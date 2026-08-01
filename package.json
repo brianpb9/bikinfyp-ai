@@ -20,6 +20,7 @@
     "test:postgres-jobs": "bash scripts/test-postgres-jobs.sh",
     "test:postgres-data-rehearsal": "bash scripts/test-postgres-data-rehearsal.sh",
     "test:postgres-runtime-smoke": "bash scripts/test-postgres-runtime-smoke.sh",
+    "test:postgres-admission-retry": "bash scripts/test-postgres-admission-retry.sh",
     "test:redis-queue": "bash scripts/test-redis-queue.sh",
     "test:redis-worker": "bash scripts/test-redis-worker.sh",
     "test:postgres-redis-worker": "bash scripts/test-postgres-redis-worker.sh",

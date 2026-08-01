@@ -135,21 +135,37 @@ export async function smokeApproveScript(userId: string, scriptId: string, updat
 
 export async function smokeCreateJob(userId: string, input: { productId: string; scriptId: string; format: string; qualityTier: string; durationS: number; priceIdr: number }) {
   const pool = new Pool({ connectionString: url() });
-  const client = await pool.connect();
   try {
-    await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
-    const active = await client.query<{ id: string }>("SELECT id FROM jobs WHERE script_id=$1 AND state NOT IN ('FAILED','REFUNDED','READY') FOR UPDATE", [input.scriptId]);
-    if (active.rows[0]) { await client.query("COMMIT"); return { jobId: active.rows[0].id, duplicate: true }; }
-    const balance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);
-    if (Number(balance.rows[0].balance) < input.priceIdr) throw new Error("INSUFFICIENT_CREDITS");
-    const jobId = id(); const timestamp = at();
-    await client.query("INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,state,created_at,state_changed_at) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,'QUEUED',$8,$8)", [jobId,userId,input.productId,input.scriptId,input.format,input.qualityTier,input.durationS,timestamp]);
-    await client.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,'hold',$4,NULL,$5)", [id(),userId,-input.priceIdr,jobId,timestamp]);
-    await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId,input.scriptId]);
-    await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true }),timestamp]);
-    await client.query("COMMIT"); return { jobId, duplicate: false };
-  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
-  finally { client.release(); await pool.end(); }
+    // SERIALIZABLE is intentional: an active job and its credit hold must
+    // commit together. PostgreSQL can legitimately abort one of concurrent
+    // predicate reads with 40001, so retry the *whole* transaction. A small
+    // exponential delay prevents a synchronized retry storm on Render.
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const client = await pool.connect();
+      try {
+        await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+        const active = await client.query<{ id: string }>("SELECT id FROM jobs WHERE script_id=$1 AND state NOT IN ('FAILED','REFUNDED','READY') FOR UPDATE", [input.scriptId]);
+        if (active.rows[0]) { await client.query("COMMIT"); return { jobId: active.rows[0].id, duplicate: true }; }
+        const balance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);
+        if (Number(balance.rows[0].balance) < input.priceIdr) throw new Error("INSUFFICIENT_CREDITS");
+        const jobId = id(); const timestamp = at();
+        await client.query("INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,state,created_at,state_changed_at) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,'QUEUED',$8,$8)", [jobId,userId,input.productId,input.scriptId,input.format,input.qualityTier,input.durationS,timestamp]);
+        await client.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,'hold',$4,NULL,$5)", [id(),userId,-input.priceIdr,jobId,timestamp]);
+        await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId,input.scriptId]);
+        await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true }),timestamp]);
+        await client.query("COMMIT"); return { jobId, duplicate: false };
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        const code = (error as { code?: string }).code;
+        if ((code === "40001" || code === "40P01") && attempt < 4) {
+          await new Promise((resolve) => setTimeout(resolve, 25 * (2 ** attempt) + Math.floor(Math.random() * 25)));
+          continue;
+        }
+        throw error;
+      } finally { client.release(); }
+    }
+    throw new Error("Transaksi PostgreSQL admission habis retry.");
+  } finally { await pool.end(); }
 }
 
 /** Deterministic local provider hook: no external media/provider credentials. */
