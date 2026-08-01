@@ -18,6 +18,7 @@ need "ffmpeg python3 python3-pil python3-pip"
 need "opencv-python-headless==4.10.0.84"
 need "FFMPEG_PATH=/usr/bin/ffmpeg"
 need "FFPROBE_PATH=/usr/bin/ffprobe"
+need "NODE_OPTIONS=--max-old-space-size=256"
 need "COPY --chown=racun:racun assets/fonts ./assets/fonts"
 need "COPY --chown=racun:racun assets/models ./assets/models"
 need "USER racun"
@@ -32,6 +33,7 @@ IMAGE="racun-worker:container-check"
 docker build --target runtime -t "$IMAGE" -f "$DOCKERFILE" "$ROOT"
 docker run --rm --entrypoint sh "$IMAGE" -ec '
   test "$(id -u)" = "10001"
+  test "$NODE_OPTIONS" = "--max-old-space-size=256"
   command -v ffmpeg
   command -v ffprobe
   python3 -c "import PIL, cv2; print(\"PIL+OpenCV\", cv2.__version__)"

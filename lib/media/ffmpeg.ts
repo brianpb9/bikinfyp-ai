@@ -6,7 +6,9 @@ import { config } from "../config";
 
 export function runFf(cmd: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    execFile(cmd, args, { maxBuffer: 64 * 1024 * 1024, timeout: 5 * 60 * 1000 }, (err, stdout, stderr) => {
+    // FFmpeg/Python diagnostics are useful but must not reserve a huge Node
+    // buffer in a 512 MiB worker. Error tails remain preserved below.
+    execFile(cmd, args, { maxBuffer: 8 * 1024 * 1024, timeout: 5 * 60 * 1000 }, (err, stdout, stderr) => {
       if (err) {
         const tail = (stderr ?? "").split("\n").slice(-12).join("\n");
         reject(new Error(`${cmd} gagal (exit ${err.code}): ${tail}`));
@@ -17,7 +19,12 @@ export function runFf(cmd: string, args: string[]): Promise<{ stdout: string; st
   });
 }
 
-export const runFfmpeg = (args: string[]) => runFf(config.ffmpegPath, args);
+/** Keep FFmpeg's frame/filter workers within the Render Starter memory budget. */
+export function boundedFfmpegArgs(args: string[]): string[] {
+  return ["-threads", "1", "-filter_threads", "1", "-filter_complex_threads", "1", ...args];
+}
+
+export const runFfmpeg = (args: string[]) => runFf(config.ffmpegPath, boundedFfmpegArgs(args));
 export const runFfprobe = (args: string[]) => runFf(config.ffprobePath, args);
 
 export async function probeDurationSec(file: string): Promise<number> {
