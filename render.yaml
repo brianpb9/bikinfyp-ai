@@ -1,0 +1,128 @@
+# Staging-only Render Blueprint. It deliberately has no production resources.
+# Resource names are also the cross-service wiring contract below.
+
+services:
+  - type: web
+    name: racun-ai-staging-web
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    preDeployCommand: node scripts/migrate-postgres-runtime.mjs
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RACUN_DEPLOY_ENV
+        value: staging
+      - key: RACUN_DB_RUNTIME
+        value: postgres
+      - key: RACUN_QUEUE_MODE
+        value: redis
+      - key: REDIS_QUEUE_NAME
+        value: racun-jobs-staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: racun-ai-staging-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: racun-ai-staging-kv
+          property: connectionString
+      - key: STORAGE_MODE
+        value: r2
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        value: bikinfyp-staging
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: AUTH_SECRET
+        generateValue: true
+      # Temporary staging-only test identity. Never carry this to production.
+      - key: ALLOW_DEV_LOGIN
+        value: "1"
+      - key: PROVIDER_VIDEO
+        value: mock
+      - key: PROVIDER_VOICE
+        value: mock
+      - key: MIDTRANS_IS_PRODUCTION
+        value: "false"
+
+  - type: worker
+    name: racun-ai-staging-worker
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: Dockerfile.worker
+    dockerContext: .
+    autoDeployTrigger: off
+    maxShutdownDelaySeconds: 300
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RACUN_DEPLOY_ENV
+        value: staging
+      - key: RACUN_DB_RUNTIME
+        value: postgres
+      - key: RACUN_QUEUE_MODE
+        value: redis
+      - key: REDIS_QUEUE_NAME
+        value: racun-jobs-staging
+      - key: DATABASE_URL
+        fromDatabase:
+          name: racun-ai-staging-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: racun-ai-staging-kv
+          property: connectionString
+      - key: STORAGE_MODE
+        value: r2
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        value: bikinfyp-staging
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: AUTH_SECRET
+        fromService:
+          type: web
+          name: racun-ai-staging-web
+          envVarKey: AUTH_SECRET
+      - key: PROVIDER_VIDEO
+        value: mock
+      - key: PROVIDER_VOICE
+        value: mock
+      - key: MIDTRANS_IS_PRODUCTION
+        value: "false"
+
+  - type: keyvalue
+    name: racun-ai-staging-kv
+    plan: free
+    region: singapore
+    maxmemoryPolicy: noeviction
+    persistenceMode: off
+    # Queue only accepts Render private-network traffic.
+    ipAllowList: []
+
+databases:
+  - name: racun-ai-staging-postgres
+    plan: free
+    region: singapore
+    postgresMajorVersion: "16"
+    databaseName: racun_staging
+    user: racun_staging
+    diskSizeGB: 1
+    connectionPool: none

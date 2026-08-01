@@ -40,7 +40,7 @@ storage private. Image ini tidak mengubah deploy atau mode Midtrans.
 
 ## Blueprint staging Render (belum production)
 
-Blueprint [`../render.yaml`](../render.yaml) mendefinisikan **hanya** resource
+Blueprint [`render.yaml`](render.yaml) mendefinisikan **hanya** resource
 bernama `racun-ai-staging-*`: web Node, worker Docker, Postgres 16, dan Render
 Key Value dalam region Singapore. Semua koneksi database/queue memakai private
 network Render; Key Value memblokir akses publik. Web dan worker memakai
@@ -50,7 +50,7 @@ kode sebagai rollback lokal.
 Sebelum sync Blueprint, hubungkan repository Git ke Render dan isi di Render
 (bukan di git) variabel `R2_ENDPOINT`, `R2_ACCESS_KEY_ID`, dan
 `R2_SECRET_ACCESS_KEY` untuk **kedua** service. Bucket yang dirujuk adalah
-`racun-ai-staging-media` dan harus tetap private. Tidak ada kredensial atau
+`bikinfyp-staging` dan harus tetap private. Tidak ada kredensial atau
 nilai rahasia dalam Blueprint.
 
 `preDeployCommand` menjalankan `scripts/migrate-postgres-runtime.mjs`; runner
