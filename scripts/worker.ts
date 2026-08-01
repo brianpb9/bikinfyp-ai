@@ -6,6 +6,7 @@ import { assertQueueConfiguration, queueMode } from "../lib/job-queue";
 import { processJob } from "../lib/worker";
 import { processPostgresJob, sweepPostgresStaleJobs } from "../lib/postgres/worker";
 import { postgresRuntimeEnabled } from "../lib/postgres/smoke-runtime";
+import { redactWorkerError } from "../lib/worker-log";
 
 assertQueueConfiguration();
 if (queueMode() !== "redis") throw new Error("Worker terpisah membutuhkan RACUN_QUEUE_MODE=redis.");
@@ -20,6 +21,13 @@ const worker = new Worker<{ jobId: string }>(
 worker.on("failed", (job, error) => {
   if (!job) return;
   const attempts = typeof job.opts.attempts === "number" ? job.opts.attempts : 1;
+  console.error(JSON.stringify({
+    event: "worker_job_failed",
+    job_id: job.data.jobId,
+    attempts_made: job.attemptsMade,
+    attempts_allowed: attempts,
+    message: redactWorkerError(error.message),
+  }));
   // BullMQ increments attemptsMade before emitting failed; only the final
   // failure enters the established FAILED -> release -> REFUNDED workflow.
   if (job.attemptsMade >= attempts) {
