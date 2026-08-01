@@ -1,0 +1,4 @@
+Poppins — dirilis di bawah SIL Open Font License (OFL) 1.1
+Sumber: https://github.com/google/fonts/tree/main/ofl/poppins
+Teks lisensi: https://openfontlicense.org
+Penggunaan: font brand untuk semua teks overlay video RACUN.AI (caption, harga, CTA, watermark).

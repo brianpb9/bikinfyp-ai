@@ -1,0 +1,13 @@
+node_modules/
+.next/
+data/
+storage/
+.env.local
+*.tsbuildinfo
+next-env.d.ts
+.venv/
+.vercel
+.env*
+!.env.example
+!.env.postgres.example
+.DS_Store

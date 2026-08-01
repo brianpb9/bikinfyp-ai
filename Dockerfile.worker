@@ -1,0 +1,49 @@
+# Dedicated background-worker image. Build context is the app/ directory.
+# Debian is intentional: its packaged Python OpenCV + Pillow keep QC-09
+# (YuNet) reproducible without compiling OpenCV during every image build.
+FROM node:22-bookworm-slim AS dependencies
+
+WORKDIR /srv/app
+
+# better-sqlite3 remains installed for the reversible SQLite rollback path.
+# These tools let npm compile it if a matching prebuild is unavailable.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ pkg-config libsqlite3-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM node:22-bookworm-slim AS runtime
+
+WORKDIR /srv/app
+ENV NODE_ENV=production \
+    FFMPEG_PATH=/usr/bin/ffmpeg \
+    FFPROBE_PATH=/usr/bin/ffprobe
+
+# Runtime media/QC contract:
+# - ffmpeg/ffprobe: compositor and probes
+# - python3-pil: caption-card renderer
+# - python3-opencv: QC-09 YuNet face detector
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg python3 python3-pil python3-opencv \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --gid 10001 racun \
+  && useradd --uid 10001 --gid racun --create-home --shell /usr/sbin/nologin racun
+
+COPY --from=dependencies /srv/app/node_modules ./node_modules
+COPY --chown=racun:racun package.json package-lock.json ./
+COPY --chown=racun:racun lib ./lib
+COPY --chown=racun:racun scripts ./scripts
+COPY --chown=racun:racun assets/fonts ./assets/fonts
+COPY --chown=racun:racun assets/models ./assets/models
+COPY --chown=racun:racun assets/music ./assets/music
+COPY --chown=racun:racun tsconfig.json ./
+
+# STORAGE_MODE=r2 is required by production config; this writable cache is
+# also used by FFmpeg/object materialization and remains non-root.
+RUN mkdir -p /srv/app/storage/jobs /srv/app/storage/uploads \
+  && chown -R racun:racun /srv/app/storage
+
+USER racun
+CMD ["npm", "run", "worker"]

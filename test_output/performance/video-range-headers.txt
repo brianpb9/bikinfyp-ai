@@ -1,0 +1,11 @@
+HTTP/1.1 206 Partial Content
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+accept-ranges: bytes
+cache-control: private, max-age=300
+content-length: 1024
+content-range: bytes 0-1023/2823197
+content-type: video/mp4
+Date: Sat, 01 Aug 2026 10:12:55 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
+

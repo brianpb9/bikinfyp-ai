@@ -1,0 +1,241 @@
+// Worker antrian in-process (MVP): global singleton, FIFO, konkurensi 1.
+// Produksi: ganti dengan BullMQ/Redis (lihat README).
+
+import fs from "node:fs";
+import path from "node:path";
+import { config } from "./config";
+import { getDb, now, type JobRow, type ScriptRow, type ProductRow, type PersonaRow } from "./db";
+import { getJob, transition, failJob, addCost, setJobProviders } from "./jobs";
+import { planShots } from "./media/shot-planner";
+import { compositeVideo } from "./media/compositor";
+import { runQc } from "./media/qc";
+import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "./providers/registry";
+import { isMockProviderName, type QualityTier } from "./providers/types";
+import { buildCaptionCards } from "./media/captions";
+import { renderCaptionPngs } from "./media/render-captions";
+import type { CompositeMode } from "./media/compositor";
+import { getCreatorCategory } from "./personas";
+import { outputExtras } from "./script-engine";
+import { captureCredits } from "./credits";
+import { formatHargaOverlay, type SegmentDraft } from "./script-engine/templates";
+import { AIGC_WATERMARK_TEXT } from "./config/compliance";
+import { mediaStorage } from "./storage";
+
+const CONCURRENCY = 1;
+
+class JobNoLongerActive extends Error {}
+
+function advance(jobId: string, state: Parameters<typeof transition>[1], meta?: Record<string, unknown>) {
+  if (!transition(jobId, state, meta)) throw new JobNoLongerActive("Job sudah berakhir saat worker masih berjalan.");
+}
+
+const g = globalThis as unknown as {
+  __racunQueue?: { queue: string[]; running: number };
+};
+
+function store() {
+  if (!g.__racunQueue) g.__racunQueue = { queue: [], running: 0 };
+  return g.__racunQueue;
+}
+
+/**
+ * Compatibility rollback path for SQLite-only local development.  In redis
+ * mode the web process delegates to lib/job-queue and never starts pump().
+ */
+export async function enqueueInlineJob(jobId: string): Promise<void> {
+  // Saklar untuk unit test: antrian dimatikan agar tes tidak menjalankan FFmpeg.
+  if (process.env.RACUN_WORKER_DISABLED === "1") return;
+  const s = store();
+  if (!s.queue.includes(jobId)) s.queue.push(jobId);
+  void pump();
+}
+
+export function queueLength(): number {
+  return store().queue.length;
+}
+
+async function pump(): Promise<void> {
+  const s = store();
+  while (s.running < CONCURRENCY && s.queue.length > 0) {
+    const jobId = s.queue.shift()!;
+    s.running++;
+    void processJob(jobId)
+      .catch((err) => console.error(`[worker] job ${jobId} error tak tertangani:`, err))
+      .finally(() => {
+        s.running--;
+        void pump();
+      });
+  }
+}
+
+export async function processJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
+  const db = getDb();
+  const job = getJob(jobId);
+  if (!job || job.state !== "QUEUED") return;
+
+  try {
+    const script = db.prepare("SELECT * FROM scripts WHERE id = ?").get(job.script_id) as ScriptRow;
+    const product = db.prepare("SELECT * FROM products WHERE id = ?").get(job.product_id) as ProductRow;
+    const persona = job.persona_id
+      ? (db.prepare("SELECT * FROM personas WHERE id = ?").get(job.persona_id) as PersonaRow | undefined)
+      : undefined;
+    const category = getCreatorCategory(persona?.creator_category ?? "hijaber")!;
+    const segments = JSON.parse(script.segments) as SegmentDraft[];
+    const images = JSON.parse(product.images) as string[];
+    if (images.length === 0) throw new Error("Produk tidak punya foto — upload minimal 1 foto.");
+
+    const workDir = path.join(config.storageDir, "jobs", job.id);
+    fs.mkdirSync(workDir, { recursive: true });
+    const imageRef = await mediaStorage().materialize(images[0]);
+    if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
+
+    const tier = (job.quality_tier ?? "silent_caption") as QualityTier;
+    const withAudio = tier !== "silent_caption";
+
+    // --- GENERATING_VISUAL ---
+    advance(job.id, "GENERATING_VISUAL");
+    const spec = planShots({
+      jobId: job.id,
+      durationSec: job.duration_s,
+      segments,
+      category,
+      productName: product.name,
+      productCategory: product.category,
+      productVisualDesc: product.product_visual_desc,
+      imageRefPath: imageRef,
+      qualityTier: tier,
+      format: job.format === "hands_only" ? "hands_only" : undefined,
+    });
+    const video = await generateVideoWithFailover(spec, workDir);
+    setJobProviders(job.id, video.providerName);
+    addCost(job.id, video.costIdr);
+
+    // --- GENERATING_VOICE ---
+    // silent_caption: tidak ada VO sama sekali (caption + musik).
+    // tier bersuara via provider NYATA: no-op — audio embedded ikut dari model.
+    // tier bersuara via MOCK: VO `say` sebagai SIMULASI embedded (dev/test gratis).
+    advance(job.id, "GENERATING_VOICE");
+    const vo: { path: string; startSec: number }[] = [];
+    const usedMockVideo = isMockProviderName(video.providerName);
+    if (!withAudio) {
+      setJobProviders(job.id, undefined, "none-silent-caption");
+      console.log(`[job ${job.id.slice(0, 8)}] silent_caption: tanpa VO (caption + musik)`);
+    } else if (!usedMockVideo) {
+      setJobProviders(job.id, undefined, "embedded-model");
+      console.log(`[job ${job.id.slice(0, 8)}] audio embedded dari ${video.providerName} — GENERATING_VOICE no-op`);
+    } else {
+      let voiceProvider = "";
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        const res = await synthesizeVoiceWithFailover(
+          {
+            jobId: job.id,
+            text: seg.text,
+            segmentIndex: i,
+            slotSec: seg.end - seg.start,
+            language: "id-ID",
+            register: script.register,
+          },
+          workDir
+        );
+        if (!voiceProvider) voiceProvider = res.providerName;
+        vo.push({ path: res.asset.filePath, startSec: seg.start });
+        addCost(job.id, res.costIdr);
+      }
+      setJobProviders(job.id, undefined, voiceProvider + " (simulasi embedded)");
+    }
+
+    // Mode compositing mengikuti tier + provider yang benar-benar dipakai
+    const compositeMode: CompositeMode = !withAudio ? "caption" : usedMockVideo ? "vo" : "embedded";
+    const captionCards = !withAudio ? await renderCaptionPngs(buildCaptionCards({ segments, productName: product.name }), workDir) : undefined;
+    const musicPath = !withAudio ? path.join(process.cwd(), "assets", "music", "bg-loop.m4a") : undefined;
+
+    // --- COMPOSITING (dengan retry QC -> COMPOSITING maks 1x) ---
+    const demoSeg = segments.find((s) => s.role === "demo")!;
+    const ctaSeg = segments.find((s) => s.role === "cta")!;
+    const finalTexts = [
+      ...segments.map((s) => s.text),
+      formatHargaOverlay(product.price_idr),
+      "Cek keranjang kuning",
+      AIGC_WATERMARK_TEXT,
+    ];
+
+    let outPath = "";
+    let renderParams = { watermark: true as const, watermarkText: AIGC_WATERMARK_TEXT };
+    let qc = null as Awaited<ReturnType<typeof runQc>> | null;
+
+    for (;;) {
+      advance(job.id, "COMPOSITING");
+      const comp = await compositeVideo({
+        jobId: job.id,
+        workDir,
+        clipPaths: video.assets.map((a) => a.filePath),
+        mode: compositeMode,
+        vo: compositeMode === "vo" ? vo : undefined,
+        captions: captionCards,
+        musicPath,
+        durationSec: job.duration_s,
+        priceText: `Cuma ${formatHargaOverlay(product.price_idr)}`,
+        ctaText: "Klik Keranjang Kuning »",
+        demoRange: [demoSeg.start, demoSeg.end],
+        ctaRange: [ctaSeg.start, ctaSeg.end],
+        providerVideo: video.providerName,
+      });
+      outPath = comp.outPath;
+      renderParams = comp.renderParams;
+
+      // --- QC_CHECK ---
+      advance(job.id, "QC_CHECK");
+      qc = await runQc({
+        filePath: outPath,
+        targetDurationSec: job.duration_s,
+        finalTexts,
+        hookFamily: script.hook_family,
+        register: script.register,
+        productName: product.name,
+        priceIdr: product.price_idr,
+        renderParams,
+        shotPaths: video.assets.map((a) => a.filePath),
+        refImagePath: imageRef,
+        format: job.format,
+      });
+      db.prepare("UPDATE jobs SET qc_result = ? WHERE id = ?").run(JSON.stringify(qc), job.id);
+      if (qc.passed) break;
+
+      const current = getJob(job.id)!;
+      if (current.qc_retry_count < 1) {
+        db.prepare("UPDATE jobs SET qc_retry_count = qc_retry_count + 1 WHERE id = ?").run(job.id);
+        console.warn(`[job ${job.id.slice(0, 8)}] QC gagal -> retry COMPOSITING (1x)`);
+        continue; // QC_CHECK -> COMPOSITING, satu-satunya transisi mundur yang diizinkan
+      }
+      failJob(current, "QC gagal setelah retry: " + qc.checks.filter((c) => c.status === "fail").map((c) => c.code).join(", "));
+      return;
+    }
+
+    // --- LABELING (watermark sudah dibakar saat compositing; verifikasi via QC-08) ---
+    advance(job.id, "LABELING", { watermark: renderParams.watermarkText });
+
+    // --- READY ---
+    const relVideo = path.relative(config.storageDir, outPath).split(path.sep).join("/");
+    await mediaStorage().put(relVideo, fs.readFileSync(outPath), "video/mp4");
+    const extras = outputExtras(product.category);
+    db.prepare(
+      "INSERT OR REPLACE INTO outputs (job_id, video_url, caption, hashtags, suggested_post_time, compliance_checklist) VALUES (?,?,?,?,?,?)"
+    ).run(
+      job.id, relVideo, script.caption, script.hashtags,
+      extras.suggested_post_time, JSON.stringify(extras.compliance_checklist)
+    );
+    if (!transition(job.id, "READY")) return;
+    db.prepare("UPDATE jobs SET output_url = ?, completed_at = ? WHERE id = ? AND state = 'READY'").run(
+      relVideo, now(), job.id
+    );
+    captureCredits(job.user_id, job.id); // kredit hanya di-capture setelah QC lulus (BR-06.1)
+  } catch (err) {
+    const current = getJob(jobId) ?? job;
+    if (err instanceof JobNoLongerActive) return;
+    // BullMQ owns retry/backoff. It receives the original failure until its
+    // final attempt, where scripts/worker.ts applies the existing refund flow.
+    if (options.retryViaQueue) throw err;
+    failJob(current, err instanceof Error ? err.message : String(err));
+  }
+}

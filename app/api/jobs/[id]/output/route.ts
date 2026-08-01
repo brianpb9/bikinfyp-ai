@@ -1,0 +1,42 @@
+import { getAuthUser } from "@/lib/auth";
+import { ERR, errorResponse } from "@/lib/errors";
+import { getDb, type JobRow } from "@/lib/db";
+import { createSignedUrl } from "@/lib/signed-url";
+import { PRE_DOWNLOAD_NOTICE } from "@/lib/config/compliance";
+import { postgresRuntimeEnabled, smokeGetJob, smokeGetOutput } from "@/lib/postgres/smoke-runtime";
+
+export const runtime = "nodejs";
+export const dynamic = "force-dynamic";
+
+// GET /api/jobs/:id/output — paket keluaran (F-09) dengan signed URL TTL 1 jam.
+export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const user = await getAuthUser(req);
+    if (!user) throw ERR.UNAUTHORIZED();
+    const { id } = await ctx.params;
+    const db = postgresRuntimeEnabled() ? null : getDb();
+    const job = postgresRuntimeEnabled()
+      ? await smokeGetJob(user.id, id) as JobRow | null
+      : db!.prepare("SELECT * FROM jobs WHERE id = ? AND user_id = ?").get(id, user.id) as JobRow | undefined;
+    if (!job) throw ERR.NOT_FOUND("Job-nya");
+    if (job.state !== "READY") throw ERR.JOB_NOT_READY();
+
+    const output = postgresRuntimeEnabled()
+      ? await smokeGetOutput(user.id, id) as { job_id: string; video_url: string; caption: string; hashtags: string; suggested_post_time: string; compliance_checklist: string } | null
+      : db!.prepare("SELECT * FROM outputs WHERE job_id = ?").get(id) as { job_id: string; video_url: string; caption: string; hashtags: string; suggested_post_time: string; compliance_checklist: string } | undefined;
+    if (!output) throw ERR.JOB_NOT_READY();
+
+    return Response.json({
+      job_id: id,
+      video_url: createSignedUrl(output.video_url),
+      video_expires_in_sec: 3600,
+      caption: output.caption,
+      hashtags: JSON.parse(output.hashtags),
+      suggested_post_time: output.suggested_post_time,
+      compliance_checklist: JSON.parse(output.compliance_checklist),
+      notice: PRE_DOWNLOAD_NOTICE,
+    });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}

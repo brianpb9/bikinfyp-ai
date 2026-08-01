@@ -1,0 +1,89 @@
+// Unit test mesin skrip (FSD F-02 kriteria uji):
+// - 3 varian selalu beda keluarga hook
+// - >=95% lolos validator (di sini: 100% untuk produk uji)
+// - 0% kata terlarang di 100 generate
+// - register bunda tidak pernah mengandung gue/lo; genz tidak pernah aku/kamu
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+
+process.env.DB_PATH = `/tmp/racun-test-engine-${process.pid}.db`;
+process.env.STORAGE_DIR = `/tmp/racun-test-engine-storage-${process.pid}`;
+
+const { generateScripts } = await import("../lib/script-engine");
+const { validateScript } = await import("../lib/script-engine/validator");
+
+const product = { id: "prod-test-1", name: "Serum Glow Bright", price_idr: 85000, category: "beauty" };
+
+const FORBIDDEN = /\b(pasti|dijamin|terbaik|menyembuhkan|obat|penyakit)\b|100%|nomor 1/i;
+
+test("3 varian beda keluarga hook dan semua lolos validator strict", () => {
+  const variants = generateScripts({ product, register: "bestie" });
+  assert.equal(variants.length, 3);
+  const families = variants.map((v) => v.hook_family);
+  assert.equal(new Set(families).size, 3, `keluarga hook harus beda: ${families}`);
+  for (const v of variants) {
+    assert.equal(v.validation.passed, true, `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
+  }
+});
+
+test("100 generate: 100% lolos validator, 0% kata terlarang", () => {
+  const regs = ["bunda", "bestie", "genz", "netral"] as const;
+  for (let i = 0; i < 100; i++) {
+    const register = regs[i % 4];
+    const variants = generateScripts({ product, register });
+    for (const v of variants) {
+      const full = v.segments.map((s) => s.text).join(" ");
+      assert.equal(v.validation.passed, true, `iterasi ${i} ${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
+      assert.ok(!FORBIDDEN.test(full), `kata terlarang di: ${full}`);
+    }
+  }
+});
+
+test("register bunda tidak pernah mengandung gue/lo; genz tidak aku/kamu", () => {
+  for (const v of generateScripts({ product, register: "bunda" })) {
+    const full = v.segments.map((s) => s.text).join(" ").toLowerCase();
+    assert.ok(!/\b(gue|gua|gw|lo|lu|elu)\b/.test(full), `bunda bocor gue/lo: ${full}`);
+  }
+  for (const v of generateScripts({ product, register: "genz" })) {
+    const full = v.segments.map((s) => s.text).join(" ").toLowerCase();
+    assert.ok(!/\b(aku|kamu|kau|anda)\b/.test(full), `genz bocor aku/kamu: ${full}`);
+  }
+});
+
+test("struktur segmen 0-3/3-10/10-15 dan caption+hashtag sesuai kontrak", () => {
+  const [v] = generateScripts({ product, register: "netral" });
+  assert.deepEqual(
+    v.segments.map((s) => [s.role, s.start, s.end]),
+    [["hook", 0, 3], ["demo", 3, 10], ["cta", 10, 15]]
+  );
+  assert.ok(v.caption.toLowerCase().includes("keranjang kuning"));
+  assert.ok(v.hashtags.length >= 8 && v.hashtags.length <= 12);
+  assert.ok(v.hashtags.includes("#racuntiktok"));
+});
+
+test("harga muncul eksplisit di hook atau demo untuk berbagai nominal", () => {
+  for (const price of [5000, 25000, 85000, 250000, 1500000]) {
+    const p = { ...product, price_idr: price };
+    for (const v of generateScripts({ product: p, register: "bestie" })) {
+      const res = validateScript(
+        { hook_family: v.hook_family, register: "bestie", segments: v.segments, productName: p.name, priceIdr: price },
+        "strict"
+      );
+      assert.equal(res.passed, true, `harga ${price}: ${JSON.stringify(res.errors)}`);
+    }
+  }
+});
+
+test("tier bersuara: skrip kompak <=22 kata, tanpa tanda kurung, lolos validator", () => {
+  const variants = generateScripts({ product, register: "bestie", qualityTier: "high_quality" });
+  assert.equal(variants.length, 3);
+  for (const v of variants) {
+    assert.equal(v.validation.passed, true, `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
+    const full = v.segments.map((s) => s.text).join(" ");
+    const wc = full.split(/\s+/).filter(Boolean).length;
+    assert.ok(wc >= 10 && wc <= 22, `${v.hook_family}: ${wc} kata`);
+    assert.ok(!/[()]/.test(full), `${v.hook_family}: ada tanda kurung`);
+    assert.equal(v.quality_tier, "high_quality");
+  }
+});

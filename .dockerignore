@@ -1,0 +1,10 @@
+.git
+.next
+.vercel
+node_modules
+data
+storage
+test_output
+.env.local
+.venv
+npm-debug.log*
