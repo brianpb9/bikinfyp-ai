@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { runFf } from "@/lib/media/ffmpeg";
+import sharp from "sharp";
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit } from "@/lib/db";
@@ -21,18 +21,14 @@ const MAX_IMAGES = 5;
 const MAX_BYTES = 10 * 1024 * 1024; // NF-SEC09
 
 async function verifyDecodableImage(data: Buffer, mime: string): Promise<boolean> {
-  // Magic bytes saja masih bisa dipalsukan. Verifikasi struktur gambar sebelum
-  // file masuk storage/provider, lalu selalu bersihkan file sementara.
-  const tempDir = fs.mkdtempSync(path.join(config.storageDir, ".verify-"));
-  const tempPath = path.join(tempDir, `image${ALLOWED_MIME[mime] ?? ".img"}`);
+  // Magic bytes saja masih bisa dipalsukan. `sharp` memverifikasi struktur
+  // decoder di proses Node web, sehingga staging native tidak bergantung pada
+  // Python/Pillow (yang memang hanya kontrak container worker).
   try {
-    fs.writeFileSync(tempPath, data);
-    await runFf("python3", ["-c", "from PIL import Image; import sys; im=Image.open(sys.argv[1]); im.verify()", tempPath]);
-    return true;
+    const info = await sharp(data, { failOn: "error", limitInputPixels: 40_000_000 }).metadata();
+    return Boolean(info.width && info.height);
   } catch {
     return false;
-  } finally {
-    fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
 
@@ -53,23 +49,22 @@ async function saveImages(productId: string, blobs: { mime: string; data: Buffer
     const ext = ALLOWED_MIME[blobs[i].mime] ?? ".png";
     let rel = path.join("uploads", productId, `${i}${ext}`).split(path.sep).join("/");
     let abs = path.join(config.storageDir, rel);
-    fs.writeFileSync(abs, blobs[i].data);
+    let normalized: Buffer | null = null;
     // Normalisasi sisi panjang ≤1600px ke WebP (BR-01.5): hemat kuota upload
-    // ke model tanpa mengandalkan CSS untuk mengecilkan byte foto kamera.
+    // ke model tanpa mengandalkan CSS untuk mengecilkan byte foto kamera. Ini
+    // sengaja memakai sharp agar web Render native tidak membutuhkan Pillow.
     try {
-      await runFf("python3", [
-        "-c",
-        "from PIL import Image, ImageOps; import sys; im=ImageOps.exif_transpose(Image.open(sys.argv[1])); im.thumbnail((1600, 1600)); im.save(sys.argv[2], 'WEBP', quality=82, method=4)",
-        abs,
-        `${abs}.webp`,
-      ]);
-      fs.unlinkSync(abs);
+      normalized = await sharp(blobs[i].data, { failOn: "error", limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 82, effort: 4 })
+        .toBuffer();
       rel = path.join("uploads", productId, `${i}.webp`).split(path.sep).join("/");
       abs = path.join(config.storageDir, rel);
-      fs.renameSync(`${path.join(config.storageDir, path.join("uploads", productId, `${i}${ext}`))}.webp`, abs);
     } catch {
       /* kompresi gagal tidak fatal — file asli tetap dipakai */
     }
+    fs.writeFileSync(abs, normalized ?? blobs[i].data);
     await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
     if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
     rels.push(rel);
