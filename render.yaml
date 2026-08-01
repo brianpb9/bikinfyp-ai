@@ -61,6 +61,8 @@ services:
         sync: false
       - key: MIDTRANS_IS_PRODUCTION
         value: "false"
+      - key: APP_BASE_URL
+        value: https://racun-ai-staging-web.onrender.com
       - key: MIDTRANS_SERVER_KEY
         sync: false
       - key: MIDTRANS_CLIENT_KEY

@@ -69,6 +69,9 @@ export const config = {
   // OTP Email via Resend — kosong = mode mock (kode ke log server)
   resendApiKey: env("RESEND_API_KEY", ""),
   resendFromEmail: env("RESEND_FROM_EMAIL", "onboarding@resend.dev"),
+  // Origin publik yang dikelola deploy, bukan Host dari request. Dipakai untuk
+  // callback pembayaran agar webhook tidak bisa diarahkan oleh header klien.
+  appBaseUrl: env("APP_BASE_URL", ""),
   // Midtrans — kosong = checkout 503 jelas
   midtransServerKey: env("MIDTRANS_SERVER_KEY", ""),
   midtransClientKey: env("MIDTRANS_CLIENT_KEY", ""),

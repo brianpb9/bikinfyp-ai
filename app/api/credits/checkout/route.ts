@@ -1,7 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit } from "@/lib/db";
-import { createSnapTransaction, newOrderId, MidtransNotConfigured } from "@/lib/midtrans";
+import { createSnapTransaction, newOrderId, MidtransCallbackNotConfigured, MidtransNotConfigured } from "@/lib/midtrans";
 import { TOPUP_PACKAGES } from "@/lib/credits";
 import { pgAudit, pgCreateCheckout, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 
@@ -35,7 +35,7 @@ export async function POST(req: Request) {
       else audit(user.id, "payment.checkout", "payments", orderId, { package_id: packageId, amount_idr: pkg.priceIdr });
       return Response.json({ order_id: orderId, snap_token: snapToken, redirect_url: redirectUrl }, { status: 201 });
     } catch (err) {
-      if (err instanceof MidtransNotConfigured) {
+      if (err instanceof MidtransNotConfigured || err instanceof MidtransCallbackNotConfigured) {
         return Response.json(
           {
             code: "PAYMENT_NOT_CONFIGURED",

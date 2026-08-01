@@ -14,6 +14,36 @@ export class MidtransNotConfigured extends Error {
   }
 }
 
+/** Callback pembayaran wajib berasal dari konfigurasi deploy, bukan request host. */
+export class MidtransCallbackNotConfigured extends Error {
+  constructor() {
+    super("APP_BASE_URL harus berupa origin HTTPS publik tanpa path untuk callback Midtrans.");
+    this.name = "MidtransCallbackNotConfigured";
+  }
+}
+
+export function midtransNotificationUrl(appBaseUrl = config.appBaseUrl): string {
+  try {
+    const base = new URL(appBaseUrl);
+    // Tidak menerima userinfo, port, query, fragment, atau path deploy yang
+    // ambigu. Host hanya dapat ditentukan oleh konfigurasi server.
+    if (
+      base.protocol !== "https:" ||
+      base.username ||
+      base.password ||
+      base.port ||
+      base.search ||
+      base.hash ||
+      (base.pathname !== "" && base.pathname !== "/")
+    ) {
+      throw new Error("invalid APP_BASE_URL");
+    }
+    return new URL("/api/webhooks/midtrans", base.origin).toString();
+  } catch {
+    throw new MidtransCallbackNotConfigured();
+  }
+}
+
 export function midtransBase(): string {
   return config.midtransIsProduction
     ? "https://app.midtrans.com"
@@ -30,6 +60,7 @@ export async function createSnapTransaction(opts: {
   phone: string;
 }): Promise<{ snapToken: string; redirectUrl: string }> {
   if (!config.midtransServerKey) throw new MidtransNotConfigured();
+  const notificationUrl = midtransNotificationUrl();
   const pkg = TOPUP_PACKAGES.find((p) => p.id === opts.packageId);
   if (!pkg) throw new Error(`Paket tidak dikenal: ${opts.packageId}`);
 
@@ -38,6 +69,9 @@ export async function createSnapTransaction(opts: {
     headers: {
       "content-type": "application/json",
       authorization: "Basic " + Buffer.from(config.midtransServerKey + ":").toString("base64"),
+      // Midtrans Snap memakai header override per transaksi, bukan host request
+      // atau redirect pengguna, untuk endpoint notifikasi server-ke-server.
+      "X-Override-Notification": notificationUrl,
     },
     body: JSON.stringify({
       transaction_details: { order_id: opts.orderId, gross_amount: pkg.priceIdr },
