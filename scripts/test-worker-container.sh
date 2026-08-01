@@ -14,7 +14,8 @@ test -f "$ROOT/assets/music/bg-loop.m4a" || fail "asset musik tidak ada"
 
 need "FROM node:22-bookworm-slim AS dependencies"
 need "FROM node:22-bookworm-slim AS runtime"
-need "ffmpeg python3 python3-pil python3-opencv"
+need "ffmpeg python3 python3-pil python3-pip"
+need "opencv-python-headless==4.10.0.84"
 need "FFMPEG_PATH=/usr/bin/ffmpeg"
 need "FFPROBE_PATH=/usr/bin/ffprobe"
 need "COPY --chown=racun:racun assets/fonts ./assets/fonts"
@@ -33,7 +34,8 @@ docker run --rm --entrypoint sh "$IMAGE" -ec '
   test "$(id -u)" = "10001"
   command -v ffmpeg
   command -v ffprobe
-  python3 -c "import PIL, cv2; print(\"PIL+OpenCV OK\")"
+  python3 -c "import PIL, cv2; print(\"PIL+OpenCV\", cv2.__version__)"
+  python3 -c "import cv2; m=\"/srv/app/assets/models/face_detection_yunet_2023mar.onnx\"; d=cv2.FaceDetectorYN_create(m, \"\", (320,320), 0.9, 0.3, 5000); assert d is not None; print(\"YuNet loader OK\")"
   test -f /srv/app/assets/fonts/Poppins-ExtraBold.ttf
   test -f /srv/app/assets/models/face_detection_yunet_2023mar.onnx
   test -f /srv/app/assets/music/bg-loop.m4a
