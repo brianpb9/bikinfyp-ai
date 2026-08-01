@@ -7,7 +7,8 @@ services:
     runtime: node
     plan: starter
     region: singapore
-    buildCommand: npm ci && npm run build
+    # NODE_ENV=production is set at runtime; include dev deps for Next's TS build.
+    buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     preDeployCommand: node scripts/migrate-postgres-runtime.mjs
     autoDeployTrigger: off
