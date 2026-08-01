@@ -2,6 +2,7 @@
 // QC-01/02/06 = stub terdokumentasi (butuh model CV/audio — fase berikutnya).
 
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { probeDurationSec, probeHasVideoStream, probeFormatTags, volumeDetect, runFfmpeg, runFf } from "./ffmpeg";
@@ -36,6 +37,12 @@ export interface QcInput {
   refImagePath?: string;
   /** QC-09: format job — hands_only melarang wajah di frame. */
   format?: string;
+  /**
+   * Teks overlay yang memang diharapkan terlihat, plus jendela waktunya.
+   * Ini terpisah dari `finalTexts`: teks skrip bisa terdengar tanpa selalu
+   * menjadi overlay pada mode embedded/VO.
+   */
+  overlayTextExpectations?: { text: string; startSec: number; endSec: number }[];
 }
 
 /** Python dengan OpenCV: venv proyek bila ada, selain python3 sistem. */
@@ -116,13 +123,177 @@ export async function qcProductSimilarity(shotPaths: string[], refImagePath: str
   };
 }
 
+interface HandMorphResult {
+  sampled_frames: number;
+  evaluated_pairs: number;
+  anomalies: { from: string; to: string; area_ratio: number; solidity_delta: number; valley_delta: number; signals: number }[];
+}
+
+type OcrWord = { text: string; left: number; top: number; width: number; height: number; conf: number; line: string };
+type OcrLine = { left: number; top: number; width: number; height: number; key: string };
+
+const normalizeOcr = (value: string) => value
+  .toLocaleLowerCase("id-ID")
+  .normalize("NFKD")
+  .replace(/[\u0300-\u036f]/g, "")
+  .replace(/[^a-z0-9]+/g, " ")
+  .trim();
+
+function ocrTokens(text: string): string[] {
+  return normalizeOcr(text).split(" ").filter((word) => word.length >= 3 || /^\d+$/.test(word));
+}
+
+/**
+ * Parse TSV Tesseract only at word/line level.  Line geometry catches text
+ * which is visibly cut off even when OCR loses the final characters.
+ */
+function parseTesseractTsv(tsv: string): { words: OcrWord[]; lines: OcrLine[] } {
+  const words: OcrWord[] = [];
+  const lines: OcrLine[] = [];
+  for (const raw of tsv.split(/\r?\n/).slice(1)) {
+    const fields = raw.split("\t");
+    if (fields.length < 12) continue;
+    const [level, page, block, par, line, , left, top, width, height, conf, ...textParts] = fields;
+    const geometry = { left: Number(left), top: Number(top), width: Number(width), height: Number(height) };
+    if (!Number.isFinite(geometry.left) || !Number.isFinite(geometry.top)) continue;
+    const key = `${page}:${block}:${par}:${line}`;
+    if (level === "4") lines.push({ ...geometry, key });
+    if (level === "5") {
+      const text = textParts.join("\t").trim();
+      const confidence = Number(conf);
+      if (text && confidence >= 35) words.push({ ...geometry, text, conf: confidence, line: key });
+    }
+  }
+  return { words, lines };
+}
+
+async function ocrFrame(frame: string): Promise<{ words: OcrWord[]; lines: OcrLine[] }> {
+  const { stdout } = await runFf("tesseract", [frame, "stdout", "-l", "eng", "--psm", "11", "tsv"]);
+  return parseTesseractTsv(stdout);
+}
+
+function intersects(a: OcrWord, b: OcrWord): boolean {
+  const horizontal = Math.max(0, Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left));
+  const vertical = Math.max(0, Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top));
+  return horizontal * vertical > Math.min(a.width * a.height, b.width * b.height) * 0.25;
+}
+
+/**
+ * QC-06 uses Tesseract on actual composited frames (not just overlay layout).
+ * OCR cannot prove every Indonesian caption; therefore absence/low confidence
+ * is a `skip` for human review, while a recognised expected overlay touching
+ * the canvas edge or colliding with another expected overlay is a hard fail.
+ */
+export async function qcTextNotClipped(
+  filePath: string,
+  _workDir: string,
+  expectations: { text: string; startSec: number; endSec: number }[],
+): Promise<QcCheck> {
+  if (expectations.length === 0) return { code: "QC-06", name: "Teks overlay tidak terpotong", status: "skip", detail: "Tidak ada overlay bertimeline untuk diperiksa OCR." };
+  // Homebrew Tesseract/Leptonica on macOS can reject media files under an
+  // inherited work directory; a fresh OS temp dir is portable to the worker
+  // container and avoids leaking render artifacts into storage.
+  const framesDir = fs.mkdtempSync(path.join(os.tmpdir(), "racun-qc06-"));
+  try {
+    const duration = await probeDurationSec(filePath);
+    const observations: { expected: string; frame: string; words: OcrWord[]; lines: OcrLine[] }[] = [];
+    const sampled = new Map<number, { frame: string; words: OcrWord[]; lines: OcrLine[] }>();
+    const edge = 4;
+    for (let i = 0; i < expectations.length; i++) {
+      const expected = expectations[i];
+      const at = Math.max(0, Math.min(duration - 0.05, (expected.startSec + expected.endSec) / 2));
+      let sample = sampled.get(at);
+      if (!sample) {
+        const frame = path.join(framesDir, `frame_${String(i).padStart(2, "0")}.png`);
+        await runFfmpeg(["-y", "-v", "error", "-ss", at.toFixed(2), "-i", filePath, "-frames:v", "1", frame]);
+        const parsed = await ocrFrame(frame);
+        sample = { frame, ...parsed };
+        sampled.set(at, sample);
+      }
+      // At this sampled instant, inspect every overlay that is expected to be
+      // visible. This makes the overlap check meaningful, not merely a
+      // comparison between unrelated frames.
+      for (const active of expectations.filter((item) => item.startSec <= at && item.endSec >= at)) {
+        const wanted = new Set(ocrTokens(active.text));
+        const matched = sample.words.filter((word) => wanted.has(normalizeOcr(word.text)));
+        observations.push({ expected: active.text, frame: sample.frame, words: matched, lines: sample.lines });
+      }
+    }
+    const recognised = observations.filter((item) => item.words.length > 0);
+    const expectedTexts = [...new Set(expectations.map((item) => item.text))];
+    const recognisedTexts = new Set(recognised.map((item) => item.expected));
+    const missing = expectedTexts.filter((text) => !recognisedTexts.has(text));
+    if (missing.length > 0) {
+      // A partial match is never evidence that every simultaneously visible
+      // overlay is safe. Keep this reviewable rather than issuing a false PASS.
+      return { code: "QC-06", name: "Teks overlay tidak terpotong", status: "skip", detail: `OCR belum membuktikan overlay: ${missing.map((text) => JSON.stringify(text)).join(", ")}; perlu tinjauan visual, bukan klaim lulus.` };
+    }
+    for (const item of recognised) {
+      for (const word of item.words) {
+        const line = item.lines.find((candidate) => candidate.key === word.line);
+        // Use line geometry: OCR often drops the final letters of clipped text,
+        // but preserves the line box extending to the canvas boundary.
+        if (line && (line.left <= edge || line.top <= edge || line.left + line.width >= 720 - edge || line.top + line.height >= 1280 - edge)) {
+          return { code: "QC-06", name: "Teks overlay tidak terpotong", status: "fail", detail: `OCR mengenali "${word.text}" namun barisnya menyentuh tepi kanvas di ${path.basename(item.frame)}.` };
+        }
+      }
+    }
+    const all = recognised.flatMap((item) => item.words.map((word) => ({ ...word, expected: item.expected, frame: item.frame })));
+    for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
+      if (all[i].frame === all[j].frame && all[i].expected !== all[j].expected && intersects(all[i], all[j])) {
+        return { code: "QC-06", name: "Teks overlay tidak terpotong", status: "fail", detail: `OCR mendeteksi tumpang tindih "${all[i].text}" dan "${all[j].text}".` };
+      }
+    }
+    const foundTokens = new Set(recognised.flatMap((item) => item.words.map((word) => normalizeOcr(word.text))));
+    return { code: "QC-06", name: "Teks overlay tidak terpotong", status: "pass", detail: `OCR memverifikasi ${foundTokens.size} token overlay pada ${recognised.length}/${expectations.length} frame; tidak ada tepi/tumpang tindih terdeteksi.` };
+  } finally {
+    fs.rmSync(framesDir, { recursive: true, force: true });
+  }
+}
+
+/**
+ * QC-02: lightweight continuity guard for hands/fingers.
+ *
+ * It samples the completed video, then asks OpenCV to compare the largest
+ * skin-coloured silhouette in consecutive non-cut frames.  It only rejects a
+ * transition with at least two major topology changes (area, convex solidity,
+ * or finger-valley proxy), so it is intentionally a conservative morphing
+ * detector rather than an unreliable finger counter.
+ */
+export async function qcHandMorphing(filePath: string, workDir: string): Promise<QcCheck> {
+  const framesDir = path.join(workDir, "qc02_frames");
+  fs.rmSync(framesDir, { recursive: true, force: true });
+  fs.mkdirSync(framesDir, { recursive: true });
+  const pattern = path.join(framesDir, "frame_%03d.jpg");
+  // Two samples/sec and a width cap keep the check bounded on a 512 MiB worker.
+  await runFfmpeg(["-y", "-v", "error", "-i", filePath, "-vf", "fps=2,scale=480:-2", "-frames:v", "32", pattern]);
+  const frames = fs.readdirSync(framesDir).filter((f) => f.endsWith(".jpg")).sort().map((f) => path.join(framesDir, f));
+  if (frames.length < 2) throw new Error("frame sampel QC-02 tidak cukup");
+  const { stdout } = await runFf(pythonBin(), [path.join(process.cwd(), "lib", "media", "qc_hand_morph_check.py"), ...frames]);
+  const data = JSON.parse(stdout) as HandMorphResult;
+  const worst = data.anomalies[0];
+  return {
+    code: "QC-02",
+    name: "Tangan/jari tidak morphing (kontinuitas siluet)",
+    status: worst ? "fail" : "pass",
+    detail: worst
+      ? `anomali siluet ${path.basename(worst.from)}→${path.basename(worst.to)}: area×${worst.area_ratio}, soliditas Δ${worst.solidity_delta}, lembah-jari Δ${worst.valley_delta}`
+      : `${data.sampled_frames} frame; ${data.evaluated_pairs} transisi tangan non-cut diperiksa`,
+  };
+}
+
 export async function runQc(input: QcInput): Promise<QcResult> {
   const checks: QcCheck[] = [];
 
   // QC-01 lip-sync — stub: mode hands_only tidak punya wajah bicara.
   checks.push({ code: "QC-01", name: "Lip-sync drift", status: "skip", detail: "Tidak relevan untuk hands_only; butuh analisis viseme untuk talking_head (fase 2)." });
-  // QC-02 morphing tangan — stub: butuh deteksi anomali antar-frame (model CV).
-  checks.push({ code: "QC-02", name: "Tangan/jari morphing", status: "skip", detail: "Butuh model CV deteksi anomali frame (fase 2)." });
+  // QC-02 morphing tangan — conservative OpenCV silhouette continuity check.
+  try {
+    checks.push(await qcHandMorphing(input.filePath, path.dirname(input.filePath)));
+  } catch (err) {
+    // Cannot inspect a hands_only output safely: fail closed, rather than hide it.
+    checks.push({ code: "QC-02", name: "Tangan/jari tidak morphing", status: "fail", detail: `detektor gagal: ${err instanceof Error ? err.message : err}` });
+  }
   // QC-03 identitas produk konsisten — pemeriksaan kasar tapi nyata (warna region tengah).
   if (input.shotPaths && input.shotPaths.length >= 2 && input.refImagePath && fs.existsSync(input.refImagePath)) {
     try {
@@ -170,8 +341,14 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     checks.push({ code: "QC-05", name: "Durasi sesuai target", status: "fail", detail: String(err) });
   }
 
-  // QC-06 teks terpotong — stub: overlay kami fixed-position di safe area; butuh OCR untuk verifikasi umum.
-  checks.push({ code: "QC-06", name: "Teks tidak terpotong", status: "skip", detail: "Overlay memakai posisi tetap dalam safe area; verifikasi OCR = fase 2." });
+  // QC-06 runs on composited output.  Do not turn uncertain OCR into a false
+  // pass: unavailable/insufficient OCR remains explicitly skipped for review.
+  try {
+    const expectations = input.overlayTextExpectations ?? input.finalTexts.map((text) => ({ text, startSec: 0, endSec: input.targetDurationSec }));
+    checks.push(await qcTextNotClipped(input.filePath, path.dirname(input.filePath), expectations));
+  } catch (err) {
+    checks.push({ code: "QC-06", name: "Teks overlay tidak terpotong", status: "skip", detail: `OCR tidak tersedia/gagal: ${err instanceof Error ? err.message : err}` });
+  }
 
   // QC-07 ulangi filter kata terlarang (L-10/L-11) pada teks final — dicek 2x (SF-03).
   const v = validateScript(

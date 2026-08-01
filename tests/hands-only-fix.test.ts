@@ -113,3 +113,74 @@ test("QC-09: detektor YuNet jalan dan melaporkan 0 wajah pada gambar polos", asy
   const res = await qcNoFace([plain], dir);
   assert.equal(res.status, "pass", res.detail);
 });
+
+function makeHandFrame(out: string, morph: boolean) {
+  execFileSync("python3", ["-c", `
+from PIL import Image, ImageDraw
+im = Image.new("RGB", (480, 640), (240, 235, 225)); d = ImageDraw.Draw(im); skin = (198, 134, 100)
+if ${morph ? "True" : "False"}:
+  d.ellipse((80, 80, 400, 600), fill=skin)
+else:
+  d.rectangle((215, 390, 265, 610), fill=skin)
+  for x in [130, 170, 210, 250]: d.rounded_rectangle((x, 180, x + 20, 410), radius=10, fill=skin)
+im.save(${JSON.stringify(out)})`]);
+}
+
+function makeMorphVideo(dir: string, morph: boolean) {
+  const normal = `${dir}/hand.png`;
+  const bad = `${dir}/morph.png`;
+  makeHandFrame(normal, false);
+  makeHandFrame(bad, true);
+  const list = `${dir}/frames.txt`;
+  // Same background means this is deliberately not a hard scene-cut: QC-02
+  // should inspect the sudden silhouette change, not skip it as an edit.
+  fs.writeFileSync(list, `file '${normal}'\nduration 1\nfile '${morph ? bad : normal}'\nduration 1\nfile '${morph ? bad : normal}'\n`);
+  const out = `${dir}/${morph ? "morph" : "stable"}.mp4`;
+  execFileSync(process.env.FFMPEG_PATH ?? "/opt/homebrew/bin/ffmpeg", ["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", list, "-vf", "fps=2", "-pix_fmt", "yuv420p", out]);
+  return out;
+}
+
+test("QC-02: perubahan siluet tangan ekstrem tanpa cut DITOLAK; siluet stabil LOLOS", async () => {
+  const { qcHandMorphing } = await import("../lib/media/qc");
+  const dir = `/tmp/qc02-${process.pid}`;
+  fs.mkdirSync(dir, { recursive: true });
+  const stable = await qcHandMorphing(makeMorphVideo(dir, false), dir);
+  assert.equal(stable.status, "pass", stable.detail);
+  const malformed = await qcHandMorphing(makeMorphVideo(dir, true), dir);
+  assert.equal(malformed.status, "fail", malformed.detail);
+  assert.match(malformed.detail ?? "", /anomali siluet/);
+});
+
+function makeOcrVideo(dir: string, clipped: boolean) {
+  const png = `${dir}/${clipped ? "clipped" : "safe"}.png`;
+  const python = [
+    "from PIL import Image, ImageDraw, ImageFont",
+    'im = Image.new("RGB", (720, 1280), (28, 37, 48))',
+    "d = ImageDraw.Draw(im)",
+    `font = ImageFont.truetype(${JSON.stringify(`${process.cwd()}/assets/fonts/Poppins-ExtraBold.ttf`)}, 44)`,
+    `d.text((${clipped ? -150 : 60}, 1020), "KLIK KERANJANG KUNING", font=font, fill="white")`,
+    `im.save(${JSON.stringify(png)})`,
+  ].join("\n");
+  execFileSync("python3", ["-c", python]);
+  const mp4 = `${dir}/${clipped ? "clipped" : "safe"}.mp4`;
+  execFileSync(process.env.FFMPEG_PATH ?? "/opt/homebrew/bin/ffmpeg", ["-y", "-v", "error", "-loop", "1", "-i", png, "-t", "2", "-pix_fmt", "yuv420p", mp4]);
+  return mp4;
+}
+
+test("QC-06: OCR frame nyata meluluskan overlay aman dan menolak baris terpotong", async () => {
+  const { qcTextNotClipped } = await import("../lib/media/qc");
+  const dir = `/tmp/qc06-${process.pid}`;
+  fs.mkdirSync(dir, { recursive: true });
+  const expected = [{ text: "Klik Keranjang Kuning", startSec: 0, endSec: 2 }];
+  const safe = await qcTextNotClipped(makeOcrVideo(dir, false), dir, expected);
+  assert.equal(safe.status, "pass", safe.detail);
+  const partial = await qcTextNotClipped(makeOcrVideo(dir, false), dir, [
+    ...expected,
+    { text: "Dibuat dengan AI", startSec: 0, endSec: 2 },
+  ]);
+  assert.equal(partial.status, "skip", partial.detail);
+  assert.match(partial.detail ?? "", /belum membuktikan overlay/);
+  const clipped = await qcTextNotClipped(makeOcrVideo(dir, true), dir, expected);
+  assert.equal(clipped.status, "fail", clipped.detail);
+  assert.match(clipped.detail ?? "", /menyentuh tepi kanvas/);
+});

@@ -88,6 +88,15 @@ function SkripInner() {
 
   const hardErrors = issues.filter((i) => i.rule === "L-10" || i.rule === "L-11");
   const canApprove = selectedId !== null && editorSeen && hardErrors.length === 0 && !loading;
+  const approveHint = loading
+    ? "Skrip sedang dikirim ke dapur."
+    : !selectedId
+      ? "Pilih satu versi skrip terlebih dahulu."
+      : !editorSeen
+        ? "Buka dan tinjau bagian skrip sebelum melanjutkan."
+        : hardErrors.length > 0
+          ? "Perbaiki bagian yang ditandai merah sebelum melanjutkan."
+          : "Skrip siap disetujui dan dibuatkan videonya.";
 
   async function approve() {
     const script = scripts.find((s) => s.id === selectedId);
@@ -191,9 +200,12 @@ function SkripInner() {
         <PrimaryButton onClick={approve} disabled={!canApprove}>
           {loading ? "Mengirim ke dapur..." : "Setuju & Lanjut"}
         </PrimaryButton>
-        {selectedId && !editorSeen && (
-          <p className="text-center text-sm text-zinc-500">Gulir & cek bagian skripnya dulu ya.</p>
-        )}
+        <p
+          aria-live="polite"
+          className={`rounded-2xl px-4 py-3 text-center text-sm ${canApprove ? "bg-emerald-50 text-emerald-800" : "bg-zinc-100 text-zinc-600"}`}
+        >
+          {canApprove ? "✓ " : ""}{approveHint}
+        </p>
       </div>
     </main>
   );

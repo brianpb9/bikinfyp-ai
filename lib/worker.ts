@@ -198,6 +198,13 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         shotPaths: video.assets.map((a) => a.filePath),
         refImagePath: imageRef,
         format: job.format,
+        overlayTextExpectations: [
+          { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: job.duration_s },
+          ...(compositeMode === "caption"
+            ? (captionCards ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec }))
+            : [{ text: `Cuma ${formatHargaOverlay(product.price_idr)}`, startSec: demoSeg.start, endSec: demoSeg.end }]),
+          { text: "Klik Keranjang Kuning", startSec: ctaSeg.start, endSec: ctaSeg.end },
+        ],
       });
       db.prepare("UPDATE jobs SET qc_result = ? WHERE id = ?").run(JSON.stringify(qc), job.id);
       if (qc.passed) break;

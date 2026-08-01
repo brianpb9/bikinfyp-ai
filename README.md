@@ -214,7 +214,7 @@ Semua error berformat `{code, message_id, message_en, retryable}` — `message_i
 | Dev login tanpa OTP | OTP SMS sungguhan / OAuth Google |
 | Dev topup & webhook stub | Payment gateway QRIS berlisensi |
 | Metadata AIGC sederhana | Manifest C2PA penuh (c2patool) |
-| QC-04/05/07/08 nyata; QC-01/02/03/06 stub | Model CV/audio untuk lip-sync, morphing, deteksi produk & OCR |
+| QC-02/03/04/05/07/08 nyata; QC-01/06 stub | Model CV/audio untuk lip-sync dan OCR penuh; QC-02 memakai guard siluet tangan OpenCV yang konservatif, bukan landmark model |
 
 ## Struktur
 

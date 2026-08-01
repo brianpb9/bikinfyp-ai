@@ -50,6 +50,7 @@ export default function GayaPage() {
   }, [router]);
 
   const selectedTier = tiers.find((t) => t.id === tier);
+  const selectedCategory = CREATOR_CATS.find((c) => c.id === creatorCategory);
 
   async function generate() {
     const product = loadFlow().product;
@@ -127,9 +128,19 @@ export default function GayaPage() {
           ))}
         </section>
 
-        <section className="space-y-3">
-          <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Sesuaikan audiens</p><h2 className="font-display text-xl font-bold">Kategori kreator</h2></div>
-          <div className="grid grid-cols-2 gap-2">
+        <details className="group rounded-3xl border border-zinc-200 bg-white shadow-sm">
+          <summary className="flex min-h-[64px] cursor-pointer list-none items-center justify-between gap-3 p-4 marker:content-none">
+            <span>
+              <span className="block text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Opsional</span>
+              <span className="font-display text-lg font-bold">Sesuaikan gaya kreator</span>
+              <span className="block text-sm text-zinc-500">{selectedCategory?.label ?? "Pilih kategori"}{tier === "silent_caption" ? " · tanpa suara" : ` · ${REGISTERS.find((r) => r.id === register)?.label ?? "suara"}`}</span>
+            </span>
+            <span aria-hidden="true" className="text-xl text-amber-700 transition-transform group-open:rotate-45">+</span>
+          </summary>
+          <div className="space-y-6 border-t border-zinc-100 p-4 pt-5">
+            <section className="space-y-3">
+              <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Sesuaikan audiens</p><h2 className="font-display text-xl font-bold">Kategori kreator</h2></div>
+              <div className="grid grid-cols-2 gap-2">
             {CREATOR_CATS.filter((c) => c.active).map((c) => (
               <button
                 key={c.id}
@@ -150,18 +161,17 @@ export default function GayaPage() {
                 <p className="text-xs font-semibold text-amber-600">Segera</p>
               </button>
             ))}
-          </div>
-        </section>
+              </div>
+            </section>
 
-        {tier === "silent_caption" ? (
-          <div className="rounded-2xl border border-zinc-100 bg-white p-4 text-sm leading-6 text-zinc-600 shadow-sm">
-            🔇 Tier Senyap + Teks tidak ada suara — skrip tampil sebagai caption tersinkron dengan
-            musik latar. Pilihan register suara tidak dipakai.
-          </div>
-        ) : (
-          <section className="space-y-3">
-            <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih karakter</p><h2 className="font-display text-xl font-bold">Suara & panggilan</h2></div>
-            {REGISTERS.map((r) => (
+            {tier === "silent_caption" ? (
+              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
+                🔇 Senyap + Teks memakai caption tersinkron dan musik latar; pilihan panggilan tidak dipakai.
+              </div>
+            ) : (
+              <section className="space-y-3">
+                <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih karakter</p><h2 className="font-display text-xl font-bold">Suara & panggilan</h2></div>
+                {REGISTERS.map((r) => (
               <button
                 key={r.id}
                 type="button"
@@ -176,21 +186,23 @@ export default function GayaPage() {
                   <span className="block text-xs text-zinc-500">{r.hint}</span>
                 </span>
               </button>
-            ))}
-          </section>
-        )}
+                ))}
+              </section>
+            )}
 
-        <section className="space-y-3">
-          <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Panjang video</p><h2 className="font-display text-xl font-bold">Durasi</h2></div>
-          <div className="flex gap-2">
-            <div className="rounded-2xl border-2 border-amber-500 bg-amber-50 px-5 py-3 font-bold shadow-sm">15 dtk</div>
-            {[30, 45].map((d) => (
-              <div key={d} className="rounded-2xl border-2 border-zinc-100 bg-zinc-50 px-5 py-3 font-bold text-zinc-400">
-                {d} <span className="text-xs font-semibold text-amber-600">Segera</span>
+            <section className="space-y-3">
+              <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Panjang video</p><h2 className="font-display text-xl font-bold">Durasi</h2></div>
+              <div className="flex gap-2">
+                <div className="rounded-2xl border-2 border-amber-500 bg-amber-50 px-5 py-3 font-bold shadow-sm">15 dtk</div>
+                {[30, 45].map((d) => (
+                  <div key={d} className="rounded-2xl border-2 border-zinc-100 bg-zinc-50 px-5 py-3 font-bold text-zinc-400">
+                    {d} <span className="text-xs font-semibold text-amber-600">Segera</span>
+                  </div>
+                ))}
               </div>
-            ))}
+            </section>
           </div>
-        </section>
+        </details>
 
         <ErrorText message={error} />
         {noCredits && (

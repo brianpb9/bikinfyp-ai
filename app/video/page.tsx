@@ -48,13 +48,24 @@ export default function VideoPage() {
       {jobs === null ? (
         <div className="rounded-3xl border border-zinc-100 bg-white p-6 text-center text-zinc-500 shadow-sm">Memuat video kamu...</div>
       ) : jobs.length === 0 ? (
-        <div className="space-y-4 rounded-3xl border-2 border-dashed border-amber-200 bg-white p-8 text-center shadow-sm">
-          <p className="text-5xl">📼</p>
-          <p className="text-zinc-600">Belum ada video. Yang pertama biasanya paling berkesan.</p>
-          <PrimaryButton href="/bikin/produk">Bikin Video</PrimaryButton>
+        <div className="space-y-5 overflow-hidden rounded-3xl border border-amber-200 bg-white text-center shadow-sm">
+          <div className="bg-gradient-to-br from-amber-100 via-orange-50 to-white px-8 pb-5 pt-8">
+            <p className="text-5xl" aria-hidden="true">🎬</p>
+            <p className="mt-3 font-display text-xl font-bold">Video pertamamu mulai dari sini</p>
+            <p className="mt-2 text-sm leading-6 text-zinc-600">Pilih produk, pilih gaya, lalu biarkan kami siapkan videonya.</p>
+          </div>
+          <div className="px-6 pb-6"><PrimaryButton href="/bikin/produk">Bikin video pertama</PrimaryButton></div>
         </div>
       ) : (
-        jobs.map((j) => (
+        <>
+          {jobs.length === 1 && (
+            <aside className="rounded-3xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
+              <p className="text-sm font-bold text-amber-900">Koleksimu baru dimulai ✨</p>
+              <p className="mt-1 text-sm leading-5 text-amber-800">Coba satu gaya lain agar punya video untuk dibandingkan dan diposting.</p>
+              <Link href="/bikin/produk" className="mt-3 inline-flex min-h-[44px] items-center rounded-xl bg-amber-500 px-4 text-sm font-bold text-white shadow-sm active:bg-amber-600">Bikin video lagi</Link>
+            </aside>
+          )}
+          {jobs.map((j) => (
           <div key={j.id} className="flex gap-3 rounded-3xl border border-zinc-200 bg-white p-3 shadow-sm transition-transform active:scale-[0.99]">
             <div className="h-24 w-16 shrink-0 overflow-hidden rounded-2xl bg-zinc-200 ring-1 ring-black/5">
               {j.thumb_url ? (
@@ -90,7 +101,8 @@ export default function VideoPage() {
               </div>
             </div>
           </div>
-        ))
+          ))}
+        </>
       )}
     </main>
   );

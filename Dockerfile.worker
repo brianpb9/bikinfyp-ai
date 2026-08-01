@@ -26,8 +26,9 @@ ENV NODE_ENV=production \
 # - ffmpeg/ffprobe: compositor and probes
 # - python3-pil: caption-card renderer
 # - pinned opencv-python-headless: QC-09 YuNet (must support the bundled ONNX)
+# - tesseract + English data: QC-06 OCR on actual composited frames
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends ffmpeg python3 python3-pil python3-pip \
+  && apt-get install -y --no-install-recommends ffmpeg python3 python3-pil python3-pip tesseract-ocr tesseract-ocr-eng \
   && python3 -m pip install --no-cache-dir --break-system-packages opencv-python-headless==4.10.0.84 \
   && rm -rf /var/lib/apt/lists/* \
   && groupadd --gid 10001 racun \

@@ -15,6 +15,7 @@ test -f "$ROOT/assets/music/bg-loop.m4a" || fail "asset musik tidak ada"
 need "FROM node:22-bookworm-slim AS dependencies"
 need "FROM node:22-bookworm-slim AS runtime"
 need "ffmpeg python3 python3-pil python3-pip"
+need "tesseract-ocr tesseract-ocr-eng"
 need "opencv-python-headless==4.10.0.84"
 need "FFMPEG_PATH=/usr/bin/ffmpeg"
 need "FFPROBE_PATH=/usr/bin/ffprobe"
@@ -36,6 +37,8 @@ docker run --rm --entrypoint sh "$IMAGE" -ec '
   test "$NODE_OPTIONS" = "--max-old-space-size=256"
   command -v ffmpeg
   command -v ffprobe
+  command -v tesseract
+  tesseract --list-langs | grep -qx eng
   python3 -c "import PIL, cv2; print(\"PIL+OpenCV\", cv2.__version__)"
   python3 -c "import cv2; m=\"/srv/app/assets/models/face_detection_yunet_2023mar.onnx\"; d=cv2.FaceDetectorYN_create(m, \"\", (320,320), 0.9, 0.3, 5000); assert d is not None; print(\"YuNet loader OK\")"
   test -f /srv/app/assets/fonts/Poppins-ExtraBold.ttf
@@ -43,4 +46,4 @@ docker run --rm --entrypoint sh "$IMAGE" -ec '
   test -f /srv/app/assets/music/bg-loop.m4a
   test -w /srv/app/storage/jobs
 '
-echo "[worker-container] PASS image runtime: FFmpeg, Python PIL/OpenCV, assets, dan user non-root."
+echo "[worker-container] PASS image runtime: FFmpeg, Tesseract OCR, Python PIL/OpenCV, assets, dan user non-root."

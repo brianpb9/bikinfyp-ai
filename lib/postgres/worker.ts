@@ -139,7 +139,15 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s,
       finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), "Cek keranjang kuning", AIGC_WATERMARK_TEXT],
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, priceIdr: row.product_price_idr,
-      renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format: row.format });
+      renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format: row.format,
+      overlayTextExpectations: [
+        { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: row.duration_s },
+        ...(mode === "caption"
+          ? (captions ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec }))
+          : [{ text: `Cuma ${formatHargaOverlay(row.product_price_idr)}`, startSec: demo.start, endSec: demo.end }]),
+        { text: "Klik Keranjang Kuning", startSec: cta.start, endSec: cta.end },
+      ],
+    });
     await pool.query("UPDATE jobs SET qc_result=$1,qc_retry_count=$2 WHERE id=$3", [JSON.stringify(qc), retry, row.id]);
     if (qc.passed) break;
     if (retry === 1) throw new Error(`QC gagal setelah retry: ${qc.checks.filter((check) => check.status === "fail").map((check) => check.code).join(", ")}`);
