@@ -49,11 +49,21 @@ services:
       - key: ALLOW_DEV_LOGIN
         value: "1"
       - key: PROVIDER_VIDEO
-        value: mock
+        value: byteplus
       - key: PROVIDER_VOICE
         value: mock
+      - key: BYTEPLUS_ARK_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
       - key: MIDTRANS_IS_PRODUCTION
         value: "false"
+      - key: MIDTRANS_SERVER_KEY
+        sync: false
+      - key: MIDTRANS_CLIENT_KEY
+        sync: false
 
   - type: worker
     name: racun-ai-staging-worker
@@ -102,11 +112,21 @@ services:
           name: racun-ai-staging-web
           envVarKey: AUTH_SECRET
       - key: PROVIDER_VIDEO
-        value: mock
+        value: byteplus
       - key: PROVIDER_VOICE
         value: mock
+      - key: BYTEPLUS_ARK_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
       - key: MIDTRANS_IS_PRODUCTION
         value: "false"
+      - key: MIDTRANS_SERVER_KEY
+        sync: false
+      - key: MIDTRANS_CLIENT_KEY
+        sync: false
 
   - type: keyvalue
     name: racun-ai-staging-kv

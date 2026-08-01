@@ -65,7 +65,9 @@ BASE_URL=https://<web-staging>.onrender.com bash scripts/smoke-e2e.sh
 ```
 
 Blueprint mengaktifkan `ALLOW_DEV_LOGIN=1` hanya agar smoke staging dapat
-membuat data uji tanpa kredensial pelanggan. Itu bukan konfigurasi production;
+membuat data uji tanpa kredensial pelanggan. Video memakai BytePlus dan OTP
+email memakai Resend; `PROVIDER_VOICE=mock` tetap eksplisit karena audio tier
+bersuara dihasilkan oleh BytePlus. Itu bukan konfigurasi production;
 `MIDTRANS_IS_PRODUCTION` tetap literal `false` pada web dan worker.
 
 ## Arsitektur suara FINAL (keputusan 31 Jul 2026) & 3-tier
