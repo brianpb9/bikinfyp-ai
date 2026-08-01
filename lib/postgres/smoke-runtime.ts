@@ -136,16 +136,30 @@ export async function smokeApproveScript(userId: string, scriptId: string, updat
 export async function smokeCreateJob(userId: string, input: { productId: string; scriptId: string; format: string; qualityTier: string; durationS: number; priceIdr: number }) {
   const pool = new Pool({ connectionString: url() });
   try {
-    // SERIALIZABLE is intentional: an active job and its credit hold must
-    // commit together. PostgreSQL can legitimately abort one of concurrent
-    // predicate reads with 40001, so retry the *whole* transaction. A small
-    // exponential delay prevents a synchronized retry storm on Render.
+    // The user-row lock serializes wallet spends and the script-row lock
+    // serializes duplicate decisions. Read Committed then observes the latest
+    // balance after the lock wait; SERIALIZABLE would retain a pre-wait
+    // snapshot and abort independent admissions under a burst.
     for (let attempt = 0; attempt < 5; attempt++) {
       const client = await pool.connect();
       try {
-        await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
-        const active = await client.query<{ id: string }>("SELECT id FROM jobs WHERE script_id=$1 AND state NOT IN ('FAILED','REFUNDED','READY') FOR UPDATE", [input.scriptId]);
-        if (active.rows[0]) { await client.query("COMMIT"); return { jobId: active.rows[0].id, duplicate: true }; }
+        await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+        // Serialize spends for the same wallet before any predicate read. It
+        // prevents concurrent balance aggregates from becoming serialization
+        // pivots, while admissions for different users remain concurrent.
+        const user = await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [userId]);
+        if (!user.rows[0]) throw new Error("USER_NOT_FOUND");
+        // Lock the script row, not a predicate over the whole jobs table. The
+        // old predicate read made independent scripts conflict under
+        // SERIALIZABLE admission. `scripts.job_id` is the canonical latest
+        // job pointer, so this preserves duplicate prevention while allowing
+        // different scripts to be admitted concurrently.
+        const script = await client.query<{ job_id: string | null }>("SELECT job_id FROM scripts WHERE id=$1 FOR UPDATE", [input.scriptId]);
+        if (!script.rows[0]) throw new Error("SCRIPT_NOT_FOUND");
+        if (script.rows[0].job_id) {
+          const active = await client.query<{ id: string }>("SELECT id FROM jobs WHERE id=$1 AND state NOT IN ('FAILED','REFUNDED','READY') FOR UPDATE", [script.rows[0].job_id]);
+          if (active.rows[0]) { await client.query("COMMIT"); return { jobId: active.rows[0].id, duplicate: true }; }
+        }
         const balance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);
         if (Number(balance.rows[0].balance) < input.priceIdr) throw new Error("INSUFFICIENT_CREDITS");
         const jobId = id(); const timestamp = at();

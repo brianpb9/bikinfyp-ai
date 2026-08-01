@@ -39,7 +39,8 @@ try {
   }
   await pool.query(
     "INSERT INTO credit_ledger (id,user_id,delta,type,created_at) VALUES ($1,$2,$3,'topup',$4)",
-    [`topup-${crypto.randomUUID()}`, userId, count * priceIdr, now]
+    // One extra hold funds the explicit terminal re-admission assertion below.
+    [`topup-${crypto.randomUUID()}`, userId, (count + 1) * priceIdr, now]
   );
 
   const settled = await Promise.allSettled(scriptIds.map((scriptId) => smokeCreateJob(userId, {
@@ -61,10 +62,27 @@ try {
   );
   assert.equal(holds.rowCount, count, "harus ada tepat 20 hold");
   assert.ok(holds.rows.every((row) => Number(row.n) === 1 && Number(row.delta) === -priceIdr), "setiap job harus memiliki satu hold sebesar harga");
+  const first = accepted[0];
+  const duplicate = await smokeCreateJob(userId, { productId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
+  assert.equal(duplicate.duplicate, true, "job aktif untuk script yang sama harus idempoten");
+  assert.equal(duplicate.jobId, first.jobId, "duplikat aktif harus menunjuk job awal");
+  const activeDuplicateHolds = await pool.query("SELECT id FROM credit_ledger WHERE job_id=$1 AND type='hold'", [first.jobId]);
+  assert.equal(activeDuplicateHolds.rowCount, 1, "duplikat aktif tidak boleh membuat hold kedua");
+
+  // This matches the historic rule: a terminal job does not block a deliberate
+  // re-admission of the same approved script, and the script pointer advances.
+  await pool.query("UPDATE jobs SET state='FAILED' WHERE id=$1", [first.jobId]);
+  const reAdmitted = await smokeCreateJob(userId, { productId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
+  assert.equal(reAdmitted.duplicate, false, "job terminal harus mengizinkan re-admission");
+  assert.notEqual(reAdmitted.jobId, first.jobId, "re-admission harus membuat job baru");
+  const pointer = await pool.query<{ job_id: string }>("SELECT job_id FROM scripts WHERE id=$1", [scriptIds[0]]);
+  assert.equal(pointer.rows[0]?.job_id, reAdmitted.jobId, "pointer script harus berpindah ke job re-admission");
+  const finalHolds = await pool.query("SELECT id FROM credit_ledger WHERE job_id=$1 AND type='hold'", [reAdmitted.jobId]);
+  assert.equal(finalHolds.rowCount, 1, "re-admission terminal harus membuat satu hold baru");
   const balance = await pool.query<{ balance: string }>("SELECT balance::text FROM v_credit_balance WHERE user_id=$1", [userId]);
   assert.equal(Number(balance.rows[0]?.balance), 0, "saldo harus habis persis tanpa hold ganda/terlewat");
 
-  process.stdout.write(JSON.stringify({ admissions: count, jobs: jobs.rowCount, holds: holds.rowCount, balance: Number(balance.rows[0]?.balance) }) + "\n");
+  process.stdout.write(JSON.stringify({ admissions: count, jobs: jobs.rowCount, holds: holds.rowCount, active_duplicate: true, terminal_readmission: true, balance: Number(balance.rows[0]?.balance) }) + "\n");
 } finally {
   await pool.end();
 }
