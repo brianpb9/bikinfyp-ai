@@ -61,6 +61,11 @@ export const config = {
   googleTtsApiKey: env("GOOGLE_TTS_API_KEY", ""),
   azureTtsKey: env("AZURE_TTS_KEY", ""),
   azureTtsRegion: env("AZURE_TTS_REGION", ""),
+  // ElevenLabs — Video Promosi (non-ecommerce) prototype VO only. Deliberately
+  // NOT wired into the e-commerce voiceOrder() registry (lib/providers/registry.ts)
+  // — that keeps the 31-Jul "no separate TTS for e-commerce" decision intact.
+  elevenLabsApiKey: env("ELEVENLABS_API_KEY", ""),
+  elevenLabsVoiceId: env("ELEVENLABS_VOICE_ID", ""),
   // OTP WhatsApp (fonnte | watzap) — kosong = mode mock (kode ke log server)
   waOtpProvider: env("WA_OTP_PROVIDER", "fonnte"),
   fonnteApiKey: env("FONNTE_API_KEY", ""),

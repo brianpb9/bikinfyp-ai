@@ -12,11 +12,17 @@ import { mediaStorage } from "../storage";
 import { probeDurationSec, probeHasAudioStream, probeHasVideoStream } from "../media/ffmpeg";
 import { generateVideoWithFailover } from "../providers/registry";
 import { extractReferenceFrame, buildHookVisualSpec } from "./hook-generator";
+import { synthesizeHookVoiceover } from "./voiceover";
 import { stitchClips } from "./stitch";
 import { PgPromoJobsRepository } from "../postgres/promo-jobs";
 
-const HOOK_DURATION_SEC = 6;
 const MAX_DURATION_SEC = 60;
+// BytePlus shots run best in roughly this range (SRS: umumnya <=12 dtk/klip);
+// VO's real spoken length drives the hook's video duration so they land in
+// sync without padding/trimming — clamped so a very short/long placeholder
+// script can't push the video-gen call outside the provider's sane range.
+const HOOK_DURATION_MIN_SEC = 3;
+const HOOK_DURATION_MAX_SEC = 10;
 
 export async function processPromoJob(jobId: string): Promise<void> {
   const repo = new PgPromoJobsRepository(config.databaseUrl);
@@ -40,8 +46,13 @@ export async function processPromoJob(jobId: string): Promise<void> {
     if (durationSec > MAX_DURATION_SEC) throw new Error(`Video maksimal ${MAX_DURATION_SEC} detik untuk prototype ini.`);
 
     await repo.setState(jobId, "GENERATING_HOOK");
+    // VO first: its real spoken length drives the hook video's duration so
+    // the two stay in sync without padding/trimming logic.
+    const vo = await synthesizeHookVoiceover(workDir);
+    await repo.addCost(jobId, vo.costIdr);
+    const hookDurationSec = Math.min(HOOK_DURATION_MAX_SEC, Math.max(HOOK_DURATION_MIN_SEC, vo.durationSec));
     const refFrame = await extractReferenceFrame(uploadedClipLocal, workDir);
-    const spec = buildHookVisualSpec({ jobId, imageRefPath: refFrame, durationSec: HOOK_DURATION_SEC });
+    const spec = buildHookVisualSpec({ jobId, imageRefPath: refFrame, durationSec: hookDurationSec });
     const video = await generateVideoWithFailover(spec, workDir);
     const hookClip = video.assets[0];
     if (!hookClip) throw new Error("Provider video tidak menghasilkan klip hook.");
@@ -55,7 +66,7 @@ export async function processPromoJob(jobId: string): Promise<void> {
       jobId,
       workDir,
       clipPaths: [uploadedClipLocal, hookClip.filePath],
-      aiClipDurationsSec: [HOOK_DURATION_SEC],
+      aiClips: [{ durationSec: hookDurationSec, audioPath: vo.filePath }],
     });
     const outputRel = `promo_jobs/${jobId}/output.mp4`;
     await mediaStorage().put(outputRel, fs.readFileSync(stitched.outPath), "video/mp4");
