@@ -3,6 +3,10 @@
 // (2) harga dari JSON-LD Schema.org (offers.price / lowPrice).
 // Harga tidak ketemu = biarkan kosong (user isi manual) — TIDAK gagal total.
 // Timeout 8 dtk (BR-01.2). Rate limit per-user (pola canRequestOtp).
+// Keputusan riset 2026-08: jangan tambahkan Playwright/stealth untuk melewati
+// proteksi bot TikTok Shop/Shopee. Itu rapuh dan berisiko melanggar ketentuan
+// platform. Impor URL publik tetap best-effort OG/JSON-LD + input manual;
+// integrasi yang konsisten harus memakai API partner/OAuth toko seller resmi.
 
 import { validateMarketplaceUrl } from "./url-safety";
 import { getDb } from "./db";
