@@ -33,14 +33,21 @@ export async function stitchClips(input: { jobId: string; workDir: string; clipP
   for (const dur of input.aiClipDurationsSec) args.push("-f", "lavfi", "-t", dur.toFixed(2), "-i", "anullsrc=r=24000:cl=mono");
 
   const vChain: string[] = [];
-  // concat requires every input to already share dimensions/SAR — the user's
-  // upload and the AI-generated clip come from different sources (phone
-  // camera vs. provider's native render res, e.g. 480x864), so each is
-  // scaled to 720x1280 individually BEFORE concat, not after.
-  for (let i = 0; i < n; i++) vChain.push(`[${i}:v]scale=720:1280:flags=bilinear,setsar=1[v${i}sc]`);
-  const parts: string[] = [];
-  parts.push(`[v0sc][0:a]`);
-  for (let i = 1; i < n; i++) parts.push(`[v${i}sc][${silentStart + i - 1}:a]`);
+  // concat requires every input to already share dimensions/SAR AND a
+  // consistent, zero-based timeline — the user's upload (phone camera, e.g.
+  // 30fps) and the AI-generated clip (provider's native res/fps, e.g.
+  // 480x864 @ 24fps) differ on both counts. Mismatched PTS/fps made ffmpeg's
+  // concat muxer spin duplicating frames indefinitely ("More than 1000
+  // frames duplicated") instead of erroring — caught via a live staging
+  // test, not something that reproduced with simple synthetic test clips
+  // locally. fps= normalizes rate, setpts=PTS-STARTPTS resets each input's
+  // timeline to 0 so concat isn't fighting stale/offset timestamps.
+  for (let i = 0; i < n; i++)
+    vChain.push(`[${i}:v]scale=720:1280:flags=bilinear,setsar=1,fps=30,setpts=PTS-STARTPTS[v${i}sc]`);
+  vChain.push(`[0:a]asetpts=PTS-STARTPTS[a0n]`);
+  for (let i = 1; i < n; i++) vChain.push(`[${silentStart + i - 1}:a]asetpts=PTS-STARTPTS[a${i}n]`);
+  const parts: string[] = [`[v0sc][a0n]`];
+  for (let i = 1; i < n; i++) parts.push(`[v${i}sc][a${i}n]`);
   vChain.push(`${parts.join("")}concat=n=${n}:v=1:a=1[vcat][acat]`);
   vChain.push(
     `[vcat]drawtext=fontfile='${font}':text='${escDrawtext(AIGC_WATERMARK_TEXT)}':` +
