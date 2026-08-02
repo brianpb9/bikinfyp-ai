@@ -95,3 +95,5 @@ process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 console.log(`[worker] Redis queue ${config.redisQueueName}; concurrency=${Math.max(1, config.workerConcurrency)}`);
 if (promoWorker) console.log(`[worker] Promo queue ${PROMO_QUEUE_NAME}; concurrency=1`);
+// TEMP DEBUG (remove after diagnosing env var propagation) — presence only, never the value.
+console.log(`[worker] debug: ELEVENLABS_API_KEY present=${!!config.elevenLabsApiKey} ELEVENLABS_VOICE_ID present=${!!config.elevenLabsVoiceId}`);
