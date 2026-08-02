@@ -56,6 +56,9 @@ async function fileBelongsToUser(relPath: string, userId: string): Promise<boole
         UNION ALL
         SELECT 1 FROM products p CROSS JOIN LATERAL jsonb_array_elements_text(p.images::jsonb) image(path)
           WHERE p.user_id=$2 AND image.path=$1
+        UNION ALL
+        SELECT 1 FROM promo_jobs pj
+          WHERE pj.user_id=$2 AND $1 IN (pj.output_url, pj.uploaded_clip_url, pj.generated_shot_url)
         LIMIT 1`, [relPath, userId]);
       return Boolean(result.rowCount);
     } finally { await pool.end(); }

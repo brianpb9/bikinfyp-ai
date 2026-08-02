@@ -54,6 +54,14 @@ export async function probeHasVideoStream(file: string): Promise<boolean> {
   return stdout.trim() === "video";
 }
 
+export async function probeHasAudioStream(file: string): Promise<boolean> {
+  const { stdout } = await runFfprobe([
+    "-v", "error", "-select_streams", "a:0", "-show_entries", "stream=codec_type",
+    "-of", "csv=p=0", file,
+  ]);
+  return stdout.trim() === "audio";
+}
+
 /** volumedetect -> { meanDb, maxDb } */
 export async function volumeDetect(file: string): Promise<{ meanDb: number; maxDb: number }> {
   const { stderr } = await runFfmpeg(["-i", file, "-af", "volumedetect", "-f", "null", "-"]);
