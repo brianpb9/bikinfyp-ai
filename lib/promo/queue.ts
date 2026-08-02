@@ -26,12 +26,14 @@ export function getPromoQueue(): Queue<{ jobId: string }> {
 export async function enqueuePromoJob(jobId: string): Promise<void> {
   await getPromoQueue().add("promo-render", { jobId }, {
     jobId,
-    // Found via a live staging incident: the worker instance can be
-    // restarted by the platform mid-job (unrelated to this code), which
-    // orphans the in-flight attempt. BullMQ's stalled-job detection can
-    // only recover it if another attempt is allowed — attempts:1 meant an
-    // orphaned job just sat there forever with no error and no retry.
-    attempts: 2,
+    // Found via live staging incidents: this instance gets restarted by the
+    // platform mid-job unusually often (observed 2 restarts within ~15
+    // minutes during testing), each one orphaning the in-flight attempt.
+    // attempts:2 still weren't enough — a second restart burned the retry
+    // before stitching could finish. Generous budget here, not because the
+    // pipeline itself is flaky (proven correct locally across several clip
+    // combinations) but because this specific instance's restart cadence is.
+    attempts: 5,
     backoff: { type: "fixed", delay: 5_000 },
     removeOnComplete: { age: 86_400, count: 500 },
     removeOnFail: { age: 7 * 86_400, count: 500 },
