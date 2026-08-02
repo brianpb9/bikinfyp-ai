@@ -8,6 +8,8 @@ import { processPostgresJob, sweepPostgresStaleJobs } from "../lib/postgres/work
 import { postgresRuntimeEnabled } from "../lib/postgres/smoke-runtime";
 import { redactWorkerError } from "../lib/worker-log";
 import { monitoringSettings, runOperationalMonitor } from "../lib/operational-monitor";
+import { PROMO_QUEUE_NAME } from "../lib/promo/queue";
+import { processPromoJob } from "../lib/promo/worker";
 
 assertQueueConfiguration();
 if (queueMode() !== "redis") throw new Error("Worker terpisah membutuhkan RACUN_QUEUE_MODE=redis.");
@@ -18,6 +20,21 @@ const worker = new Worker<{ jobId: string }>(
   async (job) => postgresRuntimeEnabled() ? processPostgresJob(job.data.jobId, { retryViaQueue: true }) : processJob(job.data.jobId, { retryViaQueue: true }),
   { connection: { url: config.redisUrl, maxRetriesPerRequest: null }, concurrency: Math.max(1, config.workerConcurrency) }
 );
+
+// Video Promosi (non-ecommerce) prototype — separate queue, separate state
+// machine, no credit ledger/refund entanglement with the queue above. Runs
+// in this same Docker container because that's where ffmpeg/ffprobe live.
+const promoWorker = postgresRuntimeEnabled()
+  ? new Worker<{ jobId: string }>(
+      PROMO_QUEUE_NAME,
+      async (job) => processPromoJob(job.data.jobId),
+      { connection: { url: config.redisUrl, maxRetriesPerRequest: null }, concurrency: 1 }
+    )
+  : null;
+promoWorker?.on("failed", (job, error) => {
+  if (!job) return;
+  console.error(JSON.stringify({ event: "promo_worker_job_failed", job_id: job.data.jobId, message: redactWorkerError(error.message) }));
+});
 
 worker.on("failed", (job, error) => {
   if (!job) return;
@@ -71,8 +88,10 @@ async function shutdown(signal: string) {
   clearInterval(sweepTimer);
   clearInterval(monitorTimer);
   await worker.close();
+  await promoWorker?.close();
   process.exit(0);
 }
 process.on("SIGINT", () => void shutdown("SIGINT"));
 process.on("SIGTERM", () => void shutdown("SIGTERM"));
 console.log(`[worker] Redis queue ${config.redisQueueName}; concurrency=${Math.max(1, config.workerConcurrency)}`);
+if (promoWorker) console.log(`[worker] Promo queue ${PROMO_QUEUE_NAME}; concurrency=1`);

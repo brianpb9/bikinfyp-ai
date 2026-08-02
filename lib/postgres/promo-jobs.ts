@@ -46,6 +46,11 @@ export class PgPromoJobsRepository {
     return (await this.pool.query<PromoJob>("SELECT * FROM promo_jobs WHERE id=$1 AND user_id=$2", [id, userId])).rows[0];
   }
 
+  /** Trusted worker context only — no user ownership filter. */
+  async getById(id: string): Promise<PromoJob | undefined> {
+    return (await this.pool.query<PromoJob>("SELECT * FROM promo_jobs WHERE id=$1", [id])).rows[0];
+  }
+
   async setState(id: string, state: PromoJobState) {
     await this.pool.query("UPDATE promo_jobs SET state=$1 WHERE id=$2", [state, id]);
   }

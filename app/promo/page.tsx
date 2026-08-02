@@ -28,8 +28,8 @@ export default function PromoPrototypePage() {
     try {
       const fd = new FormData();
       fd.set("clip", file);
-      const up = await apiFetch<{ uploaded_clip_url: string; duration_sec: number }>("/api/promo/upload", { formData: fd });
-      setStatus(`Klip terupload (${up.duration_sec.toFixed(1)}s). Bikin job...`);
+      const up = await apiFetch<{ uploaded_clip_url: string; size_bytes: number }>("/api/promo/upload", { formData: fd });
+      setStatus(`Klip terupload (${(up.size_bytes / 1024).toFixed(0)}KB). Bikin job...`);
       const job = await apiFetch<{ id: string; state: string }>("/api/promo/jobs", { json: { uploaded_clip_url: up.uploaded_clip_url } });
       setJobId(job.id);
       setState(job.state);
