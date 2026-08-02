@@ -28,12 +28,39 @@ const promoWorker = postgresRuntimeEnabled()
   ? new Worker<{ jobId: string }>(
       PROMO_QUEUE_NAME,
       async (job) => processPromoJob(job.data.jobId),
-      { connection: { url: config.redisUrl, maxRetriesPerRequest: null }, concurrency: 1 }
+      {
+        connection: { url: config.redisUrl, maxRetriesPerRequest: null },
+        concurrency: 1,
+        // Found via live staging incidents: this instance gets restarted by
+        // the platform mid-job unusually often. BullMQ's own stalled-job
+        // ceiling (maxStalledCount, default 1) is a SEPARATE limit from the
+        // per-job `attempts` set at enqueue (lib/promo/queue.ts) — bumping
+        // attempts alone still let "job stalled more than allowable limit"
+        // permanently fail a job after its second stall, regardless of
+        // remaining attempts. Both ceilings need headroom for this instance.
+        maxStalledCount: 5,
+      }
     )
   : null;
 promoWorker?.on("failed", (job, error) => {
   if (!job) return;
-  console.error(JSON.stringify({ event: "promo_worker_job_failed", job_id: job.data.jobId, message: redactWorkerError(error.message) }));
+  const message = redactWorkerError(error.message);
+  console.error(JSON.stringify({ event: "promo_worker_job_failed", job_id: job.data.jobId, message }));
+  // BullMQ only emits "failed" once a job is DEFINITIVELY done retrying
+  // (attempts exhausted OR its separate maxStalledCount ceiling exceeded —
+  // see lib/promo/queue.ts and this file's Worker options). Found via a
+  // live incident: processPromoJob's own catch block already calls
+  // markFailed for an in-process throw, but a job that BullMQ gives up on
+  // via the stalled path (worker process died mid-run, nothing left to run
+  // that catch block) never got its promo_jobs row updated — it stayed
+  // stuck reporting STITCHING/GENERATING_HOOK forever, worse than an honest
+  // FAILED. This is the backstop for exactly that path.
+  void (async () => {
+    const { PgPromoJobsRepository } = await import("../lib/postgres/promo-jobs");
+    const repo = new PgPromoJobsRepository(config.databaseUrl);
+    try { await repo.markFailed(job.data.jobId, `Worker gagal (stalled/attempts habis): ${message}`); }
+    finally { await repo.close(); }
+  })();
 });
 
 worker.on("failed", (job, error) => {
