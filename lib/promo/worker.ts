@@ -34,7 +34,16 @@ export async function processPromoJob(jobId: string): Promise<void> {
   try {
     const job = await repo.getById(jobId);
     if (!job) throw new Error("Promo job tidak ditemukan.");
-    if (job.state !== "QUEUED") return; // already processed/processing — avoid double-run on redelivery
+    // Only bail on a TERMINAL state. A prior "already processed" check
+    // (`!== "QUEUED"`) blocked BullMQ's own retry from ever doing anything —
+    // a job orphaned mid-run by a worker restart (state stuck at
+    // GENERATING_HOOK/STITCHING, no live process left to finish or fail it)
+    // would sit there forever, because the redelivered attempt saw a non-
+    // QUEUED state and returned immediately. No resumable checkpoints exist
+    // yet, so a retry redoes the whole pipeline from scratch (wastes one
+    // duplicate BytePlus/ElevenLabs call on the rare orphan case — acceptable
+    // for an unbilled prototype, not for the same reasoning as production).
+    if (job.state === "READY" || job.state === "FAILED") return;
 
     fs.mkdirSync(workDir, { recursive: true });
 

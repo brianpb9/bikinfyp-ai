@@ -26,7 +26,13 @@ export function getPromoQueue(): Queue<{ jobId: string }> {
 export async function enqueuePromoJob(jobId: string): Promise<void> {
   await getPromoQueue().add("promo-render", { jobId }, {
     jobId,
-    attempts: 1, // prototype: no retry semantics yet — surface failures directly
+    // Found via a live staging incident: the worker instance can be
+    // restarted by the platform mid-job (unrelated to this code), which
+    // orphans the in-flight attempt. BullMQ's stalled-job detection can
+    // only recover it if another attempt is allowed — attempts:1 meant an
+    // orphaned job just sat there forever with no error and no retry.
+    attempts: 2,
+    backoff: { type: "fixed", delay: 5_000 },
     removeOnComplete: { age: 86_400, count: 500 },
     removeOnFail: { age: 7 * 86_400, count: 500 },
   });
