@@ -14,9 +14,9 @@ delete any data.
 
 ## Paid resources
 
-- Render Postgres `racun-ai-production-postgres`: `basic-256mb`, paid Hobby
+- Render Postgres `bikinfyp-ai-production-postgres`: `basic-256mb`, paid Hobby
   workspace, recovery window 3 days.
-- Render Key Value `racun-ai-production-kv`: Starter, `journal-snapshot`,
+- Render Key Value `bikinfyp-ai-production-kv`: Starter, `journal-snapshot`,
   `noeviction`, empty external IP allow-list.
 - Web and worker: separate Starter services, auto-deploy disabled.
 - R2: create the private bucket `bikinfyp-production` with distinct scoped
