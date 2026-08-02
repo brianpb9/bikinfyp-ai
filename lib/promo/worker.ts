@@ -4,6 +4,10 @@
  * lib/promo/queue.ts's queue) — that container has ffmpeg/ffprobe; the web
  * service does not. Deliberately not sharing the e-commerce jobs queue/state
  * machine: this is prototype-only, unbilled, isolated.
+ *
+ * Stage 3: N uploaded clips (not just 1). Output order is [AI hook, then
+ * uploaded clips in upload order] — "hook" means opening/attention-grabbing
+ * segment, so it plays first, not appended at the end.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -13,7 +17,7 @@ import { probeDurationSec, probeHasAudioStream, probeHasVideoStream } from "../m
 import { generateVideoWithFailover } from "../providers/registry";
 import { extractReferenceFrame, buildHookVisualSpec } from "./hook-generator";
 import { synthesizeHookVoiceover } from "./voiceover";
-import { stitchClips } from "./stitch";
+import { stitchClips, type StitchClip } from "./stitch";
 import { PgPromoJobsRepository } from "../postgres/promo-jobs";
 
 const MAX_DURATION_SEC = 60;
@@ -34,16 +38,19 @@ export async function processPromoJob(jobId: string): Promise<void> {
 
     fs.mkdirSync(workDir, { recursive: true });
 
-    const uploadedClipLocal = await mediaStorage().materialize(job.uploaded_clip_url);
-    if (!uploadedClipLocal) throw new Error("Klip upload tidak ditemukan di storage.");
-
-    // Validation lives here (not the web upload route): ffprobe is only
-    // available in this Docker worker container.
-    if (!(await probeHasVideoStream(uploadedClipLocal))) throw new Error("File bukan video yang valid.");
-    if (!(await probeHasAudioStream(uploadedClipLocal))) throw new Error("Video belum ada suaranya — prototype ini butuh klip yang ada audio (talking-head).");
-    const durationSec = await probeDurationSec(uploadedClipLocal);
-    if (!Number.isFinite(durationSec) || durationSec <= 0) throw new Error("Durasi video tidak terbaca.");
-    if (durationSec > MAX_DURATION_SEC) throw new Error(`Video maksimal ${MAX_DURATION_SEC} detik untuk prototype ini.`);
+    // Materialize + validate every uploaded clip. ffprobe only lives in this
+    // Docker worker container — not the web upload route.
+    const uploadedClips: string[] = [];
+    for (const [i, url] of job.uploadedClipUrls.entries()) {
+      const local = await mediaStorage().materialize(url);
+      if (!local) throw new Error(`Klip upload #${i + 1} tidak ditemukan di storage.`);
+      if (!(await probeHasVideoStream(local))) throw new Error(`Klip upload #${i + 1} bukan video yang valid.`);
+      if (!(await probeHasAudioStream(local))) throw new Error(`Klip upload #${i + 1} belum ada suaranya — prototype ini butuh klip yang ada audio (talking-head).`);
+      const durationSec = await probeDurationSec(local);
+      if (!Number.isFinite(durationSec) || durationSec <= 0) throw new Error(`Durasi klip upload #${i + 1} tidak terbaca.`);
+      if (durationSec > MAX_DURATION_SEC) throw new Error(`Klip upload #${i + 1} maksimal ${MAX_DURATION_SEC} detik untuk prototype ini.`);
+      uploadedClips.push(local);
+    }
 
     await repo.setState(jobId, "GENERATING_HOOK");
     // VO first: its real spoken length drives the hook video's duration so
@@ -51,7 +58,9 @@ export async function processPromoJob(jobId: string): Promise<void> {
     const vo = await synthesizeHookVoiceover(workDir);
     await repo.addCost(jobId, vo.costIdr);
     const hookDurationSec = Math.min(HOOK_DURATION_MAX_SEC, Math.max(HOOK_DURATION_MIN_SEC, vo.durationSec));
-    const refFrame = await extractReferenceFrame(uploadedClipLocal, workDir);
+    // Reference frame from the FIRST uploaded clip — keeps the hook visually
+    // continuous (background/setting) with whatever the video opens into.
+    const refFrame = await extractReferenceFrame(uploadedClips[0], workDir);
     const spec = buildHookVisualSpec({ jobId, imageRefPath: refFrame, durationSec: hookDurationSec });
     const video = await generateVideoWithFailover(spec, workDir);
     const hookClip = video.assets[0];
@@ -62,18 +71,17 @@ export async function processPromoJob(jobId: string): Promise<void> {
     await repo.setGeneratedShot(jobId, hookRel);
 
     await repo.setState(jobId, "STITCHING");
-    const stitched = await stitchClips({
-      jobId,
-      workDir,
-      clipPaths: [uploadedClipLocal, hookClip.filePath],
-      aiClips: [{ durationSec: hookDurationSec, audioPath: vo.filePath }],
-    });
+    const clips: StitchClip[] = [
+      { videoPath: hookClip.filePath, audio: { kind: "file", path: vo.filePath, durationSec: hookDurationSec } },
+      ...uploadedClips.map((videoPath): StitchClip => ({ videoPath, audio: { kind: "embedded" } })),
+    ];
+    const stitched = await stitchClips({ jobId, workDir, clips });
     const outputRel = `promo_jobs/${jobId}/output.mp4`;
     await mediaStorage().put(outputRel, fs.readFileSync(stitched.outPath), "video/mp4");
     if (config.storageMode !== "filesystem") fs.rmSync(workDir, { recursive: true, force: true });
 
     await repo.markReady(jobId, outputRel);
-    console.log(`[promo-worker] job ${jobId}: READY (${outputRel})`);
+    console.log(`[promo-worker] job ${jobId}: READY (${outputRel}, ${uploadedClips.length} klip upload + 1 hook)`);
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[promo-worker] job ${jobId}: FAILED — ${message}`);

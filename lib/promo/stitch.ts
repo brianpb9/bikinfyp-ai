@@ -1,5 +1,5 @@
 /**
- * Video Promosi (non-ecommerce) prototype — minimal 2-clip stitch.
+ * Video Promosi (non-ecommerce) prototype — N-clip stitch (stage 3).
  * Deliberately separate from lib/media/compositor.ts: that compositor is
  * tightly coupled to the e-commerce format (price overlay, "keranjang
  * kuning" CTA badge, demo/cta ranges) which don't apply here. This is a
@@ -13,55 +13,61 @@ export interface StitchResult {
   outPath: string;
 }
 
-// Prototype assumption: clipPaths[0] (user upload) has an audio stream —
-// enforced by upload validation (probeHasAudioStream). If that assumption
-// stops holding, this needs a per-clip audio-presence probe instead.
+export type ClipAudio =
+  | { kind: "embedded" } // use this clip's own audio track (real footage — user uploads)
+  | { kind: "file"; path: string; durationSec: number } // separate audio file (VO mp3 over a silent AI clip)
+  | { kind: "silent"; durationSec: number }; // no audio available for this clip
 
-export interface AiClipAudio {
-  durationSec: number;
-  /** Real VO track (ElevenLabs) for this AI clip. Falls back to silence if omitted. */
-  audioPath?: string;
+export interface StitchClip {
+  videoPath: string;
+  audio: ClipAudio;
 }
 
-/** Gabung [klip upload user (bersuara asli, tidak diubah), klip AI-generated]
- * jadi satu mp4 + watermark AIGC wajib. Klip AI pakai VO (audioPath) bila ada
- * — kalau tidak, diisi hening supaya track audio tetap menyambung. */
-export async function stitchClips(input: { jobId: string; workDir: string; clipPaths: string[]; aiClips: AiClipAudio[] }): Promise<StitchResult> {
-  if (input.clipPaths.length < 2) throw new Error("stitchClips butuh minimal 2 klip.");
+/** Gabung N klip (urutan sesuai array — mis. hook AI di depan, lalu klip upload
+ * user) jadi satu mp4 + watermark AIGC wajib. Tiap klip bawa sumber audio
+ * sendiri: audio asli (embedded), file audio terpisah (VO), atau hening. */
+export async function stitchClips(input: { jobId: string; workDir: string; clips: StitchClip[] }): Promise<StitchResult> {
+  const clips = input.clips;
+  const n = clips.length;
+  if (n < 1) throw new Error("stitchClips butuh minimal 1 klip.");
   const outPath = path.join(input.workDir, "output.mp4");
   const font = detectFont();
-  const n = input.clipPaths.length;
-  const silentStart = n; // indeks input anullsrc/VO dimulai setelah semua klip video
 
   const args: string[] = ["-y"];
-  for (const clip of input.clipPaths) args.push("-i", clip);
-  // Satu input audio per klip AI (index 1..n-1): VO nyata bila ada, else anullsrc hening.
-  for (const ai of input.aiClips) {
-    if (ai.audioPath) args.push("-i", ai.audioPath);
-    else args.push("-f", "lavfi", "-t", ai.durationSec.toFixed(2), "-i", "anullsrc=r=24000:cl=mono");
+  for (const clip of clips) args.push("-i", clip.videoPath);
+  // Audio inputs come after all video inputs, in clip order, only for clips
+  // that need a separate input (file/silent) — "embedded" reuses the video
+  // input's own [i:a] stream, no extra -i needed.
+  const audioInputIndex: (number | null)[] = [];
+  let nextAudioInput = n;
+  for (const clip of clips) {
+    if (clip.audio.kind === "embedded") {
+      audioInputIndex.push(null);
+    } else if (clip.audio.kind === "file") {
+      audioInputIndex.push(nextAudioInput++);
+      args.push("-i", clip.audio.path);
+    } else {
+      audioInputIndex.push(nextAudioInput++);
+      args.push("-f", "lavfi", "-t", clip.audio.durationSec.toFixed(2), "-i", "anullsrc=r=24000:cl=mono");
+    }
   }
 
   const vChain: string[] = [];
-  // concat requires every input to already share dimensions/SAR AND a
-  // consistent, zero-based timeline — the user's upload (phone camera, e.g.
-  // 30fps) and the AI-generated clip (provider's native res/fps, e.g.
-  // 480x864 @ 24fps) differ on both counts. Mismatched PTS/fps made ffmpeg's
-  // concat muxer spin duplicating frames indefinitely ("More than 1000
-  // frames duplicated") instead of erroring — caught via a live staging
-  // test, not something that reproduced with simple synthetic test clips
-  // locally. fps= normalizes rate, setpts=PTS-STARTPTS resets each input's
-  // timeline to 0 so concat isn't fighting stale/offset timestamps.
+  // concat requires every input to already share dimensions/SAR/fps AND a
+  // consistent, zero-based timeline (found via a live staging hang: mismatched
+  // PTS/fps made ffmpeg's concat muxer spin duplicating frames indefinitely
+  // instead of erroring). Also requires matching audio sample rate/channel
+  // layout (found via mismatched-rate VO mp3 vs. AAC upload audio). Every
+  // clip is normalized on both fronts before concat, regardless of source.
   for (let i = 0; i < n; i++)
     vChain.push(`[${i}:v]scale=720:1280:flags=bilinear,setsar=1,fps=30,setpts=PTS-STARTPTS[v${i}sc]`);
-  // Audio concat has the same "must already match" requirement as video —
-  // sample rate/channel layout, not just timeline. The AI clip's audio can
-  // be silence (anullsrc, already 24000/mono) or a real ElevenLabs mp3
-  // (unknown rate/channels), so every input is forced to 24000/mono here too.
-  vChain.push(`[0:a]aresample=24000,aformat=channel_layouts=mono,asetpts=PTS-STARTPTS[a0n]`);
-  for (let i = 1; i < n; i++)
-    vChain.push(`[${silentStart + i - 1}:a]aresample=24000,aformat=channel_layouts=mono,asetpts=PTS-STARTPTS[a${i}n]`);
-  const parts: string[] = [`[v0sc][a0n]`];
-  for (let i = 1; i < n; i++) parts.push(`[v${i}sc][a${i}n]`);
+  for (let i = 0; i < n; i++) {
+    const idx = audioInputIndex[i];
+    const src = idx === null ? `${i}:a` : `${idx}:a`;
+    vChain.push(`[${src}]aresample=24000,aformat=channel_layouts=mono,asetpts=PTS-STARTPTS[a${i}n]`);
+  }
+  const parts: string[] = [];
+  for (let i = 0; i < n; i++) parts.push(`[v${i}sc][a${i}n]`);
   vChain.push(`${parts.join("")}concat=n=${n}:v=1:a=1[vcat][acat]`);
   vChain.push(
     `[vcat]drawtext=fontfile='${font}':text='${escDrawtext(AIGC_WATERMARK_TEXT)}':` +
