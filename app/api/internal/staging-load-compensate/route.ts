@@ -5,10 +5,10 @@ import { Pool } from "pg";
 import { config } from "@/lib/config";
 
 export async function POST(req: Request) {
-  const secret = process.env.STAGING_LOAD_COMPENSATE_SECRET;
-  if (!secret || req.headers.get("x-staging-load-compensate") !== secret) return new NextResponse(null, { status: 404 });
   const body: { job_id?: unknown } = await req.json().catch(() => ({}));
   if (body.job_id !== "5cf57de0-0d88-46f7-9f93-c5ea5d32828d") return new NextResponse(null, { status: 404 });
+  const expected = crypto.createHmac("sha256", config.authSecret).update(`staging-load-compensate:${body.job_id}`).digest("hex");
+  if (req.headers.get("x-staging-load-compensate") !== expected) return new NextResponse(null, { status: 404 });
   const pool = new Pool({ connectionString: config.databaseUrl });
   let outputUrl: string | null = null; let duplicated = false;
   try {
