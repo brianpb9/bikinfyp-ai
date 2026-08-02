@@ -44,19 +44,22 @@ function PaketInner() {
     }
   }
 
-  if (error) return <main className="px-4 py-6"><ErrorText message={error} /></main>;
-  if (!pkg) return <main className="px-4 py-6 text-zinc-500">Memuat paket...</main>;
+  if (error) return <main className="min-h-dvh bg-gradient-to-b from-amber-50/70 via-white to-white px-4 py-6"><ErrorText message={error} /></main>;
+  if (!pkg) return <main className="min-h-dvh bg-gradient-to-b from-amber-50/70 via-white to-white px-4 py-6 text-zinc-500">Memuat paket...</main>;
 
   return (
-    <main className="space-y-5 px-4 py-6 pb-10">
-      <h1 className="text-xl font-bold">← Paket Posting</h1>
+    <main className="min-h-dvh space-y-5 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 py-6 pb-10">
+      <div>
+        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Langkah terakhir</p>
+        <h1 className="font-display text-xl font-bold text-zinc-900">← Paket Posting</h1>
+      </div>
 
-      <section className="flex items-center justify-between rounded-2xl border-2 border-zinc-100 p-4">
+      <section className="flex items-center justify-between rounded-2xl border-2 border-zinc-100 bg-white p-4 shadow-sm">
         <span className="font-bold">📹 Video</span>
         <a
           href={pkg.video_url}
           download="racun-video.mp4"
-          className="flex min-h-[44px] items-center rounded-xl bg-amber-500 px-5 font-bold text-white"
+          className="flex min-h-[44px] items-center rounded-xl bg-gradient-to-br from-amber-400 to-amber-500 px-5 font-bold text-white shadow-sm shadow-amber-500/20"
         >
           Unduh
         </a>
@@ -68,7 +71,7 @@ function PaketInner() {
           <button
             type="button"
             onClick={() => copy("caption", pkg.caption)}
-            className="flex min-h-[44px] items-center rounded-xl border-2 border-zinc-200 px-5 font-semibold"
+            className="flex min-h-[44px] items-center rounded-xl border-2 border-zinc-200 bg-white px-5 font-semibold"
           >
             {copied === "caption" ? "Tersalin!" : "Salin"}
           </button>
@@ -82,7 +85,7 @@ function PaketInner() {
           <button
             type="button"
             onClick={() => copy("hashtag", pkg.hashtags.join(" "))}
-            className="flex min-h-[44px] items-center rounded-xl border-2 border-zinc-200 px-5 font-semibold"
+            className="flex min-h-[44px] items-center rounded-xl border-2 border-zinc-200 bg-white px-5 font-semibold"
           >
             {copied === "hashtag" ? "Tersalin!" : "Salin"}
           </button>
@@ -90,7 +93,7 @@ function PaketInner() {
         <div className="rounded-2xl bg-zinc-50 p-4 text-sm">{pkg.hashtags.join(" ")}</div>
       </section>
 
-      <section className="rounded-2xl border-2 border-zinc-100 p-4">
+      <section className="rounded-2xl border-2 border-zinc-100 bg-white p-4 shadow-sm">
         <p className="font-bold">⏰ Jam terbaik posting</p>
         <p className="text-lg">{pkg.suggested_post_time}</p>
       </section>

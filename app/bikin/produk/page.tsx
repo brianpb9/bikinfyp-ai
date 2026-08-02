@@ -150,11 +150,14 @@ export default function ProdukPage() {
   }
 
   return (
-    <main className="pb-8">
+    <main className="min-h-dvh bg-gradient-to-b from-amber-50/70 via-white to-white pb-8">
       <FlowHeader title="Bikin Video" step={1} />
       <div className="space-y-5 px-4">
         <section className="space-y-2">
-          <h2 className="text-lg font-bold">Tempel link produkmu</h2>
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Langkah 1 dari 5</p>
+            <h2 className="font-display text-xl font-bold text-zinc-900">Tempel link produkmu</h2>
+          </div>
           <input
             type="url"
             placeholder="https://vt.tiktok.com/... atau shopee.co.id/..."
