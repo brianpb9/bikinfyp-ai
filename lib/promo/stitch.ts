@@ -33,13 +33,17 @@ export async function stitchClips(input: { jobId: string; workDir: string; clipP
   for (const dur of input.aiClipDurationsSec) args.push("-f", "lavfi", "-t", dur.toFixed(2), "-i", "anullsrc=r=24000:cl=mono");
 
   const vChain: string[] = [];
+  // concat requires every input to already share dimensions/SAR — the user's
+  // upload and the AI-generated clip come from different sources (phone
+  // camera vs. provider's native render res, e.g. 480x864), so each is
+  // scaled to 720x1280 individually BEFORE concat, not after.
+  for (let i = 0; i < n; i++) vChain.push(`[${i}:v]scale=720:1280:flags=bilinear,setsar=1[v${i}sc]`);
   const parts: string[] = [];
-  parts.push(`[0:v][0:a]`);
-  for (let i = 1; i < n; i++) parts.push(`[${i}:v][${silentStart + i - 1}:a]`);
+  parts.push(`[v0sc][0:a]`);
+  for (let i = 1; i < n; i++) parts.push(`[v${i}sc][${silentStart + i - 1}:a]`);
   vChain.push(`${parts.join("")}concat=n=${n}:v=1:a=1[vcat][acat]`);
-  vChain.push(`[vcat]scale=720:1280:flags=bilinear[vsc]`);
   vChain.push(
-    `[vsc]drawtext=fontfile='${font}':text='${escDrawtext(AIGC_WATERMARK_TEXT)}':` +
+    `[vcat]drawtext=fontfile='${font}':text='${escDrawtext(AIGC_WATERMARK_TEXT)}':` +
       `fontsize=28:fontcolor=white@0.7:x=w-text_w-24:y=h-text_h-24[vout]`
   );
   vChain.push(`[acat]aresample=24000[aout]`);
