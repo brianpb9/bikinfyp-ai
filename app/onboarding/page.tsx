@@ -14,6 +14,14 @@ export default function OnboardingPage() {
   const [devHint, setDevHint] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [monthlyVideos, setMonthlyVideos] = useState(10);
+  const [tierPrice, setTierPrice] = useState<5000 | 12000 | 49000>(5000);
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  const humanCost = monthlyVideos * 125_000;
+  const aiCost = monthlyVideos * tierPrice;
+  const saving = humanCost - aiCost;
+  const savingPercent = Math.round((saving / humanCost) * 100);
 
   async function requestOtp(e?: React.FormEvent) {
     e?.preventDefault();
@@ -46,10 +54,14 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-gradient-to-b from-amber-50 to-white px-6 pb-8 pt-16">
+    <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-gradient-to-b from-amber-50 via-white to-amber-50/40 px-6 pb-8 pt-10">
       {step === 1 && (
         <>
-          <div className="flex-1 space-y-7">
+          <div className="flex-1 space-y-9">
+            <div className="flex items-center justify-between text-xs font-semibold text-zinc-500">
+              <span className="font-display text-base font-extrabold text-zinc-900">Bikin<span className="text-amber-500">FYP</span>.AI</span>
+              <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">● Harga transparan</span>
+            </div>
             <div className="mx-auto w-48 overflow-hidden rounded-[28px] bg-zinc-900 shadow-2xl shadow-amber-900/10 ring-1 ring-black/5">
               <video src="/demo/contoh-senyap-teks.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full" />
             </div>
@@ -84,21 +96,49 @@ export default function OnboardingPage() {
                 ))}
               </div>
             </div>
-            <div className="grid grid-cols-3 gap-2">
+            <div className="grid grid-cols-2 gap-2">
               {[
-                { icon: "⚡", label: "15 detik jadi" },
-                { icon: "💸", label: "Mulai Rp5rb" },
-                { icon: "🎭", label: "5 gaya kreator" },
+                { value: "15 detik", label: "video siap posting" },
+                { value: "~2–3 menit", label: "waktu render rata-rata staging" },
+                { value: "5 gaya", label: "kreator AI aktif" },
+                { value: "Rp5.000", label: "harga mulai per video" },
               ].map((f) => (
                 <div
                   key={f.label}
-                  className="flex flex-col items-center gap-1 rounded-2xl border border-amber-100 bg-white/70 px-2 py-3 text-center shadow-sm"
+                  className="rounded-2xl border border-amber-100 bg-white px-3 py-3 shadow-sm"
                 >
-                  <span className="text-xl">{f.icon}</span>
-                  <span className="text-xs font-semibold leading-tight text-zinc-700">{f.label}</span>
+                  <p className="font-display text-lg font-extrabold text-zinc-900">{f.value}</p>
+                  <p className="text-[11px] leading-tight text-zinc-500">{f.label}</p>
                 </div>
               ))}
             </div>
+
+            <section className="rounded-[28px] bg-zinc-900 p-5 text-white shadow-xl shadow-zinc-900/15">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-300">Kalkulator hemat biaya</p>
+              <h2 className="mt-2 font-display text-2xl font-extrabold leading-tight">Berapa video yang kamu butuh tiap bulan?</h2>
+              <div className="mt-5 flex items-end justify-between"><span className="text-4xl font-extrabold text-amber-300">{monthlyVideos}</span><span className="mb-1 text-sm text-zinc-300">video / bulan</span></div>
+              <input aria-label="Jumlah video per bulan" type="range" min="1" max="100" value={monthlyVideos} onChange={(e) => setMonthlyVideos(Number(e.target.value))} className="mt-3 w-full accent-amber-400" />
+              <div className="mt-5 grid grid-cols-3 gap-2">
+                {([{ label: "Senyap+Teks", price: 5000 }, { label: "High Quality", price: 12000 }, { label: "Super HQ", price: 49000 }] as const).map((tier) => <button type="button" key={tier.price} onClick={() => setTierPrice(tier.price)} className={`rounded-xl border px-2 py-2 text-left text-[11px] font-bold ${tierPrice === tier.price ? "border-amber-300 bg-amber-400 text-zinc-950" : "border-zinc-700 text-zinc-200"}`}><span className="block leading-tight">{tier.label}</span><span className="mt-1 block text-xs">Rp{tier.price.toLocaleString("id-ID")}</span></button>)}
+              </div>
+              <div className="mt-5 rounded-2xl bg-white p-4 text-zinc-900"><div className="flex justify-between text-xs text-zinc-500"><span>Jasa UGC manusia*</span><span className="line-through">Rp{humanCost.toLocaleString("id-ID")}</span></div><div className="mt-1 flex justify-between text-xs text-zinc-500"><span>BikinFYP.AI</span><span>Rp{aiCost.toLocaleString("id-ID")}</span></div><p className="mt-3 font-display text-2xl font-extrabold text-emerald-600">Hemat Rp{saving.toLocaleString("id-ID")}</p><p className="text-sm font-bold text-emerald-600">{savingPercent}% lebih hemat</p></div>
+              <p className="mt-3 text-[10px] leading-relaxed text-zinc-400">*Estimasi Rp100–150 ribu/video dari riset pasar Fastwork; kalkulator memakai titik tengah Rp125 ribu.</p>
+            </section>
+
+            <section className="rounded-[26px] border border-zinc-100 bg-white p-5 shadow-sm">
+              <p className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">Checkout aman lewat</p>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs font-extrabold text-zinc-600"><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">GoPay</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">OVO</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">DANA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">QRIS</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">BCA VA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">VISA</span></div>
+              <p className="mt-3 text-center text-[11px] text-zinc-400">Metode ditampilkan oleh Midtrans Snap sesuai kanal merchant yang aktif.</p>
+            </section>
+
+            <section><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">Jawaban jujur sebelum mulai</p><h2 className="mt-1 font-display text-2xl font-extrabold text-zinc-900">Yang perlu kamu tahu</h2><div className="mt-4 space-y-2">{[
+              ["Videonya kelihatan AI? Aman dari TikTok Shop?", "Video diberi label AIGC dan kamu tetap perlu menyalakan label konten AI saat upload. Kami tidak menyembunyikan asal konten—ini membantu kamu mengikuti aturan platform."],
+              ["Kalau hasilnya jelek gimana?", "Sistem QC memeriksa wajah yang tidak diinginkan dan konsistensi produk. Jika job gagal QC atau gagal render, kredit di-release otomatis lewat ledger."],
+              ["Foto produk aku dipakai bagaimana?", "Foto asli dipakai sebagai referensi visual produk. Pipeline menjaga produk tetap konsisten; bukan meminta AI mengarang ulang detail produkmu."],
+              ["Bisa pakai link Tokopedia langsung?", "Tokopedia dapat dibaca best-effort. TikTok Shop dan Shopee yang memblokir pembacaan otomatis akan meminta kamu isi detail produk secara manual."],
+              ["Berapa lama sampai jadi?", "Pengukuran staging nyata berada di kisaran 2–3 menit untuk render 15 detik; waktu dapat berubah mengikuti antrean dan provider."],
+              ["Ada garansi kalau render gagal?", "Ya. Hold kredit dilepas otomatis ketika job gagal, jadi saldo bisa dipakai lagi untuk mencoba render berikutnya."],
+            ].map(([q,a],i)=><div key={q} className="rounded-2xl border border-zinc-200 bg-white"><button type="button" onClick={()=>setOpenFaq(openFaq===i?null:i)} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left text-sm font-bold text-zinc-800"><span>{q}</span><span className="text-amber-500">{openFaq===i?"−":"+"}</span></button>{openFaq===i&&<p className="border-t border-zinc-100 px-4 py-3 text-sm leading-relaxed text-zinc-600">{a}</p>}</div>)}</div></section>
           </div>
           <PrimaryButton big onClick={() => setStep(2)}>
             Coba Gratis
