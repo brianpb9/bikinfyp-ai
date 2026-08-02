@@ -80,6 +80,8 @@ export default function ProdukPage() {
         setExtractedPreviews(res.image_urls ?? []);
         setShowManual(true);
         if (res.warning) setExtractMsg(res.warning);
+        else if (!res.image_urls?.length)
+          setExtractMsg("Nama & harga ketemu, tapi fotonya nggak kebaca dari link. Upload foto sendiri ya di bawah.");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Gagal membaca link.");
@@ -95,7 +97,7 @@ export default function ProdukPage() {
     if (!name.trim()) return setError("Nama produknya belum diisi.");
     const priceIdr = parseInt(price.replace(/[^\d]/g, ""), 10);
     if (!priceIdr || priceIdr <= 0) return setError("Harganya wajib diisi — harga adalah bahan wajib hook videonya.");
-    if (!productId && photos.length < 1) return setError("Upload fotonya dulu ya — minimal 1, maksimal 5 foto.");
+    if (extractedPreviews.length + photos.length < 1) return setError("Upload fotonya dulu ya — minimal 1, maksimal 5 foto.");
     // Produk dari ekstraksi tanpa harga: sorot wajib (BR-01.3)
     if (productId && (!price || priceIdr <= 0)) return setError("Harga dari link tidak ketemu — isi manual ya, wajib.");
 
@@ -268,7 +270,7 @@ export default function ProdukPage() {
         )}
 
         <ErrorText message={error} />
-        <PrimaryButton onClick={submitProduct} disabled={loading || !name.trim() || !price || (!productId && photos.length < 1)}>
+        <PrimaryButton onClick={submitProduct} disabled={loading || !name.trim() || !price || extractedPreviews.length + photos.length < 1}>
           {loading ? "Menyimpan..." : "Lanjut"}
         </PrimaryButton>
       </div>

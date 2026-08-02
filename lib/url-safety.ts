@@ -1,6 +1,8 @@
 // Anti-SSRF (NF-SEC08): whitelist domain marketplace, tolak IP/internal/skema aneh.
 
-export const WHITELIST_DOMAINS = ["tiktok.com", "shopee.co.id", "tokopedia.com"];
+// shp.ee: domain resmi Shopee untuk short-link dari tombol "Bagikan" di app —
+// bukan subdomain shopee.co.id, jadi harus didaftarkan terpisah.
+export const WHITELIST_DOMAINS = ["tiktok.com", "shopee.co.id", "tokopedia.com", "shp.ee"];
 
 export function validateMarketplaceUrl(raw: string): { ok: boolean; reason?: string } {
   let url: URL;
