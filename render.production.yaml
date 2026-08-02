@@ -1,0 +1,142 @@
+# Production-only Render Blueprint — use this file explicitly, never rename or
+# sync the staging Blueprint. It creates isolated resources in Singapore.
+# Secrets remain sync:false and must be entered in Render, not committed here.
+
+services:
+  - type: web
+    name: racun-ai-production-web
+    runtime: node
+    plan: starter
+    region: singapore
+    buildCommand: npm ci --include=dev && npm run build
+    startCommand: npm start
+    healthCheckPath: /api/health
+    # The production runner has a separate, explicit confirmation gate. The
+    # confirmation token exists only for this deploy command, not as a saved env.
+    preDeployCommand: RACUN_PRODUCTION_MIGRATION_CONFIRM=APPLY_PRODUCTION_MIGRATIONS node scripts/migrate-postgres-production.mjs
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RACUN_DEPLOY_ENV
+        value: production
+      - key: RACUN_DB_RUNTIME
+        value: postgres
+      - key: RACUN_QUEUE_MODE
+        value: redis
+      - key: REDIS_QUEUE_NAME
+        value: racun-jobs-production
+      - key: DATABASE_URL
+        fromDatabase:
+          name: racun-ai-production-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: racun-ai-production-kv
+          property: connectionString
+      - key: STORAGE_MODE
+        value: r2
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        value: bikinfyp-production
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: AUTH_SECRET
+        generateValue: true
+      - key: ALLOW_DEV_LOGIN
+        value: "0"
+      - key: JOB_INTAKE_MODE
+        value: open
+      - key: PROVIDER_VIDEO
+        value: byteplus
+      - key: BYTEPLUS_ARK_API_KEY
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: APP_BASE_URL
+        value: https://racun-ai-production-web.onrender.com
+      - key: MIDTRANS_IS_PRODUCTION
+        value: "false"
+
+  - type: worker
+    name: racun-ai-production-worker
+    runtime: docker
+    plan: starter
+    region: singapore
+    dockerfilePath: Dockerfile.worker
+    dockerContext: .
+    autoDeployTrigger: off
+    maxShutdownDelaySeconds: 300
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: RACUN_DEPLOY_ENV
+        value: production
+      - key: RACUN_DB_RUNTIME
+        value: postgres
+      - key: RACUN_QUEUE_MODE
+        value: redis
+      - key: REDIS_QUEUE_NAME
+        value: racun-jobs-production
+      - key: WORKER_CONCURRENCY
+        value: "1"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: racun-ai-production-postgres
+          property: connectionString
+      - key: REDIS_URL
+        fromService:
+          type: keyvalue
+          name: racun-ai-production-kv
+          property: connectionString
+      - key: STORAGE_MODE
+        value: r2
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_BUCKET
+        value: bikinfyp-production
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_REGION
+        value: auto
+      - key: AUTH_SECRET
+        fromService:
+          type: web
+          name: racun-ai-production-web
+          envVarKey: AUTH_SECRET
+      - key: PROVIDER_VIDEO
+        value: byteplus
+      - key: BYTEPLUS_ARK_API_KEY
+        sync: false
+      - key: MIDTRANS_IS_PRODUCTION
+        value: "false"
+
+  - type: keyvalue
+    name: racun-ai-production-kv
+    plan: starter
+    region: singapore
+    maxmemoryPolicy: noeviction
+    persistenceMode: journal-snapshot
+    # No external Redis traffic; Render private network only.
+    ipAllowList: []
+
+databases:
+  - name: racun-ai-production-postgres
+    plan: basic-256mb
+    region: singapore
+    postgresMajorVersion: "16"
+    databaseName: racun_production
+    user: racun_production
+    connectionPool: none
+    # No external database traffic; Render private network only.
+    ipAllowList: []
