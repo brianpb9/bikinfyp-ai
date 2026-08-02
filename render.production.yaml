@@ -51,7 +51,7 @@ services:
       - key: ALLOW_DEV_LOGIN
         value: "0"
       - key: JOB_INTAKE_MODE
-        value: open
+        value: closed
       - key: PROVIDER_VIDEO
         value: byteplus
       - key: BYTEPLUS_ARK_API_KEY
@@ -60,6 +60,20 @@ services:
         sync: false
       - key: RESEND_FROM_EMAIL
         sync: false
+      - key: OPERATIONAL_MONITORING_ENABLED
+        value: "true"
+      - key: OPERATIONAL_ALERT_TO_EMAIL
+        sync: false
+      - key: OPERATIONAL_MONITORING_INTERVAL_MIN
+        value: "5"
+      - key: OPERATIONAL_ALERT_COOLDOWN_MIN
+        value: "60"
+      - key: OPERATIONAL_ERROR_WINDOW_MIN
+        value: "60"
+      - key: OPERATIONAL_ERROR_MIN_JOBS
+        value: "3"
+      - key: OPERATIONAL_ERROR_RATE_PERCENT
+        value: "20"
       - key: APP_BASE_URL
         value: https://bikinfyp-ai-production-web.onrender.com
       - key: MIDTRANS_IS_PRODUCTION
@@ -117,6 +131,24 @@ services:
         value: byteplus
       - key: BYTEPLUS_ARK_API_KEY
         sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: RESEND_FROM_EMAIL
+        sync: false
+      - key: OPERATIONAL_MONITORING_ENABLED
+        value: "true"
+      - key: OPERATIONAL_ALERT_TO_EMAIL
+        sync: false
+      - key: OPERATIONAL_MONITORING_INTERVAL_MIN
+        value: "5"
+      - key: OPERATIONAL_ALERT_COOLDOWN_MIN
+        value: "60"
+      - key: OPERATIONAL_ERROR_WINDOW_MIN
+        value: "60"
+      - key: OPERATIONAL_ERROR_MIN_JOBS
+        value: "3"
+      - key: OPERATIONAL_ERROR_RATE_PERCENT
+        value: "20"
       - key: MIDTRANS_IS_PRODUCTION
         value: "false"
 

@@ -32,6 +32,7 @@
     "test:storage": "tsx --test tests/storage.test.ts",
     "test:worker-container": "bash scripts/test-worker-container.sh",
     "worker": "tsx scripts/worker.ts",
+    "monitor:jobs": "tsx scripts/monitor-jobs.ts",
     "smoke": "bash scripts/smoke-e2e.sh"
   },
   "dependencies": {

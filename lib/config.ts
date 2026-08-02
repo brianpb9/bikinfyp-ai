@@ -69,6 +69,16 @@ export const config = {
   // OTP Email via Resend — kosong = mode mock (kode ke log server)
   resendApiKey: env("RESEND_API_KEY", ""),
   resendFromEmail: env("RESEND_FROM_EMAIL", "onboarding@resend.dev"),
+  // Monitoring operasional berjalan di proses worker, tanpa vendor monitoring
+  // tambahan. Penerima dipisahkan dari alamat pengirim agar alert tidak salah
+  // kirim ke inbox/domain Resend default.
+  operationalMonitoringEnabled: env("OPERATIONAL_MONITORING_ENABLED", "false") === "true",
+  operationalAlertToEmail: env("OPERATIONAL_ALERT_TO_EMAIL", ""),
+  operationalMonitoringIntervalMin: parseInt(env("OPERATIONAL_MONITORING_INTERVAL_MIN", "5"), 10),
+  operationalAlertCooldownMin: parseInt(env("OPERATIONAL_ALERT_COOLDOWN_MIN", "60"), 10),
+  operationalErrorWindowMin: parseInt(env("OPERATIONAL_ERROR_WINDOW_MIN", "60"), 10),
+  operationalErrorMinJobs: parseInt(env("OPERATIONAL_ERROR_MIN_JOBS", "3"), 10),
+  operationalErrorRatePercent: parseInt(env("OPERATIONAL_ERROR_RATE_PERCENT", "20"), 10),
   // Origin publik yang dikelola deploy, bukan Host dari request. Dipakai untuk
   // callback pembayaran agar webhook tidak bisa diarahkan oleh header klien.
   appBaseUrl: env("APP_BASE_URL", ""),

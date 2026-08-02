@@ -15,7 +15,7 @@ This is a preparation document. It does not provision, deploy, alter Render acco
 | Postgres recovery | Paid Render Postgres with PITR. Make a logical export and test a PITR restore into a **new** database. | Recovery window, restore timestamp, schema/count/balance/FK report. | Not provisioned; cannot activate. |
 | Queue durability | Paid Key Value, `noeviction`, `journal-snapshot`, private networking, internal auth after authenticated URLs are wired. | Settings and worker reconnect/drain log. | Not provisioned; cannot activate. |
 | Web/worker down | Enable Render email/Slack failure notifications for both production services; configure `/api/health`; name incident owner. | Destination and test event. | No account access/owner supplied; not activated. |
-| Error/stuck jobs | Install approved alert destination and monitor for elevated 5xx plus jobs exceeding per-state timeout. | Rule, threshold, owner, test alert. | No production telemetry/destination; not activated. |
+| Error/stuck jobs | Existing worker runs a PostgreSQL check every 5 minutes and sends founder alert through existing Resend. It alerts 5 minutes before each configured state timeout and when >=3 settled terminal jobs in 60 minutes have >=20% `REFUNDED`. A PostgreSQL advisory lock plus `audit_log` enforce a 60-minute per-alert cooldown across restarts. | Worker startup log, controlled alert receipt, and `audit_log` entry; `OPERATIONAL_ALERT_TO_EMAIL` is a Render secret. | Blueprint enabled; becomes live only after the founder inbox secret is entered and the worker is deployed. |
 
 Render sources reviewed 2 Aug 2026: paid Postgres has PITR (Hobby 3 days; Pro+ 7) and restores into a new instance; free DBs lack recovery. Paid Key Value supports `journal-snapshot` (up to roughly one second of writes can be lost), and Render recommends `noeviction` for queues. Render notifications include unhealthy services and failed deploys; Metrics provides web HTTP/CPU/memory graphs. [Postgres recovery](https://render.com/docs/postgresql-backups), [Key Value](https://render.com/docs/key-value), [notifications](https://render.com/docs/notifications), [metrics](https://render.com/docs/service-metrics).
 
@@ -25,6 +25,21 @@ Render sources reviewed 2 Aug 2026: paid Postgres has PITR (Hobby 3 days; Pro+ 7
 2. Create an export; restore a point at least ten minutes old to a **new isolated** database. Do not change application URLs.
 3. Run migration checksum, schema/table counts, per-user ledger balances, and FK checks on the clone. Retain redacted output.
 4. Only after match is proven may the clone be discarded. Production remains untouched.
+
+## Lightweight operational monitoring
+
+The existing Render worker is the scheduler; no monitoring subscription or new
+public endpoint is used. Production Blueprint sets `OPERATIONAL_MONITORING_ENABLED=true`.
+Set `OPERATIONAL_ALERT_TO_EMAIL` on the production **worker** to the
+founder-controlled inbox; that worker must also hold `RESEND_API_KEY` and
+`RESEND_FROM_EMAIL`. Then deploy the worker. The web service does not run the
+monitor. Test with a controlled stale job or a
+test-only Resend send, retain the received email plus the matching
+`audit_log(action='monitoring.alert')` row, and remove the controlled data.
+For a controlled one-shot check from the worker shell, run `npm run monitor:jobs`.
+
+The monitor never changes jobs, credits, intake, or payments. `JOB_INTAKE_MODE`
+remains `closed`; `MIDTRANS_IS_PRODUCTION` remains `false`.
 
 ## Freeze/drain runbook
 

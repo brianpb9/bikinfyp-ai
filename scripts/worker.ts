@@ -7,6 +7,7 @@ import { processJob } from "../lib/worker";
 import { processPostgresJob, sweepPostgresStaleJobs } from "../lib/postgres/worker";
 import { postgresRuntimeEnabled } from "../lib/postgres/smoke-runtime";
 import { redactWorkerError } from "../lib/worker-log";
+import { monitoringSettings, runOperationalMonitor } from "../lib/operational-monitor";
 
 assertQueueConfiguration();
 if (queueMode() !== "redis") throw new Error("Worker terpisah membutuhkan RACUN_QUEUE_MODE=redis.");
@@ -46,9 +47,29 @@ const sweepTimer = setInterval(() => {
 }, 60_000);
 sweepTimer.unref();
 
+let monitorInFlight = false;
+async function runMonitorOnce(event: string) {
+  if (monitorInFlight) return;
+  monitorInFlight = true;
+  try {
+    const result = await runOperationalMonitor();
+    if (result.checked || result.sent || event === "operational_monitor_startup") console.log(JSON.stringify({ event, ...result }));
+  } catch (error) {
+    console.error("[monitor] pemeriksaan operasional gagal:", redactWorkerError(error instanceof Error ? error.message : String(error)));
+  } finally { monitorInFlight = false; }
+}
+const monitorTimer = setInterval(() => {
+  void runMonitorOnce("operational_monitor");
+}, monitoringSettings().intervalMs);
+monitorTimer.unref();
+if (config.operationalMonitoringEnabled) {
+  void runMonitorOnce("operational_monitor_startup");
+}
+
 async function shutdown(signal: string) {
   console.log(`[worker] ${signal}: menutup worker dengan aman`);
   clearInterval(sweepTimer);
+  clearInterval(monitorTimer);
   await worker.close();
   process.exit(0);
 }
