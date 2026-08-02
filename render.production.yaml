@@ -11,9 +11,10 @@ services:
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
-    # The production runner has a separate, explicit confirmation gate. The
-    # confirmation token exists only for this deploy command, not as a saved env.
-    preDeployCommand: RACUN_PRODUCTION_MIGRATION_CONFIRM=APPLY_PRODUCTION_MIGRATIONS node scripts/migrate-postgres-production.mjs
+    # The production runner requires a one-off explicit confirmation token.
+    # The operator injects it only for the approved initial migration, then
+    # removes it. Never bake that token into a Blueprint or saved environment.
+    preDeployCommand: node scripts/migrate-postgres-production.mjs
     autoDeployTrigger: off
     envVars:
       - key: NODE_ENV

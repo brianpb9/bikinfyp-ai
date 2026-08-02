@@ -35,6 +35,15 @@ Enter each secret directly into the matching service after resource creation:
 Do not add Midtrans server/client keys in this phase. Both services must retain
 `MIDTRANS_IS_PRODUCTION=false`.
 
+## One-off initial migration
+
+Before the first production web deploy, temporarily set
+`RACUN_PRODUCTION_MIGRATION_CONFIRM=APPLY_PRODUCTION_MIGRATIONS` on the web
+service and deploy. Retain the redacted migration output, then remove the
+variable immediately and confirm a following deploy reports checksum skips.
+The token must never be placed in this Blueprint or retained as a production
+environment variable.
+
 ## Required evidence before accepting infrastructure
 
 1. Capture the resource plan, region, privacy, KV policy/persistence, and
