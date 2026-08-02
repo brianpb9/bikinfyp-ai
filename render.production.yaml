@@ -11,10 +11,8 @@ services:
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health
-    # The production runner requires a one-off explicit confirmation token.
-    # The operator injects it only for the approved initial migration, then
-    # removes it. Never bake that token into a Blueprint or saved environment.
-    preDeployCommand: node scripts/migrate-postgres-production.mjs
+    # Migrations are deliberately run as a one-off command from the Render
+    # Shell, never implicitly on every deploy. See the provisioning runbook.
     autoDeployTrigger: off
     envVars:
       - key: NODE_ENV

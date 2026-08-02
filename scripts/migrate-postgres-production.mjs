@@ -19,10 +19,6 @@ if (args.some((arg) => arg !== "--dry-run")) {
 if (process.env.RACUN_DEPLOY_ENV !== "production") {
   throw new Error("Migrasi production ditolak: RACUN_DEPLOY_ENV harus bernilai production.");
 }
-if (!dryRun && process.env.RACUN_PRODUCTION_MIGRATION_CONFIRM !== "APPLY_PRODUCTION_MIGRATIONS") {
-  throw new Error("Apply ditolak: set RACUN_PRODUCTION_MIGRATION_CONFIRM=APPLY_PRODUCTION_MIGRATIONS setelah approval eksplisit.");
-}
-
 const databaseUrl = process.env.DATABASE_URL;
 if (!databaseUrl || !/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
   throw new Error("Migrasi production memerlukan DATABASE_URL PostgreSQL.");
@@ -44,6 +40,23 @@ try {
     console.log(JSON.stringify({ status: "DRY_RUN", schema_migrations: "absent", would_apply: names, skipped: [] }));
     process.exitCode = 0;
   } else {
+    // Apply approval is required only if this invocation would change schema.
+    // This lets a later checksum-only verification run without retaining a
+    // dangerous approval token in the service environment.
+    const recorded = hasLedger
+      ? await pool.query("SELECT version, checksum FROM schema_migrations")
+      : { rows: [] };
+    const recordedChecksums = new Map(recorded.rows.map((row) => [row.version, row.checksum]));
+    const pending = migrations.filter((migration) => {
+      const checksum = recordedChecksums.get(migration.version);
+      if (checksum && checksum !== migration.checksum) {
+        throw new Error(`Checksum migrasi berubah setelah diterapkan: ${migration.name}`);
+      }
+      return !checksum;
+    });
+    if (!dryRun && pending.length && process.env.RACUN_PRODUCTION_MIGRATION_CONFIRM !== "APPLY_PRODUCTION_MIGRATIONS") {
+      throw new Error("Apply ditolak: set RACUN_PRODUCTION_MIGRATION_CONFIRM=APPLY_PRODUCTION_MIGRATIONS setelah approval eksplisit.");
+    }
     if (!hasLedger) await pool.query("CREATE TABLE schema_migrations (version TEXT PRIMARY KEY, checksum TEXT NOT NULL, applied_at TIMESTAMPTZ NOT NULL DEFAULT now())");
     const applied = [];
     const skipped = [];

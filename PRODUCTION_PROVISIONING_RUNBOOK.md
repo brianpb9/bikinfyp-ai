@@ -6,7 +6,7 @@ delete any data.
 
 ## Immutable release
 
-- Repository/ref: `main` at `b60ade73395c62b4fb1ad9aacf5e483029963337` or a
+- Repository/ref: `main` at `a575932fee62754fffaa945c6bf4e4a824b9549c` or a
   later explicitly reviewed commit.
 - Blueprint: `render.production.yaml`; do **not** sync `render.yaml`, which is
   staging-only.
@@ -37,12 +37,31 @@ Do not add Midtrans server/client keys in this phase. Both services must retain
 
 ## One-off initial migration
 
-Before the first production web deploy, temporarily set
-`RACUN_PRODUCTION_MIGRATION_CONFIRM=APPLY_PRODUCTION_MIGRATIONS` on the web
-service and deploy. Retain the redacted migration output, then remove the
-variable immediately and confirm a following deploy reports checksum skips.
-The token must never be placed in this Blueprint or retained as a production
-environment variable.
+Migrations are never implicit in a web deploy. After the initial web service
+is running, open its Render Shell and run the following commands in order:
+
+1. `npm run migrate:postgres-production:dry-run` — retain its checksum/pending
+   output; it makes no database writes.
+2. Set `RACUN_PRODUCTION_MIGRATION_CONFIRM=APPLY_PRODUCTION_MIGRATIONS` only
+   for that Shell command, then run `npm run migrate:postgres-production`.
+3. Run `npm run migrate:postgres-production` once more *without* the token.
+   It must report `applied: []` and checksum skips.
+
+The approval token must never be placed in this Blueprint or saved as a
+production environment variable. A later migration requires the same separate
+approval sequence; a normal application deploy never mutates schema.
+
+## PITR reconciliation command
+
+After restoring to a distinct temporary database, run this read-only command
+from a controlled Render Shell or other approved private-network execution
+context:
+
+`SOURCE_DATABASE_URL=... RESTORED_DATABASE_URL=... npm run verify:postgres-pitr-restore`
+
+It compares public-table counts, `schema_migrations` checksums, derived credit
+balances per user (reported only as aggregate mismatch count), and foreign-key
+violations. Do not point any production service at the restored clone.
 
 ## Required evidence before accepting infrastructure
 

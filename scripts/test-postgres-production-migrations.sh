@@ -24,4 +24,6 @@ apply="$(DATABASE_URL="$test_url" RACUN_DEPLOY_ENV=production RACUN_PRODUCTION_M
 [[ "$apply" == *'"status":"PASS"'* ]] || { echo "Apply production gagal" >&2; exit 1; }
 repeat="$(DATABASE_URL="$test_url" RACUN_DEPLOY_ENV=production node scripts/migrate-postgres-production.mjs --dry-run)"
 [[ "$repeat" == *'"would_apply":[]'* ]] || { echo "Checksum/idempotensi production gagal" >&2; exit 1; }
-echo "PASS: runner production dry-run non-mutating, confirmation eksplisit, checksum, dan idempotensi terbukti pada database disposable $database."
+verified="$(DATABASE_URL="$test_url" RACUN_DEPLOY_ENV=production node scripts/migrate-postgres-production.mjs)"
+[[ "$verified" == *'"status":"PASS"'* && "$verified" == *'"applied":[]'* ]] || { echo "Verifikasi tanpa token setelah semua migrasi tidak lolos" >&2; exit 1; }
+echo "PASS: runner production dry-run non-mutating, confirmation eksplisit hanya untuk perubahan, checksum, dan idempotensi terbukti pada database disposable $database."
