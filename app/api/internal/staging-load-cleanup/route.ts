@@ -8,8 +8,8 @@ import { PgJobsRepository } from "@/lib/postgres/jobs";
 export async function POST(req: Request) {
   const secret = process.env.STAGING_LOAD_CLEANUP_SECRET;
   if (!secret || req.headers.get("x-staging-load-cleanup") !== secret) return new NextResponse(null, { status: 404 });
-  const body = await req.json().catch(() => ({}));
-  const ids = Array.isArray(body.job_ids) ? body.job_ids.filter((id): id is string => typeof id === "string").slice(0, 50) : [];
+  const body: { job_ids?: unknown } = await req.json().catch(() => ({}));
+  const ids = Array.isArray(body.job_ids) ? body.job_ids.filter((id: unknown): id is string => typeof id === "string").slice(0, 50) : [];
   if (!ids.length) return NextResponse.json({ error: "job_ids wajib diisi" }, { status: 400 });
   const repo = new PgJobsRepository(config.databaseUrl, { stateTimeoutsMin: config.stateTimeoutsMin });
   const queue = getRedisJobQueue();
