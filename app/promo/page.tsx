@@ -1,65 +1,77 @@
 "use client";
 
 import { useRef, useState } from "react";
+import Link from "next/link";
 import { apiFetch, ApiFail } from "../_components/api";
+import { PrimaryButton, ErrorText, WarnCard } from "../_components/ui";
 
 const MAX_CLIPS = 5;
 
-// Video Promosi (non-ecommerce) — PROTOTYPE, sengaja mentah/tidak dipoles.
-// Buktikan alur upload (N klip) -> generate hook AI + VO -> stitch jalan
-// teknis dulu (brief: BRIEF_VIDEO_NON_ECOMMERCE.md), sebelum UI polish.
-export default function PromoPrototypePage() {
+type Phase = "idle" | "uploading" | "processing" | "ready" | "error";
+
+// Video Promosi (non-ecommerce): upload klip talking-head sendiri (1-5 klip,
+// ada suara) — AI nambahin 1 segmen hook + VO di depan, lalu digabung jadi
+// satu video siap posting. Untuk promosi app/jasa yang tidak punya produk
+// fisik untuk dipegang di kamera (beda dari alur Video Jualan Produk).
+export default function PromoPage() {
   const [files, setFiles] = useState<File[]>([]);
-  const [status, setStatus] = useState<string>("");
-  const [jobId, setJobId] = useState<string | null>(null);
-  const [state, setState] = useState<string | null>(null);
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [statusText, setStatusText] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<number | null>(null);
-  const busy = status.startsWith("Upload") || status.startsWith("Job dibuat");
 
   function stopPoll() {
     if (pollRef.current) window.clearInterval(pollRef.current);
     pollRef.current = null;
   }
 
-  async function upload() {
+  function addFiles(list: FileList | null) {
+    if (!list) return;
+    const next = [...files, ...Array.from(list)].slice(0, MAX_CLIPS);
+    setFiles(next);
+  }
+
+  function removeFile(i: number) {
+    setFiles(files.filter((_, idx) => idx !== i));
+  }
+
+  async function submit() {
     if (files.length < 1) return;
     setError(null);
     setVideoUrl(null);
+    setPhase("uploading");
     try {
       const uploadedClipUrls: string[] = [];
       for (const [i, file] of files.entries()) {
-        setStatus(`Upload klip ${i + 1}/${files.length}...`);
+        setStatusText(`Upload klip ${i + 1}/${files.length}...`);
         const fd = new FormData();
         fd.set("clip", file);
-        const up = await apiFetch<{ uploaded_clip_url: string; size_bytes: number }>("/api/promo/upload", { formData: fd });
+        const up = await apiFetch<{ uploaded_clip_url: string }>("/api/promo/upload", { formData: fd });
         uploadedClipUrls.push(up.uploaded_clip_url);
       }
-      setStatus("Semua klip terupload. Bikin job...");
-      const job = await apiFetch<{ id: string; state: string }>("/api/promo/jobs", { json: { uploaded_clip_urls: uploadedClipUrls } });
-      setJobId(job.id);
-      setState(job.state);
-      setStatus("Job dibuat — generating hook AI + VO + stitch (bisa ~1-2 menit)...");
+      setPhase("processing");
+      setStatusText("Bikin video — nambah hook AI + suara, lalu gabung (sekitar 1-2 menit)...");
+      const job = await apiFetch<{ id: string }>("/api/promo/jobs", { json: { uploaded_clip_urls: uploadedClipUrls } });
       stopPoll();
       pollRef.current = window.setInterval(() => poll(job.id), 3000);
     } catch (err) {
-      setError(err instanceof ApiFail ? err.message : "Gagal upload/bikin job.");
-      setStatus("");
+      setError(err instanceof ApiFail ? err.message : "Gagal upload/bikin video.");
+      setPhase("error");
     }
   }
 
   async function poll(id: string) {
     try {
       const job = await apiFetch<{ state: string; error_message: string | null; output_url: string | null }>(`/api/promo/jobs/${id}`);
-      setState(job.state);
       if (job.state === "READY") {
         setVideoUrl(job.output_url);
-        setStatus("Selesai!");
+        setPhase("ready");
         stopPoll();
       } else if (job.state === "FAILED") {
-        setError(job.error_message ?? "Job gagal.");
-        setStatus("");
+        setError(job.error_message ?? "Video gagal dibuat. Coba lagi ya.");
+        setPhase("error");
         stopPoll();
       }
     } catch {
@@ -67,45 +79,101 @@ export default function PromoPrototypePage() {
     }
   }
 
+  const busy = phase === "uploading" || phase === "processing";
+
   return (
-    <main className="min-h-dvh space-y-5 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-28 pt-6">
+    <main className="min-h-dvh space-y-7 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-28 pt-6">
       <div>
-        <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Prototype — internal</p>
-        <h1 className="font-display text-xl font-bold text-zinc-900">Video Promosi (non-ecommerce)</h1>
-        <p className="mt-1 text-sm text-zinc-500">Upload 1-{MAX_CLIPS} klip talking-head (ada suara, maks 60 dtk/klip) — AI bikin 1 segmen hook + VO di depan, lalu stitch jadi satu video.</p>
+        <Link href="/bikin/jenis" className="flex min-h-[44px] items-center text-base font-semibold text-zinc-700">
+          ← Video Promosi
+        </Link>
+        <p className="mt-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-700">App / Jasa · Tanpa Produk Fisik</p>
+        <h1 className="font-display text-2xl font-bold text-zinc-900">Bikin Video Promosi</h1>
+        <p className="mt-1 text-sm leading-6 text-zinc-600">
+          Upload 1-{MAX_CLIPS} rekaman kamu sendiri (talking-head, ada suara) — AI tambahin hook pembuka + suara di depan, lalu gabung jadi satu video.
+        </p>
       </div>
 
-      <input
-        type="file"
-        accept="video/mp4,video/quicktime,video/webm"
-        multiple
-        onChange={(e) => setFiles(Array.from(e.target.files ?? []).slice(0, MAX_CLIPS))}
-        className="block w-full rounded-2xl border-2 border-zinc-200 bg-white p-3 text-sm"
-      />
-      {files.length > 0 && (
-        <ul className="space-y-1 text-sm text-zinc-600">
-          {files.map((f, i) => (
-            <li key={i}>{i + 1}. {f.name} ({(f.size / 1024).toFixed(0)}KB)</li>
-          ))}
-        </ul>
+      {phase !== "ready" && (
+        <>
+          <section className="space-y-3">
+            {files.length > 0 && (
+              <ul className="space-y-2">
+                {files.map((f, i) => (
+                  <li key={i} className="flex items-center justify-between rounded-2xl border-2 border-zinc-100 bg-white p-3 shadow-sm">
+                    <span className="truncate text-sm font-medium text-zinc-700">{i + 1}. {f.name}</span>
+                    <button
+                      type="button"
+                      onClick={() => removeFile(i)}
+                      disabled={busy}
+                      className="ml-3 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-zinc-100 text-zinc-500 disabled:opacity-40"
+                      aria-label={`Hapus klip ${i + 1}`}
+                    >
+                      ✕
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+
+            {files.length < MAX_CLIPS && (
+              <button
+                type="button"
+                onClick={() => fileRef.current?.click()}
+                disabled={busy}
+                className="flex min-h-[64px] w-full flex-col items-center justify-center gap-1 rounded-3xl border-2 border-dashed border-amber-300 bg-amber-50/60 text-amber-700 disabled:opacity-50"
+              >
+                <span className="text-2xl" aria-hidden="true">＋</span>
+                <span className="text-sm font-semibold">Tambah klip ({files.length}/{MAX_CLIPS})</span>
+              </button>
+            )}
+            <input
+              ref={fileRef}
+              type="file"
+              accept="video/mp4,video/quicktime,video/webm"
+              multiple
+              hidden
+              onChange={(e) => { addFiles(e.target.files); e.target.value = ""; }}
+            />
+          </section>
+
+          <WarnCard>Tiap klip wajib ada suara (talking-head), maksimal 60 detik.</WarnCard>
+
+          {statusText && phase !== "idle" && (
+            <p className="text-sm text-zinc-600">{statusText}</p>
+          )}
+          <ErrorText message={error} />
+
+          <PrimaryButton onClick={submit} disabled={files.length < 1 || busy} big>
+            {busy ? "Sebentar..." : `Bikin Video (${files.length} klip)`}
+          </PrimaryButton>
+        </>
       )}
 
-      <button
-        type="button"
-        onClick={upload}
-        disabled={files.length < 1 || busy}
-        className="flex min-h-[52px] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 font-display font-bold text-white shadow-md shadow-amber-500/20 disabled:opacity-50"
-      >
-        Upload &amp; Generate ({files.length} klip)
-      </button>
-
-      {status && <p className="text-sm text-zinc-600">{status}{jobId ? ` (job: ${jobId.slice(0, 8)}…, state: ${state})` : ""}</p>}
-      {error && <p className="rounded-2xl border-2 border-red-200 bg-red-50 p-3 text-sm text-red-800">{error}</p>}
-
-      {videoUrl && (
-        <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-[28px] bg-zinc-900 shadow-xl shadow-amber-900/10 ring-1 ring-black/5">
-          <video src={videoUrl} controls playsInline preload="metadata" className="aspect-[9/16] w-full" />
-        </div>
+      {phase === "ready" && videoUrl && (
+        <>
+          <div className="mx-auto w-full max-w-[300px] overflow-hidden rounded-[28px] bg-zinc-900 shadow-xl shadow-amber-900/10 ring-1 ring-black/5">
+            <video src={videoUrl} controls playsInline preload="metadata" className="aspect-[9/16] w-full" />
+          </div>
+          <WarnCard>
+            <p className="font-bold">⚠ Sebelum posting:</p>
+            <p>nyalakan tanda &ldquo;konten AI&rdquo; di TikTok ya, biar akun kamu aman.</p>
+          </WarnCard>
+          <a
+            href={videoUrl}
+            download="bikinfyp-promosi.mp4"
+            className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-gradient-to-br from-amber-400 to-amber-500 text-lg font-bold text-white shadow-md shadow-amber-500/20 active:from-amber-500 active:to-amber-600"
+          >
+            Unduh Videonya
+          </a>
+          <button
+            type="button"
+            onClick={() => { setFiles([]); setVideoUrl(null); setPhase("idle"); setStatusText(""); }}
+            className="flex min-h-[48px] w-full items-center justify-center rounded-2xl border-2 border-zinc-200 bg-white font-semibold text-zinc-700 active:bg-zinc-50"
+          >
+            Bikin video lain
+          </button>
+        </>
       )}
     </main>
   );

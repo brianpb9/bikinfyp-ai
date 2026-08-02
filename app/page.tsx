@@ -38,7 +38,7 @@ export default function HomePage() {
       </div>
 
       <Link
-        href="/bikin/produk"
+        href="/bikin/jenis"
         className={`flex w-full items-center justify-center rounded-3xl bg-gradient-to-br from-amber-400 to-amber-500 font-display font-extrabold text-white shadow-lg shadow-amber-500/20 active:from-amber-500 active:to-amber-600 ${
           isNewUser ? "min-h-[100px] text-2xl" : "min-h-[60px] text-lg"
         }`}
