@@ -128,6 +128,20 @@ export class PgCreditPaymentRepository {
     });
   }
 
+  /** Records a Snap initiation failure without deleting the durable pending order. */
+  async markPaymentInitiationFailed(gateway: string, gatewayRef: string, rawPayload: unknown): Promise<boolean> {
+    return this.transaction(async (client) => {
+      const result = await client.query<Payment>("SELECT * FROM payments WHERE gateway = $1 AND gateway_ref = $2 FOR UPDATE", [gateway, gatewayRef]);
+      const payment = result.rows[0];
+      if (!payment || payment.status === "paid") return false;
+      const oldPayload = this.parsePayload(payment.raw_payload);
+      const merged = { ...oldPayload, provider_initiation: rawPayload };
+      await client.query("UPDATE payments SET status = 'failed', raw_payload = $1 WHERE id = $2", [JSON.stringify(merged), payment.id]);
+      await this.audit(client, payment.user_id, "payment.initiation_failed", "payments", gatewayRef, {});
+      return true;
+    });
+  }
+
   private package(id: string) { const pkg = TOPUP_PACKAGES.find((candidate) => candidate.id === id); if (!pkg) throw new Error(`Paket tidak dikenal: ${id}`); return pkg; }
   private parsePayload(value: string | null): Record<string, unknown> { try { return JSON.parse(value ?? "{}") as Record<string, unknown>; } catch { return {}; } }
   private async transaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {

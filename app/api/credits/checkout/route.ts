@@ -3,37 +3,50 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit } from "@/lib/db";
 import { createSnapTransaction, newOrderId, MidtransCallbackNotConfigured, MidtransNotConfigured } from "@/lib/midtrans";
 import { TOPUP_PACKAGES } from "@/lib/credits";
-import { pgAudit, pgCreateCheckout, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { pgCreateCheckout, pgMarkPaymentInitiationFailed, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { initiateCheckout, type CheckoutDeps } from "@/lib/payment-checkout";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
-// POST /api/credits/checkout {package_id} — buat order Midtrans Snap (pending).
+const productionCheckoutDeps: CheckoutDeps = {
+  newOrderId,
+  async persistPending({ userId, orderId, packageId, amountIdr }) {
+    if (postgresRuntimeEnabled()) {
+      await pgCreateCheckout({ userId, gateway: "midtrans", gatewayRef: orderId, packageId, rawPayload: { package_id: packageId } });
+      return;
+    }
+    getDb().prepare(
+      "INSERT INTO payments (id, user_id, gateway, gateway_ref, amount_idr, credits, status, raw_payload, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
+    ).run(uuid(), userId, "midtrans", orderId, amountIdr, amountIdr, "pending", JSON.stringify({ package_id: packageId }), now());
+    audit(userId, "payment.checkout", "payments", orderId, { package_id: packageId, amount_idr: amountIdr });
+  },
+  createSnap: createSnapTransaction,
+  async markInitiationFailed(orderId, failure) {
+    if (postgresRuntimeEnabled()) {
+      await pgMarkPaymentInitiationFailed("midtrans", orderId, failure);
+      return;
+    }
+    const db = getDb();
+    const payment = db.prepare("SELECT id, user_id, raw_payload FROM payments WHERE gateway = 'midtrans' AND gateway_ref = ?").get(orderId) as { id: string; user_id: string; raw_payload: string | null } | undefined;
+    if (!payment) return;
+    let oldPayload: Record<string, unknown> = {};
+    try { oldPayload = JSON.parse(payment.raw_payload ?? "{}") as Record<string, unknown>; } catch { /* preserve failed state even if old audit payload is malformed */ }
+    db.prepare("UPDATE payments SET status = 'failed', raw_payload = ? WHERE id = ? AND status != 'paid'").run(JSON.stringify({ ...oldPayload, provider_initiation: failure }), payment.id);
+    audit(payment.user_id, "payment.initiation_failed", "payments", orderId, {});
+  },
+};
+
+// POST /api/credits/checkout {package_id} — persist pending order lalu buat Midtrans Snap.
 export async function POST(req: Request) {
   try {
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
     const body = await req.json().catch(() => ({}));
     const packageId = String(body.package_id ?? "");
-    const pkg = TOPUP_PACKAGES.find((p) => p.id === packageId);
-    if (!pkg) throw ERR.BAD_REQUEST("Paketnya nggak ketemu. Coba pilih paket lain ya.", "Unknown package.");
-
     try {
-      const orderId = newOrderId(user.id);
-      const { snapToken, redirectUrl } = await createSnapTransaction({
-        orderId,
-        packageId,
-        phone: user.phone ?? user.email ?? "",
-      });
-      if (postgresRuntimeEnabled()) await pgCreateCheckout({ userId: user.id, gateway: "midtrans", gatewayRef: orderId, packageId, rawPayload: { package_id: packageId } });
-      else getDb()
-        .prepare(
-          "INSERT INTO payments (id, user_id, gateway, gateway_ref, amount_idr, credits, status, raw_payload, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
-        )
-        .run(uuid(), user.id, "midtrans", orderId, pkg.priceIdr, pkg.priceIdr, "pending", JSON.stringify({ package_id: packageId }), now());
-      if (postgresRuntimeEnabled()) await pgAudit(user.id, "payment.checkout", "payments", orderId, { package_id: packageId, amount_idr: pkg.priceIdr });
-      else audit(user.id, "payment.checkout", "payments", orderId, { package_id: packageId, amount_idr: pkg.priceIdr });
-      return Response.json({ order_id: orderId, snap_token: snapToken, redirect_url: redirectUrl }, { status: 201 });
+      const checkout = await initiateCheckout(user, packageId, productionCheckoutDeps);
+      return Response.json({ order_id: checkout.orderId, snap_token: checkout.snapToken, redirect_url: checkout.redirectUrl }, { status: 201 });
     } catch (err) {
       if (err instanceof MidtransNotConfigured || err instanceof MidtransCallbackNotConfigured) {
         return Response.json(

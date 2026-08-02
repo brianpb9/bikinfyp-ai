@@ -10,6 +10,7 @@ services:
     # NODE_ENV=production is set at runtime; include dev deps for Next's TS build.
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
+    healthCheckPath: /api/health
     preDeployCommand: node scripts/migrate-postgres-runtime.mjs
     autoDeployTrigger: off
     envVars:
@@ -49,6 +50,8 @@ services:
       # Temporary staging-only test identity. Never carry this to production.
       - key: ALLOW_DEV_LOGIN
         value: "1"
+      - key: JOB_INTAKE_MODE
+        value: open
       - key: PROVIDER_VIDEO
         value: byteplus
       - key: PROVIDER_VOICE

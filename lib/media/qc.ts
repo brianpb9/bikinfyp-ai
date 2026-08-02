@@ -22,6 +22,34 @@ export interface QcResult {
   checked_at: string;
 }
 
+/**
+ * Production acceptance policy. A `skip` is never equivalent to `pass`.
+ * Only a named, inapplicable check may be skipped.  The currently supported
+ * render format is hands_only; new formats must add a policy before use.
+ */
+export const QC_POLICY_BY_FORMAT = {
+  hands_only: {
+    requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-06", "QC-07", "QC-08", "QC-09"],
+    permittedSkip: ["QC-01"],
+    skipReason: { "QC-01": "N/A: hands_only tidak menampilkan pembicara untuk lip-sync." },
+  },
+} as const;
+
+export type QcSupportedFormat = keyof typeof QC_POLICY_BY_FORMAT;
+
+export function evaluateQcPolicy(format: string | undefined, checks: QcCheck[]): boolean {
+  const key = (format ?? "hands_only") as QcSupportedFormat;
+  const policy = QC_POLICY_BY_FORMAT[key];
+  if (!policy) return false;
+  const byCode = new Map(checks.map((check) => [check.code, check]));
+  // Required checks must be present and explicitly pass. Missing, fail, and
+  // skip all reject the output.
+  if (policy.requiredPass.some((code) => byCode.get(code)?.status !== "pass")) return false;
+  // Any check outside the documented N/A list must also pass; this prevents a
+  // future check from silently becoming optional.
+  return checks.every((check) => check.status === "pass" || (check.status === "skip" && policy.permittedSkip.includes(check.code as "QC-01")));
+}
+
 export interface QcInput {
   filePath: string;
   targetDurationSec: number;
@@ -383,6 +411,6 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     checks.push({ code: "QC-08", name: "Label AIGC ter-render", status: "fail", detail: String(err) });
   }
 
-  const passed = checks.every((c) => c.status !== "fail");
+  const passed = evaluateQcPolicy(input.format, checks);
   return { passed, checks, checked_at: new Date().toISOString() };
 }

@@ -4,6 +4,10 @@ import { runFf } from "@/lib/media/ffmpeg";
 import { config } from "@/lib/config";
 import { verifySignedUrl } from "@/lib/signed-url";
 import { mediaStorage } from "@/lib/storage";
+import { getAuthUser } from "@/lib/auth";
+import { getDb } from "@/lib/db";
+import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import pg from "pg";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,7 +45,33 @@ async function thumbnailFor(relPath: string): Promise<Buffer | null> {
   }
 }
 
-// GET /api/files/<path>?exp=&sig= — penyaji file storage dengan signed URL (TTL 1 jam).
+/** A valid HMAC link is a bearer capability, never proof of account ownership. */
+async function fileBelongsToUser(relPath: string, userId: string): Promise<boolean> {
+  if (postgresRuntimeEnabled()) {
+    const pool = new pg.Pool({ connectionString: config.databaseUrl });
+    try {
+      const result = await pool.query(`
+        SELECT 1 FROM outputs o JOIN jobs j ON j.id=o.job_id
+          WHERE o.video_url=$1 AND j.user_id=$2
+        UNION ALL
+        SELECT 1 FROM products p CROSS JOIN LATERAL jsonb_array_elements_text(p.images::jsonb) image(path)
+          WHERE p.user_id=$2 AND image.path=$1
+        LIMIT 1`, [relPath, userId]);
+      return Boolean(result.rowCount);
+    } finally { await pool.end(); }
+  }
+  const db = getDb();
+  const output = db.prepare("SELECT 1 FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.video_url=? AND j.user_id=? LIMIT 1").get(relPath, userId);
+  if (output) return true;
+  const products = db.prepare("SELECT images FROM products WHERE user_id=?").all(userId) as { images: string }[];
+  return products.some((product) => {
+    try { return (JSON.parse(product.images) as unknown[]).includes(relPath); } catch { return false; }
+  });
+}
+
+// GET /api/files/<path>?exp=&sig= — signed bearer URL (TTL 1 jam), plus
+// authenticated owner-session check. The HMAC remains useful for tamper/TTL;
+// it alone is deliberately insufficient to read a private object.
 export async function GET(req: Request, ctx: { params: Promise<{ path: string[] }> }) {
   const { path: parts } = await ctx.params;
   const relPath = parts.map(decodeURIComponent).join("/");
@@ -59,6 +89,12 @@ export async function GET(req: Request, ctx: { params: Promise<{ path: string[] 
       },
       { status: 403 }
     );
+  }
+
+  const user = await getAuthUser(req);
+  if (!user || !(await fileBelongsToUser(relPath, user.id))) {
+    // Do not distinguish a leaked/foreign link from a missing session.
+    return Response.json({ code: "FILE_FORBIDDEN", message_id: "File ini bukan milik akun kamu." }, { status: 403 });
   }
 
   let stat: { size: number; contentType?: string } | null;

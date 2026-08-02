@@ -35,8 +35,12 @@ function videoOrder(): VideoProvider[] {
   if (active === "byteplus") list.push(byteplusVideo, dashscopeVideo);
   else if (active === "dashscope") list.push(dashscopeVideo, byteplusVideo);
   else list.push(mockVideoA, mockVideoB);
-  // Selalu tambahkan mock sebagai cadangan terakhir (kecuali sudah ada).
-  for (const p of [mockVideoA, mockVideoB]) if (!list.includes(p)) list.push(p);
+  // Mock is a local-test aid only. A production provider outage must fail the
+  // job and refund it; silently substituting generated mock media would be a
+  // deceptive successful response and invalidates a production smoke.
+  if (process.env.NODE_ENV !== "production") {
+    for (const p of [mockVideoA, mockVideoB]) if (!list.includes(p)) list.push(p);
+  }
   return list;
 }
 

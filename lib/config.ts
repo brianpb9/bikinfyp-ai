@@ -78,6 +78,9 @@ export const config = {
   midtransIsProduction: env("MIDTRANS_IS_PRODUCTION", "false") === "true",
   // Jalur dev (dev-login, dev topup, webhook stub) — hanya non-production ATAU flag eksplisit
   allowDevLogin: env("ALLOW_DEV_LOGIN", "0") === "1",
+  // Saklar operasional untuk menghentikan penerimaan render baru tanpa
+  // menghentikan worker. Nilai selain open/closed ditolak pada boundary.
+  jobIntakeMode: env("JOB_INTAKE_MODE", "open"),
   // OTP
   otpExpiryMin: 5,
   otpMaxAttempts: 5,

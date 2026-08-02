@@ -18,6 +18,14 @@ interface PaymentRow {
   raw_payload: string | null;
 }
 
+/** Midtrans signs a decimal string; our stored amount is whole Indonesian rupiah. */
+function grossAmountMatchesStoredAmount(grossAmount: unknown, expectedAmountIdr: number): boolean {
+  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(grossAmount ?? ""));
+  if (!match || !Number.isSafeInteger(expectedAmountIdr) || expectedAmountIdr < 0) return false;
+  // IDR checkout amounts must be an exact whole rupiah. Do not round provider data.
+  return BigInt(match[1]) === BigInt(expectedAmountIdr) && (!match[2] || /^0{1,2}$/.test(match[2]));
+}
+
 // POST /api/webhooks/midtrans — notifikasi status dari Midtrans.
 // WAJIB lolos verifikasi signature sha512(order_id+status_code+gross_amount+SERVER_KEY).
 // Signature salah/tidak ada -> 401, TANPA side effect (lubang lama tertutup di sini).
@@ -46,6 +54,19 @@ export async function POST(req: Request) {
     if (!payment) {
       // Order tidak dikenal — jawab 200 agar Midtrans tidak retry tanpa henti, tapi tanpa side effect.
       return Response.json({ ok: true, ignored: true, reason: "order tidak dikenal" });
+    }
+
+    // A valid Midtrans signature proves who signed the payload, not that this
+    // payload belongs to this locally-created order. Bind it to the durable
+    // amount before any status transition or ledger credit.
+    if (!grossAmountMatchesStoredAmount(payload.gross_amount, payment.amount_idr)) {
+      const metadata = { order_id: orderId, gross_amount: payload.gross_amount ?? null, expected_amount_idr: payment.amount_idr };
+      if (postgresRuntimeEnabled()) await pgAudit("midtrans", "webhook.gross_amount_rejected", "payments", orderId, metadata);
+      else audit("midtrans", "webhook.gross_amount_rejected", "payments", orderId, metadata);
+      return Response.json(
+        { code: "GROSS_AMOUNT_MISMATCH", message_id: "Jumlah pembayaran tidak cocok dengan order.", message_en: "Payment amount does not match order.", retryable: false },
+        { status: 422 }
+      );
     }
 
     const packageId = (JSON.parse(payment.raw_payload ?? "{}") as { package_id?: string }).package_id ?? "";

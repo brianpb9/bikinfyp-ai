@@ -126,6 +126,10 @@ test("checkout tanpa MIDTRANS_SERVER_KEY -> 503 pesan jelas, bukan crash", async
   const body = await res.json();
   assert.equal(body.code, "PAYMENT_NOT_CONFIGURED");
   assert.match(body.message_en, /MIDTRANS_SERVER_KEY/);
-  const n = db.prepare("SELECT COUNT(*) AS n FROM payments WHERE user_id = ?").get(user.id) as { n: number };
-  assert.equal(n.n, 0);
+  const payment = db.prepare("SELECT status, raw_payload FROM payments WHERE user_id = ?").get(user.id) as { status: string; raw_payload: string };
+  assert.equal(payment.status, "failed", "pending order tetap direkam bila inisiasi Snap gagal");
+  assert.equal(JSON.parse(payment.raw_payload).package_id, "senyap5");
+  assert.match(JSON.parse(payment.raw_payload).provider_initiation.error, /MIDTRANS_SERVER_KEY/);
+  const failureAudit = db.prepare("SELECT action FROM audit_log WHERE actor = ? AND action = 'payment.initiation_failed'").get(user.id) as { action: string } | undefined;
+  assert.equal(failureAudit?.action, "payment.initiation_failed");
 });

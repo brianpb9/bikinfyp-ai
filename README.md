@@ -57,6 +57,12 @@ nilai rahasia dalam Blueprint.
 ini hanya menerima `RACUN_DEPLOY_ENV=staging`, mencatat checksum migrasi, dan
 gagal tertutup pada URL non-PostgreSQL. Jangan gunakan untuk production.
 
+Untuk production terdapat runner terpisah `scripts/migrate-postgres-production.mjs`.
+Mulai dengan `RACUN_DEPLOY_ENV=production npm run migrate:postgres-production:dry-run`.
+Apply hanya bisa dijalankan setelah approval eksplisit melalui
+`RACUN_PRODUCTION_MIGRATION_CONFIRM=APPLY_PRODUCTION_MIGRATIONS`; runner staging
+tetap tidak menerima environment production.
+
 Sesudah URL web staging tersedia, jalankan smoke tanpa menyalakan server lokal:
 
 ```bash

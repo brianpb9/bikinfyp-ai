@@ -9,6 +9,7 @@ import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { config } from "@/lib/config";
 import { getCreatorCategory } from "@/lib/personas";
 import { createSignedUrl } from "@/lib/signed-url";
+import { assertJobIntakeOpen } from "@/lib/job-intake";
 import { pgFindOrCreatePersona, pgGetPersona, pgListJobs, postgresRuntimeEnabled, postgresSmokeEnabled, smokeCompleteJob, smokeCreateJob, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 
 export const runtime = "nodejs";
@@ -18,6 +19,9 @@ export const dynamic = "force-dynamic";
 // Gerbang HITL ditegakkan DI SINI (SF-04): approved_by_user_at NULL -> 422 SCRIPT_NOT_APPROVED.
 export async function POST(req: Request) {
   try {
+    // Maintenance gate must run before authentication, database reads, holds,
+    // or queue writes. Existing jobs are intentionally unaffected.
+    assertJobIntakeOpen();
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
     const body = await req.json().catch(() => ({}));

@@ -12,9 +12,9 @@ Web Render (Singapore) ── PostgreSQL Render
           └── private R2 proxy ◄── Worker Render (FFmpeg/QC/BytePlus)
 ```
 
-- Runtime utama staging adalah PostgreSQL (`RACUN_DB_RUNTIME=postgres`). SQLite tetap di kode sebagai rollback lokal dan belum dihapus.
+- Runtime utama staging adalah PostgreSQL (`RACUN_DB_RUNTIME=postgres`). SQLite belum dihapus, tetapi hanya **arsip forensik read-only, bukan jalur rollback runtime production**. Setelah PostgreSQL menerima write baru, SQLite tidak lagi merepresentasikan state terkini.
 - Web hanya menaruh pekerjaan render di BullMQ. Worker proses terpisah mengonsumsi job, menjalankan provider, compositing, QC, upload object, dan capture/refund kredit.
-- Media disimpan privat di Cloudflare R2. URL yang diberikan aplikasi adalah proxy bertanda-HMAC; bucket tidak dipublikasikan.
+- Media disimpan privat di Cloudflare R2. URL yang diberikan aplikasi adalah signed bearer URL bertanda-HMAC dan endpoint juga mengecek session pemilik; bucket tidak dipublikasikan.
 - Worker container membawa FFmpeg/ffprobe, Python, Pillow, OpenCV YuNet, font Poppins, model YuNet, dan aset musik.
 
 ## Tahap yang telah dibuktikan

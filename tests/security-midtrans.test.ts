@@ -28,8 +28,7 @@ function makePendingOrder(): string {
   return orderId;
 }
 
-function settlementPayload(orderId: string, signatureOverride?: string) {
-  const gross = "50000.00";
+function settlementPayload(orderId: string, signatureOverride?: string, gross = "50000.00") {
   const statusCode = "200";
   const sig =
     signatureOverride ??
@@ -74,6 +73,23 @@ test("signature VALID -> 200, kredit masuk, status paid", async () => {
   assert.equal(getBalance(user.id), before + 50000);
   const pay = db.prepare("SELECT status FROM payments WHERE gateway_ref = ?").get(orderId) as { status: string };
   assert.equal(pay.status, "paid");
+});
+
+test("signature valid dengan gross_amount salah -> 422, diaudit, dan saldo TIDAK berubah", async () => {
+  const orderId = makePendingOrder();
+  const before = getBalance(user.id);
+  // Signature benar untuk payload ini; yang ditolak adalah ikatan nominal ke
+  // amount_idr yang tersimpan pada order lokal, bukan signature palsu.
+  const res = await callWebhook(settlementPayload(orderId, undefined, "500000.00"));
+  assert.equal(res.status, 422);
+  const body = await res.json();
+  assert.equal(body.code, "GROSS_AMOUNT_MISMATCH");
+  assert.equal(getBalance(user.id), before, "gross_amount yang salah tak boleh mengkredit ledger");
+  const pay = db.prepare("SELECT status FROM payments WHERE gateway_ref = ?").get(orderId) as { status: string };
+  assert.equal(pay.status, "pending", "order tetap pending untuk rekonsiliasi, bukan diam-diam paid/failed");
+  const audit = db.prepare("SELECT meta FROM audit_log WHERE action = 'webhook.gross_amount_rejected' AND entity_id = ? ORDER BY rowid DESC LIMIT 1").get(orderId) as { meta: string } | undefined;
+  assert.ok(audit, "mismatch harus memiliki audit evidence");
+  assert.deepEqual(JSON.parse(audit.meta), { order_id: orderId, gross_amount: "500000.00", expected_amount_idr: 50000 });
 });
 
 test("webhook sama 2x -> idempoten (saldo hanya +1x)", async () => {

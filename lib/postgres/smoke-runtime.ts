@@ -66,6 +66,9 @@ export async function pgCreateCheckout(input: { userId: string; gateway: string;
 export async function pgMarkPaymentFailed(gateway: string, gatewayRef: string, rawPayload?: unknown) {
   const repo = new PgCreditPaymentRepository(url()); try { return await repo.markPaymentFailed(gateway, gatewayRef, rawPayload); } finally { await repo.close(); }
 }
+export async function pgMarkPaymentInitiationFailed(gateway: string, gatewayRef: string, rawPayload: unknown) {
+  const repo = new PgCreditPaymentRepository(url()); try { return await repo.markPaymentInitiationFailed(gateway, gatewayRef, rawPayload); } finally { await repo.close(); }
+}
 export async function pgGetPayment(gatewayRef: string, userId?: string) {
   const pool = new Pool({ connectionString: url() });
   try { return (await pool.query(`SELECT * FROM payments WHERE gateway_ref=$1${userId ? " AND user_id=$2" : ""}`, userId ? [gatewayRef, userId] : [gatewayRef])).rows[0] ?? null; }
