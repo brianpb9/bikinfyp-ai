@@ -25,7 +25,7 @@ export default function TermsPage() {
         <p>
           BikinFYP.AI ("Layanan") adalah aplikasi yang membantu penjual online membuat video jualan
           bergaya UGC menggunakan kecerdasan buatan (AI), dari foto produk atau klip video milikmu sendiri.
-          Layanan dioperasikan oleh HDRV Studio (usaha perorangan), [ISI: alamat terdaftar].
+          Layanan dioperasikan oleh HDRV Studio (usaha perorangan), Jl. Kb. Kacang 29 No.2a, RT.8/RW.4, Kb. Kacang, Kecamatan Tanah Abang, Kota Jakarta Pusat, Daerah Khusus Ibukota Jakarta 10240.
         </p>
 
         <h2 className="font-display text-lg font-bold text-zinc-900">2. Siapa yang Boleh Pakai</h2>
