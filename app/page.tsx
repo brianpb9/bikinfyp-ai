@@ -89,6 +89,12 @@ export default function HomePage() {
           <span className="font-bold text-amber-600">Top-up →</span>
         </Link>
       )}
+
+      <footer className="flex flex-wrap gap-x-4 gap-y-1 border-t border-zinc-100 pt-4 text-xs text-zinc-400">
+        <Link href="/legal/terms" className="hover:text-zinc-600">Syarat & Ketentuan</Link>
+        <Link href="/legal/privacy" className="hover:text-zinc-600">Kebijakan Privasi</Link>
+        <Link href="/legal/refund" className="hover:text-zinc-600">Kebijakan Refund</Link>
+      </footer>
     </main>
   );
 }
