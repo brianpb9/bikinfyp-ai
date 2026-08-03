@@ -91,11 +91,11 @@ export async function processPromoJob(jobId: string): Promise<void> {
     const stitched = await stitchClips({ jobId, workDir, clips });
     // Rule-based virality checklist (v1, heuristic — see lib/virality-checklist.ts):
     // computed here because ffprobe only lives in this worker container, not
-    // the web tier that eventually serves it. No CTA mechanism exists yet
-    // for Video Promosi, so hasCta is honestly false, not a placeholder —
-    // that gap is exactly the kind of thing this checklist exists to surface.
+    // the web tier that eventually serves it. Stage 5.1 (2026-08-03): every VO
+    // script now closes with a real CTA line (lib/promo/hook-patterns.ts), so
+    // hasCta is honestly true — this checklist flagged the earlier gap.
     const outputDurationSec = await probeDurationSec(stitched.outPath);
-    const virality = computeViralityChecklist({ durationSec: outputDurationSec, hasCta: false, hasAudioOrCaption: true });
+    const virality = computeViralityChecklist({ durationSec: outputDurationSec, hasCta: true, hasAudioOrCaption: true });
     await repo.setViralityChecklist(jobId, virality);
     const outputRel = `promo_jobs/${jobId}/output.mp4`;
     await mediaStorage().put(outputRel, fs.readFileSync(stitched.outPath), "video/mp4");
