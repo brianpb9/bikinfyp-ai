@@ -9,6 +9,15 @@ const sora = Sora({ subsets: ["latin"], variable: "--font-sora", weight: ["600",
 export const metadata: Metadata = {
   title: "BikinFYP AI — Video jualan tanpa syuting",
   description: "Bikin video jualan 15 detik siap posting dari foto produk. Bahasa Indonesia, aman dari aturan AI TikTok.",
+  manifest: "/manifest.json",
+  icons: {
+    icon: [
+      { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
+      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
