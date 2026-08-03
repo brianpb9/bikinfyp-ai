@@ -96,9 +96,12 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   if (!PRICE_REGEX.test(hookDemo))
     push(false, { rule: "L-02", message_id: "Harganya belum disebut di awal video — pembeli butuh dengar angkanya (mis. '85 ribu').", segment: "demo" });
 
-  // L-03: CTA menyebut "keranjang kuning"
-  if (!ctaSeg || !ctaSeg.text.toLowerCase().includes("keranjang kuning"))
-    push(false, { rule: "L-03", message_id: "Ajakan penutup harus menyebut 'keranjang kuning' biar pembeli tau harus klik di mana.", segment: "cta" });
+  // L-03: CTA menyebut "keranjang" — "kuning" cuma untuk TikTok Shop (istilah
+  // branding TikTok), Shopee/Tokopedia/manual pakai "keranjang" polos (lihat
+  // cartLabelForUrl di script-engine/index.ts). Cek generik biar berlaku di
+  // kedua kasus tanpa validator perlu tau platform-nya.
+  if (!ctaSeg || !ctaSeg.text.toLowerCase().includes("keranjang"))
+    push(false, { rule: "L-03", message_id: "Ajakan penutup harus menyebut 'keranjang' biar pembeli tau harus klik di mana.", segment: "cta" });
 
   // L-04: >=1 filler lisan
   const hasFiller =

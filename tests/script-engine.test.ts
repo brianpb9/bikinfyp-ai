@@ -57,9 +57,25 @@ test("struktur segmen 0-3/3-10/10-15 dan caption+hashtag sesuai kontrak", () => 
     v.segments.map((s) => [s.role, s.start, s.end]),
     [["hook", 0, 3], ["demo", 3, 10], ["cta", 10, 15]]
   );
-  assert.ok(v.caption.toLowerCase().includes("keranjang kuning"));
+  // Tanpa sourceUrl diketahui (mis. input manual) -> istilah generik, bukan
+  // klaim TikTok yang belum tentu benar (keputusan Brian 2026-08-03).
+  assert.ok(v.caption.toLowerCase().includes("keranjang"));
+  assert.ok(!v.caption.toLowerCase().includes("keranjang kuning"));
   assert.ok(v.hashtags.length >= 8 && v.hashtags.length <= 12);
   assert.ok(v.hashtags.includes("#racuntiktok"));
+});
+
+test("CTA 'keranjang kuning' cuma untuk link TikTok; Shopee/tanpa sumber pakai 'keranjang' polos", () => {
+  const tiktokProduct = { ...product, sourceUrl: "https://vt.tiktok.com/abc123" };
+  const [tiktokVariant] = generateScripts({ product: tiktokProduct, register: "netral" });
+  const tiktokCta = tiktokVariant.segments.find((s) => s.role === "cta")!.text.toLowerCase();
+  assert.ok(tiktokCta.includes("keranjang kuning"), `TikTok CTA harusnya 'keranjang kuning': ${tiktokCta}`);
+
+  const shopeeProduct = { ...product, sourceUrl: "https://shopee.co.id/produk-123" };
+  const [shopeeVariant] = generateScripts({ product: shopeeProduct, register: "netral" });
+  const shopeeCta = shopeeVariant.segments.find((s) => s.role === "cta")!.text.toLowerCase();
+  assert.ok(shopeeCta.includes("keranjang"), `Shopee CTA harusnya sebut 'keranjang': ${shopeeCta}`);
+  assert.ok(!shopeeCta.includes("keranjang kuning"), `Shopee CTA gak boleh 'keranjang kuning': ${shopeeCta}`);
 });
 
 test("harga muncul eksplisit di hook atau demo untuk berbagai nominal", () => {

@@ -15,7 +15,7 @@ import { buildCaptionCards } from "./media/captions";
 import { renderCaptionPngs } from "./media/render-captions";
 import type { CompositeMode } from "./media/compositor";
 import { getCreatorCategory } from "./personas";
-import { outputExtras } from "./script-engine";
+import { outputExtras, cartLabelForUrl } from "./script-engine";
 import { captureCredits } from "./credits";
 import { formatHargaOverlay, type SegmentDraft } from "./script-engine/templates";
 import { AIGC_WATERMARK_TEXT } from "./config/compliance";
@@ -153,10 +153,14 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // --- COMPOSITING (dengan retry QC -> COMPOSITING maks 1x) ---
     const demoSeg = segments.find((s) => s.role === "demo")!;
     const ctaSeg = segments.find((s) => s.role === "cta")!;
+    // "Kuning" cuma istilah TikTok Shop (keputusan Brian 2026-08-03).
+    const cartLabel = cartLabelForUrl(product.source_url);
+    const ctaBadgeText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning »" : "Klik Keranjang »";
+    const ctaQcText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning" : "Klik Keranjang";
     const finalTexts = [
       ...segments.map((s) => s.text),
       formatHargaOverlay(product.price_idr),
-      "Cek keranjang kuning",
+      `Cek ${cartLabel}`,
       AIGC_WATERMARK_TEXT,
     ];
 
@@ -176,7 +180,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         musicPath,
         durationSec: job.duration_s,
         priceText: `Cuma ${formatHargaOverlay(product.price_idr)}`,
-        ctaText: "Klik Keranjang Kuning »",
+        ctaText: ctaBadgeText,
         demoRange: [demoSeg.start, demoSeg.end],
         ctaRange: [ctaSeg.start, ctaSeg.end],
         providerVideo: video.providerName,
@@ -203,7 +207,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
           ...(compositeMode === "caption"
             ? (captionCards ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec }))
             : [{ text: `Cuma ${formatHargaOverlay(product.price_idr)}`, startSec: demoSeg.start, endSec: demoSeg.end }]),
-          { text: "Klik Keranjang Kuning", startSec: ctaSeg.start, endSec: ctaSeg.end },
+          { text: ctaQcText, startSec: ctaSeg.start, endSec: ctaSeg.end },
         ],
       });
       db.prepare("UPDATE jobs SET qc_result = ? WHERE id = ?").run(JSON.stringify(qc), job.id);

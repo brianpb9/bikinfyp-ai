@@ -17,6 +17,30 @@ export interface ProductInput {
   name: string;
   price_idr: number;
   category: string;
+  /** URL sumber produk (dari link extract) — menentukan istilah keranjang di CTA. */
+  sourceUrl?: string | null;
+}
+
+/** "Keranjang kuning" cuma istilah TikTok Shop — Shopee/Tokopedia/manual pakai
+ * "keranjang" polos (keputusan Brian, 2026-08-03: platform lain jangan
+ * dibilang "kuning", itu branding TikTok doang). */
+export function cartLabelForUrl(sourceUrl: string | null | undefined): "keranjang kuning" | "keranjang" {
+  if (!sourceUrl) return "keranjang";
+  try {
+    const host = new URL(sourceUrl).hostname.toLowerCase();
+    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) return "keranjang kuning";
+  } catch {
+    /* URL tidak valid — default aman: istilah generik */
+  }
+  return "keranjang";
+}
+
+/** Ganti "keranjang kuning" -> "keranjang" di teks bila platform bukan TikTok.
+ * Post-processing string, bukan template terpisah per platform — templates.ts
+ * tetap satu set (banyak variasi hook_family), cuma istilah keranjangnya yang
+ * disesuaikan sesudah dirender. */
+function applyCartLabel<T extends string>(text: T, label: "keranjang kuning" | "keranjang"): T {
+  return (label === "keranjang kuning" ? text : text.replace(/keranjang kuning/gi, "keranjang")) as T;
 }
 
 export interface GeneratedScript {
@@ -99,7 +123,8 @@ function generateOne(
   tier: "silent_caption" | "high_quality" | "super_hq"
 ): GeneratedScript {
   const ctx = buildCtx(product, register);
-  let segments = renderSegmentsForTier(family, ctx, tier);
+  const cartLabel = cartLabelForUrl(product.sourceUrl);
+  let segments = renderSegmentsForTier(family, ctx, tier).map((s) => ({ ...s, text: applyCartLabel(s.text, cartLabel) }));
   let validation = validateScript(
     { hook_family: family, register, segments, productName: product.name, priceIdr: product.price_idr, qualityTier: tier },
     "strict"
@@ -121,7 +146,7 @@ function generateOne(
     register,
     quality_tier: tier,
     segments,
-    caption: buildCaption({ produk: product.name, proof: ctx.proof, reg }),
+    caption: applyCartLabel(buildCaption({ produk: product.name, proof: ctx.proof, reg }), cartLabel),
     hashtags: buildHashtags(product.category),
     validation,
   };

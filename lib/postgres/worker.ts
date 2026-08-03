@@ -10,7 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 import { config } from "../config";
-import { outputExtras } from "../script-engine";
+import { outputExtras, cartLabelForUrl } from "../script-engine";
 import { formatHargaOverlay, type SegmentDraft } from "../script-engine/templates";
 import { getCreatorCategory } from "../personas";
 import { planShots } from "../media/shot-planner";
@@ -36,6 +36,7 @@ type WorkerRow = {
   format: string; quality_tier: string; duration_s: number; state: string;
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
   product_name: string; product_category: string; product_visual_desc: string | null; product_images: string; product_price_idr: number;
+  product_source_url: string | null;
   creator_category: string | null;
 };
 
@@ -45,7 +46,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
   const pool = new Pool({ connectionString: databaseUrl });
   try {
     const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family,
-      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.images AS product_images, p.price_idr AS product_price_idr,
+      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
@@ -125,6 +126,11 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const demo = segments.find((segment) => segment.role === "demo");
   const cta = segments.find((segment) => segment.role === "cta");
   if (!demo || !cta) throw new Error("Segmen demo/CTA wajib untuk compositing.");
+  // "Kuning" cuma istilah TikTok Shop (lihat cartLabelForUrl di script-engine/index.ts,
+  // keputusan Brian 2026-08-03) — badge/QC di sini harus ikut, bukan hardcoded.
+  const cartLabel = cartLabelForUrl(row.product_source_url);
+  const ctaBadgeText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning »" : "Klik Keranjang »";
+  const ctaQcText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning" : "Klik Keranjang";
   let outputPath = "";
   let renderParams = { watermark: true as const, watermarkText: AIGC_WATERMARK_TEXT };
   let qc: Awaited<ReturnType<typeof runQc>> | null = null;
@@ -132,12 +138,12 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     if (!(await jobs.transition(row.id, "COMPOSITING", { worker: "postgres", retry }))) return;
     const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths: video.assets.map((asset) => asset.filePath), mode,
       vo: mode === "vo" ? vo : undefined, captions, musicPath, durationSec: row.duration_s,
-      priceText: `Cuma ${formatHargaOverlay(row.product_price_idr)}`, ctaText: "Klik Keranjang Kuning »",
+      priceText: `Cuma ${formatHargaOverlay(row.product_price_idr)}`, ctaText: ctaBadgeText,
       demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });
     outputPath = composite.outPath; renderParams = composite.renderParams;
     if (!(await jobs.transition(row.id, "QC_CHECK", { worker: "postgres" }))) return;
     qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s,
-      finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), "Cek keranjang kuning", AIGC_WATERMARK_TEXT],
+      finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), `Cek ${cartLabel}`, AIGC_WATERMARK_TEXT],
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, priceIdr: row.product_price_idr,
       renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format: row.format,
       overlayTextExpectations: [
@@ -145,7 +151,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
         ...(mode === "caption"
           ? (captions ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec }))
           : [{ text: `Cuma ${formatHargaOverlay(row.product_price_idr)}`, startSec: demo.start, endSec: demo.end }]),
-        { text: "Klik Keranjang Kuning", startSec: cta.start, endSec: cta.end },
+        { text: ctaQcText, startSec: cta.start, endSec: cta.end },
       ],
     });
     await pool.query("UPDATE jobs SET qc_result=$1,qc_retry_count=$2 WHERE id=$3", [JSON.stringify(qc), retry, row.id]);
