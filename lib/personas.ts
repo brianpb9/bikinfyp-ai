@@ -75,26 +75,51 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
   },
   {
     id: "ibu",
+    // skor uji 5/10 (lama). Root cause ditemukan 2026-08-03 lewat render nyata
+    // BytePlus langsung (bukan tebakan): "bright Indonesian kitchen" dan
+    // "simple wedding ring" TIDAK PERNAH benar-benar muncul di output —
+    // model selalu jatuh ke background studio putih polos, kehilangan
+    // identitas "ibu rumah tangga" sama sekali (itulah kenapa terasa generik).
+    // handsPrompt di bawah sudah direvisi (kata benda konkret: meja dapur,
+    // ubin, jendela — bukan "kitchen" abstrak) dan TERBUKTI merender kitchen
+    // yang benar-benar terlihat pada uji ulang. status/testScore SENGAJA
+    // belum diubah — satu-dua render bukan pengganti metodologi uji asli;
+    // re-scoring perlu putaran uji yang sama ketatnya sebelum diaktifkan.
     name: "Ibu-ibu / Bunda",
-    status: "disabled", // skor uji 5/10 — perlu iterasi prompt sebelum dirilis
+    status: "disabled",
     testScore: 5,
     suitableFor: ["home", "kitchen", "kids"],
     promptSeed:
       "Indonesian mom influencer, early 30s, polished natural makeup, healthy glowing skin, mature soft features, elegant casual style, warm motherly expression, lifestyle UGC photo",
     handsPrompt:
-      "close-up of an Indonesian mother's hands with warm medium skin tone, simple wedding ring, neat homey sleeve, holding the product in a bright Indonesian kitchen, phone camera look",
+      "close-up of an Indonesian mother's hands with warm medium skin tone, wearing a soft floral home-dress sleeve, " +
+      "resting on a wooden kitchen counter with blurred kitchen tiles and a warm morning window light visible behind, " +
+      "holding the product naturally, phone camera look",
     negativePrompt: NEG,
   },
   {
     id: "daerah",
+    // Belum pernah diuji sebelumnya (testScore null). Render pertama
+    // (2026-08-03) pakai handsPrompt lama: sama seperti "ibu", background
+    // "warm home lighting" tidak pernah muncul, tetap studio putih polos;
+    // "batik-pattern sleeve" juga terlihat lebih seperti motif pelangi
+    // generik, bukan batik asli. handsPrompt di bawah sudah direvisi (motif
+    // parang, warna coklat-krem, meja kayu + tikar rotan konkret) — uji
+    // ulang menunjukkan background & motif batik jauh lebih otentik di salah
+    // satu dari 2 sampel (sampel lain kena label produk yang buram, wajar —
+    // variasi generate-ke-generate, bukan regresi dari prompt). status/
+    // testScore tetap "pending"/null — belum ada metodologi uji formal yang
+    // dijalankan, cuma diagnosis + perbaikan awal.
     name: "Daerah (Jawa/Sunda/Batak/dll)",
-    status: "pending", // belum diuji
+    status: "pending",
     testScore: null,
     suitableFor: ["default", "food"],
     promptSeed:
       "Javanese Indonesian features, soft refined facial harmony, warm medium skin, gentle expression",
     handsPrompt:
-      "close-up of an Indonesian woman's hands with warm medium skin tone, batik-pattern sleeve, holding the product naturally, warm home lighting",
+      "close-up of an Indonesian woman's hands with warm medium skin tone, wearing a traditional brown-and-cream " +
+      "batik-pattern sleeve with classic parang motif, resting on a wooden home table with a woven rattan placemat " +
+      "and warm afternoon window light visible behind, holding the product naturally",
     negativePrompt: NEG,
   },
   {
