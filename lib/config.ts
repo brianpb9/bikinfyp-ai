@@ -59,6 +59,10 @@ export const config = {
   byteplusApiKey: env("BYTEPLUS_ARK_API_KEY", ""),
   dashscopeApiKey: env("DASHSCOPE_API_KEY", ""),
   googleTtsApiKey: env("GOOGLE_TTS_API_KEY", ""),
+  // Google OAuth login (alongside, not replacing, email OTP — Brian's
+  // decision 2026-08-03: keep both options).
+  googleOauthClientId: env("GOOGLE_OAUTH_CLIENT_ID", ""),
+  googleOauthClientSecret: env("GOOGLE_OAUTH_CLIENT_SECRET", ""),
   azureTtsKey: env("AZURE_TTS_KEY", ""),
   azureTtsRegion: env("AZURE_TTS_REGION", ""),
   // ElevenLabs — Video Promosi (non-ecommerce) prototype VO only. Deliberately

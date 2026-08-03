@@ -1,9 +1,15 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail } from "../_components/api";
 import { PrimaryButton, ErrorText } from "../_components/ui";
+
+const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
+  cancelled: "Login Google dibatalkan.",
+  state_mismatch: "Sesi login-nya kedaluwarsa, coba lagi ya.",
+  email_not_verified: "Email Google kamu belum terverifikasi. Pakai email lain atau login pakai OTP.",
+};
 
 // S0 — ONBOARDING: nilai produk -> nomor HP -> kode OTP WhatsApp -> beranda.
 export default function OnboardingPage() {
@@ -17,6 +23,14 @@ export default function OnboardingPage() {
   const [monthlyVideos, setMonthlyVideos] = useState(10);
   const [tierPrice, setTierPrice] = useState<5000 | 12000 | 49000>(5000);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  useEffect(() => {
+    const reason = new URLSearchParams(window.location.search).get("google_error");
+    if (!reason) return;
+    setStep(2);
+    setError(GOOGLE_ERROR_MESSAGES[reason] ?? "Login Google gagal. Coba lagi atau pakai OTP email.");
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   const humanCost = monthlyVideos * 125_000;
   const aiCost = monthlyVideos * tierPrice;
@@ -156,6 +170,21 @@ export default function OnboardingPage() {
             <p className="text-zinc-600">
               Tanpa password. Kami kirim kode 6 digit ke email kamu. User baru langsung dapat bonus Rp5.000.
             </p>
+            <a
+              href="/api/auth/google"
+              className="flex min-h-[56px] w-full items-center justify-center gap-3 rounded-2xl border-2 border-zinc-200 bg-white text-base font-semibold text-zinc-700 active:bg-zinc-50"
+            >
+              <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">
+                <path fill="#4285F4" d="M19.6 10.23c0-.68-.06-1.36-.18-2H10v3.79h5.4a4.63 4.63 0 0 1-2 3.04v2.5h3.24c1.9-1.75 3-4.32 3-7.33Z" />
+                <path fill="#34A853" d="M10 20c2.7 0 4.96-.9 6.62-2.44l-3.24-2.5c-.9.6-2.05.96-3.38.96-2.6 0-4.8-1.75-5.59-4.11H1.06v2.58A10 10 0 0 0 10 20Z" />
+                <path fill="#FBBC05" d="M4.41 11.9a6 6 0 0 1 0-3.8V5.52H1.06a10 10 0 0 0 0 8.96l3.35-2.58Z" />
+                <path fill="#EA4335" d="M10 3.98c1.47 0 2.79.5 3.83 1.5l2.87-2.87A9.6 9.6 0 0 0 10 0 10 10 0 0 0 1.06 5.52L4.41 8.1C5.2 5.73 7.4 3.98 10 3.98Z" />
+              </svg>
+              Masuk pakai Google
+            </a>
+            <div className="flex items-center gap-3 text-sm text-zinc-400">
+              <div className="h-px flex-1 bg-zinc-200" /> atau <div className="h-px flex-1 bg-zinc-200" />
+            </div>
             <form onSubmit={requestOtp} className="space-y-4">
               <input
                 type="email"
@@ -164,7 +193,6 @@ export default function OnboardingPage() {
                 value={email}
                 onChange={(e) => setEmail(e.target.value.trim())}
                 className="min-h-[56px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 text-lg outline-none focus:border-amber-500"
-                autoFocus
               />
               <ErrorText message={error} />
               <PrimaryButton type="submit" disabled={loading || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())}>
