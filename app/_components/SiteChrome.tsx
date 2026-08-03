@@ -19,7 +19,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
     <div className="mx-auto flex min-h-dvh w-full max-w-md flex-col bg-white">
       <header className="sticky top-0 z-10 flex h-14 items-center justify-between border-b border-zinc-100 bg-white px-4">
         <Link href="/" className="text-lg font-bold tracking-tight text-zinc-900">
-          BikinFYP<span className="text-amber-500">.AI</span>
+          BikinFYP <span className="text-amber-500">AI</span>
         </Link>
         <CreditChip />
       </header>

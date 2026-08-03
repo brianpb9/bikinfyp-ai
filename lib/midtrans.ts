@@ -76,7 +76,7 @@ export async function createSnapTransaction(opts: {
     body: JSON.stringify({
       transaction_details: { order_id: opts.orderId, gross_amount: pkg.priceIdr },
       item_details: [
-        { id: pkg.id, price: pkg.priceIdr, quantity: 1, name: `${pkg.name} BikinFYP.AI` },
+        { id: pkg.id, price: pkg.priceIdr, quantity: 1, name: `${pkg.name} BikinFYP AI` },
       ],
       customer_details: { phone: opts.phone },
     }),

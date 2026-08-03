@@ -243,7 +243,7 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     "-c:a", "aac",
     "-b:a", "128k",
     "-movflags", "faststart+use_metadata_tags",
-    "-metadata", `comment=BikinFYP.AI AIGC v0.2 | provider_video=${input.providerVideo} | mode=${input.mode} | ${new Date().toISOString()}`,
+    "-metadata", `comment=BikinFYP AI AIGC v0.2 | provider_video=${input.providerVideo} | mode=${input.mode} | ${new Date().toISOString()}`,
     "-metadata", "racun_aigc=true",
     "-metadata", `aigc_watermark=${watermarkText}`,
     // TODO(produksi): sisipkan manifest C2PA penuh (c2pa-rs / c2patool) — BR-07.2.

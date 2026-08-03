@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const metadata = { title: "Kebijakan Refund — BikinFYP.AI" };
+export const metadata = { title: "Kebijakan Refund — BikinFYP AI" };
 
 // Draf disiapkan tim produk berdasarkan mekanisme hold/capture/release kredit
 // YANG NYATA berjalan di sistem (lib/credits.ts, QC otomatis di lib/media/qc.ts).

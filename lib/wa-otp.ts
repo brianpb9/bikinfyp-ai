@@ -13,8 +13,8 @@ import { config } from "./config";
 
 export function otpMessage(code: string): string {
   return (
-    `BikinFYP.AI\nKode login kamu: *${code}*\n\n` +
-    `Berlaku 5 menit. Jangan kasih ke siapa-siapa ya, termasuk yang ngaku tim BikinFYP.AI.`
+    `BikinFYP AI\nKode login kamu: *${code}*\n\n` +
+    `Berlaku 5 menit. Jangan kasih ke siapa-siapa ya, termasuk yang ngaku tim BikinFYP AI.`
   );
 }
 

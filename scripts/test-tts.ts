@@ -122,7 +122,7 @@ async function main() {
 
   // (c) laporan markdown — kolom penilaian SENGAJA kosong (untuk Brian)
   const lines: string[] = [
-    "# LAPORAN TES TTS — BikinFYP.AI",
+    "# LAPORAN TES TTS — BikinFYP AI",
     "",
     `Tanggal: ${new Date().toISOString()}`,
     "",

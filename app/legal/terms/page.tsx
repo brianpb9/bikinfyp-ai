@@ -1,6 +1,6 @@
 import Link from "next/link";
 
-export const metadata = { title: "Syarat & Ketentuan — BikinFYP.AI" };
+export const metadata = { title: "Syarat & Ketentuan — BikinFYP AI" };
 
 // Draf disiapkan tim produk berdasarkan perilaku aktual sistem (kredit,
 // QC otomatis, refund) — BUKAN pengganti tinjauan hukum. Isi bagian
@@ -23,7 +23,7 @@ export default function TermsPage() {
       <section className="space-y-3 text-sm leading-6 text-zinc-700">
         <h2 className="font-display text-lg font-bold text-zinc-900">1. Tentang Layanan</h2>
         <p>
-          BikinFYP.AI ("Layanan") adalah aplikasi yang membantu penjual online membuat video jualan
+          BikinFYP AI ("Layanan") adalah aplikasi yang membantu penjual online membuat video jualan
           bergaya UGC menggunakan kecerdasan buatan (AI), dari foto produk atau klip video milikmu sendiri.
           Layanan dioperasikan oleh HDRV Studio (usaha perorangan), Jl. Kb. Kacang 29 No.2a, RT.8/RW.4, Kb. Kacang, Kecamatan Tanah Abang, Kota Jakarta Pusat, Daerah Khusus Ibukota Jakarta 10240.
         </p>

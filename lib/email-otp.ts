@@ -19,10 +19,10 @@ export function hasEmailKey(): boolean {
 function otpHtml(code: string): string {
   return `
   <div style="font-family:system-ui,sans-serif;max-width:480px;margin:auto;padding:24px">
-    <h2 style="margin:0 0 8px">BikinFYP.AI</h2>
+    <h2 style="margin:0 0 8px">BikinFYP AI</h2>
     <p>Kode masuk kamu:</p>
     <p style="font-size:32px;font-weight:700;letter-spacing:8px;margin:16px 0">${code}</p>
-    <p style="color:#666">Berlaku 5 menit. Jangan kasih ke siapa-siapa ya, termasuk yang ngaku tim BikinFYP.AI.</p>
+    <p style="color:#666">Berlaku 5 menit. Jangan kasih ke siapa-siapa ya, termasuk yang ngaku tim BikinFYP AI.</p>
   </div>`;
 }
 
@@ -44,7 +44,7 @@ export async function sendOtpEmail(email: string, code: string): Promise<{ mode:
     body: JSON.stringify({
       from: config.resendFromEmail,
       to: [email],
-      subject: `Kode masuk BikinFYP.AI: ${code}`,
+      subject: `Kode masuk BikinFYP AI: ${code}`,
       html: otpHtml(code),
     }),
   });

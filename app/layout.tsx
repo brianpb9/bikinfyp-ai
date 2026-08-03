@@ -7,7 +7,7 @@ const inter = Inter({ subsets: ["latin"], variable: "--font-inter" });
 const sora = Sora({ subsets: ["latin"], variable: "--font-sora", weight: ["600", "700", "800"] });
 
 export const metadata: Metadata = {
-  title: "BikinFYP.AI — Video jualan tanpa syuting",
+  title: "BikinFYP AI — Video jualan tanpa syuting",
   description: "Bikin video jualan 15 detik siap posting dari foto produk. Bahasa Indonesia, aman dari aturan AI TikTok.",
 };
 
