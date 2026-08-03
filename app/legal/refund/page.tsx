@@ -11,7 +11,7 @@ export default function RefundPage() {
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Legal</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Kebijakan Refund</h1>
-        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: [ISI: tanggal] · Terakhir diperbarui: 2026-08-03</p>
+        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: 2026-08-03 · Terakhir diperbarui: 2026-08-03</p>
       </div>
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-900">
@@ -60,7 +60,7 @@ export default function RefundPage() {
         <h2 className="font-display text-lg font-bold text-zinc-900">6. Kontak Soal Refund</h2>
         <p>
           Kalau ada transaksi yang menurutmu janggal (misalnya kredit terpotong tapi video tidak
-          pernah muncul), hubungi [ISI: email/WhatsApp support] dengan menyertakan ID video/transaksi.
+          pernah muncul), hubungi hdrvstudio@gmail.com dengan menyertakan ID video/transaksi.
         </p>
       </section>
 

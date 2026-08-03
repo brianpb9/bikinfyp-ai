@@ -11,7 +11,7 @@ export default function TermsPage() {
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Legal</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Syarat & Ketentuan</h1>
-        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: [ISI: tanggal] · Terakhir diperbarui: 2026-08-03</p>
+        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: 2026-08-03 · Terakhir diperbarui: 2026-08-03</p>
       </div>
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-900">
@@ -25,7 +25,7 @@ export default function TermsPage() {
         <p>
           BikinFYP.AI ("Layanan") adalah aplikasi yang membantu penjual online membuat video jualan
           bergaya UGC menggunakan kecerdasan buatan (AI), dari foto produk atau klip video milikmu sendiri.
-          Layanan dioperasikan oleh [ISI: nama badan usaha/perorangan], [ISI: alamat terdaftar].
+          Layanan dioperasikan oleh HDRV Studio (usaha perorangan), [ISI: alamat terdaftar].
         </p>
 
         <h2 className="font-display text-lg font-bold text-zinc-900">2. Siapa yang Boleh Pakai</h2>
@@ -86,7 +86,7 @@ export default function TermsPage() {
         <p>Syarat & Ketentuan ini tunduk pada hukum Republik Indonesia.</p>
 
         <h2 className="font-display text-lg font-bold text-zinc-900">9. Kontak</h2>
-        <p>Pertanyaan seputar layanan: [ISI: email/WhatsApp support].</p>
+        <p>Pertanyaan seputar layanan: hdrvstudio@gmail.com.</p>
       </section>
 
       <div className="flex gap-4 border-t border-zinc-100 pt-4 text-sm font-semibold text-amber-700">

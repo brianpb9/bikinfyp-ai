@@ -11,7 +11,7 @@ export default function PrivacyPage() {
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Legal</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Kebijakan Privasi</h1>
-        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: [ISI: tanggal] · Terakhir diperbarui: 2026-08-03</p>
+        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: 2026-08-03 · Terakhir diperbarui: 2026-08-03</p>
       </div>
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-900">
@@ -72,7 +72,7 @@ export default function PrivacyPage() {
         <p>Layanan ini untuk pelaku usaha berusia 18 tahun ke atas, bukan untuk anak-anak.</p>
 
         <h2 className="font-display text-lg font-bold text-zinc-900">8. Kontak</h2>
-        <p>Pertanyaan atau permintaan soal data pribadimu: [ISI: email/WhatsApp support].</p>
+        <p>Pertanyaan atau permintaan soal data pribadimu: hdrvstudio@gmail.com.</p>
       </section>
 
       <div className="flex gap-4 border-t border-zinc-100 pt-4 text-sm font-semibold text-amber-700">
