@@ -9,6 +9,11 @@ on:
 jobs:
   verify:
     runs-on: ubuntu-latest
+    env:
+      # Matches Dockerfile.worker's runtime env exactly. Some tests fall back
+      # to a hardcoded macOS Homebrew path when this is unset.
+      FFMPEG_PATH: /usr/bin/ffmpeg
+      FFPROBE_PATH: /usr/bin/ffprobe
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
