@@ -75,18 +75,19 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
   },
   {
     id: "ibu",
-    // skor uji 5/10 (lama). Root cause ditemukan 2026-08-03 lewat render nyata
+    // Skor uji lama 5/10. Root cause ditemukan 2026-08-03 lewat render nyata
     // BytePlus langsung (bukan tebakan): "bright Indonesian kitchen" dan
     // "simple wedding ring" TIDAK PERNAH benar-benar muncul di output —
     // model selalu jatuh ke background studio putih polos, kehilangan
     // identitas "ibu rumah tangga" sama sekali (itulah kenapa terasa generik).
     // handsPrompt di bawah sudah direvisi (kata benda konkret: meja dapur,
     // ubin, jendela — bukan "kitchen" abstrak) dan TERBUKTI merender kitchen
-    // yang benar-benar terlihat pada uji ulang. status/testScore SENGAJA
-    // belum diubah — satu-dua render bukan pengganti metodologi uji asli;
-    // re-scoring perlu putaran uji yang sama ketatnya sebelum diaktifkan.
+    // yang benar-benar terlihat pada uji ulang. Diaktifkan atas keputusan
+    // Brian (2026-08-03) berdasarkan bukti render itu — bukan metodologi uji
+    // formal ulang seperti kategori lain; testScore lama dipertahankan apa
+    // adanya sebagai jejak, bukan skor baru yang diklaim.
     name: "Ibu-ibu / Bunda",
-    status: "disabled",
+    status: "active",
     testScore: 5,
     suitableFor: ["home", "kitchen", "kids"],
     promptSeed:

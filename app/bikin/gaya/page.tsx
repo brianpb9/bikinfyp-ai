@@ -28,7 +28,7 @@ const CREATOR_CATS = [
   { id: "chindo", label: "👩🏻 Chindo", note: "skincare premium", active: true },
   { id: "genz", label: "🧑‍🎤 Gen-Z", note: "gadget, fashion, F&B", active: true },
   { id: "pria", label: "👨 Pria", note: "gadget, F&B, produk pria", active: true },
-  { id: "ibu", label: "👩‍🦱 Ibu-ibu", note: "", active: false },
+  { id: "ibu", label: "👩‍🦱 Ibu-ibu", note: "rumah tangga, dapur, anak", active: true },
   { id: "daerah", label: "🌾 Daerah", note: "", active: false },
 ];
 interface TierMeta {
