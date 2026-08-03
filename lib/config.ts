@@ -91,11 +91,6 @@ export const config = {
   // Origin publik yang dikelola deploy, bukan Host dari request. Dipakai untuk
   // callback pembayaran agar webhook tidak bisa diarahkan oleh header klien.
   appBaseUrl: env("APP_BASE_URL", ""),
-  // Diagnostik SEMENTARA (2026-08-03) untuk investigasi QC-06 OCR yang
-  // konsisten skip/gagal lintas format — persist output gagal ke storage di
-  // bawah prefix debug/ dan aktifkan app/api/debug/qc-frame. Harus dicabut
-  // (flag off + hapus route) setelah investigasi selesai.
-  qcDebugMode: env("QC_DEBUG_MODE", "") === "1",
   // Midtrans — kosong = checkout 503 jelas
   midtransServerKey: env("MIDTRANS_SERVER_KEY", ""),
   midtransClientKey: env("MIDTRANS_CLIENT_KEY", ""),

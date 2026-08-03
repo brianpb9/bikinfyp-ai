@@ -264,8 +264,18 @@ export async function qcTextNotClipped(
       // visible. This makes the overlap check meaningful, not merely a
       // comparison between unrelated frames.
       for (const active of expectations.filter((item) => item.startSec <= at && item.endSec >= at)) {
-        const wanted = new Set(ocrTokens(active.text));
-        const matched = sample.words.filter((word) => wanted.has(normalizeOcr(word.text)));
+        const wanted = ocrTokens(active.text);
+        // Bidirectional substring match between expected and OCR'd sub-tokens,
+        // not exact equality: Tesseract's sparse-text mode (--psm 11) on these
+        // overlays sometimes (a) merges two adjacent words into one blob with
+        // no space ("Cuma Rp75.000" -> one word "maiRp75:000"), or (b) splits
+        // a single word into fragments ("dengan" -> a separate "gan" word).
+        // Exact-string comparison missed both even though the text was
+        // clearly legible on the frame (confirmed 2026-08-03 by inspecting an
+        // actual failing composite via the QC_DEBUG_MODE persistence below).
+        const matched = sample.words.filter((word) =>
+          ocrTokens(word.text).some((token) => wanted.some((want) => token.includes(want) || want.includes(token)))
+        );
         observations.push({ expected: active.text, frame: sample.frame, words: matched, lines: sample.lines });
       }
     }

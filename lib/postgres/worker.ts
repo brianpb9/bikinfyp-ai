@@ -171,12 +171,6 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       ],
     });
     await pool.query("UPDATE jobs SET qc_result=$1,qc_retry_count=$2 WHERE id=$3", [JSON.stringify(qc), retry, row.id]);
-    // TEMPORARY (2026-08-03): QC-06 investigation only — persists the
-    // composited attempt so it can actually be watched, since the container's
-    // local disk isn't otherwise reachable. Remove with QC_DEBUG_MODE once done.
-    if (config.qcDebugMode) {
-      await mediaStorage().put(`debug/${row.id}/attempt${retry}.mp4`, fs.readFileSync(outputPath), "video/mp4");
-    }
     if (qc.passed) break;
     if (retry === 1) throw new Error(`QC gagal setelah retry: ${qc.checks.filter((check) => check.status === "fail").map((check) => check.code).join(", ")}`);
   }
