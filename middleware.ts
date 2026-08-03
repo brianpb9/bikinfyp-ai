@@ -4,7 +4,7 @@ import type { NextRequest } from "next/server";
 // Guard sederhana: belum login (tanpa cookie racun_token) -> /onboarding.
 export function middleware(req: NextRequest) {
   const { pathname } = req.nextUrl;
-  if (pathname.startsWith("/onboarding")) return NextResponse.next();
+  if (pathname.startsWith("/onboarding") || pathname.startsWith("/legal")) return NextResponse.next();
   const hasToken = req.cookies.has("racun_token");
   if (!hasToken) {
     const url = req.nextUrl.clone();
@@ -16,5 +16,5 @@ export function middleware(req: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|onboarding|demo|showcase).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|onboarding|legal|demo|showcase).*)"],
 };
