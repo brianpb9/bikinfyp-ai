@@ -83,10 +83,10 @@ export async function POST(req: Request) {
       if (!persona) throw ERR.NOT_FOUND("Personanya");
     }
     const format = String(body.format ?? "hands_only");
-    if (format !== "hands_only")
+    if (!["hands_only", "talking_head", "vo_broll"].includes(format))
       throw ERR.BAD_REQUEST(
-        "Untuk sekarang baru ada format hands_only (tanpa wajah). Format lain nyusul ya.",
-        "Only hands_only format is available in MVP."
+        "Format video tidak dikenal. Pilih: Tangan saja, Wajah AI, atau VO + Foto.",
+        "Unknown format. Choose hands_only, talking_head, or vo_broll."
       );
     const durationS = Number(body.duration_s ?? 15);
     if (durationS !== 15)
@@ -96,6 +96,13 @@ export async function POST(req: Request) {
     const tier = String(body.quality_tier ?? "silent_caption") as "silent_caption" | "high_quality" | "super_hq";
     if (!["silent_caption", "high_quality", "super_hq"].includes(tier))
       throw ERR.BAD_REQUEST("Tier tidak dikenal. Pilih: silent_caption, high_quality, atau super_hq.", "Unknown quality tier.");
+    // Wajah AI & VO+Foto namanya sendiri sudah menjanjikan suara — tier senyap
+    // tidak masuk akal (dan QC-04 bakal gagal keras karena video benar-benar bisu).
+    if ((format === "talking_head" || format === "vo_broll") && tier === "silent_caption")
+      throw ERR.BAD_REQUEST(
+        "Wajah AI dan VO + Foto butuh suara — pilih tier High Quality atau Super HQ, bukan Senyap + Teks.",
+        "talking_head/vo_broll require an audio-bearing quality tier."
+      );
     if (script.quality_tier !== tier)
       throw ERR.BAD_REQUEST(
         `Skrip ini dibuat untuk tier ${script.quality_tier}. Bikin skrip baru untuk tier ${tier} ya.`,

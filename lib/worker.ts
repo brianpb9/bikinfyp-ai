@@ -11,6 +11,8 @@ import { compositeVideo } from "./media/compositor";
 import { runQc } from "./media/qc";
 import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "./providers/registry";
 import { isMockProviderName, type QualityTier } from "./providers/types";
+import { buildPhotoPanVideo } from "./media/photo-video";
+import { synthesizeElevenLabsVoiceover } from "./media/vo-tts";
 import { buildCaptionCards } from "./media/captions";
 import { renderCaptionPngs } from "./media/render-captions";
 import type { CompositeMode } from "./media/compositor";
@@ -94,6 +96,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
 
     // --- GENERATING_VISUAL ---
     advance(job.id, "GENERATING_VISUAL");
+    const format = job.format === "talking_head" || job.format === "vo_broll" ? job.format : "hands_only";
     const spec = planShots({
       jobId: job.id,
       durationSec: job.duration_s,
@@ -104,15 +107,19 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       productVisualDesc: product.product_visual_desc,
       imageRefPath: imageRef,
       qualityTier: tier,
-      format: job.format === "hands_only" ? "hands_only" : undefined,
+      format,
     });
-    const video = await generateVideoWithFailover(spec, workDir);
+    // vo_broll (VO+Foto): no AI video-gen call — visual is the user's own
+    // product photo panned/zoomed, so there's no provider to fail over between.
+    const video = format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir);
     setJobProviders(job.id, video.providerName);
     addCost(job.id, video.costIdr);
 
     // --- GENERATING_VOICE ---
     // silent_caption: tidak ada VO sama sekali (caption + musik).
-    // tier bersuara via provider NYATA: no-op — audio embedded ikut dari model.
+    // vo_broll: tidak ada audio embedded (tidak ada panggilan model video sama
+    // sekali) -> TTS nyata (ElevenLabs) satu-satunya opsi.
+    // tier bersuara via provider NYATA (hands_only/talking_head): no-op — audio embedded ikut dari model.
     // tier bersuara via MOCK: VO `say` sebagai SIMULASI embedded (dev/test gratis).
     advance(job.id, "GENERATING_VOICE");
     const vo: { path: string; startSec: number }[] = [];
@@ -120,6 +127,15 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     if (!withAudio) {
       setJobProviders(job.id, undefined, "none-silent-caption");
       console.log(`[job ${job.id.slice(0, 8)}] silent_caption: tanpa VO (caption + musik)`);
+    } else if (format === "vo_broll") {
+      for (let i = 0; i < segments.length; i++) {
+        const seg = segments[i];
+        const res = await synthesizeElevenLabsVoiceover(seg.text, path.join(workDir, `vo_real_${i}.mp3`));
+        vo.push({ path: res.filePath, startSec: seg.start });
+        addCost(job.id, res.costIdr);
+      }
+      setJobProviders(job.id, undefined, "elevenlabs-tts");
+      console.log(`[job ${job.id.slice(0, 8)}] vo_broll: VO nyata (ElevenLabs) di atas foto produk`);
     } else if (!usedMockVideo) {
       setJobProviders(job.id, undefined, "embedded-model");
       console.log(`[job ${job.id.slice(0, 8)}] audio embedded dari ${video.providerName} — GENERATING_VOICE no-op`);
@@ -146,7 +162,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     }
 
     // Mode compositing mengikuti tier + provider yang benar-benar dipakai
-    const compositeMode: CompositeMode = !withAudio ? "caption" : usedMockVideo ? "vo" : "embedded";
+    const compositeMode: CompositeMode = !withAudio ? "caption" : format === "vo_broll" ? "vo" : usedMockVideo ? "vo" : "embedded";
     const captionCards = !withAudio ? await renderCaptionPngs(buildCaptionCards({ segments, productName: product.name }), workDir) : undefined;
     const musicPath = !withAudio ? path.join(process.cwd(), "assets", "music", "bg-loop.m4a") : undefined;
 
@@ -201,7 +217,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         renderParams,
         shotPaths: video.assets.map((a) => a.filePath),
         refImagePath: imageRef,
-        format: job.format,
+        format,
         overlayTextExpectations: [
           { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: job.duration_s },
           ...(compositeMode === "caption"

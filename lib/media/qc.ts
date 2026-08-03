@@ -33,6 +33,27 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01"],
     skipReason: { "QC-01": "N/A: hands_only tidak menampilkan pembicara untuk lip-sync." },
   },
+  // Wajah AI (v1, 2026-08-03): wajah presenter AI SENGAJA terlihat, jadi
+  // QC-09 (larangan wajah) tidak berlaku sama sekali untuk format ini —
+  // qcNoFace() hanya pernah dipanggil untuk hands_only (lihat runQc di bawah).
+  // QC-01 (lip-sync) tetap skip: verifikasi viseme belum ada (fase 2),
+  // dimitigasi lewat instruksi jeda/enunciate di shot-planner.
+  talking_head: {
+    requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-06", "QC-07", "QC-08"],
+    permittedSkip: ["QC-01"],
+    skipReason: { "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2) — dimitigasi lewat instruksi jeda/enunciate di prompt." },
+  },
+  // VO+Foto (v1, 2026-08-03): visual adalah foto produk ASLI di-pan/zoom
+  // (bukan video AI-generated), jadi QC-02 (morphing tangan AI) tidak
+  // relevan — tidak ada tangan yang di-generate untuk bisa morphing.
+  vo_broll: {
+    requiredPass: ["QC-03", "QC-04", "QC-05", "QC-06", "QC-07", "QC-08"],
+    permittedSkip: ["QC-01", "QC-02"],
+    skipReason: {
+      "QC-01": "N/A: tidak ada wajah bicara — visual adalah foto produk, bukan presenter.",
+      "QC-02": "N/A: video dari foto produk asli (pan/zoom), bukan tangan hasil AI-generated.",
+    },
+  },
 } as const;
 
 export type QcSupportedFormat = keyof typeof QC_POLICY_BY_FORMAT;
@@ -47,7 +68,8 @@ export function evaluateQcPolicy(format: string | undefined, checks: QcCheck[]):
   if (policy.requiredPass.some((code) => byCode.get(code)?.status !== "pass")) return false;
   // Any check outside the documented N/A list must also pass; this prevents a
   // future check from silently becoming optional.
-  return checks.every((check) => check.status === "pass" || (check.status === "skip" && policy.permittedSkip.includes(check.code as "QC-01")));
+  const permittedSkip: readonly string[] = policy.permittedSkip;
+  return checks.every((check) => check.status === "pass" || (check.status === "skip" && permittedSkip.includes(check.code)));
 }
 
 export interface QcInput {
@@ -313,14 +335,23 @@ export async function qcHandMorphing(filePath: string, workDir: string): Promise
 export async function runQc(input: QcInput): Promise<QcResult> {
   const checks: QcCheck[] = [];
 
-  // QC-01 lip-sync — stub: mode hands_only tidak punya wajah bicara.
-  checks.push({ code: "QC-01", name: "Lip-sync drift", status: "skip", detail: "Tidak relevan untuk hands_only; butuh analisis viseme untuk talking_head (fase 2)." });
+  const qcFormat = input.format ?? "hands_only";
+
+  // QC-01 lip-sync — stub: verifikasi viseme belum ada (fase 2) untuk format
+  // manapun yang menampilkan wajah bicara (talking_head).
+  checks.push({ code: "QC-01", name: "Lip-sync drift", status: "skip", detail: "Verifikasi viseme otomatis belum ada (fase 2); tidak relevan untuk format tanpa wajah bicara." });
   // QC-02 morphing tangan — conservative OpenCV silhouette continuity check.
-  try {
-    checks.push(await qcHandMorphing(input.filePath, path.dirname(input.filePath)));
-  } catch (err) {
-    // Cannot inspect a hands_only output safely: fail closed, rather than hide it.
-    checks.push({ code: "QC-02", name: "Tangan/jari tidak morphing", status: "fail", detail: `detektor gagal: ${err instanceof Error ? err.message : err}` });
+  // Tidak relevan untuk vo_broll: visualnya foto produk asli di-pan/zoom,
+  // tidak ada tangan AI-generated yang bisa morphing.
+  if (qcFormat === "vo_broll") {
+    checks.push({ code: "QC-02", name: "Tangan/jari tidak morphing", status: "skip", detail: "N/A: video dari foto produk asli (pan/zoom), bukan tangan hasil AI-generated." });
+  } else {
+    try {
+      checks.push(await qcHandMorphing(input.filePath, path.dirname(input.filePath)));
+    } catch (err) {
+      // Cannot inspect a hands_only/talking_head output safely: fail closed, rather than hide it.
+      checks.push({ code: "QC-02", name: "Tangan/jari tidak morphing", status: "fail", detail: `detektor gagal: ${err instanceof Error ? err.message : err}` });
+    }
   }
   // QC-03 identitas produk konsisten — pemeriksaan kasar tapi nyata (warna region tengah).
   if (input.shotPaths && input.shotPaths.length >= 2 && input.refImagePath && fs.existsSync(input.refImagePath)) {
@@ -334,7 +365,8 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   }
 
   // QC-09 wajah di hands_only — blocker bila format hands_only dan ada shot.
-  if ((input.format ?? "hands_only") === "hands_only" && input.shotPaths && input.shotPaths.length > 0) {
+  // talking_head (Wajah AI) SENGAJA menampilkan wajah -> tidak dicek sama sekali.
+  if (qcFormat === "hands_only" && input.shotPaths && input.shotPaths.length > 0) {
     try {
       checks.push(await qcNoFace(input.shotPaths, path.dirname(input.filePath)));
     } catch (err) {

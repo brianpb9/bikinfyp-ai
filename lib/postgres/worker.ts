@@ -21,6 +21,8 @@ import { renderCaptionPngs } from "../media/render-captions";
 import { runFf } from "../media/ffmpeg";
 import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "../providers/registry";
 import { isMockProviderName, type QualityTier } from "../providers/types";
+import { buildPhotoPanVideo } from "../media/photo-video";
+import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
 import { PgCreditPaymentRepository } from "./credit-payment";
@@ -97,10 +99,14 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const category = getCreatorCategory(row.creator_category ?? "hijaber")!;
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
   const withAudio = tier !== "silent_caption";
+  const format = row.format === "talking_head" || row.format === "vo_broll" ? row.format : "hands_only";
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, imageRefPath: imageRef, qualityTier: tier,
-    format: row.format === "hands_only" ? "hands_only" : undefined });
-  const video = await generateVideoWithFailover(spec, workDir);
+    format });
+  // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the
+  // user's own product photo panned/zoomed, so there's no provider to fail
+  // over between and no cost beyond the VO synthesis below.
+  const video = format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir);
   await jobs.setProviders(row.id, video.providerName);
   await jobs.addCost(row.id, video.costIdr);
 
@@ -108,7 +114,17 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const vo: { path: string; startSec: number }[] = [];
   const usedMockVideo = isMockProviderName(video.providerName);
   if (!withAudio) await jobs.setProviders(row.id, undefined, "none-silent-caption");
-  else if (!usedMockVideo) await jobs.setProviders(row.id, undefined, "embedded-model");
+  else if (format === "vo_broll") {
+    // No embedded audio is possible here (no video model call happened) —
+    // real TTS is the only option, unlike hands_only/talking_head's mock-only rule.
+    for (let i = 0; i < segments.length; i++) {
+      const segment = segments[i];
+      const result = await synthesizeElevenLabsVoiceover(segment.text, path.join(workDir, `vo_real_${i}.mp3`));
+      vo.push({ path: result.filePath, startSec: segment.start });
+      await jobs.addCost(row.id, result.costIdr);
+    }
+    await jobs.setProviders(row.id, undefined, "elevenlabs-tts");
+  } else if (!usedMockVideo) await jobs.setProviders(row.id, undefined, "embedded-model");
   else {
     let voiceProvider = "";
     for (let i = 0; i < segments.length; i++) {
@@ -120,7 +136,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     }
     await jobs.setProviders(row.id, undefined, `${voiceProvider} (simulasi embedded)`);
   }
-  const mode: CompositeMode = !withAudio ? "caption" : usedMockVideo ? "vo" : "embedded";
+  const mode: CompositeMode = !withAudio ? "caption" : format === "vo_broll" ? "vo" : usedMockVideo ? "vo" : "embedded";
   const captions = !withAudio ? await renderCaptionPngs(buildCaptionCards({ segments, productName: row.product_name }), workDir) : undefined;
   const musicPath = !withAudio ? path.join(process.cwd(), "assets", "music", "bg-loop.m4a") : undefined;
   const demo = segments.find((segment) => segment.role === "demo");
@@ -145,7 +161,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s,
       finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), `Cek ${cartLabel}`, AIGC_WATERMARK_TEXT],
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, priceIdr: row.product_price_idr,
-      renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format: row.format,
+      renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format,
       overlayTextExpectations: [
         { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: row.duration_s },
         ...(mode === "caption"

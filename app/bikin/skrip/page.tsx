@@ -110,7 +110,7 @@ function SkripInner() {
       const job = await apiFetch<{ job_id: string }>("/api/jobs", {
         json: {
           script_id: script.id,
-          format: "hands_only",
+          format: loadFlow().format ?? "hands_only",
           duration_s: 15,
           quality_tier: loadFlow().qualityTier ?? "silent_caption",
           creator_category: loadFlow().creatorCategory ?? "hijaber",

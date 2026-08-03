@@ -28,11 +28,14 @@ export interface FlowScript {
   hashtags: string[];
 }
 
+export type VideoFormat = "hands_only" | "talking_head" | "vo_broll";
+
 export interface FlowState {
   product?: FlowProduct;
   register?: string;
   emotion?: string;
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
+  format?: VideoFormat;
   creatorCategory?: string;
   scripts?: FlowScript[];
   selectedScriptId?: string;

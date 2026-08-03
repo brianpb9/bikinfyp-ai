@@ -4,7 +4,13 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail } from "../../_components/api";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
-import { loadFlow, saveFlow, rupiah, type FlowScript } from "../../_components/flow";
+import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
+
+const FORMATS: { id: VideoFormat; label: string; icon: string; hint: string; needsAudio: boolean }[] = [
+  { id: "hands_only", label: "Tangan saja", icon: "✋", hint: "tanpa wajah", needsAudio: false },
+  { id: "talking_head", label: "Wajah AI", icon: "🙂", hint: "presenter AI, versi 1", needsAudio: true },
+  { id: "vo_broll", label: "VO + Foto", icon: "🖼️", hint: "foto asli + suara, versi 1", needsAudio: true },
+];
 
 const REGISTERS = [
   { id: "bunda", label: "Bunda", hint: "sapaan: bun — hangat, pelan" },
@@ -38,6 +44,7 @@ export default function GayaPage() {
   const router = useRouter();
   const [tier, setTier] = useState<Tier>("silent_caption");
   const [tiers, setTiers] = useState<TierMeta[]>([]);
+  const [format, setFormat] = useState<VideoFormat>("hands_only");
   const [register, setRegister] = useState("bestie");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
   const [loading, setLoading] = useState(false);
@@ -52,6 +59,15 @@ export default function GayaPage() {
   const selectedTier = tiers.find((t) => t.id === tier);
   const selectedCategory = CREATOR_CATS.find((c) => c.id === creatorCategory);
 
+  function selectFormat(id: VideoFormat) {
+    setFormat(id);
+    // Wajah AI & VO+Foto namanya sendiri menjanjikan suara — tier senyap
+    // ditolak API (lihat app/api/jobs/route.ts), jadi naikkan otomatis di sini
+    // biar user tidak kena error yang membingungkan.
+    const needsAudio = FORMATS.find((f) => f.id === id)?.needsAudio;
+    if (needsAudio && tier === "silent_caption") setTier("high_quality");
+  }
+
   async function generate() {
     const product = loadFlow().product;
     if (!product) return router.replace("/bikin/produk");
@@ -64,11 +80,11 @@ export default function GayaPage() {
           product_id: product.productId,
           register: tier === "silent_caption" ? "netral" : register,
           emotion: "senang",
-          format: "hands_only",
+          format,
           quality_tier: tier,
         },
       });
-      saveFlow({ register, qualityTier: tier, creatorCategory, scripts: res.scripts, selectedScriptId: undefined });
+      saveFlow({ register, qualityTier: tier, format, creatorCategory, scripts: res.scripts, selectedScriptId: undefined });
       router.push("/bikin/skrip");
     } catch (err) {
       if (err instanceof ApiFail && err.code === "INSUFFICIENT_CREDITS") {
@@ -88,16 +104,19 @@ export default function GayaPage() {
         <section className="space-y-3">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Langkah pengaturan</p><h2 className="font-display text-xl font-bold">Format video</h2></div>
           <div className="grid grid-cols-3 gap-2">
-            <button type="button" aria-pressed="true" className="rounded-2xl border-2 border-amber-500 bg-amber-50 p-3 text-center shadow-sm transition-transform active:scale-[0.98]">
-              <div className="text-2xl">✋</div>
-              <p className="text-sm font-bold">Tangan saja</p>
-              <p className="text-xs text-zinc-500">tanpa wajah</p>
-            </button>
-            {["VO + foto", "Wajah AI"].map((f) => (
-              <button key={f} type="button" disabled className="rounded-2xl border-2 border-zinc-100 bg-zinc-50 p-3 text-center opacity-60">
-                <div className="text-2xl">{f === "Wajah AI" ? "🙂" : "🖼️"}</div>
-                <p className="text-sm font-bold text-zinc-500">{f}</p>
-                <p className="text-xs font-semibold text-amber-600">Segera</p>
+            {FORMATS.map((f) => (
+              <button
+                key={f.id}
+                type="button"
+                aria-pressed={format === f.id}
+                onClick={() => selectFormat(f.id)}
+                className={`rounded-2xl border-2 p-3 text-center shadow-sm transition-transform active:scale-[0.98] ${
+                  format === f.id ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                }`}
+              >
+                <div className="text-2xl">{f.icon}</div>
+                <p className="text-sm font-bold">{f.label}</p>
+                <p className="text-xs text-zinc-500">{f.hint}</p>
               </button>
             ))}
           </div>
@@ -105,7 +124,14 @@ export default function GayaPage() {
 
         <section className="space-y-3">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih paket</p><h2 className="font-display text-xl font-bold">Kualitas video</h2></div>
-          {(tiers.length ? tiers : [{ id: "silent_caption", name: "Senyap + Teks", note: "Video bisu + caption + musik", tag: "Paling hemat", price_idr: 5000 }]).map((t) => (
+          {FORMATS.find((f) => f.id === format)?.needsAudio && (
+            <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              {FORMATS.find((f) => f.id === format)?.label} butuh suara — Senyap + Teks disembunyikan.
+            </p>
+          )}
+          {(tiers.length ? tiers : [{ id: "silent_caption", name: "Senyap + Teks", note: "Video bisu + caption + musik", tag: "Paling hemat", price_idr: 5000 }])
+            .filter((t) => !(FORMATS.find((f) => f.id === format)?.needsAudio && t.id === "silent_caption"))
+            .map((t) => (
             <button
               key={t.id}
               type="button"

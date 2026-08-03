@@ -43,6 +43,12 @@ const HANDS_ONLY_FRAMING =
 const HANDS_ONLY_NEGATIVE =
   "no face, no visible face, no head in frame, no person facing camera";
 
+// Wajah AI (v1, 2026-08-03): opposite intent of hands_only — face IS the
+// point, framed like a normal UGC talking-head selfie, not hands-only POV.
+const TALKING_HEAD_FRAMING =
+  "face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
+  "front-facing selfie-style angle, natural phone camera look";
+
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
   "do not redesign or replace the product";
@@ -63,13 +69,21 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     : "";
 
   const shots: ShotSpec[] = [0, 1].map((i) => {
-    // Framing larangan wajah DI DEPAN prompt (posisi awal = penekanan lebih kuat).
-    const framing = format === "hands_only" ? `${HANDS_ONLY_FRAMING}. ` : "";
+    // Framing DI DEPAN prompt (posisi awal = penekanan lebih kuat): hands_only
+    // melarang wajah, talking_head justru menekankan wajah terlihat.
+    const framing = format === "hands_only" ? `${HANDS_ONLY_FRAMING}. ` : format === "talking_head" ? `${TALKING_HEAD_FRAMING}. ` : "";
+    // Wajah AI pakai promptSeed (deskripsi wajah/tipologi) sebagai subjek utama,
+    // bukan handsPrompt (yang secara eksplisit hanya deskripsi tangan/lengan).
+    const subject = format === "talking_head" ? input.category.promptSeed : input.category.handsPrompt;
     const base =
-      `${framing}${input.category.handsPrompt}. Shot ${i + 1} of 2. ${productDesc}` +
-      (i === 0
-        ? `Hands presenting "${input.productName}" to camera, product label facing camera, gentle rotation, ${IDENTITY_INSTRUCTION}`
-        : `Hands demonstrating the product in use, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`);
+      `${framing}${subject}. Shot ${i + 1} of 2. ${productDesc}` +
+      (format === "talking_head"
+        ? i === 0
+          ? `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, ${IDENTITY_INSTRUCTION}`
+          : `Presenter demonstrating the product close to camera, still clearly in frame with her face, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
+        : i === 0
+          ? `Hands presenting "${input.productName}" to camera, product label facing camera, gentle rotation, ${IDENTITY_INSTRUCTION}`
+          : `Hands demonstrating the product in use, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`);
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
