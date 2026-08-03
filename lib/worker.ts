@@ -227,6 +227,11 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         ],
       });
       db.prepare("UPDATE jobs SET qc_result = ? WHERE id = ?").run(JSON.stringify(qc), job.id);
+      // TEMPORARY (2026-08-03): QC-06 investigation only, see lib/postgres/worker.ts.
+      if (config.qcDebugMode) {
+        const attempt = getJob(job.id)!.qc_retry_count;
+        await mediaStorage().put(`debug/${job.id}/attempt${attempt}.mp4`, fs.readFileSync(outPath), "video/mp4");
+      }
       if (qc.passed) break;
 
       const current = getJob(job.id)!;
