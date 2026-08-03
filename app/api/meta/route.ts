@@ -27,6 +27,7 @@ export async function GET(req: Request) {
         ...t,
         price_idr: config.tiers[t.id]?.priceIdr ?? 0,
       })),
+      promo_price_idr: config.promoPriceIdr,
     });
   } catch (err) {
     return errorResponse(err);

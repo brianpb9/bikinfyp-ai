@@ -1,9 +1,10 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { apiFetch, ApiFail } from "../_components/api";
-import { PrimaryButton, ErrorText, WarnCard } from "../_components/ui";
+import { PrimaryButton, SecondaryButton, ErrorText, WarnCard } from "../_components/ui";
+import { rupiah } from "../_components/flow";
 
 const MAX_CLIPS = 5;
 
@@ -19,8 +20,14 @@ export default function PromoPage() {
   const [statusText, setStatusText] = useState("");
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [noCredits, setNoCredits] = useState(false);
+  const [priceIdr, setPriceIdr] = useState<number | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    apiFetch<{ promo_price_idr: number }>("/api/meta").then((m) => setPriceIdr(m.promo_price_idr)).catch(() => {});
+  }, []);
 
   function stopPoll() {
     if (pollRef.current) window.clearInterval(pollRef.current);
@@ -40,6 +47,7 @@ export default function PromoPage() {
   async function submit() {
     if (files.length < 1) return;
     setError(null);
+    setNoCredits(false);
     setVideoUrl(null);
     setPhase("uploading");
     try {
@@ -57,6 +65,7 @@ export default function PromoPage() {
       stopPoll();
       pollRef.current = window.setInterval(() => poll(job.id), 3000);
     } catch (err) {
+      if (err instanceof ApiFail && err.code === "INSUFFICIENT_CREDITS") setNoCredits(true);
       setError(err instanceof ApiFail ? err.message : "Gagal upload/bikin video.");
       setPhase("error");
     }
@@ -143,9 +152,12 @@ export default function PromoPage() {
             <p className="text-sm text-zinc-600">{statusText}</p>
           )}
           <ErrorText message={error} />
+          {noCredits && (
+            <SecondaryButton href="/kredit?return_to=%2Fpromo">Top-up dulu di sini →</SecondaryButton>
+          )}
 
           <PrimaryButton onClick={submit} disabled={files.length < 1 || busy} big>
-            {busy ? "Sebentar..." : `Bikin Video (${files.length} klip)`}
+            {busy ? "Sebentar..." : `Bikin Video${priceIdr ? ` · ${rupiah(priceIdr)}` : ""}`}
           </PrimaryButton>
         </>
       )}

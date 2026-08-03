@@ -3,6 +3,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { PgPromoJobsRepository } from "@/lib/postgres/promo-jobs";
+import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { enqueuePromoJob } from "@/lib/promo/queue";
 
 export const runtime = "nodejs";
@@ -11,11 +12,14 @@ export const dynamic = "force-dynamic";
 const MAX_CLIPS = 5;
 
 // POST /api/promo/jobs {uploaded_clip_urls: string[]} — Video Promosi
-// (non-ecommerce) prototype. Enqueued on its own BullMQ queue
-// (lib/promo/queue.ts), consumed by the Docker worker service — that's
-// where ffmpeg/ffprobe actually live, the web service has neither.
-// Deliberately a separate queue from the e-commerce pipeline's:
-// prototype-only, unbilled state machine, isolated.
+// (non-ecommerce). Flat price (config.promoPriceIdr) held from the same
+// credit_ledger as the e-commerce pipeline — job_id has no FK to `jobs`
+// specifically, so PgCreditPaymentRepository works unmodified against
+// promo_jobs.id. Enqueued on its own BullMQ queue (lib/promo/queue.ts),
+// consumed by the Docker worker service — that's where ffmpeg/ffprobe
+// actually live, the web service has neither. Deliberately a separate
+// queue from the e-commerce pipeline's: isolated state machine, no
+// entanglement with its retry/refund semantics.
 export async function POST(req: Request) {
   try {
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Prototype ini butuh runtime PostgreSQL.", "Video Promosi prototype requires Postgres runtime.");
@@ -27,13 +31,25 @@ export async function POST(req: Request) {
     if (uploadedClipUrls.length < 1) throw ERR.BAD_REQUEST("Minimal 1 klip upload wajib.", "At least one uploaded_clip_urls entry is required.");
     if (uploadedClipUrls.length > MAX_CLIPS) throw ERR.BAD_REQUEST(`Maksimal ${MAX_CLIPS} klip untuk prototype ini.`, "Too many clips for this prototype.");
 
-    const repo = new PgPromoJobsRepository(config.databaseUrl);
-    const job = await repo.create(user.id, uploadedClipUrls);
-    await repo.close();
+    const priceIdr = config.promoPriceIdr;
+    const jobsRepo = new PgPromoJobsRepository(config.databaseUrl);
+    const job = await jobsRepo.create(user.id, uploadedClipUrls);
+    await jobsRepo.close();
+
+    const creditsRepo = new PgCreditPaymentRepository(config.databaseUrl);
+    let held: boolean;
+    try { held = await creditsRepo.holdCredits(user.id, job.id, priceIdr); }
+    finally { await creditsRepo.close(); }
+    if (!held) {
+      const failRepo = new PgPromoJobsRepository(config.databaseUrl);
+      try { await failRepo.markFailed(job.id, "Kredit tidak cukup."); }
+      finally { await failRepo.close(); }
+      throw ERR.INSUFFICIENT_CREDITS();
+    }
 
     await enqueuePromoJob(job.id);
 
-    return Response.json({ id: job.id, state: job.state }, { status: 201 });
+    return Response.json({ id: job.id, state: job.state, hold_idr: priceIdr }, { status: 201 });
   } catch (err) {
     return errorResponse(err);
   }

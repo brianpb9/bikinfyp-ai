@@ -19,6 +19,7 @@ import { extractReferenceFrame, buildHookVisualSpec } from "./hook-generator";
 import { synthesizeHookVoiceover } from "./voiceover";
 import { stitchClips, type StitchClip } from "./stitch";
 import { PgPromoJobsRepository } from "../postgres/promo-jobs";
+import { PgCreditPaymentRepository } from "../postgres/credit-payment";
 
 const MAX_DURATION_SEC = 60;
 // BytePlus shots run best in roughly this range (SRS: umumnya <=12 dtk/klip);
@@ -31,9 +32,11 @@ const HOOK_DURATION_MAX_SEC = 10;
 export async function processPromoJob(jobId: string): Promise<void> {
   const repo = new PgPromoJobsRepository(config.databaseUrl);
   const workDir = path.join(config.storageDir, "promo_jobs", jobId);
+  let userId: string | null = null;
   try {
     const job = await repo.getById(jobId);
     if (!job) throw new Error("Promo job tidak ditemukan.");
+    userId = job.user_id;
     // Only bail on a TERMINAL state. A prior "already processed" check
     // (`!== "QUEUED"`) blocked BullMQ's own retry from ever doing anything —
     // a job orphaned mid-run by a worker restart (state stuck at
@@ -91,10 +94,16 @@ export async function processPromoJob(jobId: string): Promise<void> {
 
     await repo.markReady(jobId, outputRel);
     console.log(`[promo-worker] job ${jobId}: READY (${outputRel}, ${uploadedClips.length} klip upload + 1 hook)`);
+    const captureRepo = new PgCreditPaymentRepository(config.databaseUrl);
+    try { await captureRepo.captureCredits(userId, jobId); } finally { await captureRepo.close(); }
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[promo-worker] job ${jobId}: FAILED — ${message}`);
     await repo.markFailed(jobId, message);
+    if (userId) {
+      const releaseRepo = new PgCreditPaymentRepository(config.databaseUrl);
+      try { await releaseRepo.releaseCredits(userId, jobId); } finally { await releaseRepo.close(); }
+    }
     throw err; // let BullMQ record the failure event too
   } finally {
     await repo.close();

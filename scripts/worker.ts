@@ -58,8 +58,21 @@ promoWorker?.on("failed", (job, error) => {
   void (async () => {
     const { PgPromoJobsRepository } = await import("../lib/postgres/promo-jobs");
     const repo = new PgPromoJobsRepository(config.databaseUrl);
-    try { await repo.markFailed(job.data.jobId, `Worker gagal (stalled/attempts habis): ${message}`); }
-    finally { await repo.close(); }
+    let userId: string | null = null;
+    try {
+      const row = await repo.getById(job.data.jobId);
+      userId = row?.user_id ?? null;
+      await repo.markFailed(job.data.jobId, `Worker gagal (stalled/attempts habis): ${message}`);
+    } finally { await repo.close(); }
+    // Same backstop reasoning as markFailed above: processPromoJob's own
+    // catch block (which releases the credit hold) never ran for a job
+    // BullMQ gave up on via the stalled path — release it here instead so
+    // the user isn't charged for a video that was never produced.
+    if (userId) {
+      const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+      const creditsRepo = new PgCreditPaymentRepository(config.databaseUrl);
+      try { await creditsRepo.releaseCredits(userId, job.data.jobId); } finally { await creditsRepo.close(); }
+    }
   })();
 });
 

@@ -136,6 +136,12 @@ export const config = {
     string,
     { priceIdr: number; cogsIdr: number; byteplusModel: string; resolution: string; generateAudio: boolean }
   >,
+  // Video Promosi (non-ecommerce) — flat price regardless of clip count: the
+  // AI-generated cost (hook video + ElevenLabs VO) is fixed per job, the
+  // user's own uploaded clips cost nothing to us. Observed COGS from live
+  // staging testing (2026-08-02): ~Rp1,100-1,300/job. Brian's call (2026-08-03):
+  // pick something profitable, not a launch blocker, revisit later.
+  promoPriceIdr: parseInt(env("PROMO_PRICE_IDR", "9000"), 10),
   signupBonusIdr: 5000, // bonus user baru: cukup 1 video Senyap+Teks
   // Parameter bisnis
   signedUrlTtlSec: 3600, // SRS NF-SEC04: TTL <= 1 jam
