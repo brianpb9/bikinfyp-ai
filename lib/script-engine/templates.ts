@@ -37,12 +37,36 @@ const VISUAL: Record<string, string> = {
   cta: "Produk dipegang di samping keranjang belanja HP, tunjuk layar lalu kembali ke produk",
 };
 
-function seg(t: Triple): SegmentDraft[] {
+// Proporsi basis 15 dtk (hook 20% / demo 46.7% / cta 33.3%) — durasi lain
+// skala linear dari basis ini, bukan rasio baru per durasi (2026-08-03,
+// perluasan 30/45 dtk).
+function seg(t: Triple, durationSec = 15): SegmentDraft[] {
+  const hookEnd = Math.round((durationSec * 3) / 15);
+  const demoEnd = Math.round((durationSec * 10) / 15);
   return [
-    { role: "hook", start: 0, end: 3, text: t.hook, visual_direction: VISUAL.hook },
-    { role: "demo", start: 3, end: 10, text: t.demo, visual_direction: VISUAL.demo },
-    { role: "cta", start: 10, end: 15, text: t.cta, visual_direction: VISUAL.cta },
+    { role: "hook", start: 0, end: hookEnd, text: t.hook, visual_direction: VISUAL.hook },
+    { role: "demo", start: hookEnd, end: demoEnd, text: t.demo, visual_direction: VISUAL.demo },
+    { role: "cta", start: demoEnd, end: durationSec, text: t.cta, visual_direction: VISUAL.cta },
   ];
+}
+
+// Perluasan 30/45 dtk (2026-08-03, v1): konten INTI (hook/cta) yang sudah
+// teruji tetap dipakai apa adanya — cuma bagian demo yang diperpanjang
+// dengan kalimat lanjutan generik (bukan per-hook-family, biar scope tetap
+// terkelola). Dipilih deterministik via index keluarga hook, bukan acak —
+// mesin ini sengaja deterministik penuh (lihat generateScripts).
+// TODO: naskah per-durasi yang benar-benar ditulis khusus, bukan sambungan
+// generik — ini v1, ditandai untuk penyempurnaan lanjutan.
+const DEMO_CONTINUATION: ((c: TemplateCtx) => string)[] = [
+  (c) => `${cap(c.reg.me)} juga suka soalnya gampang dipake tiap hari, nggak ribet sama sekali`,
+  (c) => `yang bikin ${c.reg.me} makin yakin, ${c.proof} nya konsisten tiap dipake, nggak plin-plan`,
+  (c) => `buat yang masih ragu, coba aja dulu, ${c.reg.me} juga awalnya gitu sebelum ketagihan`,
+  (c) => `bukan cuma sekali dua kali, ${c.reg.me} udah pake berkali-kali dan hasilnya tetep sama`,
+];
+
+function demoContinuation(c: TemplateCtx, family: HookCode, offset: number): string {
+  const index = (parseInt(family.slice(1), 10) + offset) % DEMO_CONTINUATION.length;
+  return DEMO_CONTINUATION[index](c);
 }
 
 // CTA bersama — semua menyebut "keranjang kuning" (L-03).
@@ -230,13 +254,36 @@ const COMPACT_T: Record<HookCode, (c: TemplateCtx) => Triple> = {
   }),
 };
 
-/** Render segmen sesuai tier: silent_caption = template penuh; tier bersuara = kompak. */
+/** Render segmen sesuai tier: silent_caption = template penuh; tier bersuara = kompak.
+ * durationSec > 15 (v1, 2026-08-03): demo diperpanjang dengan kalimat lanjutan
+ * generik (lihat demoContinuation) — hook/cta inti tidak diubah.
+ */
+function wordCount(text: string): number {
+  return text.split(/\s+/).filter((w) => w.length > 0).length;
+}
+
 export function renderSegmentsForTier(
   family: HookCode,
   c: TemplateCtx,
-  tier: "silent_caption" | "high_quality" | "super_hq"
+  tier: "silent_caption" | "high_quality" | "super_hq",
+  durationSec = 15
 ): SegmentDraft[] {
-  return seg((tier === "silent_caption" ? T : COMPACT_T)[family](c));
+  const triple = (tier === "silent_caption" ? T : COMPACT_T)[family](c);
+  if (durationSec > 15) {
+    // Kalimat lanjutan ditambahkan SATU PER SATU sampai total kata menyentuh
+    // titik tengah rentang L-05 untuk tier+durasi ini (bukan jumlah tetap) —
+    // dasar kata dari silent_caption jauh lebih panjang dari tier bersuara,
+    // jumlah kalimat lanjutan yang dibutuhkan beda jauh antar keduanya.
+    const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [10, 22];
+    const scale = durationSec / 15;
+    const targetWc = Math.round(((baseMinWc + baseMaxWc) / 2) * scale);
+    let offset = 0;
+    while (wordCount(`${triple.hook} ${triple.demo} ${triple.cta}`) < targetWc && offset < 8) {
+      triple.demo = `${triple.demo}, ${demoContinuation(c, family, offset)}`;
+      offset++;
+    }
+  }
+  return seg(triple, durationSec);
 }
 
 function cap(s: string): string {

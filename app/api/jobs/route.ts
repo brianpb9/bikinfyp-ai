@@ -89,8 +89,16 @@ export async function POST(req: Request) {
         "Unknown format. Choose hands_only, talking_head, or vo_broll."
       );
     const durationS = Number(body.duration_s ?? 15);
-    if (durationS !== 15)
-      throw ERR.BAD_REQUEST("Durasi MVP baru 15 detik.", "Only 15s duration is supported in MVP.");
+    if (![15, 30].includes(durationS))
+      throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15 atau 30 detik.", "Only 15s or 30s duration is supported.");
+    // Skrip dibuat untuk durasi tertentu (segmen ikut skala) — job harus
+    // memakai durasi yang sama, bukan durasi lain yang tidak pernah divalidasi.
+    const scriptDurationSec = Math.max(...segments.map((s) => s.end));
+    if (scriptDurationSec !== durationS)
+      throw ERR.BAD_REQUEST(
+        `Skrip ini dibuat untuk video ${scriptDurationSec} detik. Bikin skrip baru untuk durasi ${durationS} detik ya.`,
+        "Script was generated for a different duration."
+      );
 
     // --- Tier kualitas: menentukan model, audio, dan HARGA (P6: harga terlihat sebelum aksi) ---
     const tier = String(body.quality_tier ?? "silent_caption") as "silent_caption" | "high_quality" | "super_hq";
@@ -108,7 +116,7 @@ export async function POST(req: Request) {
         `Skrip ini dibuat untuk tier ${script.quality_tier}. Bikin skrip baru untuk tier ${tier} ya.`,
         "Script was generated for a different quality tier."
       );
-    const priceIdr = tierPriceIdr(tier);
+    const priceIdr = tierPriceIdr(tier, durationS);
 
     // Checkpoint 1E only: compose the parity-tested PG repositories behind
     // the same HTTP contract.  The deterministic completion hook is scoped

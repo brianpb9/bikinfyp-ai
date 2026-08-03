@@ -111,7 +111,7 @@ function SkripInner() {
         json: {
           script_id: script.id,
           format: loadFlow().format ?? "hands_only",
-          duration_s: 15,
+          duration_s: loadFlow().durationSec ?? 15,
           quality_tier: loadFlow().qualityTier ?? "silent_caption",
           creator_category: loadFlow().creatorCategory ?? "hijaber",
         },
@@ -135,7 +135,7 @@ function SkripInner() {
       <FlowHeader title="Skrip" step={3} />
       <div className="space-y-6 px-4">
         <p className="rounded-2xl border border-amber-100 bg-amber-50 p-3 text-sm font-semibold text-amber-800 shadow-sm">
-          Tier: {TIER_LABELS[loadFlow().qualityTier ?? "silent_caption"]}
+          Tier: {TIER_LABELS[loadFlow().qualityTier ?? "silent_caption"]} · {loadFlow().durationSec ?? 15} dtk
         </p>
         <section className="space-y-2">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih yang paling cocok</p><h2 className="font-display text-xl font-bold">Versi skrip</h2></div>

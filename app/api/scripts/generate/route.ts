@@ -23,6 +23,7 @@ export async function POST(req: Request) {
     const emotion = ["senang", "sedih", "gemas"].includes(body.emotion) ? body.emotion : "senang";
     if (!REGISTERS[register])
       throw ERR.BAD_REQUEST("Register-nya pilih salah satu: bunda, bestie, genz, atau netral.", "Invalid register.");
+    const durationSec = [15, 30].includes(Number(body.duration_s)) ? Number(body.duration_s) : 15;
 
     const product = postgresRuntimeEnabled()
       ? await smokeGetProduct(user.id, productId)
@@ -34,6 +35,7 @@ export async function POST(req: Request) {
       register,
       emotion,
       qualityTier: tier,
+      durationSec,
     });
 
     const makeOut = (v: typeof variants[number], id: string) => ({ id, ...v });

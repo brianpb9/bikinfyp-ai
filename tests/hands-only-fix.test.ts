@@ -184,3 +184,25 @@ test("QC-06: OCR frame nyata meluluskan overlay aman dan menolak baris terpotong
   assert.equal(clipped.status, "fail", clipped.detail);
   assert.match(clipped.detail ?? "", /menyentuh tepi kanvas/);
 });
+
+test("durasi 30 dtk: tetap 2 shot, masing-masing 15 dtk (batas BytePlus 2-15 dtk/klip)", () => {
+  const segments30 = [
+    { role: "hook" as const, start: 0, end: 6, text: "Say, masa 85 ribu segini sih", visual_direction: "x" },
+    { role: "demo" as const, start: 6, end: 20, text: "nah, ini Serum Glow, teksturnya niat, cuma 85 ribu", visual_direction: "x" },
+    { role: "cta" as const, start: 20, end: 30, text: "Cek keranjang kuning ya deh", visual_direction: "x" },
+  ];
+  const s = planShots({
+    jobId: "t2",
+    durationSec: 30,
+    segments: segments30,
+    category: hijaber,
+    productName: "Serum Glow",
+    productCategory: "beauty",
+    productVisualDesc: null,
+    imageRefPath: "/tmp/x.png",
+    qualityTier: "silent_caption",
+    format: "hands_only",
+  });
+  assert.equal(s.shots.length, 2);
+  for (const shot of s.shots) assert.equal(shot.durationSec, 15);
+});

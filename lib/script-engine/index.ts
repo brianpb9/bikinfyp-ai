@@ -120,13 +120,14 @@ function generateOne(
   register: Register,
   emotion: string,
   family: HookCode,
-  tier: "silent_caption" | "high_quality" | "super_hq"
+  tier: "silent_caption" | "high_quality" | "super_hq",
+  durationSec: number
 ): GeneratedScript {
   const ctx = buildCtx(product, register);
   const cartLabel = cartLabelForUrl(product.sourceUrl);
-  let segments = renderSegmentsForTier(family, ctx, tier).map((s) => ({ ...s, text: applyCartLabel(s.text, cartLabel) }));
+  let segments = renderSegmentsForTier(family, ctx, tier, durationSec).map((s) => ({ ...s, text: applyCartLabel(s.text, cartLabel) }));
   let validation = validateScript(
-    { hook_family: family, register, segments, productName: product.name, priceIdr: product.price_idr, qualityTier: tier },
+    { hook_family: family, register, segments, productName: product.name, priceIdr: product.price_idr, qualityTier: tier, durationSec },
     "strict"
   );
   // Regenerate maks 2x bila gagal (FSD F-02.3). Template kami deterministik, jadi
@@ -135,7 +136,7 @@ function generateOne(
   for (let attempt = 0; attempt < MAX_REGEN && !validation.passed; attempt++) {
     segments = normalizeSegments(segments);
     validation = validateScript(
-      { hook_family: family, register, segments, productName: product.name, priceIdr: product.price_idr, qualityTier: tier },
+      { hook_family: family, register, segments, productName: product.name, priceIdr: product.price_idr, qualityTier: tier, durationSec },
       "strict"
     );
   }
@@ -166,12 +167,14 @@ export function generateScripts(opts: {
   register: Register;
   emotion?: string;
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
+  durationSec?: number;
 }): GeneratedScript[] {
   const { product, register } = opts;
   const emotion = opts.emotion ?? "senang";
   const tier = opts.qualityTier ?? "silent_caption";
+  const durationSec = opts.durationSec ?? 15;
   const families = pickHookFamilies(product.category, product.id);
-  return families.map((f) => generateOne(product, register, emotion, f, tier));
+  return families.map((f) => generateOne(product, register, emotion, f, tier, durationSec));
 }
 
 export function outputExtras(category: string) {

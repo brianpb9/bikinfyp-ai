@@ -13,6 +13,8 @@ export interface ScriptToValidate {
   priceIdr: number;
   /** Tier kualitas — memengaruhi L-05 (batas kata) & L-17 (kurung instruksi). Default silent_caption. */
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
+  /** Durasi video — L-05 (batas kata) skala proporsional dari basis 15 dtk. Default 15. */
+  durationSec?: number;
 }
 
 export type ValidationMode = "strict" | "light";
@@ -112,16 +114,20 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // L-05: panjang total — tergantung tier (aturan bahasa hasil uji nyata 31 Jul):
   // silent_caption 32-48 kata (teks dibaca, bukan diucapkan);
   // tier bersuara 10-22 kata (audio embedded ~20 kata/15 dtk, dirakit 2 shot).
+  // Basis 15 dtk; durasi lain skala proporsional (durationSec/15).
   const tier = script.qualityTier ?? "silent_caption";
+  const durationScale = (script.durationSec ?? 15) / 15;
   const wc = wordCount(fullText);
-  const [minWc, maxWc] = tier === "silent_caption" ? [32, 48] : [10, 22];
+  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [10, 22];
+  const minWc = Math.round(baseMinWc * durationScale);
+  const maxWc = Math.round(baseMaxWc * durationScale);
   if (wc < minWc || wc > maxWc)
     push(false, {
       rule: "L-05",
       message_id:
         tier === "silent_caption"
-          ? `Panjang skrip ${wc} kata — untuk video 15 detik harus 32–48 kata.`
-          : `Panjang skrip ${wc} kata — untuk video bersuara 15 detik maksimal ~20 kata (10–22).`,
+          ? `Panjang skrip ${wc} kata — untuk video ${script.durationSec ?? 15} detik harus ${minWc}–${maxWc} kata.`
+          : `Panjang skrip ${wc} kata — untuk video bersuara ${script.durationSec ?? 15} detik maksimal ~${maxWc} kata (${minWc}–${maxWc}).`,
     });
 
   // L-06: produk tidak disebut di hook (kecuali H4/H11)

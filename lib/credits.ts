@@ -16,8 +16,11 @@ export const TOPUP_PACKAGES = [
 
 export type PackageId = (typeof TOPUP_PACKAGES)[number]["id"];
 
-export function tierPriceIdr(tier: QualityTier): number {
-  return config.tiers[tier]?.priceIdr ?? config.tiers.silent_caption.priceIdr;
+/** Harga per tier skala linear dari basis 15 dtk — AI video-gen (BytePlus) dibayar
+ * per detik shot, jadi video 30 dtk = 2x shot-detik = kira-kira 2x biaya (2026-08-03). */
+export function tierPriceIdr(tier: QualityTier, durationSec = 15): number {
+  const base = config.tiers[tier]?.priceIdr ?? config.tiers.silent_caption.priceIdr;
+  return Math.round(base * (durationSec / 15));
 }
 
 export function getBalance(userId: string): number {

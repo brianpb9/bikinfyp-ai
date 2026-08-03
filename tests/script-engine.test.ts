@@ -103,3 +103,25 @@ test("tier bersuara: skrip kompak <=22 kata, tanpa tanda kurung, lolos validator
     assert.equal(v.quality_tier, "high_quality");
   }
 });
+
+test("durasi 30 dtk: timing segmen skala 2x, demo diperpanjang, lolos validator (v1, 2026-08-03)", () => {
+  for (const qualityTier of ["silent_caption", "high_quality"] as const) {
+    const variants = generateScripts({ product, register: "bestie", qualityTier, durationSec: 30 });
+    assert.equal(variants.length, 3);
+    for (const v of variants) {
+      assert.deepEqual(
+        v.segments.map((s) => [s.role, s.start, s.end]),
+        [["hook", 0, 6], ["demo", 6, 20], ["cta", 20, 30]],
+        `${qualityTier}/${v.hook_family}: timing tidak skala 2x dari basis 15 dtk`
+      );
+      assert.equal(v.validation.passed, true, `${qualityTier}/${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
+    }
+    // Demo 30 dtk harus lebih panjang dari demo 15 dtk (kalimat lanjutan ditambahkan,
+    // bukan cuma diregangkan diam-diam menjadi jeda kosong).
+    const [v30] = variants;
+    const [v15] = generateScripts({ product, register: "bestie", qualityTier });
+    const demo30 = v30.segments.find((s) => s.role === "demo")!.text;
+    const demo15 = v15.segments.find((s) => s.role === "demo")!.text;
+    assert.ok(demo30.length > demo15.length, `${qualityTier}: demo 30 dtk (${demo30}) tidak lebih panjang dari demo 15 dtk (${demo15})`);
+  }
+});

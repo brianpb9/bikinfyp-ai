@@ -45,6 +45,7 @@ export default function GayaPage() {
   const [tier, setTier] = useState<Tier>("silent_caption");
   const [tiers, setTiers] = useState<TierMeta[]>([]);
   const [format, setFormat] = useState<VideoFormat>("hands_only");
+  const [durationSec, setDurationSec] = useState<15 | 30>(15);
   const [register, setRegister] = useState("bestie");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
   const [loading, setLoading] = useState(false);
@@ -82,9 +83,10 @@ export default function GayaPage() {
           emotion: "senang",
           format,
           quality_tier: tier,
+          duration_s: durationSec,
         },
       });
-      saveFlow({ register, qualityTier: tier, format, creatorCategory, scripts: res.scripts, selectedScriptId: undefined });
+      saveFlow({ register, qualityTier: tier, format, durationSec, creatorCategory, scripts: res.scripts, selectedScriptId: undefined });
       router.push("/bikin/skrip");
     } catch (err) {
       if (err instanceof ApiFail && err.code === "INSUFFICIENT_CREDITS") {
@@ -147,7 +149,7 @@ export default function GayaPage() {
               )}
               <span className="flex items-center justify-between">
                 <span className="font-bold">{t.name}</span>
-                <span className="font-bold text-amber-700">{rupiah(t.price_idr)}/video</span>
+                <span className="font-bold text-amber-700">{rupiah(Math.round(t.price_idr * (durationSec / 15)))}/video</span>
               </span>
               <span className="text-sm text-zinc-500">{t.note}</span>
             </button>
@@ -219,13 +221,26 @@ export default function GayaPage() {
             <section className="space-y-3">
               <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Panjang video</p><h2 className="font-display text-xl font-bold">Durasi</h2></div>
               <div className="flex gap-2">
-                <div className="rounded-2xl border-2 border-amber-500 bg-amber-50 px-5 py-3 font-bold shadow-sm">15 dtk</div>
-                {[30, 45].map((d) => (
-                  <div key={d} className="rounded-2xl border-2 border-zinc-100 bg-zinc-50 px-5 py-3 font-bold text-zinc-400">
-                    {d} <span className="text-xs font-semibold text-amber-600">Segera</span>
-                  </div>
+                {([15, 30] as const).map((d) => (
+                  <button
+                    key={d}
+                    type="button"
+                    aria-pressed={durationSec === d}
+                    onClick={() => setDurationSec(d)}
+                    className={`rounded-2xl border-2 px-5 py-3 font-bold shadow-sm ${
+                      durationSec === d ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                    }`}
+                  >
+                    {d} dtk
+                  </button>
                 ))}
+                <div className="rounded-2xl border-2 border-zinc-100 bg-zinc-50 px-5 py-3 font-bold text-zinc-400">
+                  45 <span className="text-xs font-semibold text-amber-600">Segera</span>
+                </div>
               </div>
+              {durationSec === 30 && (
+                <p className="text-xs text-zinc-500">Video 30 detik ~2x harga 15 detik (lebih banyak AI video-gen).</p>
+              )}
             </section>
           </div>
         </details>
@@ -237,7 +252,7 @@ export default function GayaPage() {
           </div>
         )}
         <PrimaryButton onClick={generate} disabled={loading}>
-          {loading ? "Lagi nulis skrip..." : `Bikinkan Skripnya${selectedTier ? ` · ${rupiah(selectedTier.price_idr)}` : ""}`}
+          {loading ? "Lagi nulis skrip..." : `Bikinkan Skripnya${selectedTier ? ` · ${rupiah(Math.round(selectedTier.price_idr * (durationSec / 15)))}` : ""}`}
         </PrimaryButton>
       </div>
     </main>

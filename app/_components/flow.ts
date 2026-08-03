@@ -36,6 +36,7 @@ export interface FlowState {
   emotion?: string;
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
   format?: VideoFormat;
+  durationSec?: 15 | 30;
   creatorCategory?: string;
   scripts?: FlowScript[];
   selectedScriptId?: string;
