@@ -4,6 +4,7 @@ import { getDb, type JobRow } from "@/lib/db";
 import { createSignedUrl } from "@/lib/signed-url";
 import { PRE_DOWNLOAD_NOTICE } from "@/lib/config/compliance";
 import { postgresRuntimeEnabled, smokeGetJob, smokeGetOutput } from "@/lib/postgres/smoke-runtime";
+import { computeViralityChecklist } from "@/lib/virality-checklist";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,13 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       : db!.prepare("SELECT * FROM outputs WHERE job_id = ?").get(id) as { job_id: string; video_url: string; caption: string; hashtags: string; suggested_post_time: string; compliance_checklist: string } | undefined;
     if (!output) throw ERR.JOB_NOT_READY();
 
+    const ctaText = `${output.caption} ${JSON.parse(output.hashtags).join(" ")}`.toLowerCase();
+    const virality = computeViralityChecklist({
+      durationSec: job.duration_s,
+      hasCta: ctaText.includes("keranjang kuning"),
+      hasAudioOrCaption: true, // guaranteed by format/tier constraints — silent_caption has synced captions, voiced tiers have embedded audio
+    });
+
     return Response.json({
       job_id: id,
       video_url: createSignedUrl(output.video_url),
@@ -34,6 +42,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       hashtags: JSON.parse(output.hashtags),
       suggested_post_time: output.suggested_post_time,
       compliance_checklist: JSON.parse(output.compliance_checklist),
+      virality_checklist: virality,
       notice: PRE_DOWNLOAD_NOTICE,
     });
   } catch (err) {

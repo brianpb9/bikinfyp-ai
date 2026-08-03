@@ -28,6 +28,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       cost_actual_idr: job.cost_actual_idr,
       created_at: job.created_at,
       completed_at: job.completed_at,
+      virality_checklist: job.virality_checklist ? JSON.parse(job.virality_checklist) : null,
     });
   } catch (err) {
     return errorResponse(err);

@@ -20,6 +20,7 @@ import { synthesizeHookVoiceover } from "./voiceover";
 import { stitchClips, type StitchClip } from "./stitch";
 import { PgPromoJobsRepository } from "../postgres/promo-jobs";
 import { PgCreditPaymentRepository } from "../postgres/credit-payment";
+import { computeViralityChecklist } from "../virality-checklist";
 
 const MAX_DURATION_SEC = 60;
 // BytePlus shots run best in roughly this range (SRS: umumnya <=12 dtk/klip);
@@ -88,6 +89,14 @@ export async function processPromoJob(jobId: string): Promise<void> {
       ...uploadedClips.map((videoPath): StitchClip => ({ videoPath, audio: { kind: "embedded" } })),
     ];
     const stitched = await stitchClips({ jobId, workDir, clips });
+    // Rule-based virality checklist (v1, heuristic — see lib/virality-checklist.ts):
+    // computed here because ffprobe only lives in this worker container, not
+    // the web tier that eventually serves it. No CTA mechanism exists yet
+    // for Video Promosi, so hasCta is honestly false, not a placeholder —
+    // that gap is exactly the kind of thing this checklist exists to surface.
+    const outputDurationSec = await probeDurationSec(stitched.outPath);
+    const virality = computeViralityChecklist({ durationSec: outputDurationSec, hasCta: false, hasAudioOrCaption: true });
+    await repo.setViralityChecklist(jobId, virality);
     const outputRel = `promo_jobs/${jobId}/output.mp4`;
     await mediaStorage().put(outputRel, fs.readFileSync(stitched.outPath), "video/mp4");
     if (config.storageMode !== "filesystem") fs.rmSync(workDir, { recursive: true, force: true });

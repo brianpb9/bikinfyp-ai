@@ -20,6 +20,7 @@ export interface PromoJobRow {
   cost_actual_idr: number;
   created_at: string;
   completed_at: string | null;
+  virality_checklist: string | null; // JSON, raw column
 }
 
 export interface PromoJob extends Omit<PromoJobRow, "uploaded_clip_urls"> {
@@ -49,7 +50,7 @@ export class PgPromoJobsRepository {
       "INSERT INTO promo_jobs (id, user_id, state, uploaded_clip_urls, created_at) VALUES ($1,$2,'QUEUED',$3,$4)",
       [id, userId, JSON.stringify(uploadedClipUrls), createdAt]
     );
-    return { id, user_id: userId, state: "QUEUED", uploadedClipUrls, generated_shot_url: null, output_url: null, error_message: null, cost_actual_idr: 0, created_at: createdAt, completed_at: null };
+    return { id, user_id: userId, state: "QUEUED", uploadedClipUrls, generated_shot_url: null, output_url: null, error_message: null, cost_actual_idr: 0, created_at: createdAt, completed_at: null, virality_checklist: null };
   }
 
   async get(id: string, userId: string): Promise<PromoJob | undefined> {
@@ -73,6 +74,10 @@ export class PgPromoJobsRepository {
 
   async addCost(id: string, idr: number) {
     await this.pool.query("UPDATE promo_jobs SET cost_actual_idr=cost_actual_idr+$1 WHERE id=$2", [idr, id]);
+  }
+
+  async setViralityChecklist(id: string, checklist: unknown) {
+    await this.pool.query("UPDATE promo_jobs SET virality_checklist=$1 WHERE id=$2", [JSON.stringify(checklist), id]);
   }
 
   async markReady(id: string, outputUrl: string) {
