@@ -50,23 +50,40 @@ function seg(t: Triple, durationSec = 15): SegmentDraft[] {
   ];
 }
 
-// Perluasan 30/45 dtk (2026-08-03, v1): konten INTI (hook/cta) yang sudah
-// teruji tetap dipakai apa adanya — cuma bagian demo yang diperpanjang
-// dengan kalimat lanjutan generik (bukan per-hook-family, biar scope tetap
-// terkelola). Dipilih deterministik via index keluarga hook, bukan acak —
-// mesin ini sengaja deterministik penuh (lihat generateScripts).
-// TODO: naskah per-durasi yang benar-benar ditulis khusus, bukan sambungan
-// generik — ini v1, ditandai untuk penyempurnaan lanjutan.
+// Perluasan 30/45 dtk (2026-08-03, v1.1): konten INTI (hook) tetap dipakai
+// apa adanya — demo diperpanjang, cta dapat tambahan urgency untuk video
+// >15 dtk. Pola di bawah (bukan kalimat generik lagi) diambil dari riset
+// pola struktural nyata (Script Example 1/2.pdf, Strategi Penjualan via
+// Live Streaming TikTok.pdf — hak cipta sudah dicek, bukan buku pihak
+// ketiga) — insight utamanya: struktur TETAP, sudut pandang yang MUTER,
+// bukan kalimat yang diulang. Empat teknik di bawah adalah beat yang
+// bisa dipakai gantian, bukan "isi kalimat kosong" seperti versi awal:
+//   1. show-don't-claim — sensasi/aksi konkret, bukan kata sifat kosong
+//   2. value-stack — nilai tambahan baru (bonus), bukan ulang harga/diskon
+//   3. mid-engagement — pertanyaan ke penonton, beat jeda yang natural
+//   4. implicit-objection — jawab keraguan yang belum diucapkan penonton
+// Masih generik lintas-keluarga-hook (bukan ditulis khusus per keluarga,
+// scope tetap terkelola) — dipilih deterministik via index keluarga hook.
 const DEMO_CONTINUATION: ((c: TemplateCtx) => string)[] = [
-  (c) => `${cap(c.reg.me)} juga suka soalnya gampang dipake tiap hari, nggak ribet sama sekali`,
-  (c) => `yang bikin ${c.reg.me} makin yakin, ${c.proof} nya konsisten tiap dipake, nggak plin-plan`,
-  (c) => `buat yang masih ragu, coba aja dulu, ${c.reg.me} juga awalnya gitu sebelum ketagihan`,
-  (c) => `bukan cuma sekali dua kali, ${c.reg.me} udah pake berkali-kali dan hasilnya tetep sama`,
+  (c) => `pas dipake langsung kerasa bedanya, ${c.proof} nya beneran nyata bukan cuma di foto`,
+  (c) => `apalagi kalau order sekarang biasanya ada bonus tambahan, jadi makin worth it sih`,
+  (c) => `${cap(c.reg.you)} juga ngerasa gitu nggak sih, pas akhirnya nemu yang beneran works`,
+  (c) => `kalau ternyata kurang cocok juga gampang kok, tinggal komplain aja ke seller`,
 ];
 
 function demoContinuation(c: TemplateCtx, family: HookCode, offset: number): string {
   const index = (parseInt(family.slice(1), 10) + offset) % DEMO_CONTINUATION.length;
   return DEMO_CONTINUATION[index](c);
+}
+
+// CTA urgency (lapis kedua, video >15 dtk saja — hook/cta 15 dtk tidak
+// disentuh): kosakata aman, dicek tidak menyentuh L-13 (FAKE_URGENCY_PHRASES)
+// atau L-12 (FORMAL_PHRASES) di validator.ts.
+const CTA_URGENCY: string[] = ["stoknya kelihatan menipis nih", "buruan ya, keburu diserbu yang lain"];
+
+function ctaUrgency(family: HookCode): string {
+  const index = parseInt(family.slice(1), 10) % CTA_URGENCY.length;
+  return CTA_URGENCY[index];
 }
 
 // CTA bersama — semua menyebut "keranjang kuning" (L-03).
@@ -270,6 +287,10 @@ export function renderSegmentsForTier(
 ): SegmentDraft[] {
   const triple = (tier === "silent_caption" ? T : COMPACT_T)[family](c);
   if (durationSec > 15) {
+    // Urgency lapis kedua di CTA duluan (sekali saja, sebelum loop demo di
+    // bawah, biar ikut terhitung ke target kata) — lapis pertama ada di
+    // demo lewat beat value-stack/show-don't-claim, bukan diulang di sini.
+    triple.cta = `${triple.cta}, ${ctaUrgency(family)}`;
     // Kalimat lanjutan ditambahkan SATU PER SATU sampai total kata menyentuh
     // titik tengah rentang L-05 untuk tier+durasi ini (bukan jumlah tetap) —
     // dasar kata dari silent_caption jauh lebih panjang dari tier bersuara,
