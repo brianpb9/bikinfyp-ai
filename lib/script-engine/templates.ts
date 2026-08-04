@@ -64,11 +64,21 @@ function seg(t: Triple, durationSec = 15): SegmentDraft[] {
 //   4. implicit-objection — jawab keraguan yang belum diucapkan penonton
 // Masih generik lintas-keluarga-hook (bukan ditulis khusus per keluarga,
 // scope tetap terkelola) — dipilih deterministik via index keluarga hook.
+// Beat 5 & 6 (2026-08-04, v1.2): riset pola publik dari creator konten
+// (@kallawaymarketing dkk, caption Instagram — bukan kutipan langsung,
+// ditulis ulang jadi kalimat baru) — dua prinsip yang dipetakan:
+//   - Modern Story Arc: video pendek butuh "peak, release, peak, release"
+//     tiap 10-15 dtk, bukan 1 klimaks di tengah kayak arc cerita klasik.
+//   - Dopamine Addiction Loop (Headfake + Rehook): banting kontras dari
+//     ekspektasi penonton di tengah demo, lalu buka pertanyaan kecil baru.
+// Beat 5 = headfake (kontras), beat 6 = rehook (buka-tutup pertanyaan mini).
 const DEMO_CONTINUATION: ((c: TemplateCtx) => string)[] = [
-  (c) => `pas dipake langsung kerasa bedanya, ${c.proof} nya beneran nyata bukan cuma di foto`,
+  (c) => `pas dipake langsung kerasa bedanya, ${c.proof} beneran nyata bukan cuma di foto`,
   (c) => `apalagi kalau order sekarang biasanya ada bonus tambahan, jadi makin worth it sih`,
   (c) => `${cap(c.reg.you)} juga ngerasa gitu nggak sih, pas akhirnya nemu yang beneran works`,
   (c) => `kalau ternyata kurang cocok juga gampang kok, tinggal komplain aja ke seller`,
+  (c) => `eh tapi bukan itu doang serunya, yang bikin beda malah ${c.proof} pas dipake langsung`,
+  (c) => `terus ${c.reg.you} mungkin ngira ribet duluan, eh ternyata enggak sama sekali`,
 ];
 
 function demoContinuation(c: TemplateCtx, family: HookCode, offset: number): string {
@@ -90,6 +100,23 @@ function ctaUrgency(family: HookCode): string {
 function ctaDefault(c: TemplateCtx): string {
   const { me } = c.reg;
   return `${cap(me)} taruh linknya di keranjang kuning ya, tinggal CO aja deh`;
+}
+
+// Hook snapback (Triple Hook Method step 3 — Context/Lean/Contrarian
+// Snapback, riset pola publik 2026-08-04, ditulis ulang bukan kutipan
+// langsung): dipakai HANYA saat durationSec > 15 — jendela hook di 30 dtk
+// jadi 6 dtk (bukan 3 dtk), cukup ruang buat satu baris yang membanting arah
+// dari ekspektasi awal hook, bukan sekadar mengulang. Generik lintas-keluarga
+// (tanpa nama produk — aman untuk L-06 di semua family, exempt atau tidak).
+const HOOK_SNAPBACK: ((c: TemplateCtx) => string)[] = [
+  (c) => `eh tapi jangan salah sangka dulu, ternyata bukan yang biasa-biasa aja`,
+  (c) => `padahal awalnya ${c.reg.me} pikir sama aja kayak yang lain, eh ternyata enggak`,
+  (c) => `tapi pas dicoba sendiri, baru sadar dugaan ${c.reg.me} salah total`,
+];
+
+function hookSnapback(c: TemplateCtx, family: HookCode): string {
+  const index = parseInt(family.slice(1), 10) % HOOK_SNAPBACK.length;
+  return HOOK_SNAPBACK[index](c);
 }
 
 const T: Record<HookCode, (c: TemplateCtx) => Triple> = {
@@ -272,8 +299,9 @@ const COMPACT_T: Record<HookCode, (c: TemplateCtx) => Triple> = {
 };
 
 /** Render segmen sesuai tier: silent_caption = template penuh; tier bersuara = kompak.
- * durationSec > 15 (v1, 2026-08-03): demo diperpanjang dengan kalimat lanjutan
- * generik (lihat demoContinuation) — hook/cta inti tidak diubah.
+ * durationSec > 15 (v1.2, 2026-08-04): hook dapet baris snapback (Triple Hook
+ * Method step 3), demo diperpanjang dengan kalimat lanjutan generik termasuk
+ * beat headfake/rehook (lihat demoContinuation) — copy inti H1..H16 tidak diubah.
  */
 function wordCount(text: string): number {
   return text.split(/\s+/).filter((w) => w.length > 0).length;
@@ -287,6 +315,14 @@ export function renderSegmentsForTier(
 ): SegmentDraft[] {
   const triple = (tier === "silent_caption" ? T : COMPACT_T)[family](c);
   if (durationSec > 15) {
+    // Snapback hook HANYA di silent_caption (teks overlay, dibaca bebas —
+    // jatah kata longgar 32-48/15dtk). Tier bersuara (10-22/15dtk) diucapkan
+    // sungguhan sesuai durasi shot BytePlus — nggak ada ruang buat baris
+    // tambahan di hook tanpa bikin demo gagal ikut tumbuh (lihat wajib
+    // offset<1 di bawah) atau kebentur maksimum L-05.
+    if (tier === "silent_caption") {
+      triple.hook = `${triple.hook}, ${hookSnapback(c, family)}`;
+    }
     // Urgency lapis kedua di CTA duluan (sekali saja, sebelum loop demo di
     // bawah, biar ikut terhitung ke target kata) — lapis pertama ada di
     // demo lewat beat value-stack/show-don't-claim, bukan diulang di sini.
@@ -298,8 +334,15 @@ export function renderSegmentsForTier(
     const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [10, 22];
     const scale = durationSec / 15;
     const targetWc = Math.round(((baseMinWc + baseMaxWc) / 2) * scale);
+    // Minimal 1 lanjutan demo WAJIB ditambah biar demo beneran lebih panjang
+    // (bukan cuma jendela waktu yang molor diam-diam) — tanpa syarat ini,
+    // hook snapback + cta urgency di atas bisa sendirian menyentuh target di
+    // tier bersuara (jatah kata sempit) dan demo jadi nggak nambah sama sekali.
     let offset = 0;
-    while (wordCount(`${triple.hook} ${triple.demo} ${triple.cta}`) < targetWc && offset < 8) {
+    while (
+      (offset < 1 || wordCount(`${triple.hook} ${triple.demo} ${triple.cta}`) < targetWc) &&
+      offset < 8
+    ) {
       triple.demo = `${triple.demo}, ${demoContinuation(c, family, offset)}`;
       offset++;
     }
