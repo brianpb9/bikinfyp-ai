@@ -21,7 +21,8 @@ export default function PilihJenisPage() {
           href="/bikin/produk"
           className="block rounded-3xl border-2 border-amber-200 bg-white p-5 shadow-sm active:scale-[0.98]"
         >
-          <div className="text-3xl">🛍️</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/ui/jenis-produk.png" alt="" className="h-9 w-9" />
           <p className="mt-2 font-display text-lg font-bold text-zinc-900">Video Jualan Produk</p>
           <p className="mt-1 text-sm leading-6 text-zinc-600">
             Punya produk fisik (skincare, fashion, gadget, dll)? AI bikin video tangan pegang produk kamu, siap posting ke TikTok Shop.
@@ -32,7 +33,8 @@ export default function PilihJenisPage() {
           href="/promo"
           className="block rounded-3xl border-2 border-amber-200 bg-white p-5 shadow-sm active:scale-[0.98]"
         >
-          <div className="text-3xl">🎤</div>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/ui/jenis-promosi.png" alt="" className="h-9 w-9" />
           <p className="mt-2 font-display text-lg font-bold text-zinc-900">Video Promosi (App/Jasa)</p>
           <p className="mt-1 text-sm leading-6 text-zinc-600">
             Promoin app, jasa, atau apa saja tanpa produk fisik? Upload rekaman kamu sendiri, AI tambahin hook pembuka + suara.

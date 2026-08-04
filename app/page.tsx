@@ -73,7 +73,8 @@ export default function HomePage() {
       ) : (
         <div className="space-y-3 overflow-hidden rounded-3xl border border-amber-200 bg-white text-center shadow-sm">
           <div className="bg-gradient-to-br from-amber-100 via-orange-50 to-white px-6 pb-4 pt-6">
-            <p className="text-4xl" aria-hidden="true">🎬</p>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src="/icons/ui/empty-video.png" alt="" className="mx-auto h-12 w-12" />
             <p className="mt-2 font-display text-lg font-bold text-zinc-900">Belum ada video</p>
             <p className="mt-1 text-sm leading-6 text-zinc-600">Yuk bikin yang pertama — gratis pakai kredit bonus kamu!</p>
           </div>

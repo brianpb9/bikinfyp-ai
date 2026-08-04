@@ -7,9 +7,9 @@ import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_co
 import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
 
 const FORMATS: { id: VideoFormat; label: string; icon: string; hint: string; needsAudio: boolean }[] = [
-  { id: "hands_only", label: "Tangan saja", icon: "✋", hint: "tanpa wajah", needsAudio: false },
-  { id: "talking_head", label: "Wajah AI", icon: "🙂", hint: "presenter AI, versi 1", needsAudio: true },
-  { id: "vo_broll", label: "VO + Foto", icon: "🖼️", hint: "foto asli + suara, versi 1", needsAudio: true },
+  { id: "hands_only", label: "Tangan saja", icon: "/icons/ui/format-tangan.png", hint: "tanpa wajah", needsAudio: false },
+  { id: "talking_head", label: "Wajah AI", icon: "/icons/ui/format-wajah.png", hint: "presenter AI, versi 1", needsAudio: true },
+  { id: "vo_broll", label: "VO + Foto", icon: "/icons/ui/format-foto.png", hint: "foto asli + suara, versi 1", needsAudio: true },
 ];
 
 const REGISTERS = [
@@ -116,7 +116,8 @@ export default function GayaPage() {
                   format === f.id ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
                 }`}
               >
-                <div className="text-2xl">{f.icon}</div>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={f.icon} alt="" className="mx-auto h-8 w-8" />
                 <p className="text-sm font-bold">{f.label}</p>
                 <p className="text-xs text-zinc-500">{f.hint}</p>
               </button>
