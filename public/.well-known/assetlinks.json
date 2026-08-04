@@ -1,0 +1,12 @@
+[
+  {
+    "relation": ["delegate_permission/common.handle_all_urls"],
+    "target": {
+      "namespace": "android_app",
+      "package_name": "com.hdrvstudio.bikinfyp",
+      "sha256_cert_fingerprints": [
+        "EE:03:0B:95:A4:84:F9:A5:86:67:44:3F:37:0B:B7:65:AC:C3:1B:EB:9C:23:71:B1:CD:A1:14:3D:95:F9:AB:3C"
+      ]
+    }
+  }
+]
