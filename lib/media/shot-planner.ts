@@ -54,7 +54,13 @@ const IDENTITY_INSTRUCTION =
   "do not redesign or replace the product";
 
 export function planShots(input: ShotPlanInput): VisualSpec {
-  const perShot = input.durationSec / 2;
+  // Jumlah shot: 2 di baseline 15/30 dtk (PERILAKU LAMA, tidak berubah — sudah
+  // teruji di produksi). Di 45 dtk, 2 shot berarti 22,5 dtk/klip yang MELEBIHI
+  // batas keras BytePlus (2-15 dtk/klip, lihat byteplus.ts createTask) — jadi
+  // butuh 3 shot @15 dtk pas (satu shot per segmen hook/demo/cta). Formula
+  // generik: minimal 2 shot buat variasi visual, nambah tiap durasi +15 dtk.
+  const numShots = Math.max(2, Math.ceil(input.durationSec / 15));
+  const perShot = input.durationSec / numShots;
   const tier = input.qualityTier;
   const withAudio = tier !== "silent_caption";
   const format = input.format ?? "hands_only";
@@ -68,35 +74,52 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     ? `The product is ${input.productVisualDesc.trim()}. `
     : "";
 
-  const shots: ShotSpec[] = [0, 1].map((i) => {
+  // Dialog per shot (tier bersuara): 2 shot = [hook+demo] lalu [cta] (perilaku
+  // lama, tak berubah). >=3 shot (45 dtk) = 1 segmen penuh per shot — pas
+  // karena tiap shot sudah 15 dtk penuh, gak perlu digabung lagi.
+  const dialogueForShot = (i: number): string[] =>
+    numShots >= 3
+      ? i === 0 ? [segText("hook")] : i === 1 ? [segText("demo")] : [segText("cta")]
+      : i === 0 ? [segText("hook"), segText("demo")] : [segText("cta")];
+
+  const shots: ShotSpec[] = Array.from({ length: numShots }, (_, i) => {
+    const isFirst = i === 0;
+    // "Closing beat" cuma dipakai kalau shot terakhir BUKAN shot pertama juga
+    // (numShots >= 3) — di 2-shot, shot kedua tetap "demonstrating" seperti
+    // semula (perilaku lama tidak berubah).
+    const isClosing = i === numShots - 1 && numShots >= 3;
     // Framing DI DEPAN prompt (posisi awal = penekanan lebih kuat): hands_only
     // melarang wajah, talking_head justru menekankan wajah terlihat.
     const framing = format === "hands_only" ? `${HANDS_ONLY_FRAMING}. ` : format === "talking_head" ? `${TALKING_HEAD_FRAMING}. ` : "";
     // Wajah AI pakai promptSeed (deskripsi wajah/tipologi) sebagai subjek utama,
     // bukan handsPrompt (yang secara eksplisit hanya deskripsi tangan/lengan).
     const subject = format === "talking_head" ? input.category.promptSeed : input.category.handsPrompt;
-    const base =
-      `${framing}${subject}. Shot ${i + 1} of 2. ${productDesc}` +
-      (format === "talking_head"
-        ? i === 0
+    const beat =
+      format === "talking_head"
+        ? isFirst
           ? `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, ${IDENTITY_INSTRUCTION}`
-          : `Presenter demonstrating the product close to camera, still clearly in frame with her face, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
-        : i === 0
+          : isClosing
+            ? `Presenter smiling warmly, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
+            : `Presenter demonstrating the product close to camera, still clearly in frame with her face, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
+        : isFirst
           ? `Hands presenting "${input.productName}" to camera, product label facing camera, gentle rotation, ${IDENTITY_INSTRUCTION}`
-          : `Hands demonstrating the product in use, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`);
+          : isClosing
+            ? `Hands holding the product steady near the bottom of frame in a closing, inviting gesture, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
+            : `Hands demonstrating the product in use, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`;
+    const base = `${framing}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${beat}`;
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
     }
 
     // Tier bersuara: dialog dalam tanda kutip; jeda & arahan di luar tanda kutip.
-    const spoken = i === 0 ? [segText("hook"), segText("demo")] : [segText("cta")];
-    const dialogue = spoken.filter(Boolean).join(" ");
+    const dialogue = dialogueForShot(i).filter(Boolean).join(" ");
+    const isLast = i === numShots - 1;
     const prompt =
       `${base}. The presenter speaks casually to camera in Indonesian, saying: "${dialogue}". ` +
-      (i === 0
-        ? `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `
-        : `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `) +
+      (isLast
+        ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `
+        : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `) +
       `Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". ` +
       `Natural conversational Indonesian, not a newsreader.`;
     return { index: i, durationSec: perShot, prompt, imageRefPath: input.imageRefPath };

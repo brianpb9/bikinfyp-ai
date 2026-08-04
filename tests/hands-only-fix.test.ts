@@ -206,3 +206,52 @@ test("durasi 30 dtk: tetap 2 shot, masing-masing 15 dtk (batas BytePlus 2-15 dtk
   assert.equal(s.shots.length, 2);
   for (const shot of s.shots) assert.equal(shot.durationSec, 15);
 });
+
+test("durasi 45 dtk: 3 shot @15 dtk masing-masing (2 shot akan melebihi batas 15 dtk/klip BytePlus)", () => {
+  const segments45 = [
+    { role: "hook" as const, start: 0, end: 9, text: "Say, masa 85 ribu segini sih", visual_direction: "x" },
+    { role: "demo" as const, start: 9, end: 30, text: "nah, ini Serum Glow, teksturnya niat, cuma 85 ribu", visual_direction: "x" },
+    { role: "cta" as const, start: 30, end: 45, text: "Cek keranjang kuning ya deh", visual_direction: "x" },
+  ];
+  const s = planShots({
+    jobId: "t3",
+    durationSec: 45,
+    segments: segments45,
+    category: hijaber,
+    productName: "Serum Glow",
+    productCategory: "beauty",
+    productVisualDesc: null,
+    imageRefPath: "/tmp/x.png",
+    qualityTier: "silent_caption",
+    format: "hands_only",
+  });
+  assert.equal(s.shots.length, 3);
+  for (const shot of s.shots) assert.equal(shot.durationSec, 15);
+  // Shot terakhir harus beda beat dari "demonstrating" biasa (closing/inviting),
+  // bukan cuma pengulangan shot tengah.
+  assert.ok(s.shots[2].prompt.includes("closing"), s.shots[2].prompt);
+  assert.ok(s.shots[1].prompt.includes("demonstrating the product in use"), s.shots[1].prompt);
+});
+
+test("durasi 45 dtk, tier bersuara: dialog 1 segmen penuh per shot (bukan digabung)", () => {
+  const segments45 = [
+    { role: "hook" as const, start: 0, end: 9, text: "HOOKTEXT", visual_direction: "x" },
+    { role: "demo" as const, start: 9, end: 30, text: "DEMOTEXT", visual_direction: "x" },
+    { role: "cta" as const, start: 30, end: 45, text: "CTATEXT", visual_direction: "x" },
+  ];
+  const s = planShots({
+    jobId: "t4",
+    durationSec: 45,
+    segments: segments45,
+    category: hijaber,
+    productName: "Serum Glow",
+    productCategory: "beauty",
+    productVisualDesc: null,
+    imageRefPath: "/tmp/x.png",
+    qualityTier: "high_quality",
+    format: "hands_only",
+  });
+  assert.ok(s.shots[0].prompt.includes("HOOKTEXT") && !s.shots[0].prompt.includes("DEMOTEXT"));
+  assert.ok(s.shots[1].prompt.includes("DEMOTEXT") && !s.shots[1].prompt.includes("HOOKTEXT"));
+  assert.ok(s.shots[2].prompt.includes("CTATEXT"));
+});

@@ -125,3 +125,25 @@ test("durasi 30 dtk: timing segmen skala 2x, demo diperpanjang, lolos validator 
     assert.ok(demo30.length > demo15.length, `${qualityTier}: demo 30 dtk (${demo30}) tidak lebih panjang dari demo 15 dtk (${demo15})`);
   }
 });
+
+test("durasi 45 dtk: timing segmen skala 3x, demo diperpanjang, lolos validator (v1.3, 2026-08-04)", () => {
+  for (const qualityTier of ["silent_caption", "high_quality"] as const) {
+    const variants = generateScripts({ product, register: "bestie", qualityTier, durationSec: 45 });
+    assert.equal(variants.length, 3);
+    for (const v of variants) {
+      assert.deepEqual(
+        v.segments.map((s) => [s.role, s.start, s.end]),
+        [["hook", 0, 9], ["demo", 9, 30], ["cta", 30, 45]],
+        `${qualityTier}/${v.hook_family}: timing tidak skala 3x dari basis 15 dtk`
+      );
+      assert.equal(v.validation.passed, true, `${qualityTier}/${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
+    }
+    // Demo 45 dtk harus lebih panjang dari demo 30 dtk (bukan cuma 30 dtk yang
+    // diperpanjang, makin lama durasinya makin banyak juga kalimat lanjutannya).
+    const [v45] = variants;
+    const [v30] = generateScripts({ product, register: "bestie", qualityTier, durationSec: 30 });
+    const demo45 = v45.segments.find((s) => s.role === "demo")!.text;
+    const demo30 = v30.segments.find((s) => s.role === "demo")!.text;
+    assert.ok(demo45.length > demo30.length, `${qualityTier}: demo 45 dtk (${demo45}) tidak lebih panjang dari demo 30 dtk (${demo30})`);
+  }
+});

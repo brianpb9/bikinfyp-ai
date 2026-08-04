@@ -105,13 +105,18 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
   };
 
   // --- Rantai video: concat + watermark + overlay sesuai mode ---
+  // N klip dinamis (2 di 15/30 dtk, 3 di 45 dtk — lihat shot-planner.ts) bukan
+  // hardcode 2 (2026-08-04, v1.3): label input dibangun dari clipPaths.length.
+  const n = input.clipPaths.length;
   if (input.mode === "embedded") {
     // Klip membawa audio; concat video+audio sekaligus.
-    vChain.push(`[0:v][0:a][1:v][1:a]concat=n=2:v=1:a=1[vcat][acat]`);
+    const labels = Array.from({ length: n }, (_, i) => `[${i}:v][${i}:a]`).join("");
+    vChain.push(`${labels}concat=n=${n}:v=1:a=1[vcat][acat]`);
     aChain.push(`[acat]aresample=24000[aout]`);
     mapAudio = "[aout]";
   } else {
-    vChain.push(`[0:v][1:v]concat=n=2:v=1:a=0[vcat]`);
+    const labels = Array.from({ length: n }, (_, i) => `[${i}:v]`).join("");
+    vChain.push(`${labels}concat=n=${n}:v=1:a=0[vcat]`);
   }
   // Normalisasi kanvas ke 720x1280 SEBELUM overlay — klip 480p (480x854) dari
   // provider di-upscale supaya PNG overlay (lebar ~680px) tidak terpotong.

@@ -45,7 +45,7 @@ export default function GayaPage() {
   const [tier, setTier] = useState<Tier>("silent_caption");
   const [tiers, setTiers] = useState<TierMeta[]>([]);
   const [format, setFormat] = useState<VideoFormat>("hands_only");
-  const [durationSec, setDurationSec] = useState<15 | 30>(15);
+  const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
   const [register, setRegister] = useState("bestie");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
   const [loading, setLoading] = useState(false);
@@ -222,7 +222,7 @@ export default function GayaPage() {
             <section className="space-y-3">
               <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Panjang video</p><h2 className="font-display text-xl font-bold">Durasi</h2></div>
               <div className="flex gap-2">
-                {([15, 30] as const).map((d) => (
+                {([15, 30, 45] as const).map((d) => (
                   <button
                     key={d}
                     type="button"
@@ -235,12 +235,11 @@ export default function GayaPage() {
                     {d} dtk
                   </button>
                 ))}
-                <div className="rounded-2xl border-2 border-zinc-100 bg-zinc-50 px-5 py-3 font-bold text-zinc-400">
-                  45 <span className="text-xs font-semibold text-amber-600">Segera</span>
-                </div>
               </div>
-              {durationSec === 30 && (
-                <p className="text-xs text-zinc-500">Video 30 detik ~2x harga 15 detik (lebih banyak AI video-gen).</p>
+              {durationSec > 15 && (
+                <p className="text-xs text-zinc-500">
+                  Video {durationSec} detik ~{Math.round(durationSec / 15)}x harga 15 detik (lebih banyak AI video-gen).
+                </p>
               )}
             </section>
           </div>
