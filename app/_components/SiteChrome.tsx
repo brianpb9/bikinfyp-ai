@@ -26,9 +26,9 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
       <div className="flex-1 pb-20">{children}</div>
       {!hideNav && (
         <nav className="fixed bottom-0 left-1/2 z-10 flex w-full max-w-md -translate-x-1/2 border-t border-zinc-100 bg-white">
-          <NavItem href="/" label="Beranda" icon="🏠" active={pathname === "/"} />
-          <NavItem href="/video" label="Video" icon="📼" active={pathname.startsWith("/video")} />
-          <NavItem href="/kredit" label="Kredit" icon="⚡" active={pathname.startsWith("/kredit")} />
+          <NavItem href="/" label="Beranda" icon="/icons/ui/nav-home.png" active={pathname === "/"} />
+          <NavItem href="/video" label="Video" icon="/icons/ui/nav-video.png" active={pathname.startsWith("/video")} />
+          <NavItem href="/kredit" label="Kredit" icon="/icons/ui/nav-kredit.png" active={pathname.startsWith("/kredit")} />
         </nav>
       )}
     </div>
@@ -43,7 +43,8 @@ function NavItem({ href, label, icon, active }: { href: string; label: string; i
         active ? "font-bold text-amber-600" : "text-zinc-500"
       }`}
     >
-      <span className="text-xl">{icon}</span>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={icon} alt="" className={`h-6 w-6 ${active ? "" : "opacity-60"}`} />
       {label}
     </Link>
   );

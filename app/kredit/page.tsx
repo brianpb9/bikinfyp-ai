@@ -120,7 +120,11 @@ function KreditInner() {
       <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Dompet kreator</p><h1 className="font-display text-2xl font-bold">Kredit Saya</h1></div>
 
       <div className="rounded-3xl bg-gradient-to-br from-amber-400 to-amber-500 p-6 text-center text-white shadow-lg shadow-amber-500/20">
-        <p className="text-3xl font-bold">⚡ {balance === null ? "…" : rupiah(balance)}</p>
+        <p className="flex items-center justify-center gap-2 text-3xl font-bold">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/icons/ui/nav-kredit.png" alt="" className="h-7 w-7" />
+          {balance === null ? "…" : rupiah(balance)}
+        </p>
         <p className="mt-1 text-amber-100">
           = {nSenyap ?? "…"} video Senyap+Teks · {nHq ?? "…"} video High Quality
         </p>
