@@ -15,6 +15,12 @@
 //
 // Tier bersuara (audio embedded): dialog diletakkan DALAM tanda kutip, instruksi
 // jeda/intonasi DI LUAR tanda kutip, plus arahan "enunciate clearly".
+//
+// CATATAN EVIDENSI (2026-08-06, MODEL FYP 1.0 ckpt9-n316): arsitektur 2-shot
+// dengan shot panjang + produk tampil sejak detik pertama SEJALAN dengan
+// koefisien video pemenang (total_cuts -0.19, avg_shot_duration +0.17,
+// product_first_appears_sec -0.18, cuts_in_first_3s -0.09). JANGAN menambah
+// jumlah cut/rapid-cut atas nama "pacing" tanpa bukti baru dari model.
 
 import type { VisualSpec, ShotSpec, QualityTier } from "../providers/types";
 import type { CreatorCategory } from "../personas";
@@ -34,6 +40,12 @@ export interface ShotPlanInput {
   imageRefPath: string; // foto produk asli (absolut)
   qualityTier: QualityTier;
   format?: "hands_only" | "vo_broll" | "talking_head";
+  /** Level hook S3. HANYA "gila" yang mengubah visual: shot 1 dapat pembuka
+   * pattern-interrupt PRODUCT-SAFE (gerakan kamera dramatis + produk naik cepat
+   * ke tengah frame) — BUKAN adegan bahaya/kacau: aksi ekstrem berisiko kena
+   * moderasi platform, merusak konsistensi identitas produk (QC-03), dan
+   * silhouette guard QC-02. Berani = teks saja, visual tidak berubah. */
+  hookLevel?: "normal" | "berani" | "gila";
 }
 
 const HANDS_ONLY_FRAMING =
@@ -52,6 +64,18 @@ const TALKING_HEAD_FRAMING =
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
   "do not redesign or replace the product";
+
+// Pembuka pattern-interrupt level GILA (hanya shot 1). Energi dari GERAKAN
+// KAMERA + kecepatan — subjek dan framing format tetap dipatuhi (hands-only
+// tetap tanpa wajah, identitas produk tetap terkunci).
+const CRAZY_OPENER: Record<"hands_only" | "talking_head", string> = {
+  hands_only:
+    "HIGH-ENERGY OPENING: the shot starts with a fast dramatic camera push-in as the hands sweep the product " +
+    "up into center frame in one quick confident motion, slight playful camera whip, energetic start. ",
+  talking_head:
+    "HIGH-ENERGY OPENING: the presenter pops into frame with a fast dramatic camera push-in, wide surprised " +
+    "expressive reaction, immediately holding the product up to the lens, energetic start. ",
+};
 
 export function planShots(input: ShotPlanInput): VisualSpec {
   // Jumlah shot: 2 di baseline 15/30 dtk (PERILAKU LAMA, tidak berubah — sudah
@@ -106,7 +130,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
           : isClosing
             ? `Hands holding the product steady near the bottom of frame in a closing, inviting gesture, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
             : `Hands demonstrating the product in use, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`;
-    const base = `${framing}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${beat}`;
+    // Level gila: pembuka pattern-interrupt HANYA di shot pertama; vo_broll
+    // (pan foto, tanpa model video) tidak punya jalur ini.
+    const crazyOpener =
+      input.hookLevel === "gila" && isFirst && format !== "vo_broll" ? CRAZY_OPENER[format] : "";
+    const base = `${framing}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${beat}`;
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };

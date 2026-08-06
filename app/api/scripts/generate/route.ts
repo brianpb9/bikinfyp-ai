@@ -21,6 +21,8 @@ export async function POST(req: Request) {
       ? body.quality_tier
       : "silent_caption") as "silent_caption" | "high_quality" | "super_hq";
     const emotion = ["senang", "sedih", "gemas"].includes(body.emotion) ? body.emotion : "senang";
+    const hookLevel = (["normal", "berani", "gila"].includes(body.hook_level) ? body.hook_level : "normal") as
+      | "normal" | "berani" | "gila";
     if (!REGISTERS[register])
       throw ERR.BAD_REQUEST("Register-nya pilih salah satu: bunda, bestie, genz, atau netral.", "Invalid register.");
     const durationSec = [15, 30, 45].includes(Number(body.duration_s)) ? Number(body.duration_s) : 15;
@@ -36,6 +38,7 @@ export async function POST(req: Request) {
       emotion,
       qualityTier: tier,
       durationSec,
+      hookLevel,
     });
 
     const makeOut = (v: typeof variants[number], id: string) => ({ id, ...v });
@@ -43,6 +46,7 @@ export async function POST(req: Request) {
       const created = await smokeCreateScripts(user.id, product.id, variants.map((v) => ({
         hookFamily: v.hook_family, emotion: v.emotion, register: v.register, segments: v.segments,
         caption: v.caption, hashtags: v.hashtags, validationResult: v.validation, qualityTier: tier,
+        hookLevel,
       })));
       return Response.json({ scripts: variants.map((v, index) => makeOut(v, created[index].id)) });
     }
@@ -50,12 +54,12 @@ export async function POST(req: Request) {
     const out = variants.map((v) => {
       const id = uuid();
       db.prepare(
-        `INSERT INTO scripts (id, job_id, product_id, hook_family, emotion, register, segments, caption, hashtags, validation_result, quality_tier, approved_by_user_at, edited_by_user, created_at)
-         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?)`
+        `INSERT INTO scripts (id, job_id, product_id, hook_family, emotion, register, segments, caption, hashtags, validation_result, quality_tier, hook_level, approved_by_user_at, edited_by_user, created_at)
+         VALUES (?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL, 0, ?)`
       ).run(
         id, product.id, v.hook_family, v.emotion, v.register,
         JSON.stringify(v.segments), v.caption, JSON.stringify(v.hashtags),
-        JSON.stringify(v.validation), tier, now()
+        JSON.stringify(v.validation), tier, hookLevel, now()
       );
       audit(user.id, "script.generated", "scripts", id, { hook_family: v.hook_family, passed: v.validation.passed });
       return makeOut(v, id);

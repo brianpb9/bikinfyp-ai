@@ -108,6 +108,8 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       imageRefPath: imageRef,
       qualityTier: tier,
       format,
+      // Level hook dari skrip (S3): hanya "gila" yang mengubah prompt shot 1.
+      hookLevel: (script.hook_level === "berani" || script.hook_level === "gila" ? script.hook_level : "normal"),
     });
     // vo_broll (VO+Foto): no AI video-gen call — visual is the user's own
     // product photo panned/zoomed, so there's no provider to fail over between.

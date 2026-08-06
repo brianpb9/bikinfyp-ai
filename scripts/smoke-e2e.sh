@@ -121,7 +121,8 @@ echo "== 8. unduh paket keluaran"
 OUT_RES=$(curl -sf -b "$JAR" "$BASE/api/jobs/$JOB_ID/output") || fail "ambil output gagal"
 VIDEO_URL=$(echo "$OUT_RES" | jq -r '.video_url')
 echo "$OUT_RES" | jq -e '.compliance_checklist | length > 0' >/dev/null || fail "checklist kepatuhan kosong"
-curl -sf "$BASE$VIDEO_URL" -o "$OUT" || fail "unduh video gagal"
+# /api/files butuh sesi pemilik SELAIN HMAC (hardening) — wajib bawa cookie.
+curl -sf -b "$JAR" "$BASE$VIDEO_URL" -o "$OUT" || fail "unduh video gagal"
 [ -s "$OUT" ] || fail "file video kosong"
 
 SIZE=$(stat -f%z "$OUT")

@@ -1,17 +1,53 @@
 "use client";
 
-import { Suspense, useEffect, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiFail } from "../../_components/api";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
 import { HOOK_FAMILY_NAMES, TIER_LABELS, loadFlow, saveFlow, type FlowScript, type FlowSegment } from "../../_components/flow";
 import { validateScript, type RuleIssue } from "../../../lib/script-engine/validator";
+import { scoreScriptPlan, type ScriptPlanScore, type FypQualityTier, type FypVideoFormat } from "../../../lib/fyp-score";
+import type { HookCode } from "../../../lib/config/hooks";
+import type { SegmentDraft } from "../../../lib/script-engine/templates";
 
 const ROLE_LABEL: Record<string, string> = {
   hook: "HOOK (0–3 dtk)",
   demo: "DEMO (4–10 dtk)",
   cta: "CTA (11–15 dtk)",
 };
+
+/** Skor FYP pre-render (MODEL FYP 1.0) untuk satu varian — dihitung client-side
+ * dari rencana video, sama seperti validateScript. Bahasa WAJIB korelasional
+ * (pola yang cenderung menang di data pembanding), bukan janji FYP. */
+function scorePlan(
+  segments: FlowSegment[],
+  hookFamily: string,
+  productInfo: { name: string; priceIdr: number } | null
+): ScriptPlanScore | null {
+  if (!productInfo) return null;
+  const f = loadFlow();
+  try {
+    return scoreScriptPlan({
+      hookFamily: hookFamily as HookCode,
+      segments: segments.map((s) => ({ ...s, visual_direction: s.visual_direction ?? "" })) as SegmentDraft[],
+      qualityTier: (f.qualityTier ?? "silent_caption") as FypQualityTier,
+      durationSec: f.durationSec ?? 15,
+      format: (f.format ?? "hands_only") as FypVideoFormat,
+      productName: productInfo.name,
+      priceIdr: productInfo.priceIdr,
+    });
+  } catch {
+    return null; // keluarga hook tak dikenal dsb. — sembunyikan skor, jangan rusak layar
+  }
+}
+
+function ScoreBadge({ score }: { score: number }) {
+  return (
+    <span className="ml-2 inline-block rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-bold text-amber-700">
+      Skor FYP {score}
+    </span>
+  );
+}
 
 // S4 — SKRIP + EDITOR (Langkah 3/5) ★ GERBANG HITL
 function SkripInner() {
@@ -20,6 +56,7 @@ function SkripInner() {
   const dupScriptId = params.get("script");
 
   const [scripts, setScripts] = useState<FlowScript[]>([]);
+  const [productInfo, setProductInfo] = useState<{ name: string; priceIdr: number } | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [segments, setSegments] = useState<FlowSegment[]>([]);
   const [issues, setIssues] = useState<RuleIssue[]>([]);
@@ -28,13 +65,15 @@ function SkripInner() {
   const [error, setError] = useState<string | null>(null);
   const [noCredits, setNoCredits] = useState(false);
   const editorRef = useRef<HTMLDivElement>(null);
-  const submitLock = useRef(false);
 
   // Muat varian: dari flow (hasil generate) atau dari ?script= (duplikat)
   useEffect(() => {
     if (dupScriptId) {
       apiFetch<{ script: FlowScript & { product_name: string; price_idr: number } }>(`/api/scripts/${dupScriptId}`)
-        .then((d) => setScripts([d.script]))
+        .then((d) => {
+          setScripts([d.script]);
+          setProductInfo({ name: d.script.product_name, priceIdr: d.script.price_idr });
+        })
         .catch((e) => setError(e instanceof Error ? e.message : "Gagal memuat skrip."));
       return;
     }
@@ -44,6 +83,7 @@ function SkripInner() {
       return;
     }
     setScripts(f.scripts);
+    if (f.product) setProductInfo({ name: f.product.name, priceIdr: f.product.priceIdr });
   }, [dupScriptId, router]);
 
   // Editor "terlihat" = user menggulir ke editor ATAU menyentuh textarea
@@ -64,15 +104,28 @@ function SkripInner() {
     saveFlow({ selectedScriptId: s.id });
   }
 
-  // Validasi ringan realtime per edit (L-10/L-11 keras, sisanya warning)
+  // Skor FYP per varian + skor live untuk varian terpilih (ikut hasil edit).
+  const variantScores = useMemo(
+    () => new Map(scripts.map((s) => [s.id, scorePlan(s.segments, s.hook_family, productInfo)])),
+    [scripts, productInfo]
+  );
+  const liveScore = useMemo(() => {
+    const s = scripts.find((x) => x.id === selectedId);
+    return s && segments.length > 0 ? scorePlan(segments, s.hook_family, productInfo) : null;
+  }, [segments, selectedId, scripts, productInfo]);
+
+  // Validasi ringan realtime per edit (L-10/L-11 keras, sisanya warning).
+  // Catatan fix 2026-08-06: dulu fungsi ini memakai submitLock sebagai guard dan
+  // men-set-nya true tanpa pernah reset — validasi realtime cuma jalan di edit
+  // PERTAMA, edit berikutnya tidak tervalidasi sampai approve gagal. Lock dihapus
+  // dari jalur edit (validateScript sinkron, tidak butuh lock).
   function editSegment(i: number, text: string) {
     const next = segments.map((s, j) => (j === i ? { ...s, text } : s));
     setSegments(next);
     setEditorSeen(true);
     const script = scripts.find((s) => s.id === selectedId);
     const product = loadFlow().product;
-    if (!script || submitLock.current) return;
-    submitLock.current = true;
+    if (!script) return;
     const res = validateScript(
       {
         hook_family: script.hook_family,
@@ -126,7 +179,6 @@ function SkripInner() {
       }
       setError(err instanceof Error ? err.message : "Gagal melanjutkan. Coba lagi ya.");
       setLoading(false);
-      submitLock.current = false;
     }
   }
 
@@ -150,6 +202,10 @@ function SkripInner() {
             >
               <p className="text-sm font-bold text-amber-700">
                 Versi {i + 1} · {HOOK_FAMILY_NAMES[s.hook_family] ?? s.hook_family}
+                {(() => {
+                  const sc = variantScores.get(s.id);
+                  return sc ? <ScoreBadge score={sc.score} /> : null;
+                })()}
               </p>
               <p className="mt-1 text-zinc-700">&ldquo;{s.segments[0]?.text}&rdquo;</p>
             </button>
@@ -183,6 +239,27 @@ function SkripInner() {
             {issues.filter((is) => !is.segment && is.rule !== "L-10" && is.rule !== "L-11").map((is, j) => (
               <p key={j} className="text-sm text-amber-700">💡 {is.message_id}</p>
             ))}
+          </section>
+        )}
+
+        {selectedId && liveScore && (
+          <section className="rounded-2xl border border-amber-100 bg-white p-4 shadow-sm">
+            <div className="flex items-baseline justify-between">
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Skor FYP</p>
+              <p className="font-display text-2xl font-bold text-amber-700">{liveScore.score}<span className="text-sm font-semibold text-zinc-400">/100</span></p>
+            </div>
+            <p className="mt-1 text-sm leading-6 text-zinc-600">
+              Pola video seperti ini <b>cenderung menang</b> di data video jualan yang kami pelajari.
+              Ini korelasi dari data, bukan jaminan masuk FYP.
+            </p>
+            {liveScore.topFixes.length > 0 && (
+              <ul className="mt-2 space-y-1">
+                {liveScore.topFixes.map((f) => (
+                  <li key={f.feature} className="text-sm leading-6 text-zinc-700">💡 {f.fix}</li>
+                ))}
+              </ul>
+            )}
+            <p className="mt-2 text-right text-[10px] text-zinc-400">model {liveScore.modelVersion}</p>
           </section>
         )}
 

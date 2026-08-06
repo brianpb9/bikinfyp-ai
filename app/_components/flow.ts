@@ -37,6 +37,7 @@ export interface FlowState {
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
   format?: VideoFormat;
   durationSec?: 15 | 30 | 45;
+  hookLevel?: "normal" | "berani" | "gila";
   creatorCategory?: string;
   scripts?: FlowScript[];
   selectedScriptId?: string;

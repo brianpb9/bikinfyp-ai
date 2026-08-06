@@ -36,17 +36,41 @@ export const HOOK_BY_CODE = Object.fromEntries(HOOK_FAMILIES.map((h) => [h.code,
   HookFamily
 >;
 
-/** Urutan prioritas keluarga hook per kategori produk (ambil 3 teratas yang layak). */
+/** Level hook pilihan user (S3): normal = prioritas kategori berbasis evidensi;
+ * berani/gila = keluarga hook agresif. gila JUGA mengubah visual shot 1
+ * (pattern-interrupt product-safe di shot-planner).
+ *
+ * JUJUR SOAL EVIDENSI (ckpt9-n316): shock cuma +0.08 (lemah), challenge malah
+ * negatif — "makin gila makin menang" TIDAK didukung data saat ini. Level ini
+ * fitur EKSPERIMEN (dilabeli begitu di UI, jangan dijanjikan "lebih FYP");
+ * hasilnya justru jadi data eksperimen buat model (brief §4). */
+export type HookLevel = "normal" | "berani" | "gila";
+
+/** Prioritas keluarga untuk level berani/gila: shock/peringatan/FOMO dulu,
+ * lalu pertanyaan agresif — tetap dari 16 keluarga tervalidasi (teks tetap
+ * lolos L-10..L-13; tidak ada template baru). */
+export const BOLD_HOOK_PRIORITY: HookCode[] = ["H1", "H5", "H10", "H9", "H2", "H4"];
+
+/** Urutan prioritas keluarga hook per kategori produk (ambil 3 teratas yang layak).
+ *
+ * Re-rank 2026-08-06 berbasis koefisien MODEL FYP 1.0 ckpt9-n316 (n=316, video
+ * jualan TikTok ID ber-GMV; korelasional, bukan kausal): hook berbentuk
+ * PERTANYAAN paling kuat (+0.15 hook_type=question, +0.21 transcript_has_question
+ * → H2/H4/H9/H13/H15), transformasi/before_after positif (+0.13 → H11), shock
+ * ringan positif (+0.08 → H1), storytime negatif (-0.11 → H16 turun ke ekor).
+ * Anggota per kategori TIDAK diubah (fit kategori tetap keputusan produk) —
+ * hanya urutannya. Koefisien global, belum per-kategori (n belum cukup) —
+ * re-rank ulang saat checkpoint per-kategori tersedia. */
 export const CATEGORY_HOOK_PRIORITY: Record<string, HookCode[]> = {
-  beauty: ["H3", "H4", "H9", "H14", "H1", "H5", "H16"],
-  fashion: ["H4", "H1", "H13", "H8", "H9", "H5", "H10"],
-  muslim_fashion: ["H4", "H1", "H13", "H8", "H3", "H10"],
-  home: ["H6", "H12", "H2", "H11", "H7", "H1"],
-  kitchen: ["H6", "H12", "H2", "H7", "H15"],
-  gadget: ["H5", "H7", "H13", "H8", "H1", "H14"],
-  food: ["H13", "H15", "H8", "H9", "H16", "H10"],
-  kids: ["H2", "H8", "H12", "H15", "H3"],
-  default: ["H1", "H2", "H4", "H15", "H16", "H7", "H8"],
+  beauty: ["H9", "H4", "H3", "H1", "H14", "H5", "H16"],
+  fashion: ["H13", "H4", "H9", "H1", "H8", "H5", "H10"],
+  muslim_fashion: ["H13", "H4", "H1", "H3", "H8", "H10"],
+  home: ["H2", "H11", "H6", "H12", "H7", "H1"],
+  kitchen: ["H2", "H15", "H6", "H12", "H7"],
+  gadget: ["H13", "H1", "H5", "H7", "H8", "H14"],
+  food: ["H15", "H13", "H9", "H8", "H10", "H16"],
+  kids: ["H2", "H15", "H8", "H12", "H3"],
+  default: ["H2", "H15", "H4", "H1", "H7", "H8", "H16"],
 };
 
 /** Kata benda kategori yang dipakai di template (bukan nama produk). */

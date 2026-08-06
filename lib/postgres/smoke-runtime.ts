@@ -214,6 +214,57 @@ export async function smokeGetJob(userId: string, jobId: string) { const pool = 
 export async function smokeGetOutput(userId: string, jobId: string) { const pool = new Pool({ connectionString: url() }); try { return (await pool.query("SELECT o.* FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.job_id=$1 AND j.user_id=$2", [jobId,userId])).rows[0] ?? null; } finally { await pool.end(); } }
 export async function pgListJobs(userId: string) {
   const pool = new Pool({ connectionString: url() });
-  try { return (await pool.query("SELECT j.id,j.state,j.format,j.duration_s,j.created_at,j.completed_at,j.provider_video,j.provider_voice,j.cost_actual_idr,j.script_id,p.name AS product_name,p.images AS product_images FROM jobs j JOIN products p ON p.id=j.product_id WHERE j.user_id=$1 ORDER BY j.created_at DESC LIMIT 50", [userId])).rows; }
+  try { return (await pool.query("SELECT j.id,j.state,j.format,j.duration_s,j.created_at,j.completed_at,j.provider_video,j.provider_voice,j.cost_actual_idr,j.script_id,p.name AS product_name,p.images AS product_images,fs.score AS fyp_score,fs.posted_url AS fyp_posted_url FROM jobs j JOIN products p ON p.id=j.product_id LEFT JOIN fyp_snapshots fs ON fs.job_id=j.id WHERE j.user_id=$1 ORDER BY j.created_at DESC LIMIT 50", [userId])).rows; }
   finally { await pool.end(); }
+}
+
+/** Snapshot Skor FYP beku (padanan createFypSnapshot SQLite) — idempoten via
+ * ON CONFLICT DO NOTHING; dipanggil non-fatal setelah job dibuat. */
+export async function pgSaveFypSnapshot(input: {
+  jobId: string; scriptId: string; modelVersion: string; score: number;
+  rawProbability: number; featuresJson: string;
+}) {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    await pool.query(
+      `INSERT INTO fyp_snapshots (job_id, script_id, model_version, score, raw_probability, features_json, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (job_id) DO NOTHING`,
+      [input.jobId, input.scriptId, input.modelVersion, input.score, input.rawProbability, input.featuresJson, at()]
+    );
+  } finally { await pool.end(); }
+}
+
+/** Lapor hasil posting (padanan applyFypReport SQLite): posted_url BEKU setelah
+ * terisi (nilai beda -> Error), outcome upsert. Validasi URL dilakukan pemanggil. */
+export async function pgApplyFypReport(userId: string, jobId: string, report: { postedUrl: string; views: number | null; orders: number | null }) {
+  const pool = new Pool({ connectionString: url() });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const found = await client.query(
+      `SELECT fs.* FROM fyp_snapshots fs JOIN jobs j ON j.id=fs.job_id WHERE fs.job_id=$1 AND j.user_id=$2 FOR UPDATE`,
+      [jobId, userId]
+    );
+    const row = found.rows[0];
+    if (!row) { await client.query("ROLLBACK"); return null; }
+    if (row.posted_url && row.posted_url !== report.postedUrl) {
+      await client.query("ROLLBACK");
+      throw new Error("FYP_POSTED_URL_FROZEN");
+    }
+    const prev = row.outcome_json ? JSON.parse(row.outcome_json) : {};
+    const outcome = { views: report.views ?? prev.views ?? null, orders: report.orders ?? prev.orders ?? null };
+    const hasOutcome = outcome.views !== null || outcome.orders !== null;
+    await client.query(
+      `UPDATE fyp_snapshots SET posted_url = COALESCE(posted_url,$1), posted_at = COALESCE(posted_at,$2),
+         outcome_json = $3, outcome_updated_at = CASE WHEN $4 THEN $2 ELSE outcome_updated_at END
+       WHERE job_id = $5`,
+      [report.postedUrl, at(), hasOutcome ? JSON.stringify(outcome) : row.outcome_json, hasOutcome, jobId]
+    );
+    const updated = await client.query("SELECT * FROM fyp_snapshots WHERE job_id=$1", [jobId]);
+    await client.query("COMMIT");
+    return updated.rows[0];
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally { client.release(); await pool.end(); }
 }

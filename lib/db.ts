@@ -37,6 +37,9 @@ export function getDb(): Database.Database {
     if (!scriptCols.includes("quality_tier")) {
       db.exec("ALTER TABLE scripts ADD COLUMN quality_tier TEXT NOT NULL DEFAULT 'silent_caption'");
     }
+    if (!scriptCols.includes("hook_level")) {
+      db.exec("ALTER TABLE scripts ADD COLUMN hook_level TEXT NOT NULL DEFAULT 'normal'");
+    }
     const prodCols = (db.prepare("PRAGMA table_info(products)").all() as { name: string }[]).map((c) => c.name);
     if (!prodCols.includes("product_visual_desc")) {
       db.exec("ALTER TABLE products ADD COLUMN product_visual_desc TEXT");
@@ -103,5 +106,5 @@ export function audit(actor: string, action: string, entity: string, entityId: s
 export interface UserRow { id: string; phone: string | null; email: string | null; name: string | null; tier: string; locale: string; created_at: string }
 export interface ProductRow { id: string; user_id: string; source_url: string | null; name: string; price_idr: number; category: string; product_visual_desc?: string | null; images: string; raw_meta: string | null; created_at: string }
 export interface PersonaRow { id: string; user_id: string; name: string; creator_category: string; voice_id: string; register: string; created_at: string }
-export interface ScriptRow { id: string; job_id: string | null; product_id: string; hook_family: string; emotion: string; register: string; segments: string; caption: string; hashtags: string; validation_result: string; quality_tier: string; approved_by_user_at: string | null; edited_by_user: number; created_at: string }
+export interface ScriptRow { id: string; job_id: string | null; product_id: string; hook_family: string; emotion: string; register: string; segments: string; caption: string; hashtags: string; validation_result: string; quality_tier: string; hook_level?: string; approved_by_user_at: string | null; edited_by_user: number; created_at: string }
 export interface JobRow { id: string; user_id: string; product_id: string; persona_id: string | null; script_id: string; format: string; quality_tier: string; duration_s: number; state: string; provider_video: string | null; provider_voice: string | null; cost_actual_idr: number; qc_result: string | null; output_url: string | null; qc_retry_count: number; created_at: string; completed_at: string | null; state_changed_at?: string | null }

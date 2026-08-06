@@ -26,6 +26,7 @@ export interface PgScriptInput {
   hashtags: unknown;
   validationResult: unknown;
   qualityTier: "silent_caption" | "high_quality" | "super_hq";
+  hookLevel?: "normal" | "berani" | "gila";
 }
 
 export class PgProductPersonaScriptRepository {
@@ -138,12 +139,13 @@ export class PgProductPersonaScriptRepository {
           id: this.uuid(), job_id: null, product_id: productId, hook_family: variant.hookFamily, emotion: variant.emotion,
           register: variant.register, segments: JSON.stringify(variant.segments), caption: variant.caption,
           hashtags: JSON.stringify(variant.hashtags), validation_result: JSON.stringify(variant.validationResult),
-          quality_tier: variant.qualityTier, approved_by_user_at: null, edited_by_user: 0, created_at: this.now(),
+          quality_tier: variant.qualityTier, hook_level: variant.hookLevel ?? "normal",
+          approved_by_user_at: null, edited_by_user: 0, created_at: this.now(),
         };
         await client.query(
-          `INSERT INTO scripts (id, job_id, product_id, hook_family, emotion, register, segments, caption, hashtags, validation_result, quality_tier, approved_by_user_at, edited_by_user, created_at)
-           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,NULL,0,$11)`,
-          [script.id, script.product_id, script.hook_family, script.emotion, script.register, script.segments, script.caption, script.hashtags, script.validation_result, script.quality_tier, script.created_at]
+          `INSERT INTO scripts (id, job_id, product_id, hook_family, emotion, register, segments, caption, hashtags, validation_result, quality_tier, hook_level, approved_by_user_at, edited_by_user, created_at)
+           VALUES ($1,NULL,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,NULL,0,$12)`,
+          [script.id, script.product_id, script.hook_family, script.emotion, script.register, script.segments, script.caption, script.hashtags, script.validation_result, script.quality_tier, script.hook_level, script.created_at]
         );
         await this.insertAudit(client, userId, "script.generated", "scripts", script.id, { hook_family: script.hook_family, passed: Boolean((variant.validationResult as { passed?: boolean })?.passed) });
         scripts.push(script);

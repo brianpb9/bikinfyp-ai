@@ -10,7 +10,10 @@ import { config } from "@/lib/config";
 import { getCreatorCategory } from "@/lib/personas";
 import { createSignedUrl } from "@/lib/signed-url";
 import { assertJobIntakeOpen } from "@/lib/job-intake";
-import { pgFindOrCreatePersona, pgGetPersona, pgListJobs, postgresRuntimeEnabled, postgresSmokeEnabled, smokeCompleteJob, smokeCreateJob, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { createFypSnapshot } from "@/lib/fyp-snapshot";
+import type { FypQualityTier, FypVideoFormat } from "@/lib/fyp-score";
+import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnapshot, postgresRuntimeEnabled, postgresSmokeEnabled, smokeCompleteJob, smokeCreateJob, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { scoreScriptPlan } from "@/lib/fyp-score";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -123,6 +126,25 @@ export async function POST(req: Request) {
     // to RACUN_POSTGRES_SMOKE and never starts the production worker.
     if (postgresRuntimeEnabled()) {
       const created = await smokeCreateJob(user.id, { productId: product.id, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr });
+      // Snapshot Skor FYP BEKU (pre-render) — non-fatal, sama seperti jalur SQLite.
+      if (!created.duplicate) {
+        try {
+          const plan = scoreScriptPlan({
+            hookFamily: script.hook_family as Parameters<typeof scoreScriptPlan>[0]["hookFamily"],
+            segments, qualityTier: tier, durationSec: durationS,
+            format: format as "hands_only" | "vo_broll" | "talking_head",
+            productName: product.name, priceIdr: product.price_idr,
+          });
+          await pgSaveFypSnapshot({
+            jobId: created.jobId, scriptId: script.id, modelVersion: plan.modelVersion,
+            score: plan.score, rawProbability: plan.rawProbability,
+            featuresJson: JSON.stringify(plan.featureValues),
+          });
+          await pgAudit(user.id, "fyp.snapshot", "fyp_snapshots", created.jobId, { score: plan.score, model_version: plan.modelVersion });
+        } catch (snapErr) {
+          console.warn(`[fyp-snapshot] gagal untuk job pg ${created.jobId}:`, snapErr);
+        }
+      }
       // The deterministic completion fixture belongs only to the disposable
       // smoke.  A real PostgreSQL runtime is completed by the queue worker.
       if (!created.duplicate && postgresSmokeEnabled()) await smokeCompleteJob(created.jobId);
@@ -148,8 +170,21 @@ export async function POST(req: Request) {
       return { jobId, duplicate: false };
     })();
     const jobId = created.jobId;
-    if (!created.duplicate)
+    if (!created.duplicate) {
       audit(user.id, "job.created", "jobs", jobId, { script_id: script.id, format, quality_tier: tier, price_idr: priceIdr });
+      // Snapshot Skor FYP BEKU (pre-render) — bahan loop predicted-vs-actual.
+      // Non-fatal: kegagalan scoring tidak boleh menggagalkan job berbayar.
+      try {
+        const snap = createFypSnapshot(db!, {
+          jobId, scriptId: script.id, hookFamily: script.hook_family, segments,
+          qualityTier: tier as FypQualityTier, durationSec: durationS,
+          format: format as FypVideoFormat, productName: product.name, priceIdr: product.price_idr,
+        });
+        audit(user.id, "fyp.snapshot", "fyp_snapshots", jobId, { score: snap.score, model_version: snap.modelVersion });
+      } catch (snapErr) {
+        console.warn(`[fyp-snapshot] gagal untuk job ${jobId}:`, snapErr);
+      }
+    }
     try {
       // A duplicate request also re-attempts enqueue. BullMQ job-id dedup
       // makes this safe and recovers the narrow case where Redis was down
@@ -178,8 +213,10 @@ export async function GET(req: Request) {
       .prepare(
         `SELECT j.id, j.state, j.format, j.duration_s, j.created_at, j.completed_at,
                 j.provider_video, j.provider_voice, j.cost_actual_idr, j.script_id,
-                p.name AS product_name, p.images AS product_images
+                p.name AS product_name, p.images AS product_images,
+                fs.score AS fyp_score, fs.posted_url AS fyp_posted_url
          FROM jobs j JOIN products p ON p.id = j.product_id
+         LEFT JOIN fyp_snapshots fs ON fs.job_id = j.id
          WHERE j.user_id = ? ORDER BY j.created_at DESC LIMIT 50`
       )
       .all(user.id) as (JobRow & { script_id: string; product_images: string })[];

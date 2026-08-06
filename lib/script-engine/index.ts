@@ -2,8 +2,8 @@
 // Deterministik berbasis template; LLM opsional via LLM_API_KEY (fallback template bila kosong).
 
 import {
-  CATEGORY_HOOK_PRIORITY, CATEGORY_NOUN, CATEGORY_PAIN, CATEGORY_PROOF,
-  HOOK_BY_CODE, type HookCode,
+  BOLD_HOOK_PRIORITY, CATEGORY_HOOK_PRIORITY, CATEGORY_NOUN, CATEGORY_PAIN, CATEGORY_PROOF,
+  HOOK_BY_CODE, type HookCode, type HookLevel,
 } from "../config/hooks";
 import { COMPLIANCE_CHECKLIST } from "../config/compliance";
 import { REGISTERS, type Register } from "./registers";
@@ -76,9 +76,12 @@ function pick(category: string, table: Record<string, string>): string {
   return table[category] ?? table.default;
 }
 
-/** Pilih 3 keluarga hook berbeda; keluarga yang dipakai produk sama <7 hari diturunkan (F-02.2 #3). */
-export function pickHookFamilies(category: string, productId: string): HookCode[] {
-  const priority = CATEGORY_HOOK_PRIORITY[category] ?? CATEGORY_HOOK_PRIORITY.default;
+/** Pilih 3 keluarga hook berbeda; keluarga yang dipakai produk sama <7 hari diturunkan (F-02.2 #3).
+ * Level berani/gila memakai BOLD_HOOK_PRIORITY (lintas kategori), bukan prioritas kategori. */
+export function pickHookFamilies(category: string, productId: string, level: HookLevel = "normal"): HookCode[] {
+  const priority = level === "normal"
+    ? CATEGORY_HOOK_PRIORITY[category] ?? CATEGORY_HOOK_PRIORITY.default
+    : BOLD_HOOK_PRIORITY;
   let recent: string[] = [];
   try {
     const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
@@ -168,12 +171,13 @@ export function generateScripts(opts: {
   emotion?: string;
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
   durationSec?: number;
+  hookLevel?: HookLevel;
 }): GeneratedScript[] {
   const { product, register } = opts;
   const emotion = opts.emotion ?? "senang";
   const tier = opts.qualityTier ?? "silent_caption";
   const durationSec = opts.durationSec ?? 15;
-  const families = pickHookFamilies(product.category, product.id);
+  const families = pickHookFamilies(product.category, product.id, opts.hookLevel ?? "normal");
   return families.map((f) => generateOne(product, register, emotion, f, tier, durationSec));
 }
 

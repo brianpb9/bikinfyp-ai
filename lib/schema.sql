@@ -80,6 +80,7 @@ CREATE TABLE IF NOT EXISTS scripts (
   hashtags TEXT NOT NULL,   -- JSON array
   validation_result TEXT NOT NULL, -- JSON
   quality_tier TEXT NOT NULL DEFAULT 'silent_caption', -- silent_caption | high_quality | super_hq
+  hook_level TEXT NOT NULL DEFAULT 'normal', -- normal | berani | gila (S3; gila = visual pattern-interrupt)
   approved_by_user_at TEXT, -- NULL = belum melewati gerbang HITL
   edited_by_user INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
@@ -116,6 +117,24 @@ CREATE TABLE IF NOT EXISTS outputs (
   hashtags TEXT NOT NULL,       -- JSON array
   suggested_post_time TEXT NOT NULL,
   compliance_checklist TEXT NOT NULL -- JSON array
+);
+
+-- Snapshot Skor FYP BEKU per job (MODEL FYP 1.0) — dihitung saat job dibuat,
+-- SEBELUM render/posting, dan tidak pernah diubah (anti-leakage: predicted-vs-
+-- actual butuh prediksi yang dibekukan pre-posting). posted_url set-once;
+-- outcome_json boleh di-update (angka hasil menyusul).
+CREATE TABLE IF NOT EXISTS fyp_snapshots (
+  job_id TEXT PRIMARY KEY REFERENCES jobs(id),
+  script_id TEXT NOT NULL REFERENCES scripts(id),
+  model_version TEXT NOT NULL,
+  score INTEGER NOT NULL,
+  raw_probability REAL NOT NULL,
+  features_json TEXT NOT NULL,  -- nilai fitur mentah yang diskor (audit + /ingest)
+  created_at TEXT NOT NULL,
+  posted_url TEXT,              -- link postingan user; BEKU setelah terisi
+  posted_at TEXT,
+  outcome_json TEXT,            -- {views, orders, ...} — boleh di-update
+  outcome_updated_at TEXT
 );
 
 -- Kode OTP login email: yang disimpan HANYA hash (sha256+salt), bukan kode mentah.

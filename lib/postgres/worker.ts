@@ -37,6 +37,7 @@ type WorkerRow = {
   id: string; user_id: string; product_id: string; persona_id: string | null; script_id: string;
   format: string; quality_tier: string; duration_s: number; state: string;
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
+  script_hook_level: string | null;
   product_name: string; product_category: string; product_visual_desc: string | null; product_images: string; product_price_idr: number;
   product_source_url: string | null;
   creator_category: string | null;
@@ -47,7 +48,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
   const jobs = new PgJobsRepository(databaseUrl, { stateTimeoutsMin: config.stateTimeoutsMin });
   const pool = new Pool({ connectionString: databaseUrl });
   try {
-    const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family,
+    const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level,
       p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
@@ -102,7 +103,8 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const format = row.format === "talking_head" || row.format === "vo_broll" ? row.format : "hands_only";
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, imageRefPath: imageRef, qualityTier: tier,
-    format });
+    format,
+    hookLevel: row.script_hook_level === "berani" || row.script_hook_level === "gila" ? row.script_hook_level : "normal" });
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the
   // user's own product photo panned/zoomed, so there's no provider to fail
   // over between and no cost beyond the VO synthesis below.

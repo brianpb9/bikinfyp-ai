@@ -219,7 +219,29 @@ function parseTesseractTsv(tsv: string): { words: OcrWord[]; lines: OcrLine[] } 
 
 async function ocrFrame(frame: string): Promise<{ words: OcrWord[]; lines: OcrLine[] }> {
   const { stdout } = await runFf("tesseract", [frame, "stdout", "-l", "eng", "--psm", "11", "tsv"]);
-  return parseTesseractTsv(stdout);
+  const base = parseTesseractTsv(stdout);
+  // Pass kedua: threshold luminance — SEMUA overlay app ini (caption, harga, CTA,
+  // watermark) putih/near-putih by design, jadi ambang Y>210 menyisakan teks
+  // overlay saja dan membuang latar sibuk (tangan/produk) yang membuat psm 11
+  // kehilangan teks yang jelas terbaca mata (kasus nyata 2026-08-06: pill CTA
+  // "Klik Keranjang" 0 token di frame mentah, 96%/93% conf setelah threshold).
+  // Resolusi TIDAK diubah supaya koordinat bbox tetap sebanding untuk cek
+  // tepi/tumpang tindih. Ini memperkuat PENGENALAN, bukan melonggarkan gate —
+  // syarat fail/skip tidak berubah.
+  const thresholded = `${frame}.thresh.png`;
+  try {
+    await runFfmpeg(["-y", "-v", "error", "-i", frame, "-vf",
+      "format=gray,geq=lum='if(gt(lum(X\\,Y)\\,210)\\,0\\,255)'", thresholded]);
+    const second = await runFf("tesseract", [thresholded, "stdout", "-l", "eng", "--psm", "11", "tsv"]);
+    const extra = parseTesseractTsv(second.stdout);
+    // Kata dari pass threshold memakai key line berprefix agar tidak menabrak
+    // key pass pertama (overlap check antar pass tetap berjalan lewat geometri).
+    base.words.push(...extra.words.map((w) => ({ ...w, line: `thresh:${w.line}` })));
+    base.lines.push(...extra.lines.map((l) => ({ ...l, key: `thresh:${l.key}` })));
+  } catch {
+    /* pass threshold opsional — kegagalannya tidak boleh mematikan OCR utama */
+  }
+  return base;
 }
 
 function intersects(a: OcrWord, b: OcrWord): boolean {

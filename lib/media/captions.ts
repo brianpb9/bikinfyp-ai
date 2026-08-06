@@ -20,6 +20,12 @@ const PRICE_REGEX = /\d+([.,]\d+)?\s?(ribu|rb|ribuan|juta|jt)\b/i;
 const FACTOR_MIN = 0.35;
 const FACTOR_MAX = 0.45;
 const CARD_MIN_SEC = 0.8;
+// Hook = teks STATIS (2026-08-06): koefisien MODEL FYP 1.0 ckpt9-n316 menempatkan
+// hook_text_transitions (-0.17) & full_text_transitions (-0.20) di antara sinyal
+// negatif terkuat — teks yang gonta-ganti di jendela hook berkorelasi kalah di
+// data video jualan. Card hook dibuat sebesar mungkin (hook 15 dtk ≈ 1 card
+// penuh; renderer PIL sudah word-wrap multi-baris). Demo/CTA tetap 3-5 kata.
+const HOOK_MAX_WORDS_PER_CARD = 12;
 
 function highlightWordsFor(text: string, productName: string): string[] {
   const out = new Set<string>();
@@ -31,9 +37,18 @@ function highlightWordsFor(text: string, productName: string): string[] {
   return [...out];
 }
 
-/** Pecah kata jadi grup 3–5 (usahakan 4; sisa didistribusikan agar tidak ada card 1–2 kata di akhir). */
-export function splitIntoCards(words: string[]): string[][] {
-  if (words.length <= 5) return [words];
+/** Pecah kata jadi grup 3–5 (usahakan 4; sisa didistribusikan agar tidak ada card
+ * 1–2 kata di akhir). maxPerCard > 5 (jalur hook statis) memakai pembagian rata
+ * sejumlah-minimum-card, ukuran antar card beda maks 1 kata. */
+export function splitIntoCards(words: string[], maxPerCard = 5): string[][] {
+  if (words.length <= maxPerCard) return [words];
+  if (maxPerCard > 5) {
+    const k = Math.ceil(words.length / maxPerCard);
+    const base = Math.ceil(words.length / k);
+    const cards: string[][] = [];
+    for (let i = 0; i < words.length; i += base) cards.push(words.slice(i, i + base));
+    return cards;
+  }
   const cards: string[][] = [];
   let i = 0;
   while (i < words.length) {
@@ -68,7 +83,7 @@ export function buildCaptionCards(opts: {
     const segStart = seg.start;
     const segWindow = seg.end - seg.start;
     const words = seg.text.split(/\s+/).filter(Boolean);
-    const groups = splitIntoCards(words);
+    const groups = splitIntoCards(words, seg.role === "hook" ? HOOK_MAX_WORDS_PER_CARD : 5);
     const totalWords = words.length;
     const minGroup = Math.min(...groups.map((g) => g.length));
     // Faktor pas dengan jendela segmen; floor agar card terpendek >= 0,8 dtk.

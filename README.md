@@ -126,6 +126,25 @@ Acuan waktu = kolom `jobs.state_changed_at` (migrasi otomatis untuk DB lama).
 UI S5 mengambil teks estimasi jujur dari `GET /api/meta` dan polling tanpa batas
 waktu; job pulih dari URL atau `sessionStorage`.
 
+## Skor FYP (MODEL FYP 1.0, 2026-08-06)
+
+Port scorer dari repo Viral Meter (artifact beku `lib/fyp-score/ckpt9-n316.json`,
+logistic regression n=316 video jualan TikTok ID ber-GMV). Fitur dibangun **by
+construction** dari rencana video (segmen, caption timeline, shot plan, format)
+— tanpa analisis video. Bahasa WAJIB korelasional: "cenderung menang di data
+kami", bukan prediksi/jaminan FYP.
+
+- `lib/fyp-score/` — scoring + top-3-fixes; golden test vs kode Python asli
+  (`tests/fixtures/fyp-score-golden.json`, regen: `scripts/fyp-golden-dump.ts`).
+- S4 menampilkan skor + saran per varian, live saat diedit (client-side).
+- `fyp_snapshots` — skor beku pre-render per job; user lapor link+hasil di S8
+  (`POST /api/jobs/:id/report`; posted_url set-once). Ekspor ke /ingest model:
+  `npx tsx scripts/export-fyp-ingest.ts`.
+- Level hook S3 (`hook_level`): normal | berani (keluarga bold) | gila (+
+  pembuka pattern-interrupt product-safe di shot 1) — dilabeli eksperimen.
+- Default generation berbasis koefisien: prioritas hook question naik, caption
+  hook = 1 kartu statis, 2-shot dipertahankan (jangan tambah cut).
+
 ## Kredit (denominasi RUPIAH)
 
 Saldo = rupiah. Hold sebesar harga tier saat job dibuat → capture saat QC lulus →

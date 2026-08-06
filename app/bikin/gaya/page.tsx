@@ -20,6 +20,15 @@ const REGISTERS = [
 ];
 
 type Tier = "silent_caption" | "high_quality" | "super_hq";
+type HookLevel = "normal" | "berani" | "gila";
+
+// Level hook — copy JUJUR: data kami mendukung hook pertanyaan/payoff cepat;
+// "Gila" adalah eksperimen (pembuka visual nyeleneh), BUKAN janji lebih FYP.
+const HOOK_LEVELS: { id: HookLevel; label: string; icon: string; hint: string }[] = [
+  { id: "normal", label: "Normal", icon: "✅", hint: "pola paling terbukti di data" },
+  { id: "berani", label: "Berani", icon: "🔥", hint: "hook lebih nendang" },
+  { id: "gila", label: "Gila", icon: "🤪", hint: "pembuka nyeleneh · eksperimen" },
+];
 
 // 5 kategori aktif (lolos uji 7–9/10) — Ibu-ibu & Daerah TETAP "Segera" (5–6/10).
 const CREATOR_CATS = [
@@ -46,6 +55,7 @@ export default function GayaPage() {
   const [tiers, setTiers] = useState<TierMeta[]>([]);
   const [format, setFormat] = useState<VideoFormat>("hands_only");
   const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
+  const [hookLevel, setHookLevel] = useState<HookLevel>("normal");
   const [register, setRegister] = useState("bestie");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
   const [loading, setLoading] = useState(false);
@@ -84,9 +94,10 @@ export default function GayaPage() {
           format,
           quality_tier: tier,
           duration_s: durationSec,
+          hook_level: hookLevel,
         },
       });
-      saveFlow({ register, qualityTier: tier, format, durationSec, creatorCategory, scripts: res.scripts, selectedScriptId: undefined });
+      saveFlow({ register, qualityTier: tier, format, durationSec, hookLevel, creatorCategory, scripts: res.scripts, selectedScriptId: undefined });
       router.push("/bikin/skrip");
     } catch (err) {
       if (err instanceof ApiFail && err.code === "INSUFFICIENT_CREDITS") {
@@ -123,6 +134,33 @@ export default function GayaPage() {
               </button>
             ))}
           </div>
+        </section>
+
+        <section className="space-y-3">
+          <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Seberapa berani</p><h2 className="font-display text-xl font-bold">Level hook</h2></div>
+          <div className="grid grid-cols-3 gap-2">
+            {HOOK_LEVELS.map((l) => (
+              <button
+                key={l.id}
+                type="button"
+                aria-pressed={hookLevel === l.id}
+                onClick={() => setHookLevel(l.id)}
+                className={`rounded-2xl border-2 p-3 text-center shadow-sm transition-transform active:scale-[0.98] ${
+                  hookLevel === l.id ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                }`}
+              >
+                <p className="text-2xl" aria-hidden="true">{l.icon}</p>
+                <p className="text-sm font-bold">{l.label}</p>
+                <p className="text-xs text-zinc-500">{l.hint}</p>
+              </button>
+            ))}
+          </div>
+          {hookLevel === "gila" && (
+            <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+              Level Gila = pembuka visual super energik. Ini eksperimen — di data kami hook pertanyaan
+              yang paling sering menang, jadi cek Skor FYP tiap versi sebelum pilih ya.
+            </p>
+          )}
         </section>
 
         <section className="space-y-3">

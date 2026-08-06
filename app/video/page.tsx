@@ -13,6 +13,79 @@ interface JobItem {
   created_at: string;
   thumb_url: string | null;
   script_id: string;
+  fyp_score?: number | null;
+  fyp_posted_url?: string | null;
+}
+
+// Lapor hasil posting (loop belajar Skor FYP): link beku setelah tersimpan,
+// angka views/pesanan boleh diisi/diperbarui menyusul.
+function ReportForm({ job }: { job: JobItem }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState(job.fyp_posted_url ?? "");
+  const [views, setViews] = useState("");
+  const [orders, setOrders] = useState("");
+  const [saved, setSaved] = useState(Boolean(job.fyp_posted_url));
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<string | null>(null);
+
+  async function save() {
+    setBusy(true);
+    setMsg(null);
+    try {
+      await apiFetch(`/api/jobs/${job.id}/report`, {
+        json: {
+          posted_url: url,
+          views: views.trim() === "" ? null : Number(views),
+          orders: orders.trim() === "" ? null : Number(orders),
+        },
+      });
+      setSaved(true);
+      setMsg("✓ Tersimpan. Makasih — data ini bikin Skor FYP makin akurat.");
+    } catch (e) {
+      setMsg(e instanceof Error ? e.message : "Gagal menyimpan. Coba lagi ya.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  if (!open) {
+    return (
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-1 text-left text-xs font-semibold text-amber-700 underline underline-offset-2"
+      >
+        {saved ? "✓ Terlapor · perbarui hasil" : "Sudah diposting? Lapor hasilnya →"}
+      </button>
+    );
+  }
+  return (
+    <div className="mt-2 space-y-2 rounded-2xl border border-amber-100 bg-amber-50/60 p-3">
+      <input
+        type="url"
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        disabled={saved}
+        placeholder="https:// link postinganmu"
+        className="w-full rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm disabled:text-zinc-400"
+      />
+      <div className="flex gap-2">
+        <input type="number" min={0} value={views} onChange={(e) => setViews(e.target.value)} placeholder="Views"
+          className="w-1/2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm" />
+        <input type="number" min={0} value={orders} onChange={(e) => setOrders(e.target.value)} placeholder="Pesanan"
+          className="w-1/2 rounded-xl border border-zinc-200 bg-white px-3 py-2 text-sm" />
+      </div>
+      <button
+        type="button"
+        onClick={save}
+        disabled={busy || url.trim() === ""}
+        className="min-h-[40px] rounded-xl bg-amber-500 px-4 text-sm font-bold text-white disabled:bg-zinc-300"
+      >
+        {busy ? "Menyimpan..." : "Simpan hasil"}
+      </button>
+      {msg && <p className="text-xs text-zinc-600">{msg}</p>}
+    </div>
+  );
 }
 
 const STATE_LABEL: Record<string, string> = {
@@ -79,6 +152,9 @@ export default function VideoPage() {
               <p className="truncate font-bold">{j.product_name}</p>
               <p className="text-xs text-zinc-500">
                 {relTime(j.created_at)} · {STATE_LABEL[j.state] ?? "Sedang dibikin"}
+                {typeof j.fyp_score === "number" && (
+                  <span className="ml-1 rounded-full bg-amber-500/10 px-2 py-0.5 font-bold text-amber-700">Skor FYP {j.fyp_score}</span>
+                )}
               </p>
               <div className="flex gap-2 pt-1">
                 {j.state === "READY" && (
@@ -99,6 +175,7 @@ export default function VideoPage() {
                   </Link>
                 )}
               </div>
+              {j.state === "READY" && <ReportForm job={j} />}
             </div>
           </div>
           ))}

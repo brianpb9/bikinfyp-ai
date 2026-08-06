@@ -30,20 +30,33 @@ try {
   await page.goto(`${BASE}/onboarding`, { waitUntil: "networkidle" });
   ok("S0 render", await page.getByText("Bikin video jualan").isVisible());
   await shot("s0-onboarding");
-  await page.getByRole("button", { name: "Coba Gratis" }).click();
-  await page.getByPlaceholder("08xxxxxxxxxx").fill(phone);
-  await page.getByRole("button", { name: "Masuk & Mulai" }).click();
-  await page.waitForURL(`${BASE}/`, { timeout: 10000 });
+  // Auth pindah ke email OTP (31 Jul 2026) — E2E login via dev-login API
+  // (jalur non-production yang memang disediakan untuk uji; kode OTP mock hanya
+  // muncul di log server, tidak bisa dibaca dari browser).
+  const loginStatus = await page.evaluate(async (p) => {
+    const r = await fetch("/api/auth/dev-login", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ phone: p }),
+    });
+    return r.status;
+  }, phone);
+  ok("S0 dev-login", loginStatus === 200, phone);
+  await page.goto(`${BASE}/`, { waitUntil: "networkidle" });
   ok("S0 login -> beranda", true, phone);
 
   // S1 beranda (user baru)
   await page.waitForLoadState("networkidle");
   ok("S1 tombol BIKIN VIDEO", await page.getByText("＋ BIKIN VIDEO").isVisible());
-  ok("S1 chip kredit", await page.locator("header").getByText("⚡").first().isVisible());
+  // Chip kredit sekarang ikon PNG + teks "RpN" (bukan karakter ⚡ lagi).
+  ok("S1 chip kredit", await page.locator("header").getByText(/Rp/).first().isVisible());
   await shot("s1-beranda");
 
-  // S2 produk manual
+  // S1.5 jenis video (fork e-commerce vs promosi) lalu S2 produk manual
   await page.getByText("＋ BIKIN VIDEO").click();
+  await page.waitForURL("**/bikin/jenis");
+  await shot("s1b-jenis");
+  await page.getByRole("link", { name: /Video Jualan Produk/ }).click();
   await page.waitForURL("**/bikin/produk");
   await page.getByText("Isi manual aja →").click();
   await page.getByPlaceholder(/Nama produk/).fill("Serum Glow Bright");
@@ -55,13 +68,15 @@ try {
   await page.waitForURL("**/bikin/gaya", { timeout: 15000 });
   ok("S2 produk tersimpan -> gaya", true);
 
-  // S3 gaya
-  ok("S3 format disabled 'Segera'", (await page.getByText("Segera").count()) >= 2);
+  // S3 gaya — kategori kreator kini di balik accordion "Sesuaikan gaya kreator";
+  // hanya "Daerah" yang masih Segera (Ibu-ibu sudah rilis) -> minimal 1.
+  await page.getByText("Sesuaikan gaya kreator").click();
+  ok("S3 format disabled 'Segera'", (await page.getByText("Segera").count()) >= 1);
   await shot("s3-gaya");
   await page.getByRole("button", { name: "Bikinkan Skripnya" }).click();
   await page.waitForURL("**/bikin/skrip", { timeout: 20000 });
   await page.waitForLoadState("networkidle");
-  ok("S3 generate 3 varian", (await page.getByText(/Versi \d ·/).count()) === 3);
+  ok("S3 generate 3 varian", (await page.getByRole("button", { name: /Versi \d ·/ }).count()) === 3);
 
   // S4 skrip (HITL)
   const approveBtn = page.getByRole("button", { name: "Setuju & Lanjut" });
@@ -102,7 +117,7 @@ try {
 
   // S9 kredit
   await page.goto(`${BASE}/kredit`, { waitUntil: "networkidle" });
-  ok("S9 saldo tampil", await page.getByText(/kredit/).first().isVisible());
+  ok("S9 saldo tampil", await page.getByText(/Kredit/).first().isVisible());
   ok("S9 paket 'Paling laris'", await page.getByText("Paling laris").isVisible());
   await shot("s9-kredit");
 
