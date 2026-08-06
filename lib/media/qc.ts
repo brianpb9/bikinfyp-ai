@@ -220,18 +220,19 @@ function parseTesseractTsv(tsv: string): { words: OcrWord[]; lines: OcrLine[] } 
 async function ocrFrame(frame: string): Promise<{ words: OcrWord[]; lines: OcrLine[] }> {
   const { stdout } = await runFf("tesseract", [frame, "stdout", "-l", "eng", "--psm", "11", "tsv"]);
   const base = parseTesseractTsv(stdout);
-  // Pass kedua: threshold luminance — SEMUA overlay app ini (caption, harga, CTA,
-  // watermark) putih/near-putih by design, jadi ambang Y>210 menyisakan teks
-  // overlay saja dan membuang latar sibuk (tangan/produk) yang membuat psm 11
-  // kehilangan teks yang jelas terbaca mata (kasus nyata 2026-08-06: pill CTA
-  // "Klik Keranjang" 0 token di frame mentah, 96%/93% conf setelah threshold).
+  // Pass kedua: threshold luminance — overlay app ini putih ATAU kuning
+  // (badge promo #FFD34D ≈ Y209!) by design. Ambang 185 (bukan 210) supaya
+  // teks kuning ikut lolos; latar sibuk (tangan/produk, umumnya Y<180) tetap
+  // terbuang sehingga psm 11 menemukan teks yang jelas terbaca mata (kasus
+  // nyata 2026-08-06: pill CTA "Klik Keranjang" 0 token di frame mentah,
+  // 96%/93% conf setelah threshold).
   // Resolusi TIDAK diubah supaya koordinat bbox tetap sebanding untuk cek
   // tepi/tumpang tindih. Ini memperkuat PENGENALAN, bukan melonggarkan gate —
   // syarat fail/skip tidak berubah.
   const thresholded = `${frame}.thresh.png`;
   try {
     await runFfmpeg(["-y", "-v", "error", "-i", frame, "-vf",
-      "format=gray,geq=lum='if(gt(lum(X\\,Y)\\,210)\\,0\\,255)'", thresholded]);
+      "format=gray,geq=lum='if(gt(lum(X\\,Y)\\,185)\\,0\\,255)'", thresholded]);
     const second = await runFf("tesseract", [thresholded, "stdout", "-l", "eng", "--psm", "11", "tsv"]);
     const extra = parseTesseractTsv(second.stdout);
     // Pass threshold menyumbang KATA saja, TANPA line-box: pada citra biner,

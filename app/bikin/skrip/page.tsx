@@ -144,7 +144,7 @@ function SkripInner() {
   const hardErrors = issues.filter((i) => i.rule === "L-10" || i.rule === "L-11");
   const canApprove = selectedId !== null && editorSeen && hardErrors.length === 0 && !loading;
   const approveHint = loading
-    ? "Skrip sedang dikirim ke dapur."
+    ? "Skrip sedang dikirim ke studio AI."
     : !selectedId
       ? "Pilih satu versi skrip terlebih dahulu."
       : !editorSeen
@@ -278,7 +278,7 @@ function SkripInner() {
           </SecondaryButton>
         )}
         <PrimaryButton onClick={approve} disabled={!canApprove}>
-          {loading ? "Mengirim ke dapur..." : "Setuju & Lanjut"}
+          {loading ? "Mengirim ke studio AI..." : "Setuju & Lanjut"}
         </PrimaryButton>
         <p
           aria-live="polite"
