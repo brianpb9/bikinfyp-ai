@@ -442,7 +442,11 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     }
   }
   // QC-03 identitas produk konsisten — pemeriksaan kasar tapi nyata (warna region tengah).
-  if (input.shotPaths && input.shotPaths.length >= 2 && input.refImagePath && fs.existsSync(input.refImagePath)) {
+  // >= 1 (bukan >= 2, fix 2026-08-07): Wajah AI 15 dtk kini SATU shot — tidak
+  // ada pasangan antar-shot, tapi cek warna-khas vs foto referensi tetap
+  // bermakna. Ambang lama >= 2 membuat QC-03 skip dan kebijakan menolak job
+  // sehat tanpa satu pun check fail (insiden production 21979c08).
+  if (input.shotPaths && input.shotPaths.length >= 1 && input.refImagePath && fs.existsSync(input.refImagePath)) {
     try {
       checks.push(await qcProductSimilarity(input.shotPaths, input.refImagePath, path.dirname(input.filePath)));
     } catch (err) {

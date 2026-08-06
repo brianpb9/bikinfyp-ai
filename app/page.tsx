@@ -18,17 +18,24 @@ interface JobItem {
 export default function HomePage() {
   const [credits, setCredits] = useState<number | null>(null);
   const [jobs, setJobs] = useState<JobItem[] | null>(null);
+  // User yang menutup HP saat render lalu buka app lagi mendarat DI SINI,
+  // bukan di halaman proses — beranda wajib memberi tahu ada video yang
+  // sedang dibikin (permintaan Brian 2026-08-07).
+  const [processing, setProcessing] = useState<JobItem[]>([]);
 
   useEffect(() => {
     apiFetch<{ credits: number }>("/api/auth/me")
       .then((d) => setCredits(d.credits))
       .catch(() => setCredits(null));
     apiFetch<{ jobs: JobItem[] }>("/api/jobs")
-      .then((d) => setJobs(d.jobs.filter((j) => j.state === "READY").slice(0, 6)))
+      .then((d) => {
+        setJobs(d.jobs.filter((j) => j.state === "READY").slice(0, 6));
+        setProcessing(d.jobs.filter((j) => !["READY", "FAILED", "REFUNDED"].includes(j.state)));
+      })
       .catch(() => setJobs([]));
   }, []);
 
-  const isNewUser = jobs !== null && jobs.length === 0;
+  const isNewUser = jobs !== null && jobs.length === 0 && processing.length === 0;
 
   return (
     <main className="min-h-dvh space-y-7 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-28 pt-6">
@@ -45,6 +52,24 @@ export default function HomePage() {
       >
         ＋ BIKIN VIDEO
       </Link>
+
+      {processing.length > 0 && (
+        <Link
+          href={`/bikin/proses?job=${processing[0].id}`}
+          className="flex items-center gap-3 rounded-3xl border border-amber-300 bg-amber-50 p-4 shadow-sm active:bg-amber-100"
+        >
+          <span className="inline-block h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-bold text-amber-900">
+              {processing.length} video sedang dibikin
+            </span>
+            <span className="block truncate text-xs text-amber-800">
+              {processing.map((j) => j.product_name).join(", ")} — tap untuk lihat progres
+            </span>
+          </span>
+          <span className="shrink-0 font-bold text-amber-600">→</span>
+        </Link>
+      )}
 
       {jobs === null ? null : jobs.length > 0 ? (
         <section className="space-y-3">

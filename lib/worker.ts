@@ -272,7 +272,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         console.warn(`[job ${job.id.slice(0, 8)}] QC gagal -> retry COMPOSITING (1x)`);
         continue; // QC_CHECK -> COMPOSITING, satu-satunya transisi mundur yang diizinkan
       }
-      failJob(current, "QC gagal setelah retry: " + qc.checks.filter((c) => c.status === "fail").map((c) => c.code).join(", "));
+      failJob(current, "QC gagal setelah retry: " + (qc.checks.filter((c) => c.status !== "pass").map((c) => `${c.code}:${c.status}`).join(", ") || "kebijakan menolak (check wajib hilang?)"));
       return;
     }
 

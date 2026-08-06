@@ -197,7 +197,13 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     });
     await pool.query("UPDATE jobs SET qc_result=$1,qc_retry_count=$2 WHERE id=$3", [JSON.stringify(qc), retry, row.id]);
     if (qc.passed) break;
-    if (retry === 1) throw new Error(`QC gagal setelah retry: ${qc.checks.filter((check) => check.status === "fail").map((check) => check.code).join(", ")}`);
+    // Sebut juga check skip: kebijakan bisa menolak TANPA satu pun fail
+    // (skip tak berizin / check wajib hilang) — pesan kosong = debugging buta
+    // (insiden 21979c08: "QC gagal setelah retry: " tanpa penyebab).
+    if (retry === 1) {
+      const notPass = qc.checks.filter((check) => check.status !== "pass").map((check) => `${check.code}:${check.status}`);
+      throw new Error(`QC gagal setelah retry: ${notPass.join(", ") || "kebijakan menolak (check wajib hilang?)"}`);
+    }
   }
   if (!qc?.passed) throw new Error("QC tidak menghasilkan output lulus.");
   if (!(await jobs.transition(row.id, "LABELING", { watermark: renderParams.watermarkText }))) return;

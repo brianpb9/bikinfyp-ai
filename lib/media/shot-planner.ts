@@ -60,13 +60,34 @@ const HANDS_ONLY_NEGATIVE =
 
 // Wajah AI (v1, 2026-08-03): opposite intent of hands_only — face IS the
 // point, framed like a normal UGC talking-head selfie, not hands-only POV.
+// + estetika candid (2026-08-07, dari referensi visual Brian — grid UGC yang
+// menang terlihat seperti foto iPhone sehari-hari: cahaya jendela natural,
+// warna kalem, setting rumah yang hidup — BUKAN studio terang/polished).
 const TALKING_HEAD_FRAMING =
   "face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
-  "front-facing selfie-style angle, natural phone camera look";
+  "front-facing selfie-style angle, natural phone camera look, soft natural indoor daylight, " +
+  "muted authentic colors, candid everyday vibe in a lived-in Indonesian home";
 
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
   "do not redesign or replace the product";
+
+// Aksi demo per KATEGORI PRODUK (2026-08-07, dipelajari dari akun UGC tim +
+// referensi visual Brian): "memegang kemasan" hanya benar untuk sebagian
+// kategori — fashion harus TRY-ON (baju dipakai/ditempel ke badan), beauty
+// harus swatch/aplikasi, food harus dicicipi. Konten UGC yang menang terlihat
+// seperti orang sungguhan MEMAKAI produk, bukan model memegang paket.
+const DEMO_ACTION: Record<string, string> = {
+  beauty: "applying or swatching a little of the product to show its texture on her skin",
+  fashion: "wearing the garment or holding it against her body, showing the fit and fabric drape like a quick mirror check",
+  muslim_fashion: "showing the hijab worn, adjusting the drape to show the fabric and how it frames the face",
+  food: "opening it and tasting it with a genuine delighted reaction",
+  kitchen: "using the tool naturally on a kitchen counter",
+  home: "using the item naturally in a lived-in home setting",
+  gadget: "using the gadget hands-on, showing its screen or main feature working",
+  kids: "showing playfully how the item is used",
+  default: "demonstrating the product in use",
+};
 
 // Pembuka pattern-interrupt level GILA (hanya shot 1). Energi dari GERAKAN
 // KAMERA + kecepatan — subjek dan framing format tetap dipatuhi (hands-only
@@ -131,13 +152,19 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Wajah AI pakai promptSeed (deskripsi wajah/tipologi) sebagai subjek utama,
     // bukan handsPrompt (yang secara eksplisit hanya deskripsi tangan/lengan).
     const subject = format === "talking_head" ? input.category.promptSeed : input.category.handsPrompt;
+    const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
     const beat =
       format === "talking_head"
         ? isFirst
-          ? `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, ${IDENTITY_INSTRUCTION}`
+          ? numShots === 1
+            // Satu shot utuh (15 dtk): satu arc lengkap — tunjukkan produk,
+            // demo sesuai kategori, tutup hangat. Aksi demo per kategori
+            // (fashion=try-on, beauty=swatch, food=cicip) dari DEMO_ACTION.
+            ? `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, then ${demoAction}, ending with a warm inviting smile to camera, ${IDENTITY_INSTRUCTION}`
+            : `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, ${IDENTITY_INSTRUCTION}`
           : isClosing
             ? `Presenter smiling warmly, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
-            : `Presenter demonstrating the product close to camera, still clearly in frame with her face, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
+            : `Presenter ${demoAction}, still clearly in frame with her face, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
         : isFirst
           ? `Hands presenting "${input.productName}" to camera, product label facing camera, gentle rotation, ${IDENTITY_INSTRUCTION}`
           : isClosing
