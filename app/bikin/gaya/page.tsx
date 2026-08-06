@@ -29,13 +29,18 @@ const REGISTERS = [
 type Tier = "silent_caption" | "high_quality" | "super_hq";
 type HookLevel = "normal" | "berani" | "gila";
 
-// Level hook — copy JUJUR: data kami mendukung hook pertanyaan/payoff cepat;
-// "Gila" adalah eksperimen (pembuka visual nyeleneh), BUKAN janji lebih FYP.
-const HOOK_LEVELS: { id: HookLevel; label: string; icon: string; hint: string }[] = [
-  { id: "normal", label: "Normal", icon: "✅", hint: "pola paling terbukti di data" },
-  { id: "berani", label: "Berani", icon: "🔥", hint: "hook lebih nendang" },
-  { id: "gila", label: "Gila", icon: "🤪", hint: "pembuka nyeleneh · eksperimen" },
-];
+// Level hook sebagai SLIDER 0-100% (permintaan Brian 2026-08-06, gaya
+// "Weirdness"-slider) — di belakang layar tetap dipetakan ke 3 level mesin.
+// Copy JUJUR: data kami mendukung hook pertanyaan/payoff cepat; ujung "Gila"
+// adalah eksperimen (pembuka visual nyeleneh), BUKAN janji lebih FYP.
+function hookLevelFromPct(pct: number): HookLevel {
+  return pct <= 33 ? "normal" : pct <= 66 ? "berani" : "gila";
+}
+const HOOK_LEVEL_INFO: Record<HookLevel, { icon: string; label: string; hint: string }> = {
+  normal: { icon: "✅", label: "Normal", hint: "pola paling terbukti di data" },
+  berani: { icon: "🔥", label: "Berani", hint: "hook lebih nendang" },
+  gila: { icon: "🤪", label: "Gila", hint: "pembuka nyeleneh · eksperimen" },
+};
 
 // 5 kategori aktif (lolos uji 7–9/10) — Ibu-ibu & Daerah TETAP "Segera" (5–6/10).
 const CREATOR_CATS = [
@@ -62,7 +67,8 @@ export default function GayaPage() {
   const [tiers, setTiers] = useState<TierMeta[]>([]);
   const [format, setFormat] = useState<VideoFormat>("hands_only");
   const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
-  const [hookLevel, setHookLevel] = useState<HookLevel>("normal");
+  const [hookPct, setHookPct] = useState(15);
+  const hookLevel = hookLevelFromPct(hookPct);
   const [register, setRegister] = useState("bestie");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
   const [loading, setLoading] = useState(false);
@@ -157,22 +163,29 @@ export default function GayaPage() {
 
         <section className="space-y-3">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Seberapa berani</p><h2 className="font-display text-xl font-bold">Level hook</h2></div>
-          <div className="grid grid-cols-3 gap-2">
-            {HOOK_LEVELS.map((l) => (
-              <button
-                key={l.id}
-                type="button"
-                aria-pressed={hookLevel === l.id}
-                onClick={() => setHookLevel(l.id)}
-                className={`rounded-2xl border-2 p-3 text-center shadow-sm transition-transform active:scale-[0.98] ${
-                  hookLevel === l.id ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
-                }`}
-              >
-                <p className="text-2xl" aria-hidden="true">{l.icon}</p>
-                <p className="text-sm font-bold">{l.label}</p>
-                <p className="text-xs text-zinc-500">{l.hint}</p>
-              </button>
-            ))}
+          <div className="rounded-2xl border-2 border-zinc-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center justify-between">
+              <p className="text-sm font-bold text-zinc-800">
+                <span aria-hidden="true">{HOOK_LEVEL_INFO[hookLevel].icon}</span> {HOOK_LEVEL_INFO[hookLevel].label}
+                <span className="ml-1 font-normal text-zinc-500">· {HOOK_LEVEL_INFO[hookLevel].hint}</span>
+              </p>
+              <p className="font-display text-sm font-bold text-amber-600">{hookPct}%</p>
+            </div>
+            <input
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={hookPct}
+              onChange={(e) => setHookPct(Number(e.target.value))}
+              aria-label="Level hook: 0 aman sampai 100 gila"
+              className="mt-3 h-2 w-full cursor-pointer accent-amber-500"
+            />
+            <div className="mt-1 flex justify-between text-[10px] font-semibold text-zinc-400">
+              <span>Aman & terbukti</span>
+              <span>Berani</span>
+              <span>Gila 🤪</span>
+            </div>
           </div>
           {hookLevel === "gila" && (
             <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
