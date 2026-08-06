@@ -9,6 +9,7 @@ import { getJob, transition, failJob, addCost, setJobProviders } from "./jobs";
 import { planShots } from "./media/shot-planner";
 import { compositeVideo } from "./media/compositor";
 import { runQc } from "./media/qc";
+import { resolvePromo, formatPromoOverlayText } from "./promo";
 import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "./providers/registry";
 import { isMockProviderName, type QualityTier } from "./providers/types";
 import { buildPhotoPanVideo } from "./media/photo-video";
@@ -175,6 +176,17 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const cartLabel = cartLabelForUrl(product.source_url);
     const ctaBadgeText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning »" : "Klik Keranjang »";
     const ctaQcText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning" : "Klik Keranjang";
+    // Add-on promo: overlay harga jadi harga-coret + persen + deadline. Dicek
+    // ULANG saat render (bukan saat approve) — promo yang keburu kedaluwarsa
+    // di-drop dari overlay tanpa memblokir job (keputusan 2026-08-06); teks
+    // skrip yang menyebut promo sudah melewati gerbang HITL user.
+    const promo = resolvePromo({
+      priceIdr: product.price_idr,
+      promoPriceBeforeIdr: product.promo_price_before_idr,
+      promoEndsAt: product.promo_ends_at,
+      promoStockLeft: product.promo_stock_left,
+    });
+    const priceOverlayText = promo ? formatPromoOverlayText(promo) : `Cuma ${formatHargaOverlay(product.price_idr)}`;
     const finalTexts = [
       ...segments.map((s) => s.text),
       formatHargaOverlay(product.price_idr),
@@ -197,7 +209,8 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         captions: captionCards,
         musicPath,
         durationSec: job.duration_s,
-        priceText: `Cuma ${formatHargaOverlay(product.price_idr)}`,
+        priceText: priceOverlayText,
+        priceInCaptionMode: Boolean(promo) && compositeMode === "caption",
         ctaText: ctaBadgeText,
         demoRange: [demoSeg.start, demoSeg.end],
         ctaRange: [ctaSeg.start, ctaSeg.end],
@@ -223,8 +236,11 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         overlayTextExpectations: [
           { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: job.duration_s },
           ...(compositeMode === "caption"
-            ? (captionCards ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec }))
-            : [{ text: `Cuma ${formatHargaOverlay(product.price_idr)}`, startSec: demoSeg.start, endSec: demoSeg.end }]),
+            ? [
+                ...(captionCards ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec })),
+                ...(promo ? [{ text: priceOverlayText, startSec: demoSeg.start, endSec: demoSeg.end }] : []),
+              ]
+            : [{ text: priceOverlayText, startSec: demoSeg.start, endSec: demoSeg.end }]),
           { text: ctaQcText, startSec: ctaSeg.start, endSec: ctaSeg.end },
         ],
       });

@@ -33,7 +33,10 @@ export async function POST(req: Request) {
     if (!product) throw ERR.NOT_FOUND("Produknya");
 
     const variants = generateScripts({
-      product: { id: product.id, name: product.name, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url },
+      product: {
+        id: product.id, name: product.name, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
+        promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
+      },
       register,
       emotion,
       qualityTier: tier,

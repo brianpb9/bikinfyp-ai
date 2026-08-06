@@ -50,6 +50,9 @@ export async function POST(req: Request) {
         segments,
         productName: product.name,
         priceIdr: product.price_idr,
+        // Skrip promo yang sudah disetujui memuat harga normal — tanpa ini L-14
+        // salah menolak angka harga coret saat submit render.
+        promoPriceBeforeIdr: product.promo_price_before_idr,
         qualityTier: script.quality_tier as "silent_caption" | "high_quality" | "super_hq",
       },
       "light"

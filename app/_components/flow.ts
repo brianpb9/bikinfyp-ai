@@ -8,6 +8,8 @@ export interface FlowProduct {
   priceIdr: number;
   category: string;
   images: string[];
+  /** Harga normal promo (add-on) — dipakai validator client S4 (L-14). */
+  promoPriceBeforeIdr?: number | null;
 }
 
 export interface FlowSegment {

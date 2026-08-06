@@ -44,6 +44,11 @@ export function getDb(): Database.Database {
     if (!prodCols.includes("product_visual_desc")) {
       db.exec("ALTER TABLE products ADD COLUMN product_visual_desc TEXT");
     }
+    if (!prodCols.includes("promo_price_before_idr")) {
+      db.exec("ALTER TABLE products ADD COLUMN promo_price_before_idr INTEGER");
+      db.exec("ALTER TABLE products ADD COLUMN promo_ends_at TEXT");
+      db.exec("ALTER TABLE products ADD COLUMN promo_stock_left INTEGER");
+    }
     // Migrasi users -> email sebagai identifier (phone jadi nullable). Aman re-run:
     // hanya jalan bila skema lama terdeteksi (phone NOT NULL). FK dimatikan sesaat
     // selama rebuild (jobs/products/personas mereferensikan users).
@@ -104,7 +109,7 @@ export function audit(actor: string, action: string, entity: string, entityId: s
 
 // --- Row types ---
 export interface UserRow { id: string; phone: string | null; email: string | null; name: string | null; tier: string; locale: string; created_at: string }
-export interface ProductRow { id: string; user_id: string; source_url: string | null; name: string; price_idr: number; category: string; product_visual_desc?: string | null; images: string; raw_meta: string | null; created_at: string }
+export interface ProductRow { id: string; user_id: string; source_url: string | null; name: string; price_idr: number; category: string; product_visual_desc?: string | null; images: string; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; raw_meta: string | null; created_at: string }
 export interface PersonaRow { id: string; user_id: string; name: string; creator_category: string; voice_id: string; register: string; created_at: string }
 export interface ScriptRow { id: string; job_id: string | null; product_id: string; hook_family: string; emotion: string; register: string; segments: string; caption: string; hashtags: string; validation_result: string; quality_tier: string; hook_level?: string; approved_by_user_at: string | null; edited_by_user: number; created_at: string }
 export interface JobRow { id: string; user_id: string; product_id: string; persona_id: string | null; script_id: string; format: string; quality_tier: string; duration_s: number; state: string; provider_video: string | null; provider_voice: string | null; cost_actual_idr: number; qc_result: string | null; output_url: string | null; qc_retry_count: number; created_at: string; completed_at: string | null; state_changed_at?: string | null }

@@ -20,6 +20,11 @@ export default function ProdukPage() {
   const [previews, setPreviews] = useState<string[]>([]);
   const [extractedPreviews, setExtractedPreviews] = useState<string[]>([]);
   const [productId, setProductId] = useState<string | null>(null);
+  // Add-on Promo & Urgency — semua opsional, "mainan konten" (keputusan 2026-08-06)
+  const [promoOpen, setPromoOpen] = useState(false);
+  const [promoBefore, setPromoBefore] = useState("");
+  const [promoEnds, setPromoEnds] = useState("");
+  const [promoStock, setPromoStock] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -43,8 +48,10 @@ export default function ProdukPage() {
 
   function pickPhotos(files: FileList | null) {
     if (!files) return;
-    const list = Array.from(files).slice(0, 5 - photos.length);
-    const next = [...photos, ...list].slice(0, 5);
+    // Jatah 5 foto TOTAL termasuk foto yang sudah terunduh dari link.
+    const room = Math.max(0, 5 - extractedPreviews.length - photos.length);
+    const list = Array.from(files).slice(0, room);
+    const next = [...photos, ...list];
     previewUrls.current.forEach((src) => URL.revokeObjectURL(src));
     previewUrls.current = next.map((file) => URL.createObjectURL(file));
     setPhotos(next);
@@ -101,6 +108,11 @@ export default function ProdukPage() {
     // Produk dari ekstraksi tanpa harga: sorot wajib (BR-01.3)
     if (productId && (!price || priceIdr <= 0)) return setError("Harga dari link tidak ketemu — isi manual ya, wajib.");
 
+    // Promo (opsional): harga normal harus > harga jual, kalau diisi.
+    const promoBeforeIdr = promoBefore ? parseInt(promoBefore.replace(/[^\d]/g, ""), 10) : null;
+    if (promoBeforeIdr !== null && promoBeforeIdr <= priceIdr)
+      return setError("Harga normal (sebelum diskon) harus lebih besar dari harga jual — kalau tidak, diskonnya bohong.");
+
     submitLock.current = true;
     setLoading(true);
     try {
@@ -111,6 +123,9 @@ export default function ProdukPage() {
         fd.set("price_idr", String(priceIdr));
         fd.set("category", category);
         if (visualDesc.trim()) fd.set("product_visual_desc", visualDesc.trim());
+        if (promoBeforeIdr) fd.set("promo_price_before_idr", String(promoBeforeIdr));
+        if (promoEnds) fd.set("promo_ends_at", promoEnds);
+        if (promoStock) fd.set("promo_stock_left", promoStock);
         for (const p of photos) fd.append("photos", p);
         const controller = new AbortController();
         // Upload kamera di jaringan lambat boleh berlangsung, tapi jangan biarkan
@@ -125,14 +140,24 @@ export default function ProdukPage() {
         id = res.product_id;
         setProductId(id);
       } else {
-        // Produk dari ekstraksi: simpan edit konfirmasi user (nama/harga/kategori/deskripsi)
+        // Produk dari ekstraksi: simpan edit konfirmasi user (nama/harga/kategori/deskripsi/promo)
         await apiFetch(`/api/products/${id}`, {
           method: "PATCH",
-          json: { name: name.trim(), price_idr: priceIdr, category, product_visual_desc: visualDesc.trim() || null },
+          json: {
+            name: name.trim(), price_idr: priceIdr, category, product_visual_desc: visualDesc.trim() || null,
+            promo_price_before_idr: promoBeforeIdr, promo_ends_at: promoEnds || null, promo_stock_left: promoStock || null,
+          },
         });
+        // Foto tambahan dari kartu konfirmasi (fix 2026-08-06: dulu jalur ini
+        // tidak ada — foto link gagal = user buntu total).
+        if (photos.length > 0) {
+          const fd = new FormData();
+          for (const p of photos) fd.append("photos", p);
+          await apiFetch(`/api/products/${id}/photos`, { formData: fd });
+        }
       }
       saveFlow({
-        product: { productId: id, name: name.trim(), priceIdr, category, images: [] },
+        product: { productId: id, name: name.trim(), priceIdr, category, images: [], promoPriceBeforeIdr: promoBeforeIdr },
         scripts: undefined,
         selectedScriptId: undefined,
         jobId: undefined,
@@ -238,6 +263,16 @@ export default function ProdukPage() {
                   <span className="ml-1 font-normal text-emerald-600">— dari link ✓</span>
                 )}
               </p>
+              <div className="mb-2 rounded-xl border border-amber-100 bg-amber-50/70 p-3 text-xs leading-5 text-amber-900">
+                <p className="font-bold">📸 Foto yang bagus = video yang bagus</p>
+                <ul className="mt-1 list-disc space-y-0.5 pl-4">
+                  <li><b>Foto pertama paling penting</b> — jadi patokan utama AI menggambar produkmu di video.</li>
+                  <li>Produk terlihat jelas & memenuhi frame, label menghadap kamera.</li>
+                  <li>Latar bersih & cahaya terang (dekat jendela sudah cukup).</li>
+                  <li>Hindari kolase, teks/watermark tempelan, atau foto buram.</li>
+                  <li>Foto 2–5 (opsional): sudut lain / detail tekstur / produk dipakai.</li>
+                </ul>
+              </div>
               <div className="flex flex-wrap gap-2">
                 {extractedPreviews.map((src, i) => (
                   // eslint-disable-next-line @next/next/no-img-element
@@ -247,7 +282,7 @@ export default function ProdukPage() {
                   // eslint-disable-next-line @next/next/no-img-element
                   <img key={i} src={src} alt={`foto ${i + 1}`} className="h-20 w-20 rounded-xl object-cover" decoding="async" />
                 ))}
-                {photos.length < 5 && !productId && (
+                {extractedPreviews.length + photos.length < 5 && (
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}
@@ -265,6 +300,55 @@ export default function ProdukPage() {
                 hidden
                 onChange={(e) => pickPhotos(e.target.files)}
               />
+            </div>
+
+            <div className="rounded-2xl border border-zinc-200 bg-white">
+              <button
+                type="button"
+                onClick={() => setPromoOpen((o) => !o)}
+                className="flex min-h-[48px] w-full items-center justify-between px-4 text-left"
+              >
+                <span className="text-sm font-bold text-zinc-800">🔥 Promo & Urgency <span className="font-normal text-zinc-400">(opsional)</span></span>
+                <span className="text-zinc-400">{promoOpen ? "−" : "+"}</span>
+              </button>
+              {promoOpen && (
+                <div className="space-y-2 border-t border-zinc-100 p-4">
+                  <p className="text-xs leading-5 text-zinc-500">
+                    Isi kalau produkmu lagi promo beneran — masuk ke skrip, caption, dan badge harga coret di
+                    video. Kosongkan yang tidak ada; urgency palsu malah bikin nggak dipercaya.
+                  </p>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Harga normal sebelum diskon (mis. 120000)"
+                    value={promoBefore}
+                    onChange={(e) => setPromoBefore(e.target.value.replace(/[^\d]/g, ""))}
+                    className="min-h-[48px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 text-sm outline-none focus:border-amber-500"
+                  />
+                  {promoBefore && price && parseInt(promoBefore, 10) > parseInt(price, 10) && (
+                    <p className="text-sm font-semibold text-emerald-700">
+                      = diskon {Math.round((1 - parseInt(price, 10) / parseInt(promoBefore, 10)) * 100)}% ({rupiah(parseInt(promoBefore, 10))} → {rupiah(parseInt(price, 10))})
+                    </p>
+                  )}
+                  <label className="block text-xs font-semibold text-zinc-600">
+                    Promo berakhir kapan? <span className="font-normal text-zinc-400">(lewat tanggal ini, bagian promo otomatis hilang)</span>
+                    <input
+                      type="date"
+                      value={promoEnds}
+                      onChange={(e) => setPromoEnds(e.target.value)}
+                      className="mt-1 min-h-[48px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 text-sm outline-none focus:border-amber-500"
+                    />
+                  </label>
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    placeholder="Stok tersisa (opsional, mis. 12)"
+                    value={promoStock}
+                    onChange={(e) => setPromoStock(e.target.value.replace(/[^\d]/g, ""))}
+                    className="min-h-[48px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 text-sm outline-none focus:border-amber-500"
+                  />
+                </div>
+              )}
             </div>
           </section>
         )}

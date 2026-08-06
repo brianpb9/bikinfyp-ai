@@ -321,8 +321,22 @@ export async function qcTextNotClipped(
       }
     }
     const all = recognised.flatMap((item) => item.words.map((word) => ({ ...word, expected: item.expected, frame: item.frame })));
+    // GLYPH YANG SAMA bisa cocok ke dua ekspektasi berbeda (mis. "120" ada di
+    // caption card DAN di badge promo) dan juga terbaca dua kali dengan
+    // segmentasi berbeda antar pass OCR (mentah "185)" vs threshold "85" di
+    // region yang sama). Kotak yang satu (hampir) BERISI kotak lainnya = satu
+    // region teks fisik yang terbaca ganda, bukan dua overlay saling menimpa —
+    // jangan dihitung tabrakan (kasus nyata 2026-08-06). Tabrakan sungguhan
+    // (dua teks berbeda ditumpuk) menghasilkan overlap parsial, bukan containment.
+    const sameGlyph = (a: OcrWord, b: OcrWord) => {
+      const ix = Math.max(0, Math.min(a.left + a.width, b.left + b.width) - Math.max(a.left, b.left));
+      const iy = Math.max(0, Math.min(a.top + a.height, b.top + b.height) - Math.max(a.top, b.top));
+      const inter = ix * iy;
+      const minArea = Math.min(a.width * a.height, b.width * b.height);
+      return minArea > 0 && inter / minArea > 0.8;
+    };
     for (let i = 0; i < all.length; i++) for (let j = i + 1; j < all.length; j++) {
-      if (all[i].frame === all[j].frame && all[i].expected !== all[j].expected && intersects(all[i], all[j])) {
+      if (all[i].frame === all[j].frame && all[i].expected !== all[j].expected && intersects(all[i], all[j]) && !sameGlyph(all[i], all[j])) {
         return { code: "QC-06", name: "Teks overlay tidak terpotong", status: "fail", detail: `OCR mendeteksi tumpang tindih "${all[i].text}" dan "${all[j].text}".` };
       }
     }

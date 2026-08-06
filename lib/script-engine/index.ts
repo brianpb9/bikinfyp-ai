@@ -10,6 +10,7 @@ import { REGISTERS, type Register } from "./registers";
 import { renderSegmentsForTier, formatHargaNatural, type SegmentDraft, type TemplateCtx } from "./templates";
 import { validateScript, type ValidationResult } from "./validator";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
+import { resolvePromo, promoDeadlineSpokenPhrase, type ActivePromo } from "../promo";
 import { getDb } from "../db";
 
 export interface ProductInput {
@@ -19,6 +20,10 @@ export interface ProductInput {
   category: string;
   /** URL sumber produk (dari link extract) — menentukan istilah keranjang di CTA. */
   sourceUrl?: string | null;
+  /** Add-on Promo & Urgency (lib/promo.ts) — opsional semua. */
+  promoPriceBeforeIdr?: number | null;
+  promoEndsAt?: string | null;
+  promoStockLeft?: number | null;
 }
 
 /** "Keranjang kuning" cuma istilah TikTok Shop — Shopee/Tokopedia/manual pakai
@@ -118,6 +123,37 @@ function buildCtx(product: ProductInput, register: Register): TemplateCtx {
   };
 }
 
+/** Suntik elemen promo ke segmen (add-on 2026-08-06). Tiga elemen, urut prioritas:
+ * 1. harga coret — MENGGANTI frasa harga di demo ("cuma 85 ribu" -> "dari 120
+ *    ribu jadi 85 ribu", +3 kata) supaya jatah kata L-05 tidak jebol,
+ * 2. deadline — klausa relatif TANPA angka di CTA (L-14),
+ * 3. stok — klausa tanpa angka di demo (angka stok hidup di caption/overlay).
+ * Pemanggil mencoba kombinasi dari terlengkap ke kosong dan memakai yang lolos
+ * validator (degradasi diam-diam, tidak pernah memblokir). */
+function applyPromoToSegments(
+  segments: SegmentDraft[],
+  promo: ActivePromo,
+  elements: { strike: boolean; deadline: boolean; stock: boolean }
+): SegmentDraft[] {
+  const harga = formatHargaNatural(promo.priceIdr);
+  const before = formatHargaNatural(promo.beforeIdr);
+  const deadlinePhrase = promo.endsAt ? promoDeadlineSpokenPhrase(promo.endsAt) : null;
+  return segments.map((s) => {
+    let text = s.text;
+    if (elements.strike && s.role === "demo") {
+      if (text.includes(`cuma ${harga}`)) text = text.replace(`cuma ${harga}`, `dari ${before} jadi ${harga}`);
+      else if (text.includes(harga)) text = text.replace(harga, `dari ${before} jadi ${harga}`);
+    }
+    if (elements.stock && promo.stockLeft !== null && s.role === "demo") {
+      text = `${text}, stoknya beneran tinggal dikit loh`;
+    }
+    if (elements.deadline && deadlinePhrase && s.role === "cta") {
+      text = `${text}, ${deadlinePhrase}`;
+    }
+    return { ...s, text };
+  });
+}
+
 function generateOne(
   product: ProductInput,
   register: Register,
@@ -128,20 +164,47 @@ function generateOne(
 ): GeneratedScript {
   const ctx = buildCtx(product, register);
   const cartLabel = cartLabelForUrl(product.sourceUrl);
-  let segments = renderSegmentsForTier(family, ctx, tier, durationSec).map((s) => ({ ...s, text: applyCartLabel(s.text, cartLabel) }));
-  let validation = validateScript(
-    { hook_family: family, register, segments, productName: product.name, priceIdr: product.price_idr, qualityTier: tier, durationSec },
-    "strict"
-  );
+  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec).map((s) => ({ ...s, text: applyCartLabel(s.text, cartLabel) }));
+  const promo = resolvePromo({
+    priceIdr: product.price_idr,
+    promoPriceBeforeIdr: product.promoPriceBeforeIdr,
+    promoEndsAt: product.promoEndsAt,
+    promoStockLeft: product.promoStockLeft,
+  });
+  const validate = (segs: SegmentDraft[]) =>
+    validateScript(
+      {
+        hook_family: family, register, segments: segs, productName: product.name,
+        priceIdr: product.price_idr, promoPriceBeforeIdr: promo?.beforeIdr ?? null,
+        qualityTier: tier, durationSec,
+      },
+      "strict"
+    );
+  // Kombinasi promo dari terlengkap ke kosong — pakai yang pertama lolos validator.
+  let segments = baseSegments;
+  let validation = validate(baseSegments);
+  if (promo) {
+    const combos = [
+      { strike: true, deadline: true, stock: true },
+      { strike: true, deadline: true, stock: false },
+      { strike: true, deadline: false, stock: false },
+    ];
+    for (const combo of combos) {
+      const candidate = applyPromoToSegments(baseSegments, promo, combo);
+      const res = validate(candidate);
+      if (res.passed) {
+        segments = candidate;
+        validation = res;
+        break;
+      }
+    }
+  }
   // Regenerate maks 2x bila gagal (FSD F-02.3). Template kami deterministik, jadi
   // "regenerate" = normalisasi teks; bila tetap gagal, bagian bermasalah ditandai
   // di validation_result dan skrip tetap dikembalikan untuk diperbaiki pengguna.
   for (let attempt = 0; attempt < MAX_REGEN && !validation.passed; attempt++) {
     segments = normalizeSegments(segments);
-    validation = validateScript(
-      { hook_family: family, register, segments, productName: product.name, priceIdr: product.price_idr, qualityTier: tier, durationSec },
-      "strict"
-    );
+    validation = validate(segments);
   }
   const reg = REGISTERS[register];
   return {
@@ -150,7 +213,7 @@ function generateOne(
     register,
     quality_tier: tier,
     segments,
-    caption: applyCartLabel(buildCaption({ produk: product.name, proof: ctx.proof, reg }), cartLabel),
+    caption: applyCartLabel(buildCaption({ produk: product.name, proof: ctx.proof, reg, promo }), cartLabel),
     hashtags: buildHashtags(product.category),
     validation,
   };

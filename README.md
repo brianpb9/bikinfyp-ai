@@ -145,6 +145,16 @@ kami", bukan prediksi/jaminan FYP.
 - Default generation berbasis koefisien: prioritas hook question naik, caption
   hook = 1 kartu statis, 2-shot dipertahankan (jangan tambah cut).
 
+## Add-on Promo & Urgency (2026-08-06)
+
+Kartu collapse opsional di S2 (`lib/promo.ts`): harga normal (coret), tanggal
+promo berakhir, stok tersisa — semua opsional, % dihitung otomatis. Prinsip:
+urgensi hanya dari data user (L-13); angka %/tanggal/stok TIDAK masuk teks
+skrip (L-14) — hidup di overlay badge 2 baris + caption; skrip memakai dua
+harga + frasa waktu relatif ("dari 120 ribu jadi 85 ribu", "promonya cuma
+sampai Jumat ini") dengan degradasi otomatis bila jatah kata L-05 sempit.
+Promo kedaluwarsa di-drop diam-diam saat dipakai, tidak pernah memblokir.
+
 ## Kredit (denominasi RUPIAH)
 
 Saldo = rupiah. Hold sebesar harga tier saat job dibuat → capture saat QC lulus →

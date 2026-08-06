@@ -17,6 +17,7 @@ import { planShots } from "../media/shot-planner";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
 import { buildCaptionCards } from "../media/captions";
+import { resolvePromo, formatPromoOverlayText } from "../promo";
 import { renderCaptionPngs } from "../media/render-captions";
 import { runFf } from "../media/ffmpeg";
 import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "../providers/registry";
@@ -39,6 +40,7 @@ type WorkerRow = {
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
   script_hook_level: string | null;
   product_name: string; product_category: string; product_visual_desc: string | null; product_images: string; product_price_idr: number;
+  promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   product_source_url: string | null;
   creator_category: string | null;
 };
@@ -50,6 +52,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
   try {
     const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level,
       p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url,
+      p.promo_price_before_idr, p.promo_ends_at, p.promo_stock_left,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
@@ -149,6 +152,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const cartLabel = cartLabelForUrl(row.product_source_url);
   const ctaBadgeText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning »" : "Klik Keranjang »";
   const ctaQcText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning" : "Klik Keranjang";
+  // Add-on promo (cek ulang saat render — kedaluwarsa = drop overlay, lihat lib/promo.ts).
+  const promo = resolvePromo({ priceIdr: row.product_price_idr, promoPriceBeforeIdr: row.promo_price_before_idr,
+    promoEndsAt: row.promo_ends_at, promoStockLeft: row.promo_stock_left });
+  const priceOverlayText = promo ? formatPromoOverlayText(promo) : `Cuma ${formatHargaOverlay(row.product_price_idr)}`;
   let outputPath = "";
   let renderParams = { watermark: true as const, watermarkText: AIGC_WATERMARK_TEXT };
   let qc: Awaited<ReturnType<typeof runQc>> | null = null;
@@ -156,7 +163,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     if (!(await jobs.transition(row.id, "COMPOSITING", { worker: "postgres", retry }))) return;
     const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths: video.assets.map((asset) => asset.filePath), mode,
       vo: mode === "vo" ? vo : undefined, captions, musicPath, durationSec: row.duration_s,
-      priceText: `Cuma ${formatHargaOverlay(row.product_price_idr)}`, ctaText: ctaBadgeText,
+      priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,
       demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });
     outputPath = composite.outPath; renderParams = composite.renderParams;
     if (!(await jobs.transition(row.id, "QC_CHECK", { worker: "postgres" }))) return;
@@ -167,8 +174,11 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       overlayTextExpectations: [
         { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: row.duration_s },
         ...(mode === "caption"
-          ? (captions ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec }))
-          : [{ text: `Cuma ${formatHargaOverlay(row.product_price_idr)}`, startSec: demo.start, endSec: demo.end }]),
+          ? [
+              ...(captions ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec })),
+              ...(promo ? [{ text: priceOverlayText, startSec: demo.start, endSec: demo.end }] : []),
+            ]
+          : [{ text: priceOverlayText, startSec: demo.start, endSec: demo.end }]),
         { text: ctaQcText, startSec: cta.start, endSec: cta.end },
       ],
     });

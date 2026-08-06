@@ -11,6 +11,9 @@ export interface ScriptToValidate {
   segments: { role: string; text: string }[];
   productName: string;
   priceIdr: number;
+  /** Harga normal sebelum diskon (add-on promo) — angkanya ikut jadi data produk
+   * yang sah untuk L-14 ("dari 120 ribu jadi 85 ribu"). */
+  promoPriceBeforeIdr?: number | null;
   /** Tier kualitas — memengaruhi L-05 (batas kata) & L-17 (kurung instruksi). Default silent_caption. */
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
   /** Durasi video — L-05 (batas kata) skala proporsional dari basis 15 dtk. Default 15. */
@@ -163,10 +166,14 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   if (urgency)
     push(false, { rule: "L-13", message_id: `Urgensi palsu ("${urgency}") dilarang — pakai urgensi jujur yang bisa dibuktikan.` });
 
-  // L-14: angka/klaim yang tidak ada di data produk
+  // L-14: angka/klaim yang tidak ada di data produk (harga jual + harga normal promo)
   const pricePhrase = formatHargaNatural(script.priceIdr);
   const allowedDigits = new Set(tokens(pricePhrase).filter((t) => /^\d+$/.test(t)));
   allowedDigits.add(String(script.priceIdr));
+  if (script.promoPriceBeforeIdr) {
+    for (const t of tokens(formatHargaNatural(script.promoPriceBeforeIdr))) if (/^\d+$/.test(t)) allowedDigits.add(t);
+    allowedDigits.add(String(script.promoPriceBeforeIdr));
+  }
   const badDigit = toks.find((t) => /^\d+$/.test(t) && !allowedDigits.has(t));
   if (badDigit)
     push(false, { rule: "L-14", message_id: `Ada angka "${badDigit}" yang tidak ada di data produk — klaim harus sesuai data yang kamu kasih.` });

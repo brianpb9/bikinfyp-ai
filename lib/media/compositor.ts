@@ -35,6 +35,10 @@ export interface CompositeInput {
   musicPath?: string; // mode "caption"
   durationSec: number; // target 15
   priceText: string; // overlay harga saat demo (mode vo/embedded)
+  /** Tampilkan juga priceText di mode caption (add-on promo 2026-08-06: badge
+   * harga-coret + % + deadline harus terlihat di tier senyap juga — caption card
+   * hanya memuat teks skrip yang dilarang membawa angka %/tanggal oleh L-14). */
+  priceInCaptionMode?: boolean;
   ctaText: string; // teks badge CTA (pill) saat segmen cta — semua mode
   demoRange: [number, number]; // detik
   ctaRange: [number, number];
@@ -73,6 +77,7 @@ async function renderTextPng(opts: {
     "-font", font,
     "-pointsize", String(opts.pointsize),
     "-fill", opts.fill,
+    "-gravity", "center", // multiline (badge promo 2 baris) rata tengah
   ];
   if (opts.stroke) args.push("-stroke", opts.stroke, "-strokewidth", String(opts.strokeWidth ?? 3));
   args.push(`label:${opts.text}`, opts.outPath);
@@ -150,6 +155,18 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
       );
       cur = next;
     }
+    // Badge promo (opsional): harga coret + % + deadline saat demo, di bawah
+    // area caption card (y 0.68) — posisi sama dengan overlay harga mode vo.
+    if (input.priceInCaptionMode) {
+      const promoPng = path.join(input.workDir, "ov_promo.png");
+      await renderTextPng({ text: input.priceText, outPath: promoPng, pointsize: 52, fill: "#FFD34D", stroke: "rgba(0,0,0,0.9)", strokeWidth: 4 });
+      const pIdx = addPngInput(promoPng);
+      vChain.push(
+        `[${cur}][${pIdx}:v]overlay=x=(W-w)/2:y=H*0.68-h/2:eof_action=repeat:` +
+          `enable='between(t,${input.demoRange[0]},${input.demoRange[1]})'[vpromo]`
+      );
+      cur = "vpromo";
+    }
     // Badge CTA pill ~17% dari bawah (tidak menutupi area keranjang asli TikTok)
     const badgePath = await renderCtaBadge(input.ctaText, input.workDir);
     const bIdx = addPngInput(badgePath);
@@ -168,8 +185,9 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     }
     mapAudio = "[aout]";
   } else if (input.mode === "vo") {
-    // Overlay harga & CTA statis + VO per segmen
-    if (useDrawtext) {
+    // Overlay harga & CTA statis + VO per segmen. Teks harga multiline (badge
+    // promo 2 baris) wajib jalur PNG — drawtext satu baris akan keluar kanvas.
+    if (useDrawtext && !input.priceText.includes("\n")) {
       vChain.push(
         `[${cur}]drawtext=fontfile='${font}':text='${escDrawtext(input.priceText)}':` +
           `fontsize=64:fontcolor=white:borderw=4:bordercolor=black@0.9:` +
@@ -206,8 +224,9 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     aChain.push(`${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=first:normalize=0[aout]`);
     mapAudio = "[aout]";
   } else if (input.mode === "embedded") {
-    // Overlay harga & CTA statis di atas video bersuara
-    if (useDrawtext) {
+    // Overlay harga & CTA statis di atas video bersuara. Multiline (badge promo)
+    // wajib jalur PNG — sama seperti mode vo.
+    if (useDrawtext && !input.priceText.includes("\n")) {
       vChain.push(
         `[${cur}]drawtext=fontfile='${font}':text='${escDrawtext(input.priceText)}':` +
           `fontsize=64:fontcolor=white:borderw=4:bordercolor=black@0.9:` +

@@ -133,6 +133,7 @@ function SkripInner() {
         segments: next,
         productName: product?.name ?? "produk",
         priceIdr: product?.priceIdr ?? 1,
+        promoPriceBeforeIdr: product?.promoPriceBeforeIdr ?? null,
       },
       "light"
     );

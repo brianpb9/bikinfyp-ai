@@ -52,6 +52,10 @@ CREATE TABLE IF NOT EXISTS products (
   category TEXT NOT NULL,
   product_visual_desc TEXT, -- deskripsi visual produk dari user (konsistensi identitas shot)
   images TEXT NOT NULL DEFAULT '[]', -- JSON array path relatif storage
+  -- Add-on Promo & Urgency (opsional semua; lihat lib/promo.ts):
+  promo_price_before_idr INTEGER, -- harga normal sebelum diskon (harga coret)
+  promo_ends_at TEXT,             -- ISO date/datetime; lewat = promo di-drop saat dipakai
+  promo_stock_left INTEGER,       -- stok tersisa (klaim user, urgensi jujur)
   raw_meta TEXT,
   created_at TEXT NOT NULL
 );

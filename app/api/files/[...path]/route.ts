@@ -1,6 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
-import { runFf } from "@/lib/media/ffmpeg";
+import sharp from "sharp";
 import { config } from "@/lib/config";
 import { verifySignedUrl } from "@/lib/signed-url";
 import { mediaStorage } from "@/lib/storage";
@@ -24,6 +24,8 @@ const MIME: Record<string, string> = {
 async function thumbnailFor(relPath: string): Promise<Buffer | null> {
   // Thumbnail hanya cache turunan dari file yang URL-nya sudah lolos HMAC.
   // Ukuran 128px cukup untuk kartu 64×96 dan menghindari unduh foto kamera asli.
+  // Pakai sharp (Node murni) — web service production tidak punya python3+PIL
+  // (pelajaran 2026-08-06 di jalur extract; PIL hanya kontrak container worker).
   const key = Buffer.from(relPath).toString("base64url");
   const dir = path.join(config.storageDir, ".thumbs");
   const output = path.join(dir, `${key}.webp`);
@@ -32,12 +34,12 @@ async function thumbnailFor(relPath: string): Promise<Buffer | null> {
     if (!source) return null;
     await fs.promises.mkdir(dir, { recursive: true });
     if (!fs.existsSync(output)) {
-      await runFf("python3", [
-        "-c",
-        "from PIL import Image, ImageOps; import sys; im=ImageOps.exif_transpose(Image.open(sys.argv[1])); im.thumbnail((128, 128)); im.save(sys.argv[2], 'WEBP', quality=78, method=4)",
-        source,
-        output,
-      ]);
+      const thumb = await sharp(source, { failOn: "error", limitInputPixels: 40_000_000 })
+        .rotate()
+        .resize({ width: 128, height: 128, fit: "inside", withoutEnlargement: true })
+        .webp({ quality: 78, effort: 4 })
+        .toBuffer();
+      fs.writeFileSync(output, thumb);
     }
     return fs.readFileSync(output);
   } catch {
