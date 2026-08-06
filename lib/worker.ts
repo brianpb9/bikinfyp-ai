@@ -246,7 +246,10 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         // critical = teks kepatuhan/konversi (watermark, harga/promo, CTA) —
         // WAJIB terbukti OCR; kartu caption skrip non-kritis (cukup mayoritas).
         overlayTextExpectations: [
-          { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: job.duration_s, critical: true },
+          // Watermark TIDAK critical-OCR (2026-08-06): kehadirannya dijamin QC-08 +
+          // selalu digambar compositor; teks kecil semi-transparan tak andal dibaca
+          // tesseract server (insiden refund palsu job b7d08d14).
+          { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: job.duration_s },
           ...(compositeMode === "caption"
             ? [
                 ...(captionCards ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec })),
