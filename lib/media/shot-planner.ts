@@ -148,10 +148,22 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const isClosing = i === numShots - 1 && numShots >= 3;
     // Framing DI DEPAN prompt (posisi awal = penekanan lebih kuat): hands_only
     // melarang wajah, talking_head justru menekankan wajah terlihat.
-    const framing = format === "hands_only" ? `${HANDS_ONLY_FRAMING}. ` : format === "talking_head" ? `${TALKING_HEAD_FRAMING}. ` : "";
-    // Wajah AI pakai promptSeed (deskripsi wajah/tipologi) sebagai subjek utama,
-    // bukan handsPrompt (yang secara eksplisit hanya deskripsi tangan/lengan).
-    const subject = format === "talking_head" ? input.category.promptSeed : input.category.handsPrompt;
+    // FASHION = FULL BODY (2026-08-07, keputusan Brian): baju/hijab tidak bisa
+    // dinilai dari close-up dada — presenter berdiri, outfit terlihat utuh.
+    const fullBodyFashion = format === "talking_head" && (input.productCategory === "fashion" || input.productCategory === "muslim_fashion");
+    const framing = format === "hands_only"
+      ? `${HANDS_ONLY_FRAMING}. `
+      : fullBodyFashion
+        ? "full body visible head to toe, presenter standing and showing the whole outfit like a mirror-check try-on video, " +
+          "phone propped vertical framing, natural phone camera look, soft natural indoor daylight, " +
+          "muted authentic colors, candid everyday vibe in a lived-in Indonesian home. "
+        : format === "talking_head" ? `${TALKING_HEAD_FRAMING}. ` : "";
+    // Wajah AI pakai promptSeed (deskripsi wajah/tipologi) + deliveryPrompt
+    // (gaya pembawaan per kategori — genz energik, hijaber kalem anggun, ibu
+    // menenangkan) sebagai subjek utama, bukan handsPrompt.
+    const subject = format === "talking_head"
+      ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
+      : input.category.handsPrompt;
     const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
     const beat =
       format === "talking_head"

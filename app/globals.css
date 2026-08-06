@@ -1,3 +1,23 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/* Juice tombol global (Brian 2026-08-07: "tekan tombol ga satisfying").
+   Semua tombol & link-tombol: press-scale kenyal + hilangkan flash abu-abu
+   default Android. Utility Tailwind `active:scale-*` per-komponen tetap menang
+   (layer utilities > base), ini baseline untuk semua yang belum punya. */
+@layer base {
+  button,
+  [role="button"],
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  button,
+  [role="button"] {
+    transition: transform 120ms cubic-bezier(0.2, 0.8, 0.4, 1);
+  }
+  button:active:not(:disabled),
+  [role="button"]:active {
+    transform: scale(0.96);
+  }
+}

@@ -41,6 +41,8 @@ function KreditInner() {
   const [busy, setBusy] = useState<string | null>(null);
   const [pendingOrder, setPendingOrder] = useState<string | null>(null);
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
+  // Riwayat: 5 teratas saja, sisanya di balik "Lihat selengkapnya" (Brian 2026-08-07).
+  const [showAllLedger, setShowAllLedger] = useState(false);
   const checkoutLock = useRef(false);
 
   async function refresh() {
@@ -213,17 +215,28 @@ function KreditInner() {
         {ledger.length === 0 ? (
           <p className="text-sm text-zinc-500">Belum ada riwayat.</p>
         ) : (
-          ledger.map((l) => (
-            <div key={l.id} className="flex items-center justify-between border-b border-zinc-100 py-3 text-sm last:border-0">
-              <span>
-                {LEDGER_LABEL[l.type] ?? l.type}
-                <span className="block text-xs text-zinc-400">{relTime(l.created_at)}</span>
-              </span>
-              <span className={`font-bold ${l.delta > 0 ? "text-green-600" : l.delta < 0 ? "text-zinc-800" : "text-zinc-400"}`}>
-                {l.delta > 0 ? `+${rupiah(l.delta)}` : l.delta === 0 ? "—" : `−${rupiah(Math.abs(l.delta))}`}
-              </span>
-            </div>
-          ))
+          <>
+            {(showAllLedger ? ledger : ledger.slice(0, 5)).map((l) => (
+              <div key={l.id} className="flex items-center justify-between border-b border-zinc-100 py-3 text-sm last:border-0">
+                <span>
+                  {LEDGER_LABEL[l.type] ?? l.type}
+                  <span className="block text-xs text-zinc-400">{relTime(l.created_at)}</span>
+                </span>
+                <span className={`font-bold ${l.delta > 0 ? "text-green-600" : l.delta < 0 ? "text-zinc-800" : "text-zinc-400"}`}>
+                  {l.delta > 0 ? `+${rupiah(l.delta)}` : l.delta === 0 ? "—" : `−${rupiah(Math.abs(l.delta))}`}
+                </span>
+              </div>
+            ))}
+            {!showAllLedger && ledger.length > 5 && (
+              <button
+                type="button"
+                onClick={() => setShowAllLedger(true)}
+                className="flex min-h-[44px] w-full items-center justify-center rounded-2xl border border-zinc-200 text-sm font-semibold text-zinc-600 active:bg-zinc-50"
+              >
+                Lihat selengkapnya ({ledger.length - 5} lagi)
+              </button>
+            )}
+          </>
         )}
       </section>
     </main>

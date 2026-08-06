@@ -19,6 +19,12 @@ export interface CreatorCategory {
   promptSeed: string;
   /** Prompt khusus hands-only: tangan/kulit/wardrobe. */
   handsPrompt: string;
+  /**
+   * Gaya PEMBAWAAN saat bicara ke kamera (2026-08-07, permintaan Brian:
+   * tiap kategori harus terasa beda) — energi, gestur, ritme. Dipakai
+   * shot-planner untuk format talking_head.
+   */
+  deliveryPrompt: string;
   negativePrompt: string;
 }
 
@@ -35,6 +41,8 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "Indonesian hijabi beauty influencer, modern soft hijab framing the face, luminous medium warm skin (sawo matang), soft glam modest makeup, defined brows, warm smile, clean UGC portrait, pastel background",
     handsPrompt:
       "close-up of a young Indonesian hijabi woman's hands with warm medium skin tone, soft pastel hijab sleeve visible at wrist, modest neat nails, holding the product naturally over a clean Indonesian home table, phone camera look, natural daylight",
+    deliveryPrompt:
+      "graceful calm delivery, soft gentle hand gestures, serene warm smile, unhurried elegant pace",
     negativePrompt: NEG,
   },
   {
@@ -47,6 +55,8 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "native Indonesian woman, warm medium brown skin (sawo matang), soft full oval face, expressive dark eyes, gentle rounded nose tip, natural full lips, thick dark hair, friendly warm presence, everyday beauty, natural daylight",
     handsPrompt:
       "close-up of a native Indonesian woman's hands with warm sawo matang skin tone, casual sleeve, natural nails, holding the product naturally, Indonesian home background, phone camera look",
+    deliveryPrompt:
+      "warm neighborly delivery like chatting with a close friend, easy genuine laugh, relaxed pace",
     negativePrompt: NEG,
   },
   {
@@ -59,6 +69,8 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "Chinese-Indonesian woman, fair warm ivory skin, soft V-shaped face, almond eyes, delicate nose bridge, glossy straight black hair, K-beauty inspired natural makeup, youthful influencer look, phone selfie lighting",
     handsPrompt:
       "close-up of a Chinese-Indonesian woman's hands with fair warm ivory skin tone, minimal pastel sleeve, neat glossy nails, holding a skincare product, bright clean background, phone camera look",
+    deliveryPrompt:
+      "polished beauty-influencer delivery, light confident energy, playful expressive eyes, snappy but smooth pace",
     negativePrompt: NEG,
   },
   {
@@ -71,6 +83,8 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "Indonesian Gen-Z girl, youthful baby face, dewy skin, soft lip tint, trendy dark hair with soft bangs, playful expression, TikTok selfie angle, natural phone camera, candid",
     handsPrompt:
       "close-up of an Indonesian Gen-Z woman's hands with light-medium warm skin, trendy rings, playful casual sleeve, holding the product in a bedroom with string lights, phone camera look",
+    deliveryPrompt:
+      "high-energy playful delivery, quick expressive reactions, animated hand gestures, fast fun TikTok pace",
     negativePrompt: NEG,
   },
   {
@@ -96,6 +110,8 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "close-up of an Indonesian mother's hands with warm medium skin tone, wearing a soft floral home-dress sleeve, " +
       "resting on a wooden kitchen counter with blurred kitchen tiles and a warm morning window light visible behind, " +
       "holding the product naturally, phone camera look",
+    deliveryPrompt:
+      "reassuring motherly delivery, practical no-nonsense warmth, nodding while explaining, moderate calm pace",
     negativePrompt: NEG,
   },
   {
@@ -121,6 +137,8 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "close-up of an Indonesian woman's hands with warm medium skin tone, wearing a traditional brown-and-cream " +
       "batik-pattern sleeve with classic parang motif, resting on a wooden home table with a woven rattan placemat " +
       "and warm afternoon window light visible behind, holding the product naturally",
+    deliveryPrompt:
+      "humble down-to-earth delivery, shy genuine smile, polite unhurried gestures",
     negativePrompt: NEG,
   },
   {
@@ -135,6 +153,8 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "native Indonesian man, light-to-medium brown skin (sawo matang), soft oval to gently square face, dark almond eyes, natural thick brows, short black hair neat casual style, friendly approachable everyday look, natural light",
     handsPrompt:
       "close-up of an Indonesian man's hands with light-to-medium brown skin tone (sawo matang), casual t-shirt or hoodie sleeve, natural unpolished nails, holding the product in a relatable everyday Indonesian home/desk setting, phone camera look, natural daylight",
+    deliveryPrompt:
+      "laid-back confident delivery, minimal casual gestures, slight grin, steady relaxed pace",
     negativePrompt: NEG,
   },
 ];

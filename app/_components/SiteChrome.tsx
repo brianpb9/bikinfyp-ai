@@ -1,8 +1,24 @@
 "use client";
 
 import Link from "next/link";
+import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { CreditChip } from "./CreditChip";
+
+/** Getar haptic halus tiap tap tombol/link (Android Chrome; iOS mengabaikan
+ * navigator.vibrate tanpa error). Bagian dari juice tombol — Brian 2026-08-07:
+ * "tekan tombol ga satisfying". Dipasang global sekali di SiteChrome. */
+function useTapHaptics() {
+  useEffect(() => {
+    const onDown = (e: PointerEvent) => {
+      if ((e.target as Element | null)?.closest?.("button, a, [role=button]")) {
+        try { navigator.vibrate?.(8); } catch { /* browser tanpa izin vibrate */ }
+      }
+    };
+    document.addEventListener("pointerdown", onDown, { passive: true });
+    return () => document.removeEventListener("pointerdown", onDown);
+  }, []);
+}
 
 const NO_CHROME = ["/onboarding", "/coba", "/mulai"]; // halaman anon (magic moment & quiz iklan) — chip kredit & nav menyesatkan
 const NO_NAV_PREFIX = ["/bikin", "/onboarding"];
@@ -12,6 +28,7 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const hideAll = NO_CHROME.some((p) => pathname.startsWith(p));
   const hideNav = NO_NAV_PREFIX.some((p) => pathname.startsWith(p));
+  useTapHaptics();
 
   if (hideAll) return <>{children}</>;
 
