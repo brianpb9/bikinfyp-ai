@@ -13,11 +13,13 @@ interface LedgerItem {
   created_at: string;
 }
 
+// Nama paket berbasis manfaat + contoh visual per tier (2026-08-06: tester
+// bingung "Senyap"; target user emak-emak — tunjukkan, jangan jelaskan).
 const PACKAGES = [
-  { id: "senyap5", name: "5× Senyap+Teks", price: 25_000, perVideo: "Rp5rb/video", tag: null },
-  { id: "senyap10", name: "10× Senyap+Teks", price: 50_000, perVideo: "Rp5rb/video", tag: "Paling laris" },
-  { id: "hq10", name: "10× High Quality", price: 120_000, perVideo: "Rp12rb/video", tag: null },
-  { id: "super5", name: "5× Super HQ", price: 245_000, perVideo: "Rp49rb/video", tag: null },
+  { id: "senyap5", name: "5× Teks + Musik", price: 25_000, perVideo: "Rp5rb/video", tag: null, badge: "🔇 teks gede + musik", voiced: false },
+  { id: "senyap10", name: "10× Teks + Musik", price: 50_000, perVideo: "Rp5rb/video", tag: "Paling laris", badge: "🔇 teks gede + musik", voiced: false },
+  { id: "hq10", name: "10× AI Bersuara", price: 120_000, perVideo: "Rp12rb/video", tag: null, badge: "🎙️ AI-nya ngomong", voiced: true },
+  { id: "super5", name: "5× AI Bersuara Pro", price: 245_000, perVideo: "Rp49rb/video", tag: null, badge: "🎙️ suara + gambar tertajam", voiced: true },
 ];
 
 const LEDGER_LABEL: Record<string, string> = {
@@ -126,7 +128,7 @@ function KreditInner() {
           {balance === null ? "…" : rupiah(balance)}
         </p>
         <p className="mt-1 text-amber-100">
-          = {nSenyap ?? "…"} video Senyap+Teks · {nHq ?? "…"} video High Quality
+          = {nSenyap ?? "…"} video Teks+Musik · {nHq ?? "…"} video AI Bersuara
         </p>
       </div>
 
@@ -138,20 +140,31 @@ function KreditInner() {
             type="button"
             onClick={() => topup(p.id)}
             disabled={busy !== null}
-            className={`relative w-full rounded-2xl border-2 border-zinc-200 bg-white pb-4 pl-4 pr-4 text-left shadow-sm transition-transform active:scale-[0.99] active:bg-zinc-50 disabled:opacity-60 ${p.tag ? "pt-9" : "pt-4"}`}
+            className={`relative w-full rounded-2xl border-2 border-zinc-200 bg-white p-3 text-left shadow-sm transition-transform active:scale-[0.99] active:bg-zinc-50 disabled:opacity-60`}
           >
             {p.tag && (
-              <span className="absolute right-4 top-2 rounded-full bg-amber-500 px-3 py-0.5 text-xs font-bold text-white shadow-sm">
+              <span className="absolute right-3 top-2 rounded-full bg-amber-500 px-3 py-0.5 text-xs font-bold text-white shadow-sm">
                 {p.tag}
               </span>
             )}
-            <span className="flex items-center justify-between">
-              <span className="font-bold">{p.name}</span>
-              <span className="font-bold">{rupiah(p.price)}</span>
+            <span className="flex items-center gap-3">
+              {/* Contoh nyata hasil tier — "tunjukkan, jangan jelaskan" */}
+              <video src="/previews/format-tangan.mp4" autoPlay muted loop playsInline className="h-24 w-14 shrink-0 rounded-xl object-cover ring-1 ring-black/5" />
+              <span className="min-w-0 flex-1">
+                <span className="flex items-center justify-between gap-2">
+                  <span className="font-bold">{p.name}</span>
+                  <span className="shrink-0 font-bold">{rupiah(p.price)}</span>
+                </span>
+                <span className="mt-0.5 block text-xs font-semibold text-amber-700">{p.badge}</span>
+                <span className="block text-sm text-zinc-500">{p.perVideo} · {busy === p.id ? "memproses..." : "tap untuk beli"}</span>
+              </span>
             </span>
-            <span className="text-sm text-zinc-500">{p.perVideo} · {busy === p.id ? "memproses..." : "tap untuk beli"}</span>
           </button>
         ))}
+        <p className="text-xs leading-5 text-zinc-500">
+          Semua paket: AI memperagakan produkmu seperti contoh di atas. Bedanya: <b>Teks + Musik</b> tanpa
+          suara ngomong (teks gede + musik), <b>AI Bersuara</b> ada suara AI natural yang menjelaskan produk.
+        </p>
         {msg && <p className="rounded-2xl bg-green-50 p-3 text-center text-sm font-semibold text-green-700">{msg}</p>}
         <ErrorText message={error} />
         {pendingOrder && orderStatus !== "paid" && (

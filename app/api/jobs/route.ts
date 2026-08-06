@@ -114,7 +114,7 @@ export async function POST(req: Request) {
     // tidak masuk akal (dan QC-04 bakal gagal keras karena video benar-benar bisu).
     if ((format === "talking_head" || format === "vo_broll") && tier === "silent_caption")
       throw ERR.BAD_REQUEST(
-        "Wajah AI dan VO + Foto butuh suara — pilih tier High Quality atau Super HQ, bukan Senyap + Teks.",
+        "Wajah AI dan VO + Foto butuh suara — pilih tier AI Bersuara atau AI Bersuara Pro, bukan Teks + Musik.",
         "talking_head/vo_broll require an audio-bearing quality tier."
       );
     if (script.quality_tier !== tier)

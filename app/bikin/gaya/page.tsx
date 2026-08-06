@@ -199,10 +199,10 @@ export default function GayaPage() {
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih paket</p><h2 className="font-display text-xl font-bold">Kualitas video</h2></div>
           {FORMATS.find((f) => f.id === format)?.needsAudio && (
             <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {FORMATS.find((f) => f.id === format)?.label} butuh suara — Senyap + Teks disembunyikan.
+              {FORMATS.find((f) => f.id === format)?.label} butuh suara — Teks + Musik disembunyikan.
             </p>
           )}
-          {(tiers.length ? tiers : [{ id: "silent_caption", name: "Senyap + Teks", note: "Video bisu + caption + musik", tag: "Paling hemat", price_idr: 5000 }])
+          {(tiers.length ? tiers : [{ id: "silent_caption", name: "Teks + Musik", note: "Teks gede + musik, tanpa suara ngomong", tag: "Paling hemat", price_idr: 5000 }])
             .filter((t) => !(FORMATS.find((f) => f.id === format)?.needsAudio && t.id === "silent_caption"))
             .map((t) => (
             <button
@@ -265,7 +265,7 @@ export default function GayaPage() {
 
             {tier === "silent_caption" ? (
               <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-                🔇 Senyap + Teks memakai caption tersinkron dan musik latar; pilihan panggilan tidak dipakai.
+                🔇 Teks + Musik memakai caption tersinkron dan musik latar; pilihan panggilan tidak dipakai.
               </div>
             ) : (
               <section className="space-y-3">

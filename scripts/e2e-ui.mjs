@@ -56,7 +56,7 @@ try {
   await page.getByText("＋ BIKIN VIDEO").click();
   await page.waitForURL("**/bikin/jenis");
   await shot("s1b-jenis");
-  await page.getByRole("link", { name: /Video Jualan Produk/ }).click();
+  await page.getByRole("link", { name: /AI UGC Affiliate/ }).click();
   await page.waitForURL("**/bikin/produk");
   await page.getByText("Isi manual aja →").click();
   await page.getByPlaceholder(/Nama produk/).fill("Serum Glow Bright");

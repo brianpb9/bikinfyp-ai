@@ -5,10 +5,12 @@ import { config } from "@/lib/config";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Nama tier berbasis MANFAAT (rename 2026-08-06: tester bingung istilah
+// "Senyap" — nama harus menjelaskan hasil, bukan teknologi; id internal tetap).
 const TIER_UI = [
-  { id: "silent_caption", name: "Senyap + Teks", note: "Video bisu + caption tersinkron + musik", tag: "Paling hemat" },
-  { id: "high_quality", name: "High Quality", note: "Dengan suara AI (audio bawaan model)", tag: null },
-  { id: "super_hq", name: "Super HQ", note: "Suara + kualitas gambar tertinggi", tag: null },
+  { id: "silent_caption", name: "Teks + Musik", note: "AI peragakan produk + teks gede & musik — gaya paling rame di FYP (tanpa suara ngomong)", tag: "Paling hemat" },
+  { id: "high_quality", name: "AI Bersuara", note: "Sama, PLUS AI-nya ngomong pakai suara natural", tag: null },
+  { id: "super_hq", name: "AI Bersuara Pro", note: "Suara + kualitas gambar paling tajam", tag: null },
 ];
 
 // GET /api/meta — konfigurasi publik untuk UI (estimasi waktu + harga tier, P6).

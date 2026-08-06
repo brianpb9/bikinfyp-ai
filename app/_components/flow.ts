@@ -48,9 +48,9 @@ export interface FlowState {
 }
 
 export const TIER_LABELS: Record<string, string> = {
-  silent_caption: "Senyap + Teks",
-  high_quality: "High Quality",
-  super_hq: "Super HQ",
+  silent_caption: "Teks + Musik",
+  high_quality: "AI Bersuara",
+  super_hq: "AI Bersuara Pro",
 };
 
 const KEY = "racun.flow";
