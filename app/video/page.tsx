@@ -97,9 +97,14 @@ const STATE_LABEL: Record<string, string> = {
   QUEUED: "Antre",
 };
 
+const FAILED_STATES = new Set(["FAILED", "REFUNDED"]);
+
 // S8 — RIWAYAT VIDEO
 export default function VideoPage() {
   const [jobs, setJobs] = useState<JobItem[] | null>(null);
+  // Tab Berhasil/Gagal (permintaan Brian 2026-08-07): video gagal tidak boleh
+  // menumpuk di daftar utama — dipisah ke tab sendiri.
+  const [tab, setTab] = useState<"ok" | "failed">("ok");
 
   useEffect(() => {
     apiFetch<{ jobs: JobItem[] }>("/api/jobs")
@@ -132,16 +137,62 @@ export default function VideoPage() {
           </div>
           <div className="px-6 pb-6"><PrimaryButton href="/bikin/produk">Bikin video pertama</PrimaryButton></div>
         </div>
-      ) : (
+      ) : (() => {
+        const processing = jobs.filter((j) => !FAILED_STATES.has(j.state) && j.state !== "READY");
+        const ok = jobs.filter((j) => j.state === "READY");
+        const failed = jobs.filter((j) => FAILED_STATES.has(j.state));
+        const shown = tab === "ok" ? ok : failed;
+        return (
         <>
-          {jobs.length === 1 && (
+          {/* Job yang masih diproses selalu tampil di atas — dan penegasan
+              bahwa menutup HP tidak menghentikan pembuatan video (server-side). */}
+          {processing.map((j) => (
+            <div key={j.id} className="flex items-center gap-3 rounded-3xl border border-amber-200 bg-amber-50/70 p-3 shadow-sm">
+              <span className="inline-block h-5 w-5 shrink-0 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" aria-hidden="true" />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold">{j.product_name}</p>
+                <p className="text-xs text-amber-800">Sedang dibikin di server — boleh tutup aplikasi, hasilnya muncul di sini.</p>
+              </div>
+            </div>
+          ))}
+          <div className="grid grid-cols-2 gap-2 rounded-2xl bg-zinc-100 p-1" role="tablist">
+            {([["ok", `Berhasil (${ok.length})`], ["failed", `Gagal (${failed.length})`]] as const).map(([key, label]) => (
+              <button
+                key={key}
+                type="button"
+                role="tab"
+                aria-selected={tab === key}
+                onClick={() => setTab(key)}
+                className={`min-h-[44px] rounded-xl text-sm font-bold transition-colors ${tab === key ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          {tab === "ok" && ok.some((j) => typeof j.fyp_score === "number") && (
+            <p className="rounded-2xl bg-zinc-50 p-3 text-xs leading-5 text-zinc-500">
+              <b>Skor skrip</b> menilai rencana kontennya (hook, struktur, timing) dibanding
+              pola video yang terbukti menang — bukan kualitas gambar videonya.
+            </p>
+          )}
+          {tab === "failed" && failed.length > 0 && (
+            <p className="rounded-2xl bg-zinc-50 p-3 text-xs leading-5 text-zinc-500">
+              Kredit video gagal otomatis dikembalikan. Tap “Duplikat & edit” untuk coba lagi dengan skrip yang sama.
+            </p>
+          )}
+          {shown.length === 0 && (
+            <p className="rounded-3xl border border-zinc-100 bg-white p-6 text-center text-sm text-zinc-500 shadow-sm">
+              {tab === "ok" ? "Belum ada video berhasil." : "Tidak ada video gagal. 👍"}
+            </p>
+          )}
+          {tab === "ok" && ok.length === 1 && processing.length === 0 && (
             <aside className="rounded-3xl border border-amber-200 bg-amber-50 p-4 shadow-sm">
               <p className="text-sm font-bold text-amber-900">Koleksimu baru dimulai ✨</p>
               <p className="mt-1 text-sm leading-5 text-amber-800">Coba satu gaya lain agar punya video untuk dibandingkan dan diposting.</p>
               <Link href="/bikin/produk" className="mt-3 inline-flex min-h-[44px] items-center rounded-xl bg-amber-500 px-4 text-sm font-bold text-white shadow-sm active:bg-amber-600">Bikin video lagi</Link>
             </aside>
           )}
-          {jobs.map((j) => (
+          {shown.map((j) => (
           <div key={j.id} className="flex gap-3 rounded-3xl border border-zinc-200 bg-white p-3 shadow-sm transition-transform active:scale-[0.99]">
             <div className="h-24 w-16 shrink-0 overflow-hidden rounded-2xl bg-zinc-200 ring-1 ring-black/5">
               {j.thumb_url ? (
@@ -155,8 +206,11 @@ export default function VideoPage() {
               <p className="truncate font-bold">{j.product_name}</p>
               <p className="text-xs text-zinc-500">
                 {relTime(j.created_at)} · {STATE_LABEL[j.state] ?? "Sedang dibikin"}
-                {typeof j.fyp_score === "number" && (
-                  <span className="ml-1 rounded-full bg-amber-500/10 px-2 py-0.5 font-bold text-amber-700">Skor FYP {j.fyp_score}</span>
+                {/* Skor menilai RENCANA konten (skrip/struktur vs pola video
+                    pemenang), bukan kualitas render — di video gagal disembunyikan
+                    dan labelnya dibuat jujur (insiden "video sampah skor 97"). */}
+                {typeof j.fyp_score === "number" && j.state === "READY" && (
+                  <span className="ml-1 rounded-full bg-amber-500/10 px-2 py-0.5 font-bold text-amber-700" title="Menilai skrip & struktur konten — bukan kualitas gambar">Skor skrip {j.fyp_score}</span>
                 )}
               </p>
               <div className="flex gap-2 pt-1">
@@ -183,7 +237,8 @@ export default function VideoPage() {
           </div>
           ))}
         </>
-      )}
+        );
+      })()}
     </main>
   );
 }

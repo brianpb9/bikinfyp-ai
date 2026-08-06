@@ -197,6 +197,13 @@ test("QC-06: OCR frame nyata meluluskan overlay aman dan menolak baris terpotong
   const clipped = await qcTextNotClipped(makeOcrVideo(dir, true), dir, expected);
   assert.equal(clipped.status, "fail", clipped.detail);
   assert.match(clipped.detail ?? "", /menyentuh tepi kanvas/);
+  // edgeExempt (watermark AIGC, by design 24px dari tepi): line-box yang
+  // menyentuh kanvas TIDAK menjatuhkan video (refund palsu job ec925061) —
+  // kehadirannya tetap diverifikasi, hanya analisis tepinya yang dikecualikan.
+  const exempt = await qcTextNotClipped(makeOcrVideo(dir, true), dir, [
+    { ...expected[0], edgeExempt: true },
+  ]);
+  assert.equal(exempt.status, "pass", exempt.detail);
 });
 
 test("durasi 30 dtk: tetap 2 shot, masing-masing 15 dtk (batas BytePlus 2-15 dtk/klip)", () => {

@@ -188,7 +188,8 @@ function ProsesInner() {
           </p>
         )}
         <p className="rounded-2xl border border-zinc-100 bg-white p-4 text-center text-sm leading-6 text-zinc-600 shadow-sm">
-          Kamu boleh tutup halaman ini — nanti kami kabarin.
+          📱 Boleh tutup aplikasi atau HP — video tetap dibikin di server kami.
+          Hasilnya muncul di tab <b>Video</b>.
         </p>
         <SecondaryButton href="/bikin/produk">Bikin Video Lain</SecondaryButton>
       </div>

@@ -180,7 +180,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, priceIdr: row.product_price_idr,
       renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format,
       overlayTextExpectations: [
-        { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: row.duration_s }, // non-critical: QC-08 yang menjamin watermark
+        // non-critical: QC-08 yang menjamin watermark; edgeExempt: dia memang
+        // tinggal 24px dari tepi — line-box noise pernah bikin refund palsu (ec925061)
+        { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: row.duration_s, edgeExempt: true },
         ...(mode === "caption"
           ? [
               ...(captions ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec })),

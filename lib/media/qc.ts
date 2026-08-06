@@ -92,7 +92,7 @@ export interface QcInput {
    * Ini terpisah dari `finalTexts`: teks skrip bisa terdengar tanpa selalu
    * menjadi overlay pada mode embedded/VO.
    */
-  overlayTextExpectations?: { text: string; startSec: number; endSec: number; critical?: boolean }[];
+  overlayTextExpectations?: { text: string; startSec: number; endSec: number; critical?: boolean; edgeExempt?: boolean }[];
 }
 
 /** Python dengan OpenCV: venv proyek bila ada, selain python3 sistem. */
@@ -263,7 +263,7 @@ function intersects(a: OcrWord, b: OcrWord): boolean {
 export async function qcTextNotClipped(
   filePath: string,
   _workDir: string,
-  expectations: { text: string; startSec: number; endSec: number; critical?: boolean }[],
+  expectations: { text: string; startSec: number; endSec: number; critical?: boolean; edgeExempt?: boolean }[],
 ): Promise<QcCheck> {
   if (expectations.length === 0) return { code: "QC-06", name: "Teks overlay tidak terpotong", status: "skip", detail: "Tidak ada overlay bertimeline untuk diperiksa OCR." };
   // Homebrew Tesseract/Leptonica on macOS can reject media files under an
@@ -333,7 +333,16 @@ export async function qcTextNotClipped(
             : `OCR hanya membuktikan ${Math.round(provenRatio * 100)}% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus.`,
       };
     }
-    for (const item of recognised) {
+    // Overlay yang BY DESIGN tinggal di margin tepi (watermark AIGC, 24px dari
+    // kanan-bawah) dikecualikan dari analisis tepi: pada psm 11 di footage
+    // ramai, tesseract menggabungkan noise pinggir frame ke "baris" watermark
+    // sehingga line-box menyentuh kanvas walau teksnya utuh (kasus nyata
+    // 2026-08-07 job ec925061: "Dibuat" -> refund palsu). Kehadiran watermark
+    // dijamin QC-08 + penempatan deterministik compositor; overlay lain
+    // (caption/harga/CTA) dirender PIL terpusat dengan margin >=60px sehingga
+    // cek tepi tetap bermakna penuh untuk mereka.
+    const edgeExemptTexts = new Set(expectations.filter((e) => e.edgeExempt).map((e) => e.text));
+    for (const item of recognised.filter((r) => !edgeExemptTexts.has(r.expected))) {
       for (const word of item.words) {
         const line = item.lines.find((candidate) => candidate.key === word.line);
         // Use line geometry: OCR often drops the final letters of clipped text,
