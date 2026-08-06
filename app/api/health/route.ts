@@ -1,9 +1,43 @@
+import fs from "node:fs";
+import path from "node:path";
+import pg from "pg";
 import { config } from "@/lib/config";
 import { assertQueueConfiguration } from "@/lib/job-queue";
 import { jobIntakeMode } from "@/lib/job-intake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
+
+// Deteksi migrasi tertinggal (pelajaran insiden 2026-08-06 malam: deploy kode
+// ber-skema-baru + migrasi production yang manual = 500 massal TANPA alarm;
+// health tetap "ok" karena tidak pernah membandingkan skema). Cek di-cache 5
+// menit; hasilnya DIEKSPOS di payload + console.error, tapi TIDAK membuat 503 —
+// health-fail bikin Render restart-loop dan justru memperparah insiden.
+let migrationCache: { at: number; pending: string[] } | null = null;
+async function pendingMigrations(): Promise<string[]> {
+  if (config.dbRuntime !== "postgres" || !config.databaseUrl) return [];
+  if (migrationCache && Date.now() - migrationCache.at < 5 * 60 * 1000) return migrationCache.pending;
+  const dir = path.join(process.cwd(), "migrations", "postgres");
+  const files = fs.readdirSync(dir).filter((n) => /^\d{4}_[a-z0-9_]+\.sql$/.test(n)).sort();
+  const pool = new pg.Pool({ connectionString: config.databaseUrl });
+  try {
+    const applied = new Set(
+      (await pool.query<{ version: string }>("SELECT version FROM schema_migrations")).rows.map((r) => r.version)
+    );
+    const pending = files.filter((f) => !applied.has(f.replace(/\.sql$/, "")));
+    migrationCache = { at: Date.now(), pending };
+    if (pending.length > 0)
+      console.error(`[health] MIGRASI TERTINGGAL (${pending.length}): ${pending.join(", ")} — jalankan runbook migrate:postgres-production.`);
+    return pending;
+  } catch (e) {
+    // Tabel schema_migrations belum ada = SEMUA file pending.
+    console.error("[health] gagal membaca schema_migrations:", e);
+    migrationCache = { at: Date.now(), pending: files };
+    return files;
+  } finally {
+    await pool.end();
+  }
+}
 
 /**
  * Render liveness/readiness endpoint.  It deliberately exposes no secrets and
@@ -22,7 +56,11 @@ export async function GET() {
     if (process.env.RACUN_DEPLOY_ENV === "production" && config.allowDevLogin) {
       throw new Error("ALLOW_DEV_LOGIN wajib 0 pada deployment production.");
     }
-    return Response.json({ ok: true, intake: jobIntakeMode() }, { status: 200 });
+    const pending = await pendingMigrations().catch(() => []);
+    return Response.json(
+      { ok: true, intake: jobIntakeMode(), ...(pending.length > 0 ? { migrations_pending: pending } : {}) },
+      { status: 200 }
+    );
   } catch (error) {
     console.error("[health] configuration failure", error);
     return Response.json({ ok: false, code: "HEALTH_CONFIGURATION_FAILED" }, { status: 503 });

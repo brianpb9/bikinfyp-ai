@@ -158,6 +158,58 @@ export async function fetchProductHtml(url: string): Promise<{ ok: boolean; stat
   }
 }
 
+/** Ambil URL gambar dari blok JSON-LD (schema.org Product.image: string | string[]
+ * | ImageObject | campuran). Toleran terhadap JSON rusak — blok yang gagal
+ * di-parse dilewati. */
+export function parseJsonLdImages(html: string): string[] {
+  const out: string[] = [];
+  const blocks = html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi);
+  const pushImage = (val: unknown) => {
+    if (typeof val === "string" && /^https?:\/\//.test(val)) out.push(val);
+    else if (Array.isArray(val)) val.forEach(pushImage);
+    else if (val && typeof val === "object" && "url" in val) pushImage((val as { url: unknown }).url);
+  };
+  const walk = (node: unknown) => {
+    if (!node || typeof node !== "object") return;
+    if (Array.isArray(node)) return node.forEach(walk);
+    const obj = node as Record<string, unknown>;
+    if ("image" in obj) pushImage(obj.image);
+    if ("@graph" in obj) walk(obj["@graph"]);
+  };
+  for (const m of blocks) {
+    try {
+      walk(JSON.parse(m[1]));
+    } catch {
+      /* blok JSON-LD rusak — lewati */
+    }
+  }
+  return out;
+}
+
+/** Fallback foto: pindai URL gambar produk yang tertanam di state JSON halaman
+ * (halaman lite marketplace sering TANPA JSON-LD — kasus nyata tk.tokopedia.com
+ * 2026-08-06: 0 blok ld+json tapi ~9 foto produk sebagai signed URL bergaya
+ * Bytedance `~tplv`). Unescape dulu (\/ dan & — signed URL butuh query
+ * signature utuh), lalu dedup per content-hash (tiap foto muncul berkali-kali
+ * sebagai varian resize/white-p di mirror p16/p19). URL rusak/terpotong tidak
+ * berbahaya: downloadImages memverifikasi via decoder sharp sebelum dipakai. */
+export function parseInlineProductImages(html: string): string[] {
+  const unescaped = html.replace(/\\\//g, "/").replace(/\\u002F/gi, "/").replace(/\\u0026/gi, "&");
+  const matches = unescaped.match(/https:\/\/[a-z0-9.-]+\/[^"'\s<>\\]+~tplv[^"'\s<>\\]*/g) ?? [];
+  const byHash = new Map<string, string>();
+  for (const url of matches) {
+    // Wajib punya segmen content-hash hex — menyaring aset non-produk yang
+    // kebetulan bergaya ~tplv (favicon.ico~tplv, 192px.png~tplv, logo, dll).
+    const hash = /\/([a-f0-9]{16,40})~/.exec(url)?.[1];
+    if (!hash) continue;
+    // Varian "resize" lebih netral daripada "white-p" (padded) — utamakan.
+    if (!byHash.has(hash) || (url.includes("resize") && !byHash.get(hash)!.includes("resize"))) {
+      byHash.set(hash, url);
+    }
+  }
+  return [...byHash.values()];
+}
+
 export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
   const check = validateMarketplaceUrl(rawUrl);
   if (!check.ok) {
@@ -189,7 +241,24 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
 
   const price = parsePriceFromHtml(html);
   const name = og.title?.slice(0, 120) ?? undefined;
-  const imageUrls = og.image ? [absolutize(og.image, rawUrl)] : [];
+  // USP (keputusan Brian 2026-08-06): foto dari link harus ikut ter-copy
+  // sebanyak mungkin — bukan cuma 1 og:image. Sumber digabung berurutan:
+  // og:image (foto utama) -> JSON-LD Product.image -> pindaian state halaman.
+  // Dedup per content-hash (og:image dan varian inline = foto yang sama), maks 5.
+  const candidates = [
+    ...(og.image ? [og.image] : []),
+    ...parseJsonLdImages(html),
+    ...parseInlineProductImages(html),
+  ].map((u) => absolutize(u, rawUrl));
+  const seenHash = new Set<string>();
+  const imageUrls: string[] = [];
+  for (const u of candidates) {
+    const hash = /\/([a-f0-9]{16,40})~/.exec(u)?.[1] ?? u;
+    if (seenHash.has(hash)) continue;
+    seenHash.add(hash);
+    imageUrls.push(u);
+    if (imageUrls.length >= 5) break;
+  }
   return {
     extracted: true,
     name,

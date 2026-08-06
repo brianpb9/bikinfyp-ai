@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 process.env.DB_PATH = `/tmp/racun-test-extract-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-extract-storage-${process.pid}`;
 
-const { parseOpenGraph, parseJsonLdPrice, parsePriceFromHtml, guessCategory, canExtract } = await import("../lib/extract");
+const { parseOpenGraph, parseJsonLdPrice, parsePriceFromHtml, parseJsonLdImages, parseInlineProductImages, guessCategory, canExtract } = await import("../lib/extract");
 const { getDb } = await import("../lib/db");
 const { findOrCreateUserByEmail } = await import("../lib/auth");
 
@@ -58,4 +58,29 @@ test("parsePriceFromHtml: fallback JSON state dan teks Rupiah", () => {
   assert.equal(parsePriceFromHtml("<div>Rp 1.500.000</div>"), 1500000);
   assert.equal(parsePriceFromHtml("<div>tanpa harga</div>"), null);
   assert.equal(parsePriceFromHtml('<script>{"price":50}</script>'), null); // terlalu kecil = bukan harga produk
+});
+
+test("parseJsonLdImages: string, array, ImageObject, dan @graph", () => {
+  const html =
+    '<script type="application/ld+json">{"@type":"Product","image":["https://a.cdn/x1.jpg","https://a.cdn/x2.jpg"]}</script>' +
+    '<script type="application/ld+json">{"@graph":[{"@type":"Product","image":{"url":"https://a.cdn/x3.jpg"}}]}</script>' +
+    '<script type="application/ld+json">RUSAK{{{</script>';
+  assert.deepEqual(parseJsonLdImages(html), ["https://a.cdn/x1.jpg", "https://a.cdn/x2.jpg", "https://a.cdn/x3.jpg"]);
+});
+
+test("parseInlineProductImages: unescape signed URL, dedup per hash, saring aset non-produk", () => {
+  const h1 = "1fa340ee5b774d87b037186443c54b9b";
+  const h2 = "17983a42424d49c1af12bc5188a1a7d8";
+  const html =
+    `{"img":"https:\\/\\/p16-images-sign-sg.cdn.net\\/tos\\/${h1}~tplv-white-p?x-expires=1\\u0026x-signature=abc"}` +
+    `<img src="https://p19-images-sign-sg.cdn.net/tos/${h1}~tplv-resize?x-signature=def">` +
+    `<img src="https://p16-images-sign-sg.cdn.net/tos/${h2}~tplv-resize?x-signature=ghi">` +
+    '<link href="https://p16-images-comn-sg.cdn.net/img/favicon.ico~tplv-abc">' +
+    '<link href="https://p16-images-comn-sg.cdn.net/img/lite-sw/192px.png~tplv-abc">';
+  const urls = parseInlineProductImages(html);
+  assert.equal(urls.length, 2, JSON.stringify(urls));
+  // Dedup h1: varian "resize" menang; query signature utuh setelah unescape (& -> &).
+  assert.ok(urls[0].includes("resize") && urls[0].includes(h1));
+  assert.ok(urls.every((u) => !u.includes("favicon") && !u.includes("192px")));
+  assert.ok(urls[0].includes("x-signature="));
 });

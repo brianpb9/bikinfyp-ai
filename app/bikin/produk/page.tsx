@@ -25,6 +25,10 @@ export default function ProdukPage() {
   const [promoBefore, setPromoBefore] = useState("");
   const [promoEnds, setPromoEnds] = useState("");
   const [promoStock, setPromoStock] = useState("");
+  // Loading DIPISAH (fix 2026-08-06 malam): satu state bersama membuat tombol
+  // Lanjut ikut terkunci selama "Ambil Data" berjalan/menggantung — user yang
+  // sudah mengisi manual jadi buntu tanpa alasan.
+  const [extractLoading, setExtractLoading] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -76,7 +80,7 @@ export default function ProdukPage() {
   }
 
   async function extract() {
-    setLoading(true);
+    setExtractLoading(true);
     setError(null);
     setExtractMsg(null);
     try {
@@ -91,6 +95,9 @@ export default function ProdukPage() {
         warning?: string;
       }>("/api/products/extract", {
         json: { url: url.trim() },
+        // Batas sabar client: server maksimal ~8 dtk baca halaman + unduh foto;
+        // lebih dari 45 dtk = ada yang macet, lepaskan user ke jalur manual.
+        signal: AbortSignal.timeout(45_000),
       });
       if (!res.extracted) {
         setExtractMsg(res.message ?? "Link-nya belum bisa kami baca. Isi manual aja ya, cuma 3 kolom kok.");
@@ -111,7 +118,7 @@ export default function ProdukPage() {
       setError(err instanceof Error ? err.message : "Gagal membaca link.");
       setShowManual(true);
     } finally {
-      setLoading(false);
+      setExtractLoading(false);
     }
   }
 
@@ -212,10 +219,10 @@ export default function ProdukPage() {
           <button
             type="button"
             onClick={extract}
-            disabled={loading || url.trim().length < 8}
+            disabled={extractLoading || url.trim().length < 8}
             className="min-h-[48px] w-full rounded-2xl border-2 border-zinc-200 font-semibold text-zinc-700 active:bg-zinc-50 disabled:text-zinc-400"
           >
-            {loading ? "Sebentar..." : "Ambil Data"}
+            {extractLoading ? "Membaca link & fotonya..." : "Ambil Data"}
           </button>
           {extractMsg && <WarnCard>{extractMsg}</WarnCard>}
         </section>

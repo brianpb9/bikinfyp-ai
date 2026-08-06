@@ -57,6 +57,13 @@ nilai rahasia dalam Blueprint.
 ini hanya menerima `RACUN_DEPLOY_ENV=staging`, mencatat checksum migrasi, dan
 gagal tertutup pada URL non-PostgreSQL. Jangan gunakan untuk production.
 
+**⚠️ WAJIB setiap deploy yang membawa file migrasi baru:** migrasi production
+TIDAK jalan otomatis (kebijakan runbook) — kode baru yang menyentuh kolom baru
+akan 500 massal sampai migrasi dijalankan manual (insiden nyata 2026-08-06:
+migrasi 0007–0010 tertinggal → PATCH produk/generate skrip production tumbang).
+`GET /api/health` kini mengekspos `migrations_pending` — cek SETELAH setiap
+deploy; kalau muncul, jalankan runner production di Render Shell.
+
 Untuk production terdapat runner terpisah `scripts/migrate-postgres-production.mjs`.
 Mulai dengan `RACUN_DEPLOY_ENV=production npm run migrate:postgres-production:dry-run`.
 Apply hanya bisa dijalankan setelah approval eksplisit melalui
