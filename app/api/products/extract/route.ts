@@ -17,7 +17,23 @@ const FALLBACK_MSG = "Link-nya belum bisa kami baca. Isi manual aja ya, cuma 3 k
 const UA =
   "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
 
-/** Unduh gambar OG ke storage produk (maks 5, kompresi sisi panjang ≤1600px — BR-01.5). */
+/** Sniff format gambar dari magic bytes — validasi minimum saat PIL tidak ada.
+ * Menolak bytes non-gambar (mis. HTML error page) supaya /api/files tidak pernah
+ * menyajikan konten tak dikenal sebagai gambar. */
+function sniffImage(buf: Buffer): { ext: "jpg" | "png" | "webp"; contentType: string } | null {
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return { ext: "jpg", contentType: "image/jpeg" };
+  if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return { ext: "png", contentType: "image/png" };
+  if (buf.length >= 12 && buf.subarray(0, 4).toString("ascii") === "RIFF" && buf.subarray(8, 12).toString("ascii") === "WEBP") return { ext: "webp", contentType: "image/webp" };
+  return null;
+}
+
+/** Unduh gambar OG ke storage produk (maks 5, kompresi sisi panjang ≤1600px — BR-01.5).
+ *
+ * Kompresi memakai PIL bila tersedia. Web service production (Render runtime
+ * node) TIDAK punya PIL — sebelum 2026-08-06 ini membuat SEMUA foto dari link
+ * dibuang diam-diam ("Foto dari link gagal diunduh") padahal unduhannya sukses.
+ * Fallback: validasi magic bytes + simpan foto asli tanpa kompresi (foto OG
+ * marketplace umumnya ratusan KB — aman di bawah batas 10MB). */
 async function downloadImages(productId: string, urls: string[]): Promise<string[]> {
   ensureDirs();
   const dir = path.join(config.storageDir, "uploads", productId);
@@ -29,20 +45,36 @@ async function downloadImages(productId: string, urls: string[]): Promise<string
       if (!res.ok) continue;
       const buf = Buffer.from(await res.arrayBuffer());
       if (buf.length > 10 * 1024 * 1024) continue;
+      const sniffed = sniffImage(buf);
+      if (!sniffed) continue; // bukan gambar (mis. halaman error CDN) — skip
       const tmp = path.join(dir, `raw${i}`);
       fs.writeFileSync(tmp, buf);
       const out = path.join(dir, `${i}.jpg`);
-      // Validasi + kompresi via PIL (gagal buka = bukan gambar valid → skip)
-      await runFf("python3", [
-        "-c",
-        `from PIL import Image
+      let rel: string;
+      let payload: Buffer;
+      let contentType: string;
+      try {
+        // Jalur utama: validasi + kompresi via PIL (EXTRACT_DISABLE_PIL=1 untuk
+        // menguji jalur fallback di lingkungan yang punya PIL).
+        if (process.env.EXTRACT_DISABLE_PIL === "1") throw new Error("PIL dimatikan untuk uji");
+        await runFf("python3", [
+          "-c",
+          `from PIL import Image
 img = Image.open("${tmp}").convert("RGB")
 img.thumbnail((1600, 1600))
 img.save("${out}", "JPEG", quality=85)`,
-      ]);
+        ]);
+        rel = path.join("uploads", productId, `${i}.jpg`).split(path.sep).join("/");
+        payload = fs.readFileSync(out);
+        contentType = "image/jpeg";
+      } catch {
+        // Fallback tanpa PIL: simpan bytes asli yang sudah lolos sniff.
+        rel = path.join("uploads", productId, `${i}.${sniffed.ext}`).split(path.sep).join("/");
+        payload = buf;
+        contentType = sniffed.contentType;
+      }
       fs.rmSync(tmp, { force: true });
-      const rel = path.join("uploads", productId, `${i}.jpg`).split(path.sep).join("/");
-      await mediaStorage().put(rel, fs.readFileSync(out), "image/jpeg");
+      await mediaStorage().put(rel, payload, contentType);
       if (config.storageMode === "r2") fs.rmSync(out, { force: true });
       rels.push(rel);
     } catch {
