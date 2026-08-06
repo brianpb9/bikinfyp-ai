@@ -92,7 +92,7 @@ export interface QcInput {
    * Ini terpisah dari `finalTexts`: teks skrip bisa terdengar tanpa selalu
    * menjadi overlay pada mode embedded/VO.
    */
-  overlayTextExpectations?: { text: string; startSec: number; endSec: number }[];
+  overlayTextExpectations?: { text: string; startSec: number; endSec: number; critical?: boolean }[];
 }
 
 /** Python dengan OpenCV: venv proyek bila ada, selain python3 sistem. */
@@ -263,7 +263,7 @@ function intersects(a: OcrWord, b: OcrWord): boolean {
 export async function qcTextNotClipped(
   filePath: string,
   _workDir: string,
-  expectations: { text: string; startSec: number; endSec: number }[],
+  expectations: { text: string; startSec: number; endSec: number; critical?: boolean }[],
 ): Promise<QcCheck> {
   if (expectations.length === 0) return { code: "QC-06", name: "Teks overlay tidak terpotong", status: "skip", detail: "Tidak ada overlay bertimeline untuk diperiksa OCR." };
   // Homebrew Tesseract/Leptonica on macOS can reject media files under an
@@ -309,10 +309,29 @@ export async function qcTextNotClipped(
     const expectedTexts = [...new Set(expectations.map((item) => item.text))];
     const recognisedTexts = new Set(recognised.map((item) => item.expected));
     const missing = expectedTexts.filter((text) => !recognisedTexts.has(text));
-    if (missing.length > 0) {
-      // A partial match is never evidence that every simultaneously visible
-      // overlay is safe. Keep this reviewable rather than issuing a false PASS.
-      return { code: "QC-06", name: "Teks overlay tidak terpotong", status: "skip", detail: `OCR belum membuktikan overlay: ${missing.map((text) => JSON.stringify(text)).join(", ")}; perlu tinjauan visual, bukan klaim lulus.` };
+    // KEBIJAKAN (revisi 2026-08-06 malam, insiden production): OCR server
+    // (tesseract Debian) tidak sanggup membuktikan SETIAP kartu caption
+    // Indonesia di footage ramai — all-or-nothing membuang video sehat
+    // (BytePlus+compositing+QC lain lolos, refund gara-gara 1 kartu tak
+    // terbaca). Aturan baru:
+    // - Teks KRITIS (watermark AIGC, harga/promo, CTA — ditandai pemanggil)
+    //   WAJIB terbukti; tidak terbukti = skip (fail-closed, seperti semula).
+    // - Teks non-kritis (kartu caption skrip, dirender deterministik oleh
+    //   pipeline PIL kita sendiri) cukup >= 60% terbukti.
+    // - Deteksi tepi-terpotong & tumpang-tindih TETAP hard-fail di bawah.
+    const criticalTexts = new Set(expectations.filter((e) => e.critical).map((e) => e.text));
+    const missingCritical = missing.filter((t) => criticalTexts.has(t));
+    const provenRatio = expectedTexts.length === 0 ? 1 : (expectedTexts.length - missing.length) / expectedTexts.length;
+    if (missingCritical.length > 0 || provenRatio < 0.6) {
+      return {
+        code: "QC-06",
+        name: "Teks overlay tidak terpotong",
+        status: "skip",
+        detail:
+          missingCritical.length > 0
+            ? `OCR belum membuktikan overlay KRITIS: ${missingCritical.map((t) => JSON.stringify(t)).join(", ")}; perlu tinjauan visual, bukan klaim lulus.`
+            : `OCR hanya membuktikan ${Math.round(provenRatio * 100)}% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus.`,
+      };
     }
     for (const item of recognised) {
       for (const word of item.words) {

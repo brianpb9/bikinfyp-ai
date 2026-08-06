@@ -243,15 +243,17 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         shotPaths: video.assets.map((a) => a.filePath),
         refImagePath: imageRef,
         format,
+        // critical = teks kepatuhan/konversi (watermark, harga/promo, CTA) —
+        // WAJIB terbukti OCR; kartu caption skrip non-kritis (cukup mayoritas).
         overlayTextExpectations: [
-          { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: job.duration_s },
+          { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: job.duration_s, critical: true },
           ...(compositeMode === "caption"
             ? [
                 ...(captionCards ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec })),
-                ...(promo ? [{ text: priceOverlayText, startSec: demoSeg.start, endSec: demoSeg.end }] : []),
+                ...(promo ? [{ text: priceOverlayText, startSec: demoSeg.start, endSec: demoSeg.end, critical: true }] : []),
               ]
-            : [{ text: priceOverlayText, startSec: demoSeg.start, endSec: demoSeg.end }]),
-          { text: ctaQcText, startSec: ctaSeg.start, endSec: ctaSeg.end },
+            : [{ text: priceOverlayText, startSec: demoSeg.start, endSec: demoSeg.end, critical: true }]),
+          { text: ctaQcText, startSec: ctaSeg.start, endSec: ctaSeg.end, critical: true },
         ],
       });
       db.prepare("UPDATE jobs SET qc_result = ? WHERE id = ?").run(JSON.stringify(qc), job.id);

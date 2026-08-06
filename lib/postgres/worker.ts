@@ -180,14 +180,14 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, priceIdr: row.product_price_idr,
       renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format,
       overlayTextExpectations: [
-        { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: row.duration_s },
+        { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: row.duration_s, critical: true },
         ...(mode === "caption"
           ? [
               ...(captions ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec })),
-              ...(promo ? [{ text: priceOverlayText, startSec: demo.start, endSec: demo.end }] : []),
+              ...(promo ? [{ text: priceOverlayText, startSec: demo.start, endSec: demo.end, critical: true }] : []),
             ]
-          : [{ text: priceOverlayText, startSec: demo.start, endSec: demo.end }]),
-        { text: ctaQcText, startSec: cta.start, endSec: cta.end },
+          : [{ text: priceOverlayText, startSec: demo.start, endSec: demo.end, critical: true }]),
+        { text: ctaQcText, startSec: cta.start, endSec: cta.end, critical: true },
       ],
     });
     await pool.query("UPDATE jobs SET qc_result=$1,qc_retry_count=$2 WHERE id=$3", [JSON.stringify(qc), retry, row.id]);
