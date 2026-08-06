@@ -62,7 +62,25 @@ async function hasDrawtext(): Promise<boolean> {
   return drawtextSupported;
 }
 
-/** Render PNG teks transparan via ImageMagick (fallback drawtext). */
+/** Parse warna CSS sederhana ("white", "#FFD34D", "rgba(0,0,0,0.9)") -> RGBA 0-255. */
+function cssToRgba(css: string): number[] {
+  if (css === "white") return [255, 255, 255, 255];
+  const hex = /^#([0-9a-f]{6})$/i.exec(css);
+  if (hex) {
+    const n = parseInt(hex[1], 16);
+    return [(n >> 16) & 255, (n >> 8) & 255, n & 255, 255];
+  }
+  const rgba = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)\s*(?:,\s*([\d.]+)\s*)?\)$/i.exec(css);
+  if (rgba) return [Number(rgba[1]), Number(rgba[2]), Number(rgba[3]), Math.round((rgba[4] ? Number(rgba[4]) : 1) * 255)];
+  return [255, 255, 255, 255];
+}
+
+/** Render PNG teks transparan via renderer PIL (render_caption.py) — python3+PIL
+ * adalah kontrak container worker. RIWAYAT 2026-08-06 malam: versi lama memanggil
+ * ImageMagick di path Homebrew macOS (/opt/homebrew/bin/magick) yang TIDAK ADA
+ * di worker Debian production -> semua job ber-badge promo gagal COMPOSITING
+ * ("Hasilnya belum bagus" tanpa sebab jelas). Jangan pernah memanggil binary
+ * ber-path macOS dari jalur worker. */
 async function renderTextPng(opts: {
   text: string;
   outPath: string;
@@ -71,17 +89,26 @@ async function renderTextPng(opts: {
   stroke?: string;
   strokeWidth?: number;
 }): Promise<void> {
-  const font = detectFont();
-  const args = [
-    "-background", "none",
-    "-font", font,
-    "-pointsize", String(opts.pointsize),
-    "-fill", opts.fill,
-    "-gravity", "center", // multiline (badge promo 2 baris) rata tengah
-  ];
-  if (opts.stroke) args.push("-stroke", opts.stroke, "-strokewidth", String(opts.strokeWidth ?? 3));
-  args.push(`label:${opts.text}`, opts.outPath);
-  await runFf(process.env.MAGICK_PATH ?? "/opt/homebrew/bin/magick", args);
+  const specPath = `${opts.outPath}.spec.json`;
+  fs.writeFileSync(
+    specPath,
+    JSON.stringify([
+      {
+        out: opts.outPath,
+        // Renderer PIL melakukan word-wrap sendiri (max_width) dan merender per
+        // baris rata tengah — newline eksplisit cukup jadi spasi.
+        text: opts.text.replace(/\n/g, " "),
+        size: opts.pointsize,
+        fill: cssToRgba(opts.fill),
+        stroke_fill: cssToRgba(opts.stroke ?? "rgba(0,0,0,1)").slice(0, 3),
+        stroke_width: opts.stroke ? (opts.strokeWidth ?? 3) : 0,
+        max_width: 640,
+        highlight_words: [],
+      },
+    ])
+  );
+  const py = path.join(process.cwd(), "lib", "media", "render_caption.py");
+  await runFf("python3", [py, specPath]);
 }
 
 export async function compositeVideo(input: CompositeInput): Promise<CompositeResult> {
