@@ -144,13 +144,24 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     }
 
     // Tier bersuara: dialog dalam tanda kutip; jeda & arahan di luar tanda kutip.
+    // hands_only (Tangan + VO): dialog = NARASI VOICEOVER — insiden production
+    // 2026-08-07 job a1192101: frasa "presenter speaks to camera" membuat model
+    // menggambar WAJAH pembicara di format tanpa-wajah -> QC-09 menolak (benar).
     const dialogue = dialogueForShot(i).filter(Boolean).join(" ");
     const isLast = i === numShots - 1;
+    const speech =
+      format === "hands_only"
+        ? `A warm female VOICEOVER narrates in casual Indonesian (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
+        : `The presenter speaks casually to camera in Indonesian, saying: "${dialogue}". `;
+    const pacing =
+      format === "hands_only"
+        ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
+        : isLast
+          ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `
+          : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `;
     const prompt =
-      `${base}. The presenter speaks casually to camera in Indonesian, saying: "${dialogue}". ` +
-      (isLast
-        ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `
-        : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `) +
+      `${base}. ${speech}` +
+      pacing +
       `Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". ` +
       `Natural conversational Indonesian, not a newsreader.`;
     return { index: i, durationSec: perShot, prompt, imageRefPath: input.imageRefPath };

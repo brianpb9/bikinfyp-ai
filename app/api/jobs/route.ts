@@ -88,11 +88,17 @@ export async function POST(req: Request) {
         .get(personaId, user.id) as PersonaRow | undefined;
       if (!persona) throw ERR.NOT_FOUND("Personanya");
     }
-    const format = String(body.format ?? "hands_only");
-    if (!["hands_only", "talking_head", "vo_broll"].includes(format))
+    const format = String(body.format ?? "talking_head");
+    // 2026-08-07: VO+Foto dibuang — TikTok tidak lagi mengizinkan slideshow foto+VO.
+    if (format === "vo_broll")
       throw ERR.BAD_REQUEST(
-        "Format video tidak dikenal. Pilih: Tangan saja, Wajah AI, atau VO + Foto.",
-        "Unknown format. Choose hands_only, talking_head, or vo_broll."
+        "Format VO + Foto sudah tidak tersedia (kebijakan TikTok) — pilih Wajah AI atau Tangan + VO ya.",
+        "vo_broll format retired per TikTok policy."
+      );
+    if (!["hands_only", "talking_head"].includes(format))
+      throw ERR.BAD_REQUEST(
+        "Format video tidak dikenal. Pilih: Wajah AI atau Tangan + VO.",
+        "Unknown format. Choose talking_head or hands_only."
       );
     const durationS = Number(body.duration_s ?? 15);
     if (![15, 30, 45].includes(durationS))

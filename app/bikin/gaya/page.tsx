@@ -17,8 +17,10 @@ const FORMATS: {
 }[] = [
   // Persona-first (keputusan Brian 2026-08-06): Wajah AI default & pertama.
   { id: "talking_head", label: "Wajah AI", icon: "/icons/ui/format-wajah.png", hint: "presenter AI ngomong", needsAudio: true, previewVideo: "/previews/format-wajah.mp4" },
-  { id: "hands_only", label: "Tangan saja", icon: "/icons/ui/format-tangan.png", hint: "tanpa wajah, tetap bersuara", needsAudio: true, previewVideo: "/previews/format-tangan.mp4" },
-  { id: "vo_broll", label: "VO + Foto", icon: "/icons/ui/format-foto.png", hint: "foto asli + suara, versi 1", needsAudio: true, previewVideo: "/previews/format-foto.mp4" },
+  // 2026-08-07: "Tangan saja" -> "Tangan + VO" (bersuara, narasi voiceover).
+  // VO+Foto DIBUANG — kebijakan TikTok tidak lagi mengizinkan format slideshow
+  // foto+VO (keputusan Brian 2026-08-07).
+  { id: "hands_only", label: "Tangan + VO", icon: "/icons/ui/format-tangan.png", hint: "tanpa wajah, narasi suara AI", needsAudio: true, previewVideo: "/previews/format-tangan.mp4" },
 ];
 
 const REGISTERS = [
@@ -174,7 +176,7 @@ export default function GayaPage() {
 
         <section className="space-y-3">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Langkah pengaturan</p><h2 className="font-display text-xl font-bold">Format video</h2></div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="grid grid-cols-2 gap-2">
             {FORMATS.map((f) => (
               <button
                 key={f.id}
