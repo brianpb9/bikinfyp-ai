@@ -7,6 +7,7 @@ import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_co
 import { HOOK_FAMILY_NAMES, TIER_LABELS, loadFlow, saveFlow, type FlowScript, type FlowSegment } from "../../_components/flow";
 import { validateScript, type RuleIssue } from "../../../lib/script-engine/validator";
 import { scoreScriptPlan, type ScriptPlanScore, type FypQualityTier, type FypVideoFormat } from "../../../lib/fyp-score";
+import { track } from "../../_components/track";
 import type { HookCode } from "../../../lib/config/hooks";
 import type { SegmentDraft } from "../../../lib/script-engine/templates";
 
@@ -155,6 +156,7 @@ function SkripInner() {
   async function approve() {
     const script = scripts.find((s) => s.id === selectedId);
     if (!script) return;
+    track("approve_click", { hook_family: script.hook_family });
     setLoading(true);
     setError(null);
     setNoCredits(false);

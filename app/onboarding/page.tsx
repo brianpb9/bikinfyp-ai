@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail } from "../_components/api";
 import { PrimaryButton, ErrorText } from "../_components/ui";
+import { track } from "../_components/track";
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   cancelled: "Login Google dibatalkan.",
@@ -23,6 +24,10 @@ export default function OnboardingPage() {
   const [monthlyVideos, setMonthlyVideos] = useState(10);
   const [tierPrice, setTierPrice] = useState<5000 | 12000 | 49000>(5000);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+
+  useEffect(() => {
+    track("landing_view");
+  }, []);
 
   useEffect(() => {
     const reason = new URLSearchParams(window.location.search).get("google_error");
@@ -60,7 +65,9 @@ export default function OnboardingPage() {
     setError(null);
     try {
       await apiFetch("/api/auth/verify-otp", { json: { email: email.trim(), code: code.trim() } });
-      router.replace("/");
+      track("signup_success");
+      // Datang dari /coba? Langsung ke form produk (data percobaan prefill di S2).
+      router.replace(sessionStorage.getItem("racun.try") ? "/bikin/produk" : "/");
     } catch (err) {
       setError(err instanceof ApiFail ? err.message : "Kode salah. Coba lagi ya.");
       setLoading(false);
@@ -88,6 +95,14 @@ export default function OnboardingPage() {
               <p className="text-center text-lg text-zinc-600">
                 15 detik, siap posting ke TikTok Shop. Cukup foto produk — sisanya kami yang kerjakan.
               </p>
+              {/* Magic moment tanpa daftar (2026-08-06): rasakan hasil dulu, daftar belakangan. */}
+              <a
+                href="/coba"
+                onClick={() => track("try_signup_click", { from: "hero" })}
+                className="mx-auto flex min-h-[48px] w-fit items-center justify-center rounded-2xl border-2 border-amber-400 bg-white px-6 font-bold text-amber-600 shadow-sm active:bg-amber-50"
+              >
+                ✍️ Coba lihat skripmu dulu — tanpa daftar
+              </a>
             </div>
             <div>
               <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">

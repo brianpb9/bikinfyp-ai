@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "../_components/api";
 import { PrimaryButton } from "../_components/ui";
 import { relTime } from "../_components/flow";
+import { track } from "../_components/track";
 
 interface JobItem {
   id: string;
@@ -40,6 +41,7 @@ function ReportForm({ job }: { job: JobItem }) {
         },
       });
       setSaved(true);
+      track("report_saved");
       setMsg("✓ Tersimpan. Makasih — data ini bikin Skor FYP makin akurat.");
     } catch (e) {
       setMsg(e instanceof Error ? e.message : "Gagal menyimpan. Coba lagi ya.");
@@ -107,6 +109,7 @@ export default function VideoPage() {
 
   async function download(jobId: string) {
     try {
+      track("download_click");
       const out = await apiFetch<{ video_url: string }>(`/api/jobs/${jobId}/output`);
       window.open(out.video_url, "_blank");
     } catch {

@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch } from "../../_components/api";
 import { ProgressDots, SecondaryButton } from "../../_components/ui";
 import { loadFlow, saveFlow } from "../../_components/flow";
+import { track } from "../../_components/track";
 
 interface JobStatus {
   id: string;
@@ -12,19 +13,29 @@ interface JobStatus {
   message: string;
 }
 
+// Progress theater (adopsi 2026-08-06, riset teardown kompetitor): bahasa kru
+// produksi, bukan state teknis — loading terasa seperti studio yang bekerja.
 const STEPS = [
-  { label: "Skrip siap", states: ["QUEUED", "GENERATING_VISUAL", "GENERATING_VOICE", "COMPOSITING", "QC_CHECK", "LABELING", "READY"] },
-  { label: "Suara direkam", states: ["COMPOSITING", "QC_CHECK", "LABELING", "READY"] },
-  { label: "Video dirakit", states: ["QC_CHECK", "LABELING", "READY"] },
-  { label: "Pemeriksaan mutu", states: ["READY"] },
+  { label: "Skrip dikunci", states: ["QUEUED", "GENERATING_VISUAL", "GENERATING_VOICE", "COMPOSITING", "QC_CHECK", "LABELING", "READY"] },
+  { label: "Kreator AI syuting produkmu", states: ["GENERATING_VOICE", "COMPOSITING", "QC_CHECK", "LABELING", "READY"] },
+  { label: "Editing: caption, harga & musik", states: ["QC_CHECK", "LABELING", "READY"] },
+  { label: "Quality check tiap frame", states: ["READY"] },
 ];
 const ACTIVE_LABEL: Record<string, string> = {
-  QUEUED: "Skrip siap",
-  GENERATING_VISUAL: "Video dirakit",
-  GENERATING_VOICE: "Suara direkam",
-  COMPOSITING: "Video dirakit",
-  QC_CHECK: "Pemeriksaan mutu",
-  LABELING: "Pemeriksaan mutu",
+  QUEUED: "Skrip dikunci",
+  GENERATING_VISUAL: "Kreator AI syuting produkmu",
+  GENERATING_VOICE: "Kreator AI syuting produkmu",
+  COMPOSITING: "Editing: caption, harga & musik",
+  QC_CHECK: "Quality check tiap frame",
+  LABELING: "Quality check tiap frame",
+};
+const THEATER_HEADLINE: Record<string, string> = {
+  QUEUED: "Menyiapkan studio & casting kreatormu...",
+  GENERATING_VISUAL: "🎬 Kreator AI lagi syuting produkmu...",
+  GENERATING_VOICE: "🎙️ Ngisi suara & atur intonasi...",
+  COMPOSITING: "✂️ Editor lagi pasang caption, harga & musik...",
+  QC_CHECK: "🔍 Sutradara ngecek hasilnya frame per frame...",
+  LABELING: "🔍 Sutradara ngecek hasilnya frame per frame...",
 };
 
 // S5 — SEDANG DIPROSES (Langkah 4/5)
@@ -69,6 +80,7 @@ function ProsesInner() {
         setConnectionIssue(false);
         if (j.state === "READY") {
           terminal = true;
+          track("proses_ready");
           router.replace(`/bikin/hasil?job=${jobId}`);
         } else if (j.state === "FAILED" || j.state === "REFUNDED") {
           terminal = true;
@@ -131,7 +143,12 @@ function ProsesInner() {
       </div>
       <div className="space-y-6 px-4">
         <div className="rounded-3xl border border-amber-100 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between"><span className="text-sm font-bold text-zinc-800">Sedang kami siapkan</span><span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">Proses aman</span></div>
+          <div className="mb-4 flex items-center justify-between">
+            <span className="text-sm font-bold text-zinc-800">
+              {(job && THEATER_HEADLINE[job.state]) ?? "Menyiapkan studio & casting kreatormu..."}
+            </span>
+            <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-800">Proses aman</span>
+          </div>
           <div className="h-2.5 w-full overflow-hidden rounded-full bg-amber-100">
             <div className="h-full w-1/2 animate-pulse rounded-full bg-amber-500" />
           </div>

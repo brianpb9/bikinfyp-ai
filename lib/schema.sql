@@ -152,6 +152,20 @@ CREATE TABLE IF NOT EXISTS otp_codes (
 );
 CREATE INDEX IF NOT EXISTS idx_otp_email ON otp_codes(email, created_at);
 
+-- Event funnel produk (2026-08-06): melengkapi audit_log (milestone server-side)
+-- dengan kejadian CLIENT-SIDE pra-login (landing, /coba, signup) — tanpa ini
+-- klaim "aktivasi naik X%" tidak pernah bisa dibuktikan. Nama event whitelist
+-- di app/api/events; anon_id = cookie acak, BUKAN identitas.
+CREATE TABLE IF NOT EXISTS events (
+  id TEXT PRIMARY KEY,
+  user_id TEXT,
+  anon_id TEXT,
+  name TEXT NOT NULL,
+  meta TEXT, -- JSON kecil
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_events_name_time ON events(name, created_at);
+
 CREATE TABLE IF NOT EXISTS audit_log (
   id TEXT PRIMARY KEY,
   actor TEXT NOT NULL,

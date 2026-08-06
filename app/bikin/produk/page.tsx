@@ -43,6 +43,23 @@ export default function ProdukPage() {
       setName(f.product.name);
       setPrice(String(f.product.priceIdr));
       setCategory(f.product.category);
+      return;
+    }
+    // Prefill dari percobaan /coba (magic moment tanpa login) — jangan suruh
+    // user mengetik ulang; tinggal upload foto.
+    try {
+      const trial = JSON.parse(sessionStorage.getItem("racun.try") ?? "null") as
+        | { name: string; priceIdr: number; category: string }
+        | null;
+      if (trial) {
+        setShowManual(true);
+        setName(trial.name);
+        setPrice(String(trial.priceIdr));
+        setCategory(trial.category);
+        sessionStorage.removeItem("racun.try");
+      }
+    } catch {
+      /* abaikan */
     }
   }, []);
 

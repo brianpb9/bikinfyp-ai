@@ -5,10 +5,17 @@ import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail } from "../../_components/api";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
 import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
+import { track } from "../../_components/track";
 
-const FORMATS: { id: VideoFormat; label: string; icon: string; hint: string; needsAudio: boolean }[] = [
-  { id: "hands_only", label: "Tangan saja", icon: "/icons/ui/format-tangan.png", hint: "tanpa wajah", needsAudio: false },
-  { id: "talking_head", label: "Wajah AI", icon: "/icons/ui/format-wajah.png", hint: "presenter AI, versi 1", needsAudio: true },
+// Preset-first (2026-08-06, riset teardown kompetitor): user memilih HASIL yang
+// kelihatan, bukan label abstrak — kartu format menampilkan contoh render nyata
+// (video loop / still), fallback ikon untuk format yang belum punya sample.
+const FORMATS: {
+  id: VideoFormat; label: string; icon: string; hint: string; needsAudio: boolean;
+  previewVideo?: string; previewImage?: string;
+}[] = [
+  { id: "hands_only", label: "Tangan saja", icon: "/icons/ui/format-tangan.png", hint: "tanpa wajah", needsAudio: false, previewVideo: "/previews/format-tangan.mp4" },
+  { id: "talking_head", label: "Wajah AI", icon: "/icons/ui/format-wajah.png", hint: "presenter AI, versi 1", needsAudio: true, previewImage: "/showcase/hijaber.webp" },
   { id: "vo_broll", label: "VO + Foto", icon: "/icons/ui/format-foto.png", hint: "foto asli + suara, versi 1", needsAudio: true },
 ];
 
@@ -65,6 +72,7 @@ export default function GayaPage() {
   useEffect(() => {
     if (!loadFlow().product) router.replace("/bikin/produk");
     apiFetch<{ tiers: TierMeta[] }>("/api/meta").then((m) => setTiers(m.tiers)).catch(() => {});
+    track("gaya_view");
   }, [router]);
 
   const selectedTier = tiers.find((t) => t.id === tier);
@@ -123,14 +131,25 @@ export default function GayaPage() {
                 type="button"
                 aria-pressed={format === f.id}
                 onClick={() => selectFormat(f.id)}
-                className={`rounded-2xl border-2 p-3 text-center shadow-sm transition-transform active:scale-[0.98] ${
+                className={`overflow-hidden rounded-2xl border-2 text-center shadow-sm transition-transform active:scale-[0.98] ${
                   format === f.id ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
                 }`}
               >
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={f.icon} alt="" className="mx-auto h-8 w-8" />
-                <p className="text-sm font-bold">{f.label}</p>
-                <p className="text-xs text-zinc-500">{f.hint}</p>
+                {f.previewVideo ? (
+                  <video src={f.previewVideo} autoPlay muted loop playsInline className="aspect-[9/16] w-full object-cover" />
+                ) : f.previewImage ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={f.previewImage} alt="" className="aspect-[9/16] w-full object-cover" loading="lazy" decoding="async" />
+                ) : (
+                  <div className="flex aspect-[9/16] w-full items-center justify-center bg-zinc-50">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={f.icon} alt="" className="h-10 w-10" />
+                  </div>
+                )}
+                <div className="p-2">
+                  <p className="text-sm font-bold">{f.label}</p>
+                  <p className="text-xs text-zinc-500">{f.hint}</p>
+                </div>
               </button>
             ))}
           </div>

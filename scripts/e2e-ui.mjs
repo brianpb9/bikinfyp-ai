@@ -75,7 +75,9 @@ try {
   await shot("s3-gaya");
   await page.getByRole("button", { name: "Bikinkan Skripnya" }).click();
   await page.waitForURL("**/bikin/skrip", { timeout: 20000 });
-  await page.waitForLoadState("networkidle");
+  // Tunggu varian benar-benar dirender (hidrasi React setelah networkidle bisa
+  // telat sepersekian detik — count() instan bikin flaky).
+  await page.getByRole("button", { name: /Versi \d ·/ }).first().waitFor({ timeout: 10000 });
   ok("S3 generate 3 varian", (await page.getByRole("button", { name: /Versi \d ·/ }).count()) === 3);
 
   // S4 skrip (HITL)
