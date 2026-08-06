@@ -38,13 +38,13 @@ export default function TermsPage() {
 
         <h2 className="font-display text-lg font-bold text-zinc-900">3. Konten yang Kamu Unggah</h2>
         <p>
-          Kamu bertanggung jawab penuh atas foto produk, deskripsi, dan (untuk fitur Video Promosi)
+          Kamu bertanggung jawab penuh atas foto produk, deskripsi, dan (untuk fitur AI UGC Ads)
           klip video yang kamu unggah. Dengan mengunggahnya, kamu menyatakan:
         </p>
         <ul className="list-disc space-y-1 pl-5">
           <li>Kamu punya hak untuk menggunakan foto/video tersebut (produk milikmu, atau kamu berwenang menjualnya).</li>
           <li>Konten tidak melanggar hukum, HAKI pihak lain, atau kebijakan platform (TikTok/Shopee).</li>
-          <li>Untuk klip wajah/suara di Video Promosi: itu adalah dirimu sendiri atau orang yang sudah memberi izin.</li>
+          <li>Untuk klip wajah/suara di AI UGC Ads: itu adalah dirimu sendiri atau orang yang sudah memberi izin.</li>
         </ul>
         <p>
           Kami berhak menolak atau menghapus konten yang melanggar filter kata terlarang (klaim

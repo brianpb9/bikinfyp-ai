@@ -96,10 +96,10 @@ export default function PromoPage() {
     <main className="min-h-dvh space-y-7 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-28 pt-6">
       <div>
         <Link href="/bikin/jenis" className="flex min-h-[44px] items-center text-base font-semibold text-zinc-700">
-          ← Video Promosi
+          ← AI UGC Ads
         </Link>
         <p className="mt-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-700">App / Jasa · Tanpa Produk Fisik</p>
-        <h1 className="font-display text-2xl font-bold text-zinc-900">Bikin Video Promosi</h1>
+        <h1 className="font-display text-2xl font-bold text-zinc-900">Bikin AI UGC Ads</h1>
         <p className="mt-1 text-sm leading-6 text-zinc-600">
           Upload 1-{MAX_CLIPS} rekaman kamu sendiri (talking-head, ada suara) — AI tambahin hook pembuka + suara di depan, lalu gabung jadi satu video.
         </p>

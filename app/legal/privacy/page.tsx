@@ -25,7 +25,7 @@ export default function PrivacyPage() {
         <ul className="list-disc space-y-1 pl-5">
           <li><strong>Data akun:</strong> nomor HP atau email (untuk login), nama/foto profil Google bila kamu masuk pakai Google.</li>
           <li><strong>Data produk:</strong> nama produk, harga, kategori, foto produk, link toko (TikTok/Shopee) yang kamu masukkan.</li>
-          <li><strong>Klip video pribadi:</strong> khusus fitur Video Promosi — klip talking-head yang kamu unggah sendiri.</li>
+          <li><strong>Klip video pribadi:</strong> khusus fitur AI UGC Ads (video promosi) — klip talking-head yang kamu unggah sendiri.</li>
           <li><strong>Riwayat transaksi:</strong> saldo kredit, riwayat top-up dan pemakaian.</li>
           <li><strong>Log teknis:</strong> catatan aktivitas (audit log) untuk keamanan dan penelusuran masalah.</li>
         </ul>
@@ -41,7 +41,7 @@ export default function PrivacyPage() {
         <p>Untuk menjalankan Layanan, sebagian data diproses oleh pihak ketiga berikut:</p>
         <ul className="list-disc space-y-1 pl-5">
           <li><strong>BytePlus (ModelArk/Seedance):</strong> foto produk dan teks skrip dikirim untuk menghasilkan video AI. Server dapat berada di luar Indonesia.</li>
-          <li><strong>ElevenLabs:</strong> teks skrip dikirim untuk menghasilkan suara AI (voice-over), khusus format VO+Foto dan Video Promosi.</li>
+          <li><strong>ElevenLabs:</strong> teks skrip dikirim untuk menghasilkan suara AI (voice-over), khusus format VO+Foto dan AI UGC Ads.</li>
           <li><strong>Cloudflare (R2):</strong> penyimpanan file foto/video kamu.</li>
           <li><strong>Resend:</strong> pengiriman email kode login (OTP).</li>
           <li><strong>Google:</strong> bila kamu login pakai akun Google, kami menerima nama/email dari Google sesuai izin yang kamu berikan.</li>
