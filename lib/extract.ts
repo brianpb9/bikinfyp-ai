@@ -235,6 +235,8 @@ const DESC_BOILERPLATE = [
   /\bdi aplikasi tokopedia\b[^.!]*[.!]?/gi,
   /\bgratis ongkir\b[^.!]*[.!]?/gi,
   /\bcicilan 0%[^.!]*[.!]?/gi,
+  // Ekor nama toko: "di Skin1004 Mall.", "di TokoAbc Official Store"
+  /\bdi\s+[A-Za-z0-9_ ]{2,30}?(?:Mall|Official\s*(?:Store|Shop)?|Store)\b\.?/gi,
 ];
 
 /** Bersihkan og:description untuk prefill "deskripsi visual produk". PENTING:
@@ -243,21 +245,27 @@ const DESC_BOILERPLATE = [
  * dengan judul; kalau tidak tersisa kalimat bermakna, kembalikan null (biarkan
  * kosong daripada mengarang). */
 export function cleanDescriptionForVisual(desc: string | undefined, title: string | undefined): string | null {
-  if (!desc) return null;
-  let out = desc;
-  if (title) {
-    const bareTitle = title.replace(/\s*(\||-)\s*(Tokopedia|Shopee|Lazada|Blibli).*$/i, "").trim();
-    if (bareTitle.length >= 10) out = out.split(bareTitle).join(" ");
-  }
-  for (const re of DESC_BOILERPLATE) out = out.replace(re, " ");
-  out = out
-    .replace(/\b(promo|diskon|termurah|murah|cod|official store|original|ready stock|bisa cod)\b/gi, " ")
-    .replace(/[!¡🔥⚡✨💥]+/g, " ")
-    .replace(/\s{2,}/g, " ")
-    .replace(/^[\s,.\-–|]+|[\s,.\-–|]+$/g, "")
+  const strip = (s: string) =>
+    s
+      .replace(/\b(promo|diskon|termurah|murah|cod|official store|original|ready stock|bisa cod|gratis ongkir|flash sale|terlaris|best ?seller)\b/gi, " ")
+      .replace(/[!¡🔥⚡✨💥]+/g, " ")
+      .replace(/\s{2,}/g, " ")
+      .replace(/^[\s,.\-–|]+|[\s,.\-–|]+$/g, "")
+      .trim();
+  let out = desc ?? "";
+  const bareTitle = (title ?? "")
+    .replace(/\s*(\||-)\s*(Tokopedia|Shopee|Lazada|Blibli).*$/i, "")
+    .replace(/\s+di\s+[A-Za-z0-9 ]{2,30}(Mall|Store|Official)?\s*$/i, "")
     .trim();
-  if (out.length < 15) return null; // sisa tak bermakna — jangan isi sampah
-  return out.slice(0, 160);
+  if (bareTitle.length >= 10) out = out.split(bareTitle).join(" ");
+  for (const re of DESC_BOILERPLATE) out = out.replace(re, " ");
+  out = strip(out);
+  if (out.length >= 15) return out.slice(0, 160);
+  // Fallback (permintaan Brian 2026-08-06: deskripsi jangan kosong): judul yang
+  // sudah dibersihkan biasanya memuat identitas visual berguna (merek, varian,
+  // ukuran "30ml") — lebih baik daripada kosong, tetap tanpa kata marketing.
+  const fromTitle = strip(bareTitle);
+  return fromTitle.length >= 10 ? fromTitle.slice(0, 160) : null;
 }
 
 export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {

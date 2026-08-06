@@ -125,10 +125,13 @@ function ProsesInner() {
         <div className="px-4 pt-3"><ProgressDots step={4} /></div>
         <div className="space-y-4 rounded-3xl border-2 border-red-100 bg-red-50 p-6 text-center shadow-sm">
           <p className="text-4xl">😔</p>
-          <h1 className="text-xl font-bold text-red-900">Hasilnya belum bagus</h1>
+          <h1 className="text-xl font-bold text-red-900">Videonya belum berhasil</h1>
+          {/* Tampilkan ALASAN ASLI dari server (fix 2026-08-06: copy hardcoded
+              menyembunyikan penyebab — menyulitkan user & debugging). */}
           <p className="text-red-800">
-            Hasilnya belum bagus, jadi kredit kamu sudah kami balikin. Coba ganti fotonya ya.
+            {job?.message || "Hasilnya belum bagus, jadi kredit kamu sudah kami balikin. Coba lagi ya."}
           </p>
+          <p className="text-sm text-red-700/80">Kredit kamu sudah dikembalikan otomatis.</p>
           <SecondaryButton href="/bikin/produk">Coba lagi</SecondaryButton>
         </div>
       </main>
@@ -162,7 +165,14 @@ function ProsesInner() {
                 <span className={`flex h-6 w-6 items-center justify-center rounded-full text-sm ${
                   done ? "bg-green-100 text-green-700" : active ? "bg-amber-100 text-amber-700" : "bg-zinc-100 text-zinc-400"
                 }`}>
-                  {done ? "✓" : active ? "▸" : "○"}
+                  {done ? (
+                    "✓"
+                  ) : active ? (
+                    // Spinner muter di langkah aktif (feedback tester 2026-08-06)
+                    <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-amber-500 border-t-transparent" aria-hidden="true" />
+                  ) : (
+                    "○"
+                  )}
                 </span>
                 <span className={done ? "font-semibold text-zinc-800" : active ? "font-semibold text-amber-700" : "text-zinc-400"}>
                   {s.label}{active ? "..." : ""}

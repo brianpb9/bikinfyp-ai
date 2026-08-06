@@ -93,12 +93,12 @@ test("parseOriginalPriceFromHtml: kunci original/slash > harga jual, ambil yang 
   assert.equal(parseOriginalPriceFromHtml(html, null), null);
 });
 
-test("cleanDescriptionForVisual: buang judul, boilerplate, kata marketing; sisa pendek = null", () => {
+test("cleanDescriptionForVisual: buang judul, boilerplate, kata marketing; fallback judul bersih", () => {
   const title = "Promo SKIN1004 Ampoule 30ml | Tokopedia";
-  assert.equal(
-    cleanDescriptionForVisual("Promo SKIN1004 Ampoule 30ml di Toko Mall. Promo khusus pengguna baru di aplikasi Tokopedia!", title),
-    null // sisa cuma boilerplate — jangan isi sampah
-  );
+  // Deskripsi cuma boilerplate -> fallback ke judul yang dibersihkan (tanpa
+  // "Promo"/nama marketplace) — jangan kosong (permintaan 2026-08-06).
+  const fb = cleanDescriptionForVisual("Promo SKIN1004 Ampoule 30ml di Toko Mall. Promo khusus pengguna baru di aplikasi Tokopedia!", title);
+  assert.ok(fb && fb.includes("SKIN1004 Ampoule 30ml") && !/promo|tokopedia/i.test(fb), String(fb));
   const ok = cleanDescriptionForVisual(
     "Serum botol kaca pink 30ml dengan pipet putih, kemasan kotak pink pastel. Promo khusus pengguna baru di aplikasi Tokopedia!",
     title

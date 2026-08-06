@@ -218,6 +218,15 @@ export async function pgListJobs(userId: string) {
   finally { await pool.end(); }
 }
 
+/** Update daftar foto produk (append/hapus dari route photos) — owner check di
+ * pemanggil via smokeGetProduct. */
+export async function pgSetProductImages(userId: string, productId: string, images: string[]) {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    await pool.query("UPDATE products SET images=$1 WHERE id=$2 AND user_id=$3", [JSON.stringify(images), productId, userId]);
+  } finally { await pool.end(); }
+}
+
 /** Snapshot Skor FYP beku (padanan createFypSnapshot SQLite) — idempoten via
  * ON CONFLICT DO NOTHING; dipanggil non-fatal setelah job dibuat. */
 export async function pgSaveFypSnapshot(input: {

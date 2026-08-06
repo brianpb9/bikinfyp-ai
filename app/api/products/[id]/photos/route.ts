@@ -3,27 +3,44 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, audit, type ProductRow } from "@/lib/db";
 import { createSignedUrl } from "@/lib/signed-url";
 import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
-import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { pgAudit, pgSetProductImages, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
+// Ambil produk milik user + daftar fotonya, lintas runtime (fix 2026-08-06
+// malam: versi awal menggembok pg -> tombol tambah/hapus foto MATI di
+// production yang memang Postgres).
+async function ownedProduct(userId: string, productId: string): Promise<{ product: ProductRow; images: string[] } | null> {
+  const product = postgresRuntimeEnabled()
+    ? await smokeGetProduct(userId, productId)
+    : (getDb().prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(productId, userId) as ProductRow | undefined);
+  if (!product) return null;
+  return { product, images: JSON.parse(product.images || "[]") as string[] };
+}
+
+async function persistImages(userId: string, productId: string, images: string[]): Promise<void> {
+  if (postgresRuntimeEnabled()) await pgSetProductImages(userId, productId, images);
+  else getDb().prepare("UPDATE products SET images = ? WHERE id = ?").run(JSON.stringify(images), productId);
+}
+
+async function auditBoth(userId: string, action: string, productId: string, meta: Record<string, unknown>): Promise<void> {
+  if (postgresRuntimeEnabled()) await pgAudit(userId, action, "products", productId, meta);
+  else audit(userId, action, "products", productId, meta);
+}
+
 // POST /api/products/[id]/photos — TAMBAH foto ke produk yang sudah ada
 // (multipart field "photos"), maks total 5. Dipakai kartu konfirmasi S2 saat
-// foto dari link gagal/kurang — sebelum 2026-08-06 kartu konfirmasi tidak
-// punya jalur upload sama sekali dan user buntu.
+// foto dari link gagal/kurang.
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
-    if (postgresRuntimeEnabled())
-      throw ERR.BAD_REQUEST("Tambah foto belum tersedia di lingkungan ini.", "photo append not available on postgres runtime yet.");
     const { id } = await ctx.params;
-    const db = getDb();
-    const product = db.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(id, user.id) as ProductRow | undefined;
-    if (!product) throw ERR.NOT_FOUND("Produknya");
+    const owned = await ownedProduct(user.id, id);
+    if (!owned) throw ERR.NOT_FOUND("Produknya");
+    const existing = owned.images;
 
-    const existing = JSON.parse(product.images || "[]") as string[];
     const form = await req.formData();
     const blobs: { mime: string; data: Buffer }[] = [];
     for (const part of form.getAll("photos")) {
@@ -48,8 +65,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     const added = await saveProductImages(id, blobs, existing.length);
     const images = [...existing, ...added];
-    db.prepare("UPDATE products SET images = ? WHERE id = ?").run(JSON.stringify(images), id);
-    audit(user.id, "product.photos_added", "products", id, { added: added.length, total: images.length });
+    await persistImages(user.id, id, images);
+    await auditBoth(user.id, "product.photos_added", id, { added: added.length, total: images.length });
     return Response.json({
       product_id: id,
       images,
@@ -61,27 +78,22 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 // DELETE /api/products/[id]/photos {path} — buang satu foto dari produk
-// (keputusan Brian 2026-08-06: foto hasil ekstrak harus bisa di-X kalau tidak
-// dipakai — mis. banner toko yang ikut terunduh). File storage dibiarkan
-// (best-effort orphan; path tetap privat di balik signed URL + owner check).
+// (tombol ✕ di S2). File storage dibiarkan (orphan best-effort; path tetap
+// privat di balik signed URL + owner check).
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
-    if (postgresRuntimeEnabled())
-      throw ERR.BAD_REQUEST("Hapus foto belum tersedia di lingkungan ini.", "photo delete not available on postgres runtime yet.");
     const { id } = await ctx.params;
-    const db = getDb();
-    const product = db.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(id, user.id) as ProductRow | undefined;
-    if (!product) throw ERR.NOT_FOUND("Produknya");
+    const owned = await ownedProduct(user.id, id);
+    if (!owned) throw ERR.NOT_FOUND("Produknya");
 
     const body = await req.json().catch(() => ({}));
     const target = String(body.path ?? "");
-    const existing = JSON.parse(product.images || "[]") as string[];
-    if (!existing.includes(target)) throw ERR.NOT_FOUND("Fotonya");
-    const images = existing.filter((p) => p !== target);
-    db.prepare("UPDATE products SET images = ? WHERE id = ?").run(JSON.stringify(images), id);
-    audit(user.id, "product.photo_removed", "products", id, { removed: target, total: images.length });
+    if (!owned.images.includes(target)) throw ERR.NOT_FOUND("Fotonya");
+    const images = owned.images.filter((p) => p !== target);
+    await persistImages(user.id, id, images);
+    await auditBoth(user.id, "product.photo_removed", id, { removed: target, total: images.length });
     return Response.json({
       product_id: id,
       images,
