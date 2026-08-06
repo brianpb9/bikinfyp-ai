@@ -88,18 +88,26 @@ export async function POST(req: Request) {
     // Buat produk langsung (form S2 menampilkan kartu konfirmasi untuk diedit user)
     const productId = uuid();
     const images = result.imageUrls?.length ? await downloadImages(productId, result.imageUrls) : [];
+    // Harga coret hanya dipakai bila konsisten (> harga jual) — cek ulang di sini
+    // karena user bisa mengubah harga di kartu konfirmasi nanti (PATCH memvalidasi lagi).
+    const promoBefore =
+      result.originalPriceIdr && result.priceIdr && result.originalPriceIdr > result.priceIdr
+        ? result.originalPriceIdr
+        : null;
     if (postgresRuntimeEnabled()) await smokeCreateProduct(user.id, {
       sourceUrl: url, name: result.name ?? "Produk dari link", priceIdr: result.priceIdr ?? 0,
-      category: result.categoryGuess ?? "default", images, rawMeta: { og: { price: result.priceIdr } },
+      category: result.categoryGuess ?? "default", images, productVisualDesc: result.visualDesc ?? null,
+      promoPriceBeforeIdr: promoBefore, rawMeta: { og: { price: result.priceIdr, original: result.originalPriceIdr } },
     }, productId);
     else getDb()
       .prepare(
-        "INSERT INTO products (id, user_id, source_url, name, price_idr, category, images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
+        "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
       )
       .run(
         productId, user.id, url, result.name ?? "Produk dari link",
-        result.priceIdr ?? 0, result.categoryGuess ?? "default",
-        JSON.stringify(images), JSON.stringify({ og: { price: result.priceIdr } }), now()
+        result.priceIdr ?? 0, result.categoryGuess ?? "default", result.visualDesc ?? null,
+        JSON.stringify(images), promoBefore,
+        JSON.stringify({ og: { price: result.priceIdr, original: result.originalPriceIdr } }), now()
       );
     if (postgresRuntimeEnabled()) await pgAudit(user.id, "product.extracted", "products", productId, { reason: "ok", price: result.priceIdr });
     else audit(user.id, "product.extracted", "products", productId, { reason: "ok", price: result.priceIdr });
@@ -110,6 +118,8 @@ export async function POST(req: Request) {
       name: result.name,
       price_idr: result.priceIdr, // null bila tak ketemu — field harga disorot wajib di S2
       category: result.categoryGuess,
+      product_visual_desc: result.visualDesc ?? null,
+      promo_price_before_idr: promoBefore,
       images,
       // URL bertanda tangan supaya S2 bisa langsung preview foto yang barusan diunduh
       // (tanpa ini, /api/files menolak — butuh exp+sig, bukan path polos).

@@ -17,6 +17,10 @@ export interface ExtractResult {
   priceIdr?: number | null;
   categoryGuess?: string;
   imageUrls?: string[];
+  /** Harga normal (coret) dari state halaman — prefill add-on Promo. */
+  originalPriceIdr?: number | null;
+  /** Deskripsi tersaring untuk field "deskripsi visual produk" (boleh null). */
+  visualDesc?: string | null;
   reason?: string; // alasan spesifik bila gagal (debug)
   message?: string; // pesan user (Bahasa Indonesia)
 }
@@ -210,6 +214,52 @@ export function parseInlineProductImages(html: string): string[] {
   return [...byHash.values()];
 }
 
+/** Harga normal (coret) dari state halaman — kunci bergaya original/slash/
+ * market price dengan nilai LEBIH BESAR dari harga jual. Dipakai untuk prefill
+ * add-on Promo (keputusan Brian 2026-08-06: "harga normal bisa diisi dong").
+ * Ambil kandidat terkecil yang tetap > harga jual (menghindari harga bundel). */
+export function parseOriginalPriceFromHtml(html: string, priceIdr: number | null): number | null {
+  if (!priceIdr) return null;
+  const unescaped = html.replace(/\\\//g, "/").replace(/\\u0026/gi, "&");
+  const candidates: number[] = [];
+  for (const m of unescaped.matchAll(/"(\w*(?:original|slash|market|before)\w*(?:price|Price)\w*|\w*(?:price|Price)\w*(?:Original|Slash|Before)\w*)"\s*:\s*"?(?:Rp\.?\s?)?([\d.,]{4,15})"?/gi)) {
+    const n = parseInt(m[2].replace(/[.,](?=\d{3}\b)/g, "").replace(/[^\d]/g, ""), 10);
+    if (Number.isFinite(n) && n > priceIdr && n < 1_000_000_000) candidates.push(n);
+  }
+  if (candidates.length === 0) return null;
+  return Math.min(...candidates);
+}
+
+const DESC_BOILERPLATE = [
+  /promo khusus pengguna baru[^.!]*[.!]?/gi,
+  /\bdi aplikasi tokopedia\b[^.!]*[.!]?/gi,
+  /\bgratis ongkir\b[^.!]*[.!]?/gi,
+  /\bcicilan 0%[^.!]*[.!]?/gi,
+];
+
+/** Bersihkan og:description untuk prefill "deskripsi visual produk". PENTING:
+ * field ini ikut masuk PROMPT render ("The product is ...") — teks marketing
+ * ("PROMO TERMURAH!!") merusak konsistensi visual. Buang boilerplate & overlap
+ * dengan judul; kalau tidak tersisa kalimat bermakna, kembalikan null (biarkan
+ * kosong daripada mengarang). */
+export function cleanDescriptionForVisual(desc: string | undefined, title: string | undefined): string | null {
+  if (!desc) return null;
+  let out = desc;
+  if (title) {
+    const bareTitle = title.replace(/\s*(\||-)\s*(Tokopedia|Shopee|Lazada|Blibli).*$/i, "").trim();
+    if (bareTitle.length >= 10) out = out.split(bareTitle).join(" ");
+  }
+  for (const re of DESC_BOILERPLATE) out = out.replace(re, " ");
+  out = out
+    .replace(/\b(promo|diskon|termurah|murah|cod|official store|original|ready stock|bisa cod)\b/gi, " ")
+    .replace(/[!¡🔥⚡✨💥]+/g, " ")
+    .replace(/\s{2,}/g, " ")
+    .replace(/^[\s,.\-–|]+|[\s,.\-–|]+$/g, "")
+    .trim();
+  if (out.length < 15) return null; // sisa tak bermakna — jangan isi sampah
+  return out.slice(0, 160);
+}
+
 export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
   const check = validateMarketplaceUrl(rawUrl);
   if (!check.ok) {
@@ -265,5 +315,7 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
     priceIdr: price, // null bila tidak ketemu — user isi manual
     categoryGuess: guessCategory(`${name ?? ""} ${og.description ?? ""}`),
     imageUrls,
+    originalPriceIdr: parseOriginalPriceFromHtml(html, price),
+    visualDesc: cleanDescriptionForVisual(og.description, og.title),
   };
 }

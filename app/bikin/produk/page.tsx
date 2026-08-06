@@ -19,6 +19,9 @@ export default function ProdukPage() {
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [extractedPreviews, setExtractedPreviews] = useState<string[]>([]);
+  // Path relatif foto hasil ekstrak — sejajar dengan extractedPreviews; dibutuhkan
+  // untuk menghapus foto tertentu di server (tombol ✕).
+  const [extractedRels, setExtractedRels] = useState<string[]>([]);
   const [productId, setProductId] = useState<string | null>(null);
   // Add-on Promo & Urgency — semua opsional, "mainan konten" (keputusan 2026-08-06)
   const [promoOpen, setPromoOpen] = useState(false);
@@ -67,6 +70,25 @@ export default function ProdukPage() {
     }
   }, []);
 
+  function removeLocalPhoto(i: number) {
+    URL.revokeObjectURL(previewUrls.current[i]);
+    previewUrls.current = previewUrls.current.filter((_, j) => j !== i);
+    setPhotos((p) => p.filter((_, j) => j !== i));
+    setPreviews([...previewUrls.current]);
+  }
+
+  async function removeExtractedPhoto(i: number) {
+    if (!productId) return;
+    const path = extractedRels[i];
+    try {
+      await apiFetch(`/api/products/${productId}/photos`, { method: "DELETE", json: { path } });
+      setExtractedRels((r) => r.filter((_, j) => j !== i));
+      setExtractedPreviews((p) => p.filter((_, j) => j !== i));
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Gagal menghapus foto.");
+    }
+  }
+
   function pickPhotos(files: FileList | null) {
     if (!files) return;
     // Jatah 5 foto TOTAL termasuk foto yang sudah terunduh dari link.
@@ -91,6 +113,9 @@ export default function ProdukPage() {
         name?: string;
         price_idr?: number | null;
         category?: string;
+        product_visual_desc?: string | null;
+        promo_price_before_idr?: number | null;
+        images?: string[];
         image_urls?: string[];
         warning?: string;
       }>("/api/products/extract", {
@@ -109,6 +134,13 @@ export default function ProdukPage() {
         setPrice(res.price_idr ? String(res.price_idr) : "");
         setCategory(res.category ?? "default");
         setExtractedPreviews(res.image_urls ?? []);
+        setExtractedRels(res.images ?? []);
+        if (res.product_visual_desc) setVisualDesc(res.product_visual_desc);
+        // Harga coret ketemu di halaman -> prefill promo & buka kartunya.
+        if (res.promo_price_before_idr) {
+          setPromoBefore(String(res.promo_price_before_idr));
+          setPromoOpen(true);
+        }
         setShowManual(true);
         if (res.warning) setExtractMsg(res.warning);
         else if (!res.image_urls?.length)
@@ -299,12 +331,32 @@ export default function ProdukPage() {
               </div>
               <div className="flex flex-wrap gap-2">
                 {extractedPreviews.map((src, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={`x${i}`} src={src} alt={`foto dari link ${i + 1}`} className="h-20 w-20 rounded-xl object-cover ring-2 ring-emerald-400" loading="lazy" decoding="async" />
+                  <div key={`x${i}`} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt={`foto dari link ${i + 1}`} className="h-20 w-20 rounded-xl object-cover ring-2 ring-emerald-400" loading="lazy" decoding="async" />
+                    <button
+                      type="button"
+                      aria-label={`Buang foto dari link ${i + 1}`}
+                      onClick={() => removeExtractedPhoto(i)}
+                      className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-800/90 text-xs font-bold text-white shadow"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 ))}
                 {previews.map((src, i) => (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img key={i} src={src} alt={`foto ${i + 1}`} className="h-20 w-20 rounded-xl object-cover" decoding="async" />
+                  <div key={i} className="relative">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img src={src} alt={`foto ${i + 1}`} className="h-20 w-20 rounded-xl object-cover" decoding="async" />
+                    <button
+                      type="button"
+                      aria-label={`Buang foto ${i + 1}`}
+                      onClick={() => removeLocalPhoto(i)}
+                      className="absolute -right-1.5 -top-1.5 flex h-6 w-6 items-center justify-center rounded-full bg-zinc-800/90 text-xs font-bold text-white shadow"
+                    >
+                      ✕
+                    </button>
+                  </div>
                 ))}
                 {extractedPreviews.length + photos.length < 5 && (
                   <button

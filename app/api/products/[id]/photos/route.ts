@@ -59,3 +59,35 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     return errorResponse(err);
   }
 }
+
+// DELETE /api/products/[id]/photos {path} — buang satu foto dari produk
+// (keputusan Brian 2026-08-06: foto hasil ekstrak harus bisa di-X kalau tidak
+// dipakai — mis. banner toko yang ikut terunduh). File storage dibiarkan
+// (best-effort orphan; path tetap privat di balik signed URL + owner check).
+export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
+  try {
+    const user = await getAuthUser(req);
+    if (!user) throw ERR.UNAUTHORIZED();
+    if (postgresRuntimeEnabled())
+      throw ERR.BAD_REQUEST("Hapus foto belum tersedia di lingkungan ini.", "photo delete not available on postgres runtime yet.");
+    const { id } = await ctx.params;
+    const db = getDb();
+    const product = db.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(id, user.id) as ProductRow | undefined;
+    if (!product) throw ERR.NOT_FOUND("Produknya");
+
+    const body = await req.json().catch(() => ({}));
+    const target = String(body.path ?? "");
+    const existing = JSON.parse(product.images || "[]") as string[];
+    if (!existing.includes(target)) throw ERR.NOT_FOUND("Fotonya");
+    const images = existing.filter((p) => p !== target);
+    db.prepare("UPDATE products SET images = ? WHERE id = ?").run(JSON.stringify(images), id);
+    audit(user.id, "product.photo_removed", "products", id, { removed: target, total: images.length });
+    return Response.json({
+      product_id: id,
+      images,
+      image_urls: images.map((rel) => createSignedUrl(rel)),
+    });
+  } catch (err) {
+    return errorResponse(err);
+  }
+}

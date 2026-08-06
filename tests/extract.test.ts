@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 process.env.DB_PATH = `/tmp/racun-test-extract-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-extract-storage-${process.pid}`;
 
-const { parseOpenGraph, parseJsonLdPrice, parsePriceFromHtml, parseJsonLdImages, parseInlineProductImages, guessCategory, canExtract } = await import("../lib/extract");
+const { parseOpenGraph, parseJsonLdPrice, parsePriceFromHtml, parseJsonLdImages, parseInlineProductImages, parseOriginalPriceFromHtml, cleanDescriptionForVisual, guessCategory, canExtract } = await import("../lib/extract");
 const { getDb } = await import("../lib/db");
 const { findOrCreateUserByEmail } = await import("../lib/auth");
 
@@ -83,4 +83,25 @@ test("parseInlineProductImages: unescape signed URL, dedup per hash, saring aset
   assert.ok(urls[0].includes("resize") && urls[0].includes(h1));
   assert.ok(urls.every((u) => !u.includes("favicon") && !u.includes("192px")));
   assert.ok(urls[0].includes("x-signature="));
+});
+
+test("parseOriginalPriceFromHtml: kunci original/slash > harga jual, ambil yang terkecil", () => {
+  const html = '{"originalPrice":250000,"priceFmt":"65.574","slashPriceFmt":"250.000","bundlePrice":"750.000"}';
+  assert.equal(parseOriginalPriceFromHtml(html, 65574), 250000);
+  assert.equal(parseOriginalPriceFromHtml(html, 300000), 750000 >= 300000 ? null : null); // tidak ada kandidat > harga (bundle bukan kunci original/slash)
+  assert.equal(parseOriginalPriceFromHtml("{}", 65574), null);
+  assert.equal(parseOriginalPriceFromHtml(html, null), null);
+});
+
+test("cleanDescriptionForVisual: buang judul, boilerplate, kata marketing; sisa pendek = null", () => {
+  const title = "Promo SKIN1004 Ampoule 30ml | Tokopedia";
+  assert.equal(
+    cleanDescriptionForVisual("Promo SKIN1004 Ampoule 30ml di Toko Mall. Promo khusus pengguna baru di aplikasi Tokopedia!", title),
+    null // sisa cuma boilerplate — jangan isi sampah
+  );
+  const ok = cleanDescriptionForVisual(
+    "Serum botol kaca pink 30ml dengan pipet putih, kemasan kotak pink pastel. Promo khusus pengguna baru di aplikasi Tokopedia!",
+    title
+  );
+  assert.ok(ok && ok.includes("botol kaca pink") && !/promo/i.test(ok), String(ok));
 });
