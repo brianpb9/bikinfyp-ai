@@ -123,6 +123,18 @@ try {
   ok("S9 paket 'Paling laris'", await page.getByText("Paling laris").isVisible());
   await shot("s9-kredit");
 
+  // /coba — magic moment TANPA login (halaman publik, konteks anon terpisah)
+  const cobaCtx = await browser.newContext({ viewport: { width: 390, height: 844 } });
+  const coba = await cobaCtx.newPage();
+  await coba.goto(`${BASE}/coba`, { waitUntil: "networkidle" });
+  await coba.getByPlaceholder(/Nama produk/).fill("Serum Coba Gratis");
+  await coba.getByPlaceholder(/Harga \(mis/).fill("85000");
+  await coba.getByRole("button", { name: /Bikinkan Skripnya/ }).click();
+  await coba.waitForSelector("text=3 versi skripmu", { timeout: 20000 });
+  ok("Coba: 3 skrip anon + Skor FYP", (await coba.getByText(/Skor FYP \d+/).count()) >= 3);
+  await coba.screenshot({ path: `${SHOTS}/s-coba.png`, fullPage: true });
+  await cobaCtx.close();
+
   // Middleware: tanpa cookie harus redirect ke /onboarding
   const anon = await browser.newPage({ viewport: { width: 390, height: 844 } });
   await anon.goto(`${BASE}/video`);

@@ -17,7 +17,7 @@ const FORMATS: {
 }[] = [
   { id: "hands_only", label: "Tangan saja", icon: "/icons/ui/format-tangan.png", hint: "tanpa wajah", needsAudio: false, previewVideo: "/previews/format-tangan.mp4" },
   { id: "talking_head", label: "Wajah AI", icon: "/icons/ui/format-wajah.png", hint: "presenter AI, versi 1", needsAudio: true, previewVideo: "/previews/format-wajah.mp4" },
-  { id: "vo_broll", label: "VO + Foto", icon: "/icons/ui/format-foto.png", hint: "foto asli + suara, versi 1", needsAudio: true },
+  { id: "vo_broll", label: "VO + Foto", icon: "/icons/ui/format-foto.png", hint: "foto asli + suara, versi 1", needsAudio: true, previewVideo: "/previews/format-foto.mp4" },
 ];
 
 const REGISTERS = [
