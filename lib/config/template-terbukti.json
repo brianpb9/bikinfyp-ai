@@ -1,0 +1,62 @@
+{
+  "generated_from": "template_terbukti_winners_20260806.csv",
+  "generated_at": "2026-08-06",
+  "total_winners": 110,
+  "disclaimer": "“Terbukti” = terbukti menang GMV di data pembanding kami (korelasional) — bukan jaminan FYP.",
+  "templates": [
+    {
+      "id": "klaim_langsung",
+      "name": "Klaim Langsung",
+      "desc": "Testimoni to-the-point: langsung klaim manfaat, payoff instan",
+      "count": 29,
+      "evidence": "pola paling sering muncul di video pemenang",
+      "preset": {
+        "format": "talking_head",
+        "qualityTier": "high_quality",
+        "durationSec": 30,
+        "hookFamilies": [
+          "H3",
+          "H12",
+          "H10",
+          "H5"
+        ]
+      }
+    },
+    {
+      "id": "tanya_jawab",
+      "name": "Tanya-Jawab Cepat",
+      "desc": "Buka dengan pertanyaan relatable, jawab cepat pakai produk",
+      "count": 22,
+      "evidence": "juga didukung koefisien model (hook pertanyaan berkorelasi menang)",
+      "preset": {
+        "format": "talking_head",
+        "qualityTier": "high_quality",
+        "durationSec": 30,
+        "hookFamilies": [
+          "H15",
+          "H2",
+          "H9",
+          "H13"
+        ]
+      }
+    },
+    {
+      "id": "demo_transformasi",
+      "name": "Demo Transformasi",
+      "desc": "Tunjukkan pemakaian & perubahan sebelum-sesudah, tanpa wajah",
+      "count": 22,
+      "evidence": "pola tutorial/transformasi di video pemenang",
+      "preset": {
+        "format": "hands_only",
+        "qualityTier": "silent_caption",
+        "durationSec": 30,
+        "hookFamilies": [
+          "H11",
+          "H12",
+          "H5",
+          "H6"
+        ]
+      }
+    }
+  ]
+}

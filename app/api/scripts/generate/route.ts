@@ -23,6 +23,12 @@ export async function POST(req: Request) {
     const emotion = ["senang", "sedih", "gemas"].includes(body.emotion) ? body.emotion : "senang";
     const hookLevel = (["normal", "berani", "gila"].includes(body.hook_level) ? body.hook_level : "normal") as
       | "normal" | "berani" | "gila";
+    // Template Terbukti: keluarga hook pilihan pola pemenang (opsional, tervalidasi).
+    const VALID_HOOKS = new Set(Array.from({ length: 16 }, (_, i) => `H${i + 1}`));
+    const hookFamilies = (Array.isArray(body.hook_families) ? body.hook_families : [])
+      .map(String)
+      .filter((h: string) => VALID_HOOKS.has(h))
+      .slice(0, 6) as import("@/lib/config/hooks").HookCode[];
     if (!REGISTERS[register])
       throw ERR.BAD_REQUEST("Register-nya pilih salah satu: bunda, bestie, genz, atau netral.", "Invalid register.");
     const durationSec = [15, 30, 45].includes(Number(body.duration_s)) ? Number(body.duration_s) : 15;
@@ -42,6 +48,7 @@ export async function POST(req: Request) {
       qualityTier: tier,
       durationSec,
       hookLevel,
+      hookFamilies: hookFamilies.length ? hookFamilies : undefined,
     });
 
     const makeOut = (v: typeof variants[number], id: string) => ({ id, ...v });

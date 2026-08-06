@@ -35,8 +35,7 @@ export default function PilihJenisPage() {
           href="/promo"
           className="overflow-hidden rounded-3xl border-2 border-zinc-200 bg-white shadow-sm active:scale-[0.98]"
         >
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/showcase/hijaber.webp" alt="" className="aspect-[9/16] w-full object-cover" loading="lazy" decoding="async" />
+          <video src="/previews/format-wajah.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full object-cover" />
           <div className="p-3">
             <p className="font-display text-base font-bold leading-tight text-zinc-900">AI UGC Ads</p>
             <p className="mt-1 text-xs leading-5 text-zinc-600">

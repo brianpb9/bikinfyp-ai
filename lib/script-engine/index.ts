@@ -82,11 +82,21 @@ function pick(category: string, table: Record<string, string>): string {
 }
 
 /** Pilih 3 keluarga hook berbeda; keluarga yang dipakai produk sama <7 hari diturunkan (F-02.2 #3).
- * Level berani/gila memakai BOLD_HOOK_PRIORITY (lintas kategori), bukan prioritas kategori. */
-export function pickHookFamilies(category: string, productId: string, level: HookLevel = "normal"): HookCode[] {
-  const priority = level === "normal"
+ * Level berani/gila memakai BOLD_HOOK_PRIORITY (lintas kategori), bukan prioritas kategori.
+ * priorityOverride (Template Terbukti): daftar keluarga pilihan template menang —
+ * dipakai sebagai prioritas utama, kekurangan diisi dari prioritas normal. */
+export function pickHookFamilies(
+  category: string,
+  productId: string,
+  level: HookLevel = "normal",
+  priorityOverride?: HookCode[]
+): HookCode[] {
+  const base = level === "normal"
     ? CATEGORY_HOOK_PRIORITY[category] ?? CATEGORY_HOOK_PRIORITY.default
     : BOLD_HOOK_PRIORITY;
+  const priority = priorityOverride?.length
+    ? [...new Set([...priorityOverride, ...base])]
+    : base;
   let recent: string[] = [];
   try {
     const since = new Date(Date.now() - 7 * 24 * 3600 * 1000).toISOString();
@@ -235,12 +245,14 @@ export function generateScripts(opts: {
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
   durationSec?: number;
   hookLevel?: HookLevel;
+  /** Template Terbukti: keluarga hook pilihan pola pemenang (prioritas utama). */
+  hookFamilies?: HookCode[];
 }): GeneratedScript[] {
   const { product, register } = opts;
   const emotion = opts.emotion ?? "senang";
   const tier = opts.qualityTier ?? "silent_caption";
   const durationSec = opts.durationSec ?? 15;
-  const families = pickHookFamilies(product.category, product.id, opts.hookLevel ?? "normal");
+  const families = pickHookFamilies(product.category, product.id, opts.hookLevel ?? "normal", opts.hookFamilies);
   return families.map((f) => generateOne(product, register, emotion, f, tier, durationSec));
 }
 

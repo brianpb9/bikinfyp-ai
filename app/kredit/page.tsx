@@ -149,7 +149,11 @@ function KreditInner() {
             )}
             <span className="flex items-center gap-3">
               {/* Contoh nyata hasil tier — "tunjukkan, jangan jelaskan" */}
-              <video src="/previews/format-tangan.mp4" autoPlay muted loop playsInline className="h-24 w-14 shrink-0 rounded-xl object-cover ring-1 ring-black/5" />
+              <video
+                src={p.voiced ? "/previews/format-wajah.mp4" : "/previews/format-tangan.mp4"}
+                autoPlay muted loop playsInline
+                className="h-24 w-14 shrink-0 rounded-xl object-cover ring-1 ring-black/5"
+              />
               <span className="min-w-0 flex-1">
                 <span className="flex items-center justify-between gap-2">
                   <span className="font-bold">{p.name}</span>

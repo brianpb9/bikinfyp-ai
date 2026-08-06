@@ -6,6 +6,7 @@ import { apiFetch, ApiFail } from "../../_components/api";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
 import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
 import { track } from "../../_components/track";
+import templateTerbukti from "../../../lib/config/template-terbukti.json";
 
 // Preset-first (2026-08-06, riset teardown kompetitor): user memilih HASIL yang
 // kelihatan, bukan label abstrak — kartu format menampilkan contoh render nyata
@@ -15,7 +16,7 @@ const FORMATS: {
   previewVideo?: string; previewImage?: string;
 }[] = [
   { id: "hands_only", label: "Tangan saja", icon: "/icons/ui/format-tangan.png", hint: "tanpa wajah", needsAudio: false, previewVideo: "/previews/format-tangan.mp4" },
-  { id: "talking_head", label: "Wajah AI", icon: "/icons/ui/format-wajah.png", hint: "presenter AI, versi 1", needsAudio: true, previewImage: "/showcase/hijaber.webp" },
+  { id: "talking_head", label: "Wajah AI", icon: "/icons/ui/format-wajah.png", hint: "presenter AI, versi 1", needsAudio: true, previewVideo: "/previews/format-wajah.mp4" },
   { id: "vo_broll", label: "VO + Foto", icon: "/icons/ui/format-foto.png", hint: "foto asli + suara, versi 1", needsAudio: true },
 ];
 
@@ -69,6 +70,21 @@ export default function GayaPage() {
   const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
   const [hookPct, setHookPct] = useState(15);
   const hookLevel = hookLevelFromPct(hookPct);
+  // Template Terbukti: preset dari pola video pemenang GMV (korelasional).
+  const [templateId, setTemplateId] = useState<string | null>(null);
+
+  function applyTemplate(id: string) {
+    if (templateId === id) {
+      setTemplateId(null); // tap ulang = lepas template
+      return;
+    }
+    const t = templateTerbukti.templates.find((x) => x.id === id);
+    if (!t) return;
+    setTemplateId(id);
+    setFormat(t.preset.format as VideoFormat);
+    setTier(t.preset.qualityTier as Tier);
+    setDurationSec(t.preset.durationSec as 15 | 30 | 45);
+  }
   const [register, setRegister] = useState("bestie");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
   const [loading, setLoading] = useState(false);
@@ -109,6 +125,9 @@ export default function GayaPage() {
           quality_tier: tier,
           duration_s: durationSec,
           hook_level: hookLevel,
+          ...(templateId
+            ? { hook_families: templateTerbukti.templates.find((t) => t.id === templateId)?.preset.hookFamilies }
+            : {}),
         },
       });
       saveFlow({ register, qualityTier: tier, format, durationSec, hookLevel, creatorCategory, scripts: res.scripts, selectedScriptId: undefined });
@@ -128,6 +147,35 @@ export default function GayaPage() {
     <main className="min-h-dvh bg-gradient-to-b from-amber-50/70 via-white to-white pb-10">
       <FlowHeader title="Gaya Video" step={2} />
       <div className="space-y-7 px-4">
+        <section className="space-y-3">
+          <div>
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pola dari {templateTerbukti.total_winners} video pemenang</p>
+            <h2 className="font-display text-xl font-bold">🏆 Template Terbukti</h2>
+          </div>
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {templateTerbukti.templates.map((t) => (
+              <button
+                key={t.id}
+                type="button"
+                aria-pressed={templateId === t.id}
+                onClick={() => applyTemplate(t.id)}
+                className={`w-44 shrink-0 rounded-2xl border-2 p-3 text-left shadow-sm transition-transform active:scale-[0.98] ${
+                  templateId === t.id ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                }`}
+              >
+                <p className="text-sm font-bold leading-tight">{t.name}</p>
+                <p className="mt-1 text-[11px] leading-4 text-zinc-500">{t.desc}</p>
+                <p className="mt-1.5 rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-bold text-amber-700">
+                  {t.count} dari {templateTerbukti.total_winners} video pemenang
+                </p>
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] leading-4 text-zinc-400">
+            {templateTerbukti.disclaimer} Pilih template = format, durasi & gaya hook ikut diatur otomatis (masih bisa kamu ubah).
+          </p>
+        </section>
+
         <section className="space-y-3">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Langkah pengaturan</p><h2 className="font-display text-xl font-bold">Format video</h2></div>
           <div className="grid grid-cols-3 gap-2">

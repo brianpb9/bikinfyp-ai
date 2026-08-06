@@ -234,10 +234,13 @@ async function ocrFrame(frame: string): Promise<{ words: OcrWord[]; lines: OcrLi
       "format=gray,geq=lum='if(gt(lum(X\\,Y)\\,210)\\,0\\,255)'", thresholded]);
     const second = await runFf("tesseract", [thresholded, "stdout", "-l", "eng", "--psm", "11", "tsv"]);
     const extra = parseTesseractTsv(second.stdout);
-    // Kata dari pass threshold memakai key line berprefix agar tidak menabrak
-    // key pass pertama (overlap check antar pass tetap berjalan lewat geometri).
+    // Pass threshold menyumbang KATA saja, TANPA line-box: pada citra biner,
+    // tesseract kerap menggabungkan area putih jadi satu baris lebar yang
+    // menyentuh tepi kanvas -> false positive "teks terpotong" (kasus nyata
+    // 2026-08-06: watermark di footage ramai). Cek tepi tetap berjalan penuh
+    // lewat line-box pass mentah; key line berprefix agar lookup line untuk
+    // kata threshold sengaja tidak menemukan apa-apa.
     base.words.push(...extra.words.map((w) => ({ ...w, line: `thresh:${w.line}` })));
-    base.lines.push(...extra.lines.map((l) => ({ ...l, key: `thresh:${l.key}` })));
   } catch {
     /* pass threshold opsional — kegagalannya tidak boleh mematikan OCR utama */
   }
