@@ -121,15 +121,28 @@ function KreditInner() {
     <main className="min-h-dvh space-y-7 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-28 pt-6">
       <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Dompet kreator</p><h1 className="font-display text-2xl font-bold">Kredit Saya</h1></div>
 
-      <div className="rounded-3xl bg-gradient-to-br from-amber-400 to-amber-500 p-6 text-center text-white shadow-lg shadow-amber-500/20">
-        <p className="flex items-center justify-center gap-2 text-3xl font-bold">
+      {/* Kartu saldo ala rekening bank (permintaan Brian 2026-08-06): label kecil,
+          nominal dominan, rincian "bisa buat apa" sebagai baris terpisah. */}
+      <div className="overflow-hidden rounded-3xl bg-zinc-900 p-5 text-white shadow-xl shadow-zinc-900/25 ring-1 ring-white/10">
+        <div className="flex items-center justify-between">
+          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-zinc-400">Saldo kredit</p>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src="/icons/ui/nav-kredit.png" alt="" className="h-7 w-7" />
+          <img src="/icons/ui/nav-kredit.png" alt="" className="h-5 w-5 opacity-80" />
+        </div>
+        <p className="mt-2 font-display text-[2.6rem] font-extrabold leading-none tracking-tight">
           {balance === null ? "…" : rupiah(balance)}
         </p>
-        <p className="mt-1 text-amber-100">
-          = {nSenyap ?? "…"} video Teks+Musik · {nHq ?? "…"} video AI Bersuara
-        </p>
+        <p className="mt-1 text-xs text-zinc-400">BikinFYP.AI · dompet kreator</p>
+        <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/10 pt-3 text-center">
+          <div className="rounded-xl bg-white/5 px-2 py-2">
+            <p className="font-display text-lg font-extrabold text-amber-300">{nSenyap ?? "…"}</p>
+            <p className="text-[10px] leading-tight text-zinc-400">video Teks + Musik</p>
+          </div>
+          <div className="rounded-xl bg-white/5 px-2 py-2">
+            <p className="font-display text-lg font-extrabold text-amber-300">{nHq ?? "…"}</p>
+            <p className="text-[10px] leading-tight text-zinc-400">video AI Bersuara</p>
+          </div>
+        </div>
       </div>
 
       <section className="space-y-3">

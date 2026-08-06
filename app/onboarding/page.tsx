@@ -84,7 +84,7 @@ export default function OnboardingPage() {
               <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">● Harga transparan</span>
             </div>
             <div className="mx-auto w-48 overflow-hidden rounded-[28px] bg-zinc-900 shadow-2xl shadow-amber-900/10 ring-1 ring-black/5">
-              <video src="/demo/contoh-senyap-teks.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full" />
+              <video src="/demo/contoh-hero.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full" />
             </div>
             <div className="space-y-3">
               <h1 className="text-center font-display text-[2.3rem] font-extrabold leading-[1.08] tracking-tight text-zinc-900">
@@ -109,15 +109,15 @@ export default function OnboardingPage() {
                 Hasil video AI kami — bukan mockup
               </p>
               <div className="-mx-6 flex gap-3 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {/* Render BytePlus asli (2026-08-06) — video bergerak, bukan still. */}
                 {[
-                  { src: "/showcase/gen-z.webp", label: "Gen-Z" },
-                  { src: "/showcase/hijaber.webp", label: "Hijaber" },
-                  { src: "/showcase/genz-2.webp", label: "Gen-Z" },
-                  { src: "/showcase/lokal.webp", label: "Lokal" },
+                  { src: "/showcase/hijaber.mp4", label: "Hijaber" },
+                  { src: "/showcase/genz.mp4", label: "Gen-Z" },
+                  { src: "/showcase/ibu.mp4", label: "Ibu" },
+                  { src: "/showcase/tangan.mp4", label: "Tanpa wajah" },
                 ].map((s, i) => (
                   <div key={i} className="relative shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-black/5">
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={s.src} alt={`Contoh video kategori ${s.label}`} className="h-40 w-[90px] object-cover" loading="lazy" />
+                    <video src={s.src} autoPlay muted loop playsInline className="h-40 w-[90px] object-cover" />
                     <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
                       {s.label}
                     </span>
