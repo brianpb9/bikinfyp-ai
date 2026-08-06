@@ -174,12 +174,26 @@ test("QC-06: OCR frame nyata meluluskan overlay aman dan menolak baris terpotong
   const expected = [{ text: "Klik Keranjang Kuning", startSec: 0, endSec: 2 }];
   const safe = await qcTextNotClipped(makeOcrVideo(dir, false), dir, expected);
   assert.equal(safe.status, "pass", safe.detail);
+  // Kebijakan 2026-08-06: teks KRITIS yang tak terbukti = skip (fail-closed);
+  // non-kritis cukup mayoritas (>=60%).
   const partial = await qcTextNotClipped(makeOcrVideo(dir, false), dir, [
     ...expected,
-    { text: "Dibuat dengan AI", startSec: 0, endSec: 2 },
+    { text: "Dibuat dengan AI", startSec: 0, endSec: 2, critical: true },
   ]);
   assert.equal(partial.status, "skip", partial.detail);
-  assert.match(partial.detail ?? "", /belum membuktikan overlay/);
+  assert.match(partial.detail ?? "", /belum membuktikan overlay KRITIS/);
+  // Non-kritis yang tak terbukti TIDAK menjatuhkan video selama rasio >= 60%.
+  const majority = await qcTextNotClipped(makeOcrVideo(dir, false), dir, [
+    ...expected,
+    { text: "kartu caption yang tak terbaca ocr", startSec: 0, endSec: 2 },
+    { text: "kartu caption lain yang terbaca? tidak", startSec: 0, endSec: 2 },
+  ]);
+  assert.equal(majority.status, "skip", "2 dari 3 tak terbukti = 33% < 60% -> tetap skip");
+  const okRatio = await qcTextNotClipped(makeOcrVideo(dir, false), dir, [
+    ...expected,
+    ...expected.map((e) => ({ ...e, text: "Klik Keranjang Kuning " })), // duplikat mudah terbaca
+  ]);
+  assert.equal(okRatio.status, "pass", okRatio.detail);
   const clipped = await qcTextNotClipped(makeOcrVideo(dir, true), dir, expected);
   assert.equal(clipped.status, "fail", clipped.detail);
   assert.match(clipped.detail ?? "", /menyentuh tepi kanvas/);
