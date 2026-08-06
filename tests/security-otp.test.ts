@@ -93,16 +93,16 @@ test("request-otp: mode mock mengembalikan dev_hint, tidak membocorkan kode", as
   assert.ok(row.code_hash.length === 64, "yang tersimpan harus sha256 hash");
 });
 
-test("signup via email: user baru dapat bonus Rp5.000", () => {
+test("signup via email: user baru dapat bonus Rp12.000", () => {
   const user = findOrCreateUserByEmail("Baru@Contoh.com");
   assert.equal(user.email, "baru@contoh.com", "email dinormalisasi lowercase");
   const bal = db.prepare("SELECT COALESCE(SUM(delta),0) AS b FROM credit_ledger WHERE user_id = ?").get(user.id) as { b: number };
-  assert.equal(bal.b, 5000);
+  assert.equal(bal.b, 12000);
   // idempoten: email sama -> user sama, bonus tidak dobel
   const again = findOrCreateUserByEmail("baru@contoh.com");
   assert.equal(again.id, user.id);
   const bal2 = db.prepare("SELECT COALESCE(SUM(delta),0) AS b FROM credit_ledger WHERE user_id = ?").get(user.id) as { b: number };
-  assert.equal(bal2.b, 5000);
+  assert.equal(bal2.b, 12000);
 });
 
 test("dev-login & webhook stub: 403 saat NODE_ENV=production", async () => {
@@ -111,7 +111,7 @@ test("dev-login & webhook stub: 403 saat NODE_ENV=production", async () => {
   try {
     const res = await devLogin(jsonReq("/api/auth/dev-login", { phone: "084444000555" }));
     assert.equal(res.status, 403);
-    const res2 = await webhookStub(jsonReq("/api/webhooks/payment", { gateway_ref: "x", package_id: "senyap5", phone: "084444000555" }));
+    const res2 = await webhookStub(jsonReq("/api/webhooks/payment", { gateway_ref: "x", package_id: "hq5", phone: "084444000555" }));
     assert.equal(res2.status, 403);
   } finally {
     (process.env as Record<string, string | undefined>).NODE_ENV = original;
@@ -121,14 +121,14 @@ test("dev-login & webhook stub: 403 saat NODE_ENV=production", async () => {
 test("checkout tanpa MIDTRANS_SERVER_KEY -> 503 pesan jelas, bukan crash", async () => {
   const user = findOrCreateUserByEmail("checkout@contoh.com");
   const token = await issueToken(user.id, user.email ?? "");
-  const res = await checkout(jsonReq("/api/credits/checkout", { package_id: "senyap5" }, `racun_token=${encodeURIComponent(token)}`));
+  const res = await checkout(jsonReq("/api/credits/checkout", { package_id: "hq5" }, `racun_token=${encodeURIComponent(token)}`));
   assert.equal(res.status, 503);
   const body = await res.json();
   assert.equal(body.code, "PAYMENT_NOT_CONFIGURED");
   assert.match(body.message_en, /MIDTRANS_SERVER_KEY/);
   const payment = db.prepare("SELECT status, raw_payload FROM payments WHERE user_id = ?").get(user.id) as { status: string; raw_payload: string };
   assert.equal(payment.status, "failed", "pending order tetap direkam bila inisiasi Snap gagal");
-  assert.equal(JSON.parse(payment.raw_payload).package_id, "senyap5");
+  assert.equal(JSON.parse(payment.raw_payload).package_id, "hq5");
   assert.match(JSON.parse(payment.raw_payload).provider_initiation.error, /MIDTRANS_SERVER_KEY/);
   const failureAudit = db.prepare("SELECT action FROM audit_log WHERE actor = ? AND action = 'payment.initiation_failed'").get(user.id) as { action: string } | undefined;
   assert.equal(failureAudit?.action, "payment.initiation_failed");

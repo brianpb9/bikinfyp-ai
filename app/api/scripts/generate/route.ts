@@ -17,9 +17,12 @@ export async function POST(req: Request) {
 
     const productId = String(body.product_id ?? "");
     const register = String(body.register ?? "netral") as Register;
-    const tier = (["silent_caption", "high_quality", "super_hq"].includes(body.quality_tier)
+    // 2026-08-06: tier senyap dihapus dari AI UGC Affiliate — fokus persona bersuara.
+    if (body.quality_tier === "silent_caption")
+      throw ERR.BAD_REQUEST("Tier Teks + Musik sudah tidak tersedia — pilih AI Bersuara ya.", "silent_caption tier retired.");
+    const tier = (["high_quality", "super_hq"].includes(body.quality_tier)
       ? body.quality_tier
-      : "silent_caption") as "silent_caption" | "high_quality" | "super_hq";
+      : "high_quality") as "silent_caption" | "high_quality" | "super_hq";
     const emotion = ["senang", "sedih", "gemas"].includes(body.emotion) ? body.emotion : "senang";
     const hookLevel = (["normal", "berani", "gila"].includes(body.hook_level) ? body.hook_level : "normal") as
       | "normal" | "berani" | "gila";

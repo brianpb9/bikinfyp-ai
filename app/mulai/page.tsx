@@ -26,7 +26,7 @@ const OBJECTIONS: { id: string; label: string; pitch: string }[] = [
   {
     id: "mahal",
     label: "Jasa kreator/UGC mahal",
-    pitch: "Mulai Rp5.000 per video — bandingkan dengan jasa UGC ratusan ribu per konten.",
+    pitch: "Mulai Rp12.000 per video bersuara — bandingkan dengan jasa UGC ratusan ribu per konten.",
   },
   {
     id: "sepi",
@@ -117,7 +117,7 @@ export default function MulaiQuizPage() {
           >
             {product === "affiliate" ? "Lihat skripmu sekarang — gratis, tanpa daftar" : "Mulai bikin AI UGC Ads"}
           </Link>
-          <p className="text-xs text-zinc-400">Tanpa kartu kredit · user baru dapat bonus Rp5.000</p>
+          <p className="text-xs text-zinc-400">Tanpa kartu kredit · user baru dapat bonus Rp12.000 (1 video gratis)</p>
         </section>
       )}
     </main>

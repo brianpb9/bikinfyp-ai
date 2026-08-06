@@ -43,8 +43,8 @@ export function findOrCreateUserByPhone(phone: string): UserRow {
   // Bonus onboarding: Rp5.000 untuk pengguna baru — cukup 1 video Senyap+Teks (F-12)
   db.prepare(
     "INSERT INTO credit_ledger (id, user_id, delta, type, job_id, payment_id, created_at) VALUES (?,?,?,?,NULL,NULL,?)"
-  ).run(uuid(), id, 5000, "bonus", now());
-  audit(id, "user.signup_bonus", "credit_ledger", id, { delta_idr: 5000 });
+  ).run(uuid(), id, config.signupBonusIdr, "bonus", now());
+  audit(id, "user.signup_bonus", "credit_ledger", id, { delta_idr: config.signupBonusIdr });
   audit(id, "user.created", "users", id, { phone });
   return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow;
 }
@@ -61,8 +61,8 @@ export function findOrCreateUserByEmail(email: string): UserRow {
   // Bonus onboarding: Rp5.000 untuk pengguna baru — cukup 1 video Senyap+Teks (F-12)
   db.prepare(
     "INSERT INTO credit_ledger (id, user_id, delta, type, job_id, payment_id, created_at) VALUES (?,?,?,?,NULL,NULL,?)"
-  ).run(uuid(), id, 5000, "bonus", now());
-  audit(id, "user.signup_bonus", "credit_ledger", id, { delta_idr: 5000 });
+  ).run(uuid(), id, config.signupBonusIdr, "bonus", now());
+  audit(id, "user.signup_bonus", "credit_ledger", id, { delta_idr: config.signupBonusIdr });
   audit(id, "user.created", "users", id, { email: key });
   return db.prepare("SELECT * FROM users WHERE id = ?").get(id) as UserRow;
 }

@@ -40,8 +40,8 @@ const segments = [
   { role: "cta", start: 10, end: 15, text: "Aku taruh linknya di keranjang kuning ya, tinggal CO aja deh", visual_direction: "x" },
 ];
 db.prepare(
-  `INSERT INTO scripts (id, job_id, product_id, hook_family, emotion, register, segments, caption, hashtags, validation_result, approved_by_user_at, edited_by_user, created_at)
-   VALUES (?, NULL, ?, 'H1', 'senang', 'bestie', ?, 'caption', '[]', '{}', NULL, 0, ?)`
+  `INSERT INTO scripts (id, job_id, product_id, hook_family, emotion, register, segments, caption, hashtags, validation_result, quality_tier, approved_by_user_at, edited_by_user, created_at)
+   VALUES (?, NULL, ?, 'H1', 'senang', 'bestie', ?, 'caption', '[]', '{}', 'high_quality', NULL, 0, ?)`
 ).run(scriptId, productId, JSON.stringify(segments), now());
 
 function req(url: string, body: unknown) {
@@ -87,7 +87,7 @@ test("setelah approve -> job dibuat (201) dan state QUEUED", async () => {
   assert.equal(duplicateBody.job_id, body.job_id);
   assert.equal(duplicateBody.duplicate, true);
 
-  // Kredit ter-hold: bonus Rp5.000 - hold Rp5.000 (tier silent_caption) = 0
+  // Kredit ter-hold: bonus Rp12.000 - hold Rp12.000 (tier high_quality default) = 0
   const bal = db.prepare("SELECT COALESCE(SUM(delta),0) AS b FROM credit_ledger WHERE user_id = ?").get(user.id) as { b: number };
   assert.equal(bal.b, 0);
   const holds = db.prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE user_id = ? AND type = 'hold'").get(user.id) as { n: number };

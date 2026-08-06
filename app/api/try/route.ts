@@ -41,8 +41,8 @@ export async function POST(req: Request) {
         let score: number | null = null;
         try {
           score = scoreScriptPlan({
-            hookFamily: v.hook_family, segments: v.segments, qualityTier: "silent_caption",
-            durationSec: 15, format: "hands_only", productName: name, priceIdr,
+            hookFamily: v.hook_family, segments: v.segments, qualityTier: "high_quality",
+            durationSec: 15, format: "talking_head", productName: name, priceIdr,
           }).score;
         } catch {
           /* skor gagal bukan alasan menahan skrip */

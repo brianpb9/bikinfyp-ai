@@ -15,10 +15,10 @@ interface LedgerItem {
 
 // Nama paket berbasis manfaat + contoh visual per tier (2026-08-06: tester
 // bingung "Senyap"; target user emak-emak — tunjukkan, jangan jelaskan).
+// 2026-08-06: tier Teks+Musik pensiun — fokus persona bersuara.
 const PACKAGES = [
-  { id: "senyap5", name: "5× Teks + Musik", price: 25_000, perVideo: "Rp5rb/video", tag: null, badge: "🔇 teks gede + musik", voiced: false },
-  { id: "senyap10", name: "10× Teks + Musik", price: 50_000, perVideo: "Rp5rb/video", tag: "Paling laris", badge: "🔇 teks gede + musik", voiced: false },
-  { id: "hq10", name: "10× AI Bersuara", price: 120_000, perVideo: "Rp12rb/video", tag: null, badge: "🎙️ AI-nya ngomong", voiced: true },
+  { id: "hq5", name: "5× AI Bersuara", price: 60_000, perVideo: "Rp12rb/video", tag: null, badge: "🎙️ AI-nya ngomong", voiced: true },
+  { id: "hq10", name: "10× AI Bersuara", price: 120_000, perVideo: "Rp12rb/video", tag: "Paling laris", badge: "🎙️ AI-nya ngomong", voiced: true },
   { id: "super5", name: "5× AI Bersuara Pro", price: 245_000, perVideo: "Rp49rb/video", tag: null, badge: "🎙️ suara + gambar tertajam", voiced: true },
 ];
 
@@ -114,7 +114,7 @@ function KreditInner() {
     }
   }
 
-  const nSenyap = balance === null ? null : Math.floor(balance / 5000);
+  const nSuper = balance === null ? null : Math.floor(balance / 49000);
   const nHq = balance === null ? null : Math.floor(balance / 12000);
 
   return (
@@ -135,12 +135,12 @@ function KreditInner() {
         <p className="mt-1 text-xs text-zinc-400">BikinFYP.AI · dompet kreator</p>
         <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/10 pt-3 text-center">
           <div className="rounded-xl bg-white/5 px-2 py-2">
-            <p className="font-display text-lg font-extrabold text-amber-300">{nSenyap ?? "…"}</p>
-            <p className="text-[10px] leading-tight text-zinc-400">video Teks + Musik</p>
-          </div>
-          <div className="rounded-xl bg-white/5 px-2 py-2">
             <p className="font-display text-lg font-extrabold text-amber-300">{nHq ?? "…"}</p>
             <p className="text-[10px] leading-tight text-zinc-400">video AI Bersuara</p>
+          </div>
+          <div className="rounded-xl bg-white/5 px-2 py-2">
+            <p className="font-display text-lg font-extrabold text-amber-300">{nSuper ?? "…"}</p>
+            <p className="text-[10px] leading-tight text-zinc-400">video Bersuara Pro</p>
           </div>
         </div>
       </div>
@@ -179,8 +179,8 @@ function KreditInner() {
           </button>
         ))}
         <p className="text-xs leading-5 text-zinc-500">
-          Semua paket: AI memperagakan produkmu seperti contoh di atas. Bedanya: <b>Teks + Musik</b> tanpa
-          suara ngomong (teks gede + musik), <b>AI Bersuara</b> ada suara AI natural yang menjelaskan produk.
+          Semua paket bersuara: AI memperagakan produkmu + suara natural yang menjelaskan produk.
+          <b> Pro</b> = kualitas gambar paling tajam.
         </p>
         {msg && <p className="rounded-2xl bg-green-50 p-3 text-center text-sm font-semibold text-green-700">{msg}</p>}
         <ErrorText message={error} />

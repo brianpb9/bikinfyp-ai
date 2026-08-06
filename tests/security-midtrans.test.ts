@@ -24,11 +24,11 @@ function makePendingOrder(): string {
   const orderId = `racun-test-${uuid().slice(0, 13)}`;
   db.prepare(
     "INSERT INTO payments (id, user_id, gateway, gateway_ref, amount_idr, credits, status, raw_payload, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
-  ).run(uuid(), user.id, "midtrans", orderId, 50000, 50000, "pending", JSON.stringify({ package_id: "senyap10" }), now());
+  ).run(uuid(), user.id, "midtrans", orderId, 120000, 120000, "pending", JSON.stringify({ package_id: "hq10" }), now());
   return orderId;
 }
 
-function settlementPayload(orderId: string, signatureOverride?: string, gross = "50000.00") {
+function settlementPayload(orderId: string, signatureOverride?: string, gross = "120000.00") {
   const statusCode = "200";
   const sig =
     signatureOverride ??
@@ -70,7 +70,7 @@ test("signature VALID -> 200, kredit masuk, status paid", async () => {
   assert.equal(res.status, 200);
   const body = await res.json();
   assert.equal(body.credited, true);
-  assert.equal(getBalance(user.id), before + 50000);
+  assert.equal(getBalance(user.id), before + 120000);
   const pay = db.prepare("SELECT status FROM payments WHERE gateway_ref = ?").get(orderId) as { status: string };
   assert.equal(pay.status, "paid");
 });
@@ -89,7 +89,7 @@ test("signature valid dengan gross_amount salah -> 422, diaudit, dan saldo TIDAK
   assert.equal(pay.status, "pending", "order tetap pending untuk rekonsiliasi, bukan diam-diam paid/failed");
   const audit = db.prepare("SELECT meta FROM audit_log WHERE action = 'webhook.gross_amount_rejected' AND entity_id = ? ORDER BY rowid DESC LIMIT 1").get(orderId) as { meta: string } | undefined;
   assert.ok(audit, "mismatch harus memiliki audit evidence");
-  assert.deepEqual(JSON.parse(audit.meta), { order_id: orderId, gross_amount: "500000.00", expected_amount_idr: 50000 });
+  assert.deepEqual(JSON.parse(audit.meta), { order_id: orderId, gross_amount: "500000.00", expected_amount_idr: 120000 });
 });
 
 test("webhook sama 2x -> idempoten (saldo hanya +1x)", async () => {
@@ -99,7 +99,7 @@ test("webhook sama 2x -> idempoten (saldo hanya +1x)", async () => {
   const res2 = await callWebhook(settlementPayload(orderId));
   const body2 = await res2.json();
   assert.equal(body2.duplicated, true);
-  assert.equal(getBalance(user.id), before + 50000);
+  assert.equal(getBalance(user.id), before + 120000);
 });
 
 test("status deny/cancel/expire -> status failed, tanpa kredit", async () => {

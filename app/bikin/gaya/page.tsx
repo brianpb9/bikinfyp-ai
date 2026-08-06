@@ -15,8 +15,9 @@ const FORMATS: {
   id: VideoFormat; label: string; icon: string; hint: string; needsAudio: boolean;
   previewVideo?: string; previewImage?: string;
 }[] = [
-  { id: "hands_only", label: "Tangan saja", icon: "/icons/ui/format-tangan.png", hint: "tanpa wajah", needsAudio: false, previewVideo: "/previews/format-tangan.mp4" },
-  { id: "talking_head", label: "Wajah AI", icon: "/icons/ui/format-wajah.png", hint: "presenter AI, versi 1", needsAudio: true, previewVideo: "/previews/format-wajah.mp4" },
+  // Persona-first (keputusan Brian 2026-08-06): Wajah AI default & pertama.
+  { id: "talking_head", label: "Wajah AI", icon: "/icons/ui/format-wajah.png", hint: "presenter AI ngomong", needsAudio: true, previewVideo: "/previews/format-wajah.mp4" },
+  { id: "hands_only", label: "Tangan saja", icon: "/icons/ui/format-tangan.png", hint: "tanpa wajah, tetap bersuara", needsAudio: true, previewVideo: "/previews/format-tangan.mp4" },
   { id: "vo_broll", label: "VO + Foto", icon: "/icons/ui/format-foto.png", hint: "foto asli + suara, versi 1", needsAudio: true, previewVideo: "/previews/format-foto.mp4" },
 ];
 
@@ -64,9 +65,9 @@ interface TierMeta {
 // S3 — PILIH GAYA (Langkah 2/5) — tier harga AKTIF (keputusan final 3-tier)
 export default function GayaPage() {
   const router = useRouter();
-  const [tier, setTier] = useState<Tier>("silent_caption");
+  const [tier, setTier] = useState<Tier>("high_quality");
   const [tiers, setTiers] = useState<TierMeta[]>([]);
-  const [format, setFormat] = useState<VideoFormat>("hands_only");
+  const [format, setFormat] = useState<VideoFormat>("talking_head");
   const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
   const [hookPct, setHookPct] = useState(15);
   const hookLevel = hookLevelFromPct(hookPct);
@@ -101,12 +102,7 @@ export default function GayaPage() {
   const selectedCategory = CREATOR_CATS.find((c) => c.id === creatorCategory);
 
   function selectFormat(id: VideoFormat) {
-    setFormat(id);
-    // Wajah AI & VO+Foto namanya sendiri menjanjikan suara — tier senyap
-    // ditolak API (lihat app/api/jobs/route.ts), jadi naikkan otomatis di sini
-    // biar user tidak kena error yang membingungkan.
-    const needsAudio = FORMATS.find((f) => f.id === id)?.needsAudio;
-    if (needsAudio && tier === "silent_caption") setTier("high_quality");
+    setFormat(id); // semua format kini bersuara (tier senyap dihapus 2026-08-06)
   }
 
   async function generate() {
@@ -119,7 +115,7 @@ export default function GayaPage() {
       const res = await apiFetch<{ scripts: FlowScript[] }>("/api/scripts/generate", {
         json: {
           product_id: product.productId,
-          register: tier === "silent_caption" ? "netral" : register,
+          register,
           emotion: "senang",
           format,
           quality_tier: tier,
@@ -245,13 +241,7 @@ export default function GayaPage() {
 
         <section className="space-y-3">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih paket</p><h2 className="font-display text-xl font-bold">Kualitas video</h2></div>
-          {FORMATS.find((f) => f.id === format)?.needsAudio && (
-            <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              {FORMATS.find((f) => f.id === format)?.label} butuh suara — Teks + Musik disembunyikan.
-            </p>
-          )}
-          {(tiers.length ? tiers : [{ id: "silent_caption", name: "Teks + Musik", note: "Teks gede + musik, tanpa suara ngomong", tag: "Paling hemat", price_idr: 5000 }])
-            .filter((t) => !(FORMATS.find((f) => f.id === format)?.needsAudio && t.id === "silent_caption"))
+          {(tiers.length ? tiers : [{ id: "high_quality", name: "AI Bersuara", note: "AI-nya ngomong pakai suara natural", tag: null, price_idr: 12000 }])
             .map((t) => (
             <button
               key={t.id}
@@ -311,11 +301,8 @@ export default function GayaPage() {
               </div>
             </section>
 
-            {tier === "silent_caption" ? (
-              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm leading-6 text-amber-900">
-                🔇 Teks + Musik memakai caption tersinkron dan musik latar; pilihan panggilan tidak dipakai.
-              </div>
-            ) : (
+            {/* Semua tier kini bersuara (2026-08-06) — pilihan suara selalu tampil. */}
+            {(
               <section className="space-y-3">
                 <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih karakter</p><h2 className="font-display text-xl font-bold">Suara & panggilan</h2></div>
                 {REGISTERS.map((r) => (

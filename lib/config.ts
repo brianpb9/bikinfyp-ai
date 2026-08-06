@@ -146,7 +146,7 @@ export const config = {
   // staging testing (2026-08-02): ~Rp1,100-1,300/job. Brian's call (2026-08-03):
   // pick something profitable, not a launch blocker, revisit later.
   promoPriceIdr: parseInt(env("PROMO_PRICE_IDR", "9000"), 10),
-  signupBonusIdr: 5000, // bonus user baru: cukup 1 video Senyap+Teks
+  signupBonusIdr: 12000, // bonus user baru: cukup 1 video AI Bersuara (keputusan 2026-08-06: tier senyap dihapus dari Affiliate)
   // Parameter bisnis
   signedUrlTtlSec: 3600, // SRS NF-SEC04: TTL <= 1 jam
   queuedTimeoutMin: 30, // BR-06.3: job QUEUED >30 menit -> FAILED + refund

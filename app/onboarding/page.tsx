@@ -22,7 +22,7 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [monthlyVideos, setMonthlyVideos] = useState(10);
-  const [tierPrice, setTierPrice] = useState<5000 | 12000 | 49000>(5000);
+  const [tierPrice, setTierPrice] = useState<12000 | 49000>(12000);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   useEffect(() => {
@@ -130,7 +130,7 @@ export default function OnboardingPage() {
                 { value: "15 detik", label: "video siap posting" },
                 { value: "~2–3 menit", label: "waktu render rata-rata staging" },
                 { value: "5 gaya", label: "kreator AI aktif" },
-                { value: "Rp5.000", label: "harga mulai per video" },
+                { value: "Rp12.000", label: "harga per video bersuara" },
               ].map((f) => (
                 <div
                   key={f.label}
@@ -148,7 +148,7 @@ export default function OnboardingPage() {
               <div className="mt-5 flex items-end justify-between"><span className="text-4xl font-extrabold text-amber-300">{monthlyVideos}</span><span className="mb-1 text-sm text-zinc-300">video / bulan</span></div>
               <input aria-label="Jumlah video per bulan" type="range" min="1" max="100" value={monthlyVideos} onChange={(e) => setMonthlyVideos(Number(e.target.value))} className="mt-3 w-full accent-amber-400" />
               <div className="mt-5 grid grid-cols-3 gap-2">
-                {([{ label: "Teks+Musik", price: 5000 }, { label: "AI Bersuara", price: 12000 }, { label: "Bersuara Pro", price: 49000 }] as const).map((tier) => <button type="button" key={tier.price} onClick={() => setTierPrice(tier.price)} className={`rounded-xl border px-2 py-2 text-left text-[11px] font-bold ${tierPrice === tier.price ? "border-amber-300 bg-amber-400 text-zinc-950" : "border-zinc-700 text-zinc-200"}`}><span className="block leading-tight">{tier.label}</span><span className="mt-1 block text-xs">Rp{tier.price.toLocaleString("id-ID")}</span></button>)}
+                {([{ label: "AI Bersuara", price: 12000 }, { label: "Bersuara Pro", price: 49000 }] as const).map((tier) => <button type="button" key={tier.price} onClick={() => setTierPrice(tier.price)} className={`rounded-xl border px-2 py-2 text-left text-[11px] font-bold ${tierPrice === tier.price ? "border-amber-300 bg-amber-400 text-zinc-950" : "border-zinc-700 text-zinc-200"}`}><span className="block leading-tight">{tier.label}</span><span className="mt-1 block text-xs">Rp{tier.price.toLocaleString("id-ID")}</span></button>)}
               </div>
               <div className="mt-5 rounded-2xl bg-white p-4 text-zinc-900"><div className="flex justify-between text-xs text-zinc-500"><span>Jasa UGC manusia*</span><span className="line-through">Rp{humanCost.toLocaleString("id-ID")}</span></div><div className="mt-1 flex justify-between text-xs text-zinc-500"><span>BikinFYP AI</span><span>Rp{aiCost.toLocaleString("id-ID")}</span></div><p className="mt-3 font-display text-2xl font-extrabold text-emerald-600">Hemat Rp{saving.toLocaleString("id-ID")}</p><p className="text-sm font-bold text-emerald-600">{savingPercent}% lebih hemat</p></div>
               <p className="mt-3 text-[10px] leading-relaxed text-zinc-400">*Estimasi Rp100–150 ribu/video dari riset pasar Fastwork; kalkulator memakai titik tengah Rp125 ribu.</p>
@@ -183,7 +183,7 @@ export default function OnboardingPage() {
           <div className="flex-1 space-y-6 pt-8">
             <h1 className="text-2xl font-bold text-zinc-900">Masuk pakai email</h1>
             <p className="text-zinc-600">
-              Tanpa password. Kami kirim kode 6 digit ke email kamu. User baru langsung dapat bonus Rp5.000.
+              Tanpa password. Kami kirim kode 6 digit ke email kamu. User baru langsung dapat bonus Rp12.000 (1 video gratis).
             </p>
             <a
               href="/api/auth/google"

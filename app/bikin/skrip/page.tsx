@@ -31,9 +31,9 @@ function scorePlan(
     return scoreScriptPlan({
       hookFamily: hookFamily as HookCode,
       segments: segments.map((s) => ({ ...s, visual_direction: s.visual_direction ?? "" })) as SegmentDraft[],
-      qualityTier: (f.qualityTier ?? "silent_caption") as FypQualityTier,
+      qualityTier: (f.qualityTier ?? "high_quality") as FypQualityTier,
       durationSec: f.durationSec ?? 15,
-      format: (f.format ?? "hands_only") as FypVideoFormat,
+      format: (f.format ?? "talking_head") as FypVideoFormat,
       productName: productInfo.name,
       priceIdr: productInfo.priceIdr,
     });
@@ -166,9 +166,9 @@ function SkripInner() {
       const job = await apiFetch<{ job_id: string }>("/api/jobs", {
         json: {
           script_id: script.id,
-          format: loadFlow().format ?? "hands_only",
+          format: loadFlow().format ?? "talking_head",
           duration_s: loadFlow().durationSec ?? 15,
-          quality_tier: loadFlow().qualityTier ?? "silent_caption",
+          quality_tier: loadFlow().qualityTier ?? "high_quality",
           creator_category: loadFlow().creatorCategory ?? "hijaber",
         },
       });

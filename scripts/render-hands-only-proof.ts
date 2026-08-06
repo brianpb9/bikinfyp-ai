@@ -36,7 +36,7 @@ async function main() {
 
   const login = await api("/api/auth/dev-login", { json: { phone } });
   if (login.status !== 200) throw new Error(`login: ${login.status}`);
-  await api("/api/credits/topup", { json: { package_id: "senyap5" } }); // cukup untuk beberapa percobaan
+  await api("/api/credits/topup", { json: { package_id: "hq5" } }); // cukup untuk beberapa percobaan
 
   const fd = new FormData();
   fd.set("name", "Serum Glow Bright");

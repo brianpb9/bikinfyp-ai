@@ -48,7 +48,7 @@
       "evidence": "pola tutorial/transformasi di video pemenang",
       "preset": {
         "format": "hands_only",
-        "qualityTier": "silent_caption",
+        "qualityTier": "high_quality",
         "durationSec": 30,
         "hookFamilies": [
           "H11",

@@ -6,6 +6,7 @@
  */
 import crypto from "node:crypto";
 import { Pool, type PoolClient } from "pg";
+import { config } from "../config";
 import type { UserRow } from "../db";
 
 export interface PgAuthOtpAuditOptions {
@@ -189,9 +190,9 @@ export class PgAuthOtpAuditRepository {
   private async insertSignupSideEffects(client: PoolClient, userId: string, identity: { email?: string; phone?: string }, createdAt: string): Promise<void> {
     await client.query(
       "INSERT INTO credit_ledger (id, user_id, delta, type, job_id, payment_id, created_at) VALUES ($1,$2,$3,$4,NULL,NULL,$5)",
-      [this.uuid(), userId, 5000, "bonus", createdAt]
+      [this.uuid(), userId, config.signupBonusIdr, "bonus", createdAt]
     );
-    await this.insertAudit(client, userId, "user.signup_bonus", "credit_ledger", userId, { delta_idr: 5000 }, createdAt);
+    await this.insertAudit(client, userId, "user.signup_bonus", "credit_ledger", userId, { delta_idr: config.signupBonusIdr }, createdAt);
     await this.insertAudit(client, userId, "user.created", "users", userId, identity, createdAt);
   }
 

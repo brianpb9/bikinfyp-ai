@@ -67,7 +67,7 @@ const TEMPLATES = [
     name: "Demo Transformasi",
     desc: "Tunjukkan pemakaian & perubahan sebelum-sesudah, tanpa wajah",
     match: (r: Record<string, string>) => r.label_format === "tutorial" || r.label_narrative === "transformation",
-    preset: { format: "hands_only", qualityTier: "silent_caption", durationSec: 30, hookFamilies: ["H11", "H12", "H5", "H6"] },
+    preset: { format: "hands_only", qualityTier: "high_quality", durationSec: 30, hookFamilies: ["H11", "H12", "H5", "H6"] },
     evidence: "pola tutorial/transformasi di video pemenang",
   },
 ];

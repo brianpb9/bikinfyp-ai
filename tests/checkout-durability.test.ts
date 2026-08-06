@@ -13,7 +13,7 @@ test("checkout persists pending order before the mocked Midtrans call", async ()
   let pending: { userId: string; orderId: string; packageId: string; amountIdr: number } | undefined;
   const checkout = await initiateCheckout(
     { id: "user-1", phone: "08123456789" },
-    "senyap5",
+    "hq5",
     {
       newOrderId: () => "racun-durable-order",
       persistPending: async (record) => {
@@ -22,7 +22,7 @@ test("checkout persists pending order before the mocked Midtrans call", async ()
       },
       createSnap: async ({ orderId }) => {
         events.push("provider");
-        assert.deepEqual(pending, { userId: "user-1", orderId, packageId: "senyap5", amountIdr: 25000 });
+        assert.deepEqual(pending, { userId: "user-1", orderId, packageId: "hq5", amountIdr: 60000 });
         return { snapToken: "snap-test", redirectUrl: "https://example.test/snap" };
       },
       markInitiationFailed: async () => assert.fail("provider success must not mark checkout failed"),
@@ -38,7 +38,7 @@ test("provider initiation failure keeps the pending order as a recorded failed c
   await assert.rejects(
     initiateCheckout(
       { id: "user-2", email: "owner@example.test" },
-      "senyap10",
+      "hq10",
       {
         newOrderId: () => "racun-provider-failed",
         persistPending: async () => { events.push("persist"); },

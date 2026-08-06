@@ -13,12 +13,12 @@ const { findOrCreateUserByPhone } = await import("../lib/auth");
 const { getBalance, holdCredits, captureCredits, releaseCredits, creditTopup, tierPriceIdr } = await import("../lib/credits");
 
 const db = getDb();
-const user = findOrCreateUserByPhone("089999000111"); // bonus onboarding: Rp5.000
+const user = findOrCreateUserByPhone("089999000111"); // bonus onboarding: Rp12.000
 
-test("user baru dapat bonus Rp5.000 (cukup 1 video Senyap+Teks)", () => {
-  assert.equal(getBalance(user.id), 5000);
+test("user baru dapat bonus Rp12.000 (cukup 1 video AI Bersuara)", () => {
+  assert.equal(getBalance(user.id), 12000);
   const row = db.prepare("SELECT * FROM credit_ledger WHERE user_id = ? AND type = 'bonus'").get(user.id) as { delta: number };
-  assert.equal(row.delta, 5000);
+  assert.equal(row.delta, 12000);
 });
 
 test("harga tier sesuai keputusan final: 5000 / 12000 / 49000", () => {
@@ -28,40 +28,40 @@ test("harga tier sesuai keputusan final: 5000 / 12000 / 49000", () => {
 });
 
 test("topup menambah saldo rupiah via ledger", () => {
-  const r = creditTopup({ userId: user.id, packageId: "senyap5", gateway: "test", gatewayRef: "ref-1" });
+  const r = creditTopup({ userId: user.id, packageId: "hq5", gateway: "test", gatewayRef: "ref-1" });
   assert.equal(r.duplicated, false);
-  assert.equal(r.amountIdr, 25000);
-  assert.equal(getBalance(user.id), 30000);
+  assert.equal(r.amountIdr, 60000);
+  assert.equal(getBalance(user.id), 72000);
 });
 
 test("hold sebesar harga tier; capture tidak mengubah saldo (hold jadi final)", () => {
   assert.equal(holdCredits(user.id, "job-1", 5000), true);
-  assert.equal(getBalance(user.id), 25000);
+  assert.equal(getBalance(user.id), 67000);
   captureCredits(user.id, "job-1");
-  assert.equal(getBalance(user.id), 25000); // delta capture = 0
+  assert.equal(getBalance(user.id), 67000); // delta capture = 0
 });
 
 test("release setelah capture = no-op (uang tidak kembali dua kali)", () => {
   const refunded = releaseCredits(user.id, "job-1");
   assert.equal(refunded, 0);
-  assert.equal(getBalance(user.id), 25000);
+  assert.equal(getBalance(user.id), 67000);
 });
 
 test("hold -> release mengembalikan rupiah persis sebesar hold", () => {
   assert.equal(holdCredits(user.id, "job-2", 12000), true);
-  assert.equal(getBalance(user.id), 13000);
+  assert.equal(getBalance(user.id), 55000);
   const refunded = releaseCredits(user.id, "job-2");
   assert.equal(refunded, 12000);
-  assert.equal(getBalance(user.id), 25000);
+  assert.equal(getBalance(user.id), 67000);
   assert.equal(releaseCredits(user.id, "job-2"), 0);
-  assert.equal(getBalance(user.id), 25000);
+  assert.equal(getBalance(user.id), 67000);
 });
 
 test("hold ditolak bila saldo kurang dari harga tier", () => {
-  const miskin = findOrCreateUserByPhone("089999000222"); // bonus Rp5.000
-  assert.equal(holdCredits(miskin.id, "job-x", 12000), false);
-  assert.equal(getBalance(miskin.id), 5000);
-  assert.equal(holdCredits(miskin.id, "job-y", 5000), true);
+  const miskin = findOrCreateUserByPhone("089999000222"); // bonus Rp12.000
+  assert.equal(holdCredits(miskin.id, "job-x", 49000), false); // Super HQ > bonus
+  assert.equal(getBalance(miskin.id), 12000);
+  assert.equal(holdCredits(miskin.id, "job-y", 12000), true); // AI Bersuara pas
 });
 
 test("webhook/topup duplikat via gateway_ref tidak menggandakan saldo", () => {

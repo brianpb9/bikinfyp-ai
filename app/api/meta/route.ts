@@ -8,7 +8,6 @@ export const dynamic = "force-dynamic";
 // Nama tier berbasis MANFAAT (rename 2026-08-06: tester bingung istilah
 // "Senyap" — nama harus menjelaskan hasil, bukan teknologi; id internal tetap).
 const TIER_UI = [
-  { id: "silent_caption", name: "Teks + Musik", note: "AI peragakan produk + teks gede & musik — gaya paling rame di FYP (tanpa suara ngomong)", tag: "Paling hemat" },
   { id: "high_quality", name: "AI Bersuara", note: "Sama, PLUS AI-nya ngomong pakai suara natural", tag: null },
   { id: "super_hq", name: "AI Bersuara Pro", note: "Suara + kualitas gambar paling tajam", tag: null },
 ];

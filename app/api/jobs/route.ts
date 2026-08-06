@@ -107,16 +107,11 @@ export async function POST(req: Request) {
       );
 
     // --- Tier kualitas: menentukan model, audio, dan HARGA (P6: harga terlihat sebelum aksi) ---
-    const tier = String(body.quality_tier ?? "silent_caption") as "silent_caption" | "high_quality" | "super_hq";
-    if (!["silent_caption", "high_quality", "super_hq"].includes(tier))
-      throw ERR.BAD_REQUEST("Tier tidak dikenal. Pilih: silent_caption, high_quality, atau super_hq.", "Unknown quality tier.");
-    // Wajah AI & VO+Foto namanya sendiri sudah menjanjikan suara — tier senyap
-    // tidak masuk akal (dan QC-04 bakal gagal keras karena video benar-benar bisu).
-    if ((format === "talking_head" || format === "vo_broll") && tier === "silent_caption")
-      throw ERR.BAD_REQUEST(
-        "Wajah AI dan VO + Foto butuh suara — pilih tier AI Bersuara atau AI Bersuara Pro, bukan Teks + Musik.",
-        "talking_head/vo_broll require an audio-bearing quality tier."
-      );
+    const tier = String(body.quality_tier ?? "high_quality") as "silent_caption" | "high_quality" | "super_hq";
+    if (tier === "silent_caption")
+      throw ERR.BAD_REQUEST("Tier Teks + Musik sudah tidak tersedia — bikin skrip baru dengan AI Bersuara ya.", "silent_caption tier retired.");
+    if (!["high_quality", "super_hq"].includes(tier))
+      throw ERR.BAD_REQUEST("Tier tidak dikenal. Pilih: high_quality atau super_hq.", "Unknown quality tier.");
     if (script.quality_tier !== tier)
       throw ERR.BAD_REQUEST(
         `Skrip ini dibuat untuk tier ${script.quality_tier}. Bikin skrip baru untuk tier ${tier} ya.`,

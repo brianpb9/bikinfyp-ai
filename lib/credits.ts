@@ -7,11 +7,12 @@ import { config } from "./config";
 import type { QualityTier } from "./providers/types";
 
 // Paket top-up — bundel per tier (BRD §5.2 "kebiasaan beli pulsa").
+// 2026-08-06: tier Teks+Musik DIHAPUS dari AI UGC Affiliate (fokus persona
+// bersuara) — paket senyap5/senyap10 pensiun; hq5 jadi paket masuk termurah.
 export const TOPUP_PACKAGES = [
-  { id: "senyap5", name: "5× Senyap+Teks", priceIdr: 25_000, videos: 5, tier: "silent_caption" },
-  { id: "senyap10", name: "10× Senyap+Teks", priceIdr: 50_000, videos: 10, tier: "silent_caption" },
-  { id: "hq10", name: "10× High Quality", priceIdr: 120_000, videos: 10, tier: "high_quality" },
-  { id: "super5", name: "5× Super HQ", priceIdr: 245_000, videos: 5, tier: "super_hq" },
+  { id: "hq5", name: "5× AI Bersuara", priceIdr: 60_000, videos: 5, tier: "high_quality" },
+  { id: "hq10", name: "10× AI Bersuara", priceIdr: 120_000, videos: 10, tier: "high_quality" },
+  { id: "super5", name: "5× AI Bersuara Pro", priceIdr: 245_000, videos: 5, tier: "super_hq" },
 ] as const;
 
 export type PackageId = (typeof TOPUP_PACKAGES)[number]["id"];
