@@ -81,16 +81,23 @@ const CRAZY_OPENER: Record<"hands_only" | "talking_head", string> = {
 };
 
 export function planShots(input: ShotPlanInput): VisualSpec {
-  // Jumlah shot: 2 di baseline 15/30 dtk (PERILAKU LAMA, tidak berubah — sudah
-  // teruji di produksi). Di 45 dtk, 2 shot berarti 22,5 dtk/klip yang MELEBIHI
-  // batas keras BytePlus (2-15 dtk/klip, lihat byteplus.ts createTask) — jadi
-  // butuh 3 shot @15 dtk pas (satu shot per segmen hook/demo/cta). Formula
-  // generik: minimal 2 shot buat variasi visual, nambah tiap durasi +15 dtk.
-  const numShots = Math.max(2, Math.ceil(input.durationSec / 15));
+  // Jumlah shot: batas keras BytePlus 2-15 dtk/klip (lihat byteplus.ts
+  // createTask) → satu shot per 15 dtk.
+  //
+  // WAJAH AI = SESEDIKIT MUNGKIN SHOT (2026-08-07, insiden produksi render
+  // Wajah AI pertama Brian): tiap shot adalah generate TERPISAH, dan model
+  // tidak menjamin identitas presenter antar generate → video 15 dtk yang
+  // dipecah 2 shot menghasilkan DUA KARAKTER BERBEDA. 15 dtk kini SATU shot
+  // utuh (satu generate = satu wajah, satu suara — mustahil ganti karakter).
+  // hands_only tetap minimal 2 shot (variasi visual; tangan tidak punya
+  // masalah identitas wajah — perilaku lama teruji di produksi).
+  const format = input.format ?? "hands_only";
+  const numShots = format === "talking_head"
+    ? Math.max(1, Math.ceil(input.durationSec / 15))
+    : Math.max(2, Math.ceil(input.durationSec / 15));
   const perShot = input.durationSec / numShots;
   const tier = input.qualityTier;
   const withAudio = tier !== "silent_caption";
-  const format = input.format ?? "hands_only";
 
   const segText = (role: string) => input.segments.find((s) => s.role === role)?.text ?? "";
   const noun = CATEGORY_NOUN[input.productCategory] ?? CATEGORY_NOUN.default;
@@ -101,13 +108,16 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     ? `The product is ${input.productVisualDesc.trim()}. `
     : "";
 
-  // Dialog per shot (tier bersuara): 2 shot = [hook+demo] lalu [cta] (perilaku
-  // lama, tak berubah). >=3 shot (45 dtk) = 1 segmen penuh per shot — pas
-  // karena tiap shot sudah 15 dtk penuh, gak perlu digabung lagi.
+  // Dialog per shot (tier bersuara): 1 shot (Wajah AI 15 dtk) = seluruh skrip
+  // dalam satu tarikan; 2 shot = [hook+demo] lalu [cta] (perilaku lama, tak
+  // berubah). >=3 shot (45 dtk) = 1 segmen penuh per shot — pas karena tiap
+  // shot sudah 15 dtk penuh, gak perlu digabung lagi.
   const dialogueForShot = (i: number): string[] =>
-    numShots >= 3
-      ? i === 0 ? [segText("hook")] : i === 1 ? [segText("demo")] : [segText("cta")]
-      : i === 0 ? [segText("hook"), segText("demo")] : [segText("cta")];
+    numShots === 1
+      ? [segText("hook"), segText("demo"), segText("cta")]
+      : numShots >= 3
+        ? i === 0 ? [segText("hook")] : i === 1 ? [segText("demo")] : [segText("cta")]
+        : i === 0 ? [segText("hook"), segText("demo")] : [segText("cta")];
 
   const shots: ShotSpec[] = Array.from({ length: numShots }, (_, i) => {
     const isFirst = i === 0;

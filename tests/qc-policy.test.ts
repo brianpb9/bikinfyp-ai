@@ -9,8 +9,15 @@ const passing = (): QcCheck[] => [
 
 test("QC hands_only: hanya N/A terdokumentasi boleh skip", () => {
   assert.equal(evaluateQcPolicy("hands_only", passing()), true);
-  const uncertainOverlay = passing().map((c) => c.code === "QC-06" ? { ...c, status: "skip" as const } : c);
-  assert.equal(evaluateQcPolicy("hands_only", uncertainOverlay), false);
+  // QC-04 wajib pass — skip (apa pun alasannya) menolak output.
+  const uncertainAudio = passing().map((c) => c.code === "QC-04" ? { ...c, status: "skip" as const } : c);
+  assert.equal(evaluateQcPolicy("hands_only", uncertainAudio), false);
+  // QC-06 skip DIIZINKAN sejak 2026-08-07 (mode bersuara tanpa overlay teks) —
+  // tapi fail tetap menolak.
+  const noOverlay = [...passing(), { code: "QC-06", name: "overlay", status: "skip" as const }];
+  assert.equal(evaluateQcPolicy("hands_only", noOverlay), true);
+  const clipped = [...passing(), { code: "QC-06", name: "overlay", status: "fail" as const }];
+  assert.equal(evaluateQcPolicy("hands_only", clipped), false);
 });
 
 test("QC hands_only: check wajib hilang atau format tanpa kebijakan menolak", () => {

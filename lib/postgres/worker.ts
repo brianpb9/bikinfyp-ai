@@ -179,7 +179,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), `Cek ${cartLabel}`, AIGC_WATERMARK_TEXT],
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, priceIdr: row.product_price_idr,
       renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format,
-      overlayTextExpectations: [
+      // Mode embedded (semua tier bersuara) TIDAK punya overlay teks lagi
+      // (2026-08-07: harga/CTA diucapkan AI, tulisan di layar dihapus) —
+      // QC-06 jadi N/A; watermark dijamin QC-08 + compositor.
+      overlayTextExpectations: mode === "embedded" ? [] : [
         // non-critical: QC-08 yang menjamin watermark; edgeExempt: dia memang
         // tinggal 24px dari tepi — line-box noise pernah bikin refund palsu (ec925061)
         { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: row.duration_s, edgeExempt: true },

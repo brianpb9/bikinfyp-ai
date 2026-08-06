@@ -28,10 +28,17 @@ export interface QcResult {
  * render format is hands_only; new formats must add a policy before use.
  */
 export const QC_POLICY_BY_FORMAT = {
+  // QC-06 keluar dari requiredPass untuk format bersuara (2026-08-07): mode
+  // embedded tidak merender overlay teks sama sekali (harga/CTA diucapkan AI,
+  // keputusan Brian "tulisan di layar hilangin aja") sehingga QC-06 skip
+  // dengan alasan "tidak ada overlay" — fail tetap menolak output.
   hands_only: {
-    requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-06", "QC-07", "QC-08", "QC-09"],
-    permittedSkip: ["QC-01"],
-    skipReason: { "QC-01": "N/A: hands_only tidak menampilkan pembicara untuk lip-sync." },
+    requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08", "QC-09"],
+    permittedSkip: ["QC-01", "QC-06"],
+    skipReason: {
+      "QC-01": "N/A: hands_only tidak menampilkan pembicara untuk lip-sync.",
+      "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
+    },
   },
   // Wajah AI (v1, 2026-08-03): wajah presenter AI SENGAJA terlihat, jadi
   // QC-09 (larangan wajah) tidak berlaku sama sekali untuk format ini —
@@ -39,9 +46,12 @@ export const QC_POLICY_BY_FORMAT = {
   // QC-01 (lip-sync) tetap skip: verifikasi viseme belum ada (fase 2),
   // dimitigasi lewat instruksi jeda/enunciate di shot-planner.
   talking_head: {
-    requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-06", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01"],
-    skipReason: { "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2) — dimitigasi lewat instruksi jeda/enunciate di prompt." },
+    requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08"],
+    permittedSkip: ["QC-01", "QC-06"],
+    skipReason: {
+      "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2) — dimitigasi lewat instruksi jeda/enunciate di prompt.",
+      "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
+    },
   },
   // VO+Foto (v1, 2026-08-03): visual adalah foto produk ASLI di-pan/zoom
   // (bukan video AI-generated), jadi QC-02 (morphing tangan AI) tidak

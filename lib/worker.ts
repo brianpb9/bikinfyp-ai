@@ -245,7 +245,9 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         format,
         // critical = teks kepatuhan/konversi (watermark, harga/promo, CTA) —
         // WAJIB terbukti OCR; kartu caption skrip non-kritis (cukup mayoritas).
-        overlayTextExpectations: [
+        // Mode embedded (bersuara): TANPA overlay teks sejak 2026-08-07
+        // (harga/CTA diucapkan AI) — QC-06 N/A, watermark dijamin QC-08.
+        overlayTextExpectations: compositeMode === "embedded" ? [] : [
           // Watermark TIDAK critical-OCR (2026-08-06): kehadirannya dijamin QC-08 +
           // selalu digambar compositor; teks kecil semi-transparan tak andal dibaca
           // tesseract server (insiden refund palsu job b7d08d14).

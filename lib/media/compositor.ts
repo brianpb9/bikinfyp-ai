@@ -251,33 +251,11 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     aChain.push(`${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=first:normalize=0[aout]`);
     mapAudio = "[aout]";
   } else if (input.mode === "embedded") {
-    // Overlay harga & CTA statis di atas video bersuara. Multiline (badge promo)
-    // wajib jalur PNG — sama seperti mode vo.
-    if (useDrawtext && !input.priceText.includes("\n")) {
-      vChain.push(
-        `[${cur}]drawtext=fontfile='${font}':text='${escDrawtext(input.priceText)}':` +
-          `fontsize=64:fontcolor=white:borderw=4:bordercolor=black@0.9:` +
-          `x=(w-text_w)/2:y=h*0.68:enable='between(t,${input.demoRange[0]},${input.demoRange[1]})'[vp]`
-      );
-      cur = "vp";
-      const badgePath = await renderCtaBadge(input.ctaText, input.workDir);
-      const bIdx = addPngInput(badgePath);
-      vChain.push(
-        `[${cur}][${bIdx}:v]overlay=x=(W-w)/2:y=H*0.83-h/2:eof_action=repeat:` +
-          `enable='between(t,${input.ctaRange[0]},${input.ctaRange[1]})'[vq]`
-      );
-      cur = "vq";
-    } else {
-      const pricePng = path.join(input.workDir, "ov_price.png");
-      await renderTextPng({ text: input.priceText, outPath: pricePng, pointsize: 64, fill: "white", stroke: "rgba(0,0,0,0.9)", strokeWidth: 4 });
-      let idx = addPngInput(pricePng);
-      vChain.push(`[${cur}][${idx}:v]overlay=x=(W-w)/2:y=H*0.68-h/2:eof_action=repeat:enable='between(t,${input.demoRange[0]},${input.demoRange[1]})'[vp]`);
-      cur = "vp";
-      const badgePath = await renderCtaBadge(input.ctaText, input.workDir);
-      idx = addPngInput(badgePath);
-      vChain.push(`[${cur}][${idx}:v]overlay=x=(W-w)/2:y=H*0.83-h/2:eof_action=repeat:enable='between(t,${input.ctaRange[0]},${input.ctaRange[1]})'[vq]`);
-      cur = "vq";
-    }
+    // Mode bersuara TANPA overlay teks (keputusan Brian 2026-08-07: "tulisan
+    // di layar hilangin aja" — overlay harga/CTA hasil render dinilai jelek dan
+    // menurunkan kesan UGC natural). Harga & CTA sudah DIUCAPKAN oleh AI di
+    // dialog; satu-satunya elemen di atas video adalah watermark AIGC
+    // (kewajiban kepatuhan, sudah dipasang sebelum cabang mode ini).
   }
 
   vChain.push(`[${cur}]null[vout]`);
