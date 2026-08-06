@@ -38,6 +38,9 @@ export interface ShotPlanInput {
   /** Deskripsi visual produk dari user (opsional) — memperkuat konsistensi identitas. */
   productVisualDesc?: string | null;
   imageRefPath: string; // foto produk asli (absolut)
+  /** Foto produk ke-2..5 (absolut) — referensi identitas tambahan untuk model
+   * yang mendukung r2v (Seedance 2.0 / tier bersuara). Lihat VisualSpec. */
+  extraImageRefPaths?: string[];
   qualityTier: QualityTier;
   format?: "hands_only" | "vo_broll" | "talking_head";
   /** Level hook S3. HANYA "gila" yang mengubah visual: shot 1 dapat pembuka
@@ -172,6 +175,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     negativePrompt, // tetap mengandung MANDATORY_NEGATIVE_PROMPT dari kategori
     qualityTier: tier,
     generateAudio: withAudio, // konsisten dengan tier — ditegakkan juga di registry
+    extraReferenceImagePaths: input.extraImageRefPaths?.slice(0, 4),
   };
 }
 

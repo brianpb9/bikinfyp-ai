@@ -101,23 +101,43 @@ function estimateCostIdr(model: string, totalTokens: number | undefined, duratio
   return { idr: Math.round(durationSec * perSec * config.usdIdr), estimated: true };
 }
 
+/** Susun item content create-task. Diekspor untuk unit test.
+ *
+ * Dua mode (aturan ModelArk, diverifikasi 2026-08-06: first/last frame TIDAK
+ * boleh dicampur reference media):
+ * - i2v (default): 1 foto tanpa role -> jadi frame pertama persis.
+ * - r2v (multi-referensi): SEMUA foto ber-role "reference_image" — dipakai
+ *   hanya bila ada foto ekstra DAN model Seedance 2.0 (dreamina-*); model 1.0
+ *   (tier senyap) tidak mendukung r2v.
+ */
+export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string): unknown[] {
+  const textItem = {
+    type: "text",
+    // Negative instruction wajib ikut di prompt (aturan keras #3)
+    text: `${shot.prompt}. Negative: ${spec.negativePrompt}`,
+  };
+  const extras = (spec.extraReferenceImagePaths ?? []).slice(0, 4);
+  const useR2v = extras.length > 0 && model.includes("dreamina-seedance-2");
+  if (!useR2v) {
+    return [textItem, { type: "image_url", image_url: { url: imageToDataUri(shot.imageRefPath) } }];
+  }
+  return [
+    textItem,
+    { type: "image_url", image_url: { url: imageToDataUri(shot.imageRefPath) }, role: "reference_image" },
+    ...extras.map((p) => ({ type: "image_url", image_url: { url: imageToDataUri(p) }, role: "reference_image" })),
+  ];
+}
+
 async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
-  const durationInt = Math.max(2, Math.min(15, Math.ceil(shot.durationSec))); // API hanya bilangan bulat (2–15 dtk tergantung model)
   const tierCfg = config.tiers[spec.qualityTier] ?? config.tiers.silent_caption;
+  const content = buildTaskContent(spec, shot, tierCfg.byteplusModel);
+  // Mode r2v (ada role reference_image) minimal 4 dtk (diverifikasi: duration 3
+  // ditolak InvalidParameter di r2v; i2v tetap 2-15).
+  const minDur = content.some((c) => (c as { role?: string }).role === "reference_image") ? 4 : 2;
+  const durationInt = Math.max(minDur, Math.min(15, Math.ceil(shot.durationSec))); // API hanya bilangan bulat
   const body = {
     model: tierCfg.byteplusModel,
-    content: [
-      {
-        type: "text",
-        // Negative instruction wajib ikut di prompt (aturan keras #3)
-        text: `${shot.prompt}. Negative: ${spec.negativePrompt}`,
-      },
-      {
-        type: "image_url",
-        // Foto produk asli user (disk lokal -> data URI base64)
-        image_url: { url: imageToDataUri(shot.imageRefPath) },
-      },
-    ],
+    content,
     // ATURAN SUARA FINAL: diturunkan dari tier (silent=false, bersuara=true) — ditegakkan assertVisualSpec
     generate_audio: spec.generateAudio,
     resolution: tierCfg.resolution,

@@ -1,6 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { getDb, now, uuid } from "@/lib/db";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { allowRate } from "@/lib/rate-limit";
 import crypto from "node:crypto";
 
 export const runtime = "nodejs";
@@ -11,9 +12,13 @@ export const dynamic = "force-dynamic";
 // - nama event whitelist keras (bukan analytics bebas),
 // - anon_id = cookie acak first-party (bukan fingerprint, bukan ad-id),
 // - meta dibatasi 500 char, fire-and-forget (selalu 204, tidak pernah memblokir UI),
-// - rate limit ringan per IP (in-memory — cukup untuk 1 instance web).
+// - rate limit per IP via lib/rate-limit (Redis-backed di production).
 const EVENT_NAMES = new Set([
   "landing_view",
+  "quiz_view",
+  "quiz_product",
+  "quiz_objection",
+  "quiz_done",
   "try_view",
   "try_generated",
   "try_signup_click",
@@ -25,22 +30,10 @@ const EVENT_NAMES = new Set([
   "report_saved",
 ]);
 
-const bucket = new Map<string, { count: number; resetAt: number }>();
-function allow(ip: string): boolean {
-  const nowMs = Date.now();
-  const b = bucket.get(ip);
-  if (!b || b.resetAt < nowMs) {
-    bucket.set(ip, { count: 1, resetAt: nowMs + 15 * 60 * 1000 });
-    return true;
-  }
-  b.count++;
-  return b.count <= 120;
-}
-
 export async function POST(req: Request) {
   try {
     const ip = (req.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
-    if (!allow(ip)) return new Response(null, { status: 204 });
+    if (!(await allowRate("events", ip, 120, 15 * 60))) return new Response(null, { status: 204 });
     const body = await req.json().catch(() => ({}));
     const name = String(body.name ?? "");
     if (!EVENT_NAMES.has(name)) return new Response(null, { status: 204 });

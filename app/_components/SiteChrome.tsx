@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { CreditChip } from "./CreditChip";
 
-const NO_CHROME = ["/onboarding", "/coba"]; // /coba = anon (magic moment) — chip kredit & nav menyesatkan
+const NO_CHROME = ["/onboarding", "/coba", "/mulai"]; // halaman anon (magic moment & quiz iklan) — chip kredit & nav menyesatkan
 const NO_NAV_PREFIX = ["/bikin", "/onboarding"];
 
 /** Header + nav bawah global. Disembunyikan di layar tertentu. */

@@ -94,6 +94,15 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
 
     const tier = (job.quality_tier ?? "silent_caption") as QualityTier;
     const withAudio = tier !== "silent_caption";
+    // Foto ke-2..5 = referensi identitas tambahan (hanya berlaku di model r2v /
+    // tier bersuara — provider yang memutuskan; gagal materialize = lewati saja).
+    const extraRefs: string[] = [];
+    if (withAudio) {
+      for (const rel of images.slice(1, 5)) {
+        const p = await mediaStorage().materialize(rel).catch(() => null);
+        if (p) extraRefs.push(p);
+      }
+    }
 
     // --- GENERATING_VISUAL ---
     advance(job.id, "GENERATING_VISUAL");
@@ -107,6 +116,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       productCategory: product.category,
       productVisualDesc: product.product_visual_desc,
       imageRefPath: imageRef,
+      extraImageRefPaths: extraRefs,
       qualityTier: tier,
       format,
       // Level hook dari skrip (S3): hanya "gila" yang mengubah prompt shot 1.

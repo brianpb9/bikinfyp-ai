@@ -36,6 +36,12 @@ export interface VisualSpec {
   qualityTier: QualityTier;
   /** Wajib === (qualityTier !== 'silent_caption'). */
   generateAudio: boolean;
+  /** Foto produk ke-2..5 sebagai referensi identitas TAMBAHAN (2026-08-06).
+   * Hanya dipakai model yang mendukung mode reference-to-video (Seedance 2.0);
+   * ModelArk MELARANG first_frame dicampur reference_image, jadi provider
+   * beralih ke mode semua-referensi bila daftar ini terisi (diverifikasi
+   * nyata: r2v butuh durasi >= 4 dtk). */
+  extraReferenceImagePaths?: string[];
 }
 
 export interface VideoAsset {

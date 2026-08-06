@@ -98,6 +98,13 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   if (images.length === 0) throw new Error("Produk tidak punya foto — upload minimal 1 foto.");
   const imageRef = await mediaStorage().materialize(images[0]);
   if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
+  const extraRefs: string[] = [];
+  if ((row.quality_tier ?? "silent_caption") !== "silent_caption") {
+    for (const rel of images.slice(1, 5)) {
+      const p = await mediaStorage().materialize(rel).catch(() => null);
+      if (p) extraRefs.push(p);
+    }
+  }
   const workDir = path.join(config.storageDir, "jobs", row.id);
   fs.mkdirSync(workDir, { recursive: true });
   const category = getCreatorCategory(row.creator_category ?? "hijaber")!;
@@ -105,7 +112,8 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const withAudio = tier !== "silent_caption";
   const format = row.format === "talking_head" || row.format === "vo_broll" ? row.format : "hands_only";
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
-    productCategory: row.product_category, productVisualDesc: row.product_visual_desc, imageRefPath: imageRef, qualityTier: tier,
+    productCategory: row.product_category, productVisualDesc: row.product_visual_desc, imageRefPath: imageRef,
+    extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
     hookLevel: row.script_hook_level === "berani" || row.script_hook_level === "gila" ? row.script_hook_level : "normal" });
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the

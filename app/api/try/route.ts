@@ -2,6 +2,7 @@ import { generateScripts } from "@/lib/script-engine";
 import { scoreScriptPlan } from "@/lib/fyp-score";
 import { validPriceIdr, validProductName } from "@/lib/product-validation";
 import { ERR, errorResponse } from "@/lib/errors";
+import { allowRate } from "@/lib/rate-limit";
 import crypto from "node:crypto";
 
 export const runtime = "nodejs";
@@ -11,23 +12,11 @@ export const dynamic = "force-dynamic";
 // (adopsi 2026-08-06 dari riset funnel kompetitor: user merasakan hasil dulu,
 // baru diminta daftar). TANPA persist apa pun: skrip digenerate on-the-fly
 // (deterministik, nol COGS) + Skor FYP dihitung dari rencana. Rate limit
-// per-IP in-memory 15/15 menit (cukup untuk 1 instance web).
-const bucket = new Map<string, { count: number; resetAt: number }>();
-function allow(ip: string): boolean {
-  const now = Date.now();
-  const b = bucket.get(ip);
-  if (!b || b.resetAt < now) {
-    bucket.set(ip, { count: 1, resetAt: now + 15 * 60 * 1000 });
-    return true;
-  }
-  b.count++;
-  return b.count <= 15;
-}
-
+// per-IP 15/15 menit (Redis-backed di production — lib/rate-limit.ts).
 export async function POST(req: Request) {
   try {
     const ip = (req.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
-    if (!allow(ip))
+    if (!(await allowRate("try", ip, 15, 15 * 60)))
       return Response.json(
         { code: "TRY_RATE_LIMITED", message_id: "Udah banyak nyoba nih 😄 — daftar gratis dulu ya, dapat bonus Rp5.000 buat render video beneran.", retryable: false },
         { status: 429 }
