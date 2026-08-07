@@ -182,7 +182,7 @@ test("mode light: pelanggaran non-L-10/L-11 hanya jadi warning", () => {
   assert.ok(res.warnings.length > 0);
 });
 
-test("L-05 tier bersuara: maks ~22 kata; skrip 47 kata ditolak", () => {
+test("L-05 tier bersuara: maks ~34 kata (r13, Gemini TTS ~1.93 kata/dtk); skrip 47 kata ditolak", () => {
   const audioTier = { ...base, qualityTier: "high_quality" as const };
   const res = validateScript(audioTier, "strict");
   assert.ok(rules(res).includes("L-05"));

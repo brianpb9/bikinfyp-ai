@@ -105,6 +105,11 @@ export interface QcInput {
    * menjadi overlay pada mode embedded/VO.
    */
   overlayTextExpectations?: { text: string; startSec: number; endSec: number; critical?: boolean; edgeExempt?: boolean }[];
+  /** true bila video dari provider MOCK (dev/e2e) — konten sintetis (zoom-in
+   * generik) TIDAK PERNAH punya label produk nyata untuk dibaca; QC-10 wajib
+   * skip, bukan fail (insiden r13 2026-08-07: e2e stuck 180s krn QC-10 selalu
+   * gagal di produk yang nama-nya kebetulan lolos filter kata generik). */
+  isMockProvider?: boolean;
 }
 
 /** Python dengan OpenCV: venv proyek bila ada, selain python3 sistem. */
@@ -547,7 +552,9 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // di bawah: label yang TERBUKTI terbaca adalah bukti identitas produk jauh
   // lebih langsung/presisi daripada heuristik fraksi warna kasar QC-03.
   let labelFidelityPassed = false;
-  if (input.format === "hands_only" || input.format === "talking_head") {
+  if (input.isMockProvider) {
+    checks.push({ code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip", detail: "N/A: provider mock (dev/e2e) — konten sintetis tidak punya label produk nyata untuk dibaca." });
+  } else if (input.format === "hands_only" || input.format === "talking_head") {
     try {
       const labelCheck = await qcLabelFidelity(input.filePath, input.productName);
       checks.push(labelCheck);

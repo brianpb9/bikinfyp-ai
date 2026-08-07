@@ -29,7 +29,7 @@ FITUR UTAMA
 • Skrip otomatis dengan 16 gaya hook berbeda, disesuaikan kategori produkmu
 • 4 pilihan suara/gaya bicara: Bunda, Bestie, Gen-Z, Netral
 • 3 tier kualitas: Senyap + Teks (paling hemat), High Quality (suara AI), Super HQ
-• Durasi 15 atau 30 detik
+• Durasi 15, 30, atau 45 detik
 • Setiap video otomatis diberi label "Dibuat dengan AI" sesuai aturan platform
 • Sistem kredit — bayar sesuai pakai, kredit dikembalikan otomatis kalau videonya gagal kualitas
 

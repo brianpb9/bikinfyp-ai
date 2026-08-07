@@ -24,9 +24,13 @@ export default function OnboardingPage() {
   const [monthlyVideos, setMonthlyVideos] = useState(10);
   const [tierPrice, setTierPrice] = useState<12000 | 80000>(12000);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  // r13 (review produk 2026-08-07): landing publik sempat mengklaim "Checkout
+  // aman lewat GoPay/OVO/DANA..." tanpa syarat walau Midtrans belum aktif.
+  const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null);
 
   useEffect(() => {
     track("landing_view");
+    fetch("/api/health").then((r) => r.json()).then((d) => setPaymentsLive(Boolean(d.payments_live))).catch(() => setPaymentsLive(false));
   }, []);
 
   useEffect(() => {
@@ -154,11 +158,16 @@ export default function OnboardingPage() {
               <p className="mt-3 text-[10px] leading-relaxed text-zinc-400">*Estimasi Rp100–150 ribu/video dari riset pasar Fastwork; kalkulator memakai titik tengah Rp125 ribu.</p>
             </section>
 
+            {/* r13 (review produk 2026-08-07): badge metode bayar dulu tampil TANPA
+                SYARAT ke semua pengunjung — janji "checkout aman" yang tidak benar
+                selama Midtrans belum aktif. Sekarang jujur sesuai /api/health. */}
+            {paymentsLive !== false && (
             <section className="rounded-[26px] border border-zinc-100 bg-white p-5 shadow-sm">
               <p className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">Checkout aman lewat</p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs font-extrabold text-zinc-600"><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">GoPay</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">OVO</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">DANA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">QRIS</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">BCA VA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">VISA</span></div>
               <p className="mt-3 text-center text-[11px] text-zinc-400">Metode ditampilkan oleh Midtrans Snap sesuai kanal merchant yang aktif.</p>
             </section>
+            )}
 
             <section><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">Jawaban jujur sebelum mulai</p><h2 className="mt-1 font-display text-2xl font-extrabold text-zinc-900">Yang perlu kamu tahu</h2><div className="mt-4 space-y-2">{[
               ["Videonya kelihatan AI? Aman dari TikTok Shop?", "Video diberi label AIGC dan kamu tetap perlu menyalakan label konten AI saat upload. Kami tidak menyembunyikan asal konten—ini membantu kamu mengikuti aturan platform."],

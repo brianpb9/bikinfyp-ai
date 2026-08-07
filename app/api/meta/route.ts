@@ -29,6 +29,11 @@ export async function GET(req: Request) {
         price_idr: config.tiers[t.id]?.priceIdr ?? 0,
       })),
       promo_price_idr: config.promoPriceIdr,
+      // r13 (review produk 2026-08-07): halaman kredit sempat menampilkan
+      // "Mode demo: pembayaran berhasil tanpa uang sungguhan" TANPA SYARAT,
+      // termasuk ke user production — client butuh tahu status pembayaran
+      // sungguhan supaya bisa jujur, bukan menebak dari kegagalan fallback.
+      payments_live: Boolean(config.midtransServerKey && config.midtransClientKey),
     });
   } catch (err) {
     return errorResponse(err);

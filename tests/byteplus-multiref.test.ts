@@ -3,7 +3,7 @@
 // - foto ekstra + model Seedance 2.0 -> SEMUA image ber-role reference_image
 //   (aturan ModelArk terverifikasi: first_frame tidak boleh dicampur reference),
 // - foto ekstra + model Seedance 1.0 (tier senyap) -> tetap i2v (1.0 tanpa r2v),
-// - maks 4 foto ekstra (5 total).
+// - maks 7 foto ekstra (8 total) -- r13 2026-08-07, dites langsung ke BytePlus.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -29,7 +29,7 @@ const mk = (name: string) => {
   return p;
 };
 const main = mk("0.png");
-const extras = [mk("1.png"), mk("2.png"), mk("3.png"), mk("4.png"), mk("5.png")];
+const extras = [mk("1.png"), mk("2.png"), mk("3.png"), mk("4.png"), mk("5.png"), mk("6.png"), mk("7.png"), mk("8.png")];
 
 const shot: ShotSpec = { index: 0, durationSec: 7.5, prompt: "hands presenting product", imageRefPath: main };
 const spec = (extra?: string[]): VisualSpec => ({
@@ -60,7 +60,7 @@ test("foto ekstra + Seedance 1.0 (tier senyap): tetap i2v", () => {
   assert.ok(items.every((i) => i.role === undefined));
 });
 
-test("maks 4 foto ekstra (total 5 image)", () => {
+test("maks 7 foto ekstra (total 8 image) -- kelebihan (8) dipotong", () => {
   const items = buildTaskContent(spec(extras), shot, "dreamina-seedance-2-0-260128") as Item[];
-  assert.equal(items.filter((i) => i.type === "image_url").length, 5);
+  assert.equal(items.filter((i) => i.type === "image_url").length, 8);
 });

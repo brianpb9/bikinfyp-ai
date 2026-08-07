@@ -116,7 +116,10 @@ export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string
     // Negative instruction wajib ikut di prompt (aturan keras #3)
     text: `${shot.prompt}. Negative: ${spec.negativePrompt}`,
   };
-  const extras = (spec.extraReferenceImagePaths ?? []).slice(0, 4);
+  // r13 (Brian 2026-08-07): 4->7 extra (+1 primer = 8 total) — dites langsung
+  // ke BytePlus, API menerima 8 foto referensi tanpa error (bukan API yg
+  // membatasi 5, itu batas kode lama).
+  const extras = (spec.extraReferenceImagePaths ?? []).slice(0, 7);
   const useR2v = extras.length > 0 && model.includes("dreamina-seedance-2");
   if (!useR2v) {
     return [textItem, { type: "image_url", image_url: { url: imageToDataUri(shot.imageRefPath) } }];

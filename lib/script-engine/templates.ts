@@ -331,7 +331,15 @@ export function renderSegmentsForTier(
     // titik tengah rentang L-05 untuk tier+durasi ini (bukan jumlah tetap) —
     // dasar kata dari silent_caption jauh lebih panjang dari tier bersuara,
     // jumlah kalimat lanjutan yang dibutuhkan beda jauh antar keduanya.
-    const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [10, 22];
+    // r13 (Brian 2026-08-07: "VO hanya sampai detik 20 padahal video 30 detik,
+    // sisanya kosong") — [10,22] dikalibrasi utk audio embedded LAMA (~20
+    // kata/15dtk = ~1,07 kata/dtk). Gemini TTS (suara resmi sejak r5) TERUKUR
+    // ~1,93 kata/dtk pada skrip Wardah nyata (38 kata = 19,72 dtk) — jauh
+    // lebih cepat, jadi target lama SELALU menyisakan durasi kosong di video
+    // >15 dtk. Dinaikkan ke [20,34] (~1,8 kata/dtk) supaya narasi mendekati
+    // durasi video sungguhan; belum kalibrasi sempurna (baru 1 titik data
+    // nyata), pantau lapor-hasil berikutnya utk penyesuaian lanjutan.
+    const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [20, 34];
     const scale = durationSec / 15;
     const targetWc = Math.round(((baseMinWc + baseMaxWc) / 2) * scale);
     // Minimal 1 lanjutan demo WAJIB ditambah biar demo beneran lebih panjang

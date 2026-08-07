@@ -7,6 +7,7 @@ import { config } from "./config";
 import { getDb, now, type JobRow, type ScriptRow, type ProductRow, type PersonaRow } from "./db";
 import { getJob, transition, failJob, addCost, setJobProviders } from "./jobs";
 import { planShots, PRODUCT_PROOF_INSERT_SEC } from "./media/shot-planner";
+import { findReusableClips } from "./media/resume-clips";
 import { buildProductProofClip } from "./media/product-proof-insert";
 import { compositeVideo } from "./media/compositor";
 import { runQc } from "./media/qc";
@@ -26,6 +27,7 @@ import { captureCredits } from "./credits";
 import { formatHargaOverlay, type SegmentDraft } from "./script-engine/templates";
 import { AIGC_WATERMARK_TEXT } from "./config/compliance";
 import { mediaStorage } from "./storage";
+import { MAX_IMAGES } from "./product-images";
 import { personSafeReferencePhotos } from "./media/person-safe-refs";
 
 const CONCURRENCY = 1;
@@ -103,7 +105,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     let primaryRef = imageRef;
     const extraRefs: string[] = [];
     if (withAudio) {
-      for (const rel of images.slice(1, 5)) {
+      for (const rel of images.slice(1, MAX_IMAGES)) {
         const p = await mediaStorage().materialize(rel).catch(() => null);
         if (p) extraRefs.push(p);
       }
@@ -139,7 +141,12 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     });
     // vo_broll (VO+Foto): no AI video-gen call — visual is the user's own
     // product photo panned/zoomed, so there's no provider to fail over between.
-    const video = format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir);
+    // r13 (review QA 2026-08-07): pakai ulang klip dari upaya sebelumnya bila
+    // masih valid di disk — hemat biaya provider saat retry setelah kegagalan
+    // transien di step SETELAH video (lihat lib/media/resume-clips.ts).
+    const reused = format === "vo_broll" ? null : await findReusableClips(workDir, spec);
+    if (reused) console.log(`[job ${job.id.slice(0, 8)}] resume: ${reused.assets.length} klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi`);
+    const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir));
     setJobProviders(job.id, video.providerName);
     addCost(job.id, video.costIdr);
 
@@ -291,6 +298,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         shotPaths: video.assets.map((a) => a.filePath),
         refImagePath: primaryRef,
         format,
+        isMockProvider: usedMockVideo,
         // critical = teks kepatuhan/konversi (watermark, harga/promo, CTA) —
         // WAJIB terbukti OCR; kartu caption skrip non-kritis (cukup mayoritas).
         // Mode embedded (bersuara): TANPA overlay teks sejak 2026-08-07

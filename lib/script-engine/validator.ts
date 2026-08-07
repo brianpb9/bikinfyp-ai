@@ -114,14 +114,18 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   if (!hasFiller)
     push(false, { rule: "L-04", message_id: "Belum ada jeda lisan ('nah', 'jadi gini', 'sumpah') — tanpa itu kedengeran kayak robot." });
 
-  // L-05: panjang total — tergantung tier (aturan bahasa hasil uji nyata 31 Jul):
-  // silent_caption 32-48 kata (teks dibaca, bukan diucapkan);
-  // tier bersuara 10-22 kata (audio embedded ~20 kata/15 dtk, dirakit 2 shot).
+  // L-05: panjang total — tergantung tier. silent_caption 32-48 kata (teks
+  // dibaca, bukan diucapkan). Tier bersuara: r13 (Brian 2026-08-07, VO
+  // Gemini TTS berhenti detik 20 dari video 30 detik) — [10,22] lama
+  // dikalibrasi utk audio embedded LAMA (~1,07 kata/dtk); Gemini TTS terukur
+  // ~1,93 kata/dtk nyata, dinaikkan ke 20-34 kata/15dtk (~1,8 kata/dtk) SUPAYA
+  // KONSISTEN dgn target di templates.ts (WAJIB sinkron — kalau tidak, skrip
+  // yang lolos target template bisa ditolak validator, atau sebaliknya).
   // Basis 15 dtk; durasi lain skala proporsional (durationSec/15).
   const tier = script.qualityTier ?? "silent_caption";
   const durationScale = (script.durationSec ?? 15) / 15;
   const wc = wordCount(fullText);
-  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [10, 22];
+  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [20, 34];
   const minWc = Math.round(baseMinWc * durationScale);
   const maxWc = Math.round(baseMaxWc * durationScale);
   if (wc < minWc || wc > maxWc)

@@ -14,6 +14,7 @@ import { outputExtras, cartLabelForUrl } from "../script-engine";
 import { formatHargaOverlay, type SegmentDraft } from "../script-engine/templates";
 import { getCreatorCategory } from "../personas";
 import { planShots, PRODUCT_PROOF_INSERT_SEC } from "../media/shot-planner";
+import { findReusableClips } from "../media/resume-clips";
 import { buildProductProofClip } from "../media/product-proof-insert";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
@@ -29,6 +30,7 @@ import { synthesizeGeminiVoiceover } from "../media/gemini-tts";
 import { hargaTerbilang } from "../script-engine/terbilang";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
+import { MAX_IMAGES } from "../product-images";
 import { personSafeReferencePhotos } from "../media/person-safe-refs";
 import { PgCreditPaymentRepository } from "./credit-payment";
 import { PgJobsRepository } from "./jobs";
@@ -62,11 +64,17 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
     const row = found.rows[0];
     if (!row || ["READY", "FAILED", "REFUNDED"].includes(row.state)) return;
-    // A retry must never be acknowledged as a successful no-op merely because
-    // its earlier attempt already claimed the job. Until resumable provider
-    // checkpoints are introduced, rethrowing makes BullMQ exhaust its bounded
-    // attempts and execute the single established refund path.
-    if (row.state !== "QUEUED") throw new Error(`Job PostgreSQL belum resumable dari state ${row.state}; retry harus gagal agar refund final berjalan.`);
+    // r13 (review QA 2026-08-07): dulu SETIAP retry BullMQ untuk state != QUEUED
+    // langsung gagal instan ("belum resumable") -> kegagalan transien SETELAH
+    // video sukses (compositing/storage/dsb) selalu membakar biaya provider
+    // tanpa percobaan ulang sungguhan. processPostgresJob HANYA pernah dipanggil
+    // dari satu tempat (scripts/worker.ts, BullMQ Worker processor) — BullMQ
+    // menjamin attempt berikutnya baru mulai SETELAH promise attempt sebelumnya
+    // reject (tidak ada eksekusi konkuren utk job yang sama), jadi retry di sini
+    // aman dilanjutkan. transition() sendiri permisif (active->active) sehingga
+    // reset ke GENERATING_VISUAL harmless. Yang benar-benar menghemat biaya:
+    // findReusableClips() di runProviderPipeline melewati provider bila klip
+    // dari upaya sebelumnya masih ada & valid di disk (lihat resume-clips.ts).
     if (!(await jobs.transition(jobId, "GENERATING_VISUAL", { worker: "postgres" }))) return;
 
     if (deterministicFixtureAllowed()) {
@@ -107,7 +115,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   let primaryRef = imageRef;
   const extraRefs: string[] = [];
   if ((row.quality_tier ?? "silent_caption") !== "silent_caption") {
-    for (const rel of images.slice(1, 5)) {
+    for (const rel of images.slice(1, MAX_IMAGES)) {
       const p = await mediaStorage().materialize(rel).catch(() => null);
       if (p) extraRefs.push(p);
     }
@@ -135,7 +143,11 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the
   // user's own product photo panned/zoomed, so there's no provider to fail
   // over between and no cost beyond the VO synthesis below.
-  const video = format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir);
+  // r13: retry lewat provider MAHAL kalau klip upaya sebelumnya masih valid
+  // di disk (lihat resume-clips.ts) — menghemat ~Rp8-37rb per retry transien.
+  const reused = format === "vo_broll" ? null : await findReusableClips(workDir, spec);
+  if (reused) console.log(`[job ${row.id.slice(0, 8)}] resume: ${reused.assets.length} klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi`);
+  const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir));
   await jobs.setProviders(row.id, video.providerName);
   await jobs.addCost(row.id, video.costIdr);
 
@@ -221,7 +233,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });
     outputPath = composite.outPath; renderParams = composite.renderParams;
     if (!(await jobs.transition(row.id, "QC_CHECK", { worker: "postgres" }))) return;
-    qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s,
+    qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
       finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), `Cek ${cartLabel}`, AIGC_WATERMARK_TEXT],
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, priceIdr: row.product_price_idr,
       renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: primaryRef, format,

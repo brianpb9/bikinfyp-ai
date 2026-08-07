@@ -43,6 +43,9 @@ function KreditInner() {
   const [orderStatus, setOrderStatus] = useState<string | null>(null);
   // Riwayat: 5 teratas saja, sisanya di balik "Lihat selengkapnya" (Brian 2026-08-07).
   const [showAllLedger, setShowAllLedger] = useState(false);
+  // r13 (review produk 2026-08-07): jangan lagi menebak status pembayaran dari
+  // kegagalan fallback dev — tanya server langsung (null = belum tahu).
+  const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null);
   const checkoutLock = useRef(false);
 
   async function refresh() {
@@ -56,6 +59,7 @@ function KreditInner() {
   }
   useEffect(() => {
     refresh();
+    apiFetch<{ payments_live: boolean }>("/api/meta").then((m) => setPaymentsLive(m.payments_live)).catch(() => setPaymentsLive(false));
   }, []);
 
   async function topup(packageId: string) {
@@ -77,6 +81,11 @@ function KreditInner() {
       window.open(res.redirect_url, "_blank");
       setMsg("Order dibuat — selesaikan pembayaran di halaman Midtrans yang terbuka, lalu tap 'Sudah bayar? Cek status'.");
     } catch (err) {
+      // r13 (review produk 2026-08-07): jalur demo HANYA boleh dicoba kalau
+      // server sudah bilang pembayaran belum aktif; sebelumnya err2 (fallback
+      // dev diblokir di production) diganti pesan generik "Top-up gagal" yang
+      // MEMBUANG pesan jujur server ("Pembayaran online belum aktif — hubungi
+      // tim kami") — user production tidak pernah tahu alasan sebenarnya.
       if (err instanceof ApiFail && err.code === "PAYMENT_NOT_CONFIGURED") {
         try {
           await apiFetch("/api/credits/topup", { json: { package_id: packageId } });
@@ -85,8 +94,10 @@ function KreditInner() {
           // Balik otomatis ke titik alur terakhir (draft aman di sessionStorage)
           const target = params.get("return_to") ?? loadFlow().returnTo ?? "/";
           setTimeout(() => router.push(target), 900);
-        } catch (err2) {
-          setError(err2 instanceof Error ? err2.message : "Top-up gagal. Coba lagi ya.");
+        } catch {
+          // Jalur dev diblokir (production) -> tampilkan pesan JUJUR asli dari
+          // server, bukan pesan generik yang menyembunyikan alasan sebenarnya.
+          setError(err.message);
         }
       } else {
         setError(err instanceof ApiFail ? err.message : "Top-up gagal. Coba lagi ya.");
@@ -200,14 +211,23 @@ function KreditInner() {
 
       <section className="space-y-2">
         <h2 className="font-display text-xl font-bold">Bayar pakai</h2>
-        <div className="flex gap-2">
-          {["QRIS", "GoPay", "OVO", "DANA"].map((m) => (
-            <span key={m} className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 shadow-sm">
-              {m}
-            </span>
-          ))}
-        </div>
-        <p className="text-xs text-zinc-400">Mode demo: pembayaran langsung berhasil tanpa uang sungguhan.</p>
+        {/* r13 (review produk 2026-08-07): dulu badge metode bayar + klaim "mode
+            demo" tampil TANPA SYARAT ke SEMUA user termasuk production — padahal
+            Midtrans belum aktif, jadi klaimnya salah. Sekarang jujur sesuai
+            status server (/api/meta payments_live), bukan asumsi tetap. */}
+        {paymentsLive ? (
+          <div className="flex gap-2">
+            {["QRIS", "GoPay", "OVO", "DANA"].map((m) => (
+              <span key={m} className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 shadow-sm">
+                {m}
+              </span>
+            ))}
+          </div>
+        ) : paymentsLive === false ? (
+          <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
+            Pembayaran online sedang kami siapkan — belum bisa top-up pakai uang sungguhan dulu ya. Coba lagi dalam beberapa hari.
+          </p>
+        ) : null}
       </section>
 
       <section className="space-y-2">

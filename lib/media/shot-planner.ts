@@ -230,10 +230,19 @@ export function planShots(input: ShotPlanInput): VisualSpec {
               ? `Presenter smiling warmly, NOT talking, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
               : `Close cutaway on presenter's hands as she ${demoAction}, her face out of tight focus and NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
         : isFirst
-          ? `Hands presenting "${input.productName}" to camera, product label facing camera, gentle rotation, ${IDENTITY_INSTRUCTION}`
+          // r13 (Brian 2026-08-07: "kenapa ada gambar Wardah di depan?" — shot
+          // pembuka terlihat seperti foto produk diam sebelum tangan "masuk").
+          // Motion eksplisit SEJAK FRAME PERTAMA supaya model tidak menganggur
+          // di seed image yang statis di awal generate.
+          ? `The video starts ALREADY in motion: hands are already gripping and gently rotating "${input.productName}" from the very first frame — NOT a static product photo, no frozen opening beat, product label facing camera, ${IDENTITY_INSTRUCTION}`
           : isClosing
             ? `Hands holding the product steady near the bottom of frame in a closing, inviting gesture, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
-            : `Hands demonstrating the product in use, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`;
+            // r13 (Brian 2026-08-07, evidenced via render 45fe92ad): shot demo
+            // tanpa instruksi label eksplisit -> model mengarahkan botol ke
+            // sudut acak / label ketutup jari saat "in use", bikin QC-10 gagal
+            // & identitas produk kelihatan beda dari shot 1. Label WAJIB
+            // tetap menghadap kamera bahkan saat demo.
+            : `Hands demonstrating the product in use, but the bottle stays angled so its label keeps facing the camera and stays legible throughout — fingers never cover the label, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`;
     // Level gila: pembuka pattern-interrupt HANYA di shot pertama; vo_broll
     // (pan foto, tanpa model video) tidak punya jalur ini.
     const crazyOpener =
@@ -318,7 +327,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     negativePrompt, // tetap mengandung MANDATORY_NEGATIVE_PROMPT dari kategori
     qualityTier: tier,
     generateAudio: withAudio, // konsisten dengan tier — ditegakkan juga di registry
-    extraReferenceImagePaths: input.extraImageRefPaths?.slice(0, 4),
+    extraReferenceImagePaths: input.extraImageRefPaths?.slice(0, 7), // r13: 4->7 (+1 primer = 8 total)
   };
 }
 

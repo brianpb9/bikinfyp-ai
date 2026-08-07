@@ -59,15 +59,16 @@ async function main() {
   if (prod.status !== 201) throw new Error(`produk: ${prod.status} ${JSON.stringify(prod.data)}`);
   const productId = prod.data.product_id;
 
+  const durationS = Number(process.env.LAB_DURATION ?? 15);
   const gen = await api("/api/scripts/generate", {
-    json: { product_id: productId, register: "bestie", emotion: "senang", format: process.env.LAB_FORMAT ?? "talking_head", quality_tier: process.env.LAB_TIER ?? "high_quality" },
+    json: { product_id: productId, register: "bestie", emotion: "senang", format: process.env.LAB_FORMAT ?? "talking_head", quality_tier: process.env.LAB_TIER ?? "high_quality", duration_s: durationS },
   });
   if (!gen.data.scripts?.length) throw new Error(`generate: ${JSON.stringify(gen.data)}`);
   const script = gen.data.scripts[0];
   await api(`/api/scripts/${script.id}/approve`, { json: {} });
 
   const job = await api("/api/jobs", {
-    json: { script_id: script.id, format: process.env.LAB_FORMAT ?? "talking_head", duration_s: 15, quality_tier: process.env.LAB_TIER ?? "high_quality", creator_category: CATEGORY },
+    json: { script_id: script.id, format: process.env.LAB_FORMAT ?? "talking_head", duration_s: durationS, quality_tier: process.env.LAB_TIER ?? "high_quality", creator_category: CATEGORY },
   });
   if (job.status !== 201) throw new Error(`job: ${job.status} ${JSON.stringify(job.data)}`);
   const jobId = job.data.job_id;

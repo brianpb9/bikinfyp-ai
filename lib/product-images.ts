@@ -14,7 +14,13 @@ export const ALLOWED_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/webp": ".webp",
 };
-export const MAX_IMAGES = 5;
+// r13 (Brian 2026-08-07: "input banyak reference produk sampe 10 kalau perlu")
+// — dites langsung ke BytePlus: API menerima 8 foto referensi (1 primary + 7
+// extra) tanpa error, bukan API yang membatasi 5 (itu keputusan kode lama).
+// TAPI pelajaran hari ini (eksperimen r10, SKIN1004 5-foto beragam justru
+// memperburuk label): kuantitas TANPA kurasi bisa kontraproduktif. 8 dipilih
+// sebagai kompromi — beri ruang lebih tanpa mendorong user asal upload banyak.
+export const MAX_IMAGES = 8;
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024; // NF-SEC09
 
 export function sniffMime(buf: Buffer): string | null {

@@ -57,8 +57,12 @@ export async function GET() {
       throw new Error("ALLOW_DEV_LOGIN wajib 0 pada deployment production.");
     }
     const pending = await pendingMigrations().catch(() => []);
+    // r13 (review produk 2026-08-07): halaman landing publik (anonim, sebelum
+    // login) mengklaim "Checkout aman lewat GoPay/OVO/DANA/QRIS" TANPA SYARAT
+    // walau Midtrans belum dipasang — publik, non-rahasia, aman diekspos di sini.
+    const paymentsLive = Boolean(config.midtransServerKey && config.midtransClientKey);
     return Response.json(
-      { ok: true, intake: jobIntakeMode(), ...(pending.length > 0 ? { migrations_pending: pending } : {}) },
+      { ok: true, intake: jobIntakeMode(), payments_live: paymentsLive, ...(pending.length > 0 ? { migrations_pending: pending } : {}) },
       { status: 200 }
     );
   } catch (error) {
