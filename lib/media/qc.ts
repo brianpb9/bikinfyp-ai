@@ -519,7 +519,9 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     detail: v.passed ? "bersih" : v.errors.map((e) => e.message_id).join(" "),
   });
 
-  // QC-08 label AIGC ter-render: verifikasi parameter render + probe stream + metadata tag.
+  // QC-08 label AIGC via METADATA (watermark visual dihapus 2026-08-07 —
+  // disclosure ke penonton lewat toggle AIGC platform saat posting):
+  // verifikasi parameter render + probe stream + metadata tag racun_aigc.
   try {
     const tags = await probeFormatTags(input.filePath);
     const hasVideo = await probeHasVideoStream(input.filePath);
@@ -527,12 +529,12 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     const wmOk = input.renderParams.watermark === true;
     const ok = hasVideo && tagOk && wmOk;
     checks.push({
-      code: "QC-08", name: `Label AIGC ("${AIGC_WATERMARK_TEXT}") ter-render`,
+      code: "QC-08", name: "Label AIGC (metadata) tertanam",
       status: ok ? "pass" : "fail",
       detail: `watermark_param=${wmOk} metadata_tag=${tagOk} video_stream=${hasVideo}`,
     });
   } catch (err) {
-    checks.push({ code: "QC-08", name: "Label AIGC ter-render", status: "fail", detail: String(err) });
+    checks.push({ code: "QC-08", name: "Label AIGC (metadata) tertanam", status: "fail", detail: String(err) });
   }
 
   const passed = evaluateQcPolicy(input.format, checks);

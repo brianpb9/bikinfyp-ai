@@ -154,21 +154,11 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
   // provider di-upscale supaya PNG overlay (lebar ~680px) tidak terpotong.
   vChain.push(`[vcat]scale=720:1280:flags=bilinear[vsc]`);
 
-  // Watermark (selalu)
+  // Watermark VISUAL DIHAPUS (keputusan Brian 2026-08-07): teks "Dibuat
+  // dengan AI" di video mengganggu dan platform (TikTok) punya toggle label
+  // AIGC sendiri saat posting. Provenance AIGC TETAP ada secara tak terlihat:
+  // metadata racun_aigc/aigc_watermark + comment di bawah (diverifikasi QC-08).
   let cur = "vsc";
-  if (useDrawtext) {
-    vChain.push(
-      `[${cur}]drawtext=fontfile='${font}':text='${escDrawtext(watermarkText)}':` +
-        `fontsize=28:fontcolor=white@0.7:x=w-text_w-24:y=h-text_h-24[vw]`
-    );
-    cur = "vw";
-  } else {
-    const wmPng = path.join(input.workDir, "ov_watermark.png");
-    await renderTextPng({ text: watermarkText, outPath: wmPng, pointsize: 28, fill: "rgba(255,255,255,0.7)", stroke: "rgba(0,0,0,0.35)", strokeWidth: 1 });
-    const idx = addPngInput(wmPng);
-    vChain.push(`[${cur}][${idx}:v]overlay=x=W-w-24:y=H-h-24:eof_action=repeat[vw]`);
-    cur = "vw";
-  }
 
   if (input.mode === "caption") {
     // Caption tersinkron: multi PNG overlay ber-timeline. Harga tampil di card demo
@@ -280,6 +270,6 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
   );
 
   await runFfmpeg(args);
-  console.log(`[compositor] job ${input.jobId}: output.mp4 selesai (mode=${input.mode}, watermark AIGC aktif 100% durasi)`);
+  console.log(`[compositor] job ${input.jobId}: output.mp4 selesai (mode=${input.mode}, label AIGC via metadata — tanpa watermark visual)`);
   return { outPath, renderParams: { watermark: true, watermarkText } };
 }

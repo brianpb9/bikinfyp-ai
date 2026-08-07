@@ -181,11 +181,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format,
       // Mode embedded (semua tier bersuara) TIDAK punya overlay teks lagi
       // (2026-08-07: harga/CTA diucapkan AI, tulisan di layar dihapus) —
-      // QC-06 jadi N/A; watermark dijamin QC-08 + compositor.
+      // QC-06 jadi N/A. Watermark visual juga dihapus (label AIGC via
+      // metadata + toggle platform, keputusan Brian 2026-08-07).
       overlayTextExpectations: mode === "embedded" ? [] : [
-        // non-critical: QC-08 yang menjamin watermark; edgeExempt: dia memang
-        // tinggal 24px dari tepi — line-box noise pernah bikin refund palsu (ec925061)
-        { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: row.duration_s, edgeExempt: true },
         ...(mode === "caption"
           ? [
               ...(captions ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec })),

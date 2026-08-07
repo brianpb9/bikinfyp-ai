@@ -248,12 +248,8 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         // Mode embedded (bersuara): TANPA overlay teks sejak 2026-08-07
         // (harga/CTA diucapkan AI) — QC-06 N/A, watermark dijamin QC-08.
         overlayTextExpectations: compositeMode === "embedded" ? [] : [
-          // Watermark TIDAK critical-OCR (2026-08-06): kehadirannya dijamin QC-08 +
-          // selalu digambar compositor; teks kecil semi-transparan tak andal dibaca
-          // tesseract server (insiden refund palsu job b7d08d14).
-          // edgeExempt: watermark memang 24px dari tepi kanvas — line-box tesseract
-          // yang tercemar noise pernah memicu refund palsu (job ec925061).
-          { text: AIGC_WATERMARK_TEXT, startSec: 0, endSec: job.duration_s, edgeExempt: true },
+          // Watermark visual DIHAPUS 2026-08-07 (label AIGC via metadata +
+          // toggle platform) — tidak ada lagi ekspektasi teks watermark.
           ...(compositeMode === "caption"
             ? [
                 ...(captionCards ?? []).filter((card) => card.segmentRole !== "cta").map((card) => ({ text: card.text, startSec: card.startSec, endSec: card.endSec })),

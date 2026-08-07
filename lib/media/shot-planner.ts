@@ -198,10 +198,12 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // menggambar WAJAH pembicara di format tanpa-wajah -> QC-09 menolak (benar).
     const dialogue = dialogueForShot(i).filter(Boolean).join(" ");
     const isLast = i === numShots - 1;
+    // Bar kualitas suara (Brian 2026-08-07): "VO kayak real, tidak cepet, ada
+    // pause/jeda" — tempo santai + jeda antar kalimat ditulis eksplisit.
     const speech =
       format === "hands_only"
-        ? `A warm female VOICEOVER narrates in casual Indonesian (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
-        : `The presenter speaks casually to camera in Indonesian, saying: "${dialogue}". `;
+        ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting, never rushed (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
+        : `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting with a friend, never rushed or salesy, saying: "${dialogue}". `;
     const pacing =
       format === "hands_only"
         ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
@@ -219,6 +221,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // Negative prompt per-format: hands_only melarang wajah sepenuhnya (bukan sekadar
   // "no face distortion"); format lain memakai negative kategori apa adanya.
   let negativePrompt = input.category.negativePrompt;
+  if (format === "talking_head") {
+    // Anti AI-slop (bar Brian 2026-08-07: "smooth, tidak ada AI slop, realisme")
+    negativePrompt = `${negativePrompt}, no morphing, no warping, no uncanny artificial look, no oversmoothed skin, no flickering`;
+  }
   if (format === "hands_only") {
     negativePrompt = negativePrompt
       .replace(/no face distortion,?\s*/i, "") // kontradiktif untuk hands_only — diganti larangan total
