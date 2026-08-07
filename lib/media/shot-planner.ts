@@ -26,6 +26,7 @@ import type { VisualSpec, ShotSpec, QualityTier } from "../providers/types";
 import type { CreatorCategory } from "../personas";
 import type { SegmentDraft } from "../script-engine/templates";
 import { CATEGORY_NOUN, CATEGORY_PAIN } from "../config/hooks";
+import { hargaTerbilang } from "../script-engine/terbilang";
 import { MANDATORY_NEGATIVE_PROMPT } from "../config/compliance";
 
 export interface ShotPlanInput {
@@ -68,9 +69,12 @@ const TALKING_HEAD_FRAMING =
   "front-facing selfie-style angle, natural phone camera look, soft natural indoor daylight, " +
   "muted authentic colors, candid everyday vibe in a lived-in Indonesian home";
 
+// r4 (Brian, screenshot slop kemasan 2026-08-07): + kemasan harus utuh dan
+// masuk akal secara fisik — insiden pipet/tutup ganda pada botol serum.
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
-  "do not redesign or replace the product, the label text stays sharp, steady and readable the whole time";
+  "do not redesign or replace the product, the label text stays sharp, steady and readable the whole time, " +
+  "the packaging stays physically intact and correct (one cap, one dropper, nothing floating or duplicated)";
 
 // Aksi demo per KATEGORI PRODUK (2026-08-07, dipelajari dari akun UGC tim +
 // referensi visual Brian): "memegang kemasan" hanya benar untuk sebagian
@@ -199,7 +203,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // hands_only (Tangan + VO): dialog = NARASI VOICEOVER — insiden production
     // 2026-08-07 job a1192101: frasa "presenter speaks to camera" membuat model
     // menggambar WAJAH pembicara di format tanpa-wajah -> QC-09 menolak (benar).
-    const dialogue = dialogueForShot(i).filter(Boolean).join(" ");
+    // r4 (Brian 2026-08-07): harga di dialog WAJIB terbilang — model membaca
+    // "Rp299.000" ngaco. Hanya pola harga yang dikonversi (kode produk aman).
+    const dialogue = hargaTerbilang(dialogueForShot(i).filter(Boolean).join(" "));
     const isLast = i === numShots - 1;
     // Bar kualitas suara (Brian 2026-08-07): "VO kayak real, tidak cepet, ada
     // pause/jeda" — tempo santai + jeda antar kalimat ditulis eksplisit.
@@ -229,7 +235,8 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // r3: + anti tangan-ganda (temuan Brian: tangan kanan kedua muncul pegang
     // muka) dan anti label-kedip (tulisan produk hilang-muncul).
     negativePrompt = `${negativePrompt}, no morphing, no warping, no uncanny artificial look, no oversmoothed skin, no flickering, ` +
-      "no extra hands, no third hand, no duplicated limbs, exactly two hands, no flickering or disappearing product label text";
+      "no extra hands, no third hand, no duplicated limbs, exactly two hands, no flickering or disappearing product label text, " +
+      "no deformed packaging, no duplicated caps or droppers, no floating parts";
   }
   if (format === "hands_only") {
     negativePrompt = negativePrompt
