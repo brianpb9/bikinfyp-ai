@@ -152,23 +152,42 @@ interface ColorSim {
   ref_fractions: (number | null)[];
 }
 
-/** QC-03: konsistensi antar shot + kehadiran warna khas produk referensi (color_similarity.py). */
-export async function qcProductSimilarity(shotPaths: string[], refImagePath: string, workDir: string): Promise<QcCheck> {
+/** QC-03: konsistensi antar shot + kehadiran warna khas produk referensi (color_similarity.py).
+ *
+ * talking_head (fix 2026-08-07, insiden production 9ee95693): produk dipegang
+ * KECIL di samping wajah — fraksi warna khas di region tengah wajar rendah,
+ * dan single-shot berarti cuma 1 frame sampel (produk bisa sedang tak jelas
+ * di detik itu). Ambang 0.10 kalibrasi hands_only (produk memenuhi frame)
+ * membuang video sehat. Untuk talking_head: sampel 3 titik per shot dan pakai
+ * fraksi MAKSIMUM (produk harus jelas terlihat di SUATU titik) dengan ambang
+ * lebih rendah 0.02. hands_only tetap aturan lama (min per shot, 0.10).
+ */
+export const QC03_HUE_FRAC_MIN_TALKING_HEAD = 0.02;
+
+export async function qcProductSimilarity(shotPaths: string[], refImagePath: string, workDir: string, format?: string): Promise<QcCheck> {
+  const talkingHead = format === "talking_head";
+  const samplePoints = talkingHead ? [0.15, 0.5, 0.85] : [0.5];
   const frames: string[] = [];
   for (let i = 0; i < shotPaths.length; i++) {
-    const frame = path.join(workDir, `qc03_shot${i}.png`);
     const dur = await probeDurationSec(shotPaths[i]);
-    await runFfmpeg(["-y", "-v", "error", "-ss", (dur / 2).toFixed(2), "-i", shotPaths[i], "-frames:v", "1", frame]);
-    frames.push(frame);
+    for (let k = 0; k < samplePoints.length; k++) {
+      const frame = path.join(workDir, `qc03_shot${i}_${k}.png`);
+      await runFfmpeg(["-y", "-v", "error", "-ss", (dur * samplePoints[k]).toFixed(2), "-i", shotPaths[i], "-frames:v", "1", frame]);
+      frames.push(frame);
+    }
   }
   const { stdout } = await runFf("python3", [
     path.join(process.cwd(), "lib", "media", "color_similarity.py"), refImagePath, ...frames,
   ]);
   const data = JSON.parse(stdout) as ColorSim;
+  // Pair-delta antar frame: pada talking_head multi-frame, pasangan intra-shot
+  // ikut terhitung — tak apa (delta intra-shot kecil; ambang 60 tetap longgar).
   const shotMax = Math.max(0, ...data.shot_pairs.map((p) => p.max));
-  const minFrac = data.signature === null ? null : Math.min(...(data.ref_fractions as number[]));
+  const fracs = data.signature === null ? null : (data.ref_fractions as number[]);
+  const refFrac = fracs === null ? null : talkingHead ? Math.max(...fracs) : Math.min(...fracs);
+  const hueThreshold = talkingHead ? QC03_HUE_FRAC_MIN_TALKING_HEAD : QC03_HUE_FRAC_MIN;
   const failShot = shotMax > QC03_SHOT_DELTA_MAX;
-  const failRef = minFrac !== null && minFrac < QC03_HUE_FRAC_MIN;
+  const failRef = refFrac !== null && refFrac < hueThreshold;
   const fail = failShot || failRef;
   return {
     code: "QC-03",
@@ -176,9 +195,9 @@ export async function qcProductSimilarity(shotPaths: string[], refImagePath: str
     status: fail ? "fail" : "pass",
     detail:
       `antar_shot_max=${shotMax} (ambang ${QC03_SHOT_DELTA_MAX}) · ` +
-      (minFrac === null
+      (refFrac === null
         ? "warna signature referensi tidak terdeteksi (produk polos) — cek referensi di-skip"
-        : `hue_khas_min=${minFrac} (ambang ${QC03_HUE_FRAC_MIN})`) +
+        : `hue_khas_${talkingHead ? "max" : "min"}=${refFrac} (ambang ${hueThreshold})`) +
       " — kasar, hanya menangkap penyimpangan total",
   };
 }
@@ -448,7 +467,7 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // sehat tanpa satu pun check fail (insiden production 21979c08).
   if (input.shotPaths && input.shotPaths.length >= 1 && input.refImagePath && fs.existsSync(input.refImagePath)) {
     try {
-      checks.push(await qcProductSimilarity(input.shotPaths, input.refImagePath, path.dirname(input.filePath)));
+      checks.push(await qcProductSimilarity(input.shotPaths, input.refImagePath, path.dirname(input.filePath), input.format));
     } catch (err) {
       checks.push({ code: "QC-03", name: "Identitas produk konsisten", status: "skip", detail: `pemeriksaan gagal jalan: ${err instanceof Error ? err.message : err}` });
     }
