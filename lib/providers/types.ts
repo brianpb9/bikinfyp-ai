@@ -42,12 +42,6 @@ export interface VisualSpec {
    * beralih ke mode semua-referensi bila daftar ini terisi (diverifikasi
    * nyata: r2v butuh durasi >= 4 dtk). */
   extraReferenceImagePaths?: string[];
-  /** true bila shot-planner sudah menyisakan PRODUCT_PROOF_INSERT_SEC dari
-   * durasi AI untuk klip foto-asli di ujung (lihat product-proof-insert.ts).
-   * Satu sumber kebenaran dipakai worker — jangan hitung ulang kondisinya
-   * di tempat lain (r15: MAX_PHOTOS drift antara backend/frontend adalah
-   * pelajaran kenapa logika begini wajib satu tempat). */
-  hasProofInsert: boolean;
 }
 
 export interface VideoAsset {

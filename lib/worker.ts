@@ -6,9 +6,8 @@ import path from "node:path";
 import { config } from "./config";
 import { getDb, now, type JobRow, type ScriptRow, type ProductRow, type PersonaRow } from "./db";
 import { getJob, transition, failJob, addCost, setJobProviders } from "./jobs";
-import { planShots, PRODUCT_PROOF_INSERT_SEC } from "./media/shot-planner";
+import { planShots } from "./media/shot-planner";
 import { findReusableClips } from "./media/resume-clips";
-import { buildProductProofClip, trimShotsForProofInsert } from "./media/product-proof-insert";
 import { compositeVideo } from "./media/compositor";
 import { runQc } from "./media/qc";
 import { resolvePromo, formatPromoOverlayText } from "./promo";
@@ -150,26 +149,10 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     setJobProviders(job.id, video.providerName);
     addCost(job.id, video.costIdr);
 
-    // r9 (Brian 2026-08-07, "kamu harus perbanyak referensi" — sudah diuji,
-    // TIDAK menyelesaikan, limitasi model): jaminan label BENAR selamanya —
-    // selipkan klip FOTO ASLI produk di ujung video (piksel nyata, bukan AI).
-    // shot-planner sudah menyisakan PRODUCT_PROOF_INSERT_SEC dari durasi AI.
-    // r15: diperluas ke hands_only juga (riset: limitasi label-text lintas
-    // SEMUA model video-gen 2026, ganti provider tak akan menyelesaikan).
-    // spec.hasProofInsert = satu sumber kebenaran, jangan hitung ulang di sini.
-    let clipPaths = video.assets.map((a) => a.filePath);
-    if (spec.hasProofInsert) {
-      // r15 (bug ditemukan saat verifikasi hands_only): provider BytePlus
-      // Math.ceil ke detik bulat -> shot yang diminta 14.25dtk pulang ~15.1dtk,
-      // reservasi shot-planner jadi sia-sia dan trim akhir compositor makan
-      // habis proof clip di ujung. Potong paksa tiap shot ke durasi rencana
-      // PERSIS dulu, baru concat, supaya proof clip TIDAK PERNAH kepotong.
-      clipPaths = await trimShotsForProofInsert(clipPaths, spec.shots.map((s) => s.durationSec), workDir);
-      const proofPath = path.join(workDir, "product_proof.mp4");
-      await buildProductProofClip(primaryRef, proofPath, PRODUCT_PROOF_INSERT_SEC);
-      clipPaths = [...clipPaths, proofPath];
-      console.log(`[job ${job.id.slice(0, 8)}] product-proof insert ditambahkan (${PRODUCT_PROOF_INSERT_SEC}dtk foto asli, label dijamin benar)`);
-    }
+    // r16 (Brian 2026-08-08: "tidak ada lagi foto real produk... di video
+    // manapun" — product-proof insert DIHAPUS TOTAL). Video selalu 100%
+    // AI-generated, tanpa sisipan foto statis.
+    const clipPaths = video.assets.map((a) => a.filePath);
 
     // --- GENERATING_VOICE ---
     // silent_caption: tidak ada VO sama sekali (caption + musik).

@@ -224,11 +224,8 @@ test("durasi 30 dtk: tetap 2 shot, masing-masing 15 dtk (batas BytePlus 2-15 dtk
     qualityTier: "silent_caption",
     format: "hands_only",
   });
-  // r15: hands_only kini juga menyisakan PRODUCT_PROOF_INSERT_SEC (1.5 dtk)
-  // dari durasi AI untuk klip foto-asli di ujung -> 15 dtk/shot jadi 14.25.
   assert.equal(s.shots.length, 2);
-  assert.equal(s.hasProofInsert, true);
-  for (const shot of s.shots) assert.equal(shot.durationSec, 14.25);
+  for (const shot of s.shots) assert.equal(shot.durationSec, 15);
 });
 
 test("durasi 45 dtk: 3 shot @15 dtk masing-masing (2 shot akan melebihi batas 15 dtk/klip BytePlus)", () => {
@@ -249,10 +246,8 @@ test("durasi 45 dtk: 3 shot @15 dtk masing-masing (2 shot akan melebihi batas 15
     qualityTier: "silent_caption",
     format: "hands_only",
   });
-  // r15: hands_only kini juga menyisakan PRODUCT_PROOF_INSERT_SEC (1.5 dtk).
   assert.equal(s.shots.length, 3);
-  assert.equal(s.hasProofInsert, true);
-  for (const shot of s.shots) assert.equal(shot.durationSec, 14.5);
+  for (const shot of s.shots) assert.equal(shot.durationSec, 15);
   // Shot terakhir harus beda beat dari "demonstrating" biasa (closing/inviting),
   // bukan cuma pengulangan shot tengah.
   assert.ok(s.shots[2].prompt.includes("closing"), s.shots[2].prompt);

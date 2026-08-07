@@ -42,7 +42,6 @@ export function buildHookVisualSpec(input: { jobId: string; imageRefPath: string
     negativePrompt: PLACEHOLDER_NEGATIVE,
     qualityTier: "silent_caption",
     generateAudio: false,
-    hasProofInsert: false,
   };
 }
 
