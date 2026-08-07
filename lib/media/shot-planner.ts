@@ -71,10 +71,21 @@ const TALKING_HEAD_FRAMING =
 
 // r4 (Brian, screenshot slop kemasan 2026-08-07): + kemasan harus utuh dan
 // masuk akal secara fisik — insiden pipet/tutup ganda pada botol serum.
+// r8 (Brian 2026-08-07, screenshot label "BNIGHTENING"/"CASSULE"/baris kecil
+// gibberish): nama besar/wordmark biasanya benar, tapi teks KECIL di bawahnya
+// nyaris selalu gagal dirender presisi oleh model video — ini limitasi model,
+// BUKAN kekurangan foto referensi (produk ini sudah pakai 2-3 foto). Fix:
+// jangan minta SEMUA teks tajam (itu memancing model "mencoba" merender teks
+// kecil dan gagal jadi huruf acak) — hanya wordmark besar yang wajib tajam;
+// teks kecil diarahkan jadi blur alami (shallow depth-of-field macro), bukan
+// tulisan tajam yang salah.
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
-  "do not redesign or replace the product, the label text stays sharp, steady and readable the whole time, " +
-  "the packaging stays physically intact and correct (one cap, one dropper, nothing floating or duplicated)";
+  "do not redesign or replace the product, the packaging stays physically intact and correct " +
+  "(one cap, one dropper, nothing floating or duplicated). The large bold brand name on the label " +
+  "stays sharp, steady and perfectly legible the whole time; any smaller printed text below it is " +
+  "realistically soft and out of focus from natural macro shallow depth of field, like a real phone " +
+  "camera close-up — not an attempt at sharp illegible lettering";
 
 // Aksi demo per KATEGORI PRODUK (2026-08-07, dipelajari dari akun UGC tim +
 // referensi visual Brian): "memegang kemasan" hanya benar untuk sebagian
@@ -125,6 +136,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   const perShot = input.durationSec / numShots;
   const tier = input.qualityTier;
   const withAudio = tier !== "silent_caption";
+  // r7 (Brian 2026-08-07): "presenter/lipsync jual Super HQ 80rb-an, sisanya
+  // video+VO mulut nggak lipsync" — Wajah AI + Super HQ = SATU-SATUNYA
+  // kombinasi berlip-sync sungguhan (audio embedded asli dipertahankan oleh
+  // worker, bukan diganti Gemini TTS) -> prompt di sini boleh minta presenter
+  // BENAR-BENAR bicara sinkron kata. Semua kombinasi lain = gaya voice-over
+  // (r6: presenter tidak "bicara", mayoritas cutaway) karena akan diucap
+  // ulang oleh Gemini TTS yang tak pernah sinkron ke gerak mulut asli.
+  const lipSyncPresenter = format === "talking_head" && tier === "super_hq";
 
   const segText = (role: string) => input.segments.find((s) => s.role === role)?.text ?? "";
   const noun = CATEGORY_NOUN[input.productCategory] ?? CATEGORY_NOUN.default;
@@ -174,16 +193,31 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
     const beat =
       format === "talking_head"
-        ? isFirst
-          ? numShots === 1
-            // Satu shot utuh (15 dtk): satu arc lengkap — tunjukkan produk,
-            // demo sesuai kategori, tutup hangat. Aksi demo per kategori
-            // (fashion=try-on, beauty=swatch, food=cicip) dari DEMO_ACTION.
-            ? `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, then ${demoAction}, ending with a warm inviting smile to camera, ${IDENTITY_INSTRUCTION}`
-            : `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, ${IDENTITY_INSTRUCTION}`
-          : isClosing
-            ? `Presenter smiling warmly, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
-            : `Presenter ${demoAction}, still clearly in frame with her face, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
+        ? lipSyncPresenter
+          // Presenter/Lipsync (Super HQ, r7): bicara sungguhan ke kamera —
+          // audio embedded asli dipertahankan, jadi sinkron mulut BENAR di
+          // sini justru yang diinginkan (perilaku pra-r6).
+          ? isFirst
+            ? numShots === 1
+              ? `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, then ${demoAction}, ending with a warm inviting smile to camera, ${IDENTITY_INSTRUCTION}`
+              : `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, ${IDENTITY_INSTRUCTION}`
+            : isClosing
+              ? `Presenter smiling warmly, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
+              : `Presenter ${demoAction}, still clearly in frame with her face, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
+          : isFirst
+            ? numShots === 1
+              // r6 (Brian 2026-08-07: "lipsync-nya ga dapat, banyakin voice over
+              // aja") — VO Gemini TTS mengganti audio embedded sepenuhnya, jadi
+              // mulut yang "bicara" ke kata tertentu SELALU meleset dari suara
+              // final. Fix: gaya presenter-di-layar TAPI TIDAK BICARA (mulut
+              // rileks/senyum tipis, bukan sinkron kata) — mayoritas durasi jadi
+              // cutaway demo tangan/produk (mulut tak jadi fokus), seperti video
+              // UGC editan asli yang memotong ke b-roll saat VO jalan.
+              ? `Presenter holds "${input.productName}" up to the camera at chest height with a warm delighted reaction — NOT talking, mouth relaxed in a soft closed-lip smile, not synced to any words — product label facing camera, then the camera lingers on a close cutaway of her hands as she ${demoAction} (her face out of tight focus during this part), ending with her looking back up at the camera with a warm inviting smile and a small nod, still not talking, ${IDENTITY_INSTRUCTION}`
+              : `Presenter holding "${input.productName}" up to the camera at chest height with a warm reaction, NOT talking, mouth relaxed and closed, ${IDENTITY_INSTRUCTION}`
+            : isClosing
+              ? `Presenter smiling warmly, NOT talking, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
+              : `Close cutaway on presenter's hands as she ${demoAction}, her face out of tight focus and NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
         : isFirst
           ? `Hands presenting "${input.productName}" to camera, product label facing camera, gentle rotation, ${IDENTITY_INSTRUCTION}`
           : isClosing
@@ -209,10 +243,17 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const isLast = i === numShots - 1;
     // Bar kualitas suara (Brian 2026-08-07): "VO kayak real, tidak cepet, ada
     // pause/jeda" — tempo santai + jeda antar kalimat ditulis eksplisit.
+    // r6 (Brian 2026-08-07): Gemini TTS menggantikan audio embedded utk SEMUA
+    // format bersuara -> mulut yang disuruh sinkron ke kata tertentu pasti
+    // meleset dari VO final. hands_only sudah aman (pembicara tak pernah
+    // terlihat). talking_head: dialog dipakai HANYA sebagai konteks nada/
+    // ekspresi (voice-over style, presenter di layar tapi tidak "bicara").
     const speech =
       format === "hands_only"
         ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting, never rushed (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
-        : `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting with a friend, never rushed or salesy, saying: "${dialogue}". `;
+        : lipSyncPresenter
+          ? `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting with a friend, never rushed or salesy, saying: "${dialogue}". `
+          : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally but her mouth is NOT moving in sync to any specific words (not talking to camera): "${dialogue}". `;
     const pacing =
       format === "hands_only"
         ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
@@ -220,16 +261,22 @@ export function planShots(input: ShotPlanInput): VisualSpec {
           ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `
           : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `;
     const prompt =
-      `${base}. ${speech}` +
-      pacing +
-      `Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". ` +
-      `Natural conversational Indonesian, not a newsreader.`;
+      format === "talking_head" && !lipSyncPresenter
+        ? `${base}. ${speech}${pacing}Natural warm reactive expression throughout, mouth relaxed and not talking to camera.`
+        : `${base}. ${speech}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader.`;
     return { index: i, durationSec: perShot, prompt, imageRefPath: input.imageRefPath };
   });
 
   // Negative prompt per-format: hands_only melarang wajah sepenuhnya (bukan sekadar
   // "no face distortion"); format lain memakai negative kategori apa adanya.
   let negativePrompt = input.category.negativePrompt;
+  // r8: larangan bersama (format ber-video-AI saja — vo_broll pakai FOTO ASLI
+  // user, tidak ada model video sama sekali, jadi tak relevan & tak diubah).
+  // Model jangan "mencoba" merender teks kecil label sebagai tajam lalu gagal
+  // jadi gibberish (lihat IDENTITY_INSTRUCTION).
+  if (format !== "vo_broll") {
+    negativePrompt = `${negativePrompt}, no garbled small print, no illegible fine text, no attempted sharp small text that is wrong or gibberish`;
+  }
   if (format === "talking_head") {
     // Anti AI-slop (bar Brian 2026-08-07: "smooth, tidak ada AI slop, realisme")
     // r3: + anti tangan-ganda (temuan Brian: tangan kanan kedua muncul pegang
@@ -237,6 +284,12 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     negativePrompt = `${negativePrompt}, no morphing, no warping, no uncanny artificial look, no oversmoothed skin, no flickering, ` +
       "no extra hands, no third hand, no duplicated limbs, exactly two hands, no flickering or disappearing product label text, " +
       "no deformed packaging, no duplicated caps or droppers, no floating parts";
+    if (!lipSyncPresenter) {
+      // r6: semua kombinasi KECUALI Presenter/Lipsync (Super HQ) punya audio
+      // embedded diganti Gemini TTS -> mulut yang "bicara" ke teks asli pasti
+      // tak sinkron dengan VO final; larang mouth-flapping.
+      negativePrompt += ", no mouth flapping or exaggerated talking motion, no lip-sync to any specific words";
+    }
   }
   if (format === "hands_only") {
     negativePrompt = negativePrompt

@@ -152,6 +152,11 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const vo: { path: string; startSec: number }[] = [];
     let geminiVoPath: string | undefined;
     const usedMockVideo = isMockProviderName(video.providerName);
+    // r7 (Brian 2026-08-07): "presenter/lipsync jual Super HQ 80rb-an, sisanya
+    // video+VO mulut nggak lipsync" — satu-satunya kombinasi berlip-sync
+    // sungguhan adalah Wajah AI di tier Super HQ (audio embedded asli
+    // dipertahankan); semua kombinasi lain pakai gaya voice-over (Gemini TTS).
+    const isPresenterLipsync = format === "talking_head" && tier === "super_hq";
     if (!withAudio) {
       setJobProviders(job.id, undefined, "none-silent-caption");
       console.log(`[job ${job.id.slice(0, 8)}] silent_caption: tanpa VO (caption + musik)`);
@@ -164,6 +169,13 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       }
       setJobProviders(job.id, undefined, "elevenlabs-tts");
       console.log(`[job ${job.id.slice(0, 8)}] vo_broll: VO nyata (ElevenLabs) di atas foto produk`);
+    } else if (!usedMockVideo && isPresenterLipsync) {
+      // r7 (Brian 2026-08-07): "presenter/lipsync ya kita jual Super HQ 80rb-an,
+      // sisanya video+VO (mulut nggak lipsync)". Super HQ Wajah AI = satu-satunya
+      // kombinasi yang MEMPERTAHANKAN audio embedded asli (lip-sync sungguhan
+      // dari model, prompt talking-to-camera) — TIDAK diganti Gemini TTS.
+      setJobProviders(job.id, undefined, "embedded-model-lipsync");
+      console.log(`[job ${job.id.slice(0, 8)}] Presenter/Lipsync (Super HQ): audio embedded asli dipertahankan dari ${video.providerName}`);
     } else if (!usedMockVideo) {
       // SUARA RESMI = Gemini TTS (Brian 2026-08-07): audio embedded dari model
       // video DIGANTI VO TTS ber-voice terkunci per avatar (gerak bibir klip

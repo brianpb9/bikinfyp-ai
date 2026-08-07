@@ -21,10 +21,10 @@ test("user baru dapat bonus Rp12.000 (cukup 1 video AI Bersuara)", () => {
   assert.equal(row.delta, 12000);
 });
 
-test("harga tier sesuai keputusan final: 5000 / 12000 / 49000", () => {
+test("harga tier sesuai keputusan final: 5000 / 12000 / 80000", () => {
   assert.equal(tierPriceIdr("silent_caption"), 5000);
   assert.equal(tierPriceIdr("high_quality"), 12000);
-  assert.equal(tierPriceIdr("super_hq"), 49000);
+  assert.equal(tierPriceIdr("super_hq"), 80000); // r7: presenter/lipsync premium
 });
 
 test("topup menambah saldo rupiah via ledger", () => {
@@ -59,7 +59,7 @@ test("hold -> release mengembalikan rupiah persis sebesar hold", () => {
 
 test("hold ditolak bila saldo kurang dari harga tier", () => {
   const miskin = findOrCreateUserByPhone("089999000222"); // bonus Rp12.000
-  assert.equal(holdCredits(miskin.id, "job-x", 49000), false); // Super HQ > bonus
+  assert.equal(holdCredits(miskin.id, "job-x", 80000), false); // Super HQ > bonus
   assert.equal(getBalance(miskin.id), 12000);
   assert.equal(holdCredits(miskin.id, "job-y", 12000), true); // AI Bersuara pas
 });

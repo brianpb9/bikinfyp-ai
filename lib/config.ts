@@ -133,7 +133,11 @@ export const config = {
       generateAudio: true,
     },
     super_hq: {
-      priceIdr: 49000,
+      // r7 (Brian 2026-08-07): "presenter/lipsync jual Super HQ 80rb-an" —
+      // ini satu-satunya tier yang mempertahankan audio embedded asli (lip-
+      // sync sungguhan dari model), COGS-nya juga paling tinggi (Rp37rb) —
+      // margin lama (Rp49rb-37rb=Rp12rb, ~24%) terlalu tipis untuk premium.
+      priceIdr: 80000,
       cogsIdr: 37164,
       byteplusModel: env("BYTEPLUS_MODEL_SUPER", "dreamina-seedance-2-0-260128"),
       resolution: "720p",

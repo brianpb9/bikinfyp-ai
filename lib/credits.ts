@@ -12,7 +12,10 @@ import type { QualityTier } from "./providers/types";
 export const TOPUP_PACKAGES = [
   { id: "hq5", name: "5× AI Bersuara", priceIdr: 60_000, videos: 5, tier: "high_quality" },
   { id: "hq10", name: "10× AI Bersuara", priceIdr: 120_000, videos: 10, tier: "high_quality" },
-  { id: "super5", name: "5× AI Bersuara Pro", priceIdr: 245_000, videos: 5, tier: "super_hq" },
+  // r7 (Brian 2026-08-07): AI Bersuara Pro = satu-satunya tier presenter
+  // ber-lip-sync sungguhan (audio embedded asli, bukan Gemini TTS) -> harga naik
+  // dari Rp49rb/video ke Rp80rb/video (COGS Rp37rb, margin lama terlalu tipis).
+  { id: "super5", name: "5× AI Bersuara Pro", priceIdr: 400_000, videos: 5, tier: "super_hq" },
 ] as const;
 
 export type PackageId = (typeof TOPUP_PACKAGES)[number]["id"];

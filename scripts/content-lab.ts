@@ -43,7 +43,7 @@ async function main() {
   const phone = `0816${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`;
   const login = await api("/api/auth/dev-login", { json: { phone } });
   if (login.status !== 200) throw new Error(`login: ${login.status}`);
-  await api("/api/credits/topup", { json: { package_id: "hq5" } });
+  await api("/api/credits/topup", { json: { package_id: process.env.LAB_TIER === "super_hq" ? "super5" : "hq5" } });
 
   const fd = new FormData();
   // Produk bisa di-override via env (LAB_PRODUCT_NAME/PRICE/CATEGORY/DESC) —
@@ -60,14 +60,14 @@ async function main() {
   const productId = prod.data.product_id;
 
   const gen = await api("/api/scripts/generate", {
-    json: { product_id: productId, register: "bestie", emotion: "senang", format: "talking_head", quality_tier: "high_quality" },
+    json: { product_id: productId, register: "bestie", emotion: "senang", format: process.env.LAB_FORMAT ?? "talking_head", quality_tier: process.env.LAB_TIER ?? "high_quality" },
   });
   if (!gen.data.scripts?.length) throw new Error(`generate: ${JSON.stringify(gen.data)}`);
   const script = gen.data.scripts[0];
   await api(`/api/scripts/${script.id}/approve`, { json: {} });
 
   const job = await api("/api/jobs", {
-    json: { script_id: script.id, format: "talking_head", duration_s: 15, quality_tier: "high_quality", creator_category: CATEGORY },
+    json: { script_id: script.id, format: process.env.LAB_FORMAT ?? "talking_head", duration_s: 15, quality_tier: process.env.LAB_TIER ?? "high_quality", creator_category: CATEGORY },
   });
   if (job.status !== 201) throw new Error(`job: ${job.status} ${JSON.stringify(job.data)}`);
   const jobId = job.data.job_id;

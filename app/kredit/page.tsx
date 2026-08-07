@@ -19,7 +19,7 @@ interface LedgerItem {
 const PACKAGES = [
   { id: "hq5", name: "5× AI Bersuara", price: 60_000, perVideo: "Rp12rb/video", tag: null, badge: "🎙️ AI-nya ngomong", voiced: true },
   { id: "hq10", name: "10× AI Bersuara", price: 120_000, perVideo: "Rp12rb/video", tag: "Paling laris", badge: "🎙️ AI-nya ngomong", voiced: true },
-  { id: "super5", name: "5× AI Bersuara Pro", price: 245_000, perVideo: "Rp49rb/video", tag: null, badge: "🎙️ suara + gambar tertajam", voiced: true },
+  { id: "super5", name: "5× AI Bersuara Pro", price: 400_000, perVideo: "Rp80rb/video", tag: null, badge: "🎙️ presenter ngomong asli, lip-sync sungguhan", voiced: true },
 ];
 
 const LEDGER_LABEL: Record<string, string> = {
@@ -116,7 +116,7 @@ function KreditInner() {
     }
   }
 
-  const nSuper = balance === null ? null : Math.floor(balance / 49000);
+  const nSuper = balance === null ? null : Math.floor(balance / 80000);
   const nHq = balance === null ? null : Math.floor(balance / 12000);
 
   return (
