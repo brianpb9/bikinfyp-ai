@@ -59,6 +59,9 @@ export const config = {
   byteplusApiKey: env("BYTEPLUS_ARK_API_KEY", ""),
   dashscopeApiKey: env("DASHSCOPE_API_KEY", ""),
   googleTtsApiKey: env("GOOGLE_TTS_API_KEY", ""),
+  // Gemini TTS (gemini-3.1-flash-tts-preview) — suara resmi semua video sejak
+  // 2026-08-07 (voice terkunci per avatar; menggantikan audio embedded dreamina).
+  geminiApiKey: env("GEMINI_API_KEY", ""),
   // Google OAuth login (alongside, not replacing, email OTP — Brian's
   // decision 2026-08-03: keep both options).
   googleOauthClientId: env("GOOGLE_OAUTH_CLIENT_ID", ""),

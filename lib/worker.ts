@@ -14,6 +14,8 @@ import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "./provid
 import { isMockProviderName, type QualityTier } from "./providers/types";
 import { buildPhotoPanVideo } from "./media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "./media/vo-tts";
+import { synthesizeGeminiVoiceover } from "./media/gemini-tts";
+import { hargaTerbilang } from "./script-engine/terbilang";
 import { buildCaptionCards } from "./media/captions";
 import { renderCaptionPngs } from "./media/render-captions";
 import type { CompositeMode } from "./media/compositor";
@@ -148,6 +150,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // tier bersuara via MOCK: VO `say` sebagai SIMULASI embedded (dev/test gratis).
     advance(job.id, "GENERATING_VOICE");
     const vo: { path: string; startSec: number }[] = [];
+    let geminiVoPath: string | undefined;
     const usedMockVideo = isMockProviderName(video.providerName);
     if (!withAudio) {
       setJobProviders(job.id, undefined, "none-silent-caption");
@@ -162,8 +165,15 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       setJobProviders(job.id, undefined, "elevenlabs-tts");
       console.log(`[job ${job.id.slice(0, 8)}] vo_broll: VO nyata (ElevenLabs) di atas foto produk`);
     } else if (!usedMockVideo) {
-      setJobProviders(job.id, undefined, "embedded-model");
-      console.log(`[job ${job.id.slice(0, 8)}] audio embedded dari ${video.providerName} — GENERATING_VOICE no-op`);
+      // SUARA RESMI = Gemini TTS (Brian 2026-08-07): audio embedded dari model
+      // video DIGANTI VO TTS ber-voice terkunci per avatar (gerak bibir klip
+      // tetap dipakai — dialog prompt = teks yang sama dengan TTS).
+      const voText = hargaTerbilang(segments.map((seg) => seg.text).join(" ... "));
+      const tts = await synthesizeGeminiVoiceover(voText, category.voiceName, category.voiceStyle, path.join(workDir, "vo_gemini.wav"));
+      geminiVoPath = tts.filePath;
+      addCost(job.id, tts.costIdr);
+      setJobProviders(job.id, undefined, "gemini-tts");
+      console.log(`[job ${job.id.slice(0, 8)}] VO Gemini TTS voice=${category.voiceName} menggantikan audio embedded ${video.providerName}`);
     } else {
       let voiceProvider = "";
       for (let i = 0; i < segments.length; i++) {
@@ -227,6 +237,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         workDir,
         clipPaths: video.assets.map((a) => a.filePath),
         mode: compositeMode,
+        voiceoverWavPath: compositeMode === "embedded" ? geminiVoPath : undefined,
         vo: compositeMode === "vo" ? vo : undefined,
         captions: captionCards,
         musicPath,

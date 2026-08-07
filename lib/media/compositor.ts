@@ -43,6 +43,9 @@ export interface CompositeInput {
   demoRange: [number, number]; // detik
   ctaRange: [number, number];
   providerVideo: string;
+  /** Mode embedded: GANTI audio klip dengan VO eksternal (Gemini TTS — suara
+   * resmi semua video sejak 2026-08-07; gerak bibir dari klip tetap dipakai). */
+  voiceoverWavPath?: string;
 }
 
 export interface CompositeResult {
@@ -133,15 +136,25 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
   let pngCount = 0;
   const addPngInput = (p: string) => {
     args.push("-i", p);
-    return input.clipPaths.length + (input.mode === "vo" ? (input.vo?.length ?? 0) : 0) + (hasMusic ? 1 : 0) + pngCount++;
+    return input.clipPaths.length + (input.mode === "vo" ? (input.vo?.length ?? 0) : 0) + (hasMusic ? 1 : 0) +
+      (input.mode === "embedded" && input.voiceoverWavPath ? 1 : 0) + pngCount++;
   };
 
   // --- Rantai video: concat + watermark + overlay sesuai mode ---
   // N klip dinamis (2 di 15/30 dtk, 3 di 45 dtk — lihat shot-planner.ts) bukan
   // hardcode 2 (2026-08-04, v1.3): label input dibangun dari clipPaths.length.
   const n = input.clipPaths.length;
-  if (input.mode === "embedded") {
-    // Klip membawa audio; concat video+audio sekaligus.
+  if (input.mode === "embedded" && input.voiceoverWavPath) {
+    // Suara resmi = Gemini TTS (Brian 2026-08-07): audio embedded klip DIBUANG,
+    // diganti VO eksternal (apad supaya pas durasi video).
+    args.push("-i", input.voiceoverWavPath);
+    const voIdx = n; // input VO tepat setelah klip; addPngInput menghitung offset di bawah
+    const labels = Array.from({ length: n }, (_, i) => `[${i}:v]`).join("");
+    vChain.push(`${labels}concat=n=${n}:v=1:a=0[vcat]`);
+    aChain.push(`[${voIdx}:a]aresample=24000,apad[aout]`);
+    mapAudio = "[aout]";
+  } else if (input.mode === "embedded") {
+    // Klip membawa audio; concat video+audio sekaligus (jalur lama tanpa TTS).
     const labels = Array.from({ length: n }, (_, i) => `[${i}:v][${i}:a]`).join("");
     vChain.push(`${labels}concat=n=${n}:v=1:a=1[vcat][acat]`);
     aChain.push(`[acat]aresample=24000[aout]`);

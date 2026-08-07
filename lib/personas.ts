@@ -25,6 +25,10 @@ export interface CreatorCategory {
    * shot-planner untuk format talking_head.
    */
   deliveryPrompt: string;
+  /** Voice Gemini TTS terkunci per avatar (2026-08-07: TTS = suara resmi semua video). */
+  voiceName: string;
+  /** Arahan gaya bicara untuk TTS (bahasa Indonesia, jeda natural). */
+  voiceStyle: string;
   negativePrompt: string;
 }
 
@@ -43,6 +47,9 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "close-up of a young Indonesian hijabi woman's hands with warm medium skin tone, soft pastel hijab sleeve visible at wrist, modest neat nails, holding the product naturally over a clean Indonesian home table, phone camera look, natural daylight",
     deliveryPrompt:
       "graceful calm delivery, soft gentle hand gestures, serene warm smile, unhurried elegant pace",
+    voiceName: "Aoede",
+    voiceStyle:
+      "Ucapkan sebagai perempuan muda Indonesia yang kalem, hangat dan anggun, seperti cerita ke teman dekat, ada jeda natural antar kalimat, tidak buru-buru, tidak seperti iklan:",
     negativePrompt: NEG,
   },
   {
@@ -57,6 +64,9 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "close-up of a native Indonesian woman's hands with warm sawo matang skin tone, casual sleeve, natural nails, holding the product naturally, Indonesian home background, phone camera look",
     deliveryPrompt:
       "warm neighborly delivery like chatting with a close friend, easy genuine laugh, relaxed pace",
+    voiceName: "Kore",
+    voiceStyle:
+      "Ucapkan sebagai perempuan Indonesia yang ramah dan membumi, seperti ngobrol santai dengan tetangga akrab, ada jeda natural, tidak buru-buru:",
     negativePrompt: NEG,
   },
   {
@@ -71,6 +81,9 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "close-up of a Chinese-Indonesian woman's hands with fair warm ivory skin tone, minimal pastel sleeve, neat glossy nails, holding a skincare product, bright clean background, phone camera look",
     deliveryPrompt:
       "polished beauty-influencer delivery, light confident energy, playful expressive eyes, snappy but smooth pace",
+    voiceName: "Zephyr",
+    voiceStyle:
+      "Ucapkan sebagai beauty influencer muda Indonesia yang percaya diri dan halus, santai tapi meyakinkan, ada jeda natural, tidak buru-buru:",
     negativePrompt: NEG,
   },
   {
@@ -85,6 +98,9 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "close-up of an Indonesian Gen-Z woman's hands with light-medium warm skin, trendy rings, playful casual sleeve, holding the product in a bedroom with string lights, phone camera look",
     deliveryPrompt:
       "high-energy playful delivery, quick expressive reactions, animated hand gestures, fast fun TikTok pace",
+    voiceName: "Leda",
+    voiceStyle:
+      "Ucapkan sebagai cewek Gen-Z Indonesia yang ceria dan ekspresif, santai seperti ngobrol ke bestie, ada jeda natural, tidak buru-buru:",
     negativePrompt: NEG,
   },
   {
@@ -112,6 +128,9 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "holding the product naturally, phone camera look",
     deliveryPrompt:
       "reassuring motherly delivery, practical no-nonsense warmth, nodding while explaining, moderate calm pace",
+    voiceName: "Sulafat",
+    voiceStyle:
+      "Ucapkan sebagai ibu muda Indonesia yang hangat dan menenangkan, praktis dan meyakinkan, ada jeda natural, tidak buru-buru:",
     negativePrompt: NEG,
   },
   {
@@ -139,6 +158,9 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "and warm afternoon window light visible behind, holding the product naturally",
     deliveryPrompt:
       "humble down-to-earth delivery, shy genuine smile, polite unhurried gestures",
+    voiceName: "Kore",
+    voiceStyle:
+      "Ucapkan sebagai perempuan Indonesia yang santun dan membumi, pelan dan ramah, ada jeda natural:",
     negativePrompt: NEG,
   },
   {
@@ -155,6 +177,9 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "close-up of an Indonesian man's hands with light-to-medium brown skin tone (sawo matang), casual t-shirt or hoodie sleeve, natural unpolished nails, holding the product in a relatable everyday Indonesian home/desk setting, phone camera look, natural daylight",
     deliveryPrompt:
       "laid-back confident delivery, minimal casual gestures, slight grin, steady relaxed pace",
+    voiceName: "Charon",
+    voiceStyle:
+      "Ucapkan sebagai cowok muda Indonesia yang santai dan percaya diri, seperti rekomendasi ke teman, ada jeda natural, tidak buru-buru:",
     negativePrompt: NEG,
   },
 ];

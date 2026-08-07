@@ -24,6 +24,8 @@ import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "../provi
 import { isMockProviderName, type QualityTier } from "../providers/types";
 import { buildPhotoPanVideo } from "../media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
+import { synthesizeGeminiVoiceover } from "../media/gemini-tts";
+import { hargaTerbilang } from "../script-engine/terbilang";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
 import { personSafeReferencePhotos } from "../media/person-safe-refs";
@@ -138,6 +140,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
 
   if (!(await jobs.transition(row.id, "GENERATING_VOICE", { worker: "postgres" }))) return;
   const vo: { path: string; startSec: number }[] = [];
+  let geminiVoPath: string | undefined;
   const usedMockVideo = isMockProviderName(video.providerName);
   if (!withAudio) await jobs.setProviders(row.id, undefined, "none-silent-caption");
   else if (format === "vo_broll") {
@@ -150,8 +153,15 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       await jobs.addCost(row.id, result.costIdr);
     }
     await jobs.setProviders(row.id, undefined, "elevenlabs-tts");
-  } else if (!usedMockVideo) await jobs.setProviders(row.id, undefined, "embedded-model");
-  else {
+  } else if (!usedMockVideo) {
+    // SUARA RESMI = Gemini TTS (Brian 2026-08-07): audio embedded model video
+    // diganti VO TTS ber-voice terkunci per avatar.
+    const voText = hargaTerbilang(segments.map((segment) => segment.text).join(" ... "));
+    const tts = await synthesizeGeminiVoiceover(voText, category.voiceName, category.voiceStyle, path.join(workDir, "vo_gemini.wav"));
+    geminiVoPath = tts.filePath;
+    await jobs.addCost(row.id, tts.costIdr);
+    await jobs.setProviders(row.id, undefined, "gemini-tts");
+  } else {
     let voiceProvider = "";
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
@@ -183,6 +193,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   for (let retry = 0; retry < 2; retry++) {
     if (!(await jobs.transition(row.id, "COMPOSITING", { worker: "postgres", retry }))) return;
     const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths: video.assets.map((asset) => asset.filePath), mode,
+      voiceoverWavPath: mode === "embedded" ? geminiVoPath : undefined,
       vo: mode === "vo" ? vo : undefined, captions, musicPath, durationSec: row.duration_s,
       priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,
       demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });

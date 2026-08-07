@@ -34,10 +34,11 @@ export const QC_POLICY_BY_FORMAT = {
   // dengan alasan "tidak ada overlay" — fail tetap menolak output.
   hands_only: {
     requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08", "QC-09"],
-    permittedSkip: ["QC-01", "QC-06"],
+    permittedSkip: ["QC-01", "QC-06", "QC-10"],
     skipReason: {
       "QC-01": "N/A: hands_only tidak menampilkan pembicara untuk lip-sync.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
+      "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
     },
   },
   // Wajah AI (v1, 2026-08-03): wajah presenter AI SENGAJA terlihat, jadi
@@ -47,10 +48,11 @@ export const QC_POLICY_BY_FORMAT = {
   // dimitigasi lewat instruksi jeda/enunciate di shot-planner.
   talking_head: {
     requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01", "QC-06"],
+    permittedSkip: ["QC-01", "QC-06", "QC-10"],
     skipReason: {
       "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2) — dimitigasi lewat instruksi jeda/enunciate di prompt.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
+      "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
     },
   },
   // VO+Foto (v1, 2026-08-03): visual adalah foto produk ASLI di-pan/zoom
@@ -439,6 +441,79 @@ export async function qcHandMorphing(filePath: string, workDir: string): Promise
   };
 }
 
+/**
+ * QC-10 — FIDELITAS LABEL PRODUK (gate anti "AI slop label", keputusan Brian
+ * 2026-08-07: label rusak/gibberish DILARANG selamanya). Sampling 5 frame,
+ * OCR (pass mentah + threshold), lalu cari token merek dari nama produk.
+ * Tidak ketemu di SEMUA frame = fail -> retry sekali -> refund. Produk tanpa
+ * token alfabet >=4 huruf (mis. baju polos) = skip N/A terdokumentasi.
+ */
+// Kata produk GENERIK — bukan identitas merek. Video slop bisa menulis kata
+// generik dengan benar sambil MENGGANTI mereknya (kasus food-lokal: pack palsu
+// "Hi Tempura" tetap memuat "tempura"/"seaweed" yang legible). Token merek =
+// token NON-generik; hanya itu yang membuktikan label benar.
+const GENERIC_PRODUCT_WORDS = new Set([
+  "gamis", "dress", "baju", "kaos", "kemeja", "jaket", "sweater", "hoodie", "celana", "rok",
+  "hijab", "kerudung", "jilbab", "scarf", "jubah", "sepatu", "sandal", "tas", "tote", "pouch",
+  "serum", "cream", "krim", "ampoule", "essence", "toner", "sunscreen", "cleanser", "lotion",
+  "snack", "keripik", "kripik", "tempura", "seaweed", "cemilan", "kopi", "teh", "susu",
+  "earphone", "headset", "gaming", "chair", "kursi", "mouse", "mousepad", "deskmat", "tumbler", "botol",
+  "original", "flavor", "premium", "murah", "viral", "terlaris", "wanita", "pria", "anak", "basic", "polos",
+]);
+
+export function brandTokens(productName: string): string[] {
+  const all = normalizeOcr(productName)
+    .split(" ")
+    .filter((token) => token.length >= 4 && /[a-z]/.test(token));
+  const brand = all.filter((token) => !GENERIC_PRODUCT_WORDS.has(token));
+  // Tanpa token non-generik (mis. "Gamis Polos Premium") -> tidak ada merek
+  // untuk diverifikasi; qcLabelFidelity akan skip N/A.
+  return brand.sort((a, b) => b.length - a.length).slice(0, 3);
+}
+
+export async function qcLabelFidelity(filePath: string, productName: string): Promise<QcCheck> {
+  const tokens = brandTokens(productName);
+  if (tokens.length === 0) {
+    return { code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip", detail: "N/A: nama produk tanpa token teks merek (produk polos)." };
+  }
+  const framesDir = fs.mkdtempSync(path.join(os.tmpdir(), "racun-qc10-"));
+  try {
+    const duration = await probeDurationSec(filePath);
+    const found = new Set<string>();
+    let sampled = 0;
+    // 8 titik sampel + upscale 2x (label kecil di frame 720p sering di bawah
+    // ukuran minimum tesseract — kasus genz-r2: label tajam secara visual tapi
+    // OCR full-frame gagal; upscale menyelesaikannya).
+    for (const frac of [0.08, 0.2, 0.3, 0.42, 0.55, 0.68, 0.8, 0.92]) {
+      const frame = path.join(framesDir, `f${Math.round(frac * 100)}.png`);
+      await runFfmpeg(["-y", "-v", "error", "-ss", (duration * frac).toFixed(2), "-i", filePath,
+        "-frames:v", "1", "-vf", "scale=1440:-2:flags=lanczos", frame]);
+      sampled++;
+      const { words } = await ocrFrame(frame);
+      for (const word of words) {
+        const norm = normalizeOcr(word.text);
+        for (const token of tokens) {
+          // cocok bila token dan kata OCR berbagi substring >=4 huruf
+          // (toleran huruf awal/akhir terpotong sudut kamera)
+          for (let i = 0; i + 4 <= token.length; i++) {
+            if (norm.includes(token.slice(i, i + 4))) { found.add(token); break; }
+          }
+        }
+      }
+      if (found.size > 0) break; // satu frame terbukti sudah cukup
+    }
+    if (found.size > 0) {
+      return { code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "pass", detail: `token merek ${[...found].join(",")} terbaca (sampai ${sampled} frame diperiksa).` };
+    }
+    return {
+      code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
+      detail: `token merek (${tokens.join(", ")}) tidak terbaca di ${sampled} frame sampel — indikasi label rusak/gibberish (AI slop).`,
+    };
+  } finally {
+    fs.rmSync(framesDir, { recursive: true, force: true });
+  }
+}
+
 export async function runQc(input: QcInput): Promise<QcResult> {
   const checks: QcCheck[] = [];
 
@@ -537,6 +612,16 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     status: v.passed ? "pass" : "fail",
     detail: v.passed ? "bersih" : v.errors.map((e) => e.message_id).join(" "),
   });
+
+
+  // QC-10 fidelitas label produk (anti "AI slop label") — hanya format ber-video-AI.
+  if (input.format === "hands_only" || input.format === "talking_head") {
+    try {
+      checks.push(await qcLabelFidelity(input.filePath, input.productName));
+    } catch (err) {
+      checks.push({ code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail", detail: `pemeriksaan gagal jalan: ${err instanceof Error ? err.message : err}` });
+    }
+  }
 
   // QC-08 label AIGC via METADATA (watermark visual dihapus 2026-08-07 —
   // disclosure ke penonton lewat toggle AIGC platform saat posting):
