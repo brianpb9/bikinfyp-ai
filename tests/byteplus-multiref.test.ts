@@ -37,6 +37,7 @@ const spec = (extra?: string[]): VisualSpec => ({
   negativePrompt: "no text, no logo, no writing",
   qualityTier: "high_quality", generateAudio: true,
   extraReferenceImagePaths: extra,
+  hasProofInsert: false,
 });
 
 type Item = { type: string; role?: string };

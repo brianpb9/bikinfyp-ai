@@ -20,7 +20,13 @@ def main() -> None:
             out.append({"file": path, "faces": 0, "best_score": 0, "error": "unreadable"})
             continue
         h, w = img.shape[:2]
-        det = cv2.FaceDetectorYN_create(model, "", (w, h), score_threshold=0.6)
+        # r15 (Brian 2026-08-08): ambang 0.6 asli menghasilkan 4 false-positive
+        # TERBUKTI hari ini (skor 0.61/0.63/0.63/0.71, semua dicek manual = TIDAK
+        # ada wajah, cuma pola kulit tangan/buku jari). Dikalibrasi ulang pakai
+        # 2 foto wajah asli sungguhan: skor wajah nyata 0.91 & 0.93 -- gap lebar
+        # ke false-positive tertinggi (0.71), jadi 0.8 aman di tengah tanpa
+        # kehilangan deteksi wajah sungguhan.
+        det = cv2.FaceDetectorYN_create(model, "", (w, h), score_threshold=0.8)
         _, faces = det.detect(img)
         n = 0 if faces is None else len(faces)
         best = 0.0 if faces is None or len(faces) == 0 else round(float(max(x[-1] for x in faces)), 2)

@@ -21,6 +21,7 @@ function spec(shots: { durationSec: number }[]): VisualSpec {
     jobId: "test", width: 720, height: 1280,
     shots: shots.map((s, i) => ({ index: i, durationSec: s.durationSec, prompt: "x", imageRefPath: "/dev/null" })),
     negativePrompt: "", qualityTier: "high_quality", generateAudio: true,
+    hasProofInsert: false,
   };
 }
 

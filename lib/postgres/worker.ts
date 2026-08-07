@@ -15,7 +15,7 @@ import { formatHargaOverlay, type SegmentDraft } from "../script-engine/template
 import { getCreatorCategory } from "../personas";
 import { planShots, PRODUCT_PROOF_INSERT_SEC } from "../media/shot-planner";
 import { findReusableClips } from "../media/resume-clips";
-import { buildProductProofClip } from "../media/product-proof-insert";
+import { buildProductProofClip, trimShotsForProofInsert } from "../media/product-proof-insert";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
 import { buildCaptionCards } from "../media/captions";
@@ -155,8 +155,15 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // TIDAK menyelesaikan, limitasi model): jaminan label BENAR selamanya —
   // selipkan klip FOTO ASLI produk di ujung video (piksel nyata, bukan AI).
   // shot-planner sudah menyisakan PRODUCT_PROOF_INSERT_SEC dari durasi AI.
+  // r15: diperluas ke hands_only juga (riset: limitasi label-text lintas
+  // SEMUA model video-gen 2026, ganti provider tak akan menyelesaikan).
+  // spec.hasProofInsert = satu sumber kebenaran, jangan hitung ulang di sini.
   let clipPaths = video.assets.map((asset) => asset.filePath);
-  if (format === "talking_head") {
+  if (spec.hasProofInsert) {
+    // r15: lihat komentar sama di lib/worker.ts — provider Math.ceil ke detik
+    // bulat menggagalkan reservasi shot-planner, potong paksa dulu SEBELUM
+    // concat supaya proof clip di ujung tidak pernah kepotong trim akhir.
+    clipPaths = await trimShotsForProofInsert(clipPaths, spec.shots.map((s) => s.durationSec), workDir);
     const proofPath = path.join(workDir, "product_proof.mp4");
     await buildProductProofClip(primaryRef, proofPath, PRODUCT_PROOF_INSERT_SEC);
     clipPaths = [...clipPaths, proofPath];

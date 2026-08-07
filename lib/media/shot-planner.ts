@@ -150,7 +150,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // di ujung video Wajah AI utk klip FOTO ASLI produk (worker yang
   // menambahkannya setelah generate — lihat product-proof-insert.ts). AI clip
   // diminta lebih pendek supaya total tetap pas durationSec, bukan terpotong.
-  const reserveProof = format === "talking_head" && numShots === 1;
+  // r15 (Brian 2026-08-08, "tulisannya masih jelek, ganti model?" — riset:
+  // limitasi label-text di video-gen AI berlaku LINTAS SEMUA model besar
+  // 2026 (Kling/Veo/Seedance), bukan spesifik BytePlus; ganti provider tidak
+  // akan menyelesaikan). Perluas jaminan matematis product-proof ke
+  // hands_only juga — hands_only SELALU >=2 shot (lihat komentar di atas)
+  // jadi TIDAK direstriksi numShots===1 seperti talking_head (yang dibatasi
+  // krn identitas presenter, bukan krn matematika durasi).
+  const reserveProof = format === "talking_head" ? numShots === 1 : format === "hands_only";
   const perShot = reserveProof ? (input.durationSec - PRODUCT_PROOF_INSERT_SEC) / numShots : input.durationSec / numShots;
   const tier = input.qualityTier;
   const withAudio = tier !== "silent_caption";
@@ -335,6 +342,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     qualityTier: tier,
     generateAudio: withAudio, // konsisten dengan tier — ditegakkan juga di registry
     extraReferenceImagePaths: input.extraImageRefPaths?.slice(0, 7), // r13: 4->7 (+1 primer = 8 total)
+    hasProofInsert: reserveProof,
   };
 }
 
