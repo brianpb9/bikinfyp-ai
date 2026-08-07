@@ -83,13 +83,20 @@ const TALKING_HEAD_FRAMING =
 // kecil dan gagal jadi huruf acak) — hanya wordmark besar yang wajib tajam;
 // teks kecil diarahkan jadi blur alami (shallow depth-of-field macro), bukan
 // tulisan tajam yang salah.
+// r14 (Brian 2026-08-08, screenshot: "W" Wardah kepotong tepi frame + brand
+// text jadi "Ampule" bukan "Ampoule") — kamera terlalu dekat/miring motong
+// label, dan model kadang mengeja ulang kata alih-alih mereproduksi persis.
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
   "do not redesign or replace the product, the packaging stays physically intact and correct " +
-  "(one cap, one dropper, nothing floating or duplicated). The large bold brand name on the label " +
-  "stays sharp, steady and perfectly legible the whole time; any smaller printed text below it is " +
-  "realistically soft and out of focus from natural macro shallow depth of field, like a real phone " +
-  "camera close-up — not an attempt at sharp illegible lettering";
+  "(one cap, one dropper, nothing floating or duplicated). The ENTIRE bottle and its full label " +
+  "stay completely inside the frame at all times, with visible margin on every side — never cropped " +
+  "or cut off by the frame edges, camera framed wide enough that no part of the bottle ever leaves " +
+  "frame. The large bold brand name on the label stays sharp, steady and perfectly legible the whole " +
+  "time, reproduced with the EXACT same letters and spelling as the reference image (do not alter, " +
+  "add, drop, or misspell any letter); any smaller printed text below it is realistically soft and " +
+  "out of focus from natural macro shallow depth of field, like a real phone camera close-up — not " +
+  "an attempt at sharp illegible lettering";
 
 // Aksi demo per KATEGORI PRODUK (2026-08-07, dipelajari dari akun UGC tim +
 // referensi visual Brian): "memegang kemasan" hanya benar untuk sebagian

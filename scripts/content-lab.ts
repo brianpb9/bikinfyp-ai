@@ -37,7 +37,7 @@ async function api(url: string, opts?: { method?: string; json?: unknown; formDa
 
 async function main() {
   fs.mkdirSync(OUT_DIR, { recursive: true });
-  const photos = fs.readdirSync(PHOTO_DIR).filter((f) => /\.(jpe?g|png)$/i.test(f)).sort();
+  const photos = fs.readdirSync(PHOTO_DIR).filter((f) => /\.(jpe?g|png|webp)$/i.test(f)).sort();
   if (!photos.length) throw new Error(`tidak ada foto di ${PHOTO_DIR}`);
 
   const phone = `0816${String(Math.floor(Math.random() * 1e7)).padStart(7, "0")}`;

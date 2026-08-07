@@ -6,6 +6,10 @@ import { apiFetch } from "../../_components/api";
 import { FlowHeader, PrimaryButton, ErrorText, WarnCard } from "../../_components/ui";
 import { CATEGORY_OPTIONS, loadFlow, saveFlow, rupiah } from "../../_components/flow";
 
+// Harus sinkron dengan MAX_IMAGES di lib/product-images.ts (server, tak bisa
+// diimpor langsung ke client component karena pakai node:fs/sharp).
+const MAX_PHOTOS = 8;
+
 // S2 — INPUT PRODUK (Langkah 1/5)
 export default function ProdukPage() {
   const router = useRouter();
@@ -91,8 +95,8 @@ export default function ProdukPage() {
 
   function pickPhotos(files: FileList | null) {
     if (!files) return;
-    // Jatah 5 foto TOTAL termasuk foto yang sudah terunduh dari link.
-    const room = Math.max(0, 5 - extractedPreviews.length - photos.length);
+    // Jatah MAX_PHOTOS foto TOTAL termasuk foto yang sudah terunduh dari link.
+    const room = Math.max(0, MAX_PHOTOS - extractedPreviews.length - photos.length);
     const list = Array.from(files).slice(0, room);
     const next = [...photos, ...list];
     previewUrls.current.forEach((src) => URL.revokeObjectURL(src));
@@ -160,7 +164,7 @@ export default function ProdukPage() {
     if (!name.trim()) return setError("Nama produknya belum diisi.");
     const priceIdr = parseInt(price.replace(/[^\d]/g, ""), 10);
     if (!priceIdr || priceIdr <= 0) return setError("Harganya wajib diisi — harga adalah bahan wajib hook videonya.");
-    if (extractedPreviews.length + photos.length < 1) return setError("Upload fotonya dulu ya — minimal 1, maksimal 5 foto.");
+    if (extractedPreviews.length + photos.length < 1) return setError(`Upload fotonya dulu ya — minimal 1, maksimal ${MAX_PHOTOS} foto.`);
     // Produk dari ekstraksi tanpa harga: sorot wajib (BR-01.3)
     if (productId && (!price || priceIdr <= 0)) return setError("Harga dari link tidak ketemu — isi manual ya, wajib.");
 
@@ -314,7 +318,7 @@ export default function ProdukPage() {
 
             <div>
               <p className="mb-2 text-sm font-semibold text-zinc-700">
-                Foto produk ({extractedPreviews.length + photos.length}/5)
+                Foto produk ({extractedPreviews.length + photos.length}/{MAX_PHOTOS})
                 {extractedPreviews.length > 0 && (
                   <span className="ml-1 font-normal text-emerald-600">— dari link ✓</span>
                 )}
@@ -326,7 +330,7 @@ export default function ProdukPage() {
                   <li>Produk terlihat jelas & memenuhi frame, label menghadap kamera.</li>
                   <li>Latar bersih & cahaya terang (dekat jendela sudah cukup).</li>
                   <li>Hindari kolase, teks/watermark tempelan, atau foto buram.</li>
-                  <li>Foto 2–5 (opsional): sudut lain / detail tekstur / produk dipakai.</li>
+                  <li>Foto 2–{MAX_PHOTOS} (opsional): sudut lain / detail tekstur / produk dipakai.</li>
                 </ul>
               </div>
               <div className="flex flex-wrap gap-2">
@@ -358,7 +362,7 @@ export default function ProdukPage() {
                     </button>
                   </div>
                 ))}
-                {extractedPreviews.length + photos.length < 5 && (
+                {extractedPreviews.length + photos.length < MAX_PHOTOS && (
                   <button
                     type="button"
                     onClick={() => fileRef.current?.click()}

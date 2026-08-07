@@ -70,7 +70,7 @@ export async function POST(req: Request) {
     if (!priceIdr)
       throw ERR.BAD_REQUEST("Harganya wajib diisi — harga adalah bahan wajib hook videonya.", "Price is required.");
     if (blobs.length < 1 || blobs.length > MAX_IMAGES)
-      throw ERR.BAD_REQUEST("Upload fotonya dulu ya — minimal 1, maksimal 5 foto.", "1-5 images required.");
+      throw ERR.BAD_REQUEST(`Upload fotonya dulu ya — minimal 1, maksimal ${MAX_IMAGES} foto.`, `1-${MAX_IMAGES} images required.`);
 
     // Validasi MIME nyata dari magic bytes (NF-SEC09)
     // Fresh disposable smoke/storage has no directory yet; create it before
