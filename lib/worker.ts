@@ -23,6 +23,7 @@ import { captureCredits } from "./credits";
 import { formatHargaOverlay, type SegmentDraft } from "./script-engine/templates";
 import { AIGC_WATERMARK_TEXT } from "./config/compliance";
 import { mediaStorage } from "./storage";
+import { personSafeReferencePhotos } from "./media/person-safe-refs";
 
 const CONCURRENCY = 1;
 
@@ -96,11 +97,22 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const withAudio = tier !== "silent_caption";
     // Foto ke-2..5 = referensi identitas tambahan (hanya berlaku di model r2v /
     // tier bersuara — provider yang memutuskan; gagal materialize = lewati saja).
+    let primaryRef = imageRef;
     const extraRefs: string[] = [];
     if (withAudio) {
       for (const rel of images.slice(1, 5)) {
         const p = await mediaStorage().materialize(rel).catch(() => null);
         if (p) extraRefs.push(p);
+      }
+      // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
+      // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
+      // model; terbukti crop lolos moderasi, lab fashion-r2b 2026-08-07).
+      const sanitized = await personSafeReferencePhotos([imageRef, ...extraRefs], workDir);
+      primaryRef = sanitized.safe[0];
+      extraRefs.length = 0;
+      extraRefs.push(...sanitized.safe.slice(1));
+      if (sanitized.cropped > 0 || sanitized.dropped > 0) {
+        console.log(`[job ${job.id.slice(0, 8)}] foto referensi aman-orang: ${sanitized.safe.length} dipakai, ${sanitized.cropped} di-crop, ${sanitized.dropped} dibuang`);
       }
     }
 
@@ -115,7 +127,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       productName: product.name,
       productCategory: product.category,
       productVisualDesc: product.product_visual_desc,
-      imageRefPath: imageRef,
+      imageRefPath: primaryRef,
       extraImageRefPaths: extraRefs,
       qualityTier: tier,
       format,
@@ -241,7 +253,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         priceIdr: product.price_idr,
         renderParams,
         shotPaths: video.assets.map((a) => a.filePath),
-        refImagePath: imageRef,
+        refImagePath: primaryRef,
         format,
         // critical = teks kepatuhan/konversi (watermark, harga/promo, CTA) —
         // WAJIB terbukti OCR; kartu caption skrip non-kritis (cukup mayoritas).

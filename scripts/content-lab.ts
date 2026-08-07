@@ -46,10 +46,12 @@ async function main() {
   await api("/api/credits/topup", { json: { package_id: "hq5" } });
 
   const fd = new FormData();
-  fd.set("name", "SKIN1004 Centella Ampoule");
-  fd.set("price_idr", "159000");
-  fd.set("category", "beauty");
-  fd.set("product_visual_desc", "botol kaca bening berisi serum dengan kapsul putih kecil, label putih bertuliskan CENTELLA, tutup pipet putih");
+  // Produk bisa di-override via env (LAB_PRODUCT_NAME/PRICE/CATEGORY/DESC) —
+  // default = SKIN1004 (baseline beauty yang terbukti terbaca labelnya).
+  fd.set("name", process.env.LAB_PRODUCT_NAME ?? "SKIN1004 Centella Ampoule");
+  fd.set("price_idr", process.env.LAB_PRICE ?? "159000");
+  fd.set("category", process.env.LAB_CATEGORY ?? "beauty");
+  fd.set("product_visual_desc", process.env.LAB_DESC ?? "botol kaca bening berisi serum dengan kapsul putih kecil, label putih bertuliskan CENTELLA, tutup pipet putih");
   for (const p of photos) {
     fd.append("photos", new Blob([fs.readFileSync(path.join(PHOTO_DIR, p))], { type: "image/jpeg" }), p);
   }

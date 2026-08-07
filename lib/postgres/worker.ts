@@ -26,6 +26,7 @@ import { buildPhotoPanVideo } from "../media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
+import { personSafeReferencePhotos } from "../media/person-safe-refs";
 import { PgCreditPaymentRepository } from "./credit-payment";
 import { PgJobsRepository } from "./jobs";
 
@@ -98,21 +99,33 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   if (images.length === 0) throw new Error("Produk tidak punya foto — upload minimal 1 foto.");
   const imageRef = await mediaStorage().materialize(images[0]);
   if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
+  const workDir = path.join(config.storageDir, "jobs", row.id);
+  fs.mkdirSync(workDir, { recursive: true });
+  let primaryRef = imageRef;
   const extraRefs: string[] = [];
   if ((row.quality_tier ?? "silent_caption") !== "silent_caption") {
     for (const rel of images.slice(1, 5)) {
       const p = await mediaStorage().materialize(rel).catch(() => null);
       if (p) extraRefs.push(p);
     }
+    // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
+    // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
+    // model; terbukti lolos moderasi, lab fashion-r2b 2026-08-07). Bila tidak
+    // ada satu pun foto aman, error berpesan-user → FAILED + refund jelas.
+    const sanitized = await personSafeReferencePhotos([imageRef, ...extraRefs], workDir);
+    primaryRef = sanitized.safe[0];
+    extraRefs.length = 0;
+    extraRefs.push(...sanitized.safe.slice(1));
+    if (sanitized.cropped > 0 || sanitized.dropped > 0) {
+      console.log(`[job ${row.id.slice(0, 8)}] foto referensi aman-orang: ${sanitized.safe.length} dipakai, ${sanitized.cropped} di-crop, ${sanitized.dropped} dibuang`);
+    }
   }
-  const workDir = path.join(config.storageDir, "jobs", row.id);
-  fs.mkdirSync(workDir, { recursive: true });
   const category = getCreatorCategory(row.creator_category ?? "hijaber")!;
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
   const withAudio = tier !== "silent_caption";
   const format = row.format === "talking_head" || row.format === "vo_broll" ? row.format : "hands_only";
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
-    productCategory: row.product_category, productVisualDesc: row.product_visual_desc, imageRefPath: imageRef,
+    productCategory: row.product_category, productVisualDesc: row.product_visual_desc, imageRefPath: primaryRef,
     extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
     hookLevel: row.script_hook_level === "berani" || row.script_hook_level === "gila" ? row.script_hook_level : "normal" });
@@ -178,7 +191,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s,
       finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), `Cek ${cartLabel}`, AIGC_WATERMARK_TEXT],
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, priceIdr: row.product_price_idr,
-      renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: imageRef, format,
+      renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: primaryRef, format,
       // Mode embedded (semua tier bersuara) TIDAK punya overlay teks lagi
       // (2026-08-07: harga/CTA diucapkan AI, tulisan di layar dihapus) —
       // QC-06 jadi N/A. Watermark visual juga dihapus (label AIGC via
