@@ -13,7 +13,8 @@ import { config } from "../config";
 import { outputExtras, cartLabelForUrl } from "../script-engine";
 import { formatHargaOverlay, type SegmentDraft } from "../script-engine/templates";
 import { getCreatorCategory } from "../personas";
-import { planShots } from "../media/shot-planner";
+import { planShots, PRODUCT_PROOF_INSERT_SEC } from "../media/shot-planner";
+import { buildProductProofClip } from "../media/product-proof-insert";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
 import { buildCaptionCards } from "../media/captions";
@@ -138,6 +139,18 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   await jobs.setProviders(row.id, video.providerName);
   await jobs.addCost(row.id, video.costIdr);
 
+  // r9 (Brian 2026-08-07, "kamu harus perbanyak referensi" — sudah diuji,
+  // TIDAK menyelesaikan, limitasi model): jaminan label BENAR selamanya —
+  // selipkan klip FOTO ASLI produk di ujung video (piksel nyata, bukan AI).
+  // shot-planner sudah menyisakan PRODUCT_PROOF_INSERT_SEC dari durasi AI.
+  let clipPaths = video.assets.map((asset) => asset.filePath);
+  if (format === "talking_head") {
+    const proofPath = path.join(workDir, "product_proof.mp4");
+    await buildProductProofClip(primaryRef, proofPath, PRODUCT_PROOF_INSERT_SEC);
+    clipPaths = [...clipPaths, proofPath];
+    console.log(`[job ${row.id.slice(0, 8)}] product-proof insert ditambahkan (${PRODUCT_PROOF_INSERT_SEC}dtk foto asli, label dijamin benar)`);
+  }
+
   if (!(await jobs.transition(row.id, "GENERATING_VOICE", { worker: "postgres" }))) return;
   const vo: { path: string; startSec: number }[] = [];
   let geminiVoPath: string | undefined;
@@ -201,7 +214,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   let qc: Awaited<ReturnType<typeof runQc>> | null = null;
   for (let retry = 0; retry < 2; retry++) {
     if (!(await jobs.transition(row.id, "COMPOSITING", { worker: "postgres", retry }))) return;
-    const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths: video.assets.map((asset) => asset.filePath), mode,
+    const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths, mode,
       voiceoverWavPath: mode === "embedded" ? geminiVoPath : undefined,
       vo: mode === "vo" ? vo : undefined, captions, musicPath, durationSec: row.duration_s,
       priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,

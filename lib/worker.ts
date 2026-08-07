@@ -6,7 +6,8 @@ import path from "node:path";
 import { config } from "./config";
 import { getDb, now, type JobRow, type ScriptRow, type ProductRow, type PersonaRow } from "./db";
 import { getJob, transition, failJob, addCost, setJobProviders } from "./jobs";
-import { planShots } from "./media/shot-planner";
+import { planShots, PRODUCT_PROOF_INSERT_SEC } from "./media/shot-planner";
+import { buildProductProofClip } from "./media/product-proof-insert";
 import { compositeVideo } from "./media/compositor";
 import { runQc } from "./media/qc";
 import { resolvePromo, formatPromoOverlayText } from "./promo";
@@ -142,6 +143,18 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     setJobProviders(job.id, video.providerName);
     addCost(job.id, video.costIdr);
 
+    // r9 (Brian 2026-08-07, "kamu harus perbanyak referensi" — sudah diuji,
+    // TIDAK menyelesaikan, limitasi model): jaminan label BENAR selamanya —
+    // selipkan klip FOTO ASLI produk di ujung video (piksel nyata, bukan AI).
+    // shot-planner sudah menyisakan PRODUCT_PROOF_INSERT_SEC dari durasi AI.
+    let clipPaths = video.assets.map((a) => a.filePath);
+    if (format === "talking_head") {
+      const proofPath = path.join(workDir, "product_proof.mp4");
+      await buildProductProofClip(primaryRef, proofPath, PRODUCT_PROOF_INSERT_SEC);
+      clipPaths = [...clipPaths, proofPath];
+      console.log(`[job ${job.id.slice(0, 8)}] product-proof insert ditambahkan (${PRODUCT_PROOF_INSERT_SEC}dtk foto asli, label dijamin benar)`);
+    }
+
     // --- GENERATING_VOICE ---
     // silent_caption: tidak ada VO sama sekali (caption + musik).
     // vo_broll: tidak ada audio embedded (tidak ada panggilan model video sama
@@ -247,7 +260,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       const comp = await compositeVideo({
         jobId: job.id,
         workDir,
-        clipPaths: video.assets.map((a) => a.filePath),
+        clipPaths,
         mode: compositeMode,
         voiceoverWavPath: compositeMode === "embedded" ? geminiVoPath : undefined,
         vo: compositeMode === "vo" ? vo : undefined,

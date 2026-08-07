@@ -52,6 +52,10 @@ export interface ShotPlanInput {
   hookLevel?: "normal" | "berani" | "gila";
 }
 
+// r9 (Brian 2026-08-07): durasi klip FOTO ASLI produk yang disisipkan worker
+// di ujung video Wajah AI — lihat product-proof-insert.ts + planShots di bawah.
+export const PRODUCT_PROOF_INSERT_SEC = 1.5;
+
 const HANDS_ONLY_FRAMING =
   "hands and forearms only, face and body NOT visible, cropped below shoulders, " +
   "close-up POV hands-only shot, camera focused on hands and product";
@@ -133,7 +137,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   const numShots = format === "talking_head"
     ? Math.max(1, Math.ceil(input.durationSec / 15))
     : Math.max(2, Math.ceil(input.durationSec / 15));
-  const perShot = input.durationSec / numShots;
+  // r9 (Brian 2026-08-07, screenshot label gibberish berulang: "kamu harus
+  // perbanyak referensi" — sudah diuji: 3 foto TIDAK menyelesaikan, limitasi
+  // model). Jaminan matematis, bukan probabilistik: sisakan PRODUCT_PROOF_SEC
+  // di ujung video Wajah AI utk klip FOTO ASLI produk (worker yang
+  // menambahkannya setelah generate — lihat product-proof-insert.ts). AI clip
+  // diminta lebih pendek supaya total tetap pas durationSec, bukan terpotong.
+  const reserveProof = format === "talking_head" && numShots === 1;
+  const perShot = reserveProof ? (input.durationSec - PRODUCT_PROOF_INSERT_SEC) / numShots : input.durationSec / numShots;
   const tier = input.qualityTier;
   const withAudio = tier !== "silent_caption";
   // r7 (Brian 2026-08-07): "presenter/lipsync jual Super HQ 80rb-an, sisanya

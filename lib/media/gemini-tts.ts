@@ -17,17 +17,9 @@ export interface GeminiTtsResult {
   costIdr: number; // estimasi — tarif flash-tts sangat kecil
 }
 
-/**
- * Sintesis VO Indonesia dengan voice terkunci. Teks HARUS sudah melalui
- * hargaTerbilang() oleh pemanggil bila mengandung harga.
- */
-export async function synthesizeGeminiVoiceover(
-  text: string,
-  voiceName: string,
-  styleInstruction: string,
-  outWavPath: string,
-): Promise<GeminiTtsResult> {
-  if (!config.geminiApiKey) throw new Error("GEMINI_API_KEY belum di-set — TTS Gemini tidak bisa jalan.");
+const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
+
+async function callGemini(text: string, voiceName: string, styleInstruction: string): Promise<{ status: number; ok: boolean; data: Record<string, unknown> }> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${config.geminiApiKey}`,
     {
@@ -43,8 +35,38 @@ export async function synthesizeGeminiVoiceover(
     },
   );
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`Gemini TTS HTTP ${res.status}: ${JSON.stringify(data).slice(0, 250)}`);
-  const b64 = data?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+  return { status: res.status, ok: res.ok, data };
+}
+
+/**
+ * Sintesis VO Indonesia dengan voice terkunci. Teks HARUS sudah melalui
+ * hargaTerbilang() oleh pemanggil bila mengandung harga.
+ *
+ * Retry 3x dgn backoff (2s/5s/10s) utk error transien (429/5xx) — insiden
+ * lab 2026-08-07 job aa39e66a: Gemini 503 "high demand" menggagalkan SELURUH
+ * job (refund) padahal video BytePlus sudah sukses (~Rp8rb terbakar percuma)
+ * hanya karena hiccup TTS sesaat tanpa retry sama sekali.
+ */
+export async function synthesizeGeminiVoiceover(
+  text: string,
+  voiceName: string,
+  styleInstruction: string,
+  outWavPath: string,
+): Promise<GeminiTtsResult> {
+  if (!config.geminiApiKey) throw new Error("GEMINI_API_KEY belum di-set — TTS Gemini tidak bisa jalan.");
+  const delaysMs = [2000, 5000, 10000];
+  let last: { status: number; ok: boolean; data: Record<string, unknown> } | null = null;
+  for (let attempt = 0; attempt <= delaysMs.length; attempt++) {
+    last = await callGemini(text, voiceName, styleInstruction);
+    if (last.ok) break;
+    if (!RETRYABLE_STATUS.has(last.status) || attempt === delaysMs.length) break;
+    console.warn(`[gemini-tts] HTTP ${last.status} (percobaan ${attempt + 1}/${delaysMs.length + 1}) — retry ${delaysMs[attempt]}ms`);
+    await new Promise((r) => setTimeout(r, delaysMs[attempt]));
+  }
+  const { status, ok, data } = last!;
+  if (!ok) throw new Error(`Gemini TTS HTTP ${status}: ${JSON.stringify(data).slice(0, 250)}`);
+  const b64 = (data as { candidates?: { content?: { parts?: { inlineData?: { data?: string } }[] } }[] })
+    ?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
   if (!b64) throw new Error(`Gemini TTS: respons tanpa audio (${JSON.stringify(data).slice(0, 200)})`);
   const pcm = `${outWavPath}.pcm`;
   fs.writeFileSync(pcm, Buffer.from(b64, "base64"));
