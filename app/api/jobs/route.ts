@@ -103,6 +103,14 @@ export async function POST(req: Request) {
     const durationS = Number(body.duration_s ?? 15);
     if (![15, 30, 45].includes(durationS))
       throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Only 15s, 30s, or 45s duration is supported.");
+    // Wajah AI dibatasi 15 dtk (2026-08-07): durasi >15 = multi-shot = wajah
+    // presenter bisa BERGANTI antar potongan (BytePlus menolak semua gambar
+    // referensi berwajah — identitas tak bisa dikunci lintas generate).
+    if (format === "talking_head" && durationS > 15)
+      throw ERR.BAD_REQUEST(
+        "Wajah AI saat ini tersedia untuk video 15 detik (menjaga presenter tetap orang yang sama). Durasi panjang segera hadir.",
+        "talking_head is limited to 15s until cross-shot identity is solvable."
+      );
     // Skrip dibuat untuk durasi tertentu (segmen ikut skala) — job harus
     // memakai durasi yang sama, bukan durasi lain yang tidak pernah divalidasi.
     const scriptDurationSec = Math.max(...segments.map((s) => s.end));

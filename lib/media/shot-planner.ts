@@ -70,7 +70,7 @@ const TALKING_HEAD_FRAMING =
 
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
-  "do not redesign or replace the product";
+  "do not redesign or replace the product, the label text stays sharp, steady and readable the whole time";
 
 // Aksi demo per KATEGORI PRODUK (2026-08-07, dipelajari dari akun UGC tim +
 // referensi visual Brian): "memegang kemasan" hanya benar untuk sebagian
@@ -78,7 +78,9 @@ const IDENTITY_INSTRUCTION =
 // harus swatch/aplikasi, food harus dicicipi. Konten UGC yang menang terlihat
 // seperti orang sungguhan MEMAKAI produk, bukan model memegang paket.
 const DEMO_ACTION: Record<string, string> = {
-  beauty: "applying or swatching a little of the product to show its texture on her skin",
+  // beauty: swatch di PUNGGUNG TANGAN — bukan wajah (r3, temuan Brian: pegang
+  // produk + sentuh muka memicu tangan ganda / AI slop anatomi).
+  beauty: "dropping or swatching a little of the product onto the BACK of her other hand to show its texture, both hands clearly accounted for",
   fashion: "wearing the garment or holding it against her body, showing the fit and fabric drape like a quick mirror check",
   muslim_fashion: "showing the hijab worn, adjusting the drape to show the fabric and how it frames the face",
   food: "opening it and tasting it with a genuine delighted reaction",
@@ -154,9 +156,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const framing = format === "hands_only"
       ? `${HANDS_ONLY_FRAMING}. `
       : fullBodyFashion
+        // r3 (Brian): fashion di DALAM KAMAR — suasana try-on paling relatable.
         ? "full body visible head to toe, presenter standing and showing the whole outfit like a mirror-check try-on video, " +
-          "phone propped vertical framing, natural phone camera look, soft natural indoor daylight, " +
-          "muted authentic colors, candid everyday vibe in a lived-in Indonesian home. "
+          "phone propped vertical framing, natural phone camera look, inside a cozy lived-in bedroom with a bed and " +
+          "wardrobe visible, soft natural window light, muted authentic colors, candid everyday vibe. "
         : format === "talking_head" ? `${TALKING_HEAD_FRAMING}. ` : "";
     // Wajah AI pakai promptSeed (deskripsi wajah/tipologi) + deliveryPrompt
     // (gaya pembawaan per kategori — genz energik, hijaber kalem anggun, ibu
@@ -223,7 +226,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   let negativePrompt = input.category.negativePrompt;
   if (format === "talking_head") {
     // Anti AI-slop (bar Brian 2026-08-07: "smooth, tidak ada AI slop, realisme")
-    negativePrompt = `${negativePrompt}, no morphing, no warping, no uncanny artificial look, no oversmoothed skin, no flickering`;
+    // r3: + anti tangan-ganda (temuan Brian: tangan kanan kedua muncul pegang
+    // muka) dan anti label-kedip (tulisan produk hilang-muncul).
+    negativePrompt = `${negativePrompt}, no morphing, no warping, no uncanny artificial look, no oversmoothed skin, no flickering, ` +
+      "no extra hands, no third hand, no duplicated limbs, exactly two hands, no flickering or disappearing product label text";
   }
   if (format === "hands_only") {
     negativePrompt = negativePrompt

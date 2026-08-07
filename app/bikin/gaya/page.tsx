@@ -46,15 +46,19 @@ const HOOK_LEVEL_INFO: Record<HookLevel, { icon: string; label: string; hint: st
   gila: { icon: "🤪", label: "Gila", hint: "pembuka nyeleneh · eksperimen" },
 };
 
-// 5 kategori aktif (lolos uji 7–9/10) — Ibu-ibu & Daerah TETAP "Segera" (5–6/10).
+// AVATAR LIBRARY v1 (2026-08-07): tiap kategori kreator = avatar bernama +
+// potret preview NYATA (still dari render terbaik lab). Identitas antar-video
+// "mirip konsisten" via deskriptor prompt beku (BytePlus menolak SEMUA gambar
+// referensi berwajah — termasuk wajah AI — jadi konsistensi via teks, bukan
+// foto). Avatar tanpa potret memakai emoji sampai render kurasinya ada.
 const CREATOR_CATS = [
-  { id: "hijaber", label: "🧕 Hijaber", note: "paling laris di TikTok Shop", active: true },
-  { id: "lokal", label: "👩 Lokal/Pribumi", note: "cocok semua produk", active: true },
-  { id: "chindo", label: "👩🏻 Chindo", note: "skincare premium", active: true },
-  { id: "genz", label: "🧑‍🎤 Gen-Z", note: "gadget, fashion, F&B", active: true },
-  { id: "pria", label: "👨 Pria", note: "gadget, F&B, produk pria", active: true },
-  { id: "ibu", label: "👩‍🦱 Ibu-ibu", note: "rumah tangga, dapur, anak", active: true },
-  { id: "daerah", label: "🌾 Daerah", note: "", active: false },
+  { id: "hijaber", name: "Salma", label: "🧕 Hijaber", note: "paling laris di TikTok Shop", img: "/avatars/salma.png", active: true },
+  { id: "genz", name: "Zea", label: "🧑‍🎤 Gen-Z", note: "gadget, fashion, F&B", img: "/avatars/zea.png", active: true },
+  { id: "ibu", name: "Bunda Ratih", label: "👩‍🦱 Ibu-ibu", note: "rumah tangga, dapur, anak", img: "/avatars/ratih.png", active: true },
+  { id: "chindo", name: "Keisha", label: "👩🏻 Chindo", note: "skincare premium", img: "/avatars/keisha.png", active: true },
+  { id: "pria", name: "Raka", label: "👨 Pria", note: "gadget, F&B, produk pria", img: "/avatars/raka.png", active: true },
+  { id: "lokal", name: "Dina", label: "👩 Lokal/Pribumi", note: "cocok semua produk", img: null as string | null, active: true },
+  { id: "daerah", name: "Laras", label: "🌾 Daerah", note: "", img: null as string | null, active: false },
 ];
 interface TierMeta {
   id: string;
@@ -86,7 +90,7 @@ export default function GayaPage() {
     setTemplateId(id);
     setFormat(t.preset.format as VideoFormat);
     setTier(t.preset.qualityTier as Tier);
-    setDurationSec(t.preset.durationSec as 15 | 30 | 45);
+    setDurationSec(t.preset.format === "talking_head" ? 15 : (t.preset.durationSec as 15 | 30 | 45));
   }
   const [register, setRegister] = useState("bestie");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
@@ -105,6 +109,9 @@ export default function GayaPage() {
 
   function selectFormat(id: VideoFormat) {
     setFormat(id); // semua format kini bersuara (tier senyap dihapus 2026-08-06)
+    // Wajah AI dibatasi 15 dtk (2026-08-07): >15 dtk = multi-shot = wajah bisa
+    // berganti antar potongan (BytePlus menolak referensi wajah, tak bisa dikunci).
+    if (id === "talking_head") setDurationSec(15);
   }
 
   async function generate() {
@@ -267,42 +274,47 @@ export default function GayaPage() {
           ))}
         </section>
 
-        <details className="group rounded-3xl border border-zinc-200 bg-white shadow-sm">
-          <summary className="flex min-h-[64px] cursor-pointer list-none items-center justify-between gap-3 p-4 marker:content-none">
-            <span>
-              <span className="block text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Opsional</span>
-              <span className="font-display text-lg font-bold">Sesuaikan gaya kreator</span>
-              <span className="block text-sm text-zinc-500">{selectedCategory?.label ?? "Pilih kategori"}{tier === "silent_caption" ? " · tanpa suara" : ` · ${REGISTERS.find((r) => r.id === register)?.label ?? "suara"}`}</span>
-            </span>
-            <span aria-hidden="true" className="text-xl text-amber-700 transition-transform group-open:rotate-45">+</span>
-          </summary>
-          <div className="space-y-6 border-t border-zinc-100 p-4 pt-5">
-            <section className="space-y-3">
-              <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Sesuaikan audiens</p><h2 className="font-display text-xl font-bold">Kategori kreator</h2></div>
-              <div className="grid grid-cols-2 gap-2">
+        {/* AVATAR — fitur utama, bukan opsional (ala "Choose your avatar"
+            kompetitor; permintaan Brian 2026-08-07). Potret = still nyata dari
+            render lab terkurasi. */}
+        <section className="space-y-3">
+          <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih presenter AI-mu</p><h2 className="font-display text-xl font-bold">Avatar</h2></div>
+          <div className="grid grid-cols-3 gap-2">
             {CREATOR_CATS.filter((c) => c.active).map((c) => (
               <button
                 key={c.id}
                 type="button"
                 aria-pressed={creatorCategory === c.id}
                 onClick={() => setCreatorCategory(c.id)}
-                className={`rounded-2xl border-2 p-3 text-left ${
-                  creatorCategory === c.id ? "border-amber-500 bg-amber-50 shadow-sm" : "border-zinc-200 bg-white shadow-sm"
+                className={`overflow-hidden rounded-2xl border-2 text-left shadow-sm ${
+                  creatorCategory === c.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
                 }`}
               >
-                <p className="font-bold">{c.label}</p>
-                <p className="text-xs text-zinc-500">{c.note}</p>
+                {c.img ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={c.img} alt={c.name} className="aspect-[3/4] w-full object-cover" loading="lazy" decoding="async" />
+                ) : (
+                  <span className="flex aspect-[3/4] w-full items-center justify-center bg-amber-50 text-4xl">{c.label.split(" ")[0]}</span>
+                )}
+                <span className="block p-2">
+                  <span className="block truncate text-sm font-bold">{c.name}</span>
+                  <span className="block truncate text-[10px] leading-tight text-zinc-500">{c.note}</span>
+                </span>
               </button>
             ))}
-            {CREATOR_CATS.filter((c) => !c.active).map((c) => (
-              <button key={c.id} type="button" disabled className="rounded-2xl border-2 border-zinc-100 bg-zinc-50 p-3 text-left opacity-60">
-                <p className="font-bold text-zinc-500">{c.label}</p>
-                <p className="text-xs font-semibold text-amber-600">Segera</p>
-              </button>
-            ))}
-              </div>
-            </section>
+          </div>
+        </section>
 
+        <details className="group rounded-3xl border border-zinc-200 bg-white shadow-sm">
+          <summary className="flex min-h-[64px] cursor-pointer list-none items-center justify-between gap-3 p-4 marker:content-none">
+            <span>
+              <span className="block text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Opsional</span>
+              <span className="font-display text-lg font-bold">Sesuaikan gaya kreator</span>
+              <span className="block text-sm text-zinc-500">{selectedCategory ? `Avatar ${selectedCategory.name}` : "Pilih avatar"}{` · ${REGISTERS.find((r) => r.id === register)?.label ?? "suara"}`}</span>
+            </span>
+            <span aria-hidden="true" className="text-xl text-amber-700 transition-transform group-open:rotate-45">+</span>
+          </summary>
+          <div className="space-y-6 border-t border-zinc-100 p-4 pt-5">
             {/* Semua tier kini bersuara (2026-08-06) — pilihan suara selalu tampil. */}
             {(
               <section className="space-y-3">
@@ -329,20 +341,29 @@ export default function GayaPage() {
             <section className="space-y-3">
               <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Panjang video</p><h2 className="font-display text-xl font-bold">Durasi</h2></div>
               <div className="flex gap-2">
-                {([15, 30, 45] as const).map((d) => (
+                {([15, 30, 45] as const).map((d) => {
+                  const locked = format === "talking_head" && d > 15;
+                  return (
                   <button
                     key={d}
                     type="button"
                     aria-pressed={durationSec === d}
+                    disabled={locked}
                     onClick={() => setDurationSec(d)}
                     className={`rounded-2xl border-2 px-5 py-3 font-bold shadow-sm ${
-                      durationSec === d ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                      durationSec === d ? "border-amber-500 bg-amber-50" : locked ? "border-zinc-100 bg-zinc-50 text-zinc-400" : "border-zinc-200 bg-white"
                     }`}
                   >
                     {d} dtk
                   </button>
-                ))}
+                  );
+                })}
               </div>
+              {format === "talking_head" && (
+                <p className="text-xs text-zinc-500">
+                  Wajah AI saat ini 15 detik — menjaga presenter tetap satu orang yang sama dari awal sampai akhir. Durasi panjang segera.
+                </p>
+              )}
               {durationSec > 15 && (
                 <p className="text-xs text-zinc-500">
                   Video {durationSec} detik ~{Math.round(durationSec / 15)}x harga 15 detik (lebih banyak AI video-gen).
