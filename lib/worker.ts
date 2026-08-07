@@ -113,8 +113,8 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       primaryRef = sanitized.safe[0];
       extraRefs.length = 0;
       extraRefs.push(...sanitized.safe.slice(1));
-      if (sanitized.cropped > 0 || sanitized.dropped > 0) {
-        console.log(`[job ${job.id.slice(0, 8)}] foto referensi aman-orang: ${sanitized.safe.length} dipakai, ${sanitized.cropped} di-crop, ${sanitized.dropped} dibuang`);
+      if (sanitized.cropped > 0 || sanitized.dropped > 0 || sanitized.resized > 0) {
+        console.log(`[job ${job.id.slice(0, 8)}] foto referensi aman-orang: ${sanitized.safe.length} dipakai, ${sanitized.cropped} di-crop, ${sanitized.resized} di-upscale (<320px), ${sanitized.dropped} dibuang`);
       }
     }
 

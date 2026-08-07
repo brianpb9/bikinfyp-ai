@@ -3,7 +3,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { extractFromUrl, canExtract } from "@/lib/extract";
 import { getDb, now, uuid, audit } from "@/lib/db";
 import { config, ensureDirs } from "@/lib/config";
-import sharp from "sharp";
+import { normalizeProductImageBuffer } from "@/lib/product-images";
 import { createSignedUrl } from "@/lib/signed-url";
 import fs from "node:fs";
 import path from "node:path";
@@ -38,11 +38,10 @@ async function downloadImages(productId: string, urls: string[]): Promise<string
       if (buf.length > 10 * 1024 * 1024) continue;
       // sharp memverifikasi struktur decoder sekaligus menormalkan ke WebP —
       // bytes non-gambar (mis. halaman error CDN) gagal decode dan di-skip.
-      const normalized = await sharp(buf, { failOn: "error", limitInputPixels: 40_000_000 })
-        .rotate()
-        .resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
-        .webp({ quality: 82, effort: 4 })
-        .toBuffer();
+      // normalizeProductImageBuffer JUGA menaikkan foto <320px (thumbnail toko
+      // kecil) — tanpa ini foto lolos tersimpan tapi ditolak BytePlus saat
+      // render ("expected width >= 300px", insiden production 990a734e).
+      const normalized = await normalizeProductImageBuffer(buf);
       const rel = path.join("uploads", productId, `${i}.webp`).split(path.sep).join("/");
       const abs = path.join(config.storageDir, rel);
       fs.writeFileSync(abs, normalized);

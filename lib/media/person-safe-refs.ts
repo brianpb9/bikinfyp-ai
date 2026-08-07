@@ -12,6 +12,7 @@ interface CropResult {
   file: string;
   safe: string | null;
   cropped: boolean;
+  resized?: boolean;
   reason?: string;
 }
 
@@ -20,6 +21,9 @@ export interface PersonSafeRefs {
   safe: string[];
   cropped: number;
   dropped: number;
+  /** Foto (baru atau hasil crop) yang terlalu kecil (<320px) dinaikkan otomatis
+   * — jaring pengaman utk foto lama yang tersimpan sebelum fix normalisasi ukuran. */
+  resized: number;
 }
 
 function pythonBin(): string {
@@ -33,7 +37,7 @@ function pythonBin(): string {
  * (job harus gagal jelas + refund, bukan ditolak provider tanpa penjelasan).
  */
 export async function personSafeReferencePhotos(photoPaths: string[], workDir: string): Promise<PersonSafeRefs> {
-  if (photoPaths.length === 0) return { safe: [], cropped: 0, dropped: 0 };
+  if (photoPaths.length === 0) return { safe: [], cropped: 0, dropped: 0, resized: 0 };
   const model = path.join(process.cwd(), "assets", "models", "face_detection_yunet_2023mar.onnx");
   const outDir = path.join(workDir, "safe-refs");
   const { stdout } = await runFf(pythonBin(), [
@@ -44,11 +48,12 @@ export async function personSafeReferencePhotos(photoPaths: string[], workDir: s
   const safe = results.filter((r) => r.safe).map((r) => r.safe as string);
   const cropped = results.filter((r) => r.cropped).length;
   const dropped = results.filter((r) => !r.safe).length;
+  const resized = results.filter((r) => r.resized).length;
   if (safe.length === 0) {
     throw new Error(
       "Semua foto produk mengandung orang/model sehingga tidak bisa dipakai referensi AI (aturan penyedia model). " +
       "Tambahkan minimal 1 foto produk saja — tanpa orang — ya."
     );
   }
-  return { safe, cropped, dropped };
+  return { safe, cropped, dropped, resized };
 }
