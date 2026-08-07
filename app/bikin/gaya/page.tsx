@@ -279,14 +279,17 @@ export default function GayaPage() {
             render lab terkurasi. */}
         <section className="space-y-3">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih presenter AI-mu</p><h2 className="font-display text-xl font-bold">Avatar</h2></div>
-          <div className="grid grid-cols-3 gap-2">
+          {/* Slider horizontal (Brian 2026-08-07): potret seragam setengah badan,
+              geser ke kanan — bukan grid bertumpuk. -mx-4 px-4 = kartu tepi
+              menempel rapi ke tepi layar saat digeser. */}
+          <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {CREATOR_CATS.filter((c) => c.active).map((c) => (
               <button
                 key={c.id}
                 type="button"
                 aria-pressed={creatorCategory === c.id}
                 onClick={() => setCreatorCategory(c.id)}
-                className={`overflow-hidden rounded-2xl border-2 text-left shadow-sm ${
+                className={`w-32 shrink-0 snap-start overflow-hidden rounded-2xl border-2 text-left shadow-sm ${
                   creatorCategory === c.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
                 }`}
               >
