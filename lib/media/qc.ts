@@ -166,7 +166,7 @@ interface ColorSim {
  */
 export const QC03_HUE_FRAC_MIN_TALKING_HEAD = 0.02;
 
-export async function qcProductSimilarity(shotPaths: string[], refImagePath: string, workDir: string, format?: string): Promise<QcCheck> {
+export async function qcProductSimilarity(shotPaths: string[], refImagePath: string, workDir: string, format?: string, labelProven = false): Promise<QcCheck> {
   const talkingHead = format === "talking_head";
   const samplePoints = talkingHead ? [0.15, 0.5, 0.85] : [0.5];
   const frames: string[] = [];
@@ -189,7 +189,14 @@ export async function qcProductSimilarity(shotPaths: string[], refImagePath: str
   const refFrac = fracs === null ? null : talkingHead ? Math.max(...fracs) : Math.min(...fracs);
   const hueThreshold = talkingHead ? QC03_HUE_FRAC_MIN_TALKING_HEAD : QC03_HUE_FRAC_MIN;
   const failShot = shotMax > QC03_SHOT_DELTA_MAX;
-  const failRef = refFrac !== null && refFrac < hueThreshold;
+  // r12 (Brian, video Wardah asli ditolak 2x — fraksi warna kasar terlalu
+  // ketat utk produk pucat/kecil di frame ramai walau label & identitas
+  // sudah TERBUKTI benar via OCR QC-10): label terbaca = bukti identitas
+  // jauh lebih presisi daripada heuristik hue-fraction — bila QC-10 lulus,
+  // fraksi warna tidak lagi hard-fail sendirian (tetap dilaporkan di detail).
+  // Konsistensi ANTAR SHOT (indikasi produk BERGANTI di tengah video) tetap
+  // keras — itu sesuatu yang OCR satu-titik tidak bisa buktikan sendirian.
+  const failRef = refFrac !== null && refFrac < hueThreshold && !labelProven;
   const fail = failShot || failRef;
   return {
     code: "QC-03",
@@ -199,7 +206,7 @@ export async function qcProductSimilarity(shotPaths: string[], refImagePath: str
       `antar_shot_max=${shotMax} (ambang ${QC03_SHOT_DELTA_MAX}) · ` +
       (refFrac === null
         ? "warna signature referensi tidak terdeteksi (produk polos) — cek referensi di-skip"
-        : `hue_khas_${talkingHead ? "max" : "min"}=${refFrac} (ambang ${hueThreshold})`) +
+        : `hue_khas_${talkingHead ? "max" : "min"}=${refFrac} (ambang ${hueThreshold}${labelProven && refFrac < hueThreshold ? ", diabaikan — QC-10 sudah buktikan label" : ""})`) +
       " — kasar, hanya menangkap penyimpangan total",
   };
 }
@@ -535,14 +542,34 @@ export async function runQc(input: QcInput): Promise<QcResult> {
       checks.push({ code: "QC-02", name: "Tangan/jari tidak morphing", status: "fail", detail: `detektor gagal: ${err instanceof Error ? err.message : err}` });
     }
   }
+  // QC-10 fidelitas label produk (anti "AI slop label") — dijalankan SEBELUM
+  // QC-03 (bukan urutan lama) supaya hasilnya bisa dipakai melonggarkan QC-03
+  // di bawah: label yang TERBUKTI terbaca adalah bukti identitas produk jauh
+  // lebih langsung/presisi daripada heuristik fraksi warna kasar QC-03.
+  let labelFidelityPassed = false;
+  if (input.format === "hands_only" || input.format === "talking_head") {
+    try {
+      const labelCheck = await qcLabelFidelity(input.filePath, input.productName);
+      checks.push(labelCheck);
+      labelFidelityPassed = labelCheck.status === "pass";
+    } catch (err) {
+      checks.push({ code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail", detail: `pemeriksaan gagal jalan: ${err instanceof Error ? err.message : err}` });
+    }
+  }
+
   // QC-03 identitas produk konsisten — pemeriksaan kasar tapi nyata (warna region tengah).
   // >= 1 (bukan >= 2, fix 2026-08-07): Wajah AI 15 dtk kini SATU shot — tidak
   // ada pasangan antar-shot, tapi cek warna-khas vs foto referensi tetap
   // bermakna. Ambang lama >= 2 membuat QC-03 skip dan kebijakan menolak job
   // sehat tanpa satu pun check fail (insiden production 21979c08).
+  // r12 (Brian, video hands_only Wardah asli DITOLAK 2x padahal label &
+  // produk benar secara visual — fraksi-warna heuristik terlalu ketat utk
+  // produk pucat/kecil di frame ramai): kalau QC-10 SUDAH membuktikan label
+  // terbaca, fraksi-warna tidak lagi jadi hard-fail sendirian — konsistensi
+  // ANTAR SHOT (indikasi identitas produk BERGANTI di tengah video) tetap keras.
   if (input.shotPaths && input.shotPaths.length >= 1 && input.refImagePath && fs.existsSync(input.refImagePath)) {
     try {
-      checks.push(await qcProductSimilarity(input.shotPaths, input.refImagePath, path.dirname(input.filePath), input.format));
+      checks.push(await qcProductSimilarity(input.shotPaths, input.refImagePath, path.dirname(input.filePath), input.format, labelFidelityPassed));
     } catch (err) {
       checks.push({ code: "QC-03", name: "Identitas produk konsisten", status: "skip", detail: `pemeriksaan gagal jalan: ${err instanceof Error ? err.message : err}` });
     }
@@ -613,15 +640,6 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     detail: v.passed ? "bersih" : v.errors.map((e) => e.message_id).join(" "),
   });
 
-
-  // QC-10 fidelitas label produk (anti "AI slop label") — hanya format ber-video-AI.
-  if (input.format === "hands_only" || input.format === "talking_head") {
-    try {
-      checks.push(await qcLabelFidelity(input.filePath, input.productName));
-    } catch (err) {
-      checks.push({ code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail", detail: `pemeriksaan gagal jalan: ${err instanceof Error ? err.message : err}` });
-    }
-  }
 
   // QC-08 label AIGC via METADATA (watermark visual dihapus 2026-08-07 —
   // disclosure ke penonton lewat toggle AIGC platform saat posting):
