@@ -182,7 +182,7 @@ test("mode light: pelanggaran non-L-10/L-11 hanya jadi warning", () => {
   assert.ok(res.warnings.length > 0);
 });
 
-test("L-05 tier bersuara: maks ~34 kata (r13, Gemini TTS ~1.93 kata/dtk); skrip 47 kata ditolak", () => {
+test("L-05 tier bersuara: maks ~30 kata (r19, Gemini TTS ~1.93 kata/dtk); skrip 47 kata ditolak", () => {
   const audioTier = { ...base, qualityTier: "high_quality" as const };
   const res = validateScript(audioTier, "strict");
   assert.ok(rules(res).includes("L-05"));
@@ -192,8 +192,8 @@ test("L-05 tier bersuara: maks ~34 kata (r13, Gemini TTS ~1.93 kata/dtk); skrip 
     qualityTier: "super_hq" as const,
     segments: [
       { role: "hook", text: "Say, 85 ribu dapet kualitas segini? sumpah sih" },
-      { role: "demo", text: "nah, ini Serum Glow Bright, teksturnya niat banget" },
-      { role: "cta", text: "Cek keranjang kuning ya deh" },
+      { role: "demo", text: "nah, ini Serum Glow Bright, teksturnya niat banget, beneran kerasa bedanya pas dipake" },
+      { role: "cta", text: "Cek keranjang kuning ya deh, jangan sampai nyesel" },
     ],
   };
   const res2 = validateScript(pendek, "strict");

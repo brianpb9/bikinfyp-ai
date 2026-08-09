@@ -174,7 +174,10 @@ function generateOne(
 ): GeneratedScript {
   const ctx = buildCtx(product, register);
   const cartLabel = cartLabelForUrl(product.sourceUrl);
-  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec).map((s) => ({ ...s, text: applyCartLabel(s.text, cartLabel) }));
+  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel).map((s) => ({
+    ...s,
+    text: applyCartLabel(s.text, cartLabel),
+  }));
   const promo = resolvePromo({
     priceIdr: product.price_idr,
     promoPriceBeforeIdr: product.promoPriceBeforeIdr,

@@ -122,10 +122,16 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // KONSISTEN dgn target di templates.ts (WAJIB sinkron — kalau tidak, skrip
   // yang lolos target template bisa ditolak validator, atau sebaliknya).
   // Basis 15 dtk; durasi lain skala proporsional (durationSec/15).
+  //
+  // r19 (Brian 2026-08-09, "sound dan video tidak match, sound kecepatan" —
+  // lihat komentar sama di templates.ts): [20,34] terbukti bisa ngisi cuma
+  // ~10,4dtk dari slot 15dtk (batas bawah) atau meluber ~17,6dtk (batas
+  // atas). Dipersempit ke [25,30] (~1,93 kata/dtk asli) — WAJIB tetap sinkron
+  // dgn templates.ts.
   const tier = script.qualityTier ?? "silent_caption";
   const durationScale = (script.durationSec ?? 15) / 15;
   const wc = wordCount(fullText);
-  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [20, 34];
+  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
   const minWc = Math.round(baseMinWc * durationScale);
   const maxWc = Math.round(baseMaxWc * durationScale);
   if (wc < minWc || wc > maxWc)

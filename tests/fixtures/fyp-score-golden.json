@@ -74,7 +74,7 @@
       "cta_timing_sec": 10,
       "has_trending_sound": 0,
       "label_hook_layered": 0,
-      "transcript_word_count": 21,
+      "transcript_word_count": 26,
       "transcript_has_question": 1,
       "transcript_has_price_mention": 0,
       "ocr_word_count": 4,
@@ -82,7 +82,7 @@
       "ocr_has_cta_word": 0
     },
     "expected": {
-      "raw_probability": 0.6530450680833829,
+      "raw_probability": 0.652291249826924,
       "score": 88,
       "model_version": "ckpt9-n316"
     }
@@ -121,12 +121,12 @@
       "transcript_word_count": null,
       "transcript_has_question": null,
       "transcript_has_price_mention": null,
-      "ocr_word_count": 95,
+      "ocr_word_count": 87,
       "ocr_has_price_mention": 1,
       "ocr_has_cta_word": 1
     },
     "expected": {
-      "raw_probability": 0.6563394577982058,
+      "raw_probability": 0.652816520448864,
       "score": 88,
       "model_version": "ckpt9-n316"
     }
@@ -162,16 +162,16 @@
       "cta_timing_sec": 30,
       "has_trending_sound": 0,
       "label_hook_layered": 0,
-      "transcript_word_count": 87,
+      "transcript_word_count": 85,
       "transcript_has_question": 0,
-      "transcript_has_price_mention": 0,
+      "transcript_has_price_mention": 1,
       "ocr_word_count": 4,
       "ocr_has_price_mention": 1,
       "ocr_has_cta_word": 0
     },
     "expected": {
-      "raw_probability": 0.5674435223213519,
-      "score": 82,
+      "raw_probability": 0.5343586873343737,
+      "score": 81,
       "model_version": "ckpt9-n316"
     }
   },

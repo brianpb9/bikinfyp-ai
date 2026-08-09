@@ -86,6 +86,25 @@ function demoContinuation(c: TemplateCtx, family: HookCode, offset: number): str
   return DEMO_CONTINUATION[index](c);
 }
 
+// r19b (Brian 2026-08-09): filler pendek (4-6 kata) KHUSUS durasi dasar
+// 15dtk, dipakai buat nambal celah sempit [25,30] tier bersuara (cuma +4
+// s/d +10 kata dari basis COMPACT_T ~20-21 kata). DEMO_CONTINUATION di atas
+// terlalu kasar (~13-16 kata/kalimat) buat celah sesempit ini — sekali
+// nambah selalu MELUBER lewat maxWc (kasus nyata: 32 kata vs max 30).
+const DEMO_MICRO_FILLER: string[] = [
+  "beneran kerasa banget bedanya",
+  "worth banget buat dicoba deh",
+  "nggak nyesel sama sekali sih",
+  "seriusan recommended banget buat harian",
+  "apalagi harganya semurah itu loh",
+  "kualitasnya juga oke banget kok",
+];
+
+function demoMicroFiller(family: HookCode, offset: number): string {
+  const index = (parseInt(family.slice(1), 10) + offset) % DEMO_MICRO_FILLER.length;
+  return DEMO_MICRO_FILLER[index];
+}
+
 // CTA urgency (lapis kedua, video >15 dtk saja — hook/cta 15 dtk tidak
 // disentuh): kosakata aman, dicek tidak menyentuh L-13 (FAKE_URGENCY_PHRASES)
 // atau L-12 (FORMAL_PHRASES) di validator.ts.
@@ -311,10 +330,22 @@ export function renderSegmentsForTier(
   family: HookCode,
   c: TemplateCtx,
   tier: "silent_caption" | "high_quality" | "super_hq",
-  durationSec = 15
+  durationSec = 15,
+  cartLabel: "keranjang kuning" | "keranjang" = "keranjang kuning"
 ): SegmentDraft[] {
   const triple = (tier === "silent_caption" ? T : COMPACT_T)[family](c);
-  if (durationSec > 15) {
+  // r19c (Brian 2026-08-09, lanjutan investigasi sama): dulu "keranjang kuning"
+  // -> "keranjang" (buat sumber non-TikTok) di-substitusi SESUDAH fungsi ini
+  // return, di index.ts. Loop fill-kata di bawah jadi mikir sudah cukup
+  // (>=minWc) padahal APLIKASI NYATA (pasca-substitusi -1 kata) jatuh balik
+  // di bawah minWc — kasus nyata: 25 kata internal -> 24 kata final, gagal
+  // L-05. Substitusi dipindah ke SINI (sebelum loop hitung kata) supaya loop
+  // menghitung kata versi FINAL, bukan versi sementara.
+  if (cartLabel !== "keranjang kuning") {
+    triple.cta = triple.cta.replace(/keranjang kuning/gi, cartLabel);
+  }
+  const longer = durationSec > 15;
+  if (longer) {
     // Snapback hook HANYA di silent_caption (teks overlay, dibaca bebas —
     // jatah kata longgar 32-48/15dtk). Tier bersuara (10-22/15dtk) diucapkan
     // sungguhan sesuai durasi shot BytePlus — nggak ada ruang buat baris
@@ -327,33 +358,77 @@ export function renderSegmentsForTier(
     // bawah, biar ikut terhitung ke target kata) — lapis pertama ada di
     // demo lewat beat value-stack/show-don't-claim, bukan diulang di sini.
     triple.cta = `${triple.cta}, ${ctaUrgency(family)}`;
-    // Kalimat lanjutan ditambahkan SATU PER SATU sampai total kata menyentuh
-    // titik tengah rentang L-05 untuk tier+durasi ini (bukan jumlah tetap) —
-    // dasar kata dari silent_caption jauh lebih panjang dari tier bersuara,
-    // jumlah kalimat lanjutan yang dibutuhkan beda jauh antar keduanya.
-    // r13 (Brian 2026-08-07: "VO hanya sampai detik 20 padahal video 30 detik,
-    // sisanya kosong") — [10,22] dikalibrasi utk audio embedded LAMA (~20
-    // kata/15dtk = ~1,07 kata/dtk). Gemini TTS (suara resmi sejak r5) TERUKUR
-    // ~1,93 kata/dtk pada skrip Wardah nyata (38 kata = 19,72 dtk) — jauh
-    // lebih cepat, jadi target lama SELALU menyisakan durasi kosong di video
-    // >15 dtk. Dinaikkan ke [20,34] (~1,8 kata/dtk) supaya narasi mendekati
-    // durasi video sungguhan; belum kalibrasi sempurna (baru 1 titik data
-    // nyata), pantau lapor-hasil berikutnya utk penyesuaian lanjutan.
-    const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [20, 34];
-    const scale = durationSec / 15;
-    const targetWc = Math.round(((baseMinWc + baseMaxWc) / 2) * scale);
-    // Minimal 1 lanjutan demo WAJIB ditambah biar demo beneran lebih panjang
-    // (bukan cuma jendela waktu yang molor diam-diam) — tanpa syarat ini,
-    // hook snapback + cta urgency di atas bisa sendirian menyentuh target di
-    // tier bersuara (jatah kata sempit) dan demo jadi nggak nambah sama sekali.
-    let offset = 0;
-    while (
-      (offset < 1 || wordCount(`${triple.hook} ${triple.demo} ${triple.cta}`) < targetWc) &&
-      offset < 8
-    ) {
-      triple.demo = `${triple.demo}, ${demoContinuation(c, family, offset)}`;
-      offset++;
-    }
+  }
+  // Kalimat lanjutan ditambahkan SATU PER SATU sampai total kata menyentuh
+  // titik tengah rentang L-05 untuk tier+durasi ini (bukan jumlah tetap) —
+  // dasar kata dari silent_caption jauh lebih panjang dari tier bersuara,
+  // jumlah kalimat lanjutan yang dibutuhkan beda jauh antar keduanya.
+  // r13 (Brian 2026-08-07: "VO hanya sampai detik 20 padahal video 30 detik,
+  // sisanya kosong") — [10,22] dikalibrasi utk audio embedded LAMA (~20
+  // kata/15dtk = ~1,07 kata/dtk). Gemini TTS (suara resmi sejak r5) TERUKUR
+  // ~1,93 kata/dtk pada skrip Wardah nyata (38 kata = 19,72 dtk) — jauh
+  // lebih cepat, jadi target lama SELALU menyisakan durasi kosong di video
+  // >15 dtk. Dinaikkan ke [20,34] (~1,8 kata/dtk) supaya narasi mendekati
+  // durasi video sungguhan; belum kalibrasi sempurna (baru 1 titik data
+  // nyata), pantau lapor-hasil berikutnya utk penyesuaian lanjutan.
+  //
+  // r19 (Brian 2026-08-09, "sound dan video tidak match, sound kecepatan"
+  // — video 15dtk pakai skrip 22 kata, batas BAWAH lama = 20 kata/15dtk
+  // cuma ngisi ~10,4dtk dari 15dtk = ~4,6dtk hening di ujung, kerasa kayak
+  // suara "kabur" duluan sebelum video abis). [20,34] ternyata juga bisa
+  // MELUBER di ujung atas (34 kata/15dtk = ~17,6dtk, video cuma 15dtk ->
+  // audio kepotong tengah kalimat). Dipersempit ke [25,30] (~1,93 kata/dtk
+  // asli) supaya batas bawah ngisi ~90% durasi video (minim hening) DAN
+  // batas atas tidak pernah melebihi durasi video (minim terpotong).
+  //
+  // r19b (Brian 2026-08-09, lanjutan investigasi bug yang sama): loop ini
+  // dulu HANYA jalan di dalam blok `durationSec > 15` di atas — artinya
+  // kasus durasi DASAR 15dtk (paling umum, termasuk video dress yang
+  // dilaporkan) TIDAK PERNAH dapat kalimat lanjutan sama sekali, walau
+  // basis COMPACT_T tier bersuara cuma ~20-21 kata (di bawah minWc baru
+  // 25). Sekarang loop jalan di SEMUA durasi; hanya perilaku "wajib minimal
+  // 1 lanjutan" (forceAtLeastOne) yang tetap dikunci ke durasi >15dtk biar
+  // silent_caption di 15dtk (yang templatenya sudah penuh/pas) tidak
+  // dipaksa nambah baris yang tidak perlu dan berisiko kebentur maxWc.
+  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
+  const scale = durationSec / 15;
+  const minWc = Math.round(baseMinWc * scale);
+  const maxWc = Math.round(baseMaxWc * scale);
+  const targetWc = Math.round(((baseMinWc + baseMaxWc) / 2) * scale);
+  const forceAtLeastOne = longer;
+  // Minimal 1 lanjutan demo WAJIB ditambah (durasi >15dtk saja) biar demo
+  // beneran lebih panjang (bukan cuma jendela waktu yang molor diam-diam) —
+  // tanpa syarat ini, hook snapback + cta urgency di atas bisa sendirian
+  // menyentuh target di tier bersuara (jatah kata sempit) dan demo jadi
+  // nggak nambah sama sekali. Di durasi dasar 15dtk, top-up cuma jalan
+  // sampai minWc tercapai (tidak dipaksa jika basis sudah cukup).
+  //
+  // r19 (Brian 2026-08-09): loop lama cuma cek target SEBELUM nambah, jadi
+  // 1x penambahan kalimat lanjutan (butiran kasar, bisa 10+ kata) bisa
+  // MELUBER lewat maxWc dalam sekali lompatan (kasus nyata: 55 target/60
+  // max jadi 63). Sekarang tiap penambahan DICOBA dulu — hanya di-commit
+  // kalau tidak melebihi maxWc, KECUALI count saat ini masih di bawah
+  // minWc (lebih baik sedikit meluber daripada kritis kurang/hening).
+  let offset = 0;
+  while (offset < 8) {
+    const current = wordCount(`${triple.hook} ${triple.demo} ${triple.cta}`);
+    const satisfied = forceAtLeastOne ? offset >= 1 && current >= targetWc : current >= minWc;
+    if (satisfied) break;
+    // r19d (Brian 2026-08-09, lanjutan investigasi sama): DEMO_CONTINUATION
+    // (~10-16 kata/kalimat) cukup kasar buat celah SEMPIT di ujung target —
+    // kasus nyata: celah tinggal 6 kata (49->55) tapi kalimat lanjutan yang
+    // tersedia nambah 12 kata sekaligus jadi 61 (lewat max 60), sedangkan
+    // guard "current>=minWc" belum aktif (current 49 masih di bawah minWc
+    // 50) jadi commit tetap terjadi. Begitu celah ke target sudah sempit
+    // (<=8 kata), pindah ke DEMO_MICRO_FILLER (4-6 kata) biar presisi,
+    // kalimat besar cuma dipakai selagi celahnya masih lebar.
+    const gapToTarget = (forceAtLeastOne ? targetWc : minWc) - current;
+    const addition = longer && gapToTarget > 8 ? demoContinuation(c, family, offset) : demoMicroFiller(family, offset);
+    const candidate = `${triple.demo}, ${addition}`;
+    const candidateWc = wordCount(`${triple.hook} ${candidate} ${triple.cta}`);
+    if (candidateWc > maxWc && current >= minWc) break; // sudah cukup, jangan meluber demi apa-apa
+    triple.demo = candidate;
+    offset++;
   }
   return seg(triple, durationSec);
 }

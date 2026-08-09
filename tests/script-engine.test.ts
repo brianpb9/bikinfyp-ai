@@ -91,14 +91,14 @@ test("harga muncul eksplisit di hook atau demo untuk berbagai nominal", () => {
   }
 });
 
-test("tier bersuara: skrip kompak <=22 kata, tanpa tanda kurung, lolos validator", () => {
+test("tier bersuara: skrip kompak 25-30 kata (r19), tanpa tanda kurung, lolos validator", () => {
   const variants = generateScripts({ product, register: "bestie", qualityTier: "high_quality" });
   assert.equal(variants.length, 3);
   for (const v of variants) {
     assert.equal(v.validation.passed, true, `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
     const full = v.segments.map((s) => s.text).join(" ");
     const wc = full.split(/\s+/).filter(Boolean).length;
-    assert.ok(wc >= 10 && wc <= 22, `${v.hook_family}: ${wc} kata`);
+    assert.ok(wc >= 25 && wc <= 30, `${v.hook_family}: ${wc} kata`);
     assert.ok(!/[()]/.test(full), `${v.hook_family}: ada tanda kurung`);
     assert.equal(v.quality_tier, "high_quality");
   }
