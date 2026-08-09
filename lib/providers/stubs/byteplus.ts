@@ -153,6 +153,28 @@ async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
   return res.id;
 }
 
+// r17 (ditemukan 2026-08-09 saat batch-render 4 produk): 1x hiccup jaringan
+// sesaat ("TypeError: fetch failed") di SATU poll GET di tengah loop tunggu
+// panjang (4-8 mnt) menggagalkan SELURUH job -> failover ke mock, padahal
+// shot lain sudah sukses dibayar ke provider (biaya kebakar sia-sia). Sama
+// persis pola insiden Gemini TTS 503 (r5) yang sudah dikasih retry 3x -- poll
+// GET di sini belum. Retry HANYA utk error transien (bukan HTTP response
+// nyata dari server, mis. 400 tolakan gambar) -- gagal HTTP asli TETAP harus
+// langsung fail, jangan diulang buta.
+async function pollOnce(taskId: string): Promise<TaskResponse> {
+  const delaysMs = [2000, 5000, 10000];
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await apiRequest<TaskResponse>("GET", `${config.byteplusBaseUrl}/contents/generations/tasks/${taskId}`);
+    } catch (err) {
+      const isHttpError = err instanceof ProviderApiError && /^byteplus: HTTP \d/.test(err.message);
+      if (isHttpError || attempt >= delaysMs.length) throw err;
+      console.warn(`[byteplus] poll ${taskId} gagal transien (${attempt + 1}/${delaysMs.length + 1}) — retry ${delaysMs[attempt]}ms`);
+      await new Promise((r) => setTimeout(r, delaysMs[attempt]));
+    }
+  }
+}
+
 async function pollTask(taskId: string, startedAt: number, maxWaitMs: number): Promise<TaskResponse> {
   let delay = 5000;
   for (;;) {
@@ -160,7 +182,7 @@ async function pollTask(taskId: string, startedAt: number, maxWaitMs: number): P
       throw new ProviderApiError("byteplus", `task ${taskId} melebihi batas tunggu ${Math.round(maxWaitMs / 60000)} mnt`);
     }
     await new Promise((r) => setTimeout(r, delay));
-    const t = await apiRequest<TaskResponse>("GET", `${config.byteplusBaseUrl}/contents/generations/tasks/${taskId}`);
+    const t = await pollOnce(taskId);
     if (t.status === "succeeded") return t;
     if (t.status === "failed" || t.status === "cancelled" || t.status === "expired") {
       throw new ProviderApiError("byteplus", `task ${taskId} ${t.status}: ${t.error?.message ?? "tanpa pesan"}`);

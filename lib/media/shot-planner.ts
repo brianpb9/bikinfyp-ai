@@ -103,6 +103,10 @@ const DEMO_ACTION: Record<string, string> = {
   // beauty: swatch di PUNGGUNG TANGAN — bukan wajah (r3, temuan Brian: pegang
   // produk + sentuh muka memicu tangan ganda / AI slop anatomi).
   beauty: "dropping or swatching a little of the product onto the BACK of her other hand to show its texture, both hands clearly accounted for",
+  // r17 (Brian 2026-08-09, "ini kan bukan skin care" — shower gel/body wash
+  // salah kalau di-demo kayak serum wajah/leave-on). Body wash = dipompa ke
+  // telapak tangan sampai berbusa, bukan diteteskan ke punggung tangan.
+  body_care: "pumping a dollop of the product into her open palm and rubbing both palms together to work up a rich lather/foam, showing the texture and bubbles",
   fashion: "wearing the garment or holding it against her body, showing the fit and fabric drape like a quick mirror check",
   muslim_fashion: "showing the hijab worn, adjusting the drape to show the fabric and how it frames the face",
   food: "opening it and tasting it with a genuine delighted reaction",
