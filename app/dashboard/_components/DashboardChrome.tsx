@@ -5,12 +5,10 @@ import { rupiah } from "./format";
 // Desktop-first shell (F-ENT-01, 2026-08-11) — deliberately NOT app/_components/
 // SiteChrome (that's mobile bottom-tab, max-w-md, wrong context entirely).
 // Visual bar: Higgsfield-style — dark sidebar, clean light content area.
-// M2 scope: sidebar nav exists, only "Beranda" is live; "Bulk Generate" is
-// visibly present but disabled (ships in M3) so the nav doesn't silently
-// reshuffle later — labeled honestly as coming soon, not hidden.
+// M4: Bulk Generate live (F-ENT-01).
 const NAV = [
   { href: "/dashboard", label: "Beranda", icon: "⌂", disabled: false },
-  { href: "/dashboard/bulk", label: "Bulk Generate", icon: "⚡", disabled: true },
+  { href: "/dashboard/bulk", label: "Bulk Generate", icon: "⚡", disabled: false },
 ] as const;
 
 export function DashboardChrome({
@@ -64,7 +62,7 @@ export function DashboardChrome({
         </nav>
         <div className="border-t border-white/10 px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Saldo Org</p>
-          <p className="mt-1 font-display text-lg font-bold text-white">{rupiah(balanceIdr)}</p>
+          <p className="mt-1 truncate font-display text-lg font-bold text-white">{rupiah(balanceIdr)}</p>
           {userEmail && <p className="mt-3 truncate text-xs text-zinc-500">{userEmail}</p>}
         </div>
       </aside>

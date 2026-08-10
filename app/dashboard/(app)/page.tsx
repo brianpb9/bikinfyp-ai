@@ -1,19 +1,21 @@
+import Link from "next/link";
 import { requireOrgContext } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getOrgBalance } from "@/lib/org";
-import { pgGetOrgBalance } from "@/lib/postgres/org";
+import { pgGetOrgBalance, pgListRecentBulkRuns, type RecentBulkRun } from "@/lib/postgres/org";
 import { rupiah } from "../_components/format";
 
 export const dynamic = "force-dynamic";
 
-// Beranda org (M2, F-ENT-01). "Bulk run terakhir" sengaja kosong — fan-out
-// generate baru dibangun di M3; ini cuma nunjukin shell + saldo dulu supaya
-// M2 bisa didemokan berdiri sendiri, bukan nunggu M3 kelar.
+// Beranda org (M2-M4, F-ENT-01).
 export default async function DashboardHomePage() {
   const { membership } = await requireOrgContext();
   const balance = postgresRuntimeEnabled()
     ? await pgGetOrgBalance(membership.org_id)
     : getOrgBalance(membership.org_id);
+  // Bulk-generate cuma jalan di runtime Postgres (lihat guard di
+  // app/api/dashboard/bulk/route.ts) — dev SQLite selalu kosong di sini.
+  const recentRuns: RecentBulkRun[] = postgresRuntimeEnabled() ? await pgListRecentBulkRuns(membership.org_id) : [];
 
   return (
     <div className="space-y-8">
@@ -25,7 +27,7 @@ export default async function DashboardHomePage() {
       <section className="grid grid-cols-2 gap-4">
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <p className="text-xs font-semibold uppercase tracking-[0.1em] text-zinc-500">Saldo Organisasi</p>
-          <p className="mt-2 font-display text-3xl font-bold text-zinc-900">{rupiah(balance)}</p>
+          <p className="mt-2 truncate font-display text-3xl font-bold text-zinc-900">{rupiah(balance)}</p>
           <p className="mt-1 text-xs text-zinc-500">Diisi oleh tim BikinFYP — hubungi kami untuk top-up.</p>
         </div>
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
@@ -35,10 +37,30 @@ export default async function DashboardHomePage() {
       </section>
 
       <section className="space-y-3">
-        <h2 className="text-sm font-bold text-zinc-900">Bulk run terakhir</h2>
-        <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center">
-          <p className="text-sm text-zinc-500">Belum ada bulk run. Fitur Bulk Generate segera hadir.</p>
+        <div className="flex items-center justify-between">
+          <h2 className="text-sm font-bold text-zinc-900">Bulk run terakhir</h2>
+          <Link href="/dashboard/bulk" className="text-xs font-semibold text-amber-600">+ Bulk Generate baru</Link>
         </div>
+        {recentRuns.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center">
+            <p className="text-sm text-zinc-500">Belum ada bulk run.</p>
+            <Link href="/dashboard/bulk" className="mt-2 inline-block text-sm font-semibold text-amber-600">Mulai yang pertama &rarr;</Link>
+          </div>
+        ) : (
+          <ul className="space-y-2">
+            {recentRuns.map((run) => (
+              <li key={run.bulk_run_id}>
+                <Link
+                  href={`/dashboard/bulk/${run.bulk_run_id}`}
+                  className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm hover:border-amber-400"
+                >
+                  <span className="text-zinc-700">{new Date(run.created_at).toLocaleString("id-ID")}</span>
+                  <span className="font-semibold text-zinc-900">{run.ready_count}/{run.total} siap</span>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        )}
       </section>
     </div>
   );

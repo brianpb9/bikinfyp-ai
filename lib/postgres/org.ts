@@ -72,6 +72,31 @@ export async function pgGetOrgBalance(orgId: string): Promise<number> {
   }
 }
 
+export interface RecentBulkRun {
+  bulk_run_id: string;
+  created_at: string;
+  total: number;
+  ready_count: number;
+}
+
+/** Bulk run terbaru org ini (M4) — dikelompokkan dari jobs.bulk_run_id,
+ * tidak ada tabel bulk_runs terpisah (keputusan MVP di rencana M3). */
+export async function pgListRecentBulkRuns(orgId: string, limit = 5): Promise<RecentBulkRun[]> {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    const res = await pool.query<RecentBulkRun & { created_at: string }>(
+      `SELECT bulk_run_id, MIN(created_at) AS created_at, COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE state = 'READY')::int AS ready_count
+       FROM jobs WHERE org_id = $1 AND bulk_run_id IS NOT NULL
+       GROUP BY bulk_run_id ORDER BY MIN(created_at) DESC LIMIT $2`,
+      [orgId, limit]
+    );
+    return res.rows;
+  } finally {
+    await pool.end();
+  }
+}
+
 export async function pgGetOrgLedger(orgId: string, limit = 50) {
   const pool = new Pool({ connectionString: url() });
   try {
