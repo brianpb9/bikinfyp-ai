@@ -33,6 +33,10 @@ const INTENSITY_INFO: Record<HookIntensity, { icon: string; label: string; hint:
   4: { icon: "⚡", label: "Ekstrem", hint: "makin nyeleneh" },
   5: { icon: "🤪", label: "Gila", hint: "paling nyeleneh, skor tertinggi" },
 };
+// 0-100% dibagi 5 pita sama lebar (0-20/20-40/40-60/60-80/80-100).
+function pctToIntensity(pct: number): HookIntensity {
+  return (Math.min(4, Math.floor(pct / 20)) + 1) as HookIntensity;
+}
 
 // AVATAR PRESET (2026-08-10) — persona id SAMA dengan bank e-commerce
 // (lib/personas.ts), jadi pakai potret still yang sudah ada di
@@ -66,7 +70,11 @@ export default function PromoPage() {
 
   // --- Toggle hook normal <-> crazy + avatar (Brian 2026-08-10) ---
   const [hooks, setHooks] = useState<HookMeta[]>([]);
-  const [intensity, setIntensity] = useState<HookIntensity>(3);
+  // Slider 0-100% (Brian 2026-08-10: "pake toggle... miripin ini" — pola
+  // slider Level hook di app/bikin/gaya), 5 bucket sama lebar dipetakan ke 5
+  // level di hook-library.ts. Default 50% = tengah = level 3.
+  const [pct, setPct] = useState(50);
+  const intensity = pctToIntensity(pct);
   const [hookId, setHookId] = useState<string | null>(null);
   const [avatarKind, setAvatarKind] = useState<"preset" | "custom">("preset");
   const [avatarPresetId, setAvatarPresetId] = useState("hijaber");
@@ -203,24 +211,33 @@ export default function PromoPage() {
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Seberapa nyeleneh</p>
               <h2 className="font-display text-xl font-bold">Level hook</h2>
             </div>
-            <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-              {INTENSITY_LEVELS.map((lvl) => (
-                <button
-                  key={lvl}
-                  type="button"
-                  disabled={busy}
-                  onClick={() => setIntensity(lvl)}
-                  aria-pressed={intensity === lvl}
-                  className={`w-20 shrink-0 snap-start rounded-2xl border-2 p-3 text-center shadow-sm disabled:opacity-50 ${
-                    intensity === lvl ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
-                  }`}
-                >
-                  <span className="block text-2xl" aria-hidden="true">{INTENSITY_INFO[lvl].icon}</span>
-                  <span className="block text-sm font-bold text-zinc-800">{INTENSITY_INFO[lvl].label}</span>
-                </button>
-              ))}
+            <div className="rounded-2xl border-2 border-zinc-200 bg-white p-4 shadow-sm">
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-bold text-zinc-800">
+                  <span aria-hidden="true">{INTENSITY_INFO[intensity].icon}</span> {INTENSITY_INFO[intensity].label}
+                  <span className="ml-1 font-normal text-zinc-500">· {INTENSITY_INFO[intensity].hint}</span>
+                </p>
+                <p className="font-display text-sm font-bold text-amber-600">{pct}%</p>
+              </div>
+              <input
+                type="range"
+                min={0}
+                max={100}
+                step={5}
+                value={pct}
+                disabled={busy}
+                onChange={(e) => setPct(Number(e.target.value))}
+                aria-label="Level hook: 0 santai sampai 100 gila"
+                className="mt-3 h-2 w-full cursor-pointer accent-amber-500 disabled:opacity-50"
+              />
+              <div className="mt-1 flex justify-between text-[10px] font-semibold text-zinc-400">
+                {INTENSITY_LEVELS.map((lvl) => (
+                  <span key={lvl} className={intensity === lvl ? "text-amber-600" : undefined}>
+                    {INTENSITY_INFO[lvl].icon} {INTENSITY_INFO[lvl].label}
+                  </span>
+                ))}
+              </div>
             </div>
-            <p className="text-xs text-zinc-500">{INTENSITY_INFO[intensity].hint}</p>
             {hooksForIntensity.length > 1 && (
               <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {hooksForIntensity.map((h) => (
