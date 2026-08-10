@@ -14,7 +14,7 @@ const MAX_CLIPS = 1;
 
 type Phase = "idle" | "uploading" | "processing" | "ready" | "error";
 
-type HookIntensity = "normal" | "medium" | "crazy";
+type HookIntensity = 1 | 2 | 3 | 4 | 5;
 
 interface HookMeta {
   id: string;
@@ -24,22 +24,28 @@ interface HookMeta {
   has_person: boolean;
 }
 
+// 5 level (Brian 2026-08-10) sesuai sebaran skor asli lib/promo/hook-library.ts.
+const INTENSITY_LEVELS: HookIntensity[] = [1, 2, 3, 4, 5];
 const INTENSITY_INFO: Record<HookIntensity, { icon: string; label: string; hint: string }> = {
-  normal: { icon: "✅", label: "Normal", hint: "tenang, paling aman" },
-  medium: { icon: "🔥", label: "Medium", hint: "lebih nendang" },
-  crazy: { icon: "🤪", label: "Gila", hint: "paling nyeleneh, skor tertinggi" },
+  1: { icon: "✅", label: "Santai", hint: "tenang, paling aman" },
+  2: { icon: "😏", label: "Berani", hint: "mulai nendang" },
+  3: { icon: "🔥", label: "Nendang", hint: "lebih berani" },
+  4: { icon: "⚡", label: "Ekstrem", hint: "makin nyeleneh" },
+  5: { icon: "🤪", label: "Gila", hint: "paling nyeleneh, skor tertinggi" },
 };
 
-// AVATAR PRESET (2026-08-10) — sama dengan bank persona e-commerce
-// (lib/personas.ts), tapi Video Promosi belum punya potret still terkurasi
-// sendiri, jadi emoji dulu (pola sama seperti fallback di app/bikin/gaya).
+// AVATAR PRESET (2026-08-10) — persona id SAMA dengan bank e-commerce
+// (lib/personas.ts), jadi pakai potret still yang sudah ada di
+// public/avatars/ (bukan wajah dikirim ke BytePlus — ini cuma preview UI,
+// sama seperti dipakai di app/bikin/gaya/page.tsx). "lokal" belum ada
+// potret di sana juga, emoji fallback.
 const AVATAR_PRESETS = [
-  { id: "hijaber", label: "🧕", name: "Hijaber" },
-  { id: "genz", label: "🧑‍🎤", name: "Gen-Z" },
-  { id: "ibu", label: "👩‍🦱", name: "Ibu-ibu" },
-  { id: "chindo", label: "👩🏻", name: "Chindo" },
-  { id: "pria", label: "👨", name: "Pria" },
-  { id: "lokal", label: "👩", name: "Lokal/Pribumi" },
+  { id: "hijaber", label: "🧕", name: "Hijaber", img: "/avatars/salma.png" },
+  { id: "genz", label: "🧑‍🎤", name: "Gen-Z", img: "/avatars/zea.png" },
+  { id: "ibu", label: "👩‍🦱", name: "Ibu-ibu", img: "/avatars/ratih.png" },
+  { id: "chindo", label: "👩🏻", name: "Chindo", img: "/avatars/keisha.png" },
+  { id: "pria", label: "👨", name: "Pria", img: "/avatars/raka.png" },
+  { id: "lokal", label: "👩", name: "Lokal/Pribumi", img: null as string | null },
 ];
 
 // Video Promosi (non-ecommerce): upload klip talking-head sendiri (1 klip,
@@ -60,7 +66,7 @@ export default function PromoPage() {
 
   // --- Toggle hook normal <-> crazy + avatar (Brian 2026-08-10) ---
   const [hooks, setHooks] = useState<HookMeta[]>([]);
-  const [intensity, setIntensity] = useState<HookIntensity>("medium");
+  const [intensity, setIntensity] = useState<HookIntensity>(3);
   const [hookId, setHookId] = useState<string | null>(null);
   const [avatarKind, setAvatarKind] = useState<"preset" | "custom">("preset");
   const [avatarPresetId, setAvatarPresetId] = useState("hijaber");
@@ -197,23 +203,24 @@ export default function PromoPage() {
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Seberapa nyeleneh</p>
               <h2 className="font-display text-xl font-bold">Level hook</h2>
             </div>
-            <div className="grid grid-cols-3 gap-2">
-              {(Object.keys(INTENSITY_INFO) as HookIntensity[]).map((lvl) => (
+            <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+              {INTENSITY_LEVELS.map((lvl) => (
                 <button
                   key={lvl}
                   type="button"
                   disabled={busy}
                   onClick={() => setIntensity(lvl)}
-                  className={`rounded-2xl border-2 p-3 text-center shadow-sm disabled:opacity-50 ${
+                  aria-pressed={intensity === lvl}
+                  className={`w-20 shrink-0 snap-start rounded-2xl border-2 p-3 text-center shadow-sm disabled:opacity-50 ${
                     intensity === lvl ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
                   }`}
                 >
                   <span className="block text-2xl" aria-hidden="true">{INTENSITY_INFO[lvl].icon}</span>
                   <span className="block text-sm font-bold text-zinc-800">{INTENSITY_INFO[lvl].label}</span>
-                  <span className="block text-[10px] leading-tight text-zinc-500">{INTENSITY_INFO[lvl].hint}</span>
                 </button>
               ))}
             </div>
+            <p className="text-xs text-zinc-500">{INTENSITY_INFO[intensity].hint}</p>
             {hooksForIntensity.length > 1 && (
               <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {hooksForIntensity.map((h) => (
@@ -271,12 +278,17 @@ export default function PromoPage() {
                     disabled={busy}
                     onClick={() => setAvatarPresetId(a.id)}
                     aria-pressed={avatarPresetId === a.id}
-                    className={`flex w-20 shrink-0 snap-start flex-col items-center gap-1 rounded-2xl border-2 py-3 shadow-sm disabled:opacity-50 ${
-                      avatarPresetId === a.id ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                    className={`w-20 shrink-0 snap-start overflow-hidden rounded-2xl border-2 text-center shadow-sm disabled:opacity-50 ${
+                      avatarPresetId === a.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
                     }`}
                   >
-                    <span className="text-2xl" aria-hidden="true">{a.label}</span>
-                    <span className="truncate text-[10px] font-semibold text-zinc-600">{a.name}</span>
+                    {a.img ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={a.img} alt={a.name} className="aspect-[3/4] w-full object-cover" loading="lazy" decoding="async" />
+                    ) : (
+                      <span className="flex aspect-[3/4] w-full items-center justify-center bg-amber-50 text-3xl">{a.label}</span>
+                    )}
+                    <span className="block truncate bg-white px-1 py-1.5 text-[10px] font-semibold text-zinc-600">{a.name}</span>
                   </button>
                 ))}
               </div>

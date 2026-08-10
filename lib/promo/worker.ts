@@ -79,7 +79,7 @@ export async function processPromoJob(jobId: string): Promise<void> {
     // Toggle "hook normal <-> crazy" (Brian 2026-08-10): job carries the
     // hook_id picked on the config screen; fall back to a safe default for
     // jobs from before this field existed (or a bad/removed id).
-    const hookEntry = getHookById(job.hook_id ?? "") ?? HOOK_LIBRARY.find((h) => h.intensity === "medium") ?? HOOK_LIBRARY[0];
+    const hookEntry = getHookById(job.hook_id ?? "") ?? HOOK_LIBRARY.find((h) => h.intensity === 3) ?? HOOK_LIBRARY[0];
     const avatarDescription = hookEntry.hasPerson
       ? resolveAvatarDescription({
           kind: job.avatar_kind === "custom" ? "custom" : "preset",

@@ -7,8 +7,16 @@
  * - 14, 16-25: terlalu standar, "bukan AI hook", bisa direkam manusia sendiri
  * - 26-29: epik tapi fenomena bukan benda akrab (Aturan I) / produk tidak berperan (Aturan J)
  *
- * Toggle "hook normal <-> crazy" (Brian 2026-08-10) dipetakan ke 3 tingkat
- * dari skor asli (bukan skala baru) — "bener sesuai yang kita label kemarin".
+ * Toggle hook (Brian 2026-08-10, direvisi ke 5 level 2026-08-10 — "kemarin
+ * kita buat 5 level?") dipetakan dari skor asli (bukan skala baru dikarang):
+ * skor 11 hook final jatuh persis di 6 nilai unik (4.0/4.3/4.5-4.6/4.7/4.8),
+ * jadi 4.5 & 4.6 digabung satu level supaya jadi 5 level bersih, tiap level
+ * 2-3 pilihan asli — bukan dipaksa kosong/tunggal.
+ *   Level 1 (4.0): sapuan-dua-dunia, angkot-semua-pegang
+ *   Level 2 (4.3): mati-lampu, dunia-ngebut
+ *   Level 3 (4.5-4.6): shockwave, rakit-sendiri, jatuh-dari-langit
+ *   Level 4 (4.7): produk-raksasa, ojol-tembus-tembok
+ *   Level 5 (4.8): pasar-beku, krl-ruang-tamu
  *
  * {{PERSON}} = placeholder diganti deskripsi avatar (preset atau upload
  * sendiri via Gemini vision, lihat lib/promo/avatar.ts) pada ide yang
@@ -16,7 +24,7 @@
  * avatar yang dipilih tidak dipakai untuk ide-ide itu.
  */
 
-export type HookIntensity = "normal" | "medium" | "crazy";
+export type HookIntensity = 1 | 2 | 3 | 4 | 5;
 
 export interface HookLibraryEntry {
   id: string;
@@ -32,12 +40,12 @@ export interface HookLibraryEntry {
 }
 
 export const HOOK_LIBRARY: HookLibraryEntry[] = [
-  // --- NORMAL (skor 4.0-4.3, paling tenang) ---
+  // --- LEVEL 1 (skor 4.0, paling tenang) ---
   {
     id: "sapuan-dua-dunia",
     title: "Sapuan dua dunia",
     score: 4.0,
-    intensity: "normal",
+    intensity: 1,
     mode: "i2v",
     hasPerson: true,
     durationSec: 8,
@@ -60,7 +68,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
     id: "angkot-semua-pegang",
     title: "Angkot, semua pegang barang sama",
     score: 4.0,
-    intensity: "normal",
+    intensity: 1,
     mode: "r2v",
     hasPerson: true,
     durationSec: 9,
@@ -86,7 +94,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
     id: "mati-lampu",
     title: "Mati lampu sekampung, satu jendela menyala",
     score: 4.3,
-    intensity: "normal",
+    intensity: 2,
     mode: "r2v",
     hasPerson: true,
     durationSec: 10,
@@ -107,12 +115,12 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
       "focus, the dark room and dark neighbourhood around it.",
     negative: "no product glowing by itself, no product lighting the whole room, no lightning, no fire, no candles, no distorted faces, no text on screen",
   },
-  // --- MEDIUM (skor 4.3-4.6) ---
+  // --- LEVEL 3 (skor 4.5-4.6) ---
   {
     id: "shockwave",
     title: "Shockwave dari produk",
     score: 4.5,
-    intensity: "medium",
+    intensity: 3,
     mode: "i2v",
     hasPerson: false,
     durationSec: 8,
@@ -138,7 +146,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
     id: "rakit-sendiri",
     title: "Rakit-sendiri (trik putar-balik)",
     score: 4.5,
-    intensity: "medium",
+    intensity: 3,
     mode: "i2v",
     hasPerson: false,
     durationSec: 6,
@@ -160,7 +168,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
     id: "dunia-ngebut",
     title: "Dunia ngebut, dia diam",
     score: 4.3,
-    intensity: "medium",
+    intensity: 2,
     mode: "r2v",
     hasPerson: true,
     durationSec: 10,
@@ -185,7 +193,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
     id: "jatuh-dari-langit",
     title: "Produk jatuh dari langit, ditangkap",
     score: 4.6,
-    intensity: "medium",
+    intensity: 3,
     mode: "r2v",
     hasPerson: true,
     durationSec: 9,
@@ -205,12 +213,12 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
       "chest height, centered, facing the camera, in sharp focus, filling roughly one third of the frame width.",
     negative: "no different product, no redesigned packaging, no injury, no blood, no collapsing walls",
   },
-  // --- CRAZY (skor 4.7-4.8, tertinggi) ---
+  // --- LEVEL 4-5 (skor 4.7-4.8, tertinggi) ---
   {
     id: "produk-raksasa",
     title: "Produk raksasa + dorong masuk",
     score: 4.7,
-    intensity: "crazy",
+    intensity: 4,
     mode: "r2v",
     hasPerson: false,
     durationSec: 8,
@@ -233,7 +241,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
     id: "ojol-tembus-tembok",
     title: "Ojol nembus tempat mustahil",
     score: 4.7,
-    intensity: "crazy",
+    intensity: 4,
     mode: "r2v",
     hasPerson: true,
     durationSec: 9,
@@ -259,7 +267,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
     id: "pasar-beku",
     title: "Waktu berhenti di pasar",
     score: 4.8,
-    intensity: "crazy",
+    intensity: 5,
     mode: "r2v",
     hasPerson: false,
     durationSec: 10,
@@ -286,7 +294,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
     id: "krl-ruang-tamu",
     title: "KRL menembus ruang tamu",
     score: 4.8,
-    intensity: "crazy",
+    intensity: 5,
     mode: "r2v",
     hasPerson: true,
     durationSec: 9,
