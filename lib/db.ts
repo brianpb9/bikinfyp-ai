@@ -22,6 +22,23 @@ export function getDb(): Database.Database {
     if (otpTableSql.includes("phone") && !otpTableSql.includes("email TEXT")) {
       db.exec("DROP TABLE IF EXISTS otp_codes");
     }
+    // Pra-skema: org_id (F-ENT-01) harus ada SEBELUM exec schema — schema.sql
+    // bikin index di kolom org_id lewat CREATE INDEX IF NOT EXISTS, yang gagal
+    // ("no such column") kalau tabel lama (credit_ledger/products/jobs) sudah
+    // ada tapi belum punya kolom itu (CREATE TABLE IF NOT EXISTS melewatinya).
+    for (const [table, addCols] of [
+      ["credit_ledger", ["org_id TEXT REFERENCES organizations(id)"]],
+      ["products", ["org_id TEXT REFERENCES organizations(id)"]],
+      ["jobs", ["org_id TEXT REFERENCES organizations(id)", "bulk_run_id TEXT"]],
+    ] as const) {
+      const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
+      if (!exists) continue;
+      const existingCols = (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]).map((c) => c.name);
+      for (const colDef of addCols) {
+        const colName = colDef.split(" ")[0];
+        if (!existingCols.includes(colName)) db.exec(`ALTER TABLE ${table} ADD COLUMN ${colDef}`);
+      }
+    }
     const schema = fs.readFileSync(path.join(process.cwd(), "lib", "schema.sql"), "utf8");
     db.exec(schema);
     // Migrasi ringan untuk DB lama: kolom state_changed_at di jobs.

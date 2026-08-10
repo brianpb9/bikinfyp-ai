@@ -1,0 +1,51 @@
+import { cookies } from "next/headers";
+import { verifyToken, cookieName } from "@/lib/auth";
+import { getDb } from "@/lib/db";
+import { postgresRuntimeEnabled, smokeGetUser } from "@/lib/postgres/smoke-runtime";
+
+export const dynamic = "force-dynamic";
+
+// Sengaja di LUAR app/dashboard/(app)/ — kalau ini ikut lewat gerbang org
+// (app)/layout.tsx, redirect-nya bakal muter tak berujung (belum ada org ->
+// diarahkan ke sini -> ini juga dijaga gerbang yang sama -> diarahkan ke
+// sini lagi). Halaman ini TIDAK org-gated, cuma nyoba tunjukin email user
+// (kalau lagi login) biar copy-nya kerasa personal — tapi tetap tampil
+// walau belum login sama sekali.
+async function currentEmail(): Promise<string | null> {
+  try {
+    const jar = await cookies();
+    const raw = jar.get(cookieName())?.value;
+    if (!raw) return null;
+    const parsed = await verifyToken(raw);
+    if (!parsed) return null;
+    const user = postgresRuntimeEnabled()
+      ? await smokeGetUser(parsed.userId)
+      : (getDb().prepare("SELECT * FROM users WHERE id = ?").get(parsed.userId) as { email: string | null } | undefined);
+    return user?.email ?? null;
+  } catch {
+    return null;
+  }
+}
+
+export default async function RequestAccessPage() {
+  const email = await currentEmail();
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-zinc-950 px-6 text-center text-zinc-100">
+      <div className="max-w-sm space-y-4">
+        <p className="text-lg font-bold tracking-tight">
+          BikinFYP <span className="text-amber-400">Brands</span>
+        </p>
+        <h1 className="font-display text-xl font-bold">Akun kamu belum terhubung ke organisasi</h1>
+        <p className="text-sm text-zinc-400">
+          Dashboard ini khusus brand/agency yang sudah didaftarkan tim BikinFYP.
+          {email ? (
+            <> Akunmu (<span className="text-zinc-200">{email}</span>) belum jadi anggota organisasi manapun.</>
+          ) : (
+            " Login dulu, lalu hubungi tim kami untuk didaftarkan."
+          )}
+        </p>
+        <p className="text-xs text-zinc-500">Hubungi tim BikinFYP untuk minta akses.</p>
+      </div>
+    </main>
+  );
+}

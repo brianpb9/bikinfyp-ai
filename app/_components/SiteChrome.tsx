@@ -20,7 +20,9 @@ function useTapHaptics() {
   }, []);
 }
 
-const NO_CHROME = ["/onboarding", "/coba", "/mulai"]; // halaman anon (magic moment & quiz iklan) — chip kredit & nav menyesatkan
+// /dashboard (2026-08-11, F-ENT-01): desktop-first enterprise dashboard,
+// punya chrome sendiri (DashboardChrome) — bottom-tab mobile ini salah konteks total.
+const NO_CHROME = ["/onboarding", "/coba", "/mulai", "/dashboard"]; // halaman anon (magic moment & quiz iklan) — chip kredit & nav menyesatkan
 const NO_NAV_PREFIX = ["/bikin", "/onboarding"];
 
 /** Header + nav bawah global. Disembunyikan di layar tertentu. */
