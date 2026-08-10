@@ -1,0 +1,680 @@
+{
+ "model_version": "ckpt16-n565",
+ "generated_at": "2026-08-10T18:12:40.426164+00:00",
+ "n_train": 614,
+ "n_winners": 294,
+ "caveats": [
+  "KORELASIONAL — target penyusunan, bukan resep pasti dan bukan jaminan FYP.",
+  "Skor resmi tetap dihitung dari video HASIL RENDER via analyzer, bukan dari rencana.",
+  "hypothesis_only = koefisien kecil atau dukungan winner tipis; jangan jadikan default generator.",
+  "Domain data latih: TikTok Indonesia komersial (GMV), n=614 — konten ai_generated adalah out-of-distribution sampai dibuktikan predicted-vs-actual.",
+  "Target hanya berlaku untuk model_version di file ini; checkpoint baru = file baru."
+ ],
+ "numeric": {
+  "duration_sec": {
+   "coef_standardized": -0.0955,
+   "direction": "lower_better",
+   "winner_median": 21.489,
+   "winner_iqr": [
+    14.542,
+    42.928
+   ],
+   "contrast_median": 38.723,
+   "n_winner_support": 294,
+   "confidence": "hypothesis_only"
+  },
+  "total_cuts": {
+   "coef_standardized": -0.2169,
+   "direction": "lower_better",
+   "winner_median": 3.0,
+   "winner_iqr": [
+    0.0,
+    11.0
+   ],
+   "contrast_median": 9.0,
+   "n_winner_support": 279,
+   "confidence": "usable_default"
+  },
+  "cuts_per_sec": {
+   "coef_standardized": 0.0522,
+   "direction": "higher_better",
+   "winner_median": 0.136,
+   "winner_iqr": [
+    0.0,
+    0.334
+   ],
+   "contrast_median": 0.183,
+   "n_winner_support": 279,
+   "confidence": "hypothesis_only"
+  },
+  "avg_shot_duration": {
+   "coef_standardized": 0.0402,
+   "direction": "higher_better",
+   "winner_median": 5.55,
+   "winner_iqr": [
+    2.715,
+    12.665
+   ],
+   "contrast_median": 4.8,
+   "n_winner_support": 279,
+   "confidence": "hypothesis_only"
+  },
+  "cuts_in_first_3s": {
+   "coef_standardized": -0.1679,
+   "direction": "lower_better",
+   "winner_median": 0.0,
+   "winner_iqr": [
+    0.0,
+    1.0
+   ],
+   "contrast_median": 0.0,
+   "n_winner_support": 279,
+   "confidence": "usable_default"
+  },
+  "has_text_overlay": {
+   "coef_standardized": 0.126,
+   "direction": "higher_better",
+   "winner_median": 1.0,
+   "winner_iqr": [
+    1.0,
+    1.0
+   ],
+   "contrast_median": 1.0,
+   "n_winner_support": 279,
+   "confidence": "usable_default"
+  },
+  "text_appears_at_sec": {
+   "coef_standardized": -0.0313,
+   "direction": "lower_better",
+   "winner_median": 0.3,
+   "winner_iqr": [
+    0.0,
+    2.0
+   ],
+   "contrast_median": 1.0,
+   "n_winner_support": 173,
+   "confidence": "hypothesis_only"
+  },
+  "face_in_first_3s": {
+   "coef_standardized": 0.0868,
+   "direction": "higher_better",
+   "winner_median": 1.0,
+   "winner_iqr": [
+    1.0,
+    1.0
+   ],
+   "contrast_median": 1.0,
+   "n_winner_support": 278,
+   "confidence": "hypothesis_only"
+  },
+  "product_visible": {
+   "coef_standardized": 0.0591,
+   "direction": "higher_better",
+   "winner_median": 1.0,
+   "winner_iqr": [
+    0.0,
+    1.0
+   ],
+   "contrast_median": 1.0,
+   "n_winner_support": 277,
+   "confidence": "hypothesis_only"
+  },
+  "product_first_appears_sec": {
+   "coef_standardized": -0.2214,
+   "direction": "lower_better",
+   "winner_median": 0.7,
+   "winner_iqr": [
+    0.7,
+    3.0
+   ],
+   "contrast_median": 0.7,
+   "n_winner_support": 175,
+   "confidence": "usable_default"
+  },
+  "has_cta_in_audio": {
+   "coef_standardized": 0.0463,
+   "direction": "higher_better",
+   "winner_median": 0.0,
+   "winner_iqr": [
+    0.0,
+    0.0
+   ],
+   "contrast_median": 0.0,
+   "n_winner_support": 294,
+   "confidence": "hypothesis_only"
+  },
+  "cta_timing_sec": {
+   "coef_standardized": -0.1282,
+   "direction": "lower_better",
+   "winner_median": 29.6,
+   "winner_iqr": [
+    14.2,
+    41.9
+   ],
+   "contrast_median": 45.55,
+   "n_winner_support": 33,
+   "confidence": "hypothesis_only"
+  },
+  "has_trending_sound": {
+   "coef_standardized": 0.0,
+   "direction": "neutral",
+   "winner_median": null,
+   "winner_iqr": null,
+   "contrast_median": null,
+   "n_winner_support": 0,
+   "confidence": "hypothesis_only"
+  },
+  "label_hook_layered": {
+   "coef_standardized": 0.0403,
+   "direction": "higher_better",
+   "winner_median": 0.0,
+   "winner_iqr": [
+    0.0,
+    0.0
+   ],
+   "contrast_median": 0.0,
+   "n_winner_support": 150,
+   "confidence": "hypothesis_only"
+  },
+  "label_hook_visual": {
+   "coef_standardized": 0.0305,
+   "direction": "higher_better",
+   "winner_median": 1.0,
+   "winner_iqr": [
+    0.0,
+    1.0
+   ],
+   "contrast_median": 1.0,
+   "n_winner_support": 150,
+   "confidence": "hypothesis_only"
+  },
+  "label_hook_text": {
+   "coef_standardized": 0.1425,
+   "direction": "higher_better",
+   "winner_median": 1.0,
+   "winner_iqr": [
+    0.0,
+    1.0
+   ],
+   "contrast_median": 0.0,
+   "n_winner_support": 150,
+   "confidence": "hypothesis_only"
+  },
+  "label_hook_verbal": {
+   "coef_standardized": 0.0173,
+   "direction": "higher_better",
+   "winner_median": 0.0,
+   "winner_iqr": [
+    0.0,
+    1.0
+   ],
+   "contrast_median": 0.0,
+   "n_winner_support": 150,
+   "confidence": "hypothesis_only"
+  },
+  "hook_text_coverage_pct": {
+   "coef_standardized": -0.0983,
+   "direction": "lower_better",
+   "winner_median": 0.133,
+   "winner_iqr": [
+    0.0,
+    0.533
+   ],
+   "contrast_median": 0.2,
+   "n_winner_support": 272,
+   "confidence": "hypothesis_only"
+  },
+  "full_text_coverage_pct": {
+   "coef_standardized": 0.063,
+   "direction": "higher_better",
+   "winner_median": 0.15,
+   "winner_iqr": [
+    0.0,
+    0.431
+   ],
+   "contrast_median": 0.174,
+   "n_winner_support": 272,
+   "confidence": "hypothesis_only"
+  },
+  "hook_text_transitions": {
+   "coef_standardized": -0.0914,
+   "direction": "lower_better",
+   "winner_median": 1.0,
+   "winner_iqr": [
+    0.0,
+    4.0
+   ],
+   "contrast_median": 2.0,
+   "n_winner_support": 272,
+   "confidence": "hypothesis_only"
+  },
+  "full_text_transitions": {
+   "coef_standardized": -0.2654,
+   "direction": "lower_better",
+   "winner_median": 2.0,
+   "winner_iqr": [
+    0.0,
+    6.0
+   ],
+   "contrast_median": 5.0,
+   "n_winner_support": 272,
+   "confidence": "usable_default"
+  },
+  "transcript_word_count": {
+   "coef_standardized": -0.0786,
+   "direction": "lower_better",
+   "winner_median": 32.0,
+   "winner_iqr": [
+    4.0,
+    112.0
+   ],
+   "contrast_median": 87.0,
+   "n_winner_support": 281,
+   "confidence": "hypothesis_only"
+  },
+  "transcript_has_question": {
+   "coef_standardized": 0.281,
+   "direction": "higher_better",
+   "winner_median": 0.0,
+   "winner_iqr": [
+    0.0,
+    1.0
+   ],
+   "contrast_median": 0.0,
+   "n_winner_support": 281,
+   "confidence": "usable_default"
+  },
+  "transcript_has_price_mention": {
+   "coef_standardized": -0.0265,
+   "direction": "lower_better",
+   "winner_median": 0.0,
+   "winner_iqr": [
+    0.0,
+    0.0
+   ],
+   "contrast_median": 0.0,
+   "n_winner_support": 281,
+   "confidence": "hypothesis_only"
+  },
+  "ocr_word_count": {
+   "coef_standardized": -0.1004,
+   "direction": "lower_better",
+   "winner_median": 21.0,
+   "winner_iqr": [
+    10.0,
+    48.0
+   ],
+   "contrast_median": 34.0,
+   "n_winner_support": 237,
+   "confidence": "usable_default"
+  },
+  "ocr_has_price_mention": {
+   "coef_standardized": 0.0316,
+   "direction": "higher_better",
+   "winner_median": 0.0,
+   "winner_iqr": [
+    0.0,
+    0.0
+   ],
+   "contrast_median": 0.0,
+   "n_winner_support": 237,
+   "confidence": "hypothesis_only"
+  },
+  "ocr_has_cta_word": {
+   "coef_standardized": 0.1302,
+   "direction": "higher_better",
+   "winner_median": 0.0,
+   "winner_iqr": [
+    0.0,
+    0.0
+   ],
+   "contrast_median": 0.0,
+   "n_winner_support": 237,
+   "confidence": "usable_default"
+  }
+ },
+ "categorical": {
+  "label_hook_type": [
+   {
+    "value": "REDOWNLOAD_FAILED",
+    "coef_standardized": 0.2222,
+    "winner_share": 0.116,
+    "contrast_share": 0.013,
+    "n_winner_support": 34,
+    "confidence": "usable_default"
+   },
+   {
+    "value": "before_after",
+    "coef_standardized": 0.1299,
+    "winner_share": 0.034,
+    "contrast_share": 0.009,
+    "n_winner_support": 10,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "question",
+    "coef_standardized": 0.0955,
+    "winner_share": 0.109,
+    "contrast_share": 0.113,
+    "n_winner_support": 32,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "shock",
+    "coef_standardized": 0.0616,
+    "winner_share": 0.041,
+    "contrast_share": 0.072,
+    "n_winner_support": 12,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "challenge",
+    "coef_standardized": -0.0123,
+    "winner_share": 0.014,
+    "contrast_share": 0.009,
+    "n_winner_support": 4,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "pov",
+    "coef_standardized": -0.0146,
+    "winner_share": 0.099,
+    "contrast_share": 0.075,
+    "n_winner_support": 29,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "pattern_interrupt",
+    "coef_standardized": -0.0633,
+    "winner_share": 0.095,
+    "contrast_share": 0.053,
+    "n_winner_support": 28,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "direct_claim",
+    "coef_standardized": -0.066,
+    "winner_share": 0.337,
+    "contrast_share": 0.456,
+    "n_winner_support": 99,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "other",
+    "coef_standardized": -0.1055,
+    "winner_share": 0.139,
+    "contrast_share": 0.138,
+    "n_winner_support": 41,
+    "confidence": "usable_default"
+   },
+   {
+    "value": "storytime",
+    "coef_standardized": -0.1227,
+    "winner_share": 0.017,
+    "contrast_share": 0.062,
+    "n_winner_support": 5,
+    "confidence": "hypothesis_only"
+   }
+  ],
+  "label_format": [
+   {
+    "value": "skit",
+    "coef_standardized": 0.1229,
+    "winner_share": 0.102,
+    "contrast_share": 0.044,
+    "n_winner_support": 30,
+    "confidence": "usable_default"
+   },
+   {
+    "value": "dracin",
+    "coef_standardized": 0.1204,
+    "winner_share": 0.007,
+    "contrast_share": 0.0,
+    "n_winner_support": 2,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "other",
+    "coef_standardized": 0.0539,
+    "winner_share": 0.088,
+    "contrast_share": 0.047,
+    "n_winner_support": 26,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "tier_ranking",
+    "coef_standardized": 0.016,
+    "winner_share": 0.007,
+    "contrast_share": 0.003,
+    "n_winner_support": 2,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "slideshow",
+    "coef_standardized": 0.0141,
+    "winner_share": 0.014,
+    "contrast_share": 0.013,
+    "n_winner_support": 4,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "tutorial",
+    "coef_standardized": 0.0092,
+    "winner_share": 0.109,
+    "contrast_share": 0.122,
+    "n_winner_support": 32,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "vlog",
+    "coef_standardized": -0.003,
+    "winner_share": 0.296,
+    "contrast_share": 0.331,
+    "n_winner_support": 87,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "live_clip",
+    "coef_standardized": -0.0129,
+    "winner_share": 0.027,
+    "contrast_share": 0.025,
+    "n_winner_support": 8,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "unboxing",
+    "coef_standardized": -0.0901,
+    "winner_share": 0.02,
+    "contrast_share": 0.037,
+    "n_winner_support": 6,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "talking_head",
+    "coef_standardized": -0.2086,
+    "winner_share": 0.214,
+    "contrast_share": 0.366,
+    "n_winner_support": 63,
+    "confidence": "usable_default"
+   }
+  ],
+  "label_narrative": [
+   {
+    "value": "other",
+    "coef_standardized": 0.2017,
+    "winner_share": 0.041,
+    "contrast_share": 0.013,
+    "n_winner_support": 12,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "multi_peak",
+    "coef_standardized": 0.0163,
+    "winner_share": 0.044,
+    "contrast_share": 0.025,
+    "n_winner_support": 13,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "transformation",
+    "coef_standardized": -0.0337,
+    "winner_share": 0.112,
+    "contrast_share": 0.128,
+    "n_winner_support": 33,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "instant_payoff",
+    "coef_standardized": -0.0397,
+    "winner_share": 0.561,
+    "contrast_share": 0.594,
+    "n_winner_support": 165,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "listicle",
+    "coef_standardized": -0.0652,
+    "winner_share": 0.048,
+    "contrast_share": 0.05,
+    "n_winner_support": 14,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "delayed_payoff",
+    "coef_standardized": -0.1202,
+    "winner_share": 0.078,
+    "contrast_share": 0.178,
+    "n_winner_support": 23,
+    "confidence": "hypothesis_only"
+   }
+  ],
+  "label_local_element": [
+   {
+    "value": "bahasa_daerah",
+    "coef_standardized": 0.1215,
+    "winner_share": 0.02,
+    "contrast_share": 0.003,
+    "n_winner_support": 6,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "trending_sound_id",
+    "coef_standardized": 0.0697,
+    "winner_share": 0.044,
+    "contrast_share": 0.028,
+    "n_winner_support": 13,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "none",
+    "coef_standardized": 0.035,
+    "winner_share": 0.35,
+    "contrast_share": 0.272,
+    "n_winner_support": 103,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "momen_kultural",
+    "coef_standardized": -0.1261,
+    "winner_share": 0.017,
+    "contrast_share": 0.05,
+    "n_winner_support": 5,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "bahasa_gaul",
+    "coef_standardized": -0.1421,
+    "winner_share": 0.452,
+    "contrast_share": 0.634,
+    "n_winner_support": 133,
+    "confidence": "usable_default"
+   }
+  ],
+  "text_language_style": [
+   {
+    "value": "mixed",
+    "coef_standardized": -0.1334,
+    "winner_share": 0.007,
+    "contrast_share": 0.069,
+    "n_winner_support": 2,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "formal",
+    "coef_standardized": -0.1442,
+    "winner_share": 0.514,
+    "contrast_share": 0.606,
+    "n_winner_support": 151,
+    "confidence": "usable_default"
+   },
+   {
+    "value": "gaul",
+    "coef_standardized": -0.1896,
+    "winner_share": 0.065,
+    "contrast_share": 0.134,
+    "n_winner_support": 19,
+    "confidence": "hypothesis_only"
+   }
+  ],
+  "setting": [
+   {
+    "value": "studio",
+    "coef_standardized": 0.2174,
+    "winner_share": 0.061,
+    "contrast_share": 0.006,
+    "n_winner_support": 18,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "outdoor",
+    "coef_standardized": -0.0545,
+    "winner_share": 0.16,
+    "contrast_share": 0.216,
+    "n_winner_support": 47,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "indoor",
+    "coef_standardized": -0.0572,
+    "winner_share": 0.701,
+    "contrast_share": 0.691,
+    "n_winner_support": 206,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "street",
+    "coef_standardized": -0.0703,
+    "winner_share": 0.02,
+    "contrast_share": 0.028,
+    "n_winner_support": 6,
+    "confidence": "hypothesis_only"
+   }
+  ],
+  "dominant_shot_type": [
+   {
+    "value": "closeup",
+    "coef_standardized": 0.0351,
+    "winner_share": 0.333,
+    "contrast_share": 0.334,
+    "n_winner_support": 98,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "medium",
+    "coef_standardized": 0.0213,
+    "winner_share": 0.5,
+    "contrast_share": 0.441,
+    "n_winner_support": 147,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "wide",
+    "coef_standardized": -0.1306,
+    "winner_share": 0.109,
+    "contrast_share": 0.166,
+    "n_winner_support": 32,
+    "confidence": "usable_default"
+   }
+  ]
+ }
+}

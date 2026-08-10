@@ -1,5 +1,5 @@
 // Dump nilai fitur fixture plans fyp-score sebagai JSON (stdout) — input untuk
-// regenerasi golden test terhadap kode Python asli MODEL FYP 1.0.
+// regenerasi golden test terhadap kode Python asli MODEL FYP.
 //
 // Regenerasi tests/fixtures/fyp-score-golden.json (butuh repo Viral Meter + numpy):
 //   npx tsx scripts/fyp-golden-dump.ts > /tmp/fyp-features.json
@@ -45,6 +45,9 @@ rows.push({
     cta_timing_sec: 35,
     has_trending_sound: 1,
     label_hook_layered: 0,
+    label_hook_visual: 1,
+    label_hook_text: 0,
+    label_hook_verbal: null,
     transcript_word_count: 55,
     transcript_has_question: 0,
     transcript_has_price_mention: 1,

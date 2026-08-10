@@ -17,7 +17,7 @@ const ROLE_LABEL: Record<string, string> = {
   cta: "CTA (11–15 dtk)",
 };
 
-/** Skor FYP pre-render (MODEL FYP 1.0) untuk satu varian — dihitung client-side
+/** Skor FYP pre-render (MODEL FYP) untuk satu varian — dihitung client-side
  * dari rencana video, sama seperti validateScript. Bahasa WAJIB korelasional
  * (pola yang cenderung menang di data pembanding), bukan janji FYP. */
 function scorePlan(

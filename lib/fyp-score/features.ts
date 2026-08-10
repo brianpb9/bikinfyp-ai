@@ -1,4 +1,4 @@
-// Builder fitur MODEL FYP 1.0 "by construction": BikinFYP MENYUSUN videonya,
+// Builder fitur MODEL FYP "by construction": BikinFYP MENYUSUN videonya,
 // jadi fitur diketahui dari rencana (segmen skrip, caption timeline, shot plan,
 // format) TANPA pipeline ekstraksi (frames/OCR/vision/whisper). Semantik tiap
 // field mengikuti analyzers/virality_model.py (load_data/_text_content_features).
@@ -8,9 +8,13 @@
 //   pacing_score (metrik vision), setting (render model bisa apa saja),
 //   why_shared (label persepsi penonton).
 //
-// Mapping taxonomy di bawah berstatus PROPOSED — menunggu konfirmasi pengelola
-// model (BRIEF_DARI_BIKINFYP_UNTUK_FYP_MODEL.md §1). Ubah di konstanta, bukan
-// di logika.
+// Mapping H1-H16 → label_hook_type DIKONFIRMASI 2026-08-06 oleh pengelola
+// model (PLANNABLE_FEATURES.md §D, kontrak v1.1) — dengan satu simplifikasi
+// belum diterapkan: H3 (testimoni personal) semestinya direct_claim vs
+// storytime tergantung kalimat pembuka template final ("outcome-first" vs
+// "narrative-first"), tapi masih di-hardcode ke direct_claim di sini — belum
+// per-template. Field lain di tabel = deskriptif langsung, tidak butuh
+// percabangan tambahan.
 
 import type { HookCode } from "../config/hooks";
 import type { SegmentDraft } from "../script-engine/templates";
@@ -104,6 +108,7 @@ export function buildPlanFeatures(input: ScriptPlanInput): FeatureValues {
   const cutsInFirst3s = 0;
 
   const ctaSeg = segments.find((s) => s.role === "cta");
+  const hookSeg = segments.find((s) => s.role === "hook"); // selalu ada, start=0 (templates.ts)
   const fullText = segments.map((s) => s.text).join(" ");
 
   // Teks di layar: silent = caption cards + watermark; bersuara = overlay harga
@@ -160,6 +165,28 @@ export function buildPlanFeatures(input: ScriptPlanInput): FeatureValues {
     cta_timing_sec: voiced && ctaSeg ? ctaSeg.start : null,
     has_trending_sound: 0, // musik = bg-loop berlisensi, bukan trending sound
     label_hook_layered: !voiced && durationSec > 15 ? 1 : 0, // snapback di jendela hook (templates v1.2)
+
+    // --- Hook Trinity (ckpt16, r-model-2.0 2026-08-11) — 3 kanal independen,
+    // dinilai HANYA 3 detik pertama (definisi persis: analyzers/ai_labeler.py
+    // PROMPT). BikinFYP mengendalikan ketiga kanal terpisah (shot prompt /
+    // caption plan / dialog hook), jadi PLANNABLE per PLANNABLE_FEATURES.md
+    // §A — tapi hanya diisi non-null saat kita punya sinyal nyata, bukan
+    // ditebak (prinsip §1: "jangan pernah menebak nilainya").
+    //
+    // verbal: hook segment SELALU ditulis sebagai hook (H1-H16 taxonomy) dan
+    // hanya benar-benar terdengar bila tier bersuara (silent = no audio track
+    // sama sekali → deterministically false, bukan "tidak terukur").
+    label_hook_verbal: hookSeg ? (voiced ? 1 : 0) : null,
+    // text: silent tier menampilkan caption card hook sebagai headline di
+    // layar (fungsi hook, sesuai definisi) — voiced tier TIDAK menampilkan
+    // teks hook (cuma overlay harga saat demo + watermark, bukan headline).
+    label_hook_text: voiced ? 0 : 1,
+    // visual: hanya diberi nilai (false) untuk kasus yang persis cocok contoh
+    // negatif resmi ("ordinary framing of a person starting to talk" —
+    // talking_head shot 1 kita memang persis itu). Format lain (hands_only/
+    // vo_broll) ambigu terhadap definisi "deliberate visual attention
+    // device" dengan shot-planner saat ini → dibiarkan null, bukan ditebak.
+    label_hook_visual: format === "talking_head" ? 0 : null,
 
     // --- Konten teks (semantik _text_content_features Python) ---
     transcript_word_count: transcript ? wordCount(transcript) : null,

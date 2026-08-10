@@ -1,15 +1,23 @@
-// Port TypeScript dari scorer MODEL FYP 1.0 (Viral Meter, analyzers/virality_model.py).
+// Port TypeScript dari scorer MODEL FYP (Viral Meter, analyzers/virality_model.py).
 // HANYA scoring dari artifact beku — tidak pernah fit model on-the-fly (aturan keras §5
-// MODEL_FYP_1.0.md). Matematika di file ini WAJIB byte-identik konstruksinya dengan
+// MODEL_FYP_2.0.md). Matematika di file ini WAJIB byte-identik konstruksinya dengan
 // build_features() + score_video_row() Python; diverifikasi golden test
 // tests/fyp-score.test.ts terhadap output kode Python asli.
+//
+// r-model-2.0 (Brian 2026-08-11): naik dari ckpt9-n316 ke ckpt16-n565 (AUC OOF
+// 0.719->0.801, nested-CV 0.797; n=316->565). cat_fields/num_fields cocok
+// (skema lama tetap valid subset dari skema baru) KECUALI 3 kolom baru "Hook
+// Trinity" (label_hook_visual/text/verbal) — lihat features.ts untuk mapping
+// plannable-nya. cat_vocab lama semuanya tetap ada di vocab baru (cuma
+// nambah kategori baru yang tidak pernah kita emit) — tidak ada breaking
+// change untuk mapping yang sudah ada.
 //
 // Skor 0-100 = mid-rank percentile probabilitas mentah terhadap reference_distribution
 // yang dibekukan di artifact. Skor hanya sebanding dalam satu model_version.
 // Bahasa wajib saat menampilkan skor: KORELASIONAL ("video seperti ini cenderung
 // menang di data kami"), bukan kepastian/prediksi FYP.
 
-import artifactJson from "./ckpt9-n316.json";
+import artifactJson from "./ckpt16-n565.json";
 
 export interface FypArtifact {
   model_version: string;

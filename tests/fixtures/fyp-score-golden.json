@@ -30,6 +30,9 @@
       "cta_timing_sec": null,
       "has_trending_sound": 0,
       "label_hook_layered": 0,
+      "label_hook_verbal": 0,
+      "label_hook_text": 1,
+      "label_hook_visual": null,
       "transcript_word_count": null,
       "transcript_has_question": null,
       "transcript_has_price_mention": null,
@@ -38,9 +41,9 @@
       "ocr_has_cta_word": 1
     },
     "expected": {
-      "raw_probability": 0.7942181577116959,
-      "score": 96,
-      "model_version": "ckpt9-n316"
+      "raw_probability": 0.7304496755172364,
+      "score": 77,
+      "model_version": "ckpt16-n565"
     }
   },
   {
@@ -74,6 +77,9 @@
       "cta_timing_sec": 10,
       "has_trending_sound": 0,
       "label_hook_layered": 0,
+      "label_hook_verbal": 1,
+      "label_hook_text": 0,
+      "label_hook_visual": 0,
       "transcript_word_count": 26,
       "transcript_has_question": 1,
       "transcript_has_price_mention": 0,
@@ -82,9 +88,9 @@
       "ocr_has_cta_word": 0
     },
     "expected": {
-      "raw_probability": 0.652291249826924,
-      "score": 88,
-      "model_version": "ckpt9-n316"
+      "raw_probability": 0.7912024374827332,
+      "score": 82,
+      "model_version": "ckpt16-n565"
     }
   },
   {
@@ -118,6 +124,9 @@
       "cta_timing_sec": null,
       "has_trending_sound": 0,
       "label_hook_layered": 1,
+      "label_hook_verbal": 0,
+      "label_hook_text": 1,
+      "label_hook_visual": null,
       "transcript_word_count": null,
       "transcript_has_question": null,
       "transcript_has_price_mention": null,
@@ -126,9 +135,9 @@
       "ocr_has_cta_word": 1
     },
     "expected": {
-      "raw_probability": 0.652816520448864,
-      "score": 88,
-      "model_version": "ckpt9-n316"
+      "raw_probability": 0.547711739524883,
+      "score": 58,
+      "model_version": "ckpt16-n565"
     }
   },
   {
@@ -162,6 +171,9 @@
       "cta_timing_sec": 30,
       "has_trending_sound": 0,
       "label_hook_layered": 0,
+      "label_hook_verbal": 1,
+      "label_hook_text": 0,
+      "label_hook_visual": null,
       "transcript_word_count": 85,
       "transcript_has_question": 0,
       "transcript_has_price_mention": 1,
@@ -170,9 +182,9 @@
       "ocr_has_cta_word": 0
     },
     "expected": {
-      "raw_probability": 0.5343586873343737,
-      "score": 81,
-      "model_version": "ckpt9-n316"
+      "raw_probability": 0.7806884056438577,
+      "score": 82,
+      "model_version": "ckpt16-n565"
     }
   },
   {
@@ -206,6 +218,9 @@
       "cta_timing_sec": 35,
       "has_trending_sound": 1,
       "label_hook_layered": 0,
+      "label_hook_visual": 1,
+      "label_hook_text": 0,
+      "label_hook_verbal": null,
       "transcript_word_count": 55,
       "transcript_has_question": 0,
       "transcript_has_price_mention": 1,
@@ -214,9 +229,9 @@
       "ocr_has_cta_word": null
     },
     "expected": {
-      "raw_probability": 0.49493952710015554,
-      "score": 77,
-      "model_version": "ckpt9-n316"
+      "raw_probability": 0.7714942573761702,
+      "score": 81,
+      "model_version": "ckpt16-n565"
     }
   }
 ]

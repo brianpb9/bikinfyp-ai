@@ -8,7 +8,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/jobs/:id/report {posted_url, views?, orders?} — user melaporkan video
-// yang sudah diposting (loop predicted-vs-actual MODEL FYP 1.0).
+// yang sudah diposting (loop predicted-vs-actual MODEL FYP).
 // posted_url BEKU setelah terisi; views/orders boleh di-update kapan pun.
 export async function POST(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
