@@ -46,20 +46,29 @@ const HOOK_LEVEL_INFO: Record<HookLevel, { icon: string; label: string; hint: st
   gila: { icon: "🤪", label: "Gila", hint: "pembuka nyeleneh · eksperimen" },
 };
 
-// AVATAR LIBRARY v1 (2026-08-07): tiap kategori kreator = avatar bernama +
-// potret preview NYATA (still dari render terbaik lab). Identitas antar-video
-// "mirip konsisten" via deskriptor prompt beku (BytePlus menolak SEMUA gambar
-// referensi berwajah — termasuk wajah AI — jadi konsistensi via teks, bukan
-// foto). Avatar tanpa potret memakai emoji sampai render kurasinya ada.
-const CREATOR_CATS = [
-  { id: "hijaber", name: "Salma", label: "🧕 Hijaber", note: "paling laris di TikTok Shop", img: "/avatars/salma.png", active: true },
-  { id: "genz", name: "Zea", label: "🧑‍🎤 Gen-Z", note: "gadget, fashion, F&B", img: "/avatars/zea.png", active: true },
-  { id: "ibu", name: "Bunda Ratih", label: "👩‍🦱 Ibu-ibu", note: "rumah tangga, dapur, anak", img: "/avatars/ratih.png", active: true },
-  { id: "chindo", name: "Keisha", label: "👩🏻 Chindo", note: "skincare premium", img: "/avatars/keisha.png", active: true },
-  { id: "pria", name: "Raka", label: "👨 Pria", note: "gadget, F&B, produk pria", img: "/avatars/raka.png", active: true },
-  { id: "lokal", name: "Dina", label: "👩 Lokal/Pribumi", note: "cocok semua produk", img: null as string | null, active: true },
-  { id: "daerah", name: "Laras", label: "🌾 Daerah", note: "", img: null as string | null, active: false },
+// AVATAR LIBRARY v2 (2026-08-10): potret di-generate ulang atas permintaan
+// Brian — neck-up headshot bersih, TIDAK memegang produk, TIDAK berdiri
+// (dulu beberapa potret full-body/pegang produk). Ditambah toggle
+// Male/Female pertama, memakai kategori yang sudah ada (bukan persona baru):
+// female = hijaber/genz/ibu/chindo/lokal, male = pria — "daerah" dibiarkan
+// pending/gender netral, tidak tampil di kedua toggle sampai statusnya aktif.
+// Identitas antar-video tetap konsisten via deskriptor prompt teks (BytePlus
+// menolak SEMUA gambar referensi berwajah, termasuk wajah AI) — foto ini
+// PREVIEW UI saja, bukan reference image yang dikirim ke provider.
+type AvatarGender = "female" | "male";
+const CREATOR_CATS: { id: string; name: string; label: string; note: string; img: string | null; active: boolean; gender: AvatarGender }[] = [
+  { id: "hijaber", name: "Salma", label: "🧕 Hijaber", note: "paling laris di TikTok Shop", img: "/avatars/salma.png", active: true, gender: "female" },
+  { id: "genz", name: "Zea", label: "🧑‍🎤 Gen-Z", note: "gadget, fashion, F&B", img: "/avatars/zea.png", active: true, gender: "female" },
+  { id: "ibu", name: "Bunda Ratih", label: "👩‍🦱 Ibu-ibu", note: "rumah tangga, dapur, anak", img: "/avatars/ratih.png", active: true, gender: "female" },
+  { id: "chindo", name: "Keisha", label: "👩🏻 Chindo", note: "skincare premium", img: "/avatars/keisha.png", active: true, gender: "female" },
+  { id: "lokal", name: "Dina", label: "👩 Lokal/Pribumi", note: "cocok semua produk", img: "/avatars/dina.png", active: true, gender: "female" },
+  { id: "pria", name: "Raka", label: "👨 Pria", note: "gadget, F&B, produk pria", img: "/avatars/raka.png", active: true, gender: "male" },
+  { id: "daerah", name: "Laras", label: "🌾 Daerah", note: "", img: null, active: false, gender: "female" },
 ];
+const GENDER_INFO: Record<AvatarGender, { icon: string; label: string }> = {
+  female: { icon: "♀", label: "Female" },
+  male: { icon: "♂", label: "Male" },
+};
 interface TierMeta {
   id: string;
   name: string;
@@ -93,6 +102,7 @@ export default function GayaPage() {
     setDurationSec(t.preset.format === "talking_head" ? 15 : (t.preset.durationSec as 15 | 30 | 45));
   }
   const [register, setRegister] = useState("bestie");
+  const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -103,6 +113,14 @@ export default function GayaPage() {
     apiFetch<{ tiers: TierMeta[] }>("/api/meta").then((m) => setTiers(m.tiers)).catch(() => {});
     track("gaya_view");
   }, [router]);
+
+  const catsForGender = CREATOR_CATS.filter((c) => c.active && c.gender === avatarGender);
+  useEffect(() => {
+    if (catsForGender.length && !catsForGender.some((c) => c.id === creatorCategory)) {
+      setCreatorCategory(catsForGender[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarGender]);
 
   const selectedTier = tiers.find((t) => t.id === tier);
   const selectedCategory = CREATOR_CATS.find((c) => c.id === creatorCategory);
@@ -279,11 +297,28 @@ export default function GayaPage() {
             render lab terkurasi. */}
         <section className="space-y-3">
           <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih presenter AI-mu</p><h2 className="font-display text-xl font-bold">Avatar</h2></div>
+          {/* Toggle gender (2026-08-10, permintaan Brian) — dipilih dulu
+              sebelum daftar avatar, filter kategori yang sudah ada. */}
+          <div className="grid grid-cols-2 gap-2">
+            {(Object.keys(GENDER_INFO) as AvatarGender[]).map((g) => (
+              <button
+                key={g}
+                type="button"
+                onClick={() => setAvatarGender(g)}
+                aria-pressed={avatarGender === g}
+                className={`rounded-2xl border-2 py-2.5 text-center text-sm font-bold shadow-sm ${
+                  avatarGender === g ? "border-amber-500 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-700"
+                }`}
+              >
+                {GENDER_INFO[g].icon} {GENDER_INFO[g].label}
+              </button>
+            ))}
+          </div>
           {/* Slider horizontal (Brian 2026-08-07): potret seragam setengah badan,
               geser ke kanan — bukan grid bertumpuk. -mx-4 px-4 = kartu tepi
               menempel rapi ke tepi layar saat digeser. */}
           <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {CREATOR_CATS.filter((c) => c.active).map((c) => (
+            {catsForGender.map((c) => (
               <button
                 key={c.id}
                 type="button"

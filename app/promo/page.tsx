@@ -38,19 +38,24 @@ function pctToIntensity(pct: number): HookIntensity {
   return (Math.min(4, Math.floor(pct / 20)) + 1) as HookIntensity;
 }
 
-// AVATAR PRESET (2026-08-10) — persona id SAMA dengan bank e-commerce
-// (lib/personas.ts), jadi pakai potret still yang sudah ada di
-// public/avatars/ (bukan wajah dikirim ke BytePlus — ini cuma preview UI,
-// sama seperti dipakai di app/bikin/gaya/page.tsx). "lokal" belum ada
-// potret di sana juga, emoji fallback.
-const AVATAR_PRESETS = [
-  { id: "hijaber", label: "🧕", name: "Hijaber", img: "/avatars/salma.png" },
-  { id: "genz", label: "🧑‍🎤", name: "Gen-Z", img: "/avatars/zea.png" },
-  { id: "ibu", label: "👩‍🦱", name: "Ibu-ibu", img: "/avatars/ratih.png" },
-  { id: "chindo", label: "👩🏻", name: "Chindo", img: "/avatars/keisha.png" },
-  { id: "pria", label: "👨", name: "Pria", img: "/avatars/raka.png" },
-  { id: "lokal", label: "👩", name: "Lokal/Pribumi", img: null as string | null },
+// AVATAR PRESET v2 (2026-08-10) — persona id SAMA dengan bank e-commerce
+// (lib/personas.ts), potret di-generate ulang (neck-up, tidak pegang
+// produk, tidak berdiri) + toggle Male/Female pertama, sama persis dengan
+// app/bikin/gaya/page.tsx (lihat komentar di sana). Foto ini PREVIEW UI
+// saja, bukan reference image yang dikirim ke BytePlus.
+type AvatarGender = "female" | "male";
+const AVATAR_PRESETS: { id: string; label: string; name: string; img: string; gender: AvatarGender }[] = [
+  { id: "hijaber", label: "🧕", name: "Hijaber", img: "/avatars/salma.png", gender: "female" },
+  { id: "genz", label: "🧑‍🎤", name: "Gen-Z", img: "/avatars/zea.png", gender: "female" },
+  { id: "ibu", label: "👩‍🦱", name: "Ibu-ibu", img: "/avatars/ratih.png", gender: "female" },
+  { id: "chindo", label: "👩🏻", name: "Chindo", img: "/avatars/keisha.png", gender: "female" },
+  { id: "lokal", label: "👩", name: "Lokal/Pribumi", img: "/avatars/dina.png", gender: "female" },
+  { id: "pria", label: "👨", name: "Pria", img: "/avatars/raka.png", gender: "male" },
 ];
+const GENDER_INFO: Record<AvatarGender, { icon: string; label: string }> = {
+  female: { icon: "♀", label: "Female" },
+  male: { icon: "♂", label: "Male" },
+};
 
 // Video Promosi (non-ecommerce): upload klip talking-head sendiri (1 klip,
 // ada suara) — AI nambahin 1 segmen hook + VO di depan, lalu digabung jadi
@@ -77,6 +82,7 @@ export default function PromoPage() {
   const intensity = pctToIntensity(pct);
   const [hookId, setHookId] = useState<string | null>(null);
   const [avatarKind, setAvatarKind] = useState<"preset" | "custom">("preset");
+  const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
   const [avatarPresetId, setAvatarPresetId] = useState("hijaber");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
@@ -97,6 +103,14 @@ export default function PromoPage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [intensity, hooks]);
+
+  const presetsForGender = AVATAR_PRESETS.filter((a) => a.gender === avatarGender);
+  useEffect(() => {
+    if (presetsForGender.length && !presetsForGender.some((a) => a.id === avatarPresetId)) {
+      setAvatarPresetId(presetsForGender[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [avatarGender]);
 
   const selectedHook = hooks.find((h) => h.id === hookId) ?? null;
   const needsAvatar = selectedHook?.has_person ?? true;
@@ -287,28 +301,44 @@ export default function PromoPage() {
             </div>
 
             {avatarKind === "preset" && (
-              <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {AVATAR_PRESETS.map((a) => (
-                  <button
-                    key={a.id}
-                    type="button"
-                    disabled={busy}
-                    onClick={() => setAvatarPresetId(a.id)}
-                    aria-pressed={avatarPresetId === a.id}
-                    className={`w-20 shrink-0 snap-start overflow-hidden rounded-2xl border-2 text-center shadow-sm disabled:opacity-50 ${
-                      avatarPresetId === a.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
-                    }`}
-                  >
-                    {a.img ? (
-                      // eslint-disable-next-line @next/next/no-img-element
+              <>
+                {/* Toggle gender (2026-08-10, permintaan Brian) — dipilih
+                    dulu sebelum daftar avatar. */}
+                <div className="grid grid-cols-2 gap-2">
+                  {(Object.keys(GENDER_INFO) as AvatarGender[]).map((g) => (
+                    <button
+                      key={g}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setAvatarGender(g)}
+                      aria-pressed={avatarGender === g}
+                      className={`rounded-2xl border-2 py-2 text-center text-sm font-bold shadow-sm disabled:opacity-50 ${
+                        avatarGender === g ? "border-amber-500 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-700"
+                      }`}
+                    >
+                      {GENDER_INFO[g].icon} {GENDER_INFO[g].label}
+                    </button>
+                  ))}
+                </div>
+                <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                  {presetsForGender.map((a) => (
+                    <button
+                      key={a.id}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => setAvatarPresetId(a.id)}
+                      aria-pressed={avatarPresetId === a.id}
+                      className={`w-20 shrink-0 snap-start overflow-hidden rounded-2xl border-2 text-center shadow-sm disabled:opacity-50 ${
+                        avatarPresetId === a.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
+                      }`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={a.img} alt={a.name} className="aspect-[3/4] w-full object-cover" loading="lazy" decoding="async" />
-                    ) : (
-                      <span className="flex aspect-[3/4] w-full items-center justify-center bg-amber-50 text-3xl">{a.label}</span>
-                    )}
-                    <span className="block truncate bg-white px-1 py-1.5 text-[10px] font-semibold text-zinc-600">{a.name}</span>
-                  </button>
-                ))}
-              </div>
+                      <span className="block truncate bg-white px-1 py-1.5 text-[10px] font-semibold text-zinc-600">{a.name}</span>
+                    </button>
+                  ))}
+                </div>
+              </>
             )}
 
             {avatarKind === "custom" && (
