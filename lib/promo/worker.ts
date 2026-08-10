@@ -29,7 +29,10 @@ const MAX_DURATION_SEC = 60;
 // VO's real spoken length drives the hook's video duration so they land in
 // sync without padding/trimming — clamped so a very short/long placeholder
 // script can't push the video-gen call outside the provider's sane range.
-const HOOK_DURATION_MIN_SEC = 3;
+// Floor is 4, not 2-3 (r-r2v-fix 2026-08-11): r2v mode (most hook-library
+// entries) rejects duration<4 as InvalidParameter — see minDur in
+// lib/providers/stubs/byteplus.ts.
+const HOOK_DURATION_MIN_SEC = 4;
 const HOOK_DURATION_MAX_SEC = 10;
 
 export async function processPromoJob(jobId: string): Promise<void> {

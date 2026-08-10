@@ -5,21 +5,28 @@
  * e-commerce pipeline. This is a NEW, isolated placeholder for the prototype
  * only — nothing in shot-planner.ts is touched or reused.
  *
- * r-hook-library (Brian 2026-08-10): the single placeholder prompt is
- * replaced by the curated hook-library.ts (11 ideas, hasil skor Brian
- * sendiri dari 30 ide). NOTE (i2v-only simplification, disclosed not
- * hidden): hook-library.ts entries carry a `mode` field ("i2v"/"r2v") ported
- * from the original standalone experiments, but the promo worker's
- * "silent_caption" quality tier always resolves to a non-dreamina BytePlus
- * model (see lib/config.ts BYTEPLUS_MODEL_SILENT) — r2v's reference_image
- * role only activates for dreamina-seedance-2 models (see useR2v in
- * lib/providers/stubs/byteplus.ts). Switching tier to unlock r2v would force
- * generateAudio=true (assertVisualSpec), colliding with this pipeline's
- * silent-hook + external-VO design. So every entry renders i2v for now
- * (image = literal first frame) — still uses the exact same scored prompt
- * text, just without the r2v camera-freedom some ideas were tuned with.
- * Proper r2v support needs its own model-selection plumbing, out of scope
- * for this wiring pass.
+ * r-r2v-fix (Brian 2026-08-11): the earlier i2v-only shortcut shipped a real
+ * defect, not just a "less dramatic" tradeoff — forcing the user's own
+ * reference frame as the LITERAL first frame meant scene-heavy prompts
+ * (e.g. "krl-ruang-tamu": ordinary living room, sofa, wall clock) had to
+ * violently warp away from an unrelated frame (a hand holding a product) in
+ * ~1-2s, and the scripted payoff (train bursting through the wall) never
+ * actually played out — confirmed by pulling two real production outputs
+ * and inspecting them frame-by-frame.
+ *
+ * Fix: entries with mode "r2v" now render on the "high_quality" tier, whose
+ * model (dreamina-seedance-2-0-mini, see lib/config.ts BYTEPLUS_MODEL_HQ)
+ * is the one that actually supports the reference_image role (see useR2v in
+ * lib/providers/stubs/byteplus.ts) — the reference frame becomes an
+ * identity/style nudge instead of a locked first frame, so the AI can
+ * actually stage the described scene and execute the full beat. This forces
+ * generateAudio=true (assertVisualSpec ties it to tier), but that embedded
+ * audio is already discarded during stitching in worker.ts in favor of the
+ * external Gemini VO — paying for audio we don't use is an acceptable cost
+ * to fix broken visuals, not a bug. mode "i2v" entries (the 3 product-first-
+ * frame ones: sapuan-dua-dunia, shockwave, rakit-sendiri) keep the original
+ * silent_caption/i2v path — the literal-first-frame behavior is CORRECT for
+ * those, since they're written to open on the product exactly as supplied.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -58,13 +65,17 @@ export function buildHookVisualSpec(input: {
 }): VisualSpec {
   const prompt = fillPersonInPrompt(input.hookEntry.prompt, input.avatarDescription);
   const negativePrompt = `${MANDATORY_NEGATIVE_PROMPT}, ${input.hookEntry.negative}`;
+  const isR2v = input.hookEntry.mode === "r2v";
   return {
     jobId: input.jobId,
     width: 720,
     height: 1280,
     shots: [{ index: 0, durationSec: input.durationSec, prompt, imageRefPath: input.imageRefPath }],
     negativePrompt,
-    qualityTier: "silent_caption",
-    generateAudio: false,
+    qualityTier: isR2v ? "high_quality" : "silent_caption",
+    generateAudio: isR2v,
+    // >=1 entry (even the same path repeated) is what flips the provider
+    // into r2v — see useR2v in lib/providers/stubs/byteplus.ts.
+    extraReferenceImagePaths: isR2v ? [input.imageRefPath] : undefined,
   };
 }
