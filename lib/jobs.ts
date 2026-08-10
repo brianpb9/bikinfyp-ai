@@ -58,7 +58,7 @@ export function failJob(job: JobRow, reason: string): void {
     .run(timestamp, timestamp, job.id).changes;
   if (!changed) return;
   audit("worker", "job.transition", "jobs", job.id, { to: "FAILED", at: timestamp, reason });
-  const refunded = releaseCredits(job.user_id, job.id);
+  const refunded = releaseCredits(job.org_id ? { userId: job.user_id, orgId: job.org_id } : job.user_id, job.id);
   transition(job.id, "REFUNDED", { refunded_credits: refunded });
 }
 

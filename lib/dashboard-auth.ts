@@ -7,11 +7,12 @@
 // query-nya murah, single-row indexed lookup, bukan tempat optimasi).
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { verifyToken, cookieName } from "./auth";
+import { verifyToken, cookieName, getAuthUser } from "./auth";
 import { getDb, type UserRow } from "./db";
 import { postgresRuntimeEnabled, smokeGetUser } from "./postgres/smoke-runtime";
 import { getUserOrgs, type OrgMembership } from "./org";
 import { pgGetUserOrgs } from "./postgres/org";
+import { ERR } from "./errors";
 
 export interface DashboardContext {
   user: UserRow;
@@ -41,6 +42,20 @@ export async function requireOrgContext(): Promise<DashboardContext> {
   const memberships = postgresRuntimeEnabled() ? await pgGetUserOrgs(user.id) : getUserOrgs(user.id);
   const membership = memberships[0];
   if (!membership) redirect("/dashboard/request-access");
+
+  return { user, membership };
+}
+
+/** Sama seperti requireOrgContext tapi untuk API route (Request, bukan
+ * next/headers) — melempar ERR (JSON 401/400 lewat errorResponse), bukan
+ * redirect. Dipakai app/api/dashboard/**. */
+export async function requireOrgContextApi(req: Request): Promise<DashboardContext> {
+  const user = await getAuthUser(req);
+  if (!user) throw ERR.UNAUTHORIZED();
+
+  const memberships = postgresRuntimeEnabled() ? await pgGetUserOrgs(user.id) : getUserOrgs(user.id);
+  const membership = memberships[0];
+  if (!membership) throw ERR.BAD_REQUEST("Akun ini belum terhubung ke organisasi.", "User has no org membership.");
 
   return { user, membership };
 }

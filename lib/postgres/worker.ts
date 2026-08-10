@@ -40,7 +40,7 @@ function assertUrl() { if (!/^postgres(?:ql)?:\/\//i.test(config.databaseUrl)) t
 function deterministicFixtureAllowed() { return process.env.RACUN_WORKER_DETERMINISTIC === "1" && process.env.NODE_ENV !== "production"; }
 
 type WorkerRow = {
-  id: string; user_id: string; product_id: string; persona_id: string | null; script_id: string;
+  id: string; user_id: string; org_id: string | null; product_id: string; persona_id: string | null; script_id: string;
   format: string; quality_tier: string; duration_s: number; state: string;
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
   script_hook_level: string | null;
@@ -55,6 +55,9 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
   const jobs = new PgJobsRepository(databaseUrl, { stateTimeoutsMin: config.stateTimeoutsMin });
   const pool = new Pool({ connectionString: databaseUrl });
   try {
+    // j.* sudah bawa org_id (kolom asli tabel jobs, M1) — WorkerRow.org_id
+    // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
+    // (pool org untuk job dari dashboard bulk-generate, user biasa untuk retail).
     const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level,
       p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url,
       p.promo_price_before_idr, p.promo_ends_at, p.promo_stock_left,
@@ -82,7 +85,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
       await runProviderPipeline(row, jobs, pool);
     }
     const credits = new PgCreditPaymentRepository(databaseUrl);
-    try { await credits.captureCredits(row.user_id, jobId); } finally { await credits.close(); }
+    try { await credits.captureCredits(row.org_id ? { userId: row.user_id, orgId: row.org_id } : row.user_id, jobId); } finally { await credits.close(); }
   } catch (error) {
     if (options.retryViaQueue) throw error;
     await jobs.failJob(jobId, error instanceof Error ? error.message : String(error));

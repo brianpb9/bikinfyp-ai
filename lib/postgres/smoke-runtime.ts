@@ -47,14 +47,20 @@ export async function smokeGetUser(userId: string): Promise<UserRow | null> {
   const pool = new Pool({ connectionString: url() });
   try { return (await pool.query<UserRow>("SELECT * FROM users WHERE id=$1", [userId])).rows[0] ?? null; } finally { await pool.end(); }
 }
+// org_id IS NULL (F-ENT-01 fix, 2026-08-11): SEBELUM filter ini, seorang
+// user yang JUGA owner sebuah org (credit_ledger.user_id org SELALU diisi
+// user_id owner, lihat admin-grant-org-credit.mjs) akan melihat saldo
+// retailnya ketambahan saldo org — WHERE user_id=? polos ikut menjumlahkan
+// baris org itu. Baris retail lama tidak pernah punya org_id jadi filter
+// ini transparan buat semua user yang bukan owner org manapun.
 export async function pgGetBalance(userId: string): Promise<number> {
   const pool = new Pool({ connectionString: url() });
-  try { return Number((await pool.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId])).rows[0]?.balance ?? 0); }
+  try { return Number((await pool.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1 AND org_id IS NULL", [userId])).rows[0]?.balance ?? 0); }
   finally { await pool.end(); }
 }
 export async function pgGetLedger(userId: string, limit = 50) {
   const pool = new Pool({ connectionString: url() });
-  try { return (await pool.query("SELECT * FROM credit_ledger WHERE user_id=$1 ORDER BY created_at DESC,id DESC LIMIT $2", [userId, limit])).rows; }
+  try { return (await pool.query("SELECT * FROM credit_ledger WHERE user_id=$1 AND org_id IS NULL ORDER BY created_at DESC,id DESC LIMIT $2", [userId, limit])).rows; }
   finally { await pool.end(); }
 }
 export async function pgCreditTopup(input: { userId: string; packageId: string; gateway: string; gatewayRef: string; rawPayload?: unknown }) {

@@ -27,42 +27,62 @@ export function tierPriceIdr(tier: QualityTier, durationSec = 15): number {
   return Math.round(base * (durationSec / 15));
 }
 
-export function getBalance(userId: string): number {
-  const row = getDb()
-    .prepare("SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE user_id = ?")
-    .get(userId) as { balance: number };
+// CreditOwner (F-ENT-01, 2026-08-11): siapa yang dompetnya dipakai. Retail
+// tetap string userId polos -> saldo = SUM(delta) WHERE user_id=? AND
+// org_id IS NULL (baris retail lama TIDAK PERNAH punya org_id, jadi filter
+// ini transparan buat mereka). {orgId} = saldo bersama org, delta ditagih
+// ke wallet org tapi user_id TETAP diisi (acting member, jejak audit siapa
+// yang belanja) — lihat migrations/postgres/0013_org_id_columns.sql.
+//
+// Bug nyata yang ditemukan & diperbaiki sekalian (2026-08-11): SEBELUM fix
+// ini, getBalance/getLedger tanpa filter org_id IS NULL berarti user yang
+// juga jadi owner org (co. Brian setelah admin-provision-org.mjs) akan
+// melihat saldo retail-nya KETAMBAHAN saldo org — credit_ledger.user_id
+// org selalu diisi = user_id owner (lihat admin-grant-org-credit.mjs),
+// jadi WHERE user_id=? polos ikut menjumlahkan baris org itu.
+export type CreditOwner = { userId: string; orgId?: string };
+function resolveOwner(owner: string | CreditOwner): CreditOwner {
+  return typeof owner === "string" ? { userId: owner } : owner;
+}
+
+export function getBalance(owner: string | CreditOwner): number {
+  const { userId, orgId } = resolveOwner(owner);
+  const row = orgId
+    ? (getDb().prepare("SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE org_id = ?").get(orgId) as { balance: number })
+    : (getDb().prepare("SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE user_id = ? AND org_id IS NULL").get(userId) as { balance: number });
   return row.balance; // rupiah
 }
 
-function ledger(userId: string, delta: number, type: string, jobId: string | null, paymentId: string | null) {
+function ledger(owner: string | CreditOwner, delta: number, type: string, jobId: string | null, paymentId: string | null) {
+  const { userId, orgId } = resolveOwner(owner);
   getDb()
     .prepare(
-      "INSERT INTO credit_ledger (id, user_id, delta, type, job_id, payment_id, created_at) VALUES (?,?,?,?,?,?,?)"
+      "INSERT INTO credit_ledger (id, user_id, org_id, delta, type, job_id, payment_id, created_at) VALUES (?,?,?,?,?,?,?,?)"
     )
-    .run(uuid(), userId, delta, type, jobId, paymentId, now());
+    .run(uuid(), userId, orgId ?? null, delta, type, jobId, paymentId, now());
 }
 
 /** Hold sebesar harga tier saat job dibuat. Return false bila saldo kurang. */
-export function holdCredits(userId: string, jobId: string, amountIdr: number): boolean {
-  if (getBalance(userId) < amountIdr) return false;
-  ledger(userId, -amountIdr, "hold", jobId, null);
-  audit(userId, "credit.hold", "jobs", jobId, { amount_idr: amountIdr });
+export function holdCredits(owner: string | CreditOwner, jobId: string, amountIdr: number): boolean {
+  if (getBalance(owner) < amountIdr) return false;
+  ledger(owner, -amountIdr, "hold", jobId, null);
+  audit(resolveOwner(owner).userId, "credit.hold", "jobs", jobId, { amount_idr: amountIdr });
   return true;
 }
 
 /** Capture saat QC lulus: hold menjadi final (delta 0 — saldo tetap terpotong oleh hold). Idempoten. */
-export function captureCredits(userId: string, jobId: string): void {
+export function captureCredits(owner: string | CreditOwner, jobId: string): void {
   const db = getDb();
   const existing = db
     .prepare("SELECT id FROM credit_ledger WHERE job_id = ? AND type = 'capture'")
     .get(jobId);
   if (existing) return;
-  ledger(userId, 0, "capture", jobId, null);
-  audit(userId, "credit.capture", "jobs", jobId, {});
+  ledger(owner, 0, "capture", jobId, null);
+  audit(resolveOwner(owner).userId, "credit.capture", "jobs", jobId, {});
 }
 
 /** Release/refund saat job gagal: kembalikan seluruh hold yang belum di-capture. Idempoten. */
-export function releaseCredits(userId: string, jobId: string): number {
+export function releaseCredits(owner: string | CreditOwner, jobId: string): number {
   const db = getDb();
   const already = db
     .prepare("SELECT id FROM credit_ledger WHERE job_id = ? AND type IN ('capture','release')")
@@ -72,15 +92,16 @@ export function releaseCredits(userId: string, jobId: string): number {
     .prepare("SELECT COALESCE(-SUM(delta), 0) AS held FROM credit_ledger WHERE job_id = ? AND type = 'hold'")
     .get(jobId) as { held: number };
   if (held.held <= 0) return 0;
-  ledger(userId, held.held, "release", jobId, null);
-  audit(userId, "credit.release", "jobs", jobId, { amount_idr: held.held });
+  ledger(owner, held.held, "release", jobId, null);
+  audit(resolveOwner(owner).userId, "credit.release", "jobs", jobId, { amount_idr: held.held });
   return held.held;
 }
 
-export function getLedger(userId: string, limit = 50) {
-  return getDb()
-    .prepare("SELECT * FROM credit_ledger WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?")
-    .all(userId, limit);
+export function getLedger(owner: string | CreditOwner, limit = 50) {
+  const { userId, orgId } = resolveOwner(owner);
+  return orgId
+    ? getDb().prepare("SELECT * FROM credit_ledger WHERE org_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?").all(orgId, limit)
+    : getDb().prepare("SELECT * FROM credit_ledger WHERE user_id = ? AND org_id IS NULL ORDER BY created_at DESC, rowid DESC LIMIT ?").all(userId, limit);
 }
 
 /**

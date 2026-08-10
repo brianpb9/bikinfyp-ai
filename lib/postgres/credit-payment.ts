@@ -5,9 +5,12 @@
  */
 import crypto from "node:crypto";
 import { Pool, type PoolClient } from "pg";
-import { TOPUP_PACKAGES } from "../credits";
+import { TOPUP_PACKAGES, type CreditOwner } from "../credits";
 
 type Payment = { id: string; user_id: string; gateway: string; gateway_ref: string; amount_idr: number; credits: number; status: string; raw_payload: string | null; created_at: string };
+function resolveOwner(owner: string | CreditOwner): CreditOwner {
+  return typeof owner === "string" ? { userId: owner } : owner;
+}
 
 export class PgCreditPaymentRepository {
   private readonly pool: Pool;
@@ -23,8 +26,11 @@ export class PgCreditPaymentRepository {
 
   async close(): Promise<void> { await this.pool.end(); }
 
-  async getBalance(userId: string): Promise<number> {
-    const result = await this.pool.query<{ balance: string }>("SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE user_id = $1", [userId]);
+  async getBalance(owner: string | CreditOwner): Promise<number> {
+    const { userId, orgId } = resolveOwner(owner);
+    const result = orgId
+      ? await this.pool.query<{ balance: string }>("SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE org_id = $1", [orgId])
+      : await this.pool.query<{ balance: string }>("SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE user_id = $1 AND org_id IS NULL", [userId]);
     return Number(result.rows[0].balance);
   }
 
@@ -48,42 +54,45 @@ export class PgCreditPaymentRepository {
     });
   }
 
-  /** Holds a balance once per job, serialized per user to prevent overspend. */
-  async holdCredits(userId: string, jobId: string, amountIdr: number): Promise<boolean> {
+  /** Holds a balance once per job, serialized per wallet (org pool if present, else user) to prevent overspend. */
+  async holdCredits(owner: string | CreditOwner, jobId: string, amountIdr: number): Promise<boolean> {
+    const { userId, orgId } = resolveOwner(owner);
     return this.transaction(async (client) => {
-      await this.lockUser(client, userId);
+      await this.lockWallet(client, userId, orgId);
       const previous = await client.query("SELECT id FROM credit_ledger WHERE job_id = $1 AND type = 'hold'", [jobId]);
       if (previous.rowCount) return true;
-      const balance = await this.balanceForUpdate(client, userId);
+      const balance = await this.balanceForUpdate(client, userId, orgId);
       if (balance < amountIdr) return false;
-      await this.ledger(client, userId, -amountIdr, "hold", jobId, null);
-      await this.audit(client, userId, "credit.hold", "jobs", jobId, { amount_idr: amountIdr });
+      await this.ledger(client, userId, orgId, -amountIdr, "hold", jobId, null);
+      await this.audit(client, userId, "credit.hold", "jobs", jobId, { amount_idr: amountIdr, org_id: orgId ?? undefined });
       return true;
     });
   }
 
-  async captureCredits(userId: string, jobId: string): Promise<boolean> {
+  async captureCredits(owner: string | CreditOwner, jobId: string): Promise<boolean> {
+    const { userId, orgId } = resolveOwner(owner);
     return this.transaction(async (client) => {
-      await this.lockUser(client, userId);
+      await this.lockWallet(client, userId, orgId);
       const terminal = await client.query("SELECT id FROM credit_ledger WHERE job_id = $1 AND type IN ('capture','release')", [jobId]);
       if (terminal.rowCount) return false;
       const hold = await client.query("SELECT id FROM credit_ledger WHERE job_id = $1 AND type = 'hold'", [jobId]);
       if (!hold.rowCount) return false;
-      await this.ledger(client, userId, 0, "capture", jobId, null);
+      await this.ledger(client, userId, orgId, 0, "capture", jobId, null);
       await this.audit(client, userId, "credit.capture", "jobs", jobId, {});
       return true;
     });
   }
 
-  async releaseCredits(userId: string, jobId: string): Promise<number> {
+  async releaseCredits(owner: string | CreditOwner, jobId: string): Promise<number> {
+    const { userId, orgId } = resolveOwner(owner);
     return this.transaction(async (client) => {
-      await this.lockUser(client, userId);
+      await this.lockWallet(client, userId, orgId);
       const terminal = await client.query("SELECT id FROM credit_ledger WHERE job_id = $1 AND type IN ('capture','release')", [jobId]);
       if (terminal.rowCount) return 0;
       const held = await client.query<{ held: string }>("SELECT COALESCE(-SUM(delta), 0) AS held FROM credit_ledger WHERE job_id = $1 AND type = 'hold'", [jobId]);
       const amount = Number(held.rows[0].held);
       if (amount <= 0) return 0;
-      await this.ledger(client, userId, amount, "release", jobId, null);
+      await this.ledger(client, userId, orgId, amount, "release", jobId, null);
       await this.audit(client, userId, "credit.release", "jobs", jobId, { amount_idr: amount });
       return amount;
     });
@@ -111,7 +120,7 @@ export class PgCreditPaymentRepository {
         const updated = await client.query<Payment>("UPDATE payments SET status = 'paid', raw_payload = $1 WHERE id = $2 RETURNING *", [JSON.stringify(merged), payment.id]);
         payment = updated.rows[0];
       }
-      await this.ledger(client, input.userId, pkg.priceIdr, "topup", null, payment.id);
+      await this.ledger(client, input.userId, null, pkg.priceIdr, "topup", null, payment.id);
       await this.audit(client, input.userId, "credit.topup", "payments", payment.id, { package_id: input.packageId, amount_idr: pkg.priceIdr, gateway: input.gateway });
       return { duplicated: false, amountIdr: pkg.priceIdr };
     });
@@ -159,8 +168,17 @@ export class PgCreditPaymentRepository {
     }
     throw new Error("Transaksi PostgreSQL habis retry.");
   }
-  private async lockUser(client: PoolClient, userId: string) { await client.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]); }
-  private async balanceForUpdate(client: PoolClient, userId: string): Promise<number> { const row = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE user_id = $1", [userId]); return Number(row.rows[0].balance); }
-  private async ledger(client: PoolClient, userId: string, delta: number, type: string, jobId: string | null, paymentId: string | null) { await client.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", [this.uuid(), userId, delta, type, jobId, paymentId, this.now()]); }
+  /** Serializes wallet spends: an org pool locks its organizations row (shared by every acting member), retail locks the user row. */
+  private async lockWallet(client: PoolClient, userId: string, orgId: string | undefined | null) {
+    if (orgId) await client.query("SELECT id FROM organizations WHERE id = $1 FOR UPDATE", [orgId]);
+    else await client.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]);
+  }
+  private async balanceForUpdate(client: PoolClient, userId: string, orgId: string | undefined | null): Promise<number> {
+    const row = orgId
+      ? await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE org_id = $1", [orgId])
+      : await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta), 0) AS balance FROM credit_ledger WHERE user_id = $1 AND org_id IS NULL", [userId]);
+    return Number(row.rows[0].balance);
+  }
+  private async ledger(client: PoolClient, userId: string, orgId: string | undefined | null, delta: number, type: string, jobId: string | null, paymentId: string | null) { await client.query("INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8)", [this.uuid(), userId, orgId ?? null, delta, type, jobId, paymentId, this.now()]); }
   private async audit(client: PoolClient, actor: string, action: string, entity: string, entityId: string | null, meta: unknown) { await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", [this.uuid(), actor, action, entity, entityId, JSON.stringify(meta), this.now()]); }
 }

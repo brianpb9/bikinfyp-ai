@@ -2,58 +2,14 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { extractFromUrl, canExtract } from "@/lib/extract";
 import { getDb, now, uuid, audit } from "@/lib/db";
-import { config, ensureDirs } from "@/lib/config";
-import { normalizeProductImageBuffer } from "@/lib/product-images";
+import { downloadProductImages } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
-import fs from "node:fs";
-import path from "node:path";
-import { mediaStorage } from "@/lib/storage";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct } from "@/lib/postgres/smoke-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 const FALLBACK_MSG = "Link-nya belum bisa kami baca. Isi manual aja ya, cuma 3 kolom kok.";
-const UA =
-  "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
-
-/** Unduh gambar OG ke storage produk (maks 5, kompresi sisi panjang ≤1600px — BR-01.5).
- *
- * Validasi + kompresi memakai `sharp` (Node murni) — SAMA dengan jalur upload
- * manual di /api/products. Riwayat 2026-08-06: versi lama memakai python3+PIL,
- * yang tidak ada di web service production (Render runtime node), sehingga
- * SEMUA foto dari link dibuang diam-diam ("Foto dari link gagal diunduh")
- * padahal unduhan CDN-nya sukses. Jangan pernah memanggil PIL dari web service
- * — PIL hanya kontrak container worker. */
-async function downloadImages(productId: string, urls: string[]): Promise<string[]> {
-  ensureDirs();
-  const dir = path.join(config.storageDir, "uploads", productId);
-  fs.mkdirSync(dir, { recursive: true });
-  const rels: string[] = [];
-  for (const [i, url] of urls.slice(0, 5).entries()) {
-    try {
-      const res = await fetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) });
-      if (!res.ok) continue;
-      const buf = Buffer.from(await res.arrayBuffer());
-      if (buf.length > 10 * 1024 * 1024) continue;
-      // sharp memverifikasi struktur decoder sekaligus menormalkan ke WebP —
-      // bytes non-gambar (mis. halaman error CDN) gagal decode dan di-skip.
-      // normalizeProductImageBuffer JUGA menaikkan foto <320px (thumbnail toko
-      // kecil) — tanpa ini foto lolos tersimpan tapi ditolak BytePlus saat
-      // render ("expected width >= 300px", insiden production 990a734e).
-      const normalized = await normalizeProductImageBuffer(buf);
-      const rel = path.join("uploads", productId, `${i}.webp`).split(path.sep).join("/");
-      const abs = path.join(config.storageDir, rel);
-      fs.writeFileSync(abs, normalized);
-      await mediaStorage().put(rel, normalized, "image/webp");
-      if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
-      rels.push(rel);
-    } catch {
-      /* gambar gagal diunduh/dibuka — lanjut yang lain (F-01 kasus gagal: minta upload manual) */
-    }
-  }
-  return rels;
-}
 
 // POST /api/products/extract {url} — ekstraksi nyata: OG + JSON-LD harga + unduh foto.
 // Anti-SSRF tetap ketat (lib/url-safety.ts). Rate limit 10/user/15 menit.
@@ -86,7 +42,7 @@ export async function POST(req: Request) {
 
     // Buat produk langsung (form S2 menampilkan kartu konfirmasi untuk diedit user)
     const productId = uuid();
-    const images = result.imageUrls?.length ? await downloadImages(productId, result.imageUrls) : [];
+    const images = result.imageUrls?.length ? await downloadProductImages(productId, result.imageUrls) : [];
     // Harga coret hanya dipakai bila konsisten (> harga jual) — cek ulang di sini
     // karena user bisa mengubah harga di kartu konfirmasi nanti (PATCH memvalidasi lagi).
     const promoBefore =
