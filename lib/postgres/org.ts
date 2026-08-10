@@ -24,6 +24,11 @@ export interface Organization {
   slug: string;
   status: "active" | "suspended";
   created_at: string;
+  website_url: string | null;
+  business_type: string | null;
+  category: string | null;
+  audience: string | null;
+  elevator_pitch: string | null;
 }
 
 export interface OrgMembership {
@@ -54,6 +59,30 @@ export async function pgGetOrgBySlug(slug: string): Promise<Organization | null>
   const pool = new Pool({ connectionString: url() });
   try {
     return (await pool.query<Organization>("SELECT * FROM organizations WHERE slug=$1", [slug])).rows[0] ?? null;
+  } finally {
+    await pool.end();
+  }
+}
+
+export async function pgGetOrgById(orgId: string): Promise<Organization | null> {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    return (await pool.query<Organization>("SELECT * FROM organizations WHERE id=$1", [orgId])).rows[0] ?? null;
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Hasil "analisa bisnis" (M7) — org tanpa profil tetap valid, ini murni tambahan. */
+export async function pgUpdateOrgProfile(orgId: string, profile: {
+  websiteUrl: string; businessType: string; category: string; audience: string; elevatorPitch: string;
+}): Promise<void> {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    await pool.query(
+      "UPDATE organizations SET website_url=$1, business_type=$2, category=$3, audience=$4, elevator_pitch=$5 WHERE id=$6",
+      [profile.websiteUrl, profile.businessType, profile.category, profile.audience, profile.elevatorPitch, orgId]
+    );
   } finally {
     await pool.end();
   }

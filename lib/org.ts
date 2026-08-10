@@ -11,6 +11,11 @@ export interface Organization {
   slug: string;
   status: "active" | "suspended";
   created_at: string;
+  website_url: string | null;
+  business_type: string | null;
+  category: string | null;
+  audience: string | null;
+  elevator_pitch: string | null;
 }
 
 export interface OrgMembership {
@@ -34,6 +39,19 @@ export function getUserOrgs(userId: string): OrgMembership[] {
 
 export function getOrgBySlug(slug: string): Organization | undefined {
   return getDb().prepare("SELECT * FROM organizations WHERE slug = ?").get(slug) as Organization | undefined;
+}
+
+export function getOrgById(orgId: string): Organization | undefined {
+  return getDb().prepare("SELECT * FROM organizations WHERE id = ?").get(orgId) as Organization | undefined;
+}
+
+/** Hasil "analisa bisnis" (M7) — org tanpa profil tetap valid, ini murni tambahan. */
+export function updateOrgProfile(orgId: string, profile: {
+  websiteUrl: string; businessType: string; category: string; audience: string; elevatorPitch: string;
+}): void {
+  getDb()
+    .prepare("UPDATE organizations SET website_url=?, business_type=?, category=?, audience=?, elevator_pitch=? WHERE id=?")
+    .run(profile.websiteUrl, profile.businessType, profile.category, profile.audience, profile.elevatorPitch, orgId);
 }
 
 export function getOrgBalance(orgId: string): number {

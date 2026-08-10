@@ -2,9 +2,10 @@ import Link from "next/link";
 import { ArrowRight, Plus, Sparkles, UserCircle2, Wallet } from "lucide-react";
 import { requireOrgContext } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
-import { getOrgBalance } from "@/lib/org";
-import { pgGetOrgBalance, pgListRecentBulkRuns, type RecentBulkRun } from "@/lib/postgres/org";
+import { getOrgBalance, getOrgById } from "@/lib/org";
+import { pgGetOrgBalance, pgGetOrgById, pgListRecentBulkRuns, type RecentBulkRun } from "@/lib/postgres/org";
 import { rupiah } from "../_components/format";
+import { BusinessAnalysisCard } from "../_components/BusinessAnalysisCard";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ export default async function DashboardHomePage() {
   const balance = postgresRuntimeEnabled()
     ? await pgGetOrgBalance(membership.org_id)
     : getOrgBalance(membership.org_id);
+  const org = postgresRuntimeEnabled() ? await pgGetOrgById(membership.org_id) : getOrgById(membership.org_id);
   // Bulk-generate cuma jalan di runtime Postgres (lihat guard di
   // app/api/dashboard/bulk/route.ts) — dev SQLite selalu kosong di sini.
   const recentRuns: RecentBulkRun[] = postgresRuntimeEnabled() ? await pgListRecentBulkRuns(membership.org_id) : [];
@@ -24,6 +26,11 @@ export default async function DashboardHomePage() {
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-600">{membership.org_name}</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Beranda</h1>
       </div>
+
+      <BusinessAnalysisCard initial={{
+        website_url: org?.website_url ?? null, business_type: org?.business_type ?? null,
+        category: org?.category ?? null, audience: org?.audience ?? null, elevator_pitch: org?.elevator_pitch ?? null,
+      }} />
 
       <section className="grid grid-cols-2 gap-4">
         <div className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">

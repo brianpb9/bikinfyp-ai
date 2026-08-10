@@ -22,7 +22,14 @@ CREATE TABLE IF NOT EXISTS organizations (
   name TEXT NOT NULL,
   slug TEXT UNIQUE NOT NULL,
   status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')),
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  -- Profil bisnis (M7, F-ENT-01): hasil "analisa bisnis" (paste website -> AI
+  -- baca -> auto-isi). Semua nullable — org tanpa profil tetap valid.
+  website_url TEXT,
+  business_type TEXT,
+  category TEXT,
+  audience TEXT,
+  elevator_pitch TEXT
 );
 
 CREATE TABLE IF NOT EXISTS org_members (
