@@ -55,6 +55,25 @@ export const QC_POLICY_BY_FORMAT = {
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
     },
   },
+  // TVC (M9, 2026-08-11): geometri sama seperti talking_head — presenter
+  // terlihat memegang produk, jadi QC-09 (larangan wajah) TIDAK berlaku dan
+  // memang tidak pernah dijalankan untuk format ini. QC-10 justru penting di
+  // sini (brand membayar untuk label produknya benar), tapi tetap boleh skip
+  // kalau produknya memang tanpa token teks merek.
+  //
+  // Ketiadaan entri ini adalah bug yang ketahuan dari render TVC asli
+  // pertama: tanpa kebijakan, resolusi jatuh ke hands_only yang mewajibkan
+  // QC-09 lulus — padahal QC-09 tidak pernah dijalankan untuk presenter —
+  // sehingga job DITOLAK tanpa satu pun check berstatus fail.
+  tvc: {
+    requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08"],
+    permittedSkip: ["QC-01", "QC-06", "QC-10"],
+    skipReason: {
+      "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2) — dimitigasi lewat instruksi jeda/enunciate di prompt.",
+      "QC-06": "N/A: mode bersuara tanpa overlay teks (overlay brand ditambahkan di post, bukan di prompt).",
+      "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
+    },
+  },
   // VO+Foto (v1, 2026-08-03): visual adalah foto produk ASLI di-pan/zoom
   // (bukan video AI-generated), jadi QC-02 (morphing tangan AI) tidak
   // relevan — tidak ada tangan yang di-generate untuk bisa morphing.
@@ -172,8 +191,13 @@ interface ColorSim {
 export const QC03_HUE_FRAC_MIN_TALKING_HEAD = 0.02;
 
 export async function qcProductSimilarity(shotPaths: string[], refImagePath: string, workDir: string, format?: string, labelProven = false): Promise<QcCheck> {
-  const talkingHead = format === "talking_head";
-  const samplePoints = talkingHead ? [0.15, 0.5, 0.85] : [0.5];
+  // tvc ikut kalibrasi talking_head (2026-08-11, ketahuan dari render TVC
+  // asli pertama, job ebb93c4d): geometrinya SAMA — presenter memegang produk
+  // di samping wajah, produk tidak memenuhi frame. Kalibrasi hands_only
+  // (1 titik sampel, ambang 0.10) menolak video TVC yang sehat, persis
+  // insiden production 9ee95693 yang melahirkan pengecualian talking_head.
+  const presenterLed = format === "talking_head" || format === "tvc";
+  const samplePoints = presenterLed ? [0.15, 0.5, 0.85] : [0.5];
   const frames: string[] = [];
   for (let i = 0; i < shotPaths.length; i++) {
     const dur = await probeDurationSec(shotPaths[i]);
@@ -191,8 +215,8 @@ export async function qcProductSimilarity(shotPaths: string[], refImagePath: str
   // ikut terhitung — tak apa (delta intra-shot kecil; ambang 60 tetap longgar).
   const shotMax = Math.max(0, ...data.shot_pairs.map((p) => p.max));
   const fracs = data.signature === null ? null : (data.ref_fractions as number[]);
-  const refFrac = fracs === null ? null : talkingHead ? Math.max(...fracs) : Math.min(...fracs);
-  const hueThreshold = talkingHead ? QC03_HUE_FRAC_MIN_TALKING_HEAD : QC03_HUE_FRAC_MIN;
+  const refFrac = fracs === null ? null : presenterLed ? Math.max(...fracs) : Math.min(...fracs);
+  const hueThreshold = presenterLed ? QC03_HUE_FRAC_MIN_TALKING_HEAD : QC03_HUE_FRAC_MIN;
   const failShot = shotMax > QC03_SHOT_DELTA_MAX;
   // r12 (Brian, video Wardah asli ditolak 2x — fraksi warna kasar terlalu
   // ketat utk produk pucat/kecil di frame ramai walau label & identitas
@@ -211,7 +235,7 @@ export async function qcProductSimilarity(shotPaths: string[], refImagePath: str
       `antar_shot_max=${shotMax} (ambang ${QC03_SHOT_DELTA_MAX}) · ` +
       (refFrac === null
         ? "warna signature referensi tidak terdeteksi (produk polos) — cek referensi di-skip"
-        : `hue_khas_${talkingHead ? "max" : "min"}=${refFrac} (ambang ${hueThreshold}${labelProven && refFrac < hueThreshold ? ", diabaikan — QC-10 sudah buktikan label" : ""})`) +
+        : `hue_khas_${presenterLed ? "max" : "min"}=${refFrac} (ambang ${hueThreshold}${labelProven && refFrac < hueThreshold ? ", diabaikan — QC-10 sudah buktikan label" : ""})`) +
       " — kasar, hanya menangkap penyimpangan total",
   };
 }
@@ -554,7 +578,11 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   let labelFidelityPassed = false;
   if (input.isMockProvider) {
     checks.push({ code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip", detail: "N/A: provider mock (dev/e2e) — konten sintetis tidak punya label produk nyata untuk dibaca." });
-  } else if (input.format === "hands_only" || input.format === "talking_head") {
+  // tvc ikut diperiksa (2026-08-11): TVC justru format yang PALING butuh
+  // label benar — brand membayar untuk identitas produknya. Sebelumnya tvc
+  // tidak masuk daftar, jadi QC-10 tidak pernah jalan, labelFidelityPassed
+  // tetap false, dan QC-03 hard-fail walau labelnya terbaca sempurna.
+  } else if (input.format === "hands_only" || input.format === "talking_head" || input.format === "tvc") {
     try {
       const labelCheck = await qcLabelFidelity(input.filePath, input.productName);
       checks.push(labelCheck);
