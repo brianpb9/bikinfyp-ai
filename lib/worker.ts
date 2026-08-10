@@ -286,6 +286,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         hookFamily: script.hook_family,
         register: script.register,
         productName: product.name,
+        productCategory: product.category,
         priceIdr: product.price_idr,
         renderParams,
         shotPaths: video.assets.map((a) => a.filePath),

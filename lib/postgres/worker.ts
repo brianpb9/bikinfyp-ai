@@ -275,7 +275,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     if (!(await jobs.transition(row.id, "QC_CHECK", { worker: "postgres" }))) return;
     qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
       finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), `Cek ${cartLabel}`, AIGC_WATERMARK_TEXT],
-      hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, priceIdr: row.product_price_idr,
+      hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, productCategory: row.product_category, priceIdr: row.product_price_idr,
       renderParams, shotPaths: video.assets.map((asset) => asset.filePath), refImagePath: primaryRef, format,
       // Mode embedded (semua tier bersuara) TIDAK punya overlay teks lagi
       // (2026-08-07: harga/CTA diucapkan AI, tulisan di layar dihapus) —

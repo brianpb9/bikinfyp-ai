@@ -118,6 +118,8 @@ export interface QcInput {
   refImagePath?: string;
   /** QC-09: format job — hands_only melarang wajah di frame. */
   format?: string;
+  /** QC-10: kategori produk — pakaian tidak punya merek tercetak untuk di-OCR. */
+  productCategory?: string;
   /**
    * Teks overlay yang memang diharapkan terlihat, plus jendela waktunya.
    * Ini terpisah dari `finalTexts`: teks skrip bisa terdengar tanpa selalu
@@ -488,6 +490,23 @@ export async function qcHandMorphing(filePath: string, workDir: string): Promise
 // generik dengan benar sambil MENGGANTI mereknya (kasus food-lokal: pack palsu
 // "Hi Tempura" tetap memuat "tempura"/"seaweed" yang legible). Token merek =
 // token NON-generik; hanya itu yang membuktikan label benar.
+// Kategori PAKAIAN (2026-08-11). QC-10 berdiri di atas satu asumsi: nama
+// merek TERCETAK cukup besar di kemasan/produk sehingga bisa dibaca OCR.
+// Asumsi itu benar untuk botol, tube dan kotak — TIDAK untuk baju: mereknya
+// ada di label jahitan di dalam kerah, yang memang tidak pernah menghadap
+// kamera di video try-on.
+//
+// Akibatnya SETIAP produk fashion gagal QC-10 lalu di-refund walau videonya
+// bagus (dress Shella Saukia gagal 2x; Diario bahkan tidak jadi dirender
+// karena kegagalannya sudah bisa diprediksi). Itu KESALAHAN KATEGORI di
+// pemeriksaannya, bukan cacat video — jadi diperlakukan N/A, pola yang sama
+// dengan QC-09 yang tidak berlaku untuk format berpresenter.
+//
+// Identitas produk pakaian tetap dijaga QC-03: untuk baju, WARNA & bahan
+// justru sinyal identitas yang kuat (kebalikan produk kemasan pucat yang
+// kecil di frame, yang justru mengandalkan teks label).
+const APPAREL_CATEGORIES = new Set(["fashion", "muslim_fashion"]);
+
 const GENERIC_PRODUCT_WORDS = new Set([
   "gamis", "dress", "baju", "kaos", "kemeja", "jaket", "sweater", "hoodie", "celana", "rok",
   "hijab", "kerudung", "jilbab", "scarf", "jubah", "sepatu", "sandal", "tas", "tote", "pouch",
@@ -582,6 +601,11 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // label benar — brand membayar untuk identitas produknya. Sebelumnya tvc
   // tidak masuk daftar, jadi QC-10 tidak pernah jalan, labelFidelityPassed
   // tetap false, dan QC-03 hard-fail walau labelnya terbaca sempurna.
+  } else if (APPAREL_CATEGORIES.has(input.productCategory ?? "")) {
+    checks.push({
+      code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip",
+      detail: `N/A: kategori pakaian (${input.productCategory}) — merek ada di label jahitan, tidak tercetak di produk untuk dibaca OCR. Identitas dijaga QC-03 (warna & bahan).`,
+    });
   } else if (input.format === "hands_only" || input.format === "talking_head" || input.format === "tvc") {
     try {
       const labelCheck = await qcLabelFidelity(input.filePath, input.productName);
