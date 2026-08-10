@@ -21,6 +21,8 @@ export interface PgProductInput {
   promoStockLeft?: number | null;
   /** Non-NULL = dibuat lewat dashboard enterprise/brand (F-ENT-01). */
   orgId?: string | null;
+  /** M8: arahan kreatif bebas dari brand (beda dari productVisualDesc). */
+  brandBrief?: string | null;
 }
 
 export interface PgScriptInput {
@@ -197,15 +199,15 @@ export class PgProductPersonaScriptRepository {
   private async insertProduct(client: PoolClient, userId: string, input: PgProductInput): Promise<ProductRow> {
     const product: ProductRow = {
       id: this.uuid(), user_id: userId, org_id: input.orgId ?? null, source_url: input.sourceUrl ?? null, name: input.name, price_idr: input.priceIdr,
-      category: input.category, product_visual_desc: input.productVisualDesc ?? null, images: JSON.stringify(input.images),
+      category: input.category, product_visual_desc: input.productVisualDesc ?? null, brand_brief: input.brandBrief ?? null, images: JSON.stringify(input.images),
       promo_price_before_idr: input.promoPriceBeforeIdr ?? null, promo_ends_at: input.promoEndsAt ?? null,
       promo_stock_left: input.promoStockLeft ?? null,
       raw_meta: input.rawMeta === undefined || input.rawMeta === null ? null : JSON.stringify(input.rawMeta), created_at: this.now(),
     };
     await client.query(
-      `INSERT INTO products (id, user_id, org_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`,
-      [product.id, product.user_id, product.org_id, product.source_url, product.name, product.price_idr, product.category, product.product_visual_desc, product.images, product.promo_price_before_idr, product.promo_ends_at, product.promo_stock_left, product.raw_meta, product.created_at]
+      `INSERT INTO products (id, user_id, org_id, source_url, name, price_idr, category, product_visual_desc, brand_brief, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
+      [product.id, product.user_id, product.org_id, product.source_url, product.name, product.price_idr, product.category, product.product_visual_desc, product.brand_brief, product.images, product.promo_price_before_idr, product.promo_ends_at, product.promo_stock_left, product.raw_meta, product.created_at]
     );
     return product;
   }

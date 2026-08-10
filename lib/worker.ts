@@ -131,6 +131,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       productName: product.name,
       productCategory: product.category,
       productVisualDesc: product.product_visual_desc,
+      brandBrief: product.brand_brief,
       imageRefPath: primaryRef,
       extraImageRefPaths: extraRefs,
       qualityTier: tier,

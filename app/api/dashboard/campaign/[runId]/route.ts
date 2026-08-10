@@ -13,13 +13,13 @@ type BulkRunJob = {
   video_url: string | null; caption: string | null;
 };
 
-// GET /api/dashboard/bulk/:runId — status satu bulk run, org-scoped (bukan
+// GET /api/dashboard/campaign/:runId — status satu campaign run, org-scoped (bukan
 // per-user) supaya nantinya anggota org lain bisa lihat hasil yang sama
 // (tidak ada RBAC granular di MVP — semua member org lihat semua, sesuai
 // batas M3/M4 yang disetujui). Video hanya disertakan saat job READY.
 export async function GET(req: Request, ctx: { params: Promise<{ runId: string }> }) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard bulk-generate requires Postgres runtime.");
+    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
     const { membership } = await requireOrgContextApi(req);
     const { runId } = await ctx.params;
 
@@ -49,7 +49,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ runId: string }
     }));
 
     return Response.json({
-      bulk_run_id: runId,
+      campaign_run_id: runId,
       jobs,
       ready_count: jobs.filter((j) => j.state === "READY").length,
       failed_count: jobs.filter((j) => j.state === "FAILED" || j.state === "REFUNDED").length,

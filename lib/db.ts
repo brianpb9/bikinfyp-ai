@@ -29,7 +29,7 @@ export function getDb(): Database.Database {
     for (const [table, addCols] of [
       ["credit_ledger", ["org_id TEXT REFERENCES organizations(id)"]],
       ["products", ["org_id TEXT REFERENCES organizations(id)"]],
-      ["jobs", ["org_id TEXT REFERENCES organizations(id)", "bulk_run_id TEXT"]],
+      ["jobs", ["org_id TEXT REFERENCES organizations(id)", "bulk_run_id TEXT", "avatar_custom_desc TEXT"]],
     ] as const) {
       const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
       if (!exists) continue;
@@ -65,6 +65,9 @@ export function getDb(): Database.Database {
     const prodCols = (db.prepare("PRAGMA table_info(products)").all() as { name: string }[]).map((c) => c.name);
     if (!prodCols.includes("product_visual_desc")) {
       db.exec("ALTER TABLE products ADD COLUMN product_visual_desc TEXT");
+    }
+    if (!prodCols.includes("brand_brief")) {
+      db.exec("ALTER TABLE products ADD COLUMN brand_brief TEXT");
     }
     if (!prodCols.includes("promo_price_before_idr")) {
       db.exec("ALTER TABLE products ADD COLUMN promo_price_before_idr INTEGER");
@@ -131,7 +134,7 @@ export function audit(actor: string, action: string, entity: string, entityId: s
 
 // --- Row types ---
 export interface UserRow { id: string; phone: string | null; email: string | null; name: string | null; tier: string; locale: string; created_at: string }
-export interface ProductRow { id: string; user_id: string; org_id?: string | null; source_url: string | null; name: string; price_idr: number; category: string; product_visual_desc?: string | null; images: string; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; raw_meta: string | null; created_at: string }
+export interface ProductRow { id: string; user_id: string; org_id?: string | null; source_url: string | null; name: string; price_idr: number; category: string; product_visual_desc?: string | null; brand_brief?: string | null; images: string; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; raw_meta: string | null; created_at: string }
 export interface PersonaRow { id: string; user_id: string; name: string; creator_category: string; voice_id: string; register: string; created_at: string }
 export interface ScriptRow { id: string; job_id: string | null; product_id: string; hook_family: string; emotion: string; register: string; segments: string; caption: string; hashtags: string; validation_result: string; quality_tier: string; hook_level?: string; approved_by_user_at: string | null; edited_by_user: number; created_at: string }
-export interface JobRow { id: string; user_id: string; org_id: string | null; bulk_run_id: string | null; product_id: string; persona_id: string | null; script_id: string; format: string; quality_tier: string; duration_s: number; state: string; provider_video: string | null; provider_voice: string | null; cost_actual_idr: number; qc_result: string | null; output_url: string | null; qc_retry_count: number; created_at: string; completed_at: string | null; state_changed_at?: string | null }
+export interface JobRow { id: string; user_id: string; org_id: string | null; bulk_run_id: string | null; avatar_custom_desc?: string | null; product_id: string; persona_id: string | null; script_id: string; format: string; quality_tier: string; duration_s: number; state: string; provider_video: string | null; provider_voice: string | null; cost_actual_idr: number; qc_result: string | null; output_url: string | null; qc_retry_count: number; created_at: string; completed_at: string | null; state_changed_at?: string | null }

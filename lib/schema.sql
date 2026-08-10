@@ -90,6 +90,7 @@ CREATE TABLE IF NOT EXISTS products (
   price_idr INTEGER NOT NULL,
   category TEXT NOT NULL,
   product_visual_desc TEXT, -- deskripsi visual produk dari user (konsistensi identitas shot)
+  brand_brief TEXT, -- M8: arahan kreatif bebas dari brand (beda dari visual_desc di atas)
   images TEXT NOT NULL DEFAULT '[]', -- JSON array path relatif storage
   -- Add-on Promo & Urgency (opsional semua; lihat lib/promo.ts):
   promo_price_before_idr INTEGER, -- harga normal sebelum diskon (harga coret)
@@ -136,6 +137,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   user_id TEXT NOT NULL REFERENCES users(id),
   org_id TEXT REFERENCES organizations(id), -- non-NULL = dibuat lewat dashboard enterprise (bulk-generate)
   bulk_run_id TEXT, -- tag N job dari satu submit bulk-generate (bukan tabel baru — cukup ini)
+  avatar_custom_desc TEXT, -- M8: deskripsi avatar upload sendiri (teks hasil Gemini vision, bukan foto)
   product_id TEXT NOT NULL REFERENCES products(id),
   persona_id TEXT REFERENCES personas(id),
   script_id TEXT NOT NULL REFERENCES scripts(id),

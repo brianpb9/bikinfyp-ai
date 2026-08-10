@@ -7,7 +7,7 @@ import { apiFetch, ApiFail } from "../../../../_components/api";
 import { SkeletonCard } from "../../../_components/Skeleton";
 
 type BulkJob = { job_id: string; state: string; product_name: string; cost_idr: number; video_url: string | null; caption: string | null };
-type BulkRunResponse = { bulk_run_id: string; jobs: BulkJob[]; ready_count: number; failed_count: number; total: number };
+type BulkRunResponse = { campaign_run_id: string; jobs: BulkJob[]; ready_count: number; failed_count: number; total: number };
 
 const TERMINAL = new Set(["READY", "FAILED", "REFUNDED"]);
 const POLL_MS = 5000;
@@ -18,7 +18,7 @@ const STATE_LABEL: Record<string, string> = {
   READY: "Siap", FAILED: "Gagal", REFUNDED: "Gagal (kredit dikembalikan)",
 };
 
-// Galeri hasil bulk run (M4, F-ENT-01, polish M5) — polling sederhana tiap
+// Galeri hasil kampanye (M4, F-ENT-01, polish M5, campaign M8) — polling sederhana tiap
 // 5 dtk sampai semua job mencapai state terminal. Sesuai desain: satu
 // bulk_run_id bisa dilihat semua anggota org (lihat komentar org-scoped
 // di route API-nya).
@@ -33,7 +33,7 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
 
     async function poll() {
       try {
-        const res = await apiFetch<BulkRunResponse>(`/api/dashboard/bulk/${runId}`);
+        const res = await apiFetch<BulkRunResponse>(`/api/dashboard/campaign/${runId}`);
         if (stopped) return;
         setData(res);
         setError(null);
@@ -52,10 +52,10 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
   return (
     <div className="space-y-6">
       <div>
-        <Link href="/dashboard/bulk" className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-700">
-          <ArrowLeft size={14} /> Bulk Generate baru
+        <Link href="/dashboard/campaign" className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-700">
+          <ArrowLeft size={14} /> Kampanye baru
         </Link>
-        <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-amber-600">Hasil Bulk Run</p>
+        <p className="mt-2 text-xs font-bold uppercase tracking-[0.14em] text-amber-600">Hasil Kampanye</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">
           {data ? `${data.ready_count} siap / ${data.total} total` : <span className="inline-block h-7 w-48 animate-pulse rounded-lg bg-zinc-200 align-middle" />}
         </h1>

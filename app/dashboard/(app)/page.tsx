@@ -50,16 +50,16 @@ export default async function DashboardHomePage() {
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-sm font-bold text-zinc-900">Bulk run terakhir</h2>
-          <Link href="/dashboard/bulk" className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-700">
-            <Plus size={13} /> Bulk Generate baru
+          <h2 className="text-sm font-bold text-zinc-900">Kampanye terakhir</h2>
+          <Link href="/dashboard/campaign" className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-700">
+            <Plus size={13} /> Kampanye baru
           </Link>
         </div>
         {recentRuns.length === 0 ? (
           <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-zinc-300 bg-white p-8 text-center">
             <Sparkles size={22} className="text-zinc-300" />
-            <p className="text-sm text-zinc-500">Belum ada bulk run.</p>
-            <Link href="/dashboard/bulk" className="inline-flex items-center gap-1 text-sm font-semibold text-amber-600 hover:text-amber-700">
+            <p className="text-sm text-zinc-500">Belum ada kampanye.</p>
+            <Link href="/dashboard/campaign" className="inline-flex items-center gap-1 text-sm font-semibold text-amber-600 hover:text-amber-700">
               Mulai yang pertama <ArrowRight size={14} />
             </Link>
           </div>
@@ -68,7 +68,7 @@ export default async function DashboardHomePage() {
             {recentRuns.map((run) => (
               <li key={run.bulk_run_id}>
                 <Link
-                  href={`/dashboard/bulk/${run.bulk_run_id}`}
+                  href={`/dashboard/campaign/${run.bulk_run_id}`}
                   className="flex items-center justify-between rounded-xl border border-zinc-200 bg-white px-4 py-3 text-sm transition-colors hover:border-amber-400"
                 >
                   <span className="text-zinc-700">{new Date(run.created_at).toLocaleString("id-ID")}</span>

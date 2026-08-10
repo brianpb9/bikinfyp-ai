@@ -14,7 +14,7 @@ import { rupiah } from "./format";
 // usePathname can drive the active state.
 const NAV = [
   { href: "/dashboard", label: "Beranda", icon: Home, disabled: false },
-  { href: "/dashboard/bulk", label: "Bulk Generate", icon: Zap, disabled: false },
+  { href: "/dashboard/campaign", label: "Bikin Video", icon: Zap, disabled: false },
 ] as const;
 
 export function DashboardChrome({

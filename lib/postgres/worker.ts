@@ -44,7 +44,8 @@ type WorkerRow = {
   format: string; quality_tier: string; duration_s: number; state: string;
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
   script_hook_level: string | null;
-  product_name: string; product_category: string; product_visual_desc: string | null; product_images: string; product_price_idr: number;
+  avatar_custom_desc: string | null;
+  product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_images: string; product_price_idr: number;
   promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   product_source_url: string | null;
   creator_category: string | null;
@@ -59,7 +60,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
     // (pool org untuk job dari dashboard bulk-generate, user biasa untuk retail).
     const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level,
-      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url,
+      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url,
       p.promo_price_before_idr, p.promo_ends_at, p.promo_stock_left,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
@@ -133,12 +134,21 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       console.log(`[job ${row.id.slice(0, 8)}] foto referensi aman-orang: ${sanitized.safe.length} dipakai, ${sanitized.cropped} di-crop, ${sanitized.resized} di-upscale (<320px), ${sanitized.dropped} dibuang`);
     }
   }
-  const category = getCreatorCategory(row.creator_category ?? "hijaber")!;
+  const presetCategory = getCreatorCategory(row.creator_category ?? "hijaber")!;
+  // M8: avatar upload sendiri. Yang di-override HANYA deskriptor fisik yang
+  // dipakai prompt shot — voiceName/voiceStyle/negativePrompt tetap dari
+  // preset, karena foto tidak memberi tahu apa pun soal suara. Jujur ke user:
+  // hasilnya "terinspirasi foto", bukan wajah persis (BytePlus menolak foto
+  // wajah asli sebagai referensi, lihat lib/promo/avatar.ts).
+  const customDesc = row.avatar_custom_desc?.trim();
+  const category = customDesc
+    ? { ...presetCategory, promptSeed: customDesc, handsPrompt: customDesc }
+    : presetCategory;
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
   const withAudio = tier !== "silent_caption";
   const format = row.format === "talking_head" || row.format === "vo_broll" ? row.format : "hands_only";
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
-    productCategory: row.product_category, productVisualDesc: row.product_visual_desc, imageRefPath: primaryRef,
+    productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
     extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
     hookLevel: row.script_hook_level === "berani" || row.script_hook_level === "gila" ? row.script_hook_level : "normal" });

@@ -89,7 +89,10 @@ export function pickHookFamilies(
   category: string,
   productId: string,
   level: HookLevel = "normal",
-  priorityOverride?: HookCode[]
+  priorityOverride?: HookCode[],
+  // M8 (dashboard brand): satu produk bisa minta 2-6 variasi sekaligus.
+  // Default 3 = perilaku retail lama persis, tidak berubah.
+  count = 3
 ): HookCode[] {
   const base = level === "normal"
     ? CATEGORY_HOOK_PRIORITY[category] ?? CATEGORY_HOOK_PRIORITY.default
@@ -112,7 +115,7 @@ export function pickHookFamilies(
   const ordered = [...fresh, ...priority.filter((h) => recent.includes(h))];
   const chosen: HookCode[] = [];
   for (const h of ordered) {
-    if (chosen.length >= 3) break;
+    if (chosen.length >= count) break;
     if (!chosen.includes(h)) chosen.push(h);
   }
   return chosen;
@@ -250,12 +253,14 @@ export function generateScripts(opts: {
   hookLevel?: HookLevel;
   /** Template Terbukti: keluarga hook pilihan pola pemenang (prioritas utama). */
   hookFamilies?: HookCode[];
+  /** M8: jumlah variasi skrip yang diminta (dashboard brand: 2-6). Default 3 = retail. */
+  count?: number;
 }): GeneratedScript[] {
   const { product, register } = opts;
   const emotion = opts.emotion ?? "senang";
   const tier = opts.qualityTier ?? "silent_caption";
   const durationSec = opts.durationSec ?? 15;
-  const families = pickHookFamilies(product.category, product.id, opts.hookLevel ?? "normal", opts.hookFamilies);
+  const families = pickHookFamilies(product.category, product.id, opts.hookLevel ?? "normal", opts.hookFamilies, opts.count ?? 3);
   return families.map((f) => generateOne(product, register, emotion, f, tier, durationSec));
 }
 

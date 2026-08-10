@@ -38,6 +38,8 @@ export interface ShotPlanInput {
   productCategory: string;
   /** Deskripsi visual produk dari user (opsional) — memperkuat konsistensi identitas. */
   productVisualDesc?: string | null;
+  /** M8 (dashboard brand): arahan kreatif bebas dari brand, disuntik ke tiap shot. */
+  brandBrief?: string | null;
   imageRefPath: string; // foto produk asli (absolut)
   /** Foto produk ke-2..5 (absolut) — referensi identitas tambahan untuk model
    * yang mendukung r2v (Seedance 2.0 / tier bersuara). Lihat VisualSpec. */
@@ -168,6 +170,15 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     ? `The product is ${input.productVisualDesc.trim()}. `
     : "";
 
+  // M8: arahan kreatif brand. Dipotong 400 char — ini teks bebas dari user,
+  // brief kepanjangan bisa menenggelamkan instruksi shot kita sendiri di
+  // prompt (model memberi bobot pada keseluruhan teks, bukan cuma bagian
+  // akhir). Ditaruh SETELAH instruksi teknis supaya tidak menimpa aturan
+  // framing/identitas produk yang sudah terbukti.
+  const brandBrief = input.brandBrief?.trim()
+    ? `Brand direction: ${input.brandBrief.trim().slice(0, 400)}. `
+    : "";
+
   // Dialog per shot (tier bersuara): 1 shot (Wajah AI 15 dtk) = seluruh skrip
   // dalam satu tarikan; 2 shot = [hook+demo] lalu [cta] (perilaku lama, tak
   // berubah). >=3 shot (45 dtk) = 1 segmen penuh per shot — pas karena tiap
@@ -250,7 +261,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // (pan foto, tanpa model video) tidak punya jalur ini.
     const crazyOpener =
       input.hookLevel === "gila" && isFirst && format !== "vo_broll" ? CRAZY_OPENER[format] : "";
-    const base = `${framing}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${beat}`;
+    const base = `${framing}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };

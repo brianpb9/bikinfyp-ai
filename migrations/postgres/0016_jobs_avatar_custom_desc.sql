@@ -1,0 +1,11 @@
+-- Avatar upload sendiri untuk dashboard brand (F-ENT-01 M8, 2026-08-11).
+-- Brand boleh pakai wajah/model mereka sendiri, bukan cuma 11 persona preset.
+--
+-- Yang disimpan adalah DESKRIPSI TEKS hasil Gemini vision, BUKAN fotonya —
+-- BytePlus menolak semua gambar referensi berwajah manusia realistis di
+-- SEMUA mode (terbukti 2026-08-10, lihat lib/promo/avatar.ts). Jadi foto
+-- dibaca jadi ciri fisik, lalu teks itu yang dipakai text-to-video. Hasilnya
+-- "terinspirasi dari foto", bukan wajah persis — dan itu harus jujur di UI.
+--
+-- NULL = pakai persona preset dari jobs.persona_id (perilaku lama, retail).
+ALTER TABLE jobs ADD COLUMN avatar_custom_desc TEXT;

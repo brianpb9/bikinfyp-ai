@@ -13,10 +13,18 @@
  * jadi 4.5 & 4.6 digabung satu level supaya jadi 5 level bersih, tiap level
  * 2-3 pilihan asli — bukan dipaksa kosong/tunggal.
  *   Level 1 (4.0): sapuan-dua-dunia, angkot-semua-pegang
- *   Level 2 (4.3): mati-lampu, dunia-ngebut
+ *   Level 2 (4.3): mati-lampu, dunia-ngebut, unboxing-reaksi*
  *   Level 3 (4.5-4.6): shockwave, rakit-sendiri, jatuh-dari-langit
  *   Level 4 (4.7): produk-raksasa, ojol-tembus-tembok
  *   Level 5 (4.8): pasar-beku, krl-ruang-tamu
+ *
+ * (*) unboxing-reaksi DITAMBAHKAN 2026-08-11 atas permintaan langsung Brian
+ * (referensi: utas @mightyking "I generated 20 unboxing UGC clips"). Ide ini
+ * TIDAK ikut gelombang penilaian 30-ide di atas — skornya belum pernah
+ * dinilai. Ditaruh di level 2 karena Brian menyebut levelnya eksplisit, dan
+ * intensitasnya memang cocok: ada beat emosional, tapi tidak melanggar
+ * fisika seperti level 4-5. Precedent sama seperti 5 persona pria di
+ * lib/personas.ts (testScore null, diaktifkan atas permintaan eksplisit).
  *
  * {{PERSON}} = placeholder diganti deskripsi avatar (preset atau upload
  * sendiri via Gemini vision, lihat lib/promo/avatar.ts) pada ide yang
@@ -114,6 +122,43 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
       "FRAME: the product sits beside the person in the calm glow of the phone screen, centered and in sharp " +
       "focus, the dark room and dark neighbourhood around it.",
     negative: "no product glowing by itself, no product lighting the whole room, no lightning, no fire, no candles, no distorted faces, no text on screen",
+  },
+  {
+    // Ditambahkan 2026-08-11 (Brian) — BELUM lewat penilaian rasa formal,
+    // lihat catatan (*) di header file. Satu-satunya hook di pustaka ini
+    // yang "biasa saja" secara fisika: kekuatannya di REAKSI, bukan di
+    // kejadian mustahil — sengaja, karena unboxing adalah format UGC paling
+    // terbukti di TikTok Shop dan brand butuh versi yang terasa autentik.
+    id: "unboxing-reaksi",
+    title: "Unboxing, reaksi jujur",
+    score: 4.3,
+    intensity: 2,
+    mode: "r2v",
+    hasPerson: true,
+    durationSec: 9,
+    prompt:
+      "Vertical handheld selfie-style phone shot, chest-up framing, slight natural sway, as if the phone is " +
+      "propped up on a table. An ordinary Indonesian home room in the afternoon: plain painted wall, soft " +
+      "daylight from a window off to one side, a little everyday clutter. {{PERSON}} sits behind a table with " +
+      "a plain unbranded brown cardboard parcel in front of them, still taped shut. Beat 1 (0-1.5s): they look " +
+      "straight into the camera holding the sealed parcel with both hands, shaking it lightly next to their " +
+      "ear, eyebrows raised, curious and playful. Beat 2 (1.5-3.5s): they tear the tape and pull the flaps " +
+      "open. Crumpled paper filler puffs up slightly as the flaps release. The inside of the box is dim and " +
+      "ordinary — no glow, no light coming out of it. Beat 3 (3.5-5.5s): they look down into the open box and " +
+      "their expression changes to genuine surprise — eyes widening, mouth opening, a small involuntary laugh, " +
+      "one hand coming up to cover their mouth for a moment. Beat 4 (5.5-7.5s): both hands reach in and lift " +
+      "THE PRODUCT from the reference image out of the box, holding it carefully with two hands, matching the " +
+      "reference image exactly in colour, shape and proportion — do not redesign it. Loose paper filler falls " +
+      "back into the box. Beat 5 (7.5-9s): they bring the product up to chest height, turn it slightly so its " +
+      "front face is square to the camera, and grin. They speak in Indonesian, saying: \"ya ampun, sebagus ini " +
+      "aslinya?\" Natural conversational Indonesian, not a newsreader. Do not speak English. FINAL FRAME: the " +
+      "product is held still with both hands at chest height, front face square to the camera, centered and in " +
+      "sharp focus, filling roughly one third of the frame width, the open cardboard box soft in the " +
+      "foreground below.",
+    negative:
+      "no English speech, no glowing box, no light beams from inside the box, no confetti, no smoke, no " +
+      "sparkles, no branded packaging tape, no text on the box, no different product, no redesigned packaging, " +
+      "no extra hands, no extra fingers, no distorted face, no exaggerated cartoon reaction",
   },
   // --- LEVEL 3 (skor 4.5-4.6) ---
   {
