@@ -229,7 +229,7 @@ function generateOne(
     register,
     quality_tier: tier,
     segments,
-    caption: applyCartLabel(buildCaption({ produk: product.name, proof: ctx.proof, reg, promo }), cartLabel),
+    caption: applyCartLabel(buildCaption({ produk: product.name, proof: ctx.proof, reg, promo, hookFamily: family, kategori: product.category }), cartLabel),
     hashtags: buildHashtags(product.category),
     validation,
   };
