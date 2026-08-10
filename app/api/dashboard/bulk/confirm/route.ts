@@ -7,10 +7,10 @@ import { validateScript } from "@/lib/script-engine/validator";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { tierPriceIdr } from "@/lib/credits";
 import { enqueueJob } from "@/lib/job-queue";
+import { getCreatorCategory } from "@/lib/personas";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
-import { postgresRuntimeEnabled, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
-import { BULK_FORMAT, BULK_TIER, BULK_DURATION_S } from "@/lib/dashboard-bulk-config";
+import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +43,17 @@ export async function POST(req: Request) {
       .slice(0, 10);
     if (items.length === 0) throw ERR.BAD_REQUEST("Tidak ada item untuk di-render.", "No items to confirm.");
 
-    const priceIdr = tierPriceIdr(BULK_TIER, BULK_DURATION_S);
+    // M6: format + avatar dipilih di sini (bukan fase generate — script
+    // generation tidak butuh keduanya). tier & durasi TIDAK diambil dari
+    // body — diturunkan dari skrip yang sudah tersimpan (otoritatif, tidak
+    // bisa dipalsukan client) persis seperti /api/jobs retail.
+    const format = body.format === "talking_head" ? "talking_head" : body.format === "hands_only" ? "hands_only" : null;
+    if (!format) throw ERR.BAD_REQUEST("Format tidak dikenal. Pilih Wajah AI atau Tangan + VO.", "Unknown format.");
+    const creatorCategoryId = typeof body.creator_category === "string" ? body.creator_category : "";
+    const category = getCreatorCategory(creatorCategoryId);
+    if (!category || category.status !== "active") throw ERR.BAD_REQUEST("Pilih avatar dulu.", "Unknown or inactive creator category.");
+    const personaId = (await pgFindOrCreatePersona(user.id, category)).id;
+
     const pool = new Pool({ connectionString: config.databaseUrl });
     const jobsRepo = new PgJobsRepository(config.databaseUrl);
     const creditsRepo = new PgCreditPaymentRepository(config.databaseUrl);
@@ -62,10 +72,20 @@ export async function POST(req: Request) {
         }
 
         const segments = JSON.parse(script.segments) as SegmentDraft[];
+        // Tier & durasi diturunkan dari skrip tersimpan (otoritatif) — sama
+        // seperti app/api/jobs/route.ts memverifikasi scriptDurationSec vs
+        // durationS, bukan dipercaya dari body request.
+        const tier = script.quality_tier as "silent_caption" | "high_quality" | "super_hq";
+        const durationS = Math.max(...segments.map((s) => s.end));
+        if (format === "talking_head" && durationS !== 15) {
+          results.push({ status: "failed", ...item, reason: "Wajah AI cuma tersedia untuk video 15 detik — skrip ini dibuat untuk durasi lain." });
+          continue;
+        }
+        const priceIdr = tierPriceIdr(tier, durationS);
+
         const validation = validateScript(
           { hook_family: script.hook_family, register: script.register, segments, productName: product.name,
-            priceIdr: product.price_idr, promoPriceBeforeIdr: product.promo_price_before_idr,
-            qualityTier: script.quality_tier as "silent_caption" | "high_quality" | "super_hq" },
+            priceIdr: product.price_idr, promoPriceBeforeIdr: product.promo_price_before_idr, qualityTier: tier },
           "light"
         );
         if (!validation.passed) {
@@ -81,8 +101,8 @@ export async function POST(req: Request) {
           await client.query("BEGIN");
           await client.query(
             `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,product_id,persona_id,script_id,format,quality_tier,duration_s,state,created_at,state_changed_at)
-             VALUES ($1,$2,$3,$4,$5,NULL,$6,$7,$8,$9,'QUEUED',$10,$10)`,
-            [jobId, user.id, membership.org_id, bulkRunId, item.product_id, item.script_id, BULK_FORMAT, BULK_TIER, BULK_DURATION_S, now]
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,'QUEUED',$11,$11)`,
+            [jobId, user.id, membership.org_id, bulkRunId, item.product_id, personaId, item.script_id, format, tier, durationS, now]
           );
           await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId, item.script_id]);
           await client.query(

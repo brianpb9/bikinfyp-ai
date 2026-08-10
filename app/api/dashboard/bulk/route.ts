@@ -6,7 +6,6 @@ import { downloadProductImages } from "@/lib/product-image-download";
 import { generateScripts } from "@/lib/script-engine";
 import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smokeCreateScripts } from "@/lib/postgres/smoke-runtime";
-import { BULK_TIER, BULK_DURATION_S } from "@/lib/dashboard-bulk-config";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,6 +30,13 @@ export async function POST(req: Request) {
     const rawUrls = Array.isArray(body.urls) ? body.urls : [];
     const urls = rawUrls.map((u: unknown) => String(u ?? "").trim()).filter(Boolean).slice(0, MAX_URLS);
     if (urls.length === 0) throw ERR.BAD_REQUEST("Masukkan minimal 1 link produk.", "At least one product URL is required.");
+
+    // M6: toggle tier/durasi (format+avatar dipilih di fase confirm, lihat
+    // .../bulk/confirm/route.ts — script generation tidak butuh keduanya).
+    const tier = body.tier === "super_hq" ? "super_hq" : body.tier === "high_quality" ? "high_quality" : null;
+    if (!tier) throw ERR.BAD_REQUEST("Tier tidak dikenal. Pilih AI Bersuara atau AI Bersuara Pro.", "Unknown quality tier.");
+    const durationSec = [15, 30, 45].includes(Number(body.duration_sec)) ? (Number(body.duration_sec) as 15 | 30 | 45) : null;
+    if (!durationSec) throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Only 15s, 30s, or 45s duration is supported.");
 
     const bulkRunId = crypto.randomUUID();
     const items: BulkGenerateItem[] = [];
@@ -71,7 +77,7 @@ export async function POST(req: Request) {
       const variants = generateScripts({
         product: { id: product.id, name: product.name, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
           promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left },
-        register: "netral", emotion: "senang", qualityTier: BULK_TIER, durationSec: BULK_DURATION_S, hookLevel: "normal",
+        register: "netral", emotion: "senang", qualityTier: tier, durationSec, hookLevel: "normal",
       });
       const chosen = variants.find((v) => v.validation.passed);
       if (!chosen) {
@@ -80,7 +86,7 @@ export async function POST(req: Request) {
       }
       const createdScripts = await smokeCreateScripts(user.id, product.id, [{
         hookFamily: chosen.hook_family, emotion: chosen.emotion, register: chosen.register, segments: chosen.segments,
-        caption: chosen.caption, hashtags: chosen.hashtags, validationResult: chosen.validation, qualityTier: BULK_TIER,
+        caption: chosen.caption, hashtags: chosen.hashtags, validationResult: chosen.validation, qualityTier: tier,
         hookLevel: "normal",
       }]);
       const scriptId = createdScripts[0].id;
