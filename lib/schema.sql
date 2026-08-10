@@ -12,11 +12,41 @@ CREATE TABLE IF NOT EXISTS users (
   created_at TEXT NOT NULL
 );
 
+-- Organisasi (2026-08-11, dashboard enterprise/brand — F-ENT-01): konsep
+-- MINIMAL, aditif murni. org_id di tabel lain SELALU nullable — NULL berarti
+-- retail (perilaku lama, tidak berubah selamanya). role di org_members
+-- HANYA label ("siapa dihubungi"), TIDAK PERNAH dicek untuk otorisasi di MVP
+-- ini — RBAC granular sengaja ditunda ke v2.
+CREATE TABLE IF NOT EXISTS organizations (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  slug TEXT UNIQUE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active','suspended')),
+  created_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS org_members (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL REFERENCES organizations(id),
+  user_id TEXT NOT NULL REFERENCES users(id),
+  role TEXT NOT NULL DEFAULT 'member' CHECK (role IN ('owner','member')),
+  created_at TEXT NOT NULL,
+  UNIQUE (org_id, user_id)
+);
+CREATE INDEX IF NOT EXISTS idx_org_members_org ON org_members(org_id);
+CREATE INDEX IF NOT EXISTS idx_org_members_user ON org_members(user_id);
+
 -- credit_ledger: append-only. delta>0 menambah, delta<0 menahan/memotong.
 -- type: topup | hold | capture | release | bonus
+-- org_id (2026-08-11): wallet terpisah milik organisasi, dipakai dashboard
+-- enterprise. user_id TETAP wajib diisi di baris org (jejak audit "siapa
+-- yang belanja"); saldo org = SUM(delta) WHERE org_id=X, saldo retail tetap
+-- SUM(delta) WHERE user_id=X AND org_id IS NULL — baris retail lama tidak
+-- pernah punya org_id, jadi query lama tetap benar tanpa perubahan.
 CREATE TABLE IF NOT EXISTS credit_ledger (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
+  org_id TEXT REFERENCES organizations(id),
   delta INTEGER NOT NULL,
   type TEXT NOT NULL CHECK (type IN ('topup','hold','capture','release','bonus')),
   job_id TEXT,
@@ -25,6 +55,7 @@ CREATE TABLE IF NOT EXISTS credit_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_ledger_user ON credit_ledger(user_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_job ON credit_ledger(job_id);
+CREATE INDEX IF NOT EXISTS idx_ledger_org ON credit_ledger(org_id, created_at DESC);
 
 -- Saldo = agregat ledger (view, bukan tabel yang di-update)
 CREATE VIEW IF NOT EXISTS v_credit_balance AS
@@ -46,6 +77,7 @@ CREATE TABLE IF NOT EXISTS payments (
 CREATE TABLE IF NOT EXISTS products (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
+  org_id TEXT REFERENCES organizations(id), -- non-NULL = dibuat lewat dashboard enterprise (bulk-generate)
   source_url TEXT,
   name TEXT NOT NULL,
   price_idr INTEGER NOT NULL,
@@ -60,6 +92,7 @@ CREATE TABLE IF NOT EXISTS products (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id);
+CREATE INDEX IF NOT EXISTS idx_products_org ON products(org_id);
 
 CREATE TABLE IF NOT EXISTS personas (
   id TEXT PRIMARY KEY,
@@ -94,6 +127,8 @@ CREATE INDEX IF NOT EXISTS idx_scripts_product ON scripts(product_id);
 CREATE TABLE IF NOT EXISTS jobs (
   id TEXT PRIMARY KEY,
   user_id TEXT NOT NULL REFERENCES users(id),
+  org_id TEXT REFERENCES organizations(id), -- non-NULL = dibuat lewat dashboard enterprise (bulk-generate)
+  bulk_run_id TEXT, -- tag N job dari satu submit bulk-generate (bukan tabel baru — cukup ini)
   product_id TEXT NOT NULL REFERENCES products(id),
   persona_id TEXT REFERENCES personas(id),
   script_id TEXT NOT NULL REFERENCES scripts(id),
@@ -113,6 +148,8 @@ CREATE TABLE IF NOT EXISTS jobs (
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
+CREATE INDEX IF NOT EXISTS idx_jobs_org ON jobs(org_id, state);
+CREATE INDEX IF NOT EXISTS idx_jobs_bulk_run ON jobs(org_id, bulk_run_id);
 
 CREATE TABLE IF NOT EXISTS outputs (
   job_id TEXT PRIMARY KEY REFERENCES jobs(id),
