@@ -13,7 +13,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { config } from "../config";
 import { mediaStorage } from "../storage";
-import { probeDurationSec, probeHasAudioStream, probeHasVideoStream } from "../media/ffmpeg";
+import { runFfmpeg, probeDurationSec, probeHasAudioStream, probeHasVideoStream } from "../media/ffmpeg";
 import { generateVideoWithFailover } from "../providers/registry";
 import { extractReferenceFrame, buildHookVisualSpec } from "./hook-generator";
 import { synthesizeHookVoiceover } from "./voiceover";
@@ -21,6 +21,8 @@ import { stitchClips, type StitchClip } from "./stitch";
 import { PgPromoJobsRepository } from "../postgres/promo-jobs";
 import { PgCreditPaymentRepository } from "../postgres/credit-payment";
 import { computeViralityChecklist } from "../virality-checklist";
+import { HOOK_LIBRARY, getHookById } from "./hook-library";
+import { resolveAvatarDescription } from "./avatar";
 
 const MAX_DURATION_SEC = 60;
 // BytePlus shots run best in roughly this range (SRS: umumnya <=12 dtk/klip);
@@ -74,18 +76,37 @@ export async function processPromoJob(jobId: string): Promise<void> {
     // Reference frame from the FIRST uploaded clip — keeps the hook visually
     // continuous (background/setting) with whatever the video opens into.
     const refFrame = await extractReferenceFrame(uploadedClips[0], workDir);
-    const spec = buildHookVisualSpec({ jobId, imageRefPath: refFrame, durationSec: hookDurationSec });
+    // Toggle "hook normal <-> crazy" (Brian 2026-08-10): job carries the
+    // hook_id picked on the config screen; fall back to a safe default for
+    // jobs from before this field existed (or a bad/removed id).
+    const hookEntry = getHookById(job.hook_id ?? "") ?? HOOK_LIBRARY.find((h) => h.intensity === "medium") ?? HOOK_LIBRARY[0];
+    const avatarDescription = hookEntry.hasPerson
+      ? resolveAvatarDescription({
+          kind: job.avatar_kind === "custom" ? "custom" : "preset",
+          presetId: job.avatar_preset_id ?? undefined,
+          customDescription: job.avatar_custom_description ?? undefined,
+        })
+      : null;
+    const spec = buildHookVisualSpec({ jobId, imageRefPath: refFrame, durationSec: hookDurationSec, hookEntry, avatarDescription });
     const video = await generateVideoWithFailover(spec, workDir);
     const hookClip = video.assets[0];
     if (!hookClip) throw new Error("Provider video tidak menghasilkan klip hook.");
     await repo.addCost(jobId, video.costIdr);
+    // Ide "rakit-sendiri" digenerate maju (ledakan keluar) lalu diputar
+    // mundur di sini supaya jadi efek "produk merakit diri sendiri".
+    let hookClipPath = hookClip.filePath;
+    if (hookEntry.reverse) {
+      const reversedPath = path.join(workDir, "hook_reversed.mp4");
+      await runFfmpeg(["-y", "-v", "error", "-i", hookClipPath, "-vf", "reverse", "-an", reversedPath]);
+      hookClipPath = reversedPath;
+    }
     const hookRel = `promo_jobs/${jobId}/hook.mp4`;
-    await mediaStorage().put(hookRel, fs.readFileSync(hookClip.filePath), "video/mp4");
+    await mediaStorage().put(hookRel, fs.readFileSync(hookClipPath), "video/mp4");
     await repo.setGeneratedShot(jobId, hookRel);
 
     await repo.setState(jobId, "STITCHING");
     const clips: StitchClip[] = [
-      { videoPath: hookClip.filePath, audio: { kind: "file", path: vo.filePath, durationSec: hookDurationSec } },
+      { videoPath: hookClipPath, audio: { kind: "file", path: vo.filePath, durationSec: hookDurationSec } },
       ...uploadedClips.map((videoPath): StitchClip => ({ videoPath, audio: { kind: "embedded" } })),
     ];
     const stitched = await stitchClips({ jobId, workDir, clips });

@@ -21,6 +21,10 @@ export interface PromoJobRow {
   created_at: string;
   completed_at: string | null;
   virality_checklist: string | null; // JSON, raw column
+  hook_id: string | null;
+  avatar_kind: string | null;
+  avatar_preset_id: string | null;
+  avatar_custom_description: string | null;
 }
 
 export interface PromoJob extends Omit<PromoJobRow, "uploaded_clip_urls"> {
@@ -42,15 +46,27 @@ export class PgPromoJobsRepository {
 
   async close() { await this.pool.end(); }
 
-  async create(userId: string, uploadedClipUrls: string[]): Promise<PromoJob> {
+  async create(
+    userId: string,
+    uploadedClipUrls: string[],
+    hookId: string | null,
+    avatar: { kind: "preset" | "custom"; presetId?: string; customDescription?: string } | null
+  ): Promise<PromoJob> {
     if (uploadedClipUrls.length < 1) throw new Error("Minimal 1 klip upload wajib.");
     const id = crypto.randomUUID();
     const createdAt = new Date().toISOString();
+    const avatarKind = avatar?.kind ?? null;
+    const avatarPresetId = avatar?.presetId ?? null;
+    const avatarCustomDescription = avatar?.customDescription ?? null;
     await this.pool.query(
-      "INSERT INTO promo_jobs (id, user_id, state, uploaded_clip_urls, created_at) VALUES ($1,$2,'QUEUED',$3,$4)",
-      [id, userId, JSON.stringify(uploadedClipUrls), createdAt]
+      "INSERT INTO promo_jobs (id, user_id, state, uploaded_clip_urls, created_at, hook_id, avatar_kind, avatar_preset_id, avatar_custom_description) VALUES ($1,$2,'QUEUED',$3,$4,$5,$6,$7,$8)",
+      [id, userId, JSON.stringify(uploadedClipUrls), createdAt, hookId, avatarKind, avatarPresetId, avatarCustomDescription]
     );
-    return { id, user_id: userId, state: "QUEUED", uploadedClipUrls, generated_shot_url: null, output_url: null, error_message: null, cost_actual_idr: 0, created_at: createdAt, completed_at: null, virality_checklist: null };
+    return {
+      id, user_id: userId, state: "QUEUED", uploadedClipUrls, generated_shot_url: null, output_url: null,
+      error_message: null, cost_actual_idr: 0, created_at: createdAt, completed_at: null, virality_checklist: null,
+      hook_id: hookId, avatar_kind: avatarKind, avatar_preset_id: avatarPresetId, avatar_custom_description: avatarCustomDescription,
+    };
   }
 
   async get(id: string, userId: string): Promise<PromoJob | undefined> {

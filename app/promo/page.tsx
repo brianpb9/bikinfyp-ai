@@ -6,11 +6,43 @@ import { apiFetch, ApiFail } from "../_components/api";
 import { PrimaryButton, SecondaryButton, ErrorText, WarnCard } from "../_components/ui";
 import { rupiah } from "../_components/flow";
 
-const MAX_CLIPS = 5;
+// r-single-clip (Brian 2026-08-10): konsepnya "1 hook AI + 1 klip real
+// disambung" (persis viral-hook-test) — dulu 5, tapi multi-klip nggak
+// pernah bagian dari konsep aslinya dan bikin proses lebih berat (nyambung
+// ke insiden OOM worker hari ini).
+const MAX_CLIPS = 1;
 
 type Phase = "idle" | "uploading" | "processing" | "ready" | "error";
 
-// Video Promosi (non-ecommerce): upload klip talking-head sendiri (1-5 klip,
+type HookIntensity = "normal" | "medium" | "crazy";
+
+interface HookMeta {
+  id: string;
+  title: string;
+  intensity: HookIntensity;
+  score: number;
+  has_person: boolean;
+}
+
+const INTENSITY_INFO: Record<HookIntensity, { icon: string; label: string; hint: string }> = {
+  normal: { icon: "✅", label: "Normal", hint: "tenang, paling aman" },
+  medium: { icon: "🔥", label: "Medium", hint: "lebih nendang" },
+  crazy: { icon: "🤪", label: "Gila", hint: "paling nyeleneh, skor tertinggi" },
+};
+
+// AVATAR PRESET (2026-08-10) — sama dengan bank persona e-commerce
+// (lib/personas.ts), tapi Video Promosi belum punya potret still terkurasi
+// sendiri, jadi emoji dulu (pola sama seperti fallback di app/bikin/gaya).
+const AVATAR_PRESETS = [
+  { id: "hijaber", label: "🧕", name: "Hijaber" },
+  { id: "genz", label: "🧑‍🎤", name: "Gen-Z" },
+  { id: "ibu", label: "👩‍🦱", name: "Ibu-ibu" },
+  { id: "chindo", label: "👩🏻", name: "Chindo" },
+  { id: "pria", label: "👨", name: "Pria" },
+  { id: "lokal", label: "👩", name: "Lokal/Pribumi" },
+];
+
+// Video Promosi (non-ecommerce): upload klip talking-head sendiri (1 klip,
 // ada suara) — AI nambahin 1 segmen hook + VO di depan, lalu digabung jadi
 // satu video siap posting. Untuk promosi app/jasa yang tidak punya produk
 // fisik untuk dipegang di kamera (beda dari alur Video Jualan Produk).
@@ -26,9 +58,57 @@ export default function PromoPage() {
   const fileRef = useRef<HTMLInputElement>(null);
   const pollRef = useRef<number | null>(null);
 
+  // --- Toggle hook normal <-> crazy + avatar (Brian 2026-08-10) ---
+  const [hooks, setHooks] = useState<HookMeta[]>([]);
+  const [intensity, setIntensity] = useState<HookIntensity>("medium");
+  const [hookId, setHookId] = useState<string | null>(null);
+  const [avatarKind, setAvatarKind] = useState<"preset" | "custom">("preset");
+  const [avatarPresetId, setAvatarPresetId] = useState("hijaber");
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
+  const [avatarDescribing, setAvatarDescribing] = useState(false);
+  const [avatarDescription, setAvatarDescription] = useState<string | null>(null);
+  const [avatarError, setAvatarError] = useState<string | null>(null);
+  const avatarFileRef = useRef<HTMLInputElement>(null);
+
   useEffect(() => {
     apiFetch<{ promo_price_idr: number }>("/api/meta").then((m) => setPriceIdr(m.promo_price_idr)).catch(() => {});
+    apiFetch<{ hooks: HookMeta[] }>("/api/promo/hooks").then((m) => setHooks(m.hooks)).catch(() => {});
   }, []);
+
+  const hooksForIntensity = hooks.filter((h) => h.intensity === intensity);
+  useEffect(() => {
+    if (hooksForIntensity.length && !hooksForIntensity.some((h) => h.id === hookId)) {
+      setHookId(hooksForIntensity[0].id);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [intensity, hooks]);
+
+  const selectedHook = hooks.find((h) => h.id === hookId) ?? null;
+  const needsAvatar = selectedHook?.has_person ?? true;
+
+  async function pickAvatarPhoto(list: FileList | null) {
+    const file = list?.[0];
+    if (!file) return;
+    setAvatarFile(file);
+    setAvatarPreview(URL.createObjectURL(file));
+    setAvatarDescription(null);
+    setAvatarError(null);
+    setAvatarDescribing(true);
+    try {
+      const fd = new FormData();
+      fd.set("photo", file);
+      const res = await apiFetch<{ description: string }>("/api/promo/avatar/describe", { formData: fd });
+      setAvatarDescription(res.description);
+    } catch (err) {
+      setAvatarError(err instanceof ApiFail ? err.message : "Gagal membaca foto avatar.");
+    } finally {
+      setAvatarDescribing(false);
+    }
+  }
+
+  const avatarReady = avatarKind === "preset" || (avatarKind === "custom" && !!avatarDescription);
+  const configReady = !!hookId && (!needsAvatar || avatarReady);
 
   function stopPoll() {
     if (pollRef.current) window.clearInterval(pollRef.current);
@@ -46,7 +126,7 @@ export default function PromoPage() {
   }
 
   async function submit() {
-    if (files.length < 1) return;
+    if (files.length < 1 || !hookId) return;
     setError(null);
     setNoCredits(false);
     setVideoUrl(null);
@@ -62,7 +142,12 @@ export default function PromoPage() {
       }
       setPhase("processing");
       setStatusText("Bikin video — nambah hook AI + suara, lalu gabung (sekitar 1-2 menit)...");
-      const job = await apiFetch<{ id: string }>("/api/promo/jobs", { json: { uploaded_clip_urls: uploadedClipUrls } });
+      const avatar = needsAvatar
+        ? avatarKind === "preset"
+          ? { kind: "preset", preset_id: avatarPresetId }
+          : { kind: "custom", description: avatarDescription }
+        : undefined;
+      const job = await apiFetch<{ id: string }>("/api/promo/jobs", { json: { uploaded_clip_urls: uploadedClipUrls, hook_id: hookId, avatar } });
       stopPoll();
       pollRef.current = window.setInterval(() => poll(job.id), 3000);
     } catch (err) {
@@ -101,12 +186,138 @@ export default function PromoPage() {
         <p className="mt-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-700">App / Jasa · Tanpa Produk Fisik</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Bikin AI UGC Ads</h1>
         <p className="mt-1 text-sm leading-6 text-zinc-600">
-          Upload 1-{MAX_CLIPS} rekaman kamu sendiri (talking-head, ada suara) — AI tambahin hook pembuka + suara di depan, lalu gabung jadi satu video.
+          Upload 1 rekaman kamu sendiri (talking-head, ada suara) — AI tambahin hook pembuka + suara di depan, lalu gabung jadi satu video.
         </p>
       </div>
 
       {phase !== "ready" && (
         <>
+          <section className="space-y-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Seberapa nyeleneh</p>
+              <h2 className="font-display text-xl font-bold">Level hook</h2>
+            </div>
+            <div className="grid grid-cols-3 gap-2">
+              {(Object.keys(INTENSITY_INFO) as HookIntensity[]).map((lvl) => (
+                <button
+                  key={lvl}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setIntensity(lvl)}
+                  className={`rounded-2xl border-2 p-3 text-center shadow-sm disabled:opacity-50 ${
+                    intensity === lvl ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                  }`}
+                >
+                  <span className="block text-2xl" aria-hidden="true">{INTENSITY_INFO[lvl].icon}</span>
+                  <span className="block text-sm font-bold text-zinc-800">{INTENSITY_INFO[lvl].label}</span>
+                  <span className="block text-[10px] leading-tight text-zinc-500">{INTENSITY_INFO[lvl].hint}</span>
+                </button>
+              ))}
+            </div>
+            {hooksForIntensity.length > 1 && (
+              <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {hooksForIntensity.map((h) => (
+                  <button
+                    key={h.id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setHookId(h.id)}
+                    aria-pressed={hookId === h.id}
+                    className={`shrink-0 snap-start rounded-xl border-2 px-3 py-2 text-left text-xs font-semibold shadow-sm disabled:opacity-50 ${
+                      hookId === h.id ? "border-amber-500 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-700"
+                    }`}
+                  >
+                    {h.title}
+                  </button>
+                ))}
+              </div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Siapa yang tampil</p>
+              <h2 className="font-display text-xl font-bold">Avatar</h2>
+            </div>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setAvatarKind("preset")}
+                className={`rounded-2xl border-2 p-3 text-center text-sm font-bold shadow-sm disabled:opacity-50 ${
+                  avatarKind === "preset" ? "border-amber-500 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-700"
+                }`}
+              >
+                Pilih avatar
+              </button>
+              <button
+                type="button"
+                disabled={busy}
+                onClick={() => setAvatarKind("custom")}
+                className={`rounded-2xl border-2 p-3 text-center text-sm font-bold shadow-sm disabled:opacity-50 ${
+                  avatarKind === "custom" ? "border-amber-500 bg-amber-50 text-amber-800" : "border-zinc-200 bg-white text-zinc-700"
+                }`}
+              >
+                Upload foto sendiri
+              </button>
+            </div>
+
+            {avatarKind === "preset" && (
+              <div className="-mx-4 flex snap-x snap-mandatory gap-2 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {AVATAR_PRESETS.map((a) => (
+                  <button
+                    key={a.id}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setAvatarPresetId(a.id)}
+                    aria-pressed={avatarPresetId === a.id}
+                    className={`flex w-20 shrink-0 snap-start flex-col items-center gap-1 rounded-2xl border-2 py-3 shadow-sm disabled:opacity-50 ${
+                      avatarPresetId === a.id ? "border-amber-500 bg-amber-50" : "border-zinc-200 bg-white"
+                    }`}
+                  >
+                    <span className="text-2xl" aria-hidden="true">{a.label}</span>
+                    <span className="truncate text-[10px] font-semibold text-zinc-600">{a.name}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
+            {avatarKind === "custom" && (
+              <div className="space-y-2">
+                <button
+                  type="button"
+                  onClick={() => avatarFileRef.current?.click()}
+                  disabled={busy || avatarDescribing}
+                  className="flex min-h-[64px] w-full items-center justify-center gap-3 rounded-2xl border-2 border-dashed border-amber-300 bg-amber-50/60 p-3 text-amber-700 disabled:opacity-50"
+                >
+                  {avatarPreview ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={avatarPreview} alt="Foto avatar" className="h-12 w-12 rounded-full object-cover" />
+                  ) : (
+                    <span className="text-2xl" aria-hidden="true">📷</span>
+                  )}
+                  <span className="text-sm font-semibold">
+                    {avatarDescribing ? "Membaca foto..." : avatarFile ? "Ganti foto" : "Upload foto kamu"}
+                  </span>
+                </button>
+                <input
+                  ref={avatarFileRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  hidden
+                  onChange={(e) => { pickAvatarPhoto(e.target.files); e.target.value = ""; }}
+                />
+                <ErrorText message={avatarError} />
+                {avatarDescription && (
+                  <p className="rounded-xl border border-amber-100 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+                    AI akan bikin presenter terinspirasi dari foto ini (bukan wajah persis sama — kebijakan
+                    keamanan konten AI): {avatarDescription}
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+
           <section className="space-y-3">
             {files.length > 0 && (
               <ul className="space-y-2">
@@ -158,7 +369,7 @@ export default function PromoPage() {
             <SecondaryButton href="/kredit?return_to=%2Fpromo">Top-up dulu di sini →</SecondaryButton>
           )}
 
-          <PrimaryButton onClick={submit} disabled={files.length < 1 || busy} big>
+          <PrimaryButton onClick={submit} disabled={files.length < 1 || !configReady || busy} big>
             {busy ? "Sebentar..." : `Bikin Video${priceIdr ? ` · ${rupiah(priceIdr)}` : ""}`}
           </PrimaryButton>
         </>

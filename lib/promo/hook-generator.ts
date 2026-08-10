@@ -5,10 +5,21 @@
  * e-commerce pipeline. This is a NEW, isolated placeholder for the prototype
  * only — nothing in shot-planner.ts is touched or reused.
  *
- * TODO(Brian): PLACEHOLDER_PROMPT below is a minimal stand-in so the
- * upload -> generate -> stitch pipeline can be proven end-to-end. It has not
- * been tuned for quality — replace with real prompt engineering before this
- * goes past Prototype stage.
+ * r-hook-library (Brian 2026-08-10): the single placeholder prompt is
+ * replaced by the curated hook-library.ts (11 ideas, hasil skor Brian
+ * sendiri dari 30 ide). NOTE (i2v-only simplification, disclosed not
+ * hidden): hook-library.ts entries carry a `mode` field ("i2v"/"r2v") ported
+ * from the original standalone experiments, but the promo worker's
+ * "silent_caption" quality tier always resolves to a non-dreamina BytePlus
+ * model (see lib/config.ts BYTEPLUS_MODEL_SILENT) — r2v's reference_image
+ * role only activates for dreamina-seedance-2 models (see useR2v in
+ * lib/providers/stubs/byteplus.ts). Switching tier to unlock r2v would force
+ * generateAudio=true (assertVisualSpec), colliding with this pipeline's
+ * silent-hook + external-VO design. So every entry renders i2v for now
+ * (image = literal first frame) — still uses the exact same scored prompt
+ * text, just without the r2v camera-freedom some ideas were tuned with.
+ * Proper r2v support needs its own model-selection plumbing, out of scope
+ * for this wiring pass.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -16,14 +27,7 @@ import { runFfmpeg, probeDurationSec } from "../media/ffmpeg";
 import { MANDATORY_NEGATIVE_PROMPT } from "../config/compliance";
 import { normalizeProductImageBuffer } from "../product-images";
 import type { VisualSpec } from "../providers/types";
-
-const PLACEHOLDER_PROMPT =
-  "Hands and forearms only, face and body NOT visible, cropped below shoulders, close-up POV " +
-  "hands-only shot. Hands gesture openly and expressively as if explaining something exciting, " +
-  "natural phone camera movement, casual well-lit indoor setting, energetic but natural pacing.";
-
-const PLACEHOLDER_NEGATIVE =
-  `${MANDATORY_NEGATIVE_PROMPT}, no face, no visible face, no head in frame, no person facing camera, no product`;
+import { fillPersonInPrompt, type HookLibraryEntry } from "./hook-library";
 
 /** Ambil frame terakhir dari klip upload user sebagai image reference — supaya
  * segmen AI-generated nyambung visual (latar/warna) dengan footage asli.
@@ -45,16 +49,22 @@ export async function extractReferenceFrame(clipPath: string, outDir: string): P
   return framePath;
 }
 
-export function buildHookVisualSpec(input: { jobId: string; imageRefPath: string; durationSec: number }): VisualSpec {
+export function buildHookVisualSpec(input: {
+  jobId: string;
+  imageRefPath: string;
+  durationSec: number;
+  hookEntry: HookLibraryEntry;
+  avatarDescription: string | null;
+}): VisualSpec {
+  const prompt = fillPersonInPrompt(input.hookEntry.prompt, input.avatarDescription);
+  const negativePrompt = `${MANDATORY_NEGATIVE_PROMPT}, ${input.hookEntry.negative}`;
   return {
     jobId: input.jobId,
     width: 720,
     height: 1280,
-    shots: [{ index: 0, durationSec: input.durationSec, prompt: PLACEHOLDER_PROMPT, imageRefPath: input.imageRefPath }],
-    negativePrompt: PLACEHOLDER_NEGATIVE,
+    shots: [{ index: 0, durationSec: input.durationSec, prompt, imageRefPath: input.imageRefPath }],
+    negativePrompt,
     qualityTier: "silent_caption",
     generateAudio: false,
   };
 }
-
-export { PLACEHOLDER_PROMPT };
