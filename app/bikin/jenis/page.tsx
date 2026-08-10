@@ -49,7 +49,8 @@ export default function PilihJenisPage() {
       </div>
 
       <p className="text-center text-xs text-zinc-500">
-        Bingung? Kalau produkmu bisa dipegang tangan, pilih <b>AI UGC Affiliate</b>.
+        Bingung? Cuma ada <b>foto produk</b> (belum syuting)? Pilih <b>AI UGC Affiliate</b> — AI yang syuting semuanya.
+        Udah ada <b>rekaman sendiri</b>? Pilih <b>AI UGC Ads</b>.
       </p>
     </main>
   );
