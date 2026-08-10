@@ -71,6 +71,31 @@ export async function enqueueJob(jobId: string): Promise<void> {
   await inline.enqueueInlineJob(jobId);
 }
 
+/** Enqueue ulang job yang SUDAH pernah jalan (lanjut setelah brand menyetujui
+ * scene, atau setelah minta generate ulang — M11).
+ *
+ * enqueueJob() TIDAK bisa dipakai di sini: BullMQ men-dedupe berdasarkan
+ * job-id, dan record job lama masih ada sampai removeOnComplete kedaluwarsa
+ * (24 jam). add() dengan id yang sama akan DIABAIKAN diam-diam — job tidak
+ * pernah dilanjutkan dan brand menunggu selamanya tanpa error apa pun.
+ * Karena itu id BullMQ-nya unik per percobaan; payload {jobId} tetap sama,
+ * dan itulah yang dibaca worker (scripts/worker.ts: job.data.jobId). */
+export async function enqueueJobResume(jobId: string, reason: string): Promise<void> {
+  if (process.env.RACUN_WORKER_DISABLED === "1") return;
+  if (queueMode() === "redis") {
+    await getRedisJobQueue().add("render", { jobId }, {
+      jobId: `${jobId}:${reason}:${Date.now()}`,
+      attempts: 3,
+      backoff: { type: "exponential", delay: 1_000 },
+      removeOnComplete: { age: 86_400, count: 1_000 },
+      removeOnFail: { age: 7 * 86_400, count: 5_000 },
+    });
+    return;
+  }
+  const inline = await import("./worker");
+  await inline.enqueueInlineJob(jobId);
+}
+
 /** Test/lifecycle helper: closes the producer's Redis connection. */
 export async function closeRedisJobQueue(): Promise<void> {
   if (redisQueue) await redisQueue.close();

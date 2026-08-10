@@ -12,7 +12,7 @@ import { releaseCredits } from "./credits";
 import { config } from "./config";
 
 export const JOB_STATES = [
-  "DRAFT", "QUEUED", "GENERATING_VISUAL", "GENERATING_VOICE", "COMPOSITING",
+  "DRAFT", "QUEUED", "GENERATING_VISUAL", "AWAITING_APPROVAL", "GENERATING_VOICE", "COMPOSITING",
   "QC_CHECK", "LABELING", "READY", "FAILED", "REFUNDED",
 ] as const;
 export type JobState = (typeof JOB_STATES)[number];
@@ -73,6 +73,9 @@ export function sweepStaleJobs(): number {
     .all() as (JobRow & { state_changed_at: string | null })[];
   let swept = 0;
   for (const job of active) {
+    // AWAITING_APPROVAL menunggu MANUSIA (brand bisa baru buka besok pagi) —
+    // jangan pernah di-sweep sebagai "macet".
+    if (job.state === "AWAITING_APPROVAL") continue;
     const limitMin = config.stateTimeoutsMin[job.state] ?? 90;
     const changedAt = new Date(job.state_changed_at ?? job.created_at).getTime();
     if (Date.now() - changedAt > limitMin * 60_000) {

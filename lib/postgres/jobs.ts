@@ -73,8 +73,11 @@ export class PgJobsRepository {
     });
   }
 
+  /** AWAITING_APPROVAL sengaja dikecualikan: job itu menunggu MANUSIA
+   * (brand review scene), bukan macet — men-sweep-nya akan me-refund job
+   * yang sebenarnya sehat. */
   async sweepStaleJobs(referenceNow = new Date(this.now()).getTime()): Promise<number> {
-    const active = await this.pool.query<PgJob>("SELECT id,user_id,org_id,state,created_at,state_changed_at,completed_at,cost_actual_idr,provider_video,provider_voice,output_url FROM jobs WHERE state NOT IN ('READY','FAILED','REFUNDED')");
+    const active = await this.pool.query<PgJob>("SELECT id,user_id,org_id,state,created_at,state_changed_at,completed_at,cost_actual_idr,provider_video,provider_voice,output_url FROM jobs WHERE state NOT IN ('READY','FAILED','REFUNDED','AWAITING_APPROVAL')");
     let swept = 0;
     for (const job of active.rows) {
       const changed = new Date(job.state_changed_at ?? job.created_at).getTime();

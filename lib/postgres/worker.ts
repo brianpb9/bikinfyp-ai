@@ -31,6 +31,7 @@ import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
 import { MAX_IMAGES } from "../product-images";
 import { personSafeReferencePhotos } from "../media/person-safe-refs";
+import { loadJobShots, materializeJobShots, persistJobShots } from "./job-shots";
 import { PgCreditPaymentRepository } from "./credit-payment";
 import { PgJobsRepository } from "./jobs";
 
@@ -45,6 +46,8 @@ type WorkerRow = {
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
   script_hook_level: string | null;
   avatar_custom_desc: string | null;
+  requires_approval: boolean;
+  approved_at: string | null;
   product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_images: string; product_price_idr: number;
   promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   product_source_url: string | null;
@@ -157,11 +160,43 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // over between and no cost beyond the VO synthesis below.
   // r13: retry lewat provider MAHAL kalau klip upaya sebelumnya masih valid
   // di disk (lihat resume-clips.ts) — menghemat ~Rp8-37rb per retry transien.
+  // M11 (gerbang review scene): job dashboard brand berhenti setelah visual
+  // jadi, menunggu brand menyetujui tiap scene. Klip yang sudah ada ditarik
+  // balik dari storage durable DULU supaya tidak digenerate (dan dibayar)
+  // ulang — disk lokal worker sudah lama hilang saat brand akhirnya membuka
+  // dashboard. Scene yang diminta ganti digenerate satu per satu, bukan
+  // seluruh job, supaya scene yang sudah disetujui tidak ikut berubah.
+  if (row.requires_approval) {
+    const restored = await materializeJobShots(pool, row.id, workDir);
+    if (restored) console.log(`[job ${row.id.slice(0, 8)}] review: ${restored} klip ditarik dari storage`);
+    for (const shot of (await loadJobShots(pool, row.id)).filter((s) => s.regen_requested)) {
+      if (shot.idx >= spec.shots.length) continue;
+      const tmpDir = path.join(workDir, `regen-${shot.idx}`);
+      fs.mkdirSync(tmpDir, { recursive: true });
+      const single = await generateVideoWithFailover({ ...spec, shots: [spec.shots[shot.idx]] }, tmpDir);
+      await jobs.addCost(row.id, single.costIdr);
+      fs.copyFileSync(single.assets[0].filePath, path.join(workDir, `shot${shot.idx}.mp4`));
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      console.log(`[job ${row.id.slice(0, 8)}] scene ${shot.idx + 1} digenerate ulang atas permintaan brand`);
+    }
+  }
+
   const reused = format === "vo_broll" ? null : await findReusableClips(workDir, spec);
   if (reused) console.log(`[job ${row.id.slice(0, 8)}] resume: ${reused.assets.length} klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi`);
   const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir));
   await jobs.setProviders(row.id, video.providerName);
   await jobs.addCost(row.id, video.costIdr);
+
+  // M11: berhenti di sini untuk job brand yang belum disetujui. Suara,
+  // compositing dan QC BELUM jalan — brand menilai gambar & pesan dulu.
+  if (row.requires_approval && !row.approved_at) {
+    await persistJobShots(pool, row.id, video.assets.map((asset, i) => ({
+      idx: i, prompt: spec.shots[i]?.prompt ?? "", filePath: asset.filePath, durationSec: asset.durationSec,
+    })));
+    if (!(await jobs.transition(row.id, "AWAITING_APPROVAL", { worker: "postgres", scenes: video.assets.length }))) return;
+    console.log(`[job ${row.id.slice(0, 8)}] menunggu persetujuan brand (${video.assets.length} scene)`);
+    return;
+  }
 
   // r16 (Brian 2026-08-08: "tidak ada lagi foto real produk... di video
   // manapun" — product-proof insert DIHAPUS TOTAL). Video selalu 100%

@@ -29,7 +29,7 @@ export function getDb(): Database.Database {
     for (const [table, addCols] of [
       ["credit_ledger", ["org_id TEXT REFERENCES organizations(id)"]],
       ["products", ["org_id TEXT REFERENCES organizations(id)"]],
-      ["jobs", ["org_id TEXT REFERENCES organizations(id)", "bulk_run_id TEXT", "avatar_custom_desc TEXT"]],
+      ["jobs", ["org_id TEXT REFERENCES organizations(id)", "bulk_run_id TEXT", "avatar_custom_desc TEXT", "requires_approval INTEGER NOT NULL DEFAULT 0", "approved_at TEXT"]],
     ] as const) {
       const exists = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?").get(table);
       if (!exists) continue;

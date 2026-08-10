@@ -2,7 +2,7 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Loader2, VideoOff } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Eye, Loader2, VideoOff } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../../_components/api";
 import { SkeletonCard } from "../../../_components/Skeleton";
 
@@ -10,10 +10,13 @@ type BulkJob = { job_id: string; state: string; product_name: string; cost_idr: 
 type BulkRunResponse = { campaign_run_id: string; jobs: BulkJob[]; ready_count: number; failed_count: number; total: number };
 
 const TERMINAL = new Set(["READY", "FAILED", "REFUNDED"]);
+// AWAITING_APPROVAL bukan terminal, tapi juga TIDAK akan berubah sendiri —
+// polling boleh jalan terus, yang penting kartunya mengajak user bertindak.
+const NEEDS_REVIEW = "AWAITING_APPROVAL";
 const POLL_MS = 5000;
 
 const STATE_LABEL: Record<string, string> = {
-  QUEUED: "Antre", GENERATING_VISUAL: "Bikin visual", GENERATING_VOICE: "Bikin suara",
+  QUEUED: "Antre", GENERATING_VISUAL: "Bikin visual", AWAITING_APPROVAL: "Menunggu review kamu", GENERATING_VOICE: "Bikin suara",
   COMPOSITING: "Menyusun video", QC_CHECK: "Cek kualitas", LABELING: "Finalisasi",
   READY: "Siap", FAILED: "Gagal", REFUNDED: "Gagal (kredit dikembalikan)",
 };
@@ -77,7 +80,15 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
                 {!TERMINAL.has(job.state) && <Loader2 size={13} className="animate-spin text-amber-500" />}
                 {STATE_LABEL[job.state] ?? job.state}
               </p>
-              {job.state === "READY" && job.video_url ? (
+              {job.state === NEEDS_REVIEW ? (
+                <Link
+                  href={`/dashboard/campaign/job/${job.job_id}`}
+                  className="mt-3 flex aspect-[9/16] w-full flex-col items-center justify-center gap-2 rounded-lg border-2 border-dashed border-amber-300 bg-amber-50 text-center text-xs font-semibold text-amber-700 transition-colors hover:bg-amber-100"
+                >
+                  <Eye size={20} />
+                  Tinjau scene
+                </Link>
+              ) : job.state === "READY" && job.video_url ? (
                 <video src={job.video_url} controls className="mt-3 aspect-[9/16] w-full rounded-lg bg-zinc-900 object-cover" />
               ) : (
                 <div className="mt-3 flex aspect-[9/16] w-full flex-col items-center justify-center gap-2 rounded-lg bg-zinc-100 text-xs text-zinc-400">

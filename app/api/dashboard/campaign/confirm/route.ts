@@ -94,8 +94,11 @@ export async function POST(req: Request) {
         try {
           await client.query("BEGIN");
           await client.query(
-            `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,state,created_at,state_changed_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,'QUEUED',$12,$12)`,
+            // requires_approval=TRUE: job dashboard brand SELALU berhenti di
+            // gerbang review scene (M11). Brand menilai gambar & pesan tiap
+            // scene sebelum digabung. Retail tidak pernah menyalakan ini.
+            `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,requires_approval,state,created_at,state_changed_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,'QUEUED',$12,$12)`,
             [jobId, user.id, membership.org_id, runId, avatarCustomDesc, productId, personaId, scriptId, format, tier, durationS, now]
           );
           await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId, scriptId]);

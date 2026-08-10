@@ -64,6 +64,14 @@ async function fileBelongsToUser(relPath: string, userId: string): Promise<boole
         UNION ALL
         SELECT 1 FROM promo_jobs pj CROSS JOIN LATERAL jsonb_array_elements_text(pj.uploaded_clip_urls::jsonb) clip(path)
           WHERE pj.user_id=$2 AND clip.path=$1
+        UNION ALL
+        -- M11: klip & thumbnail per-scene untuk layar review brand. Dicek
+        -- ORG, bukan cuma user: layar review-nya sendiri org-scoped (semua
+        -- anggota org boleh melihat run yang sama), jadi kalau di sini
+        -- user-only, anggota kedua akan melihat gambar rusak semua.
+        SELECT 1 FROM job_shots js JOIN jobs j ON j.id=js.job_id
+          WHERE $1 IN (js.storage_key, js.thumb_key)
+            AND (j.user_id=$2 OR EXISTS (SELECT 1 FROM org_members m WHERE m.org_id=j.org_id AND m.user_id=$2))
         LIMIT 1`, [relPath, userId]);
       return Boolean(result.rowCount);
     } finally { await pool.end(); }
@@ -71,6 +79,10 @@ async function fileBelongsToUser(relPath: string, userId: string): Promise<boole
   const db = getDb();
   const output = db.prepare("SELECT 1 FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.video_url=? AND j.user_id=? LIMIT 1").get(relPath, userId);
   if (output) return true;
+  const shot = db.prepare(
+    "SELECT 1 FROM job_shots js JOIN jobs j ON j.id=js.job_id WHERE (js.storage_key=? OR js.thumb_key=?) AND j.user_id=? LIMIT 1"
+  ).get(relPath, relPath, userId);
+  if (shot) return true;
   const products = db.prepare("SELECT images FROM products WHERE user_id=?").all(userId) as { images: string }[];
   return products.some((product) => {
     try { return (JSON.parse(product.images) as unknown[]).includes(relPath); } catch { return false; }

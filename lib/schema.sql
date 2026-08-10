@@ -138,6 +138,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   org_id TEXT REFERENCES organizations(id), -- non-NULL = dibuat lewat dashboard enterprise (bulk-generate)
   bulk_run_id TEXT, -- tag N job dari satu submit bulk-generate (bukan tabel baru — cukup ini)
   avatar_custom_desc TEXT, -- M8: deskripsi avatar upload sendiri (teks hasil Gemini vision, bukan foto)
+  requires_approval INTEGER NOT NULL DEFAULT 0, -- M11: jeda approval per-scene (dashboard brand saja)
+  approved_at TEXT,
   product_id TEXT NOT NULL REFERENCES products(id),
   persona_id TEXT REFERENCES personas(id),
   script_id TEXT NOT NULL REFERENCES scripts(id),
@@ -159,6 +161,22 @@ CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
 CREATE INDEX IF NOT EXISTS idx_jobs_org ON jobs(org_id, state);
 CREATE INDEX IF NOT EXISTS idx_jobs_bulk_run ON jobs(org_id, bulk_run_id);
+
+-- M11: satu baris per shot, untuk layar review scene brand.
+CREATE TABLE IF NOT EXISTS job_shots (
+  id TEXT PRIMARY KEY,
+  job_id TEXT NOT NULL REFERENCES jobs(id),
+  idx INTEGER NOT NULL,
+  prompt TEXT NOT NULL,
+  storage_key TEXT NOT NULL,
+  thumb_key TEXT,
+  duration_sec REAL NOT NULL,
+  regen_requested INTEGER NOT NULL DEFAULT 0,
+  regen_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL,
+  UNIQUE (job_id, idx)
+);
+CREATE INDEX IF NOT EXISTS idx_job_shots_job ON job_shots(job_id, idx);
 
 CREATE TABLE IF NOT EXISTS outputs (
   job_id TEXT PRIMARY KEY REFERENCES jobs(id),
