@@ -1,14 +1,20 @@
+"use client";
+
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
+import { Home, Zap } from "lucide-react";
 import { rupiah } from "./format";
 
 // Desktop-first shell (F-ENT-01, 2026-08-11) — deliberately NOT app/_components/
 // SiteChrome (that's mobile bottom-tab, max-w-md, wrong context entirely).
 // Visual bar: Higgsfield-style — dark sidebar, clean light content area.
-// M4: Bulk Generate live (F-ENT-01).
+// M5 (visual polish pass): real icon set (lucide-react, not raw Unicode
+// glyphs), active-route highlight, hover transitions — "client" so
+// usePathname can drive the active state.
 const NAV = [
-  { href: "/dashboard", label: "Beranda", icon: "⌂", disabled: false },
-  { href: "/dashboard/bulk", label: "Bulk Generate", icon: "⚡", disabled: false },
+  { href: "/dashboard", label: "Beranda", icon: Home, disabled: false },
+  { href: "/dashboard/bulk", label: "Bulk Generate", icon: Zap, disabled: false },
 ] as const;
 
 export function DashboardChrome({
@@ -22,6 +28,8 @@ export function DashboardChrome({
   userEmail: string | null;
   children: ReactNode;
 }) {
+  const pathname = usePathname();
+
   return (
     <div className="flex min-h-dvh w-full bg-zinc-50 text-zinc-900">
       <aside className="flex w-64 shrink-0 flex-col bg-zinc-950 text-zinc-100">
@@ -35,14 +43,16 @@ export function DashboardChrome({
           <p className="mt-1 truncate text-sm font-semibold text-white">{orgName}</p>
         </div>
         <nav className="flex-1 space-y-1 px-3 py-4">
-          {NAV.map((item) =>
-            item.disabled ? (
+          {NAV.map((item) => {
+            const active = pathname === item.href || (item.href !== "/dashboard" && pathname?.startsWith(item.href));
+            const Icon = item.icon;
+            return item.disabled ? (
               <span
                 key={item.href}
                 className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-600"
                 title="Segera hadir"
               >
-                <span aria-hidden="true">{item.icon}</span>
+                <Icon size={18} strokeWidth={2} aria-hidden="true" />
                 {item.label}
                 <span className="ml-auto rounded-full bg-white/5 px-2 py-0.5 text-[10px] font-semibold text-zinc-500">
                   Segera
@@ -52,13 +62,15 @@ export function DashboardChrome({
               <Link
                 key={item.href}
                 href={item.href}
-                className="flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium text-zinc-200 hover:bg-white/5"
+                className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
+                  active ? "bg-amber-400/10 text-amber-300" : "text-zinc-300 hover:bg-white/5 hover:text-white"
+                }`}
               >
-                <span aria-hidden="true">{item.icon}</span>
+                <Icon size={18} strokeWidth={2} aria-hidden="true" />
                 {item.label}
               </Link>
-            )
-          )}
+            );
+          })}
         </nav>
         <div className="border-t border-white/10 px-5 py-4">
           <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Saldo Org</p>

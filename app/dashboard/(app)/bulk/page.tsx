@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { AlertCircle, CheckCircle2, ImageOff, Loader2, RotateCcw, Sparkles } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../_components/api";
 import { rupiah } from "../../_components/format";
 
@@ -12,9 +13,9 @@ type ReadyItem = {
 type FailedItem = { status: "failed"; url: string; reason: string };
 type BulkItem = ReadyItem | FailedItem;
 
-// Halaman submit bulk-generate (M4, F-ENT-01) — dua fase sesuai gerbang
-// HITL di API: (1) generate & review, (2) satu klik "Setujui Semua" yang
-// benar-benar meng-approve tiap skrip (bukan formalitas UI).
+// Halaman submit bulk-generate (M4, F-ENT-01, polish M5) — dua fase sesuai
+// gerbang HITL di API: (1) generate & review, (2) satu klik "Setujui Semua"
+// yang benar-benar meng-approve tiap skrip (bukan formalitas UI).
 export default function BulkGeneratePage() {
   const router = useRouter();
   const [urlsText, setUrlsText] = useState("");
@@ -71,7 +72,12 @@ export default function BulkGeneratePage() {
         <p className="mt-1 text-sm text-zinc-500">Tempel link produk (satu per baris), AI bikin skrip untuk semua, kamu tinjau &amp; setujui sekali klik.</p>
       </div>
 
-      {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
+      {error && (
+        <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          <AlertCircle size={16} className="mt-0.5 shrink-0" />
+          {error}
+        </div>
+      )}
 
       {phase === "input" && (
         <div className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
@@ -81,13 +87,14 @@ export default function BulkGeneratePage() {
             onChange={(e) => setUrlsText(e.target.value)}
             rows={8}
             placeholder={"https://www.tokopedia.com/toko/produk-a\nhttps://shopee.co.id/produk-b"}
-            className="w-full rounded-xl border border-zinc-300 px-4 py-3 font-mono text-sm text-zinc-900 focus:border-amber-500 focus:outline-none"
+            className="w-full rounded-xl border border-zinc-300 px-4 py-3 font-mono text-sm text-zinc-900 transition-colors focus:border-amber-500 focus:outline-none"
           />
           <button
             onClick={handleGenerate}
             disabled={loading}
-            className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
           >
+            {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
             {loading ? "Memproses..." : "Generate Skrip"}
           </button>
         </div>
@@ -101,37 +108,51 @@ export default function BulkGeneratePage() {
 
           {readyItems.length > 0 && (
             <ul className="space-y-3">
-              {readyItems.map((item) => (
-                <li key={item.script_id} className="flex items-start gap-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-                  <input
-                    type="checkbox"
-                    checked={!excluded.has(item.script_id)}
-                    onChange={(e) => {
-                      const next = new Set(excluded);
-                      if (e.target.checked) next.delete(item.script_id); else next.add(item.script_id);
-                      setExcluded(next);
-                    }}
-                    className="mt-1 h-4 w-4"
-                  />
-                  {item.image_url && (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={item.image_url} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-zinc-900">{item.product_name}</p>
-                    <p className="text-xs text-zinc-500">{rupiah(item.price_idr)} · hook {item.hook_family}</p>
-                    <p className="mt-1 line-clamp-2 text-xs text-zinc-600">{item.caption}</p>
-                  </div>
-                </li>
-              ))}
+              {readyItems.map((item) => {
+                const checked = !excluded.has(item.script_id);
+                return (
+                  <li
+                    key={item.script_id}
+                    className={`flex items-start gap-4 rounded-2xl border bg-white p-4 shadow-sm transition-colors ${checked ? "border-amber-300" : "border-zinc-200 opacity-60"}`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        const next = new Set(excluded);
+                        if (e.target.checked) next.delete(item.script_id); else next.add(item.script_id);
+                        setExcluded(next);
+                      }}
+                      className="mt-1 h-4 w-4 accent-amber-500"
+                    />
+                    {item.image_url ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={item.image_url} alt="" className="h-16 w-16 shrink-0 rounded-lg object-cover" />
+                    ) : (
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-lg bg-zinc-100 text-zinc-300">
+                        <ImageOff size={20} />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="flex items-center gap-1.5 truncate text-sm font-semibold text-zinc-900">
+                        <CheckCircle2 size={14} className="shrink-0 text-emerald-500" />
+                        {item.product_name}
+                      </p>
+                      <p className="text-xs text-zinc-500">{rupiah(item.price_idr)} · hook {item.hook_family}</p>
+                      <p className="mt-1 line-clamp-2 text-xs text-zinc-600">{item.caption}</p>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           )}
 
           {failedItems.length > 0 && (
             <ul className="space-y-2">
               {failedItems.map((item) => (
-                <li key={item.url} className="rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
-                  <span className="font-mono">{item.url}</span> — {item.reason}
+                <li key={item.url} className="flex items-start gap-2 rounded-xl border border-dashed border-zinc-300 bg-zinc-50 px-4 py-3 text-xs text-zinc-500">
+                  <AlertCircle size={14} className="mt-0.5 shrink-0 text-zinc-400" />
+                  <span><span className="font-mono">{item.url}</span> — {item.reason}</span>
                 </li>
               ))}
             </ul>
@@ -141,15 +162,17 @@ export default function BulkGeneratePage() {
             <button
               onClick={handleConfirm}
               disabled={loading || selectedCount === 0}
-              className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 disabled:opacity-50"
+              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
             >
+              {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
               {loading ? "Memulai render..." : `Setujui ${selectedCount} & Mulai Render`}
             </button>
             <button
               onClick={() => { setPhase("input"); setItems([]); setBulkRunId(null); }}
               disabled={loading}
-              className="rounded-xl border border-zinc-300 px-6 py-3 text-sm font-semibold text-zinc-700"
+              className="inline-flex items-center gap-2 rounded-xl border border-zinc-300 px-6 py-3 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50"
             >
+              <RotateCcw size={16} />
               Ulangi
             </button>
           </div>

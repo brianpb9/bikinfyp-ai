@@ -1,4 +1,5 @@
 import { cookies } from "next/headers";
+import { Building2 } from "lucide-react";
 import { verifyToken, cookieName } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { postgresRuntimeEnabled, smokeGetUser } from "@/lib/postgres/smoke-runtime";
@@ -32,6 +33,9 @@ export default async function RequestAccessPage() {
   return (
     <main className="flex min-h-dvh items-center justify-center bg-zinc-950 px-6 text-center text-zinc-100">
       <div className="max-w-sm space-y-4">
+        <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-amber-400">
+          <Building2 size={22} />
+        </div>
         <p className="text-lg font-bold tracking-tight">
           BikinFYP <span className="text-amber-400">Brands</span>
         </p>
