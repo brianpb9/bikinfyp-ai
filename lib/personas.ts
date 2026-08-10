@@ -182,6 +182,97 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
       "Ucapkan sebagai cowok muda Indonesia yang santai dan percaya diri, seperti rekomendasi ke teman, ada jeda natural, tidak buru-buru:",
     negativePrompt: NEG,
   },
+  // Male roster (2026-08-11, Brian: bank cewek ada 5, cowok cuma 1 — nggak
+  // seimbang). Ditambah 5 persona pria baru pakai foto yang sudah dikirim
+  // Brian sendiri (public/avatars/*.png), paralel ke 5 kategori perempuan
+  // (Gen-Z/Bapak.../senior/profesional/lokal). BELUM lewat uji rasa formal
+  // (testScore null) tapi diaktifkan langsung atas permintaan eksplisit
+  // Brian hari ini — sama seperti precedent "ibu" (2026-08-03).
+  {
+    id: "genzpria",
+    name: "Fajar (Gen-Z)",
+    status: "active",
+    testScore: null,
+    suitableFor: ["gadget", "fashion", "food"],
+    promptSeed:
+      "young Indonesian Gen-Z man, light-to-medium warm skin, soft rounded youthful face, textured casual dark hair, relaxed everyday streetwear style, friendly approachable expression, natural phone camera look",
+    handsPrompt:
+      "close-up of a young Indonesian Gen-Z man's hands with light-medium warm skin, casual sleeve, trendy watch, holding the product in a bedroom/dorm setting with string lights, phone camera look",
+    deliveryPrompt:
+      "high-energy playful delivery, quick expressive reactions, animated casual gestures, fast fun TikTok pace",
+    voiceName: "Puck",
+    voiceStyle:
+      "Ucapkan sebagai cowok Gen-Z Indonesia yang santai dan enerjik, kayak ngobrol ke temen nongkrong, ada jeda natural, tidak buru-buru:",
+    negativePrompt: NEG,
+  },
+  {
+    id: "bapak",
+    name: "Pak Danu (Bapak)",
+    status: "active",
+    testScore: null,
+    suitableFor: ["home", "gadget", "default"],
+    promptSeed:
+      "Indonesian father figure, early-to-mid 40s, warm mature features, light stubble, calm reassuring presence, smart-casual style, natural daylight",
+    handsPrompt:
+      "close-up of an Indonesian father's hands with warm medium skin tone, casual button-shirt sleeve, resting on a wooden home table with warm morning window light behind, holding the product naturally, phone camera look",
+    deliveryPrompt:
+      "reassuring fatherly delivery, practical no-nonsense warmth, calm confident pace",
+    voiceName: "Fenrir",
+    voiceStyle:
+      "Ucapkan sebagai bapak muda Indonesia yang hangat dan tenang, praktis dan meyakinkan, ada jeda natural, tidak buru-buru:",
+    negativePrompt: NEG,
+  },
+  {
+    id: "senior",
+    name: "Pak Herman (Senior)",
+    status: "active",
+    testScore: null,
+    suitableFor: ["health", "gadget", "default"],
+    promptSeed:
+      "Indonesian man in his 50s, distinguished greying-at-temples look, warm trustworthy expression, smart casual style, natural daylight",
+    handsPrompt:
+      "close-up of an older Indonesian man's hands with medium skin tone, smart casual sleeve, holding the product naturally on a simple wooden table, phone camera look",
+    deliveryPrompt:
+      "trustworthy senior delivery, unhurried authoritative warmth, steady measured pace",
+    voiceName: "Orus",
+    voiceStyle:
+      "Ucapkan sebagai bapak paruh baya Indonesia yang berwibawa dan hangat, tenang dan meyakinkan, ada jeda natural, tidak buru-buru:",
+    negativePrompt: NEG,
+  },
+  {
+    id: "profesional",
+    name: "Bimo (Profesional)",
+    status: "active",
+    testScore: null,
+    suitableFor: ["gadget", "default", "beauty"],
+    promptSeed:
+      "young Indonesian professional man, neat short hair, clean-shaven, smart formal style (blazer/dress shirt), confident polished presence, studio-clean phone camera look",
+    handsPrompt:
+      "close-up of a young Indonesian professional man's hands with medium skin tone, smart shirt sleeve, holding the product on a clean office desk, phone camera look",
+    deliveryPrompt:
+      "polished confident delivery, articulate measured gestures, professional steady pace",
+    voiceName: "Enceladus",
+    voiceStyle:
+      "Ucapkan sebagai profesional muda Indonesia yang percaya diri dan rapi, jelas dan meyakinkan, ada jeda natural, tidak buru-buru:",
+    negativePrompt: NEG,
+  },
+  {
+    id: "lokalpria",
+    name: "Yoga (Lokal)",
+    status: "active",
+    testScore: null,
+    suitableFor: ["default", "home", "food"],
+    promptSeed:
+      "native Indonesian man, warm medium brown skin (sawo matang), light stubble, approachable everyday features, casual style, natural daylight",
+    handsPrompt:
+      "close-up of a native Indonesian man's hands with warm sawo matang skin tone, casual sleeve, holding the product naturally in an everyday Indonesian home setting, phone camera look",
+    deliveryPrompt:
+      "warm neighborly delivery like chatting with a close friend, easy genuine laugh, relaxed pace",
+    voiceName: "Iapetus",
+    voiceStyle:
+      "Ucapkan sebagai cowok Indonesia yang ramah dan membumi, santai kayak ngobrol sama temen deket, ada jeda natural, tidak buru-buru:",
+    negativePrompt: NEG,
+  },
 ];
 
 export function getCreatorCategory(id: string): CreatorCategory | undefined {

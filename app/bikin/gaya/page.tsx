@@ -63,6 +63,11 @@ const CREATOR_CATS: { id: string; name: string; label: string; note: string; img
   { id: "chindo", name: "Keisha", label: "👩🏻 Chindo", note: "skincare premium", img: "/avatars/keisha.png", active: true, gender: "female" },
   { id: "lokal", name: "Dina", label: "👩 Lokal/Pribumi", note: "cocok semua produk", img: "/avatars/dina.png", active: true, gender: "female" },
   { id: "pria", name: "Raka", label: "👨 Pria", note: "gadget, F&B, produk pria", img: "/avatars/raka.png", active: true, gender: "male" },
+  { id: "genzpria", name: "Fajar", label: "🧑 Gen-Z Pria", note: "gadget, fashion, F&B", img: "/avatars/genzpria.png", active: true, gender: "male" },
+  { id: "bapak", name: "Pak Danu", label: "👨‍🦱 Bapak", note: "rumah tangga, gadget", img: "/avatars/bapak.png", active: true, gender: "male" },
+  { id: "senior", name: "Pak Herman", label: "👨‍🦳 Senior", note: "kesehatan, gadget", img: "/avatars/senior.png", active: true, gender: "male" },
+  { id: "profesional", name: "Bimo", label: "🧑‍💼 Profesional", note: "gadget, formal", img: "/avatars/profesional.png", active: true, gender: "male" },
+  { id: "lokalpria", name: "Yoga", label: "👨 Lokal Pria", note: "cocok semua produk", img: "/avatars/lokalpria.png", active: true, gender: "male" },
   { id: "daerah", name: "Laras", label: "🌾 Daerah", note: "", img: null, active: false, gender: "female" },
 ];
 const GENDER_INFO: Record<AvatarGender, { icon: string; label: string }> = {

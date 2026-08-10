@@ -51,6 +51,11 @@ const AVATAR_PRESETS: { id: string; label: string; name: string; img: string; ge
   { id: "chindo", label: "👩🏻", name: "Chindo", img: "/avatars/keisha.png", gender: "female" },
   { id: "lokal", label: "👩", name: "Lokal/Pribumi", img: "/avatars/dina.png", gender: "female" },
   { id: "pria", label: "👨", name: "Pria", img: "/avatars/raka.png", gender: "male" },
+  { id: "genzpria", label: "🧑", name: "Fajar", img: "/avatars/genzpria.png", gender: "male" },
+  { id: "bapak", label: "👨‍🦱", name: "Pak Danu", img: "/avatars/bapak.png", gender: "male" },
+  { id: "senior", label: "👨‍🦳", name: "Pak Herman", img: "/avatars/senior.png", gender: "male" },
+  { id: "profesional", label: "🧑‍💼", name: "Bimo", img: "/avatars/profesional.png", gender: "male" },
+  { id: "lokalpria", label: "👨", name: "Yoga", img: "/avatars/lokalpria.png", gender: "male" },
 ];
 const GENDER_INFO: Record<AvatarGender, { icon: string; label: string }> = {
   female: { icon: "♀", label: "Female" },
