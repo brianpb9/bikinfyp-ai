@@ -10,9 +10,11 @@
  * been tuned for quality — replace with real prompt engineering before this
  * goes past Prototype stage.
  */
+import fs from "node:fs";
 import path from "node:path";
 import { runFfmpeg, probeDurationSec } from "../media/ffmpeg";
 import { MANDATORY_NEGATIVE_PROMPT } from "../config/compliance";
+import { normalizeProductImageBuffer } from "../product-images";
 import type { VisualSpec } from "../providers/types";
 
 const PLACEHOLDER_PROMPT =
@@ -24,12 +26,22 @@ const PLACEHOLDER_NEGATIVE =
   `${MANDATORY_NEGATIVE_PROMPT}, no face, no visible face, no head in frame, no person facing camera, no product`;
 
 /** Ambil frame terakhir dari klip upload user sebagai image reference — supaya
- * segmen AI-generated nyambung visual (latar/warna) dengan footage asli. */
+ * segmen AI-generated nyambung visual (latar/warna) dengan footage asli.
+ *
+ * r-minref (Brian 2026-08-10, "expected the width to be at least 300px, but
+ * received a 270x478px image" — klip HP Android low-res): BytePlus MENOLAK
+ * gambar referensi < 300px di sisi manapun (masalah sama yang sudah
+ * ditangani utk foto produk ecommerce, lihat MIN_REF_SIDE di
+ * lib/product-images.ts) — frame mentah dari klip upload user TIDAK dijamin
+ * cukup besar, harus lewat normalisasi yang sama sebelum dipakai referensi. */
 export async function extractReferenceFrame(clipPath: string, outDir: string): Promise<string> {
   const durationSec = await probeDurationSec(clipPath);
-  const framePath = path.join(outDir, "ref_frame.jpg");
+  const rawFramePath = path.join(outDir, "ref_frame_raw.jpg");
   const seekAt = Math.max(0, durationSec - 0.2);
-  await runFfmpeg(["-y", "-v", "error", "-ss", seekAt.toFixed(2), "-i", clipPath, "-frames:v", "1", framePath]);
+  await runFfmpeg(["-y", "-v", "error", "-ss", seekAt.toFixed(2), "-i", clipPath, "-frames:v", "1", rawFramePath]);
+  const normalized = await normalizeProductImageBuffer(fs.readFileSync(rawFramePath));
+  const framePath = path.join(outDir, "ref_frame.webp");
+  fs.writeFileSync(framePath, normalized);
   return framePath;
 }
 
