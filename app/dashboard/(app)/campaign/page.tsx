@@ -12,7 +12,7 @@ import { Stepper } from "../../_components/Stepper";
 import { AVATAR_PRESETS, type AvatarGender } from "@/lib/avatar-presets";
 
 type Kind = "affiliate" | "ads" | "tvc";
-type Format = "talking_head" | "hands_only";
+type Format = "talking_head" | "hands_only" | "tvc";
 type Tier = "high_quality" | "super_hq";
 type HookLevel = "normal" | "berani" | "gila";
 
@@ -223,14 +223,23 @@ export default function CampaignPage() {
             {([
               { id: "affiliate" as const, icon: ShoppingBag, title: "AI UGC Affiliate", desc: "Jualan produk fisik ke TikTok Shop. AI yang peragakan produkmu — cukup foto.", ready: true },
               { id: "ads" as const, icon: Megaphone, title: "AI UGC Ads", desc: "Promosi app, jasa, atau toko. Rekamanmu sendiri + hook AI pembuka.", ready: false },
-              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Iklan brand sinematik: hook 3 detik, bukti produk, hero shot, packshot.", ready: false },
+              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Iklan brand berstruktur: hook 3 detik, bukti produk, reaksi, hero shot.", ready: true },
             ]).map((k) => {
               const Icon = k.icon;
               const active = kind === k.id;
               return (
                 <button
                   key={k.id}
-                  onClick={() => k.ready && setKind(k.id)}
+                  onClick={() => {
+                    if (!k.ready) return;
+                    setKind(k.id);
+                    // TVC punya peta beat sendiri (15/30 dtk) dan selalu
+                    // dipimpin presenter — jadi format & durasi diselaraskan
+                    // di sini, bukan dibiarkan menghasilkan kombinasi yang
+                    // nanti ditolak server.
+                    if (k.id === "tvc") { setFormat("tvc"); if (durationSec === 45) setDurationSec(30); }
+                    else if (format === "tvc") setFormat("hands_only");
+                  }}
                   disabled={!k.ready}
                   className={`rounded-2xl border-2 bg-white p-5 text-left shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
                     active ? "border-amber-500" : "border-zinc-200 hover:border-zinc-300"
@@ -420,7 +429,10 @@ export default function CampaignPage() {
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Format</p>
               <div className="flex gap-2">
-                {([{ id: "talking_head" as const, label: "Wajah AI" }, { id: "hands_only" as const, label: "Tangan + VO" }]).map((f) => (
+                {(kind === "tvc"
+                  ? [{ id: "tvc" as const, label: "TVC (presenter + struktur iklan)" }]
+                  : [{ id: "talking_head" as const, label: "Wajah AI" }, { id: "hands_only" as const, label: "Tangan + VO" }]
+                ).map((f) => (
                   <button key={f.id}
                     onClick={() => { setFormat(f.id); if (f.id === "talking_head") setDurationSec(15); }}
                     className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${format === f.id ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
@@ -433,10 +445,11 @@ export default function CampaignPage() {
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Durasi</p>
               <div className="flex gap-2">
                 {([15, 30, 45] as const).map((d) => {
-                  const disabled = format === "talking_head" && d !== 15;
+                  const disabled =
+                    (format === "talking_head" && d !== 15) || (format === "tvc" && d === 45);
                   return (
                     <button key={d} onClick={() => !disabled && setDurationSec(d)} disabled={disabled}
-                      title={disabled ? "Wajah AI cuma tersedia 15 detik" : undefined}
+                      title={disabled ? (format === "tvc" ? "TVC tersedia 15 atau 30 detik" : "Wajah AI cuma tersedia 15 detik") : undefined}
                       className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-40 ${durationSec === d ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
                     >{d} dtk</button>
                   );
@@ -455,7 +468,7 @@ export default function CampaignPage() {
               </div>
             </div>
 
-            <div>
+            <div className={kind === "tvc" ? "hidden" : undefined}>
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Level hook</p>
               <div className="flex gap-2">
                 {([

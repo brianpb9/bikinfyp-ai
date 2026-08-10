@@ -45,7 +45,7 @@ export interface ShotPlanInput {
    * yang mendukung r2v (Seedance 2.0 / tier bersuara). Lihat VisualSpec. */
   extraImageRefPaths?: string[];
   qualityTier: QualityTier;
-  format?: "hands_only" | "vo_broll" | "talking_head";
+  format?: "hands_only" | "vo_broll" | "talking_head" | "tvc";
   /** Level hook S3. HANYA "gila" yang mengubah visual: shot 1 dapat pembuka
    * pattern-interrupt PRODUCT-SAFE (gerakan kamera dramatis + produk naik cepat
    * ke tengah frame) — BUKAN adegan bahaya/kacau: aksi ekstrem berisiko kena
@@ -66,6 +66,13 @@ const HANDS_ONLY_NEGATIVE =
 // + estetika candid (2026-08-07, dari referensi visual Brian — grid UGC yang
 // menang terlihat seperti foto iPhone sehari-hari: cahaya jendela natural,
 // warna kalem, setting rumah yang hidup — BUKAN studio terang/polished).
+// TVC (M9): iklan brand yang tetap terasa dibuat kreator sungguhan —
+// referensi Brooks Glycerin Max dari Brian. Bukan studio mengkilap, tapi juga
+// lebih terarah daripada selfie UGC biasa.
+const TVC_FRAMING =
+  "cinematic vertical commercial framing with an authentic hand-held feel, shallow depth of field, " +
+  "natural practical lighting, muted true-to-life colour, real everyday setting rather than a studio";
+
 const TALKING_HEAD_FRAMING =
   "face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
   "front-facing selfie-style angle, natural phone camera look, soft natural indoor daylight, " +
@@ -143,7 +150,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // hands_only tetap minimal 2 shot (variasi visual; tangan tidak punya
   // masalah identitas wajah — perilaku lama teruji di produksi).
   const format = input.format ?? "hands_only";
-  const numShots = format === "talking_head"
+  const numShots = format === "talking_head" || format === "tvc"
     ? Math.max(1, Math.ceil(input.durationSec / 15))
     : Math.max(2, Math.ceil(input.durationSec / 15));
   // r16 (Brian 2026-08-08: "tidak ada lagi foto real produk... di video
@@ -190,6 +197,45 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         ? i === 0 ? [segText("hook")] : i === 1 ? [segText("demo")] : [segText("cta")]
         : i === 0 ? [segText("hook"), segText("demo")] : [segText("cta")];
 
+  // --- TVC (M9, 2026-08-11) ---
+  // Iklan brand berstruktur, bukan UGC mengalir. Peta beat mengikuti dua
+  // sumber yang sepakat: seedance-tvc-director (0-3 hook, lalu world ->
+  // product trigger -> bukti -> pembayaran emosi -> penutup brand) dan
+  // contoh Brooks Glycerin Max dari Brian (hook / reveal / on-use / demo /
+  // reaction / hero+CTA).
+  //
+  // Aturan yang sengaja ditegakkan di sini:
+  // - Frame pertama SUDAH bergerak. Model cenderung memanjangkan "pose diam"
+  //   sampai 2 detik kalau dibiarkan, dan itu membunuh hook.
+  // - Produk tampak depan penuh (packshot) hanya di segmen TERAKHIR — kalau
+  //   muncul lebih awal, model menggabungkannya jadi satu freeze panjang.
+  // - Logo, harga, CTA, endboard TIDAK PERNAH ditulis di prompt: teks di
+  //   dalam video selalu berantakan (riwayat panjang QC-10 kita), jadi itu
+  //   urusan overlay ffmpeg setelah render.
+  const TVC_BEATS_15: string[] = [
+    `0-3s: opens ALREADY mid-action — hands lifting "${input.productName}" into frame in one continuous move, no static hold, no slow push-in. By 3s the product is clearly readable and something has visibly changed`,
+    `3-7s: tight detail pass over the product's material and texture, one single camera move, the label staying square to camera`,
+    `7-11s: the product actually being used — a real physical action with a visible result, not a pose`,
+    `11-15s: the product settles front-facing and centered, held steady and evenly lit for the final beat`,
+  ];
+  const TVC_BEATS_30: string[][] = [
+    [
+      `0-3s: opens ALREADY mid-action — hands lifting "${input.productName}" into frame in one continuous move, no static hold, no slow push-in. By 3s something has visibly changed`,
+      `3-8s: the surrounding scene reads clearly — where this is, who is using it, why now`,
+      `8-15s: the product enters the action: opened, poured, applied or switched on, with visible material feedback`,
+    ],
+    [
+      `15-21s: close observation of the result the product produced — texture, finish or change, held long enough to actually read`,
+      `21-26s: a genuine human reaction to that result, caused by what just happened, not a generic smile`,
+      `26-30s: the product settles front-facing and centered, held steady and evenly lit, filling roughly a third of frame for the final beat`,
+    ],
+  ];
+  const tvcBeat = (i: number): string => {
+    const beats = numShots === 1 ? TVC_BEATS_15 : (TVC_BEATS_30[i] ?? TVC_BEATS_30[TVC_BEATS_30.length - 1]);
+    return `Branded commercial, filmed like an authentic creator ad rather than a studio spot. ${beats.join(". ")}. ` +
+      `One main camera move only. Practical, explicable lighting. ${IDENTITY_INSTRUCTION}`;
+  };
+
   const shots: ShotSpec[] = Array.from({ length: numShots }, (_, i) => {
     const isFirst = i === 0;
     // "Closing beat" cuma dipakai kalau shot terakhir BUKAN shot pertama juga
@@ -201,7 +247,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // FASHION = FULL BODY (2026-08-07, keputusan Brian): baju/hijab tidak bisa
     // dinilai dari close-up dada — presenter berdiri, outfit terlihat utuh.
     const fullBodyFashion = format === "talking_head" && (input.productCategory === "fashion" || input.productCategory === "muslim_fashion");
-    const framing = format === "hands_only"
+    const framing = format === "tvc"
+      ? `${TVC_FRAMING}. `
+      : format === "hands_only"
       ? `${HANDS_ONLY_FRAMING}. `
       : fullBodyFashion
         // r3 (Brian): fashion di DALAM KAMAR — suasana try-on paling relatable.
@@ -212,12 +260,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Wajah AI pakai promptSeed (deskripsi wajah/tipologi) + deliveryPrompt
     // (gaya pembawaan per kategori — genz energik, hijaber kalem anggun, ibu
     // menenangkan) sebagai subjek utama, bukan handsPrompt.
-    const subject = format === "talking_head"
+    const subject = format === "talking_head" || format === "tvc"
       ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
       : input.category.handsPrompt;
     const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
     const beat =
-      format === "talking_head"
+      format === "tvc"
+        ? tvcBeat(i)
+        : format === "talking_head"
         ? lipSyncPresenter
           // Presenter/Lipsync (Super HQ, r7): bicara sungguhan ke kamera —
           // audio embedded asli dipertahankan, jadi sinkron mulut BENAR di
@@ -260,7 +310,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Level gila: pembuka pattern-interrupt HANYA di shot pertama; vo_broll
     // (pan foto, tanpa model video) tidak punya jalur ini.
     const crazyOpener =
-      input.hookLevel === "gila" && isFirst && format !== "vo_broll" ? CRAZY_OPENER[format] : "";
+      input.hookLevel === "gila" && isFirst && (format === "hands_only" || format === "talking_head")
+        ? CRAZY_OPENER[format]
+        : "";
     const base = `${framing}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
 
     if (!withAudio) {

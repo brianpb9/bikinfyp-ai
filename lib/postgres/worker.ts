@@ -149,7 +149,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     : presetCategory;
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
   const withAudio = tier !== "silent_caption";
-  const format = row.format === "talking_head" || row.format === "vo_broll" ? row.format : "hands_only";
+  const format = row.format === "talking_head" || row.format === "vo_broll" || row.format === "tvc" ? row.format : "hands_only";
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
     extraImageRefPaths: extraRefs, qualityTier: tier,

@@ -40,8 +40,9 @@ export async function POST(req: Request) {
       .map((s: unknown) => String(s ?? "")).filter(Boolean).slice(0, MAX_VIDEOS);
     if (scriptIds.length === 0) throw ERR.BAD_REQUEST("Pilih minimal 1 skrip untuk dirender.", "No scripts selected.");
 
-    const format = body.format === "talking_head" ? "talking_head" : body.format === "hands_only" ? "hands_only" : null;
-    if (!format) throw ERR.BAD_REQUEST("Format tidak dikenal. Pilih Wajah AI atau Tangan + VO.", "Unknown format.");
+    const ALLOWED_FORMATS = ["talking_head", "hands_only", "tvc"] as const;
+    const format = ALLOWED_FORMATS.find((f) => f === body.format) ?? null;
+    if (!format) throw ERR.BAD_REQUEST("Format tidak dikenal. Pilih Wajah AI, Tangan + VO, atau TVC.", "Unknown format.");
 
     // Avatar: preset (persona) ATAU deskripsi hasil upload foto sendiri.
     // Persona tetap dibuat walau pakai avatar custom — voice TTS terkunci di
@@ -73,6 +74,13 @@ export async function POST(req: Request) {
         const durationS = Math.max(...segments.map((s) => s.end));
         if (format === "talking_head" && durationS !== 15) {
           results.push({ status: "failed", script_id: scriptId, reason: "Wajah AI cuma tersedia untuk video 15 detik." });
+          continue;
+        }
+        // TVC punya peta beat tetap untuk 15 dtk (4 beat) dan 30 dtk (2 shot
+        // x 3 beat). 45 dtk belum punya peta — tolak daripada meregangkan
+        // struktur 30 dtk dan menghasilkan beat kosong yang mengulang.
+        if (format === "tvc" && durationS !== 15 && durationS !== 30) {
+          results.push({ status: "failed", script_id: scriptId, reason: "TVC tersedia untuk 15 atau 30 detik." });
           continue;
         }
         const priceIdr = tierPriceIdr(tier, durationS);
