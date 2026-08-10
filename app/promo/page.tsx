@@ -12,6 +12,9 @@ import { rupiah } from "../_components/flow";
 // ke insiden OOM worker hari ini).
 const MAX_CLIPS = 1;
 
+// Survives navigating to /kredit and back (see the mount effect below).
+const CONFIG_KEY = "racun.promo.config";
+
 type Phase = "idle" | "uploading" | "processing" | "ready" | "error";
 
 type HookIntensity = 1 | 2 | 3 | 4 | 5;
@@ -96,10 +99,33 @@ export default function PromoPage() {
   const [avatarError, setAvatarError] = useState<string | null>(null);
   const avatarFileRef = useRef<HTMLInputElement>(null);
 
+  // Persist config across a page navigation-and-back (2026-08-11: Brian hit
+  // "Kredit tidak cukup" mid-flow, went to /kredit to top up, came back to a
+  // fully-reset form — silently submitted a DIFFERENT hook than the one he'd
+  // deliberately picked, because the level-5 auto-select defaults to the
+  // first entry in that level, not whatever he'd tapped before). Same
+  // sessionStorage pattern as app/_components/flow.ts's e-commerce flow.
   useEffect(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(CONFIG_KEY) ?? "null");
+      if (saved) {
+        if (typeof saved.pct === "number") setPct(saved.pct);
+        if (typeof saved.hookId === "string") setHookId(saved.hookId);
+        if (saved.avatarKind === "preset" || saved.avatarKind === "custom") setAvatarKind(saved.avatarKind);
+        if (saved.avatarGender === "female" || saved.avatarGender === "male") setAvatarGender(saved.avatarGender);
+        if (typeof saved.avatarPresetId === "string") setAvatarPresetId(saved.avatarPresetId);
+        if (typeof saved.avatarDescription === "string") setAvatarDescription(saved.avatarDescription);
+      }
+    } catch {
+      /* corrupt/old sessionStorage payload — start fresh */
+    }
     apiFetch<{ promo_price_idr: number }>("/api/meta").then((m) => setPriceIdr(m.promo_price_idr)).catch(() => {});
     apiFetch<{ hooks: HookMeta[] }>("/api/promo/hooks").then((m) => setHooks(m.hooks)).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    sessionStorage.setItem(CONFIG_KEY, JSON.stringify({ pct, hookId, avatarKind, avatarGender, avatarPresetId, avatarDescription }));
+  }, [pct, hookId, avatarKind, avatarGender, avatarPresetId, avatarDescription]);
 
   const hooksForIntensity = hooks.filter((h) => h.intensity === intensity);
   useEffect(() => {
