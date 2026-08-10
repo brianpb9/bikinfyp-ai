@@ -15,7 +15,15 @@ export interface StitchResult {
 
 export type ClipAudio =
   | { kind: "embedded" } // use this clip's own audio track (real footage — user uploads)
-  | { kind: "file"; path: string; durationSec: number } // separate audio file (VO mp3 over a silent AI clip)
+  // separate audio file (VO mp3 over a silent AI clip). leadInSec (r-purehook
+  // 2026-08-11): synthesized TTS speaks from sample 0 with no natural
+  // intake-breath pause, unlike a real human VO recording — Brian compared
+  // production output directly against the hand-made viral-hook-test
+  // reference (idea30v2fix) and found the reference has ~0.9s of silence
+  // before the voice starts ("harusnya ga ada tts di awal, pure hook").
+  // Optional delay (seconds) pads that silence back in so the hook's first
+  // beat plays clean before narration starts.
+  | { kind: "file"; path: string; durationSec: number; leadInSec?: number }
   | { kind: "silent"; durationSec: number }; // no audio available for this clip
 
 export interface StitchClip {
@@ -64,7 +72,20 @@ export async function stitchClips(input: { jobId: string; workDir: string; clips
   for (let i = 0; i < n; i++) {
     const idx = audioInputIndex[i];
     const src = idx === null ? `${i}:a` : `${idx}:a`;
-    vChain.push(`[${src}]aresample=24000,aformat=channel_layouts=mono,asetpts=PTS-STARTPTS[a${i}n]`);
+    const clip = clips[i];
+    const leadInSec = clip.audio.kind === "file" ? clip.audio.leadInSec : undefined;
+    if (leadInSec && leadInSec > 0) {
+      // adelay pushes speech later (silence at 0) but also extends the
+      // stream's length by the same amount — atrim back to the clip's
+      // stated duration keeps this segment's audio/video paired lengths
+      // equal for concat (shaves the tail of the VO if it runs long,
+      // rather than letting segments drift out of sync).
+      const ms = Math.round(leadInSec * 1000);
+      const durationSec = clip.audio.kind === "file" ? clip.audio.durationSec : 0;
+      vChain.push(`[${src}]adelay=${ms}|${ms},atrim=0:${durationSec.toFixed(2)},aresample=24000,aformat=channel_layouts=mono,asetpts=PTS-STARTPTS[a${i}n]`);
+    } else {
+      vChain.push(`[${src}]aresample=24000,aformat=channel_layouts=mono,asetpts=PTS-STARTPTS[a${i}n]`);
+    }
   }
   const parts: string[] = [];
   for (let i = 0; i < n; i++) parts.push(`[v${i}sc][a${i}n]`);

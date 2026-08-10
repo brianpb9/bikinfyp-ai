@@ -34,6 +34,12 @@ const MAX_DURATION_SEC = 60;
 // lib/providers/stubs/byteplus.ts.
 const HOOK_DURATION_MIN_SEC = 4;
 const HOOK_DURATION_MAX_SEC = 10;
+// r-purehook (Brian 2026-08-11): synthesized VO spoke from sample 0 with no
+// natural intake-breath pause — compared directly against the hand-made
+// viral-hook-test reference (idea30v2fix), which has ~0.9s of silence
+// before the voice starts. 0.6s is a conservative approximation (leaves
+// more headroom on the shortest 4s hook clips than matching 0.9s exactly).
+const HOOK_VO_LEAD_IN_SEC = 0.6;
 
 export async function processPromoJob(jobId: string): Promise<void> {
   const repo = new PgPromoJobsRepository(config.databaseUrl);
@@ -109,7 +115,7 @@ export async function processPromoJob(jobId: string): Promise<void> {
 
     await repo.setState(jobId, "STITCHING");
     const clips: StitchClip[] = [
-      { videoPath: hookClipPath, audio: { kind: "file", path: vo.filePath, durationSec: hookDurationSec } },
+      { videoPath: hookClipPath, audio: { kind: "file", path: vo.filePath, durationSec: hookDurationSec, leadInSec: HOOK_VO_LEAD_IN_SEC } },
       ...uploadedClips.map((videoPath): StitchClip => ({ videoPath, audio: { kind: "embedded" } })),
     ];
     const stitched = await stitchClips({ jobId, workDir, clips });
