@@ -3,8 +3,9 @@ import { ArrowRight, Eye, Film, Plus, Sparkles, Wallet } from "lucide-react";
 import { requireOrgContext } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getOrgBalance } from "@/lib/org";
-import { pgGetOrgBalance, pgGetOrgVideoStats, pgListRecentBulkRuns, type OrgVideoStats, type RecentBulkRun } from "@/lib/postgres/org";
+import { pgGetOrgBalance, pgGetOrgVideoStats, pgListRecentBulkRuns, pgListRecentVideos, type OrgVideoStats, type RecentBulkRun } from "@/lib/postgres/org";
 import { formatTokens } from "../_components/format";
+import { createSignedUrl } from "@/lib/signed-url";
 import { campaignKindLabel, campaignFormatLabel } from "../_components/campaign-kind";
 import { CampaignThumb } from "../_components/CampaignThumb";
 
@@ -32,6 +33,7 @@ export default async function DashboardHomePage() {
   // Bulk-generate hanya jalan di runtime Postgres (lihat guard di route API-nya)
   // — dev SQLite selalu kosong di sini.
   const recentRuns: RecentBulkRun[] = pg ? await pgListRecentBulkRuns(membership.org_id) : [];
+  const recentVideos = pg ? await pgListRecentVideos(membership.org_id) : [];
 
   return (
     <div className="space-y-8">
@@ -78,6 +80,10 @@ export default async function DashboardHomePage() {
               "3.000.000 tok…" di kartu selebar sepertiga. Angka yang tidak
               terbaca utuh lebih buruk daripada satuan yang tidak diulang. */}
           <p className="mt-2 truncate font-display text-3xl font-bold text-zinc-900">{formatTokens(balance)}</p>
+          {/* Angka token itu satuan internal kami, bukan bahasa brand. Yang
+              mereka putuskan adalah "cukup untuk berapa video lagi" — jadi
+              itu yang ditulis, bukan menyuruh mereka membaginya sendiri. */}
+          <p className="mt-0.5 text-xs text-zinc-500">± {Math.floor(balance / 12_000)} video 15 detik</p>
           <p className="mt-1 text-xs font-semibold text-amber-600">Tambah token</p>
         </Link>
         <Link href="/dashboard/library" className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition-colors hover:border-amber-400">
@@ -100,6 +106,42 @@ export default async function DashboardHomePage() {
           {stats.awaiting_review > 0 && <p className="mt-1 text-xs font-semibold text-amber-700">Tinjau sekarang</p>}
         </Link>
       </section>
+
+      {/* VIDEO TERBARU di atas daftar kampanye. Yang dibeli brand adalah
+          videonya; kampanye cuma map untuk menemukannya. Beranda yang isinya
+          angka dan folder terasa kosong justru karena hasilnya tidak pernah
+          kelihatan tanpa masuk dua halaman lagi. */}
+      {recentVideos.length > 0 && (
+        <section className="space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-zinc-900">Video terbaru</h2>
+            <Link href="/dashboard/library" className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-700">
+              Semua video <ArrowRight size={13} />
+            </Link>
+          </div>
+          <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4 lg:grid-cols-6">
+            {recentVideos.map((v) => (
+              <li key={v.job_id}>
+                <Link href="/dashboard/library" className="group block" title={v.caption ?? v.product_name}>
+                  <div className="relative aspect-[9/16] w-full overflow-hidden rounded-xl bg-zinc-900">
+                    <video
+                      src={createSignedUrl(v.video_key)}
+                      preload="metadata" muted playsInline
+                      className="absolute inset-0 h-full w-full object-cover opacity-90 transition-opacity group-hover:opacity-100"
+                    />
+                    {campaignFormatLabel(v.format) && (
+                      <span className="absolute left-1.5 top-1.5 rounded-md bg-black/65 px-1.5 py-0.5 text-[9px] font-bold text-white backdrop-blur">
+                        {campaignFormatLabel(v.format)}
+                      </span>
+                    )}
+                  </div>
+                  <p className="mt-1.5 truncate text-[11px] font-medium text-zinc-600">{v.product_name}</p>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <section className="space-y-3">
         <div className="flex items-center justify-between">

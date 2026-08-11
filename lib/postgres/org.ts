@@ -188,6 +188,41 @@ export async function pgGetOrgLedger(orgId: string, limit = 50) {
   }
 }
 
+export interface RecentVideo {
+  job_id: string;
+  product_name: string;
+  video_key: string;
+  caption: string | null;
+  created_at: string;
+  /** Ikut dibawa supaya ubin bisa DIBEDAKAN. Isi normalnya beberapa variasi
+   *  dari satu produk, jadi nama produk saja membuat semua ubin tertulis sama. */
+  format: string;
+}
+
+/** Video JADI terbaru milik org — untuk deretan hasil di beranda.
+ *
+ * Beranda sebelumnya cuma memajang ANGKA (token, video siap, perlu ditinjau)
+ * dan daftar kampanye. Isi kampanye adalah video, tapi videonya sendiri tidak
+ * pernah kelihatan tanpa masuk dua halaman lagi — padahal itu satu-satunya
+ * hal yang benar-benar dibeli brand. */
+export async function pgListRecentVideos(orgId: string, limit = 6): Promise<RecentVideo[]> {
+  const pool = getPool(url());
+  try {
+    const res = await pool.query<RecentVideo>(
+      `SELECT j.id AS job_id, p.name AS product_name, o.video_url AS video_key, o.caption, j.created_at, j.format
+       FROM jobs j
+       JOIN products p ON p.id = j.product_id
+       JOIN outputs o ON o.job_id = j.id
+       WHERE j.org_id = $1 AND j.state = 'READY' AND o.video_url IS NOT NULL
+       ORDER BY j.created_at DESC LIMIT $2`,
+      [orgId, limit]
+    );
+    return res.rows;
+  } finally {
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
+  }
+}
+
 export interface OrgVideoStats {
   total: number;
   ready: number;
