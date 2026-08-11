@@ -102,7 +102,9 @@ export function pickHookFamilies(
   priorityOverride?: HookCode[],
   // M8 (dashboard brand): satu produk bisa minta 2-6 variasi sekaligus.
   // Default 3 = perilaku retail lama persis, tidak berubah.
-  count = 3
+  count = 3,
+  /** true = SEMUA varian memakai priorityOverride[0]. Lihat catatan di bawah. */
+  lockFamily = false
 ): HookCode[] {
   const byCategory = CATEGORY_HOOK_PRIORITY[category] ?? CATEGORY_HOOK_PRIORITY.default;
   // Level 2 ("agak berani") menyelang-selingkan prioritas kategori dengan
@@ -114,6 +116,20 @@ export function pickHookFamilies(
     level === "normal" ? byCategory
     : level === "agak_berani" ? interleave(byCategory, BOLD_HOOK_PRIORITY)
     : BOLD_HOOK_PRIORITY;
+  // KUNCI vs PRIORITAS — dua hal berbeda, dan membedakannya penting.
+  //
+  // Tanpa kunci, override cuma menaikkan satu keluarga ke urutan pertama lalu
+  // sisa slot diisi dari daftar kategori. Untuk "Template Terbukti" itu memang
+  // yang diinginkan: sarankan hook ini duluan, tapi tetap tawarkan variasi.
+  //
+  // Untuk template yang MENIRU satu konten tertentu, itu salah — dan Brian
+  // menemukannya (2026-08-11): memilih satu template menghasilkan tiga skrip
+  // dengan hook H12, H2, dan H1. Template itu ada untuk meniru konten yang
+  // sudah terbukti; hook-nya sudah baku, jadi ketiga variannya harus memakai
+  // keluarga yang sama dan hanya berbeda di susunan kalimatnya.
+  if (lockFamily && priorityOverride?.length) {
+    return Array.from({ length: count }, () => priorityOverride[0]);
+  }
   const priority = priorityOverride?.length
     ? [...new Set([...priorityOverride, ...base])]
     : base;
@@ -190,11 +206,12 @@ function generateOne(
   emotion: string,
   family: HookCode,
   tier: "silent_caption" | "high_quality" | "super_hq",
-  durationSec: number
+  durationSec: number,
+  beats?: { hookEnd: number; demoEnd: number }
 ): GeneratedScript {
   const ctx = buildCtx(product, register);
   const cartLabel = cartLabelForUrl(product.sourceUrl);
-  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel).map((s) => ({
+  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats).map((s) => ({
     ...s,
     text: applyCartLabel(s.text, cartLabel),
   }));
@@ -272,13 +289,22 @@ export function generateScripts(opts: {
   hookFamilies?: HookCode[];
   /** M8: jumlah variasi skrip yang diminta (dashboard brand: 2-6). Default 3 = retail. */
   count?: number;
+  /** true = semua varian memakai hookFamilies[0]. Dipakai template yang meniru
+   * satu konten tertentu, di mana hook-nya memang sudah baku. */
+  lockHookFamily?: boolean;
+  /** Batas beat sebagai PECAHAN durasi, diambil dari shot list template.
+   * Kosong = pembagian generik (hook 20%, demo sampai 67%). */
+  beats?: { hookEnd: number; demoEnd: number };
 }): GeneratedScript[] {
   const { product, register } = opts;
   const emotion = opts.emotion ?? "senang";
   const tier = opts.qualityTier ?? "silent_caption";
   const durationSec = opts.durationSec ?? 15;
-  const families = pickHookFamilies(product.category, product.id, opts.hookLevel ?? "normal", opts.hookFamilies, opts.count ?? 3);
-  return families.map((f) => generateOne(product, register, emotion, f, tier, durationSec));
+  const families = pickHookFamilies(
+    product.category, product.id, opts.hookLevel ?? "normal",
+    opts.hookFamilies, opts.count ?? 3, opts.lockHookFamily === true
+  );
+  return families.map((f) => generateOne(product, register, emotion, f, tier, durationSec, opts.beats));
 }
 
 export function outputExtras(category: string) {

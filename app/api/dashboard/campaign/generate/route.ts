@@ -61,6 +61,14 @@ export async function POST(req: Request) {
     // pertama membawa sudut template dan sisanya tetap beragam — bukan 4 video
     // dengan hook yang sama persis. Divalidasi ketat: kode yang tidak dikenal
     // diabaikan, bukan diteruskan ke mesin.
+    const rawBeats = body.beats as { hookEnd?: unknown; demoEnd?: unknown } | undefined;
+    const hookEnd = Number(rawBeats?.hookEnd);
+    const demoEnd = Number(rawBeats?.demoEnd);
+    const beats =
+      Number.isFinite(hookEnd) && Number.isFinite(demoEnd) &&
+      hookEnd > 0 && hookEnd < demoEnd && demoEnd < 1
+        ? { hookEnd, demoEnd }
+        : null;
     const rawFamilies = Array.isArray(body.hook_families) ? body.hook_families : [];
     const hookFamilies = rawFamilies
       .map((f: unknown) => String(f ?? "").toUpperCase())
@@ -73,6 +81,10 @@ export async function POST(req: Request) {
       },
       register, emotion: "senang", qualityTier: tier, durationSec, hookLevel, count,
       ...(hookFamilies.length ? { hookFamilies } : {}),
+      ...(body.lock_hook_family === true ? { lockHookFamily: true } : {}),
+      // Pecahan dijaga di sini juga, bukan cuma di mesin: nilai dari luar
+      // tidak boleh bisa membuat hook lebih panjang dari videonya.
+      ...(beats ? { beats } : {}),
     });
 
     let variants = run(product.name);

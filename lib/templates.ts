@@ -85,6 +85,15 @@ export interface CampaignTemplate {
    * dramatisasi. Menyamakan keduanya di satu label membuat yang satu terlalu
    * longgar dan yang lain terlalu ketat. */
   caution?: { badge: string; note: string };
+  /** Batas beat sebagai PECAHAN durasi, dihitung dari shot list dokumen bedah.
+   *
+   * Tanpa ini semua template memakai pembagian yang sama (hook 20%, demo
+   * sampai 67%) — dan itu membuat template hanya meminjam kata-katanya, bukan
+   * meniru kontennya (temuan Brian 2026-08-11). Angkanya memang berbeda jauh:
+   * T01 memberi hook 7% durasi karena hook-nya satu kalimat pendek, sedangkan
+   * T05 memberi 42% karena perbandingan before/after ITU SENDIRI yang jadi
+   * hook dan penonton butuh waktu memelototinya. */
+  beats?: { hookEnd: number; demoEnd: number };
   /** Kelompok di galeri. Dua kelompok ini sumbu yang BERBEDA, bukan versi
    * lama vs baru: "format" menentukan bentuk videonya (berapa adegan, ada VO
    * atau tidak, apa yang dibuktikan), "sudut" menentukan dari mana produknya
@@ -201,6 +210,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H12", count: 3, shotCount: 3,
     bestFor: ["beauty", "food", "gadget", "home"],
     source: { durationSec: 20, shots: 12, bpm: 102 },
+    beats: { hookEnd: 0.070, demoEnd: 0.881 },
     preview: "/previews/t01-tempat-susah.mp4", accent: "emerald",
   },
   // ── T02 ───────────────────────────────────────────────────────────────────
@@ -212,6 +222,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "agak_berani", hookFamily: "H9", count: 3, shotCount: 6,
     bestFor: ["gadget", "home", "fashion"],
     source: { durationSec: 22, shots: 10, bpm: 97 },
+    beats: { hookEnd: 0.107, demoEnd: 0.873 },
     preview: "/previews/t02-bedah-fitur.mp4", accent: "sky",
   },
   // ── T03 ───────────────────────────────────────────────────────────────────
@@ -223,6 +234,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H10", count: 2, shotCount: 6,
     bestFor: ["toko", "food", "beauty"],
     source: { durationSec: 31, shots: 7, bpm: 106 },
+    beats: { hookEnd: 0.273, demoEnd: 0.820 },
     preview: "/previews/t03-liputan-event.mp4", accent: "amber",
   },
   // ── T04 ───────────────────────────────────────────────────────────────────
@@ -234,6 +246,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "agak_berani", hookFamily: "H1", count: 3, shotCount: 3,
     bestFor: ["food"],
     source: { durationSec: 20, shots: 8, bpm: 81 },
+    beats: { hookEnd: 0.160, demoEnd: 0.730 },
     preview: "/previews/t04-hook-indrawi.mp4", accent: "rose",
   },
   // ── T05 ── KLAIM HASIL ────────────────────────────────────────────────────
@@ -247,6 +260,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 19, shots: 2, bpm: 126 },
     caution: { badge: "Butuh rekaman asli", note:
       "Perbandingan before/after adalah klaim hasil pada tubuh orang. Kedua sisi wajib direkam sungguhan dengan cahaya, sudut, dan kamera yang sama — membuatnya dengan AI berarti membuat bukti palsu." },
+    beats: { hookEnd: 0.423, demoEnd: 0.847 },
     preview: "/previews/t05-before-after.mp4", accent: "violet",
   },
   // ── T06 ───────────────────────────────────────────────────────────────────
@@ -258,6 +272,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H13", count: 2, shotCount: 5,
     bestFor: ["beauty", "fashion", "food"],
     source: { durationSec: 27, shots: 5, bpm: 147 },
+    beats: { hookEnd: 0.150, demoEnd: 0.897 },
     preview: "/previews/t06-swatch-shade.mp4", accent: "rose",
   },
   // ── T07 ───────────────────────────────────────────────────────────────────
@@ -269,6 +284,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "agak_berani", hookFamily: "H8", count: 3, shotCount: 3,
     bestFor: ["beauty", "home"],
     source: { durationSec: 12, shots: 5, bpm: 101 },
+    beats: { hookEnd: 0.245, demoEnd: 0.899 },
     preview: "/previews/t07-checklist-berjalan.mp4", accent: "emerald",
   },
   // ── T08 ── KLAIM HASIL ────────────────────────────────────────────────────
@@ -282,6 +298,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 22, shots: 2, bpm: 108 },
     caution: { badge: "Butuh rekaman asli", note:
       "Inti template ini adalah perubahan nyata pada tubuh seseorang selama tujuh hari. Menghasilkan \"DAY 7\" secara sintetis berarti menipu pembeli soal keputusan kesehatannya. Sediakan tujuh hari, rekam dua kali dengan setelan yang persis sama." },
+    beats: { hookEnd: 0.223, demoEnd: 0.936 },
     preview: "/previews/t08-day-1-vs-day-7.mp4", accent: "zinc",
   },
   // ── T09 ───────────────────────────────────────────────────────────────────
@@ -293,6 +310,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H7", count: 3, shotCount: 3,
     bestFor: ["beauty", "food"],
     source: { durationSec: 23, shots: 3, bpm: 94 },
+    beats: { hookEnd: 0.171, demoEnd: 0.896 },
     preview: "/previews/t09-bahan-aktif.mp4", accent: "violet",
   },
   // ── T10 ── KLAIM HASIL ────────────────────────────────────────────────────
@@ -306,6 +324,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 19, shots: 8, bpm: 63 },
     caution: { badge: "Butuh rekaman asli", note:
       "Adegan perbandingan dua lengan adalah klaim hasil produk pada kulit. Wajib direkam sungguhan; kalau dibuat AI, kamu memalsukan buktinya." },
+    beats: { hookEnd: 0.159, demoEnd: 0.929 },
     preview: "/previews/t10-bukti-di-lengan.mp4", accent: "amber",
   },
   // ── T11 ───────────────────────────────────────────────────────────────────
@@ -317,6 +336,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "berani", hookFamily: "H6", count: 3, shotCount: 2,
     bestFor: ["beauty", "food"],
     source: { durationSec: 10, shots: 2, bpm: 89 },
+    beats: { hookEnd: 0.249, demoEnd: 0.798 },
     preview: "/previews/t11-hook-misteri.mp4", accent: "zinc",
   },
   // ── T12 ───────────────────────────────────────────────────────────────────
@@ -330,6 +350,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 23, shots: 4, bpm: 116 },
     caution: { badge: "Wajib diberi label", note:
       "Vox pop bekerja karena penonton percaya ini orang sungguhan. Narasumber AI yang ditampilkan sebagai wawancara jalanan nyata adalah testimoni palsu — kalau tetap dibuat AI, videonya WAJIB diberi label dramatisasi." },
+    beats: { hookEnd: 0.178, demoEnd: 0.889 },
     preview: "/previews/t12-vox-pop.mp4", accent: "sky",
   },
   {

@@ -299,7 +299,15 @@ export default function CampaignPage() {
         "/api/dashboard/campaign/generate",
         { json: {
           product_id: product.product_id, count, tier, duration_sec: durationSec, hook_level: hookLevel,
-          ...(template?.hookFamily ? { hook_families: [template.hookFamily] } : {}),
+          // Template = tiru konten itu persis, jadi hook-nya DIKUNCI (bukan
+          // cuma disarankan) dan pembagian detiknya ikut dari shot list
+          // aslinya. Tanpa keduanya, memilih satu template tetap menghasilkan
+          // tiga skrip dengan keluarga hook berbeda dan pembagian waktu yang
+          // seragam untuk semua template.
+          ...(template?.hookFamily
+            ? { hook_families: [template.hookFamily], lock_hook_family: true }
+            : {}),
+          ...(template?.beats ? { beats: template.beats } : {}),
         } }
       );
       setScripts(res.scripts);

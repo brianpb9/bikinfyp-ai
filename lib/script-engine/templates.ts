@@ -40,9 +40,27 @@ const VISUAL: Record<string, string> = {
 // Proporsi basis 15 dtk (hook 20% / demo 46.7% / cta 33.3%) — durasi lain
 // skala linear dari basis ini, bukan rasio baru per durasi (2026-08-03,
 // perluasan 30/45 dtk).
-function seg(t: Triple, durationSec = 15): SegmentDraft[] {
-  const hookEnd = Math.round((durationSec * 3) / 15);
-  const demoEnd = Math.round((durationSec * 10) / 15);
+function seg(
+  t: Triple,
+  durationSec = 15,
+  // Pecahan durasi dari shot list template. Kosong = proporsi generik di atas.
+  //
+  // Ini yang membuat template benar-benar meniru kontennya, bukan cuma memakai
+  // kata-katanya (temuan Brian 2026-08-11: "detik-detiknya juga harus dikunci
+  // template"). Angkanya beda jauh antar template: T01 memberi hook cuma 7%
+  // durasi, T05 justru 42% karena perbandingannya sendiri YANG jadi hook.
+  // Memaksa semuanya ke 20% membuat semua template terasa sama.
+  beats?: { hookEnd: number; demoEnd: number }
+): SegmentDraft[] {
+  const clamp = (v: number, lo: number, hi: number) => Math.min(hi, Math.max(lo, v));
+  // Dijaga supaya tetap masuk akal walau angkanya salah ketik: hook minimal 1
+  // detik, dan demo wajib berakhir setelah hook tapi sebelum durasi habis.
+  const hookEnd = beats
+    ? clamp(Math.round(durationSec * beats.hookEnd), 1, durationSec - 2)
+    : Math.round((durationSec * 3) / 15);
+  const demoEnd = beats
+    ? clamp(Math.round(durationSec * beats.demoEnd), hookEnd + 1, durationSec - 1)
+    : Math.round((durationSec * 10) / 15);
   return [
     { role: "hook", start: 0, end: hookEnd, text: t.hook, visual_direction: VISUAL.hook },
     { role: "demo", start: hookEnd, end: demoEnd, text: t.demo, visual_direction: VISUAL.demo },
@@ -331,7 +349,8 @@ export function renderSegmentsForTier(
   c: TemplateCtx,
   tier: "silent_caption" | "high_quality" | "super_hq",
   durationSec = 15,
-  cartLabel: "keranjang kuning" | "keranjang" = "keranjang kuning"
+  cartLabel: "keranjang kuning" | "keranjang" = "keranjang kuning",
+  beats?: { hookEnd: number; demoEnd: number }
 ): SegmentDraft[] {
   const triple = (tier === "silent_caption" ? T : COMPACT_T)[family](c);
   // r19c (Brian 2026-08-09, lanjutan investigasi sama): dulu "keranjang kuning"
@@ -430,7 +449,7 @@ export function renderSegmentsForTier(
     triple.demo = candidate;
     offset++;
   }
-  return seg(triple, durationSec);
+  return seg(triple, durationSec, beats);
 }
 
 function cap(s: string): string {
