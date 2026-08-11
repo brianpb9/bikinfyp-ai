@@ -23,11 +23,20 @@ test("production menolak nilai bawaan pengembangan", () => {
   );
 });
 
-test("secret pendek MEMPERINGATKAN tapi tidak mematikan boot", () => {
-  // Sengaja tidak melempar: panjang secret produksi tidak bisa diperiksa dari
-  // repo (diatur manual di Render), dan mematikan situs karena tebakan lebih
-  // buruk daripada secret yang lebih lemah. Lihat komentar di lib/secrets.ts.
-  assert.doesNotThrow(() => assertAuthSecretSafe({ NODE_ENV: "production", AUTH_SECRET: "pendek123" }));
+test("production menolak secret di bawah 32 byte", () => {
+  // Naik dari peringatan jadi penolakan setelah panjang secret produksi
+  // diverifikasi langsung di Shell Render (web dan worker sama-sama 32
+  // karakter), jadi penegakan ini tidak mematikan apa pun yang berjalan.
+  assert.throws(
+    () => assertAuthSecretSafe({ NODE_ENV: "production", AUTH_SECRET: "pendek123" }),
+    /terlalu pendek/
+  );
+});
+
+test("tepat 32 byte diterima — ambangnya inklusif", () => {
+  // Penting: produksi memakai persis 32. Kalau perbandingannya <= bukan <,
+  // penegakan ini justru akan mematikan web DAN worker saat deploy.
+  assert.doesNotThrow(() => assertAuthSecretSafe({ NODE_ENV: "production", AUTH_SECRET: "x".repeat(32) }));
 });
 
 test("kunci turunan berbeda per fungsi dan stabil", () => {

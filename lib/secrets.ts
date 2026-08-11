@@ -54,22 +54,18 @@ export function assertAuthSecretSafe(
   if (secret === DEFAULT_DEV_SECRET) {
     throw new SecretConfigurationError("AUTH_SECRET masih memakai nilai bawaan pengembangan. Ganti sebelum deploy.");
   }
-  // Panjang: PERINGATAN, bukan penolakan boot — dan itu keputusan sadar.
+  // Panjang: sekarang MENOLAK boot.
   //
-  // Dua kondisi di atas tidak ambigu: tanpa AUTH_SECRET atau dengan nilai
-  // bawaan, siapa pun bisa memalsukan token, jadi menolak menyala jelas lebih
-  // baik daripada menyala dalam keadaan bisa dipalsukan.
-  //
-  // Panjang berbeda. render.yaml hanya mendefinisikan staging; secret
-  // produksi diatur manual di dashboard Render dan panjangnya TIDAK BISA saya
-  // periksa dari sini. Melempar di sini berarti mempertaruhkan produk yang
-  // sedang melayani pengguna nyata demi tebakan. Secret khas-tapi-pendek itu
-  // lebih lemah, bukan bencana; mematikan situs karenanya adalah bencana.
-  // Naikkan menjadi throw setelah Brian memastikan panjangnya di Render.
+  // Sebelumnya ini hanya peringatan karena panjang secret produksi tidak bisa
+  // saya periksa dari repo — render.yaml hanya mendefinisikan staging.
+  // Diverifikasi langsung di Shell Render 2026-08-11: web DAN worker sama-sama
+  // 32 karakter, jadi menaikkannya tidak akan mematikan apa pun yang sedang
+  // berjalan. Menegakkannya di sini mencegah deploy berikutnya menurunkan
+  // standar tanpa ada yang sadar.
   const len = Buffer.byteLength(secret, "utf8");
   if (len < MIN_SECRET_BYTES) {
-    console.error(
-      `[secrets] PERINGATAN: AUTH_SECRET hanya ${len} byte, disarankan minimal ${MIN_SECRET_BYTES} byte acak.`
+    throw new SecretConfigurationError(
+      `AUTH_SECRET terlalu pendek (${len} byte). Minimal ${MIN_SECRET_BYTES} byte acak.`
     );
   }
 }
