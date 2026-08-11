@@ -210,9 +210,14 @@ function generateOne(
   beats?: { hookEnd: number; demoEnd: number },
   wordBudget?: number
 ): GeneratedScript {
+  // Ambang Rp100.000 diturunkan dari data, bukan ditebak: tiga video pemenang
+  // yang menyebut harga ada di Rp27-30 ribu, sedangkan yang produknya di atas
+  // itu (serum, kursi kantoran) tidak menyebut harganya sama sekali. Di bawah
+  // ambang, keluarannya SAMA PERSIS seperti sebelumnya.
+  const hargaMahal = (product.price_idr ?? 0) > 100_000;
   const ctx = buildCtx(product, register);
   const cartLabel = cartLabelForUrl(product.sourceUrl);
-  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats, wordBudget).map((s) => ({
+  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats, wordBudget, hargaMahal).map((s) => ({
     ...s,
     text: applyCartLabel(s.text, cartLabel),
   }));

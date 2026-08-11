@@ -353,7 +353,9 @@ export function renderSegmentsForTier(
   beats?: { hookEnd: number; demoEnd: number },
   /** Total kata untuk SELURUH video, dari dokumen bedah template. Lihat
    * catatan di bawah — hanya dipakai template tanpa VO. */
-  wordBudget?: number
+  wordBudget?: number,
+  /** Harga di atas ambang "murah". Lihat catatan di bawah. */
+  hargaMahal = false
 ): SegmentDraft[] {
   // Jatah kata sempit memakai salinan RINGKAS, bukan salinan panjang.
   //
@@ -373,6 +375,35 @@ export function renderSegmentsForTier(
   // menghitung kata versi FINAL, bukan versi sementara.
   if (cartLabel !== "keranjang kuning") {
     triple.cta = triple.cta.replace(/keranjang kuning/gi, cartLabel);
+  }
+  // HARGA MAHAL: buang bingkai "murah", jangan buang angkanya.
+  //
+  // Aturan 3 dokumen bedah Brian: "sebut harga hanya kalau murah — kalau
+  // angkanya sendiri yang menjual". Tiga video pemenang yang menyebut harga
+  // semuanya di kisaran Rp27-30 ribu; yang produknya lebih mahal (serum,
+  // kursi kantoran) tidak menyebut harganya sama sekali.
+  //
+  // Terukur 2026-08-11 untuk produk Rp850.000: 15 dari 16 keluarga hook di
+  // tier bersuara dan 16 dari 16 di tier tanpa suara mengucapkan "cuma 850
+  // ribu" atau "harganya cuma 850 ribu". Itu terdengar janggal sekaligus
+  // MENURUNKAN posisi produknya sendiri.
+  //
+  // Yang dibuang cuma kata pengecilnya ("cuma", "doang"), bukan angkanya —
+  // menghapus harga sepenuhnya akan menabrak L-14 di skrip yang memang
+  // membangun kalimatnya di sekitar angka itu. Dilakukan DI SINI, sebelum
+  // loop hitung kata di bawah, dengan alasan yang sama persis seperti
+  // substitusi keranjang di atas: kalau sesudahnya, jumlah kata final
+  // meleset dari yang dihitung loop dan skrip bisa gagal L-05.
+  if (hargaMahal) {
+    const turunkan = (t: string) =>
+      t
+        .replace(/\bharganya\s+cuma\b/gi, "harganya")
+        .replace(/\bcuma\s+(?=\d[\d.]*\s*(?:ribu|rb|juta))/gi, "")
+        .replace(/(\d[\d.]*\s*(?:ribu|rb|juta))\s+doang\b/gi, "$1")
+        .replace(/\bmurah banget\b/gi, "worth banget");
+    triple.hook = turunkan(triple.hook);
+    triple.demo = turunkan(triple.demo);
+    triple.cta = turunkan(triple.cta);
   }
   const longer = durationSec > 15;
   if (longer) {
