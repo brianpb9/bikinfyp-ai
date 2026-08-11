@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { ArrowRight, Film, LayoutTemplate, Sparkles, Trash2, User } from "lucide-react";
 import { apiFetch } from "../../../_components/api";
+import { PreviewVideo } from "../../_components/PreviewVideo";
 import { CAMPAIGN_TEMPLATES, type CampaignTemplate } from "@/lib/templates";
 
 // Galeri template (permintaan Brian: "tinggal ganti productnya saja").
@@ -125,26 +126,19 @@ export default function TemplatesPage() {
               href={`/dashboard/campaign?template=${t.id}`}
               className="group flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-md"
             >
-              {/* Bingkai 9:16, MENGIKUTI videonya. Sebelumnya 16:10 dengan
-                  object-cover, jadi klip potret terpotong habis dan yang
-                  terlihat cuma pita tengahnya — persis keluhan Brian
-                  2026-08-11. Sekarang seluruh frame kelihatan tanpa crop.
-
-                  overflow-hidden + absolute inset-0 tetap wajib: media dengan
-                  ukuran alami sendiri akan memaksa kotak aspect-ratio molor
-                  kalau dibiarkan memakai h-full saja. */}
-              <div className="relative aspect-[9/16] w-full overflow-hidden bg-zinc-900">
-                {t.preview ? (
-                  <video
-                    src={t.preview}
-                    autoPlay muted loop playsInline
-                    className="absolute inset-0 h-full w-full object-cover"
-                  />
-                ) : (
-                  <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br ${ACCENT[t.accent]}`}>
-                    <Film size={28} className="text-white/70" />
-                  </div>
-                )}
+              {/* Kotaknya MENGIKUTI rasio videonya sendiri — klip landscape
+                  dapat kotak landscape. Rasio dibaca dari metadata berkas,
+                  bukan dari kolom manual yang pasti melenceng begitu ada yang
+                  mengganti videonya dan lupa memperbarui angkanya. */}
+              <div className="relative">
+                <PreviewVideo
+                  src={t.preview}
+                  fallback={
+                    <div className={`absolute inset-0 flex items-center justify-center bg-gradient-to-br ${ACCENT[t.accent]}`}>
+                      <Film size={28} className="text-white/70" />
+                    </div>
+                  }
+                />
                 <span className="absolute left-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
                   {t.durationSec} dtk · {FORMAT_LABEL[t.format] ?? t.format}
                 </span>

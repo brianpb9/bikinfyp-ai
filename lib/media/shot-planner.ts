@@ -271,12 +271,45 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // maupun 45 detik. Shot pertama selalu HOOK, shot terakhir selalu HERO
   // (packshot tidak pernah muncul sebelum bagian akhir), sisanya diisi
   // berputar dari peran tengah.
-  const TVC_MIDDLE_ROLES: string[] = [
-    `establishes the world of the brand — the setting, the person it is for, and why this moment matters, staged and lit like a commercial`,
-    `the product enters the action deliberately: opened, poured, applied or switched on, with crisp material feedback captured in macro`,
-    `the result the product produced, observed in a clean beauty-shot close-up — texture, finish or change, lit to be read instantly`,
-    `the payoff on the person: a directed, believable reaction caused by that result, framed as a portrait beat`,
+  // Tiap beat membawa ARAHAN KAMERA sendiri dan LARANGAN GERAK sendiri.
+  //
+  // Dipelajari dari template "THE DROP" yang Brian kirim (2026-08-11): di
+  // sana tiap modul menyebut gerak kameranya secara spesifik ("slow lateral
+  // tracking", "very slow dolly-in", "locks off into a static hero packshot")
+  // DAN menyebut apa yang tidak boleh terjadi ("no camera shake", "no jitter",
+  // "no head bobbing"). Instruksi umum seperti "satu gerakan kamera" ternyata
+  // jauh lebih lemah daripada menyebut geraknya — model butuh diberi tahu
+  // gerak MANA, bukan sekadar berapa banyak.
+  const TVC_MIDDLE_ROLES: { role: string; camera: string; avoid: string }[] = [
+    {
+      role: `establishes the world of the brand — the setting, the person it is for, and why this moment matters, staged and lit like a commercial`,
+      camera: `slow lateral tracking across the scene`,
+      avoid: `no jitter, no handheld sway`,
+    },
+    {
+      role: `the product enters the action deliberately: opened, poured, applied or switched on, with crisp material feedback captured in macro`,
+      camera: `slow forward dolly moving closer to the action`,
+      avoid: `no flicker, no sudden speed changes`,
+    },
+    {
+      role: `the result the product produced, observed in a clean beauty-shot close-up — texture, finish or change, lit to be read instantly`,
+      camera: `static frame with a subtle rack focus landing on the detail`,
+      avoid: `no exaggerated motion, no focus hunting`,
+    },
+    {
+      role: `the payoff on the person: a directed, believable reaction caused by that result, framed as a portrait beat`,
+      camera: `very slow dolly-in on the person`,
+      avoid: `no head bobbing, no abrupt expression changes`,
+    },
   ];
+
+  // Style-lock: kalimat penutup yang SAMA PERSIS di setiap shot.
+  // Template referensi menegaskan jangan diubah antar modul — konsistensi
+  // tampilan antar adegan justru datang dari kalimat yang tidak berubah ini,
+  // bukan dari mendeskripsikan ulang gayanya dengan kata-kata berbeda tiap kali.
+  const TVC_STYLE_LOCK =
+    `photorealistic, luxury commercial still, soft cinematic lighting, shallow depth of field, ` +
+    `high detail texture, no text, no logo, no watermark`;
   // IDENTITY_INSTRUCTION ditulis untuk UGC dan memuat frasa "like a real phone
   // camera close-up". Di TVC itu bertabrakan dengan framing "never a phone-shot"
   // di kalimat yang sama, dan model akan menuruti salah satunya secara acak.
@@ -290,22 +323,32 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const from = Math.round(i * perShot);
     const to = Math.round((i + 1) * perShot);
     let role: string;
+    let camera: string;
+    let avoid: string;
     if (i === 0) {
       role =
-        `the opening hook — it starts ALREADY in motion, with "${input.productName}" arriving in frame on a single ` +
-        `designed camera move. By the ${Math.min(3, to)}s mark the product reads clearly and something has visibly changed. ` +
+        `the opening hook — it starts ALREADY in motion, with "${input.productName}" arriving in frame. ` +
+        `By the ${Math.min(3, to)}s mark the product reads clearly and something has visibly changed. ` +
         `No static hold, no slow logo push-in`;
+      camera = `static macro with a slight tilt following the product`;
+      avoid = `no camera shake, no whip pans`;
     } else if (i === numShots - 1) {
       role =
         `the hero shot: the product front-facing and centred on a clean, deliberately lit surface or seamless backdrop, ` +
-        `filling roughly a third of frame, absolutely steady — the packshot a brand would sign off on`;
+        `filling roughly a third of frame — the packshot a brand would sign off on`;
+      // Penutup dikunci diam. Referensi menyebutnya eksplisit ("hold the final
+      // frame"), dan itu masuk akal: packshot yang masih bergeser di detik
+      // terakhir membuat seluruh iklan terasa belum selesai.
+      camera = `camera locks off into a static hero packshot and holds the final frame`;
+      avoid = `completely stable ending, no drift, no residual motion`;
     } else {
-      role = TVC_MIDDLE_ROLES[(i - 1) % TVC_MIDDLE_ROLES.length];
+      const m = TVC_MIDDLE_ROLES[(i - 1) % TVC_MIDDLE_ROLES.length];
+      role = m.role; camera = m.camera; avoid = m.avoid;
     }
     return (
       `Beat ${i + 1} of ${numShots} in a broadcast television commercial (${from}-${to}s of ${input.durationSec}s): ${role}. ` +
-      `One deliberate camera move per shot, executed smoothly — never a shaky or improvised one. ` +
-      `Lighting is designed, not found. ${TVC_IDENTITY}`
+      `Camera: ${camera}. ${avoid}. Lighting is designed, not found. ` +
+      `${TVC_IDENTITY} ${TVC_STYLE_LOCK}`
     );
   };
 
