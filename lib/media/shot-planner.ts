@@ -494,6 +494,32 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
       : input.category.handsPrompt;
     const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
+    // TANGGA SHOT TENGAH.
+    //
+    // Terukur 2026-08-11: sebelum ini SELURUH shot tengah membawa instruksi
+    // yang sama persis — 3 beat unik dari 6 shot, artinya empat shot disuruh
+    // melakukan hal yang identik. Pembuka dan penutupnya memang berbeda, tapi
+    // bagian tengahnya (yang justru mayoritas durasi) tidak.
+    //
+    // Pelajaran dari 12 video pemenang yang Brian bedah: yang menahan
+    // perhatian bukan shot bagus yang diulang, tapi shot yang BERGANTI TUGAS —
+    // makro tekstur, produk dituang, hasil di kulit, produk di tempatnya.
+    // Tangga ini memberi tugas berbeda tiap shot tengah sambil mempertahankan
+    // semua batasan yang sudah terbukti: label tetap menghadap kamera, produk
+    // sama dengan shot 1, dan instruksi identitas ikut di tiap beat.
+    const midIdx = Math.max(0, i - 1);
+    const HANDS_MIDDLE = [
+      `Hands demonstrating the product in use, but the bottle stays angled so its label keeps facing the camera and stays legible throughout — fingers never cover the label, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`,
+      `Macro close-up of the product's own texture and material filling most of the frame — the surface, the consistency, the detail a buyer wants to inspect before paying, the product body still partly visible with its label readable at the frame edge, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
+      `Hands opening or dispensing the product so its contents become visible coming out, the amount clear, label kept facing the camera throughout, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up, natural phone camera movement`,
+      `The product resting in the everyday place it would actually be used, hands entering frame to adjust or pick it up, the surroundings quietly telling the viewer where this belongs, label facing camera, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
+    ];
+    const HEAD_MIDDLE = [
+      `Close cutaway on presenter's hands as she ${demoAction}, her face out of tight focus and NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
+      `Macro close-up of the product's texture where it has just been used, filling most of the frame, the presenter out of focus behind, NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
+      `Presenter looking down at the result with a genuinely pleased reaction, NOT talking, mouth relaxed and closed, the product held in frame with its label facing camera, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`,
+      `Close cutaway on the presenter's hands slowly turning the product to show a different side of it, label kept readable throughout, her face out of tight focus and NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
+    ];
     // Beat template UGC. Menimpa beat generik HANYA untuk job yang memang
     // memakai salah satu dari 12 template format; job lain (dan seluruh
     // retail) tidak tersentuh karena ugcTemplate-nya null.
@@ -567,7 +593,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
               : `Presenter holding "${input.productName}" up to the camera at chest height with a warm reaction, NOT talking, mouth relaxed and closed, ${IDENTITY_INSTRUCTION}`
             : isClosing
               ? `Presenter smiling warmly, NOT talking, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
-              : `Close cutaway on presenter's hands as she ${demoAction}, her face out of tight focus and NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
+              : HEAD_MIDDLE[midIdx % HEAD_MIDDLE.length]
         : isFirst
           // r13 (Brian 2026-08-07: "kenapa ada gambar Wardah di depan?" — shot
           // pembuka terlihat seperti foto produk diam sebelum tangan "masuk").
@@ -581,7 +607,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             // sudut acak / label ketutup jari saat "in use", bikin QC-10 gagal
             // & identitas produk kelihatan beda dari shot 1. Label WAJIB
             // tetap menghadap kamera bahkan saat demo.
-            : `Hands demonstrating the product in use, but the bottle stays angled so its label keeps facing the camera and stays legible throughout — fingers never cover the label, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`);
+            : HANDS_MIDDLE[midIdx % HANDS_MIDDLE.length]);
     // Level gila: pembuka pattern-interrupt HANYA di shot pertama; vo_broll
     // (pan foto, tanpa model video) tidak punya jalur ini.
     const crazyOpener =
