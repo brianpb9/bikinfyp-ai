@@ -4,6 +4,7 @@ import { fetchBrandHomepage, analyzeBrandProfile } from "@/lib/brand-analysis";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { updateOrgProfile } from "@/lib/org";
 import { pgUpdateOrgProfile } from "@/lib/postgres/org";
+import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   try {
     const { membership } = await requireOrgContextApi(req);
+    await assertDashboardRate("analysis", membership.org_id);
     const body = await req.json().catch(() => ({}));
     const rawUrl = typeof body.url === "string" ? body.url.trim() : "";
     if (!rawUrl) throw ERR.BAD_REQUEST("Masukkan link website bisnis kamu dulu.", "url is required.");

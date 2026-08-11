@@ -2,6 +2,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled, pgAudit } from "@/lib/postgres/smoke-runtime";
 import { pgAddOrgMemberByEmail, pgListOrgMembers, pgRemoveOrgMember } from "@/lib/postgres/org";
+import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,6 +44,7 @@ export async function POST(req: Request) {
     if (membership.role !== "owner") {
       throw ERR.BAD_REQUEST("Cuma pemilik organisasi yang bisa menambah anggota.", "Owner role required.");
     }
+    await assertDashboardRate("invite", user.id);
     const body = await req.json().catch(() => ({}));
     const email = String(body.email ?? "").trim().toLowerCase();
     if (!EMAIL_RE.test(email)) throw ERR.BAD_REQUEST("Format emailnya belum benar.", "Invalid email.");

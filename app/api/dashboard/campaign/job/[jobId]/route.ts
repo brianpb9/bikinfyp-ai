@@ -10,6 +10,7 @@ import type { QualityTier } from "@/lib/providers/types";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { pgForgetShotTask } from "@/lib/postgres/task-memo";
+import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -140,6 +141,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
         await enqueueJobResume(jobId, "approve");
         return Response.json({ job_id: jobId, approved: true });
       }
+
+      // Batas laju SEBELUM apa pun disentuh: tiap regenerate memanggil
+      // provider video, jadi ini jalur uang paling mudah disalahgunakan.
+      await assertDashboardRate("regenerate", membership.org_id);
 
       // Setelah approved_at terisi, job sudah dilepas ke worker untuk
       // digabung. Meminta ganti scene di titik ini berarti mengubah bahan di

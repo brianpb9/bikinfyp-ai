@@ -12,6 +12,7 @@ import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
+import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,7 @@ export async function POST(req: Request) {
   try {
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
     const { user, membership } = await requireOrgContextApi(req);
+    await assertDashboardRate("confirm", membership.org_id);
     const body = await req.json().catch(() => ({}));
 
     const productId = typeof body.product_id === "string" ? body.product_id : "";

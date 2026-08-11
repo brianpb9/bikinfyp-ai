@@ -6,6 +6,7 @@ import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { createSignedUrl } from "@/lib/signed-url";
 import { postgresRuntimeEnabled, pgAudit } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
+import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -78,6 +79,7 @@ export async function POST(req: Request) {
   try {
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
     const { user, membership } = await requireOrgContextApi(req);
+    await assertDashboardRate("publish", membership.org_id);
     const body = await req.json().catch(() => ({}));
 
     const jobId = String(body.job_id ?? "");

@@ -5,6 +5,7 @@ import { generateScripts } from "@/lib/script-engine";
 import { cleanProductName } from "@/lib/extract";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
+import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,7 @@ export async function POST(req: Request) {
   try {
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
     const { user, membership } = await requireOrgContextApi(req);
+    await assertDashboardRate("generate", membership.org_id);
     const body = await req.json().catch(() => ({}));
 
     const productId = typeof body.product_id === "string" ? body.product_id : "";
