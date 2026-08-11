@@ -122,32 +122,31 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     bestFor: ["jasa", "toko", "beauty", "fashion", "food"],
     preview: "/previews/format-ads.mp4", accent: "rose",
   },
+  // Dua template TVC dinamai persis seperti produksi Brian yang memang sudah
+  // jadi — "THE DROP" dan "SEHARIAN". Preview-nya potongan dari video aslinya,
+  // bukan klip pengganti: kalau brand memilih template bernama The Drop, yang
+  // dia lihat harus benar-benar The Drop.
+  //
+  // Varian generik "TVC 15/30 Detik" dihapus. Di sebelah dua konsep yang punya
+  // rute, tempo, dan hasil nyata, keduanya cuma terbaca sebagai pengisi — dan
+  // durasi tetap bisa diubah sendiri di langkah Konsep.
   {
-    id: "tvc-reallife",
-    name: "TVC Sehari Penuh",
+    id: "tvc-the-drop",
+    name: "The Drop",
+    when: "Produk yang keunggulannya ada di bahan dan cara kerjanya. Makro, tekstur, mekanisme.",
+    kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
+    hookLevel: "normal", hookFamily: "H12", count: 2, tvcRoute: "luxury",
+    bestFor: ["beauty", "health", "kitchen"],
+    preview: "/previews/tvc-the-drop.mp4", accent: "zinc",
+  },
+  {
+    id: "tvc-seharian",
+    name: "Seharian",
     when: "Produk yang harus bertahan seharian — sunscreen, deodoran, makeup tahan lama.",
     kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
     hookLevel: "normal", hookFamily: "H11", count: 2, tvcRoute: "reallife",
     bestFor: ["beauty", "health", "fashion"],
-    preview: "/previews/format-tvc.mp4", accent: "sky",
-  },
-  {
-    id: "tvc-15",
-    name: "TVC 15 Detik",
-    when: "Materi brand yang rapi: sinematik, terkontrol, ditutup hero shot.",
-    kind: "tvc", format: "tvc", durationSec: 15, tier: "high_quality",
-    hookLevel: "normal", hookFamily: "H12", count: 2,
-    bestFor: ["beauty", "food", "electronics", "kitchen"],
-    preview: "/previews/format-tvc.mp4", accent: "zinc",
-  },
-  {
-    id: "tvc-30",
-    name: "TVC 30 Detik",
-    when: "Versi panjang: dunia brand, bukti, reaksi, lalu packshot.",
-    kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
-    hookLevel: "normal", hookFamily: "H11", count: 2,
-    bestFor: ["beauty", "food", "electronics", "kitchen"],
-    preview: "/previews/format-tvc.mp4", accent: "zinc",
+    preview: "/previews/tvc-seharian.mp4", accent: "sky",
   },
 ];
 
