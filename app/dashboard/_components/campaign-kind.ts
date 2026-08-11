@@ -15,7 +15,7 @@ export function campaignFormatLabel(format: string | null | undefined): string |
     case "hands_only": return "Tangan + VO";
     case "vo_broll": return "Foto + VO";
     case "tvc": return "Sinematik";
-    case "ads": return "Iklan jasa";
+    case "ads": return "Iklan";
     default: return null;
   }
 }

@@ -132,7 +132,7 @@ export default function SceneReviewPage({ params }: { params: Promise<{ jobId: s
             const promptOpen = openPrompt.has(scene.idx);
             return (
               <li key={scene.idx} className="flex gap-4 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
-                <div className="w-40 shrink-0">
+                <div className="w-32 shrink-0">
                   {scene.thumb_url ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img src={scene.thumb_url} alt={`Scene ${scene.idx + 1}`} className="aspect-[9/16] w-full rounded-lg bg-zinc-900 object-cover" />
@@ -141,7 +141,11 @@ export default function SceneReviewPage({ params }: { params: Promise<{ jobId: s
                   )}
                 </div>
 
-                <div className="min-w-0 flex-1 space-y-2">
+                {/* justify-between: sebelumnya seluruh isi menggumpal di atas
+                    dan menyisakan ruang kosong setinggi hampir separuh kartu,
+                    karena tinggi baris ditentukan thumbnail 9:16. Sekarang
+                    aksinya turun ke bawah dan kartunya terbaca utuh. */}
+                <div className="flex min-w-0 flex-1 flex-col justify-between gap-2">
                   <div className="flex items-center justify-between">
                     <p className="text-sm font-bold text-zinc-900">Scene {scene.idx + 1}</p>
                     <span className="text-xs text-zinc-400">{scene.duration_sec.toFixed(0)} dtk</span>

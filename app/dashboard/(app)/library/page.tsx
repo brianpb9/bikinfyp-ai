@@ -29,6 +29,7 @@ const STATE_LABEL: Record<string, string> = {
 };
 const FORMAT_LABEL: Record<string, string> = {
   talking_head: "Wajah AI", hands_only: "Tangan + VO", tvc: "TVC", vo_broll: "Foto + VO",
+  ads: "Iklan",
 };
 
 const TABS = [
