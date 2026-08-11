@@ -5,6 +5,7 @@ import { useEffect, useState } from "react";
 import { apiFetch } from "./_components/api";
 import { PrimaryButton } from "./_components/ui";
 import { relTime } from "./_components/flow";
+import { JobThumb } from "./_components/JobThumb";
 
 interface JobItem {
   id: string;
@@ -12,6 +13,7 @@ interface JobItem {
   product_name: string;
   created_at: string;
   thumb_url: string | null;
+  preview_url: string | null;
 }
 
 // S1 — BERANDA
@@ -78,12 +80,7 @@ export default function HomePage() {
             {jobs.slice(0, 3).map((j) => (
               <Link key={j.id} href={`/bikin/hasil?job=${j.id}`} className="space-y-1">
                 <div className="aspect-[9/16] overflow-hidden rounded-2xl bg-zinc-200 shadow-sm ring-1 ring-black/5">
-                  {j.thumb_url ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={j.thumb_url} alt={j.product_name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-2xl">📦</div>
-                  )}
+                  <JobThumb preview_url={j.preview_url} thumb_url={j.thumb_url} alt={j.product_name} />
                 </div>
                 <p className="truncate text-xs text-zinc-600">
                   {j.product_name} · {relTime(j.created_at)}

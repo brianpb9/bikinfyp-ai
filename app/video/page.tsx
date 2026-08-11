@@ -6,6 +6,7 @@ import { apiFetch } from "../_components/api";
 import { PrimaryButton } from "../_components/ui";
 import { relTime } from "../_components/flow";
 import { track } from "../_components/track";
+import { JobThumb } from "../_components/JobThumb";
 
 interface JobItem {
   id: string;
@@ -13,6 +14,7 @@ interface JobItem {
   product_name: string;
   created_at: string;
   thumb_url: string | null;
+  preview_url: string | null;
   script_id: string;
   fyp_score?: number | null;
   fyp_posted_url?: string | null;
@@ -195,12 +197,7 @@ export default function VideoPage() {
           {shown.map((j) => (
           <div key={j.id} className="flex gap-3 rounded-3xl border border-zinc-200 bg-white p-3 shadow-sm transition-transform active:scale-[0.99]">
             <div className="h-24 w-16 shrink-0 overflow-hidden rounded-2xl bg-zinc-200 ring-1 ring-black/5">
-              {j.thumb_url ? (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img src={j.thumb_url} alt={j.product_name} className="h-full w-full object-cover" loading="lazy" decoding="async" />
-              ) : (
-                <div className="flex h-full items-center justify-center text-xl">📦</div>
-              )}
+              <JobThumb preview_url={j.preview_url} thumb_url={j.thumb_url} alt={j.product_name} />
             </div>
             <div className="min-w-0 flex-1 space-y-1">
               <p className="truncate font-bold">{j.product_name}</p>

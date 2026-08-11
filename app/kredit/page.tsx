@@ -145,7 +145,7 @@ function KreditInner() {
         <p className="mt-2 font-display text-[2.6rem] font-extrabold leading-none tracking-tight">
           {balance === null ? "…" : rupiah(balance)}
         </p>
-        <p className="mt-1 text-xs text-zinc-400">BikinFYP.AI · dompet kreator</p>
+        <p className="mt-1 text-xs text-zinc-400">BikinFYP AI · dompet kreator</p>
         <div className="mt-4 grid grid-cols-2 gap-2 border-t border-white/10 pt-3 text-center">
           <div className="rounded-xl bg-white/5 px-2 py-2">
             <p className="font-display text-lg font-extrabold text-amber-300">{nHq ?? "…"}</p>

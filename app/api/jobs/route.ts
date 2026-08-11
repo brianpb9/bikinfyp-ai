@@ -215,6 +215,30 @@ export async function POST(req: Request) {
   }
 }
 
+/** Gambar kecil untuk daftar riwayat.
+ *
+ *  DULU ini selalu foto produk yang diunggah pengguna, dan itu salah: satu
+ *  produk dipakai untuk banyak video, jadi seluruh riwayat tampil dengan foto
+ *  yang sama persis — pengguna tidak bisa membedakan video mana yang mana, dan
+ *  yang dilihat pertama kali justru foto mentah, bukan hasil kerja kita.
+ *
+ *  Sekarang video hasilnya sendiri yang dikirim (`preview_url`). Klien
+ *  merendernya dengan preload="metadata" sehingga browser hanya menarik frame
+ *  pertama, bukan seluruh berkas — kekhawatiran kuota yang dulu jadi alasan
+ *  memakai foto produk tetap terjaga. Foto produk tinggal cadangan untuk job
+ *  yang belum punya hasil (masih antre/render/gagal). */
+function attachPreview<T extends { product_images: string; output_video?: string | null }>(j: T) {
+  let thumb_url: string | null = null;
+  try {
+    const imgs = JSON.parse(j.product_images) as string[];
+    if (imgs.length > 0) thumb_url = createSignedUrl(imgs[0], "thumb");
+  } catch {
+    /* abaikan */
+  }
+  const { product_images: _omit, output_video, ...rest } = j;
+  return { ...rest, thumb_url, preview_url: output_video ? createSignedUrl(output_video) : null };
+}
+
 // GET /api/jobs — riwayat job pengguna.
 export async function GET(req: Request) {
   try {
@@ -226,24 +250,15 @@ export async function GET(req: Request) {
         `SELECT j.id, j.state, j.format, j.duration_s, j.created_at, j.completed_at,
                 j.provider_video, j.provider_voice, j.cost_actual_idr, j.script_id,
                 p.name AS product_name, p.images AS product_images,
+                o.video_url AS output_video,
                 fs.score AS fyp_score, fs.posted_url AS fyp_posted_url
          FROM jobs j JOIN products p ON p.id = j.product_id
+         LEFT JOIN outputs o ON o.job_id = j.id
          LEFT JOIN fyp_snapshots fs ON fs.job_id = j.id
          WHERE j.user_id = ? ORDER BY j.created_at DESC LIMIT 50`
       )
-      .all(user.id) as (JobRow & { script_id: string; product_images: string })[];
-    // Lampirkan signed URL thumbnail (foto produk pertama) untuk daftar — hemat kuota, tanpa autoplay.
-    const withThumbs = jobs.map((j) => {
-      let thumb_url: string | null = null;
-      try {
-        const imgs = JSON.parse(j.product_images) as string[];
-        if (imgs.length > 0) thumb_url = createSignedUrl(imgs[0], "thumb");
-      } catch {
-        /* abaikan */
-      }
-      const { product_images: _omit, ...rest } = j;
-      return { ...rest, thumb_url };
-    });
+      .all(user.id) as (JobRow & { script_id: string; product_images: string; output_video: string | null })[];
+    const withThumbs = jobs.map(attachPreview);
     return Response.json({ jobs: withThumbs });
   } catch (err) {
     return errorResponse(err);

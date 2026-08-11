@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail } from "../_components/api";
 import { PrimaryButton, ErrorText } from "../_components/ui";
@@ -11,6 +11,42 @@ const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   state_mismatch: "Sesi login-nya kedaluwarsa, coba lagi ya.",
   email_not_verified: "Email Google kamu belum terverifikasi. Pakai email lain atau login pakai OTP.",
 };
+
+/** Klip showcase yang baru diunduh setelah tergulir ke layar.
+ *
+ *  Contoh videonya sengaja dinaikkan mutunya (270px -> 360px, bitrate 2-3x),
+ *  dan itu menambah ~1,9 MB. Strip ini ada DI BAWAH lipatan: memuatnya di awal
+ *  berarti menagih kuota pengunjung untuk sesuatu yang mungkin tidak pernah
+ *  mereka lihat — mahal di jaringan seluler Indonesia. Dengan menunda src,
+ *  yang terunduh saat halaman dibuka hanya hero. */
+function LazyClip({ src }: { src: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [show, setShow] = useState(false);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    // Browser tanpa IntersectionObserver (mis. WebView lawas) langsung dimuat —
+    // lebih baik boros kuota daripada kotak hitam permanen.
+    if (typeof IntersectionObserver === "undefined") return setShow(true);
+    const io = new IntersectionObserver(
+      ([e]) => { if (e.isIntersecting) { setShow(true); io.disconnect(); } },
+      { rootMargin: "200px" }, // mulai unduh sedikit sebelum masuk layar
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, []);
+  return (
+    <video
+      ref={ref}
+      src={show ? src : undefined}
+      autoPlay
+      muted
+      loop
+      playsInline
+      className="h-40 w-[90px] bg-zinc-200 object-cover"
+    />
+  );
+}
 
 // S0 — ONBOARDING: nilai produk -> nomor HP -> kode OTP WhatsApp -> beranda.
 export default function OnboardingPage() {
@@ -84,36 +120,64 @@ export default function OnboardingPage() {
         <>
           <div className="flex-1 space-y-9">
             <div className="flex items-center justify-between text-xs font-semibold text-zinc-500">
-              <span className="font-display text-base font-extrabold text-zinc-900">Bikin<span className="text-amber-500">FYP</span>.AI</span>
+              {/* Nama produk mengikuti SiteChrome dan <title>: "BikinFYP AI".
+                  Halaman ini sempat tertinggal menulis "BikinFYP.AI". */}
+              <span className="font-display text-base font-extrabold text-zinc-900">BikinFYP <span className="text-amber-500">AI</span></span>
               <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">● Harga transparan</span>
             </div>
             <div className="mx-auto w-48 overflow-hidden rounded-[28px] bg-zinc-900 shadow-2xl shadow-amber-900/10 ring-1 ring-black/5">
               <video src="/demo/contoh-hero.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full" />
             </div>
+            {/* JUDUL: yang dijual bukan "tanpa syuting" — itu caranya, bukan
+                masalahnya. Masalah penjual TikTok Shop adalah konten harus
+                jalan TIAP HARI dan mereka tidak sanggup mengejarnya. Judulnya
+                menyebut beban itu, bukan fitur kita.
+
+                ANGKANYA NYATA, bukan bumbu: Rp12.000 = config.tiers AI Bersuara,
+                Rp125.000 = titik tengah riset Fastwork yang sama dipakai
+                kalkulator di bawah, dan "video pertama gratis" persis benar
+                karena signupBonusIdr (12000) = harga satu video bersuara.
+                Kalau salah satu angka ini berubah di lib/config.ts, kalimat di
+                sini ikut berubah. */}
             <div className="space-y-3">
               <h1 className="text-center font-display text-[2.3rem] font-extrabold leading-[1.08] tracking-tight text-zinc-900">
-                Bikin video jualan
+                Konten jualan tiap hari
                 <br />
                 <span className="text-amber-500">tanpa syuting.</span>
               </h1>
-              <p className="text-center text-lg text-zinc-600">
-                15 detik, siap posting ke TikTok Shop. Cukup foto produk — sisanya kami yang kerjakan.
+              <p className="text-center text-lg leading-snug text-zinc-600">
+                Upload foto produk, tiga menit kemudian videonya siap posting.
+                <br />
+                <b className="text-zinc-900">Rp12.000</b> per video — jasa UGC minta Rp125.000.
               </p>
-              {/* Magic moment tanpa daftar (2026-08-06): rasakan hasil dulu, daftar belakangan. */}
+              <a
+                href="/onboarding#daftar"
+                onClick={(e) => { e.preventDefault(); track("hero_cta_click"); setStep(2); }}
+                className="mx-auto flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 px-6 text-lg font-extrabold text-white shadow-lg shadow-amber-500/25 active:bg-amber-600"
+              >
+                Bikin video pertama — gratis
+              </a>
+              {/* Magic moment tanpa daftar (2026-08-06): rasakan hasil dulu,
+                  daftar belakangan. Turun jadi tautan kecil — dulu ini satu-
+                  satunya tombol di hero, jadi pengunjung yang sudah yakin pun
+                  digiring ke jalur "lihat skrip" yang tidak menghasilkan akun. */}
               <a
                 href="/coba"
                 onClick={() => track("try_signup_click", { from: "hero" })}
-                className="mx-auto flex min-h-[48px] w-fit items-center justify-center rounded-2xl border-2 border-amber-400 bg-white px-6 font-bold text-amber-600 shadow-sm active:bg-amber-50"
+                className="mx-auto flex min-h-[44px] w-fit items-center justify-center text-sm font-semibold text-zinc-500 underline decoration-zinc-300 underline-offset-4"
               >
-                ✍️ Coba lihat skripmu dulu — tanpa daftar
+                Belum yakin? Lihat contoh skripnya dulu — tanpa daftar
               </a>
             </div>
             <div>
               <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                Hasil video AI kami — bukan mockup
+                Semua ini AI — tidak ada yang disyuting
               </p>
               <div className="-mx-6 flex gap-3 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {/* Render BytePlus asli (2026-08-06) — video bergerak, bukan still. */}
+                {/* Render asli dari pipeline kita sendiri, di-encode ulang dari
+                    sumber 720p (2026-08-12). Yang lama 270x480 @120 kbps dan
+                    terlihat pecah — kami menjual kualitas video, jadi contoh
+                    yang buram adalah argumen yang melawan diri sendiri. */}
                 {[
                   { src: "/showcase/hijaber.mp4", label: "Hijaber" },
                   { src: "/showcase/genz.mp4", label: "Gen-Z" },
@@ -121,7 +185,7 @@ export default function OnboardingPage() {
                   { src: "/showcase/tangan.mp4", label: "Tanpa wajah" },
                 ].map((s, i) => (
                   <div key={i} className="relative shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-black/5">
-                    <video src={s.src} autoPlay muted loop playsInline className="h-40 w-[90px] object-cover" />
+                    <LazyClip src={s.src} />
                     <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
                       {s.label}
                     </span>
@@ -131,9 +195,14 @@ export default function OnboardingPage() {
             </div>
             <div className="grid grid-cols-2 gap-2">
               {[
+                // Angka-angka ini dihitung ulang dari kode 2026-08-12, bukan
+                // disalin: "11 kreator" = CREATORS di app/bikin/gaya yang
+                // active:true (yang ke-12, "daerah", masih dimatikan), dan
+                // Rp12.000 = tier AI Bersuara di lib/config.ts. Sebelumnya
+                // tertulis "5 gaya" — MENGECILKAN produk sendiri.
                 { value: "15 detik", label: "video siap posting" },
-                { value: "~2–3 menit", label: "waktu render rata-rata staging" },
-                { value: "5 gaya", label: "kreator AI aktif" },
+                { value: "~2–3 menit", label: "rata-rata selesai render" },
+                { value: "11 kreator", label: "wajah AI siap pakai" },
                 { value: "Rp12.000", label: "harga per video bersuara" },
               ].map((f) => (
                 <div
@@ -178,9 +247,15 @@ export default function OnboardingPage() {
               ["Ada garansi kalau render gagal?", "Ya. Hold kredit dilepas otomatis ketika job gagal, jadi saldo bisa dipakai lagi untuk mencoba render berikutnya."],
             ].map(([q,a],i)=><div key={q} className="rounded-2xl border border-zinc-200 bg-white"><button type="button" onClick={()=>setOpenFaq(openFaq===i?null:i)} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left text-sm font-bold text-zinc-800"><span>{q}</span><span className="text-amber-500">{openFaq===i?"−":"+"}</span></button>{openFaq===i&&<p className="border-t border-zinc-100 px-4 py-3 text-sm leading-relaxed text-zinc-600">{a}</p>}</div>)}</div></section>
           </div>
-          <PrimaryButton big onClick={() => setStep(2)}>
-            Coba Gratis
+          {/* "Coba Gratis" tidak menjelaskan apa yang gratis. Bonus daftar
+              Rp12.000 kebetulan persis satu video bersuara, jadi janjinya bisa
+              dibuat spesifik tanpa melebih-lebihkan. */}
+          <PrimaryButton big onClick={() => { track("bottom_cta_click"); setStep(2); }}>
+            Bikin video pertama — gratis
           </PrimaryButton>
+          <p className="mt-2 text-center text-xs text-zinc-500">
+            Daftar dapat Rp12.000 — cukup untuk 1 video bersuara. Tanpa kartu kredit.
+          </p>
           <button type="button" onClick={() => setStep(2)} className="mt-3 min-h-[44px] w-full text-center text-sm text-zinc-500">
             Sudah punya akun? Masuk
           </button>
