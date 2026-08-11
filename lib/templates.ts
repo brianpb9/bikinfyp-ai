@@ -366,6 +366,50 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     beats: { hookEnd: 0.178, demoEnd: 0.889 },
     preview: "/previews/t12-vox-pop.mp4", accent: "sky",
   },
+  // ── UGC ADS: PATTERN-INTERRUPT ────────────────────────────────────────────
+  //
+  // Tiga template ini diturunkan dari render KAMI SENDIRI (test_output/
+  // viral-hook-test, Brian 2026-08-11) — bukan portfolio pihak lain, jadi
+  // pratinjaunya memang hasil mesin kita.
+  //
+  // Polanya sama di ketiganya dan itu yang membedakannya dari UGC Ads biasa:
+  // buka dengan kejadian yang mustahil, lalu POTONG KERAS ke produk aslinya
+  // di tangan. Yang menahan penonton adalah keanehannya, yang menjual adalah
+  // potongan kerasnya. Karena itu hookLevel-nya "gila" — di level itulah
+  // perencana shot memasang pembuka pattern-interrupt.
+  {
+    id: "ads-tembus-dinding", group: "lain",
+    name: "Tembus Dinding",
+    when: "Butuh perhatian dalam 2 detik. Sesuatu menembus ruangan di belakang presenter, lalu produknya yang menutup.",
+    kind: "ads", format: "ads", durationSec: 30, tier: "high_quality",
+    hookLevel: "gila", hookFamily: "H6", count: 2, shotCount: 4,
+    bestFor: ["gadget", "app", "toko", "jasa"],
+    source: { durationSec: 21, shots: 4 },
+    beats: { hookEnd: 0.280, demoEnd: 0.790 },
+    preview: "/previews/ads-tembus-dinding.mp4", accent: "sky",
+  },
+  {
+    id: "ads-atap-jebol", group: "lain",
+    name: "Atap Jebol",
+    when: "Interupsi datang dari atas — atap runtuh, orangnya jatuh masuk frame, langsung ke produk.",
+    kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
+    hookLevel: "gila", hookFamily: "H15", count: 2, shotCount: 3,
+    bestFor: ["gadget", "app", "toko", "jasa"],
+    source: { durationSec: 12, shots: 3 },
+    beats: { hookEnd: 0.324, demoEnd: 0.648 },
+    preview: "/previews/ads-atap-jebol.mp4", accent: "amber",
+  },
+  {
+    id: "ads-dobrak-pintu", group: "lain",
+    name: "Dobrak Pintu",
+    when: "Ruangan kosong, lalu seseorang mendobrak masuk dan lari ke kamera. Paling murah dibuat dari ketiganya.",
+    kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
+    hookLevel: "gila", hookFamily: "H8", count: 2, shotCount: 3,
+    bestFor: ["gadget", "app", "toko", "jasa"],
+    source: { durationSec: 12, shots: 3 },
+    beats: { hookEnd: 0.324, demoEnd: 0.648 },
+    preview: "/previews/ads-dobrak-pintu.mp4", accent: "violet",
+  },
   {
     id: "kenalin-bisnis", group: "lain",
     name: "Kenalin Bisnismu",
@@ -373,7 +417,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
     hookLevel: "normal", hookFamily: "H12", count: 3,
     bestFor: ["jasa", "app", "toko"],
-    preview: "/previews/format-ads.mp4", accent: "sky",
+    preview: "/previews/ads-dobrak-pintu.mp4", accent: "sky",
   },
   {
     id: "promo-terbatas", group: "lain",
@@ -382,7 +426,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
     hookLevel: "berani", hookFamily: "H10", count: 4,
     bestFor: ["jasa", "toko", "beauty", "fashion", "food"],
-    preview: "/previews/format-ads.mp4", accent: "rose",
+    preview: "/previews/ads-atap-jebol.mp4", accent: "rose",
   },
   // Dua template TVC dinamai persis seperti produksi Brian yang memang sudah
   // jadi — "THE DROP" dan "SEHARIAN". Preview-nya potongan dari video aslinya,
