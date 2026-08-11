@@ -8,6 +8,7 @@ import { downloadProductImages } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
+import { sanitizeClaims } from "@/lib/media/claim-overlay";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ export const dynamic = "force-dynamic";
 // mungkin (makin lengkap makin bagus hasil render), baru di-fan-out ke 2-6
 // video di langkah berikutnya.
 
-function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_visual_desc?: string | null; brand_brief?: string | null; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; images: string; source_url: string | null }) {
+function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_visual_desc?: string | null; brand_brief?: string | null; claims?: string | null; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; images: string; source_url: string | null }) {
   const images = JSON.parse(product.images || "[]") as string[];
   return {
     product_id: product.id,
@@ -28,6 +29,7 @@ function productPayload(product: { id: string; name: string; price_idr: number; 
     category: product.category,
     product_visual_desc: product.product_visual_desc ?? null,
     brand_brief: product.brand_brief ?? null,
+    claims: product.claims ? JSON.parse(product.claims) : [],
     promo_price_before_idr: product.promo_price_before_idr ?? null,
     promo_ends_at: product.promo_ends_at ?? null,
     promo_stock_left: product.promo_stock_left ?? null,
@@ -116,6 +118,12 @@ export async function PATCH(req: Request) {
     // resolvePromo() yang memutuskan, dan promo kedaluwarsa otomatis di-drop
     // saat render. Harga coret hanya dipakai kalau LEBIH BESAR dari harga
     // jual; kalau tidak, itu klaim diskon palsu dan kami buang di sini.
+    // Klaim untuk overlay teks. Dibersihkan lewat sanitizeClaims yang sama
+    // dengan yang dipakai renderer, jadi apa yang tersimpan persis apa yang
+    // akan tampil — tidak ada aturan panjang/jumlah yang berbeda antara
+    // penyimpanan dan tampilan.
+    const claims = Array.isArray(body.claims) ? sanitizeClaims(body.claims) : null;
+
     const rawBefore = Number(body.promo_price_before_idr);
     const promoBefore = Number.isFinite(rawBefore) && rawBefore > priceIdr ? Math.round(rawBefore) : null;
     const promoEndsAt = typeof body.promo_ends_at === "string" && body.promo_ends_at.trim()
@@ -126,8 +134,8 @@ export async function PATCH(req: Request) {
     const pool = getPool(config.databaseUrl);
     try {
       await pool.query(
-        "UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4, brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8 WHERE id=$9 AND user_id=$10",
-        [name, priceIdr, category, visualDesc, brandBrief, promoBefore, promoEndsAt, promoStock, productId, user.id]
+        "UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4, brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8, claims=COALESCE($11, claims) WHERE id=$9 AND user_id=$10",
+        [name, priceIdr, category, visualDesc, brandBrief, promoBefore, promoEndsAt, promoStock, productId, user.id, claims ? JSON.stringify(claims) : null]
       );
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */

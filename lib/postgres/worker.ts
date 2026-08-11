@@ -39,6 +39,7 @@ import { normalizeHookLevel } from "../config/hooks";
 import { pgTaskMemo } from "./task-memo";
 import { appendEndcard, ENDCARD_DEFAULT_COLOR } from "../media/endcard";
 import { loadBrandKit } from "./brand-kit";
+import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -54,6 +55,7 @@ type WorkerRow = {
   requires_approval: boolean;
   approved_at: string | null;
   shot_count: number | null;
+  product_claims: string | null;
   ratio: string | null;
   product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_images: string; product_price_idr: number;
   promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
@@ -70,7 +72,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
     // (pool org untuk job dari dashboard bulk-generate, user biasa untuk retail).
     const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level,
-      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url,
+      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url,
       p.promo_price_before_idr, p.promo_ends_at, p.promo_stock_left,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
@@ -282,6 +284,15 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,
       demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });
     outputPath = composite.outPath; renderParams = composite.renderParams;
+
+    // Overlay klaim dipasang SEBELUM endcard, supaya klaim menempel di konten
+    // utama saja — menimpanya di layar penutup brand justru merusak endcard.
+    if (row.product_claims) {
+      outputPath = await appendClaimOverlays({
+        videoPath: outputPath, workDir,
+        claims: sanitizeClaims(JSON.parse(row.product_claims || "[]")),
+      });
+    }
 
     // Endcard ber-brand, SESUDAH compositing dan SEBELUM QC.
     //

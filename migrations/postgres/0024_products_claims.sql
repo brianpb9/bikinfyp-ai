@@ -1,0 +1,14 @@
+-- Klaim produk untuk overlay teks (2026-08-11).
+--
+-- Dari referensi Charlotte Tilbury yang Brian kirim: teks di layar ("NEW!
+-- LUXURY PALETTE") adalah BAGIAN dari tampilan iklan, bukan tambahan.
+--
+-- Disimpan di produk, bukan di job: klaim adalah fakta tentang produknya
+-- ("tahan 12 jam", "BPOM terdaftar"), jadi berlaku untuk semua kampanye
+-- produk itu dan tidak perlu diketik ulang tiap kali.
+--
+-- PENTING soal isi: klaim ini DITULIS BRAND, bukan dikarang AI. Validator
+-- skrip kita (L-13/L-14) melarang AI mengarang angka dan klaim; overlay ini
+-- jalur berbeda — brand yang menyatakan, dan brand yang bertanggung jawab
+-- atas kebenarannya.
+ALTER TABLE products ADD COLUMN IF NOT EXISTS claims TEXT;

@@ -97,6 +97,7 @@ CREATE TABLE IF NOT EXISTS products (
   category TEXT NOT NULL,
   product_visual_desc TEXT, -- deskripsi visual produk dari user (konsistensi identitas shot)
   brand_brief TEXT, -- M8: arahan kreatif bebas dari brand (beda dari visual_desc di atas)
+  claims TEXT, -- JSON array klaim singkat untuk overlay teks (ditulis brand, bukan AI)
   images TEXT NOT NULL DEFAULT '[]', -- JSON array path relatif storage
   -- Add-on Promo & Urgency (opsional semua; lihat lib/promo.ts):
   promo_price_before_idr INTEGER, -- harga normal sebelum diskon (harga coret)

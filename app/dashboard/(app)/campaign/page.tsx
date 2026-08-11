@@ -109,6 +109,7 @@ export default function CampaignPage() {
   const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
   const [ratio, setRatio] = useState("9:16");
   const [multiShot, setMultiShot] = useState(false);
+  const [claims, setClaims] = useState<string[]>([]);
   const [shotCount, setShotCount] = useState(3);
   const [hookLevel, setHookLevel] = useState<HookLevel>("normal");
   const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
@@ -254,6 +255,7 @@ export default function CampaignPage() {
           promo_price_before_idr: product.promo_price_before_idr ?? null,
           promo_ends_at: product.promo_ends_at ?? null,
           promo_stock_left: product.promo_stock_left ?? null,
+          claims: claims.map((c) => c.trim()).filter(Boolean),
         },
       });
       setProduct(res);
@@ -559,6 +561,33 @@ export default function CampaignPage() {
                 className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-amber-500 focus:outline-none"
               />
             </label>
+            {/* Klaim: teks yang muncul di layar saat video berjalan.
+                Dipisah dari skrip DENGAN SENGAJA — validator melarang AI
+                mengarang klaim dan angka, sedangkan ini ditulis brand dan
+                brand yang bertanggung jawab atas kebenarannya. */}
+            <div className="rounded-xl border border-zinc-200 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Klaim di layar (opsional)</p>
+              <p className="mt-1 text-xs text-zinc-500">
+                Maksimal 3, muncul bergantian di tengah video. Contoh: &ldquo;Tahan 12 jam&rdquo;, &ldquo;BPOM terdaftar&rdquo;.
+              </p>
+              <div className="mt-3 space-y-2">
+                {[0, 1, 2].map((i) => (
+                  <input
+                    key={i}
+                    value={claims[i] ?? ""}
+                    onChange={(e) => {
+                      const next = [...claims];
+                      next[i] = e.target.value.slice(0, 34);
+                      setClaims(next);
+                    }}
+                    maxLength={34}
+                    placeholder={i === 0 ? "Tahan 12 jam" : `Klaim ${i + 1}`}
+                    className="w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm outline-none placeholder:text-zinc-400 focus:border-amber-400"
+                  />
+                ))}
+              </div>
+            </div>
+
             {/* Urgensi & kelangkaan — angka di sini boleh muncul di caption
                 dan overlay, tapi tidak pernah dikarang di skrip. Promo yang
                 sudah lewat tanggalnya otomatis di-drop saat render. */}
