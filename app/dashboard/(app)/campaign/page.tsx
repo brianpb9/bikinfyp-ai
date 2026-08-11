@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle, ArrowLeft, Camera, CheckCircle2, Film, ImagePlus, Loader2,
-  Megaphone, Plus, ShoppingBag, Sparkles, Trash2,
+  Megaphone, Plus, ShieldAlert, ShoppingBag, Sparkles, Trash2,
 } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../_components/api";
 import { rupiah } from "../../_components/format";
@@ -183,6 +183,11 @@ export default function CampaignPage() {
     // TVC ditulis dan dirender 16:9 — brand melihat pratinjau landscape di
     // galeri, jadi hasilnya harus landscape juga, bukan potret 9:16.
     if (t.ratio) setRatio(t.ratio);
+    // Jumlah adegan ikut template. Angka ini SUDAH disesuaikan dengan batas
+    // mesin kami (minimum 4 detik per adegan), bukan disalin mentah dari video
+    // sumbernya — enam dari 12 video itu berpotongan 1,7-2,5 detik per shot,
+    // ritme yang memang belum bisa kami hasilkan.
+    if (t.shotCount && t.shotCount >= 2) { setMultiShot(true); setShotCount(t.shotCount); }
     // Langsung ke langkah Produk: jenis videonya sudah ditentukan template,
     // menahan brand di layar pilihan jenis cuma menyuruh mengulang keputusan
     // yang baru saja dia ambil di galeri.
@@ -344,9 +349,24 @@ export default function CampaignPage() {
           sendiri tanpa penjelasan, brand akan mengira sistemnya ngawur. */}
       {template && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
-          <p className="text-sm text-amber-900">
-            Pakai template <b>{template.name}</b> — {template.when}
-          </p>
+          <div className="min-w-0">
+            <p className="text-sm text-amber-900">
+              Pakai template <b>{template.name}</b> — {template.when}
+            </p>
+            {/* Rambu ini menempel sampai langkah Review. Template klaim hasil
+                (before/after, day 1 vs day 7, perbandingan dua lengan) tidak
+                boleh dihasilkan penuh oleh AI — larangan itu datang dari
+                dokumen bedahnya sendiri, dan alasannya kuat: bukti sintetis
+                soal efek produk di kulit orang adalah bukti palsu. Kami tetap
+                membiarkan brand memakai kerangkanya, tapi tidak pura-pura
+                bahwa adegan buktinya bisa kami buatkan. */}
+            {template.caution && (
+              <p className="mt-1.5 flex items-start gap-1.5 text-xs font-semibold leading-4 text-red-700">
+                <ShieldAlert size={13} className="mt-px shrink-0" />
+                {template.caution.note}
+              </p>
+            )}
+          </div>
           <button
             onClick={() => setTemplate(null)}
             className="text-xs font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-800"

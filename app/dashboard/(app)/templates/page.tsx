@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Film, LayoutTemplate, Sparkles, Trash2, User } from "lucide-react";
+import { ArrowRight, Film, LayoutTemplate, ShieldAlert, Sparkles, Trash2, User } from "lucide-react";
 import { apiFetch } from "../../../_components/api";
 import { PreviewVideo } from "../../_components/PreviewVideo";
 import { CAMPAIGN_TEMPLATES, type CampaignTemplate } from "@/lib/templates";
@@ -31,6 +31,27 @@ const ACCENT: Record<CampaignTemplate["accent"], string> = {
   sky: "from-sky-400 to-blue-600",
   zinc: "from-zinc-700 to-zinc-950",
 };
+
+// Urutan sengaja: FORMAT dulu. Itu keputusan pertama yang harus diambil brand
+// ("videoku bentuknya seperti apa"), dan ke-12 format ini diturunkan dari video
+// yang benar-benar menang, bukan dari tebakan kami.
+const GROUPS = [
+  {
+    id: "format" as const,
+    title: "12 Format",
+    note: "Hasil bedah 12 video affiliate yang menang — tiap video ternyata memakai formula yang berbeda. Pilih yang cocok dengan produkmu.",
+  },
+  {
+    id: "sudut" as const,
+    title: "Sudut hook",
+    note: "Dari mana produknya didekati. Bisa dipakai di format mana pun.",
+  },
+  {
+    id: "lain" as const,
+    title: "UGC Ads & TVC",
+    note: "Jenis lain — untuk app, jasa, toko, dan iklan sinematik.",
+  },
+];
 
 const FORMAT_LABEL: Record<string, string> = {
   hands_only: "Tangan + VO", talking_head: "Wajah AI", tvc: "Sinematik",
@@ -119,13 +140,39 @@ export default function TemplatesPage() {
         ))}
       </div>
 
-      {/* items-start: sejak kotak pratinjau mengikuti rasio videonya masing-
-          masing, tinggi kartu jadi berbeda-beda. Tanpa ini kartu TVC yang
-          landscape diregangkan setinggi kartu potret di baris yang sama dan
-          badannya bolong besar di tengah. Lebih baik kartunya berhenti sesuai
-          isinya. */}
+      {/* Dikelompokkan, bukan diurut begitu saja. FORMAT dan SUDUT adalah dua
+          sumbu berbeda: format menentukan bentuk videonya (berapa adegan, ada
+          VO atau tidak, apa yang dibuktikan), sudut menentukan dari mana
+          produknya didekati. Dicampur jadi satu daftar, brand mengira ke-19
+          template ini saling menggantikan — padahal satu produk bisa memakai
+          format T02 dengan sudut mana pun. */}
+      {GROUPS.map((g) => {
+        const rows = visible.filter((t) => (t.group ?? "sudut") === g.id);
+        if (rows.length === 0) return null;
+        return (
+          <section key={g.id} className="space-y-3">
+            <div>
+              <h2 className="font-display text-lg font-bold text-zinc-900">{g.title}</h2>
+              <p className="mt-0.5 text-xs text-zinc-500">{g.note}</p>
+            </div>
+            <TemplateGrid rows={rows} />
+          </section>
+        );
+      })}
+
+      <BikinDariNol />
+    </div>
+  );
+}
+
+function TemplateGrid({ rows }: { rows: CampaignTemplate[] }) {
+  return (
+      /* items-start: sejak kotak pratinjau mengikuti rasio videonya masing-
+         masing, tinggi kartu jadi berbeda-beda. Tanpa ini kartu TVC yang
+         landscape diregangkan setinggi kartu potret di baris yang sama dan
+         badannya bolong besar di tengah. */
       <ul className="grid items-start gap-5 sm:grid-cols-2 lg:grid-cols-4">
-        {visible.map((t) => (
+        {rows.map((t) => (
           <li key={t.id}>
             <Link
               href={`/dashboard/campaign?template=${t.id}`}
@@ -147,11 +194,24 @@ export default function TemplatesPage() {
                 <span className="absolute left-3 top-3 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
                   {t.durationSec} dtk · {FORMAT_LABEL[t.format] ?? t.format}
                 </span>
+                {/* Rambu klaim hasil dipasang DI ATAS gambar, bukan di badan
+                    kartu: kalau brand cuma memindai galeri, inilah satu-satunya
+                    hal yang harus dia lihat sebelum mengklik. */}
+                {t.caution && (
+                  <span className="absolute right-3 top-3 inline-flex items-center gap-1 rounded-full bg-red-600 px-2.5 py-1 text-[10px] font-bold text-white">
+                    <ShieldAlert size={11} /> {t.caution.badge}
+                  </span>
+                )}
               </div>
 
               <div className="flex flex-1 flex-col p-4">
                 <p className="font-display text-base font-bold text-zinc-900">{t.name}</p>
                 <p className="mt-1 text-xs leading-5 text-zinc-500">{t.when}</p>
+                {t.caution && (
+                  <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-2 text-[11px] leading-4 text-red-700">
+                    {t.caution.note}
+                  </p>
+                )}
                 <div className="mt-auto flex items-center justify-between pt-4">
                   <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-semibold text-zinc-600">
                     {t.count} variasi
@@ -165,18 +225,21 @@ export default function TemplatesPage() {
           </li>
         ))}
       </ul>
+  );
+}
 
-      <div className="flex items-start gap-3 rounded-2xl border border-dashed border-zinc-300 bg-white p-5">
-        <LayoutTemplate size={18} className="mt-0.5 shrink-0 text-zinc-400" />
-        <div>
-          <p className="text-sm font-semibold text-zinc-800">Mau konsep yang benar-benar bebas?</p>
-          <p className="mt-0.5 text-xs text-zinc-500">
-            Mulai dari kosong dan atur sendiri format, durasi, avatar, dan level hook-nya.
-          </p>
-          <Link href="/dashboard/campaign" className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-700">
-            <Sparkles size={13} /> Bikin dari nol
-          </Link>
-        </div>
+function BikinDariNol() {
+  return (
+    <div className="flex items-start gap-3 rounded-2xl border border-dashed border-zinc-300 bg-white p-5">
+      <LayoutTemplate size={18} className="mt-0.5 shrink-0 text-zinc-400" />
+      <div>
+        <p className="text-sm font-semibold text-zinc-800">Mau konsep yang benar-benar bebas?</p>
+        <p className="mt-0.5 text-xs text-zinc-500">
+          Mulai dari kosong dan atur sendiri format, durasi, avatar, dan level hook-nya.
+        </p>
+        <Link href="/dashboard/campaign" className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-amber-600 hover:text-amber-700">
+          <Sparkles size={13} /> Bikin dari nol
+        </Link>
       </div>
     </div>
   );
