@@ -88,7 +88,14 @@ export default function LibraryPage() {
   const visible = useMemo(() => {
     const needle = q.trim().toLowerCase();
     if (!needle) return data?.videos ?? [];
-    return (data?.videos ?? []).filter((v) => v.product_name.toLowerCase().includes(needle));
+    // Ikut mencari di caption. Mencari hanya di nama produk praktis percuma
+    // begitu satu produk punya belasan video — semuanya cocok atau semuanya
+    // tidak. Yang membedakan video satu dengan lainnya adalah captionnya.
+    return (data?.videos ?? []).filter(
+      (v) =>
+        v.product_name.toLowerCase().includes(needle) ||
+        (v.caption ?? "").toLowerCase().includes(needle)
+    );
   }, [data, q]);
 
   const downloadable = visible.filter((v) => v.download_url);
@@ -129,7 +136,7 @@ export default function LibraryPage() {
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
-              placeholder="Cari produk..."
+              placeholder="Cari produk atau caption..."
               className="w-56 rounded-xl border border-zinc-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-amber-400"
             />
           </div>
@@ -225,6 +232,14 @@ export default function LibraryPage() {
                   <span className="text-zinc-300">·</span>
                   <span>{new Date(v.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}</span>
                 </p>
+                {/* Caption dipakai sebagai PEMBEDA baris, bukan hiasan. Kasus
+                    normal di sini adalah beberapa variasi dari SATU produk:
+                    tanpa baris ini semuanya tampil "Glowlab Barrier Serum"
+                    yang sama persis dan brand tidak bisa membedakan mana yang
+                    mana tanpa memutar satu per satu. */}
+                {v.caption && (
+                  <p className="mt-1 truncate text-xs italic text-zinc-400">“{v.caption}”</p>
+                )}
                 <p className="mt-1.5 inline-flex items-center gap-1.5 text-xs font-semibold">
                   {v.state === "READY" ? (
                     <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-emerald-700">

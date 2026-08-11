@@ -117,6 +117,14 @@ export interface RecentBulkRun {
   /** Kunci thumbnail scene pertama, kalau ada. NULL untuk job yang tidak
    * melewati gerbang review (tidak punya baris job_shots sama sekali). */
   thumb_key: string | null;
+  /** Video jadi pertama di run ini — CADANGAN untuk thumb_key.
+   *
+   * Bug nyata (2026-08-11): kampanye yang sudah selesai pun tampil kotak hitam
+   * di beranda, karena satu-satunya sumber gambar adalah job_shots dan job yang
+   * tidak melewati gerbang tinjau scene tidak punya baris job_shots sama
+   * sekali. Videonya sendiri selalu ada begitu state READY, jadi frame
+   * pertamanya dipakai sebagai gambar kartu. */
+  video_key: string | null;
   review_count: number;
   /** Format job pertama di run ini. Satu kampanye = satu produk dengan satu
    * konsep, jadi seluruh jobnya berformat sama (dikunci di route confirm). */
@@ -151,7 +159,11 @@ export async function pgListRecentBulkRuns(orgId: string, limit = 5): Promise<Re
                  ORDER BY j4.created_at ASC LIMIT 1) AS format,
               (SELECT sh.thumb_key FROM jobs j3 JOIN job_shots sh ON sh.job_id = j3.id
                  WHERE j3.bulk_run_id = j.bulk_run_id AND j3.org_id = $1 AND sh.thumb_key IS NOT NULL
-                 ORDER BY j3.created_at ASC, sh.idx ASC LIMIT 1) AS thumb_key
+                 ORDER BY j3.created_at ASC, sh.idx ASC LIMIT 1) AS thumb_key,
+              (SELECT o.video_url FROM jobs j5 JOIN outputs o ON o.job_id = j5.id
+                 WHERE j5.bulk_run_id = j.bulk_run_id AND j5.org_id = $1
+                   AND j5.state = 'READY' AND o.video_url IS NOT NULL
+                 ORDER BY j5.created_at ASC LIMIT 1) AS video_key
        FROM jobs j WHERE j.org_id = $1 AND j.bulk_run_id IS NOT NULL
        GROUP BY j.bulk_run_id ORDER BY MIN(j.created_at) DESC LIMIT $2`,
       [orgId, limit]
@@ -194,7 +206,14 @@ export async function pgGetOrgVideoStats(orgId: string): Promise<OrgVideoStats> 
       `SELECT COUNT(*)::text AS total,
               COUNT(*) FILTER (WHERE state='READY')::text AS ready,
               COUNT(*) FILTER (WHERE state='AWAITING_APPROVAL')::text AS awaiting_review,
-              COALESCE(SUM(cost_actual_idr),0)::text AS spent_idr
+              -- Job yang GAGAL/REFUNDED tidak dihitung: tokennya sudah
+              -- dikembalikan otomatis ke saldo org, jadi bagi brand render itu
+              -- TIDAK memakan token sama sekali. cost_actual_idr sendiri terus
+              -- bertambah selama pipeline berjalan (lihat addCost), jadi job
+              -- yang gagal di tengah jalan tetap menyimpan angka bukan nol —
+              -- menjumlahkannya membuat "token terpakai" lebih besar daripada
+              -- yang benar-benar hilang dari saldo.
+              COALESCE(SUM(cost_actual_idr) FILTER (WHERE state NOT IN ('FAILED','REFUNDED')),0)::text AS spent_idr
        FROM jobs WHERE org_id=$1`,
       [orgId]
     );

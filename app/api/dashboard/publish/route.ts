@@ -48,8 +48,18 @@ export async function GET(req: Request) {
       // Video yang layak dijadwalkan: sudah READY dan punya berkas. Job yang
       // masih berjalan sengaja TIDAK ditawarkan — menjadwalkan sesuatu yang
       // belum tentu jadi hanya memindahkan kekecewaan ke hari H.
-      const ready = (await pool.query<{ job_id: string; product_name: string; video_url: string; created_at: string }>(
-        `SELECT j.id AS job_id, p.name AS product_name, o.video_url, j.created_at
+      // format/durasi/caption ikut dibawa supaya daftar pilihannya bisa
+      // DIBEDAKAN. Satu kampanye biasanya berisi beberapa variasi dari SATU
+      // produk, jadi daftar berisi nama produk saja membuat semua pilihan
+      // tertulis sama persis dan brand harus menebak. Captionnya juga dipakai
+      // untuk mengisi kolom caption otomatis — kita yang membuatnya, tidak
+      // masuk akal menyuruh brand mengetik ulang.
+      const ready = (await pool.query<{
+        job_id: string; product_name: string; video_url: string; created_at: string;
+        format: string; duration_s: number; caption: string | null;
+      }>(
+        `SELECT j.id AS job_id, p.name AS product_name, o.video_url, j.created_at,
+                j.format, j.duration_s, o.caption
          FROM jobs j JOIN products p ON p.id = j.product_id JOIN outputs o ON o.job_id = j.id
          WHERE j.org_id = $1 AND j.state = 'READY' AND o.video_url IS NOT NULL
          ORDER BY j.created_at DESC LIMIT 100`,
@@ -65,7 +75,10 @@ export async function GET(req: Request) {
             ? `${createSignedUrl(r.video_url)}&dl=${encodeURIComponent(`${nameFor(r.product_name)}.mp4`)}`
             : null,
         })),
-        ready: ready.map((r) => ({ job_id: r.job_id, product_name: r.product_name })),
+        ready: ready.map((r) => ({
+          job_id: r.job_id, product_name: r.product_name,
+          format: r.format, duration_s: r.duration_s, caption: r.caption,
+        })),
       });
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */

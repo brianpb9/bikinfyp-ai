@@ -6,14 +6,26 @@ import {
   AlertCircle, CalendarDays, Check, Download, Info, Loader2, Plus, Trash2,
 } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../_components/api";
+import { campaignFormatLabel } from "../../_components/campaign-kind";
 
 interface Plan {
   id: string; job_id: string; channel: string; scheduled_at: string;
   caption: string | null; status: string; posted_at: string | null;
   product_name: string; download_url: string | null;
 }
-interface ReadyVideo { job_id: string; product_name: string }
+interface ReadyVideo {
+  job_id: string; product_name: string;
+  format: string; duration_s: number; caption: string | null;
+}
 interface PublishResponse { plans: Plan[]; ready: ReadyVideo[] }
+
+/** Label pilihan video yang benar-benar membedakan satu video dari lainnya. */
+function readyLabel(v: ReadyVideo): string {
+  const parts = [v.product_name, campaignFormatLabel(v.format), `${v.duration_s} dtk`].filter(Boolean);
+  const head = parts.join(" · ");
+  const cap = (v.caption ?? "").trim();
+  return cap ? `${head} — ${cap.slice(0, 45)}${cap.length > 45 ? "…" : ""}` : head;
+}
 
 const CHANNELS = [
   { id: "tiktok", label: "TikTok" },
@@ -44,6 +56,19 @@ export default function PublishPage() {
   const [channel, setChannel] = useState<string>("tiktok");
   const [when, setWhen] = useState("");
   const [caption, setCaption] = useState("");
+
+  // Memilih video sekaligus mengisi captionnya. Caption itu HASIL yang sudah
+  // kita buat dan tersimpan; menyuruh brand membuka library, menyalin, lalu
+  // menempelkannya ke sini adalah pekerjaan yang kita ciptakan sendiri.
+  // Caption yang sudah diketik sendiri tidak ditimpa.
+  function pickVideo(nextJobId: string) {
+    setJobId(nextJobId);
+    const picked = data?.ready.find((v) => v.job_id === nextJobId);
+    const auto = picked?.caption?.trim() ?? "";
+    const untouched = caption.trim() === "" ||
+      data?.ready.some((v) => (v.caption ?? "").trim() === caption.trim());
+    if (auto && untouched) setCaption(auto);
+  }
 
   const load = useCallback(async () => {
     try {
@@ -132,12 +157,17 @@ export default function PublishPage() {
             <div>
               <label className="text-xs font-semibold uppercase tracking-[0.1em] text-zinc-500">Video</label>
               <select
-                value={jobId} onChange={(e) => setJobId(e.target.value)}
+                value={jobId} onChange={(e) => pickVideo(e.target.value)}
                 className="mt-1.5 w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none focus:border-amber-400"
               >
                 <option value="">Pilih video siap...</option>
+                {/* Label harus MEMBEDAKAN. Isi normalnya adalah beberapa
+                    variasi dari satu produk, jadi nama produk saja membuat
+                    setiap baris tertulis sama persis dan brand menebak-nebak
+                    mana yang dijadwalkan. Format, durasi, dan potongan caption
+                    yang membedakannya. */}
                 {data?.ready.map((v) => (
-                  <option key={v.job_id} value={v.job_id}>{v.product_name}</option>
+                  <option key={v.job_id} value={v.job_id}>{readyLabel(v)}</option>
                 ))}
               </select>
             </div>
@@ -161,7 +191,7 @@ export default function PublishPage() {
               <label className="text-xs font-semibold uppercase tracking-[0.1em] text-zinc-500">Caption (opsional)</label>
               <input
                 value={caption} onChange={(e) => setCaption(e.target.value)}
-                placeholder="Tempel caption dari hasil videonya"
+                placeholder="Terisi otomatis dari videonya"
                 className="mt-1.5 w-full rounded-xl border border-zinc-300 px-3 py-2.5 text-sm outline-none placeholder:text-zinc-400 focus:border-amber-400"
               />
             </div>

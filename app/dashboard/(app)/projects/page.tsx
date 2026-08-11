@@ -3,7 +3,7 @@ import { AlertTriangle, CheckCircle2, Eye, Film, Loader2, Plus } from "lucide-re
 import { requireOrgContext } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { pgListRecentBulkRuns, type RecentBulkRun } from "@/lib/postgres/org";
-import { createSignedUrl } from "@/lib/signed-url";
+import { CampaignThumb } from "../../_components/CampaignThumb";
 import { campaignKindLabel, campaignFormatLabel } from "../../_components/campaign-kind";
 
 export const dynamic = "force-dynamic";
@@ -95,14 +95,7 @@ export default async function ProjectsPage({
                   className="group flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-md"
                 >
                   <div className="relative aspect-[16/10] w-full overflow-hidden bg-zinc-900">
-                    {run.thumb_key ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img src={createSignedUrl(run.thumb_key)} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 transition-opacity group-hover:opacity-100" />
-                    ) : (
-                      <div className="flex h-full w-full items-center justify-center text-zinc-700">
-                        <Film size={26} />
-                      </div>
-                    )}
+                    <CampaignThumb thumbKey={run.thumb_key} videoKey={run.video_key} />
                     <span className="absolute right-3 top-3 z-10 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
                       {campaignKindLabel(run.format)}
                     </span>

@@ -4,9 +4,9 @@ import { requireOrgContext } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getOrgBalance } from "@/lib/org";
 import { pgGetOrgBalance, pgGetOrgVideoStats, pgListRecentBulkRuns, type OrgVideoStats, type RecentBulkRun } from "@/lib/postgres/org";
-import { createSignedUrl } from "@/lib/signed-url";
-import { tokens } from "../_components/format";
+import { formatTokens } from "../_components/format";
 import { campaignKindLabel, campaignFormatLabel } from "../_components/campaign-kind";
+import { CampaignThumb } from "../_components/CampaignThumb";
 
 export const dynamic = "force-dynamic";
 
@@ -61,7 +61,11 @@ export default async function DashboardHomePage() {
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
             <Wallet size={12} /> Token organisasi
           </p>
-          <p className="mt-2 truncate font-display text-3xl font-bold text-zinc-900">{tokens(balance)}</p>
+          {/* Angkanya saja — kata "token" sudah ada di label tepat di atasnya,
+              dan mengulangnya membuat saldo tujuh digit terpotong jadi
+              "3.000.000 tok…" di kartu selebar sepertiga. Angka yang tidak
+              terbaca utuh lebih buruk daripada satuan yang tidak diulang. */}
+          <p className="mt-2 truncate font-display text-3xl font-bold text-zinc-900">{formatTokens(balance)}</p>
           <p className="mt-1 text-xs font-semibold text-amber-600">Tambah token</p>
         </Link>
         <Link href="/dashboard/library" className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition-colors hover:border-amber-400">
@@ -117,14 +121,7 @@ export default async function DashboardHomePage() {
                         dan kotaknya ikut molor jadi hampir 3x tinggi yang
                         diminta. aspect-ratio kalah oleh konten yang meluap. */}
                     <div className="relative aspect-[16/10] w-full overflow-hidden bg-zinc-900">
-                      {run.thumb_key ? (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={createSignedUrl(run.thumb_key)} alt="" className="absolute inset-0 h-full w-full object-cover opacity-90 transition-opacity group-hover:opacity-100" />
-                      ) : (
-                        <div className="flex h-full w-full items-center justify-center text-zinc-700">
-                          <Film size={26} />
-                        </div>
-                      )}
+                      <CampaignThumb thumbKey={run.thumb_key} videoKey={run.video_key} />
                       {/* Jenis kampanye di kanan atas — kiri sudah dipakai
                           lencana status, dan menumpuk keduanya di sisi yang
                           sama membuat nama produk ikut tertutup. */}
