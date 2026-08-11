@@ -1,6 +1,6 @@
 "use client";
 
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle, ArrowLeft, Camera, CheckCircle2, Film, ImagePlus, Loader2,
@@ -10,6 +10,7 @@ import { apiFetch, ApiFail } from "../../../_components/api";
 import { rupiah } from "../../_components/format";
 import { Stepper } from "../../_components/Stepper";
 import { AVATAR_PRESETS, type AvatarGender } from "@/lib/avatar-presets";
+import { getTemplate, type CampaignTemplate } from "@/lib/templates";
 
 type Kind = "affiliate" | "ads" | "tvc";
 type Format = "talking_head" | "hands_only" | "tvc";
@@ -61,6 +62,28 @@ export default function CampaignPage() {
   const [customAvatarDesc, setCustomAvatarDesc] = useState<string | null>(null);
 
   const [count, setCount] = useState(3);
+  // Template terpilih (?template=). Hanya MENGISI AWAL — semua nilainya tetap
+  // terlihat dan bisa diubah di langkah Konsep, jadi tidak ada yang berubah
+  // diam-diam. hookFamilies-nya ikut dikirim ke /generate supaya varian
+  // pertama benar-benar membawa sudut khas template itu.
+  const [template, setTemplate] = useState<CampaignTemplate | null>(null);
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("template");
+    const t = getTemplate(id);
+    if (!t) return;
+    setTemplate(t);
+    setKind(t.kind as Kind);
+    setFormat(t.format as Format);
+    setTier(t.tier as Tier);
+    setDurationSec(t.durationSec);
+    setHookLevel(t.hookLevel as HookLevel);
+    setCount(t.count);
+    // Langsung ke langkah Produk: jenis videonya sudah ditentukan template,
+    // menahan brand di layar pilihan jenis cuma menyuruh mengulang keputusan
+    // yang baru saja dia ambil di galeri.
+    setStep(1);
+  }, []);
+
   const [scripts, setScripts] = useState<GeneratedScript[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
 
@@ -164,7 +187,10 @@ export default function CampaignPage() {
     try {
       const res = await apiFetch<{ requested: number; scripts: GeneratedScript[] }>(
         "/api/dashboard/campaign/generate",
-        { json: { product_id: product.product_id, count, tier, duration_sec: durationSec, hook_level: hookLevel } }
+        { json: {
+          product_id: product.product_id, count, tier, duration_sec: durationSec, hook_level: hookLevel,
+          ...(template?.hookFamily ? { hook_families: [template.hookFamily] } : {}),
+        } }
       );
       setScripts(res.scripts);
       setExcluded(new Set());
@@ -204,6 +230,22 @@ export default function CampaignPage() {
       <div className="space-y-3">
         <Stepper steps={STEPS} current={step} onJump={(i) => go(i)} />
       </div>
+
+      {/* Template aktif ditampilkan terang-terangan. Kalau pengaturan terisi
+          sendiri tanpa penjelasan, brand akan mengira sistemnya ngawur. */}
+      {template && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-900">
+            Pakai template <b>{template.name}</b> — {template.when}
+          </p>
+          <button
+            onClick={() => setTemplate(null)}
+            className="text-xs font-semibold text-amber-700 underline underline-offset-2 hover:text-amber-800"
+          >
+            Lepas template
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">

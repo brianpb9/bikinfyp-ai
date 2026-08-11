@@ -36,6 +36,10 @@ export const config = {
   queueMode: env("RACUN_QUEUE_MODE", "inline"),
   redisUrl: env("REDIS_URL", ""),
   redisQueueName: env("REDIS_QUEUE_NAME", "racun-jobs"),
+  // Nomor WhatsApp dukungan, format internasional tanpa "+" (mis. 628123456789).
+  // SENGAJA tanpa nilai bawaan: nomor asal-asalan akan mengirim brand ke orang
+  // yang tidak dikenal. Kalau kosong, halaman Bantuan menyembunyikan tombolnya.
+  supportWhatsapp: env("SUPPORT_WHATSAPP", ""),
   workerConcurrency: parseInt(env("WORKER_CONCURRENCY", "1"), 10),
   dbPath: path.resolve(process.cwd(), env("DB_PATH", "./data/racun.db")),
   storageDir: path.resolve(process.cwd(), env("STORAGE_DIR", "./storage")),

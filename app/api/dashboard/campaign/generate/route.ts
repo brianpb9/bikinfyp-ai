@@ -1,4 +1,5 @@
 import { ERR, errorResponse } from "@/lib/errors";
+import type { HookCode } from "@/lib/config/hooks";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { generateScripts } from "@/lib/script-engine";
 import { cleanProductName } from "@/lib/extract";
@@ -43,6 +44,15 @@ export async function POST(req: Request) {
     if (!durationSec) throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Unsupported duration.");
     const hookLevel = ["normal", "berani", "gila"].includes(body.hook_level) ? (body.hook_level as "normal" | "berani" | "gila") : "normal";
     const register = ["bunda", "bestie", "genz", "netral"].includes(body.register) ? body.register : "netral";
+    // Hook khas template (mis. "Diskon Gede" -> H1). pickHookFamilies menaruh
+    // ini di DEPAN lalu melanjutkan dengan prioritas kategori, jadi varian
+    // pertama membawa sudut template dan sisanya tetap beragam — bukan 4 video
+    // dengan hook yang sama persis. Divalidasi ketat: kode yang tidak dikenal
+    // diabaikan, bukan diteruskan ke mesin.
+    const rawFamilies = Array.isArray(body.hook_families) ? body.hook_families : [];
+    const hookFamilies = rawFamilies
+      .map((f: unknown) => String(f ?? "").toUpperCase())
+      .filter((f: string) => /^H([1-9]|1[0-6])$/.test(f)) as HookCode[];
 
     const run = (name: string) => generateScripts({
       product: {
@@ -50,6 +60,7 @@ export async function POST(req: Request) {
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
       },
       register, emotion: "senang", qualityTier: tier, durationSec, hookLevel, count,
+      ...(hookFamilies.length ? { hookFamilies } : {}),
     });
 
     let variants = run(product.name);

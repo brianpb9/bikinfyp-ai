@@ -112,6 +112,11 @@ export interface RecentBulkRun {
    * melewati gerbang review (tidak punya baris job_shots sama sekali). */
   thumb_key: string | null;
   review_count: number;
+  /** Job yang belum mencapai state akhir (masih dirender). Dipakai memisahkan
+   * proyek "Aktif" dari "Selesai" — proyek dengan 2 siap + 1 gagal TIDAK boleh
+   * dianggap masih berjalan hanya karena ready_count < total. */
+  pending_count: number;
+  failed_count: number;
 }
 
 /** Bulk run terbaru org ini (M4) — dikelompokkan dari jobs.bulk_run_id,
@@ -127,6 +132,8 @@ export async function pgListRecentBulkRuns(orgId: string, limit = 5): Promise<Re
       `SELECT j.bulk_run_id, MIN(j.created_at) AS created_at, COUNT(*)::int AS total,
               COUNT(*) FILTER (WHERE j.state = 'READY')::int AS ready_count,
               COUNT(*) FILTER (WHERE j.state = 'AWAITING_APPROVAL')::int AS review_count,
+              COUNT(*) FILTER (WHERE j.state NOT IN ('READY','FAILED','REFUNDED'))::int AS pending_count,
+              COUNT(*) FILTER (WHERE j.state IN ('FAILED','REFUNDED'))::int AS failed_count,
               (SELECT p.name FROM jobs j2 JOIN products p ON p.id = j2.product_id
                  WHERE j2.bulk_run_id = j.bulk_run_id AND j2.org_id = $1
                  ORDER BY j2.created_at ASC LIMIT 1) AS product_name,

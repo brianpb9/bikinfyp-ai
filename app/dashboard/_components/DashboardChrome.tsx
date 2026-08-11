@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { Home, Library, UserRound, Zap } from "lucide-react";
+import { CircleHelp, FolderKanban, Home, LayoutTemplate, Library, UserRound, Zap } from "lucide-react";
 import { rupiah } from "./format";
 
 // Desktop-first shell (F-ENT-01, 2026-08-11) — deliberately NOT app/_components/
@@ -19,9 +19,16 @@ import { rupiah } from "./format";
 const NAV = [
   { href: "/dashboard", label: "Beranda", icon: Home, disabled: false },
   { href: "/dashboard/campaign", label: "Bikin Video", icon: Zap, disabled: false },
+  { href: "/dashboard/templates", label: "Templates", icon: LayoutTemplate, disabled: false },
+  { href: "/dashboard/projects", label: "Proyek", icon: FolderKanban, disabled: false },
   { href: "/dashboard/library", label: "Library", icon: Library, disabled: false },
   { href: "/dashboard/profile", label: "Profil", icon: UserRound, disabled: false },
 ] as const;
+
+// Bantuan dipisah ke kaki sidebar, bukan ikut daftar utama: ia bukan tempat
+// kerja, tapi jaring pengaman. Menaruhnya sejajar dengan Beranda membuat
+// daftar navigasi terasa dua kali lebih panjang tanpa alasan.
+const FOOTER_NAV = { href: "/dashboard/support", label: "Bantuan", icon: CircleHelp } as const;
 
 export function DashboardChrome({
   orgName,
@@ -78,6 +85,17 @@ export function DashboardChrome({
             );
           })}
         </nav>
+        <div className="px-3 pb-2">
+          <Link
+            href={FOOTER_NAV.href}
+            className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors duration-150 ${
+              pathname?.startsWith(FOOTER_NAV.href) ? "bg-amber-400/10 text-amber-300" : "text-zinc-400 hover:bg-white/5 hover:text-white"
+            }`}
+          >
+            <FOOTER_NAV.icon size={18} strokeWidth={2} aria-hidden="true" />
+            {FOOTER_NAV.label}
+          </Link>
+        </div>
         <div className="border-t border-white/10 p-3">
           <Link
             href="/dashboard/credits"
