@@ -5,11 +5,19 @@ import { getJob, failJob, sweepStaleJobs } from "../lib/jobs";
 import { assertQueueConfiguration, queueMode } from "../lib/job-queue";
 import { processJob } from "../lib/worker";
 import { processPostgresJob, sweepPostgresStaleJobs } from "../lib/postgres/worker";
+import { setTaskMemo } from "../lib/providers/task-memo";
+import { pgTaskMemo } from "../lib/postgres/task-memo";
 import { postgresRuntimeEnabled } from "../lib/postgres/smoke-runtime";
 import { redactWorkerError } from "../lib/worker-log";
 import { monitoringSettings, runOperationalMonitor } from "../lib/operational-monitor";
 import { PROMO_QUEUE_NAME } from "../lib/promo/queue";
 import { processPromoJob } from "../lib/promo/worker";
+
+// Provider sengaja buta database (lib/providers/task-memo.ts). Worker-lah yang
+// memasang implementasi nyatanya, dan HARUS sebelum job pertama diambil —
+// kalau tidak, percobaan pertama berjalan dengan memo no-op dan justru jendela
+// paling rawan (submit lalu proses mati) tetap terbuka.
+setTaskMemo(pgTaskMemo);
 
 assertQueueConfiguration();
 if (queueMode() !== "redis") throw new Error("Worker terpisah membutuhkan RACUN_QUEUE_MODE=redis.");

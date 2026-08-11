@@ -278,3 +278,13 @@ CREATE TABLE IF NOT EXISTS org_templates (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_org_templates_org ON org_templates(org_id, created_at DESC);
+
+-- Ingatan task provider (mirror migrations/postgres/0021_provider_tasks.sql).
+CREATE TABLE IF NOT EXISTS provider_tasks (
+  job_id TEXT NOT NULL,
+  shot_index INTEGER NOT NULL,
+  provider TEXT NOT NULL,
+  task_id TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (job_id, shot_index, provider)
+);

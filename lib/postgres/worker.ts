@@ -36,6 +36,7 @@ import { PgCreditPaymentRepository } from "./credit-payment";
 import { PgJobsRepository } from "./jobs";
 import { getPool } from "./pool";
 import { normalizeHookLevel } from "../config/hooks";
+import { pgTaskMemo } from "./task-memo";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -317,6 +318,13 @@ async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: 
     suggestedPostTime: extras.suggested_post_time, complianceChecklist: JSON.stringify(extras.compliance_checklist) }))) throw new Error("Kepemilikan output job tidak valid.");
   await pool.query("UPDATE jobs SET qc_result=$1,output_url=$2,completed_at=$3 WHERE id=$4", [JSON.stringify(qc), relVideo, at(), row.id]);
   if (!(await jobs.transition(row.id, "READY", { worker: "postgres" }))) throw new Error("Job tidak lagi aktif saat finalisasi output.");
+  // Job selesai: ingatan task tidak berguna lagi, dan membiarkannya justru
+  // berbahaya — task lama yang masih tercatat bisa terpakai ulang kalau job
+  // ini pernah disentuh lagi. Kegagalan pembersihan tidak boleh menggagalkan
+  // job yang sudah sukses; barisnya kedaluwarsa sendiri lewat batas umur.
+  await pgTaskMemo.clear(row.id).catch((err) =>
+    console.warn(`[job ${row.id.slice(0, 8)}] gagal bersihkan ingatan task: ${(err as Error).message}`)
+  );
 }
 
 /** The Redis worker owns timeout recovery while PostgreSQL is the runtime. */

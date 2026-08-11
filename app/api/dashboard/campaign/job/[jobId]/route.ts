@@ -9,6 +9,7 @@ import { regenerateSceneTokens } from "@/lib/credits";
 import type { QualityTier } from "@/lib/providers/types";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
+import { pgForgetShotTask } from "@/lib/postgres/task-memo";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -230,6 +231,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
         "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES (gen_random_uuid()::text,$1,'scene.regenerate','jobs',$2,$3,$4)",
         [user.id, jobId, JSON.stringify({ idx, org_id: membership.org_id, tokens: chargedTokens }), new Date().toISOString()]
       );
+      // Lupakan task provider untuk scene ini SEBELUM worker dibangunkan.
+      // Kalau tidak, worker akan melanjutkan polling task LAMA dan
+      // mengembalikan video yang sama persis — brand sudah ditagih token,
+      // dan tombol "Ganti scene" jadi tidak berfungsi sama sekali.
+      await pgForgetShotTask(jobId, idx);
       await enqueueJobResume(jobId, `regen${idx}`);
       return Response.json({ job_id: jobId, idx, regenerating: true, tokens_charged: chargedTokens });
     } finally {

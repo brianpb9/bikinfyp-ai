@@ -14,6 +14,7 @@ import {
   ProviderNotConfigured,
   type VideoProvider, type VideoAsset, type VisualSpec, type ShotSpec,
 } from "../types";
+import { taskMemo } from "../task-memo";
 
 // Tarif referensi (USD). Sumber:
 // - seedance-1-0-pro: $2,5/1M output tokens — https://docs.byteplus.com/docs/ModelArk/1587798
@@ -131,6 +132,8 @@ export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string
   ];
 }
 
+const PROVIDER_KEY = "byteplus";
+
 async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
   const tierCfg = config.tiers[spec.qualityTier] ?? config.tiers.silent_caption;
   const content = buildTaskContent(spec, shot, tierCfg.byteplusModel);
@@ -210,9 +213,23 @@ export const byteplusVideo: VideoProvider = {
     const perShotTimeoutMs = (config.stateTimeoutsMin.GENERATING_VISUAL * 60_000) / Math.max(1, spec.shots.length);
 
     // Submit semua shot dulu (paralel), lalu polling — hemat waktu total.
+    const memo = taskMemo();
     const submitted = await Promise.all(
       spec.shots.map(async (shot) => {
+        // Percobaan ulang harus MELANJUTKAN task yang sudah dibayar, bukan
+        // mengirim yang baru. Worker yang mati saat polling kehilangan id
+        // task-nya bersama prosesnya, dan tanpa langkah ini BytePlus menagih
+        // dua kali untuk shot yang sama.
+        const remembered = await memo.get(spec.jobId, shot.index, PROVIDER_KEY);
+        if (remembered) {
+          console.log(`[byteplus] job ${spec.jobId} shot ${shot.index}: lanjutkan task ${remembered} (tidak submit ulang)`);
+          return { shot, taskId: remembered, startedAt: Date.now() };
+        }
         const taskId = await createTask(spec, shot);
+        // Disimpan SEBELUM polling. Menyimpannya setelah polling selesai tidak
+        // ada gunanya — justru jendela antara submit dan selesai itulah yang
+        // ingin dilindungi.
+        await memo.put(spec.jobId, shot.index, PROVIDER_KEY, taskId);
         console.log(`[byteplus] job ${spec.jobId} shot ${shot.index}: task ${taskId} dikirim`);
         return { shot, taskId, startedAt: Date.now() };
       })
