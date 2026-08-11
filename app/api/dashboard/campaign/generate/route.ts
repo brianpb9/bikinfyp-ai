@@ -4,6 +4,7 @@ import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { generateScripts } from "@/lib/script-engine";
 import { cleanProductName } from "@/lib/extract";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { normalizeHookLevel } from "@/lib/config/hooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -42,7 +43,7 @@ export async function POST(req: Request) {
     if (!tier) throw ERR.BAD_REQUEST("Tier tidak dikenal. Pilih AI Bersuara atau AI Bersuara Pro.", "Unknown quality tier.");
     const durationSec = [15, 30, 45].includes(Number(body.duration_sec)) ? (Number(body.duration_sec) as 15 | 30 | 45) : null;
     if (!durationSec) throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Unsupported duration.");
-    const hookLevel = ["normal", "berani", "gila"].includes(body.hook_level) ? (body.hook_level as "normal" | "berani" | "gila") : "normal";
+    const hookLevel = normalizeHookLevel(body.hook_level);
     const register = ["bunda", "bestie", "genz", "netral"].includes(body.register) ? body.register : "netral";
     // Hook khas template (mis. "Diskon Gede" -> H1). pickHookFamilies menaruh
     // ini di DEPAN lalu melanjutkan dengan prioritas kategori, jadi varian

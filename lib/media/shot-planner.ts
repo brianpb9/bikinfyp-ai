@@ -46,12 +46,13 @@ export interface ShotPlanInput {
   extraImageRefPaths?: string[];
   qualityTier: QualityTier;
   format?: "hands_only" | "vo_broll" | "talking_head" | "tvc";
-  /** Level hook S3. HANYA "gila" yang mengubah visual: shot 1 dapat pembuka
+  /** Level hook S3 (lima level sejak 2026-08-11). Yang mengubah VISUAL hanya
+   * dua level teratas: "agak gila" memberi pembuka lembut, "gila" pembuka
    * pattern-interrupt PRODUCT-SAFE (gerakan kamera dramatis + produk naik cepat
    * ke tengah frame) — BUKAN adegan bahaya/kacau: aksi ekstrem berisiko kena
    * moderasi platform, merusak konsistensi identitas produk (QC-03), dan
    * silhouette guard QC-02. Berani = teks saja, visual tidak berubah. */
-  hookLevel?: "normal" | "berani" | "gila";
+  hookLevel?: import("../config/hooks").HookLevel;
 }
 
 const HANDS_ONLY_FRAMING =
@@ -352,8 +353,16 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Level gila: pembuka pattern-interrupt HANYA di shot pertama; vo_broll
     // (pan foto, tanpa model video) tidak punya jalur ini.
     const crazyOpener =
-      input.hookLevel === "gila" && isFirst && (format === "hands_only" || format === "talking_head")
-        ? CRAZY_OPENER[format]
+      isFirst && (format === "hands_only" || format === "talking_head")
+        ? input.hookLevel === "gila"
+          ? CRAZY_OPENER[format]
+          // Level 4 ("agak gila"): produk tetap naik cepat ke tengah frame,
+          // tapi tanpa gerakan kamera dramatis. Ini titik tengah yang NYATA
+          // antara level 3 (tanpa pembuka sama sekali) dan level 5 — bukan
+          // sekadar posisi slider tambahan.
+          : input.hookLevel === "agak_gila"
+            ? "opens with the product already moving quickly into the centre of frame, steady camera, "
+            : ""
         : "";
     const base = `${framing}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
 

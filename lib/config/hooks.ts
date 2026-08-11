@@ -44,7 +44,33 @@ export const HOOK_BY_CODE = Object.fromEntries(HOOK_FAMILIES.map((h) => [h.code,
  * negatif — "makin gila makin menang" TIDAK didukung data saat ini. Level ini
  * fitur EKSPERIMEN (dilabeli begitu di UI, jangan dijanjikan "lebih FYP");
  * hasilnya justru jadi data eksperimen buat model (brief §4). */
-export type HookLevel = "normal" | "berani" | "gila";
+export type HookLevel = "normal" | "agak_berani" | "berani" | "agak_gila" | "gila";
+
+/** Lima level (keputusan Brian 2026-08-11). Dua level tambahan BUKAN tempelan:
+ * keduanya bergerak di sepanjang dua dimensi nyata yang memang ada di pipeline,
+ * yaitu keluarga hook yang diprioritaskan dan pembuka visual shot pertama.
+ *
+ *   1 normal        prioritas kategori          — tanpa pembuka khusus
+ *   2 agak berani   campuran kategori + agresif — tanpa pembuka khusus
+ *   3 berani        agresif penuh               — tanpa pembuka khusus
+ *   4 agak gila     agresif penuh               — pembuka lembut
+ *   5 gila          agresif penuh               — pembuka penuh
+ *
+ * Naik level menggeser SUDUT, bukan mutu. Lihat catatan evidensi di atas:
+ * data kami tidak mendukung "makin gila makin menang". */
+export const HOOK_LEVELS: HookLevel[] = ["normal", "agak_berani", "berani", "agak_gila", "gila"];
+
+export function hookLevelRank(level: HookLevel): number {
+  const i = HOOK_LEVELS.indexOf(level);
+  return i < 0 ? 1 : i + 1;
+}
+
+/** Level lama tetap sah — kolom scripts.hook_level menyimpan teks bebas tanpa
+ * CHECK, jadi baris "normal"/"berani"/"gila" yang sudah ada tetap terbaca. */
+export function normalizeHookLevel(raw: unknown): HookLevel {
+  const v = String(raw ?? "");
+  return (HOOK_LEVELS as string[]).includes(v) ? (v as HookLevel) : "normal";
+}
 
 /** Prioritas keluarga untuk level berani/gila: shock/peringatan/FOMO dulu,
  * lalu pertanyaan agresif — tetap dari 16 keluarga tervalidasi (teks tetap

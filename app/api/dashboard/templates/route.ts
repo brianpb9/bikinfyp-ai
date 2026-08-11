@@ -5,6 +5,7 @@ import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled, pgAudit } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
+import { HOOK_LEVELS } from "@/lib/config/hooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export const dynamic = "force-dynamic";
 const KINDS = new Set(["affiliate", "ads", "tvc"]);
 const FORMATS = new Set(["hands_only", "talking_head", "tvc"]);
 const TIERS = new Set(["high_quality", "super_hq"]);
-const LEVELS = new Set(["normal", "berani", "gila"]);
+const LEVELS = new Set(HOOK_LEVELS as string[]);
 const MAX_PER_ORG = 30;
 
 type Row = {

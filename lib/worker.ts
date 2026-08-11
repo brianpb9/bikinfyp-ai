@@ -28,6 +28,7 @@ import { AIGC_WATERMARK_TEXT } from "./config/compliance";
 import { mediaStorage } from "./storage";
 import { MAX_IMAGES } from "./product-images";
 import { personSafeReferencePhotos } from "./media/person-safe-refs";
+import { normalizeHookLevel } from "./config/hooks";
 
 const CONCURRENCY = 1;
 
@@ -137,7 +138,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       qualityTier: tier,
       format,
       // Level hook dari skrip (S3): hanya "gila" yang mengubah prompt shot 1.
-      hookLevel: (script.hook_level === "berani" || script.hook_level === "gila" ? script.hook_level : "normal"),
+      hookLevel: normalizeHookLevel(script.hook_level),
     });
     // vo_broll (VO+Foto): no AI video-gen call — visual is the user's own
     // product photo panned/zoomed, so there's no provider to fail over between.

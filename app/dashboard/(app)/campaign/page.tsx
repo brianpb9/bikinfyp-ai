@@ -15,7 +15,8 @@ import { getTemplate, type CampaignTemplate } from "@/lib/templates";
 type Kind = "affiliate" | "ads" | "tvc";
 type Format = "talking_head" | "hands_only" | "tvc";
 type Tier = "high_quality" | "super_hq";
-type HookLevel = "normal" | "berani" | "gila";
+import type { HookLevel } from "@/lib/config/hooks";
+import { HOOK_LEVELS } from "@/lib/config/hooks";
 
 interface ProductPayload {
   product_id: string; name: string; price_idr: number; category: string;
@@ -42,6 +43,24 @@ function estimateIdr(tier: Tier, durationSec: number, count: number): number {
 // memasukkan banyak link produk. Mereka fokus SATU produk unggulan, melengkapi
 // foto referensi + detail sebanyak mungkin, lalu minta 2-6 VARIASI video dari
 // produk yang sama. Makin lengkap input, makin bagus hasil render.
+// Tiga label untuk lima posisi. Nama di bawah slider hanya menandai ujung dan
+// tengah; keterangan di bawahnya yang menyebutkan level persisnya, supaya
+// posisi 2 dan 4 tetap bisa dipahami tanpa menambah tulisan di slider.
+const HOOK_LABEL: Record<HookLevel, string> = {
+  normal: "Normal", agak_berani: "Agak berani", berani: "Berani",
+  agak_gila: "Agak gila", gila: "Gila",
+};
+// JUJUR SOAL EVIDENSI: data kami TIDAK menunjukkan makin gila makin menang
+// (lihat catatan di lib/config/hooks.ts). Karena itu keterangan di bawah
+// menjelaskan PERBEDAAN SUDUT, bukan menjanjikan hasil lebih bagus.
+const HOOK_HINT: Record<HookLevel, string> = {
+  normal: "Pola paling terbukti untuk kategori produkmu.",
+  agak_berani: "Campuran: video pertama aman, sisanya mulai menantang.",
+  berani: "Semua varian pakai sudut menantang — kaget harga, peringatan, FOMO.",
+  agak_gila: "Sama seperti Berani, plus produk langsung masuk cepat di detik pertama.",
+  gila: "Pembuka nyeleneh dengan gerakan kamera dramatis. Bukan berarti lebih FYP.",
+};
+
 export default function CampaignPage() {
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -617,19 +636,28 @@ export default function CampaignPage() {
               </div>
             </div>
 
+            {/* Level hook: LIMA posisi, TIGA label (keputusan Brian 2026-08-11:
+                "yang di tampilkan di toggle itu 3 tulisan aja, orang paham
+                kok"). Posisi 2 dan 4 sengaja tanpa nama — keduanya titik
+                tengah nyata, bukan pengisi: level 2 mencampur keluarga hook
+                kategori dengan yang agresif, level 4 menambah pembuka visual
+                lembut sebelum yang penuh di level 5. */}
             <div className={kind === "tvc" ? "hidden" : undefined}>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Level hook</p>
-              <div className="flex gap-2">
-                {([
-                  { id: "normal" as const, label: "Normal", hint: "pola paling terbukti" },
-                  { id: "berani" as const, label: "Berani", hint: "hook lebih nendang" },
-                  { id: "gila" as const, label: "Gila", hint: "pembuka nyeleneh" },
-                ]).map((h) => (
-                  <button key={h.id} onClick={() => setHookLevel(h.id)} title={h.hint}
-                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${hookLevel === h.id ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
-                  >{h.label}</button>
-                ))}
+              <div className="mb-3 flex items-baseline justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Level hook</p>
+                <p className="text-xs font-semibold text-amber-600">{HOOK_LABEL[hookLevel]}</p>
               </div>
+              <input
+                type="range" min={1} max={5} step={1}
+                value={HOOK_LEVELS.indexOf(hookLevel) + 1}
+                onChange={(e) => setHookLevel(HOOK_LEVELS[Number(e.target.value) - 1])}
+                className="w-full accent-amber-500"
+                aria-label="Level hook"
+              />
+              <div className="mt-1 flex justify-between text-[11px] font-medium text-zinc-400">
+                <span>Normal</span><span>Berani</span><span>Gila</span>
+              </div>
+              <p className="mt-2 text-xs leading-5 text-zinc-500">{HOOK_HINT[hookLevel]}</p>
             </div>
 
             <div>

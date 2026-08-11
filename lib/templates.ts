@@ -14,7 +14,7 @@
 export type TemplateKind = "affiliate" | "ads" | "tvc";
 export type TemplateFormat = "hands_only" | "talking_head" | "tvc";
 export type TemplateTier = "high_quality" | "super_hq";
-export type TemplateHookLevel = "normal" | "berani" | "gila";
+export type TemplateHookLevel = import("./config/hooks").HookLevel;
 
 export interface CampaignTemplate {
   id: string;

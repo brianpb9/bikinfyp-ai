@@ -35,7 +35,7 @@ export interface PgScriptInput {
   hashtags: unknown;
   validationResult: unknown;
   qualityTier: "silent_caption" | "high_quality" | "super_hq";
-  hookLevel?: "normal" | "berani" | "gila";
+  hookLevel?: import("../config/hooks").HookLevel;
 }
 
 export class PgProductPersonaScriptRepository {

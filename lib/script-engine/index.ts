@@ -85,6 +85,16 @@ function pick(category: string, table: Record<string, string>): string {
  * Level berani/gila memakai BOLD_HOOK_PRIORITY (lintas kategori), bukan prioritas kategori.
  * priorityOverride (Template Terbukti): daftar keluarga pilihan template menang —
  * dipakai sebagai prioritas utama, kekurangan diisi dari prioritas normal. */
+/** Selang-seling dua daftar prioritas tanpa duplikat, urutan dipertahankan. */
+function interleave(a: HookCode[], b: HookCode[]): HookCode[] {
+  const out: HookCode[] = [];
+  for (let i = 0; i < Math.max(a.length, b.length); i++) {
+    if (a[i] && !out.includes(a[i])) out.push(a[i]);
+    if (b[i] && !out.includes(b[i])) out.push(b[i]);
+  }
+  return out;
+}
+
 export function pickHookFamilies(
   category: string,
   productId: string,
@@ -94,8 +104,15 @@ export function pickHookFamilies(
   // Default 3 = perilaku retail lama persis, tidak berubah.
   count = 3
 ): HookCode[] {
-  const base = level === "normal"
-    ? CATEGORY_HOOK_PRIORITY[category] ?? CATEGORY_HOOK_PRIORITY.default
+  const byCategory = CATEGORY_HOOK_PRIORITY[category] ?? CATEGORY_HOOK_PRIORITY.default;
+  // Level 2 ("agak berani") menyelang-selingkan prioritas kategori dengan
+  // yang agresif, jadi varian pertama tetap aman sementara varian berikutnya
+  // mulai menantang. Tanpa pencampuran ini level 2 akan identik dengan
+  // level 1 atau 3 — dan slider yang dua posisinya menghasilkan output sama
+  // persis adalah kebohongan kecil yang cepat ketahuan user.
+  const base =
+    level === "normal" ? byCategory
+    : level === "agak_berani" ? interleave(byCategory, BOLD_HOOK_PRIORITY)
     : BOLD_HOOK_PRIORITY;
   const priority = priorityOverride?.length
     ? [...new Set([...priorityOverride, ...base])]

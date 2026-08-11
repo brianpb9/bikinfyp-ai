@@ -4,6 +4,7 @@ import { getDb, now, uuid, audit, type ProductRow } from "@/lib/db";
 import { generateScripts } from "@/lib/script-engine";
 import { REGISTERS, type Register } from "@/lib/script-engine/registers";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { normalizeHookLevel } from "@/lib/config/hooks";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -24,8 +25,7 @@ export async function POST(req: Request) {
       ? body.quality_tier
       : "high_quality") as "silent_caption" | "high_quality" | "super_hq";
     const emotion = ["senang", "sedih", "gemas"].includes(body.emotion) ? body.emotion : "senang";
-    const hookLevel = (["normal", "berani", "gila"].includes(body.hook_level) ? body.hook_level : "normal") as
-      | "normal" | "berani" | "gila";
+    const hookLevel = normalizeHookLevel(body.hook_level);
     // Template Terbukti: keluarga hook pilihan pola pemenang (opsional, tervalidasi).
     const VALID_HOOKS = new Set(Array.from({ length: 16 }, (_, i) => `H${i + 1}`));
     const hookFamilies = (Array.isArray(body.hook_families) ? body.hook_families : [])

@@ -35,6 +35,7 @@ import { loadJobShots, materializeJobShots, persistJobShots } from "./job-shots"
 import { PgCreditPaymentRepository } from "./credit-payment";
 import { PgJobsRepository } from "./jobs";
 import { getPool } from "./pool";
+import { normalizeHookLevel } from "../config/hooks";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -155,7 +156,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
     extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
-    hookLevel: row.script_hook_level === "berani" || row.script_hook_level === "gila" ? row.script_hook_level : "normal" });
+    hookLevel: normalizeHookLevel(row.script_hook_level) });
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the
   // user's own product photo panned/zoomed, so there's no provider to fail
   // over between and no cost beyond the VO synthesis below.
