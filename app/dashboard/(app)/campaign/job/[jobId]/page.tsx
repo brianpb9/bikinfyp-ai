@@ -1,6 +1,6 @@
 "use client";
 
-import { use, useCallback, useEffect, useState } from "react";
+import { use, useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, Loader2, RotateCcw } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../../../_components/api";
@@ -43,27 +43,48 @@ export default function SceneReviewPage({ params }: { params: Promise<{ jobId: s
     }
   }, [jobId]);
 
+  // Polling DIJALANKAN ULANG lewat pollKey, bukan lewat satu loop yang
+  // menjadwalkan dirinya sendiri.
+  //
+  // Bug yang diperbaiki (dilaporkan Brian: "tombolnya tidak bekerja"): loop
+  // lama berhenti PERMANEN begitu job sampai AWAITING_APPROVAL tanpa regen —
+  // itu memang kondisi menganggur yang benar. Tapi setelah brand menekan
+  // "Ganti scene ini", regen_requested jadi TRUE dan tidak ada lagi yang
+  // polling, jadi spinner "Sedang dibuat ulang..." menggantung selamanya dan
+  // tombol Setujui ikut terkunci (disabled saat regenerating). Dari sisi
+  // brand, SEMUA tombol tampak mati padahal request-nya sukses.
+  //
+  // Sekarang tiap muatan menjadwalkan muatan berikutnya HANYA bila masih ada
+  // yang ditunggu, dan act() menaikkan pollKey sehingga siklusnya hidup lagi.
+  const [pollKey, setPollKey] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
   useEffect(() => {
     let stopped = false;
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    async function tick() {
+    (async () => {
       const res = await load();
       if (stopped) return;
-      // Selama masih ada scene yang sedang digenerate ulang (atau job belum
-      // sampai gerbang review), terus polling — hasilnya berubah sendiri.
-      const waiting = !res || res.state !== "AWAITING_APPROVAL" || res.scenes.some((s) => s.regen_requested);
-      if (waiting) timer = setTimeout(tick, POLL_MS);
-    }
-    tick();
-    return () => { stopped = true; if (timer) clearTimeout(timer); };
-  }, [load]);
+      // Gagal muat pun tetap dijadwalkan ulang: gangguan jaringan sesaat tidak
+      // boleh mematikan layar ini sampai halaman di-refresh manual.
+      // Menganggur HANYA saat benar-benar menunggu keputusan brand: sudah di
+      // gerbang review, belum disetujui, tidak ada regen berjalan. Setelah
+      // disetujui, state DB masih AWAITING_APPROVAL sampai worker mengambil
+      // job — tanpa `res.approved` di sini layar membeku lagi persis seperti
+      // bug regenerate, cuma di langkah berikutnya.
+      const waiting = !res || res.state !== "AWAITING_APPROVAL" || res.approved || res.scenes.some((s) => s.regen_requested);
+      if (waiting) timerRef.current = setTimeout(() => setPollKey((k) => k + 1), POLL_MS);
+    })();
+    return () => { stopped = true; if (timerRef.current) clearTimeout(timerRef.current); };
+  }, [load, pollKey]);
 
   async function act(action: "approve" | "regenerate", idx?: number) {
     setBusy(action === "approve" ? "approve" : `regen-${idx}`);
     setError(null);
     try {
       await apiFetch(`/api/dashboard/campaign/job/${jobId}`, { json: { action, idx } });
-      await load();
+      // Menaikkan pollKey memuat ulang SEKALIGUS menghidupkan lagi siklus
+      // polling — tanpa ini layar membeku persis seperti bug di atas.
+      setPollKey((k) => k + 1);
     } catch (err) {
       setError(err instanceof ApiFail ? err.message : "Aksi gagal.");
     } finally {
@@ -94,7 +115,7 @@ export default function SceneReviewPage({ params }: { params: Promise<{ jobId: s
         </div>
       )}
 
-      {data && data.state !== "AWAITING_APPROVAL" && (
+      {data && (data.approved || data.state !== "AWAITING_APPROVAL") && (
         <div className="flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
           <Loader2 size={16} className="mt-0.5 shrink-0 animate-spin" />
           {data.approved ? "Sudah disetujui — video sedang digabung." : "Scene-nya masih dibuat, sebentar ya."}
@@ -150,7 +171,7 @@ export default function SceneReviewPage({ params }: { params: Promise<{ jobId: s
                     ) : (
                       <button
                         onClick={() => act("regenerate", scene.idx)}
-                        disabled={busy !== null || scene.regen_left === 0 || data.state !== "AWAITING_APPROVAL"}
+                        disabled={busy !== null || scene.regen_left === 0 || data.approved || data.state !== "AWAITING_APPROVAL"}
                         className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
                       >
                         {busy === `regen-${scene.idx}` ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
@@ -168,7 +189,11 @@ export default function SceneReviewPage({ params }: { params: Promise<{ jobId: s
         </ul>
       )}
 
-      {data && data.state === "AWAITING_APPROVAL" && (
+      {/* Bilah persetujuan disembunyikan begitu approved_at terisi. Sebelumnya
+          syaratnya cuma state, padahal state baru berubah saat WORKER mengambil
+          job — jadi setelah menekan Setujui, tombolnya tetap menyala dan tidak
+          ada perubahan apa pun di layar. Brand membacanya sebagai tombol rusak. */}
+      {data && data.state === "AWAITING_APPROVAL" && !data.approved && (
         <div className="flex items-center justify-between rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
           <p className="text-sm text-zinc-600">
             {regenerating

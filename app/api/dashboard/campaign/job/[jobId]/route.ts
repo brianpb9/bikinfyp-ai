@@ -113,7 +113,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
         if (pending.rowCount) {
           throw ERR.BAD_REQUEST("Masih ada scene yang sedang dibuat ulang — tunggu selesai dulu, baru setujui.", "Regeneration still pending.");
         }
-        await pool.query("UPDATE jobs SET approved_at=$1 WHERE id=$2", [new Date().toISOString(), jobId]);
+        // Klaim persetujuan secara ATOMIK. Tanpa `approved_at IS NULL`, dua
+        // klik "Setujui" beruntun sama-sama lolos pengecekan state di atas —
+        // state baru berubah setelah WORKER mengambil job, bukan saat klik.
+        // Akibatnya dua enqueueJobResume() dengan id BullMQ berbeda, dua
+        // worker menggabung job yang sama, dan TTS Gemini ditagih dua kali.
+        const claimed = await pool.query(
+          "UPDATE jobs SET approved_at=$1 WHERE id=$2 AND approved_at IS NULL",
+          [new Date().toISOString(), jobId]
+        );
+        if (!claimed.rowCount) return Response.json({ job_id: jobId, approved: true, already_approved: true });
         await pool.query(
           "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES (gen_random_uuid()::text,$1,'scene.approved','jobs',$2,$3,$4)",
           [user.id, jobId, JSON.stringify({ org_id: membership.org_id }), new Date().toISOString()]
@@ -122,22 +131,43 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
         return Response.json({ job_id: jobId, approved: true });
       }
 
+      // Setelah approved_at terisi, job sudah dilepas ke worker untuk
+      // digabung. Meminta ganti scene di titik ini berarti mengubah bahan di
+      // tengah compositing — hasilnya campur aduk dan providernya tetap
+      // ditagih. state masih AWAITING_APPROVAL sampai worker mengambilnya,
+      // jadi pengecekan state di atas TIDAK menangkap kasus ini.
+      if (job.approved_at) {
+        throw ERR.BAD_REQUEST("Job ini sudah disetujui dan sedang digabung — scene tidak bisa diganti lagi.", "Job already approved.");
+      }
       const idx = Number(body.idx);
       if (!Number.isInteger(idx) || idx < 0) throw ERR.BAD_REQUEST("Nomor scene tidak valid.", "Invalid scene index.");
-      const scene = (await pool.query<{ regen_count: number }>(
-        "SELECT regen_count FROM job_shots WHERE job_id=$1 AND idx=$2", [jobId, idx]
-      )).rows[0];
-      if (!scene) throw ERR.NOT_FOUND("Scene-nya");
-      if (scene.regen_count >= MAX_REGEN_PER_SCENE) {
+      // Klaim jatah regenerate secara ATOMIK, di satu pernyataan. Versi
+      // sebelumnya membaca regen_count lalu meng-update terpisah: dua request
+      // bersamaan sama-sama membaca 2, sama-sama lolos "< 3", lalu sama-sama
+      // menambah — jatahnya jebol dan provider dipanggil dua kali. Syarat
+      // regen_requested=FALSE sekaligus menutup klik ganda pada scene yang
+      // memang sedang dibuat ulang. Tiap panggilan provider ini uang nyata,
+      // jadi penjaganya harus di database, bukan cuma di UI.
+      const claimed = await pool.query<{ regen_count: number }>(
+        `UPDATE job_shots SET regen_requested=TRUE, regen_count=regen_count+1
+         WHERE job_id=$1 AND idx=$2 AND regen_requested=FALSE AND regen_count < $3
+         RETURNING regen_count`,
+        [jobId, idx, MAX_REGEN_PER_SCENE]
+      );
+      if (!claimed.rowCount) {
+        // Gagal klaim -> baca keadaan sebenarnya HANYA untuk menyusun pesan.
+        const scene = (await pool.query<{ regen_count: number; regen_requested: boolean }>(
+          "SELECT regen_count, regen_requested FROM job_shots WHERE job_id=$1 AND idx=$2", [jobId, idx]
+        )).rows[0];
+        if (!scene) throw ERR.NOT_FOUND("Scene-nya");
+        if (scene.regen_requested) {
+          throw ERR.BAD_REQUEST("Scene ini sedang dibuat ulang — tunggu selesai dulu.", "Regeneration already in flight.");
+        }
         throw ERR.BAD_REQUEST(
           `Scene ini sudah diganti ${MAX_REGEN_PER_SCENE} kali — batas maksimal. Setujui apa adanya atau buat kampanye baru.`,
           "Regenerate limit reached."
         );
       }
-      await pool.query(
-        "UPDATE job_shots SET regen_requested=TRUE, regen_count=regen_count+1 WHERE job_id=$1 AND idx=$2",
-        [jobId, idx]
-      );
       await pool.query(
         "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES (gen_random_uuid()::text,$1,'scene.regenerate','jobs',$2,$3,$4)",
         [user.id, jobId, JSON.stringify({ idx, org_id: membership.org_id }), new Date().toISOString()]
