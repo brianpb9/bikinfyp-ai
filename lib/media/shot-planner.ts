@@ -66,12 +66,17 @@ const HANDS_ONLY_NEGATIVE =
 // + estetika candid (2026-08-07, dari referensi visual Brian — grid UGC yang
 // menang terlihat seperti foto iPhone sehari-hari: cahaya jendela natural,
 // warna kalem, setting rumah yang hidup — BUKAN studio terang/polished).
-// TVC (M9): iklan brand yang tetap terasa dibuat kreator sungguhan —
-// referensi Brooks Glycerin Max dari Brian. Bukan studio mengkilap, tapi juga
-// lebih terarah daripada selfie UGC biasa.
+// TVC = IKLAN TV (koreksi Brian 2026-08-11: "TVC itu kan kayak iklan di tv2").
+// Versi pertama saya keliru menulisnya sebagai "UGC yang terstruktur" —
+// hand-held, latar sehari-hari. Itu salah kategori: TVC adalah produksi
+// terkontrol. Kamera stabil di tripod/slider, pencahayaan sinematik yang
+// ditata, warna rapi dan konsisten, set yang dirancang. Yang dipinjam dari
+// referensi Brooks hanyalah STRUKTUR beat-nya, bukan tampilannya.
 const TVC_FRAMING =
-  "cinematic vertical commercial framing with an authentic hand-held feel, shallow depth of field, " +
-  "natural practical lighting, muted true-to-life colour, real everyday setting rather than a studio";
+  "high-end television commercial cinematography, shot on a cinema camera, controlled studio-grade " +
+  "lighting with deliberate key and rim light, smooth stabilised camera movement on a slider or gimbal, " +
+  "shallow cinematic depth of field, polished colour grade, immaculate art-directed set — a broadcast " +
+  "commercial, never a phone-shot or hand-held clip";
 
 const TALKING_HEAD_FRAMING =
   "face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
@@ -150,9 +155,17 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // hands_only tetap minimal 2 shot (variasi visual; tangan tidak punya
   // masalah identitas wajah — perilaku lama teruji di produksi).
   const format = input.format ?? "hands_only";
-  const numShots = format === "talking_head" || format === "tvc"
-    ? Math.max(1, Math.ceil(input.durationSec / 15))
-    : Math.max(2, Math.ceil(input.durationSec / 15));
+  // TVC dipecah per MODUL ~5 detik, bukan per batas teknis 15 detik.
+  // Framework TVC menuntut informasi baru tiap 4-6 detik (15 dtk = 3-5 shot,
+  // 30 dtk = 5-7 modul); satu shot 15 detik melanggar itu dan menghasilkan
+  // adegan yang menggantung. Biaya provider dihitung PER DETIK video
+  // (byteplus estimateCost menjumlahkan durasi shot), jadi 6x5 dtk sama
+  // mahalnya dengan 2x15 dtk — memecah adegan tidak menambah ongkos.
+  const numShots = format === "tvc"
+    ? Math.max(3, Math.round(input.durationSec / 5))
+    : format === "talking_head"
+      ? Math.max(1, Math.ceil(input.durationSec / 15))
+      : Math.max(2, Math.ceil(input.durationSec / 15));
   // r16 (Brian 2026-08-08: "tidak ada lagi foto real produk... di video
   // manapun" — "product proof insert" DIHAPUS TOTAL, semua format). Video
   // 100% AI-generated selalu, tanpa sisipan foto statis di ujung.
@@ -191,7 +204,16 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // berubah). >=3 shot (45 dtk) = 1 segmen penuh per shot — pas karena tiap
   // shot sudah 15 dtk penuh, gak perlu digabung lagi.
   const dialogueForShot = (i: number): string[] =>
-    numShots === 1
+    // TVC dipecah jadi 3-6 modul, jadi tangga "hook / demo / sisanya CTA" di
+    // bawah tidak bisa dipakai: shot 3,4,5 semuanya akan kebagian kalimat
+    // penutup dan mengulang CTA empat kali. Segmen skrip punya start/end
+    // sungguhan, jadi tiap shot mengambil kalimat yang jendela waktunya
+    // memang beririsan dengan shot itu. Shot tanpa irisan sengaja dibiarkan
+    // tanpa dialog — beat visual murni, dan VO final tetap dirakit utuh oleh
+    // Gemini TTS di atas video, bukan dari teks per-shot ini.
+    format === "tvc"
+      ? input.segments.filter((sg) => sg.end > i * perShot && sg.start < (i + 1) * perShot).map((sg) => sg.text)
+      : numShots === 1
       ? [segText("hook"), segText("demo"), segText("cta")]
       : numShots >= 3
         ? i === 0 ? [segText("hook")] : i === 1 ? [segText("demo")] : [segText("cta")]
@@ -212,28 +234,48 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // - Logo, harga, CTA, endboard TIDAK PERNAH ditulis di prompt: teks di
   //   dalam video selalu berantakan (riwayat panjang QC-10 kita), jadi itu
   //   urusan overlay ffmpeg setelah render.
-  const TVC_BEATS_15: string[] = [
-    `0-3s: opens ALREADY mid-action — hands lifting "${input.productName}" into frame in one continuous move, no static hold, no slow push-in. By 3s the product is clearly readable and something has visibly changed`,
-    `3-7s: tight detail pass over the product's material and texture, one single camera move, the label staying square to camera`,
-    `7-11s: the product actually being used — a real physical action with a visible result, not a pose`,
-    `11-15s: the product settles front-facing and centered, held steady and evenly lit for the final beat`,
+  // Beat map TVC. Perannya mengikuti framework seedance-tvc-director
+  // (hook / dunia / pemicu / bukti / reaksi / hero+packshot) tapi ditulis
+  // sebagai PERAN, bukan tabel timecode mati, supaya tetap benar di 15, 30,
+  // maupun 45 detik. Shot pertama selalu HOOK, shot terakhir selalu HERO
+  // (packshot tidak pernah muncul sebelum bagian akhir), sisanya diisi
+  // berputar dari peran tengah.
+  const TVC_MIDDLE_ROLES: string[] = [
+    `establishes the world of the brand — the setting, the person it is for, and why this moment matters, staged and lit like a commercial`,
+    `the product enters the action deliberately: opened, poured, applied or switched on, with crisp material feedback captured in macro`,
+    `the result the product produced, observed in a clean beauty-shot close-up — texture, finish or change, lit to be read instantly`,
+    `the payoff on the person: a directed, believable reaction caused by that result, framed as a portrait beat`,
   ];
-  const TVC_BEATS_30: string[][] = [
-    [
-      `0-3s: opens ALREADY mid-action — hands lifting "${input.productName}" into frame in one continuous move, no static hold, no slow push-in. By 3s something has visibly changed`,
-      `3-8s: the surrounding scene reads clearly — where this is, who is using it, why now`,
-      `8-15s: the product enters the action: opened, poured, applied or switched on, with visible material feedback`,
-    ],
-    [
-      `15-21s: close observation of the result the product produced — texture, finish or change, held long enough to actually read`,
-      `21-26s: a genuine human reaction to that result, caused by what just happened, not a generic smile`,
-      `26-30s: the product settles front-facing and centered, held steady and evenly lit, filling roughly a third of frame for the final beat`,
-    ],
-  ];
+  // IDENTITY_INSTRUCTION ditulis untuk UGC dan memuat frasa "like a real phone
+  // camera close-up". Di TVC itu bertabrakan dengan framing "never a phone-shot"
+  // di kalimat yang sama, dan model akan menuruti salah satunya secara acak.
+  // Aturan identitas produknya tetap sama persis — hanya alasan bokehnya yang
+  // diganti ke lensa sinema.
+  const TVC_IDENTITY = IDENTITY_INSTRUCTION.replace(
+    "like a real phone camera close-up",
+    "the way a cinema lens naturally renders at this focal depth"
+  );
   const tvcBeat = (i: number): string => {
-    const beats = numShots === 1 ? TVC_BEATS_15 : (TVC_BEATS_30[i] ?? TVC_BEATS_30[TVC_BEATS_30.length - 1]);
-    return `Branded commercial, filmed like an authentic creator ad rather than a studio spot. ${beats.join(". ")}. ` +
-      `One main camera move only. Practical, explicable lighting. ${IDENTITY_INSTRUCTION}`;
+    const from = Math.round(i * perShot);
+    const to = Math.round((i + 1) * perShot);
+    let role: string;
+    if (i === 0) {
+      role =
+        `the opening hook — it starts ALREADY in motion, with "${input.productName}" arriving in frame on a single ` +
+        `designed camera move. By the ${Math.min(3, to)}s mark the product reads clearly and something has visibly changed. ` +
+        `No static hold, no slow logo push-in`;
+    } else if (i === numShots - 1) {
+      role =
+        `the hero shot: the product front-facing and centred on a clean, deliberately lit surface or seamless backdrop, ` +
+        `filling roughly a third of frame, absolutely steady — the packshot a brand would sign off on`;
+    } else {
+      role = TVC_MIDDLE_ROLES[(i - 1) % TVC_MIDDLE_ROLES.length];
+    }
+    return (
+      `Beat ${i + 1} of ${numShots} in a broadcast television commercial (${from}-${to}s of ${input.durationSec}s): ${role}. ` +
+      `One deliberate camera move per shot, executed smoothly — never a shaky or improvised one. ` +
+      `Lighting is designed, not found. ${TVC_IDENTITY}`
+    );
   };
 
   const shots: ShotSpec[] = Array.from({ length: numShots }, (_, i) => {
@@ -335,13 +377,26 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // terlihat). talking_head: dialog dipakai HANYA sebagai konteks nada/
     // ekspresi (voice-over style, presenter di layar tapi tidak "bicara").
     const speech =
-      format === "hands_only"
+      // TVC punya register suaranya sendiri: suara brand yang tenang dan
+      // berwibawa, bukan kreator yang lagi ngobrol. Memakai kalimat UGC di
+      // sini persis yang membuat hasilnya terasa bukan iklan TV.
+      format === "tvc"
+        ? !dialogue.trim()
+          ? `No voiceover lands on this beat — it plays on picture and sound design alone. `
+          : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm but never chatty or salesy; any person on screen acts and reacts but is NOT lip-syncing these words: "${dialogue}". `
+        : format === "hands_only"
         ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting, never rushed (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
         : lipSyncPresenter
           ? `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting with a friend, never rushed or salesy, saying: "${dialogue}". `
           : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally but her mouth is NOT moving in sync to any specific words (not talking to camera): "${dialogue}". `;
     const pacing =
-      format === "hands_only"
+      format === "tvc"
+        ? !dialogue.trim()
+          ? ``
+          : isLast
+          ? `The voiceover lands the final line cleanly and stops — one beat of silence on the hero shot, no trailing chatter. `
+          : `A short, deliberate beat of silence separates this line from the next. `
+        : format === "hands_only"
         ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
         : isLast
           ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `

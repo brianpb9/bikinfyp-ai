@@ -4,7 +4,7 @@ import { useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import {
   AlertCircle, ArrowLeft, Camera, CheckCircle2, Film, ImagePlus, Loader2,
-  Megaphone, ShoppingBag, Sparkles, Trash2, Upload,
+  Megaphone, Plus, ShoppingBag, Sparkles, Trash2,
 } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../_components/api";
 import { rupiah } from "../../_components/format";
@@ -19,6 +19,7 @@ type HookLevel = "normal" | "berani" | "gila";
 interface ProductPayload {
   product_id: string; name: string; price_idr: number; category: string;
   product_visual_desc: string | null; brand_brief: string | null;
+  promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   source_url: string | null; images: string[]; image_urls: string[];
 }
 interface GeneratedScript { script_id: string; hook_family: string; caption: string }
@@ -129,6 +130,9 @@ export default function CampaignPage() {
           product_id: product.product_id, name: product.name, price_idr: product.price_idr,
           category: product.category, product_visual_desc: product.product_visual_desc ?? "",
           brand_brief: product.brand_brief ?? "",
+          promo_price_before_idr: product.promo_price_before_idr ?? null,
+          promo_ends_at: product.promo_ends_at ?? null,
+          promo_stock_left: product.promo_stock_left ?? null,
         },
       });
       setProduct(res);
@@ -221,9 +225,13 @@ export default function CampaignPage() {
           </div>
           <div className="grid grid-cols-3 gap-4">
             {([
-              { id: "affiliate" as const, icon: ShoppingBag, title: "AI UGC Affiliate", desc: "Jualan produk fisik ke TikTok Shop. AI yang peragakan produkmu — cukup foto.", ready: true },
-              { id: "ads" as const, icon: Megaphone, title: "AI UGC Ads", desc: "Promosi app, jasa, atau toko. Rekamanmu sendiri + hook AI pembuka.", ready: false },
-              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Iklan brand berstruktur: hook 3 detik, bukti produk, reaksi, hero shot.", ready: true },
+              { id: "affiliate" as const, icon: ShoppingBag, title: "AI UGC Affiliate", desc: "Jualan produk fisik ke TikTok Shop. AI yang peragakan produkmu — cukup foto.", ready: true, preview: "/previews/format-tangan.mp4" },
+              { id: "ads" as const, icon: Megaphone, title: "AI UGC Ads", desc: "Promosi app, jasa, atau toko. Rekamanmu sendiri + hook AI pembuka.", ready: false, preview: "/previews/format-ads.mp4" },
+              // Sengaja TANPA preview: satu-satunya klip presenter yang kami punya
+              // (format-wajah.mp4) adalah UGC selfie, dan memasangnya di sini
+              // justru mengajarkan hal yang salah soal TVC. Kami tampilkan
+              // contoh begitu ada render TVC sungguhan.
+              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Iklan TV: sinematik, kamera terkontrol, pencahayaan ditata, ditutup hero shot produk.", ready: true, preview: null },
             ]).map((k) => {
               const Icon = k.icon;
               const active = kind === k.id;
@@ -245,6 +253,21 @@ export default function CampaignPage() {
                     active ? "border-amber-500" : "border-zinc-200 hover:border-zinc-300"
                   }`}
                 >
+                  {/* Contoh hasil nyata, bukan ilustrasi — user memilih HASIL
+                      yang kelihatan, bukan label abstrak (pola yang sama
+                      dipakai halaman jenis di retail). */}
+                  {k.preview ? (
+                    <video
+                      src={k.preview}
+                      autoPlay muted loop playsInline
+                      className="mb-3 aspect-[9/16] max-h-56 w-full rounded-xl bg-zinc-100 object-cover"
+                    />
+                  ) : (
+                    <div className="mb-3 flex aspect-[9/16] max-h-56 w-full flex-col items-center justify-center gap-2 rounded-xl bg-zinc-900 text-zinc-500">
+                      <Film size={26} />
+                      <span className="text-[11px] font-medium">Contoh menyusul</span>
+                    </div>
+                  )}
                   <Icon size={22} className={active ? "text-amber-600" : "text-zinc-400"} />
                   <p className="mt-3 flex items-center gap-2 font-display text-base font-bold text-zinc-900">
                     {k.title}
@@ -389,6 +412,46 @@ export default function CampaignPage() {
                 className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-amber-500 focus:outline-none"
               />
             </label>
+            {/* Urgensi & kelangkaan — angka di sini boleh muncul di caption
+                dan overlay, tapi tidak pernah dikarang di skrip. Promo yang
+                sudah lewat tanggalnya otomatis di-drop saat render. */}
+            <div className="col-span-2 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
+              <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Urgensi &amp; kelangkaan (opsional)</p>
+              <p className="mt-1 text-xs text-zinc-500">Isi kalau memang benar. Diskon yang tidak nyata bikin brand kehilangan kepercayaan.</p>
+              <div className="mt-3 grid grid-cols-3 gap-3">
+                <label className="block">
+                  <span className="text-xs text-zinc-500">Harga normal (coret)</span>
+                  <input
+                    type="number" min={0} value={product.promo_price_before_idr ?? ""}
+                    onChange={(e) => setProduct({ ...product, promo_price_before_idr: e.target.value ? Number(e.target.value) : null })}
+                    placeholder="mis. 249000"
+                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-amber-500 focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-zinc-500">Promo berakhir</span>
+                  <input
+                    type="date" value={product.promo_ends_at ? product.promo_ends_at.slice(0, 10) : ""}
+                    onChange={(e) => setProduct({ ...product, promo_ends_at: e.target.value || null })}
+                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-amber-500 focus:outline-none"
+                  />
+                </label>
+                <label className="block">
+                  <span className="text-xs text-zinc-500">Stok tersisa</span>
+                  <input
+                    type="number" min={0} value={product.promo_stock_left ?? ""}
+                    onChange={(e) => setProduct({ ...product, promo_stock_left: e.target.value ? Number(e.target.value) : null })}
+                    placeholder="mis. 12"
+                    className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-amber-500 focus:outline-none"
+                  />
+                </label>
+              </div>
+              {product.promo_price_before_idr !== null && product.promo_price_before_idr <= product.price_idr && (
+                <p className="mt-2 text-xs font-semibold text-amber-700">
+                  Harga normal harus lebih besar dari harga jual — kalau tidak, angka ini diabaikan.
+                </p>
+              )}
+            </div>
             <label className="col-span-2 block">
               <span className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Arahan khusus dari brand (opsional)</span>
               <textarea
@@ -484,29 +547,23 @@ export default function CampaignPage() {
             </div>
 
             <div>
-              <div className="mb-2 flex items-center justify-between">
-                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Avatar</p>
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => avatarInput.current?.click()}
-                    disabled={loading}
-                    className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-50"
-                  >
-                    <Upload size={13} /> Pakai foto sendiri
-                  </button>
-                  <input
-                    ref={avatarInput} type="file" accept="image/png,image/jpeg,image/webp" hidden
-                    onChange={(e) => e.target.files?.[0] && handleAvatarPhoto(e.target.files[0])}
-                  />
-                  <div className="flex gap-1 rounded-lg bg-zinc-100 p-0.5">
-                    {(["female", "male"] as const).map((g) => (
-                      <button key={g} onClick={() => setAvatarGender(g)}
-                        className={`rounded-md px-2.5 py-1 text-xs font-semibold transition-colors ${avatarGender === g ? "bg-white text-zinc-900 shadow-sm" : "text-zinc-500"}`}
-                      >{g === "female" ? "Female" : "Male"}</button>
-                    ))}
-                  </div>
-                </div>
+              {/* Toggle gender dibesarkan & disejajarkan dengan kontrol lain
+                  (sebelumnya kecil di pojok, tidak kelihatan). Upload foto
+                  sendiri jadi ubin "+" PERTAMA di grid, bukan tombol terpisah
+                  di atasnya — tempatnya di antara pilihan avatar, karena itu
+                  memang salah satu pilihan avatar. */}
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Avatar</p>
+              <div className="mb-3 flex gap-2">
+                {(["female", "male"] as const).map((g) => (
+                  <button key={g} onClick={() => setAvatarGender(g)}
+                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${avatarGender === g ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
+                  >{g === "female" ? "Perempuan" : "Laki-laki"}</button>
+                ))}
               </div>
+              <input
+                ref={avatarInput} type="file" accept="image/png,image/jpeg,image/webp" hidden
+                onChange={(e) => e.target.files?.[0] && handleAvatarPhoto(e.target.files[0])}
+              />
 
               {customAvatarDesc && (
                 <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
@@ -521,6 +578,15 @@ export default function CampaignPage() {
               )}
 
               <div className="grid grid-cols-6 gap-2">
+                <button
+                  onClick={() => avatarInput.current?.click()}
+                  disabled={loading}
+                  title="Pakai foto sendiri"
+                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed transition-colors disabled:opacity-50 ${customAvatarDesc ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-400 hover:border-amber-400 hover:text-amber-600"}`}
+                >
+                  {loading ? <Loader2 size={20} className="animate-spin" /> : <Plus size={22} />}
+                  <span className="px-1 text-[10px] font-semibold leading-tight">Foto sendiri</span>
+                </button>
                 {avatars.map((a) => (
                   <button key={a.id} onClick={() => setCreatorCategory(a.id)} title={a.name}
                     className={`overflow-hidden rounded-xl border-2 transition-colors ${creatorCategory === a.id ? "border-amber-500" : "border-transparent hover:border-zinc-200"}`}
@@ -564,6 +630,11 @@ export default function CampaignPage() {
             <p className="text-sm text-zinc-600">
               Estimasi <b>{rupiah(estimateIdr(tier, durationSec, count))}</b> untuk {count} video ({durationSec} dtk, {tier === "super_hq" ? "AI Bersuara Pro" : "AI Bersuara"}).
               Harga pasti dihitung ulang server saat render.
+            </p>
+            <p className="text-sm text-zinc-500">
+              Waktu render: sekitar <b>3–8 menit per video</b> (bisa sampai 45 menit kalau antrean AI padat).
+              Video dibuat berbarengan, jadi {count} video tidak berarti {count}× lama. Kamu akan diminta
+              meninjau tiap adegan dulu sebelum digabung.
             </p>
             <button
               onClick={handleGenerate}

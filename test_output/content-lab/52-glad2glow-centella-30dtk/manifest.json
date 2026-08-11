@@ -1,0 +1,108 @@
+{
+  "variant": "52-glad2glow-centella-30dtk",
+  "creator_category": "genz",
+  "job": {
+    "id": "ba466fdc-e4da-4529-a2a7-63223dbc05a3",
+    "state": "READY",
+    "format": "hands_only",
+    "duration_s": 30,
+    "script_id": "35688b61-64e0-4843-a281-18f0162a86b8",
+    "product_id": "cbeaf724-bcba-468c-bdf7-aade4e5e39a2",
+    "quality_tier": "high_quality",
+    "provider_video": "byteplus-ark-seedance",
+    "provider_voice": "gemini-tts",
+    "cost_actual_idr": 16676,
+    "qc_result": {
+      "passed": true,
+      "checks": [
+        {
+          "code": "QC-01",
+          "name": "Lip-sync drift",
+          "status": "skip",
+          "detail": "Verifikasi viseme otomatis belum ada (fase 2); tidak relevan untuk format tanpa wajah bicara."
+        },
+        {
+          "code": "QC-02",
+          "name": "Tangan/jari tidak morphing (kontinuitas siluet)",
+          "status": "pass",
+          "detail": "32 frame; 31 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-10",
+          "name": "Label produk terbaca (anti-slop)",
+          "status": "pass",
+          "detail": "token merek allantoin terbaca (sampai 3 frame diperiksa)."
+        },
+        {
+          "code": "QC-03",
+          "name": "Identitas produk konsisten (antar shot + warna khas referensi)",
+          "status": "pass",
+          "detail": "antar_shot_max=28.8 (ambang 60) · hue_khas_min=0 (ambang 0.1, diabaikan — QC-10 sudah buktikan label) — kasar, hanya menangkap penyimpangan total"
+        },
+        {
+          "code": "QC-09",
+          "name": "Tanpa wajah di hands_only (YuNet)",
+          "status": "pass",
+          "detail": "4 frame sampel bersih"
+        },
+        {
+          "code": "QC-04",
+          "name": "Audio tidak senyap",
+          "status": "pass",
+          "detail": "max_volume=-1.3 dB"
+        },
+        {
+          "code": "QC-05",
+          "name": "Durasi sesuai target",
+          "status": "pass",
+          "detail": "30.00 dtk vs target 30 dtk"
+        },
+        {
+          "code": "QC-06",
+          "name": "Teks overlay tidak terpotong",
+          "status": "skip",
+          "detail": "Tidak ada overlay bertimeline untuk diperiksa OCR."
+        },
+        {
+          "code": "QC-07",
+          "name": "Tanpa kata terlarang (overclaim/medis)",
+          "status": "pass",
+          "detail": "bersih"
+        },
+        {
+          "code": "QC-08",
+          "name": "Label AIGC (metadata) tertanam",
+          "status": "pass",
+          "detail": "watermark_param=true metadata_tag=true video_stream=true"
+        }
+      ],
+      "checked_at": "2026-08-09T09:54:44.377Z"
+    },
+    "created_at": "2026-08-09T09:51:13.469Z",
+    "completed_at": "2026-08-09T09:54:44.384Z",
+    "message": "Videonya udah jadi! Jangan lupa nyalakan tanda 'konten AI' pas upload ya."
+  },
+  "script_segments": [
+    {
+      "role": "hook",
+      "start": 0,
+      "end": 6,
+      "text": "skincare murah vs mahal, bedanya apa sih?",
+      "visual_direction": "Close-up tangan memegang produk, kamera HP goyang natural, tatap produk"
+    },
+    {
+      "role": "demo",
+      "start": 6,
+      "end": 20,
+      "text": "nah, Glad2Glow Centella Allantoin Soothing Gel Moisturizer cuma 42 ribu, nggak kalah, kalau ternyata kurang cocok juga gampang kok, tinggal komplain aja ke seller, eh tapi bukan itu doang serunya, yang bikin beda malah teksturnya pas dipake langsung",
+      "visual_direction": "Tangan mendemokan produk: putar/buka/pakai perlahan, label produk menghadap kamera"
+    },
+    {
+      "role": "cta",
+      "start": 20,
+      "end": 30,
+      "text": "Cek keranjang ya deh, buruan ya, keburu diserbu yang lain",
+      "visual_direction": "Produk dipegang di samping keranjang belanja HP, tunjuk layar lalu kembali ke produk"
+    }
+  ]
+}

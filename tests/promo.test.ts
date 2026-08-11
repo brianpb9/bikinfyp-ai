@@ -50,10 +50,23 @@ test("frasa deadline skrip: tanpa angka, tanpa frasa terlarang L-13", () => {
 });
 
 const baseProduct = { id: "prod-promo-1", name: "Serum Glow Bright", price_idr: 85000, category: "beauty" };
+// generateScripts() memanggil resolvePromo() TANPA parameter `now`, jadi ia
+// selalu memakai jam server sungguhan. Kalau fixture ini memakai `inDays()`
+// yang dihitung dari NOW beku (2026-08-06), promonya berubah jadi kedaluwarsa
+// begitu tanggal asli melewatinya — dan tes gagal bukan karena produknya rusak,
+// tapi karena tesnya membusuk. (Persis itu yang terjadi: tiga tes promo gagal
+// diam-diam mulai 9 Agu 2026.) Fixture yang masuk ke generateScripts karena itu
+// dipatok relatif ke HARI INI. NOW beku tetap dipakai untuk unit test
+// resolvePromo/promoDeadlineSpokenPhrase yang memang menerima `now` eksplisit.
+const daysFromToday = (n: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + n);
+  return d.toISOString().slice(0, 10);
+};
 const promoProduct = {
   ...baseProduct,
   promoPriceBeforeIdr: 120000,
-  promoEndsAt: inDays(2),
+  promoEndsAt: daysFromToday(2),
   promoStockLeft: 12,
 };
 

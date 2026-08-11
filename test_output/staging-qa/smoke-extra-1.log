@@ -1,0 +1,22 @@
+== Memakai server staging eksternal: https://racun-ai-staging-web.onrender.com
+== Server staging OK
+== 1. dev-login
+   login OK (0812007669, bonus 1 kredit)
+== 2. buat produk manual (foto asli test_output/hands_a.png)
+   produk OK: 7dc87a6b-50e0-4e48-a094-45ab50cc125e
+== 3. generate skrip
+   3 skrip OK (keluarga: H3, H4, H9)
+== 4. uji gerbang HITL: job tanpa approve harus 422 SCRIPT_NOT_APPROVED
+   HITL OK (422 SCRIPT_NOT_APPROVED)
+== 5. approve skrip
+   approve OK
+== 6. buat job
+   job OK: 6ff19af7-61ff-49fe-a68f-2a4f66771296
+== 7. poll sampai READY
+   READY | provider_video=byteplus-ark-seedance provider_voice=none-silent-caption biaya=Rp2608
+== 8. unduh paket keluaran
+   video: 1581697 bytes, durasi 15.000000 dtk
+   max_volume: -35.9 dB
+   watermark: QC-08 pass (log worker diverifikasi terpisah di Render)
+
+SMOKE LULUS: video siap posting di /tmp/racun-output.cgGcDa

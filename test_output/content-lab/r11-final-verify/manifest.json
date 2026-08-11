@@ -1,0 +1,102 @@
+{
+  "variant": "r11-final-verify",
+  "creator_category": "hijaber",
+  "job": {
+    "id": "4952cb10-9f00-4063-a508-212a3d780195",
+    "state": "READY",
+    "format": "talking_head",
+    "duration_s": 15,
+    "script_id": "3d464f56-22a4-4096-a471-18bc1ca71b30",
+    "product_id": "8f4c0906-3819-4043-b840-23432c9df81b",
+    "quality_tier": "high_quality",
+    "provider_video": "byteplus-ark-seedance",
+    "provider_voice": "gemini-tts",
+    "cost_actual_idr": 7809,
+    "qc_result": {
+      "passed": true,
+      "checks": [
+        {
+          "code": "QC-01",
+          "name": "Lip-sync drift",
+          "status": "skip",
+          "detail": "Verifikasi viseme otomatis belum ada (fase 2); tidak relevan untuk format tanpa wajah bicara."
+        },
+        {
+          "code": "QC-02",
+          "name": "Tangan/jari tidak morphing (kontinuitas siluet)",
+          "status": "pass",
+          "detail": "30 frame; 28 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-03",
+          "name": "Identitas produk konsisten (antar shot + warna khas referensi)",
+          "status": "pass",
+          "detail": "antar_shot_max=49.6 (ambang 60) · hue_khas_max=0.852 (ambang 0.02) — kasar, hanya menangkap penyimpangan total"
+        },
+        {
+          "code": "QC-04",
+          "name": "Audio tidak senyap",
+          "status": "pass",
+          "detail": "max_volume=-4.2 dB"
+        },
+        {
+          "code": "QC-05",
+          "name": "Durasi sesuai target",
+          "status": "pass",
+          "detail": "15.00 dtk vs target 15 dtk"
+        },
+        {
+          "code": "QC-06",
+          "name": "Teks overlay tidak terpotong",
+          "status": "skip",
+          "detail": "Tidak ada overlay bertimeline untuk diperiksa OCR."
+        },
+        {
+          "code": "QC-07",
+          "name": "Tanpa kata terlarang (overclaim/medis)",
+          "status": "pass",
+          "detail": "bersih"
+        },
+        {
+          "code": "QC-10",
+          "name": "Label produk terbaca (anti-slop)",
+          "status": "pass",
+          "detail": "token merek centella,skin1004 terbaca (sampai 1 frame diperiksa)."
+        },
+        {
+          "code": "QC-08",
+          "name": "Label AIGC (metadata) tertanam",
+          "status": "pass",
+          "detail": "watermark_param=true metadata_tag=true video_stream=true"
+        }
+      ],
+      "checked_at": "2026-08-07T13:41:45.555Z"
+    },
+    "created_at": "2026-08-07T13:37:49.773Z",
+    "completed_at": "2026-08-07T13:41:45.558Z",
+    "message": "Videonya udah jadi! Jangan lupa nyalakan tanda 'konten AI' pas upload ya."
+  },
+  "script_segments": [
+    {
+      "role": "hook",
+      "start": 0,
+      "end": 3,
+      "text": "skincare murah vs mahal, bedanya apa sih?",
+      "visual_direction": "Close-up tangan memegang produk, kamera HP goyang natural, tatap produk"
+    },
+    {
+      "role": "demo",
+      "start": 3,
+      "end": 10,
+      "text": "nah, SKIN1004 Centella Ampoule cuma 159 ribu, nggak kalah",
+      "visual_direction": "Tangan mendemokan produk: putar/buka/pakai perlahan, label produk menghadap kamera"
+    },
+    {
+      "role": "cta",
+      "start": 10,
+      "end": 15,
+      "text": "Cek keranjang ya deh",
+      "visual_direction": "Produk dipegang di samping keranjang belanja HP, tunjuk layar lalu kembali ke produk"
+    }
+  ]
+}

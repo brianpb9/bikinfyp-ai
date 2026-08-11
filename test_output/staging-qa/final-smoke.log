@@ -1,0 +1,90 @@
+== Memakai server staging eksternal: https://racun-ai-staging-web.onrender.com
+== Server staging OK
+== 1. dev-login
+   login OK (0812024501, bonus 1 kredit)
+== 2. buat produk manual (foto asli test_output/hands_a.png)
+   produk OK: c8fc1892-42c1-4ef8-a42d-85f34eeda8fa
+== 3. generate skrip
+   3 skrip OK (keluarga: H3, H4, H9)
+== 4. uji gerbang HITL: job tanpa approve harus 422 SCRIPT_NOT_APPROVED
+   HITL OK (422 SCRIPT_NOT_APPROVED)
+== 5. approve skrip
+   approve OK
+== 6. buat job
+   job OK: b8677047-20ce-4f43-b57a-dfd6018d2c32
+== 7. poll sampai READY
+{
+  "id": "b8677047-20ce-4f43-b57a-dfd6018d2c32",
+  "state": "REFUNDED",
+  "format": "hands_only",
+  "duration_s": 15,
+  "script_id": "a7dcd563-9651-49f4-bb6f-b28b4a31e0c0",
+  "product_id": "c8fc1892-42c1-4ef8-a42d-85f34eeda8fa",
+  "quality_tier": "silent_caption",
+  "provider_video": "byteplus-ark-seedance",
+  "provider_voice": "none-silent-caption",
+  "cost_actual_idr": 2608,
+  "qc_result": {
+    "passed": false,
+    "checks": [
+      {
+        "code": "QC-01",
+        "name": "Lip-sync drift",
+        "status": "skip",
+        "detail": "Tidak relevan untuk hands_only; butuh analisis viseme untuk talking_head (fase 2)."
+      },
+      {
+        "code": "QC-02",
+        "name": "Tangan/jari tidak morphing (kontinuitas siluet)",
+        "status": "pass",
+        "detail": "30 frame; 29 transisi tangan non-cut diperiksa"
+      },
+      {
+        "code": "QC-03",
+        "name": "Identitas produk konsisten (antar shot + warna khas referensi)",
+        "status": "pass",
+        "detail": "antar_shot_max=7.9 (ambang 60) · hue_khas_min=0.279 (ambang 0.1) — kasar, hanya menangkap penyimpangan total"
+      },
+      {
+        "code": "QC-09",
+        "name": "Tanpa wajah di hands_only (YuNet)",
+        "status": "fail",
+        "detail": "wajah terdeteksi (skor 0.78) di qc09_s1_1.png"
+      },
+      {
+        "code": "QC-04",
+        "name": "Audio tidak senyap",
+        "status": "pass",
+        "detail": "max_volume=-35.9 dB"
+      },
+      {
+        "code": "QC-05",
+        "name": "Durasi sesuai target",
+        "status": "pass",
+        "detail": "15.00 dtk vs target 15 dtk"
+      },
+      {
+        "code": "QC-06",
+        "name": "Teks overlay tidak terpotong",
+        "status": "skip",
+        "detail": "OCR belum membuktikan overlay: \"lagi sih, beneran\", \"nah jadi gini, aku\", \"pake Serum Glow Bright\", \"harganya cuma 85 ribu doang\"; perlu tinjauan visual, bukan klaim lulus."
+      },
+      {
+        "code": "QC-07",
+        "name": "Tanpa kata terlarang (overclaim/medis)",
+        "status": "pass",
+        "detail": "bersih"
+      },
+      {
+        "code": "QC-08",
+        "name": "Label AIGC (\"Dibuat dengan AI\") ter-render",
+        "status": "pass",
+        "detail": "watermark_param=true metadata_tag=true video_stream=true"
+      }
+    ],
+    "checked_at": "2026-08-02T07:54:43.107Z"
+  },
+  "created_at": "2026-08-02T07:52:24.936Z",
+  "completed_at": "2026-08-02T07:54:46.236Z",
+  "message": "Hasilnya belum bagus, jadi kredit kamu sudah kami balikin. Coba ganti fotonya ya."
+}

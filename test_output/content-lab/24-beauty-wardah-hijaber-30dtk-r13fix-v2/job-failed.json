@@ -1,0 +1,81 @@
+{
+  "id": "6c58385b-ad4f-4cd2-a397-80d131a8e60c",
+  "state": "REFUNDED",
+  "format": "hands_only",
+  "duration_s": 30,
+  "script_id": "a3c5dfa2-c969-4dfe-b629-09cd89fe2e93",
+  "product_id": "c68de174-3a8d-48bf-98fb-0e84a878bdc4",
+  "quality_tier": "high_quality",
+  "provider_video": "byteplus-ark-seedance",
+  "provider_voice": "gemini-tts",
+  "cost_actual_idr": 16676,
+  "qc_result": {
+    "passed": false,
+    "checks": [
+      {
+        "code": "QC-01",
+        "name": "Lip-sync drift",
+        "status": "skip",
+        "detail": "Verifikasi viseme otomatis belum ada (fase 2); tidak relevan untuk format tanpa wajah bicara."
+      },
+      {
+        "code": "QC-02",
+        "name": "Tangan/jari tidak morphing (kontinuitas siluet)",
+        "status": "pass",
+        "detail": "32 frame; 31 transisi tangan non-cut diperiksa"
+      },
+      {
+        "code": "QC-10",
+        "name": "Label produk terbaca (anti-slop)",
+        "status": "fail",
+        "detail": "token merek (lightening, wardah) tidak terbaca di 8 frame sampel — indikasi label rusak/gibberish (AI slop)."
+      },
+      {
+        "code": "QC-03",
+        "name": "Identitas produk konsisten (antar shot + warna khas referensi)",
+        "status": "fail",
+        "detail": "antar_shot_max=25.2 (ambang 60) · hue_khas_min=0.01 (ambang 0.1) — kasar, hanya menangkap penyimpangan total"
+      },
+      {
+        "code": "QC-09",
+        "name": "Tanpa wajah di hands_only (YuNet)",
+        "status": "fail",
+        "detail": "wajah terdeteksi (skor 0.63) di qc09_s0_1.png"
+      },
+      {
+        "code": "QC-04",
+        "name": "Audio tidak senyap",
+        "status": "pass",
+        "detail": "max_volume=-5.1 dB"
+      },
+      {
+        "code": "QC-05",
+        "name": "Durasi sesuai target",
+        "status": "pass",
+        "detail": "30.00 dtk vs target 30 dtk"
+      },
+      {
+        "code": "QC-06",
+        "name": "Teks overlay tidak terpotong",
+        "status": "skip",
+        "detail": "Tidak ada overlay bertimeline untuk diperiksa OCR."
+      },
+      {
+        "code": "QC-07",
+        "name": "Tanpa kata terlarang (overclaim/medis)",
+        "status": "pass",
+        "detail": "bersih"
+      },
+      {
+        "code": "QC-08",
+        "name": "Label AIGC (metadata) tertanam",
+        "status": "pass",
+        "detail": "watermark_param=true metadata_tag=true video_stream=true"
+      }
+    ],
+    "checked_at": "2026-08-07T17:10:45.377Z"
+  },
+  "created_at": "2026-08-07T17:06:36.516Z",
+  "completed_at": "2026-08-07T17:10:45.377Z",
+  "message": "Hasilnya belum bagus, jadi kredit kamu sudah kami balikin. Coba ganti fotonya ya."
+}

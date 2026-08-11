@@ -1,0 +1,75 @@
+{
+  "id": "6d5b1602-9e1b-43d3-905b-332ccdfbd03e",
+  "state": "REFUNDED",
+  "format": "talking_head",
+  "duration_s": 15,
+  "script_id": "c8dd5fb6-be9f-4eb1-83f0-8cb853c3aff1",
+  "product_id": "a45f8d6d-98ce-47e0-b4be-babdabe47820",
+  "quality_tier": "high_quality",
+  "provider_video": "byteplus-ark-seedance",
+  "provider_voice": "gemini-tts",
+  "cost_actual_idr": 2495,
+  "qc_result": {
+    "passed": false,
+    "checks": [
+      {
+        "code": "QC-01",
+        "name": "Lip-sync drift",
+        "status": "skip",
+        "detail": "Verifikasi viseme otomatis belum ada (fase 2); tidak relevan untuk format tanpa wajah bicara."
+      },
+      {
+        "code": "QC-02",
+        "name": "Tangan/jari tidak morphing (kontinuitas siluet)",
+        "status": "pass",
+        "detail": "30 frame; 28 transisi tangan non-cut diperiksa"
+      },
+      {
+        "code": "QC-10",
+        "name": "Label produk terbaca (anti-slop)",
+        "status": "fail",
+        "detail": "token merek (novella, shella, saukia) tidak terbaca di 8 frame sampel — indikasi label rusak/gibberish (AI slop)."
+      },
+      {
+        "code": "QC-03",
+        "name": "Identitas produk konsisten (antar shot + warna khas referensi)",
+        "status": "pass",
+        "detail": "antar_shot_max=40.4 (ambang 60) · hue_khas_max=0.122 (ambang 0.02) — kasar, hanya menangkap penyimpangan total"
+      },
+      {
+        "code": "QC-04",
+        "name": "Audio tidak senyap",
+        "status": "pass",
+        "detail": "max_volume=-1.6 dB"
+      },
+      {
+        "code": "QC-05",
+        "name": "Durasi sesuai target",
+        "status": "pass",
+        "detail": "15.00 dtk vs target 15 dtk"
+      },
+      {
+        "code": "QC-06",
+        "name": "Teks overlay tidak terpotong",
+        "status": "skip",
+        "detail": "Tidak ada overlay bertimeline untuk diperiksa OCR."
+      },
+      {
+        "code": "QC-07",
+        "name": "Tanpa kata terlarang (overclaim/medis)",
+        "status": "pass",
+        "detail": "bersih"
+      },
+      {
+        "code": "QC-08",
+        "name": "Label AIGC (metadata) tertanam",
+        "status": "pass",
+        "detail": "watermark_param=true metadata_tag=true video_stream=true"
+      }
+    ],
+    "checked_at": "2026-08-09T09:39:34.525Z"
+  },
+  "created_at": "2026-08-09T09:34:35.985Z",
+  "completed_at": "2026-08-09T09:39:34.526Z",
+  "message": "Hasilnya belum bagus, jadi kredit kamu sudah kami balikin. Coba ganti fotonya ya."
+}

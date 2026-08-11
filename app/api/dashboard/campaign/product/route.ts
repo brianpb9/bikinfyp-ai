@@ -18,7 +18,7 @@ export const dynamic = "force-dynamic";
 // mungkin (makin lengkap makin bagus hasil render), baru di-fan-out ke 2-6
 // video di langkah berikutnya.
 
-function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_visual_desc?: string | null; brand_brief?: string | null; images: string; source_url: string | null }) {
+function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_visual_desc?: string | null; brand_brief?: string | null; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; images: string; source_url: string | null }) {
   const images = JSON.parse(product.images || "[]") as string[];
   return {
     product_id: product.id,
@@ -27,6 +27,9 @@ function productPayload(product: { id: string; name: string; price_idr: number; 
     category: product.category,
     product_visual_desc: product.product_visual_desc ?? null,
     brand_brief: product.brand_brief ?? null,
+    promo_price_before_idr: product.promo_price_before_idr ?? null,
+    promo_ends_at: product.promo_ends_at ?? null,
+    promo_stock_left: product.promo_stock_left ?? null,
     source_url: product.source_url,
     images,
     image_urls: images.map((rel) => createSignedUrl(rel)),
@@ -107,11 +110,23 @@ export async function PATCH(req: Request) {
     const visualDesc = typeof body.product_visual_desc === "string" ? body.product_visual_desc.trim().slice(0, 600) || null : existing.product_visual_desc ?? null;
     const brandBrief = typeof body.brand_brief === "string" ? body.brand_brief.trim().slice(0, 1200) || null : existing.brand_brief ?? null;
 
+    // Urgensi & kelangkaan (add-on Promo, lib/promo.ts). Angka-angka ini
+    // BOLEH muncul di caption/overlay tapi tidak boleh dikarang di skrip —
+    // resolvePromo() yang memutuskan, dan promo kedaluwarsa otomatis di-drop
+    // saat render. Harga coret hanya dipakai kalau LEBIH BESAR dari harga
+    // jual; kalau tidak, itu klaim diskon palsu dan kami buang di sini.
+    const rawBefore = Number(body.promo_price_before_idr);
+    const promoBefore = Number.isFinite(rawBefore) && rawBefore > priceIdr ? Math.round(rawBefore) : null;
+    const promoEndsAt = typeof body.promo_ends_at === "string" && body.promo_ends_at.trim()
+      ? body.promo_ends_at.trim() : null;
+    const rawStock = Number(body.promo_stock_left);
+    const promoStock = Number.isFinite(rawStock) && rawStock > 0 ? Math.round(rawStock) : null;
+
     const pool = new Pool({ connectionString: config.databaseUrl });
     try {
       await pool.query(
-        "UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4, brand_brief=$5 WHERE id=$6 AND user_id=$7",
-        [name, priceIdr, category, visualDesc, brandBrief, productId, user.id]
+        "UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4, brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8 WHERE id=$9 AND user_id=$10",
+        [name, priceIdr, category, visualDesc, brandBrief, promoBefore, promoEndsAt, promoStock, productId, user.id]
       );
     } finally {
       await pool.end();

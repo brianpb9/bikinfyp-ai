@@ -1,0 +1,125 @@
+{
+  "codes": [
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "job_id": "d61c96a4-cf27-44bc-8f8d-bb8f64e45584",
+      "state": "QUEUED",
+      "quality_tier": "silent_caption",
+      "hold_idr": 5000
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "job_id": "5298ebcb-d80e-41d8-8e7b-9b11226a5601",
+      "state": "QUEUED",
+      "quality_tier": "silent_caption",
+      "hold_idr": 5000
+    },
+    {
+      "job_id": "afbd09a9-fcbb-48b1-8737-ca4e9b2faca1",
+      "state": "QUEUED",
+      "quality_tier": "silent_caption",
+      "hold_idr": 5000
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "job_id": "4966cda0-90f5-4cb7-81e8-44c4ac09618a",
+      "state": "QUEUED",
+      "quality_tier": "silent_caption",
+      "hold_idr": 5000
+    },
+    {
+      "job_id": "e681a734-748b-4352-bfb9-7f89b909729f",
+      "state": "QUEUED",
+      "quality_tier": "silent_caption",
+      "hold_idr": 5000
+    },
+    {
+      "job_id": "48413b06-cd5e-47d6-afce-84a683dc3b57",
+      "state": "QUEUED",
+      "quality_tier": "silent_caption",
+      "hold_idr": 5000
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    },
+    {
+      "job_id": "2fcf05a4-94d2-4dc4-9cc9-64a33de6d7ec",
+      "state": "QUEUED",
+      "quality_tier": "silent_caption",
+      "hold_idr": 5000
+    },
+    {
+      "code": "INTERNAL",
+      "message_id": "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya.",
+      "message_en": "Internal server error.",
+      "retryable": true
+    }
+  ],
+  "created": 7
+}

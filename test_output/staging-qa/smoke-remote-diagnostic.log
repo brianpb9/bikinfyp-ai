@@ -1,0 +1,91 @@
+== Memakai server staging eksternal: https://racun-ai-staging-web.onrender.com
+== Server staging OK
+== 1. dev-login
+   login OK (0812008111, bonus 1 kredit)
+== 2. buat produk manual (foto asli test_output/hands_a.png)
+   produk OK: e6cef7f3-eb48-4abb-9481-fa26b8cb1d02
+== 3. generate skrip
+   3 skrip OK (keluarga: H3, H4, H9)
+== 4. uji gerbang HITL: job tanpa approve harus 422 SCRIPT_NOT_APPROVED
+   HITL OK (422 SCRIPT_NOT_APPROVED)
+== 5. approve skrip
+   approve OK
+== 6. buat job
+   job OK: 8e007a73-6ee0-4cb3-98aa-fc378ac4f758
+== 7. poll sampai READY
+{
+  "id": "8e007a73-6ee0-4cb3-98aa-fc378ac4f758",
+  "state": "REFUNDED",
+  "format": "hands_only",
+  "duration_s": 15,
+  "script_id": "1dd0f16a-1c10-4336-aa1a-fa1df1657ee5",
+  "product_id": "e6cef7f3-eb48-4abb-9481-fa26b8cb1d02",
+  "quality_tier": "silent_caption",
+  "provider_video": "byteplus-ark-seedance",
+  "provider_voice": "none-silent-caption",
+  "cost_actual_idr": 2608,
+  "qc_result": {
+    "passed": false,
+    "checks": [
+      {
+        "code": "QC-01",
+        "name": "Lip-sync drift",
+        "status": "skip",
+        "detail": "Tidak relevan untuk hands_only; butuh analisis viseme untuk talking_head (fase 2)."
+      },
+      {
+        "code": "QC-02",
+        "name": "Tangan/jari morphing",
+        "status": "skip",
+        "detail": "Butuh model CV deteksi anomali frame (fase 2)."
+      },
+      {
+        "code": "QC-03",
+        "name": "Identitas produk konsisten (antar shot + warna khas referensi)",
+        "status": "pass",
+        "detail": "antar_shot_max=14.9 (ambang 60) · hue_khas_min=0.38 (ambang 0.1) — kasar, hanya menangkap penyimpangan total"
+      },
+      {
+        "code": "QC-09",
+        "name": "Tanpa wajah di hands_only (YuNet)",
+        "status": "fail",
+        "detail": "wajah terdeteksi (skor 0.72) di qc09_s0_1.png"
+      },
+      {
+        "code": "QC-04",
+        "name": "Audio tidak senyap",
+        "status": "pass",
+        "detail": "max_volume=-35.9 dB"
+      },
+      {
+        "code": "QC-05",
+        "name": "Durasi sesuai target",
+        "status": "pass",
+        "detail": "15.00 dtk vs target 15 dtk"
+      },
+      {
+        "code": "QC-06",
+        "name": "Teks tidak terpotong",
+        "status": "skip",
+        "detail": "Overlay memakai posisi tetap dalam safe area; verifikasi OCR = fase 2."
+      },
+      {
+        "code": "QC-07",
+        "name": "Tanpa kata terlarang (overclaim/medis)",
+        "status": "pass",
+        "detail": "bersih"
+      },
+      {
+        "code": "QC-08",
+        "name": "Label AIGC (\"Dibuat dengan AI\") ter-render",
+        "status": "pass",
+        "detail": "watermark_param=true metadata_tag=true video_stream=true"
+      }
+    ],
+    "checked_at": "2026-08-01T17:22:31.336Z"
+  },
+  "created_at": "2026-08-01T17:21:09.827Z",
+  "completed_at": "2026-08-01T17:22:34.428Z",
+  "message": "Hasilnya belum bagus, jadi kredit kamu sudah kami balikin. Coba ganti fotonya ya."
+}
+SMOKE GAGAL: job gagal (REFUNDED)

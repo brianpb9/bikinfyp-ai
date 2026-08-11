@@ -1,0 +1,16 @@
+{
+  "id": "17041f23-b6ef-405d-85b9-34f5b05c3c06",
+  "state": "REFUNDED",
+  "format": "hands_only",
+  "duration_s": 30,
+  "script_id": "13420b64-fd52-4d1b-8c58-2871ae82ea67",
+  "product_id": "a4bf2f7b-02b8-4052-8f24-9f410c46605f",
+  "quality_tier": "high_quality",
+  "provider_video": "byteplus-ark-seedance",
+  "provider_voice": null,
+  "cost_actual_idr": 16626,
+  "qc_result": null,
+  "created_at": "2026-08-07T17:57:04.201Z",
+  "completed_at": "2026-08-07T18:00:45.203Z",
+  "message": "Hasilnya belum bagus, jadi kredit kamu sudah kami balikin. Coba ganti fotonya ya."
+}

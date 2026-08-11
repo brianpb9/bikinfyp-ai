@@ -15,10 +15,23 @@ const TERMINAL = new Set(["READY", "FAILED", "REFUNDED"]);
 const NEEDS_REVIEW = "AWAITING_APPROVAL";
 const POLL_MS = 5000;
 
+// Label + penjelasan apa yang sedang terjadi. Angka menitnya BUKAN karangan:
+// satu shot BytePlus terukur ~2,5 menit pada render berbayar 2026-08-11, dan
+// antrean provider bisa membuatnya jauh lebih lama saat padat (rentang resmi
+// kami 2-45 menit). Jadi yang ditulis rentang jujur, bukan janji.
 const STATE_LABEL: Record<string, string> = {
   QUEUED: "Antre", GENERATING_VISUAL: "Bikin visual", AWAITING_APPROVAL: "Menunggu review kamu", GENERATING_VOICE: "Bikin suara",
   COMPOSITING: "Menyusun video", QC_CHECK: "Cek kualitas", LABELING: "Finalisasi",
   READY: "Siap", FAILED: "Gagal", REFUNDED: "Gagal (kredit dikembalikan)",
+};
+const STATE_HINT: Record<string, string> = {
+  QUEUED: "Menunggu giliran render.",
+  GENERATING_VISUAL: "AI lagi menggambar adegannya — ini bagian paling lama.",
+  AWAITING_APPROVAL: "Semua adegan sudah jadi, tinggal kamu tinjau.",
+  GENERATING_VOICE: "Bikin suara narasi.",
+  COMPOSITING: "Menggabungkan adegan jadi satu video.",
+  QC_CHECK: "Memeriksa kualitas: label produk, tangan, durasi, audio.",
+  LABELING: "Menempel label AI dan merapikan berkas.",
 };
 
 // Galeri hasil kampanye (M4, F-ENT-01, polish M5, campaign M8) — polling sederhana tiap
@@ -62,6 +75,12 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
         <h1 className="font-display text-2xl font-bold text-zinc-900">
           {data ? `${data.ready_count} siap / ${data.total} total` : <span className="inline-block h-7 w-48 animate-pulse rounded-lg bg-zinc-200 align-middle" />}
         </h1>
+        {data && data.ready_count < data.total && (
+          <p className="mt-1 text-sm text-zinc-500">
+            Satu video biasanya <b>3–8 menit</b>, bisa sampai 45 menit kalau antrean AI lagi padat.
+            Halaman ini memperbarui sendiri — boleh ditinggal dulu.
+          </p>
+        )}
       </div>
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -80,6 +99,9 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
                 {!TERMINAL.has(job.state) && <Loader2 size={13} className="animate-spin text-amber-500" />}
                 {STATE_LABEL[job.state] ?? job.state}
               </p>
+              {STATE_HINT[job.state] && (
+                <p className="mt-0.5 text-[11px] leading-4 text-zinc-400">{STATE_HINT[job.state]}</p>
+              )}
               {job.state === NEEDS_REVIEW ? (
                 <Link
                   href={`/dashboard/campaign/job/${job.job_id}`}
@@ -100,7 +122,7 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
                   ) : (
                     <>
                       <Loader2 size={20} className="animate-spin text-zinc-300" />
-                      Sedang diproses...
+                      Sedang diproses
                     </>
                   )}
                 </div>

@@ -1,0 +1,32 @@
+{
+  "balance": 5000,
+  "ledger": [
+    {
+      "id": "4ad0abd1-1de5-4ceb-9072-61827eb265c9",
+      "user_id": "4c8236f3-0d4b-4c6d-9db1-f331be6150bb",
+      "delta": 5000,
+      "type": "release",
+      "job_id": "8e007a73-6ee0-4cb3-98aa-fc378ac4f758",
+      "payment_id": null,
+      "created_at": "2026-08-01T17:22:34.428Z"
+    },
+    {
+      "id": "fd092d58-a179-46a0-acf5-3e1daffd7942",
+      "user_id": "4c8236f3-0d4b-4c6d-9db1-f331be6150bb",
+      "delta": -5000,
+      "type": "hold",
+      "job_id": "8e007a73-6ee0-4cb3-98aa-fc378ac4f758",
+      "payment_id": null,
+      "created_at": "2026-08-01T17:21:09.827Z"
+    },
+    {
+      "id": "842ebff0-868b-46ad-b3ec-d0993b7e6cfd",
+      "user_id": "4c8236f3-0d4b-4c6d-9db1-f331be6150bb",
+      "delta": 5000,
+      "type": "bonus",
+      "job_id": null,
+      "payment_id": null,
+      "created_at": "2026-08-01T17:21:06.902Z"
+    }
+  ]
+}

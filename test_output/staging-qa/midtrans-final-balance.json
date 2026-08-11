@@ -1,0 +1,17 @@
+{
+  "balance": 30000,
+  "ledger": [
+    {
+      "type": "topup",
+      "delta": 25000,
+      "payment_id": "657c8fb5-5220-47e6-9f36-ab8aa51d1f5a",
+      "created_at": "2026-08-02T07:37:03.211Z"
+    },
+    {
+      "type": "bonus",
+      "delta": 5000,
+      "payment_id": null,
+      "created_at": "2026-08-02T07:24:33.145Z"
+    }
+  ]
+}

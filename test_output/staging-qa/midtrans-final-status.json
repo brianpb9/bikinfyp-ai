@@ -1,0 +1,11 @@
+{
+  "order_id": "racun-55480fda-83cc0731-e005",
+  "transaction_status": "settlement",
+  "status_code": "200",
+  "status_message": "Success, transaction is found",
+  "payment_type": "bank_transfer",
+  "gross_amount": "25000.00",
+  "transaction_time": "2026-08-02 14:31:51",
+  "settlement_time": "2026-08-02 14:37:02",
+  "fraud_status": "accept"
+}

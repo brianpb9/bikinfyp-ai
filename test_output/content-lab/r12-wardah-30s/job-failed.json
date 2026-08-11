@@ -1,0 +1,81 @@
+{
+  "id": "b4d55260-6ae1-47a9-a20f-3699e62e4de9",
+  "state": "REFUNDED",
+  "format": "hands_only",
+  "duration_s": 30,
+  "script_id": "b9db116d-f017-4a76-ad0c-d56ea8239770",
+  "product_id": "97321684-77cf-4d19-9641-913fa8ba130d",
+  "quality_tier": "high_quality",
+  "provider_video": "byteplus-ark-seedance",
+  "provider_voice": "gemini-tts",
+  "cost_actual_idr": 16676,
+  "qc_result": {
+    "passed": false,
+    "checks": [
+      {
+        "code": "QC-01",
+        "name": "Lip-sync drift",
+        "status": "skip",
+        "detail": "Verifikasi viseme otomatis belum ada (fase 2); tidak relevan untuk format tanpa wajah bicara."
+      },
+      {
+        "code": "QC-02",
+        "name": "Tangan/jari tidak morphing (kontinuitas siluet)",
+        "status": "pass",
+        "detail": "32 frame; 31 transisi tangan non-cut diperiksa"
+      },
+      {
+        "code": "QC-03",
+        "name": "Identitas produk konsisten (antar shot + warna khas referensi)",
+        "status": "fail",
+        "detail": "antar_shot_max=22.1 (ambang 60) · hue_khas_min=0.024 (ambang 0.1) — kasar, hanya menangkap penyimpangan total"
+      },
+      {
+        "code": "QC-09",
+        "name": "Tanpa wajah di hands_only (YuNet)",
+        "status": "fail",
+        "detail": "wajah terdeteksi (skor 0.63) di qc09_s0_0.png"
+      },
+      {
+        "code": "QC-04",
+        "name": "Audio tidak senyap",
+        "status": "pass",
+        "detail": "max_volume=-4.6 dB"
+      },
+      {
+        "code": "QC-05",
+        "name": "Durasi sesuai target",
+        "status": "pass",
+        "detail": "30.00 dtk vs target 30 dtk"
+      },
+      {
+        "code": "QC-06",
+        "name": "Teks overlay tidak terpotong",
+        "status": "skip",
+        "detail": "Tidak ada overlay bertimeline untuk diperiksa OCR."
+      },
+      {
+        "code": "QC-07",
+        "name": "Tanpa kata terlarang (overclaim/medis)",
+        "status": "pass",
+        "detail": "bersih"
+      },
+      {
+        "code": "QC-10",
+        "name": "Label produk terbaca (anti-slop)",
+        "status": "pass",
+        "detail": "token merek wardah,lightening terbaca (sampai 5 frame diperiksa)."
+      },
+      {
+        "code": "QC-08",
+        "name": "Label AIGC (metadata) tertanam",
+        "status": "pass",
+        "detail": "watermark_param=true metadata_tag=true video_stream=true"
+      }
+    ],
+    "checked_at": "2026-08-07T13:45:24.640Z"
+  },
+  "created_at": "2026-08-07T13:41:47.387Z",
+  "completed_at": "2026-08-07T13:45:24.640Z",
+  "message": "Hasilnya belum bagus, jadi kredit kamu sudah kami balikin. Coba ganti fotonya ya."
+}

@@ -1,0 +1,2 @@
+file '/Users/hadrava/HDRV/03_UGC_AI_ID/app/test_output/content-lab/tts-beauty-salma/clip_0.mp4'
+file '/Users/hadrava/HDRV/03_UGC_AI_ID/app/test_output/content-lab/tts-beauty-salma/clip_1.mp4'

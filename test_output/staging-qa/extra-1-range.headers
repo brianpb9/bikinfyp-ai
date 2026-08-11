@@ -1,0 +1,15 @@
+HTTP/2 206 
+date: Sat, 01 Aug 2026 17:34:51 GMT
+content-type: video/mp4
+content-length: 1024
+accept-ranges: bytes
+cache-control: private, max-age=300
+content-range: bytes 0-1023/1581697
+rndr-id: 88a77ad0-f455-46e3
+server: cloudflare
+vary: rsc, next-router-state-tree, next-router-prefetch, next-router-segment-prefetch
+x-render-origin-server: Render
+cf-cache-status: DYNAMIC
+cf-ray: a2469890adbcec19-CGK
+alt-svc: h3=":443"; ma=86400
+

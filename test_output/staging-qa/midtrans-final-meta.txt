@@ -1,0 +1,2 @@
+user=55480fda-0897-48d5-b4b2-d4d3471d5e16
+cookie=[REDACTED — JWT session token dihapus 2026-08-02, ditemukan tersimpan mentah di file bukti lewat review Codex. Ini akun test staging (bukan user sungguhan, saldo cuma sandbox), tapi tetap dibersihkan sebagai kebiasaan sebelum production.]

@@ -1,0 +1,108 @@
+{
+  "variant": "45-mosseru-showergel-bodycare-30dtk",
+  "creator_category": "genz",
+  "job": {
+    "id": "0e73d15f-9802-47c6-ae21-79d6913c34a0",
+    "state": "READY",
+    "format": "hands_only",
+    "duration_s": 30,
+    "script_id": "3a537fdf-3c9b-43b8-813d-4e6a7fd093ec",
+    "product_id": "881e689f-a09e-4eb9-87f7-87d3d1237fc9",
+    "quality_tier": "high_quality",
+    "provider_video": "byteplus-ark-seedance",
+    "provider_voice": "gemini-tts",
+    "cost_actual_idr": 4940,
+    "qc_result": {
+      "passed": true,
+      "checks": [
+        {
+          "code": "QC-01",
+          "name": "Lip-sync drift",
+          "status": "skip",
+          "detail": "Verifikasi viseme otomatis belum ada (fase 2); tidak relevan untuk format tanpa wajah bicara."
+        },
+        {
+          "code": "QC-02",
+          "name": "Tangan/jari tidak morphing (kontinuitas siluet)",
+          "status": "pass",
+          "detail": "32 frame; 30 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-10",
+          "name": "Label produk terbaca (anti-slop)",
+          "status": "pass",
+          "detail": "token merek bright terbaca (sampai 6 frame diperiksa)."
+        },
+        {
+          "code": "QC-03",
+          "name": "Identitas produk konsisten (antar shot + warna khas referensi)",
+          "status": "pass",
+          "detail": "antar_shot_max=40.1 (ambang 60) · hue_khas_min=0.857 (ambang 0.1) — kasar, hanya menangkap penyimpangan total"
+        },
+        {
+          "code": "QC-09",
+          "name": "Tanpa wajah di hands_only (YuNet)",
+          "status": "pass",
+          "detail": "4 frame sampel bersih"
+        },
+        {
+          "code": "QC-04",
+          "name": "Audio tidak senyap",
+          "status": "pass",
+          "detail": "max_volume=-1.4 dB"
+        },
+        {
+          "code": "QC-05",
+          "name": "Durasi sesuai target",
+          "status": "pass",
+          "detail": "30.00 dtk vs target 30 dtk"
+        },
+        {
+          "code": "QC-06",
+          "name": "Teks overlay tidak terpotong",
+          "status": "skip",
+          "detail": "Tidak ada overlay bertimeline untuk diperiksa OCR."
+        },
+        {
+          "code": "QC-07",
+          "name": "Tanpa kata terlarang (overclaim/medis)",
+          "status": "pass",
+          "detail": "bersih"
+        },
+        {
+          "code": "QC-08",
+          "name": "Label AIGC (metadata) tertanam",
+          "status": "pass",
+          "detail": "watermark_param=true metadata_tag=true video_stream=true"
+        }
+      ],
+      "checked_at": "2026-08-09T06:06:18.214Z"
+    },
+    "created_at": "2026-08-09T05:58:47.363Z",
+    "completed_at": "2026-08-09T06:06:18.218Z",
+    "message": "Videonya udah jadi! Jangan lupa nyalakan tanda 'konten AI' pas upload ya."
+  },
+  "script_segments": [
+    {
+      "role": "hook",
+      "start": 0,
+      "end": 6,
+      "text": "Say, zonknya balik lagi terus nggak sih?",
+      "visual_direction": "Close-up tangan memegang produk, kamera HP goyang natural, tatap produk"
+    },
+    {
+      "role": "demo",
+      "start": 6,
+      "end": 20,
+      "text": "nah, nemu Mosseru Tranexamic Bright Shower Gel, sumpah beda, cuma 119 ribu, Kamu juga ngerasa gitu nggak sih, pas akhirnya nemu yang beneran works, kalau ternyata kurang cocok juga gampang kok, tinggal komplain aja ke seller, apalagi harganya semurah itu loh",
+      "visual_direction": "Tangan mendemokan produk: putar/buka/pakai perlahan, label produk menghadap kamera"
+    },
+    {
+      "role": "cta",
+      "start": 20,
+      "end": 30,
+      "text": "Cek keranjang ya deh, stoknya kelihatan menipis nih",
+      "visual_direction": "Produk dipegang di samping keranjang belanja HP, tunjuk layar lalu kembali ke produk"
+    }
+  ]
+}

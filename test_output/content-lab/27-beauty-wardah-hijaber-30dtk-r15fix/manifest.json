@@ -1,0 +1,108 @@
+{
+  "variant": "27-beauty-wardah-hijaber-30dtk-r15fix",
+  "creator_category": "hijaber",
+  "job": {
+    "id": "5a0cc48a-6fb8-4f48-aae9-3c41a81bcee4",
+    "state": "READY",
+    "format": "hands_only",
+    "duration_s": 30,
+    "script_id": "99062976-0ce5-4874-a02e-cdee675a7139",
+    "product_id": "0dd2ad8a-6f9f-4f1d-bc81-6e3930de71ec",
+    "quality_tier": "high_quality",
+    "provider_video": "byteplus-ark-seedance",
+    "provider_voice": "gemini-tts",
+    "cost_actual_idr": 16676,
+    "qc_result": {
+      "passed": true,
+      "checks": [
+        {
+          "code": "QC-01",
+          "name": "Lip-sync drift",
+          "status": "skip",
+          "detail": "Verifikasi viseme otomatis belum ada (fase 2); tidak relevan untuk format tanpa wajah bicara."
+        },
+        {
+          "code": "QC-02",
+          "name": "Tangan/jari tidak morphing (kontinuitas siluet)",
+          "status": "pass",
+          "detail": "32 frame; 31 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-10",
+          "name": "Label produk terbaca (anti-slop)",
+          "status": "pass",
+          "detail": "token merek wardah terbaca (sampai 2 frame diperiksa)."
+        },
+        {
+          "code": "QC-03",
+          "name": "Identitas produk konsisten (antar shot + warna khas referensi)",
+          "status": "pass",
+          "detail": "antar_shot_max=21.2 (ambang 60) · hue_khas_min=0.021 (ambang 0.1, diabaikan — QC-10 sudah buktikan label) — kasar, hanya menangkap penyimpangan total"
+        },
+        {
+          "code": "QC-09",
+          "name": "Tanpa wajah di hands_only (YuNet)",
+          "status": "pass",
+          "detail": "4 frame sampel bersih"
+        },
+        {
+          "code": "QC-04",
+          "name": "Audio tidak senyap",
+          "status": "pass",
+          "detail": "max_volume=-3.4 dB"
+        },
+        {
+          "code": "QC-05",
+          "name": "Durasi sesuai target",
+          "status": "pass",
+          "detail": "30.00 dtk vs target 30 dtk"
+        },
+        {
+          "code": "QC-06",
+          "name": "Teks overlay tidak terpotong",
+          "status": "skip",
+          "detail": "Tidak ada overlay bertimeline untuk diperiksa OCR."
+        },
+        {
+          "code": "QC-07",
+          "name": "Tanpa kata terlarang (overclaim/medis)",
+          "status": "pass",
+          "detail": "bersih"
+        },
+        {
+          "code": "QC-08",
+          "name": "Label AIGC (metadata) tertanam",
+          "status": "pass",
+          "detail": "watermark_param=true metadata_tag=true video_stream=true"
+        }
+      ],
+      "checked_at": "2026-08-07T17:50:59.333Z"
+    },
+    "created_at": "2026-08-07T17:46:49.911Z",
+    "completed_at": "2026-08-07T17:50:59.344Z",
+    "message": "Videonya udah jadi! Jangan lupa nyalakan tanda 'konten AI' pas upload ya."
+  },
+  "script_segments": [
+    {
+      "role": "hook",
+      "start": 0,
+      "end": 6,
+      "text": "skincare murah vs mahal, bedanya apa sih?",
+      "visual_direction": "Close-up tangan memegang produk, kamera HP goyang natural, tatap produk"
+    },
+    {
+      "role": "demo",
+      "start": 6,
+      "end": 20,
+      "text": "nah, Wardah Lightening Serum Ampoule cuma 60 ribu, nggak kalah, kalau ternyata kurang cocok juga gampang kok, tinggal komplain aja ke seller, eh tapi bukan itu doang serunya, yang bikin beda malah teksturnya pas dipake langsung",
+      "visual_direction": "Tangan mendemokan produk: putar/buka/pakai perlahan, label produk menghadap kamera"
+    },
+    {
+      "role": "cta",
+      "start": 20,
+      "end": 30,
+      "text": "Cek keranjang ya deh, buruan ya, keburu diserbu yang lain",
+      "visual_direction": "Produk dipegang di samping keranjang belanja HP, tunjuk layar lalu kembali ke produk"
+    }
+  ]
+}

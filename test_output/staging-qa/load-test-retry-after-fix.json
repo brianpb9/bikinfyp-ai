@@ -1,0 +1,384 @@
+{
+  "startedAt": "2026-08-01T21:30:10.801Z",
+  "finishedAt": "2026-08-01T21:31:16.688Z",
+  "base": "https://racun-ai-staging-web.onrender.com",
+  "workerMustBeSuspended": true,
+  "uniqueSubmissions": [
+    {
+      "scriptId": "ea11e6b4-e1e0-4878-a0ea-9629b71e856e",
+      "userId": "031c2d1b-694f-4a28-9aa9-d8a81e43ee78",
+      "status": 201,
+      "jobId": "7d34c8f6-0065-4eb8-8749-9ff2bde6a016",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "061feb25-4dd0-4436-813c-f5e639f46098",
+      "userId": "74e2daff-f44f-423a-8ab6-5b35f470351e",
+      "status": 201,
+      "jobId": "5cf57de0-0d88-46f7-9f93-c5ea5d32828d",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "ef93fcf6-1cae-49e6-b7cb-aa1f520257da",
+      "userId": "ee5d39fc-613a-489c-bb4d-738809ee456b",
+      "status": 201,
+      "jobId": "8f2e785d-4e43-4c2e-925c-4abe6f77436b",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "479e23c7-718e-4e7e-9c55-1b3748d4f060",
+      "userId": "932c776c-3e87-4989-921d-ca1af96adf88",
+      "status": 201,
+      "jobId": "58a3c9ea-d02f-42c7-a06b-da1b52ff20ad",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "d573af54-4273-4ec5-ae70-2c93f42f9b14",
+      "userId": "9c0f4043-dfe3-4b42-8d0f-b668bf2a4ad6",
+      "status": 201,
+      "jobId": "f523f493-5187-486d-9c3d-5a51534e8f77",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "d6a63a45-2c7a-4d91-93c0-5f72ef27d03d",
+      "userId": "37651688-00ae-45c1-b846-f2c416d7ed84",
+      "status": 201,
+      "jobId": "32440bd7-46a1-4d18-9db9-c081bf6c6517",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "bb9d3ab1-eaeb-4282-b6be-f893e293ad5a",
+      "userId": "262b1f49-933c-4183-a994-e3084fe20a67",
+      "status": 201,
+      "jobId": "29366b77-7fd8-48d2-bd48-f3b3d0a41a84",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "80de8654-ece8-4935-b4f3-9286bc183fe9",
+      "userId": "7c99458c-176b-400b-a79c-35e19b7adea0",
+      "status": 201,
+      "jobId": "b633a52c-21f7-4366-a339-2f9dd3e4e286",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "e193f8a6-b7d4-4601-b285-9228f08ae74f",
+      "userId": "686218e9-86f6-4ce5-b6d1-7dc5cb6039ea",
+      "status": 201,
+      "jobId": "cf3ac0a2-1dda-495e-bfa0-efcfeb5c0a14",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "5a8caa3b-3b2a-41da-807b-75e4d559f8e4",
+      "userId": "726c7e9e-1741-4cc4-b329-62455208ab5f",
+      "status": 201,
+      "jobId": "892aff36-4bc9-4b63-8402-1e6faaebeba1",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "4b4abaae-53e0-4ab7-ad85-6a81a8ab7245",
+      "userId": "3b846241-6116-4d2a-9a6d-c27629074536",
+      "status": 201,
+      "jobId": "5f7ca903-4ab0-4718-9e94-18c87329a505",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "7dc370c2-af3d-4b73-b07d-2871fe775670",
+      "userId": "6e7a2e21-b77f-4693-8689-a0abaa64c3fc",
+      "status": 201,
+      "jobId": "b32c3a8c-3542-4f4f-a3d2-410faf6c57fe",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "1ac6c05a-613c-4091-8d11-edf0e753e344",
+      "userId": "80315c14-67f3-47eb-b59a-3bf602893034",
+      "status": 201,
+      "jobId": "f599fc1a-ae0b-4549-b940-ec787d87974f",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "9e24ac49-1e62-4b83-a477-86bc2005d9c1",
+      "userId": "9eb9909e-abea-4592-b695-5fe47d517923",
+      "status": 201,
+      "jobId": "1b4d7d94-60ec-4962-808f-3fcc8ac09612",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "5fe5c2b0-48d9-4d59-b3a8-99590db1b0c1",
+      "userId": "b23265b8-fae4-452a-9cd0-9d7c47e82f62",
+      "status": 201,
+      "jobId": "3d949bad-5876-46c8-b6da-66e9f1179c82",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "ac593c3a-9241-49d3-a878-12c0e405b8f5",
+      "userId": "639f0c94-fbf3-48b3-878e-5d6f7c2a5ded",
+      "status": 201,
+      "jobId": "841307b2-c11f-45bc-aaa4-ec7d7fc0f78f",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "a12414d7-07b3-4227-a915-047398975b01",
+      "userId": "25f33fcf-c061-4e9e-a75f-f8a968f0ed28",
+      "status": 201,
+      "jobId": "7b158e69-5e3a-46c5-bd5a-c0ce00082a27",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "9a9fdf37-a0ec-4d41-8652-f0bb6d748072",
+      "userId": "30026097-aa4a-4273-b7fc-4d8c987c7fe0",
+      "status": 201,
+      "jobId": "d3672e3d-4a8b-4f7b-baad-07f28c14779b",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "57584d01-7255-4303-beae-8daa4690e50a",
+      "userId": "ea3b3d10-9fd6-488e-930b-bf86db9393d3",
+      "status": 201,
+      "jobId": "3b3032e8-f07a-4599-b447-64bda06c443a",
+      "duplicate": false,
+      "state": "QUEUED"
+    },
+    {
+      "scriptId": "2ef3fd0c-5d15-4adc-8a68-de3d9018d14f",
+      "userId": "a194e3e5-4525-4dbb-86ad-6628bbee7cc4",
+      "status": 201,
+      "jobId": "8c56d183-374f-40a0-a56a-f55a2b018af6",
+      "duplicate": false,
+      "state": "QUEUED"
+    }
+  ],
+  "duplicateAttempts": [
+    {
+      "status": 200,
+      "jobId": "7d34c8f6-0065-4eb8-8749-9ff2bde6a016",
+      "duplicate": true,
+      "state": "QUEUED"
+    },
+    {
+      "status": 200,
+      "jobId": "7d34c8f6-0065-4eb8-8749-9ff2bde6a016",
+      "duplicate": true,
+      "state": "QUEUED"
+    },
+    {
+      "status": 200,
+      "jobId": "7d34c8f6-0065-4eb8-8749-9ff2bde6a016",
+      "duplicate": true,
+      "state": "QUEUED"
+    },
+    {
+      "status": 200,
+      "jobId": "7d34c8f6-0065-4eb8-8749-9ff2bde6a016",
+      "duplicate": true,
+      "state": "QUEUED"
+    }
+  ],
+  "reconciled": [
+    {
+      "userId": "031c2d1b-694f-4a28-9aa9-d8a81e43ee78",
+      "jobId": "7d34c8f6-0065-4eb8-8749-9ff2bde6a016",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "74e2daff-f44f-423a-8ab6-5b35f470351e",
+      "jobId": "5cf57de0-0d88-46f7-9f93-c5ea5d32828d",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "ee5d39fc-613a-489c-bb4d-738809ee456b",
+      "jobId": "8f2e785d-4e43-4c2e-925c-4abe6f77436b",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "932c776c-3e87-4989-921d-ca1af96adf88",
+      "jobId": "58a3c9ea-d02f-42c7-a06b-da1b52ff20ad",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "9c0f4043-dfe3-4b42-8d0f-b668bf2a4ad6",
+      "jobId": "f523f493-5187-486d-9c3d-5a51534e8f77",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "37651688-00ae-45c1-b846-f2c416d7ed84",
+      "jobId": "32440bd7-46a1-4d18-9db9-c081bf6c6517",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "262b1f49-933c-4183-a994-e3084fe20a67",
+      "jobId": "29366b77-7fd8-48d2-bd48-f3b3d0a41a84",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "7c99458c-176b-400b-a79c-35e19b7adea0",
+      "jobId": "b633a52c-21f7-4366-a339-2f9dd3e4e286",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "686218e9-86f6-4ce5-b6d1-7dc5cb6039ea",
+      "jobId": "cf3ac0a2-1dda-495e-bfa0-efcfeb5c0a14",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "726c7e9e-1741-4cc4-b329-62455208ab5f",
+      "jobId": "892aff36-4bc9-4b63-8402-1e6faaebeba1",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "3b846241-6116-4d2a-9a6d-c27629074536",
+      "jobId": "5f7ca903-4ab0-4718-9e94-18c87329a505",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "6e7a2e21-b77f-4693-8689-a0abaa64c3fc",
+      "jobId": "b32c3a8c-3542-4f4f-a3d2-410faf6c57fe",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "80315c14-67f3-47eb-b59a-3bf602893034",
+      "jobId": "f599fc1a-ae0b-4549-b940-ec787d87974f",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "9eb9909e-abea-4592-b695-5fe47d517923",
+      "jobId": "1b4d7d94-60ec-4962-808f-3fcc8ac09612",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "b23265b8-fae4-452a-9cd0-9d7c47e82f62",
+      "jobId": "3d949bad-5876-46c8-b6da-66e9f1179c82",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "639f0c94-fbf3-48b3-878e-5d6f7c2a5ded",
+      "jobId": "841307b2-c11f-45bc-aaa4-ec7d7fc0f78f",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "25f33fcf-c061-4e9e-a75f-f8a968f0ed28",
+      "jobId": "7b158e69-5e3a-46c5-bd5a-c0ce00082a27",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "30026097-aa4a-4273-b7fc-4d8c987c7fe0",
+      "jobId": "d3672e3d-4a8b-4f7b-baad-07f28c14779b",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "ea3b3d10-9fd6-488e-930b-bf86db9393d3",
+      "jobId": "3b3032e8-f07a-4599-b447-64bda06c443a",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    },
+    {
+      "userId": "a194e3e5-4525-4dbb-86ad-6628bbee7cc4",
+      "jobId": "8c56d183-374f-40a0-a56a-f55a2b018af6",
+      "balance": 0,
+      "matchingJobs": 1,
+      "holds": 1,
+      "holdDelta": -5000,
+      "state": "QUEUED"
+    }
+  ],
+  "summary": {
+    "users": 20,
+    "uniqueJobs": 20,
+    "duplicateRequests": 4,
+    "duplicateJobId": "7d34c8f6-0065-4eb8-8749-9ff2bde6a016",
+    "totalHoldsIdr": 100000,
+    "allQueued": true
+  }
+}

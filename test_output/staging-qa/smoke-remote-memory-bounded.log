@@ -1,0 +1,32 @@
+== Memakai server staging eksternal: https://racun-ai-staging-web.onrender.com
+== Server staging OK
+== 1. dev-login
+   login OK (0812031424, bonus 1 kredit)
+== 2. buat produk manual (foto asli test_output/hands_a.png)
+   produk OK: 31ef9cba-8d48-46d3-a259-48288454d758
+== 3. generate skrip
+   3 skrip OK (keluarga: H3, H4, H9)
+== 4. uji gerbang HITL: job tanpa approve harus 422 SCRIPT_NOT_APPROVED
+   HITL OK (422 SCRIPT_NOT_APPROVED)
+== 5. approve skrip
+   approve OK
+== 6. buat job
+   job OK: 04ca6c03-b08e-4fc2-bacb-971f35d31bc1
+== 7. poll sampai READY
+{
+  "id": "04ca6c03-b08e-4fc2-bacb-971f35d31bc1",
+  "state": "REFUNDED",
+  "format": "hands_only",
+  "duration_s": 15,
+  "script_id": "1388024b-23d3-4bfe-9660-57823d46102e",
+  "product_id": "31ef9cba-8d48-46d3-a259-48288454d758",
+  "quality_tier": "silent_caption",
+  "provider_video": "byteplus-ark-seedance",
+  "provider_voice": "none-silent-caption",
+  "cost_actual_idr": 2608,
+  "qc_result": null,
+  "created_at": "2026-08-01T17:16:42.929Z",
+  "completed_at": "2026-08-01T17:18:08.022Z",
+  "message": "Hasilnya belum bagus, jadi kredit kamu sudah kami balikin. Coba ganti fotonya ya."
+}
+SMOKE GAGAL: job gagal (REFUNDED)
