@@ -29,7 +29,17 @@ interface GeneratedScript { script_id: string; hook_family: string; caption: str
 const STEPS = ["Jenis", "Produk", "Detail", "Konsep", "Review"];
 const MAX_PHOTOS = 8;
 const TIER_BASE_IDR: Record<Tier, number> = { high_quality: 12_000, super_hq: 80_000 };
-const CATEGORIES = ["beauty", "fashion", "food", "gadget", "home", "default"];
+// Kategori produk. Tiga terakhir TIDAK punya barang fisik dan itulah yang
+// mematikan pemeriksaan identitas produk (isServiceLike di lib/config/hooks.ts)
+// — tanpa opsi ini di layar, iklan jasa tidak akan pernah bisa dipilih dan
+// seluruh jalurnya jadi kode mati.
+const CATEGORIES = ["beauty", "fashion", "muslim_fashion", "food", "gadget", "home", "jasa", "app", "toko", "default"];
+const CATEGORY_LABEL: Record<string, string> = {
+  beauty: "Kecantikan", fashion: "Fashion", muslim_fashion: "Fashion muslim",
+  food: "Makanan & minuman", gadget: "Elektronik", home: "Rumah & dapur",
+  jasa: "Jasa (tanpa barang fisik)", app: "Aplikasi", toko: "Toko / tempat usaha",
+  default: "Lainnya",
+};
 
 function estimateIdr(tier: Tier, durationSec: number, count: number): number {
   return Math.round(TIER_BASE_IDR[tier] * (durationSec / 15)) * count;
@@ -510,7 +520,7 @@ export default function CampaignPage() {
                 onChange={(e) => setProduct({ ...product, category: e.target.value })}
                 className="mt-1 w-full rounded-lg border border-zinc-300 px-3 py-2 text-sm text-zinc-900 focus:border-amber-500 focus:outline-none"
               >
-                {CATEGORIES.map((c) => <option key={c} value={c}>{c === "default" ? "lainnya" : c}</option>)}
+                {CATEGORIES.map((c) => <option key={c} value={c}>{CATEGORY_LABEL[c] ?? c}</option>)}
               </select>
             </label>
             <label className="block">

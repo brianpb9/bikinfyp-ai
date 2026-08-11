@@ -28,6 +28,7 @@ import type { SegmentDraft } from "../script-engine/templates";
 import { CATEGORY_NOUN, CATEGORY_PAIN } from "../config/hooks";
 import { hargaTerbilang } from "../script-engine/terbilang";
 import { MANDATORY_NEGATIVE_PROMPT } from "../config/compliance";
+import { isServiceLike } from "../config/hooks";
 
 export interface ShotPlanInput {
   jobId: string;
@@ -322,8 +323,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
       : input.category.handsPrompt;
     const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
+    // Tanpa-produk ditentukan KATEGORI, bukan format: iklan untuk barang fisik
+    // tetap menampilkan barangnya. Lihat isServiceLike di lib/config/hooks.ts.
+    const noPhysicalProduct = isServiceLike(input.productCategory);
     const beat =
-      format === "ads"
+      format === "ads" && noPhysicalProduct
         // Iklan jasa: yang diperagakan adalah MANFAAT, bukan benda. Presenter
         // tidak memegang apa pun — begitu diminta memegang sesuatu, model akan
         // mengarang produk yang tidak pernah ada, dan itu justru menyesatkan
@@ -335,7 +339,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             : `The same person continuing, gesturing naturally to make a point, the surroundings quietly reinforcing what the business does — no product in hand at any moment`
       : format === "tvc"
         ? tvcBeat(i)
-        : format === "talking_head"
+        : format === "talking_head" || format === "ads"
         ? lipSyncPresenter
           // Presenter/Lipsync (Super HQ, r7): bicara sungguhan ke kamera —
           // audio embedded asli dipertahankan, jadi sinkron mulut BENAR di

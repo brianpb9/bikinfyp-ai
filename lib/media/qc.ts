@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 import { probeDurationSec, probeHasVideoStream, probeFormatTags, volumeDetect, runFfmpeg, runFf } from "./ffmpeg";
 import { validateScript } from "../script-engine/validator";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
+import { isServiceLike } from "../config/hooks";
 
 export interface QcCheck {
   code: string;
@@ -645,12 +646,12 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // produk pucat/kecil di frame ramai): kalau QC-10 SUDAH membuktikan label
   // terbaca, fraksi-warna tidak lagi jadi hard-fail sendirian — konsistensi
   // ANTAR SHOT (indikasi identitas produk BERGANTI di tengah video) tetap keras.
-  if (input.format === "ads") {
+  if (isServiceLike(input.productCategory)) {
     // Iklan jasa TIDAK punya produk fisik. Gambar yang dikirim adalah visual
     // bisnis (logo/toko/screenshot) yang sengaja TIDAK muncul utuh di layar,
     // jadi membandingkan warna frame dengannya pasti gagal dan akan menolak
     // setiap iklan jasa yang sebenarnya baik-baik saja.
-    checks.push({ code: "QC-03", name: "Identitas produk konsisten", status: "skip", detail: "N/A: iklan jasa/app/toko tidak punya produk fisik untuk dicocokkan." });
+    checks.push({ code: "QC-03", name: "Identitas produk konsisten", status: "skip", detail: "N/A: jasa/app/toko tidak punya produk fisik untuk dicocokkan." });
   } else if (input.shotPaths && input.shotPaths.length >= 1 && input.refImagePath && fs.existsSync(input.refImagePath)) {
     try {
       checks.push(await qcProductSimilarity(input.shotPaths, input.refImagePath, path.dirname(input.filePath), input.format, labelFidelityPassed));

@@ -169,3 +169,20 @@ export const COMPETITOR_BRANDS = [
   "wardah", "skintific", "somethinc", "scarlett", "hanasui", "implora",
   "msglow", "ms glow", "erha", "avoskin", "azarine", "glad2glow",
 ];
+
+/** Kategori yang TIDAK punya barang fisik untuk ditampilkan: jasa, aplikasi,
+ * toko/tempat usaha.
+ *
+ * Koreksi Brian 2026-08-11: "ini bisa jasa, dan bisa juga produk fisik kok,
+ * cuman beda approach klo ads". Versi pertama saya keliru mengikat perilaku
+ * "tidak ada produk" ke FORMAT ads — akibatnya iklan untuk barang fisik pun
+ * dipaksa tanpa produk di tangan, dan pemeriksaan identitas produknya
+ * dimatikan padahal produknya nyata ada.
+ *
+ * Yang benar: format menentukan PENDEKATAN (iklan vs rekomendasi kreator),
+ * kategori menentukan APAKAH ADA BARANG. Keduanya bebas dikombinasikan. */
+export const SERVICELIKE_CATEGORIES = new Set(["jasa", "app", "toko"]);
+
+export function isServiceLike(productCategory: string | null | undefined): boolean {
+  return SERVICELIKE_CATEGORIES.has(String(productCategory ?? ""));
+}
