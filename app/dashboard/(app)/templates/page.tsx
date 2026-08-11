@@ -212,6 +212,16 @@ function TemplateGrid({ rows }: { rows: CampaignTemplate[] }) {
                     {t.caution.note}
                   </p>
                 )}
+                {/* Angka dari video sumbernya. Ditulis apa adanya karena
+                    inilah yang membedakan template ini dari tebakan: "aslinya
+                    12 shot / 102 BPM" itu fakta hasil bedah, dan tempo musik
+                    adalah satu-satunya bagian produksi yang tidak kami
+                    kerjakan — brand yang memilih lagunya sendiri. */}
+                {t.source && (
+                  <p className="mt-2 text-[11px] text-zinc-400">
+                    Aslinya {t.source.durationSec} dtk · {t.source.shots} shot · musik ±{t.source.bpm} BPM
+                  </p>
+                )}
                 <div className="mt-auto flex items-center justify-between pt-4">
                   <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-semibold text-zinc-600">
                     {t.count} variasi

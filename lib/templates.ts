@@ -36,8 +36,20 @@ export interface CampaignTemplate {
   count: number;
   /** Kategori produk yang paling cocok — untuk penyaringan di galeri. */
   bestFor: string[];
-  /** Klip contoh; null kalau kami belum punya render nyata untuk gaya ini.
-   * Lebih baik kosong daripada memasang klip yang salah gaya. */
+  /** Klip contoh, atau null kalau berkasnya BELUM ada.
+   *
+   * Harus null — bukan menunjuk ke berkas yang belum diunggah. Diuji
+   * 2026-08-11: src yang 404 menyisakan elemen <video> kosong yang tampil
+   * sebagai kotak hitam polos, dan itu TIDAK bisa dideteksi dengan andal dari
+   * sisi klien — pada 404 yang sudah ter-cache, event "error" media lewat
+   * sebelum React sempat memasang pendengarnya (terukur: pendengar terpasang
+   * di 23 elemen, handler jalan nol kali, padahal properti v.error terisi di
+   * 12 elemen). Event media juga tidak menggelembung, jadi tidak ada tempat
+   * lain menangkapnya.
+   *
+   * Yang ada di disk kita tahu pasti tanpa menebak di browser. Cara menambah
+   * pratinjau ada di public/previews/README-12-format.md — satu baris per
+   * template, dan kartunya langsung hidup. */
   preview: string | null;
   accent: "amber" | "rose" | "emerald" | "violet" | "sky" | "zinc";
   /** Rute TVC — hanya untuk kind "tvc". Lihat lib/media/shot-planner.ts. */
@@ -80,14 +92,16 @@ export interface CampaignTemplate {
 // berdasarkan produkmu" di dokumen indeks persis fungsi sebuah galeri
 // template, jadi `when` di bawah memakai kalimat itu.
 //
-// TIGA TEMPLATE SENGAJA TIDAK BISA DIGENERATE PENUH (humanFootage terisi).
+// EMPAT TEMPLATE MEMBAWA RAMBU (`caution`), dengan dua aturan berbeda.
 // T05, T08, dan T10 adalah KLAIM HASIL — before/after berdampingan, day 1 vs
 // day 7, perbandingan dua lengan. Dokumen Brian sendiri melarangnya dibuat
 // dengan AI, dan larangan itu benar: membuat "bukti" efek produk pada kulit
 // orang secara sintetis adalah bukti palsu, berapa pun bagusnya hasil
-// rendernya. Kami tetap memajangnya sebagai format yang kami pahami, dengan
-// alasannya ditulis terbuka — bukan menghapusnya diam-diam, dan bukan pula
-// menawarkan tombol yang menghasilkan klaim palsu.
+// rendernya. T12 (vox pop) beda kasus — boleh dibuat AI, tapi WAJIB diberi
+// label dramatisasi, karena risikonya testimoni palsu. Keempatnya tetap
+// dipajang sebagai format yang kami pahami, dengan alasannya ditulis
+// terbuka — bukan dihapus diam-diam, dan bukan pula disediakan tombol yang
+// menghasilkan bukti palsu.
 //
 // CATATAN JARAK TEKNIS: enam dari 12 video sumber berpotongan 1,66–2,50 detik
 // per shot. Perencana shot kami mematok MINIMUM 4 detik per adegan (batas
