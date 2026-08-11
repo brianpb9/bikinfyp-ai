@@ -14,7 +14,7 @@ import { getTemplate, type CampaignTemplate } from "@/lib/templates";
 
 type Kind = "affiliate" | "ads" | "tvc";
 type Format = "talking_head" | "hands_only" | "tvc" | "ads";
-type Tier = "high_quality" | "super_hq";
+type Tier = "silent_caption" | "high_quality" | "super_hq";
 import type { HookLevel } from "@/lib/config/hooks";
 import { HOOK_LEVELS } from "@/lib/config/hooks";
 
@@ -28,11 +28,33 @@ interface GeneratedScript { script_id: string; hook_family: string; caption: str
 
 const STEPS = ["Jenis", "Produk", "Detail", "Konsep", "Review"];
 const MAX_PHOTOS = 8;
-const TIER_BASE_IDR: Record<Tier, number> = { high_quality: 12_000, super_hq: 80_000 };
+// Harga dasar per tier — HARUS cocok dengan config.tiers di server, karena
+// angka di layar ini yang dibaca brand sebelum menekan Bikin. Server tetap
+// menghitung ulang saat render; ini estimasi, bukan otoritas.
+const TIER_BASE_IDR: Record<Tier, number> = { silent_caption: 5_000, high_quality: 12_000, super_hq: 80_000 };
 // Kategori produk. Tiga terakhir TIDAK punya barang fisik dan itulah yang
 // mematikan pemeriksaan identitas produk (isServiceLike di lib/config/hooks.ts)
 // — tanpa opsi ini di layar, iklan jasa tidak akan pernah bisa dipilih dan
 // seluruh jalurnya jadi kode mati.
+// Tiga tier yang MEMANG ada di mesin. Dashboard sebelumnya cuma menawarkan
+// dua — silent_caption ditolak di route generate padahal ia tier produksi
+// yang dipakai retail tiap hari.
+const TIER_OPTIONS = [
+  { id: "silent_caption" as const, label: "Standard" },
+  { id: "high_quality" as const, label: "Quality" },
+  { id: "super_hq" as const, label: "High Quality" },
+];
+const TIER_META: Record<string, { resolution: string; note: string }> = {
+  silent_caption: { resolution: "480p", note: "teks di layar, tanpa suara" },
+  high_quality: { resolution: "720p", note: "suara AI" },
+  super_hq: { resolution: "1080p", note: "suara AI + gerak bibir" },
+};
+const RATIOS = [
+  { id: "9:16", label: "9:16" },
+  { id: "1:1", label: "1:1" },
+  { id: "16:9", label: "16:9" },
+];
+
 const CATEGORIES = ["beauty", "fashion", "muslim_fashion", "food", "gadget", "home", "jasa", "app", "toko", "default"];
 const CATEGORY_LABEL: Record<string, string> = {
   beauty: "Kecantikan", fashion: "Fashion", muslim_fashion: "Fashion muslim",
@@ -85,6 +107,9 @@ export default function CampaignPage() {
   const [format, setFormat] = useState<Format>("hands_only");
   const [tier, setTier] = useState<Tier>("high_quality");
   const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
+  const [ratio, setRatio] = useState("9:16");
+  const [multiShot, setMultiShot] = useState(false);
+  const [shotCount, setShotCount] = useState(3);
   const [hookLevel, setHookLevel] = useState<HookLevel>("normal");
   const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
@@ -286,6 +311,8 @@ export default function CampaignPage() {
         json: {
           product_id: product.product_id, script_ids: chosen.map((s) => s.script_id),
           format, creator_category: creatorCategory, avatar_custom_desc: customAvatarDesc,
+          // null = biarkan mesin menurunkan jumlah adegan seperti sebelumnya.
+          shot_count: multiShot ? shotCount : null, ratio,
         },
       });
       router.push(`/dashboard/campaign/${res.run_id}`);
@@ -342,12 +369,11 @@ export default function CampaignPage() {
             {([
               { id: "affiliate" as const, icon: ShoppingBag, title: "AI UGC Affiliate", desc: "Jualan produk fisik ke TikTok Shop. AI yang peragakan produkmu — cukup foto.", ready: true, preview: "/previews/format-tangan.mp4" },
               { id: "ads" as const, icon: Megaphone, title: "AI UGC Ads", desc: "Buat app, jasa, atau toko — yang tidak punya barang fisik. Presenter AI yang bicara.", ready: true, preview: "/previews/format-ads.mp4" },
-              // Preview TVC: gambar dari Brian (2026-08-11) dengan push-in
-              // lambat. BUKAN hasil render AI — ini still yang digerakkan,
-              // dan sengaja dipilih begitu: gerakan kamera pelan yang
-              // terkontrol memang tata bahasa iklan TV, jadi ia jujur
-              // menggambarkan gayanya tanpa mengklaim sebagai contoh output.
-              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Iklan TV: sinematik, kamera terkontrol, pencahayaan ditata, ditutup hero shot produk.", ready: true, preview: "/previews/format-tvc.mp4" },
+              // Preview TVC: klip AI sungguhan dari Brian (2026-08-11),
+              // menggantikan still-yang-digerakkan sebelumnya. Sumbernya
+              // 1280x720 tapi isinya sudah pillarbox — dipotong ke isi
+              // aslinya lalu ke 9:16 agar sejajar dengan preview lain.
+              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Sinematik, kamera terkontrol, pencahayaan ditata, ditutup hero shot produk.", ready: true, preview: "/previews/format-tvc.mp4" },
             ]).map((k) => {
               const Icon = k.icon;
               const active = kind === k.id;
@@ -642,14 +668,81 @@ export default function CampaignPage() {
             </div>
 
             <div>
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Tier kualitas</p>
-              <div className="flex gap-2">
-                {([{ id: "high_quality" as const, label: "AI Bersuara" }, { id: "super_hq" as const, label: "AI Bersuara Pro" }]).map((t) => (
+              <div className="mb-2 flex items-baseline justify-between">
+                <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Quality</p>
+                {/* Resolusi TIDAK bisa dipilih terpisah: harga tiap tier
+                    dihitung dari resolusinya, jadi memisahkan keduanya akan
+                    membuat tagihan tidak cocok dengan yang dirender. Karena
+                    itu ditampilkan sebagai keterangan, bukan tombol. */}
+                <span className="rounded-full bg-zinc-100 px-2.5 py-1 text-[10px] font-bold text-zinc-600">
+                  {TIER_META[tier].resolution}
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {TIER_OPTIONS.map((t) => (
                   <button key={t.id} onClick={() => setTier(t.id)}
-                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${tier === t.id ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
-                  >{t.label}</button>
+                    className={`rounded-lg border px-4 py-2 text-left text-sm font-medium transition-colors ${tier === t.id ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
+                  >
+                    {t.label}
+                    <span className="mt-0.5 block text-[10px] font-normal opacity-70">{TIER_META[t.id].note}</span>
+                  </button>
                 ))}
               </div>
+            </div>
+
+            {/* Rasio aspek */}
+            <div>
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Rasio</p>
+              <div className="flex gap-2">
+                {RATIOS.map((r) => (
+                  <button key={r.id} onClick={() => setRatio(r.id)}
+                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${ratio === r.id ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
+                  >{r.label}</button>
+                ))}
+              </div>
+              {ratio !== "9:16" && (
+                <p className="mt-1.5 text-xs text-amber-700">
+                  Baru 9:16 yang sudah kami render sungguhan. {ratio} didukung API-nya tapi belum diuji —
+                  kalau gagal, tokenmu dikembalikan otomatis.
+                </p>
+              )}
+            </div>
+
+            {/* Multi-shot */}
+            <div>
+              <button
+                onClick={() => setMultiShot(!multiShot)}
+                className="flex w-full items-center justify-between rounded-xl border border-zinc-300 px-4 py-3 text-left transition-colors hover:bg-zinc-50"
+              >
+                <span>
+                  <span className="block text-sm font-semibold text-zinc-800">Multi-shot</span>
+                  <span className="block text-xs text-zinc-500">Pecah videonya jadi beberapa adegan, bukan satu ambilan.</span>
+                </span>
+                <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${multiShot ? "bg-amber-500" : "bg-zinc-300"}`}>
+                  <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${multiShot ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+                </span>
+              </button>
+              {multiShot && (
+                <div className="mt-2">
+                  <div className="flex flex-wrap gap-2">
+                    {[2, 3, 4, 5, 6].map((n) => {
+                      // Batas keras provider: minimal 4 detik per adegan. 6
+                      // adegan dalam 15 detik akan dipanjangkan paksa dan
+                      // durasinya meleset, jadi pilihan yang mustahil dimatikan
+                      // di sini — bukan dibiarkan gagal saat render.
+                      const bisa = n <= Math.floor(durationSec / 4);
+                      return (
+                        <button key={n} onClick={() => bisa && setShotCount(n)} disabled={!bisa}
+                          className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors disabled:cursor-not-allowed disabled:opacity-35 ${shotCount === n && bisa ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
+                        >{n} adegan</button>
+                      );
+                    })}
+                  </div>
+                  <p className="mt-1.5 text-xs text-zinc-500">
+                    Maksimal {Math.floor(durationSec / 4)} adegan untuk {durationSec} detik — tiap adegan minimal 4 detik.
+                  </p>
+                </div>
+              )}
             </div>
 
             {/* Level hook: LIMA posisi, TIGA label (keputusan Brian 2026-08-11:

@@ -56,6 +56,14 @@ export async function POST(req: Request) {
       ? body.avatar_custom_desc.trim().slice(0, 600)
       : null;
 
+    // Multi-shot & rasio. Divalidasi di sini, BUKAN dipercaya apa adanya:
+    // keduanya masuk ke baris job dan dipakai worker berjam-jam kemudian,
+    // jadi nilai ngawur akan muncul sebagai render aneh yang sulit dilacak.
+    const RATIOS = ["9:16", "1:1", "16:9"];
+    const ratio = RATIOS.includes(String(body.ratio)) ? String(body.ratio) : "9:16";
+    const rawShots = Number(body.shot_count);
+    const shotCount = Number.isInteger(rawShots) && rawShots >= 2 && rawShots <= 6 ? rawShots : null;
+
     const runId = typeof body.run_id === "string" && body.run_id ? body.run_id : crypto.randomUUID();
     const pool = getPool(config.databaseUrl);
     const jobsRepo = new PgJobsRepository(config.databaseUrl);
@@ -110,9 +118,9 @@ export async function POST(req: Request) {
             // requires_approval=TRUE: job dashboard brand SELALU berhenti di
             // gerbang review scene (M11). Brand menilai gambar & pesan tiap
             // scene sebelum digabung. Retail tidak pernah menyalakan ini.
-            `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,requires_approval,state,created_at,state_changed_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,TRUE,'QUEUED',$12,$12)`,
-            [jobId, user.id, membership.org_id, runId, avatarCustomDesc, productId, personaId, scriptId, format, tier, durationS, now]
+            `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,requires_approval,state,created_at,state_changed_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,TRUE,'QUEUED',$14,$14)`,
+            [jobId, user.id, membership.org_id, runId, avatarCustomDesc, productId, personaId, scriptId, format, tier, durationS, shotCount, ratio, now]
           );
           await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId, scriptId]);
           await client.query(

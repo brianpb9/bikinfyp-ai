@@ -51,6 +51,8 @@ type WorkerRow = {
   avatar_custom_desc: string | null;
   requires_approval: boolean;
   approved_at: string | null;
+  shot_count: number | null;
+  ratio: string | null;
   product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_images: string; product_price_idr: number;
   promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   product_source_url: string | null;
@@ -157,7 +159,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
     extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
-    hookLevel: normalizeHookLevel(row.script_hook_level) });
+    hookLevel: normalizeHookLevel(row.script_hook_level),
+    // NULL = perilaku lama (jumlah shot diturunkan, rasio 9:16).
+    shotCountOverride: row.shot_count ?? undefined,
+    ratio: row.ratio ?? undefined });
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the
   // user's own product photo panned/zoomed, so there's no provider to fail
   // over between and no cost beyond the VO synthesis below.

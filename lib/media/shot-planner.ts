@@ -54,6 +54,11 @@ export interface ShotPlanInput {
    * moderasi platform, merusak konsistensi identitas produk (QC-03), dan
    * silhouette guard QC-02. Berani = teks saja, visual tidak berubah. */
   hookLevel?: import("../config/hooks").HookLevel;
+  /** Multi-shot: jumlah scene yang diminta user (2-6). Tanpa ini, jumlahnya
+   * diturunkan dari durasi & format seperti sebelumnya. */
+  shotCountOverride?: number;
+  /** Rasio aspek. Lihat catatan "TERBUKTI hanya 9:16" di VisualSpec. */
+  ratio?: string;
 }
 
 const HANDS_ONLY_FRAMING =
@@ -159,6 +164,8 @@ const CRAZY_OPENER: Record<"hands_only" | "talking_head", string> = {
 /** Shot terakhir? Dipakai beat iklan jasa untuk menutup dengan ajakan. */
 function isLastShot(i: number, total: number): boolean { return i === total - 1; }
 
+const MIN_SHOT_SEC = 4;
+
 export function planShots(input: ShotPlanInput): VisualSpec {
   // Jumlah shot: batas keras BytePlus 2-15 dtk/klip (lihat byteplus.ts
   // createTask) → satu shot per 15 dtk.
@@ -177,7 +184,15 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // adegan yang menggantung. Biaya provider dihitung PER DETIK video
   // (byteplus estimateCost menjumlahkan durasi shot), jadi 6x5 dtk sama
   // mahalnya dengan 2x15 dtk — memecah adegan tidak menambah ongkos.
-  const numShots = format === "tvc"
+  // Batas keras dari provider: mode referensi menolak durasi < 4 detik, dan
+  // BytePlus membulatkan naik — 6 shot dalam 15 detik berarti 2,5 detik per
+  // shot, dipanjangkan jadi 4, dan videonya jadi 24 detik padahal user minta
+  // 15. Jadi jumlah shot HARUS dibatasi durasi, bukan cuma dibatasi 2-6.
+  const maxShotsForDuration = Math.max(1, Math.floor(input.durationSec / MIN_SHOT_SEC));
+  const requested = input.shotCountOverride
+    ? Math.min(Math.max(2, Math.round(input.shotCountOverride)), 6, maxShotsForDuration)
+    : null;
+  const numShots = requested !== null ? requested : format === "tvc"
     ? Math.max(3, Math.round(input.durationSec / 5))
     : format === "talking_head"
       ? Math.max(1, Math.ceil(input.durationSec / 15))
@@ -491,6 +506,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // pertama — kalau tidak, hasilnya video tentang logo, bukan orang yang
     // berbicara. Lihat catatan referenceOnlyImages di lib/providers/types.ts.
     referenceOnlyImages: format === "ads",
+    ratio: input.ratio ?? "9:16",
   };
 }
 

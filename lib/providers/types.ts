@@ -51,6 +51,13 @@ export interface VisualSpec {
    * sekadar mengarahkan suasana — itu peran reference_image, bukan first
    * frame. */
   referenceOnlyImages?: boolean;
+  /** Rasio aspek yang diminta ("9:16" | "1:1" | "16:9").
+   *
+   * TERBUKTI hanya "9:16" — itu satu-satunya nilai yang pernah benar-benar
+   * dirender ke BytePlus. Parameternya memang ada di API mereka, jadi dua
+   * nilai lain sangat mungkin jalan, tapi sampai ada render berbayar yang
+   * membuktikannya jangan diperlakukan sebagai fakta. */
+  ratio?: string;
 }
 
 export interface VideoAsset {

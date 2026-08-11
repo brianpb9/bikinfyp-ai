@@ -12,10 +12,14 @@ import { CAMPAIGN_TEMPLATES, type CampaignTemplate } from "@/lib/templates";
 // kunci. Semua nilainya kelihatan di langkah Konsep, jadi tidak ada yang
 // terjadi diam-diam di belakang layar.
 
+// Tiga jenis, sama persis dengan kartu di langkah Jenis. "UGC Ads" sempat
+// hilang di sini karena filternya dibuat sebelum format ads ada — akibatnya
+// galeri tidak pernah bisa disaring ke jenis yang ketiga.
 const KINDS = [
   { id: "all", label: "Semua" },
   { id: "affiliate", label: "UGC Affiliate" },
-  { id: "tvc", label: "Iklan TV" },
+  { id: "ads", label: "UGC Ads" },
+  { id: "tvc", label: "TVC" },
 ] as const;
 
 const ACCENT: Record<CampaignTemplate["accent"], string> = {

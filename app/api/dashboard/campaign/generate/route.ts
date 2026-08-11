@@ -43,8 +43,13 @@ export async function POST(req: Request) {
     if (count < MIN_VIDEOS || count > MAX_VIDEOS) {
       throw ERR.BAD_REQUEST(`Jumlah video harus antara ${MIN_VIDEOS} dan ${MAX_VIDEOS}.`, "count out of range.");
     }
-    const tier = body.tier === "super_hq" ? "super_hq" : body.tier === "high_quality" ? "high_quality" : null;
-    if (!tier) throw ERR.BAD_REQUEST("Tier tidak dikenal. Pilih AI Bersuara atau AI Bersuara Pro.", "Unknown quality tier.");
+    // Tiga tier, sesuai kontrol Quality di wizard (Standard / Quality / High
+    // Quality). silent_caption sebelumnya ditolak di sini padahal ia tier
+    // produksi yang dipakai retail — itu yang membuat dashboard cuma punya
+    // dua pilihan padahal mesinnya punya tiga.
+    const TIERS = ["silent_caption", "high_quality", "super_hq"];
+    const tier = TIERS.includes(String(body.tier)) ? (String(body.tier) as "silent_caption" | "high_quality" | "super_hq") : null;
+    if (!tier) throw ERR.BAD_REQUEST("Kualitas tidak dikenal. Pilih Standard, Quality, atau High Quality.", "Unknown quality tier.");
     const durationSec = [15, 30, 45].includes(Number(body.duration_sec)) ? (Number(body.duration_sec) as 15 | 30 | 45) : null;
     if (!durationSec) throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Unsupported duration.");
     const hookLevel = normalizeHookLevel(body.hook_level);

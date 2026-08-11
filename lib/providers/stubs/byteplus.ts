@@ -152,7 +152,7 @@ async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
     // ATURAN SUARA FINAL: diturunkan dari tier (silent=false, bersuara=true) — ditegakkan assertVisualSpec
     generate_audio: spec.generateAudio,
     resolution: tierCfg.resolution,
-    ratio: "9:16",
+    ratio: spec.ratio ?? "9:16",
     duration: durationInt,
     watermark: false,
   };
