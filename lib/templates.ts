@@ -38,12 +38,22 @@ export interface CampaignTemplate {
   bestFor: string[];
   /** Klip contoh, atau null kalau berkasnya BELUM ada.
    *
-   * Ke-12 template format sementara memakai klip GAYA, bukan hasil rendernya
-   * sendiri (permintaan Brian 2026-08-11: "isi pake potongan video tadi").
-   * Dipasangkan menurut FORMAT — talking_head dapat klip wajah, hands_only
-   * dapat klip tangan — jadi yang ditunjukkan tetap jujur di tingkat format,
-   * sesuai lencana di kartunya. Diganti hasil render template masing-masing
-   * begitu ada.
+   * Ke-12 template format memakai potongan 6 detik dari video sumbernya
+   * MASING-MASING (Brian mengirim berkasnya 2026-08-11). Titik potongnya
+   * dipilih dari shot list di dokumen bedah, di bagian yang paling
+   * menunjukkan formula template itu — bukan detik pertama begitu saja.
+   *
+   * Ini klip REFERENSI dari portfolio yang dibedah, bukan hasil render mesin
+   * kami. Diganti begitu 12 render sungguhan per template tersedia.
+   *
+   * EMPAT DITAHAN (T01, T03, T07, T09) dan masih memakai klip gaya. Diperiksa
+   * frame-nya 2026-08-11: tiga membawa watermark TikTok berisi handle kreator
+   * (@chalistaaadewi_, @hiakufeliciaaa, @kansa...) dan dua di antaranya
+   * mencetak "Unauthorised commercial use of video strictly prohibited" di
+   * dalam frame; satu lagi membawa overlay kampanye "TikTok Shop x Brand Day"
+   * yang mengklaim afiliasi brand yang bukan milik kita. Memajangnya di
+   * dashboard komersial berarti menampilkan larangan itu di produk kita
+   * sendiri. Tinggal ganti path-nya kalau Brian memutuskan lain.
    *
    * Harus null — bukan menunjuk ke berkas yang belum diunggah. Diuji
    * 2026-08-11: src yang 404 menyisakan elemen <video> kosong yang tampil
@@ -200,7 +210,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "agak_berani", hookFamily: "H9", count: 3, shotCount: 6,
     bestFor: ["gadget", "home", "fashion"],
     source: { durationSec: 22, shots: 10, bpm: 97 },
-    preview: "/previews/format-wajah.mp4", accent: "sky",
+    preview: "/previews/t02-bedah-fitur.mp4", accent: "sky",
   },
   // ── T03 ───────────────────────────────────────────────────────────────────
   {
@@ -222,7 +232,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "agak_berani", hookFamily: "H1", count: 3, shotCount: 3,
     bestFor: ["food"],
     source: { durationSec: 20, shots: 8, bpm: 81 },
-    preview: "/previews/format-wajah.mp4", accent: "rose",
+    preview: "/previews/t04-hook-indrawi.mp4", accent: "rose",
   },
   // ── T05 ── KLAIM HASIL ────────────────────────────────────────────────────
   {
@@ -235,7 +245,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 19, shots: 2, bpm: 126 },
     caution: { badge: "Butuh rekaman asli", note:
       "Perbandingan before/after adalah klaim hasil pada tubuh orang. Kedua sisi wajib direkam sungguhan dengan cahaya, sudut, dan kamera yang sama — membuatnya dengan AI berarti membuat bukti palsu." },
-    preview: "/previews/format-tangan.mp4", accent: "violet",
+    preview: "/previews/t05-before-after.mp4", accent: "violet",
   },
   // ── T06 ───────────────────────────────────────────────────────────────────
   {
@@ -246,7 +256,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H13", count: 2, shotCount: 5,
     bestFor: ["beauty", "fashion", "food"],
     source: { durationSec: 27, shots: 5, bpm: 147 },
-    preview: "/previews/format-tangan.mp4", accent: "rose",
+    preview: "/previews/t06-swatch-shade.mp4", accent: "rose",
   },
   // ── T07 ───────────────────────────────────────────────────────────────────
   {
@@ -270,7 +280,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 22, shots: 2, bpm: 108 },
     caution: { badge: "Butuh rekaman asli", note:
       "Inti template ini adalah perubahan nyata pada tubuh seseorang selama tujuh hari. Menghasilkan \"DAY 7\" secara sintetis berarti menipu pembeli soal keputusan kesehatannya. Sediakan tujuh hari, rekam dua kali dengan setelan yang persis sama." },
-    preview: "/previews/format-tangan.mp4", accent: "zinc",
+    preview: "/previews/t08-day-1-vs-day-7.mp4", accent: "zinc",
   },
   // ── T09 ───────────────────────────────────────────────────────────────────
   {
@@ -294,7 +304,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 19, shots: 8, bpm: 63 },
     caution: { badge: "Butuh rekaman asli", note:
       "Adegan perbandingan dua lengan adalah klaim hasil produk pada kulit. Wajib direkam sungguhan; kalau dibuat AI, kamu memalsukan buktinya." },
-    preview: "/previews/format-wajah.mp4", accent: "amber",
+    preview: "/previews/t10-bukti-di-lengan.mp4", accent: "amber",
   },
   // ── T11 ───────────────────────────────────────────────────────────────────
   {
@@ -305,7 +315,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "berani", hookFamily: "H6", count: 3, shotCount: 2,
     bestFor: ["beauty", "food"],
     source: { durationSec: 10, shots: 2, bpm: 89 },
-    preview: "/previews/format-tangan.mp4", accent: "zinc",
+    preview: "/previews/t11-hook-misteri.mp4", accent: "zinc",
   },
   // ── T12 ───────────────────────────────────────────────────────────────────
   {
@@ -318,7 +328,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 23, shots: 4, bpm: 116 },
     caution: { badge: "Wajib diberi label", note:
       "Vox pop bekerja karena penonton percaya ini orang sungguhan. Narasumber AI yang ditampilkan sebagai wawancara jalanan nyata adalah testimoni palsu — kalau tetap dibuat AI, videonya WAJIB diberi label dramatisasi." },
-    preview: "/previews/format-wajah.mp4", accent: "sky",
+    preview: "/previews/t12-vox-pop.mp4", accent: "sky",
   },
   {
     id: "kenalin-bisnis", group: "lain",
