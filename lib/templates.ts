@@ -126,6 +126,12 @@ export interface CampaignTemplate {
 // bawah adalah yang REALISTIS untuk mesin sekarang, `source.shots` adalah
 // aslinya. Jangan disamakan.
 
+// Tujuh template "Sudut hook" memakai klip yang sama dengan template FORMAT
+// tertentu — dipilih yang sudutnya paling dekat (Racun Checkout memakai klip
+// yang menonjolkan harga, Before/After memakai klip day-1-vs-day-7, dan
+// seterusnya). Ini ILUSTRASI sudut, bukan hasil template itu sendiri; yang
+// penting tiap kartu bisa dibedakan, karena sebelumnya tujuh kartu ini cuma
+// memutar dua klip yang sama berulang-ulang.
 export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   {
     id: "racun-checkout", group: "sudut",
@@ -134,7 +140,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "affiliate", format: "hands_only", durationSec: 15, tier: "high_quality",
     hookLevel: "berani", hookFamily: "H10", count: 3,
     bestFor: ["beauty", "food", "kitchen", "fashion"],
-    preview: "/previews/format-tangan.mp4", accent: "amber",
+    preview: "/previews/t05-before-after.mp4", accent: "amber",
   },
   {
     id: "review-jujur", group: "sudut",
@@ -143,7 +149,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "affiliate", format: "talking_head", durationSec: 15, tier: "high_quality",
     hookLevel: "normal", hookFamily: "H3", count: 3,
     bestFor: ["beauty", "health", "electronics"],
-    preview: "/previews/format-wajah.mp4", accent: "emerald",
+    preview: "/previews/t10-bukti-di-lengan.mp4", accent: "emerald",
   },
   {
     id: "unboxing", group: "sudut",
@@ -152,7 +158,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "affiliate", format: "hands_only", durationSec: 15, tier: "high_quality",
     hookLevel: "berani", hookFamily: "H4", count: 4,
     bestFor: ["beauty", "fashion", "electronics", "kitchen"],
-    preview: "/previews/format-tangan.mp4", accent: "violet",
+    preview: "/previews/t02-bedah-fitur.mp4", accent: "violet",
   },
   {
     id: "before-after", group: "sudut",
@@ -161,7 +167,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "affiliate", format: "hands_only", durationSec: 30, tier: "high_quality",
     hookLevel: "normal", hookFamily: "H11", count: 3,
     bestFor: ["beauty", "kitchen", "health"],
-    preview: "/previews/format-tangan.mp4", accent: "sky",
+    preview: "/previews/t08-day-1-vs-day-7.mp4", accent: "sky",
   },
   {
     id: "diskon-gede", group: "sudut",
@@ -170,7 +176,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "affiliate", format: "hands_only", durationSec: 15, tier: "high_quality",
     hookLevel: "gila", hookFamily: "H1", count: 4,
     bestFor: ["fashion", "muslim_fashion", "electronics", "food"],
-    preview: "/previews/format-tangan.mp4", accent: "rose",
+    preview: "/previews/t04-hook-indrawi.mp4", accent: "rose",
   },
   {
     id: "buat-kamu-yang", group: "sudut",
@@ -179,7 +185,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "affiliate", format: "talking_head", durationSec: 15, tier: "high_quality",
     hookLevel: "berani", hookFamily: "H8", count: 3,
     bestFor: ["muslim_fashion", "fashion", "beauty", "health"],
-    preview: "/previews/format-wajah.mp4", accent: "amber",
+    preview: "/previews/t06-swatch-shade.mp4", accent: "amber",
   },
   {
     id: "spill-rahasia", group: "sudut",
@@ -188,7 +194,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "affiliate", format: "talking_head", durationSec: 15, tier: "high_quality",
     hookLevel: "gila", hookFamily: "H14", count: 3,
     bestFor: ["beauty", "health", "fashion"],
-    preview: "/previews/format-wajah.mp4", accent: "violet",
+    preview: "/previews/t11-hook-misteri.mp4", accent: "violet",
   },
   // ── T01 ───────────────────────────────────────────────────────────────────
   {
