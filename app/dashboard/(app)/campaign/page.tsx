@@ -252,8 +252,29 @@ export default function CampaignPage() {
     } finally { setLoading(false); }
   }
 
+  // Nama + harga + minimal satu foto DIPERIKSA DI SINI, di langkah yang
+  // memuat kolomnya.
+  //
+  // Sebelum ini wizard membiarkan brand maju dua langkah dengan harga kosong,
+  // lalu baru gagal jauh di belakang saat pembuatan skrip — pesannya pun
+  // muncul di layar Review, bukan di sebelah kolom yang salah. Ditemukan saat
+  // menyusuri satu rantai penuh 2026-08-11: produk tersimpan "Produk baru"
+  // harga 0, wizard lolos ke Konsep dan Review, lalu 400 "Isi harga produknya
+  // dulu". Kesalahan sejauh itu dari tempat asalnya mahal untuk dipahami.
+  function detailBelumLengkap(): string | null {
+    if (!product) return null;
+    if (!product.name.trim() || product.name.trim() === "Produk baru") return "Isi nama produknya dulu.";
+    if (!Number.isFinite(product.price_idr) || product.price_idr <= 0) {
+      return "Isi harga produknya dulu — harga dipakai di skrip dan overlay video.";
+    }
+    if (product.images.length === 0) return "Tambah minimal satu foto produk dulu.";
+    return null;
+  }
+
   async function handleSaveDetail() {
     if (!product) return;
+    const kurang = detailBelumLengkap();
+    if (kurang) { setError(kurang); return; }
     setLoading(true); setError(null);
     try {
       const res = await apiFetch<ProductPayload>("/api/dashboard/campaign/product", {
@@ -698,13 +719,20 @@ export default function CampaignPage() {
             </label>
           </section>
 
-          <div className="flex justify-between">
+          <div className="flex items-center justify-between gap-4">
             <button onClick={() => go(1)} className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-500 hover:text-zinc-800">
               <ArrowLeft size={15} /> Kembali
             </button>
+            {/* Alasan tombol mati ditulis TERBACA, bukan cuma di tooltip.
+                Tombol nonaktif tanpa keterangan sama membingungkannya dengan
+                error yang muncul dua langkah kemudian. */}
+            {detailBelumLengkap() && (
+              <p className="flex-1 text-right text-xs font-medium text-amber-700">{detailBelumLengkap()}</p>
+            )}
             <button
               onClick={handleSaveDetail}
-              disabled={loading}
+              disabled={loading || detailBelumLengkap() !== null}
+              title={detailBelumLengkap() ?? undefined}
               className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
             >
               {loading && <Loader2 size={16} className="animate-spin" />} Lanjut
