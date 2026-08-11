@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { CircleHelp, FolderKanban, Home, LayoutTemplate, Library, UserRound, Zap } from "lucide-react";
+import { CircleHelp, FolderKanban, Home, LayoutTemplate, Library, Send, Users, UserRound, Zap } from "lucide-react";
 import { rupiah } from "./format";
 
 // Desktop-first shell (F-ENT-01, 2026-08-11) — deliberately NOT app/_components/
@@ -22,6 +22,8 @@ const NAV = [
   { href: "/dashboard/templates", label: "Templates", icon: LayoutTemplate, disabled: false },
   { href: "/dashboard/projects", label: "Proyek", icon: FolderKanban, disabled: false },
   { href: "/dashboard/library", label: "Library", icon: Library, disabled: false },
+  { href: "/dashboard/publish", label: "Posting", icon: Send, disabled: false },
+  { href: "/dashboard/team", label: "Tim", icon: Users, disabled: false },
   { href: "/dashboard/profile", label: "Profil", icon: UserRound, disabled: false },
 ] as const;
 

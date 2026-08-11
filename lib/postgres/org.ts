@@ -8,6 +8,7 @@
 // role di org_members HANYA label ("siapa dihubungi"), TIDAK PERNAH dicek
 // untuk otorisasi di MVP ini — akses dashboard cukup "punya >=1 baris
 // org_members" (lihat app/dashboard/layout.tsx). RBAC granular = v2.
+import crypto from "node:crypto";
 import { Pool } from "pg";
 import { config } from "../config";
 
@@ -29,6 +30,7 @@ export interface Organization {
   category: string | null;
   audience: string | null;
   elevator_pitch: string | null;
+  onboarded_at: string | null;
 }
 
 export interface OrgMembership {
@@ -193,6 +195,119 @@ export async function pgGetOrgVideoStats(orgId: string): Promise<OrgVideoStats> 
       awaiting_review: Number(r?.awaiting_review ?? 0),
       spent_idr: Number(r?.spent_idr ?? 0),
     };
+  } finally {
+    await pool.end();
+  }
+}
+
+export interface OrgMemberRow {
+  user_id: string;
+  role: "owner" | "member";
+  email: string | null;
+  phone: string | null;
+  name: string | null;
+  created_at: string;
+}
+
+export async function pgListOrgMembers(orgId: string): Promise<OrgMemberRow[]> {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    return (
+      await pool.query<OrgMemberRow>(
+        `SELECT m.user_id, m.role, u.email, u.phone, u.name, m.created_at
+         FROM org_members m JOIN users u ON u.id = m.user_id
+         WHERE m.org_id = $1 ORDER BY (m.role = 'owner') DESC, m.created_at ASC`,
+        [orgId]
+      )
+    ).rows;
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Tambahkan anggota lewat email.
+ *
+ * Kalau emailnya belum pernah login, barisnya dibuat SEKARANG supaya undangan
+ * langsung berlaku — begitu orang itu masuk dengan email tersebut (OTP atau
+ * Google), dia sudah menjadi anggota. Alternatifnya adalah tabel undangan
+ * tertunda dengan token dan kedaluwarsa; itu berlebihan selama satu-satunya
+ * cara masuk memang lewat email yang sama.
+ *
+ * Mengembalikan "exists" kalau orangnya sudah anggota — pemanggil boleh
+ * menganggapnya sukses, bukan error, supaya menekan tombol dua kali tidak
+ * memunculkan pesan merah yang membingungkan.
+ */
+export async function pgAddOrgMemberByEmail(
+  orgId: string,
+  email: string
+): Promise<{ status: "added" | "exists"; userId: string }> {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    const found = await pool.query<{ id: string }>("SELECT id FROM users WHERE lower(email) = lower($1)", [email]);
+    let userId = found.rows[0]?.id ?? null;
+    if (!userId) {
+      userId = crypto.randomUUID();
+      await pool.query(
+        "INSERT INTO users (id, email, tier, locale, created_at) VALUES ($1,$2,'free','id',$3)",
+        [userId, email, new Date().toISOString()]
+      );
+    }
+    const already = await pool.query("SELECT 1 FROM org_members WHERE org_id=$1 AND user_id=$2", [orgId, userId]);
+    if (already.rowCount) return { status: "exists", userId };
+    await pool.query(
+      "INSERT INTO org_members (id, org_id, user_id, role, created_at) VALUES ($1,$2,$3,'member',$4)",
+      [crypto.randomUUID(), orgId, userId, new Date().toISOString()]
+    );
+    return { status: "added", userId };
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Keluarkan anggota. Pemilik TIDAK bisa dikeluarkan lewat jalur ini —
+ * organisasi tanpa pemilik tidak punya siapa pun yang berhak mengundang lagi,
+ * dan itu hanya bisa diperbaiki lewat akses database. */
+export async function pgRemoveOrgMember(orgId: string, userId: string): Promise<boolean> {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    const res = await pool.query("DELETE FROM org_members WHERE org_id=$1 AND user_id=$2 AND role <> 'owner'", [orgId, userId]);
+    return (res.rowCount ?? 0) > 0;
+  } finally {
+    await pool.end();
+  }
+}
+
+/** Simpan hasil onboarding sekaligus menandainya selesai.
+ *
+ * Nama org ikut diperbarui karena brand sering didaftarkan tim kami dengan
+ * nama sementara ("Toko Bu Ani") sebelum pemiliknya sendiri masuk. Nama kosong
+ * diabaikan, BUKAN ditimpa jadi kosong — organisasi tanpa nama tidak bisa
+ * dikenali di mana pun di dashboard.
+ */
+export async function pgSaveOnboarding(orgId: string, input: {
+  name?: string | null;
+  websiteUrl?: string | null;
+  businessType?: string | null;
+  category?: string | null;
+  audience?: string | null;
+  elevatorPitch?: string | null;
+}): Promise<void> {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    await pool.query(
+      `UPDATE organizations SET
+         name = COALESCE(NULLIF($2, ''), name),
+         website_url = COALESCE(NULLIF($3, ''), website_url),
+         business_type = COALESCE(NULLIF($4, ''), business_type),
+         category = COALESCE(NULLIF($5, ''), category),
+         audience = COALESCE(NULLIF($6, ''), audience),
+         elevator_pitch = COALESCE(NULLIF($7, ''), elevator_pitch),
+         onboarded_at = $8
+       WHERE id = $1`,
+      [orgId, input.name ?? "", input.websiteUrl ?? "", input.businessType ?? "",
+       input.category ?? "", input.audience ?? "", input.elevatorPitch ?? "",
+       new Date().toISOString()]
+    );
   } finally {
     await pool.end();
   }

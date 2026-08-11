@@ -29,7 +29,10 @@ CREATE TABLE IF NOT EXISTS organizations (
   business_type TEXT,
   category TEXT,
   audience TEXT,
-  elevator_pitch TEXT
+  elevator_pitch TEXT,
+  -- Penanda onboarding selesai (termasuk saat sengaja dilewati). Lihat
+  -- migrations/postgres/0018_org_onboarded.sql.
+  onboarded_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS org_members (
@@ -240,3 +243,18 @@ CREATE TABLE IF NOT EXISTS audit_log (
   created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_audit_entity ON audit_log(entity, entity_id);
+
+-- Rencana posting (mirror migrations/postgres/0019_post_plans.sql).
+CREATE TABLE IF NOT EXISTS post_plans (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  job_id TEXT NOT NULL,
+  channel TEXT NOT NULL,
+  scheduled_at TEXT NOT NULL,
+  caption TEXT,
+  status TEXT NOT NULL DEFAULT 'planned' CHECK (status IN ('planned','posted','skipped')),
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL,
+  posted_at TEXT
+);
+CREATE INDEX IF NOT EXISTS idx_post_plans_org ON post_plans(org_id, scheduled_at);

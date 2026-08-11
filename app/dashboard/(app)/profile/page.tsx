@@ -44,7 +44,7 @@ export default async function ProfilePage() {
   const rows: { icon: typeof Wallet; label: string; hint: string; href?: string; badge?: string }[] = [
     { icon: CreditCard, label: "Kredit & tagihan", hint: "Beli kredit, lihat riwayat pemakaian", href: "/dashboard/credits" },
     { icon: Film, label: "Library video", hint: `${stats.total} video dari semua kampanye`, href: "/dashboard/library" },
-    { icon: Users, label: "Anggota tim", hint: "Undang rekan ke organisasi ini", badge: "Segera" },
+    { icon: Users, label: "Anggota tim", hint: "Undang rekan ke organisasi ini", href: "/dashboard/team" },
   ];
 
   return (
