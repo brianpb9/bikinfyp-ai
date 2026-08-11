@@ -422,44 +422,6 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     preview: "/previews/ads-waktu-berhenti.mp4", accent: "emerald",
   },
   {
-    id: "ads-kota-terlipat", group: "lain",
-    name: "Kota Terlipat",
-    when: "Jalanan melipat jadi lengkungan di belakang, produkmu diam tidak bergeming di depan.",
-    kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
-    hookLevel: "gila", hookFamily: "H12", count: 2, shotCount: 3,
-    bestFor: ["gadget", "app", "toko", "jasa"],
-    source: { durationSec: 13, shots: 3 },
-    beats: { hookEnd: 0.320, demoEnd: 0.700 },
-    preview: "/previews/ads-kota-terlipat.mp4", accent: "zinc",
-  },
-  {
-    id: "ads-keluar-dari-layar", group: "lain",
-    name: "Keluar dari Layar",
-    when: "Produknya muncul KELUAR dari layar HP yang lagi dipegang. Paling pas untuk app dan produk digital.",
-    kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
-    hookLevel: "gila", hookFamily: "H14", count: 2, shotCount: 3,
-    bestFor: ["app", "gadget", "jasa"],
-    source: { durationSec: 12, shots: 3 },
-    beats: { hookEnd: 0.320, demoEnd: 0.660 },
-    preview: "/previews/ads-keluar-dari-layar.mp4", accent: "violet",
-  },
-  {
-    // SATU-SATUNYA yang TENANG di antara template ads. Sengaja dipertahankan:
-    // enam lainnya menjual dengan keanehan, dan brand yang produknya memang
-    // sehari-hari akan terlihat palsu kalau dipaksa spektakuler. Karena itu
-    // hookLevel-nya "normal", bukan "gila" — tidak ada pembuka
-    // pattern-interrupt sama sekali di sini.
-    id: "ads-warung-malam", group: "lain",
-    name: "Warung Malam",
-    when: "Tanpa keanehan sama sekali. Produkmu masuk ke keseharian Indonesia yang biasa — warung, malam, orang makan.",
-    kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
-    hookLevel: "normal", hookFamily: "H3", count: 2, shotCount: 3,
-    bestFor: ["food", "toko", "jasa", "gadget"],
-    source: { durationSec: 12, shots: 3 },
-    beats: { hookEnd: 0.300, demoEnd: 0.660 },
-    preview: "/previews/ads-warung-malam.mp4", accent: "rose",
-  },
-  {
     id: "kenalin-bisnis", group: "lain",
     name: "Kenalin Bisnismu",
     when: "Buat app, jasa, atau toko yang belum banyak dikenal. Presenter yang menjelaskan.",
