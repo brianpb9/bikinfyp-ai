@@ -106,6 +106,12 @@ export interface RecentBulkRun {
   created_at: string;
   total: number;
   ready_count: number;
+  /** Nama produk kampanye ini — satu kampanye = satu produk (model M8). */
+  product_name: string | null;
+  /** Kunci thumbnail scene pertama, kalau ada. NULL untuk job yang tidak
+   * melewati gerbang review (tidak punya baris job_shots sama sekali). */
+  thumb_key: string | null;
+  review_count: number;
 }
 
 /** Bulk run terbaru org ini (M4) — dikelompokkan dari jobs.bulk_run_id,
@@ -114,10 +120,21 @@ export async function pgListRecentBulkRuns(orgId: string, limit = 5): Promise<Re
   const pool = new Pool({ connectionString: url() });
   try {
     const res = await pool.query<RecentBulkRun & { created_at: string }>(
-      `SELECT bulk_run_id, MIN(created_at) AS created_at, COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE state = 'READY')::int AS ready_count
-       FROM jobs WHERE org_id = $1 AND bulk_run_id IS NOT NULL
-       GROUP BY bulk_run_id ORDER BY MIN(created_at) DESC LIMIT $2`,
+      // Nama produk & thumbnail diambil lewat sub-query berkorelasi, BUKAN
+      // JOIN + GROUP BY: satu kampanye selalu satu produk (model M8), jadi
+      // MIN()/MAX() atas nama produk hanya akan mengaburkan maksudnya. Ini juga
+      // menghindari menyeret job_shots ke dalam agregat dan menggandakan baris.
+      `SELECT j.bulk_run_id, MIN(j.created_at) AS created_at, COUNT(*)::int AS total,
+              COUNT(*) FILTER (WHERE j.state = 'READY')::int AS ready_count,
+              COUNT(*) FILTER (WHERE j.state = 'AWAITING_APPROVAL')::int AS review_count,
+              (SELECT p.name FROM jobs j2 JOIN products p ON p.id = j2.product_id
+                 WHERE j2.bulk_run_id = j.bulk_run_id AND j2.org_id = $1
+                 ORDER BY j2.created_at ASC LIMIT 1) AS product_name,
+              (SELECT sh.thumb_key FROM jobs j3 JOIN job_shots sh ON sh.job_id = j3.id
+                 WHERE j3.bulk_run_id = j.bulk_run_id AND j3.org_id = $1 AND sh.thumb_key IS NOT NULL
+                 ORDER BY j3.created_at ASC, sh.idx ASC LIMIT 1) AS thumb_key
+       FROM jobs j WHERE j.org_id = $1 AND j.bulk_run_id IS NOT NULL
+       GROUP BY j.bulk_run_id ORDER BY MIN(j.created_at) DESC LIMIT $2`,
       [orgId, limit]
     );
     return res.rows;
@@ -135,6 +152,40 @@ export async function pgGetOrgLedger(orgId: string, limit = 50) {
         [orgId, limit]
       )
     ).rows;
+  } finally {
+    await pool.end();
+  }
+}
+
+export interface OrgVideoStats {
+  total: number;
+  ready: number;
+  awaiting_review: number;
+  spent_idr: number;
+}
+
+/** Ringkasan video org untuk kartu di Beranda & Profil. Dihitung langsung
+ * dari `jobs` — tidak ada tabel agregat, dan pada skala pilot (ratusan baris
+ * per org) satu COUNT jauh lebih murah daripada menjaga penghitung tersendiri
+ * yang bisa melenceng. */
+export async function pgGetOrgVideoStats(orgId: string): Promise<OrgVideoStats> {
+  const pool = new Pool({ connectionString: url() });
+  try {
+    const res = await pool.query<{ total: string; ready: string; awaiting_review: string; spent_idr: string }>(
+      `SELECT COUNT(*)::text AS total,
+              COUNT(*) FILTER (WHERE state='READY')::text AS ready,
+              COUNT(*) FILTER (WHERE state='AWAITING_APPROVAL')::text AS awaiting_review,
+              COALESCE(SUM(cost_actual_idr),0)::text AS spent_idr
+       FROM jobs WHERE org_id=$1`,
+      [orgId]
+    );
+    const r = res.rows[0];
+    return {
+      total: Number(r?.total ?? 0),
+      ready: Number(r?.ready ?? 0),
+      awaiting_review: Number(r?.awaiting_review ?? 0),
+      spent_idr: Number(r?.spent_idr ?? 0),
+    };
   } finally {
     await pool.end();
   }

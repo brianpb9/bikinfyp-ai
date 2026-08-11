@@ -42,11 +42,18 @@ export async function GET(req: Request, ctx: { params: Promise<{ runId: string }
     }
     if (rows.length === 0) throw ERR.NOT_FOUND("Bulk run-nya");
 
-    const jobs = rows.map((row) => ({
-      job_id: row.job_id, state: row.state, product_name: row.product_name, cost_idr: row.cost_actual_idr,
-      video_url: row.state === "READY" && row.video_url ? createSignedUrl(row.video_url) : null,
-      caption: row.caption,
-    }));
+    const jobs = rows.map((row, i) => {
+      const ready = row.state === "READY" && row.video_url;
+      // Nama berkas dari nama produk + nomor urut, bukan UUID: brand mengunduh
+      // 6 berkas sekaligus dan harus bisa membedakannya di folder Downloads.
+      const base = row.product_name.replace(/[^\w.\- ]+/g, "").replace(/\s+/g, "-").slice(0, 50) || "video";
+      return {
+        job_id: row.job_id, state: row.state, product_name: row.product_name, cost_idr: row.cost_actual_idr,
+        video_url: ready ? createSignedUrl(row.video_url!) : null,
+        download_url: ready ? `${createSignedUrl(row.video_url!)}&dl=${encodeURIComponent(`${base}-${i + 1}.mp4`)}` : null,
+        caption: row.caption,
+      };
+    });
 
     return Response.json({
       campaign_run_id: runId,

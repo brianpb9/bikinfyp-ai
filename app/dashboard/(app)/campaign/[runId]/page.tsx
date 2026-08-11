@@ -2,11 +2,11 @@
 
 import { use, useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CheckCircle2, Eye, Loader2, VideoOff } from "lucide-react";
+import { ArrowLeft, CheckCircle2, Download, Eye, Loader2, VideoOff } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../../_components/api";
 import { SkeletonCard } from "../../../_components/Skeleton";
 
-type BulkJob = { job_id: string; state: string; product_name: string; cost_idr: number; video_url: string | null; caption: string | null };
+type BulkJob = { job_id: string; state: string; product_name: string; cost_idr: number; video_url: string | null; download_url: string | null; caption: string | null };
 type BulkRunResponse = { campaign_run_id: string; jobs: BulkJob[]; ready_count: number; failed_count: number; total: number };
 
 const TERMINAL = new Set(["READY", "FAILED", "REFUNDED"]);
@@ -42,6 +42,7 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
   const { runId } = use(params);
   const [data, setData] = useState<BulkRunResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     let stopped = false;
@@ -65,8 +66,30 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
     return () => { stopped = true; if (timer) clearTimeout(timer); };
   }, [runId]);
 
+  const downloadable = (data?.jobs ?? []).filter((j) => j.download_url);
+
+  // Unduh berurutan dengan jeda: browser hanya menyimpan berkas pertama kalau
+  // beberapa unduhan dipicu serentak dari satu gestur.
+  async function downloadAll() {
+    setBulkBusy(true);
+    try {
+      for (const job of downloadable) {
+        const a = document.createElement("a");
+        a.href = job.download_url!;
+        a.download = "";
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        await new Promise((r) => setTimeout(r, 700));
+      }
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   return (
     <div className="space-y-6">
+      <div className="flex flex-wrap items-end justify-between gap-4">
       <div>
         <Link href="/dashboard/campaign" className="inline-flex items-center gap-1 text-xs font-semibold text-amber-600 hover:text-amber-700">
           <ArrowLeft size={14} /> Kampanye baru
@@ -81,6 +104,15 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
             Halaman ini memperbarui sendiri — boleh ditinggal dulu.
           </p>
         )}
+      </div>
+        <button
+          onClick={downloadAll}
+          disabled={bulkBusy || downloadable.length === 0}
+          className="inline-flex items-center gap-2 rounded-xl bg-zinc-900 px-4 py-2.5 text-sm font-bold text-white transition-colors hover:bg-zinc-800 disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          {bulkBusy ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+          Unduh semua{downloadable.length > 0 ? ` (${downloadable.length})` : ""}
+        </button>
       </div>
 
       {error && <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">{error}</div>}
@@ -111,7 +143,18 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
                   Tinjau scene
                 </Link>
               ) : job.state === "READY" && job.video_url ? (
-                <video src={job.video_url} controls className="mt-3 aspect-[9/16] w-full rounded-lg bg-zinc-900 object-cover" />
+                <>
+                  <video src={job.video_url} controls className="mt-3 aspect-[9/16] w-full rounded-lg bg-zinc-900 object-cover" />
+                  {job.download_url && (
+                    <a
+                      href={job.download_url}
+                      download
+                      className="mt-2 flex w-full items-center justify-center gap-1.5 rounded-lg border border-zinc-300 py-2 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50"
+                    >
+                      <Download size={13} /> Unduh
+                    </a>
+                  )}
+                </>
               ) : (
                 <div className="mt-3 flex aspect-[9/16] w-full flex-col items-center justify-center gap-2 rounded-lg bg-zinc-100 text-xs text-zinc-400">
                   {TERMINAL.has(job.state) ? (

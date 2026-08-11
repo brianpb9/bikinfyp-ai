@@ -47,6 +47,21 @@ async function thumbnailFor(relPath: string): Promise<Buffer | null> {
   }
 }
 
+// Unduhan: ?dl=<nama> memaksa browser MENYIMPAN berkas dengan nama yang
+// masuk akal, bukan membuka pemutar dengan nama UUID. Nama dibersihkan keras
+// karena ia masuk ke header respons — karakter apa pun di luar daftar aman
+// (termasuk kutip, CR/LF) dibuang supaya tidak bisa menyuntik header.
+// Aman terhadap tanda tangan: HMAC hanya menutup (path, exp), lihat
+// lib/signed-url.ts, jadi parameter tambahan tidak membatalkannya.
+function contentDisposition(url: URL, relPath: string): Record<string, string> {
+  const raw = url.searchParams.get("dl");
+  if (!raw) return {};
+  const ext = path.extname(relPath) || ".mp4";
+  const base = raw.replace(/[^\w.\- ]+/g, "").replace(/\s+/g, " ").trim().slice(0, 80);
+  const name = (base || "video") + (base.toLowerCase().endsWith(ext) ? "" : ext);
+  return { "content-disposition": `attachment; filename="${name}"` };
+}
+
 /** A valid HMAC link is a bearer capability, never proof of account ownership. */
 async function fileBelongsToUser(relPath: string, userId: string): Promise<boolean> {
   if (postgresRuntimeEnabled()) {
@@ -171,6 +186,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ path: string[] 
       "content-length": String(size),
       "accept-ranges": "bytes",
       "cache-control": "private, max-age=300",
+      ...contentDisposition(url, relPath),
     },
   });
 }
