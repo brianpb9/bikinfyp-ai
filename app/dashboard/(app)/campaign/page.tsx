@@ -342,11 +342,12 @@ export default function CampaignPage() {
             {([
               { id: "affiliate" as const, icon: ShoppingBag, title: "AI UGC Affiliate", desc: "Jualan produk fisik ke TikTok Shop. AI yang peragakan produkmu — cukup foto.", ready: true, preview: "/previews/format-tangan.mp4" },
               { id: "ads" as const, icon: Megaphone, title: "AI UGC Ads", desc: "Buat app, jasa, atau toko — yang tidak punya barang fisik. Presenter AI yang bicara.", ready: true, preview: "/previews/format-ads.mp4" },
-              // Sengaja TANPA preview: satu-satunya klip presenter yang kami punya
-              // (format-wajah.mp4) adalah UGC selfie, dan memasangnya di sini
-              // justru mengajarkan hal yang salah soal TVC. Kami tampilkan
-              // contoh begitu ada render TVC sungguhan.
-              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Iklan TV: sinematik, kamera terkontrol, pencahayaan ditata, ditutup hero shot produk.", ready: true, preview: null },
+              // Preview TVC: gambar dari Brian (2026-08-11) dengan push-in
+              // lambat. BUKAN hasil render AI — ini still yang digerakkan,
+              // dan sengaja dipilih begitu: gerakan kamera pelan yang
+              // terkontrol memang tata bahasa iklan TV, jadi ia jujur
+              // menggambarkan gayanya tanpa mengklaim sebagai contoh output.
+              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Iklan TV: sinematik, kamera terkontrol, pencahayaan ditata, ditutup hero shot produk.", ready: true, preview: "/previews/format-tvc.mp4" },
             ]).map((k) => {
               const Icon = k.icon;
               const active = kind === k.id;

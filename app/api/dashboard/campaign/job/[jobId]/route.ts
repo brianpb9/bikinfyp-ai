@@ -184,8 +184,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
         } else {
           claimedCount = claimed.rowCount;
           const price = regenerateSceneTokens(job.quality_tier as QualityTier, claimed.rows[0].duration_sec);
-          // Saldo dibaca DI DALAM transaksi supaya dua permintaan bersamaan
-          // tidak sama-sama melihat saldo lama dan membuatnya minus.
+          // Kunci dompet dulu, baru baca saldo. Klaim scene di atas hanya
+          // menserialisasi per-SHOT; dua scene BERBEDA pada job yang sama
+          // masih bisa berjalan bersamaan dan sama-sama membaca saldo lama.
+          // Pola FOR UPDATE ini sama persis dengan lockWallet() di
+          // lib/postgres/credit-payment.ts, jadi penagihan regenerate ikut
+          // antre di baris yang sama dengan hold/capture — bukan jalur uang
+          // kedua yang diam-diam lebih longgar.
+          await client.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE", [membership.org_id]);
           const bal = await client.query<{ balance: string }>(
             "SELECT COALESCE(SUM(delta),0)::text AS balance FROM credit_ledger WHERE org_id=$1",
             [membership.org_id]

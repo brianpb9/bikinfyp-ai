@@ -109,7 +109,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "tvc", format: "tvc", durationSec: 15, tier: "high_quality",
     hookLevel: "normal", hookFamily: "H12", count: 2,
     bestFor: ["beauty", "food", "electronics", "kitchen"],
-    preview: null, accent: "zinc",
+    preview: "/previews/format-tvc.mp4", accent: "zinc",
   },
   {
     id: "tvc-30",
@@ -118,7 +118,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
     hookLevel: "normal", hookFamily: "H11", count: 2,
     bestFor: ["beauty", "food", "electronics", "kitchen"],
-    preview: null, accent: "zinc",
+    preview: "/previews/format-tvc.mp4", accent: "zinc",
   },
 ];
 
