@@ -22,8 +22,36 @@ type Row = {
   job_id: string; state: string; product_name: string; created_at: string;
   format: string; duration_s: number; cost_actual_idr: number;
   bulk_run_id: string | null; video_url: string | null; caption: string | null;
-  thumb_key: string | null;
+  thumb_key: string | null; fail_meta: string | null;
 };
+
+// Alasan kegagalan hanya tersimpan di audit_log (jobs tidak punya kolomnya),
+// jadi harus dibaca dari sana. `meta` bertipe TEXT, bukan jsonb, jadi tidak
+// bisa dioperasikan dengan operator JSON di SQL — diurai di sini.
+function failReason(metaJson: string | null): string | null {
+  if (!metaJson) return null;
+  try {
+    const reason = (JSON.parse(metaJson) as { reason?: unknown }).reason;
+    return typeof reason === "string" && reason.trim() ? reason.trim().slice(0, 300) : null;
+  } catch { return null; }
+}
+
+/** Alasan teknis -> kalimat yang berguna buat brand.
+ *
+ * Sebagian alasan internal sudah berbahasa Indonesia dan layak tampil apa
+ * adanya ("Kredit organisasi tidak cukup"). Sisanya adalah pesan error
+ * provider dalam bahasa Inggris yang tidak berarti apa-apa bagi brand — untuk
+ * itu yang penting bukan detail teknisnya, tapi APA YANG HARUS DILAKUKAN. */
+function friendlyFailure(reason: string | null): string {
+  if (!reason) return "Render gagal. Token sudah dikembalikan ke saldo.";
+  const r = reason.toLowerCase();
+  if (r.includes("kredit") || r.includes("token")) return reason;
+  if (r.includes("antrean") || r.includes("queue")) return "Antrean render sedang bermasalah. Token dikembalikan — coba lagi.";
+  if (r.includes("timeout") || r.includes("batas tunggu")) return "Render melebihi batas waktu. Token dikembalikan — coba lagi, biasanya berhasil.";
+  if (r.includes("qc") || r.includes("kualitas")) return "Hasilnya tidak lolos pemeriksaan kualitas. Token dikembalikan — coba ganti foto produk yang lebih jelas.";
+  if (r.includes("moderation") || r.includes("policy") || r.includes("content")) return "Ditolak moderasi AI. Token dikembalikan — coba turunkan level hook atau ganti foto.";
+  return "Render gagal di sisi AI. Token sudah dikembalikan — coba lagi.";
+}
 
 const FILTERS = new Set(["all", "ready", "review", "failed"]);
 
@@ -51,7 +79,14 @@ export async function GET(req: Request) {
         `SELECT j.id AS job_id, j.state, p.name AS product_name, j.created_at,
                 j.format, j.duration_s, j.cost_actual_idr, j.bulk_run_id,
                 o.video_url, o.caption,
-                (SELECT sh.thumb_key FROM job_shots sh WHERE sh.job_id = j.id ORDER BY sh.idx ASC LIMIT 1) AS thumb_key
+                (SELECT sh.thumb_key FROM job_shots sh WHERE sh.job_id = j.id ORDER BY sh.idx ASC LIMIT 1) AS thumb_key,
+                -- Memakai idx_audit_entity(entity, entity_id), jadi tetap murah
+                -- walau audit_log besar. LIMIT 1 terbaru: satu job bisa punya
+                -- beberapa transisi, yang relevan hanya yang terakhir.
+                (SELECT a.meta FROM audit_log a
+                   WHERE a.entity = 'jobs' AND a.entity_id = j.id
+                     AND a.action = 'job.transition' AND a.meta LIKE '%"FAILED"%'
+                   ORDER BY a.created_at DESC LIMIT 1) AS fail_meta
          FROM jobs j
          JOIN products p ON p.id = j.product_id
          LEFT JOIN outputs o ON o.job_id = j.id
@@ -83,6 +118,10 @@ export async function GET(req: Request) {
           ? `${createSignedUrl(row.video_url)}&dl=${encodeURIComponent(downloadName(row.product_name, i))}`
           : null,
       thumb_url: row.thumb_key ? createSignedUrl(row.thumb_key) : null,
+      fail_reason:
+        row.state === "FAILED" || row.state === "REFUNDED"
+          ? friendlyFailure(failReason(row.fail_meta))
+          : null,
     }));
 
     const counts = {

@@ -11,7 +11,7 @@ interface Video {
   job_id: string; state: string; product_name: string; created_at: string;
   format: string; duration_s: number; cost_idr: number; run_id: string | null;
   caption: string | null; video_url: string | null; download_url: string | null;
-  thumb_url: string | null;
+  thumb_url: string | null; fail_reason: string | null;
 }
 interface LibraryResponse {
   filter: string;
@@ -235,13 +235,21 @@ export default function LibraryPage() {
                       <Eye size={11} /> {STATE_LABEL[v.state]}
                     </span>
                   ) : TERMINAL.has(v.state) ? (
-                    <span className="rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-500">{STATE_LABEL[v.state] ?? v.state}</span>
+                    <span className="rounded-full bg-red-50 px-2 py-0.5 text-red-700">{STATE_LABEL[v.state] ?? v.state}</span>
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-zinc-600">
                       <Loader2 size={11} className="animate-spin" /> {STATE_LABEL[v.state] ?? v.state}
                     </span>
                   )}
                 </p>
+                {/* Sebelumnya video gagal hanya bertuliskan "Gagal" tanpa satu
+                    kata pun alasan — brand tidak tahu harus mengulang, ganti
+                    produk, atau menghubungi kami. Padahal tokennya sudah
+                    dikembalikan, jadi diamnya terasa lebih buruk dari
+                    kenyataannya. */}
+                {v.fail_reason && (
+                  <p className="mt-1 text-xs leading-5 text-red-600">{v.fail_reason}</p>
+                )}
               </div>
 
               <div className="flex shrink-0 items-center gap-2">
