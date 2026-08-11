@@ -17,7 +17,11 @@ const secret = () => new TextEncoder().encode(process.env.AUTH_SECRET ?? "");
 
 function toOnboarding(req: NextRequest, clearCookie: boolean) {
   const url = req.nextUrl.clone();
-  url.pathname = "/onboarding";
+  // Pengunjung di hostname dashboard yang belum login adalah CALON BRAND,
+  // bukan penjual retail. Melemparnya ke /onboarding retail memberi halaman
+  // yang salah sama sekali — mereka dikirim ke halaman depan enterprise.
+  const onDashboardHost = Boolean(DASHBOARD_HOST) && req.headers.get("host") === DASHBOARD_HOST;
+  url.pathname = onDashboardHost ? "/brands" : "/onboarding";
   url.search = "";
   const res = NextResponse.redirect(url);
   // Token tidak sah dihapus, bukan dibiarkan. Kalau tidak, tiap permintaan
@@ -40,7 +44,7 @@ export async function middleware(req: NextRequest) {
     url.pathname = `/dashboard${pathname === "/" ? "" : pathname}`;
     return NextResponse.rewrite(url);
   }
-  if (pathname.startsWith("/onboarding") || pathname.startsWith("/coba") || pathname.startsWith("/mulai") || pathname.startsWith("/legal") || pathname.startsWith("/.well-known")) return NextResponse.next();
+  if (pathname.startsWith("/brands") || pathname.startsWith("/onboarding") || pathname.startsWith("/coba") || pathname.startsWith("/mulai") || pathname.startsWith("/legal") || pathname.startsWith("/.well-known")) return NextResponse.next();
   const token = req.cookies.get(COOKIE)?.value;
   if (!token) return toOnboarding(req, false);
 
@@ -62,6 +66,16 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico|onboarding|legal|demo|showcase|manifest.json|icons|apple-touch-icon.png|\\.well-known).*)",
+    // `previews` DAN aturan ekstensi berkas WAJIB ada di sini.
+    //
+    // Bug nyata yang ditemukan saat membangun halaman /brands (2026-08-11):
+    // /previews/*.mp4 ikut kena guard login dan dijawab 307 ke /onboarding,
+    // jadi SEMUA video contoh rusak untuk pengunjung yang belum masuk —
+    // persis audiens halaman depan. Di dashboard tidak ketahuan karena di
+    // sana user selalu sudah login.
+    //
+    // Aturan ekstensi ditambahkan supaya aset statis berikutnya tidak
+    // mengulang jebakan yang sama hanya karena lupa didaftarkan.
+    "/((?!api|_next/static|_next/image|favicon.ico|onboarding|legal|demo|showcase|manifest.json|icons|previews|apple-touch-icon.png|\\.well-known|.*\\.(?:mp4|webm|mov|png|jpg|jpeg|webp|avif|svg|ico|gif|woff2?|txt|xml|json)$).*)",
   ],
 };
