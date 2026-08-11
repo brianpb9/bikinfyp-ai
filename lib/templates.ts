@@ -46,14 +46,10 @@ export interface CampaignTemplate {
    * Ini klip REFERENSI dari portfolio yang dibedah, bukan hasil render mesin
    * kami. Diganti begitu 12 render sungguhan per template tersedia.
    *
-   * EMPAT DITAHAN (T01, T03, T07, T09) dan masih memakai klip gaya. Diperiksa
-   * frame-nya 2026-08-11: tiga membawa watermark TikTok berisi handle kreator
-   * (@chalistaaadewi_, @hiakufeliciaaa, @kansa...) dan dua di antaranya
-   * mencetak "Unauthorised commercial use of video strictly prohibited" di
-   * dalam frame; satu lagi membawa overlay kampanye "TikTok Shop x Brand Day"
-   * yang mengklaim afiliasi brand yang bukan milik kita. Memajangnya di
-   * dashboard komersial berarti menampilkan larangan itu di produk kita
-   * sendiri. Tinggal ganti path-nya kalau Brian memutuskan lain.
+   * T01, T03, T07, dan T09 sempat ditahan karena frame-nya membawa watermark
+   * TikTok berisi handle kreator dan tulisan larangan penggunaan komersial.
+   * Brian mengonfirmasi 2026-08-11 bahwa portfolio itu produksi timnya
+   * sendiri, jadi keempatnya ikut dipasang.
    *
    * Harus null — bukan menunjuk ke berkas yang belum diunggah. Diuji
    * 2026-08-11: src yang 404 menyisakan elemen <video> kosong yang tampil
@@ -70,7 +66,7 @@ export interface CampaignTemplate {
   preview: string | null;
   accent: "amber" | "rose" | "emerald" | "violet" | "sky" | "zinc";
   /** Rute TVC — hanya untuk kind "tvc". Lihat lib/media/shot-planner.ts. */
-  tvcRoute?: "luxury" | "reallife";
+  tvcRoute?: "luxury" | "reallife" | "comedy";
   /** Rasio yang dipaksa template ini. Kosong = ikut pilihan pengguna (9:16).
    *
    * Ada karena dua template TVC ditulis dan dirender 16:9 landscape: brand
@@ -80,7 +76,7 @@ export interface CampaignTemplate {
   shotCount?: number;
   /** Angka dari video sumber yang dibedah — dipakai untuk jujur soal jarak
    * antara referensinya dan yang bisa mesin kami hasilkan hari ini. */
-  source?: { durationSec: number; shots: number; bpm: number };
+  source?: { durationSec: number; shots: number; bpm?: number };
   /** Peringatan yang WAJIB terbaca sebelum brand memakai template ini.
    *
    * Dipisah badge/note karena rambunya tidak seragam: klaim hasil
@@ -205,7 +201,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H12", count: 3, shotCount: 3,
     bestFor: ["beauty", "food", "gadget", "home"],
     source: { durationSec: 20, shots: 12, bpm: 102 },
-    preview: "/previews/format-wajah.mp4", accent: "emerald",
+    preview: "/previews/t01-tempat-susah.mp4", accent: "emerald",
   },
   // ── T02 ───────────────────────────────────────────────────────────────────
   {
@@ -227,7 +223,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H10", count: 2, shotCount: 6,
     bestFor: ["toko", "food", "beauty"],
     source: { durationSec: 31, shots: 7, bpm: 106 },
-    preview: "/previews/format-wajah.mp4", accent: "amber",
+    preview: "/previews/t03-liputan-event.mp4", accent: "amber",
   },
   // ── T04 ───────────────────────────────────────────────────────────────────
   {
@@ -273,7 +269,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "agak_berani", hookFamily: "H8", count: 3, shotCount: 3,
     bestFor: ["beauty", "home"],
     source: { durationSec: 12, shots: 5, bpm: 101 },
-    preview: "/previews/format-wajah.mp4", accent: "emerald",
+    preview: "/previews/t07-checklist-berjalan.mp4", accent: "emerald",
   },
   // ── T08 ── KLAIM HASIL ────────────────────────────────────────────────────
   {
@@ -297,7 +293,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H7", count: 3, shotCount: 3,
     bestFor: ["beauty", "food"],
     source: { durationSec: 23, shots: 3, bpm: 94 },
-    preview: "/previews/format-wajah.mp4", accent: "violet",
+    preview: "/previews/t09-bahan-aktif.mp4", accent: "violet",
   },
   // ── T10 ── KLAIM HASIL ────────────────────────────────────────────────────
   {
@@ -371,6 +367,22 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     bestFor: ["beauty", "health", "kitchen"],
     ratio: "16:9",
     preview: "/previews/tvc-the-drop.mp4", accent: "zinc",
+  },
+  {
+    id: "tvc-tersangka", group: "lain",
+    name: "Tersangka Glowing",
+    when: "Hasilnya kelihatan sampai orang curiga. Parodi ruang sidang — produknya jadi punchline, bukan dipuja.",
+    kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
+    // ENAM adegan, bukan empat. Rute komedi punya empat beat tengah dan yang
+    // terakhir adalah PEMBALIKANNYA — si penuduh ketahuan ikut memotret
+    // produknya. Dengan empat adegan (hook + 2 tengah + packshot) beat itu
+    // tidak pernah tercapai, dan lelucon tanpa pembalikan cuma jadi adegan
+    // aneh. 30 dtk / 6 = 5 dtk per adegan, masih di atas minimum 4 dtk.
+    hookLevel: "berani", hookFamily: "H6", count: 2, shotCount: 6,
+    tvcRoute: "comedy", ratio: "16:9",
+    bestFor: ["beauty", "health", "fashion"],
+    source: { durationSec: 30, shots: 6 }, // dokumen TVC 3 tidak menyebut BPM
+    preview: "/previews/tvc-tersangka.mp4", accent: "rose",
   },
   {
     id: "tvc-seharian", group: "lain",

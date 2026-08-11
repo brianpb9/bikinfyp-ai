@@ -63,8 +63,9 @@ export interface ShotPlanInput {
   /** TVC tanpa orang: seluruh beat jadi makro produk, tekstur, dan packshot.
    * Suara tetap dari persona — yang dimatikan hanya kehadirannya di layar. */
   noModel?: boolean;
-  /** Rute TVC: "luxury" (makro/mekanisme) atau "reallife" (sehari penuh). */
-  tvcRoute?: "luxury" | "reallife";
+  /** Rute TVC: "luxury" (makro/mekanisme), "reallife" (sehari penuh), atau
+   * "comedy" (parodi/pattern-break — TVC 3 "Tersangka Glowing"). */
+  tvcRoute?: "luxury" | "reallife" | "comedy";
   /** Id template UGC affiliate (T01..T12). NULL = perilaku lama, beat generik.
    *
    * Inilah yang membuat template mengubah VIDEONYA, bukan cuma labelnya:
@@ -325,6 +326,46 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     },
   ];
 
+  // Rute KOMEDI (TVC 3 "TERSANGKA GLOWING"): produk tidak dipuja, produk jadi
+  // PUNCHLINE. Strukturnya tuduhan -> bukti -> jawaban -> pembalikan, dan yang
+  // menjual adalah pembalikan itu: si penuduh diam-diam ikut memotret
+  // produknya.
+  //
+  // SENGAJA DIRAMPINGKAN JADI DUA ORANG. Referensinya memakai enam orang
+  // (tersangka + penuduh + empat juri), dan production log-nya sendiri menyebut
+  // cast berubah wajah/posisi antar modul sebagai "risiko #1" — itu terjadi
+  // PADAHAL mereka punya start/end frame dan master cast reference. Kita tidak
+  // punya keduanya: satu shot = satu generate terpisah, dan penjaga identitas
+  // (QC-03) justru menghukum wajah yang berubah. Meminta empat juri di sini
+  // bukan ambisius, itu memesan kegagalan. Dua orang sudah cukup membawa
+  // seluruh leluconnya.
+  const TVC_COMEDY_ROLES: { role: string; camera: string; avoid: string; pace: string }[] = [
+    {
+      role: `the accusation: a second person points at the first with theatrical, playful suspicion, as if this were a courtroom and the product's result were evidence of something — the tone is sitcom, likeable and absurd, never menacing`,
+      camera: `slow push-in from wide to medium on the accuser`,
+      avoid: `maximum two people in frame and only one of them moving at a time, the room keeps exactly the same furniture, shape and layout as the other shots`,
+      pace: `snappy, comic timing`,
+    },
+    {
+      role: `the accused stays perfectly calm and unbothered while being accused, the contrast between the drama around them and their composure IS the joke`,
+      camera: `static medium shot holding on the calm reaction`,
+      avoid: `no exaggerated mugging, the calm must read as confidence, same room and same furniture as before`,
+      pace: `held, deadpan`,
+    },
+    {
+      role: `the answer: the accused calmly produces the product and places it down in the centre of frame in smooth slow motion, every other head turning to follow it — the music-stop moment`,
+      camera: `slow dolly-in ending on the product as hero`,
+      avoid: `no clutter around the product, nothing else moves while it settles, same room and same furniture`,
+      pace: `reverent, comic gravitas`,
+    },
+    {
+      role: `the reversal: the accuser is caught sheepishly photographing the product with their phone, glancing around to check whether anyone saw — the accusation collapses into wanting it too`,
+      camera: `quick lateral pan then settle on the guilty expression`,
+      avoid: `keep it warm and self-deprecating, same room and same furniture as the other shots`,
+      pace: `quick, then a beat of stillness`,
+    },
+  ];
+
   const TVC_MIDDLE_ROLES: { role: string; camera: string; avoid: string; pace: string }[] = [
     {
       role: `establishes the world of the brand — the setting, the person it is for, and why this moment matters, staged and lit like a commercial`,
@@ -387,9 +428,15 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // Template referensi menegaskan jangan diubah antar modul — konsistensi
   // tampilan antar adegan justru datang dari kalimat yang tidak berubah ini,
   // bukan dari mendeskripsikan ulang gayanya dengan kata-kata berbeda tiap kali.
+  // KUNCI GEOMETRI ikut di sini, dan itu pelajaran dari cacat nyata di TVC 3:
+  // satu shot memakai meja lurus dan shot pasangannya meja bundar, jadi selama
+  // lima detik modelnya memuaikan bentuk mejanya sendiri. Menyebut "ruangan dan
+  // perabotnya sama persis" jauh lebih murah daripada menemukan meja meleleh
+  // setelah rendernya dibayar.
   const TVC_STYLE_LOCK =
     `photorealistic, luxury commercial still, soft cinematic lighting, shallow depth of field, ` +
-    `high detail texture, no text, no logo, no watermark`;
+    `high detail texture, the room, its furniture and their exact shapes stay identical across every shot, ` +
+    `nothing stretches or changes proportion, no text, no logo, no watermark`;
   // IDENTITY_INSTRUCTION ditulis untuk UGC dan memuat frasa "like a real phone
   // camera close-up". Di TVC itu bertabrakan dengan framing "never a phone-shot"
   // di kalimat yang sama, dan model akan menuruti salah satunya secara acak.
@@ -431,7 +478,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         ? TVC_MIDDLE_ROLES_NO_MODEL
         : input.tvcRoute === "reallife"
           ? TVC_REALLIFE_ROLES
-          : TVC_MIDDLE_ROLES;
+          : input.tvcRoute === "comedy"
+            ? TVC_COMEDY_ROLES
+            : TVC_MIDDLE_ROLES;
       const m = table[(i - 1) % table.length];
       role = m.role; camera = m.camera; avoid = m.avoid; pace = m.pace;
     }

@@ -171,7 +171,11 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     shotCountOverride: row.shot_count ?? undefined,
     ratio: row.ratio ?? undefined,
     noModel: row.no_model === true,
-    tvcRoute: row.tvc_route === "reallife" ? "reallife" : undefined,
+    // Daftar putih, bukan lolos apa adanya: nilai asing lebih baik jatuh ke
+    // rute luxury (perilaku lama) daripada masuk ke perencana sebagai rute
+    // yang tidak punya tabel beat.
+    tvcRoute: row.tvc_route === "reallife" ? "reallife"
+      : row.tvc_route === "comedy" ? "comedy" : undefined,
     ugcTemplate: row.template_id });
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the
   // user's own product photo panned/zoomed, so there's no provider to fail

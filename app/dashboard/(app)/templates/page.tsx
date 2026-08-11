@@ -219,7 +219,8 @@ function TemplateGrid({ rows }: { rows: CampaignTemplate[] }) {
                     kerjakan — brand yang memilih lagunya sendiri. */}
                 {t.source && (
                   <p className="mt-2 text-[11px] text-zinc-400">
-                    Aslinya {t.source.durationSec} dtk · {t.source.shots} shot · musik ±{t.source.bpm} BPM
+                    Aslinya {t.source.durationSec} dtk · {t.source.shots} shot
+                    {t.source.bpm ? ` · musik ±${t.source.bpm} BPM` : ""}
                   </p>
                 )}
                 <div className="mt-auto flex items-center justify-between pt-4">

@@ -68,7 +68,10 @@ export async function POST(req: Request) {
     // dibangun di sekitar presenter, jadi mematikan orangnya di sana akan
     // menghasilkan prompt yang bertengkar dengan dirinya sendiri.
     const noModel = format === "tvc" && body.no_model === true;
-    const tvcRoute = format === "tvc" && body.tvc_route === "reallife" ? "reallife" : null;
+    const tvcRoute =
+      format === "tvc" && (body.tvc_route === "reallife" || body.tvc_route === "comedy")
+        ? (body.tvc_route as string)
+        : null;
     // Template UGC affiliate. Divalidasi terhadap daftar template yang MEMANG
     // ada, bukan diterima mentah: nilainya masuk ke perencana shot, dan id
     // karangan hanya akan diam-diam jatuh ke beat generik tanpa jejak.
