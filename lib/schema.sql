@@ -32,7 +32,10 @@ CREATE TABLE IF NOT EXISTS organizations (
   elevator_pitch TEXT,
   -- Penanda onboarding selesai (termasuk saat sengaja dilewati). Lihat
   -- migrations/postgres/0018_org_onboarded.sql.
-  onboarded_at TEXT
+  onboarded_at TEXT,
+  brand_logo_key TEXT,
+  brand_color TEXT,
+  brand_tagline TEXT
 );
 
 CREATE TABLE IF NOT EXISTS org_members (

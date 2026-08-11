@@ -32,6 +32,9 @@ export interface Organization {
   audience: string | null;
   elevator_pitch: string | null;
   onboarded_at: string | null;
+  brand_logo_key: string | null;
+  brand_color: string | null;
+  brand_tagline: string | null;
 }
 
 export interface OrgMembership {

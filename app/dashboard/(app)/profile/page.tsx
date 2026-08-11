@@ -8,6 +8,7 @@ import { getOrgBalance, getOrgById } from "@/lib/org";
 import { pgGetOrgBalance, pgGetOrgById, pgGetOrgVideoStats, type OrgVideoStats } from "@/lib/postgres/org";
 import { tokens } from "../../_components/format";
 import { BusinessAnalysisCard } from "../../_components/BusinessAnalysisCard";
+import { BrandKitCard } from "../../_components/BrandKitCard";
 import { LogoutButton } from "../../_components/ProfileActions";
 
 export const dynamic = "force-dynamic";
@@ -126,6 +127,7 @@ export default async function ProfilePage() {
         <p className="-mt-1 text-xs text-zinc-500">
           Dipakai AI sebagai konteks saat menulis skrip. Makin lengkap, makin nyambung hasilnya.
         </p>
+        <BrandKitCard />
         <BusinessAnalysisCard initial={{
           website_url: org?.website_url ?? null, business_type: org?.business_type ?? null,
           category: org?.category ?? null, audience: org?.audience ?? null, elevator_pitch: org?.elevator_pitch ?? null,

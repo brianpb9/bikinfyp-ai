@@ -37,6 +37,8 @@ import { PgJobsRepository } from "./jobs";
 import { getPool } from "./pool";
 import { normalizeHookLevel } from "../config/hooks";
 import { pgTaskMemo } from "./task-memo";
+import { appendEndcard, ENDCARD_DEFAULT_COLOR } from "../media/endcard";
+import { loadBrandKit } from "./brand-kit";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -280,6 +282,25 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,
       demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });
     outputPath = composite.outPath; renderParams = composite.renderParams;
+
+    // Endcard ber-brand, SESUDAH compositing dan SEBELUM QC.
+    //
+    // Sesudah compositing: graf filter compositor sudah panjang dan sudah
+    // terbukti; endcard sebagai langkah terpisah berarti kegagalannya paling
+    // buruk cuma menghilangkan endcard, bukan merusak videonya.
+    //
+    // Sebelum QC: QC memeriksa durasi, dan menambah 2 detik SETELAH
+    // pemeriksaan akan membuat berkas yang dikirim ke brand berbeda dari yang
+    // diperiksa — persis jenis celah yang membuat pemeriksaan jadi teater.
+    if (row.org_id) {
+      const kit = await loadBrandKit(row.org_id);
+      if (kit && (kit.logoPath || kit.tagline)) {
+        outputPath = await appendEndcard({
+          videoPath: outputPath, workDir,
+          logoPath: kit.logoPath, colorHex: kit.color ?? ENDCARD_DEFAULT_COLOR, tagline: kit.tagline,
+        });
+      }
+    }
     if (!(await jobs.transition(row.id, "QC_CHECK", { worker: "postgres" }))) return;
     qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
       finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), `Cek ${cartLabel}`, AIGC_WATERMARK_TEXT],
