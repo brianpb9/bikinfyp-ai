@@ -121,7 +121,12 @@ export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string
   // ke BytePlus, API menerima 8 foto referensi tanpa error (bukan API yg
   // membatasi 5, itu batas kode lama).
   const extras = (spec.extraReferenceImagePaths ?? []).slice(0, 7);
-  const useR2v = extras.length > 0 && model.includes("dreamina-seedance-2");
+  // referenceOnlyImages memaksa mode referensi walau hanya ada SATU gambar.
+  // Tanpa ini, visual bisnis milik iklan jasa akan dipakai sebagai frame
+  // pertama dan hasilnya video tentang logo, bukan presenter yang bicara.
+  const useR2v =
+    (extras.length > 0 || spec.referenceOnlyImages === true) &&
+    model.includes("dreamina-seedance-2");
   if (!useR2v) {
     return [textItem, { type: "image_url", image_url: { url: imageToDataUri(shot.imageRefPath) } }];
   }

@@ -45,7 +45,7 @@ export interface ShotPlanInput {
    * yang mendukung r2v (Seedance 2.0 / tier bersuara). Lihat VisualSpec. */
   extraImageRefPaths?: string[];
   qualityTier: QualityTier;
-  format?: "hands_only" | "vo_broll" | "talking_head" | "tvc";
+  format?: "hands_only" | "vo_broll" | "talking_head" | "tvc" | "ads";
   /** Level hook S3 (lima level sejak 2026-08-11). Yang mengubah VISUAL hanya
    * dua level teratas: "agak gila" memberi pembuka lembut, "gila" pembuka
    * pattern-interrupt PRODUCT-SAFE (gerakan kamera dramatis + produk naik cepat
@@ -78,6 +78,17 @@ const TVC_FRAMING =
   "lighting with deliberate key and rim light, smooth stabilised camera movement on a slider or gimbal, " +
   "shallow cinematic depth of field, polished colour grade, immaculate art-directed set — a broadcast " +
   "commercial, never a phone-shot or hand-held clip";
+
+// AI UGC Ads: iklan untuk APP, JASA, atau TOKO — bukan barang fisik.
+//
+// Perbedaan yang menentukan: tidak ada produk yang harus tampil identik di
+// setiap shot. Karena itu format ini TIDAK memakai IDENTITY_INSTRUCTION sama
+// sekali; memaksa "kemasan yang sama persis" pada bisnis yang tidak punya
+// kemasan hanya menghasilkan benda karangan di tangan presenter.
+const ADS_FRAMING =
+  "face and upper body clearly visible, a real person speaking straight to camera with genuine energy, " +
+  "front-facing phone-camera angle, natural daylight, muted true-to-life colour, filmed somewhere that " +
+  "fits the business being talked about — a shop counter, a desk, a café table — never a blank studio";
 
 const TALKING_HEAD_FRAMING =
   "face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
@@ -143,6 +154,9 @@ const CRAZY_OPENER: Record<"hands_only" | "talking_head", string> = {
     "HIGH-ENERGY OPENING: the presenter pops into frame with a fast dramatic camera push-in, wide surprised " +
     "expressive reaction, immediately holding the product up to the lens, energetic start. ",
 };
+
+/** Shot terakhir? Dipakai beat iklan jasa untuk menutup dengan ajakan. */
+function isLastShot(i: number, total: number): boolean { return i === total - 1; }
 
 export function planShots(input: ShotPlanInput): VisualSpec {
   // Jumlah shot: batas keras BytePlus 2-15 dtk/klip (lihat byteplus.ts
@@ -299,16 +313,27 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         ? "full body visible head to toe, presenter standing and showing the whole outfit like a mirror-check try-on video, " +
           "phone propped vertical framing, natural phone camera look, inside a cozy lived-in bedroom with a bed and " +
           "wardrobe visible, soft natural window light, muted authentic colors, candid everyday vibe. "
-        : format === "talking_head" ? `${TALKING_HEAD_FRAMING}. ` : "";
+        : format === "talking_head" ? `${TALKING_HEAD_FRAMING}. `
+        : format === "ads" ? `${ADS_FRAMING}. ` : "";
     // Wajah AI pakai promptSeed (deskripsi wajah/tipologi) + deliveryPrompt
     // (gaya pembawaan per kategori — genz energik, hijaber kalem anggun, ibu
     // menenangkan) sebagai subjek utama, bukan handsPrompt.
-    const subject = format === "talking_head" || format === "tvc"
+    const subject = format === "talking_head" || format === "tvc" || format === "ads"
       ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
       : input.category.handsPrompt;
     const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
     const beat =
-      format === "tvc"
+      format === "ads"
+        // Iklan jasa: yang diperagakan adalah MANFAAT, bukan benda. Presenter
+        // tidak memegang apa pun — begitu diminta memegang sesuatu, model akan
+        // mengarang produk yang tidak pernah ada, dan itu justru menyesatkan
+        // calon pembeli jasa.
+        ? isFirst
+          ? `A person talking straight to camera about "${input.productName}", relaxed and convincing, hands free and gesturing naturally — holding no product of any kind. The place around them fits the business being described`
+          : isLastShot(i, numShots)
+            ? `The same person wrapping up, looking straight at camera with a warm inviting nod, hands open in a natural gesture — still holding nothing`
+            : `The same person continuing, gesturing naturally to make a point, the surroundings quietly reinforcing what the business does — no product in hand at any moment`
+      : format === "tvc"
         ? tvcBeat(i)
         : format === "talking_head"
         ? lipSyncPresenter
@@ -458,6 +483,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     qualityTier: tier,
     generateAudio: withAudio, // konsisten dengan tier — ditegakkan juga di registry
     extraReferenceImagePaths: input.extraImageRefPaths?.slice(0, 7), // r13: 4->7 (+1 primer = 8 total)
+    // Iklan jasa: visual bisnis dipakai sebagai REFERENSI, bukan frame
+    // pertama — kalau tidak, hasilnya video tentang logo, bukan orang yang
+    // berbicara. Lihat catatan referenceOnlyImages di lib/providers/types.ts.
+    referenceOnlyImages: format === "ads",
   };
 }
 

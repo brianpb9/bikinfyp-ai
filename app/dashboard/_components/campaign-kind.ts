@@ -6,7 +6,7 @@
 // lebih murah daripada menambah kolom + migrasi untuk sesuatu yang sudah bisa
 // disimpulkan tanpa kehilangan informasi.
 export function campaignKindLabel(format: string | null | undefined): string {
-  return format === "tvc" ? "AI TVC" : "UGC Affiliate";
+  return format === "tvc" ? "AI TVC" : format === "ads" ? "UGC Ads" : "UGC Affiliate";
 }
 
 export function campaignFormatLabel(format: string | null | undefined): string | null {
@@ -15,6 +15,7 @@ export function campaignFormatLabel(format: string | null | undefined): string |
     case "hands_only": return "Tangan + VO";
     case "vo_broll": return "Foto + VO";
     case "tvc": return "Sinematik";
+    case "ads": return "Iklan jasa";
     default: return null;
   }
 }

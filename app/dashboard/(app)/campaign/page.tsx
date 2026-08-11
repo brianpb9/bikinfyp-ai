@@ -13,7 +13,7 @@ import { AVATAR_PRESETS, type AvatarGender } from "@/lib/avatar-presets";
 import { getTemplate, type CampaignTemplate } from "@/lib/templates";
 
 type Kind = "affiliate" | "ads" | "tvc";
-type Format = "talking_head" | "hands_only" | "tvc";
+type Format = "talking_head" | "hands_only" | "tvc" | "ads";
 type Tier = "high_quality" | "super_hq";
 import type { HookLevel } from "@/lib/config/hooks";
 import { HOOK_LEVELS } from "@/lib/config/hooks";
@@ -331,7 +331,7 @@ export default function CampaignPage() {
           <div className="grid grid-cols-3 gap-4">
             {([
               { id: "affiliate" as const, icon: ShoppingBag, title: "AI UGC Affiliate", desc: "Jualan produk fisik ke TikTok Shop. AI yang peragakan produkmu — cukup foto.", ready: true, preview: "/previews/format-tangan.mp4" },
-              { id: "ads" as const, icon: Megaphone, title: "AI UGC Ads", desc: "Promosi app, jasa, atau toko. Rekamanmu sendiri + hook AI pembuka.", ready: false, preview: "/previews/format-ads.mp4" },
+              { id: "ads" as const, icon: Megaphone, title: "AI UGC Ads", desc: "Buat app, jasa, atau toko — yang tidak punya barang fisik. Presenter AI yang bicara.", ready: true, preview: "/previews/format-ads.mp4" },
               // Sengaja TANPA preview: satu-satunya klip presenter yang kami punya
               // (format-wajah.mp4) adalah UGC selfie, dan memasangnya di sini
               // justru mengajarkan hal yang salah soal TVC. Kami tampilkan
@@ -350,8 +350,13 @@ export default function CampaignPage() {
                     // dipimpin presenter — jadi format & durasi diselaraskan
                     // di sini, bukan dibiarkan menghasilkan kombinasi yang
                     // nanti ditolak server.
+                    // Jenis mengunci format: TVC dan Iklan Jasa masing-masing
+                    // punya framing & kebijakan QC sendiri, jadi membiarkan
+                    // user memilih "Tangan + VO" di sini hanya menghasilkan
+                    // kombinasi yang ditolak server beberapa langkah kemudian.
                     if (k.id === "tvc") { setFormat("tvc"); if (durationSec === 45) setDurationSec(30); }
-                    else if (format === "tvc") setFormat("hands_only");
+                    else if (k.id === "ads") { setFormat("ads"); if (durationSec === 45) setDurationSec(30); }
+                    else if (format === "tvc" || format === "ads") setFormat("hands_only");
                   }}
                   disabled={!k.ready}
                   className={`rounded-2xl border-2 bg-white p-5 text-left shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
@@ -642,7 +647,7 @@ export default function CampaignPage() {
                 tengah nyata, bukan pengisi: level 2 mencampur keluarga hook
                 kategori dengan yang agresif, level 4 menambah pembuka visual
                 lembut sebelum yang penuh di level 5. */}
-            <div className={kind === "tvc" ? "hidden" : undefined}>
+            <div className={kind === "tvc" || kind === "ads" ? "hidden" : undefined}>
               <div className="mb-3 flex items-baseline justify-between">
                 <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Level hook</p>
                 <p className="text-xs font-semibold text-amber-600">{HOOK_LABEL[hookLevel]}</p>

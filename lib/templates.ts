@@ -12,7 +12,7 @@
 // preset sendiri, ITU yang masuk database — bukan yang ini.
 
 export type TemplateKind = "affiliate" | "ads" | "tvc";
-export type TemplateFormat = "hands_only" | "talking_head" | "tvc";
+export type TemplateFormat = "hands_only" | "talking_head" | "tvc" | "ads";
 export type TemplateTier = "high_quality" | "super_hq";
 export type TemplateHookLevel = import("./config/hooks").HookLevel;
 

@@ -74,6 +74,25 @@ export const QC_POLICY_BY_FORMAT = {
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
     },
   },
+  // AI UGC Ads (2026-08-11): iklan untuk app/jasa/toko, TANPA produk fisik.
+  //
+  // QC-03 dan QC-10 dikeluarkan dari requiredPass karena keduanya menilai
+  // benda yang memang tidak ada. Membiarkannya wajib berarti setiap iklan jasa
+  // ditolak walau hasilnya bagus — persis pola bug yang sudah dua kali kena di
+  // sini (TVC tanpa entri kebijakan, dan QC-10 memblokir semua produk fashion).
+  // Sisanya TETAP wajib: morphing, durasi, audio, dan kualitas teknis sama
+  // pentingnya untuk iklan jasa seperti untuk iklan produk.
+  ads: {
+    requiredPass: ["QC-02", "QC-04", "QC-05", "QC-07", "QC-08"],
+    permittedSkip: ["QC-01", "QC-03", "QC-06", "QC-09", "QC-10"],
+    skipReason: {
+      "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2).",
+      "QC-03": "N/A: iklan jasa/app/toko tidak punya produk fisik untuk dicocokkan.",
+      "QC-06": "N/A: mode bersuara tanpa overlay teks.",
+      "QC-09": "N/A: format ini memang menampilkan presenter.",
+      "QC-10": "N/A: tidak ada label kemasan untuk dibaca.",
+    },
+  },
   // VO+Foto (v1, 2026-08-03): visual adalah foto produk ASLI di-pan/zoom
   // (bukan video AI-generated), jadi QC-02 (morphing tangan AI) tidak
   // relevan — tidak ada tangan yang di-generate untuk bisa morphing.
@@ -626,7 +645,13 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // produk pucat/kecil di frame ramai): kalau QC-10 SUDAH membuktikan label
   // terbaca, fraksi-warna tidak lagi jadi hard-fail sendirian — konsistensi
   // ANTAR SHOT (indikasi identitas produk BERGANTI di tengah video) tetap keras.
-  if (input.shotPaths && input.shotPaths.length >= 1 && input.refImagePath && fs.existsSync(input.refImagePath)) {
+  if (input.format === "ads") {
+    // Iklan jasa TIDAK punya produk fisik. Gambar yang dikirim adalah visual
+    // bisnis (logo/toko/screenshot) yang sengaja TIDAK muncul utuh di layar,
+    // jadi membandingkan warna frame dengannya pasti gagal dan akan menolak
+    // setiap iklan jasa yang sebenarnya baik-baik saja.
+    checks.push({ code: "QC-03", name: "Identitas produk konsisten", status: "skip", detail: "N/A: iklan jasa/app/toko tidak punya produk fisik untuk dicocokkan." });
+  } else if (input.shotPaths && input.shotPaths.length >= 1 && input.refImagePath && fs.existsSync(input.refImagePath)) {
     try {
       checks.push(await qcProductSimilarity(input.shotPaths, input.refImagePath, path.dirname(input.filePath), input.format, labelFidelityPassed));
     } catch (err) {

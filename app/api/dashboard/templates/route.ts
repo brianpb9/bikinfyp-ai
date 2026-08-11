@@ -14,7 +14,7 @@ export const dynamic = "force-dynamic";
 // alasan ia terpisah dari template bawaan di lib/templates.ts.
 
 const KINDS = new Set(["affiliate", "ads", "tvc"]);
-const FORMATS = new Set(["hands_only", "talking_head", "tvc"]);
+const FORMATS = new Set(["hands_only", "talking_head", "tvc", "ads"]);
 const TIERS = new Set(["high_quality", "super_hq"]);
 const LEVELS = new Set(HOOK_LEVELS as string[]);
 const MAX_PER_ORG = 30;

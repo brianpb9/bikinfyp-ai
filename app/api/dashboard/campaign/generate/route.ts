@@ -33,7 +33,11 @@ export async function POST(req: Request) {
     if (!product || product.org_id !== membership.org_id) throw ERR.NOT_FOUND("Produknya");
     if (!product.price_idr) throw ERR.BAD_REQUEST("Isi harga produknya dulu — harga dipakai di skrip dan overlay.", "Product price is required.");
     const images = JSON.parse(product.images || "[]") as string[];
-    if (images.length === 0) throw ERR.BAD_REQUEST("Upload minimal 1 foto produk dulu.", "At least one product photo is required.");
+    // Iklan jasa tetap butuh SATU visual — logo, foto toko, atau screenshot app.
+    // Text-to-video murni belum pernah kami uji ke provider, jadi tidak dipakai
+    // sampai terbukti; meminta satu visual bisnis jauh lebih murah daripada
+    // menjanjikan sesuatu yang belum tentu jalan.
+    if (images.length === 0) throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko/screenshot app untuk iklan jasa.", "At least one image is required.");
 
     const count = Number.isFinite(Number(body.count)) ? Math.round(Number(body.count)) : 0;
     if (count < MIN_VIDEOS || count > MAX_VIDEOS) {

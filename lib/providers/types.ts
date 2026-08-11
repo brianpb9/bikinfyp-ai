@@ -42,6 +42,15 @@ export interface VisualSpec {
    * beralih ke mode semua-referensi bila daftar ini terisi (diverifikasi
    * nyata: r2v butuh durasi >= 4 dtk). */
   extraReferenceImagePaths?: string[];
+  /** AI UGC Ads: gambar yang dikirim adalah VISUAL BISNIS (logo, foto toko,
+   * screenshot app) — konteks, BUKAN subjek yang harus muncul utuh di layar.
+   *
+   * Bedanya penting. Pada jalur i2v biasa, gambar menjadi frame pertama, jadi
+   * mengirim logo akan menghasilkan video tentang logo. Untuk iklan jasa yang
+   * kita inginkan adalah presenter yang berbicara, dengan visual bisnis
+   * sekadar mengarahkan suasana — itu peran reference_image, bukan first
+   * frame. */
+  referenceOnlyImages?: boolean;
 }
 
 export interface VideoAsset {
