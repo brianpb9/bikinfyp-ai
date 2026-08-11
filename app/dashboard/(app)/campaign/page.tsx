@@ -110,6 +110,7 @@ export default function CampaignPage() {
   const [ratio, setRatio] = useState("9:16");
   const [multiShot, setMultiShot] = useState(false);
   const [claims, setClaims] = useState<string[]>([]);
+  const [noModel, setNoModel] = useState(false);
   const [shotCount, setShotCount] = useState(3);
   const [hookLevel, setHookLevel] = useState<HookLevel>("normal");
   const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
@@ -314,7 +315,7 @@ export default function CampaignPage() {
           product_id: product.product_id, script_ids: chosen.map((s) => s.script_id),
           format, creator_category: creatorCategory, avatar_custom_desc: customAvatarDesc,
           // null = biarkan mesin menurunkan jumlah adegan seperti sebelumnya.
-          shot_count: multiShot ? shotCount : null, ratio,
+          shot_count: multiShot ? shotCount : null, ratio, no_model: noModel,
         },
       });
       router.push(`/dashboard/campaign/${res.run_id}`);
@@ -718,6 +719,31 @@ export default function CampaignPage() {
                 ))}
               </div>
             </div>
+
+            {/* TVC tanpa model — dari template Brian: 4 dari 6 modulnya memang
+                tidak ada orangnya. Hanya muncul untuk TVC; format lain
+                dibangun di sekitar presenter. */}
+            {kind === "tvc" && (
+              <div>
+                <button
+                  onClick={() => setNoModel(!noModel)}
+                  className="flex w-full items-center justify-between rounded-xl border border-zinc-300 px-4 py-3 text-left transition-colors hover:bg-zinc-50"
+                >
+                  <span>
+                    <span className="block text-sm font-semibold text-zinc-800">Tanpa model</span>
+                    <span className="block text-xs text-zinc-500">Produk saja: makro, tekstur, packshot. Tidak ada orang di layar.</span>
+                  </span>
+                  <span className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${noModel ? "bg-amber-500" : "bg-zinc-300"}`}>
+                    <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-transform ${noModel ? "translate-x-[22px]" : "translate-x-0.5"}`} />
+                  </span>
+                </button>
+                {noModel && (
+                  <p className="mt-1.5 text-xs text-zinc-500">
+                    Suaranya tetap dari avatar yang dipilih — yang dimatikan cuma kehadirannya di layar.
+                  </p>
+                )}
+              </div>
+            )}
 
             {/* Rasio aspek */}
             <div>

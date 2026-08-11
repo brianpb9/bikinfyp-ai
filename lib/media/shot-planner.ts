@@ -59,6 +59,9 @@ export interface ShotPlanInput {
   shotCountOverride?: number;
   /** Rasio aspek. Lihat catatan "TERBUKTI hanya 9:16" di VisualSpec. */
   ratio?: string;
+  /** TVC tanpa orang: seluruh beat jadi makro produk, tekstur, dan packshot.
+   * Suara tetap dari persona — yang dimatikan hanya kehadirannya di layar. */
+  noModel?: boolean;
 }
 
 const HANDS_ONLY_FRAMING =
@@ -303,6 +306,33 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     },
   ];
 
+  // Varian tanpa model — cerminan modul M2/M3/M5 di template "THE DROP":
+  // tekstur, mekanisme abstrak, lalu hasil yang diamati dekat. Tidak satu pun
+  // menyebut orang, karena satu kata "person" saja sudah cukup memanggil
+  // manusia ke frame yang seharusnya murni makro.
+  const TVC_MIDDLE_ROLES_NO_MODEL: { role: string; camera: string; avoid: string }[] = [
+    {
+      role: `the product's material in extreme macro — texture, viscosity, or surface catching the light, filling the frame`,
+      camera: `slow lateral tracking across the surface`,
+      avoid: `no people, no hands, no jitter`,
+    },
+    {
+      role: `an abstract visualisation of how it works: light, particles or structure suggesting the mechanism, dreamlike rather than literal`,
+      camera: `slow forward dolly diving into the material`,
+      avoid: `no people, no anatomy, no flicker`,
+    },
+    {
+      role: `the result the product leaves behind, observed in a clean beauty-shot close-up, lit to be read instantly`,
+      camera: `static frame with a subtle rack focus landing on the detail`,
+      avoid: `no people, no exaggerated motion`,
+    },
+    {
+      role: `the product resting in an art-directed setting that suggests where it belongs, still the only subject in frame`,
+      camera: `very slow push-in on the product`,
+      avoid: `no people, no drift`,
+    },
+  ];
+
   // Style-lock: kalimat penutup yang SAMA PERSIS di setiap shot.
   // Template referensi menegaskan jangan diubah antar modul — konsistensi
   // tampilan antar adegan justru datang dari kalimat yang tidak berubah ini,
@@ -342,7 +372,8 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       camera = `camera locks off into a static hero packshot and holds the final frame`;
       avoid = `completely stable ending, no drift, no residual motion`;
     } else {
-      const m = TVC_MIDDLE_ROLES[(i - 1) % TVC_MIDDLE_ROLES.length];
+      const table = input.noModel ? TVC_MIDDLE_ROLES_NO_MODEL : TVC_MIDDLE_ROLES;
+      const m = table[(i - 1) % table.length];
       role = m.role; camera = m.camera; avoid = m.avoid;
     }
     return (
@@ -377,7 +408,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Wajah AI pakai promptSeed (deskripsi wajah/tipologi) + deliveryPrompt
     // (gaya pembawaan per kategori — genz energik, hijaber kalem anggun, ibu
     // menenangkan) sebagai subjek utama, bukan handsPrompt.
-    const subject = format === "talking_head" || format === "tvc" || format === "ads"
+    // Tanpa model: subjeknya PRODUK, bukan orang. Memakai promptSeed persona
+    // di sini akan tetap memanggil manusia ke frame walau beat-nya makro.
+    const subject = input.noModel && format === "tvc"
+      ? `"${input.productName}" itself as the sole subject, no people anywhere in frame`
+      : format === "talking_head" || format === "tvc" || format === "ads"
       ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
       : input.category.handsPrompt;
     const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
@@ -479,7 +514,12 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       format === "tvc"
         ? !dialogue.trim()
           ? `No voiceover lands on this beat — it plays on picture and sound design alone. `
-          : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm but never chatty or salesy; any person on screen acts and reacts but is NOT lip-syncing these words: "${dialogue}". `
+          : input.noModel
+            // Tanpa model, menyebut "any person on screen" justru memanggil
+            // orang kembali ke frame yang seharusnya murni produk — kalimat
+            // itu ditulis untuk kasus ADA presenter, dan di sini merugikan.
+            ? `A composed, confident Indonesian brand voiceover is heard over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm but never chatty or salesy. The narrator is never seen; nobody appears on screen: "${dialogue}". `
+            : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm but never chatty or salesy; any person on screen acts and reacts but is NOT lip-syncing these words: "${dialogue}". `
         : format === "hands_only"
         ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting, never rushed (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
         : lipSyncPresenter
