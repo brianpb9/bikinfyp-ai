@@ -118,18 +118,22 @@ export default function TemplatesPage() {
         ))}
       </div>
 
-      <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {visible.map((t) => (
           <li key={t.id}>
             <Link
               href={`/dashboard/campaign?template=${t.id}`}
               className="group flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-md"
             >
-              {/* overflow-hidden + absolute inset-0: media dengan ukuran alami
-                  sendiri akan mendorong kotak aspect-ratio jadi molor kalau
-                  dibiarkan memakai h-full saja (pelajaran dari kartu kampanye
-                  di Beranda). */}
-              <div className="relative aspect-[16/10] w-full overflow-hidden">
+              {/* Bingkai 9:16, MENGIKUTI videonya. Sebelumnya 16:10 dengan
+                  object-cover, jadi klip potret terpotong habis dan yang
+                  terlihat cuma pita tengahnya — persis keluhan Brian
+                  2026-08-11. Sekarang seluruh frame kelihatan tanpa crop.
+
+                  overflow-hidden + absolute inset-0 tetap wajib: media dengan
+                  ukuran alami sendiri akan memaksa kotak aspect-ratio molor
+                  kalau dibiarkan memakai h-full saja. */}
+              <div className="relative aspect-[9/16] w-full overflow-hidden bg-zinc-900">
                 {t.preview ? (
                   <video
                     src={t.preview}
