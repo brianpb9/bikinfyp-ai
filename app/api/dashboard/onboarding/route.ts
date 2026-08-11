@@ -30,6 +30,9 @@ export async function POST(req: Request) {
       websiteUrl: clean(body.website_url, 200),
       businessType: clean(body.business_type, 80),
       category: clean(body.category, 80),
+      // Kunci internal untuk mencocokkan template. Ditulis lewat pernyataan
+      // terpisah yang memaafkan kolom belum ada (lihat pgSetProductCategory).
+      productCategory: clean(body.product_category, 40),
       audience: clean(body.audience),
       elevatorPitch: clean(body.elevator_pitch, 600),
     });

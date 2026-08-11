@@ -84,6 +84,28 @@ export async function pgGetOrgById(orgId: string): Promise<Organization | null> 
 }
 
 /** Hasil "analisa bisnis" (M7) — org tanpa profil tetap valid, ini murni tambahan. */
+
+/** Tulis product_category terpisah dan MEMAAFKAN kolom yang belum ada.
+ *
+ *  Alasannya sama dengan onboarded_at di pgSaveOnboarding: kalau kolom baru
+ *  digabung ke UPDATE utama dan migrasinya belum diterapkan, SELURUH
+ *  penyimpanan gagal — brand kehilangan jawaban yang sudah dia isi hanya
+ *  karena satu kolom tambahan. Dipisah begini, kode boleh tayang sebelum
+ *  migrasi 0028 dijalankan: yang hilang cuma "Pendekatan konten", dan itu
+ *  muncul sendiri begitu migrasinya masuk. */
+async function pgSetProductCategory(orgId: string, value: string | null | undefined): Promise<void> {
+  if (!value) return;
+  const pool = getPool(url());
+  try {
+    await pool.query("UPDATE organizations SET product_category = $2 WHERE id = $1", [orgId, value]);
+  } catch (err) {
+    // 42703 = undefined_column. Hanya itu yang dimaafkan; kegagalan lain
+    // (koneksi putus, hak akses) tetap dilempar.
+    if ((err as { code?: string }).code !== "42703") throw err;
+    console.error("[org] kolom product_category belum ada — migrasi 0028 belum diterapkan");
+  }
+}
+
 export async function pgUpdateOrgProfile(orgId: string, profile: {
   websiteUrl: string; businessType: string; category: string; audience: string; elevatorPitch: string;
   productCategory?: string;
@@ -91,9 +113,10 @@ export async function pgUpdateOrgProfile(orgId: string, profile: {
   const pool = getPool(url());
   try {
     await pool.query(
-      "UPDATE organizations SET website_url=$1, business_type=$2, category=$3, audience=$4, elevator_pitch=$5, product_category=$6 WHERE id=$7",
-      [profile.websiteUrl, profile.businessType, profile.category, profile.audience, profile.elevatorPitch, profile.productCategory ?? null, orgId]
+      "UPDATE organizations SET website_url=$1, business_type=$2, category=$3, audience=$4, elevator_pitch=$5 WHERE id=$6",
+      [profile.websiteUrl, profile.businessType, profile.category, profile.audience, profile.elevatorPitch, orgId]
     );
+    await pgSetProductCategory(orgId, profile.productCategory);
   } finally {
     /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
@@ -358,6 +381,11 @@ export async function pgSaveOnboarding(orgId: string, input: {
   websiteUrl?: string | null;
   businessType?: string | null;
   category?: string | null;
+  /** Kunci kategori internal — dulu onboarding hanya menyimpan label bebas
+   *  ("Skincare & kecantikan") yang tidak bisa dicocokkan ke template, jadi
+   *  brand yang onboarding tapi tidak pernah menjalankan analisa bisnis tidak
+   *  pernah mendapat "Pendekatan konten". */
+  productCategory?: string | null;
   audience?: string | null;
   elevatorPitch?: string | null;
 }): Promise<void> {
@@ -383,6 +411,7 @@ export async function pgSaveOnboarding(orgId: string, input: {
       [orgId, input.name ?? "", input.websiteUrl ?? "", input.businessType ?? "",
        input.category ?? "", input.audience ?? "", input.elevatorPitch ?? ""]
     );
+    await pgSetProductCategory(orgId, input.productCategory);
     try {
       await pool.query("UPDATE organizations SET onboarded_at = $2 WHERE id = $1",
         [orgId, new Date().toISOString()]);
