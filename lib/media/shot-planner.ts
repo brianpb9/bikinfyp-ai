@@ -428,6 +428,20 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       role = m.role; camera = m.camera; avoid = m.avoid; pace = m.pace;
     }
     return (
+      // TULANG CERITA. Arahan Brian 2026-08-11: "yang penting skenario dan
+      // storytelling-nya clear". Sebelumnya tiap beat cuma menyebut FUNGSInya
+      // (hook, bukti, hero) tanpa pernah menyebut apa yang BARU SAJA terjadi —
+      // hasilnya 6 shot bagus yang tidak terasa satu cerita.
+      //
+      // Kedua template Brian melakukannya secara eksplisit: tiap modul
+      // merujuk modul sebelumnya ("the same drop has just landed", "she has
+      // walked several steps forward now"). Kalimat ini memberi model
+      // konteks itu.
+      `${i === 0
+        ? `This is the OPENING shot of a continuous ${input.durationSec}-second story about "${input.productName}". `
+        : i === numShots - 1
+          ? `This is the FINAL shot, resolving everything the previous ${numShots - 1} shots built up. `
+          : `This shot continues directly from the previous one — same world, same look, the story moving forward one step. `}` +
       `Beat ${i + 1} of ${numShots} in a broadcast television commercial (${from}-${to}s of ${input.durationSec}s): ${role}. ` +
       `Camera: ${camera}. Pace: ${pace}. ${avoid}. Lighting is designed, not found. ` +
       // Character-lock: pelajaran dari template kedua. Sekali orangnya
