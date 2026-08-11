@@ -327,3 +327,44 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
     visualDesc: cleanDescriptionForVisual(og.description, og.title),
   };
 }
+
+// --- Pembersih nama produk marketplace (2026-08-11) ---
+//
+// Judul Tokopedia/Shopee adalah tumpukan kata kunci SEO, bukan nama produk:
+//   "Promo SKINTIFlC - Instant Glowing First Serum Spray 50ML/100ML |
+//    Radiance Booster Essence wajah Toner Centella Kulit Leb"
+// 18 kata, dipotong di tengah kata ("Leb"), plus embel-embel promo.
+//
+// Nama ini masuk ke kalimat skrip. Tier bersuara dibatasi ~30 kata total
+// (L-05), jadi nama 18 kata membuat SETIAP varian gagal validasi — dan
+// karena ekstraksi link adalah jalur utama, praktis semua produk marketplace
+// tidak bisa dibuatkan video. Terbukti dari data production: nama asli 0/4
+// varian lolos, versi dipendekkan 4/4 lolos.
+//
+// Pembersihan sengaja KONSERVATIF: hanya memotong bagian yang jelas bukan
+// nama (embel-embel promo, spesifikasi ukuran, ekor setelah pemisah), dan
+// hanya memangkas panjang bila masih kepanjangan. User tetap bisa mengedit
+// nama di langkah Detail — ini cuma default yang waras.
+const MARKETING_PREFIXES = /^(promo|sale|diskon|murah|terlaris|viral|ready|new|original|bpom|cod|grosir|best\s*seller)\b[\s\-–—:.]*/gi;
+
+/** Token spesifikasi/ukuran: "50ML", "100ml/50ml", "30gr", "20 ml", "2pcs". */
+const SPEC_TOKEN = /^(\d+(\.\d+)?\s*(ml|gr|gram|g|kg|l|liter|pcs|pack|sachet|cm|mm|inch)\b[\/\d\w]*|[\d/]+(ml|gr|g|kg|pcs)\b)$/i;
+
+export function cleanProductName(raw: string, maxWords = 6): string {
+  if (!raw) return raw;
+  // 1. Ambil segmen pertama sebelum pemisah daftar-kata-kunci.
+  let name = raw.split(/[|｜]/)[0];
+  // 2. Buang embel-embel promo di depan (bisa bertumpuk: "Promo Sale ...").
+  let before = "";
+  while (before !== name) { before = name; name = name.replace(MARKETING_PREFIXES, ""); }
+  // 3. Buang token spesifikasi/ukuran di mana pun.
+  let words = name.split(/\s+/).filter((w) => w && !SPEC_TOKEN.test(w));
+  // 4. Masih panjang -> potong, TAPI buang penggal kata terakhir yang jelas
+  //    terpotong ("Leb") supaya tidak jadi kata aneh di skrip.
+  if (words.length > maxWords) words = words.slice(0, maxWords);
+  const last = words[words.length - 1];
+  if (last && last.length <= 3 && /^[A-Za-z]+$/.test(last) && words.length > 2) words = words.slice(0, -1);
+  const cleaned = words.join(" ").replace(/[\s\-–—:,.]+$/, "").trim();
+  // Jangan pernah mengembalikan string kosong — lebih baik nama asli.
+  return cleaned.length >= 3 ? cleaned : raw.trim();
+}

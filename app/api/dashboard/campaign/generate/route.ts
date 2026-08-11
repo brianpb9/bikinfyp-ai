@@ -1,6 +1,7 @@
 import { ERR, errorResponse } from "@/lib/errors";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { generateScripts } from "@/lib/script-engine";
+import { cleanProductName } from "@/lib/extract";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 
 export const runtime = "nodejs";
@@ -43,17 +44,34 @@ export async function POST(req: Request) {
     const hookLevel = ["normal", "berani", "gila"].includes(body.hook_level) ? (body.hook_level as "normal" | "berani" | "gila") : "normal";
     const register = ["bunda", "bestie", "genz", "netral"].includes(body.register) ? body.register : "netral";
 
-    const variants = generateScripts({
+    const run = (name: string) => generateScripts({
       product: {
-        id: product.id, name: product.name, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
+        id: product.id, name, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
       },
       register, emotion: "senang", qualityTier: tier, durationSec, hookLevel, count,
     });
-    const passing = variants.filter((v) => v.validation.passed);
+
+    let variants = run(product.name);
+    let passing = variants.filter((v) => v.validation.passed);
+    // Jaring pengaman nama kepanjangan. Nama produk masuk ke kalimat skrip,
+    // dan tier bersuara dibatasi ~30 kata (L-05) — nama 18 kata (judul SEO
+    // marketplace, atau user mengetik panjang sendiri) membuat SEMUA varian
+    // gagal. Ekstraksi sudah membersihkan nama sejak 2026-08-11, tapi produk
+    // lama dan nama ketikan sendiri tetap bisa kepanjangan, jadi coba sekali
+    // lagi dengan nama pendek daripada memblokir user tanpa jalan keluar.
+    let shortenedTo: string | null = null;
+    if (passing.length === 0) {
+      const shorter = cleanProductName(product.name);
+      if (shorter !== product.name) {
+        const retry = run(shorter);
+        const retryPassing = retry.filter((v) => v.validation.passed);
+        if (retryPassing.length > 0) { variants = retry; passing = retryPassing; shortenedTo = shorter; }
+      }
+    }
     if (passing.length === 0) {
       throw ERR.BAD_REQUEST(
-        "Semua skrip yang dibuat AI tidak lolos validasi otomatis — coba ubah nama/harga produk, atau turunkan level hook.",
+        "Skrip AI belum lolos validasi otomatis. Coba persingkat nama produk (maks ~6 kata), pastikan harganya benar, atau turunkan level hook.",
         "No generated variant passed validation."
       );
     }
@@ -66,6 +84,8 @@ export async function POST(req: Request) {
     return Response.json({
       product_id: product.id,
       requested: count,
+      // Jujur kalau kami memendekkan nama supaya skrip bisa dibuat.
+      shortened_name: shortenedTo,
       // Jujur ke UI kalau AI cuma sanggup bikin lebih sedikit dari yang
       // diminta (mis. semua keluarga hook sisanya gagal validasi) — jangan
       // diam-diam mengurangi jumlah tanpa memberi tahu.

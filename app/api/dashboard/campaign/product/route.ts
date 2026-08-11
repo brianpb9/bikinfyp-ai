@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { extractFromUrl } from "@/lib/extract";
+import { extractFromUrl, cleanProductName } from "@/lib/extract";
 import { downloadProductImages } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
@@ -60,7 +60,7 @@ export async function POST(req: Request) {
       const product = await smokeCreateProduct(
         user.id,
         {
-          sourceUrl: url, name: result.name ?? "Produk dari link", priceIdr: result.priceIdr ?? 0,
+          sourceUrl: url, name: cleanProductName(result.name ?? "Produk dari link"), priceIdr: result.priceIdr ?? 0,
           category: result.categoryGuess ?? "default", images, productVisualDesc: result.visualDesc ?? null,
           promoPriceBeforeIdr: promoBefore, rawMeta: { og: { price: result.priceIdr, original: result.originalPriceIdr } },
           orgId: membership.org_id,

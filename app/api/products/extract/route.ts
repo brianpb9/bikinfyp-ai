@@ -1,6 +1,6 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
-import { extractFromUrl, canExtract } from "@/lib/extract";
+import { extractFromUrl, canExtract, cleanProductName } from "@/lib/extract";
 import { getDb, now, uuid, audit } from "@/lib/db";
 import { downloadProductImages } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
@@ -50,7 +50,7 @@ export async function POST(req: Request) {
         ? result.originalPriceIdr
         : null;
     if (postgresRuntimeEnabled()) await smokeCreateProduct(user.id, {
-      sourceUrl: url, name: result.name ?? "Produk dari link", priceIdr: result.priceIdr ?? 0,
+      sourceUrl: url, name: cleanProductName(result.name ?? "Produk dari link"), priceIdr: result.priceIdr ?? 0,
       category: result.categoryGuess ?? "default", images, productVisualDesc: result.visualDesc ?? null,
       promoPriceBeforeIdr: promoBefore, rawMeta: { og: { price: result.priceIdr, original: result.originalPriceIdr } },
     }, productId);
@@ -59,7 +59,7 @@ export async function POST(req: Request) {
         "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
       )
       .run(
-        productId, user.id, url, result.name ?? "Produk dari link",
+        productId, user.id, url, cleanProductName(result.name ?? "Produk dari link"),
         result.priceIdr ?? 0, result.categoryGuess ?? "default", result.visualDesc ?? null,
         JSON.stringify(images), promoBefore,
         JSON.stringify({ og: { price: result.priceIdr, original: result.originalPriceIdr } }), now()
