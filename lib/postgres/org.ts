@@ -115,6 +115,9 @@ export interface RecentBulkRun {
    * melewati gerbang review (tidak punya baris job_shots sama sekali). */
   thumb_key: string | null;
   review_count: number;
+  /** Format job pertama di run ini. Satu kampanye = satu produk dengan satu
+   * konsep, jadi seluruh jobnya berformat sama (dikunci di route confirm). */
+  format: string | null;
   /** Job yang belum mencapai state akhir (masih dirender). Dipakai memisahkan
    * proyek "Aktif" dari "Selesai" — proyek dengan 2 siap + 1 gagal TIDAK boleh
    * dianggap masih berjalan hanya karena ready_count < total. */
@@ -140,6 +143,9 @@ export async function pgListRecentBulkRuns(orgId: string, limit = 5): Promise<Re
               (SELECT p.name FROM jobs j2 JOIN products p ON p.id = j2.product_id
                  WHERE j2.bulk_run_id = j.bulk_run_id AND j2.org_id = $1
                  ORDER BY j2.created_at ASC LIMIT 1) AS product_name,
+              (SELECT j4.format FROM jobs j4
+                 WHERE j4.bulk_run_id = j.bulk_run_id AND j4.org_id = $1
+                 ORDER BY j4.created_at ASC LIMIT 1) AS format,
               (SELECT sh.thumb_key FROM jobs j3 JOIN job_shots sh ON sh.job_id = j3.id
                  WHERE j3.bulk_run_id = j.bulk_run_id AND j3.org_id = $1 AND sh.thumb_key IS NOT NULL
                  ORDER BY j3.created_at ASC, sh.idx ASC LIMIT 1) AS thumb_key

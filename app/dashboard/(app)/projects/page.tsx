@@ -4,6 +4,7 @@ import { requireOrgContext } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { pgListRecentBulkRuns, type RecentBulkRun } from "@/lib/postgres/org";
 import { createSignedUrl } from "@/lib/signed-url";
+import { campaignKindLabel, campaignFormatLabel } from "../../_components/campaign-kind";
 
 export const dynamic = "force-dynamic";
 
@@ -102,6 +103,9 @@ export default async function ProjectsPage({
                         <Film size={26} />
                       </div>
                     )}
+                    <span className="absolute right-3 top-3 z-10 rounded-full bg-black/60 px-2.5 py-1 text-[10px] font-bold text-white backdrop-blur">
+                      {campaignKindLabel(run.format)}
+                    </span>
                     {run.review_count > 0 ? (
                       <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-[10px] font-bold text-zinc-950">
                         <Eye size={10} /> {run.review_count} perlu ditinjau
@@ -124,6 +128,12 @@ export default async function ProjectsPage({
                     <p className="truncate text-sm font-bold text-zinc-900">{run.product_name ?? "Kampanye"}</p>
                     <p className="mt-0.5 text-xs text-zinc-500">
                       {new Date(run.created_at).toLocaleDateString("id-ID", { day: "numeric", month: "short", year: "numeric" })}
+                      {campaignFormatLabel(run.format) && (
+                        <>
+                          <span className="mx-1.5 text-zinc-300">·</span>
+                          {campaignFormatLabel(run.format)}
+                        </>
+                      )}
                     </p>
                     <div className="mt-auto pt-3">
                       <div className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-100">

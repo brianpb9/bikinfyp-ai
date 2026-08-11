@@ -105,7 +105,7 @@ export function DashboardChrome({
           >
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Token</p>
             <p className="mt-1 truncate font-display text-lg font-bold text-white">{tokens(balanceIdr)}</p>
-            <p className="mt-0.5 text-[11px] font-semibold text-amber-400">Tambah kredit</p>
+            <p className="mt-0.5 text-[11px] font-semibold text-amber-400">Tambah token</p>
           </Link>
           {userEmail && (
             <Link
