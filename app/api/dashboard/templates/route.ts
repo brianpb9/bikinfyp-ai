@@ -4,6 +4,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled, pgAudit } from "@/lib/postgres/smoke-runtime";
+import { getPool } from "@/lib/postgres/pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,7 +29,7 @@ export async function GET(req: Request) {
   try {
     if (!postgresRuntimeEnabled()) return Response.json({ templates: [] });
     const { membership } = await requireOrgContextApi(req);
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       const rows = (await pool.query<Row>(
         `SELECT id, name, note, kind, format, duration_sec, quality_tier, hook_level,
@@ -38,7 +39,7 @@ export async function GET(req: Request) {
       )).rows;
       return Response.json({ templates: rows });
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
   } catch (err) {
     return errorResponse(err);
@@ -66,7 +67,7 @@ export async function POST(req: Request) {
     if (!Number.isInteger(count) || count < 2 || count > 6) throw ERR.BAD_REQUEST("Jumlah variasi harus 2-6.", "variant_count out of range.");
     const hookFamily = /^H([1-9]|1[0-6])$/.test(String(body.hook_family ?? "")) ? String(body.hook_family) : null;
 
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       // Batas per organisasi. Tanpa ini satu brand bisa menyimpan ribuan
       // template dan membuat galerinya sendiri tidak berguna — lagipula
@@ -89,7 +90,7 @@ export async function POST(req: Request) {
       await pgAudit(user.id, "template.created", "org_templates", id, { org_id: membership.org_id });
       return Response.json({ id, name });
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
   } catch (err) {
     return errorResponse(err);
@@ -103,13 +104,13 @@ export async function DELETE(req: Request) {
     const body = await req.json().catch(() => ({}));
     const id = String(body.id ?? "");
     if (!id) throw ERR.BAD_REQUEST("id wajib diisi.", "id is required.");
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       const res = await pool.query("DELETE FROM org_templates WHERE id=$1 AND org_id=$2", [id, membership.org_id]);
       if (!res.rowCount) throw ERR.NOT_FOUND("Templatenya");
       return Response.json({ deleted: true });
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
   } catch (err) {
     return errorResponse(err);

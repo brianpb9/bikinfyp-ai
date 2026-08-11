@@ -8,6 +8,7 @@ import { getAuthUser } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import pg from "pg";
+import { getPool } from "@/lib/postgres/pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,7 +66,7 @@ function contentDisposition(url: URL, relPath: string): Record<string, string> {
 /** A valid HMAC link is a bearer capability, never proof of account ownership. */
 async function fileBelongsToUser(relPath: string, userId: string): Promise<boolean> {
   if (postgresRuntimeEnabled()) {
-    const pool = new pg.Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       const result = await pool.query(`
         SELECT 1 FROM outputs o JOIN jobs j ON j.id=o.job_id
@@ -89,7 +90,7 @@ async function fileBelongsToUser(relPath: string, userId: string): Promise<boole
             AND (j.user_id=$2 OR EXISTS (SELECT 1 FROM org_members m WHERE m.org_id=j.org_id AND m.user_id=$2))
         LIMIT 1`, [relPath, userId]);
       return Boolean(result.rowCount);
-    } finally { await pool.end(); }
+    } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
   }
   const db = getDb();
   const output = db.prepare("SELECT 1 FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.video_url=? AND j.user_id=? LIMIT 1").get(relPath, userId);

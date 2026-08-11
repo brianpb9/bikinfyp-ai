@@ -5,6 +5,7 @@ import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { createSignedUrl } from "@/lib/signed-url";
 import { postgresRuntimeEnabled, pgAudit } from "@/lib/postgres/smoke-runtime";
+import { getPool } from "@/lib/postgres/pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,7 +30,7 @@ export async function GET(req: Request) {
   try {
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
     const { membership } = await requireOrgContextApi(req);
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       const plans = (await pool.query<PlanRow>(
         `SELECT pp.id, pp.job_id, pp.channel, pp.scheduled_at, pp.caption, pp.status, pp.posted_at,
@@ -66,7 +67,7 @@ export async function GET(req: Request) {
         ready: ready.map((r) => ({ job_id: r.job_id, product_name: r.product_name })),
       });
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
   } catch (err) {
     return errorResponse(err);
@@ -86,7 +87,7 @@ export async function POST(req: Request) {
     if (!CHANNELS.has(channel)) throw ERR.BAD_REQUEST("Kanal tidak dikenal.", "Unknown channel.");
     if (Number.isNaN(Date.parse(scheduledAt))) throw ERR.BAD_REQUEST("Tanggal/jamnya belum benar.", "Invalid scheduled_at.");
 
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       // Kepemilikan diperiksa lewat org_id job-nya, bukan lewat job_id saja.
       // Tanpa ini, siapa pun yang tahu sebuah job_id bisa menautkannya ke
@@ -106,7 +107,7 @@ export async function POST(req: Request) {
       await pgAudit(user.id, "post.planned", "post_plans", id, { org_id: membership.org_id, channel });
       return Response.json({ id });
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
   } catch (err) {
     return errorResponse(err);
@@ -123,7 +124,7 @@ export async function PATCH(req: Request) {
     if (!id) throw ERR.BAD_REQUEST("id wajib diisi.", "id is required.");
     if (!["planned", "posted", "skipped"].includes(status)) throw ERR.BAD_REQUEST("Status tidak dikenal.", "Unknown status.");
 
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       const res = await pool.query(
         "UPDATE post_plans SET status=$1, posted_at=$2 WHERE id=$3 AND org_id=$4",
@@ -133,7 +134,7 @@ export async function PATCH(req: Request) {
       await pgAudit(user.id, "post.status", "post_plans", id, { status });
       return Response.json({ ok: true });
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
   } catch (err) {
     return errorResponse(err);
@@ -147,13 +148,13 @@ export async function DELETE(req: Request) {
     const body = await req.json().catch(() => ({}));
     const id = String(body.id ?? "");
     if (!id) throw ERR.BAD_REQUEST("id wajib diisi.", "id is required.");
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       const res = await pool.query("DELETE FROM post_plans WHERE id=$1 AND org_id=$2", [id, membership.org_id]);
       if (!res.rowCount) throw ERR.NOT_FOUND("Rencananya");
       return Response.json({ deleted: true });
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
   } catch (err) {
     return errorResponse(err);

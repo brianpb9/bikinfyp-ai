@@ -11,6 +11,7 @@ import { getCreatorCategory } from "@/lib/personas";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { getPool } from "@/lib/postgres/pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -56,7 +57,7 @@ export async function POST(req: Request) {
       : null;
 
     const runId = typeof body.run_id === "string" && body.run_id ? body.run_id : crypto.randomUUID();
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     const jobsRepo = new PgJobsRepository(config.databaseUrl);
     const creditsRepo = new PgCreditPaymentRepository(config.databaseUrl);
     const results: ConfirmResult[] = [];
@@ -138,7 +139,7 @@ export async function POST(req: Request) {
         results.push({ status: "queued", script_id: scriptId, job_id: jobId });
       }
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
       await jobsRepo.close();
       await creditsRepo.close();
     }

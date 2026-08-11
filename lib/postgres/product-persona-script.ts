@@ -6,6 +6,7 @@
 import crypto from "node:crypto";
 import { Pool, type PoolClient } from "pg";
 import type { PersonaRow, ProductRow, ScriptRow } from "../db";
+import { getPool } from "./pool";
 
 export interface PgProductInput {
   sourceUrl?: string | null;
@@ -46,12 +47,12 @@ export class PgProductPersonaScriptRepository {
     if (!/^postgres(?:ql)?:\/\//i.test(databaseUrl)) {
       throw new Error("PgProductPersonaScriptRepository membutuhkan DATABASE_URL PostgreSQL.");
     }
-    this.pool = new Pool({ connectionString: databaseUrl });
+    this.pool = getPool(databaseUrl);
     this.now = options.now ?? (() => new Date().toISOString());
     this.uuid = options.uuid ?? (() => crypto.randomUUID());
   }
 
-  async close(): Promise<void> { await this.pool.end(); }
+  async close(): Promise<void> { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 
   async createProduct(userId: string, input: PgProductInput): Promise<ProductRow> {
     const client = await this.pool.connect();

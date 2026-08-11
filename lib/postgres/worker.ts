@@ -34,6 +34,7 @@ import { personSafeReferencePhotos } from "../media/person-safe-refs";
 import { loadJobShots, materializeJobShots, persistJobShots } from "./job-shots";
 import { PgCreditPaymentRepository } from "./credit-payment";
 import { PgJobsRepository } from "./jobs";
+import { getPool } from "./pool";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -57,7 +58,7 @@ type WorkerRow = {
 export async function processPostgresJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
   const databaseUrl = assertUrl();
   const jobs = new PgJobsRepository(databaseUrl, { stateTimeoutsMin: config.stateTimeoutsMin });
-  const pool = new Pool({ connectionString: databaseUrl });
+  const pool = getPool(databaseUrl);
   try {
     // j.* sudah bawa org_id (kolom asli tabel jobs, M1) — WorkerRow.org_id
     // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
@@ -93,7 +94,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
   } catch (error) {
     if (options.retryViaQueue) throw error;
     await jobs.failJob(jobId, error instanceof Error ? error.message : String(error));
-  } finally { await jobs.close(); await pool.end(); }
+  } finally { await jobs.close(); /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 
 async function runDeterministicFixture(row: WorkerRow, jobs: PgJobsRepository, pool: Pool) {

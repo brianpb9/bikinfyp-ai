@@ -4,6 +4,7 @@ import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { createSignedUrl } from "@/lib/signed-url";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { getPool } from "@/lib/postgres/pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,7 +24,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ runId: string }
     const { membership } = await requireOrgContextApi(req);
     const { runId } = await ctx.params;
 
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     let rows: BulkRunJob[];
     try {
       const result = await pool.query<BulkRunJob>(
@@ -38,7 +39,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ runId: string }
       );
       rows = result.rows;
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
     if (rows.length === 0) throw ERR.NOT_FOUND("Bulk run-nya");
 

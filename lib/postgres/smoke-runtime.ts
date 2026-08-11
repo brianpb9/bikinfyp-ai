@@ -19,6 +19,7 @@ import { PgJobsRepository } from "./jobs";
 import { PgCreditPaymentRepository } from "./credit-payment";
 import { runFf } from "../media/ffmpeg";
 import { mediaStorage } from "../storage";
+import { getPool } from "./pool";
 
 /**
  * PostgreSQL runtime switch.  `RACUN_POSTGRES_SMOKE=1` is retained solely for
@@ -44,8 +45,8 @@ export async function smokeFindOrCreateUser(phone: string): Promise<UserRow> {
   try { return await repo.findOrCreateUserByPhone(phone); } finally { await repo.close(); }
 }
 export async function smokeGetUser(userId: string): Promise<UserRow | null> {
-  const pool = new Pool({ connectionString: url() });
-  try { return (await pool.query<UserRow>("SELECT * FROM users WHERE id=$1", [userId])).rows[0] ?? null; } finally { await pool.end(); }
+  const pool = getPool(url());
+  try { return (await pool.query<UserRow>("SELECT * FROM users WHERE id=$1", [userId])).rows[0] ?? null; } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 // org_id IS NULL (F-ENT-01 fix, 2026-08-11): SEBELUM filter ini, seorang
 // user yang JUGA owner sebuah org (credit_ledger.user_id org SELALU diisi
@@ -54,14 +55,14 @@ export async function smokeGetUser(userId: string): Promise<UserRow | null> {
 // baris org itu. Baris retail lama tidak pernah punya org_id jadi filter
 // ini transparan buat semua user yang bukan owner org manapun.
 export async function pgGetBalance(userId: string): Promise<number> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try { return Number((await pool.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1 AND org_id IS NULL", [userId])).rows[0]?.balance ?? 0); }
-  finally { await pool.end(); }
+  finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 export async function pgGetLedger(userId: string, limit = 50) {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try { return (await pool.query("SELECT * FROM credit_ledger WHERE user_id=$1 AND org_id IS NULL ORDER BY created_at DESC,id DESC LIMIT $2", [userId, limit])).rows; }
-  finally { await pool.end(); }
+  finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 export async function pgCreditTopup(input: { userId: string; packageId: string; gateway: string; gatewayRef: string; rawPayload?: unknown }) {
   const repo = new PgCreditPaymentRepository(url()); try { return await repo.creditTopup(input); } finally { await repo.close(); }
@@ -76,22 +77,22 @@ export async function pgMarkPaymentInitiationFailed(gateway: string, gatewayRef:
   const repo = new PgCreditPaymentRepository(url()); try { return await repo.markPaymentInitiationFailed(gateway, gatewayRef, rawPayload); } finally { await repo.close(); }
 }
 export async function pgGetPayment(gatewayRef: string, userId?: string) {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try { return (await pool.query(`SELECT * FROM payments WHERE gateway_ref=$1${userId ? " AND user_id=$2" : ""}`, userId ? [gatewayRef, userId] : [gatewayRef])).rows[0] ?? null; }
-  finally { await pool.end(); }
+  finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 export async function pgFindUser(input: { id?: string; phone?: string }) {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try { return (await pool.query<UserRow>(input.id ? "SELECT * FROM users WHERE id=$1" : "SELECT * FROM users WHERE phone=$1", [input.id ?? input.phone ?? ""])).rows[0] ?? null; }
-  finally { await pool.end(); }
+  finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 export async function pgCanExtract(userId: string): Promise<boolean> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     const since = new Date(Date.now() - 15 * 60_000).toISOString();
     const result = await pool.query<{ n: number }>("SELECT COUNT(*)::int AS n FROM audit_log WHERE actor=$1 AND action='product.extract' AND created_at>$2", [userId, since]);
     return (result.rows[0]?.n ?? 0) < 10;
-  } finally { await pool.end(); }
+  } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 export async function pgAudit(actor: string, action: string, entity: string, entityId: string | null, meta: unknown = {}) {
   const repo = new PgAuthOtpAuditRepository(url(), { authSecret: config.authSecret, otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
@@ -143,7 +144,7 @@ export async function smokeApproveScript(userId: string, scriptId: string, updat
 }
 
 export async function smokeCreateJob(userId: string, input: { productId: string; scriptId: string; format: string; qualityTier: string; durationS: number; priceIdr: number }) {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     // The user-row lock serializes wallet spends and the script-row lock
     // serializes duplicate decisions. Read Committed then observes the latest
@@ -188,13 +189,13 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
       } finally { client.release(); }
     }
     throw new Error("Transaksi PostgreSQL admission habis retry.");
-  } finally { await pool.end(); }
+  } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 
 /** Deterministic local provider hook: no external media/provider credentials. */
 export async function smokeCompleteJob(jobId: string) {
   const jobs = new PgJobsRepository(url(), { stateTimeoutsMin: config.stateTimeoutsMin });
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     for (const state of ["GENERATING_VISUAL", "GENERATING_VOICE", "COMPOSITING", "QC_CHECK", "LABELING"] as const) {
       if (!(await jobs.transition(jobId, state, { provider: "deterministic-smoke" }))) throw new Error("Job smoke tidak aktif.");
@@ -214,23 +215,23 @@ export async function smokeCompleteJob(jobId: string) {
     await pool.query("UPDATE jobs SET provider_video='deterministic-smoke',provider_voice='none-silent-caption',cost_actual_idr=0,output_url=$1,qc_result=$2,completed_at=$3 WHERE id=$4", [outputUrl,JSON.stringify({ passed: true, checks: [{ code: "QC-08", status: "pass" }]}),at(),jobId]);
     if (!(await jobs.transition(jobId, "READY", { provider: "deterministic-smoke" }))) throw new Error("READY ditolak.");
     await pool.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,0,'capture',$3,NULL,$4)", [id(),job.user_id,jobId,at()]);
-  } finally { await jobs.close(); await pool.end(); }
+  } finally { await jobs.close(); /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
-export async function smokeGetJob(userId: string, jobId: string) { const pool = new Pool({ connectionString: url() }); try { return (await pool.query("SELECT * FROM jobs WHERE id=$1 AND user_id=$2", [jobId,userId])).rows[0] ?? null; } finally { await pool.end(); } }
-export async function smokeGetOutput(userId: string, jobId: string) { const pool = new Pool({ connectionString: url() }); try { return (await pool.query("SELECT o.* FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.job_id=$1 AND j.user_id=$2", [jobId,userId])).rows[0] ?? null; } finally { await pool.end(); } }
+export async function smokeGetJob(userId: string, jobId: string) { const pool = getPool(url()); try { return (await pool.query("SELECT * FROM jobs WHERE id=$1 AND user_id=$2", [jobId,userId])).rows[0] ?? null; } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ } }
+export async function smokeGetOutput(userId: string, jobId: string) { const pool = getPool(url()); try { return (await pool.query("SELECT o.* FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.job_id=$1 AND j.user_id=$2", [jobId,userId])).rows[0] ?? null; } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ } }
 export async function pgListJobs(userId: string) {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try { return (await pool.query("SELECT j.id,j.state,j.format,j.duration_s,j.created_at,j.completed_at,j.provider_video,j.provider_voice,j.cost_actual_idr,j.script_id,p.name AS product_name,p.images AS product_images,fs.score AS fyp_score,fs.posted_url AS fyp_posted_url FROM jobs j JOIN products p ON p.id=j.product_id LEFT JOIN fyp_snapshots fs ON fs.job_id=j.id WHERE j.user_id=$1 ORDER BY j.created_at DESC LIMIT 50", [userId])).rows; }
-  finally { await pool.end(); }
+  finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 
 /** Update daftar foto produk (append/hapus dari route photos) — owner check di
  * pemanggil via smokeGetProduct. */
 export async function pgSetProductImages(userId: string, productId: string, images: string[]) {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     await pool.query("UPDATE products SET images=$1 WHERE id=$2 AND user_id=$3", [JSON.stringify(images), productId, userId]);
-  } finally { await pool.end(); }
+  } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 
 /** Snapshot Skor FYP beku (padanan createFypSnapshot SQLite) — idempoten via
@@ -239,20 +240,20 @@ export async function pgSaveFypSnapshot(input: {
   jobId: string; scriptId: string; modelVersion: string; score: number;
   rawProbability: number; featuresJson: string;
 }) {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     await pool.query(
       `INSERT INTO fyp_snapshots (job_id, script_id, model_version, score, raw_probability, features_json, created_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT (job_id) DO NOTHING`,
       [input.jobId, input.scriptId, input.modelVersion, input.score, input.rawProbability, input.featuresJson, at()]
     );
-  } finally { await pool.end(); }
+  } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 
 /** Lapor hasil posting (padanan applyFypReport SQLite): posted_url BEKU setelah
  * terisi (nilai beda -> Error), outcome upsert. Validasi URL dilakukan pemanggil. */
 export async function pgApplyFypReport(userId: string, jobId: string, report: { postedUrl: string; views: number | null; orders: number | null }) {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -281,5 +282,5 @@ export async function pgApplyFypReport(userId: string, jobId: string, report: { 
   } catch (error) {
     await client.query("ROLLBACK").catch(() => undefined);
     throw error;
-  } finally { client.release(); await pool.end(); }
+  } finally { client.release(); /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }

@@ -7,6 +7,8 @@ import assert from "node:assert/strict";
 process.env.RACUN_NO_DOTENV = "1";
 // Node's ProcessEnv declares this property read-only in the current typings.
 (process.env as Record<string, string | undefined>).NODE_ENV = "production";
+// lib/secrets.ts menolak boot di production tanpa AUTH_SECRET yang layak.
+process.env.AUTH_SECRET = "x".repeat(48);
 process.env.ALLOW_DEV_LOGIN = "0";
 process.env.PROVIDER_VIDEO = "byteplus";
 delete process.env.RESEND_API_KEY;

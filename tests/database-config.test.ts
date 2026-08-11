@@ -46,6 +46,10 @@ test("database guard: getDb tidak pernah membuka SQLite di production", () => {
         ...process.env,
         NODE_ENV: "production",
         DATABASE_URL: "postgresql://user:secret@localhost/app",
+        // Wajib sejak lib/secrets.ts gagal-tertutup saat boot: tanpa ini
+        // prosesnya mati di penjaga rahasia sebelum menyentuh penjaga SQLite,
+        // dan tes ini menguji yang KEDUA. Produksi sungguhan juga menyetelnya.
+        AUTH_SECRET: "x".repeat(48),
         RACUN_NO_DOTENV: "1",
       },
       encoding: "utf8",

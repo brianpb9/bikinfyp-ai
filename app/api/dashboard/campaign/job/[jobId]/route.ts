@@ -8,6 +8,7 @@ import { enqueueJobResume } from "@/lib/job-queue";
 import { regenerateSceneTokens } from "@/lib/credits";
 import type { QualityTier } from "@/lib/providers/types";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { getPool } from "@/lib/postgres/pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,7 +50,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
     const { membership } = await requireOrgContextApi(req);
     const { jobId } = await ctx.params;
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       const job = await loadJob(pool, jobId, membership.org_id);
       if (!job) throw ERR.NOT_FOUND("Job-nya");
@@ -80,7 +81,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
         })),
       });
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
   } catch (err) {
     return errorResponse(err);
@@ -101,7 +102,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
     const action = body.action === "approve" ? "approve" : body.action === "regenerate" ? "regenerate" : null;
     if (!action) throw ERR.BAD_REQUEST("Aksi tidak dikenal.", "Unknown action.");
 
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       const job = await loadJob(pool, jobId, membership.org_id);
       if (!job) throw ERR.NOT_FOUND("Job-nya");
@@ -232,7 +233,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       await enqueueJobResume(jobId, `regen${idx}`);
       return Response.json({ job_id: jobId, idx, regenerating: true, tokens_charged: chargedTokens });
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
   } catch (err) {
     return errorResponse(err);

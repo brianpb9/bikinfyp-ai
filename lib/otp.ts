@@ -5,10 +5,14 @@
 import crypto from "node:crypto";
 import { getDb, now, uuid } from "./db";
 import { config } from "./config";
+import { otpHashKey } from "./secrets";
 
+// Salt OTP kini kunci turunan (HKDF), bukan AUTH_SECRET + ":otp". Kode OTP
+// yang belum terpakai jadi tidak cocok lagi setelah deploy — dampaknya kecil
+// karena umurnya 5 menit, dan pengguna cukup minta kode baru.
 const g = globalThis as unknown as { __otpSalt?: string };
 function salt(): string {
-  if (!g.__otpSalt) g.__otpSalt = config.authSecret + ":otp";
+  if (!g.__otpSalt) g.__otpSalt = otpHashKey().toString("hex");
   return g.__otpSalt;
 }
 

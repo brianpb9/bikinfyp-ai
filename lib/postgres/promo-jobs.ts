@@ -6,6 +6,7 @@
  */
 import crypto from "node:crypto";
 import { Pool } from "pg";
+import { getPool } from "./pool";
 
 export type PromoJobState = "QUEUED" | "GENERATING_HOOK" | "STITCHING" | "READY" | "FAILED";
 
@@ -41,10 +42,10 @@ export class PgPromoJobsRepository {
 
   constructor(databaseUrl: string) {
     if (!/^postgres(?:ql)?:\/\//i.test(databaseUrl)) throw new Error("PgPromoJobsRepository membutuhkan DATABASE_URL PostgreSQL.");
-    this.pool = new Pool({ connectionString: databaseUrl });
+    this.pool = getPool(databaseUrl);
   }
 
-  async close() { await this.pool.end(); }
+  async close() { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 
   async create(
     userId: string,

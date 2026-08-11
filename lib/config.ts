@@ -185,3 +185,10 @@ export function ensureDirs() {
     fs.mkdirSync(d, { recursive: true });
   }
 }
+
+// Gagal-tertutup pada rahasia tanda tangan. Diletakkan di sini, bukan di
+// getDb(), karena config diimpor oleh SEMUA jalur — termasuk runtime Postgres
+// yang tidak pernah menyentuh SQLite. Pemeriksaan yang hanya jalan di jalur
+// SQLite tidak akan pernah berjalan di produksi.
+import { assertAuthSecretSafe } from "./secrets";
+assertAuthSecretSafe();

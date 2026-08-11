@@ -6,6 +6,7 @@
 import crypto from "node:crypto";
 import { Pool, type PoolClient } from "pg";
 import { TOPUP_PACKAGES, type CreditOwner } from "../credits";
+import { getPool } from "./pool";
 
 type Payment = { id: string; user_id: string; gateway: string; gateway_ref: string; amount_idr: number; credits: number; status: string; raw_payload: string | null; created_at: string };
 function resolveOwner(owner: string | CreditOwner): CreditOwner {
@@ -19,12 +20,12 @@ export class PgCreditPaymentRepository {
 
   constructor(databaseUrl: string, options: { now?: () => string; uuid?: () => string } = {}) {
     if (!/^postgres(?:ql)?:\/\//i.test(databaseUrl)) throw new Error("PgCreditPaymentRepository membutuhkan DATABASE_URL PostgreSQL.");
-    this.pool = new Pool({ connectionString: databaseUrl });
+    this.pool = getPool(databaseUrl);
     this.now = options.now ?? (() => new Date().toISOString());
     this.uuid = options.uuid ?? (() => crypto.randomUUID());
   }
 
-  async close(): Promise<void> { await this.pool.end(); }
+  async close(): Promise<void> { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 
   async getBalance(owner: string | CreditOwner): Promise<number> {
     const { userId, orgId } = resolveOwner(owner);

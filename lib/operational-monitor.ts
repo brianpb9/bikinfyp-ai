@@ -9,6 +9,7 @@
 import crypto from "node:crypto";
 import { Pool } from "pg";
 import { config } from "./config";
+import { getPool } from "./postgres/pool";
 
 type Queryable = { query: (sql: string, values?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> };
 type Alert = { fingerprint: string; subject: string; text: string; meta: Record<string, unknown> };
@@ -97,7 +98,7 @@ export async function runOperationalMonitor(options: {
   if (config.midtransIsProduction) throw new Error("Monitoring operasional menolak berjalan saat MIDTRANS_IS_PRODUCTION=true.");
   if (!options.db && !/^postgres(?:ql)?:\/\//i.test(options.databaseUrl ?? config.databaseUrl)) throw new Error("Monitoring operasional memerlukan DATABASE_URL PostgreSQL.");
   if (!options.send && (!config.resendApiKey || !config.operationalAlertToEmail)) throw new Error("Monitoring aktif memerlukan RESEND_API_KEY dan OPERATIONAL_ALERT_TO_EMAIL.");
-  const pool = options.db ? undefined : new Pool({ connectionString: options.databaseUrl ?? config.databaseUrl });
+  const pool = options.db ? undefined : getPool(options.databaseUrl ?? config.databaseUrl);
   const db = options.db ?? pool!;
   const now = options.now ?? new Date();
   const settings = monitoringSettings();

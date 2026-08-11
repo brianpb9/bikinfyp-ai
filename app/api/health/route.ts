@@ -4,6 +4,7 @@ import pg from "pg";
 import { config } from "@/lib/config";
 import { assertQueueConfiguration } from "@/lib/job-queue";
 import { jobIntakeMode } from "@/lib/job-intake";
+import { getPool } from "@/lib/postgres/pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ async function pendingMigrations(): Promise<string[]> {
   if (migrationCache && Date.now() - migrationCache.at < 5 * 60 * 1000) return migrationCache.pending;
   const dir = path.join(process.cwd(), "migrations", "postgres");
   const files = fs.readdirSync(dir).filter((n) => /^\d{4}_[a-z0-9_]+\.sql$/.test(n)).sort();
-  const pool = new pg.Pool({ connectionString: config.databaseUrl });
+  const pool = getPool(config.databaseUrl);
   try {
     const applied = new Set(
       (await pool.query<{ version: string }>("SELECT version FROM schema_migrations")).rows.map((r) => r.version)
@@ -35,7 +36,7 @@ async function pendingMigrations(): Promise<string[]> {
     migrationCache = { at: Date.now(), pending: files };
     return files;
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 

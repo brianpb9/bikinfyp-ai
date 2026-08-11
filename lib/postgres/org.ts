@@ -11,6 +11,7 @@
 import crypto from "node:crypto";
 import { Pool } from "pg";
 import { config } from "../config";
+import { getPool } from "./pool";
 
 function url() {
   if (!/^postgres(?:ql)?:\/\//i.test(config.databaseUrl)) {
@@ -43,7 +44,7 @@ export interface OrgMembership {
 
 /** Semua org yang diikuti user ini (biasanya 0 utk retail, 1 utk brand MVP). */
 export async function pgGetUserOrgs(userId: string): Promise<OrgMembership[]> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     const res = await pool.query<OrgMembership>(
       `SELECT o.id AS org_id, o.name AS org_name, o.slug AS org_slug, o.status AS org_status, m.role
@@ -53,25 +54,25 @@ export async function pgGetUserOrgs(userId: string): Promise<OrgMembership[]> {
     );
     return res.rows;
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
 export async function pgGetOrgBySlug(slug: string): Promise<Organization | null> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     return (await pool.query<Organization>("SELECT * FROM organizations WHERE slug=$1", [slug])).rows[0] ?? null;
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
 export async function pgGetOrgById(orgId: string): Promise<Organization | null> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     return (await pool.query<Organization>("SELECT * FROM organizations WHERE id=$1", [orgId])).rows[0] ?? null;
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
@@ -79,19 +80,19 @@ export async function pgGetOrgById(orgId: string): Promise<Organization | null> 
 export async function pgUpdateOrgProfile(orgId: string, profile: {
   websiteUrl: string; businessType: string; category: string; audience: string; elevatorPitch: string;
 }): Promise<void> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     await pool.query(
       "UPDATE organizations SET website_url=$1, business_type=$2, category=$3, audience=$4, elevator_pitch=$5 WHERE id=$6",
       [profile.websiteUrl, profile.businessType, profile.category, profile.audience, profile.elevatorPitch, orgId]
     );
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
 export async function pgGetOrgBalance(orgId: string): Promise<number> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     const res = await pool.query<{ balance: string }>(
       "SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE org_id=$1",
@@ -99,7 +100,7 @@ export async function pgGetOrgBalance(orgId: string): Promise<number> {
     );
     return Number(res.rows[0]?.balance ?? 0);
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
@@ -124,7 +125,7 @@ export interface RecentBulkRun {
 /** Bulk run terbaru org ini (M4) — dikelompokkan dari jobs.bulk_run_id,
  * tidak ada tabel bulk_runs terpisah (keputusan MVP di rencana M3). */
 export async function pgListRecentBulkRuns(orgId: string, limit = 5): Promise<RecentBulkRun[]> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     const res = await pool.query<RecentBulkRun & { created_at: string }>(
       // Nama produk & thumbnail diambil lewat sub-query berkorelasi, BUKAN
@@ -148,12 +149,12 @@ export async function pgListRecentBulkRuns(orgId: string, limit = 5): Promise<Re
     );
     return res.rows;
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
 export async function pgGetOrgLedger(orgId: string, limit = 50) {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     return (
       await pool.query(
@@ -162,7 +163,7 @@ export async function pgGetOrgLedger(orgId: string, limit = 50) {
       )
     ).rows;
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
@@ -178,7 +179,7 @@ export interface OrgVideoStats {
  * per org) satu COUNT jauh lebih murah daripada menjaga penghitung tersendiri
  * yang bisa melenceng. */
 export async function pgGetOrgVideoStats(orgId: string): Promise<OrgVideoStats> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     const res = await pool.query<{ total: string; ready: string; awaiting_review: string; spent_idr: string }>(
       `SELECT COUNT(*)::text AS total,
@@ -196,7 +197,7 @@ export async function pgGetOrgVideoStats(orgId: string): Promise<OrgVideoStats> 
       spent_idr: Number(r?.spent_idr ?? 0),
     };
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
@@ -210,7 +211,7 @@ export interface OrgMemberRow {
 }
 
 export async function pgListOrgMembers(orgId: string): Promise<OrgMemberRow[]> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     return (
       await pool.query<OrgMemberRow>(
@@ -221,7 +222,7 @@ export async function pgListOrgMembers(orgId: string): Promise<OrgMemberRow[]> {
       )
     ).rows;
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
@@ -241,7 +242,7 @@ export async function pgAddOrgMemberByEmail(
   orgId: string,
   email: string
 ): Promise<{ status: "added" | "exists"; userId: string }> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     const found = await pool.query<{ id: string }>("SELECT id FROM users WHERE lower(email) = lower($1)", [email]);
     let userId = found.rows[0]?.id ?? null;
@@ -260,7 +261,7 @@ export async function pgAddOrgMemberByEmail(
     );
     return { status: "added", userId };
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
@@ -268,12 +269,12 @@ export async function pgAddOrgMemberByEmail(
  * organisasi tanpa pemilik tidak punya siapa pun yang berhak mengundang lagi,
  * dan itu hanya bisa diperbaiki lewat akses database. */
 export async function pgRemoveOrgMember(orgId: string, userId: string): Promise<boolean> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     const res = await pool.query("DELETE FROM org_members WHERE org_id=$1 AND user_id=$2 AND role <> 'owner'", [orgId, userId]);
     return (res.rowCount ?? 0) > 0;
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }
 
@@ -292,7 +293,7 @@ export async function pgSaveOnboarding(orgId: string, input: {
   audience?: string | null;
   elevatorPitch?: string | null;
 }): Promise<void> {
-  const pool = new Pool({ connectionString: url() });
+  const pool = getPool(url());
   try {
     // Dua pernyataan, bukan satu, DENGAN SENGAJA.
     //
@@ -324,6 +325,6 @@ export async function pgSaveOnboarding(orgId: string, input: {
       console.error("[onboarding] kolom onboarded_at belum ada — migrasi 0018 belum diterapkan");
     }
   } finally {
-    await pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 }

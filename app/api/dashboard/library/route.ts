@@ -4,6 +4,7 @@ import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { createSignedUrl } from "@/lib/signed-url";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { getPool } from "@/lib/postgres/pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -40,7 +41,7 @@ export async function GET(req: Request) {
     const filterRaw = url.searchParams.get("filter") ?? "all";
     const filter = FILTERS.has(filterRaw) ? filterRaw : "all";
 
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     let rows: Row[];
     try {
       // thumb diambil dari scene PERTAMA (job_shots idx=0) kalau ada. Job yang
@@ -61,7 +62,7 @@ export async function GET(req: Request) {
       );
       rows = result.rows;
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
 
     const all = rows.map((row, i) => ({

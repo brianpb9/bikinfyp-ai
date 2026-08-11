@@ -8,6 +8,7 @@ import crypto from "node:crypto";
 import { Pool, type PoolClient } from "pg";
 import { config } from "../config";
 import type { UserRow } from "../db";
+import { getPool } from "./pool";
 
 export interface PgAuthOtpAuditOptions {
   authSecret: string;
@@ -50,13 +51,13 @@ export class PgAuthOtpAuditRepository {
 
   constructor(databaseUrl: string, private readonly options: PgAuthOtpAuditOptions) {
     assertPostgresUrl(databaseUrl);
-    this.pool = new Pool({ connectionString: databaseUrl });
+    this.pool = getPool(databaseUrl);
     this.now = options.now ?? defaultNow;
     this.uuid = options.uuid ?? defaultUuid;
   }
 
   async close(): Promise<void> {
-    await this.pool.end();
+    /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
 
   async findOrCreateUserByEmail(email: string): Promise<UserRow> {

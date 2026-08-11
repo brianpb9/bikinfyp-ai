@@ -7,6 +7,7 @@ import { extractFromUrl, cleanProductName } from "@/lib/extract";
 import { downloadProductImages } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { getPool } from "@/lib/postgres/pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,14 +123,14 @@ export async function PATCH(req: Request) {
     const rawStock = Number(body.promo_stock_left);
     const promoStock = Number.isFinite(rawStock) && rawStock > 0 ? Math.round(rawStock) : null;
 
-    const pool = new Pool({ connectionString: config.databaseUrl });
+    const pool = getPool(config.databaseUrl);
     try {
       await pool.query(
         "UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4, brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8 WHERE id=$9 AND user_id=$10",
         [name, priceIdr, category, visualDesc, brandBrief, promoBefore, promoEndsAt, promoStock, productId, user.id]
       );
     } finally {
-      await pool.end();
+      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
     await pgAudit(user.id, "product.updated", "products", productId, { campaign: true });
 

@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 import { Pool, type PoolClient } from "pg";
 import { JOB_STATES, type JobState } from "../jobs";
+import { getPool } from "./pool";
 
 export type PgJob = { id: string; user_id: string; org_id: string | null; state: JobState; created_at: string; state_changed_at: string | null; completed_at: string | null; cost_actual_idr: number; provider_video: string | null; provider_voice: string | null; output_url: string | null };
 type StateTimeouts = Partial<Record<string, number>>;
@@ -17,12 +18,12 @@ export class PgJobsRepository {
 
   constructor(databaseUrl: string, options: { now?: () => string; uuid?: () => string; stateTimeoutsMin?: StateTimeouts } = {}) {
     if (!/^postgres(?:ql)?:\/\//i.test(databaseUrl)) throw new Error("PgJobsRepository membutuhkan DATABASE_URL PostgreSQL.");
-    this.pool = new Pool({ connectionString: databaseUrl });
+    this.pool = getPool(databaseUrl);
     this.now = options.now ?? (() => new Date().toISOString());
     this.uuid = options.uuid ?? (() => crypto.randomUUID());
     this.timeouts = options.stateTimeoutsMin ?? {};
   }
-  async close() { await this.pool.end(); }
+  async close() { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
   async getJob(id: string): Promise<PgJob | undefined> { return (await this.pool.query<PgJob>("SELECT id,user_id,org_id,state,created_at,state_changed_at,completed_at,cost_actual_idr,provider_video,provider_voice,output_url FROM jobs WHERE id=$1", [id])).rows[0]; }
 
   /** Mirrors SQLite's deliberately permissive active->active transition and terminal guard. */
