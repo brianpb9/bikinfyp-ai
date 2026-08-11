@@ -119,12 +119,17 @@ export default function TemplatesPage() {
         ))}
       </div>
 
-      <ul className="grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+      {/* items-start: sejak kotak pratinjau mengikuti rasio videonya masing-
+          masing, tinggi kartu jadi berbeda-beda. Tanpa ini kartu TVC yang
+          landscape diregangkan setinggi kartu potret di baris yang sama dan
+          badannya bolong besar di tengah. Lebih baik kartunya berhenti sesuai
+          isinya. */}
+      <ul className="grid items-start gap-5 sm:grid-cols-2 lg:grid-cols-4">
         {visible.map((t) => (
           <li key={t.id}>
             <Link
               href={`/dashboard/campaign?template=${t.id}`}
-              className="group flex h-full flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-md"
+              className="group flex flex-col overflow-hidden rounded-2xl border border-zinc-200 bg-white shadow-sm transition-all hover:-translate-y-0.5 hover:border-amber-400 hover:shadow-md"
             >
               {/* Kotaknya MENGIKUTI rasio videonya sendiri — klip landscape
                   dapat kotak landscape. Rasio dibaca dari metadata berkas,

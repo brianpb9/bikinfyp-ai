@@ -38,6 +38,11 @@ export interface CampaignTemplate {
   accent: "amber" | "rose" | "emerald" | "violet" | "sky" | "zinc";
   /** Rute TVC — hanya untuk kind "tvc". Lihat lib/media/shot-planner.ts. */
   tvcRoute?: "luxury" | "reallife";
+  /** Rasio yang dipaksa template ini. Kosong = ikut pilihan pengguna (9:16).
+   *
+   * Ada karena dua template TVC ditulis dan dirender 16:9 landscape: brand
+   * melihat pratinjau landscape, lalu tanpa ini hasilnya keluar potret. */
+  ratio?: "9:16" | "1:1" | "16:9";
 }
 
 export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
@@ -137,6 +142,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
     hookLevel: "normal", hookFamily: "H12", count: 2, tvcRoute: "luxury",
     bestFor: ["beauty", "health", "kitchen"],
+    ratio: "16:9",
     preview: "/previews/tvc-the-drop.mp4", accent: "zinc",
   },
   {
@@ -146,6 +152,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
     hookLevel: "normal", hookFamily: "H11", count: 2, tvcRoute: "reallife",
     bestFor: ["beauty", "health", "fashion"],
+    ratio: "16:9",
     preview: "/previews/tvc-seharian.mp4", accent: "sky",
   },
 ];

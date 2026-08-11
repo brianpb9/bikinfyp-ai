@@ -11,6 +11,7 @@ import { rupiah } from "../../_components/format";
 import { Stepper } from "../../_components/Stepper";
 import { AVATAR_PRESETS, type AvatarGender } from "@/lib/avatar-presets";
 import { getTemplate, type CampaignTemplate } from "@/lib/templates";
+import { PreviewVideo } from "../../_components/PreviewVideo";
 
 type Kind = "affiliate" | "ads" | "tvc";
 type Format = "talking_head" | "hands_only" | "tvc" | "ads";
@@ -178,6 +179,10 @@ export default function CampaignPage() {
     setDurationSec(t.durationSec);
     setHookLevel(t.hookLevel as HookLevel);
     setCount(t.count);
+    // Rasio ikut template kalau template memang menentukannya. Dua template
+    // TVC ditulis dan dirender 16:9 — brand melihat pratinjau landscape di
+    // galeri, jadi hasilnya harus landscape juga, bukan potret 9:16.
+    if (t.ratio) setRatio(t.ratio);
     // Langsung ke langkah Produk: jenis videonya sudah ditentukan template,
     // menahan brand di layar pilihan jenis cuma menyuruh mengulang keputusan
     // yang baru saja dia ambil di galeri.
@@ -373,11 +378,11 @@ export default function CampaignPage() {
             {([
               { id: "affiliate" as const, icon: ShoppingBag, title: "AI UGC Affiliate", desc: "Jualan produk fisik ke TikTok Shop. AI yang peragakan produkmu — cukup foto.", ready: true, preview: "/previews/format-tangan.mp4" },
               { id: "ads" as const, icon: Megaphone, title: "AI UGC Ads", desc: "Buat app, jasa, atau toko — yang tidak punya barang fisik. Presenter AI yang bicara.", ready: true, preview: "/previews/format-ads.mp4" },
-              // Preview TVC: klip AI sungguhan dari Brian (2026-08-11),
-              // menggantikan still-yang-digerakkan sebelumnya. Sumbernya
-              // 1280x720 tapi isinya sudah pillarbox — dipotong ke isi
-              // aslinya lalu ke 9:16 agar sejajar dengan preview lain.
-              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Sinematik, kamera terkontrol, pencahayaan ditata, ditutup hero shot produk.", ready: true, preview: "/previews/format-tvc.mp4" },
+              // Preview TVC: potongan TVC "The Drop" yang benar-benar diproduksi
+              // (Brian, 2026-08-11) — klip yang sama dengan template TVC di
+              // galeri, jadi apa yang dilihat di sini persis yang dia dapat.
+              // Landscape 16:9 asli; kotaknya ikut, bukan dipaksa 9:16.
+              { id: "tvc" as const, icon: Film, title: "AI TVC", desc: "Sinematik, kamera terkontrol, pencahayaan ditata, ditutup hero shot produk.", ready: true, preview: "/previews/tvc-the-drop.mp4" },
             ]).map((k) => {
               const Icon = k.icon;
               const active = kind === k.id;
@@ -400,25 +405,32 @@ export default function CampaignPage() {
                     else if (format === "tvc" || format === "ads") setFormat("hands_only");
                   }}
                   disabled={!k.ready}
-                  className={`rounded-2xl border-2 bg-white p-5 text-left shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
+                  // flex-col + justify-start WAJIB: browser memusatkan isi
+                  // <button> secara vertikal, dan begitu kartu-kartu ini
+                  // diregangkan sama tinggi oleh grid, kartu yang isinya lebih
+                  // pendek (klip landscape) melayang di tengah dengan celah
+                  // besar di atasnya.
+                  className={`flex flex-col items-stretch justify-start rounded-2xl border-2 bg-white p-5 text-left shadow-sm transition-colors disabled:cursor-not-allowed disabled:opacity-55 ${
                     active ? "border-amber-500" : "border-zinc-200 hover:border-zinc-300"
                   }`}
                 >
                   {/* Contoh hasil nyata, bukan ilustrasi — user memilih HASIL
                       yang kelihatan, bukan label abstrak (pola yang sama
                       dipakai halaman jenis di retail). */}
-                  {k.preview ? (
-                    <video
+                  {/* Ikut rasio videonya, sama seperti galeri template — kartu
+                      TVC memakai klip landscape, jadi memaku 9:16 di sini akan
+                      memotongnya persis seperti bug yang baru diperbaiki. */}
+                  <div className="mb-3 overflow-hidden rounded-xl">
+                    <PreviewVideo
                       src={k.preview}
-                      autoPlay muted loop playsInline
-                      className="mb-3 aspect-[9/16] max-h-56 w-full rounded-xl bg-zinc-100 object-cover"
+                      fallback={
+                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-zinc-500">
+                          <Film size={26} />
+                          <span className="text-[11px] font-medium">Contoh menyusul</span>
+                        </div>
+                      }
                     />
-                  ) : (
-                    <div className="mb-3 flex aspect-[9/16] max-h-56 w-full flex-col items-center justify-center gap-2 rounded-xl bg-zinc-900 text-zinc-500">
-                      <Film size={26} />
-                      <span className="text-[11px] font-medium">Contoh menyusul</span>
-                    </div>
-                  )}
+                  </div>
                   <Icon size={22} className={active ? "text-amber-600" : "text-zinc-400"} />
                   <p className="mt-3 flex items-center gap-2 font-display text-base font-bold text-zinc-900">
                     {k.title}
@@ -675,7 +687,10 @@ export default function CampaignPage() {
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Format</p>
               <div className="flex gap-2">
                 {(kind === "tvc"
-                  ? [{ id: "tvc" as const, label: "TVC (presenter + struktur iklan)" }]
+                  // "presenter" itu bahasa UGC dan bertentangan dengan kartu
+                  // Jenis yang menjanjikan iklan TV sinematik. TVC di sini
+                  // memang iklan TV: kamera terkontrol, ditutup hero shot.
+                  ? [{ id: "tvc" as const, label: "TVC (sinematik + hero shot)" }]
                   : [{ id: "talking_head" as const, label: "Wajah AI" }, { id: "hands_only" as const, label: "Tangan + VO" }]
                 ).map((f) => (
                   <button key={f.id}
