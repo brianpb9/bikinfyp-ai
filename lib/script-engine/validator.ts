@@ -18,6 +18,14 @@ export interface ScriptToValidate {
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
   /** Durasi video — L-05 (batas kata) skala proporsional dari basis 15 dtk. Default 15. */
   durationSec?: number;
+  /** Jatah kata template (total seluruh video). Kalau ada, L-05 memakai ini.
+   *
+   * WAJIB ada. Komentar L-05 di bawah sudah memperingatkan bahwa batas di sini
+   * dan target di templates.ts harus sinkron — dan saya melanggarnya sendiri
+   * (2026-08-11): target diturunkan ke 22 kata untuk empat template tanpa VO,
+   * tapi batas L-05 dibiarkan 32-48. Akibatnya SETIAP varian keempat template
+   * itu ditolak validator dan tidak ada satu pun skrip yang bisa dibuat. */
+  wordBudget?: number;
 }
 
 export type ValidationMode = "strict" | "light";
@@ -132,8 +140,14 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   const durationScale = (script.durationSec ?? 15) / 15;
   const wc = wordCount(fullText);
   const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
-  const minWc = Math.round(baseMinWc * durationScale);
-  const maxWc = Math.round(baseMaxWc * durationScale);
+  // Jatah template memakai toleransi yang sama dengan templates.ts (+/-15%)
+  // dan TIDAK diskalakan durasi — batasnya beban baca, bukan kecepatan bicara.
+  const minWc = script.wordBudget
+    ? Math.round(script.wordBudget * 0.85)
+    : Math.round(baseMinWc * durationScale);
+  const maxWc = script.wordBudget
+    ? Math.round(script.wordBudget * 1.15)
+    : Math.round(baseMaxWc * durationScale);
   if (wc < minWc || wc > maxWc)
     push(false, {
       rule: "L-05",

@@ -227,7 +227,7 @@ function generateOne(
       {
         hook_family: family, register, segments: segs, productName: product.name,
         priceIdr: product.price_idr, promoPriceBeforeIdr: promo?.beforeIdr ?? null,
-        qualityTier: tier, durationSec,
+        qualityTier: tier, durationSec, wordBudget,
       },
       "strict"
     );
