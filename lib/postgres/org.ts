@@ -294,6 +294,14 @@ export async function pgSaveOnboarding(orgId: string, input: {
 }): Promise<void> {
   const pool = new Pool({ connectionString: url() });
   try {
+    // Dua pernyataan, bukan satu, DENGAN SENGAJA.
+    //
+    // Kolom profil sudah ada sejak migrasi 0014; onboarded_at baru ada di
+    // 0018. Kalau keduanya digabung dan 0018 belum diterapkan, seluruh
+    // penyimpanan gagal dan brand mentok di langkah terakhir tanpa jalan
+    // keluar — persis yang menimpa Brian di produksi 2026-08-11. Memisahkannya
+    // berarti jawaban yang sudah dia isi TETAP tersimpan; yang hilang hanya
+    // penandanya, dan itu cuma berarti perkenalannya muncul sekali lagi.
     await pool.query(
       `UPDATE organizations SET
          name = COALESCE(NULLIF($2, ''), name),
@@ -301,13 +309,20 @@ export async function pgSaveOnboarding(orgId: string, input: {
          business_type = COALESCE(NULLIF($4, ''), business_type),
          category = COALESCE(NULLIF($5, ''), category),
          audience = COALESCE(NULLIF($6, ''), audience),
-         elevator_pitch = COALESCE(NULLIF($7, ''), elevator_pitch),
-         onboarded_at = $8
+         elevator_pitch = COALESCE(NULLIF($7, ''), elevator_pitch)
        WHERE id = $1`,
       [orgId, input.name ?? "", input.websiteUrl ?? "", input.businessType ?? "",
-       input.category ?? "", input.audience ?? "", input.elevatorPitch ?? "",
-       new Date().toISOString()]
+       input.category ?? "", input.audience ?? "", input.elevatorPitch ?? ""]
     );
+    try {
+      await pool.query("UPDATE organizations SET onboarded_at = $2 WHERE id = $1",
+        [orgId, new Date().toISOString()]);
+    } catch (err) {
+      // 42703 = undefined_column. Hanya itu yang boleh dimaafkan di sini —
+      // kegagalan lain (koneksi putus, hak akses) tetap dilempar.
+      if ((err as { code?: string }).code !== "42703") throw err;
+      console.error("[onboarding] kolom onboarded_at belum ada — migrasi 0018 belum diterapkan");
+    }
   } finally {
     await pool.end();
   }

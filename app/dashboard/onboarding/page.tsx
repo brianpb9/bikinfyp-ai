@@ -169,7 +169,7 @@ export default function OnboardingPage() {
         <div className="space-y-5">
           <div className="text-center">
             <h1 className="font-display text-2xl font-bold text-zinc-900">Siap mulai</h1>
-            <p className="mt-1 text-sm text-zinc-500">Saldo kredit organisasi diatur bareng tim kami.</p>
+            <p className="mt-1 text-sm text-zinc-500">Token organisasi diatur bareng tim kami.</p>
           </div>
           <div className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
             {[
@@ -183,7 +183,7 @@ export default function OnboardingPage() {
             ))}
           </div>
           <p className="text-center text-xs text-zinc-500">
-            Mau lihat paket dan harganya? Buka <b>Kredit &amp; tagihan</b> kapan saja dari menu Profil.
+            Mau lihat paket dan harganya? Buka <b>Token &amp; tagihan</b> kapan saja dari menu Profil.
           </p>
         </div>
       )}
