@@ -30,6 +30,9 @@ CREATE TABLE IF NOT EXISTS organizations (
   category TEXT,
   audience TEXT,
   elevator_pitch TEXT,
+  -- Kategori dalam kosakata internal (bestFor di lib/templates.ts) — kunci
+  -- untuk menghitung "Pendekatan konten". Lihat 0028_org_product_category.sql.
+  product_category TEXT,
   -- Penanda onboarding selesai (termasuk saat sengaja dilewati). Lihat
   -- migrations/postgres/0018_org_onboarded.sql.
   onboarded_at TEXT,

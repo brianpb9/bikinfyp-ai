@@ -8,6 +8,7 @@ import { getOrgBalance, getOrgById } from "@/lib/org";
 import { pgGetOrgBalance, pgGetOrgById, pgGetOrgVideoStats, type OrgVideoStats } from "@/lib/postgres/org";
 import { tokens } from "../../_components/format";
 import { BusinessAnalysisCard } from "../../_components/BusinessAnalysisCard";
+import { buildBrandApproach } from "@/lib/brand-approach";
 import { BrandKitCard } from "../../_components/BrandKitCard";
 import { LogoutButton } from "../../_components/ProfileActions";
 
@@ -131,7 +132,18 @@ export default async function ProfilePage() {
         <BusinessAnalysisCard initial={{
           website_url: org?.website_url ?? null, business_type: org?.business_type ?? null,
           category: org?.category ?? null, audience: org?.audience ?? null, elevator_pitch: org?.elevator_pitch ?? null,
-        }} />
+          // Kunci untuk menghitung ulang "Pendekatan konten" setiap render,
+          // supaya saran tetap ikut katalog template yang berlaku sekarang.
+          product_category: org?.product_category ?? null,
+        }}
+        // Dihitung di server tiap render, TIDAK diambil dari database. Isinya
+        // turunan katalog template yang ikut versi kode; menyimpannya berarti
+        // brand melihat saran dari katalog lama setelah kami mengubah template.
+        approach={org?.product_category ? buildBrandApproach({
+          category: org.product_category,
+          businessType: org.business_type ?? undefined,
+        }) : null}
+        />
       </section>
 
       {/* Bantuan & akun */}

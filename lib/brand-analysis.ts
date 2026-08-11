@@ -57,12 +57,37 @@ export async function fetchBrandHomepage(rawUrl: string): Promise<BrandHomepage>
   return { url: normalized, title, ogDescription, bodyText };
 }
 
+/** Kosakata kategori INTERNAL — sama dengan `bestFor` di lib/templates.ts.
+ *
+ *  `category` yang lama adalah teks bebas ("Agency Digital Marketing"), enak
+ *  dibaca manusia tapi tidak bisa dipakai mencocokkan template. Field ini
+ *  dipaksa masuk ke daftar tertutup supaya lib/brand-approach.ts punya kunci
+ *  yang andal. Keduanya disimpan: yang bebas untuk ditampilkan, yang tertutup
+ *  untuk dihitung. */
+export const KATEGORI_INTERNAL = [
+  "beauty", "health", "fashion", "muslim_fashion", "food",
+  "kitchen", "home", "gadget", "electronics", "kids",
+  "jasa", "app", "toko", "default",
+] as const;
+export type KategoriInternal = (typeof KATEGORI_INTERNAL)[number];
+
 export interface BrandProfile {
   business_name: string;
   business_type: string;
   category: string;
   audience: string;
   elevator_pitch: string;
+  /** Kategori dalam kosakata internal — kunci untuk memilih template. */
+  product_category: KategoriInternal;
+  /** Nilai jual yang BRAND SENDIRI tulis di websitenya.
+   *
+   *  Ini bukan hiasan. Validator L-13/L-14 melarang mesin mengarang klaim yang
+   *  tidak diberikan brand, jadi daftar ini adalah bahan sah yang boleh masuk
+   *  skrip — dan sekaligus jawaban atas "kenapa videonya tidak menyebut
+   *  keunggulan kami?". */
+  selling_points: string[];
+  /** Klaim di website mereka yang berisiko diulang di video. */
+  risky_claims: string[];
 }
 
 /** Kirim ringkasan homepage ke Gemini, minta profil bisnis terstruktur. */
@@ -76,8 +101,15 @@ export async function analyzeBrandProfile(page: BrandHomepage): Promise<BrandPro
     "(e-commerce/manufacturer selling physical products)), category (short: e.g. \"Skincare\", \"Fashion\", " +
     '"Agency Digital Marketing"), audience (who the business sells to, one short phrase), elevator_pitch ' +
     "(2-3 sentences introducing the business, written for a brand's own marketing use, confident and specific, " +
-    "not generic). If the page content is too thin to be confident, make a reasonable best guess rather than " +
-    "leaving fields empty. Output ONLY the JSON object, no markdown fences, no other text.";
+    "not generic), product_category (MUST be exactly one of: " + KATEGORI_INTERNAL.join(", ") +
+    " — use \"default\" only if truly none fit), selling_points (JSON array of 2-4 short strings: the concrete " +
+    "advantages THIS PAGE actually claims, in the brand's own terms — ingredients, guarantees, certifications, " +
+    "materials, coverage. Do NOT invent any; if the page states none, return an empty array), risky_claims " +
+    "(JSON array of 0-3 short strings: claims on this page that would be legally or factually risky to repeat " +
+    "in an ad — medical/curative promises, unverifiable superlatives like \"nomor 1\", guaranteed results. " +
+    "Empty array if none). If the page content is too thin to be confident, make a reasonable best guess for " +
+    "the text fields rather than leaving them empty — but NEVER invent selling_points or risky_claims. " +
+    "Output ONLY the JSON object, no markdown fences, no other text.";
   const prompt = `${instruction}\n\nURL: ${page.url}\nTitle: ${page.title ?? "(tidak ada)"}\nMeta description: ${page.ogDescription ?? "(tidak ada)"}\nIsi halaman:\n${page.bodyText}`;
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${config.geminiApiKey}`,
@@ -106,5 +138,22 @@ export async function analyzeBrandProfile(page: BrandHomepage): Promise<BrandPro
   for (const key of required) {
     if (typeof parsed[key] !== "string" || !parsed[key]) throw new Error(`Gemini: field "${key}" hilang dari hasil analisa.`);
   }
-  return parsed as BrandProfile;
+  // Field baru TIDAK ikut daftar wajib: analisa yang sudah benar tidak boleh
+  // gagal total cuma karena model melewatkan satu tambahan. Yang dilakukan di
+  // sini adalah membersihkannya jadi bentuk yang aman dipakai.
+  const kategori = KATEGORI_INTERNAL.includes(parsed.product_category as KategoriInternal)
+    ? (parsed.product_category as KategoriInternal)
+    : "default"; // model mengarang kategori di luar daftar -> jatuh ke default, bukan diteruskan
+  const daftarPendek = (v: unknown, maks: number) =>
+    (Array.isArray(v) ? v : [])
+      .filter((x): x is string => typeof x === "string" && x.trim().length > 0)
+      .map((x) => x.trim().slice(0, 120))
+      .slice(0, maks);
+
+  return {
+    ...(parsed as BrandProfile),
+    product_category: kategori,
+    selling_points: daftarPendek(parsed.selling_points, 4),
+    risky_claims: daftarPendek(parsed.risky_claims, 3),
+  };
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, Building2, Globe, Loader2, RotateCcw, Sparkles } from "lucide-react";
+import { AlertCircle, Building2, Check, Globe, Loader2, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { apiFetch, ApiFail } from "../../_components/api";
 
 export interface BrandProfile {
@@ -10,6 +10,15 @@ export interface BrandProfile {
   category: string | null;
   audience: string | null;
   elevator_pitch: string | null;
+  product_category: string | null;
+}
+
+interface Approach {
+  pakai: { id: string; name: string; when: string; alasan: string }[];
+  hindari: { name: string; alasan: string }[];
+  kreator: { id: string; label: string; alasan: string };
+  hookLevel: { level: string; label: string; alasan: string };
+  klaim: { aman: string[]; hatiHati: string[] };
 }
 
 // Kartu "Analisa Bisnis" (M7, F-ENT-01) — paste website brand, Gemini baca
@@ -17,8 +26,11 @@ export interface BrandProfile {
 // buat pakai dashboard (bulk-generate tetap jalan tanpa ini) — murni biar
 // brand ngerasa "AI ini beneran ngerti bisnis saya" di langkah pertama,
 // sesuai arahan Brian 2026-08-11.
-export function BusinessAnalysisCard({ initial }: { initial: BrandProfile }) {
+export function BusinessAnalysisCard({ initial, approach: approachAwal = null }: { initial: BrandProfile; approach?: Approach | null }) {
   const [profile, setProfile] = useState<BrandProfile>(initial);
+  const [approach, setApproach] = useState<Approach | null>(approachAwal);
+  const [sellingPoints, setSellingPoints] = useState<string[]>([]);
+  const [riskyClaims, setRiskyClaims] = useState<string[]>([]);
   const [url, setUrl] = useState(initial.website_url ?? "");
   const [editing, setEditing] = useState(!initial.business_type);
   const [loading, setLoading] = useState(false);
@@ -29,11 +41,18 @@ export function BusinessAnalysisCard({ initial }: { initial: BrandProfile }) {
     setLoading(true);
     setError(null);
     try {
-      const res = await apiFetch<{ website_url: string; business_name: string; business_type: string; category: string; audience: string; elevator_pitch: string }>(
-        "/api/dashboard/business-analysis",
-        { json: { url: url.trim() } }
-      );
-      setProfile({ website_url: res.website_url, business_type: res.business_type, category: res.category, audience: res.audience, elevator_pitch: res.elevator_pitch });
+      const res = await apiFetch<{
+        website_url: string; business_name: string; business_type: string; category: string;
+        audience: string; elevator_pitch: string; product_category: string;
+        selling_points?: string[]; risky_claims?: string[]; approach?: Approach;
+      }>("/api/dashboard/business-analysis", { json: { url: url.trim() } });
+      setProfile({
+        website_url: res.website_url, business_type: res.business_type, category: res.category,
+        audience: res.audience, elevator_pitch: res.elevator_pitch, product_category: res.product_category,
+      });
+      setApproach(res.approach ?? null);
+      setSellingPoints(res.selling_points ?? []);
+      setRiskyClaims(res.risky_claims ?? []);
       setEditing(false);
     } catch (err) {
       setError(err instanceof ApiFail ? err.message : "Analisa gagal. Coba lagi.");
@@ -77,6 +96,109 @@ export function BusinessAnalysisCard({ initial }: { initial: BrandProfile }) {
           )}
         </div>
         {profile.elevator_pitch && <p className="mt-3 text-sm text-zinc-600">{profile.elevator_pitch}</p>}
+
+        {/* PENDEKATAN KONTEN — bagian yang menjawab "jadi kontennya mau
+            diapain?". Sebelumnya kartu ini berhenti di elevator pitch, dan
+            Brian benar menyebutnya dangkal: brand yang membayar sudah tahu
+            bisnisnya sendiri. Isi di bawah ini diturunkan dari katalog template
+            kami (lib/brand-approach.ts), bukan dikarang model bahasa — tiap
+            baris bisa ditunjuk asalnya. */}
+        {approach && (
+          <div className="mt-5 space-y-4 border-t border-zinc-100 pt-4">
+            <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-[0.1em] text-zinc-500">
+              <Target size={13} /> Pendekatan konten untuk brand ini
+            </p>
+
+            <div>
+              <p className="text-xs font-semibold text-zinc-700">Jalankan duluan</p>
+              <ul className="mt-1.5 space-y-1.5">
+                {approach.pakai.map((t) => (
+                  <li key={t.id} className="flex gap-2 text-sm">
+                    <Check size={15} className="mt-0.5 shrink-0 text-emerald-600" />
+                    <span>
+                      <span className="font-medium text-zinc-900">{t.name}</span>
+                      <span className="block text-xs leading-relaxed text-zinc-500">{t.alasan}</span>
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            {approach.hindari.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-zinc-700">Sebaiknya dihindari</p>
+                <ul className="mt-1.5 space-y-1.5">
+                  {approach.hindari.map((t) => (
+                    <li key={t.name} className="flex gap-2 text-sm">
+                      <X size={15} className="mt-0.5 shrink-0 text-zinc-400" />
+                      <span>
+                        <span className="font-medium text-zinc-900">{t.name}</span>
+                        <span className="block text-xs leading-relaxed text-zinc-500">{t.alasan}</span>
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg bg-zinc-50 p-3">
+                <p className="text-xs text-zinc-400">Kreator yang disarankan</p>
+                <p className="text-sm font-medium text-zinc-900">{approach.kreator.label}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">{approach.kreator.alasan}</p>
+              </div>
+              <div className="rounded-lg bg-zinc-50 p-3">
+                <p className="text-xs text-zinc-400">Level hook</p>
+                <p className="text-sm font-medium text-zinc-900">{approach.hookLevel.label}</p>
+                <p className="mt-0.5 text-xs leading-relaxed text-zinc-500">{approach.hookLevel.alasan}</p>
+              </div>
+            </div>
+
+            {/* Nilai jual yang brand SENDIRI tulis di websitenya. Validator
+                kami melarang mesin mengarang klaim, jadi daftar ini adalah
+                bahan sah yang boleh masuk skrip — sekaligus jawaban atas
+                "kenapa videonya tidak menyebut keunggulan kami?". */}
+            {sellingPoints.length > 0 && (
+              <div>
+                <p className="text-xs font-semibold text-zinc-700">Yang kami ambil dari websitemu</p>
+                <ul className="mt-1.5 flex flex-wrap gap-1.5">
+                  {sellingPoints.map((s) => (
+                    <li key={s} className="rounded-full bg-amber-50 px-2.5 py-1 text-xs text-amber-800">{s}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div>
+                <p className="text-xs font-semibold text-zinc-700">Aman disebut</p>
+                <ul className="mt-1 space-y-0.5 text-xs text-zinc-600">
+                  {approach.klaim.aman.map((k) => <li key={k}>· {k}</li>)}
+                </ul>
+              </div>
+              <div>
+                <p className="text-xs font-semibold text-zinc-700">Hati-hati</p>
+                <ul className="mt-1 space-y-0.5 text-xs text-zinc-600">
+                  {approach.klaim.hatiHati.map((k) => <li key={k}>· {k}</li>)}
+                </ul>
+              </div>
+            </div>
+
+            {/* Klaim berisiko yang MEMANG ADA di halaman mereka — beda dari
+                rambu kategori di atas yang berlaku umum. Ini spesifik, jadi
+                jauh lebih berguna, dan hanya muncul kalau betul ketemu. */}
+            {riskyClaims.length > 0 && (
+              <div className="rounded-lg border border-amber-200 bg-amber-50 p-3">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-900">
+                  <AlertCircle size={13} /> Ada di websitemu, tapi berisiko diulang di iklan
+                </p>
+                <ul className="mt-1 space-y-0.5 text-xs text-amber-800">
+                  {riskyClaims.map((k) => <li key={k}>· {k}</li>)}
+                </ul>
+              </div>
+            )}
+          </div>
+        )}
       </section>
     );
   }

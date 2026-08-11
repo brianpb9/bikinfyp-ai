@@ -31,6 +31,10 @@ export interface Organization {
   category: string | null;
   audience: string | null;
   elevator_pitch: string | null;
+  /** Kategori dalam kosakata internal (bestFor di lib/templates.ts) — kunci
+   *  untuk menghitung "Pendekatan konten". Null untuk org yang dianalisa
+   *  sebelum kolom ini ada; kartunya tetap tampil, cuma tanpa pendekatan. */
+  product_category: string | null;
   onboarded_at: string | null;
   brand_logo_key: string | null;
   brand_color: string | null;
@@ -82,12 +86,13 @@ export async function pgGetOrgById(orgId: string): Promise<Organization | null> 
 /** Hasil "analisa bisnis" (M7) — org tanpa profil tetap valid, ini murni tambahan. */
 export async function pgUpdateOrgProfile(orgId: string, profile: {
   websiteUrl: string; businessType: string; category: string; audience: string; elevatorPitch: string;
+  productCategory?: string;
 }): Promise<void> {
   const pool = getPool(url());
   try {
     await pool.query(
-      "UPDATE organizations SET website_url=$1, business_type=$2, category=$3, audience=$4, elevator_pitch=$5 WHERE id=$6",
-      [profile.websiteUrl, profile.businessType, profile.category, profile.audience, profile.elevatorPitch, orgId]
+      "UPDATE organizations SET website_url=$1, business_type=$2, category=$3, audience=$4, elevator_pitch=$5, product_category=$6 WHERE id=$7",
+      [profile.websiteUrl, profile.businessType, profile.category, profile.audience, profile.elevatorPitch, profile.productCategory ?? null, orgId]
     );
   } finally {
     /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */

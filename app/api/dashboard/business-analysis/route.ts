@@ -1,6 +1,7 @@
 import { ERR, errorResponse } from "@/lib/errors";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { fetchBrandHomepage, analyzeBrandProfile } from "@/lib/brand-analysis";
+import { buildBrandApproach } from "@/lib/brand-approach";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { updateOrgProfile } from "@/lib/org";
 import { pgUpdateOrgProfile } from "@/lib/postgres/org";
@@ -44,11 +45,21 @@ export async function POST(req: Request) {
     const toSave = {
       websiteUrl: page.url, businessType: profile.business_type, category: profile.category,
       audience: profile.audience, elevatorPitch: profile.elevator_pitch,
+      productCategory: profile.product_category,
     };
     if (postgresRuntimeEnabled()) await pgUpdateOrgProfile(membership.org_id, toSave);
     else updateOrgProfile(membership.org_id, toSave);
 
-    return Response.json({ website_url: page.url, ...profile });
+    // Pendekatan dihitung SETIAP kali diminta, tidak disimpan. Isinya turunan
+    // dari katalog template yang ikut versi kode — kalau ditulis ke database,
+    // brand akan melihat saran basi dari katalog lama setelah kami menambah
+    // atau mengubah template.
+    const approach = buildBrandApproach({
+      category: profile.product_category,
+      businessType: profile.business_type,
+    });
+
+    return Response.json({ website_url: page.url, ...profile, approach });
   } catch (err) {
     return errorResponse(err);
   }

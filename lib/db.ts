@@ -43,7 +43,9 @@ export function getDb(): Database.Database {
     db.exec(schema);
     // Migrasi ringan untuk DB lama: profil bisnis org (M7, F-ENT-01).
     const orgCols = (db.prepare("PRAGMA table_info(organizations)").all() as { name: string }[]).map((c) => c.name);
-    for (const col of ["website_url", "business_type", "category", "audience", "elevator_pitch"]) {
+    // product_category ikut di sini (2026-08-12): padanan SQLite dari
+    // migrations/postgres/0028_org_product_category.sql.
+    for (const col of ["website_url", "business_type", "category", "audience", "elevator_pitch", "product_category"]) {
       if (!orgCols.includes(col)) db.exec(`ALTER TABLE organizations ADD COLUMN ${col} TEXT`);
     }
     // Migrasi ringan untuk DB lama: kolom state_changed_at di jobs.

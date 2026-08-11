@@ -16,6 +16,10 @@ export interface Organization {
   category: string | null;
   audience: string | null;
   elevator_pitch: string | null;
+  /** Kategori dalam kosakata internal (bestFor di lib/templates.ts). Kunci
+   *  untuk menghitung "Pendekatan konten"; null untuk org yang profilnya
+   *  dianalisa sebelum kolom ini ada. */
+  product_category: string | null;
 }
 
 export interface OrgMembership {
@@ -48,10 +52,11 @@ export function getOrgById(orgId: string): Organization | undefined {
 /** Hasil "analisa bisnis" (M7) — org tanpa profil tetap valid, ini murni tambahan. */
 export function updateOrgProfile(orgId: string, profile: {
   websiteUrl: string; businessType: string; category: string; audience: string; elevatorPitch: string;
+  productCategory?: string;
 }): void {
   getDb()
-    .prepare("UPDATE organizations SET website_url=?, business_type=?, category=?, audience=?, elevator_pitch=? WHERE id=?")
-    .run(profile.websiteUrl, profile.businessType, profile.category, profile.audience, profile.elevatorPitch, orgId);
+    .prepare("UPDATE organizations SET website_url=?, business_type=?, category=?, audience=?, elevator_pitch=?, product_category=? WHERE id=?")
+    .run(profile.websiteUrl, profile.businessType, profile.category, profile.audience, profile.elevatorPitch, profile.productCategory ?? null, orgId);
 }
 
 export function getOrgBalance(orgId: string): number {

@@ -1,0 +1,12 @@
+-- Kategori brand dalam kosakata INTERNAL (sama dengan bestFor di
+-- lib/templates.ts), hasil analisa bisnis.
+--
+-- Kolom `category` yang sudah ada berisi teks bebas ("Agency Digital
+-- Marketing") — enak dibaca, tapi tidak bisa dipakai mencocokkan template.
+-- Kolom ini kuncinya, supaya "Pendekatan konten" bisa dihitung ulang setiap
+-- halaman dimuat tanpa menyimpan hasil turunannya (yang akan basi begitu
+-- katalog template berubah).
+--
+-- Nullable: org lama tanpa analisa ulang tetap sah, kartunya cuma menampilkan
+-- profil tanpa pendekatan.
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS product_category TEXT;
