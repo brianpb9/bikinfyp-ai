@@ -327,6 +327,10 @@ export default function CampaignPage() {
           // null = biarkan mesin menurunkan jumlah adegan seperti sebelumnya.
           shot_count: multiShot ? shotCount : null, ratio, no_model: noModel,
           tvc_route: template?.tvcRoute ?? null,
+          // Id template ikut dikirim supaya perencana shot memakai struktur
+          // template itu, bukan beat generik. Tanpa ini, memilih "Bedah Fitur"
+          // atau "Klaim + Bahan Aktif" menghasilkan susunan shot yang sama.
+          template_id: template?.id ?? null,
         },
       });
       router.push(`/dashboard/campaign/${res.run_id}`);

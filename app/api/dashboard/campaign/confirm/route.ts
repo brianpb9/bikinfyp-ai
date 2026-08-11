@@ -13,6 +13,7 @@ import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
+import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -68,6 +69,13 @@ export async function POST(req: Request) {
     // menghasilkan prompt yang bertengkar dengan dirinya sendiri.
     const noModel = format === "tvc" && body.no_model === true;
     const tvcRoute = format === "tvc" && body.tvc_route === "reallife" ? "reallife" : null;
+    // Template UGC affiliate. Divalidasi terhadap daftar template yang MEMANG
+    // ada, bukan diterima mentah: nilainya masuk ke perencana shot, dan id
+    // karangan hanya akan diam-diam jatuh ke beat generik tanpa jejak.
+    const templateId =
+      typeof body.template_id === "string" && CAMPAIGN_TEMPLATES.some((t) => t.id === body.template_id)
+        ? body.template_id
+        : null;
     const rawShots = Number(body.shot_count);
     const shotCount = Number.isInteger(rawShots) && rawShots >= 2 && rawShots <= 6 ? rawShots : null;
 
@@ -125,9 +133,9 @@ export async function POST(req: Request) {
             // requires_approval=TRUE: job dashboard brand SELALU berhenti di
             // gerbang review scene (M11). Brand menilai gambar & pesan tiap
             // scene sebelum digabung. Retail tidak pernah menyalakan ini.
-            `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,requires_approval,state,created_at,state_changed_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,TRUE,'QUEUED',$16,$16)`,
-            [jobId, user.id, membership.org_id, runId, avatarCustomDesc, productId, personaId, scriptId, format, tier, durationS, shotCount, ratio, noModel, tvcRoute, now]
+            `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,requires_approval,state,created_at,state_changed_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,'QUEUED',$17,$17)`,
+            [jobId, user.id, membership.org_id, runId, avatarCustomDesc, productId, personaId, scriptId, format, tier, durationS, shotCount, ratio, noModel, tvcRoute, templateId, now]
           );
           await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId, scriptId]);
           await client.query(

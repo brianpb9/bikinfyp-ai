@@ -57,6 +57,7 @@ type WorkerRow = {
   shot_count: number | null;
   no_model: boolean | null;
   tvc_route: string | null;
+  template_id: string | null;
   product_claims: string | null;
   ratio: string | null;
   product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_images: string; product_price_idr: number;
@@ -170,7 +171,8 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     shotCountOverride: row.shot_count ?? undefined,
     ratio: row.ratio ?? undefined,
     noModel: row.no_model === true,
-    tvcRoute: row.tvc_route === "reallife" ? "reallife" : undefined });
+    tvcRoute: row.tvc_route === "reallife" ? "reallife" : undefined,
+    ugcTemplate: row.template_id });
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the
   // user's own product photo panned/zoomed, so there's no provider to fail
   // over between and no cost beyond the VO synthesis below.

@@ -150,6 +150,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   shot_count INTEGER,
   no_model INTEGER,
   tvc_route TEXT,
+  template_id TEXT, -- template UGC affiliate; NULL = beat generik (lihat 0027)
   ratio TEXT,
   requires_approval INTEGER NOT NULL DEFAULT 0, -- M11: jeda approval per-scene (dashboard brand saja)
   approved_at TEXT,

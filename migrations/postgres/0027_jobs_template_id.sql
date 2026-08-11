@@ -1,0 +1,14 @@
+-- Template UGC affiliate yang dipakai job ini (2026-08-11).
+--
+-- Tanpa kolom ini, ke-12 template hasil bedah video pemenang cuma mengubah
+-- LABEL: "Bedah Fitur" (4 makro berturut-turut) dan "Klaim + Bahan Aktif"
+-- (kamera nyaris tidak pindah) menghasilkan struktur shot yang sama persis,
+-- karena perencana shot tidak pernah tahu template mana yang dipilih.
+--
+-- Nullable dan tanpa CHECK. NULL = perilaku lama (beat generik), dan itulah
+-- isi SELURUH baris yang sudah ada plus semua job retail — jadi migrasi ini
+-- tidak mengubah satu pun job yang sudah berjalan. Sengaja tanpa CHECK karena
+-- daftar templatenya hidup di kode (lib/templates.ts) dan akan bertambah;
+-- constraint di database hanya akan memaksa migrasi tiap kali kami menambah
+-- satu template.
+ALTER TABLE jobs ADD COLUMN IF NOT EXISTS template_id TEXT;

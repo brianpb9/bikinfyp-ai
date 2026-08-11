@@ -28,6 +28,7 @@ import type { SegmentDraft } from "../script-engine/templates";
 import { CATEGORY_NOUN, CATEGORY_PAIN } from "../config/hooks";
 import { hargaTerbilang } from "../script-engine/terbilang";
 import { MANDATORY_NEGATIVE_PROMPT } from "../config/compliance";
+import { ugcRolesFor } from "./ugc-template-roles";
 import { isServiceLike } from "../config/hooks";
 
 export interface ShotPlanInput {
@@ -64,6 +65,13 @@ export interface ShotPlanInput {
   noModel?: boolean;
   /** Rute TVC: "luxury" (makro/mekanisme) atau "reallife" (sehari penuh). */
   tvcRoute?: "luxury" | "reallife";
+  /** Id template UGC affiliate (T01..T12). NULL = perilaku lama, beat generik.
+   *
+   * Inilah yang membuat template mengubah VIDEONYA, bukan cuma labelnya:
+   * tanpa ini "Bedah Fitur" (4 makro berturut-turut) dan "Klaim + Bahan Aktif"
+   * (kamera nyaris tidak pindah) menghasilkan struktur shot yang identik.
+   * Tabelnya di lib/media/ugc-template-roles.ts. */
+  ugcTemplate?: string | null;
 }
 
 const HANDS_ONLY_FRAMING =
@@ -486,11 +494,43 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
       : input.category.handsPrompt;
     const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
+    // Beat template UGC. Menimpa beat generik HANYA untuk job yang memang
+    // memakai salah satu dari 12 template format; job lain (dan seluruh
+    // retail) tidak tersentuh karena ugcTemplate-nya null.
+    //
+    // Tetap memakai jalur framing/subject yang sama di bawah — yang diganti
+    // cuma APA YANG TERJADI di tiap shot dan gerak kameranya, bukan gaya
+    // gambarnya. Character-lock disebut ulang tiap shot karena itu yang
+    // menjaga wajah tetap sama antar generate (pelajaran dari dokumen TVC).
+    const ugcRoles = ugcRolesFor(input.ugcTemplate);
+    const ugcBeat = (i: number): string | null => {
+      if (!ugcRoles || format === "tvc" || format === "ads") return null;
+      const pick =
+        i === 0 && ugcRoles.opening
+          ? ugcRoles.opening
+          : isLastShot(i, numShots) && ugcRoles.closing && numShots >= 2
+            ? ugcRoles.closing
+            : ugcRoles.middle[
+                Math.max(0, i - (ugcRoles.opening ? 1 : 0)) % ugcRoles.middle.length
+              ];
+      if (!pick) return null;
+      return (
+        `${i === 0
+          ? `This is the OPENING shot of a continuous ${input.durationSec}-second story about "${input.productName}". `
+          : isLastShot(i, numShots)
+            ? `This is the FINAL shot, resolving what the earlier shots built up. `
+            : `This shot continues directly from the previous one — same place, same person, same look, one step further on. `}` +
+        `Shot ${i + 1} of ${numShots}: ${pick.role}. Camera: ${pick.camera}. ` +
+        `The same person, same face, same hair and same outfit as the other shots. ` +
+        `${IDENTITY_INSTRUCTION}`
+      );
+    };
     // Tanpa-produk ditentukan KATEGORI, bukan format: iklan untuk barang fisik
     // tetap menampilkan barangnya. Lihat isServiceLike di lib/config/hooks.ts.
     const noPhysicalProduct = isServiceLike(input.productCategory);
     const beat =
-      format === "ads" && noPhysicalProduct
+      ugcBeat(i) ??
+      (format === "ads" && noPhysicalProduct
         // Iklan jasa: yang diperagakan adalah MANFAAT, bukan benda. Presenter
         // tidak memegang apa pun — begitu diminta memegang sesuatu, model akan
         // mengarang produk yang tidak pernah ada, dan itu justru menyesatkan
@@ -541,7 +581,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             // sudut acak / label ketutup jari saat "in use", bikin QC-10 gagal
             // & identitas produk kelihatan beda dari shot 1. Label WAJIB
             // tetap menghadap kamera bahkan saat demo.
-            : `Hands demonstrating the product in use, but the bottle stays angled so its label keeps facing the camera and stays legible throughout — fingers never cover the label, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`;
+            : `Hands demonstrating the product in use, but the bottle stays angled so its label keeps facing the camera and stays legible throughout — fingers never cover the label, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`);
     // Level gila: pembuka pattern-interrupt HANYA di shot pertama; vo_broll
     // (pan foto, tanpa model video) tidak punya jalur ini.
     const crazyOpener =
