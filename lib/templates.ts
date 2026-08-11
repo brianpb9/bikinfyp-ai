@@ -38,6 +38,13 @@ export interface CampaignTemplate {
   bestFor: string[];
   /** Klip contoh, atau null kalau berkasnya BELUM ada.
    *
+   * Ke-12 template format sementara memakai klip GAYA, bukan hasil rendernya
+   * sendiri (permintaan Brian 2026-08-11: "isi pake potongan video tadi").
+   * Dipasangkan menurut FORMAT — talking_head dapat klip wajah, hands_only
+   * dapat klip tangan — jadi yang ditunjukkan tetap jujur di tingkat format,
+   * sesuai lencana di kartunya. Diganti hasil render template masing-masing
+   * begitu ada.
+   *
    * Harus null — bukan menunjuk ke berkas yang belum diunggah. Diuji
    * 2026-08-11: src yang 404 menyisakan elemen <video> kosong yang tampil
    * sebagai kotak hitam polos, dan itu TIDAK bisa dideteksi dengan andal dari
@@ -182,7 +189,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H12", count: 3, shotCount: 3,
     bestFor: ["beauty", "food", "gadget", "home"],
     source: { durationSec: 20, shots: 12, bpm: 102 },
-    preview: null, accent: "emerald",
+    preview: "/previews/format-wajah.mp4", accent: "emerald",
   },
   // ── T02 ───────────────────────────────────────────────────────────────────
   {
@@ -193,7 +200,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "agak_berani", hookFamily: "H9", count: 3, shotCount: 6,
     bestFor: ["gadget", "home", "fashion"],
     source: { durationSec: 22, shots: 10, bpm: 97 },
-    preview: null, accent: "sky",
+    preview: "/previews/format-wajah.mp4", accent: "sky",
   },
   // ── T03 ───────────────────────────────────────────────────────────────────
   {
@@ -204,7 +211,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H10", count: 2, shotCount: 6,
     bestFor: ["toko", "food", "beauty"],
     source: { durationSec: 31, shots: 7, bpm: 106 },
-    preview: null, accent: "amber",
+    preview: "/previews/format-wajah.mp4", accent: "amber",
   },
   // ── T04 ───────────────────────────────────────────────────────────────────
   {
@@ -215,7 +222,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "agak_berani", hookFamily: "H1", count: 3, shotCount: 3,
     bestFor: ["food"],
     source: { durationSec: 20, shots: 8, bpm: 81 },
-    preview: null, accent: "rose",
+    preview: "/previews/format-wajah.mp4", accent: "rose",
   },
   // ── T05 ── KLAIM HASIL ────────────────────────────────────────────────────
   {
@@ -228,7 +235,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 19, shots: 2, bpm: 126 },
     caution: { badge: "Butuh rekaman asli", note:
       "Perbandingan before/after adalah klaim hasil pada tubuh orang. Kedua sisi wajib direkam sungguhan dengan cahaya, sudut, dan kamera yang sama — membuatnya dengan AI berarti membuat bukti palsu." },
-    preview: null, accent: "violet",
+    preview: "/previews/format-tangan.mp4", accent: "violet",
   },
   // ── T06 ───────────────────────────────────────────────────────────────────
   {
@@ -239,7 +246,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H13", count: 2, shotCount: 5,
     bestFor: ["beauty", "fashion", "food"],
     source: { durationSec: 27, shots: 5, bpm: 147 },
-    preview: null, accent: "rose",
+    preview: "/previews/format-tangan.mp4", accent: "rose",
   },
   // ── T07 ───────────────────────────────────────────────────────────────────
   {
@@ -250,7 +257,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "agak_berani", hookFamily: "H8", count: 3, shotCount: 3,
     bestFor: ["beauty", "home"],
     source: { durationSec: 12, shots: 5, bpm: 101 },
-    preview: null, accent: "emerald",
+    preview: "/previews/format-wajah.mp4", accent: "emerald",
   },
   // ── T08 ── KLAIM HASIL ────────────────────────────────────────────────────
   {
@@ -263,7 +270,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 22, shots: 2, bpm: 108 },
     caution: { badge: "Butuh rekaman asli", note:
       "Inti template ini adalah perubahan nyata pada tubuh seseorang selama tujuh hari. Menghasilkan \"DAY 7\" secara sintetis berarti menipu pembeli soal keputusan kesehatannya. Sediakan tujuh hari, rekam dua kali dengan setelan yang persis sama." },
-    preview: null, accent: "zinc",
+    preview: "/previews/format-tangan.mp4", accent: "zinc",
   },
   // ── T09 ───────────────────────────────────────────────────────────────────
   {
@@ -274,7 +281,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "normal", hookFamily: "H7", count: 3, shotCount: 3,
     bestFor: ["beauty", "food"],
     source: { durationSec: 23, shots: 3, bpm: 94 },
-    preview: null, accent: "violet",
+    preview: "/previews/format-wajah.mp4", accent: "violet",
   },
   // ── T10 ── KLAIM HASIL ────────────────────────────────────────────────────
   {
@@ -287,7 +294,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 19, shots: 8, bpm: 63 },
     caution: { badge: "Butuh rekaman asli", note:
       "Adegan perbandingan dua lengan adalah klaim hasil produk pada kulit. Wajib direkam sungguhan; kalau dibuat AI, kamu memalsukan buktinya." },
-    preview: null, accent: "amber",
+    preview: "/previews/format-wajah.mp4", accent: "amber",
   },
   // ── T11 ───────────────────────────────────────────────────────────────────
   {
@@ -298,7 +305,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "berani", hookFamily: "H6", count: 3, shotCount: 2,
     bestFor: ["beauty", "food"],
     source: { durationSec: 10, shots: 2, bpm: 89 },
-    preview: null, accent: "zinc",
+    preview: "/previews/format-tangan.mp4", accent: "zinc",
   },
   // ── T12 ───────────────────────────────────────────────────────────────────
   {
@@ -311,7 +318,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     source: { durationSec: 23, shots: 4, bpm: 116 },
     caution: { badge: "Wajib diberi label", note:
       "Vox pop bekerja karena penonton percaya ini orang sungguhan. Narasumber AI yang ditampilkan sebagai wawancara jalanan nyata adalah testimoni palsu — kalau tetap dibuat AI, videonya WAJIB diberi label dramatisasi." },
-    preview: null, accent: "sky",
+    preview: "/previews/format-wajah.mp4", accent: "sky",
   },
   {
     id: "kenalin-bisnis", group: "lain",

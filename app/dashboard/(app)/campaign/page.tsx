@@ -11,7 +11,6 @@ import { rupiah } from "../../_components/format";
 import { Stepper } from "../../_components/Stepper";
 import { AVATAR_PRESETS, type AvatarGender } from "@/lib/avatar-presets";
 import { getTemplate, type CampaignTemplate } from "@/lib/templates";
-import { PreviewVideo } from "../../_components/PreviewVideo";
 
 type Kind = "affiliate" | "ads" | "tvc";
 type Format = "talking_head" | "hands_only" | "tvc" | "ads";
@@ -441,19 +440,26 @@ export default function CampaignPage() {
                   {/* Contoh hasil nyata, bukan ilustrasi — user memilih HASIL
                       yang kelihatan, bukan label abstrak (pola yang sama
                       dipakai halaman jenis di retail). */}
-                  {/* Ikut rasio videonya, sama seperti galeri template — kartu
-                      TVC memakai klip landscape, jadi memaku 9:16 di sini akan
-                      memotongnya persis seperti bug yang baru diperbaiki. */}
-                  <div className="mb-3 overflow-hidden rounded-xl">
-                    <PreviewVideo
-                      src={k.preview}
-                      fallback={
-                        <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-zinc-500">
-                          <Film size={26} />
-                          <span className="text-[11px] font-medium">Contoh menyusul</span>
-                        </div>
-                      }
-                    />
+                  {/* Rasio DIKUNCI 9:16 di sini, berbeda dari galeri template.
+                      Alasannya bukan teknis tapi tata letak: ketiga kartu ini
+                      berdiri sejajar dalam satu baris, dan begitu satu kotak
+                      landscape sementara dua lainnya potret, barisnya langsung
+                      terlihat timpang. Klip TVC yang landscape dipotong tengah
+                      (object-cover) — di galeri template, yang kartunya berdiri
+                      sendiri-sendiri, rasio aslinya tetap dipertahankan. */}
+                  <div className="relative mb-3 aspect-[9/16] max-h-72 w-full overflow-hidden rounded-xl bg-zinc-900">
+                    {k.preview ? (
+                      <video
+                        src={k.preview}
+                        autoPlay muted loop playsInline
+                        className="absolute inset-0 h-full w-full object-cover"
+                      />
+                    ) : (
+                      <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 text-zinc-500">
+                        <Film size={26} />
+                        <span className="text-[11px] font-medium">Contoh menyusul</span>
+                      </div>
+                    )}
                   </div>
                   <Icon size={22} className={active ? "text-amber-600" : "text-zinc-400"} />
                   <p className="mt-3 flex items-center gap-2 font-display text-base font-bold text-zinc-900">
