@@ -567,12 +567,16 @@ export default function CampaignPage() {
                 Dipisah dari skrip DENGAN SENGAJA — validator melarang AI
                 mengarang klaim dan angka, sedangkan ini ditulis brand dan
                 brand yang bertanggung jawab atas kebenarannya. */}
-            <div className="rounded-xl border border-zinc-200 p-4">
+            {/* col-span-2: blok ini berada di dalam grid dua kolom. Tanpa
+                rentang penuh ia menempati kolom kiri saja dan menyisakan
+                lubang kosong sebesar setengah kartu di sebelahnya — persis
+                seperti blok Urgensi di bawahnya yang memang sudah melebar. */}
+            <div className="col-span-2 rounded-xl border border-zinc-200 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Klaim di layar (opsional)</p>
               <p className="mt-1 text-xs text-zinc-500">
                 Maksimal 3, muncul bergantian di tengah video. Contoh: &ldquo;Tahan 12 jam&rdquo;, &ldquo;BPOM terdaftar&rdquo;.
               </p>
-              <div className="mt-3 space-y-2">
+              <div className="mt-3 grid gap-2 sm:grid-cols-3">
                 {[0, 1, 2].map((i) => (
                   <input
                     key={i}
@@ -831,7 +835,13 @@ export default function CampaignPage() {
                   sendiri jadi ubin "+" PERTAMA di grid, bukan tombol terpisah
                   di atasnya — tempatnya di antara pilihan avatar, karena itu
                   memang salah satu pilihan avatar. */}
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Avatar</p>
+              {/* Judulnya berubah saat Tanpa model menyala. Membiarkannya
+                  tetap "Avatar" membuat brand mengira orang yang dipilih akan
+                  muncul di layar — padahal yang dipakai cuma suaranya, dan
+                  kekeliruan itu baru ketahuan setelah videonya jadi. */}
+              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">
+                {noModel ? "Suara (avatar tidak tampil di layar)" : "Avatar"}
+              </p>
               <div className="mb-3 flex gap-2">
                 {(["female", "male"] as const).map((g) => (
                   <button key={g} onClick={() => setAvatarGender(g)}
