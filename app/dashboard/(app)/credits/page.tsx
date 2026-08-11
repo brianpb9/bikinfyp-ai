@@ -3,7 +3,7 @@ import { requireOrgContext } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getOrgBalance } from "@/lib/org";
 import { pgGetOrgBalance, pgGetOrgLedger } from "@/lib/postgres/org";
-import { rupiah } from "../../_components/format";
+import { tokens } from "../../_components/format";
 import { CreditPlans } from "../../_components/CreditPlans";
 
 export const dynamic = "force-dynamic";
@@ -13,10 +13,10 @@ type LedgerRow = { id: string; type: string; delta: number; created_at: string; 
 // Label baris buku besar dalam bahasa manusia. `type` adalah istilah internal
 // (hold/capture/release/bonus/topup) dan tidak layak ditampilkan mentah ke brand.
 const TYPE_LABEL: Record<string, string> = {
-  hold: "Ditahan untuk render",
-  capture: "Terpakai untuk video",
+  hold: "Token ditahan untuk render",
+  capture: "Token terpakai untuk video",
   release: "Dikembalikan (render gagal)",
-  bonus: "Kredit dari tim BikinFYP",
+  bonus: "Token dari tim BikinFYP",
   topup: "Top-up",
 };
 
@@ -30,17 +30,17 @@ export default async function CreditsPage() {
     <div className="space-y-8">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.14em] text-amber-600">{membership.org_name}</p>
-        <h1 className="font-display text-2xl font-bold text-zinc-900">Kredit & tagihan</h1>
+        <h1 className="font-display text-2xl font-bold text-zinc-900">Token &amp; tagihan</h1>
       </div>
 
       <section className="rounded-2xl bg-gradient-to-br from-zinc-900 to-zinc-950 p-6 shadow-sm">
         <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-400">
-          <Wallet size={13} /> Saldo organisasi
+          <Wallet size={13} /> Token organisasi
         </p>
-        <p className="mt-2 font-display text-4xl font-bold text-white">{rupiah(balance)}</p>
+        <p className="mt-2 font-display text-4xl font-bold text-white">{tokens(balance)}</p>
         <p className="mt-2 text-xs text-zinc-400">
-          Saldo dipakai bersama seluruh anggota organisasi. Kredit ditahan saat render dimulai
-          dan dikembalikan otomatis kalau rendernya gagal.
+          Token dipakai bersama seluruh anggota organisasi. Token ditahan saat render dimulai
+          dan dikembalikan otomatis kalau rendernya gagal. 1 token = Rp1.
         </p>
       </section>
 
@@ -66,7 +66,7 @@ export default async function CreditsPage() {
                   </span>
                 </span>
                 <span className={`shrink-0 font-display font-bold ${row.delta >= 0 ? "text-emerald-600" : "text-zinc-900"}`}>
-                  {row.delta >= 0 ? "+" : "−"}{rupiah(Math.abs(row.delta))}
+                  {row.delta >= 0 ? "+" : "−"}{tokens(Math.abs(row.delta))}
                 </span>
               </li>
             ))}

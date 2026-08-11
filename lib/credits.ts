@@ -157,3 +157,28 @@ export function creditTopup(opts: {
   });
   return { duplicated: false, amountIdr: pkg.priceIdr };
 }
+
+// --- Harga layanan tambahan dalam TOKEN (1 token = Rp1, lihat lib/tokens.ts) ---
+// Ditaruh di sini, bukan di lib/tokens.ts, karena butuh tierPriceIdr dan
+// lib/tokens.ts harus tetap bebas impor agar aman dipakai komponen klien.
+
+import { idrToTokens } from "./tokens";
+
+/** Biaya membuat ulang SATU scene.
+ *
+ * Dihitung dari durasi scene itu, bukan durasi video utuh: provider menagih
+ * kami per detik video (estimateCost di lib/providers/stubs/byteplus.ts
+ * menjumlahkan durasi shot), jadi mengganti satu shot 5 detik pada TVC 30
+ * detik memang sepertiga biaya video 15 detik — bukan biaya penuh. Menagih
+ * penuh akan menghukum brand karena struktur teknis yang tidak mereka pilih.
+ */
+export function regenerateSceneTokens(tier: QualityTier, sceneDurationSec: number): number {
+  return idrToTokens(tierPriceIdr(tier, Math.max(1, Math.round(sceneDurationSec))));
+}
+
+/** Selisih token bila brand menaikkan tier ("upgrade model generator" dari
+ * masukan tester). Tidak pernah negatif — menurunkan tier tidak mengembalikan
+ * token, karena keputusan itu diambil SEBELUM render dimulai. */
+export function tierUpgradeTokens(from: QualityTier, to: QualityTier, durationSec: number): number {
+  return Math.max(0, idrToTokens(tierPriceIdr(to, durationSec) - tierPriceIdr(from, durationSec)));
+}

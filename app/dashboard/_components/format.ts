@@ -5,3 +5,9 @@
 export function rupiah(n: number): string {
   return "Rp" + n.toLocaleString("id-ID");
 }
+
+// Dashboard brand memakai satuan TOKEN, bukan rupiah (lihat lib/tokens.ts
+// untuk alasan kurs 1:1 dan mengapa retail sengaja tidak ikut berubah).
+// Diekspor ulang dari sini supaya Server Component dashboard tidak perlu tahu
+// asal-usulnya, sama seperti rupiah() di atas.
+export { tokens, formatTokens, idrToTokens } from "@/lib/tokens";

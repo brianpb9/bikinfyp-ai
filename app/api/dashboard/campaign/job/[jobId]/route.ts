@@ -3,7 +3,10 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { createSignedUrl } from "@/lib/signed-url";
+import crypto from "node:crypto";
 import { enqueueJobResume } from "@/lib/job-queue";
+import { regenerateSceneTokens } from "@/lib/credits";
+import type { QualityTier } from "@/lib/providers/types";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 
 export const runtime = "nodejs";
@@ -24,11 +27,12 @@ type SceneRow = {
 type JobRowLite = {
   id: string; state: string; org_id: string | null; approved_at: string | null;
   requires_approval: boolean; product_name: string; segments: string;
+  quality_tier: string;
 };
 
 async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRowLite | null> {
   const res = await pool.query<JobRowLite>(
-    `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval,
+    `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier,
             p.name AS product_name, s.segments
      FROM jobs j JOIN products p ON p.id=j.product_id JOIN scripts s ON s.id=j.script_id
      WHERE j.id=$1 AND j.org_id=$2`,
@@ -63,6 +67,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
         scenes: scenes.map((s) => ({
           idx: s.idx,
           duration_sec: s.duration_sec,
+          // Harga ganti scene ditampilkan SEBELUM diklik. Menagih token tanpa
+          // memberi tahu jumlahnya lebih dulu adalah cara tercepat membuat
+          // brand merasa dicurangi.
+          regen_tokens: regenerateSceneTokens(job.quality_tier as QualityTier, s.duration_sec),
           prompt: s.prompt,
           video_url: createSignedUrl(s.storage_key),
           thumb_url: s.thumb_key ? createSignedUrl(s.thumb_key) : null,
@@ -148,12 +156,61 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       // regen_requested=FALSE sekaligus menutup klik ganda pada scene yang
       // memang sedang dibuat ulang. Tiap panggilan provider ini uang nyata,
       // jadi penjaganya harus di database, bukan cuma di UI.
-      const claimed = await pool.query<{ regen_count: number }>(
-        `UPDATE job_shots SET regen_requested=TRUE, regen_count=regen_count+1
-         WHERE job_id=$1 AND idx=$2 AND regen_requested=FALSE AND regen_count < $3
-         RETURNING regen_count`,
-        [jobId, idx, MAX_REGEN_PER_SCENE]
-      );
+      // Klaim jatah DAN tagih token dalam SATU transaksi.
+      //
+      // Brian, 2026-08-11: "nanti tentu regenerate harus bayar, kalau tidak
+      // perusahaan rugi kan?" — benar: tiap penggantian memanggil provider
+      // video lagi dan itu uang nyata keluar dari kami.
+      //
+      // Harus satu transaksi, bukan dua langkah. Kalau klaim berhasil lalu
+      // penagihan gagal, brand mendapat render gratis; kalau penagihan lebih
+      // dulu lalu klaim kalah balapan, brand membayar sesuatu yang tidak
+      // pernah dibuat. Keduanya cacat uang, dan keduanya hilang di sini.
+      const client = await pool.connect();
+      let claimedCount = 0;
+      let chargedTokens = 0;
+      try {
+        await client.query("BEGIN");
+        const claimed = await client.query<{ regen_count: number; duration_sec: number }>(
+          `UPDATE job_shots SET regen_requested=TRUE, regen_count=regen_count+1
+           WHERE job_id=$1 AND idx=$2 AND regen_requested=FALSE AND regen_count < $3
+           RETURNING regen_count, duration_sec`,
+          [jobId, idx, MAX_REGEN_PER_SCENE]
+        );
+        if (!claimed.rowCount) {
+          await client.query("ROLLBACK");
+        } else {
+          claimedCount = claimed.rowCount;
+          const price = regenerateSceneTokens(job.quality_tier as QualityTier, claimed.rows[0].duration_sec);
+          // Saldo dibaca DI DALAM transaksi supaya dua permintaan bersamaan
+          // tidak sama-sama melihat saldo lama dan membuatnya minus.
+          const bal = await client.query<{ balance: string }>(
+            "SELECT COALESCE(SUM(delta),0)::text AS balance FROM credit_ledger WHERE org_id=$1",
+            [membership.org_id]
+          );
+          if (Number(bal.rows[0]?.balance ?? 0) < price) {
+            await client.query("ROLLBACK");
+            throw ERR.BAD_REQUEST(
+              `Token tidak cukup untuk mengganti scene ini (butuh ${price.toLocaleString("id-ID")} token).`,
+              "Insufficient tokens for regeneration."
+            );
+          }
+          await client.query(
+            `INSERT INTO credit_ledger (id,user_id,org_id,type,delta,job_id,created_at)
+             VALUES ($1,$2,$3,'capture',$4,$5,$6)`,
+            [crypto.randomUUID(), user.id, membership.org_id, -price, jobId, new Date().toISOString()]
+          );
+          chargedTokens = price;
+          await client.query("COMMIT");
+        }
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        throw error;
+      } finally {
+        client.release();
+      }
+
+      const claimed = { rowCount: claimedCount };
       if (!claimed.rowCount) {
         // Gagal klaim -> baca keadaan sebenarnya HANYA untuk menyusun pesan.
         const scene = (await pool.query<{ regen_count: number; regen_requested: boolean }>(
@@ -170,10 +227,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       }
       await pool.query(
         "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES (gen_random_uuid()::text,$1,'scene.regenerate','jobs',$2,$3,$4)",
-        [user.id, jobId, JSON.stringify({ idx, org_id: membership.org_id }), new Date().toISOString()]
+        [user.id, jobId, JSON.stringify({ idx, org_id: membership.org_id, tokens: chargedTokens }), new Date().toISOString()]
       );
       await enqueueJobResume(jobId, `regen${idx}`);
-      return Response.json({ job_id: jobId, idx, regenerating: true });
+      return Response.json({ job_id: jobId, idx, regenerating: true, tokens_charged: chargedTokens });
     } finally {
       await pool.end();
     }

@@ -2,10 +2,10 @@
 
 import { useState } from "react";
 import { Check, Sparkles } from "lucide-react";
-import { rupiah } from "./format";
+import { rupiah, tokens } from "./format";
 
-// Paket kredit — TAMPILAN saja (permintaan Brian: "ini di buat aja dlu UI nya").
-// Belum ada Midtrans untuk organisasi; kredit org masih diisi manual oleh tim.
+// Paket token — TAMPILAN saja (permintaan Brian: "ini di buat aja dlu UI nya").
+// Belum ada Midtrans untuk organisasi; token org masih diisi manual oleh tim.
 // Karena itu tombolnya jujur berbunyi "Ajukan" dan membuka kontak, BUKAN
 // "Bayar sekarang" yang akan berbohong soal apa yang terjadi setelah diklik.
 // Harga di bawah adalah ANGKA RANCANGAN yang belum Brian kunci (dia bilang
@@ -13,33 +13,33 @@ import { rupiah } from "./format";
 // ubah, bukan berserakan di markup.
 
 interface Plan {
-  id: string; name: string; priceIdr: number; creditIdr: number;
+  id: string; name: string; priceIdr: number; tokenIdr: number;
   blurb: string; perks: string[]; popular?: boolean;
 }
 
 const SUBSCRIPTIONS: Plan[] = [
   {
-    id: "starter", name: "Starter", priceIdr: 490_000, creditIdr: 600_000,
+    id: "starter", name: "Starter", priceIdr: 490_000, tokenIdr: 600_000,
     blurb: "Buat brand yang baru mulai rutin bikin konten.",
     perks: ["± 25 video 15 detik / bulan", "Semua format: Affiliate, Ads, TVC", "Review scene sebelum digabung"],
   },
   {
-    id: "growth", name: "Growth", priceIdr: 1_900_000, creditIdr: 2_500_000, popular: true,
+    id: "growth", name: "Growth", priceIdr: 1_900_000, tokenIdr: 2_500_000, popular: true,
     blurb: "Paling pas untuk brand yang jalan tiap minggu.",
     perks: ["± 100 video 15 detik / bulan", "Avatar kustom (foto sendiri)", "Prioritas antrean render", "Library & unduh massal"],
   },
   {
-    id: "scale", name: "Scale", priceIdr: 4_900_000, creditIdr: 7_000_000,
+    id: "scale", name: "Scale", priceIdr: 4_900_000, tokenIdr: 7_000_000,
     blurb: "Untuk agensi dan brand dengan banyak SKU.",
     perks: ["± 290 video 15 detik / bulan", "Anggota tim tanpa batas", "Pendampingan skrip & konsep", "Dukungan prioritas"],
   },
 ];
 
 const TOPUPS = [
-  { id: "t1", priceIdr: 250_000, creditIdr: 250_000, bonus: null },
-  { id: "t2", priceIdr: 500_000, creditIdr: 550_000, bonus: "+10%" },
-  { id: "t3", priceIdr: 1_000_000, creditIdr: 1_150_000, bonus: "+15%" },
-  { id: "t4", priceIdr: 2_500_000, creditIdr: 3_000_000, bonus: "+20%" },
+  { id: "t1", priceIdr: 250_000, tokenIdr: 250_000, bonus: null },
+  { id: "t2", priceIdr: 500_000, tokenIdr: 550_000, bonus: "+10%" },
+  { id: "t3", priceIdr: 1_000_000, tokenIdr: 1_150_000, bonus: "+15%" },
+  { id: "t4", priceIdr: 2_500_000, tokenIdr: 3_000_000, bonus: "+20%" },
 ] as const;
 
 export function CreditPlans() {
@@ -86,7 +86,7 @@ export function CreditPlans() {
                   <span className="text-sm font-semibold text-zinc-400"> /bln</span>
                 </p>
                 <p className="mt-0.5 text-xs font-semibold text-emerald-600">
-                  Dapat kredit {rupiah(plan.creditIdr)}
+                  Dapat {tokens(plan.tokenIdr)}
                 </p>
                 <ul className="mt-4 space-y-2">
                   {plan.perks.map((perk) => (
@@ -118,7 +118,7 @@ export function CreditPlans() {
                   </span>
                 )}
                 <p className="font-display text-2xl font-bold text-zinc-900">{rupiah(pack.priceIdr)}</p>
-                <p className="mt-1 text-xs font-semibold text-emerald-600">Jadi {rupiah(pack.creditIdr)} kredit</p>
+                <p className="mt-1 text-xs font-semibold text-emerald-600">Jadi {tokens(pack.tokenIdr)}</p>
               </button>
             );
           })}
@@ -128,7 +128,7 @@ export function CreditPlans() {
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
         <p className="max-w-md text-xs leading-5 text-zinc-500">
           Pembayaran mandiri untuk organisasi belum aktif. Pilih paketnya, lalu tim kami yang
-          mengisikan kreditnya dan mengatur penagihan — biasanya di hari yang sama.
+          mengisikan tokennya dan mengatur penagihan — biasanya di hari yang sama.
         </p>
         <button
           disabled={!picked}

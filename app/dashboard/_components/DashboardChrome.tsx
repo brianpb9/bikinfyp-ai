@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { CircleHelp, FolderKanban, Home, LayoutTemplate, Library, Send, Users, UserRound, Zap } from "lucide-react";
-import { rupiah } from "./format";
+import { tokens } from "./format";
 
 // Desktop-first shell (F-ENT-01, 2026-08-11) — deliberately NOT app/_components/
 // SiteChrome (that's mobile bottom-tab, max-w-md, wrong context entirely).
@@ -103,8 +103,8 @@ export function DashboardChrome({
             href="/dashboard/credits"
             className="block rounded-lg px-2 py-2 transition-colors hover:bg-white/5"
           >
-            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Saldo Org</p>
-            <p className="mt-1 truncate font-display text-lg font-bold text-white">{rupiah(balanceIdr)}</p>
+            <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Token</p>
+            <p className="mt-1 truncate font-display text-lg font-bold text-white">{tokens(balanceIdr)}</p>
             <p className="mt-0.5 text-[11px] font-semibold text-amber-400">Tambah kredit</p>
           </Link>
           {userEmail && (

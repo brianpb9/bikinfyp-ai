@@ -1,8 +1,9 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, Film, LayoutTemplate, Sparkles } from "lucide-react";
+import { ArrowRight, Film, LayoutTemplate, Sparkles, Trash2, User } from "lucide-react";
+import { apiFetch } from "../../../_components/api";
 import { CAMPAIGN_TEMPLATES, type CampaignTemplate } from "@/lib/templates";
 
 // Galeri template (permintaan Brian: "tinggal ganti productnya saja").
@@ -30,8 +31,30 @@ const FORMAT_LABEL: Record<string, string> = {
   hands_only: "Tangan + VO", talking_head: "Wajah AI", tvc: "Sinematik",
 };
 
+interface OrgTemplate {
+  id: string; name: string; note: string | null; kind: string; format: string;
+  duration_sec: number; quality_tier: string; hook_level: string;
+  hook_family: string | null; variant_count: number;
+}
+
 export default function TemplatesPage() {
   const [kind, setKind] = useState<string>("all");
+  // Template buatan brand sendiri (masukan tester). Dipisah dari bawaan supaya
+  // jelas mana keputusan kami dan mana milik mereka — brand harus bisa
+  // menghapus miliknya tanpa takut merusak yang bawaan.
+  const [mine, setMine] = useState<OrgTemplate[]>([]);
+  const loadMine = useCallback(async () => {
+    try {
+      const res = await apiFetch<{ templates: OrgTemplate[] }>("/api/dashboard/templates");
+      setMine(res.templates);
+    } catch { /* galeri bawaan tetap berguna walau daftar milik brand gagal dimuat */ }
+  }, []);
+  useEffect(() => { void loadMine(); }, [loadMine]);
+
+  async function removeMine(id: string) {
+    await apiFetch("/api/dashboard/templates", { method: "DELETE", json: { id } }).catch(() => undefined);
+    await loadMine();
+  }
 
   const visible = useMemo(
     () => (kind === "all" ? CAMPAIGN_TEMPLATES : CAMPAIGN_TEMPLATES.filter((t) => t.kind === kind)),
@@ -48,6 +71,34 @@ export default function TemplatesPage() {
           sudah diatur. Kamu tinggal masukkan produknya.
         </p>
       </div>
+
+      {mine.length > 0 && (
+        <section className="space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-bold text-zinc-900">
+            <User size={14} className="text-zinc-400" /> Template kamu
+          </h2>
+          <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            {mine.map((t) => (
+              <li key={t.id} className="flex items-center gap-3 rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm transition-colors hover:border-amber-400">
+                <Link href={`/dashboard/campaign?orgtpl=${t.id}`} className="min-w-0 flex-1">
+                  <span className="block truncate text-sm font-bold text-zinc-900">{t.name}</span>
+                  <span className="mt-0.5 block truncate text-xs text-zinc-500">
+                    {t.duration_sec} dtk · {FORMAT_LABEL[t.format] ?? t.format} · {t.variant_count} variasi
+                  </span>
+                  {t.note && <span className="mt-0.5 block truncate text-xs text-zinc-400">{t.note}</span>}
+                </Link>
+                <button
+                  onClick={() => removeMine(t.id)}
+                  className="shrink-0 rounded-lg p-2 text-zinc-400 transition-colors hover:bg-red-50 hover:text-red-600"
+                  title="Hapus template"
+                >
+                  <Trash2 size={15} />
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="flex flex-wrap gap-2">
         {KINDS.map((k) => (

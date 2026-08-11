@@ -67,6 +67,50 @@ export default function CampaignPage() {
   // diam-diam. hookFamilies-nya ikut dikirim ke /generate supaya varian
   // pertama benar-benar membawa sudut khas template itu.
   const [template, setTemplate] = useState<CampaignTemplate | null>(null);
+  // Template milik brand (?orgtpl=). Diambil dari API karena isinya data
+  // organisasi, bukan konstanta kode seperti template bawaan.
+  const [savedName, setSavedName] = useState("");
+  const [savingTpl, setSavingTpl] = useState(false);
+  useEffect(() => {
+    const orgTplId = new URLSearchParams(window.location.search).get("orgtpl");
+    if (!orgTplId) return;
+    (async () => {
+      try {
+        const res = await apiFetch<{ templates: Array<Record<string, unknown>> }>("/api/dashboard/templates");
+        const t = res.templates.find((x) => x.id === orgTplId);
+        if (!t) return;
+        setKind(String(t.kind) as Kind);
+        setFormat(String(t.format) as Format);
+        setTier(String(t.quality_tier) as Tier);
+        setDurationSec(Number(t.duration_sec) as 15 | 30 | 45);
+        setHookLevel(String(t.hook_level) as HookLevel);
+        setCount(Number(t.variant_count));
+        if (t.creator_category) setCreatorCategory(String(t.creator_category));
+        if (t.avatar_gender) setAvatarGender(String(t.avatar_gender) as AvatarGender);
+        setNotice(`Pakai template kamu: ${String(t.name)}`);
+        setStep(1);
+      } catch { /* biarkan wizard kosong; brand tetap bisa mengatur manual */ }
+    })();
+  }, []);
+
+  async function saveAsTemplate() {
+    setSavingTpl(true); setError(null);
+    try {
+      await apiFetch("/api/dashboard/templates", { json: {
+        name: savedName, kind, format, quality_tier: tier, duration_sec: durationSec,
+        hook_level: hookLevel, variant_count: count,
+        creator_category: creatorCategory, avatar_gender: avatarGender,
+        hook_family: template?.hookFamily ?? null,
+      } });
+      setSavedName("");
+      setNotice("Template disimpan. Ada di halaman Templates, bagian \"Template kamu\".");
+    } catch (err) {
+      setError(err instanceof ApiFail ? err.message : "Gagal menyimpan template.");
+    } finally {
+      setSavingTpl(false);
+    }
+  }
+
   useEffect(() => {
     const id = new URLSearchParams(window.location.search).get("template");
     const t = getTemplate(id);
@@ -640,6 +684,32 @@ export default function CampaignPage() {
                 ))}
               </div>
             </div>
+          </section>
+
+          {/* Simpan konfigurasi ini jadi template milik brand (masukan tester).
+              Diletakkan DI SINI, bukan di akhir alur: pada titik ini semua
+              pilihan konsep sudah dibuat, dan setelah render dimulai brand
+              sudah beralih memikirkan hasilnya, bukan pengaturannya. */}
+          <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-zinc-300 bg-white p-4">
+            <div className="min-w-0 flex-1">
+              <p className="text-sm font-semibold text-zinc-800">Simpan pengaturan ini jadi template</p>
+              <p className="mt-0.5 text-xs text-zinc-500">
+                Lain kali tinggal pilih templatenya dan masukkan produk baru.
+              </p>
+            </div>
+            <input
+              value={savedName}
+              onChange={(e) => setSavedName(e.target.value)}
+              placeholder="Nama template"
+              className="w-48 rounded-xl border border-zinc-300 px-3 py-2 text-sm outline-none placeholder:text-zinc-400 focus:border-amber-400"
+            />
+            <button
+              onClick={saveAsTemplate}
+              disabled={!savedName.trim() || savingTpl}
+              className="rounded-xl border border-zinc-300 px-4 py-2 text-sm font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
+            >
+              {savingTpl ? "Menyimpan..." : "Simpan"}
+            </button>
           </section>
 
           <div className="flex justify-between">

@@ -6,7 +6,7 @@ import { requireOrgContext } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getOrgBalance, getOrgById } from "@/lib/org";
 import { pgGetOrgBalance, pgGetOrgById, pgGetOrgVideoStats, type OrgVideoStats } from "@/lib/postgres/org";
-import { rupiah } from "../../_components/format";
+import { tokens } from "../../_components/format";
 import { BusinessAnalysisCard } from "../../_components/BusinessAnalysisCard";
 import { LogoutButton } from "../../_components/ProfileActions";
 
@@ -42,7 +42,7 @@ export default async function ProfilePage() {
   const stats = pg ? await pgGetOrgVideoStats(membership.org_id) : EMPTY_STATS;
 
   const rows: { icon: typeof Wallet; label: string; hint: string; href?: string; badge?: string }[] = [
-    { icon: CreditCard, label: "Kredit & tagihan", hint: "Beli kredit, lihat riwayat pemakaian", href: "/dashboard/credits" },
+    { icon: CreditCard, label: "Token & tagihan", hint: "Beli token, lihat riwayat pemakaian", href: "/dashboard/credits" },
     { icon: Film, label: "Library video", hint: `${stats.total} video dari semua kampanye`, href: "/dashboard/library" },
     { icon: Users, label: "Anggota tim", hint: "Undang rekan ke organisasi ini", href: "/dashboard/team" },
   ];
@@ -68,9 +68,9 @@ export default async function ProfilePage() {
       <section className="grid grid-cols-3 gap-4">
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
-            <Wallet size={12} /> Saldo
+            <Wallet size={12} /> Token
           </p>
-          <p className="mt-2 truncate font-display text-2xl font-bold text-zinc-900">{rupiah(balance)}</p>
+          <p className="mt-2 truncate font-display text-2xl font-bold text-zinc-900">{tokens(balance)}</p>
         </div>
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
@@ -80,9 +80,9 @@ export default async function ProfilePage() {
         </div>
         <div className="rounded-2xl border border-zinc-200 bg-white p-4 shadow-sm">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
-            <Building2 size={12} /> Terpakai
+            <Building2 size={12} /> Token terpakai
           </p>
-          <p className="mt-2 truncate font-display text-2xl font-bold text-zinc-900">{rupiah(stats.spent_idr)}</p>
+          <p className="mt-2 truncate font-display text-2xl font-bold text-zinc-900">{tokens(stats.spent_idr)}</p>
         </div>
       </section>
 

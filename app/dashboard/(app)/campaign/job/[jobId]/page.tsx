@@ -9,7 +9,7 @@ import { SkeletonCard } from "../../../../_components/Skeleton";
 interface Scene {
   idx: number; duration_sec: number; prompt: string;
   video_url: string; thumb_url: string | null;
-  regen_requested: boolean; regen_count: number; regen_left: number;
+  regen_requested: boolean; regen_count: number; regen_left: number; regen_tokens: number;
 }
 interface Segment { role: string; start: number; end: number; text: string }
 interface ReviewResponse {
@@ -105,7 +105,8 @@ export default function SceneReviewPage({ params }: { params: Promise<{ jobId: s
         <h1 className="font-display text-2xl font-bold text-zinc-900">{data?.product_name ?? "Memuat..."}</h1>
         <p className="mt-1 text-sm text-zinc-500">
           Cek tiap scene. Kalau ada yang kurang pas, minta ganti scene itu saja — yang lain tetap.
-          Video baru digabung setelah kamu setujui.
+          Video baru digabung setelah kamu setujui. Mengganti scene memakai token tambahan,
+          karena setiap penggantian memanggil AI video lagi.
         </p>
       </div>
 
@@ -175,7 +176,7 @@ export default function SceneReviewPage({ params }: { params: Promise<{ jobId: s
                         className="inline-flex items-center gap-1.5 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-semibold text-zinc-700 transition-colors hover:bg-zinc-50 disabled:opacity-40"
                       >
                         {busy === `regen-${scene.idx}` ? <Loader2 size={13} className="animate-spin" /> : <RotateCcw size={13} />}
-                        Ganti scene ini
+                        Ganti scene ini · {scene.regen_tokens.toLocaleString("id-ID")} token
                       </button>
                     )}
                     <span className="text-xs text-zinc-400">

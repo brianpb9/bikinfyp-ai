@@ -258,3 +258,23 @@ CREATE TABLE IF NOT EXISTS post_plans (
   posted_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_post_plans_org ON post_plans(org_id, scheduled_at);
+
+-- Template milik brand (mirror migrations/postgres/0020_org_templates.sql).
+CREATE TABLE IF NOT EXISTS org_templates (
+  id TEXT PRIMARY KEY,
+  org_id TEXT NOT NULL,
+  name TEXT NOT NULL,
+  note TEXT,
+  kind TEXT NOT NULL,
+  format TEXT NOT NULL,
+  duration_sec INTEGER NOT NULL,
+  quality_tier TEXT NOT NULL,
+  hook_level TEXT NOT NULL,
+  hook_family TEXT,
+  variant_count INTEGER NOT NULL,
+  creator_category TEXT,
+  avatar_gender TEXT,
+  created_by TEXT NOT NULL,
+  created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_org_templates_org ON org_templates(org_id, created_at DESC);

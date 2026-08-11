@@ -5,7 +5,7 @@ import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getOrgBalance } from "@/lib/org";
 import { pgGetOrgBalance, pgGetOrgVideoStats, pgListRecentBulkRuns, type OrgVideoStats, type RecentBulkRun } from "@/lib/postgres/org";
 import { createSignedUrl } from "@/lib/signed-url";
-import { rupiah } from "../_components/format";
+import { tokens } from "../_components/format";
 
 export const dynamic = "force-dynamic";
 
@@ -58,10 +58,10 @@ export default async function DashboardHomePage() {
       <section className="grid grid-cols-3 gap-4">
         <Link href="/dashboard/credits" className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition-colors hover:border-amber-400">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
-            <Wallet size={12} /> Saldo organisasi
+            <Wallet size={12} /> Token organisasi
           </p>
-          <p className="mt-2 truncate font-display text-3xl font-bold text-zinc-900">{rupiah(balance)}</p>
-          <p className="mt-1 text-xs font-semibold text-amber-600">Tambah kredit</p>
+          <p className="mt-2 truncate font-display text-3xl font-bold text-zinc-900">{tokens(balance)}</p>
+          <p className="mt-1 text-xs font-semibold text-amber-600">Tambah token</p>
         </Link>
         <Link href="/dashboard/library" className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition-colors hover:border-amber-400">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
