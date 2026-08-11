@@ -62,6 +62,8 @@ export interface ShotPlanInput {
   /** TVC tanpa orang: seluruh beat jadi makro produk, tekstur, dan packshot.
    * Suara tetap dari persona — yang dimatikan hanya kehadirannya di layar. */
   noModel?: boolean;
+  /** Rute TVC: "luxury" (makro/mekanisme) atau "reallife" (sehari penuh). */
+  tvcRoute?: "luxury" | "reallife";
 }
 
 const HANDS_ONLY_FRAMING =
@@ -283,26 +285,62 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // "no head bobbing"). Instruksi umum seperti "satu gerakan kamera" ternyata
   // jauh lebih lemah daripada menyebut geraknya — model butuh diberi tahu
   // gerak MANA, bukan sekadar berapa banyak.
-  const TVC_MIDDLE_ROLES: { role: string; camera: string; avoid: string }[] = [
+  // Rute REAL-LIFE ("SEHARIAN"): produk diuji hari yang nyata, bukan dipuja
+  // dalam makro. Tiap beat membawa TEMPO-nya sendiri — pelajaran baru dari
+  // template kedua: TVC 1 hanya menyebut kamera, TVC 2 menyebut kecepatan
+  // ("fast, on-beat" vs "half-speed relaxed"), dan tanpa itu semua beat
+  // keluar dengan ritme yang sama datar.
+  const TVC_REALLIFE_ROLES: { role: string; camera: string; avoid: string; pace: string }[] = [
+    {
+      role: `the first thing that tests the product — harsh midday heat outdoors, the person moving through it while the product visibly holds`,
+      camera: `smooth tracking backward in front of them`,
+      avoid: `no jitter, controlled shake only`,
+      pace: `upbeat, purposeful`,
+    },
+    {
+      role: `the second test, indoors and quieter — dry cold air, long hours, the product still holding where it matters`,
+      camera: `steady push-in ending tight on the detail`,
+      avoid: `no abrupt cuts, no drifting focus`,
+      pace: `medium, settled`,
+    },
+    {
+      role: `the third test at the end of the day — late light, dust, tiredness everywhere except in how the product performs`,
+      camera: `static three-quarter close-up with a gentle natural sway`,
+      avoid: `no exaggerated motion`,
+      pace: `half-speed, relaxed`,
+    },
+    {
+      role: `the realisation: catching sight of the result unexpectedly and reacting to it, a clear beat of pleasant surprise`,
+      camera: `static frame holding on the reaction`,
+      avoid: `no head bobbing, the surprise must read clearly`,
+      pace: `snappy, not slow or atmospheric`,
+    },
+  ];
+
+  const TVC_MIDDLE_ROLES: { role: string; camera: string; avoid: string; pace: string }[] = [
     {
       role: `establishes the world of the brand — the setting, the person it is for, and why this moment matters, staged and lit like a commercial`,
       camera: `slow lateral tracking across the scene`,
       avoid: `no jitter, no handheld sway`,
+      pace: `unhurried, deliberate`,
     },
     {
       role: `the product enters the action deliberately: opened, poured, applied or switched on, with crisp material feedback captured in macro`,
       camera: `slow forward dolly moving closer to the action`,
       avoid: `no flicker, no sudden speed changes`,
+      pace: `slow and continuous`,
     },
     {
       role: `the result the product produced, observed in a clean beauty-shot close-up — texture, finish or change, lit to be read instantly`,
       camera: `static frame with a subtle rack focus landing on the detail`,
       avoid: `no exaggerated motion, no focus hunting`,
+      pace: `still, letting the detail be read`,
     },
     {
       role: `the payoff on the person: a directed, believable reaction caused by that result, framed as a portrait beat`,
       camera: `very slow dolly-in on the person`,
       avoid: `no head bobbing, no abrupt expression changes`,
+      pace: `calm and intimate`,
     },
   ];
 
@@ -310,26 +348,30 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // tekstur, mekanisme abstrak, lalu hasil yang diamati dekat. Tidak satu pun
   // menyebut orang, karena satu kata "person" saja sudah cukup memanggil
   // manusia ke frame yang seharusnya murni makro.
-  const TVC_MIDDLE_ROLES_NO_MODEL: { role: string; camera: string; avoid: string }[] = [
+  const TVC_MIDDLE_ROLES_NO_MODEL: { role: string; camera: string; avoid: string; pace: string }[] = [
     {
       role: `the product's material in extreme macro — texture, viscosity, or surface catching the light, filling the frame`,
       camera: `slow lateral tracking across the surface`,
       avoid: `no people, no hands, no jitter`,
+      pace: `unhurried, deliberate`,
     },
     {
       role: `an abstract visualisation of how it works: light, particles or structure suggesting the mechanism, dreamlike rather than literal`,
       camera: `slow forward dolly diving into the material`,
       avoid: `no people, no anatomy, no flicker`,
+      pace: `slow and continuous`,
     },
     {
       role: `the result the product leaves behind, observed in a clean beauty-shot close-up, lit to be read instantly`,
       camera: `static frame with a subtle rack focus landing on the detail`,
       avoid: `no people, no exaggerated motion`,
+      pace: `still, letting the detail be read`,
     },
     {
       role: `the product resting in an art-directed setting that suggests where it belongs, still the only subject in frame`,
       camera: `very slow push-in on the product`,
       avoid: `no people, no drift`,
+      pace: `calm and composed`,
     },
   ];
 
@@ -355,6 +397,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     let role: string;
     let camera: string;
     let avoid: string;
+    let pace: string;
     if (i === 0) {
       role =
         `the opening hook — it starts ALREADY in motion, with "${input.productName}" arriving in frame. ` +
@@ -362,6 +405,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         `No static hold, no slow logo push-in`;
       camera = `static macro with a slight tilt following the product`;
       avoid = `no camera shake, no whip pans`;
+      pace = input.tvcRoute === "reallife" ? `fast, on-beat, no slow motion` : `unhurried, deliberate`;
     } else if (i === numShots - 1) {
       role =
         `the hero shot: the product front-facing and centred on a clean, deliberately lit surface or seamless backdrop, ` +
@@ -371,14 +415,26 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       // terakhir membuat seluruh iklan terasa belum selesai.
       camera = `camera locks off into a static hero packshot and holds the final frame`;
       avoid = `completely stable ending, no drift, no residual motion`;
+      pace = `calm and resolved`;
     } else {
-      const table = input.noModel ? TVC_MIDDLE_ROLES_NO_MODEL : TVC_MIDDLE_ROLES;
+      // Tanpa model mengalahkan rute: kalau tidak ada orang di layar, beat
+      // "sehari penuh" yang seluruhnya tentang orang tidak bisa dipakai.
+      const table = input.noModel
+        ? TVC_MIDDLE_ROLES_NO_MODEL
+        : input.tvcRoute === "reallife"
+          ? TVC_REALLIFE_ROLES
+          : TVC_MIDDLE_ROLES;
       const m = table[(i - 1) % table.length];
-      role = m.role; camera = m.camera; avoid = m.avoid;
+      role = m.role; camera = m.camera; avoid = m.avoid; pace = m.pace;
     }
     return (
       `Beat ${i + 1} of ${numShots} in a broadcast television commercial (${from}-${to}s of ${input.durationSec}s): ${role}. ` +
-      `Camera: ${camera}. ${avoid}. Lighting is designed, not found. ` +
+      `Camera: ${camera}. Pace: ${pace}. ${avoid}. Lighting is designed, not found. ` +
+      // Character-lock: pelajaran dari template kedua. Sekali orangnya
+      // ditetapkan, deskripsinya TIDAK BOLEH berubah antar shot — itu yang
+      // menjaga wajah tetap sama, bukan mendeskripsikan ulang orangnya dengan
+      // kata berbeda di tiap beat. Hanya disebut bila memang ada orang.
+      `${input.noModel ? "" : `The same person, same face, same hair and same outfit as the other shots. `}` +
       `${TVC_IDENTITY} ${TVC_STYLE_LOCK}`
     );
   };

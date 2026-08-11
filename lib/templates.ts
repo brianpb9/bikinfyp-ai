@@ -36,6 +36,8 @@ export interface CampaignTemplate {
    * Lebih baik kosong daripada memasang klip yang salah gaya. */
   preview: string | null;
   accent: "amber" | "rose" | "emerald" | "violet" | "sky" | "zinc";
+  /** Rute TVC — hanya untuk kind "tvc". Lihat lib/media/shot-planner.ts. */
+  tvcRoute?: "luxury" | "reallife";
 }
 
 export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
@@ -119,6 +121,15 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     hookLevel: "berani", hookFamily: "H10", count: 4,
     bestFor: ["jasa", "toko", "beauty", "fashion", "food"],
     preview: "/previews/format-ads.mp4", accent: "rose",
+  },
+  {
+    id: "tvc-reallife",
+    name: "TVC Sehari Penuh",
+    when: "Produk yang harus bertahan seharian — sunscreen, deodoran, makeup tahan lama.",
+    kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
+    hookLevel: "normal", hookFamily: "H11", count: 2, tvcRoute: "reallife",
+    bestFor: ["beauty", "health", "fashion"],
+    preview: "/previews/format-tvc.mp4", accent: "sky",
   },
   {
     id: "tvc-15",

@@ -316,6 +316,7 @@ export default function CampaignPage() {
           format, creator_category: creatorCategory, avatar_custom_desc: customAvatarDesc,
           // null = biarkan mesin menurunkan jumlah adegan seperti sebelumnya.
           shot_count: multiShot ? shotCount : null, ratio, no_model: noModel,
+          tvc_route: template?.tvcRoute ?? null,
         },
       });
       router.push(`/dashboard/campaign/${res.run_id}`);

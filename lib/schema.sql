@@ -147,6 +147,7 @@ CREATE TABLE IF NOT EXISTS jobs (
   avatar_custom_desc TEXT, -- M8: deskripsi avatar upload sendiri (teks hasil Gemini vision, bukan foto)
   shot_count INTEGER,
   no_model INTEGER,
+  tvc_route TEXT,
   ratio TEXT,
   requires_approval INTEGER NOT NULL DEFAULT 0, -- M11: jeda approval per-scene (dashboard brand saja)
   approved_at TEXT,
