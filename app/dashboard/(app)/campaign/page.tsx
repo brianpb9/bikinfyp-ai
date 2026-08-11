@@ -371,6 +371,12 @@ export default function CampaignPage() {
 
   const avatars = AVATAR_PRESETS.filter((a) => a.gender === avatarGender);
   const selectedCount = scripts.filter((s) => !excluded.has(s.script_id)).length;
+  // Seragam = semua varian punya caption yang sama persis. Diperiksa dari
+  // HASILNYA, bukan dari "apakah template dipakai": kalau nanti variasi
+  // kalimat per template ditulis, layar pilihan muncul lagi dengan
+  // sendirinya tanpa ada yang perlu mengingat untuk menyalakannya.
+  const skripSeragam =
+    scripts.length > 1 && scripts.every((s) => s.caption === scripts[0].caption);
 
   return (
     <div className="space-y-8">
@@ -1043,7 +1049,31 @@ export default function CampaignPage() {
             </button>
           </section>
 
-          {scripts.length > 0 && (
+          {/* TEMPLATE TIDAK MENAWARKAN PILIHAN SKRIP.
+              Template mengunci keluarga hook-nya, dan mesin menghasilkan satu
+              teks tetap per keluarga — jadi semua variannya keluar sama persis
+              kata per kata. Menampilkan "2 skrip siap, pilih yang mau
+              dirender" untuk dua teks identik adalah pilihan palsu: brand
+              membandingkan dua hal yang tidak berbeda.
+              Skripnya tetap N baris di belakang layar supaya N video tetap
+              terbentuk; yang berubah cuma layarnya berhenti berpura-pura. */}
+          {scripts.length > 0 && skripSeragam && (
+            <section className="space-y-3">
+              <p className="text-sm font-bold text-zinc-900">Skrip template siap</p>
+              <div className="rounded-xl border border-amber-300 bg-white p-4 shadow-sm">
+                <p className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
+                  <CheckCircle2 size={13} className="text-emerald-500" /> hook {scripts[0].hook_family} · dikunci template
+                </p>
+                <p className="mt-1 text-sm text-zinc-700">{scripts[0].caption}</p>
+                <p className="mt-3 border-t border-zinc-100 pt-3 text-xs text-zinc-500">
+                  Dirender jadi <b>{scripts.length} video</b> dari skrip yang sama. Visualnya tetap
+                  berbeda karena tiap video digambar ulang sendiri-sendiri.
+                </p>
+              </div>
+            </section>
+          )}
+
+          {scripts.length > 0 && !skripSeragam && (
             <section className="space-y-3">
               <p className="text-sm font-bold text-zinc-900">{scripts.length} skrip siap — pilih yang mau dirender</p>
               <ul className="space-y-2">
@@ -1083,7 +1113,13 @@ export default function CampaignPage() {
               className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
-              {loading ? "Memulai render..." : `Setujui ${selectedCount} & Mulai Render`}
+              {/* "Setujui" menyiratkan memilih. Kalau tidak ada yang bisa
+                  dipilih, yang jujur adalah menyebut apa yang akan terjadi. */}
+              {loading
+                ? "Memulai render..."
+                : skripSeragam
+                  ? `Render ${scripts.length} video`
+                  : `Setujui ${selectedCount} & Mulai Render`}
             </button>
           </div>
         </div>
