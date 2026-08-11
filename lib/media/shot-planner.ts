@@ -30,6 +30,7 @@ import { hargaTerbilang } from "../script-engine/terbilang";
 import { MANDATORY_NEGATIVE_PROMPT } from "../config/compliance";
 import { ugcRolesFor } from "./ugc-template-roles";
 import { isServiceLike } from "../config/hooks";
+import { getRecordingStyle, type StyleFormat } from "./recording-styles";
 
 export interface ShotPlanInput {
   jobId: string;
@@ -73,6 +74,13 @@ export interface ShotPlanInput {
    * (kamera nyaris tidak pindah) menghasilkan struktur shot yang identik.
    * Tabelnya di lib/media/ugc-template-roles.ts. */
   ugcTemplate?: string | null;
+  /** Gaya rekam (lib/media/recording-styles.ts) — sumbu "bagaimana direkam",
+   *  terpisah dari "apa yang dijual". NULL / "standar" = perilaku lama persis.
+   *
+   *  Hanya berlaku untuk hands_only / talking_head / ads. TVC SENGAJA tidak
+   *  ikut: TVC punya TVC_STYLE_LOCK demi konsistensi antar-shot, dan menimpanya
+   *  membatalkan alasan kunci itu ada. */
+  recordStyle?: string | null;
 }
 
 const HANDS_ONLY_FRAMING =
@@ -521,7 +529,17 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // FASHION = FULL BODY (2026-08-07, keputusan Brian): baju/hijab tidak bisa
     // dinilai dari close-up dada — presenter berdiri, outfit terlihat utuh.
     const fullBodyFashion = format === "talking_head" && (input.productCategory === "fashion" || input.productCategory === "muslim_fashion");
-    const framing = format === "tvc"
+    // Gaya rekam menimpa framing bawaan — TAPI hanya kalau formatnya memang
+    // cocok. Menerapkan "selfie" pada hands_only akan menaruh "face filling
+    // the frame" tepat di sebelah HANDS_ONLY_NEGATIVE ("no face"): dua
+    // perintah berlawanan dalam satu prompt, dan hasilnya render rusak yang
+    // tetap dibayar penuh. Penyaringan ada di UI, penjagaan ada di sini —
+    // dua-duanya, karena yang di UI bisa dilewati lewat panggilan API.
+    const gaya = getRecordingStyle(input.recordStyle);
+    const gayaBerlaku = gaya && gaya.framing && gaya.formats.includes(format as StyleFormat) ? gaya : null;
+    const framing = gayaBerlaku
+      ? `${gayaBerlaku.framing}. `
+      : format === "tvc"
       ? `${TVC_FRAMING}. `
       : format === "hands_only"
       ? `${HANDS_ONLY_FRAMING}. `
