@@ -7,6 +7,7 @@ import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_co
 import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
 import { track } from "../../_components/track";
 import templateTerbukti from "../../../lib/config/template-terbukti.json";
+import { HOOK_LEVELS, type HookLevel } from "@/lib/config/hooks";
 
 // Preset-first (2026-08-06, riset teardown kompetitor): user memilih HASIL yang
 // kelihatan, bukan label abstrak — kartu format menampilkan contoh render nyata
@@ -31,18 +32,29 @@ const REGISTERS = [
 ];
 
 type Tier = "silent_caption" | "high_quality" | "super_hq";
-type HookLevel = "normal" | "berani" | "gila";
 
 // Level hook sebagai SLIDER 0-100% (permintaan Brian 2026-08-06, gaya
-// "Weirdness"-slider) — di belakang layar tetap dipetakan ke 3 level mesin.
+// "Weirdness"-slider).
+//
+// TIPENYA DIIMPOR, tidak lagi dideklarasikan ulang di sini. Halaman ini dulu
+// punya `type HookLevel = "normal" | "berani" | "gila"` sendiri, dan salinan
+// itu diam-diam melenceng saat levelnya jadi lima (keputusan Brian
+// 2026-08-11): slider 100 posisi ternyata cuma menghasilkan TIGA hasil
+// berbeda, padahal mesin skripnya sudah mendukung kelimanya. Mengimpor dari
+// lib/config/hooks.ts membuat pergeseran seperti itu ketahuan saat typecheck.
+//
 // Copy JUJUR: data kami mendukung hook pertanyaan/payoff cepat; ujung "Gila"
 // adalah eksperimen (pembuka visual nyeleneh), BUKAN janji lebih FYP.
 function hookLevelFromPct(pct: number): HookLevel {
-  return pct <= 33 ? "normal" : pct <= 66 ? "berani" : "gila";
+  // Lima pita sama lebar di sepanjang slider.
+  const i = Math.min(HOOK_LEVELS.length - 1, Math.floor((pct / 100) * HOOK_LEVELS.length));
+  return HOOK_LEVELS[i];
 }
 const HOOK_LEVEL_INFO: Record<HookLevel, { icon: string; label: string; hint: string }> = {
   normal: { icon: "✅", label: "Normal", hint: "pola paling terbukti di data" },
+  agak_berani: { icon: "🙂", label: "Agak berani", hint: "campur pola agresif sedikit" },
   berani: { icon: "🔥", label: "Berani", hint: "hook lebih nendang" },
+  agak_gila: { icon: "😜", label: "Agak gila", hint: "pembuka visual lembut · eksperimen" },
   gila: { icon: "🤪", label: "Gila", hint: "pembuka nyeleneh · eksperimen" },
 };
 

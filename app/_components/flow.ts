@@ -1,5 +1,7 @@
 "use client";
 
+import type { HookLevel } from "@/lib/config/hooks";
+
 // Konteks alur "bikin video" — disimpan di sessionStorage agar tahan tutup halaman.
 
 export interface FlowProduct {
@@ -39,7 +41,9 @@ export interface FlowState {
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
   format?: VideoFormat;
   durationSec?: 15 | 30 | 45;
-  hookLevel?: "normal" | "berani" | "gila";
+  // Tipe kanonik dari lib/config/hooks.ts, bukan salinan. Versi salinan di
+  // sini pernah tertinggal di tiga level saat levelnya jadi lima.
+  hookLevel?: HookLevel;
   creatorCategory?: string;
   scripts?: FlowScript[];
   selectedScriptId?: string;

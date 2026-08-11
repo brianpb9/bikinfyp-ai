@@ -13,7 +13,11 @@ export default function PilihJenisPage() {
         <Link href="/" className="flex min-h-[44px] items-center text-base font-semibold text-zinc-700">
           ← Bikin Video
         </Link>
-        <p className="mt-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Langkah 1 · pilih satu</p>
+        {/* TANPA nomor langkah. Penghitung 5 langkah baru mulai di halaman
+            berikutnya (FlowHeader step=1 di /bikin/produk), jadi menyebut
+            layar ini "Langkah 1" membuat pengguna melihat "Langkah 1" dua
+            kali berturut-turut dan mengira dia berputar di tempat. */}
+        <p className="mt-2 text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih satu</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Mau bikin video apa?</h1>
       </div>
 

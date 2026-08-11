@@ -241,8 +241,9 @@ export default function ProdukPage() {
       <FlowHeader title="Bikin Video" step={1} />
       <div className="space-y-5 px-4">
         <section className="space-y-2">
+          {/* "Langkah 1 dari 5" TIDAK diulang di sini — FlowHeader tepat di
+              atasnya sudah mencetaknya lengkap dengan titik-titiknya. */}
           <div>
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Langkah 1 dari 5</p>
             <h2 className="font-display text-xl font-bold text-zinc-900">Tempel link produkmu</h2>
           </div>
           <input

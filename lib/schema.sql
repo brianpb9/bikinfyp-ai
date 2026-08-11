@@ -132,7 +132,9 @@ CREATE TABLE IF NOT EXISTS scripts (
   hashtags TEXT NOT NULL,   -- JSON array
   validation_result TEXT NOT NULL, -- JSON
   quality_tier TEXT NOT NULL DEFAULT 'silent_caption', -- silent_caption | high_quality | super_hq
-  hook_level TEXT NOT NULL DEFAULT 'normal', -- normal | berani | gila (S3; gila = visual pattern-interrupt)
+  hook_level TEXT NOT NULL DEFAULT 'normal', -- lima level, lihat HOOK_LEVELS di lib/config/hooks.ts
+                                             -- (normal | agak_berani | berani | agak_gila | gila).
+                                             -- Sengaja tanpa CHECK: baris lama tiga-level tetap terbaca.
   approved_by_user_at TEXT, -- NULL = belum melewati gerbang HITL
   edited_by_user INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL
