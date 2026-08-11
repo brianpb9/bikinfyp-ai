@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { apiFetch } from "../../_components/api";
 import { FlowHeader, PrimaryButton, ErrorText, WarnCard } from "../../_components/ui";
 import { CATEGORY_OPTIONS, loadFlow, saveFlow, rupiah } from "../../_components/flow";
+import { guessCategory } from "@/lib/category-guess";
 
 // Harus sinkron dengan MAX_IMAGES di lib/product-images.ts (server, tak bisa
 // diimpor langsung ke client component karena pakai node:fs/sharp).
@@ -19,6 +20,11 @@ export default function ProdukPage() {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("beauty");
+  // Kategori sudah ditentukan dari sumber yang lebih tepercaya daripada tebakan
+  // nama? (pengunjung memilih sendiri, hasil ekstrak URL, draft tersimpan, atau
+  // data percobaan /coba). Kalau ya, penebak tidak boleh ikut campur.
+  const [kategoriDitentukan, setKategoriDitentukan] = useState(false);
+  const [kategoriDitebak, setKategoriDitebak] = useState(false);
   const [visualDesc, setVisualDesc] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
@@ -54,6 +60,7 @@ export default function ProdukPage() {
       setName(f.product.name);
       setPrice(String(f.product.priceIdr));
       setCategory(f.product.category);
+      setKategoriDitentukan(true);
       return;
     }
     // Prefill dari percobaan /coba (magic moment tanpa login) — jangan suruh
@@ -67,12 +74,26 @@ export default function ProdukPage() {
         setName(trial.name);
         setPrice(String(trial.priceIdr));
         setCategory(trial.category);
+        setKategoriDitentukan(true);
         sessionStorage.removeItem("racun.try");
       }
     } catch {
       /* abaikan */
     }
   }, []);
+
+  // Jalur isi-manual (link gagal dibaca, atau user memang mengetik sendiri)
+  // meninggalkan kategori di "beauty" untuk semua orang. Gamis pun disusun
+  // pakai sudut skincare. Sama seperti di /coba: tebak dari nama produk, pakai
+  // kamus yang sama (lib/category-guess.ts), dan mundur begitu ada sumber yang
+  // lebih tepercaya.
+  useEffect(() => {
+    if (kategoriDitentukan) return;
+    const tebakan = guessCategory(name);
+    if (tebakan === "default" || tebakan === category) return;
+    setCategory(tebakan);
+    setKategoriDitebak(true);
+  }, [name, kategoriDitentukan, category]);
 
   function removeLocalPhoto(i: number) {
     URL.revokeObjectURL(previewUrls.current[i]);
@@ -137,6 +158,7 @@ export default function ProdukPage() {
         setName(res.name ?? "");
         setPrice(res.price_idr ? String(res.price_idr) : "");
         setCategory(res.category ?? "default");
+        setKategoriDitentukan(true);
         setExtractedPreviews(res.image_urls ?? []);
         setExtractedRels(res.images ?? []);
         if (res.product_visual_desc) setVisualDesc(res.product_visual_desc);
@@ -307,7 +329,7 @@ export default function ProdukPage() {
             />
             <select
               value={category}
-              onChange={(e) => setCategory(e.target.value)}
+              onChange={(e) => { setCategory(e.target.value); setKategoriDitentukan(true); setKategoriDitebak(false); }}
               className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
             >
               {CATEGORY_OPTIONS.map((c) => (
@@ -316,6 +338,13 @@ export default function ProdukPage() {
                 </option>
               ))}
             </select>
+            {/* Tebakan yang tidak diberitahukan itu diam-diam mengubah hasil
+                orang. Katakan bahwa kita menebak — dan bahwa boleh diganti. */}
+            {kategoriDitebak && (
+              <p className="-mt-2 text-sm text-zinc-500">
+                Kategorinya kami tebak dari nama produk — ganti kalau meleset.
+              </p>
+            )}
 
             <div>
               <p className="mb-2 text-sm font-semibold text-zinc-700">

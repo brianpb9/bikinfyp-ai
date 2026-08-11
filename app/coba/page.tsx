@@ -10,6 +10,7 @@ import Link from "next/link";
 import { apiFetch } from "../_components/api";
 import { CATEGORY_OPTIONS, HOOK_FAMILY_NAMES, rupiah } from "../_components/flow";
 import { track } from "../_components/track";
+import { guessCategory } from "@/lib/category-guess";
 
 interface TryScript {
   hook_family: string;
@@ -28,10 +29,30 @@ export default function CobaPage() {
   const [openIdx, setOpenIdx] = useState(0);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Sudah disentuh sendiri oleh pengunjung? Kalau ya, tebakan berhenti campur
+  // tangan selamanya — pilihan manusia mengalahkan tebakan mesin.
+  const [pilihSendiri, setPilihSendiri] = useState(false);
+  const [ditebak, setDitebak] = useState(false);
 
   useEffect(() => {
     track("try_view");
   }, []);
+
+  // Halaman ini adalah kesan pertama, dan dropdown-nya default "beauty" untuk
+  // SEMUA orang. Ketik "Gamis Katun Premium", biarkan default, dan skripnya
+  // membuka dengan "Skincare murah vs mahal tuh bedanya apa sih?" — calon
+  // pelanggan menyimpulkan AI-nya bodoh, padahal dia cuma tidak diberi tahu
+  // ada dropdown. Menebak dari nama produk memakai kamus yang sama dengan
+  // jalur ekstraksi URL (lib/category-guess.ts).
+  useEffect(() => {
+    if (pilihSendiri) return;
+    const tebakan = guessCategory(name);
+    // "default" = tidak ketemu. Jangan timpa pilihan yang sudah ada dengan
+    // tebakan kosong; lebih baik diam.
+    if (tebakan === "default" || tebakan === category) return;
+    setCategory(tebakan);
+    setDitebak(true);
+  }, [name, pilihSendiri, category]);
 
   async function generate() {
     setLoading(true);
@@ -79,13 +100,20 @@ export default function CobaPage() {
         {price && <p className="text-sm text-zinc-500">= {rupiah(parseInt(price || "0", 10) || 0)}</p>}
         <select
           value={category}
-          onChange={(e) => setCategory(e.target.value)}
+          onChange={(e) => { setCategory(e.target.value); setPilihSendiri(true); setDitebak(false); }}
           className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
         >
           {CATEGORY_OPTIONS.map((c) => (
             <option key={c.id} value={c.id}>{c.label}</option>
           ))}
         </select>
+        {/* Tebakan yang tidak diberitahukan itu diam-diam mengubah hasil orang.
+            Katakan bahwa kita menebak, dan katakan bahwa mereka boleh ganti. */}
+        {ditebak && (
+          <p className="text-sm text-zinc-500">
+            Kategorinya kami tebak dari nama produk — ganti kalau meleset.
+          </p>
+        )}
         <button
           type="button"
           onClick={generate}
