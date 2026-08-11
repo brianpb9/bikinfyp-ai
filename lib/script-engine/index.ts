@@ -207,11 +207,12 @@ function generateOne(
   family: HookCode,
   tier: "silent_caption" | "high_quality" | "super_hq",
   durationSec: number,
-  beats?: { hookEnd: number; demoEnd: number }
+  beats?: { hookEnd: number; demoEnd: number },
+  wordBudget?: number
 ): GeneratedScript {
   const ctx = buildCtx(product, register);
   const cartLabel = cartLabelForUrl(product.sourceUrl);
-  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats).map((s) => ({
+  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats, wordBudget).map((s) => ({
     ...s,
     text: applyCartLabel(s.text, cartLabel),
   }));
@@ -295,6 +296,9 @@ export function generateScripts(opts: {
   /** Batas beat sebagai PECAHAN durasi, diambil dari shot list template.
    * Kosong = pembagian generik (hook 20%, demo sampai 67%). */
   beats?: { hookEnd: number; demoEnd: number };
+  /** Total kata seluruh video, dari dokumen template. Hanya untuk template
+   * tanpa VO — lihat catatan di lib/script-engine/templates.ts. */
+  wordBudget?: number;
 }): GeneratedScript[] {
   const { product, register } = opts;
   const emotion = opts.emotion ?? "senang";
@@ -304,7 +308,7 @@ export function generateScripts(opts: {
     product.category, product.id, opts.hookLevel ?? "normal",
     opts.hookFamilies, opts.count ?? 3, opts.lockHookFamily === true
   );
-  return families.map((f) => generateOne(product, register, emotion, f, tier, durationSec, opts.beats));
+  return families.map((f) => generateOne(product, register, emotion, f, tier, durationSec, opts.beats, opts.wordBudget));
 }
 
 export function outputExtras(category: string) {

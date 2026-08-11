@@ -94,6 +94,15 @@ export interface CampaignTemplate {
    * T05 memberi 42% karena perbandingan before/after ITU SENDIRI yang jadi
    * hook dan penonton butuh waktu memelototinya. */
   beats?: { hookEnd: number; demoEnd: number };
+  /** Total kata untuk SELURUH video, dari dokumen bedah.
+   *
+   * Sengaja HANYA diisi untuk template tanpa VO. Empat video pemenang yang
+   * tanpa VO memakai 22-30 kata untuk seluruh videonya, sedangkan rentang
+   * mesin kami [32,48] per 15 dtk — dua sampai tiga kali lipat teks di layar.
+   * Template ber-VO tidak diberi angka ini karena jatah kata di dokumen
+   * dihitung dari kecepatan bicara MANUSIA (2,8 kata/dtk) sementara TTS kami
+   * ~1,93 kata/dtk; menyalinnya membuat audio lebih panjang dari videonya. */
+  wordBudget?: number;
   /** Kelompok di galeri. Dua kelompok ini sumbu yang BERBEDA, bukan versi
    * lama vs baru: "format" menentukan bentuk videonya (berapa adegan, ada VO
    * atau tidak, apa yang dibuktikan), "sudut" menentukan dari mana produknya
@@ -261,6 +270,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     caution: { badge: "Butuh rekaman asli", note:
       "Perbandingan before/after adalah klaim hasil pada tubuh orang. Kedua sisi wajib direkam sungguhan dengan cahaya, sudut, dan kamera yang sama — membuatnya dengan AI berarti membuat bukti palsu." },
     beats: { hookEnd: 0.423, demoEnd: 0.847 },
+    wordBudget: 22,
     preview: "/previews/t05-before-after.mp4", accent: "violet",
   },
   // ── T06 ───────────────────────────────────────────────────────────────────
@@ -273,6 +283,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     bestFor: ["beauty", "fashion", "food"],
     source: { durationSec: 27, shots: 5, bpm: 147 },
     beats: { hookEnd: 0.150, demoEnd: 0.897 },
+    wordBudget: 24,
     preview: "/previews/t06-swatch-shade.mp4", accent: "rose",
   },
   // ── T07 ───────────────────────────────────────────────────────────────────
@@ -299,6 +310,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     caution: { badge: "Butuh rekaman asli", note:
       "Inti template ini adalah perubahan nyata pada tubuh seseorang selama tujuh hari. Menghasilkan \"DAY 7\" secara sintetis berarti menipu pembeli soal keputusan kesehatannya. Sediakan tujuh hari, rekam dua kali dengan setelan yang persis sama." },
     beats: { hookEnd: 0.223, demoEnd: 0.936 },
+    wordBudget: 22,
     preview: "/previews/t08-day-1-vs-day-7.mp4", accent: "zinc",
   },
   // ── T09 ───────────────────────────────────────────────────────────────────
@@ -337,6 +349,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     bestFor: ["beauty", "food"],
     source: { durationSec: 10, shots: 2, bpm: 89 },
     beats: { hookEnd: 0.249, demoEnd: 0.798 },
+    wordBudget: 30,
     preview: "/previews/t11-hook-misteri.mp4", accent: "zinc",
   },
   // ── T12 ───────────────────────────────────────────────────────────────────

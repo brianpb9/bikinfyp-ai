@@ -69,6 +69,11 @@ export async function POST(req: Request) {
       hookEnd > 0 && hookEnd < demoEnd && demoEnd < 1
         ? { hookEnd, demoEnd }
         : null;
+    const rawBudget = Number(body.word_budget);
+    // Batas atas 120 bukan angka asal: video 45 dtk tier bersuara pun cuma
+    // ~90 kata, jadi nilai di atas ini pasti salah kirim, bukan permintaan.
+    const wordBudget = Number.isFinite(rawBudget) && rawBudget >= 10 && rawBudget <= 120
+      ? Math.round(rawBudget) : null;
     const rawFamilies = Array.isArray(body.hook_families) ? body.hook_families : [];
     const hookFamilies = rawFamilies
       .map((f: unknown) => String(f ?? "").toUpperCase())
@@ -85,6 +90,7 @@ export async function POST(req: Request) {
       // Pecahan dijaga di sini juga, bukan cuma di mesin: nilai dari luar
       // tidak boleh bisa membuat hook lebih panjang dari videonya.
       ...(beats ? { beats } : {}),
+      ...(wordBudget ? { wordBudget } : {}),
     });
 
     let variants = run(product.name);

@@ -350,9 +350,20 @@ export function renderSegmentsForTier(
   tier: "silent_caption" | "high_quality" | "super_hq",
   durationSec = 15,
   cartLabel: "keranjang kuning" | "keranjang" = "keranjang kuning",
-  beats?: { hookEnd: number; demoEnd: number }
+  beats?: { hookEnd: number; demoEnd: number },
+  /** Total kata untuk SELURUH video, dari dokumen bedah template. Lihat
+   * catatan di bawah — hanya dipakai template tanpa VO. */
+  wordBudget?: number
 ): SegmentDraft[] {
-  const triple = (tier === "silent_caption" ? T : COMPACT_T)[family](c);
+  // Jatah kata sempit memakai salinan RINGKAS, bukan salinan panjang.
+  //
+  // Terukur 2026-08-11: dengan jatah 22 kata, salinan panjang (T) berhenti di
+  // 35 kata dan tidak pernah turun lagi — loop di bawah cuma bisa MENAMBAH
+  // kalimat, tidak memangkas, sementara teks dasarnya sendiri sudah ~35 kata.
+  // COMPACT_T memang ditulis untuk kasus jatah sempit; memakainya di sini
+  // adalah cara mencapai jatah tanpa memotong kalimat di tengah.
+  const useCompact = tier !== "silent_caption" || (wordBudget !== undefined && wordBudget <= 34);
+  const triple = (useCompact ? COMPACT_T : T)[family](c);
   // r19c (Brian 2026-08-09, lanjutan investigasi sama): dulu "keranjang kuning"
   // -> "keranjang" (buat sumber non-TikTok) di-substitusi SESUDAH fungsi ini
   // return, di index.ts. Loop fill-kata di bawah jadi mikir sudah cukup
@@ -411,9 +422,24 @@ export function renderSegmentsForTier(
   // dipaksa nambah baris yang tidak perlu dan berisiko kebentur maxWc.
   const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
   const scale = durationSec / 15;
-  const minWc = Math.round(baseMinWc * scale);
-  const maxWc = Math.round(baseMaxWc * scale);
-  const targetWc = Math.round(((baseMinWc + baseMaxWc) / 2) * scale);
+  // JATAH KATA TEMPLATE menimpa rentang di atas, dan sengaja TIDAK diskalakan
+  // durasi — karena batasnya bukan kecepatan bicara, tapi beban baca.
+  //
+  // Ini hanya diisi untuk template TANPA VO. Dari 12 video pemenang, empat
+  // yang tanpa VO memakai 22-30 kata untuk SELURUH video (T05 22 kata/18,9
+  // dtk · T06 24/26,7 · T08 22/22,4 · T11 30/10). Rentang kami [32,48] per 15
+  // dtk berarti dua sampai tiga kali lipat teks di layar dibanding video mana
+  // pun yang menang. Dokumen T05 menjelaskan sebabnya: lewat 25 kata,
+  // penonton MEMBACA dan berhenti melihat perbandingannya — padahal
+  // perbandingan itu satu-satunya alasan videonya jalan.
+  //
+  // Template BER-VO sengaja tidak diberi jatah ini. Angka di dokumen (56, 62,
+  // 86 kata) dihitung dari kecepatan bicara manusia 2,8 kata/detik; TTS kami
+  // terukur ~1,93 kata/detik, jadi menyalinnya membuat audio lebih panjang
+  // dari videonya. Rentang [25,30] yang sudah dikalibrasi ITU yang setara.
+  const minWc = wordBudget ? Math.round(wordBudget * 0.85) : Math.round(baseMinWc * scale);
+  const maxWc = wordBudget ? Math.round(wordBudget * 1.15) : Math.round(baseMaxWc * scale);
+  const targetWc = wordBudget ? wordBudget : Math.round(((baseMinWc + baseMaxWc) / 2) * scale);
   const forceAtLeastOne = longer;
   // Minimal 1 lanjutan demo WAJIB ditambah (durasi >15dtk saja) biar demo
   // beneran lebih panjang (bukan cuma jendela waktu yang molor diam-diam) —

@@ -308,6 +308,7 @@ export default function CampaignPage() {
             ? { hook_families: [template.hookFamily], lock_hook_family: true }
             : {}),
           ...(template?.beats ? { beats: template.beats } : {}),
+          ...(template?.wordBudget ? { word_budget: template.wordBudget } : {}),
         } }
       );
       setScripts(res.scripts);
