@@ -11,6 +11,7 @@ import { rupiah } from "../../_components/format";
 import { Stepper } from "../../_components/Stepper";
 import { AVATAR_PRESETS, type AvatarGender } from "@/lib/avatar-presets";
 import { getTemplate, type CampaignTemplate } from "@/lib/templates";
+import { pickTemplate } from "@/lib/auto-pick";
 
 type Kind = "affiliate" | "ads" | "tvc";
 type Format = "talking_head" | "hands_only" | "tvc" | "ads";
@@ -123,6 +124,11 @@ export default function CampaignPage() {
   // diam-diam. hookFamilies-nya ikut dikirim ke /generate supaya varian
   // pertama benar-benar membawa sudut khas template itu.
   const [template, setTemplate] = useState<CampaignTemplate | null>(null);
+  // Mode cepat ("Bikinin aja"): kita yang memilih template dari kategori dan
+  // harga, lalu melompat langsung ke Review. TAMBAHAN, bukan pengganti —
+  // alasannya ditampilkan dan templatenya tetap bisa diganti.
+  const [modeCepat, setModeCepat] = useState(false);
+  const [alasanPilih, setAlasanPilih] = useState<string | null>(null);
   // Template milik brand (?orgtpl=). Diambil dari API karena isinya data
   // organisasi, bukan konstanta kode seperti template bawaan.
   const [savedName, setSavedName] = useState("");
@@ -168,9 +174,17 @@ export default function CampaignPage() {
   }
 
   useEffect(() => {
-    const id = new URLSearchParams(window.location.search).get("template");
-    const t = getTemplate(id);
+    const params = new URLSearchParams(window.location.search);
+    // Mode cepat: brand tidak memilih jenis maupun template — kita yang pilih
+    // setelah dia memasukkan produknya. Lihat catatan di lib/auto-pick.ts.
+    if (params.get("auto") === "1") { setModeCepat(true); setStep(1); return; }
+    const t = getTemplate(params.get("template"));
     if (!t) return;
+    terapkanTemplate(t);
+    setStep(1);
+  }, []);
+
+  function terapkanTemplate(t: CampaignTemplate) {
     setTemplate(t);
     setKind(t.kind as Kind);
     setFormat(t.format as Format);
@@ -187,11 +201,7 @@ export default function CampaignPage() {
     // sumbernya — enam dari 12 video itu berpotongan 1,7-2,5 detik per shot,
     // ritme yang memang belum bisa kami hasilkan.
     if (t.shotCount && t.shotCount >= 2) { setMultiShot(true); setShotCount(t.shotCount); }
-    // Langsung ke langkah Produk: jenis videonya sudah ditentukan template,
-    // menahan brand di layar pilihan jenis cuma menyuruh mengulang keputusan
-    // yang baru saja dia ambil di galeri.
-    setStep(1);
-  }, []);
+  }
 
   const [scripts, setScripts] = useState<GeneratedScript[]>([]);
   const [excluded, setExcluded] = useState<Set<string>>(new Set());
@@ -290,6 +300,13 @@ export default function CampaignPage() {
         },
       });
       setProduct(res);
+      if (modeCepat) {
+        const pilihan = pickTemplate({ category: res.category, priceIdr: res.price_idr });
+        terapkanTemplate(pilihan.template);
+        setAlasanPilih(pilihan.alasan);
+        go(4); // langsung ke Review — langkah Konsep dilewati, bukan dihapus
+        return;
+      }
       go(3);
     } catch (err) {
       setError(err instanceof ApiFail ? err.message : "Gagal menyimpan detail.");
@@ -386,7 +403,25 @@ export default function CampaignPage() {
 
       {/* Template aktif ditampilkan terang-terangan. Kalau pengaturan terisi
           sendiri tanpa penjelasan, brand akan mengira sistemnya ngawur. */}
-      {template && (
+      {/* Alasan pemilihan otomatis. Ditampilkan karena penggunanya brand yang
+          PAHAM konten — mereka berhak tidak setuju, dan tidak bisa tidak setuju
+          dengan keputusan yang tidak dijelaskan. Tombol di bawahnya membuka
+          seluruh pengaturan, jadi mode cepat tidak pernah jadi jalan buntu. */}
+      {modeCepat && alasanPilih && template && (
+        <div className="rounded-xl border border-sky-200 bg-sky-50 px-4 py-3">
+          <p className="text-sm text-sky-900">
+            Kami pilihkan <b>{template.name}</b> — {alasanPilih}
+          </p>
+          <button
+            onClick={() => { setModeCepat(false); setAlasanPilih(null); go(3); }}
+            className="mt-1.5 text-xs font-semibold text-sky-700 underline underline-offset-2 hover:text-sky-900"
+          >
+            Bukan ini — atur sendiri
+          </button>
+        </div>
+      )}
+
+      {template && !modeCepat && (
         <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
           <div className="min-w-0">
             <p className="text-sm text-amber-900">

@@ -45,15 +45,27 @@ export default async function DashboardHomePage() {
         <div className="min-w-0">
           <h2 className="font-display text-xl font-bold text-white">Bikin video baru</h2>
           <p className="mt-1 max-w-md text-sm text-zinc-400">
-            Satu produk, 2–6 variasi video sekaligus. Pilih AI UGC Affiliate, UGC Ads, atau TVC.
+            Masukkan produknya, kami pilihkan formatnya dari kategori dan harganya —
+            atau atur sendiri kalau kamu sudah punya konsepnya.
           </p>
         </div>
-        <Link
-          href="/dashboard/campaign"
-          className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400"
-        >
-          <Plus size={16} /> Mulai kampanye
-        </Link>
+        {/* DUA jalur, bukan satu menggantikan yang lain. "Bikinin aja" untuk
+            yang sudah tahu mau apa dan tidak mau mengatur lima layar; "Atur
+            sendiri" tetap membuka seluruh pilihan seperti sebelumnya. */}
+        <div className="flex shrink-0 flex-wrap items-center gap-3">
+          <Link
+            href="/dashboard/campaign?auto=1"
+            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400"
+          >
+            <Sparkles size={16} /> Bikinin aja
+          </Link>
+          <Link
+            href="/dashboard/campaign"
+            className="inline-flex items-center gap-2 rounded-xl border border-zinc-700 px-5 py-3 text-sm font-semibold text-zinc-200 transition-colors hover:border-zinc-500 hover:text-white"
+          >
+            <Plus size={15} /> Atur sendiri
+          </Link>
+        </div>
       </section>
 
       <section className="grid grid-cols-3 gap-4">
