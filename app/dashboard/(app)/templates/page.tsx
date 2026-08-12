@@ -47,9 +47,18 @@ const GROUPS = [
     note: "Dari mana produknya didekati. Bisa dipakai di format mana pun.",
   },
   {
-    id: "lain" as const,
-    title: "UGC Ads & TVC",
-    note: "Jenis lain — untuk app, jasa, toko, dan iklan sinematik.",
+    id: "ads" as const,
+    title: "UGC Ads",
+    note: "Untuk app, jasa, dan toko — yang dijual kemampuannya, bukan barangnya.",
+  },
+  {
+    // Kolom sendiri sejak 2026-08-12 (permintaan Brian): TVC sudah lima
+    // template dan tenggelam waktu dicampur dengan Ads di satu bagian. Dua
+    // yang terbaru diproduksi tim sendiri — dari enam yang dibuat, empat
+    // dibuang karena jelek dan hanya dua ini yang lolos.
+    id: "tvc" as const,
+    title: "TVC Sinematik",
+    note: "Iklan TV: kamera terkontrol, pencahayaan ditata, ditutup hero shot. Bukan gaya UGC.",
   },
 ];
 

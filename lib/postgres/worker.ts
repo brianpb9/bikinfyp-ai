@@ -14,6 +14,7 @@ import { outputExtras, cartLabelForUrl } from "../script-engine";
 import { formatHargaOverlay, type SegmentDraft } from "../script-engine/templates";
 import { getCreatorCategory } from "../personas";
 import { planShots } from "../media/shot-planner";
+import { TVC_ROUTES, type TvcRoute } from "../templates";
 import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
@@ -175,8 +176,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // Daftar putih, bukan lolos apa adanya: nilai asing lebih baik jatuh ke
     // rute luxury (perilaku lama) daripada masuk ke perencana sebagai rute
     // yang tidak punya tabel beat.
-    tvcRoute: row.tvc_route === "reallife" ? "reallife"
-      : row.tvc_route === "comedy" ? "comedy" : undefined,
+    // Diteruskan apa adanya kalau terdaftar. Dulu di-hardcode dua rute, jadi
+    // rute yang ditambahkan belakangan sampai ke database tapi tidak pernah
+    // sampai ke perencana shot.
+    tvcRoute: TVC_ROUTES.includes(row.tvc_route as never) ? (row.tvc_route as TvcRoute) : undefined,
     ugcTemplate: row.template_id,
     recordStyle: row.record_style });
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the

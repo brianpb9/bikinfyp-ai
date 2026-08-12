@@ -14,7 +14,7 @@ import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
-import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
+import { CAMPAIGN_TEMPLATES, TVC_ROUTES } from "@/lib/templates";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,7 +70,11 @@ export async function POST(req: Request) {
     // menghasilkan prompt yang bertengkar dengan dirinya sendiri.
     const noModel = format === "tvc" && body.no_model === true;
     const tvcRoute =
-      format === "tvc" && (body.tvc_route === "reallife" || body.tvc_route === "comedy")
+      // Divalidasi terhadap TVC_ROUTES, bukan daftar yang ditulis ulang di
+      // sini: rute baru yang lupa didaftarkan akan diam-diam jatuh ke beat
+      // generik tanpa jejak. "luxury" tetap dikecualikan karena itu perilaku
+      // bawaan ketika tvc_route kosong.
+      format === "tvc" && body.tvc_route !== "luxury" && TVC_ROUTES.includes(body.tvc_route as never)
         ? (body.tvc_route as string)
         : null;
     // Template UGC affiliate. Divalidasi terhadap daftar template yang MEMANG

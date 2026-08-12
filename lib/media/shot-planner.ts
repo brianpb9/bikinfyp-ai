@@ -66,7 +66,10 @@ export interface ShotPlanInput {
   noModel?: boolean;
   /** Rute TVC: "luxury" (makro/mekanisme), "reallife" (sehari penuh), atau
    * "comedy" (parodi/pattern-break — TVC 3 "Tersangka Glowing"). */
-  tvcRoute?: "luxury" | "reallife" | "comedy";
+  /** Rute TVC. "fabric" dan "intimate" ditambahkan 2026-08-12 dari dua TVC
+   *  produksi Brian yang lolos (TVC 5 & 6); empat lainnya dia buang sendiri
+   *  karena jelek, jadi hanya dua ini yang jadi acuan. */
+  tvcRoute?: "luxury" | "reallife" | "comedy" | "fabric" | "intimate";
   /** Id template UGC affiliate (T01..T12). NULL = perilaku lama, beat generik.
    *
    * Inilah yang membuat template mengubah VIDEONYA, bukan cuma labelnya:
@@ -334,6 +337,89 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     },
   ];
 
+
+  // Rute KAIN (TVC 5 "KAIN YANG IKUT LARI", produksi Brian 12 Agustus 2026).
+  //
+  // Yang dijual BUKAN bajunya sebagai benda, tapi bajunya SAAT DIPAKAI
+  // BERGERAK. Premisnya satu kalimat: baju bagus bukan yang cantik saat diam,
+  // tapi yang tetap rapi saat kamu bergerak.
+  //
+  // DUA HAL DIBUANG DARI VERSI FINAL, dan keduanya jadi aturan di sini:
+  // 1. Adegan koridor berjalan santai dibuang — Brian: "terasa seperti
+  //    lookbook", persis yang harus dihindari kategori fashion. Jadi tiap beat
+  //    di bawah menuntut gerakan yang punya SEBAB (menuruni tangga, menurunkan
+  //    lengan), bukan berjalan untuk dipandangi.
+  // 2. Packshot baju di hanger dibuang — Brian: "mematikan premis iklan:
+  //    konsepnya kain yang bergerak, tapi penutupnya kain diam tak dipakai
+  //    siapa pun". Penutup rute ini ditangani terpisah di bawah.
+  const TVC_FABRIC_ROLES: { role: string; camera: string; avoid: string; pace: string }[] = [
+    {
+      role: `movement with a REASON, not a walk for the camera — descending stairs quickly, one hand light on the rail, the hem and fabric lifting and trailing with each step`,
+      camera: `smooth tracking alongside the descent`,
+      avoid: `no posing, no lookbook stroll, no pausing to be admired`,
+      pace: `upbeat, purposeful`,
+    },
+    {
+      role: `the garment correcting ITSELF after a real action — an arm raised to write or reach, then lowered, and the sleeve and body of the garment fall back into a clean line by themselves with no adjustment by hand`,
+      camera: `steady medium shot, no movement`,
+      avoid: `no hand smoothing the fabric, no visible adjusting`,
+      pace: `calm, confident`,
+    },
+    {
+      role: `extreme macro of the fabric itself: the weave breathes and lifts into a soft suspended wave, daylight glowing through the thinnest folds until it turns translucent`,
+      camera: `drifting very slowly across the surface`,
+      avoid: `no cuts, no snapping motion, nothing rigid`,
+      pace: `slow, tactile, sensual`,
+    },
+    {
+      role: `warm backlight and wind: the garment lifts and trails around the wearer while she stays composed, the whole silhouette readable head to toe`,
+      camera: `slow steady approach`,
+      avoid: `no cropping the garment, the full silhouette must stay in frame`,
+      pace: `unhurried, cinematic`,
+    },
+  ];
+
+  // Rute INTIM (TVC 6 "JAM TIGA PAGI", produksi Brian 12 Agustus 2026).
+  //
+  // Kategori bayi & ibu. Yang dijual ketenangan di jam yang tidak ada orang
+  // lain melihatnya — bukan fitur produk. Produk baru muncul di tengah, dan
+  // muncul sebagai bagian dari rutinitas, bukan sebagai pahlawan.
+  //
+  // TIGA ATURAN KERAS, semuanya dari kegagalan nyata di produksi Brian:
+  // 1. WAJAH BAYI TIDAK PERNAH TAMPIL — hanya punggung kepala, tangan mungil,
+  //    atau siluet. Ini aturan produksi, bukan selera.
+  // 2. Anatomi ditulis POSITIF ("dia punya tepat dua tangan, keduanya terlihat
+  //    jelas dan menempel wajar pada lengannya"), bukan negatif. Klip ini tiga
+  //    kali dibuat: versi negatif menghasilkan TANGAN HANTU di detik 6.
+  // 3. Kamera DIKUNCI DIAM di shot yang melibatkan menggendong. Kamera yang
+  //    bergerak sambil model menggendong bayi adalah dua hal sulit sekaligus.
+  const TVC_INTIMATE_ROLES: { role: string; camera: string; avoid: string; pace: string }[] = [
+    {
+      role: `stillness first — a dim room lit only by one small warm nightlight, nothing moving, then the smallest sign of someone waking: eyes opening, exhausted but instantly alert`,
+      camera: `drifting very gently across the room`,
+      avoid: `no bright light, no sudden movement, no music-video energy`,
+      pace: `slow, quiet, intimate`,
+    },
+    {
+      role: `the careful act: lifting and holding with visibly correct, safe handling — she has exactly two hands, both clearly visible and naturally attached to her own arms throughout the entire shot, one hand supporting behind the head and neck, the other arm supporting the back`,
+      camera: `completely static and locked off, hands resting calmly before any movement begins`,
+      avoid: `never show the infant's face — only the back of the head; no extra limbs, no hands entering frame from outside`,
+      pace: `slow and deliberate`,
+    },
+    {
+      role: `rhythm: a steady gentle repeated motion — swaying, patting — the kind that only works because it is boring, only the back of the small head visible`,
+      camera: `moving in slowly toward the repeating hand`,
+      avoid: `never show the infant's face; no jerky motion`,
+      pace: `hypnotic, tender`,
+    },
+    {
+      role: `the product enters the routine quietly: lifted from the bedside surface, opened, a small amount taken onto a fingertip — an ordinary step, not a reveal`,
+      camera: `close and steady on the product`,
+      avoid: `no dramatic lighting change, no hero framing`,
+      pace: `careful, gentle`,
+    },
+  ];
+
   // Rute KOMEDI (TVC 3 "TERSANGKA GLOWING"): produk tidak dipuja, produk jadi
   // PUNCHLINE. Strukturnya tuduhan -> bukti -> jawaban -> pembalikan, dan yang
   // menjual adalah pembalikan itu: si penuduh diam-diam ikut memotret
@@ -469,6 +555,25 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       camera = `static macro with a slight tilt following the product`;
       avoid = `no camera shake, no whip pans`;
       pace = input.tvcRoute === "reallife" ? `fast, on-beat, no slow motion` : `unhurried, deliberate`;
+    } else if (i === numShots - 1 && input.tvcRoute === "fabric") {
+      // PENUTUP RUTE KAIN — sengaja BUKAN packshot.
+      //
+      // Brian membuang packshot tunik di hanger dari versi finalnya dengan
+      // alasan yang telak: "mematikan premis iklan — konsepnya kain yang
+      // bergerak, tapi penutupnya kain diam tak dipakai siapa pun". Penutup
+      // generik kita adalah packshot produk diam di atas meja; menerapkannya
+      // ke rute ini akan mengulang persis kesalahan yang sudah dia perbaiki.
+      //
+      // Penggantinya: bajunya tetap DIPAKAI dan tetap BERGERAK, lalu berhenti
+      // dan jatuh rapi dengan sendirinya. Gerakan berhenti, produknya tidak
+      // pernah jadi benda mati.
+      role =
+        `the closing shot — NOT a still packshot: the garment stays worn and in motion, ` +
+        `walking toward camera in gentle slow motion with the fabric lifting and trailing, the whole garment ` +
+        `visible head to toe, then coming to a stop so the fabric settles into a calm drape by itself`;
+      camera = `slow steady approach, then locks off once she stops`;
+      avoid = `never end on the garment hanging still on a hanger or laid flat — that kills the premise; do not crop the silhouette`;
+      pace = `unhurried, cinematic`;
     } else if (i === numShots - 1) {
       role =
         `the hero shot: the product front-facing and centred on a clean, deliberately lit surface or seamless backdrop, ` +
@@ -488,7 +593,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
           ? TVC_REALLIFE_ROLES
           : input.tvcRoute === "comedy"
             ? TVC_COMEDY_ROLES
-            : TVC_MIDDLE_ROLES;
+            : input.tvcRoute === "fabric"
+              ? TVC_FABRIC_ROLES
+              : input.tvcRoute === "intimate"
+                ? TVC_INTIMATE_ROLES
+                : TVC_MIDDLE_ROLES;
       const m = table[(i - 1) % table.length];
       role = m.role; camera = m.camera; avoid = m.avoid; pace = m.pace;
     }

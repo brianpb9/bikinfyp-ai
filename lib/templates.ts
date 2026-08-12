@@ -12,6 +12,14 @@
 // preset sendiri, ITU yang masuk database — bukan yang ini.
 
 export type TemplateKind = "affiliate" | "ads" | "tvc";
+
+/** Rute TVC yang sah — SATU sumber, dipakai template, route confirm, dan
+ *  worker. Sebelum ini daftarnya ditulis ulang di tiap tempat, dan rute yang
+ *  belum terdaftar di salah satunya HILANG DIAM-DIAM: jobnya tetap jalan,
+ *  cuma memakai beat generik, dan tidak ada satu pun jejak bahwa rute yang
+ *  dipilih brand diabaikan. */
+export const TVC_ROUTES = ["luxury", "reallife", "comedy", "fabric", "intimate"] as const;
+export type TvcRoute = (typeof TVC_ROUTES)[number];
 export type TemplateFormat = "hands_only" | "talking_head" | "tvc" | "ads";
 // silent_caption masuk ke sini (2026-08-11). Dari 12 video pemenang yang
 // dibedah Brian, EMPAT sengaja tanpa voice-over dan seluruh pesannya dipikul
@@ -66,7 +74,7 @@ export interface CampaignTemplate {
   preview: string | null;
   accent: "amber" | "rose" | "emerald" | "violet" | "sky" | "zinc";
   /** Rute TVC — hanya untuk kind "tvc". Lihat lib/media/shot-planner.ts. */
-  tvcRoute?: "luxury" | "reallife" | "comedy";
+  tvcRoute?: TvcRoute;
   /** Rasio yang dipaksa template ini. Kosong = ikut pilihan pengguna (9:16).
    *
    * Ada karena dua template TVC ditulis dan dirender 16:9 landscape: brand
@@ -108,7 +116,7 @@ export interface CampaignTemplate {
    * atau tidak, apa yang dibuktikan), "sudut" menentukan dari mana produknya
    * didekati (racun checkout, diskon, spill rahasia). Satu produk bisa pakai
    * format T02 dengan sudut mana pun. */
-  group?: "format" | "sudut" | "lain";
+  group?: "format" | "sudut" | "ads" | "tvc";
 }
 
 // ── 12 TEMPLATE UGC AFFILIATE ───────────────────────────────────────────────
@@ -378,7 +386,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   // potongan kerasnya. Karena itu hookLevel-nya "gila" — di level itulah
   // perencana shot memasang pembuka pattern-interrupt.
   {
-    id: "ads-tembus-dinding", group: "lain",
+    id: "ads-tembus-dinding", group: "ads",
     name: "Tembus Dinding",
     when: "Butuh perhatian dalam 2 detik. Sesuatu menembus ruangan di belakang presenter, lalu produknya yang menutup.",
     kind: "ads", format: "ads", durationSec: 30, tier: "high_quality",
@@ -389,7 +397,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     preview: "/previews/ads-tembus-dinding.mp4", accent: "sky",
   },
   {
-    id: "ads-atap-jebol", group: "lain",
+    id: "ads-atap-jebol", group: "ads",
     name: "Atap Jebol",
     when: "Interupsi datang dari atas — atap runtuh, orangnya jatuh masuk frame, langsung ke produk.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
@@ -400,7 +408,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     preview: "/previews/ads-atap-jebol.mp4", accent: "amber",
   },
   {
-    id: "ads-dobrak-pintu", group: "lain",
+    id: "ads-dobrak-pintu", group: "ads",
     name: "Dobrak Pintu",
     when: "Ruangan kosong, lalu seseorang mendobrak masuk dan lari ke kamera. Paling murah dibuat dari ketiganya.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
@@ -411,7 +419,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     preview: "/previews/ads-dobrak-pintu.mp4", accent: "violet",
   },
   {
-    id: "ads-waktu-berhenti", group: "lain",
+    id: "ads-waktu-berhenti", group: "ads",
     name: "Waktu Berhenti",
     when: "Semua yang bergerak membeku — pasar, uap, orang — dan cuma produkmu yang masih jalan.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
@@ -422,7 +430,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     preview: "/previews/ads-waktu-berhenti.mp4", accent: "emerald",
   },
   {
-    id: "kenalin-bisnis", group: "lain",
+    id: "kenalin-bisnis", group: "ads",
     name: "Kenalin Bisnismu",
     when: "Buat app, jasa, atau toko yang belum banyak dikenal. Presenter yang menjelaskan.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
@@ -431,7 +439,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     preview: "/previews/ads-dobrak-pintu.mp4", accent: "sky",
   },
   {
-    id: "promo-terbatas", group: "lain",
+    id: "promo-terbatas", group: "ads",
     name: "Promo Terbatas",
     when: "Ada penawaran yang benar-benar berbatas waktu. Langsung ke ajakan, tanpa basa-basi.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
@@ -448,7 +456,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   // rute, tempo, dan hasil nyata, keduanya cuma terbaca sebagai pengisi — dan
   // durasi tetap bisa diubah sendiri di langkah Konsep.
   {
-    id: "tvc-the-drop", group: "lain",
+    id: "tvc-the-drop", group: "tvc",
     name: "The Drop",
     when: "Produk yang keunggulannya ada di bahan dan cara kerjanya. Makro, tekstur, mekanisme.",
     kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
@@ -458,7 +466,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     preview: "/previews/tvc-the-drop.mp4", accent: "zinc",
   },
   {
-    id: "tvc-tersangka", group: "lain",
+    id: "tvc-tersangka", group: "tvc",
     name: "Tersangka Glowing",
     when: "Hasilnya kelihatan sampai orang curiga. Parodi ruang sidang — produknya jadi punchline, bukan dipuja.",
     kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
@@ -474,7 +482,7 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     preview: "/previews/tvc-tersangka.mp4", accent: "rose",
   },
   {
-    id: "tvc-seharian", group: "lain",
+    id: "tvc-seharian", group: "tvc",
     name: "Seharian",
     when: "Produk yang harus bertahan seharian — sunscreen, deodoran, makeup tahan lama.",
     kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
@@ -482,6 +490,52 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     bestFor: ["beauty", "health", "fashion"],
     ratio: "16:9",
     preview: "/previews/tvc-seharian.mp4", accent: "sky",
+  },
+
+  // --- DUA TVC PRODUKSI SENDIRI (Brian, 12 Agustus 2026) ---
+  //
+  // Berbeda dari tiga TVC di atas yang diturunkan dari referensi luar: dua ini
+  // BENAR-BENAR DIPRODUKSI tim dan lolos penilaian Brian sendiri. Dari enam
+  // yang dia buat, empat dia buang karena jelek dan hanya dua ini dikirim —
+  // jadi ini bukan "dua contoh", ini dua yang bertahan dari seleksi.
+  //
+  // Struktur beat, aturan kamera, dan larangan tiap rute diambil dari
+  // PROMPT-FINAL-3-TVC.md, termasuk bagian yang DIBUANG dari versi final —
+  // yang dibuang justru paling informatif, karena itu kesalahan yang sudah
+  // terbukti merusak iklannya.
+  {
+    id: "tvc-kain-lari", group: "tvc",
+    name: "Kain yang Ikut Lari",
+    when: "Fashion yang nilainya baru kelihatan saat dipakai bergerak — jatuh bahan, potongan, kain yang rapi sendiri.",
+    kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
+    hookLevel: "normal", hookFamily: "H11", count: 2, tvcRoute: "fabric",
+    bestFor: ["fashion", "muslim_fashion"],
+    ratio: "16:9",
+    // 5 klip, bukan 6: adegan koridor dibuang dari versi final karena terasa
+    // seperti lookbook — kategori fashion paling mudah jatuh ke sana.
+    shotCount: 5,
+    source: { durationSec: 30, shots: 5 },
+    caution: {
+      badge: "Wajib bergerak",
+      note: "Jangan pernah tutup dengan baju tergantung di hanger atau dibentang datar. Premisnya kain yang bergerak; penutup diam membatalkan iklannya sendiri.",
+    },
+    preview: "/previews/tvc-kain-lari.mp4", accent: "emerald",
+  },
+  {
+    id: "tvc-jam-tiga", group: "tvc",
+    name: "Jam Tiga Pagi",
+    when: "Produk ibu & bayi, atau apa pun yang dipakai di jam sepi yang tidak ada orang lain lihat.",
+    kind: "tvc", format: "tvc", durationSec: 30, tier: "high_quality",
+    hookLevel: "normal", hookFamily: "H11", count: 2, tvcRoute: "intimate",
+    bestFor: ["kids", "health", "beauty"],
+    ratio: "16:9",
+    shotCount: 6,
+    source: { durationSec: 32, shots: 6 },
+    caution: {
+      badge: "Wajah bayi disembunyikan",
+      note: "Bayi hanya tampil dari punggung kepala, tangan mungil, atau siluet — tidak pernah wajahnya. Ini aturan produksi, bukan pilihan gaya.",
+    },
+    preview: "/previews/tvc-jam-tiga.mp4", accent: "amber",
   },
 ];
 
