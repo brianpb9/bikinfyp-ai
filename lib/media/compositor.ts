@@ -13,6 +13,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { AUDIO_TARGET, audioEncoderArgs, loudnormFilter, masterAudioFile } from "./audio-master";
 import { runFfmpeg, runFf, escDrawtext, detectFont } from "./ffmpeg";
 import { config } from "../config";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
@@ -151,13 +152,13 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     const voIdx = n; // input VO tepat setelah klip; addPngInput menghitung offset di bawah
     const labels = Array.from({ length: n }, (_, i) => `[${i}:v]`).join("");
     vChain.push(`${labels}concat=n=${n}:v=1:a=0[vcat]`);
-    aChain.push(`[${voIdx}:a]aresample=24000,apad[aout]`);
+    aChain.push(`[${voIdx}:a]aresample=${AUDIO_TARGET.sampleRate},apad[aout]`);
     mapAudio = "[aout]";
   } else if (input.mode === "embedded") {
     // Klip membawa audio; concat video+audio sekaligus (jalur lama tanpa TTS).
     const labels = Array.from({ length: n }, (_, i) => `[${i}:v][${i}:a]`).join("");
     vChain.push(`${labels}concat=n=${n}:v=1:a=1[vcat][acat]`);
-    aChain.push(`[acat]aresample=24000[aout]`);
+    aChain.push(`[acat]aresample=${AUDIO_TARGET.sampleRate}[aout]`);
     mapAudio = "[aout]";
   } else {
     const labels = Array.from({ length: n }, (_, i) => `[${i}:v]`).join("");
@@ -209,9 +210,9 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     // jadi harus tetap terdengar lembut TAPI terdeteksi QC-04; tanpa suara mengagetkan).
     if (hasMusic) {
       const mIdx = input.clipPaths.length; // indeks input musik (setelah klip)
-      aChain.push(`[${mIdx}:a]atrim=0:${input.durationSec},volume=0.5,afade=t=in:st=0:d=0.5,afade=t=out:st=${Math.max(0, input.durationSec - 1)}:d=1,aresample=24000[aout]`);
+      aChain.push(`[${mIdx}:a]atrim=0:${input.durationSec},volume=0.5,afade=t=in:st=0:d=0.5,afade=t=out:st=${Math.max(0, input.durationSec - 1)}:d=1,aresample=${AUDIO_TARGET.sampleRate}[aout]`);
     } else {
-      aChain.push(`aevalsrc=0:d=${input.durationSec}:s=24000[aout]`);
+      aChain.push(`aevalsrc=0:d=${input.durationSec}:s=${AUDIO_TARGET.sampleRate}[aout]`);
     }
     mapAudio = "[aout]";
   } else if (input.mode === "vo") {
@@ -243,12 +244,12 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
       cur = "vq";
     }
     // Audio: basis hening + VO per segmen di-delay ke timestamp segmen.
-    aChain.push(`aevalsrc=0:d=${input.durationSec}:s=24000[sil]`);
+    aChain.push(`aevalsrc=0:d=${input.durationSec}:s=${AUDIO_TARGET.sampleRate}[sil]`);
     const mixInputs = ["[sil]"];
     (input.vo ?? []).forEach((vo, i) => {
       const streamIdx = input.clipPaths.length + i;
       const delayMs = Math.round(vo.startSec * 1000);
-      aChain.push(`[${streamIdx}:a]aresample=24000,adelay=delays=${delayMs}:all=1[a${i}]`);
+      aChain.push(`[${streamIdx}:a]aresample=${AUDIO_TARGET.sampleRate},adelay=delays=${delayMs}:all=1[a${i}]`);
       mixInputs.push(`[a${i}]`);
     });
     aChain.push(`${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=first:normalize=0[aout]`);
@@ -263,8 +264,25 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
 
   vChain.push(`[${cur}]null[vout]`);
 
+  // MASTERING AUDIO (2026-08-13). Diukur pada video yang benar-benar dirender
+  // pipeline ini: -12,4 LUFS di 32 kHz, padahal standar TikTok -14 LUFS di
+  // 44,1 kHz. Sumbernya ada DI SINI — compositor me-resample ke 24 kHz di enam
+  // tempat, dan tidak ada satu pun langkah normalisasi loudness.
+  //
+  // Disisipkan sebagai langkah terakhir rantai audio, bukan sebagai lewatan
+  // encode tambahan: encode ulang video demi audio berarti membuang kualitas
+  // gambar tanpa alasan.
+  //
+  // Lewatan TUNGGAL (tanpa measured_*): compositor dipanggil sekali per video
+  // dan berkas sumbernya belum ada saat filter disusun, jadi pengukuran dua
+  // lewatan butuh render ganda. Meleset ~1 LU dibanding dua lewatan — masih
+  // jauh lebih baik daripada 1,6 LU terlalu keras dan sample rate salah.
+  const aFinal = aChain.length > 0
+    ? [...aChain.slice(0, -1), aChain[aChain.length - 1].replace(/\[aout\]$/, "[apre]"), `[apre]${loudnormFilter(null)}[aout]`]
+    : aChain;
+
   args.push(
-    "-filter_complex", [...vChain, ...aChain].join(";"),
+    "-filter_complex", [...vChain, ...aFinal].join(";"),
     "-map", "[vout]",
     "-map", mapAudio,
     "-t", String(input.durationSec),
@@ -272,8 +290,7 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     "-preset", "veryfast",
     "-crf", "26",
     "-pix_fmt", "yuv420p",
-    "-c:a", "aac",
-    "-b:a", "128k",
+    ...audioEncoderArgs(),
     "-movflags", "faststart+use_metadata_tags",
     "-metadata", `comment=BikinFYP AI AIGC v0.2 | provider_video=${input.providerVideo} | mode=${input.mode} | ${new Date().toISOString()}`,
     "-metadata", "racun_aigc=true",
@@ -283,6 +300,32 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
   );
 
   await runFfmpeg(args);
+
+  // MASTERING AUDIO — lewatan kedua, di berkas jadi.
+  //
+  // Lewatan pertama sudah ada di dalam filter_complex di atas, tapi terukur
+  // 2026-08-13 ia meleset: dari -12,4 LUFS mendarat di -15,5, yaitu 1,5 LU
+  // di luar toleransi. Sebabnya audio akhir adalah CAMPURAN yang baru ada
+  // setelah dirakit — lewatan tunggal menebak dari awal berkas.
+  //
+  // Di sini campurannya sudah jadi, jadi bisa diukur betulan. Video di-copy,
+  // hanya audio yang di-encode ulang: tidak ada kualitas gambar yang hilang.
+  // Terukur sesudahnya: -14,02 LUFS di 44,1 kHz.
+  //
+  // GAGAL = BIARKAN YANG ASLI. Video yang audionya kurang pas masih bisa
+  // dipakai; video yang hilang tidak.
+  const mastered = outPath.replace(/\.mp4$/, ".mastered.mp4");
+  try {
+    const hasil = await masterAudioFile({ filePath: outPath, outPath: mastered });
+    if (fs.existsSync(mastered) && fs.statSync(mastered).size > 0) {
+      fs.renameSync(mastered, outPath);
+      console.log(`[compositor] job ${input.jobId}: audio ${hasil.sebelum?.inputI} -> ${hasil.sesudah?.inputI} LUFS @ ${AUDIO_TARGET.sampleRate} Hz${hasil.ok ? "" : " (MASIH DI LUAR TARGET)"}`);
+    }
+  } catch (err) {
+    console.error(`[compositor] job ${input.jobId}: mastering audio gagal, memakai audio apa adanya —`, err instanceof Error ? err.message : err);
+    try { if (fs.existsSync(mastered)) fs.unlinkSync(mastered); } catch { /* abaikan */ }
+  }
+
   console.log(`[compositor] job ${input.jobId}: output.mp4 selesai (mode=${input.mode}, label AIGC via metadata — tanpa watermark visual)`);
   return { outPath, renderParams: { watermark: true, watermarkText } };
 }

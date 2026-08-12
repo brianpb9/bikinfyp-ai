@@ -242,6 +242,103 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
       camera: `static selfie, natural micro-shake`,
     },
   },
+  // --- ENAM ADS LAMA (tabel ditambahkan 2026-08-13) ---
+  //
+  // Keenamnya tayang sejak awal TANPA tabel peran, jadi selama ini semuanya
+  // jatuh ke beat generik: presenter memegang produk sambil bicara. Nama
+  // kartunya menjanjikan atap runtuh, pintu didobrak, waktu berhenti — dan
+  // tidak satu pun pernah terjadi di videonya. Ini gap yang sama persis yang
+  // ditemukan pada tiga ads baru lewat render, cuma di template yang lebih
+  // lama dan karena itu lebih lama diam.
+  //
+  // EMPAT PATTERN-INTERRUPT punya bentuk yang sama: interupsi dulu, produk
+  // BELAKANGAN. Yang membedakan hanya ARAH interupsinya — dari belakang, dari
+  // atas, dari depan, atau waktu yang membeku. Perbedaan arah itulah yang
+  // harus ditulis; kalau tidak, keempatnya keluar sama seperti sekarang.
+  "ads-tembus-dinding": {
+    opening: {
+      role: `an ordinary quiet room with a person going about something mundane in the foreground, then WITHOUT WARNING something massive breaks through the wall directly behind them — debris and dust bursting forward. The product is NOT visible yet`,
+      camera: `static wide, locked off so the breach reads clearly`,
+    },
+    middle: [
+      { role: `the aftermath in the same room: dust settling, the person turning to look, still processing what just happened`,
+        camera: `slight handheld push in toward their reaction` },
+      { role: `the product finally raised into frame, calm and undamaged, the chaos still visible behind it`,
+        camera: `steady close-up on the product with the wreckage soft behind` },
+    ],
+    closing: {
+      role: `one continuous shot: product held to camera, the closing line spoken, the broken wall still in frame as proof this really happened`,
+      camera: `single continuous take, no cuts` },
+  },
+  "ads-atap-jebol": {
+    opening: {
+      role: `a calm interior seen from below, then the CEILING gives way and someone drops into frame from above in a burst of dust and debris, landing hard. The product is NOT visible yet`,
+      camera: `low angle looking up, locked off, so the fall enters from the top of frame` },
+    middle: [
+      { role: `the person picking themselves up amid fallen ceiling pieces, dazed but unhurt, the room now wrecked around them`,
+        camera: `handheld at their level, slightly unsteady` },
+    ],
+    closing: {
+      role: `one continuous shot: they hold the product up to camera, completely composed now, ceiling debris still on the floor`,
+      camera: `single continuous take, steady` },
+  },
+  "ads-dobrak-pintu": {
+    opening: {
+      role: `an empty quiet room, nothing happening at all, held just long enough to feel still — then the door is KICKED OPEN and someone charges straight toward the camera. The product is NOT visible yet`,
+      camera: `static frame facing the closed door, locked off` },
+    middle: [
+      { role: `they arrive right at the lens, out of breath, and hold the product up close so it fills the frame — the first time it is seen at all`,
+        camera: `static, the person and product coming to the camera rather than the camera moving` },
+    ],
+    closing: {
+      role: `one continuous shot: product in hand, closing line spoken directly to camera, the open door still visible behind`,
+      camera: `single continuous take, no cuts` },
+  },
+  "ads-waktu-berhenti": {
+    opening: {
+      role: `a busy everyday Indonesian scene full of motion — market stalls, steam rising, people walking — then EVERYTHING freezes mid-motion at once, steam suspended in the air, people mid-step. The product is NOT visible yet`,
+      camera: `slow steady drift through the frozen scene` },
+    middle: [
+      { role: `the camera keeps moving through the frozen world and finds the product — the ONLY thing still moving in the entire frame`,
+        camera: `continuing the same drift, arriving on the product` },
+    ],
+    closing: {
+      role: `one continuous shot: the world snaps back into motion around the product while it stays perfectly steady, closing line spoken`,
+      camera: `single continuous take, locked off on the product` },
+  },
+
+  // DUA ADS PENJELAS. Bentuknya kebalikan dari empat di atas: tidak ada
+  // interupsi sama sekali, dan produk/bisnis justru harus jelas SEJAK AWAL.
+  // Yang dijual kejelasan, bukan kejutan.
+  "kenalin-bisnis": {
+    opening: {
+      role: `the person introducing themselves and the business straight to camera, standing where the business actually happens — a shop counter, a workshop, a desk — not a blank studio`,
+      camera: `static at eye level, no movement` },
+    middle: [
+      { role: `showing what the business actually does, in the real place, with real hands doing the real work`,
+        camera: `handheld following the work` },
+      { role: `who it is for and what changes for them, spoken plainly with the workplace still visible behind`,
+        camera: `static medium shot` },
+    ],
+    closing: {
+      role: `one continuous shot: a plain, unhurried invitation to get in touch, spoken directly to camera`,
+      camera: `single continuous take, static` },
+  },
+  "promo-terbatas": {
+    opening: {
+      role: `straight to the offer with no preamble at all — the product held up and the deadline stated in the first breath`,
+      camera: `static close, product already in frame` },
+    middle: [
+      { role: `the reason the offer is worth taking, shown rather than claimed: the product being used or opened`,
+        camera: `close handheld on the product in use` },
+      { role: `the offer restated with the product clearly readable, urgency in delivery rather than in graphics`,
+        camera: `static, product centred` },
+    ],
+    closing: {
+      role: `one continuous shot: the deadline repeated once and a direct instruction to act, product still in hand`,
+      camera: `single continuous take, no cuts` },
+  },
+
   // --- TIGA UGC ADS PRODUKSI SENDIRI (Brian, 13 Agustus 2026) ---
   //
   // DITAMBAHKAN SETELAH RENDER BUKTI GAGAL. Ketiga template ini sempat tayang
