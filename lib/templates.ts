@@ -385,6 +385,60 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   // di tangan. Yang menahan penonton adalah keanehannya, yang menjual adalah
   // potongan kerasnya. Karena itu hookLevel-nya "gila" — di level itulah
   // perencana shot memasang pembuka pattern-interrupt.
+  // --- TIGA UGC ADS PRODUKSI SENDIRI (Brian, 13 Agustus 2026) ---
+  //
+  // DITARUH PALING DEPAN atas permintaan Brian: ketiganya diproduksi tim
+  // sendiri dan sudah lolos revisi sampai dinyatakan siap tayang, sedangkan
+  // empat ads di bawahnya adalah konsep pattern-interrupt yang belum melewati
+  // seleksi seketat itu. Yang paling terbukti pantas dilihat lebih dulu.
+  //
+  // Lima aturan di dokumennya lahir dari PENOLAKAN, bukan teori, dan
+  // ketiganya masuk sebagai peringatan di kartu — bukan cuma jadi catatan.
+  {
+    id: "ads-unboxing-pov", group: "ads",
+    name: "Unboxing dari Dalam Kardus",
+    when: "Produk yang kesan pertamanya ada di momen dibuka — tas, gadget, hampers.",
+    kind: "ads", format: "talking_head", durationSec: 15, tier: "high_quality",
+    hookLevel: "berani", hookFamily: "H8", count: 3,
+    bestFor: ["fashion", "muslim_fashion", "gadget", "home", "kids"],
+    ratio: "9:16", shotCount: 3,
+    source: { durationSec: 18, shots: 3 },
+    caution: {
+      badge: "Tanpa teks overlay",
+      note: "CTA diucapkan talent, bukan kartu teks. Teks tempelan langsung membocorkan bahwa videonya dirakit.",
+    },
+    preview: "/previews/ads-unboxing-pov.mp4", accent: "amber",
+  },
+  {
+    id: "ads-meja-kosong", group: "ads",
+    name: "Meja Kosong",
+    when: "Jasa, app, atau SaaS. Alat-alat produksi lenyap satu per satu — yang dijual adalah hilangnya kerepotan.",
+    kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
+    hookLevel: "agak_gila", hookFamily: "H13", count: 3,
+    bestFor: ["jasa", "app", "toko"],
+    ratio: "9:16", shotCount: 4,
+    source: { durationSec: 18, shots: 4 },
+    caution: {
+      badge: "Anti-produksi",
+      note: "Yang diperlihatkan bukan produknya, tapi hilangnya pekerjaan. Cocok untuk yang tidak punya barang fisik.",
+    },
+    preview: "/previews/ads-meja-kosong.mp4", accent: "violet",
+  },
+  {
+    id: "ads-panas-ekstrem", group: "ads",
+    name: "Masalah Dilebih-lebihkan",
+    when: "Produk yang menyelesaikan satu keluhan sehari-hari — kipas, cooling, anti-gerah, anti-bau.",
+    kind: "ads", format: "talking_head", durationSec: 15, tier: "high_quality",
+    hookLevel: "gila", hookFamily: "H2", count: 3,
+    bestFor: ["gadget", "electronics", "beauty", "home"],
+    ratio: "9:16", shotCount: 3,
+    source: { durationSec: 18, shots: 3 },
+    caution: {
+      badge: "Masalah dulu",
+      note: "Produknya WAJIB diam sampai masalahnya terasa. Kalau produk sudah aktif sejak frame pertama, tidak ada yang diselesaikan dan hook-nya mati.",
+    },
+    preview: "/previews/ads-panas-ekstrem.mp4", accent: "rose",
+  },
   {
     id: "ads-tembus-dinding", group: "ads",
     name: "Tembus Dinding",
@@ -552,51 +606,6 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   //
   // Durasi sumbernya 18 detik; kita hanya punya 15/30/45, jadi disetel 15 dan
   // angka aslinya disimpan di `source` supaya tidak hilang.
-  {
-    id: "ads-unboxing-pov", group: "ads",
-    name: "Unboxing dari Dalam Kardus",
-    when: "Produk yang kesan pertamanya ada di momen dibuka — tas, gadget, hampers.",
-    kind: "ads", format: "talking_head", durationSec: 15, tier: "high_quality",
-    hookLevel: "berani", hookFamily: "H8", count: 3,
-    bestFor: ["fashion", "muslim_fashion", "gadget", "home", "kids"],
-    ratio: "9:16", shotCount: 3,
-    source: { durationSec: 18, shots: 3 },
-    caution: {
-      badge: "Tanpa teks overlay",
-      note: "CTA diucapkan talent, bukan kartu teks. Teks tempelan langsung membocorkan bahwa videonya dirakit.",
-    },
-    preview: "/previews/ads-unboxing-pov.mp4", accent: "amber",
-  },
-  {
-    id: "ads-meja-kosong", group: "ads",
-    name: "Meja Kosong",
-    when: "Jasa, app, atau SaaS. Alat-alat produksi lenyap satu per satu — yang dijual adalah hilangnya kerepotan.",
-    kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
-    hookLevel: "agak_gila", hookFamily: "H13", count: 3,
-    bestFor: ["jasa", "app", "toko"],
-    ratio: "9:16", shotCount: 4,
-    source: { durationSec: 18, shots: 4 },
-    caution: {
-      badge: "Anti-produksi",
-      note: "Yang diperlihatkan bukan produknya, tapi hilangnya pekerjaan. Cocok untuk yang tidak punya barang fisik.",
-    },
-    preview: "/previews/ads-meja-kosong.mp4", accent: "violet",
-  },
-  {
-    id: "ads-panas-ekstrem", group: "ads",
-    name: "Masalah Dilebih-lebihkan",
-    when: "Produk yang menyelesaikan satu keluhan sehari-hari — kipas, cooling, anti-gerah, anti-bau.",
-    kind: "ads", format: "talking_head", durationSec: 15, tier: "high_quality",
-    hookLevel: "gila", hookFamily: "H2", count: 3,
-    bestFor: ["gadget", "electronics", "beauty", "home"],
-    ratio: "9:16", shotCount: 3,
-    source: { durationSec: 18, shots: 3 },
-    caution: {
-      badge: "Masalah dulu",
-      note: "Produknya WAJIB diam sampai masalahnya terasa. Kalau produk sudah aktif sejak frame pertama, tidak ada yang diselesaikan dan hook-nya mati.",
-    },
-    preview: "/previews/ads-panas-ekstrem.mp4", accent: "rose",
-  },
 ];
 
 export function getTemplate(id: string | null | undefined): CampaignTemplate | null {
