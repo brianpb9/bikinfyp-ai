@@ -11,7 +11,9 @@ export async function GET(req: Request) {
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
     return Response.json({
-      user: { id: user.id, phone: user.phone, name: user.name, tier: user.tier },
+      // email ikut supaya menu akun bisa menampilkan identitas yang dipakai
+      // login — data milik pengguna itu sendiri, bukan orang lain.
+      user: { id: user.id, phone: user.phone, email: user.email, name: user.name, tier: user.tier },
       credits: postgresRuntimeEnabled() ? await pgGetBalance(user.id) : getBalance(user.id),
     });
   } catch (err) {

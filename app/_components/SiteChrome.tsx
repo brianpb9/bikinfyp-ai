@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { CreditChip } from "./CreditChip";
+import { AccountMenu } from "./AccountMenu";
 
 /** Getar haptic halus tiap tap tombol/link (Android Chrome; iOS mengabaikan
  * navigator.vibrate tanpa error). Bagian dari juice tombol — Brian 2026-08-07:
@@ -40,7 +41,13 @@ export function SiteChrome({ children }: { children: React.ReactNode }) {
         <Link href="/" className="text-lg font-bold tracking-tight text-zinc-900">
           BikinFYP <span className="text-amber-500">AI</span>
         </Link>
-        <CreditChip />
+        <div className="flex items-center gap-2">
+          <CreditChip />
+          {/* Tombol keluar wajib ada di SETIAP halaman yang login (permintaan
+              Brian 2026-08-12). Sebelum ini pengguna retail tidak punya cara
+              keluar sama sekali — hanya dashboard brand yang punya. */}
+          <AccountMenu />
+        </div>
       </header>
       <div className="flex-1 pb-20">{children}</div>
       {!hideNav && (

@@ -7,6 +7,18 @@ import { postgresRuntimeEnabled, smokeFindOrCreateUser, smokeGetUser } from "./p
 // Token = JWT HS256 (via jose), disimpan di httpOnly cookie.
 
 const COOKIE_NAME = "racun_token";
+
+/** MASA BERLAKU SESI — 24 jam (permintaan Brian 2026-08-12).
+ *
+ *  SATU SUMBU KEBENARAN. Sebelumnya angkanya ditulis ulang di EMPAT tempat:
+ *  masa berlaku JWT di sini, plus Max-Age cookie di verify-otp, dev-login,
+ *  dan google/callback. Nilai yang disalin empat kali akan hanyut: cukup satu
+ *  yang lupa diperbarui, dan cookie hidup lebih lama daripada tokennya (atau
+ *  sebaliknya) — pengguna terlihat masih login padahal setiap panggilan API
+ *  ditolak, dan itu terbaca sebagai aplikasi rusak, bukan sesi habis.
+ *
+ *  Keduanya WAJIB memakai angka ini. */
+export const SESSION_MAX_AGE_SEC = 24 * 3600;
 const secret = () => new TextEncoder().encode(config.authSecret);
 
 export async function issueToken(userId: string, phone: string): Promise<string> {
@@ -14,7 +26,7 @@ export async function issueToken(userId: string, phone: string): Promise<string>
     .setProtectedHeader({ alg: "HS256" })
     .setSubject(userId)
     .setIssuedAt()
-    .setExpirationTime("30d")
+    .setExpirationTime(`${SESSION_MAX_AGE_SEC}s`)
     .sign(secret());
 }
 

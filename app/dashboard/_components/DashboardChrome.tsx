@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
 import { CircleHelp, FolderKanban, Home, LayoutTemplate, Library, Send, Users, UserRound, Zap } from "lucide-react";
 import { tokens } from "./format";
+import { SidebarLogout } from "./ProfileActions";
 
 // Desktop-first shell (F-ENT-01, 2026-08-11) — deliberately NOT app/_components/
 // SiteChrome (that's mobile bottom-tab, max-w-md, wrong context entirely).
@@ -115,6 +116,11 @@ export function DashboardChrome({
               {userEmail}
             </Link>
           )}
+          {/* Keluar ada DI CHROME, bukan cuma di halaman Profil (permintaan
+              Brian 2026-08-12: tombol keluar untuk setiap user yang login).
+              Terkubur satu klik di dalam halaman lain bukan "ada" — di
+              perangkat bersama, keluar harus selalu terjangkau. */}
+          <SidebarLogout />
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto">

@@ -29,3 +29,28 @@ export function LogoutButton() {
     </button>
   );
 }
+
+/** Versi ramping untuk sidebar — teks kecil, tanpa border, menyatu dengan
+ *  daftar navigasi di atasnya. Logikanya sama persis dengan LogoutButton;
+ *  yang berbeda hanya bajunya, jadi perilaku keluar tetap satu perilaku. */
+export function SidebarLogout() {
+  const [busy, setBusy] = useState(false);
+  return (
+    <button
+      onClick={async () => {
+        setBusy(true);
+        try {
+          await fetch("/api/auth/logout", { method: "POST" });
+          window.location.href = "/onboarding";
+        } catch {
+          setBusy(false);
+        }
+      }}
+      disabled={busy}
+      className="mt-1 flex w-full items-center gap-2 rounded-lg px-2 py-2 text-xs font-semibold text-zinc-500 transition-colors hover:bg-white/5 hover:text-red-400 disabled:opacity-50"
+    >
+      <LogOut size={13} />
+      {busy ? "Keluar..." : "Keluar"}
+    </button>
+  );
+}
