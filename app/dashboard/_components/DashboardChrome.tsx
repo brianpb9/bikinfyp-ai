@@ -37,11 +37,16 @@ export function DashboardChrome({
   orgName,
   balanceIdr,
   userEmail,
+  /** Harga satu video bersuara. Dikirim dari layout (Server Component) yang
+   *  membacanya dari config — komponen ini "use client" dan tidak boleh
+   *  menyalin tarif, karena salinan tarif pasti hanyut. */
+  hargaVideoIdr,
   children,
 }: {
   orgName: string;
   balanceIdr: number;
   userEmail: string | null;
+  hargaVideoIdr: number;
   children: ReactNode;
 }) {
   const pathname = usePathname();
@@ -106,6 +111,18 @@ export function DashboardChrome({
           >
             <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-zinc-500">Token</p>
             <p className="mt-1 truncate font-display text-lg font-bold text-white">{tokens(balanceIdr)}</p>
+            {/* Saldo diterjemahkan jadi satuan yang berarti. "84.000 token"
+                tidak memberi tahu apa pun; "≈ 7 video" langsung menjawab
+                pertanyaan yang sebenarnya ada di kepala brand. Pola ini
+                diambil dari Higgsfield yang menampilkan kuota sebagai "3 free
+                generations", bukan angka saldo.
+                Dibulatkan KE BAWAH: menjanjikan video yang tidak terbayar
+                lebih buruk daripada kelihatan pelit. */}
+            {hargaVideoIdr > 0 && balanceIdr >= hargaVideoIdr && (
+              <p className="mt-0.5 text-[11px] text-zinc-400">
+                ≈ {Math.floor(balanceIdr / hargaVideoIdr)} video bersuara
+              </p>
+            )}
             <p className="mt-0.5 text-[11px] font-semibold text-amber-400">Tambah token</p>
           </Link>
           {userEmail && (

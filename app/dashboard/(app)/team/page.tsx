@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { AlertCircle, Loader2, Plus, Shield, Trash2, Users } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../_components/api";
+import { BTN_PRIMARY_SM } from "@/app/dashboard/_components/buttons";
 
 interface Member {
   user_id: string; role: "owner" | "member";
@@ -95,7 +96,7 @@ export default function TeamPage() {
             <button
               onClick={invite}
               disabled={!email || busy === "invite"}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+              className={BTN_PRIMARY_SM}
             >
               {busy === "invite" ? <Loader2 size={15} className="animate-spin" /> : <Plus size={15} />}
               Tambah

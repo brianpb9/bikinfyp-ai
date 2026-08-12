@@ -5,6 +5,7 @@ import Link from "next/link";
 import { AlertCircle, ArrowLeft, CheckCircle2, ChevronDown, Loader2, RotateCcw } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../../../_components/api";
 import { SkeletonCard } from "../../../../_components/Skeleton";
+import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
 
 interface Scene {
   idx: number; duration_sec: number; prompt: string;
@@ -208,7 +209,7 @@ export default function SceneReviewPage({ params }: { params: Promise<{ jobId: s
           <button
             onClick={() => act("approve")}
             disabled={busy !== null || regenerating}
-            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
+            className={BTN_PRIMARY}
           >
             {busy === "approve" ? <Loader2 size={16} className="animate-spin" /> : <CheckCircle2 size={16} />}
             Setujui &amp; Gabungkan

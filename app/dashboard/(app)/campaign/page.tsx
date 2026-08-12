@@ -19,6 +19,7 @@ type Format = "talking_head" | "hands_only" | "tvc" | "ads";
 type Tier = "silent_caption" | "high_quality" | "super_hq";
 import type { HookLevel } from "@/lib/config/hooks";
 import { HOOK_LEVELS } from "@/lib/config/hooks";
+import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
 
 interface ProductPayload {
   product_id: string; name: string; price_idr: number; category: string;
@@ -548,7 +549,7 @@ export default function CampaignPage() {
             })}
           </div>
           <div className="flex justify-end">
-            <button onClick={() => go(1)} className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400">
+            <button onClick={() => go(1)} className={BTN_PRIMARY}>
               Lanjut
             </button>
           </div>
@@ -573,7 +574,7 @@ export default function CampaignPage() {
               <button
                 onClick={() => handleExtract(false)}
                 disabled={loading || !urlInput.trim()}
-                className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
+                className={BTN_PRIMARY}
               >
                 {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
                 {loading ? "Menarik data..." : "Tarik data produk"}
@@ -779,7 +780,7 @@ export default function CampaignPage() {
               onClick={handleSaveDetail}
               disabled={loading || detailBelumLengkap() !== null}
               title={detailBelumLengkap() ?? undefined}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
+              className={BTN_PRIMARY}
             >
               {loading && <Loader2 size={16} className="animate-spin" />} Lanjut
             </button>
@@ -1095,7 +1096,7 @@ export default function CampaignPage() {
             <button onClick={() => go(2)} className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-500 hover:text-zinc-800">
               <ArrowLeft size={15} /> Kembali
             </button>
-            <button onClick={() => go(4)} className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400">
+            <button onClick={() => go(4)} className={BTN_PRIMARY}>
               Lanjut
             </button>
           </div>
@@ -1130,7 +1131,7 @@ export default function CampaignPage() {
             <button
               onClick={handleGenerate}
               disabled={loading}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
+              className={BTN_PRIMARY}
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
               {loading ? "Membuat skrip..." : scripts.length ? "Buat ulang skrip" : "Buat skrip"}
@@ -1198,7 +1199,7 @@ export default function CampaignPage() {
             <button
               onClick={handleConfirm}
               disabled={loading || selectedCount === 0}
-              className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
+              className={BTN_PRIMARY}
             >
               {loading ? <Loader2 size={16} className="animate-spin" /> : <Sparkles size={16} />}
               {/* "Setujui" menyiratkan memilih. Kalau tidak ada yang bisa

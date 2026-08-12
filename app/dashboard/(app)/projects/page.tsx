@@ -5,6 +5,7 @@ import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { pgListRecentBulkRuns, type RecentBulkRun } from "@/lib/postgres/org";
 import { CampaignThumb } from "../../_components/CampaignThumb";
 import { campaignKindLabel, campaignFormatLabel } from "../../_components/campaign-kind";
+import { BTN_PRIMARY_SM } from "@/app/dashboard/_components/buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -46,7 +47,7 @@ export default async function ProjectsPage({
         </div>
         <Link
           href="/dashboard/templates"
-          className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400"
+          className={BTN_PRIMARY_SM}
         >
           <Plus size={15} /> Proyek baru
         </Link>

@@ -8,6 +8,7 @@ import { formatTokens } from "../_components/format";
 import { createSignedUrl } from "@/lib/signed-url";
 import { campaignKindLabel, campaignFormatLabel } from "../_components/campaign-kind";
 import { CampaignThumb } from "../_components/CampaignThumb";
+import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
 
 export const dynamic = "force-dynamic";
 
@@ -57,7 +58,7 @@ export default async function DashboardHomePage() {
         <div className="flex shrink-0 flex-wrap items-center gap-3">
           <Link
             href="/dashboard/campaign?auto=1"
-            className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400"
+            className={BTN_PRIMARY}
           >
             <Sparkles size={16} /> Bikinin aja
           </Link>

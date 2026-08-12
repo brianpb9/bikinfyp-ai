@@ -6,6 +6,7 @@ import { pgGetOrgBalance, pgGetOrgById } from "@/lib/postgres/org";
 import { redirect } from "next/navigation";
 import { isRedirectError } from "next/dist/client/components/redirect-error";
 import { DashboardChrome } from "../_components/DashboardChrome";
+import { config } from "@/lib/config";
 
 export const dynamic = "force-dynamic";
 
@@ -51,8 +52,14 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     ? await pgGetOrgBalance(membership.org_id)
     : getOrgBalance(membership.org_id);
 
+  // Harga satu video bersuara diambil dari config, BUKAN ditulis ulang di
+  // komponen klien: kalau tarifnya berubah dan angkanya disalin, sidebar akan
+  // menjanjikan jumlah video yang salah — dan yang menemukannya pengguna,
+  // bukan kita.
+  const hargaVideoIdr = config.tiers.high_quality.priceIdr;
+
   return (
-    <DashboardChrome orgName={membership.org_name} balanceIdr={balance} userEmail={user.email}>
+    <DashboardChrome orgName={membership.org_name} balanceIdr={balance} userEmail={user.email} hargaVideoIdr={hargaVideoIdr}>
       {children}
     </DashboardChrome>
   );

@@ -6,6 +6,7 @@ import {
   CheckCircle2, Download, Eye, Film, Loader2, Search, Sparkles, VideoOff,
 } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../_components/api";
+import { BTN_PRIMARY_SM } from "@/app/dashboard/_components/buttons";
 
 interface Video {
   job_id: string; state: string; product_name: string; created_at: string;
@@ -271,7 +272,7 @@ export default function LibraryPage() {
                 {v.state === "AWAITING_APPROVAL" && (
                   <Link
                     href={`/dashboard/campaign/job/${v.job_id}`}
-                    className="inline-flex items-center gap-1.5 rounded-lg bg-amber-500 px-3 py-2 text-xs font-bold text-zinc-950 transition-colors hover:bg-amber-400"
+                    className={BTN_PRIMARY_SM}
                   >
                     <Eye size={13} /> Tinjau
                   </Link>

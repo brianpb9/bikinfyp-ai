@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../_components/api";
 import { campaignFormatLabel } from "../../_components/campaign-kind";
+import { BTN_PRIMARY_SM } from "@/app/dashboard/_components/buttons";
 
 interface Plan {
   id: string; job_id: string; channel: string; scheduled_at: string;
@@ -129,7 +130,7 @@ export default function PublishPage() {
         <button
           onClick={() => setOpen(!open)}
           disabled={(data?.ready.length ?? 0) === 0}
-          className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-5 py-2.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+          className={BTN_PRIMARY_SM}
         >
           <Plus size={15} /> Jadwalkan video
         </button>

@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { AlertCircle, Building2, Check, Globe, Loader2, RotateCcw, Sparkles, Target, X } from "lucide-react";
 import { apiFetch, ApiFail } from "../../_components/api";
+import { BTN_PRIMARY_SM } from "@/app/dashboard/_components/buttons";
 
 export interface BrandProfile {
   website_url: string | null;
@@ -228,7 +229,7 @@ export function BusinessAnalysisCard({ initial, approach: approachAwal = null }:
         <button
           onClick={handleAnalyze}
           disabled={loading}
-          className="inline-flex shrink-0 items-center gap-2 rounded-lg bg-amber-500 px-4 py-2 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:opacity-50"
+          className={BTN_PRIMARY_SM}
         >
           {loading ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
           {loading ? "Menganalisa..." : "Analisa"}

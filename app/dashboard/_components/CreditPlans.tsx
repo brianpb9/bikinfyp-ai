@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, Sparkles } from "lucide-react";
 import { rupiah, tokens } from "./format";
+import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
 
 // Paket token — TAMPILAN saja (permintaan Brian: "ini di buat aja dlu UI nya").
 // Belum ada Midtrans untuk organisasi; token org masih diisi manual oleh tim.
@@ -132,7 +133,7 @@ export function CreditPlans() {
         </p>
         <button
           disabled={!picked}
-          className="rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400 disabled:cursor-not-allowed disabled:opacity-40"
+          className={BTN_PRIMARY}
         >
           {picked ? "Ajukan paket ini" : "Pilih paket dulu"}
         </button>
