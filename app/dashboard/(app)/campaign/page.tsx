@@ -29,7 +29,10 @@ interface ProductPayload {
 }
 interface GeneratedScript { script_id: string; hook_family: string; caption: string }
 
-const STEPS = ["Jenis", "Produk", "Detail", "Konsep", "Review"];
+// Avatar jadi langkah sendiri (permintaan Brian 2026-08-12). Dulu terselip di
+// dalam Konsep, di bawah slider hook — pilihan sepenting "siapa yang muncul di
+// video" tidak boleh jadi sisipan di layar yang sudah padat.
+const STEPS = ["Jenis", "Produk", "Detail", "Avatar", "Konsep", "Review"];
 const MAX_PHOTOS = 8;
 // Harga dasar per tier — HARUS cocok dengan config.tiers di server, karena
 // angka di layar ini yang dibaca brand sebelum menekan Bikin. Server tetap
@@ -155,7 +158,7 @@ export default function CampaignPage() {
         if (t.creator_category) setCreatorCategory(String(t.creator_category));
         if (t.avatar_gender) setAvatarGender(String(t.avatar_gender) as AvatarGender);
         setNotice(`Pakai template kamu: ${String(t.name)}`);
-        setStep(1);
+        setStep(1); setMaxStep((m) => Math.max(m, 1));
       } catch { /* biarkan wizard kosong; brand tetap bisa mengatur manual */ }
     })();
   }, []);
@@ -182,11 +185,11 @@ export default function CampaignPage() {
     const params = new URLSearchParams(window.location.search);
     // Mode cepat: brand tidak memilih jenis maupun template — kita yang pilih
     // setelah dia memasukkan produknya. Lihat catatan di lib/auto-pick.ts.
-    if (params.get("auto") === "1") { setModeCepat(true); setStep(1); return; }
+    if (params.get("auto") === "1") { setModeCepat(true); setStep(1); setMaxStep(1); return; }
     const t = getTemplate(params.get("template"));
     if (!t) return;
     terapkanTemplate(t);
-    setStep(1);
+    setStep(1); setMaxStep(1);
   }, []);
 
   function terapkanTemplate(t: CampaignTemplate) {
@@ -214,7 +217,14 @@ export default function CampaignPage() {
   const photoInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
 
-  function go(next: number) { setError(null); setNotice(null); setStep(next); }
+  // Langkah terjauh yang pernah dicapai — dipakai Stepper untuk menentukan
+  // mana yang boleh diklik. Disimpan terpisah dari `step` karena `step` turun
+  // saat mundur, sedangkan izin melompat tidak boleh ikut hilang.
+  const [maxStep, setMaxStep] = useState(0);
+  function go(next: number) {
+    setError(null); setNotice(null); setStep(next);
+    setMaxStep((m) => Math.max(m, next));
+  }
 
   // --- Langkah 2: link -> tarik data ---
   async function handleExtract(useManual: boolean) {
@@ -237,6 +247,41 @@ export default function CampaignPage() {
   }
 
   // --- Langkah 3: foto + detail ---
+  /** Mulai dari FOTO, bukan dari link (permintaan Brian 2026-08-12).
+   *
+   *  Banyak brand TikTok Shop tidak punya halaman produk yang bisa dibaca —
+   *  Shopee dan TikTok Shop memblokir pembacaan otomatis, dan produk baru
+   *  sering belum tayang di mana pun. Sebelum ini satu-satunya jalan adalah
+   *  "atau isi manual", tulisan kecil abu-abu di sebelah tombol utama, lalu
+   *  fotonya baru bisa diunggah satu layar kemudian. Padahal foto produk itu
+   *  bahan WAJIB untuk render — menyembunyikannya di langkah berikutnya
+   *  membuat jalur yang paling sering dipakai terasa seperti jalur cadangan.
+   *
+   *  product_id dipakai LANGSUNG dari respons, bukan dari state `product`:
+   *  setProduct baru berlaku pada render berikutnya, jadi membaca state di
+   *  sini akan mengunggah foto ke produk yang salah (atau ke null). */
+  async function handleMulaiDariFoto(files: FileList) {
+    if (files.length === 0) return;
+    setLoading(true); setError(null); setNotice(null);
+    try {
+      const dibuat = await apiFetch<{ extracted: boolean; message?: string } & Partial<ProductPayload>>(
+        "/api/dashboard/campaign/product", { json: { name: "Produk baru", price_idr: 0 } }
+      );
+      if (!dibuat.extracted) { setNotice(dibuat.message ?? "Gagal menyiapkan produk."); return; }
+      const produk = dibuat as ProductPayload;
+      const fd = new FormData();
+      Array.from(files).slice(0, MAX_PHOTOS).forEach((f) => fd.append("photos", f));
+      const res = await fetch(`/api/products/${produk.product_id}/photos`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new ApiFail(data.code ?? "ERROR", data.message_id ?? "Upload foto gagal.", false);
+      setProduct({ ...produk, images: data.images, image_urls: data.image_urls });
+      setNotice("Fotonya sudah masuk. Tinggal isi nama dan harganya.");
+      go(2);
+    } catch (err) {
+      setError(err instanceof ApiFail ? err.message : "Gagal memulai dari foto.");
+    } finally { setLoading(false); }
+  }
+
   async function handleUploadPhotos(files: FileList) {
     if (!product) return;
     setLoading(true); setError(null);
@@ -309,7 +354,7 @@ export default function CampaignPage() {
         const pilihan = pickTemplate({ category: res.category, priceIdr: res.price_idr });
         terapkanTemplate(pilihan.template);
         setAlasanPilih(pilihan.alasan);
-        go(4); // langsung ke Review — langkah Konsep dilewati, bukan dihapus
+        go(5); // langsung ke Review — langkah Konsep dilewati, bukan dihapus
         return;
       }
       go(3);
@@ -404,7 +449,7 @@ export default function CampaignPage() {
   return (
     <div className="space-y-8">
       <div className="space-y-3">
-        <Stepper steps={STEPS} current={step} onJump={(i) => go(i)} />
+        <Stepper steps={STEPS} current={step} maxReached={maxStep} onJump={(i) => go(i)} />
       </div>
 
       {/* Template aktif ditampilkan terang-terangan. Kalau pengaturan terisi
@@ -419,7 +464,7 @@ export default function CampaignPage() {
             Kami pilihkan <b>{template.name}</b> — {alasanPilih}
           </p>
           <button
-            onClick={() => { setModeCepat(false); setAlasanPilih(null); go(3); }}
+            onClick={() => { setModeCepat(false); setAlasanPilih(null); go(4); }}
             className="mt-1.5 text-xs font-semibold text-sky-700 underline underline-offset-2 hover:text-sky-900"
           >
             Bukan ini — atur sendiri
@@ -561,8 +606,33 @@ export default function CampaignPage() {
         <div className="space-y-6">
           <div>
             <h1 className="font-display text-2xl font-bold text-zinc-900">Produk mana yang mau diiklankan?</h1>
-            <p className="mt-1 text-sm text-zinc-500">Tempel link produknya — kami tarik nama, harga, dan fotonya otomatis.</p>
+            <p className="mt-1 text-sm text-zinc-500">Upload foto produknya, atau tempel link kalau produkmu sudah tayang.</p>
           </div>
+
+          {/* FOTO DULU, LINK BELAKANGAN (permintaan Brian 2026-08-12).
+              Urutannya sengaja dibalik: Shopee dan TikTok Shop memblokir
+              pembacaan otomatis, dan produk baru sering belum tayang di mana
+              pun — jadi jalur foto adalah jalur yang paling sering dipakai,
+              bukan cadangan. Menaruhnya di bawah link membuat yang umum
+              terasa seperti kegagalan. */}
+          <label
+            className={`flex cursor-pointer flex-col items-center gap-2 rounded-2xl border-2 border-dashed border-zinc-300 bg-white px-6 py-10 text-center transition-colors hover:border-amber-400 hover:bg-amber-50/40 ${loading ? "pointer-events-none opacity-50" : ""}`}
+          >
+            <input
+              type="file" accept="image/png,image/jpeg,image/webp" multiple hidden
+              onChange={(e) => e.target.files && handleMulaiDariFoto(e.target.files)}
+            />
+            {loading ? <Loader2 size={24} className="animate-spin text-amber-500" /> : <ImagePlus size={24} className="text-zinc-400" />}
+            <span className="text-sm font-bold text-zinc-800">Upload foto produk</span>
+            <span className="text-xs text-zinc-500">PNG atau JPG, maksimal {MAX_PHOTOS} foto. Nama dan harga diisi di langkah berikutnya.</span>
+          </label>
+
+          <div className="flex items-center gap-3">
+            <div className="h-px flex-1 bg-zinc-200" />
+            <span className="text-xs font-medium text-zinc-400">atau tempel link produk</span>
+            <div className="h-px flex-1 bg-zinc-200" />
+          </div>
+
           <div className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
             <input
               value={urlInput}
@@ -788,8 +858,94 @@ export default function CampaignPage() {
         </div>
       )}
 
+
+      {/* ---------- 3. AVATAR ----------
+          Langkah sendiri sejak 2026-08-12 (permintaan Brian). Dulu terselip di
+          dalam Konsep, di bawah slider hook: pilihan sepenting "siapa yang
+          muncul di video" jadi sisipan di layar yang sudah padat, dan brand
+          sering melewatkannya lalu kaget melihat wajah default. */}
+      {step === 3 && product && (
+        <div className="space-y-6">
+          <div>
+            <h1 className="font-display text-2xl font-bold text-zinc-900">Siapa yang membawakan?</h1>
+            <p className="mt-1 text-sm text-zinc-500">
+              Pilih dari kreator AI kami, atau pakai foto sendiri. Berlaku untuk semua variasi video di kampanye ini.
+            </p>
+          </div>
+
+          <section className="rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <div>
+            {/* Toggle gender dibesarkan & disejajarkan dengan kontrol lain
+                (sebelumnya kecil di pojok, tidak kelihatan). Upload foto
+                sendiri jadi ubin "+" PERTAMA di grid, bukan tombol terpisah
+                di atasnya — tempatnya di antara pilihan avatar, karena itu
+                memang salah satu pilihan avatar. */}
+            {/* Judulnya berubah saat Tanpa model menyala. Membiarkannya
+                tetap "Avatar" membuat brand mengira orang yang dipilih akan
+                muncul di layar — padahal yang dipakai cuma suaranya, dan
+                kekeliruan itu baru ketahuan setelah videonya jadi. */}
+            <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">
+              {noModel ? "Suara (avatar tidak tampil di layar)" : "Avatar"}
+            </p>
+            <div className="mb-3 flex gap-2">
+              {(["female", "male"] as const).map((g) => (
+                <button key={g} onClick={() => setAvatarGender(g)}
+                  className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${avatarGender === g ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
+                >{g === "female" ? "Perempuan" : "Laki-laki"}</button>
+              ))}
+            </div>
+            <input
+              ref={avatarInput} type="file" accept="image/png,image/jpeg,image/webp" hidden
+              onChange={(e) => e.target.files?.[0] && handleAvatarPhoto(e.target.files[0])}
+            />
+
+            {customAvatarDesc && (
+              <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
+                <p className="font-semibold">Avatar dari fotomu terbaca:</p>
+                <p className="mt-1 leading-5">{customAvatarDesc}</p>
+                <p className="mt-2 leading-5 text-amber-800">
+                  Hasilnya akan <b>terinspirasi</b> dari foto ini, bukan wajah yang persis sama — penyedia AI video menolak
+                  foto wajah asli sebagai referensi. Suara tetap mengikuti avatar preset yang kamu pilih di bawah.
+                </p>
+                <button onClick={() => setCustomAvatarDesc(null)} className="mt-2 font-semibold underline">Hapus, pakai preset saja</button>
+              </div>
+            )}
+
+            <div className="grid grid-cols-6 gap-2">
+              <button
+                onClick={() => avatarInput.current?.click()}
+                disabled={loading}
+                title="Pakai foto sendiri"
+                className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed transition-colors disabled:opacity-50 ${customAvatarDesc ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-400 hover:border-amber-400 hover:text-amber-600"}`}
+              >
+                {loading ? <Loader2 size={20} className="animate-spin" /> : <Plus size={22} />}
+                <span className="px-1 text-[10px] font-semibold leading-tight">Foto sendiri</span>
+              </button>
+              {avatars.map((a) => (
+                <button key={a.id} onClick={() => setCreatorCategory(a.id)} title={a.name}
+                  className={`overflow-hidden rounded-xl border-2 transition-colors ${creatorCategory === a.id ? "border-amber-500" : "border-transparent hover:border-zinc-200"}`}
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={a.img} alt={a.name} className="aspect-square w-full object-cover" />
+                  <p className="truncate px-1 py-1 text-[10px] font-medium text-zinc-600">{a.name}</p>
+                </button>
+              ))}
+            </div>
+          </div>
+          </section>
+
+          <div className="flex items-center gap-3">
+            <button onClick={() => go(2)} className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-500 hover:text-zinc-800">
+              <ArrowLeft size={15} /> Kembali
+            </button>
+            <div className="flex-1" />
+            <button onClick={() => go(4)} className={BTN_PRIMARY}>Lanjut</button>
+          </div>
+        </div>
+      )}
+
       {/* ---------- 4. KONSEP ---------- */}
-      {step === 3 && (
+      {step === 4 && (
         <div className="space-y-6">
           <div>
             <h1 className="font-display text-2xl font-bold text-zinc-900">Konsep videonya</h1>
@@ -1005,65 +1161,6 @@ export default function CampaignPage() {
               </div>
               <p className="mt-2 text-xs leading-5 text-zinc-500">{HOOK_HINT[hookLevel]}</p>
             </div>
-
-            <div>
-              {/* Toggle gender dibesarkan & disejajarkan dengan kontrol lain
-                  (sebelumnya kecil di pojok, tidak kelihatan). Upload foto
-                  sendiri jadi ubin "+" PERTAMA di grid, bukan tombol terpisah
-                  di atasnya — tempatnya di antara pilihan avatar, karena itu
-                  memang salah satu pilihan avatar. */}
-              {/* Judulnya berubah saat Tanpa model menyala. Membiarkannya
-                  tetap "Avatar" membuat brand mengira orang yang dipilih akan
-                  muncul di layar — padahal yang dipakai cuma suaranya, dan
-                  kekeliruan itu baru ketahuan setelah videonya jadi. */}
-              <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">
-                {noModel ? "Suara (avatar tidak tampil di layar)" : "Avatar"}
-              </p>
-              <div className="mb-3 flex gap-2">
-                {(["female", "male"] as const).map((g) => (
-                  <button key={g} onClick={() => setAvatarGender(g)}
-                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${avatarGender === g ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
-                  >{g === "female" ? "Perempuan" : "Laki-laki"}</button>
-                ))}
-              </div>
-              <input
-                ref={avatarInput} type="file" accept="image/png,image/jpeg,image/webp" hidden
-                onChange={(e) => e.target.files?.[0] && handleAvatarPhoto(e.target.files[0])}
-              />
-
-              {customAvatarDesc && (
-                <div className="mb-3 rounded-xl border border-amber-200 bg-amber-50 p-3 text-xs text-amber-900">
-                  <p className="font-semibold">Avatar dari fotomu terbaca:</p>
-                  <p className="mt-1 leading-5">{customAvatarDesc}</p>
-                  <p className="mt-2 leading-5 text-amber-800">
-                    Hasilnya akan <b>terinspirasi</b> dari foto ini, bukan wajah yang persis sama — penyedia AI video menolak
-                    foto wajah asli sebagai referensi. Suara tetap mengikuti avatar preset yang kamu pilih di bawah.
-                  </p>
-                  <button onClick={() => setCustomAvatarDesc(null)} className="mt-2 font-semibold underline">Hapus, pakai preset saja</button>
-                </div>
-              )}
-
-              <div className="grid grid-cols-6 gap-2">
-                <button
-                  onClick={() => avatarInput.current?.click()}
-                  disabled={loading}
-                  title="Pakai foto sendiri"
-                  className={`flex aspect-square flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed transition-colors disabled:opacity-50 ${customAvatarDesc ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-400 hover:border-amber-400 hover:text-amber-600"}`}
-                >
-                  {loading ? <Loader2 size={20} className="animate-spin" /> : <Plus size={22} />}
-                  <span className="px-1 text-[10px] font-semibold leading-tight">Foto sendiri</span>
-                </button>
-                {avatars.map((a) => (
-                  <button key={a.id} onClick={() => setCreatorCategory(a.id)} title={a.name}
-                    className={`overflow-hidden rounded-xl border-2 transition-colors ${creatorCategory === a.id ? "border-amber-500" : "border-transparent hover:border-zinc-200"}`}
-                  >
-                    {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={a.img} alt={a.name} className="aspect-square w-full object-cover" />
-                    <p className="truncate px-1 py-1 text-[10px] font-medium text-zinc-600">{a.name}</p>
-                  </button>
-                ))}
-              </div>
-            </div>
           </section>
 
           {/* Simpan konfigurasi ini jadi template milik brand (masukan tester).
@@ -1093,10 +1190,10 @@ export default function CampaignPage() {
           </section>
 
           <div className="flex justify-between">
-            <button onClick={() => go(2)} className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-500 hover:text-zinc-800">
+            <button onClick={() => go(3)} className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-500 hover:text-zinc-800">
               <ArrowLeft size={15} /> Kembali
             </button>
-            <button onClick={() => go(4)} className={BTN_PRIMARY}>
+            <button onClick={() => go(5)} className={BTN_PRIMARY}>
               Lanjut
             </button>
           </div>
@@ -1104,7 +1201,7 @@ export default function CampaignPage() {
       )}
 
       {/* ---------- 5. REVIEW ---------- */}
-      {step === 4 && product && (
+      {step === 5 && product && (
         <div className="space-y-6">
           <div>
             <h1 className="font-display text-2xl font-bold text-zinc-900">Berapa video yang mau dibuat?</h1>
@@ -1193,7 +1290,7 @@ export default function CampaignPage() {
           )}
 
           <div className="flex justify-between">
-            <button onClick={() => go(3)} className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-500 hover:text-zinc-800">
+            <button onClick={() => go(4)} className="inline-flex items-center gap-1 text-sm font-semibold text-zinc-500 hover:text-zinc-800">
               <ArrowLeft size={15} /> Kembali
             </button>
             <button
