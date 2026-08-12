@@ -395,6 +395,10 @@ export default function CampaignPage() {
           ...(template?.hookFamily
             ? { hook_families: [template.hookFamily], lock_hook_family: true }
             : {}),
+          // Id template ikut supaya mesin bisa mengambil VARIASI KALIMAT
+          // (lib/script-engine/template-copy.ts) — hook tetap dikunci, yang
+          // berbeda cuma cara mengatakannya. Keputusan Brian 2026-08-12.
+          ...(template?.id ? { template_id: template.id } : {}),
           ...(template?.beats ? { beats: template.beats } : {}),
           ...(template?.wordBudget ? { word_budget: template.wordBudget } : {}),
         } }

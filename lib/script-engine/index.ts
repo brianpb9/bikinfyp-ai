@@ -8,6 +8,7 @@ import {
 import { COMPLIANCE_CHECKLIST } from "../config/compliance";
 import { REGISTERS, type Register } from "./registers";
 import { renderSegmentsForTier, formatHargaNatural, type SegmentDraft, type TemplateCtx } from "./templates";
+import { templateCopy } from "./template-copy";
 import { validateScript, type ValidationResult } from "./validator";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
 import { resolvePromo, promoDeadlineSpokenPhrase, type ActivePromo } from "../promo";
@@ -208,7 +209,9 @@ function generateOne(
   tier: "silent_caption" | "high_quality" | "super_hq",
   durationSec: number,
   beats?: { hookEnd: number; demoEnd: number },
-  wordBudget?: number
+  wordBudget?: number,
+  templateId?: string | null,
+  variantIndex = 0
 ): GeneratedScript {
   // Ambang Rp100.000 diturunkan dari data, bukan ditebak: tiga video pemenang
   // yang menyebut harga ada di Rp27-30 ribu, sedangkan yang produknya di atas
@@ -217,9 +220,20 @@ function generateOne(
   const hargaMahal = (product.price_idr ?? 0) > 100_000;
   const ctx = buildCtx(product, register);
   const cartLabel = cartLabelForUrl(product.sourceUrl);
-  const baseSegments = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats, wordBudget, hargaMahal).map((s) => ({
+  // Variasi kalimat khusus template, kalau templatenya sudah ditulis. Yang
+  // BERUBAH cuma kata-katanya — keluarga hook, urutan beat, dan pembagian
+  // detik tetap dari template, jadi kesetiaan yang diminta Brian 11 Agustus
+  // ("template = tiru persis konten itu") tidak dilanggar.
+  //
+  // Kerangka waktunya diambil dari hasil renderSegmentsForTier, bukan dihitung
+  // ulang: start/end tiap segmen sudah mengikuti beats template, dan menyusun
+  // ulang di sini berarti dua rumus waktu yang bisa berbeda diam-diam.
+  const dasar = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats, wordBudget, hargaMahal);
+  const variasi = templateCopy(templateId, variantIndex, ctx);
+  const teksVariasi = variasi ? [variasi.hook, variasi.demo, variasi.cta] : null;
+  const baseSegments = dasar.map((s, i) => ({
     ...s,
-    text: applyCartLabel(s.text, cartLabel),
+    text: applyCartLabel(teksVariasi?.[i] ?? s.text, cartLabel),
   }));
   const promo = resolvePromo({
     priceIdr: product.price_idr,
@@ -304,6 +318,14 @@ export function generateScripts(opts: {
   /** Total kata seluruh video, dari dokumen template. Hanya untuk template
    * tanpa VO — lihat catatan di lib/script-engine/templates.ts. */
   wordBudget?: number;
+  /** Id template yang sedang ditiru. Dipakai mengambil VARIASI KALIMAT dari
+   *  lib/script-engine/template-copy.ts.
+   *
+   *  Kenapa perlu: mengunci keluarga hook membuat semua varian keluar sama
+   *  persis, karena mesin punya satu teks tetap per keluarga — layar "pilih
+   *  skrip" jadi pilihan palsu. Brian memilih opsi (b) 2026-08-12: hook tetap
+   *  dikunci template, tapi kalimatnya bervariasi. */
+  templateId?: string | null;
 }): GeneratedScript[] {
   const { product, register } = opts;
   const emotion = opts.emotion ?? "senang";
@@ -313,7 +335,9 @@ export function generateScripts(opts: {
     product.category, product.id, opts.hookLevel ?? "normal",
     opts.hookFamilies, opts.count ?? 3, opts.lockHookFamily === true
   );
-  return families.map((f) => generateOne(product, register, emotion, f, tier, durationSec, opts.beats, opts.wordBudget));
+  return families.map((f, i) =>
+    generateOne(product, register, emotion, f, tier, durationSec, opts.beats, opts.wordBudget, opts.templateId, i)
+  );
 }
 
 export function outputExtras(category: string) {

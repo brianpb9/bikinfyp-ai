@@ -1,4 +1,5 @@
 import { ERR, errorResponse } from "@/lib/errors";
+import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 import type { HookCode } from "@/lib/config/hooks";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { generateScripts } from "@/lib/script-engine";
@@ -87,6 +88,11 @@ export async function POST(req: Request) {
       register, emotion: "senang", qualityTier: tier, durationSec, hookLevel, count,
       ...(hookFamilies.length ? { hookFamilies } : {}),
       ...(body.lock_hook_family === true ? { lockHookFamily: true } : {}),
+      // Divalidasi terhadap katalog nyata, bukan diterima mentah — id karangan
+      // hanya akan diam-diam jatuh ke teks generik tanpa jejak.
+      ...(typeof body.template_id === "string" && CAMPAIGN_TEMPLATES.some((t) => t.id === body.template_id)
+        ? { templateId: body.template_id as string }
+        : {}),
       // Pecahan dijaga di sini juga, bukan cuma di mesin: nilai dari luar
       // tidak boleh bisa membuat hook lebih panjang dari videonya.
       ...(beats ? { beats } : {}),
