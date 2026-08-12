@@ -721,6 +721,27 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // gambarnya. Character-lock disebut ulang tiap shot karena itu yang
     // menjaga wajah tetap sama antar generate (pelajaran dari dokumen TVC).
     const ugcRoles = ugcRolesFor(input.ugcTemplate);
+    /** Peran template untuk shot ke-i, sebagai OBJEK. Dipisah dari ugcBeat
+     *  yang mengembalikan teks, supaya penanda withholdProduct bisa dibaca
+     *  tanpa harus mengurai kalimatnya lagi. */
+    const ugcPeran = (i: number) => {
+      if (!ugcRoles || format === "tvc") return null;
+      return i === 0 && ugcRoles.opening
+        ? ugcRoles.opening
+        : isLastShot(i, numShots) && ugcRoles.closing && numShots >= 2
+          ? ugcRoles.closing
+          : ugcRoles.middle[Math.max(0, i - (ugcRoles.opening ? 1 : 0)) % ugcRoles.middle.length];
+    };
+
+    /** Apakah shot ke-i menahan produk? Dari peran template, atau dari tabel
+     *  rute TVC (yang perannya juga menandainya eksplisit). */
+    const menahanProdukDiShot = (i: number): boolean => {
+      if (ugcPeran(i)?.withholdProduct) return true;
+      // Rute TVC: pembuka rute fabric/intimate memang menahan produk.
+      if (format === "tvc" && i === 0 && (input.tvcRoute === "fabric" || input.tvcRoute === "intimate")) return true;
+      return false;
+    };
+
     const ugcBeat = (i: number): string | null => {
       // TVC tetap dikecualikan: dia punya tabel rute sendiri
       // (TVC_FABRIC_ROLES dkk) yang lebih spesifik daripada peran template.
@@ -905,7 +926,12 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       format === "talking_head" && !lipSyncPresenter
         ? `${base}. ${speech}${pacing}Natural warm reactive expression throughout, mouth relaxed and not talking to camera.`
         : `${base}. ${speech}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader.`;
-    return { index: i, durationSec: perShot, prompt, imageRefPath: input.imageRefPath };
+    // Penanda menahan-produk ikut sebagai DATA. Sumbernya peran template
+    // (ugcRoles) atau tabel rute TVC — keduanya menandainya eksplisit.
+    return {
+      index: i, durationSec: perShot, prompt, imageRefPath: input.imageRefPath,
+      ...(menahanProdukDiShot(i) ? { withholdProduct: true } : {}),
+    };
   });
 
   // Negative prompt per-format: hands_only melarang wajah sepenuhnya (bukan sekadar

@@ -25,6 +25,12 @@ export interface ShotSpec {
   prompt: string;
   /** Foto produk asli pengguna sebagai image reference — AI tidak menggambar produk dari nol. */
   imageRefPath: string;
+  /** Produk TIDAK boleh terlihat di shot ini (dari peran template/rute).
+   *
+   *  Dibawa sebagai DATA, bukan disimpulkan dari teks prompt: keputusan yang
+   *  mengeluarkan uang (frame pertama buatan) tidak boleh bergantung pada
+   *  kebetulan pilihan kata dalam prompt berbahasa Inggris. */
+  withholdProduct?: boolean;
 }
 
 export interface VisualSpec {

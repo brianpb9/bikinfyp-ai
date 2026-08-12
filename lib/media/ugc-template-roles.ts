@@ -26,6 +26,14 @@ export interface UgcShotRole {
   role: string;
   /** Gerak kamera. Ditulis eksplisit karena tanpa ini semua shot keluar statis. */
   camera: string;
+  /** Produk TIDAK boleh terlihat di shot ini.
+   *
+   *  PENANDA EKSPLISIT, bukan hasil membaca teks perannya. Versi pertama
+   *  mendeteksinya dengan mencocokkan frasa Inggris ("NOT visible yet"), dan
+   *  langsung meleset di template yang menulis "must NOT be visible" —
+   *  tertangkap tes. Keputusan yang mengeluarkan uang (frame buatan ~Rp600)
+   *  tidak boleh bergantung pada kebetulan pilihan kata. */
+  withholdProduct?: boolean;
 }
 
 export interface UgcTemplateRoles {
@@ -258,6 +266,7 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   "ads-tembus-dinding": {
     opening: {
       role: `an ordinary quiet room with a person going about something mundane in the foreground, then WITHOUT WARNING something massive breaks through the wall directly behind them — debris and dust bursting forward. The product is NOT visible yet`,
+      withholdProduct: true,
       camera: `static wide, locked off so the breach reads clearly`,
     },
     middle: [
@@ -273,6 +282,7 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   "ads-atap-jebol": {
     opening: {
       role: `a calm interior seen from below, then the CEILING gives way and someone drops into frame from above in a burst of dust and debris, landing hard. The product is NOT visible yet`,
+      withholdProduct: true,
       camera: `low angle looking up, locked off, so the fall enters from the top of frame` },
     middle: [
       { role: `the person picking themselves up amid fallen ceiling pieces, dazed but unhurt, the room now wrecked around them`,
@@ -285,6 +295,7 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   "ads-dobrak-pintu": {
     opening: {
       role: `an empty quiet room, nothing happening at all, held just long enough to feel still — then the door is KICKED OPEN and someone charges straight toward the camera. The product is NOT visible yet`,
+      withholdProduct: true,
       camera: `static frame facing the closed door, locked off` },
     middle: [
       { role: `they arrive right at the lens, out of breath, and hold the product up close so it fills the frame — the first time it is seen at all`,
@@ -297,6 +308,7 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   "ads-waktu-berhenti": {
     opening: {
       role: `a busy everyday Indonesian scene full of motion — market stalls, steam rising, people walking — then EVERYTHING freezes mid-motion at once, steam suspended in the air, people mid-step. The product is NOT visible yet`,
+      withholdProduct: true,
       camera: `slow steady drift through the frozen scene` },
     middle: [
       { role: `the camera keeps moving through the frozen world and finds the product — the ONLY thing still moving in the entire frame`,
@@ -351,6 +363,7 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
       // Aturan #5 dokumen Brian: MASALAH DULU, BARU PRODUK. Di sini
       // "masalahnya" adalah rasa penasaran — kardus yang belum dibuka.
       role: `POV from INSIDE a closed cardboard box looking up: the flaps are pulled open from above and a face appears in the opening, lit by the light flooding in, reacting with genuine surprise — the product is NOT visible yet`,
+      withholdProduct: true,
       camera: `static from inside the box looking straight up, the flaps opening into frame`,
     },
     middle: [
@@ -398,6 +411,7 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
       // Aturan #5 lagi, dan ini paling keras: kalau produk sudah aktif sejak
       // frame pertama, tidak ada yang diselesaikan dan hook-nya mati.
       role: `the everyday problem pushed to an absurd extreme, and the person visibly SUFFERING from it — uncomfortable, exasperated, on the edge of giving up. The product must NOT be visible or in use yet`,
+      withholdProduct: true,
       camera: `handheld selfie at arm's length, slightly unsteady from the discomfort`,
     },
     middle: [

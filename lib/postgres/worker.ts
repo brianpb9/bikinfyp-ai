@@ -13,7 +13,9 @@ import { config } from "../config";
 import { outputExtras, cartLabelForUrl } from "../script-engine";
 import { formatHargaOverlay, type SegmentDraft } from "../script-engine/templates";
 import { getCreatorCategory } from "../personas";
+import type { VisualSpec } from "../providers/types";
 import { planShots } from "../media/shot-planner";
+import { generateFirstFrame, perluFrameBuatan, harusMenahanProduk, pilihShotUntukFrame } from "../media/first-frame";
 import { TVC_ROUTES, type TvcRoute } from "../templates";
 import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
@@ -67,6 +69,37 @@ type WorkerRow = {
   product_source_url: string | null;
   creator_category: string | null;
 };
+
+/** Ganti imageRefPath shot yang perannya menuntut komposisi berbeda dengan
+ *  frame pertama buatan. Shot lain dibiarkan memakai foto produk asli. */
+async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: string): Promise<VisualSpec> {
+  // Jatahnya dibatasi MARGIN, bukan kebutuhan: frame ~Rp600 sedangkan margin
+  // tier bersuara cuma Rp3.198. Yang dapat jatah lebih dulu adalah shot yang
+  // WAJIB menahan produk — tanpa frame buatan shot itu mustahil benar.
+  const dipilih = new Set(pilihShotUntukFrame(spec.shots, spec.qualityTier));
+  if (dipilih.size === 0) return spec;
+  const butuh = spec.shots.filter((sh) => perluFrameBuatan(sh)).length;
+  console.log(`[frame] job ${jobId}: ${dipilih.size} frame buatan (${butuh} shot membutuhkannya, sisanya di luar jatah tier ${spec.qualityTier})`);
+
+  const shots = await Promise.all(spec.shots.map(async (sh) => {
+    if (!dipilih.has(sh.index)) return sh;
+    try {
+      const { path: p, biayaIdr } = await generateFirstFrame({
+        productPhotoPath: sh.imageRefPath,
+        shotPrompt: sh.prompt,
+        ratio: spec.ratio ?? "9:16",
+        outPath: `${workDir}/frame-shot${sh.index}.png`,
+        withholdProduct: harusMenahanProduk(sh),
+      });
+      console.log(`[frame] job ${jobId} shot ${sh.index}: frame buatan siap (Rp${biayaIdr})`);
+      return { ...sh, imageRefPath: p };
+    } catch (err) {
+      console.error(`[frame] job ${jobId} shot ${sh.index}: gagal, pakai foto produk —`, err instanceof Error ? err.message : err);
+      return sh;
+    }
+  }));
+  return { ...spec, shots };
+}
 
 export async function processPostgresJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
   const databaseUrl = assertUrl();
@@ -210,7 +243,22 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
 
   const reused = format === "vo_broll" ? null : await findReusableClips(workDir, spec);
   if (reused) console.log(`[job ${row.id.slice(0, 8)}] resume: ${reused.assets.length} klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi`);
-  const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir));
+  // FRAME PERTAMA BUATAN (2026-08-13). Mode i2v menjadikan gambar yang dikirim
+  // sebagai frame pertama PERSIS — jadi selama gambarnya foto produk, setiap
+  // shot berangkat dari foto produk, dan template yang premisnya MENAHAN
+  // produk mustahil dijalankan. Terukur lewat tiga putaran render: "Atap
+  // Jebol" tidak pernah punya atap runtuh, "Meja Kosong" tidak pernah punya
+  // meja kosong.
+  //
+  // HANYA untuk shot yang memang butuh. Kalau frame pertama boleh berupa
+  // produk apa adanya, foto asli brand JUSTRU lebih baik: identitas produknya
+  // dijamin persis dan tidak ada biaya tambahan.
+  //
+  // GAGAL = PAKAI FOTO ASLI. Video yang framing-nya kurang pas masih bisa
+  // dipakai; job yang mati karena satu panggilan gambar gagal tidak.
+  const specSiap = await siapkanFramePertama(spec, workDir, row.id);
+
+  const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(specSiap, workDir) : await generateVideoWithFailover(specSiap, workDir));
   await jobs.setProviders(row.id, video.providerName);
   await jobs.addCost(row.id, video.costIdr);
 
