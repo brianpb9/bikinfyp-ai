@@ -195,6 +195,8 @@ CREATE TABLE IF NOT EXISTS job_shots (
 );
 CREATE INDEX IF NOT EXISTS idx_job_shots_job ON job_shots(job_id, idx);
 
+-- catatan: jobs.record_style ditambahkan lewat migrasi ringan di lib/db.ts
+-- (padanan migrations/postgres/0029_jobs_record_style.sql).
 CREATE TABLE IF NOT EXISTS outputs (
   job_id TEXT PRIMARY KEY REFERENCES jobs(id),
   video_url TEXT NOT NULL,      -- path relatif storage (disajikan via signed URL)

@@ -50,6 +50,8 @@ export function getDb(): Database.Database {
     }
     // Migrasi ringan untuk DB lama: kolom state_changed_at di jobs.
     const cols = (db.prepare("PRAGMA table_info(jobs)").all() as { name: string }[]).map((c) => c.name);
+    // Gaya rekam (padanan 0029_jobs_record_style.sql). NULL = "standar".
+    if (!cols.includes("record_style")) db.exec("ALTER TABLE jobs ADD COLUMN record_style TEXT");
     if (!cols.includes("state_changed_at")) {
       db.exec("ALTER TABLE jobs ADD COLUMN state_changed_at TEXT");
       db.exec("UPDATE jobs SET state_changed_at = created_at WHERE state_changed_at IS NULL");

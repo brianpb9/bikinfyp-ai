@@ -11,6 +11,7 @@ import { rupiah } from "../../_components/format";
 import { Stepper } from "../../_components/Stepper";
 import { AVATAR_PRESETS, type AvatarGender } from "@/lib/avatar-presets";
 import { getTemplate, type CampaignTemplate } from "@/lib/templates";
+import { stylesForFormat, GAYA_BAWAAN } from "@/lib/media/recording-styles";
 import { pickTemplate } from "@/lib/auto-pick";
 
 type Kind = "affiliate" | "ads" | "tvc";
@@ -106,6 +107,9 @@ export default function CampaignPage() {
   const [product, setProduct] = useState<ProductPayload | null>(null);
 
   const [format, setFormat] = useState<Format>("hands_only");
+  // Gaya rekam (sumbu "bagaimana direkam"). "standar" = framing bawaan format,
+  // persis perilaku sebelum fitur ini ada.
+  const [recordStyle, setRecordStyle] = useState<string>(GAYA_BAWAAN);
   const [tier, setTier] = useState<Tier>("high_quality");
   const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
   const [ratio, setRatio] = useState("9:16");
@@ -377,6 +381,7 @@ export default function CampaignPage() {
           // template itu, bukan beat generik. Tanpa ini, memilih "Bedah Fitur"
           // atau "Klaim + Bahan Aktif" menghasilkan susunan shot yang sama.
           template_id: template?.id ?? null,
+          record_style: recordStyle,
         },
       });
       router.push(`/dashboard/campaign/${res.run_id}`);
@@ -802,12 +807,60 @@ export default function CampaignPage() {
                   : [{ id: "talking_head" as const, label: "Wajah AI" }, { id: "hands_only" as const, label: "Tangan + VO" }]
                 ).map((f) => (
                   <button key={f.id}
-                    onClick={() => { setFormat(f.id); if (f.id === "talking_head") setDurationSec(15); }}
+                    onClick={() => { setFormat(f.id); setRecordStyle(GAYA_BAWAAN); if (f.id === "talking_head") setDurationSec(15); }}
                     className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${format === f.id ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
                   >{f.label}</button>
                 ))}
               </div>
             </div>
+
+            {/* GAYA REKAM — sumbu "bagaimana direkam", terpisah dari "apa yang
+                dijual" (ide dari UGC Factory Higgsfield). Hanya untuk format
+                yang punya pilihan: TVC punya style-lock sendiri, jadi tidak
+                pernah muncul di sini.
+
+                Daftarnya SELALU lewat stylesForFormat — menawarkan gaya yang
+                tidak cocok formatnya bukan menambah pilihan, tapi menyiapkan
+                render rusak yang tetap dibayar penuh. */}
+            {format !== "tvc" && stylesForFormat(format).length > 1 && (
+              <div>
+                <div className="mb-2 flex items-baseline justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Gaya rekam</p>
+                  <p className="text-[11px] text-zinc-400">Berlaku untuk semua variasi</p>
+                </div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {stylesForFormat(format, product?.category).map((g) => (
+                    <button
+                      key={g.id}
+                      onClick={() => setRecordStyle(g.id)}
+                      className={`rounded-xl border p-3 text-left transition-colors ${
+                        recordStyle === g.id
+                          ? "border-amber-500 bg-amber-50"
+                          : "border-zinc-200 bg-white hover:border-zinc-300"
+                      }`}
+                    >
+                      <p className={`text-sm font-semibold ${recordStyle === g.id ? "text-amber-800" : "text-zinc-800"}`}>
+                        {g.label}
+                      </p>
+                      {/* Deskripsi menjelaskan APA YANG TERLIHAT, bukan kapan
+                          dipakai — "kamera depan dipegang sepanjang lengan"
+                          bisa dibayangkan seketika, "cocok untuk brand yang
+                          ingin terlihat dekat" tidak. */}
+                      <p className="mt-1 text-[11px] leading-relaxed text-zinc-500">{g.lihat}</p>
+                    </button>
+                  ))}
+                </div>
+                {/* Kejujuran bukti: fragmen prompt tiap gaya disusun mengikuti
+                    pola framing yang sudah terbukti, tapi belum satu pun diuji
+                    lewat render sungguhan. Brand berhak tahu mana yang teruji. */}
+                {recordStyle !== GAYA_BAWAAN && (
+                  <p className="mt-2 text-[11px] text-zinc-400">
+                    Gaya selain Standar masih baru — hasilnya belum sebanyak Standar diuji. Kamu tetap
+                    meninjau tiap scene sebelum video digabung.
+                  </p>
+                )}
+              </div>
+            )}
 
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Durasi</p>

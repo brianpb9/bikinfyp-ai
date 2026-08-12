@@ -8,6 +8,7 @@ import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { tierPriceIdr } from "@/lib/credits";
 import { enqueueJob } from "@/lib/job-queue";
 import { getCreatorCategory } from "@/lib/personas";
+import { getRecordingStyle } from "@/lib/media/recording-styles";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
@@ -79,6 +80,16 @@ export async function POST(req: Request) {
       typeof body.template_id === "string" && CAMPAIGN_TEMPLATES.some((t) => t.id === body.template_id)
         ? body.template_id
         : null;
+    // Gaya rekam. Divalidasi DUA kali seperti template: harus ada di daftar,
+    // DAN harus cocok dengan formatnya. Gaya yang tidak cocok ("selfie" pada
+    // format tangan-saja) menaruh perintah yang berlawanan dengan negative
+    // "no face" di prompt yang sama — render rusak yang tetap dibayar penuh.
+    // Nilai tidak sah dibuang jadi null (= standar), bukan diteruskan.
+    const gayaDiminta = typeof body.record_style === "string" ? body.record_style : "";
+    const gaya = getRecordingStyle(gayaDiminta);
+    const recordStyle =
+      gaya && gaya.id !== "standar" && gaya.formats.includes(format as never) ? gaya.id : null;
+
     const rawShots = Number(body.shot_count);
     const shotCount = Number.isInteger(rawShots) && rawShots >= 2 && rawShots <= 6 ? rawShots : null;
 
@@ -136,9 +147,9 @@ export async function POST(req: Request) {
             // requires_approval=TRUE: job dashboard brand SELALU berhenti di
             // gerbang review scene (M11). Brand menilai gambar & pesan tiap
             // scene sebelum digabung. Retail tidak pernah menyalakan ini.
-            `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,requires_approval,state,created_at,state_changed_at)
-             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,TRUE,'QUEUED',$17,$17)`,
-            [jobId, user.id, membership.org_id, runId, avatarCustomDesc, productId, personaId, scriptId, format, tier, durationS, shotCount, ratio, noModel, tvcRoute, templateId, now]
+            `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,state,created_at,state_changed_at)
+             VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,'QUEUED',$18,$18)`,
+            [jobId, user.id, membership.org_id, runId, avatarCustomDesc, productId, personaId, scriptId, format, tier, durationS, shotCount, ratio, noModel, tvcRoute, templateId, recordStyle, now]
           );
           await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId, scriptId]);
           await client.query(
