@@ -20,10 +20,11 @@
 // satu prompt, dan hasilnya bukan pilihan yang lebih banyak, tapi render
 // rusak yang dibayar penuh.
 //
-// STATUS BUKTI: fragmen prompt di bawah PROPOSED — disusun mengikuti pola
-// framing yang sudah terbukti di shot-planner (sudut ponsel, cahaya alami,
-// warna apa adanya), tapi BELUM diuji lewat render sungguhan. Jangan diklaim
-// terbukti sebelum ada rekaman hasilnya.
+// STATUS BUKTI (diperbarui 2026-08-13, setelah tiga putaran render):
+//   TERBUKTI  : standar, cermin, jalan, mobil, meja kerja, unboxing
+//   DIBUANG   : selfie (tidak beda dari standar), meja (tampak-atas mustahil
+//               selama frame pertama = foto produk apa adanya)
+// Enam yang tersisa semuanya sudah dilihat hasilnya, bukan cuma dibaca.
 
 export type StyleFormat = "hands_only" | "talking_head" | "ads";
 
@@ -49,6 +50,18 @@ export interface RecordingStyle {
   bestFor?: string[];
 }
 
+// DUA GAYA DIBUANG 2026-08-13 setelah dirender, bukan setelah dibaca:
+//
+//   "Selfie" — tidak bisa dibedakan dari Standar. TALKING_HEAD_FRAMING sudah
+//     berbunyi "front-facing selfie-style angle", jadi gaya ini menambah
+//     pilihan tanpa menambah hasil. Pilihan yang tidak mengubah apa pun lebih
+//     buruk daripada tidak ada pilihan: ia menghabiskan perhatian brand dan
+//     membuat sisa daftarnya ikut terasa tidak berarti.
+//
+//   "Di Atas Meja" — dua kali dirender, dua kali gagal, termasuk dengan foto
+//     produk polos tanpa tangan. Komposisi tampak-atas bertabrakan dengan
+//     frame pertama yang selalu berupa foto produk apa adanya (mode i2v).
+//     Kami tidak bisa menepatinya, jadi kami tidak menawarkannya.
 export const RECORDING_STYLES: RecordingStyle[] = [
   {
     id: "standar",
@@ -56,16 +69,6 @@ export const RECORDING_STYLES: RecordingStyle[] = [
     lihat: "Framing bawaan format yang dipilih — paling aman untuk semua produk.",
     framing: "", // kosong = pakai framing bawaan format (lihat shot-planner)
     formats: ["hands_only", "talking_head", "ads"],
-  },
-  {
-    id: "selfie",
-    label: "Selfie",
-    lihat: "Kamera depan dipegang sepanjang lengan, wajah dekat, terasa seperti video teman.",
-    framing:
-      "handheld front-facing selfie shot at arm's length, the presenter holding the phone themselves so the " +
-      "framing sways slightly and naturally, face filling the upper half of the frame, eyes looking straight " +
-      "into the lens, soft natural indoor daylight, muted true-to-life colour, casual everyday setting",
-    formats: ["talking_head", "ads"],
   },
   {
     id: "cermin",
@@ -79,17 +82,6 @@ export const RECORDING_STYLES: RecordingStyle[] = [
     // Fashion dinilai dari potongan dan jatuh bahan — dan itu hanya terlihat
     // kalau seluruh badan masuk frame.
     bestFor: ["fashion", "muslim_fashion"],
-  },
-  {
-    id: "meja",
-    label: "Di Atas Meja",
-    lihat: "Kamera dari atas, produk ditata di meja, hanya tangan yang bergerak.",
-    framing:
-      "top-down overhead shot looking straight down at a clean table surface, only hands and forearms entering " +
-      "the frame to move and open the product, calm deliberate movements, soft even diffused daylight, " +
-      "shallow natural depth of field, tidy uncluttered surface",
-    formats: ["hands_only"],
-    negative: "no face, no head in frame, no person facing camera",
   },
   {
     id: "unboxing",

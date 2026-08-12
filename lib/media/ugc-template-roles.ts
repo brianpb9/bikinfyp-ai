@@ -242,6 +242,82 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
       camera: `static selfie, natural micro-shake`,
     },
   },
+  // --- TIGA UGC ADS PRODUKSI SENDIRI (Brian, 13 Agustus 2026) ---
+  //
+  // DITAMBAHKAN SETELAH RENDER BUKTI GAGAL. Ketiga template ini sempat tayang
+  // tanpa tabel di sini, dan hasilnya ketiganya keluar SAMA PERSIS: presenter
+  // memegang produk sambil bicara. "Meja Kosong" tanpa meja kosong,
+  // "Unboxing dari Dalam Kardus" tanpa kardus sama sekali. Menambah template
+  // tanpa menambah strukturnya = menambah label, bukan menambah video.
+  "ads-unboxing-pov": {
+    opening: {
+      // Aturan #5 dokumen Brian: MASALAH DULU, BARU PRODUK. Di sini
+      // "masalahnya" adalah rasa penasaran — kardus yang belum dibuka.
+      role: `POV from INSIDE a closed cardboard box looking up: the flaps are pulled open from above and a face appears in the opening, lit by the light flooding in, reacting with genuine surprise — the product is NOT visible yet`,
+      camera: `static from inside the box looking straight up, the flaps opening into frame`,
+    },
+    middle: [
+      {
+        role: `the product lifted out of the box for the first time and held up to camera, packaging still visible around it, the first proper look at what it actually is`,
+        camera: `handheld, following the product up out of the box`,
+      },
+      {
+        role: `the product now in use or worn, the box discarded in the background — the moment it stops being a parcel and becomes something owned`,
+        camera: `static medium shot, presenter moving within the frame`,
+      },
+    ],
+    closing: {
+      // Aturan #4: penutup SATU SHOT MENERUS, tidak bolak-balik antar scene.
+      role: `one continuous unbroken shot: wearing or holding the product, turning once to show it, speaking the closing line straight to camera — no cuts inside this shot`,
+      camera: `single continuous take, slow gentle handheld, no cuts`,
+    },
+  },
+
+  "ads-meja-kosong": {
+    opening: {
+      // Format anti-produksi: yang diperlihatkan BUKAN produknya, tapi
+      // hilangnya pekerjaan. Karena itu tidak ada produk sama sekali di sini.
+      role: `a working desk crowded with production gear — camera, tripod, lights, notebooks, cables — then the objects begin vanishing one by one, fastest at the start`,
+      camera: `locked-off wide on the desk, no movement at all so the disappearances read clearly`,
+    },
+    middle: [
+      {
+        role: `the desk now almost empty, only a laptop left, the room noticeably quieter and cleaner than it was`,
+        camera: `very slow push in toward the laptop`,
+      },
+      {
+        role: `a screen showing work finishing by itself — a progress bar completing, a result appearing — no hands touching anything`,
+        camera: `static close on the screen`,
+      },
+    ],
+    closing: {
+      role: `one continuous shot of the empty tidy desk with the finished result on screen, calm and resolved — the point is what is NO LONGER there`,
+      camera: `single continuous take, locked off, holds to the end`,
+    },
+  },
+
+  "ads-panas-ekstrem": {
+    opening: {
+      // Aturan #5 lagi, dan ini paling keras: kalau produk sudah aktif sejak
+      // frame pertama, tidak ada yang diselesaikan dan hook-nya mati.
+      role: `the everyday problem pushed to an absurd extreme, and the person visibly SUFFERING from it — uncomfortable, exasperated, on the edge of giving up. The product must NOT be visible or in use yet`,
+      camera: `handheld selfie at arm's length, slightly unsteady from the discomfort`,
+    },
+    middle: [
+      {
+        role: `the product finally raised into frame and switched on, held close to camera so what it does is unmistakable — the first moment of relief`,
+        camera: `product pushed toward the lens, then settling`,
+      },
+      {
+        role: `the same person, same place, same absurd conditions — but now visibly fine, the contrast doing all the work without a single claim being spoken`,
+        camera: `static, holding on the changed reaction`,
+      },
+    ],
+    closing: {
+      role: `one continuous shot: still in the extreme setting, product in hand and working, speaking the closing line straight to camera with a small satisfied smile`,
+      camera: `single continuous take, steady handheld, no cuts`,
+    },
+  },
 };
 
 /** null = template ini memang tidak punya tabel peran (lihat catatan di atas). */

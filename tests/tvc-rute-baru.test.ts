@@ -84,3 +84,17 @@ test("setiap rute yang dipakai template terdaftar di TVC_ROUTES", () => {
     assert.ok(TVC_ROUTES.includes(t.tvcRoute), `${t.id} memakai rute "${t.tvcRoute}" yang tidak terdaftar`);
   }
 });
+
+// Terukur 2026-08-13 lewat render: pembuka rute "fabric" dan "intimate" keluar
+// sebagai botol di atas meja, bukan "menuruni tangga" / "kamar gelap jam 3
+// pagi". Sebabnya `if (i === 0)` memaksa SEMUA rute memakai hook generik
+// "produk masuk ke frame" — rute yang premisnya justru "produk BELUM muncul"
+// jadi mustahil dijalankan.
+test("rute baru memakai perannya sendiri SEJAK shot pertama", () => {
+  assert.match(tvc("fabric").shots[0].prompt, /descending stairs/i, "pembuka rute kain masih hook generik");
+  assert.match(tvc("intimate", 6).shots[0].prompt, /stillness first/i, "pembuka rute intim masih hook generik");
+});
+
+test("rute lama TIDAK berubah pembukanya", () => {
+  assert.match(tvc("reallife").shots[0].prompt, /opening hook/i, "rute lama ikut berubah — perubahan melebar tanpa diminta");
+});

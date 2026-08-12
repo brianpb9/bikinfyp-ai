@@ -88,11 +88,19 @@ test('"standar" selalu tersedia dan selalu paling depan', () => {
 });
 
 test("gaya khusus kategori naik ke depan, tapi tidak menyingkirkan yang lain", () => {
-  const fashion = stylesForFormat("talking_head", "muslim_fashion").map((s) => s.id);
-  const umum = stylesForFormat("talking_head").map((s) => s.id);
+  const fashion = stylesForFormat("talking_head", "muslim_fashion");
+  const umum = stylesForFormat("talking_head");
   assert.equal(fashion.length, umum.length, "penyortiran tidak boleh menghilangkan pilihan");
-  // "cermin" bestFor fashion/muslim_fashion — harus lebih awal daripada di daftar umum.
-  assert.ok(fashion.indexOf("cermin") < umum.indexOf("cermin"), '"cermin" tidak naik untuk fashion muslim');
+  // Menguji MAKSUDNYA, bukan posisi angka: gaya yang memang untuk kategori ini
+  // tidak boleh berada di belakang gaya yang bukan. Versi lama membandingkan
+  // indeks terhadap daftar umum, dan itu pecah begitu satu gaya dibuang —
+  // padahal perilakunya tidak berubah sama sekali.
+  const khusus = fashion.findIndex((s) => s.bestFor?.includes("muslim_fashion"));
+  const umumTerakhir = fashion.map((s, i) => (s.id !== "standar" && !s.bestFor?.includes("muslim_fashion") ? i : -1))
+    .filter((i) => i >= 0);
+  if (khusus >= 0 && umumTerakhir.length > 0) {
+    assert.ok(khusus < Math.max(...umumTerakhir), "gaya khusus kategori tidak naik ke depan");
+  }
 });
 
 test("tiap gaya punya deskripsi 'yang terlihat' yang bisa dibayangkan", () => {

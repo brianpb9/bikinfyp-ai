@@ -547,7 +547,23 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     let camera: string;
     let avoid: string;
     let pace: string;
-    if (i === 0) {
+    // Rute dengan tabel sendiri memakai perannya SEJAK SHOT PERTAMA.
+    //
+    // Terukur di render bukti 2026-08-13: pembuka rute "fabric" yang
+    // seharusnya "menuruni tangga, kain melayang" keluar sebagai botol di atas
+    // meja, dan pembuka "intimate" yang seharusnya "kamar gelap jam 3 pagi"
+    // keluar sama. Sebabnya bukan model — sebabnya `if (i === 0)` di bawah
+    // memaksa SEMUA rute memakai hook generik "produk masuk ke frame", dan
+    // tabel rutenya baru dipakai untuk shot tengah. Rute yang seluruh
+    // premisnya adalah "produk BELUM muncul" jadi mustahil dijalankan.
+    const tabelRute =
+      input.tvcRoute === "fabric" ? TVC_FABRIC_ROLES
+      : input.tvcRoute === "intimate" ? TVC_INTIMATE_ROLES
+      : null;
+    if (i === 0 && tabelRute && !input.noModel) {
+      const m = tabelRute[0];
+      role = m.role; camera = m.camera; avoid = m.avoid; pace = m.pace;
+    } else if (i === 0) {
       role =
         `the opening hook — it starts ALREADY in motion, with "${input.productName}" arriving in frame. ` +
         `By the ${Math.min(3, to)}s mark the product reads clearly and something has visibly changed. ` +
@@ -706,7 +722,16 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // menjaga wajah tetap sama antar generate (pelajaran dari dokumen TVC).
     const ugcRoles = ugcRolesFor(input.ugcTemplate);
     const ugcBeat = (i: number): string | null => {
-      if (!ugcRoles || format === "tvc" || format === "ads") return null;
+      // TVC tetap dikecualikan: dia punya tabel rute sendiri
+      // (TVC_FABRIC_ROLES dkk) yang lebih spesifik daripada peran template.
+      //
+      // "ads" DULU ikut dikecualikan karena memang belum ada satu pun template
+      // ads yang punya tabel peran — jadi pengecualiannya tidak pernah terasa.
+      // Begitu "Meja Kosong" (format ads) dapat tabelnya 2026-08-13,
+      // pengecualian itu berubah jadi bug diam: tabelnya ada, dibaca, lalu
+      // dibuang. Sekarang yang menentukan adalah ADA-TIDAKNYA tabel, bukan
+      // nama formatnya.
+      if (!ugcRoles || format === "tvc") return null;
       const pick =
         i === 0 && ugcRoles.opening
           ? ugcRoles.opening
@@ -798,7 +823,34 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             ? "opens with the product already moving quickly into the centre of frame, steady camera, "
             : ""
         : "";
-    const base = `${framing}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
+    // URUTAN PENTING, dan ini diperbaiki setelah render bukti gagal
+    // (2026-08-13). Dulu prompt selalu dibuka framing bawaan format, lalu
+    // peran shot dari template menyusul ~400 karakter kemudian. Untuk template
+    // yang komposisinya memang BEDA, hasilnya prompt yang membantah dirinya
+    // sendiri: "presenter berbicara ke kamera di rumah" lebih dulu, baru "POV
+    // dari DALAM kardus, produk belum terlihat". Model menuruti yang pertama —
+    // terukur: ketiga UGC Ads baru keluar identik sebagai talking-head biasa,
+    // "Meja Kosong" tanpa meja kosong dan "Unboxing" tanpa kardus.
+    //
+    // Kalau template memberi peran eksplisit untuk shot ini, PERANNYA yang
+    // memimpin dan framing bawaan format tidak ikut sama sekali — persis
+    // perlakuan yang sudah dipakai gaya rekam. Yang TETAP ikut: subject
+    // (identitas persona) dan larangan format, karena keduanya bukan soal
+    // komposisi melainkan soal siapa yang tampil dan apa yang dilarang.
+    // TVC ikut aturan yang sama. Rute TVC punya tabel perannya sendiri
+    // (TVC_FABRIC_ROLES dkk) yang TIDAK lewat ugcRoles, jadi tanpa baris ini
+    // TVC tetap dibuka TVC_FRAMING dan perannya menyusul di belakang —
+    // terukur di render bukti: shot pembuka rute "fabric" yang seharusnya
+    // "menuruni tangga, kain melayang" keluar sebagai tangan memegang botol,
+    // karena kalimat pertama prompt-nya berbunyi lain.
+    //
+    // "luxury" TIDAK ikut: itu perilaku bawaan TVC sejak awal, dan framing
+    // sinematiknya memang yang memimpin di sana.
+    const rutePunyaPeran = format === "tvc" && Boolean(input.tvcRoute) && input.tvcRoute !== "luxury";
+    const punyaPeranTemplate = Boolean(ugcRoles) || rutePunyaPeran;
+    const base = punyaPeranTemplate
+      ? `${beat} ${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}`
+      : `${framing}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
@@ -888,6 +940,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     negativePrompt = `${negativePrompt}, ${HANDS_ONLY_NEGATIVE}`;
   }
 
+  // Rute TVC yang premisnya menahan produk di awal. Dipisah jadi variabel
+  // supaya alasannya bisa dibaca di satu tempat, bukan tersembunyi di dalam
+  // ekspresi panjang.
+  const menahanProduk = format === "tvc" && (input.tvcRoute === "fabric" || input.tvcRoute === "intimate");
+
   return {
     jobId: input.jobId,
     width: 720,
@@ -900,7 +957,22 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Iklan jasa: visual bisnis dipakai sebagai REFERENSI, bukan frame
     // pertama — kalau tidak, hasilnya video tentang logo, bukan orang yang
     // berbicara. Lihat catatan referenceOnlyImages di lib/providers/types.ts.
-    referenceOnlyImages: format === "ads",
+    // Mode REFERENSI, bukan frame-pertama.
+    //
+    // Mode i2v membuat foto yang dikirim jadi FRAME PERTAMA PERSIS. Untuk
+    // kebanyakan format itu benar — videonya memang harus berangkat dari
+    // produk aslinya. Tapi untuk rute TVC "fabric" dan "intimate", seluruh
+    // premisnya justru produk BELUM muncul di awal: satu dibuka orang menuruni
+    // tangga, satu dibuka kamar gelap jam 3 pagi.
+    //
+    // Terukur 2026-08-13 lewat tiga putaran render: setelah tabel rute dipakai
+    // sejak shot pertama, adegan tangganya MUNCUL — tapi botolnya tetap
+    // terpaku di depan frame, karena foto itu memang frame pertamanya. Selama
+    // i2v dipakai, rute yang menahan produk mustahil dijalankan.
+    //
+    // BELUM DIVERIFIKASI LEWAT RENDER. Perubahan ini menyusul temuan di atas
+    // dan alasannya kuat, tapi jangan diklaim terbukti sebelum ada rekamannya.
+    referenceOnlyImages: format === "ads" || menahanProduk,
     ratio: input.ratio ?? "9:16",
   };
 }
