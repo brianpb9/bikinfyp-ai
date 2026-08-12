@@ -9,7 +9,7 @@ import {
 import { apiFetch, ApiFail } from "../../../_components/api";
 import { rupiah } from "../../_components/format";
 import { Stepper } from "../../_components/Stepper";
-import { AVATAR_PRESETS, type AvatarGender } from "@/lib/avatar-presets";
+import { AVATAR_PRESETS, getAvatarPreset, type AvatarGender } from "@/lib/avatar-presets";
 import { getTemplate, type CampaignTemplate } from "@/lib/templates";
 import { stylesForFormat, GAYA_BAWAAN } from "@/lib/media/recording-styles";
 import { pickTemplate } from "@/lib/auto-pick";
@@ -123,7 +123,10 @@ export default function CampaignPage() {
   const [shotCount, setShotCount] = useState(3);
   const [hookLevel, setHookLevel] = useState<HookLevel>("normal");
   const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
-  const [creatorCategory, setCreatorCategory] = useState("hijaber");
+  // ID INFLUENCER (lib/avatar-presets.ts), bukan kategori kreator. Kategori
+  // dipinjam dari preset.voice saat dikirim ke server — dua hal berbeda sejak
+  // pustaka avatar HDRV masuk 2026-08-13.
+  const [avatarId, setAvatarId] = useState(AVATAR_PRESETS[0]?.id ?? "");
   const [customAvatarDesc, setCustomAvatarDesc] = useState<string | null>(null);
 
   const [count, setCount] = useState(3);
@@ -155,7 +158,7 @@ export default function CampaignPage() {
         setDurationSec(Number(t.duration_sec) as 15 | 30 | 45);
         setHookLevel(String(t.hook_level) as HookLevel);
         setCount(Number(t.variant_count));
-        if (t.creator_category) setCreatorCategory(String(t.creator_category));
+        if (t.creator_category) setAvatarId(String(t.creator_category));
         if (t.avatar_gender) setAvatarGender(String(t.avatar_gender) as AvatarGender);
         setNotice(`Pakai template kamu: ${String(t.name)}`);
         setStep(1); setMaxStep((m) => Math.max(m, 1));
@@ -169,7 +172,7 @@ export default function CampaignPage() {
       await apiFetch("/api/dashboard/templates", { json: {
         name: savedName, kind, format, quality_tier: tier, duration_sec: durationSec,
         hook_level: hookLevel, variant_count: count,
-        creator_category: creatorCategory, avatar_gender: avatarGender,
+        creator_category: getAvatarPreset(avatarId)?.voice ?? "lokal", avatar_gender: avatarGender,
         hook_family: template?.hookFamily ?? null,
       } });
       setSavedName("");
@@ -423,7 +426,14 @@ export default function CampaignPage() {
       const res = await apiFetch<{ run_id: string }>("/api/dashboard/campaign/confirm", {
         json: {
           product_id: product.product_id, script_ids: chosen.map((s) => s.script_id),
-          format, creator_category: creatorCategory, avatar_custom_desc: customAvatarDesc,
+          format,
+          // Kategori kreator dipinjam dari preset — itu yang membawa suara,
+          // register, dan gaya pembawaan yang sudah teruji.
+          creator_category: getAvatarPreset(avatarId)?.voice ?? "lokal",
+          // Wajah: foto unggahan brand menang atas deskripsi influencer.
+          // Kalau tidak ada unggahan, deskripsi influencerlah yang dikirim —
+          // tanpa ini semua influencer yang berbagi suara akan tampil sama.
+          avatar_custom_desc: customAvatarDesc ?? getAvatarPreset(avatarId)?.desc ?? null,
           // null = biarkan mesin menurunkan jumlah adegan seperti sebelumnya.
           shot_count: multiShot ? shotCount : null, ratio, no_model: noModel,
           tvc_route: template?.tvcRoute ?? null,
@@ -926,8 +936,8 @@ export default function CampaignPage() {
                 <span className="px-1 text-[10px] font-semibold leading-tight">Foto sendiri</span>
               </button>
               {avatars.map((a) => (
-                <button key={a.id} onClick={() => setCreatorCategory(a.id)} title={a.name}
-                  className={`overflow-hidden rounded-xl border-2 transition-colors ${creatorCategory === a.id ? "border-amber-500" : "border-transparent hover:border-zinc-200"}`}
+                <button key={a.id} onClick={() => setAvatarId(a.id)} title={a.name}
+                  className={`overflow-hidden rounded-xl border-2 transition-colors ${avatarId === a.id ? "border-amber-500" : "border-transparent hover:border-zinc-200"}`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={a.img} alt={a.name} className="aspect-square w-full object-cover" />
