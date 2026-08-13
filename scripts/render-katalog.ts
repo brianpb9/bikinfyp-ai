@@ -36,6 +36,7 @@ import { generateScripts, type ProductInput } from "../lib/script-engine";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { runFfmpeg } from "../lib/media/ffmpeg";
 import { qcVision } from "../lib/media/qc-vision";
+import { sidikPrompt } from "../lib/media/bukti-segar";
 
 const FOTO = path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg");
 const OUT = path.resolve(process.cwd(), "..", "test_output", "katalog");
@@ -48,6 +49,9 @@ interface Catatan {
   biaya?: number;
   visiLolos?: boolean | null;
   visiMasalah?: string[];
+  /** Sidik jari prompt yang dipakai. Bukti berlaku selama sidiknya masih
+   *  sama — lihat lib/media/bukti-segar.ts. */
+  sidik?: string;
 }
 
 function bacaBuku(): Record<string, Catatan> {
@@ -66,10 +70,14 @@ function batasKesegaran(): Date | null {
   }
 }
 
-function sudahTerbukti(c: Catatan | undefined, batas: Date | null): boolean {
+function sudahTerbukti(c: Catatan | undefined, batas: Date | null, sidikKini?: string): boolean {
   if (!c || !fs.existsSync(c.berkas)) return false;
-  if (batas && fs.statSync(c.berkas).mtime < batas) return false;
-  return c.visiLolos === true;
+  if (c.visiLolos !== true) return false;
+  // Sidik prompt lebih presisi daripada waktu: perubahan di format LAIN tidak
+  // membatalkan bukti template ini.
+  if (c.sidik && sidikKini) return c.sidik === sidikKini;
+  // Catatan lama tanpa sidik jatuh kembali ke aturan waktu.
+  return !batas || fs.statSync(c.berkas).mtime >= batas;
 }
 
 async function gabung(klip: string[], keluar: string) {
@@ -77,6 +85,31 @@ async function gabung(klip: string[], keluar: string) {
   fs.writeFileSync(daftar, klip.map((f) => `file '${f}'`).join("\n"));
   await runFfmpeg(["-y", "-f", "concat", "-safe", "0", "-i", daftar, "-c", "copy", keluar]);
   fs.unlinkSync(daftar);
+}
+
+const KATEGORI = getCreatorCategory("hijaber")!;
+const PRODUK: ProductInput = {
+  id: "katalog", name: "Mosseru Bright Shower Gel", price_idr: 189000,
+  category: "beauty", sourceUrl: null,
+};
+
+/** Rencana shot untuk satu template. SATU definisi, dipakai untuk menghitung
+ *  sidik prompt DAN untuk merender — kalau keduanya disalin terpisah, sidik
+ *  yang dibandingkan bukan sidik yang benar-benar dikirim. */
+function rencanakan(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
+  const [skrip] = generateScripts({
+    product: PRODUK, register: "bunda", qualityTier: "high_quality",
+    durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel,
+    ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),
+    templateId: tpl.id,
+  });
+  return planShots({
+    jobId: tpl.id, durationSec: tpl.durationSec, segments: skrip.segments,
+    category: KATEGORI, productName: PRODUK.name, productCategory: "beauty",
+    imageRefPath: FOTO, qualityTier: "high_quality", format: tpl.format,
+    hookLevel: tpl.hookLevel, ugcTemplate: tpl.id,
+    tvcRoute: tpl.tvcRoute, shotCountOverride: tpl.shotCount, ratio: tpl.ratio,
+  });
 }
 
 async function main() {
@@ -93,9 +126,22 @@ async function main() {
   // ketiga di dua template berturut-turut, dan kunci tangan positif+negatif
   // tidak menahannya — merender enam sisanya berarti membeli enam video cacat.
   const lewati = (process.env.RENDER_SKIP_FORMAT ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  // Sidik prompt SEMUA template dihitung dulu. Merencanakan shot tidak
+  // memanggil API mana pun dan tidak berbiaya — jadi memeriksa 33 template
+  // untuk tahu mana yang promptnya berubah jauh lebih murah daripada salah
+  // merender satu saja.
+  const sidikPerTemplate = new Map<string, string>();
+  for (const t of CAMPAIGN_TEMPLATES) {
+    try {
+      sidikPerTemplate.set(t.id, sidikPrompt(rencanakan(t)));
+    } catch {
+      // Template yang gagal direncanakan akan gagal juga saat dirender; biarkan
+      // masuk antrean supaya kegagalannya terlihat, bukan disembunyikan.
+    }
+  }
   const antre = CAMPAIGN_TEMPLATES
     .filter((t) => !lewati.includes(t.format))
-    .filter((t) => !sudahTerbukti(buku[t.id], batas));
+    .filter((t) => !sudahTerbukti(buku[t.id], batas, sidikPerTemplate.get(t.id)));
   if (lewati.length) console.log(`Format dilewati: ${lewati.join(", ")}`);
   const jatah = Number(process.env.RENDER_BATCH ?? 0);
   const kerjakan = jatah > 0 ? antre.slice(0, jatah) : antre;
@@ -104,15 +150,9 @@ async function main() {
   // menghitung format yang DILEWATI sebagai "sudah terbukti", padahal justru
   // dilewati karena cacat. Papan yang melaporkan cacat sebagai bukti adalah
   // persis jenis kebohongan yang skrip ini dibuat untuk mencegah.
-  const terbukti = CAMPAIGN_TEMPLATES.filter((t) => sudahTerbukti(buku[t.id], batas)).length;
+  const terbukti = CAMPAIGN_TEMPLATES.filter((t) => sudahTerbukti(buku[t.id], batas, sidikPerTemplate.get(t.id))).length;
   console.log(`Katalog ${CAMPAIGN_TEMPLATES.length} template · terbukti ${terbukti} · dilewati ${CAMPAIGN_TEMPLATES.length - terbukti - antre.length} · antre ${antre.length} · dikerjakan sekarang ${kerjakan.length}`);
   if (batas) console.log(`Batas kesegaran bukti: ${batas.toISOString()}`);
-
-  const kategori = getCreatorCategory("hijaber")!;
-  const produk: ProductInput = {
-    id: "katalog", name: "Mosseru Bright Shower Gel", price_idr: 189000,
-    category: "beauty", sourceUrl: null,
-  };
 
   let totalBiaya = 0;
   const hasil: { id: string; klip: number; biaya: number; visi: boolean | null; masalah: string[] }[] = [];
@@ -125,19 +165,7 @@ async function main() {
     let klip: string[] = [];
     let biaya = 0;
     try {
-      const [skrip] = generateScripts({
-        product: produk, register: "bunda", qualityTier: "high_quality",
-        durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel,
-        ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),
-        templateId: tpl.id,
-      });
-      const spec = planShots({
-        jobId: tpl.id, durationSec: tpl.durationSec, segments: skrip.segments,
-        category: kategori, productName: produk.name, productCategory: "beauty",
-        imageRefPath: FOTO, qualityTier: "high_quality", format: tpl.format,
-        hookLevel: tpl.hookLevel, ugcTemplate: tpl.id,
-        tvcRoute: tpl.tvcRoute, shotCountOverride: tpl.shotCount, ratio: tpl.ratio,
-      });
+      const spec = rencanakan(tpl);
 
       for (const shot of spec.shots) {
         const sub = path.join(dir, `s${shot.index}`);
@@ -178,7 +206,7 @@ async function main() {
       const bukuKini = bacaBuku();
       bukuKini[tpl.id] = {
         berkas, klip: klip.length, dirender: new Date().toISOString(),
-        biaya, visiLolos: lolos, visiMasalah: v.masalah,
+        biaya, visiLolos: lolos, visiMasalah: v.masalah, sidik: sidikPrompt(spec),
       };
       fs.writeFileSync(BUKU, JSON.stringify(bukuKini, null, 2));
 

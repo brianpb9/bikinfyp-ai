@@ -108,9 +108,10 @@ const HANDS_ONLY_FRAMING =
  *  yang menyelesaikan tangan hantu adalah pernyataan tentang apa yang ADA,
  *  bukan daftar larangan. */
 const HANDS_ONLY_HAND_LOCK =
-  "Exactly two hands are visible in the entire frame, and both belong to the same single person — " +
-  "one hand operates the product, the other receives or steadies it. No third hand ever enters the frame, " +
-  "from any edge, at any moment. ";
+  "Exactly two hands are visible in the entire frame, and both belong to the same single person. " +
+  "The SAME hand that holds the bottle also operates it — it is never handed over, and no other hand " +
+  "steadies it. The second hand does only one thing: receive the product or show the result. " +
+  "No third hand ever enters the frame, from any edge, at any moment. ";
 
 const HANDS_ONLY_NEGATIVE =
   "no face, no visible face, no head in frame, no person facing camera, " +

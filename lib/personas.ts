@@ -44,7 +44,7 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
     promptSeed:
       "Indonesian hijabi beauty influencer, modern soft hijab framing the face, luminous medium warm skin (sawo matang), soft glam modest makeup, defined brows, warm smile, clean UGC portrait, pastel background",
     handsPrompt:
-      "close-up of a young Indonesian hijabi woman's hands with warm medium skin tone, soft pastel hijab sleeve visible at wrist, modest neat nails, holding the product naturally over a clean Indonesian home table, phone camera look, natural daylight",
+      "close-up of a young Indonesian hijabi woman's hands with warm medium skin tone, soft pastel hijab sleeve visible at wrist, modest neat nails, one hand holding and working the product over a clean Indonesian home table, phone camera look, natural daylight",
     deliveryPrompt:
       "graceful calm delivery, soft gentle hand gestures, serene warm smile, unhurried elegant pace",
     voiceName: "Aoede",
@@ -61,7 +61,7 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
     promptSeed:
       "native Indonesian woman, warm medium brown skin (sawo matang), soft full oval face, expressive dark eyes, gentle rounded nose tip, natural full lips, thick dark hair, friendly warm presence, everyday beauty, natural daylight",
     handsPrompt:
-      "close-up of a native Indonesian woman's hands with warm sawo matang skin tone, casual sleeve, natural nails, holding the product naturally, Indonesian home background, phone camera look",
+      "close-up of a native Indonesian woman's hands with warm sawo matang skin tone, casual sleeve, natural nails, one hand holding and working the product, Indonesian home background, phone camera look",
     deliveryPrompt:
       "warm neighborly delivery like chatting with a close friend, easy genuine laugh, relaxed pace",
     voiceName: "Kore",
@@ -125,7 +125,7 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
     handsPrompt:
       "close-up of an Indonesian mother's hands with warm medium skin tone, wearing a soft floral home-dress sleeve, " +
       "resting on a wooden kitchen counter with blurred kitchen tiles and a warm morning window light visible behind, " +
-      "holding the product naturally, phone camera look",
+      "one hand holding and working the product, phone camera look",
     deliveryPrompt:
       "reassuring motherly delivery, practical no-nonsense warmth, nodding while explaining, moderate calm pace",
     voiceName: "Sulafat",
@@ -155,7 +155,7 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
     handsPrompt:
       "close-up of an Indonesian woman's hands with warm medium skin tone, wearing a traditional brown-and-cream " +
       "batik-pattern sleeve with classic parang motif, resting on a wooden home table with a woven rattan placemat " +
-      "and warm afternoon window light visible behind, holding the product naturally",
+      "and warm afternoon window light visible behind, one hand holding and working the product",
     deliveryPrompt:
       "humble down-to-earth delivery, shy genuine smile, polite unhurried gestures",
     voiceName: "Kore",
@@ -214,7 +214,7 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
     promptSeed:
       "Indonesian father figure, early-to-mid 40s, warm mature features, light stubble, calm reassuring presence, smart-casual style, natural daylight",
     handsPrompt:
-      "close-up of an Indonesian father's hands with warm medium skin tone, casual button-shirt sleeve, resting on a wooden home table with warm morning window light behind, holding the product naturally, phone camera look",
+      "close-up of an Indonesian father's hands with warm medium skin tone, casual button-shirt sleeve, resting on a wooden home table with warm morning window light behind, one hand holding and working the product, phone camera look",
     deliveryPrompt:
       "reassuring fatherly delivery, practical no-nonsense warmth, calm confident pace",
     voiceName: "Fenrir",
@@ -231,7 +231,7 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
     promptSeed:
       "Indonesian man in his 50s, distinguished greying-at-temples look, warm trustworthy expression, smart casual style, natural daylight",
     handsPrompt:
-      "close-up of an older Indonesian man's hands with medium skin tone, smart casual sleeve, holding the product naturally on a simple wooden table, phone camera look",
+      "close-up of an older Indonesian man's hands with medium skin tone, smart casual sleeve, one hand holding and working the product on a simple wooden table, phone camera look",
     deliveryPrompt:
       "trustworthy senior delivery, unhurried authoritative warmth, steady measured pace",
     voiceName: "Orus",
@@ -265,7 +265,7 @@ export const CREATOR_CATEGORIES: CreatorCategory[] = [
     promptSeed:
       "native Indonesian man, warm medium brown skin (sawo matang), light stubble, approachable everyday features, casual style, natural daylight",
     handsPrompt:
-      "close-up of a native Indonesian man's hands with warm sawo matang skin tone, casual sleeve, holding the product naturally in an everyday Indonesian home setting, phone camera look",
+      "close-up of a native Indonesian man's hands with warm sawo matang skin tone, casual sleeve, one hand holding and working the product in an everyday Indonesian home setting, phone camera look",
     deliveryPrompt:
       "warm neighborly delivery like chatting with a close friend, easy genuine laugh, relaxed pace",
     voiceName: "Iapetus",

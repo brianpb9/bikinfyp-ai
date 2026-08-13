@@ -160,6 +160,14 @@ test("hands_only mengunci tepat dua tangan milik satu orang", () => {
   for (const sh of s.shots) {
     assert.match(sh.prompt, /Exactly two hands are visible/i, `shot ${sh.index}: tanpa kunci jumlah tangan`);
     assert.match(sh.prompt, /No third hand ever enters the frame/i, `shot ${sh.index}: tanpa larangan tangan ketiga`);
+    // Tugas tangan harus BERJUMLAH DUA, bukan tiga. Render berbayar 2026-08-13
+    // membuktikan larangan saja tidak cukup: promptnya sendiri membagikan tiga
+    // tugas — memegang (baris persona), mengoperasikan, dan menadah (kunci) —
+    // lalu model menyediakan tangan ketiga untuk mengerjakannya.
+    assert.match(sh.prompt, /SAME hand that holds the bottle also operates it/i,
+      `shot ${sh.index}: memegang dan mengoperasikan belum digabung ke satu tangan`);
+    assert.doesNotMatch(sh.prompt, /holding the product naturally/i,
+      `shot ${sh.index}: baris persona masih memberi tugas "memegang" tanpa pemilik`);
   }
   assert.match(s.negativePrompt, /no third hand/i, "negative prompt tanpa larangan tangan ketiga");
   // Wajah tetap dilarang — kunci tangan tidak boleh menggeser larangan wajah.
