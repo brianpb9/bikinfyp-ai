@@ -45,6 +45,33 @@ export interface AvatarPreset {
 }
 
 export const AVATAR_PRESETS: AvatarPreset[] = [
+  // --- ELITE 5 (Brian, 13 Agustus 2026) — ditambahkan, bukan mengganti ---
+  //
+  // Pack ini BEDA DARI YANG HDRV dan bedanya menentukan: tiap kandidat punya
+  // "Identity Lock" TERTULIS — warna kulit, tulang pipi, bentuk mata, alis,
+  // rambut, postur — bukan sekadar menunjuk pasfoto sebagai otoritas wajah.
+  //
+  // Itu penting karena pipeline kita TIDAK BISA memakai foto wajah sebagai
+  // referensi (BytePlus menolaknya, terbukti 2026-08-12). Untuk 19 influencer
+  // HDRV, satu-satunya yang bisa dikirim ke model adalah deskripsi yang kami
+  // susun sendiri dari umur + aura + lemari pakaian. Untuk lima ini,
+  // deskripsi wajahnya datang dari packnya sendiri — jadi hasilnya lebih
+  // dekat ke sosok yang dimaksud, bukan sekadar sejiwa.
+  //
+  // Wardrobe Lock ikut disertakan: konsistensi pakaian antar-shot adalah
+  // separuh dari kesan "orang yang sama", dan model kita menggenerate tiap
+  // shot terpisah.
+  { id: "alya-satrine", name: "Alya Satrine", note: "fashion editorial, gaya arsitektural", img: "/avatars/elite/alya-satrine.jpg", gender: "female", voice: "genz",
+    desc: "22-year-old Indonesian woman Alya Satrine: warm kuning-langsat skin, refined distinctly Indonesian oval face, large intelligent dark eyes, high natural cheekbones, graceful jaw, subtle natural facial asymmetry, glossy black hair in a sharp low ponytail, silver ear cuff. Premium leading-actress prese Wearing: Charcoal architectural cropped short-sleeve jacket with asymmetric waist construction over a pearl-gray fitted inner layer, matching high-waisted char" },
+  { id: "celeste-huangkara", name: "Celeste Huangkara", note: "beauty premium, warna berani", img: "/avatars/elite/celeste-huangkara.jpg", gender: "female", voice: "chindo",
+    desc: "24-year-old Chinese-Indonesian woman Celeste Huangkara: warm ivory-golden tropical skin, distinctly Chindo Indonesian hooded almond eyes, prominent cheekbones, compact nose, clean jawline, realistic pores and natural facial asymmetry, blunt chin-length black bob. Downtown fashion authority; unmistak Wearing: Saturated turquoise sculptural square-neck sleeveless top with broad tailored straps, dove-gray low-waist tailored trousers, silver arm cuff, sleek ne" },
+  { id: "mara-laksmi", name: "Mara Laksmi", note: "wellness & kecantikan alami", img: "/avatars/elite/mara-laksmi.jpg", gender: "female", voice: "chindo",
+    desc: "25-year-old Maluku-Balinese Indonesian woman Mara Laksmi: rich bronze tropical skin, eastern Indonesian cheekbones, large deep-set dark eyes, softly full lips, realistic pores, subtle facial asymmetry, long dense black curls in a controlled sculptural shape, elegant athletic proportions. Charismatic Wearing: Soft lilac asymmetric tailored dress with clean geometric neckline, opaque underlayer and flowing midi silhouette, brushed-gold earrings, refined neut" },
+  { id: "rania-adhisti", name: "Rania Adhisti", note: "lifestyle anggun, wardrobe sehari-hari", img: "/avatars/elite/rania-adhisti.jpg", gender: "female", voice: "lokal",
+    desc: "26-year-old Minang-Sundanese Indonesian woman Rania Adhisti: warm honey-brown skin, elongated Indonesian face, dark almond eyes, high forehead, elegant aquiline nose, soft jaw, natural facial asymmetry, glossy shoulder-length black hair with an off-center bend. Sophisticated actress and culture-fash Wearing: Powder-blue bias-cut long-sleeve sculptural dress with subtle waist draping and opaque construction, pale butter-yellow geometric earrings, cream poin" },
+  { id: "saskia-aruna", name: "Saskia Aruna", note: "musik & alt-pop, panggung", img: "/avatars/elite/saskia-aruna.jpg", gender: "female", voice: "genz",
+    desc: "23-year-old Batak-Javanese Indonesian woman Saskia Aruna: medium golden-brown skin, strong elegant cheekbones, slightly hooded expressive dark eyes, full natural brows, defined mouth, subtle facial asymmetry, long ink-black hair with an imperfect center part, statuesque lean build. Magnetic alt-pop  Wearing: Pale pistachio one-shoulder draped midi dress over matching opaque fitted base, sculptural chrome arm cuff, minimal earrings, elegant neutral footwear" },
+
   { id: "bianca-limanto", name: "Bianca Limanto", note: "music, fashion, and nocturnal editorial cult", img: "/avatars/hdrv/bianca-limanto.jpg", gender: "female", voice: "chindo",
     desc: "29-year-old Indonesian woman, cool, confident, fashion-forward, wearing sharp black cropped blazer, burgundy fitted top, charcoal wide-leg trousers, polished black boots, silver jewelry" },
   { id: "celine-wibowo", name: "Celine Wibowo", note: "mature styling, wardrobe advice, and confide", img: "/avatars/hdrv/celine-wibowo.jpg", gender: "female", voice: "ibu",
