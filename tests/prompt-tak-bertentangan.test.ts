@@ -1,0 +1,154 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { planShots } from "../lib/media/shot-planner";
+import { getCreatorCategory } from "../lib/personas";
+import { CAMPAIGN_TEMPLATES } from "../lib/templates";
+import { generateScripts, type ProductInput } from "../lib/script-engine";
+
+// JARING UNTUK KELAS BUG, BUKAN UNTUK DUA KEJADIANNYA.
+//
+// Dua cacat termahal 2026-08-13 punya bentuk yang sama persis, dan keduanya
+// baru ketahuan setelah dibayar:
+//
+//   penutup TVC   beat minta "packshot produk saja", baris identitas minta
+//                 "orang yang sama", kunci minta "tepat satu orang".
+//                 -> model menggandakan orangnya kiri-kanan botol.
+//   hands_only    baris persona minta "memegang", kunci minta
+//                 "mengoperasikan" + "menadah". Tiga tugas, dua tangan.
+//                 -> model menyediakan telapak ketiga.
+//
+// Dua-duanya BUKAN larangan yang kurang keras. Dua-duanya permintaan yang
+// tidak koheren, dan model menyelesaikan ketidakkoherenan dengan mengarang.
+// Memperkuat larangan sudah dicoba tiga kali dengan uang sungguhan dan gagal
+// tiga kali.
+//
+// Tes ini memeriksa SELURUH katalog: tidak boleh ada satu prompt pun yang
+// memuat dua perintah yang tidak mungkin benar bersamaan. Ia tidak menilai
+// bagus-tidaknya video — ia menahan satu-satunya jenis kesalahan yang sudah
+// terbukti berulang, sebelum ada yang membayar untuk menemukannya lagi.
+
+const SEG = [
+  { role: "hook", text: "a", start: 0, end: 5, visual_direction: "x" },
+  { role: "demo", text: "b", start: 5, end: 11, visual_direction: "y" },
+  { role: "cta", text: "c", start: 11, end: 15, visual_direction: "z" },
+];
+
+const PRODUK: ProductInput = {
+  id: "uji", name: "Mosseru Bright Shower Gel", price_idr: 189000,
+  category: "beauty", sourceUrl: null,
+};
+
+/** Pasangan yang tidak mungkin benar bersamaan dalam satu prompt shot. */
+export const BERTENTANGAN: { a: RegExp; b: RegExp; kenapa: string }[] = [
+  {
+    a: /Not a single person appears/i,
+    b: /EXACTLY ONE person is present/i,
+    kenapa: 'shot dilarang punya orang TAPI juga dikunci "tepat satu orang"',
+  },
+  {
+    a: /Not a single person appears/i,
+    b: /The same person, same face/i,
+    kenapa: 'shot dilarang punya orang TAPI juga disuruh memakai "orang yang sama"',
+  },
+  {
+    a: /Not a single person appears/i,
+    b: /no people anywhere in frame[\s\S]*presenter|presenter[\s\S]*Not a single person/i,
+    kenapa: "shot tanpa orang tapi tetap menyebut presenter",
+  },
+  {
+    // Tugas tangan harus berjumlah dua. "holding" tanpa pemilik yang ditunjuk
+    // adalah tugas ketiga yang diam-diam ditambahkan.
+    a: /one hand operates the product, the other receives/i,
+    b: /holding the product naturally/i,
+    kenapa: "memegang, mengoperasikan, dan menadah = tiga tugas untuk dua tangan",
+  },
+];
+
+function rencana(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
+  const [skrip] = generateScripts({
+    product: PRODUK, register: "bunda", qualityTier: "high_quality",
+    durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel,
+    ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),
+    templateId: tpl.id,
+  });
+  return planShots({
+    jobId: tpl.id, durationSec: tpl.durationSec,
+    segments: skrip.segments.length ? skrip.segments : (SEG as never),
+    category: getCreatorCategory("hijaber")!, productName: PRODUK.name, productCategory: "beauty",
+    imageRefPath: "/tmp/x.jpg", qualityTier: "high_quality", format: tpl.format,
+    hookLevel: tpl.hookLevel, ugcTemplate: tpl.id,
+    tvcRoute: tpl.tvcRoute, shotCountOverride: tpl.shotCount, ratio: tpl.ratio,
+  });
+}
+
+test("tidak ada prompt di SELURUH katalog yang memuat perintah bertentangan", () => {
+  const pelanggaran: string[] = [];
+  for (const tpl of CAMPAIGN_TEMPLATES) {
+    const spec = rencana(tpl);
+    for (const shot of spec.shots) {
+      for (const aturan of BERTENTANGAN) {
+        if (aturan.a.test(shot.prompt) && aturan.b.test(shot.prompt)) {
+          pelanggaran.push(`${tpl.id} shot ${shot.index + 1}: ${aturan.kenapa}`);
+        }
+      }
+    }
+  }
+  assert.deepEqual(pelanggaran, [], `prompt bertentangan:\n  ${pelanggaran.join("\n  ")}`);
+});
+
+// Setiap shot harus menyatakan dengan jelas ADA atau TIDAK ADA orang. Shot yang
+// diam soal itu adalah tempat model bebas menebak — dan tebakan model yang
+// menghasilkan dua perempuan di shot penutup.
+test("setiap shot menyatakan sikap soal kehadiran orang", () => {
+  const bisu: string[] = [];
+  for (const tpl of CAMPAIGN_TEMPLATES) {
+    if (tpl.format !== "tvc") continue; // TVC: satu-satunya yang punya shot sengaja tanpa orang
+    for (const shot of rencana(tpl).shots) {
+      const menyatakan =
+        /Not a single person appears/i.test(shot.prompt) ||
+        /EXACTLY ONE person is present/i.test(shot.prompt) ||
+        /no people anywhere in frame/i.test(shot.prompt) ||
+        /The same person, same face/i.test(shot.prompt);
+      if (!menyatakan) bisu.push(`${tpl.id} shot ${shot.index + 1}`);
+    }
+  }
+  assert.deepEqual(bisu, [], `shot yang tidak menyatakan kehadiran orang:\n  ${bisu.join("\n  ")}`);
+});
+
+// BUKTI BAHWA JARINGNYA MENANGKAP.
+//
+// Dua tes di atas lulus sejak baris pertama ditulis, dan tes yang lulus sejak
+// awal tidak membuktikan apa pun — ia bisa saja tidak memeriksa apa-apa.
+// Di sini aturannya diadu dengan prompt yang BENAR-BENAR pernah dikirim dan
+// benar-benar menghasilkan video cacat berbayar.
+test("aturan pertentangan menangkap prompt yang dulu memang gagal", () => {
+  // Prompt penutup TVC sebelum perbaikan (render 2026-08-13, Rp16.626,
+  // menghasilkan dua perempuan berwajah identik mengapit botol).
+  const penutupLama =
+    "This is the FINAL shot. Beat 6 of 6: the hero shot: the product front-facing and centred " +
+    "on a clean surface — the packshot a brand would sign off on. " +
+    "EXACTLY ONE person is present in the entire frame from start to finish. " +
+    "The same person, same face, same hair and same outfit as the other shots.";
+
+  const kena = BERTENTANGAN.filter((a) => a.a.test(penutupLama) && a.b.test(penutupLama));
+  // Prompt lama itu TIDAK memuat "Not a single person" — justru itu masalahnya:
+  // beat-nya minta packshot tanpa orang, tapi tidak pernah mengatakannya.
+  // Maka yang menangkapnya bukan aturan pertentangan, melainkan tes kedua:
+  // shot penutup wajib MENYATAKAN sikap, dan versi lama diam.
+  assert.equal(kena.length, 0, "prompt lama memang tidak menyatakan larangan orang — itu inti bugnya");
+
+  // Versi cacat yang lain: sudah menyatakan larangan, tapi kuncinya ikut
+  // terpasang. Inilah yang harus ditangkap aturan pertentangan.
+  const bertentangan = penutupLama + " Not a single person appears in this shot.";
+  const kena2 = BERTENTANGAN.filter((a) => a.a.test(bertentangan) && a.b.test(bertentangan));
+  assert.ok(kena2.length >= 2, `harus tertangkap minimal dua aturan, dapat ${kena2.length}`);
+
+  // Prompt hands_only sebelum perbaikan.
+  const tanganLama =
+    "hands and forearms only, face and body NOT visible. " +
+    "Exactly two hands are visible in the entire frame, and both belong to the same single person — " +
+    "one hand operates the product, the other receives or steadies it. " +
+    "close-up of a young Indonesian hijabi woman's hands, holding the product naturally over a table.";
+  const kena3 = BERTENTANGAN.filter((a) => a.a.test(tanganLama) && a.b.test(tanganLama));
+  assert.equal(kena3.length, 1, "tiga tugas untuk dua tangan harus tertangkap");
+});
