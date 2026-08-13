@@ -152,3 +152,36 @@ test("aturan pertentangan menangkap prompt yang dulu memang gagal", () => {
   const kena3 = BERTENTANGAN.filter((a) => a.a.test(tanganLama) && a.b.test(tanganLama));
   assert.equal(kena3.length, 1, "tiga tugas untuk dua tangan harus tertangkap");
 });
+
+// PERTENTANGAN KEEMPAT, ditemukan lewat review kreatif 2026-08-14.
+//
+// Label produk keluar sebagai huruf setengah terbaca yang BERUBAH-UBAH antar
+// shot dalam satu video: "Bright Slow 'ver Gel" di shot 1-2, "Shaw Slow 'w'
+// Peer / 30ml / 45 oz" di shot 3 — dan 45 oz untuk botol 30ml itu mustahil.
+//
+// Sebabnya sama seperti tiga pertentangan sebelumnya. Prompt lama meminta nama
+// merek "sharp, steady and perfectly legible" DAN teks kecil di bawahnya
+// "out of focus from natural macro shallow depth of field". Keduanya tercetak
+// di PERMUKAAN DATAR YANG SAMA, bidang fokus yang sama — depth of field tidak
+// bisa menajamkan satu baris dan mengaburkan baris tepat di bawahnya. Yang
+// diminta mustahil secara optik, jadi model mengarang sesuatu di antaranya.
+//
+// QC-10 tidak menangkapnya karena ia memeriksa NAMA MEREK terbaca — dan
+// "mosseru" memang terbaca sempurna di semua frame. Yang rusak justru barisan
+// di bawahnya, yang tidak pernah diperiksa siapa pun.
+test("label: tidak menuntut tajam dan buram sekaligus di bidang yang sama", () => {
+  const pelanggaran: string[] = [];
+  for (const tpl of CAMPAIGN_TEMPLATES) {
+    for (const shot of rencana(tpl).shots) {
+      const mintaTajam = /brand name on the label stays sharp/i.test(shot.prompt);
+      const mintaBuram = /out of focus from natural macro shallow depth of field/i.test(shot.prompt);
+      if (mintaTajam && mintaBuram) pelanggaran.push(`${tpl.id} shot ${shot.index + 1}`);
+    }
+  }
+  assert.deepEqual(pelanggaran, [], `prompt menuntut tajam+buram di satu bidang:\n  ${pelanggaran.join("\n  ")}`);
+
+  // Dan harus MENYATAKAN apa yang seharusnya terlihat, bukan cuma melarang.
+  const contoh = rencana(CAMPAIGN_TEMPLATES.find((t) => t.format === "hands_only")!).shots[0].prompt;
+  assert.match(contoh, /read as fine printed TEXTURE/i, "tidak menyatakan wujud teks kecil yang benar");
+  assert.match(contoh, /Never render invented words/i, "tidak melarang kata karangan di label");
+});
