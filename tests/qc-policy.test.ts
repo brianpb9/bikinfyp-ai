@@ -43,3 +43,26 @@ test("QC talking_head & vo_broll: masing-masing punya kebijakan sendiri", () => 
   ];
   assert.equal(evaluateQcPolicy("vo_broll", voBrollPassing), true);
 });
+
+// QC-11 (2026-08-13). Cacat pemicunya: TVC 30 detik dengan DUA perempuan di
+// shot penutup lolos SELURUH QC dan sampai ke output.
+//
+// Kebijakannya sengaja asimetris dan itu perlu dijaga tes: skip DIIZINKAN
+// (model visi bisa mati atau kuncinya belum dipasang — memaksa wajib-lulus
+// berarti seluruh produksi berhenti saat layanan pihak ketiga down), tapi fail
+// MENOLAK. Pemeriksa yang cuma memberi peringatan tidak menahan apa pun.
+test("QC-11 boleh skip di semua format, tapi fail selalu menolak", () => {
+  for (const format of Object.keys(QC_POLICY_BY_FORMAT) as (keyof typeof QC_POLICY_BY_FORMAT)[]) {
+    const policy = QC_POLICY_BY_FORMAT[format];
+    const lulus: QcCheck[] = policy.requiredPass.map((code) => ({ code, name: code, status: "pass" as const }));
+    assert.ok(
+      (policy.permittedSkip as readonly string[]).includes("QC-11"),
+      `${format}: QC-11 harus boleh skip — kalau tidak, matinya model visi menghentikan seluruh produksi`
+    );
+    assert.equal(evaluateQcPolicy(format, [...lulus, { code: "QC-11", name: "visi", status: "skip" }]), true);
+    assert.equal(
+      evaluateQcPolicy(format, [...lulus, { code: "QC-11", name: "visi", status: "fail" }]), false,
+      `${format}: QC-11 fail WAJIB menolak output`
+    );
+  }
+});

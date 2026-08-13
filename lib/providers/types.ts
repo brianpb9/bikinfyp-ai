@@ -64,6 +64,10 @@ export interface VisualSpec {
    * nilai lain sangat mungkin jalan, tapi sampai ada render berbayar yang
    * membuktikannya jangan diperlakukan sebagai fakta. */
   ratio?: string;
+  /** Berapa orang yang boleh ada di frame (lihat maksOrangPerFrame di
+   *  shot-planner). Dibawa di spec supaya QC-11 memeriksa aturan yang PERSIS
+   *  sama dengan yang diperintahkan ke model, bukan tebakannya sendiri. */
+  maxPeople?: number;
 }
 
 export interface VideoAsset {

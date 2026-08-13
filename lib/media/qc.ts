@@ -9,6 +9,7 @@ import { probeDurationSec, probeHasVideoStream, probeFormatTags, volumeDetect, r
 import { validateScript } from "../script-engine/validator";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { isServiceLike } from "../config/hooks";
+import { qcVision } from "./qc-vision";
 
 export interface QcCheck {
   code: string;
@@ -35,8 +36,9 @@ export const QC_POLICY_BY_FORMAT = {
   // dengan alasan "tidak ada overlay" — fail tetap menolak output.
   hands_only: {
     requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08", "QC-09"],
-    permittedSkip: ["QC-01", "QC-06", "QC-10"],
+    permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11"],
     skipReason: {
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "N/A: hands_only tidak menampilkan pembicara untuk lip-sync.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
@@ -49,8 +51,9 @@ export const QC_POLICY_BY_FORMAT = {
   // dimitigasi lewat instruksi jeda/enunciate di shot-planner.
   talking_head: {
     requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01", "QC-06", "QC-10"],
+    permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11"],
     skipReason: {
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2) — dimitigasi lewat instruksi jeda/enunciate di prompt.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
@@ -68,8 +71,9 @@ export const QC_POLICY_BY_FORMAT = {
   // sehingga job DITOLAK tanpa satu pun check berstatus fail.
   tvc: {
     requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01", "QC-06", "QC-10"],
+    permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11"],
     skipReason: {
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2) — dimitigasi lewat instruksi jeda/enunciate di prompt.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (overlay brand ditambahkan di post, bukan di prompt).",
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
@@ -85,8 +89,9 @@ export const QC_POLICY_BY_FORMAT = {
   // pentingnya untuk iklan jasa seperti untuk iklan produk.
   ads: {
     requiredPass: ["QC-02", "QC-04", "QC-05", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01", "QC-03", "QC-06", "QC-09", "QC-10"],
+    permittedSkip: ["QC-01", "QC-03", "QC-06", "QC-09", "QC-10", "QC-11"],
     skipReason: {
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2).",
       "QC-03": "N/A: iklan jasa/app/toko tidak punya produk fisik untuk dicocokkan.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks.",
@@ -99,8 +104,9 @@ export const QC_POLICY_BY_FORMAT = {
   // relevan — tidak ada tangan yang di-generate untuk bisa morphing.
   vo_broll: {
     requiredPass: ["QC-03", "QC-04", "QC-05", "QC-06", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01", "QC-02"],
+    permittedSkip: ["QC-01", "QC-02", "QC-11"],
     skipReason: {
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "N/A: tidak ada wajah bicara — visual adalah foto produk, bukan presenter.",
       "QC-02": "N/A: video dari foto produk asli (pan/zoom), bukan tangan hasil AI-generated.",
     },
@@ -151,6 +157,12 @@ export interface QcInput {
    * skip, bukan fail (insiden r13 2026-08-07: e2e stuck 180s krn QC-10 selalu
    * gagal di produk yang nama-nya kebetulan lolos filter kata generik). */
   isMockProvider?: boolean;
+  /** QC-11: berapa orang yang BOLEH ada di frame. Datang dari spec
+   *  (maksOrangPerFrame di shot-planner) — bukan diturunkan ulang di sini,
+   *  supaya pemeriksa dan prompt tidak bisa berbeda pendapat. Tanpa nilai,
+   *  QC-11 tidak dijalankan: menebak batasnya berarti menolak video yang
+   *  sebenarnya sah. */
+  maxPeople?: number;
 }
 
 /** Python dengan OpenCV: venv proyek bila ada, selain python3 sistem. */
@@ -742,6 +754,45 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     });
   } catch (err) {
     checks.push({ code: "QC-08", name: "Label AIGC (metadata) tertanam", status: "fail", detail: String(err) });
+  }
+
+  // QC-11 jumlah subjek & anatomi, lewat model visi. BARU 2026-08-13.
+  //
+  // KENAPA ADA. Sebuah TVC 30 detik keluar dengan DUA perempuan di shot
+  // PENUTUP — hal terakhir yang dilihat penonton — dan LOLOS SELURUH QC di
+  // atas. Ketahuan hanya karena kebetulan ditonton. Tidak satu pun check yang
+  // ada pernah bertanya "ada berapa orang di frame ini": QC-02 memeriksa
+  // KONTINUITAS siluet antar frame, QC-09 hanya berlaku di hands_only.
+  //
+  // vo_broll dikecualikan: visualnya foto produk asli yang di-pan/zoom, tidak
+  // ada manusia hasil generate untuk dihitung.
+  if (qcFormat === "vo_broll") {
+    checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "N/A: visual dari foto produk asli, bukan orang hasil AI." });
+  } else if (input.isMockProvider) {
+    checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "N/A: provider mock (dev/e2e) — konten sintetis tidak punya subjek nyata." });
+  } else if (input.maxPeople === undefined) {
+    checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "batas jumlah orang tidak dikirim pemanggil — tidak ditebak." });
+  } else {
+    try {
+      const v = await qcVision({
+        videoPath: input.filePath,
+        maksOrang: input.maxPeople,
+        tanpaWajah: input.maxPeople === 0,
+      });
+      checks.push({
+        code: "QC-11", name: "Jumlah subjek & anatomi (visi)",
+        // temuan null = TIDAK DIPERIKSA, dan itu bukan lulus. Statusnya skip
+        // dengan alasannya, supaya kebijakan yang memutuskan — bukan diam.
+        status: v.temuan === null ? "skip" : v.lolos ? "pass" : "fail",
+        detail: v.temuan === null
+          ? `tidak bisa diperiksa: ${v.masalah.join("; ")}`
+          : v.lolos
+            ? `${v.temuan.length} frame, maks ${input.maxPeople} orang${v.peringatan.length ? ` · catatan: ${v.peringatan.join("; ")}` : ""}`
+            : v.masalah.join("; "),
+      });
+    } catch (err) {
+      checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: `pemeriksaan gagal dijalankan: ${err instanceof Error ? err.message : String(err)}` });
+    }
   }
 
   const passed = evaluateQcPolicy(input.format, checks);

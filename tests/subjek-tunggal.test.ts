@@ -77,3 +77,28 @@ test("TVC tanpa model tidak dikunci subjek — tidak ada orang sama sekali", () 
   const s = spec({ format: "tvc", tvcRoute: "luxury", noModel: true });
   assert.ok(!/EXACTLY ONE person/i.test(s.shots[0].prompt));
 });
+
+// --- QC-11: pemeriksa jumlah orang memakai aturan yang SAMA dengan prompt ---
+//
+// Kunci subjek di prompt dan pemeriksa di QC adalah dua sisi dari satu aturan.
+// Kalau angkanya ditulis dua kali, cepat atau lambat keduanya berbeda — dan
+// pemeriksa yang salah lebih berbahaya daripada tidak ada pemeriksa, karena ia
+// menolak video yang sebenarnya benar. Tes ini menegakkan bahwa spec membawa
+// angka yang sama dengan yang diperintahkan ke model.
+
+test("spec membawa maxPeople, dan angkanya cocok dengan kunci subjek di prompt", () => {
+  const kasus = [
+    { o: { format: "talking_head" as const }, maks: 1 },
+    { o: { format: "tvc" as const, tvcRoute: "luxury" }, maks: 1 },
+    { o: { format: "tvc" as const, tvcRoute: "comedy" }, maks: 2 },
+    { o: { format: "tvc" as const, tvcRoute: "luxury", noModel: true }, maks: 0 },
+    { o: { format: "hands_only" as const }, maks: 0 },
+  ];
+  for (const k of kasus) {
+    const s = spec(k.o);
+    assert.equal(s.maxPeople, k.maks, `${JSON.stringify(k.o)} harus maksimal ${k.maks} orang`);
+    // Kunci "tepat satu orang" HANYA boleh muncul ketika batasnya memang 1.
+    const adaKunci = s.shots.every((sh) => sh.prompt.includes("EXACTLY ONE person"));
+    assert.equal(adaKunci, k.maks === 1, `kunci subjek tunggal harus ${k.maks === 1 ? "ada" : "tidak ada"} untuk ${JSON.stringify(k.o)}`);
+  }
+});

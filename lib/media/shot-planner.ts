@@ -142,6 +142,24 @@ const SINGLE_SUBJECT_LOCK =
   "both clearly visible and naturally attached to her own arms, and only those two hands ever touch " +
   "the product. ";
 
+/** Berapa orang yang BOLEH ada di frame untuk konfigurasi ini.
+ *
+ *  SATU sumber kebenaran, dipakai dua kali: di sini untuk memasang kunci
+ *  subjek di prompt, dan di QC-11 untuk memeriksa hasilnya. Kalau angkanya
+ *  ditulis dua kali, cepat atau lambat prompt dan pemeriksanya tidak lagi
+ *  bicara tentang aturan yang sama — dan pemeriksa yang salah lebih buruk
+ *  daripada tidak ada pemeriksa, karena ia menolak video yang benar. */
+export function maksOrangPerFrame(input: {
+  format?: string;
+  noModel?: boolean;
+  tvcRoute?: string;
+}): number {
+  if (input.format === "hands_only") return 0; // wajah dilarang sama sekali
+  if (input.noModel) return 0; // TVC tanpa orang: makro produk saja
+  if (input.tvcRoute === "comedy") return 2; // rute ini SENGAJA dua tokoh
+  return 1;
+}
+
 const SINGLE_SUBJECT_NEGATIVE =
   "no second person, no duplicate of the same person, no twin, no extra people in frame, " +
   "no extra hands, no third hand, no disembodied hands, exactly two hands";
@@ -901,7 +919,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // untuk rute TVC komedi — rute itu SENGAJA memakai dua tokoh, jadi
     // memaksakan satu orang di sana akan membatalkan leluconnya.
     const perluSubjekTunggal =
-      format !== "hands_only" && !input.noModel && input.tvcRoute !== "comedy";
+      maksOrangPerFrame({ format, noModel: input.noModel, tvcRoute: input.tvcRoute }) === 1;
     const kunciSubjek = perluSubjekTunggal ? SINGLE_SUBJECT_LOCK : "";
 
     const base = punyaPeranTemplate
@@ -1020,6 +1038,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     width: 720,
     height: 1280,
     shots,
+    maxPeople: maksOrangPerFrame({ format, noModel: input.noModel, tvcRoute: input.tvcRoute }),
     negativePrompt, // tetap mengandung MANDATORY_NEGATIVE_PROMPT dari kategori
     qualityTier: tier,
     generateAudio: withAudio, // konsisten dengan tier — ditegakkan juga di registry

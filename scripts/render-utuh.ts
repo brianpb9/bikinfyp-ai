@@ -57,7 +57,7 @@ async function main() {
     category: "beauty", sourceUrl: null,
   };
 
-  const ringkas: { label: string; klip: number; biaya: number; berkas: string }[] = [];
+  const ringkas: { label: string; templateId: string; klip: number; biaya: number; berkas: string }[] = [];
   let total = 0;
 
   for (const t of TUGAS) {
@@ -108,13 +108,30 @@ async function main() {
       console.log(`  -> ${berkas}`);
     }
     total += biaya;
-    ringkas.push({ label: t.label, klip: jadi.length, biaya, berkas });
+    ringkas.push({ label: t.label, templateId: t.templateId, klip: jadi.length, biaya, berkas });
   }
 
   console.log("\n=== RINGKASAN ===");
   for (const r of ringkas) console.log(` ${r.label.padEnd(34)} ${r.klip} klip  Rp${String(r.biaya).padStart(6)}  ${r.berkas}`);
   console.log(` TOTAL: Rp${total.toLocaleString("id-ID")}`);
   fs.writeFileSync(path.join(OUT, "ringkasan.json"), JSON.stringify({ total, ringkas }, null, 2));
+
+  // BUKU BUKTI. Papan nilai membacanya untuk tahu template mana yang benar-
+  // benar pernah dirender utuh.
+  //
+  // Ditulis di SINI, oleh yang merender, dengan templateId eksplisit —
+  // bukan ditebak dari nama berkas belakangan. Menebak identitas dari prosa
+  // sudah sekali membuat pipeline salah membelanjakan uang; jangan diulang
+  // untuk memutuskan apa yang sudah terbukti.
+  const buku = path.resolve(process.cwd(), "..", "test_output", "bukti-render.json");
+  const lama: Record<string, { berkas: string; klip: number; dirender: string }> =
+    fs.existsSync(buku) ? JSON.parse(fs.readFileSync(buku, "utf8")) : {};
+  for (const r of ringkas) {
+    if (r.klip === 0) continue; // gagal total bukan bukti
+    lama[r.templateId] = { berkas: r.berkas, klip: r.klip, dirender: new Date().toISOString() };
+  }
+  fs.writeFileSync(buku, JSON.stringify(lama, null, 2));
+  console.log(` buku bukti: ${buku}`);
 }
 
 main().catch((e) => { console.error(e); process.exit(1); });
