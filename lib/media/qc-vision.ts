@@ -45,8 +45,15 @@ export const POSISI_SAMPEL = [0.2, 0.5, 0.85];
 export interface TemuanFrame {
   /** Detik ke berapa frame ini diambil. */
   detik: number;
-  /** Jumlah orang yang terlihat. 0 sah untuk shot tanpa orang. */
+  /** Jumlah orang yang terlihat. 0 sah untuk shot tanpa orang.
+   *  CATATAN: tangan tanpa wajah TETAP dihitung sebagai satu orang. */
   jumlahOrang: number;
+  /** Jumlah WAJAH yang terlihat. Dipisah dari jumlahOrang dengan sengaja:
+   *  format hands_only melarang WAJAH, bukan melarang manusia — tangan yang
+   *  memegang produk jelas milik seseorang. Menyamakan keduanya membuat QC
+   *  menolak shot hands_only yang justru sempurna (terjadi 2026-08-13 pada
+   *  racun-checkout: dua tangan memegang botol, tanpa wajah, ditolak). */
+  jumlahWajah: number;
   /** Jumlah tangan manusia yang terlihat. */
   jumlahTangan: number;
   /** Ada tulisan yang tidak terbaca / huruf acak? */
@@ -63,9 +70,12 @@ export interface TemuanFrame {
 export interface QcVisionInput {
   videoPath: string;
   /** Batas orang yang boleh tampil. 1 untuk format presenter tunggal, 2 untuk
-   *  rute komedi, 0 untuk hands_only (wajah dilarang). */
+   *  rute komedi. DIABAIKAN bila tanpaWajah — lihat di bawah. */
   maksOrang: number;
-  /** Format tanpa wajah: kemunculan orang sama sekali adalah kegagalan. */
+  /** Format hands_only: yang dilarang adalah WAJAH, bukan manusia. Tangan yang
+   *  memegang produk tentu ada pemiliknya, jadi jumlah orang tidak diperiksa
+   *  di format ini — yang diperiksa jumlah wajah (harus 0) dan jumlah tangan
+   *  (satu orang). */
   tanpaWajah?: boolean;
 }
 
@@ -82,13 +92,16 @@ export interface QcVisionResult {
 }
 
 const SKEMA = `Answer ONLY with a JSON object, no markdown fence:
-{"jumlahOrang": <int>, "jumlahTangan": <int>, "teksAcak": <bool>,
+{"jumlahOrang": <int>, "jumlahWajah": <int>, "jumlahTangan": <int>, "teksAcak": <bool>,
  "anatomiRusak": <bool>, "produkTerlihat": <bool>, "catatan": "<max 15 words>"}
 
 Definitions, be literal and count what you actually see:
 - jumlahOrang: how many DISTINCT human beings are visible, including partly
   visible ones and reflections of a different person. A single person seen in
   a mirror alongside themselves counts as 2.
+- jumlahWajah: how many human FACES are visible. A shot showing only hands or
+  only a body from behind has 0 faces but is still 1 person. Count a face even
+  if partly turned away, but not if it is fully out of frame.
 - jumlahTangan: how many human hands are visible in total.
 - teksAcak: true if any visible writing is malformed, misspelled, or
   unreadable gibberish (common on product labels).
@@ -131,6 +144,7 @@ async function periksaFrame(framePath: string, detik: number, percobaan = 0): Pr
     return {
       detik,
       jumlahOrang: Number(j.jumlahOrang ?? 0),
+      jumlahWajah: Number(j.jumlahWajah ?? 0),
       jumlahTangan: Number(j.jumlahTangan ?? 0),
       teksAcak: Boolean(j.teksAcak),
       anatomiRusak: Boolean(j.anatomiRusak),
@@ -184,14 +198,23 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     const masalah: string[] = [];
     const peringatan: string[] = [];
     for (const t of temuan) {
-      if (input.tanpaWajah && t.jumlahOrang > 0) {
-        masalah.push(`detik ${t.detik}: ada ${t.jumlahOrang} orang, padahal format ini tanpa wajah`);
+      if (input.tanpaWajah) {
+        // hands_only melarang WAJAH, bukan manusia. Jumlah orang TIDAK diperiksa
+        // di sini: shot yang benar pun selalu punya pemilik tangan.
+        if (t.jumlahWajah > 0) {
+          masalah.push(`detik ${t.detik}: ada ${t.jumlahWajah} wajah, padahal format ini tanpa wajah`);
+        }
       } else if (t.jumlahOrang > input.maksOrang) {
         masalah.push(`detik ${t.detik}: ${t.jumlahOrang} orang, maksimal ${input.maksOrang}`);
       }
-      // Dua tangan per orang. Longgar satu, karena tangan yang terpotong tepi
-      // frame kadang terhitung ganda oleh model.
-      const batasTangan = Math.max(2, t.jumlahOrang * 2) + 1;
+      // Dua tangan per orang, longgar satu — tangan yang terpotong tepi frame
+      // kadang terhitung ganda oleh model.
+      //
+      // Untuk hands_only yang dihitung adalah SATU orang pemilik tangan, bukan
+      // jumlah orang laporan model (yang di format ini tidak bisa dipercaya:
+      // tanpa wajah, model kadang menebak dua orang dari dua tangan).
+      const orangEfektif = input.tanpaWajah ? 1 : t.jumlahOrang;
+      const batasTangan = Math.max(2, orangEfektif * 2) + 1;
       if (t.jumlahTangan > batasTangan) {
         masalah.push(`detik ${t.detik}: ${t.jumlahTangan} tangan untuk ${t.jumlahOrang} orang`);
       }
