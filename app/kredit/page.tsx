@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiFail } from "../_components/api";
 import { ErrorText } from "../_components/ui";
 import { loadFlow, rupiah, relTime } from "../_components/flow";
+import { PAKET_KREDIT } from "../../lib/paket-kredit";
 
 interface LedgerItem {
   id: string;
@@ -16,11 +17,12 @@ interface LedgerItem {
 // Nama paket berbasis manfaat + contoh visual per tier (2026-08-06: tester
 // bingung "Senyap"; target user emak-emak — tunjukkan, jangan jelaskan).
 // 2026-08-06: tier Teks+Musik pensiun — fokus persona bersuara.
-const PACKAGES = [
-  { id: "hq5", name: "5× AI Bersuara", price: 60_000, perVideo: "Rp12rb/video", tag: null, badge: "🎙️ AI-nya ngomong", voiced: true },
-  { id: "hq10", name: "10× AI Bersuara", price: 120_000, perVideo: "Rp12rb/video", tag: "Paling laris", badge: "🎙️ AI-nya ngomong", voiced: true },
-  { id: "super5", name: "5× AI Bersuara Pro", price: 400_000, perVideo: "Rp80rb/video", tag: null, badge: "🎙️ presenter ngomong asli, lip-sync sungguhan", voiced: true },
-];
+//
+// Daftarnya pindah ke lib/paket-kredit.ts (2026-08-14) supaya halaman harga
+// PUBLIK dan halaman checkout ini membaca angka yang sama. Dua daftar harga
+// yang harus dijaga sama selamanya cepat atau lambat berbeda — dan yang
+// membaca halaman publik justru reviewer Midtrans.
+const PACKAGES = PAKET_KREDIT;
 
 const LEDGER_LABEL: Record<string, string> = {
   topup: "Top-up",
