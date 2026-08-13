@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import { evaluateQcPolicy, QC_POLICY_BY_FORMAT, type QcCheck } from "../lib/media/qc";
+import { evaluateQcPolicy, QC_POLICY_BY_FORMAT, AMBANG_GERAK_MULUT, type QcCheck } from "../lib/media/qc";
 import { shotUntukDetik } from "../lib/media/qc-vision";
 
 const passing = (): QcCheck[] => [
@@ -86,4 +86,23 @@ test("shotUntukDetik menunjuk shot yang benar, dan menolak menebak", () => {
   // Durasi shot tidak seragam (TVC 30 dtk, 6 shot @5 dtk vs 5 shot @6 dtk).
   assert.equal(shotUntukDetik([6, 6, 6, 6, 6], 26), 4);
   assert.equal(shotUntukDetik([6, 6, 6, 6, 6], 11.9), 1);
+});
+
+// QC-01 berhenti jadi stub (2026-08-14). Sebelumnya SELALU skip dengan alasan
+// "verifikasi viseme belum ada", dan itu menyesatkan: di tier bersuara biasa
+// VO terpisah SENGAJA menggantikan audio model, jadi mulut yang tidak sinkron
+// adalah keputusan desain — bukan pekerjaan tertunda. Lubangnya cuma di satu
+// tier, dan sekarang tier itu benar-benar diperiksa.
+test("QC-01 fail menolak output di semua format", () => {
+  for (const format of Object.keys(QC_POLICY_BY_FORMAT) as (keyof typeof QC_POLICY_BY_FORMAT)[]) {
+    const lulus: QcCheck[] = QC_POLICY_BY_FORMAT[format].requiredPass.map((code) => ({ code, name: code, status: "pass" as const }));
+    assert.equal(evaluateQcPolicy(format, [...lulus, { code: "QC-01", name: "mulut", status: "skip" }]), true,
+      `${format}: QC-01 skip harus diizinkan — N/A di hampir semua mode`);
+    assert.equal(evaluateQcPolicy(format, [...lulus, { code: "QC-01", name: "mulut", status: "fail" }]), false,
+      `${format}: QC-01 fail WAJIB menolak — presenter membeku adalah cacat yang terlihat`);
+  }
+  // Ambangnya harus berada di antara dua kasus nyata yang diukur:
+  // presenter bicara 0,29-0,32 rata-rata; frame beku tepat 0,0.
+  assert.ok(AMBANG_GERAK_MULUT > 0 && AMBANG_GERAK_MULUT < 0.29,
+    "ambang harus di atas nol (derau) dan jauh di bawah kasus bicara terukur");
 });

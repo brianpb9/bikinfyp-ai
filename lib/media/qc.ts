@@ -1,5 +1,5 @@
-// QC otomatis (FSD F-08). QC-03/04/05/07/08 diimplementasi nyata;
-// QC-01/02/06 = stub terdokumentasi (butuh model CV/audio — fase berikutnya).
+// QC otomatis (FSD F-08). Semua check kini punya implementasi nyata atau
+// alasan N/A yang spesifik — tidak ada lagi yang berstatus "stub".
 
 import fs from "node:fs";
 import os from "node:os";
@@ -45,7 +45,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11"],
     skipReason: {
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
-      "QC-01": "N/A: hands_only tidak menampilkan pembicara untuk lip-sync.",
+      "QC-01": "N/A: hands_only tidak menampilkan pembicara. fail = presenter membeku padahal seharusnya bicara.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
     },
@@ -60,7 +60,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11"],
     skipReason: {
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
-      "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2) — dimitigasi lewat instruksi jeda/enunciate di prompt.",
+      "QC-01": "N/A bila suara dari VO terpisah (mulut sengaja tidak disinkronkan). fail = presenter lipsync membeku.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
     },
@@ -80,7 +80,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11"],
     skipReason: {
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
-      "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2) — dimitigasi lewat instruksi jeda/enunciate di prompt.",
+      "QC-01": "N/A bila suara dari VO terpisah (mulut sengaja tidak disinkronkan). fail = presenter lipsync membeku.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (overlay brand ditambahkan di post, bukan di prompt).",
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
     },
@@ -98,7 +98,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-03", "QC-06", "QC-09", "QC-10", "QC-11"],
     skipReason: {
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
-      "QC-01": "Lip-sync belum diverifikasi otomatis (fase 2).",
+      "QC-01": "N/A bila suara dari VO terpisah. fail = presenter membeku padahal seharusnya bicara.",
       "QC-03": "N/A: iklan jasa/app/toko tidak punya produk fisik untuk dicocokkan.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks.",
       "QC-09": "N/A: format ini memang menampilkan presenter.",
@@ -113,7 +113,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-02", "QC-11"],
     skipReason: {
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
-      "QC-01": "N/A: tidak ada wajah bicara — visual adalah foto produk, bukan presenter.",
+      "QC-01": "N/A: visual adalah foto produk, bukan presenter. fail = presenter membeku.",
       "QC-02": "N/A: video dari foto produk asli (pan/zoom), bukan tangan hasil AI-generated.",
     },
   },
@@ -163,6 +163,10 @@ export interface QcInput {
    * skip, bukan fail (insiden r13 2026-08-07: e2e stuck 180s krn QC-10 selalu
    * gagal di produk yang nama-nya kebetulan lolos filter kata generik). */
   isMockProvider?: boolean;
+  /** true untuk mode presenter-lipsync (Super HQ): satu-satunya mode yang
+   *  mempertahankan audio embedded model, jadi satu-satunya yang benar-benar
+   *  menuntut mulutnya bergerak. */
+  presenterLipsync?: boolean;
   /** QC-11: berapa orang yang BOLEH ada di frame. Datang dari spec
    *  (maksOrangPerFrame di shot-planner) — bukan diturunkan ulang di sini,
    *  supaya pemeriksa dan prompt tidak bisa berbeda pendapat. Tanpa nilai,
@@ -655,14 +659,86 @@ export async function qcSubjekLokal(videoPath: string, maksWajah: number, workDi
   };
 }
 
+/** Ambang gerak mulut. Dikalibrasi pada video nyata 2026-08-14:
+ *  presenter yang benar-benar bicara -> rata-rata 0,29 (maks 0,94);
+ *  frame yang dibekukan -> tepat 0,0.
+ *
+ *  Ambangnya disetel jauh di bawah kasus bicara dan jauh di atas kasus beku,
+ *  supaya derau sensor atau gerak kepala kecil tidak dibaca sebagai bicara,
+ *  dan supaya bicara pelan tidak dibaca sebagai beku. */
+export const AMBANG_GERAK_MULUT = 0.05;
+
+/** QC-01 — presenter yang seharusnya bicara benar-benar menggerakkan mulutnya.
+ *
+ *  BUKAN verifikasi viseme. Yang dijawab: "mulutnya bergerak sama sekali atau
+ *  tidak", dan itu menangkap kegagalan yang paling parah — presenter membeku
+ *  sementara suaranya bicara. Apakah gerakannya COCOK dengan bunyinya butuh
+ *  model viseme dan sengaja TIDAK diklaim di sini; lihat qc_lipsync_check.py. */
+export async function qcLipSync(videoPath: string, workDir: string): Promise<QcCheck> {
+  const model = path.join(process.cwd(), "assets", "models", "face_detection_yunet_2023mar.onnx");
+  if (!fs.existsSync(model)) {
+    return { code: "QC-01", name: "Mulut presenter bergerak", status: "skip", detail: "model YuNet tidak ada" };
+  }
+  const durasi = await probeDurationSec(videoPath);
+  // Sampel rapat (0,2 dtk) di bagian tengah: pembuka sering transisi, penutup
+  // sering packshot. Bicara berlangsung di tengah.
+  const mulai = durasi * 0.25;
+  const jumlah = Math.min(20, Math.max(6, Math.floor((durasi * 0.5) / 0.2)));
+  const frames: string[] = [];
+  for (let i = 0; i < jumlah; i++) {
+    const detik = mulai + i * 0.2;
+    if (detik >= durasi) break;
+    const f = path.join(workDir, `qc01_${i}.png`);
+    await runFfmpeg(["-y", "-v", "error", "-ss", detik.toFixed(2), "-i", videoPath, "-frames:v", "1", f]);
+    if (fs.existsSync(f)) frames.push(f);
+  }
+  if (frames.length < 4) {
+    return { code: "QC-01", name: "Mulut presenter bergerak", status: "skip", detail: "frame sampel tidak cukup" };
+  }
+  const { stdout } = await runFf(pythonBin(), [path.join(process.cwd(), "lib", "media", "qc_lipsync_check.py"), model, ...frames]);
+  const d = JSON.parse(stdout) as { frames_with_face: number; mouth_motion_mean: number; mouth_motion_max: number };
+  if (d.frames_with_face < 4) {
+    // Tidak ada wajah untuk dinilai. Bukan lulus, bukan gagal — tidak bisa
+    // diperiksa, dan itu harus terlihat apa adanya.
+    return { code: "QC-01", name: "Mulut presenter bergerak", status: "skip", detail: `wajah terdeteksi di ${d.frames_with_face} frame saja — tidak cukup untuk dinilai` };
+  }
+  const bergerak = d.mouth_motion_max >= AMBANG_GERAK_MULUT;
+  return {
+    code: "QC-01",
+    name: "Mulut presenter bergerak",
+    status: bergerak ? "pass" : "fail",
+    detail: bergerak
+      ? `gerak mulut maks ${d.mouth_motion_max} (rata-rata ${d.mouth_motion_mean}) di ${d.frames_with_face} frame berwajah`
+      : `mulut praktis diam (maks ${d.mouth_motion_max}, ambang ${AMBANG_GERAK_MULUT}) padahal presenter seharusnya bicara`,
+  };
+}
+
 export async function runQc(input: QcInput): Promise<QcResult> {
   const checks: QcCheck[] = [];
 
   const qcFormat = input.format ?? "hands_only";
 
-  // QC-01 lip-sync — stub: verifikasi viseme belum ada (fase 2) untuk format
-  // manapun yang menampilkan wajah bicara (talking_head).
-  checks.push({ code: "QC-01", name: "Lip-sync drift", status: "skip", detail: "Verifikasi viseme otomatis belum ada (fase 2); tidak relevan untuk format tanpa wajah bicara." });
+  // QC-01 — DIPERBAIKI 2026-08-14. Sebelumnya selalu skip dengan alasan
+  // "verifikasi viseme belum ada", dan itu menyesatkan untuk sebagian besar
+  // job: di tier bersuara biasa, VO Gemini TTS SENGAJA menggantikan audio
+  // model, jadi mulut yang tidak sinkron memang keputusan desain — bukan
+  // pekerjaan yang tertunda. Menyebutnya "stub" membuat seolah ada lubang di
+  // semua format, padahal lubangnya cuma di satu tier.
+  //
+  // Yang benar-benar menuntut mulut bergerak: presenter lipsync, satu-satunya
+  // mode yang mempertahankan audio embedded model.
+  if (!input.presenterLipsync) {
+    checks.push({ code: "QC-01", name: "Mulut presenter bergerak", status: "skip",
+      detail: "N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain." });
+  } else if (input.isMockProvider) {
+    checks.push({ code: "QC-01", name: "Mulut presenter bergerak", status: "skip", detail: "N/A: provider mock (dev/e2e)." });
+  } else {
+    try {
+      checks.push(await qcLipSync(input.filePath, path.dirname(input.filePath)));
+    } catch (err) {
+      checks.push({ code: "QC-01", name: "Mulut presenter bergerak", status: "skip", detail: `pemeriksaan gagal jalan: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
   // QC-02 morphing tangan — conservative OpenCV silhouette continuity check.
   // Tidak relevan untuk vo_broll: visualnya foto produk asli di-pan/zoom,
   // tidak ada tangan AI-generated yang bisa morphing.
