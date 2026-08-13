@@ -121,6 +121,31 @@ const ADS_FRAMING =
   "front-facing phone-camera angle, natural daylight, muted true-to-life colour, filmed somewhere that " +
   "fits the business being talked about — a shop counter, a desk, a café table — never a blank studio";
 
+// KUNCI SUBJEK TUNGGAL. Ditemukan 2026-08-13 dari render sungguhan: shot
+// PENUTUP TVC 30 detik keluar dengan DUA perempuan dan EMPAT tangan
+// mengelilingi produk — hal terakhir yang dilihat penonton. Ini persis yang
+// dokumen produksi Brian sebut "risiko #1".
+//
+// Tidak ada satu pun yang menahannya: QC-02 (silhouette) masih stub, tidak ada
+// pemeriksaan jumlah orang di mana pun, negative prompt bawaan cuma melarang
+// teks, dan format TVC tidak punya larangan anatomi sama sekali (talking_head
+// punya, TVC tidak).
+//
+// DITULIS POSITIF, bukan sebagai larangan. Ini bukan selera: dokumen Brian
+// mencatat klip yang sama dibuat TIGA KALI, dan yang akhirnya menyelesaikan
+// tangan hantu adalah mengubah larangan negatif jadi pernyataan positif
+// ("dia punya tepat dua tangan, keduanya terlihat jelas dan menempel wajar
+// pada lengannya"). Larangan tetap dipasang sebagai jaring kedua.
+const SINGLE_SUBJECT_LOCK =
+  "EXACTLY ONE person is present in the entire frame from start to finish — no one else enters, " +
+  "and no second version of the same person ever appears. That one person has exactly two hands, " +
+  "both clearly visible and naturally attached to her own arms, and only those two hands ever touch " +
+  "the product. ";
+
+const SINGLE_SUBJECT_NEGATIVE =
+  "no second person, no duplicate of the same person, no twin, no extra people in frame, " +
+  "no extra hands, no third hand, no disembodied hands, exactly two hands";
+
 const TALKING_HEAD_FRAMING =
   "face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
   "front-facing selfie-style angle, natural phone camera look, soft natural indoor daylight, " +
@@ -869,9 +894,19 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // sinematiknya memang yang memimpin di sana.
     const rutePunyaPeran = format === "tvc" && Boolean(input.tvcRoute) && input.tvcRoute !== "luxury";
     const punyaPeranTemplate = Boolean(ugcRoles) || rutePunyaPeran;
+    // Kunci subjek tunggal ikut ke SETIAP shot yang menampilkan orang.
+    //
+    // TIDAK untuk hands_only (memang tanpa wajah, dan sudah punya larangannya
+    // sendiri), TIDAK untuk noModel (tidak ada orang sama sekali), dan TIDAK
+    // untuk rute TVC komedi — rute itu SENGAJA memakai dua tokoh, jadi
+    // memaksakan satu orang di sana akan membatalkan leluconnya.
+    const perluSubjekTunggal =
+      format !== "hands_only" && !input.noModel && input.tvcRoute !== "comedy";
+    const kunciSubjek = perluSubjekTunggal ? SINGLE_SUBJECT_LOCK : "";
+
     const base = punyaPeranTemplate
-      ? `${beat} ${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}`
-      : `${framing}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
+      ? `${beat} ${kunciSubjek}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}`
+      : `${framing}${kunciSubjek}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
@@ -957,6 +992,15 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       // tak sinkron dengan VO final; larang mouth-flapping.
       negativePrompt += ", no mouth flapping or exaggerated talking motion, no lip-sync to any specific words";
     }
+  }
+  // TVC dan ads SELAMA INI TIDAK PUNYA larangan anatomi sama sekali — hanya
+  // talking_head yang punya. Video yang gagal (dua perempuan, empat tangan)
+  // justru format TVC.
+  if ((format === "tvc" || format === "ads") && !input.noModel && input.tvcRoute !== "comedy") {
+    negativePrompt = `${negativePrompt}, ${SINGLE_SUBJECT_NEGATIVE}, no morphing, no warping, no duplicated limbs`;
+  }
+  if (format === "talking_head" && input.tvcRoute !== "comedy") {
+    negativePrompt = `${negativePrompt}, ${SINGLE_SUBJECT_NEGATIVE}`;
   }
   if (format === "hands_only") {
     negativePrompt = negativePrompt
