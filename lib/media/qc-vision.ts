@@ -48,6 +48,18 @@ export interface TemuanFrame {
   /** Jumlah orang yang terlihat. 0 sah untuk shot tanpa orang.
    *  CATATAN: tangan tanpa wajah TETAP dihitung sebagai satu orang. */
   jumlahOrang: number;
+  /** Berapa orang yang benar-benar JADI SUBJEK: tajam, di depan, atau
+   *  berinteraksi dengan produk. INI yang dipakai memblokir.
+   *
+   *  Dipisah dari jumlahOrang setelah dua positif palsu berturut-turut
+   *  2026-08-13: template "liputan event" (produk di depan, pengunjung buram di
+   *  belakang) dan "waktu berhenti" (orang di pasar, pejalan kaki di latar)
+   *  ditolak padahal keduanya justru persis seperti yang diminta. Orang di
+   *  latar adalah PREMIS template itu, bukan cacat.
+   *
+   *  Cacat yang sesungguhnya tetap tertangkap: dua perempuan yang sama-sama
+   *  di depan memegang botol dihitung dua subjek utama. */
+  jumlahOrangUtama: number;
   /** Jumlah WAJAH yang terlihat. Dipisah dari jumlahOrang dengan sengaja:
    *  format hands_only melarang WAJAH, bukan melarang manusia — tangan yang
    *  memegang produk jelas milik seseorang. Menyamakan keduanya membuat QC
@@ -92,13 +104,18 @@ export interface QcVisionResult {
 }
 
 const SKEMA = `Answer ONLY with a JSON object, no markdown fence:
-{"jumlahOrang": <int>, "jumlahWajah": <int>, "jumlahTangan": <int>, "teksAcak": <bool>,
+{"jumlahOrang": <int>, "jumlahOrangUtama": <int>, "jumlahWajah": <int>, "jumlahTangan": <int>, "teksAcak": <bool>,
  "anatomiRusak": <bool>, "produkTerlihat": <bool>, "catatan": "<max 15 words>"}
 
 Definitions, be literal and count what you actually see:
 - jumlahOrang: how many DISTINCT human beings are visible, including partly
   visible ones and reflections of a different person. A single person seen in
   a mirror alongside themselves counts as 2.
+- jumlahOrangUtama: of those people, how many are actually the SUBJECT of the
+  shot — sharply in focus, in the foreground, or touching/holding/using the
+  product. People who are blurred background, passers-by, or crowd do NOT
+  count here. A shot of one presenter in a busy street has jumlahOrang 5 but
+  jumlahOrangUtama 1.
 - jumlahWajah: how many human FACES are visible. A shot showing only hands or
   only a body from behind has 0 faces but is still 1 person. Count a face even
   if partly turned away, but not if it is fully out of frame.
@@ -144,6 +161,7 @@ async function periksaFrame(framePath: string, detik: number, percobaan = 0): Pr
     return {
       detik,
       jumlahOrang: Number(j.jumlahOrang ?? 0),
+      jumlahOrangUtama: Number(j.jumlahOrangUtama ?? j.jumlahOrang ?? 0),
       jumlahWajah: Number(j.jumlahWajah ?? 0),
       jumlahTangan: Number(j.jumlahTangan ?? 0),
       teksAcak: Boolean(j.teksAcak),
@@ -204,8 +222,13 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
         if (t.jumlahWajah > 0) {
           masalah.push(`detik ${t.detik}: ada ${t.jumlahWajah} wajah, padahal format ini tanpa wajah`);
         }
+      } else if (t.jumlahOrangUtama > input.maksOrang) {
+        masalah.push(`detik ${t.detik}: ${t.jumlahOrangUtama} orang jadi subjek utama, maksimal ${input.maksOrang}`);
       } else if (t.jumlahOrang > input.maksOrang) {
-        masalah.push(`detik ${t.detik}: ${t.jumlahOrang} orang, maksimal ${input.maksOrang}`);
+        // Orang di latar dicatat, tidak menolak. Banyak template memang
+        // mengambil tempat ramai, dan keramaian itu yang membuatnya terasa
+        // nyata.
+        peringatan.push(`detik ${t.detik}: ${t.jumlahOrang} orang di frame (${t.jumlahOrangUtama} subjek utama, sisanya latar)`);
       }
       // Dua tangan per orang, longgar satu — tangan yang terpotong tepi frame
       // kadang terhitung ganda oleh model.
