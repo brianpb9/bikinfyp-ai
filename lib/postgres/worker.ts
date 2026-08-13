@@ -21,6 +21,7 @@ import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
 import { shotUntukDetik } from "../media/qc-vision";
+import { buildPackshotAsli, packshotAsliUntukShot } from "../media/packshot-asli";
 import { buildCaptionCards } from "../media/captions";
 import { resolvePromo, formatPromoOverlayText } from "../promo";
 import { renderCaptionPngs } from "../media/render-captions";
@@ -278,6 +279,33 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // manapun" — product-proof insert DIHAPUS TOTAL). Video selalu 100%
   // AI-generated, tanpa sisipan foto statis.
   const clipPaths = video.assets.map((asset) => asset.filePath);
+
+  // PACKSHOT PENUTUP DARI FOTO ASLI BRAND (2026-08-14).
+  //
+  // Model video tidak bisa merender teks kecil label dengan benar — yang
+  // keluar kata karangan yang berubah antar shot. Dua putaran perbaikan prompt
+  // diukur dan gagal. Untuk brand yang membayar, label adalah identitasnya:
+  // iklan indah yang mencetak nama produk salah bukan "hampir benar", ia tidak
+  // bisa dipakai.
+  //
+  // Shot penutup diganti klip dari foto asli yang diunggah brand, dengan
+  // push-in halus. Labelnya dijamin benar karena itu memang labelnya. Klipnya
+  // yang sudah terlanjur digenerate tetap dibayar — penggantian ini soal MUTU,
+  // bukan penghematan, dan penghematannya baru berlaku di job berikutnya.
+  for (let i = 0; i < specSiap.shots.length && i < clipPaths.length; i++) {
+    const shot = specSiap.shots[i];
+    if (!packshotAsliUntukShot({ index: i, jumlahShot: specSiap.shots.length, tanpaOrang: shot.tanpaOrang === true })) continue;
+    try {
+      clipPaths[i] = await buildPackshotAsli({
+        fotoPath: primaryRef, durationSec: shot.durationSec,
+        width: specSiap.width, height: specSiap.height,
+        outPath: path.join(workDir, `packshot_${i}.mp4`),
+      });
+      console.log(`[job ${row.id.slice(0, 8)}] shot penutup diganti packshot foto asli — label dijamin benar`);
+    } catch (err) {
+      console.warn(`[job ${row.id.slice(0, 8)}] packshot asli gagal, pakai klip generate: ${(err as Error).message}`);
+    }
+  }
 
   if (!(await jobs.transition(row.id, "GENERATING_VOICE", { worker: "postgres" }))) return;
   const vo: { path: string; startSec: number }[] = [];

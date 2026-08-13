@@ -45,6 +45,27 @@ export interface UgcTemplateRoles {
   closing?: UgcShotRole;
 }
 
+
+/** JANGKAR DUNIA untuk template pattern-interrupt yang merusak sesuatu.
+ *
+ *  Ditemukan lewat review kreatif 2026-08-14: "ads-tembus-dinding" keluar
+ *  dengan latar KOTA HANCUR bermandi senja di shot penutup — untuk iklan sabun
+ *  mandi. Peran-nya sudah menulis "the same room" dan "the broken wall still in
+ *  frame", tapi tidak pernah menyebut apa yang ada DI BALIK lubangnya. Model
+ *  mengisi kekosongan itu dengan menaikkan taruhannya: dinding jebol menjadi
+ *  kiamat.
+ *
+ *  Sekali lagi polanya sama seperti empat cacat sebelumnya — bukan larangan
+ *  yang kurang keras, tapi permintaan yang tidak lengkap. Kalau sebuah detail
+ *  penting tidak dinyatakan, model akan mengarangnya, dan arangannya selalu
+ *  lebih dramatis daripada yang kita mau.
+ *
+ *  Ditulis positif: sebutkan dunianya, bukan larang bencananya. */
+const JANGKAR_DUNIA =
+  " Beyond the breach is simply the next room of an ordinary Indonesian home — plain painted wall, " +
+  "everyday furniture, normal daylight. This is a small domestic surprise, not a disaster: no ruined " +
+  "city, no rubble field, no smoke, no apocalyptic sky, nothing outside the house is damaged.";
+
 export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   // T01 — produk dibawa ke tempat yang bikin memakainya merepotkan.
   // Kunci dari dokumennya: hanya 13% durasi yang benar-benar iklan, dan satu
@@ -265,7 +286,7 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   // harus ditulis; kalau tidak, keempatnya keluar sama seperti sekarang.
   "ads-tembus-dinding": {
     opening: {
-      role: `an ordinary quiet room with a person going about something mundane in the foreground, then WITHOUT WARNING something massive breaks through the wall directly behind them — debris and dust bursting forward. The product is NOT visible yet`,
+      role: `an ordinary quiet room with a person going about something mundane in the foreground, then WITHOUT WARNING something massive breaks through the wall directly behind them — debris and dust bursting forward. The product is NOT visible yet.${JANGKAR_DUNIA}`,
       withholdProduct: true,
       camera: `static wide, locked off so the breach reads clearly`,
     },
@@ -276,16 +297,16 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
         camera: `steady close-up on the product with the wreckage soft behind` },
     ],
     closing: {
-      role: `one continuous shot: product held to camera, the closing line spoken, the broken wall still in frame as proof this really happened`,
+      role: `one continuous shot: product held to camera, the closing line spoken, the broken wall still in frame as proof this really happened.${JANGKAR_DUNIA}`,
       camera: `single continuous take, no cuts` },
   },
   "ads-atap-jebol": {
     opening: {
-      role: `a calm interior seen from below, then the CEILING gives way and someone drops into frame from above in a burst of dust and debris, landing hard. The product is NOT visible yet`,
+      role: `a calm interior seen from below, then the CEILING gives way and someone drops into frame from above in a burst of dust and debris, landing hard. The product is NOT visible yet.${JANGKAR_DUNIA}`,
       withholdProduct: true,
       camera: `low angle looking up, locked off, so the fall enters from the top of frame` },
     middle: [
-      { role: `the person picking themselves up amid fallen ceiling pieces, dazed but unhurt, the room now wrecked around them`,
+      { role: `the person picking themselves up amid fallen ceiling pieces, dazed but unhurt, the room now untidy around them but still clearly an ordinary home`,
         camera: `handheld at their level, slightly unsteady` },
     ],
     closing: {

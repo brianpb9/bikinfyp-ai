@@ -1067,6 +1067,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     return {
       index: i, durationSec: perShot, prompt, imageRefPath: input.imageRefPath,
       ...(menahanProdukDiShot(i) ? { withholdProduct: true } : {}),
+      ...(beatTvc?.tanpaOrang ? { tanpaOrang: true } : {}),
     };
   });
 

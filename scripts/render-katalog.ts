@@ -38,6 +38,7 @@ import { generateScripts, type ProductInput } from "../lib/script-engine";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { runFfmpeg } from "../lib/media/ffmpeg";
 import { qcVision, shotUntukDetik } from "../lib/media/qc-vision";
+import { buildPackshotAsli, packshotAsliUntukShot } from "../lib/media/packshot-asli";
 import { sidikPrompt } from "../lib/media/bukti-segar";
 
 const FOTO = path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg");
@@ -192,6 +193,29 @@ async function main() {
       for (const shot of spec.shots) {
         const sub = path.join(dir, `s${shot.index}`);
         fs.mkdirSync(sub, { recursive: true });
+
+        // PACKSHOT PENUTUP DARI FOTO ASLI — tidak digenerate sama sekali.
+        // Model tidak bisa merender teks kecil label dengan benar (dua putaran
+        // perbaikan prompt gagal, diukur), dan penutup adalah tempat produk
+        // dilihat paling lama. Bonusnya: satu klip lebih murah, bukan lebih
+        // mahal.
+        if (packshotAsliUntukShot({ index: shot.index, jumlahShot: spec.shots.length, tanpaOrang: shot.tanpaOrang === true })) {
+          try {
+            const out = await buildPackshotAsli({
+              fotoPath: FOTO, durationSec: shot.durationSec,
+              width: spec.width, height: spec.height,
+              outPath: path.join(sub, "packshot.mp4"),
+            });
+            klip.push(out);
+            process.stdout.write(`  shot ${shot.index} PACKSHOT-ASLI (Rp0)`);
+            continue;
+          } catch (err) {
+            // Gagal membangun packshot bukan alasan menggagalkan video: jatuh
+            // kembali ke generate seperti biasa.
+            process.stdout.write(`  shot ${shot.index} packshot gagal (${err instanceof Error ? err.message.slice(0, 30) : "?"}), generate biasa`);
+          }
+        }
+
         try {
           const aset = await byteplusVideo.generate({ ...spec, shots: [{ ...shot, index: 0 }] }, sub);
           for (const a of aset) { klip.push(a.filePath); biaya += a.costIdr; }

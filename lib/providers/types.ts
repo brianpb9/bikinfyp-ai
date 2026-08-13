@@ -20,6 +20,12 @@ export class ProviderNotConfigured extends Error {
 export type QualityTier = "silent_caption" | "high_quality" | "super_hq";
 
 export interface ShotSpec {
+  /** true bila shot ini memang TANPA ORANG (packshot produk).
+   *
+   *  Dipakai dua hal: memastikan promptnya tidak ikut membawa kunci subjek
+   *  (lihat shot-planner), dan menandai shot yang boleh dibangun dari FOTO
+   *  ASLI brand alih-alih digenerate — lihat lib/media/packshot-asli.ts. */
+  tanpaOrang?: boolean;
   index: number;
   durationSec: number;
   prompt: string;
