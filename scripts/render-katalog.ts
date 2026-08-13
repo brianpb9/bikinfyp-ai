@@ -88,11 +88,24 @@ async function main() {
 
   const batas = batasKesegaran();
   const buku = bacaBuku();
-  const antre = CAMPAIGN_TEMPLATES.filter((t) => !sudahTerbukti(buku[t.id], batas));
+  // RENDER_SKIP_FORMAT: jangan bayar untuk format yang cacatnya SUDAH
+  // diketahui dan belum diperbaiki. hands_only 2026-08-13 menghasilkan telapak
+  // ketiga di dua template berturut-turut, dan kunci tangan positif+negatif
+  // tidak menahannya — merender enam sisanya berarti membeli enam video cacat.
+  const lewati = (process.env.RENDER_SKIP_FORMAT ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const antre = CAMPAIGN_TEMPLATES
+    .filter((t) => !lewati.includes(t.format))
+    .filter((t) => !sudahTerbukti(buku[t.id], batas));
+  if (lewati.length) console.log(`Format dilewati: ${lewati.join(", ")}`);
   const jatah = Number(process.env.RENDER_BATCH ?? 0);
   const kerjakan = jatah > 0 ? antre.slice(0, jatah) : antre;
 
-  console.log(`Katalog ${CAMPAIGN_TEMPLATES.length} template · sudah terbukti ${CAMPAIGN_TEMPLATES.length - antre.length} · antre ${antre.length} · dikerjakan sekarang ${kerjakan.length}`);
+  // Dihitung terpisah, bukan sebagai sisa pengurangan: "33 - antre" ikut
+  // menghitung format yang DILEWATI sebagai "sudah terbukti", padahal justru
+  // dilewati karena cacat. Papan yang melaporkan cacat sebagai bukti adalah
+  // persis jenis kebohongan yang skrip ini dibuat untuk mencegah.
+  const terbukti = CAMPAIGN_TEMPLATES.filter((t) => sudahTerbukti(buku[t.id], batas)).length;
+  console.log(`Katalog ${CAMPAIGN_TEMPLATES.length} template · terbukti ${terbukti} · dilewati ${CAMPAIGN_TEMPLATES.length - terbukti - antre.length} · antre ${antre.length} · dikerjakan sekarang ${kerjakan.length}`);
   if (batas) console.log(`Batas kesegaran bukti: ${batas.toISOString()}`);
 
   const kategori = getCreatorCategory("hijaber")!;
