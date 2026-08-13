@@ -9,7 +9,7 @@ import { probeDurationSec, probeHasVideoStream, probeFormatTags, volumeDetect, r
 import { validateScript } from "../script-engine/validator";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { isServiceLike } from "../config/hooks";
-import { qcVision } from "./qc-vision";
+import { qcVision, POSISI_SAMPEL } from "./qc-vision";
 
 export interface QcCheck {
   code: string;
@@ -607,6 +607,54 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
   }
 }
 
+/** CADANGAN LOKAL untuk QC-11 — menghitung WAJAH tanpa layanan luar.
+ *
+ *  Kenapa perlu: QC-11 memanggil model visi lewat internet, dan 2026-08-14
+ *  layanan itu menjawab 503 berjam-jam. Selama itu QC-11 berstatus skip, dan
+ *  skip DIIZINKAN oleh kebijakan (supaya produksi tidak berhenti total saat
+ *  pihak ketiga mati). Konsekuensinya jujur tapi buruk: selama layanan itu
+ *  mati, cacat yang persis memicu QC-11 dibuat — DUA PEREMPUAN di satu frame —
+ *  bisa lolos lagi ke tangan brand.
+ *
+ *  Gerbang mutu yang mati bersama pihak ketiga bukan gerbang, cuma dekorasi.
+ *
+ *  Detektor YuNet sudah ada di repo ini (dipakai QC-09) dan jalan sepenuhnya
+ *  di mesin sendiri. Ia menghitung WAJAH, bukan orang — jadi cadangan ini
+ *  lebih sempit daripada QC-11 penuh: ia TIDAK bisa melihat telapak ketiga,
+ *  dan tidak melihat orang yang membelakangi kamera. Yang bisa dilihatnya
+ *  justru cacat yang paling mahal: subjek yang digandakan.
+ *
+ *  Dilaporkan apa adanya sebagai "cadangan", supaya tidak ada yang mengira
+ *  pemeriksaan penuh sudah berjalan. */
+export async function qcSubjekLokal(videoPath: string, maksWajah: number, workDir: string): Promise<QcCheck> {
+  const model = path.join(process.cwd(), "assets", "models", "face_detection_yunet_2023mar.onnx");
+  if (!fs.existsSync(model)) {
+    return { code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "cadangan lokal tidak tersedia: model YuNet tidak ada" };
+  }
+  const durasi = await probeDurationSec(videoPath);
+  const frames: string[] = [];
+  for (const posisi of POSISI_SAMPEL) {
+    const detik = Math.max(0.1, durasi * posisi);
+    const f = path.join(workDir, `qc11lokal_${Math.round(detik * 10)}.png`);
+    await runFfmpeg(["-y", "-v", "error", "-ss", detik.toFixed(2), "-i", videoPath, "-frames:v", "1", f]);
+    if (fs.existsSync(f)) frames.push(f);
+  }
+  if (frames.length === 0) {
+    return { code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "cadangan lokal: tidak ada frame yang bisa diambil" };
+  }
+  const { stdout } = await runFf(pythonBin(), [path.join(process.cwd(), "lib", "media", "qc_face_check.py"), model, ...frames]);
+  const data = JSON.parse(stdout) as { frames: { file: string; faces: number }[]; max_faces: number };
+  const lewat = data.max_faces > maksWajah;
+  return {
+    code: "QC-11",
+    name: "Jumlah subjek & anatomi (visi)",
+    status: lewat ? "fail" : "pass",
+    detail: lewat
+      ? `CADANGAN LOKAL: ${data.max_faces} wajah terdeteksi, maksimal ${maksWajah}`
+      : `CADANGAN LOKAL (model visi tidak tersedia): ${data.frames.length} frame, maksimal ${data.max_faces} wajah — hanya jumlah wajah yang diperiksa, bukan tangan/anatomi`,
+  };
+}
+
 export async function runQc(input: QcInput): Promise<QcResult> {
   const checks: QcCheck[] = [];
 
@@ -785,17 +833,24 @@ export async function runQc(input: QcInput): Promise<QcResult> {
         maksOrang: input.maxPeople,
         tanpaWajah: input.maxPeople === 0,
       });
+      if (v.temuan === null) {
+        // Model visi tidak bisa dipakai. Jangan diam — coba cadangan lokal.
+        try {
+          checks.push(await qcSubjekLokal(input.filePath, input.maxPeople, path.dirname(input.filePath)));
+        } catch (err) {
+          checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip",
+            detail: `model visi tidak tersedia (${v.masalah.join("; ")}) dan cadangan lokal gagal: ${err instanceof Error ? err.message : String(err)}` });
+        }
+      } else
       checks.push({
         code: "QC-11", name: "Jumlah subjek & anatomi (visi)",
         ...(v.detikGagal.length ? { detikGagal: v.detikGagal } : {}),
         // temuan null = TIDAK DIPERIKSA, dan itu bukan lulus. Statusnya skip
         // dengan alasannya, supaya kebijakan yang memutuskan — bukan diam.
-        status: v.temuan === null ? "skip" : v.lolos ? "pass" : "fail",
-        detail: v.temuan === null
-          ? `tidak bisa diperiksa: ${v.masalah.join("; ")}`
-          : v.lolos
-            ? `${v.temuan.length} frame, maks ${input.maxPeople} orang${v.peringatan.length ? ` · catatan: ${v.peringatan.join("; ")}` : ""}`
-            : v.masalah.join("; "),
+        status: v.lolos ? "pass" : "fail",
+        detail: v.lolos
+          ? `${v.temuan.length} frame, maks ${input.maxPeople} orang${v.peringatan.length ? ` · catatan: ${v.peringatan.join("; ")}` : ""}`
+          : v.masalah.join("; "),
       });
     } catch (err) {
       checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: `pemeriksaan gagal dijalankan: ${err instanceof Error ? err.message : String(err)}` });

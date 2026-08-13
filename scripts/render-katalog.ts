@@ -155,6 +155,17 @@ async function main() {
   if (batas) console.log(`Batas kesegaran bukti: ${batas.toISOString()}`);
 
   let totalBiaya = 0;
+  // Berhenti kalau QC tidak bisa dijalankan.
+  //
+  // 2026-08-14: Gemini menjawab 503 (sedang kelebihan beban) dan dua template
+  // hands_only tetap dirender penuh, dibayar, lalu dicatat "tidak diperiksa".
+  // Membeli video yang tidak bisa diperiksa adalah bentuk paling murni dari
+  // membakar uang: hasilnya tidak menambah bukti apa pun, dan tetap ditagih.
+  //
+  // Dua kali berturut-turut sudah cukup untuk menyimpulkan layanannya sedang
+  // mati, bukan satu frame yang apes. Antreannya bisa dilanjutkan kapan saja —
+  // skrip ini melewati yang sudah terbukti.
+  let takTerperiksaBeruntun = 0;
   const hasil: { id: string; klip: number; biaya: number; visi: boolean | null; masalah: string[] }[] = [];
 
   for (const [n, tpl] of kerjakan.entries()) {
@@ -244,6 +255,14 @@ async function main() {
 
       totalBiaya += biaya;
       hasil.push({ id: tpl.id, klip: klip.length, biaya, visi: lolos, masalah: v.masalah });
+
+      takTerperiksaBeruntun = lolos === null ? takTerperiksaBeruntun + 1 : 0;
+      if (takTerperiksaBeruntun >= 2) {
+        console.error(`\nBERHENTI: dua template berturut-turut tidak bisa diperiksa QC (${v.masalah.join("; ")}).`);
+        console.error("Video yang tidak bisa diperiksa tidak menambah bukti apa pun, tapi tetap dibayar.");
+        console.error("Jalankan lagi nanti — yang sudah terbukti otomatis dilewati.");
+        break;
+      }
     } catch (err) {
       console.error(`  GAGAL TOTAL: ${err instanceof Error ? err.message : String(err)}`);
       totalBiaya += biaya;

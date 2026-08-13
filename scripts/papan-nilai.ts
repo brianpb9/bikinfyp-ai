@@ -227,14 +227,23 @@ function nilaiTes(): Baris {
   // MENONTON video, nol oleh tes. Jumlah tes yang besar tidak boleh dibaca
   // sebagai jaring yang rapat untuk cacat visual — dan papan nilai yang
   // memberi nilai tinggi di sini akan menyesatkan.
-  const skor = 6;
+  // Naik 6 -> 7 (2026-08-14), dan alasannya harus konkret, bukan perasaan
+  // sudah bekerja keras: QC-11 kini jalan otomatis di SETIAP render bukti,
+  // punya cadangan lokal yang tidak bergantung layanan luar, dan ada tes yang
+  // menyapu 33 template mencari prompt yang bertentangan sendiri — kelas bug
+  // yang dua kali menghasilkan video cacat berbayar hari ini.
+  //
+  // TIDAK 8: tes masih tidak melihat gambar. Yang menangkap cacat visual
+  // tetap QC-11 saat render, bukan `npm test`. Selama itu benar, angka di sini
+  // tidak boleh naik lebih tinggi.
+  const skor = 7;
   return {
     domain: "Tes otomatis",
-    bukti: `${berkas.length} berkas tes; 5 bug struktural terakhir ditemukan dengan menonton, 0 oleh tes`,
+    bukti: `${berkas.length} berkas tes; QC-11 otomatis di tiap render bukti + cadangan lokal + penjaga prompt bertentangan (33 template disapu)`,
     skor,
-    cap: "tes tidak melihat gambar -> cap 7 sampai pemeriksaan visual jadi rutin",
+    cap: "tes tidak melihat gambar -> cap 7 sampai pemeriksaan visual jalan di dalam npm test",
     verdict: verdictDari(skor),
-    perbaikan: "jadikan QC-11 bagian dari alur render bukti, supaya cacat visual tertangkap mesin bukan mata",
+    perbaikan: "simpan frame acuan per template, bandingkan otomatis — supaya regresi visual tertangkap tanpa render berbayar",
   };
 }
 

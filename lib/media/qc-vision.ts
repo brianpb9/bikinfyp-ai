@@ -133,7 +133,21 @@ Definitions, be literal and count what you actually see:
   visible arm, duplicated or bent-wrong limbs.
 - produkTerlihat: true if a consumer product package is clearly visible.`;
 
+/** Jeda antar percobaan, dalam milidetik.
+ *
+ *  Percobaan ulang SEKETIKA tidak berguna untuk 503 "sedang kelebihan beban,
+ *  coba lagi nanti" — dan itu persis yang terjadi 2026-08-14: dua template
+ *  hands_only dirender dan dibayar, lalu QC-nya mengembalikan "tidak satu pun
+ *  frame bisa diperiksa" karena Gemini menjawab 503 dua kali dalam sedetik.
+ *
+ *  Naik bertahap supaya gangguan sesaat lewat sendiri, tapi tetap berhenti
+ *  sebelum satu job menggantung menit-menitan. */
+const JEDA_MS = [0, 4_000, 15_000];
+
+const tidur = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function periksaFrame(framePath: string, detik: number, percobaan = 0): Promise<TemuanFrame | null> {
+  if (percobaan > 0) await tidur(JEDA_MS[Math.min(percobaan, JEDA_MS.length - 1)]);
   const buf = fs.readFileSync(framePath);
   let res: Response;
   try {
@@ -150,13 +164,15 @@ async function periksaFrame(framePath: string, detik: number, percobaan = 0): Pr
     // tanpa tangkapan ini satu panggilan lambat membatalkan seluruh
     // pemeriksaan. Terjadi sungguhan saat menjalankan papan nilai: satu frame
     // timeout, empat video sisanya tidak pernah diperiksa.
-    if (percobaan < 1) return periksaFrame(framePath, detik, percobaan + 1);
+    if (percobaan < JEDA_MS.length - 1) return periksaFrame(framePath, detik, percobaan + 1);
     return null;
   }
   if (!res.ok) {
-    // Sekali coba lagi. Gerbang mutu yang gagal karena satu hiccup jaringan
-    // akan membuat orang berhenti memercayainya.
-    if (percobaan < 1) return periksaFrame(framePath, detik, percobaan + 1);
+    // 503/429 = layanan sibuk, bukan permintaan kita yang salah. Itu layak
+    // ditunggu. Galat lain (400 permintaan salah, 403 kunci ditolak) tidak
+    // akan membaik dengan menunggu — jangan buang waktu job untuk itu.
+    const layakDiulang = res.status === 503 || res.status === 429 || res.status >= 500;
+    if (layakDiulang && percobaan < JEDA_MS.length - 1) return periksaFrame(framePath, detik, percobaan + 1);
     return null;
   }
   const d = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
@@ -177,7 +193,7 @@ async function periksaFrame(framePath: string, detik: number, percobaan = 0): Pr
       catatan: String(j.catatan ?? "").slice(0, 120),
     };
   } catch {
-    if (percobaan < 1) return periksaFrame(framePath, detik, percobaan + 1);
+    if (percobaan < JEDA_MS.length - 1) return periksaFrame(framePath, detik, percobaan + 1);
     return null;
   }
 }
