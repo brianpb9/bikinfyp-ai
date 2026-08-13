@@ -28,7 +28,9 @@ import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { probeDurationSec } from "../lib/media/ffmpeg";
 import { execFileSync } from "node:child_process";
 
-const BUKTI_DIR = path.resolve(process.cwd(), "..", "test_output", "render_utuh");
+// Bukti diambil dari buku bukti katalog, bukan dari satu folder render lama:
+// itulah kumpulan video yang benar-benar mewakili katalog yang dijual.
+const BUKU = path.resolve(process.cwd(), "..", "test_output", "bukti-render.json");
 
 type Verdict = "Strong Reject" | "Reject" | "Neutral" | "Recommend" | "Strong Recommend";
 
@@ -70,9 +72,12 @@ function perubahanPerenderTerakhir(): Date | null {
   }
 }
 
+function bacaBuku(): Record<string, { berkas: string; visiLolos?: boolean | null }> {
+  return fs.existsSync(BUKU) ? JSON.parse(fs.readFileSync(BUKU, "utf8")) : {};
+}
+
 function berkasBukti(): string[] {
-  if (!fs.existsSync(BUKTI_DIR)) return [];
-  return fs.readdirSync(BUKTI_DIR).filter((f) => f.endsWith(".mp4")).map((f) => path.join(BUKTI_DIR, f)).sort();
+  return Object.values(bacaBuku()).map((c) => c.berkas).filter((f) => f && fs.existsSync(f)).sort();
 }
 
 // --- AUDIO -----------------------------------------------------------------
@@ -84,7 +89,8 @@ async function nilaiAudio(berkas: string[]): Promise<Baris> {
     return { domain: "Audio (standar siar)", bukti: "tidak ada berkas render", skor: null, verdict: "—", perbaikan: "render minimal satu urutan penuh dulu" };
   }
   const hasil: { nama: string; sebelum: number | null; sesudah: number | null; ok: boolean }[] = [];
-  for (const f of berkas) {
+  // Enam sampel cukup: yang diuji rantai masteringnya, bukan tiap berkas.
+  for (const f of berkas.slice(0, 6)) {
     const out = f.replace(/\.mp4$/, "-MASTER.mp4");
     const r = await masterAudioFile({ filePath: f, outPath: out });
     hasil.push({ nama: path.basename(f), sebelum: r.sebelum?.inputI ?? null, sesudah: r.sesudah?.inputI ?? null, ok: r.ok });
@@ -164,8 +170,7 @@ function nilaiKatalog(): Baris {
   // tidak ada di nama "tvc-kain-UTUH.mp4". Menebak identitas dari prosa sudah
   // sekali membuat pipeline salah membelanjakan uang; papan nilai yang
   // menebak akan melaporkan kemajuan yang salah ke dua arah sekaligus.
-  const buku = path.resolve(process.cwd(), "..", "test_output", "bukti-render.json");
-  const catatan: Record<string, { berkas: string; visiLolos?: boolean | null }> = fs.existsSync(buku) ? JSON.parse(fs.readFileSync(buku, "utf8")) : {};
+  const catatan = bacaBuku();
   const batas = perubahanPerenderTerakhir();
   const terbukti = CAMPAIGN_TEMPLATES.filter((t) => {
     const c = catatan[t.id];
