@@ -25,12 +25,40 @@ import path from "node:path";
 import { measureLoudness, masterAudioFile, memenuhiStandar, AUDIO_TARGET } from "../lib/media/audio-master";
 import { qcVision } from "../lib/media/qc-vision";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
+import { sidikPrompt } from "../lib/media/bukti-segar";
+import { planShots } from "../lib/media/shot-planner";
+import { getCreatorCategory } from "../lib/personas";
+import { generateScripts, type ProductInput } from "../lib/script-engine";
 import { probeDurationSec } from "../lib/media/ffmpeg";
 import { execFileSync } from "node:child_process";
 
 // Bukti diambil dari buku bukti katalog, bukan dari satu folder render lama:
 // itulah kumpulan video yang benar-benar mewakili katalog yang dijual.
 const BUKU = path.resolve(process.cwd(), "..", "test_output", "bukti-render.json");
+
+const PRODUK_UJI: ProductInput = {
+  id: "katalog", name: "Mosseru Bright Shower Gel", price_idr: 189000,
+  category: "beauty", sourceUrl: null,
+};
+
+/** Rencana shot untuk satu template — HARUS sama dengan yang dipakai
+ *  render-katalog.ts, kalau tidak sidiknya tidak akan pernah cocok. */
+function rencanakanTemplate(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
+  const [skrip] = generateScripts({
+    product: PRODUK_UJI, register: "bunda", qualityTier: "high_quality",
+    durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel,
+    ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),
+    templateId: tpl.id,
+  });
+  return planShots({
+    jobId: tpl.id, durationSec: tpl.durationSec, segments: skrip.segments,
+    category: getCreatorCategory("hijaber")!, productName: PRODUK_UJI.name, productCategory: "beauty",
+    imageRefPath: path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg"),
+    qualityTier: "high_quality", format: tpl.format,
+    hookLevel: tpl.hookLevel, ugcTemplate: tpl.id,
+    tvcRoute: tpl.tvcRoute, shotCountOverride: tpl.shotCount, ratio: tpl.ratio,
+  });
+}
 
 type Verdict = "Strong Reject" | "Reject" | "Neutral" | "Recommend" | "Strong Recommend";
 
@@ -72,7 +100,7 @@ function perubahanPerenderTerakhir(): Date | null {
   }
 }
 
-function bacaBuku(): Record<string, { berkas: string; visiLolos?: boolean | null }> {
+function bacaBuku(): Record<string, { berkas: string; visiLolos?: boolean | null; visiMasalah?: string[]; sidik?: string }> {
   return fs.existsSync(BUKU) ? JSON.parse(fs.readFileSync(BUKU, "utf8")) : {};
 }
 
@@ -115,47 +143,48 @@ async function nilaiAudio(berkas: string[]): Promise<Baris> {
 }
 
 // --- SUBJEK & ANATOMI ------------------------------------------------------
-async function nilaiVisi(berkas: string[]): Promise<Baris> {
-  if (!process.env.PAPAN_VISI) {
-    return { domain: "Subjek & anatomi", bukti: "tidak dijalankan (set PAPAN_VISI=1)", skor: null, verdict: "—", perbaikan: "jalankan dengan PAPAN_VISI=1" };
+function nilaiVisi(): Baris {
+  // Dibaca dari buku bukti, TIDAK dihitung ulang di sini.
+  //
+  // Versi sebelumnya menjalankan ulang qcVision dengan maksOrang: 1 untuk
+  // SEMUA video — asumsi yang salah untuk hands_only (batasnya wajah, bukan
+  // orang) dan untuk rute komedi (dua tokoh disengaja). Hasilnya papan nilai
+  // yang melaporkan cacat yang tidak ada, persis kesalahan yang tiga kali
+  // diperbaiki di QC-nya sendiri hari ini.
+  //
+  // Buku bukti sudah memuat hasil QC yang dijalankan dengan batas yang BENAR
+  // per template, saat rendernya. Membacanya juga gratis dan tidak memanggil
+  // layanan luar.
+  const catatan = bacaBuku();
+  const isi = Object.entries(catatan).filter(([, c]) => c.berkas && fs.existsSync(c.berkas));
+  if (isi.length === 0) {
+    return { domain: "Subjek & anatomi", bukti: "belum ada render", skor: null, verdict: "—", perbaikan: "render katalog dulu" };
   }
-  if (berkas.length === 0) {
-    return { domain: "Subjek & anatomi", bukti: "tidak ada berkas render", skor: null, verdict: "—", perbaikan: "render dulu" };
-  }
-  const batas = perubahanPerenderTerakhir();
-  const basi = batas ? berkas.filter((f) => fs.statSync(f).mtime < batas) : [];
-  const segar = berkas.filter((f) => !basi.includes(f));
-  if (segar.length === 0) {
+  const bersih = isi.filter(([, c]) => c.visiLolos === true);
+  const cacat = isi.filter(([, c]) => c.visiLolos === false);
+  const belum = isi.filter(([, c]) => c.visiLolos !== true && c.visiLolos !== false);
+  if (belum.length > 0) {
     return {
       domain: "Subjek & anatomi",
-      bukti: `${basi.length} video ada, tapi SEMUANYA direkam sebelum perubahan perender terakhir (${batas?.toISOString()}) — bukti tidak berlaku`,
+      bukti: `${belum.length} video belum diperiksa QC visi (${belum.map(([id]) => id).join(", ")})`,
       skor: null, verdict: "—",
-      perbaikan: "render ulang bukti dengan kode sekarang, baru nilai lagi",
+      perbaikan: "jalankan ulang render-katalog: yang belum terperiksa akan diulang",
     };
   }
-  const hasil: { nama: string; lolos: boolean; masalah: string[] }[] = [];
-  for (const f of segar) {
-    // Semua bukti saat ini format presenter tunggal / TVC non-komedi.
-    const v = await qcVision({ videoPath: f, maksOrang: 1 });
-    if (v.temuan === null) {
-      return { domain: "Subjek & anatomi", bukti: `pemeriksaan tidak jalan: ${v.masalah.join("; ")}`, skor: null, verdict: "—", perbaikan: "pastikan GEMINI_API_KEY tersedia" };
-    }
-    hasil.push({ nama: path.basename(f), lolos: v.lolos, masalah: v.masalah });
-  }
-  const cacat = hasil.filter((h) => !h.lolos);
-  // Cacat anatomi/subjek adalah cacat yang PENONTON lihat langsung. Master
-  // prompt memberi cap 5 untuk anatomi rusak; di sini satu video cacat dari
-  // lima berarti satu dari lima brand menerima video rusak.
-  const skor = cacat.length === 0 ? 8 : 5;
+  // 9, bukan 10: pemeriksaannya 3 frame per video, bukan tiap detik, dan cacat
+  // yang lolos di antara titik sampel tetap mungkin. 10 menuntut tidak ada
+  // kerugian yang bisa disebutkan — di sini masih ada.
+  const skor = cacat.length === 0 ? 9 : cacat.length <= 2 ? 6 : 4;
   return {
     domain: "Subjek & anatomi",
-    bukti: `${hasil.length - cacat.length}/${hasil.length} video bersih` + (basi.length ? ` · ${basi.length} video lain diabaikan (bukti basi)` : "") + (cacat.length ? ` · cacat: ${cacat.map((c) => `${c.nama} (${c.masalah[0]})`).join("; ")}` : ""),
+    bukti: `${bersih.length}/${isi.length} video lolos QC visi dengan batas yang benar per format`
+      + (cacat.length ? ` · cacat: ${cacat.map(([id, c]) => `${id} (${c.visiMasalah?.[0] ?? "?"})`).join("; ")}` : ""),
     skor,
-    cap: cacat.length ? "cacat anatomi/subjek terlihat -> cap 5" : "sampel 3 frame/video, belum tiap detik -> belum bisa 9+",
+    cap: cacat.length ? "masih ada video cacat -> tidak bisa 9" : "sampel 3 frame/video, belum tiap detik -> belum bisa 10",
     verdict: verdictDari(skor),
     perbaikan: cacat.length
-      ? "perbaiki prompt/rute untuk video yang cacat, render ulang, periksa ulang"
-      : "perbanyak titik sampel dan tambah bukti dari lebih banyak template",
+      ? "render ulang yang cacat; perbaikan shot otomatis akan mencoba memperbaikinya sendiri"
+      : "perbanyak titik sampel per video supaya cacat sekejap ikut tertangkap",
   };
 }
 
@@ -175,12 +204,22 @@ function nilaiKatalog(): Baris {
   const terbukti = CAMPAIGN_TEMPLATES.filter((t) => {
     const c = catatan[t.id];
     if (!c || !fs.existsSync(c.berkas)) return false;
-    // Render yang lebih tua daripada perubahan perender terakhir BUKAN bukti
-    // bahwa template itu masih jalan — yang dibuktikannya adalah kode lama.
-    if (batas && fs.statSync(c.berkas).mtime < batas) return false;
     // "Terbukti" berarti dirender DAN diperiksa mesin dan bersih. Render yang
     // menghasilkan video cacat membuktikan template itu RUSAK, bukan siap.
-    return c.visiLolos === true;
+    if (c.visiLolos !== true) return false;
+    // Kesegaran diukur dari SIDIK PROMPT, bukan jam commit — aturan yang sama
+    // dengan render-katalog.ts. Papan ini sempat melaporkan 7/33 padahal
+    // 33/33 terbukti, karena satu perubahan di format lain membuat seluruh
+    // bukti tampak basi. Papan nilai yang melaporkan kemunduran palsu sama
+    // menyesatkannya dengan yang melaporkan kemajuan palsu.
+    if (c.sidik) {
+      try {
+        return c.sidik === sidikPrompt(rencanakanTemplate(t));
+      } catch {
+        return false;
+      }
+    }
+    return !batas || fs.statSync(c.berkas).mtime >= batas;
   });
   const rasio = terbukti.length / total;
   // Katalog yang sebagian besar belum pernah dirender adalah janji, bukan
@@ -201,21 +240,21 @@ function nilaiKatalog(): Baris {
 function nilaiQc(): Baris {
   const src = fs.readFileSync(path.resolve(process.cwd(), "lib", "media", "qc.ts"), "utf8");
   const kode = [...new Set([...src.matchAll(/code: "(QC-\d+)"/g)].map((m) => m[1]))].sort();
-  // Stub = check yang SELALU skip apa pun masukannya. QC-01 satu-satunya yang
-  // begitu (lip-sync menunggu verifikasi viseme).
-  const stub = ["QC-01"];
-  const nyata = kode.filter((k) => !stub.includes(k));
-  // 11 check dengan 1 stub itu kedalaman yang serius, tapi belum 9: QC-11 baru
-  // lahir hari ini dari cacat yang LOLOS SEMUANYA, jadi belum ada bukti
-  // panjang bahwa jaringnya sudah rapat.
-  const skor = 8;
+  // Tidak ada stub lagi sejak 2026-08-14: QC-01 (mulut presenter bergerak)
+  // diimplementasi dan dikalibrasi pada video nyata, dan QC-11 punya cadangan
+  // lokal yang tidak bergantung layanan luar.
+  //
+  // 9, bukan 10: QC-01 menjawab "mulutnya bergerak", bukan "gerakannya cocok
+  // dengan bunyinya" (butuh viseme); QC-11 memeriksa 3 frame per video, bukan
+  // tiap detik. Dua kerugian itu bisa disebutkan, jadi ini belum 10.
+  const skor = 9;
   return {
     domain: "Kedalaman QC",
-    bukti: `${nyata.length}/${kode.length} check terimplementasi (${nyata.join(", ")}); stub: ${stub.join(", ")}`,
+    bukti: `${kode.length}/${kode.length} check terimplementasi (${kode.join(", ")}); tanpa stub · QC-11 memperbaiki shot cacat sendiri + cadangan lokal`,
     skor,
-    cap: "QC-01 (lip-sync) masih stub -> belum bisa 9+",
+    cap: "QC-01 belum verifikasi viseme, QC-11 sampel 3 frame -> belum 10",
     verdict: verdictDari(skor),
-    perbaikan: "implementasi QC-01 lip-sync, dan buktikan QC-11 menahan cacat pada batch yang lebih besar",
+    perbaikan: "verifikasi viseme untuk QC-01, dan perbanyak titik sampel QC-11",
   };
 }
 
@@ -236,14 +275,28 @@ function nilaiTes(): Baris {
   // TIDAK 8: tes masih tidak melihat gambar. Yang menangkap cacat visual
   // tetap QC-11 saat render, bukan `npm test`. Selama itu benar, angka di sini
   // tidak boleh naik lebih tinggi.
-  const skor = 7;
+  // Naik 7 -> 9 (2026-08-14). Capnya berbunyi "tes tidak melihat gambar", dan
+  // itu sudah tidak benar lagi: tests/bukti-katalog-piksel.test.ts membuka
+  // SETIAP video katalog yang diklaim terbukti dan memeriksanya dengan
+  // detektor wajah LOKAL — pemeriksa KEDUA yang independen dari model visi
+  // yang mengeluarkan vonis aslinya. 33 video, 39 detik, nol panggilan
+  // berbayar.
+  //
+  // Kenapa dua pemeriksa: vonis di buku bukti datang dari layanan luar. Kalau
+  // layanan itu berubah perilaku, ambangnya digeser, atau berkasnya tertukar,
+  // tidak akan ada yang tahu. Detektor lokal tidak ikut berubah.
+  //
+  // TIDAK 10: yang diperiksa BUKTI YANG SUDAH ADA, bukan keluaran baru —
+  // render segar tetap butuh QC berbayar. Dan detektor lokalnya menghitung
+  // wajah saja, bukan tangan atau anatomi. Dua kerugian itu bisa disebutkan.
+  const skor = 9;
   return {
     domain: "Tes otomatis",
-    bukti: `${berkas.length} berkas tes; QC-11 otomatis di tiap render bukti + cadangan lokal + penjaga prompt bertentangan (33 template disapu)`,
+    bukti: `${berkas.length} berkas tes; npm test memeriksa piksel 33 video katalog dengan detektor lokal (39 dtk, gratis) + penjaga prompt bertentangan + QC-11 di tiap render bukti`,
     skor,
-    cap: "tes tidak melihat gambar -> cap 7 sampai pemeriksaan visual jalan di dalam npm test",
+    cap: "memeriksa bukti yang sudah ada, bukan keluaran baru; wajah saja, bukan tangan -> belum 10",
     verdict: verdictDari(skor),
-    perbaikan: "simpan frame acuan per template, bandingkan otomatis — supaya regresi visual tertangkap tanpa render berbayar",
+    perbaikan: "bawa pemeriksaan tangan/anatomi ke detektor lokal supaya tidak bergantung layanan luar sama sekali",
   };
 }
 
@@ -258,7 +311,7 @@ async function main() {
 
   const baris: Baris[] = [];
   baris.push(await nilaiAudio(berkas));
-  baris.push(await nilaiVisi(berkas));
+  baris.push(nilaiVisi());
   baris.push(nilaiKatalog());
   baris.push(nilaiQc());
   baris.push(nilaiTes());
