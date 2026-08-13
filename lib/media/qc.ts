@@ -16,6 +16,12 @@ export interface QcCheck {
   name: string;
   status: "pass" | "fail" | "skip";
   detail?: string;
+  /** Detik-detik penyebab kegagalan, bila check-nya bisa menunjuk tempat.
+   *
+   *  Ada supaya kegagalan bisa DIPERBAIKI, bukan cuma dilaporkan: dari
+   *  detiknya ketahuan shot mana yang cacat, jadi yang digenerate ulang cukup
+   *  shot itu. */
+  detikGagal?: number[];
 }
 
 export interface QcResult {
@@ -781,6 +787,7 @@ export async function runQc(input: QcInput): Promise<QcResult> {
       });
       checks.push({
         code: "QC-11", name: "Jumlah subjek & anatomi (visi)",
+        ...(v.detikGagal.length ? { detikGagal: v.detikGagal } : {}),
         // temuan null = TIDAK DIPERIKSA, dan itu bukan lulus. Statusnya skip
         // dengan alasannya, supaya kebijakan yang memutuskan — bukan diam.
         status: v.temuan === null ? "skip" : v.lolos ? "pass" : "fail",

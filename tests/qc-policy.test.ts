@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateQcPolicy, QC_POLICY_BY_FORMAT, type QcCheck } from "../lib/media/qc";
+import { shotUntukDetik } from "../lib/media/qc-vision";
 
 const passing = (): QcCheck[] => [
   { code: "QC-01", name: "lip-sync", status: "skip" },
@@ -65,4 +66,24 @@ test("QC-11 boleh skip di semua format, tapi fail selalu menolak", () => {
       `${format}: QC-11 fail WAJIB menolak output`
     );
   }
+});
+
+// Pemetaan detik -> shot. Ini yang memungkinkan cacat DIPERBAIKI, bukan cuma
+// ditolak: QC menolak di detik 13,8, dan yang digenerate ulang cukup shot yang
+// memuat detik itu. Untuk video 6 shot, ini beda antara membayar satu klip dan
+// membayar enam.
+test("shotUntukDetik menunjuk shot yang benar, dan menolak menebak", () => {
+  const durasi = [5, 5, 5]; // 15 detik, 3 shot
+  assert.equal(shotUntukDetik(durasi, 0), 0);
+  assert.equal(shotUntukDetik(durasi, 4.9), 0);
+  assert.equal(shotUntukDetik(durasi, 5), 1, "batas shot: detik 5 milik shot ke-2");
+  assert.equal(shotUntukDetik(durasi, 13.8), 2);
+  // Di luar durasi TIDAK dipetakan ke shot terakhir. Menebak berarti membayar
+  // generate ulang shot yang mungkin baik-baik saja.
+  assert.equal(shotUntukDetik(durasi, 15), -1);
+  assert.equal(shotUntukDetik(durasi, 99), -1);
+  assert.equal(shotUntukDetik(durasi, -1), -1);
+  // Durasi shot tidak seragam (TVC 30 dtk, 6 shot @5 dtk vs 5 shot @6 dtk).
+  assert.equal(shotUntukDetik([6, 6, 6, 6, 6], 26), 4);
+  assert.equal(shotUntukDetik([6, 6, 6, 6, 6], 11.9), 1);
 });

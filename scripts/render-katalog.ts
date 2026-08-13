@@ -35,7 +35,7 @@ import { getCreatorCategory } from "../lib/personas";
 import { generateScripts, type ProductInput } from "../lib/script-engine";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { runFfmpeg } from "../lib/media/ffmpeg";
-import { qcVision } from "../lib/media/qc-vision";
+import { qcVision, shotUntukDetik } from "../lib/media/qc-vision";
 import { sidikPrompt } from "../lib/media/bukti-segar";
 
 const FOTO = path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg");
@@ -193,7 +193,39 @@ async function main() {
       await gabung(klip, berkas);
 
       const maks = spec.maxPeople ?? 1;
-      const v = await qcVision({ videoPath: berkas, maksOrang: maks, tanpaWajah: maks === 0 });
+      let v = await qcVision({ videoPath: berkas, maksOrang: maks, tanpaWajah: maks === 0 });
+
+      // PERBAIKAN TERARAH — mekanisme yang sama dengan yang dipasang di worker
+      // produksi, dijalankan di sini supaya terbukti dengan uang sungguhan.
+      //
+      // QC-11 tahu DETIK mana yang cacat, jadi shot penyebabnya digenerate
+      // ulang sendirian. Satu klip, bukan seluruh video. Maksimal dua shot dan
+      // satu putaran: kalau lebih dari itu, yang salah arahannya, bukan
+      // lemparan dadu yang sial.
+      if (v.temuan !== null && !v.lolos && v.detikGagal.length) {
+        const durasiShot = spec.shots.map((sh) => sh.durationSec);
+        const idxCacat = [...new Set(v.detikGagal.map((d) => shotUntukDetik(durasiShot, d)))]
+          .filter((i) => i >= 0).slice(0, 2);
+        if (idxCacat.length) {
+          console.log(`  QC visi menolak detik ${v.detikGagal.join(", ")} -> perbaiki shot ${idxCacat.map((i) => i + 1).join(", ")}`);
+          for (const idx of idxCacat) {
+            const sub = path.join(dir, `qcfix-s${idx}`);
+            fs.mkdirSync(sub, { recursive: true });
+            try {
+              const ulang = await byteplusVideo.generate({ ...spec, shots: [{ ...spec.shots[idx], index: 0 }] }, sub);
+              fs.copyFileSync(ulang[0].filePath, klip[idx]);
+              biaya += ulang[0].costIdr;
+              console.log(`    shot ${idx + 1} diganti (Rp${ulang[0].costIdr.toLocaleString("id-ID")})`);
+            } catch (err) {
+              console.warn(`    shot ${idx + 1} gagal diperbaiki: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          }
+          await gabung(klip, berkas);
+          v = await qcVision({ videoPath: berkas, maksOrang: maks, tanpaWajah: maks === 0 });
+          console.log(`  setelah perbaikan: ${v.lolos ? "BERSIH" : "masih cacat"}`);
+        }
+      }
+
       const lolos = v.temuan === null ? null : v.lolos;
       console.log(
         lolos === null ? `  QC visi: TIDAK DIPERIKSA (${v.masalah.join("; ")})`

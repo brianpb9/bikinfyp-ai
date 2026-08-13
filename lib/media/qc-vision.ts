@@ -101,6 +101,13 @@ export interface QcVisionResult {
   /** PERINGATAN — dicatat, tidak menolak. Yang subjektif atau yang memang
    *  batasan model yang sudah kita ketahui. */
   peringatan: string[];
+  /** Detik-detik yang menyebabkan penolakan.
+   *
+   *  Ada supaya pemanggil bisa MEMPERBAIKI, bukan cuma menolak: dari detiknya
+   *  ketahuan shot mana yang cacat, dan shot itu saja yang perlu digenerate
+   *  ulang. Tanpa ini, satu-satunya pilihan adalah menggagalkan seluruh job
+   *  atau membayar ulang seluruh video. */
+  detikGagal: number[];
 }
 
 const SKEMA = `Answer ONLY with a JSON object, no markdown fence:
@@ -178,11 +185,11 @@ async function periksaFrame(framePath: string, detik: number, percobaan = 0): Pr
 /** Periksa video jadi. Tidak melempar — kegagalan pemeriksaan dilaporkan
  *  sebagai "tidak diperiksa", bukan sebagai lulus. */
 export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
-  if (!config.geminiApiKey) return { temuan: null, lolos: false, masalah: ["QC visual tidak jalan: GEMINI_API_KEY belum di-set"], peringatan: [] };
-  if (!fs.existsSync(input.videoPath)) return { temuan: null, lolos: false, masalah: ["berkas video tidak ada"], peringatan: [] };
+  if (!config.geminiApiKey) return { temuan: null, lolos: false, masalah: ["QC visual tidak jalan: GEMINI_API_KEY belum di-set"], peringatan: [], detikGagal: [] };
+  if (!fs.existsSync(input.videoPath)) return { temuan: null, lolos: false, masalah: ["berkas video tidak ada"], peringatan: [], detikGagal: [] };
 
   const durasi = await probeDurationSec(input.videoPath).catch(() => 0);
-  if (!durasi) return { temuan: null, lolos: false, masalah: ["durasi video tidak terbaca"], peringatan: [] };
+  if (!durasi) return { temuan: null, lolos: false, masalah: ["durasi video tidak terbaca"], peringatan: [], detikGagal: [] };
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qcvision-"));
   try {
@@ -195,7 +202,7 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
       const t = await periksaFrame(f, Math.round(detik * 10) / 10);
       if (t) temuan.push(t);
     }
-    if (temuan.length === 0) return { temuan: null, lolos: false, masalah: ["tidak satu pun frame bisa diperiksa"], peringatan: [] };
+    if (temuan.length === 0) return { temuan: null, lolos: false, masalah: ["tidak satu pun frame bisa diperiksa"], peringatan: [], detikGagal: [] };
 
     // PENGHALANG vs PERINGATAN, dan pembagiannya diuji pada video nyata.
     //
@@ -215,15 +222,18 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     //     orang berhenti memercayainya, ia berhenti berguna.
     const masalah: string[] = [];
     const peringatan: string[] = [];
+    const detikGagal: number[] = [];
     for (const t of temuan) {
       if (input.tanpaWajah) {
         // hands_only melarang WAJAH, bukan manusia. Jumlah orang TIDAK diperiksa
         // di sini: shot yang benar pun selalu punya pemilik tangan.
         if (t.jumlahWajah > 0) {
           masalah.push(`detik ${t.detik}: ada ${t.jumlahWajah} wajah, padahal format ini tanpa wajah`);
+          detikGagal.push(t.detik);
         }
       } else if (t.jumlahOrangUtama > input.maksOrang) {
         masalah.push(`detik ${t.detik}: ${t.jumlahOrangUtama} orang jadi subjek utama, maksimal ${input.maksOrang}`);
+        detikGagal.push(t.detik);
       } else if (t.jumlahOrang > input.maksOrang) {
         // Orang di latar dicatat, tidak menolak. Banyak template memang
         // mengambil tempat ramai, dan keramaian itu yang membuatnya terasa
@@ -253,12 +263,32 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
       const batasTangan = input.tanpaWajah ? 2 : Math.max(2, orangEfektif * 2) + 1;
       if (t.jumlahTangan > batasTangan) {
         masalah.push(`detik ${t.detik}: ${t.jumlahTangan} tangan untuk ${t.jumlahOrang} orang`);
+        detikGagal.push(t.detik);
       }
       if (t.anatomiRusak) peringatan.push(`detik ${t.detik}: kemungkinan anatomi janggal — ${t.catatan}`);
       if (t.teksAcak) peringatan.push(`detik ${t.detik}: teks di layar tidak terbaca (batasan model, bukan cacat baru)`);
     }
-    return { temuan, lolos: masalah.length === 0, masalah, peringatan };
+    return { temuan, lolos: masalah.length === 0, masalah, peringatan, detikGagal: [...new Set(detikGagal)] };
   } finally {
     try { fs.rmSync(dir, { recursive: true, force: true }); } catch { /* abaikan */ }
   }
+}
+
+/** Shot mana yang berisi detik ini?
+ *
+ *  Dipakai memperbaiki cacat secara TERARAH: QC menolak di detik 13,8, dan
+ *  yang perlu digenerate ulang cuma shot yang memuat detik itu — bukan seluruh
+ *  video. Untuk video 6 shot, ini beda antara membayar satu klip dan enam.
+ *
+ *  Mengembalikan -1 kalau detiknya di luar total durasi (tidak menebak shot
+ *  terakhir: menebak berarti membayar generate ulang shot yang mungkin
+ *  baik-baik saja). */
+export function shotUntukDetik(durasiShot: number[], detik: number): number {
+  if (detik < 0) return -1;
+  let batas = 0;
+  for (let i = 0; i < durasiShot.length; i++) {
+    batas += durasiShot[i];
+    if (detik < batas) return i;
+  }
+  return -1;
 }

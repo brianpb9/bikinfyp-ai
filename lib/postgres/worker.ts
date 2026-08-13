@@ -20,6 +20,7 @@ import { TVC_ROUTES, type TvcRoute } from "../templates";
 import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
+import { shotUntukDetik } from "../media/qc-vision";
 import { buildCaptionCards } from "../media/captions";
 import { resolvePromo, formatPromoOverlayText } from "../promo";
 import { renderCaptionPngs } from "../media/render-captions";
@@ -399,6 +400,45 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     });
     await pool.query("UPDATE jobs SET qc_result=$1,qc_retry_count=$2 WHERE id=$3", [JSON.stringify(qc), retry, row.id]);
     if (qc.passed) break;
+
+    // PERBAIKI, JANGAN CUMA MENOLAK.
+    //
+    // Retry di loop ini semula hanya menyusun ulang (composite) KLIP YANG SAMA
+    // PERSIS — jadi untuk cacat yang hidup di dalam video hasil model (dua
+    // orang di satu frame, telapak ketiga), retry-nya mustahil berhasil: ia
+    // membayar satu compositing lagi untuk menghasilkan kegagalan yang sama,
+    // lalu job digagalkan dan brand tidak mendapat apa-apa.
+    //
+    // QC-11 tahu DETIK mana yang cacat, jadi shot penyebabnya bisa ditunjuk
+    // dan digenerate ulang sendirian. Satu klip, bukan seluruh video: untuk
+    // TVC 6 shot itu beda antara ~Rp2.771 dan ~Rp16.626.
+    //
+    // Dibatasi 2 shot per job. Kalau lebih dari dua shot cacat, yang salah
+    // kemungkinan besar arahannya, bukan satu lemparan dadu yang sial — dan
+    // menggenerate ulang terus akan membakar margin tanpa memperbaiki apa pun.
+    const qc11 = qc.checks.find((check) => check.code === "QC-11" && check.status === "fail");
+    if (retry === 0 && qc11?.detikGagal?.length && !usedMockVideo) {
+      const durasiShot = specSiap.shots.map((shot) => shot.durationSec);
+      const idxCacat = [...new Set(qc11.detikGagal.map((d) => shotUntukDetik(durasiShot, d)))]
+        .filter((i) => i >= 0)
+        .slice(0, 2);
+      for (const idx of idxCacat) {
+        const tmpDir = path.join(workDir, `qcfix-${idx}`);
+        fs.mkdirSync(tmpDir, { recursive: true });
+        try {
+          const ulang = await generateVideoWithFailover({ ...specSiap, shots: [specSiap.shots[idx]] }, tmpDir);
+          await jobs.addCost(row.id, ulang.costIdr);
+          fs.copyFileSync(ulang.assets[0].filePath, clipPaths[idx]);
+          console.log(`[job ${row.id.slice(0, 8)}] QC-11 menolak detik ${qc11.detikGagal.join(", ")} -> shot ${idx + 1} digenerate ulang`);
+        } catch (err) {
+          // Gagal memperbaiki bukan alasan menyembunyikan kegagalan aslinya:
+          // biarkan QC berikutnya yang memutuskan, dengan klip apa adanya.
+          console.warn(`[job ${row.id.slice(0, 8)}] perbaikan shot ${idx + 1} gagal: ${(err as Error).message}`);
+        } finally {
+          fs.rmSync(tmpDir, { recursive: true, force: true });
+        }
+      }
+    }
     // Sebut juga check skip: kebijakan bisa menolak TANPA satu pun fail
     // (skip tak berizin / check wajib hilang) — pesan kosong = debugging buta
     // (insiden 21979c08: "QC gagal setelah retry: " tanpa penyebab).
