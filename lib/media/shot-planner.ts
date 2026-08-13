@@ -90,8 +90,31 @@ const HANDS_ONLY_FRAMING =
   "hands and forearms only, face and body NOT visible, cropped below shoulders, " +
   "close-up POV hands-only shot, camera focused on hands and product";
 
+/** Kunci JUMLAH TANGAN untuk hands_only.
+ *
+ *  Sebelumnya format ini tidak punya batasan jumlah tangan sama sekali:
+ *  SINGLE_SUBJECT_LOCK (yang memuat "tepat dua tangan") sengaja TIDAK dipasang
+ *  di hands_only karena isinya bicara tentang orang dan wajah. Akibatnya
+ *  satu-satunya format yang seluruh isinya adalah TANGAN justru satu-satunya
+ *  yang tidak pernah diberi tahu ada berapa tangan yang boleh muncul.
+ *
+ *  Terukur 2026-08-13: DUA template hands_only pertama yang dirender
+ *  (racun-checkout dan unboxing) sama-sama keluar dengan TIGA telapak di beat
+ *  yang sama — satu menekan pompa, dua menadah di bawah. Bukan kebetulan:
+ *  aksinya memang butuh dua tangan, dan tanpa batas, model menambah satu lagi
+ *  supaya "menadah" terlihat lebih penuh.
+ *
+ *  Ditulis POSITIF lebih dulu, sesuai pelajaran di dokumen produksi Brian:
+ *  yang menyelesaikan tangan hantu adalah pernyataan tentang apa yang ADA,
+ *  bukan daftar larangan. */
+const HANDS_ONLY_HAND_LOCK =
+  "Exactly two hands are visible in the entire frame, and both belong to the same single person — " +
+  "one hand operates the product, the other receives or steadies it. No third hand ever enters the frame, " +
+  "from any edge, at any moment. ";
+
 const HANDS_ONLY_NEGATIVE =
-  "no face, no visible face, no head in frame, no person facing camera";
+  "no face, no visible face, no head in frame, no person facing camera, " +
+  "no third hand, no extra hands, no second pair of hands, no disembodied hand entering frame";
 
 // Wajah AI (v1, 2026-08-03): opposite intent of hands_only — face IS the
 // point, framed like a normal UGC talking-head selfie, not hands-only POV.
@@ -738,7 +761,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       : format === "tvc"
       ? `${TVC_FRAMING}. `
       : format === "hands_only"
-      ? `${HANDS_ONLY_FRAMING}. `
+      ? `${HANDS_ONLY_FRAMING}. ${HANDS_ONLY_HAND_LOCK}`
       : fullBodyFashion
         // r3 (Brian): fashion di DALAM KAMAR — suasana try-on paling relatable.
         ? "full body visible head to toe, presenter standing and showing the whole outfit like a mirror-check try-on video, " +

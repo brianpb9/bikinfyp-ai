@@ -213,8 +213,21 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
       // Untuk hands_only yang dihitung adalah SATU orang pemilik tangan, bukan
       // jumlah orang laporan model (yang di format ini tidak bisa dipercaya:
       // tanpa wajah, model kadang menebak dua orang dari dua tangan).
+      //
+      // hands_only DIPERKETAT (2026-08-13, tanpa toleransi): frame template
+      // "unboxing" melaporkan 3 tangan dan LOLOS karena toleransi +1. Saya
+      // periksa framenya sendiri — memang ada tiga telapak: satu menekan pompa,
+      // dua menadah di bawah. Itu cacat yang akan dilihat brand yang membayar.
+      //
+      // Di format ini premisnya justru DUA TANGAN SATU ORANG, jadi tidak ada
+      // alasan melonggarkan. Toleransi tetap dipertahankan untuk format lain,
+      // yang komposisinya lebih ramai dan tangan terpotong tepi frame memang
+      // sering terhitung ganda.
+      //
+      // Kalau ini ternyata menolak video hands_only yang bersih, angkanya
+      // dilonggarkan lagi — dengan bukti, bukan dengan firasat.
       const orangEfektif = input.tanpaWajah ? 1 : t.jumlahOrang;
-      const batasTangan = Math.max(2, orangEfektif * 2) + 1;
+      const batasTangan = input.tanpaWajah ? 2 : Math.max(2, orangEfektif * 2) + 1;
       if (t.jumlahTangan > batasTangan) {
         masalah.push(`detik ${t.detik}: ${t.jumlahTangan} tangan untuk ${t.jumlahOrang} orang`);
       }

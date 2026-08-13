@@ -149,3 +149,19 @@ test("penutup TVC: packshot tanpa orang, tanpa perintah yang bertentangan", () =
   assert.ok(!penutupKain.includes("Not a single person"), "rute kain: penutupnya memang harus ada orangnya");
   assert.ok(penutupKain.includes("EXACTLY ONE person"), "rute kain: penutup berorang tetap dikunci satu");
 });
+
+// hands_only: satu-satunya format yang seluruh isinya TANGAN, dan sampai
+// 2026-08-13 satu-satunya yang tidak pernah diberi tahu ada berapa tangan yang
+// boleh muncul — SINGLE_SUBJECT_LOCK sengaja dilewati di sini karena isinya
+// bicara soal orang dan wajah. Dua template hands_only pertama yang dirender
+// sama-sama keluar dengan TIGA telapak di beat yang sama.
+test("hands_only mengunci tepat dua tangan milik satu orang", () => {
+  const s = spec({ format: "hands_only" });
+  for (const sh of s.shots) {
+    assert.match(sh.prompt, /Exactly two hands are visible/i, `shot ${sh.index}: tanpa kunci jumlah tangan`);
+    assert.match(sh.prompt, /No third hand ever enters the frame/i, `shot ${sh.index}: tanpa larangan tangan ketiga`);
+  }
+  assert.match(s.negativePrompt, /no third hand/i, "negative prompt tanpa larangan tangan ketiga");
+  // Wajah tetap dilarang — kunci tangan tidak boleh menggeser larangan wajah.
+  assert.match(s.negativePrompt, /no face/i);
+});
