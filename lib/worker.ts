@@ -225,7 +225,8 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // Mode compositing mengikuti tier + provider yang benar-benar dipakai
     const compositeMode: CompositeMode = !withAudio ? "caption" : format === "vo_broll" ? "vo" : usedMockVideo ? "vo" : "embedded";
     const captionCards = !withAudio ? await renderCaptionPngs(buildCaptionCards({ segments, productName: product.name }), workDir) : undefined;
-    const musicPath = !withAudio ? path.join(process.cwd(), "assets", "music", "bg-loop.m4a") : undefined;
+    // Musik hanya untuk tier senyap — lihat catatan di lib/media/compositor.ts.
+    const musicPath = !withAudio ? path.join(process.cwd(), "assets", "music", "bg-bed.m4a") : undefined;
 
     // --- COMPOSITING (dengan retry QC -> COMPOSITING maks 1x) ---
     const demoSeg = segments.find((s) => s.role === "demo")!;

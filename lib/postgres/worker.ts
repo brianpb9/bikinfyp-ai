@@ -324,7 +324,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   }
   const mode: CompositeMode = !withAudio ? "caption" : format === "vo_broll" ? "vo" : usedMockVideo ? "vo" : "embedded";
   const captions = !withAudio ? await renderCaptionPngs(buildCaptionCards({ segments, productName: row.product_name }), workDir) : undefined;
-  const musicPath = !withAudio ? path.join(process.cwd(), "assets", "music", "bg-loop.m4a") : undefined;
+  // Musik hanya untuk tier senyap. Percobaan memasangnya di tier bersuara
+  // dibatalkan 2026-08-14 setelah diukur tidak terdengar — catatan lengkapnya
+  // di lib/media/compositor.ts.
+  const musicPath = !withAudio ? path.join(process.cwd(), "assets", "music", "bg-bed.m4a") : undefined;
   const demo = segments.find((segment) => segment.role === "demo");
   const cta = segments.find((segment) => segment.role === "cta");
   if (!demo || !cta) throw new Error("Segmen demo/CTA wajib untuk compositing.");

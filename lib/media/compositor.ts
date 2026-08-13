@@ -115,6 +115,23 @@ async function renderTextPng(opts: {
   await runFf("python3", [py, specPath]);
 }
 
+/** Gain tambahan untuk musik bed.
+ *
+ *  1.0 karena levelnya sudah DITETAPKAN DI ASETNYA (assets/music/bg-bed.m4a,
+ *  dinormalkan ke -22 LUFS), bukan ditebak lewat angka di filter.
+ *
+ *  Ini pelajaran dari percobaan pertama: bg-loop.m4a aslinya -40,5 dB rata-rata
+ *  — praktis senyap. Di mode caption ia tertolong karena satu-satunya sumber
+ *  audio, jadi loudnorm akhir mengangkatnya; di bawah VO ia tidak akan pernah
+ *  terdengar berapa pun gain yang dipasang. Menaikkan gain 6x di filter tidak
+ *  mengubah apa pun yang terukur, dan itu ketahuan hanya karena diukur. */
+const MUSIK_GAIN = 1;
+
+/** Setelan ducking. threshold rendah supaya bicara pelan pun tetap memicu;
+ *  release 350 ms supaya musik naik lagi di jeda antar kalimat tanpa terdengar
+ *  memompa. */
+const DUCK = { threshold: 0.03, ratio: 6, attack: 15, release: 350 } as const;
+
 export async function compositeVideo(input: CompositeInput): Promise<CompositeResult> {
   const font = detectFont();
   const outPath = path.join(input.workDir, "output.mp4");
@@ -127,7 +144,31 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
   for (const clip of input.clipPaths) args.push("-i", clip);
   // Input audio: VO (mode vo) atau musik (mode caption) — SEBELUM input PNG overlay,
   // supaya indeks stream konsisten dengan filter graph.
+  // MUSIK BED: masih mode caption saja. DICOBA DAN DIBATALKAN 2026-08-14.
+  //
+  // Rencananya musik dipasang di semua tier — video bersuara sekarang keluar
+  // dengan VO di atas kesunyian total, dan dokumen produksi Brian menuliskan
+  // musiknya eksplisit (-20 dB, turun ke -26 dB saat talent bicara, potong
+  // keras di akhir). Implementasinya jalan tanpa galat, tapi DIUKUR dan
+  // ternyata tidak terdengar, jadi dibatalkan daripada dikirim setengah jadi.
+  //
+  // Yang terukur, supaya percobaan berikutnya tidak mengulang jalan buntu:
+  //   - aset lama bg-loop.m4a rata-rata -40,5 dB: praktis senyap. Di mode
+  //     caption ia tertolong karena satu-satunya sumber audio sehingga
+  //     loudnorm akhir mengangkatnya; di bawah VO tidak akan pernah terdengar.
+  //     Aset pengganti bg-bed.m4a (dinormalkan ke -22 LUFS) sudah dibuat.
+  //   - dengan bg-bed dan ffmpeg polos, mencampur musik ke audio klip memberi
+  //     kontribusi -29,7 dB: terdengar, benar.
+  //   - lewat compositor ini, kontribusinya tetap -48,2 dB dan TIDAK BERUBAH
+  //     walau gain dinaikkan 1 -> 4 -> 10 dan kompresornya dilepas. Artinya
+  //     musiknya tidak pernah benar-benar sampai ke campuran; graf filternya
+  //     terlihat benar (sudah dicetak dan diperiksa), jadi tersangkanya ada di
+  //     interaksi dengan tahap setelahnya (loudnorm satu lewatan / -t / apad).
+  //
+  // Jangan aktifkan lagi tanpa mengukur kontribusinya dengan pengurangan dua
+  // campuran. "Filter jalan tanpa error" bukan bukti musiknya terdengar.
   const hasMusic = input.mode === "caption" && !!input.musicPath && fs.existsSync(input.musicPath);
+  const musikDiDuck = false;
   if (input.mode === "vo") for (const vo of input.vo ?? []) args.push("-i", vo.path);
   if (hasMusic) args.push("-stream_loop", "-1", "-i", input.musicPath!);
 
@@ -140,6 +181,25 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     return input.clipPaths.length + (input.mode === "vo" ? (input.vo?.length ?? 0) : 0) + (hasMusic ? 1 : 0) +
       (input.mode === "embedded" && input.voiceoverWavPath ? 1 : 0) + pngCount++;
   };
+  /** Indeks stream input musik. Urutannya: klip, VO (mode vo), musik, lalu PNG
+   *  — sama dengan urutan args.push di atas. Dihitung sekali di sini supaya
+   *  tidak ada dua rumus indeks yang bisa hanyut berbeda. */
+  const idxMusik = input.clipPaths.length + (input.mode === "vo" ? (input.vo?.length ?? 0) : 0);
+  /** Rantai musik ber-ducking, dipasang di atas suara yang sudah jadi.
+   *
+   *  sidechaincompress: yang DIKOMPRES musiknya, yang MEMICU suaranya. Jadi
+   *  begitu talent bicara, musik turun sendiri, lalu naik lagi di jeda —
+   *  persis yang ditulis dokumen produksi, dan yang membuat VO tetap jelas
+   *  tanpa harus mengecilkan musik sepanjang video.
+   *
+   *  Tanpa fade-out: dokumen produksinya minta potong keras di akhir. Fade
+   *  membuat penutup terasa mengambang, dan penutup adalah tempat CTA. */
+  const rantaiMusik = (labelSuara: string, keluar: string): string[] => [
+    `[${labelSuara}]asplit=2[sx1][sx2]`,
+    `[${idxMusik}:a]atrim=0:${input.durationSec},volume=${MUSIK_GAIN},aresample=${AUDIO_TARGET.sampleRate}[mus]`,
+    `[mus][sx2]sidechaincompress=threshold=${DUCK.threshold}:ratio=${DUCK.ratio}:attack=${DUCK.attack}:release=${DUCK.release}:makeup=1[musd]`,
+    `[sx1][musd]amix=inputs=2:duration=first:normalize=0[${keluar}]`,
+  ];
 
   // --- Rantai video: concat + watermark + overlay sesuai mode ---
   // N klip dinamis (2 di 15/30 dtk, 3 di 45 dtk — lihat shot-planner.ts) bukan
@@ -149,16 +209,33 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     // Suara resmi = Gemini TTS (Brian 2026-08-07): audio embedded klip DIBUANG,
     // diganti VO eksternal (apad supaya pas durasi video).
     args.push("-i", input.voiceoverWavPath);
-    const voIdx = n; // input VO tepat setelah klip; addPngInput menghitung offset di bawah
+    // Indeks VO menghitung input musik yang sudah didorong lebih dulu.
+    //
+    // Sampai 2026-08-14 baris ini berbunyi `const voIdx = n` — benar selama
+    // musik TIDAK PERNAH ada di mode embedded. Begitu musik dipasang untuk
+    // semua tier, n menunjuk ke MUSIK, dan setiap video bersuara akan keluar
+    // dengan musik menggantikan suara narator. Ketahuan sebelum dirilis karena
+    // kalibrasi musiknya diukur, bukan diasumsikan jalan.
+    const voIdx = n + (hasMusic ? 1 : 0);
     const labels = Array.from({ length: n }, (_, i) => `[${i}:v]`).join("");
     vChain.push(`${labels}concat=n=${n}:v=1:a=0[vcat]`);
-    aChain.push(`[${voIdx}:a]aresample=${AUDIO_TARGET.sampleRate},apad[aout]`);
+    if (musikDiDuck) {
+      aChain.push(`[${voIdx}:a]aresample=${AUDIO_TARGET.sampleRate},apad[vopre]`);
+      aChain.push(...rantaiMusik("vopre", "aout"));
+    } else {
+      aChain.push(`[${voIdx}:a]aresample=${AUDIO_TARGET.sampleRate},apad[aout]`);
+    }
     mapAudio = "[aout]";
   } else if (input.mode === "embedded") {
     // Klip membawa audio; concat video+audio sekaligus (jalur lama tanpa TTS).
     const labels = Array.from({ length: n }, (_, i) => `[${i}:v][${i}:a]`).join("");
     vChain.push(`${labels}concat=n=${n}:v=1:a=1[vcat][acat]`);
-    aChain.push(`[acat]aresample=${AUDIO_TARGET.sampleRate}[aout]`);
+    if (musikDiDuck) {
+      aChain.push(`[acat]aresample=${AUDIO_TARGET.sampleRate}[vopre]`);
+      aChain.push(...rantaiMusik("vopre", "aout"));
+    } else {
+      aChain.push(`[acat]aresample=${AUDIO_TARGET.sampleRate}[aout]`);
+    }
     mapAudio = "[aout]";
   } else {
     const labels = Array.from({ length: n }, (_, i) => `[${i}:v]`).join("");
@@ -209,8 +286,7 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     // Musik latar pelan (volume 0.5 — satu-satunya sumber audio di mode caption,
     // jadi harus tetap terdengar lembut TAPI terdeteksi QC-04; tanpa suara mengagetkan).
     if (hasMusic) {
-      const mIdx = input.clipPaths.length; // indeks input musik (setelah klip)
-      aChain.push(`[${mIdx}:a]atrim=0:${input.durationSec},volume=0.5,afade=t=in:st=0:d=0.5,afade=t=out:st=${Math.max(0, input.durationSec - 1)}:d=1,aresample=${AUDIO_TARGET.sampleRate}[aout]`);
+      aChain.push(`[${idxMusik}:a]atrim=0:${input.durationSec},volume=0.5,afade=t=in:st=0:d=0.5,afade=t=out:st=${Math.max(0, input.durationSec - 1)}:d=1,aresample=${AUDIO_TARGET.sampleRate}[aout]`);
     } else {
       aChain.push(`aevalsrc=0:d=${input.durationSec}:s=${AUDIO_TARGET.sampleRate}[aout]`);
     }
@@ -252,7 +328,12 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
       aChain.push(`[${streamIdx}:a]aresample=${AUDIO_TARGET.sampleRate},adelay=delays=${delayMs}:all=1[a${i}]`);
       mixInputs.push(`[a${i}]`);
     });
-    aChain.push(`${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=first:normalize=0[aout]`);
+    if (musikDiDuck) {
+      aChain.push(`${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=first:normalize=0[vopre]`);
+      aChain.push(...rantaiMusik("vopre", "aout"));
+    } else {
+      aChain.push(`${mixInputs.join("")}amix=inputs=${mixInputs.length}:duration=first:normalize=0[aout]`);
+    }
     mapAudio = "[aout]";
   } else if (input.mode === "embedded") {
     // Mode bersuara TANPA overlay teks (keputusan Brian 2026-08-07: "tulisan
@@ -281,6 +362,9 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     ? [...aChain.slice(0, -1), aChain[aChain.length - 1].replace(/\[aout\]$/, "[apre]"), `[apre]${loudnormFilter(null)}[aout]`]
     : aChain;
 
+  // Jejak graf audio. Dipertahankan: satu-satunya cara cepat memastikan filter
+  // yang BENAR-BENAR dikirim ke ffmpeg sama dengan yang dikira.
+  if (process.env.COMPOSITOR_DEBUG) console.log("[compositor] filter audio:", aFinal.join(";"));
   args.push(
     "-filter_complex", [...vChain, ...aFinal].join(";"),
     "-map", "[vout]",
