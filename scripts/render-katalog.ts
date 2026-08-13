@@ -24,7 +24,9 @@
 //
 // Jalankan (bertahap — inti dari "pelan2"):
 //   RENDER_CONFIRM=YA RENDER_BATCH=5 npx tsx scripts/render-katalog.ts
-// Tanpa RENDER_BATCH, seluruh sisa katalog dikerjakan dalam satu jalan.
+//   RENDER_CONFIRM=YA RENDER_ONLY=t04-hook-indrawi npx tsx scripts/render-katalog.ts
+// Tanpa RENDER_BATCH/RENDER_ONLY, seluruh sisa katalog dikerjakan sekaligus —
+// dan setelah perubahan yang menyentuh semua prompt, "sisa" berarti 33.
 
 import fs from "node:fs";
 import path from "node:path";
@@ -126,6 +128,14 @@ async function main() {
   // ketiga di dua template berturut-turut, dan kunci tangan positif+negatif
   // tidak menahannya — merender enam sisanya berarti membeli enam video cacat.
   const lewati = (process.env.RENDER_SKIP_FORMAT ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  // RENDER_ONLY: kerjakan template tertentu saja.
+  //
+  // Ditambahkan setelah nyaris membakar ~Rp400.000. Perbaikan pada
+  // IDENTITY_INSTRUCTION menyentuh SETIAP template, jadi sidik prompt ke-33
+  // template berubah sekaligus dan skrip ini — benar secara aturan — mengantre
+  // seluruh katalog. Membuktikan SATU perbaikan tidak boleh berarti membayar
+  // seluruh katalog lagi.
+  const hanya = (process.env.RENDER_ONLY ?? "").split(",").map((x) => x.trim()).filter(Boolean);
   // Sidik prompt SEMUA template dihitung dulu. Merencanakan shot tidak
   // memanggil API mana pun dan tidak berbiaya — jadi memeriksa 33 template
   // untuk tahu mana yang promptnya berubah jauh lebih murah daripada salah
@@ -140,6 +150,7 @@ async function main() {
     }
   }
   const antre = CAMPAIGN_TEMPLATES
+    .filter((t) => hanya.length === 0 || hanya.includes(t.id))
     .filter((t) => !lewati.includes(t.format))
     .filter((t) => !sudahTerbukti(buku[t.id], batas, sidikPerTemplate.get(t.id)));
   if (lewati.length) console.log(`Format dilewati: ${lewati.join(", ")}`);

@@ -206,6 +206,30 @@ const TALKING_HEAD_FRAMING =
 // r14 (Brian 2026-08-08, screenshot: "W" Wardah kepotong tepi frame + brand
 // text jadi "Ampule" bukan "Ampoule") — kamera terlalu dekat/miring motong
 // label, dan model kadang mengeja ulang kata alih-alih mereproduksi persis.
+// TEKS KECIL DI LABEL: BELUM TERPECAHKAN, dan jangan diklaim beres.
+//
+// Diukur 2026-08-14 lewat review kreatif. Label produk keluar sebagai kata
+// karangan yang BERUBAH antar shot dalam satu video: "Bright Slow 'ver Gel" ->
+// "Shaw Slow 'w' Peer / 30ml / 45 oz" (45 oz untuk botol 30 ml — mustahil).
+//
+// Percobaan 1 (versi lama): minta nama merek tajam DAN teks kecil "out of
+// focus from shallow depth of field". Mustahil secara optik — keduanya di
+// bidang datar yang sama — jadi model mengarang di antaranya.
+// Percobaan 2 (versi sekarang): berhenti mengklaim optik yang mustahil, minta
+// baris kecil terbaca sebagai TEKSTUR cetak tanpa huruf terurai, plus larangan
+// eksplisit mengarang kata dan angka volume. DIRENDER ULANG DAN DIUKUR:
+// hasilnya "Slow Slow W Gel" / "Show Show W Faer" / "50 m | 16 oL" — masih
+// mengarang, masih berubah antar shot.
+//
+// Kesimpulan jujur: model ini TIDAK BISA merender teks kecil produk dengan
+// benar, dan dua putaran prompt tidak mengubahnya. Jalan keluar yang masuk
+// akal bukan percobaan ketiga, melainkan mengubah komposisi — misalnya
+// packshot penutup memakai FOTO ASLI brand (label dijamin benar), atau produk
+// diambil cukup jauh sehingga baris kecil tidak pernah bisa terbaca.
+// Keputusan itu mengubah tampilan, jadi menunggu Brian.
+//
+// Versi sekarang tetap dipertahankan: ia tidak memperbaiki, tapi ia menghapus
+// permintaan yang mustahil dan melarang angka volume karangan.
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
   "do not redesign or replace the product, the packaging stays physically intact and correct " +
