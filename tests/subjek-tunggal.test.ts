@@ -27,11 +27,22 @@ function spec(o: { format: "talking_head" | "hands_only" | "ads" | "tvc"; tvcRou
   });
 }
 
-test("TVC mengunci satu orang di SETIAP shot — termasuk penutup", () => {
+// DIREVISI 2026-08-13 setelah render kedua. Versi lama tes ini berbunyi
+// "TVC mengunci satu orang di SETIAP shot — termasuk penutup", dan justru
+// ITULAH keyakinan yang memproduksi cacatnya: memasang "tepat satu orang" di
+// shot yang perannya "produk sendirian di frame" membuat promptnya
+// bertentangan sendiri, dan model menyelesaikannya dengan menggandakan orang.
+//
+// Aturan yang benar: shot yang MENAMPILKAN orang dikunci satu; shot yang
+// memang tanpa orang tidak dikunci — ia dilarang punya orang.
+test("TVC: shot berorang dikunci satu, shot penutup tanpa orang tidak dikunci", () => {
   const s = spec({ format: "tvc", tvcRoute: "intimate", shots: 6 });
-  for (const sh of s.shots) {
+  for (const sh of s.shots.slice(0, -1)) {
     assert.match(sh.prompt, /EXACTLY ONE person/i, `shot ${sh.index}: tanpa kunci subjek tunggal`);
   }
+  const penutup = s.shots[s.shots.length - 1].prompt;
+  assert.doesNotMatch(penutup, /EXACTLY ONE person/i, "penutup packshot tidak boleh ikut dikunci satu orang");
+  assert.match(penutup, /Not a single person/i, "penutup packshot harus melarang orang");
 });
 
 test("TVC melarang orang kedua di negative prompt", () => {
@@ -98,7 +109,43 @@ test("spec membawa maxPeople, dan angkanya cocok dengan kunci subjek di prompt",
     const s = spec(k.o);
     assert.equal(s.maxPeople, k.maks, `${JSON.stringify(k.o)} harus maksimal ${k.maks} orang`);
     // Kunci "tepat satu orang" HANYA boleh muncul ketika batasnya memang 1.
-    const adaKunci = s.shots.every((sh) => sh.prompt.includes("EXACTLY ONE person"));
+    // Diperiksa pada shot PEMBUKA: shot penutup TVC sengaja tanpa orang, jadi
+    // ia memang tidak membawa kunci itu (lihat tes penutup di bawah).
+    const adaKunci = s.shots[0].prompt.includes("EXACTLY ONE person");
     assert.equal(adaKunci, k.maks === 1, `kunci subjek tunggal harus ${k.maks === 1 ? "ada" : "tidak ada"} untuk ${JSON.stringify(k.o)}`);
   }
+});
+
+// Shot penutup TVC: packshot PRODUK SAJA, dan promptnya harus KONSISTEN.
+//
+// Dua render berbayar menghasilkan cacat yang sama persis di detik yang sama:
+// dua perempuan (wajah yang sama, digandakan) mengapit botol di shot penutup.
+// Render kedua sudah membawa kunci subjek tunggal positif DAN negatifnya
+// lengkap. Jadi ini bukan soal larangan yang kurang keras.
+//
+// Sebabnya prompt yang saling bertentangan: beat penutup meminta "packshot
+// produk", baris identitas meminta "orang yang sama seperti shot lain", dan
+// kunci subjek meminta "tepat satu orang". Model menyelesaikan kontradiksi
+// dengan komposisi simetris — orangnya digandakan kiri-kanan botol.
+//
+// Tes ini menjaga ketiganya tidak pernah lagi muncul bersamaan.
+test("penutup TVC: packshot tanpa orang, tanpa perintah yang bertentangan", () => {
+  for (const rute of ["luxury", "intimate", "reallife"]) {
+    const s = spec({ format: "tvc", tvcRoute: rute, shots: 4 });
+    const penutup = s.shots[s.shots.length - 1].prompt;
+    assert.ok(penutup.includes("Not a single person"), `${rute}: penutup harus melarang orang`);
+    assert.ok(!penutup.includes("EXACTLY ONE person"), `${rute}: kunci "tepat satu orang" tidak boleh ada di shot tanpa orang`);
+    assert.ok(!penutup.includes("same person, same face"), `${rute}: baris identitas orang tidak boleh ada di shot tanpa orang`);
+    // Shot tengah TETAP menampilkan orang dan TETAP dikunci satu.
+    const tengah = s.shots[1].prompt;
+    assert.ok(tengah.includes("EXACTLY ONE person"), `${rute}: shot tengah harus tetap dikunci satu orang`);
+    assert.ok(!tengah.includes("Not a single person"), `${rute}: shot tengah tidak boleh melarang orang`);
+  }
+  // Rute "fabric" adalah pengecualian yang disengaja: penutupnya justru HARUS
+  // memakai bajunya dan bergerak (packshot mematikan premisnya), jadi di sana
+  // orang tetap ada.
+  const kain = spec({ format: "tvc", tvcRoute: "fabric", shots: 4 });
+  const penutupKain = kain.shots[kain.shots.length - 1].prompt;
+  assert.ok(!penutupKain.includes("Not a single person"), "rute kain: penutupnya memang harus ada orangnya");
+  assert.ok(penutupKain.includes("EXACTLY ONE person"), "rute kain: penutup berorang tetap dikunci satu");
 });

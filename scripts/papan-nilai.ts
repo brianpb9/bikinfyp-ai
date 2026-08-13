@@ -26,6 +26,7 @@ import { measureLoudness, masterAudioFile, memenuhiStandar, AUDIO_TARGET } from 
 import { qcVision } from "../lib/media/qc-vision";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { probeDurationSec } from "../lib/media/ffmpeg";
+import { execFileSync } from "node:child_process";
 
 const BUKTI_DIR = path.resolve(process.cwd(), "..", "test_output", "render_utuh");
 
@@ -50,6 +51,23 @@ function verdictDari(skor: number | null): Verdict | "—" {
   if (skor >= 6) return "Neutral";
   if (skor >= 4) return "Reject";
   return "Strong Reject";
+}
+
+/** Kapan perender terakhir kali BERUBAH secara material.
+ *
+ *  Bukti yang direkam SEBELUM perubahan ini tidak berlaku lagi — master prompt
+ *  menyebutnya evidence freshness, dan ini bukan formalitas: video cacat yang
+ *  dipakai papan ini direkam pukul 03:26, sedangkan perbaikan untuk cacat itu
+ *  persis masuk pukul 07:01. Menilai 5/10 dari bukti itu berarti melaporkan
+ *  masalah yang mungkin sudah tidak ada — sama menyesatkannya dengan
+ *  melaporkan lulus untuk masalah yang masih ada. */
+function perubahanPerenderTerakhir(): Date | null {
+  try {
+    const out = execFileSync("git", ["log", "-1", "--format=%cI", "--", "lib/media/shot-planner.ts", "lib/media/first-frame.ts", "lib/media/compositor.ts"], { encoding: "utf8" }).trim();
+    return out ? new Date(out) : null;
+  } catch {
+    return null;
+  }
 }
 
 function berkasBukti(): string[] {
@@ -98,8 +116,19 @@ async function nilaiVisi(berkas: string[]): Promise<Baris> {
   if (berkas.length === 0) {
     return { domain: "Subjek & anatomi", bukti: "tidak ada berkas render", skor: null, verdict: "—", perbaikan: "render dulu" };
   }
+  const batas = perubahanPerenderTerakhir();
+  const basi = batas ? berkas.filter((f) => fs.statSync(f).mtime < batas) : [];
+  const segar = berkas.filter((f) => !basi.includes(f));
+  if (segar.length === 0) {
+    return {
+      domain: "Subjek & anatomi",
+      bukti: `${basi.length} video ada, tapi SEMUANYA direkam sebelum perubahan perender terakhir (${batas?.toISOString()}) — bukti tidak berlaku`,
+      skor: null, verdict: "—",
+      perbaikan: "render ulang bukti dengan kode sekarang, baru nilai lagi",
+    };
+  }
   const hasil: { nama: string; lolos: boolean; masalah: string[] }[] = [];
-  for (const f of berkas) {
+  for (const f of segar) {
     // Semua bukti saat ini format presenter tunggal / TVC non-komedi.
     const v = await qcVision({ videoPath: f, maksOrang: 1 });
     if (v.temuan === null) {
@@ -114,7 +143,7 @@ async function nilaiVisi(berkas: string[]): Promise<Baris> {
   const skor = cacat.length === 0 ? 8 : 5;
   return {
     domain: "Subjek & anatomi",
-    bukti: `${hasil.length - cacat.length}/${hasil.length} video bersih` + (cacat.length ? ` · cacat: ${cacat.map((c) => `${c.nama} (${c.masalah[0]})`).join("; ")}` : ""),
+    bukti: `${hasil.length - cacat.length}/${hasil.length} video bersih` + (basi.length ? ` · ${basi.length} video lain diabaikan (bukti basi)` : "") + (cacat.length ? ` · cacat: ${cacat.map((c) => `${c.nama} (${c.masalah[0]})`).join("; ")}` : ""),
     skor,
     cap: cacat.length ? "cacat anatomi/subjek terlihat -> cap 5" : "sampel 3 frame/video, belum tiap detik -> belum bisa 9+",
     verdict: verdictDari(skor),
@@ -136,10 +165,17 @@ function nilaiKatalog(): Baris {
   // sekali membuat pipeline salah membelanjakan uang; papan nilai yang
   // menebak akan melaporkan kemajuan yang salah ke dua arah sekaligus.
   const buku = path.resolve(process.cwd(), "..", "test_output", "bukti-render.json");
-  const catatan: Record<string, { berkas: string }> = fs.existsSync(buku) ? JSON.parse(fs.readFileSync(buku, "utf8")) : {};
+  const catatan: Record<string, { berkas: string; visiLolos?: boolean | null }> = fs.existsSync(buku) ? JSON.parse(fs.readFileSync(buku, "utf8")) : {};
+  const batas = perubahanPerenderTerakhir();
   const terbukti = CAMPAIGN_TEMPLATES.filter((t) => {
     const c = catatan[t.id];
-    return Boolean(c) && fs.existsSync(c.berkas);
+    if (!c || !fs.existsSync(c.berkas)) return false;
+    // Render yang lebih tua daripada perubahan perender terakhir BUKAN bukti
+    // bahwa template itu masih jalan — yang dibuktikannya adalah kode lama.
+    if (batas && fs.statSync(c.berkas).mtime < batas) return false;
+    // "Terbukti" berarti dirender DAN diperiksa mesin dan bersih. Render yang
+    // menghasilkan video cacat membuktikan template itu RUSAK, bukan siap.
+    return c.visiLolos === true;
   });
   const rasio = terbukti.length / total;
   // Katalog yang sebagian besar belum pernah dirender adalah janji, bukan
@@ -148,7 +184,7 @@ function nilaiKatalog(): Baris {
   const skor = rasio >= 0.9 ? 9 : rasio >= 0.5 ? 6 : rasio >= 0.15 ? 4 : 2;
   return {
     domain: "Katalog terbukti",
-    bukti: `${terbukti.length}/${total} template punya render utuh (${terbukti.map((t) => t.id).join(", ") || "—"})`,
+    bukti: `${terbukti.length}/${total} template terbukti (render berlaku + lolos QC visi) (${terbukti.map((t) => t.id).join(", ") || "—"})`,
     skor,
     cap: rasio < 0.5 ? "mayoritas template belum pernah dirender -> cap 5" : undefined,
     verdict: verdictDari(skor),

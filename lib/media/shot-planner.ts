@@ -583,13 +583,36 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     "like a real phone camera close-up",
     "the way a cinema lens naturally renders at this focal depth"
   );
-  const tvcBeat = (i: number): string => {
+  // Mengembalikan teks BESERTA penanda ada-tidaknya orang, bukan teks saja.
+  // Pemanggil butuh keduanya: kunci subjek tunggal tidak boleh dipasang pada
+  // shot yang memang tanpa orang — itu persis kontradiksi yang menggandakan
+  // orangnya. Menurunkan ulang penandanya di pemanggil berarti dua salinan
+  // aturan yang sama, dan salinan kedua akan hanyut.
+  const tvcBeat = (i: number): { teks: string; tanpaOrang: boolean } => {
     const from = Math.round(i * perShot);
     const to = Math.round((i + 1) * perShot);
     let role: string;
     let camera: string;
     let avoid: string;
     let pace: string;
+    // Beat ini menampilkan orang atau tidak. DATA, bukan tebakan dari prosa.
+    //
+    // Ini akar cacat "dua perempuan di shot penutup" yang dua kali lolos:
+    // beat penutup generik meminta PACKSHOT PRODUK SAJA ("the product
+    // front-facing and centred... the packshot a brand would sign off on"),
+    // tapi prompt tetap menambahkan "The same person, same face, same hair and
+    // same outfit as the other shots" karena noModel bernilai false. Dua
+    // perintah yang saling bertentangan dalam satu prompt, dan model
+    // menyelesaikannya dengan komposisi simetris: orangnya DIGANDAKAN di kiri
+    // dan kanan botol.
+    //
+    // Karena itu kunci subjek tunggal tidak pernah bisa menang di sana. Ia
+    // bilang "tepat satu orang", beat bilang "tanpa orang", baris identitas
+    // bilang "orang yang sama". Yang diminta memang tidak koheren — dan
+    // memperkuat larangan tidak memperbaiki permintaan yang tidak koheren.
+    // Terbukti: render kedua dengan kunci positif DAN negatif terpasang penuh
+    // menghasilkan cacat yang sama persis, di detik yang sama.
+    let tanpaOrang = input.noModel === true;
     // Rute dengan tabel sendiri memakai perannya SEJAK SHOT PERTAMA.
     //
     // Terukur di render bukti 2026-08-13: pembuka rute "fabric" yang
@@ -634,9 +657,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       avoid = `never end on the garment hanging still on a hanger or laid flat — that kills the premise; do not crop the silhouette`;
       pace = `unhurried, cinematic`;
     } else if (i === numShots - 1) {
+      // Packshot = PRODUK SAJA. Itu memang yang dilakukan TVC sungguhan di
+      // lima detik terakhir, dan sekaligus menghapus prasyarat cacat
+      // penggandaan: tidak ada orang untuk digandakan.
+      tanpaOrang = true;
       role =
-        `the hero shot: the product front-facing and centred on a clean, deliberately lit surface or seamless backdrop, ` +
-        `filling roughly a third of frame — the packshot a brand would sign off on`;
+        `the hero shot: the product completely alone in frame, front-facing and centred on a clean, deliberately lit ` +
+        `surface or seamless backdrop, filling roughly a third of frame — the packshot a brand would sign off on. ` +
+        `No people, no hands, no body parts anywhere in the frame`;
       // Penutup dikunci diam. Referensi menyebutnya eksplisit ("hold the final
       // frame"), dan itu masuk akal: packshot yang masih bergeser di detik
       // terakhir membuat seluruh iklan terasa belum selesai.
@@ -660,7 +688,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       const m = table[(i - 1) % table.length];
       role = m.role; camera = m.camera; avoid = m.avoid; pace = m.pace;
     }
-    return (
+    return { teks: (
       // TULANG CERITA. Arahan Brian 2026-08-11: "yang penting skenario dan
       // storytelling-nya clear". Sebelumnya tiap beat cuma menyebut FUNGSInya
       // (hook, bukti, hero) tanpa pernah menyebut apa yang BARU SAJA terjadi —
@@ -681,9 +709,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       // ditetapkan, deskripsinya TIDAK BOLEH berubah antar shot — itu yang
       // menjaga wajah tetap sama, bukan mendeskripsikan ulang orangnya dengan
       // kata berbeda di tiap beat. Hanya disebut bila memang ada orang.
-      `${input.noModel ? "" : `The same person, same face, same hair and same outfit as the other shots. `}` +
+      `${tanpaOrang ? `Not a single person appears in this shot — no face, no hands, no arms, no silhouette. ` : `The same person, same face, same hair and same outfit as the other shots. `}` +
       `${TVC_IDENTITY} ${TVC_STYLE_LOCK}`
-    );
+    ), tanpaOrang };
   };
 
   const shots: ShotSpec[] = Array.from({ length: numShots }, (_, i) => {
@@ -819,6 +847,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Tanpa-produk ditentukan KATEGORI, bukan format: iklan untuk barang fisik
     // tetap menampilkan barangnya. Lihat isServiceLike di lib/config/hooks.ts.
     const noPhysicalProduct = isServiceLike(input.productCategory);
+    const beatTvc = format === "tvc" ? tvcBeat(i) : null;
     const beat =
       ugcBeat(i) ??
       (format === "ads" && noPhysicalProduct
@@ -832,7 +861,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             ? `The same person wrapping up, looking straight at camera with a warm inviting nod, hands open in a natural gesture — still holding nothing`
             : `The same person continuing, gesturing naturally to make a point, the surroundings quietly reinforcing what the business does — no product in hand at any moment`
       : format === "tvc"
-        ? tvcBeat(i)
+        ? beatTvc!.teks
         : format === "talking_head" || format === "ads"
         ? lipSyncPresenter
           // Presenter/Lipsync (Super HQ, r7): bicara sungguhan ke kamera —
@@ -918,8 +947,13 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // sendiri), TIDAK untuk noModel (tidak ada orang sama sekali), dan TIDAK
     // untuk rute TVC komedi — rute itu SENGAJA memakai dua tokoh, jadi
     // memaksakan satu orang di sana akan membatalkan leluconnya.
+    // Kunci subjek tunggal TIDAK dipasang pada shot yang memang tanpa orang.
+    // "Tepat satu orang" di shot yang perannya "produk sendirian" adalah
+    // kontradiksi, dan model menyelesaikan kontradiksi dengan mengarang —
+    // dalam kasus kita, dengan menggandakan orangnya.
     const perluSubjekTunggal =
-      maksOrangPerFrame({ format, noModel: input.noModel, tvcRoute: input.tvcRoute }) === 1;
+      maksOrangPerFrame({ format, noModel: input.noModel, tvcRoute: input.tvcRoute }) === 1 &&
+      !(beatTvc?.tanpaOrang ?? false);
     const kunciSubjek = perluSubjekTunggal ? SINGLE_SUBJECT_LOCK : "";
 
     const base = punyaPeranTemplate

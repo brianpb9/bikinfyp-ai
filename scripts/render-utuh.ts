@@ -20,6 +20,8 @@ import { getCreatorCategory } from "../lib/personas";
 import { generateScripts, type ProductInput } from "../lib/script-engine";
 import { getTemplate } from "../lib/templates";
 import { runFfmpeg } from "../lib/media/ffmpeg";
+import { qcVision } from "../lib/media/qc-vision";
+import { maksOrangPerFrame } from "../lib/media/shot-planner";
 
 const FOTO = path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg");
 const OUT = path.resolve(process.cwd(), "..", "test_output", "render_utuh");
@@ -51,16 +53,22 @@ async function main() {
   }
   fs.mkdirSync(OUT, { recursive: true });
 
+  // Saring dengan RENDER_ONLY=id1,id2 — supaya membuktikan SATU perbaikan
+  // tidak berarti membayar seluruh katalog lagi.
+  const hanya = (process.env.RENDER_ONLY ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const daftarTugas = hanya.length ? TUGAS.filter((t) => hanya.includes(t.id) || hanya.includes(t.templateId)) : TUGAS;
+  if (daftarTugas.length === 0) { console.error(`RENDER_ONLY tidak cocok dengan tugas mana pun: ${hanya.join(",")}`); process.exit(1); }
+
   const kategori = getCreatorCategory("hijaber")!;
   const produk: ProductInput = {
     id: "utuh", name: "Mosseru Bright Shower Gel", price_idr: 189000,
     category: "beauty", sourceUrl: null,
   };
 
-  const ringkas: { label: string; templateId: string; klip: number; biaya: number; berkas: string }[] = [];
+  const ringkas: { label: string; templateId: string; klip: number; biaya: number; berkas: string; visiLolos: boolean | null; visiMasalah: string[] }[] = [];
   let total = 0;
 
-  for (const t of TUGAS) {
+  for (const t of daftarTugas) {
     const tpl = getTemplate(t.templateId)!;
     const durasi = tpl.durationSec;
     const [skrip] = generateScripts({
@@ -102,17 +110,34 @@ async function main() {
     }
 
     let berkas = "(tidak ada klip)";
+    let visi: { lolos: boolean | null; masalah: string[] } = { lolos: null, masalah: [] };
     if (jadi.length > 0) {
       berkas = path.join(OUT, `${t.id}-UTUH.mp4`);
       await gabung(jadi, berkas);
       console.log(`  -> ${berkas}`);
+
+      // PERIKSA LANGSUNG, jangan tunggu ada yang sempat menonton.
+      //
+      // Lima bug struktural hari ini semuanya ditemukan dengan MENONTON, dan
+      // satu cacat (dua perempuan di shot penutup) lolos sampai ke output
+      // karena kebetulan tidak ada yang menonton bagian itu. Bukti render yang
+      // tidak langsung diperiksa hanya memindahkan momen penemuannya ke
+      // belakang — kadang sampai setelah brand yang menemukannya.
+      const maks = maksOrangPerFrame({ format: t.format, tvcRoute: tpl.tvcRoute });
+      const v = await qcVision({ videoPath: berkas, maksOrang: maks, tanpaWajah: maks === 0 });
+      visi = { lolos: v.temuan === null ? null : v.lolos, masalah: v.masalah };
+      console.log(
+        v.temuan === null ? `  QC visi: TIDAK DIPERIKSA (${v.masalah.join("; ")})`
+          : v.lolos ? `  QC visi: BERSIH (maks ${maks} orang${v.peringatan.length ? `, catatan: ${v.peringatan.length}` : ""})`
+            : `  QC visi: CACAT — ${v.masalah.join("; ")}`
+      );
     }
     total += biaya;
-    ringkas.push({ label: t.label, templateId: t.templateId, klip: jadi.length, biaya, berkas });
+    ringkas.push({ label: t.label, templateId: t.templateId, klip: jadi.length, biaya, berkas, visiLolos: visi.lolos, visiMasalah: visi.masalah });
   }
 
   console.log("\n=== RINGKASAN ===");
-  for (const r of ringkas) console.log(` ${r.label.padEnd(34)} ${r.klip} klip  Rp${String(r.biaya).padStart(6)}  ${r.berkas}`);
+  for (const r of ringkas) console.log(` ${r.label.padEnd(34)} ${r.klip} klip  Rp${String(r.biaya).padStart(6)}  ${r.visiLolos === null ? "visi:?" : r.visiLolos ? "visi:OK" : "visi:CACAT"}  ${r.berkas}`);
   console.log(` TOTAL: Rp${total.toLocaleString("id-ID")}`);
   fs.writeFileSync(path.join(OUT, "ringkasan.json"), JSON.stringify({ total, ringkas }, null, 2));
 
@@ -124,11 +149,11 @@ async function main() {
   // sudah sekali membuat pipeline salah membelanjakan uang; jangan diulang
   // untuk memutuskan apa yang sudah terbukti.
   const buku = path.resolve(process.cwd(), "..", "test_output", "bukti-render.json");
-  const lama: Record<string, { berkas: string; klip: number; dirender: string }> =
+  const lama: Record<string, { berkas: string; klip: number; dirender: string; visiLolos?: boolean | null; visiMasalah?: string[] }> =
     fs.existsSync(buku) ? JSON.parse(fs.readFileSync(buku, "utf8")) : {};
   for (const r of ringkas) {
     if (r.klip === 0) continue; // gagal total bukan bukti
-    lama[r.templateId] = { berkas: r.berkas, klip: r.klip, dirender: new Date().toISOString() };
+    lama[r.templateId] = { berkas: r.berkas, klip: r.klip, dirender: new Date().toISOString(), visiLolos: r.visiLolos, visiMasalah: r.visiMasalah };
   }
   fs.writeFileSync(buku, JSON.stringify(lama, null, 2));
   console.log(` buku bukti: ${buku}`);
