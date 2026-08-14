@@ -778,7 +778,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       // ditetapkan, deskripsinya TIDAK BOLEH berubah antar shot — itu yang
       // menjaga wajah tetap sama, bukan mendeskripsikan ulang orangnya dengan
       // kata berbeda di tiap beat. Hanya disebut bila memang ada orang.
-      `${tanpaOrang ? `Not a single person appears in this shot — no face, no hands, no arms, no silhouette. ` : `The same person, same face, same hair and same outfit as the other shots. `}` +
+      `${tanpaOrang ? `Not a single person appears in this shot — no face, no hands, no arms, no silhouette. ` : `This is the SAME woman from the earlier shots, seen at a LATER MOMENT — same face, same hair, same outfit. She exists only ONCE inside this frame: the continuity runs across time between shots, never as a side-by-side comparison within a single frame. `}` +
       `${TVC_IDENTITY} ${TVC_STYLE_LOCK}`
     ), tanpaOrang };
   };
@@ -909,7 +909,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             ? `This is the FINAL shot, resolving what the earlier shots built up. `
             : `This shot continues directly from the previous one — same place, same person, same look, one step further on. `}` +
         `Shot ${i + 1} of ${numShots}: ${pick.role}. Camera: ${pick.camera}. ` +
-        `The same person, same face, same hair and same outfit as the other shots. ` +
+        `This is the SAME woman from the earlier shots, seen at a LATER MOMENT — same face, same hair, same outfit. She exists only ONCE inside this frame: the continuity runs across time between shots, never as a side-by-side comparison within a single frame. ` +
         `${IDENTITY_INSTRUCTION}`
       );
     };

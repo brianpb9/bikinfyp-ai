@@ -47,7 +47,11 @@ export const BERTENTANGAN: { a: RegExp; b: RegExp; kenapa: string }[] = [
   },
   {
     a: /Not a single person appears/i,
-    b: /The same person, same face/i,
+    // Dua bentuk: yang lama (dipakai sampai 2026-08-14, dan itulah yang
+    // benar-benar menghasilkan video cacat) dan yang sekarang. Aturan harus
+    // menangkap keduanya — kalau tidak, tes sejarahnya berhenti membuktikan
+    // apa pun begitu kalimatnya diganti.
+    b: /The same person, same face|SAME woman from the earlier shots/i,
     kenapa: 'shot dilarang punya orang TAPI juga disuruh memakai "orang yang sama"',
   },
   {
@@ -108,7 +112,7 @@ test("setiap shot menyatakan sikap soal kehadiran orang", () => {
         /Not a single person appears/i.test(shot.prompt) ||
         /EXACTLY ONE person is present/i.test(shot.prompt) ||
         /no people anywhere in frame/i.test(shot.prompt) ||
-        /The same person, same face/i.test(shot.prompt);
+        /SAME woman from the earlier shots/i.test(shot.prompt);
       if (!menyatakan) bisu.push(`${tpl.id} shot ${shot.index + 1}`);
     }
   }
@@ -236,4 +240,39 @@ test("latar tidak ditumpuk pada template yang sudah punya ruangannya sendiri", (
     if (punyaLatarTambahan && punyaRuangSendiri) tumpuk.push(tpl.id);
   }
   assert.deepEqual(tumpuk, [], `dua penentu tempat dalam satu prompt:\n  ${tumpuk.join("\n  ")}`);
+});
+
+// PERTENTANGAN KELIMA — penggandaan di shot TENGAH TVC.
+//
+// Dua TVC dirender ulang dengan semua perbaikan terpasang, lolos pemeriksa
+// 3-frame, lalu ditolak pemeriksa rapat: 5 dan 2 wajah utama. Perbaikan
+// packshot menutup penggandaan di PENUTUP; penggandaannya pindah ke tengah.
+//
+// Shot tengah membawa "The same person ... as the other shots" bersama beat
+// yang berbahasa perbandingan ("the second test"). Dua-duanya bahasa
+// SEBELUM-SESUDAH, dan model menampilkan perbandingan itu DI DALAM satu frame:
+// dua perempuan identik berdampingan. Larangan "no second version of the same
+// person" sudah ada sejak awal dan tetap kalah — sama seperti empat kasus
+// sebelumnya.
+//
+// Perbaikannya menyatakan bahwa kesinambungannya melintasi WAKTU, bukan di
+// dalam frame.
+test("shot berorang menyatakan kesinambungan lintas waktu, bukan perbandingan dalam frame", () => {
+  const kurang: string[] = [];
+  for (const tpl of CAMPAIGN_TEMPLATES) {
+    for (const shot of rencana(tpl).shots) {
+      if (!/SAME woman from the earlier shots/i.test(shot.prompt)) continue;
+      if (!/only ONCE inside this frame/i.test(shot.prompt) || !/never as a side-by-side comparison/i.test(shot.prompt)) {
+        kurang.push(`${tpl.id} shot ${shot.index + 1}`);
+      }
+    }
+  }
+  assert.deepEqual(kurang, [], `identitas orang tanpa penegasan lintas-waktu:\n  ${kurang.join("\n  ")}`);
+  // Baris lama tidak boleh tersisa di mana pun.
+  for (const tpl of CAMPAIGN_TEMPLATES) {
+    for (const shot of rencana(tpl).shots) {
+      assert.doesNotMatch(shot.prompt, /The same person, same face, same hair and same outfit as the other shots/i,
+        `${tpl.id} shot ${shot.index + 1}: masih memakai baris identitas lama yang mengundang perbandingan`);
+    }
+  }
 });
