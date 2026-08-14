@@ -23,6 +23,7 @@
 // jumlah cut/rapid-cut atas nama "pacing" tanpa bukti baru dari model.
 
 import type { VisualSpec, ShotSpec, QualityTier } from "../providers/types";
+import { latarUntukTemplate } from "./latar-template";
 import type { CreatorCategory } from "../personas";
 import type { SegmentDraft } from "../script-engine/templates";
 import { CATEGORY_NOUN, CATEGORY_PAIN } from "../config/hooks";
@@ -269,6 +270,25 @@ const DEMO_ACTION: Record<string, string> = {
 // Pembuka pattern-interrupt level GILA (hanya shot 1). Energi dari GERAKAN
 // KAMERA + kecepatan — subjek dan framing format tetap dipatuhi (hands-only
 // tetap tanpa wajah, identitas produk tetap terkunci).
+/** DETIK PERTAMA — berlaku untuk SETIAP shot pembuka, level hook apa pun.
+ *
+ *  Temuan review kreatif 2026-08-14: shot pembuka format hands_only sudah
+ *  punya aturan "starts ALREADY in motion", tapi talking_head dan ads TIDAK.
+ *  Hasilnya pembuka yang secara harfiah statis — presenter memegang produk
+ *  setinggi dada sambil tersenyum. Di FYP, satu detik diam adalah satu detik
+ *  yang dipakai jempol untuk menggeser.
+ *
+ *  Ini BUKAN level "gila": tidak ada gerakan kamera dramatis, tidak ada
+ *  pattern-interrupt. Yang dituntut cuma satu hal — sesuatu HARUS berubah
+ *  sebelum detik pertama habis. Itu berlaku sama untuk iklan paling kalem.
+ *
+ *  Ditulis positif dan spesifik. "Buat menarik" bukan instruksi; "sudah
+ *  bergerak sejak frame pertama, tanpa jeda diam di awal" bisa dikerjakan. */
+const DETIK_PERTAMA =
+  "The very first frame is ALREADY mid-action — the shot never opens on a held pose or a static " +
+  "product. Within the first second something visibly changes: the subject is already moving, " +
+  "turning, reaching, or reacting, and the camera is already drifting. No frozen opening beat. ";
+
 const CRAZY_OPENER: Record<"hands_only" | "talking_head", string> = {
   hands_only:
     "HIGH-ENERGY OPENING: the shot starts with a fast dramatic camera push-in as the hands sweep the product " +
@@ -1005,9 +1025,41 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       !(beatTvc?.tanpaOrang ?? false);
     const kunciSubjek = perluSubjekTunggal ? SINGLE_SUBJECT_LOCK : "";
 
+    // LATAR per template — hanya untuk template yang beat-nya BELUM menentukan
+    // tempat. Template dengan tabel peran sendiri sudah menyebut ruangannya,
+    // dan menambahkan latar kedua di sana mengulang persis kesalahan yang sudah
+    // lima kali diperbaiki hari ini: dua perintah yang tak bisa benar bersamaan.
+    //
+    // Tanpa ini, 33 template keluar dengan meja putih dan dinding beige yang
+    // sama — brand yang memesan lima template menerima lima video yang terlihat
+    // satu shooting.
+    // Detik pertama: hanya untuk shot PEMBUKA, dan hanya bila promptnya belum
+    // membawa aturannya sendiri. hands_only sudah punya ("starts ALREADY in
+    // motion"), dan menumpuk dua kalimat yang menyuruh hal sama membuat
+    // promptnya panjang tanpa menambah apa pun.
+    // Detik pertama untuk SEMUA shot pembuka, termasuk yang punya tabel peran —
+    // tes menemukan 12 template "format" yang pembukanya memang statis.
+    //
+    // Dikecualikan hanya yang kediamannya DISENGAJA, ditandai sebagai data:
+    // peran ber-pembukaDiam (ruangan sunyi sebelum pintu didobrak) dan rute
+    // TVC intimate (kamar jam tiga pagi, premisnya justru keheningan).
+    // hands_only dikecualikan HANYA bila ia memakai pembuka generiknya, yang
+    // sudah memuat "starts ALREADY in motion". Template hands_only yang punya
+    // tabel peran sendiri (t06, t11) memakai teks perannya, dan teks itu tidak
+    // menuntut gerak apa pun — dua template itulah yang ditemukan tes.
+    const kediamanDisengaja =
+      input.tvcRoute === "intimate" || (i === 0 && ugcRoles?.opening?.pembukaDiam === true);
+    const pakaiPembukaGenerikHandsOnly = format === "hands_only" && !punyaPeranTemplate;
+    const detikPertama =
+      i === 0 && !pakaiPembukaGenerikHandsOnly && !kediamanDisengaja ? DETIK_PERTAMA : "";
+
+    const latar = !punyaPeranTemplate && input.ugcTemplate
+      ? `${latarUntukTemplate(input.ugcTemplate).teks}. `
+      : "";
+
     const base = punyaPeranTemplate
-      ? `${beat} ${kunciSubjek}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}`
-      : `${framing}${kunciSubjek}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
+      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}`
+      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };

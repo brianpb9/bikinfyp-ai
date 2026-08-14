@@ -204,3 +204,36 @@ test("template perusakan menjangkarkan dunianya ke rumah biasa", () => {
     assert.match(pembuka, /not a disaster/i, `${id}: tidak menyatakan ini kejutan rumahan, bukan bencana`);
   }
 });
+
+// Setiap shot pembuka wajib menuntut gerakan di detik pertama.
+//
+// Review kreatif 2026-08-14: hands_only sudah punya "starts ALREADY in motion",
+// tapi talking_head dan ads tidak — jadi pembukanya secara harfiah statis
+// (presenter memegang produk setinggi dada sambil tersenyum). Di FYP, satu
+// detik diam adalah satu detik yang dipakai jempol untuk menggeser.
+test("shot pembuka selalu menuntut sesuatu berubah di detik pertama", () => {
+  const diam: string[] = [];
+  for (const tpl of CAMPAIGN_TEMPLATES) {
+    const pembuka = rencana(tpl).shots[0].prompt;
+    const bergerak =
+      /ALREADY mid-action/i.test(pembuka) ||          // aturan umum
+      /starts ALREADY in motion/i.test(pembuka) ||     // hands_only
+      /it starts ALREADY in motion/i.test(pembuka) ||  // TVC generik
+      /WITHOUT WARNING|KICKED OPEN|gives way|HIGH-ENERGY OPENING/i.test(pembuka) || // pattern-interrupt
+      /stillness first/i.test(pembuka);                // rute intimate: diam DISENGAJA
+    if (!bergerak) diam.push(`${tpl.id} (${tpl.format})`);
+  }
+  assert.deepEqual(diam, [], `shot pembuka tanpa tuntutan gerak:\n  ${diam.join("\n  ")}`);
+});
+
+// Latar hanya untuk template yang beat-nya belum menentukan tempat.
+test("latar tidak ditumpuk pada template yang sudah punya ruangannya sendiri", () => {
+  const tumpuk: string[] = [];
+  for (const tpl of CAMPAIGN_TEMPLATES) {
+    const p = rencana(tpl).shots[0].prompt;
+    const punyaLatarTambahan = /^.*Setting: a /m.test(p);
+    const punyaRuangSendiri = /an ordinary quiet room|a calm interior|an empty quiet room|dim room lit only by/i.test(p);
+    if (punyaLatarTambahan && punyaRuangSendiri) tumpuk.push(tpl.id);
+  }
+  assert.deepEqual(tumpuk, [], `dua penentu tempat dalam satu prompt:\n  ${tumpuk.join("\n  ")}`);
+});

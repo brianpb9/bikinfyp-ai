@@ -34,6 +34,13 @@ export interface UgcShotRole {
    *  tertangkap tes. Keputusan yang mengeluarkan uang (frame buatan ~Rp600)
    *  tidak boleh bergantung pada kebetulan pilihan kata. */
   withholdProduct?: boolean;
+  /** Pembukanya SENGAJA diam, dan kediaman itu bagian dari efeknya —
+   *  ruangan sunyi yang ditahan sebentar sebelum pintu didobrak. Menyuruh
+   *  "sudah bergerak sejak frame pertama" di sini akan membatalkan umpannya.
+   *
+   *  DATA, bukan ditebak dari prosa: aturan detik-pertama mengeluarkan
+   *  perintah ke model, dan menebak dari kata bukan cara memutuskan itu. */
+  pembukaDiam?: boolean;
 }
 
 export interface UgcTemplateRoles {
@@ -317,6 +324,7 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
     opening: {
       role: `an empty quiet room, nothing happening at all, held just long enough to feel still — then the door is KICKED OPEN and someone charges straight toward the camera. The product is NOT visible yet`,
       withholdProduct: true,
+      pembukaDiam: true,
       camera: `static frame facing the closed door, locked off` },
     middle: [
       { role: `they arrive right at the lens, out of breath, and hold the product up close so it fills the frame — the first time it is seen at all`,
