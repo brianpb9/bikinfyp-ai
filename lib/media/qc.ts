@@ -630,33 +630,70 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
  *
  *  Dilaporkan apa adanya sebagai "cadangan", supaya tidak ada yang mengira
  *  pemeriksaan penuh sudah berjalan. */
+/** Frame per detik untuk pemeriksa lokal. Dua sudah menangkap kemunculan
+ *  sekejap (orang lewat, tangan menyelinap masuk) tanpa membuat pemeriksaan
+ *  lebih lambat daripada compositing. */
+export const SAMPEL_PER_DETIK = 2;
+
 export async function qcSubjekLokal(videoPath: string, maksWajah: number, workDir: string): Promise<QcCheck> {
   const model = path.join(process.cwd(), "assets", "models", "face_detection_yunet_2023mar.onnx");
   if (!fs.existsSync(model)) {
     return { code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "cadangan lokal tidak tersedia: model YuNet tidak ada" };
   }
   const durasi = await probeDurationSec(videoPath);
-  const frames: string[] = [];
-  for (const posisi of POSISI_SAMPEL) {
-    const detik = Math.max(0.1, durasi * posisi);
-    const f = path.join(workDir, `qc11lokal_${Math.round(detik * 10)}.png`);
-    await runFfmpeg(["-y", "-v", "error", "-ss", detik.toFixed(2), "-i", videoPath, "-frames:v", "1", f]);
-    if (fs.existsSync(f)) frames.push(f);
+  // SAMPEL RAPAT — dua frame per detik, bukan tiga frame per video.
+  //
+  // Batas yang tertulis di papan nilai berbunyi "sampel 3 frame/video, cacat
+  // sekejap di antaranya tetap mungkin", dan itu benar: video 30 detik yang
+  // diperiksa di detik 6, 15, dan 25 punya 27 detik yang tidak pernah dilihat
+  // siapa pun. Orang kedua yang muncul selama dua detik lolos begitu saja.
+  //
+  // Model visi berbayar memang harus hemat frame. Detektor lokal TIDAK —
+  // YuNet jalan di mesin sendiri, gratis, dan satu frame selesai dalam
+  // milidetik. Menjarangkan sampelnya di sini bukan penghematan, cuma
+  // kelalaian yang diwarisi dari jalur berbayar.
+  //
+  // Diekstrak dalam SATU panggilan ffmpeg dengan fps filter, bukan satu
+  // panggilan per frame: 60 panggilan ffmpeg untuk video 30 detik akan membuat
+  // pemeriksaan ini lebih lambat daripada rendernya.
+  // Direktori SENDIRI per pemanggilan, bukan workDir bersama.
+  //
+  // Versi pertama menulis qc11lokal_0001.png ke workDir lalu membaca SEMUA
+  // berkas berpola itu — termasuk sisa dari video sebelumnya kalau workDir-nya
+  // dipakai ulang. Persis itu yang terjadi saat tes menyapu 33 video: video
+  // hands_only 16 detik "diperiksa" dengan 61 frame, sebagian milik video
+  // talking_head sebelumnya, lalu dilaporkan mengandung wajah.
+  //
+  // Enam dari sepuluh kegagalan yang tampak nyata ternyata cuma ini. Pemeriksa
+  // yang mencampur bukti antar video lebih berbahaya daripada tidak ada
+  // pemeriksa — ia menuduh video yang bersih.
+  const dirFrame = fs.mkdtempSync(path.join(workDir, "qc11lokal-"));
+  try {
+    const pola = path.join(dirFrame, "f_%04d.png");
+    await runFfmpeg(["-y", "-v", "error", "-i", videoPath, "-vf", `fps=${SAMPEL_PER_DETIK}`, pola]);
+    const frames = fs.readdirSync(dirFrame).filter((f) => f.endsWith(".png")).sort().map((f) => path.join(dirFrame, f));
+    if (frames.length === 0) {
+      return { code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "cadangan lokal: tidak ada frame yang bisa diambil" };
+    }
+    const { stdout } = await runFf(pythonBin(), [path.join(process.cwd(), "lib", "media", "qc_face_check.py"), model, ...frames]);
+    const data = JSON.parse(stdout) as { frames: { file: string; faces: number }[]; max_faces: number; max_faces_utama?: number };
+    // Yang memblokir WAJAH UTAMA (cukup besar untuk jadi subjek), bukan semua
+    // wajah. Orang lewat di latar adalah isi cerita di banyak template — dan
+    // menghitungnya sebagai pelanggaran adalah kesalahan yang sudah diperbaiki
+    // sekali di pemeriksa visi; jangan diulang di pemeriksa lokal.
+    const utama = data.max_faces_utama ?? data.max_faces;
+    const lewat = utama > maksWajah;
+    return {
+      code: "QC-11",
+      name: "Jumlah subjek & anatomi (visi)",
+      status: lewat ? "fail" : "pass",
+      detail: lewat
+        ? `${utama} wajah utama terdeteksi di ${data.frames.length} frame (${SAMPEL_PER_DETIK}/dtk), maksimal ${maksWajah}`
+        : `${data.frames.length} frame (${SAMPEL_PER_DETIK}/dtk), maksimal ${utama} wajah utama (${data.max_faces} total) — pemeriksa lokal: hanya jumlah wajah, bukan tangan/anatomi`,
+    };
+  } finally {
+    fs.rmSync(dirFrame, { recursive: true, force: true });
   }
-  if (frames.length === 0) {
-    return { code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "cadangan lokal: tidak ada frame yang bisa diambil" };
-  }
-  const { stdout } = await runFf(pythonBin(), [path.join(process.cwd(), "lib", "media", "qc_face_check.py"), model, ...frames]);
-  const data = JSON.parse(stdout) as { frames: { file: string; faces: number }[]; max_faces: number };
-  const lewat = data.max_faces > maksWajah;
-  return {
-    code: "QC-11",
-    name: "Jumlah subjek & anatomi (visi)",
-    status: lewat ? "fail" : "pass",
-    detail: lewat
-      ? `CADANGAN LOKAL: ${data.max_faces} wajah terdeteksi, maksimal ${maksWajah}`
-      : `CADANGAN LOKAL (model visi tidak tersedia): ${data.frames.length} frame, maksimal ${data.max_faces} wajah — hanya jumlah wajah yang diperiksa, bukan tangan/anatomi`,
-  };
 }
 
 /** Ambang gerak mulut. Dikalibrasi pada video nyata 2026-08-14:
