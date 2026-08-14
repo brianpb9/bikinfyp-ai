@@ -38,7 +38,7 @@ import { generateScripts, type ProductInput } from "../lib/script-engine";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { runFfmpeg } from "../lib/media/ffmpeg";
 import { qcVision, shotUntukDetik } from "../lib/media/qc-vision";
-import { buildPackshotAsli, packshotAsliUntukShot } from "../lib/media/packshot-asli";
+import { buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../lib/media/packshot-asli";
 import { sidikPrompt } from "../lib/media/bukti-segar";
 
 const FOTO = path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg");
@@ -201,9 +201,14 @@ async function main() {
         // mahal.
         if (packshotAsliUntukShot({ index: shot.index, jumlahShot: spec.shots.length, tanpaOrang: shot.tanpaOrang === true })) {
           try {
+            // Dimensi dari klip yang SUDAH dirender, bukan dari spec:
+            // spec.width/height di-hardcode 720x1280 sementara TVC dirender
+            // 16:9. Memakai spec menghasilkan penutup 9:16 di antara lima shot
+            // 16:9 — satu berkas berdimensi campuran, yang tidak sah.
+            const dim = klip.length > 0 ? await dimensiDariKlip(klip[0]) : { width: spec.width, height: spec.height };
             const out = await buildPackshotAsli({
               fotoPath: FOTO, durationSec: shot.durationSec,
-              width: spec.width, height: spec.height,
+              width: dim.width, height: dim.height,
               outPath: path.join(sub, "packshot.mp4"),
             });
             klip.push(out);

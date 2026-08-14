@@ -21,7 +21,7 @@ import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
 import { shotUntukDetik } from "../media/qc-vision";
-import { buildPackshotAsli, packshotAsliUntukShot } from "../media/packshot-asli";
+import { buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../media/packshot-asli";
 import { buildCaptionCards } from "../media/captions";
 import { resolvePromo, formatPromoOverlayText } from "../promo";
 import { renderCaptionPngs } from "../media/render-captions";
@@ -296,9 +296,12 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     const shot = specSiap.shots[i];
     if (!packshotAsliUntukShot({ index: i, jumlahShot: specSiap.shots.length, tanpaOrang: shot.tanpaOrang === true })) continue;
     try {
+      // Dimensi dari klip nyata, bukan dari spec — spec.width/height
+      // di-hardcode 720x1280 sementara TVC dirender 16:9.
+      const dim = await dimensiDariKlip(clipPaths[0]);
       clipPaths[i] = await buildPackshotAsli({
         fotoPath: primaryRef, durationSec: shot.durationSec,
-        width: specSiap.width, height: specSiap.height,
+        width: dim.width, height: dim.height,
         outPath: path.join(workDir, `packshot_${i}.mp4`),
       });
       console.log(`[job ${row.id.slice(0, 8)}] shot penutup diganti packshot foto asli — label dijamin benar`);

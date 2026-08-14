@@ -98,3 +98,16 @@ export function escDrawtext(text: string): string {
     .replace(/,/g, "\\,")
     .replace(/%/g, "\\%");
 }
+
+/** Dimensi video (piksel). Dipakai memastikan klip yang digabung seragam —
+ *  concat demuxer dengan `-c copy` MENUNTUT dimensi identik, dan melanggarnya
+ *  menghasilkan berkas yang terlihat jadi tapi tidak sah. */
+export async function probeVideoSize(filePath: string): Promise<{ width: number; height: number }> {
+  const { stdout } = await runFf("ffprobe", [
+    "-v", "error", "-select_streams", "v:0",
+    "-show_entries", "stream=width,height", "-of", "csv=p=0", filePath,
+  ]);
+  const [w, h] = (stdout ?? "").trim().split(",").map((x) => Number(x));
+  if (!w || !h) throw new Error(`dimensi video tidak terbaca: ${filePath}`);
+  return { width: w, height: h };
+}

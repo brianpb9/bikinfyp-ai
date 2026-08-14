@@ -6,7 +6,7 @@ import path from "node:path";
 import { qcSubjekLokal } from "../lib/media/qc";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { maksOrangPerFrame } from "../lib/media/shot-planner";
-import { probeDurationSec } from "../lib/media/ffmpeg";
+import { probeDurationSec, probeVideoSize } from "../lib/media/ffmpeg";
 
 // TES YANG BENAR-BENAR MELIHAT PIKSEL — dan tidak memanggil layanan berbayar.
 //
@@ -86,4 +86,33 @@ test("video bukti berdurasi penuh, tidak kehilangan shot", { timeout: 120_000 },
     if (d < tpl.durationSec - 2) pendek.push(`${tpl.id}: ${d.toFixed(1)} dtk, seharusnya ${tpl.durationSec}`);
   }
   assert.deepEqual(pendek, [], `bukti yang videonya kependekan — ada shot hilang:\n  ${pendek.join("\n  ")}`);
+});
+
+// Semua klip dalam satu video WAJIB berdimensi sama.
+//
+// concat demuxer dengan `-c copy` menuntut dimensi identik; melanggarnya
+// menghasilkan berkas yang terlihat jadi tapi tidak sah. Terjadi 2026-08-14:
+// packshot penutup dibangun 720x1280 dari VisualSpec yang di-hardcode,
+// sementara lima shot TVC lainnya 1280x720. Ketahuan hanya karena lembar
+// kontaknya menolak disusun — bukan oleh QC mana pun.
+test("video bukti tidak mencampur dimensi antar shot", { timeout: 120_000 }, async (t) => {
+  if (!fs.existsSync(BUKU)) return t.skip("buku bukti belum ada");
+  const buku: Record<string, Catatan> = JSON.parse(fs.readFileSync(BUKU, "utf8"));
+  const campur: string[] = [];
+  for (const tpl of CAMPAIGN_TEMPLATES) {
+    const c = buku[tpl.id];
+    if (!c || c.visiLolos !== true || !fs.existsSync(c.berkas)) continue;
+    const dir = path.join(path.dirname(c.berkas), tpl.id);
+    if (!fs.existsSync(dir)) continue;
+    const ukuran = new Set<string>();
+    for (const sub of fs.readdirSync(dir).filter((d) => d.startsWith("s"))) {
+      const berkas = fs.readdirSync(path.join(dir, sub)).filter((f) => f.endsWith(".mp4"));
+      for (const f of berkas) {
+        const d = await probeVideoSize(path.join(dir, sub, f)).catch(() => null);
+        if (d) ukuran.add(`${d.width}x${d.height}`);
+      }
+    }
+    if (ukuran.size > 1) campur.push(`${tpl.id}: ${[...ukuran].join(" + ")}`);
+  }
+  assert.deepEqual(campur, [], `video dengan dimensi campuran antar shot:\n  ${campur.join("\n  ")}`);
 });

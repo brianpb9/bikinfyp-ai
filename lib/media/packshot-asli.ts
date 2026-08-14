@@ -25,7 +25,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
-import { runFfmpeg } from "./ffmpeg";
+import { runFfmpeg, probeVideoSize } from "./ffmpeg";
 
 const FPS = 24;
 
@@ -38,9 +38,24 @@ export interface PackshotInput {
   /** Foto produk asli dari brand. */
   fotoPath: string;
   durationSec: number;
+  /** Dimensi target. WAJIB diambil dari klip yang akan digabung, BUKAN dari
+   *  VisualSpec.width/height.
+   *
+   *  spec.width/height di shot-planner di-hardcode 720x1280, sementara TVC
+   *  dirender 16:9 (1280x720). Versi pertama memakai spec, jadi packshot
+   *  penutup TVC keluar 720x1280 sementara lima shot lainnya 1280x720 —
+   *  digabung jadi satu berkas dengan dimensi campuran, yang tidak sah.
+   *  Ketahuan hanya karena lembar kontaknya menolak disusun. */
   width: number;
   height: number;
   outPath: string;
+}
+
+/** Dimensi target diambil dari klip nyata yang akan digabung bersamanya.
+ *  Satu sumber kebenaran: apa pun rasio yang benar-benar dirender provider,
+ *  packshotnya mengikuti. */
+export async function dimensiDariKlip(klipPath: string): Promise<{ width: number; height: number }> {
+  return probeVideoSize(klipPath);
 }
 
 /** Bangun klip packshot dari foto asli. Mengembalikan path klipnya.

@@ -12,7 +12,9 @@
 // Jalankan: npx tsx scripts/audit-kelengkapan.ts
 import fs from "node:fs";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
-import { probeDurationSec } from "../lib/media/ffmpeg";
+import fsx from "node:fs";
+import pathx from "node:path";
+import { probeDurationSec, probeVideoSize } from "../lib/media/ffmpeg";
 const BUKU = "/Users/hadrava/HDRV/03_UGC_AI_ID/test_output/bukti-render.json";
 async function main() {
   const buku = JSON.parse(fs.readFileSync(BUKU, "utf8"));
@@ -22,6 +24,24 @@ async function main() {
     if (!c || !fs.existsSync(c.berkas)) continue;
     const d = await probeDurationSec(c.berkas).catch(() => 0);
     // Toleransi 2 dtk: concat bisa meleset sedikit dari target.
+    // Dimensi campuran antar shot: concat -c copy menuntut dimensi identik,
+    // dan melanggarnya menghasilkan berkas yang terlihat jadi tapi tidak sah.
+    const dirShot = pathx.join(pathx.dirname(c.berkas), t.id);
+    if (fsx.existsSync(dirShot)) {
+      const ukuran = new Set<string>();
+      for (const sub of fsx.readdirSync(dirShot).filter((x) => x.startsWith("s"))) {
+        for (const f of fsx.readdirSync(pathx.join(dirShot, sub)).filter((x) => x.endsWith(".mp4"))) {
+          const dim = await probeVideoSize(pathx.join(dirShot, sub, f)).catch(() => null);
+          if (dim) ukuran.add(`${dim.width}x${dim.height}`);
+        }
+      }
+      if (ukuran.size > 1) {
+        console.log(`  ${t.id}: dimensi campuran ${[...ukuran].join(" + ")} — bukti dicabut`);
+        buku[t.id] = { ...c, visiLolos: null, visiMasalah: [`dimensi campuran antar shot: ${[...ukuran].join(" + ")}`] };
+        dicabut++;
+        continue;
+      }
+    }
     if (d < t.durationSec - 2) {
       console.log(`  ${t.id}: ${d.toFixed(1)} dtk, seharusnya ${t.durationSec} — bukti dicabut`);
       buku[t.id] = { ...c, visiLolos: null, visiMasalah: [`durasi ${d.toFixed(1)} dtk dari ${t.durationSec} — ada shot hilang`] };
