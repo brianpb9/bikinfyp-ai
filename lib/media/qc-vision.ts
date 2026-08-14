@@ -35,12 +35,26 @@ import { runFfmpeg, probeDurationSec } from "./ffmpeg";
 const MODEL = "gemini-flash-latest";
 const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
-/** Berapa frame yang diperiksa per video. Tiga sudah menangkap cacat yang
- *  kita temui (semuanya bertahan sepanjang shot), dan tetap murah. Frame
- *  diambil di 20%, 50%, 85% durasi — bukan detik 0, karena frame pertama
- *  sering masih transisi. 85% dipilih supaya SHOT PENUTUP ikut diperiksa:
- *  cacat dua-orang itu ada di penutup. */
-export const POSISI_SAMPEL = [0.2, 0.5, 0.85];
+/** Berapa frame yang diperiksa per video, sebagai fraksi durasi.
+ *
+ *  DINAIKKAN 3 -> 8 pada 2026-08-14. Angka tiga dipilih dengan alasan hemat
+ *  kuota, dan alasan itu tidak bertahan begitu dibandingkan dengan yang
+ *  dijaganya: satu klip video berbiaya Rp2.771-8.313, sementara satu frame
+ *  pemeriksaan berbiaya pecahan sen. Menghemat di sisi yang salah.
+ *
+ *  Biayanya nyata dan terukur: tvc-seharian tercatat "terbukti" dengan tiga
+ *  frame, lalu pemeriksa rapat menemukan DUA PEREMPUAN BERWAJAH IDENTIK yang
+ *  duduk persis di antara titik sampel. Untuk video 30 detik, tiga titik
+ *  berarti 27 detik tidak pernah dilihat siapa pun.
+ *
+ *  Delapan titik menyebar rata dari 8% sampai 92%. Tidak dari detik 0 (masih
+ *  transisi) dan tidak sampai 100% (frame terakhir sering hitam). 92% menjaga
+ *  shot PENUTUP tetap terperiksa — cacat dua-orang yang pertama ada di sana.
+ *
+ *  Pemeriksa lokal tetap jauh lebih rapat (2 frame/detik) karena ia gratis;
+ *  yang di sini adalah pemeriksa yang bisa menghitung TANGAN dan anatomi,
+ *  sesuatu yang belum bisa dilakukan detektor lokal. */
+export const POSISI_SAMPEL = [0.08, 0.2, 0.32, 0.45, 0.58, 0.7, 0.82, 0.92];
 
 export interface TemuanFrame {
   /** Detik ke berapa frame ini diambil. */
