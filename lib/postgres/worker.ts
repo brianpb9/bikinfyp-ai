@@ -358,7 +358,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // Musik hanya untuk tier senyap. Percobaan memasangnya di tier bersuara
   // dibatalkan 2026-08-14 setelah diukur tidak terdengar — catatan lengkapnya
   // di lib/media/compositor.ts.
-  const musicPath = !withAudio ? path.join(process.cwd(), "assets", "music", "bg-bed.m4a") : undefined;
+  const musicPath = path.join(process.cwd(), "assets", "music", "bg-bed.m4a");
   const demo = segments.find((segment) => segment.role === "demo");
   const cta = segments.find((segment) => segment.role === "cta");
   if (!demo || !cta) throw new Error("Segmen demo/CTA wajib untuk compositing.");

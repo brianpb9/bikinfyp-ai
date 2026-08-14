@@ -125,7 +125,7 @@ async function renderTextPng(opts: {
  *  audio, jadi loudnorm akhir mengangkatnya; di bawah VO ia tidak akan pernah
  *  terdengar berapa pun gain yang dipasang. Menaikkan gain 6x di filter tidak
  *  mengubah apa pun yang terukur, dan itu ketahuan hanya karena diukur. */
-const MUSIK_GAIN = 1;
+const MUSIK_GAIN = Number(process.env.MUSIK_GAIN ?? 1);
 
 /** Setelan ducking. threshold rendah supaya bicara pelan pun tetap memicu;
  *  release 350 ms supaya musik naik lagi di jeda antar kalimat tanpa terdengar
@@ -144,31 +144,35 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
   for (const clip of input.clipPaths) args.push("-i", clip);
   // Input audio: VO (mode vo) atau musik (mode caption) — SEBELUM input PNG overlay,
   // supaya indeks stream konsisten dengan filter graph.
-  // MUSIK BED: masih mode caption saja. DICOBA DAN DIBATALKAN 2026-08-14.
+  // MUSIK BED untuk SEMUA mode. Sempat dibatalkan, lalu DIPULIHKAN setelah
+  // pengukuran ulang — dan ceritanya layak ditulis karena kesalahannya ada
+  // pada CARA MENGUKUR, bukan pada fiturnya.
   //
-  // Rencananya musik dipasang di semua tier — video bersuara sekarang keluar
-  // dengan VO di atas kesunyian total, dan dokumen produksi Brian menuliskan
-  // musiknya eksplisit (-20 dB, turun ke -26 dB saat talent bicara, potong
-  // keras di akhir). Implementasinya jalan tanpa galat, tapi DIUKUR dan
-  // ternyata tidak terdengar, jadi dibatalkan daripada dikirim setengah jadi.
+  // Pembatalan pertama berdasar satu angka: selisih antara keluaran ber-musik
+  // dan tanpa-musik cuma -48 dB, dan tidak berubah walau gain dinaikkan 10x.
+  // Kesimpulannya waktu itu "musiknya tidak pernah sampai ke campuran".
   //
-  // Yang terukur, supaya percobaan berikutnya tidak mengulang jalan buntu:
-  //   - aset lama bg-loop.m4a rata-rata -40,5 dB: praktis senyap. Di mode
-  //     caption ia tertolong karena satu-satunya sumber audio sehingga
-  //     loudnorm akhir mengangkatnya; di bawah VO tidak akan pernah terdengar.
-  //     Aset pengganti bg-bed.m4a (dinormalkan ke -22 LUFS) sudah dibuat.
-  //   - dengan bg-bed dan ffmpeg polos, mencampur musik ke audio klip memberi
-  //     kontribusi -29,7 dB: terdengar, benar.
-  //   - lewat compositor ini, kontribusinya tetap -48,2 dB dan TIDAK BERUBAH
-  //     walau gain dinaikkan 1 -> 4 -> 10 dan kompresornya dilepas. Artinya
-  //     musiknya tidak pernah benar-benar sampai ke campuran; graf filternya
-  //     terlihat benar (sudah dicetak dan diperiksa), jadi tersangkanya ada di
-  //     interaksi dengan tahap setelahnya (loudnorm satu lewatan / -t / apad).
+  // Angka itu tidak sah. Kedua berkas dinormalkan loudnorm SENDIRI-SENDIRI,
+  // jadi berkas ber-musik menerima gain sedikit lebih kecil (ia memang lebih
+  // keras sebelum normalisasi). Mengurangkan keduanya menghasilkan sisa yang
+  // didominasi selisih gain suara, bukan musiknya.
   //
-  // Jangan aktifkan lagi tanpa mengukur kontribusinya dengan pengurangan dua
-  // campuran. "Filter jalan tanpa error" bukan bukti musiknya terdengar.
-  const hasMusic = input.mode === "caption" && !!input.musicPath && fs.existsSync(input.musicPath);
-  const musikDiDuck = false;
+  // Diukur ulang dengan cara yang sah — membandingkan dua keluaran ber-musik
+  // pada gain berbeda, sehingga normalisasinya sebanding:
+  //   selisih gain 5 vs gain 1        -21,6 dB  (itu musiknya, jelas ada)
+  //   jeda VO detik 13-15, gain 1     -14,0 dB
+  //   jeda VO detik 13-15, gain 5     -17,7 dB
+  // Rantai filternya juga diuji berdiri sendiri, tahap demi tahap: amix
+  // menambah 1,7 dB, loudnorm tidak menghapusnya, sidechain tidak menelannya.
+  //
+  // Pelajarannya bukan soal audio: sebuah fitur yang bekerja hampir dibuang
+  // karena metode pengukurannya salah. "Diukur" tidak sama dengan "diukur
+  // dengan benar", dan angka yang tidak masuk akal (tidak berubah walau gain
+  // 10x) seharusnya langsung mencurigakan alat ukurnya, bukan fiturnya.
+  const hasMusic = !!input.musicPath && fs.existsSync(input.musicPath);
+  // Musik untuk mode BERSUARA di-duck; mode caption tidak (musiknya satu-
+  // satunya sumber audio di sana).
+  const musikDiDuck = hasMusic && input.mode !== "caption";
   if (input.mode === "vo") for (const vo of input.vo ?? []) args.push("-i", vo.path);
   if (hasMusic) args.push("-stream_loop", "-1", "-i", input.musicPath!);
 
