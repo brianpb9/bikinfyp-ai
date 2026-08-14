@@ -683,10 +683,24 @@ export async function qcSubjekLokal(videoPath: string, maksWajah: number, workDi
     // sekali di pemeriksa visi; jangan diulang di pemeriksa lokal.
     const utama = data.max_faces_utama ?? data.max_faces;
     const lewat = utama > maksWajah;
+    // Detik penyebab, supaya penolakan bisa DIPERBAIKI dan bukan cuma dicatat.
+    //
+    // Terukur pada render katalog penuh: pemeriksa lokal menolak tiga video
+    // dan perbaikan shot otomatis menyala NOL kali — karena hanya penolakan
+    // pemeriksa visi yang membawa detikGagal. Pemeriksa yang menolak tanpa
+    // menunjuk tempatnya memaksa manusia mengulang seluruh video.
+    //
+    // Nama berkas frame berurutan pada SAMPEL_PER_DETIK fps, jadi detiknya
+    // langsung diturunkan dari urutannya.
+    const detikGagal = data.frames
+      .map((f, i) => ({ detik: i / SAMPEL_PER_DETIK, utama: (f as { faces_utama?: number }).faces_utama ?? f.faces }))
+      .filter((x) => x.utama > maksWajah)
+      .map((x) => Math.round(x.detik * 10) / 10);
     return {
       code: "QC-11",
       name: "Jumlah subjek & anatomi (visi)",
       status: lewat ? "fail" : "pass",
+      ...(detikGagal.length ? { detikGagal: [...new Set(detikGagal)] } : {}),
       detail: lewat
         ? `${utama} wajah utama terdeteksi di ${data.frames.length} frame (${SAMPEL_PER_DETIK}/dtk), maksimal ${maksWajah}`
         : `${data.frames.length} frame (${SAMPEL_PER_DETIK}/dtk), maksimal ${utama} wajah utama (${data.max_faces} total) — pemeriksa lokal: hanya jumlah wajah, bukan tangan/anatomi`,

@@ -307,7 +307,32 @@ async function main() {
       let masalahLokal: string[] = [];
       if (lolos === true) {
         try {
-          const lokal = await qcSubjekLokal(berkas, maks, dir);
+          let lokal = await qcSubjekLokal(berkas, maks, dir);
+          // PERBAIKI DULU, baru putuskan — sama seperti penolakan pemeriksa visi.
+          // Tanpa ini, penolakan lokal langsung jadi kegagalan permanen dan
+          // seluruh video (yang sudah dibayar) terbuang untuk satu shot cacat.
+          if (lokal.status === "fail" && lokal.detikGagal?.length) {
+            const durasiShot = spec.shots.map((sh) => sh.durationSec);
+            const idx = [...new Set(lokal.detikGagal.map((d) => shotUntukDetik(durasiShot, d)))].filter((i) => i >= 0).slice(0, 2);
+            if (idx.length) {
+              console.log(`  QC lokal menolak detik ${lokal.detikGagal.join(", ")} -> perbaiki shot ${idx.map((i) => i + 1).join(", ")}`);
+              for (const i2 of idx) {
+                const sub2 = path.join(dir, `lokalfix-s${i2}`);
+                fs.mkdirSync(sub2, { recursive: true });
+                try {
+                  const ulang = await byteplusVideo.generate({ ...spec, shots: [{ ...spec.shots[i2], index: 0 }] }, sub2);
+                  fs.copyFileSync(ulang[0].filePath, klip[i2]);
+                  biaya += ulang[0].costIdr;
+                  console.log(`    shot ${i2 + 1} diganti (Rp${ulang[0].costIdr.toLocaleString("id-ID")})`);
+                } catch (err) {
+                  console.warn(`    shot ${i2 + 1} gagal diperbaiki: ${err instanceof Error ? err.message : String(err)}`);
+                }
+              }
+              await gabung(klip, berkas);
+              lokal = await qcSubjekLokal(berkas, maks, dir);
+              console.log(`  setelah perbaikan lokal: ${lokal.status === "fail" ? "masih cacat" : "BERSIH"}`);
+            }
+          }
           if (lokal.status === "fail") {
             lolos = false;
             masalahLokal = [lokal.detail ?? "ditolak pemeriksa lokal rapat"];
