@@ -39,6 +39,7 @@ import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { runFfmpeg } from "../lib/media/ffmpeg";
 import { qcVision, shotUntukDetik } from "../lib/media/qc-vision";
 import { buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../lib/media/packshot-asli";
+import { qcSubjekLokal } from "../lib/media/qc";
 import { sidikPrompt } from "../lib/media/bukti-segar";
 
 const FOTO = path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg");
@@ -295,7 +296,29 @@ async function main() {
         }
       }
 
-      const lolos = v.temuan === null ? null : v.lolos;
+      // PEMERIKSA KEDUA, RAPAT — sebelum apa pun dicatat sebagai bukti.
+      //
+      // qcVision memeriksa 3 frame; itu hemat kuota tapi meninggalkan lubang.
+      // 2026-08-14 tvc-seharian tercatat "terbukti" padahal mengandung dua
+      // perempuan berwajah identik — cacatnya duduk di antara titik sampel.
+      // Pemeriksa lokal (2 frame/detik) gratis, jadi tidak ada alasan mencatat
+      // bukti tanpa melewatinya lebih dulu.
+      let lolos = v.temuan === null ? null : v.lolos;
+      let masalahLokal: string[] = [];
+      if (lolos === true) {
+        try {
+          const lokal = await qcSubjekLokal(berkas, maks, dir);
+          if (lokal.status === "fail") {
+            lolos = false;
+            masalahLokal = [lokal.detail ?? "ditolak pemeriksa lokal rapat"];
+            console.log(`  QC lokal rapat MENOLAK: ${lokal.detail}`);
+          } else {
+            console.log(`  QC lokal rapat: ${lokal.status} — ${lokal.detail}`);
+          }
+        } catch (err) {
+          console.warn(`  QC lokal rapat gagal jalan: ${err instanceof Error ? err.message : String(err)}`);
+        }
+      }
       console.log(
         lolos === null ? `  QC visi: TIDAK DIPERIKSA (${v.masalah.join("; ")})`
           : lolos ? `  QC visi: BERSIH (maks ${maks} orang) · Rp${biaya.toLocaleString("id-ID")}`
@@ -307,12 +330,12 @@ async function main() {
       const bukuKini = bacaBuku();
       bukuKini[tpl.id] = {
         berkas, klip: klip.length, dirender: new Date().toISOString(),
-        biaya, visiLolos: lolos, visiMasalah: v.masalah, sidik: sidikPrompt(spec),
+        biaya, visiLolos: lolos, visiMasalah: [...v.masalah, ...masalahLokal], sidik: sidikPrompt(spec),
       };
       fs.writeFileSync(BUKU, JSON.stringify(bukuKini, null, 2));
 
       totalBiaya += biaya;
-      hasil.push({ id: tpl.id, klip: klip.length, biaya, visi: lolos, masalah: v.masalah });
+      hasil.push({ id: tpl.id, klip: klip.length, biaya, visi: lolos, masalah: [...v.masalah, ...masalahLokal] });
 
       takTerperiksaBeruntun = lolos === null ? takTerperiksaBeruntun + 1 : 0;
       if (takTerperiksaBeruntun >= 2) {
