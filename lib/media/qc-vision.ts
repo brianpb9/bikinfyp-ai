@@ -56,6 +56,29 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
  *  sesuatu yang belum bisa dilakukan detektor lokal. */
 export const POSISI_SAMPEL = [0.08, 0.2, 0.32, 0.45, 0.58, 0.7, 0.82, 0.92];
 
+/** Jarak antar sampel dalam DETIK, bukan dalam fraksi durasi.
+ *
+ *  Delapan titik tetap membuat liputannya bergantung durasi: video 30 detik
+ *  dapat satu sampel tiap 3,75 detik, yang 15 detik dapat tiap 1,9 detik.
+ *  Lubangnya dua kali lebih lebar justru di video yang paling mahal dan paling
+ *  panjang — kebalikan dari yang masuk akal.
+ *
+ *  2,5 detik dipilih karena cacat yang kita temui semuanya bertahan minimal
+ *  satu shot penuh (shot terpendek kita 4 detik), jadi jarak ini menjamin
+ *  setiap shot kena minimal satu sampel. */
+const JARAK_SAMPEL_DETIK = 2.5;
+/** Batas bawah dan atas, supaya video sangat pendek tetap diperiksa cukup dan
+ *  video panjang tidak meledakkan kuota. */
+const MIN_SAMPEL = 6;
+const MAKS_SAMPEL = 14;
+
+/** Titik sampel untuk durasi tertentu — merata, tidak dari detik 0 (masih
+ *  transisi) dan tidak sampai ujung (frame terakhir sering hitam). */
+export function posisiSampel(durasiDetik: number): number[] {
+  const n = Math.max(MIN_SAMPEL, Math.min(MAKS_SAMPEL, Math.round(durasiDetik / JARAK_SAMPEL_DETIK)));
+  return Array.from({ length: n }, (_, i) => 0.08 + ((0.92 - 0.08) * i) / (n - 1));
+}
+
 export interface TemuanFrame {
   /** Detik ke berapa frame ini diambil. */
   detik: number;
@@ -224,7 +247,7 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qcvision-"));
   try {
     const temuan: TemuanFrame[] = [];
-    for (const p of POSISI_SAMPEL) {
+    for (const p of posisiSampel(durasi)) {
       const detik = Math.max(0.1, durasi * p);
       const f = path.join(dir, `f${Math.round(detik * 10)}.jpg`);
       await runFfmpeg(["-y", "-ss", String(detik), "-i", input.videoPath, "-frames:v", "1", "-q:v", "3", f]);

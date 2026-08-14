@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { evaluateQcPolicy, QC_POLICY_BY_FORMAT, AMBANG_GERAK_MULUT, type QcCheck } from "../lib/media/qc";
-import { shotUntukDetik } from "../lib/media/qc-vision";
+import { shotUntukDetik, posisiSampel } from "../lib/media/qc-vision";
 
 const passing = (): QcCheck[] => [
   { code: "QC-01", name: "lip-sync", status: "skip" },
@@ -105,4 +105,23 @@ test("QC-01 fail menolak output di semua format", () => {
   // presenter bicara 0,29-0,32 rata-rata; frame beku tepat 0,0.
   assert.ok(AMBANG_GERAK_MULUT > 0 && AMBANG_GERAK_MULUT < 0.29,
     "ambang harus di atas nol (derau) dan jauh di bawah kasus bicara terukur");
+});
+
+// Liputan sampel visi harus konsisten dalam WAKTU, bukan dalam fraksi durasi.
+//
+// Delapan titik tetap membuat video 30 detik diperiksa tiap 3,75 detik dan
+// video 15 detik tiap 1,9 detik — lubangnya dua kali lebih lebar justru di
+// video yang paling mahal. Kebalikan dari yang masuk akal.
+test("jarak sampel visi konsisten lintas durasi", () => {
+  for (const durasi of [15, 30, 45]) {
+    const p = posisiSampel(durasi);
+    const jarak = (p[1] - p[0]) * durasi;
+    assert.ok(jarak <= 3.0, `durasi ${durasi} dtk: jarak sampel ${jarak.toFixed(1)} dtk, terlalu renggang`);
+    // Setiap shot terpendek kita 4 detik, jadi jarak di bawah itu menjamin
+    // tiap shot kena minimal satu sampel.
+    assert.ok(jarak < 4, `durasi ${durasi} dtk: ada shot yang bisa terlewat sepenuhnya`);
+    assert.ok(p[0] > 0 && p[p.length - 1] < 1, "sampel tidak boleh di detik 0 atau di ujung akhir");
+  }
+  // Video sangat pendek tetap diperiksa cukup.
+  assert.ok(posisiSampel(8).length >= 6);
 });
