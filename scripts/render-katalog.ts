@@ -235,6 +235,24 @@ async function main() {
         continue;
       }
 
+      // VIDEO YANG KEHILANGAN SHOT BUKAN BUKTI.
+      //
+      // Terjadi 2026-08-14: satu shot racun-checkout gagal di provider, video
+      // digabung dari SATU klip (7,5 dtk dari 15), lalu QC-11 melaporkan
+      // "BERSIH" — karena tiga frame yang disampelnya memang bersih. Buku bukti
+      // hampir mencatatnya sebagai template yang terbukti.
+      //
+      // QC visual memeriksa APA YANG ADA di frame; ia tidak pernah tahu apa
+      // yang HILANG. Kelengkapan harus diperiksa di sini, di tempat yang tahu
+      // berapa shot yang seharusnya ada.
+      if (klip.length < spec.shots.length) {
+        const kurang = spec.shots.length - klip.length;
+        console.log(`  TIDAK LENGKAP: ${klip.length}/${spec.shots.length} shot — ${kurang} gagal, tidak dicatat sebagai bukti`);
+        totalBiaya += biaya;
+        hasil.push({ id: tpl.id, klip: klip.length, biaya, visi: null, masalah: [`hanya ${klip.length} dari ${spec.shots.length} shot berhasil`] });
+        continue;
+      }
+
       const berkas = path.join(OUT, `${tpl.id}.mp4`);
       await gabung(klip, berkas);
 

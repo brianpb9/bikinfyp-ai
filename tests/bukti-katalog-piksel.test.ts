@@ -6,6 +6,7 @@ import path from "node:path";
 import { qcSubjekLokal } from "../lib/media/qc";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { maksOrangPerFrame } from "../lib/media/shot-planner";
+import { probeDurationSec } from "../lib/media/ffmpeg";
 
 // TES YANG BENAR-BENAR MELIHAT PIKSEL — dan tidak memanggil layanan berbayar.
 //
@@ -65,4 +66,24 @@ test("setiap video katalog yang diklaim terbukti masih lolos pemeriksa kedua", {
       `Salah satu dari dua hal benar: buktinya sudah tidak berlaku, atau salah satu pemeriksa keliru. ` +
       `Dua-duanya harus diselidiki, bukan ditandai lulus.`
   );
+});
+
+// Kelengkapan, bukan cuma kebersihan.
+//
+// QC visual memeriksa apa yang ADA di frame; ia tidak pernah tahu apa yang
+// HILANG. 2026-08-14 sebuah video kehilangan satu dari dua shot (8,1 dtk dari
+// 15) dan tetap dilaporkan "BERSIH", karena tiga frame yang disampelnya memang
+// bersih. Durasi adalah cara termurah untuk mengetahui video itu utuh.
+test("video bukti berdurasi penuh, tidak kehilangan shot", { timeout: 120_000 }, async (t) => {
+  if (!fs.existsSync(BUKU)) return t.skip("buku bukti belum ada");
+  const buku: Record<string, Catatan> = JSON.parse(fs.readFileSync(BUKU, "utf8"));
+  const pendek: string[] = [];
+  for (const tpl of CAMPAIGN_TEMPLATES) {
+    const c = buku[tpl.id];
+    if (!c || c.visiLolos !== true || !fs.existsSync(c.berkas)) continue;
+    const d = await probeDurationSec(c.berkas).catch(() => 0);
+    // Toleransi 2 dtk: concat bisa meleset sedikit dari target.
+    if (d < tpl.durationSec - 2) pendek.push(`${tpl.id}: ${d.toFixed(1)} dtk, seharusnya ${tpl.durationSec}`);
+  }
+  assert.deepEqual(pendek, [], `bukti yang videonya kependekan — ada shot hilang:\n  ${pendek.join("\n  ")}`);
 });
