@@ -42,7 +42,10 @@ import { buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../li
 import { qcSubjekLokal } from "../lib/media/qc";
 import { sidikPrompt } from "../lib/media/bukti-segar";
 
-const FOTO = path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg");
+// FOTO_UJI bisa menimpa foto produk — dipakai menguji fidelitas label dengan
+// foto brand ASLI. produk-polos.jpg sendiri frame hasil generate berlabel
+// ngaco, jadi ia tidak pernah bisa membuktikan label benar atau salah.
+const FOTO = process.env.FOTO_UJI ?? path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg");
 const OUT = path.resolve(process.cwd(), "..", "test_output", "katalog");
 const BUKU = path.resolve(process.cwd(), "..", "test_output", "bukti-render.json");
 
