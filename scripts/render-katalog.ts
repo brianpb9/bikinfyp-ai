@@ -279,7 +279,19 @@ async function main() {
       // berapa shot yang seharusnya ada.
       if (klip.length < spec.shots.length) {
         const kurang = spec.shots.length - klip.length;
-        console.log(`  TIDAK LENGKAP: ${klip.length}/${spec.shots.length} shot — ${kurang} gagal, tidak dicatat sebagai bukti`);
+        // Klip yang berhasil DIPINDAHKAN ke folder gagal, bukan ditinggal
+        // bercampur dengan yang sehat. Dua alasan: bisa ditonton untuk tahu
+        // shot mana yang bermasalah, dan tidak akan terpungut sebagai bukti
+        // oleh siapa pun yang menyapu folder katalog.
+        const dirGagal = path.join(OUT, "gagal", tpl.id);
+        fs.mkdirSync(dirGagal, { recursive: true });
+        for (const [i, f] of klip.entries()) {
+          try { fs.copyFileSync(f, path.join(dirGagal, `shot${i}.mp4`)); } catch { /* abaikan */ }
+        }
+        fs.writeFileSync(path.join(dirGagal, "kenapa.txt"),
+          `${tpl.id}\n${klip.length}/${spec.shots.length} shot berhasil, ${kurang} gagal di provider.\n` +
+          `Dirender ${new Date().toISOString()}.\nBiaya terpakai: Rp${biaya.toLocaleString("id-ID")}\n`);
+        console.log(`  TIDAK LENGKAP: ${klip.length}/${spec.shots.length} shot — ${kurang} gagal, dipindah ke gagal/${tpl.id}`);
         totalBiaya += biaya;
         hasil.push({ id: tpl.id, klip: klip.length, biaya, visi: null, masalah: [`hanya ${klip.length} dari ${spec.shots.length} shot berhasil`] });
         continue;
