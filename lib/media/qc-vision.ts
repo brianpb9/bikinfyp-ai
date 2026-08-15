@@ -112,8 +112,14 @@ export interface TemuanFrame {
   anatomiRusak: boolean;
   /** Produk terlihat di frame ini? */
   produkTerlihat: boolean;
-  /** Fisika produk yang mustahil — cairan keluar bukan dari lubangnya, tutup
-   *  masih terpasang saat menuang, produk melayang tanpa tumpuan.
+  /** Fisika PRODUK yang mustahil — cairan keluar bukan dari lubangnya, tutup
+   *  masih terpasang saat menuang, cairan mengalir ke atas.
+   *
+   *  HANYA produk. Dinding jebol, atap runtuh, pintu didobrak, waktu membeku —
+   *  semua itu perangkat kreatif yang DISENGAJA di template pattern-interrupt
+   *  kita, dan beberapa di antaranya justru termasuk yang disetujui Brian.
+   *  Pemeriksa yang menilai fisika lingkungan akan menolak template terbaik
+   *  kita sendiri.
    *
    *  Ditambahkan setelah Brian menonton 33 video dan menyebut "cairan keluar
    *  ga dari ujung botol" sebagai salah satu dari tiga cacat utama. Nol dari
@@ -177,13 +183,17 @@ Definitions, be literal and count what you actually see:
 - anatomiRusak: true if there are extra fingers, hands not attached to a
   visible arm, duplicated or bent-wrong limbs.
 - produkTerlihat: true if a consumer product package is clearly visible.
-- fisikaJanggal: true ONLY if something physically impossible is happening to
-  the product itself. Concrete cases: liquid or cream emerging from somewhere
-  other than the actual opening (through the side, the base, or thin air); the
-  cap still sealed while product pours out; the container floating with no hand
-  or surface supporting it; liquid flowing upward. Do NOT set this for
-  stylistic choices, unusual lighting, or fast motion — only for events that
-  could not happen in the real world.`;
+- fisikaJanggal: judge ONLY the product container and its contents. Set true
+  only for: liquid or cream emerging from somewhere other than the actual
+  opening (through the side, the base, or thin air); the cap still sealed while
+  product pours out; liquid flowing upward out of the container; the container
+  passing through a hand or surface.
+  IGNORE EVERYTHING ELSE IN THE SCENE. Walls breaking, ceilings collapsing,
+  doors bursting open, objects flying, time freezing, people appearing
+  suddenly — these are deliberate creative devices in our ads and are NEVER
+  fisikaJanggal. Also ignore stylistic choices, unusual lighting, and fast
+  camera motion. If the impossible thing is not the product itself, answer
+  false.`;
 
 /** Jeda antar percobaan, dalam milidetik.
  *
