@@ -73,7 +73,14 @@ try {
   ok("redirect ke /kredit membawa return_to", page.url().includes("return_to="), page.url().split("?")[1] ?? "");
   await page.screenshot({ path: `${OUT}/s9_sebelum_topup.png`, fullPage: true });
   // top-up paket pertama (mode demo)
-  await page.getByRole("button", { name: /5× Senyap\+Teks/ }).click();
+  // Paket "5× Senyap+Teks" PENSIUN 2026-08-06 (tier senyap tidak lagi dijual
+  // sebagai paket; lihat lib/paket-kredit.ts). Tes ini terus mencarinya sampai
+  // 2026-08-16 dan gagal 30 detik tiap kali — kegagalan yang sempat saya kira
+  // job kelamaan, padahal job-nya sukses sampai READY.
+  //
+  // Diarahkan ke paket TERMURAH yang benar-benar ada, bukan nama yang
+  // di-hardcode: kalau katalog berubah lagi, tesnya ikut, bukan mati.
+  await page.getByRole("button", { name: /AI Bersuara/ }).first().click();
   await page.waitForTimeout(2500);
   await page.waitForURL("**/bikin/skrip**", { timeout: 10000 });
   ok("otomatis balik ke /bikin/skrip setelah top-up", true, page.url());
