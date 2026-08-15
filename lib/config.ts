@@ -133,7 +133,10 @@ export const config = {
       priceIdr: 12000,
       cogsIdr: 8802,
       byteplusModel: env("BYTEPLUS_MODEL_HQ", "dreamina-seedance-2-0-mini-260615"),
-      resolution: "720p",
+      // Resolusi bisa dinaikkan lewat env untuk uji: teks kecil di label butuh
+      // piksel, dan 720p tidak punya cukup untuk menilai apakah sebuah model
+      // BISA merender teks — kegagalannya bisa jadi kegagalan resolusi.
+      resolution: env("BYTEPLUS_RES_HQ", "720p"),
       generateAudio: true,
     },
     super_hq: {

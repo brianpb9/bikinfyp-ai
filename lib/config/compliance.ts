@@ -5,7 +5,30 @@ export const AIGC_WATERMARK_TEXT = "Dibuat dengan AI";
 
 // Negative prompt wajib ke semua model video (aturan keras #3):
 // AI dilarang menulis teks/logo — semua teks ditambahkan via overlay FFmpeg.
-export const MANDATORY_NEGATIVE_PROMPT = "no text, no logo, no writing";
+/** Negative prompt wajib untuk setiap panggilan model video.
+ *
+ *  DIPERBAIKI 2026-08-15, dan ini akar cacat label yang selama ini disalahkan
+ *  ke modelnya.
+ *
+ *  Bunyinya dulu "no text, no logo, no writing". Maksudnya benar: jangan
+ *  sampai model MENAMBAHKAN caption, watermark, atau tulisan karangan di atas
+ *  gambar. Tapi kalimatnya tidak membedakan tulisan yang DITAMBAHKAN dari
+ *  tulisan yang MEMANG TERCETAK DI PRODUKNYA — dan model menurutinya: ia
+ *  menekan label produk, dan yang tersisa jadi coretan.
+ *
+ *  Terbukti dengan render berpasangan pada foto Wardah asli (720p, model dan
+ *  prompt sama, HANYA negative-nya berbeda):
+ *    dengan "no writing"  -> "NACNADNAAMLNO- HYCOMRLE C3 HONIC"
+ *    tanpa "no writing"   -> "NANO-NIACINAMIDE COMPLEX* HYALURONIC
+ *                             POLYGLUTAMIC"  (persis aslinya, nol huruf salah)
+ *
+ *  Selama berbulan-bulan kesimpulannya "model tidak bisa merender teks kecil".
+ *  Yang tidak bisa adalah model yang kita larang menulis.
+ *
+ *  Versi sekarang melarang yang memang harus dilarang — lapisan tambahan di
+ *  ATAS gambar — tanpa menyentuh apa yang tercetak pada produknya sendiri. */
+export const MANDATORY_NEGATIVE_PROMPT =
+  "no added text overlay, no caption bar, no subtitle, no watermark, no invented logo";
 
 export const COMPLIANCE_CHECKLIST: string[] = [
   "Saat upload di TikTok, nyalakan toggle 'Konten yang dibuat AI' (AI-generated content) biar akun kamu aman.",

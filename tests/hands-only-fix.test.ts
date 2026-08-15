@@ -47,7 +47,14 @@ test("hands_only: negative melarang wajah total & tidak lagi 'no face distortion
   assert.ok(s.negativePrompt.includes("no face"), s.negativePrompt);
   assert.ok(s.negativePrompt.includes("no head in frame"), s.negativePrompt);
   assert.ok(!/no face distortion/i.test(s.negativePrompt), s.negativePrompt);
-  assert.ok(s.negativePrompt.includes("no text"), "negative wajib tetap mengandung 'no text'");
+    // DIREVISI 2026-08-15. Versi lama menuntut substring "no text" — dan
+    // justru itu yang menekan label produk sampai jadi coretan. Bukti
+    // berpasangan pada foto Wardah asli: dengan larangan tulisan keluar
+    // "NACNADNAAMLNO- HYCOMRLE", tanpa larangan keluar persis aslinya.
+    //
+    // Yang harus dijaga: larangan OVERLAY tambahan tetap ada, karena tanpa itu
+    // model menambah caption dan watermark karangan.
+  assert.ok(s.negativePrompt.includes("no added text overlay"), "negative wajib melarang overlay teks tambahan");
 });
 
 test("format lain (vo_broll): negative kategori tidak diubah", () => {

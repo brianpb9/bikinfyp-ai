@@ -1131,7 +1131,12 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // Model jangan "mencoba" merender teks kecil label sebagai tajam lalu gagal
   // jadi gibberish (lihat IDENTITY_INSTRUCTION).
   if (format !== "vo_broll") {
-    negativePrompt = `${negativePrompt}, no garbled small print, no illegible fine text, no attempted sharp small text that is wrong or gibberish`;
+    // DIHAPUS 2026-08-15 bersama perbaikan MANDATORY_NEGATIVE_PROMPT: tiga
+    // frasa ini juga menekan tulisan produk, dan bukti berpasangan menunjukkan
+    // label justru KELUAR BENAR begitu larangan tulisan dilepas. Melarang
+    // "teks kecil yang salah" ternyata cara paling efektif menghasilkan teks
+    // kecil yang salah.
+    negativePrompt = `${negativePrompt}, no distorted packaging, no melted plastic`;
   }
   if (format === "talking_head") {
     // Anti AI-slop (bar Brian 2026-08-07: "smooth, tidak ada AI slop, realisme")

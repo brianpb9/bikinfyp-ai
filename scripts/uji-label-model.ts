@@ -30,7 +30,11 @@ import { byteplusVideo } from "../lib/providers/stubs/byteplus";
 import { runFfmpeg, probeDurationSec } from "../lib/media/ffmpeg";
 import { IDENTITY_INSTRUCTION } from "../lib/media/shot-planner";
 
-const FOTO = path.resolve(process.cwd(), "..", "test_output", "produk-polos.jpg");
+// Foto WAJIB foto produk ASLI dengan teks kecil yang benar-benar terbaca.
+// Uji pertama memakai produk-polos.jpg — yang ternyata frame HASIL GENERATE
+// dengan label sudah ngaco. Hasilnya tidak bisa membedakan "model tidak bisa
+// merender teks kecil" dari "model setia menyalin sumber yang memang salah".
+const FOTO = process.env.FOTO_UJI ?? path.resolve(process.cwd(), "..", "test_output", "wardah-asli.png");
 const OUT = path.resolve(process.cwd(), "..", "test_output", "uji-label");
 
 async function main() {
@@ -56,9 +60,17 @@ async function main() {
   const spec = {
     jobId: "uji-label", width: 720, height: 1280,
     shots: [{ index: 0, durationSec: 5, prompt, imageRefPath: FOTO }],
-    negativePrompt: "no text overlay, no logo watermark, no writing added on top of the image, no borders",
+    // JANGAN menulis "no writing" di sini. Uji pertama memakai negative
+    // "no text overlay, no writing added on top of the image" — itu secara
+    // harfiah menyuruh model menekan tulisan, lalu hasilnya disalahkan karena
+    // tulisannya rusak. Yang dilarang seharusnya HANYA overlay tambahan di
+    // atas gambar, bukan tulisan yang memang tercetak di produknya.
+    negativePrompt: "no added caption overlay, no watermark, no subtitle bar, no borders, no collage",
     qualityTier: "high_quality" as const, generateAudio: false,
-    ratio: "9:16",
+    // TANPA ratio: Seedance 2.5 MENOLAK parameter ini untuk mode frame-pertama
+    // ("the output ratio follows the first-frame image", HTTP 400). Perbedaan
+    // API nyata dari 2.0 — dan kode produksi kita SELALU mengirim ratio, jadi
+    // memindahkan produksi ke 2.5 akan menggagalkan setiap job i2v.
   };
 
   console.log(`Model diuji : ${model}`);

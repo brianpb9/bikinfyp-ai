@@ -126,9 +126,13 @@ export function assertVisualSpec(spec: VisualSpec) {
         `(harus ${expected}). Pengaturan audio hanya boleh diturunkan dari tier.`
     );
   }
-  if (!spec.negativePrompt.toLowerCase().includes("no text")) {
+  // Yang divalidasi: larangan OVERLAY tambahan, bukan larangan tulisan.
+  // Versi lama menuntut substring "no text" — dan itu justru yang menekan
+  // label produk sampai jadi coretan (lihat MANDATORY_NEGATIVE_PROMPT).
+  if (!spec.negativePrompt.toLowerCase().includes("no added text overlay")) {
     throw new Error(
-      "DILARANG: prompt ke model video wajib menyertakan negative instruction 'no text, no logo, no writing'."
+      "DILARANG: prompt ke model video wajib menyertakan negative instruction 'no added text overlay' " +
+        "(melarang lapisan teks tambahan, BUKAN melarang tulisan yang tercetak di produk)."
     );
   }
 }

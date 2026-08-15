@@ -146,13 +146,25 @@ async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
   // ditolak InvalidParameter di r2v; i2v tetap 2-15).
   const minDur = content.some((c) => (c as { role?: string }).role === "reference_image") ? 4 : 2;
   const durationInt = Math.max(minDur, Math.min(15, Math.ceil(shot.durationSec))); // API hanya bilangan bulat
+  // Seedance 2.5 MENOLAK parameter ratio pada mode frame-pertama:
+  // "the output ratio follows the first-frame image" (HTTP 400, diuji
+  // 2026-08-15). Perbedaan API nyata dari 2.0, yang justru MEMAKAI ratio —
+  // TVC 16:9 kita dirender lewat parameter itu.
+  //
+  // Jadi ratio dihilangkan hanya untuk 2.5, bukan untuk semua: menghapusnya di
+  // 2.0 akan mengubah setiap TVC jadi 9:16 mengikuti foto produk.
+  //
+  // Ini juga catatan penting kalau produksi mau pindah ke 2.5: rasio keluaran
+  // tidak lagi bisa diminta, ia ditentukan foto yang dikirim.
+  const modelDuaLima = /seedance-2-5/.test(tierCfg.byteplusModel);
+  const punyaFramePertama = !content.some((c) => (c as { role?: string }).role === "reference_image");
   const body = {
     model: tierCfg.byteplusModel,
     content,
     // ATURAN SUARA FINAL: diturunkan dari tier (silent=false, bersuara=true) — ditegakkan assertVisualSpec
     generate_audio: spec.generateAudio,
     resolution: tierCfg.resolution,
-    ratio: spec.ratio ?? "9:16",
+    ...(modelDuaLima && punyaFramePertama ? {} : { ratio: spec.ratio ?? "9:16" }),
     duration: durationInt,
     watermark: false,
   };
