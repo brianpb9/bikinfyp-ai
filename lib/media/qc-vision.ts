@@ -246,15 +246,32 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
 
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qcvision-"));
   try {
-    const temuan: TemuanFrame[] = [];
+    // Frame diperiksa BERSAMAAN, bukan satu per satu.
+    //
+    // Terukur 2026-08-16 pada video 15 detik: pemeriksaan berurutan memakan
+    // 120,8 detik — 90% dari SELURUH waktu QC sebuah job. Sebabnya sederhana
+    // dan memalukan: 8-12 panggilan model, masing-masing ~10-15 detik, saling
+    // menunggu padahal tidak satu pun bergantung pada hasil yang lain.
+    //
+    // Ini biaya yang saya tambahkan sendiri saat menaikkan kerapatan sampel
+    // dari 3 ke 8-12 frame, dan tidak pernah saya ukur sampai e2e menolak
+    // jalan karena job-nya kelamaan. Menaikkan mutu memang membayar waktu —
+    // yang salah adalah tidak menghitung berapa.
+    //
+    // Ekstraksi frame tetap berurutan: ffmpeg lokal cepat (milidetik) dan
+    // menjalankan belasan proses ffmpeg sekaligus justru merebut CPU dari
+    // compositing yang berjalan di worker yang sama.
+    const berkasFrame: { f: string; detik: number }[] = [];
     for (const p of posisiSampel(durasi)) {
       const detik = Math.max(0.1, durasi * p);
       const f = path.join(dir, `f${Math.round(detik * 10)}.jpg`);
       await runFfmpeg(["-y", "-ss", String(detik), "-i", input.videoPath, "-frames:v", "1", "-q:v", "3", f]);
-      if (!fs.existsSync(f)) continue;
-      const t = await periksaFrame(f, Math.round(detik * 10) / 10);
-      if (t) temuan.push(t);
+      if (fs.existsSync(f)) berkasFrame.push({ f, detik: Math.round(detik * 10) / 10 });
     }
+    const hasil = await Promise.all(berkasFrame.map(({ f, detik }) => periksaFrame(f, detik)));
+    // Urutan dipertahankan (Promise.all menjaga urutan masukan), jadi laporan
+    // "detik ke sekian" tetap terbaca berurutan oleh manusia.
+    const temuan: TemuanFrame[] = hasil.filter((t): t is TemuanFrame => t !== null);
     if (temuan.length === 0) return { temuan: null, lolos: false, masalah: ["tidak satu pun frame bisa diperiksa"], peringatan: [], detikGagal: [] };
 
     // PENGHALANG vs PERINGATAN, dan pembagiannya diuji pada video nyata.
