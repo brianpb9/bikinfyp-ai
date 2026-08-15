@@ -36,3 +36,32 @@ test("rentang harga dihitung, bukan diketik", () => {
   assert.equal(r.min, 5_000);
   assert.equal(r.max, 400_000);
 });
+
+// Retail dan enterprise membaca katalog template yang SAMA.
+//
+// Sampai 2026-08-15 enterprise memakai 33 template yang sudah dirender dan
+// lolos dua pemeriksa mutu, sementara retail memakai TIGA preset tanpa video
+// contoh. Tidak ada alasan produk untuk beda itu — penjual perorangan justru
+// yang paling butuh pilihan yang sudah terbukti, karena mereka tidak punya
+// tim kreatif untuk menebak konsep sendiri.
+test("template retail diambil dari katalog yang sama, disaring untuk FYP", async () => {
+  const { templateUntukRetail, presetRetail } = await import("../lib/template-untuk-retail");
+  const { CAMPAIGN_TEMPLATES } = await import("../lib/templates");
+  const retail = templateUntukRetail();
+
+  assert.ok(retail.length >= 20, `retail cuma dapat ${retail.length} template — terlalu sedikit`);
+  // 16:9 TIDAK boleh ikut: TVC dirender landscape untuk TV, seluruh alur retail
+  // 9:16 untuk FYP. Menawarkannya berarti menjual video salah bentuk.
+  for (const t of retail) {
+    const asli = CAMPAIGN_TEMPLATES.find((x) => x.id === t.id)!;
+    assert.notEqual(asli.ratio, "16:9", `${t.id}: rasio TV bocor ke retail`);
+    assert.ok(t.durationSec <= 30, `${t.id}: ${t.durationSec} dtk terlalu panjang untuk FYP`);
+  }
+  // Preset harus cocok dengan template aslinya — bukan salinan yang bisa hanyut.
+  for (const t of retail.slice(0, 5)) {
+    const p = presetRetail(t.id)!;
+    const asli = CAMPAIGN_TEMPLATES.find((x) => x.id === t.id)!;
+    assert.equal(p.format, asli.format);
+    assert.equal(p.durationSec, asli.durationSec);
+  }
+});
