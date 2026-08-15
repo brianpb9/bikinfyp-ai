@@ -268,9 +268,17 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
       await runFfmpeg(["-y", "-ss", String(detik), "-i", input.videoPath, "-frames:v", "1", "-q:v", "3", f]);
       if (fs.existsSync(f)) berkasFrame.push({ f, detik: Math.round(detik * 10) / 10 });
     }
+    // Semua frame dikirim BERSAMAAN.
+    //
+    // Sempat dicoba bergelombang 4-sekaligus dengan hipotesis bahwa frame yang
+    // hilang (5 dari 6) disebabkan pembatasan laju. Diukur, dan hipotesisnya
+    // SALAH: bergelombang kembali ke 119,2 detik DAN tetap kehilangan frame
+    // yang sama. Jadi 67 detik dibayar untuk nol perbaikan, dan hipotesisnya
+    // dibuang — bukan dipertahankan karena terdengar masuk akal.
+    //
+    // Penyebab frame ke-6 belum diketahui dan sengaja tidak ditebak lagi.
+    // Yang pasti: jumlahnya masih di atas ambang minimal, jadi vonisnya sah.
     const hasil = await Promise.all(berkasFrame.map(({ f, detik }) => periksaFrame(f, detik)));
-    // Urutan dipertahankan (Promise.all menjaga urutan masukan), jadi laporan
-    // "detik ke sekian" tetap terbaca berurutan oleh manusia.
     const temuan: TemuanFrame[] = hasil.filter((t): t is TemuanFrame => t !== null);
     if (temuan.length === 0) return { temuan: null, lolos: false, masalah: ["tidak satu pun frame bisa diperiksa"], peringatan: [], detikGagal: [] };
 
