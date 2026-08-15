@@ -21,7 +21,11 @@ export interface DashboardContext {
 
 /** Sama seperti getAuthUser(req) di lib/auth.ts tapi baca cookie dari
  * next/headers (Server Component), bukan dari Request. */
-async function getAuthUserFromCookies(): Promise<UserRow | null> {
+/** Diekspor supaya gerbang lain (mis. lib/admin-auth.ts) memakai jalur auth
+ *  yang SAMA — bukan menyalin pembacaan cookie dan verifikasi JWT-nya sendiri.
+ *  Dua salinan logika auth adalah dua tempat yang bisa berbeda pendapat soal
+ *  siapa yang sedang login. */
+export async function getAuthUserFromCookies(): Promise<UserRow | null> {
   const jar = await cookies();
   const raw = jar.get(cookieName())?.value;
   if (!raw) return null;
