@@ -15,6 +15,22 @@
 // retail berarti menjual video yang salah bentuk untuk tempat mereka
 // memasangnya.
 
+// BELUM DISAMBUNGKAN KE UI, DAN ITU DISENGAJA (2026-08-15).
+//
+// Halaman /bikin/gaya menampilkan tiap template dengan klaim "X dari 60 video
+// pemenang" — bukti KORELASIONAL dari riset template-terbukti.json. Katalog 33
+// ini dasarnya lain sama sekali: terbukti lewat render kita sendiri yang lolos
+// dua pemeriksa mutu, bukan lewat hitungan video pemenang.
+//
+// Menukar sumbernya tanpa menukar kalimatnya akan membuat aplikasi mengklaim
+// bukti yang tidak pernah ada — ke penjual yang memakainya untuk memutuskan
+// belanja. Itu bukan bug UI, itu klaim palsu.
+//
+// Yang dibutuhkan sebelum disambung: kalimat baru yang jujur menyebut dasarnya
+// ("sudah dirender dan lolos pemeriksaan mutu", bukan "dari N video pemenang"),
+// dan keputusan apakah dua dasar bukti itu ditampilkan berdampingan atau salah
+// satunya menggantikan yang lain. Itu keputusan produk, bukan keputusan kode.
+
 import { CAMPAIGN_TEMPLATES, type CampaignTemplate } from "./templates";
 
 export interface TemplateRetail {
