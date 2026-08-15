@@ -112,6 +112,14 @@ export interface TemuanFrame {
   anatomiRusak: boolean;
   /** Produk terlihat di frame ini? */
   produkTerlihat: boolean;
+  /** Fisika produk yang mustahil — cairan keluar bukan dari lubangnya, tutup
+   *  masih terpasang saat menuang, produk melayang tanpa tumpuan.
+   *
+   *  Ditambahkan setelah Brian menonton 33 video dan menyebut "cairan keluar
+   *  ga dari ujung botol" sebagai salah satu dari tiga cacat utama. Nol dari
+   *  12 check menanyakannya: semuanya memeriksa apakah gambarnya CACAT, tidak
+   *  ada yang menanyakan apakah yang terjadi MASUK AKAL. */
+  fisikaJanggal: boolean;
   /** Catatan singkat model, untuk ditunjukkan ke manusia saat gagal. */
   catatan: string;
 }
@@ -149,7 +157,7 @@ export interface QcVisionResult {
 
 const SKEMA = `Answer ONLY with a JSON object, no markdown fence:
 {"jumlahOrang": <int>, "jumlahOrangUtama": <int>, "jumlahWajah": <int>, "jumlahTangan": <int>, "teksAcak": <bool>,
- "anatomiRusak": <bool>, "produkTerlihat": <bool>, "catatan": "<max 15 words>"}
+ "anatomiRusak": <bool>, "produkTerlihat": <bool>, "fisikaJanggal": <bool>, "catatan": "<max 15 words>"}
 
 Definitions, be literal and count what you actually see:
 - jumlahOrang: how many DISTINCT human beings are visible, including partly
@@ -168,7 +176,14 @@ Definitions, be literal and count what you actually see:
   unreadable gibberish (common on product labels).
 - anatomiRusak: true if there are extra fingers, hands not attached to a
   visible arm, duplicated or bent-wrong limbs.
-- produkTerlihat: true if a consumer product package is clearly visible.`;
+- produkTerlihat: true if a consumer product package is clearly visible.
+- fisikaJanggal: true ONLY if something physically impossible is happening to
+  the product itself. Concrete cases: liquid or cream emerging from somewhere
+  other than the actual opening (through the side, the base, or thin air); the
+  cap still sealed while product pours out; the container floating with no hand
+  or surface supporting it; liquid flowing upward. Do NOT set this for
+  stylistic choices, unusual lighting, or fast motion — only for events that
+  could not happen in the real world.`;
 
 /** Jeda antar percobaan, dalam milidetik.
  *
@@ -227,6 +242,7 @@ async function periksaFrame(framePath: string, detik: number, percobaan = 0): Pr
       teksAcak: Boolean(j.teksAcak),
       anatomiRusak: Boolean(j.anatomiRusak),
       produkTerlihat: Boolean(j.produkTerlihat),
+      fisikaJanggal: Boolean(j.fisikaJanggal),
       catatan: String(j.catatan ?? "").slice(0, 120),
     };
   } catch {
@@ -341,6 +357,17 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
       const batasTangan = input.tanpaWajah ? 2 : Math.max(2, orangEfektif * 2) + 1;
       if (t.jumlahTangan > batasTangan) {
         masalah.push(`detik ${t.detik}: ${t.jumlahTangan} tangan untuk ${t.jumlahOrang} orang`);
+        detikGagal.push(t.detik);
+      }
+      // FISIKA MUSTAHIL = PENGHALANG, bukan peringatan.
+      //
+      // Berbeda dari anatomiRusak yang sengaja jadi peringatan karena ambigu:
+      // cairan yang keluar dari sisi botol bukan soal selera atau sudut
+      // pandang — ia salah, terlihat jelas oleh penonton awam, dan langsung
+      // memberi tahu bahwa videonya buatan mesin. Untuk iklan yang tugasnya
+      // membuat orang percaya pada produk, itu menghancurkan seluruh gunanya.
+      if (t.fisikaJanggal) {
+        masalah.push(`detik ${t.detik}: fisika produk mustahil — ${t.catatan}`);
         detikGagal.push(t.detik);
       }
       if (t.anatomiRusak) peringatan.push(`detik ${t.detik}: kemungkinan anatomi janggal — ${t.catatan}`);
