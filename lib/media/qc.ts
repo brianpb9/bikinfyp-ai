@@ -10,6 +10,7 @@ import { validateScript } from "../script-engine/validator";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { isServiceLike } from "../config/hooks";
 import { qcVision, POSISI_SAMPEL } from "./qc-vision";
+import { qcSuara } from "./qc-suara";
 
 export interface QcCheck {
   code: string;
@@ -42,8 +43,9 @@ export const QC_POLICY_BY_FORMAT = {
   // dengan alasan "tidak ada overlay" — fail tetap menolak output.
   hands_only: {
     requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08", "QC-09"],
-    permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11"],
+    permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11", "QC-12"],
     skipReason: {
+      "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "N/A: hands_only tidak menampilkan pembicara. fail = presenter membeku padahal seharusnya bicara.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
@@ -57,8 +59,9 @@ export const QC_POLICY_BY_FORMAT = {
   // dimitigasi lewat instruksi jeda/enunciate di shot-planner.
   talking_head: {
     requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11"],
+    permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11", "QC-12"],
     skipReason: {
+      "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "N/A bila suara dari VO terpisah (mulut sengaja tidak disinkronkan). fail = presenter lipsync membeku.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
@@ -77,8 +80,9 @@ export const QC_POLICY_BY_FORMAT = {
   // sehingga job DITOLAK tanpa satu pun check berstatus fail.
   tvc: {
     requiredPass: ["QC-02", "QC-03", "QC-04", "QC-05", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11"],
+    permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11", "QC-12"],
     skipReason: {
+      "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "N/A bila suara dari VO terpisah (mulut sengaja tidak disinkronkan). fail = presenter lipsync membeku.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (overlay brand ditambahkan di post, bukan di prompt).",
@@ -95,8 +99,9 @@ export const QC_POLICY_BY_FORMAT = {
   // pentingnya untuk iklan jasa seperti untuk iklan produk.
   ads: {
     requiredPass: ["QC-02", "QC-04", "QC-05", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01", "QC-03", "QC-06", "QC-09", "QC-10", "QC-11"],
+    permittedSkip: ["QC-01", "QC-03", "QC-06", "QC-09", "QC-10", "QC-11", "QC-12"],
     skipReason: {
+      "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "N/A bila suara dari VO terpisah. fail = presenter membeku padahal seharusnya bicara.",
       "QC-03": "N/A: iklan jasa/app/toko tidak punya produk fisik untuk dicocokkan.",
@@ -110,8 +115,9 @@ export const QC_POLICY_BY_FORMAT = {
   // relevan — tidak ada tangan yang di-generate untuk bisa morphing.
   vo_broll: {
     requiredPass: ["QC-03", "QC-04", "QC-05", "QC-06", "QC-07", "QC-08"],
-    permittedSkip: ["QC-01", "QC-02", "QC-11"],
+    permittedSkip: ["QC-01", "QC-02", "QC-11", "QC-12"],
     skipReason: {
+      "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
       "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
       "QC-01": "N/A: visual adalah foto produk, bukan presenter. fail = presenter membeku.",
       "QC-02": "N/A: video dari foto produk asli (pan/zoom), bukan tangan hasil AI-generated.",
@@ -981,6 +987,37 @@ export async function runQc(input: QcInput): Promise<QcResult> {
       });
     } catch (err) {
       checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: `pemeriksaan gagal dijalankan: ${err instanceof Error ? err.message : String(err)}` });
+    }
+  }
+
+  // QC-12 SUARA (2026-08-15). Sampai hari ini QC audio kita hanya memeriksa
+  // videonya tidak senyap dan loudness-nya benar — tidak ada satu pun yang
+  // memeriksa APA yang diucapkan. Untuk produk yang menjual "AI-nya ngomong",
+  // itu lubang terbesar yang tersisa.
+  //
+  // Penghalangnya HARGA: harga yang salah bukan cacat estetika, itu klaim
+  // komersial yang salah, dan penjual yang memasangnya menanggung akibatnya.
+  if (!input.finalTexts.some((t) => t.trim().length > 0)) {
+    checks.push({ code: "QC-12", name: "Ucapan sesuai skrip", status: "skip", detail: "N/A: tidak ada teks skrip untuk dibandingkan." });
+  } else if (input.isMockProvider) {
+    checks.push({ code: "QC-12", name: "Ucapan sesuai skrip", status: "skip", detail: "N/A: provider mock (dev/e2e)." });
+  } else {
+    try {
+      const v = await qcSuara({
+        videoPath: input.filePath, segmenSkrip: input.finalTexts,
+        priceIdr: input.priceIdr, productName: input.productName,
+      });
+      checks.push({
+        code: "QC-12", name: "Ucapan sesuai skrip",
+        status: v.transkrip === null ? "skip" : v.lolos ? "pass" : "fail",
+        detail: v.transkrip === null
+          ? `tidak bisa diperiksa: ${v.masalah.join("; ")}`
+          : v.lolos
+            ? `transkrip cocok${v.peringatan.length ? ` · catatan: ${v.peringatan.join("; ")}` : ""}`
+            : v.masalah.join("; "),
+      });
+    } catch (err) {
+      checks.push({ code: "QC-12", name: "Ucapan sesuai skrip", status: "skip", detail: `pemeriksaan gagal jalan: ${err instanceof Error ? err.message : String(err)}` });
     }
   }
 

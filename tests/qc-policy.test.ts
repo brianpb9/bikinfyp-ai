@@ -125,3 +125,21 @@ test("jarak sampel visi konsisten lintas durasi", () => {
   // Video sangat pendek tetap diperiksa cukup.
   assert.ok(posisiSampel(8).length >= 6);
 });
+
+// QC-12 (2026-08-15). Sampai hari ini QC audio hanya memeriksa videonya tidak
+// senyap dan loudness-nya benar — tidak ada satu pun yang memeriksa APA yang
+// diucapkan. Untuk produk yang menjual "AI-nya ngomong", itu lubang terbesar.
+//
+// Harga yang salah bukan cacat estetika: itu klaim komersial yang salah, dan
+// penjual yang memasangnya yang menanggung akibatnya.
+test("QC-12 boleh skip, tapi fail selalu menolak", () => {
+  for (const format of Object.keys(QC_POLICY_BY_FORMAT) as (keyof typeof QC_POLICY_BY_FORMAT)[]) {
+    const policy = QC_POLICY_BY_FORMAT[format];
+    const lulus: QcCheck[] = policy.requiredPass.map((code) => ({ code, name: code, status: "pass" as const }));
+    assert.ok((policy.permittedSkip as readonly string[]).includes("QC-12"),
+      `${format}: QC-12 harus boleh skip — matinya transkripsi tidak boleh menghentikan produksi`);
+    assert.equal(evaluateQcPolicy(format, [...lulus, { code: "QC-12", name: "suara", status: "skip" }]), true);
+    assert.equal(evaluateQcPolicy(format, [...lulus, { code: "QC-12", name: "suara", status: "fail" }]), false,
+      `${format}: QC-12 fail WAJIB menolak — harga salah tidak boleh sampai ke penjual`);
+  }
+});
