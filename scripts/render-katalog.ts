@@ -144,6 +144,14 @@ function rencanakan(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
   });
 }
 
+// CATATAN PENTING: skrip ini merender shot SATU PER SATU, sementara worker
+// produksi mengirim semua shot SEKALIGUS (lib/postgres/worker.ts baris ~263,
+// lewat generateVideoWithFailover). Itu BUKAN kelalaian — per-shot yang
+// memungkinkan mengganti satu shot cacat tanpa membayar seluruh video, dan
+// itu fitur yang sudah menyelamatkan cacat yang tiga perbaikan prompt gagal.
+//
+// Jangan "memperbaiki" ini jadi paralel demi kecepatan: produksi sudah paralel,
+// dan yang hilang di sini adalah kemampuan memperbaiki, bukan sekadar waktu.
 async function main() {
   if (process.env.RENDER_CONFIRM !== "YA") {
     console.error("Ditolak: render katalog = uang sungguhan. Ulangi dengan RENDER_CONFIRM=YA.");
