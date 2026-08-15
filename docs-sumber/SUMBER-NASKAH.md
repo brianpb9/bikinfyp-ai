@@ -29,3 +29,33 @@ naskah adalah teks — bisa diperbaiki tanpa render berbayar sama sekali.
 
 Dari 15 hook unik → 40+, dan setiap template punya kalimatnya sendiri, bukan
 mengambil dari kolam yang sama.
+
+## Pembawaan VO — bagian dari pekerjaan naskah, bukan terpisah
+
+Temuan Brian 16 Agustus, setelah menonton 33 video: **VO ngomongnya kecepatan.**
+Yang kurang: intonasi, jeda, penekanan, dan tawa kecil (chuckle) — supaya
+terdengar seperti orang, bukan pembaca teks.
+
+Instruksi gaya global SUDAH ada di `lib/personas.ts` (`voiceStyle`), dan sudah
+menyebut "ada jeda natural antar kalimat, tidak buru-buru". Tetap kedengaran
+cepat. Kesimpulannya: **arahan di depan teks tidak cukup — model butuh penanda
+DI DALAM naskahnya.**
+
+Karena itu ini dikerjakan BERSAMA perluasan naskah, bukan sesudahnya: penanda
+pembawaan ditulis menyatu dengan kalimatnya. Kalau dikerjakan terpisah lalu
+naskahnya ditulis ulang, penandanya ikut terbuang.
+
+Yang perlu dibangun saat menulis naskah baru:
+- **jeda** di tempat yang masuk akal (setelah hook, sebelum harga, sebelum CTA)
+- **penekanan** pada kata yang menjual (nama produk, angka harga, klaim inti)
+- **tawa kecil / napas** di tempat yang wajar untuk register santai (bestie,
+  genz) — TIDAK untuk register formal
+- **tempo yang berubah**: hook cepat, demo melambat, CTA tegas
+
+Catatan penting: jangan memakai SSML mentah tanpa mengecek — jalur TTS kita
+mengirim `${styleInstruction} ${text}` sebagai teks biasa ke Gemini
+(`lib/media/gemini-tts.ts`), bukan sebagai SSML. Ada `tests/ssml.test.ts` di
+repo; periksa dulu apa yang sebenarnya didukung sebelum menulis penanda.
+
+Ukuran keberhasilan: dengarkan hasilnya. QC-12 memeriksa APA yang diucapkan,
+bukan BAGAIMANA — tidak ada check yang bisa membuktikan ini, hanya telinga.
