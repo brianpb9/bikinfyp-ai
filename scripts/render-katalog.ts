@@ -84,6 +84,31 @@ function sudahTerbukti(c: Catatan | undefined, batas: Date | null, sidikKini?: s
   return !batas || fs.statSync(c.berkas).mtime >= batas;
 }
 
+/** Coba ulang satu shot yang gagal di provider.
+ *
+ *  Kegagalan provider di sini TRANSIEN, bukan cacat kreatif: t04-hook-indrawi
+ *  kehilangan shot 1 dengan pesan galat KOSONG, videonya jadi setengah, lalu
+ *  wajah kedua muncul dan QC menolaknya. Satu template gagal karena satu
+ *  panggilan API yang apes — bukan karena promptnya salah.
+ *
+ *  Dua percobaan dengan jeda, karena percobaan seketika tidak menolong untuk
+ *  layanan yang sedang sibuk. Kalau tetap gagal, biarkan gagal: yang tidak
+ *  boleh adalah menyerah pada percobaan pertama, bukan mencoba selamanya. */
+async function coba<T>(fn: () => Promise<T>, idxShot: number): Promise<T> {
+  const jeda = [0, 8_000, 25_000];
+  let terakhir: unknown;
+  for (let i = 0; i < jeda.length; i++) {
+    if (jeda[i]) await new Promise((r) => setTimeout(r, jeda[i]));
+    try {
+      return await fn();
+    } catch (err) {
+      terakhir = err;
+      if (i < jeda.length - 1) process.stdout.write(`  shot ${idxShot} coba lagi (${i + 1}/2)`);
+    }
+  }
+  throw terakhir;
+}
+
 async function gabung(klip: string[], keluar: string) {
   const daftar = keluar.replace(/\.mp4$/, "-daftar.txt");
   fs.writeFileSync(daftar, klip.map((f) => `file '${f}'`).join("\n"));
@@ -223,13 +248,14 @@ async function main() {
         }
 
         try {
-          const aset = await byteplusVideo.generate({ ...spec, shots: [{ ...shot, index: 0 }] }, sub);
+          const aset = await coba(() => byteplusVideo.generate({ ...spec, shots: [{ ...shot, index: 0 }] }, sub), shot.index);
           for (const a of aset) { klip.push(a.filePath); biaya += a.costIdr; }
           process.stdout.write(`  shot ${shot.index} OK`);
         } catch (err) {
           // Shot gagal dilewati; sisanya tetap digabung. Video kurang satu shot
           // masih bisa dinilai, dan membatalkan semuanya membuang yang sudah
-          // dibayar.
+          // dibayar — tapi kelengkapannya diperiksa nanti dan videonya TIDAK
+          // akan dicatat sebagai bukti.
           process.stdout.write(`  shot ${shot.index} GAGAL(${err instanceof Error ? err.message.slice(0, 40) : "?"})`);
         }
       }
