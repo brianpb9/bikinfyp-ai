@@ -35,7 +35,7 @@
     "worker": "tsx scripts/worker.ts",
     "monitor:jobs": "tsx scripts/monitor-jobs.ts",
     "smoke": "bash scripts/smoke-e2e.sh",
-    "test:pg": "tsx --test tests/pg-konkurensi-kredit.test.ts"
+    "test:pg": "node -e \"if(!process.env.UJI_PG_URL){console.error('UJI_PG_URL belum diisi \u2014 gate konkurensi tidak boleh lulus tanpa database uji.');process.exit(1)}\" && tsx --test tests/pg-konkurensi-kredit.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",

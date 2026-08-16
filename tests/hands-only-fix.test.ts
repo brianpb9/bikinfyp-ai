@@ -255,10 +255,18 @@ test("durasi 45 dtk: 3 shot @15 dtk masing-masing (2 shot akan melebihi batas 15
   });
   assert.equal(s.shots.length, 3);
   for (const shot of s.shots) assert.equal(shot.durationSec, 15);
-  // Shot terakhir harus beda beat dari "demonstrating" biasa (closing/inviting),
-  // bukan cuma pengulangan shot tengah.
+  // Shot terakhir harus beda beat dari shot tengah (closing/inviting), bukan
+  // cuma pengulangannya.
   assert.ok(s.shots[2].prompt.includes("closing"), s.shots[2].prompt);
-  assert.ok(s.shots[1].prompt.includes("demonstrating the product in use"), s.shots[1].prompt);
+  // Shot tengah dulu berbunyi "demonstrating the product in use" — kalimat
+  // GENERIK yang tidak pernah menyebut apa yang sebenarnya dilakukan tangan.
+  // Itu yang membuat seluruh taksonomi bentuk produk tidak pernah sampai ke
+  // model pada format hands_only, dan sabun batang tetap diperagakan seperti
+  // barang yang bisa dituang. Sekarang shot tengah membawa aksi bentuknya.
+  assert.ok(s.shots[1].prompt.includes("Close-up of hands as she "), s.shots[1].prompt);
+  assert.ok(!s.shots[1].prompt.includes("demonstrating the product in use"),
+    "beat generik ini adalah cacatnya, bukan perilaku yang harus dijaga");
+  assert.notEqual(s.shots[1].prompt, s.shots[2].prompt);
 });
 
 test("durasi 45 dtk, tier bersuara: dialog 1 segmen penuh per shot (bukan digabung)", () => {

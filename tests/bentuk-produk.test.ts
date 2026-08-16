@@ -74,3 +74,65 @@ test("tiap bentuk padat punya aksi tangan yang berbeda", () => {
   assert.equal(menyebutBusa.length, 1, "hanya aksi sabun batang yang boleh menyebut busa");
   assert.match(menyebutBusa[0], /wetting the solid bar/, "busa harus melekat pada aksi sabun batang");
 });
+
+// ---- Prompt AKHIR, bukan cuma labelnya ----
+//
+// Audit putaran keempat benar: memeriksa nilai balik bentukProduk() tidak
+// membuktikan apa pun soal video yang keluar. Yang sampai ke model adalah
+// PROMPT, dan di situlah cacat sabun-untuk-segalanya hidup. Tes di bawah
+// menjalankan planShots() sungguhan lalu membaca prompt yang dihasilkannya.
+import { planShots } from "../lib/media/shot-planner";
+import { getCreatorCategory } from "../lib/personas";
+
+function promptUntuk(nama: string, kategoriProduk = "beauty"): string {
+  const kategori = getCreatorCategory("lokal")!;
+  const spec = planShots({
+    jobId: "uji", durationSec: 15,
+    segments: [
+      { start: 0, end: 3, text: "Hook", role: "hook" },
+      { start: 3, end: 10, text: "Demo produknya", role: "demo" },
+      { start: 10, end: 15, text: "Cek keranjang", role: "cta" },
+    ] as never,
+    category: kategori, productName: nama, productCategory: kategoriProduk,
+    imageRefPath: "/tmp/uji.jpg", qualityTier: "high_quality", format: "hands_only",
+  });
+  return spec.shots.map((s) => s.prompt).join("\n");
+}
+
+test("prompt sabun batang menyuruh berbusa", () => {
+  assert.match(promptUntuk("JJ Glow Sabun Gluta Pink Barsoap"), /lather|foam/i);
+});
+
+test("prompt padat non-sabun TIDAK PERNAH menyuruh berbusa", () => {
+  // Inilah cacat yang lolos putaran lalu: labelnya sudah benar, promptnya belum.
+  for (const nama of [
+    "Serum Stick Niacinamide", "Lotion Bar Shea", "Deodorant Stick",
+    "Roll On Deodorant Fresh", "Cushion Foundation Glow",
+    "Compact Powder Two Way Cake", "Lipstick Velvet",
+  ]) {
+    const p = promptUntuk(nama);
+    assert.ok(!/lather|foam|soap bar|solid bar/i.test(p),
+      `${nama} tidak boleh disuruh berbusa. Prompt: ${p.slice(0, 200)}`);
+  }
+});
+
+test("tiap bentuk memberi gerakan tangan yang benar-benar berbeda", () => {
+  assert.match(promptUntuk("Roll On Deodorant Fresh"), /rolling its ball/i);
+  // "twisting" (gerund = instruksi), BUKAN "twist" polos: aksi roll-on memuat
+  // LARANGAN "the ball never twisted", dan asersi yang terlalu tumpul akan
+  // menganggap larangan itu sebagai pelanggaran.
+  assert.ok(!/twisting/i.test(promptUntuk("Roll On Deodorant Fresh")),
+    "roll-on tidak boleh DISURUH memutar batang naik");
+  assert.match(promptUntuk("Serum Stick Niacinamide"), /twisting its base/i,
+    "stick justru harus diputar naik — pembanding yang membuktikan asersi di atas bukan hampa");
+  assert.match(promptUntuk("Cushion Foundation Glow"), /liquid foundation/i);
+  assert.ok(!/powder/i.test(promptUntuk("Cushion Foundation Glow")),
+    "cushion berisi alas bedak cair, bukan bedak");
+  assert.match(promptUntuk("Compact Powder Two Way Cake"), /powder/i);
+  assert.match(promptUntuk("Lipstick Velvet"), /bullet/i);
+});
+
+test("cairan tetap dituang, bukan digosok", () => {
+  const p = promptUntuk("Serum Vitamin C");
+  assert.ok(!/solid bar|twisting|rolling its ball/i.test(p), `serum tidak boleh diperlakukan padat: ${p.slice(0, 200)}`);
+});

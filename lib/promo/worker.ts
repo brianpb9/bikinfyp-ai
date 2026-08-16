@@ -131,7 +131,24 @@ export async function processPromoJob(jobId: string): Promise<void> {
     await mediaStorage().put(outputRel, fs.readFileSync(stitched.outPath), "video/mp4");
     if (config.storageMode !== "filesystem") fs.rmSync(workDir, { recursive: true, force: true });
 
-    await repo.markReady(jobId, outputRel);
+    // NILAI BALIK markReady MENENTUKAN, bukan sekadar informasi.
+    //
+    // Saya membuat markReady mengembalikan boolean lalu LUPA memakainya di
+    // sini — cacat yang saya perkenalkan sendiri saat menutup cacat lain.
+    // Akibatnya kebalikan dari yang diperbaiki: kalau FAILED sudah menang
+    // lebih dulu (sweeper timeout, backstop BullMQ), markReady ditolak, tapi
+    // baris ini tetap mencatat "READY" ke log dan tetap menagih kreditnya.
+    // Pengguna dibayar untuk job FAILED yang output_url-nya NULL.
+    //
+    // Terbukti di PostgreSQL: {failed:true, ready:false, captured:true,
+    // state:"FAILED", output_url:null}.
+    //
+    // Aturannya sederhana dan harus dipegang di mana pun: JANGAN PERNAH
+    // menagih untuk keadaan yang gagal kita tulis.
+    if (!(await repo.markReady(jobId, outputRel))) {
+      console.warn(`[promo-worker] job ${jobId}: TIDAK di-capture — job sudah terminal sebelum output selesai (kemungkinan FAILED lewat sweeper/backstop).`);
+      return;
+    }
     console.log(`[promo-worker] job ${jobId}: READY (${outputRel}, ${uploadedClips.length} klip upload + 1 hook)`);
     const captureRepo = new PgCreditPaymentRepository(config.databaseUrl);
     try { await captureRepo.captureCredits(userId, jobId); } finally { await captureRepo.close(); }

@@ -56,8 +56,20 @@ export interface TierHarga {
  * dan tidak dipajang. */
 export const TIER_PENSIUN: readonly string[] = ["silent_caption"];
 
+/** Tier yang BOLEH dijual. Daftar putih, bukan daftar hitam. */
+export const TIER_DIJUAL: readonly string[] = ["high_quality", "super_hq"];
+
+/**
+ * Daftar PUTIH, dan bedanya bukan gaya penulisan.
+ *
+ * Versi sebelumnya cuma menolak yang ada di TIER_PENSIUN, jadi id apa pun yang
+ * belum dikenal — salah ketik, tier eksperimen yang bocor dari cabang lain,
+ * nilai karangan dari klien — dijawab "masih dijual". Untuk pemeriksaan yang
+ * menentukan apakah sesuatu boleh ditagih, bawaan yang benar adalah TIDAK,
+ * bukan YA.
+ */
 export function tierMasihDijual(id: string): boolean {
-  return !TIER_PENSIUN.includes(id);
+  return TIER_DIJUAL.includes(id) && !TIER_PENSIUN.includes(id);
 }
 
 export const TIER_HARGA: TierHarga[] = [

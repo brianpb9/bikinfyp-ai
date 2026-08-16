@@ -267,8 +267,10 @@ const IDENTITY_INSTRUCTION =
  */
 export type BentukProduk =
   | "sabun_batang"   // sabun/shampoo batang — dibasahi lalu digosok sampai berbusa
-  | "oles_padat"     // stick, balm, deodoran, serum stick — dioleskan, TIDAK berbusa
-  | "bubuk_padat"    // compact, bedak, blush, eyeshadow — ditekan/disapu, TIDAK basah
+  | "oles_padat"     // stick, balm, lotion bar, serum stick — digosok/digeser, TIDAK berbusa
+  | "roll_on"        // deodoran roll-on — bolanya menggelinding, tidak diputar naik
+  | "bubuk_padat"    // compact, blush, eyeshadow — ditekan/disapu, TIDAK basah
+  | "cushion"        // alas bedak cair di dalam spons — ditekan, BUKAN bedak
   | "lipstik"        // lipstik/lip crayon — diputar keluar lalu di-swatch
   | "tuang"          // cairan/krim — dituang atau dipompa
   | "tidak diketahui";
@@ -288,10 +290,20 @@ export type BentukProduk =
 // dibutuhkan bukan tahu benda itu padat, melainkan tahu APA YANG DILAKUKAN
 // TANGAN terhadapnya. Karena itu bentuknya sekarang spesifik.
 const KATA_CAIR_TEGAS = /\b(cair|liquid)\b/i;
-const KATA_SABUN_BATANG = /\b(sabun|soap|barsoap|shampoo bar|shampo batang)\b[^.]{0,24}\b(batang|bar|padat|solid)\b|\b(barsoap|bar soap)\b|\b(batang|bar)\b[^.]{0,16}\b(sabun|soap)\b/i;
+// HANYA yang benar-benar berbusa. "Lotion Bar" dan "Body Bar" TIDAK: keduanya
+// batangan padat yang DIGOSOK LANGSUNG ke kulit dan meleleh oleh suhu badan,
+// tidak dibasahi dan tidak berbuih. Menyuruhnya berbusa memperagakan produk
+// yang salah.
+const KATA_SABUN_BATANG = /\b(sabun|soap|barsoap|shampoo|shampo)\b[^.]{0,24}\b(batang|bar|padat|solid)\b|\b(barsoap|bar soap|shampoo bar|shampo batang)\b|\b(batang|bar)\b[^.]{0,16}\b(sabun|soap|shampoo|shampo)\b/i;
 const KATA_LIPSTIK = /\b(lipstik|lipstick|lip crayon|lip stick)\b/i;
-const KATA_BUBUK_PADAT = /\b(compact|bedak padat|pressed powder|blush on|blush|eyeshadow|eye shadow|cushion|highlighter)\b/i;
-const KATA_OLES_PADAT = /\b(stick|balm|deodoran|deodorant|roll on|roll-on|batangan)\b/i;
+// Cushion DIKELUARKAN: isinya alas bedak CAIR yang diserap spons di dalam
+// wadahnya, bukan bedak padat. Menyebutnya "powder pan" salah secara harfiah.
+const KATA_BUBUK_PADAT = /\b(compact|bedak padat|pressed powder|blush on|blush|eyeshadow|eye shadow|highlighter|two way cake)\b/i;
+const KATA_CUSHION = /\b(cushion)\b/i;
+// Roll-on DIKELUARKAN dari sini: bolanya diputar menggelinding di kulit, tidak
+// ada batang yang dinaikkan dengan memutar pangkalnya.
+const KATA_ROLL_ON = /\b(roll on|roll-on|rollon)\b/i;
+const KATA_OLES_PADAT = /\b(stick|balm|deodoran|deodorant|batangan|lotion bar|body bar)\b/i;
 /** Kata bentuk padat umum — dipakai kalau tidak ada petunjuk yang lebih spesifik. */
 const KATA_PADAT_UMUM = /\b(batang|bar|padat|solid)\b/i;
 /** Zat yang LAZIMNYA cair — dipakai hanya kalau tidak ada kata bentuk. */
@@ -311,6 +323,11 @@ export function bentukProduk(nama: string, deskripsi?: string | null): BentukPro
 
   if (KATA_SABUN_BATANG.test(teks)) return "sabun_batang";
   if (KATA_LIPSTIK.test(teks)) return "lipstik";
+  // Cushion & roll-on diperiksa SEBELUM pola yang lebih longgar di bawahnya,
+  // karena keduanya sering ditulis bersama kata yang akan salah menangkapnya
+  // ("Cushion Compact", "Roll On Deodorant Stick").
+  if (KATA_CUSHION.test(teks)) return "cushion";
+  if (KATA_ROLL_ON.test(teks)) return "roll_on";
   if (KATA_BUBUK_PADAT.test(teks)) return "bubuk_padat";
   if (KATA_OLES_PADAT.test(teks)) return "oles_padat";
   // Padat tapi tidak jelas jenisnya. "Shampoo Bar" mendarat di sini kalau pola
@@ -343,6 +360,10 @@ const AKSI_PER_BENTUK: Record<Exclude<BentukProduk, "tuang" | "tidak diketahui">
     "opening the compact, pressing a sponge lightly onto the powder so the pan surface shows, then tapping it onto the BACK of her other hand to reveal the colour, keeping the pan facing camera, both hands clearly accounted for",
   lipstik:
     "twisting the lipstick bullet up so its shaped tip is clearly visible to camera, then drawing one clean swatch stripe on the BACK of her other hand to show the true colour, both hands clearly accounted for",
+  roll_on:
+    "uncapping the roll-on and rolling its ball smoothly along the BACK of her other hand so the wet trail it leaves is visible, the ball never twisted or pushed up, both hands clearly accounted for",
+  cushion:
+    "pressing the cushion puff onto the soaked sponge inside the case so it picks up liquid foundation, then patting it onto the BACK of her other hand where it blends into a dewy patch, the open case facing camera, both hands clearly accounted for",
 };
 
 const AKSI_NETRAL = "holding the product close to the camera and turning it slowly so its surface and texture read clearly, both hands visible";
@@ -955,10 +976,27 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // semua batasan yang sudah terbukti: label tetap menghadap kamera, produk
     // sama dengan shot 1, dan instruksi identitas ikut di tiap beat.
     const midIdx = Math.max(0, i - 1);
+    // JALUR TANGAN HARUS IKUT SADAR BENTUK — dan sampai sekarang TIDAK.
+    //
+    // Ini akar yang tersisa dari cacat JJ Glow, dan ia bertahan melewati dua
+    // putaran perbaikan karena tidak ada yang memeriksa prompt AKHIR-nya.
+    // demoAction (yang membawa seluruh taksonomi bentuk) hanya dipakai
+    // HEAD_MIDDLE, yaitu format Wajah AI. Untuk hands_only — format retail
+    // paling umum — beat tengahnya generik, dan slot ketiganya bahkan
+    // menyuruh "mengeluarkan isinya" ke produk APA PUN. Untuk sabun batang,
+    // stick, bedak, atau lipstik itu mustahil, jadi model mengarang bentuk
+    // produk yang bisa dikeluarkan isinya. Persis mekanisme yang sama dengan
+    // insiden aslinya, cuma di beat yang berbeda.
+    //
+    // Slot 0 sekarang membawa aksi bentuknya, dan slot 2 punya versi padat
+    // yang tidak menjanjikan isi yang bisa keluar.
+    const bentukPadat = bentuk !== "tuang" && bentuk !== "tidak diketahui";
     const HANDS_MIDDLE = [
-      `Hands demonstrating the product in use, but the bottle stays angled so its label keeps facing the camera and stays legible throughout — fingers never cover the label, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`,
+      `Close-up of hands as she ${demoAction}, the product kept angled so its label keeps facing the camera and stays legible throughout — fingers never cover the label, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up texture, natural phone camera movement`,
       `Macro close-up of the product's own texture and material filling most of the frame — the surface, the consistency, the detail a buyer wants to inspect before paying, the product body still partly visible with its label readable at the frame edge, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
-      `Hands opening or dispensing the product so its contents become visible coming out, the amount clear, label kept facing the camera throughout, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up, natural phone camera movement`,
+      bentukPadat
+        ? `Hands turning the product slowly so a different side of its solid body comes into view, the shape and edges reading clearly, nothing poured and nothing dispensed, label kept facing the camera throughout, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up, natural phone camera movement`
+        : `Hands opening or dispensing the product so its contents become visible coming out, the amount clear, label kept facing the camera throughout, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, close-up, natural phone camera movement`,
       `The product resting in the everyday place it would actually be used, hands entering frame to adjust or pick it up, the surroundings quietly telling the viewer where this belongs, label facing camera, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
     ];
     const HEAD_MIDDLE = [
