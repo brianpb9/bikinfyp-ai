@@ -11,7 +11,8 @@ import { getCreatorCategory } from "@/lib/personas";
 import { getRecordingStyle } from "@/lib/media/recording-styles";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
-import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { postgresRuntimeEnabled, pgFindOrCreatePersona, pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import { getPool } from "@/lib/postgres/pool";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { CAMPAIGN_TEMPLATES, TVC_ROUTES } from "@/lib/templates";
@@ -181,6 +182,42 @@ export async function POST(req: Request) {
           results.push({ status: "failed", script_id: scriptId, reason: "Kredit organisasi tidak cukup." });
           continue;
         }
+        // Snapshot Skor FYP BEKU (pre-render) — bahan loop predicted-vs-actual.
+        //
+        // Sempat HILANG SAMA SEKALI di jalur ini. Terukur di produksi 16 Agu:
+        // sejak 10 Agustus, 12 job tidak punya skor karena createFypSnapshot
+        // cuma dipanggil dari /api/jobs retail, sementara dashboard brand
+        // membuat job lewat jalur ini. Enam di antaranya talking_head — format
+        // yang justru didukung penuh model. Tidak ada yang menyadarinya selama
+        // enam hari karena kegagalannya diam.
+        //
+        // TVC dan iklan jasa SENGAJA dilewati, bukan dipetakan paksa: model
+        // dilatih pada konten organik TikTok (vlog, skit, tutorial) dan tidak
+        // punya padanan untuk iklan merek 30 detik. Memaksakan "other" akan
+        // menghasilkan angka yang terlihat sah padahal tidak berarti — persis
+        // jenis kebohongan yang mesin bukti ini dibuat untuk mencegah.
+        const FORMAT_BERSKOR = ["hands_only", "vo_broll", "talking_head"];
+        if (FORMAT_BERSKOR.includes(format)) {
+          try {
+            const plan = scoreScriptPlan({
+              hookFamily: script.hook_family as Parameters<typeof scoreScriptPlan>[0]["hookFamily"],
+              segments, qualityTier: tier, durationSec: durationS,
+              format: format as FypVideoFormat,
+              productName: product.name, priceIdr: product.price_idr,
+            });
+            await pgSaveFypSnapshot({
+              jobId, scriptId, modelVersion: plan.modelVersion,
+              score: plan.score, rawProbability: plan.rawProbability,
+              featuresJson: JSON.stringify(plan.featureValues),
+            });
+            await pgAudit(user.id, "fyp.snapshot", "fyp_snapshots", jobId, { score: plan.score, model_version: plan.modelVersion });
+          } catch (snapErr) {
+            // Non-fatal, sama seperti jalur retail: skor gagal tidak boleh
+            // menggagalkan job yang sudah dibayar.
+            console.warn(`[fyp-snapshot] gagal untuk job campaign ${jobId}:`, snapErr);
+          }
+        }
+
         try {
           await enqueueJob(jobId);
         } catch {
