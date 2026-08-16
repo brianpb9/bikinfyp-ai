@@ -97,17 +97,37 @@ export class PgPromoJobsRepository {
     await this.pool.query("UPDATE promo_jobs SET virality_checklist=$1 WHERE id=$2", [JSON.stringify(checklist), id]);
   }
 
-  async markReady(id: string, outputUrl: string) {
-    await this.pool.query(
-      "UPDATE promo_jobs SET state='READY', output_url=$1, completed_at=$2 WHERE id=$3",
+  // READY ITU FINAL. Keduanya di bawah menolak menimpa state terminal.
+  //
+  // Sebelum ini keduanya UPDATE tanpa syarat, dan itu membuka jalan video
+  // gratis yang tidak tertutup oleh penjaga refund mana pun:
+  //
+  //   1. worker menandai job READY (video sudah bisa diunduh)
+  //   2. captureCredits() gagal — koneksi kredit putus, misalnya
+  //   3. blok catch memanggil markFailed()
+  //   4. markFailed MENIMPA READY menjadi FAILED
+  //   5. penjaga refund mencari state READY, melihat FAILED, lalu merefund
+  //
+  // Penjaga di lapisan kredit tidak bisa menolong kalau kenyataan yang ia
+  // periksa sudah dihapus lebih dulu. Karena itu penjagaannya harus di sini,
+  // di satu-satunya tempat yang menulis state — sama seperti tabel `jobs`
+  // yang memang sudah memakai "WHERE state NOT IN (...)" sejak awal.
+  //
+  // Mengembalikan boolean supaya pemanggil bisa TAHU kalau tulisannya ditolak,
+  // bukan menganggapnya berhasil diam-diam.
+  async markReady(id: string, outputUrl: string): Promise<boolean> {
+    const r = await this.pool.query(
+      "UPDATE promo_jobs SET state='READY', output_url=$1, completed_at=$2 WHERE id=$3 AND state NOT IN ('READY','FAILED','REFUNDED')",
       [outputUrl, new Date().toISOString(), id]
     );
+    return r.rowCount === 1;
   }
 
-  async markFailed(id: string, reason: string) {
-    await this.pool.query(
-      "UPDATE promo_jobs SET state='FAILED', error_message=$1, completed_at=$2 WHERE id=$3",
+  async markFailed(id: string, reason: string): Promise<boolean> {
+    const r = await this.pool.query(
+      "UPDATE promo_jobs SET state='FAILED', error_message=$1, completed_at=$2 WHERE id=$3 AND state NOT IN ('READY','FAILED','REFUNDED')",
       [reason.slice(0, 500), new Date().toISOString(), id]
     );
+    return r.rowCount === 1;
   }
 }

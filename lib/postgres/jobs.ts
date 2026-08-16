@@ -98,13 +98,22 @@ export class PgJobsRepository {
    * pembukuannya: pendapatan yang benar-benar terjadi tidak pernah tercatat
    * final, dan setiap laporan yang menghitung 'capture' akan kurang hitung.
    *
-   * Penyapu menutupnya secara berkala. Aman diulang: setiap capture ditulis
-   * lewat INSERT ... SELECT dengan syarat NOT EXISTS di query yang sama, jadi
-   * dua penyapu bersamaan tidak bisa menulis dua capture untuk satu job.
+   * VERSI PERTAMA FUNGSI INI SALAH, dan salahnya terukur. Ia memakai SELECT
+   * lalu INSERT ... SELECT dengan NOT EXISTS, keduanya lewat pool tanpa
+   * transaksi maupun lock, dan komentarnya mengklaim itu sudah cukup untuk
+   * dua sweeper bersamaan. Uji paralel PostgreSQL membantahnya: 30 hold READY
+   * dengan 8 reconciler bersamaan menghasilkan 14 job ber-capture ganda,
+   * sebagian sampai enam. Di READ COMMITTED, dua transaksi bisa sama-sama
+   * membaca NOT EXISTS sebagai benar sebelum salah satunya menulis.
    *
-   * Id dibuat di Node (this.uuid), bukan gen_random_uuid() di SQL — sisa
-   * berkas ini memakai pola yang sama dan tidak ada satu pun ekstensi
-   * PostgreSQL yang diasumsikan terpasang.
+   * Sekarang ada TIGA lapis, dan yang paling luar sengaja bukan kode:
+   *   1. indeks unik parsial uniq_ledger_terminal_per_job (migrasi 0030) —
+   *      database menolak capture/release kedua untuk satu job, apa pun yang
+   *      lupa dipasang di kode;
+   *   2. satu transaksi SERIALIZABLE per job, dengan baris job dikunci
+   *      FOR UPDATE sebelum ledger-nya dibaca;
+   *   3. pelanggaran unik (23505) diperlakukan sebagai "sudah ditutup pihak
+   *      lain" — bukan galat — supaya balapan yang kalah berakhir tenang.
    */
   async reconcileReadyHolds(): Promise<number> {
     const menggantung = await this.pool.query<{ id: string }>(
@@ -115,17 +124,75 @@ export class PgJobsRepository {
     );
     let ditutup = 0;
     for (const { id } of menggantung.rows) {
-      const ditulis = await this.pool.query(
-        `INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,payment_id,created_at)
-         SELECT $1, j.user_id, j.org_id, 0, 'capture', j.id, NULL, $2 FROM jobs j
-         WHERE j.id = $3 AND j.state = 'READY'
-           AND NOT EXISTS (SELECT 1 FROM credit_ledger t WHERE t.job_id = j.id AND t.type IN ('capture','release'))`,
-        [this.uuid(), this.now(), id]
-      );
-      if (ditulis.rowCount) {
-        ditutup++;
-        await this.pool.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
-          [this.uuid(), "sweep", "credit.capture", "jobs", id, JSON.stringify({ alasan: "hold menggantung pada job READY" }), this.now()]);
+      try {
+        const ok = await this.transaction(async (client) => {
+          // Kunci baris job DULU. Tanpa ini, worker yang sedang menuntaskan
+          // job yang sama bisa menulis capture-nya sendiri di antara
+          // pembacaan dan penulisan di bawah.
+          const job = await client.query<{ user_id: string; org_id: string | null }>(
+            "SELECT user_id, org_id FROM jobs WHERE id=$1 AND state='READY' FOR UPDATE", [id]
+          );
+          if (!job.rows[0]) return false;
+          const terminal = await client.query(
+            "SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','release')", [id]
+          );
+          if (terminal.rowCount) return false;
+          const hold = await client.query("SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type='hold'", [id]);
+          if (!hold.rowCount) return false;
+          await client.query(
+            "INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,0,'capture',$4,NULL,$5)",
+            [this.uuid(), job.rows[0].user_id, job.rows[0].org_id, id, this.now()]
+          );
+          await this.audit(client, "sweep", "credit.capture", "jobs", id, { alasan: "hold menggantung pada job READY" });
+          return true;
+        });
+        if (ok) ditutup++;
+      } catch (err) {
+        // 23505 = indeks unik terminal menolak. Artinya pihak lain sudah
+        // menutup job ini lebih dulu — hasil yang BENAR, bukan kegagalan.
+        if ((err as { code?: string }).code !== "23505") throw err;
+      }
+    }
+    return ditutup;
+  }
+
+  /**
+   * Padanan untuk promo_jobs, yang punya tabel state sendiri.
+   *
+   * Reconciler pertama cuma membaca tabel `jobs` — job promo yang hold-nya
+   * menggantung tidak pernah tersentuh sama sekali.
+   */
+  async reconcileReadyPromoHolds(): Promise<number> {
+    const menggantung = await this.pool.query<{ id: string; user_id: string }>(
+      `SELECT p.id, p.user_id FROM promo_jobs p
+       WHERE p.state = 'READY'
+         AND EXISTS (SELECT 1 FROM credit_ledger h WHERE h.job_id = p.id AND h.type = 'hold')
+         AND NOT EXISTS (SELECT 1 FROM credit_ledger t WHERE t.job_id = p.id AND t.type IN ('capture','release'))`
+    );
+    let ditutup = 0;
+    for (const baris of menggantung.rows) {
+      try {
+        const ok = await this.transaction(async (client) => {
+          const job = await client.query(
+            "SELECT user_id FROM promo_jobs WHERE id=$1 AND state='READY' FOR UPDATE", [baris.id]
+          );
+          if (!job.rows[0]) return false;
+          const terminal = await client.query(
+            "SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','release')", [baris.id]
+          );
+          if (terminal.rowCount) return false;
+          const hold = await client.query("SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type='hold'", [baris.id]);
+          if (!hold.rowCount) return false;
+          await client.query(
+            "INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,NULL,0,'capture',$3,NULL,$4)",
+            [this.uuid(), baris.user_id, baris.id, this.now()]
+          );
+          await this.audit(client, "sweep", "credit.capture", "promo_jobs", baris.id, { alasan: "hold menggantung pada promo READY" });
+          return true;
+        });
+        if (ok) ditutup++;
+      } catch (err) {
+        if ((err as { code?: string }).code !== "23505") throw err;
       }
     }
     return ditutup;

@@ -138,10 +138,17 @@ export async function processPromoJob(jobId: string): Promise<void> {
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error(`[promo-worker] job ${jobId}: FAILED — ${message}`);
-    await repo.markFailed(jobId, message);
-    if (userId) {
+    // markFailed MENOLAK menimpa job yang sudah READY, dan penolakan itu yang
+    // menentukan boleh-tidaknya refund di sini. Jalur paling berbahaya di
+    // seluruh berkas ini adalah captureCredits() di atas: kalau IA yang
+    // gagal, videonya sudah diunggah dan job sudah READY, lalu blok catch ini
+    // yang jalan. Merefund di titik itu = memberikan video gratis.
+    const jadiGagal = await repo.markFailed(jobId, message);
+    if (userId && jadiGagal) {
       const releaseRepo = new PgCreditPaymentRepository(config.databaseUrl);
       try { await releaseRepo.releaseCredits(userId, jobId); } finally { await releaseRepo.close(); }
+    } else if (userId) {
+      console.warn(`[promo-worker] job ${jobId}: TIDAK direfund — job sudah terminal (kemungkinan READY sebelum galat ini).`);
     }
     throw err; // let BullMQ record the failure event too
   } finally {

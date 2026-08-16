@@ -34,7 +34,8 @@
     "test:worker-container": "bash scripts/test-worker-container.sh",
     "worker": "tsx scripts/worker.ts",
     "monitor:jobs": "tsx scripts/monitor-jobs.ts",
-    "smoke": "bash scripts/smoke-e2e.sh"
+    "smoke": "bash scripts/smoke-e2e.sh",
+    "test:pg": "tsx --test tests/pg-konkurensi-kredit.test.ts"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",

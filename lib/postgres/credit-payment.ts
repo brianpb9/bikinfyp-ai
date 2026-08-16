@@ -100,10 +100,22 @@ export class PgCreditPaymentRepository {
    * ditolak hanya job yang terbukti sudah READY.
    */
   private async sudahDiserahkan(client: PoolClient, jobId: string): Promise<boolean> {
+    // FOR UPDATE, bukan SELECT biasa.
+    //
+    // Membaca state tanpa mengunci barisnya menyisakan balapan: refund membaca
+    // "belum READY", worker menjadikannya READY, refund menulis release, lalu
+    // capture menyerah karena melihat catatan terminal. Mengunci baris job
+    // membuat worker menunggu sampai keputusan refund selesai.
+    //
+    // Ini lapis KEDUA. Lapis pertama ada di database (indeks unik terminal,
+    // migrasi 0030) yang menolak capture+release berbarengan apa pun urutannya.
     const q = await client.query<{ state: string }>(
-      "SELECT state FROM jobs WHERE id=$1 UNION ALL SELECT state FROM promo_jobs WHERE id=$1", [jobId]
+      "SELECT state FROM jobs WHERE id=$1 FOR UPDATE", [jobId]
     );
-    return q.rows.some((r) => r.state === "READY");
+    const p = await client.query<{ state: string }>(
+      "SELECT state FROM promo_jobs WHERE id=$1 FOR UPDATE", [jobId]
+    );
+    return [...q.rows, ...p.rows].some((r) => r.state === "READY");
   }
 
   async releaseCredits(owner: string | CreditOwner, jobId: string): Promise<number> {

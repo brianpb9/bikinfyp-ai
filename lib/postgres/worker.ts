@@ -515,6 +515,8 @@ export async function sweepPostgresStaleJobs(): Promise<number> {
     // transisi READY dan captureCredits.
     const dirapikan = await jobs.reconcileReadyHolds();
     if (dirapikan) console.warn(`[sweep] ${dirapikan} job READY di-capture susulan (hold menggantung)`);
+    const promoDirapikan = await jobs.reconcileReadyPromoHolds();
+    if (promoDirapikan) console.warn(`[sweep] ${promoDirapikan} promo READY di-capture susulan (hold menggantung)`);
     return await jobs.sweepStaleJobs();
   } finally { await jobs.close(); }
 }

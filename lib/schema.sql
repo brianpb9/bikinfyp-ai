@@ -71,6 +71,12 @@ CREATE TABLE IF NOT EXISTS credit_ledger (
 );
 CREATE INDEX IF NOT EXISTS idx_ledger_user ON credit_ledger(user_id);
 CREATE INDEX IF NOT EXISTS idx_ledger_job ON credit_ledger(job_id);
+-- Satu job = satu catatan terminal (capture ATAU release), ditegakkan database.
+-- Padanan migrations/postgres/0030 — alasan lengkapnya ada di sana. Ringkasnya:
+-- penjagaan lewat pembacaan "NOT EXISTS" di kode terbukti bisa dilewati dua
+-- proses yang berjalan bersamaan, dan yang bocor lewat celah itu adalah UANG.
+CREATE UNIQUE INDEX IF NOT EXISTS uniq_ledger_terminal_per_job
+  ON credit_ledger(job_id) WHERE type IN ('capture','release');
 CREATE INDEX IF NOT EXISTS idx_ledger_org ON credit_ledger(org_id, created_at DESC);
 
 -- Saldo = agregat ledger (view, bukan tabel yang di-update)
