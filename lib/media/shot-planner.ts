@@ -1297,16 +1297,28 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             ? `the product is already in her hands from the very first frame, so no time is spent picking it up`
             : `her hands are already engaged with the product, continuing without a visible restart`
         }.`;
-    const ekspresi = isFirst
+    // Video SATU shot itu hook DAN penutup sekaligus. Memeriksa isFirst lebih
+    // dulu membuatnya mewarisi ekspresi pembuka ("curious and a little
+    // unimpressed") padahal kalimat beat-nya sendiri sudah menyuruh "warm
+    // delighted reaction" — prompt yang bertengkar dengan dirinya sendiri,
+    // dan model akan memilih salah satunya secara acak. Untuk satu shot,
+    // penutupnya yang menang: itu yang cocok dengan busur produk "hero".
+    const ekspresi = numShots <= 1
+      ? `Expression: warm and genuinely pleased throughout — an unhurried, friendly delivery.`
+      : isFirst
       ? `Expression: curious and a little unimpressed, like someone about to show you something.`
       : isLastShot(i, numShots)
         ? `Expression: warm, settled and sure — an unhurried close, not a hard sell.`
         : `Expression: absorbed in what her hands are doing, quietly pleased.`;
-    const panggung = ` ${mulaiDari} ${produkAkhir} ${ekspresi}`;
+    // Titik ganda ".." muncul karena blok ini ditempel di belakang teks yang
+    // kadang sudah berakhir titik dan kadang tidak. Dinormalkan di satu tempat
+    // supaya tidak perlu diingat di tiap cabang perakitan.
+    const panggung = ` ${mulaiDari} ${produkAkhir} ${ekspresi}`.replace(/\s+/g, " ");
+    const rapikan = (t: string) => t.replace(/\.\.+(?=\s|$)/g, ".").replace(/\s+([.,])/g, "$1").trim();
 
-    const base = punyaPeranTemplate
+    const base = rapikan(punyaPeranTemplate
       ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${panggung}`
-      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}`;
+      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}`);
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
@@ -1357,10 +1369,15 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         : isLast
           ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `
           : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `;
-    const prompt =
+    // rapikan() dipakai di prompt AKHIR, bukan cuma di base: titik gandanya
+    // justru lahir DI SINI, saat `${base}. ` menempel pada base yang sudah
+    // berakhir titik. Menormalkan potongannya saja meninggalkan cacat yang
+    // sama di keluaran nyata — dan keluaran nyata itu yang dikirim ke model.
+    const prompt = rapikan(
       format === "talking_head" && !lipSyncPresenter
         ? `${base}. ${speech}${pacing}Natural warm reactive expression throughout, mouth relaxed and not talking to camera.`
-        : `${base}. ${speech}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader.`;
+        : `${base}. ${speech}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader.`
+    );
     // Penanda menahan-produk ikut sebagai DATA. Sumbernya peran template
     // (ugcRoles) atau tabel rute TVC — keduanya menandainya eksplisit.
     return {

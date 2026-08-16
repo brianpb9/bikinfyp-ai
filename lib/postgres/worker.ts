@@ -15,6 +15,8 @@ import { formatHargaOverlay, type SegmentDraft } from "../script-engine/template
 import { getCreatorCategory } from "../personas";
 import type { VisualSpec } from "../providers/types";
 import { planShots } from "../media/shot-planner";
+import { ringkasParams, ringkasSpec } from "../arsip-prompt";
+import { pgSimpanArsipPrompt } from "./smoke-runtime";
 import { generateFirstFrame, perluFrameBuatan, harusMenahanProduk, pilihShotUntukFrame } from "../media/first-frame";
 import { TVC_ROUTES, type TvcRoute } from "../templates";
 import { findReusableClips } from "../media/resume-clips";
@@ -218,6 +220,24 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     tvcRoute: TVC_ROUTES.includes(row.tvc_route as never) ? (row.tvc_route as TvcRoute) : undefined,
     ugcTemplate: row.template_id,
     recordStyle: row.record_style });
+
+  // ARSIP PROMPT — sebelum satu pun panggilan penyedia.
+  //
+  // Job yang GAGAL justru yang paling sering perlu dibedah, jadi arsipnya
+  // ditulis di sini, bukan setelah render sukses. Kegagalan menulis diabaikan:
+  // ini catatan, bukan bagian produk, dan pengguna yang sudah membayar tidak
+  // boleh kehilangan videonya karena pencatatan kita bermasalah.
+  try {
+    await pgSimpanArsipPrompt({
+      jobId: row.id,
+      specJson: JSON.stringify(ringkasSpec(spec)),
+      segmentsJson: JSON.stringify(segments),
+      negativePrompt: spec.negativePrompt,
+      modelParams: JSON.stringify({ ...ringkasParams(spec), format, template_id: row.template_id ?? null }),
+    });
+  } catch (err) {
+    console.warn(`[job ${row.id.slice(0, 8)}] arsip prompt gagal disimpan (diabaikan): ${(err as Error).message}`);
+  }
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the
   // user's own product photo panned/zoomed, so there's no provider to fail
   // over between and no cost beyond the VO synthesis below.

@@ -1,5 +1,15 @@
 // Mesin skrip (FSD F-02): hasilkan 3 varian skrip 15 dtk dari 3 keluarga hook berbeda.
-// Deterministik berbasis template; LLM opsional via LLM_API_KEY (fallback template bila kosong).
+// SEPENUHNYA DETERMINISTIK — tidak ada LLM di sini.
+//
+// Komentar lama berbunyi "LLM opsional via LLM_API_KEY (fallback template bila
+// kosong)". Itu TIDAK PERNAH BENAR: tidak ada satu pun panggilan jaringan di
+// seluruh lib/script-engine. Komentar yang menjanjikan kemampuan yang tidak
+// ada membuat pembaca berikutnya salah menilai kenapa naskahnya datar — ia
+// datar karena memang template pengisi, bukan karena LLM-nya belum dinyalakan.
+//
+// Penulis naskah berbasis LLM direncanakan (PATCH 5 STEP 1) dan akan masuk di
+// generateOne(), menggantikan renderSegmentsForTier + templateCopy. Sampai itu
+// benar-benar ada, jangan tulis ulang janji ini di sini.
 
 import {
   BOLD_HOOK_PRIORITY, CATEGORY_HOOK_PRIORITY, CATEGORY_NOUN, CATEGORY_PAIN, CATEGORY_PROOF,

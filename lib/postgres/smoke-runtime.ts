@@ -157,6 +157,30 @@ export async function pgInsertEvent(input: { userId: string | null; anonId: stri
   );
 }
 
+/**
+ * Simpan arsip prompt. Idempoten (job yang di-retry menimpa arsipnya sendiri,
+ * karena prompt bisa BERUBAH antar percobaan dan yang berguna dibedah adalah
+ * yang terakhir dikirim).
+ *
+ * Kegagalan di sini TIDAK boleh menggagalkan job — pemanggil membungkusnya.
+ */
+export async function pgSimpanArsipPrompt(input: {
+  jobId: string; specJson: string; segmentsJson: string; negativePrompt: string;
+  modelParams: string; ideId?: string | null; ideSkor?: number | null;
+}) {
+  const pool = getPool(url());
+  await pool.query(
+    `INSERT INTO job_prompts (job_id,spec_json,segments_json,negative_prompt,model_params,ide_id,ide_skor,created_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
+     ON CONFLICT (job_id) DO UPDATE SET
+       spec_json=EXCLUDED.spec_json, segments_json=EXCLUDED.segments_json,
+       negative_prompt=EXCLUDED.negative_prompt, model_params=EXCLUDED.model_params,
+       ide_id=EXCLUDED.ide_id, ide_skor=EXCLUDED.ide_skor, created_at=EXCLUDED.created_at`,
+    [input.jobId, input.specJson, input.segmentsJson, input.negativePrompt, input.modelParams,
+     input.ideId ?? null, input.ideSkor ?? null, new Date().toISOString()]
+  );
+}
+
 export async function smokeGetScript(userId: string, scriptId: string, orgId?: string) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.getOwnedScript(userId, scriptId, orgId); } finally { await repo.close(); }

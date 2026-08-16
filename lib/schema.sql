@@ -203,6 +203,21 @@ CREATE TABLE IF NOT EXISTS job_shots (
 );
 CREATE INDEX IF NOT EXISTS idx_job_shots_job ON job_shots(job_id, idx);
 
+-- Arsip prompt penyedia. Padanan migrations/postgres/0032 — alasan lengkapnya
+-- di sana. Ringkasnya: tanpa ini, video jelek tidak bisa dibedah karena prompt
+-- yang menghasilkannya tidak pernah disimpan di mana pun.
+CREATE TABLE IF NOT EXISTS job_prompts (
+  job_id          TEXT PRIMARY KEY REFERENCES jobs(id),
+  spec_json       TEXT NOT NULL,
+  segments_json   TEXT NOT NULL,
+  negative_prompt TEXT NOT NULL,
+  model_params    TEXT NOT NULL,
+  ide_id          TEXT,
+  ide_skor        INTEGER,
+  created_at      TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_job_prompts_dibuat ON job_prompts(created_at DESC);
+
 -- catatan: jobs.record_style ditambahkan lewat migrasi ringan di lib/db.ts
 -- (padanan migrations/postgres/0029_jobs_record_style.sql).
 CREATE TABLE IF NOT EXISTS outputs (
