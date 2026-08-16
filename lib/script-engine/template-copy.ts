@@ -18,7 +18,7 @@ type CopyFn = (c: TemplateCtx) => CopyTriple;
 export const TEMPLATE_COPY_CAPACITY = 4 as const;
 
 const RACUN_CHECKOUT: CopyFn[] = [
-  (c) => ({ hook: `[excited] Nah, detail kecil ini ternyata layak dilihat dekat loh`, demo: `[short pause] Pada ${c.produk}, periksa ${c.proof}; harganya ${c.harga}, cocokkan dengan kebutuhanmu sih`, cta: `Kalau memang masuk kebutuhanmu, cek keranjang kuning dong` }),
+  (c) => ({ hook: `[excited] Nah, detail kecil ini ternyata layak dilihat dekat loh`, demo: `[short pause] Pada ${c.produk}, periksa ${c.proof}; harganya ${c.harga} sih`, cta: `Kalau memang masuk kebutuhanmu, cek keranjang kuning dong` }),
   (c) => ({ hook: `[fast] Eh, ${c.reg.me} baru paham bagian yang perlu dicek sih`, demo: `[medium pause] ${c.produk} memperlihatkan ${c.proof}; banderolnya ${c.harga}, jadi nilai sendiri ya`, cta: `Lihat detailnya dulu di keranjang kuning deh` }),
   (c) => ({ hook: `[fast] Ternyata racunnya ada di detail, ${c.reg.sapaan}`, demo: `[long pause] Nah, amati ${c.proof} pada ${c.produk}; harganya ${c.harga}, tanpa janji berlebihan loh`, cta: `Kalau konteksnya sama, mampir ke keranjang kuning ya` }),
   (c) => ({ hook: `[fast] Kirain biasa aja, eh [giggles] ternyata bikin berhenti scroll sih`, demo: `[short pause] Sorot ${c.produk}, lalu telaah atribut ${c.proof}; banderolnya ${c.harga} sih`, cta: `Nilai sendiri sekarang lewat keranjang kuning loh` }),
@@ -47,9 +47,9 @@ const BEFORE_AFTER: CopyFn[] = [
 
 const DISKON_GEDE: CopyFn[] = [
   (c) => ({ hook: `[excited] ${c.reg.sapaan}, banderol ${c.harga} bikin ${c.reg.me} cek ulang`, demo: `[short pause] Nah, ${c.produk} seharga ${c.harga}; bandingkan detail ${c.proof} sendiri sih`, cta: `Harga aktifnya ada di keranjang kuning ya` }),
-  (c) => ({ hook: `[fast] Eh, banderol ${c.harga} ini serius bikin berhenti sih`, demo: `[medium pause] ${c.produk} menunjukkan ${c.proof} dengan jelas; untuk harga ${c.harga}, cek nilainya sendiri ya`, cta: `Angka terbarunya ada di keranjang kuning deh` }),
+  (c) => ({ hook: `[fast] Eh, banderol ${c.harga} ini serius bikin berhenti sih`, demo: `[medium pause] Banderolnya ${c.harga}; lihat dulu ${c.proof} ${c.produk} ya`, cta: `Angka terbarunya ada di keranjang kuning deh` }),
   (c) => ({ hook: `[fast] Nah, kalau budgetmu ${c.harga}, lihat barang ini dulu`, demo: `[long pause] Buat ${c.aktivitas}, amati ${c.proof} milik ${c.produk}; banderolnya ${c.harga} loh`, cta: `Bandingkan paketnya lewat keranjang kuning tuh` }),
-  (c) => ({ hook: `[fast] Yakin ${c.harga} ini wajar? [giggles] Bandingkan dulu ya`, demo: `[short pause] Nah, periksa bagian ${c.proof} dari ${c.produk}; harganya ${c.harga}, lalu nilai sendiri sih`, cta: `Harganya ada di keranjang kuning deh` }),
+  (c) => ({ hook: `[fast] Yakin ${c.harga} ini wajar? [giggles] Bandingkan dulu ya`, demo: `[short pause] Nah, periksa bagian ${c.proof} ${c.produk}; harganya ${c.harga} sih`, cta: `Harganya ada di keranjang kuning deh` }),
 ];
 
 const BUAT_KAMU_YANG: CopyFn[] = [
@@ -90,7 +90,7 @@ const T03: CopyFn[] = [
 const T04: CopyFn[] = [
   (c) => ({ hook: `[excited] Nah, bunyi bungkusnya bikin ${c.reg.me} penasaran sama isinya`, demo: `[short pause] Buka ${c.produk}, baca label rasa, lalu periksa ${c.proof} ya`, cta: `Kalau penasaran, detailnya ada di keranjang kuning ya` }),
   (c) => ({ hook: `[whispers] Kirain harus dicicip dulu, eh ternyata bunyinya udah cerita banyak`, demo: `[medium pause] Bunyi ${c.produk} memancing rasa penasaran; rasanya menunggu dicicipi sih`, cta: `Semua pilihan rasanya ada di keranjang kuning deh` }),
-  (c) => ({ hook: `[whispers] ${c.reg.sapaan}, eh belum dicicip pun teksturnya udah kedengaran dari bunyinya`, demo: `[long pause] Cek nama rasa, komposisi ${c.produk}, dan detail ${c.proof} loh`, cta: `Kalau ingin mencoba, rinciannya ada di keranjang kuning tuh` }),
+  (c) => ({ hook: `[whispers] ${c.reg.sapaan}, eh belum dicicip pun teksturnya udah kedengaran dari bunyinya`, demo: `[long pause] Cek komposisi ${c.produk} dan ${c.proof} loh`, cta: `Kalau ingin mencoba, rinciannya ada di keranjang kuning tuh` }),
   (c) => ({ hook: `[whispers] Belum kelihatan apa-apa, eh [giggles] tapi suaranya bikin pengin buka bungkusnya`, demo: `[short pause] Dengarkan teksturnya, baca label ${c.produk}, lalu pertimbangkan ${c.proof} deh`, cta: `Pilihan rasanya ada di keranjang kuning deh` }),
 ];
 
@@ -109,9 +109,9 @@ const T06: CopyFn[] = [
 ];
 
 const T07: CopyFn[] = [
-  (c) => ({ hook: `[serious] Buat yang bingung mulai dari mana, checklist ini mulai dari ${c.pain}`, demo: `[short pause] Nah, centang setelah atribut ${c.proof} pada ${c.produk} bisa diperiksa ya`, cta: `Kalau checklistnya relevan, cek keranjang kuning deh` }),
+  (c) => ({ hook: `[serious] Buat yang bingung mulai dari mana, checklist ini mulai dari ${c.pain}`, demo: `[short pause] Nah, centang setelah ${c.proof} ${c.produk} terlihat ya`, cta: `Kalau checklistnya relevan, cek keranjang kuning deh` }),
   (c) => ({ hook: `[fast] ${c.reg.sapaan}, jangan dicentang sebelum aksinya benar-benar kelihatan`, demo: `[medium pause] Nah, poin pertama: ${c.produk} punya ${c.proof}? Cari jawabannya pada barangnya langsung sih`, cta: `Manfaatnya ada di keranjang kuning ya` }),
-  (c) => ({ hook: `[fast] Eh, setiap poin harus punya jawaban yang terlihat`, demo: `[long pause] Baca poin, cari buktinya pada ${c.produk}, lalu beri centang bila ${c.proof} terlihat loh`, cta: `Kalau buktinya cukup, buka keranjang kuning tuh` }),
+  (c) => ({ hook: `[fast] Eh, setiap poin harus punya jawaban yang terlihat`, demo: `[long pause] Baca poin, cari buktinya pada ${c.produk} bila ${c.proof} terlihat loh`, cta: `Kalau buktinya cukup, buka keranjang kuning tuh` }),
   (c) => ({ hook: `[fast] Nah, [giggles] belum ngapa-ngapain, satu tindakan ini udah ngisi checklist pertama`, demo: `[short pause] Sumpah, [giggles] checklist ${c.produk} harus berisi spesifikasi yang tersedia, termasuk ${c.proof} deh`, cta: `Cocokkan kebutuhanmu di keranjang kuning ya` }),
 ];
 
@@ -133,7 +133,7 @@ const T10: CopyFn[] = [
   (c) => ({ hook: `[excited] Nah, uji kecil ini nggak sah kalau aturannya nggak jelas sejak awal`, demo: `[short pause] Ikuti petunjuk ${c.produk}; periksa ${c.proof} sebagai atribut saja ya`, cta: `Cek petunjuk di keranjang kuning ya` }),
   (c) => ({ hook: `[fast] Eh, jangan ganti cahaya dan posisi di tengah jalan`, demo: `[medium pause] Nah, gunakan informasi resmi ${c.produk} untuk memahami ${c.proof} sih`, cta: `Detail resminya ada di keranjang kuning deh` }),
   (c) => ({ hook: `[fast] Nah, bukti tanpa konteks gampang bikin salah baca, ${c.reg.sapaan}`, demo: `[long pause] Sebelum mencoba ${c.produk}, cek petunjuk dan atribut ${c.proof} loh`, cta: `Lihat cara pakai di keranjang kuning tuh` }),
-  (c) => ({ hook: `[fast] Kalau kondisinya nggak setara, eh [giggles] hasilnya nggak bisa dipercaya`, demo: `[short pause] Oleskan ${c.produk} sesuai petunjuk pada area kecil, samakan cahayanya, lalu lihat ${c.proof} deh`, cta: `Panduannya ada di keranjang kuning deh` }),
+  (c) => ({ hook: `[fast] Kalau kondisinya nggak setara, eh [giggles] hasilnya nggak bisa dipercaya`, demo: `[short pause] Oleskan ${c.produk} pada area kecil, samakan cahayanya, lihat ${c.proof} deh`, cta: `Panduannya ada di keranjang kuning deh` }),
 ];
 
 const T11: CopyFn[] = [

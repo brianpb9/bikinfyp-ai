@@ -235,6 +235,15 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   const tier = script.qualityTier ?? "silent_caption";
   const durationScale = (script.durationSec ?? 15) / 15;
   const wc = wordCount(fullText);
+  // Batas atas SEMPAT saya turunkan ke 27 untuk melawan "suara kecepatan",
+  // lalu dikembalikan. Pengukuran yang mendasarinya terlalu sempit: saya cuma
+  // memeriksa template 15 detik dan cuma menanyakan "apakah tersisa satu
+  // varian", padahal katalog menuntut SELURUH 132 varian lolos dan durasi
+  // 30/45 detik ikut terskala dari angka ini. Enam tes jatuh.
+  //
+  // Yang diperbaiki akhirnya varian yang memang duduk di 29-30 kata (2,00
+  // kata/detik) — dipendekkan satu per satu di template-copy.ts, bukan
+  // aturannya yang dilonggarkan.
   const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
   // Jatah template memakai toleransi yang sama dengan templates.ts (+/-15%)
   // dan TIDAK diskalakan durasi — batasnya beban baca, bukan kecepatan bicara.

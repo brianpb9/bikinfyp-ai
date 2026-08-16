@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail } from "../../_components/api";
+import { AVATAR_PRESETS, getAvatarPreset } from "../../../lib/avatar-presets";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
 import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
 import { track } from "../../_components/track";
@@ -121,6 +122,11 @@ export default function GayaPage() {
   const [register, setRegister] = useState("bestie");
   const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
   const [creatorCategory, setCreatorCategory] = useState("hijaber");
+  // Avatar premium (24 orang) sebelumnya HANYA ada di dashboard brand;
+  // retail terkunci di enam preset kategori lama. Tidak ada alasan produk
+  // untuk beda itu — penjual perorangan justru yang paling butuh wajah
+  // yang tidak pasaran.
+  const [avatarId, setAvatarId] = useState<string>("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noCredits, setNoCredits] = useState(false);
@@ -170,7 +176,7 @@ export default function GayaPage() {
             : {}),
         },
       });
-      saveFlow({ register, qualityTier: tier, format, durationSec, hookLevel, creatorCategory, scripts: res.scripts, selectedScriptId: undefined });
+      saveFlow({ register, qualityTier: tier, format, durationSec, hookLevel, creatorCategory, avatarDesc: getAvatarPreset(avatarId)?.desc, scripts: res.scripts, selectedScriptId: undefined });
       router.push("/bikin/skrip");
     } catch (err) {
       if (err instanceof ApiFail && err.code === "INSUFFICIENT_CREDITS") {
@@ -335,12 +341,35 @@ export default function GayaPage() {
               geser ke kanan — bukan grid bertumpuk. -mx-4 px-4 = kartu tepi
               menempel rapi ke tepi layar saat digeser. */}
           <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {/* Avatar premium didahulukan; preset kategori lama tetap ada di
+                belakangnya supaya pengguna yang sudah terbiasa tidak kehilangan
+                pilihannya. Memilih salah satu MEMBATALKAN yang lain — dua
+                identitas sekaligus tidak punya arti. */}
+            {AVATAR_PRESETS.filter((a) => a.gender === avatarGender).map((a) => (
+              <button
+                key={a.id}
+                type="button"
+                aria-pressed={avatarId === a.id}
+                aria-label={`Avatar ${a.name} — ${a.note}`}
+                onClick={() => { setAvatarId(a.id); setCreatorCategory(""); }}
+                className={`w-32 shrink-0 snap-start overflow-hidden rounded-2xl border-2 text-left shadow-sm ${
+                  avatarId === a.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
+                }`}
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={a.img} alt={a.name} className="aspect-[3/4] w-full object-cover" loading="lazy" decoding="async" />
+                <span className="block p-2">
+                  <span className="block truncate text-sm font-bold">{a.name}</span>
+                  <span className="block truncate text-[10px] leading-tight text-zinc-500">{a.note}</span>
+                </span>
+              </button>
+            ))}
             {catsForGender.map((c) => (
               <button
                 key={c.id}
                 type="button"
                 aria-pressed={creatorCategory === c.id}
-                onClick={() => setCreatorCategory(c.id)}
+                onClick={() => { setCreatorCategory(c.id); setAvatarId(""); }}
                 className={`w-32 shrink-0 snap-start overflow-hidden rounded-2xl border-2 text-left shadow-sm ${
                   creatorCategory === c.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
                 }`}

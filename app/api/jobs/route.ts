@@ -121,6 +121,14 @@ export async function POST(req: Request) {
       );
 
     // --- Tier kualitas: menentukan model, audio, dan HARGA (P6: harga terlihat sebelum aksi) ---
+    // Avatar premium (lib/avatar-presets) dikirim sebagai DESKRIPSI, bukan id:
+    // BytePlus menolak foto wajah asli sebagai referensi, jadi yang dipakai
+    // prompt memang teksnya. Dibatasi panjangnya supaya tidak jadi saluran
+    // menyuntikkan prompt sepanjang apa pun ke perencana shot.
+    const avatarCustomDesc = typeof body.avatar_custom_desc === "string" && body.avatar_custom_desc.trim()
+      ? body.avatar_custom_desc.trim().slice(0, 600)
+      : null;
+
     const tier = String(body.quality_tier ?? "high_quality") as "silent_caption" | "high_quality" | "super_hq";
     if (tier === "silent_caption")
       throw ERR.BAD_REQUEST("Tier Teks + Musik sudah tidak tersedia — bikin skrip baru dengan AI Bersuara ya.", "silent_caption tier retired.");
@@ -137,7 +145,7 @@ export async function POST(req: Request) {
     // the same HTTP contract.  The deterministic completion hook is scoped
     // to RACUN_POSTGRES_SMOKE and never starts the production worker.
     if (postgresRuntimeEnabled()) {
-      const created = await smokeCreateJob(user.id, { productId: product.id, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr });
+      const created = await smokeCreateJob(user.id, { productId: product.id, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc });
       // Snapshot Skor FYP BEKU (pre-render) — non-fatal, sama seperti jalur SQLite.
       if (!created.duplicate) {
         try {

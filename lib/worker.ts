@@ -89,7 +89,16 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const persona = job.persona_id
       ? (db.prepare("SELECT * FROM personas WHERE id = ?").get(job.persona_id) as PersonaRow | undefined)
       : undefined;
-    const category = getCreatorCategory(persona?.creator_category ?? "hijaber")!;
+    // Avatar kustom/premium menimpa DESKRIPTOR FISIK saja — voiceName,
+    // voiceStyle, dan negativePrompt tetap dari preset, karena teks deskripsi
+    // tidak memberi tahu apa pun soal suara. Sejajar dengan worker Postgres
+    // (lib/postgres/worker.ts); jalur SQLite sebelumnya mengabaikannya, jadi
+    // avatar premium diam-diam tidak berpengaruh di dev.
+    const presetKategori = getCreatorCategory(persona?.creator_category ?? "hijaber")!;
+    const descKustom = (job as { avatar_custom_desc?: string | null }).avatar_custom_desc?.trim();
+    const category = descKustom
+      ? { ...presetKategori, promptSeed: descKustom, handsPrompt: descKustom }
+      : presetKategori;
     const segments = JSON.parse(script.segments) as SegmentDraft[];
     const images = JSON.parse(product.images) as string[];
     if (images.length === 0) throw new Error("Produk tidak punya foto — upload minimal 1 foto.");

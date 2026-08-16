@@ -170,6 +170,11 @@ function SkripInner() {
           duration_s: loadFlow().durationSec ?? 15,
           quality_tier: loadFlow().qualityTier ?? "high_quality",
           creator_category: loadFlow().creatorCategory ?? "hijaber",
+          // Avatar premium: deskripsinya ikut dikirim supaya worker memakai
+          // orang yang dipilih, bukan preset kategori lama. Kosong = perilaku
+          // lama (kategori saja), jadi pengguna yang memilih avatar bawaan
+          // tidak berubah apa-apa.
+          ...(loadFlow().avatarDesc ? { avatar_custom_desc: loadFlow().avatarDesc } : {}),
         },
       });
       saveFlow({ jobId: job.job_id });

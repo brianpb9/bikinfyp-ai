@@ -250,6 +250,45 @@ const IDENTITY_INSTRUCTION =
 // kategori — fashion harus TRY-ON (baju dipakai/ditempel ke badan), beauty
 // harus swatch/aplikasi, food harus dicicipi. Konten UGC yang menang terlihat
 // seperti orang sungguhan MEMAKAI produk, bukan model memegang paket.
+
+/** BENTUK produk: padat, bisa dituang, atau tidak diketahui.
+ *
+ * Aksi demo per kategori mengandaikan produk BISA DITUANG — beauty menyuruh
+ * "dropping a little of the product", body_care menyuruh "pumping a dollop".
+ * Untuk sabun BATANG dua-duanya mustahil, dan model menuruti aksinya lalu
+ * mengarang sabun cair. Terlihat 16 Agu 2026 pada JJ Glow Gluta Pink Barsoap:
+ * deskripsi produk jelas menyebut "Barsoap", tapi videonya keluar sabun cair.
+ *
+ * Ini pola yang sama untuk keenam kalinya di repo ini — prompt yang
+ * bertentangan dengan dirinya sendiri, bukan larangan yang kurang keras.
+ *
+ * "cair" diperiksa LEBIH DULU: "sabun cair" memuat kata "sabun" dan akan salah
+ * tertangkap sebagai padat kalau urutannya dibalik.
+ */
+export type BentukProduk = "padat" | "tuang" | "tidak diketahui";
+
+const KATA_CAIR = /\b(cair|liquid|serum|toner|essence|lotion|losion|gel|minyak|oil|ampoule|mist|spray|shampoo|sampo|conditioner|krim|cream)\b/i;
+const KATA_PADAT = /\b(batang|bar|barsoap|padat|solid|stick|compact|lipstik|lipstick)\b/i;
+
+export function bentukProduk(nama: string, deskripsi?: string | null): BentukProduk {
+  const teks = `${nama} ${deskripsi ?? ""}`;
+  if (KATA_CAIR.test(teks)) return "tuang";
+  if (KATA_PADAT.test(teks)) return "padat";
+  return "tidak diketahui";
+}
+
+/** Aksi untuk produk PADAT — tidak dituang, tidak dipompa. */
+const AKSI_PADAT: Record<string, string> = {
+  beauty: "wetting the solid bar under running water and rubbing it between both palms until a rich lather builds, showing the foam on her hands",
+  body_care: "wetting the solid bar under running water and rubbing it between both palms until a rich lather builds, showing the foam on her hands",
+};
+
+/** Aksi netral saat bentuknya TIDAK DIKETAHUI.
+ *
+ *  Sengaja tidak menebak: menyuruh menuang produk yang mungkin padat sama
+ *  buruknya dengan sebaliknya. Yang aman adalah aksi yang benar untuk keduanya. */
+const AKSI_NETRAL = "holding the product close to the camera and turning it slowly so its surface and texture read clearly, both hands visible";
+
 const DEMO_ACTION: Record<string, string> = {
   // beauty: swatch di PUNGGUNG TANGAN — bukan wajah (r3, temuan Brian: pegang
   // produk + sentuh muka memicu tangan ganda / AI slop anatomi).
@@ -826,7 +865,16 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       : format === "talking_head" || format === "tvc" || format === "ads"
       ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
       : input.category.handsPrompt;
-    const demoAction = DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default;
+    // Bentuk produk mengalahkan kategori: kategori tahu JENIS-nya, bentuk tahu
+    // apa yang FISIKNYA MUNGKIN. Kategori beauty untuk sabun batang tetap
+    // beauty, tapi "menuangkan sedikit produk" tidak pernah bisa benar.
+    const bentuk = bentukProduk(input.productName, input.productVisualDesc);
+    const demoAction =
+      bentuk === "padat" && AKSI_PADAT[input.productCategory]
+        ? AKSI_PADAT[input.productCategory]
+        : bentuk === "padat"
+          ? AKSI_NETRAL
+          : (DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default);
     // TANGGA SHOT TENGAH.
     //
     // Terukur 2026-08-11: sebelum ini SELURUH shot tengah membawa instruksi
@@ -1095,10 +1143,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             ? `A composed, confident Indonesian brand voiceover is heard over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm but never chatty or salesy. The narrator is never seen; nobody appears on screen: "${dialogue}". `
             : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm but never chatty or salesy; any person on screen acts and reacts but is NOT lip-syncing these words: "${dialogue}". `
         : format === "hands_only"
-        ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting, never rushed (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
+        ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting, never rushed (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
         : lipSyncPresenter
-          ? `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences — like a real person chatting with a friend, never rushed or salesy, saying: "${dialogue}". `
-          : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally but her mouth is NOT moving in sync to any specific words (not talking to camera): "${dialogue}". `;
+          ? `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting with a friend, never rushed or salesy, saying: "${dialogue}". `
+          : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally but her mouth is NOT moving in sync to any specific words (not talking to camera): "${dialogue}". `;
     const pacing =
       format === "tvc"
         ? !dialogue.trim()
