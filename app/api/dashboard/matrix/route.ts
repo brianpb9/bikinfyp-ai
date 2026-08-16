@@ -16,6 +16,7 @@ import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { getPool } from "@/lib/postgres/pool";
 import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
+import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,6 +81,9 @@ export async function POST(req: Request) {
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard matrix requires Postgres runtime.");
     const { user, membership } = await requireOrgContextApi(req);
     await assertDashboardRate("confirm", membership.org_id);
+    // Matriks adalah pengeluaran terbesar yang bisa dipicu satu klik di produk
+    // ini. Kalau ada satu tempat yang perannya wajib diperiksa, ini tempatnya.
+    pastikanBolehBelanja(membership.role);
     const body = await req.json().catch(() => ({}));
 
     // ---- produk ----
@@ -378,6 +382,10 @@ export async function GET(req: Request) {
         }))
       : [];
     return Response.json({
+      // Peran dikirim supaya UI bisa JUJUR DI DEPAN. Menolak di akhir setelah
+      // brand menyusun matriks 12 sel adalah cara paling buruk menyampaikan
+      // batasan yang sudah kita ketahui sejak halaman dibuka.
+      role: membership.role,
       products: produk,
       avatars: AVATAR_PRESETS.map((a) => ({ id: a.id, name: a.name, note: a.note, img: a.img, gender: a.gender })),
       scenarios: CAMPAIGN_TEMPLATES

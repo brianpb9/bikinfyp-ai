@@ -11,6 +11,7 @@ import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { pgForgetShotTask } from "@/lib/postgres/task-memo";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
+import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -103,6 +104,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
     const body = await req.json().catch(() => ({}));
     const action = body.action === "approve" ? "approve" : body.action === "regenerate" ? "regenerate" : null;
     if (!action) throw ERR.BAD_REQUEST("Aksi tidak dikenal.", "Unknown action.");
+
+    // KEDUA aksi ini membelanjakan, meski dengan cara berbeda.
+    //
+    // "regenerate" membakar uang provider sungguhan (~Rp8-37rb sekali panggil,
+    // lihat catatan di atas berkas ini) walaupun belum menahan kredit — tidak
+    // menahan kredit bukan berarti tidak mengeluarkan biaya.
+    //
+    // "approve" melepas job ke compositing, yaitu titik ketika seluruh biaya
+    // render yang sudah ditahan menjadi final. Menyetujui atas nama merek juga
+    // gerbang HITL (aturan keras #5), dan gerbang yang bisa ditekan siapa saja
+    // bukan gerbang.
+    pastikanBolehBelanja(membership.role);
 
     const pool = getPool(config.databaseUrl);
     try {

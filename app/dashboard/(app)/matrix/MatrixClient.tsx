@@ -27,6 +27,7 @@ interface Produk { product_id: string; name: string; price_idr: number; category
 interface Avatar { id: string; name: string; note: string; img: string; gender: "female" | "male" }
 interface Skenario { id: string; name: string; when: string; format: string; duration_sec: number; ratio: string | null }
 interface Katalog {
+  role: string;
   products: Produk[]; avatars: Avatar[]; scenarios: Skenario[];
   limits: { max_cells: number; max_avatars: number; max_scenarios: number };
   /** Tarif per (tier:durasi), dikirim server — lihat catatan di route-nya. */
@@ -82,6 +83,9 @@ export default function MatrixClient() {
       .catch((err) => setError(err instanceof ApiFail ? err.message : "Gagal memuat katalog."));
   }, []);
 
+  // Cuma pemilik organisasi yang boleh membelanjakan saldo bersama. Diberitahu
+  // sejak awal, bukan ditolak di akhir.
+  const bolehBelanja = katalog?.role === "owner";
   const produk = katalog?.products.find((p) => p.product_id === produkId) ?? null;
   const sel = avatarIds.length * skenarioIds.length;
   const maksSel = katalog?.limits.max_cells ?? 24;
@@ -404,12 +408,17 @@ export default function MatrixClient() {
               {sel > 0 ? `Total ${rupiah(totalBiaya)} — dipotong dari saldo organisasi` : "Pilih minimal 1 avatar dan 1 skenario"}
             </span>
           </div>
-          {kelebihan ? (
+          {!bolehBelanja ? (
+            <p className="text-xs font-semibold text-zinc-500">
+              Kamu bisa menyusun matriksnya, tapi render berbayar dijalankan pemilik organisasi.
+            </p>
+          ) : kelebihan ? (
             <p className="text-xs font-semibold text-red-600">
               Di atas batas {maksSel} video sekali jalan — kurangi salah satu sumbunya.
             </p>
           ) : (
-            <button onClick={() => setKonfirmasi(true)} disabled={sibuk || sel === 0 || !produk}
+            <button onClick={() => setKonfirmasi(true)} disabled={sibuk || sel === 0 || !produk || !bolehBelanja}
+              title={bolehBelanja ? undefined : "Cuma pemilik organisasi yang bisa menjalankan render berbayar"}
               className="flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-zinc-300">
               <Zap size={16} />
               {`Lanjut — ${sel} video`}

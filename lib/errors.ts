@@ -50,6 +50,11 @@ export const ERR = {
     }),
   BAD_REQUEST: (msgId: string, msgEn = "Bad request.") =>
     new ApiError(400, { code: "BAD_REQUEST", message_id: msgId, message_en: msgEn, retryable: false }),
+  // 403, BUKAN 401: penggunanya sudah masuk dan identitasnya jelas — yang
+  // kurang wewenangnya. Membalas 401 akan membuat klien mengira sesinya habis
+  // lalu menyuruh login ulang, dan login ulang tidak akan pernah menolong.
+  FORBIDDEN: (msgId: string, msgEn = "Forbidden.") =>
+    new ApiError(403, { code: "FORBIDDEN", message_id: msgId, message_en: msgEn, retryable: false }),
   EXTRACT_UNSUPPORTED: () =>
     new ApiError(400, {
       code: "EXTRACT_UNSUPPORTED_URL",
