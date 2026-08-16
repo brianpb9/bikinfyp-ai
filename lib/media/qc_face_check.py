@@ -16,6 +16,25 @@ import cv2
 # Ambangnya diletakkan di celah lebar di antaranya.
 MIN_TINGGI_WAJAH = 0.12
 
+# ...tapi ambang MUTLAK saja tidak cukup, dan itu terbukti mahal.
+#
+# 16 Agu 2026: TVC "Tersangka Glowing" (parodi ruang sidang) ditolak karena "5
+# wajah utama", lalu render memperbaiki shot yang sebenarnya tidak cacat.
+# Diukur di frame aslinya: tokoh utama 0,378 - penuduh 0,260 - penonton 0,177 /
+# 0,148 / 0,119. Penontonnya DEKAT KAMERA, jadi semuanya melewati 0,12. Asumsi
+# "latar selalu kecil" runtuh begitu keramaiannya dekat.
+#
+# Yang sebenarnya dijaga aturan ini adalah TOKOH UTAMA TERDUPLIKASI - dua wajah
+# BESAR berukuran mirip (TVC pernah tayang dengan dua perempuan identik di shot
+# penutup). Kerumunan tidak pernah seukuran tokohnya. Jadi ukurannya dibuat
+# relatif terhadap wajah terbesar di frame yang sama, bukan terhadap frame.
+#
+# Di frame sengketa itu celahnya lebar: 69% lalu turun ke 47%. Ambang 0,6
+# menghasilkan 2 wajah utama - tepat batas rute komedi. Pada kalibrasi lama
+# hasilnya tidak berubah: latar 0,09 dibagi presenter 0,25 = 36%, tetap
+# terbuang. Aturan relatif ini lebih ketat DAN lebih benar sekaligus.
+MIN_RASIO_KE_TERBESAR = 0.6
+
 def main() -> None:
     model = sys.argv[1]
     out = []
@@ -49,9 +68,14 @@ def main() -> None:
         # latar selalu kecil. Tinggi kotak wajah relatif terhadap tinggi frame
         # memisahkan keduanya tanpa model tambahan.
         besar = 0
-        if faces is not None:
-            for f in faces:
-                if float(f[3]) / h >= MIN_TINGGI_WAJAH:
+        if faces is not None and len(faces):
+            tinggi = [float(f[3]) / h for f in faces]
+            terbesar = max(tinggi)
+            for t in tinggi:
+                # Dua syarat sekaligus: cukup besar di frame, DAN sebanding
+                # dengan wajah terbesar. Yang pertama membuang latar jauh, yang
+                # kedua membuang kerumunan dekat.
+                if t >= MIN_TINGGI_WAJAH and t >= terbesar * MIN_RASIO_KE_TERBESAR:
                     besar += 1
         out.append({"file": path, "faces": n, "faces_utama": besar, "best_score": best})
         max_faces = max(max_faces, n)
