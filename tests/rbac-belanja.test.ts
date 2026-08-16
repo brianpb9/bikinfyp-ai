@@ -139,18 +139,20 @@ test("health menutup intake sendiri dan membuktikan commit yang hidup", () => {
     "Secure diturunkan dari APP_BASE_URL — kalau ia bukan https, cookie berangkat tanpa Secure tanpa ada yang mengeluh");
 });
 
-test("gerbang uang FAIL-CLOSED saat status migrasi tidak terbaca", () => {
+test("gerbang uang FAIL-CLOSED di setiap cara ia bisa gagal", () => {
   const s = baca("lib/job-intake.ts");
-  // Versi pertama memakai .catch(() => []): pembacaan skema yang gagal
-  // menghasilkan "tidak ada yang tertinggal" dan uang boleh bergerak. Terbalik
-  // — kegagalan membaca justru sinyal database sedang tidak sehat.
-  assert.ok(!/pendingMigrations\(\)\.catch\(\(\) => \[\]/.test(s),
-    "gerbang uang tidak boleh fail-open");
-  assert.match(s, /MONEY_INVARIANT_UNKNOWN/, "gagal baca = tolak, dengan kode sendiri");
+  assert.ok(!/\.catch\(\(\) => \[\] as string\[\]\)/.test(s), "gerbang uang tidak boleh fail-open");
+  assert.match(s, /MONEY_INVARIANT_NOT_READY/, "tidak siap = tolak, dengan kode sendiri");
   assert.match(s, /export async function assertPaidAdmission/,
     "harus ada SATU gerbang bersama, bukan tiap jalur memilih sendiri");
   assert.match(s, /assertJobIntakeOpen\(\);\s*\n\s*await assertInvarianUangSiap\(\);/,
-    "gerbang bersama harus memeriksa maintenance DAN migrasi");
+    "gerbang bersama harus memeriksa maintenance DAN invarian");
+
+  // Ketiga cara gerbang ini bisa "gagal tanpa gagal" harus berakhir TIDAK SIAP.
+  const m = baca("lib/migrasi-status.ts");
+  assert.match(m, /DATABASE_URL kosong/, "URL kosong");
+  assert.match(m, /produksi berjalan tanpa runtime PostgreSQL/, "runtime salah di produksi");
+  assert.match(m, /status invarian tidak terbaca/, "query gagal");
 });
 
 test("jalur baca retail tidak bisa melihat job organisasi", () => {
@@ -165,4 +167,47 @@ test("jalur baca retail tidak bisa melihat job organisasi", () => {
   const rt = baca("lib/postgres/smoke-runtime.ts");
   assert.match(rt, /FROM jobs WHERE id=\$1 AND user_id=\$2 AND org_id IS NULL/);
   assert.match(rt, /j\.user_id=\$2 AND j\.org_id IS NULL/);
+});
+
+test("gerbang uang memeriksa ARTEFAK, bukan catatan migrasi", () => {
+  const s = baca("lib/migrasi-status.ts");
+  // pendingMigrations() mengembalikan [] saat runtime bukan PostgreSQL atau
+  // DATABASE_URL kosong — SUKSES secara logis, jadi try/catch tidak pernah
+  // jalan. Terbukti: production-mode dengan DATABASE_URL='' membuka admission.
+  assert.match(s, /export async function invarianUangTerpasang/);
+  assert.match(s, /uniq_ledger_terminal_per_job/, "indeks diperiksa langsung");
+  assert.match(s, /credit_ledger_capture_delta_check/, "CHECK diperiksa langsung");
+  assert.match(s, /DATABASE_URL kosong/, "URL kosong = TIDAK SIAP, bukan 'aman'");
+  const g = baca("lib/job-intake.ts");
+  assert.match(g, /invarianUangTerpasang\(\)/, "gerbang harus memakai pemeriksa artefak");
+  // PEMANGGILAN, bukan penyebutan: nama fungsinya masih muncul di komentar
+  // yang menjelaskan kenapa ia ditinggalkan, dan itu justru harus tetap ada.
+  assert.ok(!/await pendingMigrations\(\)/.test(g),
+    "gerbang tidak boleh lagi memanggil pembaca catatan migrasi");
+});
+
+test("skrip audit tidak bisa menemukan pemblokir lalu bilang aman", () => {
+  const s = baca("scripts/audit-ledger-sebelum-migrasi.mjs");
+  // Versi pertama hanya menyalakan bendera dari query PERTAMA, jadi grup
+  // terminal yang memuat release ditemukan di query ketiga dan tetap diakhiri
+  // "Lanjutkan". Skrip keselamatan yang bisa berkata aman padahal tidak lebih
+  // berbahaya daripada tidak ada skrip.
+  assert.match(s, /pemblokir: true/, "tiap pemeriksaan menyatakan sendiri status pemblokirnya");
+  assert.match(s, /if \(p\.pemblokir\) pemblokirDitemukan\.push/, "bendera dari SETIAP pemeriksaan, bukan satu");
+  assert.match(s, /process\.exit\(1\)/, "pemblokir harus keluar dengan kode bukan nol");
+  assert.match(s, /READ ONLY ISOLATION LEVEL REPEATABLE READ/, "semua angka dari satu snapshot");
+  assert.match(s, /statement_timeout/);
+  assert.ok(!/LIMIT 100/.test(s), "inventaris korban tidak boleh dipotong");
+  // Refund PARSIAL dulu lolos karena cuma memeriksa "ada release".
+  assert.match(s, /SUM\(-l\.delta\) FILTER \(WHERE l\.type='hold'\)[\s\S]{0,80}>[\s\S]{0,80}SUM\(l\.delta\)  FILTER \(WHERE l\.type='release'\)/,
+    "hold vs release dibandingkan NOMINAL");
+});
+
+test("aset organisasi menuntut keanggotaan yang masih aktif", () => {
+  const s = baca("app/api/files/[...path]/route.ts");
+  // "Dulu saya yang membuat" bukan izin selamanya: anggota yang dikeluarkan
+  // atau organisasi yang ditangguhkan tidak boleh tetap menarik asetnya.
+  const cocok = s.match(/org\.status='active'/g) ?? [];
+  assert.ok(cocok.length >= 3, `outputs, products, dan job_shots harus menuntut org aktif (ketemu ${cocok.length})`);
+  assert.match(s, /j\.org_id IS NULL AND j\.user_id=\$2/, "jalur retail tetap murni per-user");
 });

@@ -60,33 +60,24 @@ export function assertJobIntakeOpen(value = config.jobIntakeMode): void {
  * dipasang. Pengguna tidak perlu mengubah apa pun, cukup mencoba lagi nanti.
  */
 export async function assertInvarianUangSiap(): Promise<void> {
-  const { pendingMigrations } = await import("./migrasi-status");
+  const { invarianUangTerpasang } = await import("./migrasi-status");
 
-  // FAIL-CLOSED. Versi pertama memakai .catch(() => []) — kalau pembacaan
-  // skema gagal, hasilnya "tidak ada migrasi tertinggal" dan uang boleh
-  // bergerak. Itu terbalik: gerbang yang tidak bisa memastikan invariannya
-  // terpasang harus MENOLAK, bukan mengizinkan. Kegagalan membaca justru
-  // sinyal bahwa databasenya sedang tidak sehat.
-  let pending: string[];
-  try {
-    pending = await pendingMigrations();
-  } catch (err) {
-    console.error("[intake] DITOLAK — status migrasi tidak terbaca:", (err as Error).message);
-    throw new ApiError(503, {
-      code: "MONEY_INVARIANT_UNKNOWN",
-      message_id: "Pembuatan video dijeda sebentar — kami belum bisa memastikan kondisi database. Saldo dan video lamamu aman.",
-      message_en: "Paid intake refused: migration status could not be read.",
-      retryable: true,
-    });
-  }
+  // Memeriksa ARTEFAKNYA, bukan catatan migrasi.
+  //
+  // Versi pertama memakai pendingMigrations() dan itu fail-OPEN dalam dua cara
+  // sekaligus: ia mengembalikan [] (= "aman") ketika runtime bukan PostgreSQL
+  // atau DATABASE_URL kosong — sukses secara logis, sehingga try/catch tidak
+  // pernah jalan — dan ia mempercayai isi schema_migrations, yaitu CATATAN,
+  // bukan KENYATAAN. Baris migrasi yang tercatat sementara indeksnya hilang
+  // tetap membuka intake.
+  const status = await invarianUangTerpasang();
+  if (status.siap) return;
 
-  const kurang = invarianUangBelumTerpasang(pending);
-  if (kurang.length === 0) return;
-  console.error(`[intake] DITOLAK — migrasi invarian uang belum terpasang: ${kurang.join(", ")}`);
+  console.error(`[intake] DITOLAK — ${status.alasan}`);
   throw new ApiError(503, {
-    code: "MONEY_INVARIANT_MIGRATION_PENDING",
+    code: "MONEY_INVARIANT_NOT_READY",
     message_id: "Pembuatan video dijeda sebentar sampai perawatan database selesai. Saldo dan video lamamu aman.",
-    message_en: `Paid job intake is paused until money-invariant migrations are applied: ${kurang.join(", ")}.`,
+    message_en: `Paid intake refused: ${status.alasan}`,
     retryable: true,
   });
 }

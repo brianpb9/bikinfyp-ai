@@ -295,7 +295,7 @@ export async function pgApplyFypReport(userId: string, jobId: string, report: { 
   try {
     await client.query("BEGIN");
     const found = await client.query(
-      `SELECT fs.* FROM fyp_snapshots fs JOIN jobs j ON j.id=fs.job_id WHERE fs.job_id=$1 AND j.user_id=$2 FOR UPDATE`,
+      `SELECT fs.* FROM fyp_snapshots fs JOIN jobs j ON j.id=fs.job_id WHERE fs.job_id=$1 AND j.user_id=$2 AND j.org_id IS NULL FOR UPDATE`,
       [jobId, userId]
     );
     const row = found.rows[0];

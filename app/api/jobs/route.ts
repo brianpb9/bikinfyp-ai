@@ -269,7 +269,7 @@ export async function GET(req: Request) {
          FROM jobs j JOIN products p ON p.id = j.product_id
          LEFT JOIN outputs o ON o.job_id = j.id
          LEFT JOIN fyp_snapshots fs ON fs.job_id = j.id
-         WHERE j.user_id = ? ORDER BY j.created_at DESC LIMIT 50`
+         WHERE j.user_id = ? AND j.org_id IS NULL ORDER BY j.created_at DESC LIMIT 50`
       )
       .all(user.id) as (JobRow & { script_id: string; product_images: string; output_video: string | null })[];
     const withThumbs = jobs.map(attachPreview);
