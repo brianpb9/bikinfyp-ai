@@ -267,7 +267,8 @@ const IDENTITY_INSTRUCTION =
  */
 export type BentukProduk =
   | "sabun_batang"   // sabun/shampoo batang — dibasahi lalu digosok sampai berbusa
-  | "oles_padat"     // stick, balm, lotion bar, serum stick — digosok/digeser, TIDAK berbusa
+  | "oles_padat"     // stick, balm, serum stick — DIPUTAR naik lalu digeser
+  | "batang_gosok"   // lotion/body bar — digosok langsung, TANPA mekanisme putar
   | "roll_on"        // deodoran roll-on — bolanya menggelinding, tidak diputar naik
   | "bubuk_padat"    // compact, blush, eyeshadow — ditekan/disapu, TIDAK basah
   | "cushion"        // alas bedak cair di dalam spons — ditekan, BUKAN bedak
@@ -303,7 +304,12 @@ const KATA_CUSHION = /\b(cushion)\b/i;
 // Roll-on DIKELUARKAN dari sini: bolanya diputar menggelinding di kulit, tidak
 // ada batang yang dinaikkan dengan memutar pangkalnya.
 const KATA_ROLL_ON = /\b(roll on|roll-on|rollon)\b/i;
-const KATA_OLES_PADAT = /\b(stick|balm|deodoran|deodorant|batangan|lotion bar|body bar)\b/i;
+const KATA_OLES_PADAT = /\b(stick|balm|deodoran|deodorant|batangan)\b/i;
+// Lotion/body bar TIDAK punya mekanisme putar-naik. Ia batangan telanjang yang
+// digosok langsung ke kulit dan meleleh oleh suhu badan. Menyuruhnya "twisting
+// its base" sama mustahilnya dengan menyuruh sabun batang dituang — aksi fisik
+// yang tidak ada, dan model akan mengarang kemasan yang punya mekanisme itu.
+const KATA_BATANG_GOSOK = /\b(lotion bar|body bar|massage bar)\b/i;
 /** Kata bentuk padat umum — dipakai kalau tidak ada petunjuk yang lebih spesifik. */
 const KATA_PADAT_UMUM = /\b(batang|bar|padat|solid)\b/i;
 /** Zat yang LAZIMNYA cair — dipakai hanya kalau tidak ada kata bentuk. */
@@ -329,10 +335,15 @@ export function bentukProduk(nama: string, deskripsi?: string | null): BentukPro
   if (KATA_CUSHION.test(teks)) return "cushion";
   if (KATA_ROLL_ON.test(teks)) return "roll_on";
   if (KATA_BUBUK_PADAT.test(teks)) return "bubuk_padat";
+  if (KATA_BATANG_GOSOK.test(teks)) return "batang_gosok";
   if (KATA_OLES_PADAT.test(teks)) return "oles_padat";
   // Padat tapi tidak jelas jenisnya. "Shampoo Bar" mendarat di sini kalau pola
   // sabun di atas tidak kena — dan itu benar: ia memang dibasahi dan berbusa.
-  if (KATA_PADAT_UMUM.test(teks)) return KATA_ZAT_CAIR.test(teks) ? "sabun_batang" : "oles_padat";
+  // Batangan yang zatnya lazim cair (shampoo bar, conditioner bar) memang
+  // berbusa. Batangan lain jatuh ke aksi gosok, BUKAN aksi putar-naik: kalau
+  // bentuk pastinya tidak jelas, menggosok benar untuk hampir semua batangan
+  // sementara memutar hanya benar untuk yang berkemasan khusus.
+  if (KATA_PADAT_UMUM.test(teks)) return KATA_ZAT_CAIR.test(teks) ? "sabun_batang" : "batang_gosok";
   if (KATA_ZAT_CAIR.test(teks)) return "tuang";
   return "tidak diketahui";
 }
@@ -360,6 +371,8 @@ const AKSI_PER_BENTUK: Record<Exclude<BentukProduk, "tuang" | "tidak diketahui">
     "opening the compact, pressing a sponge lightly onto the powder so the pan surface shows, then tapping it onto the BACK of her other hand to reveal the colour, keeping the pan facing camera, both hands clearly accounted for",
   lipstik:
     "twisting the lipstick bullet up so its shaped tip is clearly visible to camera, then drawing one clean swatch stripe on the BACK of her other hand to show the true colour, both hands clearly accounted for",
+  batang_gosok:
+    "warming the bare solid bar between her fingers then gliding it directly along the BACK of her other hand, leaving a soft satin sheen as it melts on contact — the bar has no cap and no twist-up base, it is held and rubbed as-is, both hands clearly accounted for",
   roll_on:
     "uncapping the roll-on and rolling its ball smoothly along the BACK of her other hand so the wet trail it leaves is visible, the ball never twisted or pushed up, both hands clearly accounted for",
   cushion:

@@ -221,9 +221,19 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
               "Insufficient tokens for regeneration."
             );
           }
+          // 'regen', BUKAN 'capture'.
+          //
+          // Biaya regenerate memang memotong saldo (delta negatif, ikut SUM
+          // biasa), tapi ia BUKAN catatan terminal job induknya. Menulisnya
+          // sebagai capture merebut slot terminal milik render itu sendiri:
+          // capture final lalu menyerah karena "sudah ada terminal", refund
+          // menolak mengembalikan uang saat render gagal, dan hold dasarnya
+          // tertahan selamanya. Sesudah indeks unik terminal terpasang,
+          // regenerate KEDUA bahkan gagal 23505 padahal UI menjanjikan tiga
+          // kali. Lihat migrations/postgres/0030_regen_ledger_type.sql.
           await client.query(
             `INSERT INTO credit_ledger (id,user_id,org_id,type,delta,job_id,created_at)
-             VALUES ($1,$2,$3,'capture',$4,$5,$6)`,
+             VALUES ($1,$2,$3,'regen',$4,$5,$6)`,
             [crypto.randomUUID(), user.id, membership.org_id, -price, jobId, new Date().toISOString()]
           );
           chargedTokens = price;

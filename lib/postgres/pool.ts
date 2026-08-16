@@ -83,3 +83,21 @@ export async function closeAllPools(): Promise<void> {
   await Promise.all([...map.values()].map((p) => p.end().catch(() => undefined)));
   map.clear();
 }
+
+/**
+ * Tutup semua pool. HANYA untuk teardown skrip dan tes.
+ *
+ * Komentar di atas berkas ini sudah menjanjikan fungsi ini sejak awal, tapi ia
+ * tidak pernah benar-benar ditulis — dan akibatnya terlihat di CI: berkas uji
+ * PostgreSQL selesai dengan seluruh asersi hijau lalu prosesnya MENGGANTUNG,
+ * karena pool bersamanya masih memegang koneksi. Gate yang tidak pernah tiba
+ * sama tidak bergunanya dengan gate yang selalu hijau.
+ *
+ * JANGAN dipanggil dari kode request: menutup pool mematikan seluruh proses,
+ * bukan satu permintaan.
+ */
+export async function closePool(): Promise<void> {
+  const semua = [...pools().values()];
+  pools().clear();
+  await Promise.all(semua.map((p) => p.end().catch(() => undefined)));
+}

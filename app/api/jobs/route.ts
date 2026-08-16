@@ -9,11 +9,12 @@ import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { config } from "@/lib/config";
 import { getCreatorCategory } from "@/lib/personas";
 import { createSignedUrl } from "@/lib/signed-url";
-import { assertJobIntakeOpen } from "@/lib/job-intake";
+import { assertInvarianUangSiap, assertJobIntakeOpen } from "@/lib/job-intake";
 import { createFypSnapshot } from "@/lib/fyp-snapshot";
 import type { FypQualityTier, FypVideoFormat } from "@/lib/fyp-score";
 import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnapshot, postgresRuntimeEnabled, postgresSmokeEnabled, smokeCompleteJob, smokeCreateJob, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan } from "@/lib/fyp-score";
+import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +26,8 @@ export async function POST(req: Request) {
     // Maintenance gate must run before authentication, database reads, holds,
     // or queue writes. Existing jobs are intentionally unaffected.
     assertJobIntakeOpen();
+    // Jalur retail juga menahan kredit, jadi ia tunduk pada invarian yang sama.
+    await assertInvarianUangSiap();
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
     const body = await req.json().catch(() => ({}));
@@ -37,6 +40,10 @@ export async function POST(req: Request) {
       ? await smokeGetProduct(user.id, script.product_id)
       : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(script.product_id, user.id) as ProductRow | undefined;
     if (!product) throw ERR.NOT_FOUND("Skripnya");
+    // Produk organisasi WAJIB lewat dashboard: RBAC belanja, gerbang review
+    // scene, dan library org semuanya hidup di sana. Lihat catatan lengkapnya
+    // di pastikanBukanProdukOrg.
+    pastikanBukanProdukOrg(product);
 
     // --- GERBANG HITL (aturan keras #5) ---
     if (!script.approved_by_user_at) throw ERR.SCRIPT_NOT_APPROVED();

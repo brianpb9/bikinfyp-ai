@@ -2,6 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, type ScriptRow, type ProductRow } from "@/lib/db";
 import { postgresRuntimeEnabled, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
       .prepare("SELECT * FROM products WHERE id = ? AND user_id = ?")
       .get(script.product_id, user.id) as ProductRow | undefined;
     if (!product) throw ERR.NOT_FOUND("Skripnya");
+    // Produk organisasi WAJIB lewat dashboard (RBAC belanja + gerbang review
+    // scene + library org). Lihat pastikanBukanProdukOrg.
+    pastikanBukanProdukOrg(product);
 
     return Response.json({
       script: {

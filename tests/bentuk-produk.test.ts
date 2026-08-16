@@ -45,6 +45,18 @@ test("Liquid Lipstick itu cairan, bukan lipstik putar", () => {
 });
 
 // Inti temuan audit ketiga: benda padat yang BUKAN sabun tidak boleh berbusa.
+// Lotion bar TIDAK punya mekanisme putar-naik: ia batangan telanjang yang
+// digosok langsung ke kulit. "Twisting its base" sama mustahilnya dengan
+// menyuruh sabun batang dituang.
+test("lotion bar digosok, bukan diputar naik dan bukan dibasahi", () => {
+  assert.equal(bentukProduk("Lotion Bar Shea"), "batang_gosok");
+  assert.equal(bentukProduk("Body Bar Oatmeal"), "batang_gosok");
+  const p = promptUntuk("Lotion Bar Shea");
+  assert.ok(!/twisting/i.test(p), "lotion bar tidak punya batang yang diputar naik");
+  assert.match(p, /no twist-up base/i, "ketiadaan mekanisme itu disebut eksplisit ke model");
+  assert.match(p, /melts on contact/i);
+});
+
 test("padat non-sabun tidak diperlakukan seperti sabun", () => {
   assert.equal(bentukProduk("Serum Stick Niacinamide"), "oles_padat");
   assert.equal(bentukProduk("Deodorant Stick"), "oles_padat");
@@ -65,7 +77,7 @@ test("bentuk yang tidak jelas tidak ditebak", () => {
 test("tiap bentuk padat punya aksi tangan yang berbeda", () => {
   const src = fs.readFileSync(path.join(process.cwd(), "lib/media/shot-planner.ts"), "utf8");
   const blok = src.slice(src.indexOf("const AKSI_PER_BENTUK"), src.indexOf("const AKSI_NETRAL"));
-  for (const bentuk of ["sabun_batang", "oles_padat", "bubuk_padat", "lipstik"]) {
+  for (const bentuk of ["sabun_batang", "oles_padat", "batang_gosok", "roll_on", "cushion", "bubuk_padat", "lipstik"]) {
     assert.ok(blok.includes(`${bentuk}:`), `aksi untuk ${bentuk} hilang`);
   }
   // Hanya sabun yang boleh menyebut busa. Kalau kata ini bocor ke bentuk lain,
@@ -111,7 +123,10 @@ test("prompt padat non-sabun TIDAK PERNAH menyuruh berbusa", () => {
     "Compact Powder Two Way Cake", "Lipstick Velvet",
   ]) {
     const p = promptUntuk(nama);
-    assert.ok(!/lather|foam|soap bar|solid bar/i.test(p),
+    // Yang dilarang BERBUSA dan DIBASAHI, bukan kata "solid bar" itu sendiri —
+    // lotion bar memang benda padat berbentuk batangan, dan menyebutnya begitu
+    // justru benar. Asersi yang terlalu tumpul menuduh deskripsi yang tepat.
+    assert.ok(!/lather|foam|soap|wetting the solid bar/i.test(p),
       `${nama} tidak boleh disuruh berbusa. Prompt: ${p.slice(0, 200)}`);
   }
 });

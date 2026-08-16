@@ -48,3 +48,28 @@ export function pastikanBolehBelanja(role: string): void {
     "Spending requires the organization owner role."
   );
 }
+
+/**
+ * Produk milik ORGANISASI tidak boleh dikerjakan lewat API retail.
+ *
+ * Celah governance yang nyata: anggota organisasi membuat produk di dashboard
+ * (baris produknya membawa org_id, dan user_id-nya dia sendiri), lalu memanggil
+ * /api/jobs atau /api/scripts/[id]/approve — API retail mengambil produk itu
+ * HANYA dengan user_id, tidak pernah melihat org_id, dan merendernya dari
+ * dompet PRIBADI.
+ *
+ * Saldo organisasi memang tidak terkuras, jadi mudah dikira tidak berbahaya.
+ * Yang bocor bukan uangnya melainkan TATA KELOLANYA: RBAC belanja dilewati,
+ * gerbang review scene brand dilewati, dan hasilnya keluar dari library
+ * organisasi — merek kehilangan jejak video yang dibuat atas namanya sendiri.
+ *
+ * Jalur retail dan jalur organisasi karena itu dipisah tegas: produk yang
+ * punya org_id hanya boleh lewat konteks organisasi.
+ */
+export function pastikanBukanProdukOrg(product: { org_id?: string | null } | null | undefined): void {
+  if (!product?.org_id) return;
+  throw ERR.FORBIDDEN(
+    "Produk ini milik organisasi, jadi pembuatan videonya lewat dashboard — bukan dari sini.",
+    "Organization-owned products must go through the org dashboard (RBAC + brand review)."
+  );
+}

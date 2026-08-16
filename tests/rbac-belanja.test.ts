@@ -62,3 +62,71 @@ test("UI memberi tahu di depan, bukan menolak di akhir", () => {
   assert.match(baca("app/api/dashboard/matrix/route.ts"), /role: membership\.role/,
     "peran harus dikirim ke klien supaya UI bisa jujur");
 });
+
+// Celah tata kelola: anggota organisasi membuat produk di dashboard (baris
+// produknya membawa org_id), lalu memanggil API RETAIL yang mengambil produk
+// hanya dengan user_id. Saldo organisasi tidak terkuras — yang bocor tata
+// kelolanya: RBAC belanja dilewati, gerbang review scene dilewati, dan
+// hasilnya keluar dari library organisasi.
+test("API retail menolak produk milik organisasi", async () => {
+  const { pastikanBukanProdukOrg } = await import("../lib/dashboard-rbac");
+  assert.doesNotThrow(() => pastikanBukanProdukOrg({ org_id: null }));
+  assert.doesNotThrow(() => pastikanBukanProdukOrg(null));
+  try {
+    pastikanBukanProdukOrg({ org_id: "org-1" });
+    assert.fail("produk org seharusnya ditolak di jalur retail");
+  } catch (err) {
+    const e = err as { status?: number; body?: { message_id?: string } };
+    assert.equal(e.status, 403);
+    assert.match(e.body?.message_id ?? "", /lewat dashboard/i);
+  }
+});
+
+test("setiap route retail yang menyentuh produk memasang penjaganya", () => {
+  const retail = [
+    "app/api/jobs/route.ts",
+    "app/api/scripts/generate/route.ts",
+    "app/api/scripts/[id]/route.ts",
+    "app/api/scripts/[id]/approve/route.ts",
+    "app/api/products/[id]/route.ts",
+    "app/api/products/[id]/photos/route.ts",
+  ];
+  for (const rel of retail) {
+    assert.match(baca(rel), /pastikanBukanProdukOrg\(product\)/,
+      `${rel} membiarkan produk organisasi dikerjakan lewat jalur retail`);
+  }
+});
+
+// Produksi sempat menerima job berbayar sementara migrasi invarian uang masih
+// pending, dan health tetap 200 sehingga platform menganggap semuanya sehat.
+// Kode baru berjalan di atas database yang belum punya jaringnya.
+test("pekerjaan berbayar ditolak selama migrasi invarian uang belum terpasang", async () => {
+  const { invarianUangBelumTerpasang, MIGRASI_INVARIAN_UANG } = await import("../lib/job-intake");
+  assert.deepEqual(invarianUangBelumTerpasang([]), [], "tidak ada pending = boleh jalan");
+  assert.deepEqual(
+    invarianUangBelumTerpasang(["0031_terminal_ledger_unique.sql"]),
+    ["0031_terminal_ledger_unique.sql"]
+  );
+  // Kedua migrasi uang harus terdaftar — kalau salah satu lupa, gerbangnya
+  // membuka diri sendiri secara diam-diam.
+  assert.ok(MIGRASI_INVARIAN_UANG.includes("0030_regen_ledger_type.sql"));
+  assert.ok(MIGRASI_INVARIAN_UANG.includes("0031_terminal_ledger_unique.sql"));
+
+  for (const rel of [
+    "app/api/jobs/route.ts",
+    "app/api/dashboard/campaign/confirm/route.ts",
+    "app/api/dashboard/matrix/route.ts",
+  ]) {
+    assert.match(baca(rel), /await assertInvarianUangSiap\(\)/,
+      `${rel} menahan kredit tanpa memastikan invariannya terpasang`);
+  }
+});
+
+test("health menutup intake sendiri dan membuktikan commit yang hidup", () => {
+  const s = baca("app/api/health/route.ts");
+  assert.match(s, /const intake = uangPending\.length > 0 \? "closed" : jobIntakeMode\(\)/,
+    "intake yang dilaporkan harus mencerminkan kenyataan, bukan cuma env");
+  assert.match(s, /build_sha/, "commit yang hidup harus bisa dibuktikan, bukan disimpulkan");
+  assert.match(s, /Production wajib APP_BASE_URL https/,
+    "Secure diturunkan dari APP_BASE_URL — kalau ia bukan https, cookie berangkat tanpa Secure tanpa ada yang mengeluh");
+});

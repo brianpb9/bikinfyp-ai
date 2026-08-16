@@ -6,6 +6,7 @@ import { REGISTERS, type Register } from "@/lib/script-engine/registers";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { tierMasihDijual } from "@/lib/paket-kredit";
+import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -44,6 +45,9 @@ export async function POST(req: Request) {
       ? await smokeGetProduct(user.id, productId)
       : getDb().prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(productId, user.id) as ProductRow | undefined;
     if (!product) throw ERR.NOT_FOUND("Produknya");
+    // Produk organisasi WAJIB lewat dashboard (RBAC belanja + gerbang review
+    // scene + library org). Lihat pastikanBukanProdukOrg.
+    pastikanBukanProdukOrg(product);
 
     const variants = generateScripts({
       product: {

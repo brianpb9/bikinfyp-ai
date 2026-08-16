@@ -64,7 +64,9 @@ CREATE TABLE IF NOT EXISTS credit_ledger (
   user_id TEXT NOT NULL REFERENCES users(id),
   org_id TEXT REFERENCES organizations(id),
   delta INTEGER NOT NULL,
-  type TEXT NOT NULL CHECK (type IN ('topup','hold','capture','release','bonus')),
+  -- 'regen' = biaya regenerate scene. Sengaja BUKAN 'capture': ia memotong
+  -- saldo tapi tidak menutup job induknya. Lihat migrations/postgres/0030.
+  type TEXT NOT NULL CHECK (type IN ('topup','hold','capture','release','bonus','regen')),
   job_id TEXT,
   payment_id TEXT,
   created_at TEXT NOT NULL

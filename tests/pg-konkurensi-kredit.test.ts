@@ -35,7 +35,16 @@ const at = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
 
 before(async () => { if (!lewati) pool = new Pool({ connectionString: URL_UJI, max: 20 }); });
-after(async () => { if (!lewati && pool) await pool.end(); });
+after(async () => {
+  if (lewati) return;
+  if (pool) await pool.end();
+  // Pool BERSAMA lib/postgres/pool.ts sengaja tidak pernah ditutup di jalur
+  // produksi (satu pool untuk seumur proses). Di sini itu berarti proses tes
+  // menggantung dengan koneksi terbuka dan CI ikut timeout — hijau yang tidak
+  // pernah tiba. Ditutup eksplisit hanya di akhir uji.
+  const { closePool } = await import("../lib/postgres/pool");
+  await closePool?.();
+});
 
 /** Bikin satu job READY yang hold-nya belum pernah di-capture. */
 async function jobReadyBerhold(userId: string): Promise<string> {
@@ -159,4 +168,78 @@ test("event funnel benar-benar mendarat di PostgreSQL", { skip: lewati }, async 
   const r = await pool.query("SELECT name, meta FROM events WHERE anon_id=$1", [anon]);
   assert.equal(r.rowCount, 1, "event harus tersimpan, bukan dibuang diam-diam");
   assert.equal(r.rows[0].name, "landing_view");
+});
+
+// ---- Biaya regenerate tidak boleh merebut slot terminal job induknya ----
+//
+// Regenerate dulu menulis type='capture' delta=-harga dengan job_id INDUK.
+// Rantai kerusakannya panjang dan semuanya soal uang: capture final menyerah
+// karena "terminal sudah ada", refund menolak mengembalikan uang saat render
+// gagal, hold dasar tertahan selamanya, dan sesudah indeks unik terpasang
+// regenerate KEDUA gagal 23505 padahal UI menjanjikan tiga kali.
+
+async function biayaRegen(jobId: string, userId: string, harga: number) {
+  await pool.query(
+    "INSERT INTO credit_ledger (id,user_id,delta,type,job_id,created_at) VALUES ($1,$2,$3,'regen',$4,$5)",
+    [id(), userId, -harga, jobId, at()]
+  );
+}
+
+test("regenerate berkali-kali tidak menabrak indeks terminal", { skip: lewati }, async () => {
+  const uid = await penggunaUji();
+  const jid = await jobReadyBerhold(uid);
+  // Tiga kali, sebanyak yang dijanjikan UI.
+  await biayaRegen(jid, uid, 3000);
+  await biayaRegen(jid, uid, 3000);
+  await biayaRegen(jid, uid, 3000);
+  const n = await pool.query("SELECT COUNT(*)::int AS n FROM credit_ledger WHERE job_id=$1 AND type='regen'", [jid]);
+  assert.equal(n.rows[0].n, 3, "tiga regenerate harus bisa tercatat semua");
+});
+
+test("capture final tetap bisa terjadi setelah regenerate", { skip: lewati }, async () => {
+  const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  const uid = await penggunaUji();
+  const jid = await jobReadyBerhold(uid);
+  await biayaRegen(jid, uid, 3000);
+
+  const repo = new PgCreditPaymentRepository(URL_UJI);
+  try {
+    assert.equal(await repo.captureCredits(uid, jid), true,
+      "biaya regenerate tidak boleh membuat capture final menyerah");
+  } finally { await repo.close(); }
+
+  const t = await pool.query("SELECT type FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','release')", [jid]);
+  assert.equal(t.rowCount, 1);
+  assert.equal(t.rows[0].type, "capture");
+});
+
+test("job GAGAL setelah regenerate tetap direfund penuh", { skip: lewati }, async () => {
+  const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  const uid = await penggunaUji();
+  const jid = await jobReadyBerhold(uid);
+  // Job belum diserahkan — kembalikan ke keadaan aktif.
+  await pool.query("UPDATE jobs SET state='GENERATING_VISUAL' WHERE id=$1", [jid]);
+  await biayaRegen(jid, uid, 3000);
+
+  const repo = new PgCreditPaymentRepository(URL_UJI);
+  let dikembalikan = 0;
+  try { dikembalikan = await repo.releaseCredits(uid, jid); } finally { await repo.close(); }
+
+  // Hold dasarnya 12.000 dan HARUS kembali utuh. Biaya regenerate memang
+  // hangus — scene-nya benar-benar dibuat — tapi ia tidak boleh ikut
+  // memblokir pengembalian hold rendernya.
+  assert.equal(dikembalikan, 12000, "biaya regenerate tidak boleh memblokir refund hold render");
+});
+
+test("capture berdelta bukan nol ditolak database", { skip: lewati }, async () => {
+  const uid = await penggunaUji();
+  const jid = await jobReadyBerhold(uid);
+  await assert.rejects(
+    () => pool.query(
+      "INSERT INTO credit_ledger (id,user_id,delta,type,job_id,created_at) VALUES ($1,$2,-3000,'capture',$3,$4)",
+      [id(), uid, jid, at()]
+    ),
+    (err: { code?: string }) => err.code === "23514",
+    "capture yang menggerakkan saldo tidak boleh lahir lagi"
+  );
 });

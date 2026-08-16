@@ -6,10 +6,15 @@ import type { NextConfig } from "next";
 // supaya ikut ke SEMUA respons termasuk berkas statis dan halaman error yang
 // tidak melewati middleware.
 //
-// CSP SENGAJA BELUM DIPASANG. Next.js menyuntikkan skrip dan gaya inline;
-// CSP yang salah akan mematikan seluruh aplikasi, dan itu lebih berbahaya
-// daripada tidak punya CSP. Perlu dipasang report-only dulu, diamati, baru
-// ditegakkan — pekerjaan tersendiri, bukan tempelan.
+// CSP SUDAH DIPASANG (17 Agu 2026) — lihat arahannya di bawah. Komentar ini
+// sempat menyatakan sebaliknya SETELAH CSP-nya ada, dan komentar yang
+// bertentangan dengan kodenya lebih buruk daripada tidak ada komentar: ia
+// membuat pembaca berikutnya mengambil keputusan dari kenyataan yang salah.
+//
+// Kekhawatiran aslinya tetap benar dan tetap dihormati: Next menyuntikkan
+// skrip inline, jadi script-src memakai 'unsafe-inline' alih-alih nonce.
+// Artinya CSP ini TIDAK menutup XSS inline — batas itu ditulis lagi di bawah,
+// tepat di sebelah arahannya.
 const securityHeaders = [
   // Paksa HTTPS setahun. Domain sudah HTTPS penuh di Render, jadi ini tidak
   // mengunci apa pun yang belum terkunci.

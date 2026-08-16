@@ -19,6 +19,7 @@ import { CAMPAIGN_TEMPLATES, TVC_ROUTES } from "@/lib/templates";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
+import { assertInvarianUangSiap } from "@/lib/job-intake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -37,6 +38,8 @@ export async function POST(req: Request) {
     // Gerbang belanja. Langkah INI yang memotong saldo organisasi — bukan
     // pembuatan naskah — jadi di sinilah perannya diperiksa.
     pastikanBolehBelanja(membership.role);
+    // Invarian uang wajib SUDAH terpasang sebelum sepeser pun ditahan.
+    await assertInvarianUangSiap();
     const body = await req.json().catch(() => ({}));
 
     const productId = typeof body.product_id === "string" ? body.product_id : "";

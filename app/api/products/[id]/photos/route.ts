@@ -4,6 +4,7 @@ import { getDb, audit, type ProductRow } from "@/lib/db";
 import { createSignedUrl } from "@/lib/signed-url";
 import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { pgAudit, pgSetProductImages, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,9 @@ async function ownedProduct(userId: string, productId: string): Promise<{ produc
     ? await smokeGetProduct(userId, productId)
     : (getDb().prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(productId, userId) as ProductRow | undefined);
   if (!product) return null;
+  // Produk organisasi WAJIB lewat dashboard (RBAC belanja + gerbang review
+  // scene + library org). Lihat pastikanBukanProdukOrg.
+  pastikanBukanProdukOrg(product);
   return { product, images: JSON.parse(product.images || "[]") as string[] };
 }
 

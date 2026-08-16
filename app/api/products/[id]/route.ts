@@ -4,6 +4,7 @@ import { getDb, now, audit, type ProductRow } from "@/lib/db";
 import { validPriceIdr, validProductName } from "@/lib/product-validation";
 import { parsePromoFields } from "@/lib/promo";
 import { pgUpdateProduct, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,6 +20,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       ? await smokeGetProduct(user.id, id)
       : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(id, user.id) as ProductRow | undefined;
     if (!product) throw ERR.NOT_FOUND("Produknya");
+    // Produk organisasi WAJIB lewat dashboard (RBAC belanja + gerbang review
+    // scene + library org). Lihat pastikanBukanProdukOrg.
+    pastikanBukanProdukOrg(product);
 
     const body = await req.json().catch(() => ({}));
     const name = body.name !== undefined ? validProductName(body.name) : product.name;
