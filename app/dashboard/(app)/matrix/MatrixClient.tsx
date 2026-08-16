@@ -25,7 +25,7 @@ import { apiFetch, ApiFail } from "../../../_components/api";
 
 interface Produk { product_id: string; name: string; price_idr: number; category: string; image: string | null }
 interface Avatar { id: string; name: string; note: string; img: string; gender: "female" | "male" }
-interface Skenario { id: string; name: string; when: string }
+interface Skenario { id: string; name: string; when: string; format: string; duration_sec: number; ratio: string | null }
 interface Katalog {
   products: Produk[]; avatars: Avatar[]; scenarios: Skenario[];
   limits: { max_cells: number; max_avatars: number; max_scenarios: number };
@@ -33,12 +33,6 @@ interface Katalog {
   prices: Record<string, number>;
 }
 interface HasilSel { status: "queued" | "failed"; script_id: string; job_id?: string; reason?: string; avatar_id: string; template_id: string }
-
-const FORMATS = [
-  { id: "hands_only", label: "Tangan + VO", note: "AI peragakan produk, tanpa wajah" },
-  { id: "talking_head", label: "Wajah AI", note: "presenter bicara ke kamera (15 dtk)" },
-  { id: "ads", label: "Iklan Jasa", note: "app, jasa, toko — tanpa barang fisik" },
-] as const;
 
 const TIERS = [
   { id: "high_quality", label: "Quality", note: "720p, suara AI" },
@@ -53,6 +47,10 @@ const RATIOS = [
   { id: "16:9", label: "16:9", w: 22, h: 12, untuk: "YouTube, layar lebar" },
 ];
 
+const LABEL_FORMAT: Record<string, string> = {
+  hands_only: "Tangan + VO", talking_head: "Wajah AI", tvc: "TVC", ads: "Iklan Jasa", vo_broll: "VO + B-roll",
+};
+
 const rupiah = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
 
 export default function MatrixClient() {
@@ -61,13 +59,22 @@ export default function MatrixClient() {
   const [avatarIds, setAvatarIds] = useState<string[]>([]);
   const [skenarioIds, setSkenarioIds] = useState<string[]>([]);
   const [gender, setGender] = useState<"female" | "male">("female");
-  const [format, setFormat] = useState<string>("hands_only");
   const [tier, setTier] = useState<string>("high_quality");
-  const [durasi, setDurasi] = useState(15);
   const [ratio, setRatio] = useState("9:16");
   const [sibuk, setSibuk] = useState(false);
+  // Konfirmasi belanja. Tombol sticky dulu langsung POST ke render — satu klik
+  // yang bisa bernilai jutaan rupiah tanpa satu pun layar yang menyebutkan
+  // angkanya secara utuh.
+  const [konfirmasi, setKonfirmasi] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [hasil, setHasil] = useState<{ run_id: string; results: HasilSel[]; queued_count: number } | null>(null);
+  const [hasil, setHasil] = useState<{ run_id: string; results: HasilSel[]; queued_count: number; duplicated?: boolean } | null>(null);
+  // Kunci idempotensi dibekukan saat susunan matriks berubah, BUKAN saat
+  // tombol ditekan: kunci yang dibuat di dalam handler akan berbeda tiap klik
+  // dan justru tidak menjaga apa pun.
+  const kunciIdem = useMemo(
+    () => `${produkId}|${[...avatarIds].sort().join(",")}|${[...skenarioIds].sort().join(",")}|${tier}|${ratio}`,
+    [produkId, avatarIds, skenarioIds, tier, ratio]
+  );
 
   useEffect(() => {
     apiFetch<Katalog>("/api/dashboard/matrix")
@@ -84,14 +91,17 @@ export default function MatrixClient() {
   // tarif ke komponen klien sudah pernah dibayar sekali di repo ini: salinan
   // tarif pasti hanyut, dan yang menemukan selisihnya pengguna — setelah
   // menekan tombol yang menjanjikan angka lain.
-  const hargaSatuan = useMemo(
-    () => katalog?.prices[`${tier}:${durasi}`] ?? 0,
-    [katalog, tier, durasi]
-  );
-
-  // Wajah AI cuma tersedia 15 detik — dikunci di sini supaya brand tidak
-  // menyusun matriks 12 sel lalu ditolak seluruhnya di server.
-  useEffect(() => { if (format === "talking_head" && durasi !== 15) setDurasi(15); }, [format, durasi]);
+  // Total dijumlahkan PER SKENARIO karena tiap skenario punya durasinya
+  // sendiri — skenario 30 detik memang dua kali lipat yang 15 detik. Rumus
+  // "satu harga x jumlah sel" hanya benar kalau semua skenario sama panjang,
+  // dan katalognya tidak begitu.
+  const totalBiaya = useMemo(() => {
+    if (!katalog) return 0;
+    return skenarioIds.reduce((n, sid) => {
+      const sk = katalog.scenarios.find((x) => x.id === sid);
+      return n + (sk ? (katalog.prices[`${tier}:${sk.duration_sec}`] ?? 0) * avatarIds.length : 0);
+    }, 0);
+  }, [katalog, skenarioIds, avatarIds.length, tier]);
 
   function toggle(daftar: string[], set: (v: string[]) => void, id: string) {
     set(daftar.includes(id) ? daftar.filter((x) => x !== id) : [...daftar, id]);
@@ -104,10 +114,19 @@ export default function MatrixClient() {
       const res = await apiFetch<{ run_id: string; results: HasilSel[]; queued_count: number }>("/api/dashboard/matrix", {
         json: {
           product_id: produk.product_id, avatar_ids: avatarIds, template_ids: skenarioIds,
-          format, tier, duration_sec: durasi, ratio,
+          tier, ratio,
+          // Total yang BENAR-BENAR tampil di layar. Server menolak kalau
+          // hitungannya berbeda — persetujuan hanya sah untuk angka yang
+          // disetujui.
+          expected_total_idr: totalBiaya,
+          // Kunci idempotensi dibuat sekali per susunan matriks (lihat
+          // kunciKirim) supaya klik ganda, retry jaringan, atau tombol back
+          // tidak pernah menagih matriks yang sama dua kali.
+          idempotency_key: kunciIdem,
         },
       });
       setHasil(res);
+      setKonfirmasi(false);
     } catch (err) {
       setError(err instanceof ApiFail ? err.message : "Gagal menjalankan matriks.");
     } finally { setSibuk(false); }
@@ -270,6 +289,16 @@ export default function MatrixClient() {
                 <span className="min-w-0">
                   <span className="block text-sm font-semibold text-zinc-900">{s.name}</span>
                   <span className="block text-xs leading-4 text-zinc-500">{s.when}</span>
+                  {/* Format dan durasi MILIK skenario, bukan pilihan terpisah.
+                      Ditampilkan supaya brand tahu apa yang benar-benar akan
+                      dirender sebelum membayar — bukan menemukan skenario TVC
+                      keluar sebagai hands-only setelah 24 video jadi. */}
+                  <span className="mt-1.5 flex flex-wrap gap-1">
+                    <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-600">{LABEL_FORMAT[s.format] ?? s.format}</span>
+                    <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-600">{s.duration_sec} dtk</span>
+                    {s.ratio && <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-[11px] font-semibold text-zinc-600">{s.ratio}</span>}
+                    <span className="rounded bg-amber-50 px-1.5 py-0.5 text-[11px] font-semibold text-amber-700">{rupiah(katalog.prices[`${tier}:${s.duration_sec}`] ?? 0)}/video</span>
+                  </span>
                 </span>
               </button>
             );
@@ -280,17 +309,6 @@ export default function MatrixClient() {
       {/* ---------- pengaturan ---------- */}
       <section className="grid grid-cols-1 gap-6 md:grid-cols-2">
         <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Format</p>
-          <div className="flex flex-wrap gap-2">
-            {FORMATS.map((f) => (
-              <button key={f.id} onClick={() => setFormat(f.id)} aria-pressed={format === f.id} title={f.note}
-                className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${format === f.id ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}>
-                {f.label}
-              </button>
-            ))}
-          </div>
-        </div>
-        <div>
           <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Kualitas</p>
           <div className="flex flex-wrap gap-2">
             {TIERS.map((t) => (
@@ -299,21 +317,6 @@ export default function MatrixClient() {
                 {t.label}
               </button>
             ))}
-          </div>
-        </div>
-        <div>
-          <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Durasi</p>
-          <div className="flex gap-2">
-            {[15, 30].map((d) => {
-              const mati = format === "talking_head" && d !== 15;
-              return (
-                <button key={d} onClick={() => !mati && setDurasi(d)} disabled={mati} aria-pressed={durasi === d}
-                  title={mati ? "Wajah AI cuma tersedia untuk video 15 detik" : undefined}
-                  className={`rounded-lg border px-3 py-2 text-sm font-medium transition-colors ${durasi === d ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"} disabled:cursor-not-allowed disabled:opacity-40`}>
-                  {d} dtk
-                </button>
-              );
-            })}
           </div>
         </div>
         <div>
@@ -339,6 +342,53 @@ export default function MatrixClient() {
         </div>
       </section>
 
+      {/* ---------- konfirmasi belanja ----------
+          Layar terakhir sebelum uang bergerak. Ia menyebut jumlah video, total
+          rupiah, dan rincian per skenario — lalu meminta klik kedua yang
+          terpisah. Board menandai ketiadaannya sebagai blocker: eksposur satu
+          klik mencapai jutaan rupiah tanpa pengguna pernah melihat totalnya
+          dinyatakan utuh. */}
+      {konfirmasi && (
+        <div className="fixed inset-0 z-30 flex items-end justify-center bg-zinc-900/40 p-4 sm:items-center">
+          <div className="w-full max-w-md rounded-2xl bg-white p-5 shadow-xl">
+            <h2 className="font-display text-lg font-bold text-zinc-900">Konfirmasi pesanan</h2>
+            <p className="mt-1 text-sm text-zinc-500">
+              Kredit organisasi ditahan begitu kamu menekan tombol di bawah.
+            </p>
+            <div className="mt-4 space-y-1.5 rounded-xl border border-zinc-200 p-3">
+              {skenarioIds.map((sid) => {
+                const sk = katalog.scenarios.find((x) => x.id === sid);
+                if (!sk) return null;
+                const h = (katalog.prices[`${tier}:${sk.duration_sec}`] ?? 0) * avatarIds.length;
+                return (
+                  <div key={sid} className="flex items-baseline justify-between gap-3 text-sm">
+                    <span className="min-w-0 truncate text-zinc-700">
+                      {sk.name} <span className="text-zinc-400">× {avatarIds.length} avatar</span>
+                    </span>
+                    <span className="shrink-0 font-semibold text-zinc-900">{rupiah(h)}</span>
+                  </div>
+                );
+              })}
+              <div className="mt-2 flex items-baseline justify-between border-t border-zinc-200 pt-2">
+                <span className="text-sm font-bold text-zinc-900">Total {sel} video</span>
+                <span className="font-display text-lg font-bold text-amber-700">{rupiah(totalBiaya)}</span>
+              </div>
+            </div>
+            <div className="mt-4 flex gap-2">
+              <button onClick={() => setKonfirmasi(false)} disabled={sibuk}
+                className="flex-1 rounded-xl border border-zinc-300 px-4 py-3 text-sm font-semibold text-zinc-700 disabled:opacity-50">
+                Batal
+              </button>
+              <button onClick={jalankan} disabled={sibuk}
+                className="flex flex-[2] items-center justify-center gap-2 rounded-xl bg-amber-500 px-4 py-3 text-sm font-bold text-white disabled:bg-zinc-300">
+                {sibuk ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
+                {sibuk ? "Menyusun…" : `Ya, render ${rupiah(totalBiaya)}`}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* ---------- ringkasan menempel ----------
           Menempel karena matriks membuat biaya tumbuh secara perkalian: dua
           pilihan yang masing-masing terasa kecil bisa jadi 12 video. Angkanya
@@ -351,7 +401,7 @@ export default function MatrixClient() {
               {avatarIds.length} avatar × {skenarioIds.length} skenario = <b className={kelebihan ? "text-red-600" : "text-amber-700"}>{sel} video</b>
             </span>
             <span className="text-xs text-zinc-500">
-              {sel > 0 ? `${rupiah(hargaSatuan)} per video · total ${rupiah(hargaSatuan * sel)}` : "Pilih minimal 1 avatar dan 1 skenario"}
+              {sel > 0 ? `Total ${rupiah(totalBiaya)} — dipotong dari saldo organisasi` : "Pilih minimal 1 avatar dan 1 skenario"}
             </span>
           </div>
           {kelebihan ? (
@@ -359,10 +409,10 @@ export default function MatrixClient() {
               Di atas batas {maksSel} video sekali jalan — kurangi salah satu sumbunya.
             </p>
           ) : (
-            <button onClick={jalankan} disabled={sibuk || sel === 0 || !produk}
+            <button onClick={() => setKonfirmasi(true)} disabled={sibuk || sel === 0 || !produk}
               className="flex items-center gap-2 rounded-xl bg-amber-500 px-6 py-3 text-sm font-bold text-white transition-colors hover:bg-amber-600 disabled:cursor-not-allowed disabled:bg-zinc-300">
-              {sibuk ? <Loader2 size={16} className="animate-spin" /> : <Zap size={16} />}
-              {sibuk ? "Menyusun…" : `Render ${sel || ""} video`}
+              <Zap size={16} />
+              {`Lanjut — ${sel} video`}
             </button>
           )}
         </div>

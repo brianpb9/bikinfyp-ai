@@ -62,7 +62,7 @@ test("halaman matriks tidak menyalin tarif — diambil dari server", () => {
   // pengguna, setelah menekan tombol yang menjanjikan angka lain.
   assert.ok(!/80_000|12_000|80000|12000/.test(halaman),
     "angka tarif tidak boleh ditulis di komponen klien");
-  assert.match(halaman, /katalog\?\.prices\[/, "tarif harus dibaca dari katalog kiriman server");
+  assert.match(halaman, /katalog\.prices\[`\$\{tier\}:/, "tarif harus dibaca dari katalog kiriman server");
   assert.match(route, /tierPriceIdr\(t, d\)/, "server harus memakai rumus harga yang sama dengan penahanan kredit");
 });
 
@@ -119,4 +119,60 @@ test("matriks mati secara bawaan dan dijaga di sisi server", () => {
   const halaman = baca("app/dashboard/(app)/matrix/page.tsx");
   assert.match(halaman, /if \(!config\.enterpriseMatrixEnabled\) notFound\(\)/,
     "halaman harus 404 di server, bukan sekadar hilang dari sidebar");
+});
+
+// ---- Temuan audit putaran ketiga terhadap Matriks ----
+
+test("skenario terikat ke SELURUH konfigurasi kreatifnya, bukan cuma templateId", () => {
+  // 28 dari 29 template dengan hook khusus menghasilkan hook family yang salah
+  // karena route hanya mengirim templateId. Hook, level, durasi, format, dan
+  // rasio semuanya milik skenario.
+  assert.match(route, /hookFamilies: \[t\.hookFamily as HookCode\], lockHookFamily: true/,
+    "hook template harus dikunci, bukan dijadikan saran");
+  assert.match(route, /durationSec: t\.durationSec/, "durasi ikut skenario");
+  assert.match(route, /hookLevel: t\.hookLevel/, "level hook ikut skenario");
+  assert.match(route, /format: t\.format/, "format ikut skenario");
+  assert.match(route, /ratio: t\.ratio \?\? ratio/, "rasio ikut skenario bila ia menyatakannya");
+});
+
+test("tidak ada format global yang bisa menimpa format skenario", () => {
+  assert.ok(!/const format = ALLOWED_FORMATS/.test(route),
+    "format global membuat skenario TVC bisa dirender sebagai hands-only");
+  assert.ok(!/duration_sec: durasi/.test(halaman), "durasi global juga tidak boleh ada di klien");
+});
+
+test("pilihan di atas batas DITOLAK, bukan dipotong diam-diam", () => {
+  assert.ok(!/\.slice\(0, MAKS_AVATAR\)/.test(route), "slice diam-diam membuat UI berbohong soal jumlah video");
+  assert.ok(!/\.slice\(0, MAKS_SKENARIO\)/.test(route), "sama untuk skenario");
+  assert.match(route, /Too many avatars/, "kelebihan avatar harus ditolak dengan alasan");
+  assert.match(route, /Too many scenarios/, "kelebihan skenario harus ditolak dengan alasan");
+});
+
+test("permintaan ulang tidak menagih matriks dua kali", () => {
+  assert.match(route, /idempotency_key/, "kunci idempotensi wajib");
+  assert.match(route, /runIdDariKunci\(membership\.org_id, kunciIdem\)/,
+    "runId harus DITURUNKAN dari kunci, bukan diacak — runId acak membuat retry jadi matriks baru");
+  assert.match(route, /pg_advisory_lock/, "dua permintaan kembar harus berbaris, bukan sama-sama lolos");
+  assert.match(route, /duplicated: true/, "pengulangan harus dijawab dengan hasil yang sama");
+});
+
+test("server menolak membelanjakan angka yang tidak dilihat pengguna", () => {
+  assert.match(route, /expected_total_idr/, "klien wajib mengirim total yang ia tampilkan");
+  assert.match(route, /Quote mismatch/, "selisih hitungan harus menolak, bukan lanjut");
+  assert.match(route, /MAKS_BELANJA_IDR/, "harus ada langit-langit belanja per permintaan");
+  assert.match(route, /Spend cap exceeded/, "langit-langit harus benar-benar menolak");
+});
+
+test("biaya dijumlahkan per skenario, bukan satu harga dikali jumlah sel", () => {
+  // Katalog memuat skenario 15 dan 30 detik sekaligus; rumus perkalian tunggal
+  // hanya benar kalau semuanya sama panjang.
+  assert.match(route, /skenario\.reduce\(\(n, t\) => n \+ hargaPerSkenario\.get\(t\.id\)!/,
+    "total server harus menjumlahkan per skenario");
+  assert.match(halaman, /skenarioIds\.reduce\(/, "total klien harus memakai penjumlahan yang sama");
+});
+
+test("belanja butuh konfirmasi kedua yang menyebut totalnya", () => {
+  assert.match(halaman, /setKonfirmasi\(true\)/, "tombol utama membuka konfirmasi, bukan langsung mengirim");
+  assert.match(halaman, /Konfirmasi pesanan/, "harus ada layar yang menyatakan pesanannya");
+  assert.match(halaman, /Ya, render \$\{rupiah\(totalBiaya\)\}/, "tombol akhir harus menyebut angkanya");
 });

@@ -4,12 +4,11 @@ import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { AVATAR_PRESETS, getAvatarPreset } from "@/lib/avatar-presets";
-import { CAMPAIGN_TEMPLATES, TVC_ROUTES } from "@/lib/templates";
+import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 import { generateScripts } from "@/lib/script-engine";
+import type { HookCode } from "@/lib/config/hooks";
 import { getCreatorCategory } from "@/lib/personas";
-import { getRecordingStyle } from "@/lib/media/recording-styles";
-import { normalizeHookLevel } from "@/lib/config/hooks";
 import { tierPriceIdr } from "@/lib/credits";
 import { tierMasihDijual } from "@/lib/paket-kredit";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
@@ -52,6 +51,21 @@ const MAKS_SEL = 24;
 const MAKS_AVATAR = 12;
 const MAKS_SKENARIO = 6;
 
+/** Langit-langit belanja satu permintaan. Bukan pengganti konfirmasi manusia —
+ *  ia jaring terakhir kalau semua penjagaan di atasnya bocor. */
+const MAKS_BELANJA_IDR = 2_000_000;
+
+/** runId yang DITURUNKAN dari kunci idempotensi, bukan diacak.
+ *
+ *  Dengan begini permintaan ulang (jaringan putus, tombol ditekan dua kali,
+ *  retry otomatis) mendarat di runId yang SAMA, sehingga bisa dikenali sebagai
+ *  pengulangan alih-alih menagih seluruh matriks untuk kedua kalinya.
+ *  Diformat sebagai UUID supaya muat di kolom bulk_run_id yang sudah ada. */
+function runIdDariKunci(orgId: string, kunci: string): string {
+  const h = crypto.createHash("sha256").update(`${orgId}:${kunci}`).digest("hex");
+  return `${h.slice(0, 8)}-${h.slice(8, 12)}-${h.slice(12, 16)}-${h.slice(16, 20)}-${h.slice(20, 32)}`;
+}
+
 /** Gerbang fitur. Dipasang di KEDUA handler — UI yang disembunyikan bukan
  *  penjagaan, dan yang dijaga di sini adalah tombol bernilai jutaan rupiah. */
 function pastikanMatriksAktif() {
@@ -82,10 +96,14 @@ export async function POST(req: Request) {
       throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko untuk iklan jasa.", "At least one image is required.");
     }
 
-    // ---- format ----
-    const ALLOWED_FORMATS = ["talking_head", "hands_only", "tvc", "ads"] as const;
-    const format = ALLOWED_FORMATS.find((f) => f === body.format) ?? null;
-    if (!format) throw ERR.BAD_REQUEST("Format tidak dikenal. Pilih Wajah AI, Tangan + VO, TVC, atau Iklan Jasa.", "Unknown format.");
+    // ---- format: TIDAK ADA format global ----
+    //
+    // Setiap template membawa formatnya SENDIRI (talking_head, hands_only,
+    // tvc, ads) karena format itu bagian dari skenarionya, bukan preferensi
+    // tampilan. Versi pertama menerima satu format global lalu menerapkannya
+    // ke semua sel — sehingga brand bisa memilih skenario TVC lalu
+    // merendernya sebagai hands-only, dan yang keluar bukan skenario yang
+    // mereka pilih. Format sekarang dibaca dari templatenya di bawah.
 
     // ---- sumbu 1: avatar ----
     //
@@ -95,8 +113,17 @@ export async function POST(req: Request) {
     // persis cacat yang baru ditutup di wizard retail 16 Agu 2026.
     const avatarIds: string[] = (Array.isArray(body.avatar_ids) ? body.avatar_ids : [])
       .map((a: unknown) => String(a ?? "")).filter(Boolean);
-    const avatarUnik = [...new Set(avatarIds)].slice(0, MAKS_AVATAR);
+    // DITOLAK, BUKAN DIPOTONG.
+    //
+    // Versi pertama memakai .slice() — UI bisa menjanjikan 20 video, server
+    // diam-diam membuat 12, dan tidak ada yang memberi tahu siapa pun bahwa
+    // delapan sisanya tidak pernah ada. Pemotongan diam pada permintaan yang
+    // menyangkut uang selalu lebih buruk daripada penolakan yang jujur.
+    const avatarUnik = [...new Set(avatarIds)];
     if (avatarUnik.length === 0) throw ERR.BAD_REQUEST("Pilih minimal 1 avatar.", "No avatars selected.");
+    if (avatarUnik.length > MAKS_AVATAR) {
+      throw ERR.BAD_REQUEST(`Maksimal ${MAKS_AVATAR} avatar sekali jalan, kamu memilih ${avatarUnik.length}.`, "Too many avatars.");
+    }
     const avatars = avatarUnik.map((id) => {
       const preset = getAvatarPreset(id);
       if (!preset) throw ERR.BAD_REQUEST(`Avatar "${id}" tidak ada di katalog.`, "Unknown avatar preset.");
@@ -114,8 +141,11 @@ export async function POST(req: Request) {
     // diam jatuh ke beat generik.
     const skenarioIds: string[] = (Array.isArray(body.template_ids) ? body.template_ids : [])
       .map((t: unknown) => String(t ?? "")).filter(Boolean);
-    const skenarioUnik = [...new Set(skenarioIds)].slice(0, MAKS_SKENARIO);
+    const skenarioUnik = [...new Set(skenarioIds)];
     if (skenarioUnik.length === 0) throw ERR.BAD_REQUEST("Pilih minimal 1 skenario.", "No scenarios selected.");
+    if (skenarioUnik.length > MAKS_SKENARIO) {
+      throw ERR.BAD_REQUEST(`Maksimal ${MAKS_SKENARIO} skenario sekali jalan, kamu memilih ${skenarioUnik.length}.`, "Too many scenarios.");
+    }
     const skenario = skenarioUnik.map((id) => {
       const t = CAMPAIGN_TEMPLATES.find((c) => c.id === id);
       if (!t) throw ERR.BAD_REQUEST(`Skenario "${id}" tidak ada di katalog.`, "Unknown campaign template.");
@@ -145,29 +175,89 @@ export async function POST(req: Request) {
     const TIERS = ["silent_caption", "high_quality", "super_hq"].filter(tierMasihDijual);
     const tier = TIERS.includes(String(body.tier)) ? (String(body.tier) as "silent_caption" | "high_quality" | "super_hq") : null;
     if (!tier) throw ERR.BAD_REQUEST("Kualitas tidak dikenal.", "Unknown quality tier.");
-    const durationSec = [15, 30, 45].includes(Number(body.duration_sec)) ? (Number(body.duration_sec) as 15 | 30 | 45) : null;
-    if (!durationSec) throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Unsupported duration.");
+    // Yang tersisa sebagai pilihan pengguna cuma DUA, dan dua-duanya memang
+    // bukan bagian dari skenario: rasio (tempat tayang) dan tier (mutu/harga).
+    // Durasi, hook, dan format ikut skenarionya.
     const RATIOS = ["9:16", "1:1", "16:9"];
     const ratio = RATIOS.includes(String(body.ratio)) ? String(body.ratio) : "9:16";
-    const hookLevel = normalizeHookLevel(body.hook_level);
     const register = ["bunda", "bestie", "genz", "netral"].includes(body.register) ? body.register : "netral";
-    const noModel = format === "tvc" && body.no_model === true;
-    const tvcRoute = format === "tvc" && body.tvc_route !== "luxury" && TVC_ROUTES.includes(body.tvc_route as never)
-      ? (body.tvc_route as string) : null;
-    const gaya = getRecordingStyle(typeof body.record_style === "string" ? body.record_style : "");
-    const recordStyle = gaya && gaya.id !== "standar" && gaya.formats.includes(format as never) ? gaya.id : null;
-    const rawShots = Number(body.shot_count);
-    const shotCount = Number.isInteger(rawShots) && rawShots >= 2 && rawShots <= 6 ? rawShots : null;
 
-    // Biaya diberitahukan sebelum dieksekusi supaya angka di UI dan angka yang
-    // benar-benar ditahan berasal dari rumus yang sama.
-    const hargaPerVideo = tierPriceIdr(tier, durationSec);
+    // Harga per sel mengikuti DURASI SKENARIO-nya, jadi totalnya dijumlahkan
+    // per skenario — bukan satu harga dikali jumlah sel. Skenario 30 detik
+    // memang dua kali lipat skenario 15 detik.
+    const hargaPerSkenario = new Map(skenario.map((t) => [t.id, tierPriceIdr(tier, t.durationSec)]));
+    const totalBelanja = skenario.reduce((n, t) => n + hargaPerSkenario.get(t.id)! * avatars.length, 0);
+    const hargaPerVideo = Math.round(totalBelanja / totalSel);
 
-    const runId = crypto.randomUUID();
+    // LAYAR DAN SERVER HARUS SEPAKAT SEBELUM UANG BERGERAK.
+    //
+    // Klien wajib mengirim total yang IA TAMPILKAN. Kalau berbeda dengan
+    // hitungan server — tarif berubah, durasi berubah, pilihan berubah di
+    // antara render dan klik — permintaannya ditolak, bukan dijalankan dengan
+    // angka yang tidak pernah dilihat pengguna. Ini bentuk paling ringkas dari
+    // "quote lalu konfirmasi": persetujuan hanya sah untuk angka yang disetujui.
+    const totalDiharapkan = Number(body.expected_total_idr);
+    if (!Number.isFinite(totalDiharapkan)) {
+      throw ERR.BAD_REQUEST("Permintaan tidak menyertakan total biaya yang kamu lihat.", "expected_total_idr is required.");
+    }
+    if (Math.round(totalDiharapkan) !== totalBelanja) {
+      throw ERR.BAD_REQUEST(
+        `Total biaya berubah sejak halaman terakhir dihitung (di layarmu Rp${Math.round(totalDiharapkan).toLocaleString("id-ID")}, sekarang Rp${totalBelanja.toLocaleString("id-ID")}). Muat ulang lalu periksa lagi.`,
+        "Quote mismatch."
+      );
+    }
+    if (totalBelanja > MAKS_BELANJA_IDR) {
+      throw ERR.BAD_REQUEST(
+        `Total Rp${totalBelanja.toLocaleString("id-ID")} melewati batas Rp${MAKS_BELANJA_IDR.toLocaleString("id-ID")} sekali jalan. Pecah jadi beberapa kali.`,
+        "Spend cap exceeded."
+      );
+    }
+
+    // Kunci idempotensi WAJIB. Tanpanya, satu retry menagih seluruh matriks
+    // untuk kedua kalinya — dan matriks adalah tempat pengulangan paling mahal.
+    const kunciIdem = typeof body.idempotency_key === "string" ? body.idempotency_key.trim() : "";
+    if (kunciIdem.length < 8 || kunciIdem.length > 200) {
+      throw ERR.BAD_REQUEST("Permintaan tidak menyertakan kunci idempotensi yang sah.", "idempotency_key required (8-200 chars).");
+    }
+    const runId = runIdDariKunci(membership.org_id, kunciIdem);
     const pool = getPool(config.databaseUrl);
     const jobsRepo = new PgJobsRepository(config.databaseUrl);
     const creditsRepo = new PgCreditPaymentRepository(config.databaseUrl);
     const hasil: (HasilSel & { avatar_id: string; template_id: string })[] = [];
+
+    // PENEGAKAN IDEMPOTENSI.
+    //
+    // Kunci saja tidak cukup — ia harus dipakai untuk MENOLAK pekerjaan kedua.
+    // Advisory lock membuat dua permintaan kembar yang datang bersamaan
+    // berbaris, bukan sama-sama lolos pemeriksaan "belum ada" lalu sama-sama
+    // membuat 24 job. Lock dilepas di blok finally di bawah.
+    const kunciLock = await pool.connect();
+    let sudahAda: { job_id: string }[] = [];
+    try {
+      await kunciLock.query("SELECT pg_advisory_lock(hashtext($1))", [runId]);
+      const lama = await kunciLock.query<{ id: string }>(
+        "SELECT id FROM jobs WHERE org_id=$1 AND bulk_run_id=$2", [membership.org_id, runId]
+      );
+      sudahAda = lama.rows.map((r) => ({ job_id: r.id }));
+    } catch (err) {
+      kunciLock.release();
+      throw err;
+    }
+
+    // Permintaan ini sudah pernah dijalankan. Jawab dengan hasil yang SAMA,
+    // tanpa membuat skrip, job, atau tahanan kredit apa pun yang baru.
+    if (sudahAda.length) {
+      await kunciLock.query("SELECT pg_advisory_unlock(hashtext($1))", [runId]).catch(() => undefined);
+      kunciLock.release();
+      await jobsRepo.close(); await creditsRepo.close();
+      return Response.json({
+        run_id: runId, duplicated: true,
+        matrix: { avatars: avatars.length, scenarios: skenario.length, cells: totalSel },
+        price_per_video_idr: hargaPerVideo, total_idr: totalBelanja,
+        queued_count: sudahAda.length,
+        results: sudahAda.map((j) => ({ status: "queued", script_id: "", job_id: j.job_id, avatar_id: "", template_id: "" })),
+      });
+    }
 
     try {
       // Persona dibuat sekali per avatar, bukan sekali per sel: satu avatar
@@ -188,7 +278,20 @@ export async function POST(req: Request) {
             sourceUrl: product.source_url, promoPriceBeforeIdr: product.promo_price_before_idr,
             promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
           },
-          register, emotion: "senang", qualityTier: tier, durationSec, hookLevel, count: 1, templateId: t.id,
+          register, emotion: "senang", qualityTier: tier,
+          // SELURUH konfigurasi kreatif diambil dari templatenya, bukan dari
+          // satu pengaturan global. Versi pertama cuma mengirim templateId,
+          // sehingga hook khas template ("Diskon Gede" -> H1, "Review Jujur"
+          // -> H3) tidak pernah terwujud dan hampir semua skenario keluar
+          // dengan keluarga hook yang salah — brand membayar skenario yang
+          // mereka pilih dan menerima naskah generik.
+          durationSec: t.durationSec,
+          hookLevel: t.hookLevel,
+          count: 1,
+          templateId: t.id,
+          // lockHookFamily: hook template dipakai APA ADANYA, bukan dijadikan
+          // saran yang boleh ditimpa prioritas kategori.
+          ...(t.hookFamily ? { hookFamilies: [t.hookFamily as HookCode], lockHookFamily: true } : {}),
         });
         const lolos = varian.find((v) => v.validation.passed);
         if (!lolos) {
@@ -201,7 +304,7 @@ export async function POST(req: Request) {
         const barisSkrip = await smokeCreateScripts(user.id, productId, avatars.map(() => ({
           hookFamily: lolos.hook_family, emotion: lolos.emotion, register: lolos.register,
           segments: lolos.segments, caption: lolos.caption, hashtags: lolos.hashtags,
-          validationResult: lolos.validation, qualityTier: tier, hookLevel,
+          validationResult: lolos.validation, qualityTier: tier, hookLevel: t.hookLevel,
         })), membership.org_id);
 
         for (let i = 0; i < avatars.length; i++) {
@@ -216,21 +319,40 @@ export async function POST(req: Request) {
             // suara akan tampil sama persis — dan matriks avatar yang isinya
             // wajah kembar tidak membuktikan apa pun.
             avatarCustomDesc: preset.desc,
-            format, ratio, noModel, tvcRoute, templateId: t.id, recordStyle, shotCount, runId,
+            // Format ikut SKENARIO-nya. Katalog memuat template TVC,
+            // talking-head, ads, dan hands-only sekaligus; memaksakan satu
+            // format global ke semuanya membuat skenario TVC dirender sebagai
+            // hands-only — bukan skenario yang dipilih brand.
+            format: t.format,
+            // Rute TVC dan "tanpa model" hanya berarti pada format tvc, dan
+            // di luar itu justru membuat prompt bertengkar dengan dirinya
+            // sendiri. Karena formatnya sekarang dari template, keduanya juga.
+            noModel: false,
+            tvcRoute: t.format === "tvc" && t.tvcRoute ? t.tvcRoute : null,
+            // Rasio juga milik skenario kalau ia menyatakannya: TVC sinematik
+            // memang 16:9, dan memaksanya jadi 9:16 karena pengguna memilih
+            // itu di atas menghasilkan komposisi yang salah. Pilihan pengguna
+            // dipakai hanya untuk template yang memang tidak peduli.
+            ratio: t.ratio ?? ratio,
+            templateId: t.id, recordStyle: null, shotCount: null, runId,
           }, { pool, jobsRepo, creditsRepo });
           hasil.push({ ...sel, avatar_id: preset.id, template_id: t.id });
         }
       }
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
+      await kunciLock.query("SELECT pg_advisory_unlock(hashtext($1))", [runId]).catch(() => undefined);
+      kunciLock.release();
       await jobsRepo.close();
       await creditsRepo.close();
     }
 
     return Response.json({
       run_id: runId,
+      duplicated: false,
       matrix: { avatars: avatars.length, scenarios: skenario.length, cells: totalSel },
       price_per_video_idr: hargaPerVideo,
+      total_idr: totalBelanja,
       queued_count: hasil.filter((r) => r.status === "queued").length,
       results: hasil,
     });
@@ -262,7 +384,11 @@ export async function GET(req: Request) {
         // Template bukti tidak ditawarkan sama sekali di matriks: menampilkannya
         // lalu menolaknya saat submit cuma memindahkan kekecewaan ke belakang.
         .filter((t) => !aiRenderBlockMessage(t.id))
-        .map((t) => ({ id: t.id, name: t.name, when: t.when })),
+        // Format dan durasi ikut dikirim karena keduanya MILIK skenario, dan
+        // pengguna berhak melihat apa yang sebenarnya akan dirender sebelum
+        // membayar — bukan menemukan skenario TVC-nya keluar sebagai
+        // hands-only setelah 24 video jadi.
+        .map((t) => ({ id: t.id, name: t.name, when: t.when, format: t.format, duration_sec: t.durationSec, ratio: t.ratio ?? null })),
       limits: { max_cells: MAKS_SEL, max_avatars: MAKS_AVATAR, max_scenarios: MAKS_SKENARIO },
       // Tarif dikirim dari server, TIDAK disalin ke komponen klien. Pelajaran
       // yang sudah dibayar sekali di sidebar dashboard: tarif yang disalin
