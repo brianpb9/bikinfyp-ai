@@ -20,23 +20,30 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 
-/** Telusuri app/api mencari berkas yang membuat baris job. */
+/**
+ * Telusuri berkas yang membuat baris job.
+ *
+ * Bukan cuma app/api: sejak matriks avatar x skenario dibangun, urutan
+ * pembuatan job dipindah ke lib/dashboard/render-cell.ts supaya dua route
+ * memakai satu salinan aturan uang. Penjaga harus ikut ke mana kodenya pindah
+ * — kalau tidak, memindahkan INSERT keluar dari route justru MEMATIKAN
+ * penjaganya, dan itu persis cara kegagalan diam ini lahir pertama kali.
+ */
 function jalurPembuatJob(): string[] {
   const keluar: string[] = [];
-  const akar = path.join(process.cwd(), "app", "api");
   const telusuri = (dir: string) => {
     for (const nama of fs.readdirSync(dir)) {
       const p = path.join(dir, nama);
-      if (fs.statSync(p).isDirectory()) telusuri(p);
-      else if (nama === "route.ts") {
-        const isi = fs.readFileSync(p, "utf8");
-        // Dua bentuk pembuatan job yang dipakai repo ini: INSERT SQL langsung
-        // (jalur Postgres) dan helper smokeCreateJob (jalur retail).
-        if (/INSERT INTO jobs\b/.test(isi) || /smokeCreateJob\s*\(/.test(isi)) keluar.push(p);
-      }
+      if (fs.statSync(p).isDirectory()) { telusuri(p); continue; }
+      if (!p.endsWith(".ts")) continue;
+      const isi = fs.readFileSync(p, "utf8");
+      // Dua bentuk pembuatan job yang dipakai repo ini: INSERT SQL langsung
+      // (jalur Postgres) dan helper smokeCreateJob (jalur retail).
+      if (/INSERT INTO jobs\b/.test(isi) || /smokeCreateJob\s*\(/.test(isi)) keluar.push(p);
     }
   };
-  telusuri(akar);
+  telusuri(path.join(process.cwd(), "app", "api"));
+  telusuri(path.join(process.cwd(), "lib", "dashboard"));
   return keluar;
 }
 
@@ -60,7 +67,9 @@ test("setiap jalur pembuat job juga membuat snapshot Skor FYP", () => {
 // Memetakan TVC ke "other" akan menghasilkan angka yang terlihat sah padahal
 // modelnya tidak pernah melihat iklan merek — itu mengarang bukti.
 test("format di luar jangkauan model dilewati dengan alasan tertulis, bukan dipetakan paksa", () => {
-  const p = path.join(process.cwd(), "app", "api", "dashboard", "campaign", "confirm", "route.ts");
+  // Keputusan ini ikut pindah ke sel render bersama — dibaca dari sana, bukan
+  // dari salah satu route yang memanggilnya.
+  const p = path.join(process.cwd(), "lib", "dashboard", "render-cell.ts");
   const isi = fs.readFileSync(p, "utf8");
   assert.match(isi, /FORMAT_BERSKOR/, "daftar format yang boleh diskor hilang");
   assert.match(isi, /SENGAJA dilewati/, "alasan melewati TVC/iklan jasa harus tertulis di kode");

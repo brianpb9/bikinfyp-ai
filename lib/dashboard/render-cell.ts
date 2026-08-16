@@ -1,0 +1,178 @@
+/**
+ * Satu sel render dashboard: SATU skrip + SATU avatar -> satu job antre.
+ *
+ * Dipisahkan dari app/api/dashboard/campaign/confirm karena matriks avatar x
+ * skenario membutuhkan urutan yang PERSIS SAMA — validasi ulang skrip, klaim
+ * atomik, hold kredit, snapshot Skor FYP, antre — cuma dengan avatar yang
+ * berbeda per sel. Menyalinnya ke route kedua berarti dua salinan aturan uang
+ * dan aturan HITL yang akan menyimpang diam-diam; yang pertama menyimpang
+ * biasanya justru yang menyangkut kredit.
+ *
+ * Kontraknya sengaja sempit: pemanggil sudah harus memvalidasi produk, format,
+ * template, dan rasio. Fungsi ini tidak memutuskan apa pun soal kreatif — ia
+ * mengeksekusi satu sel dan melaporkan hasilnya.
+ */
+import crypto from "node:crypto";
+import type { Pool } from "pg";
+import { validateScript, templateRequiresPriceMention } from "@/lib/script-engine/validator";
+import type { SegmentDraft } from "@/lib/script-engine/templates";
+import { tierPriceIdr } from "@/lib/credits";
+import { enqueueJob } from "@/lib/job-queue";
+import type { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
+import type { PgJobsRepository } from "@/lib/postgres/jobs";
+import { pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
+
+export type HasilSel =
+  | { status: "queued"; script_id: string; job_id: string }
+  | { status: "failed"; script_id: string; reason: string };
+
+/**
+ * TVC dan iklan jasa SENGAJA dilewati, bukan dipetakan paksa: model dilatih
+ * pada konten organik TikTok (vlog, skit, tutorial) dan tidak punya padanan
+ * untuk iklan merek 30 detik. Memaksakan "other" akan menghasilkan angka yang
+ * terlihat sah padahal tidak berarti.
+ */
+const FORMAT_BERSKOR = ["hands_only", "vo_broll", "talking_head"];
+
+export interface SelRender {
+  userId: string;
+  orgId: string;
+  productId: string;
+  productName: string;
+  productPriceIdr: number;
+  promoPriceBeforeIdr: number | null;
+  scriptId: string;
+  /** Persona pembawa suara — sudah dibuat/ditemukan pemanggil. */
+  personaId: string;
+  /** Deskripsi wajah avatar untuk perencana shot. null = biarkan bawaan. */
+  avatarCustomDesc: string | null;
+  format: string;
+  ratio: string;
+  noModel: boolean;
+  tvcRoute: string | null;
+  templateId: string | null;
+  recordStyle: string | null;
+  shotCount: number | null;
+  runId: string;
+}
+
+export interface AlatSel {
+  pool: Pool;
+  jobsRepo: PgJobsRepository;
+  creditsRepo: PgCreditPaymentRepository;
+}
+
+export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<HasilSel> {
+  const { pool, jobsRepo, creditsRepo } = alat;
+  const gagal = (reason: string): HasilSel => ({ status: "failed", script_id: sel.scriptId, reason });
+
+  const script = await smokeGetScript(sel.userId, sel.scriptId);
+  if (!script || script.product_id !== sel.productId || script.job_id) {
+    return gagal("Skrip tidak ditemukan atau sudah pernah dipakai.");
+  }
+  const segments = JSON.parse(script.segments) as SegmentDraft[];
+  // Tier & durasi diturunkan dari skrip tersimpan (otoritatif) — tidak pernah
+  // dipercaya dari body request, sama seperti /api/jobs retail.
+  const tier = script.quality_tier as "silent_caption" | "high_quality" | "super_hq";
+  const durationS = Math.max(...segments.map((s) => s.end));
+  if (sel.format === "talking_head" && durationS !== 15) return gagal("Wajah AI cuma tersedia untuk video 15 detik.");
+  if (sel.format === "ads" && durationS !== 15 && durationS !== 30) return gagal("Iklan jasa tersedia untuk 15 atau 30 detik.");
+  // TVC punya peta beat tetap untuk 15 dtk (4 beat) dan 30 dtk (2 shot x 3
+  // beat). 45 dtk belum punya peta — tolak daripada meregangkan struktur 30
+  // dtk dan menghasilkan beat kosong yang mengulang.
+  if (sel.format === "tvc" && durationS !== 15 && durationS !== 30) return gagal("TVC tersedia untuk 15 atau 30 detik.");
+  const priceIdr = tierPriceIdr(tier, durationS);
+
+  const validation = validateScript(
+    { hook_family: script.hook_family, register: script.register, segments, productName: sel.productName,
+      priceIdr: sel.productPriceIdr, promoPriceBeforeIdr: sel.promoPriceBeforeIdr,
+      requirePriceMention: templateRequiresPriceMention(sel.templateId), qualityTier: tier },
+    "light"
+  );
+  if (!validation.passed) return gagal("Skrip tidak lolos validasi saat konfirmasi — buat ulang.");
+  await smokeApproveScript(sel.userId, sel.scriptId, { segments, edited: false, validationResult: validation });
+
+  const jobId = crypto.randomUUID();
+  const now = new Date().toISOString();
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    // requires_approval=TRUE: job dashboard brand SELALU berhenti di gerbang
+    // review scene (M11). Brand menilai gambar & pesan tiap scene sebelum
+    // digabung. Retail tidak pernah menyalakan ini.
+    await client.query(
+      `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,state,created_at,state_changed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,'QUEUED',$18,$18)`,
+      [jobId, sel.userId, sel.orgId, sel.runId, sel.avatarCustomDesc, sel.productId, sel.personaId, sel.scriptId,
+        sel.format, tier, durationS, sel.shotCount, sel.ratio, sel.noModel, sel.tvcRoute, sel.templateId, sel.recordStyle, now]
+    );
+    // KLAIM ATOMIK, bukan pemeriksaan tambahan.
+    //
+    // Penjagaan sebelumnya cuma membaca script.job_id di awal lalu menulisnya
+    // di sini — dua permintaan yang datang hampir bersamaan sama-sama membaca
+    // kosong, sama-sama membuat job, dan sama-sama menahan kredit. Pengguna
+    // dicharge dua kali untuk satu skrip (temuan audit QA 16 Agu 2026).
+    //
+    // "WHERE job_id IS NULL" membuat pemenangnya ditentukan database, bukan
+    // urutan kedatangan: yang kalah mendapat rowCount 0 dan transaksinya
+    // digulung balik sebelum kredit tersentuh.
+    const klaim = await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2 AND job_id IS NULL", [jobId, sel.scriptId]);
+    if (klaim.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return gagal("Skrip ini sudah dipakai permintaan lain.");
+    }
+    await client.query(
+      "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)",
+      [crypto.randomUUID(), sel.userId, jobId,
+        JSON.stringify({ script_id: sel.scriptId, campaign_run_id: sel.runId, org_id: sel.orgId, custom_avatar: Boolean(sel.avatarCustomDesc) }), now]
+    );
+    await client.query("COMMIT");
+  } catch (error) {
+    await client.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    client.release();
+  }
+
+  const held = await creditsRepo.holdCredits({ userId: sel.userId, orgId: sel.orgId }, jobId, priceIdr);
+  if (!held) {
+    await jobsRepo.failJob(jobId, "Kredit organisasi tidak cukup.");
+    return gagal("Kredit organisasi tidak cukup.");
+  }
+
+  // Snapshot Skor FYP BEKU (pre-render) — bahan loop predicted-vs-actual.
+  //
+  // Sempat HILANG SAMA SEKALI di jalur ini. Terukur di produksi 16 Agu: sejak
+  // 10 Agustus, 12 job tidak punya skor karena createFypSnapshot cuma dipanggil
+  // dari /api/jobs retail, sementara dashboard brand membuat job lewat jalur
+  // ini. Tidak ada yang menyadarinya selama enam hari karena kegagalannya diam.
+  if (FORMAT_BERSKOR.includes(sel.format)) {
+    try {
+      const plan = scoreScriptPlan({
+        hookFamily: script.hook_family as Parameters<typeof scoreScriptPlan>[0]["hookFamily"],
+        segments, qualityTier: tier, durationSec: durationS,
+        format: sel.format as FypVideoFormat,
+        productName: sel.productName, priceIdr: sel.productPriceIdr,
+      });
+      await pgSaveFypSnapshot({
+        jobId, scriptId: sel.scriptId, modelVersion: plan.modelVersion,
+        score: plan.score, rawProbability: plan.rawProbability,
+        featuresJson: JSON.stringify(plan.featureValues),
+      });
+      await pgAudit(sel.userId, "fyp.snapshot", "fyp_snapshots", jobId, { score: plan.score, model_version: plan.modelVersion });
+    } catch (snapErr) {
+      // Non-fatal, sama seperti jalur retail: skor gagal tidak boleh
+      // menggagalkan job yang sudah dibayar.
+      console.warn(`[fyp-snapshot] gagal untuk job dashboard ${jobId}:`, snapErr);
+    }
+  }
+
+  try {
+    await enqueueJob(jobId);
+  } catch {
+    await jobsRepo.failJob(jobId, "Antrean render tidak tersedia; kredit dikembalikan otomatis.");
+    return gagal("Antrean render tidak tersedia — kredit dikembalikan otomatis.");
+  }
+  return { status: "queued", script_id: sel.scriptId, job_id: jobId };
+}

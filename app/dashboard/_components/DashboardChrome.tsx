@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { CircleHelp, FolderKanban, Home, LayoutTemplate, Library, Send, Users, UserRound, Zap } from "lucide-react";
+import { CircleHelp, FolderKanban, Grid3x3, Home, LayoutTemplate, Library, Send, Users, UserRound, Zap } from "lucide-react";
 import { tokens } from "./format";
 import { SidebarLogout } from "./ProfileActions";
 
@@ -20,6 +20,10 @@ import { SidebarLogout } from "./ProfileActions";
 const NAV = [
   { href: "/dashboard", label: "Beranda", icon: Home, disabled: false },
   { href: "/dashboard/campaign", label: "Bikin Video", icon: Zap, disabled: false },
+  // Matriks berdiri sendiri, bukan langkah di dalam wizard: wizard menjawab
+  // "bikin satu video", matriks menjawab "bandingkan banyak kombinasi". Dua
+  // pekerjaan berbeda dengan risiko biaya yang jauh berbeda.
+  { href: "/dashboard/matrix", label: "Matriks", icon: Grid3x3, disabled: false },
   { href: "/dashboard/templates", label: "Templates", icon: LayoutTemplate, disabled: false },
   { href: "/dashboard/projects", label: "Proyek", icon: FolderKanban, disabled: false },
   { href: "/dashboard/library", label: "Library", icon: Library, disabled: false },
