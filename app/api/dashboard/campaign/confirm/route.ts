@@ -11,7 +11,7 @@ import { getCreatorCategory } from "@/lib/personas";
 import { getRecordingStyle } from "@/lib/media/recording-styles";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
-import { postgresRuntimeEnabled, pgFindOrCreatePersona, pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { postgresRuntimeEnabled, pgFindOrCreatePersona, pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetOrgProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import { getPool } from "@/lib/postgres/pool";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
@@ -37,8 +37,11 @@ export async function POST(req: Request) {
 
     const productId = typeof body.product_id === "string" ? body.product_id : "";
     if (!productId) throw ERR.BAD_REQUEST("product_id wajib diisi.", "product_id is required.");
-    const product = await smokeGetProduct(user.id, productId);
-    if (!product || product.org_id !== membership.org_id) throw ERR.NOT_FOUND("Produknya");
+    // Per-ORG, bukan per-user. Produk dashboard dibuat satu anggota, dibayar
+    // dari dompet organisasi, dan dipakai seluruh tim — pemeriksaan per-user
+    // menolak rekan satu tim atas produk yang jelas ada di daftar mereka.
+    const product = await smokeGetOrgProduct(membership.org_id, productId);
+    if (!product) throw ERR.NOT_FOUND("Produknya");
 
     const scriptIds: string[] = (Array.isArray(body.script_ids) ? body.script_ids : [])
       .map((s: unknown) => String(s ?? "")).filter(Boolean).slice(0, MAX_VIDEOS);

@@ -78,3 +78,29 @@ test("wajah influencer dikirim ke perencana shot, bukan dibiarkan bawaan", () =>
   assert.match(route, /avatarCustomDesc: preset\.desc/,
     "tanpa ini matriks avatar berisi wajah kembar dan tidak membuktikan apa pun");
 });
+
+// Kepemilikan per-ORG, bukan per-anggota. Produk dashboard dibuat satu orang,
+// dibayar dompet organisasi, dan dipakai seluruh tim. Pemeriksaan per-user
+// membuat rekan satu tim melihat produk di daftar lalu ditolak "tidak
+// ditemukan" saat menekan render — dan pada PATCH lebih buruk lagi: lolos
+// pemeriksaan tapi mengenai nol baris, jadi Simpan berhasil tanpa menyimpan.
+test("route dashboard memeriksa produk terhadap organisasi, bukan pembuatnya", () => {
+  const routes = [
+    "app/api/dashboard/matrix/route.ts",
+    "app/api/dashboard/campaign/confirm/route.ts",
+    "app/api/dashboard/campaign/generate/route.ts",
+    "app/api/dashboard/campaign/product/route.ts",
+  ];
+  for (const rel of routes) {
+    const isi = baca(rel);
+    assert.ok(!/smokeGetProduct\(user\.id/.test(isi), `${rel} masih memeriksa produk per-user`);
+    assert.match(isi, /smokeGetOrgProduct\(membership\.org_id/, `${rel} harus memeriksa produk per-org`);
+  }
+});
+
+test("UPDATE produk memakai kunci yang sama dengan pemeriksaannya", () => {
+  const isi = baca("app/api/dashboard/campaign/product/route.ts");
+  assert.ok(!/UPDATE products SET[^"]*WHERE id=\$9 AND user_id=/.test(isi),
+    "pemeriksaan per-org + UPDATE per-user = Simpan yang berhasil tanpa menyimpan");
+  assert.match(isi, /WHERE id=\$9 AND org_id=\$10/, "UPDATE harus dikunci per-org");
+});

@@ -6,7 +6,7 @@ import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { extractFromUrl, cleanProductName } from "@/lib/extract";
 import { downloadProductImages } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
-import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { sanitizeClaims } from "@/lib/media/claim-overlay";
 
@@ -104,8 +104,11 @@ export async function PATCH(req: Request) {
     const productId = typeof body.product_id === "string" ? body.product_id : "";
     if (!productId) throw ERR.BAD_REQUEST("product_id wajib diisi.", "product_id is required.");
 
-    const existing = await smokeGetProduct(user.id, productId);
-    if (!existing || existing.org_id !== membership.org_id) throw ERR.NOT_FOUND("Produknya");
+    // Per-ORG, bukan per-user. Produk dashboard dibuat satu anggota, dibayar
+    // dari dompet organisasi, dan disunting seluruh tim — pemeriksaan per-user
+    // menolak rekan satu tim atas produk yang jelas ada di daftar mereka.
+    const existing = await smokeGetOrgProduct(membership.org_id, productId);
+    if (!existing) throw ERR.NOT_FOUND("Produknya");
 
     const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : existing.name;
     const priceIdr = Number.isFinite(Number(body.price_idr)) ? Math.max(0, Math.round(Number(body.price_idr))) : existing.price_idr;
@@ -134,15 +137,20 @@ export async function PATCH(req: Request) {
     const pool = getPool(config.databaseUrl);
     try {
       await pool.query(
-        "UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4, brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8, claims=COALESCE($11, claims) WHERE id=$9 AND user_id=$10",
-        [name, priceIdr, category, visualDesc, brandBrief, promoBefore, promoEndsAt, promoStock, productId, user.id, claims ? JSON.stringify(claims) : null]
+        // WHERE per org, sejalan dengan pemeriksaan di atas. Kalau ini tetap
+        // "user_id=$10", pemeriksaan sudah lolos tapi UPDATE-nya mengenai nol
+        // baris — rekan satu tim menekan Simpan, tidak ada error, dan tidak ada
+        // yang tersimpan. Kegagalan diam yang jauh lebih membingungkan
+        // daripada penolakan yang jujur.
+        "UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4, brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8, claims=COALESCE($11, claims) WHERE id=$9 AND org_id=$10",
+        [name, priceIdr, category, visualDesc, brandBrief, promoBefore, promoEndsAt, promoStock, productId, membership.org_id, claims ? JSON.stringify(claims) : null]
       );
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
     await pgAudit(user.id, "product.updated", "products", productId, { campaign: true });
 
-    const updated = await smokeGetProduct(user.id, productId);
+    const updated = await smokeGetOrgProduct(membership.org_id, productId);
     if (!updated) throw ERR.NOT_FOUND("Produknya");
     return Response.json(productPayload(updated));
   } catch (err) {

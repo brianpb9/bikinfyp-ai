@@ -88,6 +88,21 @@ export class PgProductPersonaScriptRepository {
     return found.rows[0] ?? null;
   }
 
+  /**
+   * Produk milik ORGANISASI, bukan milik anggota yang kebetulan membuatnya.
+   *
+   * Kepemilikan per-user benar untuk retail dan SALAH untuk dashboard brand:
+   * produk dibuat satu orang, dibayar dari dompet organisasi, dan dipakai
+   * seluruh tim. Dengan getOwnedProduct, rekan satu tim melihat produk itu di
+   * daftar (daftarnya memang di-query per org) lalu mendapat "tidak ditemukan"
+   * saat menekan render — kegagalan yang terlihat seperti bug data padahal
+   * murni soal siapa yang dianggap pemilik.
+   */
+  async getOrgProduct(orgId: string, productId: string): Promise<ProductRow | null> {
+    const found = await this.pool.query<ProductRow>("SELECT * FROM products WHERE id = $1 AND org_id = $2", [productId, orgId]);
+    return found.rows[0] ?? null;
+  }
+
   async updateOwnedProduct(
     userId: string,
     productId: string,
@@ -142,11 +157,23 @@ export class PgProductPersonaScriptRepository {
   }
 
   /** Persists the three generated variants atomically, with the route's audit trail. */
-  async createScripts(userId: string, productId: string, variants: PgScriptInput[]): Promise<ScriptRow[]> {
+  /**
+   * `orgId` opsional MELUASKAN kepemilikan, bukan menggantikannya: produk milik
+   * organisasi boleh dipakai anggota mana pun. Tanpa ini, rekan satu tim yang
+   * membuka produk buatan orang lain di dashboard akan ditolak dengan "Produk
+   * tidak dimiliki user" — benar untuk retail, salah untuk dashboard brand di
+   * mana produk dibuat satu orang dan dipakai seluruh tim.
+   *
+   * Jalur retail tidak mengirim orgId sama sekali, jadi perilakunya tidak
+   * berubah sedikit pun.
+   */
+  async createScripts(userId: string, productId: string, variants: PgScriptInput[], orgId?: string): Promise<ScriptRow[]> {
     const client = await this.pool.connect();
     try {
       await client.query("BEGIN");
-      const product = await client.query("SELECT id FROM products WHERE id = $1 AND user_id = $2", [productId, userId]);
+      const product = orgId
+        ? await client.query("SELECT id FROM products WHERE id = $1 AND (user_id = $2 OR org_id = $3)", [productId, userId, orgId])
+        : await client.query("SELECT id FROM products WHERE id = $1 AND user_id = $2", [productId, userId]);
       if (!product.rowCount) throw new Error("Produk tidak dimiliki user.");
       const scripts: ScriptRow[] = [];
       for (const variant of variants) {
@@ -173,19 +200,26 @@ export class PgProductPersonaScriptRepository {
     } finally { client.release(); }
   }
 
-  async getOwnedScript(userId: string, scriptId: string): Promise<ScriptRow | null> {
-    const result = await this.pool.query<ScriptRow>(
-      "SELECT s.* FROM scripts s JOIN products p ON p.id = s.product_id WHERE s.id = $1 AND p.user_id = $2", [scriptId, userId]
-    );
+  // `orgId` opsional meluaskan kepemilikan skrip dengan alasan yang sama
+  // seperti createScripts: skrip menggantung pada produk, dan produk milik
+  // organisasi dipakai seluruh tim. Jalur retail tidak mengirimnya.
+  async getOwnedScript(userId: string, scriptId: string, orgId?: string): Promise<ScriptRow | null> {
+    const result = orgId
+      ? await this.pool.query<ScriptRow>(
+          "SELECT s.* FROM scripts s JOIN products p ON p.id = s.product_id WHERE s.id = $1 AND (p.user_id = $2 OR p.org_id = $3)", [scriptId, userId, orgId]
+        )
+      : await this.pool.query<ScriptRow>(
+          "SELECT s.* FROM scripts s JOIN products p ON p.id = s.product_id WHERE s.id = $1 AND p.user_id = $2", [scriptId, userId]
+        );
     return result.rows[0] ?? null;
   }
 
-  async approveOwnedScript(userId: string, scriptId: string, update: { segments: unknown; edited: boolean; validationResult: unknown }): Promise<ScriptRow | null> {
+  async approveOwnedScript(userId: string, scriptId: string, update: { segments: unknown; edited: boolean; validationResult: unknown }, orgId?: string): Promise<ScriptRow | null> {
     const approvedAt = this.now();
     const result = await this.pool.query<ScriptRow>(
       `UPDATE scripts SET segments = $1, edited_by_user = $2, approved_by_user_at = $3, validation_result = $4
-       WHERE id = $5 AND product_id IN (SELECT id FROM products WHERE user_id = $6) RETURNING *`,
-      [JSON.stringify(update.segments), update.edited ? 1 : 0, approvedAt, JSON.stringify(update.validationResult), scriptId, userId]
+       WHERE id = $5 AND product_id IN (SELECT id FROM products WHERE user_id = $6 OR ($7::text IS NOT NULL AND org_id = $7)) RETURNING *`,
+      [JSON.stringify(update.segments), update.edited ? 1 : 0, approvedAt, JSON.stringify(update.validationResult), scriptId, userId, orgId ?? null]
     );
     const script = result.rows[0] ?? null;
     if (script) await this.appendAudit(userId, "script.approved", "scripts", script.id, { edited: update.edited });

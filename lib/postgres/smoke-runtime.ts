@@ -130,17 +130,22 @@ export async function pgGetPersona(userId: string, personaId: string) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.getOwnedPersona(userId, personaId); } finally { await repo.close(); }
 }
-export async function smokeCreateScripts(userId: string, productId: string, variants: PgScriptInput[]) {
+export async function smokeCreateScripts(userId: string, productId: string, variants: PgScriptInput[], orgId?: string) {
   const repo = new PgProductPersonaScriptRepository(url());
-  try { return await repo.createScripts(userId, productId, variants); } finally { await repo.close(); }
+  try { return await repo.createScripts(userId, productId, variants, orgId); } finally { await repo.close(); }
 }
-export async function smokeGetScript(userId: string, scriptId: string) {
+/** Produk milik org — dipakai seluruh permukaan dashboard. Lihat getOrgProduct. */
+export async function smokeGetOrgProduct(orgId: string, productId: string) {
   const repo = new PgProductPersonaScriptRepository(url());
-  try { return await repo.getOwnedScript(userId, scriptId); } finally { await repo.close(); }
+  try { return await repo.getOrgProduct(orgId, productId); } finally { await repo.close(); }
 }
-export async function smokeApproveScript(userId: string, scriptId: string, update: { segments: unknown; edited: boolean; validationResult: unknown }) {
+export async function smokeGetScript(userId: string, scriptId: string, orgId?: string) {
   const repo = new PgProductPersonaScriptRepository(url());
-  try { return await repo.approveOwnedScript(userId, scriptId, update); } finally { await repo.close(); }
+  try { return await repo.getOwnedScript(userId, scriptId, orgId); } finally { await repo.close(); }
+}
+export async function smokeApproveScript(userId: string, scriptId: string, update: { segments: unknown; edited: boolean; validationResult: unknown }, orgId?: string) {
+  const repo = new PgProductPersonaScriptRepository(url());
+  try { return await repo.approveOwnedScript(userId, scriptId, update, orgId); } finally { await repo.close(); }
 }
 
 export async function smokeCreateJob(userId: string, input: { productId: string; scriptId: string; format: string; qualityTier: string; durationS: number; priceIdr: number; avatarCustomDesc?: string | null }) {

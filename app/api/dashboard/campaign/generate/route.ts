@@ -4,7 +4,7 @@ import type { HookCode } from "@/lib/config/hooks";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { generateScripts, TEMPLATE_COPY_CAPACITY } from "@/lib/script-engine";
 import { cleanProductName } from "@/lib/extract";
-import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { tierMasihDijual } from "@/lib/paket-kredit";
@@ -33,8 +33,11 @@ export async function POST(req: Request) {
 
     const productId = typeof body.product_id === "string" ? body.product_id : "";
     if (!productId) throw ERR.BAD_REQUEST("product_id wajib diisi.", "product_id is required.");
-    const product = await smokeGetProduct(user.id, productId);
-    if (!product || product.org_id !== membership.org_id) throw ERR.NOT_FOUND("Produknya");
+    // Per-ORG, bukan per-user. Produk dashboard dibuat satu anggota, dibayar
+    // dari dompet organisasi, dan dipakai seluruh tim — pemeriksaan per-user
+    // menolak rekan satu tim atas produk yang jelas ada di daftar mereka.
+    const product = await smokeGetOrgProduct(membership.org_id, productId);
+    if (!product) throw ERR.NOT_FOUND("Produknya");
     if (!product.price_idr) throw ERR.BAD_REQUEST("Isi harga produknya dulu — harga dipakai di skrip dan overlay.", "Product price is required.");
     const images = JSON.parse(product.images || "[]") as string[];
     // Iklan jasa tetap butuh SATU visual — logo, foto toko, atau screenshot app.
@@ -146,7 +149,7 @@ export async function POST(req: Request) {
     const created = await smokeCreateScripts(user.id, product.id, passing.map((v) => ({
       hookFamily: v.hook_family, emotion: v.emotion, register: v.register, segments: v.segments,
       caption: v.caption, hashtags: v.hashtags, validationResult: v.validation, qualityTier: tier, hookLevel,
-    })));
+    })), membership.org_id);
 
     return Response.json({
       product_id: product.id,

@@ -67,7 +67,12 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   const { pool, jobsRepo, creditsRepo } = alat;
   const gagal = (reason: string): HasilSel => ({ status: "failed", script_id: sel.scriptId, reason });
 
-  const script = await smokeGetScript(sel.userId, sel.scriptId);
+  // Kepemilikan diperiksa terhadap ORGANISASI, bukan anggota yang kebetulan
+  // membuat produknya. Di dashboard brand, produk dibuat satu orang, dibayar
+  // dompet organisasi, dan dirender siapa pun di tim — pemeriksaan per-user
+  // membuat rekan satu tim ditolak "tidak ditemukan" atas produk yang jelas-
+  // jelas ada di daftarnya.
+  const script = await smokeGetScript(sel.userId, sel.scriptId, sel.orgId);
   if (!script || script.product_id !== sel.productId || script.job_id) {
     return gagal("Skrip tidak ditemukan atau sudah pernah dipakai.");
   }
@@ -91,7 +96,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     "light"
   );
   if (!validation.passed) return gagal("Skrip tidak lolos validasi saat konfirmasi — buat ulang.");
-  await smokeApproveScript(sel.userId, sel.scriptId, { segments, edited: false, validationResult: validation });
+  await smokeApproveScript(sel.userId, sel.scriptId, { segments, edited: false, validationResult: validation }, sel.orgId);
 
   const jobId = crypto.randomUUID();
   const now = new Date().toISOString();

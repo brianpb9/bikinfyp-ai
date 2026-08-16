@@ -15,7 +15,7 @@ import { tierMasihDijual } from "@/lib/paket-kredit";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { getPool } from "@/lib/postgres/pool";
-import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 
 export const runtime = "nodejs";
@@ -62,8 +62,12 @@ export async function POST(req: Request) {
     // ---- produk ----
     const productId = typeof body.product_id === "string" ? body.product_id : "";
     if (!productId) throw ERR.BAD_REQUEST("product_id wajib diisi.", "product_id is required.");
-    const product = await smokeGetProduct(user.id, productId);
-    if (!product || product.org_id !== membership.org_id) throw ERR.NOT_FOUND("Produknya");
+    // Per-ORG, bukan per-user: matriks dijalankan atas nama organisasi dan
+    // dibayar dari dompetnya, jadi produk buatan rekan satu tim harus bisa
+    // dipakai. Daftar di GET sudah di-query per org — memvalidasi per user di
+    // sini akan menampilkan produk lalu menolaknya saat ditekan.
+    const product = await smokeGetOrgProduct(membership.org_id, productId);
+    if (!product) throw ERR.NOT_FOUND("Produknya");
     if (!product.price_idr) throw ERR.BAD_REQUEST("Isi harga produknya dulu — harga dipakai di skrip dan overlay.", "Product price is required.");
     if ((JSON.parse(product.images || "[]") as string[]).length === 0) {
       throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko untuk iklan jasa.", "At least one image is required.");
@@ -189,7 +193,7 @@ export async function POST(req: Request) {
           hookFamily: lolos.hook_family, emotion: lolos.emotion, register: lolos.register,
           segments: lolos.segments, caption: lolos.caption, hashtags: lolos.hashtags,
           validationResult: lolos.validation, qualityTier: tier, hookLevel,
-        })));
+        })), membership.org_id);
 
         for (let i = 0; i < avatars.length; i++) {
           const { preset } = avatars[i];
