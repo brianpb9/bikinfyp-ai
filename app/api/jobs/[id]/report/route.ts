@@ -56,7 +56,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const db = getDb();
-    const job = db.prepare("SELECT * FROM jobs WHERE id = ? AND user_id = ?").get(id, user.id) as JobRow | undefined;
+    const job = db.prepare("SELECT * FROM jobs WHERE id = ? AND user_id = ? AND org_id IS NULL").get(id, user.id) as JobRow | undefined;
     if (!job) throw ERR.NOT_FOUND("Videonya");
     row = applyFypReport(db, id, { postedUrl, views, orders });
     audit(user.id, "fyp.reported", "fyp_snapshots", id, { posted_url: row.posted_url, outcome: row.outcome_json });

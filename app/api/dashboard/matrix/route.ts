@@ -17,7 +17,7 @@ import { getPool } from "@/lib/postgres/pool";
 import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
-import { assertInvarianUangSiap } from "@/lib/job-intake";
+import { assertPaidAdmission } from "@/lib/job-intake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,8 +85,10 @@ export async function POST(req: Request) {
     // Matriks adalah pengeluaran terbesar yang bisa dipicu satu klik di produk
     // ini. Kalau ada satu tempat yang perannya wajib diperiksa, ini tempatnya.
     pastikanBolehBelanja(membership.role);
-    // Invarian uang wajib SUDAH terpasang sebelum sepeser pun ditahan.
-    await assertInvarianUangSiap();
+    // Satu gerbang untuk semua yang memakan uang. Sebelumnya jalur ini cuma
+    // memeriksa migrasi, jadi ia tetap membuka diri walau JOB_INTAKE_MODE
+    // sudah "closed" untuk perawatan.
+    await assertPaidAdmission();
     const body = await req.json().catch(() => ({}));
 
     // ---- produk ----

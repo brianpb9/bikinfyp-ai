@@ -7,6 +7,7 @@ import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { enqueuePromoJob } from "@/lib/promo/queue";
 import { getHookById } from "@/lib/promo/hook-library";
 import { getCreatorCategory } from "@/lib/personas";
+import { assertPaidAdmission } from "@/lib/job-intake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,6 +31,11 @@ export async function POST(req: Request) {
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Prototype ini butuh runtime PostgreSQL.", "Video Promosi prototype requires Postgres runtime.");
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
+    // Promo membuat pekerjaan baru, memanggil provider, DAN menahan saldo —
+    // ketiganya. Sebelumnya ia satu-satunya jalur uang tanpa gerbang sama
+    // sekali, jadi health bisa mengumumkan intake "closed" sementara promo
+    // terus menerima job.
+    await assertPaidAdmission();
     const body = await req.json().catch(() => ({}));
     const raw = body.uploaded_clip_urls ?? (body.uploaded_clip_url ? [body.uploaded_clip_url] : []);
     const uploadedClipUrls = Array.isArray(raw) ? raw.map(String).filter(Boolean) : [];

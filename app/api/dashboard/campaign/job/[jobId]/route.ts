@@ -12,6 +12,7 @@ import { getPool } from "@/lib/postgres/pool";
 import { pgForgetShotTask } from "@/lib/postgres/task-memo";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
+import { assertPaidAdmission } from "@/lib/job-intake";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -116,6 +117,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
     // gerbang HITL (aturan keras #5), dan gerbang yang bisa ditekan siapa saja
     // bukan gerbang.
     pastikanBolehBelanja(membership.role);
+
+    // Regenerate memanggil provider DAN memotong saldo; approve melepas job ke
+    // compositing (provider lagi). Keduanya wajib lewat gerbang yang sama.
+    //
+    // Ini penting khusus untuk regenerate SEKARANG: ia sudah menulis
+    // type='regen', tapi migrasi yang mengizinkan tipe itu (0030) belum
+    // terpasang di produksi — tanpa gerbang ini, permintaannya berujung 500
+    // dengan saldo yang sudah tersentuh.
+    await assertPaidAdmission();
 
     const pool = getPool(config.databaseUrl);
     try {

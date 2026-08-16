@@ -9,7 +9,7 @@ import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { config } from "@/lib/config";
 import { getCreatorCategory } from "@/lib/personas";
 import { createSignedUrl } from "@/lib/signed-url";
-import { assertInvarianUangSiap, assertJobIntakeOpen } from "@/lib/job-intake";
+import { assertPaidAdmission } from "@/lib/job-intake";
 import { createFypSnapshot } from "@/lib/fyp-snapshot";
 import type { FypQualityTier, FypVideoFormat } from "@/lib/fyp-score";
 import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnapshot, postgresRuntimeEnabled, postgresSmokeEnabled, smokeCompleteJob, smokeCreateJob, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
@@ -25,9 +25,8 @@ export async function POST(req: Request) {
   try {
     // Maintenance gate must run before authentication, database reads, holds,
     // or queue writes. Existing jobs are intentionally unaffected.
-    assertJobIntakeOpen();
-    // Jalur retail juga menahan kredit, jadi ia tunduk pada invarian yang sama.
-    await assertInvarianUangSiap();
+    // Satu gerbang untuk semua yang memakan uang — lihat assertPaidAdmission.
+    await assertPaidAdmission();
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
     const body = await req.json().catch(() => ({}));

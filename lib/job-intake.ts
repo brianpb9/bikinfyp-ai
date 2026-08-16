@@ -61,7 +61,25 @@ export function assertJobIntakeOpen(value = config.jobIntakeMode): void {
  */
 export async function assertInvarianUangSiap(): Promise<void> {
   const { pendingMigrations } = await import("./migrasi-status");
-  const pending = await pendingMigrations().catch(() => [] as string[]);
+
+  // FAIL-CLOSED. Versi pertama memakai .catch(() => []) — kalau pembacaan
+  // skema gagal, hasilnya "tidak ada migrasi tertinggal" dan uang boleh
+  // bergerak. Itu terbalik: gerbang yang tidak bisa memastikan invariannya
+  // terpasang harus MENOLAK, bukan mengizinkan. Kegagalan membaca justru
+  // sinyal bahwa databasenya sedang tidak sehat.
+  let pending: string[];
+  try {
+    pending = await pendingMigrations();
+  } catch (err) {
+    console.error("[intake] DITOLAK — status migrasi tidak terbaca:", (err as Error).message);
+    throw new ApiError(503, {
+      code: "MONEY_INVARIANT_UNKNOWN",
+      message_id: "Pembuatan video dijeda sebentar — kami belum bisa memastikan kondisi database. Saldo dan video lamamu aman.",
+      message_en: "Paid intake refused: migration status could not be read.",
+      retryable: true,
+    });
+  }
+
   const kurang = invarianUangBelumTerpasang(pending);
   if (kurang.length === 0) return;
   console.error(`[intake] DITOLAK — migrasi invarian uang belum terpasang: ${kurang.join(", ")}`);
@@ -71,4 +89,28 @@ export async function assertInvarianUangSiap(): Promise<void> {
     message_en: `Paid job intake is paused until money-invariant migrations are applied: ${kurang.join(", ")}.`,
     retryable: true,
   });
+}
+
+/**
+ * SATU gerbang untuk semua yang memakan uang.
+ *
+ * Sebelumnya tiap jalur memilih sendiri penjaganya, dan pilihannya tidak
+ * pernah sama:
+ *
+ *   /api/jobs           maintenance + migrasi
+ *   campaign/confirm    migrasi saja
+ *   matrix              migrasi saja
+ *   scene regenerate    tidak ada
+ *   /api/promo/jobs     tidak ada
+ *
+ * Akibatnya health bisa mengumumkan intake "closed" sementara promo masih
+ * menerima job dan regenerate masih memanggil provider — status yang memberi
+ * rasa aman palsu justru lebih berbahaya daripada tidak punya status.
+ *
+ * Aturannya sekarang satu kalimat: apa pun yang MEMBUAT pekerjaan baru,
+ * MEMANGGIL provider, MENAHAN saldo, atau MEMOTONG saldo memanggil ini.
+ */
+export async function assertPaidAdmission(): Promise<void> {
+  assertJobIntakeOpen();
+  await assertInvarianUangSiap();
 }

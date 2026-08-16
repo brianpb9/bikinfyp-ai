@@ -17,7 +17,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const { id } = await ctx.params;
     const job = postgresRuntimeEnabled()
       ? await smokeGetJob(user.id, id) as JobRow | null
-      : getDb().prepare("SELECT * FROM jobs WHERE id = ? AND user_id = ?").get(id, user.id) as JobRow | undefined;
+      : getDb().prepare("SELECT * FROM jobs WHERE id = ? AND user_id = ? AND org_id IS NULL").get(id, user.id) as JobRow | undefined;
     if (!job) throw ERR.NOT_FOUND("Job-nya");
 
     return Response.json({

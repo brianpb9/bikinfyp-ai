@@ -243,15 +243,22 @@ export async function smokeCompleteJob(jobId: string) {
     await pool.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,0,'capture',$3,NULL,$4)", [id(),job.user_id,jobId,at()]);
   } finally { await jobs.close(); /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
-export async function smokeGetJob(userId: string, jobId: string) { const pool = getPool(url()); try { return (await pool.query("SELECT * FROM jobs WHERE id=$1 AND user_id=$2", [jobId,userId])).rows[0] ?? null; } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ } }
-export async function smokeGetOutput(userId: string, jobId: string) { const pool = getPool(url()); try { return (await pool.query("SELECT o.* FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.job_id=$1 AND j.user_id=$2", [jobId,userId])).rows[0] ?? null; } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ } }
+// "org_id IS NULL" — jalur RETAIL hanya melihat job retail.
+//
+// Pembuatan job organisasi lewat API retail sudah ditutup, tapi PEMBACAANNYA
+// belum: anggota org masih bisa menarik job, output, dan report organisasi
+// lewat endpoint retail berdasarkan user_id saja. Yang bocor bukan uangnya
+// melainkan pemisahan jalurnya — job merek muncul di riwayat pribadi, di luar
+// library dan di luar kendali organisasinya.
+export async function smokeGetJob(userId: string, jobId: string) { const pool = getPool(url()); try { return (await pool.query("SELECT * FROM jobs WHERE id=$1 AND user_id=$2 AND org_id IS NULL", [jobId,userId])).rows[0] ?? null; } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ } }
+export async function smokeGetOutput(userId: string, jobId: string) { const pool = getPool(url()); try { return (await pool.query("SELECT o.* FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.job_id=$1 AND j.user_id=$2 AND j.org_id IS NULL", [jobId,userId])).rows[0] ?? null; } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ } }
 export async function pgListJobs(userId: string) {
   const pool = getPool(url());
   // o.video_url ikut diambil supaya daftar riwayat bisa menampilkan frame video
   // hasil, bukan foto produk yang sama untuk semua video (lihat attachPreview
   // di app/api/jobs/route.ts). LEFT JOIN — job yang belum selesai tidak punya
   // baris outputs.
-  try { return (await pool.query("SELECT j.id,j.state,j.format,j.duration_s,j.created_at,j.completed_at,j.provider_video,j.provider_voice,j.cost_actual_idr,j.script_id,p.name AS product_name,p.images AS product_images,o.video_url AS output_video,fs.score AS fyp_score,fs.posted_url AS fyp_posted_url FROM jobs j JOIN products p ON p.id=j.product_id LEFT JOIN outputs o ON o.job_id=j.id LEFT JOIN fyp_snapshots fs ON fs.job_id=j.id WHERE j.user_id=$1 ORDER BY j.created_at DESC LIMIT 50", [userId])).rows; }
+  try { return (await pool.query("SELECT j.id,j.state,j.format,j.duration_s,j.created_at,j.completed_at,j.provider_video,j.provider_voice,j.cost_actual_idr,j.script_id,p.name AS product_name,p.images AS product_images,o.video_url AS output_video,fs.score AS fyp_score,fs.posted_url AS fyp_posted_url FROM jobs j JOIN products p ON p.id=j.product_id LEFT JOIN outputs o ON o.job_id=j.id LEFT JOIN fyp_snapshots fs ON fs.job_id=j.id WHERE j.user_id=$1 AND j.org_id IS NULL ORDER BY j.created_at DESC LIMIT 50", [userId])).rows; }
   finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 

@@ -112,13 +112,21 @@ test("pekerjaan berbayar ditolak selama migrasi invarian uang belum terpasang", 
   assert.ok(MIGRASI_INVARIAN_UANG.includes("0030_regen_ledger_type.sql"));
   assert.ok(MIGRASI_INVARIAN_UANG.includes("0031_terminal_ledger_unique.sql"));
 
+  // SEMUA jalur yang membuat pekerjaan, memanggil provider, menahan saldo,
+  // atau memotong saldo memakai gerbang yang SAMA. Sebelumnya tiap jalur
+  // memilih penjaganya sendiri dan pilihannya tidak pernah sama — promo dan
+  // regenerate bahkan tidak punya penjaga sama sekali, jadi health bisa
+  // mengumumkan intake "closed" sementara keduanya terus jalan. Status yang
+  // memberi rasa aman palsu lebih berbahaya daripada tidak punya status.
   for (const rel of [
-    "app/api/jobs/route.ts",
-    "app/api/dashboard/campaign/confirm/route.ts",
-    "app/api/dashboard/matrix/route.ts",
+    "app/api/jobs/route.ts",                              // retail: menahan kredit
+    "app/api/dashboard/campaign/confirm/route.ts",        // enterprise: menahan kredit
+    "app/api/dashboard/matrix/route.ts",                  // enterprise: sampai 24 video
+    "app/api/dashboard/campaign/job/[jobId]/route.ts",    // regenerate + approve: provider
+    "app/api/promo/jobs/route.ts",                        // promo: job + provider + saldo
   ]) {
-    assert.match(baca(rel), /await assertInvarianUangSiap\(\)/,
-      `${rel} menahan kredit tanpa memastikan invariannya terpasang`);
+    assert.match(baca(rel), /await assertPaidAdmission\(\)/,
+      `${rel} memakan uang tanpa lewat gerbang bersama`);
   }
 });
 
@@ -129,4 +137,32 @@ test("health menutup intake sendiri dan membuktikan commit yang hidup", () => {
   assert.match(s, /build_sha/, "commit yang hidup harus bisa dibuktikan, bukan disimpulkan");
   assert.match(s, /Production wajib APP_BASE_URL https/,
     "Secure diturunkan dari APP_BASE_URL — kalau ia bukan https, cookie berangkat tanpa Secure tanpa ada yang mengeluh");
+});
+
+test("gerbang uang FAIL-CLOSED saat status migrasi tidak terbaca", () => {
+  const s = baca("lib/job-intake.ts");
+  // Versi pertama memakai .catch(() => []): pembacaan skema yang gagal
+  // menghasilkan "tidak ada yang tertinggal" dan uang boleh bergerak. Terbalik
+  // — kegagalan membaca justru sinyal database sedang tidak sehat.
+  assert.ok(!/pendingMigrations\(\)\.catch\(\(\) => \[\]/.test(s),
+    "gerbang uang tidak boleh fail-open");
+  assert.match(s, /MONEY_INVARIANT_UNKNOWN/, "gagal baca = tolak, dengan kode sendiri");
+  assert.match(s, /export async function assertPaidAdmission/,
+    "harus ada SATU gerbang bersama, bukan tiap jalur memilih sendiri");
+  assert.match(s, /assertJobIntakeOpen\(\);\s*\n\s*await assertInvarianUangSiap\(\);/,
+    "gerbang bersama harus memeriksa maintenance DAN migrasi");
+});
+
+test("jalur baca retail tidak bisa melihat job organisasi", () => {
+  for (const rel of [
+    "app/api/jobs/[id]/route.ts",
+    "app/api/jobs/[id]/output/route.ts",
+    "app/api/jobs/[id]/report/route.ts",
+  ]) {
+    assert.match(baca(rel), /AND org_id IS NULL/,
+      `${rel} membocorkan job organisasi ke riwayat pribadi`);
+  }
+  const rt = baca("lib/postgres/smoke-runtime.ts");
+  assert.match(rt, /FROM jobs WHERE id=\$1 AND user_id=\$2 AND org_id IS NULL/);
+  assert.match(rt, /j\.user_id=\$2 AND j\.org_id IS NULL/);
 });
