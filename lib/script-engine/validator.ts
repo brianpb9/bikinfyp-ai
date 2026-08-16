@@ -100,6 +100,14 @@ const KAMU_TOKENS = new Set(["kamu", "kau", "anda"]);
 const PRICE_REGEX = /\d+([.,]\d+)?\s*(ribu|rb|ribuan|juta|jt)\b/i;
 const PRICE_MENTION_REGEX = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
 
+function spokenPriceAmount(priceIdr: number): number | null {
+  const match = formatHargaNatural(priceIdr).match(PRICE_REGEX);
+  if (!match) return null;
+  const number = Number(match[0].match(/\d+(?:[.,]\d+)?/)?.[0].replace(",", "."));
+  const multiplier = /juta|jt/i.test(match[0]) ? 1_000_000 : 1_000;
+  return Number.isFinite(number) ? Math.round(number * multiplier) : null;
+}
+
 export const PRICE_REQUIRED_TEMPLATE_IDS = ["diskon-gede", "promo-terbatas"] as const;
 
 export function templateRequiresPriceMention(templateId: string | null | undefined): boolean {
@@ -230,9 +238,27 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
   // Jatah template memakai toleransi yang sama dengan templates.ts (+/-15%)
   // dan TIDAK diskalakan durasi — batasnya beban baca, bukan kecepatan bicara.
-  const minWc = script.wordBudget
-    ? Math.round(script.wordBudget * 0.85)
-    : Math.round(baseMinWc * durationScale);
+  // BATAS BAWAH menyerap panjang NAMA PRODUK; batas atas tidak.
+  //
+  // Nama produk ikut diucapkan, jadi ia menggeser total kata — tapi panjangnya
+  // ditentukan pengguna, bukan penulis naskah. Terukur 16 Agu 2026: dengan
+  // jendela lama, 10 dari 33 template gagal total tergantung panjang nama, dan
+  // 33 dari 36 kegagalan itu karena naskah KEKURANGAN 1-4 kata. Brian tidak
+  // bisa membuat video sama sekali untuk produknya, sementara pesan errornya
+  // justru menyuruh MEMENDEKKAN nama — yang mengurangi kata lagi.
+  //
+  // Asimetrisnya disengaja dan berdasar bukti:
+  //   - kelebihan kata = VO terpotong / terdengar diburu (r19, cacat terukur)
+  //   - kekurangan kata = ekor hening sedikit; 1-4 kata ~ 0,5-2 detik
+  // Jadi batas atas TETAP ketat, batas bawah diberi kelonggaran sebesar nama
+  // produknya (maksimal 6 kata, sepanjang nama terpanjang yang wajar).
+  const kelonggaranNama = Math.min(6, wordCount(script.productName ?? ""));
+  const minWc = Math.max(
+    1,
+    (script.wordBudget
+      ? Math.round(script.wordBudget * 0.85)
+      : Math.round(baseMinWc * durationScale)) - kelonggaranNama
+  );
   const maxWc = script.wordBudget
     ? Math.round(script.wordBudget * 1.15)
     : Math.round(baseMaxWc * durationScale);
@@ -286,10 +312,23 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     for (const t of tokens(formatHargaNatural(script.promoPriceBeforeIdr))) if (/^\d+$/.test(t)) allowedDigits.add(t);
     allowedDigits.add(String(script.promoPriceBeforeIdr));
   }
-  const badDigit = toks.find((t) => /^\d+$/.test(t) && !allowedDigits.has(t));
+  // Angka di dalam frasa harga diperiksa utuh (nominal + unit) di bawah.
+  // Jangan pecah "24,62 ribu" menjadi token 24 dan 62 lalu menolaknya
+  // sebelum pemeriksaan harga semantik sempat berjalan.
+  const nonPriceTokens = tokens(fullText.replace(PRICE_MENTION_REGEX, " "));
+  const badDigit = nonPriceTokens.find((t) => /^\d+$/.test(t) && !allowedDigits.has(t));
   if (badDigit)
     push(false, { rule: "L-14", message_id: `Ada angka "${badDigit}" yang tidak ada di data produk — klaim harus sesuai data yang kamu kasih.` });
-  const allowedPriceAmounts = new Set([script.priceIdr, script.promoPriceBeforeIdr].filter((value): value is number => Boolean(value)));
+  const sourcePriceAmounts = [script.priceIdr, script.promoPriceBeforeIdr]
+    .filter((value): value is number => Boolean(value));
+  // Copy lisan sengaja memakai formatHargaNatural (mis. Rp24.620 ->
+  // "25 ribu"). Terima nilai eksak ATAU hasil pembulatan formatter resmi;
+  // tanpa ini generator dan validator saling bertentangan dan memblokir flow.
+  const allowedPriceAmounts = new Set(sourcePriceAmounts);
+  for (const amount of sourcePriceAmounts) {
+    const spoken = spokenPriceAmount(amount);
+    if (spoken !== null) allowedPriceAmounts.add(spoken);
+  }
   const wrongPrice = [...fullText.matchAll(PRICE_MENTION_REGEX)].find((match) => {
     const number = Number(match[1].replace(",", "."));
     const multiplier = /juta|jt/i.test(match[2]) ? 1_000_000 : 1_000;

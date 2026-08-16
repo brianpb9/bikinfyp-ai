@@ -25,10 +25,10 @@ const RACUN_CHECKOUT: CopyFn[] = [
 ];
 
 const REVIEW_JUJUR: CopyFn[] = [
-  (c) => ({ hook: `[serious] Jujur ya, awalnya ${c.reg.me} kira ini bakal biasa aja`, demo: `[short pause] Nah, pada ${c.produk}, ${c.proof} bisa diperiksa; harganya ${c.harga}, kecocokan tetap personal sih`, cta: `Penilaian lengkapnya ada di keranjang kuning ya` }),
-  (c) => ({ hook: `[slow] Nggak akan aku manis-manisin, eh ini ulasan apa adanya`, demo: `[medium pause] ${c.produk} menunjukkan ${c.proof}; harganya ${c.harga}, jadi cek kebutuhanmu juga ya`, cta: `Bandingkan sendiri sekarang lewat keranjang kuning deh` }),
-  (c) => ({ hook: `[slow] Ada bagusnya, eh tapi ada yang belum aku yakini sih`, demo: `[long pause] ${c.proof} tersedia pada ${c.produk}; untuk ${c.pain}, pertimbangkan kecocokan dan harga ${c.harga}`, cta: `Spesifikasinya ada di keranjang kuning tuh` }),
-  (c) => ({ hook: `[slow] Kalau [giggles] cari pujian kosong, ulasan ini bukan tempatnya loh`, demo: `[short pause] Nah, periksa ${c.proof} dari ${c.produk}; sesuaikan kebutuhan dengan harga ${c.harga} ya`, cta: `Kalau masih penasaran, buka keranjang kuning deh` }),
+  (c) => ({ hook: `[serious] Jujur ya, awalnya ${c.reg.me} kira ini biasa aja`, demo: `[short pause] Nah, ${c.proof} ${c.produk} bisa diperiksa; harganya ${c.harga} sih`, cta: `Penilaian lengkapnya ada di keranjang kuning ya` }),
+  (c) => ({ hook: `[slow] Nggak akan aku manis-manisin, eh ini ulasan apa adanya`, demo: `[medium pause] ${c.produk} menunjukkan ${c.proof}; harganya ${c.harga} ya`, cta: `Bandingkan sendiri sekarang lewat keranjang kuning deh` }),
+  (c) => ({ hook: `[slow] Ada bagusnya, eh tapi ada yang belum aku yakini sih`, demo: `[long pause] ${c.proof} ada pada ${c.produk}; untuk ${c.pain}, harganya ${c.harga}`, cta: `Spesifikasinya ada di keranjang kuning tuh` }),
+  (c) => ({ hook: `[slow] Kalau [giggles] cari pujian kosong, ulasan ini bukan tempatnya loh`, demo: `[short pause] Nah, ${c.proof} ${c.produk} aku telaah dulu; banderolnya ${c.harga} ya`, cta: `Kalau masih penasaran, buka keranjang kuning deh` }),
 ];
 
 const UNBOXING: CopyFn[] = [
