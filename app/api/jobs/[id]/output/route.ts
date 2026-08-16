@@ -30,7 +30,15 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const ctaText = `${output.caption} ${JSON.parse(output.hashtags).join(" ")}`.toLowerCase();
     const virality = computeViralityChecklist({
       durationSec: job.duration_s,
-      hasCta: ctaText.includes("keranjang kuning"),
+      // "keranjang" saja, BUKAN "keranjang kuning". "Kuning" cuma istilah
+      // branding TikTok Shop; Shopee/Tokopedia/manual memakai "keranjang" polos
+      // (lihat cartLabelForUrl). Pemeriksaan literal lama menyatakan caption
+      // Shopee yang berbunyi "cek keranjang" TIDAK punya CTA — positif palsu
+      // yang menurunkan skor video yang sebenarnya benar.
+      //
+      // Validator L-03 sudah memakai pemeriksaan generik ini sejak lama dengan
+      // alasan yang sama; pemeriksa di sini yang tertinggal.
+      hasCta: ctaText.includes("keranjang"),
       hasAudioOrCaption: true, // guaranteed by format/tier constraints — silent_caption has synced captions, voiced tiers have embedded audio
     });
 

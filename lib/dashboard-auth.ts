@@ -39,12 +39,37 @@ export async function getAuthUserFromCookies(): Promise<UserRow | null> {
 /** Belum login -> /onboarding (sama seperti middleware.ts). Login tapi nol
  * org_members -> /dashboard/request-access. MVP: 1 org per user diasumsikan,
  * pakai membership pertama (created_at ASC, lihat lib/org.ts). */
+
+/** Membership pertama yang organisasinya AKTIF.
+ *
+ * Lubang keamanan enterprise, ditemukan audit QA 16 Agu 2026: kedua jalur
+ * (Postgres dan SQLite) MENGAMBIL kolom org_status tapi tidak pernah
+ * menyaringnya, dan pemanggilnya langsung memakai memberships[0]. Akibatnya
+ * anggota organisasi yang sudah ditangguhkan tetap bisa masuk dashboard,
+ * memakai kredit bersama, dan mengubah brand kit.
+ *
+ * Disaring di sini — lapisan keputusan akses — bukan di dalam query, supaya
+ * daftar mentahnya tetap memuat organisasi tertangguh untuk keperluan admin
+ * dan tampilan status nanti. */
+function membershipAktif<T extends { org_status: string }>(semua: T[]): T | undefined {
+  return semua.find((m) => m.org_status === "active");
+}
+
+/** Punya organisasi, TAPI semuanya ditangguhkan. Dibedakan dari "tidak punya
+ *  organisasi sama sekali": memberi tahu pengguna tertangguh bahwa ia "belum
+ *  terhubung ke organisasi" menyembunyikan keadaan sebenarnya dan membuatnya
+ *  mengulang pendaftaran yang tidak akan pernah berhasil. */
+function semuaTertangguh<T extends { org_status: string }>(semua: T[]): boolean {
+  return semua.length > 0 && !semua.some((m) => m.org_status === "active");
+}
+
 export async function requireOrgContext(): Promise<DashboardContext> {
   const user = await getAuthUserFromCookies();
   if (!user) redirect("/onboarding");
 
   const memberships = postgresRuntimeEnabled() ? await pgGetUserOrgs(user.id) : getUserOrgs(user.id);
-  const membership = memberships[0];
+  if (semuaTertangguh(memberships)) redirect("/dashboard/suspended");
+  const membership = membershipAktif(memberships);
   if (!membership) redirect("/dashboard/request-access");
 
   return { user, membership };
@@ -58,7 +83,9 @@ export async function requireOrgContextApi(req: Request): Promise<DashboardConte
   if (!user) throw ERR.UNAUTHORIZED();
 
   const memberships = postgresRuntimeEnabled() ? await pgGetUserOrgs(user.id) : getUserOrgs(user.id);
-  const membership = memberships[0];
+  if (semuaTertangguh(memberships))
+    throw ERR.BAD_REQUEST("Organisasi ini sedang ditangguhkan. Hubungi kami untuk mengaktifkannya lagi.", "Organization suspended.");
+  const membership = membershipAktif(memberships);
   if (!membership) throw ERR.BAD_REQUEST("Akun ini belum terhubung ke organisasi.", "User has no org membership.");
 
   return { user, membership };

@@ -87,10 +87,28 @@ export function ErrorText({ message }: { message: string | null }) {
   );
 }
 
-export function FlowHeader({ title, step }: { title: string; step: number }) {
+/** Langkah SEBELUM tiap langkah alur retail.
+ *
+ *  Panah "←" dulu SELALU menuju "/" apa pun langkahnya, jadi dari Skrip ia
+ *  melempar ke beranda, bukan mundur ke Gaya. Pengguna yang cuma ingin
+ *  membetulkan satu pilihan kehilangan seluruh kemajuannya (temuan audit QA
+ *  16 Agu 2026). */
+const LANGKAH_SEBELUMNYA: Record<number, string> = {
+  1: "/bikin/jenis",
+  2: "/bikin/produk",
+  3: "/bikin/gaya",
+};
+
+export function FlowHeader({ title, step, kembaliKe }: { title: string; step: number; kembaliKe?: string }) {
+  // kembaliKe boleh menimpa, untuk halaman yang jalur masuknya tidak tunggal.
+  const href = kembaliKe ?? LANGKAH_SEBELUMNYA[step] ?? "/";
   return (
     <div className="px-4 pt-3">
-      <Link href="/" className="flex min-h-[44px] items-center text-base font-semibold text-zinc-700">
+      <Link
+        href={href}
+        aria-label={`Kembali ke langkah sebelumnya dari ${title}`}
+        className="flex min-h-[44px] items-center text-base font-semibold text-zinc-700"
+      >
         ← {title}
       </Link>
       <ProgressDots step={step} />

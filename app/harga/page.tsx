@@ -17,13 +17,17 @@ import { PAKET_KREDIT, TIER_HARGA, rentangHarga } from "../../lib/paket-kredit";
 // Server Component tanpa "use client": halaman ini murni bacaan, tidak butuh
 // state, dan bentuk statis membuatnya lebih cepat dibaca perayap maupun orang.
 
+const rupiah = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
+
 export const metadata = {
   title: "Harga — BikinFYP AI",
   description:
-    "Harga jelas dalam Rupiah: video iklan produk mulai Rp5.000. Tanpa langganan, tanpa biaya tersembunyi.",
+    // Angka TIDAK diketik di sini. "Mulai Rp5.000" sempat bertahan berbulan-bulan
+    // sesudah tier itu pensiun, jadi halaman publik mengiklankan barang yang
+    // mesinnya sendiri tolak. Diturunkan dari TIER_HARGA supaya tidak bisa hanyut lagi.
+    `Harga jelas dalam Rupiah: video iklan produk mulai ${rupiah(Math.min(...TIER_HARGA.map((t) => t.hargaIdr)))}. Tanpa langganan, tanpa biaya tersembunyi.`,
 };
 
-const rupiah = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
 
 export default function HargaPage() {
   const { min, max } = rentangHarga();

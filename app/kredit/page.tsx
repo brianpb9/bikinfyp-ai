@@ -162,12 +162,25 @@ function KreditInner() {
 
       <section className="space-y-3">
         <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Pilih sesuai kebutuhan</p><h2 className="font-display text-xl font-bold">Isi ulang</h2></div>
+        {/* Pemberitahuan pembayaran mati harus muncul SEBELUM tombolnya, bukan di
+            bawah. Sebelumnya tombol tetap aktif dan pengguna baru tahu setelah
+            menekan "beli" lalu menerima error — kegagalan yang bisa diramalkan
+            tapi tetap dibiarkan terjadi. */}
+        {paymentsLive === false && (
+          <p className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
+            Pembayaran online belum aktif, jadi top-up dimatikan dulu. Kreditmu yang
+            sekarang tetap bisa dipakai. Kami kabari begitu sudah bisa.
+          </p>
+        )}
         {PACKAGES.map((p) => (
           <button
             key={p.id}
             type="button"
             onClick={() => topup(p.id)}
-            disabled={busy !== null}
+            // Mati saat pembayaran belum aktif — tombol beli yang pasti gagal
+            // bukan "CTA", itu jebakan.
+            disabled={busy !== null || paymentsLive === false}
+            aria-disabled={busy !== null || paymentsLive === false}
             className={`relative w-full rounded-2xl border-2 border-zinc-200 bg-white p-3 text-left shadow-sm transition-transform active:scale-[0.99] active:bg-zinc-50 disabled:opacity-60`}
           >
             {p.tag && (
@@ -188,7 +201,7 @@ function KreditInner() {
                   <span className="shrink-0 font-bold">{rupiah(p.price)}</span>
                 </span>
                 <span className="mt-0.5 block text-xs font-semibold text-amber-700">{p.badge}</span>
-                <span className="block text-sm text-zinc-500">{p.perVideo} · {busy === p.id ? "memproses..." : "tap untuk beli"}</span>
+                <span className="block text-sm text-zinc-500">{p.perVideo} · {paymentsLive === false ? "pembayaran belum aktif" : busy === p.id ? "memproses..." : "tap untuk beli"}</span>
               </span>
             </span>
           </button>

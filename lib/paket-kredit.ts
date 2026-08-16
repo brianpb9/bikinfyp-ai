@@ -41,13 +41,26 @@ export interface TierHarga {
 }
 
 /** Harga per video, diambil dari config.tiers — bukan diketik ulang. */
+/** Tier yang SUDAH TIDAK DIJUAL lagi.
+ *
+ * Satu sumber kebenaran, dipakai halaman harga DAN API generate. Sebelumnya
+ * "silent_caption sudah pensiun" cuma ditulis hardcode di dalam satu route,
+ * sementara /harga tetap memajangnya seharga Rp5.000 dan config tetap
+ * memberinya harga. Akibatnya halaman publik mengiklankan barang yang
+ * mesinnya sendiri tolak dengan pesan "sudah tidak tersedia" — itu bukan copy
+ * basi, itu iklan menyesatkan, dan yang membaca halaman publik justru
+ * termasuk reviewer Midtrans.
+ *
+ * config.tiers TETAP memuat harganya: job lama yang dibuat sebelum pensiun
+ * masih perlu dihitung biayanya dengan benar. Yang berubah cuma: tidak dijual
+ * dan tidak dipajang. */
+export const TIER_PENSIUN: readonly string[] = ["silent_caption"];
+
+export function tierMasihDijual(id: string): boolean {
+  return !TIER_PENSIUN.includes(id);
+}
+
 export const TIER_HARGA: TierHarga[] = [
-  {
-    id: "silent_caption",
-    nama: "Video Teks",
-    hargaIdr: 5_000,
-    dapat: "Video iklan produk 480p, tanpa suara, dengan teks di layar.",
-  },
   {
     id: "high_quality",
     nama: "Video AI Bersuara",

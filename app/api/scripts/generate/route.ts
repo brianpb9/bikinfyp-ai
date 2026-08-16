@@ -5,6 +5,7 @@ import { generateScripts } from "@/lib/script-engine";
 import { REGISTERS, type Register } from "@/lib/script-engine/registers";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
+import { tierMasihDijual } from "@/lib/paket-kredit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -19,8 +20,11 @@ export async function POST(req: Request) {
     const productId = String(body.product_id ?? "");
     const register = String(body.register ?? "netral") as Register;
     // 2026-08-06: tier senyap dihapus dari AI UGC Affiliate — fokus persona bersuara.
-    if (body.quality_tier === "silent_caption")
-      throw ERR.BAD_REQUEST("Tier Teks + Musik sudah tidak tersedia — pilih AI Bersuara ya.", "silent_caption tier retired.");
+    // Daftar pensiunnya dari lib/paket-kredit (SATU sumber dengan halaman harga),
+    // bukan string hardcode di sini — dulu terpisah, dan /harga sempat menjual
+    // tier ini seharga Rp5.000 sementara route ini menolaknya.
+    if (typeof body.quality_tier === "string" && !tierMasihDijual(body.quality_tier))
+      throw ERR.BAD_REQUEST("Tier Teks + Musik sudah tidak tersedia — pilih AI Bersuara ya.", "retired tier requested.");
     const tier = (["high_quality", "super_hq"].includes(body.quality_tier)
       ? body.quality_tier
       : "high_quality") as "silent_caption" | "high_quality" | "super_hq";

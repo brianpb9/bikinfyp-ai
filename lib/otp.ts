@@ -73,5 +73,13 @@ export function verifyOtp(email: string, code: string): VerifyResult {
     const left = config.otpMaxAttempts - (row.attempts + 1);
     return { ok: false, reason: left <= 0 ? "too_many_attempts" : "wrong_code", attemptsLeft: Math.max(0, left) };
   }
+  // KODE DIHANGUSKAN saat berhasil. Sebelumnya barisnya dibiarkan hidup, jadi
+  // kode sekali-pakai ternyata bisa dipakai berkali-kali sampai kedaluwarsa
+  // (temuan audit QA 16 Agu 2026).
+  //
+  // Hapus BERSYARAT id, lalu periksa changes: kalau 0, proses lain sudah
+  // memakainya lebih dulu dan verifikasi ini tidak boleh dianggap berhasil.
+  const hapus = db.prepare("DELETE FROM otp_codes WHERE id = ?").run(row.id);
+  if (hapus.changes !== 1) return { ok: false, reason: "no_code", attemptsLeft: 0 };
   return { ok: true };
 }

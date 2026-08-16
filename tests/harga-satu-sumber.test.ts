@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { PAKET_KREDIT, TIER_HARGA, rentangHarga } from "../lib/paket-kredit";
+import { PAKET_KREDIT, TIER_HARGA, TIER_PENSIUN, rentangHarga, tierMasihDijual } from "../lib/paket-kredit";
 import { config } from "../lib/config";
 
 // Harga muncul di dua tempat yang tidak bisa saling impor: config.ts
@@ -16,11 +16,28 @@ test("harga per video di halaman = harga yang benar-benar ditagih", () => {
     const asli = config.tiers[tier.id]?.priceIdr;
     assert.equal(tier.hargaIdr, asli, `${tier.id}: halaman menulis ${tier.hargaIdr}, config menagih ${asli}`);
   }
-  // Setiap tier di config harus punya wajah publiknya. Tier yang dijual tapi
-  // tidak pernah dipajang adalah harga tersembunyi.
+  // Setiap tier AKTIF di config harus punya wajah publiknya. Tier yang dijual
+  // tapi tidak pernah dipajang adalah harga tersembunyi.
+  //
+  // Tier pensiun dikecualikan: config tetap memuat harganya supaya job lama
+  // bisa dihitung, tapi ia tidak boleh dipajang lagi.
   for (const id of Object.keys(config.tiers)) {
+    if (!tierMasihDijual(id)) continue;
     assert.ok(TIER_HARGA.some((t) => t.id === id), `tier ${id} dijual tapi tidak muncul di halaman harga`);
   }
+});
+
+// Arah sebaliknya, dan ini yang bobol 16 Agu 2026: /harga memajang "Video Teks"
+// seharga Rp5.000 sementara API generate menolaknya dengan pesan "sudah tidak
+// tersedia". Halaman publik mengiklankan barang yang mesinnya sendiri tolak.
+test("tidak ada tier pensiun yang masih dipajang di halaman harga", () => {
+  const dipajang = TIER_HARGA.filter((t) => !tierMasihDijual(t.id)).map((t) => t.id);
+  assert.deepEqual(dipajang, [], "tier ini sudah pensiun tapi masih dijual di /harga");
+});
+
+test("daftar pensiun tidak kosong dan tidak memakan seluruh katalog", () => {
+  assert.ok(TIER_PENSIUN.length >= 1, "silent_caption memang sudah pensiun — daftarnya jangan dikosongkan");
+  assert.ok(TIER_HARGA.length >= 2, "halaman harga kehilangan hampir seluruh tier");
 });
 
 test("paket kredit konsisten dengan harga per video", () => {
@@ -31,10 +48,19 @@ test("paket kredit konsisten dengan harga per video", () => {
   }
 });
 
+// Tes ini dulu MENGETIK angka yang judulnya sendiri melarang: min 5.000 — harga
+// tier yang sudah pensiun. Jadi ia ikut membekukan harga usang, bukan
+// menjaganya. Sekarang dibandingkan dengan data, bukan dengan angka hafalan.
 test("rentang harga dihitung, bukan diketik", () => {
   const r = rentangHarga();
-  assert.equal(r.min, 5_000);
-  assert.equal(r.max, 400_000);
+  const semua = [...TIER_HARGA.map((t) => t.hargaIdr), ...PAKET_KREDIT.map((x) => x.price)];
+  assert.equal(r.min, Math.min(...semua));
+  assert.equal(r.max, Math.max(...semua));
+  // Tier pensiun tidak boleh ikut membentuk rentang yang dipajang publik.
+  for (const id of TIER_PENSIUN) {
+    const harga = config.tiers[id]?.priceIdr;
+    if (harga !== undefined) assert.notEqual(r.min, harga, `rentang publik masih memakai harga tier pensiun ${id}`);
+  }
 });
 
 // Retail dan enterprise membaca katalog template yang SAMA.

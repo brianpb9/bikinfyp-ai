@@ -168,7 +168,17 @@ export class PgAuthOtpAuditRepository {
       }
       const match = otp.code_hash === hashCode(this.options.authSecret, normalizeEmail(email), code);
       await client.query("UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1", [otp.id]);
-      if (match) return await this.commitResult(client, { ok: true });
+      if (match) {
+        // KODE DIHANGUSKAN saat berhasil. Sebelumnya barisnya dibiarkan hidup dan
+        // hanya attempts yang naik, jadi kode yang sama masih bisa dipakai lagi
+        // sampai kedaluwarsa atau kehabisan percobaan — kode sekali-pakai yang
+        // ternyata bisa dipakai berkali-kali (temuan audit QA 16 Agu 2026).
+        //
+        // Aman dari balapan: baris ini sudah dikunci FOR UPDATE di atas, dan
+        // penghapusannya ikut transaksi yang sama.
+        await client.query("DELETE FROM otp_codes WHERE id = $1", [otp.id]);
+        return await this.commitResult(client, { ok: true });
+      }
       const attemptsLeft = Math.max(0, this.options.otpMaxAttempts - (otp.attempts + 1));
       return await this.commitResult(client, {
         ok: false,

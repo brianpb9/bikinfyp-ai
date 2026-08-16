@@ -67,6 +67,36 @@ test("template price-led menerima harga benar dan L-14 menolak unit harga yang s
   assert.ok(rules(salah).includes("L-14"), "85 juta tidak boleh dianggap sama dengan 85 ribu");
 });
 
+test("L-14 menerima pembulatan harga dari formatter resmi tanpa meloloskan nominal lain", () => {
+  const rounded = {
+    ...base,
+    priceIdr: 24620,
+    segments: base.segments.map((segment) => ({
+      ...segment,
+      text: segment.text.replaceAll("85 ribu", "25 ribu"),
+    })),
+  };
+  assert.ok(!rules(validateScript(rounded, "strict")).includes("L-14"), "Rp24.620 memang diformat menjadi 25 ribu");
+
+  const exact = {
+    ...rounded,
+    segments: rounded.segments.map((segment) => ({
+      ...segment,
+      text: segment.text.replaceAll("25 ribu", "24,62 ribu"),
+    })),
+  };
+  assert.ok(!rules(validateScript(exact, "strict")).includes("L-14"), "nilai eksak tetap sah");
+
+  const wrong = {
+    ...rounded,
+    segments: rounded.segments.map((segment) => ({
+      ...segment,
+      text: segment.text.replaceAll("25 ribu", "26 ribu"),
+    })),
+  };
+  assert.ok(rules(validateScript(wrong, "strict")).includes("L-14"), "pembulatan di luar formatter tetap ditolak");
+});
+
 test("L-03: CTA tanpa 'keranjang kuning' -> gagal", () => {
   const res = validateScript(withSeg(2, "Aku taruh linknya di bio ya, tinggal klik deh"), "strict");
   assert.ok(rules(res).includes("L-03"));
