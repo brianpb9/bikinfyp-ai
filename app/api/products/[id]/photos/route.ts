@@ -5,6 +5,10 @@ import { createSignedUrl } from "@/lib/signed-url";
 import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { pgAudit, pgSetProductImages, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { periksaLabelFoto } from "@/lib/media/label-terbaca";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -65,6 +69,27 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       if (!(await verifyDecodableImage(b.data)))
         throw ERR.BAD_REQUEST("File gambarnya rusak atau bukan foto utuh. Coba upload foto lain ya.", "Corrupt image file.");
       b.mime = sniffed;
+    }
+
+    // GERBANG LABEL — sebelum foto disimpan, jauh sebelum kredit ditahan.
+    //
+    // QC-10 memeriksa label di VIDEO HASIL, yaitu setelah provider dibayar.
+    // Kalau foto sumbernya sendiri tidak terbaca, videonya tidak akan pernah
+    // lolos, dan penggunanya membayar untuk kegagalan yang sudah bisa
+    // diketahui di sini.
+    //
+    // Diperiksa hanya untuk foto PERTAMA produk (yang jadi referensi utama);
+    // foto tambahan boleh berupa sudut lain yang labelnya tidak menghadap.
+    if (existing.length === 0 && blobs[0]) {
+      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "intake-label-"));
+      const tmpFile = path.join(tmpDir, "foto");
+      try {
+        fs.writeFileSync(tmpFile, blobs[0].data);
+        const label = await periksaLabelFoto(tmpFile, owned.product.name);
+        if (!label.terbaca) throw ERR.BAD_REQUEST(label.alasan!, "Product label not OCR-readable.");
+      } finally {
+        fs.rmSync(tmpDir, { recursive: true, force: true });
+      }
     }
 
     const added = await saveProductImages(id, blobs, existing.length);

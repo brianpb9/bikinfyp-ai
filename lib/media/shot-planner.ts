@@ -508,7 +508,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // BENAR-BENAR bicara sinkron kata. Semua kombinasi lain = gaya voice-over
   // (r6: presenter tidak "bicara", mayoritas cutaway) karena akan diucap
   // ulang oleh Gemini TTS yang tak pernah sinkron ke gerak mulut asli.
-  const lipSyncPresenter = format === "talking_head" && tier === "super_hq";
+  // Sejalan dengan worker: presenter yang TERLIHAT sekarang benar-benar
+  // berbicara (audio native Seedance), bukan diam sambil ditimpa VO. Larangan
+  // "no lip-sync to any specific words" karena itu tidak lagi dipasang untuk
+  // format berpresenter — larangan itu ada semata karena VO-nya dulu diganti.
+  const lipSyncPresenter = format === "talking_head" || format === "tvc";
 
   const segText = (role: string) => stripDeliveryTags(input.segments.find((s) => s.role === role)?.text ?? "");
   const noun = CATEGORY_NOUN[input.productCategory] ?? CATEGORY_NOUN.default;

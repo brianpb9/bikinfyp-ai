@@ -1,0 +1,64 @@
+// Keputusan ADR-001 (docs/spike-2026-08-17) dijaga di sini.
+//
+// Ketiganya diambil dari render BERBAYAR, bukan dari teori — jadi kalau ada
+// yang membaliknya nanti, ia harus membalik buktinya dulu, bukan cuma kodenya.
+
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+
+const baca = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
+
+test("bawaan mode referensi adalah r2v, i2v hanya cadangan eksplisit", () => {
+  const s = baca("lib/providers/stubs/byteplus.ts");
+  // i2v merusak nama merek ("SCARLETT" -> "SCARLFTT") DAN memaksa pack shot di
+  // detik pertama — yang kedua mustahil diperbaiki lewat prompt.
+  assert.match(s, /const useR2v = modelDukungR2v && spec\.preferI2v !== true/,
+    "r2v harus jadi bawaan, bukan menunggu foto tambahan");
+  assert.ok(!/extras\.length > 0 \|\| spec\.referenceOnlyImages === true/.test(s),
+    "syarat lama membuat jalur retail selalu jatuh ke i2v");
+  assert.match(baca("lib/providers/types.ts"), /preferI2v\?: boolean/, "cadangan i2v harus eksplisit");
+});
+
+test("presenter yang terlihat benar-benar bicara, bukan dibungkam", () => {
+  const w = baca("lib/postgres/worker.ts");
+  assert.match(w, /const isPresenterLipsync = format === "talking_head" \|\| format === "tvc"/,
+    "audio native jadi bawaan untuk format berpresenter");
+  const p = baca("lib/media/shot-planner.ts");
+  assert.match(p, /const lipSyncPresenter = format === "talking_head" \|\| format === "tvc"/);
+  // Larangan itu dulu ada SEMATA karena VO-nya diganti Gemini TTS.
+  assert.ok(!/no lip-sync to any specific words/.test(p) || /lipSyncPresenter/.test(p),
+    "larangan lip-sync tidak boleh dipasang untuk presenter yang bicara sungguhan");
+});
+
+test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
+  const s = baca("lib/media/label-terbaca.ts");
+  // Percobaan pertama memakai panjang >=4 dan LOLOS pada foto AI-slop:
+  // tesseract membaca "Sdadpgeer" dan "NNSONGO" sebagai kata.
+  assert.match(s, /const MIN_CONF = 60/, "ambang keyakinan diturunkan dari sebaran terukur");
+  assert.match(s, /"tsv"/, "butuh TSV untuk mendapat kolom keyakinan");
+  assert.match(s, /Sdadpgeer/, "kenapa panjang huruf tidak cukup harus tertulis di kode");
+  // Gerbangnya dipasang SEBELUM foto disimpan.
+  const r = baca("app/api/products/[id]/photos/route.ts");
+  assert.match(r, /periksaLabelFoto\(tmpFile, owned\.product\.name\)/);
+  const iGerbang = r.indexOf("periksaLabelFoto");
+  const iSimpan = r.indexOf("saveProductImages(id, blobs");
+  assert.ok(iGerbang > 0 && iGerbang < iSimpan, "gerbang harus mendahului penyimpanan");
+});
+
+test("ketidakcocokan nama adalah peringatan, bukan penolakan", () => {
+  const s = baca("lib/media/label-terbaca.ts");
+  // Menolak karena nama tak cocok akan menghukum penamaan yang wajar
+  // (pengguna sering menulis nama lebih pendek daripada yang tercetak).
+  assert.match(s, /cocokNama/, "ketidakcocokan dilaporkan");
+  const blokir = s.slice(s.indexOf("if (kata.length < MIN_KATA)"), s.indexOf("const tokens"));
+  assert.ok(!/cocokNama/.test(blokir.replace(/cocokNama: false/, "")),
+    "hanya keterbacaan yang memblokir, bukan kecocokan nama");
+});
+
+test("ADR mencatat apa yang BELUM terbukti", () => {
+  const adr = baca("docs/spike-2026-08-17/ADR-001-referensi-audio-identitas.md");
+  assert.match(adr, /belum terbukti/i, "klaim yang belum diuji harus ditandai, bukan ditulis sebagai fakta");
+  assert.match(adr, /429/, "penyebab spike C gagal harus tercatat");
+});

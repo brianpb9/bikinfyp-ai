@@ -63,6 +63,13 @@ export interface VisualSpec {
    * sekadar mengarahkan suasana — itu peran reference_image, bukan first
    * frame. */
   referenceOnlyImages?: boolean;
+  /** Paksa mode i2v (frame pertama persis) — CADANGAN, bukan jalur biasa.
+   *
+   *  Bawaan sekarang r2v karena i2v terbukti merusak nama merek dan memaksa
+   *  pack shot di detik pertama (spike 17 Agu 2026, docs/spike-2026-08-17).
+   *  Nyalakan hanya kalau memang butuh frame pertama yang identik dengan foto
+   *  — dan sadari harganya. */
+  preferI2v?: boolean;
   /** Rasio aspek yang diminta ("9:16" | "1:1" | "16:9").
    *
    * TERBUKTI hanya "9:16" — itu satu-satunya nilai yang pernah benar-benar

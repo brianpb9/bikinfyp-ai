@@ -339,7 +339,23 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // video+VO mulut nggak lipsync" — satu-satunya kombinasi berlip-sync
   // sungguhan adalah Wajah AI di tier Super HQ (audio embedded asli
   // dipertahankan); semua kombinasi lain pakai gaya voice-over (Gemini TTS).
-  const isPresenterLipsync = format === "talking_head" && tier === "super_hq";
+  // AUDIO NATIVE JADI BAWAAN untuk format berpresenter (talking_head, tvc).
+  //
+  // Dulu hanya Wajah AI di tier Super HQ yang mempertahankan audio model;
+  // sisanya SELALU diganti Gemini TTS. Konsekuensinya tidak kecil: mulut
+  // presenter dilarang sinkron ke kata mana pun ("no lip-sync to any specific
+  // words" di negative prompt), karena VO akhirnya pasti berbeda dari yang
+  // diucapkan model. Jadi kita membayar model untuk menggerakkan mulut, lalu
+  // melarangnya berbicara.
+  //
+  // Spike 17 Agu membuktikan Seedance MEMANG menghasilkan audio dan mulut yang
+  // bicara sinkron pada klip 5 detik (docs/spike-2026-08-17): AAC 32 kHz,
+  // mean -21 dB, dan mulut terlihat membentuk kata di frame 0,5/2,5/4,5 dtk.
+  //
+  // Gemini TTS TETAP dipakai untuk hands_only dan vo_broll — di sana
+  // pembicaranya memang tidak pernah terlihat, jadi narasi luar-kamera adalah
+  // bentuk yang benar, bukan kompromi.
+  const isPresenterLipsync = format === "talking_head" || format === "tvc";
   if (!withAudio) await jobs.setProviders(row.id, undefined, "none-silent-caption");
   else if (format === "vo_broll") {
     // No embedded audio is possible here (no video model call happened) —

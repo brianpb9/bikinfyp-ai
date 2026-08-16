@@ -41,10 +41,24 @@ const spec = (extra?: string[]): VisualSpec => ({
 
 type Item = { type: string; role?: string };
 
-test("tanpa foto ekstra: mode i2v lama (1 image, tanpa role)", () => {
+// BAWAANNYA DIBALIK 17 Agu 2026 (ADR-001). Tes ini dulu memaku i2v sebagai
+// bawaan; keputusannya diambil dari render berbayar, bukan dari teori:
+// i2v mengeluarkan "SCARLFTT" alih-alih "SCARLETT", dan frame pertamanya
+// harfiah foto produk — pack shot yang mustahil dihindari lewat prompt.
+test("tanpa foto ekstra pun, model 2.0 memakai r2v (bawaan baru)", () => {
   const items = buildTaskContent(spec(undefined), shot, "dreamina-seedance-2-0-mini-260615") as Item[];
-  assert.equal(items.filter((i) => i.type === "image_url").length, 1);
-  assert.ok(items.every((i) => i.role === undefined));
+  const imgs = items.filter((i) => i.type === "image_url");
+  assert.equal(imgs.length, 1);
+  assert.ok(imgs.every((i) => i.role === "reference_image"),
+    "satu foto produk pun dikirim sebagai referensi, bukan frame pertama");
+});
+
+test("preferI2v mengembalikan mode frame-pertama secara sadar", () => {
+  const s = { ...spec(undefined), preferI2v: true } as Parameters<typeof buildTaskContent>[0];
+  const items = buildTaskContent(s, shot, "dreamina-seedance-2-0-mini-260615") as Item[];
+  const imgs = items.filter((i) => i.type === "image_url");
+  assert.equal(imgs.length, 1);
+  assert.ok(imgs.every((i) => i.role === undefined), "cadangan i2v harus benar-benar i2v");
 });
 
 test("foto ekstra + Seedance 2.0: semua image ber-role reference_image", () => {

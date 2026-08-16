@@ -106,10 +106,27 @@ function estimateCostIdr(model: string, totalTokens: number | undefined, duratio
  *
  * Dua mode (aturan ModelArk, diverifikasi 2026-08-06: first/last frame TIDAK
  * boleh dicampur reference media):
- * - i2v (default): 1 foto tanpa role -> jadi frame pertama persis.
- * - r2v (multi-referensi): SEMUA foto ber-role "reference_image" — dipakai
- *   hanya bila ada foto ekstra DAN model Seedance 2.0 (dreamina-*); model 1.0
- *   (tier senyap) tidak mendukung r2v.
+ * - r2v (BAWAAN sejak 17 Agu 2026): semua foto ber-role "reference_image".
+ * - i2v (cadangan): 1 foto tanpa role -> jadi frame pertama PERSIS.
+ *
+ * BAWAANNYA DIBALIK, dan itu diputuskan dari render berbayar, bukan teori.
+ * Spike 17 Agu (docs/spike-2026-08-17, dua klip 5 detik dengan foto Scarlett
+ * Acne Serum yang labelnya tajam) menunjukkan dua hal yang menentukan:
+ *
+ *   1. i2v MERUSAK NAMA MEREK. "SCARLETT" keluar sebagai "SCARLFTT".
+ *      r2v mempertahankannya utuh. Untuk produk yang dibayar brand, itu
+ *      bukan detail.
+ *
+ *   2. i2v MEMAKSA PACK SHOT. Frame pertamanya HARFIAH foto produk itu,
+ *      jadi detik pertama video adalah foto diam — persis yang dilarang
+ *      playbook, dan MUSTAHIL diperbaiki lewat prompt karena itu sifat
+ *      mode i2v, bukan kekurangan kalimat.
+ *
+ * Bonus terukur: r2v selesai 111 detik vs 233 detik.
+ *
+ * i2v dipertahankan sebagai CADANGAN EKSPLISIT (preferI2v), bukan dihapus:
+ * model 1.0 di tier senyap tidak mendukung r2v sama sekali, dan r2v menolak
+ * durasi < 4 detik.
  */
 export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string): unknown[] {
   const textItem = {
@@ -121,12 +138,15 @@ export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string
   // ke BytePlus, API menerima 8 foto referensi tanpa error (bukan API yg
   // membatasi 5, itu batas kode lama).
   const extras = (spec.extraReferenceImagePaths ?? []).slice(0, 7);
-  // referenceOnlyImages memaksa mode referensi walau hanya ada SATU gambar.
-  // Tanpa ini, visual bisnis milik iklan jasa akan dipakai sebagai frame
-  // pertama dan hasilnya video tentang logo, bukan presenter yang bicara.
-  const useR2v =
-    (extras.length > 0 || spec.referenceOnlyImages === true) &&
-    model.includes("dreamina-seedance-2");
+  // r2v adalah BAWAAN untuk model yang mendukungnya. Dulu ia hanya dipakai
+  // kalau ada foto tambahan atau referenceOnlyImages dinyalakan — artinya
+  // jalur retail (satu foto produk) selalu jatuh ke i2v, yaitu mode yang
+  // terbukti merusak nama merek dan memaksa pack shot.
+  //
+  // preferI2v mematikannya secara sadar untuk kasus yang memang menuntut
+  // frame pertama persis.
+  const modelDukungR2v = model.includes("dreamina-seedance-2");
+  const useR2v = modelDukungR2v && spec.preferI2v !== true;
   if (!useR2v) {
     return [textItem, { type: "image_url", image_url: { url: imageToDataUri(shot.imageRefPath) } }];
   }
