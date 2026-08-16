@@ -2,7 +2,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 import type { HookCode } from "@/lib/config/hooks";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { generateScripts } from "@/lib/script-engine";
+import { generateScripts, TEMPLATE_COPY_CAPACITY } from "@/lib/script-engine";
 import { cleanProductName } from "@/lib/extract";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
@@ -45,6 +45,16 @@ export async function POST(req: Request) {
     const count = Number.isFinite(Number(body.count)) ? Math.round(Number(body.count)) : 0;
     if (count < MIN_VIDEOS || count > MAX_VIDEOS) {
       throw ERR.BAD_REQUEST(`Jumlah video harus antara ${MIN_VIDEOS} dan ${MAX_VIDEOS}.`, "count out of range.");
+    }
+    const templateId = typeof body.template_id === "string"
+      && CAMPAIGN_TEMPLATES.some((template) => template.id === body.template_id)
+      ? body.template_id as string
+      : null;
+    if (templateId && count > TEMPLATE_COPY_CAPACITY) {
+      throw ERR.BAD_REQUEST(
+        `Template ini menyediakan maksimal ${TEMPLATE_COPY_CAPACITY} variasi naskah unik. Lepas template untuk membuat sampai ${MAX_VIDEOS} video.`,
+        "Template variant count exceeds unique copy capacity."
+      );
     }
     // Tiga tier, sesuai kontrol Quality di wizard (Standard / Quality / High
     // Quality). silent_caption sebelumnya ditolak di sini padahal ia tier
@@ -90,9 +100,7 @@ export async function POST(req: Request) {
       ...(body.lock_hook_family === true ? { lockHookFamily: true } : {}),
       // Divalidasi terhadap katalog nyata, bukan diterima mentah — id karangan
       // hanya akan diam-diam jatuh ke teks generik tanpa jejak.
-      ...(typeof body.template_id === "string" && CAMPAIGN_TEMPLATES.some((t) => t.id === body.template_id)
-        ? { templateId: body.template_id as string }
-        : {}),
+      ...(templateId ? { templateId } : {}),
       // Pecahan dijaga di sini juga, bukan cuma di mesin: nilai dari luar
       // tidak boleh bisa membuat hook lebih panjang dari videonya.
       ...(beats ? { beats } : {}),

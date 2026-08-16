@@ -13,6 +13,7 @@ import { AVATAR_PRESETS, getAvatarPreset, type AvatarGender } from "@/lib/avatar
 import { getTemplate, type CampaignTemplate } from "@/lib/templates";
 import { stylesForFormat, GAYA_BAWAAN } from "@/lib/media/recording-styles";
 import { pickTemplate } from "@/lib/auto-pick";
+import { TEMPLATE_COPY_CAPACITY } from "@/lib/script-engine/template-copy";
 
 type Kind = "affiliate" | "ads" | "tvc";
 type Format = "talking_head" | "hands_only" | "tvc" | "ads";
@@ -135,6 +136,10 @@ export default function CampaignPage() {
   // diam-diam. hookFamilies-nya ikut dikirim ke /generate supaya varian
   // pertama benar-benar membawa sudut khas template itu.
   const [template, setTemplate] = useState<CampaignTemplate | null>(null);
+  const maxVideoCount = template ? TEMPLATE_COPY_CAPACITY : 6;
+  useEffect(() => {
+    if (template && count > TEMPLATE_COPY_CAPACITY) setCount(TEMPLATE_COPY_CAPACITY);
+  }, [template, count]);
   // Mode cepat ("Bikinin aja"): kita yang memilih template dari kategori dan
   // harga, lalu melompat langsung ke Review. TAMBAHAN, bukan pengganti —
   // alasannya ditampilkan dan templatenya tetap bisa diganti.
@@ -202,7 +207,7 @@ export default function CampaignPage() {
     setTier(t.tier as Tier);
     setDurationSec(t.durationSec);
     setHookLevel(t.hookLevel as HookLevel);
-    setCount(t.count);
+    setCount(Math.min(t.count, TEMPLATE_COPY_CAPACITY));
     // Rasio ikut template kalau template memang menentukannya. Dua template
     // TVC ditulis dan dirender 16:9 — brand melihat pratinjau landscape di
     // galeri, jadi hasilnya harus landscape juga, bukan potret 9:16.
@@ -1224,12 +1229,17 @@ export default function CampaignPage() {
 
           <section className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
             <div className="flex gap-2">
-              {[2, 3, 4, 5, 6].map((n) => (
+              {Array.from({ length: maxVideoCount - 1 }, (_, index) => index + 2).map((n) => (
                 <button key={n} onClick={() => setCount(n)}
                   className={`h-11 w-11 rounded-lg border text-sm font-bold transition-colors ${count === n ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
                 >{n}</button>
               ))}
             </div>
+            {template && (
+              <p className="text-xs font-medium text-amber-700">
+                Template ini punya maksimal {TEMPLATE_COPY_CAPACITY} naskah unik. Lepas template untuk membuat sampai 6 video.
+              </p>
+            )}
             <p className="text-sm text-zinc-600">
               Estimasi <b>{rupiah(estimateIdr(tier, durationSec, count))}</b> untuk {count} video ({durationSec} dtk, {tier === "super_hq" ? "AI Bersuara Pro" : "AI Bersuara"}).
               Harga pasti dihitung ulang server saat render.

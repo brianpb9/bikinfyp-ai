@@ -16,6 +16,7 @@ import { isMockProviderName, type QualityTier } from "./providers/types";
 import { buildPhotoPanVideo } from "./media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "./media/vo-tts";
 import { synthesizeGeminiVoiceover } from "./media/gemini-tts";
+import { stripDeliveryTags } from "./script-engine/delivery-tags";
 import { hargaTerbilang } from "./script-engine/terbilang";
 import { buildCaptionCards } from "./media/captions";
 import { renderCaptionPngs } from "./media/render-captions";
@@ -177,7 +178,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     } else if (format === "vo_broll") {
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
-        const res = await synthesizeElevenLabsVoiceover(seg.text, path.join(workDir, `vo_real_${i}.mp3`));
+        const res = await synthesizeElevenLabsVoiceover(stripDeliveryTags(seg.text), path.join(workDir, `vo_real_${i}.mp3`));
         vo.push({ path: res.filePath, startSec: seg.start });
         addCost(job.id, res.costIdr);
       }
@@ -194,7 +195,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       // SUARA RESMI = Gemini TTS (Brian 2026-08-07): audio embedded dari model
       // video DIGANTI VO TTS ber-voice terkunci per avatar (gerak bibir klip
       // tetap dipakai — dialog prompt = teks yang sama dengan TTS).
-      const voText = hargaTerbilang(segments.map((seg) => seg.text).join(" ... "));
+      const voText = hargaTerbilang(segments.map((seg) => seg.tts_text ?? seg.text).join(" ... "));
       const tts = await synthesizeGeminiVoiceover(voText, category.voiceName, category.voiceStyle, path.join(workDir, "vo_gemini.wav"));
       geminiVoPath = tts.filePath;
       addCost(job.id, tts.costIdr);
@@ -207,7 +208,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         const res = await synthesizeVoiceWithFailover(
           {
             jobId: job.id,
-            text: seg.text,
+            text: stripDeliveryTags(seg.text),
             segmentIndex: i,
             slotSec: seg.end - seg.start,
             language: "id-ID",

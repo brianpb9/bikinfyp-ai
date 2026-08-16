@@ -31,6 +31,7 @@ import { isMockProviderName, type QualityTier } from "../providers/types";
 import { buildPhotoPanVideo } from "../media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
 import { synthesizeGeminiVoiceover } from "../media/gemini-tts";
+import { stripDeliveryTags } from "../script-engine/delivery-tags";
 import { hargaTerbilang } from "../script-engine/terbilang";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
@@ -325,7 +326,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // real TTS is the only option, unlike hands_only/talking_head's mock-only rule.
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
-      const result = await synthesizeElevenLabsVoiceover(segment.text, path.join(workDir, `vo_real_${i}.mp3`));
+      const result = await synthesizeElevenLabsVoiceover(stripDeliveryTags(segment.text), path.join(workDir, `vo_real_${i}.mp3`));
       vo.push({ path: result.filePath, startSec: segment.start });
       await jobs.addCost(row.id, result.costIdr);
     }
@@ -337,7 +338,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   } else if (!usedMockVideo) {
     // SUARA RESMI = Gemini TTS (Brian 2026-08-07): audio embedded model video
     // diganti VO TTS ber-voice terkunci per avatar.
-    const voText = hargaTerbilang(segments.map((segment) => segment.text).join(" ... "));
+    const voText = hargaTerbilang(segments.map((segment) => segment.tts_text ?? segment.text).join(" ... "));
     const tts = await synthesizeGeminiVoiceover(voText, category.voiceName, category.voiceStyle, path.join(workDir, "vo_gemini.wav"));
     geminiVoPath = tts.filePath;
     await jobs.addCost(row.id, tts.costIdr);
@@ -346,7 +347,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     let voiceProvider = "";
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
-      const result = await synthesizeVoiceWithFailover({ jobId: row.id, text: segment.text, segmentIndex: i, slotSec: segment.end - segment.start, language: "id-ID", register: row.script_register }, workDir);
+      const result = await synthesizeVoiceWithFailover({ jobId: row.id, text: stripDeliveryTags(segment.text), segmentIndex: i, slotSec: segment.end - segment.start, language: "id-ID", register: row.script_register }, workDir);
       if (!voiceProvider) voiceProvider = result.providerName;
       vo.push({ path: result.asset.filePath, startSec: segment.start });
       await jobs.addCost(row.id, result.costIdr);

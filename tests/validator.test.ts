@@ -48,11 +48,23 @@ test("L-01: kurang dari 2 partikel -> gagal", () => {
   assert.ok(rules(res).includes("L-01"));
 });
 
-test("L-02: tanpa harga eksplisit di hook/demo -> gagal", () => {
+test("L-02: tanpa harga hanya gagal bila template memberi sinyal price-led", () => {
   const tanpaHarga = withSeg(1, "nah jadi gini, ini Serum Glow Bright. teksturnya tuh niat banget, beneran bagus sih buat harian, aku suka banget pokoknya deh");
   tanpaHarga.segments[0] = { ...tanpaHarga.segments[0], text: "Say, kualitas segini kok bisa sih? aku ngecek ulang loh" };
-  const res = validateScript(tanpaHarga, "strict");
-  assert.ok(rules(res).includes("L-02"));
+  const normal = validateScript(tanpaHarga, "strict");
+  assert.equal(rules(normal).includes("L-02"), false, "hook non-harga tidak boleh dihukum");
+  const priceLed = validateScript({ ...tanpaHarga, requirePriceMention: true }, "strict");
+  assert.ok(rules(priceLed).includes("L-02"));
+});
+
+test("template price-led menerima harga benar dan L-14 menolak unit harga yang salah", () => {
+  const benar = validateScript({ ...base, requirePriceMention: true }, "strict");
+  assert.equal(rules(benar).includes("L-02"), false);
+  assert.equal(rules(benar).includes("L-14"), false);
+
+  const salahUnit = withSeg(0, "Say, masa 85 juta dapet kualitas kayak gini sih? aku ngecek ulang loh");
+  const salah = validateScript({ ...salahUnit, requirePriceMention: true }, "strict");
+  assert.ok(rules(salah).includes("L-14"), "85 juta tidak boleh dianggap sama dengan 85 ribu");
 });
 
 test("L-03: CTA tanpa 'keranjang kuning' -> gagal", () => {

@@ -26,6 +26,8 @@ export interface SegmentDraft {
   start: number;
   end: number;
   text: string;
+  /** Dialog dengan cue Gemini TTS inline. Tidak boleh dipakai UI/caption/QC/video prompt. */
+  tts_text?: string;
   visual_direction: string;
 }
 

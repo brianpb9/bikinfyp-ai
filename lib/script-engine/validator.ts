@@ -4,13 +4,16 @@
 
 import { COMPETITOR_BRANDS } from "../config/hooks";
 import { formatHargaNatural } from "./templates";
+import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
 
 export interface ScriptToValidate {
   hook_family: string;
   register: string;
-  segments: { role: string; text: string }[];
+  segments: { role: string; text: string; tts_text?: string }[];
   productName: string;
   priceIdr: number;
+  /** Hanya aktif bila pemanggil punya sinyal template price-led yang nyata. */
+  requirePriceMention?: boolean;
   /** Harga normal sebelum diskon (add-on promo) — angkanya ikut jadi data produk
    * yang sah untuk L-14 ("dari 120 ribu jadi 85 ribu"). */
   promoPriceBeforeIdr?: number | null;
@@ -18,6 +21,18 @@ export interface ScriptToValidate {
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
   /** Durasi video — L-05 (batas kata) skala proporsional dari basis 15 dtk. Default 15. */
   durationSec?: number;
+  /** Genre naskah. "tvc" mengaktifkan aturan T-01..T-03 dan MEMATIKAN L-01/L-03/L-04.
+   *
+   * Kenapa ini ada (vonis Brian 2026-08-16: "tvc concept salah semua"):
+   * L-03 mewajibkan penutup menyebut "keranjang" TANPA SYARAT, dan L-01/L-04
+   * mewajibkan partikel gaul + filler. Tiga aturan itu benar untuk konten
+   * afiliasi, tapi untuk TVC justru MELARANG naskahnya terdengar seperti TVC —
+   * penutup yang benar menurut playbook produksi ("Koleksi baru dari Rana")
+   * pasti ditolak. Akarnya struktural, bukan pilihan kata: visualnya sudah
+   * sinematik 6 beat sementara naskahnya dipaksa jadi iklan keranjang.
+   *
+   * Default undefined = perilaku lama persis, jadi pemanggil non-TVC aman. */
+  format?: "hands_only" | "vo_broll" | "talking_head" | "tvc" | "ads";
   /** Jatah kata template (total seluruh video). Kalau ada, L-05 memakai ini.
    *
    * WAJIB ada. Komentar L-05 di bawah sudah memperingatkan bahwa batas di sini
@@ -47,6 +62,15 @@ const PARTICLES = new Set(["deh", "sih", "dong", "ya", "loh", "kok", "nah", "tuh
 const FILLER_TOKENS = new Set(["nah", "sumpah", "eh", "btw"]);
 const FILLER_PHRASES = ["jadi gini"];
 
+/** Dua negasi yang saling menumpuk, mis. "nggak pernah nggak siap" (T-03).
+ *
+ * Sengaja hanya mengizinkan NOL ATAU SATU kata sisipan, dan sisipannya wajib
+ * huruf semua. Dua batasan itu yang memisahkan cacat dari retorika: "nggak
+ * perlu ribet, nggak perlu mahal" adalah kalimat berpasangan yang sah dan
+ * tertolak di sini karena ada koma dan dua kata di antaranya. */
+const NEGASI = "nggak|ngga|gak|ga|tidak|tak|bukan|belum|jangan";
+const DOUBLE_NEGATION_REGEX = new RegExp(`\\b(?:${NEGASI})\\b(?:\\s+[a-zA-Z]+)?\\s+\\b(?:${NEGASI})\\b`, "i");
+
 const OVERCLAIM_TOKENS = new Set(["pasti", "pastiin", "dijamin", "jamin", "terbaik", "terampuh"]);
 const OVERCLAIM_PHRASES = ["100%", "paling bagus", "nomor 1", "nomor satu", "no 1", "no. 1", "paling ampuh", "terbaik di dunia"];
 const MEDICAL_TOKENS = new Set([
@@ -74,6 +98,24 @@ const LO_TOKENS = new Set(["lo", "lu", "elu"]);
 const KAMU_TOKENS = new Set(["kamu", "kau", "anda"]);
 
 const PRICE_REGEX = /\d+([.,]\d+)?\s*(ribu|rb|ribuan|juta|jt)\b/i;
+const PRICE_MENTION_REGEX = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
+
+export const PRICE_REQUIRED_TEMPLATE_IDS = ["diskon-gede", "promo-terbatas"] as const;
+
+export function templateRequiresPriceMention(templateId: string | null | undefined): boolean {
+  return Boolean(templateId && (PRICE_REQUIRED_TEMPLATE_IDS as readonly string[]).includes(templateId));
+}
+
+/** TVC dikenali dari awalan id-nya.
+ *
+ * Konvensi penamaan memang rapuh, jadi tidak dibiarkan sebagai kesepakatan
+ * lisan: tests/tvc-genre.test.ts membandingkan hasil fungsi ini dengan field
+ * `format` di katalog template. Menambah TVC tanpa awalan "tvc-" — atau
+ * memberi awalan itu ke template yang bukan TVC — gagal di CI, bukan lolos
+ * diam-diam sampai ke penonton. */
+export function isTvcTemplate(templateId: string | null | undefined): boolean {
+  return Boolean(templateId?.startsWith("tvc-"));
+}
 
 function tokens(text: string): string[] {
   return text.toLowerCase().match(/[a-z0-9%]+/g) ?? [];
@@ -92,7 +134,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     else warnings.push(issue);
   };
 
-  const fullText = script.segments.map((s) => s.text).join(" ");
+  const fullText = script.segments.map((s) => stripDeliveryTags(s.text)).join(" ");
   const lower = fullText.toLowerCase();
   const toks = tokens(fullText);
   const hookSeg = script.segments.find((s) => s.role === "hook");
@@ -100,27 +142,73 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   const ctaSeg = script.segments.find((s) => s.role === "cta");
   const hookDemo = [hookSeg?.text ?? "", demoSeg?.text ?? ""].join(" ");
 
+  // TVC adalah genre lain, bukan varian gaya. Iklan televisi tidak menyebut
+  // keranjang, tidak menawar dengan partikel gaul, dan wajib ditutup nama
+  // merek. Aturan lisan L-01/L-03/L-04 dimatikan dan diganti T-01..T-03.
+  const isTvc = script.format === "tvc";
+
   // L-01: >=2 partikel
   const particleCount = toks.filter((t) => PARTICLES.has(t)).length;
-  if (particleCount < 2)
+  if (!isTvc && particleCount < 2)
     push(false, { rule: "L-01", message_id: "Skripnya masih kaku — tambahin kata kayak 'deh', 'sih', atau 'dong' biar kayak orang ngobrol." });
 
-  // L-02: harga eksplisit di hook atau demo
-  if (!PRICE_REGEX.test(hookDemo))
+  // L-02 bukan aturan global. Hanya template price-led/promo yang memberi
+  // sinyal eksplisit boleh mewajibkan harga; template lain justru perlu ruang
+  // untuk hook masalah, rasa penasaran, bukti, atau cerita tanpa boilerplate.
+  if (script.requirePriceMention && !PRICE_REGEX.test(hookDemo))
     push(false, { rule: "L-02", message_id: "Harganya belum disebut di awal video — pembeli butuh dengar angkanya (mis. '85 ribu').", segment: "demo" });
 
   // L-03: CTA menyebut "keranjang" — "kuning" cuma untuk TikTok Shop (istilah
   // branding TikTok), Shopee/Tokopedia/manual pakai "keranjang" polos (lihat
   // cartLabelForUrl di script-engine/index.ts). Cek generik biar berlaku di
   // kedua kasus tanpa validator perlu tau platform-nya.
-  if (!ctaSeg || !ctaSeg.text.toLowerCase().includes("keranjang"))
+  if (!isTvc && (!ctaSeg || !ctaSeg.text.toLowerCase().includes("keranjang")))
     push(false, { rule: "L-03", message_id: "Ajakan penutup harus menyebut 'keranjang' biar pembeli tau harus klik di mana.", segment: "cta" });
 
   // L-04: >=1 filler lisan
   const hasFiller =
     toks.some((t) => FILLER_TOKENS.has(t)) || FILLER_PHRASES.some((p) => lower.includes(p));
-  if (!hasFiller)
+  if (!isTvc && !hasFiller)
     push(false, { rule: "L-04", message_id: "Belum ada jeda lisan ('nah', 'jadi gini', 'sumpah') — tanpa itu kedengeran kayak robot." });
+
+  if (isTvc) {
+    const penutup = stripDeliveryTags(ctaSeg?.text ?? "");
+
+    // T-01: penutup wajib menyebut nama produk/merek (playbook TVC aturan D4).
+    // Kesalahan nyata yang melahirkan aturan ini: TVC Mom & Baby selesai tanpa
+    // announcer penutup, jadi iklannya berakhir tanpa pernah menyebut nama
+    // produk sama sekali.
+    const merek = script.productName.trim().toLowerCase();
+    if (!merek || !penutup.toLowerCase().includes(merek))
+      push(false, {
+        rule: "T-01",
+        message_id: `Penutup TVC wajib menyebut nama produknya ("${script.productName}") — tanpa itu iklan berakhir tanpa pernah menyebut merek.`,
+        segment: "cta",
+      });
+
+    // T-02: TVC bukan konten afiliasi. Menyebut keranjang mengubah genrenya
+    // kembali jadi live-selling, yang justru cacat yang sedang diperbaiki.
+    if (/keranjang/i.test(fullText))
+      push(false, {
+        rule: "T-02",
+        message_id: "TVC tidak boleh menyebut 'keranjang' — itu bahasa konten afiliasi, bukan iklan merek.",
+        segment: "cta",
+      });
+
+    // T-03: dua negasi. Playbook aturan D1 — kalimat "tapi nggak pernah nggak
+    // siap" ditolak klien dengan kata-kata "ga jelas itu apa".
+    for (const seg of script.segments) {
+      const bersih = stripDeliveryTags(seg.text);
+      if (DOUBLE_NEGATION_REGEX.test(bersih)) {
+        push(false, {
+          rule: "T-03",
+          message_id: "Ada kalimat dengan dua negasi — nyatakan langsung keunggulannya, jangan lewat sangkalan berlapis.",
+          segment: seg.role,
+        });
+        break;
+      }
+    }
+  }
 
   // L-05: panjang total — tergantung tier. silent_caption 32-48 kata (teks
   // dibaca, bukan diucapkan). Tier bersuara: r13 (Brian 2026-08-07, VO
@@ -201,6 +289,15 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   const badDigit = toks.find((t) => /^\d+$/.test(t) && !allowedDigits.has(t));
   if (badDigit)
     push(false, { rule: "L-14", message_id: `Ada angka "${badDigit}" yang tidak ada di data produk — klaim harus sesuai data yang kamu kasih.` });
+  const allowedPriceAmounts = new Set([script.priceIdr, script.promoPriceBeforeIdr].filter((value): value is number => Boolean(value)));
+  const wrongPrice = [...fullText.matchAll(PRICE_MENTION_REGEX)].find((match) => {
+    const number = Number(match[1].replace(",", "."));
+    const multiplier = /juta|jt/i.test(match[2]) ? 1_000_000 : 1_000;
+    return !allowedPriceAmounts.has(Math.round(number * multiplier));
+  });
+  if (wrongPrice) {
+    push(false, { rule: "L-14", message_id: `Harga "${wrongPrice[0]}" tidak cocok dengan harga produk yang diberikan.` });
+  }
 
   // L-15: merek pesaing yang direndahkan
   for (const brand of COMPETITOR_BRANDS) {
@@ -237,6 +334,34 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
           "Ada tanda kurung di teks ucapan — untuk video bersuara, instruksi jeda ditulis di luar dialog, bukan di dalam kurung.",
         segment: withParens.role,
       });
+  }
+
+  // L-18: cue pembawaan hanya boleh berada di tts_text, memakai whitelist.
+  // `text` harus selalu dialog bersih karena dipakai UI, caption, QC, dan
+  // prompt video/provider non-Gemini.
+  for (const segment of script.segments) {
+    const tagsInText = segment.text.match(/\[[^\[\]\n]+\]/g) ?? [];
+    const unknown = unknownDeliveryTags(segment.tts_text ?? "");
+    const misplacedEmphasis = misplacedEmphasisTags(segment.tts_text ?? "");
+    if (tagsInText.length || unknown.length || misplacedEmphasis.length) {
+      push(true, {
+        rule: "L-18",
+        message_id: tagsInText.length
+          ? `Penanda pembawaan ${tagsInText.join(", ")} bocor ke teks ucapan bersih.`
+          : unknown.length
+            ? `Penanda pembawaan tidak dikenal: ${unknown.join(", ")}.`
+            : `Cue emphasis harus berada di awal baris: ${misplacedEmphasis.join(", ")}.`,
+        segment: segment.role,
+      });
+      continue;
+    }
+    if (segment.tts_text && stripDeliveryTags(segment.tts_text) !== segment.text.trim()) {
+      push(true, {
+        rule: "L-18",
+        message_id: "Teks VO bertag tidak sama dengan teks bersih setelah penandanya dihapus.",
+        segment: segment.role,
+      });
+    }
   }
 
   return { passed: errors.length === 0, errors, warnings, checked_at: new Date().toISOString() };

@@ -19,6 +19,20 @@ export interface GeminiTtsResult {
 
 const RETRYABLE_STATUS = new Set([429, 500, 502, 503, 504]);
 
+/** Batas prompt/transkrip dibuat eksplisit walau endpoint generateContent
+ * hanya menerima satu text part. Ini mencegah instruksi gaya melebur menjadi
+ * kata pertama yang harus dibacakan. */
+export function buildGeminiTtsPrompt(text: string, styleInstruction: string): string {
+  return [
+    "# STYLE INSTRUCTION",
+    styleInstruction.trim().replace(/:\s*$/, ""),
+    "Do not read the style instruction or section headings aloud.",
+    "",
+    "# TRANSCRIPT",
+    text.trim(),
+  ].join("\n");
+}
+
 async function callGemini(text: string, voiceName: string, styleInstruction: string): Promise<{ status: number; ok: boolean; data: Record<string, unknown> }> {
   const res = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${config.geminiApiKey}`,
@@ -26,7 +40,7 @@ async function callGemini(text: string, voiceName: string, styleInstruction: str
       method: "POST",
       headers: { "content-type": "application/json" },
       body: JSON.stringify({
-        contents: [{ parts: [{ text: `${styleInstruction} ${text}` }] }],
+        contents: [{ parts: [{ text: buildGeminiTtsPrompt(text, styleInstruction) }] }],
         generationConfig: {
           responseModalities: ["AUDIO"],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName } } },

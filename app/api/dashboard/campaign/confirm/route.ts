@@ -3,7 +3,7 @@ import { Pool } from "pg";
 import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { validateScript } from "@/lib/script-engine/validator";
+import { templateRequiresPriceMention, validateScript } from "@/lib/script-engine/validator";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { tierPriceIdr } from "@/lib/credits";
 import { enqueueJob } from "@/lib/job-queue";
@@ -15,6 +15,7 @@ import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeApproveScript, smok
 import { getPool } from "@/lib/postgres/pool";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { CAMPAIGN_TEMPLATES, TVC_ROUTES } from "@/lib/templates";
+import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,18 @@ export async function POST(req: Request) {
     const format = ALLOWED_FORMATS.find((f) => f === body.format) ?? null;
     if (!format) throw ERR.BAD_REQUEST("Format tidak dikenal. Pilih Wajah AI, Tangan + VO, TVC, atau Iklan Jasa.", "Unknown format.");
 
+    // Empat template bukti membutuhkan footage asli. Blok dilakukan sebelum
+    // persona, kredit, job, atau antrean dibuat agar request yang melewati UI
+    // tetap tidak menimbulkan side effect apa pun.
+    const templateId =
+      typeof body.template_id === "string" && CAMPAIGN_TEMPLATES.some((t) => t.id === body.template_id)
+        ? body.template_id
+        : null;
+    const renderBlockMessage = aiRenderBlockMessage(templateId);
+    if (renderBlockMessage) {
+      throw ERR.BAD_REQUEST(renderBlockMessage, "AI render blocked: verified original footage required for this evidence template.");
+    }
+
     // Avatar: preset (persona) ATAU deskripsi hasil upload foto sendiri.
     // Persona tetap dibuat walau pakai avatar custom — voice TTS terkunci di
     // persona (foto tidak memberi tahu apa pun soal suara).
@@ -76,13 +89,6 @@ export async function POST(req: Request) {
       // bawaan ketika tvc_route kosong.
       format === "tvc" && body.tvc_route !== "luxury" && TVC_ROUTES.includes(body.tvc_route as never)
         ? (body.tvc_route as string)
-        : null;
-    // Template UGC affiliate. Divalidasi terhadap daftar template yang MEMANG
-    // ada, bukan diterima mentah: nilainya masuk ke perencana shot, dan id
-    // karangan hanya akan diam-diam jatuh ke beat generik tanpa jejak.
-    const templateId =
-      typeof body.template_id === "string" && CAMPAIGN_TEMPLATES.some((t) => t.id === body.template_id)
-        ? body.template_id
         : null;
     // Gaya rekam. Divalidasi DUA kali seperti template: harus ada di daftar,
     // DAN harus cocok dengan formatnya. Gaya yang tidak cocok ("selfie" pada
@@ -133,7 +139,8 @@ export async function POST(req: Request) {
 
         const validation = validateScript(
           { hook_family: script.hook_family, register: script.register, segments, productName: product.name,
-            priceIdr: product.price_idr, promoPriceBeforeIdr: product.promo_price_before_idr, qualityTier: tier },
+            priceIdr: product.price_idr, promoPriceBeforeIdr: product.promo_price_before_idr,
+            requirePriceMention: templateRequiresPriceMention(templateId), qualityTier: tier },
           "light"
         );
         if (!validation.passed) {

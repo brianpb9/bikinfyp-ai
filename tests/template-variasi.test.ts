@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { generateScripts } from "../lib/script-engine";
+import { generateScripts, TEMPLATE_COPY_CAPACITY } from "../lib/script-engine";
 import { TEMPLATE_COPY } from "../lib/script-engine/template-copy";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 
@@ -20,6 +20,32 @@ function skrip(templateId: string | null) {
   });
 }
 
+function skripDenganCount(templateId: string | null, count: number) {
+  return generateScripts({
+    product: PRODUK, register: "bunda", qualityTier: "high_quality", durationSec: 15,
+    count, hookFamilies: ["H1"], lockHookFamily: true, templateId,
+  });
+}
+
+test("kapasitas template dikunci ke empat varian unik", () => {
+  assert.equal(TEMPLATE_COPY_CAPACITY, 4);
+  const output = skripDenganCount("t01-tempat-susah", TEMPLATE_COPY_CAPACITY);
+  const teks = output.map((variant) => variant.segments.map((segment) => segment.text).join("|"));
+  assert.equal(output.length, 4);
+  assert.equal(new Set(teks).size, 4);
+});
+
+test("count=5 pada template ditolak, bukan modulo-repeat", () => {
+  assert.throws(
+    () => skripDenganCount("t01-tempat-susah", 5),
+    /maksimal 4 variasi unik.*count=5 ditolak/i
+  );
+});
+
+test("tanpa template count=5 tetap didukung", () => {
+  assert.equal(skripDenganCount(null, 5).length, 5);
+});
+
 test("template dengan variasi menghasilkan tiga kalimat BERBEDA", () => {
   const s = skrip("t01-tempat-susah");
   const teks = s.map((x) => x.segments.map((g) => g.text).join("|"));
@@ -32,14 +58,16 @@ test("hook tetap TERKUNCI walau kalimatnya bervariasi", () => {
   }
 });
 
-test("template tanpa variasi tertulis TIDAK berubah perilakunya", () => {
-  const tanpa = skrip(null).map((x) => x.segments.map((g) => g.text).join("|"));
-  const belum = skrip("t04-hook-indrawi").map((x) => x.segments.map((g) => g.text).join("|"));
-  assert.deepEqual(belum, tanpa, "template yang copy-nya belum ditulis seharusnya persis seperti sebelumnya");
+test("T04 sekarang punya tiga variasi copy khusus", () => {
+  const teks = skrip("t04-hook-indrawi").map((x) => x.segments.map((g) => g.text).join("|"));
+  assert.equal(new Set(teks).size, 3, "T04 kembali memakai pilihan copy yang identik");
 });
 
-test("id template ngawur tidak bikin crash", () => {
-  assert.equal(skrip("template-yang-tidak-ada").length, 3);
+test("template null dan id tidak dikenal tetap memakai fallback aman", () => {
+  const tanpa = skrip(null).map((x) => x.segments.map((g) => g.text).join("|"));
+  const tidakDikenal = skrip("template-yang-tidak-ada").map((x) => x.segments.map((g) => g.text).join("|"));
+  assert.equal(tidakDikenal.length, 3);
+  assert.deepEqual(tidakDikenal, tanpa, "id tidak dikenal tidak memakai fallback generik yang sama dengan null");
 });
 
 test("setiap template yang punya variasi memang ada di katalog", () => {

@@ -8,9 +8,10 @@ import {
 import { COMPLIANCE_CHECKLIST } from "../config/compliance";
 import { REGISTERS, type Register } from "./registers";
 import { renderSegmentsForTier, formatHargaNatural, type SegmentDraft, type TemplateCtx } from "./templates";
-import { templateCopy } from "./template-copy";
-import { validateScript, type ValidationResult } from "./validator";
+import { templateCopy, TEMPLATE_COPY_CAPACITY } from "./template-copy";
+import { isTvcTemplate, templateRequiresPriceMention, validateScript, type ValidationResult } from "./validator";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
+import { compileDeliveryText } from "./delivery-tags";
 import { resolvePromo, promoDeadlineSpokenPhrase, type ActivePromo } from "../promo";
 import { getDb } from "../db";
 
@@ -186,18 +187,25 @@ function applyPromoToSegments(
   const before = formatHargaNatural(promo.beforeIdr);
   const deadlinePhrase = promo.endsAt ? promoDeadlineSpokenPhrase(promo.endsAt) : null;
   return segments.map((s) => {
-    let text = s.text;
-    if (elements.strike && s.role === "demo") {
-      if (text.includes(`cuma ${harga}`)) text = text.replace(`cuma ${harga}`, `dari ${before} jadi ${harga}`);
-      else if (text.includes(harga)) text = text.replace(harga, `dari ${before} jadi ${harga}`);
-    }
-    if (elements.stock && promo.stockLeft !== null && s.role === "demo") {
-      text = `${text}, stoknya beneran tinggal dikit loh`;
-    }
-    if (elements.deadline && deadlinePhrase && s.role === "cta") {
-      text = `${text}, ${deadlinePhrase}`;
-    }
-    return { ...s, text };
+    const transform = (source: string): string => {
+      let text = source;
+      if (elements.strike && s.role === "demo") {
+        if (text.includes(`cuma ${harga}`)) text = text.replace(`cuma ${harga}`, `dari ${before} jadi ${harga}`);
+        else if (text.includes(harga)) text = text.replace(harga, `dari ${before} jadi ${harga}`);
+      }
+      if (elements.stock && promo.stockLeft !== null && s.role === "demo") {
+        text = `${text}, stoknya beneran tinggal dikit loh`;
+      }
+      if (elements.deadline && deadlinePhrase && s.role === "cta") {
+        text = `${text}, ${deadlinePhrase}`;
+      }
+      return text;
+    };
+    return {
+      ...s,
+      text: transform(s.text),
+      ...(s.tts_text ? { tts_text: transform(s.tts_text) } : {}),
+    };
   });
 }
 
@@ -231,10 +239,10 @@ function generateOne(
   const dasar = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats, wordBudget, hargaMahal);
   const variasi = templateCopy(templateId, variantIndex, ctx);
   const teksVariasi = variasi ? [variasi.hook, variasi.demo, variasi.cta] : null;
-  const baseSegments = dasar.map((s, i) => ({
-    ...s,
-    text: applyCartLabel(teksVariasi?.[i] ?? s.text, cartLabel),
-  }));
+  const baseSegments = dasar.map((s, i) => {
+    const authored = applyCartLabel(teksVariasi?.[i] ?? s.text, cartLabel);
+    return { ...s, ...compileDeliveryText(authored) };
+  });
   const promo = resolvePromo({
     priceIdr: product.price_idr,
     promoPriceBeforeIdr: product.promoPriceBeforeIdr,
@@ -246,6 +254,8 @@ function generateOne(
       {
         hook_family: family, register, segments: segs, productName: product.name,
         priceIdr: product.price_idr, promoPriceBeforeIdr: promo?.beforeIdr ?? null,
+        requirePriceMention: templateRequiresPriceMention(templateId),
+        format: isTvcTemplate(templateId) ? "tvc" : undefined,
         qualityTier: tier, durationSec, wordBudget,
       },
       "strict"
@@ -291,9 +301,11 @@ function generateOne(
 
 /** Normalisasi ringan antar-attempt: rapikan spasi/tanda baca ganda. */
 function normalizeSegments(segments: SegmentDraft[]): SegmentDraft[] {
+  const normalize = (text: string) => text.replace(/\s{2,}/g, " ").replace(/\s+([,.!?])/g, "$1").trim();
   return segments.map((s) => ({
     ...s,
-    text: s.text.replace(/\s{2,}/g, " ").replace(/\s+([,.!?])/g, "$1").trim(),
+    text: normalize(s.text),
+    ...(s.tts_text ? { tts_text: normalize(s.tts_text) } : {}),
   }));
 }
 
@@ -328,12 +340,18 @@ export function generateScripts(opts: {
   templateId?: string | null;
 }): GeneratedScript[] {
   const { product, register } = opts;
+  const count = opts.count ?? 3;
+  if (opts.templateId && count > TEMPLATE_COPY_CAPACITY) {
+    throw new RangeError(
+      `Template hanya mendukung maksimal ${TEMPLATE_COPY_CAPACITY} variasi unik; count=${count} ditolak agar naskah tidak berulang.`
+    );
+  }
   const emotion = opts.emotion ?? "senang";
   const tier = opts.qualityTier ?? "silent_caption";
   const durationSec = opts.durationSec ?? 15;
   const families = pickHookFamilies(
     product.category, product.id, opts.hookLevel ?? "normal",
-    opts.hookFamilies, opts.count ?? 3, opts.lockHookFamily === true
+    opts.hookFamilies, count, opts.lockHookFamily === true
   );
   return families.map((f, i) =>
     generateOne(product, register, emotion, f, tier, durationSec, opts.beats, opts.wordBudget, opts.templateId, i)
@@ -345,3 +363,4 @@ export function outputExtras(category: string) {
 }
 
 export { HOOK_BY_CODE };
+export { TEMPLATE_COPY_CAPACITY } from "./template-copy";

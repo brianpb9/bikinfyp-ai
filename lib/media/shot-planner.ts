@@ -32,6 +32,7 @@ import { MANDATORY_NEGATIVE_PROMPT } from "../config/compliance";
 import { ugcRolesFor } from "./ugc-template-roles";
 import { isServiceLike } from "../config/hooks";
 import { getRecordingStyle, type StyleFormat } from "./recording-styles";
+import { stripDeliveryTags } from "../script-engine/delivery-tags";
 
 export interface ShotPlanInput {
   jobId: string;
@@ -349,7 +350,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // ulang oleh Gemini TTS yang tak pernah sinkron ke gerak mulut asli.
   const lipSyncPresenter = format === "talking_head" && tier === "super_hq";
 
-  const segText = (role: string) => input.segments.find((s) => s.role === role)?.text ?? "";
+  const segText = (role: string) => stripDeliveryTags(input.segments.find((s) => s.role === role)?.text ?? "");
   const noun = CATEGORY_NOUN[input.productCategory] ?? CATEGORY_NOUN.default;
   const pain = CATEGORY_PAIN[input.productCategory] ?? CATEGORY_PAIN.default;
 
@@ -380,7 +381,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // tanpa dialog — beat visual murni, dan VO final tetap dirakit utuh oleh
     // Gemini TTS di atas video, bukan dari teks per-shot ini.
     format === "tvc"
-      ? input.segments.filter((sg) => sg.end > i * perShot && sg.start < (i + 1) * perShot).map((sg) => sg.text)
+      ? input.segments.filter((sg) => sg.end > i * perShot && sg.start < (i + 1) * perShot).map((sg) => stripDeliveryTags(sg.text))
       : numShots === 1
       ? [segText("hook"), segText("demo"), segText("cta")]
       : numShots >= 3
