@@ -1,6 +1,6 @@
 import { getAuthUser } from "@/lib/auth";
 import { getDb, now, uuid } from "@/lib/db";
-import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { pgInsertEvent, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { allowRate } from "@/lib/rate-limit";
 import crypto from "node:crypto";
 import { cookieAnon } from "@/lib/cookies";
@@ -49,12 +49,27 @@ export async function POST(req: Request) {
       headers.set("Set-Cookie", cookieAnon("racun_anon", anonId, 31536000));
     }
 
-    // Event drop diam-diam bila runtime pg belum termigrasi — telemetry tidak
-    // boleh pernah mengganggu jalur produk.
-    if (!postgresRuntimeEnabled()) {
-      getDb()
-        .prepare("INSERT INTO events (id, user_id, anon_id, name, meta, created_at) VALUES (?,?,?,?,?,?)")
-        .run(uuid(), user?.id ?? null, anonId, name, meta, now());
+    // DULU event DIBUANG SELURUHNYA di runtime PostgreSQL.
+    //
+    // Syaratnya berbunyi "if (!postgresRuntimeEnabled())" dengan alasan
+    // "telemetry tidak boleh mengganggu jalur produk" — tapi yang terjadi
+    // bukan tidak mengganggu, melainkan tidak mencatat apa pun. Produksi
+    // berjalan di PostgreSQL, jadi funnel, konversi, dan seluruh dasar
+    // keputusan produk KOSONG, tanpa satu pun tanda bahwa ada yang hilang.
+    // Tabel events-nya sendiri sudah ada di PostgreSQL sejak migrasi 0010.
+    //
+    // Sifat fire-and-forget-nya dipertahankan, tapi lewat try/catch — bukan
+    // lewat tidak menulis sama sekali.
+    try {
+      if (postgresRuntimeEnabled()) {
+        await pgInsertEvent({ userId: user?.id ?? null, anonId, name, meta });
+      } else {
+        getDb()
+          .prepare("INSERT INTO events (id, user_id, anon_id, name, meta, created_at) VALUES (?,?,?,?,?,?)")
+          .run(uuid(), user?.id ?? null, anonId, name, meta, now());
+      }
+    } catch (err) {
+      console.warn("[events] gagal menyimpan event (diabaikan, jalur produk tidak boleh terganggu):", (err as Error).message);
     }
     return new Response(null, { status: 204, headers });
   } catch {

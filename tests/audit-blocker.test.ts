@@ -114,3 +114,14 @@ test("onboarding publik tidak menjanjikan checkout saat status belum diketahui",
     "tiga keadaan, bukan dua — null berarti belum tahu, bukan berarti aktif");
   assert.match(s, /paymentsLive === true/, "klaim checkout hanya saat server bilang aktif");
 });
+
+test("route event menulis di KEDUA runtime, bukan cuma SQLite", () => {
+  const s = baca("app/api/events/route.ts");
+  assert.match(s, /if \(postgresRuntimeEnabled\(\)\)\s*\{\s*await pgInsertEvent/,
+    "runtime PostgreSQL harus punya penulisnya sendiri");
+  assert.ok(!/if \(!postgresRuntimeEnabled\(\)\) \{\s*getDb\(\)/.test(s),
+    "syarat lama ini membuang SETIAP event di produksi");
+  // Fire-and-forget dipertahankan lewat try/catch, bukan lewat tidak menulis.
+  assert.match(s, /catch \(err\) \{[\s\S]*jalur produk tidak boleh terganggu/,
+    "kegagalan telemetri tidak boleh menggagalkan permintaan");
+});

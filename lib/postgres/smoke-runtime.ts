@@ -139,6 +139,24 @@ export async function smokeGetOrgProduct(orgId: string, productId: string) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.getOrgProduct(orgId, productId); } finally { await repo.close(); }
 }
+/**
+ * Event funnel di runtime PostgreSQL.
+ *
+ * Tabelnya sudah ada sejak migrasi 0010; yang tidak pernah ada adalah
+ * PENULISNYA. app/api/events cuma menulis ke SQLite, jadi di produksi SETIAP
+ * event dibuang — funnel, konversi, dan seluruh dasar keputusan produk kosong
+ * tanpa satu pun tanda bahwa ada yang hilang.
+ *
+ * Tetap fire-and-forget: telemetri tidak boleh pernah mengganggu jalur produk.
+ */
+export async function pgInsertEvent(input: { userId: string | null; anonId: string | null; name: string; meta: string | null }) {
+  const pool = getPool(url());
+  await pool.query(
+    "INSERT INTO events (id,user_id,anon_id,name,meta,created_at) VALUES ($1,$2,$3,$4,$5,$6)",
+    [crypto.randomUUID(), input.userId, input.anonId, input.name, input.meta, new Date().toISOString()]
+  );
+}
+
 export async function smokeGetScript(userId: string, scriptId: string, orgId?: string) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.getOwnedScript(userId, scriptId, orgId); } finally { await repo.close(); }

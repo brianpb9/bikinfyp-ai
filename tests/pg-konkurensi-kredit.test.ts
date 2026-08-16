@@ -22,6 +22,14 @@ import { Pool } from "pg";
 const URL_UJI = process.env.UJI_PG_URL ?? "";
 const lewati = !URL_UJI;
 
+// Sebagian helper (mis. pgInsertEvent) membaca konfigurasi runtime, bukan URL
+// yang dioper. Dipasang di sini supaya seluruh berkas ini berbicara ke
+// database uji yang sama — bukan ke database produksi mana pun.
+if (!lewati) {
+  process.env.DATABASE_URL = URL_UJI;
+  process.env.RACUN_DB_RUNTIME = "postgres";
+}
+
 let pool: Pool;
 const at = () => new Date().toISOString();
 const id = () => crypto.randomUUID();
@@ -139,4 +147,16 @@ test("promo READY tidak bisa ditimpa jadi FAILED, jadi tidak bisa direfund", { s
   }
   const st = await pool.query<{ state: string }>("SELECT state FROM promo_jobs WHERE id=$1", [pjid]);
   assert.equal(st.rows[0].state, "READY", "state tidak boleh mundur dari READY");
+});
+
+// Event funnel: DULU dibuang seluruhnya di runtime PostgreSQL karena syaratnya
+// berbunyi "if (!postgresRuntimeEnabled())". Produksi berjalan di PostgreSQL,
+// jadi funnel dan konversi kosong tanpa satu pun tanda ada yang hilang.
+test("event funnel benar-benar mendarat di PostgreSQL", { skip: lewati }, async () => {
+  const { pgInsertEvent } = await import("../lib/postgres/smoke-runtime");
+  const anon = `uji-${id().slice(0, 8)}`;
+  await pgInsertEvent({ userId: null, anonId: anon, name: "landing_view", meta: '{"dari":"uji"}' });
+  const r = await pool.query("SELECT name, meta FROM events WHERE anon_id=$1", [anon]);
+  assert.equal(r.rowCount, 1, "event harus tersimpan, bukan dibuang diam-diam");
+  assert.equal(r.rows[0].name, "landing_view");
 });
