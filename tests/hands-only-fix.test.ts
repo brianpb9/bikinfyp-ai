@@ -213,7 +213,20 @@ test("QC-06: OCR frame nyata meluluskan overlay aman dan menolak baris terpotong
   assert.equal(exempt.status, "pass", exempt.detail);
 });
 
-test("durasi 30 dtk: tetap 2 shot, masing-masing 15 dtk (batas BytePlus 2-15 dtk/klip)", () => {
+// Dua tes di bawah dulu memaku 15 detik per shot. Alasan yang mereka TULIS
+// ("batas BytePlus 2-15 dtk/klip") tetap dihormati — 5 detik jelas di dalam
+// rentang itu; yang dipaku cuma satu nilai yang kebetulan memenuhinya.
+//
+// Sejak 17 Agu format tanpa wajah memakai modul ~5 detik, sesuai naskah
+// rujukan produksi (15s->3, 20s->4, 30s->5-6 segmen). Alasannya ada di
+// shot-planner: tangga beat punya empat anak tangga berbeda tugas, dan dua
+// shot panjang tidak pernah benar-benar memakainya. Biaya tidak berubah —
+// provider menagih per DETIK video, bukan per klip.
+//
+// Yang dijaga sekarang invariannya, bukan angkanya: tiap shot 4-15 detik,
+// durasinya BULAT (BytePlus membulatkan naik, jadi pecahan memanjangkan video
+// diam-diam), dan totalnya sama persis dengan durasi yang diminta.
+test("durasi 30 dtk: modul pendek, durasi bulat, total tetap 30 dtk", () => {
   const segments30 = [
     { role: "hook" as const, start: 0, end: 6, text: "Say, masa 85 ribu segini sih", visual_direction: "x" },
     { role: "demo" as const, start: 6, end: 20, text: "nah, ini Serum Glow, teksturnya niat, cuma 85 ribu", visual_direction: "x" },
@@ -231,11 +244,19 @@ test("durasi 30 dtk: tetap 2 shot, masing-masing 15 dtk (batas BytePlus 2-15 dtk
     qualityTier: "silent_caption",
     format: "hands_only",
   });
-  assert.equal(s.shots.length, 2);
-  for (const shot of s.shots) assert.equal(shot.durationSec, 15);
+  assert.equal(s.shots.length, 6);
+  for (const shot of s.shots) {
+    assert.equal(shot.durationSec, 5);
+    assert.ok(Number.isInteger(shot.durationSec), "durasi pecahan dibulatkan naik provider");
+    assert.ok(shot.durationSec >= 4 && shot.durationSec <= 15, "batas klip provider");
+  }
+  assert.equal(s.shots.reduce((a, b) => a + b.durationSec, 0), 30, "total wajib sama dengan yang diminta");
 });
 
-test("durasi 45 dtk: 3 shot @15 dtk masing-masing (2 shot akan melebihi batas 15 dtk/klip BytePlus)", () => {
+// 45 detik adalah kasus yang membuktikan kenapa durasi harus BULAT: 45/6 =
+// 7,5 detik, dibulatkan naik provider jadi 8, dan videonya keluar 48 detik.
+// Jumlah shot karena itu diturunkan sampai membagi habis — 5 shot @9 detik.
+test("durasi 45 dtk: jumlah shot diturunkan agar durasinya membagi habis", () => {
   const segments45 = [
     { role: "hook" as const, start: 0, end: 9, text: "Say, masa 85 ribu segini sih", visual_direction: "x" },
     { role: "demo" as const, start: 9, end: 30, text: "nah, ini Serum Glow, teksturnya niat, cuma 85 ribu", visual_direction: "x" },
@@ -253,11 +274,16 @@ test("durasi 45 dtk: 3 shot @15 dtk masing-masing (2 shot akan melebihi batas 15
     qualityTier: "silent_caption",
     format: "hands_only",
   });
-  assert.equal(s.shots.length, 3);
-  for (const shot of s.shots) assert.equal(shot.durationSec, 15);
+  assert.equal(s.shots.length, 5);
+  for (const shot of s.shots) assert.equal(shot.durationSec, 9);
+  assert.equal(s.shots.reduce((a, b) => a + b.durationSec, 0), 45, "45 dtk harus tetap 45 dtk, bukan 48");
   // Shot terakhir harus beda beat dari shot tengah (closing/inviting), bukan
   // cuma pengulangannya.
-  assert.ok(s.shots[2].prompt.includes("closing"), s.shots[2].prompt);
+  // Penutup = shot TERAKHIR, bukan indeks tetap. Dulu keduanya kebetulan sama
+  // karena 45 detik selalu 3 shot; sejak modul dipendekkan, indeks 2 adalah
+  // beat tengah. Asersi yang memaku indeks akan menuduh perilaku yang benar.
+  const terakhir = s.shots[s.shots.length - 1];
+  assert.ok(terakhir.prompt.includes("closing"), terakhir.prompt);
   // Shot tengah dulu berbunyi "demonstrating the product in use" — kalimat
   // GENERIK yang tidak pernah menyebut apa yang sebenarnya dilakukan tangan.
   // Itu yang membuat seluruh taksonomi bentuk produk tidak pernah sampai ke
@@ -266,7 +292,10 @@ test("durasi 45 dtk: 3 shot @15 dtk masing-masing (2 shot akan melebihi batas 15
   assert.ok(s.shots[1].prompt.includes("Close-up of hands as she "), s.shots[1].prompt);
   assert.ok(!s.shots[1].prompt.includes("demonstrating the product in use"),
     "beat generik ini adalah cacatnya, bukan perilaku yang harus dijaga");
-  assert.notEqual(s.shots[1].prompt, s.shots[2].prompt);
+  assert.notEqual(s.shots[1].prompt, terakhir.prompt);
+  // Tangga beat benar-benar berganti tugas — inti kenapa modulnya dipendekkan.
+  const tengah = s.shots.slice(1, -1).map((x) => x.prompt);
+  assert.equal(new Set(tengah).size, tengah.length, "shot tengah tidak boleh mengulang beat yang sama");
 });
 
 test("durasi 45 dtk, tier bersuara: dialog 1 segmen penuh per shot (bukan digabung)", () => {

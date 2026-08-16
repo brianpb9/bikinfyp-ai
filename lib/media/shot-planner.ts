@@ -461,11 +461,40 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   const requested = input.shotCountOverride
     ? Math.min(Math.max(2, Math.round(input.shotCountOverride)), 6, maxShotsForDuration)
     : null;
-  const numShots = requested !== null ? requested : format === "tvc"
-    ? Math.max(3, Math.round(input.durationSec / 5))
-    : format === "talking_head"
-      ? Math.max(1, Math.ceil(input.durationSec / 15))
-      : Math.max(2, Math.ceil(input.durationSec / 15));
+  // MODUL ~5 DETIK UNTUK SEMUA FORMAT TANPA WAJAH, bukan potongan 15 detik.
+  //
+  // hands_only dulu memakai ceil(durasi/15): video 20 detik keluar sebagai DUA
+  // shot 10 detik. Padahal tangga beat di bawah (HANDS_MIDDLE) punya empat anak
+  // tangga dengan tugas berbeda-beda, dan komentar tangga itu sendiri berbunyi
+  // "yang menahan perhatian bukan shot bagus yang diulang, tapi shot yang
+  // BERGANTI TUGAS" — lalu kita cuma pernah memberinya dua tugas. Naskah
+  // rujukan produksi memakai 15s→3, 20s→4, 30s→5-6 segmen, masing-masing 4-6
+  // detik, dan itu memang yang membuat videonya terasa bergerak.
+  //
+  // Biaya TIDAK naik: provider menagih PER DETIK video (byteplus estimateCost
+  // menjumlahkan durasi shot), jadi 4x5 detik sama mahalnya dengan 2x10 detik.
+  //
+  // talking_head SENGAJA DIKECUALIKAN dan tetap 15 detik per shot. Tiap shot
+  // adalah generate TERPISAH dan model tidak menjamin identitas antar generate
+  // — insiden produksi 7 Agu 2026: video 15 detik yang dipecah dua shot
+  // menghasilkan DUA KARAKTER BERBEDA. Tangan tidak punya masalah itu, wajah
+  // punya. Jadi penghalusan segmen berhenti di batas wajah.
+  // DURASI PER SHOT WAJIB BULAT.
+  //
+  // BytePlus MEMBULATKAN NAIK durasi klip, jadi pembagian berpecahan
+  // memanjangkan videonya diam-diam: 45 detik dibagi 6 = 7,5 detik per shot,
+  // dibulatkan jadi 8, dan hasil akhirnya 48 detik padahal pengguna meminta 45.
+  // Karena itu jumlah shot diturunkan sampai ia membagi habis durasinya.
+  function modulRapi(durasi: number, minimal: number): number {
+    const ideal = Math.min(6, Math.max(minimal, Math.round(durasi / 5)));
+    for (let n = ideal; n >= minimal; n--) {
+      if (durasi % n === 0 && durasi / n >= MIN_SHOT_SEC && durasi / n <= 15) return n;
+    }
+    return minimal;
+  }
+  const numShots = requested !== null ? requested : format === "talking_head"
+    ? Math.max(1, Math.ceil(input.durationSec / 15))
+    : modulRapi(input.durationSec, format === "tvc" ? 3 : 2);
   // r16 (Brian 2026-08-08: "tidak ada lagi foto real produk... di video
   // manapun" — "product proof insert" DIHAPUS TOTAL, semua format). Video
   // 100% AI-generated selalu, tanpa sisipan foto statis di ujung.
@@ -1128,7 +1157,21 @@ export function planShots(input: ShotPlanInput): VisualSpec {
           // pembuka terlihat seperti foto produk diam sebelum tangan "masuk").
           // Motion eksplisit SEJAK FRAME PERTAMA supaya model tidak menganggur
           // di seed image yang statis di awal generate.
-          ? `The video starts ALREADY in motion: hands are already gripping and gently rotating "${input.productName}" from the very first frame — NOT a static product photo, no frozen opening beat, product label facing camera, ${IDENTITY_INSTRUCTION}`
+          //
+          // TAPI GERAKANNYA BUKAN LAGI MEMEGANG PRODUK.
+          //
+          // Versi sebelumnya membuka dengan produk sudah di tangan dan label
+          // menghadap kamera — itu pack shot, dan naskah rujukan produksi
+          // melarangnya tegas: "Never open on a pack shot. First frame = face,
+          // motion, or object anomaly." Produk boleh TERLIHAT sejak awal, tapi
+          // DIAM; tangan baru menyentuhnya di detik 3-5.
+          //
+          // Alasannya dramaturgi, bukan selera: kalau label sudah dipamerkan di
+          // frame pertama, tidak ada lagi yang ditunggu penonton, dan CTA yang
+          // seharusnya jadi puncak kehilangan bobotnya. Busur produk
+          // idle -> partial -> hero itu yang membuat beat terakhir terasa
+          // seperti penutup, bukan pengulangan.
+          ? `The video starts ALREADY in motion, but the hands are NOT holding the product yet: "${input.productName}" is already sitting in frame, still and untouched, while her hands move in the space beside it — reaching, resting, or adjusting something near it. The product stays put for the first beats and is picked up only later. NOT a static product photo, no frozen opening beat, and NOT a packshot: the product is present but idle, its label not yet presented to camera, ${IDENTITY_INSTRUCTION}`
           : isClosing
             ? `Hands holding the product steady near the bottom of frame in a closing, inviting gesture, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
             // r13 (Brian 2026-08-07, evidenced via render 45fe92ad): shot demo
@@ -1223,9 +1266,47 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       ? `${latarUntukTemplate(input.ugcTemplate).teks}. `
       : "";
 
+    // ---- LAPISAN PANGGUNG (start state / busur produk / ekspresi) ----
+    //
+    // Prompt kita selama ini berat di LARANGAN dan tipis di PANGGUNG: 2.500
+    // karakter batasan (identitas, label, negative) dengan satu kalimat aksi
+    // tenggelam di tengahnya. Semua batasan itu lahir dari kegagalan produksi
+    // nyata dan tetap dipertahankan — yang ditambahkan di sini bagian yang
+    // hilang, bukan pengganti.
+    //
+    // Tiga field ini datang dari naskah rujukan produksi yang terbukti, dan
+    // masing-masing menutup satu kelemahan yang bisa diukur:
+    //
+    //   Start state  — model bergerak MENUJU prompt, jadi yang kita tulis tiba
+    //                  di AKHIR klip. Tanpa menyatakan kondisi awal, model
+    //                  MENGARANG pembukaannya sendiri.
+    //   Product state— busur idle -> partial -> hero. Kalau label sudah
+    //                  dipamerkan sejak frame pertama, CTA kehilangan bobot.
+    //   Expression   — beat yang tidak menyebut ekspresi keluar datar.
+    const busur = numShots <= 1 ? "hero" : isFirst ? "idle" : isLastShot(i, numShots) ? "hero" : "partial";
+    const produkAkhir =
+      busur === "idle"
+        ? `Product state at the end of this shot: still idle — present in frame but not yet held up or presented, its label not turned to camera.`
+        : busur === "partial"
+          ? `Product state at the end of this shot: partially revealed — in her hands and clearly in use, but not yet held up as a hero shot.`
+          : `Product state at the end of this shot: hero — held up, label squarely readable to camera, and held still for the final second.`;
+    const mulaiDari = isFirst
+      ? `Start state: the first frame is already mid-action, not a posed opening.`
+      : `Start state: this shot begins exactly where the previous one ended — ${
+          busur === "hero"
+            ? `the product is already in her hands from the very first frame, so no time is spent picking it up`
+            : `her hands are already engaged with the product, continuing without a visible restart`
+        }.`;
+    const ekspresi = isFirst
+      ? `Expression: curious and a little unimpressed, like someone about to show you something.`
+      : isLastShot(i, numShots)
+        ? `Expression: warm, settled and sure — an unhurried close, not a hard sell.`
+        : `Expression: absorbed in what her hands are doing, quietly pleased.`;
+    const panggung = ` ${mulaiDari} ${produkAkhir} ${ekspresi}`;
+
     const base = punyaPeranTemplate
-      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}`
-      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}`;
+      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${panggung}`
+      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}`;
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
