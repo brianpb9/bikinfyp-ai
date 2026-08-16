@@ -273,7 +273,7 @@ const TVC_TERSANGKA: CopyFn[] = [
   }),
   (c) => ({
     hook: `Yang mulia, saya keberatan. Saksi terlihat terlalu segar untuk jam segini.`,
-    demo: `[medium pause] Ruangan langsung hening dan semua mata pindah ke meja barang bukti. Ternyata yang tergeletak di sana sederhana sekali, sama sekali tidak mewah, tapi ${c.proof} nya terbaca jelas bahkan dari kursi penonton paling belakang.`,
+    demo: `[medium pause] Ruangan langsung hening dan semua mata pindah ke meja barang bukti. Ternyata yang tergeletak di sana sederhana sekali, sama sekali tidak mewah, tapi ${c.proof} terbaca jelas bahkan dari kursi penonton paling belakang.`,
     cta: `[short pause] ${c.produk}. Terbukti di ruang sidang.`,
   }),
   (c) => ({
@@ -283,7 +283,7 @@ const TVC_TERSANGKA: CopyFn[] = [
   }),
   (c) => ({
     hook: `Pertanyaannya cuma satu: sejak kapan terdakwa mulai terlihat seperti ini?`,
-    demo: `[short pause] Terdakwa diam agak lama, seperti menimbang harus jujur atau tidak. Ruangan ikut menunggu. Lalu dia menjawab pelan bahwa semuanya berubah sejak dia berhenti mencoba banyak hal sekaligus, dan menyisakan satu saja yang ${c.proof} nya konsisten.`,
+    demo: `[short pause] Terdakwa diam agak lama, seperti menimbang harus jujur atau tidak. Ruangan ikut menunggu. Lalu dia menjawab pelan bahwa semuanya berubah sejak dia berhenti mencoba banyak hal sekaligus, dan menyisakan satu saja yang ${c.proof} konsisten.`,
     cta: `[medium pause] ${c.produk}. Satu-satunya yang dia akui.`,
   }),
 ];
@@ -291,22 +291,22 @@ const TVC_TERSANGKA: CopyFn[] = [
 const TVC_SEHARIAN: CopyFn[] = [
   (c) => ({
     hook: `[serious] Jam tujuh pagi semuanya masih aman. Masalahnya, hari belum mulai.`,
-    demo: `[medium pause] Lalu datang panas jalanan, ruangan ber-AC yang kering, rapat yang mundur dua jam, dan macet panjang di jalan pulang. Semuanya menumpuk sejak pagi. Baru jam tujuh malam ketahuan siapa yang benar-benar bertahan, dan ${c.proof} nya yang menjawab.`,
+    demo: `[medium pause] Lalu datang panas jalanan, ruangan ber-AC yang kering, rapat yang mundur dua jam, dan macet panjang di jalan pulang. Semuanya menumpuk sejak pagi. Baru jam tujuh malam ketahuan siapa yang benar-benar bertahan, dan ${c.proof} yang menjawab.`,
     cta: `[short pause] ${c.produk}. Diuji oleh hari.`,
   }),
   (c) => ({
     hook: `Hari tidak pernah menunggu siapa pun siap. Termasuk hari ini.`,
-    demo: `[medium pause] Jadwal maju, jalanan padat, semuanya minta serba cepat sejak pagi. Yang bagus bukan yang terlihat bagus jam delapan pagi waktu belum terjadi apa-apa, tapi yang ${c.proof} nya masih utuh waktu kamu sampai rumah.`,
+    demo: `[medium pause] Jadwal maju, jalanan padat, semuanya minta serba cepat sejak pagi buta. Yang bagus bukan yang terlihat bagus jam delapan pagi waktu belum terjadi apa-apa, tapi yang ${c.proof} masih utuh waktu kamu sampai rumah.`,
     cta: `[short pause] ${c.produk}. Bertahan sampai hari selesai.`,
   }),
   (c) => ({
     hook: `Ada jarak dua belas jam antara berangkat dan sampai rumah lagi.`,
-    demo: `[long pause] Dua belas jam itu yang hampir tidak pernah ditunjukkan siapa pun. Panas, keringat, ruangan dingin, lalu panas lagi, berulang-ulang tanpa jeda. Berulang setiap hari kerja. ${c.proof} nya baru jujur sesudah melewati semuanya, bukan sebelum.`,
+    demo: `[long pause] Dua belas jam itu yang hampir tidak pernah ditunjukkan siapa pun. Panas, keringat, ruangan dingin, lalu panas lagi, berulang-ulang tanpa jeda. Berulang setiap hari kerja. ${c.proof} baru jujur sesudah melewati semuanya, bukan sebelum.`,
     cta: `[short pause] ${c.produk}. Dinilai di jam terakhir.`,
   }),
   (c) => ({
     hook: `Pertanyaannya bukan bagus atau tidak. Tapi masih bagus jam berapa.`,
-    demo: `[short pause] Pagi hampir semuanya kelihatan sama saja, susah dibedakan. Semuanya masih terlihat menjanjikan. Bedanya baru muncul menjelang sore, waktu tenaga habis, waktu tidak ada yang sempat memperbaiki apa pun, dan ${c.proof} nya harus bekerja sendirian.`,
+    demo: `[short pause] Pagi hampir semuanya kelihatan sama saja, susah dibedakan. Semuanya masih terlihat menjanjikan. Bedanya baru muncul menjelang sore, waktu tenaga habis, waktu tidak ada yang sempat memperbaiki apa pun, dan ${c.proof} harus bekerja sendirian.`,
     cta: `[medium pause] ${c.produk}. Masih bekerja waktu yang lain menyerah.`,
   }),
 ];
@@ -314,22 +314,22 @@ const TVC_SEHARIAN: CopyFn[] = [
 const TVC_KAIN: CopyFn[] = [
   (c) => ({
     hook: `[serious] Semua orang memotret baju sambil berdiri diam. Itu masalahnya.`,
-    demo: `[medium pause] Karena kamu memakainya sambil berjalan, berbelok, duduk, lalu buru-buru berdiri lagi. Sepanjang hari, tanpa jeda. Yang bagus bukan yang cantik waktu diam di depan kamera, tapi yang ${c.proof} nya tetap terjaga persis waktu kamu bergerak cepat.`,
+    demo: `[medium pause] Karena kamu memakainya sambil berjalan, berbelok, duduk, lalu buru-buru berdiri lagi. Sepanjang hari, tanpa jeda. Yang bagus bukan yang cantik waktu diam di depan kamera, tapi yang ${c.proof} tetap terjaga persis waktu kamu bergerak cepat.`,
     cta: `[short pause] ${c.produk}. Kain yang ikut lari.`,
   }),
   (c) => ({
     hook: `Coba nilai satu potongan dari foto diam. Hampir selalu meleset.`,
-    demo: `[medium pause] Bentuk aslinya baru keluar waktu tubuh berbelok dan lipatannya menyusul setengah detik kemudian, bukan sebelum itu. Foto tidak pernah menangkap bagian ini. Di situ ${c.proof} nya terbaca paling jujur, dan di situ juga potongan yang biasa saja langsung ketahuan.`,
+    demo: `[medium pause] Bentuk aslinya baru keluar waktu tubuh berbelok dan lipatannya menyusul setengah detik kemudian, bukan sebelum itu. Foto tidak pernah menangkap bagian ini. Di situ ${c.proof} terbaca paling jujur, dan di situ juga potongan yang biasa saja langsung ketahuan.`,
     cta: `[short pause] ${c.produk}. Dinilai saat bergerak.`,
   }),
   (c) => ({
     hook: `Ada setengah detik antara langkah kaki dan kain yang menyusul.`,
-    demo: `[long pause] Setengah detik itu yang membedakan jatuh bahan mahal dari yang murah, dan hampir tidak ada yang menyadarinya. Padahal justru di sana bedanya. Kalau ${c.proof} nya benar, kainnya berhenti sesudah kamu berhenti, bukan mendahului langkahmu sendiri.`,
+    demo: `[long pause] Setengah detik itu yang membedakan jatuh bahan mahal dari yang murah, dan hampir tidak ada yang menyadarinya. Padahal justru di sana bedanya. Kalau ${c.proof} benar, kainnya berhenti sesudah kamu berhenti, bukan mendahului langkahmu sendiri.`,
     cta: `[short pause] ${c.produk}. Jatuhnya menyusul langkahmu.`,
   }),
   (c) => ({
     hook: `Bukan busana yang bagus untuk berpose. Ini untuk hari yang sibuk.`,
-    demo: `[short pause] Naik motor, masuk ruangan dingin, duduk lama di kursi kantor, lalu berdiri lagi buru-buru. Belum termasuk cuaca di jalan. Semua itu meremas kain sepanjang hari. Yang tersisa sesudahnya, ${c.proof} nya, itu yang menentukan pantas atau tidak.`,
+    demo: `[short pause] Naik motor, masuk ruangan dingin, duduk lama di kursi kantor, lalu berdiri lagi buru-buru. Belum termasuk cuaca di jalan. Semua itu meremas kain sepanjang hari. Yang tersisa sesudahnya, ${c.proof}, itu yang menentukan pantas atau tidak.`,
     cta: `[medium pause] ${c.produk}. Dinilai sesudah dipakai.`,
   }),
 ];
@@ -337,17 +337,17 @@ const TVC_KAIN: CopyFn[] = [
 const TVC_JAM_TIGA: CopyFn[] = [
   (c) => ({
     hook: `[serious] Jam tiga pagi. Tidak ada yang melihat, tidak ada yang memuji.`,
-    demo: `[medium pause] Cuma satu lampu kecil di sudut ruangan, gerakan sepelan mungkin, dan tangan yang sudah hafal urutannya ada di luar kepala. Di jam seperti ini ${c.proof} nya baru terasa berarti, karena sama sekali tidak ada waktu untuk mengulang.`,
+    demo: `[medium pause] Cuma satu lampu kecil di sudut ruangan, gerakan sepelan mungkin, dan tangan yang sudah hafal urutannya tanpa berpikir. Di jam seperti ini ${c.proof} baru terasa berarti, karena sama sekali tidak ada waktu untuk mengulang.`,
     cta: `[short pause] ${c.produk}. Menemani jam paling sepi.`,
   }),
   (c) => ({
     hook: `Yang paling sulit dari malam bukan lelahnya. Tapi harus tetap pelan.`,
-    demo: `[medium pause] Satu suara terlalu keras saja, semua usaha satu jam tadi hilang begitu saja. Makanya yang dipilih untuk jam segini selalu yang paling sederhana, yang ${c.proof} nya masih bisa dipercaya sambil setengah sadar.`,
+    demo: `[medium pause] Satu suara terlalu keras saja, semua usaha satu jam tadi hilang begitu saja, dan harus diulang. Makanya yang dipilih untuk jam segini selalu yang paling sederhana, yang ${c.proof} masih bisa dipercaya sambil setengah sadar.`,
     cta: `[short pause] ${c.produk}. Untuk tangan yang mengantuk.`,
   }),
   (c) => ({
     hook: `Rumah sudah diam sejak tadi. Satu orang masih belum selesai.`,
-    demo: `[long pause] Dia bergerak hati-hati di antara perabot, hafal betul di bagian mana lantainya berbunyi. Semua sudah dihafalnya sejak lama. Yang dia bawa malam ini cuma satu benda, dan ${c.proof} nya sudah dia hafal jauh sebelum malam ini datang.`,
+    demo: `[long pause] Dia bergerak hati-hati di antara perabot, hafal betul di bagian mana lantainya berbunyi. Semua sudah dihafalnya sejak lama. Yang dia bawa malam ini cuma satu benda, dan ${c.proof} sudah dia hafal jauh sebelum malam ini datang.`,
     cta: `[short pause] ${c.produk}. Ada di jam tersepi.`,
   }),
   (c) => ({

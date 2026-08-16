@@ -169,3 +169,26 @@ test("aturan afiliasi L-01/L-03/L-04 tetap keras di luar TVC", () => {
     assert.ok(hasil.errors.some((e) => e.rule === rule), `${rule} seharusnya masih keras untuk non-TVC`);
   }
 });
+
+// Penjaga kelas cacat yang lolos sekali dan hampir dibayar.
+//
+// Naskah TVC pertama saya menulis `${c.proof} nya`, mengira `proof` kata benda
+// telanjang. Nyatanya SETIAP nilai proof sudah berakhiran -nya — "teksturnya",
+// "bahannya", "rasanya" — jadi yang keluar "teksturnya nya". Tidak ada satu pun
+// dari 338 tes yang menangkapnya; ketahuan karena naskahnya dibaca sebelum
+// render sempat jauh.
+test("tidak ada kepemilikan ganda '-nya nya' di naskah mana pun", () => {
+  const proofs = ["teksturnya", "bahannya", "materialnya", "build quality-nya", "rasanya", "jahitannya", "kualitasnya"];
+  for (const proof of proofs) {
+    const c = { ...ctx, proof };
+    for (const [id, varian] of Object.entries(TEMPLATE_COPY)) {
+      for (let i = 0; i < TEMPLATE_COPY_CAPACITY; i++) {
+        const v = varian[i](c);
+        const teks = `${v.hook} ${v.demo} ${v.cta}`;
+        assert.ok(!/\bnya\s+nya\b/i.test(teks), `${id}#${i} (proof="${proof}"): kepemilikan ganda`);
+        assert.ok(!new RegExp(`${proof.replace(/[-]/g, "\\$&")}\\s+nya\\b`, "i").test(teks),
+          `${id}#${i}: "${proof}" sudah berakhiran -nya, jangan ditambah lagi`);
+      }
+    }
+  }
+});
