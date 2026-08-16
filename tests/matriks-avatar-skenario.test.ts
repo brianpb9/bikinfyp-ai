@@ -17,7 +17,7 @@ import { aiRenderBlockMessage } from "../lib/template-render-safety";
 
 const baca = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
 const route = baca("app/api/dashboard/matrix/route.ts");
-const halaman = baca("app/dashboard/(app)/matrix/page.tsx");
+const halaman = baca("app/dashboard/(app)/matrix/MatrixClient.tsx");
 
 // Cacat yang persis ini baru ditutup di wizard retail 16 Agu 2026: avatar yang
 // kategori suaranya tidak aktif akan lolos ke worker lalu jatuh ke suara
@@ -103,4 +103,20 @@ test("UPDATE produk memakai kunci yang sama dengan pemeriksaannya", () => {
   assert.ok(!/UPDATE products SET[^"]*WHERE id=\$9 AND user_id=/.test(isi),
     "pemeriksaan per-org + UPDATE per-user = Simpan yang berhasil tanpa menyimpan");
   assert.match(isi, /WHERE id=\$9 AND org_id=\$10/, "UPDATE harus dikunci per-org");
+});
+
+// Board menahan Matriks untuk pengguna berbayar (17 Agu 2026) sampai approval
+// naskah, konfirmasi belanja, dan idempotensi selesai. Penahanan itu harus
+// nyata di SERVER — UI yang disembunyikan bukan penjagaan, dan URL langsung
+// tetap bisa diketik.
+test("matriks mati secara bawaan dan dijaga di sisi server", () => {
+  const cfg = baca("lib/config.ts");
+  assert.match(cfg, /enterpriseMatrixEnabled: env\("ENTERPRISE_MATRIX_ENABLED", "false"\)/,
+    "bawaannya harus MATI, dinyalakan lewat env");
+  assert.match(route, /pastikanMatriksAktif\(\);/, "route harus memeriksa gerbang");
+  assert.equal((route.match(/pastikanMatriksAktif\(\);/g) ?? []).length, 2,
+    "POST dan GET dua-duanya harus dijaga");
+  const halaman = baca("app/dashboard/(app)/matrix/page.tsx");
+  assert.match(halaman, /if \(!config\.enterpriseMatrixEnabled\) notFound\(\)/,
+    "halaman harus 404 di server, bukan sekadar hilang dari sidebar");
 });

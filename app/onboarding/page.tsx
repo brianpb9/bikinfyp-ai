@@ -230,7 +230,11 @@ export default function OnboardingPage() {
             {/* r13 (review produk 2026-08-07): badge metode bayar dulu tampil TANPA
                 SYARAT ke semua pengunjung — janji "checkout aman" yang tidak benar
                 selama Midtrans belum aktif. Sekarang jujur sesuai /api/health. */}
-            {paymentsLive !== false && (
+            {/* "=== true", bukan "!== false". paymentsLive punya tiga keadaan,
+                dan selama null (menunggu /api/meta) versi lama menampilkan
+                klaim checkout yang belum tentu benar. Halaman /kredit sudah
+                diperbaiki 16 Agu; halaman ini terlewat. */}
+            {paymentsLive === true && (
             <section className="rounded-[26px] border border-zinc-100 bg-white p-5 shadow-sm">
               <p className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">Checkout aman lewat</p>
               <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs font-extrabold text-zinc-600"><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">GoPay</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">OVO</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">DANA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">QRIS</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">BCA VA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">VISA</span></div>

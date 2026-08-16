@@ -89,6 +89,18 @@ export const config = {
   // tambahan. Penerima dipisahkan dari alamat pengirim agar alert tidak salah
   // kirim ke inbox/domain Resend default.
   operationalMonitoringEnabled: env("OPERATIONAL_MONITORING_ENABLED", "false") === "true",
+  // Matriks avatar x skenario. MATI secara bawaan, dan itu keputusan sadar.
+  //
+  // Board menahannya (17 Agu 2026) karena fiturnya ada tapi produknya belum
+  // benar: skenario yang dipilih tidak terwujud di naskah, approval naskah
+  // manusia terlewat, pilihan di atas batas dipotong diam-diam, permintaan
+  // ulang bisa menagih dua kali, dan tidak ada konfirmasi belanja padahal
+  // satu klik bisa bernilai jutaan rupiah. Sampai semua itu ditutup, ia tidak
+  // boleh dijangkau pengguna berbayar.
+  //
+  // Dinyalakan lewat ENTERPRISE_MATRIX_ENABLED=true, bukan dengan menghapus
+  // baris ini — supaya menyalakannya adalah keputusan yang tercatat.
+  enterpriseMatrixEnabled: env("ENTERPRISE_MATRIX_ENABLED", "false") === "true",
   operationalAlertToEmail: env("OPERATIONAL_ALERT_TO_EMAIL", ""),
   operationalMonitoringIntervalMin: parseInt(env("OPERATIONAL_MONITORING_INTERVAL_MIN", "5"), 10),
   operationalAlertCooldownMin: parseInt(env("OPERATIONAL_ALERT_COOLDOWN_MIN", "60"), 10),

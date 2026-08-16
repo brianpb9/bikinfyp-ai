@@ -98,3 +98,19 @@ test("pemeriksa CTA menerima 'keranjang' polos, bukan hanya 'keranjang kuning'",
   assert.match(s, /ctaText\.includes\("keranjang"\)/, "pemeriksaan harus generik");
   assert.ok(!/includes\("keranjang kuning"\)/.test(s), "jangan kembali ke pemeriksaan literal");
 });
+
+// Audit putaran KETIGA (17 Agu 2026) menemukan cacat di dalam perbaikan
+// putaran kedua. Penjaga di bawah menahan tiap satunya.
+test("tab gender melepas wajah, bukan cuma menukar suara", () => {
+  const s = baca("app/bikin/gaya/page.tsx");
+  assert.match(s, /if \(avatarId && getAvatarPreset\(avatarId\)\?\.gender !== avatarGender\)/,
+    "berganti gender harus ikut melepas avatar yang tidak lagi cocok");
+  assert.match(s, /setAvatarId\(""\)/, "avatar yang tidak cocok harus dikosongkan");
+});
+
+test("onboarding publik tidak menjanjikan checkout saat status belum diketahui", () => {
+  const s = baca("app/onboarding/page.tsx");
+  assert.ok(!/paymentsLive !== false/.test(s),
+    "tiga keadaan, bukan dua — null berarti belum tahu, bukan berarti aktif");
+  assert.match(s, /paymentsLive === true/, "klaim checkout hanya saat server bilang aktif");
+});

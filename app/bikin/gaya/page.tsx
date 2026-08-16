@@ -149,6 +149,20 @@ export default function GayaPage() {
     if (catsForGender.length && !catsForGender.some((c) => c.id === creatorCategory)) {
       setCreatorCategory(catsForGender[0].id);
     }
+    // WAJAH IKUT DILEPAS SAAT GENDER BERGANTI.
+    //
+    // Tanpa baris ini, memilih Arka lalu menggeser tab ke "Perempuan" hanya
+    // mengganti SUARANYA: avatarId masih Arka, jadi deskripsi wajah laki-laki
+    // dikirim bersama suara perempuan. Persis cacat yang sudah ditutup di
+    // jalur klik langsung (16 Agu), cuma lewat pintu lain — dan pintu itu
+    // masih terbuka sampai audit putaran ketiga menemukannya.
+    //
+    // Dikosongkan, bukan ditebak gantinya: pengguna yang berpindah gender
+    // memang harus memilih orangnya lagi, dan pilihan kosong jauh lebih jujur
+    // daripada wajah yang tidak pernah mereka pilih.
+    if (avatarId && getAvatarPreset(avatarId)?.gender !== avatarGender) {
+      setAvatarId("");
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarGender]);
 

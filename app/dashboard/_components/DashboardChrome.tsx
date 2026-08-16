@@ -20,10 +20,7 @@ import { SidebarLogout } from "./ProfileActions";
 const NAV = [
   { href: "/dashboard", label: "Beranda", icon: Home, disabled: false },
   { href: "/dashboard/campaign", label: "Bikin Video", icon: Zap, disabled: false },
-  // Matriks berdiri sendiri, bukan langkah di dalam wizard: wizard menjawab
-  // "bikin satu video", matriks menjawab "bandingkan banyak kombinasi". Dua
-  // pekerjaan berbeda dengan risiko biaya yang jauh berbeda.
-  { href: "/dashboard/matrix", label: "Matriks", icon: Grid3x3, disabled: false },
+
   { href: "/dashboard/templates", label: "Templates", icon: LayoutTemplate, disabled: false },
   { href: "/dashboard/projects", label: "Proyek", icon: FolderKanban, disabled: false },
   { href: "/dashboard/library", label: "Library", icon: Library, disabled: false },
@@ -37,6 +34,9 @@ const NAV = [
 // daftar navigasi terasa dua kali lebih panjang tanpa alasan.
 const FOOTER_NAV = { href: "/dashboard/support", label: "Bantuan", icon: CircleHelp } as const;
 
+// Matriks TIDAK ada di NAV tetap. Ia ditambahkan saat runtime hanya kalau
+// fiturnya menyala (lihat matrixEnabled di bawah) — board menahannya sampai
+// approval naskah, konfirmasi belanja, dan idempotensi selesai.
 export function DashboardChrome({
   orgName,
   balanceIdr,

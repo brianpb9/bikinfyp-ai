@@ -52,8 +52,17 @@ const MAKS_SEL = 24;
 const MAKS_AVATAR = 12;
 const MAKS_SKENARIO = 6;
 
+/** Gerbang fitur. Dipasang di KEDUA handler — UI yang disembunyikan bukan
+ *  penjagaan, dan yang dijaga di sini adalah tombol bernilai jutaan rupiah. */
+function pastikanMatriksAktif() {
+  if (!config.enterpriseMatrixEnabled) {
+    throw ERR.NOT_FOUND("Fiturnya");
+  }
+}
+
 export async function POST(req: Request) {
   try {
+    pastikanMatriksAktif();
     if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard matrix requires Postgres runtime.");
     const { user, membership } = await requireOrgContextApi(req);
     await assertDashboardRate("confirm", membership.org_id);
@@ -233,6 +242,7 @@ export async function POST(req: Request) {
 /** GET /api/dashboard/matrix — katalog sumbu untuk UI, tanpa side effect. */
 export async function GET(req: Request) {
   try {
+    pastikanMatriksAktif();
     const { membership } = await requireOrgContextApi(req);
     // Produk milik ORG, bukan milik user yang kebetulan login: matriks dijalankan
     // atas nama organisasi dan dibayar dari dompet organisasi, jadi daftarnya

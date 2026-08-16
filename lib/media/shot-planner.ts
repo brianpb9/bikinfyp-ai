@@ -265,25 +265,57 @@ const IDENTITY_INSTRUCTION =
  * "cair" diperiksa LEBIH DULU: "sabun cair" memuat kata "sabun" dan akan salah
  * tertangkap sebagai padat kalau urutannya dibalik.
  */
-export type BentukProduk = "padat" | "tuang" | "tidak diketahui";
+export type BentukProduk =
+  | "sabun_batang"   // sabun/shampoo batang — dibasahi lalu digosok sampai berbusa
+  | "oles_padat"     // stick, balm, deodoran, serum stick — dioleskan, TIDAK berbusa
+  | "bubuk_padat"    // compact, bedak, blush, eyeshadow — ditekan/disapu, TIDAK basah
+  | "lipstik"        // lipstik/lip crayon — diputar keluar lalu di-swatch
+  | "tuang"          // cairan/krim — dituang atau dipompa
+  | "tidak diketahui";
 
 // Kata BENTUK menang atas kata ZAT, dan itu bukan detail urutan.
 //
 // Versi pertama memeriksa kata zat lebih dulu, jadi "Shampoo Bar", "Lotion
 // Bar", "Serum Stick", dan "Cream Stick" semuanya pulang sebagai "tuang" —
-// padahal keempatnya benda padat. Bug JJ Glow tertutup, sistemnya tidak.
+// padahal keempatnya benda padat. Sebabnya: "shampoo" menyebut ISI-nya, "bar"
+// menyebut BENTUKNYA. Yang menentukan apa yang bisa dilakukan tangan adalah
+// bentuknya.
 //
-// Sebabnya: "shampoo" menyebut ISI-nya, "bar" menyebut BENTUKNYA. Yang
-// menentukan apa yang bisa dilakukan tangan adalah bentuknya.
-const KATA_BENTUK_PADAT = /\b(batang|bar|barsoap|padat|solid|stick|compact|lipstik|lipstick)\b/i;
-const KATA_BENTUK_CAIR = /\b(cair|liquid)\b/i;
+// TAPI PERBAIKAN ITU BELUM SELESAI, dan audit putaran ketiga benar soal ini:
+// menggabungkan semua benda padat jadi satu label "padat" membuat Serum Stick,
+// lipstik, dan compact powder SEMUANYA mendapat aksi sabun — "dibasahi lalu
+// digosok sampai berbusa". Labelnya benar, promptnya tetap salah. Yang
+// dibutuhkan bukan tahu benda itu padat, melainkan tahu APA YANG DILAKUKAN
+// TANGAN terhadapnya. Karena itu bentuknya sekarang spesifik.
+const KATA_CAIR_TEGAS = /\b(cair|liquid)\b/i;
+const KATA_SABUN_BATANG = /\b(sabun|soap|barsoap|shampoo bar|shampo batang)\b[^.]{0,24}\b(batang|bar|padat|solid)\b|\b(barsoap|bar soap)\b|\b(batang|bar)\b[^.]{0,16}\b(sabun|soap)\b/i;
+const KATA_LIPSTIK = /\b(lipstik|lipstick|lip crayon|lip stick)\b/i;
+const KATA_BUBUK_PADAT = /\b(compact|bedak padat|pressed powder|blush on|blush|eyeshadow|eye shadow|cushion|highlighter)\b/i;
+const KATA_OLES_PADAT = /\b(stick|balm|deodoran|deodorant|roll on|roll-on|batangan)\b/i;
+/** Kata bentuk padat umum — dipakai kalau tidak ada petunjuk yang lebih spesifik. */
+const KATA_PADAT_UMUM = /\b(batang|bar|padat|solid)\b/i;
 /** Zat yang LAZIMNYA cair — dipakai hanya kalau tidak ada kata bentuk. */
 const KATA_ZAT_CAIR = /\b(serum|toner|essence|lotion|losion|gel|minyak|oil|ampoule|mist|spray|shampoo|sampo|conditioner|krim|cream)\b/i;
 
 export function bentukProduk(nama: string, deskripsi?: string | null): BentukProduk {
   const teks = `${nama} ${deskripsi ?? ""}`;
-  if (KATA_BENTUK_PADAT.test(teks)) return "padat";
-  if (KATA_BENTUK_CAIR.test(teks)) return "tuang";
+
+  // "cair"/"liquid" MENANG ATAS SEGALANYA, termasuk atas kata benda bentuk.
+  //
+  // "Liquid Lipstick" sempat pulang sebagai padat karena "lipstick" diperiksa
+  // lebih dulu — lalu di-demo seperti lipstik putar, padahal ia dioles pakai
+  // aplikator. Kalau penjual menulis "liquid" secara eksplisit, itu koreksi
+  // sadar terhadap bentuk yang biasanya diasumsikan orang, dan koreksi sadar
+  // selalu menang atas tebakan kita.
+  if (KATA_CAIR_TEGAS.test(teks)) return "tuang";
+
+  if (KATA_SABUN_BATANG.test(teks)) return "sabun_batang";
+  if (KATA_LIPSTIK.test(teks)) return "lipstik";
+  if (KATA_BUBUK_PADAT.test(teks)) return "bubuk_padat";
+  if (KATA_OLES_PADAT.test(teks)) return "oles_padat";
+  // Padat tapi tidak jelas jenisnya. "Shampoo Bar" mendarat di sini kalau pola
+  // sabun di atas tidak kena — dan itu benar: ia memang dibasahi dan berbusa.
+  if (KATA_PADAT_UMUM.test(teks)) return KATA_ZAT_CAIR.test(teks) ? "sabun_batang" : "oles_padat";
   if (KATA_ZAT_CAIR.test(teks)) return "tuang";
   return "tidak diketahui";
 }
@@ -296,16 +328,23 @@ export function bentukProduk(nama: string, deskripsi?: string | null): BentukPro
  *  food, gadget) aksinya tidak bergantung bentuk, jadi tetap dipakai. */
 const KATEGORI_ANDAIKAN_TUANG = new Set(["beauty", "body_care"]);
 
-/** Aksi untuk produk PADAT — tidak dituang, tidak dipompa. */
-const AKSI_PADAT: Record<string, string> = {
-  beauty: "wetting the solid bar under running water and rubbing it between both palms until a rich lather builds, showing the foam on her hands",
-  body_care: "wetting the solid bar under running water and rubbing it between both palms until a rich lather builds, showing the foam on her hands",
+/** Aksi per BENTUK, bukan per kategori.
+ *
+ *  Inilah inti perbaikannya: yang menentukan gerakan tangan adalah bentuk
+ *  bendanya, bukan rak tempat ia dijual. Sabun berbusa, stick dioles, bedak
+ *  ditekan, lipstik diputar — menyamakan keempatnya menghasilkan video yang
+ *  memperagakan produk yang salah dengan sangat meyakinkan. */
+const AKSI_PER_BENTUK: Record<Exclude<BentukProduk, "tuang" | "tidak diketahui">, string> = {
+  sabun_batang:
+    "wetting the solid bar under running water and rubbing it between both palms until a rich lather builds, showing the foam on her hands",
+  oles_padat:
+    "uncapping the solid stick, twisting its base so a little product rises, then gliding it in one smooth stroke along the BACK of her other hand and showing the satin trace it leaves, both hands clearly accounted for",
+  bubuk_padat:
+    "opening the compact, pressing a sponge lightly onto the powder so the pan surface shows, then tapping it onto the BACK of her other hand to reveal the colour, keeping the pan facing camera, both hands clearly accounted for",
+  lipstik:
+    "twisting the lipstick bullet up so its shaped tip is clearly visible to camera, then drawing one clean swatch stripe on the BACK of her other hand to show the true colour, both hands clearly accounted for",
 };
 
-/** Aksi netral saat bentuknya TIDAK DIKETAHUI.
- *
- *  Sengaja tidak menebak: menyuruh menuang produk yang mungkin padat sama
- *  buruknya dengan sebaliknya. Yang aman adalah aksi yang benar untuk keduanya. */
 const AKSI_NETRAL = "holding the product close to the camera and turning it slowly so its surface and texture read clearly, both hands visible";
 
 const DEMO_ACTION: Record<string, string> = {
@@ -889,8 +928,12 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // beauty, tapi "menuangkan sedikit produk" tidak pernah bisa benar.
     const bentuk = bentukProduk(input.productName, input.productVisualDesc);
     const demoAction =
-      bentuk === "padat"
-        ? (AKSI_PADAT[input.productCategory] ?? AKSI_NETRAL)
+      // Bentuk spesifik punya aksinya sendiri, dan aksi itu MENGALAHKAN aksi
+      // kategori. Sabun berbusa, stick dioles, bedak ditekan, lipstik diputar
+      // — dulu keempatnya memakai satu aksi sabun karena semuanya cuma diberi
+      // label "padat".
+      bentuk !== "tuang" && bentuk !== "tidak diketahui"
+        ? AKSI_PER_BENTUK[bentuk]
         // Bentuk tidak diketahui + kategori yang mengandaikan bisa dituang =
         // aksi netral. Menebak "tuangkan sedikit" pada barang yang ternyata
         // padat menghasilkan cacat yang sedang diperbaiki; aksi netral benar
