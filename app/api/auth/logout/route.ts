@@ -1,4 +1,5 @@
 import { cookieName } from "@/lib/auth";
+import { cookieHapus } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -13,7 +14,7 @@ export async function POST() {
     status: 200,
     headers: {
       "content-type": "application/json",
-      "set-cookie": `${cookieName()}=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0`,
+      "set-cookie": cookieHapus(cookieName()),
     },
   });
 }

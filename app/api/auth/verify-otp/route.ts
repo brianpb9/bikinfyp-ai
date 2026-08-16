@@ -3,6 +3,7 @@ import { verifyOtp } from "@/lib/otp";
 import { findOrCreateUserByEmail, issueToken, cookieName, SESSION_MAX_AGE_SEC } from "@/lib/auth";
 import { audit } from "@/lib/db";
 import { pgAudit, pgVerifyOtp, postgresRuntimeEnabled, smokeFindOrCreateUser } from "@/lib/postgres/smoke-runtime";
+import { cookieSesi } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -55,7 +56,7 @@ export async function POST(req: Request) {
         status: 200,
         headers: {
           "content-type": "application/json",
-          "set-cookie": `${cookieName()}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE_SEC}`,
+          "set-cookie": cookieSesi(cookieName(), token, SESSION_MAX_AGE_SEC),
         },
       }
     );

@@ -41,7 +41,13 @@ test("setiap penerbit cookie sesi memakai SESSION_MAX_AGE_SEC, bukan angka sendi
   ];
   for (const f of penerbit) {
     const isi = fs.readFileSync(f, "utf8");
-    assert.match(isi, /Max-Age=\$\{SESSION_MAX_AGE_SEC\}/, `${f} tidak memakai konstanta bersama`);
+    // Bentuknya berubah saat string cookie disatukan ke lib/cookies.ts: dulu
+    // "Max-Age=${SESSION_MAX_AGE_SEC}" di dalam template, sekarang konstanta
+    // yang sama dioper sebagai argumen. Yang dijaga tetap sama — dan sekarang
+    // lebih kuat, karena penerbitnya juga wajib lewat helper bersama yang
+    // memasang Secure/HttpOnly/SameSite.
+    assert.match(isi, /cookieSesi\(cookieName\(\), token, SESSION_MAX_AGE_SEC\)/,
+      `${f} tidak memakai helper + konstanta bersama`);
   }
 });
 

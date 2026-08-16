@@ -25,6 +25,43 @@ const securityHeaders = [
   // Tidak ada fitur perangkat yang kita pakai. Menutupnya berarti skrip pihak
   // ketiga yang lolos pun tidak bisa menyalakan kamera atau mikrofon.
   { key: "Permissions-Policy", value: "camera=(), microphone=(), geolocation=(), interest-cohort=()" },
+  // Content-Security-Policy.
+  //
+  // Aplikasi ini SELF-CONTAINED: next/font/google mengunduh fontnya saat build
+  // lalu menyajikannya dari domain sendiri, tidak ada images.remotePatterns,
+  // dan tidak ada skrip pihak ketiga di layout. Karena itu 'self' bisa jadi
+  // bawaan yang ketat tanpa merusak apa pun.
+  //
+  // BATASNYA HARUS DIKATAKAN APA ADANYA: script-src memakai 'unsafe-inline'
+  // karena Next menyuntikkan skrip bootstrap inline dan repo ini belum punya
+  // infrastruktur nonce per-permintaan. Jadi CSP ini TIDAK menghentikan XSS
+  // yang berhasil menyuntik skrip inline. Yang ia hentikan tetap banyak dan
+  // nyata: memuat skrip dari domain luar, menyematkan objek/plugin, membajak
+  // <base>, dan yang paling penting untuk aplikasi berisi saldo dan token —
+  // form-action 'self' membuat data tidak bisa dikirim ke server penyerang,
+  // dan connect-src 'self' menutup eksfiltrasi lewat fetch.
+  //
+  // Naik ke nonce adalah pekerjaan tersendiri; menuliskannya di sini supaya
+  // tidak ada yang mengira CSP ini sudah menutup XSS.
+  {
+    key: "Content-Security-Policy",
+    value: [
+      "default-src 'self'",
+      "script-src 'self' 'unsafe-inline'",
+      "style-src 'self' 'unsafe-inline'",
+      "img-src 'self' data: blob:",
+      "media-src 'self' blob:",
+      "font-src 'self'",
+      "connect-src 'self'",
+      "worker-src 'self' blob:",
+      "manifest-src 'self'",
+      "object-src 'none'",
+      "base-uri 'self'",
+      "form-action 'self'",
+      "frame-ancestors 'none'",
+      "upgrade-insecure-requests",
+    ].join("; "),
+  },
 ];
 
 const nextConfig: NextConfig = {

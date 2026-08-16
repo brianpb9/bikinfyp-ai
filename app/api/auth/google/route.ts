@@ -2,6 +2,7 @@ import crypto from "node:crypto";
 import { config } from "@/lib/config";
 import { ERR, errorResponse } from "@/lib/errors";
 import { GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
+import { cookieState } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -31,7 +32,7 @@ export async function GET() {
         // 10 min TTL — just long enough for the user to complete the Google
         // consent screen. SameSite=Lax so it still rides along on the
         // top-level redirect back from accounts.google.com.
-        "set-cookie": `${GOOGLE_OAUTH_STATE_COOKIE}=${state}; Path=/; HttpOnly; SameSite=Lax; Max-Age=600`,
+        "set-cookie": cookieState(GOOGLE_OAUTH_STATE_COOKIE, state, 600),
       },
     });
   } catch (err) {

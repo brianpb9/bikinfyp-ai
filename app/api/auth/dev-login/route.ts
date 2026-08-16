@@ -2,6 +2,7 @@ import { findOrCreateUserByPhone, issueToken, cookieName, SESSION_MAX_AGE_SEC } 
 import { ERR, errorResponse } from "@/lib/errors";
 import { assertDevRoute } from "@/lib/dev-gate";
 import { postgresRuntimeEnabled, smokeFindOrCreateUser } from "@/lib/postgres/smoke-runtime";
+import { cookieSesi } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,7 +26,7 @@ export async function POST(req: Request) {
       status: 200,
       headers: {
         "content-type": "application/json",
-        "set-cookie": `${cookieName()}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE_SEC}`,
+        "set-cookie": cookieSesi(cookieName(), token, SESSION_MAX_AGE_SEC),
       },
     });
   } catch (err) {

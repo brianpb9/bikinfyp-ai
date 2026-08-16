@@ -3,6 +3,7 @@ import { findOrCreateUserByEmail, issueToken, cookieName, SESSION_MAX_AGE_SEC } 
 import { audit } from "@/lib/db";
 import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
+import { cookieSesi, cookieHapus } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -20,7 +21,7 @@ function loginFailedRedirect(reason: string): Response {
   url.searchParams.set("google_error", reason);
   return new Response(null, {
     status: 302,
-    headers: { location: url.toString(), "set-cookie": `${GOOGLE_OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; Max-Age=0` },
+    headers: { location: url.toString(), "set-cookie": cookieHapus(GOOGLE_OAUTH_STATE_COOKIE) },
   });
 }
 
@@ -88,8 +89,8 @@ export async function GET(req: Request) {
     // browsers won't parse it as two cookies. Headers.append is the correct
     // way to emit multiple Set-Cookie lines on one Response.
     const headers = new Headers({ location: home.toString() });
-    headers.append("set-cookie", `${cookieName()}=${encodeURIComponent(token)}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${SESSION_MAX_AGE_SEC}`);
-    headers.append("set-cookie", `${GOOGLE_OAUTH_STATE_COOKIE}=; Path=/; HttpOnly; Max-Age=0`);
+    headers.append("set-cookie", cookieSesi(cookieName(), token, SESSION_MAX_AGE_SEC));
+    headers.append("set-cookie", cookieHapus(GOOGLE_OAUTH_STATE_COOKIE));
     return new Response(null, { status: 302, headers });
   } catch {
     return loginFailedRedirect("unexpected_error");

@@ -3,6 +3,7 @@ import { getDb, now, uuid } from "@/lib/db";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { allowRate } from "@/lib/rate-limit";
 import crypto from "node:crypto";
+import { cookieAnon } from "@/lib/cookies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,7 +46,7 @@ export async function POST(req: Request) {
     const headers = new Headers();
     if (!anonId && !user) {
       anonId = crypto.randomBytes(12).toString("hex");
-      headers.set("Set-Cookie", `racun_anon=${anonId}; Path=/; Max-Age=31536000; SameSite=Lax`);
+      headers.set("Set-Cookie", cookieAnon("racun_anon", anonId, 31536000));
     }
 
     // Event drop diam-diam bila runtime pg belum termigrasi — telemetry tidak
