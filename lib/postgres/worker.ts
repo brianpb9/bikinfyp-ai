@@ -509,5 +509,12 @@ async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: 
 /** The Redis worker owns timeout recovery while PostgreSQL is the runtime. */
 export async function sweepPostgresStaleJobs(): Promise<number> {
   const jobs = new PgJobsRepository(assertUrl(), { stateTimeoutsMin: config.stateTimeoutsMin });
-  try { return await jobs.sweepStaleJobs(); } finally { await jobs.close(); }
+  try {
+    // Penyapuan yang sama juga menutup celah arah sebaliknya: job yang SUKSES
+    // tapi hold-nya tidak pernah ter-capture karena proses mati di antara
+    // transisi READY dan captureCredits.
+    const dirapikan = await jobs.reconcileReadyHolds();
+    if (dirapikan) console.warn(`[sweep] ${dirapikan} job READY di-capture susulan (hold menggantung)`);
+    return await jobs.sweepStaleJobs();
+  } finally { await jobs.close(); }
 }

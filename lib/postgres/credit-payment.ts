@@ -84,10 +84,33 @@ export class PgCreditPaymentRepository {
     });
   }
 
+  /**
+   * Video yang SUDAH sampai ke pengguna tidak boleh direfund.
+   *
+   * Ledger saja tidak cukup untuk menjaga itu. Urutan di worker adalah
+   * markReady lalu captureCredits, dan di antara keduanya job sudah READY
+   * tapi ledger-nya masih cuma punya 'hold'. Kalau proses mati di celah itu —
+   * atau kalau captureCredits sendiri yang gagal — penangkap galat di atasnya
+   * memanggil releaseCredits, ledger tidak melihat catatan terminal apa pun,
+   * dan videonya diberikan GRATIS. Jalur paling mungkin justru yang paling
+   * berbahaya: blok catch di lib/promo/worker.ts membungkus captureCredits.
+   *
+   * Karena itu keadaan job diperiksa DI DALAM transaksi yang sama. Job yang
+   * tidak ada barisnya (mis. skrip paritas) tetap boleh dilepas — yang
+   * ditolak hanya job yang terbukti sudah READY.
+   */
+  private async sudahDiserahkan(client: PoolClient, jobId: string): Promise<boolean> {
+    const q = await client.query<{ state: string }>(
+      "SELECT state FROM jobs WHERE id=$1 UNION ALL SELECT state FROM promo_jobs WHERE id=$1", [jobId]
+    );
+    return q.rows.some((r) => r.state === "READY");
+  }
+
   async releaseCredits(owner: string | CreditOwner, jobId: string): Promise<number> {
     const { userId, orgId } = resolveOwner(owner);
     return this.transaction(async (client) => {
       await this.lockWallet(client, userId, orgId);
+      if (await this.sudahDiserahkan(client, jobId)) return 0;
       const terminal = await client.query("SELECT id FROM credit_ledger WHERE job_id = $1 AND type IN ('capture','release')", [jobId]);
       if (terminal.rowCount) return 0;
       const held = await client.query<{ held: string }>("SELECT COALESCE(-SUM(delta), 0) AS held FROM credit_ledger WHERE job_id = $1 AND type = 'hold'", [jobId]);

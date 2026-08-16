@@ -88,6 +88,49 @@ export class PgJobsRepository {
     return swept;
   }
 
+  /**
+   * Job READY yang hold-nya tidak pernah ter-capture.
+   *
+   * captureCredits berjalan SETELAH transisi READY, di koneksi terpisah. Kalau
+   * proses mati (atau koneksi kredit gagal) di antara keduanya, videonya sudah
+   * diserahkan tapi ledger berhenti di 'hold'. Saldo pengguna memang sudah
+   * terpotong sejak hold, jadi tidak ada yang dirugikan uangnya — yang rusak
+   * pembukuannya: pendapatan yang benar-benar terjadi tidak pernah tercatat
+   * final, dan setiap laporan yang menghitung 'capture' akan kurang hitung.
+   *
+   * Penyapu menutupnya secara berkala. Aman diulang: setiap capture ditulis
+   * lewat INSERT ... SELECT dengan syarat NOT EXISTS di query yang sama, jadi
+   * dua penyapu bersamaan tidak bisa menulis dua capture untuk satu job.
+   *
+   * Id dibuat di Node (this.uuid), bukan gen_random_uuid() di SQL — sisa
+   * berkas ini memakai pola yang sama dan tidak ada satu pun ekstensi
+   * PostgreSQL yang diasumsikan terpasang.
+   */
+  async reconcileReadyHolds(): Promise<number> {
+    const menggantung = await this.pool.query<{ id: string }>(
+      `SELECT j.id FROM jobs j
+       WHERE j.state = 'READY'
+         AND EXISTS (SELECT 1 FROM credit_ledger h WHERE h.job_id = j.id AND h.type = 'hold')
+         AND NOT EXISTS (SELECT 1 FROM credit_ledger t WHERE t.job_id = j.id AND t.type IN ('capture','release'))`
+    );
+    let ditutup = 0;
+    for (const { id } of menggantung.rows) {
+      const ditulis = await this.pool.query(
+        `INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,payment_id,created_at)
+         SELECT $1, j.user_id, j.org_id, 0, 'capture', j.id, NULL, $2 FROM jobs j
+         WHERE j.id = $3 AND j.state = 'READY'
+           AND NOT EXISTS (SELECT 1 FROM credit_ledger t WHERE t.job_id = j.id AND t.type IN ('capture','release'))`,
+        [this.uuid(), this.now(), id]
+      );
+      if (ditulis.rowCount) {
+        ditutup++;
+        await this.pool.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)",
+          [this.uuid(), "sweep", "credit.capture", "jobs", id, JSON.stringify({ alasan: "hold menggantung pada job READY" }), this.now()]);
+      }
+    }
+    return ditutup;
+  }
+
   async upsertOutput(input: { jobId: string; userId: string; videoUrl: string; caption: string; hashtags: string; suggestedPostTime: string; complianceChecklist: string }) {
     return this.transaction(async (client) => {
       const owned = await client.query("SELECT id FROM jobs WHERE id=$1 AND user_id=$2 FOR UPDATE", [input.jobId, input.userId]);

@@ -81,9 +81,20 @@ export function captureCredits(owner: string | CreditOwner, jobId: string): void
   audit(resolveOwner(owner).userId, "credit.capture", "jobs", jobId, {});
 }
 
-/** Release/refund saat job gagal: kembalikan seluruh hold yang belum di-capture. Idempoten. */
+/**
+ * Release/refund saat job gagal: kembalikan seluruh hold yang belum di-capture.
+ * Idempoten, dan MENOLAK job yang sudah READY.
+ *
+ * Penolakan itu bukan kehati-hatian berlebihan. Worker menandai job READY dulu,
+ * baru capture; di celah antara keduanya ledger cuma punya 'hold', sehingga
+ * pemanggil release mana pun akan melihat "belum terminal" dan merefund video
+ * yang sudah diserahkan. Padanan PostgreSQL-nya ada di
+ * PgCreditPaymentRepository.sudahDiserahkan.
+ */
 export function releaseCredits(owner: string | CreditOwner, jobId: string): number {
   const db = getDb();
+  const diserahkan = db.prepare("SELECT state FROM jobs WHERE id = ?").get(jobId) as { state?: string } | undefined;
+  if (diserahkan?.state === "READY") return 0;
   const already = db
     .prepare("SELECT id FROM credit_ledger WHERE job_id = ? AND type IN ('capture','release')")
     .get(jobId);
