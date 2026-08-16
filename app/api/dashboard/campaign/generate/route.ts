@@ -7,6 +7,7 @@ import { cleanProductName } from "@/lib/extract";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
+import { tierMasihDijual } from "@/lib/paket-kredit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -57,10 +58,12 @@ export async function POST(req: Request) {
       );
     }
     // Tiga tier, sesuai kontrol Quality di wizard (Standard / Quality / High
-    // Quality). silent_caption sebelumnya ditolak di sini padahal ia tier
-    // produksi yang dipakai retail — itu yang membuat dashboard cuma punya
-    // dua pilihan padahal mesinnya punya tiga.
-    const TIERS = ["silent_caption", "high_quality", "super_hq"];
+    // Quality). Daftar pensiunnya dari lib/paket-kredit — SATU sumber dengan
+    // halaman harga retail dan wizard Enterprise. Sebelumnya route ini menerima
+    // silent_caption dengan alasan "ia tier produksi yang dipakai retail", dan
+    // alasan itu sudah tidak benar sejak retail memensiunkannya: Enterprise
+    // menjual Standard Rp5.000 sementara retail menyatakannya tidak tersedia.
+    const TIERS = ["silent_caption", "high_quality", "super_hq"].filter(tierMasihDijual);
     const tier = TIERS.includes(String(body.tier)) ? (String(body.tier) as "silent_caption" | "high_quality" | "super_hq") : null;
     if (!tier) throw ERR.BAD_REQUEST("Kualitas tidak dikenal. Pilih Standard, Quality, atau High Quality.", "Unknown quality tier.");
     const durationSec = [15, 30, 45].includes(Number(body.duration_sec)) ? (Number(body.duration_sec) as 15 | 30 | 45) : null;

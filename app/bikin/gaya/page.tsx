@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail } from "../../_components/api";
 import { AVATAR_PRESETS, getAvatarPreset } from "../../../lib/avatar-presets";
@@ -127,6 +127,13 @@ export default function GayaPage() {
   // untuk beda itu — penjual perorangan justru yang paling butuh wajah
   // yang tidak pasaran.
   const [avatarId, setAvatarId] = useState<string>("");
+  // Kunci SINKRON, bukan setLoading. setLoading adalah state React yang
+  // diterapkan asinkron, jadi tiga ketukan cepat sempat lolos semuanya sebelum
+  // render pertama selesai — terukur audit QA 16 Agu 2026: triple-tap
+  // menghasilkan tiga permintaan dan sembilan skrip. Kredit memang ter-dedupe
+  // belakangan, tapi compute dan catatan audit tetap terbuang. useRef berubah
+  // seketika, jadi ketukan kedua sudah melihat kuncinya terpasang.
+  const kunciKirim = useRef(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [noCredits, setNoCredits] = useState(false);
@@ -158,6 +165,8 @@ export default function GayaPage() {
   async function generate() {
     const product = loadFlow().product;
     if (!product) return router.replace("/bikin/produk");
+    if (kunciKirim.current) return;
+    kunciKirim.current = true;
     setLoading(true);
     setError(null);
     setNoCredits(false);
@@ -185,6 +194,7 @@ export default function GayaPage() {
       }
       setError(err instanceof Error ? err.message : "Gagal bikin skrip. Coba lagi ya.");
     } finally {
+      kunciKirim.current = false;
       setLoading(false);
     }
   }
@@ -351,7 +361,12 @@ export default function GayaPage() {
                 type="button"
                 aria-pressed={avatarId === a.id}
                 aria-label={`Avatar ${a.name} — ${a.note}`}
-                onClick={() => { setAvatarId(a.id); setCreatorCategory(""); }}
+                // Voice preset IKUT dipasang, bukan kategorinya dikosongkan.
+                // Mengosongkannya membuat worker jatuh ke default "hijaber",
+                // jadi avatar laki-laki (Arka, Bima, Jason) tampil berwajah
+                // pria dengan suara perempuan hijaber — cacat yang saya buat
+                // sendiri waktu membuka avatar premium untuk retail.
+                onClick={() => { setAvatarId(a.id); setCreatorCategory(a.voice); }}
                 className={`w-32 shrink-0 snap-start overflow-hidden rounded-2xl border-2 text-left shadow-sm ${
                   avatarId === a.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
                 }`}

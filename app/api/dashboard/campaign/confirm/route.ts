@@ -163,7 +163,23 @@ export async function POST(req: Request) {
              VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,'QUEUED',$18,$18)`,
             [jobId, user.id, membership.org_id, runId, avatarCustomDesc, productId, personaId, scriptId, format, tier, durationS, shotCount, ratio, noModel, tvcRoute, templateId, recordStyle, now]
           );
-          await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId, scriptId]);
+          // KLAIM ATOMIK, bukan pemeriksaan tambahan.
+          //
+          // Penjagaan sebelumnya cuma membaca script.job_id di awal lalu
+          // menulisnya di sini — dua permintaan yang datang hampir bersamaan
+          // sama-sama membaca kosong, sama-sama membuat job, dan sama-sama
+          // menahan kredit. Pengguna dicharge dua kali untuk satu skrip
+          // (temuan audit QA 16 Agu 2026).
+          //
+          // "WHERE job_id IS NULL" membuat pemenangnya ditentukan database,
+          // bukan urutan kedatangan: yang kalah mendapat rowCount 0 dan
+          // transaksinya digulung balik sebelum kredit tersentuh.
+          const klaim = await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2 AND job_id IS NULL", [jobId, scriptId]);
+          if (klaim.rowCount !== 1) {
+            await client.query("ROLLBACK");
+            results.push({ status: "failed", script_id: scriptId, reason: "Skrip ini sudah dipakai permintaan lain." });
+            continue;
+          }
           await client.query(
             "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)",
             [crypto.randomUUID(), user.id, jobId, JSON.stringify({ script_id: scriptId, campaign_run_id: runId, org_id: membership.org_id, custom_avatar: Boolean(avatarCustomDesc) }), now]

@@ -26,10 +26,45 @@ test("API generate memakai daftar pensiun bersama, bukan string hardcode", () =>
 });
 
 // Tombol beli yang pasti gagal bukan CTA, itu jebakan.
-test("tombol top-up mati saat pembayaran belum aktif", () => {
+test("tombol top-up mati sampai server menyatakan pembayaran aktif", () => {
   const s = baca("app/kredit/page.tsx");
-  assert.match(s, /disabled=\{busy !== null \|\| paymentsLive === false\}/, "tombol beli harus ikut mati saat payments off");
+  // "!== true", bukan "=== false": paymentsLive punya tiga keadaan, dan null
+  // (selagi /api/meta belum menjawab) sempat membiarkan tombolnya hidup.
+  assert.match(s, /disabled=\{busy !== null \|\| paymentsLive !== true\}/, "default harus tertutup sampai server bilang boleh");
+  assert.ok(!/paymentsLive === false\}/.test(s), "jangan kembali memeriksa hanya keadaan false");
   assert.match(s, /pembayaran belum aktif/, "label tombol harus menjelaskan kenapa mati");
+});
+
+// Putaran kedua audit menemukan lima cacat DI DALAM perbaikan putaran pertama.
+// Penjaga di bawah menahan tiap satunya supaya tidak kembali.
+test("avatar premium mengikat wajah ke suaranya", () => {
+  const s = baca("app/bikin/gaya/page.tsx");
+  assert.match(s, /setCreatorCategory\(a\.voice\)/, "voice preset harus ikut dipasang");
+  assert.ok(!/setAvatarId\(a\.id\); setCreatorCategory\(""\)/.test(s),
+    "mengosongkan kategori membuat worker jatuh ke default hijaber — avatar pria jadi bersuara perempuan");
+});
+
+test("seluruh route dashboard memakai gerbang akses bersama", () => {
+  const dir = path.join(process.cwd(), "app", "api", "dashboard");
+  const bocor: string[] = [];
+  const telusuri = (d: string) => {
+    for (const nama of fs.readdirSync(d)) {
+      const f = path.join(d, nama);
+      if (fs.statSync(f).isDirectory()) telusuri(f);
+      else if (nama === "route.ts" && !/requireOrgContextApi/.test(fs.readFileSync(f, "utf8"))) {
+        bocor.push(path.relative(process.cwd(), f));
+      }
+    }
+  };
+  telusuri(dir);
+  assert.deepEqual(bocor, [], "route ini melewati gerbang organisasi — org tertangguh bisa membacanya");
+});
+
+test("Enterprise tidak menjual tier yang sudah pensiun", () => {
+  const wizard = baca("app/dashboard/(app)/campaign/page.tsx");
+  assert.match(wizard, /TIER_OPTIONS = SEMUA_TIER\.filter\(\(t\) => tierMasihDijual\(t\.id\)\)/, "wizard harus menyaring tier pensiun");
+  const gen = baca("app/api/dashboard/campaign/generate/route.ts");
+  assert.match(gen, /\.filter\(tierMasihDijual\)/, "route generate Enterprise harus menolak tier pensiun");
 });
 
 // Anggota organisasi yang ditangguhkan sempat tetap bisa masuk dashboard,

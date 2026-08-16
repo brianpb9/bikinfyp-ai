@@ -1,25 +1,27 @@
-import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
+import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
-import { getUserOrgs, getOrgBalance } from "@/lib/org";
-import { pgGetUserOrgs, pgGetOrgBalance } from "@/lib/postgres/org";
+import { getOrgBalance } from "@/lib/org";
+import { pgGetOrgBalance } from "@/lib/postgres/org";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // GET /api/dashboard/org — org + saldo user yang lagi login (dashboard
-// enterprise/brand, F-ENT-01). MVP: 1 org per user diasumsikan, ambil
-// membership pertama. role di org_members hanya label, TIDAK PERNAH dicek
-// buat otorisasi di sini — pengecekan akses sesungguhnya ada di
-// app/dashboard/(app)/layout.tsx (requireOrgContext), route ini cuma data
-// untuk client-side polling nanti (bulk-run status, M3/M4).
+// enterprise/brand, F-ENT-01).
+//
+// Route ini SEMPAT memakai memberships[0] sendiri dengan alasan "pengecekan
+// akses sesungguhnya ada di layout" — dan itu keliru: route API tidak dilindungi
+// oleh layout halaman. Akibatnya sesudah gerbang organisasi tertangguh dipasang
+// di dashboard-auth, satu-satunya route yang tidak memakainya tetap membocorkan
+// identitas organisasi, statusnya, role, dan SALDO ke anggota org yang sudah
+// ditangguhkan (temuan audit QA putaran kedua, 16 Agu 2026).
+//
+// Sekarang memakai gerbang yang sama dengan seluruh dashboard API. Satu pintu,
+// bukan satu pintu plus satu jendela.
 export async function GET(req: Request) {
   try {
-    const user = await getAuthUser(req);
-    if (!user) throw ERR.UNAUTHORIZED();
-
-    const memberships = postgresRuntimeEnabled() ? await pgGetUserOrgs(user.id) : getUserOrgs(user.id);
-    const membership = memberships[0];
+    const { membership } = await requireOrgContextApi(req);
     if (!membership) throw ERR.BAD_REQUEST("Akun ini belum jadi anggota organisasi manapun.", "User has no org membership.");
 
     const balance = postgresRuntimeEnabled()

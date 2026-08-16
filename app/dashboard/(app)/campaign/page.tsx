@@ -10,6 +10,7 @@ import { apiFetch, ApiFail } from "../../../_components/api";
 import { rupiah } from "../../_components/format";
 import { Stepper } from "../../_components/Stepper";
 import { AVATAR_PRESETS, getAvatarPreset, type AvatarGender } from "@/lib/avatar-presets";
+import { tierMasihDijual } from "@/lib/paket-kredit";
 import { getTemplate, type CampaignTemplate } from "@/lib/templates";
 import { stylesForFormat, GAYA_BAWAAN } from "@/lib/media/recording-styles";
 import { pickTemplate } from "@/lib/auto-pick";
@@ -43,14 +44,23 @@ const TIER_BASE_IDR: Record<Tier, number> = { silent_caption: 5_000, high_qualit
 // mematikan pemeriksaan identitas produk (isServiceLike di lib/config/hooks.ts)
 // — tanpa opsi ini di layar, iklan jasa tidak akan pernah bisa dipilih dan
 // seluruh jalurnya jadi kode mati.
-// Tiga tier yang MEMANG ada di mesin. Dashboard sebelumnya cuma menawarkan
-// dua — silent_caption ditolak di route generate padahal ia tier produksi
-// yang dipakai retail tiap hari.
-const TIER_OPTIONS = [
+// Tier yang MASIH DIJUAL, disaring dari daftar pensiun bersama.
+//
+// Dashboard sempat menawarkan silent_caption dengan alasan "ia tier produksi
+// yang dipakai retail tiap hari" — dan alasan itu sudah tidak benar sejak
+// retail memensiunkannya. Akibatnya Enterprise menjual Standard Rp5.000
+// sementara retail menyatakannya tidak tersedia: dua permukaan, dua kebenaran
+// (temuan audit QA putaran kedua, 16 Agu 2026).
+//
+// Disaring, bukan dihapus dari TIER_META/TIER_BASE_IDR — job lama yang sudah
+// terlanjur memakai tier ini tetap perlu label dan harganya untuk ditampilkan
+// di riwayat.
+const SEMUA_TIER = [
   { id: "silent_caption" as const, label: "Standard" },
   { id: "high_quality" as const, label: "Quality" },
   { id: "super_hq" as const, label: "High Quality" },
 ];
+const TIER_OPTIONS = SEMUA_TIER.filter((t) => tierMasihDijual(t.id));
 const TIER_META: Record<string, { resolution: string; note: string }> = {
   silent_caption: { resolution: "480p", note: "teks di layar, tanpa suara" },
   high_quality: { resolution: "720p", note: "suara AI" },

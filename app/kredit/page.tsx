@@ -177,10 +177,17 @@ function KreditInner() {
             key={p.id}
             type="button"
             onClick={() => topup(p.id)}
-            // Mati saat pembayaran belum aktif — tombol beli yang pasti gagal
-            // bukan "CTA", itu jebakan.
-            disabled={busy !== null || paymentsLive === false}
-            aria-disabled={busy !== null || paymentsLive === false}
+            // "!== true", BUKAN "=== false".
+            //
+            // paymentsLive punya TIGA keadaan: true, false, dan null selagi
+            // /api/meta belum menjawab. Pemeriksaan "=== false" membiarkan
+            // tombolnya hidup selama keadaan null — jendela kecil di awal muat
+            // halaman, tapi persis jendela yang ditekan orang tidak sabar
+            // (temuan audit QA putaran kedua, 16 Agu 2026).
+            //
+            // Default aman: tertutup sampai server BILANG boleh.
+            disabled={busy !== null || paymentsLive !== true}
+            aria-disabled={busy !== null || paymentsLive !== true}
             className={`relative w-full rounded-2xl border-2 border-zinc-200 bg-white p-3 text-left shadow-sm transition-transform active:scale-[0.99] active:bg-zinc-50 disabled:opacity-60`}
           >
             {p.tag && (
@@ -201,7 +208,7 @@ function KreditInner() {
                   <span className="shrink-0 font-bold">{rupiah(p.price)}</span>
                 </span>
                 <span className="mt-0.5 block text-xs font-semibold text-amber-700">{p.badge}</span>
-                <span className="block text-sm text-zinc-500">{p.perVideo} · {paymentsLive === false ? "pembayaran belum aktif" : busy === p.id ? "memproses..." : "tap untuk beli"}</span>
+                <span className="block text-sm text-zinc-500">{p.perVideo} · {paymentsLive === null ? "mengecek pembayaran..." : paymentsLive === false ? "pembayaran belum aktif" : busy === p.id ? "memproses..." : "tap untuk beli"}</span>
               </span>
             </span>
           </button>

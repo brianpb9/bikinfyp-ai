@@ -267,15 +267,34 @@ const IDENTITY_INSTRUCTION =
  */
 export type BentukProduk = "padat" | "tuang" | "tidak diketahui";
 
-const KATA_CAIR = /\b(cair|liquid|serum|toner|essence|lotion|losion|gel|minyak|oil|ampoule|mist|spray|shampoo|sampo|conditioner|krim|cream)\b/i;
-const KATA_PADAT = /\b(batang|bar|barsoap|padat|solid|stick|compact|lipstik|lipstick)\b/i;
+// Kata BENTUK menang atas kata ZAT, dan itu bukan detail urutan.
+//
+// Versi pertama memeriksa kata zat lebih dulu, jadi "Shampoo Bar", "Lotion
+// Bar", "Serum Stick", dan "Cream Stick" semuanya pulang sebagai "tuang" —
+// padahal keempatnya benda padat. Bug JJ Glow tertutup, sistemnya tidak.
+//
+// Sebabnya: "shampoo" menyebut ISI-nya, "bar" menyebut BENTUKNYA. Yang
+// menentukan apa yang bisa dilakukan tangan adalah bentuknya.
+const KATA_BENTUK_PADAT = /\b(batang|bar|barsoap|padat|solid|stick|compact|lipstik|lipstick)\b/i;
+const KATA_BENTUK_CAIR = /\b(cair|liquid)\b/i;
+/** Zat yang LAZIMNYA cair — dipakai hanya kalau tidak ada kata bentuk. */
+const KATA_ZAT_CAIR = /\b(serum|toner|essence|lotion|losion|gel|minyak|oil|ampoule|mist|spray|shampoo|sampo|conditioner|krim|cream)\b/i;
 
 export function bentukProduk(nama: string, deskripsi?: string | null): BentukProduk {
   const teks = `${nama} ${deskripsi ?? ""}`;
-  if (KATA_CAIR.test(teks)) return "tuang";
-  if (KATA_PADAT.test(teks)) return "padat";
+  if (KATA_BENTUK_PADAT.test(teks)) return "padat";
+  if (KATA_BENTUK_CAIR.test(teks)) return "tuang";
+  if (KATA_ZAT_CAIR.test(teks)) return "tuang";
   return "tidak diketahui";
 }
+
+/** Kategori yang aksi demonya MENGANDAIKAN produk bisa dituang/dipompa.
+ *
+ *  Untuk kategori ini, bentuk yang tidak diketahui TIDAK boleh jatuh ke aksi
+ *  kategori — menebak "tuangkan sedikit" pada barang yang ternyata padat
+ *  menghasilkan persis cacat yang sedang diperbaiki. Kategori lain (fashion,
+ *  food, gadget) aksinya tidak bergantung bentuk, jadi tetap dipakai. */
+const KATEGORI_ANDAIKAN_TUANG = new Set(["beauty", "body_care"]);
 
 /** Aksi untuk produk PADAT — tidak dituang, tidak dipompa. */
 const AKSI_PADAT: Record<string, string> = {
@@ -870,9 +889,13 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // beauty, tapi "menuangkan sedikit produk" tidak pernah bisa benar.
     const bentuk = bentukProduk(input.productName, input.productVisualDesc);
     const demoAction =
-      bentuk === "padat" && AKSI_PADAT[input.productCategory]
-        ? AKSI_PADAT[input.productCategory]
-        : bentuk === "padat"
+      bentuk === "padat"
+        ? (AKSI_PADAT[input.productCategory] ?? AKSI_NETRAL)
+        // Bentuk tidak diketahui + kategori yang mengandaikan bisa dituang =
+        // aksi netral. Menebak "tuangkan sedikit" pada barang yang ternyata
+        // padat menghasilkan cacat yang sedang diperbaiki; aksi netral benar
+        // untuk keduanya.
+        : bentuk === "tidak diketahui" && KATEGORI_ANDAIKAN_TUANG.has(input.productCategory)
           ? AKSI_NETRAL
           : (DEMO_ACTION[input.productCategory] ?? DEMO_ACTION.default);
     // TANGGA SHOT TENGAH.

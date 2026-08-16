@@ -23,7 +23,11 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: "device-width",
   initialScale: 1,
-  maximumScale: 1,
+  // maximumScale: 1 DIHAPUS. Ia memblokir pinch-zoom, jadi siapa pun yang perlu
+  // memperbesar teks — mata lelah, layar kecil, penglihatan terbatas — tidak
+  // bisa. Alasan aslinya biasanya mencegah iOS melompat-zoom saat fokus ke
+  // input, tapi itu diselesaikan dengan ukuran font input >=16px, bukan dengan
+  // mencabut zoom dari semua orang (temuan aksesibilitas audit QA 16 Agu 2026).
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
