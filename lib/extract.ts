@@ -339,16 +339,34 @@ const MARKETING_PREFIXES = /^(promo|sale|diskon|murah|terlaris|viral|ready|new|o
 /** Token spesifikasi/ukuran: "50ML", "100ml/50ml", "30gr", "20 ml", "2pcs". */
 const SPEC_TOKEN = /^(\d+(\.\d+)?\s*(ml|gr|gram|g|kg|l|liter|pcs|pack|sachet|cm|mm|inch)\b[\/\d\w]*|[\d/]+(ml|gr|g|kg|pcs)\b)$/i;
 
+/** Label promo dalam kurung: "[ SPECIAL MEGA LIVE ]", "(FLASH SALE)", "【BARU】".
+ *
+ *  Pola paling umum di judul marketplace, dan sebelumnya TIDAK dikenali sama
+ *  sekali. Akibatnya fatal karena pemotongan di bawah mengambil enam kata
+ *  PERTAMA: judul "[ SPECIAL MEGA LIVE ] JJ Glow Sabun Gluta Pink ..." pulang
+ *  sebagai "[ SPECIAL MEGA LIVE ]" — label promonya disimpan, nama produknya
+ *  dibuang. Terlihat 16 Agu 2026 ketika Brian tidak bisa membuat skrip untuk
+ *  produk nyata dan pesan errornya cuma menebak-nebak sebabnya.
+ *
+ *  Panjang isinya dibatasi supaya kurung yang membungkus SELURUH judul tidak
+ *  menghapus semuanya. */
+const BRACKET_TAG = /[[(（【][^\])）】]{0,40}[\])）】]/g;
+
 export function cleanProductName(raw: string, maxWords = 6): string {
   if (!raw) return raw;
   // 1. Ambil segmen pertama sebelum pemisah daftar-kata-kunci.
   let name = raw.split(/[|｜]/)[0];
-  // 2. Buang embel-embel promo di depan (bisa bertumpuk: "Promo Sale ...").
+  // 2. Buang label promo dalam kurung, di mana pun letaknya.
+  const tanpaKurung = name.replace(BRACKET_TAG, " ").replace(/\s{2,}/g, " ").trim();
+  // Kalau membuang kurung menyisakan terlalu sedikit, judulnya memang seluruhnya
+  // di dalam kurung — pertahankan bentuk asli daripada memulangkan sisa acak.
+  if (tanpaKurung.split(/\s+/).filter(Boolean).length >= 2) name = tanpaKurung;
+  // 3. Buang embel-embel promo di depan (bisa bertumpuk: "Promo Sale ...").
   let before = "";
   while (before !== name) { before = name; name = name.replace(MARKETING_PREFIXES, ""); }
-  // 3. Buang token spesifikasi/ukuran di mana pun.
+  // 4. Buang token spesifikasi/ukuran di mana pun.
   let words = name.split(/\s+/).filter((w) => w && !SPEC_TOKEN.test(w));
-  // 4. Masih panjang -> potong, TAPI buang penggal kata terakhir yang jelas
+  // 5. Masih panjang -> potong, TAPI buang penggal kata terakhir yang jelas
   //    terpotong ("Leb") supaya tidak jadi kata aneh di skrip.
   if (words.length > maxWords) words = words.slice(0, maxWords);
   const last = words[words.length - 1];

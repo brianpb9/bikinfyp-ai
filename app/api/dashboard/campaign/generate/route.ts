@@ -125,9 +125,18 @@ export async function POST(req: Request) {
       }
     }
     if (passing.length === 0) {
+      // Pesan lama cuma MENEBAK tiga sebab ("persingkat nama, pastikan harga,
+      // turunkan hook") padahal validator tahu persis aturan mana yang jatuh.
+      // Brian kena ini 16 Agu 2026 dan tidak punya cara tahu bahwa penyebabnya
+      // panjang naskah. Sekarang sebabnya yang nyata ikut disebut.
+      const jatuh = new Map<string, string>();
+      for (const v of variants) for (const e of v.validation.errors) if (!jatuh.has(e.rule)) jatuh.set(e.rule, e.message_id);
+      const alasan = [...jatuh.values()].slice(0, 2).join(" ");
       throw ERR.BAD_REQUEST(
-        "Skrip AI belum lolos validasi otomatis. Coba persingkat nama produk (maks ~6 kata), pastikan harganya benar, atau turunkan level hook.",
-        "No generated variant passed validation."
+        alasan
+          ? `Skrip AI belum lolos validasi otomatis. ${alasan}`
+          : "Skrip AI belum lolos validasi otomatis. Coba persingkat nama produk (maks ~6 kata), pastikan harganya benar, atau turunkan level hook.",
+        `No generated variant passed validation: ${[...jatuh.keys()].join(", ") || "unknown"}`
       );
     }
 
