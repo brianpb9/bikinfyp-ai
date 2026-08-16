@@ -12,6 +12,21 @@
 // nambah kategori baru yang tidak pernah kita emit) — tidak ada breaking
 // change untuk mapping yang sudah ada.
 //
+// KOREKSI (paket fyp-model-2.0, 16 Agu 2026): angka AUC 0.801 di atas TIDAK
+// SAH. Tim model menemukan kontaminasi di ckpt16 — 49 video yang gagal diunduh
+// tertandai sebagai kategori label dan bocor ke training, jadi sebagian
+// kenaikannya palsu. Checkpoint bersih berikutnya (ckpt18-n691) turun ke 77,5%
+// nested-CV, dan guard permanen sudah dipasang di pipeline mereka.
+//
+// Kita MASIH menjalankan ckpt16 karena paket portable itu hanya membawa
+// generation_targets_ckpt18-n691.json — resep generasi, bukan artefak skoring.
+// Bentuknya beda total (numeric/categorical vs weights/standardize/cat_vocab),
+// jadi tidak bisa ditukar di sini. Untuk naik ke ckpt18 kita perlu file
+// ckpt18-n691.json yang setara ckpt16-n565.json ini; belum ada di paket mana
+// pun yang kita terima.
+//
+// Jangan mengutip 0.801 sebagai mutu model, di dokumen mana pun.
+//
 // Skor 0-100 = mid-rank percentile probabilitas mentah terhadap reference_distribution
 // yang dibekukan di artifact. Skor hanya sebanding dalam satu model_version.
 // Bahasa wajib saat menampilkan skor: KORELASIONAL ("video seperti ini cenderung
