@@ -46,7 +46,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11", "QC-12"],
     skipReason: {
       "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
-      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang/tangan melanggar batas ATAU fisika produk mustahil (cairan keluar bukan dari lubangnya), dan itu MENOLAK output.",
       "QC-01": "N/A: hands_only tidak menampilkan pembicara. fail = presenter membeku padahal seharusnya bicara.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
@@ -62,7 +62,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11", "QC-12"],
     skipReason: {
       "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
-      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang/tangan melanggar batas ATAU fisika produk mustahil (cairan keluar bukan dari lubangnya), dan itu MENOLAK output.",
       "QC-01": "N/A bila suara dari VO terpisah (mulut sengaja tidak disinkronkan). fail = presenter lipsync membeku.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (tulisan di layar dihapus 2026-08-07).",
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
@@ -83,7 +83,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-06", "QC-10", "QC-11", "QC-12"],
     skipReason: {
       "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
-      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang/tangan melanggar batas ATAU fisika produk mustahil (cairan keluar bukan dari lubangnya), dan itu MENOLAK output.",
       "QC-01": "N/A bila suara dari VO terpisah (mulut sengaja tidak disinkronkan). fail = presenter lipsync membeku.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks (overlay brand ditambahkan di post, bukan di prompt).",
       "QC-10": "N/A hanya bila produk tanpa token teks merek (cek memutuskan sendiri); fail = label rusak.",
@@ -102,7 +102,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-03", "QC-06", "QC-09", "QC-10", "QC-11", "QC-12"],
     skipReason: {
       "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
-      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang/tangan melanggar batas ATAU fisika produk mustahil (cairan keluar bukan dari lubangnya), dan itu MENOLAK output.",
       "QC-01": "N/A bila suara dari VO terpisah. fail = presenter membeku padahal seharusnya bicara.",
       "QC-03": "N/A: iklan jasa/app/toko tidak punya produk fisik untuk dicocokkan.",
       "QC-06": "N/A: mode bersuara tanpa overlay teks.",
@@ -118,7 +118,7 @@ export const QC_POLICY_BY_FORMAT = {
     permittedSkip: ["QC-01", "QC-02", "QC-11", "QC-12"],
     skipReason: {
       "QC-12": "Boleh skip HANYA bila tak terperiksa (transkripsi mati / provider mock). fail = harga tidak terdengar atau VO terpotong, dan itu MENOLAK output.",
-      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang atau tangan melanggar batas, dan itu MENOLAK output.",
+      "QC-11": "Boleh skip HANYA bila tak terperiksa (model visi mati / provider mock). fail = jumlah orang/tangan melanggar batas ATAU fisika produk mustahil (cairan keluar bukan dari lubangnya), dan itu MENOLAK output.",
       "QC-01": "N/A: visual adalah foto produk, bukan presenter. fail = presenter membeku.",
       "QC-02": "N/A: video dari foto produk asli (pan/zoom), bukan tangan hasil AI-generated.",
     },

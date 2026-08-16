@@ -63,14 +63,35 @@ export const POSISI_SAMPEL = [0.08, 0.2, 0.32, 0.45, 0.58, 0.7, 0.82, 0.92];
  *  Lubangnya dua kali lebih lebar justru di video yang paling mahal dan paling
  *  panjang — kebalikan dari yang masuk akal.
  *
- *  2,5 detik dipilih karena cacat yang kita temui semuanya bertahan minimal
- *  satu shot penuh (shot terpendek kita 4 detik), jadi jarak ini menjamin
- *  setiap shot kena minimal satu sampel. */
-const JARAK_SAMPEL_DETIK = 2.5;
+ *  2,5 detik semula dipilih karena cacat yang kita temui semuanya bertahan
+ *  minimal satu shot penuh (shot terpendek kita 4 detik), jadi jarak itu
+ *  menjamin setiap shot kena minimal satu sampel.
+ *
+ *  DIRAPATKAN JADI 1,2 DETIK (16 Agu 2026). Alasannya bukan selera: cacat
+ *  FISIKA PRODUK adalah kelas yang berbeda. Orang duplikat dan tangan ketiga
+ *  bertahan sepanjang shot, tapi tetesan yang keluar dari tempat yang salah
+ *  cuma kejadian sekejap DI DALAM shot. Asumsi "satu sampel per shot sudah
+ *  cukup" tidak menjangkaunya.
+ *
+ *  Terukur pada jarak 2,5 detik — peluang sebuah cacat tertangkap:
+ *    cacat 0,5 dtk  ~20%
+ *    cacat 1,0 dtk  ~40%
+ *    cacat 2,0 dtk  ~85%
+ *  Artinya laporan "QC fisika menyala di 2 dari 27 video" hampir pasti
+ *  undercount; yang lain lolos bukan karena bersih, tapi karena tidak ada
+ *  sampel yang kebetulan mendarat di sana.
+ *
+ *  Pada 1,2 detik, cacat 1 detik naik ke ~83%. Biayanya Gemini flash per
+ *  frame — tidak sebanding dengan Rp2.771 per klip BytePlus yang terbuang
+ *  kalau cacatnya baru ketahuan sesudah video jadi. Frame diperiksa paralel,
+ *  jadi waktu dindingnya tidak ikut berlipat. */
+const JARAK_SAMPEL_DETIK = 1.2;
 /** Batas bawah dan atas, supaya video sangat pendek tetap diperiksa cukup dan
- *  video panjang tidak meledakkan kuota. */
+ *  video panjang tidak meledakkan kuota. Batas atas dinaikkan mengikuti jarak
+ *  yang lebih rapat: 30 dtk butuh 25 frame, 45 dtk butuh 37 — dipotong di 30
+ *  supaya video terpanjang pun tidak melebihi tiga kali lipat biaya lama. */
 const MIN_SAMPEL = 6;
-const MAKS_SAMPEL = 14;
+const MAKS_SAMPEL = 30;
 
 /** Titik sampel untuk durasi tertentu — merata, tidak dari detik 0 (masih
  *  transisi) dan tidak sampai ujung (frame terakhir sering hitam). */
