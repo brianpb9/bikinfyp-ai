@@ -49,7 +49,7 @@ const snapInput = {
 
 test("snapshot dibuat beku, idempoten, skor cocok dengan scorer", () => {
   const first = createFypSnapshot(db, snapInput);
-  assert.equal(first.modelVersion, "ckpt16-n565");
+  assert.equal(first.modelVersion, "ckpt18-n691");
   assert.ok(first.score >= 0 && first.score <= 100);
   const row1 = db.prepare("SELECT * FROM fyp_snapshots WHERE job_id = ?").get(jobId) as { created_at: string; score: number };
   // Panggilan kedua (job duplikat / retry) tidak menimpa snapshot pertama.

@@ -1,66 +1,66 @@
 {
- "model_version": "ckpt16-n565",
- "generated_at": "2026-08-10T18:12:40.426164+00:00",
- "n_train": 614,
- "n_winners": 294,
+ "model_version": "ckpt18-n691",
+ "generated_at": "2026-08-13T18:57:13.567065+00:00",
+ "n_train": 691,
+ "n_winners": 258,
  "caveats": [
   "KORELASIONAL — target penyusunan, bukan resep pasti dan bukan jaminan FYP.",
   "Skor resmi tetap dihitung dari video HASIL RENDER via analyzer, bukan dari rencana.",
   "hypothesis_only = koefisien kecil atau dukungan winner tipis; jangan jadikan default generator.",
-  "Domain data latih: TikTok Indonesia komersial (GMV), n=614 — konten ai_generated adalah out-of-distribution sampai dibuktikan predicted-vs-actual.",
+  "Domain data latih: TikTok Indonesia komersial (GMV), n=691 — konten ai_generated adalah out-of-distribution sampai dibuktikan predicted-vs-actual.",
   "Target hanya berlaku untuk model_version di file ini; checkpoint baru = file baru."
  ],
  "numeric": {
   "duration_sec": {
-   "coef_standardized": -0.0955,
+   "coef_standardized": -0.1127,
    "direction": "lower_better",
-   "winner_median": 21.489,
+   "winner_median": 20.027,
    "winner_iqr": [
-    14.542,
-    42.928
+    14.074,
+    41.867
    ],
-   "contrast_median": 38.723,
-   "n_winner_support": 294,
-   "confidence": "hypothesis_only"
+   "contrast_median": 38.545,
+   "n_winner_support": 258,
+   "confidence": "usable_default"
   },
   "total_cuts": {
-   "coef_standardized": -0.2169,
+   "coef_standardized": -0.2846,
    "direction": "lower_better",
    "winner_median": 3.0,
    "winner_iqr": [
     0.0,
-    11.0
+    10.0
    ],
    "contrast_median": 9.0,
-   "n_winner_support": 279,
+   "n_winner_support": 258,
    "confidence": "usable_default"
   },
   "cuts_per_sec": {
-   "coef_standardized": 0.0522,
+   "coef_standardized": 0.0734,
    "direction": "higher_better",
    "winner_median": 0.136,
    "winner_iqr": [
     0.0,
     0.334
    ],
-   "contrast_median": 0.183,
-   "n_winner_support": 279,
+   "contrast_median": 0.179,
+   "n_winner_support": 258,
    "confidence": "hypothesis_only"
   },
   "avg_shot_duration": {
-   "coef_standardized": 0.0402,
+   "coef_standardized": 0.1012,
    "direction": "higher_better",
-   "winner_median": 5.55,
+   "winner_median": 5.395,
    "winner_iqr": [
-    2.715,
-    12.665
+    2.723,
+    12.305
    ],
-   "contrast_median": 4.8,
-   "n_winner_support": 279,
-   "confidence": "hypothesis_only"
+   "contrast_median": 4.84,
+   "n_winner_support": 258,
+   "confidence": "usable_default"
   },
   "cuts_in_first_3s": {
-   "coef_standardized": -0.1679,
+   "coef_standardized": -0.171,
    "direction": "lower_better",
    "winner_median": 0.0,
    "winner_iqr": [
@@ -68,11 +68,11 @@
     1.0
    ],
    "contrast_median": 0.0,
-   "n_winner_support": 279,
+   "n_winner_support": 258,
    "confidence": "usable_default"
   },
   "has_text_overlay": {
-   "coef_standardized": 0.126,
+   "coef_standardized": 0.193,
    "direction": "higher_better",
    "winner_median": 1.0,
    "winner_iqr": [
@@ -80,11 +80,11 @@
     1.0
    ],
    "contrast_median": 1.0,
-   "n_winner_support": 279,
+   "n_winner_support": 258,
    "confidence": "usable_default"
   },
   "text_appears_at_sec": {
-   "coef_standardized": -0.0313,
+   "coef_standardized": -0.0538,
    "direction": "lower_better",
    "winner_median": 0.3,
    "winner_iqr": [
@@ -92,11 +92,11 @@
     2.0
    ],
    "contrast_median": 1.0,
-   "n_winner_support": 173,
+   "n_winner_support": 159,
    "confidence": "hypothesis_only"
   },
   "face_in_first_3s": {
-   "coef_standardized": 0.0868,
+   "coef_standardized": 0.204,
    "direction": "higher_better",
    "winner_median": 1.0,
    "winner_iqr": [
@@ -104,11 +104,11 @@
     1.0
    ],
    "contrast_median": 1.0,
-   "n_winner_support": 278,
-   "confidence": "hypothesis_only"
+   "n_winner_support": 257,
+   "confidence": "usable_default"
   },
   "product_visible": {
-   "coef_standardized": 0.0591,
+   "coef_standardized": 0.1236,
    "direction": "higher_better",
    "winner_median": 1.0,
    "winner_iqr": [
@@ -116,11 +116,11 @@
     1.0
    ],
    "contrast_median": 1.0,
-   "n_winner_support": 277,
-   "confidence": "hypothesis_only"
+   "n_winner_support": 257,
+   "confidence": "usable_default"
   },
   "product_first_appears_sec": {
-   "coef_standardized": -0.2214,
+   "coef_standardized": -0.255,
    "direction": "lower_better",
    "winner_median": 0.7,
    "winner_iqr": [
@@ -128,11 +128,11 @@
     3.0
    ],
    "contrast_median": 0.7,
-   "n_winner_support": 175,
+   "n_winner_support": 163,
    "confidence": "usable_default"
   },
   "has_cta_in_audio": {
-   "coef_standardized": 0.0463,
+   "coef_standardized": 0.0442,
    "direction": "higher_better",
    "winner_median": 0.0,
    "winner_iqr": [
@@ -140,19 +140,19 @@
     0.0
    ],
    "contrast_median": 0.0,
-   "n_winner_support": 294,
+   "n_winner_support": 258,
    "confidence": "hypothesis_only"
   },
   "cta_timing_sec": {
-   "coef_standardized": -0.1282,
+   "coef_standardized": -0.1053,
    "direction": "lower_better",
-   "winner_median": 29.6,
+   "winner_median": 36.3,
    "winner_iqr": [
-    14.2,
-    41.9
+    16.8,
+    46.2
    ],
-   "contrast_median": 45.55,
-   "n_winner_support": 33,
+   "contrast_median": 42.0,
+   "n_winner_support": 29,
    "confidence": "hypothesis_only"
   },
   "has_trending_sound": {
@@ -165,19 +165,19 @@
    "confidence": "hypothesis_only"
   },
   "label_hook_layered": {
-   "coef_standardized": 0.0403,
-   "direction": "higher_better",
+   "coef_standardized": -0.0356,
+   "direction": "lower_better",
    "winner_median": 0.0,
    "winner_iqr": [
     0.0,
     0.0
    ],
    "contrast_median": 0.0,
-   "n_winner_support": 150,
+   "n_winner_support": 151,
    "confidence": "hypothesis_only"
   },
   "label_hook_visual": {
-   "coef_standardized": 0.0305,
+   "coef_standardized": 0.0292,
    "direction": "higher_better",
    "winner_median": 1.0,
    "winner_iqr": [
@@ -185,11 +185,11 @@
     1.0
    ],
    "contrast_median": 1.0,
-   "n_winner_support": 150,
+   "n_winner_support": 151,
    "confidence": "hypothesis_only"
   },
   "label_hook_text": {
-   "coef_standardized": 0.1425,
+   "coef_standardized": 0.0909,
    "direction": "higher_better",
    "winner_median": 1.0,
    "winner_iqr": [
@@ -197,11 +197,11 @@
     1.0
    ],
    "contrast_median": 0.0,
-   "n_winner_support": 150,
+   "n_winner_support": 151,
    "confidence": "hypothesis_only"
   },
   "label_hook_verbal": {
-   "coef_standardized": 0.0173,
+   "coef_standardized": 0.0355,
    "direction": "higher_better",
    "winner_median": 0.0,
    "winner_iqr": [
@@ -209,11 +209,11 @@
     1.0
    ],
    "contrast_median": 0.0,
-   "n_winner_support": 150,
+   "n_winner_support": 151,
    "confidence": "hypothesis_only"
   },
   "hook_text_coverage_pct": {
-   "coef_standardized": -0.0983,
+   "coef_standardized": -0.1162,
    "direction": "lower_better",
    "winner_median": 0.133,
    "winner_iqr": [
@@ -221,23 +221,23 @@
     0.533
    ],
    "contrast_median": 0.2,
-   "n_winner_support": 272,
-   "confidence": "hypothesis_only"
+   "n_winner_support": 253,
+   "confidence": "usable_default"
   },
   "full_text_coverage_pct": {
-   "coef_standardized": 0.063,
+   "coef_standardized": 0.164,
    "direction": "higher_better",
-   "winner_median": 0.15,
+   "winner_median": 0.152,
    "winner_iqr": [
     0.0,
-    0.431
+    0.472
    ],
-   "contrast_median": 0.174,
-   "n_winner_support": 272,
-   "confidence": "hypothesis_only"
+   "contrast_median": 0.184,
+   "n_winner_support": 253,
+   "confidence": "usable_default"
   },
   "hook_text_transitions": {
-   "coef_standardized": -0.0914,
+   "coef_standardized": -0.0402,
    "direction": "lower_better",
    "winner_median": 1.0,
    "winner_iqr": [
@@ -245,35 +245,35 @@
     4.0
    ],
    "contrast_median": 2.0,
-   "n_winner_support": 272,
+   "n_winner_support": 253,
    "confidence": "hypothesis_only"
   },
   "full_text_transitions": {
-   "coef_standardized": -0.2654,
+   "coef_standardized": -0.428,
    "direction": "lower_better",
    "winner_median": 2.0,
    "winner_iqr": [
     0.0,
     6.0
    ],
-   "contrast_median": 5.0,
-   "n_winner_support": 272,
+   "contrast_median": 6.0,
+   "n_winner_support": 253,
    "confidence": "usable_default"
   },
   "transcript_word_count": {
-   "coef_standardized": -0.0786,
+   "coef_standardized": -0.0749,
    "direction": "lower_better",
-   "winner_median": 32.0,
+   "winner_median": 29.0,
    "winner_iqr": [
     4.0,
-    112.0
+    109.0
    ],
-   "contrast_median": 87.0,
-   "n_winner_support": 281,
+   "contrast_median": 84.0,
+   "n_winner_support": 249,
    "confidence": "hypothesis_only"
   },
   "transcript_has_question": {
-   "coef_standardized": 0.281,
+   "coef_standardized": 0.3417,
    "direction": "higher_better",
    "winner_median": 0.0,
    "winner_iqr": [
@@ -281,35 +281,35 @@
     1.0
    ],
    "contrast_median": 0.0,
-   "n_winner_support": 281,
+   "n_winner_support": 249,
    "confidence": "usable_default"
   },
   "transcript_has_price_mention": {
-   "coef_standardized": -0.0265,
-   "direction": "lower_better",
+   "coef_standardized": 0.0044,
+   "direction": "higher_better",
    "winner_median": 0.0,
    "winner_iqr": [
     0.0,
     0.0
    ],
    "contrast_median": 0.0,
-   "n_winner_support": 281,
+   "n_winner_support": 249,
    "confidence": "hypothesis_only"
   },
   "ocr_word_count": {
-   "coef_standardized": -0.1004,
+   "coef_standardized": -0.0471,
    "direction": "lower_better",
-   "winner_median": 21.0,
+   "winner_median": 22.0,
    "winner_iqr": [
     10.0,
-    48.0
+    52.0
    ],
    "contrast_median": 34.0,
-   "n_winner_support": 237,
-   "confidence": "usable_default"
+   "n_winner_support": 219,
+   "confidence": "hypothesis_only"
   },
   "ocr_has_price_mention": {
-   "coef_standardized": 0.0316,
+   "coef_standardized": 0.084,
    "direction": "higher_better",
    "winner_median": 0.0,
    "winner_iqr": [
@@ -317,11 +317,11 @@
     0.0
    ],
    "contrast_median": 0.0,
-   "n_winner_support": 237,
+   "n_winner_support": 219,
    "confidence": "hypothesis_only"
   },
   "ocr_has_cta_word": {
-   "coef_standardized": 0.1302,
+   "coef_standardized": 0.0337,
    "direction": "higher_better",
    "winner_median": 0.0,
    "winner_iqr": [
@@ -329,89 +329,81 @@
     0.0
    ],
    "contrast_median": 0.0,
-   "n_winner_support": 237,
-   "confidence": "usable_default"
+   "n_winner_support": 219,
+   "confidence": "hypothesis_only"
   }
  },
  "categorical": {
   "label_hook_type": [
    {
-    "value": "REDOWNLOAD_FAILED",
-    "coef_standardized": 0.2222,
-    "winner_share": 0.116,
-    "contrast_share": 0.013,
-    "n_winner_support": 34,
-    "confidence": "usable_default"
-   },
-   {
     "value": "before_after",
-    "coef_standardized": 0.1299,
-    "winner_share": 0.034,
+    "coef_standardized": 0.1899,
+    "winner_share": 0.039,
     "contrast_share": 0.009,
     "n_winner_support": 10,
     "confidence": "hypothesis_only"
    },
    {
     "value": "question",
-    "coef_standardized": 0.0955,
-    "winner_share": 0.109,
-    "contrast_share": 0.113,
+    "coef_standardized": 0.0815,
+    "winner_share": 0.124,
+    "contrast_share": 0.111,
     "n_winner_support": 32,
     "confidence": "hypothesis_only"
    },
    {
-    "value": "shock",
-    "coef_standardized": 0.0616,
-    "winner_share": 0.041,
-    "contrast_share": 0.072,
-    "n_winner_support": 12,
-    "confidence": "hypothesis_only"
-   },
-   {
-    "value": "challenge",
-    "coef_standardized": -0.0123,
-    "winner_share": 0.014,
-    "contrast_share": 0.009,
-    "n_winner_support": 4,
-    "confidence": "hypothesis_only"
-   },
-   {
-    "value": "pov",
-    "coef_standardized": -0.0146,
-    "winner_share": 0.099,
-    "contrast_share": 0.075,
-    "n_winner_support": 29,
-    "confidence": "hypothesis_only"
-   },
-   {
     "value": "pattern_interrupt",
-    "coef_standardized": -0.0633,
-    "winner_share": 0.095,
-    "contrast_share": 0.053,
+    "coef_standardized": 0.0317,
+    "winner_share": 0.109,
+    "contrast_share": 0.076,
     "n_winner_support": 28,
     "confidence": "hypothesis_only"
    },
    {
+    "value": "shock",
+    "coef_standardized": 0.028,
+    "winner_share": 0.047,
+    "contrast_share": 0.076,
+    "n_winner_support": 12,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "pov",
+    "coef_standardized": 0.0132,
+    "winner_share": 0.116,
+    "contrast_share": 0.072,
+    "n_winner_support": 30,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "challenge",
+    "coef_standardized": -0.0388,
+    "winner_share": 0.016,
+    "contrast_share": 0.014,
+    "n_winner_support": 4,
+    "confidence": "hypothesis_only"
+   },
+   {
     "value": "direct_claim",
-    "coef_standardized": -0.066,
-    "winner_share": 0.337,
-    "contrast_share": 0.456,
-    "n_winner_support": 99,
+    "coef_standardized": -0.0431,
+    "winner_share": 0.372,
+    "contrast_share": 0.446,
+    "n_winner_support": 96,
     "confidence": "hypothesis_only"
    },
    {
     "value": "other",
-    "coef_standardized": -0.1055,
-    "winner_share": 0.139,
-    "contrast_share": 0.138,
+    "coef_standardized": -0.0706,
+    "winner_share": 0.159,
+    "contrast_share": 0.143,
     "n_winner_support": 41,
-    "confidence": "usable_default"
+    "confidence": "hypothesis_only"
    },
    {
     "value": "storytime",
-    "coef_standardized": -0.1227,
-    "winner_share": 0.017,
-    "contrast_share": 0.062,
+    "coef_standardized": -0.1088,
+    "winner_share": 0.019,
+    "contrast_share": 0.053,
     "n_winner_support": 5,
     "confidence": "hypothesis_only"
    }
@@ -419,81 +411,81 @@
   "label_format": [
    {
     "value": "skit",
-    "coef_standardized": 0.1229,
-    "winner_share": 0.102,
-    "contrast_share": 0.044,
-    "n_winner_support": 30,
+    "coef_standardized": 0.1852,
+    "winner_share": 0.12,
+    "contrast_share": 0.062,
+    "n_winner_support": 31,
     "confidence": "usable_default"
    },
    {
     "value": "dracin",
-    "coef_standardized": 0.1204,
-    "winner_share": 0.007,
-    "contrast_share": 0.0,
+    "coef_standardized": 0.1685,
+    "winner_share": 0.008,
+    "contrast_share": 0.002,
     "n_winner_support": 2,
     "confidence": "hypothesis_only"
    },
    {
     "value": "other",
-    "coef_standardized": 0.0539,
-    "winner_share": 0.088,
-    "contrast_share": 0.047,
+    "coef_standardized": 0.0752,
+    "winner_share": 0.101,
+    "contrast_share": 0.074,
     "n_winner_support": 26,
     "confidence": "hypothesis_only"
    },
    {
-    "value": "tier_ranking",
-    "coef_standardized": 0.016,
-    "winner_share": 0.007,
-    "contrast_share": 0.003,
-    "n_winner_support": 2,
-    "confidence": "hypothesis_only"
-   },
-   {
-    "value": "slideshow",
-    "coef_standardized": 0.0141,
-    "winner_share": 0.014,
-    "contrast_share": 0.013,
-    "n_winner_support": 4,
-    "confidence": "hypothesis_only"
-   },
-   {
-    "value": "tutorial",
-    "coef_standardized": 0.0092,
-    "winner_share": 0.109,
-    "contrast_share": 0.122,
-    "n_winner_support": 32,
-    "confidence": "hypothesis_only"
-   },
-   {
     "value": "vlog",
-    "coef_standardized": -0.003,
-    "winner_share": 0.296,
-    "contrast_share": 0.331,
+    "coef_standardized": 0.061,
+    "winner_share": 0.337,
+    "contrast_share": 0.305,
     "n_winner_support": 87,
     "confidence": "hypothesis_only"
    },
    {
     "value": "live_clip",
-    "coef_standardized": -0.0129,
-    "winner_share": 0.027,
-    "contrast_share": 0.025,
+    "coef_standardized": 0.0167,
+    "winner_share": 0.031,
+    "contrast_share": 0.046,
     "n_winner_support": 8,
     "confidence": "hypothesis_only"
    },
    {
+    "value": "tier_ranking",
+    "coef_standardized": 0.0139,
+    "winner_share": 0.008,
+    "contrast_share": 0.005,
+    "n_winner_support": 2,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "slideshow",
+    "coef_standardized": 0.0041,
+    "winner_share": 0.016,
+    "contrast_share": 0.014,
+    "n_winner_support": 4,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "tutorial",
+    "coef_standardized": -0.0192,
+    "winner_share": 0.112,
+    "contrast_share": 0.111,
+    "n_winner_support": 29,
+    "confidence": "hypothesis_only"
+   },
+   {
     "value": "unboxing",
-    "coef_standardized": -0.0901,
-    "winner_share": 0.02,
+    "coef_standardized": -0.1237,
+    "winner_share": 0.023,
     "contrast_share": 0.037,
     "n_winner_support": 6,
     "confidence": "hypothesis_only"
    },
    {
     "value": "talking_head",
-    "coef_standardized": -0.2086,
-    "winner_share": 0.214,
-    "contrast_share": 0.366,
+    "coef_standardized": -0.1924,
+    "winner_share": 0.244,
+    "contrast_share": 0.344,
     "n_winner_support": 63,
     "confidence": "usable_default"
    }
@@ -501,179 +493,187 @@
   "label_narrative": [
    {
     "value": "other",
-    "coef_standardized": 0.2017,
-    "winner_share": 0.041,
-    "contrast_share": 0.013,
+    "coef_standardized": 0.2602,
+    "winner_share": 0.047,
+    "contrast_share": 0.009,
     "n_winner_support": 12,
     "confidence": "hypothesis_only"
    },
    {
     "value": "multi_peak",
-    "coef_standardized": 0.0163,
-    "winner_share": 0.044,
-    "contrast_share": 0.025,
+    "coef_standardized": 0.0164,
+    "winner_share": 0.05,
+    "contrast_share": 0.046,
     "n_winner_support": 13,
     "confidence": "hypothesis_only"
    },
    {
-    "value": "transformation",
-    "coef_standardized": -0.0337,
-    "winner_share": 0.112,
-    "contrast_share": 0.128,
-    "n_winner_support": 33,
-    "confidence": "hypothesis_only"
-   },
-   {
     "value": "instant_payoff",
-    "coef_standardized": -0.0397,
-    "winner_share": 0.561,
-    "contrast_share": 0.594,
+    "coef_standardized": -0.0047,
+    "winner_share": 0.64,
+    "contrast_share": 0.628,
     "n_winner_support": 165,
     "confidence": "hypothesis_only"
    },
    {
-    "value": "listicle",
-    "coef_standardized": -0.0652,
-    "winner_share": 0.048,
-    "contrast_share": 0.05,
-    "n_winner_support": 14,
+    "value": "transformation",
+    "coef_standardized": -0.0338,
+    "winner_share": 0.12,
+    "contrast_share": 0.115,
+    "n_winner_support": 31,
     "confidence": "hypothesis_only"
    },
    {
     "value": "delayed_payoff",
-    "coef_standardized": -0.1202,
-    "winner_share": 0.078,
-    "contrast_share": 0.178,
+    "coef_standardized": -0.0521,
+    "winner_share": 0.089,
+    "contrast_share": 0.148,
     "n_winner_support": 23,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "listicle",
+    "coef_standardized": -0.0542,
+    "winner_share": 0.054,
+    "contrast_share": 0.053,
+    "n_winner_support": 14,
     "confidence": "hypothesis_only"
    }
   ],
   "label_local_element": [
    {
     "value": "bahasa_daerah",
-    "coef_standardized": 0.1215,
-    "winner_share": 0.02,
-    "contrast_share": 0.003,
+    "coef_standardized": 0.212,
+    "winner_share": 0.023,
+    "contrast_share": 0.002,
     "n_winner_support": 6,
     "confidence": "hypothesis_only"
    },
    {
-    "value": "trending_sound_id",
-    "coef_standardized": 0.0697,
-    "winner_share": 0.044,
-    "contrast_share": 0.028,
-    "n_winner_support": 13,
-    "confidence": "hypothesis_only"
-   },
-   {
     "value": "none",
-    "coef_standardized": 0.035,
-    "winner_share": 0.35,
-    "contrast_share": 0.272,
+    "coef_standardized": 0.1,
+    "winner_share": 0.399,
+    "contrast_share": 0.339,
     "n_winner_support": 103,
     "confidence": "hypothesis_only"
    },
    {
-    "value": "momen_kultural",
-    "coef_standardized": -0.1261,
-    "winner_share": 0.017,
-    "contrast_share": 0.05,
-    "n_winner_support": 5,
+    "value": "trending_sound_id",
+    "coef_standardized": 0.0883,
+    "winner_share": 0.05,
+    "contrast_share": 0.023,
+    "n_winner_support": 13,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "other",
+    "coef_standardized": -0.0702,
+    "winner_share": 0.0,
+    "contrast_share": 0.002,
+    "n_winner_support": 0,
     "confidence": "hypothesis_only"
    },
    {
     "value": "bahasa_gaul",
-    "coef_standardized": -0.1421,
-    "winner_share": 0.452,
-    "contrast_share": 0.634,
-    "n_winner_support": 133,
-    "confidence": "usable_default"
+    "coef_standardized": -0.0978,
+    "winner_share": 0.508,
+    "contrast_share": 0.577,
+    "n_winner_support": 131,
+    "confidence": "hypothesis_only"
+   },
+   {
+    "value": "momen_kultural",
+    "coef_standardized": -0.1687,
+    "winner_share": 0.019,
+    "contrast_share": 0.055,
+    "n_winner_support": 5,
+    "confidence": "hypothesis_only"
    }
   ],
   "text_language_style": [
    {
     "value": "mixed",
-    "coef_standardized": -0.1334,
-    "winner_share": 0.007,
-    "contrast_share": 0.069,
+    "coef_standardized": -0.2309,
+    "winner_share": 0.008,
+    "contrast_share": 0.058,
     "n_winner_support": 2,
     "confidence": "hypothesis_only"
    },
    {
     "value": "formal",
-    "coef_standardized": -0.1442,
-    "winner_share": 0.514,
-    "contrast_share": 0.606,
-    "n_winner_support": 151,
+    "coef_standardized": -0.2412,
+    "winner_share": 0.535,
+    "contrast_share": 0.621,
+    "n_winner_support": 138,
     "confidence": "usable_default"
    },
    {
     "value": "gaul",
-    "coef_standardized": -0.1896,
-    "winner_share": 0.065,
-    "contrast_share": 0.134,
-    "n_winner_support": 19,
+    "coef_standardized": -0.3243,
+    "winner_share": 0.07,
+    "contrast_share": 0.145,
+    "n_winner_support": 18,
     "confidence": "hypothesis_only"
    }
   ],
   "setting": [
    {
     "value": "studio",
-    "coef_standardized": 0.2174,
-    "winner_share": 0.061,
-    "contrast_share": 0.006,
-    "n_winner_support": 18,
-    "confidence": "hypothesis_only"
-   },
-   {
-    "value": "outdoor",
-    "coef_standardized": -0.0545,
-    "winner_share": 0.16,
-    "contrast_share": 0.216,
-    "n_winner_support": 47,
+    "coef_standardized": 0.2541,
+    "winner_share": 0.062,
+    "contrast_share": 0.016,
+    "n_winner_support": 16,
     "confidence": "hypothesis_only"
    },
    {
     "value": "indoor",
-    "coef_standardized": -0.0572,
-    "winner_share": 0.701,
-    "contrast_share": 0.691,
-    "n_winner_support": 206,
+    "coef_standardized": 0.1277,
+    "winner_share": 0.748,
+    "contrast_share": 0.626,
+    "n_winner_support": 193,
+    "confidence": "usable_default"
+   },
+   {
+    "value": "outdoor",
+    "coef_standardized": 0.0438,
+    "winner_share": 0.167,
+    "contrast_share": 0.196,
+    "n_winner_support": 43,
     "confidence": "hypothesis_only"
    },
    {
     "value": "street",
-    "coef_standardized": -0.0703,
-    "winner_share": 0.02,
+    "coef_standardized": -0.0652,
+    "winner_share": 0.019,
     "contrast_share": 0.028,
-    "n_winner_support": 6,
+    "n_winner_support": 5,
     "confidence": "hypothesis_only"
    }
   ],
   "dominant_shot_type": [
    {
     "value": "closeup",
-    "coef_standardized": 0.0351,
-    "winner_share": 0.333,
-    "contrast_share": 0.334,
-    "n_winner_support": 98,
-    "confidence": "hypothesis_only"
+    "coef_standardized": 0.1337,
+    "winner_share": 0.337,
+    "contrast_share": 0.286,
+    "n_winner_support": 87,
+    "confidence": "usable_default"
    },
    {
     "value": "medium",
-    "coef_standardized": 0.0213,
-    "winner_share": 0.5,
-    "contrast_share": 0.441,
-    "n_winner_support": 147,
+    "coef_standardized": 0.0991,
+    "winner_share": 0.539,
+    "contrast_share": 0.436,
+    "n_winner_support": 139,
     "confidence": "hypothesis_only"
    },
    {
     "value": "wide",
-    "coef_standardized": -0.1306,
-    "winner_share": 0.109,
-    "contrast_share": 0.166,
-    "n_winner_support": 32,
-    "confidence": "usable_default"
+    "coef_standardized": 0.0042,
+    "winner_share": 0.12,
+    "contrast_share": 0.143,
+    "n_winner_support": 31,
+    "confidence": "hypothesis_only"
    }
   ]
  }

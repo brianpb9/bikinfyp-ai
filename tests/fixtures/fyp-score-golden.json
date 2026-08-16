@@ -41,9 +41,9 @@
       "ocr_has_cta_word": 1
     },
     "expected": {
-      "raw_probability": 0.7304496755172364,
-      "score": 77,
-      "model_version": "ckpt16-n565"
+      "raw_probability": 0.1857259248571497,
+      "score": 27,
+      "model_version": "ckpt18-n691"
     }
   },
   {
@@ -88,9 +88,9 @@
       "ocr_has_cta_word": 0
     },
     "expected": {
-      "raw_probability": 0.7912024374827332,
-      "score": 82,
-      "model_version": "ckpt16-n565"
+      "raw_probability": 0.44339328700745956,
+      "score": 64,
+      "model_version": "ckpt18-n691"
     }
   },
   {
@@ -135,9 +135,9 @@
       "ocr_has_cta_word": 1
     },
     "expected": {
-      "raw_probability": 0.547711739524883,
-      "score": 58,
-      "model_version": "ckpt16-n565"
+      "raw_probability": 0.0741269545727522,
+      "score": 13,
+      "model_version": "ckpt18-n691"
     }
   },
   {
@@ -182,9 +182,9 @@
       "ocr_has_cta_word": 0
     },
     "expected": {
-      "raw_probability": 0.7806884056438577,
-      "score": 82,
-      "model_version": "ckpt16-n565"
+      "raw_probability": 0.5162275770787015,
+      "score": 72,
+      "model_version": "ckpt18-n691"
     }
   },
   {
@@ -229,9 +229,9 @@
       "ocr_has_cta_word": null
     },
     "expected": {
-      "raw_probability": 0.7714942573761702,
-      "score": 81,
-      "model_version": "ckpt16-n565"
+      "raw_probability": 0.7504636010081202,
+      "score": 89,
+      "model_version": "ckpt18-n691"
     }
   }
 ]

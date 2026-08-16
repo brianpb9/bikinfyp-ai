@@ -1,4 +1,4 @@
-// Unit test modul fyp-score (port MODEL FYP, artifact ckpt16-n565):
+// Unit test modul fyp-score (port MODEL FYP, artifact ckpt18-n691):
 // - GOLDEN: skor TS byte-setara dengan kode Python asli (analyzers/virality_model.py)
 //   untuk 5 baris fitur — fixture tests/fixtures/fyp-score-golden.json digenerate
 //   oleh kode Python asli via:
@@ -78,7 +78,7 @@ test("scoreScriptPlan end-to-end: skor 0-100, fixes <= 3, snapshot fitur ikut", 
   for (const plan of buildFixturePlans()) {
     const s = scoreScriptPlan(plan.input);
     assert.ok(s.score >= 0 && s.score <= 100, `${plan.name}: skor ${s.score}`);
-    assert.equal(s.modelVersion, "ckpt16-n565");
+    assert.equal(s.modelVersion, "ckpt18-n691");
     assert.ok(s.topFixes.length <= 3);
     for (const f of s.topFixes) {
       assert.ok(f.contribution < 0, "fix hanya dari kontribusi negatif");
