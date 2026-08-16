@@ -56,10 +56,16 @@ const TIER_META: Record<string, { resolution: string; note: string }> = {
   high_quality: { resolution: "720p", note: "suara AI" },
   super_hq: { resolution: "1080p", note: "suara AI + gerak bibir" },
 };
+// Tiap rasio membawa BENTUK kotaknya sendiri. Angka "9:16" tidak berarti apa-apa
+// buat kebanyakan penjual; bentuknya langsung terbaca tanpa perlu dipikir.
+//
+// Sisi terpanjang disamakan (22px) supaya yang membedakan bentuknya, bukan
+// ukurannya — kalau tiap kotak dibuat seluas mungkin, yang persegi terlihat
+// paling besar dan seolah paling penting.
 const RATIOS = [
-  { id: "9:16", label: "9:16" },
-  { id: "1:1", label: "1:1" },
-  { id: "16:9", label: "16:9" },
+  { id: "9:16", label: "9:16", w: 12, h: 22, untuk: "TikTok, Reels, Shorts" },
+  { id: "1:1", label: "1:1", w: 18, h: 18, untuk: "Feed Instagram" },
+  { id: "16:9", label: "16:9", w: 22, h: 12, untuk: "YouTube, layar lebar" },
 ];
 
 const CATEGORIES = ["beauty", "fashion", "muslim_fashion", "food", "gadget", "home", "jasa", "app", "toko", "default"];
@@ -1106,11 +1112,29 @@ export default function CampaignPage() {
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Rasio</p>
               <div className="flex gap-2">
-                {RATIOS.map((r) => (
-                  <button key={r.id} onClick={() => setRatio(r.id)}
-                    className={`rounded-lg border px-4 py-2 text-sm font-medium transition-colors ${ratio === r.id ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
-                  >{r.label}</button>
-                ))}
+                {RATIOS.map((r) => {
+                  const dipilih = ratio === r.id;
+                  return (
+                    <button key={r.id} onClick={() => setRatio(r.id)}
+                      aria-pressed={dipilih}
+                      // Label lengkap untuk pembaca layar: bentuk kotaknya tidak
+                      // terbaca sama sekali oleh mereka.
+                      aria-label={`Rasio ${r.label} — ${r.untuk}`}
+                      title={r.untuk}
+                      className={`flex min-w-[76px] flex-col items-center gap-1.5 rounded-lg border px-3 py-2.5 text-sm font-medium transition-colors ${dipilih ? "border-amber-500 bg-amber-50 text-amber-700" : "border-zinc-300 text-zinc-600 hover:bg-zinc-50"}`}
+                    >
+                      {/* Kotak berbentuk rasionya. Tinggi baris dikunci 22px supaya
+                          tombol tidak naik-turun waktu rasio berganti. */}
+                      <span className="flex h-[22px] items-center justify-center" aria-hidden="true">
+                        <span
+                          style={{ width: r.w, height: r.h }}
+                          className={`block rounded-[3px] border-2 ${dipilih ? "border-amber-500 bg-amber-100" : "border-zinc-400 bg-white"}`}
+                        />
+                      </span>
+                      <span>{r.label}</span>
+                    </button>
+                  );
+                })}
               </div>
               {ratio !== "9:16" && (
                 <p className="mt-1.5 text-xs text-amber-700">
