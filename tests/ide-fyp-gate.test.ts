@@ -444,3 +444,90 @@ test("tanpaLlm memaksa jalur template — jalur anonim tidak boleh keluar uang",
     assert.ok(hasil.length >= 1 && hasil[0].segments.length >= 3, "naskah template tetap keluar");
   } finally { globalThis.fetch = aslinya; }
 });
+
+test("LULUS TIPIS: semua dimensi lewat dan total 72-74", async () => {
+  const { AMBANG_BORDERLINE, AMBANG_TOTAL } = await import("../lib/script-engine/ide");
+  // Kasus nyata yang melahirkan aturan ini (Scarlett, 17 Agu): 7·8·7·7·8·7 = 73.
+  const nyata = { scroll_stop: 7, distinctiveness: 8, story_pull: 7, payoff: 7, brand_fidelity_plan: 8, nativeness: 7 };
+  const n = hitungNilai(nyata);
+  assert.equal(n.total, 73);
+  assert.equal(n.lulus, true);
+  assert.equal(n.borderline, true, "harus ditandai tipis, bukan disamakan dengan lulus bersih");
+  assert.deepEqual(n.sebabGagal, []);
+});
+
+test("LULUS BERSIH tidak ikut ditandai tipis", () => {
+  const n = hitungNilai(sempurna);
+  assert.equal(n.total, 100);
+  assert.equal(n.lulus, true);
+  assert.equal(n.borderline, false);
+});
+
+test("batas bawah jalur tipis: 72 lulus, di bawahnya tidak", () => {
+  // 8·7·7·7·8·7 = 74 (tipis). Turunkan sampai di bawah 72 -> gagal.
+  assert.equal(hitungNilai({ scroll_stop: 8, distinctiveness: 7, story_pull: 7, payoff: 7, brand_fidelity_plan: 8, nativeness: 7 }).borderline, true);
+  const pas = { scroll_stop: 7, distinctiveness: 7, story_pull: 7, payoff: 7, brand_fidelity_plan: 8, nativeness: 7 };
+  const n = hitungNilai(pas);
+  assert.equal(n.total, 71);
+  assert.equal(n.lulus, false, "71 di bawah ambang tipis 72");
+  assert.ok(n.sebabGagal[0].includes("ambang 72"), `pesannya harus menyebut ambang yang berlaku: ${n.sebabGagal[0]}`);
+});
+
+test("jalur tipis TIDAK membuka celah untuk kelemahan kritis", async () => {
+  // Inti aturannya: satu dimensi jeblok tetap menjatuhkan, berapa pun totalnya.
+  // Kalau tidak, "total >= 72" akan jadi pintu belakang untuk scroll-stop 4.
+  const n = hitungNilai({ ...sempurna, scroll_stop: 4 });
+  assert.ok(n.total >= 72, `totalnya ${n.total} — memang masih tinggi`);
+  assert.equal(n.lulus, false);
+  assert.equal(n.borderline, false);
+  assert.ok(n.sebabGagal.some((s) => s.startsWith("scroll_stop")));
+  // Pesan totalnya memakai ambang BERSIH, karena dimensinya belum semua lewat.
+  const { AMBANG_TOTAL } = await import("../lib/script-engine/ide");
+  assert.ok(n.sebabGagal.some((s) => s.includes(`ambang ${AMBANG_TOTAL}`)));
+});
+
+test("ide yang lulus TIPIS tetap menulis naskah, dan naskahnya ditandai", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const tipis = { scroll_stop: 7, distinctiveness: 8, story_pull: 7, payoff: 7, brand_fidelity_plan: 8, nativeness: 7 };
+  const promptNaskah: string[] = [];
+  const daftar = [
+    ideDummy(),
+    ideDummy({ mechanic: "absence", one_liner: "Meja rias aku dikosongin satu per satu sampai sisa satu botol" }),
+    ideDummy({ mechanic: "stakes", one_liner: "Kalau ini bikin kulitku perih, aku balikin ke toko besok pagi" }),
+  ];
+  globalThis.fetch = (async (_u: string, init: { body: string }) => {
+    const body = JSON.parse(init.body) as { system: { text: string }[]; messages: { content: string }[] };
+    const sistem = body.system.map((s) => s.text).join("\n");
+    if (sistem.includes("You are the FYP gate"))
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ scores: tipis, reason: "alasan uji yang cukup panjang" }) }] }) };
+    if (sistem.includes("You invent ONE IDEA"))
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ ideas: daftar }) }] }) };
+    promptNaskah.push(body.messages[0].content);
+    return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments: [
+      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, jerawat aku dulu bandel banget sih",
+        start_state: "dia sudah memegang pipinya", framing: "medium", angle: "eye level", camera: "static",
+        action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
+        audio_note: "", why: "setup", mode: "SELFIE" },
+      { block: "BODY", label: "DEMO", start: 4, end: 10,
+        text: "aku pakai serum ini tiap malam deh, teksturnya ringan banget dan cepat meresap",
+        start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
+        action: "dia memutar botol, lalu memiringkan label", product_state: "partial", expression: "warm",
+        audio_note: "", why: "tension", mode: "SELLING" },
+      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "cek keranjang kuning ya",
+        start_state: "botolnya sudah terangkat", framing: "tight", angle: "eye level", camera: "static",
+        action: "dia menahannya diam, lalu menunjuk", product_state: "hero", expression: "bright",
+        audio_note: "", why: "payoff", mode: "SELLING" },
+    ] }) }] }) };
+  }) as never;
+  try {
+    const hasil = await generateScripts({
+      product: { id: "p5", name: "Scarlett Acne Serum", price_idr: 75000, category: "beauty" },
+      register: "bestie", qualityTier: "super_hq", durationSec: 15, count: 1,
+    });
+    // Naskah DITULIS dari idenya — bedanya dengan gate gagal.
+    assert.ok(promptNaskah.some((p) => p.startsWith("THE IDEA")), "lulus tipis tetap menulis naskah dari idenya");
+    assert.equal(hasil[0].ideBorderline, true, "naskahnya harus ditandai tipis untuk UI");
+    assert.equal(hasil[0].ideSkor, 73);
+    assert.equal(hasil[0].ideKandidat, undefined, "bukan kegagalan, jadi tidak menawarkan kandidat lain");
+  } finally { globalThis.fetch = aslinya; }
+});

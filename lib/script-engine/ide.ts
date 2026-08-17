@@ -79,13 +79,40 @@ export const SkemaNilai = z.object({
   reason: z.string().min(10),
 });
 
-/** Ambang total. Di bawah ini, atau satu dimensi di bawah ambangnya, ide DIGANTI. */
+/** Ambang total untuk LULUS BERSIH. */
 export const AMBANG_TOTAL = 75;
+
+/**
+ * Ambang total untuk LULUS TIPIS (borderline), dan syaratnya lebih keras dari
+ * sekadar angka: SELURUH enam dimensi harus sudah lewat ambangnya
+ * masing-masing.
+ *
+ * Kenapa ada. Jalankan Scarlett 17 Agu menghasilkan ide bernilai 73 yang gagal
+ * HANYA di total — keenam dimensinya sudah lewat (7·8·7·7·8·7). Menolaknya
+ * berarti membuang ide yang tidak punya satu pun kelemahan kritis, hanya
+ * karena tidak ada satu pun dimensi yang menonjol. Itu bukan yang dijaga
+ * ambang 75.
+ *
+ * Yang TETAP dijaga: satu dimensi di bawah ambangnya tetap menjatuhkan, berapa
+ * pun totalnya. Kelemahan kritis tidak bisa dirata-ratakan sampai hilang, dan
+ * jalur tipis ini tidak membuka celah untuk itu — ia hanya melonggarkan syarat
+ * "harus ada yang menonjol", bukan syarat "tidak boleh ada yang jeblok".
+ */
+export const AMBANG_BORDERLINE = 72;
 
 export interface HasilNilai {
   total: number;
   perDimensi: Record<string, number>;
   lulus: boolean;
+  /**
+   * Lulus lewat jalur TIPIS: semua dimensi lewat ambangnya, total 72-74.
+   *
+   * Wajib ikut sampai UI dan catatan. Lulus tipis dan lulus bersih adalah dua
+   * keadaan berbeda, dan menyamakannya di layar berarti pengguna tidak pernah
+   * tahu bahwa idenya lolos karena tidak ada cacat — bukan karena ada yang
+   * kuat.
+   */
+  borderline: boolean;
   /** Kenapa gagal, siap dibaca manusia. Kosong kalau lulus. */
   sebabGagal: string[];
   alasan: string;
@@ -112,8 +139,17 @@ export function hitungNilai(scores: Record<string, number>, alasan = ""): HasilN
     if (n < d.ambang) sebabGagal.push(`${d.id} ${n} (ambang ${d.ambang})`);
   }
   total = Math.round(total * 10) / 10;
-  if (total < AMBANG_TOTAL) sebabGagal.unshift(`total ${total} (ambang ${AMBANG_TOTAL})`);
-  return { total, perDimensi, lulus: sebabGagal.length === 0, sebabGagal, alasan };
+
+  // SYARAT PERTAMA, tidak bisa ditawar: tidak boleh ada dimensi yang jeblok.
+  // Kalau ada, totalnya tidak lagi relevan — inilah yang mencegah kelemahan
+  // kritis dirata-ratakan sampai hilang.
+  const semuaDimensiLulus = sebabGagal.length === 0;
+  const bersih = semuaDimensiLulus && total >= AMBANG_TOTAL;
+  const tipis = semuaDimensiLulus && !bersih && total >= AMBANG_BORDERLINE;
+  if (!bersih && !tipis) {
+    sebabGagal.unshift(`total ${total} (ambang ${semuaDimensiLulus ? AMBANG_BORDERLINE : AMBANG_TOTAL})`);
+  }
+  return { total, perDimensi, lulus: bersih || tipis, borderline: tipis, sebabGagal, alasan };
 }
 
 /**
@@ -520,6 +556,7 @@ function catat(r: PermintaanIde, hasil: IdeTerpilih, biaya: AkumulasiBiaya): voi
   catatSkorGate({
     productName: r.productName, productCategory: r.productCategory,
     mechanic: hasil.ide.mechanic, total: hasil.nilai.total, lulus: hasil.nilai.lulus,
+    borderline: hasil.nilai.borderline,
     putaran: hasil.putaran, jumlahKandidat: hasil.peringkat.length,
     manusiawi: hasil.peringkat.filter((p) => situasiManusiawi(p.ide.human_situation)).length,
     panggilan: biaya.panggilan,
@@ -530,7 +567,7 @@ function catat(r: PermintaanIde, hasil: IdeTerpilih, biaya: AkumulasiBiaya): voi
   });
   console.log(
     `[idea] gate "${r.productName}": tertinggi ${hasil.nilai.total} (${hasil.ide.mechanic}) · ` +
-      `${hasil.nilai.lulus ? "LULUS" : "gagal"} · ${hasil.peringkat.length} kandidat, ` +
+      `${hasil.nilai.lulus ? (hasil.nilai.borderline ? "LULUS TIPIS" : "LULUS") : "gagal"} · ${hasil.peringkat.length} kandidat, ` +
       `${hasil.peringkat.filter((p) => situasiManusiawi(p.ide.human_situation)).length} berangkat dari situasi manusia · ` +
       `biaya ${biaya.panggilan} panggilan, ${biaya.tokenMasuk} token masuk / ${biaya.tokenKeluar} keluar`
   );
@@ -570,6 +607,7 @@ export function catatSkorGate(baris: {
   mechanic: string;
   total: number;
   lulus: boolean;
+  borderline: boolean;
   putaran: number;
   jumlahKandidat: number;
   manusiawi: number;

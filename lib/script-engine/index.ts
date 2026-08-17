@@ -81,6 +81,16 @@ export interface GeneratedScript {
    * PATCH 4 §6: kalau tidak ada yang lulus, tampilkan tiga terbaik dan minta
    * pilih — jangan render diam-diam.
    */
+  /**
+   * Ide ini lolos lewat jalur TIPIS (semua dimensi lewat, total 72-74).
+   *
+   * Ditandai supaya UI bisa mengatakannya apa adanya. Lulus tipis berarti
+   * "tidak ada cacat", bukan "ada yang kuat" — dan pengguna berhak tahu bedanya
+   * sebelum membayar render.
+   */
+  ideBorderline?: boolean;
+  /** Skor gate ide yang dipakai, untuk ditampilkan bersama naskahnya. */
+  ideSkor?: number;
   ideKandidat?: {
     one_liner: string;
     mechanic: string;
@@ -557,6 +567,19 @@ export async function generateScripts(opts: {
   }
   // Gate gagal: tiga terbaik ikut keluar supaya UI bisa menampilkannya dan
   // meminta pengguna memilih — bukan disimpan diam-diam di log server.
+  // Lulus (bersih maupun tipis): skornya ikut, dan yang tipis DITANDAI.
+  if (ide?.nilai.lulus) {
+    for (const v of hasil) {
+      v.ideSkor = ide.nilai.total;
+      if (ide.nilai.borderline) v.ideBorderline = true;
+    }
+    if (ide.nilai.borderline) {
+      console.log(
+        `[idea] "${product.name}": LULUS TIPIS ${ide.nilai.total} — semua dimensi lewat ambangnya, ` +
+          `tapi tidak ada yang menonjol. Ditandai borderline supaya terlihat di layar.`
+      );
+    }
+  }
   if (ide && !ide.nilai.lulus) {
     const tiga = ide.peringkat.slice(0, 3).map((p) => ({
       one_liner: p.ide.one_liner,
