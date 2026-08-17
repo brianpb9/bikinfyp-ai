@@ -80,6 +80,7 @@ const aslinya = globalThis.fetch;
 function ideDummy(over: Record<string, unknown> = {}) {
   return {
     one_liner: "Serum yang nggak boleh dipakai sebelum jam enam pagi",
+    human_situation: "Ibu ngendap-ngendap ke kamar mandi jam lima pagi sebelum anak-anak bangun",
     mechanic: "forbidden", hook_device: "larangan-terbalik", hook_level: "L2",
     why_stop: "Larangan bikin penonton nunggu alasannya",
     story: { setup: "dia ngendap ke kamar mandi", tension: "kenapa sembunyi-sembunyi?", payoff: "kalau ketahuan, habis dipakai rame-rame" },
@@ -279,5 +280,104 @@ test("ide sampai ke prompt penulis naskah, dan tiap varian dapat sudut berbeda",
     // validator, jadi prompt tidak 1:1 dengan varian.
     const oneLiners = new Set(promptNaskah.map((p) => p.split("\n")[0]));
     assert.equal(oneLiners.size, 3, `tiga varian harus memakai tiga sudut:\n${[...oneLiners].join("\n")}`);
+  } finally { globalThis.fetch = aslinya; }
+});
+
+test("mekanik ber-CGI dibatasi nativeness-nya di format sehari-hari, tidak di level tontonan", async () => {
+  const { penaltiCgi } = await import("../lib/script-engine/ide");
+  const { BATAS_NATIVENESS_CGI } = await import("../lib/script-engine/idea-mechanics");
+  const pov = ideDummy({ mechanic: "anomaly_pov" });
+  // hands_only / talking_head level normal: dibatasi, dan batasnya DI BAWAH
+  // ambang 7 — jadi benar-benar tidak bisa lolos, bukan cuma kehilangan poin.
+  assert.equal(penaltiCgi(pov, { format: "hands_only", hookLevel: "normal" }).berlaku, true);
+  assert.equal(penaltiCgi(pov, { format: "talking_head", hookLevel: "normal" }).berlaku, true);
+  assert.ok(BATAS_NATIVENESS_CGI < 7);
+  // Level tontonan: penonton memang datang untuk yang mustahil.
+  assert.equal(penaltiCgi(pov, { format: "hands_only", hookLevel: "gila" }).berlaku, false);
+  assert.equal(penaltiCgi(pov, { format: "hands_only", hookLevel: "agak_gila" }).berlaku, false);
+  // TVC memang dirakit dan penonton tahu itu.
+  assert.equal(penaltiCgi(pov, { format: "tvc", hookLevel: "normal" }).berlaku, false);
+  // Mekanik non-CGI tidak tersentuh.
+  assert.equal(penaltiCgi(ideDummy({ mechanic: "social_theft" }), { format: "hands_only", hookLevel: "normal" }).berlaku, false);
+});
+
+test("situasi manusia dibedakan dari deskripsi benda", async () => {
+  const { situasiManusiawi } = await import("../lib/script-engine/idea-mechanics");
+  assert.equal(situasiManusiawi("Ibu ngendap-ngendap ke kamar mandi sebelum anak-anak bangun"), true);
+  assert.equal(situasiManusiawi("Bestie nanya terus sampai aku ketahuan nyimpen botolnya"), true);
+  assert.equal(situasiManusiawi("Anak kos rebutan satu botol di meja bersama"), true);
+  // Yang berangkat dari benda — persis 10 dari 10 kandidat pada jalankan 17 Agu.
+  assert.equal(situasiManusiawi("Kamera dipasang di dasar botol, pipet turun menyedot cairan"), false);
+  assert.equal(situasiManusiawi("Satu tetes menyusut sampai hilang di permukaan datar"), false);
+});
+
+test("gate GAGAL: naskah TIDAK ditulis dari ide gagal, dan tiga terbaik dikembalikan", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const lemah = { scroll_stop: 4, distinctiveness: 4, story_pull: 4, payoff: 4, brand_fidelity_plan: 4, nativeness: 4 };
+  const promptNaskah: string[] = [];
+  const daftar = [
+    ideDummy(),
+    ideDummy({ mechanic: "absence", one_liner: "Meja rias aku dikosongin satu per satu sampai sisa satu botol" }),
+    ideDummy({ mechanic: "stakes", one_liner: "Kalau ini bikin kulitku perih, aku balikin ke toko besok pagi" }),
+  ];
+  globalThis.fetch = (async (_u: string, init: { body: string }) => {
+    const body = JSON.parse(init.body) as { system: { text: string }[]; messages: { content: string }[] };
+    const sistem = body.system.map((s) => s.text).join("\n");
+    if (sistem.includes("You are the FYP gate")) {
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ scores: lemah, reason: "alasan uji yang cukup panjang" }) }] }) };
+    }
+    if (sistem.includes("You invent ONE IDEA")) {
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ ideas: daftar }) }] }) };
+    }
+    promptNaskah.push(body.messages[0].content);
+    return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments: [
+      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, aku dulu gitu juga sih",
+        start_state: "dia sudah memegang pipinya", framing: "medium", angle: "eye level", camera: "static",
+        action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
+        audio_note: "", why: "setup", mode: "SELFIE" },
+      { block: "BODY", label: "DEMO", start: 4, end: 10, text: "aku pakai ini tiap malam deh",
+        start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
+        action: "dia memutar botol, lalu memiringkan labelnya", product_state: "partial", expression: "warm",
+        audio_note: "", why: "tension", mode: "SELLING" },
+      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "cek keranjang kuning ya",
+        start_state: "botolnya sudah terangkat", framing: "tight", angle: "eye level", camera: "static",
+        action: "dia menahannya diam, lalu menunjuk ke bawah", product_state: "hero", expression: "bright",
+        audio_note: "", why: "payoff", mode: "SELLING" },
+    ] }) }] }) };
+  }) as never;
+
+  try {
+    const hasil = await generateScripts({
+      product: { id: "p2", name: "Scarlett Acne Serum", price_idr: 75000, category: "beauty" },
+      register: "bestie", qualityTier: "high_quality", durationSec: 15, count: 1,
+    });
+    // Tidak satu pun prompt naskah membawa ide — itu inti perubahannya.
+    assert.ok(promptNaskah.length > 0, "penulis naskah tetap dipanggil");
+    for (const p of promptNaskah) {
+      assert.ok(!p.startsWith("THE IDEA"), `naskah tidak boleh ditulis dari ide yang gagal gate:\n${p.slice(0, 200)}`);
+    }
+    // Tiga terbaik ikut keluar supaya bisa ditawarkan ke pengguna.
+    const k = hasil[0].ideKandidat;
+    assert.ok(k, "kandidat ide harus dikembalikan saat gate gagal");
+    assert.ok(k.length >= 1 && k.length <= 3, `maksimal tiga, dapat ${k.length}`);
+    assert.ok(k[0].sebabGagal.length > 0, "sebab gagalnya harus ikut");
+    assert.ok(typeof k[0].total === "number" && k[0].human_situation.length > 0);
+  } finally { globalThis.fetch = aslinya; }
+});
+
+test("penambal kuota tidak boleh menggandakan mekanik walau model mengabaikan larangan", async () => {
+  // Larangan yang cuma ditulis di prompt bukan larangan. Model yang
+  // mengembalikan daftar sama harus tetap menghasilkan peringkat tanpa
+  // duplikat — kalau tidak, satu ide dihitung dua kali dan varian naskah
+  // kedua memakai ide yang sama dengan varian pertama.
+  const dua = [
+    ideDummy(),
+    ideDummy({ mechanic: "absence", one_liner: "Meja rias dikosongin satu per satu sampai sisa satu botol" }),
+  ];
+  stubModel(dua, [sempurna]);
+  try {
+    const hasil = await pilihIde(permintaan);
+    const mekanik = hasil.peringkat.map((p) => p.ide.mechanic);
+    assert.equal(new Set(mekanik).size, mekanik.length, `mekanik terduplikasi: ${mekanik.join(", ")}`);
   } finally { globalThis.fetch = aslinya; }
 });

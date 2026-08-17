@@ -133,3 +133,49 @@ export function ideGenerik(oneLiner: string, konteks: { productName: string; kat
   // konkret di kalimat itu.
   return !menyebutProduk && konkret.length < 2;
 }
+
+/**
+ * Mekanik yang MENUNTUT CGI atau kamera mustahil.
+ *
+ * Di jalur produksi kita (satu talent, satu HP, r2v Seedance) mekanik ini
+ * tidak bisa terasa spontan — dan itu terukur, bukan selera: pada jalankan
+ * Scarlett 17 Agu, anomaly_pov "kamera di dasar botol" dinilai nativeness 3
+ * dan scale "botol setinggi pintu" juga 3, dengan alasan juri yang sama
+ * ("jelas dirakit, nol spontanitas", "CGI jelas terasa dirakit").
+ *
+ * Mereka bukan ide buruk — mereka ide untuk hook level tinggi, di mana
+ * penonton memang datang untuk tontonan yang mustahil. Di level normal,
+ * mereka cuma terasa iklan.
+ */
+export const MEKANIK_BUTUH_CGI = new Set<IdMekanik>(["anomaly_pov", "scale"]);
+
+/** Level hook yang memang menjual tontonan mustahil. */
+export const LEVEL_TONTONAN = new Set(["agak_gila", "gila"]);
+
+/** Batas nativeness untuk mekanik CGI di luar level tontonan.
+ *
+ *  4, yaitu DI BAWAH ambang 7 — jadi ia tidak bisa lolos gate, bukan sekadar
+ *  kehilangan sedikit poin. Itu memang maksudnya: mekanik ini hanya milik
+ *  level tinggi, dan setengah-setengah akan membuatnya lolos sesekali lalu
+ *  keluar sebagai video yang terasa dirakit. */
+export const BATAS_NATIVENESS_CGI = 4;
+
+/** Kata yang menandai SITUASI MANUSIA — orang, hubungan, tempat sosial, momen.
+ *
+ *  Dipakai memeriksa apakah kandidat berangkat dari manusia atau dari benda.
+ *  Sengaja daftar kata, bukan model: yang diukur cuma "ada manusianya atau
+ *  tidak", dan pertanyaan sesederhana itu tidak butuh panggilan berbayar. */
+const KATA_MANUSIA = [
+  "aku", "gue", "saya", "kamu", "dia", "orang", "teman", "temen", "bestie", "sahabat",
+  "ibu", "bapak", "adik", "kakak", "anak", "pacar", "suami", "istri", "mertua", "tetangga",
+  "kos", "kantor", "sekolah", "kampus", "kelas", "rumah", "kamar mandi", "dapur", "arisan",
+  "pagi", "malam", "subuh", "telat", "buru-buru", "ngantri", "antre", "reuni", "kondangan",
+  "nanya", "ditanya", "bilang", "ngomong", "ketahuan", "sembunyi", "ngumpet", "malu",
+  "rebutan", "pinjam", "minjem", "nyamber", "nitip", "dimarahi", "dilarang",
+];
+
+/** Apakah situasi ini berangkat dari MANUSIA, bukan dari bendanya? */
+export function situasiManusiawi(human_situation: string): boolean {
+  const t = ` ${human_situation.toLowerCase().replace(/[^a-z\s-]/g, " ")} `;
+  return KATA_MANUSIA.some((k) => t.includes(` ${k} `) || t.includes(`${k} `));
+}

@@ -74,6 +74,22 @@ export interface GeneratedScript {
   caption: string;
   hashtags: string[];
   validation: ValidationResult;
+  /**
+   * Tiga ide terbaik BESERTA skornya, diisi HANYA saat FYP Gate gagal.
+   *
+   * Ada supaya kegagalan gate sampai ke pengguna, bukan berhenti di log server.
+   * PATCH 4 §6: kalau tidak ada yang lulus, tampilkan tiga terbaik dan minta
+   * pilih — jangan render diam-diam.
+   */
+  ideKandidat?: {
+    one_liner: string;
+    mechanic: string;
+    human_situation: string;
+    total: number;
+    perDimensi: Record<string, number>;
+    sebabGagal: string[];
+    alasan: string;
+  }[];
 }
 
 const MAX_REGEN = 2; // FSD F-02.3: regenerate maksimal 2x
@@ -477,18 +493,29 @@ export async function generateScripts(opts: {
         kategoriNoun: pick(product.category, CATEGORY_NOUN),
         priceIdr: product.price_idr ?? 0, durationSec,
         contentType: opts.contentType ?? "affiliate", register,
+        format: opts.format, hookLevel: opts.hookLevel ?? "normal",
       });
       console.log(
         `[idea] "${product.name}": ${ide.peringkat.length} kandidat dinilai, terpilih ` +
           `${ide.ide.mechanic} (${ide.nilai.total}) — "${ide.ide.one_liner}"`
       );
       if (!ide.nilai.lulus) {
-        // Tidak dirender diam-diam sebagai "bagus": idenya dipakai karena harus
-        // ada yang dipakai, tapi kegagalannya tercatat supaya bisa ditawarkan
-        // ke pengguna di layar pilih naskah.
+        // TIDAK ADA naskah yang ditulis dari ide yang gagal gate.
+        //
+        // Versi pertama tetap memakai ide terbaik "karena harus ada yang
+        // dipakai". Hasilnya terbaca: naskah Scarlett 17 Agu ditulis dari ide
+        // bernilai nativeness 3, dan memang terasa dirakit. Menulis naskah dari
+        // ide yang kita sendiri nilai gagal berarti mengubah gerbang jadi
+        // hiasan — ia melaporkan kegagalan lalu melanjutkan seolah tidak.
+        //
+        // Yang benar menurut PATCH 4 §6: tampilkan tiga ide terbaik beserta
+        // skornya dan minta pengguna memilih. Jadi kandidatnya dibawa keluar
+        // lewat ideKandidat, dan naskahnya ditulis TANPA ide — perilaku
+        // sebelum Gate 3, yang jujur sebagai "belum ada sudut yang layak".
         console.warn(
           `[idea] "${product.name}": tidak ada ide yang lulus FYP Gate setelah ${ide.putaran} putaran ` +
-            `(terbaik ${ide.nilai.total} — ${ide.nilai.sebabGagal.join(", ")})`
+            `(terbaik ${ide.nilai.total} — ${ide.nilai.sebabGagal.join(", ")}). ` +
+            `Naskah ditulis TANPA ide; tiga kandidat teratas dikembalikan untuk dipilih pengguna.`
         );
       }
     } catch (err) {
@@ -500,10 +527,26 @@ export async function generateScripts(opts: {
   for (let i = 0; i < families.length; i++) {
     // Varian ke-i memakai ide peringkat ke-i kalau ada; kalau kandidatnya lebih
     // sedikit dari variannya, sisanya memakai ide terbaik.
-    const ideVarian = ide ? (ide.peringkat[i] ?? ide.peringkat[0])?.ide ?? ide.ide : null;
+    // Ide dipakai HANYA kalau gate lulus. Kalau tidak, naskah ditulis tanpa
+    // ide dan kandidatnya ditawarkan ke pengguna (lihat catatan di atas).
+    const ideVarian = ide?.nilai.lulus ? (ide.peringkat[i] ?? ide.peringkat[0])?.ide ?? ide.ide : null;
     hasil.push(await generateOne(product, register, emotion, families[i], tier, durationSec,
       opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format,
       ideVarian ? petunjukNaskah(ideVarian) : undefined));
+  }
+  // Gate gagal: tiga terbaik ikut keluar supaya UI bisa menampilkannya dan
+  // meminta pengguna memilih — bukan disimpan diam-diam di log server.
+  if (ide && !ide.nilai.lulus) {
+    const tiga = ide.peringkat.slice(0, 3).map((p) => ({
+      one_liner: p.ide.one_liner,
+      mechanic: p.ide.mechanic,
+      human_situation: p.ide.human_situation,
+      total: p.nilai.total,
+      perDimensi: p.nilai.perDimensi,
+      sebabGagal: p.nilai.sebabGagal,
+      alasan: p.nilai.alasan,
+    }));
+    for (const v of hasil) v.ideKandidat = tiga;
   }
   return hasil;
 }

@@ -45,6 +45,7 @@ const ide = await pilihIde({
   productName: produk.name, productCategory: produk.category, kategoriNoun: CATEGORY_NOUN.beauty,
   priceIdr: produk.priceIdr, durationSec: durasi, contentType: "affiliate", register,
   klaim: ["teksturnya ringan", "cepat meresap"],
+  format: "hands_only", hookLevel: "normal",
 });
 
 console.log("\n" + "=".repeat(78));
@@ -54,6 +55,7 @@ for (const p of ide.peringkat) {
   const d = p.nilai.perDimensi;
   console.log(`\n[${String(p.nilai.total).padStart(5)}] ${p.ide.mechanic.padEnd(17)} ${p.nilai.lulus ? "LULUS" : "gagal"}`);
   console.log(`        one-liner : "${p.ide.one_liner}"`);
+  console.log(`        situasi   : ${p.ide.human_situation}`);
   console.log(`        perangkat : ${p.ide.hook_device}  (level ${p.ide.hook_level})`);
   console.log(
     `        skor      : scroll-stop ${d.scroll_stop ?? "-"} · beda ${d.distinctiveness ?? "-"} · ` +
@@ -85,6 +87,15 @@ const nilai = (segs: SegmentDraft[]) =>
     hook_family: "H1", register, segments: segs, productName: produk.name,
     priceIdr: produk.priceIdr, qualityTier: tier, durationSec: durasi,
   } as never, "strict");
+
+if (!ide.nilai.lulus) {
+  console.log("\n" + "=".repeat(78));
+  console.log("D. NASKAH — TIDAK DITULIS");
+  console.log("=".repeat(78));
+  console.log("Tidak ada ide yang lulus FYP Gate, jadi naskah TIDAK ditulis dari ide gagal.");
+  console.log("Tiga terbaik di atas yang ditawarkan ke pengguna untuk dipilih (PATCH 4 §6).");
+  process.exit(0);
+}
 
 let keluhan: string[] | undefined;
 let segmen: SegmentDraft[] | null = null;
