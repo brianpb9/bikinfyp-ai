@@ -316,7 +316,43 @@ test("durasi 45 dtk, tier bersuara: dialog 1 segmen penuh per shot (bukan digabu
     qualityTier: "high_quality",
     format: "hands_only",
   });
-  assert.ok(s.shots[0].prompt.includes("HOOKTEXT") && !s.shots[0].prompt.includes("DEMOTEXT"));
-  assert.ok(s.shots[1].prompt.includes("DEMOTEXT") && !s.shots[1].prompt.includes("HOOKTEXT"));
-  assert.ok(s.shots[2].prompt.includes("CTATEXT"));
+  // Dulu asersinya memaku indeks (0=hook, 1=demo, 2=cta) — benar saat 45 detik
+  // selalu tiga shot. Sejak modul dipendekkan ia lima shot, dan CTA jatuh di
+  // shot terakhir, bukan shot ketiga. Yang dijaga sekarang maksud aslinya:
+  // satu segmen penuh per shot, TIDAK digabung dan TIDAK diulang.
+  const cari = (t: string) => s.shots.filter((sh) => sh.prompt.includes(t));
+  for (const t of ["HOOKTEXT", "DEMOTEXT", "CTATEXT"]) {
+    assert.equal(cari(t).length, 1, `"${t}" harus muncul di tepat satu shot`);
+  }
+  // Tidak ada shot yang memuat dua kalimat sekaligus (itu arti "bukan digabung").
+  for (const sh of s.shots) {
+    const jumlah = ["HOOKTEXT", "DEMOTEXT", "CTATEXT"].filter((t) => sh.prompt.includes(t)).length;
+    assert.ok(jumlah <= 1, `satu shot memuat ${jumlah} kalimat — dialog tergabung lagi`);
+  }
+  // Urutannya tetap naik: hook sebelum demo sebelum cta.
+  const idx = (t: string) => s.shots.findIndex((sh) => sh.prompt.includes(t));
+  assert.ok(idx("HOOKTEXT") < idx("DEMOTEXT") && idx("DEMOTEXT") < idx("CTATEXT"));
+});
+
+// Modul 5 detik memperkenalkan cacat yang tangga lama tidak punya: pada 4+
+// shot, "hook / demo / sisanya CTA" memberi kalimat penutup ke DUA shot, jadi
+// CTA-nya diucapkan dua kali. Dan menyaring "segmen yang beririsan" saja juga
+// salah — segmen demo 9 detik beririsan dengan tiga shot 5 detik sekaligus.
+test("tiap kalimat naskah diucapkan TEPAT SEKALI, apa pun jumlah shotnya", () => {
+  for (const dur of [15, 20, 30]) {
+    const segments = [
+      { role: "hook" as const, start: 0, end: dur * 0.25, text: "HOOKLINE", visual_direction: "x" },
+      { role: "demo" as const, start: dur * 0.25, end: dur * 0.7, text: "DEMOLINE", visual_direction: "x" },
+      { role: "cta" as const, start: dur * 0.7, end: dur, text: "CTALINE", visual_direction: "x" },
+    ];
+    const s = planShots({
+      jobId: `dup-${dur}`, durationSec: dur, segments, category: hijaber,
+      productName: "Serum Glow", productCategory: "beauty", productVisualDesc: null,
+      imageRefPath: "/tmp/x.png", qualityTier: "high_quality", format: "hands_only",
+    });
+    for (const baris of ["HOOKLINE", "DEMOLINE", "CTALINE"]) {
+      const muncul = s.shots.filter((sh) => sh.prompt.includes(baris)).length;
+      assert.equal(muncul, 1, `${dur}s: "${baris}" muncul di ${muncul} shot, seharusnya tepat 1`);
+    }
+  }
 });

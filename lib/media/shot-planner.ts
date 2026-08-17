@@ -536,6 +536,26 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // dalam satu tarikan; 2 shot = [hook+demo] lalu [cta] (perilaku lama, tak
   // berubah). >=3 shot (45 dtk) = 1 segmen penuh per shot — pas karena tiap
   // shot sudah 15 dtk penuh, gak perlu digabung lagi.
+  /**
+   * Tiap segmen jatuh ke TEPAT SATU shot: yang irisan waktunya paling besar.
+   *
+   * Menyaring "segmen yang beririsan" saja tidak cukup — segmen demo 9 detik
+   * beririsan dengan tiga shot 5 detik sekaligus, dan kalimatnya akan
+   * diucapkan tiga kali. Yang benar: satu kalimat, satu shot, dan shot lain di
+   * rentang itu jadi beat visual TANPA dialog. Justru itu yang memberi ruang
+   * bernapas untuk beat sensorik (busa, tuang, tekstur) — bukan kekurangan.
+   */
+  const segmenMilikShot = (i: number) =>
+    input.segments.filter((sg) => {
+      let terbaik = -1;
+      let irisanTerbesar = 0;
+      for (let k = 0; k < numShots; k++) {
+        const irisan = Math.min(sg.end, (k + 1) * perShot) - Math.max(sg.start, k * perShot);
+        if (irisan > irisanTerbesar) { irisanTerbesar = irisan; terbaik = k; }
+      }
+      return terbaik === i;
+    });
+
   const dialogueForShot = (i: number): string[] =>
     // TVC dipecah jadi 3-6 modul, jadi tangga "hook / demo / sisanya CTA" di
     // bawah tidak bisa dipakai: shot 3,4,5 semuanya akan kebagian kalimat
@@ -544,13 +564,22 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // memang beririsan dengan shot itu. Shot tanpa irisan sengaja dibiarkan
     // tanpa dialog — beat visual murni, dan VO final tetap dirakit utuh oleh
     // Gemini TTS di atas video, bukan dari teks per-shot ini.
-    format === "tvc"
-      ? input.segments.filter((sg) => sg.end > i * perShot && sg.start < (i + 1) * perShot).map((sg) => stripDeliveryTags(sg.text))
-      : numShots === 1
+    // JENDELA WAKTU untuk SEMUA format bershot banyak, bukan cuma TVC.
+    //
+    // Tangga "hook / demo / sisanya CTA" hanya benar saat shotnya tepat tiga.
+    // Sejak format tanpa wajah memakai modul 5 detik (17 Agu), video 20 detik
+    // jadi EMPAT shot — dan tangga itu memberi kalimat CTA ke shot 2 DAN 3.
+    // Penutupnya diucapkan dua kali, dan model diminta memeragakan CTA dua
+    // kali. Komentar di jalur TVC sudah memperingatkan pola ini; kesalahannya
+    // adalah memakai jalur berbeda untuk masalah yang sama.
+    //
+    // Segmen skrip punya start/end sungguhan, jadi tiap shot mengambil kalimat
+    // yang jendela waktunya memang beririsan dengannya. Shot tanpa irisan
+    // sengaja dibiarkan TANPA dialog — beat visual murni, dan itu justru yang
+    // membuat beat sensorik (busa, tuang, tekstur) punya ruang bernapas.
+    numShots === 1
       ? [segText("hook"), segText("demo"), segText("cta")]
-      : numShots >= 3
-        ? i === 0 ? [segText("hook")] : i === 1 ? [segText("demo")] : [segText("cta")]
-        : i === 0 ? [segText("hook"), segText("demo")] : [segText("cta")];
+      : segmenMilikShot(i).map((sg) => stripDeliveryTags(sg.text));
 
   // --- TVC (M9, 2026-08-11) ---
   // Iklan brand berstruktur, bukan UGC mengalir. Peta beat mengikuti dua
