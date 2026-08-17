@@ -186,3 +186,37 @@ test("saat memperbaiki PANJANG, sasarannya turun ke dekat batas bawah", async ()
     assert.ok(perbaikan[0].includes("no more than 30"));
   } finally { globalThis.fetch = aslinya; }
 });
+
+test("keberhasilan jalur LLM meninggalkan baris log POSITIF", async () => {
+  // "Tidak ada JATUH KE TEMPLATE" bukan bukti kalau tidak ada permintaan sama
+  // sekali. Verifikasi produksi butuh sesuatu yang MUNCUL saat berhasil.
+  const { generateScripts } = await import("../lib/script-engine");
+  const baris: string[] = [];
+  const logAsli = console.log;
+  console.log = (...a: unknown[]) => { baris.push(a.join(" ")); };
+  globalThis.fetch = (async () => ({
+    ok: true,
+    json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments: [
+      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, jerawat aku dulu bandel banget sih",
+        start_state: "dia sudah memegang pipinya", framing: "medium", angle: "eye level", camera: "static",
+        action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
+        audio_note: "", why: "setup", mode: "SELFIE" },
+      { block: "BODY", label: "DEMO", start: 4, end: 10,
+        text: "aku pakai serum ini tiap malam deh, teksturnya ringan banget dan cepat meresap",
+        start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
+        action: "dia memutar botol, lalu memiringkan label", product_state: "partial", expression: "warm",
+        audio_note: "", why: "tension", mode: "SELLING" },
+      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "cek keranjang kuning ya",
+        start_state: "botolnya sudah terangkat", framing: "tight", angle: "eye level", camera: "static",
+        action: "dia menahannya diam, lalu menunjuk", product_state: "hero", expression: "bright",
+        audio_note: "", why: "payoff", mode: "SELLING" },
+    ] }) }] }),
+  })) as never;
+  try {
+    await generateScripts({
+      product: { id: "pl", name: "Scarlett Acne Serum", price_idr: 75000, category: "beauty" },
+      register: "bestie", qualityTier: "high_quality", durationSec: 15, count: 1,
+    });
+    assert.ok(baris.some((b) => /naskah LLM DIPAKAI/.test(b)), `tidak ada baris positif:\n${baris.join("\n")}`);
+  } finally { console.log = logAsli; globalThis.fetch = aslinya; }
+});

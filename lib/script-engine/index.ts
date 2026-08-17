@@ -365,7 +365,19 @@ async function generateOne(
           ide: petunjukIde,
         });
         const kandidat = rakitDanNilai(keSegmentDraft(segs), true);
-        if (kandidat.validation.passed) { hasil = kandidat; break; }
+        if (kandidat.validation.passed) {
+          // Baris POSITIF, sengaja. Sampai sekarang jalur LLM hanya menulis log
+          // saat GAGAL, jadi keberhasilannya tidak bisa dibuktikan dari log —
+          // dan "tidak ada JATUH KE TEMPLATE" bukan bukti kalau tidak ada
+          // permintaan sama sekali. Ini yang membuat verifikasi produksi bisa
+          // dijawab dengan bukti, bukan dengan ketiadaan bukti.
+          console.log(
+            `[script-engine] naskah LLM DIPAKAI untuk "${product.name}" ` +
+              `(percobaan ${percobaan + 1}/${MAKS_PERBAIKAN_LLM}, tier ${tier}${petunjukIde ? ", dengan ide" : ""})`
+          );
+          hasil = kandidat;
+          break;
+        }
         keluhan = kandidat.validation.errors.map((e) => e.message_id);
         console.warn(
           `[script-engine] naskah LLM "${product.name}" ditolak validator ` +
