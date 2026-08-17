@@ -214,11 +214,18 @@ export async function turunkanFrameAwalTerperiksa(input: {
     });
     biaya += qc.biayaIdr;
     terakhir = qc;
-    if (qc.lulus) return { path: f.path, biayaIdr: biaya, qc, ulang };
+    // Hanya PASS yang boleh dipakai. UNVERIFIED sengaja TIDAK diulang: kalau
+    // kuncinya tidak ada atau OCR mati, mengulang cuma membakar biaya gambar
+    // untuk pemeriksa yang tetap tidak bisa memeriksa.
+    if (qc.status === "PASS") return { path: f.path, biayaIdr: biaya, qc, ulang };
+    if (qc.status === "UNVERIFIED") {
+      console.error(`[QC-F1] frame ${path.basename(input.outPath)}: ${qc.detail}`);
+      return { path: input.outPath, biayaIdr: biaya, qc, ulang };
+    }
     console.warn(`[QC-F1] frame ${path.basename(input.outPath)} percobaan ${ulang + 1}: ${qc.detail}`);
   }
 
-  console.error(`[QC-F1] frame ${path.basename(input.outPath)} TETAP GAGAL setelah ${MAKS_ULANG + 1} percobaan: ${terakhir!.detail}`);
+  console.error(`[QC-F1] frame ${path.basename(input.outPath)} TETAP ${terakhir!.status} setelah ${MAKS_ULANG + 1} percobaan: ${terakhir!.detail}`);
   return { path: input.outPath, biayaIdr: biaya, qc: terakhir!, ulang: MAKS_ULANG };
 }
 

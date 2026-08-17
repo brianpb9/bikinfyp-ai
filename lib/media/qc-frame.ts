@@ -1,17 +1,27 @@
 /**
- * QC-F1 — kesetiaan produk pada FRAME TURUNAN.
+ * QC-F1 — kesetiaan produk pada FRAME TURUNAN. TIGA KEADAAN.
  *
- * Gate 1 (brand fidelity) dari standar produk: label dan bentuk produk harus
- * identik dengan foto aslinya. Wajib, bukan opsional.
+ * Gate 1 (brand fidelity): label dan bentuk produk harus identik dengan foto
+ * aslinya. Wajib, bukan opsional.
  *
- * KENAPA ADA. Frame awal tiap segmen diturunkan dari CAST-REF + foto produk
- * lewat Gemini. Uji 17 Agu menunjukkan langkah itu BISA MENGGESER produknya:
- * botol serum berdropper keluar sebagai botol berpump — dan pergeserannya
- * terjadi di langkah GEMINI, bukan di Seedance. Tanpa pemeriksaan di sini,
- * kita cuma memindahkan cacat dari tahap video ke tahap gambar lalu merasa
- * sudah aman, karena video hilirnya akan setia... pada produk yang salah.
+ * KENAPA TIGA KEADAAN, bukan lulus/gagal (temuan reviewer A10, 18 Agu).
  *
- * Diperiksa DUA CARA, karena keduanya menangkap kegagalan yang berbeda:
+ * Versi sebelumnya mengembalikan `lulus: true` pada dua jalur yang sebenarnya
+ * berarti "tidak tahu": kunci Gemini tidak ada, dan panggilan vision gagal.
+ * Alasannya waktu itu terdengar masuk akal — "gagal MEMERIKSA bukan gagal
+ * kesetiaan" — tapi akibatnya adalah frame yang tidak pernah diperiksa dikirim
+ * ke Seedance sebagai referensi, dan seluruh gerbang jadi hiasan justru pada
+ * saat ia paling dibutuhkan.
+ *
+ *   PASS        diperiksa dan setia.
+ *   FAIL        diperiksa dan TIDAK setia.
+ *   UNVERIFIED  tidak bisa diperiksa. BUKAN lolos.
+ *
+ * `lulus` sengaja DIHAPUS dari hasil. Selama field itu ada, pemanggil bisa
+ * menulis `if (qc.lulus)` dan memperlakukan UNVERIFIED sebagai lolos tanpa
+ * pernah menyadarinya. Sekarang mereka harus menyebut statusnya.
+ *
+ * Diperiksa DUA CARA, karena keduanya menangkap kegagalan berbeda:
  *
  *   Gemini vision  — bentuk, jenis tutup (dropper/pump/screw), warna, tata
  *                    letak label. Hal-hal yang tidak punya teks untuk dibaca.
@@ -33,9 +43,11 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 /** Satu panggilan vision. Pecahan sen dibanding klip Rp2.771-8.313. */
 const BIAYA_PERIKSA_IDR = 12;
 
+export type StatusQcF1 = "PASS" | "FAIL" | "UNVERIFIED";
+
 export interface HasilQcF1 {
-  lulus: boolean;
-  /** Alasan siap-baca kalau gagal — dipakai di log dan arsip prompt. */
+  status: StatusQcF1;
+  /** Alasan siap-baca — dipakai di log dan arsip prompt. */
   detail: string;
   /** Rincian per aspek, untuk menelusuri kegagalan yang berulang. */
   temuan: {
@@ -46,6 +58,16 @@ export interface HasilQcF1 {
     merekTerbaca: boolean | null;
   };
   biayaIdr: number;
+}
+
+/**
+ * SATU-SATUNYA cara sah menanyakan "boleh dipakai sebagai referensi?".
+ *
+ * Ada supaya jawabannya tidak pernah ditulis ulang sebagai `!== "FAIL"` di
+ * suatu tempat — yang akan diam-diam meloloskan UNVERIFIED.
+ */
+export function bolehJadiReferensi(hasil: HasilQcF1): boolean {
+  return hasil.status === "PASS";
 }
 
 function dataUri(p: string) {
@@ -67,22 +89,51 @@ const PERTANYAAN =
   "tata_letak_label_sama: same label layout — same blocks in the same places, same relative sizes.\n" +
   "Be strict. If you are unsure, answer false.";
 
-/** OCR nama merek di frame turunan. Dipisah dari vision karena menangkap
- *  kegagalan yang berbeda: huruf yang berubah, bukan bentuk yang berubah. */
-async function merekTerbaca(framePath: string, productName: string): Promise<boolean | null> {
+/**
+ * Apakah token merek benar-benar TERBACA UTUH di teks OCR?
+ *
+ * Aturannya asimetris, dan itu inti perbaikannya (reviewer A10).
+ *
+ * Versi lama mencocokkan AWALAN EMPAT HURUF, dengan alasan memberi toleransi
+ * pada huruf tepi yang terpotong sudut kamera. Akibatnya terukur pada frame
+ * c-no-face-2.5.png: label frame berbunyi "SCARLET" (satu T) sementara
+ * mereknya "SCARLETT" — dan `"scarlet".includes("scar")` menjawab lolos.
+ * Toleransi itu menerima MEREK LAIN, yang justru satu-satunya hal yang tidak
+ * boleh diterima gerbang kesetiaan merek.
+ *
+ * Yang benar: kelebihan huruf boleh, KEKURANGAN huruf tidak.
+ *   "scarlett"   -> cocok (persis)
+ *   "scarlettx"  -> cocok (OCR menambah derau di ekor)
+ *   "scarlet"    -> TIDAK cocok (mereknya terpotong: itu nama lain)
+ */
+export function merekCocok(teksOcr: string, token: string): boolean {
+  const kata = teksOcr.toLowerCase().replace(/[^a-z0-9]+/g, " ").split(" ").filter(Boolean);
+  return kata.some((w) => w === token || w.startsWith(token));
+}
+
+export type HasilOcr = { terbaca: boolean; teks: string } | { terbaca: null; teks: "" };
+
+/**
+ * OCR nama merek di frame. Mengembalikan null HANYA kalau tidak ada merek
+ * untuk dibaca; kegagalan menjalankan OCR MELEMPAR, supaya pemanggil bisa
+ * membedakan "tidak ada merek" dari "tidak bisa diperiksa".
+ */
+async function merekTerbaca(framePath: string, productName: string): Promise<HasilOcr> {
   const tokens = brandTokens(productName);
-  if (tokens.length === 0) return null; // produk polos: tidak ada merek untuk dibaca
+  if (tokens.length === 0) return { terbaca: null, teks: "" }; // produk polos
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qcf1-"));
   try {
     const png = path.join(dir, "besar.png");
     await jalankan("ffmpeg", ["-y", "-v", "error", "-i", framePath, "-vf", "scale=1440:-2:flags=lanczos", png]);
     const { stdout } = await jalankan("tesseract", [png, "stdout", "-l", "eng", "--psm", "11"]);
-    const teks = stdout.toLowerCase().replace(/[^a-z0-9]+/g, " ");
-    // Cocok bila token dan teks berbagi awalan >=4 huruf — toleran terhadap
-    // huruf tepi yang terpotong sudut kamera, tapi tidak terhadap kata lain.
-    return tokens.some((t) => teks.includes(t.slice(0, 4)));
-  } catch {
-    return null; // gagal memeriksa bukan gagal kesetiaan
+    // TOKEN UTAMA saja yang menentukan, bukan "salah satu token".
+    //
+    // brandTokens mengurutkan dari yang terpanjang, jadi [0] adalah nama
+    // mereknya. Menerima "token mana pun" membuat token lemah yang memutuskan:
+    // pada frame c-no-face-2.5.png mereknya terbaca "SCARLET" (salah), tapi
+    // kata "acne" terbaca benar — dan gerbangnya lolos karena "acne".
+    // Kesetiaan MEREK tidak boleh dibuktikan oleh kata yang bukan merek.
+    return { terbaca: merekCocok(stdout, tokens[0]), teks: stdout.trim().slice(0, 200) };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -94,27 +145,61 @@ export async function qcF1FrameFidelity(input: {
   productPhotoPath: string;
   productName: string;
   /**
-   * Peran produk di frame ini. Menentukan seberapa ketat OCR diperlakukan.
+   * Peran produk di frame ini. Menentukan apakah OCR merek WAJIB.
    *
-   * Hanya frame HERO yang wajib nama mereknya terbaca OCR — itu janji produk
-   * kita (Gate 1), dan di sanalah produknya memang diangkat dekat ke kamera.
-   * Pada frame "partial" produk sengaja jauh atau sebagian tertutup tangan;
-   * menuntut OCR di situ akan menolak frame yang justru benar, lalu membakar
-   * biaya gulung-ulang untuk memperbaiki sesuatu yang tidak rusak.
+   * Hanya frame HERO yang wajib nama mereknya terbaca — itu janji produk kita
+   * (Gate 1), dan di sanalah produknya memang diangkat dekat ke kamera. Pada
+   * frame "partial" produk sengaja jauh atau sebagian tertutup tangan;
+   * menuntut OCR di situ akan menolak frame yang justru benar.
    *
-   * Bentuk, tutup, warna, dan tata letak label tetap diperiksa penuh di
-   * kedua peran — pergeseran bentuk salah di mana pun ia muncul.
+   * Bentuk, tutup, warna, dan tata letak label tetap diperiksa penuh di kedua
+   * peran — pergeseran bentuk salah di mana pun ia muncul.
    */
   productState?: "hero" | "partial";
 }): Promise<HasilQcF1> {
   const kosong = { bentukSama: null, tutupSama: null, warnaSama: null, tataLetakLabelSama: null, merekTerbaca: null };
+  const hero = (input.productState ?? "hero") === "hero";
+
   if (!config.geminiApiKey) {
-    return { lulus: true, detail: "QC-F1 dilewati: GEMINI_API_KEY belum di-set.", temuan: kosong, biayaIdr: 0 };
+    // BUKAN lolos. Frame yang tidak diperiksa tidak boleh jadi referensi.
+    return {
+      status: "UNVERIFIED",
+      detail: "QC-F1 tidak dapat dijalankan: GEMINI_API_KEY belum di-set. Frame TIDAK boleh dipakai sebagai referensi.",
+      temuan: kosong,
+      biayaIdr: 0,
+    };
   }
 
-  const ocr = await merekTerbaca(input.framePath, input.productName);
+  let ocr: HasilOcr;
+  try {
+    ocr = await merekTerbaca(input.framePath, input.productName);
+  } catch (err) {
+    // OCR mati (tesseract/ffmpeg tidak ada) pada frame HERO berarti janji
+    // "nama merek terbaca" tidak bisa dibuktikan — dan janji yang tidak bisa
+    // dibuktikan tidak boleh diperlakukan sebagai terbukti.
+    if (hero) {
+      return {
+        status: "UNVERIFIED",
+        detail: `QC-F1 tidak dapat memeriksa merek pada frame hero (${(err as Error).message}). Frame TIDAK dipakai.`,
+        temuan: kosong,
+        biayaIdr: 0,
+      };
+    }
+    ocr = { terbaca: null, teks: "" };
+  }
 
+  // SEKALI ULANG untuk galat sesaat sebelum menyatakan UNVERIFIED.
+  //
+  // Timeout jaringan bukan bukti apa pun tentang framenya, sementara
+  // menyatakannya UNVERIFIED membuang frame turunan seharga Rp650 demi
+  // pemeriksaan Rp12. Yang TIDAK diulang: jawaban vision yang sah tapi
+  // menyatakan FAIL — itu jawaban, bukan kegagalan.
   let vision: Record<string, unknown> | null = null;
+  let galatTerakhir = "";
+  for (let percobaan = 0; percobaan < 3 && !vision; percobaan++) {
+  // Jeda menaik: 503 dari penyedia biasanya sesaat, dan mencoba lagi seketika
+  // hanya menambah beban pada layanan yang sedang tersendat.
+  if (percobaan > 0) await new Promise((r) => setTimeout(r, percobaan * 1500));
   try {
     const res = await fetch(`${ENDPOINT}/${MODEL}:generateContent`, {
       method: "POST",
@@ -127,19 +212,20 @@ export async function qcF1FrameFidelity(input: {
         ] }],
         generationConfig: { responseMimeType: "application/json", temperature: 0 },
       }),
-      signal: AbortSignal.timeout(90_000),
+      signal: AbortSignal.timeout(120_000),
     });
     if (!res.ok) throw new Error(`HTTP ${res.status}`);
     const data = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
-    const teks = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
-    vision = JSON.parse(teks) as Record<string, unknown>;
+    vision = JSON.parse(data.candidates?.[0]?.content?.parts?.[0]?.text ?? "") as Record<string, unknown>;
   } catch (err) {
-    // Gagal MEMERIKSA bukan gagal kesetiaan. Menolak frame karena pemeriksa
-    // kita bermasalah akan membakar biaya re-roll tanpa alasan.
+    galatTerakhir = (err as Error).message;
+  }
+  }
+  if (!vision) {
     return {
-      lulus: true,
-      detail: `QC-F1 tidak dapat dijalankan (${(err as Error).message}) — frame diteruskan tanpa penilaian.`,
-      temuan: { ...kosong, merekTerbaca: ocr },
+      status: "UNVERIFIED",
+      detail: `QC-F1 tidak dapat dijalankan (${galatTerakhir}). Frame TIDAK dipakai sebagai referensi.`,
+      temuan: { ...kosong, merekTerbaca: ocr.terbaca },
       biayaIdr: 0,
     };
   }
@@ -149,7 +235,7 @@ export async function qcF1FrameFidelity(input: {
     tutupSama: vision.tutup_sama === true,
     warnaSama: vision.warna_sama === true,
     tataLetakLabelSama: vision.tata_letak_label_sama === true,
-    merekTerbaca: ocr,
+    merekTerbaca: ocr.terbaca,
   };
 
   const gagal: string[] = [];
@@ -157,16 +243,15 @@ export async function qcF1FrameFidelity(input: {
   if (!temuan.tutupSama) gagal.push("jenis tutup berbeda");
   if (!temuan.warnaSama) gagal.push("warna berbeda");
   if (!temuan.tataLetakLabelSama) gagal.push("tata letak label berbeda");
-  // ocr === null berarti tidak ada merek untuk dibaca — bukan kegagalan.
-  // Pada frame "partial", OCR dilaporkan tapi TIDAK memblokir (lihat catatan
-  // pada productState).
-  const wajibOcr = (input.productState ?? "hero") === "hero";
-  if (ocr === false && wajibOcr) gagal.push("nama merek tidak terbaca");
+  // ocr.terbaca === null berarti tidak ada merek untuk dibaca — bukan kegagalan.
+  if (ocr.terbaca === false && hero) {
+    gagal.push(`nama merek tidak terbaca utuh${ocr.teks ? ` (OCR membaca: "${ocr.teks.replace(/\s+/g, " ").slice(0, 60)}")` : ""}`);
+  }
 
   const catatan = typeof vision.catatan === "string" ? ` (${vision.catatan})` : "";
   return {
-    lulus: gagal.length === 0,
-    detail: gagal.length === 0 ? `QC-F1 lulus${catatan}` : `QC-F1 GAGAL: ${gagal.join(", ")}${catatan}`,
+    status: gagal.length === 0 ? "PASS" : "FAIL",
+    detail: gagal.length === 0 ? `QC-F1 PASS${catatan}` : `QC-F1 FAIL: ${gagal.join(", ")}${catatan}`,
     temuan,
     biayaIdr: BIAYA_PERIKSA_IDR,
   };

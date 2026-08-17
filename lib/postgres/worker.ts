@@ -20,6 +20,7 @@ import { pgSimpanArsipPrompt } from "./smoke-runtime";
 import { generateFirstFrame, perluFrameBuatan, harusMenahanProduk, pilihShotUntukFrame } from "../media/first-frame";
 import { kunciCastRef } from "../media/cast-ref";
 import { periksaPemicu, ringkasPemicu } from "../media/pemicu-filter";
+import { bolehJadiReferensi } from "../media/qc-frame";
 import { TVC_ROUTES, type TvcRoute } from "../templates";
 import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
@@ -139,7 +140,8 @@ async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: str
 export interface RingkasanQcF1 {
   shot: number;
   productState: "hero" | "partial";
-  lulus: boolean;
+  /** PASS / FAIL / UNVERIFIED — lihat lib/media/qc-frame.ts. */
+  status: import("../media/qc-frame").StatusQcF1;
   ulang: number;
   detail: string;
 }
@@ -197,12 +199,14 @@ async function siapkanFrameTurunan(
         productState,
       });
       biaya += hasil.biayaIdr;
-      qcF1.push({ shot: sh.index, productState, lulus: hasil.qc.lulus, ulang: hasil.ulang, detail: hasil.qc.detail });
-      console.log(`[QC-F1] job ${jobId} shot ${sh.index} (${productState}): ${hasil.qc.lulus ? "LULUS" : "GAGAL"} setelah ${hasil.ulang} ulang — ${hasil.qc.detail}`);
-      // Frame yang GAGAL QC-F1 tetap tidak dipakai: produk yang bentuknya
-      // sudah bergeser di tahap gambar akan diikuti setia oleh tahap video.
-      // Lebih baik kembali ke foto produk asli, yang setidaknya benar.
-      shots.push(hasil.qc.lulus ? { ...sh, imageRefPath: hasil.path } : sh);
+      qcF1.push({ shot: sh.index, productState, status: hasil.qc.status, ulang: hasil.ulang, detail: hasil.qc.detail });
+      const pesan = `[QC-F1] job ${jobId} shot ${sh.index} (${productState}): ${hasil.qc.status} setelah ${hasil.ulang} ulang — ${hasil.qc.detail}`;
+      if (hasil.qc.status === "PASS") console.log(pesan); else console.error(pesan);
+      // HANYA PASS yang jadi referensi. FAIL berarti produknya sudah bergeser
+      // di tahap gambar dan tahap video akan mengikutinya dengan setia;
+      // UNVERIFIED berarti kita tidak pernah tahu. Keduanya kembali ke foto
+      // produk asli, yang setidaknya benar.
+      shots.push(bolehJadiReferensi(hasil.qc) ? { ...sh, imageRefPath: hasil.path } : sh);
     } catch (err) {
       console.error(`[QC-F1] job ${jobId} shot ${sh.index}: turunan gagal, pakai foto produk —`, err instanceof Error ? err.message : err);
       shots.push(sh);

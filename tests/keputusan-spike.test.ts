@@ -123,9 +123,23 @@ test("QC-F1 wajib: frame turunan diperiksa terhadap foto ASLI, bukan turunan seb
   assert.match(s, /gemini-flash-latest/, "vision untuk bentuk/tutup/warna/tata letak");
   assert.match(s, /tesseract/, "OCR untuk huruf mereknya sendiri");
   assert.match(s, /tutup_sama/, "jenis tutup diperiksa — dropper bukan pump");
-  // Gagal MEMERIKSA tidak boleh dihitung sebagai gagal kesetiaan.
-  assert.match(s, /tidak dapat dijalankan[\s\S]{0,80}diteruskan tanpa penilaian/,
-    "pemeriksa yang error tidak boleh membakar biaya gulung-ulang");
+  // DIBALIK setelah temuan reviewer A10 (18 Agu).
+  //
+  // Aturan lama di sini berbunyi "gagal MEMERIKSA bukan gagal kesetiaan", dan
+  // itu terdengar masuk akal sampai akibatnya terlihat: frame yang tidak pernah
+  // diperiksa diteruskan sebagai referensi ke Seedance, dan gerbangnya jadi
+  // hiasan justru saat paling dibutuhkan. Sekarang ada keadaan KETIGA.
+  assert.match(s, /UNVERIFIED/, "tidak-bisa-diperiksa punya keadaan sendiri");
+  assert.match(s, /TIDAK dipakai sebagai referensi|TIDAK boleh dipakai/,
+    "frame yang tidak diperiksa tidak boleh jadi referensi");
+  // Dicocokkan ke DEKLARASI PROPERTI, bukan ke teks mana pun: versi pertama
+  // assertion ini menangkap komentar yang justru mendokumentasikan cacat
+  // lamanya, lalu gagal karena dokumentasinya benar.
+  assert.ok(!/^\s*lulus\??:/m.test(s), "field `lulus` harus hilang supaya UNVERIFIED tidak bisa dibaca sebagai lolos");
+  assert.match(s, /export function bolehJadiReferensi/, "satu pintu untuk menanyakan boleh-tidaknya");
   // Ketat OCR mengikuti peran: hanya hero yang wajib.
-  assert.match(s, /const wajibOcr = \(input\.productState \?\? "hero"\) === "hero"/);
+  // Dinamai ulang jadi `hero` saat A10 diperbaiki; yang dijaga tetap sama —
+  // hanya frame hero yang wajib mereknya terbaca OCR.
+  assert.match(s, /const hero = \(input\.productState \?\? "hero"\) === "hero"/);
+  assert.match(s, /ocr\.terbaca === false && hero/, "OCR hanya memblokir di frame hero");
 });
