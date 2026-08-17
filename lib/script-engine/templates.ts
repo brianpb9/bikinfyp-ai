@@ -37,6 +37,9 @@ export interface SegmentDraft {
    * naskahlah yang memutuskan hook-nya menahan produk, bukan tebakan dari prosa.
    */
   product_state?: "hidden" | "partial" | "hero";
+  /** Keadaan yang sudah benar di frame pertama segmen ini (tulisan LLM).
+   *  Dipakai membangun frame turunan — lihat ShotSpec.startState. */
+  start_state?: string;
 }
 
 type Triple = { hook: string; demo: string; cta: string };

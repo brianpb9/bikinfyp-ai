@@ -337,6 +337,7 @@ export function keSegmentDraft(s: SegmenLlm[]): SegmentDraft[] {
     text: x.text,
     visual_direction: `${x.framing}, ${x.angle}. ${x.camera}. ${x.action}`,
     product_state: x.product_state,
+    start_state: x.start_state,
   })) as SegmentDraft[];
 }
 

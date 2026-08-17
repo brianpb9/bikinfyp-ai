@@ -37,6 +37,19 @@ export interface ShotSpec {
    *  mengeluarkan uang (frame pertama buatan) tidak boleh bergantung pada
    *  kebetulan pilihan kata dalam prompt berbahasa Inggris. */
   withholdProduct?: boolean;
+  /**
+   * Keadaan yang SUDAH BENAR di frame pertama, sebagaimana ditulis penulis
+   * naskah ("the bottle is already in her hand at chest height").
+   *
+   * Dibawa sebagai data karena frame turunan dibangun DARI kalimat ini.
+   * Prompt shot menggambarkan apa yang TERJADI sepanjang klip; frame pertama
+   * butuh apa yang sudah benar SEBELUM ada yang bergerak. Memakai prompt shot
+   * sebagai gantinya membuat frame pertamanya menggambarkan gerakan, dan model
+   * video lalu mengulang gerakan yang sudah terjadi.
+   *
+   * Kosong pada jalur template — di situ frame turunan memakai prompt shot.
+   */
+  startState?: string;
 }
 
 export interface VisualSpec {

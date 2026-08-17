@@ -21,6 +21,7 @@
  */
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { config } from "../config";
 
 const MODEL = "gemini-3.1-flash-image";
@@ -119,6 +120,40 @@ export async function buatPaketCastRef(avatarDesc: string, outDir: string): Prom
   );
 
   return { netral, tigaPerempat, closeUp, biayaIdr: a.biayaIdr + b.biayaIdr + c.biayaIdr };
+}
+
+/**
+ * Paket CAST-REF milik satu avatar, dibuat SEKALI lalu dipakai ulang.
+ *
+ * Cache-nya berkas di disk, bukan basis data — sengaja. Paket ini adalah tiga
+ * PNG; menaruhnya di tabel berarti migrasi, dan yang dibutuhkan cuma "sudah
+ * pernah dibuat atau belum". Kalau berkasnya hilang, ia dibuat lagi seharga
+ * Rp1.950 dan tidak ada yang rusak.
+ *
+ * Kuncinya WAJIB stabil per identitas avatar. Untuk preset, id presetnya.
+ * Untuk avatar unggahan sendiri, sidik jari deskripsinya — dua deskripsi
+ * berbeda adalah dua orang berbeda dan tidak boleh berbagi paket.
+ */
+export function kunciCastRef(input: { presetId?: string | null; customDesc?: string | null }): string {
+  const custom = input.customDesc?.trim();
+  if (custom) return `custom-${createHash("sha1").update(custom).digest("hex").slice(0, 16)}`;
+  return `preset-${(input.presetId ?? "hijaber").replace(/[^a-z0-9_-]/gi, "")}`;
+}
+
+export async function paketCastRefTersimpan(
+  kunci: string,
+  avatarDesc: string,
+  baseDir: string
+): Promise<PaketCastRef> {
+  const dir = path.join(baseDir, "castref", kunci);
+  const netral = path.join(dir, "netral.png");
+  const tigaPerempat = path.join(dir, "tiga-perempat.png");
+  const closeUp = path.join(dir, "close-up.png");
+  if ([netral, tigaPerempat, closeUp].every((p) => fs.existsSync(p))) {
+    return { netral, tigaPerempat, closeUp, biayaIdr: 0 };
+  }
+  fs.mkdirSync(dir, { recursive: true });
+  return buatPaketCastRef(avatarDesc, dir);
 }
 
 /**

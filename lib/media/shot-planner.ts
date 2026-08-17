@@ -1446,10 +1446,15 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     );
     // Penanda menahan-produk ikut sebagai DATA. Sumbernya peran template
     // (ugcRoles) atau tabel rute TVC — keduanya menandainya eksplisit.
+    // start_state segmen paling awal di shot ini — kalimat yang menggambarkan
+    // apa yang SUDAH benar sebelum ada yang bergerak. Dipakai membangun frame
+    // pertama; prompt shot menggambarkan gerakannya, bukan keadaan awalnya.
+    const awalShot = segmenMilikShot(i).slice().sort((a, b) => a.start - b.start)[0];
     return {
       index: i, durationSec: perShot, prompt, imageRefPath: input.imageRefPath,
       ...(menahanProdukDiShot(i) ? { withholdProduct: true } : {}),
       ...(beatTvc?.tanpaOrang ? { tanpaOrang: true } : {}),
+      ...(awalShot?.start_state ? { startState: awalShot.start_state } : {}),
     };
   });
 

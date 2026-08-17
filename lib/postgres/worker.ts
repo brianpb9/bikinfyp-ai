@@ -18,6 +18,7 @@ import { planShots } from "../media/shot-planner";
 import { ringkasParams, ringkasSpec } from "../arsip-prompt";
 import { pgSimpanArsipPrompt } from "./smoke-runtime";
 import { generateFirstFrame, perluFrameBuatan, harusMenahanProduk, pilihShotUntukFrame } from "../media/first-frame";
+import { kunciCastRef } from "../media/cast-ref";
 import { TVC_ROUTES, type TvcRoute } from "../templates";
 import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
@@ -75,6 +76,33 @@ type WorkerRow = {
   creator_category: string | null;
 };
 
+/**
+ * Boleh memakai frame TURUNAN CAST-REF (bukan sekadar frame pertama buatan)?
+ *
+ * Keputusan Brian 17 Agu, dan dua batasnya berbeda sifat:
+ *
+ *   TIER — hanya super_hq dan Enterprise. Biayanya Rp650 + Rp12 per segmen;
+ *   pada high_quality itu 62% margin (Rp1.986 dari Rp3.198), jauh di atas
+ *   batas ~25% yang sudah tertulis di MAKS_FRAME_PER_TIER. Yang menjaga
+ *   high_quality tetap QC-10 di video jadi — label merek harus terbaca, dan
+ *   itu sudah berlaku hari ini (skip hanya sah untuk produk tanpa token merek).
+ *
+ *   FORMAT — hanya hands_only dulu. Frame turunan memberi identitas antar klip,
+ *   dan format inilah yang benar-benar punya banyak klip; talking_head justru
+ *   dikunci satu klip selama Seedance menolak referensi berwajah, jadi tidak
+ *   ada identitas antar-klip untuk dijaga. vo_broll tidak memanggil model video
+ *   sama sekali.
+ */
+export function bolehFrameTurunan(input: {
+  format: string;
+  tier: string;
+  /** Job milik organisasi = jalur Enterprise. */
+  orgId?: string | null;
+}): boolean {
+  if (input.format !== "hands_only") return false;
+  return input.tier === "super_hq" || Boolean(input.orgId);
+}
+
 /** Ganti imageRefPath shot yang perannya menuntut komposisi berbeda dengan
  *  frame pertama buatan. Shot lain dibiarkan memakai foto produk asli. */
 async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: string): Promise<VisualSpec> {
@@ -104,6 +132,82 @@ async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: str
     }
   }));
   return { ...spec, shots };
+}
+
+/** Verdict QC-F1 per shot, untuk diarsipkan bersama promptnya. */
+export interface RingkasanQcF1 {
+  shot: number;
+  productState: "hero" | "partial";
+  lulus: boolean;
+  ulang: number;
+  detail: string;
+}
+
+/**
+ * Frame awal SETIAP shot diturunkan dari CAST-REF + foto produk, lalu diperiksa
+ * QC-F1 sebelum dipakai (STEP 2).
+ *
+ * Bedanya dengan siapkanFramePertama: di sana tiap frame lahir sendiri-sendiri
+ * dari foto produk, jadi ruangan, pakaian, dan tangannya berganti antar klip.
+ * Di sini semuanya turunan dari SATU paket avatar, jadi klipnya terasa satu
+ * sesi rekaman — dan itu memang alasan CAST-REF ada.
+ *
+ * Kegagalan TIDAK menggagalkan job: frame yang gagal diturunkan kembali ke foto
+ * produk, persis perilaku lama. Pengguna yang sudah membayar tidak boleh
+ * kehilangan videonya karena satu panggilan gambar bermasalah — yang wajib
+ * adalah verdictnya tercatat, bukan bahwa ia menghentikan semuanya.
+ */
+async function siapkanFrameTurunan(
+  spec: VisualSpec,
+  workDir: string,
+  jobId: string,
+  identitas: { kunci: string; deskripsi: string; productName: string }
+): Promise<{ spec: VisualSpec; qcF1: RingkasanQcF1[]; biayaIdr: number }> {
+  const { paketCastRefTersimpan, turunkanFrameAwalTerperiksa } = await import("../media/cast-ref");
+  const qcF1: RingkasanQcF1[] = [];
+  let biaya = 0;
+
+  let paket: Awaited<ReturnType<typeof paketCastRefTersimpan>>;
+  try {
+    paket = await paketCastRefTersimpan(identitas.kunci, identitas.deskripsi, config.storageDir);
+    biaya += paket.biayaIdr;
+    if (paket.biayaIdr > 0) console.log(`[castref] job ${jobId}: paket "${identitas.kunci}" dibuat (Rp${paket.biayaIdr})`);
+  } catch (err) {
+    console.error(`[castref] job ${jobId}: paket gagal dibuat, pakai jalur frame lama —`, err instanceof Error ? err.message : err);
+    return { spec: await siapkanFramePertama(spec, workDir, jobId), qcF1, biayaIdr: biaya };
+  }
+
+  // BERURUTAN, bukan Promise.all. Tiap frame bisa memicu sampai tiga panggilan
+  // gambar (dua gulung ulang), dan menjalankan semua shot sekaligus berarti
+  // ledakan permintaan ke satu kunci Gemini yang sama — kunci yang, saat kena
+  // 429, ikut mematikan TTS produksi (catatan spike 17 Agu).
+  const shots: typeof spec.shots = [];
+  for (const sh of spec.shots) {
+    const productState = harusMenahanProduk(sh) ? "partial" : "hero";
+    try {
+      const hasil = await turunkanFrameAwalTerperiksa({
+        castRefPath: paket.tigaPerempat,
+        productPhotoPath: sh.imageRefPath,
+        productName: identitas.productName,
+        // Prompt shot menggambarkan GERAKAN; frame pertama butuh keadaan awal.
+        startState: sh.startState ?? sh.prompt,
+        outPath: `${workDir}/turunan-shot${sh.index}.png`,
+        denganWajah: config.seedanceFaceRef,
+        productState,
+      });
+      biaya += hasil.biayaIdr;
+      qcF1.push({ shot: sh.index, productState, lulus: hasil.qc.lulus, ulang: hasil.ulang, detail: hasil.qc.detail });
+      console.log(`[QC-F1] job ${jobId} shot ${sh.index} (${productState}): ${hasil.qc.lulus ? "LULUS" : "GAGAL"} setelah ${hasil.ulang} ulang — ${hasil.qc.detail}`);
+      // Frame yang GAGAL QC-F1 tetap tidak dipakai: produk yang bentuknya
+      // sudah bergeser di tahap gambar akan diikuti setia oleh tahap video.
+      // Lebih baik kembali ke foto produk asli, yang setidaknya benar.
+      shots.push(hasil.qc.lulus ? { ...sh, imageRefPath: hasil.path } : sh);
+    } catch (err) {
+      console.error(`[QC-F1] job ${jobId} shot ${sh.index}: turunan gagal, pakai foto produk —`, err instanceof Error ? err.message : err);
+      shots.push(sh);
+    }
+  }
+  return { spec: { ...spec, shots }, qcF1, biayaIdr: biaya };
 }
 
 export async function processPostgresJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
@@ -283,7 +387,41 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   //
   // GAGAL = PAKAI FOTO ASLI. Video yang framing-nya kurang pas masih bisa
   // dipakai; job yang mati karena satu panggilan gambar gagal tidak.
-  const specSiap = await siapkanFramePertama(spec, workDir, row.id);
+  //
+  // STEP 2 (17 Agu): pada tier/format yang berhak, frame pertamanya DITURUNKAN
+  // dari paket CAST-REF avatar dan diperiksa QC-F1 dulu — supaya klipnya
+  // terasa satu sesi rekaman, bukan beberapa ruangan berbeda. Lihat
+  // bolehFrameTurunan() untuk kenapa gerbangnya tier + format.
+  let qcF1: RingkasanQcF1[] = [];
+  let specSiap: VisualSpec;
+  if (bolehFrameTurunan({ format, tier, orgId: row.org_id })) {
+    const turunan = await siapkanFrameTurunan(spec, workDir, row.id, {
+      kunci: kunciCastRef({ presetId: row.creator_category, customDesc: customDesc ?? null }),
+      deskripsi: category.promptSeed,
+      productName: row.product_name,
+    });
+    specSiap = turunan.spec;
+    qcF1 = turunan.qcF1;
+    if (turunan.biayaIdr > 0) await jobs.addCost(row.id, turunan.biayaIdr);
+  } else {
+    specSiap = await siapkanFramePertama(spec, workDir, row.id);
+  }
+  // Verdict QC-F1 ikut ke arsip prompt lewat modelParams — SENGAJA belum kolom
+  // sendiri. Kolom qc_f1_json (migrasi 0033) menunggu 0030/0031 dipasang lebih
+  // dulu, dan menahan buktinya sampai migrasi itu jalan berarti kehilangan
+  // bukti dari job-job pertama yang justru paling perlu dibedah.
+  if (qcF1.length) {
+    try {
+      await pool.query(
+        // ::text di luar WAJIB — model_params kolomnya TEXT, dan Postgres tidak
+        // mengecor jsonb ke text secara implisit saat penugasan.
+        `UPDATE job_prompts SET model_params = (model_params::jsonb || $2::jsonb)::text WHERE job_id = $1`,
+        [row.id, JSON.stringify({ qc_f1: qcF1 })]
+      );
+    } catch (err) {
+      console.warn(`[job ${row.id.slice(0, 8)}] verdict QC-F1 gagal diarsipkan (diabaikan): ${(err as Error).message}`);
+    }
+  }
 
   const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(specSiap, workDir) : await generateVideoWithFailover(specSiap, workDir));
   await jobs.setProviders(row.id, video.providerName);
