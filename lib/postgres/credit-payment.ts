@@ -205,6 +205,51 @@ export class PgCreditPaymentRepository {
     throw new Error("Transaksi PostgreSQL habis retry.");
   }
   /** Serializes wallet spends: an org pool locks its organizations row (shared by every acting member), retail locks the user row. */
+  /**
+   * Kredit manual (kompensasi, itikad baik, koreksi) — SATU-SATUNYA jalan sah
+   * menambah saldo di luar pembelian.
+   *
+   * Menambah baris baru bertipe 'bonus', TIDAK PERNAH menyentuh baris lama.
+   * Ledger ini append-only dan dijaga trigger di database
+   * (credit_ledger_no_update / credit_ledger_no_delete), jadi "membetulkan"
+   * catatan lama memang mustahil — dan itu memang yang diinginkan: riwayat
+   * uang harus bisa dibaca ulang persis seperti kejadiannya.
+   *
+   * IDEMPOTEN lewat `rujukan`. Kompensasi hampir selalu dijalankan dari skrip
+   * operasional, dan skrip operasional hampir selalu dijalankan dua kali —
+   * sekali karena ragu, sekali karena terminalnya tertutup. Tanpa kunci ini,
+   * jalankan kedua menggandakan hadiahnya.
+   */
+  async grantBonus(
+    owner: string | CreditOwner,
+    amountIdr: number,
+    input: { alasan: string; rujukan: string }
+  ): Promise<{ granted: boolean; amountIdr: number }> {
+    if (!Number.isInteger(amountIdr) || amountIdr <= 0) {
+      throw new Error(`Jumlah bonus harus bilangan bulat positif, dapat ${amountIdr}.`);
+    }
+    const { userId, orgId } = resolveOwner(owner);
+    return this.transaction(async (client) => {
+      await this.lockWallet(client, userId, orgId);
+      // Rujukan dicari di audit_log, bukan di ledger: ledger tidak punya kolom
+      // teks bebas, dan menaruh rujukan di job_id akan mencemari kolom yang
+      // artinya "job mana" dengan sesuatu yang bukan job.
+      const sudah = await client.query(
+        `SELECT id FROM audit_log WHERE action = 'credit.bonus' AND meta::jsonb ->> 'rujukan' = $1`,
+        [input.rujukan]
+      );
+      if (sudah.rowCount) return { granted: false, amountIdr: 0 };
+      await this.ledger(client, userId, orgId, amountIdr, "bonus", null, null);
+      await this.audit(client, userId, "credit.bonus", orgId ? "organizations" : "users", orgId ?? userId, {
+        amount_idr: amountIdr,
+        alasan: input.alasan,
+        rujukan: input.rujukan,
+        org_id: orgId ?? undefined,
+      });
+      return { granted: true, amountIdr };
+    });
+  }
+
   private async lockWallet(client: PoolClient, userId: string, orgId: string | undefined | null) {
     if (orgId) await client.query("SELECT id FROM organizations WHERE id = $1 FOR UPDATE", [orgId]);
     else await client.query("SELECT id FROM users WHERE id = $1 FOR UPDATE", [userId]);

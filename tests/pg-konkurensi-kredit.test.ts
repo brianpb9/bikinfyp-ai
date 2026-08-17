@@ -243,3 +243,49 @@ test("capture berdelta bukan nol ditolak database", { skip: lewati }, async () =
     "capture yang menggerakkan saldo tidak boleh lahir lagi"
   );
 });
+
+test("grantBonus idempoten walau dijalankan berbarengan", { skip: lewati }, async () => {
+  // Kompensasi hampir selalu dijalankan dari skrip operasional, dan skrip
+  // operasional hampir selalu dijalankan dua kali. Yang diuji di sini bukan
+  // "dua panggilan berurutan" — itu mudah — tapi delapan panggilan BERBARENGAN,
+  // karena cacat uang cuma muncul saat dua proses membaca keadaan yang sama
+  // sebelum salah satunya menulis.
+  const uid = await penggunaUji();
+  const oid = id();
+  await pool.query("INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,$2,$3,$4)", [oid, `Org uji ${oid}`, `uji-${oid}`, at()]);
+
+  const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  const repo = new PgCreditPaymentRepository(URL_UJI);
+  const rujukan = `uji-kompensasi-${oid}`;
+  try {
+    const hasil = await Promise.all(
+      Array.from({ length: 8 }, () =>
+        repo.grantBonus({ userId: uid, orgId: oid }, 36000, { alasan: "uji", rujukan })
+      )
+    );
+    const diberikan = hasil.filter((h) => h.granted);
+    assert.equal(diberikan.length, 1, `hanya satu yang boleh memberi, dapat ${diberikan.length}`);
+
+    const saldo = await pool.query<{ s: string }>(
+      "SELECT COALESCE(SUM(delta),0)::text AS s FROM credit_ledger WHERE org_id=$1", [oid]
+    );
+    assert.equal(Number(saldo.rows[0].s), 36000, "saldo harus naik SEKALI, bukan delapan kali");
+
+    const baris = await pool.query("SELECT id FROM credit_ledger WHERE org_id=$1 AND type='bonus'", [oid]);
+    assert.equal(baris.rowCount, 1);
+  } finally { await repo.close(); }
+});
+
+test("grantBonus menolak jumlah yang tidak masuk akal", { skip: lewati }, async () => {
+  const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  const repo = new PgCreditPaymentRepository(URL_UJI);
+  try {
+    for (const jumlah of [0, -1000, 1.5, NaN]) {
+      await assert.rejects(
+        () => repo.grantBonus(id(), jumlah, { alasan: "uji", rujukan: `x-${jumlah}` }),
+        /bilangan bulat positif/,
+        `jumlah ${jumlah} harus ditolak`
+      );
+    }
+  } finally { await repo.close(); }
+});
