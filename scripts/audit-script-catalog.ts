@@ -10,7 +10,7 @@ function outputPath(argv: string[]): string | null {
   return path.resolve(value);
 }
 
-const audit = generateCatalogScriptAudit();
+const audit = await generateCatalogScriptAudit();
 const json = `${JSON.stringify(audit, null, 2)}\n`;
 const target = outputPath(process.argv.slice(2));
 

@@ -71,7 +71,7 @@ async function main() {
   for (const t of daftarTugas) {
     const tpl = getTemplate(t.templateId)!;
     const durasi = tpl.durationSec;
-    const [skrip] = generateScripts({
+    const [skrip] = await generateScripts({
       product: produk, register: "bunda", qualityTier: "high_quality",
       durationSec: durasi, count: 1, hookLevel: tpl.hookLevel,
       ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),

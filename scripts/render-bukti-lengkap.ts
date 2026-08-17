@@ -80,7 +80,7 @@ async function main() {
     id: "bukti", name: "Mosseru Bright Shower Gel", price_idr: 189000,
     category: "beauty", sourceUrl: null,
   };
-  const [skrip] = generateScripts({
+  const [skrip] = await generateScripts({
     product: produk, register: "bunda", qualityTier: "high_quality",
     durationSec: 15, count: 1, hookLevel: "berani",
   });

@@ -17,8 +17,8 @@ const product = { id: "prod-test-1", name: "Serum Glow Bright", price_idr: 85000
 
 const FORBIDDEN = /\b(pasti|dijamin|terbaik|menyembuhkan|obat|penyakit)\b|100%|nomor 1/i;
 
-test("3 varian beda keluarga hook dan semua lolos validator strict", () => {
-  const variants = generateScripts({ product, register: "bestie" });
+test("3 varian beda keluarga hook dan semua lolos validator strict", async () => {
+  const variants = await generateScripts({ product, register: "bestie" });
   assert.equal(variants.length, 3);
   const families = variants.map((v) => v.hook_family);
   assert.equal(new Set(families).size, 3, `keluarga hook harus beda: ${families}`);
@@ -27,11 +27,11 @@ test("3 varian beda keluarga hook dan semua lolos validator strict", () => {
   }
 });
 
-test("100 generate: 100% lolos validator, 0% kata terlarang", () => {
+test("100 generate: 100% lolos validator, 0% kata terlarang", async () => {
   const regs = ["bunda", "bestie", "genz", "netral"] as const;
   for (let i = 0; i < 100; i++) {
     const register = regs[i % 4];
-    const variants = generateScripts({ product, register });
+    const variants = await generateScripts({ product, register });
     for (const v of variants) {
       const full = v.segments.map((s) => s.text).join(" ");
       assert.equal(v.validation.passed, true, `iterasi ${i} ${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
@@ -40,19 +40,19 @@ test("100 generate: 100% lolos validator, 0% kata terlarang", () => {
   }
 });
 
-test("register bunda tidak pernah mengandung gue/lo; genz tidak aku/kamu", () => {
-  for (const v of generateScripts({ product, register: "bunda" })) {
+test("register bunda tidak pernah mengandung gue/lo; genz tidak aku/kamu", async () => {
+  for (const v of await generateScripts({ product, register: "bunda" })) {
     const full = v.segments.map((s) => s.text).join(" ").toLowerCase();
     assert.ok(!/\b(gue|gua|gw|lo|lu|elu)\b/.test(full), `bunda bocor gue/lo: ${full}`);
   }
-  for (const v of generateScripts({ product, register: "genz" })) {
+  for (const v of await generateScripts({ product, register: "genz" })) {
     const full = v.segments.map((s) => s.text).join(" ").toLowerCase();
     assert.ok(!/\b(aku|kamu|kau|anda)\b/.test(full), `genz bocor aku/kamu: ${full}`);
   }
 });
 
-test("struktur segmen 0-3/3-10/10-15 dan caption+hashtag sesuai kontrak", () => {
-  const [v] = generateScripts({ product, register: "netral" });
+test("struktur segmen 0-3/3-10/10-15 dan caption+hashtag sesuai kontrak", async () => {
+  const [v] = await generateScripts({ product, register: "netral" });
   assert.deepEqual(
     v.segments.map((s) => [s.role, s.start, s.end]),
     [["hook", 0, 3], ["demo", 3, 10], ["cta", 10, 15]]
@@ -65,23 +65,23 @@ test("struktur segmen 0-3/3-10/10-15 dan caption+hashtag sesuai kontrak", () => 
   assert.ok(v.hashtags.includes("#racuntiktok"));
 });
 
-test("CTA 'keranjang kuning' cuma untuk link TikTok; Shopee/tanpa sumber pakai 'keranjang' polos", () => {
+test("CTA 'keranjang kuning' cuma untuk link TikTok; Shopee/tanpa sumber pakai 'keranjang' polos", async () => {
   const tiktokProduct = { ...product, sourceUrl: "https://vt.tiktok.com/abc123" };
-  const [tiktokVariant] = generateScripts({ product: tiktokProduct, register: "netral" });
+  const [tiktokVariant] = await generateScripts({ product: tiktokProduct, register: "netral" });
   const tiktokCta = tiktokVariant.segments.find((s) => s.role === "cta")!.text.toLowerCase();
   assert.ok(tiktokCta.includes("keranjang kuning"), `TikTok CTA harusnya 'keranjang kuning': ${tiktokCta}`);
 
   const shopeeProduct = { ...product, sourceUrl: "https://shopee.co.id/produk-123" };
-  const [shopeeVariant] = generateScripts({ product: shopeeProduct, register: "netral" });
+  const [shopeeVariant] = await generateScripts({ product: shopeeProduct, register: "netral" });
   const shopeeCta = shopeeVariant.segments.find((s) => s.role === "cta")!.text.toLowerCase();
   assert.ok(shopeeCta.includes("keranjang"), `Shopee CTA harusnya sebut 'keranjang': ${shopeeCta}`);
   assert.ok(!shopeeCta.includes("keranjang kuning"), `Shopee CTA gak boleh 'keranjang kuning': ${shopeeCta}`);
 });
 
-test("harga muncul eksplisit di hook atau demo untuk berbagai nominal", () => {
+test("harga muncul eksplisit di hook atau demo untuk berbagai nominal", async () => {
   for (const price of [5000, 25000, 85000, 250000, 1500000]) {
     const p = { ...product, price_idr: price };
-    for (const v of generateScripts({ product: p, register: "bestie" })) {
+    for (const v of await generateScripts({ product: p, register: "bestie" })) {
       const res = validateScript(
         { hook_family: v.hook_family, register: "bestie", segments: v.segments, productName: p.name, priceIdr: price },
         "strict"
@@ -91,8 +91,8 @@ test("harga muncul eksplisit di hook atau demo untuk berbagai nominal", () => {
   }
 });
 
-test("tier bersuara: skrip kompak 25-30 kata (r19), tanpa tanda kurung, lolos validator", () => {
-  const variants = generateScripts({ product, register: "bestie", qualityTier: "high_quality" });
+test("tier bersuara: skrip kompak 25-30 kata (r19), tanpa tanda kurung, lolos validator", async () => {
+  const variants = await generateScripts({ product, register: "bestie", qualityTier: "high_quality" });
   assert.equal(variants.length, 3);
   for (const v of variants) {
     assert.equal(v.validation.passed, true, `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
@@ -104,9 +104,9 @@ test("tier bersuara: skrip kompak 25-30 kata (r19), tanpa tanda kurung, lolos va
   }
 });
 
-test("durasi 30 dtk: timing segmen skala 2x, demo diperpanjang, lolos validator (v1, 2026-08-03)", () => {
+test("durasi 30 dtk: timing segmen skala 2x, demo diperpanjang, lolos validator (v1, 2026-08-03)", async () => {
   for (const qualityTier of ["silent_caption", "high_quality"] as const) {
-    const variants = generateScripts({ product, register: "bestie", qualityTier, durationSec: 30 });
+    const variants = await generateScripts({ product, register: "bestie", qualityTier, durationSec: 30 });
     assert.equal(variants.length, 3);
     for (const v of variants) {
       assert.deepEqual(
@@ -119,16 +119,16 @@ test("durasi 30 dtk: timing segmen skala 2x, demo diperpanjang, lolos validator 
     // Demo 30 dtk harus lebih panjang dari demo 15 dtk (kalimat lanjutan ditambahkan,
     // bukan cuma diregangkan diam-diam menjadi jeda kosong).
     const [v30] = variants;
-    const [v15] = generateScripts({ product, register: "bestie", qualityTier });
+    const [v15] = await generateScripts({ product, register: "bestie", qualityTier });
     const demo30 = v30.segments.find((s) => s.role === "demo")!.text;
     const demo15 = v15.segments.find((s) => s.role === "demo")!.text;
     assert.ok(demo30.length > demo15.length, `${qualityTier}: demo 30 dtk (${demo30}) tidak lebih panjang dari demo 15 dtk (${demo15})`);
   }
 });
 
-test("durasi 45 dtk: timing segmen skala 3x, demo diperpanjang, lolos validator (v1.3, 2026-08-04)", () => {
+test("durasi 45 dtk: timing segmen skala 3x, demo diperpanjang, lolos validator (v1.3, 2026-08-04)", async () => {
   for (const qualityTier of ["silent_caption", "high_quality"] as const) {
-    const variants = generateScripts({ product, register: "bestie", qualityTier, durationSec: 45 });
+    const variants = await generateScripts({ product, register: "bestie", qualityTier, durationSec: 45 });
     assert.equal(variants.length, 3);
     for (const v of variants) {
       assert.deepEqual(
@@ -141,7 +141,7 @@ test("durasi 45 dtk: timing segmen skala 3x, demo diperpanjang, lolos validator 
     // Demo 45 dtk harus lebih panjang dari demo 30 dtk (bukan cuma 30 dtk yang
     // diperpanjang, makin lama durasinya makin banyak juga kalimat lanjutannya).
     const [v45] = variants;
-    const [v30] = generateScripts({ product, register: "bestie", qualityTier, durationSec: 30 });
+    const [v30] = await generateScripts({ product, register: "bestie", qualityTier, durationSec: 30 });
     const demo45 = v45.segments.find((s) => s.role === "demo")!.text;
     const demo30 = v30.segments.find((s) => s.role === "demo")!.text;
     assert.ok(demo45.length > demo30.length, `${qualityTier}: demo 45 dtk (${demo45}) tidak lebih panjang dari demo 30 dtk (${demo30})`);

@@ -101,7 +101,7 @@ async function main() {
     if (!tpl) { console.error(`Template ${id} tidak ada — dilewati`); continue; }
     console.log(`\n[${n + 1}/${PESANAN.template.length}] ${id} — ${tpl.format}, ${tpl.durationSec} dtk`);
 
-    const [skrip] = generateScripts({
+    const [skrip] = await generateScripts({
       product: produk, register: "bunda", qualityTier: tpl.tier as never,
       durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel, templateId: id,
       ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),

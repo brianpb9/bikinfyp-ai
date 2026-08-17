@@ -281,7 +281,7 @@ export async function POST(req: Request) {
         // Satu naskah per skenario, lalu DISALIN sebanyak avatar. Naskahnya
         // sengaja identik antar avatar — perbandingan wajah baru berarti kalau
         // kalimatnya tidak ikut berubah.
-        const varian = generateScripts({
+        const varian = await generateScripts({
           product: {
             id: product.id, name: product.name, price_idr: product.price_idr, category: product.category,
             sourceUrl: product.source_url, promoPriceBeforeIdr: product.promo_price_before_idr,

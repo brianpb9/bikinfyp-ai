@@ -594,14 +594,17 @@ function allowedDeliveryTags(text: string): string[] {
  * mengubah durasi, rute, beat, tier, atau keluarga hook; satu-satunya override
  * adalah count=4 agar kapasitas variasi diuji secara seragam.
  */
-export function generateCatalogScriptAudit(): CatalogScriptAudit {
+export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> {
   const fixture = SCRIPT_CATALOG_AUDIT_FIXTURE;
-  const rawTemplates = CAMPAIGN_TEMPLATES.map((template) => {
+  const rawTemplates: Awaited<ReturnType<typeof satuTemplate>>[] = [];
+  for (const template of CAMPAIGN_TEMPLATES) rawTemplates.push(await satuTemplate(template));
+
+  async function satuTemplate(template: (typeof CAMPAIGN_TEMPLATES)[number]) {
     const product = auditProductForTemplate(template);
     const fixtureSourceCategory = template.bestFor[0] ?? "default";
     const fixtureCategory = product.category;
     const fixtureCompatible = normalizeBestForCategory(fixtureSourceCategory) === fixtureCategory;
-    const variants = generateScripts({
+    const variants = await generateScripts({
       product,
       register: fixture.register,
       qualityTier: template.tier,
@@ -719,7 +722,7 @@ export function generateCatalogScriptAudit(): CatalogScriptAudit {
       nearDuplicateHookRefs: [] as CatalogTemplateAudit["nearDuplicateHookRefs"],
       variants: variantEvidence,
     } satisfies CatalogTemplateAudit;
-  });
+  }
 
   const allHookRefs = rawTemplates.flatMap((template) =>
     template.variants.flatMap((variant) => variant.hook ? [variant.hook] : [])

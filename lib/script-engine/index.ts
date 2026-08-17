@@ -22,6 +22,7 @@ import { templateCopy, TEMPLATE_COPY_CAPACITY } from "./template-copy";
 import { isTvcTemplate, templateRequiresPriceMention, validateScript, type ValidationResult } from "./validator";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
 import { compileDeliveryText } from "./delivery-tags";
+import { keSegmentDraft, laporJatuhKeTemplate, llmSiap, tulisNaskah } from "./llm";
 import { resolvePromo, promoDeadlineSpokenPhrase, type ActivePromo } from "../promo";
 import { getDb } from "../db";
 
@@ -219,7 +220,7 @@ function applyPromoToSegments(
   });
 }
 
-function generateOne(
+async function generateOne(
   product: ProductInput,
   register: Register,
   emotion: string,
@@ -229,8 +230,10 @@ function generateOne(
   beats?: { hookEnd: number; demoEnd: number },
   wordBudget?: number,
   templateId?: string | null,
-  variantIndex = 0
-): GeneratedScript {
+  variantIndex = 0,
+  contentType: "affiliate" | "ads" = "affiliate",
+  format = "hands_only"
+): Promise<GeneratedScript> {
   // Ambang Rp100.000 diturunkan dari data, bukan ditebak: tiga video pemenang
   // yang menyebut harga ada di Rp27-30 ribu, sedangkan yang produknya di atas
   // itu (serum, kursi kantoran) tidak menyebut harganya sama sekali. Di bawah
@@ -249,8 +252,35 @@ function generateOne(
   const dasar = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats, wordBudget, hargaMahal);
   const variasi = templateCopy(templateId, variantIndex, ctx);
   const teksVariasi = variasi ? [variasi.hook, variasi.demo, variasi.cta] : null;
-  const baseSegments = dasar.map((s, i) => {
-    const authored = applyCartLabel(teksVariasi?.[i] ?? s.text, cartLabel);
+  // ---- JALUR PENULIS LLM ----
+  //
+  // Menggantikan kalimat template. Yang TIDAK diganti: delivery tags, promo,
+  // validateScript("strict"), caption. LLM menulis; aturan yang memutuskan.
+  //
+  // Kegagalan apa pun jatuh ke template — produk tidak boleh mati karena satu
+  // penyedia — TAPI jatuhnya BERISIK. Naskah template yang dikirim diam-diam
+  // adalah persis cara kondisi "benar tapi datar" bertahan berbulan-bulan
+  // tanpa ada yang menyadarinya.
+  let dariLlm: SegmentDraft[] | null = null;
+  if (llmSiap()) {
+    try {
+      const segs = await tulisNaskah({
+        productName: product.name, productCategory: product.category,
+        priceIdr: product.price_idr ?? 0, durationSec, contentType, cartLabel,
+        register, hookFamily: family, hookLevel: "normal", format,
+        contoh: variasi ? `${variasi.hook} / ${variasi.demo} / ${variasi.cta}` : null,
+      });
+      dariLlm = keSegmentDraft(segs);
+    } catch (err) {
+      laporJatuhKeTemplate((err as Error).message, { productName: product.name });
+    }
+  } else {
+    laporJatuhKeTemplate("ANTHROPIC_API_KEY belum di-set", { productName: product.name });
+  }
+
+  const sumber = dariLlm ?? dasar;
+  const baseSegments = sumber.map((s, i) => {
+    const authored = applyCartLabel(dariLlm ? s.text : (teksVariasi?.[i] ?? s.text), cartLabel);
     return { ...s, ...compileDeliveryText(authored) };
   });
   const promo = resolvePromo({
@@ -320,7 +350,7 @@ function normalizeSegments(segments: SegmentDraft[]): SegmentDraft[] {
 }
 
 /** Generator utama: 3 varian, masing-masing beda keluarga hook. */
-export function generateScripts(opts: {
+export async function generateScripts(opts: {
   product: ProductInput;
   register: Register;
   emotion?: string;
@@ -348,7 +378,11 @@ export function generateScripts(opts: {
    *  skrip" jadi pilihan palsu. Brian memilih opsi (b) 2026-08-12: hook tetap
    *  dikunci template, tapi kalimatnya bervariasi. */
   templateId?: string | null;
-}): GeneratedScript[] {
+  /** Mengubah aturan CTA dan overlay (lihat references/content-types.md). */
+  contentType?: "affiliate" | "ads";
+  /** Petunjuk strategi untuk penulis LLM. */
+  format?: string;
+}): Promise<GeneratedScript[]> {
   const { product, register } = opts;
   const count = opts.count ?? 3;
   if (opts.templateId && count > TEMPLATE_COPY_CAPACITY) {
@@ -363,9 +397,16 @@ export function generateScripts(opts: {
     product.category, product.id, opts.hookLevel ?? "normal",
     opts.hookFamilies, count, opts.lockHookFamily === true
   );
-  return families.map((f, i) =>
-    generateOne(product, register, emotion, f, tier, durationSec, opts.beats, opts.wordBudget, opts.templateId, i)
-  );
+  // Berurutan, BUKAN Promise.all: tiap varian memanggil LLM, dan menembakkan
+  // enam permintaan sekaligus ke satu akun akan menabrak rate limit persis
+  // saat pengguna paling menunggu. Selisih waktunya kecil dibanding satu klip
+  // video yang butuh dua sampai empat menit.
+  const hasil: GeneratedScript[] = [];
+  for (let i = 0; i < families.length; i++) {
+    hasil.push(await generateOne(product, register, emotion, families[i], tier, durationSec,
+      opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format));
+  }
+  return hasil;
 }
 
 export function outputExtras(category: string) {

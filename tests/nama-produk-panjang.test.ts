@@ -19,35 +19,35 @@ import { generateScripts } from "../lib/script-engine";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 import { validateScript } from "../lib/script-engine/validator";
 
-function coba(nama: string, t: (typeof CAMPAIGN_TEMPLATES)[number]) {
+async function coba(nama: string, t: (typeof CAMPAIGN_TEMPLATES)[number]) {
   const produk = {
     id: "uji", name: nama, category: "beauty", price_idr: 24_620,
     images: ["a.jpg"], sourceUrl: null, product_visual_desc: null, brand_brief: null,
   } as unknown as Parameters<typeof generateScripts>[0]["product"];
   const t2 = t as unknown as Record<string, unknown>;
-  return generateScripts({
+  return (await generateScripts({
     product: produk, register: "bunda", qualityTier: t.tier as never,
     durationSec: t.durationSec, count: 3, hookLevel: t.hookLevel, templateId: t.id,
     ...(t.hookFamily ? { hookFamilies: [t.hookFamily as never], lockHookFamily: true } : {}),
     ...(t2.beats ? { beats: t2.beats as never } : {}),
     ...(t2.wordBudget ? { wordBudget: t2.wordBudget as number } : {}),
-  }).filter((v) => v.validation.passed).length;
+  })).filter((v) => v.validation.passed).length;
 }
 
 // Nama 3 kata adalah kasus Brian, dan mewakili nama produk paling lazim.
-test("nama produk 3 kata bisa dipakai di SETIAP template", () => {
-  const gagal = CAMPAIGN_TEMPLATES.filter((t) => coba("JJ Glow Sabun", t) === 0).map((t) => t.id);
+test("nama produk 3 kata bisa dipakai di SETIAP template", async () => {
+  const gagal = (await Promise.all(CAMPAIGN_TEMPLATES.map(async (t) => ((await coba("JJ Glow Sabun", t)) === 0 ? t.id : null)))).filter(Boolean);
   assert.deepEqual(gagal, [], "template ini tidak bisa dipakai untuk nama produk 3 kata");
 });
 
-test("nama produk 6 kata juga bisa dipakai di setiap template", () => {
-  const gagal = CAMPAIGN_TEMPLATES.filter((t) => coba("JJ Glow Sabun Gluta Pink Barsoap", t) === 0).map((t) => t.id);
+test("nama produk 6 kata juga bisa dipakai di setiap template", async () => {
+  const gagal = (await Promise.all(CAMPAIGN_TEMPLATES.map(async (t) => ((await coba("JJ Glow Sabun Gluta Pink Barsoap", t)) === 0 ? t.id : null)))).filter(Boolean);
   assert.deepEqual(gagal, [], "template ini gagal untuk nama produk panjang");
 });
 
 // Kelonggaran hanya di batas BAWAH. Kelebihan kata memotong VO di tengah
 // kalimat (r19) — itu cacat terukur, jadi batas atas tetap ketat.
-test("kelonggaran hanya menyerap kekurangan kata, bukan kelebihan", () => {
+test("kelonggaran hanya menyerap kekurangan kata, bukan kelebihan", async () => {
   const seg = (teks: string) => [
     { role: "hook", text: teks }, { role: "demo", text: "nah" }, { role: "cta", text: "cek keranjang ya" },
   ];

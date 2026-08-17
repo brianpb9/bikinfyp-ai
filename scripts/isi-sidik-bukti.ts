@@ -41,8 +41,8 @@ const PRODUK: ProductInput = {
   category: "beauty", sourceUrl: null,
 };
 
-function rencanakan(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
-  const [skrip] = generateScripts({
+async function rencanakan(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
+  const [skrip] = await generateScripts({
     product: PRODUK, register: "bunda", qualityTier: "high_quality",
     durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel,
     ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),
@@ -57,7 +57,7 @@ function rencanakan(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
   });
 }
 
-function main() {
+async function main() {
   const buku: Record<string, { berkas: string; sidik?: string; visiLolos?: boolean | null }> =
     fs.existsSync(BUKU) ? JSON.parse(fs.readFileSync(BUKU, "utf8")) : {};
   let diisi = 0, dilewati = 0;
@@ -80,7 +80,7 @@ function main() {
     }
     if (!fs.existsSync(c.berkas)) { console.log(`  lewati ${tpl.id} — berkas hilang`); dilewati++; continue; }
     try {
-      c.sidik = sidikPrompt(rencanakan(tpl));
+      c.sidik = sidikPrompt(await rencanakan(tpl));
       console.log(`  isi ${tpl.id} -> ${c.sidik}`);
       diisi++;
     } catch (err) {

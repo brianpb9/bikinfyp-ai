@@ -32,7 +32,7 @@ export async function POST(req: Request) {
 
     // Produk sintetis (tidak disimpan) — id acak supaya deprioritisasi hook 7-hari
     // di DB tidak pernah cocok.
-    const variants = generateScripts({
+    const variants = await generateScripts({
       product: { id: `try-${crypto.randomBytes(6).toString("hex")}`, name, price_idr: priceIdr, category },
       register: "netral",
     });

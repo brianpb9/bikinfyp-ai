@@ -57,7 +57,7 @@ async function main() {
 
   // SATU skrip dipakai ketiganya. Kalau tiap gaya memakai skrip sendiri,
   // perbedaan hasilnya bisa berasal dari kalimatnya, bukan dari kameranya.
-  const [skrip] = generateScripts({
+  const [skrip] = await generateScripts({
     product: produk, register: "bunda", qualityTier: "high_quality",
     durationSec: 15, count: 1, hookLevel: "berani",
   });

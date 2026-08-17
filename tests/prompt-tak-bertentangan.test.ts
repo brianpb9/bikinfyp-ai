@@ -68,8 +68,8 @@ export const BERTENTANGAN: { a: RegExp; b: RegExp; kenapa: string }[] = [
   },
 ];
 
-function rencana(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
-  const [skrip] = generateScripts({
+async function rencana(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
+  const [skrip] = await generateScripts({
     product: PRODUK, register: "bunda", qualityTier: "high_quality",
     durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel,
     ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),
@@ -85,10 +85,10 @@ function rencana(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
   });
 }
 
-test("tidak ada prompt di SELURUH katalog yang memuat perintah bertentangan", () => {
+test("tidak ada prompt di SELURUH katalog yang memuat perintah bertentangan", async () => {
   const pelanggaran: string[] = [];
   for (const tpl of CAMPAIGN_TEMPLATES) {
-    const spec = rencana(tpl);
+    const spec = await rencana(tpl);
     for (const shot of spec.shots) {
       for (const aturan of BERTENTANGAN) {
         if (aturan.a.test(shot.prompt) && aturan.b.test(shot.prompt)) {
@@ -103,11 +103,11 @@ test("tidak ada prompt di SELURUH katalog yang memuat perintah bertentangan", ()
 // Setiap shot harus menyatakan dengan jelas ADA atau TIDAK ADA orang. Shot yang
 // diam soal itu adalah tempat model bebas menebak — dan tebakan model yang
 // menghasilkan dua perempuan di shot penutup.
-test("setiap shot menyatakan sikap soal kehadiran orang", () => {
+test("setiap shot menyatakan sikap soal kehadiran orang", async () => {
   const bisu: string[] = [];
   for (const tpl of CAMPAIGN_TEMPLATES) {
     if (tpl.format !== "tvc") continue; // TVC: satu-satunya yang punya shot sengaja tanpa orang
-    for (const shot of rencana(tpl).shots) {
+    for (const shot of (await rencana(tpl)).shots) {
       const menyatakan =
         /Not a single person appears/i.test(shot.prompt) ||
         /EXACTLY ONE person is present/i.test(shot.prompt) ||
@@ -125,7 +125,7 @@ test("setiap shot menyatakan sikap soal kehadiran orang", () => {
 // awal tidak membuktikan apa pun — ia bisa saja tidak memeriksa apa-apa.
 // Di sini aturannya diadu dengan prompt yang BENAR-BENAR pernah dikirim dan
 // benar-benar menghasilkan video cacat berbayar.
-test("aturan pertentangan menangkap prompt yang dulu memang gagal", () => {
+test("aturan pertentangan menangkap prompt yang dulu memang gagal", async () => {
   // Prompt penutup TVC sebelum perbaikan (render 2026-08-13, Rp16.626,
   // menghasilkan dua perempuan berwajah identik mengapit botol).
   const penutupLama =
@@ -173,10 +173,10 @@ test("aturan pertentangan menangkap prompt yang dulu memang gagal", () => {
 // QC-10 tidak menangkapnya karena ia memeriksa NAMA MEREK terbaca — dan
 // "mosseru" memang terbaca sempurna di semua frame. Yang rusak justru barisan
 // di bawahnya, yang tidak pernah diperiksa siapa pun.
-test("label: tidak menuntut tajam dan buram sekaligus di bidang yang sama", () => {
+test("label: tidak menuntut tajam dan buram sekaligus di bidang yang sama", async () => {
   const pelanggaran: string[] = [];
   for (const tpl of CAMPAIGN_TEMPLATES) {
-    for (const shot of rencana(tpl).shots) {
+    for (const shot of (await rencana(tpl)).shots) {
       const mintaTajam = /brand name on the label stays sharp/i.test(shot.prompt);
       const mintaBuram = /out of focus from natural macro shallow depth of field/i.test(shot.prompt);
       if (mintaTajam && mintaBuram) pelanggaran.push(`${tpl.id} shot ${shot.index + 1}`);
@@ -185,7 +185,7 @@ test("label: tidak menuntut tajam dan buram sekaligus di bidang yang sama", () =
   assert.deepEqual(pelanggaran, [], `prompt menuntut tajam+buram di satu bidang:\n  ${pelanggaran.join("\n  ")}`);
 
   // Dan harus MENYATAKAN apa yang seharusnya terlihat, bukan cuma melarang.
-  const contoh = rencana(CAMPAIGN_TEMPLATES.find((t) => t.format === "hands_only")!).shots[0].prompt;
+  const contoh = (await rencana(CAMPAIGN_TEMPLATES.find((t) => t.format === "hands_only")!)).shots[0].prompt;
   assert.match(contoh, /read as fine printed TEXTURE/i, "tidak menyatakan wujud teks kecil yang benar");
   assert.match(contoh, /Never render invented words/i, "tidak melarang kata karangan di label");
 });
@@ -198,12 +198,12 @@ test("label: tidak menuntut tajam dan buram sekaligus di bidang yang sama", () =
 // BALIK lubangnya, dan model mengisi kekosongan itu dengan menaikkan
 // taruhannya. Kalau detail penting tidak dinyatakan, model mengarangnya — dan
 // arangannya selalu lebih dramatis daripada yang kita mau.
-test("template perusakan menjangkarkan dunianya ke rumah biasa", () => {
+test("template perusakan menjangkarkan dunianya ke rumah biasa", async () => {
   const perusakan = ["ads-tembus-dinding", "ads-atap-jebol"];
   for (const id of perusakan) {
     const tpl = CAMPAIGN_TEMPLATES.find((t) => t.id === id);
     if (!tpl) continue;
-    const pembuka = rencana(tpl).shots[0].prompt;
+    const pembuka = (await rencana(tpl)).shots[0].prompt;
     assert.match(pembuka, /ordinary Indonesian home/i, `${id}: pembuka tidak menjangkarkan dunianya`);
     assert.match(pembuka, /not a disaster/i, `${id}: tidak menyatakan ini kejutan rumahan, bukan bencana`);
   }
@@ -215,10 +215,10 @@ test("template perusakan menjangkarkan dunianya ke rumah biasa", () => {
 // tapi talking_head dan ads tidak — jadi pembukanya secara harfiah statis
 // (presenter memegang produk setinggi dada sambil tersenyum). Di FYP, satu
 // detik diam adalah satu detik yang dipakai jempol untuk menggeser.
-test("shot pembuka selalu menuntut sesuatu berubah di detik pertama", () => {
+test("shot pembuka selalu menuntut sesuatu berubah di detik pertama", async () => {
   const diam: string[] = [];
   for (const tpl of CAMPAIGN_TEMPLATES) {
-    const pembuka = rencana(tpl).shots[0].prompt;
+    const pembuka = (await rencana(tpl)).shots[0].prompt;
     const bergerak =
       /ALREADY mid-action/i.test(pembuka) ||          // aturan umum
       /starts ALREADY in motion/i.test(pembuka) ||     // hands_only
@@ -231,10 +231,10 @@ test("shot pembuka selalu menuntut sesuatu berubah di detik pertama", () => {
 });
 
 // Latar hanya untuk template yang beat-nya belum menentukan tempat.
-test("latar tidak ditumpuk pada template yang sudah punya ruangannya sendiri", () => {
+test("latar tidak ditumpuk pada template yang sudah punya ruangannya sendiri", async () => {
   const tumpuk: string[] = [];
   for (const tpl of CAMPAIGN_TEMPLATES) {
-    const p = rencana(tpl).shots[0].prompt;
+    const p = (await rencana(tpl)).shots[0].prompt;
     const punyaLatarTambahan = /^.*Setting: a /m.test(p);
     const punyaRuangSendiri = /an ordinary quiet room|a calm interior|an empty quiet room|dim room lit only by/i.test(p);
     if (punyaLatarTambahan && punyaRuangSendiri) tumpuk.push(tpl.id);
@@ -257,10 +257,10 @@ test("latar tidak ditumpuk pada template yang sudah punya ruangannya sendiri", (
 //
 // Perbaikannya menyatakan bahwa kesinambungannya melintasi WAKTU, bukan di
 // dalam frame.
-test("shot berorang menyatakan kesinambungan lintas waktu, bukan perbandingan dalam frame", () => {
+test("shot berorang menyatakan kesinambungan lintas waktu, bukan perbandingan dalam frame", async () => {
   const kurang: string[] = [];
   for (const tpl of CAMPAIGN_TEMPLATES) {
-    for (const shot of rencana(tpl).shots) {
+    for (const shot of (await rencana(tpl)).shots) {
       if (!/SAME woman from the earlier shots/i.test(shot.prompt)) continue;
       if (!/only ONCE inside this frame/i.test(shot.prompt) || !/never as a side-by-side comparison/i.test(shot.prompt)) {
         kurang.push(`${tpl.id} shot ${shot.index + 1}`);
@@ -270,7 +270,7 @@ test("shot berorang menyatakan kesinambungan lintas waktu, bukan perbandingan da
   assert.deepEqual(kurang, [], `identitas orang tanpa penegasan lintas-waktu:\n  ${kurang.join("\n  ")}`);
   // Baris lama tidak boleh tersisa di mana pun.
   for (const tpl of CAMPAIGN_TEMPLATES) {
-    for (const shot of rencana(tpl).shots) {
+    for (const shot of (await rencana(tpl)).shots) {
       assert.doesNotMatch(shot.prompt, /The same person, same face, same hair and same outfit as the other shots/i,
         `${tpl.id} shot ${shot.index + 1}: masih memakai baris identitas lama yang mengundang perbandingan`);
     }

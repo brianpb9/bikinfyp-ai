@@ -23,7 +23,7 @@ const inDays = (n: number) => {
   return d.toISOString().slice(0, 10);
 };
 
-test("resolvePromo: aktif hanya bila harga normal > harga jual dan belum lewat", () => {
+test("resolvePromo: aktif hanya bila harga normal > harga jual dan belum lewat", async () => {
   assert.equal(resolvePromo({ priceIdr: 85000 }, NOW), null);
   assert.equal(resolvePromo({ priceIdr: 85000, promoPriceBeforeIdr: 85000 }, NOW), null);
   assert.equal(resolvePromo({ priceIdr: 85000, promoPriceBeforeIdr: 60000 }, NOW), null);
@@ -37,7 +37,7 @@ test("resolvePromo: aktif hanya bila harga normal > harga jual dan belum lewat",
   assert.ok(resolvePromo({ priceIdr: 85000, promoPriceBeforeIdr: 120000, promoEndsAt: inDays(0) }, NOW));
 });
 
-test("frasa deadline skrip: tanpa angka, tanpa frasa terlarang L-13", () => {
+test("frasa deadline skrip: tanpa angka, tanpa frasa terlarang L-13", async () => {
   const cases = [0, 1, 3, 10].map((n) => promoDeadlineSpokenPhrase(new Date(`${inDays(n)}T23:59:59`), NOW));
   for (const phrase of cases) {
     assert.ok(phrase, "frasa wajib ada untuk <=13 hari");
@@ -50,7 +50,7 @@ test("frasa deadline skrip: tanpa angka, tanpa frasa terlarang L-13", () => {
 });
 
 const baseProduct = { id: "prod-promo-1", name: "Serum Glow Bright", price_idr: 85000, category: "beauty" };
-// generateScripts() memanggil resolvePromo() TANPA parameter `now`, jadi ia
+// await generateScripts() memanggil resolvePromo() TANPA parameter `now`, jadi ia
 // selalu memakai jam server sungguhan. Kalau fixture ini memakai `inDays()`
 // yang dihitung dari NOW beku (2026-08-06), promonya berubah jadi kedaluwarsa
 // begitu tanggal asli melewatinya — dan tes gagal bukan karena produknya rusak,
@@ -70,8 +70,8 @@ const promoProduct = {
   promoStockLeft: 12,
 };
 
-test("injeksi promo: harga coret di demo + deadline di CTA, lolos validator (silent)", () => {
-  const variants = generateScripts({ product: promoProduct, register: "bestie" });
+test("injeksi promo: harga coret di demo + deadline di CTA, lolos validator (silent)", async () => {
+  const variants = await generateScripts({ product: promoProduct, register: "bestie" });
   for (const v of variants) {
     assert.ok(v.validation.passed, `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
     const demo = v.segments.find((s) => s.role === "demo")!.text;
@@ -79,15 +79,15 @@ test("injeksi promo: harga coret di demo + deadline di CTA, lolos validator (sil
   }
 });
 
-test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator", () => {
+test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator", async () => {
   // Nama panjang: jatah kata bersuara (10-22) bisa habis -> promo boleh ter-drop
   // dari UCAPAN (tetap hidup di overlay + caption), yang penting valid.
-  const longName = generateScripts({ product: promoProduct, register: "bestie", qualityTier: "high_quality" });
+  const longName = await generateScripts({ product: promoProduct, register: "bestie", qualityTier: "high_quality" });
   for (const v of longName) {
     assert.ok(v.validation.passed, `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
   }
   // Nama pendek: ada ruang -> harga coret masuk ke ucapan minimal di satu varian.
-  const shortName = generateScripts({
+  const shortName = await generateScripts({
     product: { ...promoProduct, id: "prod-promo-short", name: "Serum X" },
     register: "bestie",
     qualityTier: "high_quality",
@@ -99,10 +99,10 @@ test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator"
   assert.ok(anyStrike, "nama pendek: tidak ada satu pun varian bersuara yang memuat harga coret");
 });
 
-test("semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)", () => {
+test("semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)", async () => {
   for (const duration of [15, 30] as const) {
     for (let i = 1; i <= 16; i++) {
-      const variants = generateScripts({
+      const variants = await generateScripts({
         product: { ...promoProduct, id: `p-${duration}-${i}` },
         register: "netral",
         durationSec: duration,
@@ -115,21 +115,21 @@ test("semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)", () => {
   }
 });
 
-test("promo kedaluwarsa: skrip identik dengan tanpa promo (drop diam-diam)", () => {
-  const expired = generateScripts({ product: { ...promoProduct, promoEndsAt: inDays(-2) }, register: "bestie" });
-  const plain = generateScripts({ product: baseProduct, register: "bestie" });
+test("promo kedaluwarsa: skrip identik dengan tanpa promo (drop diam-diam)", async () => {
+  const expired = await generateScripts({ product: { ...promoProduct, promoEndsAt: inDays(-2) }, register: "bestie" });
+  const plain = await generateScripts({ product: baseProduct, register: "bestie" });
   assert.deepEqual(expired.map((v) => v.segments), plain.map((v) => v.segments));
   assert.equal(expired[0].caption, plain[0].caption);
 });
 
-test("caption memuat angka promo (%, harga, stok, tanggal)", () => {
-  const [v] = generateScripts({ product: promoProduct, register: "bestie" });
+test("caption memuat angka promo (%, harga, stok, tanggal)", async () => {
+  const [v] = await generateScripts({ product: promoProduct, register: "bestie" });
   assert.ok(v.caption.includes("diskon 29%"), v.caption);
   assert.ok(v.caption.includes("Rp120.000") && v.caption.includes("Rp85.000"), v.caption);
   assert.ok(v.caption.includes("stok tinggal 12"), v.caption);
 });
 
-test("L-14: angka harga normal sah hanya bila promoPriceBeforeIdr diberikan", () => {
+test("L-14: angka harga normal sah hanya bila promoPriceBeforeIdr diberikan", async () => {
   const segments = [
     { role: "hook", text: "Say, kusamnya balik terus nggak sih loh?" },
     { role: "demo", text: "nah jadi gini, dari 120 ribu jadi 85 ribu doang deh, teksturnya niat banget sumpah, beneran kerasa bedanya pas dipake tiap hari" },

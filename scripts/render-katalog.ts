@@ -128,8 +128,8 @@ const PRODUK: ProductInput = {
 /** Rencana shot untuk satu template. SATU definisi, dipakai untuk menghitung
  *  sidik prompt DAN untuk merender — kalau keduanya disalin terpisah, sidik
  *  yang dibandingkan bukan sidik yang benar-benar dikirim. */
-function rencanakan(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
-  const [skrip] = generateScripts({
+async function rencanakan(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
+  const [skrip] = await generateScripts({
     product: PRODUK, register: "bunda", qualityTier: "high_quality",
     durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel,
     ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),
@@ -181,7 +181,7 @@ async function main() {
   const sidikPerTemplate = new Map<string, string>();
   for (const t of CAMPAIGN_TEMPLATES) {
     try {
-      sidikPerTemplate.set(t.id, sidikPrompt(rencanakan(t)));
+      sidikPerTemplate.set(t.id, sidikPrompt(await rencanakan(t)));
     } catch {
       // Template yang gagal direncanakan akan gagal juga saat dirender; biarkan
       // masuk antrean supaya kegagalannya terlihat, bukan disembunyikan.
@@ -225,7 +225,7 @@ async function main() {
     let klip: string[] = [];
     let biaya = 0;
     try {
-      const spec = rencanakan(tpl);
+      const spec = await rencanakan(tpl);
 
       for (const shot of spec.shots) {
         const sub = path.join(dir, `s${shot.index}`);

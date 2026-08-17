@@ -20,10 +20,10 @@ import {
 } from "../lib/script-engine/catalog-audit";
 import { CAMPAIGN_TEMPLATES } from "../lib/templates";
 
-const audit = generateCatalogScriptAudit();
+const audit = await generateCatalogScriptAudit();
 const { summary } = audit;
 
-test("whitelist delivery Gemini terkunci ke tag yang disepakati", () => {
+test("whitelist delivery Gemini terkunci ke tag yang disepakati", async () => {
   assert.deepEqual([...DELIVERY_TAGS], [
     "[short pause]",
     "[medium pause]",
@@ -38,25 +38,25 @@ test("whitelist delivery Gemini terkunci ke tag yang disepakati", () => {
   ]);
 });
 
-test("normalisasi menetralkan nama produk dan bentuk harga fixture", () => {
+test("normalisasi menetralkan nama produk dan bentuk harga fixture", async () => {
   const angka = normalizeAuditText("Mosseru Bright Shower Gel cuma Rp 189.000!");
   const kata = normalizeAuditText("MOSseru bright shower gel cuma 189 ribu");
   assert.equal(angka, kata);
   assert.equal(angka, "placeholder produk cuma placeholder harga");
 });
 
-test("normalisasi uniqueness membuang delivery tag Gemini", () => {
+test("normalisasi uniqueness membuang delivery tag Gemini", async () => {
   assert.equal(
     normalizeAuditText("Nah, [short pause] ini baru beda. [giggles] Serius."),
     normalizeAuditText("Nah, ini baru beda. Serius.")
   );
 });
 
-test("fixture audit mencakup tepat 33 template katalog aktif", () => {
+test("fixture audit mencakup tepat 33 template katalog aktif", async () => {
   assert.equal(summary.templateCount, SCRIPT_CATALOG_AUDIT_FIXTURE.expectedTemplateCount);
 });
 
-test("fixture tiap template mengikuti kategori bestFor yang dinormalisasi", () => {
+test("fixture tiap template mengikuti kategori bestFor yang dinormalisasi", async () => {
   assert.deepEqual(summary.incompatibleFixtureTemplateIds, []);
   for (const template of CAMPAIGN_TEMPLATES) {
     assert.equal(
@@ -67,7 +67,7 @@ test("fixture tiap template mengikuti kategori bestFor yang dinormalisasi", () =
   }
 });
 
-test("guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen menggantung", () => {
+test("guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen menggantung", async () => {
   assert.deepEqual(spokenProductionJargon("Kunci framing kameranya lalu edit hasilnya"), ["kameranya", "framing", "edit"]);
   assert.ok(unsupportedFactualClaims("Setelah Serum Uji Katalog dipakai, ruang terasa beda").length > 0);
   assert.deepEqual(danglingFragmentReasons("Cek produknya karena"), ["ends with connector"]);
@@ -102,7 +102,7 @@ test("guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen meng
   }
 });
 
-test("33/33 template mempunyai copy khusus", () => {
+test("33/33 template mempunyai copy khusus", async () => {
   assert.equal(
     summary.templatesWithCopy,
     SCRIPT_CATALOG_AUDIT_FIXTURE.expectedTemplateCount,
@@ -110,7 +110,7 @@ test("33/33 template mempunyai copy khusus", () => {
   );
 });
 
-test("33/33 fixed hook unik setelah normalisasi", () => {
+test("33/33 fixed hook unik setelah normalisasi", async () => {
   assert.equal(summary.fixedHookCount, SCRIPT_CATALOG_AUDIT_FIXTURE.expectedFixedHookCount);
   assert.equal(
     summary.uniqueFixedHookCount,
@@ -119,7 +119,7 @@ test("33/33 fixed hook unik setelah normalisasi", () => {
   );
 });
 
-test("132/132 hook count=4 unik setelah normalisasi", () => {
+test("132/132 hook count=4 unik setelah normalisasi", async () => {
   assert.equal(summary.totalHookCount, SCRIPT_CATALOG_AUDIT_FIXTURE.expectedTotalHookCount);
   assert.equal(
     summary.uniqueTotalHookCount,
@@ -128,7 +128,7 @@ test("132/132 hook count=4 unik setelah normalisasi", () => {
   );
 });
 
-test("harga render maksimal muncul di 33/132 hook dan 8/33 fixed hook", () => {
+test("harga render maksimal muncul di 33/132 hook dan 8/33 fixed hook", async () => {
   assert.ok(
     summary.hooksMentioningPriceCount <= SCRIPT_CATALOG_AUDIT_FIXTURE.maximumHookPriceMentions,
     `hook menyebut harga ${summary.hooksMentioningPriceCount}/${summary.totalHookCount}; batas ${SCRIPT_CATALOG_AUDIT_FIXTURE.maximumHookPriceMentions}`
@@ -139,7 +139,7 @@ test("harga render maksimal muncul di 33/132 hook dan 8/33 fixed hook", () => {
   );
 });
 
-test("hook bebas starter harga boilerplate dan prefix bersama di atas cap", () => {
+test("hook bebas starter harga boilerplate dan prefix bersama di atas cap", async () => {
   assert.deepEqual(
     summary.bannedBoilerplateHookRefs,
     [],
@@ -152,7 +152,7 @@ test("hook bebas starter harga boilerplate dan prefix bersama di atas cap", () =
   );
 });
 
-test("hook tidak mengulang makna yang sama di dua klausa", () => {
+test("hook tidak mengulang makna yang sama di dua klausa", async () => {
   assert.deepEqual(
     summary.intraHookEchoRefs,
     [],
@@ -160,7 +160,7 @@ test("hook tidak mengulang makna yang sama di dua klausa", () => {
   );
 });
 
-test("spoken copy bebas CTA mekanis, berkas produk, dan pola aksi/subjek berulang", () => {
+test("spoken copy bebas CTA mekanis, berkas produk, dan pola aksi/subjek berulang", async () => {
   assert.deepEqual(
     summary.mechanicalPhraseRefs,
     [],
@@ -168,21 +168,21 @@ test("spoken copy bebas CTA mekanis, berkas produk, dan pola aksi/subjek berulan
   );
 });
 
-test("seluruh empat varian menghasilkan minimal 150 segment-sentence unik", () => {
+test("seluruh empat varian menghasilkan minimal 150 segment-sentence unik", async () => {
   assert.ok(
     summary.uniqueSegmentSentenceCount >= SCRIPT_CATALOG_AUDIT_FIXTURE.minimumUniqueSegmentSentences,
     `segment-sentence unik hanya ${summary.uniqueSegmentSentenceCount}/${SCRIPT_CATALOG_AUDIT_FIXTURE.minimumUniqueSegmentSentences}`
   );
 });
 
-test("body expansion menghasilkan minimal 100 demo+CTA unik tanpa mengandalkan hook", () => {
+test("body expansion menghasilkan minimal 100 demo+CTA unik tanpa mengandalkan hook", async () => {
   assert.ok(
     summary.uniqueNonHookSegmentSentenceCount >= SCRIPT_CATALOG_AUDIT_FIXTURE.minimumUniqueNonHookSegmentSentences,
     `demo+CTA unik hanya ${summary.uniqueNonHookSegmentSentenceCount}/${SCRIPT_CATALOG_AUDIT_FIXTURE.minimumUniqueNonHookSegmentSentences}`
   );
 });
 
-test("body tidak near-duplicate lintas template", () => {
+test("body tidak near-duplicate lintas template", async () => {
   assert.deepEqual(
     summary.nearDuplicateBodyPairs,
     [],
@@ -190,7 +190,7 @@ test("body tidak near-duplicate lintas template", () => {
   );
 });
 
-test("body tidak berbagi blok enam kata lintas template", () => {
+test("body tidak berbagi blok enam kata lintas template", async () => {
   assert.deepEqual(
     summary.sharedBodyBlocks,
     [],
@@ -198,7 +198,7 @@ test("body tidak berbagi blok enam kata lintas template", () => {
   );
 });
 
-test("spoken script bebas jargon produksi", () => {
+test("spoken script bebas jargon produksi", async () => {
   assert.deepEqual(
     summary.productionJargonRefs,
     [],
@@ -206,7 +206,7 @@ test("spoken script bebas jargon produksi", () => {
   );
 });
 
-test("spoken script bebas klaim faktual yang tidak ditopang input produk", () => {
+test("spoken script bebas klaim faktual yang tidak ditopang input produk", async () => {
   assert.deepEqual(
     summary.unsupportedClaimRefs,
     [],
@@ -214,14 +214,14 @@ test("spoken script bebas klaim faktual yang tidak ditopang input produk", () =>
   );
 });
 
-test("maksimal 66 dari 132 demo menyebut harga render", () => {
+test("maksimal 66 dari 132 demo menyebut harga render", async () => {
   assert.ok(
     summary.demosMentioningPriceCount <= SCRIPT_CATALOG_AUDIT_FIXTURE.maximumDemoPriceMentions,
     `demo menyebut harga ${summary.demosMentioningPriceCount}/${SCRIPT_CATALOG_AUDIT_FIXTURE.expectedTotalHookCount}; batas ${SCRIPT_CATALOG_AUDIT_FIXTURE.maximumDemoPriceMentions}`
   );
 });
 
-test("skeleton proof-slot + harga generik maksimal 20 persen dan tidak dibagi lintas template", () => {
+test("skeleton proof-slot + harga generik maksimal 20 persen dan tidak dibagi lintas template", async () => {
   assert.ok(
     summary.proofPriceSkeletonCount <= summary.maximumProofPriceSkeletonCount,
     `proof+price skeleton ${summary.proofPriceSkeletonCount}; batas ${summary.maximumProofPriceSkeletonCount}`
@@ -233,7 +233,7 @@ test("skeleton proof-slot + harga generik maksimal 20 persen dan tidak dibagi li
   );
 });
 
-test("spoken VO tidak mengomentari mekanik kreatif iklannya sendiri", () => {
+test("spoken VO tidak mengomentari mekanik kreatif iklannya sendiri", async () => {
   assert.deepEqual(
     summary.creativeAnalysisRefs,
     [],
@@ -241,7 +241,7 @@ test("spoken VO tidak mengomentari mekanik kreatif iklannya sendiri", () => {
   );
 });
 
-test("T05 T08 T10 hanya inspeksi atribut netral, bukan bukti perubahan sintetis", () => {
+test("T05 T08 T10 hanya inspeksi atribut netral, bukan bukti perubahan sintetis", async () => {
   assert.deepEqual(
     summary.semanticRiskRefs,
     [],
@@ -249,7 +249,7 @@ test("T05 T08 T10 hanya inspeksi atribut netral, bukan bukti perubahan sintetis"
   );
 });
 
-test("tidak ada fragmen kalimat menggantung", () => {
+test("tidak ada fragmen kalimat menggantung", async () => {
   assert.deepEqual(
     summary.danglingFragmentRefs,
     [],
@@ -257,7 +257,7 @@ test("tidak ada fragmen kalimat menggantung", () => {
   );
 });
 
-test("count=4 memberi empat demo berbeda pada setiap template", () => {
+test("count=4 memberi empat demo berbeda pada setiap template", async () => {
   assert.equal(
     summary.count4DemoDuplicateFailures,
     0,
@@ -265,7 +265,7 @@ test("count=4 memberi empat demo berbeda pada setiap template", () => {
   );
 });
 
-test("CTA tidak exact-repeat lintas template setelah frasa platform dinetralkan", () => {
+test("CTA tidak exact-repeat lintas template setelah frasa platform dinetralkan", async () => {
   assert.equal(
     summary.crossTemplateCtaDuplicatePairs.length,
     0,
@@ -273,7 +273,7 @@ test("CTA tidak exact-repeat lintas template setelah frasa platform dinetralkan"
   );
 });
 
-test("delivery voiced punya minimal dua tag, silent tanpa tts_text, dan tidak ada unknown tag", () => {
+test("delivery voiced punya minimal dua tag, silent tanpa tts_text, dan tidak ada unknown tag", async () => {
   assert.equal(
     summary.deliveryFailureVariants,
     0,
@@ -282,7 +282,7 @@ test("delivery voiced punya minimal dua tag, silent tanpa tts_text, dan tidak ad
   assert.deepEqual(summary.unknownAudioTagRefs, []);
 });
 
-test("inventaris voiced benar-benar memakai seluruh delivery tag", () => {
+test("inventaris voiced benar-benar memakai seluruh delivery tag", async () => {
   assert.deepEqual(
     summary.missingDeliveryTags,
     [],
@@ -293,7 +293,7 @@ test("inventaris voiced benar-benar memakai seluruh delivery tag", () => {
   }
 });
 
-test("setiap template voiced punya minimal satu cue emphasis di empat variannya", () => {
+test("setiap template voiced punya minimal satu cue emphasis di empat variannya", async () => {
   assert.deepEqual(
     summary.missingEmphasisCueTemplateIds,
     [],
@@ -302,7 +302,7 @@ test("setiap template voiced punya minimal satu cue emphasis di empat variannya"
   assert.ok(summary.emphasisCueCount > 0, "inventaris emphasis kosong");
 });
 
-test("empat varian tiap template voiced punya empat delivery-tag signature unik", () => {
+test("empat varian tiap template voiced punya empat delivery-tag signature unik", async () => {
   assert.deepEqual(
     summary.deliverySignatureFailureTemplateIds,
     [],
@@ -317,7 +317,7 @@ test("empat varian tiap template voiced punya empat delivery-tag signature unik"
   }
 });
 
-test("count=4 tidak mengulang hook atau naskah pada template mana pun", () => {
+test("count=4 tidak mengulang hook atau naskah pada template mana pun", async () => {
   assert.equal(
     summary.count4DuplicateFailures,
     0,
@@ -325,7 +325,7 @@ test("count=4 tidak mengulang hook atau naskah pada template mana pun", () => {
   );
 });
 
-test("semua 132 varian lolos validator pada konfigurasi template aktual", () => {
+test("semua 132 varian lolos validator pada konfigurasi template aktual", async () => {
   assert.equal(
     summary.validationFailureVariants,
     0,

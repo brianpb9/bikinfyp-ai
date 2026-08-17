@@ -124,6 +124,19 @@ export const config = {
    * tanpa perlu menyentuh perencana shot.
    */
   seedanceFaceRef: env("SEEDANCE_FACE_REF", "false") === "true",
+
+  /**
+   * Kunci penulis naskah (Anthropic). Dipasang di ENV layanan web saja —
+   * worker tidak pernah menulis naskah, dan kunci yang tersebar lebih banyak
+   * permukaan bocornya.
+   *
+   * Kosong = mesin JATUH KE TEMPLATE, dan jatuhnya BERISIK: lihat
+   * lib/script-engine/llm.ts. Naskah template diam-diam adalah persis cara
+   * "benar tapi datar" bertahan tanpa ada yang menyadarinya.
+   */
+  anthropicApiKey: env("ANTHROPIC_API_KEY", ""),
+  /** Model penulis adegan. Idea Stage & FYP Gate memakai model kelas atas. */
+  anthropicModelScenes: env("ANTHROPIC_MODEL_SCENES", "claude-sonnet-4-6"),
   operationalAlertToEmail: env("OPERATIONAL_ALERT_TO_EMAIL", ""),
   operationalMonitoringIntervalMin: parseInt(env("OPERATIONAL_MONITORING_INTERVAL_MIN", "5"), 10),
   operationalAlertCooldownMin: parseInt(env("OPERATIONAL_ALERT_COOLDOWN_MIN", "60"), 10),

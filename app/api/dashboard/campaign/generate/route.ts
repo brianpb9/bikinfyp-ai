@@ -113,7 +113,7 @@ export async function POST(req: Request) {
       ...(wordBudget ? { wordBudget } : {}),
     });
 
-    let variants = run(product.name);
+    let variants = await run(product.name);
     let passing = variants.filter((v) => v.validation.passed);
     // Jaring pengaman nama kepanjangan. Nama produk masuk ke kalimat skrip,
     // dan tier bersuara dibatasi ~30 kata (L-05) — nama 18 kata (judul SEO
@@ -125,7 +125,7 @@ export async function POST(req: Request) {
     if (passing.length === 0) {
       const shorter = cleanProductName(product.name);
       if (shorter !== product.name) {
-        const retry = run(shorter);
+        const retry = await run(shorter);
         const retryPassing = retry.filter((v) => v.validation.passed);
         if (retryPassing.length > 0) { variants = retry; passing = retryPassing; shortenedTo = shorter; }
       }

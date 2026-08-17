@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     // scene + library org). Lihat pastikanBukanProdukOrg.
     pastikanBukanProdukOrg(product);
 
-    const variants = generateScripts({
+    const variants = await generateScripts({
       product: {
         id: product.id, name: product.name, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,

@@ -43,8 +43,8 @@ const PRODUK_UJI: ProductInput = {
 
 /** Rencana shot untuk satu template — HARUS sama dengan yang dipakai
  *  render-katalog.ts, kalau tidak sidiknya tidak akan pernah cocok. */
-function rencanakanTemplate(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
-  const [skrip] = generateScripts({
+async function rencanakanTemplate(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
+  const [skrip] = await generateScripts({
     product: PRODUK_UJI, register: "bunda", qualityTier: "high_quality",
     durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel,
     ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),
@@ -189,7 +189,7 @@ function nilaiVisi(): Baris {
 }
 
 // --- KATALOG ---------------------------------------------------------------
-function nilaiKatalog(): Baris {
+async function nilaiKatalog(): Promise<Baris> {
   const total = CAMPAIGN_TEMPLATES.length;
   // Sebuah template TERBUKTI hanya bila tercatat di buku bukti YANG DITULIS
   // OLEH PERENDER, dengan templateId eksplisit, dan berkasnya masih ada.
@@ -201,7 +201,10 @@ function nilaiKatalog(): Baris {
   // menebak akan melaporkan kemajuan yang salah ke dua arah sekaligus.
   const catatan = bacaBuku();
   const batas = perubahanPerenderTerakhir();
-  const terbukti = CAMPAIGN_TEMPLATES.filter((t) => {
+  // Promise.all + filter, BUKAN filter(async ...): predikat async selalu
+  // mengembalikan Promise, dan setiap Promise truthy — filter-nya tidak akan
+  // menyaring apa pun dan papan nilai melaporkan 33/33 selamanya.
+  const lolosPerTemplate = await Promise.all(CAMPAIGN_TEMPLATES.map(async (t) => {
     const c = catatan[t.id];
     if (!c || !fs.existsSync(c.berkas)) return false;
     // "Terbukti" berarti dirender DAN diperiksa mesin dan bersih. Render yang
@@ -214,13 +217,14 @@ function nilaiKatalog(): Baris {
     // menyesatkannya dengan yang melaporkan kemajuan palsu.
     if (c.sidik) {
       try {
-        return c.sidik === sidikPrompt(rencanakanTemplate(t));
+        return c.sidik === sidikPrompt(await rencanakanTemplate(t));
       } catch {
         return false;
       }
     }
     return !batas || fs.statSync(c.berkas).mtime >= batas;
-  });
+  }));
+  const terbukti = CAMPAIGN_TEMPLATES.filter((_, i) => lolosPerTemplate[i]);
   const rasio = terbukti.length / total;
   // Katalog yang sebagian besar belum pernah dirender adalah janji, bukan
   // produk. Cap 5 sampai mayoritas terbukti — brand yang memilih template
@@ -312,7 +316,7 @@ async function main() {
   const baris: Baris[] = [];
   baris.push(await nilaiAudio(berkas));
   baris.push(nilaiVisi());
-  baris.push(nilaiKatalog());
+  baris.push(await nilaiKatalog());
   baris.push(nilaiQc());
   baris.push(nilaiTes());
 

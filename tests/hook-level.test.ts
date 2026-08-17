@@ -17,7 +17,7 @@ const { getCreatorCategory } = await import("../lib/personas");
 
 const product = { id: "prod-hl-1", name: "Serum Glow Bright", price_idr: 85000, category: "beauty" };
 
-test("pickHookFamilies: berani/gila memakai keluarga bold, normal memakai prioritas kategori", () => {
+test("pickHookFamilies: berani/gila memakai keluarga bold, normal memakai prioritas kategori", async () => {
   const normal = pickHookFamilies("beauty", "p1");
   const berani = pickHookFamilies("beauty", "p1", "berani");
   const gila = pickHookFamilies("beauty", "p1", "gila");
@@ -26,8 +26,8 @@ test("pickHookFamilies: berani/gila memakai keluarga bold, normal memakai priori
   assert.notDeepEqual(normal, berani);
 });
 
-test("varian level berani lolos validator strict (tanpa template baru)", () => {
-  const variants = generateScripts({ product, register: "bestie", hookLevel: "berani" });
+test("varian level berani lolos validator strict (tanpa template baru)", async () => {
+  const variants = await generateScripts({ product, register: "bestie", hookLevel: "berani" });
   assert.equal(variants.length, 3);
   for (const v of variants) {
     assert.ok(BOLD_HOOK_PRIORITY.includes(v.hook_family), v.hook_family);
@@ -58,7 +58,7 @@ function spec(hookLevel: "normal" | "berani" | "gila", format: "hands_only" | "t
   });
 }
 
-test("gila: pembuka HIGH-ENERGY hanya di shot 1, shot lain tidak berubah", () => {
+test("gila: pembuka HIGH-ENERGY hanya di shot 1, shot lain tidak berubah", async () => {
   const s = spec("gila");
   assert.ok(s.shots[0].prompt.includes("HIGH-ENERGY OPENING"), s.shots[0].prompt);
   for (const shot of s.shots.slice(1)) {
@@ -66,7 +66,7 @@ test("gila: pembuka HIGH-ENERGY hanya di shot 1, shot lain tidak berubah", () =>
   }
 });
 
-test("gila tetap product-safe: framing hands-only + identitas produk tidak hilang", () => {
+test("gila tetap product-safe: framing hands-only + identitas produk tidak hilang", async () => {
   const shot1 = spec("gila").shots[0];
   assert.ok(shot1.prompt.includes("hands and forearms only"), "framing hands-only hilang");
   assert.ok(shot1.prompt.includes("identical packaging"), "instruksi identitas produk hilang");
@@ -74,7 +74,7 @@ test("gila tetap product-safe: framing hands-only + identitas produk tidak hilan
   assert.ok(!/fall|roof|crash|explod|jump/i.test(shot1.prompt), shot1.prompt);
 });
 
-test("normal & berani: visual TIDAK berubah; vo_broll gila juga tanpa opener", () => {
+test("normal & berani: visual TIDAK berubah; vo_broll gila juga tanpa opener", async () => {
   assert.ok(!spec("normal").shots[0].prompt.includes("HIGH-ENERGY OPENING"));
   assert.ok(!spec("berani").shots[0].prompt.includes("HIGH-ENERGY OPENING"));
   assert.ok(!spec("gila", "vo_broll").shots[0].prompt.includes("HIGH-ENERGY OPENING"));
