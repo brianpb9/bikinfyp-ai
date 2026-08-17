@@ -574,6 +574,39 @@ export function brandTokens(productName: string): string[] {
   return brand.sort((a, b) => b.length - a.length).slice(0, 3);
 }
 
+/**
+ * Token yang MEMUTUSKAN kesetiaan merek — satu, bukan daftar.
+ *
+ * Dipisah dari brandTokens() karena keduanya menjawab pertanyaan berbeda.
+ * brandTokens menjawab "kata apa saja yang mungkin merek" (dipakai QC-10 yang
+ * memang toleran, mencari di 8 frame). Fungsi ini menjawab "kata mana yang
+ * KALAU SALAH berarti produknya bukan produk kita".
+ *
+ * URUTAN, BUKAN PANJANG (temuan reviewer, 18 Agu). brandTokens mengurutkan
+ * dari terpanjang, dan itu bisa memilih DESKRIPTOR alih-alih merek: pada
+ * "Bening Antioksidan Serum", yang terpanjang adalah "antioksidan" — kata yang
+ * boleh saja salah dibaca tanpa mengubah identitas produknya. Merek dalam nama
+ * produk Indonesia hampir selalu di depan, jadi yang dipakai adalah token
+ * non-generik PERTAMA.
+ *
+ * `merekEksplisit` menang atas segalanya. Ia disediakan sekarang meski belum
+ * ada kolom `products.brand` (migrasi sedang diblokir): begitu kolom itu ada,
+ * atau begitu intake menyimpan merek yang benar-benar terbaca di label,
+ * nilainya tinggal dialirkan ke sini tanpa menyentuh pemanggil mana pun.
+ */
+export function tokenMerekUtama(productName: string, merekEksplisit?: string | null): string | null {
+  const eksplisit = (merekEksplisit ?? "").trim();
+  if (eksplisit) {
+    const t = normalizeOcr(eksplisit).split(" ").filter((x) => x.length >= 3 && /[a-z]/.test(x));
+    if (t.length) return t[0];
+  }
+  const urut = normalizeOcr(productName)
+    .split(" ")
+    .filter((token) => token.length >= 4 && /[a-z]/.test(token))
+    .filter((token) => !GENERIC_PRODUCT_WORDS.has(token));
+  return urut[0] ?? null;
+}
+
 export async function qcLabelFidelity(filePath: string, productName: string): Promise<QcCheck> {
   const tokens = brandTokens(productName);
   if (tokens.length === 0) {

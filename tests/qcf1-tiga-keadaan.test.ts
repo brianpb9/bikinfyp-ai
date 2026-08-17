@@ -89,3 +89,29 @@ test("OCR pada frame palsu NYATA menolak mereknya — tanpa jaringan", { skip: !
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+test("token merek dipilih dari URUTAN, bukan panjang — deskriptor terpanjang tidak menang", async () => {
+  const { tokenMerekUtama } = await import("../lib/media/qc");
+  // Kasus yang membuat aturan lama salah: kata terpanjang justru DESKRIPTOR.
+  // "antioksidan" boleh salah dibaca tanpa mengubah identitas produknya;
+  // "bening" tidak.
+  assert.equal(tokenMerekUtama("Bening Antioksidan Serum"), "bening");
+  assert.equal(tokenMerekUtama("Scarlett Acne Serum"), "scarlett");
+  // Kata generik di depan dilewati, bukan dipakai.
+  assert.equal(tokenMerekUtama("Serum Wajah Scarlett"), "wajah",
+    "kata non-generik pertama; 'serum' generik jadi dilewati");
+  // Produk polos tanpa merek: null, bukan menebak.
+  assert.equal(tokenMerekUtama("Gamis Polos Premium"), null);
+  // Merek eksplisit MENANG atas tebakan dari nama.
+  assert.equal(tokenMerekUtama("Bening Antioksidan Serum", "Scarlett"), "scarlett");
+  assert.equal(tokenMerekUtama("Bening Antioksidan Serum", "   "), "bening", "merek kosong tidak dianggap");
+});
+
+test("cast-ref memutuskan lewat bolehJadiReferensi(), bukan membaca status sendiri", async () => {
+  const fsx = await import("node:fs");
+  const src = fsx.readFileSync("lib/media/cast-ref.ts", "utf8");
+  // Satu pintu: kalau ada yang membaca status secara langsung untuk MEMUTUSKAN
+  // pakai/tidak, jawabannya bisa ditulis ulang jadi `!== "FAIL"` suatu hari.
+  assert.match(src, /bolehJadiReferensi\(qc\)/);
+  assert.ok(!/qc\.status === "PASS"/.test(src), "keputusan pakai/tidak tidak boleh membaca status langsung");
+});

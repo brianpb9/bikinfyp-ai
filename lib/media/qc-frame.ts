@@ -35,7 +35,7 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { config } from "../config";
-import { brandTokens } from "./qc";
+import { tokenMerekUtama } from "./qc";
 
 const jalankan = promisify(execFile);
 const MODEL = "gemini-flash-latest";
@@ -118,22 +118,22 @@ export type HasilOcr = { terbaca: boolean; teks: string } | { terbaca: null; tek
  * untuk dibaca; kegagalan menjalankan OCR MELEMPAR, supaya pemanggil bisa
  * membedakan "tidak ada merek" dari "tidak bisa diperiksa".
  */
-async function merekTerbaca(framePath: string, productName: string): Promise<HasilOcr> {
-  const tokens = brandTokens(productName);
-  if (tokens.length === 0) return { terbaca: null, teks: "" }; // produk polos
+async function merekTerbaca(framePath: string, productName: string, merekEksplisit?: string | null): Promise<HasilOcr> {
+  const token = tokenMerekUtama(productName, merekEksplisit);
+  if (!token) return { terbaca: null, teks: "" }; // produk polos, tidak ada merek untuk dibaca
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qcf1-"));
   try {
     const png = path.join(dir, "besar.png");
     await jalankan("ffmpeg", ["-y", "-v", "error", "-i", framePath, "-vf", "scale=1440:-2:flags=lanczos", png]);
     const { stdout } = await jalankan("tesseract", [png, "stdout", "-l", "eng", "--psm", "11"]);
-    // TOKEN UTAMA saja yang menentukan, bukan "salah satu token".
+    // SATU token yang menentukan, bukan "salah satu token".
     //
-    // brandTokens mengurutkan dari yang terpanjang, jadi [0] adalah nama
-    // mereknya. Menerima "token mana pun" membuat token lemah yang memutuskan:
-    // pada frame c-no-face-2.5.png mereknya terbaca "SCARLET" (salah), tapi
-    // kata "acne" terbaca benar — dan gerbangnya lolos karena "acne".
-    // Kesetiaan MEREK tidak boleh dibuktikan oleh kata yang bukan merek.
-    return { terbaca: merekCocok(stdout, tokens[0]), teks: stdout.trim().slice(0, 200) };
+    // Menerima token mana pun membuat kata lemah yang memutuskan: pada frame
+    // c-no-face-2.5.png mereknya terbaca "SCARLET" (salah) tapi kata "acne"
+    // benar, dan gerbangnya lolos karena "acne". Kesetiaan MEREK tidak boleh
+    // dibuktikan oleh kata yang bukan merek. Pemilihan tokennya sendiri ada di
+    // tokenMerekUtama() — urutan, bukan panjang.
+    return { terbaca: merekCocok(stdout, token), teks: stdout.trim().slice(0, 200) };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }
@@ -144,6 +144,8 @@ export async function qcF1FrameFidelity(input: {
   /** SELALU foto produk ASLI — tidak pernah frame turunan sebelumnya. */
   productPhotoPath: string;
   productName: string;
+  /** Merek eksplisit dari catatan produk/intake. Menang atas tebakan dari nama. */
+  merekEksplisit?: string | null;
   /**
    * Peran produk di frame ini. Menentukan apakah OCR merek WAJIB.
    *
@@ -172,7 +174,7 @@ export async function qcF1FrameFidelity(input: {
 
   let ocr: HasilOcr;
   try {
-    ocr = await merekTerbaca(input.framePath, input.productName);
+    ocr = await merekTerbaca(input.framePath, input.productName, input.merekEksplisit);
   } catch (err) {
     // OCR mati (tesseract/ffmpeg tidak ada) pada frame HERO berarti janji
     // "nama merek terbaca" tidak bisa dibuktikan — dan janji yang tidak bisa

@@ -197,7 +197,7 @@ export async function turunkanFrameAwalTerperiksa(input: {
   /** Diteruskan ke QC-F1 — hanya frame hero yang wajib lolos OCR merek. */
   productState?: "hero" | "partial";
 }): Promise<HasilFrameTurunan> {
-  const { qcF1FrameFidelity } = await import("./qc-frame");
+  const { qcF1FrameFidelity, bolehJadiReferensi } = await import("./qc-frame");
   const MAKS_ULANG = 2;
   let biaya = 0;
   let terakhir: import("./qc-frame").HasilQcF1 | null = null;
@@ -217,7 +217,7 @@ export async function turunkanFrameAwalTerperiksa(input: {
     // Hanya PASS yang boleh dipakai. UNVERIFIED sengaja TIDAK diulang: kalau
     // kuncinya tidak ada atau OCR mati, mengulang cuma membakar biaya gambar
     // untuk pemeriksa yang tetap tidak bisa memeriksa.
-    if (qc.status === "PASS") return { path: f.path, biayaIdr: biaya, qc, ulang };
+    if (bolehJadiReferensi(qc)) return { path: f.path, biayaIdr: biaya, qc, ulang };
     if (qc.status === "UNVERIFIED") {
       console.error(`[QC-F1] frame ${path.basename(input.outPath)}: ${qc.detail}`);
       return { path: input.outPath, biayaIdr: biaya, qc, ulang };
