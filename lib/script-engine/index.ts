@@ -26,6 +26,7 @@ import { isTvcTemplate, jendelaKata, templateRequiresPriceMention, validateScrip
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
 import { compileDeliveryText } from "./delivery-tags";
 import { keSegmentDraft, laporJatuhKeTemplate, llmSengajaDimatikan, llmSiap, tulisNaskah } from "./llm";
+import { petunjukNaskah, pilihIde, type IdeTerpilih } from "./ide";
 import { resolvePromo, promoDeadlineSpokenPhrase, type ActivePromo } from "../promo";
 import { getDb } from "../db";
 
@@ -245,7 +246,9 @@ async function generateOne(
   templateId?: string | null,
   variantIndex = 0,
   contentType: "affiliate" | "ads" = "affiliate",
-  format = "hands_only"
+  format = "hands_only",
+  /** Petunjuk ide terpilih (Idea Stage). Kosong = perilaku tanpa Gate 3. */
+  petunjukIde?: string
 ): Promise<GeneratedScript> {
   // Ambang Rp100.000 diturunkan dari data, bukan ditebak: tiga video pemenang
   // yang menyebut harga ada di Rp27-30 ribu, sedangkan yang produknya di atas
@@ -341,6 +344,7 @@ async function generateOne(
           contoh: variasi ? `${variasi.hook} / ${variasi.demo} / ${variasi.cta}` : null,
           wordMin: minWc, wordMax: maxWc,
           keluhan: keluhan.length ? keluhan : undefined,
+          ide: petunjukIde,
         });
         const kandidat = rakitDanNilai(keSegmentDraft(segs), true);
         if (kandidat.validation.passed) { hasil = kandidat; break; }
@@ -452,10 +456,50 @@ export async function generateScripts(opts: {
   // enam permintaan sekaligus ke satu akun akan menabrak rate limit persis
   // saat pengguna paling menunggu. Selisih waktunya kecil dibanding satu klip
   // video yang butuh dua sampai empat menit.
+  //
+  // IDEA STAGE — SEKALI per permintaan, bukan per varian.
+  //
+  // Modelnya kelas atas dan idenya adalah keputusan paling menentukan di
+  // seluruh pipeline; menjalankannya tiga kali melipatgandakan biaya paling
+  // mahal tanpa menambah apa pun. Peringkat kandidatnya justru berguna:
+  // varian ke-i mendapat ide peringkat ke-i, jadi tiga varian benar-benar tiga
+  // SUDUT berbeda — bukan satu ide yang ditulis ulang tiga kali, yang selama
+  // ini membuat layar "pilih naskah" terasa seperti pilihan palsu.
+  //
+  // GAGAL = LANJUT TANPA IDE. Idea Stage adalah lapisan mutu, bukan syarat
+  // hidup: kalau modelnya tidak tersedia, naskah tetap ditulis seperti hari
+  // ini. Yang tidak boleh adalah gagal diam-diam, jadi sebabnya dicatat.
+  let ide: IdeTerpilih | null = null;
+  if (llmSiap()) {
+    try {
+      ide = await pilihIde({
+        productName: product.name, productCategory: product.category,
+        kategoriNoun: pick(product.category, CATEGORY_NOUN),
+        priceIdr: product.price_idr ?? 0, durationSec,
+        contentType: opts.contentType ?? "affiliate", register,
+      });
+      if (!ide.nilai.lulus) {
+        // Tidak dirender diam-diam sebagai "bagus": idenya dipakai karena harus
+        // ada yang dipakai, tapi kegagalannya tercatat supaya bisa ditawarkan
+        // ke pengguna di layar pilih naskah.
+        console.warn(
+          `[idea] "${product.name}": tidak ada ide yang lulus FYP Gate setelah ${ide.putaran} putaran ` +
+            `(terbaik ${ide.nilai.total} — ${ide.nilai.sebabGagal.join(", ")})`
+        );
+      }
+    } catch (err) {
+      console.warn(`[idea] "${product.name}": Idea Stage dilewati — ${(err as Error).message}`);
+    }
+  }
+
   const hasil: GeneratedScript[] = [];
   for (let i = 0; i < families.length; i++) {
+    // Varian ke-i memakai ide peringkat ke-i kalau ada; kalau kandidatnya lebih
+    // sedikit dari variannya, sisanya memakai ide terbaik.
+    const ideVarian = ide ? (ide.peringkat[i] ?? ide.peringkat[0])?.ide ?? ide.ide : null;
     hasil.push(await generateOne(product, register, emotion, families[i], tier, durationSec,
-      opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format));
+      opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format,
+      ideVarian ? petunjukNaskah(ideVarian) : undefined));
   }
   return hasil;
 }

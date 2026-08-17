@@ -138,6 +138,15 @@ export const config = {
   /** Model penulis adegan. Idea Stage & FYP Gate memakai model kelas atas. */
   anthropicModelScenes: env("ANTHROPIC_MODEL_SCENES", "claude-sonnet-4-6"),
   /**
+   * Model Idea Stage & FYP Gate — kelas atas, sengaja beda dari penulis adegan.
+   *
+   * Dipanggil SEKALI per naskah, bukan per varian, sementara ide adalah
+   * keputusan paling menentukan di seluruh pipeline. Di sinilah anggaran model
+   * paling layak dibelanjakan; menyamakannya dengan Sonnet menghemat sedikit
+   * di tempat yang paling menentukan hasilnya.
+   */
+  anthropicModelIdeas: env("ANTHROPIC_MODEL_IDEAS", "claude-opus-5"),
+  /**
    * SCRIPT_LLM=0 mematikan penulis LLM secara SENGAJA.
    *
    * Ada karena "kunci tidak ada" dan "memang dimatikan" adalah dua hal berbeda

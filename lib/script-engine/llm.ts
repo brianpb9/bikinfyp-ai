@@ -201,6 +201,15 @@ interface PermintaanNaskah {
    * ditolak, karena menyuruhnya "coba lagi" tanpa alasan cuma mengocok dadu.
    */
   keluhan?: string[];
+  /**
+   * Petunjuk ide terpilih (Idea Stage, PATCH 4). Kalau ada, INI yang dilayani
+   * naskah — bukan template, dan bukan selera penulis.
+   *
+   * Ditaruh paling depan di blok tugas dengan sengaja: segala yang menyusul
+   * (hook family, format, contoh nada) adalah bahan, sementara ide adalah
+   * tujuannya. Menaruhnya di akhir membuatnya terbaca sebagai catatan tambahan.
+   */
+  ide?: string;
 }
 
 /**
@@ -255,6 +264,7 @@ function blokTugas(r: PermintaanNaskah): string {
       ].join("\n")
     : "";
   return [
+    r.ide ? `${r.ide}\n` : "",
     `PRODUCT: ${r.productName} (${r.productCategory}), price ${r.priceIdr} rupiah — write it as words if spoken.`,
     `DURATION: ${r.durationSec} seconds, exactly ${jumlah} segments.`,
     `CONTENT TYPE: ${r.contentType}. ${cta}`,
