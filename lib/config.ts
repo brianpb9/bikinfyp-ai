@@ -147,6 +147,33 @@ export const config = {
    */
   anthropicModelIdeas: env("ANTHROPIC_MODEL_IDEAS", "claude-opus-5"),
   /**
+   * Tier mana yang menjalankan Idea Stage. Enterprise (job ber-org) SELALU
+   * ikut, apa pun isi daftar ini.
+   *
+   * Bergerbang karena harganya nyata: satu jalankan gate memakai sampai dua
+   * panggilan pembuat ide di model kelas atas (batas 12k token keluaran) plus
+   * satu panggilan penilai per kandidat. Sebelum ini, /api/scripts/generate
+   * praktis gratis dan tanpa rate limit — satu pengguna yang mengulang bisa
+   * menghabiskan kuota untuk semua orang.
+   *
+   * high_quality TETAP memakai penulis LLM; yang tidak ia dapat cuma Gate 3.
+   */
+  ideaStageTiers: env("IDEA_STAGE_TIERS", "super_hq")
+    .split(",").map((t) => t.trim()).filter(Boolean),
+  /**
+   * Bolehkah /api/try (magic moment TANPA LOGIN) memakai penulis LLM?
+   *
+   * MATI secara bawaan, dan itu perbaikan cacat. Rute itu dirancang saat mesin
+   * naskah masih 100% template — komentarnya sendiri berbunyi "deterministik,
+   * nol COGS". Sejak STEP 1 hidup, kalimat itu berhenti benar: tiap permintaan
+   * anonim menulis TIGA naskah lewat model berbayar, dan batasnya cuma 15 per
+   * 15 menit PER IP. Tidak ada batas lintas-IP, dan tidak ada yang login.
+   *
+   * Dinyalakan lewat TRY_LLM=1 kalau mutu demo dinilai sepadan dengan biayanya
+   * — satu env, keputusan sadar, bukan efek samping yang tidak pernah dipilih.
+   */
+  tryLlmEnabled: env("TRY_LLM", "0") === "1",
+  /**
    * SCRIPT_LLM=0 mematikan penulis LLM secara SENGAJA.
    *
    * Ada karena "kunci tidak ada" dan "memang dimatikan" adalah dua hal berbeda

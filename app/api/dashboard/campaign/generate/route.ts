@@ -102,6 +102,8 @@ export async function POST(req: Request) {
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
       },
       register, emotion: "senang", qualityTier: tier, durationSec, hookLevel, count,
+      // Enterprise: Idea Stage selalu ikut, tidak melihat tier.
+      orgId: membership.org_id,
       ...(hookFamilies.length ? { hookFamilies } : {}),
       ...(body.lock_hook_family === true ? { lockHookFamily: true } : {}),
       // Divalidasi terhadap katalog nyata, bukan diterima mentah — id karangan

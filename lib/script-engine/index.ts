@@ -26,7 +26,7 @@ import { isTvcTemplate, jendelaKata, templateRequiresPriceMention, validateScrip
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
 import { compileDeliveryText } from "./delivery-tags";
 import { keSegmentDraft, laporJatuhKeTemplate, llmSengajaDimatikan, llmSiap, tulisNaskah } from "./llm";
-import { petunjukNaskah, pilihIde, type IdeTerpilih } from "./ide";
+import { bolehIdeaStage, petunjukNaskah, pilihIde, type IdeTerpilih } from "./ide";
 import { resolvePromo, promoDeadlineSpokenPhrase, type ActivePromo } from "../promo";
 import { getDb } from "../db";
 
@@ -264,7 +264,9 @@ async function generateOne(
   contentType: "affiliate" | "ads" = "affiliate",
   format = "hands_only",
   /** Petunjuk ide terpilih (Idea Stage). Kosong = perilaku tanpa Gate 3. */
-  petunjukIde?: string
+  petunjukIde?: string,
+  /** true = lewati penulis LLM sepenuhnya, pakai template. */
+  tanpaLlm = false
 ): Promise<GeneratedScript> {
   // Ambang Rp100.000 diturunkan dari data, bukan ditebak: tiga video pemenang
   // yang menyebut harga ada di Rp27-30 ribu, sedangkan yang produknya di atas
@@ -350,7 +352,7 @@ async function generateOne(
   // dan tidak akan pernah bisa menambah jeda lisan atau membetulkan kata ganti.
   let hasil: { segments: SegmentDraft[]; validation: ReturnType<typeof validate> } | null = null;
   let keluhan: string[] = [];
-  if (llmSiap()) {
+  if (llmSiap() && !tanpaLlm) {
     for (let percobaan = 0; percobaan < MAKS_PERBAIKAN_LLM; percobaan++) {
       try {
         const segs = await tulisNaskah({
@@ -380,7 +382,7 @@ async function generateOne(
         { productName: product.name }
       );
     }
-  } else if (!llmSengajaDimatikan()) {
+  } else if (!llmSengajaDimatikan() && !tanpaLlm) {
     // Dimatikan sengaja (SCRIPT_LLM=0) TIDAK dilaporkan sebagai kabar buruk —
     // itu konfigurasi, bukan kegagalan. Kunci yang hilang tetap alarm.
     laporJatuhKeTemplate("ANTHROPIC_API_KEY belum di-set", { productName: product.name });
@@ -453,6 +455,10 @@ export async function generateScripts(opts: {
   contentType?: "affiliate" | "ads";
   /** Petunjuk strategi untuk penulis LLM. */
   format?: string;
+  /** Job milik organisasi = jalur Enterprise; Idea Stage selalu ikut di sana. */
+  orgId?: string | null;
+  /** Paksa jalur template — dipakai jalur anonim yang tidak boleh keluar uang. */
+  tanpaLlm?: boolean;
 }): Promise<GeneratedScript[]> {
   const { product, register } = opts;
   const count = opts.count ?? 3;
@@ -486,7 +492,10 @@ export async function generateScripts(opts: {
   // hidup: kalau modelnya tidak tersedia, naskah tetap ditulis seperti hari
   // ini. Yang tidak boleh adalah gagal diam-diam, jadi sebabnya dicatat.
   let ide: IdeTerpilih | null = null;
-  if (llmSiap()) {
+  // BERGERBANG TIER. Idea Stage memakai model kelas atas dan sampai dua
+  // panggilan pembuat ide per permintaan; high_quality tetap memakai penulis
+  // LLM, yang tidak ia dapat cuma Gate 3. Enterprise selalu ikut.
+  if (llmSiap() && !opts.tanpaLlm && bolehIdeaStage({ tier, orgId: opts.orgId })) {
     try {
       ide = await pilihIde({
         productName: product.name, productCategory: product.category,
@@ -532,7 +541,7 @@ export async function generateScripts(opts: {
     const ideVarian = ide?.nilai.lulus ? (ide.peringkat[i] ?? ide.peringkat[0])?.ide ?? ide.ide : null;
     hasil.push(await generateOne(product, register, emotion, families[i], tier, durationSec,
       opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format,
-      ideVarian ? petunjukNaskah(ideVarian) : undefined));
+      ideVarian ? petunjukNaskah(ideVarian) : undefined, opts.tanpaLlm === true));
   }
   // Gate gagal: tiga terbaik ikut keluar supaya UI bisa menampilkannya dan
   // meminta pengguna memilih — bukan disimpan diam-diam di log server.

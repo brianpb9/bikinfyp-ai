@@ -288,6 +288,8 @@ export async function POST(req: Request) {
             promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
           },
           register, emotion: "senang", qualityTier: tier,
+          // Enterprise: Idea Stage selalu ikut, tidak melihat tier.
+          orgId: membership.org_id,
           // SELURUH konfigurasi kreatif diambil dari templatenya, bukan dari
           // satu pengaturan global. Versi pertama cuma mengirim templateId,
           // sehingga hook khas template ("Diskon Gede" -> H1, "Review Jujur"

@@ -270,7 +270,8 @@ test("ide sampai ke prompt penulis naskah, dan tiap varian dapat sudut berbeda",
   try {
     await generateScripts({
       product: { id: "p1", name: "Scarlett Acne Serum", price_idr: 75000, category: "beauty" },
-      register: "bestie", qualityTier: "high_quality", durationSec: 15, count: 3,
+      // super_hq: tier yang memang menjalankan Idea Stage (IDEA_STAGE_TIERS).
+      register: "bestie", qualityTier: "super_hq", durationSec: 15, count: 3,
     });
     assert.ok(promptNaskah.length >= 3, `butuh >=3 prompt naskah, dapat ${promptNaskah.length}`);
     // Ide ada di prompt, dan PALING DEPAN — ia tujuan, bukan catatan tambahan.
@@ -349,7 +350,7 @@ test("gate GAGAL: naskah TIDAK ditulis dari ide gagal, dan tiga terbaik dikembal
   try {
     const hasil = await generateScripts({
       product: { id: "p2", name: "Scarlett Acne Serum", price_idr: 75000, category: "beauty" },
-      register: "bestie", qualityTier: "high_quality", durationSec: 15, count: 1,
+      register: "bestie", qualityTier: "super_hq", durationSec: 15, count: 1,
     });
     // Tidak satu pun prompt naskah membawa ide — itu inti perubahannya.
     assert.ok(promptNaskah.length > 0, "penulis naskah tetap dipanggil");
@@ -379,5 +380,67 @@ test("penambal kuota tidak boleh menggandakan mekanik walau model mengabaikan la
     const hasil = await pilihIde(permintaan);
     const mekanik = hasil.peringkat.map((p) => p.ide.mechanic);
     assert.equal(new Set(mekanik).size, mekanik.length, `mekanik terduplikasi: ${mekanik.join(", ")}`);
+  } finally { globalThis.fetch = aslinya; }
+});
+
+test("Idea Stage bergerbang tier; Enterprise selalu ikut", async () => {
+  const { bolehIdeaStage } = await import("../lib/script-engine/ide");
+  // Bawaan IDEA_STAGE_TIERS = "super_hq".
+  assert.equal(bolehIdeaStage({ tier: "super_hq" }), true);
+  assert.equal(bolehIdeaStage({ tier: "high_quality" }), false);
+  assert.equal(bolehIdeaStage({ tier: "silent_caption" }), false);
+  // Enterprise tidak melihat tier — jalurnya memang dibayar berbeda.
+  assert.equal(bolehIdeaStage({ tier: "high_quality", orgId: "org-1" }), true);
+  assert.equal(bolehIdeaStage({ tier: "silent_caption", orgId: "org-1" }), true);
+});
+
+test("high_quality tetap memakai penulis LLM, hanya tanpa Idea Stage", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  let panggilanIde = 0;
+  const promptNaskah: string[] = [];
+  globalThis.fetch = (async (_u: string, init: { body: string }) => {
+    const body = JSON.parse(init.body) as { system: { text: string }[]; messages: { content: string }[] };
+    const sistem = body.system.map((s) => s.text).join("\n");
+    if (sistem.includes("You invent ONE IDEA") || sistem.includes("You are the FYP gate")) {
+      panggilanIde++;
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: "{}" }] }) };
+    }
+    promptNaskah.push(body.messages[0].content);
+    return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments: [
+      { block: "HOOK", label: "PAIN", start: 0, end: 4, text: "Nah, aku dulu gitu juga sih",
+        start_state: "dia sudah memegang pipinya", framing: "medium", angle: "eye level", camera: "static",
+        action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
+        audio_note: "", why: "setup", mode: "SELFIE" },
+      { block: "BODY", label: "DEMO", start: 4, end: 10, text: "aku pakai ini tiap malam deh",
+        start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
+        action: "dia memutar botol, lalu memiringkan label", product_state: "partial", expression: "warm",
+        audio_note: "", why: "tension", mode: "SELLING" },
+      { block: "CTA", label: "REVEAL", start: 10, end: 15, text: "cek keranjang kuning ya",
+        start_state: "botolnya sudah terangkat", framing: "tight", angle: "eye level", camera: "static",
+        action: "dia menahannya diam, lalu menunjuk", product_state: "hero", expression: "bright",
+        audio_note: "", why: "payoff", mode: "SELLING" },
+    ] }) }] }) };
+  }) as never;
+  try {
+    await generateScripts({
+      product: { id: "p3", name: "Scarlett Acne Serum", price_idr: 75000, category: "beauty" },
+      register: "bestie", qualityTier: "high_quality", durationSec: 15, count: 1,
+    });
+    assert.equal(panggilanIde, 0, "Idea Stage tidak boleh jalan di high_quality retail");
+    assert.ok(promptNaskah.length > 0, "penulis LLM TETAP dipakai — yang hilang cuma Gate 3");
+  } finally { globalThis.fetch = aslinya; }
+});
+
+test("tanpaLlm memaksa jalur template — jalur anonim tidak boleh keluar uang", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  let panggilan = 0;
+  globalThis.fetch = (async () => { panggilan++; throw new Error("tidak boleh ada panggilan model"); }) as never;
+  try {
+    const hasil = await generateScripts({
+      product: { id: "p4", name: "Scarlett Acne Serum", price_idr: 75000, category: "beauty" },
+      register: "netral", tanpaLlm: true,
+    });
+    assert.equal(panggilan, 0, "/api/try tidak boleh memanggil model berbayar");
+    assert.ok(hasil.length >= 1 && hasil[0].segments.length >= 3, "naskah template tetap keluar");
   } finally { globalThis.fetch = aslinya; }
 });

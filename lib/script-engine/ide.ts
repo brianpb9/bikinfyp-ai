@@ -135,7 +135,7 @@ class JawabanTerpotong extends LlmTidakTersedia {
   }
 }
 
-async function panggil(system: string, user: string, maxTokens: number): Promise<string> {
+async function panggil(system: string, user: string, maxTokens: number, biaya?: AkumulasiBiaya): Promise<string> {
   if (!config.scriptLlmEnabled || config.anthropicApiKey === "") {
     throw new LlmTidakTersedia("Idea Stage butuh ANTHROPIC_API_KEY dan SCRIPT_LLM aktif");
   }
@@ -158,9 +158,43 @@ async function panggil(system: string, user: string, maxTokens: number): Promise
   if (!res.ok) {
     throw new LlmTidakTersedia(`HTTP ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
   }
-  const data = (await res.json()) as { content?: { type: string; text?: string }[]; stop_reason?: string };
+  const data = (await res.json()) as {
+    content?: { type: string; text?: string }[];
+    stop_reason?: string;
+    usage?: { input_tokens?: number; output_tokens?: number };
+  };
+  if (biaya) {
+    biaya.panggilan += 1;
+    biaya.tokenMasuk += data.usage?.input_tokens ?? 0;
+    biaya.tokenKeluar += data.usage?.output_tokens ?? 0;
+  }
   if (data.stop_reason === "max_tokens") throw new JawabanTerpotong(maxTokens);
   return (data.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
+}
+
+/**
+ * Bolehkah Idea Stage dijalankan untuk permintaan ini?
+ *
+ * Aturannya sama bentuknya dengan bolehFrameTurunan() di worker, dan sengaja:
+ * dua-duanya keputusan BIAYA, bukan keputusan mutu, jadi keduanya berdiri di
+ * satu fungsi yang bisa dibaca dan diuji sendiri.
+ *
+ * Enterprise selalu ikut tanpa melihat tier — jalur itu memang dibayar berbeda.
+ */
+export function bolehIdeaStage(input: { tier: string; orgId?: string | null }): boolean {
+  if (input.orgId) return true;
+  return config.ideaStageTiers.includes(input.tier);
+}
+
+/** Pemakaian token satu jalankan gate — dipakai mencatat biaya per ide. */
+export interface AkumulasiBiaya {
+  panggilan: number;
+  tokenMasuk: number;
+  tokenKeluar: number;
+}
+
+export function biayaKosong(): AkumulasiBiaya {
+  return { panggilan: 0, tokenMasuk: 0, tokenKeluar: 0 };
 }
 
 export interface PermintaanIde {
@@ -268,8 +302,8 @@ function blokTugasIde(r: PermintaanIde): string {
  * berarti membayar panggilan termahal di pipeline lalu membuang hasilnya;
  * menambal kekurangannya jauh lebih murah dan hasilnya sama.
  */
-export async function usulkanIdeBerkuota(r: PermintaanIde): Promise<Ide[]> {
-  const awal = await usulkanIde(r);
+export async function usulkanIdeBerkuota(r: PermintaanIde, biaya?: AkumulasiBiaya): Promise<Ide[]> {
+  const awal = await usulkanIde(r, biaya);
   const manusiawi = awal.filter((i) => situasiManusiawi(i.human_situation));
   const kurang = MIN_MANUSIAWI_PER_PUTARAN - manusiawi.length;
   if (kurang <= 0) return awal;
@@ -284,7 +318,7 @@ export async function usulkanIdeBerkuota(r: PermintaanIde): Promise<Ide[]> {
       // sudut baru dan bukan tulis-ulang kandidat yang sama.
       mekanikDilarang: [...(r.mekanikDilarang ?? []), ...awal.map((i) => i.mechanic as IdMekanik)],
       wajibSemuaManusiawi: true,
-    });
+    }, biaya);
     // Disaring DI SINI, bukan sekadar dilarang di prompt. Larangan yang tidak
     // ditegakkan kode bukan larangan: pada uji dengan model yang mengabaikannya,
     // penambalan mengembalikan mekanik yang sama dan peringkatnya berisi
@@ -302,12 +336,12 @@ export async function usulkanIdeBerkuota(r: PermintaanIde): Promise<Ide[]> {
 }
 
 /** Hasilkan kandidat ide, buang yang generik dan yang mekaniknya tidak dikenal. */
-export async function usulkanIde(r: PermintaanIde): Promise<Ide[]> {
+export async function usulkanIde(r: PermintaanIde, biaya?: AkumulasiBiaya): Promise<Ide[]> {
   // 12000, bukan 4000. Terukur 17 Agu: lima ide selengkap yang diminta
   // spesifikasi memakan ~6-8k token, dan 4000 memotongnya di tengah kandidat
   // keempat. Batas dinaikkan, BUKAN idenya yang disuruh lebih pendek —
   // kedalaman itulah yang membedakannya dari template.
-  const teks = await panggil(blokPengetahuan(r), blokTugasIde(r), 12000);
+  const teks = await panggil(blokPengetahuan(r), blokTugasIde(r), 12000, biaya);
   const mentah = JSON.parse(ambilObjekJson(teks)) as { ideas?: unknown[] };
   // Divalidasi SATU PER SATU, bukan sebagai satu daftar.
   //
@@ -377,7 +411,8 @@ export function penaltiCgi(
 
 export async function nilaiIde(
   ide: Ide,
-  konteks: { productName: string; productCategory: string; format?: string; hookLevel?: string }
+  konteks: { productName: string; productCategory: string; format?: string; hookLevel?: string },
+  biaya?: AkumulasiBiaya
 ): Promise<HasilNilai> {
   const user = [
     `CATEGORY: ${konteks.productCategory}. PRODUCT: ${konteks.productName}.`,
@@ -391,7 +426,7 @@ export async function nilaiIde(
     "",
     "JSON only.",
   ].join("\n");
-  const teks = await panggil(blokPenilai(), user, 800);
+  const teks = await panggil(blokPenilai(), user, 800, biaya);
   const parsed = SkemaNilai.parse(JSON.parse(ambilObjekJson(teks)));
   const cgi = penaltiCgi(ide, konteks);
   const scores = cgi.berlaku
@@ -426,11 +461,14 @@ export interface IdeTerpilih {
 export const MAKS_PUTARAN_IDE = 2;
 
 export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
+  // Akumulator dibuat PER PANGGILAN, bukan modul-global: dua permintaan yang
+  // berjalan bersamaan di satu proses akan saling mencampur biayanya.
+  const biaya = biayaKosong();
   const semua: { ide: Ide; nilai: HasilNilai }[] = [];
   const dilarang = new Set<IdMekanik>(r.mekanikDilarang ?? []);
 
   for (let putaran = 1; putaran <= MAKS_PUTARAN_IDE; putaran++) {
-    const kandidat = await usulkanIdeBerkuota({ ...r, mekanikDilarang: [...dilarang] });
+    const kandidat = await usulkanIdeBerkuota({ ...r, mekanikDilarang: [...dilarang] }, biaya);
     // SEMUA kandidat dinilai, tidak berhenti di yang pertama lulus.
     //
     // Berhenti lebih awal memang lebih murah — dan salah. Peringkatnya dipakai
@@ -460,36 +498,41 @@ export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
       const nilai = await nilaiIde(ide, {
         productName: r.productName, productCategory: r.productCategory,
         format: r.format, hookLevel: r.hookLevel,
-      });
+      }, biaya);
       semua.push({ ide, nilai });
       if (!nilai.lulus) dilarang.add(ide.mechanic as IdMekanik);
     }
     const peringkat = peringkatkan(semua);
     const menang = peringkat.find((p) => p.nilai.lulus);
     if (menang) {
-      catat(r, { ide: menang.ide, nilai: menang.nilai, peringkat, putaran });
+      catat(r, { ide: menang.ide, nilai: menang.nilai, peringkat, putaran }, biaya);
       return { ide: menang.ide, nilai: menang.nilai, peringkat, putaran };
     }
   }
   const peringkat = peringkatkan(semua);
   if (peringkat.length === 0) throw new LlmTidakTersedia("Idea Stage tidak menghasilkan satu pun kandidat sah");
   const hasil = { ide: peringkat[0].ide, nilai: peringkat[0].nilai, peringkat, putaran: MAKS_PUTARAN_IDE };
-  catat(r, hasil);
+  catat(r, hasil, biaya);
   return hasil;
 }
 
-function catat(r: PermintaanIde, hasil: IdeTerpilih): void {
+function catat(r: PermintaanIde, hasil: IdeTerpilih, biaya: AkumulasiBiaya): void {
   catatSkorGate({
     productName: r.productName, productCategory: r.productCategory,
     mechanic: hasil.ide.mechanic, total: hasil.nilai.total, lulus: hasil.nilai.lulus,
     putaran: hasil.putaran, jumlahKandidat: hasil.peringkat.length,
     manusiawi: hasil.peringkat.filter((p) => situasiManusiawi(p.ide.human_situation)).length,
+    panggilan: biaya.panggilan,
+    tokenMasuk: biaya.tokenMasuk,
+    tokenKeluar: biaya.tokenKeluar,
+    model: config.anthropicModelIdeas,
     waktu: new Date().toISOString(),
   });
   console.log(
     `[idea] gate "${r.productName}": tertinggi ${hasil.nilai.total} (${hasil.ide.mechanic}) · ` +
       `${hasil.nilai.lulus ? "LULUS" : "gagal"} · ${hasil.peringkat.length} kandidat, ` +
-      `${hasil.peringkat.filter((p) => situasiManusiawi(p.ide.human_situation)).length} berangkat dari situasi manusia`
+      `${hasil.peringkat.filter((p) => situasiManusiawi(p.ide.human_situation)).length} berangkat dari situasi manusia · ` +
+      `biaya ${biaya.panggilan} panggilan, ${biaya.tokenMasuk} token masuk / ${biaya.tokenKeluar} keluar`
   );
 }
 
@@ -530,6 +573,11 @@ export function catatSkorGate(baris: {
   putaran: number;
   jumlahKandidat: number;
   manusiawi: number;
+  /** Biaya jalankan ini: berapa panggilan model dan berapa token. */
+  panggilan: number;
+  tokenMasuk: number;
+  tokenKeluar: number;
+  model: string;
   waktu: string;
 }): void {
   try {

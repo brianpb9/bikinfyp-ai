@@ -7,6 +7,7 @@ import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/l
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { tierMasihDijual } from "@/lib/paket-kredit";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
+import { allowRate } from "@/lib/rate-limit";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -16,6 +17,26 @@ export async function POST(req: Request) {
   try {
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
+
+    // BATAS 5 PER JAM PER PENGGUNA.
+    //
+    // Rute ini dulu praktis gratis, jadi tidak pernah dibatasi. Sejak penulis
+    // naskah LLM hidup (dan Idea Stage di atasnya untuk tier tinggi), satu klik
+    // "buat skrip" memanggil model berbayar beberapa kali — sampai dua panggilan
+    // pembuat ide kelas atas plus satu penilai per kandidat. Tanpa batas, satu
+    // akun yang mengulang-ulang bisa menghabiskan kuota untuk semua orang.
+    //
+    // Per PENGGUNA, bukan per org: rute ini memang jalur retail, dan yang
+    // dibatasi perbuatan orangnya. Fail-open mengikuti allowRate — memblokir
+    // orang yang membayar karena Redis ngadat lebih merugikan daripada
+    // meloloskan beberapa permintaan ekstra.
+    if (!(await allowRate("skrip:generate", user.id, 5, 3600))) {
+      throw ERR.BAD_REQUEST(
+        "Sudah 5 kali buat skrip dalam sejam terakhir. Tunggu sebentar ya — tiap permintaan menulis naskah baru dari awal.",
+        "Rate limited: scripts/generate 5/hour"
+      );
+    }
+
     const body = await req.json().catch(() => ({}));
 
     const productId = String(body.product_id ?? "");
