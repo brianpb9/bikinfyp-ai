@@ -57,8 +57,28 @@ test("ketidakcocokan nama adalah peringatan, bukan penolakan", () => {
     "hanya keterbacaan yang memblokir, bukan kecocokan nama");
 });
 
-test("ADR mencatat apa yang BELUM terbukti", () => {
+test("ADR mencatat BUKTI, bukan kesimpulan", () => {
   const adr = baca("docs/spike-2026-08-17/ADR-001-referensi-audio-identitas.md");
-  assert.match(adr, /belum terbukti/i, "klaim yang belum diuji harus ditandai, bukan ditulis sebagai fakta");
-  assert.match(adr, /429/, "penyebab spike C gagal harus tercatat");
+  // Tes ini dulu menuntut kata "belum terbukti" — benar saat spike C belum
+  // pernah jalan. Sekarang C SUDAH dijalankan dan jawabannya tegas, jadi yang
+  // dijaga bergeser: responsnya harus dikutip apa adanya supaya siapa pun bisa
+  // membantahnya dengan uji baru, bukan dengan pendapat.
+  assert.match(adr, /may contain real person/, "respons penolakan dikutip persis");
+  assert.match(adr, /Request id: 0217869633553829/, "request id bisa ditelusuri");
+  assert.match(adr, /429/, "kenapa C sempat tertunda tetap tercatat");
+  // Batas yang ditemukan sendiri tidak boleh hilang dari catatan.
+  assert.match(adr, /perlu diperiksa sebelum dipakai/, "batas frame turunan harus tertulis");
+});
+
+test("referensi berwajah MATI secara bawaan, dengan alasan terukur", () => {
+  const cfg = baca("lib/config.ts");
+  assert.match(cfg, /seedanceFaceRef: env\("SEEDANCE_FACE_REF", "false"\)/, "bawaannya harus false");
+  // Alasannya bukan kehati-hatian, tapi respons API yang tercatat.
+  assert.match(cfg, /may contain real person/, "respons penolakan harus tertulis di kode");
+  assert.match(cfg, /0217869633553829/, "request id disimpan supaya bisa ditelusuri");
+  const adr = baca("docs/spike-2026-08-17/ADR-001-referensi-audio-identitas.md");
+  assert.match(adr, /Seedance MENOLAK frame berwajah/);
+  assert.match(adr, /Seedance MENERIMA frame tanpa wajah/);
+  // Batas yang ditemukan sendiri harus ikut tercatat, bukan cuma keberhasilan.
+  assert.match(adr, /dropper jadi pump/, "pergeseran bentuk produk di tahap turunan harus dicatat");
 });

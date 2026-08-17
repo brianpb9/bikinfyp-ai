@@ -101,6 +101,29 @@ export const config = {
   // Dinyalakan lewat ENTERPRISE_MATRIX_ENABLED=true, bukan dengan menghapus
   // baris ini — supaya menyalakannya adalah keputusan yang tercatat.
   enterpriseMatrixEnabled: env("ENTERPRISE_MATRIX_ENABLED", "false") === "true",
+
+  /**
+   * Bolehkah frame referensi yang dikirim ke Seedance MEMUAT WAJAH?
+   *
+   * MATI, dan bukan karena kehati-hatian — karena diuji dan ditolak. Frame
+   * turunan berisi wajah hasil Gemini dijawab BytePlus dengan:
+   *
+   *   HTTP 400: The request failed because the input image 'content[1]'
+   *   may contain real person.
+   *   (request id 0217869633553829e96f8c80ac47960a454270e9930f95432d99e,
+   *    17 Agu 2026 — docs/spike-2026-08-17)
+   *
+   * Persis error yang sama dengan foto wajah ASLI: detektornya tidak
+   * membedakan wajah buatan dari wajah nyata, ia menolak wajah apa pun.
+   *
+   * Saat false, frame turunan dibuat TANPA wajah (produk + ruangan + tubuh
+   * dari leher ke bawah) dan identitas avatar dibawa deskripsi teks. Jalur itu
+   * TERBUKTI diterima pada uji yang sama.
+   *
+   * Dinyalakan lewat env begitu Seedance membuka referensi wajah — satu tempat,
+   * tanpa perlu menyentuh perencana shot.
+   */
+  seedanceFaceRef: env("SEEDANCE_FACE_REF", "false") === "true",
   operationalAlertToEmail: env("OPERATIONAL_ALERT_TO_EMAIL", ""),
   operationalMonitoringIntervalMin: parseInt(env("OPERATIONAL_MONITORING_INTERVAL_MIN", "5"), 10),
   operationalAlertCooldownMin: parseInt(env("OPERATIONAL_ALERT_COOLDOWN_MIN", "60"), 10),

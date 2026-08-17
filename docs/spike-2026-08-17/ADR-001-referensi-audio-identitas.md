@@ -61,11 +61,31 @@ Karena itu urutannya:
 
 ---
 
-## Yang TIDAK diputuskan di sini
+## Spike C — dijalankan, dan jawabannya TIDAK
 
-Spike C (dua referensi: produk + CAST-REF) **belum pernah berhasil dijalankan** — Gemini kehabisan kredit prabayar (HTTP 429) tepat saat CAST-REF dibuat. Kredit sudah diisi ulang; C akan diulang **dalam bentuk keputusan 5c** (frame turunan sebagai referensi), bukan selfie mentah.
+Diuji 17 Agu (setelah kredit Gemini diisi ulang), dalam bentuk keputusan 5c: frame turunan, bukan selfie mentah.
 
-Sampai itu dijalankan, klaim "Seedance menerima wajah AI" **belum terbukti** dan tidak boleh ditulis sebagai fakta.
+**Paket CAST-REF berhasil** (`castref-pack-alya.jpg`): tiga frame satu orang yang sama, pakaian sama, ruangan sama, kulit bertekstur nyata. Frame kedua dan ketiga diturunkan dari yang pertama — bukan tiga generate mandiri, karena tiga generate mandiri menghasilkan tiga orang yang mirip tapi berbeda. Biaya Rp1.950 per avatar.
+
+**Frame turunan berhasil** (`derived-frames.jpg`): berwajah dan tanpa-wajah, keduanya mempertahankan produk dan identitas.
+
+**Seedance MENOLAK frame berwajah:**
+
+```
+HTTP 400: The request failed because the input image 'content[1]'
+may contain real person.
+Request id: 0217869633553829e96f8c80ac47960a454270e9930f95432d99e
+```
+
+Itu error yang **sama persis** dengan foto wajah asli (insiden 12 Agu). Detektornya tidak membedakan wajah buatan dari wajah nyata — ia menolak wajah apa pun. Informasi eksternal Brian terbukti benar.
+
+**Seedance MENERIMA frame tanpa wajah** (`C-no-face.mp4`, `C-no-face-montase.jpg`): selesai 213 dtk, audio AAC mean −20,4 dB, dua tangan benar, label "SCARLETT / ACNE SERUM / 3X" terbaca sepanjang klip.
+
+Satu batas yang jujur harus dicatat: bentuk botolnya bergeser sedikit di tahap turunan (dropper jadi pump). Pergeseran itu terjadi di langkah GEMINI, bukan di Seedance — jadi frame turunan perlu diperiksa sebelum dipakai, bukan dipercaya begitu saja.
+
+**Konsekuensi:** `SEEDANCE_FACE_REF` bawaannya **false**. Jalur hidup adalah frame turunan tanpa wajah + identitas avatar lewat deskripsi teks. Paket CAST-REF tetap dibangun — Gemini menerimanya, ia dibutuhkan di tahap gambar, dan ia siap pakai pada hari Seedance membuka referensi wajah.
+
+`hands_only` tetap jalur yang direkomendasikan untuk merek yang menuntut konsistensi maksimal.
 
 ---
 
