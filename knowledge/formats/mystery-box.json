@@ -1,0 +1,18 @@
+{
+  "id": "mystery_box",
+  "slug_higgsfield": "mystery_box",
+  "nama": "Mystery Box",
+  "kekuatan": "Open loop paling murni. Penonton bertahan HANYA untuk tahu isinya — dan itu satu-satunya alasan yang dibutuhkan.",
+  "cocok_untuk": ["bundling", "hampers", "blind box"],
+  "beat_table": [
+    { "beat": 1, "durasi": 5, "isi": "Kotak polos, digoyang, dia menebak isinya" },
+    { "beat": 2, "durasi": 4, "isi": "Mulai dibuka tapi belum kelihatan — tangan menghalangi" },
+    { "beat": 3, "durasi": 5, "isi": "Isinya keluar satu per satu" },
+    { "beat": 4, "durasi": 4, "isi": "Semua dijejer + CTA" }
+  ],
+  "technique": "Di beat 2 tangan dan tutup kotak SENGAJA menghalangi pandangan kamera. Reaksinya datang SEBELUM apa pun terlihat — matanya membesar, tangan menutup mulut.",
+  "failure_mode": "Beat 2 tidak boleh membocorkan isinya, baik lewat GAMBAR maupun lewat KALIMAT. Kalau bocor, satu-satunya alasan penonton bertahan hilang — dan sisa videonya tidak punya apa-apa lagi.",
+  "no_face_recommended": false,
+  "hook_level_min": "normal",
+  "butuh_cgi": false
+}

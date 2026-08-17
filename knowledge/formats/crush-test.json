@@ -1,0 +1,18 @@
+{
+  "id": "crush_test",
+  "slug_higgsfield": "crush_test",
+  "nama": "Crush Test",
+  "kekuatan": "Ketahanan tidak bisa diklaim, tapi bisa diperagakan. Salah satu dari sedikit format di mana bukti fisik mengalahkan kata-kata.",
+  "cocok_untuk": ["case HP", "botol minum", "koper", "kacamata"],
+  "beat_table": [
+    { "beat": 1, "durasi": 4, "isi": "Produk ditaruh, tangan menyiapkan beban" },
+    { "beat": 2, "durasi": 5, "isi": "Beban turun, produk tertekan — satu take, tanpa potong" },
+    { "beat": 3, "durasi": 4, "isi": "Beban diangkat, produk diperiksa dari dekat" },
+    { "beat": 4, "durasi": 5, "isi": "Produk dipakai normal lagi + CTA" }
+  ],
+  "technique": "Kamera terkunci di TITIK KONTAK sepanjang beat 2, tidak pernah memotong. Tekanan naik perlahan dan tetap; produk terlihat tertekan lalu bertahan. Berat dan deformasinya harus nyata.",
+  "failure_mode": "Kalau produknya penyok, TUNJUKKAN penyoknya. Crush test yang hasilnya terlalu sempurna langsung terbaca palsu, dan itu justru merusak kepercayaan yang mau dibangun formatnya.",
+  "no_face_recommended": true,
+  "hook_level_min": "normal",
+  "butuh_cgi": false
+}

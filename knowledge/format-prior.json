@@ -1,0 +1,18 @@
+{
+  "catatan": "Tabel 'Cara memilih' dari katalog preset, dipakai Idea Stage saat memasangkan mekanik x format. PRIOR, bukan aturan keras: ia menaikkan prioritas, tidak melarang pasangan lain. Sifat produk yang tidak cocok satu pun tetap boleh memakai format apa saja.",
+  "prior": [
+    { "sifat_produk": "hasilnya terlihat", "format": "before_after" },
+    { "sifat_produk": "diklaim kuat atau awet", "format": "crush_test" },
+    { "sifat_produk": "membersihkan atau merapikan", "format": "mess_to_fresh" },
+    { "sifat_produk": "punya fungsi tersembunyi", "format": "secret_hack" },
+    { "sifat_produk": "kecil dan gampang diabaikan", "format": "giant_figure" },
+    { "sifat_produk": "dijual sebagai paket", "format": "mystery_box" },
+    { "sifat_produk": "kemasannya bagus", "format": "unboxing_asmr" },
+    { "sifat_produk": "butuh penjelasan", "format": "tutorial" }
+  ],
+  "belum_punya_berkas_format": [
+    { "sifat_produk": "aromanya atau rasanya tidak kelihatan", "format": "review", "catatan": "acuan di prompt-sukses/06; belum diturunkan jadi berkas format" },
+    { "sifat_produk": "fesyen", "format": "unboxing_virtual_try_on", "catatan": "acuan di prompt-sukses/08" },
+    { "sifat_produk": "jasa atau software", "format": "anti_produksi", "catatan": "acuan di prompt-sukses/02" }
+  ]
+}

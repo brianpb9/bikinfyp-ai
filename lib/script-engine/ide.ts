@@ -24,6 +24,7 @@ import {
   type IdMekanik,
 } from "./idea-mechanics";
 import { LlmTidakTersedia, ambilObjekJson } from "./llm";
+import { bolehPasangan, formatById, formatTersedia, muatPrior, ringkasUntukPrompt } from "./format-katalog";
 
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
 const VERSI_API = "2023-06-01";
@@ -43,6 +44,14 @@ export const SkemaIde = z.object({
    */
   human_situation: z.string().min(15),
   mechanic: z.string().min(3),
+  /**
+   * Format produksi dari katalog (knowledge/formats). Kandidat sekarang adalah
+   * PASANGAN mekanik x format, bukan mekanik saja — mekanik menjawab "kenapa
+   * ditonton", format menjawab "bagaimana direkam", dan ide yang punya satu
+   * tanpa yang lain selalu berakhir jadi salah satu dari dua kegagalan: ide
+   * bagus yang tidak bisa diproduksi, atau produksi rapi tanpa alasan ditonton.
+   */
+  format: z.string().min(3),
   hook_device: z.string().min(3),
   hook_level: z.string().min(2),
   why_stop: z.string().min(10),
@@ -274,6 +283,14 @@ function blokPengetahuan(r: PermintaanIde): string {
     .filter((m) => !(r.mekanikDilarang ?? []).includes(m.id))
     .map((m) => `- ${m.id}: ${m.mekanik} (contoh: ${m.contoh}; cocok: ${m.cocok})`)
     .join("\n");
+  // HANYA format yang boleh dipasangkan untuk konteks ini yang disebut. Format
+  // ber-CGI di level normal, dan format dua-orang, tidak pernah muncul di
+  // daftar — melarang setelah model mengusulkannya berarti membuang panggilan
+  // termahal di pipeline untuk kandidat yang sudah pasti gugur.
+  const formatBoleh = formatTersedia({ hookLevel: r.hookLevel, productCategory: r.productCategory })
+    .map(ringkasUntukPrompt)
+    .join("\n");
+  const prior = muatPrior().map((p) => `${p.sifat_produk} -> ${p.format}`).join("; ");
   return [
     "You invent ONE IDEA that makes a short-form Indonesian product video worth watching.",
     "",
@@ -284,6 +301,13 @@ function blokPengetahuan(r: PermintaanIde): string {
     "MECHANIC BANK — every idea must pick EXACTLY ONE. Listed best-first for this brand:",
     daftar,
     "",
+    "FORMAT CATALOGUE — every idea must also pick EXACTLY ONE format. These are production",
+    "structures with known beat tables and known ways of failing. Mechanic answers WHY anyone watches;",
+    "format answers HOW it is filmed. An idea with only one of the two always fails the same way:",
+    "either a good idea nobody can shoot, or a tidy shoot with no reason to watch.",
+    formatBoleh,
+    r.productCategory ? `    Prior for this product type: ${prior}` : "",
+    "",
     "RULES:",
     "- START FROM A HUMAN SITUATION, not from the object.",
     `  At least ${MIN_MANUSIAWI_PER_PUTARAN} of your 5 candidates must begin with a person, a moment, or a social tension —`,
@@ -291,6 +315,10 @@ function blokPengetahuan(r: PermintaanIde): string {
     "  The product only TAGS ALONG in those. A competitor also owns a bottle; they do not own your moment.",
     "  Ideas that begin with the object (the bottle, the drop, the pipette, the price) all score alike and",
     "  all get the same verdict: anyone could copy this tomorrow.",
+    "- Pick exactly one mechanic AND exactly one format. Do not invent format names —",
+    "  use an id from the catalogue above, exactly as written.",
+    "- Different candidates should not all share the same format. Two candidates with the same",
+    "  mechanic AND the same format are one idea written twice.",
     "- The one_liner must be ONE sentence of AT MOST 160 characters. Count them.",
     "  If the idea does not fit in 160 characters, the idea is not found yet — that compression IS the test.",
     "  Put the staging detail in story/brand_fidelity_plan, not in the one_liner.",
@@ -304,7 +332,7 @@ function blokPengetahuan(r: PermintaanIde): string {
     "- Write one_liner, why_stop, story and product_role in Indonesian. Everything else in English.",
     "",
     "OUTPUT SHAPE — exact field names, no others:",
-    '{"ideas":[{"one_liner":"","human_situation":"","mechanic":"","hook_device":"","hook_level":"",',
+    '{"ideas":[{"one_liner":"","human_situation":"","mechanic":"","format":"","hook_device":"","hook_level":"",',
     '"why_stop":"","story":{"setup":"","tension":"","payoff":""},"product_role":"","claim_safety":"",',
     '"suggested_mode":"","suggested_format":"","brand_fidelity_plan":"","risk":""}]}',
   ].join("\n");
@@ -359,10 +387,10 @@ export async function usulkanIdeBerkuota(r: PermintaanIde, biaya?: AkumulasiBiay
     // ditegakkan kode bukan larangan: pada uji dengan model yang mengabaikannya,
     // penambalan mengembalikan mekanik yang sama dan peringkatnya berisi
     // "forbidden" dua kali — yaitu satu ide yang dihitung dua kali.
-    const sudahAda = new Set(awal.map((i) => i.mechanic));
+    const sudahAda = new Set(awal.map((i) => `${i.mechanic}|${i.format}`));
     return [
       ...awal,
-      ...tambahan.filter((i) => situasiManusiawi(i.human_situation) && !sudahAda.has(i.mechanic)),
+      ...tambahan.filter((i) => situasiManusiawi(i.human_situation) && !sudahAda.has(`${i.mechanic}|${i.format}`)),
     ];
   } catch (err) {
     // Gagal menambal bukan alasan membuang kandidat yang sudah ada.
@@ -398,11 +426,26 @@ export async function usulkanIde(r: PermintaanIde, biaya?: AkumulasiBiaya): Prom
   const terpakai = new Set<string>();
   return sah.filter((ide) => {
     if (!(ide.mechanic in MEKANIK_BY_ID)) return false;
-    // Mekanik yang sama dua kali berarti kandidatnya bukan lima pilihan
-    // berbeda, cuma satu ide yang ditulis ulang lima kali.
-    if (terpakai.has(ide.mechanic)) return false;
+    // Pasangan DITEGAKKAN di kode, bukan cuma diminta di prompt. Model yang
+    // mengusulkan giant_figure di level normal, atau format dua-orang, harus
+    // gugur di sini — kalau tidak, aturan pemasangannya cuma saran.
+    const pasangan = bolehPasangan({
+      formatId: ide.format,
+      hookLevel: r.hookLevel,
+      productCategory: r.productCategory,
+    });
+    if (!pasangan.boleh) {
+      console.warn(`[idea] kandidat dijatuhkan: ${pasangan.sebab}`);
+      return false;
+    }
+    // Yang didedup PASANGANNYA, bukan mekaniknya saja: satu mekanik bisa
+    // melahirkan ide berbeda di format berbeda (forbidden x mystery_box tidak
+    // sama dengan forbidden x mess_to_fresh), dan membuang yang kedua akan
+    // membuang ide yang sah. Yang tidak sah adalah pasangan yang sama persis.
+    const pasanganKunci = `${ide.mechanic}|${ide.format}`;
+    if (terpakai.has(pasanganKunci)) return false;
     if (ideGenerik(ide.one_liner, { productName: r.productName, kategoriNoun: r.kategoriNoun })) return false;
-    terpakai.add(ide.mechanic);
+    terpakai.add(pasanganKunci);
     return true;
   });
 }
@@ -579,6 +622,7 @@ function peringkatkan(semua: { ide: Ide; nilai: HasilNilai }[]) {
 
 /** Ringkas ide jadi petunjuk untuk penulis adegan — inilah yang dilayani naskah. */
 export function petunjukNaskah(ide: Ide): string {
+  const f = formatById(ide.format);
   return [
     `THE IDEA (every segment must serve it): ${ide.one_liner}`,
     `MECHANIC: ${ide.mechanic}. WHY IT STOPS: ${ide.why_stop}`,
@@ -586,6 +630,15 @@ export function petunjukNaskah(ide: Ide): string {
     `PRODUCT ROLE: ${ide.product_role}`,
     `BRAND FIDELITY PLAN (product_state must follow this): ${ide.brand_fidelity_plan}`,
     `MODE: ${ide.suggested_mode}`,
+    ...(f
+      ? [
+          `FORMAT: ${f.id} (${f.nama}) — ${f.kekuatan}`,
+          `BEATS (follow these durations): ${f.beat_table.map((b) => `${b.durasi}s ${b.isi}`).join(" | ")}`,
+          `TECHNIQUE: ${f.technique}`,
+          `THIS FORMAT FAILS WHEN: ${f.failure_mode}`,
+          ...(f.no_face_recommended ? ["NO FACE: this format works hands-only. Write it that way."] : []),
+        ]
+      : []),
     `Each segment's "why" must name which of setup/tension/payoff it serves, in THIS story.`,
   ].join("\n");
 }

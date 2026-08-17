@@ -45,6 +45,8 @@ export interface FlowState {
   // sini pernah tertinggal di tiga level saat levelnya jadi lima.
   hookLevel?: HookLevel;
   creatorCategory?: string;
+  /** Influencer identity selected from the single HDRV roster. */
+  avatarId?: string;
   /** Deskripsi avatar premium yang dipilih (lib/avatar-presets .desc).
    *  Kosong berarti pengguna memakai preset kategori lama. */
   avatarDesc?: string;

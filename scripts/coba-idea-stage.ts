@@ -53,7 +53,7 @@ console.log(`B. KANDIDAT IDE — ${ide.peringkat.length} dinilai, ${ide.putaran}
 console.log("=".repeat(78));
 for (const p of ide.peringkat) {
   const d = p.nilai.perDimensi;
-  console.log(`\n[${String(p.nilai.total).padStart(5)}] ${p.ide.mechanic.padEnd(17)} ${p.nilai.lulus ? "LULUS" : "gagal"}`);
+  console.log(`\n[${String(p.nilai.total).padStart(5)}] ${p.ide.mechanic.padEnd(16)} x ${(p.ide.format ?? "-").padEnd(15)} ${p.nilai.lulus ? (p.nilai.borderline ? "LULUS TIPIS" : "LULUS") : "gagal"}`);
   console.log(`        one-liner : "${p.ide.one_liner}"`);
   console.log(`        situasi   : ${p.ide.human_situation}`);
   console.log(`        perangkat : ${p.ide.hook_device}  (level ${p.ide.hook_level})`);
@@ -69,6 +69,7 @@ for (const p of ide.peringkat) {
 console.log("\n" + "=".repeat(78));
 console.log(`C. IDE TERPILIH — skor ${ide.nilai.total}, ${ide.nilai.lulus ? "LULUS gate" : "TIDAK lulus gate"}`);
 console.log("=".repeat(78));
+console.log(`format    : ${ide.ide.format}`);
 console.log(`mekanik   : ${ide.ide.mechanic} — ${MEKANIK_BY_ID[ide.ide.mechanic as keyof typeof MEKANIK_BY_ID]?.mekanik}`);
 console.log(`one-liner : ${ide.ide.one_liner}`);
 console.log(`perangkat : ${ide.ide.hook_device}`);

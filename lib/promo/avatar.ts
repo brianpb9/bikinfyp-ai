@@ -14,7 +14,7 @@
  * foto", bukan wajah persis sama — user perlu tau ini (lihat UI copy).
  */
 import { config } from "../config";
-import { getCreatorCategory } from "../personas";
+import { getAvatarPreset } from "../avatar-presets";
 
 export interface AvatarChoice {
   kind: "preset" | "custom";
@@ -25,8 +25,8 @@ export interface AvatarChoice {
 /** Deskripsi teks final yang disuntik ke {{PERSON}} di hook-library.ts. */
 export function resolveAvatarDescription(choice: AvatarChoice): string {
   if (choice.kind === "preset") {
-    const persona = choice.presetId ? getCreatorCategory(choice.presetId) : undefined;
-    return persona?.promptSeed ?? "a native Indonesian person, warm approachable everyday look";
+    const avatar = choice.presetId ? getAvatarPreset(choice.presetId) : undefined;
+    return avatar?.castLock ?? "a native Indonesian person, warm approachable everyday look";
   }
   return choice.customDescription ?? "a native Indonesian person, warm approachable everyday look";
 }

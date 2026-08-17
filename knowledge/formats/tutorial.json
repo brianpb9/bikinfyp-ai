@@ -1,0 +1,18 @@
+{
+  "id": "tutorial",
+  "slug_higgsfield": "ugc_how_to",
+  "nama": "Tutorial",
+  "kekuatan": "Produk yang butuh dijelaskan biasanya sulit dijual lewat hook biasa. Format ini membalikkannya — kerumitan jadi alasan menonton.",
+  "cocok_untuk": ["produk yang butuh dijelaskan"],
+  "beat_table": [
+    { "beat": 1, "durasi": 4, "isi": "Hook koreksi — 'banyak yang salah pakai ini'" },
+    { "beat": 2, "durasi": 5, "isi": "Langkah 1, satu take, tangan jelas" },
+    { "beat": 3, "durasi": 5, "isi": "Langkah 2, makro ke bagian yang sering keliru" },
+    { "beat": 4, "durasi": 4, "isi": "Hasil benar + CTA" }
+  ],
+  "technique": "Hooknya KOREKSI, bukan penjelasan: ekspresi orang yang hendak membetulkan kesalahan umum. Produk diputar untuk menunjukkan bagian yang sering keliru sebelum langkah pertama dimulai.",
+  "failure_mode": "Kalau kesalahan umumnya tidak disebut spesifik, formatnya jatuh jadi manual produk — dan manual tidak punya alasan ditonton.",
+  "no_face_recommended": false,
+  "hook_level_min": "normal",
+  "butuh_cgi": false
+}

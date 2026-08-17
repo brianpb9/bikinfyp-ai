@@ -1,0 +1,19 @@
+{
+  "id": "mess_to_fresh",
+  "slug_higgsfield": "mess_to_fresh",
+  "nama": "Mess to Fresh",
+  "kekuatan": "Kepuasan visual. Satu-satunya format di mana kotor itu ASET — makin jelek kondisi awalnya, makin kuat hooknya.",
+  "cocok_untuk": ["pembersih sepatu", "organizer", "pembersih dapur", "laundry"],
+  "beat_table": [
+    { "beat": 1, "durasi": 5, "isi": "Kondisi berantakan, kamera menyapu pelan" },
+    { "beat": 2, "durasi": 5, "isi": "Produk bekerja — busa, sikat, penataan" },
+    { "beat": 3, "durasi": 4, "isi": "Makro ke bagian yang paling memuaskan" },
+    { "beat": 4, "durasi": 4, "isi": "Wide shot hasil akhir + CTA" }
+  ],
+  "technique": "Kekacauan awal harus SPESIFIK — noda apa, tumpukan apa, debu di mana. 'Berantakan' yang umum tidak menghasilkan kepuasan apa pun saat bersih. Di beat 1 produk sudah dipegang tapi BELUM dipakai.",
+  "failure_mode": "Kondisi awal yang dibuat rapi supaya 'enak dilihat' membunuh formatnya: tanpa kekacauan yang nyata, tidak ada yang berubah.",
+  "no_face_recommended": true,
+  "alasan_tanpa_wajah": "Format ini tidak butuh orang, dan menghilangkan wajah menghapus seluruh masalah konsistensi identitas antar klip.",
+  "hook_level_min": "normal",
+  "butuh_cgi": false
+}

@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail } from "../../_components/api";
-import { AVATAR_PRESETS, getAvatarPreset } from "../../../lib/avatar-presets";
+import { AVATAR_PRESETS, getAvatarPreset, type AvatarGender } from "../../../lib/avatar-presets";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
 import { loadFlow, saveFlow, rupiah, type FlowScript, type VideoFormat } from "../../_components/flow";
 import { track } from "../../_components/track";
@@ -59,30 +59,6 @@ const HOOK_LEVEL_INFO: Record<HookLevel, { icon: string; label: string; hint: st
   gila: { icon: "🤪", label: "Gila", hint: "pembuka nyeleneh · eksperimen" },
 };
 
-// AVATAR LIBRARY v2 (2026-08-10): potret di-generate ulang atas permintaan
-// Brian — neck-up headshot bersih, TIDAK memegang produk, TIDAK berdiri
-// (dulu beberapa potret full-body/pegang produk). Ditambah toggle
-// Male/Female pertama, memakai kategori yang sudah ada (bukan persona baru):
-// female = hijaber/genz/ibu/chindo/lokal, male = pria — "daerah" dibiarkan
-// pending/gender netral, tidak tampil di kedua toggle sampai statusnya aktif.
-// Identitas antar-video tetap konsisten via deskriptor prompt teks (BytePlus
-// menolak SEMUA gambar referensi berwajah, termasuk wajah AI) — foto ini
-// PREVIEW UI saja, bukan reference image yang dikirim ke provider.
-type AvatarGender = "female" | "male";
-const CREATOR_CATS: { id: string; name: string; label: string; note: string; img: string | null; active: boolean; gender: AvatarGender }[] = [
-  { id: "hijaber", name: "Salma", label: "🧕 Hijaber", note: "paling laris di TikTok Shop", img: "/avatars/salma.png", active: true, gender: "female" },
-  { id: "genz", name: "Zea", label: "🧑‍🎤 Gen-Z", note: "gadget, fashion, F&B", img: "/avatars/zea.png", active: true, gender: "female" },
-  { id: "ibu", name: "Bunda Ratih", label: "👩‍🦱 Ibu-ibu", note: "rumah tangga, dapur, anak", img: "/avatars/ratih.png", active: true, gender: "female" },
-  { id: "chindo", name: "Keisha", label: "👩🏻 Chindo", note: "skincare premium", img: "/avatars/keisha.png", active: true, gender: "female" },
-  { id: "lokal", name: "Dina", label: "👩 Lokal/Pribumi", note: "cocok semua produk", img: "/avatars/dina.png", active: true, gender: "female" },
-  { id: "pria", name: "Raka", label: "👨 Pria", note: "gadget, F&B, produk pria", img: "/avatars/raka.png", active: true, gender: "male" },
-  { id: "genzpria", name: "Fajar", label: "🧑 Gen-Z Pria", note: "gadget, fashion, F&B", img: "/avatars/genzpria.png", active: true, gender: "male" },
-  { id: "bapak", name: "Pak Danu", label: "👨‍🦱 Bapak", note: "rumah tangga, gadget", img: "/avatars/bapak.png", active: true, gender: "male" },
-  { id: "senior", name: "Pak Herman", label: "👨‍🦳 Senior", note: "kesehatan, gadget", img: "/avatars/senior.png", active: true, gender: "male" },
-  { id: "profesional", name: "Bimo", label: "🧑‍💼 Profesional", note: "gadget, formal", img: "/avatars/profesional.png", active: true, gender: "male" },
-  { id: "lokalpria", name: "Yoga", label: "👨 Lokal Pria", note: "cocok semua produk", img: "/avatars/lokalpria.png", active: true, gender: "male" },
-  { id: "daerah", name: "Laras", label: "🌾 Daerah", note: "", img: null, active: false, gender: "female" },
-];
 const GENDER_INFO: Record<AvatarGender, { icon: string; label: string }> = {
   female: { icon: "♀", label: "Female" },
   male: { icon: "♂", label: "Male" },
@@ -120,13 +96,14 @@ export default function GayaPage() {
     setDurationSec(t.preset.format === "talking_head" ? 15 : (t.preset.durationSec as 15 | 30 | 45));
   }
   const [register, setRegister] = useState("bestie");
-  const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
-  const [creatorCategory, setCreatorCategory] = useState("hijaber");
+  const restoredAvatar = getAvatarPreset(loadFlow().avatarId);
+  const [avatarGender, setAvatarGender] = useState<AvatarGender>(restoredAvatar?.gender ?? "female");
+  const [creatorCategory, setCreatorCategory] = useState(restoredAvatar?.voice ?? "hijaber");
   // Avatar premium (24 orang) sebelumnya HANYA ada di dashboard brand;
   // retail terkunci di enam preset kategori lama. Tidak ada alasan produk
   // untuk beda itu — penjual perorangan justru yang paling butuh wajah
   // yang tidak pasaran.
-  const [avatarId, setAvatarId] = useState<string>("");
+  const [avatarId, setAvatarId] = useState<string>(restoredAvatar?.id ?? "");
   // Kunci SINKRON, bukan setLoading. setLoading adalah state React yang
   // diterapkan asinkron, jadi tiga ketukan cepat sempat lolos semuanya sebelum
   // render pertama selesai — terukur audit QA 16 Agu 2026: triple-tap
@@ -144,11 +121,7 @@ export default function GayaPage() {
     track("gaya_view");
   }, [router]);
 
-  const catsForGender = CREATOR_CATS.filter((c) => c.active && c.gender === avatarGender);
   useEffect(() => {
-    if (catsForGender.length && !catsForGender.some((c) => c.id === creatorCategory)) {
-      setCreatorCategory(catsForGender[0].id);
-    }
     // WAJAH IKUT DILEPAS SAAT GENDER BERGANTI.
     //
     // Tanpa baris ini, memilih Arka lalu menggeser tab ke "Perempuan" hanya
@@ -167,7 +140,7 @@ export default function GayaPage() {
   }, [avatarGender]);
 
   const selectedTier = tiers.find((t) => t.id === tier);
-  const selectedCategory = CREATOR_CATS.find((c) => c.id === creatorCategory);
+  const selectedAvatar = getAvatarPreset(avatarId);
 
   function selectFormat(id: VideoFormat) {
     setFormat(id); // semua format kini bersuara (tier senyap dihapus 2026-08-06)
@@ -199,7 +172,7 @@ export default function GayaPage() {
             : {}),
         },
       });
-      saveFlow({ register, qualityTier: tier, format, durationSec, hookLevel, creatorCategory, avatarDesc: getAvatarPreset(avatarId)?.desc, scripts: res.scripts, selectedScriptId: undefined });
+      saveFlow({ register, qualityTier: tier, format, durationSec, hookLevel, creatorCategory, avatarId, avatarDesc: getAvatarPreset(avatarId)?.castLock, scripts: res.scripts, selectedScriptId: undefined });
       router.push("/bikin/skrip");
     } catch (err) {
       if (err instanceof ApiFail && err.code === "INSUFFICIENT_CREDITS") {
@@ -380,7 +353,7 @@ export default function GayaPage() {
                 // jadi avatar laki-laki (Arka, Bima, Jason) tampil berwajah
                 // pria dengan suara perempuan hijaber — cacat yang saya buat
                 // sendiri waktu membuka avatar premium untuk retail.
-                onClick={() => { setAvatarId(a.id); setCreatorCategory(a.voice); }}
+                onClick={() => { setAvatarId(a.id); setCreatorCategory(a.voice); setRegister(a.register); }}
                 className={`w-32 shrink-0 snap-start overflow-hidden rounded-2xl border-2 text-left shadow-sm ${
                   avatarId === a.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
                 }`}
@@ -393,28 +366,6 @@ export default function GayaPage() {
                 </span>
               </button>
             ))}
-            {catsForGender.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                aria-pressed={creatorCategory === c.id}
-                onClick={() => { setCreatorCategory(c.id); setAvatarId(""); }}
-                className={`w-32 shrink-0 snap-start overflow-hidden rounded-2xl border-2 text-left shadow-sm ${
-                  creatorCategory === c.id ? "border-amber-500 ring-2 ring-amber-200" : "border-zinc-200"
-                }`}
-              >
-                {c.img ? (
-                  // eslint-disable-next-line @next/next/no-img-element
-                  <img src={c.img} alt={c.name} className="aspect-[3/4] w-full object-cover" loading="lazy" decoding="async" />
-                ) : (
-                  <span className="flex aspect-[3/4] w-full items-center justify-center bg-amber-50 text-4xl">{c.label.split(" ")[0]}</span>
-                )}
-                <span className="block p-2">
-                  <span className="block truncate text-sm font-bold">{c.name}</span>
-                  <span className="block truncate text-[10px] leading-tight text-zinc-500">{c.note}</span>
-                </span>
-              </button>
-            ))}
           </div>
         </section>
 
@@ -423,7 +374,7 @@ export default function GayaPage() {
             <span>
               <span className="block text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Opsional</span>
               <span className="font-display text-lg font-bold">Sesuaikan gaya kreator</span>
-              <span className="block text-sm text-zinc-500">{selectedCategory ? `Avatar ${selectedCategory.name}` : "Pilih avatar"}{` · ${REGISTERS.find((r) => r.id === register)?.label ?? "suara"}`}</span>
+              <span className="block text-sm text-zinc-500">{selectedAvatar ? `Avatar ${selectedAvatar.name}` : "Pilih avatar"}{` · ${REGISTERS.find((r) => r.id === register)?.label ?? "suara"}`}</span>
             </span>
             <span aria-hidden="true" className="text-xl text-amber-700 transition-transform group-open:rotate-45">+</span>
           </summary>

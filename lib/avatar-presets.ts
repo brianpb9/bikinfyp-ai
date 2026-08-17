@@ -1,119 +1,141 @@
-// PUSTAKA AVATAR HDRV (2026-08-13) — 19 influencer produksi sendiri.
-//
-// MENGGANTIKAN 11 avatar generik sebelumnya (Salma, Zea, Bunda Ratih, dst).
-// Brian: "avatar sebelumnya kita buang". Yang lama tidak punya identitas —
-// cuma potret generik dengan label kategori. Yang ini punya nama, umur,
-// niche, aura, dan lemari pakaian tetap, jadi brand memilih ORANG, bukan tipe.
-//
-// DUA HAL YANG DIPISAH, dan ini inti rancangannya:
-//
-//   id     = identitas influencer (dipakai UI + deskripsi wajah)
-//   voice  = kategori kreator lama di lib/personas.ts (suara + register +
-//            gaya pembawaan)
-//
-// Dipisah karena suara dan wajah datang dari mesin yang berbeda. Kategori
-// kreator lama membawa voice TTS, register bahasa ("bunda/bestie/genz"), dan
-// delivery prompt yang sudah teruji di produksi — membuangnya berarti menulis
-// ulang seluruh mesin suara demi mengganti foto. Dua influencer boleh berbagi
-// suara; wajah mereka tetap berbeda karena `desc` berbeda.
-//
-// BATAS YANG HARUS DIKATAKAN APA ADANYA: kit influencer ini dibangun di
-// sekitar penguncian identitas lewat GAMBAR — `01-passport-photo.png` disebut
-// "facial-identity authority" di tiap master prompt. Pipeline kita TIDAK BISA
-// memakainya: BytePlus menolak foto wajah asli sebagai referensi, terbukti
-// 2026-08-12 ("input image may contain real person"). Jadi yang sampai ke
-// model hanya `desc` di bawah — teks. Hasilnya SEJIWA dengan influencernya,
-// bukan wajah yang identik. Foto di sini dipakai untuk PEMILIH, supaya brand
-// tahu siapa yang mereka pilih, bukan sebagai referensi render.
+// HDRV influencer roster — the only avatar-picker source for promo, retail,
+// campaign, and matrix. The legacy generic category portraits remain voice
+// presets in personas.ts, but are not selectable identities anymore.
+
 export type AvatarGender = "female" | "male";
+export type AvatarRegister = "bunda" | "bestie" | "genz" | "netral";
 
 export interface AvatarPreset {
-  /** Identitas influencer — bukan kategori kreator. */
   id: string;
   name: string;
-  /** Niche-nya, satu baris. Dipakai brand memilih. */
   note: string;
-  /** Potret untuk pemilih. BUKAN referensi render — lihat catatan di atas. */
   img: string;
   gender: AvatarGender;
-  /** Kategori kreator (lib/personas.ts) yang dipinjam suaranya. WAJIB id yang
-   *  benar-benar ada dan aktif — divalidasi backend saat job dibuat. */
+  register: AvatarRegister;
+  /** Existing TTS/persona category. Identity and voice deliberately stay separate. */
   voice: string;
-  /** Deskripsi fisik yang dikirim ke perencana shot sebagai avatar_custom_desc.
-   *  Disusun dari umur + aura + lemari pakaian di master prompt HDRV. */
+  /** CAST-LOCK grounded in the passport + full-body reference images. */
+  castLock: string;
+  /** Backward-compatible alias consumed by the existing render pipeline. */
   desc: string;
+  /** Complete reference pack copied from the HDRV source folder. */
+  referenceImages: readonly [string, string, string, string];
 }
 
-export const AVATAR_PRESETS: AvatarPreset[] = [
-  // --- ELITE 5 (Brian, 13 Agustus 2026) — ditambahkan, bukan mengganti ---
-  //
-  // Pack ini BEDA DARI YANG HDRV dan bedanya menentukan: tiap kandidat punya
-  // "Identity Lock" TERTULIS — warna kulit, tulang pipi, bentuk mata, alis,
-  // rambut, postur — bukan sekadar menunjuk pasfoto sebagai otoritas wajah.
-  //
-  // Itu penting karena pipeline kita TIDAK BISA memakai foto wajah sebagai
-  // referensi (BytePlus menolaknya, terbukti 2026-08-12). Untuk 19 influencer
-  // HDRV, satu-satunya yang bisa dikirim ke model adalah deskripsi yang kami
-  // susun sendiri dari umur + aura + lemari pakaian. Untuk lima ini,
-  // deskripsi wajahnya datang dari packnya sendiri — jadi hasilnya lebih
-  // dekat ke sosok yang dimaksud, bukan sekadar sejiwa.
-  //
-  // Wardrobe Lock ikut disertakan: konsistensi pakaian antar-shot adalah
-  // separuh dari kesan "orang yang sama", dan model kita menggenerate tiap
-  // shot terpisah.
-  { id: "alya-satrine", name: "Alya Satrine", note: "fashion editorial, gaya arsitektural", img: "/avatars/elite/alya-satrine.jpg", gender: "female", voice: "genz",
-    desc: "22-year-old Indonesian woman Alya Satrine: warm kuning-langsat skin, refined distinctly Indonesian oval face, large intelligent dark eyes, high natural cheekbones, graceful jaw, subtle natural facial asymmetry, glossy black hair in a sharp low ponytail, silver ear cuff. Premium leading-actress prese Wearing: Charcoal architectural cropped short-sleeve jacket with asymmetric waist construction over a pearl-gray fitted inner layer, matching high-waisted char" },
-  { id: "celeste-huangkara", name: "Celeste Huangkara", note: "beauty premium, warna berani", img: "/avatars/elite/celeste-huangkara.jpg", gender: "female", voice: "chindo",
-    desc: "24-year-old Chinese-Indonesian woman Celeste Huangkara: warm ivory-golden tropical skin, distinctly Chindo Indonesian hooded almond eyes, prominent cheekbones, compact nose, clean jawline, realistic pores and natural facial asymmetry, blunt chin-length black bob. Downtown fashion authority; unmistak Wearing: Saturated turquoise sculptural square-neck sleeveless top with broad tailored straps, dove-gray low-waist tailored trousers, silver arm cuff, sleek ne" },
-  { id: "mara-laksmi", name: "Mara Laksmi", note: "wellness & kecantikan alami", img: "/avatars/elite/mara-laksmi.jpg", gender: "female", voice: "chindo",
-    desc: "25-year-old Maluku-Balinese Indonesian woman Mara Laksmi: rich bronze tropical skin, eastern Indonesian cheekbones, large deep-set dark eyes, softly full lips, realistic pores, subtle facial asymmetry, long dense black curls in a controlled sculptural shape, elegant athletic proportions. Charismatic Wearing: Soft lilac asymmetric tailored dress with clean geometric neckline, opaque underlayer and flowing midi silhouette, brushed-gold earrings, refined neut" },
-  { id: "rania-adhisti", name: "Rania Adhisti", note: "lifestyle anggun, wardrobe sehari-hari", img: "/avatars/elite/rania-adhisti.jpg", gender: "female", voice: "lokal",
-    desc: "26-year-old Minang-Sundanese Indonesian woman Rania Adhisti: warm honey-brown skin, elongated Indonesian face, dark almond eyes, high forehead, elegant aquiline nose, soft jaw, natural facial asymmetry, glossy shoulder-length black hair with an off-center bend. Sophisticated actress and culture-fash Wearing: Powder-blue bias-cut long-sleeve sculptural dress with subtle waist draping and opaque construction, pale butter-yellow geometric earrings, cream poin" },
-  { id: "saskia-aruna", name: "Saskia Aruna", note: "musik & alt-pop, panggung", img: "/avatars/elite/saskia-aruna.jpg", gender: "female", voice: "genz",
-    desc: "23-year-old Batak-Javanese Indonesian woman Saskia Aruna: medium golden-brown skin, strong elegant cheekbones, slightly hooded expressive dark eyes, full natural brows, defined mouth, subtle facial asymmetry, long ink-black hair with an imperfect center part, statuesque lean build. Magnetic alt-pop  Wearing: Pale pistachio one-shoulder draped midi dress over matching opaque fitted base, sculptural chrome arm cuff, minimal earrings, elegant neutral footwear" },
+type AvatarDefinition = Omit<AvatarPreset, "desc" | "referenceImages">;
 
-  { id: "bianca-limanto", name: "Bianca Limanto", note: "music, fashion, and nocturnal editorial cult", img: "/avatars/hdrv/bianca-limanto.jpg", gender: "female", voice: "chindo",
-    desc: "29-year-old Indonesian woman, cool, confident, fashion-forward, wearing sharp black cropped blazer, burgundy fitted top, charcoal wide-leg trousers, polished black boots, silver jewelry" },
-  { id: "celine-wibowo", name: "Celine Wibowo", note: "mature styling, wardrobe advice, and confide", img: "/avatars/hdrv/celine-wibowo.jpg", gender: "female", voice: "ibu",
-    desc: "44-year-old Indonesian woman, joyful, confident, stylish, wearing cropped denim jacket, black silk camisole, scarlet wide-leg tailored trousers, black pointed heels" },
-  { id: "cinta-mahadewi", name: "Cinta Mahadewi", note: "fitness, dance, and vibrant feminine wellnes", img: "/avatars/hdrv/cinta-mahadewi.jpg", gender: "female", voice: "genz",
-    desc: "young adult Indonesian woman, vibrant, sensual but tasteful, energetic, wearing coral cropped windbreaker, matching sports bra and leggings, white training shoes, pink headphones" },
-  { id: "clarissa-limanto", name: "Clarissa Limanto", note: "tennis, fitness, and aspirational mature wel", img: "/avatars/hdrv/clarissa-limanto.jpg", gender: "female", voice: "ibu",
-    desc: "41-year-old Indonesian woman, healthy, aspirational, energetic, wearing coral technical tennis jacket, ivory sports bra, pale sage high-waist leggings, white court trainers" },
-  { id: "dr-caroline-ong", name: "Dr Caroline Ong", note: "dermatology, skincare, and evidence-based be", img: "/avatars/hdrv/dr-caroline-ong.jpg", gender: "female", voice: "chindo",
-    desc: "28-year-old Indonesian woman, fresh, intelligent, trustworthy, wearing sage tailored blazer, ivory blouse, cream straight trousers, beige professional pumps" },
-  { id: "dr-vania-sugianto", name: "Dr Vania Sugianto", note: "aesthetic medicine and premium beauty educat", img: "/avatars/hdrv/dr-vania-sugianto.jpg", gender: "female", voice: "chindo",
-    desc: "29-year-old Indonesian woman, credible, elegant, reassuring, wearing espresso medical scrubs, structured cream sleeveless clinic coat, beige closed-toe professional shoes, delicate gold jewelry" },
-  { id: "kirana-aulia", name: "Kirana Aulia", note: "beauty, makeup, and relatable feminine lifes", img: "/avatars/hdrv/kirana-aulia.jpg", gender: "female", voice: "genz",
-    desc: "young adult Indonesian woman, radiant, friendly, camera-ready, wearing ribbed cherry-red fitted top, high-waist dark indigo jeans, nude slingback shoes, minimal gold hoops" },
-  { id: "monica-tan", name: "Monica Tan", note: "art, interiors, luxury culture, and mature s", img: "/avatars/hdrv/monica-tan.jpg", gender: "female", voice: "ibu",
-    desc: "48-year-old Indonesian woman, cultivated, commanding, sophisticated, wearing mustard asymmetric draped blouse, deep aubergine tailored trousers, sculptural gold earrings, pointed neutral heels" },
-  { id: "natasha-wijaya", name: "Natasha Wijaya", note: "fitness, dance, and energetic wellness", img: "/avatars/hdrv/natasha-wijaya.jpg", gender: "female", voice: "genz",
-    desc: "27-year-old Indonesian woman, bright, athletic, charismatic, wearing coral performance set: fitted long-sleeve zip jacket, coordinated high-waist leggings, clean white trainers" },
-  { id: "nayla-rahmani", name: "Nayla Rahmani", note: "modest fashion, handbags, and polished lifes", img: "/avatars/hdrv/nayla-rahmani.jpg", gender: "female", voice: "hijaber",
-    desc: "young adult Indonesian woman, warm, refined, trustworthy, wearing taupe hijab, chocolate blouse, long ivory tailored vest, wide-leg mocha trousers, nude loafers" },
-  { id: "valerie-hartono", name: "Valerie Hartono", note: "styling, thrift fashion, and wardrobe transf", img: "/avatars/hdrv/valerie-hartono.jpg", gender: "female", voice: "genz",
-    desc: "25-year-old Indonesian woman, playful, editorial, fashion-smart, wearing cropped light-wash denim jacket, black fitted turtleneck, draped crimson midi skirt, black ankle boots" },
-  { id: "arka-pradana", name: "Arka Pradana", note: "sneakers, streetwear, and collectible fashio", img: "/avatars/hdrv/arka-pradana.jpg", gender: "male", voice: "genzpria",
-    desc: "young adult Indonesian man, charming, youthful, trend-aware, wearing olive overshirt, textured cream tee, relaxed black trousers, distinctive multicolor premium sneakers, silver rings" },
-  { id: "bima-satrya", name: "Bima Satrya", note: "coffee, menswear, and thoughtful everyday li", img: "/avatars/hdrv/bima-satrya.jpg", gender: "male", voice: "lokalpria",
-    desc: "young adult Indonesian man, composed, masculine, approachable, wearing espresso knitted polo, black tailored trousers, classic watch, dark brown loafers" },
-  { id: "elang-kresna", name: "Elang Kresna", note: "music, craftsmanship, and grounded masculine", img: "/avatars/hdrv/elang-kresna.jpg", gender: "male", voice: "lokalpria",
-    desc: "young adult Indonesian man, grounded, soulful, approachable, wearing rust camp-collar shirt, black tailored trousers, brown leather watch, dark loafers" },
-  { id: "jason-hartono", name: "Jason Hartono", note: "coffee, photography, and quiet urban lifesty", img: "/avatars/hdrv/jason-hartono.jpg", gender: "male", voice: "pria",
-    desc: "26-year-old Indonesian man, calm, artistic, quietly attractive, wearing dark chocolate knitted polo, charcoal pleated trousers, brown leather watch, minimalist loafers" },
-  { id: "jovan-mahesa", name: "Jovan Mahesa", note: "surf, fitness, and tropical travel", img: "/avatars/hdrv/jovan-mahesa.jpg", gender: "male", voice: "genzpria",
-    desc: "young adult Indonesian man, strong, joyful, outdoorsy, wearing sage sleeveless top, sand linen drawstring trousers, rugged neutral sandals, beaded bracelet" },
-  { id: "kenzo-halim", name: "Kenzo Halim", note: "music, fashion, and nightlife culture", img: "/avatars/hdrv/kenzo-halim.jpg", gender: "male", voice: "pria",
-    desc: "28-year-old Indonesian man, magnetic, stylish, slightly mysterious, wearing black fluid satin shirt, tailored burgundy trousers, black leather boots, restrained silver jewelry" },
-  { id: "nico-tan", name: "Nico Tan", note: "technology, gaming, and creator gadgets", img: "/avatars/hdrv/nico-tan.jpg", gender: "male", voice: "genzpria",
-    desc: "22-year-old Indonesian man, youthful, clever, energetic, wearing cobalt utility overshirt, white ribbed tank, black tapered cargo trousers, modern white sneakers, slim silver chain" },
-  { id: "reza-tanujaya", name: "Reza Tanujaya", note: "fitness, travel, and tropical active lifesty", img: "/avatars/hdrv/reza-tanujaya.jpg", gender: "male", voice: "pria",
-    desc: "29-year-old Indonesian man, sunny, athletic, adventurous, wearing sage sleeveless performance top, cream drawstring athletic trousers, technical trainers, black sports watch" },
+const references = (id: string): AvatarPreset["referenceImages"] => [
+  `/avatars/hdrv/${id}/01-passport-photo.png`,
+  `/avatars/hdrv/${id}/02-full-body-360-reference.png`,
+  `/avatars/hdrv/${id}/03-face-360-reference.png`,
+  `/avatars/hdrv/${id}/04-five-emotions-reference.png`,
 ];
 
-/** Preset berdasarkan id, atau null. */
+const defineAvatar = (avatar: AvatarDefinition): AvatarPreset => ({
+  ...avatar,
+  desc: avatar.castLock,
+  referenceImages: references(avatar.id),
+});
+
+export const AVATAR_PRESETS: AvatarPreset[] = [
+  defineAvatar({
+    id: "arka-pradana", name: "Arka Pradana", note: "Sneakers, streetwear, collectible fashion",
+    img: "/avatars/hdrv/arka-pradana/01-passport-photo.png", gender: "male", register: "genz", voice: "genzpria",
+    castLock: "CAST-LOCK: Arka Pradana, young adult Indonesian man with medium warm-brown skin, a slim oval face, dark almond eyes, a broad natural smile, clean-shaven face, and thick wavy black hair parted at the center. Lean build. Fixed wardrobe: olive overshirt over a textured cream T-shirt, relaxed black trousers, multicolor premium sneakers, and silver rings.",
+  }),
+  defineAvatar({
+    id: "bianca-limanto", name: "Bianca Limanto", note: "Music, fashion, nocturnal editorial culture",
+    img: "/avatars/hdrv/bianca-limanto/01-passport-photo.png", gender: "female", register: "bestie", voice: "chindo",
+    castLock: "CAST-LOCK: Bianca Limanto, 29-year-old Indonesian woman with medium tan skin, an oval face, defined cheekbones, dark almond eyes, and shoulder-length softly waved black hair. Slim build with a cool, confident expression. Fixed wardrobe: sharp black cropped blazer, burgundy fitted top, charcoal wide-leg trousers, polished black boots, and silver jewelry.",
+  }),
+  defineAvatar({
+    id: "bima-satrya", name: "Bima Satrya", note: "Coffee, menswear, thoughtful everyday lifestyle",
+    img: "/avatars/hdrv/bima-satrya/01-passport-photo.png", gender: "male", register: "netral", voice: "lokalpria",
+    castLock: "CAST-LOCK: Bima Satrya, young adult Indonesian man with medium tan skin, a long oval face, dark almond eyes, a straight nose, clean-shaven jaw, and medium-length black hair parted loosely at the center. Lean build and composed expression. Fixed wardrobe: espresso knitted polo, black tailored trousers, classic watch, and dark brown loafers.",
+  }),
+  defineAvatar({
+    id: "celine-wibowo", name: "Celine Wibowo", note: "Mature styling, wardrobe advice, confident fashion",
+    img: "/avatars/hdrv/celine-wibowo/01-passport-photo.png", gender: "female", register: "bunda", voice: "ibu",
+    castLock: "CAST-LOCK: Celine Wibowo, 44-year-old Indonesian woman with light-medium warm skin, a softly angular oval face, warm dark eyes, and a chin-length black bob with a visible silver streak. Medium-lean build and joyful smile. Fixed wardrobe: cropped light-denim jacket, black silk camisole, scarlet wide-leg tailored trousers, and black pointed heels.",
+  }),
+  defineAvatar({
+    id: "cinta-mahadewi", name: "Cinta Mahadewi", note: "Fitness, dance, vibrant feminine wellness",
+    img: "/avatars/hdrv/cinta-mahadewi/01-passport-photo.png", gender: "female", register: "genz", voice: "genz",
+    castLock: "CAST-LOCK: Cinta Mahadewi, young adult Indonesian woman with medium-deep warm-brown skin, an oval face, large dark almond eyes, full lips, and shoulder-length softly waved black hair. Athletic curvy build and energetic expression. Fixed wardrobe: coral cropped windbreaker, matching coral sports bra and leggings, white training shoes, and pink headphones.",
+  }),
+  defineAvatar({
+    id: "clarissa-limanto", name: "Clarissa Limanto", note: "Tennis, fitness, aspirational mature wellness",
+    img: "/avatars/hdrv/clarissa-limanto/01-passport-photo.png", gender: "female", register: "bunda", voice: "ibu",
+    castLock: "CAST-LOCK: Clarissa Limanto, 41-year-old Indonesian woman with medium warm-tan skin, a long oval face, dark eyes, and shoulder-length softly waved dark hair with subtle warm highlights. Lean athletic build and healthy confident expression. Fixed wardrobe: coral technical tennis jacket, ivory sports bra, pale-sage high-waist leggings, and white court trainers.",
+  }),
+  defineAvatar({
+    id: "dr-caroline-ong", name: "Dr Caroline Ong", note: "Dermatology, skincare, evidence-based beauty",
+    img: "/avatars/hdrv/dr-caroline-ong/01-passport-photo.png", gender: "female", register: "netral", voice: "chindo",
+    castLock: "CAST-LOCK: Dr Caroline Ong, 28-year-old Indonesian woman with light-medium warm skin, a balanced oval face, dark almond eyes, and straight shoulder-length black hair with a side part. Medium-slim build and calm trustworthy expression. Fixed wardrobe: sage tailored blazer, ivory blouse, cream straight trousers, and beige professional pumps.",
+  }),
+  defineAvatar({
+    id: "dr-vania-sugianto", name: "Dr Vania Sugianto", note: "Aesthetic medicine, premium beauty education",
+    img: "/avatars/hdrv/dr-vania-sugianto/01-passport-photo.png", gender: "female", register: "netral", voice: "chindo",
+    castLock: "CAST-LOCK: Dr Vania Sugianto, 29-year-old Indonesian woman with light-medium warm skin, a softly oval face, dark almond eyes, and straight black hair center-parted into a neat low bun. Slim build and poised reassuring expression. Fixed wardrobe: espresso medical scrubs under a structured cream sleeveless clinic coat, beige closed-toe professional shoes, and delicate gold jewelry.",
+  }),
+  defineAvatar({
+    id: "elang-kresna", name: "Elang Kresna", note: "Music, craftsmanship, grounded masculine lifestyle",
+    img: "/avatars/hdrv/elang-kresna/01-passport-photo.png", gender: "male", register: "netral", voice: "lokalpria",
+    castLock: "CAST-LOCK: Elang Kresna, young adult Indonesian man with deep warm-tan skin, a long angular face, dark eyes, a neat moustache and short goatee, and close-cropped black hair. Lean athletic build and grounded expression. Fixed wardrobe: rust camp-collar shirt, black tailored trousers, brown leather watch, and dark loafers.",
+  }),
+  defineAvatar({
+    id: "jason-hartono", name: "Jason Hartono", note: "Coffee, photography, quiet urban lifestyle",
+    img: "/avatars/hdrv/jason-hartono/01-passport-photo.png", gender: "male", register: "netral", voice: "pria",
+    castLock: "CAST-LOCK: Jason Hartono, 26-year-old Indonesian man with light-medium warm skin, a soft oval face, dark almond eyes, a clean-shaven jaw, and thick wavy black hair parted at the center. Slim build and calm artistic expression. Fixed wardrobe: dark chocolate knitted polo, charcoal pleated trousers, brown leather watch, and minimalist loafers.",
+  }),
+  defineAvatar({
+    id: "jovan-mahesa", name: "Jovan Mahesa", note: "Surf, fitness, tropical travel",
+    img: "/avatars/hdrv/jovan-mahesa/01-passport-photo.png", gender: "male", register: "genz", voice: "genzpria",
+    castLock: "CAST-LOCK: Jovan Mahesa, young adult Indonesian man with deep warm-brown skin, a long angular face, dark eyes, short tight black curls, and a clean-shaven face. Tall athletic muscular build and joyful outdoorsy expression. Fixed wardrobe: sage sleeveless top, sand linen drawstring trousers, rugged neutral sandals, and a beaded bracelet.",
+  }),
+  defineAvatar({
+    id: "kenzo-halim", name: "Kenzo Halim", note: "Music, fashion, nightlife culture",
+    img: "/avatars/hdrv/kenzo-halim/01-passport-photo.png", gender: "male", register: "bestie", voice: "pria",
+    castLock: "CAST-LOCK: Kenzo Halim, 28-year-old Indonesian man with medium tan skin, an angular oval face, narrow dark eyes, a clean-shaven jaw, and long layered black hair swept away from the face. Lean build and magnetic reserved expression. Fixed wardrobe: black fluid satin shirt, tailored burgundy trousers, black leather boots, and restrained silver jewelry.",
+  }),
+  defineAvatar({
+    id: "kirana-aulia", name: "Kirana Aulia", note: "Beauty, makeup, relatable feminine lifestyle",
+    img: "/avatars/hdrv/kirana-aulia/01-passport-photo.png", gender: "female", register: "genz", voice: "genz",
+    castLock: "CAST-LOCK: Kirana Aulia, young adult Indonesian woman with medium warm-tan skin, a heart-shaped oval face, dark almond eyes, full lips, and long softly waved black hair. Slim build and radiant friendly expression. Fixed wardrobe: ribbed cherry-red fitted top, high-waist dark-indigo jeans, nude slingback shoes, and minimal gold hoops.",
+  }),
+  defineAvatar({
+    id: "monica-tan", name: "Monica Tan", note: "Art, interiors, luxury culture, mature style",
+    img: "/avatars/hdrv/monica-tan/01-passport-photo.png", gender: "female", register: "bunda", voice: "ibu",
+    castLock: "CAST-LOCK: Monica Tan, 48-year-old Indonesian woman with light-medium warm skin, a mature oval face, dark almond eyes, and a sleek chin-length black bob with prominent silver streaks. Medium-lean build and cultivated commanding expression. Fixed wardrobe: mustard asymmetric one-shoulder blouse, deep-aubergine tailored trousers, sculptural gold earrings, and pointed neutral heels.",
+  }),
+  defineAvatar({
+    id: "natasha-wijaya", name: "Natasha Wijaya", note: "Fitness, dance, energetic wellness",
+    img: "/avatars/hdrv/natasha-wijaya/01-passport-photo.png", gender: "female", register: "bestie", voice: "genz",
+    castLock: "CAST-LOCK: Natasha Wijaya, 27-year-old Indonesian woman with light-medium warm skin, a heart-shaped face, dark almond eyes, and long black hair tied in a high ponytail. Athletic build and bright charismatic expression. Fixed wardrobe: coral fitted long-sleeve zip performance jacket, matching high-waist leggings, and clean white trainers.",
+  }),
+  defineAvatar({
+    id: "nayla-rahmani", name: "Nayla Rahmani", note: "Modest fashion, handbags, polished lifestyle",
+    img: "/avatars/hdrv/nayla-rahmani/01-passport-photo.png", gender: "female", register: "bestie", voice: "hijaber",
+    castLock: "CAST-LOCK: Nayla Rahmani, young adult Indonesian woman with light-medium warm skin, a soft oval face, dark almond eyes, and a taupe hijab fitted neatly around her face and shoulders. Medium-slim build and warm refined expression. Fixed wardrobe: chocolate blouse, long ivory tailored vest, wide-leg mocha trousers, and nude loafers.",
+  }),
+  defineAvatar({
+    id: "nico-tan", name: "Nico Tan", note: "Technology, gaming, creator gadgets",
+    img: "/avatars/hdrv/nico-tan/01-passport-photo.png", gender: "male", register: "genz", voice: "genzpria",
+    castLock: "CAST-LOCK: Nico Tan, 22-year-old Indonesian man with light-medium warm skin, an angular oval face, dark almond eyes, a clean-shaven jaw, and thick black hair styled upward with a textured front. Slim build and clever energetic expression. Fixed wardrobe: cobalt utility overshirt, white ribbed T-shirt, black tapered cargo trousers, modern white sneakers, and a slim silver chain.",
+  }),
+  defineAvatar({
+    id: "reza-tanujaya", name: "Reza Tanujaya", note: "Fitness, travel, tropical active lifestyle",
+    img: "/avatars/hdrv/reza-tanujaya/01-passport-photo.png", gender: "male", register: "bestie", voice: "pria",
+    castLock: "CAST-LOCK: Reza Tanujaya, 29-year-old Indonesian man with medium warm-tan skin, a softly square oval face, dark eyes, short neatly cropped black hair, and a clean-shaven jaw. Athletic muscular build and sunny confident expression. Fixed wardrobe: sage sleeveless performance top, cream drawstring athletic trousers, technical trainers, and a black sports watch.",
+  }),
+  defineAvatar({
+    id: "valerie-hartono", name: "Valerie Hartono", note: "Styling, thrift fashion, wardrobe transformation",
+    img: "/avatars/hdrv/valerie-hartono/01-passport-photo.png", gender: "female", register: "genz", voice: "genz",
+    castLock: "CAST-LOCK: Valerie Hartono, 25-year-old Indonesian woman with light-medium warm skin, an oval face, dark almond eyes, and a straight jaw-length black bob tucked behind one ear. Slim build and playful editorial expression. Fixed wardrobe: cropped light-wash denim jacket over a black fitted turtleneck, draped crimson midi skirt, and black ankle boots.",
+  }),
+];
+
 export function getAvatarPreset(id: string | null | undefined): AvatarPreset | null {
   if (!id) return null;
-  return AVATAR_PRESETS.find((a) => a.id === id) ?? null;
+  return AVATAR_PRESETS.find((avatar) => avatar.id === id) ?? null;
 }

@@ -1,0 +1,18 @@
+{
+  "id": "before_after",
+  "slug_higgsfield": "ugc_before_and_after",
+  "nama": "Before and After",
+  "kekuatan": "Hasil yang terlihat adalah bukti terkuat yang bisa dimiliki iklan.",
+  "cocok_untuk": ["hair serum", "penyimpanan lemari", "pembersih sepatu", "skincare", "kebersihan"],
+  "beat_table": [
+    { "beat": 1, "durasi": 5, "isi": "Kondisi sebelum — jujur, tidak dilebih-lebihkan" },
+    { "beat": 2, "durasi": 5, "isi": "Proses pemakaian, satu take" },
+    { "beat": 3, "durasi": 4, "isi": "Split-screen atau match-cut ke kondisi sesudah" },
+    { "beat": 4, "durasi": 4, "isi": "Hasil + CTA" }
+  ],
+  "technique": "Beat 3 memakai end_image berupa frame SESUDAH dengan komposisi dan sudut kamera IDENTIK dengan beat 1. Kesamaan framing itu yang membuat perubahannya terbaca instan; kalau sudutnya bergeser, penonton membaca dua adegan berbeda, bukan satu perubahan.",
+  "failure_mode": "Kategori paling rawan overclaim. Dilarang: 'pasti', 'dalam X hari', 'permanen'. Yang boleh hanya pengalaman pribadi — 'di aku hasilnya gini', 'ini setelah dua minggu'.",
+  "no_face_recommended": false,
+  "hook_level_min": "normal",
+  "butuh_cgi": false
+}

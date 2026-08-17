@@ -1,0 +1,18 @@
+{
+  "id": "unboxing_asmr",
+  "slug_higgsfield": "ugc_unboxing_asmr",
+  "nama": "Unboxing ASMR",
+  "kekuatan": "Suara. Satu-satunya format di mana audio bawaan Seedance adalah BINTANGNYA, bukan pelengkap.",
+  "cocok_untuk": ["apa pun dengan kemasan bagus"],
+  "beat_table": [
+    { "beat": 1, "durasi": 5, "isi": "Makro: kuku menyusuri segel, plastik ditarik" },
+    { "beat": 2, "durasi": 5, "isi": "Tutup diangkat, tisu dibuka — suara renyah" },
+    { "beat": 3, "durasi": 4, "isi": "Produk diangkat, jari menyusuri permukaannya" },
+    { "beat": 4, "durasi": 4, "isi": "Produk ditaruh rapi + CTA" }
+  ],
+  "technique": "Suaranya ditulis SEDETAIL gambarnya: sebutkan tiap bunyi satu per satu (gesekan kuku di kardus, retakan tajam plastik terkelupas), minta 'crisp detailed ASMR sound design', tanpa musik, dan suaranya pelan hampir berbisik. Depth of field sangat dangkal, sambungan segel tajam, latar buram total.",
+  "failure_mode": "Menulis 'ASMR' saja tanpa merinci bunyinya menghasilkan unboxing biasa dengan label ASMR — bedanya justru seluruhnya ada di rincian bunyi.",
+  "no_face_recommended": true,
+  "hook_level_min": "normal",
+  "butuh_cgi": false
+}

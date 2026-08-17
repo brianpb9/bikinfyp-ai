@@ -7,6 +7,7 @@ import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { enqueuePromoJob } from "@/lib/promo/queue";
 import { getHookById } from "@/lib/promo/hook-library";
 import { getCreatorCategory } from "@/lib/personas";
+import { getAvatarPreset } from "@/lib/avatar-presets";
 import { assertPaidAdmission } from "@/lib/job-intake";
 
 export const runtime = "nodejs";
@@ -55,8 +56,9 @@ export async function POST(req: Request) {
       const kind = avatarBody.kind === "custom" ? "custom" : avatarBody.kind === "preset" ? "preset" : null;
       if (kind === "preset") {
         const presetId = typeof avatarBody.preset_id === "string" ? avatarBody.preset_id : "";
-        const persona = getCreatorCategory(presetId);
-        if (!persona || persona.status !== "active") throw ERR.BAD_REQUEST("Pilih avatar dulu.", "avatar.preset_id must be a known active persona.");
+        const preset = getAvatarPreset(presetId);
+        const persona = preset ? getCreatorCategory(preset.voice) : undefined;
+        if (!preset || !persona || persona.status !== "active") throw ERR.BAD_REQUEST("Pilih avatar dulu.", "avatar.preset_id must be a known HDRV influencer with an active voice.");
         avatar = { kind: "preset", presetId };
       } else if (kind === "custom") {
         const description = typeof avatarBody.description === "string" ? avatarBody.description.trim() : "";

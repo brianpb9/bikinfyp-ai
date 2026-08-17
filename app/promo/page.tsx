@@ -5,6 +5,7 @@ import Link from "next/link";
 import { apiFetch, ApiFail } from "../_components/api";
 import { PrimaryButton, SecondaryButton, ErrorText, WarnCard } from "../_components/ui";
 import { rupiah } from "../_components/flow";
+import { AVATAR_PRESETS, getAvatarPreset, type AvatarGender } from "@/lib/avatar-presets";
 
 // r-single-clip (Brian 2026-08-10): konsepnya "1 hook AI + 1 klip real
 // disambung" (persis viral-hook-test) — dulu 5, tapi multi-klip nggak
@@ -41,25 +42,6 @@ function pctToIntensity(pct: number): HookIntensity {
   return (Math.min(4, Math.floor(pct / 20)) + 1) as HookIntensity;
 }
 
-// AVATAR PRESET v2 (2026-08-10) — persona id SAMA dengan bank e-commerce
-// (lib/personas.ts), potret di-generate ulang (neck-up, tidak pegang
-// produk, tidak berdiri) + toggle Male/Female pertama, sama persis dengan
-// app/bikin/gaya/page.tsx (lihat komentar di sana). Foto ini PREVIEW UI
-// saja, bukan reference image yang dikirim ke BytePlus.
-type AvatarGender = "female" | "male";
-const AVATAR_PRESETS: { id: string; label: string; name: string; img: string; gender: AvatarGender }[] = [
-  { id: "hijaber", label: "🧕", name: "Hijaber", img: "/avatars/salma.png", gender: "female" },
-  { id: "genz", label: "🧑‍🎤", name: "Gen-Z", img: "/avatars/zea.png", gender: "female" },
-  { id: "ibu", label: "👩‍🦱", name: "Ibu-ibu", img: "/avatars/ratih.png", gender: "female" },
-  { id: "chindo", label: "👩🏻", name: "Chindo", img: "/avatars/keisha.png", gender: "female" },
-  { id: "lokal", label: "👩", name: "Lokal/Pribumi", img: "/avatars/dina.png", gender: "female" },
-  { id: "pria", label: "👨", name: "Pria", img: "/avatars/raka.png", gender: "male" },
-  { id: "genzpria", label: "🧑", name: "Fajar", img: "/avatars/genzpria.png", gender: "male" },
-  { id: "bapak", label: "👨‍🦱", name: "Pak Danu", img: "/avatars/bapak.png", gender: "male" },
-  { id: "senior", label: "👨‍🦳", name: "Pak Herman", img: "/avatars/senior.png", gender: "male" },
-  { id: "profesional", label: "🧑‍💼", name: "Bimo", img: "/avatars/profesional.png", gender: "male" },
-  { id: "lokalpria", label: "👨", name: "Yoga", img: "/avatars/lokalpria.png", gender: "male" },
-];
 const GENDER_INFO: Record<AvatarGender, { icon: string; label: string }> = {
   female: { icon: "♀", label: "Female" },
   male: { icon: "♂", label: "Male" },
@@ -91,7 +73,7 @@ export default function PromoPage() {
   const [hookId, setHookId] = useState<string | null>(null);
   const [avatarKind, setAvatarKind] = useState<"preset" | "custom">("preset");
   const [avatarGender, setAvatarGender] = useState<AvatarGender>("female");
-  const [avatarPresetId, setAvatarPresetId] = useState("hijaber");
+  const [avatarPresetId, setAvatarPresetId] = useState(() => AVATAR_PRESETS.find((avatar) => avatar.gender === "female")?.id ?? "");
   const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
   const [avatarDescribing, setAvatarDescribing] = useState(false);
@@ -203,7 +185,7 @@ export default function PromoPage() {
       setStatusText("Bikin video — nambah hook AI + suara, lalu gabung (sekitar 1-2 menit)...");
       const avatar = needsAvatar
         ? avatarKind === "preset"
-          ? { kind: "preset", preset_id: avatarPresetId }
+          ? { kind: "preset", preset_id: avatarPresetId, register: getAvatarPreset(avatarPresetId)?.register }
           : { kind: "custom", description: avatarDescription }
         : undefined;
       const job = await apiFetch<{ id: string }>("/api/promo/jobs", { json: { uploaded_clip_urls: uploadedClipUrls, hook_id: hookId, avatar } });

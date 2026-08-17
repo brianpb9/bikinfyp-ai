@@ -1,0 +1,18 @@
+{
+  "id": "giant_figure",
+  "slug_higgsfield": "ugc_giant_figure",
+  "nama": "Giant Figure",
+  "kekuatan": "Skala yang salah membuat otak berhenti memproses selama sepersekian detik — dan itu sudah cukup.",
+  "cocok_untuk": ["produk kecil apa pun", "lipstik", "earphone", "botol parfum"],
+  "beat_table": [
+    { "beat": 1, "durasi": 5, "isi": "Produk seukuran gedung berdiri di lingkungan nyata" },
+    { "beat": 2, "durasi": 4, "isi": "Dia berjalan mendekatinya, skalanya terbaca" },
+    { "beat": 3, "durasi": 4, "isi": "Match-cut ke produk seukuran asli di tangannya" },
+    { "beat": 4, "durasi": 5, "isi": "Pakai normal + CTA" }
+  ],
+  "technique": "WAJIB memaksa empat hal sekaligus: correct perspective, real cast shadow on the ground, haze at distance, correct scale terhadap bangunan sekitar. Lingkungannya harus tempat Indonesia yang nyata (alun-alun, jalan kota, sawah), bukan latar generik.",
+  "failure_mode": "Tanpa keempat kunci di atas, produk raksasa terlihat seperti stiker yang ditempel — dan itu membaca sebagai murahan, bukan mengejutkan.",
+  "no_face_recommended": false,
+  "hook_level_min": "agak_gila",
+  "butuh_cgi": true
+}

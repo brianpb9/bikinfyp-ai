@@ -81,7 +81,7 @@ function ideDummy(over: Record<string, unknown> = {}) {
   return {
     one_liner: "Serum yang nggak boleh dipakai sebelum jam enam pagi",
     human_situation: "Ibu ngendap-ngendap ke kamar mandi jam lima pagi sebelum anak-anak bangun",
-    mechanic: "forbidden", hook_device: "larangan-terbalik", hook_level: "L2",
+    mechanic: "forbidden", format: "secret_hack", hook_device: "larangan-terbalik", hook_level: "L2",
     why_stop: "Larangan bikin penonton nunggu alasannya",
     story: { setup: "dia ngendap ke kamar mandi", tension: "kenapa sembunyi-sembunyi?", payoff: "kalau ketahuan, habis dipakai rame-rame" },
     product_role: "benda yang direbutin, bukan yang dijelaskan",
@@ -530,4 +530,56 @@ test("ide yang lulus TIPIS tetap menulis naskah, dan naskahnya ditandai", async 
     assert.equal(hasil[0].ideSkor, 73);
     assert.equal(hasil[0].ideKandidat, undefined, "bukan kegagalan, jadi tidak menawarkan kandidat lain");
   } finally { globalThis.fetch = aslinya; }
+});
+
+test("kandidat dengan format terlarang dijatuhkan di KODE, bukan cuma dilarang di prompt", async () => {
+  // Model yang mengabaikan katalog harus tetap gugur. Larangan yang cuma
+  // ditulis di prompt bukan larangan.
+  const nakal = [
+    ideDummy({ format: "giant_figure", one_liner: "Botol setinggi pintu kos berdiri di tengah alun-alun kota" }),
+    ideDummy({ mechanic: "absence", format: "couple_sharing_at_home", one_liner: "Aku dan pacarku berhenti beli botol lain" }),
+    ideDummy({ mechanic: "stakes", format: "crush_test", one_liner: "Kalau botolnya penyok, aku ganti rugi ke bestie-ku" }),
+  ];
+  stubModel(nakal, [sempurna]);
+  try {
+    // hookLevel normal: giant_figure (CGI) dan couple (dua orang) harus gugur.
+    const hasil = await pilihIde({ ...permintaan, hookLevel: "normal" });
+    const format = hasil.peringkat.map((p) => p.ide.format);
+    assert.ok(!format.includes("giant_figure"), `giant_figure lolos di level normal: ${format.join(", ")}`);
+    assert.ok(!format.includes("couple_sharing_at_home"), `format dua-orang lolos: ${format.join(", ")}`);
+    assert.ok(format.includes("crush_test"), "format yang sah harus tetap lolos");
+  } finally { globalThis.fetch = aslinya; }
+});
+
+test("dedup memakai PASANGAN mekanik+format, bukan mekanik saja", async () => {
+  // forbidden x mystery_box dan forbidden x mess_to_fresh adalah dua ide
+  // berbeda; membuang yang kedua akan membuang ide yang sah.
+  const dua = [
+    ideDummy({ format: "mystery_box" }),
+    ideDummy({ format: "mess_to_fresh", one_liner: "Adik ngumpetin botol itu di rak paling atas kamar mandi" }),
+    ideDummy({ format: "mystery_box", one_liner: "Kotak itu digoyang adik sebelum kakaknya pulang kerja" }),
+  ];
+  stubModel(dua, [sempurna]);
+  try {
+    const hasil = await pilihIde(permintaan);
+    const pasangan = hasil.peringkat.map((p) => `${p.ide.mechanic}|${p.ide.format}`);
+    assert.equal(new Set(pasangan).size, pasangan.length, `pasangan terduplikasi: ${pasangan.join(", ")}`);
+    // Mekanik sama dengan format BERBEDA harus tetap hidup.
+    assert.ok(pasangan.includes("forbidden|mystery_box"));
+    assert.ok(pasangan.includes("forbidden|mess_to_fresh"));
+  } finally { globalThis.fetch = aslinya; }
+});
+
+test("petunjuk naskah membawa beat, technique, dan cara gagal formatnya", async () => {
+  const { petunjukNaskah } = await import("../lib/script-engine/ide");
+  const p = petunjukNaskah(ideDummy({ format: "mystery_box" }));
+  assert.match(p, /FORMAT: mystery_box/);
+  assert.match(p, /BEATS \(follow these durations\)/);
+  assert.match(p, /TECHNIQUE:/);
+  // Cara gagalnya ikut — itu yang paling sering menyelamatkan formatnya.
+  assert.match(p, /THIS FORMAT FAILS WHEN:.*membocorkan isinya/s);
+
+  // Format tanpa wajah menyatakannya eksplisit ke penulis.
+  assert.match(petunjukNaskah(ideDummy({ format: "mess_to_fresh" })), /NO FACE/);
+  assert.ok(!/NO FACE/.test(petunjukNaskah(ideDummy({ format: "tutorial" }))));
 });
