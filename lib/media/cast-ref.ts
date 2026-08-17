@@ -129,6 +129,64 @@ export async function buatPaketCastRef(avatarDesc: string, outDir: string): Prom
  * dikirim ke Seedance tanpa memicu penolakan wajah — identitas avatar dibawa
  * deskripsi teks di prompt video, seperti perilaku sekarang.
  */
+export interface HasilFrameTurunan {
+  path: string;
+  biayaIdr: number;
+  /** Verdict QC-F1 pada frame yang akhirnya dipakai. */
+  qc: import("./qc-frame").HasilQcF1;
+  /** Berapa kali frame digulung ulang sebelum diterima (0 = sekali jadi). */
+  ulang: number;
+}
+
+/**
+ * Frame awal + QC-F1 + gulung ulang maksimal dua kali.
+ *
+ * MAKSIMAL DUA, lalu frame terakhir tetap dikembalikan bersama verdict-nya
+ * yang GAGAL — bukan dilempar sebagai error. Alasannya: pemanggil (worker)
+ * yang berhak memutuskan apakah menahan job, dan keputusan itu berbeda antara
+ * jalur retail dan jalur review brand. Yang wajib adalah verdictnya tercatat,
+ * bukan bahwa fungsi ini yang menghentikan semuanya.
+ *
+ * Foto produk ASLI dikirim ulang di SETIAP percobaan — tidak pernah menurunkan
+ * produk dari frame sebelumnya. Menurunkan dari turunan membuat pergeseran
+ * bentuk menumpuk diam-diam: percobaan kedua akan setia pada botol yang sudah
+ * salah di percobaan pertama.
+ */
+export async function turunkanFrameAwalTerperiksa(input: {
+  castRefPath: string;
+  productPhotoPath: string;
+  productName: string;
+  startState: string;
+  outPath: string;
+  denganWajah: boolean;
+  /** Diteruskan ke QC-F1 — hanya frame hero yang wajib lolos OCR merek. */
+  productState?: "hero" | "partial";
+}): Promise<HasilFrameTurunan> {
+  const { qcF1FrameFidelity } = await import("./qc-frame");
+  const MAKS_ULANG = 2;
+  let biaya = 0;
+  let terakhir: import("./qc-frame").HasilQcF1 | null = null;
+
+  for (let ulang = 0; ulang <= MAKS_ULANG; ulang++) {
+    const f = await turunkanFrameAwal(input);
+    biaya += f.biayaIdr;
+    const qc = await qcF1FrameFidelity({
+      framePath: f.path,
+      // ASLI, selalu — lihat catatan di atas.
+      productPhotoPath: input.productPhotoPath,
+      productName: input.productName,
+      productState: input.productState,
+    });
+    biaya += qc.biayaIdr;
+    terakhir = qc;
+    if (qc.lulus) return { path: f.path, biayaIdr: biaya, qc, ulang };
+    console.warn(`[QC-F1] frame ${path.basename(input.outPath)} percobaan ${ulang + 1}: ${qc.detail}`);
+  }
+
+  console.error(`[QC-F1] frame ${path.basename(input.outPath)} TETAP GAGAL setelah ${MAKS_ULANG + 1} percobaan: ${terakhir!.detail}`);
+  return { path: input.outPath, biayaIdr: biaya, qc: terakhir!, ulang: MAKS_ULANG };
+}
+
 export async function turunkanFrameAwal(input: {
   castRefPath: string;
   productPhotoPath: string;

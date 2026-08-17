@@ -82,3 +82,22 @@ test("referensi berwajah MATI secara bawaan, dengan alasan terukur", () => {
   // Batas yang ditemukan sendiri harus ikut tercatat, bukan cuma keberhasilan.
   assert.match(adr, /dropper jadi pump/, "pergeseran bentuk produk di tahap turunan harus dicatat");
 });
+
+test("QC-F1 wajib: frame turunan diperiksa terhadap foto ASLI, bukan turunan sebelumnya", () => {
+  const s = baca("lib/media/qc-frame.ts");
+  const c = baca("lib/media/cast-ref.ts");
+  // Menurunkan produk dari frame turunan membuat pergeseran menumpuk: percobaan
+  // kedua akan setia pada botol yang sudah salah di percobaan pertama.
+  assert.match(c, /productPhotoPath: input\.productPhotoPath/,
+    "foto ASLI dikirim ulang tiap percobaan");
+  assert.match(c, /const MAKS_ULANG = 2/, "gulung ulang dibatasi dua");
+  // Dua pemeriksa, karena menangkap kegagalan yang berbeda.
+  assert.match(s, /gemini-flash-latest/, "vision untuk bentuk/tutup/warna/tata letak");
+  assert.match(s, /tesseract/, "OCR untuk huruf mereknya sendiri");
+  assert.match(s, /tutup_sama/, "jenis tutup diperiksa — dropper bukan pump");
+  // Gagal MEMERIKSA tidak boleh dihitung sebagai gagal kesetiaan.
+  assert.match(s, /tidak dapat dijalankan[\s\S]{0,80}diteruskan tanpa penilaian/,
+    "pemeriksa yang error tidak boleh membakar biaya gulung-ulang");
+  // Ketat OCR mengikuti peran: hanya hero yang wajib.
+  assert.match(s, /const wajibOcr = \(input\.productState \?\? "hero"\) === "hero"/);
+});
