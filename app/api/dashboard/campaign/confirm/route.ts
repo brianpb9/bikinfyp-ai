@@ -8,6 +8,7 @@ import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { tierPriceIdr } from "@/lib/credits";
 import { enqueueJob } from "@/lib/job-queue";
 import { getCreatorCategory } from "@/lib/personas";
+import { getAvatarPreset } from "@/lib/avatar-presets";
 import { getRecordingStyle } from "@/lib/media/recording-styles";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
@@ -75,13 +76,15 @@ export async function POST(req: Request) {
     // Avatar: preset (persona) ATAU deskripsi hasil upload foto sendiri.
     // Persona tetap dibuat walau pakai avatar custom — voice TTS terkunci di
     // persona (foto tidak memberi tahu apa pun soal suara).
-    const creatorCategoryId = typeof body.creator_category === "string" ? body.creator_category : "";
+    const avatarPreset = typeof body.avatar_id === "string" ? getAvatarPreset(body.avatar_id) : null;
+    if (body.avatar_id && !avatarPreset) throw ERR.BAD_REQUEST("Avatar tidak dikenal. Pilih ulang avatarnya.", "Unknown avatar_id.");
+    const creatorCategoryId = avatarPreset?.voice ?? (typeof body.creator_category === "string" ? body.creator_category : "");
     const category = getCreatorCategory(creatorCategoryId);
     if (!category || category.status !== "active") throw ERR.BAD_REQUEST("Pilih avatar dulu.", "Unknown or inactive creator category.");
     const personaId = (await pgFindOrCreatePersona(user.id, category)).id;
     const avatarCustomDesc = typeof body.avatar_custom_desc === "string" && body.avatar_custom_desc.trim()
       ? body.avatar_custom_desc.trim().slice(0, 600)
-      : null;
+      : avatarPreset?.castLock.slice(0, 600) ?? null;
 
     // Multi-shot & rasio. Divalidasi di sini, BUKAN dipercaya apa adanya:
     // keduanya masuk ke baris job dan dipakai worker berjam-jam kemudian,

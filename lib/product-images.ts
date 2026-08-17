@@ -5,6 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import sharp from "sharp";
 import { config, ensureDirs } from "./config";
 import { mediaStorage } from "./storage";
@@ -96,4 +97,47 @@ export async function saveProductImages(
     rels.push(rel);
   }
   return rels;
+}
+
+/** Organization uploads use collision-proof object names. Array indexes are
+ * unsafe when two teammates upload at the same time: both requests can observe
+ * the same length and overwrite the same R2 key. */
+export async function saveUniqueProductImages(
+  productId: string,
+  blobs: { mime: string; data: Buffer }[]
+): Promise<string[]> {
+  ensureDirs();
+  const rels: string[] = [];
+  try {
+    for (const blob of blobs) {
+      // Full decode + normalization is mandatory here. Never fall back to a
+      // corrupt original merely because its metadata could still be parsed.
+      const normalized = await normalizeProductImageBuffer(blob.data);
+      const rel = path.posix.join("uploads", productId, `${crypto.randomUUID()}.webp`);
+      // Track before put: an object store may commit then lose the response.
+      // Cleanup must still know which idempotent key to delete.
+      rels.push(rel);
+      await mediaStorage().put(rel, normalized, "image/webp");
+    }
+    return rels;
+  } catch (error) {
+    await deleteStoredProductImages(rels).catch((cleanupError) => console.error("[storage] rollback upload tidak tuntas:", cleanupError));
+    throw error;
+  }
+}
+
+export async function deleteStoredProductImages(keys: string[]): Promise<void> {
+  const failed: string[] = [];
+  await Promise.all(keys.map(async (key) => {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try { await mediaStorage().delete(key); return; }
+      catch (error) {
+        if (attempt === 3) {
+          failed.push(key);
+          console.error(`[storage] gagal menghapus ${key} setelah 3 percobaan:`, error);
+        }
+      }
+    }
+  }));
+  if (failed.length) throw new Error(`Storage cleanup failed for ${failed.length} object(s).`);
 }

@@ -66,9 +66,9 @@ export async function periksaLabelFoto(fotoPath: string, productName: string): P
   try {
     // Diperbesar sebelum OCR: label produk di foto 1080px sering di bawah
     // ukuran minimum tesseract — sama alasannya dengan upscale di QC-10.
-    await jalankan("ffmpeg", ["-y", "-v", "error", "-i", fotoPath, "-vf", "scale=1440:-2:flags=lanczos", png]);
+    await jalankan("ffmpeg", ["-y", "-v", "error", "-i", fotoPath, "-vf", "scale=1440:-2:flags=lanczos", png], { timeout: 20_000, killSignal: "SIGKILL", maxBuffer: 2 * 1024 * 1024 });
     // TSV, bukan teks polos: kita butuh kolom keyakinan per kata.
-    const { stdout } = await jalankan("tesseract", [png, "stdout", "-l", "eng", "--psm", "11", "tsv"]);
+    const { stdout } = await jalankan("tesseract", [png, "stdout", "-l", "eng", "--psm", "11", "tsv"], { timeout: 20_000, killSignal: "SIGKILL", maxBuffer: 4 * 1024 * 1024 });
 
     const kata = stdout
       .split("\n")

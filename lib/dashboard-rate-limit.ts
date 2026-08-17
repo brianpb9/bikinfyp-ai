@@ -33,6 +33,8 @@ export const DASHBOARD_LIMITS = {
   invite: { max: 20, windowSec: 3600 },
   /** Simpan template: murah, tapi tetap perlu batas supaya tidak dibanjiri. */
   template: { max: 30, windowSec: 3600 },
+  /** Upload foto bisa menjalankan decode penuh dan OCR. */
+  photo: { max: 30, windowSec: 300 },
   /** Rencana posting: murni tulis database. */
   publish: { max: 60, windowSec: 300 },
 } as const;

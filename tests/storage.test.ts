@@ -5,6 +5,7 @@ import { type MediaStorage, setMediaStorageForTests, mediaStorage } from "../lib
 class MemoryObjectStorage implements MediaStorage {
   values = new Map<string, Buffer>();
   async put(key: string, body: Buffer) { this.values.set(key, Buffer.from(body)); }
+  async delete(key: string) { this.values.delete(key); }
   async get(key: string, range?: { start: number; end: number }) {
     const body = this.values.get(key);
     if (!body) return null;

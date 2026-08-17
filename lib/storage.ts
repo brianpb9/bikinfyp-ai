@@ -5,6 +5,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import {
+  DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
   PutObjectCommand,
@@ -16,6 +17,7 @@ export type StoredObject = { body: Buffer; size: number; contentType?: string };
 
 export interface MediaStorage {
   put(key: string, body: Buffer, contentType?: string): Promise<void>;
+  delete(key: string): Promise<void>;
   get(key: string, range?: { start: number; end: number }): Promise<StoredObject | null>;
   stat(key: string): Promise<{ size: number; contentType?: string } | null>;
   /** Local staging path for FFmpeg/providers. It is a cache, not primary storage. */
@@ -42,6 +44,10 @@ class FilesystemStorage implements MediaStorage {
     const target = localPath(key);
     await fs.promises.mkdir(path.dirname(target), { recursive: true });
     await fs.promises.writeFile(target, body);
+  }
+
+  async delete(key: string): Promise<void> {
+    await fs.promises.rm(localPath(key), { force: true });
   }
 
   async get(key: string, range?: { start: number; end: number }): Promise<StoredObject | null> {
@@ -91,6 +97,9 @@ class R2Storage implements MediaStorage {
   }
   async put(key: string, body: Buffer, contentType?: string): Promise<void> {
     await this.client.send(new PutObjectCommand({ Bucket: config.r2Bucket, Key: safeKey(key), Body: body, ContentType: contentType }));
+  }
+  async delete(key: string): Promise<void> {
+    await this.client.send(new DeleteObjectCommand({ Bucket: config.r2Bucket, Key: safeKey(key) }));
   }
   async get(key: string, range?: { start: number; end: number }): Promise<StoredObject | null> {
     try {

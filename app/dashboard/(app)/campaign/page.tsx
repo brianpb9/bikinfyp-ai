@@ -15,6 +15,7 @@ import { getTemplate, type CampaignTemplate } from "@/lib/templates";
 import { stylesForFormat, GAYA_BAWAAN } from "@/lib/media/recording-styles";
 import { pickTemplate } from "@/lib/auto-pick";
 import { TEMPLATE_COPY_CAPACITY } from "@/lib/script-engine/template-copy";
+import { runSequentially } from "@/lib/sequential-queue";
 
 type Kind = "affiliate" | "ads" | "tvc";
 type Format = "talking_head" | "hands_only" | "tvc" | "ads";
@@ -144,6 +145,7 @@ export default function CampaignPage() {
   // dipinjam dari preset.voice saat dikirim ke server — dua hal berbeda sejak
   // pustaka avatar HDRV masuk 2026-08-13.
   const [avatarId, setAvatarId] = useState(AVATAR_PRESETS[0]?.id ?? "");
+  const [avatarNeedsReselection, setAvatarNeedsReselection] = useState(false);
   const [customAvatarDesc, setCustomAvatarDesc] = useState<string | null>(null);
 
   const [count, setCount] = useState(3);
@@ -179,21 +181,34 @@ export default function CampaignPage() {
         setDurationSec(Number(t.duration_sec) as 15 | 30 | 45);
         setHookLevel(String(t.hook_level) as HookLevel);
         setCount(Number(t.variant_count));
-        if (t.creator_category) setAvatarId(String(t.creator_category));
-        if (t.avatar_gender) setAvatarGender(String(t.avatar_gender) as AvatarGender);
-        setNotice(`Pakai template kamu: ${String(t.name)}`);
+        const savedAvatar = getAvatarPreset(String(t.creator_category ?? ""));
+        if (savedAvatar) {
+          setAvatarId(savedAvatar.id);
+          setAvatarGender(savedAvatar.gender);
+          setAvatarNeedsReselection(false);
+        } else if (t.avatar_gender) {
+          setAvatarGender(String(t.avatar_gender) as AvatarGender);
+          setAvatarId("");
+          setAvatarNeedsReselection(true);
+        }
+        setNotice(savedAvatar
+          ? `Pakai template kamu: ${String(t.name)}`
+          : `Template lama “${String(t.name)}” belum menyimpan identitas influencer. Pilih avatarnya lagi.`);
         setStep(1); setMaxStep((m) => Math.max(m, 1));
       } catch { /* biarkan wizard kosong; brand tetap bisa mengatur manual */ }
     })();
   }, []);
 
   async function saveAsTemplate() {
+    if (!getAvatarPreset(avatarId)) { setError("Pilih avatar dulu sebelum menyimpan template."); return; }
     setSavingTpl(true); setError(null);
     try {
       await apiFetch("/api/dashboard/templates", { json: {
         name: savedName, kind, format, quality_tier: tier, duration_sec: durationSec,
         hook_level: hookLevel, variant_count: count,
-        creator_category: getAvatarPreset(avatarId)?.voice ?? "lokal", avatar_gender: avatarGender,
+        // Column name is legacy, but templates store the canonical avatar ID;
+        // voice is derived from that avatar when a job is confirmed.
+        creator_category: avatarId, avatar_gender: avatarGender,
         hook_family: template?.hookFamily ?? null,
       } });
       setSavedName("");
@@ -240,6 +255,7 @@ export default function CampaignPage() {
 
   const photoInput = useRef<HTMLInputElement>(null);
   const avatarInput = useRef<HTMLInputElement>(null);
+  const [photoDragActive, setPhotoDragActive] = useState(false);
 
   // Langkah terjauh yang pernah dicapai — dipakai Stepper untuk menentukan
   // mana yang boleh diklik. Disimpan terpisah dari `step` karena `step` turun
@@ -271,6 +287,20 @@ export default function CampaignPage() {
   }
 
   // --- Langkah 3: foto + detail ---
+  async function uploadPhotosQueued(base: ProductPayload, files: File[]): Promise<ProductPayload> {
+    // The server intentionally accepts one file per request so a multi-photo
+    // drop cannot multiply multipart buffering. UX stays multi-file; this is
+    // simply a bounded queue behind the dropzone.
+    return runSequentially(base, files, async (latest, file) => {
+      const fd = new FormData();
+      fd.set("photos", file);
+      const res = await fetch(`/api/dashboard/campaign/product/${base.product_id}/photos`, { method: "POST", body: fd });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) throw new ApiFail(data.code ?? "ERROR", data.message_id ?? "Upload foto gagal.", false);
+      return { ...latest, images: data.images, image_urls: data.image_urls };
+    }, (latest) => setProduct(latest));
+  }
+
   /** Mulai dari FOTO, bukan dari link (permintaan Brian 2026-08-12).
    *
    *  Banyak brand TikTok Shop tidak punya halaman produk yang bisa dibaca —
@@ -293,29 +323,32 @@ export default function CampaignPage() {
       );
       if (!dibuat.extracted) { setNotice(dibuat.message ?? "Gagal menyiapkan produk."); return; }
       const produk = dibuat as ProductPayload;
-      const fd = new FormData();
-      Array.from(files).slice(0, MAX_PHOTOS).forEach((f) => fd.append("photos", f));
-      const res = await fetch(`/api/products/${produk.product_id}/photos`, { method: "POST", body: fd });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new ApiFail(data.code ?? "ERROR", data.message_id ?? "Upload foto gagal.", false);
-      setProduct({ ...produk, images: data.images, image_urls: data.image_urls });
-      setNotice("Fotonya sudah masuk. Tinggal isi nama dan harganya.");
+      // Make the newly created product reachable before the first upload; a
+      // later file failure must not strand the product or earlier successes.
+      setProduct(produk);
       go(2);
+      const latest = await uploadPhotosQueued(produk, Array.from(files).slice(0, MAX_PHOTOS));
+      setProduct(latest);
+      setNotice("Fotonya sudah masuk. Tinggal isi nama dan harganya.");
     } catch (err) {
       setError(err instanceof ApiFail ? err.message : "Gagal memulai dari foto.");
     } finally { setLoading(false); }
   }
 
-  async function handleUploadPhotos(files: FileList) {
+  async function handleUploadPhotos(files: FileList | File[]) {
     if (!product) return;
+    const accepted = new Set(["image/png", "image/jpeg", "image/webp"]);
+    const incoming = Array.from(files);
+    const valid = incoming.filter((file) => accepted.has(file.type));
+    const room = Math.max(0, MAX_PHOTOS - product.images.length);
+    if (!valid.length) { setError("Pakai foto PNG, JPG, atau WebP ya."); return; }
+    if (!room) { setError(`Foto sudah penuh (${MAX_PHOTOS}/${MAX_PHOTOS}). Hapus satu dulu untuk mengganti.`); return; }
+    const upload = valid.slice(0, room);
+    if (valid.length !== incoming.length) setNotice("File selain PNG, JPG, atau WebP tidak ikut diunggah.");
+    if (valid.length > room) setNotice(`Hanya ${room} foto yang masuk karena batasnya ${MAX_PHOTOS}.`);
     setLoading(true); setError(null);
     try {
-      const fd = new FormData();
-      Array.from(files).slice(0, MAX_PHOTOS).forEach((f) => fd.append("photos", f));
-      const res = await fetch(`/api/products/${product.product_id}/photos`, { method: "POST", body: fd });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) throw new ApiFail(data.code ?? "ERROR", data.message_id ?? "Upload foto gagal.", false);
-      setProduct({ ...product, images: data.images, image_urls: data.image_urls });
+      setProduct(await uploadPhotosQueued(product, upload));
     } catch (err) {
       setError(err instanceof ApiFail ? err.message : "Upload foto gagal.");
     } finally { setLoading(false); }
@@ -325,7 +358,7 @@ export default function CampaignPage() {
     if (!product) return;
     setLoading(true); setError(null);
     try {
-      const res = await fetch(`/api/products/${product.product_id}/photos`, {
+      const res = await fetch(`/api/dashboard/campaign/product/${product.product_id}/photos`, {
         method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: rel }),
       });
       const data = await res.json().catch(() => ({}));
@@ -405,12 +438,15 @@ export default function CampaignPage() {
   // --- Langkah 5: generate + konfirmasi ---
   async function handleGenerate() {
     if (!product) return;
+    if (avatarNeedsReselection || !getAvatarPreset(avatarId)) { setError("Pilih ulang avatar untuk template lama ini dulu ya."); return; }
     setLoading(true); setError(null); setNotice(null);
     try {
       const res = await apiFetch<{ requested: number; scripts: GeneratedScript[] }>(
         "/api/dashboard/campaign/generate",
         { json: {
           product_id: product.product_id, count, tier, duration_sec: durationSec, hook_level: hookLevel,
+          avatar_id: avatarId,
+          register: getAvatarPreset(avatarId)?.register ?? "netral",
           // Template = tiru konten itu persis, jadi hook-nya DIKUNCI (bukan
           // cuma disarankan) dan pembagian detiknya ikut dari shot list
           // aslinya. Tanpa keduanya, memilih satu template tetap menghasilkan
@@ -451,10 +487,11 @@ export default function CampaignPage() {
           // Kategori kreator dipinjam dari preset — itu yang membawa suara,
           // register, dan gaya pembawaan yang sudah teruji.
           creator_category: getAvatarPreset(avatarId)?.voice ?? "lokal",
+          avatar_id: avatarId,
           // Wajah: foto unggahan brand menang atas deskripsi influencer.
           // Kalau tidak ada unggahan, deskripsi influencerlah yang dikirim —
           // tanpa ini semua influencer yang berbagi suara akan tampil sama.
-          avatar_custom_desc: customAvatarDesc ?? getAvatarPreset(avatarId)?.desc ?? null,
+          avatar_custom_desc: customAvatarDesc ?? getAvatarPreset(avatarId)?.castLock ?? null,
           // null = biarkan mesin menurunkan jumlah adegan seperti sebelumnya.
           shot_count: multiShot ? shotCount : null, ratio, no_model: noModel,
           tvc_route: template?.tvcRoute ?? null,
@@ -473,6 +510,12 @@ export default function CampaignPage() {
   }
 
   const avatars = AVATAR_PRESETS.filter((a) => a.gender === avatarGender);
+  useEffect(() => {
+    if (avatarNeedsReselection) return;
+    if (!AVATAR_PRESETS.some((avatar) => avatar.id === avatarId && avatar.gender === avatarGender)) {
+      setAvatarId(AVATAR_PRESETS.find((avatar) => avatar.gender === avatarGender)?.id ?? "");
+    }
+  }, [avatarGender, avatarId, avatarNeedsReselection]);
   const selectedCount = scripts.filter((s) => !excluded.has(s.script_id)).length;
   // Seragam = semua varian punya caption yang sama persis. Diperiksa dari
   // HASILNYA, bukan dari "apakah template dipakai": kalau nanti variasi
@@ -711,7 +754,14 @@ export default function CampaignPage() {
             </p>
           </div>
 
-          <section className="space-y-3 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <section
+            onDragEnter={(event) => { event.preventDefault(); if (!loading) setPhotoDragActive(true); }}
+            onDragOver={(event) => { event.preventDefault(); event.dataTransfer.dropEffect = "copy"; }}
+            onDragLeave={(event) => { if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setPhotoDragActive(false); }}
+            onDrop={(event) => { event.preventDefault(); setPhotoDragActive(false); if (!loading) void handleUploadPhotos(event.dataTransfer.files); }}
+            className={`space-y-3 rounded-2xl border-2 bg-white p-6 shadow-sm transition-colors ${photoDragActive ? "border-amber-500 bg-amber-50/60" : "border-zinc-200"}`}
+            data-testid="product-photo-dropzone"
+          >
             <div className="flex items-center justify-between">
               <p className="text-sm font-semibold text-zinc-900">Foto referensi ({product.images.length}/{MAX_PHOTOS})</p>
               <button
@@ -723,9 +773,12 @@ export default function CampaignPage() {
               </button>
               <input
                 ref={photoInput} type="file" accept="image/png,image/jpeg,image/webp" multiple hidden
-                onChange={(e) => e.target.files && handleUploadPhotos(e.target.files)}
+                onChange={(event) => { if (event.target.files) void handleUploadPhotos(event.target.files); event.target.value = ""; }}
               />
             </div>
+            <p className={`text-xs ${photoDragActive ? "font-semibold text-amber-700" : "text-zinc-500"}`}>
+              {photoDragActive ? "Lepaskan foto di sini" : "Tarik & lepas beberapa foto ke kotak ini, atau pilih Tambah foto."}
+            </p>
             {product.image_urls.length === 0 ? (
               <div className="flex flex-col items-center gap-2 rounded-xl border border-dashed border-zinc-300 py-8 text-center">
                 <Camera size={22} className="text-zinc-300" />
@@ -957,7 +1010,7 @@ export default function CampaignPage() {
                 <span className="px-1 text-[10px] font-semibold leading-tight">Foto sendiri</span>
               </button>
               {avatars.map((a) => (
-                <button key={a.id} onClick={() => setAvatarId(a.id)} title={a.name}
+                <button key={a.id} onClick={() => { setAvatarId(a.id); setAvatarNeedsReselection(false); }} title={a.name}
                   className={`overflow-hidden rounded-xl border-2 transition-colors ${avatarId === a.id ? "border-amber-500" : "border-transparent hover:border-zinc-200"}`}
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -966,6 +1019,11 @@ export default function CampaignPage() {
                 </button>
               ))}
             </div>
+            {avatarNeedsReselection && (
+              <p className="mt-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800">
+                Template lama ini belum menyimpan identitas influencer. Pilih satu avatar untuk melanjutkan.
+              </p>
+            )}
           </div>
           </section>
 
@@ -974,7 +1032,7 @@ export default function CampaignPage() {
               <ArrowLeft size={15} /> Kembali
             </button>
             <div className="flex-1" />
-            <button onClick={() => go(4)} className={BTN_PRIMARY}>Lanjut</button>
+            <button onClick={() => go(4)} disabled={avatarNeedsReselection || !getAvatarPreset(avatarId)} className={`${BTN_PRIMARY} disabled:cursor-not-allowed disabled:opacity-50`}>Lanjut</button>
           </div>
         </div>
       )}

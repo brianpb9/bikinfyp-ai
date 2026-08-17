@@ -8,6 +8,7 @@ import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetOrgProduct } from "
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { tierMasihDijual } from "@/lib/paket-kredit";
+import { getAvatarPreset } from "@/lib/avatar-presets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -72,7 +73,9 @@ export async function POST(req: Request) {
     const durationSec = [15, 30, 45].includes(Number(body.duration_sec)) ? (Number(body.duration_sec) as 15 | 30 | 45) : null;
     if (!durationSec) throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Unsupported duration.");
     const hookLevel = normalizeHookLevel(body.hook_level);
-    const register = ["bunda", "bestie", "genz", "netral"].includes(body.register) ? body.register : "netral";
+    const avatar = typeof body.avatar_id === "string" ? getAvatarPreset(body.avatar_id) : null;
+    if (body.avatar_id && !avatar) throw ERR.BAD_REQUEST("Avatar tidak dikenal. Pilih ulang avatarnya.", "Unknown avatar_id.");
+    const register = avatar?.register ?? (["bunda", "bestie", "genz", "netral"].includes(body.register) ? body.register : "netral");
     // Hook khas template (mis. "Diskon Gede" -> H1). pickHookFamilies menaruh
     // ini di DEPAN lalu melanjutkan dengan prioritas kategori, jadi varian
     // pertama membawa sudut template dan sisanya tetap beragam — bukan 4 video

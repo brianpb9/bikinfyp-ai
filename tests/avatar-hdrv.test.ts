@@ -19,6 +19,19 @@ test("setiap avatar meminjam suara dari kategori kreator yang NYATA dan aktif", 
   }
 });
 
+test("roster kanonik persis 19 influencer HDRV dengan metadata writer dan CAST-REF", () => {
+  assert.equal(AVATAR_PRESETS.length, 19);
+  assert.equal(AVATAR_PRESETS.filter((avatar) => avatar.gender === "female").length, 11);
+  assert.equal(AVATAR_PRESETS.filter((avatar) => avatar.gender === "male").length, 8);
+  for (const avatar of AVATAR_PRESETS) {
+    assert.ok(["bunda", "bestie", "genz", "netral"].includes(avatar.register), `${avatar.id}: register invalid`);
+    assert.match(avatar.castLock, /^CAST-LOCK:/, `${avatar.id}: CAST-LOCK tidak eksplisit`);
+    assert.equal(avatar.desc, avatar.castLock, `${avatar.id}: alias desc hanyut dari CAST-LOCK`);
+    assert.equal(avatar.referenceImages.length, 4, `${avatar.id}: pack referensi tidak lengkap`);
+    for (const image of avatar.referenceImages) assert.ok(fs.existsSync(`public${image}`), `referensi hilang: ${image}`);
+  }
+});
+
 test("id avatar unik dan tidak bentrok dengan id kategori kreator", () => {
   const ids = AVATAR_PRESETS.map((a) => a.id);
   assert.equal(new Set(ids).size, ids.length, "ada id avatar kembar");

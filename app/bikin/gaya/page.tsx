@@ -95,15 +95,18 @@ export default function GayaPage() {
     setTier(t.preset.qualityTier as Tier);
     setDurationSec(t.preset.format === "talking_head" ? 15 : (t.preset.durationSec as 15 | 30 | 45));
   }
-  const [register, setRegister] = useState("bestie");
-  const restoredAvatar = getAvatarPreset(loadFlow().avatarId);
-  const [avatarGender, setAvatarGender] = useState<AvatarGender>(restoredAvatar?.gender ?? "female");
-  const [creatorCategory, setCreatorCategory] = useState(restoredAvatar?.voice ?? "hijaber");
-  // Avatar premium (24 orang) sebelumnya HANYA ada di dashboard brand;
+  const restoredFlow = loadFlow();
+  const restoredAvatar = getAvatarPreset(restoredFlow.avatarId);
+  const initialAvatar = restoredAvatar ?? AVATAR_PRESETS.find((avatar) => avatar.gender === "female")!;
+  const validRegisters = new Set(["bunda", "bestie", "genz", "netral"]);
+  const [register, setRegister] = useState<string>(validRegisters.has(restoredFlow.register ?? "") ? restoredFlow.register! : initialAvatar.register);
+  const [avatarGender, setAvatarGender] = useState<AvatarGender>(initialAvatar.gender);
+  const [creatorCategory, setCreatorCategory] = useState(initialAvatar.voice);
+  // Roster HDRV sebelumnya hanya tersedia di dashboard brand;
   // retail terkunci di enam preset kategori lama. Tidak ada alasan produk
   // untuk beda itu — penjual perorangan justru yang paling butuh wajah
   // yang tidak pasaran.
-  const [avatarId, setAvatarId] = useState<string>(restoredAvatar?.id ?? "");
+  const [avatarId, setAvatarId] = useState<string>(initialAvatar.id);
   // Kunci SINKRON, bukan setLoading. setLoading adalah state React yang
   // diterapkan asinkron, jadi tiga ketukan cepat sempat lolos semuanya sebelum
   // render pertama selesai — terukur audit QA 16 Agu 2026: triple-tap
@@ -130,11 +133,13 @@ export default function GayaPage() {
     // jalur klik langsung (16 Agu), cuma lewat pintu lain — dan pintu itu
     // masih terbuka sampai audit putaran ketiga menemukannya.
     //
-    // Dikosongkan, bukan ditebak gantinya: pengguna yang berpindah gender
-    // memang harus memilih orangnya lagi, dan pilihan kosong jauh lebih jujur
-    // daripada wajah yang tidak pernah mereka pilih.
     if (avatarId && getAvatarPreset(avatarId)?.gender !== avatarGender) {
-      setAvatarId("");
+      const next = AVATAR_PRESETS.find((avatar) => avatar.gender === avatarGender);
+      if (next) {
+        setAvatarId(next.id);
+        setCreatorCategory(next.voice);
+        setRegister(next.register);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [avatarGender]);
@@ -152,6 +157,7 @@ export default function GayaPage() {
   async function generate() {
     const product = loadFlow().product;
     if (!product) return router.replace("/bikin/produk");
+    if (!selectedAvatar) { setError("Pilih avatar presenter dulu ya."); return; }
     if (kunciKirim.current) return;
     kunciKirim.current = true;
     setLoading(true);
@@ -338,10 +344,7 @@ export default function GayaPage() {
               geser ke kanan — bukan grid bertumpuk. -mx-4 px-4 = kartu tepi
               menempel rapi ke tepi layar saat digeser. */}
           <div className="-mx-4 flex snap-x snap-mandatory gap-3 overflow-x-auto px-4 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-            {/* Avatar premium didahulukan; preset kategori lama tetap ada di
-                belakangnya supaya pengguna yang sudah terbiasa tidak kehilangan
-                pilihannya. Memilih salah satu MEMBATALKAN yang lain — dua
-                identitas sekaligus tidak punya arti. */}
+            {/* Satu-satunya roster picker: influencer HDRV kanonik. */}
             {AVATAR_PRESETS.filter((a) => a.gender === avatarGender).map((a) => (
               <button
                 key={a.id}
@@ -443,7 +446,7 @@ export default function GayaPage() {
             <SecondaryButton href="/kredit?return_to=%2Fbikin%2Fgaya">Top-up dulu di sini →</SecondaryButton>
           </div>
         )}
-        <PrimaryButton onClick={generate} disabled={loading}>
+        <PrimaryButton onClick={generate} disabled={loading || !selectedAvatar}>
           {loading ? "Lagi nulis skrip..." : `Bikinkan Skripnya${selectedTier ? ` · ${rupiah(Math.round(selectedTier.price_idr * (durationSec / 15)))}` : ""}`}
         </PrimaryButton>
       </div>

@@ -101,11 +101,13 @@ test("pemeriksa CTA menerima 'keranjang' polos, bukan hanya 'keranjang kuning'",
 
 // Audit putaran KETIGA (17 Agu 2026) menemukan cacat di dalam perbaikan
 // putaran kedua. Penjaga di bawah menahan tiap satunya.
-test("tab gender melepas wajah, bukan cuma menukar suara", () => {
+test("tab gender mengganti wajah, suara, dan register sebagai satu identitas", () => {
   const s = baca("app/bikin/gaya/page.tsx");
   assert.match(s, /if \(avatarId && getAvatarPreset\(avatarId\)\?\.gender !== avatarGender\)/,
     "berganti gender harus ikut melepas avatar yang tidak lagi cocok");
-  assert.match(s, /setAvatarId\(""\)/, "avatar yang tidak cocok harus dikosongkan");
+  assert.match(s, /setAvatarId\(next\.id\)/, "avatar pengganti harus berasal dari roster kanonik");
+  assert.match(s, /setCreatorCategory\(next\.voice\)/, "suara harus ikut avatar pengganti");
+  assert.match(s, /setRegister\(next\.register\)/, "register harus ikut avatar pengganti");
 });
 
 test("onboarding publik tidak menjanjikan checkout saat status belum diketahui", () => {

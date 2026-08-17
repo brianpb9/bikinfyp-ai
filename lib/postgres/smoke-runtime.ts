@@ -295,6 +295,42 @@ export async function pgSetProductImages(userId: string, productId: string, imag
   } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 
+/** Organization product photo mutation. The org key is part of the UPDATE,
+ * not merely checked beforehand, so a cross-org id cannot win a race. */
+export async function pgAppendOrgProductImages(orgId: string, productId: string, added: string[], maxImages: number) {
+  const pool = getPool(url());
+  try {
+    const result = await pool.query(
+      `UPDATE products
+       SET images=(COALESCE(NULLIF(images,''),'[]')::jsonb || $3::jsonb)::text
+       WHERE id=$1 AND org_id=$2
+         AND jsonb_array_length(COALESCE(NULLIF(images,''),'[]')::jsonb) + $4 <= $5
+       RETURNING images`,
+      [productId, orgId, JSON.stringify(added), added.length, maxImages]
+    );
+    return result.rows[0]?.images ? JSON.parse(result.rows[0].images) as string[] : null;
+  } finally { /* shared pool */ }
+}
+
+/** Atomic removal: concurrent appends survive, and a repeated delete cannot
+ * claim success for a path that is already absent. */
+export async function pgRemoveOrgProductImage(orgId: string, productId: string, target: string) {
+  const pool = getPool(url());
+  try {
+    const result = await pool.query(
+      `UPDATE products
+       SET images=(SELECT COALESCE(jsonb_agg(value),'[]'::jsonb)::text
+                   FROM jsonb_array_elements_text(COALESCE(NULLIF(images,''),'[]')::jsonb) AS value
+                   WHERE value <> $3)
+       WHERE id=$1 AND org_id=$2
+         AND COALESCE(NULLIF(images,''),'[]')::jsonb ? $3
+       RETURNING images`,
+      [productId, orgId, target]
+    );
+    return result.rows[0]?.images ? JSON.parse(result.rows[0].images) as string[] : null;
+  } finally { /* shared pool */ }
+}
+
 /** Snapshot Skor FYP beku (padanan createFypSnapshot SQLite) — idempoten via
  * ON CONFLICT DO NOTHING; dipanggil non-fatal setelah job dibuat. */
 export async function pgSaveFypSnapshot(input: {

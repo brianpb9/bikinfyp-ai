@@ -7,6 +7,7 @@ import { postgresRuntimeEnabled, pgAudit } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { HOOK_LEVELS } from "@/lib/config/hooks";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
+import { getAvatarPreset } from "@/lib/avatar-presets";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,6 +70,8 @@ export async function POST(req: Request) {
     if (![15, 30, 45].includes(durationSec)) throw ERR.BAD_REQUEST("Durasi tidak didukung.", "Unsupported duration.");
     if (!Number.isInteger(count) || count < 2 || count > 6) throw ERR.BAD_REQUEST("Jumlah variasi harus 2-6.", "variant_count out of range.");
     const hookFamily = /^H([1-9]|1[0-6])$/.test(String(body.hook_family ?? "")) ? String(body.hook_family) : null;
+    const avatar = getAvatarPreset(String(body.creator_category ?? ""));
+    if (!avatar) throw ERR.BAD_REQUEST("Pilih ulang avatar untuk template ini.", "Unknown avatar preset.");
 
     const pool = getPool(config.databaseUrl);
     try {
@@ -86,8 +89,8 @@ export async function POST(req: Request) {
          VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
         [id, membership.org_id, name, String(body.note ?? "").trim().slice(0, 200) || null,
          kind, format, durationSec, tier, level, hookFamily, count,
-         String(body.creator_category ?? "").slice(0, 40) || null,
-         String(body.avatar_gender ?? "").slice(0, 10) || null,
+         avatar.id,
+         avatar.gender,
          user.id, new Date().toISOString()]
       );
       await pgAudit(user.id, "template.created", "org_templates", id, { org_id: membership.org_id });
