@@ -117,7 +117,11 @@ export async function readSinglePhotoMultipart(
         parser.destroy();
         throw ERR.PAYLOAD_TOO_LARGE("Fotonya terlalu besar. Maksimal 10 MB per foto.");
       }
-      if (!parser.write(Buffer.from(value))) await withDeadline(once(parser, "drain"), options.signal, Math.min(options.idleTimeoutMs ?? 15_000, remaining));
+      if (!parser.write(Buffer.from(value))) {
+        const drainRemaining = totalTimeoutMs - (Date.now() - startedAt);
+        if (drainRemaining <= 0) throw new Error("Upload total timeout.");
+        await withDeadline(once(parser, "drain"), options.signal, Math.min(options.idleTimeoutMs ?? 15_000, drainRemaining));
+      }
     }
     parser.end();
     await once(parser, "finish");
