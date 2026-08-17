@@ -143,3 +143,46 @@ test("JSON diambil sebagai objek seimbang, bukan cuma dibuang pagarnya", async (
   // Prosa sebelum objeknya ikut dilewati.
   assert.equal(ambilObjekJson('Here you go:\n{"a":2}'), '{"a":2}');
 });
+
+test("aturan partikel (L-01) ikut ke prompt — sebelumnya terlewat", async () => {
+  const { PARTICLES } = await import("../lib/script-engine/validator");
+  const dikirim = stub(segmenSah);
+  try {
+    await tulisNaskah({
+      productName: "X", productCategory: "beauty", priceIdr: 1000, durationSec: 15,
+      contentType: "affiliate", cartLabel: "keranjang", register: "bestie",
+      hookFamily: "H1", hookLevel: "normal", format: "hands_only", wordMin: 22, wordMax: 30,
+    });
+    const p = dikirim[0];
+    assert.match(p, /PARTICLES — at least TWO/);
+    // Daftarnya harus daftar VALIDATOR, bukan salinan yang bisa hanyut.
+    for (const t of PARTICLES) assert.ok(p.includes(`"${t}"`), `partikel "${t}" tidak ikut`);
+  } finally { globalThis.fetch = aslinya; }
+});
+
+test("saat memperbaiki PANJANG, sasarannya turun ke dekat batas bawah", async () => {
+  // Model memangkas tapi kurang jauh: 34 lalu 32 kata untuk batas 30 (17 Agu).
+  // Batasnya tidak diubah; sasarannya digeser supaya lesetnya mendarat di dalam.
+  const biasa = stub(segmenSah);
+  try {
+    await tulisNaskah({
+      productName: "X", productCategory: "beauty", priceIdr: 1000, durationSec: 15,
+      contentType: "affiliate", cartLabel: "keranjang", register: "bestie",
+      hookFamily: "H1", hookLevel: "normal", format: "hands_only", wordMin: 22, wordMax: 30,
+    });
+    assert.ok(biasa[0].includes("about 25 spoken words"), biasa[0].slice(0, 400));
+  } finally { globalThis.fetch = aslinya; }
+
+  const perbaikan = stub(segmenSah);
+  try {
+    await tulisNaskah({
+      productName: "X", productCategory: "beauty", priceIdr: 1000, durationSec: 15,
+      contentType: "affiliate", cartLabel: "keranjang", register: "bestie",
+      hookFamily: "H1", hookLevel: "normal", format: "hands_only", wordMin: 22, wordMax: 30,
+      keluhan: ["Panjang skrip 34 kata — untuk video bersuara 15 detik maksimal ~30 kata (22–30)."],
+    });
+    assert.ok(perbaikan[0].includes("about 24 spoken words"), perbaikan[0].slice(0, 400));
+    // Batas kerasnya TIDAK ikut turun.
+    assert.ok(perbaikan[0].includes("no more than 30"));
+  } finally { globalThis.fetch = aslinya; }
+});

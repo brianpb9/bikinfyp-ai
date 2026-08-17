@@ -478,6 +478,10 @@ export async function generateScripts(opts: {
         priceIdr: product.price_idr ?? 0, durationSec,
         contentType: opts.contentType ?? "affiliate", register,
       });
+      console.log(
+        `[idea] "${product.name}": ${ide.peringkat.length} kandidat dinilai, terpilih ` +
+          `${ide.ide.mechanic} (${ide.nilai.total}) — "${ide.ide.one_liner}"`
+      );
       if (!ide.nilai.lulus) {
         // Tidak dirender diam-diam sebagai "bagus": idenya dipakai karena harus
         // ada yang dipakai, tapi kegagalannya tercatat supaya bisa ditawarkan

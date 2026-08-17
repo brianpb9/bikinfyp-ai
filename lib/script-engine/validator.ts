@@ -2,6 +2,7 @@
 // Mode "strict": semua aturan keras (dipakai saat generate & QC-07 pra-render).
 // Mode "light": hanya L-10/L-11 yang keras (edit pengguna, FSD BR-03.2); sisanya jadi warning.
 
+import { memakaiPerangkat } from "./hook-devices";
 import { COMPETITOR_BRANDS } from "../config/hooks";
 import { formatHargaNatural } from "./templates";
 import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
@@ -109,7 +110,7 @@ export function jendelaKata(script: {
   return { minWc, maxWc };
 }
 
-const PARTICLES = new Set(["deh", "sih", "dong", "ya", "loh", "kok", "nah", "tuh"]);
+export const PARTICLES = new Set(["deh", "sih", "dong", "ya", "loh", "kok", "nah", "tuh"]);
 export const FILLER_TOKENS = new Set(["nah", "sumpah", "eh", "btw"]);
 export const FILLER_PHRASES = ["jadi gini"];
 
@@ -435,6 +436,37 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
         segment: segment.role,
       });
     }
+  }
+
+  // L-19: hook sebaiknya memakai perangkat retoris yang bisa dikenali.
+  //
+  // PERINGATAN, BUKAN ERROR — dan itu keputusan berdasar ukuran, bukan
+  // kehati-hatian. PATCH 5 memintanya jadi aturan keras. Diukur dulu terhadap
+  // katalog template (17 Agu): hanya 108 dari 132 hook varian yang dikenali
+  // POLA_PERANGKAT. Menjadikannya error akan:
+  //
+  //   1. menolak 24 varian template — dan template adalah JALUR CADANGAN saat
+  //      penulis LLM mati, jadi cadangannya sendiri jadi tidak sah; dan
+  //   2. menolak hook yang sebenarnya bagus. Contoh yang gagal: "Eh, sesuatu
+  //      baru saja menembus dinding belakang". Perangkatnya nyata (kejutan),
+  //      daftar polanya yang belum mengenalinya.
+  //
+  // Yang salah di situ pengukurnya, bukan hooknya — dan aturan keras yang
+  // berdiri di atas pengukur yang belum lengkap akan membuang karya bagus.
+  // Jadi ia dilaporkan supaya terlihat dan bisa dihitung, sampai POLA_PERANGKAT
+  // menutupi kejutan/anomali dan template yang tersisa diperbaiki. Setelah itu
+  // menaikkannya jadi aturan keras tinggal memindahkannya ke push().
+  //
+  // Ditulis LANGSUNG ke warnings, bukan lewat push(): argumen push() berarti
+  // "keras bahkan di mode light", dan di mode strict SEMUANYA jadi error. Jadi
+  // push(false, ...) tetap menjatuhkan naskah di strict — persis kebalikan dari
+  // yang dimaksud, dan tesnya yang menangkapnya.
+  if (!isTvc && hookSeg && !memakaiPerangkat(stripDeliveryTags(hookSeg.text))) {
+    warnings.push({
+      rule: "L-19",
+      message_id: "Hook belum memakai perangkat retoris yang dikenali — pertanyaan, negasi, harga, atau pengakuan pribadi biasanya yang menahan scroll.",
+      segment: "hook",
+    });
   }
 
   return { passed: errors.length === 0, errors, warnings, checked_at: new Date().toISOString() };

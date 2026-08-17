@@ -16,7 +16,6 @@
  */
 import { z } from "zod";
 import { config } from "../config";
-import { memakaiPerangkat } from "./hook-devices";
 import {
   ideGenerik, urutkanMekanik, KATEGORI_JENUH, MEKANIK_BY_ID,
   type IdMekanik,
@@ -102,6 +101,25 @@ export function hitungNilai(scores: Record<string, number>, alasan = ""): HasilN
   return { total, perDimensi, lulus: sebabGagal.length === 0, sebabGagal, alasan };
 }
 
+/**
+ * Jawaban yang TERPOTONG harus mengaku terpotong.
+ *
+ * Jalankan pertama 17 Agu: lima ide selengkap ini butuh ~6-8k token, dan batas
+ * 4000 memotongnya di tengah ide keempat. Yang muncul ke permukaan cuma
+ * "Unterminated string in JSON at position 6163" — pesan yang menuduh format
+ * jawaban model padahal batas kitalah yang kekecilan, dan itu mengarahkan
+ * pembedahan ke tempat yang salah.
+ */
+class JawabanTerpotong extends LlmTidakTersedia {
+  constructor(maxTokens: number) {
+    super(
+      `jawaban terpotong di batas ${maxTokens} token — bukan format jawaban yang salah, ` +
+        `melainkan batasnya kekecilan untuk jumlah kandidat yang diminta`
+    );
+    this.name = "JawabanTerpotong";
+  }
+}
+
 async function panggil(system: string, user: string, maxTokens: number): Promise<string> {
   if (!config.scriptLlmEnabled || config.anthropicApiKey === "") {
     throw new LlmTidakTersedia("Idea Stage butuh ANTHROPIC_API_KEY dan SCRIPT_LLM aktif");
@@ -125,7 +143,8 @@ async function panggil(system: string, user: string, maxTokens: number): Promise
   if (!res.ok) {
     throw new LlmTidakTersedia(`HTTP ${res.status}: ${(await res.text().catch(() => "")).slice(0, 200)}`);
   }
-  const data = (await res.json()) as { content?: { type: string; text?: string }[] };
+  const data = (await res.json()) as { content?: { type: string; text?: string }[]; stop_reason?: string };
+  if (data.stop_reason === "max_tokens") throw new JawabanTerpotong(maxTokens);
   return (data.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
 }
 
@@ -162,7 +181,9 @@ function blokPengetahuan(r: PermintaanIde): string {
     daftar,
     "",
     "RULES:",
-    "- The one_liner must be ONE sentence. If it needs two, the idea is not found yet.",
+    "- The one_liner must be ONE sentence of AT MOST 160 characters. Count them.",
+    "  If the idea does not fit in 160 characters, the idea is not found yet — that compression IS the test.",
+    "  Put the staging detail in story/brand_fidelity_plan, not in the one_liner.",
     "- An idea whose one_liner would work for a different product unchanged is GENERIC and will be thrown away.",
     "- Each of the five candidates must use a DIFFERENT mechanic.",
     "- story must be a real setup -> tension -> payoff. Tension means a question the viewer cannot answer yet.",
@@ -196,10 +217,30 @@ function blokTugasIde(r: PermintaanIde): string {
 
 /** Hasilkan kandidat ide, buang yang generik dan yang mekaniknya tidak dikenal. */
 export async function usulkanIde(r: PermintaanIde): Promise<Ide[]> {
-  const teks = await panggil(blokPengetahuan(r), blokTugasIde(r), 4000);
-  const parsed = SkemaDaftarIde.parse(JSON.parse(ambilObjekJson(teks)));
+  // 12000, bukan 4000. Terukur 17 Agu: lima ide selengkap yang diminta
+  // spesifikasi memakan ~6-8k token, dan 4000 memotongnya di tengah kandidat
+  // keempat. Batas dinaikkan, BUKAN idenya yang disuruh lebih pendek —
+  // kedalaman itulah yang membedakannya dari template.
+  const teks = await panggil(blokPengetahuan(r), blokTugasIde(r), 12000);
+  const mentah = JSON.parse(ambilObjekJson(teks)) as { ideas?: unknown[] };
+  // Divalidasi SATU PER SATU, bukan sebagai satu daftar.
+  //
+  // Sekali jalankan menghasilkan lima kandidat; satu di antaranya menulis
+  // one_liner 180 karakter dan skema daftar menolak SELURUH batch — empat ide
+  // bagus ikut terbuang, dan panggilan model termahal di pipeline dibayar untuk
+  // tidak menghasilkan apa pun. Kandidat cacat dijatuhkan sendiri-sendiri.
+  const sah: Ide[] = [];
+  for (const kandidat of mentah.ideas ?? []) {
+    const hasil = SkemaIde.safeParse(kandidat);
+    if (hasil.success) sah.push(hasil.data);
+    else {
+      const soal = hasil.error.issues[0];
+      console.warn(`[idea] satu kandidat dijatuhkan: ${soal.path.join(".")} — ${soal.message}`);
+    }
+  }
+  if (sah.length === 0) throw new LlmTidakTersedia("tidak ada kandidat ide yang sesuai skema");
   const terpakai = new Set<string>();
-  return parsed.ideas.filter((ide) => {
+  return sah.filter((ide) => {
     if (!(ide.mechanic in MEKANIK_BY_ID)) return false;
     // Mekanik yang sama dua kali berarti kandidatnya bukan lima pilihan
     // berbeda, cuma satu ide yang ditulis ulang lima kali.
@@ -282,18 +323,21 @@ export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
     // Biayanya wajar: satu panggilan pembuat ide, lalu beberapa panggilan
     // penilai yang pendek (800 token) — bukan lima kali ongkos pembuat ide.
     for (const ide of kandidat) {
-      // L-19 di tahap ide: hook tanpa perangkat retoris yang bisa dikenali
-      // gagal otomatis, TANPA dinilai model. Ini yang akhirnya membuat
-      // hook-devices.ts hidup di produksi — sampai sekarang ia cuma ada di
-      // berkas. Sekalian menghemat satu panggilan untuk kandidat yang sudah
-      // pasti gugur.
-      if (!memakaiPerangkat(ide.one_liner)) {
-        semua.push({
-          ide,
-          nilai: { total: 0, perDimensi: {}, lulus: false, sebabGagal: ["hook tanpa perangkat retoris"], alasan: "" },
-        });
-        continue;
-      }
+      // TIDAK ADA pemeriksaan perangkat retoris di sini, dan itu KOREKSI.
+      //
+      // Versi pertama menjatuhkan kandidat yang one_liner-nya tidak cocok
+      // POLA_PERANGKAT. Salah artefak: POLA_PERANGKAT mengukur bentuk KALIMAT
+      // YANG DIUCAPKAN (pertanyaan, negasi, sebut harga, kata ganti orang),
+      // sedangkan one_liner adalah DESKRIPSI ide.
+      //
+      // Akibatnya terukur pada jalankan Scarlett 17 Agu: 4 dari 10 kandidat
+      // dibunuh tanpa dinilai, termasuk "Botol setinggi pintu kos" dan "satu
+      // botol dioper enam anak kos" — keduanya ide yang justru kuat. Aturan
+      // yang membunuh ide bagus karena mengukur benda yang salah lebih
+      // berbahaya daripada tidak ada aturan.
+      //
+      // Tempat aturan ini yang benar adalah validator naskah (L-19), pada teks
+      // segmen HOOK yang memang diucapkan. Lihat catatan L-19 di validator.ts.
       const nilai = await nilaiIde(ide, { productName: r.productName, productCategory: r.productCategory });
       semua.push({ ide, nilai });
       if (!nilai.lulus) dilarang.add(ide.mechanic as IdMekanik);

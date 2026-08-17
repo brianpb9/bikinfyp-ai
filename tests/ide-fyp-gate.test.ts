@@ -142,21 +142,46 @@ test("ide yang lulus gate dipakai, dan petunjuknya membawa story ke penulis nask
   } finally { globalThis.fetch = aslinya; }
 });
 
-test("hook tanpa perangkat retoris gagal OTOMATIS, tanpa dinilai model", async () => {
-  // Ini yang akhirnya membuat hook-devices.ts hidup di produksi.
-  const polos = ideDummy({ one_liner: "Botol kaca kecil berisi cairan bening di meja" });
+test("perangkat retoris TIDAK dinilai di tahap ide — itu artefak yang salah", async () => {
+  // Koreksi, bukan pelonggaran. POLA_PERANGKAT mengukur bentuk KALIMAT YANG
+  // DIUCAPKAN; one_liner adalah DESKRIPSI ide. Menerapkannya di sini membunuh
+  // 4 dari 10 kandidat pada jalankan Scarlett 17 Agu, termasuk "Botol setinggi
+  // pintu kos" — ide yang justru kuat. Aturannya pindah ke validator (L-19),
+  // pada teks segmen hook yang memang diucapkan.
+  const polos = ideDummy({ one_liner: "Botol serum setinggi pintu kos berdiri di tengah kamar" });
   stubModel([polos], [sempurna]);
   try {
     const hasil = await pilihIde(permintaan);
-    // Kandidat lain boleh saja menang; yang diuji adalah bahwa yang TANPA
-    // perangkat dijatuhkan tanpa pernah dinilai model — skornya nol bulat,
-    // bukan hasil penilaian.
-    const dijatuhkan = hasil.peringkat.find((p) => p.ide.one_liner === polos.one_liner);
-    assert.ok(dijatuhkan, "kandidat tanpa perangkat harus tetap tercatat di peringkat");
-    assert.equal(dijatuhkan.nilai.lulus, false);
-    assert.equal(dijatuhkan.nilai.total, 0);
-    assert.deepEqual(dijatuhkan.nilai.sebabGagal, ["hook tanpa perangkat retoris"]);
+    const kandidat = hasil.peringkat.find((p) => p.ide.one_liner === polos.one_liner);
+    assert.ok(kandidat, "kandidat harus tetap ada");
+    assert.ok(kandidat.nilai.total > 0, "harus DINILAI, bukan digugurkan tanpa dinilai");
+    assert.ok(!kandidat.nilai.sebabGagal.includes("hook tanpa perangkat retoris"));
   } finally { globalThis.fetch = aslinya; }
+});
+
+test("L-19 ada di validator sebagai PERINGATAN, dan menunjuk segmen hook", async () => {
+  const { validateScript } = await import("../lib/script-engine/validator");
+  const segmen = (hook: string) => [
+    { role: "hook", text: hook },
+    { role: "demo", text: "Nah, aku pakai ini tiap malam deh soalnya teksturnya ringan banget di kulit" },
+    { role: "cta", text: "cek keranjang kuning ya" },
+  ];
+  const nilai = (hook: string) => validateScript({
+    hook_family: "H1", register: "bestie", segments: segmen(hook),
+    productName: "Scarlett Acne Serum", priceIdr: 75000,
+    qualityTier: "high_quality", durationSec: 15,
+  } as never, "strict");
+
+  // Hook tanpa perangkat yang dikenali: DILAPORKAN, tapi tidak menjatuhkan.
+  const tanpa = nilai("Sesuatu baru saja menembus dinding belakang");
+  const l19 = tanpa.warnings.find((w) => w.rule === "L-19");
+  assert.ok(l19, "L-19 harus muncul sebagai peringatan");
+  assert.equal(l19.segment, "hook");
+  assert.ok(!tanpa.errors.some((e) => e.rule === "L-19"), "L-19 belum boleh jadi error — 24 dari 132 hook template gagal, sebagiannya bagus");
+
+  // Hook berpertanyaan: tidak dilaporkan sama sekali.
+  const dengan = nilai("Jerawat udah hilang, bekasnya masih bandel?");
+  assert.ok(!dengan.warnings.some((w) => w.rule === "L-19"));
 });
 
 test("kandidat dengan mekanik ganda dibuang — lima ide harus lima pilihan", async () => {

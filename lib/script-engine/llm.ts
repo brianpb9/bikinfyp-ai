@@ -23,7 +23,7 @@
 import { z } from "zod";
 import { config } from "../config";
 import {
-  AKU_TOKENS, FILLER_PHRASES, FILLER_TOKENS, GUE_TOKENS, KAMU_TOKENS, LO_TOKENS,
+  AKU_TOKENS, FILLER_PHRASES, FILLER_TOKENS, GUE_TOKENS, KAMU_TOKENS, LO_TOKENS, PARTICLES,
 } from "./validator";
 import type { SegmentDraft } from "./templates";
 
@@ -230,7 +230,17 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
   // mudah ditaksir daripada total), lesetnya jatuh di dalam jendela.
   //
   // Sasarannya sedikit di bawah tengah karena lesetnya searah: ke atas.
-  const sasaran = Math.max(r.wordMin, Math.round((r.wordMin + r.wordMax) / 2) - 1);
+  // Saat MEMPERBAIKI panjang, sasarannya diturunkan ke dekat batas bawah.
+  //
+  // Terukur 17 Agu: pada perbaikan, model tetap menjawab 34 lalu 32 kata untuk
+  // batas 30 — ia memangkas, tapi kurang jauh. Diberi sasaran di tengah jendela
+  // ia meleset ke atas; diberi sasaran dekat batas bawah, lesetnya jatuh di
+  // dalam jendela. Ini bukan melonggarkan aturan — batasnya tidak berubah,
+  // hanya sasarannya digeser supaya lesetnya mendarat di tempat yang sah.
+  const sedangMemperbaikiPanjang = (r.keluhan ?? []).some((k) => /Panjang skrip/i.test(k));
+  const sasaran = sedangMemperbaikiPanjang
+    ? Math.min(r.wordMax, r.wordMin + 2)
+    : Math.max(r.wordMin, Math.round((r.wordMin + r.wordMax) / 2) - 1);
   const perSegmen = Math.max(3, Math.round(sasaran / Math.max(1, jumlahSegmen)));
   return [
     // L-05. Jendelanya SEMPIT dan dua sisi — batas bawah sama mengikatnya
@@ -242,6 +252,11 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
     // L-04.
     `SPOKEN FILLER — at least one of these must appear somewhere in the dialogue: ${filler}.`,
     `  Without it the voice-over sounds like a robot reading a label.`,
+    // L-01. Terlewat di versi pertama, dan itu menjatuhkan naskah yang isinya
+    // sudah bagus — persis kesalahan yang sama dengan jendela kata: aturan
+    // dipakai menolak tanpa pernah diberitahukan.
+    `PARTICLES — at least TWO of these must appear across the dialogue: ${[...PARTICLES].map((p) => `"${p}"`).join(", ")}.`,
+    `  Indonesian casual speech leans on them; without two the script reads stiff and written.`,
     // L-16.
     r.register === "genz"
       ? `PRONOUNS — this register uses ${gue}. Never use ${aku}. Never mix the two families.`
