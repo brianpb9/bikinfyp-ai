@@ -1,3 +1,14 @@
+// Jalankan Idea Stage + FYP Gate sungguhan untuk satu produk, lalu cetak
+// peringkat kandidat beserta rincian skornya.
+//
+// Dipakai untuk membandingkan hook SEBELUM vs SESUDAH Gate 3 — dan untuk
+// memeriksa mutu penilai itu sendiri, karena skor yang tidak pernah dilihat
+// manusia akan pelan-pelan jadi angka hiasan.
+//
+//   SCRIPT_LLM=1 npx tsx scripts/coba-idea-stage.ts
+//
+// Butuh ANTHROPIC_API_KEY dan saldo. Satu jalankan = 1 panggilan pembuat ide
+// (mahal) + beberapa panggilan penilai (pendek).
 import { pilihIde, petunjukNaskah } from "../lib/script-engine/ide";
 import { MEKANIK_BY_ID } from "../lib/script-engine/idea-mechanics";
 
