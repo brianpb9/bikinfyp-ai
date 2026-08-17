@@ -1,0 +1,52 @@
+{
+  "spec": {
+    "shots": [
+      {
+        "idx": 0,
+        "durationSec": 5,
+        "prompt": "medium selfie, face and product hero shot, eye level. Camera: static, confident hold. Creator holds product label facing camera, then points finger downward toward keranjang kuning, then winks at lens. Start state: Creator smiling directly at camera, full product label of Scarlett Acne Serum clearly visible held up near face. Expression: bright, warm, encouraging — bestie energy. She speaks this line out loud in casual Indonesian, mouth in sync: \"Cuma tujuh puluh lima ribu, cek di keranjang kuning ya!\". The product is the exact same one as in the reference image — identical bottle, identical label artwork and spelling.",
+        "imageRefPath": "/Users/hadrava/.claude/jobs/248e091d/tmp/step2/frame2.png",
+        "referenceMode": "first_frame (i2v)"
+      }
+    ]
+  },
+  "params": {
+    "ratio": "9:16",
+    "width": 720,
+    "height": 1280,
+    "qualityTier": "high_quality",
+    "generateAudio": true,
+    "maxPeople": 1,
+    "jumlahReferensiTambahan": 0,
+    "referenceOnlyImages": false
+  },
+  "segment": {
+    "block": "CTA",
+    "label": "REVEAL",
+    "start": 10,
+    "end": 15,
+    "text": "Cuma tujuh puluh lima ribu, cek di keranjang kuning ya!",
+    "start_state": "Creator smiling directly at camera, full product label of Scarlett Acne Serum clearly visible held up near face",
+    "framing": "medium selfie, face and product hero shot",
+    "angle": "eye level",
+    "camera": "static, confident hold",
+    "action": "Creator holds product label facing camera, then points finger downward toward keranjang kuning, then winks at lens",
+    "product_state": "hero",
+    "expression": "bright, warm, encouraging — bestie energy",
+    "audio_note": "lo-fi music lifts slightly on CTA",
+    "why": "payoff — price reveal plus clear action step converts warm viewer into buyer",
+    "mode": "SELLING"
+  },
+  "qcF1": {
+    "lulus": true,
+    "detail": "QC-F1 lulus (Produk identik dalam bentuk, tutup, warna, dan tata letak label.)",
+    "temuan": {
+      "bentukSama": true,
+      "tutupSama": true,
+      "warnaSama": true,
+      "tataLetakLabelSama": true,
+      "merekTerbaca": true
+    },
+    "biayaIdr": 12
+  }
+}

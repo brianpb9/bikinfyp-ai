@@ -1,15 +1,18 @@
 // Mesin skrip (FSD F-02): hasilkan 3 varian skrip 15 dtk dari 3 keluarga hook berbeda.
-// SEPENUHNYA DETERMINISTIK — tidak ada LLM di sini.
 //
-// Komentar lama berbunyi "LLM opsional via LLM_API_KEY (fallback template bila
-// kosong)". Itu TIDAK PERNAH BENAR: tidak ada satu pun panggilan jaringan di
-// seluruh lib/script-engine. Komentar yang menjanjikan kemampuan yang tidak
-// ada membuat pembaca berikutnya salah menilai kenapa naskahnya datar — ia
-// datar karena memang template pengisi, bukan karena LLM-nya belum dinyalakan.
+// Penulis naskahnya LLM (PATCH 5 STEP 1, hidup sejak 17 Agu 2026) dengan
+// template sebagai CADANGAN. Pembagiannya: LLM menulis kalimat; aturan yang
+// memutuskan. Keluarga hook, pembagian detik, delivery tags, promo, caption,
+// dan validateScript("strict") tetap deterministik.
 //
-// Penulis naskah berbasis LLM direncanakan (PATCH 5 STEP 1) dan akan masuk di
-// generateOne(), menggantikan renderSegmentsForTier + templateCopy. Sampai itu
-// benar-benar ada, jangan tulis ulang janji ini di sini.
+// Sejarah yang perlu diingat, karena komentar di sini pernah berbohong dua kali
+// ke arah berlawanan. Versi lama menjanjikan "LLM opsional via LLM_API_KEY"
+// padahal tidak ada satu pun panggilan jaringan — pembaca jadi salah menilai
+// kenapa naskahnya datar (datar karena template pengisi, bukan karena LLM belum
+// dinyalakan). Versi setelahnya menyatakan "SEPENUHNYA DETERMINISTIK" dan
+// bertahan setelah LLM-nya benar-benar dipasang.
+//
+// Kalau jalurnya berubah lagi, ubah komentar ini di commit yang sama.
 
 import {
   BOLD_HOOK_PRIORITY, CATEGORY_HOOK_PRIORITY, CATEGORY_NOUN, CATEGORY_PAIN, CATEGORY_PROOF,
@@ -19,10 +22,10 @@ import { COMPLIANCE_CHECKLIST } from "../config/compliance";
 import { REGISTERS, type Register } from "./registers";
 import { renderSegmentsForTier, formatHargaNatural, type SegmentDraft, type TemplateCtx } from "./templates";
 import { templateCopy, TEMPLATE_COPY_CAPACITY } from "./template-copy";
-import { isTvcTemplate, templateRequiresPriceMention, validateScript, type ValidationResult } from "./validator";
+import { isTvcTemplate, jendelaKata, templateRequiresPriceMention, validateScript, type ValidationResult } from "./validator";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
 import { compileDeliveryText } from "./delivery-tags";
-import { keSegmentDraft, laporJatuhKeTemplate, llmSiap, tulisNaskah } from "./llm";
+import { keSegmentDraft, laporJatuhKeTemplate, llmSengajaDimatikan, llmSiap, tulisNaskah } from "./llm";
 import { resolvePromo, promoDeadlineSpokenPhrase, type ActivePromo } from "../promo";
 import { getDb } from "../db";
 
@@ -73,6 +76,16 @@ export interface GeneratedScript {
 }
 
 const MAX_REGEN = 2; // FSD F-02.3: regenerate maksimal 2x
+/**
+ * Berapa kali naskah LLM boleh ditulis ulang dengan keluhan validator.
+ *
+ * DUA, bukan satu: percobaan kedua adalah perbaikan pertama yang benar-benar
+ * tahu apa yang salah. Bukan lima, karena tiap percobaan satu panggilan
+ * berbayar dan kegagalan yang bertahan setelah dua kali biasanya bukan soal
+ * kalimat — melainkan permintaannya sendiri (mis. jendela kata mustahil untuk
+ * nama produk sepanjang itu). Di situ template cadangan lebih cepat dan pasti.
+ */
+const MAKS_PERBAIKAN_LLM = 2;
 
 const CATEGORY_SPACE: Record<string, string> = {
   beauty: "Meja skincare", fashion: "Isi lemari", muslim_fashion: "Isi lemari",
@@ -261,28 +274,6 @@ async function generateOne(
   // penyedia — TAPI jatuhnya BERISIK. Naskah template yang dikirim diam-diam
   // adalah persis cara kondisi "benar tapi datar" bertahan berbulan-bulan
   // tanpa ada yang menyadarinya.
-  let dariLlm: SegmentDraft[] | null = null;
-  if (llmSiap()) {
-    try {
-      const segs = await tulisNaskah({
-        productName: product.name, productCategory: product.category,
-        priceIdr: product.price_idr ?? 0, durationSec, contentType, cartLabel,
-        register, hookFamily: family, hookLevel: "normal", format,
-        contoh: variasi ? `${variasi.hook} / ${variasi.demo} / ${variasi.cta}` : null,
-      });
-      dariLlm = keSegmentDraft(segs);
-    } catch (err) {
-      laporJatuhKeTemplate((err as Error).message, { productName: product.name });
-    }
-  } else {
-    laporJatuhKeTemplate("ANTHROPIC_API_KEY belum di-set", { productName: product.name });
-  }
-
-  const sumber = dariLlm ?? dasar;
-  const baseSegments = sumber.map((s, i) => {
-    const authored = applyCartLabel(dariLlm ? s.text : (teksVariasi?.[i] ?? s.text), cartLabel);
-    return { ...s, ...compileDeliveryText(authored) };
-  });
   const promo = resolvePromo({
     priceIdr: product.price_idr,
     promoPriceBeforeIdr: product.promoPriceBeforeIdr,
@@ -300,32 +291,92 @@ async function generateOne(
       },
       "strict"
     );
-  // Kombinasi promo dari terlengkap ke kosong — pakai yang pertama lolos validator.
-  let segments = baseSegments;
-  let validation = validate(baseSegments);
-  if (promo) {
-    const combos = [
-      { strike: true, deadline: true, stock: true },
-      { strike: true, deadline: true, stock: false },
-      { strike: true, deadline: false, stock: false },
-    ];
-    for (const combo of combos) {
-      const candidate = applyPromoToSegments(baseSegments, promo, combo);
-      const res = validate(candidate);
-      if (res.passed) {
-        segments = candidate;
-        validation = res;
+
+  /** Rakit kandidat lengkap (cart label + delivery tags + promo) lalu nilai. */
+  const rakitDanNilai = (sumber: SegmentDraft[], dariLlm: boolean) => {
+    const baseSegments = sumber.map((s, i) => {
+      const authored = applyCartLabel(dariLlm ? s.text : (teksVariasi?.[i] ?? s.text), cartLabel);
+      return { ...s, ...compileDeliveryText(authored) };
+    });
+    // Kombinasi promo dari terlengkap ke kosong — pakai yang pertama lolos.
+    // Promo yang lolos LEBIH DIUTAMAKAN daripada naskah polos yang juga lolos,
+    // karena elemen promo memang yang diminta pengguna.
+    if (promo) {
+      for (const combo of [
+        { strike: true, deadline: true, stock: true },
+        { strike: true, deadline: true, stock: false },
+        { strike: true, deadline: false, stock: false },
+      ]) {
+        const candidate = applyPromoToSegments(baseSegments, promo, combo);
+        const res = validate(candidate);
+        if (res.passed) return { segments: candidate, validation: res };
+      }
+    }
+    return { segments: baseSegments, validation: validate(baseSegments) };
+  };
+
+  const { minWc, maxWc } = jendelaKata({
+    qualityTier: tier, durationSec, wordBudget, productName: product.name,
+  });
+
+  // ---- LINGKAR PERBAIKAN LLM ----
+  //
+  // Naskah yang tidak lolos validator TIDAK BOLEH dikirim diam-diam: gerbang
+  // konfirmasi (render-cell.ts) dan rute approve menolaknya, jadi pengguna
+  // berakhir dengan naskah yang mustahil disetujui dan tidak tahu kenapa.
+  //
+  // Jadi kegagalan dikembalikan ke penulisnya beserta keluhan validator yang
+  // SEBENARNYA. Menyuruh "coba lagi" tanpa alasan cuma mengocok dadu — dan
+  // itu persis yang dilakukan normalizeSegments, yang cuma merapikan spasi
+  // dan tidak akan pernah bisa menambah jeda lisan atau membetulkan kata ganti.
+  let hasil: { segments: SegmentDraft[]; validation: ReturnType<typeof validate> } | null = null;
+  let keluhan: string[] = [];
+  if (llmSiap()) {
+    for (let percobaan = 0; percobaan < MAKS_PERBAIKAN_LLM; percobaan++) {
+      try {
+        const segs = await tulisNaskah({
+          productName: product.name, productCategory: product.category,
+          priceIdr: product.price_idr ?? 0, durationSec, contentType, cartLabel,
+          register, hookFamily: family, hookLevel: "normal", format,
+          contoh: variasi ? `${variasi.hook} / ${variasi.demo} / ${variasi.cta}` : null,
+          wordMin: minWc, wordMax: maxWc,
+          keluhan: keluhan.length ? keluhan : undefined,
+        });
+        const kandidat = rakitDanNilai(keSegmentDraft(segs), true);
+        if (kandidat.validation.passed) { hasil = kandidat; break; }
+        keluhan = kandidat.validation.errors.map((e) => e.message_id);
+        console.warn(
+          `[script-engine] naskah LLM "${product.name}" ditolak validator ` +
+            `(percobaan ${percobaan + 1}/${MAKS_PERBAIKAN_LLM}): ${keluhan.join(" | ")}`
+        );
+      } catch (err) {
+        laporJatuhKeTemplate((err as Error).message, { productName: product.name });
         break;
       }
     }
+    if (!hasil && keluhan.length) {
+      laporJatuhKeTemplate(
+        `naskah tidak lolos validator setelah ${MAKS_PERBAIKAN_LLM} percobaan: ${keluhan.join(" | ")}`,
+        { productName: product.name }
+      );
+    }
+  } else if (!llmSengajaDimatikan()) {
+    // Dimatikan sengaja (SCRIPT_LLM=0) TIDAK dilaporkan sebagai kabar buruk —
+    // itu konfigurasi, bukan kegagalan. Kunci yang hilang tetap alarm.
+    laporJatuhKeTemplate("ANTHROPIC_API_KEY belum di-set", { productName: product.name });
   }
-  // Regenerate maks 2x bila gagal (FSD F-02.3). Template kami deterministik, jadi
-  // "regenerate" = normalisasi teks; bila tetap gagal, bagian bermasalah ditandai
-  // di validation_result dan skrip tetap dikembalikan untuk diperbaiki pengguna.
-  for (let attempt = 0; attempt < MAX_REGEN && !validation.passed; attempt++) {
-    segments = normalizeSegments(segments);
-    validation = validate(segments);
+
+  // Jalur template — cadangan, dan tetap memakai regenerate lamanya. Di sini
+  // normalisasi memang masuk akal: templatenya deterministik, jadi kegagalan
+  // yang tersisa memang soal perapian teks.
+  if (!hasil) {
+    hasil = rakitDanNilai(dasar, false);
+    for (let attempt = 0; attempt < MAX_REGEN && !hasil.validation.passed; attempt++) {
+      const rapi = normalizeSegments(hasil.segments);
+      hasil = { segments: rapi, validation: validate(rapi) };
+    }
   }
+  const { segments, validation } = hasil;
   const reg = REGISTERS[register];
   return {
     hook_family: family,

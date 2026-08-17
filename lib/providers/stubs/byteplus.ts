@@ -128,6 +128,30 @@ function estimateCostIdr(model: string, totalTokens: number | undefined, duratio
  * model 1.0 di tier senyap tidak mendukung r2v sama sekali, dan r2v menolak
  * durasi < 4 detik.
  */
+/**
+ * SATU tempat yang memutuskan mode referensi — dan satu-satunya yang boleh
+ * ditanya soal itu.
+ *
+ * Dulu keputusannya ada di sini, TAPI arsip prompt menurunkannya sendiri dengan
+ * aturan lama (ada foto tambahan? berarti r2v). Begitu r2v jadi bawaan (ADR-001
+ * keputusan 1), dua tempat itu tidak lagi sepakat: provider mengirim r2v,
+ * arsipnya mencatat "first_frame (i2v)". Terbukti di jalankan STEP 2, 17 Agu —
+ * ketiga segmen tercatat i2v padahal ketiganya r2v.
+ *
+ * Arsip yang salah lebih berbahaya daripada tidak ada arsip: ia dipakai untuk
+ * membedah video jelek, dan ia akan mengarahkan pembedahan ke mode yang tidak
+ * pernah dipakai. Jadi aturannya tinggal satu salinan, dan pencatat memanggil
+ * fungsi yang sama dengan pengirim.
+ */
+export function modeReferensi(
+  spec: VisualSpec,
+  model: string
+): "reference_image (r2v)" | "first_frame (i2v)" | "text_to_video" {
+  const modelDukungR2v = model.includes("dreamina-seedance-2");
+  if (modelDukungR2v && spec.preferI2v !== true) return "reference_image (r2v)";
+  return "first_frame (i2v)";
+}
+
 export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string): unknown[] {
   const textItem = {
     type: "text",
@@ -145,8 +169,7 @@ export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string
   //
   // preferI2v mematikannya secara sadar untuk kasus yang memang menuntut
   // frame pertama persis.
-  const modelDukungR2v = model.includes("dreamina-seedance-2");
-  const useR2v = modelDukungR2v && spec.preferI2v !== true;
+  const useR2v = modeReferensi(spec, model) === "reference_image (r2v)";
   if (!useR2v) {
     return [textItem, { type: "image_url", image_url: { url: imageToDataUri(shot.imageRefPath) } }];
   }

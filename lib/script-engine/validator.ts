@@ -58,9 +58,60 @@ export interface ValidationResult {
   checked_at: string;
 }
 
+
+/**
+ * Jendela kata yang berlaku untuk satu naskah — SATU sumber, dipakai validator
+ * DAN penulis LLM.
+ *
+ * Kenapa diekspor. Prompt LLM versi pertama menyebut batasnya sendiri
+ * ("<= 1.5 x detik") padahal aturan sebenarnya 25-30 kata per 15 detik. LLM
+ * lalu ditolak L-05 oleh aturan yang tidak pernah diberitahukan kepadanya —
+ * dan naskahnya sampai ke pengguna dalam keadaan tidak bisa disetujui.
+ * Menyalin angkanya ke prompt akan mengulang cacat yang sama begitu angkanya
+ * berubah, jadi promptnya memanggil fungsi ini.
+ *
+ * Jatah template memakai toleransi yang sama dengan templates.ts (+/-15%) dan
+ * TIDAK diskalakan durasi — batasnya beban baca, bukan kecepatan bicara.
+ * BATAS BAWAH menyerap panjang NAMA PRODUK; batas atas tidak.
+ *
+ * Nama produk ikut diucapkan, jadi ia menggeser total kata — tapi panjangnya
+ * ditentukan pengguna, bukan penulis naskah. Terukur 16 Agu 2026: dengan
+ * jendela lama, 10 dari 33 template gagal total tergantung panjang nama, dan
+ * 33 dari 36 kegagalan itu karena naskah KEKURANGAN 1-4 kata. Brian tidak bisa
+ * membuat video sama sekali untuk produknya, sementara pesan errornya justru
+ * menyuruh MEMENDEKKAN nama — yang mengurangi kata lagi.
+ *
+ * Asimetrisnya disengaja dan berdasar bukti:
+ *   - kelebihan kata = VO terpotong / terdengar diburu (r19, cacat terukur)
+ *   - kekurangan kata = ekor hening sedikit; 1-4 kata ~ 0,5-2 detik
+ * Jadi batas atas TETAP ketat, batas bawah diberi kelonggaran sebesar nama
+ * produknya (maksimal 6 kata, sepanjang nama terpanjang yang wajar).
+ */
+export function jendelaKata(script: {
+  qualityTier?: string | null;
+  durationSec?: number | null;
+  wordBudget?: number | null;
+  productName?: string | null;
+}): { minWc: number; maxWc: number } {
+  const tier = script.qualityTier ?? "silent_caption";
+  const durationScale = (script.durationSec ?? 15) / 15;
+  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
+  const kelonggaranNama = Math.min(6, wordCount(script.productName ?? ""));
+  const minWc = Math.max(
+    1,
+    (script.wordBudget
+      ? Math.round(script.wordBudget * 0.85)
+      : Math.round(baseMinWc * durationScale)) - kelonggaranNama
+  );
+  const maxWc = script.wordBudget
+    ? Math.round(script.wordBudget * 1.15)
+    : Math.round(baseMaxWc * durationScale);
+  return { minWc, maxWc };
+}
+
 const PARTICLES = new Set(["deh", "sih", "dong", "ya", "loh", "kok", "nah", "tuh"]);
-const FILLER_TOKENS = new Set(["nah", "sumpah", "eh", "btw"]);
-const FILLER_PHRASES = ["jadi gini"];
+export const FILLER_TOKENS = new Set(["nah", "sumpah", "eh", "btw"]);
+export const FILLER_PHRASES = ["jadi gini"];
 
 /** Dua negasi yang saling menumpuk, mis. "nggak pernah nggak siap" (T-03).
  *
@@ -92,10 +143,10 @@ const FAKE_URGENCY_PHRASES = [
 ];
 const NEGATIVE_WORDS = new Set(["jelek", "buruk", "sampah", "payah", "gagal", "zonk"]);
 
-const GUE_TOKENS = new Set(["gue", "gua", "gw"]);
-const AKU_TOKENS = new Set(["aku"]);
-const LO_TOKENS = new Set(["lo", "lu", "elu"]);
-const KAMU_TOKENS = new Set(["kamu", "kau", "anda"]);
+export const GUE_TOKENS = new Set(["gue", "gua", "gw"]);
+export const AKU_TOKENS = new Set(["aku"]);
+export const LO_TOKENS = new Set(["lo", "lu", "elu"]);
+export const KAMU_TOKENS = new Set(["kamu", "kau", "anda"]);
 
 const PRICE_REGEX = /\d+([.,]\d+)?\s*(ribu|rb|ribuan|juta|jt)\b/i;
 const PRICE_MENTION_REGEX = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
@@ -244,33 +295,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // Yang diperbaiki akhirnya varian yang memang duduk di 29-30 kata (2,00
   // kata/detik) — dipendekkan satu per satu di template-copy.ts, bukan
   // aturannya yang dilonggarkan.
-  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
-  // Jatah template memakai toleransi yang sama dengan templates.ts (+/-15%)
-  // dan TIDAK diskalakan durasi — batasnya beban baca, bukan kecepatan bicara.
-  // BATAS BAWAH menyerap panjang NAMA PRODUK; batas atas tidak.
-  //
-  // Nama produk ikut diucapkan, jadi ia menggeser total kata — tapi panjangnya
-  // ditentukan pengguna, bukan penulis naskah. Terukur 16 Agu 2026: dengan
-  // jendela lama, 10 dari 33 template gagal total tergantung panjang nama, dan
-  // 33 dari 36 kegagalan itu karena naskah KEKURANGAN 1-4 kata. Brian tidak
-  // bisa membuat video sama sekali untuk produknya, sementara pesan errornya
-  // justru menyuruh MEMENDEKKAN nama — yang mengurangi kata lagi.
-  //
-  // Asimetrisnya disengaja dan berdasar bukti:
-  //   - kelebihan kata = VO terpotong / terdengar diburu (r19, cacat terukur)
-  //   - kekurangan kata = ekor hening sedikit; 1-4 kata ~ 0,5-2 detik
-  // Jadi batas atas TETAP ketat, batas bawah diberi kelonggaran sebesar nama
-  // produknya (maksimal 6 kata, sepanjang nama terpanjang yang wajar).
-  const kelonggaranNama = Math.min(6, wordCount(script.productName ?? ""));
-  const minWc = Math.max(
-    1,
-    (script.wordBudget
-      ? Math.round(script.wordBudget * 0.85)
-      : Math.round(baseMinWc * durationScale)) - kelonggaranNama
-  );
-  const maxWc = script.wordBudget
-    ? Math.round(script.wordBudget * 1.15)
-    : Math.round(baseMaxWc * durationScale);
+  const { minWc, maxWc } = jendelaKata(script);
   if (wc < minWc || wc > maxWc)
     push(false, {
       rule: "L-05",

@@ -10,15 +10,43 @@ import path from "node:path";
 
 const baca = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
 
-test("bawaan mode referensi adalah r2v, i2v hanya cadangan eksplisit", () => {
-  const s = baca("lib/providers/stubs/byteplus.ts");
+test("bawaan mode referensi adalah r2v, i2v hanya cadangan eksplisit", async () => {
+  const { modeReferensi } = await import("../lib/providers/stubs/byteplus");
+  const retail = { qualityTier: "high_quality", shots: [] } as never;
   // i2v merusak nama merek ("SCARLETT" -> "SCARLFTT") DAN memaksa pack shot di
   // detik pertama — yang kedua mustahil diperbaiki lewat prompt.
-  assert.match(s, /const useR2v = modelDukungR2v && spec\.preferI2v !== true/,
-    "r2v harus jadi bawaan, bukan menunggu foto tambahan");
-  assert.ok(!/extras\.length > 0 \|\| spec\.referenceOnlyImages === true/.test(s),
-    "syarat lama membuat jalur retail selalu jatuh ke i2v");
+  // Jalur retail = SATU foto produk, tanpa referensi tambahan. Justru di situ
+  // dulu selalu jatuh ke i2v.
+  assert.equal(modeReferensi(retail, "dreamina-seedance-2-0-mini-260615"), "reference_image (r2v)");
+  assert.equal(
+    modeReferensi({ ...(retail as object), preferI2v: true } as never, "dreamina-seedance-2-0-mini-260615"),
+    "first_frame (i2v)",
+    "cadangan i2v harus bisa dipilih secara eksplisit"
+  );
+  // Model 1.0 tidak mendukung r2v sama sekali.
+  assert.equal(modeReferensi(retail, "seedance-1-0-lite-i2v-250428"), "first_frame (i2v)");
   assert.match(baca("lib/providers/types.ts"), /preferI2v\?: boolean/, "cadangan i2v harus eksplisit");
+});
+
+test("arsip prompt mencatat mode yang BENAR-BENAR dikirim, bukan menurunkannya sendiri", async () => {
+  // Jalankan STEP 2 (17 Agu) mencatat "first_frame (i2v)" untuk ketiga segmen
+  // padahal provider mengirim r2v: arsip menyalin aturan lama. Arsip yang salah
+  // mengarahkan pembedahan video jelek ke mode yang tidak pernah dipakai.
+  const { ringkasSpec } = await import("../lib/arsip-prompt");
+  const { modeReferensi } = await import("../lib/providers/stubs/byteplus");
+  const model = "dreamina-seedance-2-0-mini-260615";
+  const spec = {
+    qualityTier: "high_quality",
+    shots: [{ durationSec: 5, prompt: "p", imageRefPath: "a.png" }, { durationSec: 5, prompt: "q" }],
+  } as never;
+  const r = ringkasSpec(spec, model);
+  assert.equal(r.model, model, "model harus ikut tercatat supaya modenya bisa diverifikasi ulang");
+  assert.equal(r.shots[0].referenceMode, modeReferensi(spec, model), "harus SAMA dengan keputusan provider");
+  assert.equal(r.shots[0].referenceMode, "reference_image (r2v)");
+  assert.equal(r.shots[1].referenceMode, "text_to_video", "tanpa foto tetap text_to_video");
+  // Aturannya hanya boleh punya satu salinan.
+  assert.ok(!/extraReferenceImagePaths\?\.length \?\? 0\) > 0/.test(baca("lib/arsip-prompt.ts")),
+    "arsip tidak boleh menurunkan ulang mode referensi");
 });
 
 test("presenter yang terlihat benar-benar bicara, bukan dibungkam", () => {

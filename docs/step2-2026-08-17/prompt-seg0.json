@@ -1,0 +1,41 @@
+{
+  "spec": {
+    "shots": [
+      {
+        "idx": 0,
+        "durationSec": 4,
+        "prompt": "medium selfie, face and shoulders, eye level. Camera: static with slight handheld drift. Creator stares into lens with eyebrow raised, then taps cheek lightly, then shakes head slowly. Start state: Creator faces camera directly, skin visible with faint acne marks under warm natural light, no product in frame. Expression: knowing frustration, direct eye contact. She speaks this line out loud in casual Indonesian, mouth in sync: \"Jerawat udah hilang, bekasnya masih bandel?\". The product is the exact same one as in the reference image — identical bottle, identical label artwork and spelling.",
+        "imageRefPath": "/Users/hadrava/HDRV/03_UGC_AI_ID/app/storage/uploads/f4d0d645-ecd8-4842-be0e-17c14ea5826c/0.webp",
+        "referenceMode": "first_frame (i2v)"
+      }
+    ]
+  },
+  "params": {
+    "ratio": "9:16",
+    "width": 720,
+    "height": 1280,
+    "qualityTier": "high_quality",
+    "generateAudio": true,
+    "maxPeople": 1,
+    "jumlahReferensiTambahan": 0,
+    "referenceOnlyImages": false
+  },
+  "segment": {
+    "block": "HOOK",
+    "label": "PROVOCATION",
+    "start": 0,
+    "end": 4,
+    "text": "Jerawat udah hilang, bekasnya masih bandel?",
+    "start_state": "Creator faces camera directly, skin visible with faint acne marks under warm natural light, no product in frame",
+    "framing": "medium selfie, face and shoulders",
+    "angle": "eye level",
+    "camera": "static with slight handheld drift",
+    "action": "Creator stares into lens with eyebrow raised, then taps cheek lightly, then shakes head slowly",
+    "product_state": "hidden",
+    "expression": "knowing frustration, direct eye contact",
+    "audio_note": "quiet room tone, no music yet",
+    "why": "setup — provocative question mirrors viewer's exact pain point to stop the scroll",
+    "mode": "SELFIE"
+  },
+  "qcF1": null
+}

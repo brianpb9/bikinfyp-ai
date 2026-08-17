@@ -1,0 +1,53 @@
+[
+  {
+    "block": "HOOK",
+    "label": "PROVOCATION",
+    "start": 0,
+    "end": 4,
+    "text": "Jerawat udah hilang, bekasnya masih bandel?",
+    "start_state": "Creator faces camera directly, skin visible with faint acne marks under warm natural light, no product in frame",
+    "framing": "medium selfie, face and shoulders",
+    "angle": "eye level",
+    "camera": "static with slight handheld drift",
+    "action": "Creator stares into lens with eyebrow raised, then taps cheek lightly, then shakes head slowly",
+    "product_state": "hidden",
+    "expression": "knowing frustration, direct eye contact",
+    "audio_note": "quiet room tone, no music yet",
+    "why": "setup — provocative question mirrors viewer's exact pain point to stop the scroll",
+    "mode": "SELFIE"
+  },
+  {
+    "block": "BODY",
+    "label": "DEMO",
+    "start": 4,
+    "end": 10,
+    "text": "Ini serum yang aku pakai tiap malam, teksturnya ringan banget di kulit.",
+    "start_state": "Creator holds small serum bottle loosely at chest height, dropper tip visible but label partially obscured by thumb",
+    "framing": "medium selfie, face and hands in frame",
+    "angle": "slight top-down",
+    "camera": "slow push in toward product in hand",
+    "action": "Creator lifts bottle into frame, then applies one drop onto fingertip, then presses finger gently onto cheek",
+    "product_state": "partial",
+    "expression": "relaxed satisfaction, soft smile",
+    "audio_note": "soft upbeat lo-fi starts low under dialogue",
+    "why": "tension — introduces the solution and shows real use without overpromising",
+    "mode": "SELLING"
+  },
+  {
+    "block": "CTA",
+    "label": "REVEAL",
+    "start": 10,
+    "end": 15,
+    "text": "Cuma tujuh puluh lima ribu, cek di keranjang kuning ya!",
+    "start_state": "Creator smiling directly at camera, full product label of Scarlett Acne Serum clearly visible held up near face",
+    "framing": "medium selfie, face and product hero shot",
+    "angle": "eye level",
+    "camera": "static, confident hold",
+    "action": "Creator holds product label facing camera, then points finger downward toward keranjang kuning, then winks at lens",
+    "product_state": "hero",
+    "expression": "bright, warm, encouraging — bestie energy",
+    "audio_note": "lo-fi music lifts slightly on CTA",
+    "why": "payoff — price reveal plus clear action step converts warm viewer into buyer",
+    "mode": "SELLING"
+  }
+]

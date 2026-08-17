@@ -29,6 +29,14 @@ export interface SegmentDraft {
   /** Dialog dengan cue Gemini TTS inline. Tidak boleh dipakai UI/caption/QC/video prompt. */
   tts_text?: string;
   visual_direction: string;
+  /**
+   * Peran produk di segmen ini, sebagaimana DITULIS penulis naskah.
+   *
+   * Opsional karena jalur template tidak menuliskannya — di sana peran produk
+   * masih datang dari peran template UGC. Kalau ada, ini yang menang: penulis
+   * naskahlah yang memutuskan hook-nya menahan produk, bukan tebakan dari prosa.
+   */
+  product_state?: "hidden" | "partial" | "hero";
 }
 
 type Triple = { hook: string; demo: string; cta: string };

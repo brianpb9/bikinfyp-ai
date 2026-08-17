@@ -137,6 +137,19 @@ export const config = {
   anthropicApiKey: env("ANTHROPIC_API_KEY", ""),
   /** Model penulis adegan. Idea Stage & FYP Gate memakai model kelas atas. */
   anthropicModelScenes: env("ANTHROPIC_MODEL_SCENES", "claude-sonnet-4-6"),
+  /**
+   * SCRIPT_LLM=0 mematikan penulis LLM secara SENGAJA.
+   *
+   * Ada karena "kunci tidak ada" dan "memang dimatikan" adalah dua hal berbeda
+   * yang butuh perlakuan berbeda. Kunci hilang di produksi = alarm. Dimatikan
+   * di suite tes = normal, dan justru wajib: begitu STEP 1 hidup, `npm test`
+   * mulai memanggil Anthropic sungguhan — satu tes 67 detik, satu lagi 121
+   * detik, keduanya berbayar, dan hasilnya tidak deterministik sehingga tes
+   * katalog template gagal secara acak.
+   *
+   * Tes yang memang menguji jalur LLM memasang stub fetch sendiri.
+   */
+  scriptLlmEnabled: env("SCRIPT_LLM", "1") !== "0",
   operationalAlertToEmail: env("OPERATIONAL_ALERT_TO_EMAIL", ""),
   operationalMonitoringIntervalMin: parseInt(env("OPERATIONAL_MONITORING_INTERVAL_MIN", "5"), 10),
   operationalAlertCooldownMin: parseInt(env("OPERATIONAL_ALERT_COOLDOWN_MIN", "60"), 10),

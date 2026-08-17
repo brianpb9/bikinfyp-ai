@@ -22,6 +22,7 @@
 // product_first_appears_sec -0.18, cuts_in_first_3s -0.09). JANGAN menambah
 // jumlah cut/rapid-cut atas nama "pacing" tanpa bukti baru dari model.
 
+import { config } from "../config";
 import type { VisualSpec, ShotSpec, QualityTier } from "../providers/types";
 import { latarUntukTemplate } from "./latar-template";
 import type { CreatorCategory } from "../personas";
@@ -492,9 +493,28 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     }
     return minimal;
   }
-  const numShots = requested !== null ? requested : format === "talking_head"
+  // WAJAH TIDAK BOLEH DIPECAH selama Seedance menolak referensi berwajah.
+  //
+  // Tiap shot adalah generate TERPISAH; tanpa referensi wajah, identitas hanya
+  // dibawa deskripsi teks — dan itu tidak cukup. Terbukti dua kali: insiden 7
+  // Agu (15 detik dipecah dua shot -> DUA KARAKTER BERBEDA) dan jalankan STEP 2
+  // 17 Agu (tiga segmen -> tiga orang, pakaian ikut berganti).
+  //
+  // Ini menutup lubang yang tersisa: shotCountOverride bisa memaksa
+  // talking_head jadi 2-6 shot, melewati aturan ceil(durasi/15) di bawahnya.
+  // Overridenya diabaikan untuk format berwajah, bukan dihormati diam-diam —
+  // menghormatinya berarti menjual video yang orangnya berganti di tengah.
+  //
+  // Batas jujurnya: durasi >15 detik TETAP harus dipecah, karena satu klip
+  // Seedance maksimal 15 detik. Di atas 15 detik, talking_head memang belum
+  // punya jaminan identitas — itu yang harus dikatakan ke pengguna, bukan
+  // ditutupi.
+  const wajahTerkunci = format === "talking_head" && !config.seedanceFaceRef;
+  const numShots = wajahTerkunci
     ? Math.max(1, Math.ceil(input.durationSec / 15))
-    : modulRapi(input.durationSec, format === "tvc" ? 3 : 2);
+    : requested !== null ? requested : format === "talking_head"
+      ? Math.max(1, Math.ceil(input.durationSec / 15))
+      : modulRapi(input.durationSec, format === "tvc" ? 3 : 2);
   // r16 (Brian 2026-08-08: "tidak ada lagi foto real produk... di video
   // manapun" — "product proof insert" DIHAPUS TOTAL, semua format). Video
   // 100% AI-generated selalu, tanpa sisipan foto statis di ujung.
@@ -1104,6 +1124,19 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     /** Apakah shot ke-i menahan produk? Dari peran template, atau dari tabel
      *  rute TVC (yang perannya juga menandainya eksplisit). */
     const menahanProdukDiShot = (i: number): boolean => {
+      // Penulis naskah menang atas peran template. Kalau LLM menulis produknya
+      // belum tampil, shot-nya TIDAK boleh berangkat dari foto produk — kalau
+      // tidak, model diberi barang yang diperintahkan disembunyikan, dan detik
+      // pertamanya kembali jadi pack shot.
+      //
+      // Yang dibaca hanya segmen PALING AWAL di shot ini, bukan semuanya.
+      // withholdProduct mengatur FRAME PERTAMA, sementara satu shot bisa
+      // memuat beberapa segmen — talking_head 15 dtk sengaja tidak dipecah
+      // (wajahnya bergeser antar klip), jadi hook, demo, dan CTA-nya berada di
+      // klip yang sama. Membaca "ada yang hidden" akan membuat hook menahan
+      // produk sepanjang video, termasuk CTA yang justru harus hero.
+      const awal = segmenMilikShot(i).slice().sort((a, b) => a.start - b.start)[0];
+      if (awal?.product_state === "hidden") return true;
       if (ugcPeran(i)?.withholdProduct) return true;
       // Rute TVC: pembuka rute fabric/intimate memang menahan produk.
       if (format === "tvc" && i === 0 && (input.tvcRoute === "fabric" || input.tvcRoute === "intimate")) return true;

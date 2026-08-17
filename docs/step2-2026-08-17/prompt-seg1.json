@@ -1,0 +1,52 @@
+{
+  "spec": {
+    "shots": [
+      {
+        "idx": 0,
+        "durationSec": 6,
+        "prompt": "medium selfie, face and hands in frame, slight top-down. Camera: slow push in toward product in hand. Creator lifts bottle into frame, then applies one drop onto fingertip, then presses finger gently onto cheek. Start state: Creator holds small serum bottle loosely at chest height, dropper tip visible but label partially obscured by thumb. Expression: relaxed satisfaction, soft smile. She speaks this line out loud in casual Indonesian, mouth in sync: \"Ini serum yang aku pakai tiap malam, teksturnya ringan banget di kulit.\". The product is the exact same one as in the reference image — identical bottle, identical label artwork and spelling.",
+        "imageRefPath": "/Users/hadrava/.claude/jobs/248e091d/tmp/step2/frame1.png",
+        "referenceMode": "first_frame (i2v)"
+      }
+    ]
+  },
+  "params": {
+    "ratio": "9:16",
+    "width": 720,
+    "height": 1280,
+    "qualityTier": "high_quality",
+    "generateAudio": true,
+    "maxPeople": 1,
+    "jumlahReferensiTambahan": 0,
+    "referenceOnlyImages": false
+  },
+  "segment": {
+    "block": "BODY",
+    "label": "DEMO",
+    "start": 4,
+    "end": 10,
+    "text": "Ini serum yang aku pakai tiap malam, teksturnya ringan banget di kulit.",
+    "start_state": "Creator holds small serum bottle loosely at chest height, dropper tip visible but label partially obscured by thumb",
+    "framing": "medium selfie, face and hands in frame",
+    "angle": "slight top-down",
+    "camera": "slow push in toward product in hand",
+    "action": "Creator lifts bottle into frame, then applies one drop onto fingertip, then presses finger gently onto cheek",
+    "product_state": "partial",
+    "expression": "relaxed satisfaction, soft smile",
+    "audio_note": "soft upbeat lo-fi starts low under dialogue",
+    "why": "tension — introduces the solution and shows real use without overpromising",
+    "mode": "SELLING"
+  },
+  "qcF1": {
+    "lulus": true,
+    "detail": "QC-F1 lulus (Produk identik dalam bentuk botol, tutup pipet, warna, dan tata letak label.)",
+    "temuan": {
+      "bentukSama": true,
+      "tutupSama": true,
+      "warnaSama": true,
+      "tataLetakLabelSama": true,
+      "merekTerbaca": true
+    },
+    "biayaIdr": 12
+  }
+}

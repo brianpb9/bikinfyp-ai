@@ -221,6 +221,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     ugcTemplate: row.template_id,
     recordStyle: row.record_style });
 
+  // Model yang akan dipakai penyedia — sama sumbernya dengan createTask(),
+  // supaya mode referensi yang diarsipkan adalah mode yang benar-benar dikirim.
+  const modelTier = (config.tiers[spec.qualityTier] ?? config.tiers.silent_caption).byteplusModel;
+
   // ARSIP PROMPT — sebelum satu pun panggilan penyedia.
   //
   // Job yang GAGAL justru yang paling sering perlu dibedah, jadi arsipnya
@@ -230,7 +234,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   try {
     await pgSimpanArsipPrompt({
       jobId: row.id,
-      specJson: JSON.stringify(ringkasSpec(spec)),
+      specJson: JSON.stringify(ringkasSpec(spec, modelTier)),
       segmentsJson: JSON.stringify(segments),
       negativePrompt: spec.negativePrompt,
       modelParams: JSON.stringify({ ...ringkasParams(spec), format, template_id: row.template_id ?? null }),
