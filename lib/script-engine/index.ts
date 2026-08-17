@@ -65,6 +65,15 @@ function applyCartLabel<T extends string>(text: T, label: "keranjang kuning" | "
   return (label === "keranjang kuning" ? text : text.replace(/keranjang kuning/gi, "keranjang")) as T;
 }
 
+/**
+ * Dari mana naskah ini berasal.
+ *
+ *   llm       ditulis LLM dan LOLOS gate.
+ *   template  cadangan deterministik yang lolos gate.
+ *   degraded  tidak ada yang lolos gate. TIDAK BOLEH dirender.
+ */
+export type SumberNaskah = "llm" | "template" | "degraded";
+
 export interface GeneratedScript {
   hook_family: HookCode;
   emotion: string;
@@ -74,6 +83,9 @@ export interface GeneratedScript {
   caption: string;
   hashtags: string[];
   validation: ValidationResult;
+  /** Wajib ikut ke UI dan DB — reviewer A2: fallback tidak boleh disajikan
+   *  sebagai keluaran setara tanpa jejak. */
+  script_source: SumberNaskah;
   /**
    * Tiga ide terbaik BESERTA skornya, diisi HANYA saat FYP Gate gagal.
    *
@@ -317,6 +329,7 @@ async function generateOne(
         hook_family: family, register, segments: segs, productName: product.name,
         priceIdr: product.price_idr, promoPriceBeforeIdr: promo?.beforeIdr ?? null,
         requirePriceMention: templateRequiresPriceMention(templateId),
+        cartLabel,
         format: isTvcTemplate(templateId) ? "tvc" : undefined,
         qualityTier: tier, durationSec, wordBudget,
       },
@@ -410,19 +423,36 @@ async function generateOne(
     laporJatuhKeTemplate("ANTHROPIC_API_KEY belum di-set", { productName: product.name });
   }
 
-  // Jalur template — cadangan, dan tetap memakai regenerate lamanya. Di sini
-  // normalisasi memang masuk akal: templatenya deterministik, jadi kegagalan
-  // yang tersisa memang soal perapian teks.
+  // Jalur template — CADANGAN, dan sejak gate dikeraskan ia tidak lagi setara.
+  //
+  // Template dikalibrasi ke jendela lama 25-30 kata. Dengan batas Brian 1,5
+  // kata/detik (22 kata untuk 15 detik), 130 dari 132 varian melanggar — jadi
+  // "jatuh ke template" hampir selalu berarti naskah yang TIDAK memenuhi
+  // standar. Ia tetap dicoba, tapi hasilnya ditandai apa adanya dan tidak
+  // pernah disajikan sebagai keluaran normal.
+  let sumberNaskah: SumberNaskah = hasil ? "llm" : "template";
   if (!hasil) {
     hasil = rakitDanNilai(dasar, false);
     for (let attempt = 0; attempt < MAX_REGEN && !hasil.validation.passed; attempt++) {
       const rapi = normalizeSegments(hasil.segments);
       hasil = { segments: rapi, validation: validate(rapi) };
     }
+    // Cadangan yang ikut gagal gate = DEGRADED. Bukan "template biasa":
+    // pemanggil harus bisa membedakan "ditulis template" dari "tidak ada
+    // naskah yang memenuhi standar", karena yang kedua tidak boleh dirender.
+    if (!hasil.validation.passed) {
+      sumberNaskah = "degraded";
+      console.error(
+        `[script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "${product.name}" — ` +
+          `LLM gagal dan template cadangan ikut ditolak gate: ` +
+          hasil.validation.errors.map((e) => `${e.rule} ${e.message_id}`).join(" | ")
+      );
+    }
   }
   const { segments, validation } = hasil;
   const reg = REGISTERS[register];
   return {
+    script_source: sumberNaskah,
     hook_family: family,
     emotion,
     register,

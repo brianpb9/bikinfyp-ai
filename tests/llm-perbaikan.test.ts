@@ -202,7 +202,7 @@ test("keberhasilan jalur LLM meninggalkan baris log POSITIF", async () => {
         action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
         audio_note: "", why: "setup", mode: "SELFIE" },
       { block: "BODY", label: "DEMO", start: 4, end: 10,
-        text: "aku pakai serum ini tiap malam deh, teksturnya ringan banget dan cepat meresap",
+        text: "aku pakai serum ini tiap malam deh, ringan banget",
         start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
         action: "dia memutar botol, lalu memiringkan label", product_state: "partial", expression: "warm",
         audio_note: "", why: "tension", mode: "SELLING" },

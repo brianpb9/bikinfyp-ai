@@ -44,7 +44,7 @@ test("negasi tentang ORANG tertangkap; negative prompt biasa TIDAK", () => {
   }
 });
 
-test("L-21 memeriksa ARAHAN VISUAL, bukan dialog, dan hanya memperingatkan", () => {
+test("L-21 memeriksa ARAHAN VISUAL, bukan dialog, dan MENJATUHKAN naskah", () => {
   const nilai = (visual: string) => validateScript({
     hook_family: "H1", register: "bestie", productName: "Scarlett Acne Serum", priceIdr: 75000,
     qualityTier: "high_quality", durationSec: 15,
@@ -56,13 +56,13 @@ test("L-21 memeriksa ARAHAN VISUAL, bukan dialog, dan hanya memperingatkan", () 
   } as never, "strict");
 
   const kena = nilai("she walks past the bathroom door while another person waits, no other residents visible");
-  const l21 = kena.warnings.filter((w) => w.rule === "L-21");
+  const l21 = kena.errors.filter((e) => e.rule === "L-21");
   assert.ok(l21.length >= 2, `harus melaporkan kosakata DAN negasi: ${JSON.stringify(l21)}`);
-  assert.ok(!kena.errors.some((e) => e.rule === "L-21"), "L-21 tidak boleh menjatuhkan naskah");
+  assert.equal(kena.passed, false, "L-21 kini gate keras (reviewer A5)");
   assert.equal(l21[0].segment, "hook", "harus menunjuk segmennya");
 
   // Arahan visual bersih: tidak ada L-21 sama sekali.
-  assert.equal(nilai("medium selfie, eye level, static").warnings.some((w) => w.rule === "L-21"), false);
+  assert.equal(nilai("medium selfie, eye level, static").errors.some((e) => e.rule === "L-21"), false);
 });
 
 test("prompt penulis menyebut aturannya, termasuk kenapa negasi dilarang", () => {

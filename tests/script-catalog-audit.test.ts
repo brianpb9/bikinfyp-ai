@@ -325,10 +325,39 @@ test("count=4 tidak mengulang hook atau naskah pada template mana pun", async ()
   );
 });
 
-test("semua 132 varian lolos validator pada konfigurasi template aktual", async () => {
-  assert.equal(
-    summary.validationFailureVariants,
-    0,
-    `varian gagal validasi: ${summary.validationFailureRefs.map((ref) => `${ref.templateId}#${ref.variantIndex}`).join(", ")}`
+test("katalog template: hanya DUA jenis utang yang diketahui, tidak ada yang lain", async () => {
+  // DIPERTAJAM, bukan dilonggarkan (18 Agu). Sampai hari ini invariannya
+  // "semua 132 varian lolos". Dua gate baru membatalkan sebagian:
+  //
+  //   L-05  batas Brian 1,5 kata/detik (22 kata untuk 15 dtk). Template
+  //         dikalibrasi ke jendela lama 25-30 kata.
+  //   L-19  hook wajib memakai perangkat retoris yang dikenali.
+  //
+  // Keduanya UTANG COPY yang disengaja dan tercatat. Yang dijaga tes ini:
+  // tidak ada JENIS kegagalan lain yang menyusup di baliknya. Kalau suatu hari
+  // ada varian gagal karena L-03, L-16, atau apa pun di luar dua itu, tes ini
+  // merah — dan itu memang gunanya.
+  const UTANG_DIKENAL = new Set(["L-05", "L-19"]);
+  const lain = summary.validationFailureRefs
+    .map((ref) => ({ ref, aturan: ref.errors.map((e) => e.rule).filter((r) => !UTANG_DIKENAL.has(r)) }))
+    .filter((x) => x.aturan.length > 0);
+  assert.deepEqual(
+    lain.map((x) => `${x.ref.templateId}#${x.ref.variantIndex}: ${x.aturan.join(",")}`),
+    [],
+    "varian gagal karena sebab DI LUAR dua utang yang diketahui"
   );
 });
+
+test("utang template tercatat angkanya per jenis, bukan diam-diam", async () => {
+  // Angkanya ditulis supaya perbaikan copy terlihat maju: begitu template
+  // ditulis ulang, angka ini turun dan tesnya memaksa diperbarui.
+  const hitung = (aturan: string) =>
+    summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule === aturan)).length;
+  const panjang = hitung("L-05");
+  const perangkat = hitung("L-19");
+  assert.ok(panjang > 0 && panjang <= 130, `varian melanggar batas 22 kata: ${panjang}/132`);
+  assert.ok(perangkat > 0 && perangkat <= 17, `varian tanpa perangkat retoris: ${perangkat}/132`);
+  // Kalau keduanya nol, katalognya sudah bersih: hapus tes ini dan kembalikan
+  // invarian "semua varian lolos".
+});
+

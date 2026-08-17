@@ -118,9 +118,11 @@ export type HasilOcr = { terbaca: boolean; teks: string } | { terbaca: null; tek
  * untuk dibaca; kegagalan menjalankan OCR MELEMPAR, supaya pemanggil bisa
  * membedakan "tidak ada merek" dari "tidak bisa diperiksa".
  */
-async function merekTerbaca(framePath: string, productName: string, merekEksplisit?: string | null): Promise<HasilOcr> {
-  const token = tokenMerekUtama(productName, merekEksplisit);
-  if (!token) return { terbaca: null, teks: "" }; // produk polos, tidak ada merek untuk dibaca
+async function merekTerbaca(framePath: string, merekEksplisit?: string | null): Promise<HasilOcr> {
+  const token = tokenMerekUtama(merekEksplisit);
+  // null = tidak ada MEREK TEPERCAYA. Bukan "produk polos" — kita memang tidak
+  // tahu, dan pemanggil yang memutuskan itu berarti UNVERIFIED untuk hero.
+  if (!token) return { terbaca: null, teks: "" };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qcf1-"));
   try {
     const png = path.join(dir, "besar.png");
@@ -174,7 +176,7 @@ export async function qcF1FrameFidelity(input: {
 
   let ocr: HasilOcr;
   try {
-    ocr = await merekTerbaca(input.framePath, input.productName, input.merekEksplisit);
+    ocr = await merekTerbaca(input.framePath, input.merekEksplisit);
   } catch (err) {
     // OCR mati (tesseract/ffmpeg tidak ada) pada frame HERO berarti janji
     // "nama merek terbaca" tidak bisa dibuktikan — dan janji yang tidak bisa
@@ -229,6 +231,23 @@ export async function qcF1FrameFidelity(input: {
       detail: `QC-F1 tidak dapat dijalankan (${galatTerakhir}). Frame TIDAK dipakai sebagai referensi.`,
       temuan: { ...kosong, merekTerbaca: ocr.terbaca },
       biayaIdr: 0,
+    };
+  }
+
+  // HERO TANPA MEREK TEPERCAYA = UNVERIFIED.
+  //
+  // Janji Gate 1 adalah "nama merek terbaca". Tanpa sumber merek yang bisa
+  // dipercaya, janji itu tidak bisa dibuktikan — dan janji yang tidak bisa
+  // dibuktikan tidak boleh diperlakukan sebagai terbukti hanya karena bentuk
+  // dan warnanya kebetulan cocok.
+  if (hero && ocr.terbaca === null) {
+    return {
+      status: "UNVERIFIED",
+      detail:
+        "QC-F1 tidak punya merek tepercaya untuk diperiksa pada frame hero " +
+        "(products.brand / merek hasil intake belum ada). Frame TIDAK dipakai sebagai referensi.",
+      temuan: { ...kosong, merekTerbaca: null },
+      biayaIdr: BIAYA_PERIKSA_IDR,
     };
   }
 

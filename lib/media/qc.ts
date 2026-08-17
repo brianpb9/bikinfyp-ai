@@ -575,36 +575,52 @@ export function brandTokens(productName: string): string[] {
 }
 
 /**
- * Token yang MEMUTUSKAN kesetiaan merek — satu, bukan daftar.
- *
- * Dipisah dari brandTokens() karena keduanya menjawab pertanyaan berbeda.
- * brandTokens menjawab "kata apa saja yang mungkin merek" (dipakai QC-10 yang
- * memang toleran, mencari di 8 frame). Fungsi ini menjawab "kata mana yang
- * KALAU SALAH berarti produknya bukan produk kita".
- *
- * URUTAN, BUKAN PANJANG (temuan reviewer, 18 Agu). brandTokens mengurutkan
- * dari terpanjang, dan itu bisa memilih DESKRIPTOR alih-alih merek: pada
- * "Bening Antioksidan Serum", yang terpanjang adalah "antioksidan" — kata yang
- * boleh saja salah dibaca tanpa mengubah identitas produknya. Merek dalam nama
- * produk Indonesia hampir selalu di depan, jadi yang dipakai adalah token
- * non-generik PERTAMA.
- *
- * `merekEksplisit` menang atas segalanya. Ia disediakan sekarang meski belum
- * ada kolom `products.brand` (migrasi sedang diblokir): begitu kolom itu ada,
- * atau begitu intake menyimpan merek yang benar-benar terbaca di label,
- * nilainya tinggal dialirkan ke sini tanpa menyentuh pemanggil mana pun.
+ * Kata yang tidak pernah jadi identitas merek walau berdiri di depan namanya.
+ * "The Originote" -> originote, bukan "the".
  */
-export function tokenMerekUtama(productName: string, merekEksplisit?: string | null): string | null {
+const KATA_DEPAN_MEREK = new Set(["the", "pt", "cv", "by", "dan", "and", "official", "store"]);
+
+/**
+ * Token yang MEMUTUSKAN kesetiaan merek — HANYA dari sumber tepercaya.
+ *
+ * TIDAK ADA LAGI TEBAKAN DARI NAMA PRODUK, dan itu koreksi kedua di tempat
+ * yang sama (reviewer, 18 Agu). Versi pertama memakai token TERPANJANG dan
+ * memilih deskriptor; versi kedua memakai non-generik PERTAMA dan tetap salah:
+ *
+ *   "Serum Wajah Scarlett"   -> "wajah"   (deskriptor, bukan merek)
+ *   "[ Beli 5 box dapat 10"  -> "beli"    (nama produk rusak dari parser)
+ *   "The Originote"          -> "the"     (kata depan)
+ *
+ * Mengganti satu tebakan dengan tebakan lain tidak membuatnya benar. Gerbang
+ * kesetiaan MEREK tidak boleh berdiri di atas terkaan tentang merek apa yang
+ * dimaksud — kalau sumbernya tidak ada, jawabannya "tidak tahu", dan pemanggil
+ * WAJIB memperlakukannya sebagai UNVERIFIED.
+ *
+ * Mengembalikan null berarti: tidak ada merek tepercaya untuk diperiksa.
+ */
+export function tokenMerekUtama(merekEksplisit?: string | null): string | null {
   const eksplisit = (merekEksplisit ?? "").trim();
-  if (eksplisit) {
-    const t = normalizeOcr(eksplisit).split(" ").filter((x) => x.length >= 3 && /[a-z]/.test(x));
-    if (t.length) return t[0];
-  }
-  const urut = normalizeOcr(productName)
+  if (!eksplisit) return null;
+  const kata = normalizeOcr(eksplisit)
     .split(" ")
-    .filter((token) => token.length >= 4 && /[a-z]/.test(token))
-    .filter((token) => !GENERIC_PRODUCT_WORDS.has(token));
-  return urut[0] ?? null;
+    .filter((x) => x.length >= 3 && /[a-z]/.test(x))
+    .filter((x) => !KATA_DEPAN_MEREK.has(x));
+  return kata[0] ?? null;
+}
+
+/**
+ * Usulan merek dari nama produk — untuk DITAWARKAN ke pengguna saat intake,
+ * bukan untuk memutuskan gerbang.
+ *
+ * Dipisah namanya supaya tidak ada yang keliru memakainya sebagai keputusan:
+ * yang ini boleh salah, karena manusia yang mengoreksinya sebelum disimpan.
+ */
+export function usulMerekDariNama(productName: string): string | null {
+  const kata = normalizeOcr(productName)
+    .split(" ")
+    .filter((t) => t.length >= 4 && /[a-z]/.test(t))
+    .filter((t) => !GENERIC_PRODUCT_WORDS.has(t) && !KATA_DEPAN_MEREK.has(t));
+  return kata[0] ?? null;
 }
 
 export async function qcLabelFidelity(filePath: string, productName: string): Promise<QcCheck> {

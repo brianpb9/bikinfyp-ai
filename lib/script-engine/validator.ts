@@ -44,6 +44,9 @@ export interface ScriptToValidate {
    *
    * Default undefined = perilaku lama persis, jadi pemanggil non-TVC aman. */
   format?: "hands_only" | "vo_broll" | "talking_head" | "tvc" | "ads";
+  /** Label keranjang yang WAJIB disebut CTA — "keranjang kuning" (TikTok) atau
+   *  "keranjang" (Shopee/Tokopedia/manual). Kosong = "keranjang". */
+  cartLabel?: string;
   /** Jatah kata template (total seluruh video). Kalau ada, L-05 memakai ini.
    *
    * WAJIB ada. Komentar L-05 di bawah sudah memperingatkan bahwa batas di sini
@@ -106,7 +109,16 @@ export function jendelaKata(script: {
 }): { minWc: number; maxWc: number } {
   const tier = script.qualityTier ?? "silent_caption";
   const durationScale = (script.durationSec ?? 15) / 15;
-  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
+  // BATAS BRIAN: 1,5 kata per detik (temuan reviewer A3). 15 dtk -> 22 kata.
+  //
+  // Angka lama [25,30] lahir dari kalibrasi Gemini TTS (~1,93 kata/detik) dan
+  // memang menghasilkan naskah 24/26/26 kata = 1,60-1,73 kata/detik — semuanya
+  // di atas batas. Yang dipakai sekarang batasnya, bukan kecepatan TTS-nya.
+  //
+  // Batas bawah ikut turun supaya jendelanya tidak terbalik. 16 dipilih, bukan
+  // 20: dengan kelonggaran nama produk sampai 6 kata, batas bawah efektif bisa
+  // menyentuh 10 — dan naskah 10 kata untuk 15 detik memang terlalu sepi.
+  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [16, 22];
   const kelonggaranNama = Math.min(6, wordCount(script.productName ?? ""));
   const minWc = Math.max(
     1,
@@ -232,8 +244,14 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // branding TikTok), Shopee/Tokopedia/manual pakai "keranjang" polos (lihat
   // cartLabelForUrl di script-engine/index.ts). Cek generik biar berlaku di
   // kedua kasus tanpa validator perlu tau platform-nya.
-  if (!isTvc && (!ctaSeg || !ctaSeg.text.toLowerCase().includes("keranjang")))
-    push(false, { rule: "L-03", message_id: "Ajakan penutup harus menyebut 'keranjang' biar pembeli tau harus klik di mana.", segment: "cta" });
+  // Yang diwajibkan LABEL PENUHNYA, bukan kata "keranjang" saja (temuan
+  // reviewer: tiga CTA nyata cuma berkata "cek keranjang", tidak satu pun
+  // memakai "keranjang kuning"). Labelnya sendiri tetap mengikuti platform —
+  // "keranjang kuning" itu branding TikTok, dan menyuruh pembeli Shopee
+  // mencari keranjang kuning adalah menyuruhnya mencari sesuatu yang tidak ada.
+  const labelKeranjang = (script.cartLabel ?? "keranjang").toLowerCase();
+  if (!isTvc && (!ctaSeg || !ctaSeg.text.toLowerCase().includes(labelKeranjang)))
+    push(false, { rule: "L-03", message_id: `Ajakan penutup harus menyebut "${labelKeranjang}" biar pembeli tau harus klik di mana.`, segment: "cta" });
 
   // L-04: >=1 filler lisan
   const hasFiller =
@@ -472,9 +490,9 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // push(false, ...) tetap menjatuhkan naskah di strict — persis kebalikan dari
   // yang dimaksud, dan tesnya yang menangkapnya.
   if (!isTvc && hookSeg && !memakaiPerangkat(stripDeliveryTags(hookSeg.text))) {
-    warnings.push({
+    push(false, {
       rule: "L-19",
-      message_id: "Hook belum memakai perangkat retoris yang dikenali — pertanyaan, negasi, harga, atau pengakuan pribadi biasanya yang menahan scroll.",
+      message_id: "Hook belum memakai perangkat retoris yang dikenali — pakai pertanyaan, negasi, sebut harga, atau pengakuan pribadi.",
       segment: "hook",
     });
   }
@@ -500,14 +518,14 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     const negasi = temuan.filter((t) => t.jenis === "negasi-orang");
     const kosakata = temuan.filter((t) => t.jenis === "kosakata");
     if (negasi.length) {
-      warnings.push({
+      push(false, {
         rule: "L-21",
         message_id: `Negasi tentang orang di arahan visual — tulis positifnya: ${ringkasPemicu(negasi)}`,
         segment: segment.role,
       });
     }
     if (kosakata.length) {
-      warnings.push({
+      push(false, {
         rule: "L-21",
         message_id: `Kata ini sering memicu penyaring konten penyedia: ${ringkasPemicu(kosakata)}`,
         segment: segment.role,

@@ -160,7 +160,7 @@ test("perangkat retoris TIDAK dinilai di tahap ide — itu artefak yang salah", 
   } finally { globalThis.fetch = aslinya; }
 });
 
-test("L-19 ada di validator sebagai PERINGATAN, dan menunjuk segmen hook", async () => {
+test("L-19 GATE KERAS di validator, dan menunjuk segmen hook", async () => {
   const { validateScript } = await import("../lib/script-engine/validator");
   const segmen = (hook: string) => [
     { role: "hook", text: hook },
@@ -174,11 +174,16 @@ test("L-19 ada di validator sebagai PERINGATAN, dan menunjuk segmen hook", async
   } as never, "strict");
 
   // Hook tanpa perangkat yang dikenali: DILAPORKAN, tapi tidak menjatuhkan.
-  const tanpa = nilai("Sesuatu baru saja menembus dinding belakang");
-  const l19 = tanpa.warnings.find((w) => w.rule === "L-19");
-  assert.ok(l19, "L-19 harus muncul sebagai peringatan");
+  // Kalimat ini SEKARANG lolos: "sesuatu"/"baru saja" adalah perangkat
+  // kejutan yang dulu tidak dikenali detektor (itu sebabnya L-19 belum bisa
+  // dikeraskan). Detektornya dilengkapi lebih dulu, baru gatenya dikeraskan.
+  assert.ok(!nilai("Sesuatu baru saja menembus dinding belakang").errors.some((e) => e.rule === "L-19"),
+    "perangkat kejutan harus dikenali sesudah detektor dilengkapi");
+  const polos = nilai("Botol kaca kecil berisi cairan bening di meja");
+  const l19 = polos.errors.find((e) => e.rule === "L-19");
+  assert.ok(l19, "hook tanpa perangkat harus jadi ERROR, bukan peringatan");
   assert.equal(l19.segment, "hook");
-  assert.ok(!tanpa.errors.some((e) => e.rule === "L-19"), "L-19 belum boleh jadi error — 24 dari 132 hook template gagal, sebagiannya bagus");
+  assert.equal(polos.passed, false);
 
   // Hook berpertanyaan: tidak dilaporkan sama sekali.
   const dengan = nilai("Jerawat udah hilang, bekasnya masih bandel?");

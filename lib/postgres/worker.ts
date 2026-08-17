@@ -75,6 +75,8 @@ type WorkerRow = {
   product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_images: string; product_price_idr: number;
   promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   product_source_url: string | null;
+  /** JSON bebas dari intake. Sumber MEREK TEPERCAYA (raw_meta.brand). */
+  product_raw_meta: string | null;
   creator_category: string | null;
 };
 
@@ -136,6 +138,24 @@ async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: str
   return { ...spec, shots };
 }
 
+/**
+ * Merek tepercaya untuk job ini, atau null.
+ *
+ * Dibaca dari products.raw_meta.brand — bukan ditebak dari nama produk.
+ * Reviewer 18 Agu: dua heuristik berturut-turut salah ("terpanjang" memilih
+ * deskriptor, "non-generik pertama" memilih "wajah"/"beli"/"the"), jadi
+ * tebakan dihentikan sama sekali. Tanpa sumber ini, gerbang hero UNVERIFIED.
+ */
+export function merekTepercaya(row: { product_raw_meta?: string | null }): string | null {
+  try {
+    const meta = JSON.parse(row.product_raw_meta ?? "{}") as { brand?: unknown };
+    const b = typeof meta.brand === "string" ? meta.brand.trim() : "";
+    return b || null;
+  } catch {
+    return null;
+  }
+}
+
 /** Verdict QC-F1 per shot, untuk diarsipkan bersama promptnya. */
 export interface RingkasanQcF1 {
   shot: number;
@@ -164,7 +184,7 @@ async function siapkanFrameTurunan(
   spec: VisualSpec,
   workDir: string,
   jobId: string,
-  identitas: { kunci: string; deskripsi: string; productName: string }
+  identitas: { kunci: string; deskripsi: string; productName: string; merekEksplisit?: string | null }
 ): Promise<{ spec: VisualSpec; qcF1: RingkasanQcF1[]; biayaIdr: number }> {
   const { paketCastRefTersimpan, turunkanFrameAwalTerperiksa } = await import("../media/cast-ref");
   const qcF1: RingkasanQcF1[] = [];
@@ -192,6 +212,7 @@ async function siapkanFrameTurunan(
         castRefPath: paket.tigaPerempat,
         productPhotoPath: sh.imageRefPath,
         productName: identitas.productName,
+        merekEksplisit: identitas.merekEksplisit,
         // Prompt shot menggambarkan GERAKAN; frame pertama butuh keadaan awal.
         startState: sh.startState ?? sh.prompt,
         outPath: `${workDir}/turunan-shot${sh.index}.png`,
@@ -224,7 +245,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
     // (pool org untuk job dari dashboard bulk-generate, user biasa untuk retail).
     const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level,
-      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url,
+      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
       p.promo_price_before_idr, p.promo_ends_at, p.promo_stock_left,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
@@ -419,6 +440,12 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       kunci: kunciCastRef({ presetId: row.creator_category, customDesc: customDesc ?? null }),
       deskripsi: category.promptSeed,
       productName: row.product_name,
+      // MEREK TEPERCAYA. Kolom products.brand belum ada (migrasi diblokir),
+      // jadi sumbernya raw_meta.brand kalau intake sudah menyimpannya. Kosong
+      // = QC-F1 hero UNVERIFIED, dan itu memang yang diinginkan: lebih baik
+      // menolak memakai frame daripada menyatakan setia pada merek yang kita
+      // sendiri cuma menebaknya.
+      merekEksplisit: merekTepercaya(row),
     });
     specSiap = turunan.spec;
     qcF1 = turunan.qcF1;

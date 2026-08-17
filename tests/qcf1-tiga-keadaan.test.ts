@@ -51,7 +51,8 @@ const adaKunci = Boolean(process.env.GEMINI_API_KEY) && process.env.UJI_QCF1_NYA
 
 test("frame SCARLET/pump/10ml GAGAL — frame yang dulu false-pass", { skip: !(adaArtefak && adaKunci) }, async () => {
   const hasil = await qcF1FrameFidelity({
-    framePath: PALSU, productPhotoPath: ASLI, productName: "Scarlett Acne Serum", productState: "hero",
+    framePath: PALSU, productPhotoPath: ASLI, productName: "Scarlett Acne Serum",
+    merekEksplisit: "Scarlett", productState: "hero",
   });
   assert.equal(hasil.status, "FAIL", `harus FAIL, dapat ${hasil.status}: ${hasil.detail}`);
   assert.equal(bolehJadiReferensi(hasil), false);
@@ -63,7 +64,8 @@ test("frame SCARLET/pump/10ml GAGAL — frame yang dulu false-pass", { skip: !(a
 test("foto asli dibandingkan dirinya sendiri LULUS", { skip: !(adaArtefak && adaKunci) }, async () => {
   // Kalau ini gagal, gerbangnya terlalu ketat dan akan menolak frame yang benar.
   const hasil = await qcF1FrameFidelity({
-    framePath: ASLI, productPhotoPath: ASLI, productName: "Scarlett Acne Serum", productState: "hero",
+    framePath: ASLI, productPhotoPath: ASLI, productName: "Scarlett Acne Serum",
+    merekEksplisit: "Scarlett", productState: "hero",
   });
   assert.equal(hasil.status, "PASS", `asli vs dirinya sendiri harus PASS: ${hasil.detail}`);
   assert.equal(hasil.temuan.merekTerbaca, true, "OCR hero harus membaca mereknya utuh");
@@ -90,21 +92,38 @@ test("OCR pada frame palsu NYATA menolak mereknya — tanpa jaringan", { skip: !
   }
 });
 
-test("token merek dipilih dari URUTAN, bukan panjang — deskriptor terpanjang tidak menang", async () => {
-  const { tokenMerekUtama } = await import("../lib/media/qc");
-  // Kasus yang membuat aturan lama salah: kata terpanjang justru DESKRIPTOR.
-  // "antioksidan" boleh salah dibaca tanpa mengubah identitas produknya;
-  // "bening" tidak.
-  assert.equal(tokenMerekUtama("Bening Antioksidan Serum"), "bening");
-  assert.equal(tokenMerekUtama("Scarlett Acne Serum"), "scarlett");
-  // Kata generik di depan dilewati, bukan dipakai.
-  assert.equal(tokenMerekUtama("Serum Wajah Scarlett"), "wajah",
-    "kata non-generik pertama; 'serum' generik jadi dilewati");
-  // Produk polos tanpa merek: null, bukan menebak.
-  assert.equal(tokenMerekUtama("Gamis Polos Premium"), null);
-  // Merek eksplisit MENANG atas tebakan dari nama.
-  assert.equal(tokenMerekUtama("Bening Antioksidan Serum", "Scarlett"), "scarlett");
-  assert.equal(tokenMerekUtama("Bening Antioksidan Serum", "   "), "bening", "merek kosong tidak dianggap");
+test("merek HANYA dari sumber tepercaya — tidak ada tebakan dari nama produk", async () => {
+  const { tokenMerekUtama, usulMerekDariNama } = await import("../lib/media/qc");
+
+  // Tebakan dari nama produk DIHAPUS sebagai keputusan. Ekspektasi lama
+  // "Serum Wajah Scarlett -> wajah" dulu dikunci di sini sebagai BENAR; itu
+  // keliru, dan reviewer menemukannya. Mengganti satu tebakan (terpanjang)
+  // dengan tebakan lain (non-generik pertama) tidak membuatnya benar.
+  assert.equal(tokenMerekUtama(null), null, "tanpa sumber tepercaya: tidak tahu");
+  assert.equal(tokenMerekUtama("   "), null);
+
+  // Merek eksplisit: kata depan dilewati, bukan dipakai.
+  assert.equal(tokenMerekUtama("The Originote"), "originote");
+  assert.equal(tokenMerekUtama("Scarlett"), "scarlett");
+  assert.equal(tokenMerekUtama("PT Scarlett Whitening"), "scarlett");
+
+  // Usulan dari nama produk tetap ada, TAPI namanya jelas: untuk ditawarkan ke
+  // pengguna saat intake, bukan untuk memutuskan gerbang.
+  assert.equal(usulMerekDariNama("Scarlett Acne Serum"), "scarlett");
+  assert.equal(usulMerekDariNama("The Originote Serum"), "originote");
+  // Nama produk rusak dari parser tidak boleh melahirkan "merek" apa pun yang
+  // meyakinkan — usulannya boleh salah, dan itu sebabnya ia bukan keputusan.
+  assert.equal(usulMerekDariNama("[ Beli 5 box dapat 10"), "beli");
+});
+
+test("hero tanpa merek tepercaya = UNVERIFIED, bukan menebak", { skip: !adaArtefak || !adaKunci }, async () => {
+  const hasil = await qcF1FrameFidelity({
+    framePath: ASLI, productPhotoPath: ASLI, productName: "Scarlett Acne Serum",
+    productState: "hero", // merekEksplisit sengaja TIDAK diisi
+  });
+  assert.equal(hasil.status, "UNVERIFIED");
+  assert.equal(bolehJadiReferensi(hasil), false);
+  assert.match(hasil.detail, /merek tepercaya/);
 });
 
 test("cast-ref memutuskan lewat bolehJadiReferensi(), bukan membaca status sendiri", async () => {
@@ -114,4 +133,28 @@ test("cast-ref memutuskan lewat bolehJadiReferensi(), bukan membaca status sendi
   // pakai/tidak, jawabannya bisa ditulis ulang jadi `!== "FAIL"` suatu hari.
   assert.match(src, /bolehJadiReferensi\(qc\)/);
   assert.ok(!/qc\.status === "PASS"/.test(src), "keputusan pakai/tidak tidak boleh membaca status langsung");
+});
+
+test("merek tepercaya dibaca dari raw_meta, dan tidak pernah ditebak", async () => {
+  const { merekTepercaya } = await import("../lib/postgres/worker");
+  assert.equal(merekTepercaya({ product_raw_meta: '{"brand":"Scarlett"}' }), "Scarlett");
+  assert.equal(merekTepercaya({ product_raw_meta: '{"brand":"  The Originote  "}' }), "The Originote");
+  // Tidak ada sumber = null, BUKAN menebak dari nama produk.
+  assert.equal(merekTepercaya({ product_raw_meta: "{}" }), null);
+  assert.equal(merekTepercaya({ product_raw_meta: null }), null);
+  assert.equal(merekTepercaya({ product_raw_meta: "bukan json" }), null, "raw_meta rusak tidak boleh melempar");
+  assert.equal(merekTepercaya({ product_raw_meta: '{"brand":42}' }), null, "tipe salah bukan merek");
+});
+
+test("merek mengalir worker -> cast-ref -> qcF1 lewat satu nama field", async () => {
+  const fsx = await import("node:fs");
+  // Rantainya diperiksa di sumber karena ujung-ke-ujungnya butuh render nyata:
+  // yang dijaga adalah TIDAK ADA mata rantai yang menjatuhkan fieldnya diam-diam.
+  const worker = fsx.readFileSync("lib/postgres/worker.ts", "utf8");
+  const castref = fsx.readFileSync("lib/media/cast-ref.ts", "utf8");
+  const qcframe = fsx.readFileSync("lib/media/qc-frame.ts", "utf8");
+  assert.match(worker, /merekEksplisit: merekTepercaya\(row\)/, "worker mengisi dari sumber tepercaya");
+  assert.match(castref, /merekEksplisit\?: string \| null/, "cast-ref menerimanya");
+  assert.match(castref, /merekEksplisit: input\.merekEksplisit/, "cast-ref meneruskannya");
+  assert.match(qcframe, /merekEksplisit\?: string \| null/, "qcF1 menerimanya");
 });

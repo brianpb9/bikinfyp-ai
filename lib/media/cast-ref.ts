@@ -191,6 +191,8 @@ export async function turunkanFrameAwalTerperiksa(input: {
   castRefPath: string;
   productPhotoPath: string;
   productName: string;
+  /** Merek TEPERCAYA (products.brand / hasil intake). Kosong = hero UNVERIFIED. */
+  merekEksplisit?: string | null;
   startState: string;
   outPath: string;
   denganWajah: boolean;
@@ -210,6 +212,7 @@ export async function turunkanFrameAwalTerperiksa(input: {
       // ASLI, selalu — lihat catatan di atas.
       productPhotoPath: input.productPhotoPath,
       productName: input.productName,
+      merekEksplisit: input.merekEksplisit,
       productState: input.productState,
     });
     biaya += qc.biayaIdr;

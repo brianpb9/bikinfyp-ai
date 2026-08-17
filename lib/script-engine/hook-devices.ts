@@ -123,13 +123,29 @@ export const POLA_PERANGKAT: Record<string, RegExp> = {
   // contoh perangkat "subversi-kategori" gagal mengenali polanya sendiri.
   "larangan atau negasi": /\bjangan\b|\bnggak\b|\bgak\b|\bbukan\b|\bbelum\b|\btidak\b|\btak\b/i,
   segmentasi: /\bbuat (kalian|yang|kamu)\b|\bkhusus\b|\bkalian yang\b/i,
-  superlatif: /\bpaling\b|\bter[a-z]{3,}\b|\bbanget\b/i,
+  // "ter[a-z]{3,}" DIPERSEMPIT (18 Agu). Pola lama mencocoki kata apa pun yang
+  // kebetulan berawalan "ter" — "tersedia", "terlihat", "terakhir" — sehingga
+  // kalimat datar seperti "Produk ini tersedia dalam tiga ukuran" dinyatakan
+  // memakai perangkat retoris. Positif palsu di detektor yang akan dijadikan
+  // GATE KERAS jauh lebih berbahaya daripada negatif palsu: ia meloloskan
+  // hook yang justru tidak menahan siapa pun.
+  superlatif: /\bpaling\b|\bter(baik|murah|cepat|laris|enak|bagus|mahal|besar|kecil|lengkap)\b|\bbanget\b/i,
   "pengakuan pribadi": /\baku\b|\bgue\b|\bsaya\b|\bkirain?\b|\bternyata\b/i,
   perbandingan: /\bmirip\b|\bkayak\b|\bsetara\b|\bmendekati\b|\bdibanding/i,
   // Penanda "sudah coba banyak, baru ini yang berhasil". Ditambahkan setelah
   // contoh perangkat penemuan-setelah-gagal tidak dikenali polanya sendiri —
   // perangkatnya nyata, pengukurnya yang belum lengkap.
   "penemuan setelah gagal": /\bakhirnya\b|\bganti-ganti\b|\bberkali-kali\b|\bbaru (yang )?ini\b/i,
+  // TIGA POLA DI BAWAH ditambahkan sebelum L-19 dijadikan gate keras — urutan
+  // yang diminta reviewer A4: lengkapi dulu pengukurnya, baru dikeraskan.
+  // Ketiganya perangkat NYATA yang dipakai hook produksi dan sama sekali tidak
+  // dikenali, sehingga 24 dari 132 varian gagal karena pengukurnya, bukan
+  // karena hooknya lemah. Contoh: "Eh, sesuatu baru saja menembus dinding
+  // belakang" (kejutan) dan "kali ini kita melihat dari dalam kardus" (sudut
+  // mustahil).
+  kejutan: /\btiba-tiba\b|\bbaru saja\b|\bsesuatu\b|\bmendadak\b|\bkaget\b|\bmakin\b/i,
+  "sudut mustahil": /\bdari dalam\b|\bdari atas\b|\bdari bawah\b|\bdari balik\b|\bsedekat ini\b|\bkali ini kita\b/i,
+  "ajakan lihat": /\blihat (ini|dulu|tembok|bagian)\b|\bcoba tebak\b|\bperhatiin\b|\bperhatikan\b/i,
 };
 
 /** True kalau hook memakai minimal satu perangkat yang bisa dikenali. */

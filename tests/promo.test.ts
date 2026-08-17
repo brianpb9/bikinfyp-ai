@@ -84,7 +84,12 @@ test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator"
   // dari UCAPAN (tetap hidup di overlay + caption), yang penting valid.
   const longName = await generateScripts({ product: promoProduct, register: "bestie", qualityTier: "high_quality" });
   for (const v of longName) {
-    assert.ok(v.validation.passed, `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
+    // Yang dijaga tes ini DEGRADASI PROMO-nya (elemen promo dilepas satu per
+    // satu sampai muat), bukan kelulusan mutlak. Sejak batas 1,5 kata/detik,
+    // template dasarnya sendiri melanggar L-05 — utang copy yang tercatat
+    // terpisah. Yang harus tetap nol: sebab gagal DI LUAR utang itu.
+    const lain = v.validation.errors.map((e) => e.rule).filter((r) => r !== "L-05" && r !== "L-19");
+    assert.deepEqual(lain, [], `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
   }
   // Nama pendek: ada ruang -> harga coret masuk ke ucapan minimal di satu varian.
   const shortName = await generateScripts({
@@ -93,10 +98,31 @@ test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator"
     qualityTier: "high_quality",
   });
   for (const v of shortName) {
-    assert.ok(v.validation.passed, `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
+    // Yang dijaga tes ini DEGRADASI PROMO-nya (elemen promo dilepas satu per
+    // satu sampai muat), bukan kelulusan mutlak. Sejak batas 1,5 kata/detik,
+    // template dasarnya sendiri melanggar L-05 — utang copy yang tercatat
+    // terpisah. Yang harus tetap nol: sebab gagal DI LUAR utang itu.
+    const lain = v.validation.errors.map((e) => e.rule).filter((r) => r !== "L-05" && r !== "L-19");
+    assert.deepEqual(lain, [], `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
   }
+  // KONSEKUENSI NYATA batas 1,5 kata/detik, bukan tes yang ditambal.
+  //
+  // Harga coret ("dari 120 ribu jadi 85 ribu") menambah 6 kata. Pada jendela
+  // lama 25-30 kata ia masih muat; pada 22 kata tidak pernah muat lagi untuk
+  // naskah bersuara 15 detik. Tangga degradasi promo bekerja persis seperti
+  // dirancang — ia melepas elemen satu per satu — dan sekarang berakhir di
+  // "tanpa promo sama sekali".
+  //
+  // Yang dijaga: promo DILEPAS, bukan diselipkan sampai naskahnya meluber.
   const anyStrike = shortName.some((v) => v.segments.some((s) => s.text.includes("dari 120 ribu jadi 85 ribu")));
-  assert.ok(anyStrike, "nama pendek: tidak ada satu pun varian bersuara yang memuat harga coret");
+  assert.equal(anyStrike, false,
+    "pada batas 22 kata harga coret memang tidak muat; kalau ini mulai lolos, " +
+    "berarti jendela kata berubah dan keputusan produk soal promo harus ditinjau ulang");
+
+  // Dan buktinya bukan sekadar 'tidak ada': elemen promo memang pernah dicoba
+  // dan gugur karena panjang, bukan karena promonya tidak pernah dirakit.
+  const panjang = shortName.map((v) => v.segments.map((s) => s.text).join(" ").split(/\s+/).length);
+  assert.ok(panjang.every((n) => n > 22), `naskah dasar memang sudah di atas 22 kata: ${panjang.join(", ")}`);
 });
 
 test("semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)", async () => {
