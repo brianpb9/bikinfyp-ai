@@ -3,6 +3,7 @@
 // Mode "light": hanya L-10/L-11 yang keras (edit pengguna, FSD BR-03.2); sisanya jadi warning.
 
 import { memakaiPerangkat } from "./hook-devices";
+import { periksaPemicu, ringkasPemicu } from "../media/pemicu-filter";
 import { COMPETITOR_BRANDS } from "../config/hooks";
 import { formatHargaNatural } from "./templates";
 import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
@@ -10,7 +11,16 @@ import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from ".
 export interface ScriptToValidate {
   hook_family: string;
   register: string;
-  segments: { role: string; text: string; tts_text?: string }[];
+  segments: {
+    role: string;
+    text: string;
+    tts_text?: string;
+    /** Arahan visual. Diperiksa L-21 — di sinilah kata pemicu penyaring hidup,
+     *  bukan di dialog. */
+    visual_direction?: string;
+    /** Keadaan awal frame (tulisan LLM), ikut diperiksa L-21. */
+    start_state?: string;
+  }[];
   productName: string;
   priceIdr: number;
   /** Hanya aktif bila pemanggil punya sinyal template price-led yang nyata. */
@@ -467,6 +477,42 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
       message_id: "Hook belum memakai perangkat retoris yang dikenali — pertanyaan, negasi, harga, atau pengakuan pribadi biasanya yang menahan scroll.",
       segment: "hook",
     });
+  }
+
+  // L-21: kata yang memicu penyaring konten penyedia.
+  //
+  // PERINGATAN, bukan error, dan alasannya sama dengan L-19: penyaringnya
+  // menghukum kosakata, bukan maksud — dan sebagian kosakata itu memang milik
+  // produknya. Iklan sabun tanpa kata "mandi" hampir mustahil ditulis, jadi
+  // melarangnya keras akan mematikan satu kategori penuh, pola kesalahan yang
+  // sudah dua kali kena di repo ini.
+  //
+  // Yang diperiksa arah VISUAL dan keadaan awal, bukan dialog: penolakan 18 Agu
+  // datang dari prompt video, dan dialognya sendiri tidak pernah dikirim ke
+  // penyaring itu.
+  for (const segment of script.segments) {
+    const bahan = [segment.visual_direction ?? "", segment.start_state ?? ""].join(" ").trim();
+    if (!bahan) continue;
+    const temuan = periksaPemicu(bahan);
+    if (!temuan.length) continue;
+    // Negasi tentang orang dilaporkan terpisah: ia bukan cuma risiko penyaring,
+    // ia juga membuat model MEMUNCULKAN yang dinegasikan.
+    const negasi = temuan.filter((t) => t.jenis === "negasi-orang");
+    const kosakata = temuan.filter((t) => t.jenis === "kosakata");
+    if (negasi.length) {
+      warnings.push({
+        rule: "L-21",
+        message_id: `Negasi tentang orang di arahan visual — tulis positifnya: ${ringkasPemicu(negasi)}`,
+        segment: segment.role,
+      });
+    }
+    if (kosakata.length) {
+      warnings.push({
+        rule: "L-21",
+        message_id: `Kata ini sering memicu penyaring konten penyedia: ${ringkasPemicu(kosakata)}`,
+        segment: segment.role,
+      });
+    }
   }
 
   return { passed: errors.length === 0, errors, warnings, checked_at: new Date().toISOString() };

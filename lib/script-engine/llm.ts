@@ -94,6 +94,21 @@ export function blokAturan(): string {
     "- No double negatives in one sentence.",
     "- The HOOK must not name the product.",
     "",
+    // Penolakan nyata 18 Agu: adegan koridor dengan talent BERPAKAIAN LENGKAP
+    // ditolak penyaring penyedia sebagai NSFW. Bukan adegannya yang salah —
+    // kosakatanya yang bertetangga dengan adegan terlarang.
+    "FILTER SAFETY — the video provider rejects prompts on vocabulary, not intent.",
+    "A fully-clothed corridor scene was rejected as NSFW because of the words around it. So:",
+    "- Never write: towel, bathrobe, shower, bathing, wet skin/body/hair, undressing, changing clothes.",
+    "  Move the action to a sink, a table, a doorway. Describe cloth as 'a folded cloth', not a towel.",
+    "- Never put a bathroom door and a second person in the same scene. Keep one person in frame.",
+    "- Never write weapons of any kind, including a baton.",
+    "- NEVER USE NEGATIONS ABOUT PEOPLE. Not 'no other residents', not 'her face is never sharp',",
+    "  not 'she never speaks'. Two reasons: the filter reads the words you wrote, and the video model",
+    "  renders what you name — 'no other residents' is how you get other residents.",
+    "  Write the positive instead: 'the corridor is empty', 'the camera stays on her hands',",
+    "  'she listens quietly'. Say what IS there.",
+    "",
     "STRUCTURE:",
     "- Exactly one HOOK first, 1-5 BODY, exactly one CTA last. Timecodes contiguous, no gaps.",
     "- Each segment 4-6 seconds. HOOK 3-5s. CTA >= 4s.",

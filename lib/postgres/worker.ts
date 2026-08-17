@@ -19,6 +19,7 @@ import { ringkasParams, ringkasSpec } from "../arsip-prompt";
 import { pgSimpanArsipPrompt } from "./smoke-runtime";
 import { generateFirstFrame, perluFrameBuatan, harusMenahanProduk, pilihShotUntukFrame } from "../media/first-frame";
 import { kunciCastRef } from "../media/cast-ref";
+import { periksaPemicu, ringkasPemicu } from "../media/pemicu-filter";
 import { TVC_ROUTES, type TvcRoute } from "../templates";
 import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
@@ -328,6 +329,21 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // Model yang akan dipakai penyedia — sama sumbernya dengan createTask(),
   // supaya mode referensi yang diarsipkan adalah mode yang benar-benar dikirim.
   const modelTier = (config.tiers[spec.qualityTier] ?? config.tiers.silent_caption).byteplusModel;
+
+  // Pemicu penyaring dicatat SEBELUM dikirim, tidak memblokir.
+  //
+  // Penolakan 18 Agu (koridor berpakaian lengkap ditolak NSFW) tidak bisa
+  // dibedah karena tidak ada catatan kata apa yang ada di promptnya. Baris ini
+  // membuat penolakan berikutnya bisa langsung dikorelasikan. TIDAK memblokir:
+  // penyaringnya menghukum kosakata, dan sebagian kosakata itu memang milik
+  // produknya — menahan render karena kata "mandi" akan mematikan kategori
+  // sabun.
+  for (const sh of spec.shots) {
+    const temuan = periksaPemicu(sh.prompt);
+    if (temuan.length) {
+      console.warn(`[pemicu] job ${row.id.slice(0, 8)} shot ${sh.index}: ${ringkasPemicu(temuan)}`);
+    }
+  }
 
   // ARSIP PROMPT — sebelum satu pun panggilan penyedia.
   //
