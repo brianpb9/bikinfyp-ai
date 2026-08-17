@@ -69,7 +69,8 @@ export const SkemaIde = z.object({
 });
 export type Ide = z.infer<typeof SkemaIde>;
 
-export const SkemaDaftarIde = z.object({ ideas: z.array(SkemaIde).min(3).max(8) });
+/** min(1): gelombang paralel hanya meminta 1-2 ide, bukan lima sekaligus. */
+export const SkemaDaftarIde = z.object({ ideas: z.array(SkemaIde).min(1).max(8) });
 
 /** Bobot dan ambang FYP Gate — PATCH 4 §6, angkanya milik Brian. */
 export const DIMENSI_FYP = [
@@ -263,6 +264,10 @@ export interface PermintaanIde {
   hookLevel?: string;
   /** Putaran penambal: SEMUA kandidat harus berangkat dari situasi manusia. */
   wajibSemuaManusiawi?: boolean;
+  /** Jatah mekanik untuk SATU gelombang paralel — bukan seluruh bank. */
+  jatahMekanik?: IdMekanik[];
+  /** Berapa ide diminta dari panggilan ini. Kosong = lima (perilaku lama). */
+  jumlahDiminta?: number;
 }
 
 /**
@@ -281,6 +286,10 @@ export const MIN_MANUSIAWI_PER_PUTARAN = 3;
 function blokPengetahuan(r: PermintaanIde): string {
   const daftar = urutkanMekanik(r.mekanikBaruDipakai ?? [])
     .filter((m) => !(r.mekanikDilarang ?? []).includes(m.id))
+    // Gelombang paralel hanya melihat JATAHNYA. Menyodorkan seluruh bank ke
+    // tiap gelombang membuat ketiganya cenderung memilih mekanik terkuat yang
+    // sama, dan keragaman yang justru jadi alasan memecahnya ikut hilang.
+    .filter((m) => !r.jatahMekanik || r.jatahMekanik.includes(m.id))
     .map((m) => `- ${m.id}: ${m.mekanik} (contoh: ${m.contoh}; cocok: ${m.cocok})`)
     .join("\n");
   // HANYA format yang boleh dipasangkan untuk konteks ini yang disebut. Format
@@ -354,7 +363,7 @@ function blokTugasIde(r: PermintaanIde): string {
       ? `FORBIDDEN MECHANICS this round (they already failed the gate): ${(r.mekanikDilarang ?? []).join(", ")}.`
       : "",
     "",
-    "Give exactly 5 candidates, each with a different mechanic. JSON only.",
+    `Give exactly ${r.jumlahDiminta ?? 5} candidate${(r.jumlahDiminta ?? 5) === 1 ? "" : "s"}, each with a different mechanic. JSON only.`,
   ].filter(Boolean).join("\n");
 }
 
@@ -400,12 +409,62 @@ export async function usulkanIdeBerkuota(r: PermintaanIde, biaya?: AkumulasiBiay
 }
 
 /** Hasilkan kandidat ide, buang yang generik dan yang mekaniknya tidak dikenal. */
+/**
+ * Bagi pembuatan ide jadi beberapa panggilan PARALEL.
+ *
+ * Terukur 18 Agu: satu panggilan yang meminta lima ide selengkap spesifikasi
+ * menghasilkan ~7k token keluaran, dan di model kelas atas itu sekitar 90
+ * detik — dua putaran jadi 214 detik. Yang lama BUKAN penilaiannya (sudah
+ * paralel), melainkan mengarang lima ide sekaligus dalam satu aliran.
+ *
+ * Dipecah jadi beberapa panggilan yang menulis lebih sedikit ide dan berjalan
+ * bersamaan. Jumlah idenya sama; yang hilang cuma waktu menunggu.
+ *
+ * Efek samping yang justru diinginkan: tiap panggilan diberi JATAH MEKANIK
+ * berbeda, jadi keragaman mekanik tidak lagi bergantung pada model mengingat
+ * apa yang sudah ia tulis di paragraf sebelumnya.
+ */
+const IDE_PER_PANGGILAN = 2;
+const MAKS_GELOMBANG = 3;
+
 export async function usulkanIde(r: PermintaanIde, biaya?: AkumulasiBiaya): Promise<Ide[]> {
-  // 12000, bukan 4000. Terukur 17 Agu: lima ide selengkap yang diminta
-  // spesifikasi memakan ~6-8k token, dan 4000 memotongnya di tengah kandidat
-  // keempat. Batas dinaikkan, BUKAN idenya yang disuruh lebih pendek —
-  // kedalaman itulah yang membedakannya dari template.
-  const teks = await panggil(blokPengetahuan(r), blokTugasIde(r), 12000, biaya);
+  const bank = urutkanMekanik(r.mekanikBaruDipakai ?? [])
+    .filter((m) => !(r.mekanikDilarang ?? []).includes(m.id))
+    .map((m) => m.id);
+  const jatah: IdMekanik[][] = [];
+  for (let i = 0; i < bank.length && jatah.length < MAKS_GELOMBANG; i += IDE_PER_PANGGILAN) {
+    jatah.push(bank.slice(i, i + IDE_PER_PANGGILAN));
+  }
+  if (jatah.length <= 1) return usulkanIdeSekali(r, biaya);
+
+  const gelombang = await Promise.all(
+    jatah.map((mekanik) =>
+      usulkanIdeSekali({ ...r, jatahMekanik: mekanik, jumlahDiminta: mekanik.length }, biaya).catch((err) => {
+        // Satu gelombang gagal tidak boleh menjatuhkan sisanya — yang lain
+        // sudah dibayar dan hasilnya sah.
+        console.warn(`[idea] satu gelombang gagal, dilanjut dengan sisanya: ${(err as Error).message}`);
+        return [] as Ide[];
+      })
+    )
+  );
+  const gabung = gelombang.flat();
+  if (gabung.length === 0) throw new LlmTidakTersedia("semua gelombang pembuat ide gagal");
+  // Dedup lintas gelombang: dua gelombang bisa memilih format yang sama.
+  const terpakai = new Set<string>();
+  return gabung.filter((i) => {
+    const k = `${i.mechanic}|${i.format}`;
+    if (terpakai.has(k)) return false;
+    terpakai.add(k);
+    return true;
+  });
+}
+
+async function usulkanIdeSekali(r: PermintaanIde, biaya?: AkumulasiBiaya): Promise<Ide[]> {
+  // Batas token mengikuti jumlah ide yang diminta — panggilan yang menulis dua
+  // ide tidak perlu jatah untuk lima. Batas 4000 dulu memotong jawaban di
+  // tengah kandidat keempat, jadi jatahnya dihitung per ide, bukan dipukul rata.
+  const batas = Math.max(4000, (r.jumlahDiminta ?? 5) * 2600);
+  const teks = await panggil(blokPengetahuan(r), blokTugasIde(r), batas, biaya);
   const mentah = JSON.parse(ambilObjekJson(teks)) as { ideas?: unknown[] };
   // Divalidasi SATU PER SATU, bukan sebagai satu daftar.
   //
@@ -539,6 +598,31 @@ export interface IdeTerpilih {
  */
 export const MAKS_PUTARAN_IDE = 2;
 
+/**
+ * Berapa penilaian boleh berjalan bersamaan.
+ *
+ * EMPAT. Cukup untuk memotong waktu tunggu sepuluh kandidat jadi tiga
+ * gelombang, dan masih jauh di bawah batas laju akun. Angka yang lebih besar
+ * memperbaiki waktu makin sedikit sementara risiko 429-nya naik terus — dan
+ * satu 429 di tengah menghabiskan lebih banyak waktu daripada yang dihemat.
+ */
+export const BATAS_PARALEL = 4;
+
+/** Jalankan tugas berbarengan, maksimal `batas` sekaligus, urutan hasil dijaga. */
+async function petaTerbatas<T, H>(item: T[], batas: number, tugas: (x: T) => Promise<H>): Promise<H[]> {
+  const hasil: H[] = new Array(item.length);
+  let berikut = 0;
+  const pekerja = Array.from({ length: Math.min(batas, item.length) }, async () => {
+    for (;;) {
+      const i = berikut++;
+      if (i >= item.length) return;
+      hasil[i] = await tugas(item[i]);
+    }
+  });
+  await Promise.all(pekerja);
+  return hasil;
+}
+
 export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
   // Akumulator dibuat PER PANGGILAN, bukan modul-global: dua permintaan yang
   // berjalan bersamaan di satu proses akan saling mencampur biayanya.
@@ -558,7 +642,19 @@ export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
     //
     // Biayanya wajar: satu panggilan pembuat ide, lalu beberapa panggilan
     // penilai yang pendek (800 token) — bukan lima kali ongkos pembuat ide.
-    for (const ide of kandidat) {
+    // PENILAIAN BERBARENGAN, bukan berurutan.
+    //
+    // Sepuluh kandidat dinilai satu per satu adalah sepuluh bolak-balik
+    // jaringan yang saling menunggu tanpa alasan — tiap penilaian berdiri
+    // sendiri dan tidak membaca hasil penilaian lain. Terukur pada jalankan
+    // Scarlett: 12 panggilan berurutan, dan bagian penilaian itu yang paling
+    // lama sekaligus paling mudah diperbaiki.
+    //
+    // Dibatasi BATAS_PARALEL, bukan dilepas semua: menembakkan sepuluh
+    // permintaan sekaligus ke satu akun akan menabrak rate limit persis saat
+    // pengguna paling menunggu, dan gagal karena rate limit jauh lebih mahal
+    // daripada menunggu satu gelombang.
+    const dinilai = await petaTerbatas(kandidat, BATAS_PARALEL, async (ide) => {
       // TIDAK ADA pemeriksaan perangkat retoris di sini, dan itu KOREKSI.
       //
       // Versi pertama menjatuhkan kandidat yang one_liner-nya tidak cocok
@@ -578,8 +674,14 @@ export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
         productName: r.productName, productCategory: r.productCategory,
         format: r.format, hookLevel: r.hookLevel,
       }, biaya);
-      semua.push({ ide, nilai });
-      if (!nilai.lulus) dilarang.add(ide.mechanic as IdMekanik);
+      return { ide, nilai };
+    });
+    // Mutasi `dilarang` dikumpulkan SESUDAH semua selesai. Menyentuhnya di
+    // dalam tugas paralel membuat larangan putaran kedua bergantung pada
+    // urutan penyelesaian — yaitu hasil yang berbeda tiap dijalankan.
+    for (const d of dinilai) {
+      semua.push(d);
+      if (!d.nilai.lulus) dilarang.add(d.ide.mechanic as IdMekanik);
     }
     const peringkat = peringkatkan(semua);
     const menang = peringkat.find((p) => p.nilai.lulus);
@@ -600,6 +702,7 @@ function catat(r: PermintaanIde, hasil: IdeTerpilih, biaya: AkumulasiBiaya): voi
     productName: r.productName, productCategory: r.productCategory,
     mechanic: hasil.ide.mechanic, total: hasil.nilai.total, lulus: hasil.nilai.lulus,
     borderline: hasil.nilai.borderline,
+    perDimensi: hasil.nilai.perDimensi,
     putaran: hasil.putaran, jumlahKandidat: hasil.peringkat.length,
     manusiawi: hasil.peringkat.filter((p) => situasiManusiawi(p.ide.human_situation)).length,
     panggilan: biaya.panggilan,
@@ -661,6 +764,9 @@ export function catatSkorGate(baris: {
   total: number;
   lulus: boolean;
   borderline: boolean;
+  /** Skor per dimensi. Tanpa ini, tinjauan 20-produk cuma melihat total —
+   *  padahal yang menentukan justru dimensi mana yang jeblok. */
+  perDimensi: Record<string, number>;
   putaran: number;
   jumlahKandidat: number;
   manusiawi: number;
