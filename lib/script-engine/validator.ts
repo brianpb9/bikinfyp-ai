@@ -8,6 +8,7 @@ import { COMPETITOR_BRANDS } from "../config/hooks";
 import { formatHargaNatural } from "./templates";
 import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
 import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
+import { pilihTokenMerek } from "../merek";
 
 export interface ScriptToValidate {
   hook_family: string;
@@ -299,15 +300,11 @@ export function templateRequiresPriceMention(templateId: string | null | undefin
  * nama lengkap tetap diterima (lihat T-01). Yang tidak boleh adalah menuntut
  * seluruh SKU, karena itu menolak naskah yang benar.
  */
-const KATA_UMUM_MEREK = new Set([
-  "the", "pt", "cv", "by", "dan", "and", "official", "store", "new", "premium",
-  "original", "asli", "paket", "isi",
-]);
 export function tokenMerek(productName: string): string {
-  for (const t of (productName.toLowerCase().match(/[a-z]{3,}/g) ?? [])) {
-    if (!KATA_UMUM_MEREK.has(t)) return t;
-  }
-  return "";
+  // Pengetahuan mereknya BERSAMA dengan QC-10 (lib/merek.ts) — canary 19 Agu
+  // menemukan dua daftar kata umum yang menyimpang, dan T-01 sempat menuntut
+  // penutup TVC menyebut "kopi" untuk produk "KOPI TANG".
+  return pilihTokenMerek(productName)[0] ?? "";
 }
 
 export function isTvcTemplate(templateId: string | null | undefined): boolean {

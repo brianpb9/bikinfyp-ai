@@ -12,6 +12,7 @@ import { isServiceLike } from "../config/hooks";
 import { qcVision, POSISI_SAMPEL } from "./qc-vision";
 import { qcSuara } from "./qc-suara";
 import { merekCocok } from "./qc-frame";
+import { GENERIC_PRODUCT_WORDS, KATA_DEPAN_MEREK } from "../merek";
 
 export interface QcCheck {
   code: string;
@@ -556,14 +557,6 @@ export async function qcHandMorphing(filePath: string, workDir: string): Promise
 // kecil di frame, yang justru mengandalkan teks label).
 const APPAREL_CATEGORIES = new Set(["fashion", "muslim_fashion"]);
 
-const GENERIC_PRODUCT_WORDS = new Set([
-  "gamis", "dress", "baju", "kaos", "kemeja", "jaket", "sweater", "hoodie", "celana", "rok",
-  "hijab", "kerudung", "jilbab", "scarf", "jubah", "sepatu", "sandal", "tas", "tote", "pouch",
-  "serum", "sabun", "soap", "cream", "krim", "ampoule", "essence", "toner", "sunscreen", "cleanser", "lotion",
-  "snack", "keripik", "kripik", "tempura", "seaweed", "cemilan", "kopi", "teh", "susu",
-  "earphone", "headset", "gaming", "chair", "kursi", "mouse", "mousepad", "deskmat", "tumbler", "botol",
-  "original", "flavor", "premium", "murah", "viral", "terlaris", "wanita", "pria", "anak", "basic", "polos",
-]);
 
 export function brandTokens(productName: string): string[] {
   const all = normalizeOcr(productName)
@@ -581,11 +574,6 @@ export function brandTokens(productName: string): string[] {
   return brand.slice(0, 3);
 }
 
-/**
- * Kata yang tidak pernah jadi identitas merek walau berdiri di depan namanya.
- * "The Originote" -> originote, bukan "the".
- */
-const KATA_DEPAN_MEREK = new Set(["the", "pt", "cv", "by", "dan", "and", "official", "store"]);
 
 /**
  * Token yang MEMUTUSKAN kesetiaan merek — HANYA dari sumber tepercaya.

@@ -62,15 +62,15 @@ const P = {
 const KLIP: Klip[] = [
   { id: "somethinc-a", produk: P.somethinc, foto: "canary-somethinc.jpg", format: "hands_only", contentType: "affiliate", durationSec: 15, persona: "hijaber", shot: 1, sifat: "SKU panjang, foto banner marketing" },
   { id: "somethinc-b", produk: P.somethinc, foto: "canary-somethinc.jpg", format: "talking_head", contentType: "affiliate", durationSec: 15, persona: "genz", shot: 0, sifat: "SKU panjang, wajah AI" },
-  { id: "glow-a", produk: P.glow, foto: "canary-glow.jpg", format: "hands_only", contentType: "affiliate", durationSec: 15, persona: "bunda", shot: 1, sifat: "promo harga coret 120rb->85rb" },
+  { id: "glow-a", produk: P.glow, foto: "canary-glow.jpg", format: "hands_only", contentType: "affiliate", durationSec: 15, persona: "ibu", shot: 1, sifat: "promo harga coret 120rb->85rb" },
   { id: "glow-b", produk: P.glow, foto: "canary-glow.jpg", format: "hands_only", contentType: "affiliate", durationSec: 30, persona: "hijaber", shot: 2, sifat: "durasi 30 dtk" },
   { id: "mosseru-a", produk: P.mosseru, foto: "produk-polos.jpg", format: "talking_head", contentType: "affiliate", durationSec: 15, persona: "hijaber", shot: 0, sifat: "nama memuat kata pemicu (Shower)" },
   { id: "mosseru-b", produk: P.mosseru, foto: "produk-polos.jpg", format: "ads", contentType: "ads", durationSec: 15, persona: "genz", shot: 0, sifat: "genre Ads, CTA tanpa keranjang" },
   { id: "kopitang-a", produk: P.kopitang, foto: "canary-kopitang.jpg", format: "hands_only", contentType: "affiliate", durationSec: 15, persona: "genz", shot: 1, sifat: "merek pendek, label penuh tulisan" },
-  { id: "kopitang-b", produk: P.kopitang, foto: "canary-kopitang.jpg", format: "tvc", contentType: "affiliate", durationSec: 15, persona: "bunda", shot: 2, sifat: "TVC packshot product-only" },
+  { id: "kopitang-b", produk: P.kopitang, foto: "canary-kopitang.jpg", format: "tvc", contentType: "affiliate", durationSec: 15, persona: "ibu", shot: 2, sifat: "TVC packshot product-only" },
   { id: "arva-a", produk: P.arva, foto: "canary-arva.jpg", format: "tvc", contentType: "affiliate", durationSec: 15, persona: "hijaber", shot: 0, sifat: "kemasan reflektif chrome" },
-  { id: "arva-b", produk: P.arva, foto: "canary-arva.jpg", format: "hands_only", contentType: "affiliate", durationSec: 15, persona: "bunda", shot: 0, sifat: "label sangat kecil" },
-  { id: "sabun-a", produk: P.sabun, foto: "canary-sabun.jpg", format: "talking_head", contentType: "affiliate", durationSec: 15, persona: "bunda", shot: 0, sifat: "produk polos tanpa teks — QC-10 wajib skip, bukan fail" },
+  { id: "arva-b", produk: P.arva, foto: "canary-arva.jpg", format: "hands_only", contentType: "affiliate", durationSec: 15, persona: "ibu", shot: 0, sifat: "label sangat kecil" },
+  { id: "sabun-a", produk: P.sabun, foto: "canary-sabun.jpg", format: "talking_head", contentType: "affiliate", durationSec: 15, persona: "ibu", shot: 0, sifat: "produk polos tanpa teks — QC-10 wajib skip, bukan fail" },
   { id: "sabun-b", produk: P.sabun, foto: "canary-sabun.jpg", format: "hands_only", contentType: "affiliate", durationSec: 30, persona: "hijaber", shot: 1, sifat: "polos + 30 dtk" },
 ];
 
