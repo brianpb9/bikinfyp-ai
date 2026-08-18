@@ -91,7 +91,15 @@ export default function HargaPage() {
         <h2 className="font-display text-base font-bold text-amber-900">Cara kerjanya</h2>
         <ol className="list-decimal space-y-1 pl-5 text-xs leading-6 text-amber-900">
           <li>Daftar pakai email atau akun Google.</li>
-          <li>Beli kredit lewat halaman Kredit — pembayaran diproses Midtrans.</li>
+          {/* Dikatakan apa adanya: pembayaran mandiri BELUM aktif. Copy lama
+              berbunyi seolah top-up sudah bisa dipakai, dan pengunjung yang
+              mencobanya berakhir di jalan buntu — kekecewaan yang kita
+              ciptakan sendiri di kalimat ini. */}
+          <li>
+            Beli kredit lewat halaman Kredit — pembayaran diproses Midtrans.
+            <b> Saat ini pembelian mandiri belum dibuka</b>; kredit ditambahkan tim kami
+            selama masa akses awal.
+          </li>
           <li>Unggah foto produk atau tempel link produkmu, isi detail singkat.</li>
           <li>Kredit ditahan dulu, belum dipotong, sementara videomu dibuat.</li>
           <li>Video lolos pemeriksaan kualitas otomatis → kredit dipotong, video bisa diunduh.</li>

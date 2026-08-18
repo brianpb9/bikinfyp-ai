@@ -3,6 +3,8 @@ import { Building2 } from "lucide-react";
 import { verifyToken, cookieName } from "@/lib/auth";
 import { getDb } from "@/lib/db";
 import { postgresRuntimeEnabled, smokeGetUser } from "@/lib/postgres/smoke-runtime";
+import { config } from "@/lib/config";
+import { FormAkses } from "./FormAkses";
 
 export const dynamic = "force-dynamic";
 
@@ -32,7 +34,7 @@ export default async function RequestAccessPage() {
   const email = await currentEmail();
   return (
     <main className="flex min-h-dvh items-center justify-center bg-zinc-950 px-6 text-center text-zinc-100">
-      <div className="max-w-sm space-y-4">
+      <div className="w-full max-w-sm space-y-4">
         <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-white/5 text-amber-400">
           <Building2 size={22} />
         </div>
@@ -45,10 +47,18 @@ export default async function RequestAccessPage() {
           {email ? (
             <> Akunmu (<span className="text-zinc-200">{email}</span>) belum jadi anggota organisasi manapun.</>
           ) : (
-            " Login dulu, lalu hubungi tim kami untuk didaftarkan."
+            " Login dulu supaya permintaanmu bisa kami hubungkan ke akunmu."
           )}
         </p>
-        <p className="text-xs text-zinc-500">Hubungi tim BikinFYP untuk minta akses.</p>
+        {/* Form, bukan kalimat buntu — lihat FormAkses. */}
+        {email ? (
+          <FormAkses email={email} whatsapp={config.supportWhatsapp || null} />
+        ) : (
+          <a href="/onboarding"
+            className="mx-auto flex w-full items-center justify-center rounded-xl bg-amber-500 px-4 py-3 text-sm font-extrabold text-zinc-950">
+            Login dulu
+          </a>
+        )}
       </div>
     </main>
   );

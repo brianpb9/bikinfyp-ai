@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import type { ReactNode } from "react";
-import { CircleHelp, FolderKanban, Grid3x3, Home, LayoutTemplate, Library, Send, Users, UserRound, Zap, Images} from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
+import { CircleHelp, FolderKanban, Grid3x3, Home, LayoutTemplate, Library, Menu, Send, Users, UserRound, Zap, Images } from "lucide-react";
 import { tokens } from "./format";
 import { SidebarLogout } from "./ProfileActions";
 
@@ -57,10 +57,35 @@ export function DashboardChrome({
   children: ReactNode;
 }) {
   const pathname = usePathname();
+  /**
+   * Laci navigasi untuk layar kecil.
+   *
+   * Shell ini dibuat desktop-first dengan sengaja (brand/agency bekerja di
+   * laptop), tapi di Indonesia tautan dashboard paling sering dibuka dari
+   * WhatsApp — di HP. Tanpa laci, seluruh navigasi hilang di layar kecil dan
+   * pengguna terjebak di halaman mana pun yang pertama ia buka.
+   */
+  const [laciBuka, setLaciBuka] = useState(false);
+  // Menutup sendiri saat pindah halaman: laci yang tetap terbuka menutupi
+  // konten yang baru saja diminta pengguna.
+  useEffect(() => { setLaciBuka(false); }, [pathname]);
 
   return (
     <div className="flex min-h-dvh w-full bg-zinc-50 text-zinc-900">
-      <aside className="flex w-64 shrink-0 flex-col bg-zinc-950 text-zinc-100">
+      {/* Latar gelap saat laci terbuka — tap di luar untuk menutup. */}
+      {laciBuka && (
+        <button
+          type="button"
+          aria-label="Tutup menu"
+          onClick={() => setLaciBuka(false)}
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+        />
+      )}
+      <aside
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col bg-zinc-950 text-zinc-100 transition-transform duration-200 md:static md:translate-x-0 ${
+          laciBuka ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
         <div className="flex h-16 items-center gap-2 border-b border-white/10 px-5">
           <span className="text-base font-bold tracking-tight">
             BikinFYP <span className="text-amber-400">Brands</span>
@@ -148,7 +173,24 @@ export function DashboardChrome({
         </div>
       </aside>
       <main className="flex-1 overflow-y-auto">
-        <div className="mx-auto max-w-5xl px-8 py-10">{children}</div>
+        {/* Bar atas HANYA di layar kecil: satu tombol menu, satu identitas. */}
+        <div className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-zinc-200 bg-white px-4 md:hidden">
+          <button
+            type="button"
+            onClick={() => setLaciBuka(true)}
+            aria-label="Buka menu"
+            className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 text-zinc-700"
+          >
+            <Menu size={18} />
+          </button>
+          <span className="truncate text-sm font-bold">
+            BikinFYP <span className="text-amber-500">Brands</span>
+          </span>
+          <Link href="/dashboard/credits" className="ml-auto text-xs font-semibold text-amber-600">
+            {tokens(balanceIdr)}
+          </Link>
+        </div>
+        <div className="mx-auto max-w-5xl px-4 py-6 md:px-8 md:py-10">{children}</div>
       </main>
     </div>
   );

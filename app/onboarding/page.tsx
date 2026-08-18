@@ -302,6 +302,18 @@ export default function OnboardingPage() {
             <p className="text-zinc-600">
               Tanpa password. Kami kirim kode 6 digit ke email kamu. User baru langsung dapat bonus Rp12.000 (1 video gratis).
             </p>
+            {/* PERSETUJUAN DI TITIK DAFTAR, bukan cuma tautan di kaki halaman.
+                Audit kedalaman: tombol daftar (email maupun Google) tidak
+                menampilkan persetujuan Syarat & Privasi di dekatnya. Untuk
+                produk yang mengirim foto pengguna ke penyedia luar negeri,
+                persetujuan yang tidak pernah terlihat bukan persetujuan. */}
+            <p className="text-xs leading-5 text-zinc-500">
+              Dengan lanjut, kamu setuju pada{" "}
+              <a href="/legal/terms" className="font-semibold text-zinc-700 underline underline-offset-2">Syarat &amp; Ketentuan</a>{" "}
+              dan{" "}
+              <a href="/legal/privacy" className="font-semibold text-zinc-700 underline underline-offset-2">Kebijakan Privasi</a>.
+              Foto yang kamu unggah diproses oleh penyedia AI di luar negeri untuk membuat videomu.
+            </p>
             <a
               href="/api/auth/google"
               className="flex min-h-[56px] w-full items-center justify-center gap-3 rounded-2xl border-2 border-zinc-200 bg-white text-base font-semibold text-zinc-700 active:bg-zinc-50"
