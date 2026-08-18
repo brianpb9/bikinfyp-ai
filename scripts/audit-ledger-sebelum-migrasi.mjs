@@ -35,6 +35,26 @@ if (!url || !/^postgres(ql)?:\/\//i.test(url)) {
   process.exit(2);
 }
 
+/**
+ * Kasus yang SUDAH direkonsiliasi manual, dengan alasannya.
+ *
+ * Ditulis satu per satu — BUKAN disimpulkan otomatis dari adanya bonus di
+ * dompet yang sama. Percobaan pertama saya begitu, dan itu salah dua arah
+ * sekaligus: bonus pendaftaran bisa menutupi hold yang benar-benar hilang,
+ * sementara aritmetikanya sendiri justru melaporkan 23 kasus dari 2. Aturan
+ * yang menebak niat manusia dari angka akan menebak salah pada saat yang
+ * paling mahal.
+ *
+ * Jadi bentuknya daftar sadar: satu baris per job, ditandatangani alasan yang
+ * bisa diperiksa orang lain. Sisanya tetap memblokir.
+ */
+const SUDAH_DIREKONSILIASI = new Map([
+  ["ac9e2ade-8204-4713-b072-91d1bcc34612",
+    "17 Agu 2026: dikompensasi manual bonus +24.000 (bersama 17e14771, 2 x 12.000) ke org 55180168 saat pipeline diganti — lihat docs/evidence/migrasi-0030-0032.md"],
+  ["17e14771-dbc0-45fa-9a70-beb18a9f0c1b",
+    "17 Agu 2026: dikompensasi manual bonus +24.000 (bersama ac9e2ade, 2 x 12.000) ke org 55180168 saat pipeline diganti — lihat docs/evidence/migrasi-0030-0032.md"],
+]);
+
 const pool = new pg.Pool({ connectionString: url, max: 2 });
 
 /**
@@ -135,13 +155,23 @@ try {
 
   for (const p of PEMERIKSAAN) {
     const r = await client.query(p.sql);
-    const tanda = p.pemblokir ? "[PEMBLOKIR]" : "[info]";
-    console.log(`\n=== ${tanda} ${p.nama} — ${r.rowCount} baris`);
+    // Baris yang sudah direkonsiliasi manual dipisahkan — TETAP DICETAK,
+    // beserta alasannya, supaya keputusannya bisa diperiksa orang lain.
+    const belum = r.rows.filter((b) => !(b.job_id && SUDAH_DIREKONSILIASI.has(b.job_id)));
+    const sudah = r.rows.filter((b) => b.job_id && SUDAH_DIREKONSILIASI.has(b.job_id));
+
+    const tanda = p.pemblokir && belum.length ? "[PEMBLOKIR]" : "[info]";
+    console.log(`\n=== ${tanda} ${p.nama} — ${r.rowCount} baris` +
+      (sudah.length ? ` (${sudah.length} sudah direkonsiliasi)` : ""));
     console.log(`    ${p.catatan}`);
     if (r.rowCount === 0) { console.log("    (tidak ada)"); continue; }
-    if (p.pemblokir) pemblokirDitemukan.push(`${p.nama} (${r.rowCount})`);
+    if (p.pemblokir && belum.length) pemblokirDitemukan.push(`${p.nama} (${belum.length})`);
     // TANPA potongan: ini inventaris korban, bukan cuplikan.
-    for (const baris of r.rows) console.log("   ", JSON.stringify(baris));
+    for (const baris of belum) console.log("   ", JSON.stringify(baris));
+    for (const baris of sudah) {
+      console.log("    [sudah direkonsiliasi]", JSON.stringify(baris));
+      console.log("       alasan:", SUDAH_DIREKONSILIASI.get(baris.job_id));
+    }
   }
 
   await client.query("COMMIT");

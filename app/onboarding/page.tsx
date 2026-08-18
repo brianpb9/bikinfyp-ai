@@ -52,6 +52,26 @@ function LazyClip({ src }: { src: string }) {
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  /**
+   * CTA MEMBACA KEADAAN SISTEM.
+   *
+   * Selama intake ditutup, tombol lama tetap berkata "Bikin video pertama —
+   * gratis" dan pengunjung dibawa sampai unggah foto sebelum ditolak pesan
+   * maintenance. Kegagalan di langkah terakhir jauh lebih merusak kepercayaan
+   * daripada kalimat jujur di langkah pertama.
+   *
+   * Kalau health tidak terjawab, CTA-nya TIDAK berubah — ketidaktahuan bukan
+   * alasan menakut-nakuti pengunjung.
+   */
+  const [intakeTertutup, setIntakeTertutup] = useState(false);
+  useEffect(() => {
+    let batal = false;
+    fetch("/api/health")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => { if (!batal && d && d.intake === "closed") setIntakeTertutup(true); })
+      .catch(() => undefined);
+    return () => { batal = true; };
+  }, []);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [devHint, setDevHint] = useState<string | null>(null);
@@ -146,17 +166,26 @@ export default function OnboardingPage() {
                 <span className="text-amber-500">tanpa syuting.</span>
               </h1>
               <p className="text-center text-lg leading-snug text-zinc-600">
-                Upload foto produk, tiga menit kemudian videonya siap posting.
+                Upload foto produk, biasanya 2–3 menit kemudian videonya siap ditinjau.
                 <br />
-                <b className="text-zinc-900">Rp12.000</b> per video — jasa UGC minta Rp125.000.
+                <b className="text-zinc-900">Rp12.000</b> per video — jasa UGC biasanya sekitar Rp100–150 ribu.
               </p>
               <a
-                href="/onboarding#daftar"
-                onClick={(e) => { e.preventDefault(); track("hero_cta_click"); setStep(2); }}
+                href={intakeTertutup ? "/coba" : "/onboarding#daftar"}
+                onClick={(e) => {
+                  if (intakeTertutup) { track("hero_cta_click", { intake: "closed" }); return; }
+                  e.preventDefault(); track("hero_cta_click"); setStep(2);
+                }}
                 className="mx-auto flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 px-6 text-lg font-extrabold text-white shadow-lg shadow-amber-500/25 active:bg-amber-600"
               >
-                Bikin video pertama — gratis
+                {intakeTertutup ? "Lihat contoh skripnya — tanpa daftar" : "Bikin video pertama — gratis"}
               </a>
+              {intakeTertutup && (
+                <p className="text-center text-sm text-zinc-500">
+                  Pembuatan video sedang ditutup sementara — kami sedang merapikan mesinnya.
+                  Contoh skrip tetap bisa dicoba sekarang.
+                </p>
+              )}
               {/* Magic moment tanpa daftar (2026-08-06): rasakan hasil dulu,
                   daftar belakangan. Turun jadi tautan kecil — dulu ini satu-
                   satunya tombol di hero, jadi pengunjung yang sudah yakin pun

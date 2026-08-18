@@ -26,7 +26,7 @@ const STEPS = [
 ];
 
 const PROOF = [
-  { icon: ShieldCheck, title: "Produkmu tidak berubah bentuk", body: "Foto produkmu disuntikkan ke setiap adegan, dan pemeriksaan otomatis menolak video yang produknya berubah identitas di tengah jalan." },
+  { icon: ShieldCheck, title: "Produkmu dijaga tetap konsisten", body: "Foto produkmu disuntikkan ke setiap adegan, dan pemeriksaan otomatis menolak video yang produknya berubah identitas. Render yang gagal pemeriksaan tidak ditagihkan." },
   { icon: Eye, title: "Tidak ada yang digabung diam-diam", body: "Video baru disusun setelah kamu menyetujui adegannya. Brand peduli gambar dan pesan — jadi keputusannya di tanganmu, bukan di tangan AI." },
   { icon: Coins, title: "Bayar pakai token, gagal dikembalikan", body: "Token ditahan saat render mulai dan dikembalikan otomatis kalau rendernya gagal. Kamu tidak membayar hasil yang tidak jadi." },
 ];

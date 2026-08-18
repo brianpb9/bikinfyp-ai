@@ -193,7 +193,14 @@ test("skrip audit tidak bisa menemukan pemblokir lalu bilang aman", () => {
   // "Lanjutkan". Skrip keselamatan yang bisa berkata aman padahal tidak lebih
   // berbahaya daripada tidak ada skrip.
   assert.match(s, /pemblokir: true/, "tiap pemeriksaan menyatakan sendiri status pemblokirnya");
-  assert.match(s, /if \(p\.pemblokir\) pemblokirDitemukan\.push/, "bendera dari SETIAP pemeriksaan, bukan satu");
+  assert.match(s, /if \(p\.pemblokir && belum\.length\) pemblokirDitemukan\.push/, "bendera dari SETIAP pemeriksaan, bukan satu");
+  // Pengecualian hanya lewat DAFTAR SADAR, bukan tebakan dari angka: percobaan
+  // pertama menyimpulkan "sudah dikompensasi" dari adanya bonus di dompet yang
+  // sama, dan itu bisa membuat bonus pendaftaran menutupi hold yang benar-benar
+  // hilang. Yang dikecualikan wajib tercatat satu per satu beserta alasannya.
+  assert.match(s, /const SUDAH_DIREKONSILIASI = new Map\(/, "daftar rekonsiliasi eksplisit");
+  assert.match(s, /\[sudah direkonsiliasi\]/, "kasus yang dikecualikan TETAP dicetak");
+  assert.match(s, /alasan:/, "beserta alasannya, supaya bisa diperiksa orang lain");
   assert.match(s, /process\.exit\(1\)/, "pemblokir harus keluar dengan kode bukan nol");
   assert.match(s, /READ ONLY ISOLATION LEVEL REPEATABLE READ/, "semua angka dari satu snapshot");
   assert.match(s, /statement_timeout/);

@@ -8,7 +8,7 @@ const sora = Sora({ subsets: ["latin"], variable: "--font-sora", weight: ["600",
 
 export const metadata: Metadata = {
   title: "BikinFYP AI — Video jualan tanpa syuting",
-  description: "Bikin video jualan 15 detik siap posting dari foto produk. Bahasa Indonesia, aman dari aturan AI TikTok.",
+  description: "Bikin video jualan 15 detik dari foto produk. Bahasa Indonesia, dengan label AIGC untuk membantu mengikuti aturan konten AI TikTok.",
   manifest: "/manifest.json",
   icons: {
     icon: [
