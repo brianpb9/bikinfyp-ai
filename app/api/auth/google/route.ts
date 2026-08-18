@@ -35,7 +35,10 @@ export async function GET(req: Request) {
 
     const headers = new Headers({ location: authUrl.toString() });
     headers.append("set-cookie", cookieState(GOOGLE_OAUTH_STATE_COOKIE, state, 600));
-    if (next) headers.append("set-cookie", cookieState(GOOGLE_NEXT_COOKIE, next, 600));
+    // Di-ENCODE saat ditulis: nilai path bisa memuat karakter yang berarti
+    // lain di header cookie (;, koma, spasi). Callback men-decode-nya lagi —
+    // pasangan encode/decode yang eksplisit, bukan berharap path selalu polos.
+    if (next) headers.append("set-cookie", cookieState(GOOGLE_NEXT_COOKIE, encodeURIComponent(next), 600));
     return new Response(null, { status: 302, headers });
 
   } catch (err) {

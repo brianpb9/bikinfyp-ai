@@ -74,6 +74,10 @@ export function ajakan(status: Kesiapan): AjakanCta {
         catatan: "Kami belum bisa memastikan ketersediaan sistem saat ini.",
       };
     default:
-      return { label: "Mengecek ketersediaan…", href: "/coba", mulaiDaftar: false, catatan: "" };
+      // Keadaan "memuat" HARUS tetap CTA yang berfungsi tanpa JavaScript:
+      // ini yang dirender server, dan bila hidrasi mati (kelas kegagalan yang
+      // benar-benar pernah terjadi di dev), inilah satu-satunya tombol yang
+      // dilihat pengunjung. Tautan /coba bekerja murni lewat <a href>.
+      return { label: "Lihat contoh skripnya — tanpa daftar", href: "/coba", mulaiDaftar: false, catatan: "" };
   }
 }

@@ -23,6 +23,7 @@ type Tier = "silent_caption" | "high_quality" | "super_hq";
 import type { HookLevel } from "@/lib/config/hooks";
 import { HOOK_LEVELS } from "@/lib/config/hooks";
 import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
+import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 interface ProductPayload {
   product_id: string; name: string; price_idr: number; category: string;
@@ -1372,7 +1373,7 @@ export default function CampaignPage() {
               Harga pasti dihitung ulang server saat render.
             </p>
             <p className="text-sm text-zinc-500">
-              Waktu render: sekitar <b>3–8 menit per video</b> (bisa sampai 45 menit kalau antrean AI padat).
+              Waktu render: sekitar <b>{JANJI_WAKTU.kisaran} per video</b> (bisa sampai {JANJI_WAKTU.ekor} kalau antrean AI padat).
               Video dibuat berbarengan, jadi {count} video tidak berarti {count}× lama. Kamu akan diminta
               meninjau tiap adegan dulu sebelum digabung.
             </p>

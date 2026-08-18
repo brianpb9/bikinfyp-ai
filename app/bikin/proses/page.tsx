@@ -6,6 +6,7 @@ import { apiFetch } from "../../_components/api";
 import { ProgressDots, SecondaryButton } from "../../_components/ui";
 import { loadFlow, saveFlow } from "../../_components/flow";
 import { track } from "../../_components/track";
+import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 interface JobStatus {
   id: string;
@@ -47,7 +48,7 @@ function ProsesInner() {
   const [job, setJob] = useState<JobStatus | null>(null);
   const [failed, setFailed] = useState(false);
   const [connectionIssue, setConnectionIssue] = useState(false);
-  const [estimateText, setEstimateText] = useState("Sekitar 1–2 menit lagi");
+  const [estimateText, setEstimateText] = useState(`Sekitar ${JANJI_WAKTU.sisaKlip} lagi`);
 
   useEffect(() => {
     apiFetch<{ estimate_text: string }>("/api/meta")

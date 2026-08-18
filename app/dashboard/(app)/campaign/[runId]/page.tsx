@@ -5,6 +5,7 @@ import Link from "next/link";
 import { ArrowLeft, CheckCircle2, Download, Eye, Loader2, VideoOff } from "lucide-react";
 import { apiFetch, ApiFail } from "../../../../_components/api";
 import { SkeletonCard } from "../../../_components/Skeleton";
+import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 type BulkJob = { job_id: string; state: string; product_name: string; cost_idr: number; video_url: string | null; download_url: string | null; caption: string | null };
 type BulkRunResponse = { campaign_run_id: string; jobs: BulkJob[]; ready_count: number; failed_count: number; total: number };
@@ -100,7 +101,7 @@ export default function BulkRunPage({ params }: { params: Promise<{ runId: strin
         </h1>
         {data && data.ready_count < data.total && (
           <p className="mt-1 text-sm text-zinc-500">
-            Satu video biasanya <b>3–8 menit</b>, bisa sampai 45 menit kalau antrean AI lagi padat.
+            Satu video biasanya <b>{JANJI_WAKTU.kisaran}</b>, bisa sampai {JANJI_WAKTU.ekor} kalau antrean AI lagi padat.
             Halaman ini memperbarui sendiri — boleh ditinggal dulu.
           </p>
         )}

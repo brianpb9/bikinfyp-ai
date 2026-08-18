@@ -36,6 +36,24 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm test
       - run: npm run build
+      # SMOKE INTERAKSI (P0-QA-01) — apakah halaman HIDUP, bukan cuma
+      # ter-render. Kelas bug yang dijaga benar-benar terjadi 19 Agu: CSP
+      # mematikan hidrasi total dan TIDAK ADA tes yang menyadarinya, karena
+      # semua tes menilai HTML/unit, bukan interaksi.
+      #
+      # Jalan di server DEV, bukan production start: mode production menolak
+      # SQLite tanpa syarat (fail-closed yang benar), dan CI tidak punya
+      # Postgres. Konsekuensi jujurnya: smoke ini membuktikan hidrasi dan
+      # interaksi, TIDAK membuktikan CSP production — string CSP production
+      # (tanpa unsafe-eval) dijaga tes unit tests/csp-produksi.test.ts.
+      - run: npx playwright install --with-deps chromium
+      - run: |
+          PORT=3210 SCRIPT_LLM=0 npm run dev -- --port 3210 &
+          for i in $(seq 1 60); do
+            curl -sf http://localhost:3210/api/health >/dev/null && break
+            sleep 1
+          done
+          BASE=http://localhost:3210 node scripts/smoke-interaksi.mjs
 
   # AUDIT UTANG KATALOG — pengukur, BUKAN gerbang deploy.
   #

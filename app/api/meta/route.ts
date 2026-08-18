@@ -1,6 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
+import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,8 +22,8 @@ export async function GET(req: Request) {
     return Response.json({
       provider_video: config.providerVideo,
       estimate_text: isByteplus
-        ? "Biasanya 2–5 menit, tapi bisa lebih lama saat antrean padat. Kamu boleh tutup halaman ini."
-        : "Sekitar 1–2 menit lagi. Kamu boleh tutup halaman ini.",
+        ? `Biasanya ${JANJI_WAKTU.klipTunggal}, tapi bisa lebih lama saat antrean padat. Kamu boleh tutup halaman ini.`
+        : `Sekitar ${JANJI_WAKTU.sisaKlip} lagi. Kamu boleh tutup halaman ini.`,
       estimate_min_max_min: isByteplus ? [2, 45] : [1, 2],
       tiers: TIER_UI.map((t) => ({
         ...t,

@@ -6,6 +6,7 @@ import { apiFetch, ApiFail } from "../_components/api";
 import { PrimaryButton, SecondaryButton, ErrorText, WarnCard } from "../_components/ui";
 import { rupiah } from "../_components/flow";
 import { AVATAR_PRESETS, getAvatarPreset, type AvatarGender } from "@/lib/avatar-presets";
+import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 // r-single-clip (Brian 2026-08-10): konsepnya "1 hook AI + 1 klip real
 // disambung" (persis viral-hook-test) — dulu 5, tapi multi-klip nggak
@@ -182,7 +183,7 @@ export default function PromoPage() {
         uploadedClipUrls.push(up.uploaded_clip_url);
       }
       setPhase("processing");
-      setStatusText("Bikin video — nambah hook AI + suara, lalu gabung (sekitar 1-2 menit)...");
+      setStatusText(`Bikin video — nambah hook AI + suara, lalu gabung (sekitar ${JANJI_WAKTU.sisaKlip})...`);
       const avatar = needsAvatar
         ? avatarKind === "preset"
           ? { kind: "preset", preset_id: avatarPresetId, register: getAvatarPreset(avatarPresetId)?.register }

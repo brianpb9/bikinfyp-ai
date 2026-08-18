@@ -1,5 +1,5 @@
 import { config } from "@/lib/config";
-import { tujuanSesudahLogin } from "@/lib/tujuan-login";
+import { tujuanAman, tujuanSesudahLogin } from "@/lib/tujuan-login";
 import { findOrCreateUserByEmail, issueToken, cookieName, SESSION_MAX_AGE_SEC } from "@/lib/auth";
 import { audit } from "@/lib/db";
 import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
@@ -17,13 +17,19 @@ function readCookie(req: Request, name: string): string | null {
 
 // Login gagal (state tidak cocok, dibatalkan user, dll) -> lempar balik ke
 // halaman masuk dengan pesan, bukan JSON mentah — ini alur redirect browser.
-function loginFailedRedirect(reason: string): Response {
+function loginFailedRedirect(reason: string, req?: Request): Response {
   const url = new URL("/onboarding", config.appBaseUrl || "http://localhost:3210");
   url.searchParams.set("google_error", reason);
-  return new Response(null, {
-    status: 302,
-    headers: { location: url.toString(), "set-cookie": cookieHapus(GOOGLE_OAUTH_STATE_COOKIE) },
-  });
+  // TUJUAN IKUT PULANG (board review 19 Agu, "stale intent"): pengguna yang
+  // membatalkan layar Google lalu mencoba lagi harus tetap berakhir di tempat
+  // yang tadi ia minta — bukan di beranda retail.
+  const nextCookie = req?.headers.get("cookie")?.match(/racun_google_next=([^;]+)/)?.[1];
+  const next = tujuanAman(nextCookie ? decodeURIComponent(nextCookie) : null);
+  if (next) url.searchParams.set("next", next);
+  const headers = new Headers({ location: url.toString() });
+  headers.append("set-cookie", cookieHapus(GOOGLE_OAUTH_STATE_COOKIE));
+  headers.append("set-cookie", cookieHapus(GOOGLE_NEXT_COOKIE));
+  return new Response(null, { status: 302, headers });
 }
 
 // GET /api/auth/google/callback — tukar authorization code, ambil email
@@ -34,13 +40,13 @@ export async function GET(req: Request) {
     const url = new URL(req.url);
     const code = url.searchParams.get("code");
     const state = url.searchParams.get("state");
-    if (url.searchParams.get("error")) return loginFailedRedirect("cancelled");
-    if (!code || !state) return loginFailedRedirect("missing_params");
+    if (url.searchParams.get("error")) return loginFailedRedirect("cancelled", req);
+    if (!code || !state) return loginFailedRedirect("missing_params", req);
 
     const expectedState = readCookie(req, GOOGLE_OAUTH_STATE_COOKIE);
-    if (!expectedState || expectedState !== state) return loginFailedRedirect("state_mismatch");
+    if (!expectedState || expectedState !== state) return loginFailedRedirect("state_mismatch", req);
 
-    if (!config.googleOauthClientId || !config.googleOauthClientSecret) return loginFailedRedirect("not_configured");
+    if (!config.googleOauthClientId || !config.googleOauthClientSecret) return loginFailedRedirect("not_configured", req);
     const redirectUri = `${config.appBaseUrl}/api/auth/google/callback`;
 
     const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
@@ -54,17 +60,17 @@ export async function GET(req: Request) {
         grant_type: "authorization_code",
       }),
     });
-    if (!tokenRes.ok) return loginFailedRedirect("token_exchange_failed");
+    if (!tokenRes.ok) return loginFailedRedirect("token_exchange_failed", req);
     const tokenData = (await tokenRes.json()) as { access_token?: string };
-    if (!tokenData.access_token) return loginFailedRedirect("token_exchange_failed");
+    if (!tokenData.access_token) return loginFailedRedirect("token_exchange_failed", req);
 
     const userinfoRes = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
       headers: { authorization: `Bearer ${tokenData.access_token}` },
     });
-    if (!userinfoRes.ok) return loginFailedRedirect("userinfo_failed");
+    if (!userinfoRes.ok) return loginFailedRedirect("userinfo_failed", req);
     const profile = (await userinfoRes.json()) as { email?: string; email_verified?: boolean };
     // Google's own verified flag — never trust an unverified email as a login identity.
-    if (!profile.email || !profile.email_verified) return loginFailedRedirect("email_not_verified");
+    if (!profile.email || !profile.email_verified) return loginFailedRedirect("email_not_verified", req);
     const email = profile.email.toLowerCase().trim();
 
     const user = postgresRuntimeEnabled()
@@ -101,6 +107,6 @@ export async function GET(req: Request) {
     headers.append("set-cookie", cookieHapus(GOOGLE_NEXT_COOKIE));
     return new Response(null, { status: 302, headers });
   } catch {
-    return loginFailedRedirect("unexpected_error");
+    return loginFailedRedirect("unexpected_error", req);
   }
 }

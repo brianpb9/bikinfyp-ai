@@ -3,6 +3,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { getDb } from "@/lib/db";
 import { getBalance } from "@/lib/credits";
 import { pgGetBalance, pgGetPayment, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,7 +28,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ orderId: string
           ? "Pembayaran berhasil — kredit sudah masuk."
           : payment.status === "failed"
             ? "Pembayaran gagal/kedaluwarsa. Coba checkout lagi ya."
-            : "Pembayaran belum masuk — kalau sudah bayar, tunggu 1–2 menit lalu cek lagi.",
+            : `Pembayaran belum masuk — kalau sudah bayar, tunggu ${JANJI_WAKTU.tungguPembayaran} lalu cek lagi.`,
     });
   } catch (err) {
     return errorResponse(err);

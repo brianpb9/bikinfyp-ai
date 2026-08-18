@@ -7,6 +7,7 @@ import { PrimaryButton, ErrorText } from "../_components/ui";
 import { track } from "../_components/track";
 import { tujuanAman } from "@/lib/tujuan-login";
 import { ajakan, useKesiapan } from "../_components/kesiapan";
+import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   cancelled: "Login Google dibatalkan.",
@@ -82,7 +83,12 @@ export default function OnboardingPage() {
     if (!reason) return;
     setStep(2);
     setError(GOOGLE_ERROR_MESSAGES[reason] ?? "Login Google gagal. Coba lagi atau pakai OTP email.");
-    window.history.replaceState(null, "", window.location.pathname);
+    // google_error dibuang dari URL, tapi `next` DIPERTAHANKAN: menghapus
+    // seluruh query berarti percobaan login berikutnya kehilangan tujuannya.
+    const params = new URLSearchParams(window.location.search);
+    params.delete("google_error");
+    const sisa = params.toString();
+    window.history.replaceState(null, "", window.location.pathname + (sisa ? `?${sisa}` : ""));
   }, []);
 
   const humanCost = monthlyVideos * 125_000;
@@ -158,7 +164,7 @@ export default function OnboardingPage() {
                 <span className="text-amber-500">tanpa syuting.</span>
               </h1>
               <p className="text-center text-lg leading-snug text-zinc-600">
-                Upload foto produk, biasanya 2–3 menit kemudian videonya siap ditinjau.
+                Upload foto produk, biasanya {JANJI_WAKTU.kisaran} kemudian videonya siap ditinjau.
                 <br />
                 <b className="text-zinc-900">Rp12.000</b> per video — jasa UGC biasanya sekitar Rp100–150 ribu.
               </p>
@@ -220,7 +226,7 @@ export default function OnboardingPage() {
                 // Rp12.000 = tier AI Bersuara di lib/config.ts. Sebelumnya
                 // tertulis "5 gaya" — MENGECILKAN produk sendiri.
                 { value: "15 detik", label: "video siap posting" },
-                { value: "~2–3 menit", label: "rata-rata selesai render" },
+                { value: JANJI_WAKTU.singkat, label: "rata-rata selesai render" },
                 { value: "11 kreator", label: "wajah AI siap pakai" },
                 { value: "Rp12.000", label: "harga per video bersuara" },
               ].map((f) => (
@@ -266,7 +272,7 @@ export default function OnboardingPage() {
               ["Kalau hasilnya jelek gimana?", "Sistem QC memeriksa wajah yang tidak diinginkan dan konsistensi produk. Jika job gagal QC atau gagal render, kredit di-release otomatis lewat ledger."],
               ["Foto produk aku dipakai bagaimana?", "Foto asli dipakai sebagai referensi visual produk. Pipeline menjaga produk tetap konsisten; bukan meminta AI mengarang ulang detail produkmu."],
               ["Bisa pakai link Tokopedia langsung?", "Tokopedia dapat dibaca best-effort. TikTok Shop dan Shopee yang memblokir pembacaan otomatis akan meminta kamu isi detail produk secara manual."],
-              ["Berapa lama sampai jadi?", "Pengukuran staging nyata berada di kisaran 2–3 menit untuk render 15 detik; waktu dapat berubah mengikuti antrean dan provider."],
+              ["Berapa lama sampai jadi?", `Biasanya ${JANJI_WAKTU.kisaran} per video — kalau antrean AI padat bisa sampai ${JANJI_WAKTU.ekor}. Halaman hasil memperbarui sendiri.`],
               ["Ada garansi kalau render gagal?", "Ya. Hold kredit dilepas otomatis ketika job gagal, jadi saldo bisa dipakai lagi untuk mencoba render berikutnya."],
             ].map(([q,a],i)=><div key={q} className="rounded-2xl border border-zinc-200 bg-white"><button type="button" onClick={()=>setOpenFaq(openFaq===i?null:i)} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left text-sm font-bold text-zinc-800"><span>{q}</span><span className="text-amber-500">{openFaq===i?"−":"+"}</span></button>{openFaq===i&&<p className="border-t border-zinc-100 px-4 py-3 text-sm leading-relaxed text-zinc-600">{a}</p>}</div>)}</div></section>
           </div>

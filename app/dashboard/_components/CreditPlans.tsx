@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Check, Sparkles } from "lucide-react";
 import { rupiah, tokens } from "./format";
 import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
+import { PAKET_TOKEN } from "@/lib/paket-token";
 
 // Paket token — TAMPILAN saja (permintaan Brian: "ini di buat aja dlu UI nya").
 // Belum ada Midtrans untuk organisasi; token org masih diisi manual oleh tim.
@@ -57,9 +58,9 @@ export function CreditPlans() {
 
   async function ajukan() {
     if (!picked) return;
-    const semua = [...SUBSCRIPTIONS.map((p) => ({ id: p.id, label: p.name, harga: p.priceIdr, token: p.tokenIdr })),
-      ...TOPUPS.map((t) => ({ id: t.id, label: `Top-up ${rupiah(t.priceIdr)}`, harga: t.priceIdr, token: t.tokenIdr }))];
-    const dipilih = semua.find((x) => x.id === picked);
+    // Katalog BERSAMA dengan server (lib/paket-token.ts) — id dan harga di
+    // layar dijamin sama dengan yang dicatat rute pengajuan.
+    const dipilih = PAKET_TOKEN.find((x) => x.id === picked);
     setKirim(true);
     setHasil(null);
     try {
@@ -68,10 +69,9 @@ export function CreditPlans() {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
           paket: picked,
-          label: dipilih?.label ?? picked,
-          // Angka YANG TERLIHAT saat ditekan ikut dikirim — lihat rutenya.
-          harga_idr: dipilih?.harga ?? null,
-          token_idr: dipilih?.token ?? null,
+          // Harga yang TERLIHAT ikut dikirim untuk dibandingkan server dengan
+          // katalognya — selisih berarti layar menampilkan harga basi.
+          harga_idr: dipilih?.priceIdr ?? null,
         }),
       });
       const body = await res.json().catch(() => ({}));

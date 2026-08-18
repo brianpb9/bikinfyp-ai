@@ -5,6 +5,7 @@ import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { audit } from "@/lib/db";
 import { allowRate } from "@/lib/rate-limit";
 import { daftarAdmin } from "@/lib/admin-auth";
+import { paketById } from "@/lib/paket-token";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,18 +33,24 @@ export async function POST(req: Request) {
     }
 
     const body = await req.json().catch(() => ({}));
-    const paket = String(body.paket ?? "").trim().slice(0, 60);
-    const label = String(body.label ?? "").trim().slice(0, 120);
-    const hargaIdr = Number(body.harga_idr);
-    const tokenIdr = Number(body.token_idr);
-    if (!paket) throw ERR.BAD_REQUEST("Pilih paketnya dulu ya.", "paket is required.");
+    const idPaket = String(body.paket ?? "").trim().slice(0, 60);
+    // HARGA DARI KATALOG SERVER, bukan dari kiriman klien (board review 19
+    // Agu): siapa pun bisa mengirim {paket:"scale", harga_idr: 1}, dan angka
+    // itulah yang dulu sampai ke tim penjualan sebagai "harga yang terlihat".
+    // Yang klien kirim tetap DICATAT untuk dibandingkan — selisihnya berarti
+    // layar menampilkan harga basi (atau ada yang main-main), dan dua-duanya
+    // perlu diketahui.
+    const paketKatalog = paketById(idPaket);
+    if (!paketKatalog) throw ERR.BAD_REQUEST("Pilih paketnya dulu ya.", "paket is required / unknown.");
+    const hargaKlien = Number(body.harga_idr);
 
     const data = {
-      paket,
-      label,
-      // Angka YANG TERLIHAT saat menekan, bukan yang berlaku saat dibaca admin.
-      harga_idr_terlihat: Number.isFinite(hargaIdr) ? hargaIdr : null,
-      token_idr_terlihat: Number.isFinite(tokenIdr) ? tokenIdr : null,
+      paket: paketKatalog.id,
+      label: paketKatalog.label,
+      harga_idr: paketKatalog.priceIdr,
+      token_idr: paketKatalog.tokenIdr,
+      harga_terlihat_klien: Number.isFinite(hargaKlien) ? hargaKlien : null,
+      harga_cocok: Number.isFinite(hargaKlien) ? hargaKlien === paketKatalog.priceIdr : null,
       org_id: membership.org_id,
       user_id: user.id,
       email: user.email ?? null,
@@ -66,11 +73,12 @@ export async function POST(req: Request) {
           body: JSON.stringify({
             from: config.resendFromEmail,
             to: [tujuan],
-            subject: `Pengajuan paket ${label || paket}`,
+            subject: `Pengajuan paket ${paketKatalog.label}`,
             text: [
-              `Paket   : ${label || paket}`,
-              `Harga   : ${data.harga_idr_terlihat ?? "-"}`,
-              `Token   : ${data.token_idr_terlihat ?? "-"}`,
+              `Paket   : ${paketKatalog.label}`,
+              `Harga   : ${paketKatalog.priceIdr}`,
+              `Token   : ${paketKatalog.tokenIdr}`,
+              `Layar   : ${data.harga_terlihat_klien ?? "-"} (cocok: ${data.harga_cocok})`,
               `Org     : ${membership.org_id}`,
               `User    : ${user.email ?? user.id}`,
             ].join("\n"),

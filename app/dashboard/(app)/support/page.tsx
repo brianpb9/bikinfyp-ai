@@ -1,6 +1,7 @@
 import { HelpCircle, MessageCircle, Mail } from "lucide-react";
 import { requireOrgContext } from "@/lib/dashboard-auth";
 import { config } from "@/lib/config";
+import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export const dynamic = "force-dynamic";
 const FAQ: { q: string; a: string }[] = [
   {
     q: "Satu video jadi berapa lama?",
-    a: "Biasanya 3–8 menit. Kalau antrean AI sedang padat bisa sampai 45 menit. Halaman hasil memperbarui sendiri, jadi boleh ditinggal.",
+    a: `Biasanya ${JANJI_WAKTU.kisaran}. Kalau antrean AI sedang padat bisa sampai ${JANJI_WAKTU.ekor}. Halaman hasil memperbarui sendiri, jadi boleh ditinggal.`,
   },
   {
     q: "Kenapa harus meninjau scene dulu sebelum video digabung?",

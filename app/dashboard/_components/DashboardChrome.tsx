@@ -69,18 +69,42 @@ export function DashboardChrome({
   // Menutup sendiri saat pindah halaman: laci yang tetap terbuka menutupi
   // konten yang baru saja diminta pengguna.
   useEffect(() => { setLaciBuka(false); }, [pathname]);
-  // Saat laci terbuka: badan halaman TIDAK ikut menggulir, dan Escape menutup.
-  // Tanpa kunci gulir, jari yang menggulir daftar menu ikut menggulir halaman
-  // di baliknya — dua permukaan bergerak untuk satu gerakan.
+  // Saat laci terbuka: badan halaman TIDAK ikut menggulir, Escape menutup,
+  // dan FOKUS TERPERANGKAP di dalam laci (P0-A11Y-02). Tanpa perangkap, Tab
+  // berjalan ke konten di balik overlay — pengguna keyboard "mengetik ke
+  // halaman yang tidak kelihatan". Saat menutup, fokus kembali ke tombol menu
+  // supaya posisi keyboard tidak hilang.
   useEffect(() => {
     if (!laciBuka) return;
     const semula = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    const tombol = (e: KeyboardEvent) => { if (e.key === "Escape") setLaciBuka(false); };
+    const pembuka = document.activeElement as HTMLElement | null;
+    const laci = document.getElementById("laci-navigasi");
+    // Fokus masuk ke laci — item pertama yang bisa difokus.
+    const fokusable = () =>
+      Array.from(laci?.querySelectorAll<HTMLElement>('a[href], button:not([disabled])') ?? [])
+        .filter((el) => el.offsetParent !== null);
+    fokusable()[0]?.focus();
+    const tombol = (e: KeyboardEvent) => {
+      if (e.key === "Escape") { setLaciBuka(false); return; }
+      if (e.key !== "Tab") return;
+      const daftar = fokusable();
+      if (daftar.length === 0) return;
+      const pertama = daftar[0];
+      const terakhir = daftar[daftar.length - 1];
+      const aktif = document.activeElement;
+      // Perangkapnya dua arah: Tab di ujung kembali ke awal, Shift+Tab di awal
+      // ke ujung. Fokus yang lolos ke luar laci ditarik kembali ke awal.
+      if (!laci?.contains(aktif)) { e.preventDefault(); pertama.focus(); return; }
+      if (!e.shiftKey && aktif === terakhir) { e.preventDefault(); pertama.focus(); }
+      else if (e.shiftKey && aktif === pertama) { e.preventDefault(); terakhir.focus(); }
+    };
     window.addEventListener("keydown", tombol);
     return () => {
       document.body.style.overflow = semula;
       window.removeEventListener("keydown", tombol);
+      // Fokus pulang ke yang membuka — biasanya tombol menu.
+      pembuka?.focus?.();
     };
   }, [laciBuka]);
 
@@ -97,6 +121,7 @@ export function DashboardChrome({
       )}
       <aside
         id="laci-navigasi"
+        aria-label="Navigasi dashboard"
         className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col overflow-y-auto overscroll-contain bg-zinc-950 text-zinc-100 transition-transform duration-200 md:static md:translate-x-0 ${
           laciBuka ? "translate-x-0" : "-translate-x-full"
         }`}
