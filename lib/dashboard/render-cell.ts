@@ -14,7 +14,7 @@
  */
 import crypto from "node:crypto";
 import type { Pool } from "pg";
-import { validateScript, templateRequiresPriceMention } from "@/lib/script-engine/validator";
+import { periksaAdmisi } from "@/lib/script-engine/admisi";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { tierPriceIdr } from "@/lib/credits";
 import { enqueueJob } from "@/lib/job-queue";
@@ -41,6 +41,8 @@ export interface SelRender {
   productId: string;
   productName: string;
   productPriceIdr: number;
+  /** URL sumber produk — menentukan label keranjang yang wajib disebut CTA. */
+  productSourceUrl?: string | null;
   promoPriceBeforeIdr: number | null;
   scriptId: string;
   /** Persona pembawa suara — sudah dibuat/ditemukan pemanggil. */
@@ -89,13 +91,26 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   if (sel.format === "tvc" && durationS !== 15 && durationS !== 30) return gagal("TVC tersedia untuk 15 atau 30 detik.");
   const priceIdr = tierPriceIdr(tier, durationS);
 
-  const validation = validateScript(
-    { hook_family: script.hook_family, register: script.register, segments, productName: sel.productName,
-      priceIdr: sel.productPriceIdr, promoPriceBeforeIdr: sel.promoPriceBeforeIdr,
-      requirePriceMention: templateRequiresPriceMention(sel.templateId), qualityTier: tier },
-    "light"
-  );
-  if (!validation.passed) return gagal("Skrip tidak lolos validasi saat konfirmasi — buat ulang.");
+  // KONTEKS ADMISI KANONIK. Versi lama tidak mengirim format maupun durasi,
+  // jadi TVC yang sah justru DITOLAK: aturan T-01..T-03 tidak pernah
+  // dijalankan sementara aturan lisan afiliasi (L-03/L-19) dipaksakan ke
+  // naskah yang memang bukan afiliasi.
+  const validation = periksaAdmisi({
+    segments,
+    hookFamily: script.hook_family,
+    register: script.register,
+    productName: sel.productName,
+    productPriceIdr: sel.productPriceIdr,
+    productSourceUrl: sel.productSourceUrl ?? null,
+    promoPriceBeforeIdr: sel.promoPriceBeforeIdr,
+    qualityTier: tier,
+    durationSec: durationS,
+    format: sel.format,
+    templateId: sel.templateId,
+  });
+  if (!validation.passed) {
+    return gagal(`Skrip belum memenuhi standar: ${validation.errors.map((e) => e.message_id).join(" ")}`);
+  }
   await smokeApproveScript(sel.userId, sel.scriptId, { segments, edited: false, validationResult: validation }, sel.orgId);
 
   const jobId = crypto.randomUUID();

@@ -323,6 +323,8 @@ export async function POST(req: Request) {
           const sel = await renderSatuSel({
             userId: user.id, orgId: membership.org_id,
             productId, productName: product.name, productPriceIdr: product.price_idr,
+          // Label keranjang mengikuti platform — lihat konteksAdmisi().
+          productSourceUrl: product.source_url,
             promoPriceBeforeIdr: product.promo_price_before_idr ?? null,
             scriptId: barisSkrip[i].id,
             personaId: personaPerAvatar.get(preset.id)!,

@@ -83,3 +83,26 @@ test("keluaran degraded TIDAK lagi lolos light — reproduksi reviewer dibalik",
     }
   }
 });
+
+test("aturan FAKTA (L-13 urgensi palsu, L-14 angka tanpa data) keras di light", () => {
+  // Reviewer 18 Agu: keduanya PASS di light, jadi naskah yang menyebut stok
+  // palsu atau harga karangan tetap renderable. Ini bukan wilayah selera
+  // pengguna — ini soal apakah videonya jujur.
+  const urgensiPalsu = arg([
+    { role: "hook", text: "Say, delapan puluh lima ribu segini sih?" },
+    { role: "demo", text: "nah, stok terakhir nih, teksturnya niat banget" },
+    { role: "cta", text: "cek keranjang kuning ya" },
+  ]);
+  const a = validateScript(urgensiPalsu as never, "light");
+  assert.ok(a.errors.some((e) => e.rule === "L-13"), `L-13 harus keras: ${JSON.stringify(a.errors)}`);
+
+  const angkaKarangan = arg([
+    // L-14 memeriksa ANGKA yang tidak ada di data produk — ditulis sebagai
+    // angka, karena versi kata ("sembilan puluh") memang bukan sasarannya.
+    { role: "hook", text: "Say, dipakai 90 persen orang?" },
+    { role: "demo", text: "nah, teksturnya niat banget deh" },
+    { role: "cta", text: "cek keranjang kuning ya" },
+  ]);
+  const b = validateScript(angkaKarangan as never, "light");
+  assert.ok(b.errors.some((e) => e.rule === "L-14"), `L-14 harus keras: ${JSON.stringify(b.errors)}`);
+});

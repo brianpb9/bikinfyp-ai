@@ -1,7 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, audit, type ScriptRow, type ProductRow } from "@/lib/db";
-import { validateScript } from "@/lib/script-engine/validator";
+import { periksaAdmisi } from "@/lib/script-engine/admisi";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { postgresRuntimeEnabled, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
@@ -43,18 +43,31 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     // Validasi ringan — L-10/L-11 keras, sisanya warning (FSD BR-03.2).
-    const validation = validateScript(
-      {
-        hook_family: script.hook_family,
-        register: script.register,
-        segments,
-        productName: product.name,
-        priceIdr: product.price_idr,
-        qualityTier: script.quality_tier as "silent_caption" | "high_quality" | "super_hq",
-      },
-      "light"
-    );
-    if (!validation.passed) throw ERR.FORBIDDEN_WORDS();
+    // Konteks admisi KANONIK — lihat lib/script-engine/admisi.ts. Versi lama
+    // kehilangan durationSec dan cartLabel di sini juga.
+    const validation = periksaAdmisi({
+      segments,
+      hookFamily: script.hook_family,
+      register: script.register,
+      productName: product.name,
+      productPriceIdr: product.price_idr,
+      productSourceUrl: product.source_url,
+      promoPriceBeforeIdr: product.promo_price_before_idr,
+      qualityTier: script.quality_tier,
+    });
+    if (!validation.passed) {
+      // Kode FORBIDDEN_WORDS DIPERTAHANKAN untuk kasus kata terlarang: ia
+      // sudah jadi kontrak API dan artinya spesifik. Kegagalan gerbang lain
+      // (panjang, keranjang, perangkat hook, pemicu penyaring) dulu ikut
+      // memakai kode itu dan jadi tidak bisa dibedakan — sekarang punya pesan
+      // sendiri yang menyebut sebabnya.
+      const kataTerlarang = validation.errors.some((e) => e.rule === "L-10" || e.rule === "L-11");
+      if (kataTerlarang) throw ERR.FORBIDDEN_WORDS();
+      throw ERR.BAD_REQUEST(
+        `Naskahnya belum memenuhi standar: ${validation.errors.map((e) => e.message_id).join(" ")}`,
+        `Admission failed: ${validation.errors.map((e) => e.rule).join(",")}`
+      );
+    }
 
     if (postgresRuntimeEnabled()) await smokeApproveScript(user.id, id, { segments, edited, validationResult: validation });
     else {

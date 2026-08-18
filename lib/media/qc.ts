@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { probeDurationSec, probeHasVideoStream, probeFormatTags, volumeDetect, runFfmpeg, runFf } from "./ffmpeg";
-import { validateScript } from "../script-engine/validator";
+import { periksaKataTerlarang, validateScript } from "../script-engine/validator";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { isServiceLike } from "../config/hooks";
 import { qcVision, POSISI_SAMPEL } from "./qc-vision";
@@ -957,20 +957,20 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   }
 
   // QC-07 ulangi filter kata terlarang (L-10/L-11) pada teks final — dicek 2x (SF-03).
-  const v = validateScript(
-    {
-      hook_family: input.hookFamily,
-      register: input.register,
-      segments: [{ role: "hook", text: input.finalTexts.join(" ") }],
-      productName: input.productName,
-      priceIdr: input.priceIdr,
-    },
-    "light" // light = hanya L-10/L-11 keras, persis definisi QC-07
-  );
+  //
+  // Memakai periksaKataTerlarang(), BUKAN validateScript(..., "light").
+  //
+  // Versi lama memakai mode "light" sebagai proksi dari "cuma L-10/L-11 yang
+  // keras". Proksi itu berhenti benar begitu SELALU_KERAS dipasang, dan
+  // akibatnya deterministik: teks final diratakan jadi satu segmen "hook",
+  // jadi tidak pernah ada CTA, jadi L-03 selalu gagal — SETELAH provider video
+  // dibayar. Pemeriksa struktur naskah tidak punya urusan di sini; yang
+  // diperiksa QC-07 hanya kata terlarang pada teks yang benar-benar keluar.
+  const terlarang = periksaKataTerlarang(input.finalTexts.join(" "));
   checks.push({
     code: "QC-07", name: "Tanpa kata terlarang (overclaim/medis)",
-    status: v.passed ? "pass" : "fail",
-    detail: v.passed ? "bersih" : v.errors.map((e) => e.message_id).join(" "),
+    status: terlarang.length === 0 ? "pass" : "fail",
+    detail: terlarang.length === 0 ? "bersih" : terlarang.map((e) => e.message_id).join(" "),
   });
 
 

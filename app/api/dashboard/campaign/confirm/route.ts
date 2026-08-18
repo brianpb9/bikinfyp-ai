@@ -130,6 +130,8 @@ export async function POST(req: Request) {
         results.push(await renderSatuSel({
           userId: user.id, orgId: membership.org_id,
           productId, productName: product.name, productPriceIdr: product.price_idr,
+          // Label keranjang mengikuti platform — lihat konteksAdmisi().
+          productSourceUrl: product.source_url,
           promoPriceBeforeIdr: product.promo_price_before_idr ?? null,
           scriptId, personaId, avatarCustomDesc,
           format, ratio, noModel, tvcRoute, templateId, recordStyle, shotCount, runId,

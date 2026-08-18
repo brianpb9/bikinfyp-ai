@@ -4,7 +4,7 @@ import { getDb, now, uuid, audit, type ScriptRow, type ProductRow, type JobRow, 
 import { getBalance, holdCredits, tierPriceIdr } from "@/lib/credits";
 import { enqueueJob } from "@/lib/job-queue";
 import { failJob, getJob, sweepStaleJobs } from "@/lib/jobs";
-import { validateScript } from "@/lib/script-engine/validator";
+import { periksaAdmisi } from "@/lib/script-engine/admisi";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { config } from "@/lib/config";
 import { getCreatorCategory } from "@/lib/personas";
@@ -49,21 +49,36 @@ export async function POST(req: Request) {
 
     // --- Filter kata terlarang dicek ulang saat submit render (aturan keras #6 / QC-07 pra-render) ---
     const segments = JSON.parse(script.segments) as SegmentDraft[];
-    const recheck = validateScript(
-      {
-        hook_family: script.hook_family,
-        register: script.register,
-        segments,
-        productName: product.name,
-        priceIdr: product.price_idr,
-        // Skrip promo yang sudah disetujui memuat harga normal — tanpa ini L-14
-        // salah menolak angka harga coret saat submit render.
-        promoPriceBeforeIdr: product.promo_price_before_idr,
-        qualityTier: script.quality_tier as "silent_caption" | "high_quality" | "super_hq",
-      },
-      "light"
-    );
-    if (!recheck.passed) throw ERR.FORBIDDEN_WORDS();
+    // KONTEKS ADMISI KANONIK. Versi lama tidak mengirim durationSec maupun
+    // cartLabel, jadi naskah 30 detik dinilai dengan jendela 15 detik dan CTA
+    // TikTok yang cuma berkata "keranjang" lolos — keduanya dibuktikan
+    // reviewer lewat handler nyata sampai job QUEUED dan hold Rp24.000.
+    const recheck = periksaAdmisi({
+      segments,
+      hookFamily: script.hook_family,
+      register: script.register,
+      productName: product.name,
+      productPriceIdr: product.price_idr,
+      productSourceUrl: product.source_url,
+      // Skrip promo yang sudah disetujui memuat harga normal — tanpa ini L-14
+      // salah menolak angka harga coret saat submit render.
+      promoPriceBeforeIdr: product.promo_price_before_idr,
+      qualityTier: script.quality_tier,
+      format: typeof body.format === "string" ? body.format : null,
+    });
+    if (!recheck.passed) {
+      // Kode FORBIDDEN_WORDS DIPERTAHANKAN untuk kasus kata terlarang: ia
+      // sudah jadi kontrak API dan artinya spesifik. Kegagalan gerbang lain
+      // (panjang, keranjang, perangkat hook, pemicu penyaring) dulu ikut
+      // memakai kode itu dan jadi tidak bisa dibedakan — sekarang punya pesan
+      // sendiri yang menyebut sebabnya.
+      const kataTerlarang = recheck.errors.some((e) => e.rule === "L-10" || e.rule === "L-11");
+      if (kataTerlarang) throw ERR.FORBIDDEN_WORDS();
+      throw ERR.BAD_REQUEST(
+        `Naskahnya belum memenuhi standar: ${recheck.errors.map((e) => e.message_id).join(" ")}`,
+        `Admission failed: ${recheck.errors.map((e) => e.rule).join(",")}`
+      );
+    }
 
     let personaId = body.persona_id ? String(body.persona_id) : null;
     // Kategori kreator dari S3: find-or-create persona (user, kategori) — pilihan

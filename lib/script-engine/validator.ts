@@ -232,7 +232,55 @@ function wordCount(text: string): number {
  * Aturan gaya (partikel, filler, register) TETAP lunak di light: itu memang
  * wilayah selera penggunanya.
  */
-export const SELALU_KERAS = new Set(["L-03", "L-05", "L-10", "L-11", "L-19", "L-21"]);
+export const SELALU_KERAS = new Set([
+  "L-03", "L-05", "L-10", "L-11", "L-13", "L-14", "L-19", "L-21",
+]);
+
+/**
+ * L-13 dan L-14 ditambahkan 18 Agu (reviewer: "compliance/truth", Strong
+ * Reject).
+ *
+ * Keduanya aturan FAKTA, bukan gaya: L-13 urgensi palsu ("stok terakhir" yang
+ * tidak berdasar data), L-14 angka/harga yang tidak ada sumbernya. Selama
+ * keduanya cuma peringatan di light, naskah yang menyebut stok palsu atau
+ * harga karangan tetap bisa disetujui lalu dirender — dan itu bukan soal
+ * selera penggunanya, itu soal apakah videonya jujur.
+ */
+
+/**
+ * QC-07 — filter kata terlarang pada TEKS FINAL, berdiri sendiri.
+ *
+ * DIPISAH dari validateScript() (reviewer 18 Agu, temuan P0 regresi).
+ *
+ * QC-07 hanya pernah berarti satu hal: ulangi L-10/L-11 pada teks yang
+ * benar-benar keluar (SF-03). Pemanggilnya di lib/media/qc.ts memakai
+ * validateScript(..., "light") sebagai PROKSI dari "cuma L-10/L-11 yang
+ * keras" — proksi yang benar sampai SELALU_KERAS dipasang, lalu berhenti
+ * benar dalam satu commit.
+ *
+ * Akibatnya deterministik dan mahal: teks final diratakan jadi SATU segmen
+ * berperan "hook", jadi tidak pernah ada segmen CTA, jadi L-03 selalu gagal —
+ * dan QC-07 berjalan SETELAH provider video dibayar. Setiap render akan gagal
+ * lalu direfund, dengan ongkos providernya sudah keluar.
+ *
+ * Proksi diganti pemeriksa langsung. Sekarang QC-07 tidak bisa lagi ikut
+ * berubah kalau daftar aturan struktur naskah berubah — karena ia memang
+ * bukan pemeriksa struktur naskah.
+ */
+export function periksaKataTerlarang(teksFinal: string): RuleIssue[] {
+  const lower = teksFinal.toLowerCase();
+  const toks = tokens(teksFinal);
+  const issues: RuleIssue[] = [];
+  const overTok = toks.find((t) => OVERCLAIM_TOKENS.has(t));
+  const overPhrase = OVERCLAIM_PHRASES.find((p) => lower.includes(p));
+  if (overTok || overPhrase)
+    issues.push({ rule: "L-10", message_id: `Ada kata overclaim ("${overTok ?? overPhrase}") — kata kayak 'pasti'/'dijamin'/'terbaik' bisa bikin kena teguran TikTok.` });
+  const medTok = toks.find((t) => MEDICAL_TOKENS.has(t));
+  const medPhrase = MEDICAL_PHRASES.find((p) => lower.includes(p));
+  if (medTok || medPhrase)
+    issues.push({ rule: "L-11", message_id: `Ada klaim kesehatan ("${medTok ?? medPhrase}") — klaim medis dilarang keras di platform.` });
+  return issues;
+}
 
 export function validateScript(script: ScriptToValidate, mode: ValidationMode): ValidationResult {
   const errors: RuleIssue[] = [];
