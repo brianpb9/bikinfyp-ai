@@ -239,7 +239,10 @@ export function frasaNegatifBersih(negatif: string): string {
 }
 
 const TALKING_HEAD_FRAMING =
-  "face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
+  // "framed from the chest up" adalah bawaan (STANDAR 10/10 baris 8): batas
+  // framing yang ditulis POSITIF sekaligus menutup penekanan tubuh tanpa perlu
+  // satu pun larangan.
+  "framed from the chest up, face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
   "front-facing selfie-style angle, natural phone camera look, soft natural indoor daylight, " +
   "muted authentic colors, candid everyday vibe in a lived-in Indonesian home";
 
@@ -901,7 +904,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // perabotnya sama persis" jauh lebih murah daripada menemukan meja meleleh
   // setelah rendernya dibayar.
   const TVC_STYLE_LOCK =
-    `photorealistic, luxury commercial still, soft cinematic lighting, shallow depth of field, ` +
+    `photorealistic, luxury commercial still, framed from the chest up whenever a person is in frame, soft cinematic lighting, shallow depth of field, ` +
     `high detail texture, the room, its furniture and their exact shapes stay identical across every shot, ` +
     // Titik di ujung BUKAN kosmetik: tanpa itu kalimat berikutnya menempel
     // langsung ("...no watermark EXACTLY ONE person is present..."), dan yang

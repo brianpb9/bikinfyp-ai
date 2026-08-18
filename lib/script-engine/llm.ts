@@ -21,6 +21,8 @@
  * ada yang menyadarinya. Sekali lagi tidak boleh terjadi.
  */
 import { z } from "zod";
+import { MAKS_KATA_PER_SHOT } from "./standar-10";
+import { blokStandar } from "./standar-10-teks";
 import { config } from "../config";
 import {
   AKU_TOKENS, FILLER_PHRASES, FILLER_TOKENS, GUE_TOKENS, KAMU_TOKENS, LO_TOKENS, PARTICLES,
@@ -119,6 +121,19 @@ export function blokAturan(): string {
     "- 'why' must say which story beat the segment serves: setup, tension, or payoff.",
     "",
     "WRITE dialogue in casual Indonesian. Write every other field in English.",
+    "",
+    // STANDAR 10/10 (knowledge/rules/standard-10.md). Disuntikkan UTUH, bukan
+    // diringkas: seksi A memutuskan genre idenya dan seksi B adalah 12 baris
+    // yang dipakai gerbang untuk menilai. Meringkasnya di sini berarti penulis
+    // dinilai dengan aturan yang tidak pernah ia baca — cacat yang sama persis
+    // dengan L-05 dulu.
+    blokStandar(),
+    "",
+    "Six of those twelve lines are checked MECHANICALLY and will reject your script:",
+    "- line 1: the first segment must carry a start_state (>=15 chars) and a product_state.",
+    "- line 2: the one-liner/hook must name the product or its category — it must not survive a product swap.",
+    "- line 4: the shot-2 line must be a REASON. Never open it with 'isinya', 'teksturnya', 'kandungannya'.",
+    `- line 9: at most ${MAKS_KATA_PER_SHOT} spoken words per shot, on top of the total word window.`,
     "",
     // BENTUK PERSIS. Tanpa ini model mengarang nama field yang masuk akal
     // ("type" bukan "block", "dialogue" bukan "text", "timecode" bukan

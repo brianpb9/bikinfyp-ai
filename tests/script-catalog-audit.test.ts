@@ -348,7 +348,7 @@ test("katalog template: hanya TIGA jenis utang yang diketahui, tidak ada yang la
   // Jalur LLM sudah menulis CTA Ads yang benar (llm.ts blokTugas). Yang merah
   // hanya template cadangan — dan naskah cadangan yang gagal gate memang tidak
   // boleh dirender.
-  const UTANG_DIKENAL = new Set(["L-05", "L-19", "A-01", "A-02"]);
+  const UTANG_DIKENAL = new Set(["L-05", "L-19", "A-01", "A-02", "S-04", "S-09"]);
   const lain = summary.validationFailureRefs
     .map((ref) => ({ ref, aturan: ref.errors.map((e) => e.rule).filter((r) => !UTANG_DIKENAL.has(r)) }))
     .filter((x) => x.aturan.length > 0);
@@ -367,6 +367,11 @@ test("utang template tercatat angkanya per jenis, bukan diam-diam", async () => 
   const panjang = hitung("L-05");
   const perangkat = hitung("L-19");
   const genreAds = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule.startsWith("A-"))).length;
+  // STANDAR 10/10 baris 9 (kata per shot). TIDAK menambah varian gagal —
+  // 82 dari 116 yang sudah gagal L-05 juga melanggar batas per shot. Angkanya
+  // dicatat supaya perbaikan copy terlihat maju di dua sumbu, bukan satu.
+  const perShot = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule === "S-09")).length;
+  assert.ok(perShot > 0 && perShot <= 116, `varian melanggar batas kata per shot: ${perShot}/132`);
   assert.ok(panjang > 0 && panjang <= 130, `varian melanggar batas 22 kata: ${panjang}/132`);
   assert.ok(perangkat > 0 && perangkat <= 17, `varian tanpa perangkat retoris: ${perangkat}/132`);
   // 9 template Ads x 4 varian = 36. Semuanya berpenutup afiliasi.

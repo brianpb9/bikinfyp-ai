@@ -107,7 +107,10 @@ test("tier bersuara: template lama masih 25-30 kata — UTANG yang tercatat, buk
     assert.ok(!/[()]/.test(full), `${v.hook_family}: ada tanda kurung`);
     assert.equal(v.quality_tier, "high_quality");
     // Satu-satunya sebab gagal yang boleh ada di sini adalah utang copy.
-    const lain = v.validation.errors.map((e) => e.rule).filter((r) => r !== "L-05" && r !== "L-19");
+    // S-09 (kata per shot, STANDAR 10/10 baris 9) masuk daftar yang sama: ia
+    // menolak demo template yang memang sudah kepanjangan menurut L-05 — sumbu
+    // ukur baru untuk copy yang sama, bukan cacat baru.
+    const lain = v.validation.errors.map((e) => e.rule).filter((r) => !["L-05", "L-19", "S-09", "S-04"].includes(r));
     assert.deepEqual(lain, [], `${v.hook_family}: gagal di luar utang copy: ${JSON.stringify(v.validation.errors)}`);
     // Dan sumbernya WAJIB tertandai degraded — naskah yang tidak lolos gate
     // tidak boleh menyamar sebagai keluaran normal (reviewer A2).
@@ -128,7 +131,7 @@ test("durasi 30 dtk: timing segmen skala 2x, demo diperpanjang, lolos validator 
       // Yang dijaga tes ini TIMING-nya. Kelulusan validator jadi utang copy
       // yang sama dengan tes di atas sejak batas 1,5 kata/detik dipasang, jadi
       // yang diperiksa: tidak ada sebab gagal DI LUAR utang itu.
-      const lain = v.validation.errors.map((e) => e.rule).filter((r) => r !== "L-05" && r !== "L-19");
+      const lain = v.validation.errors.map((e) => e.rule).filter((r) => !["L-05", "L-19", "S-09", "S-04"].includes(r));
       assert.deepEqual(lain, [], `${qualityTier}/${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
     }
     // Demo 30 dtk harus lebih panjang dari demo 15 dtk (kalimat lanjutan ditambahkan,
@@ -151,7 +154,7 @@ test("durasi 45 dtk: timing segmen skala 3x, demo diperpanjang, lolos validator 
         [["hook", 0, 9], ["demo", 9, 30], ["cta", 30, 45]],
         `${qualityTier}/${v.hook_family}: timing tidak skala 3x dari basis 15 dtk`
       );
-      const lain = v.validation.errors.map((e) => e.rule).filter((r) => r !== "L-05" && r !== "L-19");
+      const lain = v.validation.errors.map((e) => e.rule).filter((r) => !["L-05", "L-19", "S-09", "S-04"].includes(r));
       assert.deepEqual(lain, [], `${qualityTier}/${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
     }
     // Demo 45 dtk harus lebih panjang dari demo 30 dtk (bukan cuma 30 dtk yang

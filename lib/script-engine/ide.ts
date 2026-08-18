@@ -25,6 +25,9 @@ import {
 } from "./idea-mechanics";
 import { LlmTidakTersedia, ambilObjekJson } from "./llm";
 import { bolehPasangan, formatById, formatTersedia, muatPrior, ringkasUntukPrompt } from "./format-katalog";
+import { nilaiBarisIde, skor12, ujiCepatGenre, ujiTukarProduk, type Skor12 } from "./standar-10";
+import { blokStandar } from "./standar-10-teks";
+import { periksaPemicu } from "../media/pemicu-filter";
 
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
 const VERSI_API = "2023-06-01";
@@ -340,6 +343,8 @@ function blokPengetahuan(r: PermintaanIde): string {
     "  If you cannot fill it without describing the product, the idea started from the wrong end.",
     "- Write one_liner, why_stop, story and product_role in Indonesian. Everything else in English.",
     "",
+    blokStandar(),
+    "",
     "OUTPUT SHAPE — exact field names, no others:",
     '{"ideas":[{"one_liner":"","human_situation":"","mechanic":"","format":"","hook_device":"","hook_level":"",',
     '"why_stop":"","story":{"setup":"","tension":"","payoff":""},"product_role":"","claim_safety":"",',
@@ -349,9 +354,32 @@ function blokPengetahuan(r: PermintaanIde): string {
 
 function blokTugasIde(r: PermintaanIde): string {
   const jenuh = KATEGORI_JENUH.has(r.productCategory);
+  // GENRE MENGUBAH RUANG IDENYA, bukan cuma CTA-nya (STANDAR 10/10 §A).
+  //
+  // Affiliate menjual "aku beli/pakai ini" — yang menang social proof dan
+  // kejadian pribadi. Ads menjual satu perasaan yang tahan ditonton berkali-
+  // kali sebagai iklan berbayar, dan kata belanja justru merusaknya. Tanpa
+  // pembedaan ini, kedua genre menghasilkan kandidat yang sama dan cuma
+  // ditempeli CTA berbeda di akhir.
+  const ruangIde = r.contentType === "ads"
+    ? [
+        "GENRE: ADS (paid brand ad, spoken by an ordinary face).",
+        "- Sell ONE feeling or situation that stays watchable on the fifth viewing. It runs for days.",
+        "- Human situations that repeat well: an odd object in an ordinary place, a small everyday stake,",
+        "  a quiet contrast. One joke at most; no hard sell.",
+        "- FORBIDDEN in the idea itself: keranjang, checkout, diskon, promo, harga, stok, borong.",
+        "  If the idea still works with a 'keranjang kuning' CTA, it is an Affiliate idea wearing an Ads coat.",
+      ]
+    : [
+        "GENRE: AFFILIATE (an affiliator on a personal account).",
+        "- Sell social proof plus a personal event: borong, rebutan, dititip, dijaga, kehabisan, disembunyikan.",
+        "- The idea MUST contain a personal action by the speaker (beli/pakai/simpan/rebutan/kehabisan).",
+        "  An idea with no personal action is an Ads idea in the wrong room.",
+      ];
   return [
     `PRODUCT: ${r.productName} (${r.productCategory}), price ${r.priceIdr} rupiah.`,
     `VIDEO: ${r.durationSec} seconds, ${r.contentType}, register ${r.register}.`,
+    ...ruangIde,
     r.klaim?.length ? `ALLOWED CLAIMS (nothing beyond these): ${r.klaim.join("; ")}` : "ALLOWED CLAIMS: none.",
     r.wajibSemuaManusiawi
       ? "EVERY candidate this round must start from a human situation. Not one may start from the object."
@@ -504,6 +532,26 @@ async function usulkanIdeSekali(r: PermintaanIde, biaya?: AkumulasiBiaya): Promi
     const pasanganKunci = `${ide.mechanic}|${ide.format}`;
     if (terpakai.has(pasanganKunci)) return false;
     if (ideGenerik(ide.one_liner, { productName: r.productName, kategoriNoun: r.kategoriNoun })) return false;
+    // UJI CEPAT §A dan uji tukar produk §B baris 2 DITANDAI, bukan dibuang.
+    //
+    // Keduanya sudah masuk skor 12 baris (baris 10 dan baris 2), dan baris 2
+    // termasuk baris kritis yang menahan nilai di 6 — di bawah ambang gate.
+    // Jadi ide yang salah genre tetap tidak akan terpakai, TAPI ia tetap
+    // muncul di peringkat: kalau semua kandidat ditandai, pengguna melihat
+    // tiga terbaik beserta sebabnya, bukan pesan "tidak ada kandidat sah".
+    const genre = ujiCepatGenre({
+      contentType: r.contentType,
+      one_liner: ide.one_liner,
+      human_situation: ide.human_situation,
+      mechanic: ide.mechanic,
+    });
+    if (!genre.lolos) console.warn(`[idea] kandidat DITANDAI: ${genre.sebab.join("; ")}`);
+    const tukar = ujiTukarProduk({
+      one_liner: ide.one_liner,
+      productName: r.productName,
+      productCategory: r.productCategory,
+    });
+    if (!tukar.lolos) console.warn(`[idea] kandidat DITANDAI: ${tukar.sebab}`);
     terpakai.add(pasanganKunci);
     return true;
   });
@@ -577,6 +625,8 @@ export async function nilaiIde(
 export interface IdeTerpilih {
   ide: Ide;
   nilai: HasilNilai;
+  /** Skor 12 baris STANDAR 10/10 untuk ide terpilih — dicetak di UI dan log. */
+  standar: Skor12;
   /** Semua kandidat yang dinilai, urut skor turun — dipakai kalau gate gagal. */
   peringkat: { ide: Ide; nilai: HasilNilai }[];
   putaran: number;
@@ -686,19 +736,47 @@ export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
     const peringkat = peringkatkan(semua);
     const menang = peringkat.find((p) => p.nilai.lulus);
     if (menang) {
-      catat(r, { ide: menang.ide, nilai: menang.nilai, peringkat, putaran }, biaya);
-      return { ide: menang.ide, nilai: menang.nilai, peringkat, putaran };
+      const hasilMenang: IdeTerpilih = {
+        ide: menang.ide, nilai: menang.nilai, peringkat, putaran,
+        standar: standarIde(r, menang.ide),
+      };
+      catat(r, hasilMenang, biaya);
+      return hasilMenang;
     }
   }
   const peringkat = peringkatkan(semua);
   if (peringkat.length === 0) throw new LlmTidakTersedia("Idea Stage tidak menghasilkan satu pun kandidat sah");
-  const hasil = { ide: peringkat[0].ide, nilai: peringkat[0].nilai, peringkat, putaran: MAKS_PUTARAN_IDE };
+  const hasil: IdeTerpilih = {
+    ide: peringkat[0].ide, nilai: peringkat[0].nilai, peringkat, putaran: MAKS_PUTARAN_IDE,
+    standar: standarIde(r, peringkat[0].ide),
+  };
   catat(r, hasil, biaya);
   return hasil;
 }
 
+/** Nilai 12 baris untuk satu ide, memakai konteks permintaan. */
+export function standarIde(r: PermintaanIde, ide: Ide): Skor12 {
+  const teks = `${ide.one_liner} ${ide.human_situation} ${ide.story.setup} ${ide.story.tension} ${ide.story.payoff}`;
+  const { gagal } = nilaiBarisIde({
+    contentType: r.contentType,
+    one_liner: ide.one_liner,
+    human_situation: ide.human_situation,
+    mechanic: ide.mechanic,
+    why_stop: ide.why_stop,
+    hookLevel: (r.hookLevel ?? "normal") as never,
+    productName: r.productName,
+    productCategory: r.productCategory,
+    pemicu: periksaPemicu(teks, { namaProduk: r.productName }).map((t) => t.cocok),
+    claim_safety: ide.claim_safety,
+  });
+  return skor12(gagal);
+}
+
 function catat(r: PermintaanIde, hasil: IdeTerpilih, biaya: AkumulasiBiaya): void {
   catatSkorGate({
+    standar: hasil.standar.garis,
+    standarNilai: hasil.standar.nilai,
+    standarGagal: hasil.standar.gagal.map((g) => g.no),
     productName: r.productName, productCategory: r.productCategory,
     mechanic: hasil.ide.mechanic, total: hasil.nilai.total, lulus: hasil.nilai.lulus,
     borderline: hasil.nilai.borderline,
@@ -711,6 +789,11 @@ function catat(r: PermintaanIde, hasil: IdeTerpilih, biaya: AkumulasiBiaya): voi
     model: config.anthropicModelIdeas,
     waktu: new Date().toISOString(),
   });
+  console.log(
+    `[idea] standar 10/10 "${r.productName}": ${hasil.standar.garis} -> nilai ${hasil.standar.nilai}` +
+      `${hasil.standar.capKritis ? " (ditahan di 6: baris kritis gagal)" : ""}` +
+      `${hasil.standar.gagal.length ? ` · gagal: ${hasil.standar.gagal.map((g) => `#${g.no} ${g.sebab}`).join(" | ")}` : ""}`
+  );
   console.log(
     `[idea] gate "${r.productName}": tertinggi ${hasil.nilai.total} (${hasil.ide.mechanic}) · ` +
       `${hasil.nilai.lulus ? (hasil.nilai.borderline ? "LULUS TIPIS" : "LULUS") : "gagal"} · ${hasil.peringkat.length} kandidat, ` +
@@ -758,6 +841,10 @@ export function petunjukNaskah(ide: Ide): string {
  * dan kegagalan menulisnya tidak boleh menggagalkan apa pun.
  */
 export function catatSkorGate(baris: {
+  /** Garis "9/12 baris standar" — STANDAR 10/10. */
+  standar?: string;
+  standarNilai?: number;
+  standarGagal?: number[];
   productName: string;
   productCategory: string;
   mechanic: string;

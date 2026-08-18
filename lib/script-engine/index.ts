@@ -16,9 +16,10 @@
 
 import {
   BOLD_HOOK_PRIORITY, CATEGORY_HOOK_PRIORITY, CATEGORY_NOUN, CATEGORY_PAIN, CATEGORY_PROOF,
-  HOOK_BY_CODE, type HookCode, type HookLevel,
+  HOOK_BY_CODE, hookLevelRank, type HookCode, type HookLevel,
 } from "../config/hooks";
 import { COMPLIANCE_CHECKLIST } from "../config/compliance";
+import { kategoriJenuh } from "./standar-10";
 import { REGISTERS, type Register } from "./registers";
 import { renderSegmentsForTier, formatHargaNatural, type SegmentDraft, type TemplateCtx } from "./templates";
 import { templateCopy, TEMPLATE_COPY_CAPACITY } from "./template-copy";
@@ -95,6 +96,9 @@ export interface GeneratedScript {
   ideBorderline?: boolean;
   /** Skor gate ide yang dipakai, untuk ditampilkan bersama naskahnya. */
   ideSkor?: number;
+  /** STANDAR 10/10: garis "9/12 baris standar" + nilai 0-10, untuk UI & log. */
+  standarGaris?: string;
+  standarNilai?: number;
   ideKandidat?: {
     one_liner: string;
     mechanic: string;
@@ -280,7 +284,10 @@ async function generateOne(
   /** Petunjuk ide terpilih (Idea Stage). Kosong = perilaku tanpa Gate 3. */
   petunjukIde?: string,
   /** true = lewati penulis LLM sepenuhnya, pakai template. */
-  tanpaLlm = false
+  tanpaLlm = false,
+  /** Level hook & mekanik ide — dibawa ke snapshot untuk STANDAR 10/10 (S-04, S-05). */
+  hookLevel: HookLevel = "normal",
+  mekanikIde?: string
 ): Promise<GeneratedScript> {
   // Ambang Rp100.000 diturunkan dari data, bukan ditebak: tiga video pemenang
   // yang menyebut harga ada di Rp27-30 ribu, sedangkan yang produknya di atas
@@ -330,6 +337,9 @@ async function generateOne(
     wordBudget: wordBudget ?? null,
     cartLabel,
     requirePriceMention: templateRequiresPriceMention(templateId),
+    hookLevel,
+    productCategory: product.category,
+    ...(mekanikIde ? { mechanic: mekanikIde } : {}),
   };
   const validate = (segs: SegmentDraft[]) =>
     validateScript(
@@ -534,8 +544,24 @@ export async function generateScripts(opts: {
   const emotion = opts.emotion ?? "senang";
   const tier = opts.qualityTier ?? "silent_caption";
   const durationSec = opts.durationSec ?? 15;
+  // STANDAR 10/10 baris 5: kategori jenuh (sabun, skincare, F&B, odol) menuntut
+  // level hook minimal L2.
+  //
+  // Sistemnya MENAIKKAN level, bukan menolak permintaannya. Menolak akan
+  // membuat setiap produk skincare gagal digenerate pada level bawaan — dan
+  // pengguna tidak punya cara tahu bahwa yang salah adalah levelnya. S-05 di
+  // validator tetap keras sebagai jaring: kalau suatu hari ada jalur yang
+  // melewatkan kenaikan ini, naskahnya tidak lolos gerbang.
+  const levelDiminta = opts.hookLevel ?? "normal";
+  const hookLevel: HookLevel = kategoriJenuh({ productCategory: product.category, productName: product.name })
+    && hookLevelRank(levelDiminta) < 2 ? "agak_berani" : levelDiminta;
+  if (hookLevel !== levelDiminta) {
+    console.log(
+      `[standar-10] "${product.name}" kategori jenuh — level hook dinaikkan ${levelDiminta} -> ${hookLevel} (§B baris 5)`
+    );
+  }
   const families = pickHookFamilies(
-    product.category, product.id, opts.hookLevel ?? "normal",
+    product.category, product.id, hookLevel,
     opts.hookFamilies, count, opts.lockHookFamily === true
   );
   // Berurutan, BUKAN Promise.all: tiap varian memanggil LLM, dan menembakkan
@@ -566,7 +592,7 @@ export async function generateScripts(opts: {
         kategoriNoun: pick(product.category, CATEGORY_NOUN),
         priceIdr: product.price_idr ?? 0, durationSec,
         contentType: opts.contentType ?? "affiliate", register,
-        format: opts.format, hookLevel: opts.hookLevel ?? "normal",
+        format: opts.format, hookLevel,
       });
       console.log(
         `[idea] "${product.name}": ${ide.peringkat.length} kandidat dinilai, terpilih ` +
@@ -605,7 +631,8 @@ export async function generateScripts(opts: {
     const ideVarian = ide?.nilai.lulus ? (ide.peringkat[i] ?? ide.peringkat[0])?.ide ?? ide.ide : null;
     hasil.push(await generateOne(product, register, emotion, families[i], tier, durationSec,
       opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format,
-      ideVarian ? petunjukNaskah(ideVarian) : undefined, opts.tanpaLlm === true));
+      ideVarian ? petunjukNaskah(ideVarian) : undefined, opts.tanpaLlm === true,
+      hookLevel, ideVarian?.mechanic));
   }
   // Gate gagal: tiga terbaik ikut keluar supaya UI bisa menampilkannya dan
   // meminta pengguna memilih — bukan disimpan diam-diam di log server.
@@ -613,6 +640,10 @@ export async function generateScripts(opts: {
   if (ide?.nilai.lulus) {
     for (const v of hasil) {
       v.ideSkor = ide.nilai.total;
+      // STANDAR 10/10 ikut ke layar: pengguna berhak melihat baris mana yang
+      // belum terpenuhi, bukan cuma satu angka gabungan.
+      v.standarGaris = ide.standar.garis;
+      v.standarNilai = ide.standar.nilai;
       if (ide.nilai.borderline) v.ideBorderline = true;
     }
     if (ide.nilai.borderline) {

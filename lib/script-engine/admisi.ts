@@ -66,6 +66,11 @@ export interface SnapshotAdmisi {
    *  naskah lama memang harus ditulis ulang. */
   cartLabel?: string | null;
   requirePriceMention?: boolean;
+  /** Level hook & kategori — dipakai S-05 (STANDAR 10/10 baris 5). */
+  hookLevel?: string | null;
+  productCategory?: string | null;
+  /** Mekanik ide terpilih — S-04 mengecualikan mekanik tekstur. */
+  mechanic?: string | null;
 }
 
 /**
@@ -139,6 +144,8 @@ export interface SumberAdmisi {
   format?: string | null;
   templateId?: string | null;
   wordBudget?: number | null;
+  hookLevel?: string | null;
+  productCategory?: string | null;
 }
 
 /**
@@ -206,6 +213,11 @@ export function konteksAdmisi(sumber: SumberAdmisi) {
       : (snap?.cartLabel ?? "keranjang"),
     ...(format ? { format: format as "hands_only" | "vo_broll" | "talking_head" | "tvc" | "ads" } : {}),
     requirePriceMention: snap?.requirePriceMention ?? templateRequiresPriceMention(templateId),
+    // STANDAR 10/10 baris 4 & 5 butuh tiga hal ini; tanpa mereka aturannya
+    // diam-diam tidak pernah berjalan.
+    hookLevel: snap?.hookLevel ?? sumber.hookLevel ?? null,
+    productCategory: snap?.productCategory ?? sumber.productCategory ?? null,
+    mechanic: snap?.mechanic ?? null,
     ...(wordBudget ? { wordBudget } : {}),
   };
 }

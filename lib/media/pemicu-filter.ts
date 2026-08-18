@@ -47,6 +47,27 @@ const KOSAKATA: { pola: RegExp; saran: string }[] = [
   { pola: /\b(wet|damp|basah|lembap)\s+(skin|body|hair|kulit|badan|rambut)\b/i, saran: "sebut hasilnya, bukan keadaan tubuhnya: 'freshly rinsed hands'" },
   { pola: /\b(undress|undressing|changing clothes|ganti baju|buka baju|telanjang)\b/i, saran: "hilangkan; adegan ganti pakaian tidak pernah dibutuhkan iklan produk" },
   { pola: /\b(weapon|gun|knife|baton|pistol|senjata|pentungan|pisau)\b/i, saran: "hilangkan; benda ini tidak punya tempat di iklan konsumen" },
+  // PENEKANAN TUBUH (STANDAR 10/10 baris 8). Referensi full-body dan pakaian
+  // yang menonjolkan bentuk badan menggeser tebakan penyaring, sama seperti
+  // kosakata kamar mandi.
+  //
+  // "skin" SENGAJA tidak dilarang telanjang: seluruh kategori skincare menulis
+  // kata itu secara sah ("skin feels calmer"), dan melarangnya akan mengulang
+  // pola QC-10 yang dulu memblokir semua produk fashion. Yang dilarang
+  // bentuk-bentuk yang menekankan tubuhnya.
+  { pola: /\b(full[- ]body shot|full[- ]body reference|bodycon|ribbed|high[- ]?waist(ed)?|midriff|cleavage|thigh)\b/i,
+    saran: "ganti ke framing dada ke atas: 'framed from the chest up'" },
+  // "dewy skin" TIDAK masuk: itu deskripsi WAJAH baku di UGC kecantikan
+  // (persona genz kita memakainya), bukan penekanan tubuh. Terukur: memasukkan
+  // "dewy" memblokir 57 dari 360 shot yang sepenuhnya sah.
+  { pola: /\b(bare|glistening|oiled)\s+skin\b/i,
+    saran: "sebut hasilnya, bukan permukaan tubuhnya: 'skin looks calmer'" },
+  // GERAK-GERIK SEMBUNYI-SEMBUNYI (baris 8). Penolakan CCTV 18 Agu memakai
+  // persis kosakata ini: guilty + hurried + mengendap.
+  { pola: /\b(hides|hiding|sneaks|sneaking|sneaky|furtive|furtively|hurried|hurriedly|guiltily)\b/i,
+    saran: "tulis gerakannya apa adanya: 'she picks it up quickly and walks on'" },
+  { pola: /\bglances (left and right|around nervously|over (her|his) shoulder)\b/i,
+    saran: "hilangkan; gerakan mengawasi sekitar membaca sebagai perbuatan tersembunyi" },
 ];
 
 /** "bathroom door" + orang kedua — kombinasi, bukan kata tunggal. */
@@ -63,7 +84,11 @@ const ORANG_KEDUA = /\b(another|second|other)\s+(person|woman|man|figure|orang)\
 const KATA_ORANG =
   "person|people|resident|residents|woman|women|man|men|face|faces|figure|figures|silhouette|silhouettes|" +
   "speaker|speakers|presenter|model|models|head|heads|hand|hands|arm|arms|limb|limbs|lip|lips|mouth|body|anatomy|" +
-  "orang|penghuni|wajah|wajahnya|kepala|tangan|lengan|bibir|mulut|badan|siluet|dia";
+  // "dia" SENGAJA tidak di sini — ia kata ganti, dan kata ganti hanya dipakai
+  // di arah mundur (lihat KATA_GANTI). Di arah maju ia menghasilkan tangkapan
+  // seperti "bukan di meja rias. Dia buka brankas": dua kalimat berbeda yang
+  // kebetulan berdekatan.
+  "orang|penghuni|wajah|wajahnya|kepala|tangan|lengan|bibir|mulut|badan|siluet";
 /**
  * Bentuk negasi yang dilewatkan versi pertama, dan semuanya nyata di prompt
  * kami sendiri (reviewer ronde 3, oracle independen): "tak", "gak", dan
@@ -129,8 +154,16 @@ export function periksaPemicu(teks: string, konteks: KonteksPemicu = {}): Temuan
   // sisanya seperti biasa.
   const bersih = tutupiNama(teks, konteks.namaProduk);
   for (const { pola, saran } of KOSAKATA) {
-    const m = bersih.match(pola);
-    if (m) temuan.push({ jenis: "kosakata", cocok: m[0], saran });
+    // SEMUA kecocokan, bukan yang pertama saja: satu pola menampung banyak kata
+    // ("hides|hurried|furtive"), dan melaporkan satu di antaranya membuat
+    // penulisnya memperbaiki satu kata lalu tertahan lagi di kata berikutnya.
+    const terlihat = new Set<string>();
+    for (const m of bersih.matchAll(new RegExp(pola.source, "gi"))) {
+      const kunci = m[0].toLowerCase();
+      if (terlihat.has(kunci)) continue;
+      terlihat.add(kunci);
+      temuan.push({ jenis: "kosakata", cocok: m[0], saran });
+    }
   }
   if (PINTU_KAMAR_MANDI.test(bersih) && ORANG_KEDUA.test(bersih)) {
     temuan.push({

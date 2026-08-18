@@ -7,6 +7,7 @@ import { periksaPemicu, ringkasPemicu } from "../media/pemicu-filter";
 import { COMPETITOR_BRANDS } from "../config/hooks";
 import { formatHargaNatural } from "./templates";
 import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
+import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
 
 export interface ScriptToValidate {
   hook_family: string;
@@ -58,6 +59,12 @@ export interface ScriptToValidate {
    * keranjang. Jadi setiap naskah Ads yang BENAR ditolak gerbang, dan yang
    * lolos justru yang salah genre. */
   contentType?: "affiliate" | "ads";
+  /** Level hook naskah — dipakai S-05 (STANDAR 10/10 baris 5). */
+  hookLevel?: string | null;
+  /** Kategori produk — S-05 memakainya untuk mengenali kategori jenuh. */
+  productCategory?: string | null;
+  /** Mekanik ide terpilih — S-04 mengecualikan mekanik yang memang soal tekstur. */
+  mechanic?: string | null;
   /** Label keranjang yang WAJIB disebut CTA — "keranjang kuning" (TikTok) atau
    *  "keranjang" (Shopee/Tokopedia/manual). Kosong = "keranjang". */
   cartLabel?: string;
@@ -327,6 +334,9 @@ function wordCount(text: string): number {
 export const SELALU_KERAS = new Set([
   "L-03", "L-05", "L-10", "L-11", "L-13", "L-14", "L-19", "L-21",
   "T-01", "T-02", "T-03", "A-01", "A-02",
+  // STANDAR 10/10 (knowledge/rules/standard-10.md). Ketiganya aturan MUTU yang
+  // bisa diperiksa mesin, dan Brian menyebutnya syarat render — bukan saran.
+  "S-04", "S-05", "S-09",
 ]);
 
 /**
@@ -766,6 +776,37 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
         segment: segment.role,
       });
     }
+  }
+
+  // ---- STANDAR 10/10 (knowledge/rules/standard-10.md) ----
+  //
+  // Hanya baris yang benar-benar bisa diperiksa dari NASKAH yang ada di sini.
+  // Baris tentang video jadi (label terbaca dua titik) tidak bisa dinilai dari
+  // teks, dan menuliskannya sebagai lulus di sini akan membuat standar ini
+  // terlihat ditegakkan padahal tidak — lihat BARIS_10 di standar-10.ts.
+
+  // S-04 (baris 4): kalimat shot 2 adalah ALASAN, bukan katalog.
+  if (demoSeg) {
+    const b4 = payoffBukanKatalog({ teksShot2: stripDeliveryTags(demoSeg.text), mechanic: script.mechanic ?? "" });
+    if (!b4.lolos) push(false, { rule: "S-04", message_id: b4.sebab!, segment: "demo" });
+  }
+
+  // S-05 (baris 5): kategori jenuh menuntut level hook minimal L2.
+  if (script.hookLevel) {
+    const b5 = levelHookCukup({
+      hookLevel: script.hookLevel as never,
+      productCategory: script.productCategory,
+      productName: script.productName,
+    });
+    if (!b5.lolos) push(false, { rule: "S-05", message_id: b5.sebab! });
+  }
+
+  // S-09 (baris 9): batas kata PER SHOT — hanya untuk tier bersuara. Di
+  // silent_caption teksnya dibaca, bukan diucapkan, dan batas 1,5 kata/detik
+  // tidak berlaku di sana.
+  if (tier !== "silent_caption") {
+    const b9 = kataPerShot(script.segments as never);
+    if (!b9.lolos) push(false, { rule: "S-09", message_id: b9.sebab! });
   }
 
   return { passed: errors.length === 0, errors, warnings, checked_at: new Date().toISOString() };

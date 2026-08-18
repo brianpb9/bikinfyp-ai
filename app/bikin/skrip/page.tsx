@@ -231,6 +231,12 @@ function SkripInner() {
               {/* PROVENANCE (reviewer ronde 3): naskah cadangan tidak boleh
                   tampil persis seperti naskah yang ditulis penulis AI —
                   penggunanya membayar render yang sama. */}
+              {s.standarGaris && (
+                <p className="mt-2 text-xs font-bold text-zinc-500">
+                  Standar 10/10: {s.standarGaris}
+                  {typeof s.standarNilai === "number" ? ` · nilai ${s.standarNilai}/10` : ""}
+                </p>
+              )}
               {s.script_source && s.script_source !== "llm" && (
                 <p className="mt-2 inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-bold text-zinc-600">
                   {s.script_source === "template" ? "Naskah cadangan (template)" : "Belum memenuhi standar"}

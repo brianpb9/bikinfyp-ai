@@ -53,6 +53,9 @@ export interface FlowScript {
   /** Bentuk naskah saat ditulis — dipakai UI supaya gerbangnya sama dengan
    *  server (genre, durasi, jatah kata, label keranjang). */
   admisi?: SnapshotAdmisi;
+  /** STANDAR 10/10: "9/12 baris standar" + nilai 0-10 (knowledge/rules). */
+  standarGaris?: string;
+  standarNilai?: number;
 }
 
 export type VideoFormat = "hands_only" | "talking_head" | "vo_broll";
