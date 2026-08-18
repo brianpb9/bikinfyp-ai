@@ -90,7 +90,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
       "pan continues. EVERY passenger on the bench is holding the exact same product in the same way, calmly " +
       "and casually, as if it is completely normal. Five or six people, different ages and clothing, all with " +
       "the identical product, matching the reference image exactly in colour, shape and proportion — do not " +
-      "redesign it. Nobody reacts. Nobody looks at the camera. Beat 4 (6.5-9s): the camera pans back to the " +
+      "redesign it. Everyone stays absorbed in their own ride, eyes forward and away from the camera. Beat 4 (6.5-9s): the camera pans back to the " +
       "original passenger, who slowly looks down at their own empty hands, then lifts their head and stares " +
       "straight into the camera with a deadpan expression. They speak in Indonesian, saying: \"kok cuma aku " +
       "yang belum punya?\" Natural conversational Indonesian, not a newsreader. Do not speak English. FINAL " +
@@ -355,7 +355,7 @@ export const HOOK_LIBRARY: HookLibraryEntry[] = [
       "past, wind blasting through the room, curtains and papers flying, the person's hair and shirt whipping " +
       "violently. Beat 4 (6-8s): the train's last carriage passes and exits through the right side of frame. " +
       "The wind dies. Dust and papers drift down. The back wall is now an open train-sized gap with rails " +
-      "running through it. Beat 5 (8-9s): the person has not moved at all. Still seated, still calm, still " +
+      "running through it. Beat 5 (8-9s): the person stays exactly where they were. Still seated, still calm, still " +
       "holding the product in exactly the same position, hair settling back down. FINAL FRAME: the person " +
       "sits calmly holding the product at chest height, centered and sharp, the open wall and rails visible " +
       "behind them, dust settling.",
