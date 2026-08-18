@@ -89,7 +89,7 @@ test("field terstruktur penulis LLM TIDAK dibuang", () => {
       expression: "curious", mode: "product", product_state: "hidden",
     } as never,
   ]);
-  const s = draft[0] as Record<string, unknown>;
+  const s = draft[0] as unknown as Record<string, unknown>;
   for (const kunci of ["framing", "angle", "camera", "action", "expression", "mode", "product_state", "start_state"]) {
     assert.ok(s[kunci], `${kunci} dibuang — FlowSegment punya tipenya tapi tidak pernah punya datanya`);
   }
