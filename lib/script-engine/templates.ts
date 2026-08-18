@@ -40,6 +40,24 @@ export interface SegmentDraft {
   /** Keadaan yang sudah benar di frame pertama segmen ini (tulisan LLM).
    *  Dipakai membangun frame turunan — lihat ShotSpec.startState. */
   start_state?: string;
+  /**
+   * Field TERSTRUKTUR dari penulis LLM, DISIMPAN UTUH di samping
+   * visual_direction (reviewer A2 / ronde 3).
+   *
+   * visual_direction adalah gabungan keempatnya jadi satu kalimat — dan
+   * begitu digabung, tidak ada lagi cara memisahkannya untuk ditampilkan,
+   * dinilai, atau diperbaiki satu per satu. Tipenya sudah ditambahkan di
+   * FlowSegment sejak lama, tapi datanya dibuang di keSegmentDraft, jadi UI
+   * membaca field yang tidak pernah terisi.
+   *
+   * Opsional: jalur template tidak menulisnya.
+   */
+  framing?: string;
+  angle?: string;
+  camera?: string;
+  action?: string;
+  expression?: string;
+  mode?: string;
 }
 
 type Triple = { hook: string; demo: string; cta: string };

@@ -3,6 +3,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, type ScriptRow, type ProductRow } from "@/lib/db";
 import { postgresRuntimeEnabled, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
+import { bacaJejak } from "@/lib/script-engine/admisi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -36,6 +37,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
         approved: script.approved_by_user_at !== null,
         product_name: product.name,
         price_idr: product.price_idr,
+        // Provenance IKUT (reviewer ronde 3): tanpa ini UI tidak punya cara
+        // membedakan naskah tulisan LLM dari naskah cadangan, dan pengguna
+        // membayar render tanpa pernah tahu bedanya.
+        ...bacaJejak(script.validation_result),
       },
     });
   } catch (err) {

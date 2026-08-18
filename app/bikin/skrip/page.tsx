@@ -5,7 +5,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { apiFetch, ApiFail } from "../../_components/api";
 import { FlowHeader, PrimaryButton, ErrorText, SecondaryButton } from "../../_components/ui";
 import { HOOK_FAMILY_NAMES, TIER_LABELS, loadFlow, saveFlow, type FlowScript, type FlowSegment } from "../../_components/flow";
-import { validateScript, type RuleIssue } from "../../../lib/script-engine/validator";
+import { type RuleIssue } from "../../../lib/script-engine/validator";
+import { periksaAdmisi } from "../../../lib/script-engine/admisi";
 import { scoreScriptPlan, type ScriptPlanScore, type FypQualityTier, type FypVideoFormat } from "../../../lib/fyp-score";
 import { track } from "../../_components/track";
 import type { HookCode } from "../../../lib/config/hooks";
@@ -61,6 +62,8 @@ function SkripInner() {
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [segments, setSegments] = useState<FlowSegment[]>([]);
   const [issues, setIssues] = useState<RuleIssue[]>([]);
+  /** Kegagalan KERAS menurut validator — yang benar-benar ditolak server. */
+  const [keras, setKeras] = useState<RuleIssue[]>([]);
   const [editorSeen, setEditorSeen] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -102,6 +105,7 @@ function SkripInner() {
     setSelectedId(s.id);
     setSegments(s.segments.map((seg) => ({ ...seg })));
     setIssues([]);
+    setKeras([]);
     saveFlow({ selectedScriptId: s.id });
   }
 
@@ -127,21 +131,29 @@ function SkripInner() {
     const script = scripts.find((s) => s.id === selectedId);
     const product = loadFlow().product;
     if (!script) return;
-    const res = validateScript(
-      {
-        hook_family: script.hook_family,
-        register: script.register,
-        segments: next,
-        productName: product?.name ?? "produk",
-        priceIdr: product?.priceIdr ?? 1,
-        promoPriceBeforeIdr: product?.promoPriceBeforeIdr ?? null,
-      },
-      "light"
-    );
+    // GERBANG YANG SAMA dengan server (reviewer ronde 3, "Product UX").
+    //
+    // Versi lama memanggil validateScript dengan konteks yang tidak lengkap —
+    // tanpa durasi, tanpa label keranjang, tanpa genre — lalu menganggap hanya
+    // L-10/L-11 yang keras. Akibatnya tombolnya tampak siap, pengguna menekan,
+    // dan server menolak dengan aturan yang tidak pernah ditunjukkan.
+    const res = periksaAdmisi({
+      segments: next as never,
+      snapshot: script.admisi,
+      hookFamily: script.hook_family,
+      register: script.register,
+      productName: product?.name ?? "produk",
+      productPriceIdr: product?.priceIdr ?? 1,
+      promoPriceBeforeIdr: product?.promoPriceBeforeIdr ?? null,
+      qualityTier: loadFlow().qualityTier ?? "high_quality",
+    });
     setIssues([...res.errors, ...res.warnings]);
+    setKeras(res.errors);
   }
 
-  const hardErrors = issues.filter((i) => i.rule === "L-10" || i.rule === "L-11");
+  // Daftar aturan kerasnya milik validator (SELALU_KERAS), bukan disalin di
+  // sini — salinan itu yang membuat UI dan server berbeda pendapat.
+  const hardErrors = keras;
   const canApprove = selectedId !== null && editorSeen && hardErrors.length === 0 && !loading;
   const approveHint = loading
     ? "Skrip sedang dikirim ke studio AI."
@@ -216,6 +228,14 @@ function SkripInner() {
                 })()}
               </p>
               <p className="mt-1 text-zinc-700">&ldquo;{s.segments[0]?.text}&rdquo;</p>
+              {/* PROVENANCE (reviewer ronde 3): naskah cadangan tidak boleh
+                  tampil persis seperti naskah yang ditulis penulis AI —
+                  penggunanya membayar render yang sama. */}
+              {s.script_source && s.script_source !== "llm" && (
+                <p className="mt-2 inline-block rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-bold text-zinc-600">
+                  {s.script_source === "template" ? "Naskah cadangan (template)" : "Belum memenuhi standar"}
+                </p>
+              )}
             </button>
           ))}
         </section>
@@ -225,7 +245,10 @@ function SkripInner() {
             <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Tinjau sebelum lanjut</p><h2 className="font-display text-xl font-bold">Edit per bagian</h2></div>
             {segments.map((seg, i) => {
               const segIssues = issues.filter((is) => is.segment === seg.role);
-              const globalHard = issues.filter((is) => !is.segment && (is.rule === "L-10" || is.rule === "L-11"));
+              // Kegagalan keras tanpa segmen (panjang naskah, genre, harga)
+              // ditempel di bagian pertama — daftar aturannya dari validator,
+              // bukan disalin di sini.
+              const globalHard = keras.filter((is) => !is.segment);
               const segErr = i === 0 ? [...segIssues, ...globalHard] : segIssues;
               return (
                 <div key={seg.role}>

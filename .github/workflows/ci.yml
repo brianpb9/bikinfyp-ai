@@ -14,6 +14,11 @@ jobs:
       # to a hardcoded macOS Homebrew path when this is unset.
       FFMPEG_PATH: /usr/bin/ffmpeg
       FFPROBE_PATH: /usr/bin/ffprobe
+      # Bukan rahasia: nilai buangan supaya `next build` bisa mengumpulkan
+      # data halaman. Tanpa ini CI runner bersih SELALU gagal di build,
+      # sementara build lokal hijau karena .env.local diam-diam mengisinya —
+      # jadi "build hijau" di laptop tidak pernah berarti build hijau di CI.
+      AUTH_SECRET: ci-build-only-not-a-secret-0000000000000000
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -31,3 +36,23 @@ jobs:
       - run: npx tsc --noEmit
       - run: npm test
       - run: npm run build
+
+  # GERBANG KATALOG, dipisah dari `verify` dengan sengaja.
+  #
+  # Keputusan Brian 18 Agu (opsi a): suara copy dimiliki Brian/copywriter, dan
+  # audit ini jadi gerbang rilis keras — merahnya TIDAK boleh dinormalkan lewat
+  # rewrite mekanis. Sampai 116 varian ditulis ulang, job ini memang merah.
+  #
+  # Dipisah supaya `verify` tetap punya arti. Alarm yang selalu menyala berhenti
+  # dibaca, dan kalau utang copy ini menenggelamkan sinyal tes & build, cacat
+  # BARU akan lewat tanpa ada yang sadar.
+  catalog:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: npm ci
+      - run: npm run audit:script-catalog

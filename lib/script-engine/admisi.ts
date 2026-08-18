@@ -195,7 +195,15 @@ export function konteksAdmisi(sumber: SumberAdmisi) {
     // Label keranjang mengikuti platform — "keranjang kuning" itu branding
     // TikTok, dan menyuruh pembeli Shopee mencarinya adalah menyuruhnya
     // mencari sesuatu yang tidak ada.
-    cartLabel: cartLabelForUrl(sumber.productSourceUrl),
+    //
+    // Pemanggil yang TIDAK PUNYA url produk (UI, yang cuma memegang naskah)
+    // memakai label dari snapshot. Bedanya disengaja: `null` berarti "produk
+    // ini memang bukan TikTok", `undefined` berarti "saya tidak tahu" — dan
+    // menebak "keranjang" untuk yang kedua membuat UI meloloskan naskah yang
+    // ditolak server.
+    cartLabel: sumber.productSourceUrl !== undefined
+      ? cartLabelForUrl(sumber.productSourceUrl)
+      : (snap?.cartLabel ?? "keranjang"),
     ...(format ? { format: format as "hands_only" | "vo_broll" | "talking_head" | "tvc" | "ads" } : {}),
     requirePriceMention: snap?.requirePriceMention ?? templateRequiresPriceMention(templateId),
     ...(wordBudget ? { wordBudget } : {}),

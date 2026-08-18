@@ -1,6 +1,7 @@
 "use client";
 
 import type { HookLevel } from "@/lib/config/hooks";
+import type { SnapshotAdmisi } from "@/lib/script-engine/admisi";
 
 // Konteks alur "bikin video" — disimpan di sessionStorage agar tahan tutup halaman.
 
@@ -49,6 +50,9 @@ export interface FlowScript {
    * kalau muncul, itu bug, bukan pilihan.
    */
   script_source?: "llm" | "template" | "degraded";
+  /** Bentuk naskah saat ditulis — dipakai UI supaya gerbangnya sama dengan
+   *  server (genre, durasi, jatah kata, label keranjang). */
+  admisi?: SnapshotAdmisi;
 }
 
 export type VideoFormat = "hands_only" | "talking_head" | "vo_broll";

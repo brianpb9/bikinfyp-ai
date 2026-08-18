@@ -375,7 +375,15 @@ export function keSegmentDraft(s: SegmenLlm[]): SegmentDraft[] {
     start: x.start,
     end: x.end,
     text: x.text,
+    // Gabungan TETAP dibuat — sisa pipeline (perencana shot, QC, L-21)
+    // membacanya. Yang berubah: potongannya ikut disimpan, bukan dibuang.
     visual_direction: `${x.framing}, ${x.angle}. ${x.camera}. ${x.action}`,
+    framing: x.framing,
+    angle: x.angle,
+    camera: x.camera,
+    action: x.action,
+    expression: x.expression,
+    mode: x.mode,
     product_state: x.product_state,
     start_state: x.start_state,
   })) as SegmentDraft[];
