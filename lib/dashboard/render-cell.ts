@@ -65,6 +65,33 @@ export interface AlatSel {
   creditsRepo: PgCreditPaymentRepository;
 }
 
+/**
+ * Permintaan render yang BERTENTANGAN dengan naskahnya — ditolak, bukan ditimpa.
+ *
+ * Admisi menilai naskah memakai genre dari snapshot, tapi baris JOB dulu tetap
+ * menyimpan format dan template dari request — dan worker merencanakan shot
+ * dari baris job itu. Jadi naskah Ads bisa dirender sebagai talking_head tanpa
+ * satu pun gerbang mengeluh, dan videonya tidak cocok dengan naskahnya.
+ *
+ * Ditolak, bukan diperbaiki diam-diam: harga dan durasi mengikuti format, jadi
+ * menimpanya berarti mengubah yang dibayar pengguna tanpa ia tahu.
+ *
+ * Snapshot yang TIDAK menyebut format (naskah lama, atau format yang memang
+ * baru dipilih di langkah confirm) tidak menghalangi apa pun.
+ */
+export function kontradiksiNaskah(
+  snap: { format?: string | null; templateId?: string | null } | undefined,
+  minta: { format: string; templateId: string | null }
+): string | null {
+  if (snap?.format && snap.format !== minta.format) {
+    return `Naskah ini ditulis untuk format "${snap.format}", bukan "${minta.format}". Buat naskah baru untuk format itu ya.`;
+  }
+  if (snap?.templateId && minta.templateId && snap.templateId !== minta.templateId) {
+    return `Naskah ini ditulis dari template "${snap.templateId}", bukan "${minta.templateId}".`;
+  }
+  return null;
+}
+
 export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<HasilSel> {
   const { pool, jobsRepo, creditsRepo } = alat;
   const gagal = (reason: string): HasilSel => ({ status: "failed", script_id: sel.scriptId, reason });
@@ -96,6 +123,8 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   // dijalankan sementara aturan lisan afiliasi (L-03/L-19) dipaksakan ke
   // naskah yang memang bukan afiliasi.
   const jejak = bacaJejak(script.validation_result);
+  const bentrok = kontradiksiNaskah(jejak.admisi, { format: sel.format, templateId: sel.templateId });
+  if (bentrok) return gagal(bentrok);
   const validation = periksaAdmisi({
     segments,
     // Snapshot menang atas isi request: genre naskah ditentukan saat ia

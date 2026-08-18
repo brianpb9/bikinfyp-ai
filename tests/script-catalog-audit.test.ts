@@ -18,7 +18,7 @@ import {
   spokenProductionJargon,
   unsupportedFactualClaims,
 } from "../lib/script-engine/catalog-audit";
-import { CAMPAIGN_TEMPLATES } from "../lib/templates";
+import { CAMPAIGN_TEMPLATES, KATALOG_BUTUH_COPY } from "../lib/templates";
 
 const audit = await generateCatalogScriptAudit();
 const { summary } = audit;
@@ -380,3 +380,15 @@ test("utang template tercatat angkanya per jenis, bukan diam-diam", async () => 
   // invarian "semua varian lolos".
 });
 
+
+
+test("daftar KATALOG_BUTUH_COPY cocok dengan kenyataan audit", async () => {
+  // Daftar yang ditulis tangan akan basi diam-diam. Ini yang menahannya:
+  // begitu satu template copynya ditulis ulang sampai ada varian yang lolos,
+  // tes ini merah sampai daftarnya diperbarui.
+  const nyata = audit.templates
+    .filter((t) => !t.variants.some((v) => v.validation.passed))
+    .map((t) => t.templateId)
+    .sort();
+  assert.deepEqual([...KATALOG_BUTUH_COPY].sort(), nyata);
+});

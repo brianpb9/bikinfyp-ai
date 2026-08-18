@@ -12,6 +12,7 @@ import { compositeVideo } from "./media/compositor";
 import { runQc } from "./media/qc";
 import { resolvePromo, formatPromoOverlayText } from "./promo";
 import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "./providers/registry";
+import { assertVisualSpec } from "./providers/types";
 import { isMockProviderName, type QualityTier } from "./providers/types";
 import { buildPhotoPanVideo } from "./media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "./media/vo-tts";
@@ -155,6 +156,9 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // r13 (review QA 2026-08-07): pakai ulang klip dari upaya sebelumnya bila
     // masih valid di disk — hemat biaya provider saat retry setelah kegagalan
     // transien di step SETELAH video (lihat lib/media/resume-clips.ts).
+    // Kontrak penyedia diperiksa SEBELUM langkah berbayar mana pun — alasan
+    // lengkapnya di lib/postgres/worker.ts.
+    assertVisualSpec(spec);
     const reused = format === "vo_broll" ? null : await findReusableClips(workDir, spec);
     if (reused) console.log(`[job ${job.id.slice(0, 8)}] resume: ${reused.assets.length} klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi`);
     const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir));

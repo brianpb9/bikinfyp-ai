@@ -32,6 +32,7 @@ import { resolvePromo, formatPromoOverlayText } from "../promo";
 import { renderCaptionPngs } from "../media/render-captions";
 import { runFf } from "../media/ffmpeg";
 import { generateVideoWithFailover, synthesizeVoiceWithFailover } from "../providers/registry";
+import { assertVisualSpec } from "../providers/types";
 import { isMockProviderName, type QualityTier } from "../providers/types";
 import { buildPhotoPanVideo } from "../media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
@@ -350,6 +351,19 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     tvcRoute: TVC_ROUTES.includes(row.tvc_route as never) ? (row.tvc_route as TvcRoute) : undefined,
     ugcTemplate: row.template_id,
     recordStyle: row.record_style });
+
+  // KONTRAK PENYEDIA DIPERIKSA DI SINI, bukan nanti di registry.
+  //
+  // registry memanggil assertVisualSpec tepat sebelum request video — dan itu
+  // SESUDAH frame turunan/CAST-REF, yang memanggil model gambar berbayar.
+  // Reviewer ronde 5: kontrak negative prompt sempat tidak cocok, dan setiap
+  // job melempar di titik itu — sesudah gambar dibayar, sebelum video jadi.
+  //
+  // Spec-nya tidak berubah lagi setelah planShots (hanya shots-nya dipilih
+  // per klip), jadi memeriksanya sekarang memindahkan kegagalan ke titik
+  // paling murah: nol panggilan berbayar. registry tetap memeriksa ulang —
+  // dua kali murah, dan ia menjaga pemanggil lain.
+  assertVisualSpec(spec);
 
   // Model yang akan dipakai penyedia — sama sumbernya dengan createTask(),
   // supaya mode referensi yang diarsipkan adalah mode yang benar-benar dikirim.

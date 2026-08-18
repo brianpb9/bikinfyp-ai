@@ -182,6 +182,11 @@ export async function POST(req: Request) {
         hook_family: v.hook_family,
         caption: v.caption,
         segments: v.segments,
+        // Provenance + skor standar ikut ke layar: brand membayar render yang
+        // sama untuk naskah LLM dan naskah cadangan, jadi bedanya harus
+        // terlihat sebelum ia menekan Bikin.
+        script_source: v.script_source,
+        ...(v.standarGaris ? { standar_garis: v.standarGaris, standar_nilai: v.standarNilai } : {}),
       })),
     });
   } catch (err) {

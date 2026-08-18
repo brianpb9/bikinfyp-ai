@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowRight, Film, LayoutTemplate, ShieldAlert, Sparkles, Trash2, User } from "lucide-react";
 import { apiFetch } from "../../../_components/api";
 import { PreviewVideo } from "../../_components/PreviewVideo";
-import { CAMPAIGN_TEMPLATES, type CampaignTemplate } from "@/lib/templates";
+import { CAMPAIGN_TEMPLATES, KATALOG_BUTUH_COPY, type CampaignTemplate } from "@/lib/templates";
 
 // Galeri template (permintaan Brian: "tinggal ganti productnya saja").
 // Memilih template hanya mengisi awal wizard — brand tetap bisa mengubah
@@ -219,6 +219,15 @@ function TemplateGrid({ rows }: { rows: CampaignTemplate[] }) {
                 {t.caution && (
                   <p className="mt-2 rounded-lg bg-red-50 px-2.5 py-2 text-[11px] leading-4 text-red-700">
                     {t.caution.note}
+                  </p>
+                )}
+                {/* Utang copy cadangan — lihat KATALOG_BUTUH_COPY. Template ini
+                    tetap bisa dipakai (penulis AI yang menulis kalimatnya);
+                    yang belum siap adalah naskah cadangannya. */}
+                {KATALOG_BUTUH_COPY.has(t.id) && (
+                  <p className="mt-2 rounded-lg bg-amber-50 px-2.5 py-2 text-[11px] leading-4 text-amber-800">
+                    Naskah cadangan template ini belum diperbarui. Kalau penulis AI sedang tidak
+                    tersedia, permintaan dengan template ini akan ditolak — bukan dirender apa adanya.
                   </p>
                 )}
                 {/* Angka dari video sumbernya. Ditulis apa adanya karena

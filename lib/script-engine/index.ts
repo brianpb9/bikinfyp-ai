@@ -287,7 +287,16 @@ async function generateOne(
   tanpaLlm = false,
   /** Level hook & mekanik ide — dibawa ke snapshot untuk STANDAR 10/10 (S-04, S-05). */
   hookLevel: HookLevel = "normal",
-  mekanikIde?: string
+  mekanikIde?: string,
+  /**
+   * Format yang BENAR-BENAR diminta pemanggil (undefined = belum diputuskan).
+   *
+   * Dibedakan dari parameter `format` yang punya nilai bawaan: snapshot hanya
+   * boleh mengunci format kalau formatnya memang sebuah KEPUTUSAN. Di jalur
+   * Enterprise, format dipilih di langkah confirm — sesudah naskah lahir — dan
+   * mengunci nilai bawaan di sini akan menolak pilihan pengguna sendiri.
+   */
+  formatDiminta?: string
 ): Promise<GeneratedScript> {
   // Ambang Rp100.000 diturunkan dari data, bukan ditebak: tiga video pemenang
   // yang menyebut harga ada di Rp27-30 ribu, sedangkan yang produknya di atas
@@ -331,7 +340,7 @@ async function generateOne(
   // dengan aturan afiliasi lalu ditolak karena tidak menyebut keranjang.
   const admisi: SnapshotAdmisi = {
     contentType,
-    format,
+    format: formatDiminta ?? null,
     durationSec,
     templateId: templateId ?? null,
     wordBudget: wordBudget ?? null,
@@ -632,7 +641,7 @@ export async function generateScripts(opts: {
     hasil.push(await generateOne(product, register, emotion, families[i], tier, durationSec,
       opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format,
       ideVarian ? petunjukNaskah(ideVarian) : undefined, opts.tanpaLlm === true,
-      hookLevel, ideVarian?.mechanic));
+      hookLevel, ideVarian?.mechanic, opts.format));
   }
   // Gate gagal: tiga terbaik ikut keluar supaya UI bisa menampilkannya dan
   // meminta pengguna memilih — bukan disimpan diam-diam di log server.

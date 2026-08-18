@@ -608,6 +608,33 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   // angka aslinya disimpan di `source` supaya tidak hilang.
 ];
 
+/**
+ * Template yang COPY CADANGANNYA belum memenuhi gate (audit 18 Agu 2026).
+ *
+ * Artinya SATU hal saja: kalau penulis LLM tidak tersedia, template ini tidak
+ * bisa menghasilkan naskah yang lolos — jalur cadangannya masih memakai copy
+ * lama (>22 kata, penutup Ads berbahasa afiliasi). Dengan LLM hidup, template
+ * ini tetap bekerja normal: template memberi strategi (hook family, beat,
+ * jatah kata), bukan kalimatnya.
+ *
+ * Karena itu daftarnya DITAMPILKAN, bukan dipakai menyembunyikan template.
+ * Menyembunyikan 29 dari 33 template berdasarkan pengukuran jalur cadangan
+ * akan mematikan hampir seluruh katalog untuk pengguna yang jalurnya sehat.
+ *
+ * Daftarnya dijaga tests/script-catalog-audit.test.ts: begitu copy-nya ditulis
+ * ulang, tesnya merah sampai daftar ini diperbarui — ia tidak bisa basi diam-
+ * diam. Inventaris per-varian ada di docs/UTANG_COPY.md.
+ */
+export const KATALOG_BUTUH_COPY = new Set<string>([
+  "racun-checkout", "review-jujur", "unboxing", "before-after", "diskon-gede",
+  "buat-kamu-yang", "spill-rahasia", "t01-tempat-susah", "t02-bedah-fitur",
+  "t03-liputan-event", "t04-hook-indrawi", "t07-checklist-berjalan",
+  "t09-bahan-aktif", "t10-bukti-di-lengan", "t12-vox-pop", "ads-unboxing-pov",
+  "ads-meja-kosong", "ads-panas-ekstrem", "ads-tembus-dinding", "ads-atap-jebol",
+  "ads-dobrak-pintu", "ads-waktu-berhenti", "kenalin-bisnis", "promo-terbatas",
+  "tvc-the-drop", "tvc-tersangka", "tvc-seharian", "tvc-kain-lari", "tvc-jam-tiga",
+]);
+
 export function getTemplate(id: string | null | undefined): CampaignTemplate | null {
   if (!id) return null;
   return CAMPAIGN_TEMPLATES.find((t) => t.id === id) ?? null;

@@ -30,7 +30,42 @@ interface ProductPayload {
   promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   source_url: string | null; images: string[]; image_urls: string[];
 }
-interface GeneratedScript { script_id: string; hook_family: string; caption: string }
+interface GeneratedScript {
+  script_id: string;
+  hook_family: string;
+  caption: string;
+  /** Baris yang BENAR-BENAR diucapkan. Layar ini dulu cuma menampilkan
+   *  caption — dan caption bukan naskah: brand menyetujui render tanpa pernah
+   *  melihat kalimat yang akan diucapkan talent. */
+  segments?: { role: string; text: string }[];
+  script_source?: "llm" | "template" | "degraded";
+  standar_garis?: string;
+  standar_nilai?: number;
+}
+
+/** Naskah yang diucapkan, satu baris per segmen. */
+function BarisNaskah({ s }: { s: GeneratedScript }) {
+  if (!s.segments?.length) return <p className="mt-1 text-sm text-zinc-700">{s.caption}</p>;
+  return (
+    <div className="mt-1 space-y-1">
+      {s.segments.map((seg, i) => (
+        <p key={i} className="text-sm text-zinc-700">
+          <span className="mr-1.5 text-xs font-bold uppercase tracking-wide text-zinc-400">{seg.role}</span>
+          {seg.text}
+        </p>
+      ))}
+      <p className="pt-1 text-xs text-zinc-500">Caption: {s.caption}</p>
+      {(s.standar_garis || (s.script_source && s.script_source !== "llm")) && (
+        <p className="pt-1 text-xs font-semibold text-zinc-500">
+          {s.standar_garis ? `Standar 10/10: ${s.standar_garis}${typeof s.standar_nilai === "number" ? ` · nilai ${s.standar_nilai}/10` : ""}` : ""}
+          {s.script_source && s.script_source !== "llm"
+            ? `${s.standar_garis ? " · " : ""}${s.script_source === "template" ? "naskah cadangan (template)" : "belum memenuhi standar"}`
+            : ""}
+        </p>
+      )}
+    </div>
+  );
+}
 
 // Avatar jadi langkah sendiri (permintaan Brian 2026-08-12). Dulu terselip di
 // dalam Konsep, di bawah slider hook — pilihan sepenting "siapa yang muncul di
@@ -1366,7 +1401,7 @@ export default function CampaignPage() {
                 <p className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
                   <CheckCircle2 size={13} className="text-emerald-500" /> hook {scripts[0].hook_family} · dikunci template
                 </p>
-                <p className="mt-1 text-sm text-zinc-700">{scripts[0].caption}</p>
+                <BarisNaskah s={scripts[0]} />
                 <p className="mt-3 border-t border-zinc-100 pt-3 text-xs text-zinc-500">
                   Dirender jadi <b>{scripts.length} video</b> dari skrip yang sama. Visualnya tetap
                   berbeda karena tiap video digambar ulang sendiri-sendiri.
@@ -1396,7 +1431,7 @@ export default function CampaignPage() {
                         <p className="flex items-center gap-1.5 text-xs font-semibold text-zinc-500">
                           <CheckCircle2 size={13} className="text-emerald-500" /> hook {s.hook_family}
                         </p>
-                        <p className="mt-1 text-sm text-zinc-700">{s.caption}</p>
+                        <BarisNaskah s={s} />
                       </div>
                     </li>
                   );
