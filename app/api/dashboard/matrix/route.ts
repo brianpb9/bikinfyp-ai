@@ -19,6 +19,7 @@ import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
+import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -282,9 +283,11 @@ export async function POST(req: Request) {
         // Satu naskah per skenario, lalu DISALIN sebanyak avatar. Naskahnya
         // sengaja identik antar avatar — perbandingan wajah baru berarti kalau
         // kalimatnya tidak ikut berubah.
-        const varian = await generateScripts({
+        // Jaring pengaman nama (canary temuan #4) — sama seperti campaign &
+        // retail: nama sah yang kepanjangan diturunkan bertangga sampai lolos.
+        const jalanSkenario = (namaProduk: string) => generateScripts({
           product: {
-            id: product.id, name: product.name, price_idr: product.price_idr, category: product.category,
+            id: product.id, name: namaProduk, price_idr: product.price_idr, category: product.category,
             sourceUrl: product.source_url, promoPriceBeforeIdr: product.promo_price_before_idr,
             promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
           },
@@ -308,6 +311,7 @@ export async function POST(req: Request) {
           // saran yang boleh ditimpa prioritas kategori.
           ...(t.hookFamily ? { hookFamilies: [t.hookFamily as HookCode], lockHookFamily: true } : {}),
         });
+        const { variants: varian } = await cobaDenganNamaPendek(jalanSkenario, product.name);
         const lolos = varian.find((v) => v.validation.passed);
         if (!lolos) {
           for (const { preset } of avatars) {

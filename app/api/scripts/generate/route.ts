@@ -9,6 +9,7 @@ import { normalizeHookLevel } from "@/lib/config/hooks";
 import { tierMasihDijual } from "@/lib/paket-kredit";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { allowRate } from "@/lib/rate-limit";
+import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -71,9 +72,13 @@ export async function POST(req: Request) {
     // scene + library org). Lihat pastikanBukanProdukOrg.
     pastikanBukanProdukOrg(product);
 
-    const variants = await generateScripts({
+    // Jaring pengaman nama (canary temuan #4): nama sah 4-6 kata bisa memakan
+    // jendela kata L-05/S-09 sampai penulis mustahil lolos. Enterprise sudah
+    // punya jaring ini; retail-lah yang kena di canary — tangga asli -> bersih
+    // -> nama panggung merek, berhenti di anak tangga pertama yang lolos.
+    const jalan = (namaProduk: string) => generateScripts({
       product: {
-        id: product.id, name: product.name, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
+        id: product.id, name: namaProduk, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
       },
       register,
@@ -83,6 +88,8 @@ export async function POST(req: Request) {
       hookLevel,
       hookFamilies: hookFamilies.length ? hookFamilies : undefined,
     });
+    const jaring = await cobaDenganNamaPendek(jalan, product.name);
+    const variants = jaring.variants;
 
     // NASKAH YANG GAGAL GATE TIDAK DISIMPAN.
     //
@@ -116,7 +123,7 @@ export async function POST(req: Request) {
         caption: v.caption, hashtags: v.hashtags, validationResult: hasilValidasi(v), qualityTier: tier,
         hookLevel,
       })));
-      return Response.json({ scripts: sah.map((v, index) => makeOut(v, created[index].id)) });
+      return Response.json({ scripts: sah.map((v, index) => makeOut(v, created[index].id)), shortened_to: jaring.shortenedTo });
     }
     const db = getDb();
     const out = sah.map((v) => {
@@ -135,7 +142,7 @@ export async function POST(req: Request) {
       return makeOut(v, id);
     });
 
-    return Response.json({ scripts: out });
+    return Response.json({ scripts: out, shortened_to: jaring.shortenedTo });
   } catch (err) {
     return errorResponse(err);
   }

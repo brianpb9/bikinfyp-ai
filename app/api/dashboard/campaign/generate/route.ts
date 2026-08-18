@@ -4,7 +4,7 @@ import type { HookCode } from "@/lib/config/hooks";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { generateScripts, TEMPLATE_COPY_CAPACITY } from "@/lib/script-engine";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
-import { cleanProductName } from "@/lib/extract";
+import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
@@ -126,23 +126,14 @@ export async function POST(req: Request) {
       ...(wordBudget ? { wordBudget } : {}),
     });
 
-    let variants = await run(product.name);
-    let passing = variants.filter((v) => v.validation.passed);
-    // Jaring pengaman nama kepanjangan. Nama produk masuk ke kalimat skrip,
-    // dan tier bersuara dibatasi ~30 kata (L-05) — nama 18 kata (judul SEO
-    // marketplace, atau user mengetik panjang sendiri) membuat SEMUA varian
-    // gagal. Ekstraksi sudah membersihkan nama sejak 2026-08-11, tapi produk
-    // lama dan nama ketikan sendiri tetap bisa kepanjangan, jadi coba sekali
-    // lagi dengan nama pendek daripada memblokir user tanpa jalan keluar.
-    let shortenedTo: string | null = null;
-    if (passing.length === 0) {
-      const shorter = cleanProductName(product.name);
-      if (shorter !== product.name) {
-        const retry = await run(shorter);
-        const retryPassing = retry.filter((v) => v.validation.passed);
-        if (retryPassing.length > 0) { variants = retry; passing = retryPassing; shortenedTo = shorter; }
-      }
-    }
+    // Jaring pengaman nama: tangga asli → bersih → nama panggung merek
+    // (lib/script-engine/jaring-nama.ts). Dulu cuma satu anak tangga
+    // (cleanProductName) — canary temuan #4 membuktikan nama sah 4–6 kata
+    // tetap mengalahkan penulis, dan pembersihan 6-kata tidak menolongnya.
+    const jaring = await cobaDenganNamaPendek(run, product.name);
+    const variants = jaring.variants;
+    const passing = variants.filter((v) => v.validation.passed);
+    const shortenedTo = jaring.shortenedTo;
     if (passing.length === 0) {
       // Pesan lama cuma MENEBAK tiga sebab ("persingkat nama, pastikan harga,
       // turunkan hook") padahal validator tahu persis aturan mana yang jatuh.

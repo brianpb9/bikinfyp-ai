@@ -1071,7 +1071,22 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // dua-duanya, karena yang di UI bisa dilewati lewat panggilan API.
     const gaya = getRecordingStyle(input.recordStyle);
     const gayaBerlaku = gaya && gaya.framing && gaya.formats.includes(format as StyleFormat) ? gaya : null;
-    const framing = gayaBerlaku
+    // STANDAR-10 §E (9 render nyata 18 Agu): SEMUA yang lolos NSFW membuka
+    // tanpa wajah; SEMUA yang wajahnya tampil di shot 1 ditolak. Standarnya
+    // eksplisit: "Jadikan ini default, bukan pilihan." Maka multi-shot
+    // talking_head membuka dengan tangan + produk; wajah presenter masuk
+    // mulai shot 2. Pengecualian yang DISENGAJA, bukan lupa:
+    //  - numShots 1: talking_head 15 dtk sengaja tak dipecah (kontinuitas
+    //    wajah antar klip) — tanpa wajah ia bukan talking_head lagi;
+    //  - fashion full-body: produknya DIPAKAI presenter, mustahil tanpa orang;
+    //  - gaya rekam & peran template opening: pilihan sadar pengguna/katalog.
+    // Ini perubahan level PROMPT — bukti piksel menyusul di canary berikutnya.
+    const bukaTanpaWajah =
+      isFirst && numShots >= 2 && format === "talking_head" &&
+      !fullBodyFashion && !gayaBerlaku && !ugcRolesFor(input.ugcTemplate)?.opening;
+    const framing = bukaTanpaWajah
+      ? `${HANDS_ONLY_FRAMING}. ${HANDS_ONLY_HAND_LOCK}`
+      : gayaBerlaku
       ? `${gayaBerlaku.framing}. `
       : format === "tvc"
       ? `${TVC_FRAMING}. `
@@ -1091,6 +1106,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // di sini akan tetap memanggil manusia ke frame walau beat-nya makro.
     const subject = input.noModel && format === "tvc"
       ? `"${input.productName}" itself as the sole subject, the frame belonging entirely to the product`
+      // Shot pembuka tanpa wajah: subjeknya TANGAN, bukan persona — promptSeed
+      // mendeskripsikan wajah, dan menyebutnya di sini memanggil wajah ke frame.
+      : bukaTanpaWajah
+      ? input.category.handsPrompt
       : format === "talking_head" || format === "tvc" || format === "ads"
       ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
       : input.category.handsPrompt;
@@ -1255,7 +1274,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
           ? isFirst
             ? numShots === 1
               ? `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, then ${demoAction}, ending with a warm inviting smile to camera, ${IDENTITY_INSTRUCTION}`
-              : `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, ${IDENTITY_INSTRUCTION}`
+              : bukaTanpaWajah
+                ? `Hands lifting "${input.productName}" up into center frame in one quick confident motion, product label facing camera, the framing staying on hands and product for this whole opening shot, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
+                : `Presenter holding "${input.productName}" up to the camera at chest height, product label facing camera, warm smile, ${IDENTITY_INSTRUCTION}`
             : isClosing
               ? `Presenter smiling warmly, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
               : `Presenter ${demoAction}, still clearly in frame with her face, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
@@ -1269,7 +1290,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
               // cutaway demo tangan/produk (mulut tak jadi fokus), seperti video
               // UGC editan asli yang memotong ke b-roll saat VO jalan.
               ? `Presenter holds "${input.productName}" up to the camera at chest height with a warm delighted reaction — lips closed and relaxed in a soft closed-lip smile, listening rather than speaking — product label facing camera, then the camera lingers on a close cutaway of her hands as she ${demoAction} (her face softly out of focus during this part), ending with her looking back up at the camera with a warm inviting smile and a small nod, lips still closed, ${IDENTITY_INSTRUCTION}`
-              : `Presenter holding "${input.productName}" up to the camera at chest height with a warm reaction, lips closed and relaxed, listening rather than speaking, ${IDENTITY_INSTRUCTION}`
+              : bukaTanpaWajah
+                ? `Hands lifting "${input.productName}" up into center frame in one quick confident motion, product label facing camera, the framing staying on hands and product for this whole opening shot, ${IDENTITY_INSTRUCTION}, natural phone camera movement`
+                : `Presenter holding "${input.productName}" up to the camera at chest height with a warm reaction, lips closed and relaxed, listening rather than speaking, ${IDENTITY_INSTRUCTION}`
             : isClosing
               ? `Presenter smiling warmly with her lips closed and relaxed, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
               : HEAD_MIDDLE[midIdx % HEAD_MIDDLE.length]
@@ -1306,7 +1329,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const crazyOpener =
       isFirst && (format === "hands_only" || format === "talking_head")
         ? input.hookLevel === "gila"
-          ? CRAZY_OPENER[format]
+          ? CRAZY_OPENER[bukaTanpaWajah ? "hands_only" : format]
           // Level 4 ("agak gila"): produk tetap naik cepat ke tengah frame,
           // tapi tanpa gerakan kamera dramatis. Ini titik tengah yang NYATA
           // antara level 3 (tanpa pembuka sama sekali) dan level 5 — bukan
@@ -1478,7 +1501,15 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         : format === "hands_only"
         ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to hands and product): "${dialogue}". `
         : lipSyncPresenter
-          ? `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting with a friend, easy and unsalesy, saying: "${dialogue}". `
+          ? bukaTanpaWajah
+            // Preseden job a1192101: frasa "presenter speaks to camera" membuat
+            // model MENGGAMBAR wajah pembicara di shot yang harus tanpa wajah.
+            // Shot pembuka memakai kalimat VO hands_only; presenter bicara ke
+            // kamera baru mulai shot 2.
+            ? `A warm female VOICEOVER speaks in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words (the speaker stays entirely off-screen in this opening shot; the frame keeps to hands and product): "${dialogue}". `
+            : `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting with a friend, easy and unsalesy, saying: "${dialogue}". `
+          : bukaTanpaWajah
+          ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words (the narration stays entirely off-screen in this opening shot; the frame keeps to hands and product): "${dialogue}". `
           : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally with her lips closed and relaxed throughout, listening rather than speaking: "${dialogue}". `;
     const pacing =
       format === "tvc"
@@ -1489,6 +1520,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
           : `A short, deliberate beat of silence separates this line from the next. `
         : format === "hands_only"
         ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
+        : bukaTanpaWajah
+        // Shot pembuka tanpa wajah: "taking a visible breath" menyebut tubuh
+        // yang justru tidak boleh tampil — pakai jeda narasi gaya hands_only.
+        ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
         : isLast
           ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `
           : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `;
@@ -1497,7 +1532,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // berakhir titik. Menormalkan potongannya saja meninggalkan cacat yang
     // sama di keluaran nyata — dan keluaran nyata itu yang dikirim ke model.
     const prompt = rapikan(
-      format === "talking_head" && !lipSyncPresenter
+      format === "talking_head" && !lipSyncPresenter && !bukaTanpaWajah
         ? `${base}. ${speech}${pacing}Natural warm reactive expression throughout, with her lips closed and relaxed as she listens.`
         : `${base}. ${speech}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader.`
     );
