@@ -89,8 +89,15 @@ export interface ShotPlanInput {
   recordStyle?: string | null;
 }
 
+// DITULIS POSITIF (reviewer A5, 18 Agu). Versi lama berbunyi "face and body
+// NOT visible" — negasi tentang ORANG di dalam prompt POSITIF, yang memicu
+// penyaring penyedia dan sekaligus melanggar L-21 kita sendiri. Ironisnya
+// justru frasa yang kita wajibkan.
+//
+// Batasnya sekarang dinyatakan sebagai BINGKAI, bukan larangan: menyebut di
+// mana kamera berhenti mencapai hal yang sama tanpa menyebut wajah sama sekali.
 const HANDS_ONLY_FRAMING =
-  "hands and forearms only, face and body NOT visible, cropped below shoulders, " +
+  "hands and forearms only, framing cropped at the wrists and elbows and stopping below the collarbone, " +
   "close-up POV hands-only shot, camera focused on hands and product";
 
 /** Kunci JUMLAH TANGAN untuk hands_only.
@@ -116,9 +123,14 @@ const HANDS_ONLY_HAND_LOCK =
   "steadies it. The second hand does only one thing: receive the product or show the result. " +
   "No third hand ever enters the frame, from any edge, at any moment. ";
 
+// FRASA BENDA TELANJANG, tanpa kata "no" (reviewer A5).
+//
+// Field negative prompt artinya memang "hindari ini" — kata "no" di dalamnya
+// tidak menambah makna apa pun bagi model, tapi menambah token negasi yang
+// dibaca penyaring konten dan detektor L-21 kita. Isinya sama, tokennya bersih.
 const HANDS_ONLY_NEGATIVE =
-  "no face, no visible face, no head in frame, no person facing camera, " +
-  "no third hand, no extra hands, no second pair of hands, no disembodied hand entering frame";
+  "face, visible face, head in frame, person facing camera, " +
+  "third hand, extra hands, second pair of hands, disembodied hand entering frame";
 
 // Wajah AI (v1, 2026-08-03): opposite intent of hands_only — face IS the
 // point, framed like a normal UGC talking-head selfie, not hands-only POV.
@@ -187,9 +199,13 @@ export function maksOrangPerFrame(input: {
   return 1;
 }
 
+// FRASA BENDA TELANJANG (reviewer A5): field negative sudah berarti "hindari
+// ini", jadi kata "no" hanya menambah token negasi-tentang-orang yang dibaca
+// penyaring penyedia. "exactly two hands" DIPERTAHANKAN — itu satu-satunya
+// bagian yang memang menyatakan JUMLAH yang benar, bukan larangan.
 const SINGLE_SUBJECT_NEGATIVE =
-  "no second person, no duplicate of the same person, no twin, no extra people in frame, " +
-  "no extra hands, no third hand, no disembodied hands, exactly two hands";
+  "second person, duplicate of the same person, twin, extra people in frame, " +
+  "extra hands, third hand, disembodied hands, exactly two hands";
 
 const TALKING_HEAD_FRAMING =
   "face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
@@ -1422,7 +1438,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting, never rushed (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
         : lipSyncPresenter
           ? `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting with a friend, never rushed or salesy, saying: "${dialogue}". `
-          : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally but her mouth is NOT moving in sync to any specific words (not talking to camera): "${dialogue}". `;
+          : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally with her lips closed and relaxed throughout, listening rather than speaking: "${dialogue}". `;
     const pacing =
       format === "tvc"
         ? !dialogue.trim()

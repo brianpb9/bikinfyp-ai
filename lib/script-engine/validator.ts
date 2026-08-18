@@ -207,12 +207,41 @@ function wordCount(text: string): number {
   return text.split(/\s+/).filter((w) => w.length > 0).length;
 }
 
+/**
+ * Aturan yang KERAS DI SEMUA MODE — termasuk "light".
+ *
+ * "light" ada untuk alasan yang sah: saat pengguna menyunting naskahnya
+ * sendiri, aturan gaya tidak boleh memblokir (FSD BR-03.2). Tapi mode itu
+ * dipakai juga di tiga gerbang yang menentukan apakah sesuatu DIRENDER dan
+ * DIBAYAR — approve, submit job, dan confirm Enterprise — dan di situ
+ * "peringatan" berarti naskah yang gagal tetap berangkat.
+ *
+ * Reproduksi reviewer 18 Agu, dan saya reproduksi ulang: tiga keluaran
+ * fallback berstatus degraded, strictPassed=false karena L-05, tapi
+ * lightPassed=true — jadi ketiganya bisa disetujui lalu dirender. Klaim
+ * "tidak boleh dirender" tidak pernah ditegakkan.
+ *
+ * Yang masuk daftar ini adalah aturan yang menentukan apakah keluarannya SAH,
+ * bukan apakah keluarannya bagus:
+ *   L-03  CTA menyebut keranjang — tanpa ini videonya tidak bisa menjual.
+ *   L-05  jendela kata — kelebihan kata memotong VO di tengah kalimat.
+ *   L-10/L-11  overclaim & klaim medis — risiko hukum.
+ *   L-19  hook tanpa perangkat retoris.
+ *   L-21  kata yang memicu penyaring penyedia.
+ *
+ * Aturan gaya (partikel, filler, register) TETAP lunak di light: itu memang
+ * wilayah selera penggunanya.
+ */
+export const SELALU_KERAS = new Set(["L-03", "L-05", "L-10", "L-11", "L-19", "L-21"]);
+
 export function validateScript(script: ScriptToValidate, mode: ValidationMode): ValidationResult {
   const errors: RuleIssue[] = [];
   const warnings: RuleIssue[] = [];
-  // alwaysHard=true hanya untuk L-10/L-11: keras bahkan saat edit pengguna (BR-03.2).
+  // alwaysHard: dipertahankan untuk pemanggil lama; SELALU_KERAS yang
+  // sebenarnya memutuskan, supaya daftarnya berada di SATU tempat dan tidak
+  // perlu diingat ulang di tiap push().
   const push = (alwaysHard: boolean, issue: RuleIssue) => {
-    if (mode === "strict" || alwaysHard) errors.push(issue);
+    if (mode === "strict" || alwaysHard || SELALU_KERAS.has(issue.rule)) errors.push(issue);
     else warnings.push(issue);
   };
 

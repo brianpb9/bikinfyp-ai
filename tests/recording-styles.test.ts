@@ -62,7 +62,9 @@ test("hands_only tetap melarang wajah walau gaya rekam dipakai", () => {
   for (const gaya of ["standar", "meja", "unboxing", "selfie", "cermin"]) {
     // negativePrompt ada di level VisualSpec, bukan per-shot (lib/providers/types.ts).
     const spec = rencana("hands_only", gaya);
-    assert.match(spec.negativePrompt, /no face/i, `hands_only + "${gaya}" kehilangan larangan wajah`);
+    // Token "no" dihapus dari field negative 18 Agu (reviewer A5) — isinya
+    // yang wajib ada, bukan negasinya.
+    assert.match(spec.negativePrompt, /\bface\b/i, `hands_only + "${gaya}" kehilangan pengecualian wajah`);
   }
 });
 

@@ -38,14 +38,20 @@ test("hands_only: base prompt mengandung framing larangan wajah eksplisit", () =
   const s = spec();
   for (const shot of s.shots) {
     assert.ok(shot.prompt.includes("hands and forearms only"), shot.prompt);
-    assert.ok(shot.prompt.includes("face and body NOT visible"), shot.prompt);
+    // Maknanya, bukan frasanya: batas dinyatakan sebagai BINGKAI sejak 18 Agu
+    // (reviewer A5) karena "face and body NOT visible" adalah negasi tentang
+    // orang di prompt positif dan memicu penyaring penyedia.
+    assert.ok(/below the collarbone|cropped at the wrists/.test(shot.prompt), shot.prompt);
   }
 });
 
-test("hands_only: negative melarang wajah total & tidak lagi 'no face distortion'", () => {
+test("hands_only: negative mengecualikan wajah sepenuhnya, tanpa token negasi", () => {
   const s = spec();
-  assert.ok(s.negativePrompt.includes("no face"), s.negativePrompt);
-  assert.ok(s.negativePrompt.includes("no head in frame"), s.negativePrompt);
+  // Field negative sudah berarti "hindari ini"; kata "no" cuma menambah token
+  // negasi-tentang-orang yang dibaca penyaring. Yang wajib ada isinya.
+  assert.ok(/\bface\b/.test(s.negativePrompt), s.negativePrompt);
+  assert.ok(!/\bno face\b/.test(s.negativePrompt), "token negasi tidak boleh kembali");
+  assert.ok(s.negativePrompt.includes("head in frame"), s.negativePrompt);
   assert.ok(!/no face distortion/i.test(s.negativePrompt), s.negativePrompt);
     // DIREVISI 2026-08-15. Versi lama menuntut substring "no text" — dan
     // justru itu yang menekan label produk sampai jadi coretan. Bukti
@@ -61,7 +67,7 @@ test("format lain (vo_broll): negative kategori tidak diubah", () => {
   const s = spec("vo_broll");
   assert.equal(s.negativePrompt, hijaber.negativePrompt);
   for (const shot of s.shots) {
-    assert.ok(!shot.prompt.includes("face and body NOT visible"));
+    assert.ok(!shot.prompt.includes("face and body NOT visible"), "frasa negasi lama tidak boleh kembali");
   }
 });
 

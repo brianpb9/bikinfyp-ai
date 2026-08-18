@@ -34,10 +34,15 @@ db.prepare(
 
 // Skrip belum di-approve
 const scriptId = uuid();
+// DIPENDEKKAN ke jendela baru (16-22 kata untuk 15 detik, batas Brian 1,5
+// kata/detik). Versi lama 45 kata: dulu lolos karena L-05 cuma keras di mode
+// strict, sementara approve dan submit render memakai "light" — persis lubang
+// P0 yang ditutup 18 Agu. Sekarang aturan gerbang keras di kedua mode, jadi
+// fixture-nya harus benar-benar sah, bukan cuma lolos di jalur yang longgar.
 const segments = [
-  { role: "hook", start: 0, end: 3, text: "Say, masa 85 ribu dapet kualitas kayak gini sih? aku ngecek ulang loh", visual_direction: "x" },
-  { role: "demo", start: 3, end: 10, text: "nah jadi gini, ini Serum Glow Bright. pas aku pegang langsung kerasa sih bedanya, teksturnya tuh niat banget, padahal harganya cuma 85 ribu", visual_direction: "x" },
-  { role: "cta", start: 10, end: 15, text: "Aku taruh linknya di keranjang kuning ya, tinggal CO aja deh", visual_direction: "x" },
+  { role: "hook", start: 0, end: 3, text: "Say, masa 85 ribu segini sih?", visual_direction: "x" },
+  { role: "demo", start: 3, end: 10, text: "nah, teksturnya niat banget deh", visual_direction: "x" },
+  { role: "cta", start: 10, end: 15, text: "linknya di keranjang kuning ya", visual_direction: "x" },
 ];
 db.prepare(
   `INSERT INTO scripts (id, job_id, product_id, hook_family, emotion, register, segments, caption, hashtags, validation_result, quality_tier, approved_by_user_at, edited_by_user, created_at)

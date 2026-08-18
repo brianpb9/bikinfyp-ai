@@ -32,7 +32,10 @@ export interface CreatorCategory {
   negativePrompt: string;
 }
 
-const NEG = `${MANDATORY_NEGATIVE_PROMPT}, no watermark, no face distortion, no extra fingers, no plastic skin`;
+// "no face distortion" -> "face distortion": kata "no" di field negative tidak
+// menambah makna bagi model, tapi menambah token negasi-tentang-orang yang
+// dibaca penyaring penyedia (reviewer A5).
+const NEG = `${MANDATORY_NEGATIVE_PROMPT}, no watermark, face distortion, extra fingers, plastic skin`;
 
 export const CREATOR_CATEGORIES: CreatorCategory[] = [
   {

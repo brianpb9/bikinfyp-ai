@@ -20,6 +20,16 @@ export interface FlowSegment {
   end: number;
   text: string;
   visual_direction?: string;
+  /** Field TERSTRUKTUR dari penulis LLM (reviewer A2: jangan cuma
+   *  visual_direction gabungan — begitu digabung, framing/kamera/aksi tidak
+   *  bisa dipisahkan lagi untuk ditampilkan atau diperbaiki). */
+  framing?: string;
+  camera?: string;
+  action?: string;
+  expression?: string;
+  start_state?: string;
+  product_state?: "hidden" | "partial" | "hero";
+  mode?: string;
 }
 
 export interface FlowScript {
@@ -30,6 +40,15 @@ export interface FlowScript {
   segments: FlowSegment[];
   caption: string;
   hashtags: string[];
+  /**
+   * Dari mana naskah ini berasal: llm | template | degraded.
+   *
+   * Wajib sampai ke UI (reviewer 18 Agu): tanpa ini, naskah cadangan tampil
+   * persis seperti naskah yang lolos gate, dan penggunanya membayar render
+   * tanpa pernah tahu bedanya. `degraded` tidak boleh pernah sampai ke sini —
+   * kalau muncul, itu bug, bukan pilihan.
+   */
+  script_source?: "llm" | "template" | "degraded";
 }
 
 export type VideoFormat = "hands_only" | "talking_head" | "vo_broll";

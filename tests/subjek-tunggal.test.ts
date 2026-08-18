@@ -47,7 +47,7 @@ test("TVC: shot berorang dikunci satu, shot penutup tanpa orang tidak dikunci", 
 
 test("TVC melarang orang kedua di negative prompt", () => {
   const s = spec({ format: "tvc", tvcRoute: "fabric", shots: 5 });
-  assert.match(s.negativePrompt, /no second person/i, "TVC tanpa larangan orang kedua — ini video yang gagal");
+  assert.match(s.negativePrompt, /\bsecond person\b/i, "TVC tanpa pengecualian orang kedua — ini video yang gagal");
   assert.match(s.negativePrompt, /exactly two hands/i, "TVC tanpa larangan tangan berlebih");
 });
 
@@ -61,13 +61,13 @@ test("kunci anatomi ditulis POSITIF, bukan cuma sebagai larangan", () => {
 test("format ads ikut terkunci", () => {
   const s = spec({ format: "ads" });
   assert.match(s.shots[0].prompt, /EXACTLY ONE person/i);
-  assert.match(s.negativePrompt, /no second person/i);
+  assert.match(s.negativePrompt, /\bsecond person\b/i);
 });
 
 test("talking_head ikut terkunci", () => {
   const s = spec({ format: "talking_head" });
   assert.match(s.shots[0].prompt, /EXACTLY ONE person/i);
-  assert.match(s.negativePrompt, /no second person/i);
+  assert.match(s.negativePrompt, /\bsecond person\b/i);
 });
 
 // Rute komedi SENGAJA memakai dua tokoh (tersangka + penuduh). Memaksakan
@@ -81,7 +81,7 @@ test("rute TVC komedi TIDAK dikunci satu orang", () => {
 test("hands_only tidak dikunci subjek — memang tanpa wajah", () => {
   const s = spec({ format: "hands_only" });
   assert.ok(!/EXACTLY ONE person/i.test(s.shots[0].prompt));
-  assert.match(s.negativePrompt, /no face/i, "hands_only kehilangan larangan wajahnya");
+  assert.match(s.negativePrompt, /\bface\b/i, "hands_only kehilangan pengecualian wajahnya");
 });
 
 test("TVC tanpa model tidak dikunci subjek — tidak ada orang sama sekali", () => {
@@ -169,7 +169,7 @@ test("hands_only mengunci tepat dua tangan milik satu orang", () => {
     assert.doesNotMatch(sh.prompt, /holding the product naturally/i,
       `shot ${sh.index}: baris persona masih memberi tugas "memegang" tanpa pemilik`);
   }
-  assert.match(s.negativePrompt, /no third hand/i, "negative prompt tanpa larangan tangan ketiga");
+  assert.match(s.negativePrompt, /\bthird hand\b/i, "negative prompt tanpa pengecualian tangan ketiga");
   // Wajah tetap dilarang — kunci tangan tidak boleh menggeser larangan wajah.
-  assert.match(s.negativePrompt, /no face/i);
+  assert.match(s.negativePrompt, /\bface\b/i);
 });

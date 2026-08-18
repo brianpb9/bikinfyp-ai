@@ -363,11 +363,26 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // penyaringnya menghukum kosakata, dan sebagian kosakata itu memang milik
   // produknya — menahan render karena kata "mandi" akan mematikan kategori
   // sabun.
-  for (const sh of spec.shots) {
-    const temuan = periksaPemicu(sh.prompt);
-    if (temuan.length) {
-      console.warn(`[pemicu] job ${row.id.slice(0, 8)} shot ${sh.index}: ${ringkasPemicu(temuan)}`);
-    }
+  // GERBANG, bukan catatan (reviewer A5, temuan P0).
+  //
+  // Versi sebelumnya hanya console.warn lalu tetap mengirim promptnya. Itu
+  // berarti aturan yang kita tegakkan pada naskah dilanggar oleh prompt yang
+  // benar-benar berangkat ke penyedia — dan penolakan NSFW 18 Agu terjadi pada
+  // adegan koridor berpakaian lengkap justru karena kosakata prompt.
+  //
+  // Diperiksa prompt AKHIR tiap shot DAN negative prompt, karena keduanya
+  // dikirim. Sekarang aman: frasa larangan wajah kita sendiri sudah ditulis
+  // sebagai batas positif, jadi gerbang ini seharusnya tidak pernah menyala —
+  // dan kalau menyala, artinya ada yang menulis negasi baru, yang memang harus
+  // dihentikan sebelum uang keluar.
+  const pemicu = [
+    ...spec.shots.flatMap((sh) => periksaPemicu(sh.prompt).map((t) => ({ di: `shot ${sh.index}`, t }))),
+    ...periksaPemicu(spec.negativePrompt).map((t) => ({ di: "negative prompt", t })),
+  ];
+  if (pemicu.length) {
+    const rincian = pemicu.map((p) => `${p.di}: ${ringkasPemicu([p.t])}`).join(" | ");
+    console.error(`[pemicu] job ${row.id.slice(0, 8)} DIHENTIKAN sebelum provider — ${rincian}`);
+    throw new Error(`Prompt akhir memicu penyaring penyedia dan tidak dikirim: ${rincian}`);
   }
 
   // ARSIP PROMPT — sebelum satu pun panggilan penyedia.

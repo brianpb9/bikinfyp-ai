@@ -83,17 +83,41 @@ export async function POST(req: Request) {
       hookFamilies: hookFamilies.length ? hookFamilies : undefined,
     });
 
+    // NASKAH YANG GAGAL GATE TIDAK DISIMPAN.
+    //
+    // Reviewer 18 Agu, temuan P0: rute ini menyimpan SEMUA varian tanpa
+    // memeriksa validation.passed. Naskah degraded lalu bisa disetujui dan
+    // dirender — klaim "tidak boleh dirender" tidak pernah ditegakkan di jalur
+    // yang benar-benar dilewati pengguna.
+    //
+    // Menolak lebih baik daripada menyimpan sesuatu yang tidak boleh dipakai:
+    // baris yang tersimpan adalah baris yang suatu hari akan dirender.
+    const sah = variants.filter((v) => v.validation.passed);
+    if (sah.length === 0) {
+      const sebab = [...new Set(variants.flatMap((v) => v.validation.errors.map((e) => e.message_id)))];
+      throw ERR.BAD_REQUEST(
+        `Belum ada naskah yang memenuhi standar untuk produk ini. ${sebab[0] ?? ""}`.trim(),
+        `No script passed the hard gates: ${variants.map((v) => v.validation.errors.map((e) => e.rule).join("/")).join(" | ")}`
+      );
+    }
+
+    // script_source ikut TERSIMPAN, dititipkan di validation_result.
+    //
+    // Kolom sendiri butuh migrasi, dan migrasi terkunci sampai audit ledger
+    // bersih. validation_result sudah bertipe JSON dan sudah dibaca bersama
+    // naskahnya, jadi provenance-nya tidak hilang sambil menunggu.
+    const hasilValidasi = (v: typeof variants[number]) => ({ ...v.validation, script_source: v.script_source });
     const makeOut = (v: typeof variants[number], id: string) => ({ id, ...v });
     if (postgresRuntimeEnabled()) {
-      const created = await smokeCreateScripts(user.id, product.id, variants.map((v) => ({
+      const created = await smokeCreateScripts(user.id, product.id, sah.map((v) => ({
         hookFamily: v.hook_family, emotion: v.emotion, register: v.register, segments: v.segments,
-        caption: v.caption, hashtags: v.hashtags, validationResult: v.validation, qualityTier: tier,
+        caption: v.caption, hashtags: v.hashtags, validationResult: hasilValidasi(v), qualityTier: tier,
         hookLevel,
       })));
-      return Response.json({ scripts: variants.map((v, index) => makeOut(v, created[index].id)) });
+      return Response.json({ scripts: sah.map((v, index) => makeOut(v, created[index].id)) });
     }
     const db = getDb();
-    const out = variants.map((v) => {
+    const out = sah.map((v) => {
       const id = uuid();
       db.prepare(
         `INSERT INTO scripts (id, job_id, product_id, hook_family, emotion, register, segments, caption, hashtags, validation_result, quality_tier, hook_level, approved_by_user_at, edited_by_user, created_at)
@@ -101,9 +125,11 @@ export async function POST(req: Request) {
       ).run(
         id, product.id, v.hook_family, v.emotion, v.register,
         JSON.stringify(v.segments), v.caption, JSON.stringify(v.hashtags),
-        JSON.stringify(v.validation), tier, hookLevel, now()
+        JSON.stringify(hasilValidasi(v)), tier, hookLevel, now()
       );
-      audit(user.id, "script.generated", "scripts", id, { hook_family: v.hook_family, passed: v.validation.passed });
+      audit(user.id, "script.generated", "scripts", id, {
+        hook_family: v.hook_family, passed: v.validation.passed, script_source: v.script_source,
+      });
       return makeOut(v, id);
     });
 
