@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import type { ReactNode } from "react";
-import { CircleHelp, FolderKanban, Grid3x3, Home, LayoutTemplate, Library, Send, Users, UserRound, Zap } from "lucide-react";
+import { CircleHelp, FolderKanban, Grid3x3, Home, LayoutTemplate, Library, Send, Users, UserRound, Zap, Images} from "lucide-react";
 import { tokens } from "./format";
 import { SidebarLogout } from "./ProfileActions";
 
@@ -24,6 +24,9 @@ const NAV = [
   { href: "/dashboard/templates", label: "Templates", icon: LayoutTemplate, disabled: false },
   { href: "/dashboard/projects", label: "Proyek", icon: FolderKanban, disabled: false },
   { href: "/dashboard/library", label: "Library", icon: Library, disabled: false },
+  // Assets DI BAWAH Library karena keduanya "barang yang sudah ada": Library
+  // hasil videonya, Assets bahan bakunya.
+  { href: "/dashboard/assets", label: "Assets", icon: Images, disabled: false },
   { href: "/dashboard/publish", label: "Posting", icon: Send, disabled: false },
   { href: "/dashboard/team", label: "Tim", icon: Users, disabled: false },
   { href: "/dashboard/profile", label: "Profil", icon: UserRound, disabled: false },
