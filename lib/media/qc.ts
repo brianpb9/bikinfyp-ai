@@ -559,7 +559,7 @@ const APPAREL_CATEGORIES = new Set(["fashion", "muslim_fashion"]);
 const GENERIC_PRODUCT_WORDS = new Set([
   "gamis", "dress", "baju", "kaos", "kemeja", "jaket", "sweater", "hoodie", "celana", "rok",
   "hijab", "kerudung", "jilbab", "scarf", "jubah", "sepatu", "sandal", "tas", "tote", "pouch",
-  "serum", "cream", "krim", "ampoule", "essence", "toner", "sunscreen", "cleanser", "lotion",
+  "serum", "sabun", "soap", "cream", "krim", "ampoule", "essence", "toner", "sunscreen", "cleanser", "lotion",
   "snack", "keripik", "kripik", "tempura", "seaweed", "cemilan", "kopi", "teh", "susu",
   "earphone", "headset", "gaming", "chair", "kursi", "mouse", "mousepad", "deskmat", "tumbler", "botol",
   "original", "flavor", "premium", "murah", "viral", "terlaris", "wanita", "pria", "anak", "basic", "polos",
@@ -569,10 +569,16 @@ export function brandTokens(productName: string): string[] {
   const all = normalizeOcr(productName)
     .split(" ")
     .filter((token) => token.length >= 4 && /[a-z]/.test(token));
-  const brand = all.filter((token) => !GENERIC_PRODUCT_WORDS.has(token));
-  // Tanpa token non-generik (mis. "Gamis Polos Premium") -> tidak ada merek
-  // untuk diverifikasi; qcLabelFidelity akan skip N/A.
-  return brand.sort((a, b) => b.length - a.length).slice(0, 3);
+  const brand = all.filter((token) => !GENERIC_PRODUCT_WORDS.has(token) && !KATA_DEPAN_MEREK.has(token));
+  // URUTAN NAMA DIPERTAHANKAN, bukan diurutkan berdasar panjang.
+  //
+  // Canary 19 Agu: "SOMETHINC 5% Niacinamide Barrier Serum" menghasilkan
+  // merek utama "niacinamide" — kandungan, bukan mereknya — karena sort lama
+  // memenangkan token terpanjang. Itu heuristik "terpanjang = merek" yang
+  // sudah pernah ditolak reviewer di QC-F1, masuk lagi lewat pintu ini.
+  // Nama produk Indonesia menaruh MEREKNYA di depan; kandungan dan deskriptor
+  // menyusul. Token pertama yang bukan kata umum adalah tebakan terbaik.
+  return brand.slice(0, 3);
 }
 
 /**

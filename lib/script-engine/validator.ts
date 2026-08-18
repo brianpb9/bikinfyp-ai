@@ -351,7 +351,7 @@ function wordCount(text: string): number {
  */
 export const SELALU_KERAS = new Set([
   "L-03", "L-05", "L-10", "L-11", "L-13", "L-14", "L-19", "L-21",
-  "T-01", "T-02", "T-03", "A-01", "A-02",
+  "T-01", "T-02", "T-03", "A-01", "A-02", "L-22",
   // STANDAR 10/10 (knowledge/rules/standard-10.md). Ketiganya aturan MUTU yang
   // bisa diperiksa mesin, dan Brian menyebutnya syarat render — bukan saran.
   "S-04", "S-05", "S-09",
@@ -802,6 +802,28 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
         message_id: `Kata ini sering memicu penyaring konten penyedia: ${ringkasPemicu(kosakata)}`,
         segment: segment.role,
       });
+    }
+  }
+
+  // L-22: dialog wajib aksara Latin.
+  //
+  // Ditemukan CANARY 19 Agu, klip pertama: penulis LLM menghasilkan
+  // "kulitku断 mending banget" — karakter Tionghoa di tengah dialog Indonesia
+  // — dan SEMUA gerbang meloloskannya sampai render dibayar. Tidak ada satu
+  // aturan pun yang pernah memeriksa aksaranya.
+  //
+  // TTS membaca karakter itu semaunya (atau diam), dan penonton melihat
+  // naskah yang jelas bukan tulisan manusia. Yang diperiksa DIALOGNYA saja —
+  // arahan visual memang berbahasa Inggris, dan emoji/angka/tanda baca sah.
+  for (const seg of script.segments) {
+    const asing = stripDeliveryTags(seg.text).match(/[^\u0000-\u024F\u2000-\u206F\u20A0-\u20CF"'\u2018\u2019\u201C\u201D\-—–…]/u);
+    if (asing) {
+      push(true, {
+        rule: "L-22",
+        message_id: `Ada karakter di luar aksara Latin ("${asing[0]}") di dialog — TTS membacanya semaunya dan penonton tahu ini bukan tulisan manusia.`,
+        segment: seg.role,
+      });
+      break;
     }
   }
 

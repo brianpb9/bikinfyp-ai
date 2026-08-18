@@ -211,3 +211,22 @@ test("dokumen standar benar-benar terbaca dan ikut ke prompt", () => {
     if (b.penegakan !== "kode") assert.ok(b.catatan, `baris ${b.no} bukan kode tapi tidak menjelaskan kenapa`);
   }
 });
+
+test("L-22: karakter non-Latin di dialog DITOLAK — temuan canary 19 Agu", async () => {
+  const { validateScript } = await import("../lib/script-engine/validator");
+  const nilai = (demo: string) => validateScript({
+    hook_family: "H1", register: "bestie",
+    segments: [
+      { role: "hook", text: "Nah, kenapa kusam banget sih?" },
+      { role: "demo", text: demo },
+      { role: "cta", text: "cek keranjang kuning ya" },
+    ],
+    productName: "Serum Glow", priceIdr: 85000, qualityTier: "high_quality",
+    durationSec: 15, cartLabel: "keranjang kuning",
+  } as never, "light").errors.filter((e) => e.rule === "L-22");
+  // Kalimat PERSIS dari canary: karakter Tionghoa lolos semua gerbang.
+  assert.equal(nilai("kulitku断 mending banget, sumpah").length, 1);
+  assert.equal(nilai("kulitku mending banget, sumpah").length, 0);
+  // Tanda kutip tipografis, gelap-terang, dan angka tetap sah.
+  assert.equal(nilai("teksturnya “niat” banget — 85 ribu aja").length, 0);
+});
