@@ -225,7 +225,7 @@ export default function OnboardingPage() {
                 // active:true (yang ke-12, "daerah", masih dimatikan), dan
                 // Rp12.000 = tier AI Bersuara di lib/config.ts. Sebelumnya
                 // tertulis "5 gaya" — MENGECILKAN produk sendiri.
-                { value: "15 detik", label: "video siap posting" },
+                { value: "15–30 detik", label: "video siap ditinjau" },
                 { value: JANJI_WAKTU.singkat, label: "rata-rata selesai render" },
                 { value: "11 kreator", label: "wajah AI siap pakai" },
                 { value: "Rp12.000", label: "harga per video bersuara" },
