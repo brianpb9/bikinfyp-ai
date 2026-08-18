@@ -46,8 +46,23 @@ for (const k of laporan.laporan) {
     "QC mesin:",
     ...(k.qc ?? []).map((c) => `- ${c.code} **${c.status.toUpperCase()}** — ${c.detail}`),
     "",
+    // Rubrik formal (board review 19 Agu §4.2): dua dimensi bernilai 0-2 di
+    // samping ceklis cacat, plus daftar CRITICAL FAIL yang masing-masing
+    // menggagalkan klip sendirian. "Scroll-stop" dinilai TERHADAP feed
+    // pembanding bernama, bukan perasaan — reviewer wajib menulis pembandingnya.
     "Reviewer 1 (label / merek / anatomi / bahasa): [ ]",
     "Reviewer 2: [ ]",
+    "",
+    "Rubrik skor (masing-masing 0-2, isi manusia):",
+    "- **Bahasa & CTA** ( /2): transkrip 100% Indonesia; frasa CTA benar untuk content-type-nya (afiliasi=keranjang, Ads=tanpa keranjang); nol klaim berlebihan.",
+    "- **Scroll-stop** ( /2): dibandingkan feed FYP nyata — SEBUTKAN video pembandingnya (akun/tautan). 2 = berhenti scroll, 1 = mungkin, 0 = lewat.",
+    "",
+    "CRITICAL FAIL (satu saja = klip gagal, apa pun skornya):",
+    "- [ ] dialog berbahasa Inggris",
+    "- [ ] on-screen text karangan model (bukan overlay kami)",
+    "- [ ] pack shot di detik pertama",
+    "- [ ] wajah berubah antar klip produk yang sama",
+    "- [ ] naskah template/degraded terkirim sebagai output",
     "",
     `Berkas: \`${path.relative(path.resolve(process.cwd(), ".."), k.berkas)}\` · frame: frame-awal/tengah/akhir.jpg`,
     "",

@@ -36,7 +36,8 @@
     "monitor:jobs": "tsx scripts/monitor-jobs.ts",
     "smoke": "bash scripts/smoke-e2e.sh",
     "test:pg": "node -e \"if(!process.env.UJI_PG_URL){console.error('UJI_PG_URL belum diisi — gate konkurensi tidak boleh lulus tanpa database uji.');process.exit(1)}\" && tsx --test tests/pg-konkurensi-kredit.test.ts",
-    "gate:rilis": "npx tsc --noEmit && npm test && npm run build && npm run audit:script-catalog"
+    "gate:rilis": "npx tsc --noEmit && npm test && npm run build && npm run audit:script-catalog",
+    "laporan:nsfw": "node scripts/laporan-nsfw.mjs"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
