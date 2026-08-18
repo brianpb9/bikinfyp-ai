@@ -30,7 +30,7 @@ terverifikasi via header/health nyata.
 | Hydration/interaction canary CI | 4 | **8** | V | Smoke membuktikan hidrasi lewat perubahan CTA yang mustahil terjadi di HTML statis (diverifikasi: 0 kemunculan di HTML server), dan **sudah teramati LULUS di run CI nyata** (run 32182693249, job verify SUCCESS, log "SMOKE INTERAKSI LULUS"). Bukan 9: cakupan baru landing + /coba, interaksi dashboard belum; smoke CI jalan di server dev (production menolak SQLite — fail-closed yang benar), CSP production dijaga `tests/csp-produksi.test.ts`. |
 | Content engine standard | 4 | **7** | V | Gate keras kedua mode (tes), snapshot admisi beku sejak lahir, standar-10 §A/§B di prompt + 12/12 di log, canary membuktikan gate menolak SEBELUM bayar. Bukan 8: temuan #4 (nama produk panjang mengalahkan penulis 3 putaran), #8 (intake tak memeriksa foto referensi), utang copy 116 varian. |
 | Brand fidelity | 5 | **6** | V | `lib/merek.ts` satu sumber (lahir dari temuan canary #2/#3), QC-10 tiga-keadaan jujur; frame bukti: "SOMETHINC" & "KOPI TANG" utuh. Bukan 7: brand belum jadi field tepercaya di intake; "Gula ARAM" (label sedang salah eja) lolos — butuh QC label penuh berbasis visi. |
-| Anti-slop produksi | 5 | **6** | V/C | Chest-up default di kode, kosakata filter dgn oracle independen 0/360 false-block, semua negasi-orang ditulis positif. Bukan 7: shot-1 no-face belum jadi gate mesin, baru konvensi planner. |
+| Anti-slop produksi | 5 | **7** | V/C | Chest-up default, kosakata filter dgn oracle independen 0/360 false-block, negasi-orang positif, dan **shot-1 tanpa wajah kini default multi-shot talking_head + dijaga tes** (standar-10 §E; pengecualian sadar: 15 dtk satu-shot, fashion full-body, gaya rekam, peran template). Bukan 8: masih level prompt — bukti piksel butuh canary berikutnya. |
 | Prompt/verdict archive | 3 | **8** | V | 0032 live (bukti migrasi); amplop validasi + verdict QC tersimpan per job. Bukan 9: belum ada satu job produksi pasca-0032 yang dibedah ujung-ke-ujung sebagai contoh. |
 | NSFW rejection | 3 | **6** | V | **Terukur**: canary 1 penolakan provider dari 11 panggilan render (~9%) vs 6/10 (60%) sebelum pembersihan kosakata — di bawah target board (≤20%/≤35%). Bukan 7: sampel kecil (n=11), auto-refund belum dilatih di jalur job nyata (canary render langsung), KPI belum formal di dashboard. |
 | Payments (Midtrans sandbox) | 2 | **2** | N | Tidak berubah — menunggu Brian (settlement sandbox). |
@@ -63,8 +63,8 @@ payments sebelum keputusan ini.**
 | §4 | Status |
 |---|---|
 | 1. Content-standard gate Phase 1 | **Terpasang** (SELALU_KERAS kedua mode, degraded ditolak render, snapshot beku) — sisa: brand tepercaya di intake |
-| 2. Rubrik canary +2 dimensi | Belum formal; bahan sudah ada (transkrip per klip + frame di canary-12) |
-| 3. NSFW KPI | Terukur (~9%, n=11); belum jadi KPI berkelanjutan |
+| 2. Rubrik canary +2 dimensi | **Terpasang** (canary-12-tinjau.ts: Bahasa & CTA 0–2, Scroll-stop 0–2 dgn feed pembanding bernama, 5 critical fail per klip) |
+| 3. NSFW KPI | **Berkelanjutan**: `npm run laporan:nsfw` (SELECT-only atas jobs+audit produksi, target per format, exit 1 bila lewat). Jalur job 30 hari: 0 penolakan konten |
 | 4. Arsip prompt sebelum canary | **Terpasang** (0032 live) |
 | 5. Budget canary realistis | Terbukti: aktual Rp44.336 utk 12 klip (bersuara Rp8.313/klip) — dilaporkan apa adanya |
 | 6. Latency KPI | Terukur per klip: 112–194 dtk → semua copy waktu kini satu sumber `lib/janji-waktu.ts` |
