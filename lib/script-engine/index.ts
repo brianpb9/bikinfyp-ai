@@ -23,7 +23,7 @@ import { kategoriJenuh } from "./standar-10";
 import { REGISTERS, type Register } from "./registers";
 import { renderSegmentsForTier, formatHargaNatural, type SegmentDraft, type TemplateCtx } from "./templates";
 import { templateCopy, TEMPLATE_COPY_CAPACITY } from "./template-copy";
-import { isTvcTemplate, jendelaKata, templateRequiresPriceMention, validateScript, type ValidationResult } from "./validator";
+import { isTvcTemplate, jendelaKata, templateRequiresPriceMention, tokenMerek, validateScript, type ValidationResult } from "./validator";
 import { konteksAdmisi, type SnapshotAdmisi } from "./admisi";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
 import { compileDeliveryText } from "./delivery-tags";
@@ -412,6 +412,8 @@ async function generateOne(
           productName: product.name, productCategory: product.category,
           priceIdr: product.price_idr ?? 0, durationSec, contentType, cartLabel,
           register, hookFamily: family, hookLevel: "normal", format,
+          // Penutup TVC menyebut MEREK, bukan seluruh nama SKU — lihat T-01.
+          merek: tokenMerek(product.name),
           contoh: variasi ? `${variasi.hook} / ${variasi.demo} / ${variasi.cta}` : null,
           wordMin: minWc, wordMax: maxWc,
           keluhan: keluhan.length ? keluhan : undefined,

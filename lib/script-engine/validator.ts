@@ -292,6 +292,24 @@ export function templateRequiresPriceMention(templateId: string | null | undefin
  * `format` di katalog template. Menambah TVC tanpa awalan "tvc-" — atau
  * memberi awalan itu ke template yang bukan TVC — gagal di CI, bukan lolos
  * diam-diam sampai ke penonton. */
+/**
+ * Token MEREK dari nama produk: kata pertama yang bukan kata umum.
+ *
+ * Sengaja sederhana dan bisa salah ke arah AMAN — kalau tebakannya meleset,
+ * nama lengkap tetap diterima (lihat T-01). Yang tidak boleh adalah menuntut
+ * seluruh SKU, karena itu menolak naskah yang benar.
+ */
+const KATA_UMUM_MEREK = new Set([
+  "the", "pt", "cv", "by", "dan", "and", "official", "store", "new", "premium",
+  "original", "asli", "paket", "isi",
+]);
+export function tokenMerek(productName: string): string {
+  for (const t of (productName.toLowerCase().match(/[a-z]{3,}/g) ?? [])) {
+    if (!KATA_UMUM_MEREK.has(t)) return t;
+  }
+  return "";
+}
+
 export function isTvcTemplate(templateId: string | null | undefined): boolean {
   return Boolean(templateId?.startsWith("tvc-"));
 }
@@ -488,11 +506,20 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     // Kesalahan nyata yang melahirkan aturan ini: TVC Mom & Baby selesai tanpa
     // announcer penutup, jadi iklannya berakhir tanpa pernah menyebut nama
     // produk sama sekali.
-    const merek = script.productName.trim().toLowerCase();
-    if (!merek || !penutup.toLowerCase().includes(merek))
+    // Yang wajib disebut MEREKNYA, bukan seluruh nama SKU.
+    //
+    // Versi pertama menuntut nama lengkap ("Mosseru Bright Shower Gel"), dan
+    // itu terbukti mustahil di render nyata 18 Agu: empat kata merek memakan
+    // separuh jendela 22 kata, jadi penulis LLM gagal dua kali berturut-turut
+    // pada aturan yang memang tidak bisa dipenuhi. Iklan TV menyebut "Mosseru",
+    // bukan membacakan seluruh label.
+    const merekPenuh = script.productName.trim().toLowerCase();
+    const token = tokenMerek(script.productName);
+    const penutupLower = penutup.toLowerCase();
+    if (!merekPenuh || !(penutupLower.includes(merekPenuh) || (token && penutupLower.includes(token))))
       push(false, {
         rule: "T-01",
-        message_id: `Penutup TVC wajib menyebut nama produknya ("${script.productName}") — tanpa itu iklan berakhir tanpa pernah menyebut merek.`,
+        message_id: `Penutup TVC wajib menyebut mereknya ("${token || script.productName}") — tanpa itu iklan berakhir tanpa pernah menyebut merek.`,
         segment: "cta",
       });
 

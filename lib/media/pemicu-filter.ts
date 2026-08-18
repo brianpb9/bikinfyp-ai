@@ -123,8 +123,24 @@ const NEGASI_ORANG: RegExp[] = [
 function tutupiNama(teks: string, nama?: string | null): string {
   const n = (nama ?? "").trim();
   if (n.length < 3) return teks;
-  const pola = new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
-  return teks.replace(pola, " PRODUK ");
+  const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const kata = n.split(/\s+/).filter((w) => w.length >= 3);
+  let out = teks;
+  // Potongan BERURUTAN dari nama produk, dari yang terpanjang.
+  //
+  // Penulis jarang mengulang nama lengkapnya: "Mosseru Bright Shower Gel"
+  // muncul lagi sebagai "shower gel" — dan render nyata 18 Agu berhenti persis
+  // di situ, karena kata dari nama produknya sendiri dihitung sebagai pemicu.
+  //
+  // Minimal DUA kata, bukan satu: menutup "shower" sendirian mengembalikan
+  // izin global yang dulu membuat "the talent enters the shower" ikut lolos.
+  for (let panjang = kata.length; panjang >= 2; panjang--) {
+    for (let i = 0; i + panjang <= kata.length; i++) {
+      const pola = kata.slice(i, i + panjang).map(esc).join("\\s+");
+      out = out.replace(new RegExp(pola, "gi"), " PRODUK ");
+    }
+  }
+  return out;
 }
 
 export interface KonteksPemicu {

@@ -50,7 +50,11 @@ export const SkemaSegmen = z.object({
   audio_note: z.string().default(""),
   /** WAJIB merujuk setup/tension/payoff — bukan hiasan. */
   why: z.string().min(5),
-  mode: z.string().min(2),
+  // Opsional dengan bawaan: `mode` cuma metadata tampilan, dan render nyata
+  // 18 Agu kehilangan naskah Ads yang sudah benar dua kali berturut-turut
+  // hanya karena field ini tidak ditulis. Membuang naskah bagus karena label
+  // kosmetik adalah biaya yang dibayar dua kali tanpa dapat apa-apa.
+  mode: z.string().default(""),
 });
 
 export const SkemaNaskah = z.object({
@@ -209,6 +213,8 @@ interface PermintaanNaskah {
   durationSec: number;
   /** "affiliate" | "ads" — mengubah aturan CTA dan overlay. */
   contentType: "affiliate" | "ads";
+  /** Token merek — penutup TVC menyebut ini, bukan seluruh nama SKU. */
+  merek?: string;
   /** Label keranjang untuk affiliate ("keranjang kuning"/"keranjang oren"). */
   cartLabel: string;
   register: string;
@@ -296,10 +302,18 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
 
 function blokTugas(r: PermintaanNaskah): string {
   const jumlah = r.durationSec <= 15 ? 3 : r.durationSec <= 20 ? 4 : r.durationSec <= 30 ? 5 : 6;
+  // TIGA genre, bukan dua.
+  //
+  // Sampai render nyata 18 Agu, TVC tidak punya cabang di sini — jadi penulis
+  // diperintahkan menutup dengan "keranjang", lalu ditolak T-02 karena menyebut
+  // keranjang. Dua kali berturut-turut, lalu jatuh ke template. Aturan yang
+  // kita tegakkan tidak pernah kita sampaikan ke penulisnya.
   const cta =
-    r.contentType === "ads"
-      ? `The CTA line must be exactly: "Detailnya ada di bawah ya". No on-screen text anywhere.`
-      : `The CTA line must be spoken and must contain "${r.cartLabel}".`;
+    r.format === "tvc"
+      ? `The CTA line is an announcer sign-off: it MUST name the brand "${r.merek || r.productName}" and MUST NOT mention "keranjang", a cart, a link, or any shopping action. Never stack two negations in one sentence.`
+      : r.contentType === "ads"
+        ? `The CTA line must be exactly: "Detailnya ada di bawah ya". No on-screen text anywhere.`
+        : `The CTA line must be spoken and must contain "${r.cartLabel}".`;
   const perbaikan = r.keluhan?.length
     ? [
         "",

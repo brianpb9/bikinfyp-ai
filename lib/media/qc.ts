@@ -11,6 +11,7 @@ import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { isServiceLike } from "../config/hooks";
 import { qcVision, POSISI_SAMPEL } from "./qc-vision";
 import { qcSuara } from "./qc-suara";
+import { merekCocok } from "./qc-frame";
 
 export interface QcCheck {
   code: string;
@@ -623,8 +624,30 @@ export function usulMerekDariNama(productName: string): string | null {
   return kata[0] ?? null;
 }
 
+/**
+ * Kata OCR yang MIRIP merek: berbagi potongan >=4 huruf.
+ *
+ * Dipakai untuk memisahkan dua hal yang dulu tercampur: label yang terbaca
+ * SALAH EJA (bukti cacat) versus label yang tidak terbaca sama sekali (bukan
+ * bukti apa-apa).
+ */
+function miripMerek(kataOcr: string, merek: string): boolean {
+  if (kataOcr.length < 4 || merek.length < 4) return false;
+  for (let i = 0; i + 4 <= merek.length; i++) {
+    if (kataOcr.includes(merek.slice(i, i + 4))) return true;
+  }
+  return false;
+}
+
 export async function qcLabelFidelity(filePath: string, productName: string): Promise<QcCheck> {
   const tokens = brandTokens(productName);
+  // Yang WAJIB terbaca token MEREKNYA, bukan token mana pun.
+  //
+  // Terbukti 18 Agu: klip TVC lolos karena OCR membaca "shower" — kata umum
+  // dari nama produk — sementara mereknya sendiri tercetak "moseru". Lulus
+  // atas kata deskriptif tidak membuktikan apa pun soal fidelitas merek, dan
+  // itulah satu-satunya hal yang dijaga QC-10.
+  const merekUtama = tokens[0];
   if (tokens.length === 0) {
     return { code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip", detail: "N/A: nama produk tanpa token teks merek (produk polos)." };
   }
@@ -632,6 +655,7 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
   try {
     const duration = await probeDurationSec(filePath);
     const found = new Set<string>();
+    const mirip = new Set<string>();
     let sampled = 0;
     // 8 titik sampel + upscale 2x (label kecil di frame 720p sering di bawah
     // ukuran minimum tesseract — kasus genz-r2: label tajam secara visual tapi
@@ -644,22 +668,46 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
       const { words } = await ocrFrame(frame);
       for (const word of words) {
         const norm = normalizeOcr(word.text);
+        // Kata yang MIRIP merek tapi tidak cocok = bukti label salah eja.
+        // Dibedakan dari "OCR tidak membaca apa pun", yang bukan bukti apa-apa.
+        if (!merekCocok(norm, merekUtama) && miripMerek(norm, merekUtama)) mirip.add(norm);
         for (const token of tokens) {
-          // cocok bila token dan kata OCR berbagi substring >=4 huruf
-          // (toleran huruf awal/akhir terpotong sudut kamera)
-          for (let i = 0; i + 4 <= token.length; i++) {
-            if (norm.includes(token.slice(i, i + 4))) { found.add(token); break; }
-          }
+          // ATURAN SAMA DENGAN QC-F1 (merekCocok): kelebihan huruf boleh,
+          // KEKURANGAN tidak.
+          //
+          // Versi lama menerima kecocokan substring 4 huruf mana pun, dan itu
+          // meloloskan persis cacat yang QC-10 ada untuk menangkap. Terbukti
+          // di render 18 Agu: label berbunyi "moseru" untuk produk "Mosseru"
+          // dan QC-10 melaporkan "token merek mosseru terbaca" — karena
+          // keduanya berbagi potongan "seru". Merek yang salah eja adalah
+          // label rusak, dan meloloskannya membuat QC ini jadi hiasan.
+          if (merekCocok(norm, token)) { found.add(token); break; }
         }
       }
-      if (found.size > 0) break; // satu frame terbukti sudah cukup
+      if (found.has(merekUtama)) break; // mereknya terbaca — cukup
     }
-    if (found.size > 0) {
-      return { code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "pass", detail: `token merek ${[...found].join(",")} terbaca (sampai ${sampled} frame diperiksa).` };
+    if (found.has(merekUtama)) {
+      return { code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "pass", detail: `merek "${merekUtama}" terbaca utuh (sampai ${sampled} frame diperiksa).` };
+    }
+    // TIGA KEADAAN, bukan dua (terukur 18 Agu dari tiga render nyata).
+    //
+    // Tesseract praktis tidak bisa membaca label serif tipis di botol
+    // translusen: pada ketiga klip ia membaca NOL kata dari labelnya. "Lulus"
+    // versi lama datang dari kecocokan substring, bukan dari benar-benar
+    // membaca mereknya — kepercayaan yang tidak pernah punya dasar.
+    //
+    // Jadi: salah eja yang TERBACA = fail (ada buktinya). Tidak terbaca sama
+    // sekali = skip, dan dikatakan apa adanya. Fidelitas merek yang sebenarnya
+    // dijaga QC-F1 (model visi), bukan OCR.
+    if (mirip.size > 0) {
+      return {
+        code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
+        detail: `label tercetak "${[...mirip].join(", ")}" — bukan "${merekUtama}". Merek salah eja = label rusak (AI slop).`,
+      };
     }
     return {
-      code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
-      detail: `token merek (${tokens.join(", ")}) tidak terbaca di ${sampled} frame sampel — indikasi label rusak/gibberish (AI slop).`,
+      code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip",
+      detail: `TIDAK TERBUKTI: OCR tidak membaca merek "${merekUtama}" maupun kata mirip di ${sampled} frame${found.size ? ` (hanya kata umum: ${[...found].join(", ")})` : ""}. Bukan bukti labelnya benar — fidelitas merek diputuskan QC-F1 (model visi).`,
     };
   } finally {
     fs.rmSync(framesDir, { recursive: true, force: true });
