@@ -719,7 +719,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   for (const segment of script.segments) {
     const bahan = [segment.visual_direction ?? "", segment.start_state ?? ""].join(" ").trim();
     if (!bahan) continue;
-    const temuan = periksaPemicu(bahan);
+    const temuan = periksaPemicu(bahan, { namaProduk: script.productName });
     if (!temuan.length) continue;
     // Negasi tentang orang dilaporkan terpisah: ia bukan cuma risiko penyaring,
     // ia juga membuat model MEMUNCULKAN yang dinegasikan.

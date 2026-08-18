@@ -8,7 +8,7 @@ import { execFileSync } from "node:child_process";
 process.env.DB_PATH = `/tmp/racun-test-handsfix-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-handsfix-storage-${process.pid}`;
 
-const { planShots, HANDS_ONLY_NEGATIVE } = await import("../lib/media/shot-planner");
+const { planShots, HANDS_ONLY_NEGATIVE, frasaNegatifBersih } = await import("../lib/media/shot-planner");
 const { getCreatorCategory } = await import("../lib/personas");
 const { qcProductSimilarity } = await import("../lib/media/qc");
 
@@ -60,12 +60,17 @@ test("hands_only: negative mengecualikan wajah sepenuhnya, tanpa token negasi", 
     //
     // Yang harus dijaga: larangan OVERLAY tambahan tetap ada, karena tanpa itu
     // model menambah caption dan watermark karangan.
-  assert.ok(s.negativePrompt.includes("no added text overlay"), "negative wajib melarang overlay teks tambahan");
+  // Bentuknya telanjang sejak frasaNegatifBersih (reviewer ronde 3): field
+  // negative sudah berarti "hindari", jadi "no X" di dalamnya negasi ganda.
+  assert.ok(s.negativePrompt.includes("added text overlay"), "negative wajib melarang overlay teks tambahan");
+  assert.ok(!/\bno added text overlay\b/.test(s.negativePrompt), "token negasi ganda tidak boleh kembali");
 });
 
 test("format lain (vo_broll): negative kategori tidak diubah", () => {
   const s = spec("vo_broll");
-  assert.equal(s.negativePrompt, hijaber.negativePrompt);
+  // Yang dijaga: TIDAK ada tambahan khusus format. Bentuknya tetap lewat
+  // pembersih yang sama seperti format lain — isinya identik, tokennya bersih.
+  assert.equal(s.negativePrompt, frasaNegatifBersih(hijaber.negativePrompt));
   for (const shot of s.shots) {
     assert.ok(!shot.prompt.includes("face and body NOT visible"), "frasa negasi lama tidak boleh kembali");
   }

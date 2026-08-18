@@ -375,16 +375,6 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // sebagai batas positif, jadi gerbang ini seharusnya tidak pernah menyala —
   // dan kalau menyala, artinya ada yang menulis negasi baru, yang memang harus
   // dihentikan sebelum uang keluar.
-  const pemicu = [
-    ...spec.shots.flatMap((sh) => periksaPemicu(sh.prompt).map((t) => ({ di: `shot ${sh.index}`, t }))),
-    ...periksaPemicu(spec.negativePrompt).map((t) => ({ di: "negative prompt", t })),
-  ];
-  if (pemicu.length) {
-    const rincian = pemicu.map((p) => `${p.di}: ${ringkasPemicu([p.t])}`).join(" | ");
-    console.error(`[pemicu] job ${row.id.slice(0, 8)} DIHENTIKAN sebelum provider — ${rincian}`);
-    throw new Error(`Prompt akhir memicu penyaring penyedia dan tidak dikirim: ${rincian}`);
-  }
-
   // ARSIP PROMPT — sebelum satu pun panggilan penyedia.
   //
   // Job yang GAGAL justru yang paling sering perlu dibedah, jadi arsipnya
@@ -401,6 +391,44 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     });
   } catch (err) {
     console.warn(`[job ${row.id.slice(0, 8)}] arsip prompt gagal disimpan (diabaikan): ${(err as Error).message}`);
+  }
+
+  // GERBANG PROMPT — SESUDAH arsip, SEBELUM penyedia.
+  //
+  // Urutannya diperbaiki (reviewer ronde 3): dulu throw terjadi sebelum
+  // pgSimpanArsipPrompt, jadi justru prompt yang DIHENTIKAN — satu-satunya
+  // yang benar-benar perlu dibedah — adalah satu-satunya yang tidak pernah
+  // tersimpan. Arsip bukan panggilan berbayar, jadi menaruhnya lebih dulu
+  // tidak memindahkan biaya apa pun.
+  //
+  // Yang MEMBLOKIR hanya negasi tentang orang. Kosakata bertetangga
+  // (mandi/handuk/basah) tetap dicatat tapi tidak menahan render: penyaring
+  // menghukum kosakata, dan sebagian kosakata itu memang milik produknya —
+  // menahan render karena kata "mandi" mematikan kategori sabun. Nama produk
+  // ikut dikirim ke detektor dengan alasan yang sama.
+  //
+  // vo_broll tidak lewat gerbang ini sama sekali: visualnya FOTO ASLI milik
+  // pengguna, tidak ada penyedia video yang dipanggil, jadi tidak ada
+  // penyaring yang bisa menolaknya.
+  if (format !== "vo_broll") {
+    const namaProduk = row.product_name;
+    const pemicu = [
+      ...spec.shots.flatMap((sh) => periksaPemicu(sh.prompt, { namaProduk }).map((t) => ({ di: `shot ${sh.index}`, t }))),
+      ...periksaPemicu(spec.negativePrompt, { namaProduk }).map((t) => ({ di: "negative prompt", t })),
+    ];
+    const negasi = pemicu.filter((p) => p.t.jenis === "negasi-orang");
+    const kosakata = pemicu.filter((p) => p.t.jenis === "kosakata");
+    if (kosakata.length) {
+      console.warn(
+        `[pemicu] job ${row.id.slice(0, 8)} kosakata bertetangga (TIDAK diblokir) — ` +
+          kosakata.map((p) => `${p.di}: ${ringkasPemicu([p.t])}`).join(" | ")
+      );
+    }
+    if (negasi.length) {
+      const rincian = negasi.map((p) => `${p.di}: ${ringkasPemicu([p.t])}`).join(" | ");
+      console.error(`[pemicu] job ${row.id.slice(0, 8)} DIHENTIKAN sebelum provider — ${rincian}`);
+      throw new Error(`Prompt akhir memuat negasi tentang orang dan tidak dikirim: ${rincian}`);
+    }
   }
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the
   // user's own product photo panned/zoomed, so there's no provider to fail

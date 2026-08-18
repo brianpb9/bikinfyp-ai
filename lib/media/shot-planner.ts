@@ -119,9 +119,9 @@ const HANDS_ONLY_FRAMING =
  *  bukan daftar larangan. */
 const HANDS_ONLY_HAND_LOCK =
   "Exactly two hands are visible in the entire frame, and both belong to the same single person. " +
-  "The SAME hand that holds the bottle also operates it — it is never handed over, and no other hand " +
-  "steadies it. The second hand does only one thing: receive the product or show the result. " +
-  "No third hand ever enters the frame, from any edge, at any moment. ";
+  "The SAME hand that holds the bottle also operates it, keeping its grip the whole time. " +
+  "The second hand does only one thing: receive the product or show the result. " +
+  "The frame stays at exactly two hands from the first frame to the last, at every edge. ";
 
 // FRASA BENDA TELANJANG, tanpa kata "no" (reviewer A5).
 //
@@ -176,8 +176,8 @@ const ADS_FRAMING =
 // ("dia punya tepat dua tangan, keduanya terlihat jelas dan menempel wajar
 // pada lengannya"). Larangan tetap dipasang sebagai jaring kedua.
 const SINGLE_SUBJECT_LOCK =
-  "EXACTLY ONE person is present in the entire frame from start to finish — no one else enters, " +
-  "and no second version of the same person ever appears. That one person has exactly two hands, " +
+  "EXACTLY ONE person is present in the entire frame from start to finish — she is alone in the shot " +
+  "and appears a single time. That one person has exactly two hands, " +
   "both clearly visible and naturally attached to her own arms, and only those two hands ever touch " +
   "the product. ";
 
@@ -201,11 +201,42 @@ export function maksOrangPerFrame(input: {
 
 // FRASA BENDA TELANJANG (reviewer A5): field negative sudah berarti "hindari
 // ini", jadi kata "no" hanya menambah token negasi-tentang-orang yang dibaca
-// penyaring penyedia. "exactly two hands" DIPERTAHANKAN — itu satu-satunya
-// bagian yang memang menyatakan JUMLAH yang benar, bukan larangan.
+// penyaring penyedia.
+//
+// "exactly two hands" DIBUANG dari sini (reviewer ronde 3). Dulu dipertahankan
+// dengan alasan ia menyatakan JUMLAH yang benar — tapi tempatnya salah:
+// BytePlus mengirim field ini sebagai "Negative: ..., exactly two hands"
+// (lib/providers/stubs/byteplus.ts), jadi kami menyuruh model MENGHINDARI
+// kondisi yang justru kami inginkan. Pernyataan positifnya sudah ada di
+// SINGLE_SUBJECT_LOCK, di tempat yang memang membacanya sebagai perintah.
 const SINGLE_SUBJECT_NEGATIVE =
   "second person, duplicate of the same person, twin, extra people in frame, " +
-  "extra hands, third hand, disembodied hands, exactly two hands";
+  "extra hands, third hand, disembodied hands";
+
+/**
+ * Negative prompt = DAFTAR HAL YANG DIHINDARI. Dua cacat yang lahir dari lupa
+ * itu, dan keduanya nyata:
+ *
+ *   1. "no face" di daftar hindari berarti "hindari ketiadaan wajah" — persis
+ *      kebalikan dari maksudnya. Setiap "no X" di sini adalah negasi ganda.
+ *   2. Kondisi yang DIINGINKAN ("exactly two hands") tidak boleh ada di daftar
+ *      hindari sama sekali.
+ *
+ * Dijalankan sekali di ujung penyusunan, bukan dijaga manual di sepuluh tempat
+ * yang menambahkan potongan — disiplin yang harus diingat berulang kali adalah
+ * disiplin yang cepat atau lambat terlewat, dan memang sudah terlewat.
+ */
+export function frasaNegatifBersih(negatif: string): string {
+  const keluar: string[] = [];
+  for (const mentah of negatif.split(",").map((x) => x.trim()).filter(Boolean)) {
+    // Kondisi yang diinginkan, bukan larangan.
+    if (/^(exactly|tepat)\b/i.test(mentah)) continue;
+    const telanjang = mentah.replace(/^(?:no|not|never|without|tanpa|tidak|nggak)\s+/i, "").trim();
+    if (!telanjang) continue;
+    if (!keluar.some((x) => x.toLowerCase() === telanjang.toLowerCase())) keluar.push(telanjang);
+  }
+  return keluar.join(", ");
+}
 
 const TALKING_HEAD_FRAMING =
   "face and upper body clearly visible, warm friendly UGC presenter speaking directly to camera, " +
@@ -674,7 +705,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     {
       role: `the realisation: catching sight of the result unexpectedly and reacting to it, a clear beat of pleasant surprise`,
       camera: `static frame holding on the reaction`,
-      avoid: `no head bobbing, the surprise must read clearly`,
+      avoid: `her head stays steady so the surprise reads clearly`,
       pace: `snappy, not slow or atmospheric`,
     },
   ];
@@ -702,9 +733,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       pace: `upbeat, purposeful`,
     },
     {
-      role: `the garment correcting ITSELF after a real action — an arm raised to write or reach, then lowered, and the sleeve and body of the garment fall back into a clean line by themselves with no adjustment by hand`,
+      role: `the garment correcting ITSELF after a real action — an arm raised to write or reach, then lowered, and the sleeve and body of the garment fall back into a clean line entirely by themselves, untouched`,
       camera: `steady medium shot, no movement`,
-      avoid: `no hand smoothing the fabric, no visible adjusting`,
+      avoid: `the fabric settles on its own, untouched`,
       pace: `calm, confident`,
     },
     {
@@ -745,13 +776,13 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     {
       role: `the careful act: lifting and holding with visibly correct, safe handling — she has exactly two hands, both clearly visible and naturally attached to her own arms throughout the entire shot, one hand supporting behind the head and neck, the other arm supporting the back`,
       camera: `completely static and locked off, hands resting calmly before any movement begins`,
-      avoid: `never show the infant's face — only the back of the head; no extra limbs, no hands entering frame from outside`,
+      avoid: `the infant is seen strictly from behind, only the back of the head visible; the only limbs in frame are her own two hands`,
       pace: `slow and deliberate`,
     },
     {
       role: `rhythm: a steady gentle repeated motion — swaying, patting — the kind that only works because it is boring, only the back of the small head visible`,
       camera: `moving in slowly toward the repeating hand`,
-      avoid: `never show the infant's face; no jerky motion`,
+      avoid: `the infant stays seen from behind, and the motion stays smooth throughout`,
       pace: `hypnotic, tender`,
     },
     {
@@ -824,7 +855,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     {
       role: `the payoff on the person: a directed, believable reaction caused by that result, framed as a portrait beat`,
       camera: `very slow dolly-in on the person`,
-      avoid: `no head bobbing, no abrupt expression changes`,
+      avoid: `her head stays steady and her expression shifts gradually`,
       pace: `calm and intimate`,
     },
   ];
@@ -837,25 +868,25 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     {
       role: `the product's material in extreme macro — texture, viscosity, or surface catching the light, filling the frame`,
       camera: `slow lateral tracking across the surface`,
-      avoid: `no people, no hands, no jitter`,
+      avoid: `a product-only frame, held locked and steady`,
       pace: `unhurried, deliberate`,
     },
     {
       role: `an abstract visualisation of how it works: light, particles or structure suggesting the mechanism, dreamlike rather than literal`,
       camera: `slow forward dolly diving into the material`,
-      avoid: `no people, no anatomy, no flicker`,
+      avoid: `a product-only frame with steady exposure`,
       pace: `slow and continuous`,
     },
     {
       role: `the result the product leaves behind, observed in a clean beauty-shot close-up, lit to be read instantly`,
       camera: `static frame with a subtle rack focus landing on the detail`,
-      avoid: `no people, no exaggerated motion`,
+      avoid: `a product-only frame with restrained motion`,
       pace: `still, letting the detail be read`,
     },
     {
       role: `the product resting in an art-directed setting that suggests where it belongs, still the only subject in frame`,
       camera: `very slow push-in on the product`,
-      avoid: `no people, no drift`,
+      avoid: `a product-only frame with the camera locked off`,
       pace: `calm and composed`,
     },
   ];
@@ -953,7 +984,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         `walking toward camera in gentle slow motion with the fabric lifting and trailing, the whole garment ` +
         `visible head to toe, then coming to a stop so the fabric settles into a calm drape by itself`;
       camera = `slow steady approach, then locks off once she stops`;
-      avoid = `never end on the garment hanging still on a hanger or laid flat — that kills the premise; do not crop the silhouette`;
+      avoid = `the garment is still moving as the shot ends — in motion on the body, rather than resting on a hanger or laid flat — and the full silhouette stays inside the frame`;
       pace = `unhurried, cinematic`;
     } else if (i === numShots - 1) {
       // Packshot = PRODUK SAJA. Itu memang yang dilakukan TVC sungguhan di
@@ -963,7 +994,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       role =
         `the hero shot: the product completely alone in frame, front-facing and centred on a clean, deliberately lit ` +
         `surface or seamless backdrop, filling roughly a third of frame — the packshot a brand would sign off on. ` +
-        `No people, no hands, no body parts anywhere in the frame`;
+        `The frame holds only the product and the surface it rests on`;
       // Penutup dikunci diam. Referensi menyebutnya eksplisit ("hold the final
       // frame"), dan itu masuk akal: packshot yang masih bergeser di detik
       // terakhir membuat seluruh iklan terasa belum selesai.
@@ -1008,7 +1039,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       // ditetapkan, deskripsinya TIDAK BOLEH berubah antar shot — itu yang
       // menjaga wajah tetap sama, bukan mendeskripsikan ulang orangnya dengan
       // kata berbeda di tiap beat. Hanya disebut bila memang ada orang.
-      `${tanpaOrang ? `Not a single person appears in this shot — no face, no hands, no arms, no silhouette. ` : `This is the SAME woman from the earlier shots, seen at a LATER MOMENT — same face, same hair, same outfit. She exists only ONCE inside this frame: the continuity runs across time between shots, never as a side-by-side comparison within a single frame. `}` +
+      `${tanpaOrang ? `This shot is product-only: the frame holds just the product, its surface, and the light on it. ` : `This is the SAME woman from the earlier shots, seen at a LATER MOMENT — same face, same hair, same outfit. She exists only ONCE inside this frame: the continuity runs across time between shots, never as a side-by-side comparison within a single frame. `}` +
       `${TVC_IDENTITY} ${TVC_STYLE_LOCK}`
     ), tanpaOrang };
   };
@@ -1051,7 +1082,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Tanpa model: subjeknya PRODUK, bukan orang. Memakai promptSeed persona
     // di sini akan tetap memanggil manusia ke frame walau beat-nya makro.
     const subject = input.noModel && format === "tvc"
-      ? `"${input.productName}" itself as the sole subject, no people anywhere in frame`
+      ? `"${input.productName}" itself as the sole subject, the frame belonging entirely to the product`
       : format === "talking_head" || format === "tvc" || format === "ads"
       ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
       : input.category.handsPrompt;
@@ -1113,7 +1144,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const HEAD_MIDDLE = [
       `Close cutaway on presenter's hands as she ${demoAction}, her face out of tight focus and NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
       `Macro close-up of the product's texture where it has just been used, filling most of the frame, the presenter out of focus behind, NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
-      `Presenter looking down at the result with a genuinely pleased reaction, NOT talking, mouth relaxed and closed, the product held in frame with its label facing camera, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`,
+      `Presenter looking down at the result with a genuinely pleased reaction, lips closed and relaxed throughout — listening rather than speaking, the product held in frame with its label facing camera, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`,
       `Close cutaway on the presenter's hands slowly turning the product to show a different side of it, label kept readable throughout, her face out of tight focus and NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
     ];
     // Beat template UGC. Menimpa beat generik HANYA untuk job yang memang
@@ -1229,8 +1260,8 @@ export function planShots(input: ShotPlanInput): VisualSpec {
               // rileks/senyum tipis, bukan sinkron kata) — mayoritas durasi jadi
               // cutaway demo tangan/produk (mulut tak jadi fokus), seperti video
               // UGC editan asli yang memotong ke b-roll saat VO jalan.
-              ? `Presenter holds "${input.productName}" up to the camera at chest height with a warm delighted reaction — NOT talking, mouth relaxed in a soft closed-lip smile, not synced to any words — product label facing camera, then the camera lingers on a close cutaway of her hands as she ${demoAction} (her face out of tight focus during this part), ending with her looking back up at the camera with a warm inviting smile and a small nod, still not talking, ${IDENTITY_INSTRUCTION}`
-              : `Presenter holding "${input.productName}" up to the camera at chest height with a warm reaction, NOT talking, mouth relaxed and closed, ${IDENTITY_INSTRUCTION}`
+              ? `Presenter holds "${input.productName}" up to the camera at chest height with a warm delighted reaction — lips closed and relaxed in a soft closed-lip smile, listening rather than speaking — product label facing camera, then the camera lingers on a close cutaway of her hands as she ${demoAction} (her face softly out of focus during this part), ending with her looking back up at the camera with a warm inviting smile and a small nod, lips still closed, ${IDENTITY_INSTRUCTION}`
+              : `Presenter holding "${input.productName}" up to the camera at chest height with a warm reaction, lips closed and relaxed, listening rather than speaking, ${IDENTITY_INSTRUCTION}`
             : isClosing
               ? `Presenter smiling warmly, NOT talking, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
               : HEAD_MIDDLE[midIdx % HEAD_MIDDLE.length]
@@ -1253,7 +1284,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
           // seharusnya jadi puncak kehilangan bobotnya. Busur produk
           // idle -> partial -> hero itu yang membuat beat terakhir terasa
           // seperti penutup, bukan pengulangan.
-          ? `The video starts ALREADY in motion, but the hands are NOT holding the product yet: "${input.productName}" is already sitting in frame, still and untouched, while her hands move in the space beside it — reaching, resting, or adjusting something near it. The product stays put for the first beats and is picked up only later. NOT a static product photo, no frozen opening beat, and NOT a packshot: the product is present but idle, its label not yet presented to camera, ${IDENTITY_INSTRUCTION}`
+          ? `The video starts ALREADY in motion, with her hands busy in the space beside the product — reaching, resting, or adjusting something near it: "${input.productName}" is already sitting in frame, still and untouched, and stays put for the first beats before being picked up later. The frame keeps moving from the very first instant, and the product stays idle in the background of the action, its label still turned away from camera, ${IDENTITY_INSTRUCTION}`
           : isClosing
             ? `Hands holding the product steady near the bottom of frame in a closing, inviting gesture, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
             // r13 (Brian 2026-08-07, evidenced via render 45fe92ad): shot demo
@@ -1432,12 +1463,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             // Tanpa model, menyebut "any person on screen" justru memanggil
             // orang kembali ke frame yang seharusnya murni produk — kalimat
             // itu ditulis untuk kasus ADA presenter, dan di sini merugikan.
-            ? `A composed, confident Indonesian brand voiceover is heard over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm but never chatty or salesy. The narrator is never seen; nobody appears on screen: "${dialogue}". `
-            : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm but never chatty or salesy; any person on screen acts and reacts but is NOT lip-syncing these words: "${dialogue}". `
+            // Ditulis positif: menyebut "nobody appears on screen" justru
+            // memanggil orang ke frame yang seharusnya murni produk.
+            ? `A composed, confident Indonesian brand voiceover is heard over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed. The narration stays entirely off-screen while the frame keeps to the product: "${dialogue}". `
+            : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed; the voice comes from off-screen while anyone in frame keeps their lips closed and simply acts and reacts: "${dialogue}". `
         : format === "hands_only"
-        ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting, never rushed (the speaker is NEVER visible — off-screen narration only, keep the shot strictly hands and product): "${dialogue}". `
+        ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to hands and product): "${dialogue}". `
         : lipSyncPresenter
-          ? `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting with a friend, never rushed or salesy, saying: "${dialogue}". `
+          ? `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting with a friend, easy and unsalesy, saying: "${dialogue}". `
           : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally with her lips closed and relaxed throughout, listening rather than speaking: "${dialogue}". `;
     const pacing =
       format === "tvc"
@@ -1519,6 +1552,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       .trim();
     negativePrompt = `${negativePrompt}, ${HANDS_ONLY_NEGATIVE}`;
   }
+  // SATU pembersih di ujung, bukan disiplin yang harus diingat di sepuluh
+  // tempat penyusunan di atas. Lihat frasaNegatifBersih.
+  negativePrompt = frasaNegatifBersih(negativePrompt);
 
   // Rute TVC yang premisnya menahan produk di awal. Dipisah jadi variabel
   // supaya alasannya bisa dibaca di satu tempat, bukan tersembunyi di dalam

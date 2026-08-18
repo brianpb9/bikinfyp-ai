@@ -60,8 +60,18 @@ const ORANG_KEDUA = /\b(another|second|other)\s+(person|woman|man|figure|orang)\
  * screen" dan "no watermark" adalah negative prompt yang memang kita butuhkan
  * dan tidak boleh ikut tertangkap.
  */
-const KATA_ORANG = "person|people|resident|residents|woman|women|man|men|face|faces|figure|figures|orang|penghuni|wajah|dia";
-const NEGASI = "no|not|never|without|tanpa|tidak|nggak|bukan";
+const KATA_ORANG =
+  "person|people|resident|residents|woman|women|man|men|face|faces|figure|figures|silhouette|silhouettes|" +
+  "speaker|speakers|presenter|model|models|head|heads|hand|hands|arm|arms|limb|limbs|lip|lips|mouth|body|anatomy|" +
+  "orang|penghuni|wajah|wajahnya|kepala|tangan|lengan|bibir|mulut|badan|siluet|dia";
+/**
+ * Bentuk negasi yang dilewatkan versi pertama, dan semuanya nyata di prompt
+ * kami sendiri (reviewer ronde 3, oracle independen): "tak", "gak", dan
+ * "no one"/"nobody" yang objeknya bukan kata orang mana pun di daftar atas.
+ */
+const NEGASI = "no|not|never|without|none|nor|neither|tanpa|tidak|tak|gak|nggak|bukan|jangan";
+/** Negasi yang objeknya manusia TANPA menyebut kata orangnya. */
+const NEGASI_TANPA_OBJEK = /\b(?:no one|no-one|noone|nobody|not a single (?:person|soul)|tak seorang pun|tidak ada orang)\b/gi;
 /**
  * DUA arah, bukan satu.
  *
@@ -84,12 +94,28 @@ const NEGASI_ORANG: RegExp[] = [
   new RegExp(`\\b(?:${KATA_ORANG}|${KATA_GANTI})\\b(?:\\s+\\w+){0,3}\\s+\\b(?:${NEGASI})\\b`, "gi"),
 ];
 
-/** Periksa satu potongan teks (prompt shot, start_state, atau visual direction). */
-export function periksaPemicu(teks: string): TemuanPemicu[] {
+export interface KonteksPemicu {
+  /** Nama produk. Kata pemicu yang MEMANG bagian namanya bukan sinyal. */
+  namaProduk?: string | null;
+}
+
+/**
+ * Periksa satu potongan teks (prompt shot, start_state, atau visual direction).
+ *
+ * `namaProduk` bukan kelonggaran, melainkan koreksi sinyal (reviewer ronde 3):
+ * "Bright Shower Gel" dan "Sabun Mandi Harian" membuat 21 dari 21 shot mereka
+ * diblokir — bukan karena adegannya berisiko, tapi karena produknya bernama
+ * demikian, dan namanya memang muncul di setiap prompt. Menghukumnya berarti
+ * memblokir seluruh kategori sabun, persis pola kesalahan yang sudah dua kali
+ * terjadi di repo ini. Negasi tentang orang TIDAK ikut dimaafkan: itu cacat
+ * penulisan, bukan nama produk.
+ */
+export function periksaPemicu(teks: string, konteks: KonteksPemicu = {}): TemuanPemicu[] {
   const temuan: TemuanPemicu[] = [];
+  const nama = (konteks.namaProduk ?? "").toLowerCase();
   for (const { pola, saran } of KOSAKATA) {
     const m = teks.match(pola);
-    if (m) temuan.push({ jenis: "kosakata", cocok: m[0], saran });
+    if (m && !(nama && nama.includes(m[0].toLowerCase()))) temuan.push({ jenis: "kosakata", cocok: m[0], saran });
   }
   if (PINTU_KAMAR_MANDI.test(teks) && ORANG_KEDUA.test(teks)) {
     temuan.push({
@@ -99,7 +125,7 @@ export function periksaPemicu(teks: string): TemuanPemicu[] {
     });
   }
   const sudah = new Set<string>();
-  for (const pola of NEGASI_ORANG) {
+  for (const pola of [...NEGASI_ORANG, NEGASI_TANPA_OBJEK]) {
     for (const m of teks.matchAll(pola)) {
       // Dua arah bisa mencocoki potongan yang sama; laporkan sekali saja.
       const kunci = m[0].toLowerCase();

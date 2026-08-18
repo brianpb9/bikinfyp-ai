@@ -42,13 +42,22 @@ test("TVC: shot berorang dikunci satu, shot penutup tanpa orang tidak dikunci", 
   }
   const penutup = s.shots[s.shots.length - 1].prompt;
   assert.doesNotMatch(penutup, /EXACTLY ONE person/i, "penutup packshot tidak boleh ikut dikunci satu orang");
-  assert.match(penutup, /Not a single person/i, "penutup packshot harus melarang orang");
+  // Ditulis POSITIF (reviewer ronde 3): "not a single person appears" adalah
+  // negasi yang menyebut orang — bentuk kalimat yang justru memanggil orang
+  // ke frame. Yang dinyatakan sekarang apa yang ADA di frame.
+  assert.match(penutup, /product-only/i, "penutup packshot harus menyatakan frame-nya milik produk");
+  assert.doesNotMatch(penutup, /not a single person|no people|no hands/i, "negasi tentang orang tidak boleh kembali");
 });
 
 test("TVC melarang orang kedua di negative prompt", () => {
   const s = spec({ format: "tvc", tvcRoute: "fabric", shots: 5 });
   assert.match(s.negativePrompt, /\bsecond person\b/i, "TVC tanpa pengecualian orang kedua — ini video yang gagal");
-  assert.match(s.negativePrompt, /exactly two hands/i, "TVC tanpa larangan tangan berlebih");
+  assert.match(s.negativePrompt, /extra hands|third hand/i, "TVC tanpa larangan tangan berlebih");
+  // "exactly two hands" DILARANG ada di sini (reviewer ronde 3): BytePlus
+  // mengirim field ini sebagai "Negative: ...", jadi menaruhnya di sini
+  // menyuruh model menghindari kondisi yang justru kita inginkan.
+  assert.doesNotMatch(s.negativePrompt, /exactly two hands/i,
+    "kondisi yang diinginkan tidak boleh berada di daftar hindari");
 });
 
 test("kunci anatomi ditulis POSITIF, bukan cuma sebagai larangan", () => {
@@ -133,7 +142,7 @@ test("penutup TVC: packshot tanpa orang, tanpa perintah yang bertentangan", () =
   for (const rute of ["luxury", "intimate", "reallife"]) {
     const s = spec({ format: "tvc", tvcRoute: rute, shots: 4 });
     const penutup = s.shots[s.shots.length - 1].prompt;
-    assert.ok(penutup.includes("Not a single person"), `${rute}: penutup harus melarang orang`);
+    assert.ok(penutup.includes("product-only"), `${rute}: penutup harus menyatakan frame-nya milik produk`);
     assert.ok(!penutup.includes("EXACTLY ONE person"), `${rute}: kunci "tepat satu orang" tidak boleh ada di shot tanpa orang`);
     assert.ok(!penutup.includes("same person, same face"), `${rute}: baris identitas orang tidak boleh ada di shot tanpa orang`);
     // Shot tengah TETAP menampilkan orang dan TETAP dikunci satu.
@@ -159,7 +168,8 @@ test("hands_only mengunci tepat dua tangan milik satu orang", () => {
   const s = spec({ format: "hands_only" });
   for (const sh of s.shots) {
     assert.match(sh.prompt, /Exactly two hands are visible/i, `shot ${sh.index}: tanpa kunci jumlah tangan`);
-    assert.match(sh.prompt, /No third hand ever enters the frame/i, `shot ${sh.index}: tanpa larangan tangan ketiga`);
+    // Batas jumlah tangan dipertahankan, tapi sebagai pernyataan positif.
+    assert.match(sh.prompt, /stays at exactly two hands from the first frame to the last/i, `shot ${sh.index}: tanpa batas jumlah tangan`);
     // Tugas tangan harus BERJUMLAH DUA, bukan tiga. Render berbayar 2026-08-13
     // membuktikan larangan saja tidak cukup: promptnya sendiri membagikan tiga
     // tugas — memegang (baris persona), mengoperasikan, dan menadah (kunci) —

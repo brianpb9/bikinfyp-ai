@@ -108,10 +108,14 @@ test("setiap shot menyatakan sikap soal kehadiran orang", async () => {
   for (const tpl of CAMPAIGN_TEMPLATES) {
     if (tpl.format !== "tvc") continue; // TVC: satu-satunya yang punya shot sengaja tanpa orang
     for (const shot of (await rencana(tpl)).shots) {
+      // Ketiga bentuk "tanpa orang" kini ditulis POSITIF (reviewer ronde 3):
+      // menyebut orang di dalam negasi adalah cara paling efektif memanggilnya
+      // ke frame. Yang dijaga tetap sama — tiap shot menyatakan sikapnya.
       const menyatakan =
-        /Not a single person appears/i.test(shot.prompt) ||
+        /product-only/i.test(shot.prompt) ||
         /EXACTLY ONE person is present/i.test(shot.prompt) ||
-        /no people anywhere in frame/i.test(shot.prompt) ||
+        /frame belonging entirely to the product/i.test(shot.prompt) ||
+        /frame holds only the product/i.test(shot.prompt) ||
         /SAME woman from the earlier shots/i.test(shot.prompt);
       if (!menyatakan) bisu.push(`${tpl.id} shot ${shot.index + 1}`);
     }

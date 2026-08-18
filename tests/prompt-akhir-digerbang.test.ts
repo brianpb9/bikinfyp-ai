@@ -63,6 +63,12 @@ test("worker MEMBLOKIR, bukan mencatat", async () => {
   const fsx = await import("node:fs");
   const src = fsx.readFileSync("lib/postgres/worker.ts", "utf8");
   assert.match(src, /DIHENTIKAN sebelum provider/, "harus menghentikan job");
-  assert.match(src, /throw new Error\(`Prompt akhir memicu/, "harus melempar, bukan warn");
-  assert.match(src, /periksaPemicu\(spec\.negativePrompt\)/, "negative prompt ikut diperiksa");
+  assert.match(src, /throw new Error\(`Prompt akhir memuat negasi/, "harus melempar, bukan warn");
+  assert.match(src, /periksaPemicu\(spec\.negativePrompt, \{ namaProduk \}\)/, "negative prompt ikut diperiksa");
+  // Urutan: arsip DULU, gerbang kemudian (reviewer ronde 3) — prompt yang
+  // dihentikan justru yang paling perlu dibedah.
+  assert.ok(src.indexOf("pgSimpanArsipPrompt") < src.indexOf("DIHENTIKAN sebelum provider"),
+    "arsip harus ditulis sebelum gerbang melempar");
+  // vo_broll tidak memanggil penyedia video sama sekali.
+  assert.match(src, /if \(format !== "vo_broll"\) \{\n\s+const namaProduk/, "gerbang tidak berlaku untuk vo_broll");
 });
