@@ -1,8 +1,9 @@
 import crypto from "node:crypto";
 import { config } from "@/lib/config";
 import { ERR, errorResponse } from "@/lib/errors";
-import { GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
+import { GOOGLE_NEXT_COOKIE, GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
 import { cookieState } from "@/lib/cookies";
+import { tujuanAman } from "@/lib/tujuan-login";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export const dynamic = "force-dynamic";
 // GET /api/auth/google — mulai login Google, redirect ke consent screen.
 // Alternatif email OTP yang sudah ada, bukan pengganti (keputusan Brian
 // 2026-08-03: dua-duanya tetap ada).
-export async function GET() {
+export async function GET(req: Request) {
   try {
     if (!config.googleOauthClientId) throw ERR.BAD_REQUEST("Login Google belum dikonfigurasi.", "Google OAuth not configured.");
     if (!config.appBaseUrl) throw ERR.BAD_REQUEST("APP_BASE_URL belum diisi.", "APP_BASE_URL not configured.");
@@ -25,16 +26,18 @@ export async function GET() {
     authUrl.searchParams.set("state", state);
     authUrl.searchParams.set("prompt", "select_account");
 
-    return new Response(null, {
-      status: 302,
-      headers: {
-        location: authUrl.toString(),
-        // 10 min TTL — just long enough for the user to complete the Google
-        // consent screen. SameSite=Lax so it still rides along on the
-        // top-level redirect back from accounts.google.com.
-        "set-cookie": cookieState(GOOGLE_OAUTH_STATE_COOKIE, state, 600),
-      },
-    });
+    // TUJUAN dititipkan di cookie, bukan di parameter state.
+    //
+    // state dipakai untuk anti-CSRF dan dibandingkan apa adanya; menempelkan
+    // data lain ke dalamnya membuat perbandingan itu lebih longgar. Cookie
+    // terpisah dengan umur yang sama menjaga dua urusan tetap dua urusan.
+    const next = tujuanAman(new URL(req.url).searchParams.get("next"));
+
+    const headers = new Headers({ location: authUrl.toString() });
+    headers.append("set-cookie", cookieState(GOOGLE_OAUTH_STATE_COOKIE, state, 600));
+    if (next) headers.append("set-cookie", cookieState(GOOGLE_NEXT_COOKIE, next, 600));
+    return new Response(null, { status: 302, headers });
+
   } catch (err) {
     return errorResponse(err);
   }

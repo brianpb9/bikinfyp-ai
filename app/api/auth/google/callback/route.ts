@@ -1,8 +1,9 @@
 import { config } from "@/lib/config";
+import { tujuanSesudahLogin } from "@/lib/tujuan-login";
 import { findOrCreateUserByEmail, issueToken, cookieName, SESSION_MAX_AGE_SEC } from "@/lib/auth";
 import { audit } from "@/lib/db";
 import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
-import { GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
+import { GOOGLE_NEXT_COOKIE, GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
 import { cookieSesi, cookieHapus } from "@/lib/cookies";
 
 export const runtime = "nodejs";
@@ -83,7 +84,13 @@ export async function GET(req: Request) {
     else audit(user.id, "auth.google_login", "users", user.id, {});
 
     const token = await issueToken(user.id, user.email ?? "");
-    const home = new URL("/", config.appBaseUrl || "http://localhost:3210");
+    // Kembali ke tujuan yang tadi diminta (FLOW-02). Dibersihkan ulang di sini
+    // walau sudah dibersihkan saat disimpan: cookie bisa disunting pemiliknya,
+    // dan pemeriksaan di pintu keluar yang menentukan ke mana orang benar-benar
+    // dikirim.
+    const nextCookie = req.headers.get("cookie")?.match(/racun_google_next=([^;]+)/)?.[1];
+    const tujuan = tujuanSesudahLogin(nextCookie ? decodeURIComponent(nextCookie) : null);
+    const home = new URL(tujuan, config.appBaseUrl || "http://localhost:3210");
     // Two separate Set-Cookie headers — comma-joining into one string (an
     // earlier draft of this route did that) is not spec-compliant and
     // browsers won't parse it as two cookies. Headers.append is the correct
@@ -91,6 +98,7 @@ export async function GET(req: Request) {
     const headers = new Headers({ location: home.toString() });
     headers.append("set-cookie", cookieSesi(cookieName(), token, SESSION_MAX_AGE_SEC));
     headers.append("set-cookie", cookieHapus(GOOGLE_OAUTH_STATE_COOKIE));
+    headers.append("set-cookie", cookieHapus(GOOGLE_NEXT_COOKIE));
     return new Response(null, { status: 302, headers });
   } catch {
     return loginFailedRedirect("unexpected_error");

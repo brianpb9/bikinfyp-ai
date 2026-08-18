@@ -17,6 +17,7 @@ import { Loader2, MessageCircle, Send } from "lucide-react";
 export function FormAkses({ email, whatsapp }: { email: string | null; whatsapp: string | null }) {
   const [kirim, setKirim] = useState(false);
   const [selesai, setSelesai] = useState(false);
+  const [notified, setNotified] = useState(false);
   const [galat, setGalat] = useState<string | null>(null);
   const [form, setForm] = useState({ nama: "", brand: "", situs: "", whatsapp: "", volume: "" });
 
@@ -35,6 +36,10 @@ export function FormAkses({ email, whatsapp }: { email: string | null; whatsapp:
       });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.message_id ?? "Gagal mengirim permintaan.");
+      // Janji waktu HANYA kalau jalur notifikasinya benar-benar jalan.
+      // Menjanjikan 1x24 jam saat email ke tim gagal berarti menaruh
+      // kekecewaan di kalender pengguna.
+      setNotified(body.notified === true);
       setSelesai(true);
     } catch (err) {
       setGalat(err instanceof Error ? err.message : "Gagal mengirim permintaan.");
@@ -52,8 +57,9 @@ export function FormAkses({ email, whatsapp }: { email: string | null; whatsapp:
       <div className="space-y-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/10 p-5 text-left">
         <p className="font-bold text-emerald-300">Permintaanmu sudah masuk.</p>
         <p className="text-sm text-zinc-300">
-          Tim kami menghubungi lewat email{email ? ` (${email})` : ""} — biasanya dalam 1×24 jam kerja.
-          Kalau butuh lebih cepat, chat WhatsApp kami.
+          {notified
+            ? <>Tim kami menghubungi lewat email{email ? ` (${email})` : ""} — biasanya dalam 1×24 jam kerja.</>
+            : <>Permintaanmu tersimpan, tapi notifikasi ke tim kami sedang bermasalah. Supaya cepat ditangani, chat WhatsApp kami ya.</>}
         </p>
         {waLink && (
           <a href={waLink} target="_blank" rel="noreferrer"

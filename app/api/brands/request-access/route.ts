@@ -63,9 +63,10 @@ export async function POST(req: Request) {
     // Notifikasi ke tim. Gagal kirim TIDAK menggagalkan permintaan: yang
     // penting jejaknya sudah tersimpan — email cuma cara kami tahu lebih cepat.
     const tujuan = daftarAdmin()[0] ?? config.resendFromEmail;
+    let emailTerkirim = false;
     if (config.resendApiKey && tujuan) {
       try {
-        await fetch("https://api.resend.com/emails", {
+        const res = await fetch("https://api.resend.com/emails", {
           method: "POST",
           headers: { "content-type": "application/json", authorization: `Bearer ${config.resendApiKey}` },
           body: JSON.stringify({
@@ -84,12 +85,17 @@ export async function POST(req: Request) {
           }),
           signal: AbortSignal.timeout(8000),
         });
+        // STATUSNYA DIPERIKSA (audit ulang SUPPORT-01). fetch yang cuma
+        // dibungkus try/catch tetap "berhasil" pada 401/429/500 — dan kita
+        // menjanjikan "tim akan menghubungi" padahal timnya tidak pernah tahu.
+        emailTerkirim = res.ok;
+        if (!res.ok) console.warn(`[request-access] Resend menolak: HTTP ${res.status}`);
       } catch (err) {
         console.warn(`[request-access] email tim gagal dikirim (permintaan tetap tersimpan): ${(err as Error).message}`);
       }
     }
 
-    return Response.json({ ok: true, whatsapp: config.supportWhatsapp || null });
+    return Response.json({ ok: true, notified: emailTerkirim, whatsapp: config.supportWhatsapp || null });
   } catch (err) {
     return errorResponse(err);
   }

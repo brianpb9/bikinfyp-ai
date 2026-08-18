@@ -46,6 +46,47 @@ const TOPUPS = [
 export function CreditPlans() {
   const [mode, setMode] = useState<"subscription" | "topup">("subscription");
   const [picked, setPicked] = useState<string | null>(null);
+  /**
+   * Tombolnya DULU tidak melakukan apa pun — tanpa onClick, tanpa request,
+   * tanpa jejak (audit ulang MONEY-UI-01). Brand yang memilih paket jutaan
+   * rupiah menekannya, lalu tidak terjadi apa-apa dan tidak ada yang tahu ia
+   * pernah menekan. Itu kebocoran di titik monetisasi tertinggi produk ini.
+   */
+  const [kirim, setKirim] = useState(false);
+  const [hasil, setHasil] = useState<{ ok: boolean; pesan: string; whatsapp?: string | null } | null>(null);
+
+  async function ajukan() {
+    if (!picked) return;
+    const semua = [...SUBSCRIPTIONS.map((p) => ({ id: p.id, label: p.name, harga: p.priceIdr, token: p.tokenIdr })),
+      ...TOPUPS.map((t) => ({ id: t.id, label: `Top-up ${rupiah(t.priceIdr)}`, harga: t.priceIdr, token: t.tokenIdr }))];
+    const dipilih = semua.find((x) => x.id === picked);
+    setKirim(true);
+    setHasil(null);
+    try {
+      const res = await fetch("/api/brands/package-request", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({
+          paket: picked,
+          label: dipilih?.label ?? picked,
+          // Angka YANG TERLIHAT saat ditekan ikut dikirim — lihat rutenya.
+          harga_idr: dipilih?.harga ?? null,
+          token_idr: dipilih?.token ?? null,
+        }),
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(body.message_id ?? "Pengajuan gagal dikirim.");
+      setHasil({
+        ok: true,
+        pesan: `Pengajuan paket ${dipilih?.label ?? picked} sudah kami terima. Tim menghubungi maksimal 1 hari kerja.`,
+        whatsapp: body.whatsapp ?? null,
+      });
+    } catch (err) {
+      setHasil({ ok: false, pesan: err instanceof Error ? err.message : "Pengajuan gagal dikirim." });
+    } finally {
+      setKirim(false);
+    }
+  }
 
   return (
     <div className="space-y-6">
@@ -128,16 +169,34 @@ export function CreditPlans() {
 
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm">
         <p className="max-w-md text-xs leading-5 text-zinc-500">
-          Pembayaran mandiri untuk organisasi belum aktif. Pilih paketnya, lalu tim kami yang
-          mengisikan tokennya dan mengatur penagihan — biasanya di hari yang sama.
+          Paket early access — angkanya penawaran, dikonfirmasi tim sebelum ditagih. Pembayaran
+          mandiri untuk organisasi belum aktif: pilih paketnya, lalu tim kami yang mengisikan
+          tokennya dan mengatur penagihan.
         </p>
         <button
-          disabled={!picked}
+          type="button"
+          disabled={!picked || kirim}
+          onClick={ajukan}
           className={BTN_PRIMARY}
         >
-          {picked ? "Ajukan paket ini" : "Pilih paket dulu"}
+          {kirim ? "Mengirim…" : picked ? "Ajukan paket ini" : "Pilih paket dulu"}
         </button>
       </div>
+
+      {hasil && (
+        <div className={`rounded-2xl border p-4 text-sm ${hasil.ok ? "border-emerald-200 bg-emerald-50 text-emerald-800" : "border-red-200 bg-red-50 text-red-700"}`}>
+          <p className="font-semibold">{hasil.pesan}</p>
+          {hasil.ok && hasil.whatsapp && (
+            <a
+              href={`https://wa.me/${hasil.whatsapp.replace(/[^0-9]/g, "")}`}
+              target="_blank" rel="noreferrer"
+              className="mt-1 inline-block font-semibold underline underline-offset-2"
+            >
+              Butuh lebih cepat? Chat WhatsApp
+            </a>
+          )}
+        </div>
+      )}
     </div>
   );
 }

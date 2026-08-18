@@ -37,16 +37,25 @@ jobs:
       - run: npm test
       - run: npm run build
 
-  # GERBANG KATALOG, dipisah dari `verify` dengan sengaja.
+  # AUDIT UTANG KATALOG — pengukur, BUKAN gerbang deploy.
   #
-  # Keputusan Brian 18 Agu (opsi a): suara copy dimiliki Brian/copywriter, dan
-  # audit ini jadi gerbang rilis keras — merahnya TIDAK boleh dinormalkan lewat
-  # rewrite mekanis. Sampai 116 varian ditulis ulang, job ini memang merah.
+  # Dinamai ulang dari "gerbang rilis keras" (audit ulang 18 Agu, RELEASE-01):
+  # job ini merah sejak dibuat dan deploy tetap berjalan — dan alarm yang
+  # selalu merah tapi selalu boleh dilewati bukan gate, itu papan utang.
+  # Menyebutnya gate sambil melewatinya tiap deploy mengajari semua orang
+  # bahwa kata "gate" di repo ini boleh diabaikan.
   #
-  # Dipisah supaya `verify` tetap punya arti. Alarm yang selalu menyala berhenti
-  # dibaca, dan kalau utang copy ini menenggelamkan sinyal tes & build, cacat
-  # BARU akan lewat tanpa ada yang sadar.
-  catalog:
+  # Yang SEBENARNYA menjaga produk dari utang ini sudah jalan di runtime:
+  # naskah cadangan yang gagal gate ditandai degraded dan DITOLAK dirender
+  # (bukan dikirim diam-diam), dan galeri template menandai 29 template yang
+  # copy cadangannya belum siap (KATALOG_BUTUH_COPY, dijaga tes agar tidak
+  # basi). Job ini tinggal mengukur sisanya: angkanya harus TURUN setiap kali
+  # copy ditulis ulang, dan tes script-catalog-audit menjaga tidak ada JENIS
+  # kegagalan baru menyusup di balik utang lama.
+  #
+  # Suara copy tetap milik Brian/copywriter (keputusan 18 Agu, opsi a) —
+  # merahnya tidak boleh dinormalkan lewat rewrite mekanis.
+  catalog-debt-audit:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

@@ -5,6 +5,8 @@ import { useRouter } from "next/navigation";
 import { apiFetch, ApiFail } from "../_components/api";
 import { PrimaryButton, ErrorText } from "../_components/ui";
 import { track } from "../_components/track";
+import { tujuanAman } from "@/lib/tujuan-login";
+import { ajakan, useKesiapan } from "../_components/kesiapan";
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   cancelled: "Login Google dibatalkan.",
@@ -52,26 +54,12 @@ function LazyClip({ src }: { src: string }) {
 export default function OnboardingPage() {
   const router = useRouter();
   const [step, setStep] = useState<1 | 2 | 3>(1);
-  /**
-   * CTA MEMBACA KEADAAN SISTEM.
-   *
-   * Selama intake ditutup, tombol lama tetap berkata "Bikin video pertama —
-   * gratis" dan pengunjung dibawa sampai unggah foto sebelum ditolak pesan
-   * maintenance. Kegagalan di langkah terakhir jauh lebih merusak kepercayaan
-   * daripada kalimat jujur di langkah pertama.
-   *
-   * Kalau health tidak terjawab, CTA-nya TIDAK berubah — ketidaktahuan bukan
-   * alasan menakut-nakuti pengunjung.
-   */
-  const [intakeTertutup, setIntakeTertutup] = useState(false);
-  useEffect(() => {
-    let batal = false;
-    fetch("/api/health")
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => { if (!batal && d && d.intake === "closed") setIntakeTertutup(true); })
-      .catch(() => undefined);
-    return () => { batal = true; };
-  }, []);
+  // KESIAPAN dibaca SEKALI untuk seluruh halaman — lihat useKesiapan().
+  // Versi sebelumnya cuma menjaga hero atas dengan boolean yang gagal-terbuka;
+  // CTA bawah tetap mengajak daftar saat intake ditutup, jadi satu halaman
+  // memberi dua jawaban untuk status sistem yang sama.
+  const kesiapan = useKesiapan();
+  const cta = ajakan(kesiapan);
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
   const [devHint, setDevHint] = useState<string | null>(null);
@@ -127,7 +115,11 @@ export default function OnboardingPage() {
       await apiFetch("/api/auth/verify-otp", { json: { email: email.trim(), code: code.trim() } });
       track("signup_success");
       // Datang dari /coba? Langsung ke form produk (data percobaan prefill di S2).
-      router.replace(sessionStorage.getItem("racun.try") ? "/bikin/produk" : "/");
+      // Tujuan yang tadi diminta MENANG (audit ulang FLOW-02): brand yang
+      // datang dari /brands harus kembali ke /dashboard, bukan ke beranda
+      // retail. Nilainya dibersihkan tujuanAman() — ia datang dari URL.
+      const diminta = tujuanAman(new URLSearchParams(window.location.search).get("next"));
+      router.replace(diminta ?? (sessionStorage.getItem("racun.try") ? "/bikin/produk" : "/"));
     } catch (err) {
       setError(err instanceof ApiFail ? err.message : "Kode salah. Coba lagi ya.");
       setLoading(false);
@@ -171,20 +163,18 @@ export default function OnboardingPage() {
                 <b className="text-zinc-900">Rp12.000</b> per video — jasa UGC biasanya sekitar Rp100–150 ribu.
               </p>
               <a
-                href={intakeTertutup ? "/coba" : "/onboarding#daftar"}
+                href={cta.href}
                 onClick={(e) => {
-                  if (intakeTertutup) { track("hero_cta_click", { intake: "closed" }); return; }
+                  if (!cta.mulaiDaftar) { track("hero_cta_click", { kesiapan }); return; }
                   e.preventDefault(); track("hero_cta_click"); setStep(2);
                 }}
+                aria-disabled={kesiapan === "memuat"}
                 className="mx-auto flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 px-6 text-lg font-extrabold text-white shadow-lg shadow-amber-500/25 active:bg-amber-600"
               >
-                {intakeTertutup ? "Lihat contoh skripnya — tanpa daftar" : "Bikin video pertama — gratis"}
+                {cta.label}
               </a>
-              {intakeTertutup && (
-                <p className="text-center text-sm text-zinc-500">
-                  Pembuatan video sedang ditutup sementara — kami sedang merapikan mesinnya.
-                  Contoh skrip tetap bisa dicoba sekarang.
-                </p>
+              {cta.catatan && (
+                <p className="text-center text-sm text-zinc-500">{cta.catatan}</p>
               )}
               {/* Magic moment tanpa daftar (2026-08-06): rasakan hasil dulu,
                   daftar belakangan. Turun jadi tautan kecil — dulu ini satu-
@@ -283,11 +273,20 @@ export default function OnboardingPage() {
           {/* "Coba Gratis" tidak menjelaskan apa yang gratis. Bonus daftar
               Rp12.000 kebetulan persis satu video bersuara, jadi janjinya bisa
               dibuat spesifik tanpa melebih-lebihkan. */}
-          <PrimaryButton big onClick={() => { track("bottom_cta_click"); setStep(2); }}>
-            Bikin video pertama — gratis
-          </PrimaryButton>
+          {cta.mulaiDaftar ? (
+            <PrimaryButton big onClick={() => { track("bottom_cta_click"); setStep(2); }}>
+              {cta.label}
+            </PrimaryButton>
+          ) : (
+            <a href={cta.href} onClick={() => track("bottom_cta_click", { kesiapan })}
+              className="flex min-h-[56px] w-full items-center justify-center rounded-2xl bg-amber-500 px-6 text-lg font-extrabold text-white shadow-lg shadow-amber-500/25 active:bg-amber-600">
+              {cta.label}
+            </a>
+          )}
           <p className="mt-2 text-center text-xs text-zinc-500">
-            Daftar dapat Rp12.000 — cukup untuk 1 video bersuara. Tanpa kartu kredit.
+            {cta.mulaiDaftar
+              ? "Daftar dapat Rp12.000 — cukup untuk 1 video bersuara. Tanpa kartu kredit."
+              : cta.catatan}
           </p>
           <button type="button" onClick={() => setStep(2)} className="mt-3 min-h-[44px] w-full text-center text-sm text-zinc-500">
             Sudah punya akun? Masuk
@@ -315,7 +314,11 @@ export default function OnboardingPage() {
               Foto yang kamu unggah diproses oleh penyedia AI di luar negeri untuk membuat videomu.
             </p>
             <a
-              href="/api/auth/google"
+              href={`/api/auth/google${
+                typeof window !== "undefined" && tujuanAman(new URLSearchParams(window.location.search).get("next"))
+                  ? `?next=${encodeURIComponent(tujuanAman(new URLSearchParams(window.location.search).get("next"))!)}`
+                  : ""
+              }`}
               className="flex min-h-[56px] w-full items-center justify-center gap-3 rounded-2xl border-2 border-zinc-200 bg-white text-base font-semibold text-zinc-700 active:bg-zinc-50"
             >
               <svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true">

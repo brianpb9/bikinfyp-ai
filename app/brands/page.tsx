@@ -6,7 +6,7 @@ import {
 export const metadata = {
   title: "BikinFYP Brands — Video iklan AI untuk brand Indonesia",
   description:
-    "Satu produk jadi 2–6 variasi video siap posting. Tinjau tiap adegan sebelum digabung, bayar pakai token, unduh sekaligus.",
+    "Satu produk jadi 2–6 variasi video siap ditinjau. Tinjau tiap adegan sebelum digabung, bayar pakai token, unduh sekaligus.",
 };
 
 // Halaman depan enterprise (permintaan Brian, referensi brand.ai + Sintra).
@@ -45,7 +45,7 @@ export default function BrandsLandingPage() {
           BikinFYP <span className="text-amber-500">Brands</span>
         </span>
         <Link
-          href="/dashboard"
+          href="/onboarding?audience=brand&next=%2Fdashboard"
           className="rounded-full bg-zinc-900 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-zinc-800"
         >
           Masuk
@@ -59,7 +59,7 @@ export default function BrandsLandingPage() {
             <h1 className="font-display text-4xl font-bold leading-[1.1] tracking-tight sm:text-5xl">
               Satu produk.
               <br />
-              <span className="text-amber-500">Enam video</span> siap posting.
+              <span className="text-amber-500">Enam video</span> siap ditinjau.
             </h1>
             <p className="mt-5 max-w-lg text-lg leading-8 text-zinc-600">
               Tanpa syuting, tanpa talent, tanpa nunggu agensi. Masukkan produkmu, pilih konsepnya,
@@ -67,7 +67,7 @@ export default function BrandsLandingPage() {
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-3">
               <Link
-                href="/dashboard"
+                href="/onboarding?audience=brand&next=%2Fdashboard"
                 className="inline-flex items-center gap-2 rounded-xl bg-amber-500 px-7 py-3.5 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400"
               >
                 Mulai sekarang <ArrowRight size={16} />
@@ -161,7 +161,7 @@ export default function BrandsLandingPage() {
           <div className="grid gap-10 lg:grid-cols-2">
             <div>
               <h2 className="font-display text-3xl font-bold tracking-tight">Termasuk di dalamnya</h2>
-              <p className="mt-2 text-zinc-600">Semua ini sudah jalan hari ini, bukan rencana.</p>
+              <p className="mt-2 text-zinc-600">Fitur-fitur ini sudah terpasang — akses dibuka bertahap selama early access.</p>
             </div>
             <ul className="space-y-3">
               {[
@@ -187,13 +187,13 @@ export default function BrandsLandingPage() {
           <div className="rounded-3xl bg-gradient-to-br from-zinc-900 to-zinc-950 p-10 text-center sm:p-14">
             <Film size={26} className="mx-auto text-amber-400" />
             <h2 className="mt-5 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              Produk pertamamu bisa jadi video hari ini
+              Produk pertamamu bisa mulai diproses hari ini
             </h2>
             <p className="mx-auto mt-3 max-w-lg text-zinc-400">
               Hubungi kami untuk membuka akses organisasi. Kami bantu sampai video pertamamu jadi.
             </p>
             <Link
-              href="/dashboard"
+              href="/onboarding?audience=brand&next=%2Fdashboard"
               className="mt-8 inline-flex items-center gap-2 rounded-xl bg-amber-500 px-8 py-4 text-sm font-bold text-zinc-950 transition-colors hover:bg-amber-400"
             >
               Mulai sekarang <ArrowRight size={16} />

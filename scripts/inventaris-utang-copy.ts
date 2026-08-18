@@ -8,7 +8,7 @@
  * sekarang, berapa yang muat, aturan mana yang dilanggar, dan kalimat mana
  * yang harus disentuh.
  *
- * Sumber angkanya AUDIT YANG SAMA dengan gerbang rilis
+ * Sumber angkanya AUDIT YANG SAMA dengan job CI catalog-debt-audit
  * (generateCatalogScriptAudit), bukan jalur generate kedua — dua jalur
  * penghitung akan menyimpang, dan yang menyimpang biasanya yang dipakai
  * mengambil keputusan.
@@ -69,7 +69,7 @@ for (const b of baris) for (const a of b.aturan) perAturan.set(a, (perAturan.get
 const potong = (t: string) => t.replace(/\|/g, "/").replace(/\[[^\]]*\]/g, "").replace(/\s+/g, " ").trim().slice(0, 72);
 
 console.log("# Utang copy katalog template\n");
-console.log(`Dihitung ${audit.generatedAt} dari audit yang sama dengan gerbang rilis.\n`);
+console.log(`Dihitung ${audit.generatedAt} dari audit yang sama dengan catalog-debt-audit di CI.\n`);
 console.log(`**${baris.length} dari ${total} varian** perlu ditulis ulang. Nama produk yang lebih panjang menggeser batas BAWAH, bukan batas atas.\n`);
 console.log("| Aturan | Varian | Artinya |");
 console.log("|---|---:|---|");

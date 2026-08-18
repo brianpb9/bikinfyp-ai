@@ -65,8 +65,8 @@ export default function HargaPage() {
       <section className="space-y-3">
         <h2 className="font-display text-lg font-bold text-zinc-900">Paket kredit</h2>
         <p className="text-xs leading-5 text-zinc-500">
-          Kamu membeli kredit dulu, lalu memakainya untuk membuat video. Kredit tidak punya masa
-          kedaluwarsa — bisa dipakai kapan saja.
+          Videonya dibayar pakai kredit. Kredit tidak punya masa kedaluwarsa — bisa dipakai
+          kapan saja. Selama early access, kredit ditambahkan tim kami, bukan dibeli mandiri.
         </p>
         <ul className="space-y-2">
           {PAKET_KREDIT.map((p) => (
@@ -96,9 +96,8 @@ export default function HargaPage() {
               mencobanya berakhir di jalan buntu — kekecewaan yang kita
               ciptakan sendiri di kalimat ini. */}
           <li>
-            Beli kredit lewat halaman Kredit — pembayaran diproses Midtrans.
-            <b> Saat ini pembelian mandiri belum dibuka</b>; kredit ditambahkan tim kami
-            selama masa akses awal.
+            Selama masa early access, kredit ditambahkan secara manual oleh tim BikinFYP.
+            Pembelian mandiri melalui Midtrans belum dibuka.
           </li>
           <li>Unggah foto produk atau tempel link produkmu, isi detail singkat.</li>
           <li>Kredit ditahan dulu, belum dipotong, sementara videomu dibuat.</li>
@@ -108,11 +107,14 @@ export default function HargaPage() {
       </section>
 
       <div className="flex gap-2">
+        {/* Halaman ini statis (dibaca calon pengguna DAN reviewer Midtrans),
+            jadi CTA-nya tidak membaca health — ia mengarah ke landing yang
+            CTA-nya health-aware, bukan langsung ke langkah daftar. */}
         <Link
-          href="/onboarding"
+          href="/"
           className="flex min-h-[56px] flex-1 items-center justify-center rounded-2xl bg-zinc-900 px-4 text-sm font-bold text-white"
         >
-          Mulai bikin video
+          Lihat cara kerjanya
         </Link>
       </div>
 
