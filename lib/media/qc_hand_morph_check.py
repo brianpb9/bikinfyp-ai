@@ -19,6 +19,13 @@ def features(filename):
     image = cv2.imread(filename)
     if image is None:
         raise ValueError("cannot read " + filename)
+    # Frame grayscale/beralpha tetap masuk lewat jalur yang sama: cvtColor
+    # BGR2YCrCb menuntut 3 kanal, dan frame satu kanal membuatnya melempar
+    # sebelum satu pun pemeriksaan berjalan.
+    if image.ndim == 2:
+        image = cv2.cvtColor(image, cv2.COLOR_GRAY2BGR)
+    elif image.shape[2] == 4:
+        image = cv2.cvtColor(image, cv2.COLOR_BGRA2BGR)
     h, w = image.shape[:2]
     # Conservative YCrCb skin range; only evaluates an actual skin-coloured
     # foreground large enough to plausibly be a hand/forearm.
@@ -36,11 +43,23 @@ def features(filename):
     perimeter = max(cv2.arcLength(contour, True), 1.0)
     valleys = 0
     hull_indices = cv2.convexHull(contour, returnPoints=False)
-    if hull_indices is not None and len(hull_indices) >= 4:
-        defects = cv2.convexityDefects(contour, hull_indices)
-        if defects is not None:
-            # Depth threshold relative to perimeter filters tiny mask noise.
-            valleys = sum(1 for d in defects[:, 0] if d[3] / 256.0 >= perimeter * 0.018)
+    # BENTUK defects TIDAK SAMA di semua versi OpenCV: ada yang mengembalikan
+    # (N, 1, 4), ada yang (N, 4). Kode lama menulis defects[:, 0] lalu membaca
+    # d[3] — pada bentuk kedua, d adalah SATU bilangan, dan d[3] melempar
+    # IndexError. Itu terjadi SESUDAH penyedia video dibayar.
+    #
+    # reshape(-1, 4) membuat kedua bentuk itu jadi satu bentuk. try/except
+    # tetap dipasang untuk kontur yang memang ditolak convexityDefects (indeks
+    # hull tidak monotonik): kalau lembah jari tidak bisa dihitung, yang hilang
+    # sinyal itu saja — dua sinyal lain (area, soliditas) tetap jalan.
+    if hull_indices is not None and len(hull_indices) >= 4 and len(contour) >= 4:
+        try:
+            defects = cv2.convexityDefects(contour, hull_indices)
+            if defects is not None:
+                # Depth threshold relative to perimeter filters tiny mask noise.
+                valleys = sum(1 for d in defects.reshape(-1, 4) if d[3] / 256.0 >= perimeter * 0.018)
+        except (cv2.error, IndexError, ValueError) as err:
+            print("qc-02: lembah jari dilewati (" + type(err).__name__ + ")", file=sys.stderr)
     return {
         "area_fraction": round(area / float(w * h), 5),
         "solidity": round(area / hull_area, 4),
