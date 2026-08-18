@@ -29,7 +29,23 @@ export function Stepper({
 }) {
   const batas = maxReached ?? current;
   return (
-    <nav aria-label="Langkah" className="flex flex-wrap items-center gap-1 text-sm">
+    <nav aria-label="Langkah" className="text-sm">
+      {/* Di HP breadcrumb enam langkah membungkus jadi 2-3 baris yang berat
+          sebelum setiap form. Ringkasan satu baris + mundur satu langkah
+          menjawab dua pertanyaan yang sebenarnya: "saya di mana" dan
+          "bagaimana kembali". Breadcrumb penuh tetap milik desktop. */}
+      <div className="flex items-center justify-between gap-2 sm:hidden">
+        <span className="font-bold text-zinc-900">
+          Langkah {current + 1} dari {steps.length}
+          <span className="ml-1.5 font-medium text-zinc-500">· {steps[current]}</span>
+        </span>
+        {current > 0 && onJump && (
+          <button onClick={() => onJump(current - 1)} className="rounded-lg px-2 py-1 text-xs font-semibold text-amber-700">
+            ← {steps[current - 1]}
+          </button>
+        )}
+      </div>
+      <div className="hidden flex-wrap items-center gap-1 sm:flex">
       {steps.map((label, i) => {
         const done = i < current;
         const active = i === current;
@@ -55,6 +71,7 @@ export function Stepper({
           </span>
         );
       })}
+      </div>
     </nav>
   );
 }

@@ -632,7 +632,7 @@ export default function CampaignPage() {
             <h1 className="font-display text-2xl font-bold text-zinc-900">Mau bikin video apa?</h1>
             <p className="mt-1 text-sm text-zinc-500">Pilih satu — langkah berikutnya menyesuaikan.</p>
           </div>
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             {([
               { id: "affiliate" as const, icon: ShoppingBag, title: "AI UGC Affiliate", desc: "Jualan produk fisik ke TikTok Shop. AI yang peragakan produkmu — cukup foto.", ready: true, preview: "/previews/format-tangan.mp4" },
               { id: "ads" as const, icon: Megaphone, title: "AI UGC Ads", desc: "Buat app, jasa, atau toko — yang tidak punya barang fisik. Presenter AI yang bicara.", ready: true, preview: "/previews/format-ads.mp4" },
@@ -820,7 +820,7 @@ export default function CampaignPage() {
                 <p className="text-sm text-zinc-500">Belum ada foto. Minimal 1 foto wajib buat render.</p>
               </div>
             ) : (
-              <ul className="grid grid-cols-4 gap-3">
+              <ul className="grid grid-cols-3 gap-3 sm:grid-cols-4">
                 {product.image_urls.map((url, i) => (
                   <li key={product.images[i]} className="group relative overflow-hidden rounded-xl border border-zinc-200">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -829,7 +829,7 @@ export default function CampaignPage() {
                       onClick={() => handleDeletePhoto(product.images[i])}
                       disabled={loading}
                       title="Hapus foto"
-                      className="absolute right-1.5 top-1.5 rounded-lg bg-white/90 p-1.5 text-zinc-600 opacity-0 transition-opacity hover:text-red-600 group-hover:opacity-100"
+                      className="absolute right-1.5 top-1.5 rounded-lg bg-white/90 p-1.5 text-zinc-600 transition-opacity hover:text-red-600 md:opacity-0 md:group-hover:opacity-100"
                     >
                       <Trash2 size={13} />
                     </button>
@@ -839,7 +839,7 @@ export default function CampaignPage() {
             )}
           </section>
 
-          <section className="grid grid-cols-2 gap-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+          <section className="grid grid-cols-1 gap-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm sm:grid-cols-2">
             <label className="block">
               <span className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Nama produk</span>
               <input
@@ -912,7 +912,7 @@ export default function CampaignPage() {
             <div className="col-span-2 rounded-xl border border-zinc-200 bg-zinc-50/60 p-4">
               <p className="text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Urgensi &amp; kelangkaan (opsional)</p>
               <p className="mt-1 text-xs text-zinc-500">Isi kalau memang benar. Diskon yang tidak nyata bikin brand kehilangan kepercayaan.</p>
-              <div className="mt-3 grid grid-cols-3 gap-3">
+              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <label className="block">
                   <span className="text-xs text-zinc-500">Harga normal (coret)</span>
                   <input
@@ -1034,7 +1034,7 @@ export default function CampaignPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-6 gap-2">
+            <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
               <button
                 onClick={() => avatarInput.current?.click()}
                 disabled={loading}

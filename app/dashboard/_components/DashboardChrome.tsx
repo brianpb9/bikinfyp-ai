@@ -69,6 +69,20 @@ export function DashboardChrome({
   // Menutup sendiri saat pindah halaman: laci yang tetap terbuka menutupi
   // konten yang baru saja diminta pengguna.
   useEffect(() => { setLaciBuka(false); }, [pathname]);
+  // Saat laci terbuka: badan halaman TIDAK ikut menggulir, dan Escape menutup.
+  // Tanpa kunci gulir, jari yang menggulir daftar menu ikut menggulir halaman
+  // di baliknya — dua permukaan bergerak untuk satu gerakan.
+  useEffect(() => {
+    if (!laciBuka) return;
+    const semula = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const tombol = (e: KeyboardEvent) => { if (e.key === "Escape") setLaciBuka(false); };
+    window.addEventListener("keydown", tombol);
+    return () => {
+      document.body.style.overflow = semula;
+      window.removeEventListener("keydown", tombol);
+    };
+  }, [laciBuka]);
 
   return (
     <div className="flex min-h-dvh w-full bg-zinc-50 text-zinc-900">
@@ -82,7 +96,8 @@ export function DashboardChrome({
         />
       )}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col bg-zinc-950 text-zinc-100 transition-transform duration-200 md:static md:translate-x-0 ${
+        id="laci-navigasi"
+        className={`fixed inset-y-0 left-0 z-40 flex w-64 shrink-0 flex-col overflow-y-auto overscroll-contain bg-zinc-950 text-zinc-100 transition-transform duration-200 md:static md:translate-x-0 ${
           laciBuka ? "translate-x-0" : "-translate-x-full"
         }`}
       >
@@ -172,13 +187,15 @@ export function DashboardChrome({
           <SidebarLogout />
         </div>
       </aside>
-      <main className="flex-1 overflow-y-auto">
+      <main className="min-w-0 flex-1 overflow-y-auto">
         {/* Bar atas HANYA di layar kecil: satu tombol menu, satu identitas. */}
         <div className="sticky top-0 z-20 flex h-14 items-center gap-3 border-b border-zinc-200 bg-white px-4 md:hidden">
           <button
             type="button"
             onClick={() => setLaciBuka(true)}
             aria-label="Buka menu"
+            aria-expanded={laciBuka}
+            aria-controls="laci-navigasi"
             className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-200 text-zinc-700"
           >
             <Menu size={18} />

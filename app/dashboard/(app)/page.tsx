@@ -71,7 +71,7 @@ export default async function DashboardHomePage() {
         </div>
       </section>
 
-      <section className="grid grid-cols-3 gap-4">
+      <section className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <Link href="/dashboard/credits" className="rounded-2xl border border-zinc-200 bg-white p-5 shadow-sm transition-colors hover:border-amber-400">
           <p className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.1em] text-zinc-500">
             <Wallet size={12} /> Token organisasi

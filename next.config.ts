@@ -52,7 +52,12 @@ const securityHeaders = [
     key: "Content-Security-Policy",
     value: [
       "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
+      // 'unsafe-eval' HANYA di development: react-refresh Next memakai eval,
+      // dan tanpa izin ini hidrasi mati total di dev — setiap onClick diam,
+      // dan TIDAK ADA yang bisa menguji interaksi secara lokal (ketahuan 19
+      // Agu saat QA mobile: klik laci tidak melakukan apa pun di dev server).
+      // Production TIDAK pernah mendapat unsafe-eval.
+      `script-src 'self' 'unsafe-inline'${process.env.NODE_ENV === "development" ? " 'unsafe-eval'" : ""}`,
       "style-src 'self' 'unsafe-inline'",
       "img-src 'self' data: blob:",
       "media-src 'self' blob:",

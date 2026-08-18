@@ -131,14 +131,17 @@ export default function LibraryPage() {
           <h1 className="font-display text-2xl font-bold text-zinc-900">Library</h1>
           <p className="mt-1 text-sm text-zinc-500">Semua video yang pernah dibuat, dari semua kampanye.</p>
         </div>
-        <div className="flex items-center gap-2">
+        {/* Di HP: cari melebar penuh dan tombol unduh turun baris — w-56 tetap
+            untuk desktop. Dua kontrol berdempetan di 360px membuat keduanya
+            tidak bisa dipakai. */}
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row sm:items-center">
           <div className="relative">
             <Search size={15} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-zinc-400" />
             <input
               value={q}
               onChange={(e) => setQ(e.target.value)}
               placeholder="Cari produk atau caption..."
-              className="w-56 rounded-xl border border-zinc-300 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-amber-400"
+              className="w-full rounded-xl border border-zinc-300 sm:w-56 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition-colors placeholder:text-zinc-400 focus:border-amber-400"
             />
           </div>
           <button
@@ -154,7 +157,7 @@ export default function LibraryPage() {
 
       {/* Dua kartu ringkas di atas, mengikuti pola Library yang Brian kirim:
           angka penting terbaca duluan sebelum daftar panjang. */}
-      <section className="grid grid-cols-2 gap-4">
+      <section className="grid grid-cols-2 gap-3 sm:gap-4">
         <button
           onClick={() => setTab("ready")}
           className="group relative overflow-hidden rounded-2xl bg-gradient-to-br from-amber-400 to-orange-500 p-5 text-left shadow-sm transition-transform hover:-translate-y-0.5"
