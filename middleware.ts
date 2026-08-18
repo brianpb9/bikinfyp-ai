@@ -20,8 +20,15 @@ function toOnboarding(req: NextRequest, clearCookie: boolean) {
   // Pengunjung di hostname dashboard yang belum login adalah CALON BRAND,
   // bukan penjual retail. Melemparnya ke /onboarding retail memberi halaman
   // yang salah sama sekali — mereka dikirim ke halaman depan enterprise.
+  // Yang menentukan TUJUAN YANG DIMINTA, bukan cuma hostname.
+  //
+  // Audit kedalaman 18 Agu: brand yang membuka bikinfyp.com/dashboard mendarat
+  // di onboarding retail "Rp12.000 per video", daftar akun biasa, lalu buntu
+  // karena tidak punya organisasi. Siapa pun yang mengetik /dashboard sedang
+  // mencari halaman brand — hostname mana pun ia datang.
   const onDashboardHost = Boolean(DASHBOARD_HOST) && req.headers.get("host") === DASHBOARD_HOST;
-  url.pathname = onDashboardHost ? "/brands" : "/onboarding";
+  const mintaDashboard = req.nextUrl.pathname.startsWith("/dashboard");
+  url.pathname = onDashboardHost || mintaDashboard ? "/brands" : "/onboarding";
   url.search = "";
   const res = NextResponse.redirect(url);
   // Token tidak sah dihapus, bukan dibiarkan. Kalau tidak, tiap permintaan
