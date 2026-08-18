@@ -26,12 +26,106 @@
  * akan lahir lagi setiap kali ada gerbang baru. Jadi penyusunannya dipindah ke
  * sini, dan pemanggil hanya menyerahkan apa yang memang mereka punya.
  */
-import { cartLabelForUrl } from "./index";
+import { cartLabelForUrl } from "./cart-label";
 import { isTvcTemplate, templateRequiresPriceMention, validateScript, type ValidationResult } from "./validator";
+import { getTemplate } from "../templates";
 import type { SegmentDraft } from "./templates";
+
+/**
+ * SNAPSHOT ADMISI — bentuk naskah seperti yang DITETAPKAN saat ditulis.
+ *
+ * Kenapa ada (reviewer ronde 4, temuan P0-2). Konteks admisi memang sudah
+ * terpusat, tapi isinya masih disusun ulang dari request yang datang belakangan
+ * — dan request itu tidak tahu naskahnya ditulis sebagai apa. Dua akibat yang
+ * direproduksi, dan keduanya nyata:
+ *
+ *   HILANG — wordBudget tidak dibawa satu pun pemanggil produksi. Naskah T06
+ *   sepanjang 23 kata (target katalognya 24) dinilai dengan jendela default
+ *   dan ditolak "harus 62-96 kata".
+ *
+ *   SALAH GENRE — format dikirim terpisah dari template_id. Template afiliasi
+ *   yang dikirim sebagai format:"tvc" melewati L-03; naskah yang sama sebagai
+ *   hands_only ditolak. Genre naskah jadi ditentukan oleh isi request, bukan
+ *   oleh naskahnya.
+ *
+ * Jadi bentuknya dibekukan di tempat naskahnya lahir dan ikut tersimpan.
+ * Gerbang membaca snapshot; request tidak lagi boleh mengubah genre.
+ *
+ * Fakta PRODUK (nama, harga) sengaja TIDAK ikut dibekukan — kalau harganya
+ * berubah setelah naskah ditulis, angkanya di naskah memang jadi salah dan
+ * L-14 harus menangkapnya.
+ */
+export interface SnapshotAdmisi {
+  contentType?: "affiliate" | "ads";
+  format?: string | null;
+  durationSec?: number | null;
+  templateId?: string | null;
+  wordBudget?: number | null;
+  /** Disimpan untuk jejak. Yang DIPAKAI gerbang tetap label dari URL produk
+   *  saat ini — kalau pengguna memindahkan produknya dari TikTok ke Shopee,
+   *  naskah lama memang harus ditulis ulang. */
+  cartLabel?: string | null;
+  requirePriceMention?: boolean;
+}
+
+/**
+ * JEJAK NASKAH yang menumpang di kolom validation_result: dari mana naskahnya
+ * berasal, dan bentuk apa yang dipakai saat menilainya.
+ *
+ * Menumpang, bukan kolom sendiri, karena migrasi 0030-0032 masih tertahan di
+ * produksi dan menambah migrasi keempat memperlebar risiko rilis yang sedang
+ * ditutup. Kolomnya sudah bertipe JSON dan sudah ikut terbaca bersama
+ * naskahnya, jadi jejaknya tidak hilang sambil menunggu.
+ */
+export interface JejakNaskah {
+  script_source?: "llm" | "template" | "degraded";
+  admisi?: SnapshotAdmisi;
+}
+
+function parse(validationResult: unknown): Record<string, unknown> | null {
+  const obj = typeof validationResult === "string"
+    ? (() => { try { return JSON.parse(validationResult); } catch { return null; } })()
+    : validationResult;
+  return obj && typeof obj === "object" ? (obj as Record<string, unknown>) : null;
+}
+
+/** Baca snapshot dari kolom validation_result (JSON string atau objek). */
+export function bacaSnapshot(validationResult: unknown): SnapshotAdmisi | null {
+  const snap = parse(validationResult)?.admisi;
+  return snap && typeof snap === "object" ? (snap as SnapshotAdmisi) : null;
+}
+
+export function bacaJejak(validationResult: unknown): JejakNaskah {
+  const obj = parse(validationResult);
+  const jejak: JejakNaskah = {};
+  const src = obj?.script_source;
+  if (src === "llm" || src === "template" || src === "degraded") jejak.script_source = src;
+  const snap = obj?.admisi;
+  if (snap && typeof snap === "object") jejak.admisi = snap as SnapshotAdmisi;
+  return jejak;
+}
+
+/**
+ * Amplop yang DISIMPAN di validation_result: vonis terbaru + jejak yang tidak
+ * boleh hilang.
+ *
+ * Kenapa ada (reviewer ronde 3 & 4, "provenance FAIL"): rute approve menimpa
+ * seluruh kolom dengan hasil validasi baru, jadi script_source lenyap persis
+ * pada langkah yang menentukan naskah itu jadi dirender. Sekarang vonisnya
+ * yang diganti, jejaknya yang dibawa.
+ */
+export function amplopValidasi(validation: ValidationResult, jejak: JejakNaskah): ValidationResult & JejakNaskah {
+  return {
+    ...validation,
+    ...(jejak.script_source ? { script_source: jejak.script_source } : {}),
+    ...(jejak.admisi ? { admisi: jejak.admisi } : {}),
+  };
+}
 
 export interface SumberAdmisi {
   segments: SegmentDraft[];
+  /** Bentuk naskah saat ditulis. Menang atas apa pun yang dikirim pemanggil. */
+  snapshot?: SnapshotAdmisi | null;
   hookFamily: string;
   register: string;
   productName: string;
@@ -64,9 +158,32 @@ export function durasiDariSegmen(segments: SegmentDraft[]): number {
 
 /** Susun input validator yang LENGKAP dari data yang tersedia. */
 export function konteksAdmisi(sumber: SumberAdmisi) {
-  const durationSec = sumber.durationSec ?? durasiDariSegmen(sumber.segments);
-  const format = sumber.format ?? (isTvcTemplate(sumber.templateId) ? "tvc" : undefined);
+  const snap = sumber.snapshot ?? null;
+  const durationSec = snap?.durationSec ?? sumber.durationSec ?? durasiDariSegmen(sumber.segments);
+  const templateId = snap?.templateId ?? sumber.templateId;
+  const wordBudget = snap?.wordBudget ?? sumber.wordBudget;
+  // GENRE — urutan otoritasnya disengaja:
+  //   1. katalog template (data kami, tidak bisa dikirim klien),
+  //   2. snapshot naskah,
+  //   3. baru kiriman pemanggil (baris lama yang belum punya snapshot).
+  // Tanpa urutan ini, genre naskah ditentukan oleh isi request: reviewer
+  // membuktikan template afiliasi bisa dinilai sebagai TVC — dan lolos L-03 —
+  // hanya dengan menuliskan format:"tvc".
+  const tpl = getTemplate(templateId ?? null);
+  const genre: "tvc" | "ads" | "affiliate" = tpl
+    ? tpl.kind
+    : isTvcTemplate(templateId) || (snap?.format ?? sumber.format) === "tvc"
+      ? "tvc"
+      : (snap?.contentType ?? "affiliate") === "ads"
+        ? "ads"
+        : "affiliate";
+  const contentType: "affiliate" | "ads" = genre === "ads" ? "ads" : "affiliate";
+  // Kalau genre-nya BUKAN TVC, nilai "tvc" di field format dibuang: itu cara
+  // request membelokkan genre lewat pintu belakang.
+  const formatRekam = snap?.format ?? sumber.format ?? undefined;
+  const format = genre === "tvc" ? "tvc" : formatRekam === "tvc" ? undefined : formatRekam;
   return {
+    contentType,
     hook_family: sumber.hookFamily,
     register: sumber.register,
     segments: sumber.segments,
@@ -80,8 +197,8 @@ export function konteksAdmisi(sumber: SumberAdmisi) {
     // mencari sesuatu yang tidak ada.
     cartLabel: cartLabelForUrl(sumber.productSourceUrl),
     ...(format ? { format: format as "hands_only" | "vo_broll" | "talking_head" | "tvc" | "ads" } : {}),
-    requirePriceMention: templateRequiresPriceMention(sumber.templateId),
-    ...(sumber.wordBudget ? { wordBudget: sumber.wordBudget } : {}),
+    requirePriceMention: snap?.requirePriceMention ?? templateRequiresPriceMention(templateId),
+    ...(wordBudget ? { wordBudget } : {}),
   };
 }
 

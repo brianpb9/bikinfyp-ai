@@ -34,10 +34,12 @@ async function coba(nama: string, t: (typeof CAMPAIGN_TEMPLATES)[number]) {
   }));
 }
 
-/** Kegagalan DI LUAR dua utang copy yang sudah diketahui (L-05 panjang, L-19
- *  perangkat hook). Itu yang masih harus nol — bukan "semua varian lolos",
- *  yang berhenti benar sejak batas 22 kata dipasang. */
-const UTANG_COPY = new Set(["L-05", "L-19"]);
+/** Kegagalan DI LUAR utang copy yang sudah diketahui (L-05 panjang, L-19
+ *  perangkat hook, A-01/A-02 penutup Ads yang masih berupa copy afiliasi).
+ *  Itu yang masih harus nol — bukan "semua varian lolos", yang berhenti benar
+ *  sejak batas 22 kata dipasang. Inventaris lengkapnya di
+ *  tests/script-catalog-audit.test.ts. */
+const UTANG_COPY = new Set(["L-05", "L-19", "A-01", "A-02"]);
 function sebabLain(varian: Awaited<ReturnType<typeof coba>>): string[] {
   return varian.flatMap((v) => v.validation.errors.map((e) => e.rule)).filter((r) => !UTANG_COPY.has(r));
 }

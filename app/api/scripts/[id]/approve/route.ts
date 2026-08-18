@@ -1,7 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, audit, type ScriptRow, type ProductRow } from "@/lib/db";
-import { periksaAdmisi } from "@/lib/script-engine/admisi";
+import { amplopValidasi, bacaJejak, periksaAdmisi } from "@/lib/script-engine/admisi";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { postgresRuntimeEnabled, smokeApproveScript, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
@@ -45,8 +45,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // Validasi ringan — L-10/L-11 keras, sisanya warning (FSD BR-03.2).
     // Konteks admisi KANONIK — lihat lib/script-engine/admisi.ts. Versi lama
     // kehilangan durationSec dan cartLabel di sini juga.
+    // Jejak naskah dibaca DULU: snapshot menentukan genre dan jendela katanya,
+    // dan script_source harus selamat melewati approve — sebelum ini kolomnya
+    // ditimpa utuh dan provenance-nya hilang persis di langkah yang membuat
+    // naskah itu boleh dirender.
+    const jejak = bacaJejak(script.validation_result);
     const validation = periksaAdmisi({
       segments,
+      snapshot: jejak.admisi,
       hookFamily: script.hook_family,
       register: script.register,
       productName: product.name,
@@ -69,14 +75,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       );
     }
 
-    if (postgresRuntimeEnabled()) await smokeApproveScript(user.id, id, { segments, edited, validationResult: validation });
+    const disimpan = amplopValidasi(validation, jejak);
+    if (postgresRuntimeEnabled()) await smokeApproveScript(user.id, id, { segments, edited, validationResult: disimpan });
     else {
       db!.prepare("UPDATE scripts SET segments = ?, edited_by_user = ?, approved_by_user_at = ?, validation_result = ? WHERE id = ?")
-        .run(JSON.stringify(segments), edited ? 1 : 0, now(), JSON.stringify(validation), id);
-      audit(user.id, "script.approved", "scripts", id, { edited });
+        .run(JSON.stringify(segments), edited ? 1 : 0, now(), JSON.stringify(disimpan), id);
+      audit(user.id, "script.approved", "scripts", id, { edited, script_source: jejak.script_source ?? null });
     }
 
-    return Response.json({ id, approved_by_user_at: now(), edited_by_user: edited, validation });
+    return Response.json({ id, approved_by_user_at: now(), edited_by_user: edited, validation: disimpan });
   } catch (err) {
     return errorResponse(err);
   }

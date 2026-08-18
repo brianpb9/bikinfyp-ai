@@ -4,7 +4,7 @@ import { getDb, now, uuid, audit, type ScriptRow, type ProductRow, type JobRow, 
 import { getBalance, holdCredits, tierPriceIdr } from "@/lib/credits";
 import { enqueueJob } from "@/lib/job-queue";
 import { failJob, getJob, sweepStaleJobs } from "@/lib/jobs";
-import { periksaAdmisi } from "@/lib/script-engine/admisi";
+import { bacaJejak, periksaAdmisi } from "@/lib/script-engine/admisi";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { config } from "@/lib/config";
 import { getCreatorCategory } from "@/lib/personas";
@@ -55,6 +55,8 @@ export async function POST(req: Request) {
     // reviewer lewat handler nyata sampai job QUEUED dan hold Rp24.000.
     const recheck = periksaAdmisi({
       segments,
+      // Snapshot naskah menang atas body request — lihat SnapshotAdmisi.
+      snapshot: bacaJejak(script.validation_result).admisi,
       hookFamily: script.hook_family,
       register: script.register,
       productName: product.name,

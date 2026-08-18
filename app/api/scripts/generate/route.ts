@@ -2,6 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit, type ProductRow } from "@/lib/db";
 import { generateScripts } from "@/lib/script-engine";
+import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { REGISTERS, type Register } from "@/lib/script-engine/registers";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
@@ -106,7 +107,8 @@ export async function POST(req: Request) {
     // Kolom sendiri butuh migrasi, dan migrasi terkunci sampai audit ledger
     // bersih. validation_result sudah bertipe JSON dan sudah dibaca bersama
     // naskahnya, jadi provenance-nya tidak hilang sambil menunggu.
-    const hasilValidasi = (v: typeof variants[number]) => ({ ...v.validation, script_source: v.script_source });
+    const hasilValidasi = (v: typeof variants[number]) =>
+      amplopValidasi(v.validation, { script_source: v.script_source, admisi: v.admisi });
     const makeOut = (v: typeof variants[number], id: string) => ({ id, ...v });
     if (postgresRuntimeEnabled()) {
       const created = await smokeCreateScripts(user.id, product.id, sah.map((v) => ({

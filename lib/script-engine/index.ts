@@ -23,6 +23,7 @@ import { REGISTERS, type Register } from "./registers";
 import { renderSegmentsForTier, formatHargaNatural, type SegmentDraft, type TemplateCtx } from "./templates";
 import { templateCopy, TEMPLATE_COPY_CAPACITY } from "./template-copy";
 import { isTvcTemplate, jendelaKata, templateRequiresPriceMention, validateScript, type ValidationResult } from "./validator";
+import { konteksAdmisi, type SnapshotAdmisi } from "./admisi";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
 import { compileDeliveryText } from "./delivery-tags";
 import { keSegmentDraft, laporJatuhKeTemplate, llmSengajaDimatikan, llmSiap, tulisNaskah } from "./llm";
@@ -43,19 +44,8 @@ export interface ProductInput {
   promoStockLeft?: number | null;
 }
 
-/** "Keranjang kuning" cuma istilah TikTok Shop — Shopee/Tokopedia/manual pakai
- * "keranjang" polos (keputusan Brian, 2026-08-03: platform lain jangan
- * dibilang "kuning", itu branding TikTok doang). */
-export function cartLabelForUrl(sourceUrl: string | null | undefined): "keranjang kuning" | "keranjang" {
-  if (!sourceUrl) return "keranjang";
-  try {
-    const host = new URL(sourceUrl).hostname.toLowerCase();
-    if (host === "tiktok.com" || host.endsWith(".tiktok.com")) return "keranjang kuning";
-  } catch {
-    /* URL tidak valid — default aman: istilah generik */
-  }
-  return "keranjang";
-}
+import { cartLabelForUrl } from "./cart-label";
+export { cartLabelForUrl };
 
 /** Ganti "keranjang kuning" -> "keranjang" di teks bila platform bukan TikTok.
  * Post-processing string, bukan template terpisah per platform — templates.ts
@@ -86,6 +76,8 @@ export interface GeneratedScript {
   /** Wajib ikut ke UI dan DB — reviewer A2: fallback tidak boleh disajikan
    *  sebagai keluaran setara tanpa jejak. */
   script_source: SumberNaskah;
+  /** Bentuk naskah saat ditulis. WAJIB ikut tersimpan — lihat SnapshotAdmisi. */
+  admisi: SnapshotAdmisi;
   /**
    * Tiga ide terbaik BESERTA skornya, diisi HANYA saat FYP Gate gagal.
    *
@@ -323,16 +315,35 @@ async function generateOne(
     promoEndsAt: product.promoEndsAt,
     promoStockLeft: product.promoStockLeft,
   });
+  // SNAPSHOT ADMISI — bentuk naskah ini, dibekukan di tempat ia lahir.
+  //
+  // Yang sama persis dipakai untuk menilai di sini (strict) DAN ikut tersimpan
+  // supaya gerbang berikutnya menilai naskah yang sama dengan konteks yang
+  // sama. Sebelum ini gerbang menyusun ulang konteksnya dari request, dan
+  // request tidak tahu naskahnya ditulis sebagai apa: naskah Ads dinilai
+  // dengan aturan afiliasi lalu ditolak karena tidak menyebut keranjang.
+  const admisi: SnapshotAdmisi = {
+    contentType,
+    format,
+    durationSec,
+    templateId: templateId ?? null,
+    wordBudget: wordBudget ?? null,
+    cartLabel,
+    requirePriceMention: templateRequiresPriceMention(templateId),
+  };
   const validate = (segs: SegmentDraft[]) =>
     validateScript(
-      {
-        hook_family: family, register, segments: segs, productName: product.name,
-        priceIdr: product.price_idr, promoPriceBeforeIdr: promo?.beforeIdr ?? null,
-        requirePriceMention: templateRequiresPriceMention(templateId),
-        cartLabel,
-        format: isTvcTemplate(templateId) ? "tvc" : undefined,
-        qualityTier: tier, durationSec, wordBudget,
-      },
+      konteksAdmisi({
+        segments: segs,
+        snapshot: admisi,
+        hookFamily: family,
+        register,
+        productName: product.name,
+        productPriceIdr: product.price_idr,
+        productSourceUrl: product.sourceUrl,
+        promoPriceBeforeIdr: promo?.beforeIdr ?? null,
+        qualityTier: tier,
+      }) as never,
       "strict"
     );
 
@@ -453,6 +464,7 @@ async function generateOne(
   const reg = REGISTERS[register];
   return {
     script_source: sumberNaskah,
+    admisi,
     hook_family: family,
     emotion,
     register,

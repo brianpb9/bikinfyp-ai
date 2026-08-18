@@ -325,7 +325,7 @@ test("count=4 tidak mengulang hook atau naskah pada template mana pun", async ()
   );
 });
 
-test("katalog template: hanya DUA jenis utang yang diketahui, tidak ada yang lain", async () => {
+test("katalog template: hanya TIGA jenis utang yang diketahui, tidak ada yang lain", async () => {
   // DIPERTAJAM, bukan dilonggarkan (18 Agu). Sampai hari ini invariannya
   // "semua 132 varian lolos". Dua gate baru membatalkan sebagian:
   //
@@ -333,11 +333,22 @@ test("katalog template: hanya DUA jenis utang yang diketahui, tidak ada yang lai
   //         dikalibrasi ke jendela lama 25-30 kata.
   //   L-19  hook wajib memakai perangkat retoris yang dikenali.
   //
-  // Keduanya UTANG COPY yang disengaja dan tercatat. Yang dijaga tes ini:
+  //   A-01/A-02  genre Ads. SELURUH copy template Ads adalah copy AFILIASI:
+  //         penutupnya menyuruh "cek keranjang kuning" untuk iklan jasa/app
+  //         yang tidak punya keranjang sama sekali. Sebelum 18 Agu ini tidak
+  //         terlihat karena naskah Ads dinilai dengan aturan afiliasi — jadi
+  //         copy yang salah genre justru yang lolos, dan CTA Ads yang BENAR
+  //         ("Detailnya ada di bawah ya") yang ditolak.
+  //
+  // Ketiganya UTANG COPY yang disengaja dan tercatat. Yang dijaga tes ini:
   // tidak ada JENIS kegagalan lain yang menyusup di baliknya. Kalau suatu hari
-  // ada varian gagal karena L-03, L-16, atau apa pun di luar dua itu, tes ini
+  // ada varian gagal karena L-03, L-16, atau apa pun di luar tiga itu, tes ini
   // merah — dan itu memang gunanya.
-  const UTANG_DIKENAL = new Set(["L-05", "L-19"]);
+  //
+  // Jalur LLM sudah menulis CTA Ads yang benar (llm.ts blokTugas). Yang merah
+  // hanya template cadangan — dan naskah cadangan yang gagal gate memang tidak
+  // boleh dirender.
+  const UTANG_DIKENAL = new Set(["L-05", "L-19", "A-01", "A-02"]);
   const lain = summary.validationFailureRefs
     .map((ref) => ({ ref, aturan: ref.errors.map((e) => e.rule).filter((r) => !UTANG_DIKENAL.has(r)) }))
     .filter((x) => x.aturan.length > 0);
@@ -355,8 +366,11 @@ test("utang template tercatat angkanya per jenis, bukan diam-diam", async () => 
     summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule === aturan)).length;
   const panjang = hitung("L-05");
   const perangkat = hitung("L-19");
+  const genreAds = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule.startsWith("A-"))).length;
   assert.ok(panjang > 0 && panjang <= 130, `varian melanggar batas 22 kata: ${panjang}/132`);
   assert.ok(perangkat > 0 && perangkat <= 17, `varian tanpa perangkat retoris: ${perangkat}/132`);
+  // 9 template Ads x 4 varian = 36. Semuanya berpenutup afiliasi.
+  assert.ok(genreAds > 0 && genreAds <= 36, `varian Ads dengan CTA salah genre: ${genreAds}/132`);
   // Kalau keduanya nol, katalognya sudah bersih: hapus tes ini dan kembalikan
   // invarian "semua varian lolos".
 });

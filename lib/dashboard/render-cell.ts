@@ -14,7 +14,7 @@
  */
 import crypto from "node:crypto";
 import type { Pool } from "pg";
-import { periksaAdmisi } from "@/lib/script-engine/admisi";
+import { amplopValidasi, bacaJejak, periksaAdmisi } from "@/lib/script-engine/admisi";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { tierPriceIdr } from "@/lib/credits";
 import { enqueueJob } from "@/lib/job-queue";
@@ -95,8 +95,12 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   // jadi TVC yang sah justru DITOLAK: aturan T-01..T-03 tidak pernah
   // dijalankan sementara aturan lisan afiliasi (L-03/L-19) dipaksakan ke
   // naskah yang memang bukan afiliasi.
+  const jejak = bacaJejak(script.validation_result);
   const validation = periksaAdmisi({
     segments,
+    // Snapshot menang atas isi request: genre naskah ditentukan saat ia
+    // ditulis, bukan oleh sel yang mengirimnya ke render.
+    snapshot: jejak.admisi,
     hookFamily: script.hook_family,
     register: script.register,
     productName: sel.productName,
@@ -111,7 +115,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   if (!validation.passed) {
     return gagal(`Skrip belum memenuhi standar: ${validation.errors.map((e) => e.message_id).join(" ")}`);
   }
-  await smokeApproveScript(sel.userId, sel.scriptId, { segments, edited: false, validationResult: validation }, sel.orgId);
+  await smokeApproveScript(sel.userId, sel.scriptId, { segments, edited: false, validationResult: amplopValidasi(validation, jejak) }, sel.orgId);
 
   const jobId = crypto.randomUUID();
   const now = new Date().toISOString();

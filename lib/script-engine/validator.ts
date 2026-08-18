@@ -44,6 +44,20 @@ export interface ScriptToValidate {
    *
    * Default undefined = perilaku lama persis, jadi pemanggil non-TVC aman. */
   format?: "hands_only" | "vo_broll" | "talking_head" | "tvc" | "ads";
+  /** Genre naskah untuk iklan berbayar. "ads" MEMATIKAN L-03 dan mengaktifkan
+   *  A-01/A-02.
+   *
+   * Terpisah dari `format` dengan sengaja. `format` itu cara merekam
+   * (hands_only, talking_head), dan katalog memakai nilai "ads" di sana untuk
+   * gaya anti-produksi — sementara ads-unboxing-pov berformat talking_head
+   * tapi genre-nya tetap Ads. Menyatukan keduanya berarti satu dari dua
+   * template Ads selalu salah dinilai.
+   *
+   * Kenapa ada (reviewer ronde 4, Strong Reject "Ads"): CTA resmi Ads adalah
+   * "Detailnya ada di bawah ya" — dan L-03 menolaknya karena tidak menyebut
+   * keranjang. Jadi setiap naskah Ads yang BENAR ditolak gerbang, dan yang
+   * lolos justru yang salah genre. */
+  contentType?: "affiliate" | "ads";
   /** Label keranjang yang WAJIB disebut CTA — "keranjang kuning" (TikTok) atau
    *  "keranjang" (Shopee/Tokopedia/manual). Kosong = "keranjang". */
   cartLabel?: string;
@@ -182,6 +196,65 @@ function spokenPriceAmount(priceIdr: number): number | null {
   return Number.isFinite(number) ? Math.round(number * multiplier) : null;
 }
 
+/**
+ * Harga yang DITULIS DENGAN KATA — "sembilan puluh sembilan ribu" = 99000.
+ *
+ * Kenapa ada (reviewer ronde 4, Strong Reject "truth"): L-14 hanya memindai
+ * DIGIT, sementara prompt penulis justru menyuruh menulis harga sebagai kata
+ * untuk naskah bersuara ("price ... — write it as words if spoken"). Jadi
+ * jalur yang kita perintahkan sendiri adalah jalur yang tidak diperiksa:
+ * produk seharga Rp85.000 bisa mengatakan "sembilan puluh sembilan ribu" dan
+ * lolos gerbang kebenaran tanpa satu pun peringatan.
+ *
+ * Hanya rangkaian yang DIAKHIRI satuan (ribu/juta) yang dihitung. "dua kali
+ * sehari" atau "tiga puluh detik" bukan harga dan tidak ikut terjaring.
+ */
+const KATA_SATUAN: Record<string, number> = {
+  nol: 0, satu: 1, se: 1, dua: 2, tiga: 3, empat: 4, lima: 5,
+  enam: 6, tujuh: 7, delapan: 8, sembilan: 9,
+};
+
+export function hargaTerbilang(text: string): { frasa: string; nilai: number }[] {
+  const kata = text.toLowerCase().match(/[a-z]+/g) ?? [];
+  const hasil: { frasa: string; nilai: number }[] = [];
+  let kelompok = 0;   // yang sudah ditutup ratusan/puluhan
+  let tertunda = 0;   // satuan yang belum ditutup
+  let mulai = -1;     // indeks kata pertama rangkaian, untuk pesan errornya
+  let punyaAngka = false; // ada kata bilangan sebelum satuannya?
+  const reset = () => { kelompok = 0; tertunda = 0; mulai = -1; punyaAngka = false; };
+  for (let i = 0; i < kata.length; i++) {
+    const w = kata[i];
+    const tandai = () => { if (mulai < 0) mulai = i; punyaAngka = true; };
+    if (w in KATA_SATUAN) { tandai(); tertunda = KATA_SATUAN[w]; continue; }
+    if (w === "sepuluh") { tandai(); tertunda = 10; continue; }
+    if (w === "sebelas") { tandai(); tertunda = 11; continue; }
+    if (w === "belas") { tandai(); tertunda = 10 + tertunda; continue; }
+    if (w === "puluh") { tandai(); kelompok += tertunda * 10; tertunda = 0; continue; }
+    if (w === "ratus" || w === "seratus") {
+      tandai();
+      kelompok += (w === "seratus" ? 1 : tertunda || 1) * 100;
+      tertunda = 0;
+      continue;
+    }
+    if (w === "ribu" || w === "seribu" || w === "juta" || w === "sejuta") {
+      const seSendiri = w.startsWith("se");
+      // "85 ribu" ANGKANYA DIGIT, dan jalur digit sudah memeriksanya. Satuan
+      // yang berdiri tanpa kata bilangan di depannya bukan harga terbilang —
+      // menghitungnya sebagai 1.000 menolak setiap naskah yang menyebut harga
+      // dengan angka.
+      if (!punyaAngka && !seSendiri) { reset(); continue; }
+      tandai();
+      const pengali = w.includes("juta") ? 1_000_000 : 1_000;
+      const nilai = (seSendiri ? 1 : (kelompok + tertunda) || 1) * pengali;
+      hasil.push({ frasa: kata.slice(mulai, i + 1).join(" "), nilai });
+      reset();
+      continue;
+    }
+    reset();
+  }
+  return hasil;
+}
+
 export const PRICE_REQUIRED_TEMPLATE_IDS = ["diskon-gede", "promo-terbatas"] as const;
 
 export function templateRequiresPriceMention(templateId: string | null | undefined): boolean {
@@ -228,13 +301,31 @@ function wordCount(text: string): number {
  *   L-10/L-11  overclaim & klaim medis — risiko hukum.
  *   L-19  hook tanpa perangkat retoris.
  *   L-21  kata yang memicu penyaring penyedia.
+ *   T-01..T-03  genre TVC — lihat catatan di bawah.
+ *   A-01/A-02  genre Ads — lihat catatan di bawah.
  *
  * Aturan gaya (partikel, filler, register) TETAP lunak di light: itu memang
  * wilayah selera penggunanya.
  */
 export const SELALU_KERAS = new Set([
   "L-03", "L-05", "L-10", "L-11", "L-13", "L-14", "L-19", "L-21",
+  "T-01", "T-02", "T-03", "A-01", "A-02",
 ]);
+
+/**
+ * T-01..T-03 dan A-01/A-02 ditambahkan 18 Agu (reviewer ronde 4, Strong
+ * Reject "Enterprise admission").
+ *
+ * Ketiga aturan TVC memakai push(false), jadi di light ketiganya cuma
+ * peringatan — dan SELURUH jalur Enterprise memvalidasi dengan light. Yang
+ * direproduksi reviewer: TVC yang melanggar T-01, T-02, DAN T-03 sekaligus
+ * tetap menghasilkan passed:true, job QUEUED, dan hold Rp24.000.
+ *
+ * Ketiganya aturan GENRE, bukan gaya. Penutup tanpa nama merek berarti iklan
+ * yang berakhir tanpa pernah menyebut siapa yang beriklan; "keranjang" di
+ * dalam TVC berarti genre-nya berubah jadi live-selling. Keduanya bukan
+ * wilayah selera pengguna, jadi tempatnya di sini.
+ */
 
 /**
  * L-13 dan L-14 ditambahkan 18 Agu (reviewer: "compliance/truth", Strong
@@ -305,6 +396,9 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // keranjang, tidak menawar dengan partikel gaul, dan wajib ditutup nama
   // merek. Aturan lisan L-01/L-03/L-04 dimatikan dan diganti T-01..T-03.
   const isTvc = script.format === "tvc";
+  // Ads = iklan berbayar untuk jasa/app/SaaS. Tidak ada keranjang yang bisa
+  // diklik, jadi L-03 tidak berlaku dan penutupnya punya aturan sendiri.
+  const isAds = !isTvc && script.contentType === "ads";
 
   // L-01: >=2 partikel
   const particleCount = toks.filter((t) => PARTICLES.has(t)).length;
@@ -327,8 +421,32 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // "keranjang kuning" itu branding TikTok, dan menyuruh pembeli Shopee
   // mencari keranjang kuning adalah menyuruhnya mencari sesuatu yang tidak ada.
   const labelKeranjang = (script.cartLabel ?? "keranjang").toLowerCase();
-  if (!isTvc && (!ctaSeg || !ctaSeg.text.toLowerCase().includes(labelKeranjang)))
+  if (!isTvc && !isAds && (!ctaSeg || !ctaSeg.text.toLowerCase().includes(labelKeranjang)))
     push(false, { rule: "L-03", message_id: `Ajakan penutup harus menyebut "${labelKeranjang}" biar pembeli tau harus klik di mana.`, segment: "cta" });
+
+  if (isAds) {
+    const penutup = stripDeliveryTags(ctaSeg?.text ?? "").toLowerCase();
+
+    // A-01: penutup Ads mengarahkan ke bawah/bio/profil. Copy resminya
+    // "Detailnya ada di bawah ya" — yang diwajibkan ARAHNYA, bukan kalimatnya
+    // persis, supaya naskah yang disunting pengguna tidak diblokir karena
+    // memilih kata lain untuk maksud yang sama.
+    if (!/di bawah|dibawah|di bio|link di|profil/.test(penutup))
+      push(false, {
+        rule: "A-01",
+        message_id: 'Penutup iklan harus mengarahkan ke bawah/bio (mis. "Detailnya ada di bawah ya") — tanpa itu penonton tidak tahu harus ke mana.',
+        segment: "cta",
+      });
+
+    // A-02: alasan yang sama dengan T-02. Iklan jasa/app tidak punya keranjang;
+    // menyebutnya membuat penonton mencari sesuatu yang tidak ada.
+    if (/keranjang/i.test(fullText))
+      push(false, {
+        rule: "A-02",
+        message_id: "Iklan jasa/app tidak boleh menyebut 'keranjang' — tidak ada keranjang yang bisa diklik di iklan ini.",
+        segment: "cta",
+      });
+  }
 
   // L-04: >=1 filler lisan
   const hasFiller =
@@ -452,6 +570,10 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     for (const t of tokens(formatHargaNatural(script.promoPriceBeforeIdr))) if (/^\d+$/.test(t)) allowedDigits.add(t);
     allowedDigits.add(String(script.promoPriceBeforeIdr));
   }
+  // Angka DI DALAM NAMA PRODUK bukan klaim. "SPF Serum 50", "Sabun 3 in 1",
+  // dan "Minyak 100ml" adalah data produk yang dikirim penggunanya sendiri —
+  // menolaknya berarti menyuruh pengguna berbohong tentang namanya sendiri.
+  for (const t of tokens(script.productName)) if (/^\d+$/.test(t)) allowedDigits.add(t);
   // Angka di dalam frasa harga diperiksa utuh (nominal + unit) di bawah.
   // Jangan pecah "24,62 ribu" menjadi token 24 dan 62 lalu menolaknya
   // sebelum pemeriksaan harga semantik sempat berjalan.
@@ -476,6 +598,15 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   });
   if (wrongPrice) {
     push(false, { rule: "L-14", message_id: `Harga "${wrongPrice[0]}" tidak cocok dengan harga produk yang diberikan.` });
+  }
+  // Harga yang ditulis dengan KATA — jalur yang justru kita perintahkan
+  // sendiri ke penulis LLM, dan satu-satunya jalur yang belum diperiksa.
+  const salahTerbilang = hargaTerbilang(fullText).find((h) => !allowedPriceAmounts.has(h.nilai));
+  if (salahTerbilang) {
+    push(false, {
+      rule: "L-14",
+      message_id: `Harga "${salahTerbilang.frasa}" (${salahTerbilang.nilai}) tidak cocok dengan harga produk yang diberikan.`,
+    });
   }
 
   // L-15: merek pesaing yang direndahkan
