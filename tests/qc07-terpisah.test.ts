@@ -55,7 +55,12 @@ test("QC-07 tidak lagi ikut berubah kalau aturan STRUKTUR naskah berubah", () =>
 test("qc.ts memanggil pemeriksa terpisah, bukan proksi mode", async () => {
   const fsx = await import("node:fs");
   const src = fsx.readFileSync("lib/media/qc.ts", "utf8");
-  assert.match(src, /periksaKataTerlarang\(input\.finalTexts\.join\(" "\)\)/);
+  // Bentuknya berubah sejak QC-07 ikut membaca transkrip (reviewer ronde 4):
+  // pemeriksanya sekarang dipanggil lewat periksaQc07(), yang menggabungkan
+  // segmen + transkrip. Yang dijaga tetap sama — pemeriksa KATA TERLARANG,
+  // bukan validator struktur naskah.
+  assert.match(src, /periksaKataTerlarang\(\[finalTexts\.join\(" "\), transkrip \?\? ""\]\.join\(" "\)\)/);
+  assert.match(src, /periksaQc07\(input\.finalTexts, transkripUcapan\)/);
   // Proksi lama tidak boleh kembali: pola inilah yang membuat QC-07 ikut
   // berubah setiap kali daftar aturan struktur berubah.
   assert.ok(!/segments: \[\{ role: "hook", text: input\.finalTexts/.test(src),

@@ -819,6 +819,25 @@ export async function qcLipSync(videoPath: string, workDir: string): Promise<QcC
   };
 }
 
+/**
+ * Vonis QC-07 dari teks yang benar-benar keluar.
+ *
+ * Dipisah jadi fungsi murni supaya bisa diuji tanpa merender apa pun — dan
+ * supaya sumber teksnya (transkrip vs segmen) tercatat di hasilnya, bukan
+ * jadi asumsi pembaca.
+ */
+export function periksaQc07(
+  finalTexts: string[],
+  transkrip: string | null
+): { status: "pass" | "fail"; detail: string } {
+  const terlarang = periksaKataTerlarang([finalTexts.join(" "), transkrip ?? ""].join(" "));
+  const sumber = transkrip === null ? "segmen naskah (transkrip tidak tersedia)" : "transkrip audio + segmen";
+  return {
+    status: terlarang.length === 0 ? "pass" : "fail",
+    detail: terlarang.length === 0 ? `bersih · sumber: ${sumber}` : `${terlarang.map((e) => e.message_id).join(" ")} · sumber: ${sumber}`,
+  };
+}
+
 export async function runQc(input: QcInput): Promise<QcResult> {
   const checks: QcCheck[] = [];
 
@@ -966,12 +985,37 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // jadi tidak pernah ada CTA, jadi L-03 selalu gagal — SETELAH provider video
   // dibayar. Pemeriksa struktur naskah tidak punya urusan di sini; yang
   // diperiksa QC-07 hanya kata terlarang pada teks yang benar-benar keluar.
-  const terlarang = periksaKataTerlarang(input.finalTexts.join(" "));
-  checks.push({
-    code: "QC-07", name: "Tanpa kata terlarang (overclaim/medis)",
-    status: terlarang.length === 0 ? "pass" : "fail",
-    detail: terlarang.length === 0 ? "bersih" : terlarang.map((e) => e.message_id).join(" "),
-  });
+  // TRANSKRIP diambil SEKALI, dipakai dua pemeriksaan (QC-07 dan QC-12).
+  // Dua panggilan berarti dua biaya untuk jawaban yang sama.
+  const adaTeksSkrip = input.finalTexts.some((t) => t.trim().length > 0);
+  const bolehTranskrip = adaTeksSkrip && !input.isMockProvider;
+  let hasilSuara: Awaited<ReturnType<typeof qcSuara>> | null = null;
+  let galatSuara: string | null = null;
+  if (bolehTranskrip) {
+    try {
+      hasilSuara = await qcSuara({
+        videoPath: input.filePath, segmenSkrip: input.finalTexts,
+        priceIdr: input.priceIdr, productName: input.productName,
+      });
+    } catch (err) {
+      galatSuara = err instanceof Error ? err.message : String(err);
+    }
+  }
+  const transkripUcapan = hasilSuara?.transkrip ?? null;
+
+  //
+  // DIPERIKSA PADA TRANSKRIP, bukan cuma pada segmen naskah (reviewer ronde 4).
+  //
+  // Segmen adalah apa yang KITA MINTA diucapkan; transkrip adalah apa yang
+  // BENAR-BENAR terdengar. Untuk tier bersuara via provider, keduanya bisa
+  // berbeda — model video menambah atau mengganti kata — dan yang menanggung
+  // risiko hukum adalah yang terdengar. Transkripnya sudah kita ambil untuk
+  // QC-12; QC-07 dulu tidak pernah memakainya.
+  //
+  // Kalau transkripsi tidak tersedia (mock, kunci kosong, tier senyap), QC-07
+  // tetap memeriksa segmen dan MENGATAKANNYA di detail — bukan diam-diam
+  // mengaku sudah memeriksa ucapan.
+  checks.push({ code: "QC-07", name: "Tanpa kata terlarang (overclaim/medis)", ...periksaQc07(input.finalTexts, transkripUcapan) });
 
 
   // QC-08 label AIGC via METADATA (watermark visual dihapus 2026-08-07 —
@@ -1046,28 +1090,23 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   //
   // Penghalangnya HARGA: harga yang salah bukan cacat estetika, itu klaim
   // komersial yang salah, dan penjual yang memasangnya menanggung akibatnya.
-  if (!input.finalTexts.some((t) => t.trim().length > 0)) {
+  if (!adaTeksSkrip) {
     checks.push({ code: "QC-12", name: "Ucapan sesuai skrip", status: "skip", detail: "N/A: tidak ada teks skrip untuk dibandingkan." });
   } else if (input.isMockProvider) {
     checks.push({ code: "QC-12", name: "Ucapan sesuai skrip", status: "skip", detail: "N/A: provider mock (dev/e2e)." });
+  } else if (galatSuara !== null) {
+    checks.push({ code: "QC-12", name: "Ucapan sesuai skrip", status: "skip", detail: `pemeriksaan gagal jalan: ${galatSuara}` });
   } else {
-    try {
-      const v = await qcSuara({
-        videoPath: input.filePath, segmenSkrip: input.finalTexts,
-        priceIdr: input.priceIdr, productName: input.productName,
-      });
-      checks.push({
-        code: "QC-12", name: "Ucapan sesuai skrip",
-        status: v.transkrip === null ? "skip" : v.lolos ? "pass" : "fail",
-        detail: v.transkrip === null
-          ? `tidak bisa diperiksa: ${v.masalah.join("; ")}`
-          : v.lolos
-            ? `transkrip cocok${v.peringatan.length ? ` · catatan: ${v.peringatan.join("; ")}` : ""}`
-            : v.masalah.join("; "),
-      });
-    } catch (err) {
-      checks.push({ code: "QC-12", name: "Ucapan sesuai skrip", status: "skip", detail: `pemeriksaan gagal jalan: ${err instanceof Error ? err.message : String(err)}` });
-    }
+    const v = hasilSuara!;
+    checks.push({
+      code: "QC-12", name: "Ucapan sesuai skrip",
+      status: v.transkrip === null ? "skip" : v.lolos ? "pass" : "fail",
+      detail: v.transkrip === null
+        ? `tidak bisa diperiksa: ${v.masalah.join("; ")}`
+        : v.lolos
+          ? `transkrip cocok${v.peringatan.length ? ` · catatan: ${v.peringatan.join("; ")}` : ""}`
+          : v.masalah.join("; "),
+    });
   }
 
   const passed = evaluateQcPolicy(input.format, checks);
