@@ -27,7 +27,7 @@ terverifikasi via header/health nyata.
 | Money safety | 8 | **9** | V | Health live: closed/false. Migrasi fail-closed lulus + rekonsiliasi eksplisit + indeks terminal unik 0031 + uji konkurensi pg. Bukan 10: settlement Midtrans sandbox belum pernah dieksekusi (baris sendiri). |
 | Auth intent & failure path | 5 | **7** | C | Jalur gagal lengkap di kode: cookie next ter-encode, Google cancel bawa `next` balik (9 call site), replaceState pertahankan next, OTP hormati `?next=` (commit `9fb7a51`). Bukan 8: belum ada bukti browser nyata untuk skenario Google-cancel — masih unit+kode. |
 | Mobile UI 375 | 6 | **7** | V | QA interaksi nyata di 375px + drawer + focus trap dua arah (`docs/evidence/mobile-qa/`). Bukan 8: sapuan 768/1024 dan click-through wizard 1–6 di atas Postgres belum. |
-| Hydration/interaction canary CI | 4 | **7** | V(lokal) | Smoke membuktikan hidrasi lewat perubahan CTA yang mustahil terjadi di HTML statis (diverifikasi: 0 kemunculan di HTML server). Bukan 8: run CI hijau pertama belum teramati; smoke CI jalan di server dev (production menolak SQLite — fail-closed yang benar), CSP production dijaga `tests/csp-produksi.test.ts`. |
+| Hydration/interaction canary CI | 4 | **8** | V | Smoke membuktikan hidrasi lewat perubahan CTA yang mustahil terjadi di HTML statis (diverifikasi: 0 kemunculan di HTML server), dan **sudah teramati LULUS di run CI nyata** (run 32182693249, job verify SUCCESS, log "SMOKE INTERAKSI LULUS"). Bukan 9: cakupan baru landing + /coba, interaksi dashboard belum; smoke CI jalan di server dev (production menolak SQLite — fail-closed yang benar), CSP production dijaga `tests/csp-produksi.test.ts`. |
 | Content engine standard | 4 | **7** | V | Gate keras kedua mode (tes), snapshot admisi beku sejak lahir, standar-10 §A/§B di prompt + 12/12 di log, canary membuktikan gate menolak SEBELUM bayar. Bukan 8: temuan #4 (nama produk panjang mengalahkan penulis 3 putaran), #8 (intake tak memeriksa foto referensi), utang copy 116 varian. |
 | Brand fidelity | 5 | **6** | V | `lib/merek.ts` satu sumber (lahir dari temuan canary #2/#3), QC-10 tiga-keadaan jujur; frame bukti: "SOMETHINC" & "KOPI TANG" utuh. Bukan 7: brand belum jadi field tepercaya di intake; "Gula ARAM" (label sedang salah eja) lolos — butuh QC label penuh berbasis visi. |
 | Anti-slop produksi | 5 | **6** | V/C | Chest-up default di kode, kosakata filter dgn oracle independen 0/360 false-block, semua negasi-orang ditulis positif. Bukan 7: shot-1 no-face belum jadi gate mesin, baru konvensi planner. |
@@ -76,8 +76,9 @@ payments sebelum keputusan ini.**
 
 **Public paid: HOLD** — tetap, dan memang belum diminta dibuka.
 **Private beta: HOLD tipis.** Engineering P0 dari board §2 sudah naik tier
-dengan bukti; yang menahan tinggal (a) run CI hijau pertama teramati,
-(b) tiga baris N milik Brian (§5), (c) keputusan harga §2.
+dengan bukti; yang menahan tinggal (a) tiga baris N milik Brian (§5) dan (b) keputusan harga §2 — run CI hijau
+sudah teramati (verify SUCCESS di run 32182693249; satu-satunya job merah =
+papan utang copy katalog yang memang sengaja merah, milik Brian/copywriter).
 
 ## 5. Butuh Brian (tidak berubah banyak, tapi kini dengan angka)
 
