@@ -1,0 +1,44 @@
+
+=== kopitang-a · merek pendek, label penuh tulisan ===
+[script-engine] naskah LLM "KOPI TANG Kopi Susu Gula Aren" ditolak validator (percobaan 1/2): Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu.
+[script-engine] naskah LLM "KOPI TANG Kopi Susu Gula Aren" ditolak validator (percobaan 2/2): Panjang skrip 28 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22). | Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu. | segmen "cta" 11 kata — maksimal 10 kata untuk shot 5 detik (§B baris 9)
+[script-engine] JATUH KE TEMPLATE untuk "KOPI TANG Kopi Susu Gula Aren" — naskah yang keluar adalah template pengisi, BUKAN tulisan LLM. Sebab: naskah tidak lolos validator setelah 2 percobaan: Panjang skrip 28 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22). | Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu. | segmen "cta" 11 kata — maksimal 10 kata untuk shot 5 detik (§B baris 9). Ini bukan kondisi normal: pasang ANTHROPIC_API_KEY di layanan web.
+[script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "KOPI TANG Kopi Susu Gula Aren" — LLM gagal dan template cadangan ikut ditolak gate: L-05 Panjang skrip 28 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22). | S-09 segmen "demo" 16 kata — maksimal 11 kata untuk shot 7 detik (§B baris 9)
+  naskah: degraded
+    [hook] Cuy, 45 ribu dapet kualitas segini? sumpah sih
+    [demo] nah, ini KOPI TANG Kopi Susu Gula Aren, rasanya niat banget, worth banget buat dicoba deh
+    [cta] Cek keranjang ya deh
+
+=== kopitang-b · TVC packshot product-only ===
+[script-engine] naskah LLM DIPAKAI untuk "KOPI TANG Kopi Susu Gula Aren" (percobaan 1/2, tier high_quality)
+  naskah: llm
+    [hook] Eh, kopinya kok beda ya?
+    [demo] Sumpah manis gula aren-nya deh, pas banget sih.
+    [cta] Nah, ini Kopi Tang, cobain dong!
+[byteplus] job kopitang-b shot 0: task cgt-20260819040739-zkbrf dikirim
+[byteplus] job kopitang-b shot 0: selesai 111 dtk, model=dreamina-seedance-2-0-mini-260615, audio=true, biaya Rp2771 (estimasi tarif)
+  render OK 112 dtk, Rp2.771
+  QC-01 SKIP — N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain.
+  QC-02 PASS — 10 frame; 9 transisi tangan non-cut diperiksa
+  QC-10 PASS — merek "tang" terbaca utuh (sampai 1 frame diperiksa).
+  QC-03 SKIP — Tidak ada shot/referensi untuk dibandingkan.
+  QC-04 PASS — max_volume=-1.0 dB
+  QC-05 PASS — 5.09 dtk vs target 5 dtk
+  QC-06 PASS — OCR memverifikasi 3 token overlay pada 9/3 frame; tidak ada tepi/tumpang tindih terdeteksi.
+  QC-07 PASS — bersih · sumber: transkrip audio + segmen
+  QC-08 FAIL — watermark_param=false metadata_tag=false video_stream=true
+  QC-11 SKIP — batas jumlah orang tidak dikirim pemanggil — tidak ditebak.
+  QC-12 FAIL — VO jauh lebih pendek dari skrip (5 vs 20 kata) — kemungkinan terpotong
+
+=== arva-b · label sangat kecil ===
+[script-engine] naskah LLM "ARVA Tumbler Chrome" ditolak validator (percobaan 1/2): Panjang skrip 24 kata — untuk video bersuara 15 detik maksimal ~22 kata (13–22). | Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu.
+[script-engine] naskah LLM "ARVA Tumbler Chrome" ditolak validator (percobaan 2/2): Panjang skrip 24 kata — untuk video bersuara 15 detik maksimal ~22 kata (13–22). | Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu.
+[script-engine] JATUH KE TEMPLATE untuk "ARVA Tumbler Chrome" — naskah yang keluar adalah template pengisi, BUKAN tulisan LLM. Sebab: naskah tidak lolos validator setelah 2 percobaan: Panjang skrip 24 kata — untuk video bersuara 15 detik maksimal ~22 kata (13–22). | Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu.. Ini bukan kondisi normal: pasang ANTHROPIC_API_KEY di layanan web.
+[script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "ARVA Tumbler Chrome" — LLM gagal dan template cadangan ikut ditolak gate: L-05 Panjang skrip 25 kata — untuk video bersuara 15 detik maksimal ~22 kata (13–22). | S-09 segmen "demo" 13 kata — maksimal 11 kata untuk shot 7 detik (§B baris 9)
+  naskah: degraded
+    [hook] Say, 150 ribu dapet kualitas segini? sumpah sih
+    [demo] nah, ini ARVA Tumbler Chrome, materialnya niat banget, worth banget buat dicoba deh
+    [cta] Cek keranjang ya deh
+
+SELESAI: 1/3 klip, total Rp2.771
+Laporan: /Users/hadrava/HDRV/03_UGC_AI_ID/test_output/canary_12/laporan.json

@@ -1,0 +1,517 @@
+{
+  "total": 24939,
+  "laporan": [
+    {
+      "id": "somethinc-a",
+      "sifat": "SKU panjang, foto banner marketing",
+      "status": "ok",
+      "berkas": "/Users/hadrava/HDRV/03_UGC_AI_ID/test_output/canary_12/somethinc-a/shot0.mp4",
+      "biaya": 2771,
+      "format": "hands_only",
+      "contentType": "affiliate",
+      "durationSec": 15,
+      "fotoSintetis": false,
+      "script_source": "llm",
+      "standar": null,
+      "segments": [
+        {
+          "role": "hook",
+          "text": "nah, ini yang aku sembunyiin dari kakak"
+        },
+        {
+          "role": "demo",
+          "text": "kulitku断 mending banget, sumpah"
+        },
+        {
+          "role": "cta",
+          "text": "cek aja deh di keranjang ya"
+        }
+      ],
+      "qc": [
+        {
+          "code": "QC-01",
+          "status": "skip",
+          "detail": "N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain."
+        },
+        {
+          "code": "QC-02",
+          "status": "pass",
+          "detail": "10 frame; 9 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-10",
+          "status": "skip",
+          "detail": "TIDAK TERBUKTI: OCR tidak membaca merek \"niacinamide\" maupun kata mirip di 8 frame. Bukan bukti labelnya benar — fidelitas merek diputuskan QC-F1 (model visi)."
+        },
+        {
+          "code": "QC-03",
+          "status": "skip",
+          "detail": "Tidak ada shot/referensi untuk dibandingkan."
+        },
+        {
+          "code": "QC-04",
+          "status": "pass",
+          "detail": "max_volume=-3.6 dB"
+        },
+        {
+          "code": "QC-05",
+          "status": "pass",
+          "detail": "5.09 dtk vs target 5 dtk"
+        },
+        {
+          "code": "QC-06",
+          "status": "skip",
+          "detail": "OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus."
+        },
+        {
+          "code": "QC-07",
+          "status": "pass",
+          "detail": "bersih · sumber: transkrip audio + segmen"
+        },
+        {
+          "code": "QC-08",
+          "status": "fail",
+          "detail": "watermark_param=false metadata_tag=false video_stream=true"
+        },
+        {
+          "code": "QC-11",
+          "status": "skip",
+          "detail": "batas jumlah orang tidak dikirim pemanggil — tidak ditebak."
+        },
+        {
+          "code": "QC-12",
+          "status": "pass",
+          "detail": "transkrip cocok"
+        }
+      ],
+      "qcPassed": false
+    },
+    {
+      "id": "somethinc-b",
+      "sifat": "SKU panjang, wajah AI",
+      "status": "ok",
+      "berkas": "/Users/hadrava/HDRV/03_UGC_AI_ID/test_output/canary_12/somethinc-b/shot0.mp4",
+      "biaya": 8313,
+      "format": "talking_head",
+      "contentType": "affiliate",
+      "durationSec": 15,
+      "fotoSintetis": false,
+      "script_source": "llm",
+      "standar": null,
+      "segments": [
+        {
+          "role": "hook",
+          "text": "Sumpah kulit gue lagi sensitif banget"
+        },
+        {
+          "role": "demo",
+          "text": "Nah, serum niacinamide ini nemenin gue tiap hari deh"
+        },
+        {
+          "role": "cta",
+          "text": "Cek aja di keranjang ya, ada kok"
+        }
+      ],
+      "qc": [
+        {
+          "code": "QC-01",
+          "status": "skip",
+          "detail": "N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain."
+        },
+        {
+          "code": "QC-02",
+          "status": "pass",
+          "detail": "30 frame; 29 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-10",
+          "status": "skip",
+          "detail": "TIDAK TERBUKTI: OCR tidak membaca merek \"niacinamide\" maupun kata mirip di 8 frame. Bukan bukti labelnya benar — fidelitas merek diputuskan QC-F1 (model visi)."
+        },
+        {
+          "code": "QC-03",
+          "status": "skip",
+          "detail": "Tidak ada shot/referensi untuk dibandingkan."
+        },
+        {
+          "code": "QC-04",
+          "status": "pass",
+          "detail": "max_volume=-1.8 dB"
+        },
+        {
+          "code": "QC-05",
+          "status": "fail",
+          "detail": "15.10 dtk vs target 5 dtk"
+        },
+        {
+          "code": "QC-06",
+          "status": "skip",
+          "detail": "OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus."
+        },
+        {
+          "code": "QC-07",
+          "status": "pass",
+          "detail": "bersih · sumber: segmen naskah (transkrip tidak tersedia)"
+        },
+        {
+          "code": "QC-08",
+          "status": "fail",
+          "detail": "watermark_param=false metadata_tag=false video_stream=true"
+        },
+        {
+          "code": "QC-11",
+          "status": "skip",
+          "detail": "batas jumlah orang tidak dikirim pemanggil — tidak ditebak."
+        },
+        {
+          "code": "QC-12",
+          "status": "skip",
+          "detail": "tidak bisa diperiksa: transkripsi gagal: HTTP 503"
+        }
+      ],
+      "qcPassed": false
+    },
+    {
+      "id": "glow-a",
+      "sifat": "promo harga coret 120rb->85rb",
+      "status": "error",
+      "sebab": "TypeError: Cannot read properties of undefined (reading 'handsPrompt')"
+    },
+    {
+      "id": "glow-b",
+      "sifat": "durasi 30 dtk",
+      "status": "batal-naskah",
+      "errors": [
+        {
+          "rule": "L-05",
+          "message_id": "Panjang skrip 56 kata — untuk video bersuara 30 detik maksimal ~44 kata (29–44)."
+        },
+        {
+          "rule": "S-09",
+          "message_id": "segmen \"demo\" 38 kata — maksimal 21 kata untuk shot 14 detik (§B baris 9)"
+        }
+      ]
+    },
+    {
+      "id": "mosseru-a",
+      "sifat": "nama memuat kata pemicu (Shower)",
+      "status": "ok",
+      "berkas": "/Users/hadrava/HDRV/03_UGC_AI_ID/test_output/canary_12/mosseru-a/shot0.mp4",
+      "biaya": 8313,
+      "format": "talking_head",
+      "contentType": "affiliate",
+      "durationSec": 15,
+      "fotoSintetis": false,
+      "script_source": "llm",
+      "standar": null,
+      "segments": [
+        {
+          "role": "hook",
+          "text": "Eh, sabun mandi aku disembunyiin sih."
+        },
+        {
+          "role": "demo",
+          "text": "Nah, aromanya tuh bikin nagih banget deh."
+        },
+        {
+          "role": "cta",
+          "text": "Cek keranjang ya, Mosseru Bright."
+        }
+      ],
+      "qc": [
+        {
+          "code": "QC-01",
+          "status": "skip",
+          "detail": "N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain."
+        },
+        {
+          "code": "QC-02",
+          "status": "pass",
+          "detail": "30 frame; 29 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-10",
+          "status": "skip",
+          "detail": "TIDAK TERBUKTI: OCR tidak membaca merek \"mosseru\" maupun kata mirip di 8 frame. Bukan bukti labelnya benar — fidelitas merek diputuskan QC-F1 (model visi)."
+        },
+        {
+          "code": "QC-03",
+          "status": "skip",
+          "detail": "Tidak ada shot/referensi untuk dibandingkan."
+        },
+        {
+          "code": "QC-04",
+          "status": "pass",
+          "detail": "max_volume=-1.9 dB"
+        },
+        {
+          "code": "QC-05",
+          "status": "fail",
+          "detail": "15.10 dtk vs target 5 dtk"
+        },
+        {
+          "code": "QC-06",
+          "status": "skip",
+          "detail": "OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus."
+        },
+        {
+          "code": "QC-07",
+          "status": "pass",
+          "detail": "bersih · sumber: transkrip audio + segmen"
+        },
+        {
+          "code": "QC-08",
+          "status": "fail",
+          "detail": "watermark_param=false metadata_tag=false video_stream=true"
+        },
+        {
+          "code": "QC-11",
+          "status": "skip",
+          "detail": "batas jumlah orang tidak dikirim pemanggil — tidak ditebak."
+        },
+        {
+          "code": "QC-12",
+          "status": "pass",
+          "detail": "transkrip cocok"
+        }
+      ],
+      "qcPassed": false
+    },
+    {
+      "id": "mosseru-b",
+      "sifat": "genre Ads, CTA tanpa keranjang",
+      "status": "gagal-render",
+      "sebab": "byteplus: task cgt-20260819033824-8thzt failed: The request failed because the output audio may contain sensitive information. Request id: 02178708190484700000000000000000000ffffc0a8791f8effda"
+    },
+    {
+      "id": "kopitang-a",
+      "sifat": "merek pendek, label penuh tulisan",
+      "status": "batal-naskah",
+      "errors": [
+        {
+          "rule": "L-05",
+          "message_id": "Panjang skrip 28 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22)."
+        },
+        {
+          "rule": "S-09",
+          "message_id": "segmen \"demo\" 16 kata — maksimal 11 kata untuk shot 7 detik (§B baris 9)"
+        }
+      ]
+    },
+    {
+      "id": "kopitang-b",
+      "sifat": "TVC packshot product-only",
+      "status": "batal-naskah",
+      "errors": [
+        {
+          "rule": "T-01",
+          "message_id": "Penutup TVC wajib menyebut mereknya (\"kopi\") — tanpa itu iklan berakhir tanpa pernah menyebut merek.",
+          "segment": "cta"
+        },
+        {
+          "rule": "T-02",
+          "message_id": "TVC tidak boleh menyebut 'keranjang' — itu bahasa konten afiliasi, bukan iklan merek.",
+          "segment": "cta"
+        },
+        {
+          "rule": "L-05",
+          "message_id": "Panjang skrip 28 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22)."
+        },
+        {
+          "rule": "S-09",
+          "message_id": "segmen \"demo\" 16 kata — maksimal 11 kata untuk shot 7 detik (§B baris 9)"
+        }
+      ]
+    },
+    {
+      "id": "arva-a",
+      "sifat": "kemasan reflektif chrome",
+      "status": "ok",
+      "berkas": "/Users/hadrava/HDRV/03_UGC_AI_ID/test_output/canary_12/arva-a/shot0.mp4",
+      "biaya": 2771,
+      "format": "tvc",
+      "contentType": "affiliate",
+      "durationSec": 15,
+      "fotoSintetis": true,
+      "script_source": "llm",
+      "standar": null,
+      "segments": [
+        {
+          "role": "hook",
+          "text": "Eh, ini apa sih?"
+        },
+        {
+          "role": "demo",
+          "text": "Sumpah, tumbler ARVA keren banget loh!"
+        },
+        {
+          "role": "cta",
+          "text": "Nah, ARVA ya, deh!"
+        }
+      ],
+      "qc": [
+        {
+          "code": "QC-01",
+          "status": "skip",
+          "detail": "N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain."
+        },
+        {
+          "code": "QC-02",
+          "status": "pass",
+          "detail": "10 frame; 9 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-10",
+          "status": "skip",
+          "detail": "TIDAK TERBUKTI: OCR tidak membaca merek \"chrome\" maupun kata mirip di 8 frame. Bukan bukti labelnya benar — fidelitas merek diputuskan QC-F1 (model visi)."
+        },
+        {
+          "code": "QC-03",
+          "status": "skip",
+          "detail": "Tidak ada shot/referensi untuk dibandingkan."
+        },
+        {
+          "code": "QC-04",
+          "status": "pass",
+          "detail": "max_volume=-2.2 dB"
+        },
+        {
+          "code": "QC-05",
+          "status": "pass",
+          "detail": "5.09 dtk vs target 5 dtk"
+        },
+        {
+          "code": "QC-06",
+          "status": "skip",
+          "detail": "OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus."
+        },
+        {
+          "code": "QC-07",
+          "status": "pass",
+          "detail": "bersih · sumber: transkrip audio + segmen"
+        },
+        {
+          "code": "QC-08",
+          "status": "fail",
+          "detail": "watermark_param=false metadata_tag=false video_stream=true"
+        },
+        {
+          "code": "QC-11",
+          "status": "skip",
+          "detail": "batas jumlah orang tidak dikirim pemanggil — tidak ditebak."
+        },
+        {
+          "code": "QC-12",
+          "status": "fail",
+          "detail": "VO jauh lebih pendek dari skrip (4 vs 14 kata) — kemungkinan terpotong"
+        }
+      ],
+      "qcPassed": false
+    },
+    {
+      "id": "arva-b",
+      "sifat": "label sangat kecil",
+      "status": "error",
+      "sebab": "TypeError: Cannot read properties of undefined (reading 'handsPrompt')"
+    },
+    {
+      "id": "sabun-a",
+      "sifat": "produk polos tanpa teks — QC-10 wajib skip, bukan fail",
+      "status": "error",
+      "sebab": "TypeError: Cannot read properties of undefined (reading 'promptSeed')"
+    },
+    {
+      "id": "sabun-b",
+      "sifat": "polos + 30 dtk",
+      "status": "ok",
+      "berkas": "/Users/hadrava/HDRV/03_UGC_AI_ID/test_output/canary_12/sabun-b/shot0.mp4",
+      "biaya": 2771,
+      "format": "hands_only",
+      "contentType": "affiliate",
+      "durationSec": 30,
+      "fotoSintetis": true,
+      "script_source": "llm",
+      "standar": null,
+      "segments": [
+        {
+          "role": "hook",
+          "text": "Eh, dua puluh lima ribu buat sabun? Serius?"
+        },
+        {
+          "role": "demo",
+          "text": "Sumpah, aku skeptis awalnya sih."
+        },
+        {
+          "role": "demo",
+          "text": "Tapi busanya lembut banget, beda banget deh."
+        },
+        {
+          "role": "demo",
+          "text": "Nah, ini dia sabun susu kambing-nya, loh."
+        },
+        {
+          "role": "cta",
+          "text": "Langsung cek keranjang ya, harganya cuma dua puluh lima ribu dong!"
+        }
+      ],
+      "qc": [
+        {
+          "code": "QC-01",
+          "status": "skip",
+          "detail": "N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain."
+        },
+        {
+          "code": "QC-02",
+          "status": "pass",
+          "detail": "10 frame; 9 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-10",
+          "status": "skip",
+          "detail": "TIDAK TERBUKTI: OCR tidak membaca merek \"kambing\" maupun kata mirip di 8 frame. Bukan bukti labelnya benar — fidelitas merek diputuskan QC-F1 (model visi)."
+        },
+        {
+          "code": "QC-03",
+          "status": "skip",
+          "detail": "Tidak ada shot/referensi untuk dibandingkan."
+        },
+        {
+          "code": "QC-04",
+          "status": "pass",
+          "detail": "max_volume=-2.5 dB"
+        },
+        {
+          "code": "QC-05",
+          "status": "pass",
+          "detail": "5.09 dtk vs target 5 dtk"
+        },
+        {
+          "code": "QC-06",
+          "status": "skip",
+          "detail": "OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus."
+        },
+        {
+          "code": "QC-07",
+          "status": "pass",
+          "detail": "bersih · sumber: segmen naskah (transkrip tidak tersedia)"
+        },
+        {
+          "code": "QC-08",
+          "status": "fail",
+          "detail": "watermark_param=false metadata_tag=false video_stream=true"
+        },
+        {
+          "code": "QC-11",
+          "status": "skip",
+          "detail": "batas jumlah orang tidak dikirim pemanggil — tidak ditebak."
+        },
+        {
+          "code": "QC-12",
+          "status": "skip",
+          "detail": "tidak bisa diperiksa: transkripsi gagal: HTTP 503"
+        }
+      ],
+      "qcPassed": false
+    }
+  ]
+}

@@ -1,0 +1,120 @@
+{
+  "total": 2771,
+  "laporan": [
+    {
+      "id": "kopitang-a",
+      "sifat": "merek pendek, label penuh tulisan",
+      "status": "batal-naskah",
+      "errors": [
+        {
+          "rule": "L-05",
+          "message_id": "Panjang skrip 28 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22)."
+        },
+        {
+          "rule": "S-09",
+          "message_id": "segmen \"demo\" 16 kata — maksimal 11 kata untuk shot 7 detik (§B baris 9)"
+        }
+      ]
+    },
+    {
+      "id": "kopitang-b",
+      "sifat": "TVC packshot product-only",
+      "status": "ok",
+      "berkas": "/Users/hadrava/HDRV/03_UGC_AI_ID/test_output/canary_12/kopitang-b/shot0.mp4",
+      "biaya": 2771,
+      "format": "tvc",
+      "contentType": "affiliate",
+      "durationSec": 15,
+      "fotoSintetis": true,
+      "script_source": "llm",
+      "standar": null,
+      "segments": [
+        {
+          "role": "hook",
+          "text": "Eh, kopinya kok beda ya?"
+        },
+        {
+          "role": "demo",
+          "text": "Sumpah manis gula aren-nya deh, pas banget sih."
+        },
+        {
+          "role": "cta",
+          "text": "Nah, ini Kopi Tang, cobain dong!"
+        }
+      ],
+      "qc": [
+        {
+          "code": "QC-01",
+          "status": "skip",
+          "detail": "N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain."
+        },
+        {
+          "code": "QC-02",
+          "status": "pass",
+          "detail": "10 frame; 9 transisi tangan non-cut diperiksa"
+        },
+        {
+          "code": "QC-10",
+          "status": "pass",
+          "detail": "merek \"tang\" terbaca utuh (sampai 1 frame diperiksa)."
+        },
+        {
+          "code": "QC-03",
+          "status": "skip",
+          "detail": "Tidak ada shot/referensi untuk dibandingkan."
+        },
+        {
+          "code": "QC-04",
+          "status": "pass",
+          "detail": "max_volume=-1.0 dB"
+        },
+        {
+          "code": "QC-05",
+          "status": "pass",
+          "detail": "5.09 dtk vs target 5 dtk"
+        },
+        {
+          "code": "QC-06",
+          "status": "pass",
+          "detail": "OCR memverifikasi 3 token overlay pada 9/3 frame; tidak ada tepi/tumpang tindih terdeteksi."
+        },
+        {
+          "code": "QC-07",
+          "status": "pass",
+          "detail": "bersih · sumber: transkrip audio + segmen"
+        },
+        {
+          "code": "QC-08",
+          "status": "fail",
+          "detail": "watermark_param=false metadata_tag=false video_stream=true"
+        },
+        {
+          "code": "QC-11",
+          "status": "skip",
+          "detail": "batas jumlah orang tidak dikirim pemanggil — tidak ditebak."
+        },
+        {
+          "code": "QC-12",
+          "status": "fail",
+          "detail": "VO jauh lebih pendek dari skrip (5 vs 20 kata) — kemungkinan terpotong"
+        }
+      ],
+      "qcPassed": false
+    },
+    {
+      "id": "arva-b",
+      "sifat": "label sangat kecil",
+      "status": "batal-naskah",
+      "errors": [
+        {
+          "rule": "L-05",
+          "message_id": "Panjang skrip 25 kata — untuk video bersuara 15 detik maksimal ~22 kata (13–22)."
+        },
+        {
+          "rule": "S-09",
+          "message_id": "segmen \"demo\" 13 kata — maksimal 11 kata untuk shot 7 detik (§B baris 9)"
+        }
+      ]
+    }
+  ]
+}

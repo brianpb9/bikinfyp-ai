@@ -1,0 +1,176 @@
+
+=== somethinc-a · SKU panjang, foto banner marketing ===
+[script-engine] naskah LLM DIPAKAI untuk "SOMETHINC 5% Niacinamide Barrier Serum" (percobaan 1/2, tier high_quality)
+  naskah: llm
+    [hook] nah, ini yang aku sembunyiin dari kakak
+    [demo] kulitku断 mending banget, sumpah
+    [cta] cek aja deh di keranjang ya
+[byteplus] job somethinc-a shot 0: task cgt-20260819032645-l55dc dikirim
+[byteplus] job somethinc-a shot 0: selesai 112 dtk, model=dreamina-seedance-2-0-mini-260615, audio=true, biaya Rp2771 (estimasi tarif)
+  render OK 113 dtk, Rp2.771
+  QC-01 SKIP — N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain.
+  QC-02 PASS — 10 frame; 9 transisi tangan non-cut diperiksa
+  QC-10 SKIP — TIDAK TERBUKTI: OCR tidak membaca merek "niacinamide" maupun kata mirip di 8 frame. Bukan bukti labelnya benar
+  QC-03 SKIP — Tidak ada shot/referensi untuk dibandingkan.
+  QC-04 PASS — max_volume=-3.6 dB
+  QC-05 PASS — 5.09 dtk vs target 5 dtk
+  QC-06 SKIP — OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus.
+  QC-07 PASS — bersih · sumber: transkrip audio + segmen
+  QC-08 FAIL — watermark_param=false metadata_tag=false video_stream=true
+  QC-11 SKIP — batas jumlah orang tidak dikirim pemanggil — tidak ditebak.
+  QC-12 PASS — transkrip cocok
+
+=== somethinc-b · SKU panjang, wajah AI ===
+[script-engine] naskah LLM DIPAKAI untuk "SOMETHINC 5% Niacinamide Barrier Serum" (percobaan 1/2, tier high_quality)
+  naskah: llm
+    [hook] Sumpah kulit gue lagi sensitif banget
+    [demo] Nah, serum niacinamide ini nemenin gue tiap hari deh
+    [cta] Cek aja di keranjang ya, ada kok
+[byteplus] job somethinc-b shot 0: task cgt-20260819032911-n7sfx dikirim
+[byteplus] job somethinc-b shot 0: selesai 192 dtk, model=dreamina-seedance-2-0-mini-260615, audio=true, biaya Rp8313 (estimasi tarif)
+  render OK 193 dtk, Rp8.313
+  QC-01 SKIP — N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain.
+  QC-02 PASS — 30 frame; 29 transisi tangan non-cut diperiksa
+  QC-10 SKIP — TIDAK TERBUKTI: OCR tidak membaca merek "niacinamide" maupun kata mirip di 8 frame. Bukan bukti labelnya benar
+  QC-03 SKIP — Tidak ada shot/referensi untuk dibandingkan.
+  QC-04 PASS — max_volume=-1.8 dB
+  QC-05 FAIL — 15.10 dtk vs target 5 dtk
+  QC-06 SKIP — OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus.
+  QC-07 PASS — bersih · sumber: segmen naskah (transkrip tidak tersedia)
+  QC-08 FAIL — watermark_param=false metadata_tag=false video_stream=true
+  QC-11 SKIP — batas jumlah orang tidak dikirim pemanggil — tidak ditebak.
+  QC-12 SKIP — tidak bisa diperiksa: transkripsi gagal: HTTP 503
+
+=== glow-a · promo harga coret 120rb->85rb ===
+[script-engine] naskah LLM DIPAKAI untuk "Serum Glow Bright" (percobaan 1/2, tier high_quality)
+  naskah: llm
+    [hook] Nah, ini seru banget sih.
+    [demo] Serum aku yang aku jaga deh, tuh.
+    [cta] Cek keranjang ya, Bunda dong.
+  GAGAL total glow-a: Cannot read properties of undefined (reading 'handsPrompt')
+
+=== glow-b · durasi 30 dtk ===
+[script-engine] naskah LLM "Serum Glow Bright" ditolak validator (percobaan 1/2): Hook belum memakai perangkat retoris yang dikenali — pakai pertanyaan, negasi, sebut harga, atau pengakuan pribadi. | Negasi tentang orang di arahan visual — tulis positifnya: "not move Two hands" (tulis ulang jadi kalimat positif — sebut apa yang ADA, bukan apa yang tidak ada); "hand does not" (tulis ulang jadi kalimat positif — sebut apa yang ADA, bukan apa yang tidak ada) | segmen "demo" 13 kata — maksimal 10 kata untuk shot 6 detik (§B baris 9)
+[script-engine] naskah LLM "Serum Glow Bright" ditolak validator (percobaan 2/2): Panjang skrip 45 kata — untuk video bersuara 30 detik maksimal ~44 kata (29–44). | Ada kata overclaim ("pasti") — kata kayak 'pasti'/'dijamin'/'terbaik' bisa bikin kena teguran TikTok. | segmen "demo" 11 kata — maksimal 10 kata untuk shot 6 detik (§B baris 9)
+[script-engine] JATUH KE TEMPLATE untuk "Serum Glow Bright" — naskah yang keluar adalah template pengisi, BUKAN tulisan LLM. Sebab: naskah tidak lolos validator setelah 2 percobaan: Panjang skrip 45 kata — untuk video bersuara 30 detik maksimal ~44 kata (29–44). | Ada kata overclaim ("pasti") — kata kayak 'pasti'/'dijamin'/'terbaik' bisa bikin kena teguran TikTok. | segmen "demo" 11 kata — maksimal 10 kata untuk shot 6 detik (§B baris 9). Ini bukan kondisi normal: pasang ANTHROPIC_API_KEY di layanan web.
+[script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "Serum Glow Bright" — LLM gagal dan template cadangan ikut ditolak gate: L-05 Panjang skrip 56 kata — untuk video bersuara 30 detik maksimal ~44 kata (29–44). | S-09 segmen "demo" 38 kata — maksimal 21 kata untuk shot 14 detik (§B baris 9)
+  naskah: degraded
+    [hook] Say, 85 ribu dapet kualitas segini? sumpah sih
+    [demo] nah, ini Serum Glow Bright, teksturnya niat banget, apalagi kalau order sekarang biasanya ada bonus tambahan, jadi makin worth it sih, Kamu juga ngerasa gitu nggak sih, pas akhirnya nemu yang beneran works, seriusan recommended banget buat harian
+    [cta] Cek keranjang ya deh, buruan ya, keburu diserbu yang lain
+
+=== mosseru-a · nama memuat kata pemicu (Shower) ===
+[script-engine] naskah LLM "Mosseru Bright Shower Gel" ditolak validator (percobaan 1/2): Panjang skrip 27 kata — untuk video bersuara 15 detik maksimal ~22 kata (12–22). | segmen "demo" 12 kata — maksimal 10 kata untuk shot 6 detik (§B baris 9)
+[script-engine] naskah LLM DIPAKAI untuk "Mosseru Bright Shower Gel" (percobaan 2/2, tier high_quality)
+  naskah: llm
+    [hook] Eh, sabun mandi aku disembunyiin sih.
+    [demo] Nah, aromanya tuh bikin nagih banget deh.
+    [cta] Cek keranjang ya, Mosseru Bright.
+[byteplus] job mosseru-a shot 0: task cgt-20260819033404-5sqhb dikirim
+[byteplus] job mosseru-a shot 0: selesai 193 dtk, model=dreamina-seedance-2-0-mini-260615, audio=true, biaya Rp8313 (estimasi tarif)
+  render OK 194 dtk, Rp8.313
+  QC-01 SKIP — N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain.
+  QC-02 PASS — 30 frame; 29 transisi tangan non-cut diperiksa
+  QC-10 SKIP — TIDAK TERBUKTI: OCR tidak membaca merek "mosseru" maupun kata mirip di 8 frame. Bukan bukti labelnya benar — f
+  QC-03 SKIP — Tidak ada shot/referensi untuk dibandingkan.
+  QC-04 PASS — max_volume=-1.9 dB
+  QC-05 FAIL — 15.10 dtk vs target 5 dtk
+  QC-06 SKIP — OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus.
+  QC-07 PASS — bersih · sumber: transkrip audio + segmen
+  QC-08 FAIL — watermark_param=false metadata_tag=false video_stream=true
+  QC-11 SKIP — batas jumlah orang tidak dikirim pemanggil — tidak ditebak.
+  QC-12 PASS — transkrip cocok
+
+=== mosseru-b · genre Ads, CTA tanpa keranjang ===
+[script-engine] naskah LLM "Mosseru Bright Shower Gel" ditolak validator (percobaan 1/2): Hook belum memakai perangkat retoris yang dikenali — pakai pertanyaan, negasi, sebut harga, atau pengakuan pribadi. | segmen "demo" 11 kata — maksimal 10 kata untuk shot 6 detik (§B baris 9)
+[script-engine] naskah LLM DIPAKAI untuk "Mosseru Bright Shower Gel" (percobaan 2/2, tier high_quality)
+  naskah: llm
+    [hook] Eh, botol apa ini sih?
+    [demo] Nah, ini yang gue sembunyiin dari temen-temen gue deh.
+    [cta] Detailnya ada di bawah ya.
+[byteplus] job mosseru-b shot 0: task cgt-20260819033824-8thzt dikirim
+
+=== kopitang-a · merek pendek, label penuh tulisan ===
+[script-engine] naskah LLM "KOPI TANG Kopi Susu Gula Aren" ditolak validator (percobaan 1/2): Hook belum memakai perangkat retoris yang dikenali — pakai pertanyaan, negasi, sebut harga, atau pengakuan pribadi. | Negasi tentang orang di arahan visual — tulis positifnya: "no hands" (tulis ulang jadi kalimat positif — sebut apa yang ADA, bukan apa yang tidak ada)
+[script-engine] naskah LLM "KOPI TANG Kopi Susu Gula Aren" ditolak validator (percobaan 2/2): Panjang skrip 23 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22). | Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu.
+[script-engine] JATUH KE TEMPLATE untuk "KOPI TANG Kopi Susu Gula Aren" — naskah yang keluar adalah template pengisi, BUKAN tulisan LLM. Sebab: naskah tidak lolos validator setelah 2 percobaan: Panjang skrip 23 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22). | Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu.. Ini bukan kondisi normal: pasang ANTHROPIC_API_KEY di layanan web.
+[script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "KOPI TANG Kopi Susu Gula Aren" — LLM gagal dan template cadangan ikut ditolak gate: L-05 Panjang skrip 28 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22). | S-09 segmen "demo" 16 kata — maksimal 11 kata untuk shot 7 detik (§B baris 9)
+  naskah: degraded
+    [hook] Cuy, 45 ribu dapet kualitas segini? sumpah sih
+    [demo] nah, ini KOPI TANG Kopi Susu Gula Aren, rasanya niat banget, worth banget buat dicoba deh
+    [cta] Cek keranjang ya deh
+
+=== kopitang-b · TVC packshot product-only ===
+[script-engine] naskah LLM "KOPI TANG Kopi Susu Gula Aren" ditolak validator (percobaan 1/2): Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu. | Negasi tentang orang di arahan visual — tulis positifnya: "no hand" (tulis ulang jadi kalimat positif — sebut apa yang ADA, bukan apa yang tidak ada)
+[script-engine] naskah LLM "KOPI TANG Kopi Susu Gula Aren" ditolak validator (percobaan 2/2): Panjang skrip 27 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22). | Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu. | segmen "hook" 11 kata — maksimal 10 kata untuk shot 4 detik (§B baris 9)
+[script-engine] JATUH KE TEMPLATE untuk "KOPI TANG Kopi Susu Gula Aren" — naskah yang keluar adalah template pengisi, BUKAN tulisan LLM. Sebab: naskah tidak lolos validator setelah 2 percobaan: Panjang skrip 27 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22). | Nama produk jangan disebut di 3 detik pertama — bikin penasaran dulu. | segmen "hook" 11 kata — maksimal 10 kata untuk shot 4 detik (§B baris 9). Ini bukan kondisi normal: pasang ANTHROPIC_API_KEY di layanan web.
+[script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "KOPI TANG Kopi Susu Gula Aren" — LLM gagal dan template cadangan ikut ditolak gate: T-01 Penutup TVC wajib menyebut mereknya ("kopi") — tanpa itu iklan berakhir tanpa pernah menyebut merek. | T-02 TVC tidak boleh menyebut 'keranjang' — itu bahasa konten afiliasi, bukan iklan merek. | L-05 Panjang skrip 28 kata — untuk video bersuara 15 detik maksimal ~22 kata (10–22). | S-09 segmen "demo" 16 kata — maksimal 11 kata untuk shot 7 detik (§B baris 9)
+  naskah: degraded
+    [hook] Bun, 45 ribu dapet kualitas segini? sumpah sih
+    [demo] nah, ini KOPI TANG Kopi Susu Gula Aren, rasanya niat banget, worth banget buat dicoba deh
+    [cta] Cek keranjang ya deh
+
+=== arva-a · kemasan reflektif chrome ===
+[script-engine] naskah LLM DIPAKAI untuk "ARVA Tumbler Chrome" (percobaan 1/2, tier high_quality)
+  naskah: llm
+    [hook] Eh, ini apa sih?
+    [demo] Sumpah, tumbler ARVA keren banget loh!
+    [cta] Nah, ARVA ya, deh!
+[byteplus] job arva-a shot 0: task cgt-20260819034142-xt8wt dikirim
+[byteplus] job arva-a shot 0: selesai 111 dtk, model=dreamina-seedance-2-0-mini-260615, audio=true, biaya Rp2771 (estimasi tarif)
+  render OK 112 dtk, Rp2.771
+  QC-01 SKIP — N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain.
+  QC-02 PASS — 10 frame; 9 transisi tangan non-cut diperiksa
+  QC-10 SKIP — TIDAK TERBUKTI: OCR tidak membaca merek "chrome" maupun kata mirip di 8 frame. Bukan bukti labelnya benar — fi
+  QC-03 SKIP — Tidak ada shot/referensi untuk dibandingkan.
+  QC-04 PASS — max_volume=-2.2 dB
+  QC-05 PASS — 5.09 dtk vs target 5 dtk
+  QC-06 SKIP — OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus.
+  QC-07 PASS — bersih · sumber: transkrip audio + segmen
+  QC-08 FAIL — watermark_param=false metadata_tag=false video_stream=true
+  QC-11 SKIP — batas jumlah orang tidak dikirim pemanggil — tidak ditebak.
+  QC-12 FAIL — VO jauh lebih pendek dari skrip (4 vs 14 kata) — kemungkinan terpotong
+
+=== arva-b · label sangat kecil ===
+[script-engine] naskah LLM DIPAKAI untuk "ARVA Tumbler Chrome" (percobaan 1/2, tier high_quality)
+  naskah: llm
+    [hook] Nah, tumblernya beda banget sih.
+    [demo] Sumpah aku sampe beli dua, dong.
+    [cta] Cek keranjang ya, ada di bawah tuh.
+  GAGAL total arva-b: Cannot read properties of undefined (reading 'handsPrompt')
+
+=== sabun-a · produk polos tanpa teks — QC-10 wajib skip, bukan fail ===
+[script-engine] naskah LLM "Sabun Susu Kambing" ditolak validator (percobaan 1/2): Panjang skrip 27 kata — untuk video bersuara 15 detik maksimal ~22 kata (13–22). | segmen "demo" 11 kata — maksimal 10 kata untuk shot 6 detik (§B baris 9)
+[script-engine] naskah LLM DIPAKAI untuk "Sabun Susu Kambing" (percobaan 2/2, tier high_quality)
+  naskah: llm
+    [hook] Sumpah, kulit aku kering banget deh.
+    [demo] Nah, aku pakai sabun susu kambing ini loh.
+    [cta] Cek keranjang ya, Bunda!
+  GAGAL total sabun-a: Cannot read properties of undefined (reading 'promptSeed')
+
+=== sabun-b · polos + 30 dtk ===
+[script-engine] naskah LLM "Sabun Susu Kambing" ditolak validator (percobaan 1/2): Hook belum memakai perangkat retoris yang dikenali — pakai pertanyaan, negasi, sebut harga, atau pengakuan pribadi.
+[script-engine] naskah LLM DIPAKAI untuk "Sabun Susu Kambing" (percobaan 2/2, tier high_quality)
+  naskah: llm
+    [hook] Eh, dua puluh lima ribu buat sabun? Serius?
+    [demo] Sumpah, aku skeptis awalnya sih.
+    [demo] Tapi busanya lembut banget, beda banget deh.
+    [demo] Nah, ini dia sabun susu kambing-nya, loh.
+    [cta] Langsung cek keranjang ya, harganya cuma dua puluh lima ribu dong!
+[byteplus] job sabun-b shot 0: task cgt-20260819034513-2tjrg dikirim
+[byteplus] job sabun-b shot 0: selesai 131 dtk, model=dreamina-seedance-2-0-mini-260615, audio=true, biaya Rp2771 (estimasi tarif)
+  render OK 132 dtk, Rp2.771
+  QC-01 SKIP — N/A: suara dari VO terpisah (Gemini TTS) — mulut memang tidak disinkronkan ke kata, sesuai desain.
+  QC-02 PASS — 10 frame; 9 transisi tangan non-cut diperiksa
+  QC-10 SKIP — TIDAK TERBUKTI: OCR tidak membaca merek "kambing" maupun kata mirip di 8 frame. Bukan bukti labelnya benar — f
+  QC-03 SKIP — Tidak ada shot/referensi untuk dibandingkan.
+  QC-04 PASS — max_volume=-2.5 dB
+  QC-05 PASS — 5.09 dtk vs target 5 dtk
+  QC-06 SKIP — OCR hanya membuktikan 0% overlay (< 60%); perlu tinjauan visual, bukan klaim lulus.
+  QC-07 PASS — bersih · sumber: segmen naskah (transkrip tidak tersedia)
+  QC-08 FAIL — watermark_param=false metadata_tag=false video_stream=true
+  QC-11 SKIP — batas jumlah orang tidak dikirim pemanggil — tidak ditebak.
+  QC-12 SKIP — tidak bisa diperiksa: transkripsi gagal: HTTP 503
+
+SELESAI: 5/12 klip, total Rp24.939
+Laporan: /Users/hadrava/HDRV/03_UGC_AI_ID/test_output/canary_12/laporan.json
