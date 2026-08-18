@@ -1,3 +1,28 @@
+/**
+ * HERMETIK: audit ini TIDAK BOLEH memanggil penyedia berbayar.
+ *
+ * Ia menilai copy TEMPLATE, dan penulis LLM tidak ada hubungannya dengan itu.
+ * Tapi selama SCRIPT_LLM tidak dikunci, .env.local mengisinya sendiri dan
+ * setiap kali audit dijalankan — di CI, di laptop, oleh auditor — request
+ * Anthropic ikut terkirim. Reviewer ronde 5 menjalankannya dan memicu
+ * sedikitnya dua request tanpa pernah memintanya.
+ *
+ * Uang tidak boleh keluar sebagai efek samping dari MENGUKUR.
+ *
+ * Ditulis sebagai PEMERIKSAAN, bukan penugasan: `import` di ESM dievaluasi
+ * sebelum baris mana pun di badan modul, jadi menyetel process.env di sini
+ * sudah terlambat untuk modul yang membaca env saat dimuat. Yang bisa
+ * diandalkan hanya menolak berjalan.
+ */
+if (process.env.SCRIPT_LLM !== "0") {
+  console.error(
+    "audit:script-catalog menolak berjalan tanpa SCRIPT_LLM=0.\n" +
+      "Audit ini menilai copy TEMPLATE dan tidak boleh memanggil penyedia berbayar.\n" +
+      "Jalankan: SCRIPT_LLM=0 npm run audit:script-catalog"
+  );
+  process.exit(2);
+}
+
 import fs from "node:fs";
 import path from "node:path";
 import { generateCatalogScriptAudit } from "../lib/script-engine/catalog-audit";

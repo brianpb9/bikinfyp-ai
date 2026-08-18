@@ -149,9 +149,18 @@ export function assertVisualSpec(spec: VisualSpec) {
   // Yang divalidasi: larangan OVERLAY tambahan, bukan larangan tulisan.
   // Versi lama menuntut substring "no text" — dan itu justru yang menekan
   // label produk sampai jadi coretan (lihat MANDATORY_NEGATIVE_PROMPT).
-  if (!spec.negativePrompt.toLowerCase().includes("no added text overlay")) {
+  // Frasanya TELANJANG, tanpa kata "no" (lihat frasaNegatifBersih di
+  // shot-planner): field negative sudah berarti "hindari ini", jadi "no X" di
+  // dalamnya adalah negasi ganda.
+  //
+  // Assertion ini sempat menuntut literal "no added text overlay" SETELAH
+  // pembersih membuang kata "no" — dan karena tidak ada satu pun tes yang
+  // menjalankan planShots() lalu assertVisualSpec() berurutan, keduanya hijau
+  // sendiri-sendiri sementara SETIAP render nyata melempar. Tes komposisinya
+  // sekarang ada di tests/spec-provider-kontrak.test.ts.
+  if (!spec.negativePrompt.toLowerCase().includes("added text overlay")) {
     throw new Error(
-      "DILARANG: prompt ke model video wajib menyertakan negative instruction 'no added text overlay' " +
+      "DILARANG: prompt ke model video wajib menyertakan negative instruction 'added text overlay' " +
         "(melarang lapisan teks tambahan, BUKAN melarang tulisan yang tercetak di produk)."
     );
   }

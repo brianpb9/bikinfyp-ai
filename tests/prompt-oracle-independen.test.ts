@@ -35,7 +35,15 @@ const MANUSIA_ORACLE = new RegExp(
 function negasiManusia(teks: string): string[] {
   const temuan: string[] = [];
   for (const m of teks.matchAll(NEGASI_ORACLE)) {
-    const ekor = teks.slice(m.index! + m[0].length, m.index! + m[0].length + 40);
+    // trim() DULU: tanpa itu split menghasilkan elemen kosong di depan, satu
+    // slot jendela terbuang, dan kata orang di posisi keempat lolos. Itu yang
+    // membuat oracle ini sempat melaporkan 0/360 sementara oracle reviewer
+    // menemukan "no watermark EXACTLY ONE person" di 23 shot.
+    // Jendela berhenti di AKHIR KALIMAT. Negasi mengikat di dalam kalimatnya:
+    // "no watermark. EXACTLY ONE person is present" adalah dua kalimat, dan
+    // yang dinegasikan watermark — bukan orangnya. Koma TIDAK menghentikan
+    // jendela, karena itu masih satu klausa.
+    const ekor = teks.slice(m.index! + m[0].length, m.index! + m[0].length + 60).split(/[.;!?]/)[0].trim();
     const jendela = ekor.split(/\s+/).slice(0, 4).join(" ");
     if (MANUSIA_ORACLE.test(jendela)) temuan.push(`${m[0]}${jendela}`);
   }

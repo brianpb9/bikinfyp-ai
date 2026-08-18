@@ -94,6 +94,14 @@ const NEGASI_ORANG: RegExp[] = [
   new RegExp(`\\b(?:${KATA_ORANG}|${KATA_GANTI})\\b(?:\\s+\\w+){0,3}\\s+\\b(?:${NEGASI})\\b`, "gi"),
 ];
 
+/** Ganti tiap kemunculan nama produk dengan placeholder netral. */
+function tutupiNama(teks: string, nama?: string | null): string {
+  const n = (nama ?? "").trim();
+  if (n.length < 3) return teks;
+  const pola = new RegExp(n.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "gi");
+  return teks.replace(pola, " PRODUK ");
+}
+
 export interface KonteksPemicu {
   /** Nama produk. Kata pemicu yang MEMANG bagian namanya bukan sinyal. */
   namaProduk?: string | null;
@@ -112,12 +120,19 @@ export interface KonteksPemicu {
  */
 export function periksaPemicu(teks: string, konteks: KonteksPemicu = {}): TemuanPemicu[] {
   const temuan: TemuanPemicu[] = [];
-  const nama = (konteks.namaProduk ?? "").toLowerCase();
+  // Nama produk DITUTUP di tempat ia muncul, bukan dijadikan izin global.
+  //
+  // Versi pertama membandingkan kata pemicu dengan seluruh nama produk, jadi
+  // produk bernama "Bright Shower Gel" membuat SETIAP "shower" di prompt
+  // lolos — termasuk "the talent enters the shower", adegan yang justru
+  // memicu penolakan. Yang benar: buang kemunculan namanya, lalu periksa
+  // sisanya seperti biasa.
+  const bersih = tutupiNama(teks, konteks.namaProduk);
   for (const { pola, saran } of KOSAKATA) {
-    const m = teks.match(pola);
-    if (m && !(nama && nama.includes(m[0].toLowerCase()))) temuan.push({ jenis: "kosakata", cocok: m[0], saran });
+    const m = bersih.match(pola);
+    if (m) temuan.push({ jenis: "kosakata", cocok: m[0], saran });
   }
-  if (PINTU_KAMAR_MANDI.test(teks) && ORANG_KEDUA.test(teks)) {
+  if (PINTU_KAMAR_MANDI.test(bersih) && ORANG_KEDUA.test(bersih)) {
     temuan.push({
       jenis: "kosakata",
       cocok: "pintu kamar mandi + orang kedua",
@@ -126,7 +141,7 @@ export function periksaPemicu(teks: string, konteks: KonteksPemicu = {}): Temuan
   }
   const sudah = new Set<string>();
   for (const pola of [...NEGASI_ORANG, NEGASI_TANPA_OBJEK]) {
-    for (const m of teks.matchAll(pola)) {
+    for (const m of bersih.matchAll(pola)) {
       // Dua arah bisa mencocoki potongan yang sama; laporkan sekali saja.
       const kunci = m[0].toLowerCase();
       if (sudah.has(kunci)) continue;

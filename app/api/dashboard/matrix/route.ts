@@ -15,6 +15,7 @@ import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { getPool } from "@/lib/postgres/pool";
 import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
+import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
@@ -300,6 +301,9 @@ export async function POST(req: Request) {
           hookLevel: t.hookLevel,
           count: 1,
           templateId: t.id,
+          // Genre dari katalog: matrix menjalankan template Ads juga.
+          ...(t.kind === "ads" ? { contentType: "ads" as const } : {}),
+          ...(t.format ? { format: t.format } : {}),
           // lockHookFamily: hook template dipakai APA ADANYA, bukan dijadikan
           // saran yang boleh ditimpa prioritas kategori.
           ...(t.hookFamily ? { hookFamilies: [t.hookFamily as HookCode], lockHookFamily: true } : {}),
@@ -315,7 +319,9 @@ export async function POST(req: Request) {
         const barisSkrip = await smokeCreateScripts(user.id, productId, avatars.map(() => ({
           hookFamily: lolos.hook_family, emotion: lolos.emotion, register: lolos.register,
           segments: lolos.segments, caption: lolos.caption, hashtags: lolos.hashtags,
-          validationResult: lolos.validation, qualityTier: tier, hookLevel: t.hookLevel,
+          // Amplop lengkap (snapshot + provenance) — lihat campaign/generate.
+          validationResult: amplopValidasi(lolos.validation, { script_source: lolos.script_source, admisi: lolos.admisi }),
+          qualityTier: tier, hookLevel: t.hookLevel,
         })), membership.org_id);
 
         for (let i = 0; i < avatars.length; i++) {
@@ -347,7 +353,10 @@ export async function POST(req: Request) {
             // itu di atas menghasilkan komposisi yang salah. Pilihan pengguna
             // dipakai hanya untuk template yang memang tidak peduli.
             ratio: t.ratio ?? ratio,
-            templateId: t.id, recordStyle: null, shotCount: null, runId,
+            templateId: t.id,
+          // Genre dari katalog: matrix menjalankan template Ads juga.
+          ...(t.kind === "ads" ? { contentType: "ads" as const } : {}),
+          ...(t.format ? { format: t.format } : {}), recordStyle: null, shotCount: null, runId,
           }, { pool, jobsRepo, creditsRepo });
           hasil.push({ ...sel, avatar_id: preset.id, template_id: t.id });
         }

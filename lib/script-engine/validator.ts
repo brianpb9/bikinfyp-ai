@@ -217,11 +217,21 @@ const KATA_SATUAN: Record<string, number> = {
 export function hargaTerbilang(text: string): { frasa: string; nilai: number }[] {
   const kata = text.toLowerCase().match(/[a-z]+/g) ?? [];
   const hasil: { frasa: string; nilai: number }[] = [];
-  let kelompok = 0;   // yang sudah ditutup ratusan/puluhan
-  let tertunda = 0;   // satuan yang belum ditutup
-  let mulai = -1;     // indeks kata pertama rangkaian, untuk pesan errornya
-  let punyaAngka = false; // ada kata bilangan sebelum satuannya?
-  const reset = () => { kelompok = 0; tertunda = 0; mulai = -1; punyaAngka = false; };
+  let kelompok = 0;      // ratusan/puluhan yang sudah ditutup
+  let tertunda = 0;      // satuan yang belum ditutup
+  let total = 0;         // AKUMULASI satu rangkaian: "satu juta dua ratus ribu"
+  let pengaliTerakhir = Infinity; // satuan hanya boleh MENGECIL dalam satu rangkaian
+  let mulai = -1;
+  let punyaAngka = false;
+  const reset = () => { kelompok = 0; tertunda = 0; total = 0; pengaliTerakhir = Infinity; mulai = -1; punyaAngka = false; };
+  /** Tutup rangkaian: sisa kelompok tanpa satuan ikut sebagai sisa nominal. */
+  const tutup = (sampai: number) => {
+    if (total > 0) {
+      const sisa = kelompok + tertunda;
+      hasil.push({ frasa: kata.slice(mulai, sampai).join(" "), nilai: Math.round(total + sisa) });
+    }
+    reset();
+  };
   for (let i = 0; i < kata.length; i++) {
     const w = kata[i];
     const tandai = () => { if (mulai < 0) mulai = i; punyaAngka = true; };
@@ -230,6 +240,10 @@ export function hargaTerbilang(text: string): { frasa: string; nilai: number }[]
     if (w === "sebelas") { tandai(); tertunda = 11; continue; }
     if (w === "belas") { tandai(); tertunda = 10 + tertunda; continue; }
     if (w === "puluh") { tandai(); kelompok += tertunda * 10; tertunda = 0; continue; }
+    // "dua setengah juta" = 2.500.000. Bentuk ini dipakai orang Indonesia
+    // sehari-hari dan sebelumnya tidak terbaca sama sekali — jadi klaim harga
+    // dalam bentuk itu lewat gerbang kebenaran tanpa diperiksa.
+    if (w === "setengah") { tandai(); tertunda += 0.5; continue; }
     if (w === "ratus" || w === "seratus") {
       tandai();
       kelompok += (w === "seratus" ? 1 : tertunda || 1) * 100;
@@ -238,20 +252,23 @@ export function hargaTerbilang(text: string): { frasa: string; nilai: number }[]
     }
     if (w === "ribu" || w === "seribu" || w === "juta" || w === "sejuta") {
       const seSendiri = w.startsWith("se");
-      // "85 ribu" ANGKANYA DIGIT, dan jalur digit sudah memeriksanya. Satuan
-      // yang berdiri tanpa kata bilangan di depannya bukan harga terbilang —
-      // menghitungnya sebagai 1.000 menolak setiap naskah yang menyebut harga
-      // dengan angka.
-      if (!punyaAngka && !seSendiri) { reset(); continue; }
-      tandai();
+      // "85 ribu" angkanya DIGIT, dan jalur digit sudah memeriksanya. Satuan
+      // yang berdiri tanpa kata bilangan di depannya bukan harga terbilang.
+      if (!punyaAngka && !seSendiri) { tutup(i); continue; }
       const pengali = w.includes("juta") ? 1_000_000 : 1_000;
-      const nilai = (seSendiri ? 1 : (kelompok + tertunda) || 1) * pengali;
-      hasil.push({ frasa: kata.slice(mulai, i + 1).join(" "), nilai });
-      reset();
+      // Satuan yang MEMBESAR berarti rangkaian baru ("dua ribu... lima juta").
+      if (pengali >= pengaliTerakhir) tutup(i);
+      tandai();
+      const nominal = seSendiri ? 1 : (kelompok + tertunda) || 1;
+      total += nominal * pengali;
+      pengaliTerakhir = pengali;
+      kelompok = 0;
+      tertunda = 0;
       continue;
     }
-    reset();
+    tutup(i);
   }
+  tutup(kata.length);
   return hasil;
 }
 
@@ -570,15 +587,25 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     for (const t of tokens(formatHargaNatural(script.promoPriceBeforeIdr))) if (/^\d+$/.test(t)) allowedDigits.add(t);
     allowedDigits.add(String(script.promoPriceBeforeIdr));
   }
-  // Angka DI DALAM NAMA PRODUK bukan klaim. "SPF Serum 50", "Sabun 3 in 1",
-  // dan "Minyak 100ml" adalah data produk yang dikirim penggunanya sendiri —
-  // menolaknya berarti menyuruh pengguna berbohong tentang namanya sendiri.
-  for (const t of tokens(script.productName)) if (/^\d+$/.test(t)) allowedDigits.add(t);
   // Angka di dalam frasa harga diperiksa utuh (nominal + unit) di bawah.
   // Jangan pecah "24,62 ribu" menjadi token 24 dan 62 lalu menolaknya
   // sebelum pemeriksaan harga semantik sempat berjalan.
   const nonPriceTokens = tokens(fullText.replace(PRICE_MENTION_REGEX, " "));
-  const badDigit = nonPriceTokens.find((t) => /^\d+$/.test(t) && !allowedDigits.has(t));
+  // Angka DI DALAM NAMA PRODUK bukan klaim — tapi izinnya melekat pada
+  // KEMUNCULAN namanya, bukan pada angkanya di mana pun.
+  //
+  // Versi pertama memasukkan angka nama produk ke daftar izin global, jadi
+  // produk bernama "SPF Serum 50" membuat "diskon 50 persen" ikut lolos
+  // (reviewer ronde 5). Sekarang angka itu hanya dimaafkan bila bertetangga
+  // dengan kata lain dari nama produknya — "SPF 50" lolos, "diskon 50 persen"
+  // tidak.
+  const kataNama = new Set(tokens(script.productName).filter((t) => t.length >= 3 && !/^\d+$/.test(t)));
+  const angkaNama = new Set(tokens(script.productName).filter((t) => /^\d+$/.test(t)));
+  const dekatNama = (i: number) =>
+    nonPriceTokens.slice(Math.max(0, i - 2), i + 3).some((t) => kataNama.has(t));
+  const badDigit = nonPriceTokens.find(
+    (t, i) => /^\d+$/.test(t) && !allowedDigits.has(t) && !(angkaNama.has(t) && dekatNama(i))
+  );
   if (badDigit)
     push(false, { rule: "L-14", message_id: `Ada angka "${badDigit}" yang tidak ada di data produk — klaim harus sesuai data yang kamu kasih.` });
   const sourcePriceAmounts = [script.priceIdr, script.promoPriceBeforeIdr]

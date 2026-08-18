@@ -1,8 +1,9 @@
 import { ERR, errorResponse } from "@/lib/errors";
-import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
+import { CAMPAIGN_TEMPLATES, getTemplate } from "@/lib/templates";
 import type { HookCode } from "@/lib/config/hooks";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { generateScripts, TEMPLATE_COPY_CAPACITY } from "@/lib/script-engine";
+import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { cleanProductName } from "@/lib/extract";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
@@ -112,6 +113,13 @@ export async function POST(req: Request) {
       // Divalidasi terhadap katalog nyata, bukan diterima mentah — id karangan
       // hanya akan diam-diam jatuh ke teks generik tanpa jejak.
       ...(templateId ? { templateId } : {}),
+      // GENRE dari katalog, bukan dari request (reviewer ronde 5). Tanpa dua
+      // baris ini template Ads ditulis DAN dinilai sebagai naskah afiliasi:
+      // penulis LLM tidak pernah diberi tahu CTA Ads, dan cadangan template
+      // menghasilkan "cek keranjang" untuk iklan jasa yang tidak punya
+      // keranjang.
+      ...(getTemplate(templateId)?.kind === "ads" ? { contentType: "ads" as const } : {}),
+      ...(getTemplate(templateId)?.format ? { format: getTemplate(templateId)!.format } : {}),
       // Pecahan dijaga di sini juga, bukan cuma di mesin: nilai dari luar
       // tidak boleh bisa membuat hook lebih panjang dari videonya.
       ...(beats ? { beats } : {}),
@@ -153,7 +161,12 @@ export async function POST(req: Request) {
 
     const created = await smokeCreateScripts(user.id, product.id, passing.map((v) => ({
       hookFamily: v.hook_family, emotion: v.emotion, register: v.register, segments: v.segments,
-      caption: v.caption, hashtags: v.hashtags, validationResult: v.validation, qualityTier: tier, hookLevel,
+      caption: v.caption, hashtags: v.hashtags,
+      // AMPLOP, bukan vonis polos: tanpa snapshot, confirm menilai ulang
+      // naskah ini tanpa jatah kata dan tanpa genre — dan T06 24 kata ditolak
+      // "harus 63-96 kata" sesudah lahir dalam keadaan sah.
+      validationResult: amplopValidasi(v.validation, { script_source: v.script_source, admisi: v.admisi }),
+      qualityTier: tier, hookLevel,
     })), membership.org_id);
 
     return Response.json({

@@ -9,7 +9,7 @@
     "start": "next start",
     "seed": "tsx scripts/seed.ts",
     "test": "SCRIPT_LLM=0 tsx --test tests/*.test.ts",
-    "audit:script-catalog": "tsx scripts/audit-script-catalog.ts",
+    "audit:script-catalog": "SCRIPT_LLM=0 tsx scripts/audit-script-catalog.ts",
     "test:db-config": "tsx --test tests/database-config.test.ts",
     "check:postgres-local": "bash scripts/check-postgres-local.sh",
     "migrate:postgres-local": "bash scripts/migrate-postgres.sh",

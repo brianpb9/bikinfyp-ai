@@ -147,7 +147,7 @@ const TVC_FRAMING =
   "high-end television commercial cinematography, shot on a cinema camera, controlled studio-grade " +
   "lighting with deliberate key and rim light, smooth stabilised camera movement on a slider or gimbal, " +
   "shallow cinematic depth of field, polished colour grade, immaculate art-directed set — a broadcast " +
-  "commercial, never a phone-shot or hand-held clip";
+  "commercial shot entirely on stabilised cinema rigs, every frame composed and locked";
 
 // AI UGC Ads: iklan untuk APP, JASA, atau TOKO — bukan barang fisik.
 //
@@ -706,7 +706,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       role: `the realisation: catching sight of the result unexpectedly and reacting to it, a clear beat of pleasant surprise`,
       camera: `static frame holding on the reaction`,
       avoid: `her head stays steady so the surprise reads clearly`,
-      pace: `snappy, not slow or atmospheric`,
+      pace: `snappy and brisk, energy kept high throughout`,
     },
   ];
 
@@ -903,7 +903,12 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   const TVC_STYLE_LOCK =
     `photorealistic, luxury commercial still, soft cinematic lighting, shallow depth of field, ` +
     `high detail texture, the room, its furniture and their exact shapes stay identical across every shot, ` +
-    `nothing stretches or changes proportion, no text, no logo, no watermark`;
+    // Titik di ujung BUKAN kosmetik: tanpa itu kalimat berikutnya menempel
+    // langsung ("...no watermark EXACTLY ONE person is present..."), dan yang
+    // dibaca model — juga detektor kita — adalah "no watermark EXACTLY ONE
+    // person". Satu tanda baca yang hilang mengubah larangan watermark jadi
+    // negasi tentang orang di 23 shot.
+    `nothing stretches or changes proportion, no text, no logo, no watermark.`;
   // IDENTITY_INSTRUCTION ditulis untuk UGC dan memuat frasa "like a real phone
   // camera close-up". Di TVC itu bertabrakan dengan framing "never a phone-shot"
   // di kalimat yang sama, dan model akan menuruti salah satunya secara acak.
@@ -1142,10 +1147,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       `The product resting in the everyday place it would actually be used, hands entering frame to adjust or pick it up, the surroundings quietly telling the viewer where this belongs, label facing camera, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
     ];
     const HEAD_MIDDLE = [
-      `Close cutaway on presenter's hands as she ${demoAction}, her face out of tight focus and NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
-      `Macro close-up of the product's texture where it has just been used, filling most of the frame, the presenter out of focus behind, NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
+      `Close cutaway on presenter's hands as she ${demoAction}, her face softly out of focus and her lips closed and relaxed, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
+      `Macro close-up of the product's texture where it has just been used, filling most of the frame, the presenter softly out of focus behind with her lips closed and relaxed, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
       `Presenter looking down at the result with a genuinely pleased reaction, lips closed and relaxed throughout — listening rather than speaking, the product held in frame with its label facing camera, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`,
-      `Close cutaway on the presenter's hands slowly turning the product to show a different side of it, label kept readable throughout, her face out of tight focus and NOT talking, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
+      `Close cutaway on the presenter's hands slowly turning the product to show a different side of it, label kept readable throughout, her face softly out of focus and her lips closed and relaxed, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}, natural phone camera movement`,
     ];
     // Beat template UGC. Menimpa beat generik HANYA untuk job yang memang
     // memakai salah satu dari 12 template format; job lain (dan seluruh
@@ -1263,7 +1268,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
               ? `Presenter holds "${input.productName}" up to the camera at chest height with a warm delighted reaction — lips closed and relaxed in a soft closed-lip smile, listening rather than speaking — product label facing camera, then the camera lingers on a close cutaway of her hands as she ${demoAction} (her face softly out of focus during this part), ending with her looking back up at the camera with a warm inviting smile and a small nod, lips still closed, ${IDENTITY_INSTRUCTION}`
               : `Presenter holding "${input.productName}" up to the camera at chest height with a warm reaction, lips closed and relaxed, listening rather than speaking, ${IDENTITY_INSTRUCTION}`
             : isClosing
-              ? `Presenter smiling warmly, NOT talking, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
+              ? `Presenter smiling warmly with her lips closed and relaxed, gesturing invitingly toward the camera as if wrapping up, product still clearly visible, the same product as in shot 1 and the reference image, ${IDENTITY_INSTRUCTION}`
               : HEAD_MIDDLE[midIdx % HEAD_MIDDLE.length]
         : isFirst
           // r13 (Brian 2026-08-07: "kenapa ada gambar Wardah di depan?" — shot
@@ -1490,7 +1495,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // sama di keluaran nyata — dan keluaran nyata itu yang dikirim ke model.
     const prompt = rapikan(
       format === "talking_head" && !lipSyncPresenter
-        ? `${base}. ${speech}${pacing}Natural warm reactive expression throughout, mouth relaxed and not talking to camera.`
+        ? `${base}. ${speech}${pacing}Natural warm reactive expression throughout, with her lips closed and relaxed as she listens.`
         : `${base}. ${speech}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader.`
     );
     // Penanda menahan-produk ikut sebagai DATA. Sumbernya peran template
