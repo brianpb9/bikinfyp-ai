@@ -9,6 +9,7 @@
 import crypto from "node:crypto";
 import { Pool } from "pg";
 import { config, paymentsEnv } from "./config";
+import { jobIntakeMode } from "./job-intake";
 import { getPool } from "./postgres/pool";
 
 type Queryable = { query: (sql: string, values?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> };
@@ -21,6 +22,10 @@ function positive(value: number, fallback: number) { return Number.isFinite(valu
 export function monitoringSettings() {
   return {
     intervalMs: positive(config.operationalMonitoringIntervalMin, 5) * 60_000,
+    // Berapa jam sunyi baru dianggap rusak. 24 jam: cukup panjang untuk
+    // melewati malam yang wajar, cukup pendek untuk tidak kehilangan sehari
+    // penuh penjualan tanpa ada yang tahu.
+    senyapJam: positive(Number(process.env.OPERATIONAL_SENYAP_JAM ?? 24), 24),
     cooldownMin: positive(config.operationalAlertCooldownMin, 60),
     errorWindowMin: positive(config.operationalErrorWindowMin, 60),
     errorMinJobs: positive(config.operationalErrorMinJobs, 3),
@@ -37,7 +42,16 @@ function stuckThresholds() {
     .map(([state, timeout]) => [state, Math.max(1, timeout - 5)]));
 }
 
-export async function collectOperationalAlerts(db: Queryable, now = new Date()): Promise<Alert[]> {
+export async function collectOperationalAlerts(
+  db: Queryable,
+  now = new Date(),
+  /**
+   * Mode intake yang BERLAKU. Disuntikkan, bukan dibaca ulang dari config:
+   * config di-cache saat impor, sehingga alarm ini mustahil diuji — dan alarm
+   * yang tidak bisa diuji adalah alarm yang tidak bisa dipercaya.
+   */
+  intake: "open" | "closed" = jobIntakeMode()
+): Promise<Alert[]> {
   const settings = monitoringSettings();
   const thresholds = stuckThresholds();
   const states = Object.keys(thresholds);
@@ -109,11 +123,34 @@ export async function collectOperationalAlerts(db: Queryable, now = new Date()):
     meta: { kind: "penulis_naskah_mati", window_min: settings.errorWindowMin, count: gagalNaskah, sebab: penulisMati.rows[0]?.sebab ?? null },
   });
 
+  // KEGAGALAN SENYAP (20 Agu). Alarm sebelumnya semuanya menunggu SESUATU
+  // TERJADI: job macet, error rate naik, naskah ditolak. Tidak ada satu pun
+  // yang menyala saat TIDAK ADA APA-APA — padahal "nol job selama dua hari
+  // padahal intake terbuka" adalah kegagalan paling mahal yang bisa dialami
+  // produk: ia terlihat persis seperti hari yang tenang.
+  if (intake === "open") {
+    const terakhir = await db.query("SELECT max(created_at) AS t FROM jobs");
+    const t = terakhir.rows[0]?.t;
+    const umurJam = t ? (now.getTime() - new Date(String(t)).getTime()) / 3_600_000 : Infinity;
+    if (umurJam >= settings.senyapJam) {
+      alerts.push({
+        fingerprint: "tidak-ada-job",
+        subject: `[BikinFYP] ALERT: tidak ada job baru ${Math.round(umurJam)} jam padahal intake TERBUKA`,
+        text:
+          `Job terakhir ${t ? `${Math.round(umurJam)} jam lalu` : "tidak pernah ada"}, sementara JOB_INTAKE_MODE=open. ` +
+          "Periksa jalur checkout, penulis naskah, dan halaman bikin — sunyi yang tidak dijelaskan biasanya bukan sepi, tapi rusak.",
+        meta: { kind: "tidak_ada_job", umur_jam: Number.isFinite(umurJam) ? Math.round(umurJam) : null, ambang_jam: settings.senyapJam },
+      });
+    }
+  }
+
   return alerts;
 }
 
 export async function runOperationalMonitor(options: {
   databaseUrl?: string; now?: Date; db?: Queryable;
+  /** Mode intake efektif; kosong = baca konfigurasi proses. */
+  intake?: "open" | "closed";
   send?: (alert: Alert) => Promise<void>;
 } = {}): Promise<{ checked: number; sent: number; suppressed: number }> {
   if (!config.operationalMonitoringEnabled && !options.db) return { checked: 0, sent: 0, suppressed: 0 };
@@ -128,7 +165,7 @@ export async function runOperationalMonitor(options: {
   const settings = monitoringSettings();
   let sent = 0, suppressed = 0;
   try {
-    const alerts = await collectOperationalAlerts(db, now);
+    const alerts = await collectOperationalAlerts(db, now, options.intake);
     for (const alert of alerts) {
       const since = new Date(now.getTime() - settings.cooldownMin * 60_000).toISOString();
       // One PostgreSQL session owns the advisory lock while it sends and

@@ -5,6 +5,10 @@ process.env.RACUN_NO_DOTENV = "1";
 process.env.TIMEOUT_QUEUED_MIN = "30";
 process.env.OPERATIONAL_ERROR_MIN_JOBS = "3";
 process.env.OPERATIONAL_ERROR_RATE_PERCENT = "20";
+// Alarm "tidak ada job" (20 Agu) hanya berlaku saat intake TERBUKA. Berkas ini
+// menguji alarm satu per satu, jadi bawaannya ditutup dan tes yang memang
+// menguji alarm itu membukanya sendiri.
+process.env.JOB_INTAKE_MODE = "closed";
 const { runOperationalMonitor } = await import("../lib/operational-monitor");
 
 test("monitor mengirim satu alert stuck dan mencatat cooldown setelah pengiriman", async () => {
@@ -84,4 +88,51 @@ test("satu-dua kegagalan naskah TIDAK membangunkan siapa pun", async () => {
     send: async () => assert.fail("alarm terlalu sensitif — kegagalan sesekali itu normal"),
   });
   assert.equal(hasil.sent, 0);
+});
+
+// KEGAGALAN SENYAP (20 Agu). Alarm lain semuanya menunggu sesuatu TERJADI;
+// yang ini menyala saat tidak ada apa-apa — kegagalan paling mahal, karena ia
+// terlihat persis seperti hari yang tenang.
+test("alarm menyala saat intake TERBUKA tapi tidak ada job berjam-jam", async () => {
+  const asli = process.env.JOB_INTAKE_MODE;
+  process.env.JOB_INTAKE_MODE = "open";
+  try {
+    const db = { query: async (sql: string) => {
+      if (sql.includes("FROM jobs") && sql.includes("ANY")) return { rows: [] };
+      if (sql.includes("GROUP BY state")) return { rows: [] };
+      if (sql.includes("naskah.penulis_tidak_tersedia")) return { rows: [{ count: 0 }] };
+      if (sql.includes("max(created_at)")) return { rows: [{ t: "2026-01-01T00:00:00.000Z" }] };
+      if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: true }] };
+      if (sql.includes("SELECT id FROM audit_log")) return { rows: [] };
+      return { rows: [] };
+    }};
+    const terkirim: string[] = [];
+    const hasil = await runOperationalMonitor({
+      db, now: new Date("2026-01-03T00:00:00.000Z"), intake: "open", // 48 jam sunyi
+      send: async (a) => { terkirim.push(a.fingerprint); },
+    });
+    assert.equal(hasil.sent, 1);
+    assert.deepEqual(terkirim, ["tidak-ada-job"]);
+  } finally {
+    if (asli === undefined) delete process.env.JOB_INTAKE_MODE; else process.env.JOB_INTAKE_MODE = asli;
+  }
+});
+
+test("intake TERTUTUP: sunyi itu normal, jangan bangunkan siapa pun", async () => {
+  const asli = process.env.JOB_INTAKE_MODE;
+  process.env.JOB_INTAKE_MODE = "closed";
+  try {
+    const db = { query: async (sql: string) => {
+      if (sql.includes("max(created_at)")) return { rows: [{ t: "2026-01-01T00:00:00.000Z" }] };
+      if (sql.includes("naskah.penulis_tidak_tersedia")) return { rows: [{ count: 0 }] };
+      return { rows: [] };
+    }};
+    const hasil = await runOperationalMonitor({
+      db, now: new Date("2026-01-03T00:00:00.000Z"), intake: "closed",
+      send: async () => assert.fail("intake ditutup sengaja — sunyi memang yang diharapkan"),
+    });
+    assert.equal(hasil.sent, 0);
+  } finally {
+    if (asli === undefined) delete process.env.JOB_INTAKE_MODE; else process.env.JOB_INTAKE_MODE = asli;
+  }
 });
