@@ -25,7 +25,7 @@ import {
 } from "./idea-mechanics";
 import { LlmTidakTersedia, ambilObjekJson } from "./llm";
 import { bolehPasangan, formatById, formatTersedia, muatPrior, ringkasUntukPrompt } from "./format-katalog";
-import { nilaiBarisIde, skor12, ujiCepatGenre, ujiTukarProduk, type Skor12 } from "./standar-10";
+import { nilaiBarisIde, skor12, ujiCepatGenre, ujiTukarProduk, type Skor12, BARIS_CAP } from "./standar-10";
 import { blokMaster, blokStandar } from "./standar-10-teks";
 import { periksaPemicu } from "../media/pemicu-filter";
 
@@ -697,6 +697,14 @@ export const MAKS_PUTARAN_IDE = 2;
 export const BATAS_LARANG_MEKANIK = 45;
 
 /**
+ * Baris standar yang MENJATUHKAN ide di gerbang, apa pun skor FYP-nya.
+ *
+ * Subset dari BARIS_CAP, dan pembatasannya disengaja — lihat alasan di titik
+ * pemakaiannya di pilihIde().
+ */
+export const BARIS_GATE_IDE = [2, 6];
+
+/**
  * Berapa penilaian boleh berjalan bersamaan.
  *
  * EMPAT. Cukup untuk memotong waktu tunggu sepuluh kandidat jadi tiga
@@ -782,6 +790,17 @@ export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
     // dalam tugas paralel membuat larangan putaran kedua bergantung pada
     // urutan penyelesaian — yaitu hasil yang berbeda tiap dijalankan.
     for (const d of dinilai) {
+      // DEDUP DI TITIK GABUNG, bukan lewat larangan mekanik.
+      //
+      // Dulu invarian "satu mekanik sekali" dijaga sebagai efek samping:
+      // mekanik yang gagal dilarang di putaran berikutnya, jadi ia tak mungkin
+      // muncul dua kali. Begitu larangan dilonggarkan (BATAS_LARANG_MEKANIK),
+      // efek sampingnya hilang dan duplikat bisa masuk peringkat — padahal
+      // peringkat itulah yang membagi sudut ke tiap varian naskah. Dua varian
+      // dengan pasangan mekanik+format yang sama membuat layar "pilih naskah"
+      // jadi pilihan palsu lagi.
+      const kunci = `${d.ide.mechanic}/${d.ide.format}`;
+      if (semua.some((x) => `${x.ide.mechanic}/${x.ide.format}` === kunci)) continue;
       semua.push(d);
       // MEKANIK TIDAK GAGAL — EKSEKUSINYA YANG GAGAL (koreksi 20 Agu).
       //
@@ -801,7 +820,39 @@ export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
     // jatuh berikut ambangnya, sebab paling sering, dan dua one-liner terbaik
     // yang tetap gagal (supaya model tahu "sebagus ini pun belum cukup").
     kritik = susunKritik(peringkat);
-    const menang = peringkat.find((p) => p.nilai.lulus);
+    // GERBANG TIDAK BOLEH DIKALAHKAN ANGKA (temuan board 20 Agu).
+    //
+    // Sebelum ini pemenang dipilih hanya dari skor FYP, sementara standar 10/12
+    // dinilai terpisah — dan log membuktikan kebocorannya: satu ide gagal baris
+    // 6 (klaim terlarang) DAN baris 8 (filter-safety), tetap tercatat
+    // lulus:true karena totalnya 75. Standar kalian sendiri berbunyi "ini gate,
+    // bukan skor: satu baris gagal = naskah tidak dirender".
+    //
+    // Yang memblokir DUA dari empat baris cap: 2 dan 6 — keduanya cacat IDE.
+    // Baris 2 (ide bisa dipindah ke produk lain) dan baris 6 (klaim yang bisa
+    // menyeret akun pengguna) adalah sifat idenya sendiri, dan tidak ada
+    // gerbang lain yang menangkapnya.
+    //
+    // Baris 1 dan 8 SENGAJA tidak ikut. Baris 1 (anomali tanpa kata) belum
+    // punya penegak mesin sama sekali — memblokir dengannya berarti menegakkan
+    // sesuatu yang tidak kita ukur. Baris 8 (kosakata pemicu) sudah ditegakkan
+    // KERAS di tempat yang benar: gerbang prompt akhir, atas teks yang
+    // BENAR-BENAR dikirim ke penyedia. Menjatuhkan ide bagus karena kata
+    // "mandi" muncul di deskripsi situasinya — kata yang belum tentu sampai ke
+    // prompt — adalah menghukum dua kali di tempat yang salah.
+    const menang = peringkat.find((p) => {
+      if (!p.nilai.lulus) return false;
+      const std = standarIde(r, p.ide);
+      const kritis = std.gagal.filter((g) => BARIS_GATE_IDE.includes(g.no));
+      if (kritis.length) {
+        console.log(
+          `[idea] "${r.productName}": ide skor ${p.nilai.total} DITOLAK gerbang standar — ` +
+            kritis.map((g) => `baris ${g.no}: ${g.sebab}`).join(" | ")
+        );
+        return false;
+      }
+      return true;
+    });
     if (menang) {
       const hasilMenang: IdeTerpilih = {
         ide: menang.ide, nilai: menang.nilai, peringkat, putaran,

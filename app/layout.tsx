@@ -10,6 +10,29 @@ export const metadata: Metadata = {
   title: "BikinFYP AI — Video jualan tanpa syuting",
   description: "Bikin video jualan 15 detik dari foto produk. Bahasa Indonesia, dengan label AIGC untuk membantu mengikuti aturan konten AI TikTok.",
   manifest: "/manifest.json",
+  // KARTU SOSIAL (board review 20 Agu). Sebelumnya tidak ada satu pun tag
+  // openGraph/twitter — dan distribusi utama produk ini adalah WhatsApp dan
+  // bio TikTok, tempat tautan tanpa kartu muncul sebagai URL telanjang.
+  // Untuk produk web, itu setara memasang etalase kosong di jalan paling ramai.
+  //
+  // metadataBase wajib: tanpanya Next merender URL gambar relatif, dan
+  // pengurai kartu (WhatsApp) menolaknya.
+  metadataBase: new URL("https://bikinfyp.com"),
+  openGraph: {
+    type: "website",
+    siteName: "BikinFYP AI",
+    locale: "id_ID",
+    title: "BikinFYP AI — Video jualan tanpa syuting",
+    description: "Bikin video jualan 15 detik dari foto produk. Rp12.000 per video, tanpa langganan.",
+    url: "https://bikinfyp.com",
+    images: [{ url: "/icons/icon-512.png", width: 512, height: 512, alt: "BikinFYP AI" }],
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "BikinFYP AI — Video jualan tanpa syuting",
+    description: "Bikin video jualan 15 detik dari foto produk. Rp12.000 per video, tanpa langganan.",
+    images: ["/icons/icon-512.png"],
+  },
   icons: {
     icon: [
       { url: "/icons/icon-32.png", sizes: "32x32", type: "image/png" },

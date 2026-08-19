@@ -6,6 +6,10 @@ import { allowRate } from "@/lib/rate-limit";
 import crypto from "node:crypto";
 import { config } from "@/lib/config";
 
+/** Bonus daftar ditulis dari config, bukan diketik: angka Rp5.000 di sini
+ * bertahan berbulan-bulan sesudah tier itu pensiun (temuan board 20 Agu). */
+const rupiah = (n: number) => `Rp${n.toLocaleString("id-ID")}`;
+
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -26,7 +30,7 @@ export async function POST(req: Request) {
     const ip = (req.headers.get("x-forwarded-for") ?? "local").split(",")[0].trim();
     if (!(await allowRate("try", ip, 15, 15 * 60)))
       return Response.json(
-        { code: "TRY_RATE_LIMITED", message_id: "Udah banyak nyoba nih 😄 — daftar gratis dulu ya, dapat bonus Rp5.000 buat render video beneran.", retryable: false },
+        { code: "TRY_RATE_LIMITED", message_id: `Udah banyak nyoba nih 😄 — daftar gratis dulu ya, dapat bonus ${rupiah(config.signupBonusIdr)} buat render video beneran.`, retryable: false },
         { status: 429 }
       );
     const body = await req.json().catch(() => ({}));

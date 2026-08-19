@@ -10,6 +10,7 @@ import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from ".
 import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
 import { periksaStoryOsAds } from "./story-os-ads";
 import { pilihTokenMerek } from "../merek";
+import { tutupiNama } from "../media/pemicu-filter";
 
 export interface ScriptToValidate {
   hook_family: string;
@@ -170,6 +171,26 @@ const DOUBLE_NEGATION_REGEX = new RegExp(`\\b(?:${NEGASI})\\b(?:\\s+[a-zA-Z]+)?\
 
 const OVERCLAIM_TOKENS = new Set(["pasti", "pastiin", "dijamin", "jamin", "terbaik", "terampuh"]);
 const OVERCLAIM_PHRASES = ["100%", "paling bagus", "nomor 1", "nomor satu", "no 1", "no. 1", "paling ampuh", "terbaik di dunia"];
+/**
+ * KLAIM HASIL — dilarang standar 10/10 baris 6, dan sampai 20 Agu tidak punya
+ * penegak sama sekali di tingkat NASKAH.
+ *
+ * Ditemukan board review dari trace nyata: naskah yang LOLOS seluruh gerbang
+ * mengucapkan "Sumpah, kulit aku langsung keliatan bening deh". Aturannya ada
+ * di prompt penulis dan di penilaian ide — tapi tidak di validator, sehingga
+ * satu-satunya penegaknya adalah niat baik model. Aturan yang penegakannya
+ * niat baik bukan aturan.
+ *
+ * "langsung" TIDAK dilarang sendirian: ia kata sehari-hari yang sah
+ * ("langsung aku pakai", "langsung ke intinya"). Yang dilarang adalah
+ * PASANGANNYA dengan hasil — itu yang menjadikannya janji.
+ */
+const KLAIM_TOKENS = new Set(["instan", "instant", "permanen", "memutihkan", "whitening", "mencerahkan"]);
+const KLAIM_POLA: RegExp[] = [
+  /\b(langsung|seketika|dalam (semalam|sehari|sekali pakai))\s+\w{0,6}\s*(putih|bening|cerah|glowing|mulus|hilang|kempes|kencang)/i,
+  /\b(pasti|dijamin)\s+(putih|bening|cerah|sembuh|hilang)/i,
+];
+
 const MEDICAL_TOKENS = new Set([
   "menyembuhkan", "mengobati", "obat", "penyakit", "klinis", "dokter",
   "antibiotik", "hormon", "farmasi",
@@ -352,7 +373,7 @@ export const SELALU_KERAS = new Set([
   "T-01", "T-02", "T-03", "A-01", "A-02", "L-22",
   // STANDAR 10/10 (knowledge/rules/standard-10.md). Ketiganya aturan MUTU yang
   // bisa diperiksa mesin, dan Brian menyebutnya syarat render — bukan saran.
-  "S-04", "S-05", "S-09",
+  "S-04", "S-05", "S-09", "L-23",
   // Story OS Ads (slice 2, 19 Agu). Gerbang SA yang bisa dicek mesin: gagal
   // satu = naskah tidak dirender (STORY-OS-ADS-v1 §3).
   "SA1", "SA2", "SA4", "SA6", "SA8",
@@ -404,7 +425,7 @@ export const SELALU_KERAS = new Set([
  * berubah kalau daftar aturan struktur naskah berubah — karena ia memang
  * bukan pemeriksa struktur naskah.
  */
-export function periksaKataTerlarang(teksFinal: string): RuleIssue[] {
+export function periksaKataTerlarang(teksFinal: string, namaProduk?: string | null): RuleIssue[] {
   const lower = teksFinal.toLowerCase();
   const toks = tokens(teksFinal);
   const issues: RuleIssue[] = [];
@@ -412,6 +433,18 @@ export function periksaKataTerlarang(teksFinal: string): RuleIssue[] {
   const overPhrase = OVERCLAIM_PHRASES.find((p) => lower.includes(p));
   if (overTok || overPhrase)
     issues.push({ rule: "L-10", message_id: `Ada kata overclaim ("${overTok ?? overPhrase}") — kata kayak 'pasti'/'dijamin'/'terbaik' bisa bikin kena teguran TikTok.` });
+  // L-23: klaim HASIL (standar baris 6). Nama produk dibuang dulu — SKU
+  // bernama "Whitening Serum" bukan janji, dan pola masking ini sudah dipakai
+  // baris 6 di standar-10.ts.
+  const tanpaNama = tutupiNama(lower, namaProduk);
+  const klaimTok = tanpaNama.split(/[^a-z0-9]+/i).find((t) => KLAIM_TOKENS.has(t));
+  const klaimPola = KLAIM_POLA.find((p) => p.test(tanpaNama));
+  if (klaimTok || klaimPola) {
+    issues.push({
+      rule: "L-23",
+      message_id: `Ada klaim hasil ("${klaimTok ?? tanpaNama.match(klaimPola!)?.[0]}") — janji hasil instan bisa menyeret akun kamu kena teguran. Ceritakan yang kelihatan saja.`,
+    });
+  }
   const medTok = toks.find((t) => MEDICAL_TOKENS.has(t));
   const medPhrase = MEDICAL_PHRASES.find((p) => lower.includes(p));
   if (medTok || medPhrase)

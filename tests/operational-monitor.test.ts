@@ -136,3 +136,46 @@ test("intake TERTUTUP: sunyi itu normal, jangan bangunkan siapa pun", async () =
     if (asli === undefined) delete process.env.JOB_INTAKE_MODE; else process.env.JOB_INTAKE_MODE = asli;
   }
 });
+
+// BLOCKER yang ditemukan board review 20 Agu: monitor MENOLAK berjalan saat
+// lingkungan pembayaran production — jaring pengaman putus persis pada detik
+// pertama uang sungguhan mengalir, dan kegagalannya cuma console.error di log
+// worker. Tes ini menjaga agar penjaga itu tidak pernah kembali.
+test("monitor TETAP berjalan saat pembayaran production — alarm justru paling dibutuhkan di sana", async () => {
+  const asli = { prod: process.env.DUITKU_IS_PRODUCTION, gw: process.env.PAYMENT_GATEWAY };
+  process.env.PAYMENT_GATEWAY = "duitku";
+  process.env.DUITKU_IS_PRODUCTION = "true";
+  try {
+    const db = { query: async (sql: string) => {
+      if (sql.includes("FROM jobs") && sql.includes("ANY")) return { rows: [{ id: "x", state: "QUEUED", state_changed_at: "2026-01-01T00:00:00.000Z" }] };
+      if (sql.includes("GROUP BY state")) return { rows: [] };
+      if (sql.includes("naskah.penulis_tidak_tersedia")) return { rows: [{ count: 0 }] };
+      if (sql.includes("max(created_at)")) return { rows: [{ t: "2026-01-01T00:00:00.000Z" }] };
+      if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: true }] };
+      if (sql.includes("SELECT id FROM audit_log")) return { rows: [] };
+      return { rows: [] };
+    }};
+    const terkirim: string[] = [];
+    const hasil = await runOperationalMonitor({
+      db, now: new Date("2026-01-01T00:30:00.000Z"), intake: "closed",
+      send: async (a) => { terkirim.push(a.fingerprint); },
+    });
+    assert.equal(hasil.sent, 1, "alarm harus tetap terkirim di lingkungan production");
+    assert.deepEqual(terkirim, ["stuck-jobs"]);
+  } finally {
+    if (asli.prod === undefined) delete process.env.DUITKU_IS_PRODUCTION; else process.env.DUITKU_IS_PRODUCTION = asli.prod;
+    if (asli.gw === undefined) delete process.env.PAYMENT_GATEWAY; else process.env.PAYMENT_GATEWAY = asli.gw;
+  }
+});
+
+test("monitor menolak jalan HANYA saat alat kirimnya tidak ada", async () => {
+  // Tanpa kunci Resend + alamat tujuan, monitor hanya membakar kueri tanpa
+  // pernah bisa memberi tahu siapa pun — itu alasan berhenti yang sah.
+  // db disuntikkan supaya lewat gerbang "monitoring dimatikan"; yang diuji di
+  // sini adalah penjaga alat kirim, bukan saklar fiturnya.
+  const db = { query: async () => ({ rows: [] }) };
+  await assert.rejects(
+    runOperationalMonitor({ db, intake: "closed" }),   // tanpa send, tanpa kunci Resend
+    /RESEND_API_KEY|OPERATIONAL_ALERT_TO_EMAIL/,
+  );
+});

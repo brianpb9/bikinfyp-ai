@@ -870,9 +870,13 @@ export async function qcLipSync(videoPath: string, workDir: string): Promise<QcC
  */
 export function periksaQc07(
   finalTexts: string[],
-  transkrip: string | null
+  transkrip: string | null,
+  /** Nama produk — dibuang dari teks sebelum diperiksa (lihat L-23). */
+  namaProduk?: string | null
 ): { status: "pass" | "fail"; detail: string } {
-  const terlarang = periksaKataTerlarang([finalTexts.join(" "), transkrip ?? ""].join(" "));
+  // Nama produk ikut supaya SKU bernama "Whitening Serum" tidak dituduh
+  // mengklaim — pola masking yang sama dengan standar baris 6 (L-23).
+  const terlarang = periksaKataTerlarang([finalTexts.join(" "), transkrip ?? ""].join(" "), namaProduk);
   const sumber = transkrip === null ? "segmen naskah (transkrip tidak tersedia)" : "transkrip audio + segmen";
   return {
     status: terlarang.length === 0 ? "pass" : "fail",
@@ -1057,7 +1061,7 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // Kalau transkripsi tidak tersedia (mock, kunci kosong, tier senyap), QC-07
   // tetap memeriksa segmen dan MENGATAKANNYA di detail — bukan diam-diam
   // mengaku sudah memeriksa ucapan.
-  checks.push({ code: "QC-07", name: "Tanpa kata terlarang (overclaim/medis)", ...periksaQc07(input.finalTexts, transkripUcapan) });
+  checks.push({ code: "QC-07", name: "Tanpa kata terlarang (overclaim/medis)", ...periksaQc07(input.finalTexts, transkripUcapan, input.productName) });
 
 
   // QC-08 label AIGC via METADATA (watermark visual dihapus 2026-08-07 —

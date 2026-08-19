@@ -48,10 +48,11 @@ export default function TermsPage() {
         <h2 className="font-display text-lg font-bold text-zinc-900">4. Konten Buatan AI</h2>
         <p>
           Video yang dihasilkan Layanan adalah konten buatan AI (AI-generated content). Setiap video
-          membawa label "Dibuat dengan AI" yang tertanam permanen — dilarang menghapus, menutup dengan
-          stiker, atau mengklaim video sebagai rekaman asli tanpa AI. Kamu wajib menyalakan toggle
-          "Konten yang dibuat AI" saat mengunggah ke TikTok atau platform lain yang mensyaratkannya —
-          ini kewajibanmu sebagai pengunggah, bukan tanggung jawab kami.
+          membawa penanda AI di dalam berkasnya (metadata AIGC) — bukan tulisan di gambar. Karena
+          penanda itu bisa hilang saat platform memproses ulang video yang kamu unggah, pengungkapan
+          kepada penonton bergantung padamu: kamu wajib menyalakan toggle "Konten yang dibuat AI"
+          saat mengunggah ke TikTok atau platform lain yang mensyaratkannya. Dilarang mengklaim video
+          ini sebagai rekaman asli tanpa AI.
         </p>
 
         <h2 className="font-display text-lg font-bold text-zinc-900">5. Kredit & Pembayaran</h2>

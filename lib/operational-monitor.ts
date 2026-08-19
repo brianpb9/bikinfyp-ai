@@ -8,7 +8,7 @@
  */
 import crypto from "node:crypto";
 import { Pool } from "pg";
-import { config, paymentsEnv } from "./config";
+import { config } from "./config";
 import { jobIntakeMode } from "./job-intake";
 import { getPool } from "./postgres/pool";
 
@@ -154,9 +154,20 @@ export async function runOperationalMonitor(options: {
   send?: (alert: Alert) => Promise<void>;
 } = {}): Promise<{ checked: number; sent: number; suppressed: number }> {
   if (!config.operationalMonitoringEnabled && !options.db) return { checked: 0, sent: 0, suppressed: 0 };
-  // Penjaga lama menyebut MIDTRANS_IS_PRODUCTION; sejak pindah ke Duitku yang
-  // relevan adalah LINGKUNGAN pembayaran yang benar-benar aktif (20 Agu).
-  if (paymentsEnv() === "production") throw new Error("Monitoring operasional menolak berjalan saat lingkungan pembayaran production.");
+  // PENJAGA LAMA DICABUT — dan ini koreksi atas kesalahan saya sendiri.
+  //
+  // Baris ini dulu berbunyi `if (config.midtransIsProduction) throw`, dan 20
+  // Agu saya menyalinnya buta jadi `paymentsEnv() === "production"` tanpa
+  // menanyakan APA MAKSUDNYA. Board review menemukan akibatnya: begitu
+  // pembayaran di-flip ke production — detik pertama uang sungguhan mengalir —
+  // seluruh alarm (job macet, error rate, penulis naskah mati, kegagalan
+  // senyap) MATI TOTAL, dan kegagalannya cuma jadi satu console.error di log
+  // worker. Jaring pengaman yang putus persis saat mulai dibutuhkan lebih
+  // buruk daripada tidak punya jaring, karena semua orang mengira ada.
+  //
+  // Yang benar-benar harus menghentikan monitor bukan lingkungan pembayaran,
+  // melainkan ketiadaan alat kirim: tanpa kunci Resend dan alamat tujuan, ia
+  // hanya membakar kueri tanpa pernah bisa memberi tahu siapa pun.
   if (!options.db && !/^postgres(?:ql)?:\/\//i.test(options.databaseUrl ?? config.databaseUrl)) throw new Error("Monitoring operasional memerlukan DATABASE_URL PostgreSQL.");
   if (!options.send && (!config.resendApiKey || !config.operationalAlertToEmail)) throw new Error("Monitoring aktif memerlukan RESEND_API_KEY dan OPERATIONAL_ALERT_TO_EMAIL.");
   const pool = options.db ? undefined : getPool(options.databaseUrl ?? config.databaseUrl);

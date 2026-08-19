@@ -32,7 +32,14 @@ export const MANDATORY_NEGATIVE_PROMPT =
 
 export const COMPLIANCE_CHECKLIST: string[] = [
   "Saat upload di TikTok, nyalakan toggle 'Konten yang dibuat AI' (AI-generated content) biar akun kamu aman.",
-  "Tanda 'Dibuat dengan AI' sudah tertanam di dalam video — jangan di-crop atau ditutup stiker.",
+  // DIPERBAIKI 20 Agu 2026 (board review). Kalimat lama berbunyi "tanda sudah
+  // tertanam di dalam video — jangan di-crop atau ditutup stiker", padahal
+  // watermark VISUAL dihapus 7 Agu (lihat lib/media/compositor.ts): yang
+  // tersisa metadata berkas, dan tidak ada apa pun yang bisa ditutup stiker.
+  // Menyuruh pengguna menjaga sesuatu yang tidak ada membuat seluruh daftar
+  // ini kehilangan wibawa — dan yang benar-benar melindungi akunnya justru
+  // baris pertama.
+  "Penanda AI ada di dalam berkas video (metadata), bukan tulisan di gambar — jadi toggle di atas itulah yang dilihat penonton.",
   "Jangan tambahkan klaim berlebihan di caption (mis. 'pasti sembuh', '100% ampuh') — bisa kena teguran TikTok.",
   "Pastikan harga di video sama dengan harga di etalase toko kamu.",
   "Kalau ada perubahan harga/stok, update caption sebelum posting.",

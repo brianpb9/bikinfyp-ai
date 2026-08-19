@@ -59,8 +59,10 @@ test("qc.ts memanggil pemeriksa terpisah, bukan proksi mode", async () => {
   // pemeriksanya sekarang dipanggil lewat periksaQc07(), yang menggabungkan
   // segmen + transkrip. Yang dijaga tetap sama — pemeriksa KATA TERLARANG,
   // bukan validator struktur naskah.
-  assert.match(src, /periksaKataTerlarang\(\[finalTexts\.join\(" "\), transkrip \?\? ""\]\.join\(" "\)\)/);
-  assert.match(src, /periksaQc07\(input\.finalTexts, transkripUcapan\)/);
+  // Argumen nama produk ditambahkan 20 Agu (L-23 memakai masking nama);
+  // yang dijaga tetap BENTUK panggilannya, bukan jumlah argumennya.
+  assert.match(src, /periksaKataTerlarang\(\[finalTexts\.join\(" "\), transkrip \?\? ""\]\.join\(" "\)/);
+  assert.match(src, /periksaQc07\(input\.finalTexts, transkripUcapan/);
   // Proksi lama tidak boleh kembali: pola inilah yang membuat QC-07 ikut
   // berubah setiap kali daftar aturan struktur berubah.
   assert.ok(!/segments: \[\{ role: "hook", text: input\.finalTexts/.test(src),

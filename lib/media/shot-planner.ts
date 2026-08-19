@@ -1161,9 +1161,17 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     //  - fashion full-body: produknya DIPAKAI presenter, mustahil tanpa orang;
     //  - gaya rekam & peran template opening: pilihan sadar pengguna/katalog.
     // Ini perubahan level PROMPT — bukti piksel menyusul di canary berikutnya.
+    // SHOT 1 TANPA WAJAH — kini berlaku untuk ads dan tvc juga (board review
+    // 20 Agu). Bukan preferensi gaya: standard-10.md §E mencatat dari 9 render
+    // nyata bahwa SEMUA klip yang lolos filter penyedia membuka tanpa wajah,
+    // dan 0 dari 3 yang membuka dengan wajah lolos. Dokumennya sendiri menulis
+    // "jadikan ini default, bukan pilihan" — tapi kodenya hanya memberlakukannya
+    // pada talking_head, sehingga format ads dikirim ke antrean berbayar
+    // dengan konfigurasi yang catatan kita sendiri beri 0% kelulusan.
+    const formatBukaTanpaWajah = format === "talking_head" || format === "ads" || format === "tvc";
     const bukaTanpaWajah =
-      isFirst && numShots >= 2 && format === "talking_head" &&
-      !fullBodyFashion && !gayaBerlaku && !ugcRolesFor(input.ugcTemplate)?.opening;
+      isFirst && numShots >= 2 && formatBukaTanpaWajah &&
+      !input.noModel && !fullBodyFashion && !gayaBerlaku && !ugcRolesFor(input.ugcTemplate)?.opening;
     // SUMBU MODE (slice 1, 19 Agu). Mode segmen — sampai kini cuma label
     // metadata — kini menentukan kontrak kamera shot, sesuai modes.md:
     // "Any segment whose camera contradicts its governing mode fails the gate".
