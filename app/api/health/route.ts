@@ -23,7 +23,10 @@ export async function GET() {
     // r13 (review produk 2026-08-07): halaman landing publik (anonim, sebelum
     // login) mengklaim "Checkout aman lewat GoPay/OVO/DANA/QRIS" TANPA SYARAT
     // walau Midtrans belum dipasang — publik, non-rahasia, aman diekspos di sini.
-    const paymentsLive = Boolean(config.midtransServerKey && config.midtransClientKey);
+    const paymentsLive =
+      config.paymentGateway === "duitku"
+        ? Boolean(config.duitkuMerchantCode && config.duitkuApiKey)
+        : Boolean(config.midtransServerKey && config.midtransClientKey);
     // APP_BASE_URL WAJIB HTTPS di produksi.
     //
     // Bukan formalitas: flag Secure pada cookie sesi diturunkan dari URL ini
