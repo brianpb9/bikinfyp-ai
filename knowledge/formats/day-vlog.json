@@ -1,0 +1,23 @@
+{
+  "id": "day_vlog",
+  "slug_higgsfield": "ugc_day_vlog",
+  "nama": "Day Vlog",
+  "kekuatan": "Produk hadir sebagai KEBIASAAN, bukan sebagai barang yang sedang dijual. Penonton menerima produk yang lewat di hidup orang lain jauh lebih mudah daripada produk yang diperkenalkan.",
+  "cocok_untuk": ["skincare rutin", "minuman", "perawatan harian", "alat kerja"],
+  "beat_table": [
+    { "beat": 1, "durasi": 4, "isi": "Potongan pagi biasa — jam, tirai, langkah kaki. Produk SUDAH ada di bingkai, tidak disebut" },
+    { "beat": 2, "durasi": 5, "isi": "Kegiatan berjalan; produk dipakai sekilas seperti kebiasaan, kamera tidak berhenti untuknya" },
+    { "beat": 3, "durasi": 4, "isi": "Satu momen jeda — duduk, menghela napas, hasil harinya terasa" },
+    { "beat": 4, "durasi": 4, "isi": "Produk diangkat sekali, label terbaca + CTA" }
+  ],
+  "technique": "Rangkai potongan pendek 1-2 detik dengan cahaya jendela yang berubah sepanjang hari; kamera handheld ringan mengikuti, tidak pernah berhenti untuk memamerkan produk. Kalimat diucapkan sambil melakukan sesuatu, bukan menghadap kamera. Produk masuk bingkai dari pinggir seperti benda yang memang tinggal di sana.",
+  "failure_mode": "Berubah jadi tutorial begitu kamera BERHENTI untuk produknya — vlog yang menunggu produk bukan vlog lagi, dan penonton langsung membaca iklan.",
+  "no_face_recommended": false,
+  "hook_level_min": "normal",
+  "butuh_cgi": false,
+  "planner": {
+    "kamera": "loose handheld that keeps moving with her, short 1-2 second beats, window light shifting across the day",
+    "aksi": "she keeps doing the ordinary thing while she talks; the product enters frame from the side like something that already lives there",
+    "hindari": "stopping the camera to present the product"
+  }
+}

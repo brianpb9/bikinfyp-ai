@@ -1,0 +1,24 @@
+{
+  "id": "live_replay",
+  "slug_higgsfield": "ugc_live_replay",
+  "nama": "Potongan Live",
+  "kekuatan": "Rasa 'ini tidak disiapkan'. Potongan siaran langsung terbaca sebagai kejadian, bukan produksi — dan barang yang diborong orang lain di depan mata adalah bukti sosial paling cepat.",
+  "cocok_untuk": ["produk yang memang dijual live", "flash sale", "stok terbatas"],
+  "hanya_untuk": "affiliate",
+  "beat_table": [
+    { "beat": 1, "durasi": 4, "isi": "Bingkai seperti siaran: kamera diam, sedikit noise, dia bicara ke penonton yang tidak terlihat" },
+    { "beat": 2, "durasi": 5, "isi": "Dia menjawab sesuatu yang barusan ditanyakan, sambil mengangkat produk" },
+    { "beat": 3, "durasi": 3, "isi": "Reaksi cepat: dia terkejut sendiri, tangannya mengambil produk berikutnya" },
+    { "beat": 4, "durasi": 3, "isi": "Produk diam di depan kamera, label terbaca + CTA" }
+  ],
+  "technique": "Kamera statis di jarak meja, kualitas sedikit lebih kasar dari biasanya, cahaya ruangan apa adanya. Kalimatnya menjawab pertanyaan yang tidak pernah kita dengar — itu yang membuat penonton merasa masuk di tengah. Tanpa teks di layar; kesan live datang dari cara bicara, bukan dari hiasan antarmuka.",
+  "failure_mode": "Menempelkan elemen antarmuka siaran (jumlah penonton, ikon hati, komentar) — itu teks liar yang dilarang gate klip, dan model menggambarnya jadi huruf berantakan.",
+  "no_face_recommended": false,
+  "hook_level_min": "normal",
+  "butuh_cgi": false,
+  "planner": {
+    "kamera": "locked-off camera at desk distance, slightly rougher image, plain room light",
+    "aksi": "she answers someone we never hear and keeps reaching for the next item, unhurried",
+    "hindari": "any broadcast interface elements, viewer counts, floating hearts or comments"
+  }
+}

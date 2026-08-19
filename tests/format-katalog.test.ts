@@ -16,9 +16,9 @@ process.env.STORAGE_DIR = `/tmp/racun-test-format-storage-${process.pid}`;
 const { muatFormat, formatById, bolehPasangan, formatTersedia, muatPrior, FORMAT_DILARANG } =
   await import("../lib/script-engine/format-katalog");
 
-test("delapan format termuat, semuanya lengkap", () => {
+test("tiga belas format termuat, semuanya lengkap", () => {
   const f = muatFormat();
-  assert.equal(f.length, 8, `harus 8 format, dapat ${f.length}`);
+  assert.equal(f.length, 13, `harus 8 format, dapat ${f.length}`);
   for (const x of f) {
     assert.ok(x.beat_table.length >= 3, `${x.id}: butuh tabel beat`);
     for (const b of x.beat_table) assert.ok(b.durasi > 0 && b.isi.length > 5, `${x.id} beat ${b.beat}`);

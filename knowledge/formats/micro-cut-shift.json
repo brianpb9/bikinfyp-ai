@@ -1,0 +1,23 @@
+{
+  "id": "micro_cut_shift",
+  "slug_higgsfield": "ugc_micro_cut_shift",
+  "nama": "Potongan Mikro",
+  "kekuatan": "Perubahan terasa karena RITMENYA, bukan karena dijelaskan. Potongan yang makin rapat lalu tiba-tiba melambat membuat perubahan terasa di badan penonton.",
+  "cocok_untuk": ["sebelum-sesudah", "produk fokus/tenang", "pembersih", "audio_shift"],
+  "beat_table": [
+    { "beat": 1, "durasi": 4, "isi": "Potongan cepat berulang: kesibukan yang sama terjadi berkali-kali" },
+    { "beat": 2, "durasi": 4, "isi": "Potongan makin rapat, dunia makin ramai; produk masuk tanpa disebut" },
+    { "beat": 3, "durasi": 4, "isi": "SATU potongan panjang — semuanya melambat, ruang terasa lega" },
+    { "beat": 4, "durasi": 3, "isi": "Produk diam, label terbaca + CTA" }
+  ],
+  "technique": "Beat 1-2 dirakit dari potongan 0,5-1 detik dengan aksi yang mirip tapi tidak identik; beat 3 SATU take panjang tanpa potongan sama sekali. Kontrasnya seluruhnya ada di panjang potongan — kalau beat 3 ikut dipotong, formatnya kehilangan satu-satunya alat yang dimilikinya.",
+  "failure_mode": "Semua beat dipotong dengan ritme sama, jadi cuma montase cepat tanpa pelepasan.",
+  "no_face_recommended": true,
+  "hook_level_min": "agak_berani",
+  "butuh_cgi": false,
+  "planner": {
+    "kamera": "rapid 0.5-1 second cuts that tighten, then one long unbroken take that lets everything slow down",
+    "aksi": "the same small action repeats with slight variation, then finally resolves in a single continuous move",
+    "hindari": "cutting during the release beat"
+  }
+}

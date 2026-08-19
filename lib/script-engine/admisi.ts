@@ -79,6 +79,12 @@ export interface SnapshotAdmisi {
   ideSkor?: number | null;
   /** Mekanik+format ide sebagai identitas ringkas, untuk job_prompts.ide_id. */
   ideId?: string | null;
+  /**
+   * Format IDE terpilih (knowledge/formats). Dibawa terpisah dari ideId karena
+   * perencana shot memakainya sebagai instruksi kamera (slice 3) — mengurainya
+   * kembali dari string gabungan berarti satu tempat lagi yang bisa salah.
+   */
+  ideaFormat?: string | null;
 }
 
 /**

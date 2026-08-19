@@ -1,0 +1,23 @@
+{
+  "id": "storyboard_panels",
+  "slug_higgsfield": "ugc_storyboard_panels",
+  "nama": "Panel Papan Cerita",
+  "kekuatan": "Cerita bertahap tanpa dialog. Tiap panel satu kalimat visual, dan penonton menyelesaikan ceritanya sendiri — itu yang membuatnya berhenti.",
+  "cocok_untuk": ["produk dengan sebelum/sesudah pelan", "cerita kebiasaan", "produk tanpa demo visual"],
+  "beat_table": [
+    { "beat": 1, "durasi": 4, "isi": "Panel 1: keadaan awal, satu benda menonjol, tanpa kata" },
+    { "beat": 2, "durasi": 4, "isi": "Panel 2: satu hal berubah dari panel sebelumnya — komposisi sama persis" },
+    { "beat": 3, "durasi": 4, "isi": "Panel 3: perubahan sudah terjadi; sudut kamera tetap sama" },
+    { "beat": 4, "durasi": 3, "isi": "Panel terakhir: produk di posisi yang sama sejak awal + CTA" }
+  ],
+  "technique": "Sudut kamera DIKUNCI identik di seluruh panel — hanya isinya yang berubah, seperti halaman komik yang digambar dari titik yang sama. Perpindahan antarpanel tegas (potong keras, bukan transisi halus). Satu perubahan per panel; dua perubahan membuat penonton kehilangan jejak apa yang harus dilihat.",
+  "failure_mode": "Sudut kamera bergeser antarpanel, sehingga penonton membandingkan bingkai, bukan isinya — dan seluruh alat format ini hilang.",
+  "no_face_recommended": true,
+  "hook_level_min": "normal",
+  "butuh_cgi": false,
+  "planner": {
+    "kamera": "identical locked camera angle in every panel, hard cuts between panels, no smooth transitions",
+    "aksi": "exactly one thing changes per panel while everything else stays where it was",
+    "hindari": "moving the camera between panels"
+  }
+}

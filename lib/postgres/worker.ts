@@ -90,16 +90,17 @@ type WorkerRow = {
  * yang korup tidak boleh menggagalkan render yang sudah dibayar — arsip adalah
  * catatan, bukan produk.
  */
-export function bacaJejakIde(validationResult: string | null): { ideId: string | null; ideSkor: number | null } {
-  if (!validationResult) return { ideId: null, ideSkor: null };
+export function bacaJejakIde(validationResult: string | null): { ideId: string | null; ideSkor: number | null; ideaFormat: string | null } {
+  if (!validationResult) return { ideId: null, ideSkor: null, ideaFormat: null };
   try {
-    const parsed = JSON.parse(validationResult) as { admisi?: { ideId?: unknown; ideSkor?: unknown } };
+    const parsed = JSON.parse(validationResult) as { admisi?: { ideId?: unknown; ideSkor?: unknown; ideaFormat?: unknown } };
     const admisi = parsed?.admisi ?? {};
     const skor = typeof admisi.ideSkor === "number" && Number.isFinite(admisi.ideSkor) ? admisi.ideSkor : null;
     const id = typeof admisi.ideId === "string" && admisi.ideId.trim() ? admisi.ideId.slice(0, 120) : null;
-    return { ideId: id, ideSkor: skor };
+    const fmt = typeof admisi.ideaFormat === "string" && admisi.ideaFormat.trim() ? admisi.ideaFormat.slice(0, 60) : null;
+    return { ideId: id, ideSkor: skor, ideaFormat: fmt };
   } catch {
-    return { ideId: null, ideSkor: null };
+    return { ideId: null, ideSkor: null, ideaFormat: null };
   }
 }
 
@@ -359,6 +360,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
     extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
+    // Format IDE (knowledge/formats) menyeberang ke kamera lewat snapshot
+    // admisi — slice 3, 20 Agu. Tanpa baris ini format ide berhenti di
+    // penulis naskah dan shot-nya digambar seolah formatnya tidak pernah ada.
+    ideaFormat: bacaJejakIde(row.script_validation_result).ideaFormat,
     hookLevel: normalizeHookLevel(row.script_hook_level),
     // NULL = perilaku lama (jumlah shot diturunkan, rasio 9:16).
     shotCountOverride: row.shot_count ?? undefined,

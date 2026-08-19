@@ -33,7 +33,9 @@ export type IdMekanik =
   | "time_compression"
   | "absence"
   | "scale"
-  | "confession";
+  | "confession"
+  // Ditambahkan 20 Agu 2026 dari STORY-OS-ADS-v1.md §MEKANIK BARU.
+  | "audio_shift";
 
 export interface Mekanik {
   id: IdMekanik;
@@ -70,6 +72,16 @@ export const MEKANIK_IDE: Mekanik[] = [
     contoh: "serum sebesar tugu", cocok: "produk kecil (level berani ke atas)" },
   { id: "confession", mekanik: "pengakuan yang bikin percaya",
     contoh: "aku males banget skincare, tapi", cocok: "testimoni" },
+  // SUARA yang berubah, bukan gambar (STORY-OS-ADS-v1.md, 20 Agu 2026).
+  //
+  // Satu-satunya mekanik yang pelampiasannya terjadi di TELINGA: bising jadi
+  // hening, ramai jadi sepi. Konsekuensi produksinya nyata dan ditulis di
+  // syarat_produksi format pasangannya — audio design per shot ditulis
+  // eksplisit, bising dinyatakan POSITIF ("a busy office hum"), bukan sebagai
+  // negasi, karena negasi memanggil kembali apa yang dinegasikan.
+  { id: "audio_shift", mekanik: "suara dunia berubah, gambarnya boleh tetap",
+    contoh: "Kantor bising, dia pakai earphone — semua suara hilang kecuali napasnya",
+    cocok: "earphone, kipas/AC, pembersih (bising→senyap), aplikasi fokus; HINDARI produk yang manfaatnya visual dan klaim medis" },
 ];
 
 export const MEKANIK_BY_ID = Object.fromEntries(MEKANIK_IDE.map((m) => [m.id, m])) as Record<IdMekanik, Mekanik>;

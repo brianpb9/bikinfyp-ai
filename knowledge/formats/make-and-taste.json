@@ -1,0 +1,23 @@
+{
+  "id": "make_and_taste",
+  "slug_higgsfield": "ugc_make_and_taste",
+  "nama": "Bikin lalu Cicip",
+  "kekuatan": "Reaksi yang tidak bisa dipalsukan sebagai penutup. Penonton menunggu satu hal: wajahnya saat suapan pertama.",
+  "cocok_untuk": ["makanan", "minuman", "bumbu", "camilan"],
+  "beat_table": [
+    { "beat": 1, "durasi": 4, "isi": "Bahan sudah tertata; tangan mulai bergerak tanpa penjelasan" },
+    { "beat": 2, "durasi": 5, "isi": "Proses yang paling enak dilihat: dituang, diaduk, uap naik" },
+    { "beat": 3, "durasi": 3, "isi": "Suapan pertama — kamera menahan di wajah, jeda satu detik" },
+    { "beat": 4, "durasi": 3, "isi": "Kemasan diangkat di samping hasil jadinya + CTA" }
+  ],
+  "technique": "Dua jarak saja: makro untuk proses, medium untuk reaksi. Suara ditulis rinci (dentang sendok, minyak, tuangan) karena separuh selera datang dari telinga. Jeda satu detik penuh setelah suapan — reaksi yang dipotong cepat terbaca palsu.",
+  "failure_mode": "Reaksi diucapkan sebelum dikunyah ('enak banget!' saat sendok masih di udara) — penonton menangkapnya seketika sebagai akting.",
+  "no_face_recommended": false,
+  "hook_level_min": "normal",
+  "butuh_cgi": false,
+  "planner": {
+    "kamera": "macro for the making, medium for the tasting, nothing in between",
+    "aksi": "hands work first and talk later; after the first bite the camera holds on her face for a full second before anything else moves",
+    "hindari": "reacting before chewing"
+  }
+}

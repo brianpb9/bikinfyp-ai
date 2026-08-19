@@ -34,6 +34,7 @@ import { ugcRolesFor } from "./ugc-template-roles";
 import { isServiceLike } from "../config/hooks";
 import { getRecordingStyle, type StyleFormat } from "./recording-styles";
 import { blokKontrakMode, framingUntukMode, modeDikenal } from "./mode-kamera";
+import { formatById } from "../script-engine/format-katalog";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
 
 export interface ShotPlanInput {
@@ -63,6 +64,17 @@ export interface ShotPlanInput {
   /** Multi-shot: jumlah scene yang diminta user (2-6). Tanpa ini, jumlahnya
    * diturunkan dari durasi & format seperti sebelumnya. */
   shotCountOverride?: number;
+  /**
+   * Format IDE terpilih (knowledge/formats/*.json) — beda sumbu dari `format`
+   * di atas, yang menentukan jenis produksi (hands_only/talking_head/...).
+   *
+   * Slice 3 (20 Agu): sampai kini format ide hanya mewarnai prompt Idea Stage
+   * dan penulis; kamera tidak pernah tahu. Format yang tidak sampai ke kamera
+   * adalah nama, bukan format. Id yang tidak dikenal DIABAIKAN — bukan
+   * diteruskan mentah, karena model memperlakukan kata asing sebagai gaya
+   * visual dan hasilnya tak bisa ditebak.
+   */
+  ideaFormat?: string | null;
   /** Rasio aspek. Lihat catatan "TERBUKTI hanya 9:16" di VisualSpec. */
   ratio?: string;
   /** TVC tanpa orang: seluruh beat jadi makro produk, tekstur, dan packshot.
@@ -524,6 +536,20 @@ function kunciBahasa(mode: "presenter" | "voiceover"): { header: string; perShot
         : "The voiceover is spoken in Indonesian (Bahasa Indonesia).",
     penutup: "no English speech.",
   };
+}
+
+/**
+ * Kalimat kamera+aksi dari format ide, atau "" bila formatnya tidak dikenal.
+ *
+ * Dibaca dari knowledge/formats/*.json (field `planner`), bukan disalin ke
+ * kode: tabel yang disalin adalah tabel yang akan berpisah dari dokumennya.
+ */
+function petunjukFormatIde(id: string | null | undefined): string {
+  if (!id) return "";
+  const f = formatById(String(id));
+  if (!f?.planner) return "";
+  const bagian = [f.planner.kamera, f.planner.aksi].filter(Boolean).join(". ");
+  return bagian ? `Format ${f.id}: ${bagian}.` : "";
 }
 
 export function planShots(input: ShotPlanInput): VisualSpec {
@@ -1532,10 +1558,16 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Kontrak talent mode ikut, terpisah dari framing: framing mengatur KAMERA,
     // kalimat ini mengatur apa yang dilakukan orangnya.
     const kontrak = framingMode ? ` ${blokKontrakMode(modeShot)}` : "";
+    // Format ide -> kamera (slice 3). Larangan format ditulis sebagai kalimat
+    // POSITIF: "hindari" di katalog menyebut apa yang merusak, dan menyalinnya
+    // apa adanya akan memanggil balik hal yang dilarang (pelajaran negasi yang
+    // sama dengan pemicu penyaring).
+    const petunjukFormat = petunjukFormatIde(input.ideaFormat);
+    const blokFormat = petunjukFormat ? ` ${petunjukFormat}` : "";
 
     const base = rapikan(punyaPeranTemplate
-      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${panggung}${kontrak}${ukuran}`
-      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}${kontrak}${ukuran}`);
+      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${panggung}${kontrak}${blokFormat}${ukuran}`
+      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}${kontrak}${blokFormat}${ukuran}`);
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };

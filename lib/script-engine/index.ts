@@ -319,6 +319,8 @@ async function generateOne(
    *  worker (job_prompts.ide_skor/ide_id, audit E15). */
   skorIde: number | null = null,
   idIde: string | null = null,
+  /** Format ide (knowledge/formats) — dipakai perencana shot, slice 3. */
+  formatIde: string | null = null,
   /**
    * Format yang BENAR-BENAR diminta pemanggil (undefined = belum diputuskan).
    *
@@ -382,6 +384,7 @@ async function generateOne(
     ...(mekanikIde ? { mechanic: mekanikIde } : {}),
     ...(skorIde !== null ? { ideSkor: skorIde } : {}),
     ...(idIde ? { ideId: idIde } : {}),
+    ...(formatIde ? { ideaFormat: formatIde } : {}),
   };
   const validate = (segs: SegmentDraft[]) =>
     validateScript(
@@ -691,6 +694,7 @@ export async function generateScripts(opts: {
       hookLevel, ideVarian?.mechanic,
       ide?.nilai.lulus ? ide.nilai.total : null,
       ideVarian ? `${ideVarian.mechanic}/${ideVarian.format ?? "-"}` : null,
+      ideVarian?.format ?? null,
       opts.format));
   }
   // Gate gagal: tiga terbaik ikut keluar supaya UI bisa menampilkannya dan

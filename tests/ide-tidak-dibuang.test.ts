@@ -28,9 +28,9 @@ test("jejak ide diselamatkan dari snapshot admisi ke arsip prompt", () => {
 });
 
 test("snapshot lama / korup tidak menggagalkan arsip (catatan, bukan produk)", () => {
-  assert.deepEqual(bacaJejakIde(null), { ideId: null, ideSkor: null });
-  assert.deepEqual(bacaJejakIde("{bukan json"), { ideId: null, ideSkor: null });
-  assert.deepEqual(bacaJejakIde(JSON.stringify({ passed: true })), { ideId: null, ideSkor: null });
+  assert.deepEqual(bacaJejakIde(null), { ideId: null, ideSkor: null, ideaFormat: null });
+  assert.deepEqual(bacaJejakIde("{bukan json"), { ideId: null, ideSkor: null, ideaFormat: null });
+  assert.deepEqual(bacaJejakIde(JSON.stringify({ passed: true })), { ideId: null, ideSkor: null, ideaFormat: null });
 });
 
 test("worker mengirim jejak ide ke pgSimpanArsipPrompt — kolom 0032 tidak lagi NULL", () => {

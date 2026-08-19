@@ -36,6 +36,30 @@ export interface FormatKatalog {
   /** Level hook minimal. giant_figure hanya masuk akal di level tontonan. */
   hook_level_min: string;
   butuh_cgi: boolean;
+  /**
+   * Genre yang BOLEH memakai format ini. Kosong = keduanya.
+   *
+   * Ada karena live_replay (slice 3, 20 Agu): potongan siaran langsung adalah
+   * bahasa afiliator yang sedang jualan di akunnya sendiri. Iklan berbayar
+   * yang meniru bentuk itu berbohong tentang asal videonya — dan MASTER-UGC-ADS
+   * menyebut bentuk jualan transaksional sebagai "Affiliate yang menyamar".
+   */
+  hanya_untuk?: "affiliate" | "ads";
+  /**
+   * Petunjuk yang dibaca PERENCANA SHOT, bukan cuma prompt Idea Stage.
+   *
+   * Sampai slice 3, delapan format knowledge hanya mewarnai prompt penulis dan
+   * tidak pernah sampai ke kamera — format tanpa kamera adalah nama, bukan
+   * format. Field ini yang menyeberangkannya.
+   */
+  planner?: {
+    /** Kalimat kamera, ditempel apa adanya ke prompt shot. */
+    kamera: string;
+    /** Apa yang dilakukan subjeknya. */
+    aksi: string;
+    /** Satu hal yang paling sering merusak format ini. Ditulis POSITIF di prompt. */
+    hindari?: string;
+  };
 }
 
 const DIR = path.join(process.cwd(), "knowledge", "formats");
@@ -122,6 +146,8 @@ export function bolehPasangan(input: {
   formatId: string;
   hookLevel?: string;
   productCategory?: string;
+  /** Genre yang meminta. Format ber-hanya_untuk menolak genre lain. */
+  contentType?: "affiliate" | "ads";
 }): AlasanPasangan {
   if (FORMAT_DILARANG.has(input.formatId)) {
     return { boleh: false, sebab: `format ${input.formatId} butuh dua orang di frame — melanggar aturan satu-orang` };
@@ -135,6 +161,15 @@ export function bolehPasangan(input: {
     return {
       boleh: false,
       sebab: `format ${f.id} menuntut CGI dan hanya masuk akal di level tontonan (agak_gila/gila), sekarang level ${level}`,
+    };
+  }
+
+  // Genre terkunci (slice 3). Diperiksa DI SINI, bukan cuma diminta di prompt:
+  // larangan yang hanya ditulis di prompt bukan larangan.
+  if (f.hanya_untuk && input.contentType && f.hanya_untuk !== input.contentType) {
+    return {
+      boleh: false,
+      sebab: `format ${f.id} hanya untuk ${f.hanya_untuk} — genre yang diminta ${input.contentType}`,
     };
   }
 
