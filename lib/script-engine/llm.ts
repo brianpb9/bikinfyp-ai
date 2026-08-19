@@ -313,6 +313,20 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
   ].join("\n");
 }
 
+/**
+ * Hook uji untuk blokTugas — dipakai tes memastikan instruksi genre benar-benar
+ * dikirim ke penulis. Diekspor terpisah supaya blokTugas sendiri tetap privat
+ * dan tesnya tidak perlu merakit PermintaanNaskah lengkap hanya untuk membaca
+ * satu blok instruksi.
+ */
+export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; durationSec: number }): string {
+  return blokTugas({
+    productName: "Serum Glow Bening", productCategory: "beauty", priceIdr: 89000,
+    durationSec: p.durationSec, contentType: p.contentType, cartLabel: "keranjang kuning",
+    register: "netral", hookFamily: "H1", hookLevel: "normal", format: "talking_head",
+  } as PermintaanNaskah);
+}
+
 function blokTugas(r: PermintaanNaskah): string {
   const jumlah = r.durationSec <= 15 ? 3 : r.durationSec <= 20 ? 4 : r.durationSec <= 30 ? 5 : 6;
   // TIGA genre, bukan dua.
@@ -327,6 +341,33 @@ function blokTugas(r: PermintaanNaskah): string {
       : r.contentType === "ads"
         ? `The CTA line must be exactly: "Detailnya ada di bawah ya". No on-screen text anywhere.`
         : `The CTA line must be spoken and must contain "${r.cartLabel}".`;
+  // STORY OS ADS (slice 2, 19 Agu) — knowledge/rules/STORY-OS-ADS-v1.md.
+  //
+  // Sampai kini penulis Ads cuma dibedakan oleh kalimat CTA, jadi ia menulis
+  // naskah afiliasi yang penutupnya ditukar. Beat di bawah adalah BENTUK yang
+  // membedakan iklan berbayar: ditulis Button-first, tekanan naik dua kali,
+  // pelampiasan di depan saksi. Yang tidak diberitahukan tidak bisa ditulis —
+  // dan gerbang SA menolak naskah yang tidak memakainya.
+  const storyOs =
+    r.contentType === "ads"
+      ? [
+          "",
+          "STORY OS (Ads only) — write the beats in THIS order, then lay them out in time:",
+          "1. BUTTON first (the last 3-6s): one small question left unanswered, and the CTA lives INSIDE it,",
+          "   preceded by a story clause. Label this segment BUTTON. Product hero, label readable.",
+          "2. SPIKE: the protagonist beats their own pressure IN FRONT OF A WITNESS (a voice off camera is enough:",
+          "   petugas, ibu, pewawancara, penghulu, anak). Put it at 65-80% of the duration. Label it SPIKE and",
+          '   fill the field "saksi" with who witnesses it.',
+          "3. HOOK: the conflict is already in frame 1, with NO dialogue. Label it HOOK.",
+          "4. FRICTION (write last): pressure rises at least TWICE between hook and spike. Label each one FRICTION.",
+          "   Every friction beat must MOVE something in its action — a position, a decision, an object.",
+          "   Enemies that work: your own reflex, time running out, a voice calling you.",
+          "BRIDGING — at least TWO of three, and never say the benefit out loud:",
+          "  (a) an honest action with the product during friction, (b) the product present in frame 1 without",
+          "  being explained, (c) a light admission in the button before the CTA phrase.",
+          "BODY IS NOT EXPLANATION: no 'aslinya...', no describing the product, no benefit claims. The viewer concludes.",
+        ].join("\n")
+      : "";
   const perbaikan = r.keluhan?.length
     ? [
         "",
@@ -340,6 +381,7 @@ function blokTugas(r: PermintaanNaskah): string {
     `PRODUCT: ${r.productName} (${r.productCategory}), price ${r.priceIdr} rupiah — write it as words if spoken.`,
     `DURATION: ${r.durationSec} seconds, exactly ${jumlah} segments.`,
     `CONTENT TYPE: ${r.contentType}. ${cta}`,
+    storyOs,
     `REGISTER: ${r.register}.`,
     blokAturanTerukur(r, jumlah),
     `STRATEGY HINTS (these shape the angle, they are not lines to copy):`,

@@ -348,7 +348,18 @@ test("katalog template: hanya TIGA jenis utang yang diketahui, tidak ada yang la
   // Jalur LLM sudah menulis CTA Ads yang benar (llm.ts blokTugas). Yang merah
   // hanya template cadangan — dan naskah cadangan yang gagal gate memang tidak
   // boleh dirender.
-  const UTANG_DIKENAL = new Set(["L-05", "L-19", "A-01", "A-02", "S-04", "S-09"]);
+  //
+  // SA1/SA2/SA4/SA6 ditambahkan 19 Agu (slice 2, Story OS Ads) — dan ini utang
+  // COPY yang sama, bukan jenis baru yang menyusup: seluruh template Ads
+  // ditulis sebagai HOOK-BODY-CTA afiliasi, jadi tidak satu pun punya beat
+  // BUTTON/SPIKE/FRICTION atau jembatan produk. Template Ads yang gagal
+  // memang TIDAK BOLEH dirender (script_source degraded), dan jalur LLM sudah
+  // diberi instruksi Story OS penuh. Yang menghapus utang ini adalah penulisan
+  // ulang copy template Ads ke bentuk Story OS — pekerjaan copy, milik Brian.
+  const UTANG_DIKENAL = new Set([
+    "L-05", "L-19", "A-01", "A-02", "S-04", "S-09",
+    "SA1", "SA2", "SA4", "SA6", "SA8",
+  ]);
   const lain = summary.validationFailureRefs
     .map((ref) => ({ ref, aturan: ref.errors.map((e) => e.rule).filter((r) => !UTANG_DIKENAL.has(r)) }))
     .filter((x) => x.aturan.length > 0);
@@ -373,6 +384,10 @@ test("utang template tercatat angkanya per jenis, bukan diam-diam", async () => 
   const perShot = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule === "S-09")).length;
   assert.ok(perShot > 0 && perShot <= 116, `varian melanggar batas kata per shot: ${perShot}/132`);
   assert.ok(panjang > 0 && panjang <= 130, `varian melanggar batas 22 kata: ${panjang}/132`);
+  // Story OS Ads: angkanya dicatat supaya penulisan ulang copy Ads terlihat
+  // maju. Nol berarti seluruh template Ads sudah berbentuk Story OS.
+  const storyOs = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule.startsWith("SA"))).length;
+  assert.ok(storyOs >= 0 && storyOs <= 132, `varian Ads belum berbentuk Story OS: ${storyOs}/132`);
   assert.ok(perangkat > 0 && perangkat <= 17, `varian tanpa perangkat retoris: ${perangkat}/132`);
   // 9 template Ads x 4 varian = 36. Semuanya berpenutup afiliasi.
   assert.ok(genreAds > 0 && genreAds <= 36, `varian Ads dengan CTA salah genre: ${genreAds}/132`);

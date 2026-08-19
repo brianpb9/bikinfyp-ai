@@ -8,6 +8,7 @@ import { COMPETITOR_BRANDS } from "../config/hooks";
 import { formatHargaNatural } from "./templates";
 import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
 import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
+import { periksaStoryOsAds } from "./story-os-ads";
 import { pilihTokenMerek } from "../merek";
 
 export interface ScriptToValidate {
@@ -352,6 +353,9 @@ export const SELALU_KERAS = new Set([
   // STANDAR 10/10 (knowledge/rules/standard-10.md). Ketiganya aturan MUTU yang
   // bisa diperiksa mesin, dan Brian menyebutnya syarat render — bukan saran.
   "S-04", "S-05", "S-09",
+  // Story OS Ads (slice 2, 19 Agu). Gerbang SA yang bisa dicek mesin: gagal
+  // satu = naskah tidak dirender (STORY-OS-ADS-v1 §3).
+  "SA1", "SA2", "SA4", "SA6", "SA8",
 ]);
 
 /**
@@ -866,6 +870,15 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   if (tier !== "silent_caption") {
     const b9 = kataPerShot(script.segments as never);
     if (!b9.lolos) push(false, { rule: "S-09", message_id: b9.sebab! });
+  }
+
+  // STORY OS ADS (slice 2) — hanya untuk genre ads; Affiliate punya bentuknya
+  // sendiri dan sudah dijaga L-03/A-01/A-02.
+  for (const t of periksaStoryOsAds(
+    { segments: script.segments as never },
+    { contentType: script.contentType ?? null, durationSec: script.durationSec ?? null }
+  )) {
+    push(false, { rule: t.gerbang, message_id: t.pesan });
   }
 
   return { passed: errors.length === 0, errors, warnings, checked_at: new Date().toISOString() };

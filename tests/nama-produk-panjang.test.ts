@@ -39,7 +39,14 @@ async function coba(nama: string, t: (typeof CAMPAIGN_TEMPLATES)[number]) {
  *  Itu yang masih harus nol — bukan "semua varian lolos", yang berhenti benar
  *  sejak batas 22 kata dipasang. Inventaris lengkapnya di
  *  tests/script-catalog-audit.test.ts. */
-const UTANG_COPY = new Set(["L-05", "L-19", "A-01", "A-02", "S-04", "S-09"]);
+// SA* ditambahkan 19 Agu (slice 2): seluruh copy template Ads berbentuk
+// HOOK-BODY-CTA afiliasi, jadi tidak satu pun punya beat BUTTON/SPIKE/FRICTION
+// atau jembatan produk. Utang COPY yang sama, bukan jenis baru yang menyusup —
+// lihat catatan panjang di tests/script-catalog-audit.test.ts.
+const UTANG_COPY = new Set([
+  "L-05", "L-19", "A-01", "A-02", "S-04", "S-09",
+  "SA1", "SA2", "SA4", "SA6", "SA8",
+]);
 function sebabLain(varian: Awaited<ReturnType<typeof coba>>): string[] {
   return varian.flatMap((v) => v.validation.errors.map((e) => e.rule)).filter((r) => !UTANG_COPY.has(r));
 }
