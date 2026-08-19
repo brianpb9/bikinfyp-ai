@@ -26,7 +26,7 @@ import {
 import { LlmTidakTersedia, ambilObjekJson } from "./llm";
 import { bolehPasangan, formatById, formatTersedia, muatPrior, ringkasUntukPrompt } from "./format-katalog";
 import { nilaiBarisIde, skor12, ujiCepatGenre, ujiTukarProduk, type Skor12 } from "./standar-10";
-import { blokStandar } from "./standar-10-teks";
+import { blokMaster, blokStandar } from "./standar-10-teks";
 import { periksaPemicu } from "../media/pemicu-filter";
 
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
@@ -344,6 +344,10 @@ function blokPengetahuan(r: PermintaanIde): string {
     "- Write one_liner, why_stop, story and product_role in Indonesian. Everything else in English.",
     "",
     blokStandar(),
+    "",
+    // MASTER genre (slice 1, 19 Agu) — ide harus lahir di kamar yang benar,
+    // dan "uji kamar" ada di seksi ini.
+    blokMaster(r.contentType),
     "",
     "OUTPUT SHAPE — exact field names, no others:",
     '{"ideas":[{"one_liner":"","human_situation":"","mechanic":"","format":"","hook_device":"","hook_level":"",',

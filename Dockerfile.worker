@@ -38,6 +38,12 @@ COPY --from=dependencies /srv/app/node_modules ./node_modules
 COPY --chown=racun:racun package.json package-lock.json ./
 COPY --chown=racun:racun lib ./lib
 COPY --chown=racun:racun scripts ./scripts
+# knowledge/ WAJIB ikut: lib/media/shot-planner memuat kontrak kamera 14 mode
+# dari knowledge/rules/modes.md saat modul di-load (slice 1, 19 Agu). Tanpa
+# baris ini sumbu mode MATI DIAM-DIAM di container worker — persis tempat
+# planShots benar-benar berjalan di produksi — dan prompt keluar tanpa kontrak
+# kamera tanpa satu pun kegagalan terlihat. Dijaga tests/mode-sumbu-planner.
+COPY --chown=racun:racun knowledge ./knowledge
 COPY --chown=racun:racun assets/fonts ./assets/fonts
 COPY --chown=racun:racun assets/models ./assets/models
 COPY --chown=racun:racun assets/music ./assets/music

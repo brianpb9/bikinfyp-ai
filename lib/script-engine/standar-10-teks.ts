@@ -43,3 +43,43 @@ export function blokStandar(): string {
   return isi ? `PRODUCTION STANDARD (authoritative, Indonesian source text):\n${isi}` : "";
 }
 
+
+// ---------------------------------------------------------------------------
+// MASTER per CONTENT TYPE (slice 1, 19 Agu 2026)
+// ---------------------------------------------------------------------------
+//
+// Kontrak Ads vs Affiliate sebelumnya cuma hidup di kepala dan di berkas skill
+// di luar app; penulis LLM tidak pernah membacanya, dan satu-satunya perbedaan
+// yang benar-benar sampai ke model adalah kalimat CTA. Sejak sekarang seksi
+// pembuka MASTER masing-masing ("Apa itu X dan bukan") disuntik VERBATIM sesuai
+// content_type — bagian yang menentukan apakah sebuah naskah lahir di kamar
+// yang benar.
+
+const CACHE_MASTER = new Map<string, string>();
+
+function masterSeksiSatu(berkas: string): string {
+  const sudah = CACHE_MASTER.get(berkas);
+  if (sudah !== undefined) return sudah;
+  let hasil = "";
+  try {
+    const teks = fs.readFileSync(path.join(process.cwd(), "knowledge", "rules", berkas), "utf8");
+    // Seksi "## 1. ..." sampai sebelum "## 2."
+    const m = teks.match(/\n## 1\.[\s\S]*?(?=\n## 2\.)/);
+    hasil = m ? m[0].trim() : "";
+  } catch (err) {
+    console.warn(`[master] knowledge/rules/${berkas} tidak terbaca: ${(err as Error).message}`);
+  }
+  CACHE_MASTER.set(berkas, hasil);
+  return hasil;
+}
+
+/**
+ * Blok MASTER sesuai genre. Kosong = berkasnya tidak ikut ter-deploy; penulis
+ * tetap jalan (lapisan mutu, bukan syarat hidup) tapi peringatannya terlihat.
+ */
+export function blokMaster(contentType: "affiliate" | "ads"): string {
+  const isi = masterSeksiSatu(contentType === "ads" ? "MASTER-UGC-ADS.md" : "MASTER-UGC-AFFILIATE.md");
+  if (!isi) return "";
+  const judul = contentType === "ads" ? "MASTER — AI UGC ADS" : "MASTER — AI UGC AFFILIATE";
+  return `${judul} (authoritative, Indonesian source text):\n${isi}`;
+}

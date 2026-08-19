@@ -22,7 +22,7 @@
  */
 import { z } from "zod";
 import { MAKS_KATA_PER_SHOT } from "./standar-10";
-import { blokStandar } from "./standar-10-teks";
+import { blokMaster, blokStandar } from "./standar-10-teks";
 import { config } from "../config";
 import {
   AKU_TOKENS, FILLER_PHRASES, FILLER_TOKENS, GUE_TOKENS, KAMU_TOKENS, LO_TOKENS, PARTICLES,
@@ -81,7 +81,7 @@ export function llmSengajaDimatikan(): boolean {
  * cache_control supaya tidak dibayar berulang. Ini yang membuat pemanggilan
  * per-varian murah: aturan panjang cukup dikirim sekali per lima menit.
  */
-export function blokAturan(): string {
+export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): string {
   return [
     "You write short-form Indonesian UGC ad scripts as production prompts.",
     "",
@@ -132,6 +132,13 @@ export function blokAturan(): string {
     // dinilai dengan aturan yang tidak pernah ia baca — cacat yang sama persis
     // dengan L-05 dulu.
     blokStandar(),
+    "",
+    // MASTER per genre (slice 1, 19 Agu). Seksi 1 masing-masing dokumen —
+    // "apa itu Ads/Affiliate DAN BUKAN", berikut uji kamarnya — dikirim UTUH.
+    // Sebelum ini satu-satunya perbedaan genre yang sampai ke penulis adalah
+    // kalimat CTA, jadi naskah Ads lahir sebagai naskah afiliasi yang cuma
+    // ditukar penutupnya.
+    blokMaster(contentType),
     "",
     // Jumlahnya DITURUNKAN dari yang benar-benar menolak keluaranmu (audit A2,
     // 19 Agu). Sebelumnya tertulis "six" lalu hanya empat yang didaftar, dan
@@ -359,7 +366,12 @@ export async function tulisNaskah(r: PermintaanNaskah): Promise<SegmenLlm[]> {
     system: [
       // cache_control pada blok STATIS: aturannya panjang dan identik tiap
       // permintaan, jadi tanpa ini kita membayarnya berulang untuk tiap varian.
-      { type: "text", text: blokAturan(), cache_control: { type: "ephemeral" } },
+      //
+      // Sejak MASTER genre ikut di sini (slice 1, 19 Agu) blok ini punya DUA
+      // bentuk — affiliate dan ads. Cache prefix Anthropic dikunci per teks
+      // persis, jadi artinya dua entri cache, bukan cache yang meleset: tiap
+      // genre tetap memakai ulang miliknya sendiri.
+      { type: "text", text: blokAturan(r.contentType), cache_control: { type: "ephemeral" } },
     ],
     messages: [{ role: "user", content: blokTugas(r) }],
   };

@@ -33,6 +33,7 @@ import { MANDATORY_NEGATIVE_PROMPT } from "../config/compliance";
 import { ugcRolesFor } from "./ugc-template-roles";
 import { isServiceLike } from "../config/hooks";
 import { getRecordingStyle, type StyleFormat } from "./recording-styles";
+import { blokKontrakMode, framingUntukMode, modeDikenal } from "./mode-kamera";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
 
 export interface ShotPlanInput {
@@ -1137,10 +1138,22 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const bukaTanpaWajah =
       isFirst && numShots >= 2 && format === "talking_head" &&
       !fullBodyFashion && !gayaBerlaku && !ugcRolesFor(input.ugcTemplate)?.opening;
+    // SUMBU MODE (slice 1, 19 Agu). Mode segmen — sampai kini cuma label
+    // metadata — kini menentukan kontrak kamera shot, sesuai modes.md:
+    // "Any segment whose camera contradicts its governing mode fails the gate".
+    //
+    // Urutan kalah-menangnya sengaja: shot pembuka tanpa wajah tetap menang
+    // (ia menjaga lolos filter, bukan sekadar gaya), lalu gaya rekam yang
+    // dipilih brand secara eksplisit di dashboard, baru mode dari naskah.
+    // Mode tak dikenal = diabaikan, bukan diteruskan (lihat kontrakMode).
+    const modeShot = segmenMilikShot(i).map((sg) => sg.mode).find((m) => modeDikenal(m)) ?? null;
+    const framingMode = !bukaTanpaWajah && !gayaBerlaku ? framingUntukMode(modeShot) : null;
     const framing = bukaTanpaWajah
       ? `${HANDS_ONLY_FRAMING}. ${HANDS_ONLY_HAND_LOCK}`
       : gayaBerlaku
       ? `${gayaBerlaku.framing}. `
+      : framingMode
+      ? `${framingMode}. `
       : format === "tvc"
       ? `${TVC_FRAMING}. `
       : format === "hands_only"
@@ -1516,10 +1529,13 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Kunci ukuran asli (§C.10) di TIAP shot — termasuk shot tanpa suara, yang
     // punya cacat produk-raksasa yang sama.
     const ukuran = ` ${kunciUkuranAsli(input.productName)}`;
+    // Kontrak talent mode ikut, terpisah dari framing: framing mengatur KAMERA,
+    // kalimat ini mengatur apa yang dilakukan orangnya.
+    const kontrak = framingMode ? ` ${blokKontrakMode(modeShot)}` : "";
 
     const base = rapikan(punyaPeranTemplate
-      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${panggung}${ukuran}`
-      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}${ukuran}`);
+      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${panggung}${kontrak}${ukuran}`
+      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}${kontrak}${ukuran}`);
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
