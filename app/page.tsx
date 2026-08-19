@@ -41,7 +41,12 @@ export default function HomePage() {
   const isNewUser = jobs !== null && jobs.length === 0 && processing.length === 0;
 
   return (
-    <main className="min-h-dvh space-y-7 bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-28 pt-6">
+    // Kolom flex, bukan sekadar min-h-dvh: beranda pengguna baru isinya pendek,
+    // dan tanpa ini footer identitas merchant berhenti tepat di bawah konten —
+    // menggantung di tengah layar dengan ruang kosong di bawahnya (feedback
+    // Brian 19 Agu). flex-1 pada pembungkus konten yang mendorongnya ke dasar.
+    <main className="flex min-h-dvh flex-col bg-gradient-to-b from-amber-50/70 via-white to-white px-4 pb-28 pt-6">
+      <div className="flex-1 space-y-7">
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Studio kreator</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Beranda</h1>
@@ -113,6 +118,8 @@ export default function HomePage() {
           <span className="font-bold text-amber-600">Top-up →</span>
         </Link>
       )}
+
+      </div>
 
       <SiteFooter />
     </main>
