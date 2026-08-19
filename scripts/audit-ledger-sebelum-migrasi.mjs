@@ -131,6 +131,33 @@ const PEMERIKSAAN = [
       ORDER BY 2 DESC`,
   },
   {
+    // Ditambahkan 20 Agu 2026 setelah kejadian nyata: satu callback SANDBOX
+    // Duitku mengkredit Rp60.000 ke dompet produksi. Audit lama TIDAK PUNYA
+    // mata untuk kasus ini — seluruh pemeriksaannya berporos pada job, dan
+    // topup tidak punya job. Lubang yang tidak bisa dilihat alat ukurnya
+    // adalah lubang yang akan diulang.
+    //
+    // Hijau bila: tiap topup dari order sandbox sudah punya baris 'koreksi'
+    // yang membalikkannya (lihat scripts/koreksi-kredit-sandbox.mjs).
+    nama: "Topup dari order SANDBOX yang belum dibalik koreksi",
+    pemblokir: true,
+    catatan:
+      "Saldo nyata yang berasal dari uang mainan. Balikkan dengan entri append-only type='koreksi' (scripts/koreksi-kredit-sandbox.mjs --apply), jangan mengedit baris topup-nya.",
+    sql: `
+      SELECT p.gateway_ref, p.user_id, p.amount_idr,
+             COALESCE(SUM(l.delta) FILTER (WHERE l.type='topup'), 0)   AS topup_idr,
+             COALESCE(SUM(l.delta) FILTER (WHERE l.type='koreksi'), 0) AS koreksi_idr
+      FROM payments p JOIN credit_ledger l ON l.payment_id = p.id
+      WHERE COALESCE(p.raw_payload::jsonb->>'payments_env', '') = 'sandbox'
+         -- Order dari uji Fase 3 (sebelum cap payments_env ada) disebut
+         -- namanya, bukan ditebak dari polanya.
+         OR p.gateway_ref = 'racun-9f1b7d04-18dbf97f-2c35'
+      GROUP BY p.gateway_ref, p.user_id, p.amount_idr
+      HAVING COALESCE(SUM(l.delta) FILTER (WHERE l.type='topup'), 0)
+           + COALESCE(SUM(l.delta) FILTER (WHERE l.type='koreksi'), 0) <> 0
+      ORDER BY 4 DESC`,
+  },
+  {
     nama: "Job READY yang hold-nya belum ter-capture",
     pemblokir: false,
     catatan: "Dirapikan reconciler. Capture berdelta nol — saldo tidak bergerak.",

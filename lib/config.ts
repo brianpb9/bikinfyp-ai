@@ -203,6 +203,9 @@ export const config = {
   midtransServerKey: env("MIDTRANS_SERVER_KEY", ""),
   midtransClientKey: env("MIDTRANS_CLIENT_KEY", ""),
   midtransIsProduction: env("MIDTRANS_IS_PRODUCTION", "false") === "true",
+  // Midtrans (di bawah) = JALUR ROLLBACK yang sengaja dipertahankan, bukan
+  // sisa yang terlupa — lihat docs/adr/0001-gateway-duitku-midtrans-rollback.md
+  // sebelum menghapus MIDTRANS_* atau lib/midtrans.ts.
   // Duitku POP — kosong = checkout 503 jelas (sama seperti jalur Midtrans)
   duitkuMerchantCode: env("DUITKU_MERCHANT_CODE", ""),
   duitkuApiKey: env("DUITKU_API_KEY", ""),
