@@ -16,6 +16,7 @@
  * paling cepat membuat standar ini terlihat berjalan padahal tidak.
  */
 import { hookLevelRank, type HookLevel } from "../config/hooks";
+import { tutupiNama } from "../media/pemicu-filter";
 import type { SegmentDraft } from "./templates";
 
 export type Penegakan = "kode" | "prompt" | "belum";
@@ -328,6 +329,20 @@ export interface KonteksIde12 {
   claim_safety?: string;
 }
 
+/**
+ * Buang SETIAP kata nama produk (>=4 huruf) dari teks — bukan cuma pasangan
+ * kata berurutan. Dipakai baris 6 saja; lihat alasannya di pemakaiannya.
+ */
+function tutupiKataNama(teks: string, nama?: string | null): string {
+  const dasar = tutupiNama(teks, nama); // pasangan kata dulu (pola terbukti)
+  const kata = (nama ?? "").split(/\s+/).filter((w) => w.length >= 4);
+  let out = dasar;
+  for (const w of kata) {
+    out = out.replace(new RegExp(`\\b${w.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`, "gi"), " PRODUK ");
+  }
+  return out;
+}
+
 export function nilaiBarisIde(k: KonteksIde12): { gagal: { no: number; sebab: string }[]; belumDiuji: number[] } {
   const gagal: { no: number; sebab: string }[] = [];
   const belumDiuji = [1, 4, 7, 9, 11];
@@ -342,8 +357,26 @@ export function nilaiBarisIde(k: KonteksIde12): { gagal: { no: number; sebab: st
   const b5 = levelHookCukup({ hookLevel: k.hookLevel, productCategory: k.productCategory, productName: k.productName });
   if (!b5.lolos) gagal.push({ no: 5, sebab: b5.sebab! });
 
-  // Baris 6 dinilai dari klaimnya sendiri: kata yang tidak boleh diucapkan.
-  if (/\b(whitening|memutihkan|instan|instant|menyembuhkan|klinis)\b/i.test(`${k.one_liner} ${k.why_stop} ${k.claim_safety ?? ""}`)) {
+  // Baris 6 dinilai dari klaimnya sendiri: kata yang tidak boleh DIUCAPKAN.
+  //
+  // Nama produk dibuang lebih dulu (20 Agu). Bug nyata: "Scarlett Whitening
+  // Serum" adalah nama SKU di katalog, dan menyebutnya bukan mengklaim apa pun
+  // — tapi baris 6 menjatuhkannya, menahan nilai di 6, sehingga setiap SKU
+  // dengan kata itu di namanya mustahil lolos gate berapa pun bagus idenya.
+  // Yang dilarang tetap klaimnya sebagai kalimat; masking memakai helper yang
+  // sama dengan penyaring pemicu, bukan salinan aturan kedua.
+  // Masking baris 6 lebih lebar daripada masking penyaring pemicu, dan itu
+  // disengaja. tutupiNama() menuntut DUA kata berurutan supaya "shower"
+  // sendirian tidak jadi izin global — benar untuk penyaring penyedia, tapi
+  // salah di sini: SKU bernama "Scarlett Whitening Serum" ditulis ulang model
+  // sebagai "serum whitening-nya", satu kata, lalu dituduh mengklaim.
+  //
+  // Aman dilonggarkan karena gerbang yang sebenarnya menjaga penonton ada di
+  // tingkat NASKAH dan tetap keras: L-10 (overclaim) dan L-11 (klaim medis)
+  // memeriksa kalimat yang benar-benar diucapkan. Yang dilonggarkan di sini
+  // cuma penilaian IDE, dan hanya untuk kata yang memang ada di nama produk.
+  const teksKlaim = tutupiKataNama(`${k.one_liner} ${k.why_stop} ${k.claim_safety ?? ""}`, k.productName);
+  if (/\b(whitening|memutihkan|instan|instant|menyembuhkan|klinis)\b/i.test(teksKlaim)) {
     gagal.push({ no: 6, sebab: "ide menyebut klaim yang tidak boleh diucapkan (whitening/instan/menyembuhkan/klinis)" });
   }
 

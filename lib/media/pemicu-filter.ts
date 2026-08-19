@@ -120,7 +120,15 @@ const NEGASI_ORANG: RegExp[] = [
 ];
 
 /** Ganti tiap kemunculan nama produk dengan placeholder netral. */
-function tutupiNama(teks: string, nama?: string | null): string {
+/**
+ * Buang kemunculan NAMA PRODUK dari teks sebelum diperiksa.
+ *
+ * Diekspor sejak 20 Agu: standar 10/10 baris 6 memakai pola yang sama setelah
+ * bug nyata — "Scarlett Whitening Serum" (nama SKU asli) dituduh menyebut
+ * klaim terlarang. Satu implementasi untuk dua pemeriksa; dua salinan aturan
+ * yang sama akan menyimpang, dan repo ini sudah pernah membayar itu.
+ */
+export function tutupiNama(teks: string, nama?: string | null): string {
   const n = (nama ?? "").trim();
   if (n.length < 3) return teks;
   const esc = (x: string) => x.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
