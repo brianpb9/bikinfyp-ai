@@ -9,7 +9,7 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/credits/topup {package_id} — DEV ONLY (non-production/ALLOW_DEV_LOGIN=1).
-// Produksi memakai /api/credits/checkout + webhook Midtrans terverifikasi.
+// Produksi memakai /api/credits/checkout + webhook Duitku terverifikasi.
 export async function POST(req: Request) {
   try {
     assertDevRoute();

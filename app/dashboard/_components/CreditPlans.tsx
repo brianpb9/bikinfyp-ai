@@ -7,7 +7,7 @@ import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
 import { PAKET_TOKEN } from "@/lib/paket-token";
 
 // Paket token — TAMPILAN saja (permintaan Brian: "ini di buat aja dlu UI nya").
-// Belum ada Midtrans untuk organisasi; token org masih diisi manual oleh tim.
+// Belum ada Duitku untuk organisasi; token org masih diisi manual oleh tim.
 // Karena itu tombolnya jujur berbunyi "Ajukan" dan membuka kontak, BUKAN
 // "Bayar sekarang" yang akan berbohong soal apa yang terjadi setelah diklik.
 // Harga di bawah adalah ANGKA RANCANGAN yang belum Brian kunci (dia bilang

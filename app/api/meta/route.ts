@@ -1,6 +1,6 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
-import { config } from "@/lib/config";
+import { config, paymentsEnv, paymentsLive, paymentsProvider } from "@/lib/config";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 export const runtime = "nodejs";
@@ -34,10 +34,12 @@ export async function GET(req: Request) {
       // "Mode demo: pembayaran berhasil tanpa uang sungguhan" TANPA SYARAT,
       // termasuk ke user production — client butuh tahu status pembayaran
       // sungguhan supaya bisa jujur, bukan menebak dari kegagalan fallback.
-      payments_live:
-        config.paymentGateway === "duitku"
-          ? Boolean(config.duitkuMerchantCode && config.duitkuApiKey)
-          : Boolean(config.midtransServerKey && config.midtransClientKey),
+      // Sama dengan /api/health (koreksi Brian 20 Agu): sandbox TIDAK PERNAH
+      // live. Halaman kredit membaca ini untuk memutuskan boleh-tidaknya
+      // tombol beli terbuka.
+      payments_provider: paymentsProvider(),
+      payments_env: paymentsEnv(),
+      payments_live: paymentsLive(),
     });
   } catch (err) {
     return errorResponse(err);

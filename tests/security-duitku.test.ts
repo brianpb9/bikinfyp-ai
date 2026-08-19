@@ -13,6 +13,12 @@ process.env.STORAGE_DIR = `/tmp/racun-test-duitku-webhook-storage-${process.pid}
 process.env.DUITKU_MERCHANT_CODE = "DTEST1";
 process.env.DUITKU_API_KEY = "kunci-uji-duitku";
 process.env.RACUN_WORKER_DISABLED = "1";
+// Berkas ini menguji KEAMANAN webhook (signature, ikatan nominal, idempotensi)
+// pada lingkungan produksi. Gerbang sandbox — yang menolak mengkredit dompet
+// non-penguji — punya berkasnya sendiri: tests/pembayaran-sandbox.test.ts.
+// Tanpa baris ini gerbang itu ikut campur dan menutupi apa yang diuji di sini.
+process.env.PAYMENT_GATEWAY = "duitku";
+process.env.DUITKU_IS_PRODUCTION = "true";
 
 const { getDb, now, uuid } = await import("../lib/db");
 const { findOrCreateUserByPhone } = await import("../lib/auth");

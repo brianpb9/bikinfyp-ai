@@ -3,7 +3,7 @@
 // Sebelum ini daftar paket hidup sebagai konstanta di dalam app/kredit/page.tsx.
 // Menyalinnya ke halaman publik berarti dua daftar harga yang harus dijaga
 // sama selamanya, dan daftar harga yang hanyut bukan sekadar bug kosmetik:
-// yang membaca halaman publik justru reviewer Midtrans (temuan onboarding
+// yang membaca halaman publik justru reviewer gateway pembayaran (temuan onboarding
 // 2026-08-13: "tidak menemukan harga untuk barang/jasa pada website"), dan
 // pelanggan yang melihat satu angka lalu ditagih angka lain.
 //
@@ -49,7 +49,7 @@ export interface TierHarga {
  * memberinya harga. Akibatnya halaman publik mengiklankan barang yang
  * mesinnya sendiri tolak dengan pesan "sudah tidak tersedia" — itu bukan copy
  * basi, itu iklan menyesatkan, dan yang membaca halaman publik justru
- * termasuk reviewer Midtrans.
+ * termasuk reviewer gateway pembayaran.
  *
  * config.tiers TETAP memuat harganya: job lama yang dibuat sebelum pensiun
  * masih perlu dihitung biayanya dengan benar. Yang berubah cuma: tidak dijual
@@ -88,7 +88,7 @@ export const TIER_HARGA: TierHarga[] = [
 ];
 
 /** Rentang harga keseluruhan — dipakai halaman harga dan dokumen onboarding
- *  Midtrans. Dihitung, bukan ditulis, supaya tidak pernah salah saat paket
+ *  Duitku. Dihitung, bukan ditulis, supaya tidak pernah salah saat paket
  *  atau tier berubah. */
 export function rentangHarga(): { min: number; max: number } {
   const semua = [...TIER_HARGA.map((t) => t.hargaIdr), ...PAKET_KREDIT.map((p) => p.price)];

@@ -24,7 +24,7 @@ export const JANJI_WAKTU = {
   klipTunggal: "2–5 menit",
   /** Estimasi sisa saat fase akhir alur satu-klip. */
   sisaKlip: "1–2 menit",
-  /** BUKAN waktu render: jeda settlement pembayaran Midtrans. Ditaruh di sini
+  /** BUKAN waktu render: jeda settlement pembayaran Duitku. Ditaruh di sini
    * hanya supaya SEMUA janji menit punya satu rumah yang dijaga tes. */
   tungguPembayaran: "1–2 menit",
 } as const;

@@ -1,5 +1,5 @@
 import pg from "pg";
-import { config } from "@/lib/config";
+import { config, paymentsEnv, paymentsLive, paymentsProvider } from "@/lib/config";
 import { assertQueueConfiguration } from "@/lib/job-queue";
 import { invarianUangBelumTerpasang, jobIntakeMode } from "@/lib/job-intake";
 import { pendingMigrations } from "@/lib/migrasi-status";
@@ -22,11 +22,13 @@ export async function GET() {
     const pending = await pendingMigrations().catch(() => []);
     // r13 (review produk 2026-08-07): halaman landing publik (anonim, sebelum
     // login) mengklaim "Checkout aman lewat GoPay/OVO/DANA/QRIS" TANPA SYARAT
-    // walau Midtrans belum dipasang — publik, non-rahasia, aman diekspos di sini.
-    const paymentsLive =
-      config.paymentGateway === "duitku"
-        ? Boolean(config.duitkuMerchantCode && config.duitkuApiKey)
-        : Boolean(config.midtransServerKey && config.midtransClientKey);
+    // walau Duitku belum dipasang — publik, non-rahasia, aman diekspos di sini.
+    // KONTRAK PEMBAYARAN (koreksi Brian 20 Agu). Tiga field, bukan satu boolean:
+    // provider mana, lingkungan apa, dan apakah benar-benar hidup. Sebelumnya
+    // health menjawab payments_live: true hanya karena kunci SANDBOX terpasang,
+    // jadi landing mengiklankan "checkout aman" dan tombol beli terbuka
+    // sementara merchant Duitku masih menunggu approval.
+    const paymentsHidup = paymentsLive();
     // APP_BASE_URL WAJIB HTTPS di produksi.
     //
     // Bukan formalitas: flag Secure pada cookie sesi diturunkan dari URL ini
@@ -51,7 +53,9 @@ export async function GET() {
       {
         ok: true,
         intake,
-        payments_live: paymentsLive,
+        payments_provider: paymentsProvider(),
+        payments_env: paymentsEnv(),
+        payments_live: paymentsHidup,
         // SHA build supaya commit yang benar-benar hidup bisa DIBUKTIKAN, bukan
         // disimpulkan dari "sudah dipush dan build hijau".
         build_sha: process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT ?? null,

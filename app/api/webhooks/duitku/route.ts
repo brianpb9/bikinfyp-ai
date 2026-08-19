@@ -1,9 +1,11 @@
 import { errorResponse } from "@/lib/errors";
+import { paymentsEnv } from "@/lib/config";
+import { apakahAdmin } from "@/lib/admin-auth";
 import { getDb, audit } from "@/lib/db";
 import { verifyDuitkuCallbackSignature } from "@/lib/duitku";
 import { grossAmountMatchesStoredAmount } from "@/lib/payment-amount";
 import { creditTopup } from "@/lib/credits";
-import { pgAudit, pgCreditTopup, pgGetPayment, pgMarkPaymentFailed, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
+import { pgAudit, pgCreditTopup, pgGetPayment, pgMarkPaymentFailed, postgresRuntimeEnabled, smokeGetUser } from "@/lib/postgres/smoke-runtime";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -22,8 +24,18 @@ interface PaymentRow {
 // POST /api/webhooks/duitku — callback status dari Duitku (x-www-form-urlencoded).
 // WAJIB lolos verifikasi signature md5(merchantCode+amount+merchantOrderId+API_KEY).
 // Signature salah/tidak ada -> 401, TANPA side effect — pola yang sama dengan
-// webhook Midtrans (lubang lama yang sudah ditutup tidak boleh dibuka ulang di
+// webhook Duitku (lubang lama yang sudah ditutup tidak boleh dibuka ulang di
 // gateway baru).
+/** Email pemilik order — dipakai gerbang sandbox. null = tidak diketahui. */
+async function emailPemilik(userId: string): Promise<string | null> {
+  if (postgresRuntimeEnabled()) {
+    const u = await smokeGetUser(userId).catch(() => null);
+    return u?.email ?? null;
+  }
+  const row = getDb().prepare("SELECT email FROM users WHERE id = ?").get(userId) as { email: string | null } | undefined;
+  return row?.email ?? null;
+}
+
 export async function POST(req: Request) {
   try {
     // Duitku mengirim form-urlencoded, bukan JSON.
@@ -66,7 +78,32 @@ export async function POST(req: Request) {
       );
     }
 
-    const packageId = (JSON.parse(payment.raw_payload ?? "{}") as { package_id?: string }).package_id ?? "";
+    const jejakOrder = (() => {
+      try { return JSON.parse(payment.raw_payload ?? "{}") as { package_id?: string; payments_env?: string }; }
+      catch { return {} as { package_id?: string; payments_env?: string }; }
+    })();
+    const packageId = jejakOrder.package_id ?? "";
+
+    // PENANDA UJI — callback SANDBOX tidak boleh mengisi dompet nyata.
+    //
+    // Ini bukan kehati-hatian teoretis: pada uji 19 Agu satu callback sandbox
+    // benar-benar mengkredit Rp60.000 ke dompet pengguna produksi. Uang mainan
+    // yang menjadi saldo sungguhan adalah lubang akuntansi, dan ia akan
+    // membengkak diam-diam selama merchant masih menunggu approval.
+    //
+    // Aturannya: selama lingkungan pembayaran masih sandbox, kredit hanya
+    // diberikan kepada PENGUJI TERDAFTAR (ADMIN_EMAILS). Order milik orang
+    // lain dijawab 200 (supaya Duitku berhenti mengulang) tapi TIDAK
+    // mengkredit apa pun, dan penolakannya diaudit.
+    if (resultCode === "00" && paymentsEnv() === "sandbox") {
+      const email = await emailPemilik(payment.user_id);
+      if (!apakahAdmin(email)) {
+        const meta = { merchant_order_id: orderId, payments_env: "sandbox", order_env: jejakOrder.payments_env ?? null };
+        if (postgresRuntimeEnabled()) await pgAudit("duitku", "webhook.sandbox_ditolak", "payments", orderId, meta);
+        else audit("duitku", "webhook.sandbox_ditolak", "payments", orderId, meta);
+        return Response.json({ ok: true, credited: false, reason: "sandbox: hanya penguji terdaftar yang dikredit" });
+      }
+    }
 
     if (resultCode === "00") {
       // Sudah dibayar sebelumnya -> jawab idempoten TANPA menyentuh apa pun

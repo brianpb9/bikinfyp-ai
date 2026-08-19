@@ -6,9 +6,9 @@ import { SiteFooter } from "../_components/SiteFooter";
 //
 // Kenapa ada. Sampai 2026-08-14 seluruh daftar harga BikinFYP hidup di
 // /kredit, dan /kredit wajib login. Akibatnya siapa pun yang menilai kita dari
-// luar — calon pelanggan yang belum daftar, dan reviewer Midtrans — membuka
+// luar — calon pelanggan yang belum daftar, dan reviewer gateway pembayaran — membuka
 // bikinfyp.com, kena dinding login, lalu menyimpulkan produk dan harganya
-// tidak jelas. Itu persis dua temuan onboarding Midtrans 13 Agustus 2026:
+// tidak jelas. Itu persis dua temuan onboarding gateway pembayaran 13 Agustus 2026:
 //   "Produk barang/jasa yang dijual belum tersedia/belum jelas pada website"
 //   "Tidak menemukan harga (harus dalam IDR) untuk barang/jasa yang tercantum"
 //
@@ -105,7 +105,7 @@ export default function HargaPage() {
       </section>
 
       <div className="flex gap-2">
-        {/* Halaman ini statis (dibaca calon pengguna DAN reviewer Midtrans),
+        {/* Halaman ini statis (dibaca calon pengguna DAN reviewer gateway pembayaran),
             jadi CTA-nya tidak membaca health — ia mengarah ke landing yang
             CTA-nya health-aware, bukan langsung ke langkah daftar. */}
         <Link

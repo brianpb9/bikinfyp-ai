@@ -5,8 +5,9 @@ export type CheckoutUser = { id: string; phone?: string | null; email?: string |
 export type CheckoutDeps = {
   newOrderId: (userId: string) => string;
   persistPending: (input: { userId: string; orderId: string; packageId: string; amountIdr: number }) => Promise<void>;
-  // Netral-provider: Midtrans mengembalikan snap token, Duitku mengembalikan
-  // reference — dua-duanya cuma "ref provider + URL bayar" bagi alur checkout.
+  // Netral-provider: Duitku mengembalikan reference, Midtrans (rollback)
+  // mengembalikan snap token — dua-duanya cuma "ref provider + URL bayar"
+  // bagi alur checkout.
   createPayment: (input: { orderId: string; packageId: string; phone: string; email: string }) => Promise<{ providerRef: string; redirectUrl: string }>;
   markInitiationFailed: (orderId: string, failure: Record<string, unknown>) => Promise<void>;
 };

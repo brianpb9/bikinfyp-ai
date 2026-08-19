@@ -71,7 +71,7 @@ export default function OnboardingPage() {
   const [tierPrice, setTierPrice] = useState<12000 | 80000>(12000);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   // r13 (review produk 2026-08-07): landing publik sempat mengklaim "Checkout
-  // aman lewat GoPay/OVO/DANA..." tanpa syarat walau Midtrans belum aktif.
+  // aman lewat GoPay/OVO/DANA..." tanpa syarat walau Duitku belum aktif.
   const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -255,7 +255,7 @@ export default function OnboardingPage() {
 
             {/* r13 (review produk 2026-08-07): badge metode bayar dulu tampil TANPA
                 SYARAT ke semua pengunjung — janji "checkout aman" yang tidak benar
-                selama Midtrans belum aktif. Sekarang jujur sesuai /api/health. */}
+                selama Duitku belum aktif. Sekarang jujur sesuai /api/health. */}
             {/* "=== true", bukan "!== false". paymentsLive punya tiga keadaan,
                 dan selama null (menunggu /api/meta) versi lama menampilkan
                 klaim checkout yang belum tentu benar. Halaman /kredit sudah

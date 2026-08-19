@@ -15,7 +15,7 @@
 // Yang benar-benar berubah karena masukan tester: BAHASANYA (brand melihat
 // "token", bukan "Rp") dan adanya harga eksplisit untuk layanan tambahan.
 // Retail (bikinfyp.com) sengaja TIDAK diikutkan — di sana orang membeli paket
-// rupiah lewat Midtrans dan menyebutnya token justru membingungkan.
+// rupiah lewat Duitku dan menyebutnya token justru membingungkan.
 
 // Modul ini WAJIB bebas impor. DashboardChrome ("use client") memakainya
 // lewat _components/format.ts; begitu file ini mengimpor lib/credits.ts,

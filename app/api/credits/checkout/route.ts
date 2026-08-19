@@ -1,7 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit } from "@/lib/db";
-import { config } from "@/lib/config";
+import { config, paymentsEnv } from "@/lib/config";
 import { createSnapTransaction, newOrderId, MidtransCallbackNotConfigured, MidtransNotConfigured } from "@/lib/midtrans";
 import { createDuitkuInvoice, DuitkuCallbackNotConfigured, DuitkuNotConfigured } from "@/lib/duitku";
 import { pgCreateCheckout, pgMarkPaymentInitiationFailed, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
@@ -21,19 +21,19 @@ const productionCheckoutDeps = (): CheckoutDeps => {
     newOrderId,
     async persistPending({ userId, orderId, packageId, amountIdr }) {
       if (postgresRuntimeEnabled()) {
-        await pgCreateCheckout({ userId, gateway, gatewayRef: orderId, packageId, rawPayload: { package_id: packageId } });
+        await pgCreateCheckout({ userId, gateway, gatewayRef: orderId, packageId, rawPayload: { package_id: packageId, payments_env: paymentsEnv() } });
         return;
       }
       getDb().prepare(
         "INSERT INTO payments (id, user_id, gateway, gateway_ref, amount_idr, credits, status, raw_payload, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
-      ).run(uuid(), userId, gateway, orderId, amountIdr, amountIdr, "pending", JSON.stringify({ package_id: packageId }), now());
+      ).run(uuid(), userId, gateway, orderId, amountIdr, amountIdr, "pending", JSON.stringify({ package_id: packageId, payments_env: paymentsEnv() }), now());
       audit(userId, "payment.checkout", "payments", orderId, { package_id: packageId, amount_idr: amountIdr, gateway });
     },
     async createPayment({ orderId, packageId, phone, email }) {
       if (gateway === "duitku") {
         return createDuitkuInvoice({ orderId, packageId, phone, email });
       }
-      // Kompatibilitas Midtrans lama: field phone diisi email bila kosong.
+      // Kompatibilitas Duitku lama: field phone diisi email bila kosong.
       const snap = await createSnapTransaction({ orderId, packageId, phone: phone || email });
       return { providerRef: snap.snapToken, redirectUrl: snap.redirectUrl };
     },
@@ -54,7 +54,7 @@ const productionCheckoutDeps = (): CheckoutDeps => {
 };
 
 // POST /api/credits/checkout {package_id} — persist pending order lalu buat
-// invoice di gateway aktif (Duitku POP / Midtrans Snap).
+// invoice di gateway aktif (Duitku POP; Midtrans Snap = jalur rollback).
 export async function POST(req: Request) {
   try {
     const user = await getAuthUser(req);

@@ -21,7 +21,7 @@ interface LedgerItem {
 // Daftarnya pindah ke lib/paket-kredit.ts (2026-08-14) supaya halaman harga
 // PUBLIK dan halaman checkout ini membaca angka yang sama. Dua daftar harga
 // yang harus dijaga sama selamanya cepat atau lambat berbeda — dan yang
-// membaca halaman publik justru reviewer Midtrans.
+// membaca halaman publik justru reviewer gateway pembayaran.
 const PACKAGES = PAKET_KREDIT;
 
 const LEDGER_LABEL: Record<string, string> = {
@@ -65,7 +65,7 @@ function KreditInner() {
   }, []);
 
   // Kembali dari halaman pembayaran: returnUrl Duitku membawa ?merchantOrderId=...
-  // (Midtrans lama memakai ?order=...). Tab hasil redirect tidak mewarisi state
+  // (jalur Midtrans lama memakai ?order=...). Tab hasil redirect tidak mewarisi state
   // tab asal, jadi order-nya dilanjutkan dari query — status langsung dicek
   // tanpa menunggu user menekan apa pun.
   useEffect(() => {
@@ -85,16 +85,16 @@ function KreditInner() {
 
   async function topup(packageId: string) {
     // State disabled baru terlihat setelah render berikutnya; ref menutup celah
-    // dua tap dalam frame yang sama agar tidak membuat dua intent Midtrans.
+    // dua tap dalam frame yang sama agar tidak membuat dua invoice Duitku.
     if (checkoutLock.current) return;
     checkoutLock.current = true;
     setBusy(packageId);
     setMsg(null);
     setError(null);
     try {
-      // Jalur utama: checkout gateway aktif (Duitku POP / Midtrans Snap — sama-sama
-      // redirect URL). Bila gateway belum dipasang kuncinya (mode demo tanpa key),
-      // jatuh ke topup instan dev.
+      // Jalur utama: checkout gateway aktif (Duitku POP; Midtrans Snap tetap
+      // ada sebagai rollback — sama-sama redirect URL). Bila gateway belum
+      // dipasang kuncinya (mode demo tanpa key), jatuh ke topup instan dev.
       const res = await apiFetch<{ order_id: string; redirect_url: string }>("/api/credits/checkout", {
         json: { package_id: packageId },
       });
@@ -255,7 +255,7 @@ function KreditInner() {
         <h2 className="font-display text-xl font-bold">Bayar pakai</h2>
         {/* r13 (review produk 2026-08-07): dulu badge metode bayar + klaim "mode
             demo" tampil TANPA SYARAT ke SEMUA user termasuk production — padahal
-            Midtrans belum aktif, jadi klaimnya salah. Sekarang jujur sesuai
+            Duitku belum aktif, jadi klaimnya salah. Sekarang jujur sesuai
             status server (/api/meta payments_live), bukan asumsi tetap. */}
         {paymentsLive ? (
           <div className="flex gap-2">

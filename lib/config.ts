@@ -195,18 +195,31 @@ export const config = {
   // Origin publik yang dikelola deploy, bukan Host dari request. Dipakai untuk
   // callback pembayaran agar webhook tidak bisa diarahkan oleh header klien.
   appBaseUrl: env("APP_BASE_URL", ""),
-  // Gateway pembayaran aktif: "midtrans" | "duitku". Midtrans dipertahankan
+  // Gateway pembayaran aktif: "midtrans" | "duitku". Duitku dipertahankan
   // sebagai jalur rollback; keputusan pindah ke Duitku (Brian, 2026-08-19)
   // dieksekusi lewat env ini supaya cutover/rollback = satu variabel, bukan deploy kode.
   paymentGateway: env("PAYMENT_GATEWAY", "midtrans"),
-  // Midtrans — kosong = checkout 503 jelas
+  // Duitku — kosong = checkout 503 jelas
   midtransServerKey: env("MIDTRANS_SERVER_KEY", ""),
   midtransClientKey: env("MIDTRANS_CLIENT_KEY", ""),
   midtransIsProduction: env("MIDTRANS_IS_PRODUCTION", "false") === "true",
-  // Duitku POP — kosong = checkout 503 jelas (sama seperti Midtrans)
+  // Duitku POP — kosong = checkout 503 jelas (sama seperti jalur Midtrans)
   duitkuMerchantCode: env("DUITKU_MERCHANT_CODE", ""),
   duitkuApiKey: env("DUITKU_API_KEY", ""),
   duitkuIsProduction: env("DUITKU_IS_PRODUCTION", "false") === "true",
+  /**
+   * IZIN EKSPLISIT bahwa pembayaran benar-benar hidup untuk uang sungguhan.
+   *
+   * Dipisah dari "kunci sudah terpasang" karena keduanya bukan hal yang sama:
+   * kunci SANDBOX juga terpasang, dan sistem yang menyebut dirinya live karena
+   * ada kunci akan mengumumkan "checkout aman" sementara yang berjalan adalah
+   * uang mainan. Hanya boleh true atas keputusan Brian, sesudah approval
+   * Duitku DAN uji settlement Fase 4 lolos (keputusan 20 Agu).
+   *
+   * Gerbang tambahan ada di paymentsLive(): sandbox TIDAK PERNAH live, apa pun
+   * isi variabel ini.
+   */
+  paymentsGoLive: env("PAYMENTS_GO_LIVE", "false") === "true",
   // Jalur dev (dev-login, dev topup, webhook stub) — hanya non-production ATAU flag eksplisit
   allowDevLogin: env("ALLOW_DEV_LOGIN", "0") === "1",
   // Saklar operasional untuk menghentikan penerimaan render baru tanpa
@@ -282,6 +295,37 @@ export const config = {
     LABELING: parseInt(env("TIMEOUT_LABELING_MIN", "10"), 10),
   } as Record<string, number>,
 };
+
+/** Gateway yang benar-benar dipakai hari ini. */
+export function paymentsProvider(): "duitku" | "midtrans" {
+  return config.paymentGateway === "duitku" ? "duitku" : "midtrans";
+}
+
+/** "sandbox" | "production" — diturunkan dari flag provider aktif. */
+export function paymentsEnv(): "sandbox" | "production" {
+  const prod = paymentsProvider() === "duitku" ? config.duitkuIsProduction : config.midtransIsProduction;
+  return prod ? "production" : "sandbox";
+}
+
+/** Apakah kunci provider aktif terpasang? Bukan izin, cuma kesiapan teknis. */
+export function paymentsConfigured(): boolean {
+  return paymentsProvider() === "duitku"
+    ? Boolean(config.duitkuMerchantCode && config.duitkuApiKey)
+    : Boolean(config.midtransServerKey && config.midtransClientKey);
+}
+
+/**
+ * Boleh mengumumkan pembayaran HIDUP?
+ *
+ * Tiga syarat, dan yang ketiga bukan formalitas: sandbox tidak pernah live.
+ * Sampai 20 Agu health menjawab payments_live: true hanya karena kunci sandbox
+ * terpasang — jadi landing mengiklankan "checkout aman" dan halaman kredit
+ * membuka tombol beli, padahal merchant Duitku masih menunggu approval dan
+ * uang yang mengalir adalah uang mainan.
+ */
+export function paymentsLive(): boolean {
+  return paymentsConfigured() && paymentsEnv() === "production" && config.paymentsGoLive;
+}
 
 export function ensureDirs() {
   for (const d of [
