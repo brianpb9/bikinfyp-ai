@@ -13,6 +13,7 @@ import path from "node:path";
 import { Pool } from "pg";
 import type { UserRow } from "../db";
 import { config } from "../config";
+import { SQL_RIWAYAT_PG, bersihkanRiwayat } from "../script-engine/riwayat-mekanik";
 import { PgAuthOtpAuditRepository } from "./auth-otp-audit";
 import { PgProductPersonaScriptRepository, type PgProductInput, type PgScriptInput } from "./product-persona-script";
 import { PgJobsRepository } from "./jobs";
@@ -121,6 +122,16 @@ export async function smokeGetProduct(userId: string, productId: string) {
 export async function pgUpdateProduct(userId: string, productId: string, patch: { name: string; priceIdr: number; category: string; productVisualDesc: string | null; promoPriceBeforeIdr?: number | null; promoEndsAt?: string | null; promoStockLeft?: number | null }) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.updateOwnedProduct(userId, productId, patch); } finally { await repo.close(); }
+}
+/**
+ * Mekanik yang dipakai merek ini dalam jendela riwayat (slice 4, 20 Agu).
+ * Dibaca dari kolom JSON yang sudah ada — migrasi terkunci sampai rekonsiliasi
+ * ledger selesai (keputusan Brian).
+ */
+export async function pgMekanikDipakaiBrand(productId: string, sejakIso: string) {
+  const pool = getPool(url());
+  const r = await pool.query<{ mechanic: string | null }>(SQL_RIWAYAT_PG, [productId, sejakIso]);
+  return bersihkanRiwayat(r.rows);
 }
 export async function pgSetProductBrand(userId: string, productId: string, brand: string | null) {
   const repo = new PgProductPersonaScriptRepository(url());

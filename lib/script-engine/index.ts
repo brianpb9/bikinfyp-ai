@@ -1,3 +1,5 @@
+import { HARI_RIWAYAT, riwayatMekanikMerek } from "./riwayat-mekanik";
+import type { IdMekanik } from "./idea-mechanics";
 // Mesin skrip (FSD F-02): hasilkan 3 varian skrip 15 dtk dari 3 keluarga hook berbeda.
 //
 // Penulis naskahnya LLM (PATCH 5 STEP 1, hidup sejak 17 Agu 2026) dengan
@@ -646,7 +648,26 @@ export async function generateScripts(opts: {
   // LLM, yang tidak ia dapat cuma Gate 3. Enterprise selalu ikut.
   if (llmSiap() && !opts.tanpaLlm && bolehIdeaStage({ tier, orgId: opts.orgId })) {
     try {
-      ide = await pilihIde({
+      // ANTI-REPEAT PER MEREK (slice 4, 20 Agu). Parameter ini sudah ada sejak
+    // Idea Stage lahir dan TIDAK PERNAH diisi — jendela 30 hari selalu dinilai
+    // terhadap array kosong, jadi tiap permintaan melihat bank mekanik dalam
+    // urutan yang sama persis. Kegagalannya senyap: mesin tetap menjawab,
+    // cuma variasinya tidak pernah terjadi.
+    //
+    // Riwayat GAGAL = LANJUT TANPA RIWAYAT. Anti-repeat adalah lapisan mutu,
+    // bukan syarat hidup; naskah tidak boleh mati karena satu kueri catatan.
+    let mekanikBaruDipakai: IdMekanik[] = [];
+    try {
+      mekanikBaruDipakai = await riwayatMekanikMerek(product.id);
+      if (mekanikBaruDipakai.length) {
+        console.log(`[idea] "${product.name}": mekanik dipakai merek ini <${HARI_RIWAYAT} hari — ${mekanikBaruDipakai.join(", ")} (diturunkan prioritasnya)`);
+      }
+    } catch (err) {
+      console.warn(`[idea] riwayat mekanik tidak terbaca (lanjut tanpa anti-repeat): ${(err as Error).message}`);
+    }
+
+    ide = await pilihIde({
+      mekanikBaruDipakai,
         productName: product.name, productCategory: product.category,
         kategoriNoun: pick(product.category, CATEGORY_NOUN),
         priceIdr: product.price_idr ?? 0, durationSec,
