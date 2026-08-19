@@ -373,7 +373,10 @@ function blokTugas(r: PermintaanNaskah): string {
         "",
         "THIS IS A REPAIR. Your previous script was rejected by the validator for exactly these reasons:",
         ...r.keluhan.map((k) => `  - ${k}`),
-        "Fix every one of them. Keep whatever was already working; do not rewrite the idea from scratch.",
+        "Fix every one of them AT ONCE. This list is cumulative — it includes rules you broke in earlier",
+        "attempts, so a fix that satisfies one line while breaking another is not a fix. Count your words",
+        "before you answer: the total window and the per-shot limit are both stated above, and they are the",
+        "two most common ways this repair fails. Keep whatever was already working; do not rewrite the idea.",
       ].join("\n")
     : "";
   return [

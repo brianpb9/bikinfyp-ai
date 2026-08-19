@@ -147,9 +147,19 @@ const MAX_REGEN = 2; // FSD F-02.3: regenerate maksimal 2x
  * tahu apa yang salah. Bukan lima, karena tiap percobaan satu panggilan
  * berbayar dan kegagalan yang bertahan setelah dua kali biasanya bukan soal
  * kalimat — melainkan permintaannya sendiri (mis. jendela kata mustahil untuk
- * nama produk sepanjang itu). Di situ template cadangan lebih cepat dan pasti.
+ * nama produk sepanjang itu).
+ *
+ * DINAIKKAN JADI TIGA (20 Agu). Kalimat terakhir alinea di atas dulu berbunyi
+ * "di situ template cadangan lebih cepat dan pasti" — dan itu berhenti benar
+ * sejak template TIDAK PERNAH disajikan: kegagalan setelah percobaan terakhir
+ * bukan lagi naskah cadangan, melainkan 503 dan pengguna berbayar pulang
+ * dengan tangan kosong. Satu panggilan tambahan jauh lebih murah daripada itu.
+ *
+ * Percobaan ketiga juga yang pertama benar-benar melihat SELURUH daftar
+ * pelanggaran (keluhan kini kumulatif) — pada run nyata, percobaan kedua
+ * memperbaiki L-19 lalu melanggar L-05, L-13, dan S-09 sekaligus.
  */
-const MAKS_PERBAIKAN_LLM = 2;
+const MAKS_PERBAIKAN_LLM = 3;
 
 const CATEGORY_SPACE: Record<string, string> = {
   beauty: "Meja skincare", fashion: "Isi lemari", muslim_fashion: "Isi lemari",
@@ -471,7 +481,15 @@ async function generateOne(
           hasil = kandidat;
           break;
         }
-        keluhan = kandidat.validation.errors.map((e) => e.message_id);
+        // KELUHAN KUMULATIF (20 Agu). Sebelumnya tiap percobaan hanya menerima
+        // keluhan percobaan TERAKHIR, dan hasilnya terukur di run nyata:
+        // penulis memperbaiki L-19, lalu percobaan berikutnya melanggar L-05,
+        // L-13, dan S-09 sekaligus. Memperbaiki satu sambil merusak tiga
+        // bukan perbaikan — dan model tidak bisa menjaga aturan yang tidak
+        // pernah lagi disebutkan kepadanya.
+        for (const e of kandidat.validation.errors) {
+          if (!keluhan.includes(e.message_id)) keluhan.push(e.message_id);
+        }
         console.warn(
           `[script-engine] naskah LLM "${product.name}" ditolak validator ` +
             `(percobaan ${percobaan + 1}/${MAKS_PERBAIKAN_LLM}): ${keluhan.join(" | ")}`

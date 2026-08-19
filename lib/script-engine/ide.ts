@@ -265,6 +265,14 @@ export interface PermintaanIde {
   format?: string;
   /** Level hook. Mekanik ber-CGI hanya milik level tontonan (agak_gila/gila). */
   hookLevel?: string;
+  /**
+   * KRITIK dari putaran sebelumnya (20 Agu). Sampai kini putaran kedua hanya
+   * diberi daftar mekanik terlarang — model tahu apa yang tidak boleh dipakai
+   * lagi, tapi tidak pernah tahu APA YANG SALAH. Penulis naskah sudah lama
+   * punya jalur perbaikan seperti ini (PermintaanNaskah.keluhan); pembuat ide
+   * tidak, dan itu sebabnya putaran kedua mengulang kelemahan yang sama.
+   */
+  kritikPutaranLalu?: string[];
   /** Putaran penambal: SEMUA kandidat harus berangkat dari situasi manusia. */
   wajibSemuaManusiawi?: boolean;
   /** Jatah mekanik untuk SATU gelombang paralel — bukan seluruh bank. */
@@ -390,6 +398,15 @@ function blokTugasIde(r: PermintaanIde): string {
       : "",
     jenuh
       ? `SATURATED CATEGORY. A plain everyday-complaint hook with no twist is FORBIDDEN as the sole mechanic — the feed is already full of it.`
+      : "",
+    (r.kritikPutaranLalu ?? []).length
+      ? [
+          "",
+          "THIS IS A SECOND ROUND. Your previous ideas were scored by the gate and every one failed.",
+          "Here is exactly how they failed — fix these, do not repeat them:",
+          ...(r.kritikPutaranLalu ?? []).map((k) => `  - ${k}`),
+          "Write ideas that answer these weaknesses head-on. Do not merely rephrase the earlier ones.",
+        ].join("\n")
       : "",
     (r.mekanikDilarang ?? []).length
       ? `FORBIDDEN MECHANICS this round (they already failed the gate): ${(r.mekanikDilarang ?? []).join(", ")}.`
@@ -567,7 +584,24 @@ function blokPenilai(): string {
     "already full of similar videos in that category. You are not judging politeness or correctness —",
     "other gates already do that, and everything they pass is still forgettable.",
     "",
-    "Score each dimension 0-10. Be strict: 7 means 'yes, clearly'. 5 means 'maybe'. Most ideas are 4-6.",
+    // KALIBRASI JURI (20 Agu 2026). Kalimat lama berbunyi "Most ideas are 4-6"
+    // — dan itu, dipasangkan dengan ambang 7 per dimensi dan total 75,
+    // memerintahkan juri untuk hampir selalu gagal. Terukur: 9 penilaian
+    // berturut, median 65, NOL lulus; tidak ada satu pun yang menyentuh 75
+    // meski memakai model kelas atas dan 10-12 kandidat per putaran.
+    //
+    // Yang diperbaiki KALIBRASINYA, bukan ambangnya (ambang 75 milik Brian dan
+    // tetap). Juri diberi TITIK ACUAN NYATA: ide yang dokumen kanonik sendiri
+    // sebut lulus & jadi. Tanpa acuan, penilai LLM memusat di tengah dan
+    // "ketat" berubah jadi "tidak pernah cukup".
+    "Score each dimension 0-10, anchored on ideas this studio has actually shipped:",
+    '  9-10 = as strong as the reference ideas that passed and were produced: "Disimpan di brankas" (a bar of soap',
+    '        kept in a safe), "Museum" (soap displayed behind glass with gloves), "Habisnya kecepetan" (one household',
+    "        fighting over it until it is gone). The anomaly reads in one second, without a sentence.",
+    "  7-8  = it clearly stops the thumb and could not be moved to another product, with one small weakness.",
+    "  4-6  = sensible but generic: needs a sentence to be understood, or would survive a product swap.",
+    "  0-3  = an ordinary ad. Pain hook, sensory review, packshot.",
+    "Do not cluster in the middle out of caution. If an idea genuinely belongs beside the references above, say so.",
     ...DIMENSI_FYP.map((d) => `- ${d.id}: ${d.tanya}`),
     "",
     'OUTPUT: {"scores":{"scroll_stop":0,"distinctiveness":0,"story_pull":0,"payoff":0,"brand_fidelity_plan":0,"nativeness":0},"reason":"<=40 words"}',
@@ -653,6 +687,16 @@ export interface IdeTerpilih {
 export const MAKS_PUTARAN_IDE = 2;
 
 /**
+ * Batas skor untuk MELARANG sebuah mekanik di putaran berikutnya.
+ *
+ * Angkanya jauh di bawah ambang lulus (75) dan itu disengaja: nilai 60-an
+ * berarti idenya kurang tajam, bukan mekaniknya salah untuk produk ini.
+ * Melarang di 75 akan mengosongkan bank setiap kali satu putaran gagal total —
+ * yang persis terjadi sebelum 20 Agu.
+ */
+export const BATAS_LARANG_MEKANIK = 45;
+
+/**
  * Berapa penilaian boleh berjalan bersamaan.
  *
  * EMPAT. Cukup untuk memotong waktu tunggu sepuluh kandidat jadi tiga
@@ -684,8 +728,12 @@ export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
   const semua: { ide: Ide; nilai: HasilNilai }[] = [];
   const dilarang = new Set<IdMekanik>(r.mekanikDilarang ?? []);
 
+  let kritik: string[] = [];
   for (let putaran = 1; putaran <= MAKS_PUTARAN_IDE; putaran++) {
-    const kandidat = await usulkanIdeBerkuota({ ...r, mekanikDilarang: [...dilarang] }, biaya);
+    const kandidat = await usulkanIdeBerkuota(
+      { ...r, mekanikDilarang: [...dilarang], ...(kritik.length ? { kritikPutaranLalu: kritik } : {}) },
+      biaya
+    );
     // SEMUA kandidat dinilai, tidak berhenti di yang pertama lulus.
     //
     // Berhenti lebih awal memang lebih murah — dan salah. Peringkatnya dipakai
@@ -735,9 +783,24 @@ export async function pilihIde(r: PermintaanIde): Promise<IdeTerpilih> {
     // urutan penyelesaian — yaitu hasil yang berbeda tiap dijalankan.
     for (const d of dinilai) {
       semua.push(d);
-      if (!d.nilai.lulus) dilarang.add(d.ide.mechanic as IdMekanik);
+      // MEKANIK TIDAK GAGAL — EKSEKUSINYA YANG GAGAL (koreksi 20 Agu).
+      //
+      // Versi lama melarang mekanik apa pun yang kandidatnya tidak lulus. Saat
+      // seluruh sepuluh kandidat gagal — kondisi normal hari ini — hampir
+      // seluruh bank ikut terlarang, dan putaran kedua dipaksa memakai sisa
+      // mekanik yang justru paling lemah untuk produk itu. Yang dilarang
+      // sekarang hanya yang benar-benar jauh dari ambang; sisanya boleh
+      // dicoba lagi dengan ide yang lebih baik.
+      if (!d.nilai.lulus && d.nilai.total < BATAS_LARANG_MEKANIK) {
+        dilarang.add(d.ide.mechanic as IdMekanik);
+      }
     }
     const peringkat = peringkatkan(semua);
+    // Kritik untuk putaran berikutnya, dibangun dari penilaian yang BARU SAJA
+    // terjadi — bukan nasihat umum. Yang dikirim: dimensi yang paling sering
+    // jatuh berikut ambangnya, sebab paling sering, dan dua one-liner terbaik
+    // yang tetap gagal (supaya model tahu "sebagus ini pun belum cukup").
+    kritik = susunKritik(peringkat);
     const menang = peringkat.find((p) => p.nilai.lulus);
     if (menang) {
       const hasilMenang: IdeTerpilih = {
@@ -808,6 +871,58 @@ function catat(r: PermintaanIde, hasil: IdeTerpilih, biaya: AkumulasiBiaya): voi
 
 function peringkatkan(semua: { ide: Ide; nilai: HasilNilai }[]) {
   return [...semua].sort((a, b) => b.nilai.total - a.nilai.total);
+}
+
+/**
+ * Kritik konkret untuk putaran berikutnya, diturunkan dari penilaian nyata.
+ *
+ * Bukan nasihat umum: model sudah menerima seluruh standar di blok
+ * pengetahuan. Yang belum pernah ia terima adalah HASIL PENILAIAN IDENYA
+ * SENDIRI — dan tanpa itu putaran kedua mengulang kelemahan yang sama dengan
+ * kalimat berbeda. Pola ini menyalin jalur perbaikan penulis naskah, yang
+ * sudah terbukti menaikkan tingkat lolos validator.
+ */
+export function susunKritik(peringkat: { ide: Ide; nilai: HasilNilai }[]): string[] {
+  if (!peringkat.length) return [];
+  const kritik: string[] = [];
+
+  // Dimensi yang paling sering di bawah ambangnya.
+  const jatuh: Record<string, { n: number; ambang: number; jumlah: number }> = {};
+  for (const p of peringkat) {
+    for (const d of DIMENSI_FYP) {
+      const nilai = p.nilai.perDimensi[d.id];
+      if (typeof nilai === "number" && nilai < d.ambang) {
+        jatuh[d.id] ??= { n: 0, ambang: d.ambang, jumlah: 0 };
+        jatuh[d.id].n += 1;
+        jatuh[d.id].jumlah += nilai;
+      }
+    }
+  }
+  const urut = Object.entries(jatuh).sort((a, b) => b[1].n - a[1].n).slice(0, 3);
+  for (const [dim, info] of urut) {
+    const rata = (info.jumlah / info.n).toFixed(1);
+    kritik.push(
+      `${dim}: ${info.n} dari ${peringkat.length} ide di bawah ambang (rata-rata ${rata}, ambang ${info.ambang}). ` +
+        (DIMENSI_FYP.find((d) => d.id === dim)?.tanya ?? "")
+    );
+  }
+
+  // Sebab yang paling sering disebut juri.
+  const sebab: Record<string, number> = {};
+  for (const p of peringkat) for (const sg of p.nilai.sebabGagal ?? []) {
+    const kunci = String(sg).slice(0, 120);
+    sebab[kunci] = (sebab[kunci] ?? 0) + 1;
+  }
+  for (const [teks, n] of Object.entries(sebab).sort((a, b) => b[1] - a[1]).slice(0, 2)) {
+    kritik.push(`alasan juri (muncul ${n}x): ${teks}`);
+  }
+
+  // Dua yang TERBAIK tapi tetap gagal — supaya model tahu setinggi apa
+  // ambangnya dalam praktik, bukan cuma angkanya.
+  for (const p of peringkat.slice(0, 2)) {
+    kritik.push(`skor tertinggi sejauh ini ${p.nilai.total}/100 dan masih gagal: "${p.ide.one_liner.slice(0, 110)}"`);
+  }
+  return kritik;
 }
 
 /** Ringkas ide jadi petunjuk untuk penulis adegan — inilah yang dilayani naskah. */
