@@ -106,3 +106,19 @@ Tiap butir: tes reproduce-then-fix (merah dulu, lalu hijau) + bukti.
 - Dua komentar validator yang basi (L-19 `validator.ts:738`, L-21 `validator.ts:769`) — keduanya berbunyi "PERINGATAN, BUKAN ERROR" padahal `SELALU_KERAS` sudah membalikkannya — ditulis ulang: perilaku hari ini di depan, sejarah alasannya dipertahankan di bawah.
 
 Gate setelah 1–3: `tsc` bersih, **665 tes lolos, 0 gagal** (dari 631 sebelum sesi ini).
+
+## [D13/D14 + E15] Berhenti membuang hasil kerja — SELESAI
+
+- Reproduksi: `tests/ide-tidak-dibuang.test.ts` — 3 dari 6 MERAH pada kode lama (rute membuang top-3, UI tidak membacanya, tidak ada pembaca fyp-gate-log).
+- `job_prompts.ide_id/ide_skor` kini TERISI: skor FYP Gate + identitas ide (`mechanic/format`) dititipkan ke snapshot admisi (`SnapshotAdmisi.ideSkor/ideId`) yang memang sudah ikut tersimpan di `scripts.validation_result`, lalu worker membacanya lewat `bacaJejakIde()` (toleran: baris lama/korup → null, arsip tidak boleh menggagalkan render berbayar) dan meneruskannya ke `pgSimpanArsipPrompt`. Dua kolom yang disediakan migrasi 0032 berhenti selalu-NULL.
+- `app/api/dashboard/campaign/generate/route.ts` tidak lagi menghapus hasil Idea Stage: `ide_skor`, `ide_borderline`, `ide_kandidat` (top-3 + skor + sebab gagal), plus gema `mode` (dari segmen) dan `format` (dari template).
+- UI `app/dashboard/(app)/campaign/page.tsx`: baris "Format · Mode · Skor ide N/100 (lulus tipis)" di tiap kartu, dan saat gate gagal muncul panel "Belum ada ide yang lolos gerbang — lihat 3 ide terbaik" berisi skor, mekanik, one-liner, dan sebab gagal per kandidat.
+- Pembaca `scripts/laporan-fyp-gate.mjs` (fyp-gate-log tetap JSONL sesuai keputusan asli; yang diperbaiki: ada yang membacanya). Dijalankan pada log nyata: **5 penilaian, 0 lulus (skor 63–73, ambang 75)**, dimensi paling sering jatuh `story_pull` (2×), lalu `scroll_stop`/`distinctiveness`/`payoff`/`nativeness` masing-masing 1×.
+
+## [E15] KPI penolakan NSFW — SELESAI
+
+- Reproduksi: `tests/laporan-nsfw-pola.test.ts` — 3 MERAH: pola lama tidak menangkap string BytePlus asli "may contain real person" (verbatim di `lib/config.ts`, spike 17 Agu).
+- Pola diperlebar (`may contain real person`, `content_filter`, `prohibited content`, `moderation`, `flagged`) dan dijaga DUA ARAH: 5 alasan kegagalan infrastruktur nyata dari `audit_log` produksi (pipeline upgrade, "belum resumable dari state …", QC retry, gerbang prompt) diuji TIDAK ikut terhitung.
+- KPI dihitung ulang pada log produksi yang sama — **sebelum: 0, sesudah: 0 dari 24 kegagalan terminal**. Angkanya tidak berubah karena korpus produksi saat ini memang nol penolakan konten: 24 kegagalan seluruhnya infrastruktur (9 "pipeline upgrade", 14 "belum resumable", 1 QC). Jadi yang diperbaiki adalah alat ukurnya, bukan angkanya — dan itu terbukti lewat fixture string penyedia asli, bukan lewat klaim.
+
+Gate setelah 1–5: `tsc` bersih, **683 tes lolos, 0 gagal**.

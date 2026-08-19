@@ -71,6 +71,14 @@ export interface SnapshotAdmisi {
   productCategory?: string | null;
   /** Mekanik ide terpilih — S-04 mengecualikan mekanik tekstur. */
   mechanic?: string | null;
+  /**
+   * Skor FYP Gate ide terpilih (audit E15, 19 Agu). Ikut snapshot supaya
+   * SAMPAI ke worker: kolom job_prompts.ide_skor sudah disediakan migrasi 0032
+   * tapi selalu NULL karena angkanya berhenti di memori proses web.
+   */
+  ideSkor?: number | null;
+  /** Mekanik+format ide sebagai identitas ringkas, untuk job_prompts.ide_id. */
+  ideId?: string | null;
 }
 
 /**

@@ -31,7 +31,16 @@ if (!url || !/^postgres/i.test(url)) {
   process.exit(2);
 }
 
-const POLA_KONTEN = "(sensitive|risk[_ ]?level|content polic|nsfw)";
+// Pola penolakan KONTEN penyedia. Diperlebar 19 Agu (audit E15): versi lama
+// tidak menangkap string BytePlus yang sebenarnya — "may contain real person"
+// (verbatim di lib/config.ts, spike 17 Agu) — sehingga KPI melapor NOL persis
+// di kelas kegagalan yang memotivasi CAST-REF.
+//
+// Sengaja TIDAK memakai kata seluas "failed"/"gagal": kegagalan infrastruktur
+// (resume state, QC retry, gerbang prompt) tidak boleh ikut terhitung sebagai
+// penolakan konten. Dijaga dua arah oleh tests/laporan-nsfw-pola.test.ts.
+const POLA_KONTEN =
+  "(sensitive|risk[_ ]?level|content polic|nsfw|may contain real person|content[_ ]?filter|prohibited content|moderation|flagged)";
 const TARGET = { hands_only: 0.2, talking_head: 0.35 };
 
 const c = new pg.Client({ connectionString: url });

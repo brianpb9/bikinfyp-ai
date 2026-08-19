@@ -1,0 +1,58 @@
+[
+  {
+    "name": "coba:load",
+    "ok": false,
+    "ms": 32560,
+    "err": "Error: page.goto: net::ERR_TIMED_OUT at https://bikinfyp.com/coba\nCall log:\n\u001b[2m  - navigating to \"https://bikinfyp.com/coba\", waiting until \"domcontentloaded\"\u001b[22m\n"
+  },
+  {
+    "name": "coba:fill+submit",
+    "ok": false,
+    "ms": 30005,
+    "err": "TimeoutError: locator.fill: Timeout 30000ms exceeded.\nCall log:\n\u001b[2m  - waiting for getByPlaceholder(/Nama produk/i)\u001b[22m\n"
+  },
+  {
+    "name": "coba:wait-result",
+    "ok": false,
+    "ms": 93082,
+    "err": "TimeoutError: page.waitForFunction: Timeout 90000ms exceeded."
+  },
+  {
+    "name": "mulai:load",
+    "ok": true,
+    "ms": 4407
+  },
+  {
+    "name": "mulai:step1",
+    "ok": true,
+    "ms": 1697
+  },
+  {
+    "name": "mulai:step2",
+    "ok": true,
+    "ms": 1601
+  },
+  {
+    "name": "mulai:finalUrl",
+    "url": "https://bikinfyp.com/mulai"
+  },
+  {
+    "name": "mulai:step3",
+    "ok": true,
+    "ms": 2584
+  },
+  {
+    "name": "brands:load",
+    "ok": true,
+    "ms": 7638
+  },
+  {
+    "name": "brands:ctaUrl",
+    "url": "https://bikinfyp.com/brands"
+  },
+  {
+    "name": "brands:cta",
+    "ok": true,
+    "ms": 4408
+  }
+]

@@ -42,6 +42,20 @@ interface GeneratedScript {
   script_source?: "llm" | "template" | "degraded";
   standar_garis?: string;
   standar_nilai?: number;
+  /** Hasil Idea Stage (audit D13, 19 Agu) — dulu dibuat lalu dibuang rute. */
+  ide_skor?: number;
+  ide_borderline?: boolean;
+  ide_kandidat?: {
+    one_liner: string;
+    mechanic: string;
+    human_situation: string;
+    total: number;
+    sebabGagal?: string[];
+    alasan?: string;
+  }[];
+  /** Gema pilihan, supaya kartu hasil terbaca tanpa mengingat isi form. */
+  mode?: string;
+  format?: string;
 }
 
 /** Naskah yang diucapkan, satu baris per segmen. */
@@ -56,6 +70,39 @@ function BarisNaskah({ s }: { s: GeneratedScript }) {
         </p>
       ))}
       <p className="pt-1 text-xs text-zinc-500">Caption: {s.caption}</p>
+      {(s.mode || s.format || typeof s.ide_skor === "number") && (
+        <p className="pt-1 text-xs text-zinc-500">
+          {[
+            s.format ? `Format: ${s.format}` : null,
+            s.mode ? `Mode: ${s.mode}` : null,
+            typeof s.ide_skor === "number"
+              ? `Skor ide ${s.ide_skor}/100${s.ide_borderline ? " (lulus tipis)" : ""}`
+              : null,
+          ].filter(Boolean).join(" · ")}
+        </p>
+      )}
+      {/* Gate ide GAGAL: tiga kandidat terbaik ditampilkan beserta skor dan
+          sebab gagalnya. Sebelumnya naskah tetap keluar (ditulis tanpa ide)
+          dan pengguna tidak diberi tahu apa pun — padahal ini panggilan model
+          termahal di seluruh pipeline. */}
+      {s.ide_kandidat?.length ? (
+        <details className="mt-2 rounded-xl border border-amber-200 bg-amber-50 p-2">
+          <summary className="cursor-pointer text-xs font-bold text-amber-900">
+            Belum ada ide yang lolos gerbang — lihat {s.ide_kandidat.length} ide terbaik
+          </summary>
+          <ul className="mt-2 space-y-2">
+            {s.ide_kandidat.map((k, i) => (
+              <li key={i} className="text-xs leading-5 text-amber-900">
+                <span className="font-bold">{k.total}/100</span> · <span className="uppercase tracking-wide">{k.mechanic}</span>
+                <span className="block">{k.one_liner}</span>
+                {k.sebabGagal?.length ? (
+                  <span className="block text-[11px] text-amber-800">Kenapa belum lolos: {k.sebabGagal.join("; ")}</span>
+                ) : null}
+              </li>
+            ))}
+          </ul>
+        </details>
+      ) : null}
       {(s.standar_garis || (s.script_source && s.script_source !== "llm")) && (
         <p className="pt-1 text-xs font-semibold text-zinc-500">
           {s.standar_garis ? `Standar 10/10: ${s.standar_garis}${typeof s.standar_nilai === "number" ? ` · nilai ${s.standar_nilai}/10` : ""}` : ""}

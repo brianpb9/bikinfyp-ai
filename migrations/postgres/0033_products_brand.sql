@@ -1,0 +1,19 @@
+-- MEREK TEPERCAYA DI INTAKE (board review 19 Agu §4.1, otorisasi Brian
+-- "lanjut migrasi" 19 Agu malam).
+--
+-- Hilirnya SUDAH ADA lebih dulu: merekTepercaya() di worker membaca merek
+-- eksplisit untuk gerbang hero QC-F1, dan tokenMerekUtama() di qc.ts menolak
+-- menebak merek dari nama produk (dua heuristik berturut-turut terbukti salah
+-- — "terpanjang" memilih deskriptor, "non-generik pertama" memilih
+-- "wajah"/"beli"/"the"). Yang tidak pernah ada adalah SUMBERNYA: tidak satu
+-- rute pun menulis merek, jadi gerbang kesetiaan merek selamanya UNVERIFIED.
+--
+-- Kolom sendiri, bukan raw_meta.brand: raw_meta milik hasil scrape, dan
+-- menitipkan input pengguna di dalamnya membuat merek tak bisa di-query dan
+-- mudah tertimpa scrape ulang. merekTepercaya tetap membaca raw_meta.brand
+-- sebagai fallback (tidak ada data lama di sana, tapi alamat itu pernah
+-- terdokumentasi).
+--
+-- Nullable murni tambahan — produk lama tidak terpengaruh; tanpa merek,
+-- gerbang merek tetap UNVERIFIED (fail-honest, bukan fail-broken).
+ALTER TABLE products ADD COLUMN brand TEXT;

@@ -288,6 +288,10 @@ async function generateOne(
   /** Level hook & mekanik ide — dibawa ke snapshot untuk STANDAR 10/10 (S-04, S-05). */
   hookLevel: HookLevel = "normal",
   mekanikIde?: string,
+  /** Skor FYP Gate & identitas ide — dititipkan ke snapshot agar sampai ke
+   *  worker (job_prompts.ide_skor/ide_id, audit E15). */
+  skorIde: number | null = null,
+  idIde: string | null = null,
   /**
    * Format yang BENAR-BENAR diminta pemanggil (undefined = belum diputuskan).
    *
@@ -349,6 +353,8 @@ async function generateOne(
     hookLevel,
     productCategory: product.category,
     ...(mekanikIde ? { mechanic: mekanikIde } : {}),
+    ...(skorIde !== null ? { ideSkor: skorIde } : {}),
+    ...(idIde ? { ideId: idIde } : {}),
   };
   const validate = (segs: SegmentDraft[]) =>
     validateScript(
@@ -643,7 +649,10 @@ export async function generateScripts(opts: {
     hasil.push(await generateOne(product, register, emotion, families[i], tier, durationSec,
       opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format,
       ideVarian ? petunjukNaskah(ideVarian) : undefined, opts.tanpaLlm === true,
-      hookLevel, ideVarian?.mechanic, opts.format));
+      hookLevel, ideVarian?.mechanic,
+      ide?.nilai.lulus ? ide.nilai.total : null,
+      ideVarian ? `${ideVarian.mechanic}/${ideVarian.format ?? "-"}` : null,
+      opts.format));
   }
   // Gate gagal: tiga terbaik ikut keluar supaya UI bisa menampilkannya dan
   // meminta pengguna memilih — bukan disimpan diam-diam di log server.

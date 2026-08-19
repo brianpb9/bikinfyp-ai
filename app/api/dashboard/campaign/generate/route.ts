@@ -178,6 +178,20 @@ export async function POST(req: Request) {
         // terlihat sebelum ia menekan Bikin.
         script_source: v.script_source,
         ...(v.standarGaris ? { standar_garis: v.standarGaris, standar_nilai: v.standarNilai } : {}),
+        // Hasil Idea Stage ikut ke layar (audit D13, 19 Agu). Sebelumnya
+        // pemetaan ini MENGHAPUSNYA: tiga kandidat terbaik beserta skor dan
+        // sebab gagalnya dibuat oleh model kelas atas — panggilan termahal di
+        // seluruh pipeline — lalu mati di console.warn. Brand yang gate-nya
+        // gagal tidak diberi tahu apa pun, apalagi diberi pilihan.
+        ...(typeof v.ideSkor === "number" ? { ide_skor: v.ideSkor } : {}),
+        ...(v.ideBorderline ? { ide_borderline: true } : {}),
+        ...(v.ideKandidat?.length ? { ide_kandidat: v.ideKandidat } : {}),
+        // Mode & format digemakan kembali supaya kartu hasil bisa dibaca tanpa
+        // mengingat apa yang dipilih di form. mode hidup di segmen (ia memang
+        // metadata tampilan per shot — lihat catatan di llm.ts), jadi yang
+        // dikirim adalah mode segmen pertama yang mengisinya.
+        ...(v.segments.find((sg) => sg.mode)?.mode ? { mode: v.segments.find((sg) => sg.mode)!.mode } : {}),
+        ...(getTemplate(templateId)?.format ? { format: getTemplate(templateId)!.format } : {}),
       })),
     });
   } catch (err) {

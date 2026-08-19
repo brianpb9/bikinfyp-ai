@@ -1,0 +1,119 @@
+[
+  {
+    "page": "root",
+    "viewport": "desktop",
+    "status": null,
+    "loadMs": 32481,
+    "finalUrl": null,
+    "err": "Error: page.goto: net::ERR_TIMED_OUT at https://bikinfyp.com/\nCall log:\n\u001b[2m  - navigating to \"https://bikinfyp.com/\", waiting until \"domcontentloaded\"\u001b[22m\n",
+    "consoleErrs": []
+  },
+  {
+    "page": "onboarding",
+    "viewport": "desktop",
+    "status": 200,
+    "loadMs": 26829,
+    "finalUrl": "https://bikinfyp.com/onboarding",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "harga",
+    "viewport": "desktop",
+    "status": 200,
+    "loadMs": 1045,
+    "finalUrl": "https://bikinfyp.com/harga",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "coba",
+    "viewport": "desktop",
+    "status": 200,
+    "loadMs": 6436,
+    "finalUrl": "https://bikinfyp.com/coba",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "mulai",
+    "viewport": "desktop",
+    "status": 200,
+    "loadMs": 6976,
+    "finalUrl": "https://bikinfyp.com/mulai",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "bikin",
+    "viewport": "desktop",
+    "status": 200,
+    "loadMs": 1288,
+    "finalUrl": "https://bikinfyp.com/onboarding",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "dashboard",
+    "viewport": "desktop",
+    "status": 200,
+    "loadMs": 14455,
+    "finalUrl": "https://bikinfyp.com/brands",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "brands",
+    "viewport": "desktop",
+    "status": 200,
+    "loadMs": 13899,
+    "finalUrl": "https://bikinfyp.com/brands",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "dash-request-access",
+    "viewport": "desktop",
+    "status": 200,
+    "loadMs": 20111,
+    "finalUrl": "https://bikinfyp.com/brands",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "onboarding",
+    "viewport": "mobile",
+    "status": 200,
+    "loadMs": 21126,
+    "finalUrl": "https://bikinfyp.com/onboarding",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "harga",
+    "viewport": "mobile",
+    "status": 200,
+    "loadMs": 618,
+    "finalUrl": "https://bikinfyp.com/harga",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "coba",
+    "viewport": "mobile",
+    "status": 200,
+    "loadMs": 1534,
+    "finalUrl": "https://bikinfyp.com/coba",
+    "err": null,
+    "consoleErrs": []
+  },
+  {
+    "page": "bikin",
+    "viewport": "mobile",
+    "status": 200,
+    "loadMs": 5381,
+    "finalUrl": "https://bikinfyp.com/onboarding",
+    "err": null,
+    "consoleErrs": []
+  }
+]

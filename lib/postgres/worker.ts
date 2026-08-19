@@ -63,6 +63,8 @@ type WorkerRow = {
   format: string; quality_tier: string; duration_s: number; state: string;
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
   script_hook_level: string | null;
+  /** Snapshot admisi (JSON) — membawa jejak ide sampai ke arsip prompt. */
+  script_validation_result: string | null;
   avatar_custom_desc: string | null;
   requires_approval: boolean;
   approved_at: string | null;
@@ -80,6 +82,26 @@ type WorkerRow = {
   product_raw_meta: string | null;
   creator_category: string | null;
 };
+
+/**
+ * Jejak ide dari snapshot admisi yang tersimpan di scripts.validation_result.
+ *
+ * Bentuknya sengaja toleran: baris lama tidak punya field ini, dan snapshot
+ * yang korup tidak boleh menggagalkan render yang sudah dibayar — arsip adalah
+ * catatan, bukan produk.
+ */
+export function bacaJejakIde(validationResult: string | null): { ideId: string | null; ideSkor: number | null } {
+  if (!validationResult) return { ideId: null, ideSkor: null };
+  try {
+    const parsed = JSON.parse(validationResult) as { admisi?: { ideId?: unknown; ideSkor?: unknown } };
+    const admisi = parsed?.admisi ?? {};
+    const skor = typeof admisi.ideSkor === "number" && Number.isFinite(admisi.ideSkor) ? admisi.ideSkor : null;
+    const id = typeof admisi.ideId === "string" && admisi.ideId.trim() ? admisi.ideId.slice(0, 120) : null;
+    return { ideId: id, ideSkor: skor };
+  } catch {
+    return { ideId: null, ideSkor: null };
+  }
+}
 
 /**
  * Boleh memakai frame TURUNAN CAST-REF (bukan sekadar frame pertama buatan)?
@@ -245,7 +267,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     // j.* sudah bawa org_id (kolom asli tabel jobs, M1) — WorkerRow.org_id
     // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
     // (pool org untuk job dari dashboard bulk-generate, user biasa untuk retail).
-    const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level,
+    const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level, s.validation_result AS script_validation_result,
       p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
       p.promo_price_before_idr, p.promo_ends_at, p.promo_stock_left,
       pe.creator_category
@@ -396,12 +418,19 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // ini catatan, bukan bagian produk, dan pengguna yang sudah membayar tidak
   // boleh kehilangan videonya karena pencatatan kita bermasalah.
   try {
+    // Skor & identitas ide dibaca dari snapshot admisi yang ikut tersimpan di
+    // scripts.validation_result (audit E15, 19 Agu). Sebelumnya dua kolom ini
+    // disediakan migrasi 0032 lalu SELALU NULL, karena angkanya berhenti di
+    // memori proses web dan tidak pernah menyeberang ke worker.
+    const jejakIde = bacaJejakIde(row.script_validation_result);
     await pgSimpanArsipPrompt({
       jobId: row.id,
       specJson: JSON.stringify(ringkasSpec(spec, modelTier)),
       segmentsJson: JSON.stringify(segments),
       negativePrompt: spec.negativePrompt,
       modelParams: JSON.stringify({ ...ringkasParams(spec), format, template_id: row.template_id ?? null }),
+      ideId: jejakIde.ideId,
+      ideSkor: jejakIde.ideSkor,
     });
   } catch (err) {
     console.warn(`[job ${row.id.slice(0, 8)}] arsip prompt gagal disimpan (diabaikan): ${(err as Error).message}`);
