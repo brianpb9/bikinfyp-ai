@@ -8,7 +8,7 @@
  */
 import crypto from "node:crypto";
 import { Pool } from "pg";
-import { config } from "./config";
+import { config, paymentsEnv } from "./config";
 import { getPool } from "./postgres/pool";
 
 type Queryable = { query: (sql: string, values?: unknown[]) => Promise<{ rows: Record<string, unknown>[] }> };
@@ -87,6 +87,28 @@ export async function collectOperationalAlerts(db: Queryable, now = new Date()):
     text: `Dalam ${settings.errorWindowMin} menit terakhir, ${failed}/${total} job terminal berakhir REFUNDED (${errorRate}%). Periksa worker dan provider sebelum membuka intake.`,
     meta: { kind: "error_rate", window_min: settings.errorWindowMin, total, failed, error_rate_percent: errorRate },
   });
+  // PENULIS NASKAH MATI (alarm baru 20 Agu). Sejak template tidak lagi
+  // disajikan (keputusan Brian), penulis LLM yang gagal berarti pengguna
+  // BERBAYAR tidak dapat naskah sama sekali — 503 di layarnya, senyap di
+  // sisi kami. Ambangnya rendah dan sengaja: satu jam tanpa naskah adalah
+  // jam ketika tidak ada yang bisa membeli video.
+  const penulisMati = await db.query(
+    `SELECT count(*)::int AS count, max(meta::jsonb->>'sebab') AS sebab
+       FROM audit_log
+      WHERE action = 'naskah.penulis_tidak_tersedia' AND created_at >= $1`,
+    [windowStart]
+  );
+  const gagalNaskah = Number(penulisMati.rows[0]?.count ?? 0);
+  if (gagalNaskah >= 3) alerts.push({
+    fingerprint: "penulis-naskah-mati",
+    subject: `[BikinFYP] ALERT: ${gagalNaskah} permintaan naskah ditolak (penulis LLM tidak tersedia)`,
+    text:
+      `Dalam ${settings.errorWindowMin} menit terakhir, ${gagalNaskah} permintaan naskah dijawab 503 karena penulis LLM gagal ` +
+      `dan naskah template SENGAJA tidak disajikan. Sebab terakhir: ${penulisMati.rows[0]?.sebab ?? "tidak tercatat"}. ` +
+      `Periksa saldo/kunci Anthropic — selama ini berlangsung, pengguna berbayar tidak bisa membuat video.`,
+    meta: { kind: "penulis_naskah_mati", window_min: settings.errorWindowMin, count: gagalNaskah, sebab: penulisMati.rows[0]?.sebab ?? null },
+  });
+
   return alerts;
 }
 
@@ -95,7 +117,9 @@ export async function runOperationalMonitor(options: {
   send?: (alert: Alert) => Promise<void>;
 } = {}): Promise<{ checked: number; sent: number; suppressed: number }> {
   if (!config.operationalMonitoringEnabled && !options.db) return { checked: 0, sent: 0, suppressed: 0 };
-  if (config.midtransIsProduction) throw new Error("Monitoring operasional menolak berjalan saat MIDTRANS_IS_PRODUCTION=true.");
+  // Penjaga lama menyebut MIDTRANS_IS_PRODUCTION; sejak pindah ke Duitku yang
+  // relevan adalah LINGKUNGAN pembayaran yang benar-benar aktif (20 Agu).
+  if (paymentsEnv() === "production") throw new Error("Monitoring operasional menolak berjalan saat lingkungan pembayaran production.");
   if (!options.db && !/^postgres(?:ql)?:\/\//i.test(options.databaseUrl ?? config.databaseUrl)) throw new Error("Monitoring operasional memerlukan DATABASE_URL PostgreSQL.");
   if (!options.send && (!config.resendApiKey || !config.operationalAlertToEmail)) throw new Error("Monitoring aktif memerlukan RESEND_API_KEY dan OPERATIONAL_ALERT_TO_EMAIL.");
   const pool = options.db ? undefined : getPool(options.databaseUrl ?? config.databaseUrl);

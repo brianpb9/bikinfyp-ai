@@ -4,7 +4,7 @@ import { getDb, now, uuid, audit, type ProductRow } from "@/lib/db";
 import { generateScripts, TemplateTidakDisajikan } from "@/lib/script-engine";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { REGISTERS, type Register } from "@/lib/script-engine/registers";
-import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { pgAudit, postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { tierMasihDijual } from "@/lib/paket-kredit";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
@@ -149,6 +149,14 @@ export async function POST(req: Request) {
     // pulih, jadi pengguna berhak tahu ia boleh mencoba lagi.
     if (err instanceof TemplateTidakDisajikan) {
       console.error(`[naskah] ditolak, template tidak disajikan — ${err.sebabTeknis}`);
+      // Jejak untuk ALARM operasional: sejak template tidak lagi disajikan,
+      // penulis LLM yang mati berarti pengguna berbayar tidak dapat naskah
+      // sama sekali. Kegagalan itu harus TERLIHAT, bukan cuma jadi 503 di
+      // layar satu orang. Dihitung lib/operational-monitor.
+      try {
+        if (postgresRuntimeEnabled()) await pgAudit("script-engine", "naskah.penulis_tidak_tersedia", "scripts", null, { sebab: err.sebabTeknis });
+        else audit("script-engine", "naskah.penulis_tidak_tersedia", "scripts", null, { sebab: err.sebabTeknis });
+      } catch { /* alarm tidak boleh menelan galat aslinya */ }
       return Response.json(
         {
           code: "SCRIPT_WRITER_UNAVAILABLE",

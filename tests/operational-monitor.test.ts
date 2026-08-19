@@ -49,3 +49,39 @@ test("error rate menghitung REFUNDED sekali dan memenuhi ambang sampel", async (
   assert.deepEqual(result, { checked: 1, sent: 1, suppressed: 0 });
   assert.match(subjects[0], /40%/);
 });
+
+// ALARM PENULIS NASKAH MATI (20 Agu). Sejak template tidak lagi disajikan,
+// penulis LLM yang gagal berarti pengguna berbayar tidak dapat naskah sama
+// sekali — kegagalan yang sebelumnya cuma jadi 503 di layar satu orang.
+test("alarm menyala saat permintaan naskah berulang kali ditolak 503", async () => {
+  const db = { query: async (sql: string) => {
+    if (sql.includes("FROM jobs") && sql.includes("ANY")) return { rows: [] };
+    if (sql.includes("GROUP BY state")) return { rows: [] };
+    if (sql.includes("naskah.penulis_tidak_tersedia")) return { rows: [{ count: 5, sebab: "kunci API penulis LLM belum di-set di server" }] };
+    if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: true }] };
+    if (sql.includes("SELECT id FROM audit_log")) return { rows: [] };
+    return { rows: [] };
+  }};
+  const terkirim: { fingerprint: string; text: string }[] = [];
+  const hasil = await runOperationalMonitor({
+    db, now: new Date("2026-01-01T00:30:00.000Z"),
+    send: async (alert) => { terkirim.push({ fingerprint: alert.fingerprint, text: alert.text }); },
+  });
+  assert.equal(hasil.sent, 1);
+  assert.equal(terkirim[0]?.fingerprint, "penulis-naskah-mati");
+  assert.match(terkirim[0]!.text, /kunci API penulis LLM/, "sebab teknis harus ikut di badan alarm");
+});
+
+test("satu-dua kegagalan naskah TIDAK membangunkan siapa pun", async () => {
+  const db = { query: async (sql: string) => {
+    if (sql.includes("FROM jobs") && sql.includes("ANY")) return { rows: [] };
+    if (sql.includes("GROUP BY state")) return { rows: [] };
+    if (sql.includes("naskah.penulis_tidak_tersedia")) return { rows: [{ count: 2, sebab: "x" }] };
+    return { rows: [] };
+  }};
+  const hasil = await runOperationalMonitor({
+    db, now: new Date("2026-01-01T00:30:00.000Z"),
+    send: async () => assert.fail("alarm terlalu sensitif — kegagalan sesekali itu normal"),
+  });
+  assert.equal(hasil.sent, 0);
+});
