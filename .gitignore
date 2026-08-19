@@ -11,3 +11,8 @@ next-env.d.ts
 !.env.example
 !.env.postgres.example
 .DS_Store
+
+# File sementara bukti/probe — jangan pernah ikut commit
+*.tmp.ts
+*.tmp.mjs
+probe-funnel-tmp.mjs
