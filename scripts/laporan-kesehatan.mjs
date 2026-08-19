@@ -110,8 +110,22 @@ try {
   );
   baris("prompt terarsip", String(arsip.rows[0].n));
   baris("  membawa skor ide", String(arsip.rows[0].dgn_skor));
-  if (total > 0 && arsip.rows[0].n === 0) {
-    temuan.push("ada job tapi NOL prompt terarsip — jalur arsip putus, prompt yang dikirim tidak bisa dibedah");
+  // Dibandingkan hanya dengan job yang lahir SESUDAH tabelnya ada.
+  //
+  // Versi pertama membandingkannya dengan SEMUA job dan langsung memberi alarm
+  // palsu: job terakhir 13 Agu, tabel job_prompts baru terpasang 18 Agu, jadi
+  // nol arsip memang satu-satunya angka yang mungkin. Alarm palsu lebih
+  // berbahaya daripada tidak ada alarm — ia mengajari orang mengabaikannya,
+  // dan itu persis pelajaran yang sama dengan smoke test yang menuntut
+  // payments_live=true di sandbox.
+  const sejakArsip = await pool.query(
+    `SELECT count(*)::int n FROM jobs
+      WHERE created_at >= GREATEST($1, COALESCE(
+        (SELECT applied_at::text FROM schema_migrations WHERE version='0032_job_prompts'), $1))`, [sejak]
+  );
+  baris("job sejak arsip aktif", String(sejakArsip.rows[0].n));
+  if (sejakArsip.rows[0].n > 0 && arsip.rows[0].n === 0) {
+    temuan.push("ada job SESUDAH arsip aktif tapi NOL prompt terarsip — jalur arsip putus, prompt yang dikirim tidak bisa dibedah");
   }
 
   // ---- 5. Uang ----
