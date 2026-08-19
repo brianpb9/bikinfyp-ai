@@ -122,6 +122,10 @@ export async function pgUpdateProduct(userId: string, productId: string, patch: 
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.updateOwnedProduct(userId, productId, patch); } finally { await repo.close(); }
 }
+export async function pgSetProductBrand(userId: string, productId: string, brand: string | null) {
+  const repo = new PgProductPersonaScriptRepository(url());
+  try { return await repo.setOwnedProductBrand(userId, productId, brand); } finally { await repo.close(); }
+}
 export async function pgFindOrCreatePersona(userId: string, category: { id: string; name: string }) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.findOrCreatePersona(userId, category); } finally { await repo.close(); }

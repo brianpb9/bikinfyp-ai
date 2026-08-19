@@ -133,11 +133,17 @@ export function blokAturan(): string {
     // dengan L-05 dulu.
     blokStandar(),
     "",
-    "Six of those twelve lines are checked MECHANICALLY and will reject your script:",
-    "- line 1: the first segment must carry a start_state (>=15 chars) and a product_state.",
-    "- line 2: the one-liner/hook must name the product or its category — it must not survive a product swap.",
+    // Jumlahnya DITURUNKAN dari yang benar-benar menolak keluaranmu (audit A2,
+    // 19 Agu). Sebelumnya tertulis "six" lalu hanya empat yang didaftar, dan
+    // salah satunya (anomali baris 1) tidak diperiksa apa pun. Klaim yang
+    // lebih besar dari kenyataan membuat model — dan pembaca berikutnya —
+    // percaya gerbang yang tidak ada.
+    "Four of those twelve lines are checked MECHANICALLY and will reject your script:",
+    "- line 1 (partly): the first segment must carry a start_state (>=15 chars) and a product_state. The ANOMALY itself is not machine-checked — it is on you.",
     "- line 4: the shot-2 line must be a REASON. Never open it with 'isinya', 'teksturnya', 'kandungannya'.",
+    "- line 5: saturated categories (skincare, soap, F&B, toothpaste) demand a bolder hook level.",
     `- line 9: at most ${MAKS_KATA_PER_SHOT} spoken words per shot, on top of the total word window.`,
+    "- line 2 is checked BEFORE you write (idea stage), not on your output — but a one-liner that survives a product swap is still a failed idea.",
     "",
     // BENTUK PERSIS. Tanpa ini model mengarang nama field yang masuk akal
     // ("type" bukan "block", "dialogue" bukan "text", "timecode" bukan

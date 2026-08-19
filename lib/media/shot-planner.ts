@@ -486,7 +486,60 @@ function isLastShot(i: number, total: number): boolean { return i === total - 1;
 
 const MIN_SHOT_SEC = 4;
 
+/**
+ * Kunci UKURAN ASLI produk (standar 10/10 §C.10).
+ *
+ * Ditulis positif dan disematkan di TIAP shot, bukan sekali di header: cacat
+ * yang diperbaikinya nyata dan sudah terjadi — foto referensi ikut dibaca
+ * sebagai objek adegan lalu ditempel jadi bidang depan raksasa (sepertiga
+ * layar terisi kotak seukuran meja). Larangan negatif tidak dipakai karena
+ * negasi justru memanggil objeknya kembali.
+ */
+function kunciUkuranAsli(namaProduk: string): string {
+  return (
+    `Every "${namaProduk}" in frame is at its true small size, about the width of a hand, ` +
+    `resting on a surface or held in her hand, and the camera keeps a normal conversational distance from it.`
+  );
+}
+
+/**
+ * Kunci BAHASA 4 lapis (standar 10/10 baris 9).
+ *
+ * Empat lapis karena satu kalimat tidak cukup: bukti produksi menunjukkan
+ * model tetap menyelipkan ucapan Inggris kalau bahasanya hanya disebut sekali
+ * di tengah prompt panjang. Lapis 3 (label dialog) dirakit di tempat dialog
+ * disusun; tiga lapis lain di sini.
+ *
+ * "no English speech" SENGAJA di prompt positif, bukan negative: frasaNegatifBersih()
+ * membuang awalan "no " di blok negatif, sehingga kalimat ini justru akan
+ * berubah menjadi perintah "English speech" kalau ditaruh di sana.
+ */
+function kunciBahasa(mode: "presenter" | "voiceover"): { header: string; perShot: string; penutup: string } {
+  return {
+    header: "Every spoken word is Indonesian.",
+    perShot:
+      mode === "presenter"
+        ? "She speaks Indonesian (Bahasa Indonesia)."
+        : "The voiceover is spoken in Indonesian (Bahasa Indonesia).",
+    penutup: "no English speech.",
+  };
+}
+
 export function planShots(input: ShotPlanInput): VisualSpec {
+  // Kategori kreator WAJIB objek utuh, bukan id.
+  //
+  // Tanpa pemeriksaan ini, pemanggil yang mengoper string (mis. "hijaber")
+  // menghasilkan `input.category.promptSeed === undefined`, dan kata literal
+  // "undefined" ikut terkirim ke penyedia BERBAYAR tanpa satu pun kegagalan
+  // terlihat. Ditemukan saat audit 19 Agu — di harness audit itu sendiri,
+  // bukan di jalur produksi, dan justru itu sebabnya ia layak dijaga: jalur
+  // yang gagal diam-diam menunggu pemanggil berikutnya.
+  const kategori = input.category as Partial<CreatorCategory> | string | null | undefined;
+  if (!kategori || typeof kategori !== "object" || !kategori.promptSeed || !kategori.handsPrompt || !kategori.negativePrompt) {
+    throw new TypeError(
+      `planShots: kategori kreator tidak sah (butuh objek CreatorCategory utuh, dapat ${typeof kategori}) — prompt tidak dirakit.`
+    );
+  }
   // Jumlah shot: batas keras BytePlus 2-15 dtk/klip (lihat byteplus.ts
   // createTask) → satu shot per 15 dtk.
   //
@@ -1460,13 +1513,25 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const panggung = ` ${mulaiDari} ${produkAkhir} ${ekspresi}`.replace(/\s+/g, " ");
     const rapikan = (t: string) => t.replace(/\.\.+(?=\s|$)/g, ".").replace(/\s+([.,])/g, "$1").trim();
 
+    // Kunci ukuran asli (§C.10) di TIAP shot — termasuk shot tanpa suara, yang
+    // punya cacat produk-raksasa yang sama.
+    const ukuran = ` ${kunciUkuranAsli(input.productName)}`;
+
     const base = rapikan(punyaPeranTemplate
-      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${panggung}`
-      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}`);
+      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${panggung}${ukuran}`
+      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}${ukuran}`);
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
     }
+
+    // Kunci bahasa 4 lapis. Lapis "perShot" mengikuti siapa yang terdengar:
+    // presenter yang bicara ke kamera, atau narator di luar layar — menyebut
+    // "she speaks" pada shot tanpa wajah memanggil wajah ke frame (preseden
+    // job a1192101).
+    const modeBicara: "presenter" | "voiceover" =
+      format === "talking_head" && lipSyncPresenter && !bukaTanpaWajah ? "presenter" : "voiceover";
+    const bahasa = kunciBahasa(modeBicara);
 
     // Tier bersuara: dialog dalam tanda kutip; jeda & arahan di luar tanda kutip.
     // hands_only (Tangan + VO): dialog = NARASI VOICEOVER — insiden production
@@ -1531,10 +1596,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // justru lahir DI SINI, saat `${base}. ` menempel pada base yang sudah
     // berakhir titik. Menormalkan potongannya saja meninggalkan cacat yang
     // sama di keluaran nyata — dan keluaran nyata itu yang dikirim ke model.
+    // Lapis 3 (label dialog) ditempel tepat di depan kalimat berdialog, dan
+    // lapis 1/2/4 mengapit blok ucapan — bukan disebar acak: yang terbukti
+    // menahan ucapan Inggris adalah bahasa yang disebut DEKAT teks dialognya.
+    const speechBerlabel = dialogue.trim() ? `Indonesian dialogue, spoken exactly as written. ${speech}` : speech;
     const prompt = rapikan(
       format === "talking_head" && !lipSyncPresenter && !bukaTanpaWajah
-        ? `${base}. ${speech}${pacing}Natural warm reactive expression throughout, with her lips closed and relaxed as she listens.`
-        : `${base}. ${speech}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader.`
+        ? `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Natural warm reactive expression throughout, with her lips closed and relaxed as she listens. ${bahasa.penutup}`
+        : `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader. ${bahasa.penutup}`
     );
     // Penanda menahan-produk ikut sebagai DATA. Sumbernya peran template
     // (ugcRoles) atau tabel rute TVC — keduanya menandainya eksplisit.

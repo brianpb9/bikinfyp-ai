@@ -19,7 +19,7 @@ import { ringkasParams, ringkasSpec } from "../arsip-prompt";
 import { pgSimpanArsipPrompt } from "./smoke-runtime";
 import { generateFirstFrame, perluFrameBuatan, harusMenahanProduk, pilihShotUntukFrame } from "../media/first-frame";
 import { kunciCastRef } from "../media/cast-ref";
-import { periksaPemicu, ringkasPemicu } from "../media/pemicu-filter";
+import { periksaPromptAkhir, ringkasTemuanPrompt } from "../media/gerbang-prompt";
 import { bolehJadiReferensi } from "../media/qc-frame";
 import { TVC_ROUTES, type TvcRoute } from "../templates";
 import { findReusableClips } from "../media/resume-clips";
@@ -424,24 +424,19 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // vo_broll tidak lewat gerbang ini sama sekali: visualnya FOTO ASLI milik
   // pengguna, tidak ada penyedia video yang dipanggil, jadi tidak ada
   // penyaring yang bisa menolaknya.
-  if (format !== "vo_broll") {
-    const namaProduk = row.product_name;
-    const pemicu = [
-      ...spec.shots.flatMap((sh) => periksaPemicu(sh.prompt, { namaProduk }).map((t) => ({ di: `shot ${sh.index}`, t }))),
-      ...periksaPemicu(spec.negativePrompt, { namaProduk }).map((t) => ({ di: "negative prompt", t })),
-    ];
-    const negasi = pemicu.filter((p) => p.t.jenis === "negasi-orang");
-    const kosakata = pemicu.filter((p) => p.t.jenis === "kosakata");
-    if (kosakata.length) {
-      console.warn(
-        `[pemicu] job ${row.id.slice(0, 8)} kosakata bertetangga (TIDAK diblokir) — ` +
-          kosakata.map((p) => `${p.di}: ${ringkasPemicu([p.t])}`).join(" | ")
-      );
-    }
-    if (negasi.length) {
-      const rincian = negasi.map((p) => `${p.di}: ${ringkasPemicu([p.t])}`).join(" | ");
-      console.error(`[pemicu] job ${row.id.slice(0, 8)} DIHENTIKAN sebelum provider — ${rincian}`);
-      throw new Error(`Prompt akhir memuat negasi tentang orang dan tidak dikirim: ${rincian}`);
+  {
+    const temuan = periksaPromptAkhir({
+      shots: spec.shots.map((sh) => ({ index: sh.index, prompt: sh.prompt })),
+      negativePrompt: spec.negativePrompt,
+      namaProduk: row.product_name,
+      format,
+      withAudio: spec.generateAudio !== false,
+    });
+    const keras = temuan.filter((t) => t.keras);
+    if (keras.length) {
+      const rincian = ringkasTemuanPrompt(keras);
+      console.error(`[gerbang-prompt] job ${row.id.slice(0, 8)} DIHENTIKAN sebelum provider — ${rincian}`);
+      throw new Error(`Prompt akhir tidak lolos gerbang dan tidak dikirim: ${rincian}`);
     }
   }
   // vo_broll (VO+Foto): no AI video-gen call at all — the visual is the

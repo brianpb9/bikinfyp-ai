@@ -63,12 +63,19 @@ test("worker MEMBLOKIR, bukan mencatat", async () => {
   const fsx = await import("node:fs");
   const src = fsx.readFileSync("lib/postgres/worker.ts", "utf8");
   assert.match(src, /DIHENTIKAN sebelum provider/, "harus menghentikan job");
-  assert.match(src, /throw new Error\(`Prompt akhir memuat negasi/, "harus melempar, bukan warn");
-  assert.match(src, /periksaPemicu\(spec\.negativePrompt, \{ namaProduk \}\)/, "negative prompt ikut diperiksa");
+  // 19 Agu: isi gerbang pindah ke lib/media/gerbang-prompt.ts (satu tempat
+  // untuk pemicu + kunci bahasa + kunci ukuran). Yang diuji di sini tinggal
+  // KONTRAK worker-nya: memanggil gerbang, dan MELEMPAR bila ada temuan keras.
+  assert.match(src, /periksaPromptAkhir\(\{/, "worker harus memanggil gerbang prompt akhir");
+  assert.match(src, /throw new Error\(`Prompt akhir tidak lolos gerbang/, "harus melempar, bukan warn");
+  assert.match(src, /negativePrompt: spec\.negativePrompt/, "negative prompt ikut diperiksa");
   // Urutan: arsip DULU, gerbang kemudian (reviewer ronde 3) — prompt yang
   // dihentikan justru yang paling perlu dibedah.
   assert.ok(src.indexOf("pgSimpanArsipPrompt") < src.indexOf("DIHENTIKAN sebelum provider"),
     "arsip harus ditulis sebelum gerbang melempar");
-  // vo_broll tidak memanggil penyedia video sama sekali.
-  assert.match(src, /if \(format !== "vo_broll"\) \{\n\s+const namaProduk/, "gerbang tidak berlaku untuk vo_broll");
+  // vo_broll tidak memanggil penyedia video sama sekali — pengecualiannya kini
+  // hidup di gerbang (berikut alasannya), diuji perilakunya di
+  // tests/prompt-akhir-kunci-bahasa.test.ts.
+  const gerbang = fsx.readFileSync("lib/media/gerbang-prompt.ts", "utf8");
+  assert.match(gerbang, /if \(input\.format === "vo_broll"\) return \[\]/, "gerbang tidak berlaku untuk vo_broll");
 });

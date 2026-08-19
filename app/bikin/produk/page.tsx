@@ -26,6 +26,10 @@ export default function ProdukPage() {
   const [kategoriDitentukan, setKategoriDitentukan] = useState(false);
   const [kategoriDitebak, setKategoriDitebak] = useState(false);
   const [visualDesc, setVisualDesc] = useState("");
+  // Merek DIKONFIRMASI user (audit C9 19 Agu): dari link diprefill usulan
+  // server (boleh salah — manusia koreksi di sini), manual diketik sendiri.
+  // Sumber gerbang kesetiaan merek QC-F1; kosong = gerbang jujur UNVERIFIED.
+  const [brand, setBrand] = useState("");
   const [photos, setPhotos] = useState<File[]>([]);
   const [previews, setPreviews] = useState<string[]>([]);
   const [extractedPreviews, setExtractedPreviews] = useState<string[]>([]);
@@ -135,6 +139,7 @@ export default function ProdukPage() {
         extracted: boolean;
         message?: string;
         product_id?: string;
+        brand_suggestion?: string | null;
         name?: string;
         price_idr?: number | null;
         category?: string;
@@ -162,6 +167,7 @@ export default function ProdukPage() {
         setExtractedPreviews(res.image_urls ?? []);
         setExtractedRels(res.images ?? []);
         if (res.product_visual_desc) setVisualDesc(res.product_visual_desc);
+        if (res.brand_suggestion) setBrand(res.brand_suggestion);
         // Harga coret ketemu di halaman -> prefill promo & buka kartunya.
         if (res.promo_price_before_idr) {
           setPromoBefore(String(res.promo_price_before_idr));
@@ -205,6 +211,7 @@ export default function ProdukPage() {
         fd.set("price_idr", String(priceIdr));
         fd.set("category", category);
         if (visualDesc.trim()) fd.set("product_visual_desc", visualDesc.trim());
+        if (brand.trim()) fd.set("brand", brand.trim());
         if (promoBeforeIdr) fd.set("promo_price_before_idr", String(promoBeforeIdr));
         if (promoEnds) fd.set("promo_ends_at", promoEnds);
         if (promoStock) fd.set("promo_stock_left", promoStock);
@@ -227,6 +234,7 @@ export default function ProdukPage() {
           method: "PATCH",
           json: {
             name: name.trim(), price_idr: priceIdr, category, product_visual_desc: visualDesc.trim() || null,
+            brand: brand.trim() || null,
             promo_price_before_idr: promoBeforeIdr, promo_ends_at: promoEnds || null, promo_stock_left: promoStock || null,
           },
         });
@@ -319,6 +327,21 @@ export default function ProdukPage() {
               className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
             />
             {price && <p className="text-sm text-zinc-500">= {rupiah(parseInt(price || "0", 10) || 0)}</p>}
+            {/* Merek untuk pengecekan label otomatis. Dari link: terisi usulan
+                server yang WAJIB dikoreksi user kalau salah. */}
+            <input
+              type="text"
+              placeholder="Merek di label (mis. Scarlett) — biar AI menjaga mereknya persis"
+              value={brand}
+              onChange={(e) => setBrand(e.target.value)}
+              maxLength={60}
+              className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 text-sm outline-none focus:border-amber-500"
+            />
+            {brand && (
+              <p className="text-xs text-zinc-500">
+                Pastikan tulisannya persis seperti di label produk — dipakai AI untuk menjaga merekmu tidak berubah di video.
+              </p>
+            )}
             <input
               type="text"
               placeholder="Deskripsi visual produk (opsional, biar konsisten): mis. botol dropper amber 30ml, label putih tulisan hitam"

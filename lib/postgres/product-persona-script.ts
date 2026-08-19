@@ -120,6 +120,27 @@ export class PgProductPersonaScriptRepository {
     return product;
   }
 
+  /**
+   * Merek terkonfirmasi user → raw_meta.brand (audit C9, 19 Agu).
+   *
+   * jsonb merge, bukan tulis ulang: raw_meta juga rumah hasil scrape (og) dan
+   * arsip QC — brand tidak boleh menimpanya. brand null = hapus kuncinya.
+   * Kolom products.brand (migrasi 0033, dimiliki sesi lain) menggantikan ini
+   * sebagai sumber utama begitu land; merekTepercaya() membaca keduanya.
+   */
+  async setOwnedProductBrand(userId: string, productId: string, brand: string | null): Promise<boolean> {
+    const result = await this.pool.query(
+      brand === null
+        ? `UPDATE products SET raw_meta = nullif((coalesce(raw_meta,'{}')::jsonb - 'brand')::text, '{}')
+           WHERE id = $1 AND user_id = $2`
+        : `UPDATE products SET raw_meta = (coalesce(raw_meta,'{}')::jsonb || jsonb_build_object('brand', $3::text))::text
+           WHERE id = $1 AND user_id = $2`,
+      brand === null ? [productId, userId] : [productId, userId, brand]
+    );
+    if (result.rowCount) await this.appendAudit(userId, "product.brand_set", "products", productId, { brand });
+    return Boolean(result.rowCount);
+  }
+
   /** Serializes only a single (user, category) lookup/create race. */
   async findOrCreatePersona(userId: string, category: { id: string; name: string }, voiceId = "mock-damayanti", register = "bestie"): Promise<PersonaRow> {
     const client = await this.pool.connect();

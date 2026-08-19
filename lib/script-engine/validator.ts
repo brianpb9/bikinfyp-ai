@@ -735,10 +735,17 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     }
   }
 
-  // L-19: hook sebaiknya memakai perangkat retoris yang bisa dikenali.
+  // L-19: hook wajib memakai perangkat retoris yang bisa dikenali.
   //
-  // PERINGATAN, BUKAN ERROR — dan itu keputusan berdasar ukuran, bukan
-  // kehati-hatian. PATCH 5 memintanya jadi aturan keras. Diukur dulu terhadap
+  // KERAS DI SEMUA MODE — ia ada di SELALU_KERAS (lihat konstanta di atas),
+  // jadi push(false, ...) di bawah tetap masuk `errors`, bukan `warnings`.
+  //
+  // Komentar ini sebelumnya berbunyi "PERINGATAN, BUKAN ERROR" dan bertahan
+  // lama sesudah SELALU_KERAS membalikkannya (audit 19 Agu). Sejarah di
+  // bawah dipertahankan karena ia menjelaskan KENAPA ambangnya pernah lunak —
+  // bukan karena ia masih menggambarkan perilaku hari ini.
+  //
+  // Sejarah: PATCH 5 memintanya jadi aturan keras. Diukur dulu terhadap
   // katalog template (17 Agu): hanya 108 dari 132 hook varian yang dikenali
   // POLA_PERANGKAT. Menjadikannya error akan:
   //
@@ -768,11 +775,17 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
 
   // L-21: kata yang memicu penyaring konten penyedia.
   //
-  // PERINGATAN, bukan error, dan alasannya sama dengan L-19: penyaringnya
-  // menghukum kosakata, bukan maksud — dan sebagian kosakata itu memang milik
-  // produknya. Iklan sabun tanpa kata "mandi" hampir mustahil ditulis, jadi
-  // melarangnya keras akan mematikan satu kategori penuh, pola kesalahan yang
-  // sudah dua kali kena di repo ini.
+  // KERAS DI SEMUA MODE (ada di SELALU_KERAS). Komentar lama di sini berbunyi
+  // "PERINGATAN, bukan error" — sudah tidak benar sejak SELALU_KERAS, dan
+  // menyesatkan pembaca berikutnya (audit 19 Agu).
+  //
+  // Kekhawatiran lamanya nyata dan sudah dijawab di tempat lain: penyaring
+  // menghukum kosakata, dan sebagian kosakata itu milik produknya sendiri
+  // ("iklan sabun tanpa kata mandi hampir mustahil"). Yang menyelamatkannya
+  // bukan melunakkan aturan, melainkan tutupiNama() di lib/media/pemicu-filter
+  // — kemunculan nama produk dibuang dulu, sisanya baru diperiksa. Diukur 19
+  // Agu di gerbang prompt akhir: 0 dari 81 kombinasi produk x kategori x
+  // format terblokir, termasuk sabun mandi dan shower gel.
   //
   // Yang diperiksa arah VISUAL dan keadaan awal, bukan dialog: penolakan 18 Agu
   // datang dari prompt video, dan dialognya sendiri tidak pernah dikirim ke

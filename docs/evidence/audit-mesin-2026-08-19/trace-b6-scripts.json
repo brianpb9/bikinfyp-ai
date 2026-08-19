@@ -1,0 +1,213 @@
+{
+ "count": 3,
+ "scripts": [
+  {
+   "keys": [
+    "script_source",
+    "admisi",
+    "hook_family",
+    "emotion",
+    "register",
+    "quality_tier",
+    "segments",
+    "caption",
+    "hashtags",
+    "validation",
+    "ideKandidat"
+   ],
+   "hook_family": "H2",
+   "source": "degraded",
+   "ide": null,
+   "validation": {
+    "passed": false,
+    "errors": [
+     {
+      "rule": "A-01",
+      "message_id": "Penutup iklan harus mengarahkan ke bawah/bio (mis. \"Detailnya ada di bawah ya\") — tanpa itu penonton tidak tahu harus ke mana.",
+      "segment": "cta"
+     },
+     {
+      "rule": "A-02",
+      "message_id": "Iklan jasa/app tidak boleh menyebut 'keranjang' — tidak ada keranjang yang bisa diklik di iklan ini.",
+      "segment": "cta"
+     },
+     {
+      "rule": "L-05",
+      "message_id": "Panjang skrip 26 kata — untuk video bersuara 15 detik maksimal ~22 kata (13–22)."
+     },
+     {
+      "rule": "S-09",
+      "message_id": "segmen \"demo\" 15 kata — maksimal 11 kata untuk shot 7 detik (§B baris 9)"
+     }
+    ],
+    "warnings": [],
+    "checked_at": "2026-08-19T15:07:39.337Z"
+   },
+   "segments": [
+    {
+     "role": "hook",
+     "start": 0,
+     "end": 3,
+     "text": "Kak, zonknya balik lagi terus nggak sih?",
+     "visual_direction": "Close-up tangan memegang produk, kamera HP goyang natural, tatap produk"
+    },
+    {
+     "role": "demo",
+     "start": 3,
+     "end": 10,
+     "text": "nah, nemu Serum Glow Bening, sumpah beda, cuma 89 ribu, nggak nyesel sama sekali sih",
+     "visual_direction": "Tangan mendemokan produk: putar/buka/pakai perlahan, label produk menghadap kamera"
+    },
+    {
+     "role": "cta",
+     "start": 10,
+     "end": 15,
+     "text": "Cek keranjang ya deh",
+     "visual_direction": "Produk dipegang di samping keranjang belanja HP, tunjuk layar lalu kembali ke produk"
+    }
+   ]
+  },
+  {
+   "keys": [
+    "script_source",
+    "admisi",
+    "hook_family",
+    "emotion",
+    "register",
+    "quality_tier",
+    "segments",
+    "caption",
+    "hashtags",
+    "validation",
+    "ideKandidat"
+   ],
+   "hook_family": "H1",
+   "source": "llm",
+   "ide": null,
+   "validation": {
+    "passed": true,
+    "errors": [],
+    "warnings": [],
+    "checked_at": "2026-08-19T15:07:52.899Z"
+   },
+   "segments": [
+    {
+     "role": "hook",
+     "start": 0,
+     "end": 4,
+     "text": "Eh, ini serum apa sih?",
+     "visual_direction": "tight macro, slight top-down. static. Camera holds still on the bottle standing in the pencil box, then a single finger taps the side of the bottle gently, then the bottle slowly pivots to face camera — label still partially obscured",
+     "framing": "tight macro",
+     "angle": "slight top-down",
+     "camera": "static",
+     "action": "Camera holds still on the bottle standing in the pencil box, then a single finger taps the side of the bottle gently, then the bottle slowly pivots to face camera — label still partially obscured",
+     "expression": "not visible",
+     "mode": "ASMR",
+     "product_state": "partial",
+     "start_state": "A small glass dropper bottle stands upright inside an open wooden pencil box on a plain desk, label facing away from camera, one folded cloth beside it"
+    },
+    {
+     "role": "demo",
+     "start": 4,
+     "end": 10,
+     "text": "Nah, kulitnya jadi keliatan bening deh.",
+     "visual_direction": "medium close, from the chest up, eye level. slow push in. One hand lifts the dropper bottle upright, then tilts it gently so light catches the liquid inside, then sets it back down with label facing camera",
+     "framing": "medium close, from the chest up",
+     "angle": "eye level",
+     "camera": "slow push in",
+     "action": "One hand lifts the dropper bottle upright, then tilts it gently so light catches the liquid inside, then sets it back down with label facing camera",
+     "expression": "calm, quiet satisfaction",
+     "mode": "SELFIE",
+     "product_state": "partial",
+     "start_state": "Both hands are relaxed on the desk surface, dropper bottle lying on its side between them, label now partially readable"
+    },
+    {
+     "role": "cta",
+     "start": 10,
+     "end": 15,
+     "text": "Detailnya ada di bawah ya.",
+     "visual_direction": "medium close, from the chest up, eye level. static. Talent looks directly into camera, gives a single small nod, then holds still for one full second with the bottle in clear frame",
+     "framing": "medium close, from the chest up",
+     "angle": "eye level",
+     "camera": "static",
+     "action": "Talent looks directly into camera, gives a single small nod, then holds still for one full second with the bottle in clear frame",
+     "expression": "warm, direct eye contact",
+     "mode": "SELFIE",
+     "product_state": "hero",
+     "start_state": "Dropper bottle stands hero-center on the desk, label fully facing camera and clearly readable, folded cloth neatly beside it, one hand resting still next to the bottle"
+    }
+   ]
+  },
+  {
+   "keys": [
+    "script_source",
+    "admisi",
+    "hook_family",
+    "emotion",
+    "register",
+    "quality_tier",
+    "segments",
+    "caption",
+    "hashtags",
+    "validation",
+    "ideKandidat"
+   ],
+   "hook_family": "H15",
+   "source": "llm",
+   "ide": null,
+   "validation": {
+    "passed": true,
+    "errors": [],
+    "warnings": [],
+    "checked_at": "2026-08-19T15:08:08.066Z"
+   },
+   "segments": [
+    {
+     "role": "hook",
+     "start": 0,
+     "end": 4,
+     "text": "Eh, aku sembunyiin ini dari anak kos sebelah.",
+     "visual_direction": "tight macro on hands and bottle, slight top-down. static. fingers slowly rotate the bottle toward camera, then pause before label is fully visible",
+     "framing": "tight macro on hands and bottle",
+     "angle": "slight top-down",
+     "camera": "static",
+     "action": "fingers slowly rotate the bottle toward camera, then pause before label is fully visible",
+     "expression": "not visible",
+     "mode": "ASMR",
+     "product_state": "partial",
+     "start_state": "A small glass dropper bottle stands upright on a wooden desk surface, label facing away from camera, one hand rests beside it"
+    },
+    {
+     "role": "demo",
+     "start": 4,
+     "end": 10,
+     "text": "Sumpah, kulit aku langsung keliatan bening deh.",
+     "visual_direction": "medium close on hand holding bottle, forearm visible, eye level. slow push in toward bottle label. other hand lifts and tilts bottle gently, then sets it back down on desk",
+     "framing": "medium close on hand holding bottle, forearm visible",
+     "angle": "eye level",
+     "camera": "slow push in toward bottle label",
+     "action": "other hand lifts and tilts bottle gently, then sets it back down on desk",
+     "expression": "not visible",
+     "mode": "SELLING",
+     "product_state": "partial",
+     "start_state": "the dropper bottle is held upright in one hand, label now partially readable, soft window light falls across the bottle"
+    },
+    {
+     "role": "cta",
+     "start": 10,
+     "end": 15,
+     "text": "Detailnya ada di bawah ya.",
+     "visual_direction": "medium close, bottle centered, eye level, slight top-down. static, holds still for final second. hand lifts away from bottle, leaving it standing alone, camera holds on hero product for one full second",
+     "framing": "medium close, bottle centered",
+     "angle": "eye level, slight top-down",
+     "camera": "static, holds still for final second",
+     "action": "hand lifts away from bottle, leaving it standing alone, camera holds on hero product for one full second",
+     "expression": "not visible",
+     "mode": "",
+     "product_state": "hero",
+     "start_state": "the Serum Glow Bening bottle stands hero on the wooden desk, label fully facing camera, clean soft-focus background, one hand rests open beside it"
+    }
+   ]
+  }
+ ]
+}

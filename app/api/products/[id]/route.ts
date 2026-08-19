@@ -1,9 +1,9 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, audit, type ProductRow } from "@/lib/db";
-import { validPriceIdr, validProductName } from "@/lib/product-validation";
+import { validBrand, validPriceIdr, validProductName } from "@/lib/product-validation";
 import { parsePromoFields } from "@/lib/promo";
-import { pgUpdateProduct, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { pgSetProductBrand, pgUpdateProduct, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 
 export const runtime = "nodejs";
@@ -61,6 +61,22 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         "UPDATE products SET name = ?, price_idr = ?, category = ?, product_visual_desc = ?, promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?"
       ).run(name, priceIdr, category, visualDesc, promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, id);
       audit(user.id, "product.updated", "products", id, { name, price_idr: priceIdr, promo: promo.promoPriceBeforeIdr !== null });
+    }
+
+    // Merek terkonfirmasi user (audit C9) → raw_meta.brand, merge — jangan
+    // menimpa hasil scrape (og). Field tidak dikirim = tidak disentuh;
+    // dikirim kosong/null = hapus (user menolak usulan yang salah).
+    if (body.brand !== undefined) {
+      const brand = validBrand(body.brand);
+      if (postgresRuntimeEnabled()) await pgSetProductBrand(user.id, id, brand);
+      else {
+        let meta: Record<string, unknown> = {};
+        try { meta = JSON.parse((product.raw_meta as string | null) ?? "{}") as Record<string, unknown>; } catch { /* raw_meta korup: mulai bersih, og hilang lebih baik daripada PATCH gagal */ }
+        if (brand) meta.brand = brand; else delete meta.brand;
+        const serialized = Object.keys(meta).length ? JSON.stringify(meta) : null;
+        db!.prepare("UPDATE products SET raw_meta = ? WHERE id = ?").run(serialized, id);
+        audit(user.id, "product.brand_set", "products", id, { brand });
+      }
     }
     return Response.json({ ok: true, product_id: id, name, price_idr: priceIdr, category });
   } catch (err) {

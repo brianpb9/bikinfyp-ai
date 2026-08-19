@@ -2,7 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit } from "@/lib/db";
 import { ensureDirs } from "@/lib/config";
-import { validPriceIdr, validProductName } from "@/lib/product-validation";
+import { validBrand, validPriceIdr, validProductName } from "@/lib/product-validation";
 import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { parsePromoFields } from "@/lib/promo";
 import { postgresRuntimeEnabled, smokeCreateProduct } from "@/lib/postgres/smoke-runtime";
@@ -19,6 +19,8 @@ export async function POST(req: Request) {
 
     let name = "", priceRaw: unknown = "", category = "default", sourceUrl: string | null = null;
     let visualDesc: string | null = null;
+    // Merek terkonfirmasi user (audit C9) — sumber gerbang kesetiaan merek QC-F1.
+    let brandRaw: unknown = undefined;
     let promoGet: (k: string) => unknown = () => undefined;
     const blobs: { mime: string; data: Buffer }[] = [];
 
@@ -29,6 +31,7 @@ export async function POST(req: Request) {
       priceRaw = form.get("price_idr");
       category = String(form.get("category") ?? "default").trim();
       visualDesc = form.get("product_visual_desc") ? String(form.get("product_visual_desc")).slice(0, 200) : null;
+      brandRaw = form.get("brand") ?? undefined;
       sourceUrl = form.get("source_url") ? String(form.get("source_url")) : null;
       promoGet = (k) => form.get(k) ?? undefined;
       for (const part of form.getAll("photos")) {
@@ -44,6 +47,7 @@ export async function POST(req: Request) {
       priceRaw = body.price_idr;
       category = String(body.category ?? "default").trim();
       visualDesc = body.product_visual_desc ? String(body.product_visual_desc).slice(0, 200) : null;
+      brandRaw = body.brand;
       sourceUrl = body.source_url ? String(body.source_url) : null;
       promoGet = (k) => (body as Record<string, unknown>)[k];
       const b64: string[] = Array.isArray(body.images_base64) ? body.images_base64 : [];
@@ -87,15 +91,19 @@ export async function POST(req: Request) {
 
     const id = uuid();
     const images = await saveProductImages(id, blobs);
+    // raw_meta.brand: alamat fallback yang dibaca merekTepercaya() (worker) —
+    // kolom products.brand (migrasi 0033, sesi lain) menang begitu di-land.
+    const brand = validBrand(brandRaw);
+    const rawMeta = brand ? { brand } : null;
     if (postgresRuntimeEnabled()) {
-      await smokeCreateProduct(user.id, { sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, ...promo }, id);
+      await smokeCreateProduct(user.id, { sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, rawMeta, ...promo }, id);
     } else {
       getDb()
         .prepare(
           "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
         )
-        .run(id, user.id, sourceUrl, validName, priceIdr, category, visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, null, now());
-      audit(user.id, "product.created", "products", id, { name: validName, category, promo: promo.promoPriceBeforeIdr !== null });
+        .run(id, user.id, sourceUrl, validName, priceIdr, category, visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, rawMeta ? JSON.stringify(rawMeta) : null, now());
+      audit(user.id, "product.created", "products", id, { name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null });
     }
 
     return Response.json({ product_id: id, name: validName, price_idr: priceIdr, category, images }, { status: 201 });

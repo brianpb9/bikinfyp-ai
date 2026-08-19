@@ -5,6 +5,7 @@ import { getDb, now, uuid, audit } from "@/lib/db";
 import { downloadProductImages } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct } from "@/lib/postgres/smoke-runtime";
+import { usulMerekDariNama } from "@/lib/media/qc";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -70,6 +71,9 @@ export async function POST(req: Request) {
     return Response.json({
       extracted: true,
       product_id: productId,
+      // USULAN merek untuk dikonfirmasi user di kartu S2 (audit C9) — boleh
+      // salah, karena manusia yang mengoreksinya; TIDAK ditulis ke DB di sini.
+      brand_suggestion: usulMerekDariNama(cleanProductName(result.name ?? "")),
       name: result.name,
       price_idr: result.priceIdr, // null bila tak ketemu — field harga disorot wajib di S2
       category: result.categoryGuess,

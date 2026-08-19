@@ -15,6 +15,11 @@ export const GENERIC_PRODUCT_WORDS = new Set([
   "hijab", "kerudung", "jilbab", "scarf", "jubah", "sepatu", "sandal", "tas", "tote", "pouch",
   "serum", "sabun", "soap", "cream", "krim", "ampoule", "essence", "toner", "sunscreen", "cleanser", "lotion",
   "snack", "keripik", "kripik", "tempura", "seaweed", "cemilan", "kopi", "teh", "susu",
+  // Anatomi/area pakai — deskriptor, tidak pernah identitas merek. Ditambah
+  // 19 Agu (audit C9): usulMerekDariNama("Serum Wajah Scarlett") masih
+  // mengusulkan "wajah" — kasus yang komentar qc.ts sendiri catat sebagai
+  // kegagalan heuristik lama.
+  "wajah", "muka", "kulit", "rambut", "badan", "bibir", "mata", "kaki", "tangan", "ketiak",
   "earphone", "headset", "gaming", "chair", "kursi", "mouse", "mousepad", "deskmat", "tumbler", "botol",
   "original", "flavor", "premium", "murah", "viral", "terlaris", "wanita", "pria", "anak", "basic", "polos",
 ]);

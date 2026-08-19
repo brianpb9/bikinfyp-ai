@@ -39,7 +39,12 @@ export interface Baris10 {
  * boleh bisa dirata-ratakan sampai hilang.
  */
 export const BARIS_10: Baris10[] = [
-  { no: 1, judul: "Anomali di frame pertama tanpa kata", penegakan: "kode", dimensi: "scroll_stop" },
+  // Turun dari "kode" ke "belum" (audit A2, 19 Agu): anomaliTanpaKata() ada dan
+  // punya unit test sendiri, tapi TIDAK dipanggil validator maupun Idea Stage —
+  // fungsi yang tidak pernah dijalankan tidak menegakkan apa pun. Dijaga
+  // tests/standar-10-klaim-penegakan.test.ts.
+  { no: 1, judul: "Anomali di frame pertama tanpa kata", penegakan: "belum", dimensi: "scroll_stop",
+    catatan: "anomaliTanpaKata() belum dipanggil jalur produksi mana pun — hanya prompt yang memintanya" },
   { no: 2, judul: "Satu ide, tidak bisa dipindah ke produk lain", penegakan: "kode", dimensi: "distinctiveness" },
   { no: 3, judul: "Situasi manusia menanggung video", penegakan: "kode", dimensi: "story_pull" },
   { no: 4, judul: "Payoff menjawab hook, bukan katalog", penegakan: "kode", dimensi: "payoff" },
