@@ -55,6 +55,23 @@ jobs:
           done
           BASE=http://localhost:3210 node scripts/smoke-interaksi.mjs
 
+  # IMAGE WORKER — dibangun sungguhan, bukan cuma di-grep.
+  #
+  # Sampai 19 Agu CI tidak pernah membangun Dockerfile.worker sama sekali, dan
+  # itu bukan celah teoretis: knowledge/ tidak ikut ter-COPY ke image padahal
+  # worker menjalankan planShots, yang memuat kontrak kamera 14 mode dari
+  # knowledge/rules/modes.md. Tabel kosong TIDAK melempar — prompt cuma keluar
+  # tanpa kontrak kamera, diam-diam, hanya di produksi.
+  #
+  # Tes unit hanya bisa memeriksa teks Dockerfile-nya. Job ini memeriksa
+  # ARTEFAKNYA: build image, lalu di dalam container muat modulnya sungguhan
+  # dan tuntut 14 mode terbaca dari WORKDIR.
+  worker-image:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/test-worker-container.sh
+
   # AUDIT UTANG KATALOG — pengukur, BUKAN gerbang deploy.
   #
   # Dinamai ulang dari "gerbang rilis keras" (audit ulang 18 Agu, RELEASE-01):

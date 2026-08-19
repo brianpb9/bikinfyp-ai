@@ -20,6 +20,7 @@ need "opencv-python-headless==4.10.0.84"
 need "FFMPEG_PATH=/usr/bin/ffmpeg"
 need "FFPROBE_PATH=/usr/bin/ffprobe"
 need "NODE_OPTIONS=--max-old-space-size=256"
+need "COPY --chown=racun:racun knowledge ./knowledge"
 need "COPY --chown=racun:racun assets/fonts ./assets/fonts"
 need "COPY --chown=racun:racun assets/models ./assets/models"
 need "USER racun"
@@ -44,6 +45,21 @@ docker run --rm --entrypoint sh "$IMAGE" -ec '
   test -f /srv/app/assets/fonts/Poppins-ExtraBold.ttf
   test -f /srv/app/assets/models/face_detection_yunet_2023mar.onnx
   test -f /srv/app/assets/music/bg-loop.m4a
+  test -f /srv/app/knowledge/rules/modes.md
   test -w /srv/app/storage/jobs
 '
-echo "[worker-container] PASS image runtime: FFmpeg, Tesseract OCR, Python PIL/OpenCV, assets, dan user non-root."
+
+# SUMBU MODE HIDUP DI DALAM IMAGE — bukan sekadar berkasnya ada.
+#
+# Cek berkas saja tidak cukup: modul memuat modes.md relatif terhadap cwd
+# proses, jadi berkas yang ada tapi tidak terbaca dari WORKDIR tetap
+# menghasilkan tabel kosong — dan tabel kosong TIDAK melempar, ia hanya
+# membuat prompt keluar tanpa kontrak kamera. Persis kegagalan diam-diam yang
+# lolos sampai 19 Agu karena knowledge/ memang tidak pernah ikut ke image.
+docker run --rm --entrypoint sh "$IMAGE" -ec '
+  ./node_modules/.bin/tsx -e "import(\"/srv/app/lib/media/mode-kamera\").then((m) => {
+    if (m.MODE_KAMERA.length !== 14) { console.error(\"sumbu mode MATI di image: \" + m.MODE_KAMERA.length + \" mode\"); process.exit(1); }
+    console.log(\"sumbu mode OK di image: \" + m.MODE_KAMERA.length + \" mode\");
+  })"
+' || fail "sumbu mode tidak hidup di dalam image worker (knowledge/rules/modes.md tidak terbaca dari WORKDIR)"
+echo "[worker-container] PASS image runtime: FFmpeg, Tesseract OCR, Python PIL/OpenCV, assets, knowledge/ (sumbu mode 14), dan user non-root."
