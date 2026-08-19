@@ -122,3 +122,16 @@ Gate setelah 1–3: `tsc` bersih, **665 tes lolos, 0 gagal** (dari 631 sebelum s
 - KPI dihitung ulang pada log produksi yang sama — **sebelum: 0, sesudah: 0 dari 24 kegagalan terminal**. Angkanya tidak berubah karena korpus produksi saat ini memang nol penolakan konten: 24 kegagalan seluruhnya infrastruktur (9 "pipeline upgrade", 14 "belum resumable", 1 QC). Jadi yang diperbaiki adalah alat ukurnya, bukan angkanya — dan itu terbukti lewat fixture string penyedia asli, bukan lewat klaim.
 
 Gate setelah 1–5: `tsc` bersih, **683 tes lolos, 0 gagal**.
+
+## [A2/A4/A5/B7] Item 6 — TERTAHAN, butuh keputusan sumber kebenaran
+
+Dua prasyaratnya tidak ada di mesin ini, dan menebaknya akan merusak setiap naskah:
+
+1. **MASTER-UGC-ADS / MASTER-UGC-AFFILIATE tidak ada di mana pun** (dicari di repo, `~/HDRV`, `~/Desktop`, `~/Documents`, `~/.claude`). Yang paling mendekati: berkas referensi skill di `~/.claude/skills/ugc-script-writer/references/` — `content-types.md` (kontrak Ads vs Affiliate: kalimat CTA, teks layar, harga, musik, klaim, caption), `modes.md` (14 mode + kontrak kamera/talent + aturan override), `formats.md`, `rules.md`, dua contoh naskah. Semuanya DI LUAR app dan tidak pernah dibaca runtime — persis temuan A2.
+2. **Story OS Ads (Button-first → friction ×2 → spike with witness → bridging ≥2) tidak punya definisi tertulis di mana pun** — nol kemunculan di repo MAUPUN di berkas skill. Menulis sendiri aturan validatornya berarti mengarang doktrin naratif lalu menegakkannya keras pada setiap naskah Ads.
+
+Yang SUDAH bisa dikerjakan tanpa menebak begitu sumbernya dipastikan: sumbu mode
+(modes.md sudah memuat kontrak kamera/talent 14 mode lengkap dengan kalimat
+gerbangnya sendiri: "Any segment whose camera contradicts its governing mode
+fails the gate") dan `audio_shift` (butuh definisi semantiknya — 12 mekanik yang
+ada punya bentuk baku: id, kapan dipakai, pasangan format yang sah).
