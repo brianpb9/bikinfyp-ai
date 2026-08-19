@@ -45,12 +45,20 @@ async function check(name, fn) {
 const expect = (cond, msg) => { if (!cond) throw new Error(msg); };
 
 // ---- 1. Health & konfigurasi deploy ----
-await check("health: ok + payments_live true", async () => {
+await check("health: kontrak pembayaran konsisten dengan lingkungannya", async () => {
   const r = await fetch(`${BASE}/api/health`);
   const d = await r.json();
   expect(r.status === 200 && d.ok === true, `health ${r.status} ok=${d.ok}`);
-  expect(d.payments_live === true, `payments_live=${d.payments_live} (kunci Duitku belum terpasang?)`);
-  return `build_sha=${String(d.build_sha).slice(0, 7)} intake=${d.intake}`;
+  expect(d.payments_provider === "duitku", `provider=${d.payments_provider}, harusnya duitku`);
+  expect(["sandbox", "production"].includes(d.payments_env), `payments_env=${d.payments_env}`);
+  // INVARIAN, bukan preferensi (koreksi Brian 20 Agu): sandbox TIDAK PERNAH
+  // mengaku live. Versi pertama skrip ini menuntut payments_live=true dan
+  // karena itu MERAH pada sistem yang justru benar — alat ukur yang menuntut
+  // kondisi salah mengajari orang mengabaikan alarmnya.
+  if (d.payments_env === "sandbox") {
+    expect(d.payments_live === false, "sandbox mengaku live — uang mainan diiklankan sebagai checkout sungguhan");
+  }
+  return `build_sha=${String(d.build_sha).slice(0, 7)} intake=${d.intake} env=${d.payments_env} live=${d.payments_live}`;
 });
 
 // ---- 2. Halaman publik syarat onboarding ----
