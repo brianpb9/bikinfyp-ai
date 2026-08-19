@@ -14,14 +14,14 @@ const PRODUK = {
 } as never;
 
 async function skrip(templateId: string | null) {
-  return await generateScripts({
+  return await generateScripts({ tanpaLlm: true,
     product: PRODUK, register: "bunda", qualityTier: "high_quality", durationSec: 15,
     count: 3, hookFamilies: ["H1"], lockHookFamily: true, templateId,
   });
 }
 
 async function skripDenganCount(templateId: string | null, count: number) {
-  return await generateScripts({
+  return await generateScripts({ tanpaLlm: true,
     product: PRODUK, register: "bunda", qualityTier: "high_quality", durationSec: 15,
     count, hookFamilies: ["H1"], lockHookFamily: true, templateId,
   });

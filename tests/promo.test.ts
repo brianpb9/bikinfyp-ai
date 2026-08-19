@@ -71,7 +71,7 @@ const promoProduct = {
 };
 
 test("injeksi promo: harga coret di demo + deadline di CTA, lolos validator (silent)", async () => {
-  const variants = await generateScripts({ product: promoProduct, register: "bestie" });
+  const variants = await generateScripts({ tanpaLlm: true, product: promoProduct, register: "bestie" });
   // KONSEKUENSI TERUKUR dari STANDAR 10/10 baris 5, bukan tes yang dilonggarkan.
   //
   // Produk beauty masuk kategori jenuh, jadi levelnya dinaikkan otomatis ke
@@ -91,7 +91,7 @@ test("injeksi promo: harga coret di demo + deadline di CTA, lolos validator (sil
 test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator", async () => {
   // Nama panjang: jatah kata bersuara (10-22) bisa habis -> promo boleh ter-drop
   // dari UCAPAN (tetap hidup di overlay + caption), yang penting valid.
-  const longName = await generateScripts({ product: promoProduct, register: "bestie", qualityTier: "high_quality" });
+  const longName = await generateScripts({ tanpaLlm: true, product: promoProduct, register: "bestie", qualityTier: "high_quality" });
   for (const v of longName) {
     // Yang dijaga tes ini DEGRADASI PROMO-nya (elemen promo dilepas satu per
     // satu sampai muat), bukan kelulusan mutlak. Sejak batas 1,5 kata/detik,
@@ -104,7 +104,7 @@ test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator"
     assert.deepEqual(lain, [], `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
   }
   // Nama pendek: ada ruang -> harga coret masuk ke ucapan minimal di satu varian.
-  const shortName = await generateScripts({
+  const shortName = await generateScripts({ tanpaLlm: true,
     product: { ...promoProduct, id: "prod-promo-short", name: "Serum X" },
     register: "bestie",
     qualityTier: "high_quality",
@@ -143,7 +143,7 @@ test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator"
 test("semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)", async () => {
   for (const duration of [15, 30] as const) {
     for (let i = 1; i <= 16; i++) {
-      const variants = await generateScripts({
+      const variants = await generateScripts({ tanpaLlm: true,
         product: { ...promoProduct, id: `p-${duration}-${i}` },
         register: "netral",
         durationSec: duration,
@@ -157,14 +157,14 @@ test("semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)", async () =
 });
 
 test("promo kedaluwarsa: skrip identik dengan tanpa promo (drop diam-diam)", async () => {
-  const expired = await generateScripts({ product: { ...promoProduct, promoEndsAt: inDays(-2) }, register: "bestie" });
-  const plain = await generateScripts({ product: baseProduct, register: "bestie" });
+  const expired = await generateScripts({ tanpaLlm: true, product: { ...promoProduct, promoEndsAt: inDays(-2) }, register: "bestie" });
+  const plain = await generateScripts({ tanpaLlm: true, product: baseProduct, register: "bestie" });
   assert.deepEqual(expired.map((v) => v.segments), plain.map((v) => v.segments));
   assert.equal(expired[0].caption, plain[0].caption);
 });
 
 test("caption memuat angka promo (%, harga, stok, tanggal)", async () => {
-  const [v] = await generateScripts({ product: promoProduct, register: "bestie" });
+  const [v] = await generateScripts({ tanpaLlm: true, product: promoProduct, register: "bestie" });
   assert.ok(v.caption.includes("diskon 29%"), v.caption);
   assert.ok(v.caption.includes("Rp120.000") && v.caption.includes("Rp85.000"), v.caption);
   assert.ok(v.caption.includes("stok tinggal 12"), v.caption);

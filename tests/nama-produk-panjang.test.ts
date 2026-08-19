@@ -25,7 +25,7 @@ async function coba(nama: string, t: (typeof CAMPAIGN_TEMPLATES)[number]) {
     images: ["a.jpg"], sourceUrl: null, product_visual_desc: null, brand_brief: null,
   } as unknown as Parameters<typeof generateScripts>[0]["product"];
   const t2 = t as unknown as Record<string, unknown>;
-  return (await generateScripts({
+  return (await generateScripts({ tanpaLlm: true,
     product: produk, register: "bunda", qualityTier: t.tier as never,
     durationSec: t.durationSec, count: 3, hookLevel: t.hookLevel, templateId: t.id,
     ...(t.hookFamily ? { hookFamilies: [t.hookFamily as never], lockHookFamily: true } : {}),

@@ -65,6 +65,33 @@ function applyCartLabel<T extends string>(text: T, label: "keranjang kuning" | "
  */
 export type SumberNaskah = "llm" | "template" | "degraded";
 
+/**
+ * Penulis LLM gagal dan naskah template TIDAK BOLEH disajikan.
+ *
+ * Keputusan Brian 20 Agu: template adalah JALUR WARISAN. Sebelum ini, naskah
+ * template yang kebetulan lolos gate keluar sebagai keluaran normal — dan
+ * itulah cara "benar tapi datar" bertahan berbulan-bulan: kalimatnya aman,
+ * aturannya lolos, dan tidak satu pun bagiannya pernah menjawab kenapa orang
+ * berhenti scroll. Lebih baik menolak dengan alasan jelas daripada mengirim
+ * naskah yang kita sendiri tahu tidak memenuhi standar.
+ *
+ * Jalur anonim (/api/try, tanpaLlm) DIKECUALIKAN: ia menampilkan contoh dan
+ * tidak pernah masuk antrean render, jadi tidak ada uang maupun mutu produk
+ * yang dipertaruhkan di sana.
+ */
+export class TemplateTidakDisajikan extends Error {
+  /** Sebab teknis untuk operator — dipisah supaya pesan pengguna tetap ramah. */
+  readonly sebabTeknis: string;
+  constructor(sebabTeknis: string) {
+    super(
+      "Kami belum berhasil menulis naskah yang memenuhi standar untuk produk ini. " +
+        `Coba lagi sebentar lagi ya. (sebab: ${sebabTeknis})`
+    );
+    this.name = "TemplateTidakDisajikan";
+    this.sebabTeknis = sebabTeknis;
+  }
+}
+
 export interface GeneratedScript {
   hook_family: HookCode;
   emotion: string;
@@ -468,6 +495,18 @@ async function generateOne(
   // "jatuh ke template" hampir selalu berarti naskah yang TIDAK memenuhi
   // standar. Ia tetap dicoba, tapi hasilnya ditandai apa adanya dan tidak
   // pernah disajikan sebagai keluaran normal.
+  // TOLAK, JANGAN SAJIKAN (keputusan Brian 20 Agu). Jalur anonim tetap boleh:
+  // ia menampilkan contoh, tidak pernah dirender, dan mematikannya akan
+  // membunuh magic moment tanpa login tanpa alasan.
+  if (!hasil && !tanpaLlm) {
+    throw new TemplateTidakDisajikan(
+      llmSengajaDimatikan()
+        ? "penulis LLM dimatikan sengaja (SCRIPT_LLM=0)"
+        : llmSiap()
+          ? "penulis LLM gagal setelah percobaan ulang; naskah template tidak disajikan"
+          : "kunci API penulis LLM belum di-set di server"
+    );
+  }
   let sumberNaskah: SumberNaskah = hasil ? "llm" : "template";
   if (!hasil) {
     hasil = rakitDanNilai(dasar, false);

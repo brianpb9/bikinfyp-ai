@@ -68,7 +68,7 @@ test("aturan GAYA tetap lunak di light — light masih punya alasan hidup", () =
 });
 
 test("keluaran degraded TIDAK lagi lolos light — reproduksi reviewer dibalik", async () => {
-  const variants = await generateScripts({
+  const variants = await generateScripts({ tanpaLlm: true,
     product: { id: "p", name: "Serum Glow", price_idr: 85000, category: "beauty" },
     register: "bestie", qualityTier: "high_quality",
   });

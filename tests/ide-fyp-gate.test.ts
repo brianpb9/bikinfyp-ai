@@ -514,7 +514,13 @@ test("ide yang lulus TIPIS tetap menulis naskah, dan naskahnya ditandai", async 
         action: "dia mendekat, lalu menunjuk", product_state: "hidden", expression: "worried",
         audio_note: "", why: "setup", mode: "SELFIE" },
       { block: "BODY", label: "DEMO", start: 4, end: 10,
-        text: "aku pakai serum ini tiap malam deh, teksturnya ringan banget dan cepat meresap",
+        // Diperpendek 20 Agu: kalimat lama 13 kata melanggar L-05 (total 24 kata
+        // untuk 15 detik) dan S-09 (batas per shot). Dulu itu tidak terlihat
+        // karena naskahnya diam-diam jatuh ke template; sejak template tidak
+        // lagi disajikan, stub yang melanggar gate membuat tes ini gagal —
+        // dan itu benar: yang diuji di sini ide borderline menulis naskah,
+        // bukan jalur cadangan.
+        text: "aku pakai tiap malam deh, enak banget",
         start_state: "botolnya sudah di tangan", framing: "medium", angle: "eye level", camera: "push in",
         action: "dia memutar botol, lalu memiringkan label", product_state: "partial", expression: "warm",
         audio_note: "", why: "tension", mode: "SELLING" },

@@ -605,6 +605,12 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     const fixtureCategory = product.category;
     const fixtureCompatible = normalizeBestForCategory(fixtureSourceCategory) === fixtureCategory;
     const variants = await generateScripts({
+      // Audit ini MENGUKUR copy template — itu memang jalur template, dan
+      // sejak 20 Agu jalur itu tidak lagi disajikan ke pengguna (keputusan
+      // Brian: penulis LLM gagal = tolak, jangan sajikan cadangan). tanpaLlm
+      // membuat audit tetap bisa membaca copy-nya tanpa memanggil model
+      // berbayar dan tanpa menabrak larangan penyajian.
+      tanpaLlm: true,
       product,
       register: fixture.register,
       qualityTier: template.tier,

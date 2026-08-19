@@ -69,7 +69,7 @@ export const BERTENTANGAN: { a: RegExp; b: RegExp; kenapa: string }[] = [
 ];
 
 async function rencana(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
-  const [skrip] = await generateScripts({
+  const [skrip] = await generateScripts({ tanpaLlm: true,
     product: PRODUK, register: "bunda", qualityTier: "high_quality",
     durationSec: tpl.durationSec, count: 1, hookLevel: tpl.hookLevel,
     ...(tpl.hookFamily ? { hookFamilies: [tpl.hookFamily as never], lockHookFamily: true } : {}),

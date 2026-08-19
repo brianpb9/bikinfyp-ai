@@ -27,7 +27,7 @@ test("pickHookFamilies: berani/gila memakai keluarga bold, normal memakai priori
 });
 
 test("varian level berani lolos validator strict (tanpa template baru)", async () => {
-  const variants = await generateScripts({ product, register: "bestie", hookLevel: "berani" });
+  const variants = await generateScripts({ tanpaLlm: true, product, register: "bestie", hookLevel: "berani" });
   assert.equal(variants.length, 3);
   for (const v of variants) {
     assert.ok(BOLD_HOOK_PRIORITY.includes(v.hook_family), v.hook_family);

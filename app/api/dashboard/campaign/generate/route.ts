@@ -2,7 +2,7 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { CAMPAIGN_TEMPLATES, getTemplate } from "@/lib/templates";
 import type { HookCode } from "@/lib/config/hooks";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { generateScripts, TEMPLATE_COPY_CAPACITY } from "@/lib/script-engine";
+import { generateScripts, TEMPLATE_COPY_CAPACITY, TemplateTidakDisajikan } from "@/lib/script-engine";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
@@ -195,6 +195,21 @@ export async function POST(req: Request) {
       })),
     });
   } catch (err) {
+    // Naskah template TIDAK PERNAH disajikan (keputusan Brian 20 Agu). Jawab
+    // 503 yang jujur, bukan 500 generik: penyebabnya di sisi kami dan bisa
+    // pulih, jadi pengguna berhak tahu ia boleh mencoba lagi.
+    if (err instanceof TemplateTidakDisajikan) {
+      console.error(`[naskah] ditolak, template tidak disajikan — ${err.sebabTeknis}`);
+      return Response.json(
+        {
+          code: "SCRIPT_WRITER_UNAVAILABLE",
+          message_id: err.message,
+          message_en: `Script writer unavailable: ${err.sebabTeknis}`,
+          retryable: true,
+        },
+        { status: 503 }
+      );
+    }
     return errorResponse(err);
   }
 }
