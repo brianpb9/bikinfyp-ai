@@ -23,13 +23,7 @@ export default function PrivacyPage() {
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Legal</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Kebijakan Privasi</h1>
-        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: 2026-08-03 · Terakhir diperbarui: 2026-08-16</p>
-      </div>
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-900">
-        Draf ini disiapkan berdasarkan alur data yang sebenarnya dipakai sistem kami. Ini{" "}
-        <strong>bukan pengganti tinjauan hukum</strong> — mohon direview kuasa hukum sebelum final,
-        khususnya soal kepatuhan UU Pelindungan Data Pribadi (UU PDP No. 27/2022).
+        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: 2026-08-03 · Terakhir diperbarui: 2026-08-19</p>
       </div>
 
       <section className="space-y-3 text-sm leading-6 text-zinc-700">
@@ -59,7 +53,7 @@ export default function PrivacyPage() {
           <li><strong>Cloudflare (R2):</strong> penyimpanan file foto/video kamu.</li>
           <li><strong>Resend:</strong> pengiriman email kode login (OTP).</li>
           <li><strong>Google (Sign-In):</strong> bila kamu login pakai akun Google, kami menerima nama/email dari Google sesuai izin yang kamu berikan.</li>
-          <li><strong>Midtrans:</strong> pemroses pembayaran top-up kredit (aktif setelah proses tinjauan bisnis selesai).</li>
+          <li><strong>Duitku (PT Nusa Satu Inti Artha):</strong> pemroses pembayaran top-up kredit. Data pembayaranmu (jumlah, metode, status) diproses Duitku; kami tidak pernah menyimpan nomor kartu atau kredensial e-wallet-mu.</li>
         </ul>
         <p>Kami mewajibkan pihak ketiga ini memproses data hanya untuk keperluan menjalankan Layanan.</p>
 

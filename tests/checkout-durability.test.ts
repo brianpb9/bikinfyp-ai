@@ -1,4 +1,4 @@
-// Checkout must commit the local pending order before any external provider call.
+// Checkout must commit the local pending order before any external provider call (gateway-agnostic).
 import { test } from "node:test";
 import assert from "node:assert/strict";
 
@@ -20,16 +20,16 @@ test("checkout persists pending order before the mocked Midtrans call", async ()
         events.push("persist");
         pending = record;
       },
-      createSnap: async ({ orderId }) => {
+      createPayment: async ({ orderId }) => {
         events.push("provider");
         assert.deepEqual(pending, { userId: "user-1", orderId, packageId: "hq5", amountIdr: 60000 });
-        return { snapToken: "snap-test", redirectUrl: "https://example.test/snap" };
+        return { providerRef: "ref-test", redirectUrl: "https://example.test/pay" };
       },
       markInitiationFailed: async () => assert.fail("provider success must not mark checkout failed"),
     }
   );
   assert.deepEqual(events, ["persist", "provider"]);
-  assert.deepEqual(checkout, { orderId: "racun-durable-order", snapToken: "snap-test", redirectUrl: "https://example.test/snap" });
+  assert.deepEqual(checkout, { orderId: "racun-durable-order", providerRef: "ref-test", redirectUrl: "https://example.test/pay" });
 });
 
 test("provider initiation failure keeps the pending order as a recorded failed checkout", async () => {
@@ -42,7 +42,7 @@ test("provider initiation failure keeps the pending order as a recorded failed c
       {
         newOrderId: () => "racun-provider-failed",
         persistPending: async () => { events.push("persist"); },
-        createSnap: async () => { events.push("provider"); throw new Error("midtrans: HTTP 503 unavailable"); },
+        createPayment: async () => { events.push("provider"); throw new Error("duitku: HTTP 503 unavailable"); },
         markInitiationFailed: async (orderId, payload) => {
           events.push("record_failed");
           assert.equal(orderId, "racun-provider-failed");
@@ -53,6 +53,6 @@ test("provider initiation failure keeps the pending order as a recorded failed c
     /HTTP 503/
   );
   assert.deepEqual(events, ["persist", "provider", "record_failed"]);
-  assert.equal(failure?.error, "midtrans: HTTP 503 unavailable");
+  assert.equal(failure?.error, "duitku: HTTP 503 unavailable");
   assert.equal(typeof failure?.failed_at, "string");
 });

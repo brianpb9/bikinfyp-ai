@@ -34,7 +34,10 @@ export async function GET(req: Request) {
       // "Mode demo: pembayaran berhasil tanpa uang sungguhan" TANPA SYARAT,
       // termasuk ke user production — client butuh tahu status pembayaran
       // sungguhan supaya bisa jujur, bukan menebak dari kegagalan fallback.
-      payments_live: Boolean(config.midtransServerKey && config.midtransClientKey),
+      payments_live:
+        config.paymentGateway === "duitku"
+          ? Boolean(config.duitkuMerchantCode && config.duitkuApiKey)
+          : Boolean(config.midtransServerKey && config.midtransClientKey),
     });
   } catch (err) {
     return errorResponse(err);

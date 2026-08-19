@@ -55,7 +55,9 @@ export async function middleware(req: NextRequest) {
   // butuh login, jadi siapa pun yang menilai kita dari luar — calon pelanggan
   // maupun reviewer Midtrans — cuma melihat dinding login. Itu persis dua
   // temuan onboarding Midtrans 13 Agustus 2026.
-  if (pathname.startsWith("/brands") || pathname.startsWith("/onboarding") || pathname.startsWith("/coba") || pathname.startsWith("/mulai") || pathname.startsWith("/harga") || pathname.startsWith("/legal") || pathname.startsWith("/.well-known")) return NextResponse.next();
+  // /kontak juga publik: syarat onboarding Duitku — kontak dukungan (telepon,
+  // email, alamat) harus terlihat tanpa login, sama alasannya dengan /harga.
+  if (pathname.startsWith("/brands") || pathname.startsWith("/onboarding") || pathname.startsWith("/coba") || pathname.startsWith("/mulai") || pathname.startsWith("/harga") || pathname.startsWith("/kontak") || pathname.startsWith("/legal") || pathname.startsWith("/.well-known")) return NextResponse.next();
   const token = req.cookies.get(COOKIE)?.value;
   if (!token) return toOnboarding(req, false);
 

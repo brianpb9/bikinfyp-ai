@@ -195,10 +195,18 @@ export const config = {
   // Origin publik yang dikelola deploy, bukan Host dari request. Dipakai untuk
   // callback pembayaran agar webhook tidak bisa diarahkan oleh header klien.
   appBaseUrl: env("APP_BASE_URL", ""),
+  // Gateway pembayaran aktif: "midtrans" | "duitku". Midtrans dipertahankan
+  // sebagai jalur rollback; keputusan pindah ke Duitku (Brian, 2026-08-19)
+  // dieksekusi lewat env ini supaya cutover/rollback = satu variabel, bukan deploy kode.
+  paymentGateway: env("PAYMENT_GATEWAY", "midtrans"),
   // Midtrans — kosong = checkout 503 jelas
   midtransServerKey: env("MIDTRANS_SERVER_KEY", ""),
   midtransClientKey: env("MIDTRANS_CLIENT_KEY", ""),
   midtransIsProduction: env("MIDTRANS_IS_PRODUCTION", "false") === "true",
+  // Duitku POP — kosong = checkout 503 jelas (sama seperti Midtrans)
+  duitkuMerchantCode: env("DUITKU_MERCHANT_CODE", ""),
+  duitkuApiKey: env("DUITKU_API_KEY", ""),
+  duitkuIsProduction: env("DUITKU_IS_PRODUCTION", "false") === "true",
   // Jalur dev (dev-login, dev topup, webhook stub) — hanya non-production ATAU flag eksplisit
   allowDevLogin: env("ALLOW_DEV_LOGIN", "0") === "1",
   // Saklar operasional untuk menghentikan penerimaan render baru tanpa

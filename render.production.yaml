@@ -74,10 +74,28 @@ services:
         value: "3"
       - key: OPERATIONAL_ERROR_RATE_PERCENT
         value: "20"
+      # Domain publik asli — BUKAN hostname onrender.com. Callback/return URL
+      # Duitku & Midtrans diturunkan ketat dari nilai ini (lib/duitku.ts,
+      # lib/midtrans.ts); hostname yang salah = webhook terdaftar ke host yang
+      # salah dan kredit tidak pernah masuk.
       - key: APP_BASE_URL
-        value: https://bikinfyp-ai-production-web.onrender.com
+        value: https://bikinfyp.com
+      # Gateway aktif (keputusan pindah ke Duitku, 2026-08-19).
+      - key: PAYMENT_GATEWAY
+        value: duitku
+      # Kredensial dari dashboard Duitku (Proyek). Sandbox dulu untuk tinjauan
+      # onboarding Duitku; naikkan DUITKU_IS_PRODUCTION setelah approval.
+      - key: DUITKU_MERCHANT_CODE
+        sync: false
+      - key: DUITKU_API_KEY
+        sync: false
+      - key: DUITKU_IS_PRODUCTION
+        value: "false"
       - key: MIDTRANS_IS_PRODUCTION
         value: "false"
+      # Kontak dukungan di halaman Bantuan — tanpa ini tombol WhatsApp tersembunyi.
+      - key: SUPPORT_WHATSAPP
+        value: "628170261628"
 
   - type: worker
     name: bikinfyp-ai-production-worker

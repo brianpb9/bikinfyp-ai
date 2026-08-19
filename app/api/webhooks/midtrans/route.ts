@@ -1,6 +1,7 @@
 import { errorResponse } from "@/lib/errors";
 import { getDb, now, audit } from "@/lib/db";
 import { verifyMidtransSignature } from "@/lib/midtrans";
+import { grossAmountMatchesStoredAmount } from "@/lib/payment-amount";
 import { creditTopup } from "@/lib/credits";
 import { pgAudit, pgCreditTopup, pgGetPayment, pgMarkPaymentFailed, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 
@@ -16,14 +17,6 @@ interface PaymentRow {
   credits: number;
   status: string;
   raw_payload: string | null;
-}
-
-/** Midtrans signs a decimal string; our stored amount is whole Indonesian rupiah. */
-function grossAmountMatchesStoredAmount(grossAmount: unknown, expectedAmountIdr: number): boolean {
-  const match = /^(\d+)(?:\.(\d{1,2}))?$/.exec(String(grossAmount ?? ""));
-  if (!match || !Number.isSafeInteger(expectedAmountIdr) || expectedAmountIdr < 0) return false;
-  // IDR checkout amounts must be an exact whole rupiah. Do not round provider data.
-  return BigInt(match[1]) === BigInt(expectedAmountIdr) && (!match[2] || /^0{1,2}$/.test(match[2]));
 }
 
 // POST /api/webhooks/midtrans — notifikasi status dari Midtrans.

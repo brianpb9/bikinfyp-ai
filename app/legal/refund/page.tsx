@@ -11,12 +11,7 @@ export default function RefundPage() {
       <div>
         <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Legal</p>
         <h1 className="font-display text-2xl font-bold text-zinc-900">Kebijakan Refund</h1>
-        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: 2026-08-03 · Terakhir diperbarui: 2026-08-03</p>
-      </div>
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-xs leading-6 text-amber-900">
-        Draf ini menjelaskan mekanisme kredit yang benar-benar berjalan di sistem kami —{" "}
-        <strong>bukan pengganti tinjauan hukum.</strong>
+        <p className="mt-1 text-xs text-zinc-500">Berlaku sejak: 2026-08-03 · Terakhir diperbarui: 2026-08-19</p>
       </div>
 
       <section className="space-y-3 text-sm leading-6 text-zinc-700">

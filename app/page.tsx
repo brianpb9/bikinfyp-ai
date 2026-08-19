@@ -6,6 +6,7 @@ import { apiFetch } from "./_components/api";
 import { PrimaryButton } from "./_components/ui";
 import { relTime } from "./_components/flow";
 import { JobThumb } from "./_components/JobThumb";
+import { SiteFooter } from "./_components/SiteFooter";
 
 interface JobItem {
   id: string;
@@ -113,11 +114,7 @@ export default function HomePage() {
         </Link>
       )}
 
-      <footer className="flex flex-wrap gap-x-4 gap-y-1 border-t border-zinc-100 pt-4 text-xs text-zinc-400">
-        <Link href="/legal/terms" className="hover:text-zinc-600">Syarat & Ketentuan</Link>
-        <Link href="/legal/privacy" className="hover:text-zinc-600">Kebijakan Privasi</Link>
-        <Link href="/legal/refund" className="hover:text-zinc-600">Kebijakan Refund</Link>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

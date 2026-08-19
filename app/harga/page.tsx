@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { PAKET_KREDIT, TIER_HARGA, rentangHarga } from "../../lib/paket-kredit";
+import { SiteFooter } from "../_components/SiteFooter";
 
 // HALAMAN HARGA PUBLIK — bisa dibuka TANPA login.
 //
@@ -66,7 +67,7 @@ export default function HargaPage() {
         <h2 className="font-display text-lg font-bold text-zinc-900">Paket kredit</h2>
         <p className="text-xs leading-5 text-zinc-500">
           Videonya dibayar pakai kredit. Kredit tidak punya masa kedaluwarsa — bisa dipakai
-          kapan saja. Selama early access, kredit ditambahkan tim kami, bukan dibeli mandiri.
+          kapan saja. Top-up kredit dilakukan mandiri dari halaman Kredit setelah masuk akun.
         </p>
         <ul className="space-y-2">
           {PAKET_KREDIT.map((p) => (
@@ -91,13 +92,10 @@ export default function HargaPage() {
         <h2 className="font-display text-base font-bold text-amber-900">Cara kerjanya</h2>
         <ol className="list-decimal space-y-1 pl-5 text-xs leading-6 text-amber-900">
           <li>Daftar pakai email atau akun Google.</li>
-          {/* Dikatakan apa adanya: pembayaran mandiri BELUM aktif. Copy lama
-              berbunyi seolah top-up sudah bisa dipakai, dan pengunjung yang
-              mencobanya berakhir di jalan buntu — kekecewaan yang kita
-              ciptakan sendiri di kalimat ini. */}
           <li>
-            Selama masa early access, kredit ditambahkan secara manual oleh tim BikinFYP.
-            Pembelian mandiri melalui Midtrans belum dibuka.
+            Buka halaman <b>Kredit</b>, pilih paket, lalu bayar lewat halaman pembayaran
+            aman Duitku (QRIS, virtual account, e-wallet, atau gerai retail). Kredit masuk
+            otomatis begitu pembayaran terkonfirmasi.
           </li>
           <li>Unggah foto produk atau tempel link produkmu, isi detail singkat.</li>
           <li>Kredit ditahan dulu, belum dipotong, sementara videomu dibuat.</li>
@@ -118,16 +116,7 @@ export default function HargaPage() {
         </Link>
       </div>
 
-      <footer className="space-y-1 pt-2 text-[11px] leading-5 text-zinc-500">
-        <p>
-          <Link href="/legal/terms" className="underline">Syarat &amp; Ketentuan</Link>
-          {" · "}
-          <Link href="/legal/privacy" className="underline">Kebijakan Privasi</Link>
-          {" · "}
-          <Link href="/legal/refund" className="underline">Kebijakan Refund</Link>
-        </p>
-        <p>BikinFYP AI — layanan pembuatan video iklan produk berbasis AI. Tidak ada barang fisik yang dikirim.</p>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

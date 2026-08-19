@@ -64,6 +64,25 @@ function KreditInner() {
     apiFetch<{ payments_live: boolean }>("/api/meta").then((m) => setPaymentsLive(m.payments_live)).catch(() => setPaymentsLive(false));
   }, []);
 
+  // Kembali dari halaman pembayaran: returnUrl Duitku membawa ?merchantOrderId=...
+  // (Midtrans lama memakai ?order=...). Tab hasil redirect tidak mewarisi state
+  // tab asal, jadi order-nya dilanjutkan dari query — status langsung dicek
+  // tanpa menunggu user menekan apa pun.
+  useEffect(() => {
+    const ord = params.get("merchantOrderId") ?? params.get("order");
+    if (!ord) return;
+    setPendingOrder(ord);
+    setOrderStatus("pending");
+    apiFetch<{ status: string; message: string }>(`/api/orders/${ord}`)
+      .then((res) => {
+        setOrderStatus(res.status);
+        setMsg(res.message);
+        if (res.status === "paid") refresh();
+      })
+      .catch(() => { /* biarkan tombol "Cek status" sebagai jalan manual */ });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+
   async function topup(packageId: string) {
     // State disabled baru terlihat setelah render berikutnya; ref menutup celah
     // dua tap dalam frame yang sama agar tidak membuat dua intent Midtrans.
@@ -73,15 +92,16 @@ function KreditInner() {
     setMsg(null);
     setError(null);
     try {
-      // Jalur utama: checkout Midtrans (Snap redirect). Bila gateway belum dipasang
-      // kuncinya (mode demo tanpa key), jatuh ke topup instan dev.
+      // Jalur utama: checkout gateway aktif (Duitku POP / Midtrans Snap — sama-sama
+      // redirect URL). Bila gateway belum dipasang kuncinya (mode demo tanpa key),
+      // jatuh ke topup instan dev.
       const res = await apiFetch<{ order_id: string; redirect_url: string }>("/api/credits/checkout", {
         json: { package_id: packageId },
       });
       setPendingOrder(res.order_id);
       setOrderStatus("pending");
       window.open(res.redirect_url, "_blank");
-      setMsg("Order dibuat — selesaikan pembayaran di halaman Midtrans yang terbuka, lalu tap 'Sudah bayar? Cek status'.");
+      setMsg("Order dibuat — selesaikan pembayaran di halaman pembayaran yang terbuka, lalu tap 'Sudah bayar? Cek status'.");
     } catch (err) {
       // r13 (review produk 2026-08-07): jalur demo HANYA boleh dicoba kalau
       // server sudah bilang pembayaran belum aktif; sebelumnya err2 (fallback

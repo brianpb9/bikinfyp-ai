@@ -70,6 +70,17 @@ services:
         sync: false
       - key: MIDTRANS_CLIENT_KEY
         sync: false
+      # Duitku sandbox — jalur uji integrasi sebelum cutover produksi.
+      - key: PAYMENT_GATEWAY
+        value: duitku
+      - key: DUITKU_MERCHANT_CODE
+        sync: false
+      - key: DUITKU_API_KEY
+        sync: false
+      - key: DUITKU_IS_PRODUCTION
+        value: "false"
+      - key: SUPPORT_WHATSAPP
+        value: "628170261628"
 
   - type: worker
     name: racun-ai-staging-worker

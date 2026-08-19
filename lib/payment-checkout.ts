@@ -5,7 +5,9 @@ export type CheckoutUser = { id: string; phone?: string | null; email?: string |
 export type CheckoutDeps = {
   newOrderId: (userId: string) => string;
   persistPending: (input: { userId: string; orderId: string; packageId: string; amountIdr: number }) => Promise<void>;
-  createSnap: (input: { orderId: string; packageId: string; phone: string }) => Promise<{ snapToken: string; redirectUrl: string }>;
+  // Netral-provider: Midtrans mengembalikan snap token, Duitku mengembalikan
+  // reference — dua-duanya cuma "ref provider + URL bayar" bagi alur checkout.
+  createPayment: (input: { orderId: string; packageId: string; phone: string; email: string }) => Promise<{ providerRef: string; redirectUrl: string }>;
   markInitiationFailed: (orderId: string, failure: Record<string, unknown>) => Promise<void>;
 };
 
@@ -22,8 +24,13 @@ export async function initiateCheckout(user: CheckoutUser, packageId: string, de
   const orderId = deps.newOrderId(user.id);
   await deps.persistPending({ userId: user.id, orderId, packageId, amountIdr: pkg.priceIdr });
   try {
-    const { snapToken, redirectUrl } = await deps.createSnap({ orderId, packageId, phone: user.phone ?? user.email ?? "" });
-    return { orderId, snapToken, redirectUrl };
+    const { providerRef, redirectUrl } = await deps.createPayment({
+      orderId,
+      packageId,
+      phone: user.phone ?? "",
+      email: user.email ?? "",
+    });
+    return { orderId, providerRef, redirectUrl };
   } catch (error) {
     await deps.markInitiationFailed(orderId, errorPayload(error));
     throw error;

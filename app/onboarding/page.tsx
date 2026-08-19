@@ -8,6 +8,7 @@ import { track } from "../_components/track";
 import { tujuanAman } from "@/lib/tujuan-login";
 import { ajakan, useKesiapan } from "../_components/kesiapan";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
+import { SiteFooter } from "../_components/SiteFooter";
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   cancelled: "Login Google dibatalkan.",
@@ -262,8 +263,8 @@ export default function OnboardingPage() {
             {paymentsLive === true && (
             <section className="rounded-[26px] border border-zinc-100 bg-white p-5 shadow-sm">
               <p className="text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">Checkout aman lewat</p>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs font-extrabold text-zinc-600"><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">GoPay</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">OVO</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">DANA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">QRIS</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">BCA VA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">VISA</span></div>
-              <p className="mt-3 text-center text-[11px] text-zinc-400">Metode ditampilkan oleh Midtrans Snap sesuai kanal merchant yang aktif.</p>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs font-extrabold text-zinc-600"><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">GoPay</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">OVO</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">DANA</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">QRIS</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">Virtual Account</span><span className="rounded-lg bg-zinc-100 px-2.5 py-1.5">Kartu Kredit</span></div>
+              <p className="mt-3 text-center text-[11px] text-zinc-400">Metode ditampilkan oleh halaman pembayaran Duitku sesuai kanal merchant yang aktif.</p>
             </section>
             )}
 
@@ -275,6 +276,11 @@ export default function OnboardingPage() {
               ["Berapa lama sampai jadi?", `Biasanya ${JANJI_WAKTU.kisaran} per video — kalau antrean AI padat bisa sampai ${JANJI_WAKTU.ekor}. Halaman hasil memperbarui sendiri.`],
               ["Ada garansi kalau render gagal?", "Ya. Hold kredit dilepas otomatis ketika job gagal, jadi saldo bisa dipakai lagi untuk mencoba render berikutnya."],
             ].map(([q,a],i)=><div key={q} className="rounded-2xl border border-zinc-200 bg-white"><button type="button" onClick={()=>setOpenFaq(openFaq===i?null:i)} className="flex w-full items-center justify-between gap-3 px-4 py-4 text-left text-sm font-bold text-zinc-800"><span>{q}</span><span className="text-amber-500">{openFaq===i?"−":"+"}</span></button>{openFaq===i&&<p className="border-t border-zinc-100 px-4 py-3 text-sm leading-relaxed text-zinc-600">{a}</p>}</div>)}</div></section>
+
+            {/* Identitas & kontak merchant di halaman depan publik — syarat
+                onboarding gateway pembayaran (telepon, email, alamat terlihat
+                tanpa login), sekaligus jalan masuk ke /harga dan /kontak. */}
+            <SiteFooter />
           </div>
           {/* "Coba Gratis" tidak menjelaskan apa yang gratis. Bonus daftar
               Rp12.000 kebetulan persis satu video bersuara, jadi janjinya bisa
