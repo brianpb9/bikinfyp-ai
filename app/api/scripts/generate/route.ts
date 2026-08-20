@@ -1,7 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit, type ProductRow } from "@/lib/db";
-import { generateScripts, TemplateTidakDisajikan } from "@/lib/script-engine";
+import { generateScripts, TemplateTidakDisajikan, IdeTidakTersedia } from "@/lib/script-engine";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { REGISTERS, type Register } from "@/lib/script-engine/registers";
 import { pgAudit, postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
@@ -147,6 +147,25 @@ export async function POST(req: Request) {
     // Naskah template TIDAK PERNAH disajikan (keputusan Brian 20 Agu). Jawab
     // 503 yang jujur, bukan 500 generik: penyebabnya di sisi kami dan bisa
     // pulih, jadi pengguna berhak tahu ia boleh mencoba lagi.
+    // IDE TERPILIH TIDAK ADA — doktrin yang sama dengan template yang tidak
+    // pernah disajikan. Sampai 20 Agu, Idea Stage yang mati hanya mencatat
+    // peringatan lalu membiarkan penulis bekerja tanpa sudut sama sekali.
+    if (err instanceof IdeTidakTersedia) {
+      console.error(`[naskah] ditolak, Idea Stage mati — ${err.sebabTeknis}`);
+      try {
+        if (postgresRuntimeEnabled()) await pgAudit("script-engine", "naskah.ide_tidak_tersedia", "scripts", null, { sebab: err.sebabTeknis });
+        else audit("script-engine", "naskah.ide_tidak_tersedia", "scripts", null, { sebab: err.sebabTeknis });
+      } catch { /* alarm tidak boleh menelan galat aslinya */ }
+      return Response.json(
+        {
+          code: "IDEA_STAGE_UNAVAILABLE",
+          message_id: err.message,
+          message_en: `Idea stage unavailable: ${err.sebabTeknis}`,
+          retryable: true,
+        },
+        { status: 503 }
+      );
+    }
     if (err instanceof TemplateTidakDisajikan) {
       console.error(`[naskah] ditolak, template tidak disajikan — ${err.sebabTeknis}`);
       // Jejak untuk ALARM operasional: sejak template tidak lagi disajikan,

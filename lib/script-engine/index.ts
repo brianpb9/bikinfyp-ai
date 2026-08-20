@@ -81,6 +81,31 @@ export type SumberNaskah = "llm" | "template" | "degraded";
  * tidak pernah masuk antrean render, jadi tidak ada uang maupun mutu produk
  * yang dipertaruhkan di sana.
  */
+/**
+ * IDE TERPILIH TIDAK ADA — dan karena itu tidak ada naskah.
+ *
+ * Doktrin yang sama dengan TemplateTidakDisajikan di bawah, dan lahir dari
+ * kegagalan yang sama bentuknya. Render video penuh 20 Agu mencatat:
+ *   [idea] "Serum Glow Bright": Idea Stage dilewati — semua gelombang gagal
+ * lalu penulis menulis juga. Hasilnya "Eh, ini seru banget sih." — naskah
+ * tanpa sudut, dan videonya sudah terlanjur dibayar Rp35.015.
+ *
+ * Sebuah tahap yang mencatat kegagalannya lalu melanjutkan seolah tidak gagal
+ * bukan tahap, melainkan hiasan. Kalau bahan bakunya tidak ada, yang benar
+ * adalah menolak dengan alasan jelas dan mempersilakan mencoba lagi.
+ */
+export class IdeTidakTersedia extends Error {
+  readonly sebabTeknis: string;
+  constructor(sebabTeknis: string) {
+    super(
+      "Kami belum berhasil menemukan sudut cerita untuk produk ini. " +
+        `Coba lagi sebentar lagi ya. (sebab: ${sebabTeknis})`
+    );
+    this.name = "IdeTidakTersedia";
+    this.sebabTeknis = sebabTeknis;
+  }
+}
+
 export class TemplateTidakDisajikan extends Error {
   /** Sebab teknis untuk operator — dipisah supaya pesan pengguna tetap ramah. */
   readonly sebabTeknis: string;
@@ -716,7 +741,11 @@ export async function generateScripts(opts: {
         );
       }
     } catch (err) {
-      console.warn(`[idea] "${product.name}": Idea Stage dilewati — ${(err as Error).message}`);
+      // TIDAK ADA LAGI "dilewati". Sampai 20 Agu blok ini menulis peringatan
+      // lalu membiarkan penulis bekerja tanpa ide sama sekali — dan itulah
+      // yang menghasilkan naskah tanpa sudut pada video berbayar Rp35.015.
+      console.error(`[idea] "${product.name}": Idea Stage MATI — ${(err as Error).message}`);
+      throw new IdeTidakTersedia((err as Error).message);
     }
   }
 

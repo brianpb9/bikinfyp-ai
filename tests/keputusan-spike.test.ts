@@ -69,7 +69,7 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   assert.match(s, /Sdadpgeer/, "kenapa panjang huruf tidak cukup harus tertulis di kode");
   // Gerbangnya dipasang SEBELUM foto disimpan.
   const r = baca("app/api/products/[id]/photos/route.ts");
-  assert.match(r, /periksaLabelFoto\(tmpFile, owned\.product\.name\)/);
+  assert.match(r, /periksaLabelFoto\(tmpFile, owned\.product\.name[,)]/);
   const iGerbang = r.indexOf("periksaLabelFoto");
   const iSimpan = r.indexOf("saveProductImages(id, blobs");
   assert.ok(iGerbang > 0 && iGerbang < iSimpan, "gerbang harus mendahului penyimpanan");

@@ -8,7 +8,7 @@ import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { periksaLabelFoto } from "@/lib/media/label-terbaca";
+import { periksaLabelFoto, merekTerdaftar } from "@/lib/media/label-terbaca";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -85,8 +85,18 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       const tmpFile = path.join(tmpDir, "foto");
       try {
         fs.writeFileSync(tmpFile, blobs[0].data);
-        const label = await periksaLabelFoto(tmpFile, owned.product.name);
+        // Merek TERDAFTAR ikut — sumber yang sama dengan QC-F1
+        // (products.raw_meta.brand), bukan tebakan dari nama produk.
+        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
         if (!label.terbaca) throw ERR.BAD_REQUEST(label.alasan!, "Product label not OCR-readable.");
+        // LUBANG YANG DITUTUP 20 Agu: sampai hari itu hasil kecocokan merek
+        // dihitung lalu DIBUANG — hanya `terbaca` yang diperiksa. Karena itu
+        // foto AI berlabel "bdodpgeer" lolos jadi referensi dan ikut ke lima
+        // render berbayar. Label yang terbaca tapi bukan merek penjualnya
+        // sendiri bukan foto produknya.
+        if (label.cocokMerek === false) {
+          throw ERR.BAD_REQUEST(label.alasan!, "Product label does not match the registered brand.");
+        }
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }

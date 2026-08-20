@@ -190,9 +190,42 @@ const OVERCLAIM_PHRASES = ["100%", "paling bagus", "nomor 1", "nomor satu", "no 
  * PASANGANNYA dengan hasil — itu yang menjadikannya janji.
  */
 const KLAIM_TOKENS = new Set(["instan", "instant", "permanen", "memutihkan", "whitening", "mencerahkan"]);
+/** Kata sisipan antara pemicu waktu dan hasilnya. */
+const HASIL = "putih|putihan|bening|cerah|cerahan|glowing|glow up|glow-up|mulus|hilang|kempes|kencang";
 const KLAIM_POLA: RegExp[] = [
-  /\b(langsung|seketika|dalam (semalam|sehari|sekali pakai))\s+\w{0,6}\s*(putih|bening|cerah|glowing|mulus|hilang|kempes|kencang)/i,
-  /\b(pasti|dijamin)\s+(putih|bening|cerah|sembuh|hilang)/i,
+  // SISIPANNYA SAMPAI DUA KATA, bukan satu kata enam huruf.
+  //
+  // Batas lama `\w{0,6}` adalah alasan tunggal kenapa "kulit aku langsung
+  // KELIATAN glowing" lolos ke video berbayar 20 Agu: "keliatan" delapan
+  // huruf. Aturannya ada, penegaknya ada, dan tetap lolos karena satu angka.
+  new RegExp(`\\b(langsung|seketika|dalam (semalam|sehari|sekali pakai))\\s+(?:\\w+\\s+){0,2}(${HASIL})`, "i"),
+  new RegExp(`\\b(pasti|dijamin)\\s+(?:\\w+\\s+){0,2}(${HASIL}|sembuh)`, "i"),
+  // Hasil DULU, pemicu waktu belakangan: "mulus seketika", "bekasnya hilang
+  // dalam semalam". Urutan Indonesia bebas, jadi satu arah saja bocor.
+  new RegExp(`\\b(${HASIL})\\s+(?:\\w+\\s+){0,2}(seketika|instan|dalam semalam|sekali pakai)`, "i"),
+  /\bbekas(nya)?\s+(?:\w+\s+){0,2}hilang/i,
+];
+
+/**
+ * KOSAKATA HASIL KHUSUS KULIT — klaim walau tanpa pemicu waktu.
+ *
+ * Keputusan Brian 20 Agu: pada kategori kulit, "glowing"/"glow-up" sendirian
+ * SUDAH janji hasil — tidak perlu ada kata "langsung" di depannya. Untuk
+ * kategori lain kata yang sama tidak menjanjikan apa-apa ("lampunya glowing"),
+ * jadi daftar ini sengaja bergantung kategori: gerbang yang menghukum kalimat
+ * sah akan dimatikan orang, dan gerbang yang dimatikan tidak menjaga apa pun.
+ */
+const KULIT_KATEGORI = new Set(["beauty", "skincare", "kosmetik", "personal_care"]);
+const KLAIM_KULIT_POLA: RegExp[] = [
+  // "glow up" hampir selalu janji perubahan, jadi ia klaim berdiri sendiri.
+  /\bglow[\s-]?up\b/i,
+  // "glowing" TIDAK berdiri sendiri — dan itu ketahuan dari template nyata
+  // ("Buat tim glowing yang masih urus kusamnya sendirian"), tempat ia jadi
+  // SAPAAN komunitas, bukan janji. Yang menjadikannya klaim adalah subjeknya
+  // (kulit/muka/wajah) atau kata perubahan (jadi/bikin/makin/langsung).
+  /\b(kulit|kulitnya|kulitmu|muka|mukanya|wajah|wajahnya)\s+(?:\w+\s+){0,3}(glowing|cerahan|putihan|mulus)/i,
+  /\b(jadi|bikin|makin|langsung|auto)\s+(?:\w+\s+){0,2}(glowing|cerahan|putihan)/i,
+  /\b(cerahan|putihan)\b/i,
 ];
 
 const MEDICAL_TOKENS = new Set([
@@ -432,7 +465,11 @@ export const SELALU_KERAS = new Set([
  * berubah kalau daftar aturan struktur naskah berubah — karena ia memang
  * bukan pemeriksa struktur naskah.
  */
-export function periksaKataTerlarang(teksFinal: string, namaProduk?: string | null): RuleIssue[] {
+export function periksaKataTerlarang(
+  teksFinal: string,
+  namaProduk?: string | null,
+  productCategory?: string | null
+): RuleIssue[] {
   const lower = teksFinal.toLowerCase();
   const toks = tokens(teksFinal);
   const issues: RuleIssue[] = [];
@@ -446,10 +483,15 @@ export function periksaKataTerlarang(teksFinal: string, namaProduk?: string | nu
   const tanpaNama = tutupiNama(lower, namaProduk);
   const klaimTok = tanpaNama.split(/[^a-z0-9]+/i).find((t) => KLAIM_TOKENS.has(t));
   const klaimPola = KLAIM_POLA.find((p) => p.test(tanpaNama));
-  if (klaimTok || klaimPola) {
+  // Kosakata hasil khusus kulit — hanya untuk kategori yang punya kulit.
+  const kulitPola = KULIT_KATEGORI.has(String(productCategory ?? ""))
+    ? KLAIM_KULIT_POLA.find((p) => p.test(tanpaNama))
+    : undefined;
+  const kena = klaimPola ?? kulitPola;
+  if (klaimTok || kena) {
     issues.push({
       rule: "L-23",
-      message_id: `Ada klaim hasil ("${klaimTok ?? tanpaNama.match(klaimPola!)?.[0]}") — janji hasil instan bisa menyeret akun kamu kena teguran. Ceritakan yang kelihatan saja.`,
+      message_id: `Ada klaim hasil ("${klaimTok ?? tanpaNama.match(kena!)?.[0]}") — janji hasil instan bisa menyeret akun kamu kena teguran. Ceritakan yang kelihatan saja.`,
     });
   }
   const medTok = toks.find((t) => MEDICAL_TOKENS.has(t));
@@ -674,6 +716,20 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   const medPhrase = MEDICAL_PHRASES.find((p) => lower.includes(p));
   if (medTok || medPhrase)
     push(true, { rule: "L-11", message_id: `Ada klaim kesehatan ("${medTok ?? medPhrase}") — klaim medis dilarang keras di platform.` });
+
+  // L-23: klaim HASIL — diperiksa DI SINI, pada naskah, bukan cuma di QC.
+  //
+  // Sampai 20 Agu L-23 terdaftar di SELALU_KERAS tapi tidak pernah dipanggil
+  // dari validateScript: satu-satunya penegaknya QC-07, yang berjalan pada
+  // video JADI — yaitu sesudah tiga klip dibayar. Aturan yang hanya bisa
+  // menolak sesudah uangnya keluar tidak melindungi siapa pun; ia cuma
+  // mengubah kerugian jadi laporan.
+  //
+  // Kategori ikut supaya kosakata kulit ("glowing") hanya berlaku pada produk
+  // yang punya kulit.
+  for (const issue of periksaKataTerlarang(fullText, script.productName, script.productCategory)) {
+    if (issue.rule === "L-23") push(true, issue);
+  }
 
   // L-12: bahasa iklan formal
   const formal = FORMAL_PHRASES.find((p) => lower.includes(p));
