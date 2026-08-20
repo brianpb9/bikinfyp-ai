@@ -93,13 +93,41 @@ interface TaskResponse {
   error?: { code?: string; message?: string };
 }
 
+/** Diekspor untuk uji tarif — lihat tests/tarif-model-tak-dikenal.test.ts. */
+export function hitungBiayaUntukUji(model: string, totalTokens: number | undefined, durationSec: number, resolution: string) {
+  return estimateCostIdr(model, totalTokens, durationSec, resolution);
+}
+
 function estimateCostIdr(model: string, totalTokens: number | undefined, durationSec: number, resolution: string): { idr: number; estimated: boolean } {
   const rate = MODEL_RATES[model] ?? {};
   if (totalTokens && rate.tokenUsdPerM) {
     return { idr: Math.round((totalTokens / 1_000_000) * rate.tokenUsdPerM * config.usdIdr), estimated: false };
   }
-  const perSec = rate.perSecUsd?.[resolution] ?? rate.perSecUsd?.["480p"] ?? 0.01;
-  return { idr: Math.round(durationSec * perSec * config.usdIdr), estimated: true };
+  // MODEL TAK DIKENAL DITAKSIR MAHAL, BUKAN MURAH.
+  //
+  // Ditemukan 20 Agu dari daftar task nyata: akun ini memakai
+  // `dreamina-seedance-2-5-260628` yang TIDAK ada di MODEL_RATES. Fallback
+  // lama jatuh ke 0,01 USD/detik — tarif model termurah di tabel — sehingga
+  // 300 detik render model kelas atas tercatat ~Rp49.000 alih-alih ratusan
+  // ribu.
+  //
+  // Kenapa ini berbahaya melebihi salah catat: anggaran canary dan stop-rule
+  // membaca angka INI. Menaksir terlalu rendah berarti cap Rp250.000 bisa
+  // terlampaui jauh tanpa satu pun gerbang menyadarinya. Untuk uang, taksiran
+  // yang aman adalah yang MAHAL.
+  const tarifDikenal = rate.perSecUsd?.[resolution] ?? rate.perSecUsd?.["480p"];
+  if (tarifDikenal !== undefined) {
+    return { idr: Math.round(durationSec * tarifDikenal * config.usdIdr), estimated: true };
+  }
+  const tertinggi = Math.max(
+    ...Object.values(MODEL_RATES).flatMap((r) => Object.values(r.perSecUsd ?? {})),
+    0.01
+  );
+  console.warn(
+    `[byteplus] model "${model}" TIDAK ada di MODEL_RATES — biaya ditaksir dengan tarif TERTINGGI yang diketahui ` +
+      `($${tertinggi}/dtk). Tambahkan tarifnya sebelum angka ini dipakai untuk keputusan harga.`
+  );
+  return { idr: Math.round(durationSec * tertinggi * config.usdIdr), estimated: true };
 }
 
 /** Susun item content create-task. Diekspor untuk unit test.
