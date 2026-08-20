@@ -82,9 +82,18 @@ export const MAKS_REFERENSI_PER_GENERASI = 7;
 
 /** Sidecar metadata di storage — kelayakan dihitung SEKALI saat unggah.
  *
- * Disimpan sebagai objek terpisah, bukan kolom DB: bagian pustaka aset ini
- * sengaja tidak bergantung migrasi (migrasi masih terkunci sampai rekonsiliasi
- * ledger). Kuncinya `<rel>.meta.json`, jadi ia ikut ke mana pun berkasnya.
+ * Disimpan sebagai objek terpisah, bukan kolom DB. Kuncinya `<rel>.meta.json`,
+ * jadi ia ikut ke mana pun berkasnya.
+ *
+ * ALASAN LAMA SUDAH KEDALUWARSA, dan itu dicatat di sini supaya tidak
+ * disalin lagi: pilihan ini semula dibenarkan dengan "migrasi terkunci sampai
+ * rekonsiliasi ledger". Terverifikasi 20 Agu 2026 — migrasi 0030-0032 SUDAH
+ * terpasang sejak 18 Agu (dry-run produksi: would_apply kosong).
+ *
+ * Pilihannya tetap dipertahankan, dengan alasan yang benar: data ini hidup
+ * berdampingan dengan berkasnya di storage, jadi ia tidak perlu jadi utang
+ * skema. Yang berubah cuma alasannya — dan alasan yang salah lebih berbahaya
+ * daripada tidak ada alasan, karena ia dipakai membenarkan keputusan berikutnya.
  */
 export interface MetaGambar {
   sha256: string;

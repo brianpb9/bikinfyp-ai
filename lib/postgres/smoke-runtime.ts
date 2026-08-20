@@ -125,7 +125,11 @@ export async function pgUpdateProduct(userId: string, productId: string, patch: 
 }
 /**
  * Mekanik yang dipakai merek ini dalam jendela riwayat (slice 4, 20 Agu).
- * Dibaca dari kolom JSON yang sudah ada — migrasi terkunci sampai rekonsiliasi
+ * Dibaca dari kolom JSON yang sudah ada. (Alasan lama "migrasi terkunci"
+ * sudah kedaluwarsa: 0030-0032 terpasang sejak 18 Agu, diverifikasi 20 Agu.
+ * Bentuknya dipertahankan karena datanya memang cocok di JSON, bukan karena
+ * migrasi tidak bisa dijalankan.) Sisa komentar lama di bawah:
+ * — bekas alasan: rekonsiliasi
  * ledger selesai (keputusan Brian).
  */
 export async function pgMekanikDipakaiBrand(productId: string, sejakIso: string) {

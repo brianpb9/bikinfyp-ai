@@ -50,9 +50,9 @@ if (!url || !/^postgres(ql)?:\/\//i.test(url)) {
  */
 const SUDAH_DIREKONSILIASI = new Map([
   ["ac9e2ade-8204-4713-b072-91d1bcc34612",
-    "17 Agu 2026: dikompensasi manual bonus +24.000 (bersama 17e14771, 2 x 12.000) ke org 55180168 saat pipeline diganti — lihat docs/evidence/migrasi-0030-0032.md"],
+    "17 Agu 2026: dikompensasi Rp24.000 (refund 2 job, bersama 17e14771) + goodwill Rp12.000 — DUA baris bonus terpisah lewat grantBonus, alasan masing-masing ada di audit_log 17:49:23. Total Rp36.000 ke org 55180168, disengaja. Lihat docs/evidence/migrasi-0030-0032.md"],
   ["17e14771-dbc0-45fa-9a70-beb18a9f0c1b",
-    "17 Agu 2026: dikompensasi manual bonus +24.000 (bersama ac9e2ade, 2 x 12.000) ke org 55180168 saat pipeline diganti — lihat docs/evidence/migrasi-0030-0032.md"],
+    "17 Agu 2026: dikompensasi Rp24.000 (refund 2 job, bersama ac9e2ade) + goodwill Rp12.000 — DUA baris bonus terpisah lewat grantBonus, alasan masing-masing ada di audit_log 17:49:23. Total Rp36.000 ke org 55180168, disengaja. Lihat docs/evidence/migrasi-0030-0032.md"],
 ]);
 
 const pool = new pg.Pool({ connectionString: url, max: 2 });
