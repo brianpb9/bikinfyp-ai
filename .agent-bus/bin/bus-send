@@ -12,6 +12,7 @@ set -eu
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BUS_DIR=$(dirname "$SCRIPT_DIR")
 REPO_ROOT=$(dirname "$BUS_DIR")
+NODE_BIN=${AGENT_BUS_NODE_BIN:-node}
 
 ROLES="builder reviewer"
 TYPES="READY_FOR_REVIEW CHANGES_REQUESTED PASS DONE QUESTION FOUNDER_DECISION_REQUIRED"
@@ -25,13 +26,6 @@ in_list() {
     [ "$item" = "$needle" ] && return 0
   done
   return 1
-}
-
-json_escape() {
-  TAB=$(printf '\t')
-  printf '%s' "$1" \
-    | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e "s/$TAB/\\\\t/g" \
-    | awk '{ if (NR > 1) printf "\\n"; printf "%s", $0 }'
 }
 
 now_ms() {
@@ -85,49 +79,99 @@ fi
 INBOX="$BUS_DIR/inbox/$TO"
 TMPDIR_BUS="$BUS_DIR/tmp"
 mkdir -p "$INBOX" "$TMPDIR_BUS" "$BUS_DIR/archive"
+command -v "$NODE_BIN" >/dev/null 2>&1 || die 2 "Node.js is required for lossless JSON encoding"
 
-MS=$(now_ms)
-RESERVATION=''
+SEQUENCE_FILE="$TMPDIR_BUS/.sequence"
+SEQUENCE_LOCK="$TMPDIR_BUS/.sequence.lock"
+SEQUENCE_LOCK_KIND=''
+SHLOCK_HELD=no
 TMPFILE=''
-cleanup_reservation() {
+cleanup_send() {
   [ -z "$TMPFILE" ] || rm -f "$TMPFILE"
-  [ -z "$RESERVATION" ] || rmdir "$RESERVATION" 2>/dev/null || true
+  if [ "$SEQUENCE_LOCK_KIND" = fd ]; then
+    exec 9>&-
+  elif [ "$SHLOCK_HELD" = yes ] && [ "$(cat "$SEQUENCE_LOCK" 2>/dev/null || true)" = "$$" ]; then
+    rm -f "$SEQUENCE_LOCK"
+  fi
 }
-trap cleanup_reservation EXIT
+trap cleanup_send EXIT
 trap 'exit 130' INT
 trap 'exit 143' TERM
 trap 'exit 129' HUP
 
+# Hold one OS-backed lock until the lower-numbered message is visible in its
+# inbox. Merely reserving a number and unlocking before `mv` lets a later,
+# smaller message overtake a large one. `lockf <fd>` is the native macOS form;
+# `flock <fd>` is the Linux equivalent. Both release automatically on crash.
+if [ -d "$SEQUENCE_LOCK" ]; then
+  # One-time recovery from the directory lock used by runtime versions before
+  # the fd lock. Never remove it while its recorded owner is alive.
+  legacy_owner=$(cat "$SEQUENCE_LOCK/pid" 2>/dev/null || true)
+  case "$legacy_owner" in
+    ''|*[!0-9]*) legacy_owner_live=no ;;
+    *) if kill -0 "$legacy_owner" 2>/dev/null; then legacy_owner_live=yes; else legacy_owner_live=no; fi ;;
+  esac
+  [ "$legacy_owner_live" = no ] || die 2 "legacy sequence lock is still owned by pid $legacy_owner; retry"
+  rm -f "$SEQUENCE_LOCK/pid"
+  rmdir "$SEQUENCE_LOCK" 2>/dev/null || die 2 "cannot recover legacy sequence lock"
+fi
+
+if command -v lockf >/dev/null 2>&1; then
+  exec 9>"$SEQUENCE_LOCK" || die 2 "cannot open sequence lock"
+  lockf 9 || die 2 "cannot acquire sequence lock"
+  SEQUENCE_LOCK_KIND=fd
+elif command -v flock >/dev/null 2>&1; then
+  exec 9>"$SEQUENCE_LOCK" || die 2 "cannot open sequence lock"
+  flock -x 9 || die 2 "cannot acquire sequence lock"
+  SEQUENCE_LOCK_KIND=fd
+elif command -v shlock >/dev/null 2>&1; then
+  while ! shlock -f "$SEQUENCE_LOCK" -p "$$"; do sleep 0.01; done
+  SHLOCK_HELD=yes
+  SEQUENCE_LOCK_KIND=shlock
+else
+  die 2 "lockf, flock, or shlock is required for ordered concurrent sends"
+fi
+
+MS=$(now_ms)
+LAST_MS=$(cat "$SEQUENCE_FILE" 2>/dev/null || true)
+case "$LAST_MS" in ''|*[!0-9]*) LAST_MS=0 ;; esac
+[ "$MS" -gt "$LAST_MS" ] || MS=$((LAST_MS + 1))
+
 while :; do
-  NAME="$MS-$FROM-$TYPE.json"
-  RESERVATION="$TMPDIR_BUS/.$NAME.reserve"
-  if [ -e "$INBOX/$NAME" ] || [ -e "$BUS_DIR/archive/$NAME" ] || [ -e "$TMPDIR_BUS/$NAME" ]; then
-    MS=$(( MS + 1 ))
-    continue
-  fi
-  mkdir "$RESERVATION" 2>/dev/null && break
-  MS=$(( MS + 1 ))
+  prefix_used=no
+  for existing in \
+    "$BUS_DIR/inbox/builder/$MS-"* \
+    "$BUS_DIR/inbox/reviewer/$MS-"* \
+    "$BUS_DIR/archive/$MS-"*; do
+    if [ -e "$existing" ]; then prefix_used=yes; break; fi
+  done
+  [ "$prefix_used" = no ] && break
+  MS=$((MS + 1))
 done
+
+printf '%s\n' "$MS" > "$SEQUENCE_FILE.new.$$"
+mv "$SEQUENCE_FILE.new.$$" "$SEQUENCE_FILE"
+
+NAME="$MS-$FROM-$TYPE.json"
 ID="$MS-$FROM-$TYPE"
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Write to tmp first, then rename into the inbox. Rename within one
 # filesystem is atomic, so a reader never sees a half-written message.
 TMPFILE="$TMPDIR_BUS/.$NAME.$$"
-printf '{"id":"%s","ts":"%s","from":"%s","to":"%s","type":"%s","sha":"%s","task":"%s","body":"%s"}\n' \
-  "$(json_escape "$ID")" \
-  "$(json_escape "$TS")" \
-  "$(json_escape "$FROM")" \
-  "$(json_escape "$TO")" \
-  "$(json_escape "$TYPE")" \
-  "$(json_escape "$SHA")" \
-  "$(json_escape "$TASK")" \
-  "$(json_escape "$BODY")" \
-  > "$TMPFILE"
+"$NODE_BIN" - "$ID" "$TS" "$FROM" "$TO" "$TYPE" "$SHA" "$TASK" "$BODY" > "$TMPFILE" <<'NODE'
+const [id, ts, from, to, type, sha, task, body] = process.argv.slice(2);
+process.stdout.write(`${JSON.stringify({ id, ts, from, to, type, sha, task, body })}\n`);
+NODE
 
 mv "$TMPFILE" "$INBOX/$NAME"
 TMPFILE=''
-rmdir "$RESERVATION"
-RESERVATION=''
+if [ "$SEQUENCE_LOCK_KIND" = fd ]; then
+  exec 9>&-
+elif [ "$SHLOCK_HELD" = yes ] && [ "$(cat "$SEQUENCE_LOCK" 2>/dev/null || true)" = "$$" ]; then
+  rm -f "$SEQUENCE_LOCK"
+  SHLOCK_HELD=no
+fi
+SEQUENCE_LOCK_KIND=''
 trap - EXIT INT TERM HUP
 printf '%s\n' "$INBOX/$NAME"

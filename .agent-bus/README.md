@@ -1,7 +1,9 @@
 # .agent-bus — repo-local message bus (Claude Code Builder ↔ Codex Reviewer)
 
-A minimal, auditable, file-based message bus. No daemon, no database, no
-network, no package installs — POSIX `sh` plus `git`, `date`, `sed`, `awk`.
+A minimal, auditable, file-based message bus. No database, network transport,
+or package installs — POSIX `sh`, standard Unix tools, Git, and the Node.js
+runtime already required by this application. Node's `JSON.stringify` preserves
+all control characters and Unicode without inventing another JSON encoder.
 The same three scripts behave identically whether Claude Code or Codex runs
 them, because all state is plain files in this repo.
 
@@ -33,10 +35,11 @@ One JSON file per message. Filename:
 <unix_ms>-<from>-<type>.json
 ```
 
-The millisecond prefix is zero-padded and fixed-width, so plain glob order is
-age order — "oldest message" needs no timestamp parsing. If two messages would
-collide on the same name, `bus-send` bumps the millisecond until the name is
-free, which preserves ordering inside a burst.
+The millisecond prefix is fixed-width, so plain glob order is age order —
+"oldest message" needs no timestamp parsing. `bus-send` allocates that prefix
+through one atomic, bus-global monotonic sequence. This preserves send order
+across roles and message types even on macOS, whose `date` lacks millisecond
+formatting, and across clock rollback.
 
 Flat JSON, no nesting:
 
@@ -181,7 +184,8 @@ It keeps the existing transport and lifecycle intact:
 
 1. `bus-wait reviewer` blocks;
 2. the oldest message is staged, then archived with `bus-read`;
-3. a detached Git worktree is checked out at the exact message SHA, then
+3. a detached Git worktree outside the live checkout is checked out at the
+   exact message SHA, then
    `codex exec --ignore-user-config --sandbox read-only` performs the review
    there with the SHA and task also bound in its prompt;
 4. a JSON schema constrains the result to `PASS`, `CHANGES_REQUESTED`, or
@@ -195,27 +199,47 @@ also runs in its own process group with a 15-minute default wall-clock limit
 (`CODEX_REVIEWER_TIMEOUT_SECONDS` can override it), so one hung tool cannot
 block the queue forever.
 
+The external worktree deliberately cannot inherit mutable `node_modules` from
+the live checkout. Package downloads run offline; when exact dependencies are
+not present, the Reviewer must mark the affected test unavailable instead of
+silently testing another SHA's dependency tree.
+
 On macOS, `start` submits the loop to `launchd`; this is necessary because the
 Codex tool harness cleans up detached shell process groups after tool completion.
 Other platforms fall back to `nohup` and should use their normal process
 supervisor for machine-level durability.
 
+The launchd label contains a stable hash of the repository path, and lifecycle
+commands verify the submitted script path before removing a job. Separate clones
+and detached review worktrees therefore cannot stop each other's Reviewer.
+
 Runtime state, PID, exact-SHA worktree, and logs live under ignored
 `.agent-bus/tmp/`. A staged message survives a Reviewer subprocess failure and
 is retried. Recovery recognizes the message in either inbox or archive, stale
 locks are reclaimed after a hard crash, and an existing response in the Builder
-inbox/archive prevents duplicate delivery after a restart.
+inbox/archive prevents duplicate delivery after a restart. That match is also
+bound to bus sequence: an older infrastructure response does not suppress a
+later explicit retry of the same SHA and task.
+
+An attempt counter is persisted with the staged message. After three failed or
+timed-out Codex invocations, the runtime sends a SHA-bound
+`CHANGES_REQUESTED` infrastructure failure, clears that state, and re-arms so a
+deterministic failure cannot starve later reviews.
 
 ## Self-test
 
 ```sh
 sh .agent-bus/test-bus.sh
+sh .agent-bus/test-reviewer-runtime.sh  # run only while the Reviewer is stopped
 ```
 
 Covers: round-trip in both directions, invalid role/type rejection,
 SHA_BINDING, ROLE_SEPARATION, prompt return when a message is waiting, timeout
 exit 4, empty-inbox exit 5, STALE flagging for HEAD / ancestor / non-ancestor
-shas, and crash-safety (the message survives `bus-wait`).
+shas, mixed-type ordering, JSON controls/Unicode, and crash-safety (the message
+survives `bus-wait`). The runtime fault test covers unknown-SHA poison, SIGKILL
+with a detached child, orphan reaping, bounded failure, and re-arm to the next
+queued SHA.
 
 The test runs against the real `.agent-bus` directories and **aborts** if
 either inbox is non-empty, so it cannot destroy in-flight traffic. It removes

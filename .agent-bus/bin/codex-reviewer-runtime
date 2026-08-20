@@ -21,19 +21,33 @@ SEND="$SCRIPT_DIR/bus-send"
 RUNNER="$SCRIPT_DIR/codex-review-exec.mjs"
 SCHEMA="$BUS_DIR/reviewer-verdict.schema.json"
 STATE_DIR="$BUS_DIR/tmp/codex-reviewer-current"
-REVIEW_TREE="$BUS_DIR/tmp/codex-review-worktree"
 PID_FILE="$BUS_DIR/tmp/codex-reviewer.pid"
 RUNNER_PID_FILE="$BUS_DIR/tmp/codex-reviewer-runner.pid"
+CODEX_PID_FILE="$BUS_DIR/tmp/codex-reviewer-codex.pid"
 LOG_FILE="$BUS_DIR/tmp/codex-reviewer.log"
 SUPERVISOR_LOG="$BUS_DIR/tmp/codex-reviewer-supervisor.log"
 LOCK_DIR="$BUS_DIR/tmp/codex-reviewer.lock"
-LAUNCH_LABEL="com.bikinfyp.codex-reviewer"
+REPO_ID=$(printf '%s' "$REPO_ROOT" | git hash-object --stdin 2>/dev/null | cut -c1-12)
+[ -n "$REPO_ID" ] || REPO_ID=$(printf '%s' "$REPO_ROOT" | cksum | awk '{print $1}')
+REVIEW_TREE_ROOT=${CODEX_REVIEWER_WORKTREE_ROOT:-/tmp}
+REVIEW_TREE_ROOT=$(CDPATH= cd -- "$REVIEW_TREE_ROOT" 2>/dev/null && pwd -P)
+[ -n "$REVIEW_TREE_ROOT" ] || { printf 'codex-reviewer: invalid worktree root\n' >&2; exit 2; }
+REVIEW_TREE="$REVIEW_TREE_ROOT/bikinfyp-codex-review-$REPO_ID"
+LAUNCH_LABEL="com.bikinfyp.codex-reviewer.$REPO_ID"
+LEGACY_LAUNCH_LABEL="com.bikinfyp.codex-reviewer"
 WAIT_SECONDS=${CODEX_REVIEWER_WAIT_SECONDS:-3600}
 RETRY_SECONDS=${CODEX_REVIEWER_RETRY_SECONDS:-20}
 REVIEW_TIMEOUT_SECONDS=${CODEX_REVIEWER_TIMEOUT_SECONDS:-900}
+MAX_ATTEMPTS=${CODEX_REVIEWER_MAX_ATTEMPTS:-3}
 CODEX_BIN=${CODEX_REVIEWER_BIN:-codex}
 NODE_BIN=${CODEX_REVIEWER_NODE_BIN:-node}
 ACTIVE_RUNNER_PID=''
+CURRENT_ATTEMPT=0
+
+case "$WAIT_SECONDS" in ''|*[!0-9]*) printf 'codex-reviewer: invalid wait seconds: %s\n' "$WAIT_SECONDS" >&2; exit 2 ;; esac
+case "$RETRY_SECONDS" in ''|*[!0-9]*) printf 'codex-reviewer: invalid retry seconds: %s\n' "$RETRY_SECONDS" >&2; exit 2 ;; esac
+case "$REVIEW_TIMEOUT_SECONDS" in ''|*[!0-9]*|0) printf 'codex-reviewer: invalid review timeout: %s\n' "$REVIEW_TIMEOUT_SECONDS" >&2; exit 2 ;; esac
+case "$MAX_ATTEMPTS" in ''|*[!0-9]*|0) printf 'codex-reviewer: invalid max attempts: %s\n' "$MAX_ATTEMPTS" >&2; exit 2 ;; esac
 
 log() { printf '%s codex-reviewer: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
@@ -42,19 +56,43 @@ pid_is_runtime() {
   runtime_pid=$(cat "$PID_FILE" 2>/dev/null || true)
   case "$runtime_pid" in ''|*[!0-9]*) return 1 ;; esac
   kill -0 "$runtime_pid" 2>/dev/null || return 1
-  ps -p "$runtime_pid" -o command= 2>/dev/null | grep -F "codex-reviewer-runtime run" >/dev/null 2>&1
+  ps -p "$runtime_pid" -o command= 2>/dev/null | grep -F -- "$SCRIPT_DIR/codex-reviewer-runtime run" >/dev/null 2>&1
 }
 
 pid_value_is_runtime() {
   candidate_pid=$1
   case "$candidate_pid" in ''|*[!0-9]*) return 1 ;; esac
   kill -0 "$candidate_pid" 2>/dev/null || return 1
-  ps -p "$candidate_pid" -o command= 2>/dev/null | grep -F "codex-reviewer-runtime run" >/dev/null 2>&1
+  ps -p "$candidate_pid" -o command= 2>/dev/null | grep -F -- "$SCRIPT_DIR/codex-reviewer-runtime run" >/dev/null 2>&1
+}
+
+pid_is_live_number() {
+  live_pid=$1
+  case "$live_pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$live_pid" -gt 1 ] 2>/dev/null || return 1
+  kill -0 "$live_pid" 2>/dev/null
 }
 
 supervisor_is_loaded() {
+  supervisor_label=${1:-$LAUNCH_LABEL}
   command -v launchctl >/dev/null 2>&1 || return 1
-  launchctl print "gui/$(id -u)/$LAUNCH_LABEL" >/dev/null 2>&1
+  launchctl print "gui/$(id -u)/$supervisor_label" >/dev/null 2>&1
+}
+
+supervisor_matches_repo() {
+  supervisor_label=$1
+  launchctl print "gui/$(id -u)/$supervisor_label" 2>/dev/null \
+    | grep -F -- "$SCRIPT_DIR/codex-reviewer-runtime" >/dev/null 2>&1
+}
+
+remove_supervisor_if_owned() {
+  supervisor_label=$1
+  supervisor_is_loaded "$supervisor_label" || return 0
+  if ! supervisor_matches_repo "$supervisor_label"; then
+    log "refusing to remove supervisor not owned by this repo: $supervisor_label"
+    return 1
+  fi
+  launchctl remove "$supervisor_label" >/dev/null 2>&1
 }
 
 clear_stale_lock() {
@@ -74,6 +112,88 @@ wait_for_pid_exit() {
   ! kill -0 "$waited_pid" 2>/dev/null
 }
 
+runner_pid_is_ours() {
+  inspected_pid=$1
+  case "$inspected_pid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$inspected_pid" -gt 1 ] 2>/dev/null || return 1
+  kill -0 "$inspected_pid" 2>/dev/null || return 1
+  runner_command=$(ps -p "$inspected_pid" -o command= 2>/dev/null) || return 1
+  printf '%s\n' "$runner_command" | grep -F -- "$RUNNER" >/dev/null 2>&1 \
+    && printf '%s\n' "$runner_command" | grep -F -- "$REVIEW_TREE" >/dev/null 2>&1
+}
+
+codex_group_is_ours() {
+  inspected_pgid=$1
+  case "$inspected_pgid" in ''|*[!0-9]*) return 1 ;; esac
+  [ "$inspected_pgid" -gt 1 ] 2>/dev/null || return 1
+  ps -axo pgid=,command= 2>/dev/null | awk -v pgid="$inspected_pgid" -v tree="$REVIEW_TREE" '
+    $1 == pgid && index($0, " exec ") > 0 && index($0, "--cd " tree) > 0 { found=1 }
+    END { exit !found }
+  '
+}
+
+discover_owned_runner_pids() {
+  ps -axo pid=,command= 2>/dev/null | awk -v runner="$RUNNER" -v tree="$REVIEW_TREE" '
+    index($0, runner) > 0 && index($0, tree) > 0 { print $1 }
+  '
+}
+
+discover_owned_codex_pgids() {
+  ps -axo pgid=,command= 2>/dev/null | awk -v tree="$REVIEW_TREE" '
+    index($0, " exec ") > 0 && index($0, "--cd " tree) > 0 && !seen[$1]++ { print $1 }
+  '
+}
+
+terminate_owned_runner() {
+  runner_pid=$1
+  runner_pid_is_ours "$runner_pid" || return 1
+  kill "$runner_pid" 2>/dev/null || true
+  if ! wait_for_pid_exit "$runner_pid"; then
+    kill -KILL "$runner_pid" 2>/dev/null || true
+    wait_for_pid_exit "$runner_pid" || true
+  fi
+}
+
+terminate_owned_codex_group() {
+  codex_pgid=$1
+  codex_group_is_ours "$codex_pgid" || return 1
+  "$NODE_BIN" "$RUNNER" --terminate-group "$codex_pgid" >> "$LOG_FILE" 2>&1
+}
+
+reap_persisted_review_processes() {
+  persisted_runner_pid=$(cat "$RUNNER_PID_FILE" 2>/dev/null || true)
+  persisted_codex_pid=$(cat "$CODEX_PID_FILE" 2>/dev/null || true)
+
+  if runner_pid_is_ours "$persisted_runner_pid"; then
+    log "terminating persisted reviewer runner pid=$persisted_runner_pid"
+    terminate_owned_runner "$persisted_runner_pid" || true
+  elif pid_is_live_number "$persisted_runner_pid"; then
+    log "stale runner PID belongs to another process; not signaling pid=$persisted_runner_pid"
+  fi
+
+  for discovered_runner_pid in $(discover_owned_runner_pids); do
+    [ "$discovered_runner_pid" = "$persisted_runner_pid" ] && continue
+    log "terminating discovered orphan reviewer runner pid=$discovered_runner_pid"
+    terminate_owned_runner "$discovered_runner_pid" || true
+  done
+
+  if codex_group_is_ours "$persisted_codex_pid"; then
+    log "terminating persisted Codex process group pgid=$persisted_codex_pid"
+    terminate_owned_codex_group "$persisted_codex_pid" || true
+  elif pid_is_live_number "$persisted_codex_pid"; then
+    log "stale Codex PID belongs to another process; not signaling pid=$persisted_codex_pid"
+  fi
+
+
+  for discovered_codex_pgid in $(discover_owned_codex_pgids); do
+    [ "$discovered_codex_pgid" = "$persisted_codex_pid" ] && continue
+    log "terminating discovered orphan Codex process group pgid=$discovered_codex_pgid"
+    terminate_owned_codex_group "$discovered_codex_pgid" || true
+  done
+
+  rm -f "$RUNNER_PID_FILE" "$CODEX_PID_FILE"
+}
+
 json_file_field() {
   # JSON is parsed from a file, not squeezed through argv or extracted by sed.
   # This preserves escaped content and avoids ARG_MAX on an untrusted body.
@@ -81,9 +201,9 @@ json_file_field() {
 }
 
 validate_staged_message() {
-  "$NODE_BIN" - "$STATE_DIR/message.json" <<'NODE'
+  "$NODE_BIN" - "$STATE_DIR/message.json" "$STATE_DIR/source_name" <<'NODE'
 const fs = require("fs");
-const file = process.argv[2];
+const [file, sourceFile] = process.argv.slice(2);
 let m;
 try { m = JSON.parse(fs.readFileSync(file, "utf8")); }
 catch (error) { console.error(`invalid JSON: ${error.message}`); process.exit(1); }
@@ -91,6 +211,9 @@ const fail = (reason) => { console.error(reason); process.exit(1); };
 if (!m || typeof m !== "object" || Array.isArray(m)) fail("message is not an object");
 if (m.from !== "builder" || m.to !== "reviewer") fail(`invalid direction ${m.from}->${m.to}`);
 if (!["READY_FOR_REVIEW", "DONE", "FOUNDER_DECISION_REQUIRED"].includes(m.type)) fail(`unsupported type ${m.type}`);
+if (typeof m.id !== "string" || !/^\d+-builder-[A-Z_]+$/.test(m.id)) fail("invalid message id");
+const sourceName = fs.readFileSync(sourceFile, "utf8").trim();
+if (`${m.id}.json` !== sourceName || !m.id.endsWith(`-builder-${m.type}`)) fail("message id/source/type mismatch");
 if (typeof m.task !== "string" || m.task.length < 1 || m.task.length > 512) fail("task must contain 1..512 characters");
 if (typeof m.body !== "string") fail("body must be a string");
 if (m.type === "READY_FOR_REVIEW" && !/^[0-9a-f]{40}$/.test(m.sha)) fail("READY_FOR_REVIEW requires a full lowercase SHA");
@@ -98,24 +221,52 @@ NODE
 }
 
 response_already_sent() {
-  sha=$1 task=$2
-  "$NODE_BIN" - "$BUS_DIR" "$sha" "$task" <<'NODE'
+  sha=$1 task=$2 request_id=$3
+  "$NODE_BIN" - "$BUS_DIR" "$sha" "$task" "$request_id" <<'NODE'
 const fs = require("fs");
 const path = require("path");
-const [bus, sha, task] = process.argv.slice(2);
+const [bus, sha, task, requestId] = process.argv.slice(2);
+const sequenceOf = (id) => {
+  const match = /^(\d+)-/.exec(String(id || ""));
+  return match ? BigInt(match[1]) : null;
+};
+const requestSequence = sequenceOf(requestId);
+if (requestSequence === null) process.exit(1);
 for (const dir of [path.join(bus, "inbox", "builder"), path.join(bus, "archive")]) {
   if (!fs.existsSync(dir)) continue;
   for (const name of fs.readdirSync(dir)) {
     if (!name.endsWith(".json")) continue;
     try {
       const m = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8"));
-      if (m.from === "reviewer" && m.to === "builder" && m.sha === sha && m.task === task &&
+      const responseSequence = sequenceOf(m.id);
+      if (responseSequence !== null && responseSequence > requestSequence &&
+          m.from === "reviewer" && m.to === "builder" && m.sha === sha && m.task === task &&
           ["PASS", "CHANGES_REQUESTED", "FOUNDER_DECISION_REQUIRED"].includes(m.type)) process.exit(0);
     } catch {}
   }
 }
 process.exit(1);
 NODE
+}
+
+begin_review_attempt() {
+  attempts_file="$STATE_DIR/attempts"
+  previous_attempts=$(cat "$attempts_file" 2>/dev/null || true)
+  case "$previous_attempts" in ''|*[!0-9]*) previous_attempts=0 ;; esac
+  next_attempt=$((previous_attempts + 1))
+  printf '%s\n' "$next_attempt" > "$attempts_file.new" || return 1
+  mv "$attempts_file.new" "$attempts_file" || return 1
+  printf '%s\n' "$next_attempt"
+}
+
+send_terminal_review_failure() {
+  failure_rc=$1 failure_attempt=$2
+  failure_sha=$(json_file_field "$STATE_DIR/message.json" sha) || return 1
+  failure_task=$(json_file_field "$STATE_DIR/message.json" task) || return 1
+  failure_body="Automated Codex review could not complete after $failure_attempt attempts (last runtime rc=$failure_rc). No PASS was issued. Fix or retry the Reviewer runtime, then submit a new READY_FOR_REVIEW for this SHA."
+  BUS_FROM=reviewer "$SEND" builder CHANGES_REQUESTED "$failure_sha" "$failure_task" "$failure_body" >> "$LOG_FILE" 2>&1 || return 1
+  log "sent terminal CHANGES_REQUESTED after $failure_attempt failed attempts task=$failure_task sha=$failure_sha; re-arming"
+  rm -rf "$STATE_DIR"
 }
 
 consume_staged_message() {
@@ -208,6 +359,7 @@ Rules:
 - Read repository instructions and inspect the exact commit diff, related code, tests, and evidence.
 - The SHA binds an immutable repository tree. Task work may span its ancestors, so do not assume SHA^..SHA alone contains the whole requested slice; trace the named task and evidence at that tree.
 - Work read-only: do not edit, commit, deploy, render paid media, or send any bus message.
+- This exact-SHA worktree is outside the live checkout and deliberately does not inherit its node_modules. Never install or download packages. If exact dependencies are absent, report a test as unavailable rather than running it against another checkout or a fetched latest version.
 - Run safe targeted tests when useful. Never accept a written claim without direct evidence.
 - Judge the requested stage. For a red-before test stage, intentional assertion failures are expected: verify they fail for the intended product defect, controls pass, production code is untouched, and the tests do not force an invalid implementation.
 - PASS only when there is no material defect in this review slice.
@@ -228,6 +380,7 @@ review_current() {
   type=$(json_file_field "$STATE_DIR/message.json" type) || return 2
   sha=$(json_file_field "$STATE_DIR/message.json" sha) || return 2
   task=$(json_file_field "$STATE_DIR/message.json" task) || return 2
+  request_id=$(json_file_field "$STATE_DIR/message.json" id) || return 2
 
   case "$type" in
     DONE)
@@ -248,15 +401,16 @@ review_current() {
       ;;
   esac
 
-  if response_already_sent "$sha" "$task"; then
+  if response_already_sent "$sha" "$task" "$request_id"; then
     log "response already exists for task=$task sha=$sha; not duplicating"
     rm -rf "$STATE_DIR"
     return 0
   fi
 
   git -C "$REPO_ROOT" cat-file -e "$sha^{commit}" 2>/dev/null || {
-    log "SHA does not resolve to a commit: $sha"
-    return 2
+    log "dropping archived READY_FOR_REVIEW whose SHA is not a commit: $sha"
+    rm -rf "$STATE_DIR"
+    return 0
   }
 
   prompt="$STATE_DIR/prompt.txt"
@@ -264,15 +418,16 @@ review_current() {
   build_prompt "$message" "$sha" "$task" > "$prompt"
   rm -f "$result"
 
-  log "reviewing task=$task sha=$sha"
+  CURRENT_ATTEMPT=$(begin_review_attempt) || return 3
+  log "reviewing task=$task sha=$sha attempt=$CURRENT_ATTEMPT/$MAX_ATTEMPTS"
   prepare_review_tree "$sha" || return 3
   "$NODE_BIN" "$RUNNER" "$CODEX_BIN" "$REVIEW_TREE" "$SCHEMA" \
-    "$result" "$prompt" "$LOG_FILE" "$REVIEW_TIMEOUT_SECONDS" &
+    "$result" "$prompt" "$LOG_FILE" "$RUNNER_PID_FILE" "$CODEX_PID_FILE" "$REVIEW_TIMEOUT_SECONDS" &
   ACTIVE_RUNNER_PID=$!
   printf '%s\n' "$ACTIVE_RUNNER_PID" > "$RUNNER_PID_FILE"
   wait "$ACTIVE_RUNNER_PID"
   rc=$?
-  rm -f "$RUNNER_PID_FILE"
+  rm -f "$RUNNER_PID_FILE" "$CODEX_PID_FILE"
   ACTIVE_RUNNER_PID=''
   cleanup_review_tree || { log "failed to remove exact-SHA worktree"; return 3; }
   if [ "$rc" -ne 0 ] || [ ! -s "$result" ]; then
@@ -318,15 +473,7 @@ NODE
 }
 
 terminate_active_runner() {
-  [ -n "$ACTIVE_RUNNER_PID" ] || return 0
-  if kill -0 "$ACTIVE_RUNNER_PID" 2>/dev/null; then
-    kill "$ACTIVE_RUNNER_PID" 2>/dev/null || true
-    if ! wait_for_pid_exit "$ACTIVE_RUNNER_PID"; then
-      kill -KILL "$ACTIVE_RUNNER_PID" 2>/dev/null || true
-      wait_for_pid_exit "$ACTIVE_RUNNER_PID" || true
-    fi
-  fi
-  rm -f "$RUNNER_PID_FILE"
+  reap_persisted_review_processes
   ACTIVE_RUNNER_PID=''
 }
 
@@ -335,11 +482,12 @@ cleanup_runtime() {
   terminate_active_runner
   cleanup_review_tree || true
   if [ "$(cat "$PID_FILE" 2>/dev/null || true)" = "$$" ]; then rm -f "$PID_FILE"; fi
-  rm -f "$RUNNER_PID_FILE"
+  rm -f "$RUNNER_PID_FILE" "$CODEX_PID_FILE"
   if [ "$(cat "$LOCK_DIR/pid" 2>/dev/null || true)" = "$$" ]; then
     rm -f "$LOCK_DIR/pid"
     rmdir "$LOCK_DIR" 2>/dev/null || true
   fi
+  rmdir "$STATE_DIR" 2>/dev/null || true
 }
 
 acquire_runtime_lock() {
@@ -364,6 +512,7 @@ run_loop() {
   trap 'exit 130' INT
   trap 'exit 143' TERM
   trap 'exit 129' HUP
+  reap_persisted_review_processes
   log "armed pid=$$ repo=$REPO_ROOT"
 
   while :; do
@@ -381,7 +530,14 @@ run_loop() {
 
     review_current
     rc=$?
-    [ "$rc" -eq 0 ] || sleep "$RETRY_SECONDS"
+    if [ "$rc" -ne 0 ]; then
+      if [ "$CURRENT_ATTEMPT" -ge "$MAX_ATTEMPTS" ]; then
+        send_terminal_review_failure "$rc" "$CURRENT_ATTEMPT" || sleep "$RETRY_SECONDS"
+      else
+        log "review attempt $CURRENT_ATTEMPT/$MAX_ATTEMPTS failed rc=$rc; retrying in ${RETRY_SECONDS}s"
+        sleep "$RETRY_SECONDS"
+      fi
+    fi
   done
 }
 
@@ -390,7 +546,18 @@ case "$cmd" in
   run) run_loop ;;
   start)
     mkdir -p "$BUS_DIR/tmp"
-    if supervisor_is_loaded && pid_is_runtime; then
+    if supervisor_matches_repo "$LEGACY_LAUNCH_LABEL"; then
+      legacy_pid=''
+      if pid_is_runtime; then legacy_pid=$(cat "$PID_FILE"); fi
+      log "migrating owned legacy supervisor to repo-scoped label $LAUNCH_LABEL"
+      remove_supervisor_if_owned "$LEGACY_LAUNCH_LABEL" || exit 2
+      if [ -n "$legacy_pid" ]; then wait_for_pid_exit "$legacy_pid" || true; fi
+    fi
+    if supervisor_is_loaded && ! supervisor_matches_repo "$LAUNCH_LABEL"; then
+      log "repo-scoped label is loaded by an unexpected program; refusing start"
+      exit 2
+    fi
+    if supervisor_matches_repo "$LAUNCH_LABEL" && pid_is_runtime; then
       log "already running pid=$(cat "$PID_FILE") under $LAUNCH_LABEL"
       exit 0
     fi
@@ -399,7 +566,7 @@ case "$cmd" in
       exit 2
     fi
     if supervisor_is_loaded; then
-      launchctl remove "$LAUNCH_LABEL" >/dev/null 2>&1 || true
+      remove_supervisor_if_owned "$LAUNCH_LABEL" || exit 2
       sleep 0.2
     fi
     rm -f "$PID_FILE"
@@ -411,9 +578,11 @@ case "$cmd" in
       # that survives tool/turn completion; it adds no transport or queue.
       node_abs=$(command -v "$NODE_BIN") || { log "node binary not found: $NODE_BIN"; exit 1; }
       codex_abs=$(command -v "$CODEX_BIN") || { log "codex binary not found: $CODEX_BIN"; exit 1; }
-      launchctl remove "$LAUNCH_LABEL" >/dev/null 2>&1 || true
       launchctl submit -l "$LAUNCH_LABEL" -o "$SUPERVISOR_LOG" -e "$SUPERVISOR_LOG" -- \
         /usr/bin/env "PATH=$PATH" "CODEX_REVIEWER_NODE_BIN=$node_abs" "CODEX_REVIEWER_BIN=$codex_abs" \
+        "CODEX_REVIEWER_WAIT_SECONDS=$WAIT_SECONDS" "CODEX_REVIEWER_RETRY_SECONDS=$RETRY_SECONDS" \
+        "CODEX_REVIEWER_TIMEOUT_SECONDS=$REVIEW_TIMEOUT_SECONDS" "CODEX_REVIEWER_MAX_ATTEMPTS=$MAX_ATTEMPTS" \
+        "CODEX_REVIEWER_WORKTREE_ROOT=$REVIEW_TREE_ROOT" \
         /bin/sh "$self" run
       child=''
     else
@@ -432,25 +601,26 @@ case "$cmd" in
     ;;
   status)
     if pid_is_runtime; then
-      if command -v launchctl >/dev/null 2>&1 && ! supervisor_is_loaded; then
+      if supervisor_matches_repo "$LEGACY_LAUNCH_LABEL"; then
+        log "degraded: pid=$(cat "$PID_FILE") still uses legacy supervisor; run start to migrate"
+        exit 2
+      fi
+      if command -v launchctl >/dev/null 2>&1 && ! supervisor_matches_repo "$LAUNCH_LABEL"; then
         log "degraded: pid=$(cat "$PID_FILE") runs without canonical supervisor $LAUNCH_LABEL"
         exit 2
       fi
       log "running pid=$(cat "$PID_FILE") supervisor=$LAUNCH_LABEL"
       exit 0
     fi
-    if supervisor_is_loaded; then log "degraded: supervisor loaded but runtime pid is unavailable"; exit 2; fi
+    if supervisor_matches_repo "$LAUNCH_LABEL"; then log "degraded: supervisor loaded but runtime pid is unavailable"; exit 2; fi
     log "stopped"; exit 1
     ;;
   stop)
     stopped_pid=''
-    stopped_runner_pid=$(cat "$RUNNER_PID_FILE" 2>/dev/null || true)
     if pid_is_runtime; then stopped_pid=$(cat "$PID_FILE"); fi
-    launchctl remove "$LAUNCH_LABEL" >/dev/null 2>&1 || true
-    case "$stopped_runner_pid" in
-      ''|*[!0-9]*) ;;
-      *) kill "$stopped_runner_pid" 2>/dev/null || true ;;
-    esac
+    remove_supervisor_if_owned "$LAUNCH_LABEL" || true
+    remove_supervisor_if_owned "$LEGACY_LAUNCH_LABEL" || true
+    reap_persisted_review_processes
     if [ -n "$stopped_pid" ] && kill -0 "$stopped_pid" 2>/dev/null; then
       kill "$stopped_pid" 2>/dev/null || true
       if ! wait_for_pid_exit "$stopped_pid"; then
@@ -463,8 +633,9 @@ case "$cmd" in
       log "already stopped"
     fi
     rm -f "$PID_FILE"
-    rm -f "$RUNNER_PID_FILE"
+    rm -f "$RUNNER_PID_FILE" "$CODEX_PID_FILE"
     clear_stale_lock || true
+    rmdir "$STATE_DIR" 2>/dev/null || true
     ;;
   *) printf 'usage: %s start|status|stop|run\n' "$0" >&2; exit 2 ;;
 esac

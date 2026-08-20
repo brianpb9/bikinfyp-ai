@@ -179,6 +179,67 @@ check "STALE flagging: HEAD/ancestor=false, non-ancestor=true, not deleted" "$st
 # --- 9 (reported) ---------------------------------------------------------
 check "crash-safety: message still in inbox after bus-wait" "$cs_ok" "$crash_detail"
 
+# --- 10. task is mandatory ------------------------------------------------
+"$BIN/bus-send" reviewer QUESTION "" "" x >/dev/null 2>&1; rc10=$?
+t_ok=0
+[ "$rc10" = 2 ] || t_ok=1
+check "empty task is rejected before it can poison a consumer" "$t_ok" "rc=$rc10 (want 2)"
+
+# --- 11. the global sequence preserves mixed-type send order --------------
+order_ok=0
+p11a=$(BUS_FROM=builder "$BIN/bus-send" reviewer READY_FOR_REVIEW "$HEAD_SHA" "$TASK" "ready first") || order_ok=1
+p11b=$(BUS_FROM=builder "$BIN/bus-send" reviewer DONE "" "$TASK" "done second") || order_ok=1
+ms11a=$(basename "$p11a" | cut -d- -f1)
+ms11b=$(basename "$p11b" | cut -d- -f1)
+[ "$ms11a" -lt "$ms11b" ] || order_ok=1
+out11a=$("$BIN/bus-read" reviewer) || order_ok=1
+out11b=$("$BIN/bus-read" reviewer) || order_ok=1
+case "$out11a" in *'"type":"READY_FOR_REVIEW"'*) ;; *) order_ok=1 ;; esac
+case "$out11b" in *'"type":"DONE"'*) ;; *) order_ok=1 ;; esac
+check "mixed message types retain send order on macOS" "$order_ok" "prefixes=$ms11a,$ms11b"
+
+# --- 12. JSON encoder round-trips controls and Unicode --------------------
+json_ok=0
+control_body=$(printf 'A\rB\bC\fD\tE\n雪🙂')
+p12=$(BUS_FROM=builder "$BIN/bus-send" reviewer QUESTION "" "$TASK" "$control_body") || json_ok=1
+node - "$p12" <<'NODE' || json_ok=1
+const fs = require("fs");
+const m = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (m.body !== "A\rB\bC\fD\tE\n雪🙂") process.exit(1);
+NODE
+"$BIN/bus-read" reviewer >/dev/null 2>&1 || json_ok=1
+check "JSON round-trips CR, backspace, form-feed, tab, newline, and Unicode" "$json_ok"
+
+# --- 13. concurrent publishers cannot collide or lose a message ----------
+parallel_ok=0
+parallel_pids=''
+i=1
+while [ "$i" -le 24 ]; do
+  if [ $((i % 2)) -eq 0 ]; then parallel_type=DONE; else parallel_type=QUESTION; fi
+  BUS_FROM=builder "$BIN/bus-send" reviewer "$parallel_type" "" "$TASK" "parallel-$i" \
+    > "$BUS_DIR/tmp/bus-selftest-parallel-$i.out" 2>&1 &
+  parallel_pids="$parallel_pids $!"
+  i=$((i + 1))
+done
+for parallel_pid in $parallel_pids; do wait "$parallel_pid" || parallel_ok=1; done
+node - "$BUS_DIR/inbox/reviewer" "$TASK" <<'NODE' || parallel_ok=1
+const fs = require("fs");
+const path = require("path");
+const [dir, task] = process.argv.slice(2);
+const messages = fs.readdirSync(dir).filter((name) => name.endsWith(".json")).map((name) => {
+  const value = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8"));
+  if (value.task !== task || `${value.id}.json` !== name) process.exit(1);
+  return value;
+});
+if (messages.length !== 24 || new Set(messages.map((m) => m.id)).size !== 24) process.exit(1);
+if (new Set(messages.map((m) => m.body)).size !== 24) process.exit(1);
+NODE
+[ "$(inbox_count reviewer)" = 24 ] || parallel_ok=1
+i=1
+while [ "$i" -le 24 ]; do "$BIN/bus-read" reviewer >/dev/null 2>&1 || parallel_ok=1; i=$((i + 1)); done
+rm -f "$BUS_DIR/tmp"/bus-selftest-parallel-*.out
+check "24 concurrent mixed-type sends are lossless and collision-free" "$parallel_ok"
+
 # --- cleanup: remove only this test's archived messages -------------------
 for f in "$BUS_DIR/archive"/*.json; do
   [ -e "$f" ] || break
