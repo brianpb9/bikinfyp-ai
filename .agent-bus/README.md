@@ -188,6 +188,11 @@ It keeps the existing transport and lifecycle intact:
 5. the wrapper sends it with the existing `bus-send` and immediately waits
    again.
 
+On macOS, `start` submits the loop to `launchd`; this is necessary because the
+Codex tool harness cleans up detached shell process groups after tool completion.
+Other platforms fall back to `nohup` and should use their normal process
+supervisor for machine-level durability.
+
 Runtime state, PID, and logs live under ignored `.agent-bus/tmp/`. A staged
 message survives a Reviewer subprocess failure and is retried; an existing
 response in the Builder inbox/archive prevents duplicate delivery after a

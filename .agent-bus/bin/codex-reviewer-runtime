@@ -22,7 +22,9 @@ SCHEMA="$BUS_DIR/reviewer-verdict.schema.json"
 STATE_DIR="$BUS_DIR/tmp/codex-reviewer-current"
 PID_FILE="$BUS_DIR/tmp/codex-reviewer.pid"
 LOG_FILE="$BUS_DIR/tmp/codex-reviewer.log"
+SUPERVISOR_LOG="$BUS_DIR/tmp/codex-reviewer-supervisor.log"
 LOCK_DIR="$BUS_DIR/tmp/codex-reviewer.lock"
+LAUNCH_LABEL="com.bikinfyp.codex-reviewer"
 WAIT_SECONDS=${CODEX_REVIEWER_WAIT_SECONDS:-3600}
 RETRY_SECONDS=${CODEX_REVIEWER_RETRY_SECONDS:-20}
 CODEX_BIN=${CODEX_REVIEWER_BIN:-codex}
@@ -232,12 +234,22 @@ case "$cmd" in
     mkdir -p "$BUS_DIR/tmp"
     if pid_is_runtime; then log "already running pid=$(cat "$PID_FILE")"; exit 0; fi
     rm -f "$PID_FILE"; rmdir "$LOCK_DIR" 2>/dev/null || true
-    nohup "$0" run >> "$LOG_FILE" 2>&1 </dev/null &
-    child=$!
+    self="$SCRIPT_DIR/codex-reviewer-runtime"
+    if command -v launchctl >/dev/null 2>&1; then
+      # Tool-spawned nohup children are cleaned up with their harness process
+      # group on this Codex surface. launchd is the smallest native supervisor
+      # that survives tool/turn completion; it adds no transport or queue.
+      launchctl remove "$LAUNCH_LABEL" >/dev/null 2>&1 || true
+      launchctl submit -l "$LAUNCH_LABEL" -o "$SUPERVISOR_LOG" -e "$SUPERVISOR_LOG" -- /bin/sh "$self" run
+      child=''
+    else
+      nohup "$self" run >> "$SUPERVISOR_LOG" 2>&1 </dev/null &
+      child=$!
+    fi
     i=0
     while [ "$i" -lt 50 ]; do
       pid_is_runtime && { log "started pid=$(cat "$PID_FILE")"; exit 0; }
-      kill -0 "$child" 2>/dev/null || break
+      [ -z "$child" ] || kill -0 "$child" 2>/dev/null || break
       sleep 0.1
       i=$((i + 1))
     done
@@ -249,6 +261,7 @@ case "$cmd" in
     log "stopped"; exit 1
     ;;
   stop)
+    launchctl remove "$LAUNCH_LABEL" >/dev/null 2>&1 || true
     if pid_is_runtime; then
       pid=$(cat "$PID_FILE"); kill "$pid"; log "stop requested pid=$pid"
     else
