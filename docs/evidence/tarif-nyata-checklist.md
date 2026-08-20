@@ -20,8 +20,26 @@ ada 6 render yang tercatat, cukup untuk memisahkan per model):
 | 4 | Total tagihan 20 Agu | uji silang: estimasi kita Rp84.406 |
 | 5 | Kurs USD→IDR yang dipakai penagihan | semua konversi |
 
-Angka #4 adalah pemeriksaan paling cepat: kalau tagihan nyata hari ini jauh
-dari Rp84.406, seluruh tabel tarif meleset dan margin kedua tier ikut bergeser.
+### Uji silang Rp84.406 BATAL — dan penggantinya lebih bersih
+
+Ditambahkan 20 Agu sesudah membaca daftar task lewat API.
+
+Rencana semula membandingkan tagihan 20 Agu dengan estimasi Rp84.406 milik
+saya. Itu tidak sah: dari **62 task** akun pada 20 Agu, hanya **6 milik sesi
+ini**. Sisanya — termasuk 20 task `dreamina-seedance-2-5` pukul 21:51 — berasal
+dari sesi/pemakai lain. Tagihan akun mencakup semuanya, jadi selisih apa pun
+terhadap Rp84.406 tidak membuktikan apa-apa tentang tarif.
+
+**Dasar bersih penggantinya: token per task dari API.** Endpoint
+`/contents/generations/tasks` mengembalikan `usage.total_tokens`, `duration`,
+`resolution`, `model`, dan `generate_audio` per task — dan tokennya konsisten
+per model+resolusi (mis. dreamina-2-0 720p ber-audio ≈ 39.113 token/detik).
+Artinya **unit penagihannya token**, bukan detik.
+
+Jadi yang dibutuhkan dari konsol tinggal **harga per juta token per model**.
+Begitu angka itu masuk ke `MODEL_RATES` sebagai `tokenUsdPerM`,
+`estimateCostIdr()` otomatis berhenti menaksir: ia sudah punya cabang token,
+dan label "(estimasi tarif)" di log akan hilang sendiri tanpa render ulang.
 
 ## Sesudah angkanya ada
 

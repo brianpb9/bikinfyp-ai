@@ -18,6 +18,27 @@ hurufnya melunak (`docs/evidence/kebijakan-jarak-label-2026-08-20.md`).
 Ini SARAN, bukan gerbang: menolak foto kecil akan mengunci penjual yang cuma
 punya foto dari marketplace.
 
+### Resolusi BUKAN satu-satunya — dan ini pelajaran termahalnya
+
+Kasus internal Chi Forest, 20 Agu: enam foto **5712×4284** (jauh di atas 1000px)
+DITOLAK gerbang label, keenamnya, termasuk yang tajam. OCR membaca nol kata.
+
+Sebabnya bukan resolusi. Fotonya diambil dari ponsel di atas meja: botol berdiri
+miring, label melengkung mengikuti badan botol, teksnya terpotong perspektif,
+latar ramai. Diuji pada lebar 1440/2880/4320 — tetap nol sampai satu kata. Yang
+menentukan bukan ketajaman, melainkan **apakah labelnya menghadap kamera dan
+cukup besar di frame**.
+
+Jadi saran di wizard harus menyebut ketiganya, bukan cuma angka piksel:
+
+> - **Kemasan tegak**, jangan miring atau rebah
+> - **Label menghadap kamera**, jangan menyamping
+> - **Latar polos**, jangan ada barang lain di belakangnya
+> - Sisi panjang **≥1000px** kalau bisa
+
+Botol transparan mengilap berlabel kecil adalah kelas tersulit — tulis contohnya
+di bantuan wizard, karena penjual minuman akan sering menabraknya.
+
 ## 2. Ingatan pilihan terakhir (client-side)
 
 Bagian frontend dari pustaka aset. Simpan pilihan referensi terakhir per
