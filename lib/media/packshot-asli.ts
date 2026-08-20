@@ -27,6 +27,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { runFfmpeg, probeVideoSize } from "./ffmpeg";
+import { METADATA_IKUT } from "./metadata-aigc";
 
 const FPS = 24;
 
@@ -74,6 +75,12 @@ export async function dimensiDariKlip(klipPath: string): Promise<{ width: number
  *  menyisakan pita. Latar blur tetap dipasang di belakang sebagai jaring: bila
  *  fotonya jauh lebih lebar dari kanvas, sudut-sudutnya tetap terisi warna
  *  fotonya sendiri alih-alih hitam. */
+/** Rasio lebar/tinggi sebuah gambar. Dipakai memutuskan crop vs muat-utuh. */
+async function rasio(fotoPath: string): Promise<number> {
+  const { width, height } = await probeVideoSize(fotoPath);
+  return height > 0 ? width / height : 1;
+}
+
 export async function buildPackshotAsli(input: PackshotInput): Promise<string> {
   if (!fs.existsSync(input.fotoPath)) throw new Error(`foto produk tidak ada: ${input.fotoPath}`);
   fs.mkdirSync(path.dirname(input.outPath), { recursive: true });
@@ -84,11 +91,31 @@ export async function buildPackshotAsli(input: PackshotInput): Promise<string> {
   // rantai, supaya keduanya bergerak sebagai satu gambar — bukan produk
   // melayang di atas latar yang diam.
   const langkah = ((ZOOM_AKHIR - 1) / frames).toFixed(6);
+
+  // PENUH-BLEED ADA BATASNYA, dan batasnya ketahuan dari bukti 20 Agu.
+  //
+  // Foto uji JJ Glow berbentuk landscape lebar (1280x558). Dipotong penuh-bleed
+  // ke kanvas 9:16, yang tersisa cuma pita tengah: nama produk memang terbaca,
+  // tapi LOGO MEREK-nya terpotong keluar frame — di shot yang seluruh alasan
+  // keberadaannya adalah menampilkan merek dengan benar.
+  //
+  // Jadi crop dipakai selama yang dibuang masih wajar (foto potret/persegi,
+  // bentuk paling umum di e-commerce). Begitu fotonya jauh lebih lebar dari
+  // kanvas, produknya DIMUAT UTUH di atas latar blur dari fotonya sendiri:
+  // pita blur memang kurang megah, tapi merek yang terpotong jauh lebih buruk
+  // daripada pita.
+  const rasioFoto = await rasio(input.fotoPath);
+  const rasioKanvas = W / H;
+  // > 1,6x lebih lebar dari kanvas = kehilangan lebih dari ~38% lebar fotonya.
+  const terlaluLebar = rasioFoto / rasioKanvas > 1.6;
+  const depan = terlaluLebar
+    ? `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black@0[fg]`
+    : `[0:v]scale=${Math.round(W * 1.04)}:${Math.round(H * 1.04)}:force_original_aspect_ratio=increase,crop=${W}:${H}[fg]`;
   const filter = [
     `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=40:2,eq=brightness=0.03[bg]`,
     // Depan: penuhi kanvas lalu potong sisi. Sedikit lebih besar dari kanvas
     // (1,04) supaya push-in di akhir rantai tidak pernah menyingkap tepi.
-    `[0:v]scale=${Math.round(W * 1.04)}:${Math.round(H * 1.04)}:force_original_aspect_ratio=increase,crop=${W}:${H}[fg]`,
+    depan,
     `[bg][fg]overlay=(W-w)/2:(H-h)/2[flat]`,
     `[flat]zoompan=z='min(zoom+${langkah},${ZOOM_AKHIR})':d=${frames}:s=${W}x${H}:fps=${FPS},setsar=1[v]`,
   ].join(";");
@@ -168,6 +195,13 @@ export async function appendPackshot(input: {
       `[0:v]scale=${width}:${height},setsar=1[v0];[1:v]scale=${width}:${height},setsar=1[v1];` +
         `[v0][0:a][v1][1:a]concat=n=2:v=1:a=1[v][a]`,
       "-map", "[v]", "-map", "[a]",
+      // PENANDA AIGC IKUT PINDAH. Ditemukan dari QC-08 FAIL pada render video
+      // penuh 20 Agu: concat ini me-reencode, dan re-encode tanpa
+      // -map_metadata membuang tag racun_aigc/aigc_watermark yang ditulis
+      // compositor. Penandanya bukan hiasan — Syarat & Ketentuan menjanjikan
+      // setiap video membawanya di dalam berkas, jadi menghapusnya diam-diam
+      // membuat janji itu bohong.
+      ...METADATA_IKUT,
       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100", "-ac", "2",
       gabung,
     ]);

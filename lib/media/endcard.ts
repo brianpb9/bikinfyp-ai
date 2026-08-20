@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { runFf, runFfmpeg, runFfprobe } from "./ffmpeg";
+import { METADATA_IKUT } from "./metadata-aigc";
 
 // Endcard ber-brand: layar penutup berisi logo + tagline di atas warna brand.
 //
@@ -146,6 +147,10 @@ export async function appendEndcard(input: EndcardInput): Promise<string> {
       `[0:v]scale=${w}:${h},setsar=1[v0];[1:v]scale=${w}:${h},setsar=1[v1];` +
       `[v0][0:a][v1][1:a]concat=n=2:v=1:a=1[v][a]`,
       "-map", "[v]", "-map", "[a]",
+      // Penanda AIGC ikut menyeberang — lihat metadata-aigc.ts. Bug ini sudah
+      // lama ada di sini, hanya tidak terlihat karena endcard cuma dipasang
+      // untuk job Enterprise ber-brand-kit.
+      ...METADATA_IKUT,
       "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", merged]);
     return merged;
   } catch (err) {

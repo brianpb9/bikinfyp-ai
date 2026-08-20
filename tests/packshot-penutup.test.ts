@@ -96,3 +96,77 @@ test("sidik foto ikut, dan berubah kalau fotonya berbeda", async (t) => {
     fs.rmSync(dir, { recursive: true, force: true });
   }
 });
+
+// PENANDA AIGC HARUS SELAMAT DARI PACKSHOT.
+//
+// Ditemukan dari QC-08 FAIL pada render video penuh pertama (20 Agu):
+// watermark_param=true tapi metadata_tag=false. Concat me-reencode, dan
+// re-encode tanpa -map_metadata membuang tag kustom. Syarat & Ketentuan
+// menjanjikan setiap video membawa penanda AI di dalam berkasnya, jadi
+// menghapusnya diam-diam membuat janji itu tidak benar.
+test("tag racun_aigc ikut menyeberang ke video ber-packshot", async (t) => {
+  if (!punyaFfmpeg()) return t.skip("ffmpeg tidak ada di mesin ini");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "packshot-aigc-"));
+  try {
+    const { foto } = siapkan(dir);
+    // Video utama yang MEMBAWA tag, seperti keluaran compositor.
+    const bertag = path.join(dir, "bertag.mp4");
+    execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=360x640:rate=24:duration=3",
+      "-f", "lavfi", "-i", "anullsrc=channel_layout=stereo:sample_rate=44100", "-t", "3",
+      "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+      "-movflags", "faststart+use_metadata_tags", "-metadata", "racun_aigc=true", bertag]);
+
+    const hasil = await appendPackshot({ videoPath: bertag, workDir: dir, fotoPath: foto });
+    assert.equal(hasil.ditambahkan, true);
+    const tags = execFileSync("ffprobe", ["-v", "error", "-show_entries", "format_tags",
+      "-of", "default=noprint_wrappers=1", hasil.path]).toString();
+    assert.match(
+      tags, /racun_aigc=true/,
+      `penanda AIGC hilang sesudah packshot — janji Syarat & Ketentuan jadi tidak benar:\n${tags}`
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+// KOMPOSISI: crop penuh-bleed punya batas.
+//
+// Bukti 20 Agu: foto JJ Glow (landscape 1280x558) dipotong penuh-bleed ke 9:16
+// menyisakan pita tengah — nama produk terbaca tapi LOGO MEREK terpotong keluar
+// frame, di shot yang seluruh alasan keberadaannya adalah menampilkan merek.
+test("foto landscape lebar DIMUAT UTUH, bukan dipotong sampai merek hilang", async (t) => {
+  if (!punyaFfmpeg()) return t.skip("ffmpeg tidak ada di mesin ini");
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "packshot-rasio-"));
+  try {
+    const { buildPackshotAsli } = await import("../lib/media/packshot-asli");
+    // Landscape lebar dengan penanda MERAH di tepi kiri — berperan sebagai
+    // logo merek yang hilang duluan begitu sisi frame dipotong.
+    const lebar = path.join(dir, "lebar.png");
+    execFileSync("ffmpeg", ["-y", "-v", "error",
+      "-f", "lavfi", "-i", "color=c=red:size=200x400",
+      "-f", "lavfi", "-i", "color=c=blue:size=1000x400",
+      "-filter_complex", "[0:v][1:v]hstack=inputs=2", "-frames:v", "1", lebar]);
+    const out = await buildPackshotAsli({
+      fotoPath: lebar, durationSec: 0.5, width: 360, height: 640,
+      outPath: path.join(dir, "keluar.mp4"),
+    });
+
+    // Baca piksel frame apa adanya (rgb24 mentah) dan cari merah pekat.
+    const raw = execFileSync("ffmpeg", ["-v", "error", "-ss", "0.1", "-i", out,
+      "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+      { maxBuffer: 64 * 1024 * 1024 });
+    let merah = 0;
+    for (let i = 0; i + 2 < raw.length; i += 3) {
+      if (raw[i] > 140 && raw[i + 1] < 90 && raw[i + 2] < 90) merah++;
+    }
+    assert.ok(
+      merah > 500,
+      `penanda merah di tepi kiri foto hilang dari frame (${merah} piksel) — ` +
+        "artinya foto landscape masih dipotong, dan logo merek ikut terpotong"
+    );
+    assert.deepEqual(await probeVideoSize(out), { width: 360, height: 640 },
+      "kanvas harus tetap terisi penuh, bukan mengecil mengikuti foto");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
