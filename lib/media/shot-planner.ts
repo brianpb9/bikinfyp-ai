@@ -294,19 +294,31 @@ const TALKING_HEAD_FRAMING =
 // diambil cukup jauh sehingga baris kecil tidak pernah bisa terbaca.
 // Keputusan itu mengubah tampilan, jadi menunggu Brian.
 //
-// Versi sekarang tetap dipertahankan: ia tidak memperbaiki, tapi ia menghapus
-// permintaan yang mustahil dan melarang angka volume karangan.
+// Percobaan 3 (render berbayar 20 Agu, test_output/adu_koreografi): masih
+// mengarang — "jddpgeer", "SOMSONG", "PAL Q3" pada label botol yang diambil
+// dekat. Tiga putaran prompt, tiga kali gagal, di dua model berbeda.
+//
+// KEPUTUSAN Brian 20 Agu: jalan keluar A — produk diambil cukup jauh sehingga
+// TIDAK ADA teks pada label yang pernah ter-resolve jadi huruf, termasuk nama
+// mereknya. Alasannya sederhana: huruf yang tidak pernah dirender tidak bisa
+// salah, sedangkan tiga putaran membuktikan huruf yang dirender selalu salah.
+//
+// Konsekuensi yang TIDAK disembunyikan: di bawah kebijakan ini QC-10 ("label
+// produk terbaca") tidak akan pernah PASS dari klip generasi — ia hanya bisa
+// menangkap salah eja yang terlanjur terbaca. Baris standar 10/10 "label
+// terbaca di >=2 titik" karena itu hanya bisa dipenuhi lewat packshot foto
+// asli (jalan keluar B), dan itu keputusan terpisah yang belum diambil.
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
   "do not redesign or replace the product, the packaging stays physically intact and correct " +
   "(one cap, one dropper, nothing floating or duplicated). The ENTIRE bottle and its full label " +
   "stay completely inside the frame at all times, with visible margin on every side — never cropped " +
   "or cut off by the frame edges, camera framed wide enough that no part of the bottle ever leaves " +
-  "frame. The large bold brand name on the label stays sharp, steady and perfectly legible the whole " +
-  "time, reproduced with the EXACT same letters and spelling as the reference image (do not alter, " +
-  "add, drop, or misspell any letter). The smaller lines printed below the brand name read as fine " +
-  "printed TEXTURE at this distance — visible as faint grey lines of print, with no individual " +
-  "letters or words resolved anywhere. Never render invented words, invented ingredient names, or " +
+  "frame. The camera stays at a normal arm's-length viewing distance from the product, so " +
+  "ALL printed text on the label — the brand name included — reads only as fine printed " +
+  "TEXTURE: visible as faint lines and blocks of print, with no individual letter, word, or number " +
+  "resolved anywhere in any frame. The label keeps its exact colours, layout and proportions from " +
+  "the reference image. Never render invented words, invented ingredient names, or " +
   "invented volume figures on the label";
 
 // Aksi demo per KATEGORI PRODUK (2026-08-07, dipelajari dari akun UGC tim +
@@ -569,18 +581,49 @@ function kunciBahasa(mode: "presenter" | "voiceover"): { header: string; perShot
  * Perbaikannya menyatakan kehadiran produk sebagai KEADAAN AWAL aksi itu
  * sendiri, sehingga tidak ada lagi dua aturan yang berlomba. Kategori jasa
  * dikecualikan: di sana memang tidak ada benda yang boleh muncul.
+ *
+ * TERUKUR DAN BELUM CUKUP (render verifikasi 20 Agu, V1-hook): dengan pengikat
+ * ini terpasang, botol TETAP baru masuk frame di detik ~2 dari 5. Aksi penulis
+ * berbunyi "...THEN pauses on the serum bottle" dan kalimat berbentuk
+ * koreografi itu tetap menang atas prefiks berbentuk batasan.
+ *
+ * Kesimpulan jujur: ini menolong, tapi akar masalahnya di HULU — penulis tidak
+ * seharusnya menulis aksi yang menunda kemunculan produk pada shot pembuka.
+ * Menambal di perakit prompt berarti melawan kalimat penulis dengan kalimat
+ * lain di prompt yang sama, dan putaran ini membuktikan siapa yang menang.
+ * Jangan klaim cacat ini beres sampai ada render yang menunjukkan sebaliknya.
  */
 const praAksiHadir = (nama: string) =>
   `"${nama}" is already fully inside the frame from the very first frame and never leaves it; ` +
   `within that frame, `;
 
-function sinematografiPenulis(segs: SegmentDraft[]): { aksi: string; kamera: string; tanpaWajah: boolean } | null {
+/**
+ * Framing penulis yang mendekat ke label, ditumpulkan.
+ *
+ * Kebijakan jarak (A, 20 Agu) tidak ada gunanya kalau kalimat berikutnya di
+ * prompt yang sama berbunyi "tight macro" — dan penulis memang menulis begitu
+ * pada shot CTA, karena secara sinematik itu benar. Yang salah bukan seleranya,
+ * melainkan bahwa model tidak bisa menulis huruf: begitu label mengisi frame,
+ * hurufnya ter-resolve dan jadi karangan.
+ *
+ * Jadi macro diturunkan ke close biasa HANYA untuk produk berlabel. Framing
+ * penulis yang lain lewat apa adanya.
+ */
+const MACRO = /\b(tight\s+)?macro\b|extreme close|extreme wide|super close/gi;
+function tumpulkanMacro(kamera: string, adaLabel: boolean): string {
+  return adaLabel ? kamera.replace(MACRO, "close, at arm's-length viewing distance") : kamera;
+}
+
+function sinematografiPenulis(segs: SegmentDraft[], adaLabel: boolean): { aksi: string; kamera: string; tanpaWajah: boolean } | null {
   const utama = segs.find((sg) => (sg.action ?? "").trim().length > 12);
   if (!utama) return null;
-  const kamera = [utama.framing, utama.angle, utama.camera]
-    .map((x) => (x ?? "").trim())
-    .filter(Boolean)
-    .join(", ");
+  const kamera = tumpulkanMacro(
+    [utama.framing, utama.angle, utama.camera]
+      .map((x) => (x ?? "").trim())
+      .filter(Boolean)
+      .join(", "),
+    adaLabel
+  );
   return {
     aksi: String(utama.action).trim(),
     kamera,
@@ -1221,7 +1264,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // "jadikan ini default, bukan pilihan" — tapi kodenya hanya memberlakukannya
     // pada talking_head, sehingga format ads dikirim ke antrean berbayar
     // dengan konfigurasi yang catatan kita sendiri beri 0% kelulusan.
-    const sinema = sinematografiPenulis(segmenMilikShot(i));
+    const sinema = sinematografiPenulis(segmenMilikShot(i), !isServiceLike(input.productCategory));
     const formatBukaTanpaWajah = format === "talking_head" || format === "ads" || format === "tvc";
     const bukaTanpaWajah =
       // Penanda penulis "expression: not visible" ikut memutuskan, bukan cuma

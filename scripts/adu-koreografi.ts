@@ -74,16 +74,29 @@ async function main() {
   fs.mkdirSync(OUT, { recursive: true });
 
   // ---- 1. Satu naskah, jalur produksi penuh (LLM, bukan template) ----
-  console.log("NASKAH (jalur produksi: Idea Stage -> FYP Gate -> penulis -> validator)");
-  const [skrip] = await generateScripts({
-    product: PRODUK, register: "bestie", qualityTier: "super_hq",
-    durationSec: DURASI, count: 1, hookLevel: "berani",
-    contentType: "affiliate", format: FORMAT,
-  } as never);
-  console.log(`  sumber: ${skrip.script_source}${skrip.standarGaris ? ` · ${skrip.standarGaris}` : ""}`);
-  if (skrip.script_source !== "llm") {
-    console.error(`  BATAL — naskah bukan dari penulis LLM (${skrip.script_source}). Adu ini menguji koreografi penulis; naskah template tidak punya koreografi untuk diuji.`);
-    process.exit(1);
+  //
+  // PAKAI_NASKAH=putaran1 memakai ulang naskah yang sudah dirender sebelumnya.
+  // Tanpa itu, putaran verifikasi akan menulis naskah BARU dan membandingkan
+  // dua hal sekaligus (naskah berbeda + prompt berbeda) — lalu apa pun yang
+  // terlihat tidak bisa dikaitkan ke perbaikannya. Satu variabel per putaran.
+  const berkasLama = path.join(OUT, "naskah-putaran1.json");
+  const pakaiLama = process.env.PAKAI_NASKAH === "putaran1" && fs.existsSync(berkasLama);
+  let skrip: Awaited<ReturnType<typeof generateScripts>>[number];
+  if (pakaiLama) {
+    console.log("NASKAH: memakai ulang naskah putaran 1 (satu-satunya variabel = perbaikan prompt)");
+    skrip = JSON.parse(fs.readFileSync(berkasLama, "utf8"));
+  } else {
+    console.log("NASKAH (jalur produksi: Idea Stage -> FYP Gate -> penulis -> validator)");
+    [skrip] = await generateScripts({
+      product: PRODUK, register: "bestie", qualityTier: "super_hq",
+      durationSec: DURASI, count: 1, hookLevel: "berani",
+      contentType: "affiliate", format: FORMAT,
+    } as never);
+    console.log(`  sumber: ${skrip.script_source}${skrip.standarGaris ? ` · ${skrip.standarGaris}` : ""}`);
+    if (skrip.script_source !== "llm") {
+      console.error(`  BATAL — naskah bukan dari penulis LLM (${skrip.script_source}). Adu ini menguji koreografi penulis; naskah template tidak punya koreografi untuk diuji.`);
+      process.exit(1);
+    }
   }
   for (const s of skrip.segments) {
     const g = s as unknown as Record<string, string>;
@@ -91,19 +104,29 @@ async function main() {
     console.log(`        aksi   : ${g.action ?? "(kosong)"}`);
     console.log(`        kamera : ${[g.framing, g.angle, g.camera].filter(Boolean).join(", ") || "(kosong)"}`);
   }
-  fs.writeFileSync(path.join(OUT, "naskah.json"), JSON.stringify(skrip, null, 2));
+  if (!pakaiLama) fs.writeFileSync(path.join(OUT, "naskah.json"), JSON.stringify(skrip, null, 2));
 
   // ---- 2. Dua lengan ----
-  const lengan = [
-    { id: "A-tersambung", segments: skrip.segments as unknown[] },
-    { id: "B-kontrol", segments: lucuti(skrip.segments as unknown[]) },
+  // Putaran 2 (20 Agu, sesudah kebijakan jarak label + pengikat kehadiran):
+  // dua SHOT paling berisiko dari satu naskah yang sama, bukan lagi dua lengan.
+  // Yang diuji sekarang bukan "apakah koreografi sampai" — itu sudah terbukti —
+  // melainkan apakah dua cacat yang terlihat di piksel benar-benar hilang:
+  // shot 1 (produk telat masuk frame) dan shot 3 (label paling dekat ke kamera).
+  const semua = [
+    { id: "V1-hook", segments: skrip.segments as unknown[], shot: 0 },
+    { id: "V2-cta-hero", segments: skrip.segments as unknown[], shot: 2 },
   ];
+  // HANYA=V2-cta-hero merender ulang satu lengan saja — dipakai saat gerbang
+  // menolak satu lengan dan lengan lain sudah dibayar. Membayar ulang klip yang
+  // sudah benar adalah pemborosan, bukan ketelitian.
+  const pilih = (process.env.HANYA ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const lengan = pilih.length ? semua.filter((l) => pilih.includes(l.id)) : semua;
 
   const hasil: Record<string, unknown>[] = [];
   for (const L of lengan) {
     console.log(`\n=== ${L.id} ===`);
     const spec = rakit(L.segments, `adu-${L.id}`);
-    const shot = spec.shots[0];
+    const shot = spec.shots[Math.min(L.shot ?? 0, spec.shots.length - 1)];
     fs.writeFileSync(path.join(OUT, `prompt-${L.id}.txt`), shot.prompt);
     console.log(shot.prompt.slice(0, 400).replace(/\n/g, "\n  "));
 

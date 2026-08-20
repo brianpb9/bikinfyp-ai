@@ -69,7 +69,10 @@ test("AKSI yang ditulis penulis sampai ke prompt shot", () => {
 
 test("KAMERA & framing penulis ikut, bukan cuma format bawaan", () => {
   const p = rakit("ads").shots[0].prompt;
-  assert.match(p, /tight macro/i, "framing penulis hilang");
+  // "tight macro" penulis sengaja ditumpulkan untuk produk berlabel sejak
+  // kebijakan jarak 20 Agu (lihat test di bawah) — yang diuji di sini adalah
+  // bahwa sisa framing penulis tetap sampai, bukan macro-nya.
+  assert.match(p, /Shot composition:/i, "blok framing penulis hilang seluruhnya");
   assert.match(p, /slight top-down/i, "angle penulis hilang");
   assert.match(p, /static/i, "gerak kamera penulis hilang");
 });
@@ -139,4 +142,35 @@ test("kategori jasa TIDAK dipaksa memunculkan benda", async () => {
     !/already fully inside the frame/i.test(spec.shots[0].prompt),
     "jasa tidak punya benda untuk dijaga di frame — memaksanya membuat model mengarang produk"
   );
+});
+
+// KEBIJAKAN JARAK LABEL (Brian, 20 Agu — jalan keluar A). Tiga putaran prompt
+// gagal membuat model mengeja label dengan benar; render 20 Agu menghasilkan
+// "jddpgeer"/"SOMSONG". Huruf yang tidak pernah dirender tidak bisa salah.
+test("tidak ada lagi permintaan mustahil 'nama merek terbaca tajam'", () => {
+  const p = rakit("hands_only").shots[0].prompt;
+  assert.ok(
+    !/brand name[^.]*legible|perfectly legible/i.test(p),
+    `permintaan yang tiga kali terbukti mustahil masih ada di prompt berbayar:\n${p.slice(0, 300)}`
+  );
+  assert.match(p, /no individual letter, word, or number resolved/i, "kebijakan jarak label hilang");
+});
+
+test("framing 'tight macro' penulis ditumpulkan untuk produk berlabel", () => {
+  const p = rakit("hands_only").shots[0].prompt;   // segmen hook menulis "tight macro"
+  assert.ok(
+    !/tight macro|extreme close/i.test(p),
+    `macro penulis lolos — label akan mengisi frame dan hurufnya jadi karangan:\n${p.slice(0, 300)}`
+  );
+  assert.match(p, /at arm's-length viewing distance/i, "penggantinya tidak terpasang");
+});
+
+test("produk jasa TIDAK ditumpulkan — tidak ada label untuk dilindungi", () => {
+  const spec = planShots({
+    jobId: "uji-jasa-macro", durationSec: 15, segments: SEGMEN_KAYA,
+    category: getCreatorCategory("hijaber")!, productName: "Jasa Desain Logo",
+    productCategory: "jasa", imageRefPath: "/tmp/x.jpg",
+    qualityTier: "super_hq", format: "ads",
+  } as never) as { shots: { prompt: string }[] };
+  assert.match(spec.shots[0].prompt, /tight macro/i, "framing sinematik penulis hilang tanpa alasan");
 });

@@ -190,7 +190,12 @@ test("label: tidak menuntut tajam dan buram sekaligus di bidang yang sama", asyn
 
   // Dan harus MENYATAKAN apa yang seharusnya terlihat, bukan cuma melarang.
   const contoh = (await rencana(CAMPAIGN_TEMPLATES.find((t) => t.format === "hands_only")!)).shots[0].prompt;
-  assert.match(contoh, /read as fine printed TEXTURE/i, "tidak menyatakan wujud teks kecil yang benar");
+  // Sejak kebijakan jarak 20 Agu (jalan keluar A) aturan TEKSTUR ini berlaku
+  // untuk SELURUH teks di label, nama merek termasuk — bukan lagi hanya baris
+  // kecil di bawahnya. Render berbayar 20 Agu membuktikan nama merek pun
+  // keluar sebagai karangan ("jddpgeer", "SOMSONG") begitu ia ter-resolve.
+  assert.match(contoh, /reads? (only )?as fine printed TEXTURE/i, "tidak menyatakan wujud teks label yang benar");
+  assert.match(contoh, /no individual letter, word, or number resolved/i, "kebijakan jarak label tidak dinyatakan");
   assert.match(contoh, /Never render invented words/i, "tidak melarang kata karangan di label");
 });
 
