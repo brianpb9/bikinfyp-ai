@@ -51,9 +51,13 @@ yang menentukan selisihnya:
 | high_quality | `dreamina-seedance-2-0-mini-260615` | Rp2.771 | Rp554 | **Rp8.313** | Rp12.000 | **Rp3.687 (31%)** |
 | super_hq | `dreamina-seedance-2-0-260128` | Rp11.655 | Rp2.331 | **Rp34.965** | Rp80.000 | **Rp45.035 (56%)** |
 
-Margin di atas belum memotong frame buatan (±Rp650), QC vision (±Rp12), TTS,
-penyimpanan, dan render gagal yang harus diulang. Board 19 Agu memasukkan dua
-yang pertama dan mendapat margin retail ~25%, bukan 31%.
+Margin di atas KOTOR — belum memotong frame buatan (±Rp650), QC vision (±Rp12),
+TTS, penyimpanan, dan render gagal yang harus diulang.
+
+**Angka yang dipakai untuk keputusan dan alarm: margin retail ~25%**
+(Rp3.000 dari Rp12.000 untuk high_quality 15 detik), sesuai hitungan board
+19 Agu yang memasukkan frame dan QC vision. Yang 31% jangan dipakai — ia
+mengabaikan dua biaya yang selalu ada.
 
 Harga jual dari paket kredit di `lib/credits.ts` (hq5 Rp60.000/5 video;
 super5 Rp400.000/5 video). Margin kotor BELUM memotong TTS, penyimpanan, dan
