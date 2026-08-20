@@ -70,12 +70,43 @@ tidak berlaku di tier ini, atau model mini memang lebih setia pada label —
 
 ## Yang TIDAK bisa diverifikasi sesi ini
 
-- **Transkripsi audio**: `qcSuara` mengembalikan `{"transkrip":null,"masalah":
-  ["berkas video tidak ada"]}` untuk berkas yang jelas ada — jalur transkripsi
-  bermasalah dan tidak saya kejar. Dimensi Bahasa/CTA karena itu **NOT
-  VERIFIABLE**, bukan ditebak dari naskah.
+- **Transkripsi audio**: **NOT VERIFIABLE**, tapi bukan karena jalur
+  transkripsinya rusak — lihat koreksi di bawah.
 - Rubrik §B/§D, SA1–SA8, benchmark bernama: tidak dijalankan, karena menilai
   sampel yang konfigurasinya salah akan menghasilkan angka yang menyesatkan.
+
+## KOREKSI: "jalur transkripsi rusak" itu SALAH — kesalahan harness saya lagi
+
+Saya melaporkan `qcSuara` mengembalikan `"berkas video tidak ada"` untuk berkas
+yang jelas ada, dan menyimpulkan jalur transkripsinya bermasalah. **Salah.**
+
+Signature-nya `QcSuaraInput { videoPath, segmenSkrip, priceIdr, productName }`.
+Saya memanggilnya dengan `{ filePath }` dan menutupinya dengan `as never`,
+sehingga TypeScript tidak menolak dan `input.videoPath` bernilai undefined —
+maka pesan "berkas video tidak ada" itu benar apa adanya.
+
+Dipanggil dengan bentuk yang benar, jalurnya berjalan sampai ke penyedia dan
+gagal di sana:
+
+```json
+{"transkrip":null,"lolos":false,"masalah":["transkripsi gagal: HTTP 503"]}
+```
+
+Jadi yang perlu ditangani adalah **503 dari Gemini**, bukan kode kita. Menarik
+bahwa `GET /models` menjawab 200 pada jam yang sama — yang 503 adalah
+`generateContent` untuk transkripsi, jadi ini kemungkinan kuota/model tertentu,
+bukan layanan mati total.
+
+**Konsekuensi untuk perintah sesi berikutnya:** item "fix the transcription path
+BEFORE rerunning" **tidak perlu dikerjakan** — tidak ada yang rusak untuk
+diperbaiki. Yang perlu: cek 503-nya masih ada atau tidak sebelum canary, dan
+kalau masih, terima bahwa dimensi Bahasa/CTA akan NOT VERIFIABLE dan katakan
+begitu alih-alih menebak dari naskah.
+
+Ini kesalahan kelas yang sama dengan QC-08 dan QC-12 kemarin: `as never` di
+skrip uji saya menyembunyikan ketidakcocokan bentuk, lalu pesan galat yang
+jujur saya baca sebagai cacat produk. Pola yang sama tiga kali — di skrip
+sekali-pakai, berhenti memakai `as never` untuk membungkam pemeriksa tipe.
 
 ## Yang dibutuhkan sesi berikutnya
 
