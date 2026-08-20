@@ -181,22 +181,29 @@ It keeps the existing transport and lifecycle intact:
 
 1. `bus-wait reviewer` blocks;
 2. the oldest message is staged, then archived with `bus-read`;
-3. `codex exec --sandbox read-only` performs an independent review with the
-   exact SHA and task bound in its prompt;
+3. a detached Git worktree is checked out at the exact message SHA, then
+   `codex exec --ignore-user-config --sandbox read-only` performs the review
+   there with the SHA and task also bound in its prompt;
 4. a JSON schema constrains the result to `PASS`, `CHANGES_REQUESTED`, or
    `FOUNDER_DECISION_REQUIRED` and binds it to the same SHA/task;
 5. the wrapper sends it with the existing `bus-send` and immediately waits
    again.
+
+Personal Codex MCP/config entries are deliberately excluded from this unattended
+role. Each review also runs in its own process group with a 15-minute default
+wall-clock limit (`CODEX_REVIEWER_TIMEOUT_SECONDS` can override it), so one hung
+tool cannot block the queue forever.
 
 On macOS, `start` submits the loop to `launchd`; this is necessary because the
 Codex tool harness cleans up detached shell process groups after tool completion.
 Other platforms fall back to `nohup` and should use their normal process
 supervisor for machine-level durability.
 
-Runtime state, PID, and logs live under ignored `.agent-bus/tmp/`. A staged
-message survives a Reviewer subprocess failure and is retried; an existing
-response in the Builder inbox/archive prevents duplicate delivery after a
-restart.
+Runtime state, PID, exact-SHA worktree, and logs live under ignored
+`.agent-bus/tmp/`. A staged message survives a Reviewer subprocess failure and
+is retried. Recovery recognizes the message in either inbox or archive, stale
+locks are reclaimed after a hard crash, and an existing response in the Builder
+inbox/archive prevents duplicate delivery after a restart.
 
 ## Self-test
 

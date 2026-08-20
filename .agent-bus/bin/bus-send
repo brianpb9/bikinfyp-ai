@@ -48,6 +48,8 @@ TO=$1; TYPE=$2; SHA=$3; TASK=$4
 shift 4
 BODY=$*
 
+[ -n "$TASK" ] || die 2 "task must not be empty"
+
 # --- role validation -------------------------------------------------------
 in_list "$TO" "$ROLES" || die 2 "invalid role '$TO' (allowed: $ROLES)"
 
@@ -75,8 +77,8 @@ if in_list "$TYPE" "$SHA_REQUIRED_TYPES"; then
   case "$SHA" in *[!0-9a-f]*) sha_ok=no ;; esac
   [ "$sha_ok" = yes ] \
     || die 3 "SHA_BINDING: type $TYPE requires a 40-char lowercase hex sha, got '$SHA'"
-  git -C "$REPO_ROOT" cat-file -e "$SHA" 2>/dev/null \
-    || die 3 "SHA_BINDING: sha '$SHA' does not exist in $REPO_ROOT"
+  git -C "$REPO_ROOT" cat-file -e "$SHA^{commit}" 2>/dev/null \
+    || die 3 "SHA_BINDING: sha '$SHA' is not a commit in $REPO_ROOT"
 fi
 
 # --- compose ---------------------------------------------------------------
@@ -85,16 +87,33 @@ TMPDIR_BUS="$BUS_DIR/tmp"
 mkdir -p "$INBOX" "$TMPDIR_BUS" "$BUS_DIR/archive"
 
 MS=$(now_ms)
-while [ -e "$INBOX/$MS-$FROM-$TYPE.json" ] || [ -e "$TMPDIR_BUS/$MS-$FROM-$TYPE.json" ]; do
+RESERVATION=''
+TMPFILE=''
+cleanup_reservation() {
+  [ -z "$TMPFILE" ] || rm -f "$TMPFILE"
+  [ -z "$RESERVATION" ] || rmdir "$RESERVATION" 2>/dev/null || true
+}
+trap cleanup_reservation EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+while :; do
+  NAME="$MS-$FROM-$TYPE.json"
+  RESERVATION="$TMPDIR_BUS/.$NAME.reserve"
+  if [ -e "$INBOX/$NAME" ] || [ -e "$BUS_DIR/archive/$NAME" ] || [ -e "$TMPDIR_BUS/$NAME" ]; then
+    MS=$(( MS + 1 ))
+    continue
+  fi
+  mkdir "$RESERVATION" 2>/dev/null && break
   MS=$(( MS + 1 ))
 done
-NAME="$MS-$FROM-$TYPE.json"
 ID="$MS-$FROM-$TYPE"
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 
 # Write to tmp first, then rename into the inbox. Rename within one
 # filesystem is atomic, so a reader never sees a half-written message.
-TMPFILE="$TMPDIR_BUS/$NAME"
+TMPFILE="$TMPDIR_BUS/.$NAME.$$"
 printf '{"id":"%s","ts":"%s","from":"%s","to":"%s","type":"%s","sha":"%s","task":"%s","body":"%s"}\n' \
   "$(json_escape "$ID")" \
   "$(json_escape "$TS")" \
@@ -107,4 +126,8 @@ printf '{"id":"%s","ts":"%s","from":"%s","to":"%s","type":"%s","sha":"%s","task"
   > "$TMPFILE"
 
 mv "$TMPFILE" "$INBOX/$NAME"
+TMPFILE=''
+rmdir "$RESERVATION"
+RESERVATION=''
+trap - EXIT INT TERM HUP
 printf '%s\n' "$INBOX/$NAME"

@@ -18,32 +18,83 @@ REPO_ROOT=$(dirname "$BUS_DIR")
 WAIT="$SCRIPT_DIR/bus-wait"
 READ="$SCRIPT_DIR/bus-read"
 SEND="$SCRIPT_DIR/bus-send"
+RUNNER="$SCRIPT_DIR/codex-review-exec.mjs"
 SCHEMA="$BUS_DIR/reviewer-verdict.schema.json"
 STATE_DIR="$BUS_DIR/tmp/codex-reviewer-current"
+REVIEW_TREE="$BUS_DIR/tmp/codex-review-worktree"
 PID_FILE="$BUS_DIR/tmp/codex-reviewer.pid"
+RUNNER_PID_FILE="$BUS_DIR/tmp/codex-reviewer-runner.pid"
 LOG_FILE="$BUS_DIR/tmp/codex-reviewer.log"
 SUPERVISOR_LOG="$BUS_DIR/tmp/codex-reviewer-supervisor.log"
 LOCK_DIR="$BUS_DIR/tmp/codex-reviewer.lock"
 LAUNCH_LABEL="com.bikinfyp.codex-reviewer"
 WAIT_SECONDS=${CODEX_REVIEWER_WAIT_SECONDS:-3600}
 RETRY_SECONDS=${CODEX_REVIEWER_RETRY_SECONDS:-20}
+REVIEW_TIMEOUT_SECONDS=${CODEX_REVIEWER_TIMEOUT_SECONDS:-900}
 CODEX_BIN=${CODEX_REVIEWER_BIN:-codex}
 NODE_BIN=${CODEX_REVIEWER_NODE_BIN:-node}
+ACTIVE_RUNNER_PID=''
 
 log() { printf '%s codex-reviewer: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
 pid_is_runtime() {
   [ -f "$PID_FILE" ] || return 1
-  pid=$(cat "$PID_FILE" 2>/dev/null || true)
-  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
-  kill -0 "$pid" 2>/dev/null || return 1
-  ps -p "$pid" -o command= 2>/dev/null | grep -F "codex-reviewer-runtime run" >/dev/null 2>&1
+  runtime_pid=$(cat "$PID_FILE" 2>/dev/null || true)
+  case "$runtime_pid" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$runtime_pid" 2>/dev/null || return 1
+  ps -p "$runtime_pid" -o command= 2>/dev/null | grep -F "codex-reviewer-runtime run" >/dev/null 2>&1
 }
 
-json_field() {
-  # JSON is parsed by Node, not sed. Message bodies may contain escaped quotes
-  # and newlines, so regex extraction would silently corrupt reviewer context.
-  "$NODE_BIN" -e 'const v=JSON.parse(process.argv[1])[process.argv[2]]; process.stdout.write(v == null ? "" : String(v))' "$1" "$2"
+pid_value_is_runtime() {
+  candidate_pid=$1
+  case "$candidate_pid" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$candidate_pid" 2>/dev/null || return 1
+  ps -p "$candidate_pid" -o command= 2>/dev/null | grep -F "codex-reviewer-runtime run" >/dev/null 2>&1
+}
+
+supervisor_is_loaded() {
+  command -v launchctl >/dev/null 2>&1 || return 1
+  launchctl print "gui/$(id -u)/$LAUNCH_LABEL" >/dev/null 2>&1
+}
+
+clear_stale_lock() {
+  [ -d "$LOCK_DIR" ] || return 0
+  lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+  if pid_value_is_runtime "$lock_pid"; then return 1; fi
+  rm -f "$LOCK_DIR/pid"
+  rmdir "$LOCK_DIR" 2>/dev/null
+}
+
+wait_for_pid_exit() {
+  waited_pid=$1 waited_i=0
+  while kill -0 "$waited_pid" 2>/dev/null && [ "$waited_i" -lt 100 ]; do
+    sleep 0.1
+    waited_i=$((waited_i + 1))
+  done
+  ! kill -0 "$waited_pid" 2>/dev/null
+}
+
+json_file_field() {
+  # JSON is parsed from a file, not squeezed through argv or extracted by sed.
+  # This preserves escaped content and avoids ARG_MAX on an untrusted body.
+  "$NODE_BIN" -e 'const fs=require("fs"); const v=JSON.parse(fs.readFileSync(process.argv[1],"utf8"))[process.argv[2]]; process.stdout.write(v == null ? "" : String(v))' "$1" "$2"
+}
+
+validate_staged_message() {
+  "$NODE_BIN" - "$STATE_DIR/message.json" <<'NODE'
+const fs = require("fs");
+const file = process.argv[2];
+let m;
+try { m = JSON.parse(fs.readFileSync(file, "utf8")); }
+catch (error) { console.error(`invalid JSON: ${error.message}`); process.exit(1); }
+const fail = (reason) => { console.error(reason); process.exit(1); };
+if (!m || typeof m !== "object" || Array.isArray(m)) fail("message is not an object");
+if (m.from !== "builder" || m.to !== "reviewer") fail(`invalid direction ${m.from}->${m.to}`);
+if (!["READY_FOR_REVIEW", "DONE", "FOUNDER_DECISION_REQUIRED"].includes(m.type)) fail(`unsupported type ${m.type}`);
+if (typeof m.task !== "string" || m.task.length < 1 || m.task.length > 512) fail("task must contain 1..512 characters");
+if (typeof m.body !== "string") fail("body must be a string");
+if (m.type === "READY_FOR_REVIEW" && !/^[0-9a-f]{40}$/.test(m.sha)) fail("READY_FOR_REVIEW requires a full lowercase SHA");
+NODE
 }
 
 response_already_sent() {
@@ -69,19 +120,33 @@ NODE
 
 consume_staged_message() {
   # Crash-safe handoff: message.json is copied before bus-read. If the process
-  # dies in between, restart consumes the same inbox item before reviewing it.
+  # dies after bus-read but before `consumed`, restart recognizes the exact
+  # filename in archive and continues instead of deadlocking behind message B.
   [ -f "$STATE_DIR/message.json" ] || return 1
   if [ ! -f "$STATE_DIR/consumed" ]; then
-    id=$(json_field "$(cat "$STATE_DIR/message.json")" id)
+    if [ -f "$STATE_DIR/source_name" ]; then
+      source_name=$(cat "$STATE_DIR/source_name")
+    else
+      # Compatibility with state staged by the first runtime version.
+      id=$(json_file_field "$STATE_DIR/message.json" id 2>/dev/null) || return 2
+      case "$id" in ''|*[!A-Za-z0-9_.-]*) log "invalid legacy message id"; return 2 ;; esac
+      source_name="$id.json"
+    fi
+    case "$source_name" in ''|*/*|.|..) log "invalid staged source name"; return 2 ;; esac
+
     oldest=''
     for f in "$BUS_DIR/inbox/reviewer"/*.json; do [ -e "$f" ] || break; oldest=$f; break; done
-    if [ -n "$oldest" ]; then
-      oldest_id=$(json_field "$(cat "$oldest")" id)
-      if [ "$oldest_id" != "$id" ]; then
-        log "state/inbox order mismatch: current=$id oldest=$oldest_id"
+    if [ -f "$BUS_DIR/inbox/reviewer/$source_name" ]; then
+      if [ "$(basename "$oldest")" != "$source_name" ]; then
+        log "state/inbox order mismatch: current=$source_name oldest=$(basename "$oldest")"
         return 2
       fi
       "$READ" reviewer > "$STATE_DIR/read.out" || return 2
+    elif [ -f "$BUS_DIR/archive/$source_name" ]; then
+      log "recovered consumed message from archive: $source_name"
+    else
+      log "staged message is absent from inbox and archive: $source_name"
+      return 2
     fi
     : > "$STATE_DIR/consumed"
   fi
@@ -97,8 +162,37 @@ stage_next_message() {
   msg_path=$(printf '%s\n' "$wait_out" | sed -n '1p')
   [ -f "$msg_path" ] || { log "bus-wait returned missing path: $msg_path"; return 2; }
   cp "$msg_path" "$STATE_DIR/message.json.new" || return 2
+  basename "$msg_path" > "$STATE_DIR/source_name.new" || return 2
   mv "$STATE_DIR/message.json.new" "$STATE_DIR/message.json"
+  mv "$STATE_DIR/source_name.new" "$STATE_DIR/source_name"
   consume_staged_message
+}
+
+review_tree_registered() {
+  git -C "$REPO_ROOT" worktree list --porcelain 2>/dev/null \
+    | awk -v target="$REVIEW_TREE" '$1 == "worktree" && $2 == target { found=1 } END { exit !found }'
+}
+
+cleanup_review_tree() {
+  if review_tree_registered; then
+    git -C "$REPO_ROOT" worktree remove --force "$REVIEW_TREE" >> "$LOG_FILE" 2>&1 || return 1
+  elif [ -e "$REVIEW_TREE" ]; then
+    # Never recursively delete an unexpected directory. It may not belong to
+    # this runtime even though it occupies our deterministic worktree path.
+    log "unregistered path blocks review worktree: $REVIEW_TREE"
+    return 1
+  fi
+  git -C "$REPO_ROOT" worktree prune >> "$LOG_FILE" 2>&1 || return 1
+}
+
+prepare_review_tree() {
+  cleanup_review_tree || return 1
+  git -C "$REPO_ROOT" worktree add --detach "$REVIEW_TREE" "$1" >> "$LOG_FILE" 2>&1 || return 1
+  actual_sha=$(git -C "$REVIEW_TREE" rev-parse HEAD 2>/dev/null) || return 1
+  [ "$actual_sha" = "$1" ] || {
+    log "exact-SHA worktree mismatch: wanted=$1 actual=$actual_sha"
+    return 1
+  }
 }
 
 build_prompt() {
@@ -124,17 +218,16 @@ EOF
 }
 
 review_current() {
-  message=$(cat "$STATE_DIR/message.json")
-  from=$(json_field "$message" from) || return 2
-  to=$(json_field "$message" to) || return 2
-  type=$(json_field "$message" type) || return 2
-  sha=$(json_field "$message" sha) || return 2
-  task=$(json_field "$message" task) || return 2
-
-  if [ "$from" != "builder" ] || [ "$to" != "reviewer" ]; then
-    log "invalid message direction from=$from to=$to; refusing to execute embedded content"
-    return 2
+  if ! validation_error=$(validate_staged_message 2>&1); then
+    log "dropping invalid archived message: $validation_error"
+    rm -rf "$STATE_DIR"
+    return 0
   fi
+
+  message=$(cat "$STATE_DIR/message.json")
+  type=$(json_file_field "$STATE_DIR/message.json" type) || return 2
+  sha=$(json_file_field "$STATE_DIR/message.json" sha) || return 2
+  task=$(json_file_field "$STATE_DIR/message.json" task) || return 2
 
   case "$type" in
     DONE)
@@ -143,7 +236,7 @@ review_current() {
       return 0
       ;;
     FOUNDER_DECISION_REQUIRED)
-      log "FOUNDER_DECISION_REQUIRED received for task=$task: $(json_field "$message" body)"
+      log "FOUNDER_DECISION_REQUIRED received for task=$task: $(json_file_field "$STATE_DIR/message.json" body)"
       rm -rf "$STATE_DIR"
       return 0
       ;;
@@ -172,30 +265,51 @@ review_current() {
   rm -f "$result"
 
   log "reviewing task=$task sha=$sha"
-  (
-    cd "$REPO_ROOT" || exit 2
-    # CLI 0.144.1 makes `review --commit` mutually exclusive with a custom
-    # prompt. The task/body and output binding are mandatory here, so use the
-    # documented generic exec surface and make the exact SHA explicit in the
-    # prompt. Read-only sandbox mechanically enforces the Reviewer role.
-    "$CODEX_BIN" exec --ephemeral --sandbox read-only \
-      --output-schema "$SCHEMA" -o "$result" - < "$prompt"
-  ) >> "$LOG_FILE" 2>&1
+  prepare_review_tree "$sha" || return 3
+  "$NODE_BIN" "$RUNNER" "$CODEX_BIN" "$REVIEW_TREE" "$SCHEMA" \
+    "$result" "$prompt" "$LOG_FILE" "$REVIEW_TIMEOUT_SECONDS" &
+  ACTIVE_RUNNER_PID=$!
+  printf '%s\n' "$ACTIVE_RUNNER_PID" > "$RUNNER_PID_FILE"
+  wait "$ACTIVE_RUNNER_PID"
   rc=$?
+  rm -f "$RUNNER_PID_FILE"
+  ACTIVE_RUNNER_PID=''
+  cleanup_review_tree || { log "failed to remove exact-SHA worktree"; return 3; }
   if [ "$rc" -ne 0 ] || [ ! -s "$result" ]; then
     log "codex review failed rc=$rc; retrying in ${RETRY_SECONDS}s"
     return 3
   fi
 
-  verdict=$(json_field "$(cat "$result")" verdict) || return 3
-  result_sha=$(json_field "$(cat "$result")" sha) || return 3
-  result_task=$(json_field "$(cat "$result")" task) || return 3
-  body=$(json_field "$(cat "$result")" body) || return 3
+  verdict=$(json_file_field "$result" verdict) || return 3
+  result_sha=$(json_file_field "$result" sha) || return 3
+  result_task=$(json_file_field "$result" task) || return 3
   [ "$result_sha" = "$sha" ] && [ "$result_task" = "$task" ] || {
     log "Codex returned wrong binding: sha=$result_sha task=$result_task"
     return 3
   }
   case "$verdict" in PASS|CHANGES_REQUESTED|FOUNDER_DECISION_REQUIRED) ;; *) return 3 ;; esac
+
+  body_file="$STATE_DIR/response-body.txt"
+  if ! "$NODE_BIN" - "$result" > "$body_file" <<'NODE'
+const fs = require("fs");
+const r = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+if (!Array.isArray(r.findings)) process.exit(1);
+if (r.verdict === "PASS" && r.findings.length !== 0) process.exit(1);
+if (r.verdict === "CHANGES_REQUESTED" && r.findings.length === 0) process.exit(1);
+let body = String(r.body || "").trim();
+if (!body) process.exit(1);
+if (r.findings.length) {
+  body += "\n\nFindings:\n" + r.findings.map((f) =>
+    `- ${f.severity} ${f.file}:${f.line} — ${f.title}: ${f.detail}`
+  ).join("\n");
+}
+process.stdout.write(body);
+NODE
+  then
+    log "Codex returned verdict/findings with inconsistent semantics"
+    return 3
+  fi
+  body=$(cat "$body_file")
 
   BUS_FROM=reviewer "$SEND" builder "$verdict" "$sha" "$task" "$body" >> "$LOG_FILE" 2>&1 || return 3
   log "sent $verdict task=$task sha=$sha; re-arming"
@@ -203,14 +317,53 @@ review_current() {
   return 0
 }
 
+terminate_active_runner() {
+  [ -n "$ACTIVE_RUNNER_PID" ] || return 0
+  if kill -0 "$ACTIVE_RUNNER_PID" 2>/dev/null; then
+    kill "$ACTIVE_RUNNER_PID" 2>/dev/null || true
+    if ! wait_for_pid_exit "$ACTIVE_RUNNER_PID"; then
+      kill -KILL "$ACTIVE_RUNNER_PID" 2>/dev/null || true
+      wait_for_pid_exit "$ACTIVE_RUNNER_PID" || true
+    fi
+  fi
+  rm -f "$RUNNER_PID_FILE"
+  ACTIVE_RUNNER_PID=''
+}
+
+cleanup_runtime() {
+  trap - EXIT INT TERM HUP
+  terminate_active_runner
+  cleanup_review_tree || true
+  if [ "$(cat "$PID_FILE" 2>/dev/null || true)" = "$$" ]; then rm -f "$PID_FILE"; fi
+  rm -f "$RUNNER_PID_FILE"
+  if [ "$(cat "$LOCK_DIR/pid" 2>/dev/null || true)" = "$$" ]; then
+    rm -f "$LOCK_DIR/pid"
+    rmdir "$LOCK_DIR" 2>/dev/null || true
+  fi
+}
+
+acquire_runtime_lock() {
+  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
+    lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
+    if pid_value_is_runtime "$lock_pid"; then
+      log "another runtime holds $LOCK_DIR (pid=$lock_pid)"
+      return 1
+    fi
+    log "recovering stale runtime lock (pid=${lock_pid:-unknown})"
+    clear_stale_lock || return 1
+    mkdir "$LOCK_DIR" 2>/dev/null || return 1
+  fi
+  printf '%s\n' "$$" > "$LOCK_DIR/pid"
+}
+
 run_loop() {
   mkdir -p "$BUS_DIR/tmp" "$BUS_DIR/inbox/reviewer" "$BUS_DIR/inbox/builder" "$BUS_DIR/archive"
-  if ! mkdir "$LOCK_DIR" 2>/dev/null; then
-    log "another runtime holds $LOCK_DIR"
-    exit 7
-  fi
+  acquire_runtime_lock || exit 7
   printf '%s\n' "$$" > "$PID_FILE"
-  trap 'rm -f "$PID_FILE"; rmdir "$LOCK_DIR" 2>/dev/null || true' EXIT INT TERM HUP
+  trap cleanup_runtime EXIT
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  trap 'exit 129' HUP
   log "armed pid=$$ repo=$REPO_ROOT"
 
   while :; do
@@ -237,8 +390,20 @@ case "$cmd" in
   run) run_loop ;;
   start)
     mkdir -p "$BUS_DIR/tmp"
-    if pid_is_runtime; then log "already running pid=$(cat "$PID_FILE")"; exit 0; fi
-    rm -f "$PID_FILE"; rmdir "$LOCK_DIR" 2>/dev/null || true
+    if supervisor_is_loaded && pid_is_runtime; then
+      log "already running pid=$(cat "$PID_FILE") under $LAUNCH_LABEL"
+      exit 0
+    fi
+    if pid_is_runtime; then
+      log "runtime pid=$(cat "$PID_FILE") is not owned by canonical supervisor; stop it before start"
+      exit 2
+    fi
+    if supervisor_is_loaded; then
+      launchctl remove "$LAUNCH_LABEL" >/dev/null 2>&1 || true
+      sleep 0.2
+    fi
+    rm -f "$PID_FILE"
+    clear_stale_lock || { log "live runtime lock prevents start"; exit 2; }
     self="$SCRIPT_DIR/codex-reviewer-runtime"
     if command -v launchctl >/dev/null 2>&1; then
       # Tool-spawned nohup children are cleaned up with their harness process
@@ -266,16 +431,40 @@ case "$cmd" in
     exit 1
     ;;
   status)
-    if pid_is_runtime; then log "running pid=$(cat "$PID_FILE")"; exit 0; fi
+    if pid_is_runtime; then
+      if command -v launchctl >/dev/null 2>&1 && ! supervisor_is_loaded; then
+        log "degraded: pid=$(cat "$PID_FILE") runs without canonical supervisor $LAUNCH_LABEL"
+        exit 2
+      fi
+      log "running pid=$(cat "$PID_FILE") supervisor=$LAUNCH_LABEL"
+      exit 0
+    fi
+    if supervisor_is_loaded; then log "degraded: supervisor loaded but runtime pid is unavailable"; exit 2; fi
     log "stopped"; exit 1
     ;;
   stop)
+    stopped_pid=''
+    stopped_runner_pid=$(cat "$RUNNER_PID_FILE" 2>/dev/null || true)
+    if pid_is_runtime; then stopped_pid=$(cat "$PID_FILE"); fi
     launchctl remove "$LAUNCH_LABEL" >/dev/null 2>&1 || true
-    if pid_is_runtime; then
-      pid=$(cat "$PID_FILE"); kill "$pid"; log "stop requested pid=$pid"
+    case "$stopped_runner_pid" in
+      ''|*[!0-9]*) ;;
+      *) kill "$stopped_runner_pid" 2>/dev/null || true ;;
+    esac
+    if [ -n "$stopped_pid" ] && kill -0 "$stopped_pid" 2>/dev/null; then
+      kill "$stopped_pid" 2>/dev/null || true
+      if ! wait_for_pid_exit "$stopped_pid"; then
+        log "runtime did not stop after TERM; sending KILL pid=$stopped_pid"
+        kill -KILL "$stopped_pid" 2>/dev/null || true
+        wait_for_pid_exit "$stopped_pid" || true
+      fi
+      log "stopped pid=$stopped_pid"
     else
       log "already stopped"
     fi
+    rm -f "$PID_FILE"
+    rm -f "$RUNNER_PID_FILE"
+    clear_stale_lock || true
     ;;
   *) printf 'usage: %s start|status|stop|run\n' "$0" >&2; exit 2 ;;
 esac
