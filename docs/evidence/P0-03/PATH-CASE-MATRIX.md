@@ -1,0 +1,88 @@
+# P0-03 — PATH × CASE MATRIX
+
+BASE_SHA=8ef9fdede97d1c4a72861dbf64c122c33272524e
+BRANCH=work/p0-product-truth-20260820
+TIMESTAMP=2026-08-20
+METODE=call-site search read-only (Route Mapper subagent), BUKAN daftar handover
+STATUS=inventaris SELESAI · red-before tests BELUM DITULIS
+
+## A. Inventaris entrypoint — dari call-site nyata
+
+Setiap baris punya `file:line`. GATED = memanggil pemeriksaan label/merek DAN
+kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
+
+| # | file:line | jalur | status | memanggil |
+|---|---|---|---|---|
+| E1 | `app/api/products/route.ts:15` | POST create manual (retail) | **PARTIAL** | `saveProductImages` (sidecar ditulis); TANPA `periksaLabelFoto`, TANPA `referensiLayak` |
+| E2 | `app/api/products/extract/route.ts:17` | POST extract URL → buat produk | **UNGATED** | tidak ada; pakai `downloadProductImages` |
+| E3 | `app/api/products/[id]/route.ts:13` | PATCH nama/harga/kategori/brand | **UNGATED** | tidak ada — memutasi `name` + `raw_meta.brand`, dua input yang justru dibaca gerbang |
+| E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **GATED** | `periksaLabelFoto`+`merekTerdaftar` (:91), `referensiLayak` (:116) — TAPI gerbang label hanya jalan bila `existing.length===0` (:84) |
+| E5 | `app/api/products/[id]/photos/route.ts:142` | DELETE foto (retail) | **UNGATED** | tidak ada — bisa menghapus satu-satunya foto layak |
+| E6 | `app/api/dashboard/campaign/product/route.ts:45` | POST produk org | **UNGATED** | tidak ada; `downloadProductImages` → sidecar tidak ditulis |
+| E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | tidak ada |
+| E8 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:26` | POST add-photo (org) | **PARTIAL** | `periksaLabelFoto` (:52) TANPA argumen `merekTerdaftar` → `cocokMerek` tidak pernah diperiksa; `saveUniqueProductImages` (:59) TIDAK menulis sidecar |
+| E9 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:84` | DELETE foto (org) | **UNGATED** | tidak ada |
+| W1 | `lib/postgres/worker.ts:321-323` | worker PG pilih `images[0]` | **UNGATED** | tidak ada; `personSafeReferencePhotos` (:338) hanya soal orang |
+| W2 | `lib/worker.ts:104-109` | worker inline/SQLite pilih `images[0]` | **UNGATED** | tidak ada; reachable via `lib/job-queue.ts:71,96` |
+| A1 | `app/api/jobs/route.ts:29,62-67` | admission retail + payload | **UNGATED** | payload tanpa validasi gambar |
+| A2 | `app/api/dashboard/matrix/route.ts:93,106` | admission matrix | **UNGATED** | cek gambar hanya "ada/tidak" |
+| A3 | `app/api/dashboard/campaign/generate/route.ts:44-49` | generate campaign | **UNGATED** | cek `length===0` saja |
+| A4 | `lib/dashboard/render-cell.ts:158-160,225` | INSERT QUEUED + enqueue | **UNGATED** | tidak ada |
+| D1 | `lib/postgres/product-persona-script.ts:57,112,134-136,255,264` | penulis DB produk/brand | **UNGATED** | tidak ada |
+| D2 | `lib/postgres/smoke-runtime.ts:310,319,336` | set/append/remove images | **UNGATED** | tidak ada |
+
+**Terbukti TIDAK ADA** (jangan dibuatkan test): route reorder foto
+(`rg reorder app/api` → 0), DELETE produk (`export async function DELETE` di
+`products/[id]/route.ts` → 0), server actions (`rg '"use server"' app/` → 0),
+`app/api/dashboard/bulk/route.ts` (tidak ada berkasnya; masih disebut komentar
+`lib/product-image-download.ts:3`).
+
+## B. Temuan yang MENGOREKSI work order
+
+Work order menyebut tiga bypass (create utama, extract, worker). Yang nyata:
+
+1. **`referensiLayak` menjaga TEPAT SATU entrypoint** (E4). Delapan lainnya
+   tidak pernah memanggilnya.
+2. **Dua worker, bukan satu.** `lib/worker.ts` (inline/SQLite) juga memilih
+   `images[0]` dan masih reachable.
+3. **Jalur org tidak menulis sidecar sama sekali** (`saveUniqueProductImages`).
+   Akibatnya `backfillMetaGambar` pun tidak bisa menolong: ia hanya dipanggil
+   dari dalam `referensiLayak`, yang jalur org tidak pernah panggil.
+4. **PATCH produk (E3, E7) bisa mengganti nama dan brand** — dua input yang
+   dibaca gerbang — tanpa revalidasi apa pun.
+5. **DELETE foto (E5, E9) bisa menyisakan daftar berisi promo saja.**
+6. **Gerbang label E4 hanya jalan pada foto PERTAMA** (`existing.length===0`),
+   jadi banner yang diunggah sebagai foto kedua tidak pernah diperiksa label.
+
+## C. Matriks kasus × jalur
+
+Kolom status: RED = test ditulis dan gagal karena invariant belum ada.
+Semua masih `PENDING` — belum satu pun test ditulis.
+
+| # | Kasus | Jalur wajib diuji | Keputusan diharapkan | reason code (usul) | Status |
+|---|---|---|---|---|---|
+| C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,W1,W2 | simpan boleh; referensi WAJIB foto#2 | `REF_PROMOTIONAL` | PENDING |
+| C2 | Toothpaste diberi kategori facewash | E1,E3,E6,E7,A1..A4 | reject sebelum spend | `TYPE_MISMATCH` | PENDING |
+| C3 | Merek salah | E1,E4,E8,W1 | reject | `BRAND_MISMATCH` | PENDING |
+| C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` | PENDING |
+| C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` | PENDING |
+| C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` | PENDING |
+| C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` | PENDING |
+| C8 | Sidecar hilang/korup/basi/hash beda | E1,E6,E8,W1,W2 | fail-closed | `EVIDENCE_INVALID` | PENDING |
+| C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` | PENDING |
+| C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` | PENDING |
+| C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | PENDING |
+| C12 | Urutan images diubah/dirusak | E5,E9,W1,W2 | pakai hash tersetujui | `REF_HASH_MISMATCH` | PENDING |
+| C13 | **Produk valid** (positif) | seluruh E,A,W | DITERIMA | — | PENDING |
+
+Tiap penolakan wajib membuktikan: reason code stabil, pesan bisa ditindaklanjuti,
+**nol** credit hold/capture, **nol** enqueue, **nol** panggilan provider,
+**nol** deliverable, **nol** efek storage.
+
+## D. Yang BELUM diverifikasi
+
+- Belum satu pun red test ditulis atau dijalankan.
+- Reason code di atas adalah USULAN, belum ada di kode.
+- Jalur promo (`lib/promo/worker.ts`, `app/api/promo/jobs/route.ts`) sengaja
+  di luar cakupan: pipeline terpisah tanpa tabel produk. Perlu keputusan apakah
+  ikut Product Truth — belum diputuskan siapa pun.
