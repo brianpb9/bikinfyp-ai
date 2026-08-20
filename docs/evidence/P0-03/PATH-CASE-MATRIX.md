@@ -73,14 +73,14 @@ Semua masih `PENDING` — belum satu pun test ditulis.
 
 | # | Kasus | Jalur wajib diuji | Keputusan diharapkan | reason code (usul) | Status |
 |---|---|---|---|---|---|
-| C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,A1..A5,W1,W2 | **produk DITERIMA**; foto#1 berstatus promotional; approved reference WAJIB foto#2 + hash-nya. `REF_PROMOTIONAL` adalah STATUS FOTO, bukan penolakan produk | `REF_PROMOTIONAL` (status) | PENDING |
+| C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,A1..A5,**A6**,W1,W2 | **produk DITERIMA**; foto#1 berstatus promotional; approved reference WAJIB foto#2 + hash-nya. **A6 (approve/regenerate) wajib MEMPERTAHANKAN snapshot** — ia membangunkan worker lagi. `REF_PROMOTIONAL` adalah STATUS FOTO, bukan penolakan produk | `REF_PROMOTIONAL` (status) | PENDING |
 | C2 | Toothpaste diberi kategori facewash | E1,E3,E6,E7,A1..A4 | reject sebelum spend | `TYPE_MISMATCH` | PENDING |
 | C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` | PENDING |
 | C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` | PENDING |
 | C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` | PENDING |
 | C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` | PENDING |
 | C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` | PENDING |
-| C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,E6,E8,**A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` | PENDING |
+| C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` | PENDING |
 | C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` | PENDING |
 | C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` | PENDING |
 | C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | PENDING |
@@ -102,11 +102,18 @@ yang ditulis adalah `normalized ?? blobs[i].data`. Selama normalisasi berhasil
 sehingga verifikasi hash C8 akan menolak SETIAP foto yang sah.
 
 Test regresi `tests/kontrak-hash-sidecar.test.ts`, dibuktikan merah tanpa
-perbaikan (`git stash` → 0 lulus / 1 gagal) dan hijau dengannya.
+perbaikan (`git stash` → 0 lulus / 1 gagal) dan hijau dengannya. Diperkuat
+terhadap kelulusan HAMPA: ia menuntut keluaran benar-benar `.webp` DAN bytes
+tersimpan berbeda dari unggahan — tanpa keduanya, normalisasi yang diam-diam
+gagal akan membuat hash lama ikut cocok. Storage sementara dibersihkan `after`.
+
+Stabilitas suite: dijalankan DUA kali berturut-turut pada SHA ini, keduanya
+810 / 796 lulus / 0 gagal / 14 skip, keduanya exit 0.
 
 ## D. Yang BELUM diverifikasi
 
-- Belum satu pun red test ditulis atau dijalankan.
+- Belum ada red-before test boundary C1/C8. (Test kontrak hash sidecar SUDAH
+  ada dan hijau, tapi ia bukan boundary test C1/C8.)
 - Reason code di atas adalah USULAN, belum ada di kode.
 - Jalur promo (`lib/promo/worker.ts`, `app/api/promo/jobs/route.ts`) sengaja
   di luar cakupan: pipeline terpisah tanpa tabel produk. Perlu keputusan apakah

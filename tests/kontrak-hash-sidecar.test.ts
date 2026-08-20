@@ -6,7 +6,7 @@
 // verifikasi hash dinyalakan (P0-02 kasus C8), setiap foto SAH ditolak sebagai
 // bukti korup. Gerbang yang menolak yang benar akan dimatikan orang.
 
-import { test } from "node:test";
+import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
@@ -29,12 +29,19 @@ test("sha256 sidecar cocok dengan bytes yang benar-benar disimpan", async () => 
   );
   const rels = await saveProductImages("uji-hash", [{ mime: "image/png", data: png }]);
   assert.equal(rels.length, 1);
+  // Tanpa dua asersi ini, test bisa lulus HAMPA: kalau normalisasi diam-diam
+  // gagal, bytes tersimpan == unggahan dan hash lama pun akan cocok.
+  assert.ok(rels[0].endsWith(".webp"), `normalisasi tidak menghasilkan .webp: ${rels[0]}`);
 
   const meta = await bacaMetaGambar(rels[0]);
   assert.ok(meta, "sidecar tidak ditulis");
 
   const tersimpan = await mediaStorage().get(rels[0]);
   assert.ok(tersimpan, "berkas tidak ada di storage");
+  assert.ok(
+    !tersimpan.body.equals(png),
+    "bytes tersimpan identik dengan unggahan — normalisasi tidak jalan, jadi test ini tidak menguji apa pun"
+  );
   const shaTersimpan = crypto.createHash("sha256").update(tersimpan.body).digest("hex");
 
   assert.equal(
@@ -43,4 +50,8 @@ test("sha256 sidecar cocok dengan bytes yang benar-benar disimpan", async () => 
       `  sidecar : ${meta.sha256}\n  tersimpan: ${shaTersimpan}\n` +
       "Verifikasi hash akan menolak foto yang sah."
   );
+});
+
+after(() => {
+  fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });
 });
