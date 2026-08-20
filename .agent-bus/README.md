@@ -168,8 +168,7 @@ and the blocking/return behaviour of `bus-wait` itself was exercised by
 
 Empirical test on Codex CLI 0.144.1 proved that completion of a foreground
 shell tool does **not** wake an already-idle interactive turn. The native Codex
-surface for unattended work is `codex exec`; exact-commit review is available
-as `codex exec review --commit <SHA>`.
+surface for unattended work is `codex exec`.
 
 Start the repo-local wrapper once:
 
@@ -182,7 +181,8 @@ It keeps the existing transport and lifecycle intact:
 
 1. `bus-wait reviewer` blocks;
 2. the oldest message is staged, then archived with `bus-read`;
-3. `codex exec review --commit <SHA>` performs a read-only independent review;
+3. `codex exec --sandbox read-only` performs an independent review with the
+   exact SHA and task bound in its prompt;
 4. a JSON schema constrains the result to `PASS`, `CHANGES_REQUESTED`, or
    `FOUNDER_DECISION_REQUIRED` and binds it to the same SHA/task;
 5. the wrapper sends it with the existing `bus-send` and immediately waits

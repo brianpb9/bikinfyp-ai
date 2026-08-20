@@ -7,8 +7,8 @@
 #   codex-reviewer-runtime run     # foreground (supervisor/debug use)
 #
 # The interactive Codex TUI has no filesystem-completion wake primitive.
-# `codex exec review` is the native unattended review surface, so this wrapper
-# turns each READY_FOR_REVIEW message into one exact-commit review, sends the
+# `codex exec` is the native unattended surface, so this wrapper turns each
+# READY_FOR_REVIEW message into one SHA-bound, read-only review, sends the
 # structured verdict through bus-send, and immediately waits again.
 set -u
 
@@ -173,7 +173,11 @@ review_current() {
   log "reviewing task=$task sha=$sha"
   (
     cd "$REPO_ROOT" || exit 2
-    "$CODEX_BIN" exec review --ephemeral --commit "$sha" \
+    # CLI 0.144.1 makes `review --commit` mutually exclusive with a custom
+    # prompt. The task/body and output binding are mandatory here, so use the
+    # documented generic exec surface and make the exact SHA explicit in the
+    # prompt. Read-only sandbox mechanically enforces the Reviewer role.
+    "$CODEX_BIN" exec --ephemeral --sandbox read-only \
       --output-schema "$SCHEMA" -o "$result" - < "$prompt"
   ) >> "$LOG_FILE" 2>&1
   rc=$?
