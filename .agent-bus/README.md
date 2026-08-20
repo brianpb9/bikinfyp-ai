@@ -164,25 +164,34 @@ This is a documented property of the harness's background-task notification,
 and the blocking/return behaviour of `bus-wait` itself was exercised by
 `test-bus.sh` (cases 5, 6, 9).
 
-### Codex (reviewer) — unverified beyond the command itself
+### Codex (reviewer) — persistent non-interactive runtime
 
-Codex must run the wait as a **blocking foreground command** in its terminal:
+Empirical test on Codex CLI 0.144.1 proved that completion of a foreground
+shell tool does **not** wake an already-idle interactive turn. The native Codex
+surface for unattended work is `codex exec`; exact-commit review is available
+as `codex exec review --commit <SHA>`.
+
+Start the repo-local wrapper once:
 
 ```sh
-.agent-bus/bin/bus-wait reviewer 3600
+.agent-bus/bin/codex-reviewer-runtime start
+.agent-bus/bin/codex-reviewer-runtime status
 ```
 
-When a message arrives the command prints it and returns 0; on timeout it
-returns 4.
+It keeps the existing transport and lifecycle intact:
 
-**Not verified by this implementation:** whether Codex automatically continues
-working after the foreground command returns, or whether a human must prompt it
-to look at the output. That depends entirely on Codex's own runtime and was
-never tested here. What *is* verified is that `bus-wait` blocks, returns
-promptly when a message is present, prints the message, and times out with exit
-4 — the same POSIX behaviour regardless of which tool invokes it. Treat
-"Codex auto-continues" as an assumption to prove on a live Codex terminal, not
-as a property of this bus.
+1. `bus-wait reviewer` blocks;
+2. the oldest message is staged, then archived with `bus-read`;
+3. `codex exec review --commit <SHA>` performs a read-only independent review;
+4. a JSON schema constrains the result to `PASS`, `CHANGES_REQUESTED`, or
+   `FOUNDER_DECISION_REQUIRED` and binds it to the same SHA/task;
+5. the wrapper sends it with the existing `bus-send` and immediately waits
+   again.
+
+Runtime state, PID, and logs live under ignored `.agent-bus/tmp/`. A staged
+message survives a Reviewer subprocess failure and is retried; an existing
+response in the Builder inbox/archive prevents duplicate delivery after a
+restart.
 
 ## Self-test
 
