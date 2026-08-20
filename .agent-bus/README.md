@@ -190,9 +190,10 @@ It keeps the existing transport and lifecycle intact:
    again.
 
 Personal Codex MCP/config entries are deliberately excluded from this unattended
-role. Each review also runs in its own process group with a 15-minute default
-wall-clock limit (`CODEX_REVIEWER_TIMEOUT_SECONDS` can override it), so one hung
-tool cannot block the queue forever.
+role; reviewer reasoning effort is then set explicitly to `high`. Each review
+also runs in its own process group with a 15-minute default wall-clock limit
+(`CODEX_REVIEWER_TIMEOUT_SECONDS` can override it), so one hung tool cannot
+block the queue forever.
 
 On macOS, `start` submits the loop to `launchd`; this is necessary because the
 Codex tool harness cleans up detached shell process groups after tool completion.

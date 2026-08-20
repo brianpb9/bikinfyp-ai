@@ -41,6 +41,8 @@ const child = spawn(
   [
     "exec",
     "--ignore-user-config",
+    "-c",
+    'model_reasoning_effort="high"',
     "--ephemeral",
     "--sandbox",
     "read-only",
