@@ -1,17 +1,27 @@
-// P0-03 RED WAVE R1 — W1 + W2 harus melewati SATU resolver referensi bersama.
+// P0-03 RED WAVE R1 (diamandemen) — W1 + W2 wajib lewat SATU API pusat.
 //
-// STATUS YANG DIHARAPKAN: MERAH pada 66b4b33.
+// STATUS YANG DIHARAPKAN: MERAH pada 6623c4f.
+//
+// KONTRAK YANG DIKUNCI DI SINI (bukan tebakan, bukan pencarian nama):
+//
+//     modul  : lib/product-truth.ts
+//     ekspor : resolveApprovedReference
+//
+// Kedua worker WAJIB mengimpor DAN memanggil fungsi itu dari modul itu. Test
+// versi sebelumnya berburu kandidat lewat regex nama generik (/referensi|
+// reference/i) — cara itu bisa lulus-palsu (fungsi lain yang kebetulan bernama
+// mirip, seperti `bolehJadiReferensi` milik QC frame) DAN gagal-palsu (resolver
+// yang benar tapi dinamai lain). Sekarang nama modul dan nama ekspornya
+// ditetapkan, jadi test hanya bisa hijau kalau API pusatnya benar-benar ada dan
+// benar-benar dipakai di KEDUA worker.
 //
 // KENAPA STRUKTURAL, BUKAN RUNTIME: W1 hidup di lib/postgres/worker.ts dan
 // hanya bisa dijalankan dengan PostgreSQL nyata (dilarang di gelombang ini).
-// Test ini TIDAK mengklaim menjalankan W1. Yang ia buktikan adalah bentuk
-// kodenya: dua worker yang masing-masing punya logika pemilihan referensi
-// sendiri akan selalu berbeda pelan-pelan, dan gerbang yang hanya dipasang di
-// satu worker bukan gerbang. Runtime W2 diuji terpisah di
+// Test ini TIDAK mengklaim menjalankan W1. Runtime W2 diuji terpisah di
 // tests/product-truth-worker-reference.test.ts.
 //
 // LARANGAN YANG DIPATUHI: hanya baca berkas sumber. Nol jaringan, nol DB,
-// nol provider, nol build.
+// nol provider, nol build, nol biner.
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -19,6 +29,11 @@ import fs from "node:fs";
 import path from "node:path";
 
 const ROOT = process.cwd();
+
+/** Kontrak pusat yang harus dibangun perbaikan R2. */
+const MODUL_PUSAT = "lib/product-truth";
+const EKSPOR_PUSAT = "resolveApprovedReference";
+
 const SUMBER = {
   W2: "lib/worker.ts",
   W1: "lib/postgres/worker.ts",
@@ -26,22 +41,6 @@ const SUMBER = {
 
 const baca = (rel: string) => fs.readFileSync(path.join(ROOT, rel), "utf8");
 const teks = { W1: baca(SUMBER.W1), W2: baca(SUMBER.W2) };
-
-/**
- * Dua modul SENGAJA dikecualikan. Namanya mengandung "reference"/"referensi",
- * tapi keduanya menjawab pertanyaan lain — tanpa pengecualian ini test akan
- * lulus HAMPA:
- *
- * - `lib/media/person-safe-refs` (`personSafeReferencePhotos`): soal WAJAH
- *   ORANG di dalam gambar (moderasi provider), bukan soal apakah gambar itu
- *   bukti produk yang disetujui. Matriks P0-03 menyebutnya eksplisit di baris
- *   W1: "hanya soal orang".
- * - `lib/media/qc-frame` (`bolehJadiReferensi`): menilai FRAME HASIL GENERASI
- *   yang mau dipakai ulang sebagai acuan shot berikutnya (QC-F1), jadi ia
- *   bekerja pada keluaran model — jauh sesudah foto produk dipilih. Ia juga
- *   hanya ada di W1.
- */
-const BUKAN_RESOLVER = new Set(["lib/media/person-safe-refs", "lib/media/qc-frame"]);
 
 type Impor = { modul: string; nama: string };
 
@@ -63,48 +62,69 @@ function importsDari(rel: string, isi: string): Impor[] {
   return hasil;
 }
 
-/** Kandidat resolver: impor bernama yang benar-benar soal pemilihan referensi. */
-function kandidatResolver(rel: string, isi: string): Impor[] {
-  return importsDari(rel, isi).filter(
-    (i) =>
-      !BUKAN_RESOLVER.has(i.modul) &&
-      /referensi|reference|approvedref/i.test(i.nama) &&
-      new RegExp(`\\b${i.nama}\\s*\\(`).test(isi) // benar-benar DIPANGGIL, bukan hanya diimpor
-  );
-}
-
-test("harness: kedua sumber worker terbaca dan tidak kosong", () => {
+test("harness: kedua sumber worker terbaca dan parser impor benar-benar bekerja", () => {
   for (const [label, rel] of Object.entries(SUMBER)) {
     assert.ok(teks[label as keyof typeof teks].length > 1000, `${rel} tidak terbaca / terlalu pendek`);
   }
-  // Bukti bahwa parser impor benar-benar bekerja pada berkas ini — tanpa ini,
-  // "tidak ada resolver bersama" bisa berarti "regex-nya patah".
-  const semua = [...importsDari(SUMBER.W1, teks.W1), ...importsDari(SUMBER.W2, teks.W2)];
-  assert.ok(semua.length > 20, `parser impor hanya menemukan ${semua.length} impor — regexnya patah`);
+  // Tanpa dua asersi ini, "tidak ada impor resolveApprovedReference" bisa
+  // berarti "regexnya patah", bukan "kontraknya belum ada".
+  const w1 = importsDari(SUMBER.W1, teks.W1);
+  const w2 = importsDari(SUMBER.W2, teks.W2);
+  assert.ok(w1.length + w2.length > 20, `parser impor hanya menemukan ${w1.length + w2.length} impor — regexnya patah`);
+  for (const [label, daftar] of [["W1", w1], ["W2", w2]] as const) {
+    assert.ok(
+      daftar.some((i) => i.modul === "lib/media/person-safe-refs" && i.nama === "personSafeReferencePhotos"),
+      `parser tidak menemukan impor personSafeReferencePhotos di ${label} padahal jelas-jelas ada — regexnya patah`
+    );
+  }
+});
+
+test(`API pusat ${MODUL_PUSAT}.ts ada dan mengekspor ${EKSPOR_PUSAT}`, () => {
+  const abs = path.join(ROOT, `${MODUL_PUSAT}.ts`);
   assert.ok(
-    semua.some((i) => i.modul === "lib/media/person-safe-refs"),
-    "parser tidak menemukan impor person-safe-refs yang jelas-jelas ada — regexnya patah"
+    fs.existsSync(abs),
+    `Modul pusat ${MODUL_PUSAT}.ts BELUM ADA. Pemilihan referensi tersetujui tidak punya satu ` +
+      "rumah pun, jadi setiap pemanggil terpaksa menyusun aturannya sendiri — dan itulah kenapa " +
+      "W1 dan W2 bisa berbeda."
+  );
+  const isi = fs.readFileSync(abs, "utf8");
+  assert.ok(
+    new RegExp(`export\\s+(async\\s+)?function\\s+${EKSPOR_PUSAT}\\b`).test(isi) ||
+      new RegExp(`export\\s+(const|let)\\s+${EKSPOR_PUSAT}\\b`).test(isi) ||
+      new RegExp(`export\\s*\\{[^}]*\\b${EKSPOR_PUSAT}\\b`).test(isi),
+    `${MODUL_PUSAT}.ts ada tapi tidak mengekspor ${EKSPOR_PUSAT}`
   );
 });
 
-test("W1+W2: kedua worker memakai SATU resolver referensi tersetujui yang sama", () => {
-  const w1 = kandidatResolver(SUMBER.W1, teks.W1);
-  const w2 = kandidatResolver(SUMBER.W2, teks.W2);
-  const bersama = w1.filter((a) => w2.some((b) => b.modul === a.modul && b.nama === a.nama));
-
-  assert.ok(
-    bersama.length > 0,
-    "TIDAK ADA resolver referensi tersetujui yang dipakai bersama oleh kedua worker.\n" +
-      `  ${SUMBER.W1} (W1) -> ${w1.length ? JSON.stringify(w1) : "tidak ada kandidat"}\n` +
-      `  ${SUMBER.W2} (W2) -> ${w2.length ? JSON.stringify(w2) : "tidak ada kandidat"}\n` +
-      `  (dikecualikan, dan alasannya di ${"BUKAN_RESOLVER"}: ${[...BUKAN_RESOLVER].join(", ")})\n` +
-      "Masing-masing worker memilih referensinya sendiri, jadi gerbang bukti yang dipasang di " +
-      "salah satunya tidak pernah berlaku di yang lain."
+test(`W1+W2: kedua worker mengimpor ${EKSPOR_PUSAT} dari ${MODUL_PUSAT}`, () => {
+  const kurang: string[] = [];
+  for (const [label, rel] of Object.entries(SUMBER)) {
+    const isi = teks[label as keyof typeof teks];
+    const punya = importsDari(rel, isi).some((i) => i.modul === MODUL_PUSAT && i.nama === EKSPOR_PUSAT);
+    if (!punya) kurang.push(`${rel} (${label})`);
+  }
+  assert.deepEqual(
+    kurang,
+    [],
+    `Worker berikut TIDAK mengimpor ${EKSPOR_PUSAT} dari ${MODUL_PUSAT}:\n  ${kurang.join("\n  ")}\n` +
+      "Selama pemilihan referensi tidak lewat satu API pusat, gerbang bukti yang dipasang di satu " +
+      "worker tidak pernah berlaku di worker yang lain."
   );
-  assert.equal(
-    new Set(bersama.map((i) => `${i.modul}#${i.nama}`)).size,
-    1,
-    `harus TEPAT SATU resolver bersama, ditemukan: ${JSON.stringify(bersama)}`
+});
+
+test(`W1+W2: kedua worker benar-benar MEMANGGIL ${EKSPOR_PUSAT}`, () => {
+  // Mengimpor tanpa memanggil adalah gerbang hias. Dipisah dari test impor
+  // supaya pesan gagalnya menunjuk masalah yang tepat.
+  const kurang: string[] = [];
+  for (const [label, rel] of Object.entries(SUMBER)) {
+    const isi = teks[label as keyof typeof teks];
+    if (!new RegExp(`\\b${EKSPOR_PUSAT}\\s*\\(`).test(isi)) kurang.push(`${rel} (${label})`);
+  }
+  assert.deepEqual(
+    kurang,
+    [],
+    `Worker berikut tidak pernah MEMANGGIL ${EKSPOR_PUSAT}():\n  ${kurang.join("\n  ")}\n` +
+      "Referensi utamanya masih dipilih dengan cara lain."
   );
 });
 
@@ -123,7 +143,8 @@ test("W1+W2: tidak ada pengindeksan images[0] mentah di kedua worker", () => {
     [],
     "Referensi utama masih dipilih dengan indeks array mentah — urutan unggah, bukan bukti:\n  " +
       pelanggaran.join("\n  ") +
-      "\nPemilihan referensi harus lewat resolver bersama yang membaca sidecar, memverifikasi " +
-      "sha256 terhadap bytes tersimpan, dan gagal-tertutup kalau buktinya tidak sah."
+      `\nPemilihan referensi harus lewat ${MODUL_PUSAT}.${EKSPOR_PUSAT}(), yang membaca sidecar, ` +
+      "memverifikasi sha256 terhadap bytes tersimpan, memeriksa versiBukti, dan gagal-tertutup " +
+      "kalau buktinya tidak sah."
   );
 });

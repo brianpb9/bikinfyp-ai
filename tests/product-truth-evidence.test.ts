@@ -54,10 +54,18 @@ type MediaStorage = import("../lib/storage").MediaStorage;
 type StoredObject = import("../lib/storage").StoredObject;
 
 /**
- * Versi bukti yang dianggap "terkini" oleh kontrak ini. Sengaja ditulis di
- * test, bukan diimpor: konstanta ini BELUM ADA di produksi — itulah cacatnya.
- * Test menuntut perilaku (sidecar tanpa versi / versi lama ditolak), bukan
- * nama simbol tertentu, supaya perbaikan bebas memilih penamaannya.
+ * KONTRAK VERSI BUKTI — DIKUNCI, bukan usulan.
+ *
+ *     nama field : `versiBukti`
+ *     tipe       : integer
+ *     nilai kini : 1
+ *
+ * Ditulis di test dan bukan diimpor karena konstantanya BELUM ADA di produksi —
+ * itu bagian dari cacatnya. Tapi jangan salah baca: test ini sudah MENGUNCI
+ * nama fieldnya lewat fixture-fixture di bawah, jadi implementasi R2 WAJIB
+ * memakai `versiBukti` (integer) dan menaikkan nilainya setiap kali aturan
+ * klasifikasi berubah. Sidecar tanpa field itu, atau dengan nilai lebih kecil
+ * dari nilai kini, adalah EVIDENCE_INVALID.
  */
 const VERSI_BUKTI_TERKINI = 1;
 
@@ -210,6 +218,39 @@ test("C8: sidecar JSON korup -> tidak boleh ditimpa diam-diam lalu diloloskan", 
       "Bukti yang rusak justru dihapus jejaknya, bukan dilaporkan."
   );
   assert.deepEqual(layak, [], `EVIDENCE_INVALID: gambar dengan sidecar korup tetap lolos: ${JSON.stringify(layak)}`);
+});
+
+test("C8: skema sah tapi TIPE FIELD salah -> tidak boleh lolos", async () => {
+  // JSON-nya parse bersih dan semua field ada; yang rusak adalah TIPE-nya.
+  // `layakReferensi` datang sebagai string "false" — dan di JavaScript string
+  // "false" itu TRUTHY, jadi pemeriksaan `meta.layakReferensi` membacanya
+  // sebagai "layak". Bukti yang dibuat penulis lain (jalur org, migrasi, skrip
+  // tangan) bisa persis seperti ini, dan hasilnya kebalikan 180 derajat dari
+  // yang tertulis di buktinya sendiri.
+  const tipeSalah = Buffer.from(
+    JSON.stringify({
+      sha256: sha(PACKSHOT),
+      jenis: "promotional_graphic",
+      layakReferensi: "false", // string, bukan boolean
+      rasioAreaTeks: "0.19", // string, bukan number
+      jumlahKata: 14,
+      alasan: "materi promosi",
+      versiBukti: VERSI_BUKTI_TERKINI,
+    })
+  );
+  pasang([
+    [relFoto(1), PACKSHOT],
+    [relSidecar(1), tipeSalah],
+  ]);
+  const layak = await referensiLayak([relFoto(1)]);
+  assert.deepEqual(
+    layak,
+    [],
+    `EVIDENCE_INVALID: sidecar dengan TIPE FIELD salah (layakReferensi: "false" sebagai STRING) ` +
+      `tetap diterima (${JSON.stringify(layak)}). bacaMetaGambar hanya JSON.parse lalu meng-cast ` +
+      "ke MetaGambar (lib/product-images.ts:112) — tidak ada satu pun pemeriksaan bentuk, jadi " +
+      'string "false" yang truthy dibaca sebagai LAYAK. Buktinya sendiri berkata sebaliknya.'
+  );
 });
 
 test("C8: sidecar tanpa versi bukti -> tidak boleh lolos", async () => {

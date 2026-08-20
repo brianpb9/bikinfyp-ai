@@ -1,6 +1,7 @@
-// P0-03 RED WAVE R1 — W2: worker inline/SQLite (lib/worker.ts) memilih referensi.
+// P0-03 RED WAVE R1 (diamandemen) — W2: worker inline/SQLite (lib/worker.ts)
+// memilih referensi.
 //
-// STATUS YANG DIHARAPKAN: MERAH pada 66b4b33.
+// STATUS YANG DIHARAPKAN: MERAH pada 6623c4f.
 // lib/worker.ts:104-110 mengambil `images[0]` mentah — foto PERTAMA, apa pun
 // isinya — lalu me-materialize-nya sebagai referensi utama. Tidak ada satu pun
 // pembacaan sidecar, tidak ada verifikasi hash, tidak ada gerbang kelayakan.
@@ -144,6 +145,57 @@ function siapkanJob(images: string[]): { jobId: string; productId: string } {
 const jumlah = (sql: string, ...args: unknown[]) =>
   (db.prepare(sql).get(...(args as [])) as { n: number }).n;
 
+/**
+ * NOL EFEK SAMPING PADA JOB YANG SAMA.
+ *
+ * Dipanggil untuk SETIAP job di berkas ini, dan SEBELUM asersi merah utama —
+ * supaya pemeriksaan uang/deliverable tetap berjalan walau asersi pilihan
+ * referensi gagal. Kalau ia dipanggil sesudahnya, kegagalan pertama akan
+ * menyembunyikan kebocoran uang, dan kebocoran uang adalah temuan yang lebih
+ * mahal daripada pilihan referensi yang salah.
+ *
+ * SENGAJA TIDAK melarang `release`. Job yang gagal WAJIB boleh mengembalikan
+ * hold-nya; melarang release berarti menuntut kredit user hangus saat gerbang
+ * bukti menolak — kebalikan dari yang benar. Yang dilarang adalah pengambilan
+ * uang (`capture`, `regen`) dan segala jejak produksi.
+ */
+function assertNolEfekSamping(
+  jobId: string,
+  spy: { putCalls: string[] },
+  konteks: string
+): void {
+  assert.equal(
+    jumlah("SELECT COUNT(*) AS n FROM outputs WHERE job_id = ?", jobId),
+    0,
+    `${konteks}: ada deliverable untuk job ini padahal worker berhenti`
+  );
+  assert.equal(
+    jumlah("SELECT COUNT(*) AS n FROM credit_ledger WHERE job_id = ? AND type = 'capture'", jobId),
+    0,
+    `${konteks}: ada credit_ledger 'capture' untuk job ini — uang diambil tanpa deliverable`
+  );
+  assert.equal(
+    jumlah("SELECT COUNT(*) AS n FROM credit_ledger WHERE job_id = ? AND type = 'regen'", jobId),
+    0,
+    `${konteks}: ada credit_ledger 'regen' untuk job ini — biaya regenerate scene tanpa scene`
+  );
+  const job = db
+    .prepare("SELECT state, provider_video, provider_voice, output_url, cost_actual_idr FROM jobs WHERE id = ?")
+    .get(jobId) as {
+    state: string;
+    provider_video: string | null;
+    provider_voice: string | null;
+    output_url: string | null;
+    cost_actual_idr: number;
+  };
+  assert.equal(job.provider_video, null, `${konteks}: provider_video tercatat — ada panggilan provider video`);
+  assert.equal(job.provider_voice, null, `${konteks}: provider_voice tercatat — ada panggilan provider suara`);
+  assert.equal(job.output_url, null, `${konteks}: output_url terisi padahal worker berhenti`);
+  assert.equal(job.cost_actual_idr, 0, `${konteks}: cost_actual_idr bukan 0 — ada biaya provider tercatat`);
+  assert.equal(spy.putCalls.length, 0, `${konteks}: worker menulis ke storage (${JSON.stringify(spy.putCalls)})`);
+  assert.equal(panggilanJaringan, 0, `${konteks}: ada panggilan fetch — worker menyentuh jaringan`);
+}
+
 // ------------------------------------------------------------------- W2 / C1
 
 test("W2 C1: worker wajib memilih packshot sah, bukan images[0] (banner promo)", async () => {
@@ -161,6 +213,7 @@ test("W2 C1: worker wajib memilih packshot sah, bukan images[0] (banner promo)",
   const { jobId } = siapkanJob([relBanner, relPackshot]);
   await processJob(jobId);
 
+  assertNolEfekSamping(jobId, spy, "W2 C1");
   assert.ok(spy.materializeCalls.length > 0, "worker tidak menyentuh storage sama sekali — fixture salah, bukan cacat");
   assert.equal(
     spy.materializeCalls[0],
@@ -176,8 +229,16 @@ test("W2 C1: worker wajib memilih packshot sah, bukan images[0] (banner promo)",
 
 // ------------------------------------------------------------------- W2 / C8
 
-test("W2 C8: bukti korup -> worker tidak boleh menyentuh storage sama sekali", async () => {
-  const relFoto = "uploads/w2-c8/0.webp";
+// Dua kasus C8 di bawah menuntut hal yang SAMA: `materialize()` adalah
+// pengambilan PAYLOAD — menyalin bytes gambar ke disk lokal supaya bisa
+// disodorkan ke provider. Itu tidak boleh terjadi sebelum bukti dinyatakan
+// sah. Yang TIDAK dilarang adalah `get()`/`stat()`: validator memang harus
+// membaca sidecar dan bytes-nya untuk memverifikasi sha256. Test versi
+// sebelumnya menulis "tidak boleh menyentuh storage sama sekali" — itu terlalu
+// keras dan akan memaksa implementasi yang benar jadi merah.
+
+test("W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti sah", async () => {
+  const relFoto = "uploads/w2-c8-korup/0.webp";
   const isi = new Map<string, Buffer>([
     [relFoto, PACKSHOT],
     [`${relFoto}.meta.json`, Buffer.from('{"sha256": "abc", "jenis":')], // korup
@@ -188,13 +249,15 @@ test("W2 C8: bukti korup -> worker tidak boleh menyentuh storage sama sekali", a
   const { jobId } = siapkanJob([relFoto]);
   await processJob(jobId);
 
+  assertNolEfekSamping(jobId, spy, "W2 C8 korup");
   assert.deepEqual(
     spy.materializeCalls,
     [],
-    `EVIDENCE_INVALID: dengan sidecar KORUP, W2 tetap men-materialize ` +
-      `${JSON.stringify(spy.materializeCalls)}. Worker harus gagal-tertutup SEBELUM menyentuh ` +
-      "berkas referensi — ia tidak pernah membaca sidecar sama sekali (lib/worker.ts:104-110), " +
-      "jadi bukti rusak dan bukti bersih diperlakukan identik."
+    `EVIDENCE_INVALID: dengan sidecar KORUP, W2 tetap men-materialize payload ` +
+      `${JSON.stringify(spy.materializeCalls)}. Worker harus gagal-tertutup SEBELUM mengambil ` +
+      "bytes referensi — ia tidak pernah membaca sidecar sama sekali (lib/worker.ts:104-110), " +
+      "jadi bukti rusak dan bukti bersih diperlakukan identik. (Membaca sidecar lewat get()/stat() " +
+      "untuk MEMVALIDASI justru wajib, dan tidak dilarang test ini.)"
   );
 
   const job = db.prepare("SELECT state FROM jobs WHERE id = ?").get(jobId) as { state: string };
@@ -204,9 +267,42 @@ test("W2 C8: bukti korup -> worker tidak boleh menyentuh storage sama sekali", a
   );
 });
 
+test("W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize sebelum bukti sah", async () => {
+  // Persis produk jalur org: `saveUniqueProductImages` tidak pernah menulis
+  // sidecar sama sekali (matriks P0-03 baris E8), jadi ini bukan kasus
+  // hipotetis — ini keadaan normal untuk setiap produk yang dibuat lewat
+  // dashboard enterprise.
+  const relFoto = "uploads/w2-c8-hilang/0.webp";
+  const spy = storageSpy(new Map<string, Buffer>([[relFoto, PACKSHOT]]));
+  setMediaStorageForTests(spy.storage);
+
+  const { jobId } = siapkanJob([relFoto]);
+  await processJob(jobId);
+
+  assertNolEfekSamping(jobId, spy, "W2 C8 hilang");
+  assert.deepEqual(
+    spy.materializeCalls,
+    [],
+    `EVIDENCE_INVALID: TANPA sidecar sama sekali, W2 tetap men-materialize payload ` +
+      `${JSON.stringify(spy.materializeCalls)}. Tidak ada satu pun bukti yang menyatakan gambar ini ` +
+      "layak jadi referensi, tapi worker langsung mengambil bytes-nya karena ia hanya melihat " +
+      "posisi images[0] (lib/worker.ts:104-110)."
+  );
+
+  const job = db.prepare("SELECT state FROM jobs WHERE id = ?").get(jobId) as { state: string };
+  assert.ok(
+    ["FAILED", "REFUNDED"].includes(job.state),
+    `job tanpa bukti harus berakhir gagal-tertutup, bukan ${job.state}`
+  );
+});
+
 // ----------------------------------------------------- kebersihan sesudah halt
 
-test("W2 kontrol positif: sesudah halt — nol output, nol capture, nol provider, nol jaringan", async () => {
+test("W2 kontrol positif: sesudah halt — nol output/capture/regen/provider/put/jaringan", async () => {
+  // Kontrol positif untuk assertNolEfekSamping itu sendiri: kalau helper ini
+  // hijau di mana-mana hanya karena ia tidak memeriksa apa pun, test ini pun
+  // tidak akan pernah bisa merah. Ia dijalankan pada job yang BENAR-BENAR
+  // diproses worker sampai halt, bukan job kosong.
   const relFoto = "uploads/w2-halt/0.webp";
   const spy = storageSpy(new Map<string, Buffer>([[relFoto, PACKSHOT]]));
   setMediaStorageForTests(spy.storage);
@@ -214,25 +310,12 @@ test("W2 kontrol positif: sesudah halt — nol output, nol capture, nol provider
   const { jobId } = siapkanJob([relFoto]);
   await processJob(jobId);
 
-  assert.equal(jumlah("SELECT COUNT(*) AS n FROM outputs WHERE job_id = ?", jobId), 0, "ada deliverable padahal worker berhenti");
-  assert.equal(
-    jumlah("SELECT COUNT(*) AS n FROM credit_ledger WHERE job_id = ? AND type = 'capture'", jobId),
-    0,
-    "ada capture kredit padahal worker berhenti"
-  );
-  const job = db.prepare("SELECT state, provider_video, provider_voice, output_url, cost_actual_idr FROM jobs WHERE id = ?").get(jobId) as {
-    state: string;
-    provider_video: string | null;
-    provider_voice: string | null;
-    output_url: string | null;
-    cost_actual_idr: number;
-  };
-  assert.equal(job.provider_video, null, "provider video tercatat — berarti ada panggilan provider");
-  assert.equal(job.provider_voice, null, "provider suara tercatat — berarti ada panggilan provider");
-  assert.equal(job.output_url, null, "output_url terisi padahal worker berhenti");
-  assert.equal(job.cost_actual_idr, 0, "ada biaya provider tercatat padahal worker berhenti");
-  assert.equal(spy.putCalls.length, 0, "worker menulis ke storage padahal berhenti sebelum produksi");
-  assert.equal(panggilanJaringan, 0, "ada panggilan fetch — worker menyentuh jaringan");
+  assert.ok(spy.materializeCalls.length > 0, "worker tidak sampai menyentuh storage — fixture tidak menguji apa pun");
+  assertNolEfekSamping(jobId, spy, "W2 halt");
+
+  // Refund TIDAK dilarang: job yang gagal wajib boleh mengembalikan hold-nya.
+  const job = db.prepare("SELECT state FROM jobs WHERE id = ?").get(jobId) as { state: string };
+  assert.ok(["FAILED", "REFUNDED"].includes(job.state), `job harus berakhir gagal-tertutup, bukan ${job.state}`);
 });
 
 after(() => {
