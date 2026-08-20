@@ -31,6 +31,14 @@ Brian meminta penyimpanan **berkunci avatar + versi model**. Jadi kuncinya
 harus jadi `preset-hijaber@<model>`, dan penggantian model otomatis membuat
 paket baru alih-alih memakai yang basi.
 
+## Ditegaskan Brian sebelum sesi baru (20 Agu)
+
+1. **Versi model masuk ke `kunciCastRef` SEBELUM satu paket pun dibangun.**
+   Paket lama gugur secara EKSPLISIT saat model berubah — tidak pernah
+   diam-diam. Urutannya mengikat: kunci dulu, baru belanja.
+2. **Tiga avatar dipilih dari pemakaian NYATA HDRV**, bukan urutan berkas.
+3. **Otorisasi Rp15.000 tetap berlaku.**
+
 ## Langkah
 
 1. **Pilih 3 avatar terpakai-terbanyak.** Kueri produksi (read-only):
@@ -45,7 +53,8 @@ paket baru alih-alih memakai yang basi.
    berkas bukan bukti pemakaian.
 
 2. **Tambahkan versi model ke kunci** + test bahwa kunci berubah saat model
-   berubah.
+   berubah. WAJIB selesai sebelum langkah 3 — kalau paket dibangun dengan kunci
+   lama, ia langsung jadi paket basi yang tidak bisa dibedakan dari yang sah.
 
 3. **Bangun paket untuk 3 avatar** lewat `paketCastRefTersimpan`. Catat biaya
    per paket dari nilai kembaliannya; berhenti kalau total menyentuh Rp15.000.
