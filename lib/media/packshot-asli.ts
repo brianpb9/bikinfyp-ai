@@ -25,6 +25,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { runFfmpeg, probeVideoSize } from "./ffmpeg";
 
 const FPS = 24;
@@ -101,6 +102,82 @@ export async function buildPackshotAsli(input: PackshotInput): Promise<string> {
   ]);
   if (!fs.existsSync(input.outPath)) throw new Error("packshot asli gagal dibuat");
   return input.outPath;
+}
+
+/** Berapa lama segmen packshot penutup. 1,8 dtk: cukup lama untuk membaca nama
+ *  merek dengan tenang, cukup pendek untuk tidak terasa video membeku. */
+export const PACKSHOT_EKOR_DTK = 1.8;
+
+/** Hash isi foto — dipakai QC-10 untuk membuktikan segmen packshot memang
+ *  berasal dari foto produk yang tercatat, bukan dari gambar lain. */
+export function sidikFoto(fotoPath: string): string {
+  return createHash("sha256").update(fs.readFileSync(fotoPath)).digest("hex");
+}
+
+/**
+ * TAMBAHKAN segmen packshot foto asli di ujung video yang sudah jadi.
+ *
+ * Bedanya dengan packshotAsliUntukShot di atas: yang itu MENGGANTI shot
+ * generate terakhir dan hanya berlaku kalau shot itu kebetulan tanpa orang.
+ * Yang ini MENAMBAH segmen pendek untuk semua video — keputusan Brian 20 Agu
+ * (jalan keluar A), sesudah render berbayar membuktikan model tetap mengarang
+ * huruf pada label ("jddpgeer", "SOMSONG") di putaran prompt ketiga.
+ *
+ * Di level composer, tidak pernah dikirim ke Seedance: labelnya benar karena
+ * ia memang foto produknya, bukan tafsiran model atas foto itu.
+ *
+ * Audionya melanjutkan bed ambient yang sama supaya penutup tidak jatuh ke
+ * senyap mendadak — potong keras ke sunyi terbaca sebagai video rusak, bukan
+ * sebagai akhir. Kalau bed tidak ada, dipakai senyap: concat menolak input
+ * yang jumlah streamnya berbeda, jadi audio tetap harus ada.
+ */
+export async function appendPackshot(input: {
+  videoPath: string;
+  workDir: string;
+  fotoPath: string;
+  /** Bed ambient yang sama dengan video utama. Boleh kosong. */
+  musicPath?: string;
+  durationSec?: number;
+}): Promise<{ path: string; ditambahkan: boolean; ekorSec: number; sidik?: string }> {
+  const dur = input.durationSec ?? PACKSHOT_EKOR_DTK;
+  if (!fs.existsSync(input.fotoPath)) {
+    console.warn(`[packshot] foto produk tidak ada, penutup dilewati: ${input.fotoPath}`);
+    return { path: input.videoPath, ditambahkan: false, ekorSec: 0 };
+  }
+  try {
+    const { width, height } = await probeVideoSize(input.videoPath);
+    const klip = path.join(input.workDir, "packshot-ekor.mp4");
+    await buildPackshotAsli({ fotoPath: input.fotoPath, durationSec: dur, width, height, outPath: klip });
+
+    // Audio untuk segmen: bed yang sama, atau senyap.
+    const adaBed = !!input.musicPath && fs.existsSync(input.musicPath);
+    const klipAudio = path.join(input.workDir, "packshot-ekor-audio.mp4");
+    await runFfmpeg([
+      "-y", "-v", "error", "-i", klip,
+      ...(adaBed
+        ? ["-stream_loop", "-1", "-i", input.musicPath!]
+        : ["-f", "lavfi", "-t", String(dur), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]),
+      "-map", "0:v", "-map", "1:a", "-t", String(dur),
+      "-c:v", "copy", "-c:a", "aac", "-ar", "44100", "-ac", "2", klipAudio,
+    ]);
+
+    const gabung = path.join(input.workDir, "output-packshot.mp4");
+    await runFfmpeg([
+      "-y", "-v", "error", "-i", input.videoPath, "-i", klipAudio,
+      "-filter_complex",
+      `[0:v]scale=${width}:${height},setsar=1[v0];[1:v]scale=${width}:${height},setsar=1[v1];` +
+        `[v0][0:a][v1][1:a]concat=n=2:v=1:a=1[v][a]`,
+      "-map", "[v]", "-map", "[a]",
+      "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100", "-ac", "2",
+      gabung,
+    ]);
+    return { path: gabung, ditambahkan: true, ekorSec: dur, sidik: sidikFoto(input.fotoPath) };
+  } catch (err) {
+    // Sama seperti endcard: kegagalan di sini paling buruk menghilangkan
+    // penutupnya, tidak boleh merusak video yang sudah benar.
+    console.warn(`[packshot] gagal menambahkan penutup: ${(err as Error).message}`);
+    return { path: input.videoPath, ditambahkan: false, ekorSec: 0 };
+  }
 }
 
 /** Apakah shot ini sebaiknya memakai foto asli, bukan video generate?

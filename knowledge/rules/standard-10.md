@@ -52,8 +52,14 @@ sebagian, tidak ada "hampir".
 6. **Nol klaim yang bisa disalahkan.** Brightening/whitening/memutihkan/instan/menyembuhkan
    hanya di label fisik, tidak pernah diucapkan; tidak ada before/after; tidak ada angka
    spesifikasi di dialog. Ads lebih ketat (lihat tabel A).
-7. **Brand fidelity terencana.** Label terbaca di ≥2 titik (partial sekali di body, hero
-   statis ≥1 detik di CTA); PRODUCT-LOCK ditulis dari foto asli (bentuk, tutup, warna,
+7. **Brand fidelity terencana.** Label merek dijamin lewat **packshot penutup dari foto
+   asli** (1,8 detik, dirakit di composer, tidak pernah dikirim ke model video) — bukan
+   lewat meminta model video mengeja label dengan benar. Tiga putaran prompt dan empat
+   render berbayar (14 dan 20 Agu) membuktikan model selalu mengarang huruf: "Bright Slow
+   'ver Gel", "jddpgeer", "SOMSONG", "45 oz" untuk botol 30 ml. Karena itu di bagian yang
+   DIGENERATE berlaku sebaliknya — kamera menjaga jarak sehingga tidak ada huruf yang
+   pernah ter-resolve, dan huruf yang tidak dirender tidak bisa salah (§C.10, kebijakan
+   jarak label 20 Agu). PRODUCT-LOCK tetap ditulis dari foto asli (bentuk, tutup, warna,
    tata letak label, netto); ukuran produk dikunci ke ukuran asli (lihat §C.3).
 8. **Filter-safe secara struktural.** Tanpa kamar mandi/handuk/kulit basah/shower; tanpa
    senjata; tanpa orang kedua (figur tambahan hanya tangan/punggung tanpa wajah, ditulis

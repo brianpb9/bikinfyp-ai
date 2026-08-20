@@ -26,7 +26,7 @@ import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
 import { shotUntukDetik } from "../media/qc-vision";
-import { buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../media/packshot-asli";
+import { appendPackshot, buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../media/packshot-asli";
 import { buildCaptionCards } from "../media/captions";
 import { resolvePromo, formatPromoOverlayText } from "../promo";
 import { renderCaptionPngs } from "../media/render-captions";
@@ -49,7 +49,7 @@ import { PgJobsRepository } from "./jobs";
 import { getPool } from "./pool";
 import { normalizeHookLevel } from "../config/hooks";
 import { pgTaskMemo } from "./task-memo";
-import { appendEndcard, ENDCARD_DEFAULT_COLOR } from "../media/endcard";
+import { appendEndcard, ENDCARD_DEFAULT_COLOR, ENDCARD_DURASI_DTK } from "../media/endcard";
 import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
 
@@ -704,6 +704,25 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       });
     }
 
+    // PACKSHOT PENUTUP FOTO ASLI (keputusan Brian 20 Agu, jalan keluar A).
+    //
+    // Sesudah overlay klaim, sebelum endcard: urutannya konten -> produk ->
+    // brand. Label produk dijamin benar karena segmen ini tidak pernah
+    // dikirim ke model video — ia foto yang diunggah penjual sendiri.
+    let ekorPackshotSec = 0;
+    let sidikPackshot: string | undefined;
+    if (primaryRef) {
+      const pack = await appendPackshot({
+        videoPath: outputPath, workDir, fotoPath: primaryRef, musicPath,
+      });
+      outputPath = pack.path;
+      ekorPackshotSec = pack.ekorSec;
+      sidikPackshot = pack.sidik;
+      if (pack.ditambahkan) {
+        console.log(`[job ${row.id.slice(0, 8)}] packshot penutup foto asli ditambahkan (${pack.ekorSec} dtk) — label dijamin benar`);
+      }
+    }
+
     // Endcard ber-brand, SESUDAH compositing dan SEBELUM QC.
     //
     // Sesudah compositing: graf filter compositor sudah panjang dan sudah
@@ -713,17 +732,28 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // Sebelum QC: QC memeriksa durasi, dan menambah 2 detik SETELAH
     // pemeriksaan akan membuat berkas yang dikirim ke brand berbeda dari yang
     // diperiksa — persis jenis celah yang membuat pemeriksaan jadi teater.
+    let ekorEndcardSec = 0;
     if (row.org_id) {
       const kit = await loadBrandKit(row.org_id);
       if (kit && (kit.logoPath || kit.tagline)) {
+        const sebelum = outputPath;
         outputPath = await appendEndcard({
           videoPath: outputPath, workDir,
           logoPath: kit.logoPath, colorHex: kit.color ?? ENDCARD_DEFAULT_COLOR, tagline: kit.tagline,
         });
+        // appendEndcard mengembalikan video ASLI kalau gagal/tidak ada isi —
+        // jadi ekornya dihitung dari apakah berkasnya benar-benar berubah,
+        // bukan dari niat memanggilnya.
+        if (outputPath !== sebelum) ekorEndcardSec = ENDCARD_DURASI_DTK;
       }
     }
     if (!(await jobs.transition(row.id, "QC_CHECK", { worker: "postgres" }))) return;
     qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
+      // Ekor yang SENGAJA ditambahkan sesudah konten — QC-05 memakai ini
+      // supaya video yang lengkap tidak dinilai kelebihan durasi, dan QC-10
+      // memakainya untuk mengeluarkan segmen packshot dari jendela OCR.
+      ekorDisengajaSec: ekorPackshotSec + ekorEndcardSec,
+      packshotSidik: sidikPackshot,
       // QC-11: batas orang datang DARI SPEC yang dipakai merender, bukan
       // diturunkan ulang di QC — satu aturan, satu tempat.
       maxPeople: spec.maxPeople,

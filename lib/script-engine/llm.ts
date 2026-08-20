@@ -319,11 +319,11 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
  * dan tesnya tidak perlu merakit PermintaanNaskah lengkap hanya untuk membaca
  * satu blok instruksi.
  */
-export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; durationSec: number }): string {
+export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; durationSec: number; format?: string }): string {
   return blokTugas({
     productName: "Serum Glow Bening", productCategory: "beauty", priceIdr: 89000,
     durationSec: p.durationSec, contentType: p.contentType, cartLabel: "keranjang kuning",
-    register: "netral", hookFamily: "H1", hookLevel: "normal", format: "talking_head",
+    register: "netral", hookFamily: "H1", hookLevel: "normal", format: p.format ?? "talking_head",
   } as PermintaanNaskah);
 }
 
@@ -387,6 +387,22 @@ function blokTugas(r: PermintaanNaskah): string {
     storyOs,
     `REGISTER: ${r.register}.`,
     blokAturanTerukur(r, jumlah),
+    // KONTRAK SHOT PEMBUKA untuk format yang kameranya memang tentang produk.
+    // Ini aturan tata bahasa shot, bukan imbauan gaya: validator menolak
+    // naskahnya (S-10). Lahir dari dua render berbayar 20 Agu — aksi hook
+    // "sweeps across the mess, THEN pauses on the bottle" membuat produk baru
+    // masuk frame di detik ~2 dari 5, dua kali berturut-turut.
+    r.format === "hands_only"
+      ? [
+          "OPENING SHOT CONTRACT (format hands_only — the camera is about hands AND the product):",
+          "- the first segment's product_state is 'partial', never 'hidden'. The product is already in the",
+          "  first frame, in shot, from frame one.",
+          "- write the opening action AROUND a product that is already there. Never choreograph the camera",
+          "  finding, revealing, or arriving at the product later ('sweeps across the table, then pauses on",
+          "  the bottle'). On a 5-second hook that spends half the shot without the thing being sold.",
+          "- the arc still holds: 'partial' at the hook, 'hero' only at the CTA.",
+        ].join("\n")
+      : "",
     `STRATEGY HINTS (these shape the angle, they are not lines to copy):`,
     `  hook family ${r.hookFamily}, hook level ${r.hookLevel}, format ${r.format}.`,
     r.contoh ? `TONE EXAMPLE (imitate the register and rhythm, never the words):\n${r.contoh}` : "",

@@ -5,6 +5,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { probeDurationSec, probeHasVideoStream, probeFormatTags, volumeDetect, runFfmpeg, runFf } from "./ffmpeg";
 import { periksaKataTerlarang, validateScript } from "../script-engine/validator";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
@@ -146,6 +147,23 @@ export function evaluateQcPolicy(format: string | undefined, checks: QcCheck[]):
 export interface QcInput {
   filePath: string;
   targetDurationSec: number;
+  /**
+   * Detik yang SENGAJA ditambahkan sesudah konten: packshot penutup foto asli
+   * dan/atau endcard brand.
+   *
+   * Tanpa ini QC-05 menilai video yang lengkap sebagai kelebihan durasi —
+   * toleransinya ±2 dtk dan endcard sendiri sudah memakainya habis. Yang
+   * diperiksa QC seharusnya "durasi sesuai kontrak", bukan "durasi sesuai
+   * bagian yang digenerate".
+   */
+  ekorDisengajaSec?: number;
+  /**
+   * Segmen packshot berasal dari foto ini (sha256 isinya).
+   *
+   * QC-10 memakainya untuk membuktikan penutupnya benar-benar foto produk yang
+   * tercatat — bukan membaca huruf dari gambar generate.
+   */
+  packshotSidik?: string;
   /** Teks final yang terdengar/tertulis di video: segmen skrip + overlay. */
   finalTexts: string[];
   hookFamily: string;
@@ -633,7 +651,31 @@ function miripMerek(kataOcr: string, merek: string): boolean {
   return false;
 }
 
-export async function qcLabelFidelity(filePath: string, productName: string): Promise<QcCheck> {
+/**
+ * QC-10 punya DUA makna sejak kebijakan jarak label 20 Agu, dan keduanya
+ * ditulis terang-terangan supaya tidak ada yang salah membaca "pass"-nya.
+ *
+ * 1. Pada bagian video yang DIGENERATE: kamera sekarang menjaga jarak supaya
+ *    tidak ada huruf yang pernah ter-resolve. Jadi yang diburu di sini bukan
+ *    lagi "apakah merek terbaca" — melainkan huruf SALAH yang terlanjur
+ *    terbaca. Ketiadaan huruf adalah hasil yang benar, bukan kegagalan.
+ *
+ * 2. Pada segmen PACKSHOT penutup: tidak ada OCR sama sekali. Yang dibuktikan
+ *    adalah asal-usulnya — segmen itu dibangun dari berkas foto yang sama
+ *    dengan foto produk yang tercatat pada job (sha256 isinya). Ini bukti
+ *    PROVENANCE, bukan bukti visual bahwa mata manusia bisa membaca labelnya.
+ *    Dinyatakan begitu di detail-nya, karena mengaku membuktikan lebih dari
+ *    yang benar-benar diperiksa adalah cara sebuah gerbang berubah jadi hiasan.
+ *
+ * Ekor packshot DIKELUARKAN dari jendela OCR. Kalau tidak, tesseract yang
+ * salah membaca foto asli ("moseru" untuk "Mosseru") akan melaporkan cacat
+ * pada satu-satunya segmen yang labelnya dijamin benar.
+ */
+export async function qcLabelFidelity(
+  filePath: string,
+  productName: string,
+  opts?: { ekorSec?: number; packshotSidik?: string; fotoPath?: string }
+): Promise<QcCheck> {
   const tokens = brandTokens(productName);
   // Yang WAJIB terbaca token MEREKNYA, bukan token mana pun.
   //
@@ -648,6 +690,10 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
   const framesDir = fs.mkdtempSync(path.join(os.tmpdir(), "racun-qc10-"));
   try {
     const duration = await probeDurationSec(filePath);
+    // Jendela OCR = bagian yang DIGENERATE saja. Ekor packshot dibuktikan
+    // lewat sidik berkasnya, bukan lewat membaca hurufnya.
+    const ekor = Math.max(0, opts?.ekorSec ?? 0);
+    const durasiKonten = Math.max(0.5, duration - ekor);
     const found = new Set<string>();
     const mirip = new Set<string>();
     let sampled = 0;
@@ -656,7 +702,7 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
     // OCR full-frame gagal; upscale menyelesaikannya).
     for (const frac of [0.08, 0.2, 0.3, 0.42, 0.55, 0.68, 0.8, 0.92]) {
       const frame = path.join(framesDir, `f${Math.round(frac * 100)}.png`);
-      await runFfmpeg(["-y", "-v", "error", "-ss", (duration * frac).toFixed(2), "-i", filePath,
+      await runFfmpeg(["-y", "-v", "error", "-ss", (durasiKonten * frac).toFixed(2), "-i", filePath,
         "-frames:v", "1", "-vf", "scale=1440:-2:flags=lanczos", frame]);
       sampled++;
       const { words } = await ocrFrame(frame);
@@ -699,9 +745,28 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
         detail: `label tercetak "${[...mirip].join(", ")}" — bukan "${merekUtama}". Merek salah eja = label rusak (AI slop).`,
       };
     }
+    // Tidak ada huruf salah yang terbaca di bagian generate. Di bawah kebijakan
+    // jarak label itu justru hasil yang DIINGINKAN — tapi ia hanya boleh jadi
+    // PASS kalau labelnya benar-benar dijamin di tempat lain, yaitu segmen
+    // packshot yang dibangun dari foto produk yang tercatat.
+    if (opts?.packshotSidik) {
+      const sidikFotoKini = opts.fotoPath && fs.existsSync(opts.fotoPath)
+        ? createHash("sha256").update(fs.readFileSync(opts.fotoPath)).digest("hex")
+        : null;
+      if (sidikFotoKini && sidikFotoKini !== opts.packshotSidik) {
+        return {
+          code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
+          detail: `packshot penutup TIDAK berasal dari foto produk yang tercatat (sidik ${opts.packshotSidik.slice(0, 12)} vs foto job ${sidikFotoKini.slice(0, 12)}) — jaminan labelnya batal.`,
+        };
+      }
+      return {
+        code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "pass",
+        detail: `nol huruf salah terbaca di ${sampled} frame bagian generate (sesuai kebijakan jarak label), dan penutupnya dibangun dari foto produk yang tercatat (sha ${opts.packshotSidik.slice(0, 12)}). Yang dibuktikan: ASAL-USUL foto penutup — bukan keterbacaan visualnya.`,
+      };
+    }
     return {
       code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip",
-      detail: `TIDAK TERBUKTI: OCR tidak membaca merek "${merekUtama}" maupun kata mirip di ${sampled} frame${found.size ? ` (hanya kata umum: ${[...found].join(", ")})` : ""}. Bukan bukti labelnya benar — fidelitas merek diputuskan QC-F1 (model visi).`,
+      detail: `TIDAK TERBUKTI: OCR tidak membaca merek "${merekUtama}" maupun kata mirip di ${sampled} frame${found.size ? ` (hanya kata umum: ${[...found].join(", ")})` : ""}. Tanpa packshot foto asli tidak ada yang menjamin label — fidelitas merek diputuskan QC-F1 (model visi).`,
     };
   } finally {
     fs.rmSync(framesDir, { recursive: true, force: true });
@@ -941,7 +1006,11 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     });
   } else if (input.format === "hands_only" || input.format === "talking_head" || input.format === "tvc") {
     try {
-      const labelCheck = await qcLabelFidelity(input.filePath, input.productName);
+      const labelCheck = await qcLabelFidelity(input.filePath, input.productName, {
+        ekorSec: input.ekorDisengajaSec,
+        packshotSidik: input.packshotSidik,
+        fotoPath: input.refImagePath,
+      });
       checks.push(labelCheck);
       labelFidelityPassed = labelCheck.status === "pass";
     } catch (err) {
@@ -1002,11 +1071,15 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // QC-05 durasi ±2 detik dari target.
   try {
     const dur = await probeDurationSec(input.filePath);
-    const ok = Math.abs(dur - input.targetDurationSec) <= 2;
+    const ekor = input.ekorDisengajaSec ?? 0;
+    const target = input.targetDurationSec + ekor;
+    const ok = Math.abs(dur - target) <= 2;
     checks.push({
       code: "QC-05", name: "Durasi sesuai target",
       status: ok ? "pass" : "fail",
-      detail: `${dur.toFixed(2)} dtk vs target ${input.targetDurationSec} dtk`,
+      detail: ekor > 0
+        ? `${dur.toFixed(2)} dtk vs target ${target.toFixed(2)} dtk (konten ${input.targetDurationSec} + ekor disengaja ${ekor.toFixed(2)}: packshot/endcard)`
+        : `${dur.toFixed(2)} dtk vs target ${input.targetDurationSec} dtk`,
     });
   } catch (err) {
     checks.push({ code: "QC-05", name: "Durasi sesuai target", status: "fail", detail: String(err) });

@@ -28,7 +28,11 @@ export interface EndcardInput {
   durationSec?: number;
 }
 
-const DEFAULT_DURATION = 2;
+/** Durasi endcard. Diekspor karena QC perlu tahu berapa detik ekor yang
+ *  SENGAJA ditambahkan sesudah konten — tanpa itu QC-05 menilai video lengkap
+ *  sebagai kelebihan durasi. */
+export const ENDCARD_DURASI_DTK = 2;
+const DEFAULT_DURATION = ENDCARD_DURASI_DTK;
 
 /** Hex -> "0xRRGGBB" untuk lavfi color. Nilai tak sah jatuh ke hitam pekat,
  * BUKAN melempar: brand bisa saja menyimpan warna aneh, dan itu tidak layak

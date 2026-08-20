@@ -378,6 +378,9 @@ export const SELALU_KERAS = new Set([
   // STANDAR 10/10 (knowledge/rules/standard-10.md). Ketiganya aturan MUTU yang
   // bisa diperiksa mesin, dan Brian menyebutnya syarat render — bukan saran.
   "S-04", "S-05", "S-09", "L-23",
+  // S-10: kontrak segmen pembuka (20 Agu). Keras sejak lahir karena cacat yang
+  // ditutupnya sudah terbukti di piksel DUA kali, dan tambalan hilirnya gagal.
+  "S-10",
   // Story OS Ads (slice 2, 19 Agu). Gerbang SA yang bisa dicek mesin: gagal
   // satu = naskah tidak dirender (STORY-OS-ADS-v1 §3).
   "SA1", "SA2", "SA4", "SA6", "SA8",
@@ -482,6 +485,34 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // Ads = iklan berbayar untuk jasa/app/SaaS. Tidak ada keranjang yang bisa
   // diklik, jadi L-03 tidak berlaku dan penutupnya punya aturan sendiri.
   const isAds = !isTvc && script.contentType === "ads";
+
+  // S-10: KONTRAK SEGMEN PEMBUKA — produk sudah di frame pada format yang
+  // seluruh kameranya memang tentang produk.
+  //
+  // Lahir dari render berbayar 20 Agu. Penulis menulis aksi hook "camera sweeps
+  // across the mess, THEN pauses on the serum bottle", dan model menurutinya
+  // harfiah: botol baru masuk frame detik ~2 dari 5. Percobaan menambalnya di
+  // perakit prompt — menambahkan kalimat batasan di depan aksi penulis — GAGAL
+  // pada render verifikasi: kalimat berbentuk koreografi mengalahkan kalimat
+  // berbentuk batasan, dan keduanya ada di prompt yang sama.
+  //
+  // Jadi aturannya dipindah ke hulu, ke tata bahasa shot penulis, tempat ia
+  // tidak punya lawan. hands_only berarti kameranya memang pada tangan DAN
+  // produk sejak frame pertama; hook 'hidden' di sana bukan pilihan gaya,
+  // melainkan hook yang kehilangan subjeknya.
+  //
+  // ads/tvc SENGAJA tidak diikutkan: di Story OS Ads, hook 'hidden' justru
+  // struktur yang benar (produk datang belakangan, lihat SA-jembatan), dan
+  // memaksakan kehadiran produk di sana akan merusak genrenya.
+  const formatMenuntutProduk = script.format === "hands_only";
+  const produkAwal = (hookSeg as { product_state?: string } | undefined)?.product_state;
+  if (formatMenuntutProduk && produkAwal === "hidden") {
+    push(true, {
+      rule: "S-10",
+      message_id:
+        "Shot pembuka format hands_only harus sudah menampilkan produk (product_state 'partial', bukan 'hidden') — kameranya memang tentang tangan dan produk, jadi produk yang baru masuk belakangan membuang separuh hook.",
+    });
+  }
 
   // L-01: >=2 partikel
   const particleCount = toks.filter((t) => PARTICLES.has(t)).length;
