@@ -16,8 +16,22 @@ import { probeVideoSize } from "../lib/media/ffmpeg";
 const T = path.resolve(process.cwd(), "..", "test_output");
 const OUT = path.join(T, "canary_20agu");
 
+// NAMA PRODUK WAJIB DARI SUMBER TEPERCAYA, BUKAN INGATAN.
+//
+// Cacat 20 Agu: roster ini semula menulis "Metoo MW-3 Sabun Wajah" — nama yang
+// SAYA KARANG. Produk sebenarnya, terbaca jelas di foto sumbernya, adalah
+// METOO MW-3 ADVANCED WHITENING TOOTHPASTE 100g. Keluaran #1 karena itu
+// menjual "sabun wajah" untuk sebuah tube pasta gigi, dan Rp2.771 terbuang
+// untuk sampel yang tidak bisa dinilai.
+//
+// Tidak ada gerbang yang menangkapnya: classifier, gerbang label, QC-10, dan
+// QC-F1 semuanya lolos karena MEREKNYA memang benar. Yang tidak pernah
+// dicocokkan siapa pun adalah JENIS BARANGNYA.
+//
+// Kalau menambah entri di sini: baca namanya dari produk terdaftar di DB atau
+// dari label pada fotonya sendiri. Jangan mengetik dari ingatan.
 const ROSTER: Record<string, { produk: ProductInput; foto: string }> = {
-  "mw3": { produk: { id: "p-mw3", name: "Metoo MW-3 Sabun Wajah", price_idr: 45000, category: "beauty", sourceUrl: null } as ProductInput,
+  "mw3": { produk: { id: "p-mw3", name: "Metoo MW-3 Advanced Whitening Toothpaste", price_idr: 45000, category: "beauty", sourceUrl: null } as ProductInput,
            foto: path.join(T, "metoo-mw3", "mw3-packshot-4000px.webp") },
   "glow": { produk: { id: "p-glow", name: "Serum Glow Bright", price_idr: 85000, category: "beauty", sourceUrl: null } as ProductInput,
             foto: path.join(T, "canary-glow.jpg") },
