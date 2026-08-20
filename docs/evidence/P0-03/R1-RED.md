@@ -265,5 +265,5 @@ saat gerbang bukti menolak — kebalikan dari yang benar.
   dibuat lewat dashboard enterprise.
 
 RED_TEST_SHA=f2ad65bbe9e31b75740690f0cbe86f5128ea2b5b (R1 awal, 15 test)
-R1_AMENDED_TEST_SHA=<to be filled after commit>
-R1_AMENDED_EVIDENCE_SHA=<this commit>
+R1_AMENDED_TEST_SHA=39d363e6980ea792f98d9bcb1446242bee299ffe
+R1_AMENDED_EVIDENCE_SHA=<commit ini sendiri — commit berikutnya sesudah R1_AMENDED_TEST_SHA>
