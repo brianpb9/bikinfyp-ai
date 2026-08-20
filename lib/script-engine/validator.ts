@@ -22,6 +22,10 @@ export interface ScriptToValidate {
     /** Arahan visual. Diperiksa L-21 — di sinilah kata pemicu penyaring hidup,
      *  bukan di dialog. */
     visual_direction?: string;
+    /** Aksi terstruktur dari penulis. IKUT diperiksa L-21 sejak 20 Agu: sejak
+     *  aksi ini benar-benar masuk prompt shot, kosakata di dalamnya bisa
+     *  menjatuhkan render di ujung — sesudah semua biaya keluar. */
+    action?: string;
     /** Keadaan awal frame (tulisan LLM), ikut diperiksa L-21. */
     start_state?: string;
   }[];
@@ -828,7 +832,13 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // datang dari prompt video, dan dialognya sendiri tidak pernah dikirim ke
   // penyaring itu.
   for (const segment of script.segments) {
-    const bahan = [segment.visual_direction ?? "", segment.start_state ?? ""].join(" ").trim();
+    // `action` IKUT diperiksa sejak 20 Agu. Sebelumnya tidak, dan itu tidak
+    // masalah selama aksi penulis dibuang perencana shot. Begitu aksi itu
+    // benar-benar masuk prompt (board review), kosakata di dalamnya bisa
+    // menjatuhkan render DI UJUNG — sesudah ide, naskah, dan frame dibayar.
+    // Memeriksanya di sini memberi penulis kesempatan memperbaikinya sendiri,
+    // dan ia punya tiga percobaan.
+    const bahan = [segment.visual_direction ?? "", segment.start_state ?? "", segment.action ?? ""].join(" ").trim();
     if (!bahan) continue;
     const temuan = periksaPemicu(bahan, { namaProduk: script.productName });
     if (!temuan.length) continue;

@@ -58,7 +58,19 @@ export function periksaPromptAkhir(input: {
     const di = `shot ${sh.index}`;
 
     if (input.withAudio) {
-      const hilang = LAPIS_BAHASA.filter((l) => !l.pola.test(sh.prompt)).map((l) => l.nama);
+      // Lapis "label dialog" hanya berlaku pada shot yang PUNYA dialog.
+      //
+      // Ditemukan dari prompt nyata 20 Agu: shot hook sengaja tanpa kata
+      // (standar §E: anomali terbaca tanpa dialog), lalu gerbang ini
+      // menjatuhkannya karena tidak menemukan label dialog — menghukum shot
+      // justru karena mematuhi aturan lain. Gerbang yang menolak keluaran yang
+      // benar akan dimatikan orang, dan itu lebih buruk daripada tidak ada.
+      // Penanda eksplisit dari perakit prompt, bukan tebakan dari tanda kutip:
+      // nama produk memang ditulis dalam kutip, jadi tebakan lama menganggap
+      // setiap shot berdialog.
+      const punyaDialog = !/No spoken words in this shot/i.test(sh.prompt);
+      const wajib = punyaDialog ? LAPIS_BAHASA : LAPIS_BAHASA.filter((l) => !/label dialog/.test(l.nama));
+      const hilang = wajib.filter((l) => !l.pola.test(sh.prompt)).map((l) => l.nama);
       if (hilang.length) {
         temuan.push({
           aturan: "BAHASA",

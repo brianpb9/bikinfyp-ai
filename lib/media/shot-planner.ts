@@ -539,6 +539,37 @@ function kunciBahasa(mode: "presenter" | "voiceover"): { header: string; perShot
 }
 
 /**
+ * SINEMATOGRAFI PENULIS untuk satu shot (board review 20 Agu).
+ *
+ * Penulis LLM menghasilkan framing/angle/camera/action per segmen, dan
+ * keSegmentDraft() sudah menyimpannya utuh — tapi perencana shot tidak pernah
+ * membacanya. Akibatnya koreografi selalu datang dari tabel beat tetap, jadi
+ * setiap video dengan format sama mendapat tiga beat identik. Video yang bisa
+ * ditukar satu sama lain adalah definisi AI-slop, dan ia lahir di sini.
+ *
+ * Yang MENANG: aksi penulis mengganti beat tabel — itu inti koreografinya.
+ * Yang DITAMBAHKAN, bukan menggantikan: framing/angle/camera, karena framing
+ * bawaan membawa kunci keselamatan filter (dada ke atas, satu orang) yang
+ * tidak boleh hilang hanya karena penulis menulis "wide".
+ */
+function sinematografiPenulis(segs: SegmentDraft[]): { aksi: string; kamera: string; tanpaWajah: boolean } | null {
+  const utama = segs.find((sg) => (sg.action ?? "").trim().length > 12);
+  if (!utama) return null;
+  const kamera = [utama.framing, utama.angle, utama.camera]
+    .map((x) => (x ?? "").trim())
+    .filter(Boolean)
+    .join(", ");
+  return {
+    aksi: String(utama.action).trim(),
+    kamera,
+    // Penulis menandai sendiri bahwa wajah tidak terlihat di beat ini. Sebelum
+    // ini penandanya diabaikan dan kamera memanggil wajah kembali ke frame —
+    // persis konfigurasi yang catatan filter kita beri 0 dari 3 kelulusan.
+    tanpaWajah: /not visible|tidak terlihat|off camera/i.test(utama.expression ?? ""),
+  };
+}
+
+/**
  * Kalimat kamera+aksi dari format ide, atau "" bila formatnya tidak dikenal.
  *
  * Dibaca dari knowledge/formats/*.json (field `planner`), bukan disalin ke
@@ -1168,9 +1199,12 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // "jadikan ini default, bukan pilihan" — tapi kodenya hanya memberlakukannya
     // pada talking_head, sehingga format ads dikirim ke antrean berbayar
     // dengan konfigurasi yang catatan kita sendiri beri 0% kelulusan.
+    const sinema = sinematografiPenulis(segmenMilikShot(i));
     const formatBukaTanpaWajah = format === "talking_head" || format === "ads" || format === "tvc";
     const bukaTanpaWajah =
-      isFirst && numShots >= 2 && formatBukaTanpaWajah &&
+      // Penanda penulis "expression: not visible" ikut memutuskan, bukan cuma
+      // format dan urutan shot.
+      ((isFirst && numShots >= 2 && formatBukaTanpaWajah) || (sinema?.tanpaWajah ?? false)) &&
       !input.noModel && !fullBodyFashion && !gayaBerlaku && !ugcRolesFor(input.ugcTemplate)?.opening;
     // SUMBU MODE (slice 1, 19 Agu). Mode segmen — sampai kini cuma label
     // metadata — kini menentukan kontrak kamera shot, sesuai modes.md:
@@ -1352,7 +1386,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // tetap menampilkan barangnya. Lihat isServiceLike di lib/config/hooks.ts.
     const noPhysicalProduct = isServiceLike(input.productCategory);
     const beatTvc = format === "tvc" ? tvcBeat(i) : null;
+    // AKSI PENULIS MENANG atas tabel beat (board review 20 Agu). Kalimatnya
+    // dirakit dengan kunci identitas produk supaya presisi koreografi tidak
+    // menukar presisi identitas — keduanya harus ada, bukan salah satu.
     const beat =
+      (sinema ? `${sinema.aksi}, ${IDENTITY_INSTRUCTION}` : null) ??
       ugcBeat(i) ??
       (format === "ads" && noPhysicalProduct
         // Iklan jasa: yang diperagakan adalah MANFAAT, bukan benda. Presenter
@@ -1566,6 +1604,12 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Kontrak talent mode ikut, terpisah dari framing: framing mengatur KAMERA,
     // kalimat ini mengatur apa yang dilakukan orangnya.
     const kontrak = framingMode ? ` ${blokKontrakMode(modeShot)}` : "";
+    // Framing penulis DITAMBAHKAN, bukan menggantikan: framing bawaan membawa
+    // kunci keselamatan filter (dada ke atas, satu orang) yang tidak boleh
+    // hilang hanya karena penulis menulis "wide". Kalau keduanya bertentangan,
+    // gerbang prompt akhir yang memutuskan — dan kosakata berisiko di situ
+    // sekarang KERAS.
+    const kameraPenulis = sinema?.kamera ? ` Shot composition: ${sinema.kamera}.` : "";
     // Format ide -> kamera (slice 3). Larangan format ditulis sebagai kalimat
     // POSITIF: "hindari" di katalog menyebut apa yang merusak, dan menyalinnya
     // apa adanya akan memanggil balik hal yang dilarang (pelajaran negasi yang
@@ -1574,8 +1618,8 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const blokFormat = petunjukFormat ? ` ${petunjukFormat}` : "";
 
     const base = rapikan(punyaPeranTemplate
-      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${panggung}${kontrak}${blokFormat}${ukuran}`
-      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}. ${productDesc}${brandBrief}${beat}${panggung}${kontrak}${blokFormat}${ukuran}`);
+      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}.${kameraPenulis} ${productDesc}${brandBrief}${panggung}${kontrak}${blokFormat}${ukuran}`
+      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}.${kameraPenulis} ${productDesc}${brandBrief}${beat}${panggung}${kontrak}${blokFormat}${ukuran}`);
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
@@ -1655,7 +1699,15 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Lapis 3 (label dialog) ditempel tepat di depan kalimat berdialog, dan
     // lapis 1/2/4 mengapit blok ucapan — bukan disebar acak: yang terbukti
     // menahan ucapan Inggris adalah bahasa yang disebut DEKAT teks dialognya.
-    const speechBerlabel = dialogue.trim() ? `Indonesian dialogue, spoken exactly as written. ${speech}` : speech;
+    // Shot TANPA kata ditandai eksplisit, bukan dibiarkan merakit klausa narasi
+    // dengan kutipan kosong. Dua alasan: (1) standar §E memang meminta shot
+    // pembuka terbaca tanpa dialog, jadi bentuk ini normal, bukan cacat;
+    // (2) gerbang prompt akhir perlu cara ANDAL membedakan "tidak berdialog"
+    // dari "lupa label dialog" — sebelum ini ia menebak dari tanda kutip, dan
+    // nama produk yang memang ditulis dalam kutip membuatnya salah tebak.
+    const speechBerlabel = dialogue.trim()
+      ? `Indonesian dialogue, spoken exactly as written. ${speech}`
+      : `No spoken words in this shot — it plays on picture and sound design alone. `;
     const prompt = rapikan(
       format === "talking_head" && !lipSyncPresenter && !bukaTanpaWajah
         ? `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Natural warm reactive expression throughout, with her lips closed and relaxed as she listens. ${bahasa.penutup}`

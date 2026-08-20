@@ -55,6 +55,51 @@ jobs:
           done
           BASE=http://localhost:3210 node scripts/smoke-interaksi.mjs
 
+  # KONKURENSI UANG — gate wajib, bukan opsi.
+  #
+  # tests/pg-konkurensi-kredit.test.ts adalah suite yang MENEMUKAN bug uang
+  # nyata: komentar berkasnya sendiri mencatat versi awal reconcileReadyHolds()
+  # lulus 395 tes lama, lalu tetap menghasilkan capture GANDA pada 14 dari 30
+  # job saat delapan reconciler berjalan bersamaan. Kelas cacat itu tidak
+  # muncul pada eksekusi berurutan — ia hanya muncul saat dua proses membaca
+  # keadaan yang sama sebelum salah satunya menulis.
+  #
+  # Sampai board review 20 Agu, suite itu TIDAK PERNAH berjalan otomatis di
+  # mana pun: ia melewati dirinya sendiri kalau UJI_PG_URL kosong, dan tidak
+  # satu pun workflow/gate:rilis menyediakannya. Suite paling kritis untuk uang
+  # dijalankan hanya kalau seseorang ingat mengetiknya.
+  konkurensi-uang:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: racun
+          POSTGRES_PASSWORD: racun_local_only
+          POSTGRES_DB: racun_ci
+        ports: ["5432:5432"]
+        # Tanpa health-check, langkah migrasi bisa jalan sebelum server siap
+        # dan gagal dengan galat koneksi yang menyesatkan.
+        options: >-
+          --health-cmd "pg_isready -U racun"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      DATABASE_URL: postgresql://racun:racun_local_only@localhost:5432/racun_ci
+      UJI_PG_URL: postgresql://racun:racun_local_only@localhost:5432/racun_ci
+      AUTH_SECRET: ci-build-only-not-a-secret-0000000000000000
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: "npm"
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends postgresql-client
+      - run: npm ci
+      # Skema dari migrasi versi, bukan dump: yang diuji harus skema yang
+      # benar-benar dipakai produksi.
+      - run: npm run migrate:postgres-local
+      - run: npm run test:pg
+
   # IMAGE WORKER — dibangun sungguhan, bukan cuma di-grep.
   #
   # Sampai 19 Agu CI tidak pernah membangun Dockerfile.worker sama sekali, dan
