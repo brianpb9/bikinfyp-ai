@@ -216,6 +216,33 @@ const KLAIM_POLA: RegExp[] = [
  * sah akan dimatikan orang, dan gerbang yang dimatikan tidak menjaga apa pun.
  */
 const KULIT_KATEGORI = new Set(["beauty", "skincare", "kosmetik", "personal_care"]);
+
+/**
+ * KONTEKS AMAN untuk kata hasil — daftar eksplisit, bukan kebetulan regex.
+ *
+ * Diminta Brian 20 Agu supaya pengecualiannya bisa dibaca dan ditambah orang
+ * lain tanpa membedah pola. Isinya dari copy template NYATA yang sempat
+ * tertolak: "tim glowing" adalah sapaan komunitas, bukan janji hasil.
+ *
+ * Aturannya: kalau kata hasil muncul dalam salah satu bentuk ini, ia BUKAN
+ * klaim — walau kategorinya kulit.
+ */
+const KONTEKS_AMAN: { pola: RegExp; kenapa: string }[] = [
+  { pola: /\b(tim|geng|squad|klub|kelompok)\s+(glowing|cerah)\b/i, kenapa: "sapaan komunitas, bukan janji" },
+  { pola: /\b(buat|untuk|khusus)\s+(kamu|yang|para)\s+[\w\s]{0,12}(glowing)\b/i, kenapa: "penyebutan segmen audiens" },
+  { pola: /\bglowing\s+(itu|adalah|bukan)\b/i, kenapa: "membicarakan konsepnya, bukan menjanjikan" },
+];
+
+/**
+ * Kata hasil DALAM SATU KALIMAT dengan produk atau pemakaiannya = klaim.
+ *
+ * Keputusan Brian 20 Agu: pada kategori kulit, "glowing" yang sekalimat dengan
+ * produk atau cara memakainya sudah janji hasil, walau tanpa kata perubahan.
+ * "Pakai ini tiap malam, glowing." tidak menyebut 'jadi'/'bikin' dan tetap
+ * menjanjikan hasil.
+ */
+const KATA_PRODUK = /\b(produk|serum|krim|cream|sabun|toner|lotion|ini|dipakai|pakai|pemakaian|rutin|skincare)\b/i;
+const KATA_HASIL_KULIT = /\b(glowing|glow[\s-]?up|cerahan|putihan)\b/i;
 const KLAIM_KULIT_POLA: RegExp[] = [
   // "glow up" hampir selalu janji perubahan, jadi ia klaim berdiri sendiri.
   /\bglow[\s-]?up\b/i,
@@ -484,9 +511,22 @@ export function periksaKataTerlarang(
   const klaimTok = tanpaNama.split(/[^a-z0-9]+/i).find((t) => KLAIM_TOKENS.has(t));
   const klaimPola = KLAIM_POLA.find((p) => p.test(tanpaNama));
   // Kosakata hasil khusus kulit — hanya untuk kategori yang punya kulit.
-  const kulitPola = KULIT_KATEGORI.has(String(productCategory ?? ""))
-    ? KLAIM_KULIT_POLA.find((p) => p.test(tanpaNama))
-    : undefined;
+  const kategoriKulit = KULIT_KATEGORI.has(String(productCategory ?? ""));
+  // Konteks aman diperiksa DULU: pengecualian yang datang belakangan tidak
+  // pernah sempat menyelamatkan kalimat yang sudah tertolak.
+  const aman = kategoriKulit && KONTEKS_AMAN.some((k) => k.pola.test(tanpaNama));
+  let kulitPola = kategoriKulit && !aman ? KLAIM_KULIT_POLA.find((p) => p.test(tanpaNama)) : undefined;
+  // Kata hasil SEKALIMAT dengan produk/pemakaiannya — klaim walau tanpa kata
+  // perubahan (keputusan Brian 20 Agu). Dipecah per kalimat, bukan per teks
+  // penuh: "Aku pakai ini malam. Temanku tim glowing." dua pernyataan berbeda.
+  if (kategoriKulit && !aman && !kulitPola) {
+    for (const kalimat of tanpaNama.split(/[.!?\n]+/)) {
+      if (KATA_HASIL_KULIT.test(kalimat) && KATA_PRODUK.test(kalimat)) {
+        kulitPola = KATA_HASIL_KULIT;
+        break;
+      }
+    }
+  }
   const kena = klaimPola ?? kulitPola;
   if (klaimTok || kena) {
     issues.push({

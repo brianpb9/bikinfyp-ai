@@ -1,7 +1,7 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit, type ProductRow } from "@/lib/db";
-import { generateScripts, TemplateTidakDisajikan, IdeTidakTersedia } from "@/lib/script-engine";
+import { generateScripts, TemplateTidakDisajikan, IdeTidakTersedia, IdeGateGagal } from "@/lib/script-engine";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { REGISTERS, type Register } from "@/lib/script-engine/registers";
 import { pgAudit, postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
@@ -15,6 +15,22 @@ export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/scripts/generate {product_id, register, emotion, format} -> 3 skrip tervalidasi.
+/**
+ * Ide yang dipilih pengguna dari daftar kandidat (IDEA_GATE_FAILED).
+ *
+ * Diperiksa seadanya di sini — bentuk lengkapnya sudah dijaga skema Zod di
+ * script-engine. Yang penting: hanya objek dengan one_liner yang dianggap ide,
+ * supaya `{"idea": true}` tidak menyelinap jadi "ide terpilih" dan mematikan
+ * gerbang yang baru saja kita pasang.
+ */
+function ideDipilihDariBody(body: Record<string, unknown>) {
+  const raw = body.idea;
+  if (!raw || typeof raw !== "object") return null;
+  const one = (raw as { one_liner?: unknown }).one_liner;
+  if (typeof one !== "string" || one.trim().length < 10) return null;
+  return raw as never;
+}
+
 export async function POST(req: Request) {
   try {
     const user = await getAuthUser(req);
@@ -87,6 +103,10 @@ export async function POST(req: Request) {
       durationSec,
       hookLevel,
       hookFamilies: hookFamilies.length ? hookFamilies : undefined,
+      // IDE PILIHAN PENGGUNA dari layar "belum ada ide yang lolos". Bentuknya
+      // divalidasi skema di pilihIde/petunjukNaskah; yang diperiksa di sini
+      // cuma bahwa ia objek, supaya body sembarangan tidak lolos jadi "ide".
+      ideDipilih: ideDipilihDariBody(body),
     });
     const jaring = await cobaDenganNamaPendek(jalan, product.name);
     const variants = jaring.variants;
@@ -150,6 +170,23 @@ export async function POST(req: Request) {
     // IDE TERPILIH TIDAK ADA — doktrin yang sama dengan template yang tidak
     // pernah disajikan. Sampai 20 Agu, Idea Stage yang mati hanya mencatat
     // peringatan lalu membiarkan penulis bekerja tanpa sudut sama sekali.
+    // GATE IDE GAGAL — ada kandidat, belum ada yang terpilih. BUKAN 503:
+    // mencoba lagi dengan permintaan yang sama akan menghasilkan kegagalan
+    // yang sama. Yang dibutuhkan keputusan manusia, jadi 422 + kandidatnya.
+    if (err instanceof IdeGateGagal) {
+      console.warn(`[naskah] gate ide gagal — ${err.sebabGagal.join(", ")}`);
+      return Response.json(
+        {
+          code: "IDEA_GATE_FAILED",
+          message_id: err.message,
+          message_en: "No idea passed the FYP gate. Pick a candidate or retry idea search.",
+          retryable: false,
+          sebab_gagal: err.sebabGagal,
+          ide_kandidat: err.kandidat,
+        },
+        { status: 422 }
+      );
+    }
     if (err instanceof IdeTidakTersedia) {
       console.error(`[naskah] ditolak, Idea Stage mati — ${err.sebabTeknis}`);
       try {

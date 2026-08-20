@@ -317,7 +317,13 @@ test("situasi manusia dibedakan dari deskripsi benda", async () => {
   assert.equal(situasiManusiawi("Satu tetes menyusut sampai hilang di permukaan datar"), false);
 });
 
-test("gate GAGAL: naskah TIDAK ditulis dari ide gagal, dan tiga terbaik dikembalikan", async () => {
+// KONTRAK BARU (keputusan Brian 20 Agu): gate gagal = TIDAK ADA NASKAH.
+//
+// Versi lama menegakkan perilaku setengah jalan — naskah tetap ditulis "tanpa
+// ide", dan kandidatnya ditempel di layar sebagai catatan. Jadi pengguna
+// menerima naskah yang gerbang kita sendiri sudah menyatakan tidak layak,
+// berdampingan dengan daftar ide yang tidak bisa ia pakai.
+test("gate GAGAL: TIDAK ada naskah sama sekali, kandidat dikembalikan lewat error", async () => {
   const { generateScripts } = await import("../lib/script-engine");
   const lemah = { scroll_stop: 4, distinctiveness: 4, story_pull: 4, payoff: 4, brand_fidelity_plan: 4, nativeness: 4 };
   const promptNaskah: string[] = [];
@@ -353,21 +359,26 @@ test("gate GAGAL: naskah TIDAK ditulis dari ide gagal, dan tiga terbaik dikembal
   }) as never;
 
   try {
-    const hasil = await generateScripts({
-      product: { id: "p2", name: "Scarlett Acne Serum", price_idr: 75000, category: "beauty" },
-      register: "bestie", qualityTier: "super_hq", durationSec: 15, count: 1,
-    });
-    // Tidak satu pun prompt naskah membawa ide — itu inti perubahannya.
-    assert.ok(promptNaskah.length > 0, "penulis naskah tetap dipanggil");
-    for (const p of promptNaskah) {
-      assert.ok(!p.startsWith("THE IDEA"), `naskah tidak boleh ditulis dari ide yang gagal gate:\n${p.slice(0, 200)}`);
-    }
-    // Tiga terbaik ikut keluar supaya bisa ditawarkan ke pengguna.
-    const k = hasil[0].ideKandidat;
-    assert.ok(k, "kandidat ide harus dikembalikan saat gate gagal");
-    assert.ok(k.length >= 1 && k.length <= 3, `maksimal tiga, dapat ${k.length}`);
-    assert.ok(k[0].sebabGagal.length > 0, "sebab gagalnya harus ikut");
-    assert.ok(typeof k[0].total === "number" && k[0].human_situation.length > 0);
+    const { IdeGateGagal } = await import("../lib/script-engine");
+    await assert.rejects(
+      () => generateScripts({
+        product: { id: "p2", name: "Scarlett Acne Serum", price_idr: 75000, category: "beauty" },
+        register: "bestie", qualityTier: "super_hq", durationSec: 15, count: 1,
+      }),
+      (err: unknown) => {
+        assert.ok(err instanceof IdeGateGagal, `harus IdeGateGagal, dapat ${(err as Error).name}`);
+        const k = (err as InstanceType<typeof IdeGateGagal>).kandidat;
+        assert.ok(k.length >= 1 && k.length <= 3, `maksimal tiga kandidat, dapat ${k.length}`);
+        assert.ok(typeof k[0].skor === "number", "skor kandidat harus ikut");
+        assert.ok((err as InstanceType<typeof IdeGateGagal>).sebabGagal.length > 0, "sebab gagalnya harus ikut");
+        return true;
+      },
+      "gate gagal tapi naskah tetap dibuat"
+    );
+    // DAN penulis tidak pernah dipanggil sama sekali — bukan dipanggil lalu
+    // hasilnya dibuang. Memanggilnya berarti membayar token untuk naskah yang
+    // memang tidak boleh keluar.
+    assert.equal(promptNaskah.length, 0, `penulis dipanggil ${promptNaskah.length}x padahal gate gagal`);
   } finally { globalThis.fetch = aslinya; }
 });
 

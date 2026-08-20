@@ -90,3 +90,30 @@ test("L-23 KERAS di mode light — jalur Enterprise memakai light", () => {
     `L-23 tidak jadi error di mode light:\n${JSON.stringify(hasil, null, 2).slice(0, 600)}`
   );
 });
+
+// Tambahan keputusan Brian 20 Agu.
+test("KONTEKS AMAN eksplisit — sapaan komunitas tetap boleh", () => {
+  const aman = [
+    "Buat tim glowing yang masih urus kusamnya sendirian, lihat ini dulu sih",
+    "Khusus kamu yang lagi cari cara glowing, mampir dulu",
+    "Glowing itu bukan soal harga sih",
+  ];
+  for (const c of aman) assert.deepEqual(l23(c), [], `salah tangkap konteks aman: "${c}"`);
+});
+
+test("kata hasil SEKALIMAT dengan produk = klaim, walau tanpa kata perubahan", () => {
+  const klaim = [
+    "Pakai ini tiap malam, glowing",
+    "Serumnya dipakai rutin, cerahan",
+    "Sabun ini glow up banget",
+  ];
+  for (const c of klaim) assert.ok(l23(c).length >= 1, `lolos padahal sekalimat dengan produk: "${c}"`);
+});
+
+test("kalimat TERPISAH tidak digabung jadi klaim", () => {
+  // Dipecah per kalimat: dua pernyataan berbeda bukan satu janji.
+  assert.deepEqual(
+    l23("Aku pakai ini tiap malam. Temanku tim glowing semua."), [],
+    "dua kalimat berbeda digabung jadi klaim"
+  );
+});

@@ -33,8 +33,25 @@ jobs:
           sudo apt-get install -y --no-install-recommends ffmpeg python3 python3-pil python3-pip tesseract-ocr tesseract-ocr-eng
           python3 -m pip install --no-cache-dir --break-system-packages opencv-python-headless==4.10.0.84
       - run: npm ci
+      # LINGKUNGAN YANG BERUBAH DI BAWAH KAKI = "suite hijau" berhenti berarti.
+      #
+      # Ditulis sesudah insiden 20 Agu: node_modules di app/ lenyap di tengah
+      # sesi kerja (bukan oleh perintah sesi itu), dan suite yang lima belas
+      # menit sebelumnya hijau berubah jadi "tsx: command not found". Kalau
+      # dependensi bisa bergeser tanpa jejak, hasil uji apa pun cuma laporan
+      # tentang lingkungan yang sudah tidak ada.
+      #
+      # npm ci sendiri sudah menolak package.json yang tidak sinkron dengan
+      # lockfile. Yang BELUM dijaga: langkah sesudahnya menjalankan npm install
+      # dan menggeser lockfile diam-diam. Itu yang diperiksa di bawah.
+      - name: package-lock tidak bergeser
+        run: |
+          test -f package-lock.json || { echo "package-lock.json HILANG"; exit 1; }
+          git diff --exit-code -- package-lock.json package.json
       - run: npx tsc --noEmit
       - run: npm test
+      - name: package-lock masih utuh sesudah test
+        run: git diff --exit-code -- package-lock.json package.json
       - run: npm run build
       # SMOKE INTERAKSI (P0-QA-01) — apakah halaman HIDUP, bukan cuma
       # ter-render. Kelas bug yang dijaga benar-benar terjadi 19 Agu: CSP

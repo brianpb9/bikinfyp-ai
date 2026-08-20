@@ -1,9 +1,19 @@
 # COGS nyata per klip & anggaran canary — 20 Agu 2026
 
-Angka di bawah TERUKUR dari tagihan render hari ini, bukan dari tarif yang
-dikutip. Lima render, semuanya tercatat di `test_output/`.
+## Peringatan cara baca — dikoreksi 20 Agu sore
 
-## Biaya terukur
+Angka rupiah di bawah BUKAN tagihan. Penyedia tidak mengembalikan data
+pemakaian pada respons kita, jadi biayanya dihitung dari tabel tarif di
+`lib/providers/stubs/byteplus.ts` — dan tarif kedua model dreamina di sana
+ditandai sendiri sebagai "ESTIMASI dari COGS BRD §5.3". Log tiap render pun
+menuliskannya: `biaya Rp… (estimasi tarif)`.
+
+Yang benar-benar terukur: model mana yang dipakai, berapa detik, berapa klip.
+Rupiahnya turunan tarif. Versi pertama catatan ini menulis "TERUKUR dari
+tagihan render" — itu klaim yang lebih besar dari kenyataan, dan diperbaiki di
+sini. Angka pastinya hanya bisa datang dari dasbor tagihan BytePlus.
+
+## Biaya per klip (super_hq)
 
 | Yang diukur | Nilai | Sumber |
 |---|---|---|
@@ -30,22 +40,29 @@ angka lama.
 Canary 12 klip yang lalu berarti ~Rp139.860 dengan tarif sekarang — masih muat,
 tapi menyisakan ruang untuk hanya tiga klip ulang, bukan selusin.
 
-## Yang BELUM terukur, dan jangan ditebak
+## COGS per tier — high_quality SUDAH diukur (20 Agu, diotorisasi Brian)
 
-Semua angka di atas berasal dari tier **super_hq bersuara**. Biaya nyata tier
-`high_quality` belum diukur ulang hari ini. Itu penting karena harga jualnya
-jauh lebih rendah:
+Satu klip uji dijalankan pada tier `high_quality` (`scripts/ukur-cogs-tier.ts`,
+task `cgt-20260820193542-qsc7j`). Modelnya BERBEDA dari super_hq, dan itulah
+yang menentukan selisihnya:
 
-| Tier | Harga jual per video | Biaya render terukur |
-|---|---:|---|
-| super_hq | Rp80.000 (paket 5× Rp400.000) | Rp34.965 (15 dtk) |
-| high_quality | Rp12.000 (paket 5× Rp60.000) | **belum diukur ulang** |
+| Tier | Model | Biaya/klip | Video 15 dtk | Harga jual/video | Margin kotor |
+|---|---|---:|---:|---:|---:|
+| high_quality | `dreamina-seedance-2-0-mini-260615` | Rp2.771 | **Rp8.313** | Rp12.000 | **Rp3.687 (31%)** |
+| super_hq | `dreamina-seedance-2-0-260128` | Rp11.655 | **Rp34.965** | Rp80.000 | **Rp45.035 (56%)** |
 
-Kalau `high_quality` memakai tarif per klip yang sama, satu video 15 detik
-berbiaya ~Rp34.965 terhadap harga jual Rp12.000 — rugi, bukan margin tipis.
-Alarm margin yang sudah tercatat 19 Agu (Rp8.313 vs Rp12.000) memakai angka
-lama dan perlu diukur ulang sebelum dipakai mengambil keputusan harga.
+Harga jual dari paket kredit di `lib/credits.ts` (hq5 Rp60.000/5 video;
+super5 Rp400.000/5 video). Margin kotor BELUM memotong TTS, penyimpanan, dan
+gagal-render yang harus diulang.
 
-**Tindakan yang belum dilakukan:** satu klip uji pada tier `high_quality` untuk
-mengunci COGS-nya. Itu ~Rp12.000 dan menjawab pertanyaan harga yang jauh lebih
-mahal daripada biaya ujinya sendiri.
+**Koreksi terhadap catatan pagi ini.** Saya menulis bahwa alarm margin 19 Agu
+(Rp8.313 vs Rp12.000) "memakai angka lama dan perlu diukur ulang". Pengukuran
+hari ini menghasilkan Rp8.313 — angka yang sama persis. Alarmnya benar sejak
+awal; yang keliru adalah dugaan saya bahwa ia usang. Alarm margin tetap memakai
+angka ini.
+
+**Yang masih menggantung:** kedua angka bergantung pada tarif estimasi (lihat
+peringatan cara baca di atas). Keputusan harga jual sebaiknya menunggu satu
+pembacaan dasbor tagihan BytePlus untuk mengunci tarif nyata per model —
+terutama untuk `high_quality`, yang marginnya paling tipis dan paling mudah
+berbalik negatif kalau tarif sebenarnya lebih tinggi dari estimasi BRD.

@@ -84,3 +84,53 @@ test("jalur tanpa-LLM (template murni) TIDAK ikut ditolak", async () => {
   } as never);
   assert.equal(hasil.length, 1);
 });
+
+// JALUR KEDUA: gate gagal, kandidat ADA, tapi belum ada yang dipilih.
+//
+// Sampai keputusan Brian 20 Agu, naskah tetap ditulis "tanpa ide" dan
+// kandidatnya cuma ditempel di layar sebagai catatan — pengguna menerima
+// naskah yang gerbang kita sendiri sudah menyatakan tidak layak, berdampingan
+// dengan daftar ide yang tidak bisa ia pakai.
+// Batas invariannya TIER, bukan "semua naskah": high_quality memang dirancang
+// tanpa Idea Stage (config.ideaStageTiers). Versi pertama penjaga ini tidak
+// membedakannya dan MEMBLOKIR seluruh tier high_quality — ketahuan dari suite,
+// bukan dari produksi. Penjaga yang mematikan produk bukan penjaga.
+test("penulis TIDAK PERNAH dipanggil tanpa objek ide — penjaga di titik panggil", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync("lib/script-engine/index.ts", "utf8");
+  // Penjaganya harus berada SEBELUM pemanggilan penulis, di dalam cabang LLM.
+  const iGuard = src.indexOf("INVARIAN: penulis naskah dipanggil tanpa ide terpilih pada tier ber-Idea-Stage");
+  const iTulis = src.indexOf("await tulisNaskah({");
+  assert.ok(iGuard > 0, "penjaga invarian tidak ada di titik panggil penulis");
+  assert.ok(iGuard < iTulis, "penjaga ada SESUDAH penulis dipanggil — tidak menjaga apa pun");
+});
+
+test("gate gagal MEMBAWA kandidat + skor + sebab, bukan sekadar menolak", async () => {
+  const { IdeGateGagal } = await import("../lib/script-engine");
+  const err = new IdeGateGagal(
+    [{ ide: { one_liner: "Sepupu nginep dua malam" }, skor: 74, sebab: ["nativeness 5"] }],
+    ["tidak ada yang lulus ambang 75"]
+  );
+  assert.equal(err.kandidat.length, 1);
+  assert.equal(err.kandidat[0].skor, 74);
+  assert.deepEqual(err.sebabGagal, ["tidak ada yang lulus ambang 75"]);
+  // Pesannya menawarkan DUA jalan keluar, bukan cuma menyatakan gagal.
+  assert.match(err.message, /pilih/i);
+  assert.match(err.message, /cari lagi|ulangi/i);
+});
+
+test("ide pilihan pengguna MELEWATI Idea Stage, tidak mencarinya ulang", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync("lib/script-engine/index.ts", "utf8");
+  assert.match(
+    src, /if \(!opts\.ideDipilih && llmSiap\(\)/,
+    "Idea Stage tetap jalan walau pengguna sudah memilih — membakar biaya untuk hasil yang tidak dipakai"
+  );
+});
+
+test("body sembarangan TIDAK bisa menyamar jadi ide terpilih", async () => {
+  const fs = await import("node:fs");
+  const src = fs.readFileSync("app/api/scripts/generate/route.ts", "utf8");
+  assert.match(src, /one_liner/, "route menerima apa pun sebagai ide — gerbangnya bisa dimatikan dari luar");
+  assert.match(src, /IDEA_GATE_FAILED/, "kegagalan gate tidak punya kode sendiri");
+});
