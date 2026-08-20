@@ -16,18 +16,21 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 | E1 | `app/api/products/route.ts:15` | POST create manual (retail) | **PARTIAL** | `saveProductImages` (sidecar ditulis); TANPA `periksaLabelFoto`, TANPA `referensiLayak` |
 | E2 | `app/api/products/extract/route.ts:17` | POST extract URL → buat produk | **UNGATED** | tidak ada; pakai `downloadProductImages` |
 | E3 | `app/api/products/[id]/route.ts:13` | PATCH nama/harga/kategori/brand | **UNGATED** | tidak ada — memutasi `name` + `raw_meta.brand`, dua input yang justru dibaca gerbang |
-| E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **GATED** | `periksaLabelFoto`+`merekTerdaftar` (:91), `referensiLayak` (:116) — TAPI gerbang label hanya jalan bila `existing.length===0` (:84) |
+| E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **PARTIAL** | `periksaLabelFoto`+`merekTerdaftar` (:91), `referensiLayak` (:116). TIGA lubang: gerbang label hanya jalan bila `existing.length===0` (:84); `periksaLabelFoto` FAIL-OPEN saat OCR gagal (`label-terbaca.ts:188` mengembalikan `terbaca:true`); hash sidecar tidak pernah diverifikasi ulang terhadap isi berkas |
 | E5 | `app/api/products/[id]/photos/route.ts:142` | DELETE foto (retail) | **UNGATED** | tidak ada — bisa menghapus satu-satunya foto layak |
 | E6 | `app/api/dashboard/campaign/product/route.ts:45` | POST produk org | **UNGATED** | tidak ada; `downloadProductImages` → sidecar tidak ditulis |
-| E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | tidak ada |
+| E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | hanya mengubah `name`/`brand_brief` (:113,:117) — TIDAK menyentuh `raw_meta.brand`. Defect sebenarnya di jalur org: `raw_meta.brand` TIDAK PERNAH DIISI, padahal worker hanya mempercayai field itu (`merekTepercaya`) |
 | E8 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:26` | POST add-photo (org) | **PARTIAL** | `periksaLabelFoto` (:52) TANPA argumen `merekTerdaftar` → `cocokMerek` tidak pernah diperiksa; `saveUniqueProductImages` (:59) TIDAK menulis sidecar |
 | E9 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:84` | DELETE foto (org) | **UNGATED** | tidak ada |
 | W1 | `lib/postgres/worker.ts:321-323` | worker PG pilih `images[0]` | **UNGATED** | tidak ada; `personSafeReferencePhotos` (:338) hanya soal orang |
-| W2 | `lib/worker.ts:104-109` | worker inline/SQLite pilih `images[0]` | **UNGATED** | tidak ada; reachable via `lib/job-queue.ts:71,96` |
+| W2 | `lib/worker.ts:104-109` | worker inline/SQLite pilih `images[0]` | **UNGATED** | reachable HANYA pada mode dev/SQLite; produksi menolak inline worker. Tetap wajib diuji (C3, C8) |
 | A1 | `app/api/jobs/route.ts:29,62-67` | admission retail + payload | **UNGATED** | payload tanpa validasi gambar |
 | A2 | `app/api/dashboard/matrix/route.ts:93,106` | admission matrix | **UNGATED** | cek gambar hanya "ada/tidak" |
 | A3 | `app/api/dashboard/campaign/generate/route.ts:44-49` | generate campaign | **UNGATED** | cek `length===0` saja |
 | A4 | `lib/dashboard/render-cell.ts:158-160,225` | INSERT QUEUED + enqueue | **UNGATED** | tidak ada |
+| A5 | `app/api/dashboard/campaign/confirm/route.ts:45` | confirm campaign → enqueue | **UNGATED** | tidak ada |
+| A6 | `app/api/dashboard/campaign/job/[jobId]/route.ts:128,164,283` | approve / regenerate job | **UNGATED** | tidak ada — bisa memilih ulang referensi |
+| A7 | `app/api/scripts/generate/route.ts` | generate naskah (provider-consuming, BUKAN admission render berbayar) | **UNGATED** | tidak ada |
 | D1 | `lib/postgres/product-persona-script.ts:57,112,134-136,255,264` | penulis DB produk/brand | **UNGATED** | tidak ada |
 | D2 | `lib/postgres/smoke-runtime.ts:310,319,336` | set/append/remove images | **UNGATED** | tidak ada |
 
@@ -46,8 +49,9 @@ Work order menyebut tiga bypass (create utama, extract, worker). Yang nyata:
 2. **Dua worker, bukan satu.** `lib/worker.ts` (inline/SQLite) juga memilih
    `images[0]` dan masih reachable.
 3. **Jalur org tidak menulis sidecar sama sekali** (`saveUniqueProductImages`).
-   Akibatnya `backfillMetaGambar` pun tidak bisa menolong: ia hanya dipanggil
-   dari dalam `referensiLayak`, yang jalur org tidak pernah panggil.
+   `backfillMetaGambar` SAAT INI tidak pernah dipanggil pada jalur org: satu-
+   satunya pemanggilnya ada di dalam `referensiLayak`, yang jalur org tidak
+   pernah panggil.
 4. **PATCH produk (E3, E7) bisa mengganti nama dan brand** — dua input yang
    dibaca gerbang — tanpa revalidasi apa pun.
 5. **DELETE foto (E5, E9) bisa menyisakan daftar berisi promo saja.**
@@ -59,16 +63,23 @@ Work order menyebut tiga bypass (create utama, extract, worker). Yang nyata:
 Kolom status: RED = test ditulis dan gagal karena invariant belum ada.
 Semua masih `PENDING` — belum satu pun test ditulis.
 
+**JANGAN membuat Cartesian 13 x 17.** Arsitektur test berlapis:
+1. unit contract untuk invariant pusat;
+2. integration per KELUARGA ingestion/mutation (bukan per route);
+3. test di tiap admission/provider-consuming boundary;
+4. defensive worker test untuk W1 dan W2;
+5. E2E lokal/mocked untuk C1 dan C8.
+
 | # | Kasus | Jalur wajib diuji | Keputusan diharapkan | reason code (usul) | Status |
 |---|---|---|---|---|---|
-| C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,W1,W2 | simpan boleh; referensi WAJIB foto#2 | `REF_PROMOTIONAL` | PENDING |
+| C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,A1..A5,W1,W2 | **produk DITERIMA**; foto#1 berstatus promotional; approved reference WAJIB foto#2 + hash-nya. `REF_PROMOTIONAL` adalah STATUS FOTO, bukan penolakan produk | `REF_PROMOTIONAL` (status) | PENDING |
 | C2 | Toothpaste diberi kategori facewash | E1,E3,E6,E7,A1..A4 | reject sebelum spend | `TYPE_MISMATCH` | PENDING |
-| C3 | Merek salah | E1,E4,E8,W1 | reject | `BRAND_MISMATCH` | PENDING |
+| C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` | PENDING |
 | C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` | PENDING |
 | C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` | PENDING |
 | C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` | PENDING |
 | C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` | PENDING |
-| C8 | Sidecar hilang/korup/basi/hash beda | E1,E6,E8,W1,W2 | fail-closed | `EVIDENCE_INVALID` | PENDING |
+| C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,E6,E8,**A1..A5**,W1,W2 | fail-closed sebelum hold/enqueue/provider; tanpa sisa state invalid persisten | `EVIDENCE_INVALID` | PENDING |
 | C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` | PENDING |
 | C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` | PENDING |
 | C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | PENDING |
