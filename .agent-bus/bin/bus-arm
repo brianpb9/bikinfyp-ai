@@ -1,0 +1,38 @@
+#!/bin/sh
+# bus-arm <role> [timeout]
+# Pasang TEPAT SATU penunggu persisten untuk <role>.
+#
+# Ada karena cacat lifecycle 21 Agu: bus-wait sengaja KELUAR saat pesan datang
+# (itulah yang membangunkan Builder), lalu tidak ada yang memasangnya kembali —
+# sehingga sesudah DONE, Builder tuli terhadap pesan Reviewer berikutnya.
+#
+# Idempoten: kalau penunggu untuk role itu masih hidup, skrip ini TIDAK
+# menelurkan yang kedua; ia mencetak PID yang sudah ada lalu keluar 0.
+set -eu
+BUS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+ROLE=${1:?usage: bus-arm <builder|reviewer> [timeout]}
+TIMEOUT=${2:-86400}
+case "$ROLE" in builder|reviewer) ;; *) echo "role tidak sah: $ROLE" >&2; exit 2 ;; esac
+
+PIDFILE="$BUS_DIR/tmp/waiter-$ROLE.pid"
+if [ -f "$PIDFILE" ]; then
+  OLD=$(cat "$PIDFILE" 2>/dev/null || echo "")
+  if [ -n "$OLD" ] && kill -0 "$OLD" 2>/dev/null; then
+    echo "SUDAH ADA pid=$OLD role=$ROLE (tidak menelurkan duplikat)"
+    exit 0
+  fi
+  rm -f "$PIDFILE"
+fi
+"$BUS_DIR/bin/bus-wait" "$ROLE" "$TIMEOUT" &
+NEW=$!
+echo "$NEW" > "$PIDFILE"
+echo "ARMED pid=$NEW role=$ROLE timeout=$TIMEOUT"
+# `wait` non-nol TIDAK boleh menggugurkan skrip: dengan `set -e`, bus-wait yang
+# timeout (exit 4) akan melompati pembersihan dan meninggalkan pidfile basi.
+# Ditemukan saat menguji pemulihan pidfile basi 21 Agu — self-healing memang
+# tetap jalan (arm berikutnya membersihkannya), tapi baris rm di bawah adalah
+# kode mati kalau ditulis tanpa penjaga ini.
+RC=0
+wait "$NEW" || RC=$?
+rm -f "$PIDFILE"
+exit "$RC"

@@ -26,3 +26,4 @@ probe-funnel-tmp.mjs
 !.agent-bus/archive/.gitkeep
 .agent-bus/tmp/*
 !.agent-bus/tmp/.gitkeep
+.agent-bus/tmp/waiter-*.pid

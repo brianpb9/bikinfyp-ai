@@ -249,3 +249,37 @@ and re-arm to the next queued SHA.
 
 The inner suites retain active-state/inbox guards as defense in depth and
 remove only their isolated archived messages afterwards.
+
+## Siklus hidup penunggu Builder (WAJIB)
+
+Ditulis sesudah cacat nyata 21 Agu: `bus-wait` SENGAJA keluar saat pesan datang
+— itulah yang membangunkan Builder — lalu tidak ada yang memasangnya kembali.
+Akibatnya sesudah `DONE`, Builder tuli terhadap pesan Reviewer berikutnya.
+
+### 1. Aturan start
+Tindakan runtime PERTAMA setiap sesi Builder:
+
+    .agent-bus/bin/bus-arm builder
+
+### 2. Aturan siklus hidup
+Panggil `bus-arm builder` LAGI sesudah mencapai setiap keadaan stabil baru:
+
+- sesudah `CHANGES_REQUESTED` diproses dan submission baru dikirim;
+- sesudah `PASS` diproses;
+- sesudah `DONE` dipancarkan;
+- sesudah pertukaran `QUESTION`/`DISPUTE` selesai;
+- keadaan lain mana pun yang masih mungkin menerima pesan Reviewer.
+
+JANGAN memeriksa dulu apakah penunggu sudah ada. Selalu panggil `bus-arm`;
+penjaga idempotennya (pidfile + `kill -0`) yang memiliki pencegahan duplikat.
+Pidfile basi gagal dengan aman: ia dibersihkan lalu penunggu baru dipasang.
+
+### 3. Aturan kepemilikan sesi
+JANGAN melepas penunggu dengan `nohup`/`setsid` sekadar agar ia bertahan saat
+terminal ditutup. Penunggu HARUS dimiliki sesi Claude Builder yang aktif,
+karena selesainya perintah latar belakang itulah yang membangunkan harness
+secara otomatis. Melepasnya memutus bangun-otomatis — persis kemampuan yang
+seluruh bus ini ada untuk menyediakannya.
+
+Konsekuensi yang diterima: terminal ditutup -> penunggu ikut mati -> sesi
+Builder berikutnya memasang yang baru lewat aturan start di atas.
