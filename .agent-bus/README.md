@@ -240,8 +240,10 @@ exit 4, empty-inbox exit 5, STALE flagging for HEAD / ancestor / non-ancestor
 shas, mixed-type ordering, JSON controls/Unicode, and crash-safety (the message
 survives `bus-wait`). The runtime fault test covers unknown-SHA poison, SIGKILL
 with a detached child, partial staging recovery, orphan reaping, bounded
-failure, same-SHA retry correlation, and re-arm to the next queued SHA.
+failure, non-destructive active-runtime refusal, same-SHA retry correlation,
+and re-arm to the next queued SHA.
 
-The test runs against the real `.agent-bus` directories and **aborts** if
-either inbox is non-empty, so it cannot destroy in-flight traffic. It removes
+The tests run against the real `.agent-bus` directories and **abort** if the
+Reviewer, its state, or either inbox is active, so they cannot destroy
+in-flight traffic. They remove
 its own archived messages afterwards.

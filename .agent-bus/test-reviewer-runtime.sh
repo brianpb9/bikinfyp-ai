@@ -5,6 +5,7 @@ set -u
 
 BUS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(dirname "$BUS_DIR")
+SELF="$BUS_DIR/test-reviewer-runtime.sh"
 RUNTIME="$BUS_DIR/bin/codex-reviewer-runtime"
 SEND="$BUS_DIR/bin/bus-send"
 READ="$BUS_DIR/bin/bus-read"
@@ -65,7 +66,6 @@ cleanup() {
   rm -f "$LOCK_DIR/pid"
   rmdir "$LOCK_DIR" 2>/dev/null || true
 }
-trap cleanup EXIT INT TERM HUP
 
 mkdir -p "$BUS_DIR/inbox/builder" "$BUS_DIR/inbox/reviewer" "$BUS_DIR/archive" "$BUS_DIR/tmp"
 "$RUNTIME" status >/dev/null 2>&1
@@ -75,6 +75,7 @@ if [ "$runtime_status" != 1 ] || [ "$(inbox_count builder)" != 0 ] || \
   printf 'ABORT: live Reviewer state exists; refusing fault-injection test.\n' >&2
   exit 1
 fi
+trap cleanup EXIT INT TERM HUP
 
 start_runtime() {
   timeout=$1
@@ -89,7 +90,34 @@ start_runtime() {
 
 printf 'reviewer runtime self-test\n'
 
-# Case 1: recover state written by the old/crash-window ordering where
+# Case 1: the self-test's active-runtime guard must be observational only. A
+# rejected nested invocation must not fire this process's destructive cleanup.
+start_runtime 5
+if wait_for "idle fake runtime state" '[ -s "$PID_FILE" ] && [ -s "$LOCK_DIR/pid" ] && [ -d "$STATE_DIR" ]'; then
+  printf 'guard-sentinel\n' > "$STATE_DIR/selftest-guard-sentinel"
+  guard_pid_before=$(cat "$PID_FILE")
+  guard_lock_before=$(cat "$LOCK_DIR/pid")
+  guard_state_before=$(find "$STATE_DIR" -maxdepth 1 -type f -exec cksum {} \; | sort)
+  /bin/sh "$SELF" > "$BUS_DIR/tmp/codex-reviewer-nested-guard.log" 2>&1
+  nested_rc=$?
+  guard_state_after=$(find "$STATE_DIR" -maxdepth 1 -type f -exec cksum {} \; | sort)
+  if [ "$nested_rc" = 1 ] && kill -0 "$ACTIVE_PID" 2>/dev/null && [ -d "$STATE_DIR" ] && \
+     [ "$(cat "$PID_FILE" 2>/dev/null || true)" = "$guard_pid_before" ] && \
+     [ "$(cat "$LOCK_DIR/pid" 2>/dev/null || true)" = "$guard_lock_before" ] && \
+     [ "$guard_state_after" = "$guard_state_before" ]; then
+    printf 'PASS  active-runtime guard leaves live PID, lock, and state untouched\n'
+  else
+    printf 'FAIL  active-runtime guard mutated live runtime state\n'
+    FAILURES=$((FAILURES + 1))
+  fi
+  rm -f "$STATE_DIR/selftest-guard-sentinel"
+else
+  FAILURES=$((FAILURES + 1))
+fi
+stop_active
+wait_for "runtime cleanup after guard regression" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
+
+# Case 2: recover state written by the old/crash-window ordering where
 # message.json exists but source_name has not been published yet.
 staging_path=$(BUS_FROM=builder "$SEND" reviewer READY_FOR_REVIEW "$HEAD_SHA" RUNTIME-SELFTEST-STAGING staging)
 mkdir -p "$STATE_DIR"
@@ -107,7 +135,7 @@ fi
 stop_active
 wait_for "runtime cleanup after staging recovery" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
 
-# Case 2: a syntactically valid unknown SHA is terminal poison, not a queue lock.
+# Case 3: a syntactically valid unknown SHA is terminal poison, not a queue lock.
 poison_path=$(BUS_FROM=builder "$SEND" reviewer QUESTION "" RUNTIME-SELFTEST-POISON poison)
 node - "$poison_path" "$FAKE_SHA" <<'NODE'
 const fs = require("fs");
@@ -132,9 +160,9 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 stop_active
-wait_for "runtime cleanup after case 2" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
+wait_for "runtime cleanup after case 3" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
 
-# Case 3: SIGKILL leaves a detached reviewer, restart reaps it, bounded failure
+# Case 4: SIGKILL leaves a detached reviewer, restart reaps it, bounded failure
 # emits CHANGES_REQUESTED, then the next queued SHA receives PASS.
 BUS_FROM=builder "$SEND" reviewer READY_FOR_REVIEW "$HEAD_SHA" RUNTIME-SELFTEST-HANG hang >/dev/null
 BUS_FROM=builder "$SEND" reviewer READY_FOR_REVIEW "$HEAD_SHA" RUNTIME-SELFTEST-NEXT next >/dev/null
@@ -174,7 +202,7 @@ fi
 stop_active
 wait_for "final runtime cleanup" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
 
-# Case 4: an older infrastructure response for the same SHA/task must not
+# Case 5: an older infrastructure response for the same SHA/task must not
 # suppress an explicit later READY retry. Request/response identity is ordered
 # by the bus-global sequence, not permanently memoized by SHA+task.
 retry_task=RUNTIME-SELFTEST-RETRY
@@ -192,7 +220,7 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 stop_active
-wait_for "runtime cleanup after case 4" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
+wait_for "runtime cleanup after case 5" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
 
 printf '%s\n' "runtime self-test failures=$FAILURES"
 [ "$FAILURES" -eq 0 ]
