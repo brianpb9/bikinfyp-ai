@@ -1,10 +1,9 @@
 #!/bin/sh
 # test-bus.sh — self-test for the .agent-bus message bus.
 #
-# Runs against the REAL .agent-bus directories (messages are runtime state,
-# not source). It refuses to run if either inbox already holds a message, so
-# it can never destroy in-flight traffic, and it removes its own archived
-# messages when it is done.
+# The public entrypoint re-runs this suite inside a disposable local clone, so
+# it cannot consume or mutate live runtime traffic. The inner guard is defense
+# in depth for direct isolated invocations.
 #
 # Prints PASS/FAIL per case; exits non-zero if any case fails.
 set -u
@@ -12,6 +11,10 @@ set -u
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BUS_DIR=$SCRIPT_DIR
 REPO_ROOT=$(dirname "$BUS_DIR")
+if ! "$SCRIPT_DIR/bin/run-bus-test-isolated" --verify "$REPO_ROOT"; then
+  "$SCRIPT_DIR/bin/run-bus-test-isolated" .agent-bus/test-bus.sh "$@"
+  exit $?
+fi
 BIN="$BUS_DIR/bin"
 RUNTIME="$BIN/codex-reviewer-runtime"
 TASK=BUS-SELFTEST

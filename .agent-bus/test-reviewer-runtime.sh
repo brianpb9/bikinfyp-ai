@@ -1,10 +1,15 @@
 #!/bin/sh
 # Fault-injection test for poison handling, hard-crash recovery, bounded
-# failures, exact response ordering, and immediate re-arm.
+# failures, exact response ordering, and immediate re-arm. The public
+# entrypoint re-runs in a disposable clone and never targets the live bus.
 set -u
 
 BUS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 REPO_ROOT=$(dirname "$BUS_DIR")
+if ! "$BUS_DIR/bin/run-bus-test-isolated" --verify "$REPO_ROOT"; then
+  "$BUS_DIR/bin/run-bus-test-isolated" .agent-bus/test-reviewer-runtime.sh "$@"
+  exit $?
+fi
 SELF="$BUS_DIR/test-reviewer-runtime.sh"
 RUNTIME="$BUS_DIR/bin/codex-reviewer-runtime"
 SEND="$BUS_DIR/bin/bus-send"

@@ -229,10 +229,14 @@ deterministic failure cannot starve later reviews.
 ## Self-test
 
 ```sh
-# Both tests fail closed while the persistent Reviewer is active.
 sh .agent-bus/test-bus.sh
 sh .agent-bus/test-reviewer-runtime.sh
 ```
+
+Both public test entrypoints clone the current HEAD locally, overlay staged and
+unstaged `.agent-bus` changes, and run only inside that disposable repository.
+They can therefore run while the persistent Reviewer is armed without racing
+or mutating its inbox, state, worktree, supervisor, or Git object database.
 
 Covers: round-trip in both directions, invalid role/type rejection,
 SHA_BINDING, ROLE_SEPARATION, prompt return when a message is waiting, timeout
@@ -243,7 +247,5 @@ with a detached child, partial staging recovery, orphan reaping, bounded
 failure, non-destructive active-runtime refusal, same-SHA retry correlation,
 and re-arm to the next queued SHA.
 
-The tests run against the real `.agent-bus` directories and **abort** if the
-Reviewer, its state, or either inbox is active, so they cannot destroy
-in-flight traffic. They remove
-its own archived messages afterwards.
+The inner suites retain active-state/inbox guards as defense in depth and
+remove only their isolated archived messages afterwards.
