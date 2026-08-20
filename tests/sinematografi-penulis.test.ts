@@ -109,3 +109,34 @@ test("kunci wajib tetap ada — sinematografi menambah, tidak menggusur", () => 
   assert.match(p, /Every spoken word is Indonesian/i, "kunci bahasa hilang");
   assert.match(p, /identical packaging|do not redesign/i, "kunci identitas produk hilang");
 });
+
+// Dari render berbayar 20 Agu (test_output/adu_koreografi): aksi penulis yang
+// menyuruh kamera menemukan produk BELAKANGAN mengalahkan kunci "botol selalu
+// di frame", dan model menurutinya — botol baru muncul detik ~2,5 dari 5 detik.
+// Dua aturan berlomba di satu prompt; yang berbentuk koreografi menang.
+test("aksi penulis TERIKAT pada kehadiran produk sejak frame pertama", () => {
+  const segMenyapu = JSON.parse(JSON.stringify(SEGMEN_KAYA));
+  segMenyapu[0].action =
+    "camera sweeps left to right across the mess, then pauses on the serum bottle lying on its side";
+  const p = rakit("hands_only", segMenyapu as never).shots[0].prompt;
+  const iHadir = p.search(/already fully inside the frame from the very first frame/i);
+  const iAksi = p.search(/camera sweeps left to right/i);
+  assert.ok(iHadir >= 0, `pengikat kehadiran produk hilang:\n${p.slice(0, 400)}`);
+  assert.ok(
+    iHadir < iAksi,
+    "pengikat harus MENDAHULUI aksi — kalau ia datang belakangan ia jadi aturan yang berlomba, persis yang kalah di render 20 Agu"
+  );
+});
+
+test("kategori jasa TIDAK dipaksa memunculkan benda", async () => {
+  const spec = planShots({
+    jobId: "uji-jasa", durationSec: 15, segments: SEGMEN_KAYA,
+    category: getCreatorCategory("hijaber")!, productName: "Jasa Desain Logo",
+    productCategory: "jasa", imageRefPath: "/tmp/x.jpg",
+    qualityTier: "super_hq", format: "ads",
+  } as never) as { shots: { prompt: string }[] };
+  assert.ok(
+    !/already fully inside the frame/i.test(spec.shots[0].prompt),
+    "jasa tidak punya benda untuk dijaga di frame — memaksanya membuat model mengarang produk"
+  );
+});

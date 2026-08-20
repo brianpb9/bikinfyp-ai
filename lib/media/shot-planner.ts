@@ -552,6 +552,28 @@ function kunciBahasa(mode: "presenter" | "voiceover"): { header: string; perShot
  * bawaan membawa kunci keselamatan filter (dada ke atas, satu orang) yang
  * tidak boleh hilang hanya karena penulis menulis "wide".
  */
+/**
+ * Pengikat kehadiran produk untuk aksi penulis.
+ *
+ * Dari render adu 20 Agu (test_output/adu_koreografi, dibayar): aksi penulis
+ * berbunyi "camera sweeps left to right across the mess, THEN pauses on the
+ * serum bottle". Model menurutinya secara harfiah — botol baru masuk frame di
+ * detik ~2,5 dari klip 5 detik, padahal prompt yang sama juga memuat kunci
+ * "the ENTIRE bottle stays completely inside the frame at all times".
+ *
+ * Jadi dua aturan bertabrakan di satu prompt dan yang menang adalah kalimat
+ * yang berbentuk koreografi, bukan kalimat yang berbentuk batasan. Untuk hook
+ * afiliasi 5 detik, setengah durasi tanpa produk adalah kerugian konversi yang
+ * nyata — bukan selera.
+ *
+ * Perbaikannya menyatakan kehadiran produk sebagai KEADAAN AWAL aksi itu
+ * sendiri, sehingga tidak ada lagi dua aturan yang berlomba. Kategori jasa
+ * dikecualikan: di sana memang tidak ada benda yang boleh muncul.
+ */
+const praAksiHadir = (nama: string) =>
+  `"${nama}" is already fully inside the frame from the very first frame and never leaves it; ` +
+  `within that frame, `;
+
 function sinematografiPenulis(segs: SegmentDraft[]): { aksi: string; kamera: string; tanpaWajah: boolean } | null {
   const utama = segs.find((sg) => (sg.action ?? "").trim().length > 12);
   if (!utama) return null;
@@ -1390,7 +1412,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // dirakit dengan kunci identitas produk supaya presisi koreografi tidak
     // menukar presisi identitas — keduanya harus ada, bukan salah satu.
     const beat =
-      (sinema ? `${sinema.aksi}, ${IDENTITY_INSTRUCTION}` : null) ??
+      (sinema
+        ? `${noPhysicalProduct ? "" : praAksiHadir(input.productName)}${sinema.aksi}, ${IDENTITY_INSTRUCTION}`
+        : null) ??
       ugcBeat(i) ??
       (format === "ads" && noPhysicalProduct
         // Iklan jasa: yang diperagakan adalah MANFAAT, bukan benda. Presenter
