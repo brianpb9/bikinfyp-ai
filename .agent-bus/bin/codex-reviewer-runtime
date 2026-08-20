@@ -28,6 +28,7 @@ LAUNCH_LABEL="com.bikinfyp.codex-reviewer"
 WAIT_SECONDS=${CODEX_REVIEWER_WAIT_SECONDS:-3600}
 RETRY_SECONDS=${CODEX_REVIEWER_RETRY_SECONDS:-20}
 CODEX_BIN=${CODEX_REVIEWER_BIN:-codex}
+NODE_BIN=${CODEX_REVIEWER_NODE_BIN:-node}
 
 log() { printf '%s codex-reviewer: %s\n' "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$*"; }
 
@@ -42,12 +43,12 @@ pid_is_runtime() {
 json_field() {
   # JSON is parsed by Node, not sed. Message bodies may contain escaped quotes
   # and newlines, so regex extraction would silently corrupt reviewer context.
-  node -e 'const v=JSON.parse(process.argv[1])[process.argv[2]]; process.stdout.write(v == null ? "" : String(v))' "$1" "$2"
+  "$NODE_BIN" -e 'const v=JSON.parse(process.argv[1])[process.argv[2]]; process.stdout.write(v == null ? "" : String(v))' "$1" "$2"
 }
 
 response_already_sent() {
   sha=$1 task=$2
-  node - "$BUS_DIR" "$sha" "$task" <<'NODE'
+  "$NODE_BIN" - "$BUS_DIR" "$sha" "$task" <<'NODE'
 const fs = require("fs");
 const path = require("path");
 const [bus, sha, task] = process.argv.slice(2);
@@ -243,8 +244,12 @@ case "$cmd" in
       # Tool-spawned nohup children are cleaned up with their harness process
       # group on this Codex surface. launchd is the smallest native supervisor
       # that survives tool/turn completion; it adds no transport or queue.
+      node_abs=$(command -v "$NODE_BIN") || { log "node binary not found: $NODE_BIN"; exit 1; }
+      codex_abs=$(command -v "$CODEX_BIN") || { log "codex binary not found: $CODEX_BIN"; exit 1; }
       launchctl remove "$LAUNCH_LABEL" >/dev/null 2>&1 || true
-      launchctl submit -l "$LAUNCH_LABEL" -o "$SUPERVISOR_LOG" -e "$SUPERVISOR_LOG" -- /bin/sh "$self" run
+      launchctl submit -l "$LAUNCH_LABEL" -o "$SUPERVISOR_LOG" -e "$SUPERVISOR_LOG" -- \
+        /usr/bin/env "PATH=$PATH" "CODEX_REVIEWER_NODE_BIN=$node_abs" "CODEX_REVIEWER_BIN=$codex_abs" \
+        /bin/sh "$self" run
       child=''
     else
       nohup "$self" run >> "$SUPERVISOR_LOG" 2>&1 </dev/null &
