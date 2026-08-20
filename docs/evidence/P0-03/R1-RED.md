@@ -177,4 +177,4 @@ yang sah tidak menulis apa pun, jadi detektor tulisan itu bukan asersi kosong.
   HASIL GENERASI untuk QC-F1, jauh sesudah foto produk dipilih, dan hanya ada di
   W1). Tanpa dua pengecualian itu test bisa lulus HAMPA.
 
-RED_TEST_SHA=<to be filled after commit>
+RED_TEST_SHA=f2ad65bbe9e31b75740690f0cbe86f5128ea2b5b
