@@ -68,7 +68,10 @@ cleanup() {
 trap cleanup EXIT INT TERM HUP
 
 mkdir -p "$BUS_DIR/inbox/builder" "$BUS_DIR/inbox/reviewer" "$BUS_DIR/archive" "$BUS_DIR/tmp"
-if [ "$(inbox_count builder)" != 0 ] || [ "$(inbox_count reviewer)" != 0 ] || [ -e "$STATE_DIR" ] || [ -e "$LOCK_DIR" ]; then
+"$RUNTIME" status >/dev/null 2>&1
+runtime_status=$?
+if [ "$runtime_status" != 1 ] || [ "$(inbox_count builder)" != 0 ] || \
+   [ "$(inbox_count reviewer)" != 0 ] || [ -e "$STATE_DIR" ] || [ -e "$LOCK_DIR" ]; then
   printf 'ABORT: live Reviewer state exists; refusing fault-injection test.\n' >&2
   exit 1
 fi
@@ -86,7 +89,25 @@ start_runtime() {
 
 printf 'reviewer runtime self-test\n'
 
-# Case 1: a syntactically valid unknown SHA is terminal poison, not a queue lock.
+# Case 1: recover state written by the old/crash-window ordering where
+# message.json exists but source_name has not been published yet.
+staging_path=$(BUS_FROM=builder "$SEND" reviewer READY_FOR_REVIEW "$HEAD_SHA" RUNTIME-SELFTEST-STAGING staging)
+mkdir -p "$STATE_DIR"
+cp "$staging_path" "$STATE_DIR/message.json"
+start_runtime 5
+if wait_for "legacy partial staging recovery" '[ "$(inbox_count builder)" -ge 1 ]'; then
+  staging_response=$("$READ" builder)
+  case "$staging_response" in
+    *'"type":"PASS"'*'"task":"RUNTIME-SELFTEST-STAGING"'*) printf 'PASS  partial staging state is recovered without message loss\n' ;;
+    *) printf 'FAIL  partial staging state did not receive PASS\n'; FAILURES=$((FAILURES + 1)) ;;
+  esac
+else
+  FAILURES=$((FAILURES + 1))
+fi
+stop_active
+wait_for "runtime cleanup after staging recovery" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
+
+# Case 2: a syntactically valid unknown SHA is terminal poison, not a queue lock.
 poison_path=$(BUS_FROM=builder "$SEND" reviewer QUESTION "" RUNTIME-SELFTEST-POISON poison)
 node - "$poison_path" "$FAKE_SHA" <<'NODE'
 const fs = require("fs");
@@ -94,8 +115,11 @@ const [file, sha] = process.argv.slice(2);
 const message = JSON.parse(fs.readFileSync(file, "utf8"));
 message.type = "READY_FOR_REVIEW";
 message.sha = sha;
+message.id = message.id.replace(/-QUESTION$/, "-READY_FOR_REVIEW");
 fs.writeFileSync(file, `${JSON.stringify(message)}\n`);
 NODE
+poison_ready_path=$(printf '%s\n' "$poison_path" | sed 's/-QUESTION\.json$/-READY_FOR_REVIEW.json/')
+mv "$poison_path" "$poison_ready_path"
 BUS_FROM=builder "$SEND" reviewer READY_FOR_REVIEW "$HEAD_SHA" RUNTIME-SELFTEST-VALID valid >/dev/null
 start_runtime 5
 if wait_for "valid message after poison" '[ "$(inbox_count builder)" -ge 1 ]'; then
@@ -108,9 +132,9 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 stop_active
-wait_for "runtime cleanup after case 1" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
+wait_for "runtime cleanup after case 2" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
 
-# Case 2: SIGKILL leaves a detached reviewer, restart reaps it, bounded failure
+# Case 3: SIGKILL leaves a detached reviewer, restart reaps it, bounded failure
 # emits CHANGES_REQUESTED, then the next queued SHA receives PASS.
 BUS_FROM=builder "$SEND" reviewer READY_FOR_REVIEW "$HEAD_SHA" RUNTIME-SELFTEST-HANG hang >/dev/null
 BUS_FROM=builder "$SEND" reviewer READY_FOR_REVIEW "$HEAD_SHA" RUNTIME-SELFTEST-NEXT next >/dev/null
@@ -150,7 +174,7 @@ fi
 stop_active
 wait_for "final runtime cleanup" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
 
-# Case 3: an older infrastructure response for the same SHA/task must not
+# Case 4: an older infrastructure response for the same SHA/task must not
 # suppress an explicit later READY retry. Request/response identity is ordered
 # by the bus-global sequence, not permanently memoized by SHA+task.
 retry_task=RUNTIME-SELFTEST-RETRY
@@ -168,7 +192,7 @@ else
   FAILURES=$((FAILURES + 1))
 fi
 stop_active
-wait_for "runtime cleanup after case 3" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
+wait_for "runtime cleanup after case 4" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
 
 printf '%s\n' "runtime self-test failures=$FAILURES"
 [ "$FAILURES" -eq 0 ]

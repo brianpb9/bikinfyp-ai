@@ -282,6 +282,8 @@ consume_staged_message() {
       id=$(json_file_field "$STATE_DIR/message.json" id 2>/dev/null) || return 2
       case "$id" in ''|*[!A-Za-z0-9_.-]*) log "invalid legacy message id"; return 2 ;; esac
       source_name="$id.json"
+      printf '%s\n' "$source_name" > "$STATE_DIR/source_name.new" || return 2
+      mv "$STATE_DIR/source_name.new" "$STATE_DIR/source_name" || return 2
     fi
     case "$source_name" in ''|*/*|.|..) log "invalid staged source name"; return 2 ;; esac
 
@@ -314,8 +316,10 @@ stage_next_message() {
   [ -f "$msg_path" ] || { log "bus-wait returned missing path: $msg_path"; return 2; }
   cp "$msg_path" "$STATE_DIR/message.json.new" || return 2
   basename "$msg_path" > "$STATE_DIR/source_name.new" || return 2
-  mv "$STATE_DIR/message.json.new" "$STATE_DIR/message.json"
-  mv "$STATE_DIR/source_name.new" "$STATE_DIR/source_name"
+  # `message.json` is the state commit marker observed by run_loop. Publish it
+  # last, after all metadata needed to consume/validate it is durable.
+  mv "$STATE_DIR/source_name.new" "$STATE_DIR/source_name" || return 2
+  mv "$STATE_DIR/message.json.new" "$STATE_DIR/message.json" || return 2
   consume_staged_message
 }
 

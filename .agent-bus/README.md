@@ -229,8 +229,9 @@ deterministic failure cannot starve later reviews.
 ## Self-test
 
 ```sh
+# Both tests fail closed while the persistent Reviewer is active.
 sh .agent-bus/test-bus.sh
-sh .agent-bus/test-reviewer-runtime.sh  # run only while the Reviewer is stopped
+sh .agent-bus/test-reviewer-runtime.sh
 ```
 
 Covers: round-trip in both directions, invalid role/type rejection,
@@ -238,8 +239,8 @@ SHA_BINDING, ROLE_SEPARATION, prompt return when a message is waiting, timeout
 exit 4, empty-inbox exit 5, STALE flagging for HEAD / ancestor / non-ancestor
 shas, mixed-type ordering, JSON controls/Unicode, and crash-safety (the message
 survives `bus-wait`). The runtime fault test covers unknown-SHA poison, SIGKILL
-with a detached child, orphan reaping, bounded failure, and re-arm to the next
-queued SHA.
+with a detached child, partial staging recovery, orphan reaping, bounded
+failure, same-SHA retry correlation, and re-arm to the next queued SHA.
 
 The test runs against the real `.agent-bus` directories and **aborts** if
 either inbox is non-empty, so it cannot destroy in-flight traffic. It removes

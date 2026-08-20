@@ -13,6 +13,7 @@ SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 BUS_DIR=$SCRIPT_DIR
 REPO_ROOT=$(dirname "$BUS_DIR")
 BIN="$BUS_DIR/bin"
+RUNTIME="$BIN/codex-reviewer-runtime"
 TASK=BUS-SELFTEST
 
 FAILURES=0
@@ -40,8 +41,12 @@ inbox_count() {
 mkdir -p "$BUS_DIR/inbox/builder" "$BUS_DIR/inbox/reviewer" \
          "$BUS_DIR/archive" "$BUS_DIR/tmp"
 
-if [ "$(inbox_count builder)" != 0 ] || [ "$(inbox_count reviewer)" != 0 ]; then
-  printf 'ABORT: an inbox is non-empty; refusing to run against live traffic.\n' >&2
+"$RUNTIME" status >/dev/null 2>&1
+runtime_status=$?
+if [ "$runtime_status" != 1 ] || [ -e "$BUS_DIR/tmp/codex-reviewer.lock" ] || \
+   [ -e "$BUS_DIR/tmp/codex-reviewer-current" ] || \
+   [ "$(inbox_count builder)" != 0 ] || [ "$(inbox_count reviewer)" != 0 ]; then
+  printf 'ABORT: Reviewer runtime/state or an inbox is active; refusing to touch live traffic.\n' >&2
   exit 1
 fi
 
