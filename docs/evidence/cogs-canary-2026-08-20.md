@@ -46,20 +46,34 @@ Satu klip uji dijalankan pada tier `high_quality` (`scripts/ukur-cogs-tier.ts`,
 task `cgt-20260820193542-qsc7j`). Modelnya BERBEDA dari super_hq, dan itulah
 yang menentukan selisihnya:
 
-| Tier | Model | Biaya/klip | Video 15 dtk | Harga jual/video | Margin kotor |
-|---|---|---:|---:|---:|---:|
-| high_quality | `dreamina-seedance-2-0-mini-260615` | Rp2.771 | **Rp8.313** | Rp12.000 | **Rp3.687 (31%)** |
-| super_hq | `dreamina-seedance-2-0-260128` | Rp11.655 | **Rp34.965** | Rp80.000 | **Rp45.035 (56%)** |
+| Tier | Model | Per 5 dtk | Per detik | Video 15 dtk | Harga jual/video | Margin kotor |
+|---|---|---:|---:|---:|---:|---:|
+| high_quality | `dreamina-seedance-2-0-mini-260615` | Rp2.771 | Rp554 | **Rp8.313** | Rp12.000 | **Rp3.687 (31%)** |
+| super_hq | `dreamina-seedance-2-0-260128` | Rp11.655 | Rp2.331 | **Rp34.965** | Rp80.000 | **Rp45.035 (56%)** |
+
+Margin di atas belum memotong frame buatan (±Rp650), QC vision (±Rp12), TTS,
+penyimpanan, dan render gagal yang harus diulang. Board 19 Agu memasukkan dua
+yang pertama dan mendapat margin retail ~25%, bukan 31%.
 
 Harga jual dari paket kredit di `lib/credits.ts` (hq5 Rp60.000/5 video;
 super5 Rp400.000/5 video). Margin kotor BELUM memotong TTS, penyimpanan, dan
 gagal-render yang harus diulang.
 
-**Koreksi terhadap catatan pagi ini.** Saya menulis bahwa alarm margin 19 Agu
-(Rp8.313 vs Rp12.000) "memakai angka lama dan perlu diukur ulang". Pengukuran
-hari ini menghasilkan Rp8.313 — angka yang sama persis. Alarmnya benar sejak
-awal; yang keliru adalah dugaan saya bahwa ia usang. Alarm margin tetap memakai
-angka ini.
+**Satuannya DETIK, bukan klip.** Ini koreksi kedua atas tulisan saya sendiri,
+dan penting karena dua catatan kita nyaris saling bertentangan tanpa alasan.
+
+Board 19 Agu menulis "klip bersuara = Rp8.313". Pengukuran hari ini menulis
+"klip = Rp2.771". Keduanya benar dan tidak bertabrakan: klip 19 Agu berdurasi
+15 detik, klip hari ini 5 detik, dan tarifnya per detik — 3 × Rp2.771 = Rp8.313.
+
+Jadi yang menentukan biaya adalah TOTAL DETIK yang dirender, bukan berapa
+potong ia dibelah. Video 15 detik high_quality berbiaya Rp8.313 entah ia satu
+klip panjang atau tiga klip pendek.
+
+Saya sempat menulis bahwa angka 19 Agu "sama persis" dengan hari ini sebagai
+konfirmasi. Itu benar hasilnya tapi salah alasannya — saya membandingkan dua
+satuan berbeda yang kebetulan bertemu. Alarm margin 19 Agu memang tetap sah;
+dasarnya konsistensi tarif per detik, bukan kebetulan numerik.
 
 **Yang masih menggantung:** kedua angka bergantung pada tarif estimasi (lihat
 peringatan cara baca di atas). Keputusan harga jual sebaiknya menunggu satu

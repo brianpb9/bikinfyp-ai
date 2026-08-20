@@ -2,6 +2,42 @@
 
 Platform yang mengubah **foto produk + link toko** menjadi **video jualan gaya UGC 15 detik berbahasa Indonesia** untuk seller TikTok Shop/Shopee. Berisi: backend (mesin skrip, pipeline media, API), frontend mobile-first, dan provider nyata BytePlus/Google/Azure (menunggu API key).
 
+## Untuk agen: SATU WORKTREE PER SESI (wajib)
+
+Beberapa sesi agen bisa berjalan bersamaan di mesin ini. Kalau semuanya bekerja
+di direktori yang sama, mereka saling menimpa: pekerjaan yang belum di-commit
+tertimbun, `git add -A` menyapu berkas milik sesi lain, dan `node_modules`
+bisa lenyap di tengah jalan (terjadi 20 Agu 2026 — lihat
+`docs/evidence/insiden-node-modules-2026-08-20.md`; suite yang lima belas menit
+sebelumnya hijau berubah jadi `tsx: command not found`).
+
+Lingkungan yang berubah di bawah kaki membuat hasil uji berhenti berarti. Jadi
+setiap sesi agen memakai worktree-nya sendiri:
+
+```bash
+# Dari root repo (/Users/hadrava/HDRV)
+git worktree add ../worktrees/<nama-sesi> -b sesi/<nama-sesi>
+cd ../worktrees/<nama-sesi>/03_UGC_AI_ID/app
+npm ci                      # node_modules milik worktree ini sendiri
+```
+
+Selesai bekerja:
+
+```bash
+git worktree remove ../worktrees/<nama-sesi>   # tolak kalau masih ada perubahan
+git branch -d sesi/<nama-sesi>                 # sesudah di-merge
+```
+
+Aturan yang menyertainya:
+
+- **Jangan `git add -A`.** Sebutkan berkasnya satu per satu. Pelajaran 19 Agu:
+  satu `git add -A` menyapu WIP sesi lain plus migrasi yang belum siap ke dalam
+  commit yang tidak ada hubungannya.
+- **`npm ci`, bukan `npm install`,** supaya `package-lock.json` tidak bergeser.
+  CI menolak lockfile yang berubah (job `verify`).
+- Render berbayar dan skrip yang menulis ke `test_output/` dipakai bersama
+  seluruh worktree — koordinasikan sebelum menjalankannya.
+
 ## Cara menjalankan
 
 ```bash

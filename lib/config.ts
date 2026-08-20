@@ -157,6 +157,24 @@ export const config = {
    * menghabiskan kuota untuk semua orang.
    *
    * high_quality TETAP memakai penulis LLM; yang tidak ia dapat cuma Gate 3.
+   *
+   * RISIKO MUTU YANG DIKETAHUI DAN DITERIMA (keputusan Brian 20 Agu).
+   *
+   * Karena tier ini tidak menjalankan Idea Stage, penulisnya berangkat TANPA
+   * ide terpilih — satu-satunya jalur produksi yang begitu sejak invarian
+   * "penulis tidak pernah menulis tanpa ide" dipasang (lihat generateOne,
+   * parameter wajibIde). Akibat yang harus diharapkan, bukan disangkal:
+   * naskah high_quality lebih mudah datar dan lebih mudah bisa ditukar antar
+   * produk, karena tidak ada satu sudut yang dipilih dan dinilai lebih dulu.
+   *
+   * Diterima SEMENTARA karena biaya: Idea Stage memakai model kelas atas,
+   * sedangkan margin kotor high_quality cuma ~31% (COGS Rp8.313 per video
+   * 15 dtk terhadap harga Rp12.000 — docs/evidence/cogs-canary-2026-08-20.md).
+   *
+   * RENCANA: sesudah canary, evaluasi "idea pass murah" memakai Sonnet untuk
+   * tier ini, dihitung dengan harga token NYATA — bukan estimasi. Kalau satu
+   * lintasan ide murah muat di dalam margin Rp3.687, risiko ini ditutup;
+   * kalau tidak, ia tetap tercatat di sini sebagai pilihan sadar.
    */
   ideaStageTiers: env("IDEA_STAGE_TIERS", "super_hq")
     .split(",").map((t) => t.trim()).filter(Boolean),
