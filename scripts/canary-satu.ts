@@ -16,36 +16,61 @@ import { probeVideoSize } from "../lib/media/ffmpeg";
 const T = path.resolve(process.cwd(), "..", "test_output");
 const OUT = path.join(T, "canary_20agu");
 
-// NAMA PRODUK WAJIB DARI SUMBER TEPERCAYA, BUKAN INGATAN.
+// IDENTITAS PRODUK DIBACA DARI CATATAN TERDAFTAR — TIDAK BISA DIKETIK.
 //
-// Cacat 20 Agu: roster ini semula menulis "Metoo MW-3 Sabun Wajah" — nama yang
-// SAYA KARANG. Produk sebenarnya, terbaca jelas di foto sumbernya, adalah
-// METOO MW-3 ADVANCED WHITENING TOOTHPASTE 100g. Keluaran #1 karena itu
-// menjual "sabun wajah" untuk sebuah tube pasta gigi, dan Rp2.771 terbuang
-// untuk sampel yang tidak bisa dinilai.
+// Versi sebelumnya menerima nama produk sebagai teks di roster, dan saya
+// mengisinya dari ingatan: "Metoo MW-3 Sabun Wajah" untuk sebuah tube pasta
+// gigi. Naskahnya menjual barang yang bukan produknya, Rp2.771 terbuang, dan
+// tidak satu pun gerbang menangkapnya karena MEREKNYA benar.
 //
-// Tidak ada gerbang yang menangkapnya: classifier, gerbang label, QC-10, dan
-// QC-F1 semuanya lolos karena MEREKNYA memang benar. Yang tidak pernah
-// dicocokkan siapa pun adalah JENIS BARANGNYA.
+// Larangan lewat komentar tidak cukup — komentar tidak menghentikan siapa pun.
+// Sekarang skrip ini menerima PRODUCT ID, lalu membaca nama dan kategori dari
+// baris produk. Kalau idnya tidak terdaftar, skrip berhenti: tidak ada jalan
+// untuk mengetik nama, bahkan kalau mau.
 //
-// Kalau menambah entri di sini: baca namanya dari produk terdaftar di DB atau
-// dari label pada fotonya sendiri. Jangan mengetik dari ingatan.
-const ROSTER: Record<string, { produk: ProductInput; foto: string }> = {
-  "mw3": { produk: { id: "p-mw3", name: "Metoo MW-3 Advanced Whitening Toothpaste", price_idr: 45000, category: "beauty", sourceUrl: null } as ProductInput,
-           foto: path.join(T, "metoo-mw3", "mw3-packshot-4000px.webp") },
-  "glow": { produk: { id: "p-glow", name: "Serum Glow Bright", price_idr: 85000, category: "beauty", sourceUrl: null } as ProductInput,
-            foto: path.join(T, "canary-glow.jpg") },
-  "arva": { produk: { id: "p-arva", name: "ARVA Tumbler Chrome", price_idr: 150000, category: "home", sourceUrl: null } as ProductInput,
-            foto: path.join(T, "canary-arva.jpg") },
-  "polos": { produk: { id: "p-sabun", name: "Sabun Susu Kambing", price_idr: 25000, category: "beauty", sourceUrl: null } as ProductInput,
-             foto: path.join(T, "produk-polos.jpg") },
+// Konsekuensi yang disengaja: foto uji yang belum jadi produk terdaftar TIDAK
+// BISA dirender canary sampai ia didaftarkan. Itu benar — kalau ia tidak cukup
+// nyata untuk punya catatan produk, ia tidak cukup nyata untuk dibayar render.
+const FOTO_PER_PRODUK: Record<string, string> = {
+  // product_id -> foto referensi. Namanya TIDAK ada di sini, dengan sengaja.
+  "p-mw3": path.join(T, "metoo-mw3", "mw3-packshot-4000px.webp"),
+  "p-glow": path.join(T, "canary-glow.jpg"),
+  "p-arva": path.join(T, "canary-arva.jpg"),
+  "p-sabun": path.join(T, "produk-polos.jpg"),
 };
+
+/** Baca identitas produk dari catatan terdaftar. Melempar kalau tidak ada. */
+async function identitasProduk(productId: string): Promise<ProductInput> {
+  const url = process.env.DATABASE_URL;
+  if (!url) throw new Error("DATABASE_URL wajib — identitas produk dibaca dari catatan terdaftar, bukan diketik.");
+  const { Pool } = await import("pg");
+  const pool = new Pool({ connectionString: url, max: 2 });
+  try {
+    const r = await pool.query(
+      "SELECT id, name, price_idr, category, source_url, raw_meta FROM products WHERE id = $1",
+      [productId]
+    );
+    if (r.rowCount === 0) {
+      throw new Error(
+        `produk "${productId}" TIDAK TERDAFTAR. Daftarkan dulu produknya (nama + kategori dari labelnya) ` +
+          "— canary tidak merender barang yang tidak punya catatan."
+      );
+    }
+    const p = r.rows[0];
+    return { id: p.id, name: p.name, price_idr: p.price_idr, category: p.category, sourceUrl: p.source_url } as ProductInput;
+  } finally {
+    await pool.end();
+  }
+}
 
 async function main() {
   const [id, tier, ct] = process.argv.slice(2);
   if (process.env.RENDER_CONFIRM !== "YA") { console.error("Render BERBAYAR. RENDER_CONFIRM=YA."); process.exit(2); }
-  const r = ROSTER[id];
-  if (!r) { console.error(`roster tidak dikenal: ${id} (ada: ${Object.keys(ROSTER).join(",")})`); process.exit(2); }
+  const foto = FOTO_PER_PRODUK[id];
+  if (!foto) { console.error(`product id tidak punya foto canary: ${id} (ada: ${Object.keys(FOTO_PER_PRODUK).join(",")})`); process.exit(2); }
+  const produk = await identitasProduk(id);
+  console.log(`IDENTITAS (dari catatan terdaftar): "${produk.name}" · kategori ${produk.category} · Rp${produk.price_idr}`);
+  const r = { produk, foto };
   fs.mkdirSync(OUT, { recursive: true });
 
   // ASAL-USUL BAHAN dulu — kalau fotonya tidak layak, tidak ada uang keluar.

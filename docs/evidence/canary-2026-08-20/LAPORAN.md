@@ -108,6 +108,37 @@ skrip uji saya menyembunyikan ketidakcocokan bentuk, lalu pesan galat yang
 jujur saya baca sebagai cacat produk. Pola yang sama tiga kali — di skrip
 sekali-pakai, berhenti memakai `as never` untuk membungkam pemeriksa tipe.
 
+## Dikerjakan sesudah penghentian (20 Agu, lanjutan)
+
+**Item 3 — transkripsi PULIH.** 503 Gemini hilang. Dipanggil dengan bentuk yang
+benar atas keluaran #1:
+
+```
+TRANSKRIP: "Nah, sabun wajah aku yang aku sembunyiin dari kakak"  masalah: []
+```
+
+Bahasa Indonesia penuh, cocok persis dengan naskah shot 1, tidak terpotong.
+Dimensi **Bahasa/CTA bisa diverifikasi** di Fase 2 — bukan NOT VERIFIABLE.
+(Untuk keluaran #1 ini, nilainya tetap tidak berarti: naskahnya menjual sabun
+wajah untuk pasta gigi.)
+
+**Item 1 — identitas produk kini MUSTAHIL diketik.** `canary-satu.ts` menerima
+PRODUCT ID; nama, kategori, dan harga dibaca dari baris `products`. Peta yang
+tersisa di skrip hanya `product_id -> foto`; tidak ada kolom nama sama sekali.
+
+Dua jalur fail-closed diverifikasi:
+
+| Keadaan | Hasil |
+|---|---|
+| `DATABASE_URL` kosong | berhenti: "identitas produk dibaca dari catatan terdaftar, bukan diketik" |
+| id tidak ada di `products` | berhenti, exit 1: `produk "p-mw3" TIDAK TERDAFTAR. Daftarkan dulu produknya...` |
+
+Konsekuensi yang disengaja dan harus diketahui sebelum canary diulang: **kelima
+foto canary belum jadi produk terdaftar**, jadi tidak satu pun bisa dirender
+sampai didaftarkan dengan nama + kategori dari labelnya sendiri. Itu bukan
+halangan yang perlu diakali — kalau sebuah foto tidak cukup nyata untuk punya
+catatan produk, ia tidak cukup nyata untuk dibayar render.
+
 ## Yang dibutuhkan sesi berikutnya
 
 Perbaiki nama produk roster dari sumber tepercaya (produk terdaftar di DB, atau
