@@ -22,6 +22,24 @@
 // RAGU = PROMOSI (perintah Brian 20 Agu). Alasannya asimetris: menolak foto
 // produk yang sah merepotkan satu pengguna dan ia bisa unggah ulang; menerima
 // banner merusak SETIAP render sesudahnya dan baru ketahuan setelah dibayar.
+//
+// LUBANG WARISAN, DAN CARA IA TERTUTUP.
+//
+// Gambar yang sudah ada sebelum classifier ini tidak punya sidecar kelayakan,
+// dan diperlakukan LAYAK supaya produk yang sudah jalan tidak mati mendadak.
+// Itu keringanan yang disengaja, bukan kelalaian — tapi keringanan yang tidak
+// punya tanggal kedaluwarsa akan hidup selamanya.
+//
+// Jadi penutupnya BACKFILL MALAS (keputusan Brian 20 Agu): begitu gambar lama
+// hendak dipakai jadi referensi, ia diklasifikasi saat itu juga dan sidecarnya
+// ditulis — lihat backfillMetaGambar() di lib/product-images.ts. Sesudah sekali
+// dipakai, ia tidak lagi warisan. Gambar yang tidak pernah jadi referensi tidak
+// perlu dibayar waktu OCR-nya sama sekali, dan tidak ada satu skrip migrasi
+// besar yang harus dijalankan pada pustaka yang mungkin sudah besar.
+//
+// Yang HARUS diketahui pembaca berikutnya: selama masa peralihan ini, "layak"
+// pada gambar lama berarti "belum pernah diperiksa", bukan "sudah lulus".
+// Angka kelayakan pustaka tidak boleh dilaporkan seolah keduanya sama.
 
 import fs from "node:fs";
 import os from "node:os";

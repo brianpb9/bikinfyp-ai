@@ -5,6 +5,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import crypto from "node:crypto";
 import sharp from "sharp";
 import { config, ensureDirs } from "./config";
@@ -108,18 +109,63 @@ export async function bacaMetaGambar(rel: string): Promise<MetaGambar | null> {
 /**
  * Referensi yang BOLEH dikirim ke model, dari daftar rel apa adanya.
  *
- * Gambar tanpa sidecar (diunggah sebelum klasifikasi ada) diperlakukan LAYAK:
- * menolaknya berarti mematikan produk untuk pustaka yang sudah terlanjur ada.
- * Yang baru diunggah selalu punya sidecar.
+ * BACKFILL MALAS — lubang warisan ditutup saat dipakai, bukan sekaligus.
+ *
+ * Gambar yang diunggah sebelum classifier ada tidak punya sidecar. Menolak
+ * semuanya akan mematikan produk yang sudah terlanjur jalan; membiarkannya
+ * layak selamanya berarti lubangnya tidak pernah tertutup. Jadi: begitu gambar
+ * lama HENDAK dipakai jadi referensi, ia diklasifikasi saat itu juga dan
+ * sidecarnya ditulis. Sesudah sekali dipakai, ia tidak lagi warisan.
+ *
+ * Kenapa di sini dan bukan di skrip migrasi sekali jalan: pustaka lama bisa
+ * besar, dan gambar yang tidak pernah dipakai jadi referensi tidak perlu
+ * dibayar waktu OCR-nya sama sekali.
+ *
+ * Kegagalan klasifikasi di jalur ini TIDAK menolak gambarnya (beda dengan
+ * jalur unggah): di unggah pengguna sedang menatap layar dan bisa mengulang,
+ * sedangkan di sini render sudah berjalan dan gambar itu mungkin satu-satunya
+ * yang dimiliki produk tersebut.
  */
 export async function referensiLayak(rels: string[]): Promise<string[]> {
   const layak: string[] = [];
   for (const rel of rels) {
     if (layak.length >= MAKS_REFERENSI_PER_GENERASI) break;
-    const meta = await bacaMetaGambar(rel);
+    let meta = await bacaMetaGambar(rel);
+    if (!meta) meta = await backfillMetaGambar(rel);
     if (!meta || meta.layakReferensi) layak.push(rel);
   }
   return layak;
+}
+
+/**
+ * Klasifikasi gambar warisan pada pemakaian pertama, lalu tulis sidecarnya.
+ *
+ * Mengembalikan null kalau berkasnya tidak terjangkau atau pemeriksaannya
+ * gagal — pemanggil memperlakukan null sebagai "biarkan lewat", lihat alasan
+ * di referensiLayak.
+ */
+export async function backfillMetaGambar(rel: string): Promise<MetaGambar | null> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "backfill-"));
+  try {
+    const obj = await mediaStorage().get(rel);
+    if (!obj) return null;
+    const tmp = path.join(dir, path.basename(rel));
+    fs.writeFileSync(tmp, obj.body);
+    const k = await klasifikasiGambar(tmp);
+    const meta: MetaGambar = {
+      sha256: crypto.createHash("sha256").update(obj.body).digest("hex"),
+      jenis: k.jenis, layakReferensi: k.layakReferensi,
+      rasioAreaTeks: k.rasioAreaTeks, jumlahKata: k.jumlahKata, alasan: k.alasan,
+    };
+    await mediaStorage().put(relMeta(rel), Buffer.from(JSON.stringify(meta)), "application/json");
+    console.log(`[pustaka] backfill sidecar ${rel} -> ${meta.jenis}`);
+    return meta;
+  } catch (err) {
+    console.warn(`[pustaka] backfill gagal untuk ${rel}, dibiarkan lewat: ${(err as Error).message}`);
+    return null;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
 }
 
 export async function saveProductImages(

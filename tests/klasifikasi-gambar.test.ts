@@ -89,3 +89,33 @@ test("gagal memeriksa = dianggap PROMOSI, bukan diloloskan", async () => {
   assert.equal(h.jenis, "promotional_graphic");
   assert.equal(h.layakReferensi, false);
 });
+
+// BACKFILL MALAS — lubang warisan tertutup saat dipakai, bukan sekaligus.
+test("gambar lama tanpa sidecar diklasifikasi saat hendak jadi referensi", async (t) => {
+  if (!punyaOcr()) return t.skip("tesseract/ffmpeg tidak ada");
+  const banner = path.join(R, "02-banner-promo-JANGAN-DIPAKAI.jpeg");
+  if (!fs.existsSync(banner)) return t.skip("fixture tidak ada");
+
+  const { setMediaStorageForTests } = await import("../lib/storage");
+  const { referensiLayak, bacaMetaGambar, relMeta } = await import("../lib/product-images");
+
+  // Storage palsu: satu gambar warisan, TANPA sidecar.
+  const isi = new Map<string, Buffer>([["uploads/lama/0.jpeg", fs.readFileSync(banner)]]);
+  setMediaStorageForTests({
+    get: async (rel: string) => (isi.has(rel) ? { body: isi.get(rel)!, size: isi.get(rel)!.length } : null),
+    put: async (rel: string, body: Buffer) => { isi.set(rel, body); },
+  } as never);
+
+  try {
+    assert.equal(await bacaMetaGambar("uploads/lama/0.jpeg"), null, "harusnya belum ada sidecar");
+    const layak = await referensiLayak(["uploads/lama/0.jpeg"]);
+    // Banner warisan ini sekarang KETAHUAN dan tidak dipakai.
+    assert.deepEqual(layak, [], "banner warisan tetap lolos jadi referensi");
+    // Dan sidecarnya sudah ditulis — pemakaian berikutnya tidak perlu OCR lagi.
+    assert.ok(isi.has(relMeta("uploads/lama/0.jpeg")), "sidecar tidak ditulis; lubangnya tidak pernah tertutup");
+    const meta = await bacaMetaGambar("uploads/lama/0.jpeg");
+    assert.equal(meta?.jenis, "promotional_graphic");
+  } finally {
+    setMediaStorageForTests(undefined);
+  }
+});

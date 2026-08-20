@@ -52,6 +52,33 @@ prompt dari penulis LLM ternyata menangkap kesalahan yang ditulis manusia — da
 itu justru bukti gerbangnya dipasang di tempat yang benar (pada prompt akhir,
 bukan pada sumber tertentu).
 
+## Jaminan packshot — diuji ulang dengan sumber yang LAYAK (20 Agu sore)
+
+Bukti pertama untuk klaim "label dijamin lewat packshot" memakai
+`test_output/jjglow-produk.png`. Sesudah classifier grafis promosi dipasang,
+berkas itu ternyata **identik (sha256 sama)** dengan
+`refs/product/04-crop-banner-JANGAN-DIPAKAI.png` — banner marketing yang sudah
+ditandai manusia sebagai tidak boleh dipakai, dan yang classifier tandai
+`promotional_graphic` (rasio area teks 0,0692).
+
+Jadi klaim itu sempat berdiri di atas bahan yang justru tidak layak. Diuji
+ulang dengan sumber yang lolos classifier:
+
+| Hal | Nilai |
+|---|---|
+| Sumber | `refs/product/01-packshot-bersih-351px.webp` |
+| Klasifikasi | `product_photo`, layakReferensi=true, rasio 0,0103, 2 kata |
+| Keluaran | `test_output/video_penuh_packshot/bukti-label-layak.mp4` |
+| Biaya | Rp0 — ffmpeg lokal, tidak menyentuh penyedia |
+
+Hasilnya diperiksa sendiri: "JJ GLOW", "GLUTA PINK", "BRIGHTENING SOAP", "10X",
+netto, dan logo timbul di sabunnya semua terbaca. **Klaimnya sekarang berdiri
+di atas sumber yang layak.**
+
+Satu batas yang jujur: sumbernya hanya 351px dan dinaikkan ke 720×1280, jadi
+hurufnya sedikit melunak. Merek tetap terbaca, tapi untuk produksi foto sumber
+yang lebih besar akan menghasilkan penutup yang lebih tajam.
+
 ## Yang TIDAK dibuktikan
 
 - QC-10 tidak lagi bisa membuktikan keterbacaan visual dari klip generate, dan
