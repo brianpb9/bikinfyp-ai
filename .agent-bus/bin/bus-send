@@ -1,0 +1,110 @@
+#!/bin/sh
+# bus-send <to> <type> <sha> <task> <body...>
+#
+# Writes one message atomically into .agent-bus/inbox/<to>/.
+# Exit codes:
+#   0  message written (path printed on stdout)
+#   2  usage error / invalid role / invalid type
+#   3  SHA_BINDING violation (sha missing, malformed, or not in this repo)
+#   6  ROLE_SEPARATION violation (from == to)
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+BUS_DIR=$(dirname "$SCRIPT_DIR")
+REPO_ROOT=$(dirname "$BUS_DIR")
+
+ROLES="builder reviewer"
+TYPES="READY_FOR_REVIEW CHANGES_REQUESTED PASS DONE QUESTION FOUNDER_DECISION_REQUIRED"
+SHA_REQUIRED_TYPES="READY_FOR_REVIEW CHANGES_REQUESTED PASS"
+
+die() { code=$1; shift; printf 'bus-send: %s\n' "$*" >&2; exit "$code"; }
+
+in_list() {
+  needle=$1; shift
+  for item in $*; do
+    [ "$item" = "$needle" ] && return 0
+  done
+  return 1
+}
+
+json_escape() {
+  TAB=$(printf '\t')
+  printf '%s' "$1" \
+    | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g' -e "s/$TAB/\\\\t/g" \
+    | awk '{ if (NR > 1) printf "\\n"; printf "%s", $0 }'
+}
+
+now_ms() {
+  ms=$(date +%s%3N 2>/dev/null || true)
+  case "$ms" in
+    '' | *[!0-9]*) ms=$(( $(date +%s) * 1000 )) ;;
+  esac
+  printf '%s' "$ms"
+}
+
+[ $# -ge 5 ] || die 2 "usage: bus-send <to> <type> <sha> <task> <body...>"
+
+TO=$1; TYPE=$2; SHA=$3; TASK=$4
+shift 4
+BODY=$*
+
+# --- role validation -------------------------------------------------------
+in_list "$TO" "$ROLES" || die 2 "invalid role '$TO' (allowed: $ROLES)"
+
+# 'from' defaults to the other role; BUS_FROM pins the sender explicitly.
+if [ -n "${BUS_FROM:-}" ]; then
+  FROM=$BUS_FROM
+else
+  case "$TO" in
+    builder) FROM=reviewer ;;
+    reviewer) FROM=builder ;;
+  esac
+fi
+in_list "$FROM" "$ROLES" || die 2 "invalid BUS_FROM '$FROM' (allowed: $ROLES)"
+
+# ROLE_SEPARATION: a role may never post into its own inbox.
+[ "$FROM" != "$TO" ] || die 6 "ROLE_SEPARATION: '$FROM' may not send to its own inbox"
+
+# --- type validation -------------------------------------------------------
+in_list "$TYPE" "$TYPES" || die 2 "invalid type '$TYPE' (allowed: $TYPES)"
+
+# --- SHA_BINDING -----------------------------------------------------------
+if in_list "$TYPE" "$SHA_REQUIRED_TYPES"; then
+  sha_ok=yes
+  [ "${#SHA}" -eq 40 ] || sha_ok=no
+  case "$SHA" in *[!0-9a-f]*) sha_ok=no ;; esac
+  [ "$sha_ok" = yes ] \
+    || die 3 "SHA_BINDING: type $TYPE requires a 40-char lowercase hex sha, got '$SHA'"
+  git -C "$REPO_ROOT" cat-file -e "$SHA" 2>/dev/null \
+    || die 3 "SHA_BINDING: sha '$SHA' does not exist in $REPO_ROOT"
+fi
+
+# --- compose ---------------------------------------------------------------
+INBOX="$BUS_DIR/inbox/$TO"
+TMPDIR_BUS="$BUS_DIR/tmp"
+mkdir -p "$INBOX" "$TMPDIR_BUS" "$BUS_DIR/archive"
+
+MS=$(now_ms)
+while [ -e "$INBOX/$MS-$FROM-$TYPE.json" ] || [ -e "$TMPDIR_BUS/$MS-$FROM-$TYPE.json" ]; do
+  MS=$(( MS + 1 ))
+done
+NAME="$MS-$FROM-$TYPE.json"
+ID="$MS-$FROM-$TYPE"
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Write to tmp first, then rename into the inbox. Rename within one
+# filesystem is atomic, so a reader never sees a half-written message.
+TMPFILE="$TMPDIR_BUS/$NAME"
+printf '{"id":"%s","ts":"%s","from":"%s","to":"%s","type":"%s","sha":"%s","task":"%s","body":"%s"}\n' \
+  "$(json_escape "$ID")" \
+  "$(json_escape "$TS")" \
+  "$(json_escape "$FROM")" \
+  "$(json_escape "$TO")" \
+  "$(json_escape "$TYPE")" \
+  "$(json_escape "$SHA")" \
+  "$(json_escape "$TASK")" \
+  "$(json_escape "$BODY")" \
+  > "$TMPFILE"
+
+mv "$TMPFILE" "$INBOX/$NAME"
+printf '%s\n' "$INBOX/$NAME"

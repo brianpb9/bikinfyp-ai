@@ -1,0 +1,60 @@
+#!/bin/sh
+# bus-read <role>
+#
+# Consumes the oldest message in .agent-bus/inbox/<role>/:
+#   1. prints the message JSON
+#   2. prints STALE=true|false  (STALE SHA PROTECTION)
+#   3. moves the message file into .agent-bus/archive/
+#
+# STALE=true means the message's sha is neither HEAD nor an ancestor of HEAD,
+# i.e. the work it refers to is no longer on the current line of history.
+# Stale messages are flagged, never deleted.
+#
+# Exit codes:
+#   0  message printed and archived
+#   2  usage error / invalid role
+#   5  inbox empty
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+BUS_DIR=$(dirname "$SCRIPT_DIR")
+REPO_ROOT=$(dirname "$BUS_DIR")
+
+ROLES="builder reviewer"
+
+die() { code=$1; shift; printf 'bus-read: %s\n' "$*" >&2; exit "$code"; }
+
+[ $# -ge 1 ] || die 2 "usage: bus-read <role>"
+
+ROLE=$1
+case " $ROLES " in
+  *" $ROLE "*) ;;
+  *) die 2 "invalid role '$ROLE' (allowed: $ROLES)" ;;
+esac
+
+INBOX="$BUS_DIR/inbox/$ROLE"
+ARCHIVE="$BUS_DIR/archive"
+mkdir -p "$INBOX" "$ARCHIVE"
+
+MSG=''
+for f in "$INBOX"/*.json; do
+  [ -e "$f" ] || break
+  MSG=$f
+  break
+done
+[ -n "$MSG" ] || die 5 "inbox for '$ROLE' is empty"
+
+cat "$MSG"
+
+# Extract the flat "sha" field without a JSON parser.
+SHA=$(sed -n 's/.*"sha":"\([^"]*\)".*/\1/p' "$MSG")
+
+STALE=true
+if [ -z "$SHA" ]; then
+  STALE=false
+elif git -C "$REPO_ROOT" merge-base --is-ancestor "$SHA" HEAD 2>/dev/null; then
+  STALE=false
+fi
+printf 'STALE=%s\n' "$STALE"
+
+mv "$MSG" "$ARCHIVE/$(basename "$MSG")"

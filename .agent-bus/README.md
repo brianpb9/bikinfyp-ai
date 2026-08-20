@@ -1,0 +1,200 @@
+# .agent-bus — repo-local message bus (Claude Code Builder ↔ Codex Reviewer)
+
+A minimal, auditable, file-based message bus. No daemon, no database, no
+network, no package installs — POSIX `sh` plus `git`, `date`, `sed`, `awk`.
+The same three scripts behave identically whether Claude Code or Codex runs
+them, because all state is plain files in this repo.
+
+## Layout
+
+```
+.agent-bus/
+  README.md            # this file (committed)
+  bin/bus-send         # write a message      (committed)
+  bin/bus-wait         # block until one arrives, DO NOT consume (committed)
+  bin/bus-read         # consume the oldest message (committed)
+  test-bus.sh          # self-test            (committed)
+  inbox/builder/       # messages TO the builder   (gitignored runtime state)
+  inbox/reviewer/      # messages TO the reviewer  (gitignored runtime state)
+  archive/             # consumed messages         (gitignored runtime state)
+  tmp/                 # staging for atomic writes (gitignored runtime state)
+```
+
+Inboxes, archive and tmp are **runtime state, not source**. They are
+gitignored; only `.gitkeep` files are committed so the directories exist in a
+fresh clone. The scripts also `mkdir -p` what they need, so a missing
+directory is never an error.
+
+## Message format
+
+One JSON file per message. Filename:
+
+```
+<unix_ms>-<from>-<type>.json
+```
+
+The millisecond prefix is zero-padded and fixed-width, so plain glob order is
+age order — "oldest message" needs no timestamp parsing. If two messages would
+collide on the same name, `bus-send` bumps the millisecond until the name is
+free, which preserves ordering inside a burst.
+
+Flat JSON, no nesting:
+
+```json
+{"id":"...","ts":"<iso8601>","from":"builder|reviewer","to":"builder|reviewer",
+ "type":"READY_FOR_REVIEW|CHANGES_REQUESTED|PASS|DONE|QUESTION|FOUNDER_DECISION_REQUIRED",
+ "sha":"<40-char git sha or empty>","task":"<task id>","body":"<free text>"}
+```
+
+### Atomic writes
+
+`bus-send` never writes into an inbox directly. It writes the complete file
+into `.agent-bus/tmp/` and then `mv`s it into the inbox. Both are on the same
+filesystem, so the rename is atomic: a reader either sees no file or sees the
+whole message. It can never observe a half-written one.
+
+## Message types
+
+| Type | From | Meaning |
+|---|---|---|
+| `READY_FOR_REVIEW` | builder | Work is committed at `sha`; reviewer should review that exact commit. **sha required.** |
+| `CHANGES_REQUESTED` | reviewer | Review of `sha` found problems; `body` says what must change. **sha required.** |
+| `PASS` | reviewer | `sha` reviewed and accepted. **sha required.** |
+| `DONE` | either | This task is finished; no further action expected on the bus. |
+| `QUESTION` | either | A blocking question the other side must answer before work continues. |
+| `FOUNDER_DECISION_REQUIRED` | either | Outside both agents' mandate — stop and escalate to Brian. |
+
+### SHA_BINDING
+
+For `READY_FOR_REVIEW`, `CHANGES_REQUESTED` and `PASS`, the `sha` must be a
+40-character lowercase hex object that `git cat-file -e <sha>` confirms exists
+in this repo. Anything else exits **3** and no message is written. This is what
+stops a reviewer from reviewing "the latest code" instead of a named commit:
+every verdict is bound to an object that actually exists.
+
+### STALE SHA PROTECTION
+
+`bus-read` prints a `STALE=true|false` line after the JSON:
+
+* `STALE=false` — the message's `sha` is HEAD or an ancestor of HEAD
+  (`git merge-base --is-ancestor <sha> HEAD`), or the message carries no sha.
+* `STALE=true` — the sha exists but is **not** on the current line of history:
+  the branch was rebased, amended, reset, or the commit lives elsewhere. The
+  verdict in that message refers to code that is no longer what HEAD contains.
+
+Stale messages are **flagged, never deleted**. Deciding what a stale verdict is
+worth is a human/agent judgement, not something the bus should silently make.
+
+## Role separation
+
+* The builder writes only to `inbox/reviewer/`.
+* The reviewer writes only to `inbox/builder/`.
+* Neither role may post into its own inbox.
+
+`bus-send` enforces this. `from` defaults to the *other* role (there are only
+two), and can be pinned explicitly with the `BUS_FROM` environment variable —
+useful in scripts and required by the self-test. If `from == to`, `bus-send`
+exits **6** and writes nothing.
+
+## Usage
+
+```sh
+# send (from builder, to reviewer)
+.agent-bus/bin/bus-send reviewer READY_FOR_REVIEW "$(git rev-parse HEAD)" P0-03 "Slice 1 done, tests green"
+
+# a message with no commit attached
+.agent-bus/bin/bus-send builder QUESTION "" P0-03 "Should retries be idempotent?"
+
+# block until something arrives (does NOT consume)
+.agent-bus/bin/bus-wait builder            # default timeout 3600s
+.agent-bus/bin/bus-wait builder 600        # explicit timeout
+
+# consume the oldest message (prints JSON + STALE=..., then archives it)
+.agent-bus/bin/bus-read builder
+```
+
+### Why wait and read are separate
+
+`bus-wait` deliberately does not consume. Waking up and handling a message are
+two different events; if they were one command, a crash between "the command
+returned" and "the agent acted on it" would lose the message permanently. With
+the split, an interrupted agent restarts, calls `bus-wait` again, and the
+message is still there. Nothing is removed from an inbox until `bus-read`
+explicitly archives it.
+
+### Exit codes
+
+| Code | Meaning |
+|---|---|
+| 0 | success |
+| 2 | usage error, invalid role, or invalid type |
+| 3 | SHA_BINDING violation (`bus-send`) |
+| 4 | timeout with no message (`bus-wait`) |
+| 5 | inbox empty (`bus-read`) |
+| 6 | ROLE_SEPARATION violation, `from == to` (`bus-send`) |
+
+## Lifecycle of one message
+
+1. Builder commits, then `bus-send reviewer READY_FOR_REVIEW <sha> <task> <body>`.
+2. The file lands atomically in `.agent-bus/inbox/reviewer/`.
+3. Reviewer's `bus-wait reviewer` returns, printing the path and the JSON.
+   The file is still in the inbox.
+4. Reviewer runs `bus-read reviewer`: JSON + `STALE=…` are printed and the file
+   moves to `.agent-bus/archive/`. The inbox is now empty; the audit trail is not.
+5. Reviewer replies with `bus-send builder PASS|CHANGES_REQUESTED <sha> …`.
+6. Builder's `bus-wait builder` returns, and the cycle repeats.
+
+`archive/` is the append-only audit trail of everything both sides consumed.
+
+## Wake mechanism — stated honestly, per side
+
+The two sides do **not** wake the same way, and the two mechanisms are not
+equally proven.
+
+### Claude Code (builder) — verified mechanism
+
+Run the wait as a **backgrounded Bash tool call**:
+
+> Bash tool, `command: .agent-bus/bin/bus-wait builder 3600`, `run_in_background: true`
+
+The command keeps running across turns. When a message arrives, `bus-wait`
+exits, and the Claude Code harness re-invokes Claude with the completed
+command's output. **No human needs to type anything** for Claude to resume.
+This is a documented property of the harness's background-task notification,
+and the blocking/return behaviour of `bus-wait` itself was exercised by
+`test-bus.sh` (cases 5, 6, 9).
+
+### Codex (reviewer) — unverified beyond the command itself
+
+Codex must run the wait as a **blocking foreground command** in its terminal:
+
+```sh
+.agent-bus/bin/bus-wait reviewer 3600
+```
+
+When a message arrives the command prints it and returns 0; on timeout it
+returns 4.
+
+**Not verified by this implementation:** whether Codex automatically continues
+working after the foreground command returns, or whether a human must prompt it
+to look at the output. That depends entirely on Codex's own runtime and was
+never tested here. What *is* verified is that `bus-wait` blocks, returns
+promptly when a message is present, prints the message, and times out with exit
+4 — the same POSIX behaviour regardless of which tool invokes it. Treat
+"Codex auto-continues" as an assumption to prove on a live Codex terminal, not
+as a property of this bus.
+
+## Self-test
+
+```sh
+sh .agent-bus/test-bus.sh
+```
+
+Covers: round-trip in both directions, invalid role/type rejection,
+SHA_BINDING, ROLE_SEPARATION, prompt return when a message is waiting, timeout
+exit 4, empty-inbox exit 5, STALE flagging for HEAD / ancestor / non-ancestor
+shas, and crash-safety (the message survives `bus-wait`).
+
+The test runs against the real `.agent-bus` directories and **aborts** if
+either inbox is non-empty, so it cannot destroy in-flight traffic. It removes
+its own archived messages afterwards.

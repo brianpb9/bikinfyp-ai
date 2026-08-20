@@ -1,0 +1,61 @@
+#!/bin/sh
+# bus-wait <role> [timeout_seconds]
+#
+# Blocks until at least one message exists in .agent-bus/inbox/<role>/,
+# then prints the oldest message's path and its full JSON.
+#
+# It does NOT consume the message. Reading and consuming are separate steps
+# so that a crash between "woke up" and "handled it" cannot lose a message.
+#
+# Exit codes:
+#   0  a message is waiting (path + JSON printed)
+#   2  usage error / invalid role
+#   4  timeout expired with no message
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+BUS_DIR=$(dirname "$SCRIPT_DIR")
+
+ROLES="builder reviewer"
+POLL_SECONDS=2
+
+die() { code=$1; shift; printf 'bus-wait: %s\n' "$*" >&2; exit "$code"; }
+
+[ $# -ge 1 ] || die 2 "usage: bus-wait <role> [timeout_seconds]"
+
+ROLE=$1
+TIMEOUT=${2:-3600}
+
+case " $ROLES " in
+  *" $ROLE "*) ;;
+  *) die 2 "invalid role '$ROLE' (allowed: $ROLES)" ;;
+esac
+
+case "$TIMEOUT" in
+  '' | *[!0-9]*) die 2 "timeout must be a non-negative integer, got '$TIMEOUT'" ;;
+esac
+
+INBOX="$BUS_DIR/inbox/$ROLE"
+mkdir -p "$INBOX"
+
+oldest() {
+  # Filenames start with zero-padded unix-ms, so glob order == age order.
+  for f in "$INBOX"/*.json; do
+    [ -e "$f" ] || return 1
+    printf '%s' "$f"
+    return 0
+  done
+  return 1
+}
+
+DEADLINE=$(( $(date +%s) + TIMEOUT ))
+
+while :; do
+  if MSG=$(oldest); then
+    printf '%s\n' "$MSG"
+    cat "$MSG"
+    exit 0
+  fi
+  [ "$(date +%s)" -lt "$DEADLINE" ] || die 4 "timeout after ${TIMEOUT}s waiting for $ROLE"
+  sleep "$POLL_SECONDS"
+done
