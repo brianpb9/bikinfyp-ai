@@ -9,6 +9,7 @@ import crypto from "node:crypto";
 import sharp from "sharp";
 import { config, ensureDirs } from "./config";
 import { mediaStorage } from "./storage";
+import { klasifikasiGambar } from "./media/klasifikasi-gambar";
 
 export const ALLOWED_MIME: Record<string, string> = {
   "image/png": ".png",
@@ -69,6 +70,58 @@ export async function normalizeProductImageBuffer(data: Buffer): Promise<Buffer>
 
 /** Simpan foto ke storage produk. startIndex untuk APPEND ke produk yang sudah
  * punya foto (nama file tidak boleh bertabrakan dengan yang lama). */
+/**
+ * BATAS REFERENSI PER GENERASI — 7, terpisah dari batas unggah (MAX_IMAGES=8).
+ *
+ * Pengguna boleh menyimpan lebih banyak foto di pustakanya daripada yang
+ * dikirim ke model dalam satu generasi. Dua angka berbeda untuk dua hal
+ * berbeda: yang satu kapasitas simpan, yang satu beban satu permintaan render.
+ */
+export const MAKS_REFERENSI_PER_GENERASI = 7;
+
+/** Sidecar metadata di storage — kelayakan dihitung SEKALI saat unggah.
+ *
+ * Disimpan sebagai objek terpisah, bukan kolom DB: bagian pustaka aset ini
+ * sengaja tidak bergantung migrasi (migrasi masih terkunci sampai rekonsiliasi
+ * ledger). Kuncinya `<rel>.meta.json`, jadi ia ikut ke mana pun berkasnya.
+ */
+export interface MetaGambar {
+  sha256: string;
+  jenis: "product_photo" | "promotional_graphic";
+  layakReferensi: boolean;
+  rasioAreaTeks: number;
+  jumlahKata: number;
+  alasan: string;
+}
+
+export const relMeta = (rel: string) => `${rel}.meta.json`;
+
+export async function bacaMetaGambar(rel: string): Promise<MetaGambar | null> {
+  try {
+    const obj = await mediaStorage().get(relMeta(rel));
+    return obj ? (JSON.parse(obj.body.toString("utf8")) as MetaGambar) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Referensi yang BOLEH dikirim ke model, dari daftar rel apa adanya.
+ *
+ * Gambar tanpa sidecar (diunggah sebelum klasifikasi ada) diperlakukan LAYAK:
+ * menolaknya berarti mematikan produk untuk pustaka yang sudah terlanjur ada.
+ * Yang baru diunggah selalu punya sidecar.
+ */
+export async function referensiLayak(rels: string[]): Promise<string[]> {
+  const layak: string[] = [];
+  for (const rel of rels) {
+    if (layak.length >= MAKS_REFERENSI_PER_GENERASI) break;
+    const meta = await bacaMetaGambar(rel);
+    if (!meta || meta.layakReferensi) layak.push(rel);
+  }
+  return layak;
+}
+
 export async function saveProductImages(
   productId: string,
   blobs: { mime: string; data: Buffer }[],
@@ -92,7 +145,25 @@ export async function saveProductImages(
       /* kompresi gagal tidak fatal — file asli tetap dipakai */
     }
     fs.writeFileSync(abs, normalized ?? blobs[i].data);
+
+    // KELAYAKAN DIHITUNG SEKALI, DI SINI. Bukan saat render: di sana biayanya
+    // sudah keluar, dan jawabannya tidak akan berubah — gambarnya sama.
+    // Diklasifikasi dari berkas ASLI, sebelum normalisasi mengecilkannya:
+    // rasio area teks berubah kalau gambarnya diperkecil dulu.
+    const sha256 = crypto.createHash("sha256").update(blobs[i].data).digest("hex");
+    let meta: MetaGambar;
+    try {
+      const k = await klasifikasiGambar(abs);
+      meta = { sha256, jenis: k.jenis, layakReferensi: k.layakReferensi,
+        rasioAreaTeks: k.rasioAreaTeks, jumlahKata: k.jumlahKata, alasan: k.alasan };
+    } catch (err) {
+      // RAGU = PROMOSI, sama dengan klasifikasiGambar sendiri.
+      meta = { sha256, jenis: "promotional_graphic", layakReferensi: false,
+        rasioAreaTeks: 0, jumlahKata: 0, alasan: `Belum bisa diperiksa: ${(err as Error).message}` };
+    }
+
     await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
+    await mediaStorage().put(relMeta(rel), Buffer.from(JSON.stringify(meta)), "application/json");
     if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
     rels.push(rel);
   }

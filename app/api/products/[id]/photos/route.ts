@@ -9,6 +9,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { periksaLabelFoto, merekTerdaftar } from "@/lib/media/label-terbaca";
+import { referensiLayak, bacaMetaGambar } from "@/lib/product-images";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -103,6 +104,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const added = await saveProductImages(id, blobs, existing.length);
+
+    // WIZARD BUTUH MINIMAL SATU FOTO PRODUK YANG LAYAK JADI ACUAN.
+    //
+    // Grafis promosi boleh disimpan di pustaka — penjual memang memakainya
+    // untuk hal lain — tapi ia tidak pernah jadi referensi render. Yang
+    // ditolak di sini keadaan "produk ini tidak punya SATU pun foto yang bisa
+    // dipakai", karena itu berarti setiap render sesudahnya dijamin memakai
+    // bahan yang salah.
+    const semua = [...existing, ...added];
+    const layak = await referensiLayak(semua);
+    if (layak.length === 0) {
+      const metaBaru = await Promise.all(added.map((rel) => bacaMetaGambar(rel)));
+      const sebab = metaBaru.find((m) => m && !m.layakReferensi)?.alasan
+        ?? "Belum ada foto produk yang bisa dipakai jadi acuan.";
+      throw ERR.BAD_REQUEST(
+        `${sebab} Butuh minimal satu foto produk polos supaya videonya punya acuan yang benar.`,
+        "No reference-eligible product photo."
+      );
+    }
     const images = [...existing, ...added];
     await persistImages(user.id, id, images);
     await auditBoth(user.id, "product.photos_added", id, { added: added.length, total: images.length });
