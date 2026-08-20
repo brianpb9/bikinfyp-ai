@@ -19,11 +19,11 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 | E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **PARTIAL** | `periksaLabelFoto`+`merekTerdaftar` (:91), `referensiLayak` (:116). TIGA lubang: gerbang label hanya jalan bila `existing.length===0` (:84); `periksaLabelFoto` FAIL-OPEN saat OCR gagal (`label-terbaca.ts:188` mengembalikan `terbaca:true`); hash sidecar tidak pernah diverifikasi ulang terhadap isi berkas |
 | E5 | `app/api/products/[id]/photos/route.ts:142` | DELETE foto (retail) | **UNGATED** | tidak ada — bisa menghapus satu-satunya foto layak |
 | E6 | `app/api/dashboard/campaign/product/route.ts:45` | POST produk org | **UNGATED** | tidak ada; `downloadProductImages` → sidecar tidak ditulis |
-| E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | hanya mengubah `name`/`brand_brief` (:113,:117) — TIDAK menyentuh `raw_meta.brand`. Defect sebenarnya di jalur org: `raw_meta.brand` TIDAK PERNAH DIISI, padahal worker hanya mempercayai field itu (`merekTepercaya`) |
+| E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | mengubah `name`, `price`, **`category`**, visual desc, `brand_brief`, promo, claims (:113 dst) TANPA revalidasi. TIDAK menyentuh `raw_meta.brand`. Defect kedua: jalur org TIDAK PERNAH mengisi `raw_meta.brand`, padahal worker hanya mempercayai field itu (`merekTepercaya`) |
 | E8 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:26` | POST add-photo (org) | **PARTIAL** | `periksaLabelFoto` (:52) TANPA argumen `merekTerdaftar` → `cocokMerek` tidak pernah diperiksa; `saveUniqueProductImages` (:59) TIDAK menulis sidecar |
 | E9 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:84` | DELETE foto (org) | **UNGATED** | tidak ada |
 | W1 | `lib/postgres/worker.ts:321-323` | worker PG pilih `images[0]` | **UNGATED** | tidak ada; `personSafeReferencePhotos` (:338) hanya soal orang |
-| W2 | `lib/worker.ts:104-109` | worker inline/SQLite pilih `images[0]` | **UNGATED** | reachable HANYA pada mode dev/SQLite; produksi menolak inline worker. Tetap wajib diuji (C3, C8) |
+| W2 | `lib/worker.ts:104-109` | worker inline/SQLite pilih `images[0]` | **UNGATED** | **anggap REACHABLE sampai ditutup struktural**: `enqueueJob`/`enqueueJobResume` (`lib/job-queue.ts:67`) masih bisa memilih inline tanpa memanggil `assertQueueConfiguration`. Wajib diuji C1, C3, C8 |
 | A1 | `app/api/jobs/route.ts:29,62-67` | admission retail + payload | **UNGATED** | payload tanpa validasi gambar |
 | A2 | `app/api/dashboard/matrix/route.ts:93,106` | admission matrix | **UNGATED** | cek gambar hanya "ada/tidak" |
 | A3 | `app/api/dashboard/campaign/generate/route.ts:44-49` | generate campaign | **UNGATED** | cek `length===0` saja |
@@ -52,8 +52,9 @@ Work order menyebut tiga bypass (create utama, extract, worker). Yang nyata:
    `backfillMetaGambar` SAAT INI tidak pernah dipanggil pada jalur org: satu-
    satunya pemanggilnya ada di dalam `referensiLayak`, yang jalur org tidak
    pernah panggil.
-4. **PATCH produk (E3, E7) bisa mengganti nama dan brand** — dua input yang
-   dibaca gerbang — tanpa revalidasi apa pun.
+4. **PATCH produk (E3, E7) bisa mengganti nama DAN kategori** — dua input yang
+   dibaca gerbang — tanpa revalidasi. E7 TIDAK mengubah `raw_meta.brand`;
+   masalah brand di jalur org adalah field itu tidak pernah diisi sejak awal.
 5. **DELETE foto (E5, E9) bisa menyisakan daftar berisi promo saja.**
 6. **Gerbang label E4 hanya jalan pada foto PERTAMA** (`existing.length===0`),
    jadi banner yang diunggah sebagai foto kedua tidak pernah diperiksa label.
@@ -63,7 +64,7 @@ Work order menyebut tiga bypass (create utama, extract, worker). Yang nyata:
 Kolom status: RED = test ditulis dan gagal karena invariant belum ada.
 Semua masih `PENDING` — belum satu pun test ditulis.
 
-**JANGAN membuat Cartesian 13 x 17.** Arsitektur test berlapis:
+**JANGAN membuat matriks Cartesian** (kasus x seluruh entrypoint). Arsitektur test berlapis:
 1. unit contract untuk invariant pusat;
 2. integration per KELUARGA ingestion/mutation (bukan per route);
 3. test di tiap admission/provider-consuming boundary;
@@ -79,7 +80,7 @@ Semua masih `PENDING` — belum satu pun test ditulis.
 | C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` | PENDING |
 | C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` | PENDING |
 | C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` | PENDING |
-| C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,E6,E8,**A1..A5**,W1,W2 | fail-closed sebelum hold/enqueue/provider; tanpa sisa state invalid persisten | `EVIDENCE_INVALID` | PENDING |
+| C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,E6,E8,**A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` | PENDING |
 | C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` | PENDING |
 | C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` | PENDING |
 | C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | PENDING |
@@ -89,6 +90,19 @@ Semua masih `PENDING` — belum satu pun test ditulis.
 Tiap penolakan wajib membuktikan: reason code stabil, pesan bisa ditindaklanjuti,
 **nol** credit hold/capture, **nol** enqueue, **nol** panggilan provider,
 **nol** deliverable, **nol** efek storage.
+
+## C-bis. KONTRAK HASH (ditetapkan, sudah diimplementasikan)
+
+SHA-256 dihitung dari **bytes yang benar-benar disimpan di storage**, bukan
+unggahan asli sebelum normalisasi WebP.
+
+Cacat yang ditutup: `lib/product-images.ts` meng-hash `blobs[i].data` sementara
+yang ditulis adalah `normalized ?? blobs[i].data`. Selama normalisasi berhasil
+— kasus normal — sidecar membawa hash yang tidak pernah cocok dengan berkasnya,
+sehingga verifikasi hash C8 akan menolak SETIAP foto yang sah.
+
+Test regresi `tests/kontrak-hash-sidecar.test.ts`, dibuktikan merah tanpa
+perbaikan (`git stash` → 0 lulus / 1 gagal) dan hijau dengannya.
 
 ## D. Yang BELUM diverifikasi
 

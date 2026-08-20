@@ -203,9 +203,23 @@ export async function saveProductImages(
 
     // KELAYAKAN DIHITUNG SEKALI, DI SINI. Bukan saat render: di sana biayanya
     // sudah keluar, dan jawabannya tidak akan berubah — gambarnya sama.
-    // Diklasifikasi dari berkas ASLI, sebelum normalisasi mengecilkannya:
-    // rasio area teks berubah kalau gambarnya diperkecil dulu.
-    const sha256 = crypto.createHash("sha256").update(blobs[i].data).digest("hex");
+    //
+    // KONTRAK HASH: sha256 dihitung dari BYTES YANG BENAR-BENAR DISIMPAN,
+    // bukan dari unggahan asli.
+    //
+    // Cacat yang ditutup (ditemukan review independen): versi sebelumnya
+    // meng-hash `blobs[i].data` sementara yang ditulis ke storage adalah
+    // `normalized ?? blobs[i].data` — WebP hasil normalisasi. Selama
+    // normalisasi berhasil (kasus normal), sidecar membawa hash yang TIDAK
+    // PERNAH cocok dengan berkasnya. Begitu verifikasi hash dinyalakan di
+    // P0-02, setiap foto yang sah akan ditolak sebagai bukti korup.
+    //
+    // Komentar lama di sini juga keliru: ia menyebut klasifikasi dilakukan
+    // atas berkas ASLI, padahal klasifikasiGambar(abs) membaca berkas yang
+    // SUDAH dinormalisasi. Perilakunya tidak diubah di sini — yang diperbaiki
+    // hanya hash dan keterangannya, supaya keduanya menggambarkan kenyataan.
+    const bytesTersimpan = normalized ?? blobs[i].data;
+    const sha256 = crypto.createHash("sha256").update(bytesTersimpan).digest("hex");
     let meta: MetaGambar;
     try {
       const k = await klasifikasiGambar(abs);
