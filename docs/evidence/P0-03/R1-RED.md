@@ -1,7 +1,14 @@
 # P0-03 RED WAVE R1 — bukti MERAH sebelum perbaikan
 
 BASE_SHA=66b4b338792a34890134c2450c9e78a20703516f (pendek: 66b4b33)
-AMEND_BASE_SHA=6623c4fdb07c19da098b84104650c48f5c74f65d (pendek: 6623c4f)
+AMEND_BASE_SHA=39d363e6980ea792f98d9bcb1446242bee299ffe (pendek: 39d363e)
+
+KOREKSI SHA (P0-A, 21 Agu — temuan Reviewer). Baris ini SEBELUMNYA menyebut
+6623c4f sebagai basis jalan yang diamandemen. Itu salah dan bisa diperiksa:
+`git show --stat 6623c4f` hanya mengubah SATU baris dokumen ini; berkas test
+pada commit itu masih versi R1 awal (15 test). Jalan 19-test hanya mungkin di
+39d363e — commit yang benar-benar berisi test itu. Bukti yang menunjuk SHA yang
+salah adalah bukti yang tidak bisa direproduksi siapa pun.
 BRANCH=work/p0-product-truth-20260820
 TANGGAL=2026-08-20 · diamandemen 2026-08-21
 LINGKUP=C8 (bukti hilang/korup/tipe salah/basi/hash beda) + C1 (foto#1 banner, foto#2 packshot) + W1/W2
@@ -16,7 +23,8 @@ SCRIPT_LLM=0 npx tsx --test tests/product-truth-evidence.test.ts tests/product-t
 | Jalan | Hasil |
 |---|---|
 | R1 awal (di 66b4b33) | 15 test · 5 lulus · 10 gagal · 0 skip |
-| **R1 diamandemen (di 6623c4f)** | **19 test · 5 lulus · 14 gagal · 0 skip · 0 cancelled · 0 todo** |
+| **R1 diamandemen (di 39d363e)** | **19 test · 5 lulus · 14 gagal · 0 skip · 0 cancelled · 0 todo** |
+| **R2 kontrak diperbaiki (di P0A_TEST_SHA)** | lihat `docs/evidence/P0-03/R2A-KONTRAK.md` |
 
 Jalan yang diamandemen dijalankan dua kali berturut-turut, hasilnya identik.
 
@@ -266,4 +274,12 @@ saat gerbang bukti menolak — kebalikan dari yang benar.
 
 RED_TEST_SHA=f2ad65bbe9e31b75740690f0cbe86f5128ea2b5b (R1 awal, 15 test)
 R1_AMENDED_TEST_SHA=39d363e6980ea792f98d9bcb1446242bee299ffe
-R1_AMENDED_EVIDENCE_SHA=<commit ini sendiri — commit berikutnya sesudah R1_AMENDED_TEST_SHA>
+R1_AMENDED_EVIDENCE_SHA=bf22341305edcc615565b91eae9ccda18ecfb842
+
+(Placeholder `<commit ini sendiri ...>` yang lama sudah diikat ke SHA nyata:
+bf22341 adalah commit yang menulis R1_AMENDED_TEST_SHA ke berkas ini.)
+
+LANJUTAN: kontrak di dokumen ini DIPERBAIKI di gelombang P0-A. Lihat
+`docs/evidence/P0-03/R2A-KONTRAK.md` untuk enam perbaikan kontrak, alasannya,
+dan hitungan merah yang baru. Bagian "Daftar test" di atas menggambarkan
+keadaan pada 39d363e, bukan keadaan sekarang.

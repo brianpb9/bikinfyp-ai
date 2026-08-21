@@ -1,6 +1,6 @@
-// P0-03 RED WAVE R1 — kontrak BUKTI (C8) di pusat: referensiLayak().
+// P0-03 RED WAVE R2 (P0-A) — kontrak BUKTI (C8) di pusat: referensiLayak().
 //
-// STATUS YANG DIHARAPKAN: MERAH pada 66b4b33.
+// STATUS YANG DIHARAPKAN: MERAH pada 0c443ff.
 // Kode sekarang FAIL-OPEN: `referensiLayak` mendorong rel ke daftar layak
 // setiap kali sidecar tidak ada / tidak terbaca (`if (!meta || meta.layakReferensi)`,
 // lib/product-images.ts:144), dan ia TIDAK PERNAH memverifikasi ulang sha256
@@ -9,8 +9,27 @@
 //
 // Yang diuji di sini adalah KEPUTUSAN, bukan implementasi: bukti hilang /
 // korup / basi / hash beda => gambar TIDAK boleh keluar dari referensiLayak.
-// Bagaimana caranya kode nanti menolak (reason code EVIDENCE_INVALID, daftar
-// kosong, throw) urusan implementasi; test menuntut minimal "tidak lolos".
+//
+// KONTRAK BUKTI TIDAK SAH — DIPILIH SATU, BUKAN TIGA (temuan Reviewer 21 Agu).
+//
+// Versi R1 menulis "daftar kosong, throw, atau reason code — urusan
+// implementasi". Itu bukan kontrak, itu tiga kontrak yang saling bertabrakan:
+// pemanggil yang menyiapkan try/catch akan meledak kalau resolver memilih
+// daftar kosong, dan pemanggil yang memeriksa `.length` akan melewatkan
+// throw. Ditetapkan sekarang, dan seluruh test + pemanggil diselaraskan ke ini:
+//
+//   1. RESOLVER TIDAK PERNAH MELEMPAR untuk bukti tidak sah. Bukti tidak sah
+//      adalah keadaan data yang normal dan terduga, bukan kondisi luar biasa.
+//      Yang boleh melempar hanya kegagalan infrastruktur (storage mati).
+//   2. Bukti tidak sah = gambarnya TIDAK muncul di daftar tersetujui.
+//      `referensiLayak([...])` mengembalikan daftar tanpa gambar itu; kalau
+//      tidak ada satu pun yang sah, hasilnya `[]`.
+//   3. Alasan penolakan per gambar tetap dilaporkan (reason code) supaya
+//      pemanggil bisa memberi pesan yang bisa ditindaklanjuti — tapi ia
+//      dilaporkan sebagai DATA, bukan sebagai exception.
+//   4. GAGAL-TERTUTUP ADALAH TUGAS PEMANGGIL. Worker yang tidak mendapat
+//      referensi tersetujui wajib berhenti SEBELUM langkah berbayar. Itu
+//      diuji di tests/product-truth-worker-reference.test.ts, bukan di sini.
 //
 // LARANGAN YANG DIPATUHI: nol jaringan, nol provider, nol OCR/ffmpeg nyata,
 // nol DB produksi. PATH sengaja dikosongkan (lihat catatan di bawah) supaya
@@ -303,6 +322,57 @@ test("C8: versi bukti basi -> tidak boleh lolos", async () => {
       "yang diperketat tidak akan pernah berlaku surut selama versi tidak diperiksa."
   );
 });
+
+// VERSI BUKTI YANG TIPENYA SALAH — tiga bentuk, satu akar.
+//
+// Ditambahkan atas temuan Reviewer 21 Agu. Test versi R1 hanya menguji versi
+// HILANG dan versi BASI, jadi implementasi yang memeriksa versinya dengan
+// `meta.versiBukti >= VERSI_BUKTI_TERKINI` saja akan hijau — padahal:
+//
+//     "1" >= 1   -> true   (string dipaksa jadi angka)
+//     1.5 >= 1   -> true   (bukan integer, tapi lolos perbandingan)
+//     null >= 1  -> false  (kebetulan tertolak, bukan karena diperiksa)
+//
+// Kontraknya sudah dikunci sebagai INTEGER (lihat VERSI_BUKTI_TERKINI di atas),
+// jadi perbandingan angka saja tidak cukup: bentuknya harus diperiksa. `null`
+// ikut diuji supaya alasan penolakannya benar dan tetap benar kalau nilai
+// terkini suatu saat naik — bukan lulus karena kebetulan coercion-nya kecil.
+
+const versiTakSah: [string, unknown][] = [
+  ['versi bukti STRING "1" (bukan integer)', "1"],
+  ["versi bukti PECAHAN 1.5 (bukan integer)", 1.5],
+  ["versi bukti null", null],
+];
+
+for (const [judul, nilai] of versiTakSah) {
+  test(`C8: ${judul} -> tidak boleh lolos`, async () => {
+    const sidecar = Buffer.from(
+      JSON.stringify({
+        sha256: sha(PACKSHOT),
+        jenis: "product_photo",
+        layakReferensi: true,
+        rasioAreaTeks: 0.004,
+        jumlahKata: 2,
+        alasan: "foto produk",
+        versiBukti: nilai,
+      })
+    );
+    const tulisan = pasang([
+      [relFoto(1), PACKSHOT],
+      [relSidecar(1), sidecar],
+    ]);
+    const layak = await referensiLayak([relFoto(1)]);
+    assert.deepEqual(
+      layak,
+      [],
+      `EVIDENCE_INVALID: sidecar dengan ${judul} tetap diterima (${JSON.stringify(layak)}). ` +
+        `Kontraknya integer ${VERSI_BUKTI_TERKINI}; ${JSON.stringify(nilai)} bukan integer, jadi ` +
+        "bukti ini tidak bisa dipetakan ke aturan klasifikasi mana pun. Perbandingan angka saja " +
+        "(`versiBukti >= 1`) TIDAK cukup — periksa bentuknya."
+    );
+    assert.deepEqual(tulisan, [], `jalur baca menulis bukti baru saat versi tidak sah: ${JSON.stringify(tulisan)}`);
+  });
+}
 
 test("C8: sha256 sidecar beda dari bytes tersimpan -> tidak boleh lolos", async () => {
   // Skenario nyata: berkas ditukar/ditimpa sesudah klasifikasi; sidecar lama

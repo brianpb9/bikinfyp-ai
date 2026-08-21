@@ -90,31 +90,64 @@ test("gagal memeriksa = dianggap PROMOSI, bukan diloloskan", async () => {
   assert.equal(h.layakReferensi, false);
 });
 
-// BACKFILL MALAS — lubang warisan tertutup saat dipakai, bukan sekaligus.
-test("gambar lama tanpa sidecar diklasifikasi saat hendak jadi referensi", async (t) => {
-  if (!punyaOcr()) return t.skip("tesseract/ffmpeg tidak ada");
-  const banner = path.join(R, "02-banner-promo-JANGAN-DIPAKAI.jpeg");
-  if (!fs.existsSync(banner)) return t.skip("fixture tidak ada");
-
+// KARANTINA MENGGANTIKAN BACKFILL MALAS (P0-03, 21 Agu).
+//
+// Test ini DULU menuntut kebalikannya: gambar warisan tanpa sidecar wajib
+// diklasifikasi SAAT hendak dipakai jadi referensi, lalu sidecarnya ditulis
+// dari dalam jalur baca. Itu kebijakan yang salah, dan kontrak bukti P0-03
+// sekarang melarangnya:
+//
+//   - bukti yang dicetak DI TENGAH JALUR RENDER tidak pernah dilihat siapa
+//     pun. Tidak ada rantai kustodi: ia menempel pada bytes apa pun yang
+//     kebetulan ada di storage detik itu;
+//   - di deployment produksi, jalur baca itu bisa berjalan di runtime yang
+//     TIDAK punya ffmpeg/tesseract. Klasifikasi gagal, `klasifikasiGambar`
+//     memvonis "promosi" (RAGU = PROMOSI), dan vonis palsu itu DIBEKUKAN jadi
+//     sidecar permanen — foto produk yang sah dicap promosi selamanya oleh
+//     mesin yang kebetulan tidak punya OCR;
+//   - dan menulis dari jalur baca membuat operasi baca tidak lagi idempoten.
+//
+// Kebijakan sekarang: gambar tanpa bukti sah DIKARANTINA. Ia tidak layak jadi
+// referensi, dan jalur baca TIDAK menulis apa pun. Bukti hanya boleh dicetak
+// di jalur ingestion/revalidasi yang terbukti punya binernya — lihat
+// docs/evidence/P0-03/R1-RED.md.
+//
+// Sengaja TANPA fixture dan TANPA biner: bytes sintetis sudah cukup, karena
+// yang diuji adalah "tidak ada tulisan dan tidak ada kelulusan", bukan vonis
+// classifier. Jadi test ini deterministik di mesin mana pun — termasuk mesin
+// yang tidak punya OCR, yang justru mesin paling penting untuk kasus ini.
+test("KARANTINA: gambar warisan tanpa sidecar tidak layak, dan jalur baca TIDAK menulis bukti", async () => {
   const { setMediaStorageForTests } = await import("../lib/storage");
   const { referensiLayak, bacaMetaGambar, relMeta } = await import("../lib/product-images");
 
-  // Storage palsu: satu gambar warisan, TANPA sidecar.
-  const isi = new Map<string, Buffer>([["uploads/lama/0.jpeg", fs.readFileSync(banner)]]);
+  const rel = "uploads/lama/0.jpeg";
+  const isi = new Map<string, Buffer>([[rel, Buffer.from("BYTES-WARISAN-TANPA-BUKTI")]]);
+  const tulisan: string[] = [];
   setMediaStorageForTests({
-    get: async (rel: string) => (isi.has(rel) ? { body: isi.get(rel)!, size: isi.get(rel)!.length } : null),
-    put: async (rel: string, body: Buffer) => { isi.set(rel, body); },
+    get: async (r: string) => (isi.has(r) ? { body: isi.get(r)!, size: isi.get(r)!.length } : null),
+    stat: async (r: string) => (isi.has(r) ? { size: isi.get(r)!.length } : null),
+    put: async (r: string, body: Buffer) => { tulisan.push(r); isi.set(r, body); },
+    delete: async (r: string) => { isi.delete(r); },
+    materialize: async () => { throw new Error("materialize() tidak boleh dipanggil jalur kelayakan"); },
   } as never);
 
   try {
-    assert.equal(await bacaMetaGambar("uploads/lama/0.jpeg"), null, "harusnya belum ada sidecar");
-    const layak = await referensiLayak(["uploads/lama/0.jpeg"]);
-    // Banner warisan ini sekarang KETAHUAN dan tidak dipakai.
-    assert.deepEqual(layak, [], "banner warisan tetap lolos jadi referensi");
-    // Dan sidecarnya sudah ditulis — pemakaian berikutnya tidak perlu OCR lagi.
-    assert.ok(isi.has(relMeta("uploads/lama/0.jpeg")), "sidecar tidak ditulis; lubangnya tidak pernah tertutup");
-    const meta = await bacaMetaGambar("uploads/lama/0.jpeg");
-    assert.equal(meta?.jenis, "promotional_graphic");
+    assert.equal(await bacaMetaGambar(rel), null, "harusnya belum ada sidecar");
+
+    const layak = await referensiLayak([rel]);
+    assert.deepEqual(layak, [], "gambar warisan tanpa bukti tetap lolos jadi referensi — karantina tidak bekerja");
+
+    assert.deepEqual(
+      tulisan,
+      [],
+      `jalur baca MENULIS bukti baru: ${JSON.stringify(tulisan)}. Bukti yang dicetak sendiri oleh ` +
+        "pemakainya tidak punya rantai kustodi, dan di runtime tanpa OCR ia membekukan vonis palsu."
+    );
+    assert.equal(
+      await bacaMetaGambar(rel),
+      null,
+      `sidecar ${relMeta(rel)} muncul sesudah pembacaan — karantina berubah jadi backfill diam-diam`
+    );
   } finally {
     setMediaStorageForTests(undefined);
   }

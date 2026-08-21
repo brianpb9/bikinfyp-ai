@@ -1,7 +1,9 @@
 // P0-03 RED WAVE R1 (diamandemen) — W2: worker inline/SQLite (lib/worker.ts)
 // memilih referensi.
 //
-// STATUS YANG DIHARAPKAN: MERAH pada 6623c4f.
+// STATUS YANG DIHARAPKAN: MERAH pada 0c443ff (dan pada 39d363e, commit yang
+// benar-benar berisi versi R1 yang diamandemen — BUKAN 6623c4f, yang hanya
+// mengubah satu baris dokumen bukti).
 // lib/worker.ts:104-110 mengambil `images[0]` mentah — foto PERTAMA, apa pun
 // isinya — lalu me-materialize-nya sebagai referensi utama. Tidak ada satu pun
 // pembacaan sidecar, tidak ada verifikasi hash, tidak ada gerbang kelayakan.
@@ -298,19 +300,43 @@ test("W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize s
 
 // ----------------------------------------------------- kebersihan sesudah halt
 
-test("W2 kontrol positif: sesudah halt — nol output/capture/regen/provider/put/jaringan", async () => {
+test("W2 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih", async () => {
   // Kontrol positif untuk assertNolEfekSamping itu sendiri: kalau helper ini
   // hijau di mana-mana hanya karena ia tidak memeriksa apa pun, test ini pun
   // tidak akan pernah bisa merah. Ia dijalankan pada job yang BENAR-BENAR
   // diproses worker sampai halt, bukan job kosong.
+  //
+  // FIXTURE DIPERBAIKI (temuan Reviewer 21 Agu). Versi R1 memakai foto TANPA
+  // sidecar sambil menuntut `materializeCalls.length > 0`. Itu hijau hari ini
+  // hanya karena worker belum memeriksa bukti sama sekali — dan begitu
+  // resolver ketat menyala, test ini akan MERAH karena alasan yang justru
+  // BENAR (tidak ada bukti -> tidak boleh materialize), persis seperti yang
+  // dituntut dua test C8 di atas. Kontrol positif yang menuntut keberhasilan
+  // wajib membawa bukti yang sah; kalau tidak, ia menekan implementasi untuk
+  // melemahkan gerbangnya sendiri.
+  //
+  // Sekarang fotonya membawa sidecar SAH (sha256 cocok dengan bytes tersimpan,
+  // versiBukti terkini, layakReferensi true), jadi jalur yang diuji adalah:
+  // bukti sah -> referensi tersetujui -> materialize -> storage mengembalikan
+  // null -> halt bersih sebelum langkah berbayar.
   const relFoto = "uploads/w2-halt/0.webp";
-  const spy = storageSpy(new Map<string, Buffer>([[relFoto, PACKSHOT]]));
+  const spy = storageSpy(
+    new Map<string, Buffer>([
+      [relFoto, PACKSHOT],
+      [`${relFoto}.meta.json`, sidecar(PACKSHOT, true)],
+    ])
+  );
   setMediaStorageForTests(spy.storage);
 
   const { jobId } = siapkanJob([relFoto]);
   await processJob(jobId);
 
-  assert.ok(spy.materializeCalls.length > 0, "worker tidak sampai menyentuh storage — fixture tidak menguji apa pun");
+  assert.deepEqual(
+    spy.materializeCalls,
+    [relFoto],
+    "bukti SAH harus sampai ke materialize tepat sekali — kalau ini merah, gerbangnya terlalu " +
+      "ketat (menolak bukti yang sah), bukan terlalu longgar"
+  );
   assertNolEfekSamping(jobId, spy, "W2 halt");
 
   // Refund TIDAK dilarang: job yang gagal wajib boleh mengembalikan hold-nya.
