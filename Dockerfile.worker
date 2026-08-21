@@ -47,6 +47,12 @@ COPY --chown=racun:racun knowledge ./knowledge
 COPY --chown=racun:racun assets/fonts ./assets/fonts
 COPY --chown=racun:racun assets/models ./assets/models
 COPY --chown=racun:racun assets/music ./assets/music
+# assets/probe WAJIB ikut: probe kapabilitas klasifikasi
+# (lib/media/kapabilitas-klasifikasi.ts) membaca fixture berteks dari sini untuk
+# membuktikan OCR benar-benar bekerja di runtime ini. Tanpa berkas itu probe
+# melaporkan "tidak mampu" pada container yang sebenarnya sehat — laporan palsu
+# ke arah yang berlawanan, tapi tetap laporan palsu.
+COPY --chown=racun:racun assets/probe ./assets/probe
 COPY --chown=racun:racun tsconfig.json ./
 
 # STORAGE_MODE=r2 is required by production config; this writable cache is

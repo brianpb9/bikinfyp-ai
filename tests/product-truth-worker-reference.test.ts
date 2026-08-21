@@ -123,7 +123,7 @@ const segmen = [
 ];
 
 /** Satu produk + skrip + job QUEUED, siap diproses worker inline. */
-function siapkanJob(images: string[]): { jobId: string; productId: string } {
+function siapkanJob(images: string[], tier = "silent_caption"): { jobId: string; productId: string } {
   const productId = uuid();
   db.prepare(
     "INSERT INTO products (id, user_id, source_url, name, price_idr, category, images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
@@ -138,8 +138,8 @@ function siapkanJob(images: string[]): { jobId: string; productId: string } {
   const jobId = uuid();
   db.prepare(
     `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, state, created_at, state_changed_at)
-     VALUES (?,?,?,NULL,?,'hands_only','silent_caption',15,'QUEUED',?,?)`
-  ).run(jobId, userId, productId, scriptId, now(), now());
+     VALUES (?,?,?,NULL,?,'hands_only',?,15,'QUEUED',?,?)`
+  ).run(jobId, userId, productId, scriptId, tier, now(), now());
   db.prepare("UPDATE scripts SET job_id = ? WHERE id = ?").run(jobId, scriptId);
   return { jobId, productId };
 }
@@ -296,6 +296,143 @@ test("W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize s
     ["FAILED", "REFUNDED"].includes(job.state),
     `job tanpa bukti harus berakhir gagal-tertutup, bukan ${job.state}`
   );
+});
+
+// ------------------------------------------- bytes berubah sesudah disetujui
+
+/**
+ * TOCTOU — bytes yang DIKIRIM wajib sama dengan yang DISETUJUI.
+ *
+ * Temuan Reviewer 21 Agu. Resolver memverifikasi bytes lewat `get()` dan
+ * mengembalikan sha256-nya, tapi `materialize()` MENGAMBIL OBJEKNYA LAGI — di
+ * R2 itu GET kedua ke jaringan. Kalau objeknya berubah di antara dua pembacaan,
+ * provider menerima bytes yang tidak pernah disetujui siapa pun, dan seluruh
+ * rantai bukti di atasnya jadi hiasan.
+ *
+ * Storage di bawah ini memodelkan persis jendela itu: `get()` mengembalikan
+ * bytes yang buktinya sah, `materialize()` menuliskan bytes LAIN.
+ */
+test("W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhenti sebelum berbayar", async () => {
+  const relFoto = "uploads/w2-toctou/0.webp";
+  const isi = new Map<string, Buffer>([
+    [relFoto, PACKSHOT],
+    [`${relFoto}.meta.json`, sidecar(PACKSHOT, true)],
+  ]);
+  const materializeCalls: string[] = [];
+  const putCalls: string[] = [];
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "w2-toctou-"));
+  setMediaStorageForTests({
+    async put(key: string, body: Buffer) {
+      putCalls.push(key);
+      isi.set(key, body);
+    },
+    async delete(key: string) {
+      isi.delete(key);
+    },
+    async get(key: string) {
+      const body = isi.get(key);
+      return body ? { body, size: body.length } : null;
+    },
+    async stat(key: string) {
+      const body = isi.get(key);
+      return body ? { size: body.length } : null;
+    },
+    async materialize(key: string) {
+      materializeCalls.push(key);
+      // Bytes DITUKAR di jendela antara get() dan materialize().
+      const abs = path.join(tmp, path.basename(key));
+      fs.writeFileSync(abs, Buffer.from("BYTES-DITUKAR-SESUDAH-DISETUJUI"));
+      return abs;
+    },
+  } as never);
+
+  try {
+    const { jobId } = siapkanJob([relFoto]);
+    await processJob(jobId);
+
+    assertNolEfekSamping(jobId, { putCalls }, "W2 TOCTOU");
+    const job = db.prepare("SELECT state FROM jobs WHERE id = ?").get(jobId) as { state: string };
+    assert.ok(
+      ["FAILED", "REFUNDED"].includes(job.state),
+      `bytes yang berubah sesudah disetujui tetap diteruskan; job berakhir ${job.state}`
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+// ------------------------------------------- batas referensi per generasi
+
+/**
+ * DELAPAN foto tersetujui, TUJUH referensi terkirim.
+ *
+ * `MAKS_REFERENSI_PER_GENERASI = 7` adalah kontrak TERPISAH dari
+ * `MAX_IMAGES = 8` (batas unggah). `slice(1, MAX_IMAGES)` menghasilkan primary
+ * + tujuh = DELAPAN referensi per generasi — melewati kontraknya sendiri, di
+ * kedua worker. Temuan Reviewer 21 Agu.
+ */
+test("W2: delapan foto tersetujui menghasilkan paling banyak TUJUH referensi", async () => {
+  const dasar = "uploads/w2-delapan";
+  const isi = new Map<string, Buffer>();
+  const rels: string[] = [];
+  for (let i = 0; i < 8; i++) {
+    const rel = `${dasar}/${i}.webp`;
+    const bytes = Buffer.from(`BYTES-PACKSHOT-SAH-${i}`);
+    isi.set(rel, bytes);
+    isi.set(`${rel}.meta.json`, sidecar(bytes, true));
+    rels.push(rel);
+  }
+  const materializeCalls: string[] = [];
+  const putCalls: string[] = [];
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "w2-delapan-"));
+  setMediaStorageForTests({
+    async put(key: string, body: Buffer) {
+      putCalls.push(key);
+      isi.set(key, body);
+    },
+    async delete(key: string) {
+      isi.delete(key);
+    },
+    async get(key: string) {
+      const body = isi.get(key);
+      return body ? { body, size: body.length } : null;
+    },
+    async stat(key: string) {
+      const body = isi.get(key);
+      return body ? { size: body.length } : null;
+    },
+    async materialize(key: string) {
+      materializeCalls.push(key);
+      // Bytes yang BENAR, supaya pemeriksaan hash lolos dan jalurnya berlanjut
+      // sampai batas referensi benar-benar terpakai.
+      const body = isi.get(key);
+      if (!body) return null;
+      const abs = path.join(tmp, path.basename(key));
+      fs.writeFileSync(abs, body);
+      return abs;
+    },
+  } as never);
+
+  try {
+    // Tier bersuara supaya cabang referensi tambahan benar-benar dilewati.
+    const { jobId } = siapkanJob(rels, "high_quality");
+    await processJob(jobId);
+
+    assert.ok(materializeCalls.length > 1, "cabang referensi tambahan tidak pernah dilewati — fixture salah");
+    assert.ok(
+      materializeCalls.length <= 7,
+      `worker meminta ${materializeCalls.length} referensi (${JSON.stringify(materializeCalls)}). ` +
+        "MAKS_REFERENSI_PER_GENERASI=7 menghitung primary + tambahan; delapan berarti kontraknya " +
+        "sendiri dilewati."
+    );
+    assert.ok(
+      !materializeCalls.includes(`${dasar}/7.webp`),
+      "foto kedelapan ikut diminta — batas generasi tidak diterapkan"
+    );
+    assertNolEfekSamping(jobId, { putCalls }, "W2 delapan foto");
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
 });
 
 // ----------------------------------------------------- kebersihan sesudah halt

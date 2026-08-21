@@ -33,6 +33,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 process.env.RACUN_NO_DOTENV = "1";
 
@@ -70,11 +71,20 @@ const FFMPEG_OK = (asli: string) =>
 const FFMPEG_VERSI_SAJA =
   `case "$1" in\n  -version) echo "ffmpeg palsu"; exit 0 ;;\nesac\nexit 1\n`;
 
-/** ffprobe palsu: menjawab -version, DAN mengeluarkan dimensi sungguhan. */
+/**
+ * ffprobe palsu: menjawab -version, DAN mengeluarkan dimensi sungguhan.
+ * 1440x180 = dimensi fixture smoke sesudah diskalakan; kalau ia berbohong
+ * (mis. mengembalikan kosong), classifier jatuh ke cadangan 1440x1440 dan
+ * rasio area teks anjlok ~8x — itu yang diuji kontrol negatif di bawah.
+ */
 const FFPROBE_OK =
   `case "$1" in\n  -version) echo "ffprobe palsu"; exit 0 ;;\nesac\n` +
   'for a in "$@"; do masuk="$a"; done\n' +
-  'if [ ! -s "$masuk" ]; then exit 66; fi\necho 1440,810\nexit 0\n';
+  'if [ ! -s "$masuk" ]; then exit 66; fi\necho 1440,180\nexit 0\n';
+
+/** Lulus -version dan exit 0, tapi outputnya KOSONG — classifier pakai cadangan. */
+const FFPROBE_KOSONG =
+  `case "$1" in\n  -version) echo "ffprobe palsu"; exit 0 ;;\nesac\nexit 0\n`;
 
 const FFPROBE_VERSI_SAJA =
   `case "$1" in\n  -version) echo "ffprobe palsu"; exit 0 ;;\nesac\nexit 1\n`;
@@ -97,6 +107,18 @@ const TESSERACT_OK = (daftar: string) =>
   `if [ -n "$lang" ]; then\n  case " ${daftar.split("\n").join(" ")} " in\n    *" $lang "*) ;;\n` +
   '    *) echo "Error opening data file for language $lang" >&2; exit 1 ;;\n  esac\nfi\n' +
   'if [ ! -s "$1" ]; then exit 66; fi\n' +
+  // TSV dengan SATU kata meyakinkan berukuran besar. Header saja (nol kata)
+  // membuat smoke gagal — dan itu memang yang diinginkan: tesseract yang
+  // berjalan tapi tidak membaca apa-apa bukan tesseract yang berguna.
+  "printf 'level\\tpage\\tblock\\tpar\\tline\\tword\\tleft\\ttop\\twidth\\theight\\tconf\\ttext\\n'\n" +
+  "printf '5\\t1\\t1\\t1\\t1\\t1\\t40\\t30\\t560\\t120\\t92\\tPROMO\\n'\nexit 0\n";
+
+/** Lulus semuanya tapi TSV-nya KOSONG (header saja) — exit 0, nol kata. */
+const TESSERACT_TSV_KOSONG = (daftar: string) =>
+  `case "$1" in\n` +
+  `  --version) echo "tesseract palsu"; exit 0 ;;\n` +
+  `  --list-langs) printf 'List of available languages:\\n${daftar}\\n'; exit 0 ;;\n` +
+  `esac\n` +
   "printf 'level\\tpage\\tblock\\tpar\\tline\\tword\\tleft\\ttop\\twidth\\theight\\tconf\\ttext\\n'\nexit 0\n";
 
 /** Lulus --version dan --list-langs, tapi GAGAL menghasilkan TSV. */
@@ -269,6 +291,18 @@ const versiSaja: [string, (asli: string) => Partial<Record<(typeof BIN)[number],
     (a) => ({ ...LENGKAP(a), tesseract: TESSERACT_VERSI_SAJA("eng\nosd") }),
     "tesseract",
   ],
+  // EXIT 0 TAPI OUTPUT KOSONG — kelas yang paling sulit: tidak ada yang gagal,
+  // semuanya "sukses", dan hasilnya tetap tidak berguna. Temuan Reviewer.
+  [
+    "tesseract exit 0 tapi TSV kosong (nol kata terbaca)",
+    (a) => ({ ...LENGKAP(a), tesseract: TESSERACT_TSV_KOSONG("eng\nosd") }),
+    "tesseract",
+  ],
+  [
+    "ffprobe exit 0 tapi output KOSONG (classifier jatuh ke dimensi cadangan)",
+    (a) => ({ ...LENGKAP(a), ffprobe: FFPROBE_KOSONG }),
+    "ffprobe",
+  ],
 ];
 type BinerYangSehat = (typeof BIN)[number];
 
@@ -298,6 +332,63 @@ for (const [judul, buat, biner] of versiSaja) {
     }
   });
 }
+
+/**
+ * BATAS WAKTU — biner yang menggantung DI TAHAP KERJA tidak boleh menahan health.
+ *
+ * Temuan Reviewer 21 Agu: `BATAS_MS` hanya membatasi probe `-version`. Smoke
+ * memanggil `klasifikasiGambar`, yang di produksi menunggu 20 detik untuk
+ * ffmpeg, lalu 20 untuk ffprobe, lalu 20 untuk tesseract — dan `/api/health`
+ * MENUNGGU promise itu. Runtime dengan biner yang menggantung bisa menahan
+ * health check sekitar satu menit, dan platform akan menganggap service-nya
+ * mati padahal ia hanya sedang ditanyai.
+ *
+ * Biner di bawah menjawab `-version` seketika (jadi probe versi lolos) lalu
+ * MENGGANTUNG saat benar-benar dipakai — persis kelas yang tidak tertangkap
+ * pemeriksaan versi.
+ */
+// Durasi 97 detik SENGAJA ganjil: tests/klasifikasi-gambar.test.ts juga
+// menelurkan `/bin/sleep 90`, dan node --test menjalankan berkas test secara
+// PARALEL. Pemindaian `ps` di bawah karena itu pernah melihat proses milik
+// berkas LAIN dan merah karenanya — kegagalan yang tidak ada hubungannya
+// dengan apa yang diuji di sini. Durasi unik adalah pembeda termurah yang
+// tersedia, karena `exec` menghapus jejak direktori dari command line.
+const FFMPEG_KERJA_MENGGANTUNG =
+  `case "$1" in\n  -version) echo "ffmpeg palsu"; exit 0 ;;\nesac\nexec /bin/sleep 97\n`;
+
+test("BATAS: biner yang menggantung di tahap kerja tidak menahan probe lama-lama", async () => {
+  const { dir, bin } = await siapkan((asli) => ({ ...LENGKAP(asli), ffmpeg: FFMPEG_KERJA_MENGGANTUNG }));
+  try {
+    const mulai = Date.now();
+    const k = await periksaKapabilitasKlasifikasi({ pathOverride: bin, segarkan: true });
+    const durasi = Date.now() - mulai;
+    assert.equal(k.mampu, false, "biner yang menggantung dilaporkan mampu");
+    assert.ok(
+      durasi < 15_000,
+      `probe memakan ${durasi}ms. /api/health MENUNGGU promise ini; dengan tiga tahap × 20 detik ` +
+        "produksi, health check bisa tertahan satu menit dan platform menganggap service-nya mati."
+    );
+    // Dan prosesnya benar-benar BERHENTI, bukan sekadar tidak ditunggu.
+    //
+    // Ditunggu sebentar, bukan diperiksa seketika: SIGKILL sudah dikirim saat
+    // `execFile` menyerah, tapi pembersihan prosesnya oleh OS tidak instan.
+    // Versi pertama asersi ini memeriksa pada milidetik yang sama dan MERAH
+    // karena balapan — padahal sesudah jalan selesai tidak ada satu pun sisa.
+    // Yang dituntut kontraknya adalah "berhenti", bukan "berhenti seketika".
+    const hitungSisa = () =>
+      execFileSync("ps", ["-ax", "-o", "command="], { encoding: "utf8" })
+        .split("\n")
+        .filter((baris) => baris.includes("/bin/sleep 97")).length;
+    let sisa = hitungSisa();
+    for (let i = 0; i < 40 && sisa > 0; i++) {
+      await new Promise((r) => setTimeout(r, 50));
+      sisa = hitungSisa();
+    }
+    assert.equal(sisa, 0, "proses biner yang menggantung masih hidup dua detik sesudah probe selesai");
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
 
 /**
  * COLD START — beberapa permintaan serentak hanya boleh menelurkan SATU probe.

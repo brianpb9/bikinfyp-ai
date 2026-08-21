@@ -155,7 +155,23 @@ const MIN_CONF = 60;
 // KEBIJAKAN_KLASIFIKASI di titik keputusan, supaya penerbit bukti dan penilainya
 // tidak mungkin memakai nilai yang berbeda.
 
-export async function klasifikasiGambar(fotoPath: string): Promise<HasilKlasifikasi> {
+export interface OpsiKlasifikasi {
+  /**
+   * Batas per-eksekusi biner, ms. Default 20 detik — nilai produksi.
+   *
+   * Bisa diperpendek oleh pemanggil yang TIDAK BOLEH menunggu selama itu.
+   * Probe kapabilitas `/api/health` contohnya: tiga tahap × 20 detik berarti
+   * health check bisa tertahan satu menit oleh biner yang menggantung, dan
+   * platform menganggap service-nya mati.
+   */
+  batasMs?: number;
+}
+
+export async function klasifikasiGambar(
+  fotoPath: string,
+  opsi: OpsiKlasifikasi = {}
+): Promise<HasilKlasifikasi> {
+  const batas = opsi.batasMs ?? 20_000;
   // `mkdtempSync` ADA DI DALAM try, dan itu koreksi 21 Agu.
   //
   // Sebelumnya ia di luar, jadi fungsi ini masih bisa MENOLAK walau seluruh
@@ -173,7 +189,7 @@ export async function klasifikasiGambar(fotoPath: string): Promise<HasilKlasifik
     // gambar dengan resolusi berbeda-beda.
     const png = path.join(dir, "besar.png");
     await jalankan("ffmpeg", ["-y", "-v", "error", "-i", fotoPath, "-vf", "scale=1440:-2:flags=lanczos", png],
-      { timeout: 20_000, killSignal: "SIGKILL", maxBuffer: 2 * 1024 * 1024 });
+      { timeout: batas, killSignal: "SIGKILL", maxBuffer: 2 * 1024 * 1024 });
     // TIMEOUT WAJIB. Sampai 21 Agu panggilan ini satu-satunya dari ketiga biner
     // yang berjalan TANPA batas waktu — ffmpeg dan tesseract keduanya 20 detik.
     // ffprobe yang menggantung karena itu bisa menahan permintaan unggah
@@ -182,12 +198,12 @@ export async function klasifikasiGambar(fotoPath: string): Promise<HasilKlasifik
     // baris ini, mode "ffprobe MENGGANTUNG" harus dibunuh tenggat test.
     const { stdout: ukuran } = await jalankan("ffprobe", ["-v", "error", "-select_streams", "v:0",
       "-show_entries", "stream=width,height", "-of", "csv=p=0", png],
-      { timeout: 20_000, killSignal: "SIGKILL", maxBuffer: 1024 * 1024 });
+      { timeout: batas, killSignal: "SIGKILL", maxBuffer: 1024 * 1024 });
     const [w, h] = ukuran.trim().split(",").map(Number);
     const luas = Math.max(1, (w || 1440) * (h || 1440));
 
     const { stdout } = await jalankan("tesseract", [png, "stdout", "-l", "eng", "--psm", "11", "tsv"],
-      { timeout: 20_000, killSignal: "SIGKILL", maxBuffer: 4 * 1024 * 1024 });
+      { timeout: batas, killSignal: "SIGKILL", maxBuffer: 4 * 1024 * 1024 });
 
     let areaTeks = 0;
     let jumlahKata = 0;

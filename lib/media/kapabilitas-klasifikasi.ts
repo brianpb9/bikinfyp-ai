@@ -31,7 +31,6 @@
 // klasifikasiGambar sudah menjawabnya dengan `belum_diperiksa`.
 
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
@@ -205,26 +204,71 @@ async function jalankanProbe(jalur: string): Promise<KapabilitasKlasifikasi> {
   return hasil;
 }
 
-/** Menjalankan jalur produksi atas satu gambar kecil yang dibuat saat itu juga. */
+/**
+ * Menjalankan JALUR PRODUKSI atas fixture berteks, lalu menuntut METRIKNYA.
+ *
+ * Dua temuan Reviewer 21 Agu tergabung di sini.
+ *
+ * (a) FIXTURE POLOS TIDAK MEMBUKTIKAN OCR BEKERJA. Gambar tanpa teks membuat
+ *     setiap hasil selain `belum_diperiksa` terlihat sukses — termasuk
+ *     tesseract yang selalu mengembalikan TSV KOSONG dengan exit 0, dan
+ *     ffprobe yang mengeluarkan output kosong (classifier memakai dimensi
+ *     cadangan 1440x1440 dan tetap menghasilkan vonis). Fixture sekarang
+ *     berteks besar, dan metriknya yang dituntut:
+ *
+ *       jumlahKata >= 1     -> OCR benar-benar membaca kata. TSV kosong = 0.
+ *       rasioAreaTeks >= AMBANG_SMOKE_RASIO
+ *                           -> dimensi dari ffprobe benar-benar dipakai.
+ *                              Fixture 1440x180 memberi rasio ~0.26; kalau
+ *                              ffprobe gagal dan classifier memakai cadangan
+ *                              1440x1440, rasio yang sama jatuh ~8x menjadi
+ *                              ~0.033 — di bawah ambang ini.
+ *
+ *     Fixture-nya berkas yang DI-COMMIT, bukan dirender saat runtime: merender
+ *     teks butuh font, dan container slim sering tidak punya. Probe yang gagal
+ *     karena font akan salah melaporkan runtime sehat sebagai lumpuh.
+ *
+ * (b) BATAS WAKTU. `klasifikasiGambar` memakai 20 detik per tahap; tiga tahap
+ *     berarti `/api/health` bisa tertahan satu menit oleh biner yang
+ *     menggantung, dan platform menganggap service-nya mati. Probe memakai
+ *     batas jauh lebih pendek — dan `execFile` membunuh anaknya dengan SIGKILL
+ *     saat batas itu lewat, jadi prosesnya benar-benar berhenti, bukan sekadar
+ *     tidak ditunggu.
+ */
+const FIXTURE_SMOKE = path.join(process.cwd(), "assets", "probe", "probe-teks.png");
+const BATAS_SMOKE_MS = 4_000;
+const AMBANG_SMOKE_RASIO = 0.08;
+
 async function smokeKlasifikasi(jalur: string): Promise<{ berhasil: boolean; sebab: string }> {
   const pathAsli = process.env.PATH;
-  let dir = "";
   try {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), "kap-smoke-"));
-    const berkas = path.join(dir, "smoke.png");
-    const sharp = (await import("sharp")).default;
-    await sharp({ create: { width: 320, height: 320, channels: 3, background: { r: 200, g: 200, b: 200 } } })
-      .png()
-      .toFile(berkas);
-
+    if (!fs.existsSync(FIXTURE_SMOKE)) {
+      return { berhasil: false, sebab: `fixture probe tidak ada di ${FIXTURE_SMOKE}` };
+    }
     // `klasifikasiGambar` memanggil binernya lewat PATH proses, jadi PATH-nya
-    // diarahkan sementara. Dipulihkan di `finally`; probe ini dijalankan sekali
-    // per PATH dan hasilnya di-cache, jadi jendelanya sempit.
+    // diarahkan sementara. Dipulihkan di `finally`; probe dijalankan sekali per
+    // PATH dan hasilnya di-cache, jadi jendelanya sempit.
     process.env.PATH = jalur;
     const { klasifikasiGambar } = await import("./klasifikasi-gambar");
-    const hasil = await klasifikasiGambar(berkas);
-    if (hasil.jenis === "belum_diperiksa") {
-      return { berhasil: false, sebab: hasil.alasan };
+    const hasil = await klasifikasiGambar(FIXTURE_SMOKE, { batasMs: BATAS_SMOKE_MS });
+
+    if (hasil.jenis === "belum_diperiksa") return { berhasil: false, sebab: hasil.alasan };
+    if (hasil.jumlahKata < 1) {
+      return {
+        berhasil: false,
+        sebab:
+          "OCR tidak membaca satu kata pun dari fixture berteks — tesseract berjalan tapi tidak " +
+          "menghasilkan apa-apa (TSV kosong / data bahasa tidak terpakai)",
+      };
+    }
+    if (hasil.rasioAreaTeks < AMBANG_SMOKE_RASIO) {
+      return {
+        berhasil: false,
+        sebab:
+          `rasio area teks ${hasil.rasioAreaTeks.toFixed(4)} di bawah ambang smoke ` +
+          `${AMBANG_SMOKE_RASIO} — dimensi dari ffprobe tampaknya tidak terpakai dan classifier ` +
+          "jatuh ke dimensi cadangan",
+      };
     }
     return { berhasil: true, sebab: "" };
   } catch (err) {
@@ -232,10 +276,5 @@ async function smokeKlasifikasi(jalur: string): Promise<{ berhasil: boolean; seb
   } finally {
     if (pathAsli === undefined) delete process.env.PATH;
     else process.env.PATH = pathAsli;
-    try {
-      if (dir) fs.rmSync(dir, { recursive: true, force: true });
-    } catch (errBersih) {
-      console.warn(`[kapabilitas] gagal membersihkan ${dir}: ${(errBersih as Error).message}`);
-    }
   }
 }

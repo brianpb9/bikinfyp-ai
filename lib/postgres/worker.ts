@@ -41,7 +41,7 @@ import { stripDeliveryTags } from "../script-engine/delivery-tags";
 import { hargaTerbilang } from "../script-engine/terbilang";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
-import { MAX_IMAGES } from "../product-images";
+import { MAKS_REFERENSI_PER_GENERASI } from "../product-images";
 import { personSafeReferencePhotos } from "../media/person-safe-refs";
 import { loadJobShots, materializeJobShots, persistJobShots } from "./job-shots";
 import { PgCreditPaymentRepository } from "./credit-payment";
@@ -52,7 +52,7 @@ import { pgTaskMemo } from "./task-memo";
 import { appendEndcard, ENDCARD_DEFAULT_COLOR, ENDCARD_DURASI_DTK } from "../media/endcard";
 import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
-import { pesanTanpaReferensi, resolveApprovedReference } from "../product-truth";
+import { bytesTersetujuiCocok, pastikanBytesTersetujui, pesanTanpaReferensi, resolveApprovedReference } from "../product-truth";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -336,6 +336,11 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   if (!referensi.utama) throw new Error(pesanTanpaReferensi(referensi));
   const imageRef = await mediaStorage().materialize(referensi.utama.rel);
   if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
+  // Bytes yang BENAR-BENAR akan dikirim wajib sama dengan yang disetujui.
+  // materialize() adalah pembacaan KEDUA (di R2: GET kedua ke jaringan), dan
+  // objeknya bisa berubah di antara keduanya. Tanpa baris ini, seluruh rantai
+  // bukti di atasnya jadi hiasan.
+  await pastikanBytesTersetujui(imageRef, referensi.utama);
   const workDir = path.join(config.storageDir, "jobs", row.id);
   fs.mkdirSync(workDir, { recursive: true });
   let primaryRef = imageRef;
@@ -346,9 +351,20 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // salah. Batasnya dipertahankan sama persis dengan sebelumnya
     // (slice(1, MAX_IMAGES) => paling banyak tujuh tambahan), supaya langkah
     // ini tidak diam-diam mengubah payload provider.
-    for (const ref of referensi.tersetujui.slice(1, MAX_IMAGES)) {
+    // Batas GENERASI, bukan batas unggah. MAKS_REFERENSI_PER_GENERASI=7
+    // menghitung primary + tambahan; slice(1, MAX_IMAGES=8) sebelumnya
+    // menghasilkan primary + tujuh = DELAPAN referensi, melewati kontraknya
+    // sendiri.
+    for (const ref of referensi.tersetujui.slice(1, MAKS_REFERENSI_PER_GENERASI)) {
       const p = await mediaStorage().materialize(ref.rel).catch(() => null);
-      if (p) extraRefs.push(p);
+      if (!p) continue;
+      // Referensi tambahan yang bytes-nya berubah DIBUANG, bukan menjatuhkan
+      // job: ia opsional, dan membuangnya sudah gagal-tertutup untuk foto itu.
+      if (!(await bytesTersetujuiCocok(p, ref))) {
+        console.warn(`[referensi] ${ref.rel} berubah sesudah disetujui — dibuang dari referensi tambahan`);
+        continue;
+      }
+      extraRefs.push(p);
     }
     // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
     // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai

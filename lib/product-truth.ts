@@ -304,3 +304,42 @@ export function pesanTanpaReferensi(hasil: HasilResolusiReferensi): string {
   const rincian = hasil.ditolak.map((d) => `${d.rel} [${d.alasan}]: ${d.pesan}`).join(" | ");
   return `Tidak ada foto produk yang bisa dipakai jadi acuan video. ${rincian}`;
 }
+
+/**
+ * Memastikan BYTES YANG BENAR-BENAR AKAN DIKIRIM sama dengan yang disetujui.
+ *
+ * Temuan Reviewer 21 Agu, dan celahnya nyata: resolver memverifikasi bytes
+ * lewat `get()` lalu mengembalikan sha256-nya, tapi worker membuang hash itu
+ * dan `materialize()` MENGAMBIL OBJEKNYA LAGI. Di R2 itu GET kedua ke jaringan.
+ * Kalau objeknya berubah di antara dua pembacaan — ditimpa unggahan lain, race
+ * dengan penghapusan, replikasi yang belum konsisten — provider menerima bytes
+ * yang TIDAK PERNAH disetujui siapa pun, dan seluruh rantai bukti di atasnya
+ * jadi hiasan.
+ *
+ * Jendelanya kecil, tapi konsekuensinya persis yang gelombang ini ada untuk
+ * mencegahnya: bahan yang salah sampai ke model, dan baru ketahuan sesudah
+ * dibayar.
+ *
+ * Diperiksa di berkas HASIL materialize, bukan di objek storage-nya lagi:
+ * berkas itulah yang dibaca provider, jadi ia satu-satunya yang pemeriksaannya
+ * bermakna.
+ */
+export async function bytesTersetujuiCocok(absLokal: string, ref: ReferensiTersetujui): Promise<boolean> {
+  const fsp = await import("node:fs/promises");
+  try {
+    const isi = await fsp.readFile(absLokal);
+    return crypto.createHash("sha256").update(isi).digest("hex") === ref.sha256;
+  } catch {
+    return false;
+  }
+}
+
+/** Versi yang MELEMPAR — dipakai untuk referensi utama, yang tidak boleh dilewati. */
+export async function pastikanBytesTersetujui(absLokal: string, ref: ReferensiTersetujui): Promise<void> {
+  if (await bytesTersetujuiCocok(absLokal, ref)) return;
+  throw new Error(
+    `REF_HASH_MISMATCH: isi ${ref.rel} berubah antara saat bukti diverifikasi dan saat bytes-nya ` +
+      `diambil untuk dikirim (disetujui ${ref.sha256.slice(0, 12)}…). Job dihentikan sebelum ` +
+      "langkah berbayar."
+  );
+}
