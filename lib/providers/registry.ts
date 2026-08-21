@@ -29,7 +29,29 @@ function reportResult(name: string, ok: boolean) {
   historyScore.set(name, ok ? Math.min(1, cur + 0.02) : Math.max(0, cur - 0.2));
 }
 
+/**
+ * Seam uji untuk daftar provider video.
+ *
+ * Mengikuti pola yang sudah ada di repo ini — `setMediaStorageForTests`
+ * (lib/storage.ts) dan `setTaskMemo` (lib/providers/task-memo.ts) — bukan pola
+ * baru. Ia ada supaya kontrak yang menentukan APA YANG SAMPAI KE PROVIDER bisa
+ * diperiksa pada boundary-nya sendiri.
+ *
+ * Kenapa itu perlu: memeriksa "kunci mana yang di-materialize" hanya
+ * membuktikan PEMILIHANNYA. Ia tidak menangkap perubahan di hilir — path yang
+ * ditukar, primaryRef yang ditimpa — antara pemilihan dan pengiriman. Satu-
+ * satunya tempat yang bisa membuktikan bahan yang BENAR-BENAR dikirim adalah
+ * tempat bahan itu diterima.
+ *
+ * `undefined` mengembalikan perilaku produksi.
+ */
+let videoProvidersForTests: VideoProvider[] | undefined;
+export function setVideoProvidersForTests(providers?: VideoProvider[]): void {
+  videoProvidersForTests = providers;
+}
+
 function videoOrder(): VideoProvider[] {
+  if (videoProvidersForTests) return videoProvidersForTests;
   const active = config.providerVideo; // "mock" | "byteplus" | "dashscope"
   const list: VideoProvider[] = [];
   if (active === "byteplus") list.push(byteplusVideo, dashscopeVideo);
@@ -68,7 +90,12 @@ export interface VideoGenResult {
 export async function generateVideoWithFailover(spec: VisualSpec, outDir: string): Promise<VideoGenResult> {
   assertVisualSpec(spec); // aturan keras #1 & #3 — ditegakkan di runtime
   const providers = videoOrder();
-  if (providers.length < 2) throw new Error("SR-ABS-01: minimal 2 provider video wajib terdaftar");
+  // Aturan minimal-dua adalah aturan PRODUKSI (SR-ABS-01). Daftar yang dipasang
+  // eksplisit untuk uji sengaja dikecualikan: uji boundary justru butuh tepat
+  // satu penerima supaya yang diamati tidak ambigu.
+  if (!videoProvidersForTests && providers.length < 2) {
+    throw new Error("SR-ABS-01: minimal 2 provider video wajib terdaftar");
+  }
 
   // Ketersediaan dulu, lalu biaya, lalu skor historis.
   const available: VideoProvider[] = [];

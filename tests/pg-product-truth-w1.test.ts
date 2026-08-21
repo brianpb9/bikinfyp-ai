@@ -85,7 +85,16 @@ function sidecar(bytes: Buffer, layak: boolean): Buffer {
 }
 
 /** Storage palsu yang mencatat SETIAP materialize dan selalu mengembalikan null. */
-function storageSpy(isi: Map<string, Buffer>) {
+let tmpMaterialize = "";
+const jalurMaterialize = new Map<string, string>();
+
+/**
+ * `wujudkan: false` menghentikan worker di referensi utama (dipakai kasus C8,
+ * yang memang tidak boleh sampai mana-mana). `wujudkan: true` menuliskan bytes
+ * sungguhan supaya eksekusi BERLANJUT — tanpa itu, cabang referensi tambahan
+ * tidak pernah dilewati dan asersinya lolos secara VAKUM. Temuan Reviewer.
+ */
+function storageSpy(isi: Map<string, Buffer>, wujudkan = false) {
   const materializeCalls: string[] = [];
   const putCalls: string[] = [];
   return {
@@ -109,10 +118,60 @@ function storageSpy(isi: Map<string, Buffer>) {
       },
       async materialize(key: string) {
         materializeCalls.push(key);
-        return null; // HALT sebelum langkah berbayar apa pun
+        if (!wujudkan) return null; // HALT sebelum langkah berbayar apa pun
+        const body = isi.get(key);
+        if (!body) return null;
+        const abs = path.join(tmpMaterialize, `${materializeCalls.length}-${path.basename(key)}`);
+        fs.writeFileSync(abs, body);
+        jalurMaterialize.set(abs, key);
+        return abs;
       },
     },
   };
+}
+
+/**
+ * PROVIDER PALSU — satu-satunya tempat yang bisa membuktikan bahan yang
+ * BENAR-BENAR dikirim.
+ *
+ * Memeriksa "kunci mana yang di-materialize" hanya membuktikan PEMILIHANNYA;
+ * ia tidak menangkap perubahan di hilir antara pemilihan dan pengiriman.
+ * Temuan Reviewer 21 Agu, dan benar: asersi hash versi pertama menghitung ulang
+ * dari Map fixture memakai kunci yang SUDAH diasersikan — melingkar.
+ *
+ * Fake ini membaca bytes DARI PATH YANG DITERIMANYA, mencatat hash-nya, lalu
+ * MELEMPAR — jadi tidak ada satu rupiah pun keluar dan job tetap gagal-tertutup.
+ */
+interface AmatanProvider {
+  utamaSha: string | null;
+  utamaPath: string | null;
+  extraPaths: string[];
+  dipanggil: boolean;
+}
+let amatan: AmatanProvider = { utamaSha: null, utamaPath: null, extraPaths: [], dipanggil: false };
+
+async function pasangProviderPengamat() {
+  const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+  amatan = { utamaSha: null, utamaPath: null, extraPaths: [], dipanggil: false };
+  setVideoProvidersForTests([
+    {
+      name: "pengamat-uji",
+      async healthCheck() {
+        return true;
+      },
+      estimateCost() {
+        return 0;
+      },
+      async generate(spec: { shots: { imageRefPath: string }[]; extraReferenceImagePaths?: string[] }) {
+        amatan.dipanggil = true;
+        const utama = spec.shots[0]?.imageRefPath ?? null;
+        amatan.utamaPath = utama;
+        if (utama && fs.existsSync(utama)) amatan.utamaSha = sha256(fs.readFileSync(utama));
+        amatan.extraPaths = [...(spec.extraReferenceImagePaths ?? [])];
+        throw new Error("provider pengamat: berhenti sebelum biaya keluar");
+      },
+    } as never,
+  ]);
 }
 
 let userId = "";
@@ -120,6 +179,7 @@ let userId = "";
 before(async () => {
   if (lewati) return;
   pool = new Pool({ connectionString: URL_UJI, max: 5 });
+  tmpMaterialize = fs.mkdtempSync(path.join(os.tmpdir(), "w1-materialize-"));
   userId = uid();
   await pool.query(
     "INSERT INTO users (id, phone, email, name, tier, locale, created_at) VALUES ($1,$2,$3,$4,'free','id-ID',$5)",
@@ -132,6 +192,9 @@ after(async () => {
   if (lewati) return;
   const { setMediaStorageForTests } = await import("../lib/storage");
   setMediaStorageForTests(undefined);
+  const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+  setVideoProvidersForTests(undefined);
+  if (tmpMaterialize) fs.rmSync(tmpMaterialize, { recursive: true, force: true });
   if (pool) await pool.end();
   const { closePool } = await import("../lib/postgres/pool");
   await closePool?.();
@@ -201,9 +264,9 @@ async function assertNolEfekSamping(jobId: string, putCalls: string[], konteks: 
   assert.equal(panggilanJaringan, 0, `${konteks}: ada panggilan fetch`);
 }
 
-async function jalankan(jobId: string, isi: Map<string, Buffer>) {
+async function jalankan(jobId: string, isi: Map<string, Buffer>, wujudkan = false) {
   const { setMediaStorageForTests } = await import("../lib/storage");
-  const spy = storageSpy(isi);
+  const spy = storageSpy(isi, wujudkan);
   setMediaStorageForTests(spy.storage as never);
   const { processPostgresJob } = await import("../lib/postgres/worker");
   await processPostgresJob(jobId);
@@ -212,8 +275,9 @@ async function jalankan(jobId: string, isi: Map<string, Buffer>) {
 
 // ------------------------------------------------------------------- C1
 
-test("W1 C1: foto#1 banner + foto#2 packshot — yang di-materialize foto#2, dengan sha256-nya", async (t) => {
+test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2, dengan sha256-nya", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
+  await pasangProviderPengamat();
   const relBanner = `uploads/w1-c1-${process.pid}/0.webp`;
   const relPackshot = `uploads/w1-c1-${process.pid}/1.webp`;
   const isi = new Map<string, Buffer>([
@@ -223,7 +287,9 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang di-materialize foto#2, den
     [`${relPackshot}.meta.json`, sidecar(PACKSHOT, true)],
   ]);
   const jobId = await siapkanJob([relBanner, relPackshot]);
-  const spy = await jalankan(jobId, isi);
+  // wujudkan: eksekusi HARUS berlanjut sampai provider, kalau tidak asersi
+  // hash di bawah tidak pernah mengamati apa pun.
+  const spy = await jalankan(jobId, isi, true);
 
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 C1");
   assert.equal(
@@ -235,16 +301,21 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang di-materialize foto#2, den
       `  seluruh urutan : ${JSON.stringify(spy.materializeCalls)}`
   );
 
-  // sha256 yang SAMPAI KE INPUT PROVIDER wajib sha256 foto#2. Kunci yang
-  // di-materialize itulah yang dibaca provider, jadi memverifikasi isinya
-  // memverifikasi bahan yang benar-benar dikirim — bukan sekadar namanya.
-  const bytesTerpilih = isi.get(spy.materializeCalls[0]!)!;
-  assert.equal(
-    sha256(bytesTerpilih),
-    sha256(PACKSHOT),
-    "bytes yang dipilih worker bukan bytes packshot yang buktinya sah"
+  // BUKTI DI BOUNDARY, bukan hitung ulang dari fixture. Bytes dibaca dari path
+  // yang BENAR-BENAR DITERIMA provider — jadi asersi ini menangkap juga
+  // perubahan di hilir (path tertukar, primaryRef ditimpa) yang tidak bisa
+  // dilihat dari daftar materialize.
+  assert.ok(
+    amatan.dipanggil,
+    "provider tidak pernah menerima spec — eksekusi berhenti sebelum boundary, jadi asersi hash " +
+      "di bawah tidak akan mengamati apa pun"
   );
-  assert.notEqual(sha256(bytesTerpilih), sha256(BANNER), "worker mengambil bytes BANNER");
+  assert.equal(
+    amatan.utamaSha,
+    sha256(PACKSHOT),
+    `bytes yang SAMPAI KE PROVIDER bukan packshot yang buktinya sah (path ${amatan.utamaPath}).`
+  );
+  assert.notEqual(amatan.utamaSha, sha256(BANNER), "BANNER sampai ke provider");
 });
 
 // ------------------------------------------------------------------- C8
@@ -282,9 +353,13 @@ for (const [judul, buatIsi] of [
 
 // ------------------------------------------------- referensi tambahan
 
-test("W1: referensi TAMBAHAN juga hanya dari daftar tersetujui", async (t) => {
+test("W1: referensi TAMBAHAN yang SAMPAI KE PROVIDER hanya yang tersetujui, urut", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
-  // Tier bersuara supaya cabang referensi tambahan benar-benar dilewati.
+  await pasangProviderPengamat();
+  // Tier bersuara supaya cabang referensi tambahan benar-benar DILEWATI.
+  // Versi pertama test ini memakai materialize yang selalu null, jadi worker
+  // berhenti di referensi utama dan cabang tambahan TIDAK PERNAH jalan —
+  // asersinya lolos secara vakum. Temuan Reviewer 21 Agu.
   const dasar = `uploads/w1-extra-${process.pid}`;
   const relBanner = `${dasar}/0.webp`;
   const relSah1 = `${dasar}/1.webp`;
@@ -298,15 +373,60 @@ test("W1: referensi TAMBAHAN juga hanya dari daftar tersetujui", async (t) => {
     [`${relSah2}.meta.json`, sidecar(PACKSHOT2, true)],
   ]);
   const jobId = await siapkanJob([relBanner, relSah1, relSah2], "high_quality");
-  const spy = await jalankan(jobId, isi);
+  const spy = await jalankan(jobId, isi, true);
 
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 extra");
+  assert.deepEqual(
+    spy.materializeCalls,
+    [relSah1, relSah2],
+    `urutan materialize salah: ${JSON.stringify(spy.materializeCalls)}. Yang dituntut PERSIS ` +
+      "[foto sah pertama, foto sah kedua] — banner tidak boleh diminta sama sekali, dan foto sah " +
+      "kedua WAJIB benar-benar diminta (kalau ia hilang, cabang tambahan tidak pernah dilewati)."
+  );
   assert.ok(
     !spy.materializeCalls.includes(relBanner),
-    `banner ikut diminta sebagai referensi tambahan: ${JSON.stringify(spy.materializeCalls)}. ` +
-      "Foto ke-2 dst juga dikirim ke model sebagai referensi identitas — sama berbahayanya kalau salah."
+    "banner ikut diminta sebagai referensi tambahan — foto ke-2 dst juga dikirim ke model sebagai " +
+      "referensi identitas, sama berbahayanya kalau salah"
   );
-  assert.equal(spy.materializeCalls[0], relSah1, "referensi utama bukan foto sah pertama");
+
+  // BOUNDARY BERHENTINYA: `personSafeReferencePhotos`, yang berjalan tepat
+  // SESUDAH loop referensi tambahan dan SEBELUM planner/provider. Ia gagal di
+  // sini karena bytes fixture bukan gambar sungguhan — deterministik, dan
+  // persis boundary aman yang diminta: cukup jauh untuk membuktikan loopnya
+  // benar-benar dilewati, cukup dekat untuk tidak mengeluarkan biaya.
+  //
+  // Provider karena itu SENGAJA tidak diamati di test ini; pengamatan boundary
+  // provider ada di test C1, yang tier-nya silent_caption sehingga jalur
+  // person-safe dilewati.
+  assert.equal(amatan.dipanggil, false, "eksekusi melewati boundary aman dan mencapai provider");
+  // Alasan gagal tercatat di audit_log (bukan kolom jobs). Diperiksa supaya
+  // test ini BERISIK kalau boundary-nya bergeser: kegagalan karena gerbang
+  // bukti akan berbunyi lain dari kegagalan karena person-safe, dan keduanya
+  // tidak boleh tertukar diam-diam.
+  const jejak = await pool.query(
+    "SELECT meta FROM audit_log WHERE entity='jobs' AND entity_id=$1 AND action='job.transition'",
+    [jobId]
+  );
+  // `meta` bisa datang sebagai objek (jsonb) atau string (text) tergantung tipe
+  // kolomnya; keduanya ditangani supaya test tidak bergantung pada detail itu.
+  // Dan barisnya DISARING, bukan diambil yang terakhir: beberapa transisi bisa
+  // punya `created_at` yang sama sampai milidetik, jadi "terbaru" ambigu.
+  const semuaMeta = jejak.rows
+    .map((r) => (typeof r.meta === "string" ? (JSON.parse(r.meta) as Record<string, unknown>) : (r.meta as Record<string, unknown>)))
+    .filter(Boolean);
+  const meta = semuaMeta.find((m) => m.to === "FAILED") as { to?: string; reason?: string } | undefined;
+  assert.ok(
+    meta,
+    `transisi FAILED tidak tercatat di audit_log; yang ada: ${JSON.stringify(semuaMeta.map((m) => m.to))}`
+  );
+  const alasan = meta.reason ?? "";
+  assert.ok(alasan.length > 0, "job gagal tanpa alasan tercatat");
+  assert.ok(
+    !/EVIDENCE_INVALID|REF_HASH_MISMATCH|acuan video/i.test(alasan),
+    `job berhenti karena GERBANG BUKTI ("${alasan}"), bukan karena boundary person-safe. ` +
+      "Kalau begitu, loop referensi tambahan tidak pernah benar-benar dilewati dan asersi urutan " +
+      "di atas kehilangan maknanya."
+  );
 });
 
 // -------------------------------------------------------- kontrol positif
