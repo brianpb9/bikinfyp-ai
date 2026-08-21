@@ -53,6 +53,7 @@ import { appendEndcard, ENDCARD_DEFAULT_COLOR, ENDCARD_DURASI_DTK } from "../med
 import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
 import { ambilSnapshotTersetujui, bytesTersetujuiCocok, pastikanBytesTersetujui, pesanTanpaReferensi, resolveApprovedReference } from "../product-truth";
+import { catatKanariReferensi, GagalTanpaReferensi } from "../kanari-bukti";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -337,7 +338,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const workDir = path.join(config.storageDir, row.id ? `jobs/${row.id}` : "jobs/tanpa-id");
   fs.mkdirSync(workDir, { recursive: true });
   const referensi = await resolveApprovedReference(images);
-  if (!referensi.utama) throw new Error(pesanTanpaReferensi(referensi));
+  // KANARI, BUKAN GERBANG. Lihat catatan padanannya di lib/worker.ts.
+  catatKanariReferensi(referensi, { jobId: row.id, produkId: row.product_id, runtime: "worker-postgres" });
+  if (!referensi.utama) throw new GagalTanpaReferensi(pesanTanpaReferensi(referensi), referensi);
   const imageRef = await mediaStorage().materialize(referensi.utama.rel);
   if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
   // Bytes yang BENAR-BENAR akan dikirim wajib sama dengan yang disetujui.

@@ -53,6 +53,8 @@ globalThis.fetch = (async (...args: unknown[]) => {
 const { getDb, now, uuid } = await import("../lib/db");
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { processJob } = await import("../lib/worker");
+const { ringkasanKanari, resetKanariUntukTest, GagalTanpaReferensi, KODE_KANARI } = await import("../lib/kanari-bukti");
+const { ALASAN_TOLAK, RINCI_TOLAK } = await import("../lib/product-truth");
 type MediaStorage = import("../lib/storage").MediaStorage;
 type StoredObject = import("../lib/storage").StoredObject;
 
@@ -682,4 +684,67 @@ after(() => {
   fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });
   fs.rmSync(BIN_KOSONG, { recursive: true, force: true });
   for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(`${process.env.DB_PATH}${suffix}`, { force: true });
+});
+
+// ---------------------------------------------------------------------------
+// P0-B4 — KANARI DI BATAS WORKER
+//
+// Kanari hanya berguna kalau ia benar-benar menyala di tempat vonisnya diambil,
+// dan hanya AMAN kalau ia tidak mengubah vonis itu. Dua-duanya diperiksa di
+// sini lewat worker sungguhan, bukan lewat pemanggilan modul langsung.
+// ---------------------------------------------------------------------------
+
+test("W2 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah", async () => {
+  resetKanariUntukTest();
+  const relFoto = "uploads/w2-kanari-tolak/0.webp";
+  const spy = storageSpy(new Map<string, Buffer>([[relFoto, PACKSHOT]])); // sidecar HILANG
+  setMediaStorageForTests(spy.storage);
+
+  const { jobId } = siapkanJob([relFoto]);
+  await processJob(jobId);
+
+  // 1. Vonis tidak berubah: gagal-tertutup, nol efek samping, nol materialize.
+  assertNolEfekSamping(jobId, spy, "W2 kanari tolak");
+  assert.deepEqual(spy.materializeCalls, [], "kanari membuat worker mengambil bytes lebih dulu");
+  const job = db.prepare("SELECT state FROM jobs WHERE id = ?").get(jobId) as { state: string };
+  assert.ok(["FAILED", "REFUNDED"].includes(job.state), `vonis berubah gara-gara kanari: ${job.state}`);
+
+  // 2. Dan kanari benar-benar menyala DI SINI, dengan kode, bukan kalimat.
+  const r = ringkasanKanari();
+  assert.equal(r.dinilai, 1, "kanari tidak menyala di batas worker — nol angka dari tempat vonis diambil");
+  assert.equal(r.ditolak, 1);
+  assert.equal(r.lolos, 0);
+  assert.equal(r.perAlasan[ALASAN_TOLAK.BUKTI_TIDAK_SAH], 1);
+  assert.equal(r.perRinci[RINCI_TOLAK.SIDECAR_HILANG], 1);
+});
+
+test("W2 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", async () => {
+  resetKanariUntukTest();
+  const relFoto = "uploads/w2-kanari-lolos/0.webp";
+  const isi = new Map<string, Buffer>([[relFoto, PACKSHOT], [`${relFoto}.meta.json`, sidecar(PACKSHOT, true)]]);
+  const spy = storageSpy(isi);
+  setMediaStorageForTests(spy.storage);
+
+  const { jobId } = siapkanJob([relFoto]);
+  await processJob(jobId);
+
+  const r = ringkasanKanari();
+  assert.equal(r.dinilai, 1, "penilaian yang LOLOS tidak dicatat; kanari hanya punya pembilang");
+  assert.equal(r.lolos, 1);
+  assert.equal(r.ditolak, 0);
+  assert.deepEqual(r.perAlasan, {}, "penolakan dicatat padahal referensinya lolos");
+});
+
+test("W2 KANARI: galat yang dilempar worker membawa kode, bukan hanya kalimat", () => {
+  // Kontrak tipe, diuji langsung: selama alasan hanya ada di dalam pesan,
+  // satu-satunya cara menghitungnya adalah mencocokkan teks.
+  const e = new GagalTanpaReferensi("pesan untuk manusia", {
+    utama: null,
+    tersetujui: [],
+    ditolak: [{ rel: "x.webp", alasan: ALASAN_TOLAK.PROMOSI, pesan: "banner" }],
+  });
+  assert.ok(e instanceof Error, "pencatat kegagalan lama memperlakukan galat worker sebagai Error");
+  assert.equal(e.message, "pesan untuk manusia");
+  assert.equal(e.kode, KODE_KANARI.TANPA_REFERENSI);
+  assert.deepEqual(e.rincian, [{ rel: "x.webp", alasan: ALASAN_TOLAK.PROMOSI }]);
 });

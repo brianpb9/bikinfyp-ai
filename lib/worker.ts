@@ -32,6 +32,7 @@ import { MAKS_REFERENSI_PER_GENERASI } from "./product-images";
 import { personSafeReferencePhotos } from "./media/person-safe-refs";
 import { normalizeHookLevel } from "./config/hooks";
 import { ambilSnapshotTersetujui, bytesTersetujuiCocok, pastikanBytesTersetujui, pesanTanpaReferensi, resolveApprovedReference } from "./product-truth";
+import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 
 const CONCURRENCY = 1;
 
@@ -119,7 +120,11 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // yang melempar di sini adalah pemanggilnya, dan ia melempar SEBELUM satu
     // byte pun diambil — jadi nol materialize, nol provider, nol capture.
     const referensi = await resolveApprovedReference(images);
-    if (!referensi.utama) throw new Error(pesanTanpaReferensi(referensi));
+    // KANARI, BUKAN GERBANG. Dicatat SEBELUM vonis dan untuk KEDUA hasil: angka
+    // yang dibutuhkan adalah rasio, dan mencatat kegagalan saja memberi
+    // pembilang tanpa penyebut. Ia tidak mengubah apa pun di bawah ini.
+    catatKanariReferensi(referensi, { jobId, produkId: product.id, runtime: "worker-sqlite" });
+    if (!referensi.utama) throw new GagalTanpaReferensi(pesanTanpaReferensi(referensi), referensi);
     const imageRef = await mediaStorage().materialize(referensi.utama.rel);
     if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
     // Bytes yang BENAR-BENAR akan dikirim wajib sama dengan yang disetujui.
