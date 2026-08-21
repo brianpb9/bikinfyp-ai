@@ -38,10 +38,11 @@ SCRIPT_LLM=0 npx tsx --test \
 | R2/P0-A ronde 1 (di 4a0a343) | 28 test · 10 lulus · 18 gagal · 0 skip |
 | R2/P0-A ronde 2 (di f5d4029) | 43 test · 11 lulus · 32 gagal · 0 skip |
 | R2/P0-A ronde 3 (di f22d6e8) | 58 test · 11 lulus · 47 gagal · 0 skip |
-| **R2/P0-A ronde 4 (di c15f36f)** | **62 test · 12 lulus · 50 gagal · 0 skip · 0 cancelled · 0 todo** |
+| R2/P0-A ronde 4 (di c15f36f) | 62 test · 12 lulus · 50 gagal · 0 skip |
+| **R2/P0-A ronde 5 (di P0A5_TEST_SHA)** | **74 test · 12 lulus · 62 gagal · 0 skip · 0 cancelled · 0 todo** |
 
-Kelima-puluh kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
-`grep "  code: " | sort | uniq -c` → `50 code: 'ERR_ASSERTION'`, nol kode lain.
+Keenam-puluh-dua kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
+`grep "  code: " | sort | uniq -c` → `62 code: 'ERR_ASSERTION'`, nol kode lain.
 Nol module-not-found, nol error env, nol skip, nol error fixture.
 
 `npx tsc --noEmit` → exit 0.
@@ -49,12 +50,12 @@ Nol module-not-found, nol error env, nol skip, nol error fixture.
 Suite penuh, `npm test` (`SCRIPT_LLM=0 tsx --test tests/*.test.ts`):
 
 ```
-1..867
-# tests 867 · pass 803 · fail 50 · cancelled 0 · skipped 14 · todo 0
-exit 1   (50 merah DISENGAJA — red-before, belum ada implementasi)
+1..879
+# tests 879 · pass 803 · fail 62 · cancelled 0 · skipped 14 · todo 0
+exit 1   (62 merah DISENGAJA — red-before, belum ada implementasi)
 ```
 
-Kelima-puluh `not ok` di jalan penuh itu **persis** kelima-puluh test
+Keenam-puluh-dua `not ok` di jalan penuh itu **persis** keenam-puluh-dua test
 P0-03/karantina di atas — nol regresi di tempat lain, diverifikasi dengan
 menyaring daftar `not ok` terhadap himpunan P0-03 dan mendapati sisa kosong.
 Aritmetikanya tertutup terhadap baseline `PATH-CASE-MATRIX.md` (810 · 796 · 0 · 14):
@@ -64,6 +65,7 @@ ronde 1:  810 + 23 = 833 test ·  796 + 6 − 1 = 801 lulus ·  18 gagal
 ronde 2:  833 + 15 = 848 test ·  801 + 1     = 802 lulus ·  32 gagal
 ronde 3:  848 + 15 = 863 test ·  802         = 802 lulus ·  47 gagal
 ronde 4:  863 +  4 = 867 test ·  802 + 1     = 803 lulus ·  50 gagal
+ronde 5:  867 + 12 = 879 test ·  803         = 803 lulus ·  62 gagal
 ```
 
 Satu test ronde 4 lulus di HEAD dan itu memang benar: fixture bertentangan arah
@@ -579,6 +581,102 @@ test-bus.sh -> 13 kasus, 0 gagal
 nol proses/launchd job tertinggal; runtime kanonik live (49388) utuh
 ```
 
+## Ronde 5 — empat temuan Reviewer atas a3bc1b0
+
+Keempatnya diterima; nol sanggahan.
+
+### T12 (P1) — menyebut `utama` mencuci nilai dari `ditolak`
+
+> *"`const ref = hasil.utama ? hasil.ditolak[0].rel : hasil.ditolak[0].rel;
+> materialize(ref)` menjadi `dariResolver=true` … tetapi nilainya selalu berasal
+> dari `ditolak`."*
+
+Benar, dan ini ronde ketiga berturut-turut sebuah pencucian menembus gerbang
+statis W1. Polanya sudah jelas dan sekarang ditulis di kode sebagai prinsip:
+
+> Analisis sintaksis tidak bisa MEMBUKTIKAN nilai mana yang mengalir, jadi ia
+> tidak boleh dipakai untuk membuktikan kebersihan. Yang bisa ia lakukan dengan
+> benar adalah MENOLAK.
+
+Himpunan asal jadi tiga, dan syaratnya konjungtif dengan **dua larangan**:
+
+```
+diterima <=> menyebut jalur tersetujui
+             DAN tidak menyentuh `terlarang`
+             DAN tidak menyentuh `mentah`
+```
+
+`FIELD_TERSETUJUI` jadi daftar putih murni: `{utama, tersetujui}`. Field hasil
+apa pun di luar itu — `ditolak` hari ini, apa pun yang ditambahkan besok —
+otomatis jadi asal terlarang. Destrukturisasi ikut: `{utama}` tersetujui,
+`{ditolak}` dan field tak dikenal lainnya terlarang.
+
+Implementasi yang benar tidak pernah menyebut `ditolak` maupun `images` di dekat
+payload-nya, jadi larangan ini tidak menghalanginya — dan setiap pencucian yang
+konkret gagal, karena pencucian selalu perlu menyebut sumbernya.
+`CONTOH_CUCI_UTAMA` (verbatim dari temuan) dijalankan terhadap detektornya.
+
+### T13 (P1) — kontradiksi METRIK classifier belum dikunci
+
+> *"Implementasi yang memvalidasi pasangan itu tetapi menerima
+> `{jenis:"product_photo", layakReferensi:true, rasioAreaTeks:0.19,
+> jumlahKata:14}` tetap meluluskan bukti yang bertentangan dengan aturan
+> classifier versi 1."*
+
+Benar. Metrik bukan hiasan — metriklah yang MENENTUKAN vonis di
+`klasifikasiGambar`, jadi bukti yang metriknya membantah vonisnya sendiri tidak
+pernah bisa keluar dari classifier versi 1; ia ditulis pihak lain.
+
+Ditambahkan enam fixture satu-sumbu (di **kedua** jalur, semuanya
+`EVIDENCE_INVALID`):
+
+| Sumbu | Fixture | Kenapa mustahil |
+|---|---|---|
+| metrik | `rasioAreaTeks: 0.19` + vonis foto produk layak | `0.19 >= AMBANG_RASIO 0.02` → aturan v1 wajib memvonis promosi |
+| metrik | `jumlahKata: 14` + vonis foto produk layak | `14 >= AMBANG_KATA 6` → idem |
+| domain | `rasioAreaTeks: -0.1` | luas tidak bisa negatif |
+| domain | `rasioAreaTeks: 1.5` | luas teks tidak bisa melebihi luas gambarnya |
+| domain | `jumlahKata: -1` | cacahan tidak bisa negatif |
+| domain | `jumlahKata: 2.5` | cacahan tidak bisa pecahan |
+
+Ambangnya **disalin** dari `lib/media/klasifikasi-gambar.ts` (konstantanya tidak
+diekspor), dan penyalinan itu aman justru karena `versiBukti` ada: aturan yang
+berubah wajib menaikkan versi, dan bukti versi 1 hanya dinilai dengan aturan
+versi 1. Ambang yang digeser tanpa menaikkan versi adalah cacat tersendiri —
+dan test versi-basi yang menangkapnya.
+
+### T14 (P1) — prasyarat runtime W1 hilang dari tabel rollout
+
+Benar. Ronde 4 menyatakannya di prosa dan di pesan bus, tapi tabel rollout tetap
+melompat P0-B4 → P0-B5, jadi tree yang terikat **belum** mengunci apa pun.
+
+Ditambahkan tahap **P0-B4b** eksplisit, P0-B5 ditandai **TERBLOKIR sampai P0-B4b
+hijau**, dan empat kriteria lulusnya ditulis lengkap (C1 dengan sha256 yang
+sampai ke input provider; C8 dengan nol materialize dan nol capture/regen;
+referensi tambahan juga wajib dari daftar tersetujui; nol jaringan/provider).
+Alasan ia prasyarat dan bukan utang ditulis di sana: gerbang statis W1 sudah
+tiga kali terbukti bisa ditembus, dan W1 tidak punya apa pun di bawahnya.
+
+### T15 (P2) — probe TERM menerima exit sukses
+
+> *"Mutasi `trap 'cleanup; exit 0' TERM` tetap lulus setelah cleanup,
+> menyamarkan interupsi sebagai sukses."*
+
+Benar. Asersi diperketat dari `probe_rc != HIDUP` menjadi `probe_rc = 143`.
+Terverifikasi merah-sebelum lewat mutasi: dengan `exit 0`, case 0 gagal dengan
+`rc=0 (wajib 143)`.
+
+Bukti ronde 5:
+
+```
+targeted -> 74 test / 12 lulus / 62 gagal / 0 skip; 62/62 ERR_ASSERTION
+npm test -> 879 test / 803 lulus / 62 gagal / 14 skip; nol regresi
+tsc --noEmit -> exit 0
+test-reviewer-runtime.sh -> 7 kasus, 0 gagal
+test-bus.sh -> 13 kasus, 0 gagal
+nol proses/launchd job tertinggal; runtime kanonik live (49388) utuh
+```
+
 ## Yang SENGAJA belum dikerjakan di gelombang ini
 
 Urutan rollout dari `QUESTION` Reviewer dipatuhi: resolver ketat menyala
@@ -591,7 +689,37 @@ TERAKHIR, bukan pertama.
 | P0-B2 | batas runtime ffmpeg/ffprobe/tesseract — klasifikasi di web Render (`runtime: node`) tidak punya binernya | belum |
 | P0-B3 | audit legacy offline + karantina | belum |
 | P0-B4 | canary/product-truth verification di batas yang dipakai produksi | belum |
-| P0-B5 | resolver ketat jadi otoritatif | belum |
+| **P0-B4b** | **TEST RUNTIME W1 (`lib/postgres/worker.ts`) di atas PostgreSQL nyata — PRASYARAT** | belum |
+| P0-B5 | resolver ketat jadi otoritatif — **TERBLOKIR sampai P0-B4b hijau** | belum |
+
+### P0-B4b — kriteria lulus, dan kenapa ia prasyarat dan bukan utang
+
+Permintaan Reviewer ronde 4, diterima. Ronde 3 dan ronde 4 sama-sama menemukan
+gerbang statis W1 yang bisa ditembus (`hasil.ditolak[0].rel`, lalu pencucian
+lewat `hasil.utama ? … : …`). Pola itu tidak akan berhenti: analisis sintaksis
+tidak bisa MEMBUKTIKAN nilai mana yang mengalir, ia hanya bisa menolak bentuk
+yang ia kenali. W2 punya jaring runtime yang tidak peduli bentuk; W1 tidak
+punya apa-apa di bawah gerbang statisnya. Menyalakan resolver ketat dalam
+keadaan itu berarti mempertaruhkan jalur produksi utama pada satu analisis yang
+sudah dua kali terbukti bisa ditembus.
+
+Kriteria lulus P0-B4b, seluruhnya WAJIB, dijalankan terhadap
+`processPostgresJob` yang sesungguhnya di atas PostgreSQL nyata (`UJI_PG_URL`,
+pola yang sudah dipakai `npm run test:pg`):
+
+1. **C1** — foto#1 banner (sidecar sah, `layakReferensi:false`) + foto#2
+   packshot (sidecar sah): kunci yang di-materialize PERTAMA wajib foto#2, dan
+   sha256 yang sampai ke input provider wajib sha256 foto#2.
+2. **C8 bukti tidak sah** (hilang / korup / hash beda): **nol** `materialize`
+   payload, job berakhir fail-closed, dan nol `credit_ledger` bertipe
+   `capture`/`regen`. Release/refund tetap diizinkan.
+3. **Referensi tambahan** (foto ke-2 dst) juga hanya boleh berasal dari daftar
+   tersetujui — bukan dari `images.slice(1)`.
+4. **Nol jaringan, nol provider** sepanjang ketiga kasus, dibuktikan dengan
+   penghitung `fetch` seperti di suite W2.
+
+Sampai keempatnya hijau pada SHA yang terikat, P0-B5 tidak boleh dinyalakan
+dengan alasan apa pun — termasuk "gerbang statisnya sudah lebih ketat".
 
 Verifikasi call-site untuk P0-B1 (dibaca ulang pada 0c443ff, bukan disalin dari
 handover):
@@ -618,7 +746,7 @@ hijau lokal bukan bukti deployment.
 
 Gelombang ini adalah perbaikan KONTRAK. Ia tidak menaikkan skor readiness sama
 sekali: nol perubahan produksi, dan jumlah test merah justru NAIK di setiap
-ronde — 14 (R1) → 18 → 32 → 47 → **50** (ronde 4) — karena
+ronde — 14 (R1) → 18 → 32 → 47 → 50 → **62** (ronde 5) — karena
 kontraknya menuntut makin banyak hal yang benar, bukan karena ada yang rusak. Sesuai batas
 Reviewer, seluruh slice product-truth yang selesai pun hanya memindahkan
 kesiapan keseluruhan sekitar 40 → 55–58; 80/100 tetap butuh gerbang
@@ -626,5 +754,6 @@ Founder/eksternal yang belum dikerjakan.
 
 P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
 P0A2_TEST_SHA=f5d4029522bbeb4fbcbf4b885457369bdf3e83a6                       (ronde 2)
+P0A5_TEST_SHA=<commit ini sendiri>                                           (ronde 5)
 P0A4_TEST_SHA=c15f36ff121a2314b81607f6e2a395db3d7acc30                                           (ronde 4)
 P0A3_TEST_SHA=f22d6e80e51e95a58a7ddb4f03095f85fbe3c7e9                                           (ronde 3)

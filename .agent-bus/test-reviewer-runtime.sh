@@ -245,11 +245,16 @@ if wait_for "probe siap menerima sinyal" '[ -e "$BUS_DIR/tmp/probe-ready" ]' 300
   probe_runtime_hidup=no
   [ -n "$probe_runtime" ] && kill -0 "$probe_runtime" 2>/dev/null && probe_runtime_hidup=yes
 
+  # Menuntut 143 PERSIS, bukan sekadar "bukan HIDUP" (temuan Reviewer 21 Agu).
+  # Kontraknya menyebut handler sinyal keluar 128+signo; asersi yang menerima
+  # status apa pun akan meluluskan mutasi `trap 'cleanup; exit 0' TERM`, yang
+  # menyamarkan interupsi sebagai kesuksesan. Status itulah satu-satunya cara
+  # pemanggil membedakan "dibunuh" dari "selesai".
   if [ "$probe_lanjut" = no ] && [ "$probe_bounded_hidup" = no ] && \
-     [ "$probe_runtime_hidup" = no ] && [ "$probe_rc" != HIDUP ] && [ ! -e "$LOCK_DIR" ]; then
-    printf 'PASS  TERM saat bounded hidup: bersih DAN suite berhenti\n'
+     [ "$probe_runtime_hidup" = no ] && [ "$probe_rc" = 143 ] && [ ! -e "$LOCK_DIR" ]; then
+    printf 'PASS  TERM saat bounded hidup: bersih, berhenti, exit 143\n'
   else
-    printf 'FAIL  trap sinyal: lanjut=%s bounded_hidup=%s runtime_hidup=%s rc=%s lock=%s\n' \
+    printf 'FAIL  trap sinyal: lanjut=%s bounded_hidup=%s runtime_hidup=%s rc=%s (wajib 143) lock=%s\n' \
       "$probe_lanjut" "$probe_bounded_hidup" "$probe_runtime_hidup" "$probe_rc" \
       "$([ -e "$LOCK_DIR" ] && echo ada || echo tidak)"
     FAILURES=$((FAILURES + 1))

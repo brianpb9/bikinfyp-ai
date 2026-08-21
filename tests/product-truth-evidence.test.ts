@@ -333,7 +333,23 @@ const fieldTakSah: { judul: string; ubah: Record<string, unknown>; kenapa: strin
  * tidak sah menyatakan yang sebenarnya terjadi, dan itulah yang membuat
  * karantina/revalidasi bisa menanganinya nanti.
  */
+/**
+ * AMBANG CLASSIFIER VERSI 1 — disalin dari lib/media/klasifikasi-gambar.ts.
+ *
+ *     AMBANG_RASIO = 0.02        AMBANG_KATA = 6
+ *     promosi = rasioAreaTeks >= AMBANG_RASIO || jumlahKata >= AMBANG_KATA
+ *
+ * Disalin, bukan diimpor, karena konstantanya tidak diekspor. Penyalinan itu
+ * AMAN justru karena `versiBukti` ada: aturan classifier yang berubah WAJIB
+ * menaikkan versi bukti, dan bukti versi 1 hanya boleh dinilai dengan aturan
+ * versi 1. Kalau ambangnya digeser tanpa menaikkan versi, itu cacat tersendiri
+ * — dan test versi-basi di atas yang menangkapnya.
+ */
+const AMBANG_RASIO_V1 = 0.02;
+const AMBANG_KATA_V1 = 6;
+
 const kontradiktif: { judul: string; ubah: Record<string, unknown>; kenapa: string }[] = [
+  // --- sumbu 1: jenis vs layakReferensi ---
   {
     judul: 'jenis "promotional_graphic" TAPI layakReferensi true',
     ubah: { jenis: "promotional_graphic", layakReferensi: true, rasioAreaTeks: 0.19, jumlahKata: 14 },
@@ -345,6 +361,55 @@ const kontradiktif: { judul: string; ubah: Record<string, unknown>; kenapa: stri
     judul: 'jenis "product_photo" TAPI layakReferensi false',
     ubah: { jenis: "product_photo", layakReferensi: false },
     kenapa: "arah sebaliknya: bukti menyangkal dirinya sendiri, jadi tidak ada vonis yang bisa dibaca",
+  },
+
+  // --- sumbu 2: METRIK vs vonis, satu sumbu per fixture ---
+  //
+  // Temuan Reviewer ronde 4. Fixture sumbu 1 hanya mengunci hubungan jenis <->
+  // layakReferensi; implementasi yang memvalidasi pasangan itu TAPI mengabaikan
+  // metriknya tetap meloloskan bukti yang bertentangan dengan aturan classifier
+  // yang menghasilkannya. Metrik bukan hiasan — metriklah yang MENENTUKAN vonis
+  // di klasifikasiGambar, jadi bukti yang metriknya membantah vonisnya sendiri
+  // tidak pernah bisa dihasilkan classifier versi 1. Ia ditulis pihak lain.
+  {
+    judul: `rasioAreaTeks ${0.19} (>= ambang ${AMBANG_RASIO_V1}) TAPI divonis foto produk layak`,
+    ubah: { jenis: "product_photo", layakReferensi: true, rasioAreaTeks: 0.19 },
+    kenapa:
+      `rasio ${0.19} >= AMBANG_RASIO ${AMBANG_RASIO_V1}, jadi aturan versi 1 WAJIB memvonis ` +
+      "promosi; bukti ini tidak mungkin keluar dari classifier versi 1",
+  },
+  {
+    judul: `jumlahKata 14 (>= ambang ${AMBANG_KATA_V1}) TAPI divonis foto produk layak`,
+    ubah: { jenis: "product_photo", layakReferensi: true, jumlahKata: 14 },
+    kenapa:
+      `jumlahKata 14 >= AMBANG_KATA ${AMBANG_KATA_V1}, jadi aturan versi 1 WAJIB memvonis promosi`,
+  },
+
+  // --- sumbu 3: DOMAIN NUMERIK, satu sumbu per fixture ---
+  //
+  // Tipenya number dan vonisnya konsisten, tapi angkanya tidak mungkin berasal
+  // dari pengukuran mana pun. rasioAreaTeks adalah luas kotak teks dibagi luas
+  // gambar: ia tidak bisa negatif dan tidak bisa melebihi 1. jumlahKata adalah
+  // cacahan: ia tidak bisa negatif dan tidak bisa pecahan.
+  {
+    judul: "rasioAreaTeks negatif",
+    ubah: { rasioAreaTeks: -0.1 },
+    kenapa: "luas tidak bisa negatif; angka ini tidak berasal dari pengukuran",
+  },
+  {
+    judul: "rasioAreaTeks > 1",
+    ubah: { rasioAreaTeks: 1.5 },
+    kenapa: "luas teks tidak bisa melebihi luas gambarnya sendiri",
+  },
+  {
+    judul: "jumlahKata negatif",
+    ubah: { jumlahKata: -1 },
+    kenapa: "cacahan kata tidak bisa negatif",
+  },
+  {
+    judul: "jumlahKata pecahan",
+    ubah: { jumlahKata: 2.5 },
+    kenapa: "cacahan kata tidak bisa pecahan",
   },
 ];
 
