@@ -27,6 +27,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import { execFileSync } from "node:child_process";
 
 process.env.RACUN_NO_DOTENV = "1";
 process.env.RACUN_WORKER_DISABLED = "1"; // pump() tidak boleh jalan sendiri
@@ -58,6 +59,18 @@ type StoredObject = import("../lib/storage").StoredObject;
 const db = getDb();
 const sha = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
 const sha256Uji = sha;
+
+/** person-safe butuh python + OpenCV + model YuNet; tanpa itu jalur hilir tidak bisa ditempuh. */
+function punyaPersonSafe(): boolean {
+  try {
+    const venv = path.join(process.cwd(), ".venv", "bin", "python");
+    const py = fs.existsSync(venv) ? venv : "python3";
+    execFileSync(py, ["-c", "import cv2"], { stdio: "ignore" });
+    return fs.existsSync(path.join(process.cwd(), "assets", "models", "face_detection_yunet_2023mar.onnx"));
+  } catch {
+    return false;
+  }
+}
 
 const BANNER = Buffer.from("BYTES-BANNER-PROMO-W2");
 const PACKSHOT = Buffer.from("BYTES-PACKSHOT-SAH-W2");
@@ -440,6 +453,106 @@ test("W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tet
       `snapshot tidak memuat bytes referensi utama yang disetujui. Isi snapshot: ${JSON.stringify(shaSnapshot)}`
     );
   } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+/**
+ * SNAPSHOT DIPAKAI DI HILIR — bukan sekadar dibuat.
+ *
+ * Temuan Reviewer 21 Agu atas kasus di atas: ia berhenti sebelum
+ * person-safe/planner/provider lalu hanya membaca direktori `ref-tersetujui`.
+ * Regresi yang tetap MEMBUAT snapshot tapi meneruskan `imageRef` (path bersama
+ * yang sudah tertimpa) ke hilir akan tetap hijau — snapshot yang dibuat lalu
+ * diabaikan sama tidak bergunanya dengan snapshot yang tidak pernah dibuat.
+ *
+ * Kasus ini menempuh sampai PROVIDER lewat seam
+ * `setVideoProvidersForTests`, dengan PNG sungguhan supaya person-safe
+ * melewatinya apa adanya, lalu membaca bytes yang BENAR-BENAR diterima.
+ */
+test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetujui", async (t) => {
+  if (!punyaPersonSafe()) return t.skip("python/OpenCV/model YuNet tidak ada — jalur hilir tidak bisa ditempuh");
+  const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+  const sharp = (await import("sharp")).default;
+  const gambar = (r: number, g: number, b: number) =>
+    sharp({ create: { width: 800, height: 800, channels: 3, background: { r, g, b } } }).png().toBuffer();
+  const sah1 = await gambar(30, 190, 110);
+  const sah2 = await gambar(70, 110, 210);
+
+  const dasar = "uploads/w2-hilir";
+  const relSah1 = `${dasar}/0.png`;
+  const relSah2 = `${dasar}/1.png`;
+  const isi = new Map<string, Buffer>([
+    [relSah1, sah1],
+    [`${relSah1}.meta.json`, sidecar(sah1, true)],
+    [relSah2, sah2],
+    [`${relSah2}.meta.json`, sidecar(sah2, true)],
+  ]);
+
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "w2-hilir-"));
+  const pathBersama = path.join(tmp, "bersama.png");
+  const putCalls: string[] = [];
+  setMediaStorageForTests({
+    async put(key: string, body: Buffer) {
+      putCalls.push(key);
+      isi.set(key, body);
+    },
+    async delete(key: string) {
+      isi.delete(key);
+    },
+    async get(key: string) {
+      const body = isi.get(key);
+      return body ? { body, size: body.length } : null;
+    },
+    async stat(key: string) {
+      const body = isi.get(key);
+      return body ? { size: body.length } : null;
+    },
+    async materialize(key: string) {
+      const body = isi.get(key);
+      if (!body) return null;
+      fs.writeFileSync(pathBersama, body); // materialize kedua menimpa yang pertama
+      return pathBersama;
+    },
+  } as never);
+
+  let utamaDiterima: string | null = null;
+  setVideoProvidersForTests([
+    {
+      name: "pengamat-w2",
+      async healthCheck() {
+        return true;
+      },
+      estimateCost() {
+        return 0;
+      },
+      async generate(spec: { shots: { imageRefPath: string }[] }) {
+        const p = spec.shots[0]?.imageRefPath;
+        if (p && fs.existsSync(p)) utamaDiterima = sha256Uji(fs.readFileSync(p));
+        throw new Error("provider pengamat W2: berhenti sebelum biaya keluar");
+      },
+    } as never,
+  ]);
+
+  try {
+    const { jobId } = siapkanJob([relSah1, relSah2], "high_quality");
+    await processJob(jobId);
+
+    assertNolEfekSamping(jobId, { putCalls }, "W2 hilir");
+    assert.equal(
+      sha256Uji(fs.readFileSync(pathBersama)),
+      sha256Uji(sah2),
+      "prasyarat: path bersama memang sudah ditimpa bytes referensi kedua"
+    );
+    assert.ok(utamaDiterima, "provider tidak pernah menerima spec — jalur hilir tidak tertempuh");
+    assert.equal(
+      utamaDiterima,
+      sha256Uji(sah1),
+      "provider menerima isi PATH BERSAMA sebagai referensi utama. Snapshot dibuat tapi tidak " +
+        "dipakai di hilir — sama tidak bergunanya dengan tidak dibuat sama sekali."
+    );
+  } finally {
+    setVideoProvidersForTests(undefined);
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });

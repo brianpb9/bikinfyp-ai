@@ -56,6 +56,29 @@ export const ALASAN_TOLAK = {
 
 export type AlasanTolak = (typeof ALASAN_TOLAK)[keyof typeof ALASAN_TOLAK];
 
+/**
+ * Sub-kategori untuk `EVIDENCE_INVALID`, dipakai AUDIT — bukan gerbang.
+ *
+ * Gerbangnya tidak peduli bedanya: bukti tidak sah adalah bukti tidak sah.
+ * Audit legacy peduli sekali, karena tindakannya berbeda per sebab —
+ * sidecar HILANG bisa diterbitkan ulang dari bytes yang masih ada, sidecar
+ * KORUP menandakan storage bermasalah, dan VERSI yang tidak cocok berarti
+ * seluruh angkatan bukti perlu direvalidasi. Menghitung semuanya sebagai satu
+ * angka membuat keputusan itu mustahil diambil.
+ *
+ * Opsional: penolakan selain EVIDENCE_INVALID sudah punya kode tingkat atas
+ * yang cukup spesifik.
+ */
+export const RINCI_TOLAK = {
+  SIDECAR_HILANG: "SIDECAR_MISSING",
+  SIDECAR_KORUP: "SIDECAR_CORRUPT",
+  BENTUK_SALAH: "SIDECAR_SCHEMA",
+  VERSI_TIDAK_COCOK: "SIDECAR_VERSION",
+  BERTENTANGAN: "SIDECAR_CONTRADICTORY",
+} as const;
+
+export type RinciTolak = (typeof RINCI_TOLAK)[keyof typeof RINCI_TOLAK];
+
 /** Identitas byte yang tersetujui — bukan sekadar nama berkas. */
 export interface ReferensiTersetujui {
   rel: string;
@@ -70,6 +93,8 @@ export interface ReferensiDitolak {
   alasan: AlasanTolak;
   /** Bisa dibaca manusia; dipakai pemanggil untuk pesan yang bisa ditindaklanjuti. */
   pesan: string;
+  /** Sub-kategori untuk EVIDENCE_INVALID. Dipakai audit, tidak dipakai gerbang. */
+  rinci?: RinciTolak;
 }
 
 export interface HasilResolusiReferensi {
@@ -207,13 +232,19 @@ const sha256 = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex"
  * nanti tidak bisa membedakan keduanya.
  */
 async function nilaiSatu(rel: string): Promise<ReferensiTersetujui | ReferensiDitolak> {
-  const tolak = (alasan: AlasanTolak, pesan: string): ReferensiDitolak => ({ rel, alasan, pesan });
+  const tolak = (alasan: AlasanTolak, pesan: string, rinci?: RinciTolak): ReferensiDitolak => ({
+    rel,
+    alasan,
+    pesan,
+    ...(rinci ? { rinci } : {}),
+  });
 
   const objSidecar = await mediaStorage().get(relMeta(rel));
   if (!objSidecar) {
     return tolak(
       ALASAN_TOLAK.BUKTI_TIDAK_SAH,
-      `Tidak ada bukti kelayakan untuk ${rel}. Foto ini belum pernah diperiksa, jadi ia dikarantina.`
+      `Tidak ada bukti kelayakan untuk ${rel}. Foto ini belum pernah diperiksa, jadi ia dikarantina.`,
+      RINCI_TOLAK.SIDECAR_HILANG
     );
   }
 
@@ -221,18 +252,30 @@ async function nilaiSatu(rel: string): Promise<ReferensiTersetujui | ReferensiDi
   try {
     mentah = JSON.parse(objSidecar.body.toString("utf8"));
   } catch {
-    return tolak(ALASAN_TOLAK.BUKTI_TIDAK_SAH, `Bukti kelayakan ${rel} rusak dan tidak bisa dibaca.`);
+    return tolak(
+      ALASAN_TOLAK.BUKTI_TIDAK_SAH,
+      `Bukti kelayakan ${rel} rusak dan tidak bisa dibaca.`,
+      RINCI_TOLAK.SIDECAR_KORUP
+    );
   }
 
   const bentuk = periksaBentuk(mentah);
   if (!bentuk.ok) {
-    return tolak(ALASAN_TOLAK.BUKTI_TIDAK_SAH, `Bukti kelayakan ${rel} tidak sah: ${bentuk.sebab}.`);
+    return tolak(
+      ALASAN_TOLAK.BUKTI_TIDAK_SAH,
+      `Bukti kelayakan ${rel} tidak sah: ${bentuk.sebab}.`,
+      bentuk.sebab.startsWith("versiBukti") ? RINCI_TOLAK.VERSI_TIDAK_COCOK : RINCI_TOLAK.BENTUK_SALAH
+    );
   }
   const sidecar = bentuk.sidecar;
 
   const bantahan = periksaKonsistensi(sidecar);
   if (bantahan) {
-    return tolak(ALASAN_TOLAK.BUKTI_TIDAK_SAH, `Bukti kelayakan ${rel} bertentangan dengan dirinya sendiri: ${bantahan}.`);
+    return tolak(
+      ALASAN_TOLAK.BUKTI_TIDAK_SAH,
+      `Bukti kelayakan ${rel} bertentangan dengan dirinya sendiri: ${bantahan}.`,
+      RINCI_TOLAK.BERTENTANGAN
+    );
   }
 
   const objBerkas = await mediaStorage().get(rel);
