@@ -28,7 +28,7 @@ keluhan pengguna — yaitu terlambat.
 | `lib/audit-bukti-produk.ts` | penghitung; hakimnya `resolveApprovedReference` yang SAMA |
 | `lib/audit-sumber-produk.ts` | adapter baris: SQLite (`readonly`+`fileMustExist`) dan Postgres |
 | `scripts/audit-bukti-produk.ts` | pembungkus CLI tipis; nol logika yang bisa salah hitung |
-| `tests/audit-bukti-produk.test.ts` | 20 test |
+| `tests/audit-bukti-produk.test.ts` | 23 test |
 | `tests/audit-sumber-produk.test.ts` | 5 test |
 
 Menjalankannya:
@@ -79,9 +79,15 @@ Sebab kolom rusak: `IMAGES_COLUMN_EMPTY`, `IMAGES_COLUMN_UNPARSEABLE`,
 4. **KONTRAK KUNCI DIPINJAM, BUKAN DISALIN.** `kunciStorageSah` (lib/storage)
    memanggil `safeKey` yang sama dengan setiap adapter. Test menyilangkan
    keputusan parser dengan predikat itu untuk sembilan kunci.
-   Catatan yang mudah salah ditebak: `"/x.webp"` dan `"   "` **sah** — safeKey
-   membuang garis miring di depan, dan whitespace adalah nama berkas yang sah.
-   Keduanya berakhir `REF_MISSING`, vonis yang benar.
+   Catatan yang mudah salah ditebak: `"/x.webp"` dan `"   "` **lolos validasi
+   kunci** — safeKey membuang garis miring di depan, dan whitespace adalah nama
+   berkas yang sah. Vonis SESUDAHNYA bergantung pada keadaan sidecar dan bytes,
+   bukan pada bentuk kuncinya: `nilaiSatu()` memeriksa sidecar LEBIH DULU, jadi
+   tanpa sidecar hasilnya `EVIDENCE_INVALID / SIDECAR_MISSING`; `REF_MISSING`
+   hanya terjadi kalau sidecar SAH ada sementara bytes utamanya hilang.
+   (Koreksi temuan Reviewer atas cd70288: baris ini semula menyatakan keduanya
+   "berakhir REF_MISSING" — saya menebak vonis resolver tanpa membaca urutan
+   pemeriksaannya. Sekarang urutan itu dikunci test, bukan diklaim di dokumen.)
 5. **SATU PINTU.** `ProdukUntukAudit.images` menerima `string[] | HasilKolomRusak`
    saja. Bentuk `{ok:true}` tidak bisa diungkapkan, DAN diperiksa ulang saat
    runtime kalau diselundupkan lewat `as`.

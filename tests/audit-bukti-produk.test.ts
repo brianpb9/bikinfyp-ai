@@ -319,9 +319,12 @@ test("KOLOM: elemen yang bukan kunci storage sah adalah KERUSAKAN, bukan foto", 
   // Catatan: `"/x.webp"` dan `"   "` TIDAK ada di daftar ini. safeKey membuang
   // garis miring di depan, dan whitespace adalah nama berkas yang sah — jadi
   // storage menerima keduanya, dan audit yang MEMINJAM kontraknya wajib ikut
-  // menerimanya. Keduanya berakhir sebagai REF_MISSING, vonis yang benar dan
-  // bisa ditindaklanjuti. Menebak lebih ketat dari kontrak sebenarnya adalah
-  // cara lain audit berbohong; kedua kunci itu dijaga oleh test silang di bawah.
+  // menerimanya. Menebak lebih ketat dari kontrak sebenarnya adalah cara lain
+  // audit berbohong; kedua kunci itu dijaga oleh test silang di bawah.
+  //
+  // Vonis SESUDAH validasi kunci bukan urusan parser ini dan TIDAK diklaim di
+  // sini — ia bergantung pada keadaan sidecar/bytes, dan dikunci oleh test
+  // "URUTAN VONIS" di bawah.
   for (const mentah of ['["../x.webp"]', '["a/../../x.webp"]', '[""]', '["a//b.webp"]', '["./x.webp"]']) {
     const h = bacaKolomImages(mentah);
     assert.equal(h.ok, false, `elemen bukan kunci sah diterima: ${mentah}`);
@@ -517,4 +520,72 @@ test("AUDIT: pembungkus `ok:true` yang diselundupkan TETAP divalidasi ulang", as
   // Arah sebaliknya: validasi ulang tidak boleh MENOLAK daftar yang memang sah.
   assert.equal(h.produkTerbrick, 0, "w4 berisi kunci yang sah dan foto yang tersetujui");
   assert.equal(h.fotoTersetujui, 2, "p1 dan w4");
+});
+
+// ---------------------------------------------------------------------------
+// URUTAN VONIS RESOLVER
+//
+// Lolos validasi kunci TIDAK menentukan vonis. `nilaiSatu()` memeriksa sidecar
+// LEBIH DULU, jadi kunci sah tanpa sidecar berakhir EVIDENCE_INVALID/
+// SIDECAR_MISSING — bukan REF_MISSING. Dokumen bukti P0-B3 sempat mengklaim
+// sebaliknya (temuan Reviewer atas cd70288): saya menebak vonis resolver tanpa
+// membaca urutan pemeriksaannya. Diklaim di dokumen, urutan itu bisa menyimpang
+// tanpa ada yang tahu; dikunci di sini, ia tidak bisa.
+// ---------------------------------------------------------------------------
+
+test("URUTAN VONIS: kunci sah TANPA sidecar -> EVIDENCE_INVALID/SIDECAR_MISSING, bukan REF_MISSING", async () => {
+  isi.clear();
+  // Kunci yang lolos kunciStorageSah tapi bentuknya tidak biasa.
+  for (const k of ["/x.webp", "   ", "biasa.webp"]) {
+    assert.equal(kunciStorageSah(k), true, `prasyarat: ${JSON.stringify(k)} seharusnya lolos validasi kunci`);
+    isi.set(k, PACKSHOT); // bytes ADA, sidecar TIDAK
+  }
+  const h = await resolveApprovedReference(["/x.webp", "   ", "biasa.webp"]);
+  assert.equal(h.tersetujui.length, 0);
+  assert.deepEqual(
+    h.ditolak.map((d) => [d.alasan, d.rinci]),
+    [
+      [ALASAN_TOLAK.BUKTI_TIDAK_SAH, RINCI_TOLAK.SIDECAR_HILANG],
+      [ALASAN_TOLAK.BUKTI_TIDAK_SAH, RINCI_TOLAK.SIDECAR_HILANG],
+      [ALASAN_TOLAK.BUKTI_TIDAK_SAH, RINCI_TOLAK.SIDECAR_HILANG],
+    ],
+    "bentuk kunci tidak boleh mengubah vonis; yang menentukan adalah keadaan sidecar"
+  );
+});
+
+test("URUTAN VONIS: bytes DAN sidecar sama-sama hilang -> SIDECAR_MISSING (sidecar diperiksa lebih dulu)", async () => {
+  // INILAH kasus yang membedakan urutan, dan satu-satunya yang membedakannya.
+  // Dua test tetangga di atas/bawah masing-masing hanya menyalakan SATU dari
+  // dua kekurangan, jadi resolver yang memeriksa bytes lebih dulu akan tetap
+  // menghasilkan jawaban yang sama dan keduanya lulus tanpa menguji urutan —
+  // dibuktikan dengan mutasi: membalik urutan pemeriksaan tidak membuat satu
+  // pun dari keduanya merah. Hanya di sini kedua kekurangan hadir bersamaan,
+  // sehingga jawabannya menunjuk pemeriksaan MANA yang berjalan pertama.
+  isi.clear(); // nol bytes, nol sidecar
+  const h = await resolveApprovedReference(["/x.webp"]);
+  assert.deepEqual(
+    h.ditolak.map((d) => [d.alasan, d.rinci]),
+    [[ALASAN_TOLAK.BUKTI_TIDAK_SAH, RINCI_TOLAK.SIDECAR_HILANG]],
+    "urutan pemeriksaan berubah: bytes dinilai sebelum bukti. Foto tanpa bukti dilaporkan sebagai " +
+      "berkas hilang, jadi audit menyuruh orang mencari berkas yang sebenarnya ADA — dan kerusakan " +
+      "yang sebenarnya, yaitu bukti yang tidak pernah diterbitkan, tidak pernah terhitung."
+  );
+});
+
+test("URUTAN VONIS: REF_MISSING hanya saat sidecar SAH ada tapi bytes utamanya hilang", async () => {
+  isi.clear();
+  isi.set("/x.webp.meta.json", sidecar(PACKSHOT)); // sidecar sah, bytes TIDAK ada
+  const hilang = await resolveApprovedReference(["/x.webp"]);
+  assert.deepEqual(
+    hilang.ditolak.map((d) => [d.alasan, d.rinci]),
+    [[ALASAN_TOLAK.BERKAS_HILANG, undefined]],
+    "REF_MISSING tidak muncul justru pada satu-satunya keadaan yang memicunya"
+  );
+
+  // Dan arah sebaliknya: sidecar sah + bytes cocok -> TERSETUJUI. Tanpa kontrol
+  // ini, resolver yang menolak segalanya akan membuat kedua test di atas hijau.
+  isi.set("/x.webp", PACKSHOT);
+  const sah = await resolveApprovedReference(["/x.webp"]);
+  assert.equal(sah.ditolak.length, 0, `masih ditolak: ${JSON.stringify(sah.ditolak)}`);
+  assert.equal(sah.utama?.rel, "/x.webp");
 });
