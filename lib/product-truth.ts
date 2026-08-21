@@ -283,3 +283,24 @@ export async function resolveApprovedReference(rels: string[]): Promise<HasilRes
 
   return { utama: tersetujui[0] ?? null, tersetujui, ditolak };
 }
+
+/**
+ * Pesan siap-tampil ketika TIDAK ADA referensi tersetujui.
+ *
+ * Ada di sini, bukan di masing-masing worker, karena dua worker yang menyusun
+ * pesannya sendiri akan menjelaskan hal yang sama dengan dua cara berbeda —
+ * dan pengguna yang sama bisa mendapat penjelasan berbeda hanya karena
+ * job-nya kebetulan jalan di jalur yang berbeda.
+ *
+ * Alasan per foto ikut dibawa, bukan diringkas jadi "tidak ada foto yang
+ * layak": pengguna yang fotonya ditolak karena banner butuh tindakan berbeda
+ * dari yang fotonya belum bisa diperiksa, dan operator yang membaca log butuh
+ * bedanya untuk mengaudit.
+ */
+export function pesanTanpaReferensi(hasil: HasilResolusiReferensi): string {
+  if (hasil.ditolak.length === 0) {
+    return "Produk ini belum punya foto yang bisa dipakai jadi acuan video.";
+  }
+  const rincian = hasil.ditolak.map((d) => `${d.rel} [${d.alasan}]: ${d.pesan}`).join(" | ");
+  return `Tidak ada foto produk yang bisa dipakai jadi acuan video. ${rincian}`;
+}

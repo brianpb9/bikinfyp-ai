@@ -52,6 +52,7 @@ import { pgTaskMemo } from "./task-memo";
 import { appendEndcard, ENDCARD_DEFAULT_COLOR, ENDCARD_DURASI_DTK } from "../media/endcard";
 import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
+import { pesanTanpaReferensi, resolveApprovedReference } from "../product-truth";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -320,15 +321,33 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const segments = JSON.parse(row.script_segments) as SegmentDraft[];
   const images = JSON.parse(row.product_images) as string[];
   if (images.length === 0) throw new Error("Produk tidak punya foto — upload minimal 1 foto.");
-  const imageRef = await mediaStorage().materialize(images[0]);
+  // REFERENSI DIPILIH DARI BUKTI, BUKAN DARI URUTAN UNGGAH.
+  //
+  // Sampai 21 Agu baris ini `materialize(images[0])`: foto PERTAMA menang
+  // karena posisinya, apa pun isinya. Produk yang foto pertamanya banner
+  // promo mengirim BANNER ke model video sebagai acuan "beginilah rupa
+  // produknya", dan model menyalin teks banner ke kemasan. Baru ketahuan
+  // sesudah dibayar.
+  //
+  // GAGAL-TERTUTUP SEBELUM LANGKAH BERBAYAR. Resolver tidak pernah melempar;
+  // yang melempar di sini adalah pemanggilnya, dan ia melempar SEBELUM satu
+  // byte pun diambil — jadi nol materialize, nol provider, nol capture.
+  const referensi = await resolveApprovedReference(images);
+  if (!referensi.utama) throw new Error(pesanTanpaReferensi(referensi));
+  const imageRef = await mediaStorage().materialize(referensi.utama.rel);
   if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
   const workDir = path.join(config.storageDir, "jobs", row.id);
   fs.mkdirSync(workDir, { recursive: true });
   let primaryRef = imageRef;
   const extraRefs: string[] = [];
   if ((row.quality_tier ?? "silent_caption") !== "silent_caption") {
-    for (const rel of images.slice(1, MAX_IMAGES)) {
-      const p = await mediaStorage().materialize(rel).catch(() => null);
+    // Referensi tambahan juga HANYA dari daftar tersetujui. Foto ke-2 dst
+    // dikirim ke model sebagai referensi identitas — sama berbahayanya kalau
+    // salah. Batasnya dipertahankan sama persis dengan sebelumnya
+    // (slice(1, MAX_IMAGES) => paling banyak tujuh tambahan), supaya langkah
+    // ini tidak diam-diam mengubah payload provider.
+    for (const ref of referensi.tersetujui.slice(1, MAX_IMAGES)) {
+      const p = await mediaStorage().materialize(ref.rel).catch(() => null);
       if (p) extraRefs.push(p);
     }
     // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah

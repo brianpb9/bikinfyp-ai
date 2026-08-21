@@ -31,6 +31,7 @@ import { mediaStorage } from "./storage";
 import { MAX_IMAGES } from "./product-images";
 import { personSafeReferencePhotos } from "./media/person-safe-refs";
 import { normalizeHookLevel } from "./config/hooks";
+import { pesanTanpaReferensi, resolveApprovedReference } from "./product-truth";
 
 const CONCURRENCY = 1;
 
@@ -106,7 +107,20 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
 
     const workDir = path.join(config.storageDir, "jobs", job.id);
     fs.mkdirSync(workDir, { recursive: true });
-    const imageRef = await mediaStorage().materialize(images[0]);
+    // REFERENSI DIPILIH DARI BUKTI, BUKAN DARI URUTAN UNGGAH.
+    //
+    // Sampai 21 Agu baris ini `materialize(images[0])`: foto PERTAMA menang
+    // karena posisinya, apa pun isinya. Produk yang foto pertamanya banner
+    // promo mengirim BANNER ke model video sebagai acuan "beginilah rupa
+    // produknya", dan model menyalin teks banner ke kemasan. Baru ketahuan
+    // sesudah dibayar.
+    //
+    // GAGAL-TERTUTUP SEBELUM LANGKAH BERBAYAR. Resolver tidak pernah melempar;
+    // yang melempar di sini adalah pemanggilnya, dan ia melempar SEBELUM satu
+    // byte pun diambil — jadi nol materialize, nol provider, nol capture.
+    const referensi = await resolveApprovedReference(images);
+    if (!referensi.utama) throw new Error(pesanTanpaReferensi(referensi));
+    const imageRef = await mediaStorage().materialize(referensi.utama.rel);
     if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
 
     const tier = (job.quality_tier ?? "silent_caption") as QualityTier;
@@ -116,8 +130,13 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     let primaryRef = imageRef;
     const extraRefs: string[] = [];
     if (withAudio) {
-      for (const rel of images.slice(1, MAX_IMAGES)) {
-        const p = await mediaStorage().materialize(rel).catch(() => null);
+      // Referensi tambahan juga HANYA dari daftar tersetujui. Foto ke-2 dst
+      // dikirim ke model sebagai referensi identitas — sama berbahayanya kalau
+      // salah. Batasnya dipertahankan sama persis dengan sebelumnya
+      // (slice(1, MAX_IMAGES) => paling banyak tujuh tambahan), supaya langkah
+      // ini tidak diam-diam mengubah payload provider.
+      for (const ref of referensi.tersetujui.slice(1, MAX_IMAGES)) {
+        const p = await mediaStorage().materialize(ref.rel).catch(() => null);
         if (p) extraRefs.push(p);
       }
       // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
