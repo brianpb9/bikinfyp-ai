@@ -426,3 +426,38 @@ test("AUDIT: batas daftar juga berlaku untuk kolom rusak, tanpa mengubah CACAHNY
   assert.equal(h.produkKolomRusak, 5, "cacah kolom rusak ikut terpotong oleh batas daftar");
   assert.equal(h.kolomRusak.length, 2, "batas daftar tidak diterapkan pada kolom rusak");
 });
+
+test("AUDIT: array yang diserahkan LANGSUNG tetap lewat validasi kunci — tidak ada jalan memutar", async () => {
+  // `ProdukUntukAudit.images` menerima `string[]` sebagai kemudahan. Kemudahan
+  // itu sempat jadi pintu kedua: array dibungkus `{ok:true}` di boundary audit,
+  // sehingga kunci tidak sah melewati validasi yang dipasang di parser, dan
+  // vonisnya bergantung pada adapter storage mana yang kebetulan terpasang.
+  pasangPustaka();
+  const h = await auditBuktiProduk([
+    { id: "p1", images: ["p1/0.webp"], nama: "sah" },
+    { id: "t1", images: ["../rahasia.webp"], nama: "traversal", orgId: "org-2" },
+    { id: "t2", images: ["p1/0.webp", ""], nama: "elemen kosong" },
+    { id: "t3", images: [42 as unknown as string], nama: "bukan teks" },
+  ]);
+
+  assert.equal(
+    h.produkKolomRusak,
+    3,
+    "array yang diserahkan langsung melewati validasi kunci — perbaikan yang punya jalan memutar bukan perbaikan"
+  );
+  assert.equal(h.produkGagalDiperiksa, 0, "kunci tidak sah baru tertangkap saat storage melempar, bukan saat dibaca");
+  assert.deepEqual(h.perKolomRusak, {
+    [KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI]: 2,
+    [KOLOM_RUSAK.ELEMEN_BUKAN_TEKS]: 1,
+  });
+  assert.deepEqual(
+    h.kolomRusak.map((k) => [k.id, k.sebab, k.orgId]),
+    [
+      ["t1", KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI, "org-2"],
+      ["t2", KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI, null],
+      ["t3", KOLOM_RUSAK.ELEMEN_BUKAN_TEKS, null],
+    ]
+  );
+  assert.equal(h.produkTerbrick, 0, "baris yang kolomnya rusak diberi vonis terbrick");
+  assert.equal(h.produk, 4, "audit berhenti sebelum baris terakhir");
+});

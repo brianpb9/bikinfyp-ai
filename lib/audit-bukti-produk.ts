@@ -223,7 +223,13 @@ export async function auditBuktiProduk(
   for await (const produk of daftar as AsyncIterable<ProdukUntukAudit>) {
     hasil.produk += 1;
 
-    const kolom: HasilKolomImages = Array.isArray(produk.images) ? { ok: true, images: produk.images } : produk.images;
+    // SATU PINTU, BUKAN DUA. Array yang diserahkan langsung dilewatkan melalui
+    // `bacaKolomImages` yang sama, bukan dibungkus `{ok:true}` di sini. Versi
+    // sebelumnya membungkusnya langsung, sehingga `images: ["../x.webp"]` —
+    // jalur publik yang sah menurut tipe — MELEWATI validasi kunci yang baru
+    // saja dipasang, lalu vonisnya bergantung pada adapter storage mana yang
+    // kebetulan terpasang. Perbaikan yang punya jalan memutar bukan perbaikan.
+    const kolom: HasilKolomImages = Array.isArray(produk.images) ? bacaKolomImages(produk.images) : produk.images;
     if (!kolom.ok) {
       hasil.produkKolomRusak += 1;
       hasil.perKolomRusak[kolom.sebab] = (hasil.perKolomRusak[kolom.sebab] ?? 0) + 1;
