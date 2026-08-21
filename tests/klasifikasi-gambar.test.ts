@@ -11,6 +11,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 
@@ -106,7 +107,108 @@ test("JURANG ambang masih lebar — kalau menyempit, ambangnya harus diukur ulan
 //   - benar-benar diperiksa dan memang banner -> `promotional_graphic`
 const STATUS_BELUM_DIPERIKSA = "belum_diperiksa";
 
-test("gagal memeriksa = BELUM DIPERIKSA (bukan vonis promosi), dan tetap tidak layak", async () => {
+/**
+ * TIGA MODE KEGAGALAN, bukan satu.
+ *
+ * Temuan Reviewer ronde 6: versi pertama kontrak ini hanya memberi path berkas
+ * yang tidak ada. Implementasi bisa mengembalikan `belum_diperiksa` khusus untuk
+ * input hilang lalu TETAP mengembalikan `promotional_graphic` saat spawn
+ * ffmpeg/ffprobe/tesseract gagal atau timeout — dan seluruh kontrak itu tetap
+ * lulus. Padahal justru kegagalan BINER-lah cacat P0-B2 yang sesungguhnya:
+ * service web Render (`runtime: node`) tidak dijamin punya ketiganya.
+ *
+ * Ketiganya karena itu diuji atas GAMBAR YANG SAH DAN BENAR-BENAR ADA (dibuat
+ * dengan sharp saat test berjalan, jadi deterministik di mesin mana pun tanpa
+ * fixture eksternal), dengan PATH yang dikendalikan test:
+ *
+ *   1. biner HILANG        -> PATH kosong, spawn ENOENT
+ *   2. biner GAGAL         -> ffmpeg palsu yang exit 1
+ *   3. biner MENGGANTUNG   -> ffmpeg palsu yang tidur melewati timeout 20 detik
+ *
+ * Mode 3 memakan ~20 detik dan itu disengaja: ia satu-satunya cara menguji
+ * jalur timeout tanpa mengubah produksi (timeout 20_000 dipatok di
+ * lib/media/klasifikasi-gambar.ts, tidak ada env yang mengubahnya).
+ */
+async function gambarSahSementara(dir: string): Promise<string> {
+  const sharp = (await import("sharp")).default;
+  const berkas = path.join(dir, "packshot.webp");
+  await sharp({ create: { width: 400, height: 400, channels: 3, background: { r: 200, g: 200, b: 200 } } })
+    .webp()
+    .toFile(berkas);
+  return berkas;
+}
+
+function binPalsu(dir: string, nama: string, isi: string): void {
+  const berkas = path.join(dir, nama);
+  fs.writeFileSync(berkas, isi, { mode: 0o755 });
+}
+
+const modeKegagalan: { judul: string; siapkan: (bin: string) => void; lambat?: boolean }[] = [
+  {
+    judul: "biner HILANG (PATH kosong, spawn ENOENT)",
+    siapkan: () => {
+      /* direktori bin sengaja dibiarkan kosong */
+    },
+  },
+  {
+    judul: "biner GAGAL (exit bukan nol)",
+    siapkan: (bin) => binPalsu(bin, "ffmpeg", "#!/bin/sh\nexit 1\n"),
+  },
+  {
+    judul: "biner MENGGANTUNG (timeout 20 detik)",
+    siapkan: (bin) => binPalsu(bin, "ffmpeg", "#!/bin/sh\nsleep 25\n"),
+    lambat: true,
+  },
+];
+
+for (const mode of modeKegagalan) {
+  test(`gagal memeriksa — ${mode.judul} = BELUM DIPERIKSA, dan tetap tidak layak`, async () => {
+    const kerja = fs.mkdtempSync(path.join(os.tmpdir(), "klas-gagal-"));
+    const bin = path.join(kerja, "bin");
+    fs.mkdirSync(bin);
+    mode.siapkan(bin);
+    const foto = await gambarSahSementara(kerja);
+    const pathAsli = process.env.PATH;
+    const ffmpegAsli = process.env.FFMPEG_PATH;
+    const ffprobeAsli = process.env.FFPROBE_PATH;
+    process.env.PATH = bin;
+    delete process.env.FFMPEG_PATH;
+    delete process.env.FFPROBE_PATH;
+    try {
+      const h = await klasifikasiGambar(foto);
+
+      assert.equal(
+        h.layakReferensi,
+        false,
+        `${mode.judul}: RAGU = TIDAK LOLOS masih berlaku — pemeriksaan yang gagal tidak boleh ` +
+          "menghasilkan referensi"
+      );
+      assert.notEqual(
+        h.jenis,
+        "promotional_graphic",
+        `${mode.judul}: kegagalan biner dicatat sebagai VONIS "promotional_graphic" atas gambar ` +
+          "yang SAH dan BENAR-BENAR ADA. Inilah cacat P0-B2: service web Render (runtime: node) " +
+          "tidak dijamin punya ffmpeg/ffprobe/tesseract, jadi setiap foto produk yang sah akan " +
+          "dicap promosi selamanya oleh sidecar yang tidak bisa dibedakan dari banner sungguhan."
+      );
+      assert.equal(
+        h.jenis,
+        STATUS_BELUM_DIPERIKSA,
+        `${mode.judul}: status non-vonis eksplisit "${STATUS_BELUM_DIPERIKSA}" belum ada. ` +
+          "Reason code penolakannya CLASSIFIER_FAILED (PATH-CASE-MATRIX C7)."
+      );
+      assert.ok(h.alasan.length > 10, `${mode.judul}: penolakan tanpa alasan yang bisa dibaca`);
+    } finally {
+      if (pathAsli === undefined) delete process.env.PATH;
+      else process.env.PATH = pathAsli;
+      if (ffmpegAsli !== undefined) process.env.FFMPEG_PATH = ffmpegAsli;
+      if (ffprobeAsli !== undefined) process.env.FFPROBE_PATH = ffprobeAsli;
+      fs.rmSync(kerja, { recursive: true, force: true });
+    }
+  });
+}
+
+test("gagal memeriksa — berkas TIDAK ADA = BELUM DIPERIKSA, dan tetap tidak layak", async () => {
   const h = await klasifikasiGambar("/tmp/berkas-yang-tidak-ada-sama-sekali.png");
 
   // Keputusan gerbang tidak berubah, dan diasersi lebih dulu supaya ia tetap

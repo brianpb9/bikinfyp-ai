@@ -358,6 +358,88 @@ const fieldTakSah: { judul: string; ubah: Record<string, unknown>; kenapa: strin
 const AMBANG_RASIO_V1 = 0.02;
 const AMBANG_KATA_V1 = 6;
 
+/**
+ * SATU SUMBER KEBIJAKAN — classifier dan validator wajib membaca yang SAMA.
+ *
+ * Temuan Reviewer ronde 6, dan ia membongkar klaim saya sendiri: test ini
+ * memanggil `referensiLayak`, bukan classifier. Jadi kalau resolver menyalin
+ * 0.02/6 miliknya sendiri, menggeser AMBANG_RASIO/AMBANG_KATA di classifier
+ * tanpa menaikkan versi akan membiarkan SELURUH fixture hijau — sementara
+ * producer dan validator diam-diam memakai aturan yang berbeda. Itu keadaan
+ * terburuk: bukti diterbitkan dengan satu aturan dan dinilai dengan aturan lain,
+ * tanpa satu pun test merah.
+ *
+ * Kontraknya karena itu dinaikkan ke produksi: `lib/media/klasifikasi-gambar.ts`
+ * WAJIB mengekspor satu objek kebijakan, dan kebijakan itulah yang dipakai
+ * classifier saat menerbitkan bukti DAN validator saat menilainya.
+ *
+ *     KEBIJAKAN_KLASIFIKASI = { versiBukti: 1, ambangRasio: 0.02, ambangKata: 6 }
+ *
+ * Dua test di bawah mengunci dua hal berbeda:
+ *   1. nilai kebijakan versi 1 adalah 0.02/6 — kalau digeser tanpa menaikkan
+ *      versiBukti, test ini merah, dan penulisnya dipaksa memutuskan sadar;
+ *   2. fixture yang DIBANGUN DARI objek kebijakan itu (bukan dari literal)
+ *      dinilai konsisten oleh resolver — kalau validator punya salinan sendiri,
+ *      geseran kebijakan membuat keduanya berselisih dan test ini merah.
+ */
+const MODUL_CLASSIFIER = "lib/media/klasifikasi-gambar";
+const EKSPOR_KEBIJAKAN = "KEBIJAKAN_KLASIFIKASI";
+
+interface KebijakanKlasifikasi {
+  versiBukti: number;
+  ambangRasio: number;
+  ambangKata: number;
+}
+
+async function muatKebijakan(): Promise<KebijakanKlasifikasi> {
+  const modul = (await import(`../${MODUL_CLASSIFIER}`)) as Record<string, unknown>;
+  const kebijakan = modul[EKSPOR_KEBIJAKAN];
+  assert.ok(
+    kebijakan && typeof kebijakan === "object",
+    `${MODUL_CLASSIFIER}.ts tidak mengekspor ${EKSPOR_KEBIJAKAN}. Selama ambang classifier dan ` +
+      "ambang validator adalah dua salinan, bukti bisa diterbitkan dengan satu aturan dan " +
+      "dinilai dengan aturan lain tanpa satu pun test merah."
+  );
+  return kebijakan as KebijakanKlasifikasi;
+}
+
+test("KEBIJAKAN: classifier mengekspor kebijakan versi 1 dengan ambang yang dipakai fixture", async () => {
+  const k = await muatKebijakan();
+  assert.deepEqual(
+    { versiBukti: k.versiBukti, ambangRasio: k.ambangRasio, ambangKata: k.ambangKata },
+    { versiBukti: VERSI_BUKTI_TERKINI, ambangRasio: AMBANG_RASIO_V1, ambangKata: AMBANG_KATA_V1 },
+    `Kebijakan produksi tidak lagi sama dengan kebijakan yang dikunci fixture di berkas ini. ` +
+      "Kalau ambangnya memang sengaja digeser, versiBukti WAJIB naik dan fixture di sini WAJIB " +
+      "diperbarui bersamaan — bukti versi lama tidak boleh dinilai dengan aturan baru. Kalau " +
+      "versinya tidak naik, geseran itu membuat producer dan validator berselisih diam-diam."
+  );
+});
+
+test("KEBIJAKAN: resolver menilai TEPAT DI AMBANG produksi, bukan di salinannya sendiri", async () => {
+  // Fixture dibangun DARI objek kebijakan produksi, bukan dari literal. Kalau
+  // validator memakai salinan sendiri dan kebijakan bergeser, keduanya
+  // berselisih dan test ini yang menangkapnya — bukan fixture berliteral.
+  const k = await muatKebijakan();
+  for (const [judul, ubah] of [
+    [`rasioAreaTeks tepat ambang produksi (${k.ambangRasio})`, { rasioAreaTeks: k.ambangRasio }],
+    [`jumlahKata tepat ambang produksi (${k.ambangKata})`, { jumlahKata: k.ambangKata }],
+  ] as [string, Record<string, unknown>][]) {
+    const isi = { jenis: "product_photo", layakReferensi: true, ...ubah };
+    pasang([
+      [relFoto(1), PACKSHOT],
+      [relSidecar(1), sidecarDenganField(isi)],
+    ]);
+    const layak = await referensiLayak([relFoto(1)]);
+    assert.deepEqual(
+      layak,
+      [],
+      `${judul}: aturan produksi memakai >=, jadi nilai TEPAT di ambang sudah promosi dan vonis ` +
+        `"foto produk layak" mustahil. Kalau ini hijau, validator memakai ambang yang berbeda ` +
+        "dari classifier — dua aturan bukti, persis cacat yang modul pusat ada untuk menutupnya."
+    );
+  }
+});
+
 const kontradiktif: { judul: string; ubah: Record<string, unknown>; kenapa: string }[] = [
   // --- sumbu 1: jenis vs layakReferensi ---
   {
@@ -371,6 +453,14 @@ const kontradiktif: { judul: string; ubah: Record<string, unknown>; kenapa: stri
     judul: 'jenis "product_photo" TAPI layakReferensi false',
     ubah: { jenis: "product_photo", layakReferensi: false },
     kenapa: "arah sebaliknya: bukti menyangkal dirinya sendiri, jadi tidak ada vonis yang bisa dibaca",
+  },
+  {
+    judul: 'jenis "belum_diperiksa" TAPI layakReferensi true',
+    ubah: { jenis: "belum_diperiksa", layakReferensi: true, rasioAreaTeks: 0, jumlahKata: 0 },
+    kenapa:
+      "belum diperiksa TIDAK BISA layak — kalau ia layak, berarti ia sudah diperiksa. Ini " +
+      "kontradiksi, bukan status; bedakan dari belum_diperiksa + layakReferensi false yang " +
+      "justru bukti sah dan ditolak dengan CLASSIFIER_FAILED",
   },
 
   // --- sumbu 2: METRIK vs vonis, satu sumbu per fixture ---
@@ -416,6 +506,37 @@ const kontradiktif: { judul: string; ubah: Record<string, unknown>; kenapa: stri
     kenapa:
       `aturan v1 memakai >= , jadi jumlahKata TEPAT ${AMBANG_KATA_V1} sudah promosi. Validator ` +
       "yang memakai > akan meloloskan ini sambil tetap menolak 14",
+  },
+
+  // --- ARAH SEBALIKNYA: vonis PROMOSI dengan metrik di BAWAH ambang ---
+  //
+  // Temuan Reviewer ronde 6. Fixture di atas hanya menolak `product_photo` saat
+  // metriknya mencapai ambang; tidak ada yang menolak `promotional_graphic`
+  // ketika KEDUA metriknya di bawah ambang. Validator yang meloloskan setiap
+  // vonis promosi "karena toh fail-closed" lulus semuanya — sambil MEMBEKUKAN
+  // vonis palsu.
+  //
+  // Ini bukan kasus akademis: sidecar yang persis begini adalah yang ditulis
+  // blok catch `saveProductImages` di runtime tanpa biner — jenis promosi,
+  // layakReferensi false, rasio 0 dan kata 0. Di bawah kontrak baru keadaan itu
+  // WAJIB `belum_diperiksa`; vonis "promosi" dengan metrik di bawah ambang
+  // tidak mungkin keluar dari classifier v1, jadi ia bukan vonis — ia
+  // kegagalan yang menyamar.
+  {
+    judul: "vonis promosi TAPI kedua metrik di bawah ambang (vonis palsu yang membeku)",
+    ubah: { jenis: "promotional_graphic", layakReferensi: false, rasioAreaTeks: 0.001, jumlahKata: 1 },
+    kenapa:
+      "aturan v1 hanya memvonis promosi bila rasio >= ambang ATAU kata >= ambang; dengan " +
+      "keduanya di bawah, vonis ini mustahil dihasilkan classifier v1. Bentuk inilah yang " +
+      "ditulis blok catch saveProductImages saat biner tidak ada — dan sekarang wajib " +
+      "belum_diperiksa, bukan promosi",
+  },
+  {
+    judul: "vonis promosi dengan metrik NOL (bentuk persis dari blok catch produksi)",
+    ubah: { jenis: "promotional_graphic", layakReferensi: false, rasioAreaTeks: 0, jumlahKata: 0 },
+    kenapa:
+      "lib/product-images.ts:228-233 menulis persis ini saat klasifikasi gagal: rasio 0, kata 0, " +
+      "vonis promosi. Bukti yang berbohong tentang apa yang terjadi",
   },
 
   // --- sumbu 3: DOMAIN NUMERIK, satu sumbu per fixture ---
@@ -644,6 +765,7 @@ const ALASAN = {
   HILANG: "REF_MISSING", // bytes tidak ada di storage
   HASH: "REF_HASH_MISMATCH", // sha256 sidecar != bytes tersimpan
   PROMOSI: "REF_PROMOTIONAL", // diperiksa, dan memang materi promosi
+  BELUM: "CLASSIFIER_FAILED", // BELUM diperiksa — bukan vonis (PATH-CASE C7)
 } as const;
 
 type Resolver = (rels: string[]) => Promise<{
@@ -720,6 +842,67 @@ test("API pusat: bukti SAH -> utama terisi lengkap dengan sha256 dan versiBukti"
   assert.deepEqual(hasil.tersetujui.map((r) => r.rel), [relFoto(1)]);
   assert.deepEqual(hasil.ditolak, [], "bukti sah tidak boleh menghasilkan penolakan");
   assert.deepEqual(tulisan, [], "resolver tidak boleh menulis apa pun ke storage");
+});
+
+/**
+ * STATUS `belum_diperiksa` DIKUNCI DI KONTRAK SIDECAR, bukan hanya di classifier.
+ *
+ * Temuan Reviewer ronde 6: ronde sebelumnya memperkenalkan keadaan ketiga di
+ * `klasifikasiGambar`, tapi tidak satu pun test mengunci apa yang terjadi
+ * ketika keadaan itu SAMPAI KE SIDECAR. Implementasi bisa memperlakukannya
+ * sebagai enum asing dan menolaknya dengan EVIDENCE_INVALID — dan seluruh test
+ * tetap hijau, sementara perbedaan epistemik yang baru saja diperkenalkan
+ * lenyap tepat di tempat ia paling dibutuhkan.
+ *
+ * Perbedaannya bukan kosmetik. EVIDENCE_INVALID berarti "bukti ini rusak,
+ * karantina"; CLASSIFIER_FAILED berarti "bukti ini jujur mengatakan belum
+ * diperiksa, revalidasi di boundary yang punya binernya". Yang pertama tidak
+ * bisa dipulihkan otomatis, yang kedua bisa — dan seluruh rencana P0-B2
+ * bergantung pada bedanya.
+ */
+test("KONTRAK: sidecar belum_diperiksa DIPERTAHANKAN pembaca meta, bukan dianggap rusak", async () => {
+  const { bacaMetaGambar } = await import("../lib/product-images");
+  pasang([
+    [relFoto(1), PACKSHOT],
+    [
+      relSidecar(1),
+      sidecarDenganField({ jenis: "belum_diperiksa", layakReferensi: false, rasioAreaTeks: 0, jumlahKata: 0 }),
+    ],
+  ]);
+  const meta = (await bacaMetaGambar(relFoto(1))) as { jenis?: string; layakReferensi?: boolean } | null;
+  assert.equal(
+    meta?.jenis,
+    "belum_diperiksa",
+    'Pembaca meta tidak mempertahankan status "belum_diperiksa". Kalau ia menelannya jadi null ' +
+      "atau menormalkannya jadi promosi, bukti yang jujur berubah jadi bukti yang berbohong " +
+      "tepat di lapisan yang seharusnya menjaganya."
+  );
+  assert.equal(meta?.layakReferensi, false, "status belum diperiksa tidak boleh layak");
+});
+
+test("KONTRAK: sidecar belum_diperiksa TIDAK disetujui, dan alasannya CLASSIFIER_FAILED", async () => {
+  const resolver = await muatResolver();
+  pasang([
+    [relFoto(1), PACKSHOT],
+    [
+      relSidecar(1),
+      sidecarDenganField({ jenis: "belum_diperiksa", layakReferensi: false, rasioAreaTeks: 0, jumlahKata: 0 }),
+    ],
+  ]);
+  const layak = await referensiLayak([relFoto(1)]);
+  assert.deepEqual(layak, [], "gambar yang belum diperiksa tetap lolos jadi referensi");
+
+  const hasil = await resolveTanpaLempar(resolver, [relFoto(1)], "belum_diperiksa");
+  assert.equal(hasil.utama, null);
+  assert.deepEqual(hasil.tersetujui, []);
+  assert.deepEqual(
+    hasil.ditolak.map((d) => [d.rel, d.alasan]),
+    [[relFoto(1), ALASAN.BELUM]],
+    `Alasan penolakan wajib ${ALASAN.BELUM}, bukan ${ALASAN.BUKTI}. Bukti yang JUJUR menyatakan ` +
+      "dirinya belum diperiksa tidak rusak — ia bisa direvalidasi oleh boundary yang punya " +
+      "binernya. Menyamakannya dengan bukti rusak membuang satu-satunya informasi yang membuat " +
+      "pemulihan otomatis mungkin."
+  );
 });
 
 test("API pusat: SETIAP entri tersetujui membawa metadata lengkap, bukan hanya rel", async () => {
@@ -908,6 +1091,46 @@ for (const kasus of kasusTakSah) {
       `${kasus.judul}: penolakan tanpa pesan yang bisa dibaca manusia`
     );
     assert.deepEqual(tulisan, [], `${kasus.judul}: resolver menulis ke storage saat menolak`);
+  });
+}
+
+/**
+ * KONTROL SISI TERIMA — banner yang SAH tidak boleh dicap bukti rusak.
+ *
+ * Seluruh fixture kontradiktif di atas menuntut penolakan, jadi validator yang
+ * menolak SEGALANYA akan lulus semuanya. Dua kontrol ini menutup arah itu:
+ * sidecar promosi yang metriknya BENAR-BENAR mencapai ambang adalah bukti SAH,
+ * dan penolakannya wajib `REF_PROMOTIONAL` — status foto, bukan bukti rusak.
+ *
+ * Sekaligus mengunci `>=` dari sisi terima: tepat di ambang harus diterima
+ * sebagai vonis promosi yang sah, bukan ditolak sebagai kontradiksi.
+ */
+for (const [judul, ubah] of [
+  [
+    `rasioAreaTeks TEPAT ${AMBANG_RASIO_V1} dengan vonis promosi (bukti SAH)`,
+    { jenis: "promotional_graphic", layakReferensi: false, rasioAreaTeks: AMBANG_RASIO_V1, jumlahKata: 1 },
+  ],
+  [
+    `jumlahKata TEPAT ${AMBANG_KATA_V1} dengan vonis promosi (bukti SAH)`,
+    { jenis: "promotional_graphic", layakReferensi: false, rasioAreaTeks: 0.001, jumlahKata: AMBANG_KATA_V1 },
+  ],
+] as [string, Record<string, unknown>][]) {
+  test(`API pusat KONTROL: ${judul} -> ditolak REF_PROMOTIONAL, bukan EVIDENCE_INVALID`, async () => {
+    const resolver = await muatResolver();
+    pasang([
+      [relFoto(1), PACKSHOT],
+      [relSidecar(1), sidecarDenganField(ubah)],
+    ]);
+    const hasil = await resolveTanpaLempar(resolver, [relFoto(1)], judul);
+    assert.equal(hasil.utama, null, "banner tetap tidak boleh jadi referensi");
+    assert.deepEqual(
+      hasil.ditolak.map((d) => [d.rel, d.alasan]),
+      [[relFoto(1), ALASAN.PROMOSI]],
+      `${judul}: bukti ini SAH — metriknya mencapai ambang, jadi vonis promosi memang yang ` +
+        `dihasilkan aturan v1. Menolaknya sebagai ${ALASAN.BUKTI} berarti validator menolak ` +
+        "segalanya, dan validator yang menolak segalanya lulus setiap fixture negatif tanpa " +
+        "benar-benar memeriksa apa pun."
+    );
   });
 }
 

@@ -40,10 +40,11 @@ SCRIPT_LLM=0 npx tsx --test \
 | R2/P0-A ronde 3 (di f22d6e8) | 58 test · 11 lulus · 47 gagal · 0 skip |
 | R2/P0-A ronde 4 (di c15f36f) | 62 test · 12 lulus · 50 gagal · 0 skip |
 | R2/P0-A ronde 5 (di b1fd0e8) | 74 test · 12 lulus · 62 gagal · 0 skip |
-| **R2/P0-A ronde 6 (di 47d34eb)** | **79 test · 12 lulus · 67 gagal · 0 skip · 0 cancelled · 0 todo** |
+| R2/P0-A ronde 6 (di 47d34eb) | 79 test · 12 lulus · 67 gagal · 0 skip |
+| **R2/P0-A ronde 7 (di P0A7_TEST_SHA)** | **94 test · 15 lulus · 79 gagal · 0 skip · 0 cancelled · 0 todo** |
 
-Keenam-puluh-tujuh kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
-`grep "  code: " | sort | uniq -c` → `67 code: 'ERR_ASSERTION'`, nol kode lain.
+Ketujuh-puluh-sembilan kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
+`grep "  code: " | sort | uniq -c` → `79 code: 'ERR_ASSERTION'`, nol kode lain.
 Nol module-not-found, nol error env, nol skip, nol error fixture.
 
 `npx tsc --noEmit` → exit 0.
@@ -51,12 +52,12 @@ Nol module-not-found, nol error env, nol skip, nol error fixture.
 Suite penuh, `npm test` (`SCRIPT_LLM=0 tsx --test tests/*.test.ts`):
 
 ```
-1..884
-# tests 884 · pass 803 · fail 67 · cancelled 0 · skipped 14 · todo 0
-exit 1   (67 merah DISENGAJA — red-before, belum ada implementasi)
+1..899
+# tests 899 · pass 806 · fail 79 · cancelled 0 · skipped 14 · todo 0
+exit 1   (79 merah DISENGAJA — red-before, belum ada implementasi)
 ```
 
-Keenam-puluh-tujuh `not ok` di jalan penuh itu **persis** keenam-puluh-tujuh test
+Ketujuh-puluh-sembilan `not ok` di jalan penuh itu **persis** ketujuh-puluh-sembilan test
 P0-03/karantina di atas — nol regresi di tempat lain, diverifikasi dengan
 menyaring daftar `not ok` terhadap himpunan P0-03 dan mendapati sisa kosong.
 Aritmetikanya tertutup terhadap baseline `PATH-CASE-MATRIX.md` (810 · 796 · 0 · 14):
@@ -68,7 +69,14 @@ ronde 3:  848 + 15 = 863 test ·  802         = 802 lulus ·  47 gagal
 ronde 4:  863 +  4 = 867 test ·  802 + 1     = 803 lulus ·  50 gagal
 ronde 5:  867 + 12 = 879 test ·  803         = 803 lulus ·  62 gagal
 ronde 6:  879 +  5 = 884 test ·  803         = 803 lulus ·  67 gagal
+ronde 7:  884 + 15 = 899 test ·  803 + 3     = 806 lulus ·  79 gagal
 ```
+
+Tiga test ronde 7 lulus di HEAD, dan ketiganya memang KONTROL, bukan temuan:
+dua fixture arah-sebaliknya (vonis promosi dengan metrik di bawah ambang) sudah
+ditolak kode sekarang karena `layakReferensi:false`, dan pembaca meta memang
+sudah mempertahankan field `jenis` apa adanya. Yang mengunci reason code untuk
+kedua fixture itu ada di jalur API pusat, dan di sana keduanya merah.
 
 Satu test ronde 4 lulus di HEAD dan itu memang benar: fixture bertentangan arah
 kedua (`jenis:"product_photo"` + `layakReferensi:false`) sudah ditolak kode
@@ -747,6 +755,124 @@ test-reviewer-runtime.sh -> 7 kasus, 0 gagal
 test-bus.sh -> 13 kasus, 0 gagal
 ```
 
+## Ronde 7 — empat temuan Reviewer atas 6b97830
+
+Keempatnya diterima; nol sanggahan.
+
+### T18 (P1) — kontrak baru tidak menguji kegagalan BINER, yang justru cacat P0-B2
+
+> *"Kasus baru hanya memberikan path berkas yang tidak ada. Implementasi dapat
+> mengembalikan `belum_diperiksa` khusus untuk input hilang, tetapi tetap
+> mengembalikan `promotional_graphic` ketika spawn ffmpeg/ffprobe/tesseract
+> gagal atau timeout."*
+
+Benar, dan menohok: saya menulis kontrak untuk keadaan ketiga lalu mengujinya
+dengan satu-satunya mode kegagalan yang BUKAN cacat P0-B2.
+
+Sekarang tiga mode kegagalan diuji atas **gambar yang sah dan benar-benar ada**
+(dibuat dengan `sharp` saat test berjalan — deterministik di mesin mana pun,
+tanpa fixture eksternal), dengan `PATH` yang dikendalikan test:
+
+| Mode | Cara | Waktu |
+|---|---|---|
+| biner HILANG | `PATH` diarahkan ke direktori kosong → spawn ENOENT | instan |
+| biner GAGAL | `ffmpeg` palsu yang `exit 1` | instan |
+| biner MENGGANTUNG | `ffmpeg` palsu yang `sleep 25` → timeout 20 detik | ~20 detik |
+
+Mode ketiga memang lambat, dan itu disengaja: `timeout: 20_000` dipatok di
+`lib/media/klasifikasi-gambar.ts` dan tidak ada env yang mengubahnya, jadi tidak
+ada cara menguji jalur timeout tanpa mengubah produksi. Kasus "berkas tidak ada"
+dipertahankan sebagai mode keempat.
+
+**Observasi tambahan, di luar temuan, untuk P0-B2:** panggilan `ffprobe` di
+`klasifikasi-gambar.ts` dijalankan **tanpa opsi timeout sama sekali** (berbeda
+dari `ffmpeg` dan `tesseract` yang keduanya 20 detik). `ffprobe` yang menggantung
+akan menahan jalur unggah selamanya. Belum diperbaiki di sini karena itu
+perubahan produksi.
+
+### T19 (P1) — `belum_diperiksa` tidak dikunci di kontrak sidecar dan API pusat
+
+> *"Implementasi dapat memperlakukannya sebagai enum asing/EVIDENCE_INVALID
+> sehingga perbedaan epistemik yang baru diperkenalkan hilang, sementara semua
+> tes lulus."*
+
+Benar. Keadaan ketiga diperkenalkan di classifier lalu tidak dikunci di tempat ia
+paling berarti. Perbedaannya bukan kosmetik:
+
+* `EVIDENCE_INVALID` = "bukti rusak, karantina" — tidak bisa dipulihkan otomatis;
+* `CLASSIFIER_FAILED` = "bukti jujur mengatakan belum diperiksa" — **bisa**
+  direvalidasi oleh boundary yang punya binernya.
+
+Seluruh rencana P0-B2 bergantung pada bedanya. Ditambahkan:
+
+1. `CLASSIFIER_FAILED` masuk daftar reason code (dari PATH-CASE C7);
+2. pembaca meta wajib **mempertahankan** `jenis: "belum_diperiksa"`, bukan
+   menelannya jadi `null` atau menormalkannya jadi promosi;
+3. sidecar `belum_diperiksa` + `layakReferensi:false` adalah bukti **SAH** yang
+   ditolak dengan `CLASSIFIER_FAILED` — bukan `EVIDENCE_INVALID`;
+4. sidecar `belum_diperiksa` + `layakReferensi:true` adalah **kontradiksi**
+   (kalau ia layak, berarti ia sudah diperiksa) → `EVIDENCE_INVALID`.
+
+### T20 (P1) — konsistensi metrik–vonis hanya diuji satu arah
+
+> *"Tidak ada pasangan yang menolak `promotional_graphic` + `layakReferensi:false`
+> ketika kedua metrik berada di bawah ambang … Validator yang menerima setiap
+> vonis promosi fail-closed akan meluluskan semua tes sambil tetap membekukan
+> vonis palsu."*
+
+Benar, dan bentuk yang ditunjuk bukan hipotetis: **itu persis sidecar yang
+ditulis blok `catch` `saveProductImages`** (`lib/product-images.ts:228-233`) saat
+biner tidak ada — `jenis: promotional_graphic`, `rasioAreaTeks: 0`,
+`jumlahKata: 0`. Di bawah kontrak baru keadaan itu wajib `belum_diperiksa`;
+vonis promosi dengan metrik di bawah ambang tidak mungkin keluar dari classifier
+v1, jadi ia bukan vonis — ia kegagalan yang menyamar.
+
+Ditambahkan dua fixture arah sebaliknya (metrik di bawah ambang, dan metrik nol)
+di kedua jalur, `EVIDENCE_INVALID`.
+
+Ditambahkan juga **dua kontrol sisi terima**, karena seluruh fixture kontradiktif
+menuntut penolakan dan validator yang menolak SEGALANYA akan lulus semuanya:
+sidecar promosi yang metriknya benar-benar mencapai ambang adalah bukti SAH dan
+wajib ditolak dengan `REF_PROMOTIONAL`, bukan `EVIDENCE_INVALID`. Itu sekaligus
+mengunci `>=` dari sisi terima.
+
+### T21 (P1) — salinan ambang tidak benar-benar terikat ke ambang produksi
+
+> *"Tes mengimpor `referensiLayak`, bukan classifier atau konstanta produksinya.
+> Implementasi resolver dapat menduplikasi 0.02/6; perubahan
+> AMBANG_RASIO/AMBANG_KATA di classifier tanpa bump versi akan membiarkan semua
+> fixture hijau tetapi membuat producer dan validator berbeda aturan."*
+
+Benar, dan ini membongkar koreksi yang baru saya tulis di ronde 6 — koreksi itu
+sendiri masih terlalu optimistis. Keadaan yang dijelaskan Reviewer adalah yang
+terburuk: bukti **diterbitkan** dengan satu aturan dan **dinilai** dengan aturan
+lain, tanpa satu pun test merah.
+
+Kontraknya dinaikkan ke produksi. `lib/media/klasifikasi-gambar.ts` wajib
+mengekspor satu objek kebijakan yang dipakai classifier saat menerbitkan bukti
+**dan** validator saat menilainya:
+
+```ts
+KEBIJAKAN_KLASIFIKASI = { versiBukti: 1, ambangRasio: 0.02, ambangKata: 6 }
+```
+
+Dua test mengunci dua hal berbeda:
+
+1. **nilai kebijakan versi 1** adalah 0.02/6 dan `versiBukti` 1 — kalau digeser
+   tanpa menaikkan versi, test ini merah dan penulisnya dipaksa memutuskan sadar;
+2. **fixture yang dibangun DARI objek kebijakan itu** (bukan dari literal) harus
+   dinilai konsisten oleh resolver — kalau validator menyimpan salinannya
+   sendiri, geseran kebijakan membuat keduanya berselisih dan test ini yang
+   menangkapnya, bukan fixture berliteral.
+
+Bukti ronde 7:
+
+```
+targeted -> 94 test / 15 lulus / 79 gagal / 0 skip; 79/79 ERR_ASSERTION
+npm test -> 899 test / 806 lulus / 79 gagal / 14 skip; nol regresi
+tsc --noEmit -> exit 0
+```
+
 ## Yang SENGAJA belum dikerjakan di gelombang ini
 
 Urutan rollout dari `QUESTION` Reviewer dipatuhi: resolver ketat menyala
@@ -816,7 +942,7 @@ hijau lokal bukan bukti deployment.
 
 Gelombang ini adalah perbaikan KONTRAK. Ia tidak menaikkan skor readiness sama
 sekali: nol perubahan produksi, dan jumlah test merah justru NAIK di setiap
-ronde — 14 (R1) → 18 → 32 → 47 → 50 → 62 → **67** (ronde 6) — karena
+ronde — 14 (R1) → 18 → 32 → 47 → 50 → 62 → 67 → **79** (ronde 7) — karena
 kontraknya menuntut makin banyak hal yang benar, bukan karena ada yang rusak. Sesuai batas
 Reviewer, seluruh slice product-truth yang selesai pun hanya memindahkan
 kesiapan keseluruhan sekitar 40 → 55–58; 80/100 tetap butuh gerbang
@@ -824,6 +950,7 @@ Founder/eksternal yang belum dikerjakan.
 
 P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
 P0A2_TEST_SHA=f5d4029522bbeb4fbcbf4b885457369bdf3e83a6                       (ronde 2)
+P0A7_TEST_SHA=<commit ini sendiri>                                           (ronde 7)
 P0A6_TEST_SHA=47d34eb083ed1a90da757e2b615026f9c3677a46                                           (ronde 6)
 P0A5_TEST_SHA=b1fd0e8a173400b951be8e7b5d8d96a004696648                                           (ronde 5)
 P0A4_TEST_SHA=c15f36ff121a2314b81607f6e2a395db3d7acc30                                           (ronde 4)
