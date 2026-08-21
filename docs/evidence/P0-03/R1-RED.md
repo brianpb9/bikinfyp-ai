@@ -24,7 +24,7 @@ SCRIPT_LLM=0 npx tsx --test tests/product-truth-evidence.test.ts tests/product-t
 |---|---|
 | R1 awal (di 66b4b33) | 15 test · 5 lulus · 10 gagal · 0 skip |
 | **R1 diamandemen (di 39d363e)** | **19 test · 5 lulus · 14 gagal · 0 skip · 0 cancelled · 0 todo** |
-| **R2 kontrak diperbaiki (di P0A_TEST_SHA)** | lihat `docs/evidence/P0-03/R2A-KONTRAK.md` |
+| **R2 kontrak diperbaiki (di 4a0a343)** | lihat `docs/evidence/P0-03/R2A-KONTRAK.md` |
 
 Jalan yang diamandemen dijalankan dua kali berturut-turut, hasilnya identik.
 

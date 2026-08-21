@@ -29,7 +29,7 @@ SCRIPT_LLM=0 npx tsx --test \
 |---|---|
 | R1 awal (di f2ad65b) | 15 test · 5 lulus · 10 gagal |
 | R1 diamandemen (di 39d363e) | 19 test · 5 lulus · 14 gagal |
-| **R2/P0-A (di P0A_TEST_SHA)** | **28 test · 10 lulus · 18 gagal · 0 skip · 0 cancelled · 0 todo** |
+| **R2/P0-A (di 4a0a343)** | **28 test · 10 lulus · 18 gagal · 0 skip · 0 cancelled · 0 todo** |
 
 Kedelapan-belas kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
 `grep "  code: " | sort | uniq -c` → `18 code: 'ERR_ASSERTION'`, nol kode lain.
@@ -233,4 +233,4 @@ Reviewer, seluruh slice product-truth yang selesai pun hanya memindahkan
 kesiapan keseluruhan sekitar 40 → 55–58; 80/100 tetap butuh gerbang
 Founder/eksternal yang belum dikerjakan.
 
-P0A_TEST_SHA=<commit ini sendiri>
+P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e
