@@ -23,6 +23,7 @@ LOCK_DIR="$BUS_DIR/tmp/codex-reviewer.lock"
 HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD)
 FAKE_SHA=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
 ACTIVE_PID=''
+BOUNDED_PID=''
 FAILURES=0
 
 inbox_count() {
@@ -44,6 +45,58 @@ wait_for() {
     fi
     sleep 0.1
   done
+}
+
+# Membunuh SATU PROSES saja tidak cukup, dan itu ketahuan dari jalan nyata:
+# runtime yang berhasil arm menelurkan bus-wait, dan membunuh induknya saja
+# meninggalkan bus-wait hidup memegang fd log — jalan test pada dd5c68a
+# akhirnya MENGGANTUNG, bukan melaporkan gagal. Test regresi yang menggantung
+# tidak melaporkan apa pun.
+bunuh_pohon() {
+  akar_pid=$1
+  anak_pids=$(ps -eo pid=,ppid= 2>/dev/null | awk -v r="$akar_pid" '$2 == r { print $1 }')
+  for anak_pid in $anak_pids; do bunuh_pohon "$anak_pid"; done
+  kill -9 "$akar_pid" 2>/dev/null || true
+}
+
+jalankan_terbatas() {
+  # $1 = berkas penampung rc, $2.. = perintah
+  batas_keluaran=$1
+  shift
+  "$@" >> "$BUS_DIR/tmp/codex-reviewer-selftest.log" 2>&1 &
+  batas_pid=$!
+  # Dicatat sebagai STATE PEMBERSIHAN, bukan variabel lokal. Kalau suite
+  # menerima INT/TERM atau keluar selagi invocation ini masih hidup, proses itu
+  # beserta bus-wait turunannya akan tertinggal di mesin — persis risiko yang
+  # case 6 ada untuk menutupnya. (Temuan Reviewer 21 Agu.)
+  BOUNDED_PID=$batas_pid
+  batas_i=0
+  while [ "$batas_i" -lt 60 ] && kill -0 "$batas_pid" 2>/dev/null; do
+    sleep 0.1
+    batas_i=$((batas_i + 1))
+  done
+  if kill -0 "$batas_pid" 2>/dev/null; then
+    # Masih hidup sesudah batas waktu = runtime kedua BERHASIL arm. Itu
+    # kegagalannya, dan dicatat sebagai ARMED.
+    bunuh_pohon "$batas_pid"
+    wait "$batas_pid" 2>/dev/null || true
+    printf 'ARMED\n' > "$batas_keluaran"
+  else
+    wait "$batas_pid" 2>/dev/null
+    printf '%s\n' "$?" > "$batas_keluaran"
+  fi
+  BOUNDED_PID=''
+}
+
+stop_bounded() {
+  [ -n "$BOUNDED_PID" ] || return 0
+  # Supervisor dicabut DULU: kalau `start` yang regresi sempat men-submit job
+  # launchd, membunuh prosesnya lebih dulu hanya membuat launchd
+  # menghidupkannya kembali.
+  remove_clone_supervisor
+  bunuh_pohon "$BOUNDED_PID"
+  wait "$BOUNDED_PID" 2>/dev/null || true
+  BOUNDED_PID=''
 }
 
 stop_active() {
@@ -73,6 +126,7 @@ remove_clone_supervisor() {
 }
 
 cleanup() {
+  stop_bounded
   stop_active
   remove_clone_supervisor
   for role in builder reviewer; do
@@ -273,41 +327,6 @@ wait_for "runtime cleanup after case 5" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$
 # foreground-nya tidak gagal, ia MENGGANTUNG. Test regresi yang menggantung
 # tidak melaporkan apa pun. Runtime kedua yang masih hidup sesudah batas waktu
 # ITULAH kegagalannya, dan ia dicatat sebagai rc=ARMED.
-# Membunuh SATU PROSES saja tidak cukup, dan itu ketahuan dari jalan nyata:
-# runtime yang berhasil arm menelurkan bus-wait, dan membunuh induknya saja
-# meninggalkan bus-wait hidup memegang fd log — jalan test pada dd5c68a
-# akhirnya MENGGANTUNG, bukan melaporkan gagal. Test regresi yang menggantung
-# tidak melaporkan apa pun.
-bunuh_pohon() {
-  akar_pid=$1
-  anak_pids=$(ps -eo pid=,ppid= 2>/dev/null | awk -v r="$akar_pid" '$2 == r { print $1 }')
-  for anak_pid in $anak_pids; do bunuh_pohon "$anak_pid"; done
-  kill -9 "$akar_pid" 2>/dev/null || true
-}
-
-jalankan_terbatas() {
-  # $1 = berkas penampung rc, $2.. = perintah
-  batas_keluaran=$1
-  shift
-  "$@" >> "$BUS_DIR/tmp/codex-reviewer-selftest.log" 2>&1 &
-  batas_pid=$!
-  batas_i=0
-  while [ "$batas_i" -lt 60 ] && kill -0 "$batas_pid" 2>/dev/null; do
-    sleep 0.1
-    batas_i=$((batas_i + 1))
-  done
-  if kill -0 "$batas_pid" 2>/dev/null; then
-    # Masih hidup sesudah batas waktu = runtime kedua BERHASIL arm. Itu
-    # kegagalannya, dan dicatat sebagai ARMED.
-    bunuh_pohon "$batas_pid"
-    wait "$batas_pid" 2>/dev/null || true
-    printf 'ARMED\n' > "$batas_keluaran"
-  else
-    wait "$batas_pid" 2>/dev/null
-    printf '%s\n' "$?" > "$batas_keluaran"
-  fi
-}
-
 start_runtime 5
 if wait_for "idle runtime before nested-guard regression" '[ -s "$PID_FILE" ] && [ -s "$LOCK_DIR/pid" ]'; then
   nested_canonical=$ACTIVE_PID

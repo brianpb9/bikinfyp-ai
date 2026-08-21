@@ -239,38 +239,99 @@ test("C8: sidecar JSON korup -> tidak boleh ditimpa diam-diam lalu diloloskan", 
   assert.deepEqual(layak, [], `EVIDENCE_INVALID: gambar dengan sidecar korup tetap lolos: ${JSON.stringify(layak)}`);
 });
 
-test("C8: skema sah tapi TIPE FIELD salah -> tidak boleh lolos", async () => {
-  // JSON-nya parse bersih dan semua field ada; yang rusak adalah TIPE-nya.
-  // `layakReferensi` datang sebagai string "false" — dan di JavaScript string
-  // "false" itu TRUTHY, jadi pemeriksaan `meta.layakReferensi` membacanya
-  // sebagai "layak". Bukti yang dibuat penulis lain (jalur org, migrasi, skrip
-  // tangan) bisa persis seperti ini, dan hasilnya kebalikan 180 derajat dari
-  // yang tertulis di buktinya sendiri.
-  const tipeSalah = Buffer.from(
+/**
+ * TIPE FIELD SALAH — SATU FIELD RUSAK PER FIXTURE, bukan dua sekaligus.
+ *
+ * Versi sebelumnya menggabungkan `layakReferensi: "false"` DAN
+ * `rasioAreaTeks: "0.19"` dalam satu sidecar. Temuan Reviewer 21 Agu, dan ia
+ * benar: implementasi yang hanya memvalidasi `rasioAreaTeks` akan menolak
+ * fixture gabungan itu dan MENGHIJAUKAN test — sambil tetap menerima
+ * `layakReferensi` bertipe string setiap kali rasionya kebetulan angka. Persis
+ * perilaku truthy yang test ini ada untuk menguncinya.
+ *
+ * Jadi setiap fixture di bawah merusak TEPAT SATU field; seluruh field lain
+ * sah. Test yang hijau karena alasan yang salah tidak bisa dibedakan dari test
+ * yang hijau karena alasan yang benar, kecuali fixture-nya memaksa demikian.
+ *
+ * `layakReferensi: "false"` adalah yang paling berbahaya dan karena itu berdiri
+ * sendiri: di JavaScript string "false" itu TRUTHY, jadi `if (meta.layakReferensi)`
+ * membaca bukti 180 derajat terbalik dari isinya sendiri.
+ */
+function sidecarDenganField(ubah: Record<string, unknown>): Buffer {
+  return Buffer.from(
     JSON.stringify({
       sha256: sha(PACKSHOT),
-      jenis: "promotional_graphic",
-      layakReferensi: "false", // string, bukan boolean
-      rasioAreaTeks: "0.19", // string, bukan number
-      jumlahKata: 14,
-      alasan: "materi promosi",
+      jenis: "product_photo",
+      layakReferensi: true,
+      rasioAreaTeks: 0.004,
+      jumlahKata: 2,
+      alasan: "foto produk",
       versiBukti: VERSI_BUKTI_TERKINI,
+      ...ubah,
     })
   );
-  pasang([
-    [relFoto(1), PACKSHOT],
-    [relSidecar(1), tipeSalah],
-  ]);
-  const layak = await referensiLayak([relFoto(1)]);
-  assert.deepEqual(
-    layak,
-    [],
-    `EVIDENCE_INVALID: sidecar dengan TIPE FIELD salah (layakReferensi: "false" sebagai STRING) ` +
-      `tetap diterima (${JSON.stringify(layak)}). bacaMetaGambar hanya JSON.parse lalu meng-cast ` +
-      "ke MetaGambar (lib/product-images.ts:112) — tidak ada satu pun pemeriksaan bentuk, jadi " +
-      'string "false" yang truthy dibaca sebagai LAYAK. Buktinya sendiri berkata sebaliknya.'
-  );
-});
+}
+
+const fieldTakSah: { judul: string; ubah: Record<string, unknown>; kenapa: string }[] = [
+  {
+    judul: 'layakReferensi STRING "false"',
+    ubah: { layakReferensi: "false" },
+    kenapa: 'string "false" TRUTHY — bukti dibaca terbalik dari isinya sendiri',
+  },
+  {
+    judul: "layakReferensi ANGKA 1",
+    ubah: { layakReferensi: 1 },
+    kenapa: "angka truthy lolos pemeriksaan kebenaran, padahal kontraknya boolean",
+  },
+  {
+    judul: "rasioAreaTeks STRING",
+    ubah: { rasioAreaTeks: "0.004" },
+    kenapa: "perbandingan ambang atas string memaksa coercion diam-diam",
+  },
+  {
+    judul: "jumlahKata STRING",
+    ubah: { jumlahKata: "2" },
+    kenapa: "sama: ambang dibandingkan terhadap tipe yang salah",
+  },
+  {
+    judul: "sha256 bukan string",
+    ubah: { sha256: 12345 },
+    kenapa: "hash yang bukan string tidak bisa dibandingkan dengan digest bytes",
+  },
+  {
+    judul: "sha256 panjangnya salah",
+    ubah: { sha256: "abc123" },
+    kenapa: "digest sha256 selalu 64 hex; yang lain bukan hash apa pun",
+  },
+  {
+    judul: "jenis di luar enum",
+    ubah: { jenis: "banner" },
+    kenapa: "nilai jenis yang tidak dikenal berarti bukti ditulis aturan lain",
+  },
+  {
+    judul: "alasan bukan string",
+    ubah: { alasan: 42 },
+    kenapa: "alasan dipakai untuk pesan ke pengguna; tipe salah = pesan rusak",
+  },
+];
+
+for (const kasus of fieldTakSah) {
+  test(`C8: TIPE FIELD salah — ${kasus.judul} -> tidak boleh lolos`, async () => {
+    const tulisan = pasang([
+      [relFoto(1), PACKSHOT],
+      [relSidecar(1), sidecarDenganField(kasus.ubah)],
+    ]);
+    const layak = await referensiLayak([relFoto(1)]);
+    assert.deepEqual(
+      layak,
+      [],
+      `EVIDENCE_INVALID: sidecar dengan ${kasus.judul} tetap diterima (${JSON.stringify(layak)}). ` +
+        `${kasus.kenapa}. SELURUH field lain di fixture ini SAH, jadi test ini hanya bisa hijau ` +
+        `kalau field itu sendiri yang diperiksa — bukan karena field lain kebetulan ikut rusak.`
+    );
+    assert.deepEqual(tulisan, [], `jalur baca menulis bukti baru: ${JSON.stringify(tulisan)}`);
+  });
+}
 
 test("C8: sidecar tanpa versi bukti -> tidak boleh lolos", async () => {
   const tanpaVersi = Buffer.from(
@@ -512,6 +573,42 @@ test("API pusat: bukti SAH -> utama terisi lengkap dengan sha256 dan versiBukti"
   assert.deepEqual(tulisan, [], "resolver tidak boleh menulis apa pun ke storage");
 });
 
+test("API pusat: SETIAP entri tersetujui membawa metadata lengkap, bukan hanya rel", async () => {
+  // Temuan Reviewer 21 Agu: kontrol positif sebelumnya hanya memetakan `rel`,
+  // jadi implementasi yang mengembalikan `utama` lengkap tapi `tersetujui`
+  // berisi objek `{rel}` saja tetap lulus semuanya. Padahal justru daftar
+  // tersetujui itulah yang dipakai worker untuk referensi ke-2 dst, dan
+  // admission butuh sha256 SETIAP entri untuk di-snapshot — bukan hanya yang
+  // utama. Diuji dengan DUA foto sah supaya "utama" tidak bisa menyamar
+  // sebagai seluruh daftar.
+  const resolver = await muatResolver();
+  const KEDUA = Buffer.from("BYTES-PACKSHOT-KEDUA-SAH");
+  pasang([
+    [relFoto(1), PACKSHOT],
+    [relSidecar(1), sidecarSah(PACKSHOT, true, "product_photo")],
+    [relFoto(2), KEDUA],
+    [relSidecar(2), sidecarSah(KEDUA, true, "product_photo")],
+  ]);
+  const hasil = await resolveTanpaLempar(resolver, [relFoto(1), relFoto(2)], "dua foto sah");
+  assert.deepEqual(
+    hasil.tersetujui,
+    [
+      { rel: relFoto(1), sha256: sha(PACKSHOT), versiBukti: VERSI_BUKTI_TERKINI },
+      { rel: relFoto(2), sha256: sha(KEDUA), versiBukti: VERSI_BUKTI_TERKINI },
+    ],
+    "setiap entri tersetujui wajib membawa rel + sha256 + versiBukti. Referensi ke-2 dst juga " +
+      "dikirim ke model dan juga harus bisa di-snapshot admission; daftar berisi {rel} saja " +
+      "memindahkan pekerjaan verifikasi kembali ke setiap pemanggil."
+  );
+  assert.deepEqual(
+    hasil.utama,
+    hasil.tersetujui[0],
+    "utama wajib entri pertama daftar tersetujui yang SAMA objeknya — dua sumber kebenaran " +
+      "untuk 'referensi utama' adalah cara divergensi lahir kembali"
+  );
+  assert.deepEqual(hasil.ditolak, []);
+});
+
 test("API pusat C1: banner ditolak REF_PROMOTIONAL, packshot jadi utama", async () => {
   const resolver = await muatResolver();
   pasang([
@@ -551,27 +648,16 @@ const kasusTakSah: { judul: string; entri: [string, Buffer][]; alasan: string }[
     ],
     alasan: ALASAN.BUKTI,
   },
-  {
-    judul: "tipe field salah (layakReferensi string)",
+  // Satu field rusak per fixture, seluruh field lain sah — alasan lengkapnya
+  // ada di komentar `fieldTakSah` di atas.
+  ...fieldTakSah.map((f) => ({
+    judul: `tipe field salah — ${f.judul}`,
     entri: [
       [relFoto(1), PACKSHOT],
-      [
-        relSidecar(1),
-        Buffer.from(
-          JSON.stringify({
-            sha256: sha(PACKSHOT),
-            jenis: "promotional_graphic",
-            layakReferensi: "false",
-            rasioAreaTeks: "0.19",
-            jumlahKata: 14,
-            alasan: "materi promosi",
-            versiBukti: VERSI_BUKTI_TERKINI,
-          })
-        ),
-      ],
-    ],
+      [relSidecar(1), sidecarDenganField(f.ubah)],
+    ] as [string, Buffer][],
     alasan: ALASAN.BUKTI,
-  },
+  })),
   {
     judul: "tanpa versiBukti",
     entri: [

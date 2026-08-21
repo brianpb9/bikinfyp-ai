@@ -145,28 +145,51 @@ function namaTerikat(name: ts.BindingName): string[] {
 }
 
 /**
- * ANALISIS ALIRAN DATA — hasil resolver harus benar-benar SAMPAI ke materialize.
+ * ANALISIS ASAL NILAI — hasil resolver harus SAMPAI ke materialize, dan nilai
+ * mentah harus TIDAK sampai.
  *
- * Ditambahkan atas temuan Reviewer 21 Agu, dan counterexample-nya persis ini:
+ * Ronde 1 menambahkan pencemaran satu arah: nama yang menyebut hasil resolver
+ * dianggap berasal darinya. Reviewer menembusnya dalam satu baris:
  *
- *     await resolveApprovedReference(images);   // hasilnya DIBUANG
- *     const [ref] = images;                     // pilih posisi, bukan bukti
- *     await mediaStorage().materialize(ref);    // kirim yang belum tersetujui
+ *     const raw = images.find(Boolean)!;
+ *     const ref = hasil ? raw : raw;      // menyebut `hasil`, nilainya `raw`
+ *     await mediaStorage().materialize(ref);
  *
- * Versi sebelumnya meloloskan itu tiga kali: resolver "dipanggil" (ya),
- * dipanggil "atas daftar images" (ya), dan tidak ada `images[0]` maupun
- * `images.at(0)` (memang tidak ada — destrukturisasi bukan keduanya). Gerbang
- * yang hanya memeriksa bahwa sebuah fungsi DIPANGGIL adalah gerbang hias;
- * yang menentukan adalah apakah hasilnya yang dipakai.
+ * `ref` "menyebut" nama tercemar, jadi ia ikut tercemar — padahal nilainya
+ * SELALU datang dari `images` mentah. Menyebut bukan berasal-dari. Dan karena
+ * W1 tidak punya cakupan runtime, gerbang inilah satu-satunya penjaganya.
  *
- * Pencemaran (taint) disebar secara sintaksis: nama yang menerima hasil
- * resolver tercemar, lalu setiap deklarasi/penugasan yang inisialisasinya
- * menyebut nama tercemar ikut tercemar, sampai titik tetap. Ini aproksimasi —
- * ia bisa terlalu longgar (alias lewat fungsi lain), tapi tidak bisa terlalu
- * ketat, jadi ia tidak akan menolak implementasi yang benar.
+ * Karena itu sekarang DUA himpunan dilacak, dan syaratnya konjungtif:
+ *
+ *     resolver : nilai yang bisa berasal dari hasil resolveApprovedReference
+ *     mentah   : nilai yang bisa berasal dari daftar `images` apa adanya
+ *
+ * Argumen `materialize()` diterima hanya bila ia menyebut sesuatu dari
+ * `resolver` DAN tidak menyebut apa pun dari `mentah`. Contoh di atas menyebut
+ * keduanya, jadi ia ditolak — yang benar, karena nilainya memang mentah.
+ *
+ * Saat menghitung `mentah`, subtree panggilan resolver DIPANGKAS. Tanpa itu
+ * `const hasil = await resolveApprovedReference(images)` akan dianggap mentah
+ * (ia memang menyebut `images`), dan implementasi yang BENAR justru tertolak.
+ * Memangkasnya menyatakan hal yang tepat: menyerahkan daftar mentah KEPADA
+ * resolver adalah cara satu-satunya yang sah untuk menyentuhnya.
+ *
+ * Ini tetap aproksimasi sintaksis, dan batasnya ditulis supaya tidak
+ * disalahbaca: alias yang melewati pemanggilan fungsi lain tidak terlacak, dan
+ * implementasi yang menamai daftar tersetujui `images` akan tertolak keliru
+ * (nama itu memang sudah dipakai untuk daftar mentah di kedua worker).
+ * Penjaga runtime yang sesungguhnya untuk W2 ada di
+ * tests/product-truth-worker-reference.test.ts; W1 belum punya padanannya
+ * karena butuh PostgreSQL.
  */
-function sebarPencemaran(sf: ts.SourceFile, binding: Set<string>, namespaceBinding: Set<string>): Set<string> {
-  const tercemar = new Set<string>();
+interface Asal {
+  resolver: Set<string>;
+  mentah: Set<string>;
+}
+
+function sebarAsal(sf: ts.SourceFile, binding: Set<string>, namespaceBinding: Set<string>): Asal {
+  const resolver = new Set<string>();
+  const mentah = new Set<string>([DAFTAR_FOTO]);
 
   const dariResolver = (node: ts.Node): boolean => {
     if (!ts.isCallExpression(node)) return false;
@@ -180,49 +203,82 @@ function sebarPencemaran(sf: ts.SourceFile, binding: Set<string>, namespaceBindi
     );
   };
 
-  // Benih: `const X = await resolve(...)`, `const {utama} = resolve(...)`.
+  /** Menyebut salah satu nama, TANPA menuruni subtree panggilan resolver. */
+  const menyebutTanpaResolver = (node: ts.Node, nama: Set<string>): boolean => {
+    let ketemu = false;
+    const turun = (n: ts.Node) => {
+      if (dariResolver(n)) return; // pangkas: daftar mentah memang sah masuk ke sini
+      if (ts.isIdentifier(n) && nama.has(n.text)) ketemu = true;
+      if (ts.isPropertyAccessExpression(n) && nama.has(n.name.text)) ketemu = true;
+      ts.forEachChild(n, turun);
+    };
+    turun(node);
+    return ketemu;
+  };
+
+  const lepasBungkus = (n: ts.Node): ts.Node => {
+    let cur = n;
+    while (ts.isAwaitExpression(cur) || ts.isParenthesizedExpression(cur) || ts.isNonNullExpression(cur)) {
+      cur = cur.expression;
+    }
+    return cur;
+  };
+
+  // Benih resolver: `const X = await resolve(...)`, `const {utama} = resolve(...)`.
   jelajah(sf, (node) => {
     if (!ts.isVariableDeclaration(node) || !node.initializer) return;
-    let init: ts.Node = node.initializer;
-    while (ts.isAwaitExpression(init) || ts.isParenthesizedExpression(init)) init = init.expression;
-    if (dariResolver(init)) for (const n of namaTerikat(node.name)) tercemar.add(n);
+    if (dariResolver(lepasBungkus(node.initializer))) {
+      for (const n of namaTerikat(node.name)) resolver.add(n);
+    }
   });
 
-  // Titik tetap: apa pun yang diturunkan dari nilai tercemar ikut tercemar.
+  // Titik tetap untuk kedua himpunan sekaligus.
   for (let putaran = 0; putaran < 12; putaran++) {
-    const sebelum = tercemar.size;
+    const sebelum = resolver.size + mentah.size;
     jelajah(sf, (node) => {
-      if (ts.isVariableDeclaration(node) && node.initializer && menyebut(node.initializer, tercemar)) {
-        for (const n of namaTerikat(node.name)) tercemar.add(n);
+      const sebar = (init: ts.Node, tambah: (n: string) => void) => {
+        if (menyebutTanpaResolver(init, resolver)) tambah("resolver");
+        if (menyebutTanpaResolver(init, mentah)) tambah("mentah");
+      };
+
+      if (ts.isVariableDeclaration(node) && node.initializer) {
+        const nama = namaTerikat(node.name);
+        sebar(node.initializer, (jenis) => {
+          for (const n of nama) (jenis === "resolver" ? resolver : mentah).add(n);
+        });
       }
       if (
         ts.isBinaryExpression(node) &&
         node.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
-        ts.isIdentifier(node.left) &&
-        menyebut(node.right, tercemar)
+        ts.isIdentifier(node.left)
       ) {
-        tercemar.add(node.left.text);
+        const nama = node.left.text;
+        sebar(node.right, (jenis) => (jenis === "resolver" ? resolver : mentah).add(nama));
       }
-      // `daftar.push(<tercemar>)` menjadikan daftar itu turunan juga.
+      // `daftar.push(<x>)` menjadikan daftar itu turunan x.
       if (
         ts.isCallExpression(node) &&
         ts.isPropertyAccessExpression(node.expression) &&
         ts.isIdentifier(node.expression.expression) &&
-        node.arguments.some((a) => menyebut(a, tercemar))
+        node.arguments.length > 0
       ) {
-        tercemar.add(node.expression.expression.text);
-      }
-      // `for (const rel of <tercemar>)` mencemari variabel iterasinya.
-      if (ts.isForOfStatement(node) && menyebut(node.expression, tercemar)) {
-        const decl = node.initializer;
-        if (ts.isVariableDeclarationList(decl)) {
-          for (const d of decl.declarations) for (const n of namaTerikat(d.name)) tercemar.add(n);
+        const nama = node.expression.expression.text;
+        for (const arg of node.arguments) {
+          sebar(arg, (jenis) => (jenis === "resolver" ? resolver : mentah).add(nama));
         }
       }
+      // `for (const rel of <x>)` mencemari variabel iterasinya.
+      if (ts.isForOfStatement(node) && ts.isVariableDeclarationList(node.initializer)) {
+        const nama: string[] = [];
+        for (const d of node.initializer.declarations) nama.push(...namaTerikat(d.name));
+        sebar(node.expression, (jenis) => {
+          for (const n of nama) (jenis === "resolver" ? resolver : mentah).add(n);
+        });
+      }
     });
-    if (tercemar.size === sebelum) break;
+    if (resolver.size + mentah.size === sebelum) break;
   }
-  return tercemar;
+  return { resolver, mentah };
 }
 
 function analisis(rel: string, isi: string): Analisis {
@@ -254,7 +310,7 @@ function analisis(rel: string, isi: string): Analisis {
     }
   });
 
-  const tercemar = sebarPencemaran(sf, binding, namespaceBinding);
+  const asal = sebarAsal(sf, binding, namespaceBinding);
 
   const panggilan: ts.CallExpression[] = [];
   const panggilanDenganDaftarFoto: ts.CallExpression[] = [];
@@ -284,7 +340,13 @@ function analisis(rel: string, isi: string): Analisis {
         materialize.push({
           baris: posisi(node),
           teks: ringkas(node),
-          dariResolver: node.arguments.length > 0 && node.arguments.some((a) => menyebut(a, tercemar)),
+          // KONJUNGTIF: menyebut hasil resolver DAN tidak menyebut apa pun yang
+          // bisa berasal dari daftar mentah. Syarat kedua itulah yang menutup
+          // pencucian nilai lewat `hasil ? raw : raw`.
+          dariResolver:
+            node.arguments.length > 0 &&
+            node.arguments.some((a) => menyebut(a, asal.resolver)) &&
+            !node.arguments.some((a) => menyebut(a, asal.mentah)),
         });
       }
     }
@@ -387,6 +449,19 @@ const [ref] = images;
 const imageRef = await mediaStorage().materialize(ref);
 `;
 
+// Varian KETIGA, dan yang paling halus — dari temuan Reviewer ronde 2, verbatim:
+// nilai selalu mentah, tapi ia "menyebut" hasil resolver dalam perjalanannya.
+// Pencemaran satu arah menyatakan ini bersih; pelacakan asal dua arah tidak.
+const CONTOH_ALIAS = `
+import { resolveApprovedReference } from "./product-truth";
+declare const images: string[];
+declare const mediaStorage: () => { materialize: (k: string) => Promise<string | null> };
+const hasil = await resolveApprovedReference(images);
+const raw = images.find(Boolean)!;
+const ref = hasil ? raw : raw;
+const imageRef = await mediaStorage().materialize(ref);
+`;
+
 // Varian kedua: hasil resolver DIPAKAI untuk sesuatu, tapi bukan untuk
 // referensi yang dikirim. Gerbang yang hanya memeriksa "hasilnya dipakai di
 // suatu tempat" akan lolos di sini.
@@ -444,6 +519,19 @@ test("counterexample detektor: hasil resolver yang DIABAIKAN tertangkap (destruk
     [false],
     "materialize(ref) dianggap berasal dari resolver padahal hasilnya dibuang — analisis " +
       "aliran datanya tidak bekerja"
+  );
+
+  // Counterexample Reviewer ronde 2: nilainya SELALU mentah, tapi ia menyebut
+  // `hasil` dalam perjalanannya. Ini yang menembus pencemaran satu arah.
+  const alias = analisis("lib/contoh-alias.ts", CONTOH_ALIAS);
+  assert.equal(alias.panggilan.length, 1, "prasyarat: resolver dipanggil");
+  assert.deepEqual(alias.posisional, [], "prasyarat: tidak ada indeks/destrukturisasi terlarang");
+  assert.deepEqual(
+    alias.materialize.map((m) => m.dariResolver),
+    [false],
+    "`const ref = hasil ? raw : raw` dinyatakan berasal dari resolver padahal nilainya SELALU " +
+      "dari images mentah. Menyebut bukan berasal-dari — dan karena ini satu-satunya penjaga W1, " +
+      "kekeliruan itu tidak tertangkap siapa pun di bawahnya."
   );
 
   const salahAlamat = analisis("lib/contoh-salah-alamat.ts", CONTOH_SALAH_ALAMAT);

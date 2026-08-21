@@ -4,7 +4,13 @@ BASE_SHA=0c443ff36775da31d64dec5e54189dc5832209ce (pendek: 0c443ff)
 BRANCH=work/p0-product-truth-20260820
 TANGGAL=2026-08-21
 TASK=SHIP-80-20260821
-PERUBAHAN PRODUKSI=**NOL** (`git diff --stat` hanya menyentuh `tests/` dan `docs/`)
+PERUBAHAN PRODUKSI=**NOL** — `git diff --stat` menyentuh `tests/`, `docs/`, dan
+`.agent-bus/` saja. Nol berkas di `app/`, `lib/`, atau `scripts/`.
+
+(Koreksi ronde 3, temuan Reviewer: baris ini semula menulis "hanya `tests/` dan
+`docs/`" padahal slice yang sama juga mengubah dua berkas `.agent-bus`.
+Ringkasan bukti yang tidak cocok dengan tree yang diikatnya adalah cacat yang
+sama jenisnya dengan SHA yang salah — hanya lebih kecil.)
 
 Gelombang ini TIDAK mengimplementasikan resolver. Ia memperbaiki kontraknya
 lebih dulu, karena kontrak yang salah akan memaksa implementasi yang benar
@@ -30,10 +36,11 @@ SCRIPT_LLM=0 npx tsx --test \
 | R1 awal (di f2ad65b) | 15 test · 5 lulus · 10 gagal |
 | R1 diamandemen (di 39d363e) | 19 test · 5 lulus · 14 gagal |
 | R2/P0-A ronde 1 (di 4a0a343) | 28 test · 10 lulus · 18 gagal · 0 skip |
-| **R2/P0-A ronde 2 (di f5d4029)** | **43 test · 11 lulus · 32 gagal · 0 skip · 0 cancelled · 0 todo** |
+| R2/P0-A ronde 2 (di f5d4029) | 43 test · 11 lulus · 32 gagal · 0 skip |
+| **R2/P0-A ronde 3 (di P0A3_TEST_SHA)** | **58 test · 11 lulus · 47 gagal · 0 skip · 0 cancelled · 0 todo** |
 
-Ketiga-puluh-dua kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
-`grep "  code: " | sort | uniq -c` → `32 code: 'ERR_ASSERTION'`, nol kode lain.
+Keempat-puluh-tujuh kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
+`grep "  code: " | sort | uniq -c` → `47 code: 'ERR_ASSERTION'`, nol kode lain.
 Nol module-not-found, nol error env, nol skip, nol error fixture.
 
 `npx tsc --noEmit` → exit 0.
@@ -41,12 +48,12 @@ Nol module-not-found, nol error env, nol skip, nol error fixture.
 Suite penuh, `npm test` (`SCRIPT_LLM=0 tsx --test tests/*.test.ts`):
 
 ```
-1..848
-# tests 848 · pass 802 · fail 32 · cancelled 0 · skipped 14 · todo 0
-exit 1   (32 merah DISENGAJA — red-before, belum ada implementasi)
+1..863
+# tests 863 · pass 802 · fail 47 · cancelled 0 · skipped 14 · todo 0
+exit 1   (47 merah DISENGAJA — red-before, belum ada implementasi)
 ```
 
-Ketiga-puluh-dua `not ok` di jalan penuh itu **persis** ketiga-puluh-dua test
+Keempat-puluh-tujuh `not ok` di jalan penuh itu **persis** keempat-puluh-tujuh test
 P0-03/karantina di atas — nol regresi di tempat lain, diverifikasi dengan
 menyaring daftar `not ok` terhadap himpunan P0-03 dan mendapati sisa kosong.
 Aritmetikanya tertutup terhadap baseline `PATH-CASE-MATRIX.md` (810 · 796 · 0 · 14):
@@ -54,6 +61,7 @@ Aritmetikanya tertutup terhadap baseline `PATH-CASE-MATRIX.md` (810 · 796 · 0 
 ```
 ronde 1:  810 + 23 = 833 test ·  796 + 6 − 1 = 801 lulus ·  18 gagal
 ronde 2:  833 + 15 = 848 test ·  801 + 1     = 802 lulus ·  32 gagal
+ronde 3:  848 + 15 = 863 test ·  802         = 802 lulus ·  47 gagal
 ```
 
 Angka 28 mencakup `tests/klasifikasi-gambar.test.ts` (5 test), yang sebelumnya
@@ -351,6 +359,122 @@ sh .agent-bus/test-bus.sh              -> 13 kasus, 0 gagal
 runtime kanonik live (pid 49388)       -> tidak tersentuh sepanjang seluruh jalan
 ```
 
+## Ronde 3 — lima temuan Reviewer atas 1cfc2c9
+
+Kelimanya diterima; nol sanggahan.
+
+### T4 (P1) — fixture tipe field masih bisa hijau karena alasan yang salah
+
+> *"Fixture menggabungkan `layakReferensi:"false"` dan `rasioAreaTeks:"0.19"`.
+> Implementasi yang hanya memvalidasi rasioAreaTeks akan menolak fixture ini dan
+> menghijaukan test, tetapi tetap menerima sidecar dengan layakReferensi string
+> ketika rasio berupa angka."*
+
+Benar, dan ini kelas cacat yang sama dengan yang saya keluhkan ke R1: test yang
+hijau karena alasan yang salah tidak bisa dibedakan dari test yang hijau karena
+alasan yang benar.
+
+Satu fixture gabungan diganti **delapan fixture, masing-masing merusak TEPAT
+SATU field** dengan seluruh field lain sah:
+
+| Field dirusak | Kenapa berbahaya |
+|---|---|
+| `layakReferensi: "false"` | string "false" TRUTHY — bukti dibaca 180° terbalik |
+| `layakReferensi: 1` | angka truthy lolos, kontraknya boolean |
+| `rasioAreaTeks: "0.004"` | ambang dibandingkan lewat coercion diam-diam |
+| `jumlahKata: "2"` | idem |
+| `sha256: 12345` | hash non-string tidak bisa dibandingkan dengan digest bytes |
+| `sha256: "abc123"` | digest sha256 selalu 64 hex |
+| `jenis: "banner"` | nilai di luar enum = bukti ditulis aturan lain |
+| `alasan: 42` | alasan dipakai untuk pesan ke pengguna |
+
+Kedelapan-delapannya dipakai dua kali: di jalur `referensiLayak` dan di jalur
+API pusat, jadi keduanya terkunci pada pemeriksaan bentuk yang sama.
+
+### T5 (P1) — gerbang taint masih bisa dipuaskan referensi mentah
+
+> *"`const raw=images.find(Boolean)!; const ref=hasil ? raw : raw;
+> materialize(ref)` lolos … ref ditandai tercemar meskipun nilainya selalu
+> berasal dari images mentah. Karena ini satu-satunya penjaga W1, tambahkan
+> counterexample negatif tersebut dan lacak asal nilai secara semantik."*
+
+Benar. Pencemaran satu arah menyamakan **menyebut** dengan **berasal-dari**.
+
+Diganti pelacakan asal **dua himpunan**, dengan syarat konjungtif:
+
+```
+resolver : nilai yang bisa berasal dari hasil resolveApprovedReference
+mentah   : nilai yang bisa berasal dari daftar `images` apa adanya
+
+materialize(x) diterima  <=>  x menyebut sesuatu dari `resolver`
+                              DAN x tidak menyebut apa pun dari `mentah`
+```
+
+Contoh Reviewer menyebut keduanya, jadi ia ditolak — yang benar, karena
+nilainya memang mentah.
+
+Satu detail yang menentukan: saat menghitung `mentah`, subtree panggilan
+resolver **dipangkas**. Tanpa itu `const hasil = await resolveApprovedReference(images)`
+akan dihitung mentah (ia memang menyebut `images`) dan implementasi yang BENAR
+justru tertolak. Memangkasnya menyatakan hal yang tepat: menyerahkan daftar
+mentah KEPADA resolver adalah satu-satunya cara sah untuk menyentuhnya.
+
+Batas aproksimasinya ditulis di kode supaya tidak disalahbaca: alias yang
+melewati pemanggilan fungsi lain tidak terlacak, dan implementasi yang menamai
+daftar tersetujui `images` akan tertolak keliru. Penjaga runtime sesungguhnya
+untuk W2 ada di `product-truth-worker-reference.test.ts`; **W1 masih belum punya
+padanannya** karena butuh PostgreSQL — itu tetap utang terbuka, bukan sesuatu
+yang gerbang statis ini klaim sudah tutup.
+
+Counterexample `CONTOH_ALIAS` (verbatim dari temuan) sekarang dijalankan
+terhadap detektornya sendiri dan wajib menghasilkan `dariResolver=false`,
+bersama `CONTOH_BAIK` yang wajib tetap `[true, true]`.
+
+### T6 (P2) — metadata setiap entri tersetujui tidak diuji
+
+> *"Implementasi dapat mengembalikan utama lengkap namun tersetujui berisi
+> objek `{rel}` dan seluruh asersi tetap lulus."*
+
+Benar. Ditambahkan fixture **dua foto sah** dengan `deepEqual` atas seluruh
+array metadata, plus asersi `utama === tersetujui[0]`. Daftar tersetujui itulah
+yang dipakai worker untuk referensi ke-2 dst, dan admission butuh sha256 setiap
+entri untuk di-snapshot — bukan hanya yang utama.
+
+### T7 (P2) — trap cleanup tidak membersihkan proses bounded case 6
+
+> *"Jika suite menerima INT/TERM atau keluar saat invocation nested masih hidup,
+> proses itu dan bus-wait turunannya dapat tertinggal—risiko yang case 6 sendiri
+> dimaksudkan untuk menutup."*
+
+Benar, dan ironi itu tepat sasaran. PID bounded sekarang disimpan sebagai
+**state pembersihan** (`BOUNDED_PID`), dan `cleanup()` memanggil `stop_bounded`
+lebih dulu: cabut supervisor → bunuh POHON proses → `wait`. Urutannya penting;
+terbalik, launchd menghidupkan kembali apa yang baru dibunuh.
+
+`bunuh_pohon` dan `jalankan_terbatas` dipindah ke atas `cleanup()` supaya
+keluar-awal mana pun tetap punya fungsi yang dibutuhkan trap.
+
+### T8 (P3) — ringkasan evidence tidak cocok dengan tree yang diikat
+
+Benar dua kali: baris 7 menulis "hanya `tests/` dan `docs/`" padahal slice yang
+sama mengubah dua berkas `.agent-bus`, dan batas klaim masih menyebut kenaikan
+14 → 18 sementara ronde 2 sudah 32. Keduanya diperbaiki, dan tabel kenaikan
+merah sekarang menyebut seluruh ronde. Ringkasan bukti yang tidak cocok dengan
+tree yang diikatnya adalah cacat sejenis dengan SHA yang salah — hanya lebih
+kecil.
+
+Bukti ronde 3:
+
+```
+targeted -> 58 test / 11 lulus / 47 gagal / 0 skip; 47 dari 47 ERR_ASSERTION
+npm test -> 863 test / 802 lulus / 47 gagal / 14 skip; nol regresi
+tsc --noEmit -> exit 0
+test-reviewer-runtime.sh -> 6 kasus, 0 gagal
+test-bus.sh -> 13 kasus, 0 gagal
+nol proses/launchd job yang tertinggal sesudah seluruh jalan
+runtime kanonik live (49388) tidak tersentuh
+```
+
 ## Yang SENGAJA belum dikerjakan di gelombang ini
 
 Urutan rollout dari `QUESTION` Reviewer dipatuhi: resolver ketat menyala
@@ -389,11 +513,13 @@ hijau lokal bukan bukti deployment.
 ## Batas klaim
 
 Gelombang ini adalah perbaikan KONTRAK. Ia tidak menaikkan skor readiness sama
-sekali: nol perubahan produksi, dan jumlah test merah justru NAIK (14 → 18)
-karena kontraknya sekarang menuntut lebih banyak hal yang benar. Sesuai batas
+sekali: nol perubahan produksi, dan jumlah test merah justru NAIK di setiap
+ronde — 14 (R1) → 18 (ronde 1) → 32 (ronde 2) → **47** (ronde 3) — karena
+kontraknya menuntut makin banyak hal yang benar, bukan karena ada yang rusak. Sesuai batas
 Reviewer, seluruh slice product-truth yang selesai pun hanya memindahkan
 kesiapan keseluruhan sekitar 40 → 55–58; 80/100 tetap butuh gerbang
 Founder/eksternal yang belum dikerjakan.
 
 P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
 P0A2_TEST_SHA=f5d4029522bbeb4fbcbf4b885457369bdf3e83a6                       (ronde 2)
+P0A3_TEST_SHA=<commit ini sendiri>                                           (ronde 3)
