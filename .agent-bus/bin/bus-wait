@@ -38,6 +38,23 @@ esac
 INBOX="$BUS_DIR/inbox/$ROLE"
 mkdir -p "$INBOX"
 
+# TOKEN KESIAPAN.
+#
+# Dipancarkan SESUDAH role dan inbox tervalidasi tapi SEBELUM pemindaian pesan
+# pertama, dan urutan itu wajib: kalau inbox SUDAH berisi pesan, proses ini
+# mencetak lalu KELUAR hampir seketika. Penerbit yang menunggu identitas lewat
+# `ps` bisa kehabisan proses untuk dilihat, menyimpulkan penunggu gagal muncul,
+# lalu menyerah — padahal pesannya sudah dibangunkan. Token yang dipancarkan
+# lebih dulu membuat "saya siap" tidak bergantung pada apakah proses ini masih
+# sempat terlihat.
+#
+# BUS_SIAP_BERKAS diisi bus-arm. BUS_UJI_TUNDA_SIAP hanya dipakai test untuk
+# melebarkan jendela pra-siap secara deterministik.
+if [ -n "${BUS_SIAP_BERKAS:-}" ]; then
+  if [ -n "${BUS_UJI_TUNDA_SIAP:-}" ]; then sleep "$BUS_UJI_TUNDA_SIAP"; fi
+  printf 'SIAP %s %s\n' "$ROLE" "$$" > "$BUS_SIAP_BERKAS"
+fi
+
 oldest() {
   # Filenames start with zero-padded unix-ms, so glob order == age order.
   for f in "$INBOX"/*.json; do

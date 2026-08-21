@@ -263,9 +263,84 @@ waiter_hidup() { # waiter_hidup <pid>
     *) return 1 ;;
   esac
 }
-cacah_penunggu() { # cacah penunggu builder MILIK bus ini
-  pgrep -f "$BIN/bus-wait builder" 2>/dev/null | wc -l | tr -d ' '
+# Cacah penunggu TINGKAT ATAS milik bus ini.
+#
+# `pgrep -f` mentah TIDAK cukup: bus-wait menjalankan command substitution
+# (`dirname`, `date`) yang menelurkan shell anak sesaat, dan anak-anak itu
+# mewarisi baris perintah yang cocok polanya. Menghitungnya mentah membuat SATU
+# penunggu terbaca sebagai dua atau tiga — persis bukti palsu yang membuat
+# "delapan arm serentak menghasilkan 2 penunggu" tampak seperti balapan padahal
+# bisa jadi cuma salah hitung. Yang dihitung: proses yang cocok DAN induknya
+# bukan penunggu (jadi keturunan transien tidak ikut).
+penunggu_puncak() {
+  for _p in $(pgrep -f "$BIN/bus-wait builder" 2>/dev/null); do
+    _pp=$(ps -o ppid= -p "$_p" 2>/dev/null | tr -d ' ')
+    [ -n "$_pp" ] || continue
+    case "$(ps -o command= -p "$_pp" 2>/dev/null || true)" in
+      *"$BIN/bus-wait"*) continue ;;   # keturunan transien
+    esac
+    printf '%s\n' "$_p"
+  done
 }
+cacah_penunggu() { penunggu_puncak | wc -l | tr -d ' '; }
+# Jalankan bus-arm dengan BATAS WAKTU KERAS.
+#
+# Tanpa ini, cacat kunci-diwarisi (kasus 24) muncul sebagai SUITE MENGGANTUNG di
+# kasus 14, bukan sebagai kasus merah: tidak ada laporan, tidak ada sebab, dan
+# di CI ia hanya jadi job yang mati kena batas waktu. Menggantung BUKAN gagal —
+# ia lebih buruk, karena tidak memberi tahu apa pun.
+#
+# `timeout`/`gtimeout` dipakai kalau ada; kalau tidak, jatuh ke latar + polling
+# supaya suite ini tidak bergantung pada coreutils.
+arm_terbatas() { # arm_terbatas <detik> <argumen bus-arm...>
+  _batas=$1; shift
+  # BUS_UJI_TANPA_TIMEOUT memaksa cabang fallback. Lihat kasus 12r untuk alasan
+  # kenapa mengosongkan PATH BUKAN cara yang sah menguji cabang itu.
+  if [ -n "${BUS_UJI_TANPA_TIMEOUT:-}" ]; then
+    :
+  elif command -v timeout >/dev/null 2>&1; then
+    timeout "$_batas" "$BIN/bus-arm" "$@" 2>&1
+    return $?
+  elif command -v gtimeout >/dev/null 2>&1; then
+    gtimeout "$_batas" "$BIN/bus-arm" "$@" 2>&1
+    return $?
+  fi
+  # FALLBACK tanpa timeout/gtimeout.
+  #
+  # Versi pertama memakai `kill -9` HANYA pada induk bus-arm. Anaknya —
+  # bus-wait — lolos jadi YATIM: ia bertahan melewati akhir kasus, memegang
+  # inbox klon yang sebentar lagi dihapus, dan mencemari kasus berikutnya
+  # dengan penunggu yang tidak dimiliki siapa pun (temuan Reviewer).
+  #
+  # `set -m` memberi pekerjaan latar ini PROCESS GROUP sendiri, jadi sinyal
+  # bisa dialamatkan ke SELURUH pohon lewat PGID negatif. Urutannya juga
+  # penting: TERM lebih dulu supaya trap bus-arm sempat membersihkan anaknya
+  # sendiri dengan rapi; KILL hanya jaring, dan keduanya BERBATAS.
+  _out="$BUS_DIR/tmp/.arm-terbatas.$$"
+  set -m
+  "$BIN/bus-arm" "$@" >"$_out" 2>&1 &
+  _p=$!
+  set +m
+  _t=0
+  while [ "$_t" -lt "$_batas" ] && kill -0 "$_p" 2>/dev/null; do sleep 1; _t=$((_t + 1)); done
+  if kill -0 "$_p" 2>/dev/null; then
+    kill -TERM -"$_p" 2>/dev/null || kill -TERM "$_p" 2>/dev/null || true
+    _k=0
+    while kill -0 "$_p" 2>/dev/null && [ "$_k" -lt 40 ]; do
+      sleep 0.05 2>/dev/null || sleep 1; _k=$((_k + 1))
+    done
+    if kill -0 "$_p" 2>/dev/null; then
+      kill -9 -"$_p" 2>/dev/null || kill -9 "$_p" 2>/dev/null || true
+    fi
+    wait "$_p" 2>/dev/null || true
+    cat "$_out" 2>/dev/null; rm -f "$_out"
+    return 124
+  fi
+  wait "$_p" 2>/dev/null; _rc=$?
+  cat "$_out" 2>/dev/null; rm -f "$_out"
+  return "$_rc"
+}
+
 matikan_penunggu() {
   for pid in $(pgrep -f "$BIN/bus-wait builder" 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
   for pid in $(pgrep -f "$BIN/bus-arm builder" 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
@@ -280,8 +355,12 @@ dup_ok=0; dup_detail=""
 "$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm1.out" 2>&1 &
 arm1=$!
 sleep 1
-out2=$("$BIN/bus-arm" builder 30 2>&1 || true)
-out3=$("$BIN/bus-arm" builder 30 2>&1 || true)
+out2=$(arm_terbatas 8 builder 30 || true)
+out3=$(arm_terbatas 8 builder 30 || true)
+case "$out2$out3" in
+  *"SUDAH ADA"*) ;;
+  *) dup_ok=1; dup_detail="arm berikutnya MENGGANTUNG (batas 8s terlampaui) — kunci kemungkinan ikut diwarisi penunggu" ;;
+esac
 case "$out2" in *"SUDAH ADA"*) ;; *) dup_ok=1; dup_detail="arm kedua tidak mengenali penunggu: $out2" ;; esac
 case "$out3" in *"SUDAH ADA"*) ;; *) dup_ok=1; dup_detail="arm ketiga tidak mengenali penunggu: $out3" ;; esac
 [ "$(cacah_penunggu)" = 1 ] || { dup_ok=1; dup_detail="penunggu=$(cacah_penunggu), seharusnya 1"; }
@@ -473,17 +552,33 @@ while [ "$i" -le 8 ]; do
   "$BIN/bus-arm" builder 25 >"$BUS_DIR/tmp/arm-par-$i.out" 2>&1 &
   i=$((i + 1))
 done
-sleep 4
+# SETIAP pecundang harus SELESAI, bukan sekadar "tidak terlihat". Tujuh
+# contender yang masih menggantung di kunci akan lolos begitu saja kalau yang
+# diperiksa hanya cacah penunggu, lalu tersapu oleh pembersihan berikutnya —
+# dan kebuntuan yang tersapu tetap kebuntuan.
+# PEMENANG WAJIB TETAP HIDUP — dialah pemilik penunggu. Yang harus habis adalah
+# KETUJUH pecundang. Menuntut nol arm tersisa berarti menuntut pemenang ikut
+# mati, dan itu justru kebalikan dari yang benar.
+sisa=8
+tunggu=0
+while [ "$tunggu" -lt 20 ]; do
+  sisa=$(pgrep -f "$BIN/bus-arm builder" 2>/dev/null | wc -l | tr -d ' ')
+  [ "$sisa" -le 1 ] && break
+  sleep 1; tunggu=$((tunggu + 1))
+done
+[ "$sisa" = 1 ] || { par_ok=1; par_detail="$sisa bus-arm hidup sesudah ${tunggu}s, seharusnya 1 (pemenang); pecundang terjepit di kunci"; }
+
 jml=$(cacah_penunggu)
-[ "$jml" = 1 ] || { par_ok=1; par_detail="delapan arm serentak menghasilkan $jml penunggu"; }
+[ "$jml" = 1 ] || { par_ok=1; par_detail="${par_detail:-delapan arm serentak menghasilkan $jml penunggu tingkat atas}"; }
 tercatat=$(cat "$waiter_pid_file" 2>/dev/null || true)
-waiter_hidup "$tercatat" || { par_ok=1; par_detail="pidfile ($tercatat) tidak menunjuk penunggu hidup; ada yang yatim"; }
-# Penunggu yang HIDUP harus PERSIS yang tercatat — kalau bukan, ada yatim.
-hidup_pid=$(pgrep -f "$BIN/bus-wait builder" 2>/dev/null | head -1)
-[ "$hidup_pid" = "$tercatat" ] || { par_ok=1; par_detail="penunggu hidup $hidup_pid != tercatat $tercatat"; }
-# Tepat SATU pemenang mencetak ARMED; sisanya SUDAH ADA.
+waiter_hidup "$tercatat" || { par_ok=1; par_detail="${par_detail:-pidfile ($tercatat) tidak menunjuk penunggu hidup; ada yang yatim}"; }
+hidup_pid=$(penunggu_puncak | head -1)
+[ "$hidup_pid" = "$tercatat" ] || { par_ok=1; par_detail="${par_detail:-penunggu hidup $hidup_pid != tercatat $tercatat}"; }
+# Tepat SATU pemenang mencetak ARMED; KETUJUH sisanya wajib SUDAH ADA.
 armed=$(grep -l '^ARMED ' "$BUS_DIR/tmp"/arm-par-*.out 2>/dev/null | wc -l | tr -d ' ')
-[ "$armed" = 1 ] || { par_ok=1; par_detail="$armed instance mengklaim ARMED, seharusnya 1"; }
+[ "$armed" = 1 ] || { par_ok=1; par_detail="${par_detail:-$armed instance mengklaim ARMED, seharusnya 1}"; }
+kalah=$(grep -l 'SUDAH ADA' "$BUS_DIR/tmp"/arm-par-*.out 2>/dev/null | wc -l | tr -d ' ')
+[ "$kalah" = 7 ] || { par_ok=1; par_detail="${par_detail:-$kalah pecundang melapor SUDAH ADA, seharusnya 7}"; }
 check "delapan bus-arm SERENTAK: tepat satu penunggu, nol yatim" "$par_ok" "$par_detail"
 rm -f "$BUS_DIR/tmp"/arm-par-*.out
 matikan_penunggu
@@ -534,6 +629,332 @@ sisa=$(cat "$waiter_pid_file" 2>/dev/null || true)
 kill -0 "$pid_b" 2>/dev/null || { milik_ok=1; milik_detail="penunggu B ikut terbunuh oleh pembersihan instance lain"; }
 kill "$pid_b" 2>/dev/null || true
 check "pidfile hanya dilepas oleh pemiliknya — registrasi instance lain tidak dihapus" "$milik_ok" "$milik_detail"
+matikan_penunggu
+
+# --- 12k. KUNCI TIDAK BOLEH IKUT HIDUP DI DALAM PENUNGGU -----------------
+# Cacat paling halus di bus-arm, dan Reviewer membuktikannya lewat bukti PROSES,
+# bukan pembacaan kode: kunci fd hidup di OPEN FILE DESCRIPTION, bukan di
+# prosesnya. Anak yang mewarisi fd 9 memegang description yang SAMA, jadi kunci
+# baru lepas ketika SELURUH pewarisnya menutupnya. Tanpa `9>&-` saat menelurkan
+# bus-wait, penunggu yang berumur panjang menahan kunci SEPANJANG HIDUPNYA:
+# `exec 9>&-` di induk tidak melepas apa pun, dan bus-arm berikutnya menggantung
+# di `lockf 9` sampai penunggu pertama mati.
+#
+# Efeknya kebalikan dari maksud kunci itu — penjaga anti-duplikat berubah jadi
+# penyebab kebuntuan. Karena itu yang diuji BUKAN "arm kedua benar", melainkan
+# "arm kedua kembali CEPAT selagi penunggu pertama masih hidup".
+fd_ok=0; fd_detail=""
+matikan_penunggu
+"$BIN/bus-arm" builder 40 >"$BUS_DIR/tmp/arm-fd1.out" 2>&1 &
+sleep 2
+[ "$(cacah_penunggu)" = 1 ] || { fd_ok=1; fd_detail="penunggu pertama tidak terpasang"; }
+pid_pertama=$(cat "$waiter_pid_file" 2>/dev/null || true)
+
+mulai=$(date +%s)
+"$BIN/bus-arm" builder 40 >"$BUS_DIR/tmp/arm-fd2.out" 2>&1 &
+kedua=$!
+tunggu=0
+while [ "$tunggu" -lt 10 ] && kill -0 "$kedua" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+selesai=$(date +%s)
+durasi=$((selesai - mulai))
+
+kill -0 "$kedua" 2>/dev/null && {
+  fd_ok=1
+  fd_detail="arm KEDUA menggantung ${durasi}s selagi penunggu pertama hidup — kunci ikut diwarisi penunggu, jadi ia dipegang sepanjang siklus tunggu, bukan hanya bagian kritis"
+  kill -9 "$kedua" 2>/dev/null || true
+}
+[ "$durasi" -le 5 ] || { fd_ok=1; fd_detail="${fd_detail:-arm kedua butuh ${durasi}s, seharusnya segera}"; }
+grep -q 'SUDAH ADA' "$BUS_DIR/tmp/arm-fd2.out" 2>/dev/null || {
+  fd_ok=1; fd_detail="${fd_detail:-arm kedua tidak melapor SUDAH ADA: $(cat "$BUS_DIR/tmp/arm-fd2.out" 2>/dev/null)}"; }
+# Penunggu pertama harus MASIH hidup: kalau ia mati, "cepat" jadi tidak berarti.
+waiter_hidup "$pid_pertama" || { fd_ok=1; fd_detail="${fd_detail:-penunggu pertama mati sebelum arm kedua selesai}"; }
+[ "$(cacah_penunggu)" = 1 ] || { fd_ok=1; fd_detail="${fd_detail:-penunggu=$(cacah_penunggu)}"; }
+check "arm kedua kembali CEPAT selagi penunggu pertama hidup (kunci tidak diwarisi)" "$fd_ok" "$fd_detail"
+matikan_penunggu
+
+# --- 12l. PUBLIKASI menyiratkan identitas sudah terlihat ------------------
+# Cacat produksi yang ditemukan Reviewer pada clean run, dan ia benar menolak
+# menyebutnya flake: `$!` tersedia seketika sesudah fork, tapi anak belum tentu
+# sudah `exec` ke bus-wait. Kalau pidfile diterbitkan dan kunci dilepas di
+# jendela itu, contender berikutnya membaca baris perintah yang BELUM cocok,
+# menyimpulkan pidfile basi, menghapusnya, lalu menelurkan penunggu KEDUA.
+#
+# Invarian yang dijaga: BEGITU pidfile terbit, PID di dalamnya WAJIB sudah lolos
+# predikat identitas yang sama yang dipakai contender — tanpa polling.
+#
+# BATAS KEJUJURAN TEST INI: jendela pra-exec ada DI DALAM proses dan tidak bisa
+# dilebarkan dari luar (anak yang belum exec adalah salinan shell bus-arm, bukan
+# skrip yang bisa kita sisipi jeda). Jadi kepekaan kasus ini statistik —
+# diulang beberapa kali — sementara yang membuat invariannya BENAR adalah jabat
+# tangan di bus-arm, bukan test ini. Disebut apa adanya supaya tidak dibaca
+# sebagai bukti yang lebih kuat dari yang sebenarnya.
+pub_ok=0; pub_detail=""
+n=1
+while [ "$n" -le 5 ]; do
+  matikan_penunggu
+  "$BIN/bus-arm" builder 25 >"$BUS_DIR/tmp/arm-pub-$n.out" 2>&1 &
+  # Tunggu HANYA sampai pidfile terbit, lalu periksa identitas SEKETIKA.
+  tunggu=0
+  while [ "$tunggu" -lt 60 ] && [ ! -s "$waiter_pid_file" ]; do sleep 0.1 2>/dev/null || sleep 1; tunggu=$((tunggu + 1)); done
+  terbit=$(cat "$waiter_pid_file" 2>/dev/null || true)
+  [ -n "$terbit" ] || { pub_ok=1; pub_detail="putaran $n: pidfile tidak pernah terbit"; break; }
+  waiter_hidup "$terbit" || {
+    pub_ok=1
+    pub_detail="putaran $n: pidfile terbit dengan PID $terbit yang BELUM terlihat sebagai bus-wait — contender akan menganggapnya basi dan menelurkan penunggu kedua"
+    break
+  }
+  n=$((n + 1))
+done
+check "pidfile terbit HANYA sesudah identitas penunggu terlihat (jendela pra-exec tertutup)" "$pub_ok" "$pub_detail"
+matikan_penunggu
+
+# --- 12m. kunci warisan: hanya pemilik MATI-NUMERIK yang boleh dipulihkan --
+# Keadaan upgrade yang sah: f75d064 memakai path yang sama sebagai DIREKTORI.
+# Tapi f75 menulis pid sebagai langkah KEDUA, jadi direktori TANPA pid tidak
+# berarti tak bertuan — ia bisa berarti pemilik lama sedang di jendela
+# mkdir-sebelum-tulis dan MASIH HIDUP. Menghapusnya otomatis = merampas kunci
+# yang sedang dipegang. Karena itu hanya pemilik numerik yang terbukti MATI yang
+# dipulihkan; sisanya gagal tertutup.
+lockfile="$BUS_DIR/tmp/waiter-builder.lock"
+
+warisan_ok=0; warisan_detail=""
+matikan_penunggu
+rm -rf "$lockfile"; mkdir -p "$lockfile"
+# PID mati DETERMINISTIK: proses nyata yang sudah dibunuh dan di-reap, bukan
+# angka besar yang diasumsikan bebas. Asumsi "999999 pasti tidak ada" adalah
+# tebakan tentang ruang PID host, dan tebakan itu bisa salah.
+sleep 60 & mati=$!
+kill "$mati" 2>/dev/null || true
+wait "$mati" 2>/dev/null || true
+echo "$mati" > "$lockfile/pid"
+"$BIN/bus-arm" builder 25 >"$BUS_DIR/tmp/arm-warisan.out" 2>&1 &
+sleep 3
+grep -q '^ARMED ' "$BUS_DIR/tmp/arm-warisan.out" 2>/dev/null || {
+  warisan_ok=1; warisan_detail="tidak pulih dari kunci warisan bertuan-mati: $(cat "$BUS_DIR/tmp/arm-warisan.out" 2>/dev/null)"; }
+[ "$(cacah_penunggu)" = 1 ] || { warisan_ok=1; warisan_detail="${warisan_detail:-penunggu=$(cacah_penunggu)}"; }
+[ ! -d "$lockfile" ] || { warisan_ok=1; warisan_detail="${warisan_detail:-kunci masih berupa direktori}"; }
+check "kunci warisan bertuan MATI dipulihkan otomatis" "$warisan_ok" "$warisan_detail"
+matikan_penunggu
+
+tutup_ok=0; tutup_detail=""
+for kasus in hidup tanpa-pid rusak; do
+  matikan_penunggu
+  rm -rf "$lockfile"; mkdir -p "$lockfile"
+  pemilik=""
+  case "$kasus" in
+    hidup)     sleep 30 & pemilik=$!; echo "$pemilik" > "$lockfile/pid" ;;
+    tanpa-pid) : ;;                                   # jendela mkdir-sebelum-tulis
+    rusak)     printf 'bukan-angka\n' > "$lockfile/pid" ;;
+  esac
+  keluar=$(arm_terbatas 8 builder 20 2>&1); rc_kasus=$?
+  # rc PERSIS 75. Tanpa ini, kegagalan karena sebab lain (crash, batas waktu)
+  # ikut lolos sebagai "gagal tertutup dengan benar".
+  [ "$rc_kasus" = 75 ] || { tutup_ok=1; tutup_detail="$kasus: rc=$rc_kasus, seharusnya 75. keluaran: ${keluar:-<kosong>}"; }
+  case "$keluar" in
+    *ARMED*) tutup_ok=1; tutup_detail="$kasus: bus-arm MERAMPAS kunci warisan yang tidak terbukti mati" ;;
+  esac
+  case "$keluar" in
+    *"kunci direktori warisan"*) ;;
+    *) tutup_ok=1; tutup_detail="${tutup_detail:-$kasus: tidak ada diagnostik warisan yang bisa ditindaklanjuti: ${keluar:-<kosong>}}" ;;
+  esac
+  [ -d "$lockfile" ] || { tutup_ok=1; tutup_detail="${tutup_detail:-$kasus: direktori warisan dihapus padahal tidak terbukti tak bertuan}"; }
+  if [ -n "$pemilik" ]; then
+    kill -0 "$pemilik" 2>/dev/null || { tutup_ok=1; tutup_detail="${tutup_detail:-$kasus: proses pemilik ikut terbunuh}"; }
+    kill "$pemilik" 2>/dev/null || true
+  fi
+  [ -z "$tutup_detail" ] || break
+done
+rm -rf "$lockfile"
+check "kunci warisan hidup / tanpa-pid / rusak: GAGAL TERTUTUP, tidak dirampas" "$tutup_ok" "$tutup_detail"
+matikan_penunggu
+
+# --- 12n. gerbang PRA-SIAP deterministik ---------------------------------
+# Jendela pra-exec tidak bisa dilebarkan dari luar, tapi jendela PRA-SIAP bisa:
+# bus-wait menunda token lewat BUS_UJI_TUNDA_SIAP (khusus test). Yang dibuktikan:
+# selama token belum datang, pidfile BELUM terbit dan arm kedua TERTAHAN; sesudah
+# token, tepat satu ARMED + satu SUDAH ADA + satu penunggu tingkat atas.
+gate_ok=0; gate_detail=""
+matikan_penunggu
+rm -f "$waiter_pid_file"
+BUS_UJI_TUNDA_SIAP=6 "$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-gate1.out" 2>&1 &
+sleep 2
+[ ! -s "$waiter_pid_file" ] || { gate_ok=1; gate_detail="pidfile TERBIT sebelum token SIAP — jendela publikasi masih terbuka"; }
+"$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-gate2.out" 2>&1 &
+kedua=$!
+sleep 2
+kill -0 "$kedua" 2>/dev/null || { gate_ok=1; gate_detail="${gate_detail:-arm kedua TIDAK tertahan selagi pemenang memegang kunci pra-siap}"; }
+tunggu=0
+while [ "$tunggu" -lt 20 ] && kill -0 "$kedua" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+kill -0 "$kedua" 2>/dev/null && { gate_ok=1; gate_detail="${gate_detail:-arm kedua tidak pernah lepas sesudah token}"; kill -9 "$kedua" 2>/dev/null || true; }
+grep -q '^ARMED ' "$BUS_DIR/tmp/arm-gate1.out" 2>/dev/null || { gate_ok=1; gate_detail="${gate_detail:-pemenang tidak melapor ARMED}"; }
+grep -q 'SUDAH ADA' "$BUS_DIR/tmp/arm-gate2.out" 2>/dev/null || { gate_ok=1; gate_detail="${gate_detail:-arm kedua tidak melapor SUDAH ADA: $(cat "$BUS_DIR/tmp/arm-gate2.out" 2>/dev/null)}"; }
+[ "$(cacah_penunggu)" = 1 ] || { gate_ok=1; gate_detail="${gate_detail:-penunggu tingkat atas=$(cacah_penunggu)}"; }
+check "gerbang pra-siap: pidfile terbit HANYA sesudah token, arm kedua tertahan lalu SUDAH ADA" "$gate_ok" "$gate_detail"
+matikan_penunggu
+
+# --- 12o. inbox yang SUDAH berisi pesan tidak boleh membuat arm menyerah --
+# Versi handshake pertama menunggu identitas lewat `ps`. Kalau inbox sudah
+# berisi pesan, bus-wait mencetak lalu KELUAR hampir seketika, jadi induk tidak
+# pernah sempat melihatnya, menyimpulkan penunggu gagal muncul, dan menyerah
+# (exit 76) — SESUDAH pesannya dibangunkan, dan tanpa memasang ulang. Token yang
+# dipancarkan sebelum pemindaian pertama menutup itu.
+isi_ok=0; isi_detail=""
+matikan_penunggu
+"$BIN/bus-send" builder PASS "$HEAD_SHA" "$TASK" "sudah menunggu duluan" >/dev/null 2>&1
+# `|| true` DILARANG di sini: ia membuat $? selalu 0, jadi kegagalan apa pun
+# (75, crash sebelum wake) lolos hijau selama pesannya kebetulan masih ada.
+keluar_isi=$(arm_terbatas 10 builder 20 2>&1); rc_isi=$?
+[ "$rc_isi" = 0 ] || { isi_ok=1; isi_detail="arm keluar $rc_isi, seharusnya 0: ${keluar_isi:-<kosong>}"; }
+case "$keluar_isi" in
+  *"token SIAP"*) isi_ok=1; isi_detail="arm MENYERAH (76) padahal pesannya ada — bangun hilang tanpa pemasangan ulang" ;;
+esac
+# Bangun yang BENAR harus menyebut pesannya, bukan sekadar keluar 0.
+case "$keluar_isi" in
+  *"/inbox/builder/"*) ;;
+  *) isi_ok=1; isi_detail="${isi_detail:-keluaran tidak menunjuk berkas pesan: ${keluar_isi:-<kosong>}}" ;;
+esac
+case "$keluar_isi" in
+  *'"type":"PASS"'*) ;;
+  *) isi_ok=1; isi_detail="${isi_detail:-keluaran tidak memuat JSON pesan yang benar}" ;;
+esac
+[ "$(inbox_count builder)" = 1 ] || { isi_ok=1; isi_detail="${isi_detail:-bus-wait mengonsumsi pesan: inbox=$(inbox_count builder)}"; }
+"$BIN/bus-read" builder >/dev/null 2>&1
+check "inbox yang sudah berisi pesan membangunkan arm, bukan membuatnya menyerah" "$isi_ok" "$isi_detail"
+matikan_penunggu
+
+# --- 12p. contender TIDAK boleh melihat penunggu yang sedang MATI --------
+# Kasus 21 hanya mengirim sinyal tanpa contender, jadi ia tidak pernah menguji
+# interleaving ini. Cacatnya: pembersihan membunuh penunggu SEBELUM memegang
+# kunci, sehingga contender bisa masuk, melihat penunggu yang sudah dikirimi
+# TERM tapi belum mati, menyimpulkannya sehat, lalu keluar "SUDAH ADA" —
+# dan begitu pembersihan selesai, hasilnya NOL penunggu dengan laporan sehat.
+#
+# Jendelanya dilebarkan DETERMINISTIK lewat BUS_UJI_TUNDA_BERSIH (khusus test),
+# bukan lewat stress timing.
+mati_ok=0; mati_detail=""
+matikan_penunggu
+BUS_UJI_TUNDA_BERSIH=5 "$BIN/bus-arm" builder 40 >"$BUS_DIR/tmp/arm-mati1.out" 2>&1 &
+induk=$!
+sleep 2
+anak=$(cat "$waiter_pid_file" 2>/dev/null || true)
+waiter_hidup "$anak" || { mati_ok=1; mati_detail="penunggu tidak terpasang sebelum sinyal"; }
+
+kill -TERM "$induk" 2>/dev/null || true
+sleep 1   # pembersihan sudah memegang kunci dan sedang tertunda
+"$BIN/bus-arm" builder 40 >"$BUS_DIR/tmp/arm-mati2.out" 2>&1 &
+kedua=$!
+sleep 2
+# Selagi pembersihan memegang kunci, contender WAJIB tertahan — bukan menyimpulkan sehat.
+grep -q 'SUDAH ADA' "$BUS_DIR/tmp/arm-mati2.out" 2>/dev/null && {
+  mati_ok=1
+  mati_detail="contender melapor SUDAH ADA atas penunggu yang sedang MATI — sesudah pembersihan selesai tidak ada penunggu tersisa, tapi laporannya sehat"
+}
+# Contender TIDAK harus keluar: begitu pembersihan melepas registrasi, dialah
+# yang memasang penunggu baru dan menjadi pemiliknya — jadi ia memang tetap
+# hidup. Yang wajib: ia mengambil alih (ARMED), bukan melapor SUDAH ADA.
+tunggu=0
+while [ "$tunggu" -lt 25 ]; do
+  grep -q '^ARMED ' "$BUS_DIR/tmp/arm-mati2.out" 2>/dev/null && break
+  kill -0 "$kedua" 2>/dev/null || break
+  sleep 1; tunggu=$((tunggu + 1))
+done
+grep -q '^ARMED ' "$BUS_DIR/tmp/arm-mati2.out" 2>/dev/null || {
+  mati_ok=1
+  mati_detail="${mati_detail:-contender tidak pernah mengambil alih: $(cat "$BUS_DIR/tmp/arm-mati2.out" 2>/dev/null)}"
+}
+sleep 1
+[ "$(cacah_penunggu)" = 1 ] || { mati_ok=1; mati_detail="${mati_detail:-akhirnya penunggu=$(cacah_penunggu), seharusnya 1}"; }
+tercatat=$(cat "$waiter_pid_file" 2>/dev/null || true)
+waiter_hidup "$tercatat" || { mati_ok=1; mati_detail="${mati_detail:-pidfile tidak menunjuk penunggu hidup}"; }
+check "contender tidak menyimpulkan sehat atas penunggu yang sedang mati" "$mati_ok" "$mati_detail"
+matikan_penunggu
+
+# --- 12q. trap TIDAK menyinyali PID yang sudah dituai --------------------
+# Sesudah `wait` menuai anak, PID-nya bisa didaur ulang. Trap yang masih
+# memegang PID lama akan mengirim sinyal ke PROSES ASING.
+#
+# Versi pertama kasus ini TIDAK membuktikan itu, dan Reviewer benar menolaknya:
+# ia menjalankan penyelesaian --sekali yang normal dan TIDAK PERNAH menyinyali
+# induk sesudah anak dituai. Di jalur normal, `bersihkan` berjalan lewat trap
+# EXIT saat WAITER sudah kosong di KEDUA versi — jadi mutasi berbahayanya tetap
+# hijau, dan gerbangnya hanya membuktikan bahwa tidak ada yang terjadi.
+#
+# Sekarang: induk DITAHAN di dalam jendela pasca-reap oleh barrier test-only,
+# lalu TERM dikirim TEPAT di sana. Yang diasersikan adalah catatan sinyal —
+# PID yang sudah dituai tidak boleh muncul di dalamnya.
+reap_ok=0; reap_detail=""
+matikan_penunggu
+log_kill="$BUS_DIR/tmp/kill-log.txt"
+rm -f "$log_kill"
+
+# Batas 2 detik + --sekali: penunggu habis waktu lalu DITUAI. Barrier menahan
+# induk 6 detik di jendela itu, cukup lebar untuk menyinyalinya dengan pasti.
+BUS_UJI_LOG_KILL="$log_kill" BUS_UJI_TUNDA_REAP=6 \
+  "$BIN/bus-arm" builder 2 --sekali >"$BUS_DIR/tmp/arm-reap.out" 2>&1 &
+induk2=$!
+sleep 1
+anak2=$(cat "$waiter_pid_file" 2>/dev/null || true)
+[ -n "$anak2" ] || { reap_ok=1; reap_detail="penunggu tidak terpasang"; }
+
+# Tunggu sampai anak benar-benar DITUAI (proses hilang), lalu induk pasti
+# sedang tertahan di barrier.
+tunggu=0
+while [ "$tunggu" -lt 12 ] && kill -0 "$anak2" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+kill -0 "$anak2" 2>/dev/null && { reap_ok=1; reap_detail="${reap_detail:-anak tidak habis waktu}"; }
+
+# PROSES KORBAN: berdiri SESUDAH anak dituai, mewakili proses asing yang
+# mendapat PID daur ulang. Ia tidak boleh mati.
+sleep 25 &
+korban=$!
+
+kill -0 "$induk2" 2>/dev/null || { reap_ok=1; reap_detail="${reap_detail:-induk sudah keluar sebelum sempat disinyali di jendela pasca-reap}"; }
+kill -TERM "$induk2" 2>/dev/null || true
+tunggu=0
+while [ "$tunggu" -lt 10 ] && kill -0 "$induk2" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+
+# ASERSI UTAMA: PID yang sudah dituai tidak boleh disinyali.
+if [ -f "$log_kill" ] && grep -q "KILL $anak2\$" "$log_kill" 2>/dev/null; then
+  reap_ok=1
+  reap_detail="${reap_detail:-trap menyinyali PID $anak2 yang SUDAH dituai — pada daur ulang PID itu mengenai proses asing}"
+fi
+kill -0 "$korban" 2>/dev/null || { reap_ok=1; reap_detail="${reap_detail:-proses korban ikut mati}"; }
+kill "$korban" 2>/dev/null || true
+wait "$korban" 2>/dev/null || true
+[ ! -f "$waiter_pid_file" ] || { reap_ok=1; reap_detail="${reap_detail:-pidfile tertinggal sesudah penuaian normal}"; }
+rm -f "$log_kill"
+check "trap tidak menyinyali PID yang sudah dituai (sinyal dikirim DI DALAM jendela pasca-reap)" "$reap_ok" "$reap_detail"
+matikan_penunggu
+
+# --- 12r. fallback tanpa timeout/gtimeout tidak meninggalkan YATIM --------
+# Jalur fallback hanya berjalan di mesin tanpa timeout/gtimeout, jadi ia mudah
+# tidak pernah diuji sama sekali — dan justru di jalur itulah `kill` yang salah
+# alamat meninggalkan bus-wait yatim yang mencemari kasus berikutnya.
+#
+# KENAPA BUKAN "PATH tanpa timeout/gtimeout", walau itu yang diminta: dicoba
+# lebih dulu, dan hasilnya membuktikan caranya sendiri tidak sah. `timeout`
+# tinggal di direktori yang SAMA dengan `lockf`/`flock`, jadi mengosongkan PATH
+# ikut mencabut backend kunci bus-arm: ia keluar 75 (gagal mengunci) alih-alih
+# 124, tidak pernah sampai ke cabang pemotongan, DAN meninggalkan keadaan yang
+# menjatuhkan tiga kasus lain. Test seperti itu tidak menguji yatim sama sekali.
+#
+# Yang diuji di sini tetap cabang yang sama, dipilih lewat pemaksa eksplisit.
+yatim_ok=0; yatim_detail=""
+matikan_penunggu
+sebelum=$(cacah_penunggu)
+[ "$sebelum" = 0 ] || { yatim_ok=1; yatim_detail="ada $sebelum penunggu sebelum kasus dimulai"; }
+
+# Batas 60 detik, dipotong paksa pada 3: memaksa cabang timeout fallback.
+BUS_UJI_TANPA_TIMEOUT=1 arm_terbatas 3 builder 60 >/dev/null 2>&1
+rc_fb=$?
+
+[ "$rc_fb" = 124 ] || { yatim_ok=1; yatim_detail="${yatim_detail:-fallback mengembalikan $rc_fb, seharusnya 124}"; }
+sleep 1
+sesudah=$(cacah_penunggu)
+[ "$sesudah" = 0 ] || {
+  yatim_ok=1
+  yatim_detail="${yatim_detail:-$sesudah penunggu YATIM tertinggal sesudah fallback memotong bus-arm — ia akan mencemari kasus berikutnya dan memegang inbox klon yang sebentar lagi dihapus}"
+}
+check "fallback tanpa timeout/gtimeout: nol penunggu yatim, kode 124" "$yatim_ok" "$yatim_detail"
 matikan_penunggu
 
 # --- cleanup: remove only this test's archived messages -------------------

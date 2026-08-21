@@ -24,21 +24,36 @@
 #      meninggalkan pidfile; digabung cacat 2, berkas basi itu jadi laporan
 #      "sudah terpasang" yang palsu. Sekarang ada trap TERM/INT/EXIT.
 #
-#   4. PEMERIKSAAN-LALU-TELUR TIDAK ATOMIK (temuan Reviewer atas fbb7337, dan
-#      ia benar). Dua bus-arm serentak sama-sama bisa lolos pemeriksaan pidfile
-#      SEBELUM salah satunya sempat menulis PID, lalu keduanya menelurkan
-#      bus-wait. Hasilnya penunggu GANDA: satu pesan membangunkan dua kali, dan
-#      pidfile hanya mencatat salah satunya sehingga yang lain jadi yatim yang
-#      tidak bisa dilacak siapa pun.
-#      Sekarang bagian kritisnya — periksa, telurkan, catat — dilindungi kunci
-#      direktori atomik (`mkdir` gagal kalau sudah ada, di semua filesystem
-#      POSIX). Kuncinya dipegang HANYA selama bagian kritis, bukan selama
-#      menunggu, jadi ia tidak pernah memblokir siapa pun berlama-lama.
+#   4. PEMERIKSAAN-LALU-TELUR TIDAK ATOMIK (temuan Reviewer atas fbb7337).
+#      Dua bus-arm serentak sama-sama bisa lolos pemeriksaan pidfile SEBELUM
+#      salah satunya sempat menulis PID, lalu keduanya menelurkan bus-wait.
+#      Hasilnya penunggu GANDA: satu pesan membangunkan dua kali, dan pidfile
+#      hanya mencatat salah satunya sehingga yang lain jadi yatim.
 #
-#      Cacat pasangannya, dan Reviewer benar menyebutnya sekaligus: pembersihan
-#      lama menghapus pidfile TANPA memastikan isinya milik instance itu, jadi
-#      satu instance bisa menghapus registrasi instance lain. Sekarang setiap
-#      penghapusan diverifikasi kepemilikannya lebih dulu.
+#   5. KUNCINYA SENDIRI TIDAK ATOMIK (temuan Reviewer atas f75d064 — perbaikan
+#      pertama saya untuk cacat 4 memperkenalkan cacat baru yang sekelas).
+#      Versi itu memakai `mkdir LOCKDIR` lalu MENULIS `LOCKDIR/pid` sebagai
+#      langkah TERPISAH. A yang berhasil mkdir lalu terjeda sebelum menulis pid
+#      membuat B melihat direktori TANPA pid, menyimpulkannya basi,
+#      menghapusnya, lalu membuatnya lagi — dan keduanya masuk bagian kritis.
+#      Balapan yang sama, satu lapis lebih dalam.
+#
+#      Sekarang kuncinya OS-BACKED, primitive yang sama dengan yang sudah
+#      dipakai bus-send untuk urutan pesan: `lockf`/`flock` atas satu file
+#      descriptor: `lockf` di Darwin, `flock` di Linux, dipilih dari `uname`
+#      dan BUKAN dari urutan PATH. Kepemilikannya dipegang KERNEL, jadi tidak
+#      ada langkah kedua yang bisa disela — dan ia LEPAS SENDIRI saat proses
+#      mati, sehingga kelas "kunci basi" beserta pemulihannya yang rawan
+#      balapan tidak ada lagi PADA KEDUA BACKEND ITU.
+#      `shlock` sengaja TIDAK dipakai: ia kunci berbasis pidfile, jadi jaminannya
+#      lebih lemah dan tidak interoperabel dengan backend fd pada path yang sama.
+#      Host tanpa lockf/flock gagal tertutup, bukan diam-diam turun mutu.
+#
+#   6. PENGHAPUSAN PIDFILE MASIH TOCTOU (temuan Reviewer atas f75d064).
+#      Memverifikasi kepemilikan tidak cukup kalau BACA dan HAPUS adalah dua
+#      langkah tanpa kunci: A membaca PID miliknya, terjeda, B memasang penunggu
+#      baru dan menulis PID B, lalu A menghapus registrasi B. Sekarang baca dan
+#      hapus dijalankan di bawah kunci YANG SAMA dengan periksa-telurkan-catat.
 #
 # --sekali: pasang satu penunggu lalu keluar mengikuti kode keluar bus-wait,
 # tanpa memasang ulang saat timeout. Dipakai test lifecycle; bukan operasi normal.
@@ -58,7 +73,6 @@ done
 case "$ROLE" in builder|reviewer) ;; *) echo "role tidak sah: $ROLE" >&2; exit 2 ;; esac
 
 PIDFILE="$BUS_DIR/tmp/waiter-$ROLE.pid"
-LOCKDIR="$BUS_DIR/tmp/waiter-$ROLE.lock"
 mkdir -p "$BUS_DIR/tmp"
 
 # Identitas, bukan sekadar keberadaan. Baris perintah penunggu yang sah memuat
@@ -79,45 +93,235 @@ penunggu_sah() { # penunggu_sah <pid>
 # Hapus pidfile HANYA kalau isinya memang milik kita. Penghapusan tanpa
 # pemeriksaan ini yang membuat satu instance bisa menghapus registrasi instance
 # lain, dan meninggalkan penunggu hidup yang tidak tercatat di mana pun.
-lepas_pidfile() { # lepas_pidfile <pid_milik_kita>
+# Hapus pidfile HANYA kalau isinya memang milik kita, dan lakukan baca+hapus
+# sebagai SATU bagian kritis. Memverifikasi kepemilikan saja tidak cukup:
+# tanpa kunci, A bisa membaca PID miliknya, terjeda, lalu menghapus registrasi
+# B yang sudah menggantikannya di antara dua langkah itu.
+lepas_pidfile() { # lepas_pidfile <pid_milik_kita> [--sudah-terkunci]
   [ -n "${1:-}" ] || return 0
-  [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$1" ] || return 0
-  rm -f "$PIDFILE"
+  if [ "${2:-}" = --sudah-terkunci ]; then
+    [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$1" ] || return 0
+    rm -f "$PIDFILE"
+    return 0
+  fi
+  # Gagal mengunci BUKAN "pembersihan selesai". Versi sebelumnya mengembalikan 0
+  # di sini, jadi pemanggil mengira registrasinya sudah dilepas padahal tidak —
+  # kegagalan yang melapor sukses adalah cara tercepat menyembunyikan yatim.
+  if ! ambil_kunci; then
+    echo "bus-arm: gagal mengunci saat melepas pidfile; registrasi $1 mungkin tertinggal" >&2
+    return 1
+  fi
+  if [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$1" ]; then rm -f "$PIDFILE"; fi
+  lepas_kunci
 }
 
-kunci_dipegang=0
+# --- KUNCI OS-BACKED ------------------------------------------------------
+# Dipegang HANYA selama bagian kritis yang sangat pendek, tidak selama menunggu.
+LOCKFILE="$BUS_DIR/tmp/waiter-$ROLE.lock"
+KUNCI_JENIS=''
+
 ambil_kunci() {
-  _coba=0
-  while ! mkdir "$LOCKDIR" 2>/dev/null; do
-    _holder=$(cat "$LOCKDIR/pid" 2>/dev/null || true)
-    if [ -n "$_holder" ] && kill -0 "$_holder" 2>/dev/null; then
-      _coba=$((_coba + 1))
-      [ "$_coba" -lt 100 ] || { echo "bus-arm: kunci $LOCKDIR tidak lepas" >&2; return 1; }
-      sleep 0.1 2>/dev/null || sleep 1
-    else
-      # Pemegang kunci mati sebelum melepas. Aman dibersihkan: kunci ini hanya
-      # menjaga bagian kritis yang sangat pendek, dan kita TIDAK PERNAH mengirim
-      # sinyal ke PID di dalamnya.
-      rm -f "$LOCKDIR/pid"; rmdir "$LOCKDIR" 2>/dev/null || true
+  # PEMULIHAN WARISAN — FAIL CLOSED. Versi f75d064 memakai path yang SAMA
+  # sebagai DIREKTORI (`mkdir LOCKDIR` lalu menulis pid sebagai langkah kedua).
+  # Karena itu direktori TANPA pid TIDAK berarti "tak bertuan": ia bisa berarti
+  # pemilik lama sedang berada di jendela mkdir-sebelum-tulis dan MASIH HIDUP.
+  # Menghapusnya otomatis berarti merampas kunci yang sedang dipegang.
+  #
+  # Jadi: hanya pemilik NUMERIK yang terbukti MATI yang dipulihkan. Selain itu
+  # gagal tertutup (75) dengan pesan yang bisa ditindaklanjuti. Prosedur upgrade
+  # ada di .agent-bus/README.md: hentikan semua bus-arm lama SEBELUM upgrade.
+  if [ -d "$LOCKFILE" ]; then
+    _pemilik=$(cat "$LOCKFILE/pid" 2>/dev/null || true)
+    case "$_pemilik" in
+      ''|*[!0-9]*)
+        echo "bus-arm: kunci direktori warisan di $LOCKFILE tanpa pemilik numerik yang sah; TIDAK dihapus otomatis (pemilik lama bisa masih hidup di jendela mkdir-sebelum-tulis). Hentikan semua bus-arm lama lalu hapus manual." >&2
+        return 1 ;;
+      *)
+        if kill -0 "$_pemilik" 2>/dev/null; then
+          echo "bus-arm: kunci direktori warisan masih dipegang pid $_pemilik; coba lagi" >&2
+          return 1
+        fi ;;
+    esac
+    rm -f "$LOCKFILE/pid"
+    if ! rmdir "$LOCKFILE" 2>/dev/null; then
+      # Dua migrator bisa berlomba. Kalau path-nya SUDAH bukan direktori lagi,
+      # pemenang sudah mengubahnya dan pekerjaan ini memang sudah selesai —
+      # menyerah di sini akan membuat pecundang gagal 75 pada keadaan yang
+      # justru sudah benar. Migrasi harus idempoten, bukan sekali-jalan.
+      if [ -e "$LOCKFILE" ] && [ -d "$LOCKFILE" ]; then
+        echo "bus-arm: tidak bisa memulihkan kunci warisan $LOCKFILE" >&2
+        return 1
+      fi
     fi
-  done
-  printf '%s\n' "$$" > "$LOCKDIR/pid"
-  kunci_dipegang=1
-}
-lepas_kunci() {
-  [ "$kunci_dipegang" = 1 ] || return 0
-  if [ "$(cat "$LOCKDIR/pid" 2>/dev/null || true)" = "$$" ]; then
-    rm -f "$LOCKDIR/pid"; rmdir "$LOCKDIR" 2>/dev/null || true
   fi
-  kunci_dipegang=0
+
+  # Backend dipilih dari SISTEM OPERASI, bukan dari urutan PATH. Memilih lewat
+  # `command -v` membuat host yang kebetulan punya keduanya bisa memakai backend
+  # berbeda dari host lain untuk berkas kunci yang sama.
+  #
+  # shlock SENGAJA TIDAK DIPAKAI: ia kunci berbasis pidfile (bukan kernel), jadi
+  # kelas kunci-basi dan PID daur ulang tetap ada — dan ia tidak interoperabel
+  # dengan backend fd pada path yang sama. Host tanpa lockf/flock gagal tertutup.
+  case "$(uname -s 2>/dev/null || echo unknown)" in
+    Darwin)
+      command -v lockf >/dev/null 2>&1 || { echo "bus-arm: lockf tidak tersedia di Darwin" >&2; return 1; }
+      exec 9>"$LOCKFILE" || return 1
+      lockf 9 || { exec 9>&-; return 1; }
+      ;;
+    Linux)
+      command -v flock >/dev/null 2>&1 || { echo "bus-arm: flock tidak tersedia di Linux" >&2; return 1; }
+      exec 9>"$LOCKFILE" || return 1
+      flock -x 9 || { exec 9>&-; return 1; }
+      ;;
+    *)
+      echo "bus-arm: hanya Darwin (lockf) dan Linux (flock) yang didukung" >&2
+      return 1 ;;
+  esac
+  KUNCI_JENIS=fd
+}
+
+lepas_kunci() {
+  [ "$KUNCI_JENIS" = fd ] || return 0
+  exec 9>&-
+  KUNCI_JENIS=''
 }
 
 WAITER=""
+SIAP_BERKAS=""
+# PEMBERSIHAN = SATU BAGIAN KRITIS.
+#
+# Versi sebelumnya MEMBUNUH penunggu lebih dulu, baru mengambil kunci untuk
+# melepas pidfile. Contender bisa masuk di antara keduanya: ia melihat penunggu
+# yang SUDAH DIKIRIMI TERM tapi belum mati, menyimpulkannya sehat, dan keluar
+# "SUDAH ADA". Sesudah itu pembersihan menghapus pidfile dan anaknya mati —
+# hasilnya NOL penunggu, sementara contender sudah terlanjur melapor sehat.
+# Menghentikan, menuai, dan melepas registrasi harus terjadi di bawah kunci yang
+# SAMA supaya tidak ada yang bisa mengintip keadaan setengah jadi.
+#
+# BUS_UJI_TUNDA_BERSIH dan BUS_UJI_LOG_KILL hanya dipakai test untuk melebarkan
+# jendela dan mengamati sinyal; keduanya tidak berpengaruh di operasi normal.
+# STATUS PENUNGGU SEBAGAI SATU NILAI — LIVE:<pid> / REAPED:<pid> / kosong.
+#
+# Versi sebelumnya memakai DUA variabel yang diperbarui terpisah (WAITER
+# dikosongkan, lalu TERAKHIR_DITUAI diisi). Reviewer benar: POSIX memeriksa
+# trap yang tertunda DI ANTARA perintah, dan dua assignment adalah dua
+# perintah — ada jendela di antaranya di mana WAITER sudah kosong TAPI
+# TERAKHIR_DITUAI belum terisi. TERM yang tiba TEPAT di jendela itu melihat
+# "tidak ada yang bisa disinyali, tidak ada yang bisa dibersihkan", dan
+# pidfile tertinggal.
+#
+# Satu variabel menutup jendela itu SECARA STRUKTURAL, bukan dengan
+# mempersempitnya: transisi LIVE -> REAPED adalah SATU assignment
+# (`PENUNGGU_STATE="REAPED:$WAITER"`), jadi dari sudut pandang trap ia hanya
+# punya dua kemungkinan nilai yang berdekatan — sebelum baris itu berjalan
+# (masih LIVE) atau sesudah (sudah REAPED) — TIDAK PERNAH "keduanya kosong".
+PENUNGGU_STATE=""
+
 bersihkan() {
-  [ -n "$WAITER" ] && kill "$WAITER" 2>/dev/null || true
-  lepas_pidfile "$WAITER"
-  lepas_kunci
+  _state=${PENUNGGU_STATE:-}
+  PENUNGGU_STATE=""
+  [ -n "${SIAP_BERKAS:-}" ] && rm -f "$SIAP_BERKAS"
+
+  case "$_state" in
+    STARTING:*)
+      # FASE PRA-TOKEN. Anak sudah di-fork tapi belum terbukti sudah `exec` ke
+      # bus-wait (mungkin BELUM SEMPAT sama sekali) — baris perintahnya bisa
+      # jadi masih milik shell induk, jadi `penunggu_sah` (yang memeriksa baris
+      # perintah) TIDAK BISA dipakai sebagai syarat di fase ini; mensyaratkannya
+      # justru membuat anak pra-exec lolos dari pembersihan dan jadi yatim.
+      #
+      # Identitasnya cukup dibuktikan dengan PPID == $$ saja: struktur skrip
+      # ini menjamin HANYA SATU anak yang pernah di-fork pada satu waktu, jadi
+      # anak langsung kita DI FASE INI pasti anak yang sama ini — tidak ada
+      # proses lain yang bisa mengklaim slot itu.
+      _pid=${_state#STARTING:}
+      _ppid=$(ps -o ppid= -p "$_pid" 2>/dev/null | tr -d ' ')
+      if [ "$_ppid" = "$$" ]; then
+        [ -n "${BUS_UJI_LOG_KILL:-}" ] && printf 'KILL %s\n' "$_pid" >> "$BUS_UJI_LOG_KILL"
+        kill "$_pid" 2>/dev/null || true
+        wait "$_pid" 2>/dev/null || true
+      fi
+      # Nol pidfile untuk dilepas: baris itu HANYA ditulis sesudah token SIAP
+      # tervalidasi, dan fase STARTING selalu sebelum itu.
+      lepas_kunci
+      ;;
+    LIVE:*)
+      _pid=${_state#LIVE:}
+      _punya=0
+      [ "$KUNCI_JENIS" = fd ] && _punya=1
+      if [ "$_punya" = 0 ]; then
+        ambil_kunci || {
+          echo "bus-arm: gagal mengunci saat membersihkan; registrasi $_pid mungkin tertinggal" >&2
+          kill "$_pid" 2>/dev/null || true
+          return 1
+        }
+      fi
+
+      # PENANDA URUTAN, terpisah dari BUS_UJI_TUNDA_BERSIH. Sleep saja hanya
+      # membuktikan "contender tertahan selama jendela ada" — mutasi yang
+      # memindahkan `kill` ke SEBELUM ambil_kunci tetap lolos asalkan jendela
+      # sleep-nya tetap diletakkan di sini, karena pada saat itu kunci memang
+      # SUDAH dipegang terlepas dari kapan kill sebenarnya terjadi. Penanda ini
+      # mencatat URUTAN EKSEKUSI SEBENARNYA — LOCK lalu KILL — sehingga mutasi
+      # yang membalik urutan itu menghasilkan baris log yang terbalik pula,
+      # tanpa bergantung pada penjadwalan sama sekali.
+      [ -n "${BUS_UJI_LOG_KILL:-}" ] && printf 'LOCK %s\n' "$_pid" >> "$BUS_UJI_LOG_KILL"
+      [ -n "${BUS_UJI_TUNDA_BERSIH:-}" ] && sleep "$BUS_UJI_TUNDA_BERSIH"
+
+      # IDENTITAS SEBELUM SINYAL. Satu assignment menutup jendela ANTAR
+      # PERNYATAAN, tapi tidak bisa menutup jendela antara KEJADIAN OS (anak
+      # dituai kernel) dan PERNYATAAN SHELL yang mencatatnya — `wait` bisa saja
+      # sudah menuai anak ini SESAAT sebelum trap sempat berjalan, dan status
+      # yang tercatat MASIH "LIVE" karena baris transisinya belum sempat
+      # dieksekusi. Membunuh berdasarkan status yang tercatat SAJA berisiko
+      # menyinyali PID yang sudah didaur ulang.
+      #
+      # Jadi sebelum kill APA PUN: buktikan PID ini MASIH anak LANGSUNG proses
+      # ini (PPID == $$ — mustahil dipalsukan proses asing) DAN masih cocok
+      # sebagai bus-wait (penunggu_sah, pemeriksaan yang sama dipakai
+      # contender). Fase ini SESUDAH token SIAP tervalidasi, jadi command-match
+      # memang berlaku di sini — beda dari fase STARTING. Kalau salah satu
+      # gagal, anak ini sudah pergi; jalur ini jadi pembersihan-tanpa-sinyal,
+      # sama seperti cabang REAPED.
+      _ppid=$(ps -o ppid= -p "$_pid" 2>/dev/null | tr -d ' ')
+      if [ "$_ppid" = "$$" ] && penunggu_sah "$_pid"; then
+        [ -n "${BUS_UJI_LOG_KILL:-}" ] && printf 'KILL %s\n' "$_pid" >> "$BUS_UJI_LOG_KILL"
+        kill "$_pid" 2>/dev/null || true
+        _t=0
+        while kill -0 "$_pid" 2>/dev/null && [ "$_t" -lt 60 ]; do
+          _t=$((_t + 1)); sleep 0.05 2>/dev/null || sleep 1
+        done
+        wait "$_pid" 2>/dev/null || true
+      fi
+      if [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$_pid" ]; then rm -f "$PIDFILE"; fi
+      lepas_kunci
+      ;;
+    REAPED:*)
+      # Anak ini SUDAH MATI (kita baru saja `wait` atasnya). TIDAK PERNAH
+      # disinyali — hanya registrasinya yang dilepas, lewat jalur
+      # berbasis-kepemilikan yang sama, jadi instance lain tidak ikut terhapus.
+      lepas_kunci
+      lepas_pidfile "${_state#REAPED:}"
+      ;;
+    *)
+      # JARING PENGAMAN UNTUK JENDELA SEBELUM STATUS PERTAMA TERCATAT: garis
+      # `WAITER=$!` sesudah `&` dan `PENUNGGU_STATE="STARTING:$WAITER"` adalah
+      # DUA pernyataan terpisah — TERM di antara keduanya (atau sebelum
+      # keduanya sempat jalan) tidak menemukan status apa pun, dan anak yang
+      # baru di-fork jadi yatim yang tidak pernah tercatat.
+      #
+      # Di jendela ini command-match TIDAK relevan (sama seperti fase
+      # STARTING, dan untuk alasan yang sama): dicari LANGSUNG di pohon
+      # proses, anak LANGSUNG kita ($$) — cukup, karena struktur skrip ini
+      # menjamin hanya satu anak yang pernah di-fork pada satu waktu.
+      for _yatim in $(pgrep -P "$$" 2>/dev/null); do
+        kill "$_yatim" 2>/dev/null || true
+      done
+      lepas_kunci
+      ;;
+  esac
 }
+
 trap 'bersihkan; exit 143' TERM
 trap 'bersihkan; exit 130' INT
 trap 'bersihkan' EXIT
@@ -137,8 +341,76 @@ while :; do
   # pidfile basi tidak boleh bisa membunuh proses asing.
   rm -f "$PIDFILE"
 
-  "$BUS_DIR/bin/bus-wait" "$ROLE" "$TIMEOUT" &
+  # `9>&-` WAJIB, dan ini cacat yang paling halus di seluruh berkas ini
+  # (dibuktikan Reviewer lewat bukti proses, bukan pembacaan kode).
+  #
+  # Kunci fd hidup di OPEN FILE DESCRIPTION, bukan di prosesnya. Anak yang
+  # mewarisi fd 9 ikut memegang description yang SAMA, jadi kunci itu baru
+  # benar-benar lepas ketika SELURUH pewarisnya menutupnya. Tanpa baris ini,
+  # bus-wait yang berumur panjang menahan kunci selama SEPANJANG HIDUPNYA:
+  # `exec 9>&-` di induk tidak melepas apa pun, dan bus-arm berikutnya
+  # menggantung di `lockf 9` sampai penunggu pertama mati.
+  #
+  # Efeknya persis kebalikan dari maksud kunci ini: bukan melindungi bagian
+  # kritis yang pendek, tapi mengunci seluruh siklus tunggu — sehingga penjaga
+  # anti-duplikat berubah jadi penyebab kebuntuan.
+  # JABAT TANGAN KESIAPAN — menutup JENDELA PRA-EXEC, lewat TOKEN, bukan `ps`.
+  #
+  # `$!` tersedia seketika sesudah fork, tapi anak belum tentu sudah `exec` ke
+  # bus-wait: sesaat baris perintahnya masih milik shell induk. Menerbitkan
+  # pidfile lalu MELEPAS KUNCI di jendela itu membuat contender berikutnya
+  # membaca baris perintah yang belum cocok, menyimpulkan pidfile basi,
+  # menghapusnya, lalu menelurkan penunggu KEDUA — kegagalan dua-penunggu yang
+  # tampak acak karena bergantung penjadwal.
+  #
+  # Versi pertama perbaikan ini MENUNGGU LEWAT `ps`, dan itu salah dengan cara
+  # yang lebih berbahaya (temuan Reviewer): kalau inbox SUDAH berisi pesan,
+  # bus-wait mencetak lalu KELUAR hampir seketika, sehingga induk tidak pernah
+  # sempat melihat identitasnya, menyimpulkan penunggu gagal muncul, lalu
+  # menyerah — SESUDAH pesannya dibangunkan, dan tanpa memasang ulang.
+  #
+  # Token dipancarkan bus-wait sesudah role/inbox tervalidasi tapi SEBELUM
+  # pemindaian pesan pertama, jadi "saya siap" tidak bergantung pada apakah
+  # prosesnya masih sempat terlihat.
+  SIAP_BERKAS="$BUS_DIR/tmp/.siap-$ROLE.$$"
+  rm -f "$SIAP_BERKAS"
+  BUS_SIAP_BERKAS="$SIAP_BERKAS" "$BUS_DIR/bin/bus-wait" "$ROLE" "$TIMEOUT" 9>&- &
   WAITER=$!
+  # Satu assignment: sejak baris ini, anak sudah bisa disinyali trap — di FASE
+  # STARTING (PPID-only; belum terbukti sudah exec ke bus-wait).
+  PENUNGGU_STATE="STARTING:$WAITER"
+
+  _siap=0
+  while [ "$_siap" -lt 200 ]; do
+    [ -s "$SIAP_BERKAS" ] && break
+    # Anak yang mati SEBELUM token tidak akan pernah mengirimnya.
+    kill -0 "$WAITER" 2>/dev/null || break
+    _siap=$((_siap + 1))
+    sleep 0.05 2>/dev/null || sleep 1
+  done
+  # Token harus PERSIS milik anak ini. Menerima berkas apa pun yang tidak kosong
+  # berarti sisa token lama, tulisan separuh, atau berkas asing bisa lolos
+  # sebagai "penunggu siap".
+  _token_sah=no
+  if [ -s "$SIAP_BERKAS" ] && [ "$(cat "$SIAP_BERKAS" 2>/dev/null || true)" = "SIAP $ROLE $WAITER" ]; then
+    _token_sah=yes
+  fi
+  if [ "$_token_sah" = no ]; then
+    kill "$WAITER" 2>/dev/null || true
+    wait "$WAITER" 2>/dev/null || true
+    PENUNGGU_STATE=""
+    rm -f "$SIAP_BERKAS"
+    lepas_kunci
+    echo "bus-arm: penunggu tidak pernah memancarkan token SIAP yang sah; tidak menerbitkan pidfile" >&2
+    exit 76
+  fi
+  rm -f "$SIAP_BERKAS"
+
+  # Token SIAP tervalidasi: identitas sebagai bus-wait TERBUKTI sekarang.
+  # Satu assignment: transisi STARTING -> LIVE, syarat kill berpindah dari
+  # PPID-saja ke PPID+identitas (lihat cabang LIVE di bersihkan()).
+  PENUNGGU_STATE="LIVE:$WAITER"
+
   printf '%s\n' "$WAITER" > "$PIDFILE"
   lepas_kunci
   # --- akhir bagian kritis -------------------------------------------------
@@ -154,9 +426,26 @@ while :; do
   # timeout (exit 4) akan melompati pembersihan dan meninggalkan pidfile basi.
   RC=0
   wait "$WAITER" || RC=$?
+
+  # BARRIER TEST-ONLY, PERSIS DI JENDELA YANG DIMAKSUD REVIEWER: `wait`
+  # (kejadian KERNEL — anak sudah dituai) sudah selesai, tapi pernyataan shell
+  # yang MENCATATNYA (`PENUNGGU_STATE="REAPED:..."`, di bawah) belum berjalan.
+  # Satu assignment menutup jendela ANTAR PERNYATAAN; ia TIDAK BISA menutup
+  # jendela antara kejadian OS dan pernyataan yang mencatatnya — itulah yang
+  # sinyal di sini menguji. Kalau trap memotong TEPAT DI SINI, PENUNGGU_STATE
+  # masih "LIVE:$WAITER" walau anaknya sudah mati; jaring pengamannya adalah
+  # pemeriksaan identitas (PPID + penunggu_sah) di bersihkan(), bukan barrier
+  # ini — barrier ini hanya membuat jendelanya CUKUP LEBAR untuk diuji.
+  if [ -n "${BUS_UJI_TUNDA_TRANSISI:-}" ]; then sleep "$BUS_UJI_TUNDA_TRANSISI"; fi
+
+  # Satu assignment: satu-satunya titik status berpindah dari LIVE ke REAPED.
+  PENUNGGU_STATE="REAPED:$WAITER"
+
+  # BARRIER TEST-ONLY KEDUA, di jendela pasca-transisi (kasus reap-lama):
+  # status SUDAH benar "REAPED", tapi pembersihan pidfile-nya belum jalan.
+  if [ -n "${BUS_UJI_TUNDA_REAP:-}" ]; then sleep "$BUS_UJI_TUNDA_REAP"; fi
   lepas_pidfile "$WAITER"
-  _selesai=$WAITER
-  WAITER=""
+  PENUNGGU_STATE=""
 
   # exit 4 = habis waktu tanpa pesan. Itu BUKAN alasan berhenti menunggu; ia
   # justru satu-satunya keadaan yang dulu membuat Builder tuli selamanya.
