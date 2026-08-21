@@ -43,7 +43,8 @@ SCRIPT_LLM=0 npx tsx --test \
 | R2/P0-A ronde 6 (di 47d34eb) | 79 test · 12 lulus · 67 gagal · 0 skip |
 | R2/P0-A ronde 7 (di df840d5) | 94 test · 15 lulus · 79 gagal · 0 skip |
 | R2/P0-A ronde 8 (di da3b31d) | 99 test · 15 lulus · 84 gagal · 0 skip |
-| **R2/P0-A ronde 9 (di 79f8d58)** | **100 test · 15 lulus · 85 gagal · 0 skip · 0 cancelled · 0 todo** |
+| R2/P0-A ronde 9 (di 79f8d58) | 100 test · 15 lulus · 85 gagal · 0 skip |
+| **R2/P0-A ronde 10 (di P0A10_TEST_SHA)** | **101 test · 16 lulus · 85 gagal · 0 skip · 0 cancelled · 0 todo** |
 
 Kedelapan-puluh-lima kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
 `grep "  code: " | sort | uniq -c` → `85 code: 'ERR_ASSERTION'`, nol kode lain.
@@ -54,8 +55,8 @@ Nol module-not-found, nol error env, nol skip, nol error fixture.
 Suite penuh, `npm test` (`SCRIPT_LLM=0 tsx --test tests/*.test.ts`):
 
 ```
-1..905
-# tests 905 · pass 806 · fail 85 · cancelled 0 · skipped 14 · todo 0
+1..906
+# tests 906 · pass 807 · fail 85 · cancelled 0 · skipped 14 · todo 0
 exit 1   (85 merah DISENGAJA — red-before, belum ada implementasi)
 ```
 
@@ -74,7 +75,11 @@ ronde 6:  879 +  5 = 884 test ·  803         = 803 lulus ·  67 gagal
 ronde 7:  884 + 15 = 899 test ·  803 + 3     = 806 lulus ·  79 gagal
 ronde 8:  899 +  5 = 904 test ·  806         = 806 lulus ·  84 gagal
 ronde 9:  904 +  1 = 905 test ·  806         = 806 lulus ·  85 gagal
+ronde 10: 905 +  1 = 906 test ·  806 + 1     = 807 lulus ·  85 gagal
 ```
+
+Ronde 10 menambah satu test yang LULUS, bukan merah, dan itu memang jenisnya:
+kontrol harness yang membuktikan pipeline biner palsu bisa BERHASIL.
 
 Tiga test ronde 7 lulus di HEAD, dan ketiganya memang KONTROL, bukan temuan:
 dua fixture arah-sebaliknya (vonis promosi dengan metrik di bawah ambang) sudah
@@ -1016,6 +1021,64 @@ tsc --noEmit -> exit 0
 nol proses tersisa di setiap process group (diasersi per mode, bukan disimpulkan)
 ```
 
+## Ronde 10 — satu temuan Reviewer atas f0e161a
+
+Diterima; nol sanggahan.
+
+### T27 (P1) — fixture ffmpeg "sukses" tidak menghasilkan keluaran pipeline
+
+> *"SUKSES_FFMPEG hanya exit 0 dan tidak membuat `besar.png`. Implementasi
+> P0-B2 yang secara sah memeriksa keberadaan keluaran ffmpeg dapat mengembalikan
+> `belum_diperiksa` sebelum memanggil ffprobe/tesseract. Akibatnya kasus ffprobe
+> hilang/gagal/menggantung dapat hijau tanpa pernah mencapai ffprobe, sedangkan
+> kasus tesseract menggantung gagal pada `minimalMs` karena alasan fixture,
+> bukan produk."*
+
+Benar. Ini kelas cacat yang sama yang sudah tiga kali ditemukan di gelombang
+ini — fixture yang lulus tanpa menjalankan hal yang diklaimnya — dan kali ini
+saya yang menulisnya, di test yang baru saja saya perbaiki dua ronde berturut.
+
+Dua perbaikan, keduanya perlu:
+
+1. **ffmpeg palsu menyalin PNG sungguhan** ke path keluarannya (argumen
+   terakhir, sesuai pemanggilan di `lib/media/klasifikasi-gambar.ts`), jadi
+   tahap berikutnya punya artefak yang memadai untuk diperiksa;
+2. **setiap biner palsu meninggalkan MARKER**, dan setiap mode menuntut daftar
+   tahap yang benar-benar terpanggil sama persis dengan yang diklaim judulnya.
+   Marker ditulis SEBELUM `exec sleep`, jadi "tahap ini tercapai" tetap terbukti
+   walau prosesnya nanti dibunuh.
+
+Ditambah satu **kontrol harness**: pipeline dengan ketiga biner dipalsukan
+SUKSES wajib menghasilkan `product_photo` yang layak. Tanpa itu, seluruh mode
+kegagalan bisa hijau hanya karena pipeline palsunya memang tidak pernah bisa
+berhasil — dan "gagal di tahap X" tidak bisa dibedakan dari "tidak pernah sampai
+ke tahap mana pun".
+
+Tahap yang terukur per mode, dari jalan nyata:
+
+```
+KONTROL HARNESS                    tahap=[ffmpeg,ffprobe,tesseract]  -> product_photo layak
+ffmpeg HILANG                      tahap=[]
+ffmpeg GAGAL                       tahap=[ffmpeg]
+ffmpeg MENGGANTUNG    20062ms      tahap=[ffmpeg]
+ffprobe HILANG                     tahap=[ffmpeg]
+ffprobe GAGAL                      tahap=[ffmpeg,ffprobe]
+ffprobe MENGGANTUNG   25006ms *    tahap=[ffmpeg,ffprobe]
+tesseract HILANG                   tahap=[ffmpeg,ffprobe]
+tesseract GAGAL                    tahap=[ffmpeg,ffprobe,tesseract]
+tesseract MENGGANTUNG 20812ms      tahap=[ffmpeg,ffprobe,tesseract]
+
+* satu-satunya yang dibunuh tenggat test — produksi tidak punya timeout ffprobe
+```
+
+Bukti ronde 10:
+
+```
+targeted -> 101 test / 16 lulus / 85 gagal / 0 skip; 85/85 ERR_ASSERTION
+npm test -> 906 test / 807 lulus / 85 gagal / 14 skip; nol regresi
+tsc --noEmit -> exit 0
+```
+
 ## Yang SENGAJA belum dikerjakan di gelombang ini
 
 Urutan rollout dari `QUESTION` Reviewer dipatuhi: resolver ketat menyala
@@ -1094,6 +1157,7 @@ Founder/eksternal yang belum dikerjakan.
 
 P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
 P0A2_TEST_SHA=f5d4029522bbeb4fbcbf4b885457369bdf3e83a6                       (ronde 2)
+P0A10_TEST_SHA=<commit ini sendiri>                                          (ronde 10)
 P0A9_TEST_SHA=79f8d58e512c0a81a92a0fbee37377ebc8d8046c                                           (ronde 9)
 P0A8_TEST_SHA=da3b31da62ae08198a5029d13301723ad8dde4c9                                           (ronde 8)
 P0A7_TEST_SHA=df840d5be993fd0df0c81cf99529f6327db4baec                                           (ronde 7)
