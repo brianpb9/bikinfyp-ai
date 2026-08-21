@@ -10,7 +10,7 @@ import crypto from "node:crypto";
 import sharp from "sharp";
 import { config, ensureDirs } from "./config";
 import { mediaStorage } from "./storage";
-import { klasifikasiGambar } from "./media/klasifikasi-gambar";
+import { klasifikasiGambar, type JenisGambar } from "./media/klasifikasi-gambar";
 
 export const ALLOWED_MIME: Record<string, string> = {
   "image/png": ".png",
@@ -97,7 +97,13 @@ export const MAKS_REFERENSI_PER_GENERASI = 7;
  */
 export interface MetaGambar {
   sha256: string;
-  jenis: "product_photo" | "promotional_graphic";
+  /**
+   * Termasuk `belum_diperiksa` sejak 21 Agu. Sidecar WAJIB bisa menyimpan
+   * keadaan "tidak bisa diperiksa" apa adanya; kalau ia hanya punya dua vonis,
+   * kegagalan pemeriksaan terpaksa menyamar jadi salah satunya dan bukti yang
+   * berbohong itu jadi permanen. Lihat JenisGambar di lib/media/klasifikasi-gambar.ts.
+   */
+  jenis: JenisGambar;
   layakReferensi: boolean;
   rasioAreaTeks: number;
   jumlahKata: number;

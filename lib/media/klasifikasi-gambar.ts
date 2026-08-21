@@ -19,27 +19,29 @@
 //   2. JUMLAH KATA MEYAKINKAN — banner membawa headline, sub-headline, daftar
 //      klaim, dan badge harga sekaligus.
 //
-// RAGU = PROMOSI (perintah Brian 20 Agu). Alasannya asimetris: menolak foto
+// RAGU = TIDAK LOLOS (perintah Brian 20 Agu). Alasannya asimetris: menolak foto
 // produk yang sah merepotkan satu pengguna dan ia bisa unggah ulang; menerima
 // banner merusak SETIAP render sesudahnya dan baru ketahuan setelah dibayar.
 //
-// LUBANG WARISAN, DAN CARA IA TERTUTUP.
+// KEPUTUSAN BUKAN VONIS — koreksi 21 Agu, lihat JenisGambar di bawah.
+// Aturan lama menuliskannya "RAGU = PROMOSI", dan bukan cuma keputusannya yang
+// dibuat ketat: vonisnya ikut dipalsukan. Gambar yang tidak bisa diperiksa
+// dicatat sebagai `promotional_graphic`, tidak bisa dibedakan dari banner
+// sungguhan, selamanya. Sekarang keputusannya tetap sama ketat
+// (`layakReferensi: false`) sementara catatannya jujur (`belum_diperiksa`).
 //
-// Gambar yang sudah ada sebelum classifier ini tidak punya sidecar kelayakan,
-// dan diperlakukan LAYAK supaya produk yang sudah jalan tidak mati mendadak.
-// Itu keringanan yang disengaja, bukan kelalaian — tapi keringanan yang tidak
-// punya tanggal kedaluwarsa akan hidup selamanya.
+// LUBANG WARISAN, DAN CARA IA TERTUTUP — KEBIJAKAN BERUBAH 21 Agu.
 //
-// Jadi penutupnya BACKFILL MALAS (keputusan Brian 20 Agu): begitu gambar lama
-// hendak dipakai jadi referensi, ia diklasifikasi saat itu juga dan sidecarnya
-// ditulis — lihat backfillMetaGambar() di lib/product-images.ts. Sesudah sekali
-// dipakai, ia tidak lagi warisan. Gambar yang tidak pernah jadi referensi tidak
-// perlu dibayar waktu OCR-nya sama sekali, dan tidak ada satu skrip migrasi
-// besar yang harus dijalankan pada pustaka yang mungkin sudah besar.
+// Gambar yang ada sebelum classifier ini tidak punya sidecar kelayakan.
+// Penutup lamanya adalah BACKFILL MALAS: gambar lama diklasifikasi saat hendak
+// dipakai jadi referensi, dan sidecarnya ditulis dari dalam jalur baca.
 //
-// Yang HARUS diketahui pembaca berikutnya: selama masa peralihan ini, "layak"
-// pada gambar lama berarti "belum pernah diperiksa", bukan "sudah lulus".
-// Angka kelayakan pustaka tidak boleh dilaporkan seolah keduanya sama.
+// Itu DICABUT. Bukti yang dicetak di tengah jalur render tidak pernah dilihat
+// siapa pun, tidak punya rantai kustodi, dan menempel pada bytes apa pun yang
+// kebetulan ada di storage detik itu — dan di runtime tanpa biner ia membekukan
+// vonis palsu secara permanen. Penggantinya KARANTINA: gambar tanpa bukti sah
+// tidak layak jadi referensi, dan jalur baca tidak menulis apa pun. Bukti hanya
+// diterbitkan di jalur ingestion/revalidasi yang terbukti punya binernya.
 
 import fs from "node:fs";
 import os from "node:os";
@@ -49,7 +51,57 @@ import { promisify } from "node:util";
 
 const jalankan = promisify(execFile);
 
-export type JenisGambar = "product_photo" | "promotional_graphic";
+/**
+ * TIGA KEADAAN, BUKAN DUA.
+ *
+ * `belum_diperiksa` ditambahkan karena dua keadaan yang secara epistemik
+ * berbeda sebelumnya dipetakan ke vonis yang sama:
+ *
+ *   diperiksa, ternyata banner      -> promotional_graphic   (vonis)
+ *   TIDAK BISA diperiksa            -> promotional_graphic   (BUKAN vonis)
+ *
+ * Keputusan gerbangnya benar dan tidak berubah — ragu tidak boleh lolos, jadi
+ * `layakReferensi` tetap `false` di kedua keadaan. Yang salah adalah CATATANNYA:
+ * menuliskan "ini banner" saat yang terjadi adalah "saya tidak bisa memeriksa"
+ * menghasilkan bukti yang berbohong, dan bukti itu permanen.
+ *
+ * Kenapa itu bukan soal kerapian: service web produksi berjalan di Render
+ * `runtime: node` dan TIDAK dijamin punya ffmpeg/ffprobe/tesseract (hanya
+ * Dockerfile.worker memasangnya), sementara seluruh jalur unggah berjalan di
+ * web. Dengan dua keadaan, setiap foto produk yang sah yang diunggah di sana
+ * dicap "promosi" selamanya oleh sidecar yang tidak bisa dibedakan dari banner
+ * sungguhan oleh pembaca mana pun. Dengan tiga keadaan, catatannya jujur dan
+ * boundary yang punya binernya bisa merevalidasinya.
+ */
+export type JenisGambar = "product_photo" | "promotional_graphic" | "belum_diperiksa";
+
+/**
+ * SATU SUMBER KEBIJAKAN untuk penerbit bukti DAN penilainya.
+ *
+ * `klasifikasiGambar` memakai objek ini saat MENERBITKAN bukti; validator
+ * (lib/product-truth.ts) memakai objek yang SAMA saat MENILAINYA. Selama
+ * keduanya menyalin ambang masing-masing, ambang bisa digeser di satu sisi dan
+ * bukti diterbitkan dengan satu aturan lalu dinilai dengan aturan lain — tanpa
+ * satu pun test merah.
+ *
+ * `versiBukti` mengikat keduanya ke revisi aturan yang sama. Setiap perubahan
+ * ambang WAJIB menaikkannya; bukti versi lama tidak boleh dinilai dengan aturan
+ * baru.
+ */
+export interface KebijakanKlasifikasi {
+  /** Revisi aturan. Naikkan setiap kali ambang di bawah berubah. */
+  versiBukti: number;
+  /** Luas kotak teks / luas gambar. `>=` berarti promosi. */
+  ambangRasio: number;
+  /** Kata meyakinkan. `>=` berarti promosi. */
+  ambangKata: number;
+}
+
+export const KEBIJAKAN_KLASIFIKASI: KebijakanKlasifikasi = {
+  versiBukti: 1,
+  ambangRasio: 0.02,
+  ambangKata: 6,
+};
 
 export interface HasilKlasifikasi {
   jenis: JenisGambar;
@@ -86,8 +138,7 @@ const MIN_CONF = 60;
  * empat. Ia dipertahankan sebagai jaring kedua dengan ambang longgar (6),
  * bukan sebagai penentu.
  */
-const AMBANG_RASIO = 0.02;
-const AMBANG_KATA = 6;
+const { ambangRasio: AMBANG_RASIO, ambangKata: AMBANG_KATA } = KEBIJAKAN_KLASIFIKASI;
 
 export async function klasifikasiGambar(fotoPath: string): Promise<HasilKlasifikasi> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "klasifikasi-"));
@@ -97,8 +148,15 @@ export async function klasifikasiGambar(fotoPath: string): Promise<HasilKlasifik
     const png = path.join(dir, "besar.png");
     await jalankan("ffmpeg", ["-y", "-v", "error", "-i", fotoPath, "-vf", "scale=1440:-2:flags=lanczos", png],
       { timeout: 20_000, killSignal: "SIGKILL", maxBuffer: 2 * 1024 * 1024 });
+    // TIMEOUT WAJIB. Sampai 21 Agu panggilan ini satu-satunya dari ketiga biner
+    // yang berjalan TANPA batas waktu — ffmpeg dan tesseract keduanya 20 detik.
+    // ffprobe yang menggantung karena itu bisa menahan permintaan unggah
+    // pengguna selamanya, sampai platform memutusnya, tanpa satu pun log yang
+    // menjelaskan kenapa. Terukur di tests/klasifikasi-gambar.test.ts: sebelum
+    // baris ini, mode "ffprobe MENGGANTUNG" harus dibunuh tenggat test.
     const { stdout: ukuran } = await jalankan("ffprobe", ["-v", "error", "-select_streams", "v:0",
-      "-show_entries", "stream=width,height", "-of", "csv=p=0", png]);
+      "-show_entries", "stream=width,height", "-of", "csv=p=0", png],
+      { timeout: 20_000, killSignal: "SIGKILL", maxBuffer: 1024 * 1024 });
     const [w, h] = ukuran.trim().split(",").map(Number);
     const luas = Math.max(1, (w || 1440) * (h || 1440));
 
@@ -140,15 +198,22 @@ export async function klasifikasiGambar(fotoPath: string): Promise<HasilKlasifik
           alasan: "Foto produk.",
         };
   } catch (err) {
-    // RAGU = PROMOSI, dan gagal memeriksa termasuk ragu.
+    // RAGU = TIDAK LOLOS, dan gagal memeriksa termasuk ragu.
     //
     // Ini KEBALIKAN dari gerbang label (label-terbaca.ts), yang meloloskan
     // unggahan saat OCR mati supaya pengguna tidak terkunci oleh alat kita.
     // Bedanya konsekuensi: di sana yang gagal cuma pemeriksaan mutu foto; di
     // sini yang salah menetapkan BAHAN untuk setiap render sesudahnya.
-    console.warn(`[klasifikasi] gagal memeriksa, dianggap promosi: ${(err as Error).message}`);
+    //
+    // TAPI KEPUTUSAN BUKAN VONIS. Sampai 21 Agu jalur ini mengembalikan
+    // `promotional_graphic` — menuliskan "ini banner" untuk sesuatu yang tidak
+    // pernah diperiksa. Yang dikembalikan sekarang `belum_diperiksa`: tetap
+    // tidak layak (gerbangnya sama ketatnya), tapi catatannya jujur, dan
+    // karena jujur ia bisa direvalidasi oleh boundary yang punya binernya.
+    // Vonis palsu tidak bisa.
+    console.warn(`[klasifikasi] gagal memeriksa, ditandai belum diperiksa: ${(err as Error).message}`);
     return {
-      jenis: "promotional_graphic",
+      jenis: "belum_diperiksa",
       layakReferensi: false,
       rasioAreaTeks: 0,
       jumlahKata: 0,
