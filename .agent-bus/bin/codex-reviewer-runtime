@@ -511,6 +511,24 @@ acquire_runtime_lock() {
 run_loop() {
   mkdir -p "$BUS_DIR/tmp" "$BUS_DIR/inbox/reviewer" "$BUS_DIR/inbox/builder" "$BUS_DIR/archive"
   acquire_runtime_lock || exit 7
+  # PENJAGA BERSARANG (21 Agu). Dua kali runtime kedua lahir sebagai ANAK dari
+  # runtime kanonik (79509 lalu 93731, keduanya PPID=49388) lewat cabang
+  # cadangan `nohup "$self" run &`. Keduanya ikut memantau inbox reviewer yang
+  # sama, jadi dua konsumen berebut satu antrean: pesan bisa saling dicuri
+  # lewat bus-read, atau satu SHA ditinjau dua kali.
+  #
+  # acquire_runtime_lock saja tidak menahannya, dan baris di bawah ini
+  # menjelaskan kenapa: pidfile DITIMPA tanpa syarat sesudah lock didapat.
+  # Jadi diperiksa dulu — kalau pidfile menunjuk proses LAIN yang masih hidup,
+  # runtime ini bersarang dan harus mundur, bukan menimpa catatan kanoniknya.
+  # pid_value_is_runtime, BUKAN `kill -0` telanjang: PID bisa didaur ulang OS.
+  # Pidfile basi yang nomornya kebetulan dipakai proses lain tidak boleh
+  # menggagalkan start yang sah — ia harus benar-benar runtime repo INI.
+  existing_pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
+  if [ -n "$existing_pid" ] && [ "$existing_pid" != "$$" ] && pid_value_is_runtime "$existing_pid"; then
+    log "ABORT runtime bersarang: pid=$$ ppid=$PPID; runtime kanonik pid=$existing_pid masih hidup"
+    exit 7
+  fi
   printf '%s\n' "$$" > "$PID_FILE"
   trap cleanup_runtime EXIT
   trap 'exit 130' INT
