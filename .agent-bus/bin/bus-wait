@@ -13,7 +13,16 @@
 #   4  timeout expired with no message
 set -eu
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# `pwd -P` WAJIB, bukan `pwd` polos (temuan Reviewer, dibuktikan konkret:
+# repo yang sama dibuka lewat symlink DAN path asli menghasilkan DUA
+# penunggu). `pwd` logis mengembalikan ejaan path APA ADANYA (lewat
+# symlink kalau dipanggil lewat symlink); `pwd -P` selalu mengembalikan
+# path FISIK. Tanpa ini, dua proses yang membuka repo yang SAMA lewat dua
+# ejaan berbeda menghitung BUS_DIR yang berbeda secara TEKSTUAL padahal
+# menunjuk berkas fisik yang identik — dan pencocokan identitas berbasis
+# string di `penunggu_sah` gagal, menyimpulkan penunggu yang sah sebagai
+# proses asing, menghapus pidfile-nya, lalu menelurkan penunggu KEDUA.
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 BUS_DIR=$(dirname "$SCRIPT_DIR")
 
 ROLES="builder reviewer"
@@ -33,6 +42,14 @@ esac
 
 case "$TIMEOUT" in
   '' | *[!0-9]*) die 2 "timeout must be a non-negative integer, got '$TIMEOUT'" ;;
+esac
+# ANGKA NOL DI DEPAN DITOLAK ("00", "008", ...): shell arithmetic (`$((...))`
+# di bawah) membaca literal berawalan 0 sebagai OKTAL, dan "08"/"09" bukan
+# oktal yang sah — dibuktikan langsung: `x=08; echo $((x+1))` -> "value too
+# great for base". "0" tunggal tetap diterima (kanonik, bukan "berawalan nol").
+case "$TIMEOUT" in
+  0) ;;
+  0*) die 2 "timeout must not have a leading zero, got '$TIMEOUT'" ;;
 esac
 
 INBOX="$BUS_DIR/inbox/$ROLE"

@@ -4,7 +4,7 @@
 # worktrees, and object database are never test targets.
 set -u
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 BUS_DIR=$(dirname "$SCRIPT_DIR")
 REPO_ROOT=$(dirname "$BUS_DIR")
 

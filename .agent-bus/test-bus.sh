@@ -341,6 +341,25 @@ arm_terbatas() { # arm_terbatas <detik> <argumen bus-arm...>
   return "$_rc"
 }
 
+# Tunggu pidfile TERBIT, dengan batas waktu keras — bukan sleep tetap.
+#
+# Sleep tetap sebelum membaca pidfile adalah asumsi kesiapan yang RAPUH:
+# terbukti konkret pada suite ini sendiri (kasus jendela pasca-wait, `sleep 1`
+# lalu baca pidfile gagal sesekali di bawah beban sistem — jabat tangan token
+# bus-arm sendiri boleh makan waktu hingga 10 detik dalam kondisi kontensi).
+# Poll ini menunggu KEADAAN SEBENARNYA (pidfile ada), bukan menebak berapa
+# lama keadaan itu butuh untuk tercapai — dengan batas atas keras supaya
+# kegagalan tetap gagal cepat, bukan menggantung.
+tunggu_pidfile() { # tunggu_pidfile <detik_maks>
+  _maks=${1:-10}
+  _t=0
+  while [ "$_t" -lt "$_maks" ]; do
+    [ -s "$waiter_pid_file" ] && return 0
+    sleep 1; _t=$((_t + 1))
+  done
+  [ -s "$waiter_pid_file" ]
+}
+
 matikan_penunggu() {
   for pid in $(pgrep -f "$BIN/bus-wait builder" 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
   for pid in $(pgrep -f "$BIN/bus-arm builder" 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
@@ -519,7 +538,7 @@ for sinyal in TERM INT; do
   matikan_penunggu
   "$BIN/bus-arm" builder 60 >"$BUS_DIR/tmp/arm-trap-$sinyal.out" 2>&1 &
   induk=$!
-  sleep 2
+  tunggu_pidfile 10 || true
   anak=$(cat "$waiter_pid_file" 2>/dev/null || true)
   waiter_hidup "$anak" || { trap_ok=1; trap_detail="$sinyal: penunggu tidak terpasang sebelum sinyal"; break; }
 
@@ -833,9 +852,11 @@ matikan_penunggu
 # bukan lewat stress timing.
 mati_ok=0; mati_detail=""
 matikan_penunggu
-BUS_UJI_TUNDA_BERSIH=5 "$BIN/bus-arm" builder 40 >"$BUS_DIR/tmp/arm-mati1.out" 2>&1 &
+log_urutan="$BUS_DIR/tmp/kill-log-urutan.txt"
+rm -f "$log_urutan"
+BUS_UJI_LOG_KILL="$log_urutan" BUS_UJI_TUNDA_BERSIH=5 "$BIN/bus-arm" builder 40 >"$BUS_DIR/tmp/arm-mati1.out" 2>&1 &
 induk=$!
-sleep 2
+tunggu_pidfile 10 || true
 anak=$(cat "$waiter_pid_file" 2>/dev/null || true)
 waiter_hidup "$anak" || { mati_ok=1; mati_detail="penunggu tidak terpasang sebelum sinyal"; }
 
@@ -866,6 +887,35 @@ sleep 1
 [ "$(cacah_penunggu)" = 1 ] || { mati_ok=1; mati_detail="${mati_detail:-akhirnya penunggu=$(cacah_penunggu), seharusnya 1}"; }
 tercatat=$(cat "$waiter_pid_file" 2>/dev/null || true)
 waiter_hidup "$tercatat" || { mati_ok=1; mati_detail="${mati_detail:-pidfile tidak menunjuk penunggu hidup}"; }
+# induk WAJIB benar-benar keluar 143 — kalau TERM diabaikan/tertunda dan induk
+# masih hidup diam-diam di latar, keseluruhan skenario di atas tidak
+# membuktikan apa yang diklaimnya.
+rc_induk=0; wait "$induk" 2>/dev/null || rc_induk=$?
+[ "$rc_induk" = 143 ] || { mati_ok=1; mati_detail="${mati_detail:-induk (penerima TERM) keluar rc=$rc_induk, seharusnya 143}"; }
+
+# URUTAN EKSEKUSI SEBENARNYA, bukan timing sleep: LOCK harus muncul SEBELUM
+# KILL di log. Sleep saja (BUS_UJI_TUNDA_BERSIH) hanya membuktikan "contender
+# tertahan selama jendela ada" — mutasi yang memindahkan `kill` ke SEBELUM
+# ambil_kunci tetap lolos asalkan jendela sleep-nya tetap diletakkan di posisi
+# yang sama, karena PADA SAAT ITU kunci memang sudah dipegang terlepas dari
+# kapan kill sebenarnya terjadi. Penanda LOCK/KILL mencatat urutan yang
+# sesungguhnya dijalankan, sehingga mutasi yang membalik urutan itu
+# menghasilkan baris log yang terbalik pula.
+if [ -f "$log_urutan" ]; then
+  baris_lock=$(grep -n "^LOCK $anak\$" "$log_urutan" 2>/dev/null | head -1 | cut -d: -f1)
+  baris_kill=$(grep -n "^KILL $anak\$" "$log_urutan" 2>/dev/null | head -1 | cut -d: -f1)
+  [ -n "$baris_lock" ] || { mati_ok=1; mati_detail="${mati_detail:-tidak ada penanda LOCK untuk $anak}"; }
+  [ -n "$baris_kill" ] || { mati_ok=1; mati_detail="${mati_detail:-tidak ada penanda KILL untuk $anak}"; }
+  if [ -n "$baris_lock" ] && [ -n "$baris_kill" ]; then
+    [ "$baris_lock" -lt "$baris_kill" ] || {
+      mati_ok=1
+      mati_detail="${mati_detail:-KILL terjadi SEBELUM LOCK (baris $baris_kill vs $baris_lock) — kill di luar kunci}"
+    }
+  fi
+else
+  mati_ok=1; mati_detail="${mati_detail:-berkas log urutan tidak ada}"
+fi
+rm -f "$log_urutan"
 check "contender tidak menyimpulkan sehat atas penunggu yang sedang mati" "$mati_ok" "$mati_detail"
 matikan_penunggu
 
@@ -892,7 +942,7 @@ rm -f "$log_kill"
 BUS_UJI_LOG_KILL="$log_kill" BUS_UJI_TUNDA_REAP=6 \
   "$BIN/bus-arm" builder 2 --sekali >"$BUS_DIR/tmp/arm-reap.out" 2>&1 &
 induk2=$!
-sleep 1
+tunggu_pidfile 10 || true
 anak2=$(cat "$waiter_pid_file" 2>/dev/null || true)
 [ -n "$anak2" ] || { reap_ok=1; reap_detail="penunggu tidak terpasang"; }
 
@@ -909,8 +959,8 @@ korban=$!
 
 kill -0 "$induk2" 2>/dev/null || { reap_ok=1; reap_detail="${reap_detail:-induk sudah keluar sebelum sempat disinyali di jendela pasca-reap}"; }
 kill -TERM "$induk2" 2>/dev/null || true
-tunggu=0
-while [ "$tunggu" -lt 10 ] && kill -0 "$induk2" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+rc2=0; wait "$induk2" 2>/dev/null || rc2=$?
+[ "$rc2" = 143 ] || { reap_ok=1; reap_detail="${reap_detail:-induk keluar rc=$rc2, seharusnya 143 (TERM diabaikan/tertunda tidak membuktikan apa pun)}"; }
 
 # ASERSI UTAMA: PID yang sudah dituai tidak boleh disinyali.
 if [ -f "$log_kill" ] && grep -q "KILL $anak2\$" "$log_kill" 2>/dev/null; then
@@ -955,6 +1005,546 @@ sesudah=$(cacah_penunggu)
   yatim_detail="${yatim_detail:-$sesudah penunggu YATIM tertinggal sesudah fallback memotong bus-arm — ia akan mencemari kasus berikutnya dan memegang inbox klon yang sebentar lagi dihapus}"
 }
 check "fallback tanpa timeout/gtimeout: nol penunggu yatim, kode 124" "$yatim_ok" "$yatim_detail"
+matikan_penunggu
+
+# --- 12t. GERBANG STATIS: setiap titik kill dijaga ppid_cocok ------------
+# Reviewer menemukan TIGA titik kill yang tidak dijaga sama sekali atau
+# dijaga berbeda-beda: fallback pgrep -P yang menyapu SEMUA anak langsung
+# (termasuk subshell command-substitution yang sah), cabang token-tidak-sah
+# yang kill mentah, dan cabang kegagalan ambil_kunci di LIVE yang kill mentah
+# sebelum identitas terbukti. Ketiganya sudah diperbaiki memakai satu helper
+# bersama (`ppid_cocok`) — kasus ini MENJAGA agar titik kill BARU yang lahir
+# nanti wajib memakai helper yang sama, bukan menulis pemeriksaan sendiri yang
+# bisa menyimpang diam-diam.
+#
+# Statis, bukan runtime: sebagian jendela ini (fase FORKING, misalnya) tidak
+# bisa diinjeksi jeda dari luar sama sekali (lihat catatan kejujuran di kasus
+# 12r), jadi pemeriksaan sumber ini adalah satu-satunya cara membuktikan
+# invariannya tanpa bergantung pada kemampuan menjebak jendela mikrodetik.
+statis_ok=0; statis_detail=""
+python3 - "$BIN/bus-arm" <<'PYEOF_STATIS' || statis_ok=1
+import re, sys
+path = sys.argv[1]
+lines = open(path).read().splitlines()
+bad = []
+for i, line in enumerate(lines):
+    m = re.search(r'kill "(\$[A-Za-z_!][A-Za-z_]*)" 2>/dev/null \|\| true', line)
+    if not m:
+        continue
+    var = m.group(1)
+    # Kill -0 (pemeriksaan, bukan sinyal) dan baris di dalam blok `while
+    # kill -0` sengaja tidak diperiksa: sudah dijamin lulus ppid_cocok
+    # oleh gerbang if yang membungkus SELURUH blok pembersihan tempatnya berada.
+    window = "\n".join(lines[max(0, i - 6):i + 1])
+    # DUA bukti identitas yang sah, tergantung SIAPA yang boleh dibunuh:
+    # ppid_cocok untuk anak LANGSUNG kita sendiri; penunggu_sah untuk penunggu
+    # yang identitasnya sebagai bus-wait sudah terbukti walau BUKAN anak kita
+    # (kasus penggantian yatim — tidak bisa dibuktikan PPID karena memang
+    # bukan anak kita, tapi identitas bus-wait-nya sendiri sudah diverifikasi).
+    guard_ppid = f'ppid_cocok "{var}"'
+    guard_sah = f'penunggu_sah "{var}"'
+    if guard_ppid not in window and guard_sah not in window:
+        bad.append((i + 1, line.strip()))
+if bad:
+    for ln, txt in bad:
+        print(f"TIDAK DIJAGA baris {ln}: {txt}", file=sys.stderr)
+    sys.exit(1)
+print(f"OK: {sum(1 for l in lines if re.search(r'kill \"\$[A-Za-z_!][A-Za-z_]*\" 2>/dev/null \|\| true', l))} titik kill, semua dijaga ppid_cocok")
+PYEOF_STATIS
+statis_msg=$?
+[ "$statis_msg" = 0 ] || statis_detail="satu atau lebih titik kill tidak dijaga ppid_cocok — lihat stderr di atas"
+check "gerbang statis: setiap titik kill di bus-arm dijaga ppid_cocok" "$statis_ok" "$statis_detail"
+
+# --- 12u. jalur SUDAH ADA: exit bersih, trap tidak crash karena $! kosong -
+# Reviewer membuktikan langsung: `/bin/sh -uc 'echo "$!"'` -> "$!: unbound
+# variable", exit 127. bus-arm memakai `set -eu`, dan jalur SUDAH ADA (yang
+# TERSERING dari seluruh skrip ini — setiap arm kedua dan seterusnya lewat
+# sini) keluar SEBELUM shell itu pernah men-fork apa pun. Trap EXIT yang
+# membaca `$!` di jalur ini akan menjatuhkan proses yang seharusnya keluar 0
+# dengan bersih.
+sudahada_ok=0; sudahada_detail=""
+matikan_penunggu
+"$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-sudahada1.out" 2>&1 &
+sleep 2
+"$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-sudahada2.out" 2>"$BUS_DIR/tmp/arm-sudahada2.err"
+rc6=$?
+[ "$rc6" = 0 ] || { sudahada_ok=1; sudahada_detail="rc=$rc6, seharusnya 0 pada jalur SUDAH ADA"; }
+grep -qi 'unbound variable\|bad substitution' "$BUS_DIR/tmp/arm-sudahada2.err" 2>/dev/null && {
+  sudahada_ok=1
+  sudahada_detail="${sudahada_detail:-trap EXIT crash karena \$! belum pernah terisi di shell yang keluar lewat SUDAH ADA}"
+}
+grep -q 'SUDAH ADA' "$BUS_DIR/tmp/arm-sudahada2.out" 2>/dev/null || {
+  sudahada_ok=1; sudahada_detail="${sudahada_detail:-tidak melapor SUDAH ADA}"; }
+check "jalur SUDAH ADA: exit 0 bersih, trap EXIT tidak crash karena '\$!' belum pernah terisi" "$sudahada_ok" "$sudahada_detail"
+matikan_penunggu
+
+# --- 12v. TERM sebelum fork PERTAMA di seluruh hidup shell ini -----------
+# Jendela paling awal yang ada: bagian kritis (ambil_kunci, pemeriksaan
+# pidfile) berjalan SEBELUM baris `&` sama sekali. Kunci ditahan dari LUAR
+# supaya bus-arm blokir DI ambil_kunci-nya sendiri, sebelum ia sempat men-fork
+# apa pun — `$!` di shell itu belum pernah terisi SAMA SEKALI sepanjang
+# hidupnya. TERM dikirim TEPAT di jendela itu.
+befork_ok=0; befork_detail=""
+matikan_penunggu
+lockfile3="$BUS_DIR/tmp/waiter-builder.lock"
+rm -f "$lockfile3"
+( exec 9>"$lockfile3"
+  if command -v lockf >/dev/null 2>&1; then lockf 9; else flock -x 9; fi
+  sleep 9
+) &
+pemegang=$!
+sleep 1
+"$BIN/bus-arm" builder 20 >"$BUS_DIR/tmp/arm-befork.out" 2>"$BUS_DIR/tmp/arm-befork.err" &
+induk5=$!
+sleep 1
+kill -0 "$induk5" 2>/dev/null || { befork_ok=1; befork_detail="bus-arm sudah keluar sebelum sempat disinyali (kunci eksternal tidak menahannya)"; }
+
+kill -TERM "$induk5" 2>/dev/null || true
+tunggu=0
+while [ "$tunggu" -lt 10 ] && kill -0 "$induk5" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+rc5=0
+wait "$induk5" 2>/dev/null || rc5=$?
+kill "$pemegang" 2>/dev/null || true
+wait "$pemegang" 2>/dev/null || true
+rm -f "$lockfile3"
+
+[ "$rc5" = 143 ] || { befork_ok=1; befork_detail="${befork_detail:-rc=$rc5, seharusnya 143 (bukan crash nounset)}"; }
+grep -qi 'unbound variable\|bad substitution' "$BUS_DIR/tmp/arm-befork.err" 2>/dev/null && {
+  befork_ok=1
+  befork_detail="${befork_detail:-trap crash karena \$! belum pernah terisi — TERM tiba sebelum satu pun fork terjadi}"
+}
+check "TERM sebelum fork pertama di seluruh hidup shell: trap tidak crash nounset" "$befork_ok" "$befork_detail"
+matikan_penunggu
+
+# --- 12w. FASE STARTING: anak pra-token dibersihkan lewat PPID-saja -------
+# `WAITER=$!` sesudah `&` dan `PENUNGGU_STATE="STARTING:$WAITER"` adalah DUA
+# pernyataan terpisah, dan token SIAP (yang membuktikan identitas sebagai
+# bus-wait) belum tentu tiba secepat itu — jendela BUS_UJI_TUNDA_SIAP yang
+# sudah dipakai kasus pra-siap melebarkan PERSIS jendela ini. Yang dibuktikan
+# di sini: TERM yang tiba SEBELUM token tervalidasi tetap membersihkan anaknya,
+# lewat jalur PPID-saja (tanpa syarat cocok baris perintah) — karena di fase
+# ini baris perintah anak BELUM TENTU sudah berubah jadi bus-wait.
+#
+# BATAS KEJUJURAN: jendela pra-exec yang SEBENARNYA (antara fork() dan
+# execve() selesai) berdurasi mikrodetik dan TIDAK BISA diinjeksi jeda dari
+# skrip shell. Yang test ini benar-benar buktikan adalah jendela pra-TOKEN yang
+# lebih luas dan NYATA terjadi di operasi normal (loop pemeriksaan token,
+# hingga 10 detik). Desain PPID-saja untuk fase STARTING adalah jaminan
+# STRUKTURAL (lihat kasus statis 12t), bukan sesuatu yang bisa dibuktikan lewat
+# injeksi jeda pada sub-jendela mikrodetik itu.
+starting_ok=0; starting_detail=""
+matikan_penunggu
+BUS_UJI_TUNDA_SIAP=6 "$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-starting.out" 2>&1 &
+induk3=$!
+sleep 1
+[ ! -s "$waiter_pid_file" ] || { starting_ok=1; starting_detail="pidfile sudah terbit sebelum token — jendela STARTING tidak teruji"; }
+# FILTER PERSIS, bukan "anak langsung PERTAMA": induk sendiri melahirkan
+# anak langsung SAH lain lewat command substitution (mis. pemeriksaan token di
+# atas ini) — `-f "$BIN/bus-wait"` menyaring hanya kandidat yang ARGV-nya benar
+# memuat pola bus-wait, sama seperti gerbang FORKING.
+anak3=$(pgrep -P "$induk3" -f "$BIN/bus-wait" 2>/dev/null | head -1)
+[ -n "$anak3" ] || { starting_ok=1; starting_detail="${starting_detail:-tidak ditemukan anak bus-wait langsung dari induk}"; }
+kill -0 "$anak3" 2>/dev/null || { starting_ok=1; starting_detail="${starting_detail:-anak tidak hidup sebelum sinyal dikirim}"; }
+
+kill -TERM "$induk3" 2>/dev/null || true
+rc3=0; wait "$induk3" 2>/dev/null || rc3=$?
+# rc WAJIB 143. Tanpa ini, TERM yang diabaikan/tertunda dan induk yang
+# kebetulan selesai normal lolos sebagai "berhasil dibersihkan" tanpa
+# sinyalnya pernah benar-benar sampai.
+[ "$rc3" = 143 ] || { starting_ok=1; starting_detail="${starting_detail:-induk keluar rc=$rc3, seharusnya 143}"; }
+
+tunggu=0
+while [ "$tunggu" -lt 10 ] && kill -0 "$anak3" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+kill -0 "$anak3" 2>/dev/null && {
+  starting_ok=1
+  starting_detail="${starting_detail:-anak fase STARTING jadi YATIM sesudah induk mati — TERM pra-token tidak membersihkannya}"
+  kill -9 "$anak3" 2>/dev/null || true
+}
+check "fase STARTING: anak pra-token dibersihkan lewat PPID-saja, tanpa syarat command" "$starting_ok" "$starting_detail"
+matikan_penunggu
+
+# --- 12x. jendela transisi pasca-wait/pra-REAPED benar-benar diuji --------
+# BUS_UJI_TUNDA_TRANSISI ada di kode tapi tanpa test khusus adalah hook yang
+# sama saja dengan tidak ada. Anak sengaja dibiarkan HABIS WAKTU dan DITUAI
+# oleh jalur normal, lalu induk ditahan PERSIS di jendela antara `wait`
+# kembali dan `PENUNGGU_STATE="REAPED:..."` berjalan — status yang tercatat
+# SAAT itu masih "LIVE:<pid mati>". TERM dikirim TEPAT di sana. Yang
+# diasersikan: penjaga identitas (ppid_cocok+penunggu_sah) di cabang LIVE
+# menyelamatkan dari kill PID yang sudah mati, DAN pidfile tetap dilepas.
+transisi_ok=0; transisi_detail=""
+matikan_penunggu
+log_transisi="$BUS_DIR/tmp/kill-log-transisi.txt"
+rm -f "$log_transisi"
+BUS_UJI_LOG_KILL="$log_transisi" BUS_UJI_TUNDA_TRANSISI=6 \
+  "$BIN/bus-arm" builder 2 --sekali >"$BUS_DIR/tmp/arm-transisi.out" 2>&1 &
+induk4=$!
+tunggu_pidfile 10 || true
+anak4=$(cat "$waiter_pid_file" 2>/dev/null || true)
+[ -n "$anak4" ] || { transisi_ok=1; transisi_detail="penunggu tidak terpasang"; }
+
+tunggu=0
+while [ "$tunggu" -lt 12 ] && kill -0 "$anak4" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+kill -0 "$anak4" 2>/dev/null && { transisi_ok=1; transisi_detail="${transisi_detail:-anak tidak habis waktu; induk mungkin belum di jendela transisi}"; }
+
+kill -0 "$induk4" 2>/dev/null || { transisi_ok=1; transisi_detail="${transisi_detail:-induk sudah keluar sebelum sempat disinyali di jendela transisi}"; }
+kill -TERM "$induk4" 2>/dev/null || true
+rc4=0; wait "$induk4" 2>/dev/null || rc4=$?
+[ "$rc4" = 143 ] || { transisi_ok=1; transisi_detail="${transisi_detail:-induk keluar rc=$rc4, seharusnya 143}"; }
+
+if [ -f "$log_transisi" ] && grep -q "KILL $anak4\$" "$log_transisi" 2>/dev/null; then
+  transisi_ok=1
+  transisi_detail="${transisi_detail:-trap menyinyali PID $anak4 yang SUDAH mati — status masih 'LIVE' saat sinyal tiba tepat sebelum transisi REAPED}"
+fi
+[ ! -f "$waiter_pid_file" ] || { transisi_ok=1; transisi_detail="${transisi_detail:-pidfile tertinggal sesudah jendela transisi terpotong sinyal}"; }
+rm -f "$log_transisi"
+check "jendela pasca-wait/pra-REAPED: penjaga identitas menyelamatkan dari kill PID mati, pidfile tetap lepas" "$transisi_ok" "$transisi_detail"
+matikan_penunggu
+
+# --- 12s. jendela FORKING: TERM antara `&` dan penetapan PID -------------
+# Jendela paling sempit di skrip ini: anak SUDAH di-fork, tapi PID-nya belum
+# tercatat di mana pun. Cabang FORKING di bersihkan() dibangun khusus untuk itu,
+# dan hook BUS_UJI_TUNDA_FORK sudah ada tanpa satu pun konsumen — hook tanpa
+# konsumen adalah cakupan yang TAMPAK ada dan sebenarnya tidak ada.
+#
+# Kasus "TERM sebelum fork pertama" menguji jendela BERBEDA (belum ada anak
+# sama sekali), jadi ia tidak menggantikan gerbang ini.
+fork_ok=0; fork_detail=""
+matikan_penunggu
+BUS_UJI_TUNDA_FORK=6 "$BIN/bus-arm" builder 60 >"$BUS_DIR/tmp/arm-forking.out" 2>&1 &
+induk_f=$!
+tunggu=0; anak_f=""
+while [ "$tunggu" -lt 10 ] && [ -z "$anak_f" ]; do
+  anak_f=$(pgrep -P "$induk_f" -f "$BIN/bus-wait" 2>/dev/null | head -1)
+  [ -n "$anak_f" ] || { sleep 1; tunggu=$((tunggu + 1)); }
+done
+[ -n "$anak_f" ] || { fork_ok=1; fork_detail="anak tidak pernah muncul di jendela FORKING"; }
+[ ! -f "$waiter_pid_file" ] || { fork_ok=1; fork_detail="${fork_detail:-pidfile terbit padahal PID belum tercatat}"; }
+
+kill -TERM "$induk_f" 2>/dev/null || true
+rc_f=0; wait "$induk_f" 2>/dev/null || rc_f=$?
+# rc WAJIB 143. Tanpa asersi ini, "anak hilang + tidak ada pidfile" juga benar
+# kalau TERM diabaikan/tertunda dan induk kebetulan selesai normal — gerbang
+# yang lulus tanpa sinyalnya pernah sampai tidak membuktikan apa pun.
+[ "$rc_f" = 143 ] || { fork_ok=1; fork_detail="${fork_detail:-induk keluar $rc_f, seharusnya 143 (TERM tidak sampai di jendela FORKING)}"; }
+tunggu=0
+while [ "$tunggu" -lt 5 ] && kill -0 "$anak_f" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+! kill -0 "$anak_f" 2>/dev/null || { fork_ok=1; fork_detail="${fork_detail:-anak $anak_f YATIM: di-fork tapi belum tercatat, lalu ditinggalkan}"; }
+[ ! -f "$waiter_pid_file" ] || { fork_ok=1; fork_detail="${fork_detail:-pidfile tertinggal}"; }
+check "jendela FORKING: TERM antara fork dan penetapan PID -> rc143, anak tidak yatim" "$fork_ok" "$fork_detail"
+matikan_penunggu
+
+# --- 12y. DECOY ARGV: proses asing dengan argv yang MEMUAT pola tidak lolos
+# Bukti konkret Reviewer: `python3 -c "..." "sleep 999" "$BUS_DIR/bin/bus-wait" "builder" "60"`
+# lolos lewat pemeriksaan token-berdekatan sebelumnya karena pasangan
+# path+role MEMANG ada berdampingan di argv itu, di posisi mana pun. Satu-
+# satunya bentuk yang pernah ditelurkan bus-arm persis TIGA atau EMPAT token
+# (dengan/tanpa interpreter ditampilkan `ps`); token tambahan apa pun ditolak.
+decoy_ok=0; decoy_detail=""
+matikan_penunggu
+python3 -c "import time; time.sleep(60)" "sleep" "$BUS_DIR/bin/bus-wait" "builder" "60" &
+decoy=$!
+sleep 1
+kill -0 "$decoy" 2>/dev/null || { decoy_ok=1; decoy_detail="proses decoy tidak hidup"; }
+echo "$decoy" > "$waiter_pid_file"
+out_decoy=$(arm_terbatas 8 builder 20 || true)
+case "$out_decoy" in
+  *"SUDAH ADA"*) decoy_ok=1; decoy_detail="${decoy_detail:-bus-arm menerima decoy sebagai penunggu sah: $out_decoy}" ;;
+esac
+kill -0 "$decoy" 2>/dev/null || { decoy_ok=1; decoy_detail="${decoy_detail:-proses decoy ikut terbunuh — pidfile basi tidak boleh bisa membunuh proses asing}"; }
+kill "$decoy" 2>/dev/null; wait "$decoy" 2>/dev/null || true
+check "decoy argv (path+role berdampingan di baris perintah asing) TIDAK lolos sebagai penunggu sah" "$decoy_ok" "$decoy_detail"
+matikan_penunggu
+rm -f "$waiter_pid_file"
+
+# --- 12z. TIMEOUT=0 mode PERSISTEN ditolak, TANPA busy-loop ---------------
+# Bukti Reviewer: probe menghasilkan 1 ARMED + 7 ARMED-ULANG dalam SATU detik.
+timeout0_ok=0; timeout0_detail=""
+matikan_penunggu
+# BATAS WAKTU KERAS: kalau penjaga TIMEOUT=0 pernah dicabut lagi, panggilan
+# LANGSUNG di sini akan busy-loop SELAMANYA di dalam command substitution —
+# menggantung suite, bukan gagal merah yang terbatas.
+out_t0=$(arm_terbatas 8 builder 0); rc_t0=$?
+[ "$rc_t0" = 2 ] || { timeout0_ok=1; timeout0_detail="rc=$rc_t0, seharusnya 2 (ditolak)"; }
+case "$out_t0" in *ARMED*) timeout0_ok=1; timeout0_detail="${timeout0_detail:-bus-arm sempat memasang penunggu walau timeout=0 di mode persisten}" ;; esac
+[ "$(cacah_penunggu)" = 0 ] || { timeout0_ok=1; timeout0_detail="${timeout0_detail:-penunggu tersisa sesudah penolakan}"; }
+# --sekali TETAP boleh memakai 0 — itu satu pemeriksaan instan yang sah, bukan
+# mode persisten yang berulang tanpa jeda.
+out_t0_sekali=$(arm_terbatas 8 builder 0 --sekali); rc_t0_sekali=$?
+[ "$rc_t0_sekali" = 4 ] || { timeout0_ok=1; timeout0_detail="${timeout0_detail:-'--sekali' dengan timeout=0 ditolak juga (rc=$rc_t0_sekali), seharusnya diperbolehkan (rc=4, habis waktu instan)}"; }
+check "TIMEOUT=0 mode persisten DITOLAK (rc=2, nol busy-loop); --sekali tetap boleh" "$timeout0_ok" "$timeout0_detail"
+matikan_penunggu
+
+# --- 12aa. SYMLINK vs path asli: tetap TEPAT SATU penunggu ---------------
+# Bukti Reviewan: repo yang sama dibuka lewat symlink DAN path asli
+# menghasilkan DUA waiter ARMED — BUS_DIR yang dihitung berbeda secara
+# TEKSTUAL (symlink vs fisik) padahal menunjuk berkas fisik yang identik.
+symlink_ok=0; symlink_detail=""
+matikan_penunggu
+symlink_dir="$BUS_DIR/tmp/alias-$$"
+rm -f "$symlink_dir"
+ln -s "$REPO_ROOT" "$symlink_dir" 2>/dev/null || { symlink_ok=1; symlink_detail="tidak bisa membuat symlink uji"; }
+if [ -z "$symlink_detail" ]; then
+  "$symlink_dir/.agent-bus/bin/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-symlink1.out" 2>&1 &
+  sleep 2
+  # BATAS WAKTU KERAS: kalau pengkanonan BUS_DIR pernah dicabut lagi, arm
+  # kedua ini akan menelurkan penunggu KEDUA dan bertahan sebagai supervisor
+  # persisten — menggantung suite, bukan gagal merah yang terbatas.
+  arm_terbatas 15 builder 30 >"$BUS_DIR/tmp/arm-symlink2.out" 2>&1
+  rc_sym=$?
+  [ "$rc_sym" = 0 ] || { symlink_ok=1; symlink_detail="arm kedua (path asli) rc=$rc_sym, seharusnya 0"; }
+  grep -q 'SUDAH ADA' "$BUS_DIR/tmp/arm-symlink2.out" 2>/dev/null || {
+    symlink_ok=1; symlink_detail="${symlink_detail:-arm kedua tidak melapor SUDAH ADA: $(cat "$BUS_DIR/tmp/arm-symlink2.out" 2>/dev/null)}"; }
+  [ "$(cacah_penunggu)" = 1 ] || { symlink_ok=1; symlink_detail="${symlink_detail:-penunggu=$(cacah_penunggu), seharusnya 1 (symlink+path asli menghasilkan dua)}"; }
+fi
+rm -f "$symlink_dir"
+check "repo dibuka lewat symlink DAN path asli: tetap TEPAT SATU penunggu (BUS_DIR dikanonikkan)" "$symlink_ok" "$symlink_detail"
+matikan_penunggu
+
+# --- 12ab. LIVE: kegagalan mengunci TIDAK menyinyali (gagal tertutup) -----
+# PPID membuktikan KEPEMILIKAN, bukan SERIALISASI (temuan Reviewer). Kalau
+# `ambil_kunci` gagal di jalur pembersihan LIVE, kill HARUS batal.
+#
+# `lockf`/`flock` BLOKIR saat kontensi biasa (dibuktikan langsung: `timeout 3
+# lockf` pada kunci yang dipegang proses lain -> exit 124, tidak pernah
+# gagal-cepat), jadi kegagalan `ambil_kunci` yang nyata hanya bisa dipicu lewat
+# kegagalan `exec 9>` ITU SENDIRI. Dipicu DETERMINISTIK: lockfile dibuat lalu
+# izinnya dicabut (chmod 000) SEBELUM anak diberi TERM — dibuktikan langsung
+# `chmod 000 file; exec 9>file` -> Permission denied, exit 1.
+ambilgagal_ok=0; ambilgagal_detail=""
+matikan_penunggu
+log_ambilgagal="$BUS_DIR/tmp/kill-log-ambilgagal.txt"
+rm -f "$log_ambilgagal"
+BUS_UJI_LOG_KILL="$log_ambilgagal" "$BIN/bus-arm" builder 40 >"$BUS_DIR/tmp/arm-ambilgagal1.out" 2>&1 &
+induk6=$!
+tunggu_pidfile 10 || true
+anak6=$(cat "$waiter_pid_file" 2>/dev/null || true)
+waiter_hidup "$anak6" || { ambilgagal_ok=1; ambilgagal_detail="penunggu tidak terpasang"; }
+
+lockfile6="$BUS_DIR/tmp/waiter-builder.lock"
+[ -e "$lockfile6" ] || : > "$lockfile6"
+chmod 000 "$lockfile6" 2>/dev/null || { ambilgagal_ok=1; ambilgagal_detail="${ambilgagal_detail:-tidak bisa mencabut izin lockfile}"; }
+
+kill -TERM "$induk6" 2>/dev/null || true
+# BATAS WAKTU KERAS pada `wait`: kalau gagal-tertutup di sini pernah rusak
+# jadi menggantung (mis. deadlock kunci internal), `wait` polos akan
+# menahan seluruh suite tanpa batas. Poll dengan langit-langit eksplisit,
+# paksa-bunuh kalau terlampaui, dan itu sendiri jadi kegagalan MERAH — bukan
+# suite yang macet tanpa penjelasan.
+rc6=0
+tunggu6=0
+while [ "$tunggu6" -lt 15 ] && kill -0 "$induk6" 2>/dev/null; do sleep 1; tunggu6=$((tunggu6 + 1)); done
+if kill -0 "$induk6" 2>/dev/null; then
+  ambilgagal_ok=1
+  ambilgagal_detail="${ambilgagal_detail:-induk tidak keluar dalam ${tunggu6}s sesudah TERM saat kunci gagal — kemungkinan menggantung}"
+  kill -9 "$induk6" 2>/dev/null || true
+  wait "$induk6" 2>/dev/null || true
+else
+  wait "$induk6" 2>/dev/null || rc6=$?
+fi
+chmod 644 "$lockfile6" 2>/dev/null || true
+
+# rc TIDAK diasersikan 143 di sini dengan sengaja: `ambil_kunci` yang gagal
+# `return 1` di dalam bersihkan(), dan trap TERM meneruskan `exit 143`
+# terlepas dari nilai balik bersihkan() — jadi rc semestinya tetap 143. Kalau
+# BUKAN 143, itu justru sinyal cacat lain (trap error keluar dengan kode aneh).
+[ "$rc6" = 143 ] || { ambilgagal_ok=1; ambilgagal_detail="${ambilgagal_detail:-induk keluar rc=$rc6, seharusnya tetap 143 walau kunci gagal didapat}"; }
+
+# ASERSI UTAMA: TIDAK ADA percobaan kill sama sekali untuk anak ini — kunci
+# gagal didapat, jadi jalur "gagal tertutup, tanpa sinyal" WAJIB dipakai.
+if [ -f "$log_ambilgagal" ] && grep -q "KILL $anak6\$" "$log_ambilgagal" 2>/dev/null; then
+  ambilgagal_ok=1
+  ambilgagal_detail="${ambilgagal_detail:-trap tetap menyinyali $anak6 walau ambil_kunci gagal — PPID dipakai sebagai bukti serialisasi, padahal ia hanya bukti kepemilikan}"
+fi
+rm -f "$log_ambilgagal" "$lockfile6"
+check "LIVE: ambil_kunci gagal -> TIDAK menyinyali sama sekali (gagal tertutup, bukan PPID-saja)" "$ambilgagal_ok" "$ambilgagal_detail"
+matikan_penunggu
+
+# --- 12ac. YATIM (SIGKILL induk) diganti, bukan diadopsi sebagai "sehat" --
+# SIGKILL tidak bisa ditangkap trap apa pun. Bus-wait anaknya terus hidup,
+# direparent kernel ke PID 1, dan pidfile masih menunjuknya — arm berikutnya
+# yang HANYA memeriksa `penunggu_sah` akan melapor SUDAH ADA dan keluar,
+# meninggalkan Builder tuli PERMANEN begitu penunggu yatim itu akhirnya keluar
+# (tidak ada loop bus-arm yang mengawasinya untuk memasang penggantinya).
+#
+# Siklus penuh yang dibuktikan: SIGKILL induk -> arm berikutnya MENGGANTI
+# yatim -> penunggu baru benar-benar disupervisi (anak LANGSUNG arm baru) ->
+# pesan tetap membangunkannya -> siklus arm-ulang berikutnya tetap berfungsi.
+yatim_ok=0; yatim_detail=""
+matikan_penunggu
+"$BIN/bus-arm" builder 40 >"$BUS_DIR/tmp/arm-yatim1.out" 2>&1 &
+induk7=$!
+tunggu_pidfile 10 || true
+anak7=$(cat "$waiter_pid_file" 2>/dev/null || true)
+waiter_hidup "$anak7" || { yatim_ok=1; yatim_detail="penunggu pertama tidak terpasang"; }
+
+# SIGKILL: tidak bisa ditangkap, mensimulasikan induk yang benar-benar mati
+# tanpa sempat membersihkan apa pun.
+kill -9 "$induk7" 2>/dev/null || true
+wait "$induk7" 2>/dev/null || true
+
+tunggu=0
+while [ "$tunggu" -lt 5 ] && [ "$(ps -o ppid= -p "$anak7" 2>/dev/null | tr -d ' ')" != 1 ]; do
+  sleep 1; tunggu=$((tunggu + 1))
+done
+[ "$(ps -o ppid= -p "$anak7" 2>/dev/null | tr -d ' ')" = 1 ] || {
+  yatim_ok=1; yatim_detail="${yatim_detail:-anak tidak direparent ke PID 1 dalam ${tunggu}s; prasyarat pengujian tidak terpenuhi}"
+}
+kill -0 "$anak7" 2>/dev/null || { yatim_ok=1; yatim_detail="${yatim_detail:-anak yatim sudah mati sebelum sempat diuji}"; }
+
+# Arm KEDUA: harus MENGGANTI yatim itu, bukan melapor SUDAH ADA lalu diam.
+arm_terbatas 15 builder 40 >"$BUS_DIR/tmp/arm-yatim2.out" 2>&1 &
+induk7b=$!
+tunggu=0
+while [ "$tunggu" -lt 15 ] && kill -0 "$anak7" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+kill -0 "$anak7" 2>/dev/null && { yatim_ok=1; yatim_detail="${yatim_detail:-yatim TIDAK diganti — masih hidup ${tunggu}s sesudah arm kedua}"; }
+grep -q 'SUDAH ADA' "$BUS_DIR/tmp/arm-yatim2.out" 2>/dev/null && {
+  yatim_ok=1
+  yatim_detail="${yatim_detail:-arm kedua melapor SUDAH ADA atas yatim tanpa supervisor — Builder akan tuli permanen begitu yatim itu keluar}"
+}
+
+anak7b=""
+tunggu=0
+while [ "$tunggu" -lt 15 ] && [ -z "$anak7b" ]; do
+  anak7b=$(cat "$waiter_pid_file" 2>/dev/null || true)
+  waiter_hidup "$anak7b" || anak7b=""
+  [ -n "$anak7b" ] || { sleep 1; tunggu=$((tunggu + 1)); }
+done
+[ -n "$anak7b" ] || { yatim_ok=1; yatim_detail="${yatim_detail:-penunggu pengganti tidak pernah terpasang}"; }
+[ "$anak7b" != "$anak7" ] || { yatim_ok=1; yatim_detail="${yatim_detail:-PID pengganti sama dengan yatim lama — bukan penggantian sungguhan}"; }
+# CATATAN: `$induk7b` adalah PID pembungkus `arm_terbatas` (timeout/gtimeout),
+# BUKAN bus-arm sesungguhnya — bus-arm sebenarnya jadi ANAK dari pembungkus
+# itu. Bukti supervisi yang benar dibaca dari SUPERVISOR_FILE (klaim
+# pid+nonce), bukan dari asumsi PPID langsung, dan itu justru sumber
+# kebenaran yang SAMA yang dipakai kode produksinya sendiri.
+supervisor_file="$BUS_DIR/tmp/supervisor-builder.pid"
+_klaim=$(cat "$supervisor_file" 2>/dev/null || true)
+_spid_baru=${_klaim%%:*}
+case "$_spid_baru" in ''|*[!0-9]*) yatim_ok=1; yatim_detail="${yatim_detail:-klaim supervisor tidak terbaca atau rusak: '$_klaim'}" ;; esac
+kill -0 "$_spid_baru" 2>/dev/null || { yatim_ok=1; yatim_detail="${yatim_detail:-PID di klaim supervisor ($_spid_baru) tidak hidup}"; }
+_ppid_baru=$(ps -o ppid= -p "$anak7b" 2>/dev/null | tr -d ' ')
+[ "$_ppid_baru" = "$_spid_baru" ] || {
+  yatim_ok=1
+  yatim_detail="${yatim_detail:-penunggu pengganti PPID=$_ppid_baru, seharusnya $_spid_baru (pid dari klaim supervisor, anak langsung darinya)}"
+}
+
+# Siklus BERIKUTNYA masih berfungsi: pesan membangunkan, arm-ulang berhasil.
+"$BIN/bus-send" builder QUESTION "$HEAD_SHA" "$TASK" "sesudah penggantian yatim" >/dev/null 2>&1
+tunggu=0
+while [ "$tunggu" -lt 15 ] && kill -0 "$anak7b" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+kill -0 "$anak7b" 2>/dev/null && { yatim_ok=1; yatim_detail="${yatim_detail:-penunggu pengganti tidak bangun oleh pesan}"; }
+"$BIN/bus-read" builder >/dev/null 2>&1 || { yatim_ok=1; yatim_detail="${yatim_detail:-bus-read gagal sesudah penggantian yatim}"; }
+"$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-yatim3.out" 2>&1 &
+tunggu_pidfile 10 || true
+[ "$(cacah_penunggu)" = 1 ] || { yatim_ok=1; yatim_detail="${yatim_detail:-arm-ulang sesudah penggantian yatim gagal: penunggu=$(cacah_penunggu)}"; }
+
+check "SIGKILL induk: penunggu yatim (PPID=1) DIGANTI dengan supervisor baru, siklus berikutnya tetap hidup" "$yatim_ok" "$yatim_detail"
+matikan_penunggu
+
+# --- 12ad. DECOY: bus-wait standalone dengan induk HIDUP tetap DIGANTI ----
+# Reproduksi persis Reviewer: `bus-wait builder 30` dijalankan langsung dari
+# shell yang MASIH HIDUP (bukan lewat bus-arm sama sekali), pidfile diarahkan
+# ke situ. PPID-nya BUKAN 1 (shell pemanggil masih hidup) — kalau buktinya
+# masih PPID, bus-arm akan salah menyimpulkan "ada supervisor". Bukti yang
+# BENAR (supervisor_hidup) menuntut KLAIM pid+nonce yang tervalidasi, dan
+# standalone ini TIDAK PERNAH menulis klaim itu — jadi WAJIB tetap diganti.
+decoy_live_ok=0; decoy_live_detail=""
+matikan_penunggu
+rm -f "$BUS_DIR/tmp/supervisor-builder.pid"
+"$BIN/bus-wait" builder 40 >/dev/null 2>&1 &
+standalone_parent=$!
+sleep 1
+standalone_wait=$(pgrep -P "$standalone_parent" -f "$BIN/bus-wait" 2>/dev/null | head -1)
+[ -z "$standalone_wait" ] && standalone_wait=$standalone_parent
+kill -0 "$standalone_wait" 2>/dev/null || { decoy_live_ok=1; decoy_live_detail="bus-wait standalone tidak hidup"; }
+echo "$standalone_wait" > "$waiter_pid_file"
+_ppid_standalone=$(ps -o ppid= -p "$standalone_wait" 2>/dev/null | tr -d ' ')
+[ "$_ppid_standalone" != 1 ] || { decoy_live_ok=1; decoy_live_detail="${decoy_live_detail:-prasyarat gagal: PPID standalone kebetulan 1}"; }
+
+# LATAR, BUKAN foreground `arm_terbatas`: bus-arm yang menang penggantian ini
+# menunggu waiter-nya sendiri SAMPAI 30 detik (argumen timeout-nya) — kalau
+# dibungkus `timeout 15` di FOREGROUND, timeout membunuh bus-arm itu SENDIRI
+# di detik ke-15 SEMENTARA ia masih sah menunggu, trap TERM-nya BENAR
+# membersihkan waiter yang BARU SAJA ia telurkan (persis yang seharusnya
+# terjadi kalau supervisor sungguhan diminta berhenti) — dan test yang salah
+# menyalahartikan perilaku BENAR itu sebagai "penggantian gagal".
+"$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-decoylive.out" 2>&1 &
+supervisor_baru=$!
+tunggu_pidfile 12 || true
+grep -q 'SUDAH ADA' "$BUS_DIR/tmp/arm-decoylive.out" 2>/dev/null && {
+  decoy_live_ok=1
+  decoy_live_detail="${decoy_live_detail:-bus-arm menerima standalone berinduk-hidup sebagai SUDAH ADA — PPID bukan-1 disalahartikan sebagai supervisor}"
+}
+tunggu=0
+while [ "$tunggu" -lt 10 ] && kill -0 "$standalone_wait" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+kill -0 "$standalone_wait" 2>/dev/null && { decoy_live_ok=1; decoy_live_detail="${decoy_live_detail:-standalone TIDAK diganti}"; }
+[ "$(cacah_penunggu)" = 1 ] || { decoy_live_ok=1; decoy_live_detail="${decoy_live_detail:-penunggu=$(cacah_penunggu) sesudah penggantian}"; }
+check "bus-wait standalone berinduk HIDUP (bukan bus-arm) tetap DIGANTI, bukan diterima sebagai SUDAH ADA" "$decoy_live_ok" "$decoy_live_detail"
+kill "$standalone_parent" 2>/dev/null; wait "$standalone_parent" 2>/dev/null || true
+kill "$supervisor_baru" 2>/dev/null; wait "$supervisor_baru" 2>/dev/null || true
+matikan_penunggu
+
+# --- 12ae. OWNER MATI-TAK-DIREAP (zombie): waiter tetap DIGANTI --------
+# Reproduksi Reviewer: owner disupervisor di-SIGKILL lalu SENGAJA tidak
+# di-`wait` oleh pemanggilnya (bisa tertinggal sebagai zombie di beberapa
+# jalur OS). Yang dibuktikan: keputusan replace TIDAK bergantung pada status
+# reap owner sama sekali — ia bergantung pada PPID WAITER SEBENARNYA, yang
+# direparent kernel ke PID 1 SAAT KEMATIAN owner terjadi, terlepas dari kapan
+# (atau apakah) owner-nya sendiri pernah di-reap oleh pemanggilnya.
+zombie_ok=0; zombie_detail=""
+matikan_penunggu
+# Skrip pembungkus ditulis ke berkas terpisah, BUKAN `sh -c` inline: kutipan
+# bersarang untuk meneruskan $BIN dan path pidfile lewat parameter posisi ke
+# `sh -c` ternyata rapuh di bawah `set -u` (unbound variable) — menulis skrip
+# nyata lebih jelas dan tidak butuh kutipan berlapis.
+pembungkus_sh="$BUS_DIR/tmp/zombie-pembungkus.sh"
+cat > "$pembungkus_sh" <<PEMBUNGKUS_EOF
+#!/bin/sh
+"$BIN/bus-arm" builder 40 >/dev/null 2>&1 &
+echo \$! > "$BUS_DIR/tmp/zombie-owner.pid"
+sleep 20
+PEMBUNGKUS_EOF
+sh "$pembungkus_sh" &
+pembungkus=$!
+tunggu=0
+while [ "$tunggu" -lt 10 ] && [ ! -s "$BUS_DIR/tmp/zombie-owner.pid" ]; do sleep 1; tunggu=$((tunggu + 1)); done
+owner=$(cat "$BUS_DIR/tmp/zombie-owner.pid" 2>/dev/null || true)
+[ -n "$owner" ] || { zombie_ok=1; zombie_detail="owner tidak pernah tercatat"; }
+tunggu_pidfile 10 || true
+waiter_zombie=$(cat "$waiter_pid_file" 2>/dev/null || true)
+waiter_hidup "$waiter_zombie" || { zombie_ok=1; zombie_detail="${zombie_detail:-waiter belum terpasang sebelum owner dibunuh}"; }
+
+kill -9 "$owner" 2>/dev/null || true
+# SENGAJA TIDAK `wait "$pembungkus"` di sini — pembungkus masih `sleep 20`,
+# jadi owner yang baru dibunuh berpotensi tertinggal SEBAGAI ZOMBIE selama
+# jendela itu, PERSIS skenario yang direproduksi Reviewer.
+tunggu=0
+while [ "$tunggu" -lt 10 ] && [ "$(ps -o ppid= -p "$waiter_zombie" 2>/dev/null | tr -d ' ')" != 1 ]; do
+  sleep 1; tunggu=$((tunggu + 1))
+done
+[ "$(ps -o ppid= -p "$waiter_zombie" 2>/dev/null | tr -d ' ')" = 1 ] || {
+  zombie_ok=1; zombie_detail="${zombie_detail:-waiter tidak direparent ke PID 1 dalam ${tunggu}s}"
+}
+
+# LATAR, bukan `arm_terbatas` foreground: supervisor pengganti yang MENANG
+# menunggu waiter barunya sendiri sampai 40 detik (argumen timeout-nya) — kalau
+# dibungkus `timeout` di FOREGROUND yang lebih pendek, timeout membunuh
+# supervisor itu SENDIRI di tengah menunggu, dan trap TERM-nya BENAR
+# membersihkan waiter yang baru saja ia telurkan (persis kasus decoy_live yang
+# sama sebelumnya).
+"$BIN/bus-arm" builder 40 >"$BUS_DIR/tmp/arm-zombie.out" 2>&1 &
+pengganti=$!
+tunggu_pidfile 12 || true
+grep -q 'SUDAH ADA' "$BUS_DIR/tmp/arm-zombie.out" 2>/dev/null && {
+  zombie_ok=1
+  zombie_detail="${zombie_detail:-bus-arm menerima waiter dengan owner mati-tak-direap sebagai SUDAH ADA}"
+}
+tunggu=0
+while [ "$tunggu" -lt 10 ] && kill -0 "$waiter_zombie" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+kill -0 "$waiter_zombie" 2>/dev/null && { zombie_ok=1; zombie_detail="${zombie_detail:-waiter lama TIDAK diganti}"; }
+[ "$(cacah_penunggu)" = 1 ] || { zombie_ok=1; zombie_detail="${zombie_detail:-penunggu=$(cacah_penunggu) sesudah penggantian}"; }
+check "owner mati-tak-direap (berpotensi zombie): waiter tetap DIGANTI lewat hubungan PPID, bukan status reap owner" "$zombie_ok" "$zombie_detail"
+kill -9 "$owner" "$pembungkus" "$pengganti" 2>/dev/null; wait "$pembungkus" 2>/dev/null; wait "$pengganti" 2>/dev/null || true
+rm -f "$BUS_DIR/tmp/zombie-owner.pid" "$pembungkus_sh"
 matikan_penunggu
 
 # --- cleanup: remove only this test's archived messages -------------------

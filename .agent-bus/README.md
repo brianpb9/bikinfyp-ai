@@ -257,16 +257,23 @@ Ditulis sesudah cacat nyata 21 Agu: `bus-wait` SENGAJA keluar saat pesan datang
 Akibatnya sesudah `DONE`, Builder tuli terhadap pesan Reviewer berikutnya.
 
 ### 1. Aturan start
-Tindakan runtime PERTAMA setiap sesi Builder:
+Tindakan runtime PERTAMA setiap sesi Builder — dan ini BUKAN cuplikan shell
+biasa, sengaja ditulis tanpa blok kode `sh` supaya tidak ada yang menyalinnya
+mentah ke terminal. WAJIB dijalankan sebagai **panggilan Bash tool milik
+Claude sendiri, dengan `run_in_background: true`** — TIDAK PERNAH shell `&`,
+`nohup`, `setsid`, atau pelepasan manual apa pun (lihat Aturan 3: kenapa
+pelepasan memutus bangun-otomatis, dan REGRESI NYATA yang pernah terjadi
+karenanya di bawah). Tunggu keluaran `ARMED pid=...` sebelum melanjutkan.
 
-    .agent-bus/bin/bus-arm builder
+Perintahnya: `.agent-bus/bin/bus-arm builder`
 
 ### 2. Aturan siklus hidup — PASANG DULU, BARU KIRIM
 
-Panggil `bus-arm builder` **SEBELUM** `bus-send`, bukan sesudahnya:
+Panggil `bus-arm builder` (sebagai panggilan Bash tool `run_in_background`,
+sama seperti Aturan 1) **SEBELUM** `bus-send`, bukan sesudahnya:
 
-    .agent-bus/bin/bus-arm builder      # dulu
-    .agent-bus/bin/bus-send reviewer …  # baru
+    1. .agent-bus/bin/bus-arm builder      # dulu — Bash tool, run_in_background:true
+    2. .agent-bus/bin/bus-send reviewer …  # baru
 
 Urutannya dibalik pada 22 Agu, temuan Reviewer, dan ia menemukan DUA hal
 sekaligus lewat satu pengamatan:
@@ -320,17 +327,27 @@ dan instruksi tidak menjalankan dirinya sendiri. Sebagian sudah dipindahkan ke
 runtime; sebagian TIDAK BISA, dan bagian itu ditulis di sini apa adanya supaya
 tidak ada yang mengira sudah beres.
 
-MEKANIS sekarang (dijaga `.agent-bus/test-bus.sh` kasus 14-20):
+MEKANIS sekarang (dijaga `.agent-bus/test-bus.sh` — 44 kasus per 22 Agu; nomor
+kasus TIDAK dikutip lagi di sini karena mereka bergeser tiap penambahan, cari
+lewat isi tabel di bawah, bukan nomor):
 
 | Cacat | Dulu | Sekarang |
 |---|---|---|
 | habis waktu | `bus-wait` keluar 4, `bus-arm` meneruskannya lalu berhenti; nol penunggu, TULI PERMANEN | `bus-arm` memasang ulang sendiri; hanya kedatangan pesan yang mengakhirinya |
-| PID daur ulang | `kill -0` menerima proses asing; `bus-arm` menolak memasang | identitas baris perintah diperiksa; pidfile basi diabaikan, proses asing tidak disentuh |
-| pidfile basi saat dibunuh | tidak ada trap; berkas basi tertinggal | trap TERM/INT/EXIT |
+| PID daur ulang | `kill -0` menerima proses asing; `bus-arm` menolak memasang | identitas ARGV PERSIS diperiksa (bukan substring/glob — lihat baris "decoy argv" di bawah); pidfile basi diabaikan, proses asing tidak disentuh |
+| pidfile basi saat dibunuh | tidak ada trap; berkas basi tertinggal | trap TERM/INT/EXIT, dan `\|\| true` di setiap trap supaya `set -e` tidak memotong sebelum kode keluar sinyal tercapai |
 | keadaan tuli tidak terlihat | senyap total | `bus-send` DARI builder memperingatkan ke stderr kalau nol penunggu |
-| periksa-lalu-telur tidak atomik | dua `bus-arm` serentak sama-sama lolos pemeriksaan lalu menelurkan penunggu GANDA | bagian kritis dikunci `mkdir` atomik |
-| pembersihan pidfile tanpa kepemilikan | satu instance menghapus registrasi instance lain | setiap penghapusan memverifikasi isinya milik sendiri |
+| periksa-lalu-telur tidak atomik | dua `bus-arm` serentak sama-sama lolos pemeriksaan lalu menelurkan penunggu GANDA | bagian kritis dikunci OS-backed (`lockf` Darwin / `flock` Linux, dipilih dari `uname`, BUKAN `mkdir` — versi mkdir-based sempat dicoba dan punya balapan yang sama satu lapis lebih dalam) |
+| pembersihan pidfile tanpa kepemilikan | satu instance menghapus registrasi instance lain | setiap penghapusan memverifikasi isinya milik sendiri, di bawah kunci yang sama |
 | jendela balasan | Reviewer bisa membalas antara `bus-send` dan `bus-arm` | kontrak dibalik: arm DULU, baru kirim |
+| jendela pra-exec / pra-token | pidfile diterbitkan sebelum identitas anak terlihat | jabat tangan token SIAP: bus-wait memancarkan token SEBELUM pemindaian pesan pertama; pidfile terbit hanya sesudahnya |
+| kunci ikut diwarisi penunggu | fd kunci tidak ditutup di anak; penunggu berumur panjang menahan kunci sepanjang hidupnya, mengunci seluruh siklus tunggu | `9>&-` saat menelurkan bus-wait |
+| kill sebelum identitas terbukti | PID yang tercatat status LIVE bisa sudah dituai/didaur-ulang tepat sebelum trap berbunyi | setiap titik kill diverifikasi PPID==$$ (atau `penunggu_sah` untuk penggantian yatim) TEPAT sebelum sinyal, bukan berdasar status yang tercatat |
+| kegagalan kunci saat membersihkan | PPID dipakai sebagai bukti SERIALISASI, padahal ia cuma bukti kepemilikan | gagal-tertutup: kalau kunci tidak didapat, TIDAK menyinyali sama sekali |
+| decoy argv | pencocokan substring/glob — proses asing dengan argv yang MEMUAT pola bus-wait di mana pun lolos | bentuk argv PENUH divalidasi (interpreter opsional, path skrip PERSIS, role PERSIS, satu timeout numerik, tanpa token ekstra) — pencocokan STRING berjangkar, bukan word-splitting (aman untuk path berspasi) |
+| TIMEOUT=0 mode persisten | busy-loop tanpa batas (fork/tulis/hapus tanpa jeda) | ditolak (rc 2) di mode persisten; `--sekali` tetap boleh. Bentuk nol berawalan-nol (`00`, `08`, ...) JUGA ditolak — `08` bahkan meledakkan aritmetika shell (dibaca sebagai oktal tidak sah) |
+| BUS_DIR tidak dikanonikkan | repo yang sama dibuka lewat symlink DAN path fisik menghitung BUS_DIR berbeda secara tekstual -> DUA penunggu | `pwd -P` di semua tool bus (bus-arm, bus-wait, bus-send, bus-read, codex-reviewer-runtime, run-bus-test-isolated) |
+| penunggu yatim diterima sebagai sehat | SIGKILL induk (tak bisa ditangkap trap) meninggalkan bus-wait hidup + pidfile menunjuknya; PPID SAJA bukan bukti supervisi (proses standalone berinduk shell hidup juga lolos) | kepemilikan supervisor POSITIF: klaim `pid:nonce` (PID + waktu-mulai proses) ditulis di bawah kunci yang sama dengan pidfile, dan diverifikasi lewat HUBUNGAN — PPID waiter yang sebenarnya harus PERSIS sama dengan pid yang diklaim, bukan sekadar "ada klaim yang hidup di suatu tempat" |
 
 TIDAK BISA MEKANIS, dan ini batas yang sudah dibuktikan, bukan dugaan:
 

@@ -12,7 +12,7 @@
 # structured verdict through bus-send, and immediately waits again.
 set -u
 
-SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 BUS_DIR=$(dirname "$SCRIPT_DIR")
 REPO_ROOT=$(dirname "$BUS_DIR")
 WAIT="$SCRIPT_DIR/bus-wait"
