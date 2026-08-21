@@ -402,3 +402,293 @@ after(() => {
   fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });
   fs.rmSync(PATH_KOSONG, { recursive: true, force: true });
 });
+
+// ===========================================================================
+// KONTRAK API PUSAT — resolveApprovedReference
+// ===========================================================================
+//
+// Ditambahkan atas temuan Reviewer 21 Agu, dan temuannya benar: kontrak yang
+// ditulis di kepala berkas ini (baris 13-32) TIDAK PERNAH DIUJI. Seluruh test
+// di atas hanya memanggil `referensiLayak` dan hanya memeriksa array string.
+// Test wiring pun hanya memastikan ekspornya sebuah fungsi.
+//
+// Akibatnya, implementasi berikut LULUS SEMUA test lama sambil melanggar
+// kontraknya sendiri:
+//
+//     export async function resolveApprovedReference(rels: string[]) {
+//       const layak = await referensiLayak(rels);
+//       if (layak.length === 0) throw new Error("EVIDENCE_INVALID");  // MELEMPAR
+//       return layak;                                                 // tanpa alasan
+//     }
+//
+// Test C8 di worker pun tetap hijau, karena processJob gagal-tertutup entah
+// resolvernya melempar atau mengembalikan kosong. Jadi kontrak "kembalikan
+// data, jangan melempar, sertakan alasan per gambar" tidak dijaga siapa pun.
+//
+// Blok ini menguji API pusatnya LANGSUNG: bentuk data, penyingkiran, reason
+// code, dan yang paling penting — TIDAK MELEMPAR.
+
+/** Reason code diambil dari PATH-CASE-MATRIX.md; tidak ada kosakata baru. */
+const ALASAN = {
+  BUKTI: "EVIDENCE_INVALID", // sidecar hilang/korup/bentuk salah/versi tidak sah
+  HILANG: "REF_MISSING", // bytes tidak ada di storage
+  HASH: "REF_HASH_MISMATCH", // sha256 sidecar != bytes tersimpan
+  PROMOSI: "REF_PROMOTIONAL", // diperiksa, dan memang materi promosi
+} as const;
+
+type Resolver = (rels: string[]) => Promise<{
+  utama: { rel: string; sha256: string; versiBukti: number } | null;
+  tersetujui: { rel: string; sha256: string; versiBukti: number }[];
+  ditolak: { rel: string; alasan: string; pesan: string }[];
+}>;
+
+/**
+ * Specifier-nya dirakit dari konstanta, bukan literal.
+ *
+ * Bukan gaya-gayaan: modul ini memang BELUM ADA, dan `import("../lib/product-truth")`
+ * sebagai literal membuat `npx tsc --noEmit` gagal dengan TS2307 — kegagalan
+ * KOMPILASI, bukan kegagalan asersi. Itu menukar bukti merah yang berbicara
+ * ("kontraknya belum ada") dengan error toolchain yang menutupi seluruh
+ * berkas, dan sekaligus mematahkan gerbang rilis `tsc` untuk alasan yang salah.
+ * Bentuk ini membuat kegagalannya muncul di tempat yang benar: saat test
+ * berjalan, dengan pesan yang menjelaskan kontraknya.
+ */
+const MODUL_PUSAT = "lib/product-truth";
+
+async function muatResolver(): Promise<Resolver> {
+  let modul: Record<string, unknown>;
+  try {
+    modul = (await import(`../${MODUL_PUSAT}`)) as Record<string, unknown>;
+  } catch (err) {
+    assert.fail(
+      `${MODUL_PUSAT}.ts tidak bisa di-import: ${(err as Error).message}. ` +
+        "Kontrak bukti tidak punya rumah pusat, jadi setiap pemanggil menyusun aturannya sendiri."
+    );
+  }
+  assert.equal(
+    typeof modul.resolveApprovedReference,
+    "function",
+    `${MODUL_PUSAT}.ts ada tapi resolveApprovedReference bukan fungsi`
+  );
+  return modul.resolveApprovedReference as Resolver;
+}
+
+/**
+ * Memanggil resolver dan MENUNTUT ia tidak melempar.
+ *
+ * Ini asersi kontrak nomor satu, bukan sekadar pembungkus kenyamanan: bukti
+ * tidak sah adalah keadaan data yang normal dan terduga. Resolver yang
+ * melempar memaksa setiap pemanggil memasang try/catch, dan pemanggil yang
+ * lupa memasangnya akan menjatuhkan job dengan cara yang berbeda-beda —
+ * persis divergensi W1 vs W2 yang modul pusat ini ada untuk mengakhirinya.
+ */
+async function resolveTanpaLempar(resolver: Resolver, rels: string[], konteks: string) {
+  try {
+    return await resolver(rels);
+  } catch (err) {
+    assert.fail(
+      `${konteks}: resolveApprovedReference MELEMPAR (${(err as Error).message}). ` +
+        "Kontraknya: bukti tidak sah dikembalikan sebagai DATA (utama=null + alasan per gambar), " +
+        "bukan sebagai exception. Yang boleh melempar hanya kegagalan infrastruktur."
+    );
+  }
+}
+
+test("API pusat: bukti SAH -> utama terisi lengkap dengan sha256 dan versiBukti", async () => {
+  const resolver = await muatResolver();
+  const tulisan = pasang([
+    [relFoto(1), PACKSHOT],
+    [relSidecar(1), sidecarSah(PACKSHOT, true, "product_photo")],
+  ]);
+  const hasil = await resolveTanpaLempar(resolver, [relFoto(1)], "kontrol positif");
+  assert.deepEqual(
+    hasil.utama,
+    { rel: relFoto(1), sha256: sha(PACKSHOT), versiBukti: VERSI_BUKTI_TERKINI },
+    "utama harus membawa identitas byte yang tersetujui, bukan sekadar nama berkas — " +
+      "tanpa sha256, admission tidak punya apa pun untuk di-snapshot"
+  );
+  assert.deepEqual(hasil.tersetujui.map((r) => r.rel), [relFoto(1)]);
+  assert.deepEqual(hasil.ditolak, [], "bukti sah tidak boleh menghasilkan penolakan");
+  assert.deepEqual(tulisan, [], "resolver tidak boleh menulis apa pun ke storage");
+});
+
+test("API pusat C1: banner ditolak REF_PROMOTIONAL, packshot jadi utama", async () => {
+  const resolver = await muatResolver();
+  pasang([
+    [relFoto(0), BANNER],
+    [relSidecar(0), sidecarSah(BANNER, false, "promotional_graphic")],
+    [relFoto(1), PACKSHOT],
+    [relSidecar(1), sidecarSah(PACKSHOT, true, "product_photo")],
+  ]);
+  const hasil = await resolveTanpaLempar(resolver, [relFoto(0), relFoto(1)], "C1");
+  assert.equal(hasil.utama?.rel, relFoto(1), "utama harus packshot, bukan foto pertama");
+  assert.deepEqual(
+    hasil.ditolak.map((d) => [d.rel, d.alasan]),
+    [[relFoto(0), ALASAN.PROMOSI]],
+    "banner wajib dilaporkan sebagai REF_PROMOTIONAL — itu STATUS FOTO, dan pemanggil " +
+      "membutuhkannya untuk memberi pesan yang bisa ditindaklanjuti"
+  );
+});
+
+// Setiap fixture tidak sah diuji LANGSUNG di API pusat: tidak melempar,
+// tersetujui kosong, utama null, dan alasannya BENAR — bukan sekadar "ditolak".
+const kasusTakSah: { judul: string; entri: [string, Buffer][]; alasan: string }[] = [
+  {
+    judul: "berkas referensi hilang, sidecar ada",
+    entri: [[relSidecar(1), sidecarSah(PACKSHOT, true, "product_photo")]],
+    alasan: ALASAN.HILANG,
+  },
+  {
+    judul: "sidecar hilang, bytes ada",
+    entri: [[relFoto(1), PACKSHOT]],
+    alasan: ALASAN.BUKTI,
+  },
+  {
+    judul: "sidecar JSON korup",
+    entri: [
+      [relFoto(1), PACKSHOT],
+      [relSidecar(1), Buffer.from('{"sha256": "abc", "jenis":')],
+    ],
+    alasan: ALASAN.BUKTI,
+  },
+  {
+    judul: "tipe field salah (layakReferensi string)",
+    entri: [
+      [relFoto(1), PACKSHOT],
+      [
+        relSidecar(1),
+        Buffer.from(
+          JSON.stringify({
+            sha256: sha(PACKSHOT),
+            jenis: "promotional_graphic",
+            layakReferensi: "false",
+            rasioAreaTeks: "0.19",
+            jumlahKata: 14,
+            alasan: "materi promosi",
+            versiBukti: VERSI_BUKTI_TERKINI,
+          })
+        ),
+      ],
+    ],
+    alasan: ALASAN.BUKTI,
+  },
+  {
+    judul: "tanpa versiBukti",
+    entri: [
+      [relFoto(1), PACKSHOT],
+      [
+        relSidecar(1),
+        Buffer.from(
+          JSON.stringify({
+            sha256: sha(PACKSHOT),
+            jenis: "product_photo",
+            layakReferensi: true,
+            rasioAreaTeks: 0.004,
+            jumlahKata: 2,
+            alasan: "foto produk",
+          })
+        ),
+      ],
+    ],
+    alasan: ALASAN.BUKTI,
+  },
+  ...versiTakSah.map(([judul, nilai]) => ({
+    judul,
+    entri: [
+      [relFoto(1), PACKSHOT],
+      [
+        relSidecar(1),
+        Buffer.from(
+          JSON.stringify({
+            sha256: sha(PACKSHOT),
+            jenis: "product_photo",
+            layakReferensi: true,
+            rasioAreaTeks: 0.004,
+            jumlahKata: 2,
+            alasan: "foto produk",
+            versiBukti: nilai,
+          })
+        ),
+      ],
+    ] as [string, Buffer][],
+    alasan: ALASAN.BUKTI,
+  })),
+  {
+    judul: "versiBukti basi",
+    entri: [
+      [relFoto(1), PACKSHOT],
+      [
+        relSidecar(1),
+        Buffer.from(
+          JSON.stringify({
+            sha256: sha(PACKSHOT),
+            jenis: "product_photo",
+            layakReferensi: true,
+            rasioAreaTeks: 0.004,
+            jumlahKata: 2,
+            alasan: "foto produk",
+            versiBukti: VERSI_BUKTI_TERKINI - 1,
+          })
+        ),
+      ],
+    ],
+    alasan: ALASAN.BUKTI,
+  },
+  {
+    judul: "sha256 sidecar beda dari bytes tersimpan",
+    entri: [
+      [relFoto(1), Buffer.from("BYTES-DITUKAR-SESUDAH-KLASIFIKASI")],
+      [relSidecar(1), sidecarSah(PACKSHOT, true, "product_photo")],
+    ],
+    alasan: ALASAN.HASH,
+  },
+];
+
+for (const kasus of kasusTakSah) {
+  test(`API pusat: ${kasus.judul} -> data, bukan exception; alasan ${kasus.alasan}`, async () => {
+    const resolver = await muatResolver();
+    const tulisan = pasang(kasus.entri);
+    const hasil = await resolveTanpaLempar(resolver, [relFoto(1)], kasus.judul);
+
+    assert.equal(hasil.utama, null, `${kasus.judul}: utama harus null — tidak ada bukti yang sah`);
+    assert.deepEqual(hasil.tersetujui, [], `${kasus.judul}: daftar tersetujui harus kosong`);
+    assert.deepEqual(
+      hasil.ditolak.map((d) => [d.rel, d.alasan]),
+      [[relFoto(1), kasus.alasan]],
+      `${kasus.judul}: reason code salah atau tidak dilaporkan. Pemanggil tidak bisa memberi ` +
+        "pesan yang bisa ditindaklanjuti dari penolakan tanpa alasan, dan operator tidak bisa " +
+        "membedakan bukti rusak dari berkas hilang saat mengaudit."
+    );
+    assert.ok(
+      (hasil.ditolak[0]?.pesan ?? "").length > 10,
+      `${kasus.judul}: penolakan tanpa pesan yang bisa dibaca manusia`
+    );
+    assert.deepEqual(tulisan, [], `${kasus.judul}: resolver menulis ke storage saat menolak`);
+  });
+}
+
+test("API pusat: referensiLayak adalah proyeksi dari resolver, bukan aturan kedua", async () => {
+  // Dua jalur baca yang bisa berbeda jawaban adalah cara divergensi W1/W2 lahir
+  // kembali lewat pintu belakang. Diuji pada kasus campur: satu banner, satu
+  // packshot sah, satu bukti rusak.
+  const resolver = await muatResolver();
+  const rels = [relFoto(0), relFoto(1), relFoto(2)];
+  pasang([
+    [relFoto(0), BANNER],
+    [relSidecar(0), sidecarSah(BANNER, false, "promotional_graphic")],
+    [relFoto(1), PACKSHOT],
+    [relSidecar(1), sidecarSah(PACKSHOT, true, "product_photo")],
+    [relFoto(2), PACKSHOT],
+    [relSidecar(2), Buffer.from("{bukan json")],
+  ]);
+  const hasil = await resolveTanpaLempar(resolver, rels, "campur");
+  const layak = await referensiLayak(rels);
+  assert.deepEqual(
+    layak,
+    hasil.tersetujui.map((r) => r.rel),
+    "referensiLayak() dan resolveApprovedReference() memberi jawaban berbeda untuk daftar yang " +
+      "sama — itu dua aturan bukti, dan dua aturan bukti adalah cacat yang modul pusat ini " +
+      "seharusnya menutupnya"
+  );
+  assert.deepEqual(layak, [relFoto(1)], "hanya packshot bersidik sah yang boleh lolos");
+});

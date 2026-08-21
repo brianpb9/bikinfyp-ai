@@ -95,6 +95,71 @@ remove_supervisor_if_owned() {
   launchctl remove "$supervisor_label" >/dev/null 2>&1
 }
 
+# Runtime LAIN yang benar-benar hidup, dibaca dari TABEL PROSES — bukan dari
+# pidfile dan bukan dari lock.
+#
+# Kenapa bukan pidfile (temuan Reviewer 21 Agu, dan ia benar). Penjaga versi
+# pertama membaca PID_FILE, padahal cabang `start` menghapus PID_FILE di baris
+# `rm -f "$PID_FILE"` SEBELUM menelurkan `nohup "$self" run`. Jadi anak yang
+# lahir dari cabang itu — persis cabang yang dua kali melahirkan duplikat —
+# selalu sampai ke penjaga dengan catatan yang sudah kosong, lalu lolos.
+# Penjaga yang bergantung pada catatan tidak bisa menangkap kejadian yang
+# pemicunya adalah HILANGNYA catatan itu.
+#
+# Tabel proses tidak bisa hilang, tidak bisa basi, dan tidak bisa dihapus oleh
+# jalur start. Itu satu-satunya sumber kebenaran yang tersisa.
+#
+# Yang dibuang: diri sendiri DAN seluruh keturunannya. Keturunan wajib dibuang
+# karena fungsi ini sendiri menelurkan proses yang mewarisi command line
+# runtime — dan needle-nya bahkan ikut masuk argv awk — sehingga penjaga akan
+# menuduh dirinya sendiri. Itu bukan teori: versi pertama menolak start yang
+# sah dengan "runtime lain masih hidup (pid=96195 96197)", dua PID yang justru
+# lahir SESUDAH proses yang menolaknya.
+#
+# LELUHUR SENGAJA TIDAK dibuang. Duplikat yang benar-benar terjadi lahir
+# sebagai ANAK runtime kanonik (79509 lalu 93731, keduanya PPID=49388), jadi
+# membuang leluhur akan membutakan penjaga terhadap satu-satunya kasus yang ia
+# ada untuk mencegah. Aman karena proses `start` tampil sebagai
+# "…codex-reviewer-runtime start" dan tidak pernah cocok dengan pola
+# "…codex-reviewer-runtime run".
+#
+# Subshell runtime kanonik ikut cocok, dan itu memang benar: kehadirannya tetap
+# berarti "ada runtime lain yang hidup". Subshell sendiri tidak pernah sampai
+# ke penjaga, karena penjaga hanya dijalankan di awal run_loop.
+other_runtime_pids() {
+  ps -eo pid=,ppid=,command= 2>/dev/null | awk -v self="$$" -v needle="$SCRIPT_DIR/codex-reviewer-runtime run" '
+    { order[NR] = $1; parent[$1] = $2; line[$1] = $0 }
+    END {
+      keluar = ""
+      for (i = 1; i <= NR; i++) {
+        p = order[i]
+        if (p == self) continue
+        if (index(line[p], needle) == 0) continue
+        # Buang KETURUNAN diri sendiri. Tanpa ini penjaga menuduh dirinya
+        # sendiri: subshell command-substitution, subshell pipeline, dan proses
+        # awk ini semuanya mewarisi command line induknya (dan needle ikut
+        # masuk argv awk), jadi ketiganya cocok dengan polanya sendiri.
+        # Terbukti nyata: runtime sah menolak start dengan "runtime lain masih
+        # hidup (pid=96195 96197)" — dua PID yang justru lahir SESUDAH dirinya.
+        #
+        # LELUHUR SENGAJA TIDAK dibuang. Duplikat yang benar-benar terjadi
+        # lahir sebagai ANAK runtime kanonik (79509 lalu 93731, keduanya
+        # PPID=49388); membuang leluhur akan membutakan penjaga terhadap
+        # satu-satunya kasus yang ia ada untuk mencegah.
+        q = p; milik_sendiri = 0; kedalaman = 0
+        while (kedalaman < 64 && (q in parent)) {
+          q = parent[q]
+          kedalaman++
+          if (q == self) { milik_sendiri = 1; break }
+          if (q <= 1) break
+        }
+        if (milik_sendiri) continue
+        keluar = keluar (keluar == "" ? "" : " ") p
+      }
+      print keluar
+    }'
+}
+
 clear_stale_lock() {
   [ -d "$LOCK_DIR" ] || return 0
   lock_pid=$(cat "$LOCK_DIR/pid" 2>/dev/null || true)
@@ -510,25 +575,36 @@ acquire_runtime_lock() {
 
 run_loop() {
   mkdir -p "$BUS_DIR/tmp" "$BUS_DIR/inbox/reviewer" "$BUS_DIR/inbox/builder" "$BUS_DIR/archive"
-  acquire_runtime_lock || exit 7
+
   # PENJAGA BERSARANG (21 Agu). Dua kali runtime kedua lahir sebagai ANAK dari
   # runtime kanonik (79509 lalu 93731, keduanya PPID=49388) lewat cabang
   # cadangan `nohup "$self" run &`. Keduanya ikut memantau inbox reviewer yang
   # sama, jadi dua konsumen berebut satu antrean: pesan bisa saling dicuri
   # lewat bus-read, atau satu SHA ditinjau dua kali.
   #
-  # acquire_runtime_lock saja tidak menahannya, dan baris di bawah ini
-  # menjelaskan kenapa: pidfile DITIMPA tanpa syarat sesudah lock didapat.
-  # Jadi diperiksa dulu — kalau pidfile menunjuk proses LAIN yang masih hidup,
-  # runtime ini bersarang dan harus mundur, bukan menimpa catatan kanoniknya.
-  # pid_value_is_runtime, BUKAN `kill -0` telanjang: PID bisa didaur ulang OS.
-  # Pidfile basi yang nomornya kebetulan dipakai proses lain tidak boleh
-  # menggagalkan start yang sah — ia harus benar-benar runtime repo INI.
-  existing_pid=$(cat "$PID_FILE" 2>/dev/null || echo "")
-  if [ -n "$existing_pid" ] && [ "$existing_pid" != "$$" ] && pid_value_is_runtime "$existing_pid"; then
-    log "ABORT runtime bersarang: pid=$$ ppid=$PPID; runtime kanonik pid=$existing_pid masih hidup"
+  # DIJALANKAN SEBELUM acquire_runtime_lock, dan itu wajib (temuan Reviewer
+  # 21 Agu). Versi pertama memeriksanya SESUDAH lock didapat, jadi runtime
+  # bersarang yang seharusnya mundur sudah terlanjur mkdir LOCK_DIR dan menulis
+  # PID-nya sendiri ke situ — MENCURI lock dari runtime kanonik. Lalu ia
+  # `exit 7` sebelum `trap cleanup_runtime EXIT` terpasang, jadi lock curian
+  # itu ditinggal begitu saja: kalau kelak runtime kanonik berhenti,
+  # cleanup_runtime melihat LOCK_DIR/pid bukan miliknya dan tidak
+  # membersihkannya. Penjaga yang merusak keadaan sebelum mundur lebih buruk
+  # daripada tidak ada penjaga sama sekali.
+  #
+  # Mundur di sini berarti: nol mkdir, nol tulis pidfile, nol sentuh state.
+  #
+  # Sumbernya other_runtime_pids (tabel proses), BUKAN pidfile — alasannya ada
+  # di komentar fungsi itu: cabang `start` menghapus pidfile sebelum menelurkan
+  # anaknya, jadi penjaga berbasis pidfile buta persis pada cabang yang
+  # melahirkan duplikatnya.
+  nested_pids=$(other_runtime_pids)
+  if [ -n "$nested_pids" ]; then
+    log "ABORT runtime bersarang: pid=$$ ppid=$PPID; runtime lain masih hidup (pid=$nested_pids)"
     exit 7
   fi
+
+  acquire_runtime_lock || exit 7
   printf '%s\n' "$$" > "$PID_FILE"
   trap cleanup_runtime EXIT
   trap 'exit 130' INT
@@ -587,9 +663,58 @@ case "$cmd" in
       log "runtime pid=$(cat "$PID_FILE") is not owned by canonical supervisor; stop it before start"
       exit 2
     fi
+    # INCUMBENT DIPERTAHANKAN, BUKAN DIBUNUH LALU DIGANTI.
+    #
+    # Sampai baris ini, setiap pemeriksaan di atas bersandar pada PID_FILE —
+    # dan keadaan yang melahirkan duplikat justru keadaan di mana catatan itu
+    # hilang atau rusak. Di keadaan itu semua pemeriksaan di atas diam, lalu
+    # blok berikutnya MENCABUT supervisor runtime kanonik yang sebenarnya masih
+    # sehat, cuma tak dikenali.
+    #
+    # Tabel proses tetap tahu. Kalau ia menemukan runtime lain yang hidup
+    # sementara pidfile tidak mengenalinya, yang benar adalah MUNDUR tanpa
+    # menyentuh apa pun — bukan mencabut supervisornya, bukan menghapus
+    # pidfile, bukan menyentuh lock. Operator menjalankan `stop` kalau memang
+    # ingin mengganti; pemulihan catatan tidak boleh dibayar dengan membunuh
+    # runtime yang sedang bekerja.
+    #
+    # PID_FILE sengaja TIDAK ditulis ulang di sini: tabel proses mencantumkan
+    # runtime kanonik BERSAMA subshell-nya, dan menebak salah satu sebagai
+    # "pid kanonik" akan merusak `stop`.
+    if [ -n "$(other_runtime_pids)" ]; then
+      log "runtime lain masih hidup (pid=$(other_runtime_pids)) tapi pidfile tidak mengenalinya; menolak start tanpa menyentuh apa pun — jalankan stop lebih dulu"
+      exit 2
+    fi
     if supervisor_is_loaded; then
       remove_supervisor_if_owned "$LAUNCH_LABEL" || exit 2
       sleep 0.2
+    fi
+    # PENJAGA BERSARANG, SISI START — sebelum catatan apa pun dihancurkan.
+    #
+    # Baris `rm -f "$PID_FILE"` di bawah ini adalah persis alasan penjaga di
+    # run_loop tidak pernah bisa bekerja pada cabang `nohup "$self" run &`:
+    # saat anaknya lahir, satu-satunya catatan tentang runtime kanonik SUDAH
+    # dihapus di sini. Jadi pemeriksaannya harus terjadi SEBELUM baris itu,
+    # dan dari tabel proses — bukan dari catatan yang hendak dihapus sendiri.
+    #
+    # Pemicu duplikat yang sebenarnya adalah gagalnya jalur ini MENGENALI
+    # runtime kanonik (pidfile hilang/rusak, supervisor tidak terbaca). Semua
+    # pemeriksaan di atas bersandar pada pidfile, jadi tepat di keadaan itu
+    # mereka semua diam. other_runtime_pids tidak bergantung pada satu pun
+    # catatan yang bisa hilang.
+    #
+    # Menunggu dulu, baru menolak: kalau runtime lama memang sedang sekarat
+    # (supervisor baru saja dicabut beberapa baris di atas), menolak seketika
+    # akan membuat restart yang sah jadi gagal karena balapan. Yang ditolak
+    # hanya runtime yang MASIH hidup sesudah ditunggu.
+    incumbent_pids=$(other_runtime_pids)
+    if [ -n "$incumbent_pids" ]; then
+      for incumbent_pid in $incumbent_pids; do wait_for_pid_exit "$incumbent_pid" || true; done
+      incumbent_pids=$(other_runtime_pids)
+    fi
+    if [ -n "$incumbent_pids" ]; then
+      log "menolak start: runtime lain masih hidup (pid=$incumbent_pids); jalankan stop lebih dulu"
+      exit 2
     fi
     rm -f "$PID_FILE"
     clear_stale_lock || { log "live runtime lock prevents start"; exit 2; }

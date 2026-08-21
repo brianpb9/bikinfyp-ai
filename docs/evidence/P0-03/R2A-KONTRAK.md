@@ -29,10 +29,11 @@ SCRIPT_LLM=0 npx tsx --test \
 |---|---|
 | R1 awal (di f2ad65b) | 15 test · 5 lulus · 10 gagal |
 | R1 diamandemen (di 39d363e) | 19 test · 5 lulus · 14 gagal |
-| **R2/P0-A (di 4a0a343)** | **28 test · 10 lulus · 18 gagal · 0 skip · 0 cancelled · 0 todo** |
+| R2/P0-A ronde 1 (di 4a0a343) | 28 test · 10 lulus · 18 gagal · 0 skip |
+| **R2/P0-A ronde 2 (di P0A2_TEST_SHA)** | **43 test · 11 lulus · 32 gagal · 0 skip · 0 cancelled · 0 todo** |
 
-Kedelapan-belas kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
-`grep "  code: " | sort | uniq -c` → `18 code: 'ERR_ASSERTION'`, nol kode lain.
+Ketiga-puluh-dua kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
+`grep "  code: " | sort | uniq -c` → `32 code: 'ERR_ASSERTION'`, nol kode lain.
 Nol module-not-found, nol error env, nol skip, nol error fixture.
 
 `npx tsc --noEmit` → exit 0.
@@ -40,20 +41,19 @@ Nol module-not-found, nol error env, nol skip, nol error fixture.
 Suite penuh, `npm test` (`SCRIPT_LLM=0 tsx --test tests/*.test.ts`):
 
 ```
-1..833
-# tests 833 · pass 801 · fail 18 · cancelled 0 · skipped 14 · todo 0
-exit 1   (18 merah DISENGAJA — red-before, belum ada implementasi)
+1..848
+# tests 848 · pass 802 · fail 32 · cancelled 0 · skipped 14 · todo 0
+exit 1   (32 merah DISENGAJA — red-before, belum ada implementasi)
 ```
 
-Kedelapan-belas `not ok` di jalan penuh itu **persis** kedelapan-belas test
-P0-03/karantina di atas — nol regresi di tempat lain. Aritmetikanya tertutup
-terhadap baseline yang tercatat di `PATH-CASE-MATRIX.md` (810 test · 796 lulus ·
-0 gagal · 14 skip):
+Ketiga-puluh-dua `not ok` di jalan penuh itu **persis** ketiga-puluh-dua test
+P0-03/karantina di atas — nol regresi di tempat lain, diverifikasi dengan
+menyaring daftar `not ok` terhadap himpunan P0-03 dan mendapati sisa kosong.
+Aritmetikanya tertutup terhadap baseline `PATH-CASE-MATRIX.md` (810 · 796 · 0 · 14):
 
 ```
-810 + 23 test P0-03 baru            = 833 test
-796 + 6 lulus P0-03 − 1 (karantina) = 801 lulus
-       10 + 3 + 4 + 1               =  18 gagal
+ronde 1:  810 + 23 = 833 test ·  796 + 6 − 1 = 801 lulus ·  18 gagal
+ronde 2:  833 + 15 = 848 test ·  801 + 1     = 802 lulus ·  32 gagal
 ```
 
 Angka 28 mencakup `tests/klasifikasi-gambar.test.ts` (5 test), yang sebelumnya
@@ -189,6 +189,168 @@ Bukti yang menunjuk SHA yang salah adalah bukti yang tidak bisa direproduksi
 siapa pun. Koreksinya ditulis di `R1-RED.md` beserta cara memeriksanya, bukan
 disunting diam-diam.
 
+## Ronde 2 — tiga temuan Reviewer atas 4a0a343/e54b961
+
+Ketiganya diterima; tidak ada yang disanggah. Kutipan diambil dari
+`.agent-bus/archive/…-reviewer-CHANGES_REQUESTED.json` terikat ke e54b961.
+
+### T1 — kontrak resolver pusat tidak pernah diuji (P1)
+
+> *"An implementation can wrap referensiLayak, throw whenever the approved list
+> is empty, and omit reason codes entirely while all C8 worker tests still pass
+> because processJob fails closed."*
+
+Benar, dan itu tepat menunjuk cacat gelombang ronde 1: kontraknya ditulis
+sebagai KOMENTAR di kepala berkas, lalu tidak ada satu pun asersi yang
+menjaganya. Seluruh test hanya memanggil `referensiLayak` dan memeriksa array
+string; test wiring hanya memastikan ekspornya sebuah fungsi.
+
+Ditambahkan 13 test yang menguji API pusat **langsung**:
+
+* kontrol positif — `utama` wajib membawa `{rel, sha256, versiBukti}` lengkap,
+  bukan sekadar nama berkas (tanpa sha256, admission tidak punya apa pun untuk
+  di-snapshot);
+* C1 — banner dilaporkan `REF_PROMOTIONAL`, packshot jadi `utama`;
+* sepuluh fixture tidak sah, masing-masing menuntut: **tidak melempar**,
+  `utama === null`, `tersetujui === []`, reason code yang **benar per kasus**
+  (`EVIDENCE_INVALID` / `REF_MISSING` / `REF_HASH_MISMATCH`), pesan yang bisa
+  dibaca manusia, dan nol tulisan ke storage;
+* konsistensi — `referensiLayak(rels)` wajib sama persis dengan
+  `tersetujui.map(r => r.rel)` pada daftar campur. Dua jalur baca yang bisa
+  berbeda jawaban adalah cara divergensi W1/W2 lahir kembali lewat pintu
+  belakang.
+
+Reason code diambil dari `PATH-CASE-MATRIX.md`; tidak ada kosakata baru.
+
+Catatan teknis: specifier import-nya dirakit dari konstanta
+(``await import(`../${MODUL_PUSAT}`)``), bukan literal. Literal membuat
+`npx tsc --noEmit` gagal TS2307 karena modulnya memang belum ada — itu menukar
+bukti merah yang berbicara dengan error toolchain, dan sekaligus mematahkan
+gerbang rilis `tsc` untuk alasan yang salah.
+
+### T2 — panggilan resolver hiasan masih memuaskan gerbang wiring (P1)
+
+> *"`await resolveApprovedReference(images); const [ref] = images;
+> materialize(ref)` passes this call check and the positional detector while
+> still selecting the first unapproved image."*
+
+Benar. Destrukturisasi bukan `images[0]` dan bukan `images.at(0)`, jadi
+detektor posisional buta terhadapnya; dan memeriksa bahwa sebuah fungsi
+DIPANGGIL tidak memeriksa bahwa HASILNYA DIPAKAI. W1 tidak punya cakupan
+runtime, jadi tidak ada jaring lain di bawahnya.
+
+Dua penambahan:
+
+1. **Detektor destrukturisasi** — `VariableDeclaration` dengan
+   `ArrayBindingPattern` yang diinisialisasi dari `images` dihitung pelanggaran
+   posisional, sejajar dengan `images[n]` dan `images.at(n)`.
+2. **Gerbang aliran data** — pencemaran (taint) disebar dari nama yang menerima
+   hasil resolver, lewat deklarasi/penugasan/`push`/`for…of`, sampai titik
+   tetap. Lalu **setiap** `materialize(...)` di kedua worker wajib menerima
+   nilai turunan dari himpunan itu. Berlaku untuk seluruh materialize, bukan
+   hanya referensi utama: foto ke-2 dst juga dikirim ke model sebagai referensi
+   identitas.
+
+Aproksimasinya sengaja longgar (alias lewat fungsi lain tetap lolos) supaya ia
+tidak bisa menolak implementasi yang benar.
+
+Tiga counterexample baru dijalankan terhadap detektornya sendiri:
+
+| Sumber sintetis | Wajib menghasilkan |
+|---|---|
+| `CONTOH_ABAI` (persis contoh Reviewer) | satu pelanggaran `[ref] = images` **dan** `materialize.dariResolver = false` |
+| `CONTOH_SALAH_ALAMAT` (hasil dipakai untuk `console.log`, materialize tetap `images[0]`) | `dariResolver = false` |
+| `CONTOH_BAIK` (implementasi yang BENAR: `hasil.utama.rel` + `hasil.tersetujui.slice(1)`) | nol pelanggaran, `dariResolver = [true, true]` |
+
+Sumber ketiga itu penting: tanpanya, detektor yang terlalu ketat akan menolak
+implementasi yang benar dan tidak ada yang tahu sampai P0-B5.
+
+### T3 — penjaga runtime bersarang tidak menutup cabang yang ia sebut (P1)
+
+> *"The `start` path removes PID_FILE at line 594 before spawning `nohup
+> "$self" run` at line 611. … For a direct `run` with a missing lock, it also
+> acquires and rewrites the lock before aborting, then exits before installing
+> the cleanup trap."*
+
+Keduanya benar dan keduanya bisa diperiksa di sumbernya. Diperbaiki:
+
+1. Sumber kebenarannya pindah dari pidfile ke **tabel proses**
+   (`other_runtime_pids`). Penjaga yang bergantung pada catatan tidak bisa
+   menangkap kejadian yang pemicunya adalah HILANGNYA catatan itu.
+2. Pemeriksaan di `run_loop` pindah ke **sebelum** `acquire_runtime_lock`, jadi
+   runtime bersarang mundur tanpa mkdir lock, tanpa menulis pidfile, tanpa
+   menyentuh state.
+3. `start` memeriksa incumbent **sebelum** `rm -f "$PID_FILE"` dan sebelum
+   mutasi lock, dan ketika pidfile tidak mengenali runtime yang hidup ia
+   **mundur tanpa menyentuh apa pun** — bukan mencabut supervisornya. Pemulihan
+   catatan tidak boleh dibayar dengan membunuh runtime yang sedang bekerja.
+
+Dua jebakan ditemukan saat menulisnya, dan keduanya dicatat di kode:
+
+* **Penjaga menuduh dirinya sendiri.** Subshell command-substitution, subshell
+  pipeline, dan proses `awk` mewarisi command line runtime (needle-nya bahkan
+  masuk argv awk). Versi pertama menolak start yang sah dengan
+  `runtime lain masih hidup (pid=96195 96197)` — dua PID yang lahir SESUDAH
+  penolaknya. Diperbaiki dengan membuang keturunan diri sendiri; **leluhur
+  sengaja tidak dibuang**, karena duplikat yang benar-benar terjadi lahir
+  sebagai ANAK runtime kanonik.
+* **Job launchd bocor.** Pada runtime yang belum diperbaiki, `start` benar-benar
+  men-submit job launchd untuk clone sekali pakai, dan launchd terus
+  menghidupkannya kembali sesudah clone-nya dihapus. Terjadi dua kali saat
+  menulis case ini. Pembersihannya sekarang ada di trap EXIT suite, dan
+  urutannya cabut-supervisor-dulu-baru-bunuh-proses.
+
+**Regresi baru (case 6)**, sesuai permintaan Reviewer bahwa case lama memanggil
+`$SELF` dan bukan `$RUNTIME`. Skenarionya dipilih dari reproduksi, bukan
+dikarang: dengan pidfile ATAU lock masih utuh, dd5c68a sudah menolak — lock-lah
+yang menahannya, jadi skenario itu tidak membuktikan apa pun. Yang benar-benar
+melahirkan duplikat adalah **kedua catatan hilang sementara prosesnya hidup**.
+
+Direproduksi pada dd5c68a, di clone terpisah:
+
+```
+canonical=2544 armed;  rm pidfile + lock
+"$RUNTIME" run  ->  "armed pid=3092"
+ps              ->  2544 DAN 3092, dua runtime independen pada satu inbox
+```
+
+Dan pada jalan suite penuh terhadap runtime dd5c68a, case 1-5 lulus lalu case 6
+memperlihatkan di tabel proses:
+
+```
+80192  test-reviewer-runtime.sh
+82599  80192  …/codex-reviewer-runtime run      <-- kanonik
+82630  80192  …/codex-reviewer-runtime run      <-- DUPLIKAT, seharusnya exit 7
+82672  82671  …/bus-wait reviewer 3600
+93857  93856  …/bus-wait reviewer 1             <-- dua bus-wait, satu antrean
+```
+
+Sesudah perbaikan, skenario yang sama persis:
+
+```
+"$RUNTIME" run   ->  exit 7,  "ABORT runtime bersarang"
+"$RUNTIME" start ->  exit 2,  "menolak start tanpa menyentuh apa pun"
+pidfile/lock     ->  tetap tidak ada (penjaga tidak meninggalkan jejak)
+ps               ->  hanya runtime kanonik
+```
+
+Batas yang jujur: jalan suite penuh terhadap dd5c68a **tidak diselesaikan**
+sampai baris vonis — ia menggantung, karena runtime kedua yang berhasil arm
+memblokir di `bus-wait` dan menahan fd log. Itu sendiri temuan: test regresi
+yang menggantung tidak melaporkan apa pun. Karena itu kedua invocation di case 6
+sekarang dijalankan di latar dengan batas waktu, dan runtime yang MASIH hidup
+sesudah batas waktu dicatat sebagai `rc=ARMED` — sebuah kegagalan, bukan
+gantungan. Pembunuhannya memakai pohon proses, bukan satu PID, karena membunuh
+induk saja meninggalkan `bus-wait` hidup.
+
+Bukti suite sesudah perbaikan:
+
+```
+sh .agent-bus/test-reviewer-runtime.sh -> 6 kasus, 0 gagal
+sh .agent-bus/test-bus.sh              -> 13 kasus, 0 gagal
+runtime kanonik live (pid 49388)       -> tidak tersentuh sepanjang seluruh jalan
+```
+
 ## Yang SENGAJA belum dikerjakan di gelombang ini
 
 Urutan rollout dari `QUESTION` Reviewer dipatuhi: resolver ketat menyala
@@ -233,4 +395,5 @@ Reviewer, seluruh slice product-truth yang selesai pun hanya memindahkan
 kesiapan keseluruhan sekitar 40 → 55–58; 80/100 tetap butuh gerbang
 Founder/eksternal yang belum dikerjakan.
 
-P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e
+P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
+P0A2_TEST_SHA=<commit ini sendiri>                       (ronde 2)

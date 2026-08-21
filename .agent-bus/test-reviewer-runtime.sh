@@ -54,8 +54,27 @@ stop_active() {
   ACTIVE_PID=''
 }
 
+# Label launchd milik clone ini, dihitung sama persis dengan runtime.
+# Dipakai pembersihan: kalau penjaga bersarang regresi, `start` benar-benar
+# men-submit job launchd untuk clone sekali pakai ini, dan launchd akan terus
+# MENGHIDUPKANNYA KEMBALI setiap kali prosesnya dibunuh. Terbukti dua kali saat
+# menulis case 6: job com.bikinfyp.codex-reviewer.<id-clone> tertinggal hidup
+# di mesin pengembang sesudah clone-nya sendiri dihapus.
+clone_launch_label() {
+  clone_repo_id=$(printf '%s' "$REPO_ROOT" | git hash-object --stdin 2>/dev/null | cut -c1-12)
+  [ -n "$clone_repo_id" ] || return 1
+  printf 'com.bikinfyp.codex-reviewer.%s\n' "$clone_repo_id"
+}
+
+remove_clone_supervisor() {
+  command -v launchctl >/dev/null 2>&1 || return 0
+  clone_label=$(clone_launch_label) || return 0
+  launchctl remove "$clone_label" >/dev/null 2>&1 || true
+}
+
 cleanup() {
   stop_active
+  remove_clone_supervisor
   for role in builder reviewer; do
     for file in "$BUS_DIR/inbox/$role"/*.json; do
       [ -e "$file" ] || break
@@ -226,6 +245,143 @@ else
 fi
 stop_active
 wait_for "runtime cleanup after case 5" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
+
+# Case 6: PENJAGA BERSARANG, dijalankan terhadap RUNTIME-nya sendiri.
+#
+# Case 1 memanggil "$SELF" — skrip test ini — jadi yang diuji di sana adalah
+# penjaga isolasi milik test, BUKAN penjaga bersarang milik runtime. Temuan
+# Reviewer 21 Agu: penjaga runtime karena itu tidak pernah dieksekusi satu kali
+# pun oleh suite ini. Case ini memanggil "$RUNTIME" langsung.
+#
+# SKENARIO-nya dipilih dari reproduksi, bukan dikarang. Dengan pidfile ATAU
+# lock masih utuh, dd5c68a sudah menolak (lock-lah yang menahannya), jadi
+# skenario itu tidak membuktikan apa pun tentang penjaga. Yang benar-benar
+# melahirkan duplikat adalah KEDUA catatan hilang sementara prosesnya hidup —
+# keadaan sesudah crash-cleanup yang balapan, `stop` setengah jalan, atau
+# penghapusan manual isi tmp/ (yang justru dilarang handover karena pernah
+# terjadi).
+#
+# Direproduksi pada dd5c68a, di clone terpisah, sebelum perbaikan:
+#
+#   canonical=2544 (armed); rm pidfile + lock
+#   "$RUNTIME" run  ->  "armed pid=3092"   <-- DUA runtime hidup bersamaan,
+#                                              keduanya memantau inbox yang sama
+#
+# KEDUA invocation dijalankan DI LATAR dengan batas waktu, bukan di depan.
+# Alasannya ditemukan saat menulis case ini: pada runtime yang belum diperbaiki,
+# nested `run` BERHASIL arm lalu memblokir di bus-wait selamanya — jadi versi
+# foreground-nya tidak gagal, ia MENGGANTUNG. Test regresi yang menggantung
+# tidak melaporkan apa pun. Runtime kedua yang masih hidup sesudah batas waktu
+# ITULAH kegagalannya, dan ia dicatat sebagai rc=ARMED.
+# Membunuh SATU PROSES saja tidak cukup, dan itu ketahuan dari jalan nyata:
+# runtime yang berhasil arm menelurkan bus-wait, dan membunuh induknya saja
+# meninggalkan bus-wait hidup memegang fd log — jalan test pada dd5c68a
+# akhirnya MENGGANTUNG, bukan melaporkan gagal. Test regresi yang menggantung
+# tidak melaporkan apa pun.
+bunuh_pohon() {
+  akar_pid=$1
+  anak_pids=$(ps -eo pid=,ppid= 2>/dev/null | awk -v r="$akar_pid" '$2 == r { print $1 }')
+  for anak_pid in $anak_pids; do bunuh_pohon "$anak_pid"; done
+  kill -9 "$akar_pid" 2>/dev/null || true
+}
+
+jalankan_terbatas() {
+  # $1 = berkas penampung rc, $2.. = perintah
+  batas_keluaran=$1
+  shift
+  "$@" >> "$BUS_DIR/tmp/codex-reviewer-selftest.log" 2>&1 &
+  batas_pid=$!
+  batas_i=0
+  while [ "$batas_i" -lt 60 ] && kill -0 "$batas_pid" 2>/dev/null; do
+    sleep 0.1
+    batas_i=$((batas_i + 1))
+  done
+  if kill -0 "$batas_pid" 2>/dev/null; then
+    # Masih hidup sesudah batas waktu = runtime kedua BERHASIL arm. Itu
+    # kegagalannya, dan dicatat sebagai ARMED.
+    bunuh_pohon "$batas_pid"
+    wait "$batas_pid" 2>/dev/null || true
+    printf 'ARMED\n' > "$batas_keluaran"
+  else
+    wait "$batas_pid" 2>/dev/null
+    printf '%s\n' "$?" > "$batas_keluaran"
+  fi
+}
+
+start_runtime 5
+if wait_for "idle runtime before nested-guard regression" '[ -s "$PID_FILE" ] && [ -s "$LOCK_DIR/pid" ]'; then
+  nested_canonical=$ACTIVE_PID
+  # Kedua catatan dihapus: inilah keadaan yang membuat seluruh pemeriksaan
+  # berbasis pidfile/lock diam, dan hanya tabel proses yang masih tahu.
+  rm -f "$PID_FILE"
+  rm -rf "$LOCK_DIR"
+
+  jalankan_terbatas "$BUS_DIR/tmp/nested-run-rc" "$RUNTIME" run
+  nested_run_rc=$(cat "$BUS_DIR/tmp/nested-run-rc")
+  jalankan_terbatas "$BUS_DIR/tmp/nested-start-rc" "$RUNTIME" start
+  nested_start_rc=$(cat "$BUS_DIR/tmp/nested-start-rc")
+  sleep 1
+
+  nested_pidfile=no; [ -e "$PID_FILE" ] && nested_pidfile=yes
+  nested_lock=no; [ -e "$LOCK_DIR" ] && nested_lock=yes
+
+  # Kanonik BESERTA seluruh keturunannya tidak dihitung: satu runtime yang sehat
+  # tampil sebagai beberapa proses (subshell command-substitution dan pipeline
+  # mewarisi command line induknya). Yang dicari adalah runtime KEDUA.
+  #
+  # Keturunan SKRIP INI juga tidak dihitung, dan itu bukan kehati-hatian
+  # berlebihan: needle-nya ikut masuk argv awk di bawah, jadi proses awk itu
+  # sendiri cocok dengan polanya sendiri. Tanpa pengecualian ini penghitung
+  # selalu melaporkan satu runtime hantu — jebakan yang sama persis dengan yang
+  # ditemukan di other_runtime_pids.
+  nested_procs=$(ps -eo pid=,ppid=,command= 2>/dev/null | awk -v needle="$RUNTIME run" -v canon="$nested_canonical" -v self="$$" '
+    { induk[$1] = $2; baris[$1] = $0; urut[NR] = $1 }
+    END {
+      n = 0
+      for (i = 1; i <= NR; i++) {
+        p = urut[i]
+        if (index(baris[p], needle) == 0) continue
+        if (p == canon || p == self) continue
+        q = p; dikenal = 0; d = 0
+        while (d < 64 && (q in induk)) {
+          q = induk[q]; d++
+          if (q == canon || q == self) { dikenal = 1; break }
+          if (q <= 1) break
+        }
+        if (dikenal) continue
+        n++
+      }
+      print n
+    }')
+
+  if [ "$nested_run_rc" = 7 ] && [ "$nested_start_rc" != 0 ] && [ "$nested_start_rc" != ARMED ] && \
+     kill -0 "$nested_canonical" 2>/dev/null && \
+     [ "$nested_pidfile" = no ] && [ "$nested_lock" = no ] && [ "$nested_procs" = 0 ]; then
+    printf 'PASS  nested run/start refused without records; no duplicate runtime\n'
+  else
+    ps -eo pid=,ppid=,command= 2>/dev/null | grep -F -- "$RUNTIME run" | grep -v grep
+    printf 'FAIL  nested guard: run_rc=%s start_rc=%s pidfile=%s lock=%s runtime_lain=%s canonical_alive=%s\n' \
+      "$nested_run_rc" "$nested_start_rc" "$nested_pidfile" "$nested_lock" "$nested_procs" \
+      "$(kill -0 "$nested_canonical" 2>/dev/null && echo yes || echo no)"
+    FAILURES=$((FAILURES + 1))
+  fi
+
+  # PEMBERSIHAN WAJIB, bukan opsional: kalau penjaga regresi, invocation di atas
+  # meninggalkan runtime kedua yang hidup DAN — pada mesin ber-launchctl —
+  # sebuah job launchd milik clone ini. Keduanya harus mati bersama test, kalau
+  # tidak kegagalan test menjadi kebocoran ke mesin pengembang.
+  # Urutannya penting: cabut supervisor DULU, baru bunuh prosesnya. Terbalik,
+  # launchd langsung menghidupkannya kembali dan pkill jadi sia-sia.
+  remove_clone_supervisor
+  sleep 0.5
+  pkill -f "$RUNTIME run" 2>/dev/null || true
+  rm -f "$BUS_DIR/tmp/nested-run-rc" "$BUS_DIR/tmp/nested-start-rc"
+  ACTIVE_PID=''
+else
+  FAILURES=$((FAILURES + 1))
+fi
+stop_active
+rm -rf "$LOCK_DIR"
 
 printf '%s\n' "runtime self-test failures=$FAILURES"
 [ "$FAILURES" -eq 0 ]
