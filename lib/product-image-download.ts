@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config, ensureDirs } from "./config";
-import { normalizeProductImageBuffer, tulisSidecar } from "./product-images";
+import { deleteStoredProductImages, normalizeProductImageBuffer, tulisSidecar } from "./product-images";
 import { mediaStorage } from "./storage";
 
 const UA =
@@ -37,7 +37,22 @@ export async function downloadProductImages(productId: string, urls: string[]): 
       //
       // Urutannya penting: sidecar ditulis SEBELUM berkas lokal dibuang di mode
       // r2, karena classifier membaca path lokal itu.
-      await tulisSidecar(rel, normalized, abs);
+      //
+      // ROLLBACK BILA PENERBITAN BUKTI GAGAL. Objek fotonya sudah ada di
+      // storage saat baris ini berjalan, jadi kalau `put` sidecar-nya ditolak,
+      // blok tangkap luar akan melewati URL ini DIAM-DIAM dan meninggalkan
+      // bytes tanpa bukti — plus berkas lokal basi di mode r2. Bytes tanpa
+      // bukti persis keadaan yang seluruh P0-B1 ada untuk menghapusnya, dan ia
+      // akan lahir kembali di sini setiap kali object store bermasalah.
+      try {
+        await tulisSidecar(rel, normalized, abs);
+      } catch (errBukti) {
+        await deleteStoredProductImages([rel]).catch((errBersih) =>
+          console.error(`[unduh] rollback ${rel} tidak tuntas:`, errBersih)
+        );
+        fs.rmSync(abs, { force: true });
+        throw errBukti; // ditangkap blok luar: URL ini dilewati, tanpa sisa
+      }
       if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
       rels.push(rel);
     } catch {

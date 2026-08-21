@@ -180,6 +180,88 @@ test("I3+I4 downloadProductImages (Retail ekstrak + Enterprise) menerbitkan bukt
   }
 });
 
+// ------------------------------------------------ siklus hidup penyimpanan
+
+/**
+ * BYTES TANPA BUKTI TIDAK BOLEH TERTINGGAL — termasuk saat penerbitan gagal.
+ *
+ * Temuan Reviewer 21 Agu: objek fotonya sudah ada di storage saat `tulisSidecar`
+ * berjalan, jadi kalau `put` sidecar-nya ditolak, blok tangkap luar melewati URL
+ * itu DIAM-DIAM dan meninggalkan bytes tanpa bukti — plus berkas lokal basi di
+ * mode r2. Keadaan itu persis yang seluruh P0-B1 ada untuk menghapusnya, dan ia
+ * akan lahir kembali setiap kali object store bermasalah.
+ */
+test("ROLLBACK: put sidecar yang DITOLAK tidak meninggalkan bytes tanpa bukti", async () => {
+  const { downloadProductImages } = await import("../lib/product-image-download");
+  isi.clear();
+  const png = await fotoPolos();
+
+  // Storage yang menolak KHUSUS penulisan sidecar; penulisan foto tetap sukses,
+  // jadi yang diuji benar-benar jendela di antara keduanya.
+  setMediaStorageForTests({
+    ...storage,
+    async put(key: string, body: Buffer) {
+      if (key.endsWith(".meta.json")) throw new Error("object store menolak sidecar");
+      isi.set(key, body);
+    },
+  } as never);
+
+  const fetchAsli = globalThis.fetch;
+  globalThis.fetch = (async () =>
+    new Response(new Uint8Array(png), { status: 200, headers: { "content-type": "image/png" } })) as typeof fetch;
+  try {
+    const rels = await downloadProductImages(`gagal-bukti-${process.pid}`, ["https://contoh.test/a.png"]);
+    assert.deepEqual(rels, [], "URL yang buktinya gagal terbit tidak boleh dilaporkan berhasil");
+    assert.deepEqual(
+      [...isi.keys()],
+      [],
+      `bytes tertinggal di storage tanpa bukti: ${JSON.stringify([...isi.keys()])}. ` +
+        "Foto yang buktinya gagal terbit wajib ikut dibuang, bukan ditinggalkan yatim."
+    );
+  } finally {
+    globalThis.fetch = fetchAsli;
+    setMediaStorageForTests(storage);
+  }
+});
+
+/**
+ * BUKTI DIHAPUS BERSAMA FOTONYA.
+ *
+ * `deleteStoredProductImages` dipakai di tiga tempat yang semuanya berarti
+ * "foto ini tidak ada lagi": rollback unggah, rollback penambahan ke DB, dan
+ * penghapusan foto oleh pengguna. Menghapus hanya kunci fotonya meninggalkan
+ * bukti YATIM — dan bukti yatim bukan cuma sampah: ia menyatakan sesuatu
+ * tentang berkas yang sudah tidak ada.
+ */
+test("HAPUS: foto dan sidecar-nya dibuang sebagai satu unit", async () => {
+  const { saveUniqueProductImages, deleteStoredProductImages } = await import("../lib/product-images");
+  isi.clear();
+  const rels = await saveUniqueProductImages(`hapus-${process.pid}`, [
+    { mime: "image/png", data: await fotoPolos() },
+    { mime: "image/png", data: await fotoPolos() },
+  ]);
+  assert.equal(isi.size, 4, "prasyarat: dua foto plus dua sidecar");
+
+  await deleteStoredProductImages(rels);
+  assert.deepEqual(
+    [...isi.keys()],
+    [],
+    `sisa objek sesudah penghapusan: ${JSON.stringify([...isi.keys()])} — sidecar tertinggal yatim`
+  );
+});
+
+test("HAPUS: foto warisan tanpa sidecar tetap bisa dihapus tanpa error", async () => {
+  // Foto dari sebelum P0-B1 tidak punya sidecar. Menghapus kunci yang tidak ada
+  // wajib aman di kedua backend (`rm --force`; S3 DeleteObject atas kunci yang
+  // tidak ada tetap sukses) — kalau tidak, penghapusan foto warisan akan
+  // meledak di tangan pengguna.
+  const { deleteStoredProductImages } = await import("../lib/product-images");
+  isi.clear();
+  isi.set("uploads/warisan/0.webp", Buffer.from("BYTES-WARISAN"));
+  await deleteStoredProductImages(["uploads/warisan/0.webp"]);
+  assert.deepEqual([...isi.keys()], []);
+});
+
 // ------------------------------------------------------- kontrol positif
 
 test("KONTROL: dengan biner sungguhan, foto polos dari SETIAP jalur benar-benar TERSETUJUI", async (t) => {

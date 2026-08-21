@@ -319,9 +319,25 @@ export async function saveUniqueProductImages(
   }
 }
 
+/**
+ * Menghapus foto BESERTA sidecar-nya — satu unit, bukan dua.
+ *
+ * Sejak P0-B1 setiap foto punya `<kunci>.meta.json`, dan fungsi ini dipakai di
+ * tiga tempat yang semuanya berarti "foto ini tidak ada lagi": rollback saat
+ * unggah gagal, rollback saat penambahan ke DB gagal, dan penghapusan foto oleh
+ * pengguna. Menghapus hanya kunci fotonya meninggalkan bukti yatim di object
+ * store — dan bukti yatim itu bukan cuma sampah: ia bukti yang menyatakan
+ * sesuatu tentang berkas yang sudah tidak ada, persis keadaan yang resolver
+ * laporkan sebagai REF_MISSING.
+ *
+ * `delete` idempoten di kedua backend (`rm --force`; S3 DeleteObject atas kunci
+ * yang tidak ada tetap sukses), jadi menghapus sidecar yang memang belum pernah
+ * ada aman — termasuk untuk foto warisan dari sebelum P0-B1.
+ */
 export async function deleteStoredProductImages(keys: string[]): Promise<void> {
   const failed: string[] = [];
-  await Promise.all(keys.map(async (key) => {
+  const sasaran = keys.flatMap((key) => [key, relMeta(key)]);
+  await Promise.all(sasaran.map(async (key) => {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try { await mediaStorage().delete(key); return; }
       catch (error) {

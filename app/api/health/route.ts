@@ -3,6 +3,7 @@ import { config, paymentsEnv, paymentsLive, paymentsProvider } from "@/lib/confi
 import { assertQueueConfiguration } from "@/lib/job-queue";
 import { invarianUangBelumTerpasang, jobIntakeMode } from "@/lib/job-intake";
 import { pendingMigrations } from "@/lib/migrasi-status";
+import { periksaKapabilitasKlasifikasi } from "@/lib/media/kapabilitas-klasifikasi";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -49,6 +50,23 @@ export async function GET() {
     const uangPending = invarianUangBelumTerpasang(pending);
     const intake = uangPending.length > 0 ? "closed" : jobIntakeMode();
 
+    // KAPABILITAS KLASIFIKASI — bukti deployment, bukan asumsi.
+    //
+    // Seluruh jalur unggah foto produk berjalan di service INI, sementara
+    // ffmpeg/ffprobe/tesseract hanya dijamin oleh Dockerfile.worker; blueprint
+    // Render memakai `runtime: node` untuk web. Tanpa laporan ini, tidak ada
+    // cara membuktikan runtime produksi bisa menerbitkan bukti yang berupa
+    // VONIS — dan setiap klaim product-truth hijau jadi klaim dari mesin
+    // pengembang, yang kebetulan punya ketiga binernya.
+    //
+    // TIDAK mengubah status HTTP. Runtime yang tidak mampu bukan runtime yang
+    // rusak: unggahan tetap diterima, buktinya cuma berstatus belum_diperiksa
+    // dan menunggu revalidasi. Menutup situs karena OCR tidak ada akan
+    // mengunci semua orang, termasuk yang cuma mau melihat video lamanya.
+    // Hasilnya di-cache per proses, jadi health check platform yang beruntun
+    // tidak menelurkan proses baru.
+    const klasifikasi = await periksaKapabilitasKlasifikasi();
+
     return Response.json(
       {
         ok: true,
@@ -59,6 +77,7 @@ export async function GET() {
         // SHA build supaya commit yang benar-benar hidup bisa DIBUKTIKAN, bukan
         // disimpulkan dari "sudah dipush dan build hijau".
         build_sha: process.env.RENDER_GIT_COMMIT ?? process.env.GIT_COMMIT ?? null,
+        klasifikasi,
         ...(pending.length > 0 ? { migrations_pending: pending } : {}),
         ...(uangPending.length > 0 ? { intake_closed_reason: "migrasi invarian uang belum terpasang", blocking_migrations: uangPending } : {}),
       },
