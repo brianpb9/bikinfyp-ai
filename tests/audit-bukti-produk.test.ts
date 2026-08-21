@@ -23,6 +23,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import crypto from "node:crypto";
+import type { HasilKolomRusak, ProdukUntukAudit } from "../lib/audit-bukti-produk";
 
 process.env.RACUN_NO_DOTENV = "1";
 process.env.STORAGE_MODE = "filesystem";
@@ -31,6 +32,20 @@ process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "audit-store-"))
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { auditBuktiProduk, laporanAudit, bacaKolomImages, KOLOM_RUSAK } = await import("../lib/audit-bukti-produk");
 const { kunciStorageSah } = await import("../lib/storage");
+
+/**
+ * Membaca kolom yang HARUS rusak.
+ *
+ * `ProdukUntukAudit.images` sengaja tidak menerima bentuk `{ok:true}`, jadi
+ * hasil baca tidak bisa diserahkan apa adanya. Pembungkus ini sekaligus
+ * memastikan fixture-nya memang rusak: fixture "rusak" yang ternyata sah akan
+ * membuat test lulus tanpa menguji apa pun.
+ */
+function kolomRusak(mentah: unknown): HasilKolomRusak {
+  const h = bacaKolomImages(mentah);
+  assert.equal(h.ok, false, `fixture yang seharusnya rusak ternyata sah: ${String(mentah)}`);
+  return h as HasilKolomRusak;
+}
 const { resolveApprovedReference, ALASAN_TOLAK, RINCI_TOLAK } = await import("../lib/product-truth");
 
 const sha = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
@@ -373,9 +388,9 @@ test("AUDIT: kolom rusak masuk ember SENDIRI — bukan tanpa-foto, bukan terbric
   pasangPustaka();
   const h = await auditBuktiProduk([
     { id: "p1", images: ["p1/0.webp"], nama: "sah" },
-    { id: "r1", images: bacaKolomImages("{bukan json"), nama: "korup", orgId: "org-9" },
-    { id: "r2", images: bacaKolomImages('{"0":"a.webp"}'), nama: "bukan array" },
-    { id: "r3", images: bacaKolomImages('["a.webp", 42]'), nama: "elemen salah" },
+    { id: "r1", images: kolomRusak("{bukan json"), nama: "korup", orgId: "org-9" },
+    { id: "r2", images: kolomRusak('{"0":"a.webp"}'), nama: "bukan array" },
+    { id: "r3", images: kolomRusak('["a.webp", 42]'), nama: "elemen salah" },
     { id: "k1", images: [], nama: "tanpa foto" },
   ]);
 
@@ -397,7 +412,7 @@ test("AUDIT: kolom rusak masuk ember SENDIRI — bukan tanpa-foto, bukan terbric
 
 test("AUDIT: produk kolom rusak disebut ID-nya — hanya manusia yang bisa memperbaikinya", async () => {
   pasangPustaka();
-  const h = await auditBuktiProduk([{ id: "r1", images: bacaKolomImages("{bukan json"), nama: "korup", orgId: "org-9" }]);
+  const h = await auditBuktiProduk([{ id: "r1", images: kolomRusak("{bukan json"), nama: "korup", orgId: "org-9" }]);
   assert.deepEqual(h.kolomRusak, [
     { id: "r1", nama: "korup", orgId: "org-9", sebab: KOLOM_RUSAK.JSON_KORUP, contoh: "{bukan json" },
   ]);
@@ -421,7 +436,7 @@ test("AUDIT: orgId dipertahankan di daftar terbrick", async () => {
 
 test("AUDIT: batas daftar juga berlaku untuk kolom rusak, tanpa mengubah CACAHNYA", async () => {
   pasangPustaka();
-  const rusak = Array.from({ length: 5 }, (_, i) => ({ id: `r${i}`, images: bacaKolomImages("{x") }));
+  const rusak = Array.from({ length: 5 }, (_, i) => ({ id: `r${i}`, images: kolomRusak("{x") }));
   const h = await auditBuktiProduk(rusak, { simpanTerbrick: 2 });
   assert.equal(h.produkKolomRusak, 5, "cacah kolom rusak ikut terpotong oleh batas daftar");
   assert.equal(h.kolomRusak.length, 2, "batas daftar tidak diterapkan pada kolom rusak");
@@ -460,4 +475,46 @@ test("AUDIT: array yang diserahkan LANGSUNG tetap lewat validasi kunci — tidak
   );
   assert.equal(h.produkTerbrick, 0, "baris yang kolomnya rusak diberi vonis terbrick");
   assert.equal(h.produk, 4, "audit berhenti sebelum baris terakhir");
+});
+
+test("AUDIT: pembungkus `ok:true` yang diselundupkan TETAP divalidasi ulang", async () => {
+  // Kontrak `ProdukUntukAudit.images` sudah melarang bentuk ini — baris di
+  // bawah hanya bisa ditulis dengan `as`, dan itulah intinya: tipe mengikat
+  // pemanggil TypeScript, TIDAK mengikat pemanggil JavaScript, `as`, atau JSON
+  // yang di-cast. Daftar yang MENGAKU sudah sah diperiksa ulang, bukan
+  // dipercaya; kalau tidak, vonisnya kembali bergantung pada adapter storage
+  // mana yang kebetulan terpasang.
+  const selundup = (images: unknown[]) => ({ ok: true, images }) as unknown as ProdukUntukAudit["images"];
+
+  pasangPustaka();
+  const h = await auditBuktiProduk([
+    { id: "p1", images: ["p1/0.webp"], nama: "sah" },
+    { id: "w1", images: selundup(["../rahasia.webp"]), nama: "traversal", orgId: "org-2" },
+    { id: "w2", images: selundup(["p1/0.webp", ""]), nama: "elemen kosong" },
+    { id: "w3", images: selundup([42]), nama: "bukan teks" },
+    { id: "w4", images: selundup(["p1/0.webp"]), nama: "selundupan yang SAH" },
+  ]);
+
+  assert.equal(
+    h.produkKolomRusak,
+    3,
+    "pembungkus `ok:true` dipercaya tanpa validasi ulang — satu jalur publik kembali melewati kontrak kunci"
+  );
+  assert.equal(
+    h.produkGagalDiperiksa,
+    0,
+    "kunci tidak sah baru tertangkap saat storage melempar; vonisnya jadi bergantung pada adapter"
+  );
+  assert.deepEqual(h.perKolomRusak, {
+    [KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI]: 2,
+    [KOLOM_RUSAK.ELEMEN_BUKAN_TEKS]: 1,
+  });
+  assert.deepEqual(h.kolomRusak.map((k) => [k.id, k.sebab, k.orgId]), [
+    ["w1", KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI, "org-2"],
+    ["w2", KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI, null],
+    ["w3", KOLOM_RUSAK.ELEMEN_BUKAN_TEKS, null],
+  ]);
+  // Arah sebaliknya: validasi ulang tidak boleh MENOLAK daftar yang memang sah.
+  assert.equal(h.produkTerbrick, 0, "w4 berisi kunci yang sah dan foto yang tersetujui");
+  assert.equal(h.fotoTersetujui, 2, "p1 dan w4");
 });

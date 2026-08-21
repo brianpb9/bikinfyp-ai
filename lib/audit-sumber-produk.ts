@@ -28,7 +28,11 @@ const SQL = "SELECT id, org_id, name, images FROM products ORDER BY created_at";
 type BarisMentah = { id: string; org_id: string | null; name: string | null; images: unknown };
 
 function keProduk(r: BarisMentah): ProdukUntukAudit {
-  return { id: r.id, orgId: r.org_id ?? null, nama: r.name ?? null, images: bacaKolomImages(r.images) };
+  // Hasil BERHASIL dibongkar kembali jadi array mentah: kontrak
+  // `ProdukUntukAudit` sengaja tidak menerima bentuk `{ok:true}`, supaya tidak
+  // ada satu pun jalur yang bisa menyerahkan daftar "sudah diberkati" ke audit.
+  const kolom = bacaKolomImages(r.images);
+  return { id: r.id, orgId: r.org_id ?? null, nama: r.name ?? null, images: kolom.ok ? kolom.images : kolom };
 }
 
 export async function* dariPostgres(url = config.databaseUrl): AsyncGenerator<ProdukUntukAudit> {

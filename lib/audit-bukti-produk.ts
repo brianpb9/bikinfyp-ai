@@ -55,9 +55,8 @@ export type SebabKolomRusak = (typeof KOLOM_RUSAK)[keyof typeof KOLOM_RUSAK];
  * kosong adalah jawaban yang SAH dan berarti "produk ini memang tidak punya
  * foto"; ia tidak boleh dipakai juga untuk "saya tidak bisa membacanya".
  */
-export type HasilKolomImages =
-  | { ok: true; images: string[] }
-  | { ok: false; sebab: SebabKolomRusak; contoh: string };
+export type HasilKolomRusak = { ok: false; sebab: SebabKolomRusak; contoh: string };
+export type HasilKolomImages = { ok: true; images: string[] } | HasilKolomRusak;
 
 /** Potongan pendek nilai mentah, cukup untuk mengenali barisnya tanpa membanjiri laporan. */
 function contohMentah(mentah: unknown): string {
@@ -123,11 +122,17 @@ function periksaElemen(nilai: unknown[], mentah: unknown): HasilKolomImages {
 export interface ProdukUntukAudit {
   id: string;
   /**
-   * Kolom `images` yang sudah dibaca. Array biasa diterima karena sebuah array
-   * MEMANG kolom yang berhasil dibaca; kegagalan hanya bisa dinyatakan lewat
-   * bentuk terdiskriminasi, jadi tidak ada cara menyelundupkannya sebagai kosong.
+   * Kolom `images` yang sudah dibaca: daftar MENTAH, atau hasil GAGAL.
+   *
+   * Sengaja BUKAN `HasilKolomImages` penuh. Menerima bentuk `{ok:true}` berarti
+   * pemanggil bisa menyerahkan daftar yang sudah "diberkati" tanpa pernah lewat
+   * `bacaKolomImages` — `{ok:true, images:["../rahasia.webp"]}` sah menurut
+   * tipe, dan vonisnya lalu bergantung pada adapter storage mana yang kebetulan
+   * terpasang. Di sini keadaan itu dibuat TIDAK BISA DIUNGKAPKAN: satu-satunya
+   * cara memasok foto adalah array mentah, dan array mentah selalu divalidasi
+   * di boundary audit.
    */
-  images: string[] | HasilKolomImages;
+  images: string[] | HasilKolomRusak;
   /** Opsional, untuk laporan yang bisa ditindaklanjuti manusia. */
   nama?: string | null;
   orgId?: string | null;
@@ -187,6 +192,25 @@ export interface HasilAudit {
 }
 
 /**
+ * SATU PINTU, BUKAN DUA. Setiap daftar foto yang masuk audit melewati
+ * `bacaKolomImages` yang sama.
+ *
+ * Tipe `ProdukUntukAudit.images` sudah melarang bentuk `{ok:true}` sampai ke
+ * sini. Pemeriksaan ulang di bawah tetap ada karena tipe hanya mengikat
+ * pemanggil TypeScript: pemanggil JavaScript, `as`, dan JSON yang di-cast tidak
+ * terikat olehnya. Daftar yang mengaku sudah sah diperiksa ulang, bukan
+ * dipercaya — biayanya satu lintasan, dan yang dibeli adalah vonis yang tidak
+ * bergantung pada adapter storage mana yang kebetulan terpasang.
+ */
+function kolomProduk(images: ProdukUntukAudit["images"]): HasilKolomImages {
+  if (Array.isArray(images)) return bacaKolomImages(images);
+  if ((images as { ok?: unknown } | null)?.ok) {
+    return bacaKolomImages((images as unknown as { images?: unknown }).images);
+  }
+  return images;
+}
+
+/**
  * Menghitung satu angkatan produk.
  *
  * Produk TANPA foto sama sekali dihitung terpisah dan TIDAK disebut terbrick:
@@ -223,13 +247,7 @@ export async function auditBuktiProduk(
   for await (const produk of daftar as AsyncIterable<ProdukUntukAudit>) {
     hasil.produk += 1;
 
-    // SATU PINTU, BUKAN DUA. Array yang diserahkan langsung dilewatkan melalui
-    // `bacaKolomImages` yang sama, bukan dibungkus `{ok:true}` di sini. Versi
-    // sebelumnya membungkusnya langsung, sehingga `images: ["../x.webp"]` —
-    // jalur publik yang sah menurut tipe — MELEWATI validasi kunci yang baru
-    // saja dipasang, lalu vonisnya bergantung pada adapter storage mana yang
-    // kebetulan terpasang. Perbaikan yang punya jalan memutar bukan perbaikan.
-    const kolom: HasilKolomImages = Array.isArray(produk.images) ? bacaKolomImages(produk.images) : produk.images;
+    const kolom = kolomProduk(produk.images);
     if (!kolom.ok) {
       hasil.produkKolomRusak += 1;
       hasil.perKolomRusak[kolom.sebab] = (hasil.perKolomRusak[kolom.sebab] ?? 0) + 1;

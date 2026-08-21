@@ -111,10 +111,13 @@ test("SUMBER SQLITE: kolom rusak sampai ke audit sebagai RUSAK, bukan sebagai ko
   const baris = await kumpulkan(bikinDb("rusak.db"));
   const p3 = baris.find((b) => b.id === "p3")!;
   assert.deepEqual(p3.images, { ok: false, sebab: KOLOM_RUSAK.JSON_KORUP, contoh: "{bukan json" });
+  // Hasil BERHASIL diserahkan sebagai array MENTAH, bukan sebagai `{ok:true}`:
+  // kontrak `ProdukUntukAudit` sengaja tidak menerima daftar yang sudah
+  // "diberkati", supaya tidak ada jalur yang bisa melewati validasi kunci.
   const p4 = baris.find((b) => b.id === "p4")!;
-  assert.deepEqual(p4.images, { ok: true, images: [] }, "kolom kosong yang SAH tidak boleh dilaporkan rusak");
+  assert.deepEqual(p4.images, [], "kolom kosong yang SAH tidak boleh dilaporkan rusak");
   const p2 = baris.find((b) => b.id === "p2")!;
-  assert.deepEqual(p2.images, { ok: true, images: ["p2/0.webp", "p2/1.webp"] });
+  assert.deepEqual(p2.images, ["p2/0.webp", "p2/1.webp"]);
 });
 
 test("SUMBER SQLITE: images='' dari database NYATA masuk ember kolom rusak, bukan tanpa-foto", async () => {
