@@ -175,3 +175,20 @@ fi
 SEQUENCE_LOCK_KIND=''
 trap - EXIT INT TERM HUP
 printf '%s\n' "$INBOX/$NAME"
+
+# INVARIAN PENUNGGU: kirim DARI builder adalah keadaan mantap. Kalau saat ini
+# tidak ada penunggu builder, Builder baru saja menjadi TULI terhadap balasan
+# Reviewer atas pesan yang barusan dikirim — dan dulu itu terjadi tanpa satu pun
+# tanda. Peringatan ini tidak mengubah apa pun dan tidak menggagalkan pengiriman;
+# ia hanya membuat kegagalan senyap jadi kegagalan yang TERLIHAT, tepat di detik
+# ia terjadi. Menonaktifkan: BUS_TANPA_PERINGATAN_PENUNGGU=1.
+if [ "$FROM" = builder ] && [ "${BUS_TANPA_PERINGATAN_PENUNGGU:-}" != 1 ]; then
+  waiter_pid=$(cat "$BUS_DIR/tmp/waiter-builder.pid" 2>/dev/null || true)
+  waiter_ok=no
+  if [ -n "$waiter_pid" ] && kill -0 "$waiter_pid" 2>/dev/null; then
+    case "$(ps -o command= -p "$waiter_pid" 2>/dev/null || true)" in
+      *"$BUS_DIR/bin/bus-wait"*builder*) waiter_ok=yes ;;
+    esac
+  fi
+  [ "$waiter_ok" = yes ] || printf 'PERINGATAN: nol penunggu builder sesudah %s. Balasan Reviewer tidak akan membangunkan siapa pun sampai `bus-arm builder` dijalankan.\n' "$TYPE" >&2
+fi

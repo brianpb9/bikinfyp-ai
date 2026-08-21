@@ -1,38 +1,116 @@
 #!/bin/sh
-# bus-arm <role> [timeout]
-# Pasang TEPAT SATU penunggu persisten untuk <role>.
+# bus-arm <role> [timeout] [--sekali]
+# Pasang TEPAT SATU penunggu persisten untuk <role>, dan JAGA supaya ia tetap ada.
 #
 # Ada karena cacat lifecycle 21 Agu: bus-wait sengaja KELUAR saat pesan datang
 # (itulah yang membangunkan Builder), lalu tidak ada yang memasangnya kembali —
 # sehingga sesudah DONE, Builder tuli terhadap pesan Reviewer berikutnya.
 #
-# Idempoten: kalau penunggu untuk role itu masih hidup, skrip ini TIDAK
-# menelurkan yang kedua; ia mencetak PID yang sudah ada lalu keluar 0.
+# TIGA CACAT LIFECYCLE YANG DITUTUP DI SINI (temuan 22 Agu):
+#
+#   1. TIMEOUT = TULI PERMANEN. bus-wait keluar 4 saat timeout, dan versi lama
+#      meneruskan kode itu lalu berhenti. Tidak ada yang memasang penunggu
+#      berikutnya, jadi sesudah batas waktu lewat Builder diam-diam tuli sampai
+#      ada manusia yang menyadarinya. Sekarang timeout DIPASANG ULANG otomatis;
+#      hanya kedatangan pesan yang mengakhiri skrip ini, karena kedatangan pesan
+#      memang harus membangunkan pemanggilnya.
+#
+#   2. `kill -0` MENERIMA PID DAUR ULANG. Penjaga lama menganggap "ada proses
+#      dengan PID itu" sama dengan "penunggu masih hidup". Sesudah reboot atau
+#      daur ulang PID, proses ASING yang kebetulan memakai PID itu membuat
+#      bus-arm melapor SUDAH ADA lalu keluar tanpa memasang apa pun — Builder
+#      tuli, dan laporannya berkata sebaliknya. Sekarang identitas diperiksa:
+#      baris perintahnya harus benar-benar bus-wait untuk ROLE ini DI BUS INI.
+#
+#   3. PIDFILE BASI SAAT DIBUNUH. Tanpa trap, bus-arm yang kena SIGTERM
+#      meninggalkan pidfile. Digabung dengan cacat 2, berkas basi itu berubah
+#      jadi laporan "sudah terpasang" yang palsu. Sekarang ada trap.
+#
+# --sekali: pasang satu penunggu lalu keluar mengikuti kode keluar bus-wait,
+# tanpa memasang ulang saat timeout. Dipakai test lifecycle; bukan untuk
+# operasi normal.
 set -eu
 BUS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
-ROLE=${1:?usage: bus-arm <builder|reviewer> [timeout]}
-TIMEOUT=${2:-86400}
+ROLE=${1:?usage: bus-arm <builder|reviewer> [timeout] [--sekali]}
+shift
+TIMEOUT=86400
+SEKALI=0
+for arg in "$@"; do
+  case "$arg" in
+    --sekali) SEKALI=1 ;;
+    ''|*[!0-9]*) echo "argumen tidak sah: $arg" >&2; exit 2 ;;
+    *) TIMEOUT=$arg ;;
+  esac
+done
 case "$ROLE" in builder|reviewer) ;; *) echo "role tidak sah: $ROLE" >&2; exit 2 ;; esac
 
 PIDFILE="$BUS_DIR/tmp/waiter-$ROLE.pid"
-if [ -f "$PIDFILE" ]; then
-  OLD=$(cat "$PIDFILE" 2>/dev/null || echo "")
-  if [ -n "$OLD" ] && kill -0 "$OLD" 2>/dev/null; then
-    echo "SUDAH ADA pid=$OLD role=$ROLE (tidak menelurkan duplikat)"
-    exit 0
-  fi
-  rm -f "$PIDFILE"
+mkdir -p "$BUS_DIR/tmp"
+
+# Identitas, bukan sekadar keberadaan. Baris perintah penunggu yang sah memuat
+# path ABSOLUT bus-wait di bus ini plus role-nya, jadi penunggu milik repo lain
+# maupun proses asing berpid sama tidak bisa lolos.
+penunggu_sah() { # penunggu_sah <pid>
+  pid=${1:-}
+  [ -n "$pid" ] || return 1
+  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$pid" 2>/dev/null || return 1
+  cmd=$(ps -o command= -p "$pid" 2>/dev/null || true)
+  case "$cmd" in
+    *"$BUS_DIR/bin/bus-wait"*" $ROLE "*) return 0 ;;
+    *"$BUS_DIR/bin/bus-wait"*" $ROLE") return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+pidfile_hidup() {
+  [ -f "$PIDFILE" ] || return 1
+  penunggu_sah "$(cat "$PIDFILE" 2>/dev/null || echo '')"
+}
+
+if pidfile_hidup; then
+  echo "SUDAH ADA pid=$(cat "$PIDFILE") role=$ROLE (tidak menelurkan duplikat)"
+  exit 0
 fi
-"$BUS_DIR/bin/bus-wait" "$ROLE" "$TIMEOUT" &
-NEW=$!
-echo "$NEW" > "$PIDFILE"
-echo "ARMED pid=$NEW role=$ROLE timeout=$TIMEOUT"
-# `wait` non-nol TIDAK boleh menggugurkan skrip: dengan `set -e`, bus-wait yang
-# timeout (exit 4) akan melompati pembersihan dan meninggalkan pidfile basi.
-# Ditemukan saat menguji pemulihan pidfile basi 21 Agu — self-healing memang
-# tetap jalan (arm berikutnya membersihkannya), tapi baris rm di bawah adalah
-# kode mati kalau ditulis tanpa penjaga ini.
-RC=0
-wait "$NEW" || RC=$?
+# Sampai di sini pidfile pasti basi ATAU menunjuk proses yang bukan penunggu
+# bus ini. Membuangnya aman: kita TIDAK PERNAH mengirim sinyal ke PID itu —
+# pidfile basi tidak boleh bisa membunuh proses asing.
 rm -f "$PIDFILE"
-exit "$RC"
+
+WAITER=""
+bersihkan() {
+  [ -n "$WAITER" ] && kill "$WAITER" 2>/dev/null || true
+  if [ -f "$PIDFILE" ] && [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$WAITER" ]; then
+    rm -f "$PIDFILE"
+  fi
+}
+trap 'bersihkan; exit 143' TERM
+trap 'bersihkan; exit 130' INT
+trap 'bersihkan' EXIT
+
+pertama=1
+while :; do
+  "$BUS_DIR/bin/bus-wait" "$ROLE" "$TIMEOUT" &
+  WAITER=$!
+  echo "$WAITER" > "$PIDFILE"
+  if [ "$pertama" = 1 ]; then
+    echo "ARMED pid=$WAITER role=$ROLE timeout=$TIMEOUT"
+    pertama=0
+  else
+    echo "ARMED-ULANG pid=$WAITER role=$ROLE timeout=$TIMEOUT (penunggu sebelumnya habis waktu)"
+  fi
+
+  # `wait` non-nol TIDAK boleh menggugurkan skrip: dengan `set -e`, bus-wait yang
+  # timeout (exit 4) akan melompati pembersihan dan meninggalkan pidfile basi.
+  RC=0
+  wait "$WAITER" || RC=$?
+  rm -f "$PIDFILE"
+  WAITER=""
+
+  # exit 4 = habis waktu tanpa pesan. Itu BUKAN alasan berhenti menunggu; ia
+  # justru satu-satunya keadaan yang dulu membuat Builder tuli selamanya.
+  if [ "$RC" = 4 ] && [ "$SEKALI" = 0 ]; then
+    continue
+  fi
+  exit "$RC"
+done

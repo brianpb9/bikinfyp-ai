@@ -271,8 +271,16 @@ Panggil `bus-arm builder` LAGI sesudah mencapai setiap keadaan stabil baru:
 - keadaan lain mana pun yang masih mungkin menerima pesan Reviewer.
 
 JANGAN memeriksa dulu apakah penunggu sudah ada. Selalu panggil `bus-arm`;
-penjaga idempotennya (pidfile + `kill -0`) yang memiliki pencegahan duplikat.
-Pidfile basi gagal dengan aman: ia dibersihkan lalu penunggu baru dipasang.
+penjaga idempotennya yang memiliki pencegahan duplikat. Pidfile basi gagal
+dengan aman: ia dibersihkan lalu penunggu baru dipasang.
+
+Penjaga itu memeriksa IDENTITAS, bukan sekadar `kill -0` (perbaikan 22 Agu).
+Alasannya: `kill -0` menerima PID DAUR ULANG, jadi proses asing yang kebetulan
+memakai PID di pidfile membuat `bus-arm` melapor "SUDAH ADA" lalu keluar tanpa
+memasang apa pun — Builder tuli, laporannya berkata sebaliknya. Sekarang baris
+perintah PID itu harus benar-benar `bus-wait <role>` milik bus INI. Dan pidfile
+basi tidak pernah dipakai untuk mengirim sinyal, jadi ia juga tidak bisa
+membunuh proses asing.
 
 ### 3. Aturan kepemilikan sesi
 JANGAN melepas penunggu dengan `nohup`/`setsid` sekadar agar ia bertahan saat
@@ -283,3 +291,47 @@ seluruh bus ini ada untuk menyediakannya.
 
 Konsekuensi yang diterima: terminal ditutup -> penunggu ikut mati -> sesi
 Builder berikutnya memasang yang baru lewat aturan start di atas.
+
+### 4. Apa yang MEKANIS, dan apa yang tidak — dengan alasannya
+
+Aturan di atas pernah gagal dua kali dengan cara yang sama: ia hanya instruksi,
+dan instruksi tidak menjalankan dirinya sendiri. Sebagian sudah dipindahkan ke
+runtime; sebagian TIDAK BISA, dan bagian itu ditulis di sini apa adanya supaya
+tidak ada yang mengira sudah beres.
+
+MEKANIS sekarang (dijaga `.agent-bus/test-bus.sh` kasus 14-20):
+
+| Cacat | Dulu | Sekarang |
+|---|---|---|
+| habis waktu | `bus-wait` keluar 4, `bus-arm` meneruskannya lalu berhenti; nol penunggu, TULI PERMANEN | `bus-arm` memasang ulang sendiri; hanya kedatangan pesan yang mengakhirinya |
+| PID daur ulang | `kill -0` menerima proses asing; `bus-arm` menolak memasang | identitas baris perintah diperiksa; pidfile basi diabaikan, proses asing tidak disentuh |
+| pidfile basi saat dibunuh | tidak ada trap; berkas basi tertinggal | trap TERM/INT/EXIT |
+| keadaan tuli tidak terlihat | senyap total | `bus-send` DARI builder memperingatkan ke stderr kalau nol penunggu |
+
+TIDAK BISA MEKANIS, dan ini batas yang sudah dibuktikan, bukan dugaan:
+
+Kanal bangun Builder adalah **notifikasi selesainya background task milik
+harness Claude**. Penunggu hidup di dalam pohon proses task itu:
+
+    bus-wait  <-  bus-arm  <-  zsh (background task harness)  <-  claude
+
+Konsekuensinya berpasangan, dan tidak ada jalan tengah:
+
+- penunggu yang DIMILIKI task harness akan dibunuh saat task itu dipanen di
+  akhir giliran (terbukti: notifikasi `killed` / exit 143 berulang);
+- penunggu yang DILEPAS (`setsid`/`nohup`/`&`) bertahan melewati akhir giliran,
+  tapi TIDAK punya kanal apa pun untuk membangunkan sesi — ia keluar diam-diam
+  dan tidak ada yang tahu.
+
+Karena itu memasang ulang lewat `bus-read` atau lewat runtime Reviewer yang
+persisten JUSTRU MERUSAK: keduanya menghasilkan penunggu tak-terlacak, dan
+penjaga idempoten lalu melapor "SUDAH ADA" sehingga `bus-arm` milik sesi —
+satu-satunya yang bisa membangunkan — tidak pernah terpasang. Kanalnya mati
+sementara laporannya sehat. Itu lebih buruk daripada cacat aslinya.
+
+Yang tersisa untuk sesi: MEMBUAT background task-nya. Hanya sesi yang bisa.
+
+Yang membuat sisa itu tidak berbahaya: pesan TIDAK PERNAH hilang. `bus-wait`
+tidak mengonsumsi; hanya `bus-read` yang mengarsipkan. Jeda tanpa penunggu
+adalah soal LATENSI, bukan kehilangan — pesan menunggu di inbox sampai dibaca.
+Dijaga kasus 19.

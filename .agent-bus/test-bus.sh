@@ -248,6 +248,159 @@ while [ "$i" -le 24 ]; do "$BIN/bus-read" reviewer >/dev/null 2>&1 || parallel_o
 rm -f "$BUS_DIR/tmp"/bus-selftest-parallel-*.out
 check "24 concurrent mixed-type sends are lossless and collision-free" "$parallel_ok"
 
+# --- 12. LIFECYCLE PENUNGGU (bus-arm) -------------------------------------
+#
+# Sampai 22 Agu bus-arm TIDAK punya satu pun test, padahal ia mekanisme yang
+# menjaga loop tetap hidup. Cacat lifecycle yang ditutup di bawah semuanya
+# berakhir sama: Builder diam-diam tuli sementara laporannya berkata sehat.
+
+waiter_pid_file="$BUS_DIR/tmp/waiter-builder.pid"
+waiter_hidup() { # waiter_hidup <pid>
+  [ -n "${1:-}" ] || return 1
+  kill -0 "$1" 2>/dev/null || return 1
+  case "$(ps -o command= -p "$1" 2>/dev/null || true)" in
+    *"$BIN/bus-wait"*builder*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+cacah_penunggu() { # cacah penunggu builder MILIK bus ini
+  pgrep -f "$BIN/bus-wait builder" 2>/dev/null | wc -l | tr -d ' '
+}
+matikan_penunggu() {
+  for pid in $(pgrep -f "$BIN/bus-wait builder" 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
+  for pid in $(pgrep -f "$BIN/bus-arm builder" 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
+  rm -f "$waiter_pid_file"
+  sleep 1
+}
+
+matikan_penunggu
+
+# --- 12a. TEPAT SATU penunggu, walau di-arm berkali-kali ------------------
+dup_ok=0; dup_detail=""
+"$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm1.out" 2>&1 &
+arm1=$!
+sleep 1
+out2=$("$BIN/bus-arm" builder 30 2>&1 || true)
+out3=$("$BIN/bus-arm" builder 30 2>&1 || true)
+case "$out2" in *"SUDAH ADA"*) ;; *) dup_ok=1; dup_detail="arm kedua tidak mengenali penunggu: $out2" ;; esac
+case "$out3" in *"SUDAH ADA"*) ;; *) dup_ok=1; dup_detail="arm ketiga tidak mengenali penunggu: $out3" ;; esac
+[ "$(cacah_penunggu)" = 1 ] || { dup_ok=1; dup_detail="penunggu=$(cacah_penunggu), seharusnya 1"; }
+check "bus-arm idempoten: tiga kali arm = TEPAT SATU penunggu" "$dup_ok" "$dup_detail"
+
+# --- 12b. TIGA siklus bangun berturut-turut, penunggu pulih tiap kali -----
+siklus_ok=0; siklus_detail=""
+n=1
+while [ "$n" -le 3 ]; do
+  "$BIN/bus-send" builder CHANGES_REQUESTED "$HEAD_SHA" "$TASK" "siklus $n" >/dev/null 2>&1 || {
+    siklus_ok=1; siklus_detail="bus-send siklus $n gagal"; break; }
+  # Penunggu HARUS keluar (itulah yang membangunkan Builder).
+  tunggu=0
+  while [ "$tunggu" -lt 15 ] && [ "$(cacah_penunggu)" != 0 ]; do sleep 1; tunggu=$((tunggu + 1)); done
+  [ "$(cacah_penunggu)" = 0 ] || { siklus_ok=1; siklus_detail="siklus $n: penunggu tidak bangun oleh pesan"; break; }
+  # Builder memproses pesannya...
+  "$BIN/bus-read" builder >/dev/null 2>&1 || { siklus_ok=1; siklus_detail="siklus $n: bus-read gagal"; break; }
+  # ...lalu memasang ulang. Inilah keadaan mantap yang wajib pulih tiap siklus.
+  "$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-siklus-$n.out" 2>&1 &
+  sleep 1
+  [ "$(cacah_penunggu)" = 1 ] || { siklus_ok=1; siklus_detail="siklus $n: penunggu=$(cacah_penunggu) sesudah arm ulang"; break; }
+  n=$((n + 1))
+done
+check "TIGA siklus bangun berturut-turut, tiap kali berakhir dengan TEPAT SATU penunggu" "$siklus_ok" "$siklus_detail"
+matikan_penunggu
+
+# --- 12c. TIMEOUT tidak boleh berarti tuli permanen ----------------------
+# Cacat lama: bus-wait keluar 4, bus-arm meneruskannya lalu berhenti, dan tidak
+# ada yang memasang penunggu berikutnya. Batas 24 jam membuatnya lambat terlihat,
+# bukan tidak ada.
+to_ok=0; to_detail=""
+"$BIN/bus-arm" builder 2 >"$BUS_DIR/tmp/arm-timeout.out" 2>&1 &
+arm_to=$!
+sleep 7   # cukup untuk beberapa kali habis-waktu
+if ! kill -0 "$arm_to" 2>/dev/null; then
+  to_ok=1; to_detail="bus-arm berhenti sesudah timeout; Builder tuli permanen"
+fi
+grep -q 'ARMED-ULANG' "$BUS_DIR/tmp/arm-timeout.out" 2>/dev/null || {
+  to_ok=1; to_detail="tidak ada ARMED-ULANG: $(cat "$BUS_DIR/tmp/arm-timeout.out" 2>/dev/null)"; }
+[ "$(cacah_penunggu)" = 1 ] || { to_ok=1; to_detail="sesudah timeout penunggu=$(cacah_penunggu), seharusnya 1"; }
+check "TIMEOUT memasang ulang sendiri — bukan tuli permanen" "$to_ok" "$to_detail"
+
+# --- 12d. --sekali TIDAK memasang ulang (kontrol arah sebaliknya) --------
+# Tanpa kontrol ini, bus-arm yang memasang ulang SEGALANYA akan membuat 12c
+# hijau tanpa membuktikan bahwa pemasangan ulang itu khusus untuk timeout.
+sekali_ok=0; sekali_detail=""
+matikan_penunggu
+"$BIN/bus-arm" builder 2 --sekali >"$BUS_DIR/tmp/arm-sekali.out" 2>&1
+rc_sekali=$?
+[ "$rc_sekali" = 4 ] || { sekali_ok=1; sekali_detail="--sekali keluar $rc_sekali, seharusnya 4 (timeout bus-wait)"; }
+grep -q 'ARMED-ULANG' "$BUS_DIR/tmp/arm-sekali.out" 2>/dev/null && {
+  sekali_ok=1; sekali_detail="--sekali tetap memasang ulang"; }
+check "--sekali meneruskan timeout apa adanya (kontrol arah sebaliknya)" "$sekali_ok" "$sekali_detail"
+
+# --- 12e. PID DAUR ULANG tidak boleh diterima sebagai penunggu -----------
+# Penjaga lama memakai `kill -0` saja: proses ASING yang kebetulan memakai PID
+# di pidfile membuat bus-arm melapor SUDAH ADA lalu keluar tanpa memasang apa
+# pun. Builder tuli, laporannya berkata sebaliknya.
+reuse_ok=0; reuse_detail=""
+matikan_penunggu
+sleep 60 &            # proses asing yang HIDUP, tapi jelas bukan penunggu
+asing=$!
+echo "$asing" > "$waiter_pid_file"
+# CATATAN: output bus-arm TIDAK boleh ditangkap lewat $( ) selama ia berjalan
+# di latar — pipa command-substitution tidak pernah tertutup selama proses latar
+# memegangnya, dan test-nya menggantung selamanya alih-alih gagal. Ditemukan saat
+# menulis kasus ini; karena itu keluarannya ditulis ke berkas.
+"$BIN/bus-arm" builder 20 >"$BUS_DIR/tmp/arm-reuse.out" 2>&1 &
+sleep 2
+pid_sekarang=$(cat "$waiter_pid_file" 2>/dev/null || true)
+[ "$pid_sekarang" != "$asing" ] || {
+  reuse_ok=1; reuse_detail="pidfile masih menunjuk proses asing $asing; bus-arm menolak memasang penunggu"; }
+waiter_hidup "$pid_sekarang" || {
+  reuse_ok=1; reuse_detail="pidfile menunjuk $pid_sekarang yang bukan penunggu bus ini"; }
+[ "$(cacah_penunggu)" = 1 ] || { reuse_ok=1; reuse_detail="penunggu=$(cacah_penunggu) padahal pidfile basi seharusnya diabaikan"; }
+kill -0 "$asing" 2>/dev/null || { reuse_ok=1; reuse_detail="proses ASING ikut terbunuh oleh pemulihan pidfile basi"; }
+kill "$asing" 2>/dev/null || true
+check "PID daur ulang: pidfile basi tidak diterima, dan proses asing tidak dibunuh" "$reuse_ok" "$reuse_detail"
+matikan_penunggu
+
+# --- 12f. pesan yang datang saat TIDAK ada penunggu tetap menunggu -------
+# Batas jujur dari lifecycle ini: penunggu adalah alat BANGUN, bukan tempat
+# menyimpan pesan. Selama pesannya tetap di inbox, jeda tanpa penunggu adalah
+# soal latensi, bukan kehilangan.
+simpan_ok=0
+"$BIN/bus-send" builder QUESTION "$HEAD_SHA" "$TASK" "tanpa penunggu" >/dev/null 2>&1 || simpan_ok=1
+[ "$(inbox_count builder)" = 1 ] || simpan_ok=1
+"$BIN/bus-arm" builder 20 >/dev/null 2>&1 &
+sleep 2
+[ "$(inbox_count builder)" = 1 ] || simpan_ok=1   # bus-wait TIDAK mengonsumsi
+"$BIN/bus-read" builder >/dev/null 2>&1 || simpan_ok=1
+check "pesan yang datang tanpa penunggu tidak hilang — hanya tertunda" "$simpan_ok"
+matikan_penunggu
+
+# --- 12g. kirim DARI builder tanpa penunggu = peringatan yang TERLIHAT ----
+# Batas jujur: pembuatan penunggu tidak bisa dipindahkan sepenuhnya ke runtime
+# (lihat .agent-bus/README.md — kanal bangunnya milik harness sesi). Yang BISA
+# dipindahkan adalah DETEKSINYA: keadaan tuli tidak boleh lagi senyap.
+warn_ok=0; warn_detail=""
+matikan_penunggu
+err_tanpa=$("$BIN/bus-send" reviewer READY_FOR_REVIEW "$HEAD_SHA" "$TASK" "tanpa penunggu" 2>&1 >/dev/null || true)
+case "$err_tanpa" in
+  *"nol penunggu builder"*) ;;
+  *) warn_ok=1; warn_detail="tidak ada peringatan saat penunggu nol: ${err_tanpa:-<kosong>}" ;;
+esac
+# Arah sebaliknya: dengan penunggu hidup, TIDAK boleh ada peringatan. Peringatan
+# yang selalu muncul akan diabaikan orang dalam sehari, dan kembali senyap.
+"$BIN/bus-arm" builder 20 >"$BUS_DIR/tmp/arm-warn.out" 2>&1 &
+sleep 2
+err_ada=$("$BIN/bus-send" reviewer READY_FOR_REVIEW "$HEAD_SHA" "$TASK" "dengan penunggu" 2>&1 >/dev/null || true)
+case "$err_ada" in
+  *"nol penunggu builder"*) warn_ok=1; warn_detail="peringatan tetap muncul padahal penunggu hidup" ;;
+esac
+# Dan pengirimannya sendiri tidak boleh terganggu oleh peringatan apa pun.
+[ "$(inbox_count reviewer)" = 2 ] || { warn_ok=1; warn_detail="pesan hilang: inbox reviewer=$(inbox_count reviewer)"; }
+"$BIN/bus-read" reviewer >/dev/null 2>&1; "$BIN/bus-read" reviewer >/dev/null 2>&1
+check "kirim DARI builder tanpa penunggu memberi peringatan; dengan penunggu tidak" "$warn_ok" "$warn_detail"
+matikan_penunggu
+
 # --- cleanup: remove only this test's archived messages -------------------
 for f in "$BUS_DIR/archive"/*.json; do
   [ -e "$f" ] || break
