@@ -125,7 +125,10 @@ remove_clone_supervisor() {
   launchctl remove "$clone_label" >/dev/null 2>&1 || true
 }
 
+CLEANED=0
 cleanup() {
+  [ "$CLEANED" = 0 ] || return 0
+  CLEANED=1
   stop_bounded
   stop_active
   remove_clone_supervisor
@@ -153,7 +156,20 @@ if [ "$runtime_status" != 1 ] || [ "$(inbox_count builder)" != 0 ] || \
   printf 'ABORT: live Reviewer state exists; refusing fault-injection test.\n' >&2
   exit 1
 fi
-trap cleanup EXIT INT TERM HUP
+# TRAP EXIT DIPISAH DARI TRAP SINYAL, dan handler sinyal KELUAR.
+#
+# Temuan Reviewer 21 Agu, dan ia benar: `trap cleanup EXIT INT TERM HUP` tidak
+# menghentikan skrip sesudah menangani INT/TERM/HUP — shell melanjutkan ke
+# perintah berikutnya. Kalau sinyal tiba saat `jalankan_terbatas` sedang hidup,
+# cleanup membunuh prosesnya lalu suite MELANJUTKAN dan menelurkan invocation
+# nested berikutnya beserta supervisornya — proses baru SESUDAH pembersihan.
+# Pembersihan yang diikuti kelanjutan bukan pembersihan.
+#
+# Statusnya 128+signo, jadi pemanggil bisa membedakan dibunuh dari gagal.
+trap cleanup EXIT
+trap 'cleanup; exit 130' INT
+trap 'cleanup; exit 143' TERM
+trap 'cleanup; exit 129' HUP
 
 start_runtime() {
   timeout=$1
@@ -166,7 +182,91 @@ start_runtime() {
   ACTIVE_PID=$!
 }
 
+# MODE PROBE SINYAL — dipakai case 0 di bawah, dan HANYA oleh case itu.
+#
+# Menguji handler sinyal yang SUNGGUHAN membutuhkan proses yang benar-benar
+# menerima sinyal saat sebuah invocation bounded masih hidup. Karena itu suite
+# ini menjalankan SATU salinan dirinya sendiri dalam mode ini, lalu mengirimnya
+# TERM dari luar.
+#
+# Penandanya tiga berkas, dan yang ketiga adalah inti pengujiannya:
+#   probe-ready      : bounded invocation sudah hidup, silakan kirim sinyal
+#   probe-bounded.pid: PID yang wajib ikut mati
+#   probe-continued  : HANYA tertulis kalau trap membersihkan LALU MELANJUTKAN.
+#                      Kehadirannya = cacat yang dilaporkan Reviewer.
+if [ "${AGENT_BUS_SELFTEST_SIGNAL_PROBE:-}" = "1" ]; then
+  start_runtime 5
+  wait_for "probe: runtime armed" '[ -s "$PID_FILE" ]' 100 || exit 9
+  # Berdiri sendiri dan berumur panjang, persis seperti bus-wait turunan
+  # invocation nested yang berisiko tertinggal.
+  "$BUS_DIR/bin/bus-wait" reviewer 3600 >/dev/null 2>&1 &
+  BOUNDED_PID=$!
+  printf '%s\n' "$BOUNDED_PID" > "$BUS_DIR/tmp/probe-bounded.pid"
+  : > "$BUS_DIR/tmp/probe-ready"
+  # Menunggu dalam potongan satu detik, BUKAN `sleep 300` tunggal.
+  # /bin/sh macOS adalah bash mode POSIX, dan bash menunda handler sinyal
+  # sampai perintah foreground yang sedang berjalan selesai. `kill -TERM`
+  # hanya mengenai shell-nya, bukan `sleep`-nya, jadi dengan satu sleep panjang
+  # trap baru jalan 300 detik kemudian — dan test-nya salah menuduh cacat yang
+  # tidak ada. Ditemukan saat menulis case ini.
+  probe_tunggu=0
+  while [ "$probe_tunggu" -lt 300 ]; do
+    sleep 1
+    probe_tunggu=$((probe_tunggu + 1))
+  done
+  : > "$BUS_DIR/tmp/probe-continued"
+  exit 0
+fi
+
 printf 'reviewer runtime self-test\n'
+
+# Case 0: sinyal saat invocation bounded hidup -> bersih DAN BERHENTI.
+rm -f "$BUS_DIR/tmp/probe-ready" "$BUS_DIR/tmp/probe-continued" "$BUS_DIR/tmp/probe-bounded.pid"
+AGENT_BUS_SELFTEST_SIGNAL_PROBE=1 /bin/sh "$SELF" >> "$BUS_DIR/tmp/codex-reviewer-selftest.log" 2>&1 &
+probe_pid=$!
+if wait_for "probe siap menerima sinyal" '[ -e "$BUS_DIR/tmp/probe-ready" ]' 300; then
+  probe_bounded=$(cat "$BUS_DIR/tmp/probe-bounded.pid" 2>/dev/null || echo "")
+  probe_runtime=$(cat "$PID_FILE" 2>/dev/null || echo "")
+  kill -TERM "$probe_pid" 2>/dev/null || true
+  probe_i=0
+  while [ "$probe_i" -lt 100 ] && kill -0 "$probe_pid" 2>/dev/null; do sleep 0.1; probe_i=$((probe_i + 1)); done
+  probe_rc=0
+  if kill -0 "$probe_pid" 2>/dev/null; then
+    probe_rc=HIDUP
+    bunuh_pohon "$probe_pid"
+  else
+    wait "$probe_pid" 2>/dev/null
+    probe_rc=$?
+  fi
+  sleep 0.5
+  probe_lanjut=no; [ -e "$BUS_DIR/tmp/probe-continued" ] && probe_lanjut=yes
+  probe_bounded_hidup=no
+  [ -n "$probe_bounded" ] && kill -0 "$probe_bounded" 2>/dev/null && probe_bounded_hidup=yes
+  probe_runtime_hidup=no
+  [ -n "$probe_runtime" ] && kill -0 "$probe_runtime" 2>/dev/null && probe_runtime_hidup=yes
+
+  if [ "$probe_lanjut" = no ] && [ "$probe_bounded_hidup" = no ] && \
+     [ "$probe_runtime_hidup" = no ] && [ "$probe_rc" != HIDUP ] && [ ! -e "$LOCK_DIR" ]; then
+    printf 'PASS  TERM saat bounded hidup: bersih DAN suite berhenti\n'
+  else
+    printf 'FAIL  trap sinyal: lanjut=%s bounded_hidup=%s runtime_hidup=%s rc=%s lock=%s\n' \
+      "$probe_lanjut" "$probe_bounded_hidup" "$probe_runtime_hidup" "$probe_rc" \
+      "$([ -e "$LOCK_DIR" ] && echo ada || echo tidak)"
+    FAILURES=$((FAILURES + 1))
+  fi
+else
+  FAILURES=$((FAILURES + 1))
+  kill -TERM "$probe_pid" 2>/dev/null || true
+fi
+# Pembersihan defensif SESUDAH asersi: kalau probe memang meninggalkan sesuatu,
+# itu sudah dicatat sebagai kegagalan di atas — tapi case berikutnya tidak boleh
+# ikut merah karena sisa yang sama.
+rm -f "$BUS_DIR/tmp/probe-ready" "$BUS_DIR/tmp/probe-continued" "$BUS_DIR/tmp/probe-bounded.pid"
+[ -n "${probe_runtime:-}" ] && kill -0 "$probe_runtime" 2>/dev/null && bunuh_pohon "$probe_runtime"
+[ -n "${probe_bounded:-}" ] && kill -0 "$probe_bounded" 2>/dev/null && bunuh_pohon "$probe_bounded"
+remove_clone_supervisor
+rm -rf "$STATE_DIR"; rm -f "$PID_FILE"; rm -rf "$LOCK_DIR"
+
 
 # Case 1: the self-test's active-runtime guard must be observational only. A
 # rejected nested invocation must not fire this process's destructive cleanup.

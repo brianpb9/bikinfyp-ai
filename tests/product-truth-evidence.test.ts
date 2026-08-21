@@ -315,6 +315,57 @@ const fieldTakSah: { judul: string; ubah: Record<string, unknown>; kenapa: strin
   },
 ];
 
+/**
+ * BUKTI YANG BERTENTANGAN DENGAN DIRINYA SENDIRI — seluruh tipe SAH.
+ *
+ * Temuan Reviewer ronde 3, dan ia menutup celah yang fixture tipe di atas
+ * tidak bisa tutup: implementasi yang memvalidasi seluruh tipe, hash, dan versi
+ * dengan benar TAPI memutuskan kelayakan dari `layakReferensi === true` saja
+ * akan lulus SEMUA test sekarang — sambil meloloskan sidecar
+ * `{jenis:"promotional_graphic", layakReferensi:true}`. Yaitu: banner, yang
+ * buktinya sendiri menyebut dirinya banner, dikirim ke model sebagai acuan
+ * "beginilah rupa produknya".
+ *
+ * Kedua arah diuji, dan keduanya EVIDENCE_INVALID — bukan REF_PROMOTIONAL:
+ * ketika dua field bukti saling membantah, tidak ada satu pun dari keduanya
+ * yang bisa dipercaya sebagai vonis. Melaporkannya sebagai "promosi" berarti
+ * memilih salah satu field secara sewenang-wenang; melaporkannya sebagai bukti
+ * tidak sah menyatakan yang sebenarnya terjadi, dan itulah yang membuat
+ * karantina/revalidasi bisa menanganinya nanti.
+ */
+const kontradiktif: { judul: string; ubah: Record<string, unknown>; kenapa: string }[] = [
+  {
+    judul: 'jenis "promotional_graphic" TAPI layakReferensi true',
+    ubah: { jenis: "promotional_graphic", layakReferensi: true, rasioAreaTeks: 0.19, jumlahKata: 14 },
+    kenapa:
+      "banner yang buktinya sendiri menyebut dirinya banner tetap terkirim ke model sebagai " +
+      'acuan "beginilah rupa produknya"',
+  },
+  {
+    judul: 'jenis "product_photo" TAPI layakReferensi false',
+    ubah: { jenis: "product_photo", layakReferensi: false },
+    kenapa: "arah sebaliknya: bukti menyangkal dirinya sendiri, jadi tidak ada vonis yang bisa dibaca",
+  },
+];
+
+for (const kasus of kontradiktif) {
+  test(`C8: bukti BERTENTANGAN — ${kasus.judul} -> fail-closed`, async () => {
+    const tulisan = pasang([
+      [relFoto(1), PACKSHOT],
+      [relSidecar(1), sidecarDenganField(kasus.ubah)],
+    ]);
+    const layak = await referensiLayak([relFoto(1)]);
+    assert.deepEqual(
+      layak,
+      [],
+      `EVIDENCE_INVALID: sidecar ${kasus.judul} tetap diterima (${JSON.stringify(layak)}). ` +
+        `Seluruh TIPE di fixture ini sah, hash cocok, versi terkini — jadi validator bentuk saja ` +
+        `tidak menangkapnya. ${kasus.kenapa}.`
+    );
+    assert.deepEqual(tulisan, [], `jalur baca menulis bukti baru: ${JSON.stringify(tulisan)}`);
+  });
+}
+
 for (const kasus of fieldTakSah) {
   test(`C8: TIPE FIELD salah — ${kasus.judul} -> tidak boleh lolos`, async () => {
     const tulisan = pasang([
@@ -648,6 +699,15 @@ const kasusTakSah: { judul: string; entri: [string, Buffer][]; alasan: string }[
     ],
     alasan: ALASAN.BUKTI,
   },
+  // Bukti yang bertentangan dengan dirinya sendiri, seluruh tipe sah.
+  ...kontradiktif.map((k) => ({
+    judul: `bertentangan — ${k.judul}`,
+    entri: [
+      [relFoto(1), PACKSHOT],
+      [relSidecar(1), sidecarDenganField(k.ubah)],
+    ] as [string, Buffer][],
+    alasan: ALASAN.BUKTI,
+  })),
   // Satu field rusak per fixture, seluruh field lain sah — alasan lengkapnya
   // ada di komentar `fieldTakSah` di atas.
   ...fieldTakSah.map((f) => ({

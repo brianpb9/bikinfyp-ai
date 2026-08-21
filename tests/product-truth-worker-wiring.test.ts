@@ -183,12 +183,28 @@ function namaTerikat(name: ts.BindingName): string[] {
  * karena butuh PostgreSQL.
  */
 interface Asal {
-  resolver: Set<string>;
+  /** Nama yang terikat LANGSUNG ke objek hasil resolver (mis. `hasil`). */
+  akar: Set<string>;
+  /** Nama yang nilainya berasal dari jalur TERSETUJUI (`utama` / `tersetujui`). */
+  tersetujui: Set<string>;
+  /** Nama yang nilainya bisa berasal dari daftar `images` apa adanya. */
   mentah: Set<string>;
 }
 
+/**
+ * Field hasil resolver yang BOLEH jadi sumber payload.
+ *
+ * `ditolak` SENGAJA tidak ada di sini, dan itu inti temuan Reviewer ronde 3:
+ * versi sebelumnya mencemari seluruh binding hasil resolver, jadi
+ * `materialize(hasil.ditolak[0].rel)` memenuhi gerbang — memakai persis gambar
+ * yang baru saja dinyatakan TIDAK layak. Karena W1 belum punya test runtime,
+ * gerbang statis inilah satu-satunya yang berdiri di sana.
+ */
+const FIELD_TERSETUJUI = new Set(["utama", "tersetujui"]);
+
 function sebarAsal(sf: ts.SourceFile, binding: Set<string>, namespaceBinding: Set<string>): Asal {
-  const resolver = new Set<string>();
+  const akar = new Set<string>();
+  const tersetujui = new Set<string>();
   const mentah = new Set<string>([DAFTAR_FOTO]);
 
   const dariResolver = (node: ts.Node): boolean => {
@@ -203,7 +219,38 @@ function sebarAsal(sf: ts.SourceFile, binding: Set<string>, namespaceBinding: Se
     );
   };
 
-  /** Menyebut salah satu nama, TANPA menuruni subtree panggilan resolver. */
+  const lepasBungkus = (n: ts.Node): ts.Node => {
+    let cur = n;
+    while (ts.isAwaitExpression(cur) || ts.isParenthesizedExpression(cur) || ts.isNonNullExpression(cur)) {
+      cur = cur.expression;
+    }
+    return cur;
+  };
+
+  /**
+   * Akses properti yang berakar pada objek hasil resolver, DAN properti
+   * pertamanya adalah field tersetujui. `hasil.utama.rel` -> ya;
+   * `hasil.ditolak[0].rel` -> TIDAK.
+   */
+  const jalurTersetujui = (node: ts.Node): boolean => {
+    if (!ts.isPropertyAccessExpression(node) && !ts.isElementAccessExpression(node)) return false;
+    // Turun ke pangkal rantai, sambil mengingat properti terakhir sebelum akar.
+    let cur: ts.Node = node;
+    let propertiTerdekat: string | null = null;
+    for (let i = 0; i < 32; i++) {
+      if (ts.isPropertyAccessExpression(cur)) {
+        propertiTerdekat = cur.name.text;
+        cur = cur.expression;
+      } else if (ts.isElementAccessExpression(cur) || ts.isNonNullExpression(cur)) {
+        cur = cur.expression;
+      } else if (ts.isCallExpression(cur)) {
+        cur = cur.expression;
+      } else break;
+    }
+    return ts.isIdentifier(cur) && akar.has(cur.text) && propertiTerdekat !== null && FIELD_TERSETUJUI.has(propertiTerdekat);
+  };
+
+  /** Menyebut nama dari himpunan, TANPA menuruni subtree panggilan resolver. */
   const menyebutTanpaResolver = (node: ts.Node, nama: Set<string>): boolean => {
     let ketemu = false;
     const turun = (n: ts.Node) => {
@@ -216,35 +263,54 @@ function sebarAsal(sf: ts.SourceFile, binding: Set<string>, namespaceBinding: Se
     return ketemu;
   };
 
-  const lepasBungkus = (n: ts.Node): ts.Node => {
-    let cur = n;
-    while (ts.isAwaitExpression(cur) || ts.isParenthesizedExpression(cur) || ts.isNonNullExpression(cur)) {
-      cur = cur.expression;
-    }
-    return cur;
+  /** Menyebut nilai yang berasal dari jalur tersetujui. */
+  const menyebutTersetujui = (node: ts.Node): boolean => {
+    let ketemu = false;
+    const turun = (n: ts.Node) => {
+      if (jalurTersetujui(n)) {
+        ketemu = true;
+        return;
+      }
+      if (ts.isIdentifier(n) && tersetujui.has(n.text)) ketemu = true;
+      ts.forEachChild(n, turun);
+    };
+    turun(node);
+    return ketemu;
   };
 
-  // Benih resolver: `const X = await resolve(...)`, `const {utama} = resolve(...)`.
+  // Benih. `const hasil = await resolve(...)` -> akar.
+  // `const {utama, tersetujui} = await resolve(...)` -> hanya field tersetujui.
   jelajah(sf, (node) => {
     if (!ts.isVariableDeclaration(node) || !node.initializer) return;
-    if (dariResolver(lepasBungkus(node.initializer))) {
-      for (const n of namaTerikat(node.name)) resolver.add(n);
+    if (!dariResolver(lepasBungkus(node.initializer))) return;
+    if (ts.isIdentifier(node.name)) {
+      akar.add(node.name.text);
+      return;
+    }
+    if (ts.isObjectBindingPattern(node.name)) {
+      for (const el of node.name.elements) {
+        const field = (el.propertyName ?? el.name) as ts.Node;
+        const namaField = ts.isIdentifier(field) ? field.text : null;
+        if (namaField && FIELD_TERSETUJUI.has(namaField)) {
+          for (const n of namaTerikat(el.name)) tersetujui.add(n);
+        }
+      }
     }
   });
 
-  // Titik tetap untuk kedua himpunan sekaligus.
+  // Titik tetap untuk kedua himpunan nilai.
   for (let putaran = 0; putaran < 12; putaran++) {
-    const sebelum = resolver.size + mentah.size;
+    const sebelum = tersetujui.size + mentah.size;
     jelajah(sf, (node) => {
-      const sebar = (init: ts.Node, tambah: (n: string) => void) => {
-        if (menyebutTanpaResolver(init, resolver)) tambah("resolver");
+      const sebar = (init: ts.Node, tambah: (jenis: "tersetujui" | "mentah") => void) => {
+        if (menyebutTersetujui(init)) tambah("tersetujui");
         if (menyebutTanpaResolver(init, mentah)) tambah("mentah");
       };
 
       if (ts.isVariableDeclaration(node) && node.initializer) {
         const nama = namaTerikat(node.name);
         sebar(node.initializer, (jenis) => {
-          for (const n of nama) (jenis === "resolver" ? resolver : mentah).add(n);
+          for (const n of nama) (jenis === "tersetujui" ? tersetujui : mentah).add(n);
         });
       }
       if (
@@ -253,9 +319,8 @@ function sebarAsal(sf: ts.SourceFile, binding: Set<string>, namespaceBinding: Se
         ts.isIdentifier(node.left)
       ) {
         const nama = node.left.text;
-        sebar(node.right, (jenis) => (jenis === "resolver" ? resolver : mentah).add(nama));
+        sebar(node.right, (jenis) => (jenis === "tersetujui" ? tersetujui : mentah).add(nama));
       }
-      // `daftar.push(<x>)` menjadikan daftar itu turunan x.
       if (
         ts.isCallExpression(node) &&
         ts.isPropertyAccessExpression(node.expression) &&
@@ -264,21 +329,53 @@ function sebarAsal(sf: ts.SourceFile, binding: Set<string>, namespaceBinding: Se
       ) {
         const nama = node.expression.expression.text;
         for (const arg of node.arguments) {
-          sebar(arg, (jenis) => (jenis === "resolver" ? resolver : mentah).add(nama));
+          sebar(arg, (jenis) => (jenis === "tersetujui" ? tersetujui : mentah).add(nama));
         }
       }
-      // `for (const rel of <x>)` mencemari variabel iterasinya.
       if (ts.isForOfStatement(node) && ts.isVariableDeclarationList(node.initializer)) {
         const nama: string[] = [];
         for (const d of node.initializer.declarations) nama.push(...namaTerikat(d.name));
         sebar(node.expression, (jenis) => {
-          for (const n of nama) (jenis === "resolver" ? resolver : mentah).add(n);
+          for (const n of nama) (jenis === "tersetujui" ? tersetujui : mentah).add(n);
         });
       }
     });
-    if (resolver.size + mentah.size === sebelum) break;
+    if (tersetujui.size + mentah.size === sebelum) break;
   }
-  return { resolver, mentah };
+  return { akar, tersetujui, mentah };
+}
+
+/** Apakah ekspresi ini berasal dari jalur tersetujui hasil resolver? */
+function dariJalurTersetujui(node: ts.Node, asal: Asal): boolean {
+  let ketemu = false;
+  const jalur = (n: ts.Node): boolean => {
+    if (!ts.isPropertyAccessExpression(n) && !ts.isElementAccessExpression(n)) return false;
+    let cur: ts.Node = n;
+    let propertiTerdekat: string | null = null;
+    for (let i = 0; i < 32; i++) {
+      if (ts.isPropertyAccessExpression(cur)) {
+        propertiTerdekat = cur.name.text;
+        cur = cur.expression;
+      } else if (ts.isElementAccessExpression(cur) || ts.isNonNullExpression(cur)) {
+        cur = cur.expression;
+      } else if (ts.isCallExpression(cur)) {
+        cur = cur.expression;
+      } else break;
+    }
+    return (
+      ts.isIdentifier(cur) && asal.akar.has(cur.text) && propertiTerdekat !== null && FIELD_TERSETUJUI.has(propertiTerdekat)
+    );
+  };
+  const turun = (n: ts.Node) => {
+    if (jalur(n)) {
+      ketemu = true;
+      return;
+    }
+    if (ts.isIdentifier(n) && asal.tersetujui.has(n.text)) ketemu = true;
+    ts.forEachChild(n, turun);
+  };
+  turun(node);
+  return ketemu;
 }
 
 function analisis(rel: string, isi: string): Analisis {
@@ -343,9 +440,13 @@ function analisis(rel: string, isi: string): Analisis {
           // KONJUNGTIF: menyebut hasil resolver DAN tidak menyebut apa pun yang
           // bisa berasal dari daftar mentah. Syarat kedua itulah yang menutup
           // pencucian nilai lewat `hasil ? raw : raw`.
+          // KONJUNGTIF, dan sisi kirinya kini SPESIFIK: nilainya harus datang
+          // dari jalur TERSETUJUI (`utama`/`tersetujui`) — bukan sekadar dari
+          // objek hasil resolver, karena `hasil.ditolak[0].rel` juga datang
+          // dari objek itu dan justru gambar yang baru saja ditolak.
           dariResolver:
             node.arguments.length > 0 &&
-            node.arguments.some((a) => menyebut(a, asal.resolver)) &&
+            node.arguments.some((a) => dariJalurTersetujui(a, asal)) &&
             !node.arguments.some((a) => menyebut(a, asal.mentah)),
         });
       }
@@ -462,6 +563,18 @@ const ref = hasil ? raw : raw;
 const imageRef = await mediaStorage().materialize(ref);
 `;
 
+// Varian KEEMPAT — temuan Reviewer ronde 3. Nilainya BENAR-BENAR datang dari
+// hasil resolver, tapi dari field `ditolak`: gambar yang baru saja dinyatakan
+// TIDAK layak. Pelacakan asal yang hanya tahu "berasal dari objek hasil"
+// meloloskannya; yang tahu FIELD MANA tidak.
+const CONTOH_DITOLAK = `
+import { resolveApprovedReference } from "./product-truth";
+declare const images: string[];
+declare const mediaStorage: () => { materialize: (k: string) => Promise<string | null> };
+const hasil = await resolveApprovedReference(images);
+const imageRef = await mediaStorage().materialize(hasil.ditolak[0].rel);
+`;
+
 // Varian kedua: hasil resolver DIPAKAI untuk sesuatu, tapi bukan untuk
 // referensi yang dikirim. Gerbang yang hanya memeriksa "hasilnya dipakai di
 // suatu tempat" akan lolos di sini.
@@ -532,6 +645,19 @@ test("counterexample detektor: hasil resolver yang DIABAIKAN tertangkap (destruk
     "`const ref = hasil ? raw : raw` dinyatakan berasal dari resolver padahal nilainya SELALU " +
       "dari images mentah. Menyebut bukan berasal-dari — dan karena ini satu-satunya penjaga W1, " +
       "kekeliruan itu tidak tertangkap siapa pun di bawahnya."
+  );
+
+  // Counterexample Reviewer ronde 3: nilainya memang dari hasil resolver, tapi
+  // dari field `ditolak`. Ini material untuk W1, yang belum punya test runtime.
+  const ditolak = analisis("lib/contoh-ditolak.ts", CONTOH_DITOLAK);
+  assert.equal(ditolak.panggilan.length, 1, "prasyarat: resolver dipanggil");
+  assert.deepEqual(ditolak.posisional, [], "prasyarat: tidak ada pemilihan posisional");
+  assert.deepEqual(
+    ditolak.materialize.map((m) => m.dariResolver),
+    [false],
+    "materialize(hasil.ditolak[0].rel) dianggap sah. Itu memakai persis gambar yang baru saja " +
+      "dinyatakan TIDAK layak — dan karena W1 belum punya test runtime, gerbang statis inilah " +
+      "satu-satunya yang berdiri di sana."
   );
 
   const salahAlamat = analisis("lib/contoh-salah-alamat.ts", CONTOH_SALAH_ALAMAT);

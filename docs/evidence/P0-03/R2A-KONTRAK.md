@@ -37,10 +37,11 @@ SCRIPT_LLM=0 npx tsx --test \
 | R1 diamandemen (di 39d363e) | 19 test · 5 lulus · 14 gagal |
 | R2/P0-A ronde 1 (di 4a0a343) | 28 test · 10 lulus · 18 gagal · 0 skip |
 | R2/P0-A ronde 2 (di f5d4029) | 43 test · 11 lulus · 32 gagal · 0 skip |
-| **R2/P0-A ronde 3 (di f22d6e8)** | **58 test · 11 lulus · 47 gagal · 0 skip · 0 cancelled · 0 todo** |
+| R2/P0-A ronde 3 (di f22d6e8) | 58 test · 11 lulus · 47 gagal · 0 skip |
+| **R2/P0-A ronde 4 (di P0A4_TEST_SHA)** | **62 test · 12 lulus · 50 gagal · 0 skip · 0 cancelled · 0 todo** |
 
-Keempat-puluh-tujuh kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
-`grep "  code: " | sort | uniq -c` → `47 code: 'ERR_ASSERTION'`, nol kode lain.
+Kelima-puluh kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
+`grep "  code: " | sort | uniq -c` → `50 code: 'ERR_ASSERTION'`, nol kode lain.
 Nol module-not-found, nol error env, nol skip, nol error fixture.
 
 `npx tsc --noEmit` → exit 0.
@@ -48,12 +49,12 @@ Nol module-not-found, nol error env, nol skip, nol error fixture.
 Suite penuh, `npm test` (`SCRIPT_LLM=0 tsx --test tests/*.test.ts`):
 
 ```
-1..863
-# tests 863 · pass 802 · fail 47 · cancelled 0 · skipped 14 · todo 0
-exit 1   (47 merah DISENGAJA — red-before, belum ada implementasi)
+1..867
+# tests 867 · pass 803 · fail 50 · cancelled 0 · skipped 14 · todo 0
+exit 1   (50 merah DISENGAJA — red-before, belum ada implementasi)
 ```
 
-Keempat-puluh-tujuh `not ok` di jalan penuh itu **persis** keempat-puluh-tujuh test
+Kelima-puluh `not ok` di jalan penuh itu **persis** kelima-puluh test
 P0-03/karantina di atas — nol regresi di tempat lain, diverifikasi dengan
 menyaring daftar `not ok` terhadap himpunan P0-03 dan mendapati sisa kosong.
 Aritmetikanya tertutup terhadap baseline `PATH-CASE-MATRIX.md` (810 · 796 · 0 · 14):
@@ -62,7 +63,13 @@ Aritmetikanya tertutup terhadap baseline `PATH-CASE-MATRIX.md` (810 · 796 · 0 
 ronde 1:  810 + 23 = 833 test ·  796 + 6 − 1 = 801 lulus ·  18 gagal
 ronde 2:  833 + 15 = 848 test ·  801 + 1     = 802 lulus ·  32 gagal
 ronde 3:  848 + 15 = 863 test ·  802         = 802 lulus ·  47 gagal
+ronde 4:  863 +  4 = 867 test ·  802 + 1     = 803 lulus ·  50 gagal
 ```
+
+Satu test ronde 4 lulus di HEAD dan itu memang benar: fixture bertentangan arah
+kedua (`jenis:"product_photo"` + `layakReferensi:false`) sudah ditolak kode
+sekarang, karena ia memang memeriksa `layakReferensi`. Ia dipertahankan sebagai
+kontrol, bukan diklaim sebagai temuan.
 
 Angka 28 mencakup `tests/klasifikasi-gambar.test.ts` (5 test), yang sebelumnya
 tidak ikut dilaporkan di R1 padahal ia berisi kontrak yang BERTABRAKAN dengan
@@ -475,6 +482,103 @@ nol proses/launchd job yang tertinggal sesudah seluruh jalan
 runtime kanonik live (49388) tidak tersentuh
 ```
 
+## Ronde 4 — tiga temuan Reviewer atas ef565aa
+
+Ketiganya diterima; nol sanggahan.
+
+### T9 (P1) — `ditolak` dihitung sebagai asal referensi tersetujui
+
+> *"`const hasil = await resolveApprovedReference(images);
+> materialize(hasil.ditolak[0].rel)` memenuhi syarat … meskipun payload itu
+> secara eksplisit ditolak. Ini material untuk W1 karena belum ada tes
+> runtime."*
+
+Benar, dan ini kelanjutan langsung dari cacat ronde 3: saya memperbaiki
+"menyebut vs berasal-dari", tapi tetap memperlakukan seluruh objek hasil
+resolver sebagai satu sumber. Padahal objek itu justru berisi daftar yang
+DITOLAK.
+
+Pelacakan asal sekarang sadar-field:
+
+```
+akar       : nama yang terikat langsung ke objek hasil (mis. `hasil`)
+tersetujui : nilai dari jalur `utama` / `tersetujui` saja
+mentah     : nilai yang bisa berasal dari daftar `images` apa adanya
+```
+
+`FIELD_TERSETUJUI = {utama, tersetujui}`; `ditolak` sengaja tidak ada di sana.
+`hasil.utama.rel` diterima; `hasil.ditolak[0].rel` tidak. Destrukturisasi ikut
+sadar-field: `const {utama} = await resolve(...)` mencemari `utama`,
+`const {ditolak} = ...` tidak mencemari apa pun.
+
+Counterexample `CONTOH_DITOLAK` dijalankan terhadap detektornya sendiri.
+
+Permintaan Anda "jadikan tes runtime W1 prasyarat sebelum P0-B5 diaktifkan"
+**diterima dan dicatat sebagai prasyarat**, bukan sebagai utang yang boleh
+lewat. Ia masuk urutan di bawah.
+
+### T10 (P1) — sidecar bertipe sah tapi kontradiktif masih meloloskan banner
+
+> *"Implementasi yang memvalidasi seluruh tipe, hash, dan versi tetapi menerima
+> berdasarkan `layakReferensi === true` tetap meluluskan sidecar
+> `{jenis:"promotional_graphic", layakReferensi:true}`."*
+
+Benar. Fixture tipe per-field tidak bisa menangkap ini, karena di sini SELURUH
+tipe sah, hash cocok, dan versinya terkini.
+
+Ditambahkan dua fixture kontradiktif di **kedua** jalur (`referensiLayak` dan
+API pusat), keduanya wajib fail-closed dengan alasan **EVIDENCE_INVALID**, bukan
+REF_PROMOTIONAL: ketika dua field bukti saling membantah, tidak ada satu pun
+yang bisa dipercaya sebagai vonis. Melaporkannya "promosi" berarti memilih satu
+field secara sewenang-wenang; melaporkannya bukti tidak sah menyatakan yang
+sebenarnya terjadi, dan itulah yang membuat karantina/revalidasi bisa
+menanganinya nanti.
+
+Arah pertama (`promotional_graphic` + `layakReferensi:true`) **merah** di HEAD.
+Arah kedua (`product_photo` + `layakReferensi:false`) **hijau** di HEAD — kode
+sekarang memang memeriksa `layakReferensi`, jadi ia dipertahankan sebagai
+kontrol dan tidak diklaim sebagai temuan.
+
+### T11 (P2) — trap sinyal membersihkan lalu MELANJUTKAN suite
+
+> *"`trap cleanup EXIT INT TERM HUP` tidak keluar setelah menangani
+> INT/TERM/HUP; shell melanjutkan perintah berikutnya … suite dapat menjalankan
+> invocation nested berikutnya dan menciptakan proses/supervisor baru sesudah
+> pembersihan."*
+
+Benar. Pembersihan yang diikuti kelanjutan bukan pembersihan.
+
+Trap EXIT dipisah dari trap sinyal, dan handler sinyal keluar dengan 128+signo
+sesudah cleanup. `cleanup()` dibuat idempoten (`CLEANED`) supaya jalur
+sinyal→EXIT tidak membersihkan dua kali.
+
+**Regresi (case 0)** menjalankan SATU salinan suite ini dalam mode probe
+(`AGENT_BUS_SELFTEST_SIGNAL_PROBE=1`): probe menyalakan runtime, menghidupkan
+proses bounded berumur panjang, menulis penanda siap, lalu menunggu. Induknya
+mengirim TERM dan menuntut empat hal sekaligus — suite berhenti (bukan sekadar
+bersih), proses bounded mati, runtime mati, lock tidak tersisa — plus penanda
+`probe-continued` yang HANYA tertulis kalau trap membersihkan lalu melanjutkan.
+
+Terverifikasi merah-sebelum lewat mutasi: mengembalikan satu baris
+`trap cleanup EXIT INT TERM HUP` membuat case 0 gagal dengan `rc=HIDUP` —
+suite bersih tapi tidak berhenti, persis cacat yang dilaporkan.
+
+Satu jebakan ditemukan dan dicatat di kode: `/bin/sh` macOS adalah bash mode
+POSIX, dan bash **menunda** handler sinyal sampai perintah foreground selesai.
+Dengan `sleep 300` tunggal, trap baru jalan 300 detik kemudian dan test menuduh
+cacat yang tidak ada. Probe karena itu menunggu dalam potongan satu detik.
+
+Bukti ronde 4:
+
+```
+targeted -> 62 test / 12 lulus / 50 gagal / 0 skip; 50/50 ERR_ASSERTION
+npm test -> 867 test / 803 lulus / 50 gagal / 14 skip; nol regresi
+tsc --noEmit -> exit 0
+test-reviewer-runtime.sh -> 7 kasus, 0 gagal
+test-bus.sh -> 13 kasus, 0 gagal
+nol proses/launchd job tertinggal; runtime kanonik live (49388) utuh
+```
+
 ## Yang SENGAJA belum dikerjakan di gelombang ini
 
 Urutan rollout dari `QUESTION` Reviewer dipatuhi: resolver ketat menyala
@@ -514,7 +618,7 @@ hijau lokal bukan bukti deployment.
 
 Gelombang ini adalah perbaikan KONTRAK. Ia tidak menaikkan skor readiness sama
 sekali: nol perubahan produksi, dan jumlah test merah justru NAIK di setiap
-ronde — 14 (R1) → 18 (ronde 1) → 32 (ronde 2) → **47** (ronde 3) — karena
+ronde — 14 (R1) → 18 → 32 → 47 → **50** (ronde 4) — karena
 kontraknya menuntut makin banyak hal yang benar, bukan karena ada yang rusak. Sesuai batas
 Reviewer, seluruh slice product-truth yang selesai pun hanya memindahkan
 kesiapan keseluruhan sekitar 40 → 55–58; 80/100 tetap butuh gerbang
@@ -522,4 +626,5 @@ Founder/eksternal yang belum dikerjakan.
 
 P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
 P0A2_TEST_SHA=f5d4029522bbeb4fbcbf4b885457369bdf3e83a6                       (ronde 2)
+P0A4_TEST_SHA=<commit ini sendiri>                                           (ronde 4)
 P0A3_TEST_SHA=f22d6e80e51e95a58a7ddb4f03095f85fbe3c7e9                                           (ronde 3)
