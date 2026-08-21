@@ -143,30 +143,101 @@ function binPalsu(dir: string, nama: string, isi: string): void {
   fs.writeFileSync(berkas, isi, { mode: 0o755 });
 }
 
-const modeKegagalan: { judul: string; siapkan: (bin: string) => void; lambat?: boolean }[] = [
+/**
+ * PIPELINE BERTAHAP — setiap biner harus BENAR-BENAR TERCAPAI.
+ *
+ * Temuan Reviewer ronde 7, dua sekaligus, dan keduanya membongkar test yang
+ * saya kira sudah benar:
+ *
+ *   1. Fixture "menggantung" TIDAK PERNAH menggantung. Skripnya memanggil
+ *      `sleep 25` tanpa path absolut, sementara PATH sudah diganti direktori
+ *      bin palsu — jadi `/bin/sh` tidak menemukan `sleep`, keluar 127 dalam
+ *      0,01 detik, dan kasus itu cuma mengulang mode exit-nonzero. Sekarang
+ *      dipakai `exec /bin/sleep`, dan DURASINYA diasersi supaya jalur
+ *      timeout-nya terbukti benar-benar dilewati, bukan diasumsikan.
+ *
+ *   2. Seluruh mode berhenti di panggilan PERTAMA, yaitu ffmpeg. Implementasi
+ *      bisa menangani ffmpeg dengan benar lalu tetap membekukan kegagalan
+ *      ffprobe/tesseract sebagai vonis promosi. Sekarang biner sebelumnya
+ *      dipalsukan SUKSES supaya eksekusi benar-benar sampai ke biner yang
+ *      sedang diuji.
+ *
+ * ffprobe punya kontrak khusus: di produksi ia dipanggil TANPA opsi timeout
+ * sama sekali (ffmpeg dan tesseract keduanya 20 detik). ffprobe yang
+ * menggantung karena itu menahan jalur unggah SELAMANYA, dan test-nya memaksa
+ * batas waktunya sendiri.
+ *
+ * Dua kasus lambat (~20 dan ~25 detik) memang mahal untuk suite ini. Itu harga
+ * yang dibayar sadar: tanpa keduanya, jalur timeout tidak pernah dieksekusi
+ * satu kali pun, dan itulah yang baru saja terbukti bisa lolos tanpa ketahuan.
+ */
+const SUKSES_FFMPEG = "#!/bin/sh\nexit 0\n";
+const SUKSES_FFPROBE = "#!/bin/sh\necho 1440,810\n";
+const GAGAL = "#!/bin/sh\nexit 1\n";
+const MENGGANTUNG = (detik: number) => `#!/bin/sh\nexec /bin/sleep ${detik}\n`;
+
+interface ModeKegagalan {
+  judul: string;
+  /** Isi bin palsu; biner yang TIDAK disebut berarti hilang dari PATH. */
+  bin: Record<string, string>;
+  /** Batas waktu yang dituntut test, dalam ms. */
+  batasMs: number;
+  /** Bila diisi: jalur timeout wajib benar-benar dilewati (durasi minimum). */
+  minimalMs?: number;
+}
+
+const modeKegagalan: ModeKegagalan[] = [
+  // --- ffmpeg: panggilan pertama ---
+  { judul: "ffmpeg HILANG dari PATH", bin: {}, batasMs: 10_000 },
+  { judul: "ffmpeg GAGAL (exit bukan nol)", bin: { ffmpeg: GAGAL }, batasMs: 10_000 },
   {
-    judul: "biner HILANG (PATH kosong, spawn ENOENT)",
-    siapkan: () => {
-      /* direktori bin sengaja dibiarkan kosong */
-    },
+    judul: "ffmpeg MENGGANTUNG (wajib berhenti di timeout 20 detik)",
+    bin: { ffmpeg: MENGGANTUNG(40) },
+    // Produksi mematok timeout 20 detik untuk ffmpeg. Batas 30 detik memberi
+    // ruang, dan minimum 15 detik membuktikan yang berhenti memang TIMEOUT-nya
+    // — bukan spawn yang gagal seketika seperti fixture lama.
+    batasMs: 30_000,
+    minimalMs: 15_000,
+  },
+
+  // --- ffprobe: hanya tercapai kalau ffmpeg sukses ---
+  { judul: "ffprobe HILANG (ffmpeg sukses)", bin: { ffmpeg: SUKSES_FFMPEG }, batasMs: 10_000 },
+  {
+    judul: "ffprobe GAGAL (ffmpeg sukses)",
+    bin: { ffmpeg: SUKSES_FFMPEG, ffprobe: GAGAL },
+    batasMs: 10_000,
   },
   {
-    judul: "biner GAGAL (exit bukan nol)",
-    siapkan: (bin) => binPalsu(bin, "ffmpeg", "#!/bin/sh\nexit 1\n"),
+    judul: "ffprobe MENGGANTUNG — produksi TIDAK punya timeout untuk ffprobe",
+    bin: { ffmpeg: SUKSES_FFMPEG, ffprobe: MENGGANTUNG(60) },
+    // Tidak ada minimalMs: yang dituntut justru sebaliknya — ia WAJIB berhenti.
+    // Hari ini `jalankan("ffprobe", …)` dipanggil tanpa opsi timeout sama
+    // sekali, jadi ia menunggu sampai ffprobe selesai. Batas ini yang
+    // menyatakan kontraknya: jalur unggah tidak boleh bisa ditahan tanpa batas
+    // oleh satu proses anak.
+    batasMs: 25_000,
+  },
+
+  // --- tesseract: hanya tercapai kalau ffmpeg DAN ffprobe sukses ---
+  {
+    judul: "tesseract HILANG (ffmpeg + ffprobe sukses)",
+    bin: { ffmpeg: SUKSES_FFMPEG, ffprobe: SUKSES_FFPROBE },
+    batasMs: 10_000,
   },
   {
-    judul: "biner MENGGANTUNG (timeout 20 detik)",
-    siapkan: (bin) => binPalsu(bin, "ffmpeg", "#!/bin/sh\nsleep 25\n"),
-    lambat: true,
+    judul: "tesseract GAGAL (ffmpeg + ffprobe sukses)",
+    bin: { ffmpeg: SUKSES_FFMPEG, ffprobe: SUKSES_FFPROBE, tesseract: GAGAL },
+    batasMs: 10_000,
   },
 ];
 
 for (const mode of modeKegagalan) {
-  test(`gagal memeriksa — ${mode.judul} = BELUM DIPERIKSA, dan tetap tidak layak`, async () => {
+  test(`gagal memeriksa — ${mode.judul} = BELUM DIPERIKSA, dan tetap tidak layak`, async (t) => {
+    t.diagnostic(`batas ${mode.batasMs}ms${mode.minimalMs ? `, minimum ${mode.minimalMs}ms` : ""}`);
     const kerja = fs.mkdtempSync(path.join(os.tmpdir(), "klas-gagal-"));
     const bin = path.join(kerja, "bin");
     fs.mkdirSync(bin);
-    mode.siapkan(bin);
+    for (const [nama, isi] of Object.entries(mode.bin)) binPalsu(bin, nama, isi);
     const foto = await gambarSahSementara(kerja);
     const pathAsli = process.env.PATH;
     const ffmpegAsli = process.env.FFMPEG_PATH;
@@ -175,7 +246,39 @@ for (const mode of modeKegagalan) {
     delete process.env.FFMPEG_PATH;
     delete process.env.FFPROBE_PATH;
     try {
-      const h = await klasifikasiGambar(foto);
+      // Batas waktu dilaporkan sebagai ASERSI, bukan sebagai Error yang lolos
+      // ke test runner. Kegagalan yang ber-code ERR_TEST_FAILURE tidak bisa
+      // dibedakan dari harness yang rusak; seluruh bukti red-before di
+      // gelombang ini bersandar pada "semua kegagalan ER_ASSERTION".
+      const LEWAT_BATAS = Symbol("lewat-batas");
+      const mulai = Date.now();
+      const hasil = await Promise.race([
+        klasifikasiGambar(foto),
+        new Promise<typeof LEWAT_BATAS>((selesai) =>
+          setTimeout(() => selesai(LEWAT_BATAS), mode.batasMs).unref()
+        ),
+      ]);
+      const durasi = Date.now() - mulai;
+      if (hasil === LEWAT_BATAS) {
+        assert.fail(
+          `${mode.judul}: klasifikasiGambar TIDAK KEMBALI dalam ${mode.batasMs}ms. Satu proses ` +
+            "anak menahan jalur unggah tanpa batas — di produksi itu berarti permintaan unggah " +
+            "pengguna menggantung sampai platform memutusnya, tanpa satu pun log yang " +
+            "menjelaskan kenapa. Di klasifikasi-gambar.ts, ffmpeg dan tesseract dipanggil dengan " +
+            "timeout 20 detik; ffprobe dipanggil TANPA opsi timeout sama sekali."
+        );
+      }
+      const h = hasil;
+
+      if (mode.minimalMs !== undefined) {
+        assert.ok(
+          durasi >= mode.minimalMs,
+          `${mode.judul}: selesai dalam ${durasi}ms, di bawah minimum ${mode.minimalMs}ms — jalur ` +
+            "TIMEOUT tidak pernah dilewati. Itu persis cacat fixture ronde 6: skrip palsunya " +
+            "gagal seketika (mis. `sleep` tidak ada di PATH yang sudah dikosongkan) sehingga " +
+            "kasus ini cuma mengulang mode exit-nonzero."
+        );
+      }
 
       assert.equal(
         h.layakReferensi,

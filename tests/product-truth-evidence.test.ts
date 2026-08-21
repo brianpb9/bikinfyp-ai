@@ -415,27 +415,69 @@ test("KEBIJAKAN: classifier mengekspor kebijakan versi 1 dengan ambang yang dipa
   );
 });
 
+/** Double terbesar yang masih lebih kecil dari x. Dipakai untuk uji tepat-di-bawah-ambang. */
+function nextDown(x: number): number {
+  const buf = new DataView(new ArrayBuffer(8));
+  buf.setFloat64(0, x);
+  const bits = buf.getBigUint64(0);
+  // x positif dan berhingga di seluruh pemakaian di sini.
+  buf.setBigUint64(0, bits - 1n);
+  return buf.getFloat64(0);
+}
+
 test("KEBIJAKAN: resolver menilai TEPAT DI AMBANG produksi, bukan di salinannya sendiri", async () => {
-  // Fixture dibangun DARI objek kebijakan produksi, bukan dari literal. Kalau
-  // validator memakai salinan sendiri dan kebijakan bergeser, keduanya
-  // berselisih dan test ini yang menangkapnya — bukan fixture berliteral.
+  // BERPASANGAN, dan pasangannya wajib ada (temuan Reviewer ronde 7).
+  //
+  // Menguji tepat-di-ambang SAJA hanya mendeteksi pergeseran satu arah. Kalau
+  // kebijakan NAIK — rasio 0.02 -> 0.03, kata 6 -> 7 — sementara validator
+  // masih memakai nilai lama, nilai di ambang BARU tetap ditolak oleh keduanya
+  // dan test itu lulus. Bahkan sesudah versiBukti dinaikkan dan literal di
+  // berkas ini diperbarui, salinan validator yang basi tetap tak terdeteksi.
+  //
+  // Pasangannya menutup arah itu: nilai TEPAT DI BAWAH ambang produksi wajib
+  // DITERIMA sebagai foto produk. Validator yang ambangnya basi (0.02) akan
+  // menolak 0.0299… — dan test ini yang menangkapnya.
+  //
+  // Keduanya dibangun DARI objek kebijakan produksi, bukan dari literal.
   const k = await muatKebijakan();
-  for (const [judul, ubah] of [
-    [`rasioAreaTeks tepat ambang produksi (${k.ambangRasio})`, { rasioAreaTeks: k.ambangRasio }],
-    [`jumlahKata tepat ambang produksi (${k.ambangKata})`, { jumlahKata: k.ambangKata }],
-  ] as [string, Record<string, unknown>][]) {
-    const isi = { jenis: "product_photo", layakReferensi: true, ...ubah };
+
+  const tolak: [string, Record<string, unknown>][] = [
+    [`rasioAreaTeks TEPAT ambang produksi (${k.ambangRasio})`, { rasioAreaTeks: k.ambangRasio }],
+    [`jumlahKata TEPAT ambang produksi (${k.ambangKata})`, { jumlahKata: k.ambangKata }],
+  ];
+  for (const [judul, ubah] of tolak) {
     pasang([
       [relFoto(1), PACKSHOT],
-      [relSidecar(1), sidecarDenganField(isi)],
+      [relSidecar(1), sidecarDenganField({ jenis: "product_photo", layakReferensi: true, ...ubah })],
     ]);
-    const layak = await referensiLayak([relFoto(1)]);
     assert.deepEqual(
-      layak,
+      await referensiLayak([relFoto(1)]),
       [],
       `${judul}: aturan produksi memakai >=, jadi nilai TEPAT di ambang sudah promosi dan vonis ` +
         `"foto produk layak" mustahil. Kalau ini hijau, validator memakai ambang yang berbeda ` +
         "dari classifier — dua aturan bukti, persis cacat yang modul pusat ada untuk menutupnya."
+    );
+  }
+
+  const terima: [string, Record<string, unknown>][] = [
+    [
+      `rasioAreaTeks TEPAT DI BAWAH ambang produksi (${nextDown(k.ambangRasio)})`,
+      { rasioAreaTeks: nextDown(k.ambangRasio) },
+    ],
+    [`jumlahKata TEPAT DI BAWAH ambang produksi (${k.ambangKata - 1})`, { jumlahKata: k.ambangKata - 1 }],
+  ];
+  for (const [judul, ubah] of terima) {
+    pasang([
+      [relFoto(1), PACKSHOT],
+      [relSidecar(1), sidecarDenganField({ jenis: "product_photo", layakReferensi: true, ...ubah })],
+    ]);
+    assert.deepEqual(
+      await referensiLayak([relFoto(1)]),
+      [relFoto(1)],
+      `${judul}: nilai di BAWAH ambang produksi wajib DITERIMA sebagai foto produk. Kalau ini ` +
+        "merah, validator memakai ambang yang lebih rendah daripada classifier — salinan basi " +
+        "yang menolak bukti yang sah. Tanpa pasangan ini, kebijakan yang NAIK tidak pernah " +
+        "terdeteksi: nilai di ambang baru tetap ditolak oleh keduanya dan testnya lulus."
     );
   }
 });
