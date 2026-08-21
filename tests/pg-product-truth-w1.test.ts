@@ -22,7 +22,7 @@
  * DILEWATI (bukan gagal) kalau `UJI_PG_URL` kosong, mengikuti pola
  * tests/pg-konkurensi-kredit.test.ts. Dijalankan lewat:
  *
- *   npm run test:pg:product-truth
+ *   npm run test:postgres-product-truth-w1
  *
  * yang membuat database disposable per jalan lalu men-drop-nya — konvensi yang
  * sama dengan scripts/test-postgres-jobs.sh. Nol data nyata tersentuh.
@@ -257,6 +257,12 @@ async function assertNolEfekSamping(jobId: string, putCalls: string[], konteks: 
     "SELECT state, provider_video, provider_voice, output_url, cost_actual_idr FROM jobs WHERE id=$1",
     [jobId]
   )).rows[0];
+  assert.ok(
+    ["FAILED", "REFUNDED"].includes(job.state),
+    `${konteks}: job berakhir ${job.state}, bukan gagal-tertutup. Nol output dan nol capture saja ` +
+      "tidak cukup: job yang tertinggal di GENERATING_VISUAL juga punya nol keduanya, dan ia " +
+      "menggantung — bukan gagal dengan bersih."
+  );
   assert.equal(job.provider_video, null, `${konteks}: provider_video tercatat — ada panggilan provider`);
   assert.equal(job.provider_voice, null, `${konteks}: provider_voice tercatat`);
   assert.equal(job.output_url, null, `${konteks}: output_url terisi padahal worker berhenti`);

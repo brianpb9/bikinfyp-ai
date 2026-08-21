@@ -1194,8 +1194,11 @@ dengan alasan apa pun — termasuk "gerbang statisnya sudah lebih ketat".
 (konvensi `scripts/test-postgres-jobs.sh`; hanya endpoint loopback diterima).
 
 ```
-7 test / 7 lulus / 0 gagal / 0 skip
+12 test / 12 lulus / 0 gagal / 0 skip
 ```
+
+(Angka ini 7/7 sampai 723234d. Kenaikannya: satu kasus delapan-foto, dua kasus
+TOCTOU/urutan referensi, dan dua kasus kanari P0-B4.)
 
 Keempat kriteria terpenuhi, plus satu tambahan:
 
@@ -1206,12 +1209,17 @@ Keempat kriteria terpenuhi, plus satu tambahan:
 | referensi tambahan hanya dari daftar tersetujui | `W1: referensi TAMBAHAN` |
 | nol jaringan, nol provider | `assertNolEfekSamping` di setiap job + penghitung fetch |
 | *(tambahan)* bukti SAH tetap lolos | `W1 kontrol positif` |
+| *(P0-B4)* kanari menyala di W1 saat DITOLAK, vonis tidak berubah | `W1 KANARI: penolakan…` |
+| *(P0-B4)* kanari mencatat PENYEBUT saat LOLOS | `W1 KANARI: jalur LOLOS…` |
 
-**Bukti mutasi**, karena test yang tidak pernah merah tidak membuktikan apa pun:
-mengembalikan W1 ke `materialize(images[0])` membuat **5 dari 7 merah** — C1
-(worker mengambil banner) dan ketiga C8 (payload diambil walau bukti tidak sah).
-Kontrol positif tetap hijau, dan itu benar: bukti yang sah memang harus tetap
-lolos di kedua versi.
+**Bukti mutasi**, karena test yang tidak pernah merah tidak membuktikan apa pun.
+Tiga mutasi berbeda, dipisah supaya masing-masing bisa ditelusuri sendiri:
+
+| Mutasi | Hasil |
+|---|---|
+| W1 dikembalikan ke `materialize(images[0])` | **5 dari 7 merah** pada suite saat itu — C1 (worker mengambil banner) dan ketiga C8 (payload diambil walau bukti tidak sah). Kontrol positif tetap hijau, dan itu benar: bukti sah memang harus tetap lolos di kedua versi. |
+| kanari dicabut dari `lib/postgres/worker.ts` | **2 merah** — kedua kasus `W1 KANARI`. Sebelum kedua kasus itu ada, mutasi ini tidak membuat apa pun merah; itulah temuan Reviewer atas 691bf83. |
+| `assertNolEfekSamping` hanya menerima state `FAILED` | **10 merah** — job nyatanya berakhir `REFUNDED`, jadi asersi state itu benar-benar membaca vonis, bukan sekadar ada. Ditambahkan setelah Reviewer menemukan helper ini MEMILIH `state` lalu mengabaikannya, sehingga job yang menggantung di `GENERATING_VISUAL` akan lolos diam-diam. |
 
 Jaring runtime ini yang membuat gerbang statis W1 kembali ke perannya yang
 benar — penangkap regresi bentuk yang murah — dan bukan satu-satunya yang
