@@ -52,7 +52,7 @@ import { pgTaskMemo } from "./task-memo";
 import { appendEndcard, ENDCARD_DEFAULT_COLOR, ENDCARD_DURASI_DTK } from "../media/endcard";
 import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
-import { bytesTersetujuiCocok, pastikanBytesTersetujui, pesanTanpaReferensi, resolveApprovedReference } from "../product-truth";
+import { ambilSnapshotTersetujui, bytesTersetujuiCocok, pastikanBytesTersetujui, pesanTanpaReferensi, resolveApprovedReference } from "../product-truth";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -332,6 +332,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // GAGAL-TERTUTUP SEBELUM LANGKAH BERBAYAR. Resolver tidak pernah melempar;
   // yang melempar di sini adalah pemanggilnya, dan ia melempar SEBELUM satu
   // byte pun diambil — jadi nol materialize, nol provider, nol capture.
+  // workDir dibuat SEBELUM referensi diambil: snapshot bukti butuh rumah, dan
+  // rumah itu harus milik job ini. Dulu ia dibuat sesudah materialize.
+  const workDir = path.join(config.storageDir, row.id ? `jobs/${row.id}` : "jobs/tanpa-id");
+  fs.mkdirSync(workDir, { recursive: true });
   const referensi = await resolveApprovedReference(images);
   if (!referensi.utama) throw new Error(pesanTanpaReferensi(referensi));
   const imageRef = await mediaStorage().materialize(referensi.utama.rel);
@@ -341,9 +345,12 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // objeknya bisa berubah di antara keduanya. Tanpa baris ini, seluruh rantai
   // bukti di atasnya jadi hiasan.
   await pastikanBytesTersetujui(imageRef, referensi.utama);
-  const workDir = path.join(config.storageDir, "jobs", row.id);
-  fs.mkdirSync(workDir, { recursive: true });
-  let primaryRef = imageRef;
+  // SNAPSHOT PRIVAT: path dari materialize() masih bisa ditimpa penulis lain
+  // sesudah diperiksa. Yang dikirim ke hilir hanya salinan milik job ini,
+  // dan salinan ITU yang diverifikasi.
+  const dirSnapshot = path.join(workDir, "ref-tersetujui");
+  const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
+  let primaryRef = refUtama;
   const extraRefs: string[] = [];
   if ((row.quality_tier ?? "silent_caption") !== "silent_caption") {
     // Referensi tambahan juga HANYA dari daftar tersetujui. Foto ke-2 dst
@@ -364,13 +371,13 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
         console.warn(`[referensi] ${ref.rel} berubah sesudah disetujui — dibuang dari referensi tambahan`);
         continue;
       }
-      extraRefs.push(p);
+      extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
     }
     // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
     // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
     // model; terbukti lolos moderasi, lab fashion-r2b 2026-08-07). Bila tidak
     // ada satu pun foto aman, error berpesan-user → FAILED + refund jelas.
-    const sanitized = await personSafeReferencePhotos([imageRef, ...extraRefs], workDir);
+    const sanitized = await personSafeReferencePhotos([refUtama, ...extraRefs], workDir);
     primaryRef = sanitized.safe[0];
     extraRefs.length = 0;
     extraRefs.push(...sanitized.safe.slice(1));

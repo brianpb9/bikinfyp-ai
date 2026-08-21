@@ -522,6 +522,98 @@ test("W1: referensi tambahan yang DITERIMA PROVIDER — urutan, hash, dan tanpa 
   );
 });
 
+// ------------------- path bersama ditimpa SESUDAH diperiksa (TOCTOU nyata)
+
+/**
+ * PATH DARI materialize() ADALAH PATH BERSAMA YANG BISA DITIMPA.
+ *
+ * Temuan Reviewer 21 Agu, dan ia menunjuk mekanismenya persis:
+ * `FilesystemStorage.materialize` mengembalikan berkas storage kanoniknya
+ * sendiri; `R2Storage.materialize` memakai cache bersama `.object-cache/<key>`.
+ * Put berikutnya, materialize KEDUA atas kunci yang sama, atau job lain yang
+ * berjalan bersamaan bisa menimpa path itu SESUDAH pemeriksaan hash tapi
+ * SEBELUM person-safe/planner/provider membacanya. Memeriksa hash sekali di
+ * awal hanya mempersempit jendela, tidak menutupnya.
+ *
+ * Storage di bawah memodelkan jendela itu seketat mungkin: SETIAP materialize
+ * menulis ke SATU path yang sama. Jadi materialize referensi tambahan menimpa
+ * bytes referensi utama, tepat sesudah utama diperiksa.
+ *
+ * Tanpa snapshot privat per job, provider akan menerima bytes referensi
+ * TAMBAHAN sebagai referensi UTAMA.
+ */
+test("W1 TOCTOU: path bersama ditimpa sesudah diperiksa — provider tetap menerima bytes yang disetujui", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  if (!punyaPersonSafe()) return t.skip("python/OpenCV/model YuNet tidak ada — jalur aman tidak bisa ditempuh");
+  await pasangProviderPengamat();
+
+  const sharp = (await import("sharp")).default;
+  const gambar = async (r: number, g: number, b: number) =>
+    sharp({ create: { width: 800, height: 800, channels: 3, background: { r, g, b } } }).png().toBuffer();
+  const sah1 = await gambar(30, 190, 110);
+  const sah2 = await gambar(70, 110, 210);
+
+  const dasar = `uploads/w1-toctou-${process.pid}`;
+  const relSah1 = `${dasar}/0.png`;
+  const relSah2 = `${dasar}/1.png`;
+  const isi = new Map<string, Buffer>([
+    [relSah1, sah1],
+    [`${relSah1}.meta.json`, sidecar(sah1, true)],
+    [relSah2, sah2],
+    [`${relSah2}.meta.json`, sidecar(sah2, true)],
+  ]);
+
+  const { setMediaStorageForTests } = await import("../lib/storage");
+  const materializeCalls: string[] = [];
+  const putCalls: string[] = [];
+  // SATU path untuk semua materialize — inilah "path bersama" itu.
+  const pathBersama = path.join(tmpMaterialize, `bersama-${process.pid}.png`);
+  setMediaStorageForTests({
+    async put(key: string, body: Buffer) {
+      putCalls.push(key);
+      isi.set(key, body);
+    },
+    async delete(key: string) {
+      isi.delete(key);
+    },
+    async get(key: string) {
+      const body = isi.get(key);
+      return body ? { body, size: body.length } : null;
+    },
+    async stat(key: string) {
+      const body = isi.get(key);
+      return body ? { size: body.length } : null;
+    },
+    async materialize(key: string) {
+      materializeCalls.push(key);
+      const body = isi.get(key);
+      if (!body) return null;
+      fs.writeFileSync(pathBersama, body); // menimpa isi materialize sebelumnya
+      return pathBersama;
+    },
+  } as never);
+
+  const jobId = await siapkanJob([relSah1, relSah2], "high_quality");
+  const { processPostgresJob } = await import("../lib/postgres/worker");
+  await processPostgresJob(jobId);
+
+  await assertNolEfekSamping(jobId, putCalls, "W1 TOCTOU");
+  assert.deepEqual(materializeCalls, [relSah1, relSah2], "kedua referensi wajib diminta");
+  assert.equal(
+    sha256(fs.readFileSync(pathBersama)),
+    sha256(sah2),
+    "prasyarat: path bersama memang sudah ditimpa bytes referensi kedua"
+  );
+
+  assert.ok(amatan.dipanggil, "provider tidak pernah menerima spec — jendela TOCTOU tidak teruji");
+  assert.equal(
+    amatan.utamaSha,
+    sha256(sah1),
+    "provider menerima bytes referensi TAMBAHAN sebagai referensi UTAMA. Path dari materialize() " +
+      "ditimpa sesudah diperiksa; yang dikirim wajib salinan privat job ini, bukan path bersama."
+  );
+});
+
 // -------------------------------------------------------- kontrol positif
 
 test("W1 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih", async (t) => {

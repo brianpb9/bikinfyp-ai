@@ -31,7 +31,7 @@ import { mediaStorage } from "./storage";
 import { MAKS_REFERENSI_PER_GENERASI } from "./product-images";
 import { personSafeReferencePhotos } from "./media/person-safe-refs";
 import { normalizeHookLevel } from "./config/hooks";
-import { bytesTersetujuiCocok, pastikanBytesTersetujui, pesanTanpaReferensi, resolveApprovedReference } from "./product-truth";
+import { ambilSnapshotTersetujui, bytesTersetujuiCocok, pastikanBytesTersetujui, pesanTanpaReferensi, resolveApprovedReference } from "./product-truth";
 
 const CONCURRENCY = 1;
 
@@ -127,12 +127,17 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // objeknya bisa berubah di antara keduanya. Tanpa baris ini, seluruh rantai
     // bukti di atasnya jadi hiasan.
     await pastikanBytesTersetujui(imageRef, referensi.utama);
+    // SNAPSHOT PRIVAT: path dari materialize() masih bisa ditimpa penulis lain
+    // sesudah diperiksa. Yang dikirim ke hilir hanya salinan milik job ini,
+    // dan salinan ITU yang diverifikasi.
+    const dirSnapshot = path.join(workDir, "ref-tersetujui");
+    const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
 
     const tier = (job.quality_tier ?? "silent_caption") as QualityTier;
     const withAudio = tier !== "silent_caption";
     // Foto ke-2..5 = referensi identitas tambahan (hanya berlaku di model r2v /
     // tier bersuara — provider yang memutuskan; gagal materialize = lewati saja).
-    let primaryRef = imageRef;
+    let primaryRef = refUtama;
     const extraRefs: string[] = [];
     if (withAudio) {
       // Referensi tambahan juga HANYA dari daftar tersetujui. Foto ke-2 dst
@@ -153,12 +158,12 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
           console.warn(`[referensi] ${ref.rel} berubah sesudah disetujui — dibuang dari referensi tambahan`);
           continue;
         }
-        extraRefs.push(p);
+        extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
       }
       // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
       // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
       // model; terbukti crop lolos moderasi, lab fashion-r2b 2026-08-07).
-      const sanitized = await personSafeReferencePhotos([imageRef, ...extraRefs], workDir);
+      const sanitized = await personSafeReferencePhotos([refUtama, ...extraRefs], workDir);
       primaryRef = sanitized.safe[0];
       extraRefs.length = 0;
       extraRefs.push(...sanitized.safe.slice(1));

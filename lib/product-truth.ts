@@ -343,3 +343,44 @@ export async function pastikanBytesTersetujui(absLokal: string, ref: ReferensiTe
       "langkah berbayar."
   );
 }
+
+/**
+ * SNAPSHOT PRIVAT PER JOB dari bytes yang sudah disetujui.
+ *
+ * Kenapa memeriksa hash saja tidak cukup (temuan Reviewer 21 Agu):
+ * `materialize()` mengembalikan path BERSAMA yang masih bisa berubah.
+ * `FilesystemStorage` mengembalikan berkas storage kanoniknya sendiri;
+ * `R2Storage` memakai cache bersama `.object-cache/<key>`. Put berikutnya,
+ * materialize kedua atas kunci yang sama, atau job lain yang berjalan
+ * bersamaan bisa MENIMPA path itu SESUDAH pemeriksaan hash tapi SEBELUM
+ * person-safe/planner/provider membacanya. Pemeriksaan sekali di awal hanya
+ * mempersempit jendelanya, tidak menutupnya.
+ *
+ * Yang menutupnya: menyalin bytes ke path yang hanya milik job ini, lalu
+ * MEMVERIFIKASI SALINANNYA. Sesudah itu tidak ada penulis lain yang tahu path
+ * tersebut, jadi yang diverifikasi dan yang dikirim dijamin berkas yang sama.
+ *
+ * Urutannya penting: salin DULU, hash SESUDAHNYA. Kalau sumbernya tertukar di
+ * tengah penyalinan, hash salinannya tidak akan cocok dan job berhenti — yang
+ * benar. Hash sumber lalu menyalin akan mengulang cacat yang sama.
+ */
+export async function ambilSnapshotTersetujui(
+  absSumber: string,
+  ref: ReferensiTersetujui,
+  dirTujuan: string
+): Promise<string> {
+  const fsp = await import("node:fs/promises");
+  const nodePath = await import("node:path");
+  await fsp.mkdir(dirTujuan, { recursive: true });
+  // Nama diturunkan dari sha256 yang disetujui: unik per bytes, dan dua job
+  // yang memakai foto sama tidak saling menimpa dengan isi yang berbeda.
+  const tujuan = nodePath.join(dirTujuan, `${ref.sha256}${nodePath.extname(ref.rel) || ""}`);
+  await fsp.copyFile(absSumber, tujuan);
+  if (!(await bytesTersetujuiCocok(tujuan, ref))) {
+    throw new Error(
+      `REF_HASH_MISMATCH: isi ${ref.rel} berubah saat disalin untuk dikirim ` +
+        `(disetujui ${ref.sha256.slice(0, 12)}…). Job dihentikan sebelum langkah berbayar.`
+    );
+  }
+  return tujuan;
+}
