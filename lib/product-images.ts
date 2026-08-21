@@ -289,6 +289,28 @@ export async function saveUniqueProductImages(
       // Cleanup must still know which idempotent key to delete.
       rels.push(rel);
       await mediaStorage().put(rel, normalized, "image/webp");
+      // BUKTI DITERBITKAN DI SINI JUGA (P0-B1, 21 Agu).
+      //
+      // Jalur ini sebelumnya menulis bytes TANPA sidecar sama sekali — jadi
+      // setiap produk yang dibuat lewat dashboard enterprise tidak punya satu
+      // pun bukti yang menyatakan fotonya layak. Begitu resolver ketat menyala,
+      // produk-produk itu terbrick seluruhnya, bukan sebagian.
+      //
+      // Berkas sementara diperlukan karena jalur ini — beda dari
+      // saveProductImages — tidak pernah menulis salinan lokal; ia langsung
+      // put ke object store. Classifier butuh path lokal.
+      const tmpKlas = fs.mkdtempSync(path.join(os.tmpdir(), "sidecar-org-"));
+      try {
+        const abs = path.join(tmpKlas, path.basename(rel));
+        fs.writeFileSync(abs, normalized);
+        await tulisSidecar(rel, normalized, abs);
+      } finally {
+        try {
+          fs.rmSync(tmpKlas, { recursive: true, force: true });
+        } catch (errBersih) {
+          console.warn(`[storage] gagal membersihkan ${tmpKlas}: ${(errBersih as Error).message}`);
+        }
+      }
     }
     return rels;
   } catch (error) {

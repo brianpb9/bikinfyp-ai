@@ -6,7 +6,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config, ensureDirs } from "./config";
-import { normalizeProductImageBuffer } from "./product-images";
+import { normalizeProductImageBuffer, tulisSidecar } from "./product-images";
 import { mediaStorage } from "./storage";
 
 const UA =
@@ -28,6 +28,16 @@ export async function downloadProductImages(productId: string, urls: string[]): 
       const abs = path.join(config.storageDir, rel);
       fs.writeFileSync(abs, normalized);
       await mediaStorage().put(rel, normalized, "image/webp");
+      // BUKTI DITERBITKAN DI SINI JUGA (P0-B1, 21 Agu).
+      //
+      // Jalur ini menulis bytes TANPA sidecar, dan ia dipakai DUA route — bukan
+      // satu: ekstrak-link Retail (app/api/products/extract) dan produk org
+      // Enterprise (app/api/dashboard/campaign/product). Jadi lubangnya
+      // melintasi kedua produk sekaligus.
+      //
+      // Urutannya penting: sidecar ditulis SEBELUM berkas lokal dibuang di mode
+      // r2, karena classifier membaca path lokal itu.
+      await tulisSidecar(rel, normalized, abs);
       if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
       rels.push(rel);
     } catch {
