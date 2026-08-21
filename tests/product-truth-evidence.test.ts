@@ -1201,3 +1201,140 @@ test("API pusat: referensiLayak adalah proyeksi dari resolver, bukan aturan kedu
   );
   assert.deepEqual(layak, [relFoto(1)], "hanya packshot bersidik sah yang boleh lolos");
 });
+
+// ===========================================================================
+// KONTRAK `rinci` — sub-kategori penolakan, dipakai AUDIT bukan gerbang
+// ===========================================================================
+//
+// Temuan Reviewer 21 Agu: versi pertama menurunkan kategori ini dari TEKS pesan
+// (`sebab.startsWith("versiBukti")`), jadi `versiBukti` bertipe string, pecahan,
+// atau null — semuanya kegagalan BENTUK — ikut dilaporkan sebagai
+// ketidakcocokan VERSI. Padahal field ini ada justru untuk menentukan tindakan
+// pemulihan yang BERBEDA:
+//
+//   SIDECAR_MISSING       bukti bisa diterbitkan ulang dari bytes yang ada
+//   SIDECAR_CORRUPT       storage bermasalah, perlu diselidiki
+//   SIDECAR_SCHEMA        bukti ditulis penulis lain, perlu diperiksa satuan
+//   SIDECAR_VERSION       satu ANGKATAN bukti perlu direvalidasi
+//   SIDECAR_CONTRADICTORY bukti membantah dirinya sendiri
+//
+// Kategori yang dipakai mengambil keputusan tidak boleh diturunkan dari
+// kalimat. Test ini menguncinya secara struktural.
+
+const kasusRinci: [string, [string, Buffer][], string][] = [
+  ["sidecar HILANG", [[relFoto(1), PACKSHOT]], "SIDECAR_MISSING"],
+  [
+    "sidecar KORUP",
+    [[relFoto(1), PACKSHOT], [relSidecar(1), Buffer.from("{bukan json")]],
+    "SIDECAR_CORRUPT",
+  ],
+  [
+    "BENTUK salah (layakReferensi string)",
+    [[relFoto(1), PACKSHOT], [relSidecar(1), sidecarDenganField({ layakReferensi: "false" })]],
+    "SIDECAR_SCHEMA",
+  ],
+  [
+    "versiBukti STRING — kegagalan BENTUK, bukan versi",
+    [[relFoto(1), PACKSHOT], [relSidecar(1), sidecarDenganField({ versiBukti: "1" })]],
+    "SIDECAR_SCHEMA",
+  ],
+  [
+    "versiBukti PECAHAN — kegagalan BENTUK, bukan versi",
+    [[relFoto(1), PACKSHOT], [relSidecar(1), sidecarDenganField({ versiBukti: 1.5 })]],
+    "SIDECAR_SCHEMA",
+  ],
+  [
+    "versiBukti HILANG — kegagalan BENTUK, bukan versi",
+    [
+      [relFoto(1), PACKSHOT],
+      [
+        relSidecar(1),
+        Buffer.from(
+          JSON.stringify({
+            sha256: sha(PACKSHOT),
+            jenis: "product_photo",
+            layakReferensi: true,
+            rasioAreaTeks: 0.004,
+            jumlahKata: 2,
+            alasan: "foto produk",
+          })
+        ),
+      ],
+    ],
+    "SIDECAR_SCHEMA",
+  ],
+  [
+    "versiBukti INTEGER tapi revisinya tidak cocok — inilah SIDECAR_VERSION",
+    [[relFoto(1), PACKSHOT], [relSidecar(1), sidecarDenganField({ versiBukti: VERSI_BUKTI_TERKINI - 1 })]],
+    "SIDECAR_VERSION",
+  ],
+  [
+    "BERTENTANGAN (promosi tapi layakReferensi true)",
+    [
+      [relFoto(1), PACKSHOT],
+      [
+        relSidecar(1),
+        sidecarDenganField({ jenis: "promotional_graphic", layakReferensi: true, rasioAreaTeks: 0.19, jumlahKata: 14 }),
+      ],
+    ],
+    "SIDECAR_CONTRADICTORY",
+  ],
+];
+
+for (const [judul, entri, rinciDiharapkan] of kasusRinci) {
+  test(`RINCI: ${judul} -> ${rinciDiharapkan}`, async () => {
+    const resolver = await muatResolver();
+    pasang(entri);
+    const hasil = await resolveTanpaLempar(resolver, [relFoto(1)], judul);
+    assert.equal(hasil.ditolak[0]?.alasan, ALASAN.BUKTI, `${judul}: alasan tingkat atas salah`);
+    assert.equal(
+      (hasil.ditolak[0] as { rinci?: string })?.rinci,
+      rinciDiharapkan,
+      `${judul}: sub-kategori salah. Ia menentukan TINDAKAN PEMULIHAN — bukti yang versinya ` +
+        "tidak cocok bisa direvalidasi seangkatan, sementara bukti yang bentuknya rusak harus " +
+        "diperiksa satu per satu. Menyamakan keduanya membuat keputusan itu mustahil diambil."
+    );
+  });
+}
+
+test("RINCI: penolakan SELAIN EVIDENCE_INVALID tidak membawa sub-kategori", async () => {
+  // Kontrol arah sebaliknya: reason code tingkat atas sudah cukup spesifik di
+  // sana, dan sub-kategori yang muncul tanpa sebab akan membuat cacah audit
+  // menghitung hal yang sama dua kali.
+  const resolver = await muatResolver();
+  const kasus: [string, [string, Buffer][], string][] = [
+    ["berkas hilang", [[relSidecar(1), sidecarSah(PACKSHOT, true, "product_photo")]], ALASAN.HILANG],
+    [
+      "hash beda",
+      [[relFoto(1), Buffer.from("BYTES-LAIN")], [relSidecar(1), sidecarSah(PACKSHOT, true, "product_photo")]],
+      ALASAN.HASH,
+    ],
+    [
+      "banner sah",
+      [[relFoto(1), BANNER], [relSidecar(1), sidecarSah(BANNER, false, "promotional_graphic")]],
+      ALASAN.PROMOSI,
+    ],
+    [
+      "belum diperiksa",
+      [
+        [relFoto(1), PACKSHOT],
+        [
+          relSidecar(1),
+          sidecarDenganField({ jenis: "belum_diperiksa", layakReferensi: false, rasioAreaTeks: 0, jumlahKata: 0 }),
+        ],
+      ],
+      ALASAN.BELUM,
+    ],
+  ];
+  for (const [judul, entri, alasanDiharapkan] of kasus) {
+    pasang(entri);
+    const hasil = await resolveTanpaLempar(resolver, [relFoto(1)], judul);
+    assert.equal(hasil.ditolak[0]?.alasan, alasanDiharapkan, `${judul}: alasan salah`);
+    assert.equal(
+      (hasil.ditolak[0] as { rinci?: string })?.rinci,
+      undefined,
+      `${judul}: membawa sub-kategori padahal reason code tingkat atasnya sudah spesifik — ` +
+        "cacah audit akan menghitung hal yang sama dua kali"
+    );
+  }
+});

@@ -135,38 +135,52 @@ interface SidecarSah {
  * angka-angkanya diperiksa DOMAIN-nya: rasio luas tidak bisa negatif dan tidak
  * bisa melebihi 1; cacahan kata tidak bisa negatif dan tidak bisa pecahan.
  */
-function periksaBentuk(nilai: unknown): { ok: true; sidecar: SidecarSah } | { ok: false; sebab: string } {
-  if (typeof nilai !== "object" || nilai === null) return { ok: false, sebab: "sidecar bukan objek" };
+function periksaBentuk(
+  nilai: unknown
+): { ok: true; sidecar: SidecarSah } | { ok: false; sebab: string; rinci: RinciTolak } {
+  if (typeof nilai !== "object" || nilai === null) return { ok: false, sebab: "sidecar bukan objek", rinci: RINCI_TOLAK.BENTUK_SALAH };
   const m = nilai as Record<string, unknown>;
 
   if (typeof m.sha256 !== "string" || !HEX64.test(m.sha256)) {
-    return { ok: false, sebab: "sha256 bukan digest sha256 (64 hex)" };
+    return { ok: false, sebab: "sha256 bukan digest sha256 (64 hex)", rinci: RINCI_TOLAK.BENTUK_SALAH };
   }
   if (typeof m.jenis !== "string" || !JENIS_SAH.includes(m.jenis as JenisGambar)) {
-    return { ok: false, sebab: `jenis "${String(m.jenis)}" di luar nilai yang dikenal` };
+    return { ok: false, sebab: `jenis "${String(m.jenis)}" di luar nilai yang dikenal`, rinci: RINCI_TOLAK.BENTUK_SALAH };
   }
   if (typeof m.layakReferensi !== "boolean") {
-    return { ok: false, sebab: "layakReferensi bukan boolean" };
+    return { ok: false, sebab: "layakReferensi bukan boolean", rinci: RINCI_TOLAK.BENTUK_SALAH };
   }
   if (typeof m.rasioAreaTeks !== "number" || !Number.isFinite(m.rasioAreaTeks) || m.rasioAreaTeks < 0 || m.rasioAreaTeks > 1) {
-    return { ok: false, sebab: "rasioAreaTeks bukan angka di rentang 0..1" };
+    return { ok: false, sebab: "rasioAreaTeks bukan angka di rentang 0..1", rinci: RINCI_TOLAK.BENTUK_SALAH };
   }
   if (typeof m.jumlahKata !== "number" || !Number.isInteger(m.jumlahKata) || m.jumlahKata < 0) {
-    return { ok: false, sebab: "jumlahKata bukan cacahan (integer >= 0)" };
+    return { ok: false, sebab: "jumlahKata bukan cacahan (integer >= 0)", rinci: RINCI_TOLAK.BENTUK_SALAH };
   }
   if (typeof m.alasan !== "string") {
-    return { ok: false, sebab: "alasan bukan string" };
+    return { ok: false, sebab: "alasan bukan string", rinci: RINCI_TOLAK.BENTUK_SALAH };
   }
   // Integer, dan HARUS sama persis dengan revisi aturan yang berlaku. Bukan
   // `>=`: bukti dari aturan lain — lebih lama MAUPUN lebih baru — tidak boleh
   // dinilai dengan aturan yang berlaku sekarang.
   if (typeof m.versiBukti !== "number" || !Number.isInteger(m.versiBukti)) {
-    return { ok: false, sebab: "versiBukti bukan integer" };
+    return { ok: false, sebab: "versiBukti bukan integer", rinci: RINCI_TOLAK.BENTUK_SALAH };
   }
+  // HANYA DI SINI SIDECAR_VERSION. Sampai baris ini `versiBukti` sudah terbukti
+  // integer, jadi yang tersisa memang ketidakcocokan REVISI — bukan kegagalan
+  // bentuk. Bedanya menentukan tindakan pemulihan: bukti yang versinya tidak
+  // cocok bisa direvalidasi seangkatan, sementara bukti yang bentuknya rusak
+  // harus diperiksa satu per satu.
+  //
+  // Versi pertama menurunkan kategori ini dari TEKS pesan
+  // (`sebab.startsWith("versiBukti")`), jadi versiBukti bertipe string, pecahan,
+  // atau null — semuanya kegagalan BENTUK — ikut dilaporkan sebagai
+  // ketidakcocokan versi. Kategori yang dipakai mengambil keputusan tidak boleh
+  // diturunkan dari kalimat.
   if (m.versiBukti !== KEBIJAKAN_KLASIFIKASI.versiBukti) {
     return {
       ok: false,
       sebab: `versiBukti ${m.versiBukti} bukan revisi aturan yang berlaku (${KEBIJAKAN_KLASIFIKASI.versiBukti})`,
+      rinci: RINCI_TOLAK.VERSI_TIDAK_COCOK,
     };
   }
   return { ok: true, sidecar: m as unknown as SidecarSah };
@@ -264,7 +278,7 @@ async function nilaiSatu(rel: string): Promise<ReferensiTersetujui | ReferensiDi
     return tolak(
       ALASAN_TOLAK.BUKTI_TIDAK_SAH,
       `Bukti kelayakan ${rel} tidak sah: ${bentuk.sebab}.`,
-      bentuk.sebab.startsWith("versiBukti") ? RINCI_TOLAK.VERSI_TIDAK_COCOK : RINCI_TOLAK.BENTUK_SALAH
+      bentuk.rinci
     );
   }
   const sidecar = bentuk.sidecar;
