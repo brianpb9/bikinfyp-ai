@@ -279,13 +279,14 @@ interface HasilAnak {
 async function klasifikasiTerkendali(
   foto: string,
   binDir: string,
-  batasMs: number
+  batasMs: number,
+  envTambahan: Record<string, string> = {}
 ): Promise<{ hasil: HasilAnak | null; durasiMs: number; pgid: number; lewatBatas: boolean }> {
   const { spawn } = await import("node:child_process");
   const anak = spawn(process.execPath, ["--import", "tsx", ANAK, foto], {
     // PATH palsu HANYA di sini; `as` diperlukan karena tipe ProcessEnv Node
     // menuntut NODE_ENV, sementara lingkungan minimal justru yang diinginkan.
-    env: { PATH: binDir, HOME: process.env.HOME ?? "" } as unknown as NodeJS.ProcessEnv,
+    env: { PATH: binDir, HOME: process.env.HOME ?? "", ...envTambahan } as unknown as NodeJS.ProcessEnv,
     detached: true, // process group sendiri -> bisa dibunuh berikut anak-anaknya
     stdio: ["ignore", "pipe", "pipe"] as const,
   });
@@ -530,6 +531,135 @@ for (const mode of modeKegagalan) {
     }
   });
 }
+
+/**
+ * KLASIFIKASI TIDAK PERNAH MENOLAK — termasuk di luar kegagalan biner.
+ *
+ * Temuan Reviewer 21 Agu atas 1ef3563: seluruh kegagalan biner memang ditangani
+ * di dalam `klasifikasiGambar`, TAPI `mkdtempSync` berada di LUAR blok try dan
+ * `rmSync` di `finally` juga bisa melempar. Jadi fungsi itu masih bisa MENOLAK —
+ * dan penolakannya naik ke pemanggil, yang blok tangkapnya menuliskan vonis
+ * palsu "promosi": persis bukti permanen yang berbohong yang seluruh gelombang
+ * ini ada untuk menghapusnya.
+ *
+ * TMPDIR yang tidak bisa ditulis adalah cara paling langsung memaksa jalur itu,
+ * dan ia deterministik: direktorinya memang tidak ada.
+ */
+test("gagal memeriksa — TMPDIR tidak bisa ditulis: TETAP mengembalikan hasil, bukan menolak", async () => {
+  // DIJALANKAN DI PROSES INI, bukan di proses anak — dan itu keputusan, bukan
+  // kelalaian. `tsx` sendiri butuh TMPDIR yang bisa ditulis untuk START; dengan
+  // TMPDIR rusak, anaknya mati sebelum sempat memanggil apa pun dan test-nya
+  // akan "merah" karena harness, bukan karena produk. (Diverifikasi:
+  // `TMPDIR=/jalan-tidak-ada node --import tsx x.ts` gagal boot.)
+  //
+  // Kasus ini tidak bisa menggantung — tidak ada biner yang dipanggil sama
+  // sekali — jadi alasan memakai proses anak (bisa dibunuh) tidak berlaku di
+  // sini. `os.tmpdir()` membaca TMPDIR setiap kali dipanggil, jadi mutasi
+  // sementara di bawah ini cukup, dan ia dipulihkan di `finally`.
+  const tmpAsli = process.env.TMPDIR;
+  process.env.TMPDIR = "/jalan-yang-tidak-ada-sama-sekali/klasifikasi";
+  try {
+    const kerja = fs.mkdtempSync(path.join(tmpAsli ?? "/tmp", "klas-tmpdir-"));
+    try {
+      // Foto disiapkan SEBELUM TMPDIR dirusak? Tidak perlu: gambarSahSementara
+      // menulis ke `kerja`, yang sudah dibuat di TMPDIR asli.
+      const foto = await gambarSahSementara(kerja);
+      const hasil = await klasifikasiGambar(foto).then(
+        (h) => ({ ok: true as const, h }),
+        (e: Error) => ({ ok: false as const, e })
+      );
+      assert.ok(
+        hasil.ok,
+        "klasifikasiGambar MENOLAK ketika TMPDIR tidak bisa ditulis " +
+          `(${hasil.ok ? "" : hasil.e.message}). Penolakan itu naik ke pemanggil, dan blok ` +
+          "tangkap di sana menuliskan vonis palsu — kontraknya: fungsi ini tidak pernah menolak, " +
+          "apa pun yang gagal. `mkdtempSync` dulu berada di LUAR blok try."
+      );
+      assert.equal(hasil.h.layakReferensi, false, "RAGU = TIDAK LOLOS tetap berlaku");
+      assert.equal(
+        hasil.h.jenis,
+        STATUS_BELUM_DIPERIKSA,
+        `kegagalan di luar biner pun wajib dicatat "${STATUS_BELUM_DIPERIKSA}", bukan vonis`
+      );
+    } finally {
+      fs.rmSync(kerja, { recursive: true, force: true });
+    }
+  } finally {
+    if (tmpAsli === undefined) delete process.env.TMPDIR;
+    else process.env.TMPDIR = tmpAsli;
+  }
+});
+
+/**
+ * KEBIJAKAN TIDAK BISA DIGESER DARI LUAR.
+ *
+ * Temuan Reviewer: objek kebijakan sempat diekspor mutable sementara classifier
+ * menyalin ambangnya sekali. Importer mana pun bisa memutasi `ambangRasio`,
+ * lalu validator membaca nilai baru sementara classifier terus memakai snapshot
+ * lama — perbedaan penerbit–penilai yang objek itu ada untuk menutupnya,
+ * dihidupkan kembali lewat pintu belakang.
+ */
+test("KEBIJAKAN: objek kebijakan beku dan tidak bisa dimutasi importer", async () => {
+  const { KEBIJAKAN_KLASIFIKASI } = await import("../lib/media/klasifikasi-gambar");
+  assert.ok(
+    Object.isFrozen(KEBIJAKAN_KLASIFIKASI),
+    "KEBIJAKAN_KLASIFIKASI tidak beku — importer mana pun bisa menggeser ambangnya saat runtime"
+  );
+  const sebelum = { ...KEBIJAKAN_KLASIFIKASI };
+  try {
+    // Lewat `any`: `readonly` hanya menahan saat kompilasi, dan justru pemanggil
+    // JS biasa (atau kode yang meng-cast) yang jadi ancamannya.
+    (KEBIJAKAN_KLASIFIKASI as unknown as Record<string, number>).ambangRasio = 0.9;
+  } catch {
+    /* mode ketat: mutasi melempar — itu juga hasil yang benar */
+  }
+  assert.deepEqual(
+    { ...KEBIJAKAN_KLASIFIKASI },
+    sebelum,
+    "kebijakan berubah sesudah percobaan mutasi — penerbit dan penilai bukti bisa berselisih"
+  );
+});
+
+/**
+ * SIDECAR TIDAK PERNAH MEMBEKUKAN KEGAGALAN JADI VONIS.
+ *
+ * `klasifikasiGambar` dikontrak tidak pernah menolak, jadi blok tangkap di
+ * `tulisSidecar` tidak terjangkau lewat jalur biasa — dan cabang yang tidak
+ * bisa diuji adalah cabang yang diam-diam salah. Karena itu classifier-nya
+ * disuntik: yang diuji di sini adalah kontrak `tulisSidecar`, bukan kontrak
+ * classifier.
+ */
+test("SIDECAR: classifier yang MENOLAK ditulis sebagai belum_diperiksa, bukan promosi", async () => {
+  const { tulisSidecar, relMeta } = await import("../lib/product-images");
+  const { setMediaStorageForTests } = await import("../lib/storage");
+  const isi = new Map<string, Buffer>();
+  setMediaStorageForTests({
+    get: async (r: string) => (isi.has(r) ? { body: isi.get(r)!, size: isi.get(r)!.length } : null),
+    stat: async (r: string) => (isi.has(r) ? { size: isi.get(r)!.length } : null),
+    put: async (r: string, body: Buffer) => { isi.set(r, body); },
+    delete: async (r: string) => { isi.delete(r); },
+    materialize: async () => null,
+  } as never);
+  try {
+    const rel = "uploads/uji-tulis/0.webp";
+    const bytes = Buffer.from("BYTES-UJI-TULIS-SIDECAR");
+    const meta = await tulisSidecar(rel, bytes, "/tidak/dipakai", async () => {
+      throw new Error("classifier meledak di luar dugaan");
+    });
+    assert.equal(
+      meta.jenis,
+      STATUS_BELUM_DIPERIKSA,
+      "classifier yang MENOLAK dicatat sebagai vonis. Bukti yang berbohong itu permanen dan " +
+        "tidak bisa dibedakan dari banner sungguhan oleh pembaca mana pun."
+    );
+    assert.equal(meta.layakReferensi, false, "RAGU = TIDAK LOLOS tetap berlaku");
+    assert.ok(meta.versiBukti >= 1, "sidecar tanpa versiBukti tidak bisa dinilai aturan mana pun");
+    const tersimpan = JSON.parse(isi.get(relMeta(rel))!.toString("utf8")) as { jenis: string };
+    assert.equal(tersimpan.jenis, STATUS_BELUM_DIPERIKSA, "yang DITULIS ke storage berbeda dari yang dikembalikan");
+  } finally {
+    setMediaStorageForTests(undefined);
+  }
+});
 
 test("gagal memeriksa — berkas TIDAK ADA = BELUM DIPERIKSA, dan tetap tidak layak", async () => {
   const h = await klasifikasiGambar("/tmp/berkas-yang-tidak-ada-sama-sekali.png");

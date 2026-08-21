@@ -90,18 +90,31 @@ export type JenisGambar = "product_photo" | "promotional_graphic" | "belum_diper
  */
 export interface KebijakanKlasifikasi {
   /** Revisi aturan. Naikkan setiap kali ambang di bawah berubah. */
-  versiBukti: number;
+  readonly versiBukti: number;
   /** Luas kotak teks / luas gambar. `>=` berarti promosi. */
-  ambangRasio: number;
+  readonly ambangRasio: number;
   /** Kata meyakinkan. `>=` berarti promosi. */
-  ambangKata: number;
+  readonly ambangKata: number;
 }
 
-export const KEBIJAKAN_KLASIFIKASI: KebijakanKlasifikasi = {
+/**
+ * DIBEKUKAN, dan itu bukan formalitas.
+ *
+ * Versi pertama mengekspornya sebagai objek biasa sementara classifier menyalin
+ * ambangnya SEKALI ke konstanta modul. Importer mana pun bisa memutasi
+ * `ambangRasio`, lalu validator membaca nilai baru sementara classifier terus
+ * memakai snapshot lama — persis perbedaan penerbit–penilai yang objek ini ada
+ * untuk menutupnya, dihidupkan kembali lewat pintu belakang.
+ *
+ * Dua lapis: `readonly` menahan mutasi yang sengaja saat kompilasi,
+ * `Object.freeze` menahan yang lewat `any`/JS biasa saat runtime. Dan tidak ada
+ * lagi snapshot: setiap keputusan membaca objek ini langsung.
+ */
+export const KEBIJAKAN_KLASIFIKASI: KebijakanKlasifikasi = Object.freeze({
   versiBukti: 1,
   ambangRasio: 0.02,
   ambangKata: 6,
-};
+});
 
 export interface HasilKlasifikasi {
   jenis: JenisGambar;
@@ -138,11 +151,24 @@ const MIN_CONF = 60;
  * empat. Ia dipertahankan sebagai jaring kedua dengan ambang longgar (6),
  * bukan sebagai penentu.
  */
-const { ambangRasio: AMBANG_RASIO, ambangKata: AMBANG_KATA } = KEBIJAKAN_KLASIFIKASI;
+// SENGAJA TIDAK ADA konstanta snapshot di sini. Ambangnya dibaca langsung dari
+// KEBIJAKAN_KLASIFIKASI di titik keputusan, supaya penerbit bukti dan penilainya
+// tidak mungkin memakai nilai yang berbeda.
 
 export async function klasifikasiGambar(fotoPath: string): Promise<HasilKlasifikasi> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "klasifikasi-"));
+  // `mkdtempSync` ADA DI DALAM try, dan itu koreksi 21 Agu.
+  //
+  // Sebelumnya ia di luar, jadi fungsi ini masih bisa MENOLAK walau seluruh
+  // kegagalan biner ditangani di dalam — cukup TMPDIR tidak bisa ditulis.
+  // Penolakan itu naik ke pemanggilnya, dan blok tangkap di sana menuliskan
+  // vonis palsu "promosi" — persis bukti permanen yang berbohong yang perubahan
+  // ini ada untuk menghapusnya.
+  //
+  // Kontraknya sekarang: fungsi ini TIDAK PERNAH menolak. Apa pun yang gagal,
+  // jawabannya `belum_diperiksa` + `layakReferensi: false`.
+  let dir = "";
   try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "klasifikasi-"));
     // Dinormalkan ke lebar tetap supaya rasio area bisa dibandingkan antar
     // gambar dengan resolusi berbeda-beda.
     const png = path.join(dir, "besar.png");
@@ -179,7 +205,8 @@ export async function klasifikasiGambar(fotoPath: string): Promise<HasilKlasifik
     }
 
     const rasioAreaTeks = areaTeks / luas;
-    const promosi = rasioAreaTeks >= AMBANG_RASIO || jumlahKata >= AMBANG_KATA;
+    const promosi =
+      rasioAreaTeks >= KEBIJAKAN_KLASIFIKASI.ambangRasio || jumlahKata >= KEBIJAKAN_KLASIFIKASI.ambangKata;
     return promosi
       ? {
           jenis: "promotional_graphic",
@@ -220,6 +247,13 @@ export async function klasifikasiGambar(fotoPath: string): Promise<HasilKlasifik
       alasan: "Kami belum bisa memeriksa gambar ini. Coba unggah ulang foto produknya ya.",
     };
   } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    // Pembersihan TIDAK BOLEH mengubah jawaban. `rmSync` bisa melempar
+    // (izin, mount hilang), dan lemparan dari `finally` MENGGANTIKAN nilai
+    // balik yang sudah benar dengan sebuah penolakan.
+    try {
+      if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    } catch (errBersih) {
+      console.warn(`[klasifikasi] gagal membersihkan ${dir}: ${(errBersih as Error).message}`);
+    }
   }
 }

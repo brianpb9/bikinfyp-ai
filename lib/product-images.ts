@@ -10,7 +10,7 @@ import crypto from "node:crypto";
 import sharp from "sharp";
 import { config, ensureDirs } from "./config";
 import { mediaStorage } from "./storage";
-import { klasifikasiGambar, type JenisGambar } from "./media/klasifikasi-gambar";
+import { klasifikasiGambar, KEBIJAKAN_KLASIFIKASI, type HasilKlasifikasi, type JenisGambar } from "./media/klasifikasi-gambar";
 
 export const ALLOWED_MIME: Record<string, string> = {
   "image/png": ".png",
@@ -108,6 +108,16 @@ export interface MetaGambar {
   rasioAreaTeks: number;
   jumlahKata: number;
   alasan: string;
+  /**
+   * Revisi aturan klasifikasi yang MENERBITKAN bukti ini.
+   *
+   * Tanpa field ini, bukti yang dibuat aturan lama tidak bisa dibedakan dari
+   * bukti yang dibuat aturan sekarang — dan aturan yang diperketat tidak akan
+   * pernah berlaku surut. Nilainya selalu diambil dari KEBIJAKAN_KLASIFIKASI,
+   * bukan ditulis literal, supaya penerbit dan penilainya tidak bisa
+   * berselisih.
+   */
+  versiBukti: number;
 }
 
 export const relMeta = (rel: string) => `${rel}.meta.json`;
@@ -122,65 +132,93 @@ export async function bacaMetaGambar(rel: string): Promise<MetaGambar | null> {
 }
 
 /**
- * Referensi yang BOLEH dikirim ke model, dari daftar rel apa adanya.
+ * Referensi yang BOLEH dikirim ke model — PROYEKSI dari resolver pusat.
  *
- * BACKFILL MALAS — lubang warisan ditutup saat dipakai, bukan sekaligus.
+ * KARANTINA MENGGANTIKAN BACKFILL MALAS (21 Agu). Versi lama mengklasifikasi
+ * gambar warisan SAAT hendak dipakai jadi referensi, lalu menulis sidecarnya
+ * dari dalam jalur baca. Itu dicabut, dan tiga alasannya masing-masing cukup:
  *
- * Gambar yang diunggah sebelum classifier ada tidak punya sidecar. Menolak
- * semuanya akan mematikan produk yang sudah terlanjur jalan; membiarkannya
- * layak selamanya berarti lubangnya tidak pernah tertutup. Jadi: begitu gambar
- * lama HENDAK dipakai jadi referensi, ia diklasifikasi saat itu juga dan
- * sidecarnya ditulis. Sesudah sekali dipakai, ia tidak lagi warisan.
+ *   - bukti yang dicetak di tengah jalur render tidak pernah dilihat siapa pun.
+ *     Tidak ada rantai kustodi: ia menempel pada bytes apa pun yang kebetulan
+ *     ada di storage detik itu;
+ *   - di produksi jalur baca itu bisa berjalan di runtime TANPA
+ *     ffmpeg/tesseract (service web Render `runtime: node`). Klasifikasi gagal,
+ *     dan vonis kegagalan itu DIBEKUKAN jadi sidecar permanen — foto produk
+ *     yang sah dicap promosi selamanya oleh mesin yang kebetulan tidak punya
+ *     OCR;
+ *   - menulis dari jalur baca membuat operasi baca tidak idempoten.
  *
- * Kenapa di sini dan bukan di skrip migrasi sekali jalan: pustaka lama bisa
- * besar, dan gambar yang tidak pernah dipakai jadi referensi tidak perlu
- * dibayar waktu OCR-nya sama sekali.
+ * Penggantinya: gambar tanpa bukti sah DIKARANTINA — tidak layak, dan jalur
+ * baca tidak menulis apa pun. Bukti hanya diterbitkan di jalur
+ * ingestion/revalidasi yang terbukti punya binernya.
  *
- * Kegagalan klasifikasi di jalur ini TIDAK menolak gambarnya (beda dengan
- * jalur unggah): di unggah pengguna sedang menatap layar dan bisa mengulang,
- * sedangkan di sini render sudah berjalan dan gambar itu mungkin satu-satunya
- * yang dimiliki produk tersebut.
+ * FUNGSI INI SENGAJA TIPIS. Ia proyeksi dari `resolveApprovedReference`, bukan
+ * aturan kedua: dua jalur baca yang bisa berbeda jawaban adalah cara divergensi
+ * W1/W2 lahir kembali lewat pintu belakang. Pemanggil yang butuh alasan
+ * penolakan memanggil resolvernya langsung.
+ *
+ * BATAS `MAKS_REFERENSI_PER_GENERASI` TIDAK diterapkan di sini. Ia batas satu
+ * PERMINTAAN RENDER, bukan batas kelayakan — dan menerapkannya di sini membuat
+ * fungsi ini berbeda jawaban dari resolver begitu produk punya lebih dari tujuh
+ * foto sah. Pembatasan itu milik pemanggil yang menyusun payload generasi.
  */
 export async function referensiLayak(rels: string[]): Promise<string[]> {
-  const layak: string[] = [];
-  for (const rel of rels) {
-    if (layak.length >= MAKS_REFERENSI_PER_GENERASI) break;
-    let meta = await bacaMetaGambar(rel);
-    if (!meta) meta = await backfillMetaGambar(rel);
-    if (!meta || meta.layakReferensi) layak.push(rel);
-  }
-  return layak;
+  const { resolveApprovedReference } = await import("./product-truth");
+  const hasil = await resolveApprovedReference(rels);
+  return hasil.tersetujui.map((r) => r.rel);
 }
 
 /**
- * Klasifikasi gambar warisan pada pemakaian pertama, lalu tulis sidecarnya.
+ * Menerbitkan sidecar untuk bytes yang BARU SAJA disimpan.
  *
- * Mengembalikan null kalau berkasnya tidak terjangkau atau pemeriksaannya
- * gagal — pemanggil memperlakukan null sebagai "biarkan lewat", lihat alasan
- * di referensiLayak.
+ * Satu-satunya penerbit bukti di berkas ini, dan sengaja begitu: selama
+ * penerbitan tersebar, setiap penulis bisa punya aturannya sendiri tentang apa
+ * yang masuk ke sidecar.
+ *
+ * KONTRAK HASH: sha256 dihitung dari BYTES YANG BENAR-BENAR DISIMPAN, bukan
+ * dari unggahan asli sebelum normalisasi WebP.
+ *
+ * KEGAGALAN KLASIFIKASI BUKAN VONIS. Kalau `klasifikasiGambar` sendiri
+ * melempar, yang ditulis `belum_diperiksa` — bukan `promotional_graphic`.
+ * `klasifikasiGambar` sudah menangani kegagalannya sendiri dengan cara itu;
+ * blok tangkap di sini hanya jaring untuk kegagalan di luar dugaannya.
  */
-export async function backfillMetaGambar(rel: string): Promise<MetaGambar | null> {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "backfill-"));
+export async function tulisSidecar(
+  rel: string,
+  bytesTersimpan: Buffer,
+  absLokal: string,
+  // Bisa disuntik SUPAYA JALUR TANGKAP DI BAWAH BISA DIUJI. `klasifikasiGambar`
+  // sendiri dikontrak tidak pernah menolak, jadi tanpa suntikan ini blok
+  // tangkapnya tidak terjangkau test mana pun — dan cabang yang tidak bisa
+  // diuji adalah cabang yang diam-diam salah.
+  klasifikasi: (p: string) => Promise<HasilKlasifikasi> = klasifikasiGambar
+): Promise<MetaGambar> {
+  const sha256 = crypto.createHash("sha256").update(bytesTersimpan).digest("hex");
+  let meta: MetaGambar;
   try {
-    const obj = await mediaStorage().get(rel);
-    if (!obj) return null;
-    const tmp = path.join(dir, path.basename(rel));
-    fs.writeFileSync(tmp, obj.body);
-    const k = await klasifikasiGambar(tmp);
-    const meta: MetaGambar = {
-      sha256: crypto.createHash("sha256").update(obj.body).digest("hex"),
-      jenis: k.jenis, layakReferensi: k.layakReferensi,
-      rasioAreaTeks: k.rasioAreaTeks, jumlahKata: k.jumlahKata, alasan: k.alasan,
+    const k = await klasifikasi(absLokal);
+    meta = {
+      sha256,
+      jenis: k.jenis,
+      layakReferensi: k.layakReferensi,
+      rasioAreaTeks: k.rasioAreaTeks,
+      jumlahKata: k.jumlahKata,
+      alasan: k.alasan,
+      versiBukti: KEBIJAKAN_KLASIFIKASI.versiBukti,
     };
-    await mediaStorage().put(relMeta(rel), Buffer.from(JSON.stringify(meta)), "application/json");
-    console.log(`[pustaka] backfill sidecar ${rel} -> ${meta.jenis}`);
-    return meta;
   } catch (err) {
-    console.warn(`[pustaka] backfill gagal untuk ${rel}, dibiarkan lewat: ${(err as Error).message}`);
-    return null;
-  } finally {
-    fs.rmSync(dir, { recursive: true, force: true });
+    meta = {
+      sha256,
+      jenis: "belum_diperiksa",
+      layakReferensi: false,
+      rasioAreaTeks: 0,
+      jumlahKata: 0,
+      alasan: `Kami belum bisa memeriksa gambar ini: ${(err as Error).message}`,
+      versiBukti: KEBIJAKAN_KLASIFIKASI.versiBukti,
+    };
   }
+  await mediaStorage().put(relMeta(rel), Buffer.from(JSON.stringify(meta)), "application/json");
+  return meta;
 }
 
 export async function saveProductImages(
@@ -217,28 +255,15 @@ export async function saveProductImages(
     // meng-hash `blobs[i].data` sementara yang ditulis ke storage adalah
     // `normalized ?? blobs[i].data` — WebP hasil normalisasi. Selama
     // normalisasi berhasil (kasus normal), sidecar membawa hash yang TIDAK
-    // PERNAH cocok dengan berkasnya. Begitu verifikasi hash dinyalakan di
-    // P0-02, setiap foto yang sah akan ditolak sebagai bukti korup.
+    // PERNAH cocok dengan berkasnya, dan setiap foto sah akan ditolak sebagai
+    // bukti korup begitu verifikasi hash dinyalakan.
     //
-    // Komentar lama di sini juga keliru: ia menyebut klasifikasi dilakukan
-    // atas berkas ASLI, padahal klasifikasiGambar(abs) membaca berkas yang
-    // SUDAH dinormalisasi. Perilakunya tidak diubah di sini — yang diperbaiki
-    // hanya hash dan keterangannya, supaya keduanya menggambarkan kenyataan.
+    // Komentar lama di sini juga keliru: ia menyebut klasifikasi dilakukan atas
+    // berkas ASLI, padahal klasifikasiGambar(abs) membaca berkas yang SUDAH
+    // dinormalisasi.
     const bytesTersimpan = normalized ?? blobs[i].data;
-    const sha256 = crypto.createHash("sha256").update(bytesTersimpan).digest("hex");
-    let meta: MetaGambar;
-    try {
-      const k = await klasifikasiGambar(abs);
-      meta = { sha256, jenis: k.jenis, layakReferensi: k.layakReferensi,
-        rasioAreaTeks: k.rasioAreaTeks, jumlahKata: k.jumlahKata, alasan: k.alasan };
-    } catch (err) {
-      // RAGU = PROMOSI, sama dengan klasifikasiGambar sendiri.
-      meta = { sha256, jenis: "promotional_graphic", layakReferensi: false,
-        rasioAreaTeks: 0, jumlahKata: 0, alasan: `Belum bisa diperiksa: ${(err as Error).message}` };
-    }
-
     await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
-    await mediaStorage().put(relMeta(rel), Buffer.from(JSON.stringify(meta)), "application/json");
+    await tulisSidecar(rel, bytesTersimpan, abs);
     if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
     rels.push(rel);
   }
