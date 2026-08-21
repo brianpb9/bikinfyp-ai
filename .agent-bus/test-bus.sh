@@ -376,29 +376,164 @@ sleep 2
 check "pesan yang datang tanpa penunggu tidak hilang — hanya tertunda" "$simpan_ok"
 matikan_penunggu
 
-# --- 12g. kirim DARI builder tanpa penunggu = peringatan yang TERLIHAT ----
+# --- 12g. peringatan hanya berbunyi saat BENAR-BENAR tuli ----------------
 # Batas jujur: pembuatan penunggu tidak bisa dipindahkan sepenuhnya ke runtime
 # (lihat .agent-bus/README.md — kanal bangunnya milik harness sesi). Yang BISA
 # dipindahkan adalah DETEKSINYA: keadaan tuli tidak boleh lagi senyap.
+#
+# Tapi alarm hanya berguna kalau ia DIAM di alur normal. Versi pertama kasus ini
+# cuma menguji "send dengan penunggu sudah terpasang" — bukan transisi kanonik
+# yang sebenarnya dijalankan Builder. Dengan kontrak lama (kirim dulu, arm
+# belakangan) peringatan itu berbunyi di SETIAP siklus yang benar, dan alarm
+# yang selalu berbunyi diabaikan orang dalam sehari (temuan Reviewer, fbb7337).
 warn_ok=0; warn_detail=""
 matikan_penunggu
+
+# (a) benar-benar tuli -> HARUS berbunyi
 err_tanpa=$("$BIN/bus-send" reviewer READY_FOR_REVIEW "$HEAD_SHA" "$TASK" "tanpa penunggu" 2>&1 >/dev/null || true)
 case "$err_tanpa" in
   *"nol penunggu builder"*) ;;
   *) warn_ok=1; warn_detail="tidak ada peringatan saat penunggu nol: ${err_tanpa:-<kosong>}" ;;
 esac
-# Arah sebaliknya: dengan penunggu hidup, TIDAK boleh ada peringatan. Peringatan
-# yang selalu muncul akan diabaikan orang dalam sehari, dan kembali senyap.
-"$BIN/bus-arm" builder 20 >"$BUS_DIR/tmp/arm-warn.out" 2>&1 &
+"$BIN/bus-read" reviewer >/dev/null 2>&1
+
+# (b) SIKLUS KANONIK PENUH, seperti yang benar-benar dijalankan Builder:
+#     Reviewer mengirim -> penunggu keluar (Builder bangun) -> bus-read ->
+#     bus-arm -> bus-send. Nol peringatan di seluruh siklus, tiga kali berturut.
+"$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-kanonik.out" 2>&1 &
+sleep 1
+n=1
+while [ "$n" -le 3 ]; do
+  "$BIN/bus-send" builder CHANGES_REQUESTED "$HEAD_SHA" "$TASK" "kanonik $n" >/dev/null 2>&1
+  tunggu=0
+  while [ "$tunggu" -lt 15 ] && [ "$(cacah_penunggu)" != 0 ]; do sleep 1; tunggu=$((tunggu + 1)); done
+  "$BIN/bus-read" builder >/dev/null 2>&1 || { warn_ok=1; warn_detail="siklus $n: bus-read gagal"; break; }
+  # ARM DULU, BARU KIRIM — inilah kontraknya, dan inilah yang diuji.
+  "$BIN/bus-arm" builder 30 >"$BUS_DIR/tmp/arm-kanonik-$n.out" 2>&1 &
+  sleep 1
+  err_siklus=$("$BIN/bus-send" reviewer READY_FOR_REVIEW "$HEAD_SHA" "$TASK" "balasan $n" 2>&1 >/dev/null || true)
+  case "$err_siklus" in
+    *"nol penunggu builder"*) warn_ok=1; warn_detail="ALARM PALSU di siklus kanonik $n: $err_siklus"; break ;;
+  esac
+  "$BIN/bus-read" reviewer >/dev/null 2>&1
+  [ "$(cacah_penunggu)" = 1 ] || { warn_ok=1; warn_detail="siklus $n: penunggu=$(cacah_penunggu)"; break; }
+  n=$((n + 1))
+done
+check "peringatan berbunyi saat tuli, DIAM di tiga siklus kanonik arm-lalu-kirim" "$warn_ok" "$warn_detail"
+matikan_penunggu
+
+# --- 12h. TRAP TERM/INT: anak mati, pidfile lepas, kode keluar benar ------
+# Klaim "trap memperbaiki pidfile basi" sebelumnya TIDAK PERNAH diuji: helper
+# matikan_penunggu membunuh bus-wait lebih dulu, jadi bus-arm selalu keluar
+# lewat hasil `wait`, bukan lewat trap (temuan Reviewer, fbb7337).
+#
+# `set -m` WAJIB di sini, dan alasannya bagian dari yang diuji: POSIX 2.11
+# menetapkan bahwa anak LATAR dari shell NON-INTERAKTIF mewarisi SIGINT sebagai
+# SIG_IGN, dan trap tidak bisa memasang ulang sinyal yang sudah diabaikan saat
+# masuk. Tanpa job control, `kill -INT` ke bus-arm adalah operasi kosong: trap
+# INT-nya tidak akan pernah berbunyi, dan test yang "lulus" hanya membuktikan
+# bahwa tidak ada yang terjadi. Dengan `set -m` anak mendapat process group
+# sendiri dan disposisi sinyal bawaan, jadi INT benar-benar sampai.
+trap_ok=0; trap_detail=""
+set -m
+for sinyal in TERM INT; do
+  matikan_penunggu
+  "$BIN/bus-arm" builder 60 >"$BUS_DIR/tmp/arm-trap-$sinyal.out" 2>&1 &
+  induk=$!
+  sleep 2
+  anak=$(cat "$waiter_pid_file" 2>/dev/null || true)
+  waiter_hidup "$anak" || { trap_ok=1; trap_detail="$sinyal: penunggu tidak terpasang sebelum sinyal"; break; }
+
+  kill -"$sinyal" "$induk" 2>/dev/null || { trap_ok=1; trap_detail="$sinyal: gagal mengirim sinyal ke induk"; break; }
+  rc_trap=0
+  wait "$induk" 2>/dev/null || rc_trap=$?
+
+  if [ "$sinyal" = INT ]; then harap=130; else harap=143; fi
+  [ "$rc_trap" = "$harap" ] || { trap_ok=1; trap_detail="$sinyal: kode keluar $rc_trap, seharusnya $harap"; break; }
+
+  tunggu=0
+  while [ "$tunggu" -lt 5 ] && kill -0 "$anak" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+  ! kill -0 "$anak" 2>/dev/null || { trap_ok=1; trap_detail="$sinyal: penunggu $anak YATIM — induk mati, anak hidup"; break; }
+  [ ! -f "$waiter_pid_file" ] || { trap_ok=1; trap_detail="$sinyal: pidfile basi tertinggal ($(cat "$waiter_pid_file"))"; break; }
+done
+set +m
+check "trap TERM/INT: anak ikut mati, pidfile lepas, kode keluar 143/130" "$trap_ok" "$trap_detail"
+matikan_penunggu
+
+# --- 12i. ARM PARALEL: tetap TEPAT SATU penunggu -------------------------
+# Kasus 14 memanggil arm kedua/ketiga SESUDAH sleep, jadi ia tidak pernah
+# menguji balapan yang sebenarnya. Dua bus-arm yang start bersamaan dulu bisa
+# sama-sama lolos pemeriksaan pidfile SEBELUM salah satunya menulis PID, lalu
+# keduanya menelurkan penunggu: satu pesan membangunkan dua kali, dan yang
+# tidak tercatat di pidfile jadi yatim (temuan Reviewer, fbb7337).
+par_ok=0; par_detail=""
+matikan_penunggu
+i=1
+while [ "$i" -le 8 ]; do
+  "$BIN/bus-arm" builder 25 >"$BUS_DIR/tmp/arm-par-$i.out" 2>&1 &
+  i=$((i + 1))
+done
+sleep 4
+jml=$(cacah_penunggu)
+[ "$jml" = 1 ] || { par_ok=1; par_detail="delapan arm serentak menghasilkan $jml penunggu"; }
+tercatat=$(cat "$waiter_pid_file" 2>/dev/null || true)
+waiter_hidup "$tercatat" || { par_ok=1; par_detail="pidfile ($tercatat) tidak menunjuk penunggu hidup; ada yang yatim"; }
+# Penunggu yang HIDUP harus PERSIS yang tercatat — kalau bukan, ada yatim.
+hidup_pid=$(pgrep -f "$BIN/bus-wait builder" 2>/dev/null | head -1)
+[ "$hidup_pid" = "$tercatat" ] || { par_ok=1; par_detail="penunggu hidup $hidup_pid != tercatat $tercatat"; }
+# Tepat SATU pemenang mencetak ARMED; sisanya SUDAH ADA.
+armed=$(grep -l '^ARMED ' "$BUS_DIR/tmp"/arm-par-*.out 2>/dev/null | wc -l | tr -d ' ')
+[ "$armed" = 1 ] || { par_ok=1; par_detail="$armed instance mengklaim ARMED, seharusnya 1"; }
+check "delapan bus-arm SERENTAK: tepat satu penunggu, nol yatim" "$par_ok" "$par_detail"
+rm -f "$BUS_DIR/tmp"/arm-par-*.out
+matikan_penunggu
+
+# --- 12j. pidfile HANYA boleh dilepas oleh pemiliknya ---------------------
+# Cacat pasangan dari 12i, dan Reviewer menyebut keduanya sekaligus:
+# pembersihan lama menghapus pidfile TANPA memastikan isinya milik instance itu.
+# Akibatnya instance yang penunggunya baru saja selesai bisa menghapus
+# REGISTRASI instance lain yang masih hidup — penunggu itu lalu tidak tercatat
+# di mana pun, dan `bus-arm` berikutnya menelurkan penunggu KEDUA karena
+# pidfile-nya kosong.
+#
+# DETERMINISTIK, tanpa mengandalkan balapan: pidfile sengaja dialihkan ke
+# penunggu lain yang benar-benar hidup, lalu instance pertama dibiarkan HABIS
+# WAKTU supaya ia menjalankan jalur pembersihannya.
+#
+# Pemicunya habis-waktu, BUKAN pesan. Versi pertama kasus ini membangunkan A
+# dengan sebuah pesan — dan pesan yang sama juga membangunkan B, yang lalu
+# keluar normal. Testnya "menemukan" B mati dan menuduh pembersihan A, padahal
+# B hanya melakukan tugasnya. Test yang salah menuduh sama tidak bergunanya
+# dengan test yang tidak menguji apa pun.
+milik_ok=0; milik_detail=""
+matikan_penunggu
+
+"$BIN/bus-arm" builder 3 --sekali >"$BUS_DIR/tmp/arm-milik.out" 2>&1 &
+sleep 1
+pid_a=$(cat "$waiter_pid_file" 2>/dev/null || true)
+waiter_hidup "$pid_a" || { milik_ok=1; milik_detail="penunggu A tidak terpasang"; }
+
+# Penunggu KEDUA yang sah dan hidup, mewakili instance lain yang sudah
+# mendaftarkan dirinya sesudah A. Batas waktunya panjang supaya ia TIDAK ikut
+# selesai karena sebab lain.
+"$BIN/bus-wait" builder 60 >/dev/null 2>&1 &
+pid_b=$!
+sleep 1
+printf '%s\n' "$pid_b" > "$waiter_pid_file"
+
+# Biarkan penunggu A habis waktu; instance A lalu menjalankan pembersihannya.
+tunggu=0
+while [ "$tunggu" -lt 12 ] && kill -0 "$pid_a" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
 sleep 2
-err_ada=$("$BIN/bus-send" reviewer READY_FOR_REVIEW "$HEAD_SHA" "$TASK" "dengan penunggu" 2>&1 >/dev/null || true)
-case "$err_ada" in
-  *"nol penunggu builder"*) warn_ok=1; warn_detail="peringatan tetap muncul padahal penunggu hidup" ;;
-esac
-# Dan pengirimannya sendiri tidak boleh terganggu oleh peringatan apa pun.
-[ "$(inbox_count reviewer)" = 2 ] || { warn_ok=1; warn_detail="pesan hilang: inbox reviewer=$(inbox_count reviewer)"; }
-"$BIN/bus-read" reviewer >/dev/null 2>&1; "$BIN/bus-read" reviewer >/dev/null 2>&1
-check "kirim DARI builder tanpa penunggu memberi peringatan; dengan penunggu tidak" "$warn_ok" "$warn_detail"
+
+sisa=$(cat "$waiter_pid_file" 2>/dev/null || true)
+[ "$sisa" = "$pid_b" ] || {
+  milik_ok=1
+  milik_detail="registrasi instance lain dihapus: pidfile berisi '${sisa:-<hilang>}', seharusnya $pid_b. Penunggu B hidup tapi tidak tercatat, jadi arm berikutnya menelurkan penunggu KEDUA."
+}
+kill -0 "$pid_b" 2>/dev/null || { milik_ok=1; milik_detail="penunggu B ikut terbunuh oleh pembersihan instance lain"; }
+kill "$pid_b" 2>/dev/null || true
+check "pidfile hanya dilepas oleh pemiliknya — registrasi instance lain tidak dihapus" "$milik_ok" "$milik_detail"
 matikan_penunggu
 
 # --- cleanup: remove only this test's archived messages -------------------

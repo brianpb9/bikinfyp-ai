@@ -261,8 +261,29 @@ Tindakan runtime PERTAMA setiap sesi Builder:
 
     .agent-bus/bin/bus-arm builder
 
-### 2. Aturan siklus hidup
-Panggil `bus-arm builder` LAGI sesudah mencapai setiap keadaan stabil baru:
+### 2. Aturan siklus hidup — PASANG DULU, BARU KIRIM
+
+Panggil `bus-arm builder` **SEBELUM** `bus-send`, bukan sesudahnya:
+
+    .agent-bus/bin/bus-arm builder      # dulu
+    .agent-bus/bin/bus-send reviewer …  # baru
+
+Urutannya dibalik pada 22 Agu, temuan Reviewer, dan ia menemukan DUA hal
+sekaligus lewat satu pengamatan:
+
+1. Kontrak lama (kirim dulu, arm belakangan) membuka JENDELA NYATA: Reviewer
+   bisa membalas di antara keduanya, dan balasan itu tiba saat nol penunggu.
+   Pesannya tidak hilang — ia menunggu di inbox — tapi tidak ada yang
+   dibangunkan, jadi Builder diam sampai ada yang menyadarinya.
+2. Kontrak lama juga membuat peringatan "nol penunggu" di `bus-send` berbunyi
+   di ALUR NORMAL: penunggu sebelumnya memang sudah keluar karena pesan
+   Reviewer yang baru saja membangunkan Builder. Alarm yang berbunyi setiap
+   siklus yang benar akan diabaikan orang dalam sehari, dan kembali senyap.
+
+Dengan urutan arm-dulu, peringatan itu hanya berbunyi saat Builder BENAR-BENAR
+tuli. Diuji sebagai siklus kanonik penuh (`test-bus.sh` kasus 20).
+
+Keadaan mantap yang wajib diakhiri dengan penunggu terpasang:
 
 - sesudah `CHANGES_REQUESTED` diproses dan submission baru dikirim;
 - sesudah `PASS` diproses;
@@ -307,6 +328,9 @@ MEKANIS sekarang (dijaga `.agent-bus/test-bus.sh` kasus 14-20):
 | PID daur ulang | `kill -0` menerima proses asing; `bus-arm` menolak memasang | identitas baris perintah diperiksa; pidfile basi diabaikan, proses asing tidak disentuh |
 | pidfile basi saat dibunuh | tidak ada trap; berkas basi tertinggal | trap TERM/INT/EXIT |
 | keadaan tuli tidak terlihat | senyap total | `bus-send` DARI builder memperingatkan ke stderr kalau nol penunggu |
+| periksa-lalu-telur tidak atomik | dua `bus-arm` serentak sama-sama lolos pemeriksaan lalu menelurkan penunggu GANDA | bagian kritis dikunci `mkdir` atomik |
+| pembersihan pidfile tanpa kepemilikan | satu instance menghapus registrasi instance lain | setiap penghapusan memverifikasi isinya milik sendiri |
+| jendela balasan | Reviewer bisa membalas antara `bus-send` dan `bus-arm` | kontrak dibalik: arm DULU, baru kirim |
 
 TIDAK BISA MEKANIS, dan ini batas yang sudah dibuktikan, bukan dugaan:
 

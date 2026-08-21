@@ -6,29 +6,42 @@
 # (itulah yang membangunkan Builder), lalu tidak ada yang memasangnya kembali —
 # sehingga sesudah DONE, Builder tuli terhadap pesan Reviewer berikutnya.
 #
-# TIGA CACAT LIFECYCLE YANG DITUTUP DI SINI (temuan 22 Agu):
+# EMPAT CACAT LIFECYCLE YANG DITUTUP DI SINI:
 #
-#   1. TIMEOUT = TULI PERMANEN. bus-wait keluar 4 saat timeout, dan versi lama
-#      meneruskan kode itu lalu berhenti. Tidak ada yang memasang penunggu
+#   1. TIMEOUT = TULI PERMANEN. bus-wait keluar 4 saat habis waktu, dan versi
+#      lama meneruskan kode itu lalu berhenti. Tidak ada yang memasang penunggu
 #      berikutnya, jadi sesudah batas waktu lewat Builder diam-diam tuli sampai
-#      ada manusia yang menyadarinya. Sekarang timeout DIPASANG ULANG otomatis;
-#      hanya kedatangan pesan yang mengakhiri skrip ini, karena kedatangan pesan
-#      memang harus membangunkan pemanggilnya.
+#      ada manusia yang menyadarinya. Sekarang timeout DIPASANG ULANG otomatis.
 #
 #   2. `kill -0` MENERIMA PID DAUR ULANG. Penjaga lama menganggap "ada proses
-#      dengan PID itu" sama dengan "penunggu masih hidup". Sesudah reboot atau
-#      daur ulang PID, proses ASING yang kebetulan memakai PID itu membuat
-#      bus-arm melapor SUDAH ADA lalu keluar tanpa memasang apa pun — Builder
-#      tuli, dan laporannya berkata sebaliknya. Sekarang identitas diperiksa:
-#      baris perintahnya harus benar-benar bus-wait untuk ROLE ini DI BUS INI.
+#      dengan PID itu" sama dengan "penunggu masih hidup". Proses ASING yang
+#      kebetulan memakai PID itu membuat bus-arm melapor SUDAH ADA lalu keluar
+#      tanpa memasang apa pun — Builder tuli, laporannya berkata sebaliknya.
+#      Sekarang identitas diperiksa: baris perintahnya harus benar-benar
+#      bus-wait untuk ROLE ini DI BUS INI.
 #
 #   3. PIDFILE BASI SAAT DIBUNUH. Tanpa trap, bus-arm yang kena SIGTERM
-#      meninggalkan pidfile. Digabung dengan cacat 2, berkas basi itu berubah
-#      jadi laporan "sudah terpasang" yang palsu. Sekarang ada trap.
+#      meninggalkan pidfile; digabung cacat 2, berkas basi itu jadi laporan
+#      "sudah terpasang" yang palsu. Sekarang ada trap TERM/INT/EXIT.
+#
+#   4. PEMERIKSAAN-LALU-TELUR TIDAK ATOMIK (temuan Reviewer atas fbb7337, dan
+#      ia benar). Dua bus-arm serentak sama-sama bisa lolos pemeriksaan pidfile
+#      SEBELUM salah satunya sempat menulis PID, lalu keduanya menelurkan
+#      bus-wait. Hasilnya penunggu GANDA: satu pesan membangunkan dua kali, dan
+#      pidfile hanya mencatat salah satunya sehingga yang lain jadi yatim yang
+#      tidak bisa dilacak siapa pun.
+#      Sekarang bagian kritisnya — periksa, telurkan, catat — dilindungi kunci
+#      direktori atomik (`mkdir` gagal kalau sudah ada, di semua filesystem
+#      POSIX). Kuncinya dipegang HANYA selama bagian kritis, bukan selama
+#      menunggu, jadi ia tidak pernah memblokir siapa pun berlama-lama.
+#
+#      Cacat pasangannya, dan Reviewer benar menyebutnya sekaligus: pembersihan
+#      lama menghapus pidfile TANPA memastikan isinya milik instance itu, jadi
+#      satu instance bisa menghapus registrasi instance lain. Sekarang setiap
+#      penghapusan diverifikasi kepemilikannya lebih dulu.
 #
 # --sekali: pasang satu penunggu lalu keluar mengikuti kode keluar bus-wait,
-# tanpa memasang ulang saat timeout. Dipakai test lifecycle; bukan untuk
-# operasi normal.
+# tanpa memasang ulang saat timeout. Dipakai test lifecycle; bukan operasi normal.
 set -eu
 BUS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 ROLE=${1:?usage: bus-arm <builder|reviewer> [timeout] [--sekali]}
@@ -45,44 +58,65 @@ done
 case "$ROLE" in builder|reviewer) ;; *) echo "role tidak sah: $ROLE" >&2; exit 2 ;; esac
 
 PIDFILE="$BUS_DIR/tmp/waiter-$ROLE.pid"
+LOCKDIR="$BUS_DIR/tmp/waiter-$ROLE.lock"
 mkdir -p "$BUS_DIR/tmp"
 
 # Identitas, bukan sekadar keberadaan. Baris perintah penunggu yang sah memuat
 # path ABSOLUT bus-wait di bus ini plus role-nya, jadi penunggu milik repo lain
 # maupun proses asing berpid sama tidak bisa lolos.
 penunggu_sah() { # penunggu_sah <pid>
-  pid=${1:-}
-  [ -n "$pid" ] || return 1
-  case "$pid" in ''|*[!0-9]*) return 1 ;; esac
-  kill -0 "$pid" 2>/dev/null || return 1
-  cmd=$(ps -o command= -p "$pid" 2>/dev/null || true)
-  case "$cmd" in
+  _p=${1:-}
+  [ -n "$_p" ] || return 1
+  case "$_p" in ''|*[!0-9]*) return 1 ;; esac
+  kill -0 "$_p" 2>/dev/null || return 1
+  case "$(ps -o command= -p "$_p" 2>/dev/null || true)" in
     *"$BUS_DIR/bin/bus-wait"*" $ROLE "*) return 0 ;;
     *"$BUS_DIR/bin/bus-wait"*" $ROLE") return 0 ;;
     *) return 1 ;;
   esac
 }
 
-pidfile_hidup() {
-  [ -f "$PIDFILE" ] || return 1
-  penunggu_sah "$(cat "$PIDFILE" 2>/dev/null || echo '')"
+# Hapus pidfile HANYA kalau isinya memang milik kita. Penghapusan tanpa
+# pemeriksaan ini yang membuat satu instance bisa menghapus registrasi instance
+# lain, dan meninggalkan penunggu hidup yang tidak tercatat di mana pun.
+lepas_pidfile() { # lepas_pidfile <pid_milik_kita>
+  [ -n "${1:-}" ] || return 0
+  [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$1" ] || return 0
+  rm -f "$PIDFILE"
 }
 
-if pidfile_hidup; then
-  echo "SUDAH ADA pid=$(cat "$PIDFILE") role=$ROLE (tidak menelurkan duplikat)"
-  exit 0
-fi
-# Sampai di sini pidfile pasti basi ATAU menunjuk proses yang bukan penunggu
-# bus ini. Membuangnya aman: kita TIDAK PERNAH mengirim sinyal ke PID itu —
-# pidfile basi tidak boleh bisa membunuh proses asing.
-rm -f "$PIDFILE"
+kunci_dipegang=0
+ambil_kunci() {
+  _coba=0
+  while ! mkdir "$LOCKDIR" 2>/dev/null; do
+    _holder=$(cat "$LOCKDIR/pid" 2>/dev/null || true)
+    if [ -n "$_holder" ] && kill -0 "$_holder" 2>/dev/null; then
+      _coba=$((_coba + 1))
+      [ "$_coba" -lt 100 ] || { echo "bus-arm: kunci $LOCKDIR tidak lepas" >&2; return 1; }
+      sleep 0.1 2>/dev/null || sleep 1
+    else
+      # Pemegang kunci mati sebelum melepas. Aman dibersihkan: kunci ini hanya
+      # menjaga bagian kritis yang sangat pendek, dan kita TIDAK PERNAH mengirim
+      # sinyal ke PID di dalamnya.
+      rm -f "$LOCKDIR/pid"; rmdir "$LOCKDIR" 2>/dev/null || true
+    fi
+  done
+  printf '%s\n' "$$" > "$LOCKDIR/pid"
+  kunci_dipegang=1
+}
+lepas_kunci() {
+  [ "$kunci_dipegang" = 1 ] || return 0
+  if [ "$(cat "$LOCKDIR/pid" 2>/dev/null || true)" = "$$" ]; then
+    rm -f "$LOCKDIR/pid"; rmdir "$LOCKDIR" 2>/dev/null || true
+  fi
+  kunci_dipegang=0
+}
 
 WAITER=""
 bersihkan() {
   [ -n "$WAITER" ] && kill "$WAITER" 2>/dev/null || true
-  if [ -f "$PIDFILE" ] && [ "$(cat "$PIDFILE" 2>/dev/null || true)" = "$WAITER" ]; then
-    rm -f "$PIDFILE"
-  fi
+  lepas_pidfile "$WAITER"
+  lepas_kunci
 }
 trap 'bersihkan; exit 143' TERM
 trap 'bersihkan; exit 130' INT
@@ -90,9 +124,25 @@ trap 'bersihkan' EXIT
 
 pertama=1
 while :; do
+  # --- BAGIAN KRITIS: periksa, telurkan, catat -----------------------------
+  ambil_kunci || exit 75
+  if [ -f "$PIDFILE" ] && penunggu_sah "$(cat "$PIDFILE" 2>/dev/null || true)"; then
+    _ada=$(cat "$PIDFILE")
+    lepas_kunci
+    echo "SUDAH ADA pid=$_ada role=$ROLE (tidak menelurkan duplikat)"
+    exit 0
+  fi
+  # Sampai di sini pidfile pasti basi ATAU menunjuk proses yang bukan penunggu
+  # bus ini. Membuangnya aman: kita TIDAK PERNAH mengirim sinyal ke PID itu —
+  # pidfile basi tidak boleh bisa membunuh proses asing.
+  rm -f "$PIDFILE"
+
   "$BUS_DIR/bin/bus-wait" "$ROLE" "$TIMEOUT" &
   WAITER=$!
-  echo "$WAITER" > "$PIDFILE"
+  printf '%s\n' "$WAITER" > "$PIDFILE"
+  lepas_kunci
+  # --- akhir bagian kritis -------------------------------------------------
+
   if [ "$pertama" = 1 ]; then
     echo "ARMED pid=$WAITER role=$ROLE timeout=$TIMEOUT"
     pertama=0
@@ -104,7 +154,8 @@ while :; do
   # timeout (exit 4) akan melompati pembersihan dan meninggalkan pidfile basi.
   RC=0
   wait "$WAITER" || RC=$?
-  rm -f "$PIDFILE"
+  lepas_pidfile "$WAITER"
+  _selesai=$WAITER
   WAITER=""
 
   # exit 4 = habis waktu tanpa pesan. Itu BUKAN alasan berhenti menunggu; ia
