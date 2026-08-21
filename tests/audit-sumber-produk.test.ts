@@ -25,7 +25,7 @@ import Database from "better-sqlite3";
 process.env.RACUN_NO_DOTENV = "1";
 
 const { dariSqlite } = await import("../lib/audit-sumber-produk");
-const { KOLOM_RUSAK } = await import("../lib/audit-bukti-produk");
+const { KOLOM_RUSAK, auditBuktiProduk } = await import("../lib/audit-bukti-produk");
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), "audit-sumber-"));
 after(() => fs.rmSync(dir, { recursive: true, force: true }));
@@ -44,6 +44,11 @@ function bikinDb(nama: string): string {
   ins.run("p2", "org-7", "enterprise", JSON.stringify(["p2/0.webp", "p2/1.webp"]), "2026-08-02");
   ins.run("p3", "org-7", "kolom korup", "{bukan json", "2026-08-03");
   ins.run("p4", null, "kosong", "[]", "2026-08-04");
+  // `images TEXT NOT NULL DEFAULT '[]'`: string kosong memenuhi NOT NULL tapi
+  // BUKAN daftar kosong yang sah — tidak satu pun jalur ingestion menulisnya.
+  ins.run("p5", "org-7", "string kosong", "", "2026-08-05");
+  ins.run("p6", null, "whitespace", "   ", "2026-08-06");
+  ins.run("p7", "org-2", "path traversal", JSON.stringify(["../rahasia.webp"]), "2026-08-07");
   // WAL dimatikan lagi dan koneksi ditutup supaya sidik jari berkas stabil.
   db.pragma("journal_mode = DELETE");
   db.close();
@@ -90,12 +95,15 @@ test("SUMBER SQLITE: org_id ikut terbawa — laporan Enterprise tanpa organisasi
       ["p2", "org-7"],
       ["p3", "org-7"],
       ["p4", null],
+      ["p5", "org-7"],
+      ["p6", null],
+      ["p7", "org-2"],
     ],
     "orgId hilang: seluruh entri Enterprise dilaporkan tanpa pemilik"
   );
   assert.deepEqual(
     baris.map((b) => b.nama),
-    ["retail", "enterprise", "kolom korup", "kosong"]
+    ["retail", "enterprise", "kolom korup", "kosong", "string kosong", "whitespace", "path traversal"]
   );
 });
 
@@ -107,6 +115,36 @@ test("SUMBER SQLITE: kolom rusak sampai ke audit sebagai RUSAK, bukan sebagai ko
   assert.deepEqual(p4.images, { ok: true, images: [] }, "kolom kosong yang SAH tidak boleh dilaporkan rusak");
   const p2 = baris.find((b) => b.id === "p2")!;
   assert.deepEqual(p2.images, { ok: true, images: ["p2/0.webp", "p2/1.webp"] });
+});
+
+test("SUMBER SQLITE: images='' dari database NYATA masuk ember kolom rusak, bukan tanpa-foto", async () => {
+  // Fixture end-to-end: baris ini datang dari SQLite sungguhan, bukan dari
+  // pemanggilan parser langsung, karena di sinilah nilai seperti itu benar-benar
+  // muncul pada data legacy.
+  const baris = await kumpulkan(bikinDb("kosong.db"));
+  const ambil = (id: string) => baris.find((b) => b.id === id)!.images;
+
+  assert.deepEqual(ambil("p5"), { ok: false, sebab: KOLOM_RUSAK.KOSONG, contoh: '""' }, "images='' dilaporkan sebagai tanpa foto");
+  assert.deepEqual(ambil("p6"), { ok: false, sebab: KOLOM_RUSAK.KOSONG, contoh: '"   "' });
+  assert.deepEqual(ambil("p7"), {
+    ok: false,
+    sebab: KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI,
+    contoh: '["../rahasia.webp"]',
+  });
+
+  const h = await auditBuktiProduk(baris);
+  assert.equal(h.produkKolomRusak, 4, "p3, p5, p6, p7");
+  assert.equal(h.produkTanpaFoto, 1, "hanya p4 (images='[]') yang benar-benar tanpa foto");
+  assert.equal(h.produkGagalDiperiksa, 0, "tidak ada baris yang boleh meledak setelah validasi kunci");
+  assert.deepEqual(
+    h.kolomRusak.map((k) => [k.id, k.sebab, k.orgId]),
+    [
+      ["p3", KOLOM_RUSAK.JSON_KORUP, "org-7"],
+      ["p5", KOLOM_RUSAK.KOSONG, "org-7"],
+      ["p6", KOLOM_RUSAK.KOSONG, null],
+      ["p7", KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI, "org-2"],
+    ]
+  );
 });
 
 test("SUMBER SQLITE: database yang tidak ada = galat, BUKAN database kosong baru", async () => {

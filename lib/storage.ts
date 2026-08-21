@@ -32,6 +32,25 @@ function safeKey(key: string): string {
   return normalized;
 }
 
+/**
+ * Apakah `key` memenuhi kontrak kunci storage relatif.
+ *
+ * Sengaja memanggil `safeKey` yang SAMA dengan yang dipakai setiap adapter,
+ * bukan menyalin aturannya. Pemanggil yang perlu MEMERIKSA sebuah kunci tanpa
+ * menyentuh storage (audit legacy) harus memakai kontrak yang identik dengan
+ * yang akan menolaknya nanti; salinan aturan akan menyimpang diam-diam dan
+ * membuat audit melaporkan kunci sah yang sebenarnya ditolak, atau sebaliknya.
+ */
+export function kunciStorageSah(key: unknown): boolean {
+  if (typeof key !== "string") return false;
+  try {
+    safeKey(key);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function localPath(key: string): string {
   const safe = safeKey(key);
   const abs = path.resolve(config.storageDir, safe);

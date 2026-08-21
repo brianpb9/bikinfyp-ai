@@ -29,6 +29,7 @@
 //      pada produk yang paling perlu dilihat manusia.
 
 import { resolveApprovedReference, ALASAN_TOLAK, type AlasanTolak, type RinciTolak } from "./product-truth";
+import { kunciStorageSah } from "./storage";
 
 /**
  * Kenapa kolom `images` gagal dibaca. Dipisah karena tindakannya berbeda: JSON
@@ -37,9 +38,13 @@ import { resolveApprovedReference, ALASAN_TOLAK, type AlasanTolak, type RinciTol
  * tengah daftar yang selebihnya sah.
  */
 export const KOLOM_RUSAK = {
+  /** Kolom tidak berisi apa pun padahal skema menyatakan NOT NULL DEFAULT '[]'. */
+  KOSONG: "IMAGES_COLUMN_EMPTY",
   JSON_KORUP: "IMAGES_COLUMN_UNPARSEABLE",
   BUKAN_ARRAY: "IMAGES_COLUMN_NOT_ARRAY",
   ELEMEN_BUKAN_TEKS: "IMAGES_COLUMN_BAD_ELEMENT",
+  /** Elemen berupa teks, tapi bukan kunci storage yang sah (mis. `../x.webp`). */
+  ELEMEN_BUKAN_KUNCI: "IMAGES_COLUMN_BAD_KEY",
 } as const;
 export type SebabKolomRusak = (typeof KOLOM_RUSAK)[keyof typeof KOLOM_RUSAK];
 
@@ -67,12 +72,23 @@ function contohMentah(mentah: unknown): string {
  * bisa lahir tanpa terlihat — dan skrip tidak bisa diuji.
  */
 export function bacaKolomImages(mentah: unknown): HasilKolomImages {
+  // Array yang diserahkan langsung oleh pemanggil (test, atau adapter yang sudah
+  // mem-parse) tetap harus lolos pemeriksaan elemen yang sama.
   if (Array.isArray(mentah)) return periksaElemen(mentah, mentah);
-  if (mentah === null || mentah === undefined) return { ok: true, images: [] };
+
+  // KOSONG BUKAN "TIDAK ADA FOTO". Kedua skema menyatakan
+  // `images TEXT NOT NULL DEFAULT '[]'`, jadi kolom kosong yang SAH berbentuk
+  // teks JSON `[]`. NULL melanggar NOT NULL — schema drift atau penulis lain.
+  // String kosong/whitespace tidak pernah ditulis satu pun jalur ingestion.
+  // Menyebut keduanya "tidak punya foto" mengembalikan persis kesalahan yang
+  // ember kolom-rusak ini dibuat untuk menghentikan: cacah kerusakan terlalu
+  // rendah, dan barisnya tidak pernah dilihat manusia.
+  if (mentah === null || mentah === undefined) {
+    return { ok: false, sebab: KOLOM_RUSAK.KOSONG, contoh: mentah === null ? "NULL" : "undefined" };
+  }
   if (typeof mentah !== "string") return { ok: false, sebab: KOLOM_RUSAK.BUKAN_ARRAY, contoh: contohMentah(mentah) };
-  // Kolom kosong adalah default kolom (`'[]'` belum terisi di baris lama) dan
-  // memang berarti tidak ada foto, bukan kerusakan.
-  if (mentah.trim() === "") return { ok: true, images: [] };
+  if (mentah.trim() === "") return { ok: false, sebab: KOLOM_RUSAK.KOSONG, contoh: JSON.stringify(mentah) };
+
   let nilai: unknown;
   try {
     nilai = JSON.parse(mentah);
@@ -89,6 +105,17 @@ function periksaElemen(nilai: unknown[], mentah: unknown): HasilKolomImages {
   if (nilai.some((x) => typeof x !== "string")) {
     return { ok: false, sebab: KOLOM_RUSAK.ELEMEN_BUKAN_TEKS, contoh: contohMentah(mentah) };
   }
+  // Teks saja tidak cukup. `["../x.webp"]` lolos `typeof`, lalu resolver
+  // memanggil storage yang MELEMPAR "Invalid storage object key" — satu baris
+  // korup menghentikan seluruh audit dan tidak ada satu angka pun dihasilkan,
+  // padahal data legacy justru tempat baris seperti itu tinggal. Teks kosong
+  // lolos juga, dan dihitung sebagai satu foto yang tidak pernah ada.
+  //
+  // Kontraknya dipinjam dari lib/storage (kunciStorageSah memanggil safeKey
+  // yang sama), BUKAN disalin: aturan yang disalin akan menyimpang diam-diam.
+  if (!(nilai as string[]).every(kunciStorageSah)) {
+    return { ok: false, sebab: KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI, contoh: contohMentah(mentah) };
+  }
   return { ok: true, images: nilai as string[] };
 }
 
@@ -104,6 +131,14 @@ export interface ProdukUntukAudit {
   /** Opsional, untuk laporan yang bisa ditindaklanjuti manusia. */
   nama?: string | null;
   orgId?: string | null;
+}
+
+/** Satu produk yang pemeriksaannya sendiri melempar galat. */
+export interface ProdukGagalDiperiksa {
+  id: string;
+  nama: string | null;
+  orgId: string | null;
+  pesan: string;
 }
 
 /** Satu produk yang kolom fotonya tidak bisa dibaca sama sekali. */
@@ -133,6 +168,8 @@ export interface HasilAudit {
   produkTanpaFoto: number;
   /** Produk yang kolom `images`-nya tidak bisa dibaca — TIDAK sama dengan tanpa foto. */
   produkKolomRusak: number;
+  /** Produk yang pemeriksaannya melempar galat. Dilaporkan, tidak menghentikan audit. */
+  produkGagalDiperiksa: number;
   foto: number;
   fotoTersetujui: number;
   /** Cacah per reason code tingkat atas. */
@@ -145,6 +182,8 @@ export interface HasilAudit {
   terbrick: RingkasanProduk[];
   /** Produk dengan kolom rusak, DENGAN ID, karena hanya manusia yang bisa memperbaikinya. */
   kolomRusak: ProdukKolomRusak[];
+  /** Produk yang gagal diperiksa, DENGAN pesan galatnya. */
+  gagalDiperiksa: ProdukGagalDiperiksa[];
 }
 
 /**
@@ -170,6 +209,7 @@ export async function auditBuktiProduk(
     produkTerbrick: 0,
     produkTanpaFoto: 0,
     produkKolomRusak: 0,
+    produkGagalDiperiksa: 0,
     foto: 0,
     fotoTersetujui: 0,
     perAlasan: {},
@@ -177,6 +217,7 @@ export async function auditBuktiProduk(
     perKolomRusak: {},
     terbrick: [],
     kolomRusak: [],
+    gagalDiperiksa: [],
   };
 
   for await (const produk of daftar as AsyncIterable<ProdukUntukAudit>) {
@@ -205,7 +246,27 @@ export async function auditBuktiProduk(
     }
     hasil.foto += images.length;
 
-    const resolusi = await resolveApprovedReference(images);
+    // SATU BARIS RUSAK TIDAK BOLEH MEMBUAT SELURUH AUDIT NOL. Validasi kunci di
+    // atas menutup jalur lempar yang sudah diketahui (safeKey), tapi sifat yang
+    // sebenarnya dijaga bukan "jalur itu" melainkan "alat ini SELALU keluar
+    // dengan angka". Audit yang mati di baris ke-9.000 dari 10.000 memberi nol
+    // informasi, dan data legacy justru tempat baris tak terduga tinggal.
+    let resolusi: Awaited<ReturnType<typeof resolveApprovedReference>>;
+    try {
+      resolusi = await resolveApprovedReference(images);
+    } catch (e) {
+      hasil.foto -= images.length;
+      hasil.produkGagalDiperiksa += 1;
+      if (hasil.gagalDiperiksa.length < batasSimpan) {
+        hasil.gagalDiperiksa.push({
+          id: produk.id,
+          nama: produk.nama ?? null,
+          orgId: produk.orgId ?? null,
+          pesan: e instanceof Error ? e.message : String(e),
+        });
+      }
+      continue;
+    }
     hasil.fotoTersetujui += resolusi.tersetujui.length;
     for (const d of resolusi.ditolak) {
       hasil.perAlasan[d.alasan] = (hasil.perAlasan[d.alasan] ?? 0) + 1;
@@ -244,6 +305,7 @@ export function laporanAudit(h: HasilAudit): string {
   baris.push(`produk diperiksa      : ${h.produk}`);
   baris.push(`  tanpa foto          : ${h.produkTanpaFoto}  (tidak terpengaruh gerbang)`);
   baris.push(`  KOLOM images RUSAK  : ${h.produkKolomRusak}  (rusak SEKARANG, bukan oleh gerbang)`);
+  baris.push(`  GAGAL DIPERIKSA     : ${h.produkGagalDiperiksa}  (audit tidak bisa menilai; bukan vonis)`);
   baris.push(`  AKAN TERBRICK       : ${h.produkTerbrick}`);
   baris.push(`foto diperiksa        : ${h.foto}`);
   baris.push(`  tersetujui          : ${h.fotoTersetujui}`);
@@ -268,6 +330,14 @@ export function laporanAudit(h: HasilAudit): string {
     baris.push(`produk dengan kolom rusak (${h.kolomRusak.length} pertama):`);
     for (const p of h.kolomRusak) {
       baris.push(`  ${p.id}  ${p.nama ?? "(tanpa nama)"}  org=${p.orgId ?? "-"}  -> ${p.sebab}  ${p.contoh}`);
+    }
+  }
+
+  if (h.produkGagalDiperiksa > 0) {
+    baris.push("");
+    baris.push(`produk yang GAGAL diperiksa (${h.gagalDiperiksa.length} pertama):`);
+    for (const p of h.gagalDiperiksa) {
+      baris.push(`  ${p.id}  ${p.nama ?? "(tanpa nama)"}  org=${p.orgId ?? "-"}  -> ${p.pesan}`);
     }
   }
 

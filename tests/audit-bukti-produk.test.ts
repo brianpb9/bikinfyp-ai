@@ -30,6 +30,7 @@ process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "audit-store-"))
 
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { auditBuktiProduk, laporanAudit, bacaKolomImages, KOLOM_RUSAK } = await import("../lib/audit-bukti-produk");
+const { kunciStorageSah } = await import("../lib/storage");
 const { resolveApprovedReference, ALASAN_TOLAK, RINCI_TOLAK } = await import("../lib/product-truth");
 
 const sha = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
@@ -261,16 +262,101 @@ test("KOLOM: elemen bukan-teks tidak boleh DISARING diam-diam", () => {
   if (!h.ok) assert.equal(h.sebab, KOLOM_RUSAK.ELEMEN_BUKAN_TEKS);
 });
 
-test("KOLOM: kosong yang SAH tetap kosong — kerusakan tidak boleh ditemukan di mana-mana", () => {
-  // Arah sebaliknya sama pentingnya: parser yang curiga pada segalanya akan
-  // memindahkan produk normal ke ember kerusakan dan menggelembungkan angka.
+test("KOLOM: HANYA `[]` yang berarti 'tidak punya foto'", () => {
+  // Versi sebelumnya menerima "", "   ", null, dan undefined sebagai daftar
+  // kosong yang sah — dan testnya MENGUNCI perilaku keliru itu. Kedua skema
+  // menyatakan `images TEXT NOT NULL DEFAULT '[]'`: kolom kosong yang sah
+  // berbentuk teks JSON `[]`. NULL melanggar NOT NULL; string kosong tidak
+  // pernah ditulis satu pun jalur ingestion. Menyebut keduanya "tanpa foto"
+  // membuat cacah kerusakan kembali terlalu rendah.
   assert.deepEqual(bacaKolomImages("[]"), { ok: true, images: [] });
-  assert.deepEqual(bacaKolomImages(""), { ok: true, images: [] });
-  assert.deepEqual(bacaKolomImages("   "), { ok: true, images: [] });
-  assert.deepEqual(bacaKolomImages(null), { ok: true, images: [] });
-  assert.deepEqual(bacaKolomImages(undefined), { ok: true, images: [] });
   assert.deepEqual(bacaKolomImages('["a.webp","b.webp"]'), { ok: true, images: ["a.webp", "b.webp"] });
   assert.deepEqual(bacaKolomImages(["a.webp"]), { ok: true, images: ["a.webp"] });
+
+  for (const [mentah, label] of [
+    ["", "string kosong"],
+    ["   ", "whitespace"],
+  ] as const) {
+    const h = bacaKolomImages(mentah);
+    assert.equal(h.ok, false, `${label} diterima sebagai daftar kosong yang sah`);
+    if (!h.ok) assert.equal(h.sebab, KOLOM_RUSAK.KOSONG, label);
+  }
+  for (const [mentah, contoh] of [
+    [null, "NULL"],
+    [undefined, "undefined"],
+  ] as const) {
+    const h = bacaKolomImages(mentah);
+    assert.equal(h.ok, false, `${contoh} diterima sebagai daftar kosong yang sah`);
+    if (!h.ok) assert.deepEqual([h.sebab, h.contoh], [KOLOM_RUSAK.KOSONG, contoh]);
+  }
+});
+
+// ---------------------------------------------------------------------------
+// ELEMEN HARUS KUNCI STORAGE YANG SAH
+//
+// `typeof x === "string"` tidak cukup. `["../x.webp"]` lolos, diteruskan ke
+// resolver, dan storage MELEMPAR "Invalid storage object key" — satu baris
+// korup menghentikan seluruh audit dan tidak ada satu angka pun dihasilkan.
+// Data legacy justru tempat baris seperti itu tinggal.
+// ---------------------------------------------------------------------------
+
+test("KOLOM: elemen yang bukan kunci storage sah adalah KERUSAKAN, bukan foto", () => {
+  // Catatan: `"/x.webp"` dan `"   "` TIDAK ada di daftar ini. safeKey membuang
+  // garis miring di depan, dan whitespace adalah nama berkas yang sah — jadi
+  // storage menerima keduanya, dan audit yang MEMINJAM kontraknya wajib ikut
+  // menerimanya. Keduanya berakhir sebagai REF_MISSING, vonis yang benar dan
+  // bisa ditindaklanjuti. Menebak lebih ketat dari kontrak sebenarnya adalah
+  // cara lain audit berbohong; kedua kunci itu dijaga oleh test silang di bawah.
+  for (const mentah of ['["../x.webp"]', '["a/../../x.webp"]', '[""]', '["a//b.webp"]', '["./x.webp"]']) {
+    const h = bacaKolomImages(mentah);
+    assert.equal(h.ok, false, `elemen bukan kunci sah diterima: ${mentah}`);
+    if (!h.ok) assert.equal(h.sebab, KOLOM_RUSAK.ELEMEN_BUKAN_KUNCI, mentah);
+  }
+  // Satu elemen busuk membusukkan barisnya: kita tidak tahu daftar itu masih
+  // menggambarkan apa, jadi menilai sisanya berarti menebak.
+  const campur = bacaKolomImages('["p1/0.webp","../x.webp"]');
+  assert.equal(campur.ok, false, "daftar dengan satu elemen busuk diteruskan sebagian ke resolver");
+});
+
+test("KOLOM: kontrak kunci DIPINJAM dari storage, bukan disalin", () => {
+  // Aturan yang disalin akan menyimpang diam-diam: audit melaporkan kunci sah
+  // yang sebenarnya ditolak storage, atau sebaliknya. Test ini menyilangkan
+  // keputusan parser dengan predikat storage yang memanggil safeKey yang sama.
+  const contoh = ["p1/0.webp", "a/b/c.webp", "../x.webp", "/x.webp", "   ", "", "a//b.webp", "./x.webp", "a/../b.webp"];
+  for (const k of contoh) {
+    const lewatParser = bacaKolomImages(JSON.stringify([k])).ok;
+    assert.equal(lewatParser, kunciStorageSah(k), `parser dan storage tidak sepakat soal ${JSON.stringify(k)}`);
+  }
+});
+
+test("AUDIT: satu baris yang melempar TIDAK boleh menihilkan seluruh laporan", async () => {
+  // Sifat yang dijaga bukan "jalur safeKey" tapi "alat ini SELALU keluar dengan
+  // angka". Audit yang mati di baris ke-9.000 dari 10.000 memberi nol informasi.
+  pasangPustaka();
+  const meledak = { ...isi };
+  void meledak;
+  const asli = isi.get.bind(isi);
+  isi.get = ((k: string) => {
+    if (k.startsWith("boom/")) throw new Error("Invalid storage object key");
+    return asli(k);
+  }) as typeof isi.get;
+  try {
+    const h = await auditBuktiProduk([
+      { id: "p1", images: ["p1/0.webp"], nama: "sah" },
+      { id: "boom", images: ["boom/0.webp"], nama: "meledak", orgId: "org-3" },
+      { id: "p3", images: ["p3/0.webp"], nama: "sidecar hilang" },
+    ]);
+    assert.equal(h.produk, 3, "audit berhenti sebelum baris terakhir");
+    assert.equal(h.produkGagalDiperiksa, 1);
+    assert.equal(h.gagalDiperiksa[0].id, "boom");
+    assert.equal(h.gagalDiperiksa[0].orgId, "org-3");
+    assert.match(h.gagalDiperiksa[0].pesan, /Invalid storage object key/);
+    assert.equal(h.produkTerbrick, 1, "baris SESUDAH yang meledak tidak ikut dinilai");
+    assert.equal(h.foto, 2, "foto dari baris yang gagal diperiksa ikut dihitung padahal tidak dinilai");
+    assert.ok(laporanAudit(h).includes("GAGAL DIPERIKSA"), "laporan menyembunyikan baris yang tidak bisa dinilai");
+  } finally {
+    isi.get = asli;
+  }
 });
 
 test("KOLOM: potongan mentah dibawa ke laporan tapi dipotong", () => {
