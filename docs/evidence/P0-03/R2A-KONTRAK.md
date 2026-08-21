@@ -38,7 +38,7 @@ SCRIPT_LLM=0 npx tsx --test \
 | R2/P0-A ronde 1 (di 4a0a343) | 28 test · 10 lulus · 18 gagal · 0 skip |
 | R2/P0-A ronde 2 (di f5d4029) | 43 test · 11 lulus · 32 gagal · 0 skip |
 | R2/P0-A ronde 3 (di f22d6e8) | 58 test · 11 lulus · 47 gagal · 0 skip |
-| **R2/P0-A ronde 4 (di P0A4_TEST_SHA)** | **62 test · 12 lulus · 50 gagal · 0 skip · 0 cancelled · 0 todo** |
+| **R2/P0-A ronde 4 (di c15f36f)** | **62 test · 12 lulus · 50 gagal · 0 skip · 0 cancelled · 0 todo** |
 
 Kelima-puluh kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
 `grep "  code: " | sort | uniq -c` → `50 code: 'ERR_ASSERTION'`, nol kode lain.
@@ -626,5 +626,5 @@ Founder/eksternal yang belum dikerjakan.
 
 P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
 P0A2_TEST_SHA=f5d4029522bbeb4fbcbf4b885457369bdf3e83a6                       (ronde 2)
-P0A4_TEST_SHA=<commit ini sendiri>                                           (ronde 4)
+P0A4_TEST_SHA=c15f36ff121a2314b81607f6e2a395db3d7acc30                                           (ronde 4)
 P0A3_TEST_SHA=f22d6e80e51e95a58a7ddb4f03095f85fbe3c7e9                                           (ronde 3)
