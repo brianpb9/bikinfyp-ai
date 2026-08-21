@@ -42,10 +42,11 @@ SCRIPT_LLM=0 npx tsx --test \
 | R2/P0-A ronde 5 (di b1fd0e8) | 74 test · 12 lulus · 62 gagal · 0 skip |
 | R2/P0-A ronde 6 (di 47d34eb) | 79 test · 12 lulus · 67 gagal · 0 skip |
 | R2/P0-A ronde 7 (di df840d5) | 94 test · 15 lulus · 79 gagal · 0 skip |
-| **R2/P0-A ronde 8 (di da3b31d)** | **99 test · 15 lulus · 84 gagal · 0 skip · 0 cancelled · 0 todo** |
+| R2/P0-A ronde 8 (di da3b31d) | 99 test · 15 lulus · 84 gagal · 0 skip |
+| **R2/P0-A ronde 9 (di P0A9_TEST_SHA)** | **100 test · 15 lulus · 85 gagal · 0 skip · 0 cancelled · 0 todo** |
 
-Kedelapan-puluh-empat kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
-`grep "  code: " | sort | uniq -c` → `84 code: 'ERR_ASSERTION'`, nol kode lain.
+Kedelapan-puluh-lima kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
+`grep "  code: " | sort | uniq -c` → `85 code: 'ERR_ASSERTION'`, nol kode lain.
 Nol module-not-found, nol error env, nol skip, nol error fixture.
 
 `npx tsc --noEmit` → exit 0.
@@ -53,12 +54,12 @@ Nol module-not-found, nol error env, nol skip, nol error fixture.
 Suite penuh, `npm test` (`SCRIPT_LLM=0 tsx --test tests/*.test.ts`):
 
 ```
-1..904
-# tests 904 · pass 806 · fail 84 · cancelled 0 · skipped 14 · todo 0
-exit 1   (84 merah DISENGAJA — red-before, belum ada implementasi)
+1..905
+# tests 905 · pass 806 · fail 85 · cancelled 0 · skipped 14 · todo 0
+exit 1   (85 merah DISENGAJA — red-before, belum ada implementasi)
 ```
 
-Kedelapan-puluh-empat `not ok` di jalan penuh itu **persis** kedelapan-puluh-empat test
+Kedelapan-puluh-lima `not ok` di jalan penuh itu **persis** kedelapan-puluh-lima test
 P0-03/karantina di atas — nol regresi di tempat lain, diverifikasi dengan
 menyaring daftar `not ok` terhadap himpunan P0-03 dan mendapati sisa kosong.
 Aritmetikanya tertutup terhadap baseline `PATH-CASE-MATRIX.md` (810 · 796 · 0 · 14):
@@ -72,6 +73,7 @@ ronde 5:  867 + 12 = 879 test ·  803         = 803 lulus ·  62 gagal
 ronde 6:  879 +  5 = 884 test ·  803         = 803 lulus ·  67 gagal
 ronde 7:  884 + 15 = 899 test ·  803 + 3     = 806 lulus ·  79 gagal
 ronde 8:  899 +  5 = 904 test ·  806         = 806 lulus ·  84 gagal
+ronde 9:  904 +  1 = 905 test ·  806         = 806 lulus ·  85 gagal
 ```
 
 Tiga test ronde 7 lulus di HEAD, dan ketiganya memang KONTROL, bukan temuan:
@@ -952,6 +954,68 @@ ffprobe-menggantung duration_ms 25009   (batas test tercapai — produksi tak be
 nol proses `sleep` tertinggal sesudah suite selesai
 ```
 
+## Ronde 9 — dua temuan Reviewer atas 0dd4ebf
+
+Keduanya diterima; nol sanggahan.
+
+### T25 (P1) — tenggat ffprobe tidak menghentikan proses yang diuji
+
+> *"`Promise.race` hanya mengakhiri penantian test; ia tidak membatalkan
+> klasifikasiGambar atau child `exec /bin/sleep 60`. Setelah asersi pada 25
+> detik, proses tetap hidup sekitar 35 detik, sementara finally menghapus
+> fixture dan memulihkan PATH. Promise yang tertinggal kemudian melanjutkan
+> pipeline menggunakan state test lain/lingkungan asli. Klaim 'nol sleep sesudah
+> suite' tidak membuktikan cleanup karena child itu sendiri menahan proses Node
+> sampai selesai."*
+
+Benar, seluruhnya, termasuk bagian terakhirnya: klaim pembersihan saya tidak
+membuktikan pembersihan — ia cuma membuktikan suite-nya menunggu.
+
+Klasifikasi sekarang dijalankan di **proses anak `detached`** dengan process
+group sendiri (`tests/fixtures/klasifikasi-anak.ts`). Saat tenggat tercapai,
+seluruh GRUP dibunuh — pembungkusnya, biner palsunya, dan `sleep`-nya — lalu
+diasersi bahwa **nol proses tersisa di grup itu**, dan asersi itu dijalankan
+**lebih dulu** dari asersi lain: kalau mesinnya tercemar, sisa test tidak
+berarti.
+
+Efek samping yang penting: `PATH` palsu kini hidup **hanya di lingkungan anak**.
+Test induk tidak pernah lagi memutasi `process.env` miliknya sendiri, jadi tidak
+ada yang bisa bocor ke test lain walau anaknya dibunuh di tengah jalan.
+
+### T26 (P1) — timeout tesseract belum dikunci kontrak
+
+> *"Karena file produksi yang sama akan diubah, implementasi dapat menghapus
+> atau merusak timeout tesseract dan seluruh kontrak tetap hijau."*
+
+Benar. Timeout tesseract ada di produksi hari ini, tapi tidak satu pun test
+menyentuhnya — dan `lib/media/klasifikasi-gambar.ts` justru berkas yang akan
+dibongkar di P0-B2.
+
+Ditambahkan mode `tesseract MENGGANTUNG` dengan ffmpeg dan ffprobe dipalsukan
+sukses, tenggat 35 detik, dan `minimalMs` 15 detik sebagai bukti jalur
+menggantung benar-benar tercapai.
+
+### Bukti durasi — ketiga jalur menggantung, terukur
+
+```
+ffmpeg    MENGGANTUNG   durasi 20061ms  lewatBatas=false   <- timeout produksi 20s
+ffprobe   MENGGANTUNG   durasi 25002ms  lewatBatas=TRUE    <- tenggat TEST; produksi tak berbatas
+tesseract MENGGANTUNG   durasi 20699ms  lewatBatas=false   <- timeout produksi 20s
+```
+
+Baris tengah itulah cacat produksinya, terukur dan bukan disimpulkan: `ffmpeg`
+dan `tesseract` berhenti sendiri di 20 detik, `ffprobe` tidak pernah berhenti
+dan harus dibunuh test.
+
+Bukti ronde 9:
+
+```
+targeted -> 100 test / 15 lulus / 85 gagal / 0 skip; 85/85 ERR_ASSERTION
+npm test -> 905 test / 806 lulus / 85 gagal / 14 skip; nol regresi
+tsc --noEmit -> exit 0
+nol proses tersisa di setiap process group (diasersi per mode, bukan disimpulkan)
+```
+
 ## Yang SENGAJA belum dikerjakan di gelombang ini
 
 Urutan rollout dari `QUESTION` Reviewer dipatuhi: resolver ketat menyala
@@ -1022,7 +1086,7 @@ hijau lokal bukan bukti deployment.
 
 Gelombang ini adalah perbaikan KONTRAK. Ia tidak menaikkan skor readiness sama
 sekali: nol perubahan produksi, dan jumlah test merah justru NAIK di setiap
-ronde — 14 (R1) → 18 → 32 → 47 → 50 → 62 → 67 → 79 → **84** (ronde 8) — karena
+ronde — 14 (R1) → 18 → 32 → 47 → 50 → 62 → 67 → 79 → 84 → **85** (ronde 9) — karena
 kontraknya menuntut makin banyak hal yang benar, bukan karena ada yang rusak. Sesuai batas
 Reviewer, seluruh slice product-truth yang selesai pun hanya memindahkan
 kesiapan keseluruhan sekitar 40 → 55–58; 80/100 tetap butuh gerbang
@@ -1030,6 +1094,7 @@ Founder/eksternal yang belum dikerjakan.
 
 P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
 P0A2_TEST_SHA=f5d4029522bbeb4fbcbf4b885457369bdf3e83a6                       (ronde 2)
+P0A9_TEST_SHA=<commit ini sendiri>                                           (ronde 9)
 P0A8_TEST_SHA=da3b31da62ae08198a5029d13301723ad8dde4c9                                           (ronde 8)
 P0A7_TEST_SHA=df840d5be993fd0df0c81cf99529f6327db4baec                                           (ronde 7)
 P0A6_TEST_SHA=47d34eb083ed1a90da757e2b615026f9c3677a46                                           (ronde 6)
