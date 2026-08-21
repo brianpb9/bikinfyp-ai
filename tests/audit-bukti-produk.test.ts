@@ -29,7 +29,7 @@ process.env.STORAGE_MODE = "filesystem";
 process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "audit-store-"));
 
 const { setMediaStorageForTests } = await import("../lib/storage");
-const { auditBuktiProduk, laporanAudit } = await import("../lib/audit-bukti-produk");
+const { auditBuktiProduk, laporanAudit, bacaKolomImages, KOLOM_RUSAK } = await import("../lib/audit-bukti-produk");
 const { resolveApprovedReference, ALASAN_TOLAK, RINCI_TOLAK } = await import("../lib/product-truth");
 
 const sha = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
@@ -219,4 +219,124 @@ test("AUDIT: batas daftar terbrick tidak mengubah CACAHNYA", async () => {
   const h = await auditBuktiProduk(pustaka, { simpanTerbrick: 2 });
   assert.equal(h.produkTerbrick, 8, "cacah terbrick ikut terpotong oleh batas daftar");
   assert.equal(h.terbrick.length, 2, "batas daftar tidak diterapkan");
+});
+
+// ---------------------------------------------------------------------------
+// KOLOM images RUSAK vs PRODUK TANPA FOTO
+//
+// Versi pertama membaca kolom `images` di dalam skrip CLI dan mengembalikan
+// `[]` saat parse gagal. Produk itu lalu masuk ember "tanpa foto" dan MELEWATI
+// resolver sepenuhnya. Akibatnya cacah terbrick dan seluruh rincian kerusakan
+// terlalu rendah — persis pada baris yang paling perlu dilihat manusia — dan
+// komentar di atasnya mengklaim hal sebaliknya.
+//
+// Keduanya menghasilkan nol foto; artinya berlawanan. Tanpa foto = tidak ada
+// yang rusak. Kolom rusak = kita TIDAK TAHU berapa yang rusak.
+// ---------------------------------------------------------------------------
+
+test("KOLOM: JSON korup TIDAK boleh terbaca sebagai daftar kosong", () => {
+  assert.deepEqual(bacaKolomImages("{bukan json"), {
+    ok: false,
+    sebab: KOLOM_RUSAK.JSON_KORUP,
+    contoh: "{bukan json",
+  });
+  assert.deepEqual(bacaKolomImages('["a.webp",'), { ok: false, sebab: KOLOM_RUSAK.JSON_KORUP, contoh: '["a.webp",' });
+});
+
+test("KOLOM: JSON SAH tapi bukan array adalah kerusakan tersendiri", () => {
+  // JSON.parse berhasil, jadi kegagalan ini tidak akan pernah tertangkap oleh
+  // try/catch — satu-satunya yang menangkapnya adalah pemeriksaan bentuk.
+  for (const mentah of ['{"0":"a.webp"}', '"a.webp"', "5", "null", "true"]) {
+    const h = bacaKolomImages(mentah);
+    assert.equal(h.ok, false, `bentuk non-array diterima: ${mentah}`);
+    if (!h.ok) assert.equal(h.sebab, KOLOM_RUSAK.BUKAN_ARRAY, mentah);
+  }
+});
+
+test("KOLOM: elemen bukan-teks tidak boleh DISARING diam-diam", () => {
+  // Menyaringnya akan menghilangkan foto dari cacah tanpa satu pun tanda —
+  // kerusakan yang sama, sekadar lebih halus.
+  const h = bacaKolomImages('["a.webp", 42]');
+  assert.equal(h.ok, false, "elemen bukan-teks disaring diam-diam; satu foto hilang dari cacah tanpa tanda");
+  if (!h.ok) assert.equal(h.sebab, KOLOM_RUSAK.ELEMEN_BUKAN_TEKS);
+});
+
+test("KOLOM: kosong yang SAH tetap kosong — kerusakan tidak boleh ditemukan di mana-mana", () => {
+  // Arah sebaliknya sama pentingnya: parser yang curiga pada segalanya akan
+  // memindahkan produk normal ke ember kerusakan dan menggelembungkan angka.
+  assert.deepEqual(bacaKolomImages("[]"), { ok: true, images: [] });
+  assert.deepEqual(bacaKolomImages(""), { ok: true, images: [] });
+  assert.deepEqual(bacaKolomImages("   "), { ok: true, images: [] });
+  assert.deepEqual(bacaKolomImages(null), { ok: true, images: [] });
+  assert.deepEqual(bacaKolomImages(undefined), { ok: true, images: [] });
+  assert.deepEqual(bacaKolomImages('["a.webp","b.webp"]'), { ok: true, images: ["a.webp", "b.webp"] });
+  assert.deepEqual(bacaKolomImages(["a.webp"]), { ok: true, images: ["a.webp"] });
+});
+
+test("KOLOM: potongan mentah dibawa ke laporan tapi dipotong", () => {
+  const panjang = "x".repeat(400);
+  const h = bacaKolomImages(panjang);
+  assert.equal(h.ok, false);
+  if (!h.ok) {
+    assert.ok(h.contoh.length <= 121, `contoh tidak dipotong (${h.contoh.length}); laporan bisa dibanjiri satu baris`);
+    assert.ok(h.contoh.startsWith("xxxx"), "contoh tidak menunjukkan nilai aslinya, jadi barisnya tidak bisa dikenali");
+  }
+});
+
+test("AUDIT: kolom rusak masuk ember SENDIRI — bukan tanpa-foto, bukan terbrick", async () => {
+  pasangPustaka();
+  const h = await auditBuktiProduk([
+    { id: "p1", images: ["p1/0.webp"], nama: "sah" },
+    { id: "r1", images: bacaKolomImages("{bukan json"), nama: "korup", orgId: "org-9" },
+    { id: "r2", images: bacaKolomImages('{"0":"a.webp"}'), nama: "bukan array" },
+    { id: "r3", images: bacaKolomImages('["a.webp", 42]'), nama: "elemen salah" },
+    { id: "k1", images: [], nama: "tanpa foto" },
+  ]);
+
+  assert.equal(h.produk, 5);
+  assert.equal(h.produkKolomRusak, 3, "kolom rusak tidak dihitung");
+  assert.equal(
+    h.produkTanpaFoto,
+    1,
+    "kolom rusak ikut dihitung sebagai produk tanpa foto — kerusakan menyamar jadi kekosongan, dan cacah kerusakan jadi terlalu rendah"
+  );
+  assert.equal(h.produkTerbrick, 0, "kolom rusak disebut terbrick; gerbang bukti bukan penyebabnya");
+  assert.equal(h.foto, 1, "foto dari kolom yang tidak terbaca ikut dihitung — jumlahnya tidak diketahui siapa pun");
+  assert.deepEqual(h.perKolomRusak, {
+    [KOLOM_RUSAK.JSON_KORUP]: 1,
+    [KOLOM_RUSAK.BUKAN_ARRAY]: 1,
+    [KOLOM_RUSAK.ELEMEN_BUKAN_TEKS]: 1,
+  });
+});
+
+test("AUDIT: produk kolom rusak disebut ID-nya — hanya manusia yang bisa memperbaikinya", async () => {
+  pasangPustaka();
+  const h = await auditBuktiProduk([{ id: "r1", images: bacaKolomImages("{bukan json"), nama: "korup", orgId: "org-9" }]);
+  assert.deepEqual(h.kolomRusak, [
+    { id: "r1", nama: "korup", orgId: "org-9", sebab: KOLOM_RUSAK.JSON_KORUP, contoh: "{bukan json" },
+  ]);
+
+  const teks = laporanAudit(h);
+  assert.match(teks, /KOLOM images RUSAK\s*:\s*1/, "laporan tidak menyebut ember kolom rusak");
+  assert.ok(teks.includes("r1"), "laporan tidak menyebut produk yang kolomnya rusak");
+  assert.ok(teks.includes(KOLOM_RUSAK.JSON_KORUP), "laporan tidak menyebut sebab yang bisa ditindaklanjuti");
+  assert.ok(teks.includes("org-9"), "laporan tidak menyebut organisasi pemilik");
+});
+
+test("AUDIT: orgId dipertahankan di daftar terbrick", async () => {
+  // Tanpa ini seluruh entri Enterprise dilaporkan tanpa pemilik, dan daftar
+  // terbrick tidak bisa dibagikan ke siapa pun yang berwenang memperbaikinya.
+  pasangPustaka();
+  const h = await auditBuktiProduk([{ id: "p3", images: ["p3/0.webp"], nama: "sidecar hilang", orgId: "org-7" }]);
+  assert.equal(h.produkTerbrick, 1);
+  assert.equal(h.terbrick[0].orgId, "org-7");
+  assert.ok(laporanAudit(h).includes("org-7"), "laporan terbrick tidak menyebut organisasi pemilik");
+});
+
+test("AUDIT: batas daftar juga berlaku untuk kolom rusak, tanpa mengubah CACAHNYA", async () => {
+  pasangPustaka();
+  const rusak = Array.from({ length: 5 }, (_, i) => ({ id: `r${i}`, images: bacaKolomImages("{x") }));
+  const h = await auditBuktiProduk(rusak, { simpanTerbrick: 2 });
+  assert.equal(h.produkKolomRusak, 5, "cacah kolom rusak ikut terpotong oleh batas daftar");
+  assert.equal(h.kolomRusak.length, 2, "batas daftar tidak diterapkan pada kolom rusak");
 });
