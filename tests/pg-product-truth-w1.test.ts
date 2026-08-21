@@ -33,6 +33,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 import { Pool } from "pg";
 
 const URL_UJI = process.env.UJI_PG_URL ?? "";
@@ -332,8 +333,14 @@ for (const [judul, buatIsi] of [
       new Map<string, Buffer>([[rel, Buffer.from("BYTES-DITUKAR")], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]),
   ],
 ] as [string, (rel: string) => Map<string, Buffer>][]) {
-  test(`W1 C8: ${judul} — nol materialize, gagal-tertutup, nol capture/regen`, async (t) => {
+  test(`W1 C8: ${judul} — nol materialize, nol provider, gagal-tertutup, nol capture/regen`, async (t) => {
     if (lewati) return t.skip("UJI_PG_URL kosong");
+    // Observer DIPASANG ULANG per kasus. Tanpa ini, fake dari kasus C1 tetap
+    // terpasang dan `amatan.dipanggil` masih membawa nilai kasus sebelumnya —
+    // jadi regresi yang MELEWATI gerbang bukti lalu memanggil provider dengan
+    // path mentah tetap memenuhi seluruh asersi lain (nol materialize, nol
+    // fetch, provider_video null, job FAILED). Temuan Reviewer 21 Agu.
+    await pasangProviderPengamat();
     const rel = `uploads/w1-c8-${process.pid}-${judul.replace(/\W+/g, "")}/0.webp`;
     const jobId = await siapkanJob([rel]);
     const spy = await jalankan(jobId, buatIsi(rel));
@@ -346,6 +353,12 @@ for (const [judul, buatIsi] of [
         `${JSON.stringify(spy.materializeCalls)}. Worker wajib gagal-tertutup SEBELUM mengambil ` +
         "bytes referensi."
     );
+    assert.equal(
+      amatan.dipanggil,
+      false,
+      `provider DIPANGGIL walau bukti ${judul}. Nol materialize saja tidak membuktikan apa-apa ` +
+        "kalau ada jalur yang melewati gerbang lalu memanggil provider dengan path mentah."
+    );
     const state = (await pool.query("SELECT state FROM jobs WHERE id=$1", [jobId])).rows[0].state;
     assert.ok(["FAILED", "REFUNDED"].includes(state), `job dengan ${judul} berakhir ${state}, bukan gagal-tertutup`);
   });
@@ -353,7 +366,7 @@ for (const [judul, buatIsi] of [
 
 // ------------------------------------------------- referensi tambahan
 
-test("W1: referensi TAMBAHAN yang SAMPAI KE PROVIDER hanya yang tersetujui, urut", async (t) => {
+test("W1: loop referensi tambahan HANYA meminta yang tersetujui, urut (berhenti di boundary person-safe)", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   await pasangProviderPengamat();
   // Tier bersuara supaya cabang referensi tambahan benar-benar DILEWATI.
@@ -426,6 +439,86 @@ test("W1: referensi TAMBAHAN yang SAMPAI KE PROVIDER hanya yang tersetujui, urut
     `job berhenti karena GERBANG BUKTI ("${alasan}"), bukan karena boundary person-safe. ` +
       "Kalau begitu, loop referensi tambahan tidak pernah benar-benar dilewati dan asersi urutan " +
       "di atas kehilangan maknanya."
+  );
+});
+
+// ------------------------------- referensi tambahan DI BOUNDARY PROVIDER
+
+/**
+ * Yang BENAR-BENAR DITERIMA provider sebagai referensi tambahan.
+ *
+ * Temuan Reviewer 21 Agu: test di atas bernama "sampai ke provider" padahal
+ * justru menuntut provider TIDAK dipanggil, dan `extraReferenceImagePaths`
+ * tidak pernah diasersikan. Perubahan SESUDAH materialize — menghapus,
+ * menukar urutan, menyisipkan banner — tetap hijau di sana.
+ *
+ * Kasus ini menempuh jalur AMAN sampai fake gratis: bytes-nya PNG sungguhan
+ * berukuran 800x800 tanpa wajah, jadi `personSafeReferencePhotos` melewatinya
+ * apa adanya (tanpa crop, tanpa upscale) dan eksekusi berlanjut ke provider.
+ * Karena itu ia butuh python + OpenCV + model YuNet; kalau tidak ada, kasus ini
+ * DILEWATI, dan kasus boundary person-safe di atas tetap menjaga urutan
+ * materialize.
+ */
+function punyaPersonSafe(): boolean {
+  try {
+    const venv = path.join(process.cwd(), ".venv", "bin", "python");
+    const py = fs.existsSync(venv) ? venv : "python3";
+    execFileSync(py, ["-c", "import cv2"], { stdio: "ignore" });
+    return fs.existsSync(path.join(process.cwd(), "assets", "models", "face_detection_yunet_2023mar.onnx"));
+  } catch {
+    return false;
+  }
+}
+
+test("W1: referensi tambahan yang DITERIMA PROVIDER — urutan, hash, dan tanpa banner", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  if (!punyaPersonSafe()) return t.skip("python/OpenCV/model YuNet tidak ada — jalur aman tidak bisa ditempuh");
+  await pasangProviderPengamat();
+
+  const sharp = (await import("sharp")).default;
+  const gambar = async (r: number, g: number, b: number) =>
+    sharp({ create: { width: 800, height: 800, channels: 3, background: { r, g, b } } }).png().toBuffer();
+  const bannerPng = await gambar(240, 40, 40);
+  const sah1 = await gambar(40, 200, 120);
+  const sah2 = await gambar(60, 120, 220);
+
+  const dasar = `uploads/w1-prov-${process.pid}`;
+  const relBanner = `${dasar}/0.png`;
+  const relSah1 = `${dasar}/1.png`;
+  const relSah2 = `${dasar}/2.png`;
+  const isi = new Map<string, Buffer>([
+    [relBanner, bannerPng],
+    [`${relBanner}.meta.json`, sidecar(bannerPng, false)],
+    [relSah1, sah1],
+    [`${relSah1}.meta.json`, sidecar(sah1, true)],
+    [relSah2, sah2],
+    [`${relSah2}.meta.json`, sidecar(sah2, true)],
+  ]);
+  const jobId = await siapkanJob([relBanner, relSah1, relSah2], "high_quality");
+  const spy = await jalankan(jobId, isi, true);
+
+  await assertNolEfekSamping(jobId, spy.putCalls, "W1 provider extras");
+  assert.ok(
+    amatan.dipanggil,
+    "provider tidak pernah menerima spec — jalur amannya tidak tertempuh, jadi asersi di bawah " +
+      "tidak mengamati apa pun"
+  );
+
+  // UTAMA: bytes yang diterima provider = foto sah pertama.
+  assert.equal(amatan.utamaSha, sha256(sah1), `referensi utama di provider salah (${amatan.utamaPath})`);
+
+  // TAMBAHAN: jumlah, urutan, DAN isinya — dibaca dari path yang benar-benar
+  // diterima, bukan disimpulkan dari daftar materialize.
+  const shaTambahan = amatan.extraPaths.map((p) => sha256(fs.readFileSync(p)));
+  assert.deepEqual(
+    shaTambahan,
+    [sha256(sah2)],
+    `referensi tambahan yang diterima provider salah. Diterima ${amatan.extraPaths.length} path: ` +
+      JSON.stringify(amatan.extraPaths)
+  );
+  assert.ok(
+    !shaTambahan.includes(sha256(bannerPng)),
+    "BANNER sampai ke provider sebagai referensi identitas tambahan"
   );
 });
 
