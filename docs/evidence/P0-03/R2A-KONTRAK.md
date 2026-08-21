@@ -1149,8 +1149,8 @@ TERAKHIR, bukan pertama.
 | Tahap | Isi | Status |
 |---|---|---|
 | P0-A | kontrak/test diperbaiki | **gelombang ini** |
-| P0-B1 | setiap jalur ingestion sah memproduksi sidecar (`saveUniqueProductImages`, `downloadProductImages`, …) | belum |
-| P0-B2 | batas runtime ffmpeg/ffprobe/tesseract — klasifikasi di web Render (`runtime: node`) tidak punya binernya | belum |
+| P0-B1 | setiap jalur ingestion sah memproduksi sidecar (`saveUniqueProductImages`, `downloadProductImages`, …) | **SELESAI** (78883a3) — kelima route di `app/api/**` memakai tepat TIGA fungsi penyimpan, dan ketiganya memanggil `tulisSidecar`: `saveProductImages`, `saveUniqueProductImages`, `downloadProductImages` |
+| P0-B2 | batas runtime ffmpeg/ffprobe/tesseract — klasifikasi di web Render (`runtime: node`) tidak punya binernya | **ALAT SELESAI** (0028850) — probe `lib/media/kapabilitas-klasifikasi.ts` + permukaan `/api/health`. JAWABANNYA belum: butuh satu deploy staging untuk membaca kapabilitas runtime web yang SEBENARNYA |
 | **P0-B4b** | **test runtime W1 di atas PostgreSQL nyata** (disetujui Reviewer ronde 7) | **HIJAU** — `npm run test:postgres-product-truth-w1`, 12 test, 12 lulus |
 | P0-B3 | audit legacy offline + karantina | **ALAT SELESAI** (PASS a29569f) — ANGKANYA belum: butuh akses database nyata |
 | P0-B4 observasi | kanari bukti di batas KEDUA worker — nol penegakan | **SELESAI** — lihat docs/evidence/P0-03/B3-AUDIT-LEGACY.md §6 |
