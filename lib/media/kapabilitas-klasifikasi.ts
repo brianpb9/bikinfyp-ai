@@ -30,6 +30,9 @@
 // apa yang terjadi pada runtime yang tidak mampu adalah pemanggilnya —
 // klasifikasiGambar sudah menjawabnya dengan `belum_diperiksa`.
 
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
@@ -51,6 +54,13 @@ export interface KapabilitasKlasifikasi {
   biner: Record<BinerKlasifikasi, boolean>;
   /** `tesseract` punya data bahasa yang dipakai classifier. */
   bahasaOcr: boolean;
+  /**
+   * Jalur produksi benar-benar berhasil mengklasifikasi satu gambar uji.
+   *
+   * Inilah penentu `mampu`. `biner`/`bahasaOcr` di atas adalah DIAGNOSTIK —
+   * mereka memberi tahu operator apa yang bermasalah, bukan memutuskan.
+   */
+  smoke: boolean;
   /** Menyebut apa yang hilang, cukup spesifik untuk ditindaklanjuti. */
   alasan: string;
   diperiksaPada: string;
@@ -76,6 +86,19 @@ export interface OpsiProbe {
  * membaca hasil satu sama lain.
  */
 const cache = new Map<string, KapabilitasKlasifikasi>();
+
+/**
+ * Probe yang SEDANG BERJALAN, per kunci PATH.
+ *
+ * Cache hasil saja tidak cukup: ia baru terisi sesudah seluruh probe selesai,
+ * jadi dua permintaan `/api/health` yang datang sebelum probe pertama rampung
+ * sama-sama mengalami cache miss dan masing-masing menelurkan sampai empat
+ * proses. Pada biner yang menggantung, jendela itu berlangsung sampai lima
+ * detik — persis saat platform paling sering menanyainya (cold start).
+ *
+ * Yang di-cache karena itu PROMISE-nya, bukan hanya nilainya.
+ */
+const sedangBerjalan = new Map<string, Promise<KapabilitasKlasifikasi>>();
 
 async function binerHidup(nama: string, argumen: string[], env: NodeJS.ProcessEnv): Promise<boolean> {
   try {
@@ -114,8 +137,37 @@ export async function periksaKapabilitasKlasifikasi(opsi: OpsiProbe = {}): Promi
   if (!opsi.segarkan) {
     const tersimpan = cache.get(jalur);
     if (tersimpan) return tersimpan;
+    const berjalan = sedangBerjalan.get(jalur);
+    if (berjalan) return berjalan;
   }
 
+  const tugas = jalankanProbe(jalur).finally(() => sedangBerjalan.delete(jalur));
+  sedangBerjalan.set(jalur, tugas);
+  return tugas;
+}
+
+/**
+ * SMOKE PIPELINE, bukan sekadar `-version`.
+ *
+ * Temuan Reviewer 21 Agu, dan ia benar: `-version` yang sukses tidak
+ * membuktikan biner itu bisa melakukan pekerjaannya. ffmpeg bisa menjawab
+ * versinya lalu gagal men-decode; tesseract bisa menjawab versinya dan
+ * menyebut `eng` di `--list-langs` lalu gagal menghasilkan TSV. Probe yang
+ * berhenti di `-version` melaporkan "mampu" untuk runtime yang sebenarnya
+ * lumpuh — dan laporan itu yang dipakai orang untuk memutuskan apakah bukti
+ * produksi bisa dipercaya.
+ *
+ * Yang dijalankan di sini adalah JALUR PRODUKSI yang sama persis:
+ * `klasifikasiGambar` atas satu gambar kecil yang dibuat saat itu juga. Kalau
+ * ia mengembalikan vonis sungguhan (`product_photo`/`promotional_graphic`),
+ * runtime ini benar-benar bisa mengklasifikasi. Kalau ia mengembalikan
+ * `belum_diperiksa`, runtime ini tidak bisa — apa pun kata `-version`.
+ *
+ * Pemeriksaan `-version` TETAP ADA, tapi perannya berubah: ia bukan lagi
+ * penentu `mampu`, ia diagnostik. Operator yang membaca `/api/health` perlu
+ * tahu biner MANA yang bermasalah, dan smoke sendirian tidak memberitahunya.
+ */
+async function jalankanProbe(jalur: string): Promise<KapabilitasKlasifikasi> {
   const env: NodeJS.ProcessEnv = { ...process.env, PATH: jalur };
 
   const [ffmpeg, ffprobe, tesseract] = await Promise.all([
@@ -123,23 +175,26 @@ export async function periksaKapabilitasKlasifikasi(opsi: OpsiProbe = {}): Promi
     binerHidup("ffprobe", ["-version"], env),
     binerHidup("tesseract", ["--version"], env),
   ]);
-  // Data bahasa hanya bermakna kalau binernya sendiri hidup.
   const bahasaOcr = tesseract ? await punyaBahasaOcr(env) : false;
-
   const biner: Record<BinerKlasifikasi, boolean> = { ffmpeg, ffprobe, tesseract };
+
+  const smoke = await smokeKlasifikasi(jalur);
+
   const hilang = BINER_KLASIFIKASI.filter((n) => !biner[n]);
-  const mampu = hilang.length === 0 && bahasaOcr;
+  const mampu = smoke.berhasil;
 
   const bagian: string[] = [];
   if (hilang.length > 0) bagian.push(`biner tidak bisa dijalankan: ${hilang.join(", ")}`);
   if (tesseract && !bahasaOcr) bagian.push(`tesseract terpasang tanpa data bahasa "${BAHASA_OCR}"`);
+  if (!smoke.berhasil) bagian.push(`smoke klasifikasi gagal: ${smoke.sebab}`);
 
   const hasil: KapabilitasKlasifikasi = {
     mampu,
     biner,
     bahasaOcr,
+    smoke: smoke.berhasil,
     alasan: mampu
-      ? "Runtime ini bisa mengklasifikasi gambar."
+      ? "Runtime ini bisa mengklasifikasi gambar (terbukti lewat smoke pipeline, bukan hanya -version)."
       : `Runtime ini TIDAK bisa mengklasifikasi gambar — ${bagian.join("; ")}. ` +
         "Setiap unggahan di sini akan menerbitkan bukti berstatus belum_diperiksa " +
         "dan menunggu revalidasi di boundary yang punya binernya.",
@@ -148,4 +203,39 @@ export async function periksaKapabilitasKlasifikasi(opsi: OpsiProbe = {}): Promi
 
   cache.set(jalur, hasil);
   return hasil;
+}
+
+/** Menjalankan jalur produksi atas satu gambar kecil yang dibuat saat itu juga. */
+async function smokeKlasifikasi(jalur: string): Promise<{ berhasil: boolean; sebab: string }> {
+  const pathAsli = process.env.PATH;
+  let dir = "";
+  try {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "kap-smoke-"));
+    const berkas = path.join(dir, "smoke.png");
+    const sharp = (await import("sharp")).default;
+    await sharp({ create: { width: 320, height: 320, channels: 3, background: { r: 200, g: 200, b: 200 } } })
+      .png()
+      .toFile(berkas);
+
+    // `klasifikasiGambar` memanggil binernya lewat PATH proses, jadi PATH-nya
+    // diarahkan sementara. Dipulihkan di `finally`; probe ini dijalankan sekali
+    // per PATH dan hasilnya di-cache, jadi jendelanya sempit.
+    process.env.PATH = jalur;
+    const { klasifikasiGambar } = await import("./klasifikasi-gambar");
+    const hasil = await klasifikasiGambar(berkas);
+    if (hasil.jenis === "belum_diperiksa") {
+      return { berhasil: false, sebab: hasil.alasan };
+    }
+    return { berhasil: true, sebab: "" };
+  } catch (err) {
+    return { berhasil: false, sebab: (err as Error).message };
+  } finally {
+    if (pathAsli === undefined) delete process.env.PATH;
+    else process.env.PATH = pathAsli;
+    try {
+      if (dir) fs.rmSync(dir, { recursive: true, force: true });
+    } catch (errBersih) {
+      console.warn(`[kapabilitas] gagal membersihkan ${dir}: ${(errBersih as Error).message}`);
+    }
+  }
 }

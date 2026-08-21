@@ -53,11 +53,58 @@ function tulisPalsu(dir: string, mark: string, nama: string, isi: string): void 
   fs.writeFileSync(path.join(dir, nama), `#!/bin/sh\necho dipanggil >> "${mark}/${nama}"\n${isi}`, { mode: 0o755 });
 }
 
-const SUKSES_VERSI = 'echo "versi palsu"\nexit 0\n';
+// SEJAK PROBE MENJALANKAN SMOKE PIPELINE SUNGGUHAN, biner palsu harus
+// BERPERILAKU, bukan cuma menjawab `-version`. Temuan Reviewer: stub yang tidak
+// pernah membuat gambar atau mengeluarkan dimensi/TSV tetap dinyatakan "mampu"
+// — persis kelemahan yang smoke pipeline ada untuk menutupnya.
 const GAGAL = "exit 1\n";
-/** tesseract --list-langs: yang penting `eng` ADA di daftarnya. */
-const LANGS = (daftar: string) =>
-  `case "$1" in\n  --list-langs) printf 'List of available languages:\\n${daftar}\\n'; exit 0 ;;\nesac\necho "versi palsu"\nexit 0\n`;
+
+/** ffmpeg palsu: menjawab -version, DAN benar-benar menghasilkan PNG keluaran. */
+const FFMPEG_OK = (asli: string) =>
+  `case "$1" in\n  -version) echo "ffmpeg palsu"; exit 0 ;;\nesac\n` +
+  'for a in "$@"; do keluar="$a"; done\n' +
+  `/bin/cp "${asli}" "$keluar" || exit 65\n` +
+  'if [ ! -s "$keluar" ]; then exit 66; fi\nexit 0\n';
+
+/** ffmpeg palsu yang LULUS -version tapi GAGAL saat benar-benar men-decode. */
+const FFMPEG_VERSI_SAJA =
+  `case "$1" in\n  -version) echo "ffmpeg palsu"; exit 0 ;;\nesac\nexit 1\n`;
+
+/** ffprobe palsu: menjawab -version, DAN mengeluarkan dimensi sungguhan. */
+const FFPROBE_OK =
+  `case "$1" in\n  -version) echo "ffprobe palsu"; exit 0 ;;\nesac\n` +
+  'for a in "$@"; do masuk="$a"; done\n' +
+  'if [ ! -s "$masuk" ]; then exit 66; fi\necho 1440,810\nexit 0\n';
+
+const FFPROBE_VERSI_SAJA =
+  `case "$1" in\n  -version) echo "ffprobe palsu"; exit 0 ;;\nesac\nexit 1\n`;
+
+/**
+ * tesseract palsu: menjawab --version, mendaftar bahasa, DAN mengeluarkan TSV.
+ * Header saja (nol baris kata) => rasio 0 => vonis product_photo.
+ */
+const TESSERACT_OK = (daftar: string) =>
+  `case "$1" in\n` +
+  `  --version) echo "tesseract palsu"; exit 0 ;;\n` +
+  `  --list-langs) printf 'List of available languages:\\n${daftar}\\n'; exit 0 ;;\n` +
+  `esac\n` +
+  // BERPERILAKU SEPERTI TESSERACT SUNGGUHAN saat bahasa yang diminta tidak
+  // terpasang: gagal, bukan diam-diam mengabaikan `-l`. Versi pertama fake ini
+  // selalu mengeluarkan TSV apa pun bahasanya, jadi smoke pipeline "berhasil"
+  // pada runtime yang sebenarnya tidak punya `eng` — kelemahan yang sama
+  // persis dengan berhenti di `-version`.
+  'lang=""\nprev=""\nfor a in "$@"; do\n  if [ "$prev" = "-l" ]; then lang="$a"; fi\n  prev="$a"\ndone\n' +
+  `if [ -n "$lang" ]; then\n  case " ${daftar.split("\n").join(" ")} " in\n    *" $lang "*) ;;\n` +
+  '    *) echo "Error opening data file for language $lang" >&2; exit 1 ;;\n  esac\nfi\n' +
+  'if [ ! -s "$1" ]; then exit 66; fi\n' +
+  "printf 'level\\tpage\\tblock\\tpar\\tline\\tword\\tleft\\ttop\\twidth\\theight\\tconf\\ttext\\n'\nexit 0\n";
+
+/** Lulus --version dan --list-langs, tapi GAGAL menghasilkan TSV. */
+const TESSERACT_VERSI_SAJA = (daftar: string) =>
+  `case "$1" in\n` +
+  `  --version) echo "tesseract palsu"; exit 0 ;;\n` +
+  `  --list-langs) printf 'List of available languages:\\n${daftar}\\n'; exit 0 ;;\n` +
+  `esac\nexit 1\n`;
 
 interface Siap {
   dir: string;
@@ -65,13 +112,22 @@ interface Siap {
   mark: string;
 }
 
-function siapkan(isiBin: Partial<Record<(typeof BIN)[number], string>>): Siap {
+async function siapkan(
+  buatIsi: (asli: string) => Partial<Record<(typeof BIN)[number], string>>
+): Promise<Siap> {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "kap-"));
   const bin = path.join(dir, "bin");
   const mark = path.join(dir, "mark");
   fs.mkdirSync(bin);
   fs.mkdirSync(mark);
-  for (const [nama, isi] of Object.entries(isiBin)) tulisPalsu(bin, mark, nama, isi!);
+  // PNG sungguhan yang disalin ffmpeg palsu ke path keluarannya — tanpa ini,
+  // tahap ffprobe/tesseract tidak punya artefak untuk diperiksa.
+  const sharp = (await import("sharp")).default;
+  const asli = path.join(dir, "asli.png");
+  await sharp({ create: { width: 1440, height: 810, channels: 3, background: { r: 205, g: 205, b: 205 } } })
+    .png()
+    .toFile(asli);
+  for (const [nama, isi] of Object.entries(buatIsi(asli))) tulisPalsu(bin, mark, nama, isi!);
   return { dir, bin, mark };
 }
 
@@ -81,19 +137,20 @@ const jumlahTanda = (mark: string, nama: string) => {
   return fs.existsSync(f) ? fs.readFileSync(f, "utf8").split("\n").filter(Boolean).length : 0;
 };
 
-const LENGKAP = {
-  ffmpeg: SUKSES_VERSI,
-  ffprobe: SUKSES_VERSI,
-  tesseract: LANGS("eng\nosd"),
-};
+const LENGKAP = (asli: string) => ({
+  ffmpeg: FFMPEG_OK(asli),
+  ffprobe: FFPROBE_OK,
+  tesseract: TESSERACT_OK("eng\nosd"),
+});
 
 test("MAMPU: ketiga biner jalan dan tesseract punya data bahasa eng", async () => {
-  const { dir, bin } = siapkan(LENGKAP);
+  const { dir, bin } = await siapkan(LENGKAP);
   try {
     const k = await periksaKapabilitasKlasifikasi({ pathOverride: bin, segarkan: true });
     assert.equal(k.mampu, true, `runtime dengan ketiga biner lengkap dilaporkan tidak mampu: ${k.alasan}`);
     assert.deepEqual(k.biner, { ffmpeg: true, ffprobe: true, tesseract: true });
     assert.equal(k.bahasaOcr, true);
+    assert.equal(k.smoke, true, "smoke pipeline tidak berhasil padahal seluruh biner berperilaku benar");
     assert.ok(k.diperiksaPada.length > 0, "kapan diperiksa wajib tercatat — probe tanpa waktu tidak bisa diaudit");
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
@@ -101,7 +158,7 @@ test("MAMPU: ketiga biner jalan dan tesseract punya data bahasa eng", async () =
 });
 
 test("TIDAK MAMPU: PATH kosong — dan alasannya menyebut biner mana yang hilang", async () => {
-  const { dir, bin } = siapkan({});
+  const { dir, bin } = await siapkan(() => ({}));
   try {
     const k = await periksaKapabilitasKlasifikasi({ pathOverride: bin, segarkan: true });
     assert.equal(k.mampu, false);
@@ -122,7 +179,7 @@ test("TIDAK MAMPU: biner ADA tapi tidak bisa dijalankan (exit non-nol)", async (
   // Probe yang cuma mencari nama di PATH akan bilang "mampu" di sini. Biner
   // yang ada tapi mati saat dieksekusi — arsitektur salah, pustaka hilang —
   // adalah keadaan nyata di image container yang salah rakit.
-  const { dir, bin } = siapkan({ ...LENGKAP, ffprobe: GAGAL });
+  const { dir, bin } = await siapkan((asli) => ({ ...LENGKAP(asli), ffprobe: GAGAL }));
   try {
     const k = await periksaKapabilitasKlasifikasi({ pathOverride: bin, segarkan: true });
     assert.equal(k.mampu, false, "biner yang exit non-nol dilaporkan mampu — probe tidak benar-benar menjalankannya");
@@ -138,11 +195,17 @@ test("TIDAK MAMPU: tesseract ada tapi TANPA data bahasa eng", async () => {
   // tesseract terpasang, versinya jalan, tapi setiap gambar gagal karena
   // traineddata-nya tidak ada. Kegagalannya baru terlihat sesudah pengguna
   // mengunggah.
-  const { dir, bin } = siapkan({ ...LENGKAP, tesseract: LANGS("osd\nind") });
+  const { dir, bin } = await siapkan((asli) => ({ ...LENGKAP(asli), tesseract: TESSERACT_OK("osd\nind") }));
   try {
     const k = await periksaKapabilitasKlasifikasi({ pathOverride: bin, segarkan: true });
     assert.equal(k.biner.tesseract, true, "binernya sendiri jalan — yang hilang datanya");
     assert.equal(k.bahasaOcr, false);
+    assert.equal(
+      k.smoke,
+      false,
+      "smoke pipeline berhasil padahal tesseract tidak punya data bahasa yang diminta classifier — " +
+        "fake-nya mengabaikan `-l`, dan kalau begitu ia tidak menguji apa pun"
+    );
     assert.equal(k.mampu, false, "tesseract tanpa data bahasa eng tetap berarti runtime ini tidak mampu");
     assert.ok(k.alasan.toLowerCase().includes("eng"), `alasan tidak menyebut data bahasa: "${k.alasan}"`);
   } finally {
@@ -151,7 +214,7 @@ test("TIDAK MAMPU: tesseract ada tapi TANPA data bahasa eng", async () => {
 });
 
 test("CACHE: hasil dipakai ulang — /api/health tidak menelurkan proses tiap permintaan", async () => {
-  const { dir, bin, mark } = siapkan(LENGKAP);
+  const { dir, bin, mark } = await siapkan(LENGKAP);
   try {
     await periksaKapabilitasKlasifikasi({ pathOverride: bin, segarkan: true });
     const setelahSekali = BIN.map((n) => jumlahTanda(mark, n));
@@ -175,7 +238,7 @@ test("CACHE: hasil dipakai ulang — /api/health tidak menelurkan proses tiap pe
 });
 
 test("CACHE: `segarkan` memaksa probe ulang — cache tidak boleh jadi penjara", async () => {
-  const { dir, bin, mark } = siapkan(LENGKAP);
+  const { dir, bin, mark } = await siapkan(LENGKAP);
   try {
     await periksaKapabilitasKlasifikasi({ pathOverride: bin, segarkan: true });
     const sekali = jumlahTanda(mark, "ffmpeg");
@@ -183,6 +246,81 @@ test("CACHE: `segarkan` memaksa probe ulang — cache tidak boleh jadi penjara",
     assert.ok(
       jumlahTanda(mark, "ffmpeg") > sekali,
       "`segarkan: true` tidak menjalankan probe ulang — hasil yang salah tidak akan pernah bisa dikoreksi"
+    );
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+/**
+ * KONTROL NEGATIF — lulus `-version`, gagal saat bekerja.
+ *
+ * Temuan Reviewer 21 Agu: probe yang berhenti di `-version` menyatakan runtime
+ * MAMPU untuk biner yang sebenarnya lumpuh. ffmpeg bisa menjawab versinya lalu
+ * gagal men-decode; tesseract bisa menjawab versinya DAN menyebut `eng` di
+ * `--list-langs` lalu gagal menghasilkan TSV. Ketiganya diuji satu per satu,
+ * karena kegagalan di tahap mana pun berarti runtime ini tidak bisa dipakai.
+ */
+const versiSaja: [string, (asli: string) => Partial<Record<(typeof BIN)[number], string>>, BinerYangSehat][] = [
+  ["ffmpeg lulus -version tapi gagal men-decode", (a) => ({ ...LENGKAP(a), ffmpeg: FFMPEG_VERSI_SAJA }), "ffmpeg"],
+  ["ffprobe lulus -version tapi gagal memeriksa dimensi", (a) => ({ ...LENGKAP(a), ffprobe: FFPROBE_VERSI_SAJA }), "ffprobe"],
+  [
+    "tesseract lulus --version + --list-langs tapi gagal menghasilkan TSV",
+    (a) => ({ ...LENGKAP(a), tesseract: TESSERACT_VERSI_SAJA("eng\nosd") }),
+    "tesseract",
+  ],
+];
+type BinerYangSehat = (typeof BIN)[number];
+
+for (const [judul, buat, biner] of versiSaja) {
+  test(`TIDAK MAMPU: ${judul}`, async () => {
+    const { dir, bin } = await siapkan(buat);
+    try {
+      const k = await periksaKapabilitasKlasifikasi({ pathOverride: bin, segarkan: true });
+      assert.equal(
+        k.biner[biner],
+        true,
+        `prasyarat: ${biner} memang lulus -version — kalau tidak, test ini menguji hal yang lain`
+      );
+      assert.equal(
+        k.smoke,
+        false,
+        `${judul}: smoke pipeline dinyatakan berhasil padahal binernya gagal saat benar-benar bekerja`
+      );
+      assert.equal(
+        k.mampu,
+        false,
+        `${judul}: runtime dinyatakan MAMPU hanya karena -version lulus. Laporan itu yang dipakai ` +
+          "orang untuk memutuskan apakah bukti produksi bisa dipercaya."
+      );
+    } finally {
+      fs.rmSync(dir, { recursive: true, force: true });
+    }
+  });
+}
+
+/**
+ * COLD START — beberapa permintaan serentak hanya boleh menelurkan SATU probe.
+ *
+ * Cache hasil saja baru terisi sesudah probe selesai, jadi permintaan
+ * `/api/health` yang datang sebelum probe pertama rampung sama-sama cache miss
+ * dan masing-masing menelurkan sampai empat proses. Pada biner yang menggantung
+ * jendelanya sampai lima detik — persis saat platform paling sering menanyainya.
+ */
+test("COLD START: enam panggilan serentak hanya menjalankan probe SEKALI", async () => {
+  const { dir, bin, mark } = await siapkan(LENGKAP);
+  try {
+    const hasil = await Promise.all(
+      Array.from({ length: 6 }, () => periksaKapabilitasKlasifikasi({ pathOverride: bin }))
+    );
+    assert.ok(hasil.every((h) => h.mampu), "probe serentak menghasilkan jawaban yang tidak konsisten");
+    // ffmpeg dipanggil dua kali per probe (-version, lalu smoke), jadi yang
+    // dituntut bukan "tepat satu" melainkan "tidak berlipat enam kali".
+    const dipanggil = jumlahTanda(mark, "ffmpeg");
+    assert.ok(
+      dipanggil > 0 && dipanggil <= 2,
+      `ffmpeg dijalankan ${dipanggil} kali untuk enam panggilan serentak. Probe yang sedang ` +
+        "berjalan tidak digabungkan, jadi setiap permintaan cold-start menelurkan proses sendiri."
     );
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });

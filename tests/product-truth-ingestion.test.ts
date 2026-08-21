@@ -225,6 +225,55 @@ test("ROLLBACK: put sidecar yang DITOLAK tidak meninggalkan bytes tanpa bukti", 
 });
 
 /**
+ * ROLLBACK RETAIL — foto PERTAMA maupun BERIKUTNYA.
+ *
+ * Temuan Reviewer 21 Agu: `saveProductImages` menulis foto ke storage lalu
+ * menunggu `tulisSidecar` tanpa rollback. Kalau put `.meta.json` gagal, fungsi
+ * melempar tapi objek foto, berkas lokal, DAN seluruh foto dari iterasi
+ * sebelumnya tetap tertinggal — sementara kedua route pemanggil cuma mengubah
+ * error jadi response. Dua kasus diuji, karena kegagalan pada foto kedua
+ * meninggalkan sisa yang berbeda dari kegagalan pada foto pertama.
+ */
+for (const [judul, gagalKe] of [
+  ["foto PERTAMA", 1],
+  ["foto KEDUA (foto pertama sudah tersimpan)", 2],
+] as [string, number][]) {
+  test(`ROLLBACK Retail: sidecar ${judul} ditolak — nol sisa di storage`, async () => {
+    const { saveProductImages } = await import("../lib/product-images");
+    isi.clear();
+    let sidecarKe = 0;
+    setMediaStorageForTests({
+      ...storage,
+      async put(key: string, body: Buffer) {
+        if (key.endsWith(".meta.json")) {
+          sidecarKe += 1;
+          if (sidecarKe === gagalKe) throw new Error("object store menolak sidecar");
+        }
+        isi.set(key, body);
+      },
+    } as never);
+    try {
+      await assert.rejects(
+        saveProductImages(`rollback-${gagalKe}-${process.pid}`, [
+          { mime: "image/png", data: await fotoPolos() },
+          { mime: "image/png", data: await fotoPolos() },
+        ]),
+        /menolak sidecar/,
+        "kegagalan penerbitan bukti wajib naik ke pemanggil, bukan ditelan"
+      );
+      assert.deepEqual(
+        [...isi.keys()],
+        [],
+        `sisa di storage sesudah rollback: ${JSON.stringify([...isi.keys()])}. Foto yang buktinya ` +
+          "gagal terbit — DAN foto dari iterasi sebelumnya — wajib ikut dibuang."
+      );
+    } finally {
+      setMediaStorageForTests(storage);
+    }
+  });
+}
+
+/**
  * BUKTI DIHAPUS BERSAMA FOTONYA.
  *
  * `deleteStoredProductImages` dipakai di tiga tempat yang semuanya berarti

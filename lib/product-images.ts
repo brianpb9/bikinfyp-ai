@@ -230,44 +230,65 @@ export async function saveProductImages(
   const dir = path.join(config.storageDir, "uploads", productId);
   fs.mkdirSync(dir, { recursive: true });
   const rels: string[] = [];
-  for (let i = 0; i < blobs.length; i++) {
-    const idx = startIndex + i;
-    const ext = ALLOWED_MIME[blobs[i].mime] ?? ".png";
-    let rel = path.join("uploads", productId, `${idx}${ext}`).split(path.sep).join("/");
-    let abs = path.join(config.storageDir, rel);
-    let normalized: Buffer | null = null;
-    try {
-      normalized = await normalizeProductImageBuffer(blobs[i].data);
-      rel = path.join("uploads", productId, `${idx}.webp`).split(path.sep).join("/");
-      abs = path.join(config.storageDir, rel);
-    } catch {
-      /* kompresi gagal tidak fatal — file asli tetap dipakai */
-    }
-    fs.writeFileSync(abs, normalized ?? blobs[i].data);
+  // Berkas lokal yang ditulis sepanjang jalan. Di mode r2 ia staging yang
+  // dibuang setelah put; di mode filesystem ia berkasnya sendiri. Dicatat
+  // supaya rollback tahu apa yang harus dibersihkan.
+  const lokal: string[] = [];
+  try {
+    for (let i = 0; i < blobs.length; i++) {
+      const idx = startIndex + i;
+      const ext = ALLOWED_MIME[blobs[i].mime] ?? ".png";
+      let rel = path.join("uploads", productId, `${idx}${ext}`).split(path.sep).join("/");
+      let abs = path.join(config.storageDir, rel);
+      let normalized: Buffer | null = null;
+      try {
+        normalized = await normalizeProductImageBuffer(blobs[i].data);
+        rel = path.join("uploads", productId, `${idx}.webp`).split(path.sep).join("/");
+        abs = path.join(config.storageDir, rel);
+      } catch {
+        /* kompresi gagal tidak fatal — file asli tetap dipakai */
+      }
+      fs.writeFileSync(abs, normalized ?? blobs[i].data);
+      lokal.push(abs);
 
-    // KELAYAKAN DIHITUNG SEKALI, DI SINI. Bukan saat render: di sana biayanya
-    // sudah keluar, dan jawabannya tidak akan berubah — gambarnya sama.
+      // KELAYAKAN DIHITUNG SEKALI, DI SINI. Bukan saat render: di sana biayanya
+      // sudah keluar, dan jawabannya tidak akan berubah — gambarnya sama.
+      //
+      // KONTRAK HASH: sha256 dihitung dari BYTES YANG BENAR-BENAR DISIMPAN,
+      // bukan dari unggahan asli.
+      //
+      // Cacat yang ditutup (ditemukan review independen): versi sebelumnya
+      // meng-hash `blobs[i].data` sementara yang ditulis ke storage adalah
+      // `normalized ?? blobs[i].data` — WebP hasil normalisasi. Selama
+      // normalisasi berhasil (kasus normal), sidecar membawa hash yang TIDAK
+      // PERNAH cocok dengan berkasnya, dan setiap foto sah akan ditolak sebagai
+      // bukti korup begitu verifikasi hash dinyalakan.
+      const bytesTersimpan = normalized ?? blobs[i].data;
+      // rel dicatat SEBELUM put: object store bisa commit lalu kehilangan
+      // responsnya, dan rollback tetap harus tahu kunci mana yang harus dibuang.
+      rels.push(rel);
+      await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
+      await tulisSidecar(rel, bytesTersimpan, abs);
+      if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
+    }
+    return rels;
+  } catch (error) {
+    // ROLLBACK SEBATCH, bukan per-foto.
     //
-    // KONTRAK HASH: sha256 dihitung dari BYTES YANG BENAR-BENAR DISIMPAN,
-    // bukan dari unggahan asli.
+    // Sebelumnya fungsi ini melempar tanpa membersihkan apa pun: kalau put
+    // `.meta.json` gagal, objek fotonya, berkas lokalnya, DAN seluruh foto dari
+    // iterasi sebelumnya tetap tertinggal — sementara kedua route pemanggil
+    // cuma mengubah error jadi response. Hasilnya bytes tanpa bukti, persis
+    // keadaan yang seluruh P0-B1 ada untuk menghapusnya.
     //
-    // Cacat yang ditutup (ditemukan review independen): versi sebelumnya
-    // meng-hash `blobs[i].data` sementara yang ditulis ke storage adalah
-    // `normalized ?? blobs[i].data` — WebP hasil normalisasi. Selama
-    // normalisasi berhasil (kasus normal), sidecar membawa hash yang TIDAK
-    // PERNAH cocok dengan berkasnya, dan setiap foto sah akan ditolak sebagai
-    // bukti korup begitu verifikasi hash dinyalakan.
-    //
-    // Komentar lama di sini juga keliru: ia menyebut klasifikasi dilakukan atas
-    // berkas ASLI, padahal klasifikasiGambar(abs) membaca berkas yang SUDAH
-    // dinormalisasi.
-    const bytesTersimpan = normalized ?? blobs[i].data;
-    await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
-    await tulisSidecar(rel, bytesTersimpan, abs);
-    if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
-    rels.push(rel);
+    // Yang dibuang: foto DAN sidecar-nya (deleteStoredProductImages menangani
+    // keduanya sebagai satu unit), plus staging lokal.
+    await deleteStoredProductImages(rels).catch((errBersih) =>
+      console.error("[storage] rollback unggah tidak tuntas:", errBersih)
+    );
+    for (const abs of lokal) fs.rmSync(abs, { force: true });
+    throw error;
   }
-  return rels;
 }
 
 /** Organization uploads use collision-proof object names. Array indexes are
