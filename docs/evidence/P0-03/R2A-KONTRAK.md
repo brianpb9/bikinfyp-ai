@@ -44,7 +44,8 @@ SCRIPT_LLM=0 npx tsx --test \
 | R2/P0-A ronde 7 (di df840d5) | 94 test · 15 lulus · 79 gagal · 0 skip |
 | R2/P0-A ronde 8 (di da3b31d) | 99 test · 15 lulus · 84 gagal · 0 skip |
 | R2/P0-A ronde 9 (di 79f8d58) | 100 test · 15 lulus · 85 gagal · 0 skip |
-| **R2/P0-A ronde 10 (di 9e2dd43)** | **101 test · 16 lulus · 85 gagal · 0 skip · 0 cancelled · 0 todo** |
+| R2/P0-A ronde 10 (di 9e2dd43) | 101 test · 16 lulus · 85 gagal · 0 skip |
+| **R2/P0-A ronde 11 (di P0A11_TEST_SHA)** | **101 test · 16 lulus · 85 gagal · 0 skip · 0 cancelled · 0 todo** |
 
 Kedelapan-puluh-lima kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
 `grep "  code: " | sort | uniq -c` → `85 code: 'ERR_ASSERTION'`, nol kode lain.
@@ -76,7 +77,13 @@ ronde 7:  884 + 15 = 899 test ·  803 + 3     = 806 lulus ·  79 gagal
 ronde 8:  899 +  5 = 904 test ·  806         = 806 lulus ·  84 gagal
 ronde 9:  904 +  1 = 905 test ·  806         = 806 lulus ·  85 gagal
 ronde 10: 905 +  1 = 906 test ·  806 + 1     = 807 lulus ·  85 gagal
+ronde 11: 906 +  0 = 906 test ·  807         = 807 lulus ·  85 gagal
 ```
+
+Ronde 11 tidak menambah satu test pun: ia memperbaiki fixture yang sudah ada
+sehingga ia benar-benar menguji apa yang diklaimnya. Angka yang sama dengan
+makna yang berbeda — dan itu sebabnya jumlah test bukan ukuran kekuatan
+kontrak.
 
 Ronde 10 menambah satu test yang LULUS, bukan merah, dan itu memang jenisnya:
 kontrol harness yang membuktikan pipeline biner palsu bisa BERHASIL.
@@ -1079,6 +1086,61 @@ npm test -> 906 test / 807 lulus / 85 gagal / 14 skip; nol regresi
 tsc --noEmit -> exit 0
 ```
 
+## Ronde 11 — satu temuan Reviewer atas dce5d5b
+
+Diterima; nol sanggahan.
+
+### T28 (P1) — fake ffmpeg MASIH tidak menghasilkan artefak
+
+> *"SUKSES_FFMPEG memanggil `cp` tanpa path absolut. `/bin/sh` akibatnya
+> melaporkan `cp: command not found`; lalu `exit 0` tetap membuat fake ffmpeg
+> mengaku sukses."*
+
+Benar, dan ini persis kesalahan ronde 7 (`sleep` tanpa path absolut) **di dalam
+skrip yang saya tulis untuk memperbaiki ronde 7**. Dua kali cacat yang sama,
+dari orang yang sama, di berkas yang sama.
+
+Tiga perbaikan, dan yang ketiga yang menutup kelasnya:
+
+1. `/bin/cp` — absolut. Invariannya sekarang ditulis eksplisit di kode: PATH
+   proses anak hanya berisi `binDir`, jadi **setiap perintah eksternal wajib
+   ber-path absolut**. Yang tersisa hanya dua (`/bin/cp`, `/bin/sleep`);
+   sisanya (`:`, `[`, `echo`, `printf`, `for`, `exit`) adalah builtin `/bin/sh`
+   dan tidak menyentuh PATH sama sekali.
+2. `cp` yang gagal tidak lagi ditelan: `|| exit 65`, lalu artefaknya diperiksa
+   ada sebelum `exit 0`. Fake yang mengaku sukses tanpa menghasilkan apa-apa
+   adalah bentuk kebohongan yang sama dengan yang sedang kita buru di produksi.
+3. **fake hilir MEMVALIDASI masukannya.** `ffprobe` palsu menolak melanjutkan
+   kalau PNG hasil ffmpeg tidak ada; `tesseract` palsu sama. Jadi kontrol
+   harness tidak bisa lagi lulus di atas pipeline yang sebenarnya tidak
+   menghasilkan apa-apa — dan itulah yang membuat kelas cacat ini tertutup,
+   bukan sekadar instansinya.
+
+**Bukti mutasi**, dijalankan untuk membuktikan penjaga barunya nyata: mengubah
+`/bin/cp` kembali menjadi `cp` membuat **KONTROL HARNESS gagal** (`tahap=[]`,
+`product_photo` tidak pernah tercapai). Sebelum ronde ini, mutasi yang sama
+lolos tanpa satu pun test merah.
+
+Tahap terukur sesudah perbaikan — tidak berubah dari ronde 10, dan itu memang
+yang diharapkan: yang berubah adalah apakah angka-angka itu bisa dipercaya.
+
+```
+KONTROL HARNESS                    tahap=[ffmpeg,ffprobe,tesseract]  -> product_photo layak
+ffmpeg MENGGANTUNG    20075ms      tahap=[ffmpeg]
+ffprobe MENGGANTUNG   25006ms *    tahap=[ffmpeg,ffprobe]
+tesseract MENGGANTUNG 20838ms      tahap=[ffmpeg,ffprobe,tesseract]
+* satu-satunya yang dibunuh tenggat test — produksi tidak punya timeout ffprobe
+```
+
+Bukti ronde 11:
+
+```
+targeted -> 101 test / 16 lulus / 85 gagal / 0 skip; 85/85 ERR_ASSERTION
+npm test -> 906 test / 807 lulus / 85 gagal / 14 skip; nol regresi
+tsc --noEmit -> exit 0
+mutasi /bin/cp -> cp : KONTROL HARNESS merah (penjaga terbukti bekerja)
+```
+
 ## Yang SENGAJA belum dikerjakan di gelombang ini
 
 Urutan rollout dari `QUESTION` Reviewer dipatuhi: resolver ketat menyala
@@ -1157,6 +1219,7 @@ Founder/eksternal yang belum dikerjakan.
 
 P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
 P0A2_TEST_SHA=f5d4029522bbeb4fbcbf4b885457369bdf3e83a6                       (ronde 2)
+P0A11_TEST_SHA=<commit ini sendiri>                                          (ronde 11)
 P0A10_TEST_SHA=9e2dd432e119e1b1ec9a60ccda3b2c249d184f5f                                          (ronde 10)
 P0A9_TEST_SHA=79f8d58e512c0a81a92a0fbee37377ebc8d8046c                                           (ronde 9)
 P0A8_TEST_SHA=da3b31da62ae08198a5029d13301723ad8dde4c9                                           (ronde 8)

@@ -213,6 +213,19 @@ type SkripPalsu = (ctx: KonteksBin) => string;
 
 const tandai = (mark: string, nama: string) => `: >> "${mark}/${nama}"\n`;
 
+// SETIAP PERINTAH EKSTERNAL DI SKRIP PALSU WAJIB BER-PATH ABSOLUT.
+//
+// PATH proses anak hanya berisi binDir, jadi apa pun yang dipanggil dengan nama
+// telanjang TIDAK ADA. Ini sudah dua kali jadi cacat: `sleep` di ronde 7, lalu
+// `cp` di ronde 10 — di skrip yang saya tulis untuk MEMPERBAIKI cacat pertama.
+// Sisanya (`:`, `[`, `echo`, `printf`, `for`, `exit`) adalah builtin `/bin/sh`
+// dan tidak menyentuh PATH.
+const CP = "/bin/cp";
+
+/** Berhenti dengan kode khas kalau berkas masukan tahap ini tidak ada. */
+const WAJIB_ADA = (ekspr: string) =>
+  `if [ ! -s ${ekspr} ]; then printf 'masukan tidak ada: %s\\n' ${ekspr} >&2; exit 66; fi\n`;
+
 const SUKSES_FFMPEG: SkripPalsu = ({ asli, mark }) =>
   "#!/bin/sh\n" +
   tandai(mark, "ffmpeg") +
@@ -220,15 +233,27 @@ const SUKSES_FFMPEG: SkripPalsu = ({ asli, mark }) =>
   // lib/media/klasifikasi-gambar.ts). Disalin dari PNG sungguhan supaya tahap
   // berikutnya punya artefak yang memadai.
   'for a in "$@"; do keluar="$a"; done\n' +
-  `cp "${asli}" "$keluar"\n` +
+  `${CP} "${asli}" "$keluar" || exit 65\n` +
+  // Menyalin lalu tetap `exit 0` walau salinannya gagal adalah cara fake ini
+  // berbohong tentang keberhasilannya — persis cacat ronde 10.
+  WAJIB_ADA('"$keluar"') +
   "exit 0\n";
 
 const SUKSES_FFPROBE: SkripPalsu = ({ mark }) =>
-  "#!/bin/sh\n" + tandai(mark, "ffprobe") + "echo 1440,810\n";
+  "#!/bin/sh\n" +
+  tandai(mark, "ffprobe") +
+  // Argumen terakhir adalah PNG hasil ffmpeg. Tahap ini MENOLAK melanjutkan
+  // kalau artefaknya tidak ada, jadi kontrol harness tidak bisa lulus di atas
+  // pipeline yang sebenarnya tidak menghasilkan apa-apa.
+  'for a in "$@"; do masuk="$a"; done\n' +
+  WAJIB_ADA('"$masuk"') +
+  "echo 1440,810\n";
 
 const SUKSES_TESSERACT: SkripPalsu = ({ mark }) =>
   "#!/bin/sh\n" +
   tandai(mark, "tesseract") +
+  // Argumen PERTAMA adalah PNG-nya (tesseract <img> stdout -l eng …).
+  WAJIB_ADA('"$1"') +
   // Header TSV tanpa satu pun baris kata -> 0 kata, rasio 0 -> foto produk.
   "printf 'level\\tpage\\tblock\\tpar\\tline\\tword\\tleft\\ttop\\twidth\\theight\\tconf\\ttext\\n'\n";
 
