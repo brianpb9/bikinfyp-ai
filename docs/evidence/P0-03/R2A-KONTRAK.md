@@ -1151,7 +1151,7 @@ TERAKHIR, bukan pertama.
 | P0-A | kontrak/test diperbaiki | **gelombang ini** |
 | P0-B1 | setiap jalur ingestion sah memproduksi sidecar (`saveUniqueProductImages`, `downloadProductImages`, …) | belum |
 | P0-B2 | batas runtime ffmpeg/ffprobe/tesseract — klasifikasi di web Render (`runtime: node`) tidak punya binernya | belum |
-| **P0-B4b** | **test runtime W1 di atas PostgreSQL nyata — bagian slice implementasi PERTAMA, bersama B1+B2** (disetujui Reviewer, ronde 7) | belum |
+| **P0-B4b** | **test runtime W1 di atas PostgreSQL nyata** (disetujui Reviewer ronde 7) | **HIJAU** — `npm run test:postgres-product-truth-w1`, 7 test, 7 lulus |
 | P0-B3 | audit legacy offline + karantina | belum |
 | P0-B4 | canary/product-truth verification di batas yang dipakai produksi | belum |
 | ~~P0-B4b~~ | dipindah ke atas: ia bagian slice implementasi PERTAMA, bukan tahap tersendiri sesudah B4 | — |
@@ -1185,6 +1185,36 @@ pola yang sudah dipakai `npm run test:pg`):
 
 Sampai keempatnya hijau pada SHA yang terikat, P0-B5 tidak boleh dinyalakan
 dengan alasan apa pun — termasuk "gerbang statisnya sudah lebih ketat".
+
+### P0-B4b — TERPENUHI
+
+`tests/pg-product-truth-w1.test.ts`, dijalankan lewat
+`npm run test:postgres-product-truth-w1` di database disposable per jalan
+(konvensi `scripts/test-postgres-jobs.sh`; hanya endpoint loopback diterima).
+
+```
+7 test / 7 lulus / 0 gagal / 0 skip
+```
+
+Keempat kriteria terpenuhi, plus satu tambahan:
+
+| Kriteria | Test |
+|---|---|
+| C1 — materialize pertama = foto#2, sha256-nya foto#2 | `W1 C1` |
+| C8 — nol materialize, fail-closed, nol capture/regen | `W1 C8` × 3 (korup, hilang, hash beda) |
+| referensi tambahan hanya dari daftar tersetujui | `W1: referensi TAMBAHAN` |
+| nol jaringan, nol provider | `assertNolEfekSamping` di setiap job + penghitung fetch |
+| *(tambahan)* bukti SAH tetap lolos | `W1 kontrol positif` |
+
+**Bukti mutasi**, karena test yang tidak pernah merah tidak membuktikan apa pun:
+mengembalikan W1 ke `materialize(images[0])` membuat **5 dari 7 merah** — C1
+(worker mengambil banner) dan ketiga C8 (payload diambil walau bukti tidak sah).
+Kontrol positif tetap hijau, dan itu benar: bukti yang sah memang harus tetap
+lolos di kedua versi.
+
+Jaring runtime ini yang membuat gerbang statis W1 kembali ke perannya yang
+benar — penangkap regresi bentuk yang murah — dan bukan satu-satunya yang
+berdiri di jalur produksi utama.
 
 Verifikasi call-site untuk P0-B1 (dibaca ulang pada 0c443ff, bukan disalin dari
 handover):

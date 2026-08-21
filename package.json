@@ -35,10 +35,11 @@
     "worker": "tsx scripts/worker.ts",
     "monitor:jobs": "tsx scripts/monitor-jobs.ts",
     "smoke": "bash scripts/smoke-e2e.sh",
-    "gate:uang": "node -e \"if(!process.env.UJI_PG_URL){console.error('gate:uang butuh UJI_PG_URL — konkurensi uang tidak boleh dilewati diam-diam. Di CI ini disediakan job konkurensi-uang.');process.exit(1)}\" && npm run test:pg",
-    "test:pg": "node -e \"if(!process.env.UJI_PG_URL){console.error('UJI_PG_URL belum diisi — gate konkurensi tidak boleh lulus tanpa database uji.');process.exit(1)}\" && tsx --test tests/pg-konkurensi-kredit.test.ts",
+    "gate:uang": "node -e \"if(!process.env.UJI_PG_URL){console.error('gate:uang butuh UJI_PG_URL \u2014 konkurensi uang tidak boleh dilewati diam-diam. Di CI ini disediakan job konkurensi-uang.');process.exit(1)}\" && npm run test:pg",
+    "test:pg": "node -e \"if(!process.env.UJI_PG_URL){console.error('UJI_PG_URL belum diisi \u2014 gate konkurensi tidak boleh lulus tanpa database uji.');process.exit(1)}\" && tsx --test tests/pg-konkurensi-kredit.test.ts",
     "gate:rilis": "npx tsc --noEmit && npm test && npm run build && npm run audit:script-catalog && npm run gate:uang",
-    "laporan:nsfw": "node scripts/laporan-nsfw.mjs"
+    "laporan:nsfw": "node scripts/laporan-nsfw.mjs",
+    "test:postgres-product-truth-w1": "bash scripts/test-postgres-product-truth-w1.sh"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1101.0",
