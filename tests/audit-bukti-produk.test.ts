@@ -549,7 +549,10 @@ test("URUTAN VONIS: kunci sah TANPA sidecar -> EVIDENCE_INVALID/SIDECAR_MISSING,
       [ALASAN_TOLAK.BUKTI_TIDAK_SAH, RINCI_TOLAK.SIDECAR_HILANG],
       [ALASAN_TOLAK.BUKTI_TIDAK_SAH, RINCI_TOLAK.SIDECAR_HILANG],
     ],
-    "bentuk kunci tidak boleh mengubah vonis; yang menentukan adalah keadaan sidecar"
+    "bentuk kunci tidak boleh mengubah vonis; yang menentukan adalah keadaan sidecar. " +
+      "Pada fixture INI bytes-nya ADA dan hanya buktinya yang tidak pernah diterbitkan, jadi " +
+      "melaporkannya sebagai REF_MISSING akan menyuruh orang mencari berkas yang ada di storage " +
+      "sementara kerusakan yang sebenarnya — foto yang belum pernah diperiksa — tidak terhitung."
   );
 });
 
@@ -561,14 +564,26 @@ test("URUTAN VONIS: bytes DAN sidecar sama-sama hilang -> SIDECAR_MISSING (sidec
   // dibuktikan dengan mutasi: membalik urutan pemeriksaan tidak membuat satu
   // pun dari keduanya merah. Hanya di sini kedua kekurangan hadir bersamaan,
   // sehingga jawabannya menunjuk pemeriksaan MANA yang berjalan pertama.
+  //
+  // Catatan jujur soal apa yang kasus ini BUKTIKAN dan tidak (temuan Reviewer
+  // atas 5fd7554): ini mengunci PRESEDENSI resolver. Dampak operasional "orang
+  // disuruh mencari berkas yang ada" bukan milik kasus ini — di sini berkasnya
+  // memang tidak ada — melainkan milik test tetangga di atas, tempat bytes-nya
+  // ADA. Yang salah di sini adalah apa yang DISIRATKAN vonisnya, dijelaskan di
+  // pesan assertion.
   isi.clear(); // nol bytes, nol sidecar
   const h = await resolveApprovedReference(["/x.webp"]);
   assert.deepEqual(
     h.ditolak.map((d) => [d.alasan, d.rinci]),
     [[ALASAN_TOLAK.BUKTI_TIDAK_SAH, RINCI_TOLAK.SIDECAR_HILANG]],
-    "urutan pemeriksaan berubah: bytes dinilai sebelum bukti. Foto tanpa bukti dilaporkan sebagai " +
-      "berkas hilang, jadi audit menyuruh orang mencari berkas yang sebenarnya ADA — dan kerusakan " +
-      "yang sebenarnya, yaitu bukti yang tidak pernah diterbitkan, tidak pernah terhitung."
+    "urutan pemeriksaan berubah: bytes dinilai sebelum bukti. Di fixture ini berkasnya MEMANG " +
+      "tidak ada, jadi REF_MISSING tidak salah soal berkas — yang salah adalah apa yang " +
+      "DISIRATKANNYA. REF_MISSING berarti 'buktinya ada, bytes-nya hilang': ia mengarang bukti " +
+      "yang tidak pernah diterbitkan, dan menunjuk insiden storage yang tidak pernah terjadi. " +
+      "Baris ini lalu masuk ember insiden storage alih-alih ember 'belum pernah diperiksa', " +
+      "sehingga kedua angka salah sekaligus dan tindakan pemulihannya salah alamat. " +
+      "SIDECAR_MISSING didahulukan karena ia satu-satunya yang tidak mengklaim lebih dari yang " +
+      "diketahui: tanpa sidecar, kita tidak punya dasar apa pun untuk bicara soal bytes."
   );
 });
 
