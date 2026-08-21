@@ -1151,11 +1151,12 @@ TERAKHIR, bukan pertama.
 | P0-A | kontrak/test diperbaiki | **gelombang ini** |
 | P0-B1 | setiap jalur ingestion sah memproduksi sidecar (`saveUniqueProductImages`, `downloadProductImages`, …) | belum |
 | P0-B2 | batas runtime ffmpeg/ffprobe/tesseract — klasifikasi di web Render (`runtime: node`) tidak punya binernya | belum |
-| **P0-B4b** | **test runtime W1 di atas PostgreSQL nyata** (disetujui Reviewer ronde 7) | **HIJAU** — `npm run test:postgres-product-truth-w1`, 7 test, 7 lulus |
-| P0-B3 | audit legacy offline + karantina | belum |
-| P0-B4 | canary/product-truth verification di batas yang dipakai produksi | belum |
+| **P0-B4b** | **test runtime W1 di atas PostgreSQL nyata** (disetujui Reviewer ronde 7) | **HIJAU** — `npm run test:postgres-product-truth-w1`, 12 test, 12 lulus |
+| P0-B3 | audit legacy offline + karantina | **ALAT SELESAI** (PASS a29569f) — ANGKANYA belum: butuh akses database nyata |
+| P0-B4 observasi | kanari bukti di batas KEDUA worker — nol penegakan | **SELESAI** — lihat docs/evidence/P0-03/B3-AUDIT-LEGACY.md §6 |
+| P0-B4 tindakan | apa yang DILAKUKAN saat kanari menyala | menunggu T43 |
 | ~~P0-B4b~~ | dipindah ke atas: ia bagian slice implementasi PERTAMA, bukan tahap tersendiri sesudah B4 | — |
-| P0-B5 | resolver ketat jadi otoritatif — **TERBLOKIR sampai P0-B4b hijau** | belum |
+| P0-B5 | resolver ketat jadi otoritatif di admission | **menunggu T43** (P0-B4b sudah hijau; penahannya sekarang keputusan Founder, bukan test) |
 
 ### P0-B4b — kriteria lulus, dan kenapa ia prasyarat dan bukan utang
 

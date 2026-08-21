@@ -114,8 +114,25 @@ merah). Itu mitigasi, bukan verifikasi pihak kedua.
 
 ## 6. Urutan yang tersisa, dan gerbangnya
 
-P0-B4 (canary) dan P0-B5 (penegakan resolver ketat) **belum dimulai**, dan
-sengaja. Bentuknya ditentukan jawaban T43; memulainya sekarang berarti menebak.
+**P0-B4 dipecah dua, dan itu koreksi atas penilaian Builder sendiri.** Catatan
+versi pertama dokumen ini menyebut seluruh P0-B4 tertahan T43. Yang tertahan
+adalah TINDAKANNYA (hold, tolak, atau revalidasi). PENGAMATANNYA dibutuhkan sama
+saja di ketiga opsi — dan justru pengamatan itulah yang menghasilkan angka untuk
+memutuskan T43.
+
+| Bagian | Isi | Status |
+|---|---|---|
+| P0-B4 observasi | kanari bukti (`lib/kanari-bukti.ts`): kode alasan sebagai data, satu baris terstruktur per penilaian di KEDUA worker, `ditolakSemuaBelumDiperiksa` dihitung sendiri | **SELESAI** — nol penegakan |
+| P0-B4 tindakan | apa yang DILAKUKAN saat kanari menyala | menunggu T43 |
+| P0-B5 | resolver ketat jadi otoritatif di admission | menunggu T43 |
+
+Kanari TIDAK memblokir, TIDAK menunda, TIDAK mengubah satu pun vonis, dan TIDAK
+PERNAH MELEMPAR — termasuk saat penulisannya sendiri melempar. Cacahnya
+PROSES-LOKAL (hilang saat restart; cacah worker tidak muncul di `/api/health`
+milik web); permukaan agregasi yang sebenarnya adalah baris lognya.
+
+Ia juga hanya menghasilkan angka KALAU DI-DEPLOY. Di mesin pengembang ia tidak
+membuktikan apa pun tentang produksi.
 
 **T43 — di meja Founder, belum dijawab.** Penegakan tidak bisa dinyalakan
 sebelum ada jalur revalidasi: di runtime web tanpa biner klasifikasi, setiap

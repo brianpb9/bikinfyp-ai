@@ -274,6 +274,65 @@ async function jalankan(jobId: string, isi: Map<string, Buffer>, wujudkan = fals
   return spy;
 }
 
+// ------------------------------------------------------- P0-B4 KANARI (W1)
+//
+// Temuan Reviewer atas 691bf83, dan ia benar: kanari sempat hanya punya bukti
+// runtime di worker SQLite. Mencabut pemanggilan di lib/postgres/worker.ts —
+// JALUR PRODUKSI UTAMA — tidak membuat satu pun test merah. Slice yang mengklaim
+// dua worker sementara hanya satu yang dijaga adalah klaim yang lebih luas dari
+// buktinya.
+//
+// Dua arah wajib ada. Yang DITOLAK memberi pembilang; yang LOLOS memberi
+// penyebut. Tanpa keduanya, rasio yang jadi alasan kanari ini ada tidak bisa
+// dihitung.
+
+test("W1 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const { resetKanariUntukTest, ringkasanKanari } = await import("../lib/kanari-bukti");
+  const { ALASAN_TOLAK, RINCI_TOLAK } = await import("../lib/product-truth");
+  resetKanariUntukTest();
+
+  const rel = `uploads/w1-kanari-tolak-${process.pid}/0.webp`;
+  const isi = new Map<string, Buffer>([[rel, PACKSHOT]]); // bytes ADA, sidecar HILANG
+  const jobId = await siapkanJob([rel]);
+  const spy = await jalankan(jobId, isi);
+
+  // 1. Vonis tidak berubah: gagal-tertutup sebelum langkah berbayar.
+  await assertNolEfekSamping(jobId, spy.putCalls, "W1 kanari tolak");
+  assert.deepEqual(
+    spy.materializeCalls,
+    [],
+    "kanari membuat W1 mengambil bytes lebih dulu — alat ukur mengubah urutan yang diukurnya"
+  );
+
+  // 2. Kanari benar-benar menyala DI W1, dengan kode, bukan kalimat.
+  const r = ringkasanKanari();
+  assert.equal(r.dinilai, 1, "kanari tidak menyala di lib/postgres/worker.ts — jalur produksi utama tanpa angka");
+  assert.equal(r.ditolak, 1);
+  assert.equal(r.lolos, 0);
+  assert.equal(r.perAlasan[ALASAN_TOLAK.BUKTI_TIDAK_SAH], 1);
+  assert.equal(r.perRinci[RINCI_TOLAK.SIDECAR_HILANG], 1);
+});
+
+test("W1 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const { resetKanariUntukTest, ringkasanKanari } = await import("../lib/kanari-bukti");
+  resetKanariUntukTest();
+  await pasangProviderPengamat();
+
+  const rel = `uploads/w1-kanari-lolos-${process.pid}/0.webp`;
+  const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
+  const jobId = await siapkanJob([rel]);
+  const spy = await jalankan(jobId, isi, true);
+
+  assert.deepEqual(spy.materializeCalls, [rel], "kontrol positif tidak sampai ke materialize; penilaian LOLOS tidak pernah terjadi");
+  const r = ringkasanKanari();
+  assert.equal(r.dinilai, 1, "penilaian yang LOLOS tidak dicatat; kanari hanya punya pembilang");
+  assert.equal(r.lolos, 1);
+  assert.equal(r.ditolak, 0);
+  assert.deepEqual(r.perAlasan, {}, "penolakan dicatat padahal referensinya lolos");
+});
+
 // ------------------------------------------------------------------- C1
 
 test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2, dengan sha256-nya", async (t) => {
