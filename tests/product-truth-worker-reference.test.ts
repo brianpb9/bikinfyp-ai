@@ -57,6 +57,7 @@ type StoredObject = import("../lib/storage").StoredObject;
 
 const db = getDb();
 const sha = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
+const sha256Uji = sha;
 
 const BANNER = Buffer.from("BYTES-BANNER-PROMO-W2");
 const PACKSHOT = Buffer.from("BYTES-PACKSHOT-SAH-W2");
@@ -355,6 +356,88 @@ test("W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhent
     assert.ok(
       ["FAILED", "REFUNDED"].includes(job.state),
       `bytes yang berubah sesudah disetujui tetap diteruskan; job berakhir ${job.state}`
+    );
+  } finally {
+    fs.rmSync(tmp, { recursive: true, force: true });
+  }
+});
+
+/**
+ * W2 TOCTOU JENDELA NYATA — path BERSAMA ditimpa SESUDAH diperiksa.
+ *
+ * Temuan Reviewer 21 Agu: kasus TOCTOU W2 di atas menukar bytes SEBELUM
+ * `pastikanBytesTersetujui`, jadi ia tetap hijau walau snapshot privat di
+ * lib/worker.ts dihapus — ia menguji pemeriksaan hash, bukan jendela yang baru
+ * ditutup.
+ *
+ * Di sini SETIAP materialize menulis ke SATU path yang sama, jadi materialize
+ * referensi TAMBAHAN menimpa bytes referensi UTAMA tepat sesudah utama
+ * diverifikasi. Tanpa snapshot privat, yang diteruskan sebagai referensi utama
+ * adalah bytes foto lain.
+ */
+test("W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tetap bytes yang disetujui", async () => {
+  const dasar = "uploads/w2-toctou-bersama";
+  const relSah1 = `${dasar}/0.webp`;
+  const relSah2 = `${dasar}/1.webp`;
+  const sah1 = Buffer.from("BYTES-SAH-PERTAMA-W2-TOCTOU");
+  const sah2 = Buffer.from("BYTES-SAH-KEDUA-W2-TOCTOU");
+  const isi = new Map<string, Buffer>([
+    [relSah1, sah1],
+    [`${relSah1}.meta.json`, sidecar(sah1, true)],
+    [relSah2, sah2],
+    [`${relSah2}.meta.json`, sidecar(sah2, true)],
+  ]);
+  const materializeCalls: string[] = [];
+  const putCalls: string[] = [];
+  const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "w2-bersama-"));
+  const pathBersama = path.join(tmp, "bersama.webp");
+  setMediaStorageForTests({
+    async put(key: string, body: Buffer) {
+      putCalls.push(key);
+      isi.set(key, body);
+    },
+    async delete(key: string) {
+      isi.delete(key);
+    },
+    async get(key: string) {
+      const body = isi.get(key);
+      return body ? { body, size: body.length } : null;
+    },
+    async stat(key: string) {
+      const body = isi.get(key);
+      return body ? { size: body.length } : null;
+    },
+    async materialize(key: string) {
+      materializeCalls.push(key);
+      const body = isi.get(key);
+      if (!body) return null;
+      fs.writeFileSync(pathBersama, body); // menimpa isi materialize sebelumnya
+      return pathBersama;
+    },
+  } as never);
+
+  try {
+    const { jobId } = siapkanJob([relSah1, relSah2], "high_quality");
+    await processJob(jobId);
+
+    assertNolEfekSamping(jobId, { putCalls }, "W2 TOCTOU bersama");
+    assert.deepEqual(materializeCalls, [relSah1, relSah2], "kedua referensi wajib diminta");
+    assert.equal(
+      sha256Uji(fs.readFileSync(pathBersama)),
+      sha256Uji(sah2),
+      "prasyarat: path bersama memang sudah ditimpa bytes referensi kedua"
+    );
+
+    // Snapshot privat job ini berisi bytes yang DISETUJUI, bukan isi path
+    // bersama yang sudah ditimpa. Diperiksa dari berkas snapshot-nya sendiri:
+    // itulah yang diteruskan ke hilir.
+    const dirSnapshot = path.join(process.env.STORAGE_DIR!, "jobs", jobId, "ref-tersetujui");
+    assert.ok(fs.existsSync(dirSnapshot), "snapshot bukti tidak dibuat — path bersama diteruskan apa adanya");
+    const berkasSnapshot = fs.readdirSync(dirSnapshot).map((f) => path.join(dirSnapshot, f));
+    const shaSnapshot = berkasSnapshot.map((f) => sha256Uji(fs.readFileSync(f)));
+    assert.ok(
+      shaSnapshot.includes(sha256Uji(sah1)),
+      `snapshot tidak memuat bytes referensi utama yang disetujui. Isi snapshot: ${JSON.stringify(shaSnapshot)}`
     );
   } finally {
     fs.rmSync(tmp, { recursive: true, force: true });

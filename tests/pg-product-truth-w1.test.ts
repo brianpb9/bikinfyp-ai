@@ -522,6 +522,62 @@ test("W1: referensi tambahan yang DITERIMA PROVIDER — urutan, hash, dan tanpa 
   );
 });
 
+// ------------------------- batas tujuh referensi, DI BOUNDARY PROVIDER
+
+/**
+ * DELAPAN foto tersetujui, TUJUH referensi terkirim — diamati di provider.
+ *
+ * Temuan Reviewer 21 Agu: kasus provider W1 hanya memakai DUA foto sah, jadi
+ * mutasi yang mengembalikan W1 ke primary + tujuh tambahan (delapan total)
+ * tidak akan terdeteksi. Batasnya baru terkunci kalau jumlahnya benar-benar
+ * diuji di titik jumlah itu berarti: yang diterima provider.
+ *
+ * `MAKS_REFERENSI_PER_GENERASI = 7` menghitung primary + tambahan, jadi yang
+ * dituntut satu primary dan PALING BANYAK enam tambahan.
+ */
+test("W1: delapan foto tersetujui — provider menerima satu primary + maksimal enam tambahan", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  if (!punyaPersonSafe()) return t.skip("python/OpenCV/model YuNet tidak ada — jalur aman tidak bisa ditempuh");
+  await pasangProviderPengamat();
+
+  const sharp = (await import("sharp")).default;
+  const dasar = `uploads/w1-delapan-${process.pid}`;
+  const isi = new Map<string, Buffer>();
+  const rels: string[] = [];
+  const bytesPer: Buffer[] = [];
+  for (let i = 0; i < 8; i++) {
+    const png = await sharp({
+      create: { width: 800, height: 800, channels: 3, background: { r: 20 + i * 25, g: 180, b: 90 + i * 10 } },
+    })
+      .png()
+      .toBuffer();
+    const rel = `${dasar}/${i}.png`;
+    isi.set(rel, png);
+    isi.set(`${rel}.meta.json`, sidecar(png, true));
+    rels.push(rel);
+    bytesPer.push(png);
+  }
+
+  const jobId = await siapkanJob(rels, "high_quality");
+  const spy = await jalankan(jobId, isi, true);
+
+  await assertNolEfekSamping(jobId, spy.putCalls, "W1 delapan foto");
+  assert.ok(amatan.dipanggil, "provider tidak pernah menerima spec — batasnya tidak teruji");
+  assert.equal(amatan.utamaSha, sha256(bytesPer[0]), "referensi utama di provider bukan foto sah pertama");
+  assert.ok(
+    amatan.extraPaths.length <= 6,
+    `provider menerima ${amatan.extraPaths.length} referensi tambahan; dengan primary itu ` +
+      `${amatan.extraPaths.length + 1} referensi. MAKS_REFERENSI_PER_GENERASI=7 menghitung ` +
+      "primary + tambahan, jadi delapan berarti kontraknya sendiri dilewati."
+  );
+  const shaDiterima = new Set(amatan.extraPaths.map((pth) => sha256(fs.readFileSync(pth))));
+  assert.ok(
+    !shaDiterima.has(sha256(bytesPer[7])),
+    "foto KEDELAPAN sampai ke provider — batas generasi tidak diterapkan"
+  );
+  assert.ok(spy.materializeCalls.length <= 7, `worker meminta ${spy.materializeCalls.length} referensi`);
+});
+
 // ------------------- path bersama ditimpa SESUDAH diperiksa (TOCTOU nyata)
 
 /**
