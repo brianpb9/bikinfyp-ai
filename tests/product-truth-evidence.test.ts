@@ -339,11 +339,21 @@ const fieldTakSah: { judul: string; ubah: Record<string, unknown>; kenapa: strin
  *     AMBANG_RASIO = 0.02        AMBANG_KATA = 6
  *     promosi = rasioAreaTeks >= AMBANG_RASIO || jumlahKata >= AMBANG_KATA
  *
- * Disalin, bukan diimpor, karena konstantanya tidak diekspor. Penyalinan itu
- * AMAN justru karena `versiBukti` ada: aturan classifier yang berubah WAJIB
- * menaikkan versi bukti, dan bukti versi 1 hanya boleh dinilai dengan aturan
- * versi 1. Kalau ambangnya digeser tanpa menaikkan versi, itu cacat tersendiri
- * — dan test versi-basi di atas yang menangkapnya.
+ * Disalin, bukan diimpor, karena konstantanya tidak diekspor.
+ *
+ * KOREKSI (temuan Reviewer ronde 5): versi sebelumnya komentar ini menulis
+ * bahwa "test versi-basi yang menangkapnya" kalau ambang digeser tanpa
+ * menaikkan versi. Itu SALAH, dan salahnya penting. Test versi-basi hanya
+ * menolak sidecar yang versiBukti-nya LEBIH KECIL dari nilai kini; ambang yang
+ * digeser diam-diam tetap menghasilkan sidecar versi 1, jadi ia lolos di sana
+ * tanpa perlawanan.
+ *
+ * Yang benar-benar menangkapnya adalah SALINAN ini beserta fixture batasnya:
+ * begitu AMBANG_RASIO atau AMBANG_KATA di produksi digeser, fixture di sini
+ * berhenti cocok dengan aturan yang berlaku dan test jadi merah — memaksa
+ * penulisnya memutuskan secara sadar: naikkan `versiBukti` dan perbarui
+ * fixture, atau batalkan pergeserannya. Kopling yang disengaja, bukan
+ * duplikasi yang lupa.
  */
 const AMBANG_RASIO_V1 = 0.02;
 const AMBANG_KATA_V1 = 6;
@@ -383,6 +393,29 @@ const kontradiktif: { judul: string; ubah: Record<string, unknown>; kenapa: stri
     ubah: { jenis: "product_photo", layakReferensi: true, jumlahKata: 14 },
     kenapa:
       `jumlahKata 14 >= AMBANG_KATA ${AMBANG_KATA_V1}, jadi aturan versi 1 WAJIB memvonis promosi`,
+  },
+
+  // BATAS INKLUSIF, TEPAT DI AMBANG. Temuan Reviewer ronde 5.
+  //
+  // Fixture 0.19 dan 14 berada jauh di atas ambang, jadi validator yang keliru
+  // memakai `>` alih-alih `>=` tetap menolak keduanya dan lulus — sambil
+  // menerima sidecar `product_photo` PERSIS di 0.02 dan PERSIS di 6, padahal
+  // aturan versi 1 (`rasio >= 0.02 || kata >= 6`) wajib memvonis keduanya
+  // promosi. Ambang yang tidak diuji di titiknya sendiri bukan ambang yang
+  // terkunci.
+  {
+    judul: `rasioAreaTeks TEPAT ${AMBANG_RASIO_V1} (batas inklusif) TAPI divonis foto produk layak`,
+    ubah: { jenis: "product_photo", layakReferensi: true, rasioAreaTeks: AMBANG_RASIO_V1 },
+    kenapa:
+      `aturan v1 memakai >= , jadi rasio TEPAT ${AMBANG_RASIO_V1} sudah promosi. Validator ` +
+      "yang memakai > akan meloloskan ini sambil tetap menolak 0.19",
+  },
+  {
+    judul: `jumlahKata TEPAT ${AMBANG_KATA_V1} (batas inklusif) TAPI divonis foto produk layak`,
+    ubah: { jenis: "product_photo", layakReferensi: true, jumlahKata: AMBANG_KATA_V1 },
+    kenapa:
+      `aturan v1 memakai >= , jadi jumlahKata TEPAT ${AMBANG_KATA_V1} sudah promosi. Validator ` +
+      "yang memakai > akan meloloskan ini sambil tetap menolak 14",
   },
 
   // --- sumbu 3: DOMAIN NUMERIK, satu sumbu per fixture ---

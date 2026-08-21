@@ -39,10 +39,11 @@ SCRIPT_LLM=0 npx tsx --test \
 | R2/P0-A ronde 2 (di f5d4029) | 43 test · 11 lulus · 32 gagal · 0 skip |
 | R2/P0-A ronde 3 (di f22d6e8) | 58 test · 11 lulus · 47 gagal · 0 skip |
 | R2/P0-A ronde 4 (di c15f36f) | 62 test · 12 lulus · 50 gagal · 0 skip |
-| **R2/P0-A ronde 5 (di b1fd0e8)** | **74 test · 12 lulus · 62 gagal · 0 skip · 0 cancelled · 0 todo** |
+| R2/P0-A ronde 5 (di b1fd0e8) | 74 test · 12 lulus · 62 gagal · 0 skip |
+| **R2/P0-A ronde 6 (di P0A6_TEST_SHA)** | **79 test · 12 lulus · 67 gagal · 0 skip · 0 cancelled · 0 todo** |
 
-Keenam-puluh-dua kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
-`grep "  code: " | sort | uniq -c` → `62 code: 'ERR_ASSERTION'`, nol kode lain.
+Keenam-puluh-tujuh kegagalan seluruhnya `code: 'ERR_ASSERTION'` — diverifikasi
+`grep "  code: " | sort | uniq -c` → `67 code: 'ERR_ASSERTION'`, nol kode lain.
 Nol module-not-found, nol error env, nol skip, nol error fixture.
 
 `npx tsc --noEmit` → exit 0.
@@ -50,12 +51,12 @@ Nol module-not-found, nol error env, nol skip, nol error fixture.
 Suite penuh, `npm test` (`SCRIPT_LLM=0 tsx --test tests/*.test.ts`):
 
 ```
-1..879
-# tests 879 · pass 803 · fail 62 · cancelled 0 · skipped 14 · todo 0
-exit 1   (62 merah DISENGAJA — red-before, belum ada implementasi)
+1..884
+# tests 884 · pass 803 · fail 67 · cancelled 0 · skipped 14 · todo 0
+exit 1   (67 merah DISENGAJA — red-before, belum ada implementasi)
 ```
 
-Keenam-puluh-dua `not ok` di jalan penuh itu **persis** keenam-puluh-dua test
+Keenam-puluh-tujuh `not ok` di jalan penuh itu **persis** keenam-puluh-tujuh test
 P0-03/karantina di atas — nol regresi di tempat lain, diverifikasi dengan
 menyaring daftar `not ok` terhadap himpunan P0-03 dan mendapati sisa kosong.
 Aritmetikanya tertutup terhadap baseline `PATH-CASE-MATRIX.md` (810 · 796 · 0 · 14):
@@ -66,6 +67,7 @@ ronde 2:  833 + 15 = 848 test ·  801 + 1     = 802 lulus ·  32 gagal
 ronde 3:  848 + 15 = 863 test ·  802         = 802 lulus ·  47 gagal
 ronde 4:  863 +  4 = 867 test ·  802 + 1     = 803 lulus ·  50 gagal
 ronde 5:  867 + 12 = 879 test ·  803         = 803 lulus ·  62 gagal
+ronde 6:  879 +  5 = 884 test ·  803         = 803 lulus ·  67 gagal
 ```
 
 Satu test ronde 4 lulus di HEAD dan itu memang benar: fixture bertentangan arah
@@ -640,10 +642,17 @@ Ditambahkan enam fixture satu-sumbu (di **kedua** jalur, semuanya
 | domain | `jumlahKata: 2.5` | cacahan tidak bisa pecahan |
 
 Ambangnya **disalin** dari `lib/media/klasifikasi-gambar.ts` (konstantanya tidak
-diekspor), dan penyalinan itu aman justru karena `versiBukti` ada: aturan yang
-berubah wajib menaikkan versi, dan bukti versi 1 hanya dinilai dengan aturan
-versi 1. Ambang yang digeser tanpa menaikkan versi adalah cacat tersendiri —
-dan test versi-basi yang menangkapnya.
+diekspor).
+
+> **Koreksi ronde 6.** Kalimat di sini semula berbunyi "ambang yang digeser
+> tanpa menaikkan versi … test versi-basi yang menangkapnya". Itu **salah**, dan
+> Reviewer benar menandainya: test versi-basi hanya menolak sidecar yang
+> `versiBukti`-nya lebih KECIL dari nilai kini. Ambang yang digeser diam-diam
+> tetap menghasilkan sidecar versi 1, jadi ia lolos di sana tanpa perlawanan.
+> Yang benar-benar menangkapnya adalah salinan ambang ini beserta fixture
+> batasnya: begitu ambang produksi bergeser, fixture berhenti cocok dan test
+> jadi merah, memaksa penulisnya memutuskan secara sadar — naikkan `versiBukti`
+> dan perbarui fixture, atau batalkan pergeserannya.
 
 ### T14 (P1) — prasyarat runtime W1 hilang dari tabel rollout
 
@@ -675,6 +684,67 @@ tsc --noEmit -> exit 0
 test-reviewer-runtime.sh -> 7 kasus, 0 gagal
 test-bus.sh -> 13 kasus, 0 gagal
 nol proses/launchd job tertinggal; runtime kanonik live (49388) utuh
+```
+
+## Ronde 6 — dua temuan Reviewer atas b058ee5
+
+Keduanya diterima; nol sanggahan.
+
+### T16 (P1) — satu test masih membekukan kontrak classifier yang sudah dinyatakan cacat
+
+> *"Tes ini mewajibkan berkas yang tidak dapat diperiksa menjadi
+> `promotional_graphic`. Itu bertentangan dengan PATH-CASE C7
+> (`CLASSIFIER_FAILED`) dan B1-B2-MATRIKS-INGESTION … Implementasi P0-B2 yang
+> benar akan dipaksa merah oleh kontrol ini."*
+
+Benar, dan ini **saudara** dari cacat yang sudah dicabut di ronde 1
+(backfill malas) — di berkas yang sama, terlewat. Dua dokumen yang sudah terikat
+di tree ini menyatakan penyamaan "banner" dengan "pemeriksaan gagal" sebagai
+bukti permanen yang berbohong, sementara satu test justru menuntutnya. Kontrak
+yang bertentangan dengan dirinya sendiri akan selalu dimenangkan oleh test,
+karena testlah yang merah.
+
+Diganti kontrak red-before untuk status non-vonis eksplisit, dan **berpasangan**
+supaya tidak ada sisi yang bisa dihijaukan dengan menghapus perbedaannya:
+
+| Keadaan | Kontrak baru |
+|---|---|
+| tidak bisa diperiksa (biner hilang, timeout, berkas tak terbaca) | `jenis: "belum_diperiksa"`, `layakReferensi: false`, alasan bisa dibaca |
+| benar-benar diperiksa dan memang banner | `jenis: "promotional_graphic"`, `layakReferensi: false` |
+
+Keputusan gerbangnya **tidak berubah**: RAGU = TIDAK LOLOS, jadi
+`layakReferensi` tetap `false` di kedua sisi, dan asersi itu ditulis LEBIH DULU
+supaya ia tetap dijaga walau asersi status di bawahnya gagal. Yang berubah hanya
+kejujuran catatannya — dan itulah yang menentukan apakah bukti bisa direvalidasi
+nanti oleh boundary yang punya binernya, atau membeku jadi vonis palsu selamanya
+di service web `runtime: node`.
+
+Reason code penolakannya adalah `CLASSIFIER_FAILED` (PATH-CASE-MATRIX C7).
+
+### T17 (P1) — fixture metrik tidak mengunci ambang inklusif
+
+> *"Validator yang keliru memakai `>` pada ambang akan meluluskan seluruh tes
+> namun menerima sidecar `product_photo` tepat pada 0.02 atau 6."*
+
+Benar. Fixture 0.19 dan 14 duduk jauh di atas ambang, jadi `>` dan `>=`
+berperilaku sama di sana. Ambang yang tidak diuji **di titiknya sendiri** bukan
+ambang yang terkunci.
+
+Ditambahkan dua fixture satu-sumbu tepat di batas — `rasioAreaTeks: 0.02` dan
+`jumlahKata: 6`, keduanya dengan vonis `product_photo` + `layakReferensi: true`
+— di jalur `referensiLayak` **dan** API pusat, keduanya `EVIDENCE_INVALID`.
+
+Klaim dokumen tentang kopling ambang↔versi juga dikoreksi; lihat kotak koreksi
+di bagian T13 ronde 5.
+
+Bukti ronde 6:
+
+```
+targeted -> 79 test / 12 lulus / 67 gagal / 0 skip; 67/67 ERR_ASSERTION
+npm test -> 884 test / 803 lulus / 67 gagal / 14 skip; nol regresi
+tsc --noEmit -> exit 0
+test-reviewer-runtime.sh -> 7 kasus, 0 gagal
+test-bus.sh -> 13 kasus, 0 gagal
 ```
 
 ## Yang SENGAJA belum dikerjakan di gelombang ini
@@ -746,7 +816,7 @@ hijau lokal bukan bukti deployment.
 
 Gelombang ini adalah perbaikan KONTRAK. Ia tidak menaikkan skor readiness sama
 sekali: nol perubahan produksi, dan jumlah test merah justru NAIK di setiap
-ronde — 14 (R1) → 18 → 32 → 47 → 50 → **62** (ronde 5) — karena
+ronde — 14 (R1) → 18 → 32 → 47 → 50 → 62 → **67** (ronde 6) — karena
 kontraknya menuntut makin banyak hal yang benar, bukan karena ada yang rusak. Sesuai batas
 Reviewer, seluruh slice product-truth yang selesai pun hanya memindahkan
 kesiapan keseluruhan sekitar 40 → 55–58; 80/100 tetap butuh gerbang
@@ -754,6 +824,7 @@ Founder/eksternal yang belum dikerjakan.
 
 P0A_TEST_SHA=4a0a3434848a9cb79c687d1dd238f79e63d7df5e  (ronde 1)
 P0A2_TEST_SHA=f5d4029522bbeb4fbcbf4b885457369bdf3e83a6                       (ronde 2)
+P0A6_TEST_SHA=<commit ini sendiri>                                           (ronde 6)
 P0A5_TEST_SHA=b1fd0e8a173400b951be8e7b5d8d96a004696648                                           (ronde 5)
 P0A4_TEST_SHA=c15f36ff121a2314b81607f6e2a395db3d7acc30                                           (ronde 4)
 P0A3_TEST_SHA=f22d6e80e51e95a58a7ddb4f03095f85fbe3c7e9                                           (ronde 3)

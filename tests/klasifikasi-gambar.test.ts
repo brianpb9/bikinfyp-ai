@@ -82,11 +82,77 @@ test("JURANG ambang masih lebar — kalau menyempit, ambangnya harus diukur ulan
   );
 });
 
-test("gagal memeriksa = dianggap PROMOSI, bukan diloloskan", async () => {
-  // Kebalikan dari gerbang label, dan sengaja: yang salah di sini menetapkan
-  // bahan untuk setiap render sesudahnya.
+// GAGAL MEMERIKSA BUKAN VONIS. Ini kontrak BARU dan sengaja MERAH di HEAD.
+//
+// Versi sebelumnya menuntut berkas yang tidak bisa diperiksa menjadi
+// `promotional_graphic`. Temuan Reviewer 21 Agu, dan ia benar: kontrak itu
+// bertentangan dengan dua dokumen yang sudah terikat di tree ini —
+// PATH-CASE-MATRIX C7 (`CLASSIFIER_FAILED`, fail-closed) dan
+// B1-B2-MATRIKS-INGESTION, yang menyebut penyamaan "banner" dengan "pemeriksaan
+// gagal" sebagai bukti permanen yang berbohong. Implementasi P0-B2 yang BENAR
+// akan dipaksa merah oleh kontrol lama itu, dan tekanan berikutnya adalah
+// membatalkan perbaikan yang benar demi menghijaukan test. Itu persis pola yang
+// sudah dicabut sekali di gelombang ini (backfill malas); ini saudaranya yang
+// terlewat.
+//
+// Yang DIPERTAHANKAN utuh: keputusan gerbangnya. "Ragu tidak boleh lolos" tetap
+// benar, jadi `layakReferensi` tetap `false`. Yang berubah hanya kejujuran
+// CATATANNYA — dan itu yang menentukan apakah bukti bisa direvalidasi nanti
+// oleh boundary yang punya binernya, atau membeku jadi vonis palsu selamanya.
+//
+// Dua sisi diuji berpasangan supaya tidak ada yang bisa dihijaukan dengan
+// menghapus perbedaannya:
+//   - tidak bisa diperiksa  -> `belum_diperiksa`, layakReferensi false
+//   - benar-benar diperiksa dan memang banner -> `promotional_graphic`
+const STATUS_BELUM_DIPERIKSA = "belum_diperiksa";
+
+test("gagal memeriksa = BELUM DIPERIKSA (bukan vonis promosi), dan tetap tidak layak", async () => {
   const h = await klasifikasiGambar("/tmp/berkas-yang-tidak-ada-sama-sekali.png");
-  assert.equal(h.jenis, "promotional_graphic");
+
+  // Keputusan gerbang tidak berubah, dan diasersi lebih dulu supaya ia tetap
+  // dijaga walau asersi status di bawahnya gagal.
+  assert.equal(
+    h.layakReferensi,
+    false,
+    "RAGU = TIDAK LOLOS masih berlaku: pemeriksaan yang gagal tidak boleh menghasilkan referensi"
+  );
+
+  assert.notEqual(
+    h.jenis,
+    "promotional_graphic",
+    'Pemeriksaan yang GAGAL dicatat sebagai vonis "promotional_graphic". Vonis itu tidak bisa ' +
+      "dibedakan dari banner sungguhan oleh pembaca mana pun, dan ia PERMANEN: di runtime tanpa " +
+      "ffmpeg/tesseract (service web Render, runtime: node) setiap foto produk yang sah akan " +
+      "dicap promosi selamanya. Bukti yang berbohong lebih buruk daripada bukti yang kosong, " +
+      "karena yang kosong masih bisa direvalidasi."
+  );
+  assert.equal(
+    h.jenis,
+    STATUS_BELUM_DIPERIKSA,
+    `Status non-vonis yang eksplisit belum ada. Kontraknya: "${STATUS_BELUM_DIPERIKSA}" — ` +
+      "keadaan ketiga yang menyatakan apa yang benar-benar terjadi (belum bisa diperiksa), " +
+      "supaya boundary yang punya binernya bisa merevalidasinya. Reason code untuk penolakannya " +
+      "adalah CLASSIFIER_FAILED (PATH-CASE-MATRIX C7)."
+  );
+  assert.ok(
+    h.alasan.length > 10,
+    "penolakan tanpa alasan yang bisa dibaca pengguna"
+  );
+});
+
+test("KONTROL: banner yang BENAR-BENAR diperiksa tetap promotional_graphic", async (t) => {
+  // Pasangan test di atas. Tanpa ini, "belum_diperiksa" bisa dipakai untuk
+  // segalanya dan vonis promosi yang sah ikut hilang.
+  if (!punyaOcr()) return t.skip("tesseract/ffmpeg tidak ada");
+  const banner = path.join(R, "02-banner-promo-JANGAN-DIPAKAI.jpeg");
+  if (!fs.existsSync(banner)) return t.skip("fixture tidak ada");
+  const h = await klasifikasiGambar(banner);
+  assert.equal(
+    h.jenis,
+    "promotional_graphic",
+    "banner yang berhasil diperiksa wajib tetap divonis promosi — status belum_diperiksa tidak " +
+      "boleh menelan vonis yang sah"
+  );
   assert.equal(h.layakReferensi, false);
 });
 
