@@ -2,8 +2,13 @@
 
 TASK=P0-B2B3-STAGING-EVIDENCE-20260822
 TANGGAL=2026-08-22
-SIFAT=**HANYA BACA** — nol deploy, nol restart, nol migrasi, nol tulis, nol
-render berbayar. Seluruh perintah di bawah adalah pembacaan.
+SIFAT=**NOL MUTASI TERHADAP STAGING** — nol deploy, nol restart, nol migrasi,
+nol koneksi database, nol render berbayar. Seluruh perintah terhadap staging
+adalah pembacaan.
+
+Satu pengecualian yang disebut terus terang: probe bagian E menulis ke direktori
+SEMENTARA di filesystem lokal lalu menghapusnya. Itu inti demonstrasinya dan
+tidak menyentuh staging sama sekali.
 
 ## Ringkasan satu kalimat
 
@@ -283,8 +288,11 @@ yang bisa dibaca dari deploy mana pun saat ini.
 ## 5. Bukti sifat hanya-baca
 
 - Perintah yang dijalankan: `curl` GET, `render services/deploys/postgres list`
-  (subperintah baca), dan satu **probe konfigurasi lokal** yang tidak menyentuh
-  jaringan/database/storage (`staging-20260822/probe-gagal-tertutup.txt`).
+  (subperintah baca), dan **probe lokal** di
+  `staging-20260822/probe-gagal-tertutup.txt`: bagian A-D hanya mengkonstruksi
+  config; bagian E menulis ke direktori SEMENTARA lokal, membacanya, lalu
+  menghapusnya. Nol jaringan, nol database, nol sentuhan ke staging pada
+  keduanya.
   Versi sebelumnya menulis "hanya curl dan render" sementara batang tubuh
   dokumen mengklaim sebuah probe — inventaris yang bertentangan dengan isinya
   sendiri. Temuan Reviewer.

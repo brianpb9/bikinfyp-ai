@@ -1,6 +1,7 @@
 # probe konfigurasi EFEKTIF + gagal-tertutup
 # waktu_utc      : 2026-08-22T13:27:17Z
-# jaringan       : TIDAK ADA — hanya konstruksi config lokal
+# jaringan       : TIDAK ADA. Bagian A-D hanya konstruksi config; bagian E
+#                  menulis ke direktori SEMENTARA lokal lalu menghapusnya.
 # nilai kredensial: TIDAK PERNAH dicetak; hanya NONEMPTY / EMPTY_OR_MISSING
 
 --- PENGIKATAN SOURCE KE SHA ---
@@ -66,38 +67,56 @@ RACUN_DB_RUNTIME     = postgres
 mediaStorage()       = MELEMPAR (gagal-tertutup)
 exit=0
 
+
 ===================================================================
-# LANJUTAN — ditambahkan atas temuan review 64727be
-# waktu_utc : 2026-08-22T13:33:57Z
-# HEAD saat perekaman: 64727be46e367d47150571eab8a57d56cfd7d2e2
-# kesetaraan source (disk vs tree ber-SHA):
-#   lib/config.ts          IDENTIK
-#   lib/product-truth.ts   IDENTIK
-#   lib/storage.ts         IDENTIK
+# LANJUTAN — ditambahkan atas temuan review 64727be, direkam ulang
+# atas temuan review 2694a32 (provenance D/E sebelumnya hanya menulis
+# 'IDENTIK' tanpa perintah/nilai hash, dan tidak mencatat exit status).
+# waktu_utc : 2026-08-22T13:39:58Z
+
+$ pwd
+/Users/hadrava/HDRV/03_UGC_AI_ID/app
+$ git rev-parse HEAD
+2694a322806b934fa9dab5838a84265b0b3b17cd
+
+--- PENGIKATAN SOURCE: nilai hash DISK vs TREE, bukan sekadar vonis ---
+$ git hash-object lib/config.ts
+e3467d5cec95a8844b34d3f8db7562ca7fe879d8
+$ git rev-parse HEAD:lib/config.ts
+e3467d5cec95a8844b34d3f8db7562ca7fe879d8
+# -> IDENTIK
+$ git hash-object lib/product-truth.ts
+fc46b62fbfb650fc5d3040d609ba93b7911dded0
+$ git rev-parse HEAD:lib/product-truth.ts
+fc46b62fbfb650fc5d3040d609ba93b7911dded0
+# -> IDENTIK
+$ git hash-object lib/storage.ts
+46b5b2a73905e36b608bfafa31dae8eeaab4df18
+$ git rev-parse HEAD:lib/storage.ts
+46b5b2a73905e36b608bfafa31dae8eeaab4df18
+# -> IDENTIK
 
 --- D. SUMBER kredensial efektif: .env.local atau process env? ---
-# Membedakan keduanya dengan meng-UNSET variabel R2 dari environment
-# sementara dotenv dibiarkan AKTIF.
-
-$ env -u R2_ENDPOINT -u R2_BUCKET -u R2_ACCESS_KEY_ID -u R2_SECRET_ACCESS_KEY \
-    npx tsx probe-sumber-kredensial.ts        # dotenv AKTIF
+$ env -u R2_ENDPOINT -u R2_BUCKET -u R2_ACCESS_KEY_ID -u R2_SECRET_ACCESS_KEY npx tsx probe-sumber-kredensial.ts
 R2_ENDPOINT          = EMPTY_OR_MISSING
 R2_BUCKET            = EMPTY_OR_MISSING
 R2_ACCESS_KEY_ID     = NONEMPTY
 R2_SECRET_ACCESS_KEY = NONEMPTY
+exit=0
 
-$ env -u ...(sama)... RACUN_NO_DOTENV=1 npx tsx probe-sumber-kredensial.ts   # KONTROL
+$ env -u R2_ENDPOINT -u R2_BUCKET -u R2_ACCESS_KEY_ID -u R2_SECRET_ACCESS_KEY RACUN_NO_DOTENV=1 npx tsx probe-sumber-kredensial.ts
 R2_ENDPOINT          = EMPTY_OR_MISSING
 R2_BUCKET            = EMPTY_OR_MISSING
 R2_ACCESS_KEY_ID     = EMPTY_OR_MISSING
 R2_SECRET_ACCESS_KEY = EMPTY_OR_MISSING
+exit=0
 
 # KESIMPULAN D: env di-unset tapi ACCESS_KEY_ID/SECRET tetap NONEMPTY,
-# dan menjadi kosong begitu dotenv dimatikan -> SUMBERNYA .env.local.
+# dan kosong begitu dotenv dimatikan -> SUMBERNYA .env.local.
 
 --- isi probe-sumber-kredensial.ts ---
 // Membedakan SUMBER nilai efektif: .env.local vs process environment.
-// Nilai mentah tidak pernah dicetak; hanya status kekosongan.
+// Nilai mentah tidak pernah DICETAK; hanya status kekosongan.
 const { config } = await import("./lib/config");
 const st = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? "NONEMPTY" : "EMPTY_OR_MISSING");
 console.log("R2_ENDPOINT          =", st(config.r2Endpoint));
@@ -106,25 +125,25 @@ console.log("R2_ACCESS_KEY_ID     =", st(config.r2AccessKeyId));
 console.log("R2_SECRET_ACCESS_KEY =", st(config.r2SecretAccessKey));
 
 --- E. DEMO TERKONTROL: vonis media dari DISK LOKAL ---
-# Menjawab: apakah fail-open ke filesystem benar-benar MENGHASILKAN vonis,
-# bukan sekadar mengembalikan adapter tanpa exception.
-# Nol jaringan, nol database. STORAGE_DIR sementara, dihapus sesudahnya.
-
+# CATATAN SIFAT: bagian ini MENULIS ke direktori sementara lokal,
+# membacanya lewat resolver, lalu menghapusnya. Nol jaringan, nol
+# database, nol sentuhan ke staging.
 $ npx tsx probe-vonis-disk.ts
-STORAGE_DIR ditanam : <TMPDIR>/vonis-disk-imL2a2
 tersetujui          : 1
 ditolak             : 0
 utama               : p/0.webp
 VONIS               : TERSETUJUI dari DISK LOKAL
+STORAGE_DIR dihapus : true
 exit=0
 
 # KESIMPULAN E: berkas yang DITANAM di disk lokal menghasilkan vonis
-# TERSETUJUI. Jadi dengan STORAGE_MODE=filesystem, isi disk mesin yang
-# menjalankan audit menentukan vonis media — bukan storage produksi.
+# TERSETUJUI -> dengan STORAGE_MODE=filesystem, isi disk mesin yang
+# menjalankan audit menentukan vonis media, bukan storage produksi.
 
 --- isi probe-vonis-disk.ts ---
-// Demo TERKONTROL: dengan STORAGE_MODE=filesystem (default), vonis media
-// dihasilkan SEPENUHNYA dari isi disk lokal. Nol jaringan, nol database.
+// Demo TERKONTROL: dengan STORAGE_MODE=filesystem, vonis media lahir dari isi
+// DISK LOKAL. MENULIS ke direktori sementara, membacanya lewat resolver, lalu
+// menghapusnya. Nol jaringan, nol database, nol sentuhan ke staging.
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -142,9 +161,9 @@ fs.writeFileSync(path.join(dir, "p/0.webp.meta.json"), JSON.stringify({
 }));
 const { resolveApprovedReference } = await import("./lib/product-truth");
 const h = await resolveApprovedReference(["p/0.webp"]);
-console.log("STORAGE_DIR ditanam :", dir.replace(os.tmpdir(), "<TMPDIR>"));
 console.log("tersetujui          :", h.tersetujui.length);
 console.log("ditolak             :", h.ditolak.length);
 console.log("utama               :", h.utama ? h.utama.rel : "(nol)");
 console.log("VONIS               :", h.utama ? "TERSETUJUI dari DISK LOKAL" : "ditolak");
 fs.rmSync(dir, { recursive: true, force: true });
+console.log("STORAGE_DIR dihapus :", !fs.existsSync(dir));

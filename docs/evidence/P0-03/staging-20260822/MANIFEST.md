@@ -5,8 +5,15 @@ ini **bukan keluaran mentah**. Ia proyeksi — memilih, mengganti nama, dan
 meratakan field. Tanpa manifest ini, nilai seperti `status: "live"` (yang
 bersifat sementara) tetap hanya klaim tertulis.
 
-Semua perintah **hanya baca**. Nol deploy, nol restart, nol migrasi, nol
-koneksi database, nol tulis.
+Nol mutasi terhadap staging: nol deploy, nol restart, nol migrasi, nol koneksi
+database, nol tulis ke sistem mana pun di luar mesin ini.
+
+Satu pengecualian yang harus disebut, bukan disembunyikan di balik kata "hanya
+baca": probe bagian **E** MENULIS ke direktori sementara di filesystem LOKAL
+(`mkdtemp`, `mkdir`, dua `writeFile`), membacanya lewat resolver, lalu
+menghapusnya (`rm -rf`). Itu memang inti demonstrasinya — membuktikan vonis
+media lahir dari isi disk lokal mustahil dilakukan tanpa menaruh berkas di
+sana.
 
 | Artefak | Perintah persis | Waktu UTC | Exit | Filter sanitasi |
 |---|---|---|---|---|
@@ -78,8 +85,13 @@ Ketiganya membuang seluruh field selain yang disebut — termasuk `envVars`,
 ## Probe gagal-tertutup (`probe-gagal-tertutup.txt`)
 
 Satu-satunya artefak yang BUKAN pembacaan control-plane. Ia menguji apakah
-invocation audit memaksa jalur media gagal-tertutup, dan **tidak menyentuh
-jaringan, database, maupun storage** — hanya konstruksi config lokal.
+invocation audit memaksa jalur media gagal-tertutup. **Nol jaringan, nol
+database, nol sentuhan ke staging.**
+
+Bagian A-D hanya mengkonstruksi config. Bagian E **menulis ke filesystem
+LOKAL** — direktori sementara yang ditanami berkas, dibaca lewat resolver, lalu
+dihapus. Versi sebelumnya manifest ini menulis "tidak menyentuh storage" dan
+"nol tulis" walau bagian E sudah ada; itu keliru dan sudah dibetulkan di sini.
 
 Transcript memuat: pengikatan source, isi skrip probe, dan tiga jalankan
 (default / invocation lama / invocation baru) beserta exit status. Skrip
@@ -106,8 +118,8 @@ dan itu dibuktikan oleh hash di atas.
 Yang dicetak hanya `NONEMPTY` / `EMPTY_OR_MISSING` per variabel,
 dibaca dari konfigurasi EFEKTIF (sesudah dotenv dan pewarisan environment) —
 bukan dari `grep` atas berkas, yang hanya membuktikan adanya baris assignment
-dan tidak membuktikan nilainya non-kosong. Nilai kredensial tidak pernah dibaca
-maupun dicetak.
+dan tidak membuktikan nilainya non-kosong. Nilai mentahnya tidak pernah
+DICETAK.
 
 ## Batas yang melekat pada artefak ini
 
