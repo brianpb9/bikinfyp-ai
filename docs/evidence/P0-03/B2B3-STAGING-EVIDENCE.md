@@ -204,15 +204,30 @@ alatnya memang tidak bisa dijalankan dari sini:
      Tiga hal yang dibuktikan bagian ini, dan tidak satu pun bisa disimpulkan
      dari membaca berkas saja:
 
-     - **A membuktikan bahayanya nyata.** Dengan default, `mediaStorage()`
-       TIDAK melempar — ia membaca disk lokal. Inilah vonis media palsu yang
-       dokumen ini peringatkan, terlihat langsung.
+     - **A membuktikan PRASYARAT fail-open.** Dengan default, `mediaStorage()`
+       TIDAK melempar — ia mengembalikan adapter filesystem. Sendirian, itu
+       belum membuktikan ada pembacaan disk atau vonis; A hanya memanggil
+       `mediaStorage()`, bukan `get`/`stat`/`materialize` maupun audit.
+       Klaim sebelumnya ("bahaya terlihat langsung") melampaui yang diamati —
+       temuan Reviewer. Yang membuktikan vonisnya adalah bagian **E** di bawah.
      - **B membuktikan invocation lama hanya aman BERSYARAT.** Kredensial tetap
        `NONEMPTY` di sana (dotenv tetap dimuat); yang menahannya semata
        `ENDPOINT`/`BUCKET` yang kebetulan kosong. Begitu keduanya ada, ia gagal
        terbuka.
      - **C membuktikan invocation baru aman TANPA SYARAT** — keempatnya dipaksa
        kosong oleh perintahnya sendiri.
+     - **D membuktikan SUMBER kredensialnya.** A/B saja tidak membedakan
+       `.env.local` dari process environment yang diwariskan. Dengan variabel R2
+       di-`unset` tapi dotenv tetap aktif, `ACCESS_KEY_ID`/`SECRET` TETAP
+       `NONEMPTY`; begitu dotenv dimatikan, keduanya kosong. Jadi sumbernya
+       memang `.env.local`.
+     - **E membuktikan VONISNYA, bukan sekadar prasyaratnya.** Demo terkontrol:
+       sebuah foto plus sidecar sah DITANAM di `STORAGE_DIR` sementara, lalu
+       `resolveApprovedReference` dipanggil. Hasilnya `tersetujui: 1`,
+       `utama: p/0.webp` — **vonis TERSETUJUI yang lahir sepenuhnya dari isi
+       disk lokal**. Inilah bentuk konkret bahaya yang dokumen ini peringatkan:
+       audit yang dijalankan dengan default akan menilai foto produksi memakai
+       isi disk mesin yang menjalankannya.
 
      Keduanya gagal-tertutup HARI INI — karena `R2_ENDPOINT` dan `R2_BUCKET`
      kebetulan belum ada di sini. Itu justru inti temuannya: yang lama

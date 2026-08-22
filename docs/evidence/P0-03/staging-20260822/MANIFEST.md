@@ -16,7 +16,7 @@ koneksi database, nol tulis.
 | `postgres.json` | `render postgres list --output json --confirm` | 2026-08-22T12:51:37Z | 0 | F3 |
 | `health-web.txt` | `curl -sS -m 45 -o - -w '\nHTTP_STATUS=%{http_code}\n' https://racun-ai-staging-web.onrender.com/api/health` | 2026-08-22T12:51:37Z | 0 | tidak ada (transcript apa adanya) |
 | `meta-web.txt` | `curl -sS -m 30 -o - -w '\nHTTP_STATUS=%{http_code}\n' https://racun-ai-staging-web.onrender.com/api/meta` | 2026-08-22T13:00:04Z | 0 | tidak ada (transcript apa adanya) |
-| `probe-gagal-tertutup.txt` | pengikatan source + tiga jalankan A/B/C, tercetak lengkap di dalam transcript | 2026-08-22T13:27:17Z | 0 | status `NONEMPTY`/`EMPTY_OR_MISSING` saja, NILAI tidak pernah dibaca |
+| `probe-gagal-tertutup.txt` | pengikatan source + lima jalankan A/B/C (config efektif), D (sumber kredensial), E (demo vonis dari disk) | 2026-08-22T13:27:17Z dan 13:34Z | 0 | status `NONEMPTY`/`EMPTY_OR_MISSING` saja; nilai mentah tidak pernah DICETAK |
 
 ## Pipeline sanitasi — perintah yang BENAR-BENAR menghasilkan tiap artefak
 
@@ -100,7 +100,10 @@ sesudahnya) dan transcript yang sedang ditulis. Klaimnya bukan "worktree
 bersih", melainkan "berkas sumber yang dieksekusi identik dengan tree ber-SHA",
 dan itu dibuktikan oleh hash di atas.
 
-**Sanitasi.** Yang dicetak hanya `NONEMPTY` / `EMPTY_OR_MISSING` per variabel,
+**Sanitasi.** Nilai mentah tidak pernah DICETAK — bukan "tidak pernah dibaca":
+`lib/config.ts` membaca seluruh `.env.local` dan pemeriksa status memanggil
+`trim()` atas nilainya. Yang dijamin: nilai itu tidak pernah keluar ke repo.
+Yang dicetak hanya `NONEMPTY` / `EMPTY_OR_MISSING` per variabel,
 dibaca dari konfigurasi EFEKTIF (sesudah dotenv dan pewarisan environment) —
 bukan dari `grep` atas berkas, yang hanya membuktikan adanya baris assignment
 dan tidak membuktikan nilainya non-kosong. Nilai kredensial tidak pernah dibaca

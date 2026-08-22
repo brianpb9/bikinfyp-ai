@@ -65,3 +65,86 @@ STORAGE_MODE         = r2
 RACUN_DB_RUNTIME     = postgres
 mediaStorage()       = MELEMPAR (gagal-tertutup)
 exit=0
+
+===================================================================
+# LANJUTAN — ditambahkan atas temuan review 64727be
+# waktu_utc : 2026-08-22T13:33:57Z
+# HEAD saat perekaman: 64727be46e367d47150571eab8a57d56cfd7d2e2
+# kesetaraan source (disk vs tree ber-SHA):
+#   lib/config.ts          IDENTIK
+#   lib/product-truth.ts   IDENTIK
+#   lib/storage.ts         IDENTIK
+
+--- D. SUMBER kredensial efektif: .env.local atau process env? ---
+# Membedakan keduanya dengan meng-UNSET variabel R2 dari environment
+# sementara dotenv dibiarkan AKTIF.
+
+$ env -u R2_ENDPOINT -u R2_BUCKET -u R2_ACCESS_KEY_ID -u R2_SECRET_ACCESS_KEY \
+    npx tsx probe-sumber-kredensial.ts        # dotenv AKTIF
+R2_ENDPOINT          = EMPTY_OR_MISSING
+R2_BUCKET            = EMPTY_OR_MISSING
+R2_ACCESS_KEY_ID     = NONEMPTY
+R2_SECRET_ACCESS_KEY = NONEMPTY
+
+$ env -u ...(sama)... RACUN_NO_DOTENV=1 npx tsx probe-sumber-kredensial.ts   # KONTROL
+R2_ENDPOINT          = EMPTY_OR_MISSING
+R2_BUCKET            = EMPTY_OR_MISSING
+R2_ACCESS_KEY_ID     = EMPTY_OR_MISSING
+R2_SECRET_ACCESS_KEY = EMPTY_OR_MISSING
+
+# KESIMPULAN D: env di-unset tapi ACCESS_KEY_ID/SECRET tetap NONEMPTY,
+# dan menjadi kosong begitu dotenv dimatikan -> SUMBERNYA .env.local.
+
+--- isi probe-sumber-kredensial.ts ---
+// Membedakan SUMBER nilai efektif: .env.local vs process environment.
+// Nilai mentah tidak pernah dicetak; hanya status kekosongan.
+const { config } = await import("./lib/config");
+const st = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? "NONEMPTY" : "EMPTY_OR_MISSING");
+console.log("R2_ENDPOINT          =", st(config.r2Endpoint));
+console.log("R2_BUCKET            =", st(config.r2Bucket));
+console.log("R2_ACCESS_KEY_ID     =", st(config.r2AccessKeyId));
+console.log("R2_SECRET_ACCESS_KEY =", st(config.r2SecretAccessKey));
+
+--- E. DEMO TERKONTROL: vonis media dari DISK LOKAL ---
+# Menjawab: apakah fail-open ke filesystem benar-benar MENGHASILKAN vonis,
+# bukan sekadar mengembalikan adapter tanpa exception.
+# Nol jaringan, nol database. STORAGE_DIR sementara, dihapus sesudahnya.
+
+$ npx tsx probe-vonis-disk.ts
+STORAGE_DIR ditanam : <TMPDIR>/vonis-disk-imL2a2
+tersetujui          : 1
+ditolak             : 0
+utama               : p/0.webp
+VONIS               : TERSETUJUI dari DISK LOKAL
+exit=0
+
+# KESIMPULAN E: berkas yang DITANAM di disk lokal menghasilkan vonis
+# TERSETUJUI. Jadi dengan STORAGE_MODE=filesystem, isi disk mesin yang
+# menjalankan audit menentukan vonis media — bukan storage produksi.
+
+--- isi probe-vonis-disk.ts ---
+// Demo TERKONTROL: dengan STORAGE_MODE=filesystem (default), vonis media
+// dihasilkan SEPENUHNYA dari isi disk lokal. Nol jaringan, nol database.
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import crypto from "node:crypto";
+const dir = fs.mkdtempSync(path.join(os.tmpdir(), "vonis-disk-"));
+process.env.STORAGE_MODE = "filesystem";
+process.env.STORAGE_DIR = dir;
+const bytes = Buffer.from("BYTES-PALSU-DI-DISK-LOKAL");
+fs.mkdirSync(path.join(dir, "p"), { recursive: true });
+fs.writeFileSync(path.join(dir, "p/0.webp"), bytes);
+fs.writeFileSync(path.join(dir, "p/0.webp.meta.json"), JSON.stringify({
+  sha256: crypto.createHash("sha256").update(bytes).digest("hex"),
+  jenis: "product_photo", layakReferensi: true,
+  rasioAreaTeks: 0.004, jumlahKata: 2, alasan: "ditanam oleh probe", versiBukti: 1,
+}));
+const { resolveApprovedReference } = await import("./lib/product-truth");
+const h = await resolveApprovedReference(["p/0.webp"]);
+console.log("STORAGE_DIR ditanam :", dir.replace(os.tmpdir(), "<TMPDIR>"));
+console.log("tersetujui          :", h.tersetujui.length);
+console.log("ditolak             :", h.ditolak.length);
+console.log("utama               :", h.utama ? h.utama.rel : "(nol)");
+console.log("VONIS               :", h.utama ? "TERSETUJUI dari DISK LOKAL" : "ditolak");
+fs.rmSync(dir, { recursive: true, force: true });
