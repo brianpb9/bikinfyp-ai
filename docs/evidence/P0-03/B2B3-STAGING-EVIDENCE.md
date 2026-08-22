@@ -192,8 +192,10 @@ alatnya memang tidak bisa dijalankan dari sini:
      Transcript lengkap: `staging-20260822/probe-gagal-tertutup.txt`
      (2026-08-22T13:27:17Z, exit 0), terikat ke source lewat bukti kesetaraan
      hash (`lib/storage.ts` dan `lib/config.ts` di disk IDENTIK dengan isi tree
-     ber-SHA). Statusnya `NONEMPTY` / `EMPTY_OR_MISSING`; nilai kredensial tidak
-     pernah dibaca maupun dicetak.
+     ber-SHA). Statusnya `NONEMPTY` / `EMPTY_OR_MISSING`. **Nilai mentah tidak
+     pernah DICETAK** — bukan "tidak pernah dibaca": `lib/config.ts` memang
+     membaca seluruh `.env.local`, dan pemeriksa statusnya memanggil `trim()`
+     atas nilainya. Yang dijamin adalah nilai itu tidak pernah keluar ke repo.
 
      ```
      A. DEFAULT            ENDPOINT/BUCKET = EMPTY_OR_MISSING

@@ -23,7 +23,7 @@ sana.
 | `postgres.json` | `render postgres list --output json --confirm` | 2026-08-22T12:51:37Z | 0 | F3 |
 | `health-web.txt` | `curl -sS -m 45 -o - -w '\nHTTP_STATUS=%{http_code}\n' https://racun-ai-staging-web.onrender.com/api/health` | 2026-08-22T12:51:37Z | 0 | tidak ada (transcript apa adanya) |
 | `meta-web.txt` | `curl -sS -m 30 -o - -w '\nHTTP_STATUS=%{http_code}\n' https://racun-ai-staging-web.onrender.com/api/meta` | 2026-08-22T13:00:04Z | 0 | tidak ada (transcript apa adanya) |
-| `probe-gagal-tertutup.txt` | pengikatan source + lima jalankan A/B/C (config efektif), D (sumber kredensial), E (demo vonis dari disk) | 2026-08-22T13:27:17Z dan 13:34Z | 0 | status `NONEMPTY`/`EMPTY_OR_MISSING` saja; nilai mentah tidak pernah DICETAK |
+| `probe-gagal-tertutup.txt` | pengikatan source + lima jalankan A/B/C (config efektif), D (sumber kredensial), E (demo vonis dari disk) | A-C 2026-08-22T13:27:17Z; D-E 2026-08-22T13:39:58Z | 0 | status `NONEMPTY`/`EMPTY_OR_MISSING` saja; nilai mentah tidak pernah DICETAK |
 
 ## Pipeline sanitasi — perintah yang BENAR-BENAR menghasilkan tiap artefak
 
