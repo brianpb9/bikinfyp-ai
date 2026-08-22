@@ -1,0 +1,16 @@
+[
+  {
+    "name": "racun-ai-staging-worker",
+    "id": "srv-d9n28ue417fc73ch2b60",
+    "type": "background_worker",
+    "runtime": "docker",
+    "region": "singapore"
+  },
+  {
+    "name": "racun-ai-staging-web",
+    "id": "srv-d9n28tijnfac73a87lt0",
+    "type": "web_service",
+    "runtime": "node",
+    "region": "singapore"
+  }
+]

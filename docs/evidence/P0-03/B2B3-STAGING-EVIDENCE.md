@@ -7,7 +7,7 @@ render berbayar. Seluruh perintah di bawah adalah pembacaan.
 
 ## Ringkasan satu kalimat
 
-**Staging tidak bisa menjawab pertanyaan T43, karena staging tertinggal ~398
+**Staging tidak bisa menjawab pertanyaan T43, karena staging tertinggal ~400
 commit (18 hari) di belakang pekerjaan product-truth — seluruh instrumentasi
 yang dibangun untuk menjawabnya belum pernah ada di sana.**
 
@@ -21,12 +21,39 @@ yang dibangun untuk menjawabnya belum pernah ada di sana.**
 Perintah: `render services --output json --confirm`,
 `render deploys list <service-id> --output json --confirm` (keduanya baca).
 
+**Keluaran mentahnya ada di dalam tree**, disanitasi ke field identitas saja,
+supaya tabel di atas bisa diperiksa dan tidak perlu dipercaya:
+
+| Artefak | Isi |
+|---|---|
+| `staging-20260822/services.json` | nama, id, type, runtime, region |
+| `staging-20260822/deploys-web.json` | 5 deploy terakhir: deployId, status, commit, waktu |
+| `staging-20260822/deploys-worker.json` | idem untuk worker |
+| `staging-20260822/postgres.json` | datastore: nama, id, databaseName, status |
+| `staging-20260822/health-web.txt` | perintah + timestamp + body + HTTP_STATUS |
+
+Deploy aktif web: `dep-d9rugpuq1p3s73ajvvpg`, status `live`, commit
+`5fe53f27436d917d5232e23ef6c6e624eb00428a`.
+
 Kedua SHA bertanggal **2026-08-04**. Jarak ke HEAD:
 
+Dihitung terhadap **exact SHA yang diikat review** (`f28851c`), bukan terhadap
+parent-nya:
+
 ```
-5fe53f2..HEAD  = 398 commit
-78d8468..HEAD  = 402 commit
+git rev-list --count 5fe53f2..f28851c  = 399
+git rev-list --count 78d8468..f28851c  = 403
 ```
+
+Angka ini **berjangkar pada `f28851c`** dan bertambah satu untuk setiap commit
+sesudahnya — termasuk commit yang membawa koreksi ini. Ditulis berjangkar,
+bukan sebagai "terhadap HEAD", supaya ia tidak menjadi salah lagi di SHA
+berikutnya.
+
+(Versi pertama dokumen ini menulis 398/402 "terhadap HEAD". Itu angka terhadap
+`f28851c^` — pohon sebelum dokumen ini sendiri ditambahkan. Temuan Reviewer, dan
+ia benar: bukti yang terikat sebuah SHA harus dihitung terhadap SHA itu, dan
+"HEAD" bukan jangkar yang stabil di dalam berkas yang ikut mengubah HEAD.)
 
 Dan yang menentukan:
 
@@ -38,11 +65,18 @@ Dan yang menentukan:
 ## 2. `/api/health` staging — DIBACA, dan hasilnya bukan jawaban
 
 ```
-2026-08-22T12:42:26Z
-curl -sS -m 45 https://racun-ai-staging-web.onrender.com/api/health
--> HTTP 200
-   {"ok":true,"intake":"open"}
+# waktu_utc: 2026-08-22T12:51:37Z
+curl -sS -m 45 -o - -w '\nHTTP_STATUS=%{http_code}\n' \
+  https://racun-ai-staging-web.onrender.com/api/health
+
+{"ok":true,"intake":"open"}
+HTTP_STATUS=200
 ```
+
+Terekam apa adanya di `staging-20260822/health-web.txt`. (Versi pertama dokumen
+ini mengutip perintah TANPA `-w` sambil mengklaim HTTP 200 — perintah yang
+ditulis tidak akan pernah mencetak status itu. Temuan Reviewer; perintah di atas
+adalah yang benar-benar dijalankan dan keluarannya disimpan.)
 
 Blok `klasifikasi` **tidak ada**. Itu bukan berarti runtime web tidak mampu —
 itu berarti **probe-nya belum di-deploy**. `/api/health` di HEAD mengembalikan
@@ -68,16 +102,41 @@ alatnya memang tidak bisa dijalankan dari sini:
 1. **Butuh DATABASE_URL staging.** Di blueprint ia di-inject Render
    (`fromDatabase`), tidak ada di mesin ini. Diperiksa: `DATABASE_URL`,
    `UJI_PG_URL` kosong.
-2. **Butuh kredensial R2 juga.** Ini yang mudah terlewat: audit memakai
-   `resolveApprovedReference`, dan resolver membaca sidecar DAN bytes dari
-   object storage (`lib/product-truth.ts:256,295`). Tanpa R2, setiap foto akan
-   dilaporkan `SIDECAR_MISSING`/`REF_MISSING` — angka yang **tampak** seperti
-   kerusakan legacy padahal hanya kerusakan akses. Menjalankannya setengah
-   berkredensial LEBIH BURUK daripada tidak menjalankannya.
-3. **Angkanya pun akan menyesatkan.** Produk di `racun_staging` dibuat oleh kode
-   4 Agustus — sebelum satu pun jalur ingestion menerbitkan sidecar. Cacah
-   "kerusakan" di sana mengukur ketiadaan fitur, bukan kerusakan legacy
-   produksi.
+2. **Butuh kredensial R2 juga**, dan gagalnya BUKAN seperti yang versi pertama
+   dokumen ini tulis. Klaim lama: "setiap foto dilaporkan
+   `SIDECAR_MISSING`/`REF_MISSING`". Itu SALAH, dan Reviewer benar
+   membetulkannya — perilaku sebenarnya lebih tegas:
+
+   Dengan `STORAGE_MODE=r2` tanpa kredensial lengkap, `mediaStorage()`
+   memanggil `assertStorageConfiguration()` dan **melempar sebelum satu byte
+   pun dibaca** (`lib/storage.ts:158-177`). Audit menangkap lemparan itu per
+   produk dan menghitungnya sebagai **`produkGagalDiperiksa`**
+   (`lib/audit-bukti-produk.ts:279-292`) — ember "tidak bisa dinilai", bukan
+   vonis kerusakan.
+
+   Jadi jalur ini gagal-tertutup dengan benar: ia TIDAK mengarang kerusakan
+   legacy. Yang tetap benar adalah kesimpulannya — audit tanpa R2 menghasilkan
+   nol informasi berguna, hanya N baris "gagal diperiksa".
+
+   (Catatan ketepatan: dalam mode filesystem yang kosong, urutan resolver hanya
+   menghasilkan `SIDECAR_MISSING`; `REF_MISSING` menuntut sidecar yang SAH ada
+   sementara bytes-nya hilang. Menyebut keduanya sekaligus, seperti versi
+   pertama, salah di kedua mode.)
+3. **Nilai angkanya tidak diketahui, dan itu tidak boleh ditutupi dengan
+   tebakan.** Versi pertama dokumen ini menyimpulkan bahwa seluruh row di
+   `racun_staging` dibuat oleh build 4 Agustus, sehingga audit "pasti hanya
+   mengukur ketiadaan fitur". Kesimpulan itu DICABUT — Reviewer benar bahwa ia
+   tidak didukung apa pun.
+
+   Yang benar-benar dibuktikan: SHA build yang **aktif sekarang** adalah
+   `5fe53f2`. Itu TIDAK membuktikan asal-usul data. Datastore bertahan lintas
+   deploy, rollback, impor manual, seed, dan tulisan dari sumber lain; dokumen
+   ini sendiri menyatakan tidak pernah terhubung ke database dan tidak memuat
+   riwayat deploy lengkap sejak database dibuat (2026-08-02).
+
+   Menyimpulkan asal-usul data dari identitas build adalah persis bentuk
+   "inferensi disajikan sebagai fakta" yang seluruh gelombang bukti ini
+   dibangun untuk mencegah.
 
 Tidak ada angka empat ember yang dilaporkan. Mengarangnya dilarang, dan
 menurunkannya dari akses setengah jadi sama saja dengan mengarang.
@@ -101,7 +160,7 @@ yang bisa dibaca dari deploy mana pun saat ini.
 
 Sebelum ini, "deploy staging lalu baca /api/health" terdengar seperti satu
 langkah kecil. Ternyata bukan: staging bukan sekadar belum di-deploy ulang, ia
-**398 commit tertinggal**. Men-deploy-nya berarti memindahkan 18 hari perubahan
+**~400 commit tertinggal**. Men-deploy-nya berarti memindahkan 18 hari perubahan
 sekaligus ke lingkungan yang belum pernah menjalankannya — termasuk
 `preDeployCommand: node scripts/migrate-postgres-runtime.mjs`, yaitu **migrasi
 schema**, yang dilarang keras di lingkup tugas ini dan bukan tindakan yang boleh
