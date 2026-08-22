@@ -158,15 +158,43 @@ alatnya memang tidak bisa dijalankan dari sini:
    jalur media gagal-tertutup:
 
    ```sh
+   RACUN_NO_DOTENV=1 \
    RACUN_DB_RUNTIME=postgres \
    DATABASE_URL='<staging>' \
    STORAGE_MODE=r2 \
+   R2_ENDPOINT= R2_BUCKET= R2_ACCESS_KEY_ID= R2_SECRET_ACCESS_KEY= \
      npx tsx scripts/audit-bukti-produk.ts --json
    ```
 
-   `STORAGE_MODE=r2` TANPA kredensial dipilih dengan sengaja: itulah yang
-   membuat `assertStorageConfiguration()` melempar, sehingga produk berfoto
-   masuk `produkGagalDiperiksa` alih-alih menerima vonis dari disk lokal.
+   Tiap bagian ada karena satu cara gagal yang KONKRET, bukan untuk kerapian:
+
+   - `STORAGE_MODE=r2` tanpa kredensial → `assertStorageConfiguration()`
+     melempar, sehingga produk berfoto masuk `produkGagalDiperiksa` alih-alih
+     menerima vonis dari disk lokal.
+   - `RACUN_NO_DOTENV=1` + keempat variabel R2 dikosongkan EKSPLISIT → tanpa
+     ini, `lib/config.ts` tetap memuat `.env.local` dan mewarisi R2 dari
+     environment. Kalau keempatnya kebetulan lengkap, assertion itu LOLOS dan
+     audit membaca bucket sungguhan — yang bahkan bisa bucket yang TIDAK
+     berpasangan dengan database staging. Hasilnya vonis media yang justru
+     dokumen ini ada untuk mencegahnya.
+
+     Ini bukan risiko teoretis di mesin ini: `.env.local` di sini SUDAH memuat
+     `R2_ACCESS_KEY_ID` dan `R2_SECRET_ACCESS_KEY`. Versi sebelumnya dari
+     invocation ini hanya menyetel `STORAGE_MODE=r2`, dan akan gagal TERBUKA
+     begitu `R2_ENDPOINT` serta `R2_BUCKET` ikut ada. Temuan Reviewer.
+
+     Diuji, bukan disimpulkan (2026-08-22, mesin ini):
+
+     ```
+     invocation BARU  -> MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, R2_BUCKET, ...
+     invocation LAMA  -> MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, R2_BUCKET, ...
+     ```
+
+     Keduanya gagal-tertutup HARI INI — karena `R2_ENDPOINT` dan `R2_BUCKET`
+     kebetulan belum ada di sini. Itu justru inti temuannya: yang lama
+     bergantung pada apa yang KEBETULAN tidak ada di environment, yang baru
+     dijamin oleh perintahnya sendiri. Gerbang yang benar hanya karena
+     lingkungannya kebetulan miskin bukan gerbang.
 
    Hasil yang bisa dipercaya dari invocation itu:
    - **terhitung**: `produk`, `produkKolomRusak`, `produkTanpaFoto`, `perKolomRusak`;
@@ -194,7 +222,11 @@ alatnya memang tidak bisa dijalankan dari sini:
    `5fe53f2`. Itu TIDAK membuktikan asal-usul data. Datastore bertahan lintas
    deploy, rollback, impor manual, seed, dan tulisan dari sumber lain; dokumen
    ini sendiri menyatakan tidak pernah terhubung ke database dan tidak memuat
-   riwayat deploy lengkap sejak database dibuat (2026-08-02).
+   riwayat deploy lengkap sejak database dibuat. Waktu pembuatan menurut artefak:
+   `createdAt: "2026-08-01T16:37:18.722431Z"` (`staging-20260822/postgres.json`)
+   — yaitu 2026-08-01 UTC, dan 2026-08-01 23:37 WIB. Versi sebelumnya menulis
+   "2026-08-02"; angka itu diambil dari baris postgres PRODUKSI
+   (`2026-08-02T09:54:55Z`), bukan staging. Temuan Reviewer.
 
    Menyimpulkan asal-usul data dari identitas build adalah persis bentuk
    "inferensi disajikan sebagai fakta" yang seluruh gelombang bukti ini
