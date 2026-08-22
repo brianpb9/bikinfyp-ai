@@ -7,9 +7,10 @@ render berbayar. Seluruh perintah di bawah adalah pembacaan.
 
 ## Ringkasan satu kalimat
 
-**Staging tidak bisa menjawab pertanyaan T43, karena staging tertinggal ~400
-commit (18 hari) di belakang pekerjaan product-truth — seluruh instrumentasi
-yang dibangun untuk menjawabnya belum pernah ada di sana.**
+**Staging tidak bisa menjawab pertanyaan T43: build yang hidup di sana
+bertanggal 2026-08-04, sudah 366 commit sebelum gerbang P0 (`38466a3`) bahkan
+dimulai — seluruh instrumentasi yang dibangun untuk menjawabnya belum pernah
+ada di sana.**
 
 ## 1. Identitas service dan deploy AKTIF (tanpa membuat deploy)
 
@@ -21,8 +22,12 @@ yang dibangun untuk menjawabnya belum pernah ada di sana.**
 Perintah: `render services --output json --confirm`,
 `render deploys list <service-id> --output json --confirm` (keduanya baca).
 
-**Keluaran mentahnya ada di dalam tree**, disanitasi ke field identitas saja,
-supaya tabel di atas bisa diperiksa dan tidak perlu dipercaya:
+Keluarannya ada di dalam tree supaya tabel di atas bisa diperiksa dan tidak
+perlu dipercaya. **Berkas JSON ini PROYEKSI, bukan keluaran mentah** — ia
+memilih, mengganti nama, dan meratakan field (keluaran `render` memuat env var
+dan connection string yang tidak boleh masuk repo). Provenance tiap berkas —
+perintah persis, waktu UTC, exit status, dan filter sanitasinya — ada di
+`staging-20260822/MANIFEST.md`.
 
 | Artefak | Isi |
 |---|---|
@@ -32,28 +37,35 @@ supaya tabel di atas bisa diperiksa dan tidak perlu dipercaya:
 | `staging-20260822/postgres.json` | datastore: nama, id, databaseName, status |
 | `staging-20260822/health-web.txt` | perintah + timestamp + body + HTTP_STATUS |
 
-Deploy aktif web: `dep-d9rugpuq1p3s73ajvvpg`, status `live`, commit
-`5fe53f27436d917d5232e23ef6c6e624eb00428a`.
+| `staging-20260822/meta-web.txt` | percobaan `/api/meta`: perintah, timestamp, body, HTTP_STATUS |
+| `staging-20260822/MANIFEST.md` | provenance tiap artefak + filter sanitasi |
+
+Deploy aktif web: `dep-d9rugpuq1p3s73ajvvpg`, commit
+`5fe53f27436d917d5232e23ef6c6e624eb00428a`. Status `live` adalah keadaan **pada
+waktu pengambilan**, bukan jaminan saat dibaca — deploy bisa berganti. Yang
+immutable adalah `deployId` dan `commit`-nya.
 
 Kedua SHA bertanggal **2026-08-04**. Jarak ke HEAD:
 
-Dihitung terhadap **exact SHA yang diikat review** (`f28851c`), bukan terhadap
-parent-nya:
+Dihitung terhadap **jangkar TETAP**, bukan terhadap HEAD dan bukan terhadap SHA
+review mana pun:
 
 ```
-git rev-list --count 5fe53f2..f28851c  = 399
-git rev-list --count 78d8468..f28851c  = 403
+git rev-list --count 5fe53f2..38466a3  = 366     # deploy web -> gerbang P0
+git rev-list --count 78d8468..38466a3  = 370     # deploy worker -> gerbang P0
 ```
 
-Angka ini **berjangkar pada `f28851c`** dan bertambah satu untuk setiap commit
-sesudahnya — termasuk commit yang membawa koreksi ini. Ditulis berjangkar,
-bukan sebagai "terhadap HEAD", supaya ia tidak menjadi salah lagi di SHA
-berikutnya.
+`38466a3` dipilih karena ia commit historis yang TIDAK BERGERAK: gerbang tempat
+gelombang product-truth dimulai. Jarak ke commit mana pun sesudahnya lebih
+besar lagi.
 
-(Versi pertama dokumen ini menulis 398/402 "terhadap HEAD". Itu angka terhadap
-`f28851c^` — pohon sebelum dokumen ini sendiri ditambahkan. Temuan Reviewer, dan
-ia benar: bukti yang terikat sebuah SHA harus dihitung terhadap SHA itu, dan
-"HEAD" bukan jangkar yang stabil di dalam berkas yang ikut mengubah HEAD.)
+Kenapa berjangkar tetap, dan bukan "terhadap HEAD": angka yang diikat ke HEAD di
+dalam berkas yang IKUT MENGUBAH HEAD adalah cacat yang mereproduksi dirinya
+sendiri. Ia sudah terjadi dua kali di dokumen ini — 398/402 (terhadap `f28851c^`
+saat review mengikat `f28851c`), lalu 399/403 (terhadap `f28851c` saat review
+mengikat `6c0f4eb`). Memperbaikinya sekali lagi dengan angka baru hanya menunda
+kesalahan ketiga. Untuk rujukan: `f28851c` adalah jangkar review SEBELUMNYA
+(399/403), bukan HEAD dan bukan SHA review saat ini.
 
 Dan yang menentukan:
 
@@ -115,8 +127,24 @@ alatnya memang tidak bisa dijalankan dari sini:
    vonis kerusakan.
 
    Jadi jalur ini gagal-tertutup dengan benar: ia TIDAK mengarang kerusakan
-   legacy. Yang tetap benar adalah kesimpulannya — audit tanpa R2 menghasilkan
-   nol informasi berguna, hanya N baris "gagal diperiksa".
+   legacy.
+
+   Tapi kesimpulan "nol informasi berguna, hanya N baris gagal diperiksa" juga
+   SALAH, dan Reviewer benar membetulkannya. Audit menghitung dua ember
+   STRUKTURAL **sebelum** storage disentuh sama sekali:
+   `produkKolomRusak` (kolom `images` tidak terbaca) dan `produkTanpaFoto`
+   (`images` = `[]`). Hanya produk dengan daftar foto yang sah dan tidak kosong
+   yang sampai ke storage.
+
+   Artinya, dengan `DATABASE_URL` saja tanpa R2:
+   - **bisa dihitung**: `produk`, `produkKolomRusak`, `produkTanpaFoto`,
+     beserta rincian sebab kolom rusaknya;
+   - **tidak bisa dinilai**: seluruh ember berbasis media — `produkTerbrick`,
+     `fotoTersetujui`, `perAlasan`, `perRinci` — karena semuanya menuntut
+     pembacaan sidecar dan bytes.
+
+   Dan karena isi `racun_staging` belum pernah diperiksa, dokumen ini juga tidak
+   boleh menebak berapa banyak produk yang akan jatuh ke ember mana.
 
    (Catatan ketepatan: dalam mode filesystem yang kosong, urutan resolver hanya
    menghasilkan `SIDECAR_MISSING`; `REF_MISSING` menuntut sidecar yang SAH ada
@@ -160,7 +188,7 @@ yang bisa dibaca dari deploy mana pun saat ini.
 
 Sebelum ini, "deploy staging lalu baca /api/health" terdengar seperti satu
 langkah kecil. Ternyata bukan: staging bukan sekadar belum di-deploy ulang, ia
-**~400 commit tertinggal**. Men-deploy-nya berarti memindahkan 18 hari perubahan
+**366 commit sebelum gerbang P0 dimulai**. Men-deploy-nya berarti memindahkan 18 hari perubahan
 sekaligus ke lingkungan yang belum pernah menjalankannya — termasuk
 `preDeployCommand: node scripts/migrate-postgres-runtime.mjs`, yaitu **migrasi
 schema**, yang dilarang keras di lingkup tugas ini dan bukan tindakan yang boleh
