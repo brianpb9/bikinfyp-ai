@@ -183,19 +183,36 @@ alatnya memang tidak bisa dijalankan dari sini:
      invocation ini hanya menyetel `STORAGE_MODE=r2`, dan akan gagal TERBUKA
      begitu `R2_ENDPOINT` serta `R2_BUCKET` ikut ada. Temuan Reviewer.
 
-     Diuji, bukan disimpulkan. Transcript lengkap beserta provenance ada di
-     `staging-20260822/probe-gagal-tertutup.txt` (2026-08-22T13:19:41Z, exit 0),
-     memuat isi skrip probe, kedua invocation, dan pemeriksaan `.env.local`:
+     Diuji atas KONFIGURASI EFEKTIF, bukan atas ada-tidaknya baris di berkas.
+     Transcript lengkap: `staging-20260822/probe-gagal-tertutup.txt`
+     (2026-08-22T13:27:17Z, exit 0), terikat ke source lewat bukti kesetaraan
+     hash (`lib/storage.ts` dan `lib/config.ts` di disk IDENTIK dengan isi tree
+     ber-SHA). Statusnya `NONEMPTY` / `EMPTY_OR_MISSING`; nilai kredensial tidak
+     pernah dibaca maupun dicetak.
 
      ```
-     A. invocation BARU -> MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, ...
-     B. invocation LAMA -> MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, ...
-     C. R2_ENDPOINT tidak-ada | R2_BUCKET tidak-ada
-        R2_ACCESS_KEY_ID ADA  | R2_SECRET_ACCESS_KEY ADA
+     A. DEFAULT            ENDPOINT/BUCKET = EMPTY_OR_MISSING
+                           ACCESS_KEY_ID/SECRET = NONEMPTY
+                           STORAGE_MODE=filesystem  RACUN_DB_RUNTIME=sqlite
+                           mediaStorage() = TIDAK MELEMPAR  <- GAGAL TERBUKA
+     B. invocation LAMA    ACCESS_KEY_ID/SECRET tetap NONEMPTY
+                           mediaStorage() = MELEMPAR
+     C. invocation BARU    keempatnya EMPTY_OR_MISSING
+                           mediaStorage() = MELEMPAR
      ```
 
-     Bagian C mencetak KEBERADAAN saja; nilai kredensial tidak pernah dibaca
-     maupun ditulis ke repo.
+     Tiga hal yang dibuktikan bagian ini, dan tidak satu pun bisa disimpulkan
+     dari membaca berkas saja:
+
+     - **A membuktikan bahayanya nyata.** Dengan default, `mediaStorage()`
+       TIDAK melempar — ia membaca disk lokal. Inilah vonis media palsu yang
+       dokumen ini peringatkan, terlihat langsung.
+     - **B membuktikan invocation lama hanya aman BERSYARAT.** Kredensial tetap
+       `NONEMPTY` di sana (dotenv tetap dimuat); yang menahannya semata
+       `ENDPOINT`/`BUCKET` yang kebetulan kosong. Begitu keduanya ada, ia gagal
+       terbuka.
+     - **C membuktikan invocation baru aman TANPA SYARAT** — keempatnya dipaksa
+       kosong oleh perintahnya sendiri.
 
      Keduanya gagal-tertutup HARI INI — karena `R2_ENDPOINT` dan `R2_BUCKET`
      kebetulan belum ada di sini. Itu justru inti temuannya: yang lama

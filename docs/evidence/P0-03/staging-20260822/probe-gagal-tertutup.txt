@@ -1,30 +1,67 @@
-# probe: apakah invocation memaksa jalur media GAGAL-TERTUTUP
-# waktu_utc : 2026-08-22T13:19:41Z
-# skrip     : probe-gagal-tertutup.ts (isi di bawah), dihapus sesudah dijalankan
-# jaringan  : TIDAK ADA — hanya konstruksi config lokal
+# probe konfigurasi EFEKTIF + gagal-tertutup
+# waktu_utc      : 2026-08-22T13:27:17Z
+# jaringan       : TIDAK ADA — hanya konstruksi config lokal
+# nilai kredensial: TIDAK PERNAH dicetak; hanya NONEMPTY / EMPTY_OR_MISSING
+
+--- PENGIKATAN SOURCE KE SHA ---
+$ pwd
+/Users/hadrava/HDRV/03_UGC_AI_ID/app
+$ git rev-parse HEAD
+c91cc1d1ba9b7ba6e852cb8301168c84ac3b1e24
+$ git status --porcelain   (kosong = worktree bersih)
+ M docs/evidence/P0-03/staging-20260822/probe-gagal-tertutup.txt
+?? probe-konfig-efektif.ts
+# kesetaraan berkas yang dipakai probe: hash di DISK vs hash di TREE ber-SHA
+lib/storage.ts   disk=46b5b2a73905 tree=46b5b2a73905 IDENTIK
+lib/config.ts    disk=e3467d5cec95 tree=e3467d5cec95 IDENTIK
+# probe meng-import lewat path RELATIF (./lib/...) dari working dir di atas,
+# jadi berkas yang dieksekusi adalah yang hash-nya dibuktikan identik di atas.
 
 --- isi probe ---
-// Probe: apakah invocation memaksa jalur media GAGAL-TERTUTUP?
-// Tidak menyentuh jaringan, database, maupun storage — hanya konstruksi config.
-const { mediaStorage } = await import("/Users/hadrava/HDRV/03_UGC_AI_ID/app/lib/storage");
-try { mediaStorage(); console.log("RESULT=TIDAK_MELEMPAR (gagal TERBUKA)"); }
-catch (e) { console.log("RESULT=MELEMPAR:", (e as Error).message.slice(0, 80)); }
+// Probe konfigurasi EFEKTIF. Tidak menyentuh jaringan, database, atau storage.
+// Mencetak STATUS saja (NONEMPTY / EMPTY_OR_MISSING) — nilai tidak pernah dicetak.
+const { config } = await import("./lib/config");
+const { mediaStorage } = await import("./lib/storage");
+const st = (v: unknown) => (typeof v === "string" && v.trim() !== "" ? "NONEMPTY" : "EMPTY_OR_MISSING");
+console.log("R2_ENDPOINT          =", st(config.r2Endpoint));
+console.log("R2_BUCKET            =", st(config.r2Bucket));
+console.log("R2_ACCESS_KEY_ID     =", st(config.r2AccessKeyId));
+console.log("R2_SECRET_ACCESS_KEY =", st(config.r2SecretAccessKey));
+console.log("STORAGE_MODE         =", config.storageMode);
+console.log("RACUN_DB_RUNTIME     =", config.dbRuntime);
+try { mediaStorage(); console.log("mediaStorage()       = TIDAK_MELEMPAR (gagal TERBUKA)"); }
+catch (e) { console.log("mediaStorage()       = MELEMPAR (gagal-tertutup)"); }
 
---- A. invocation BARU ---
-$ RACUN_NO_DOTENV=1 RACUN_DB_RUNTIME=postgres STORAGE_MODE=r2 \
-    R2_ENDPOINT= R2_BUCKET= R2_ACCESS_KEY_ID= R2_SECRET_ACCESS_KEY= \
-    npx tsx probe-gagal-tertutup.ts
-RESULT=MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, and R2_SECRET
+--- A. DEFAULT (tanpa env apa pun) — memperlihatkan kondisi EFEKTIF ---
+$ npx tsx probe-konfig-efektif.ts
+R2_ENDPOINT          = EMPTY_OR_MISSING
+R2_BUCKET            = EMPTY_OR_MISSING
+R2_ACCESS_KEY_ID     = NONEMPTY
+R2_SECRET_ACCESS_KEY = NONEMPTY
+STORAGE_MODE         = filesystem
+RACUN_DB_RUNTIME     = sqlite
+mediaStorage()       = TIDAK_MELEMPAR (gagal TERBUKA)
 exit=0
 
 --- B. invocation LAMA (hanya STORAGE_MODE=r2) ---
-$ RACUN_DB_RUNTIME=postgres STORAGE_MODE=r2 npx tsx probe-gagal-tertutup.ts
-RESULT=MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, and R2_SECRET
+$ RACUN_DB_RUNTIME=postgres STORAGE_MODE=r2 npx tsx probe-konfig-efektif.ts
+R2_ENDPOINT          = EMPTY_OR_MISSING
+R2_BUCKET            = EMPTY_OR_MISSING
+R2_ACCESS_KEY_ID     = NONEMPTY
+R2_SECRET_ACCESS_KEY = NONEMPTY
+STORAGE_MODE         = r2
+RACUN_DB_RUNTIME     = postgres
+mediaStorage()       = MELEMPAR (gagal-tertutup)
 exit=0
 
---- C. variabel R2 di .env.local: KEBERADAAN saja, NILAI TIDAK DICETAK ---
-$ for v in R2_ENDPOINT R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do grep -q "^$v=" .env.local && echo "$v ADA" || echo "$v tidak-ada"; done
-R2_ENDPOINT tidak-ada
-R2_BUCKET tidak-ada
-R2_ACCESS_KEY_ID ADA
-R2_SECRET_ACCESS_KEY ADA
+--- C. invocation BARU (ter-hardening) ---
+$ RACUN_NO_DOTENV=1 RACUN_DB_RUNTIME=postgres STORAGE_MODE=r2 \
+    R2_ENDPOINT= R2_BUCKET= R2_ACCESS_KEY_ID= R2_SECRET_ACCESS_KEY= npx tsx probe-konfig-efektif.ts
+R2_ENDPOINT          = EMPTY_OR_MISSING
+R2_BUCKET            = EMPTY_OR_MISSING
+R2_ACCESS_KEY_ID     = EMPTY_OR_MISSING
+R2_SECRET_ACCESS_KEY = EMPTY_OR_MISSING
+STORAGE_MODE         = r2
+RACUN_DB_RUNTIME     = postgres
+mediaStorage()       = MELEMPAR (gagal-tertutup)
+exit=0

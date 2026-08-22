@@ -16,7 +16,7 @@ koneksi database, nol tulis.
 | `postgres.json` | `render postgres list --output json --confirm` | 2026-08-22T12:51:37Z | 0 | F3 |
 | `health-web.txt` | `curl -sS -m 45 -o - -w '\nHTTP_STATUS=%{http_code}\n' https://racun-ai-staging-web.onrender.com/api/health` | 2026-08-22T12:51:37Z | 0 | tidak ada (transcript apa adanya) |
 | `meta-web.txt` | `curl -sS -m 30 -o - -w '\nHTTP_STATUS=%{http_code}\n' https://racun-ai-staging-web.onrender.com/api/meta` | 2026-08-22T13:00:04Z | 0 | tidak ada (transcript apa adanya) |
-| `probe-gagal-tertutup.txt` | tiga bagian A/B/C, tercetak lengkap di dalam transcript | 2026-08-22T13:19:41Z | 0 | bagian C: keberadaan variabel saja, NILAI tidak pernah dicetak |
+| `probe-gagal-tertutup.txt` | pengikatan source + tiga jalankan A/B/C, tercetak lengkap di dalam transcript | 2026-08-22T13:27:17Z | 0 | status `NONEMPTY`/`EMPTY_OR_MISSING` saja, NILAI tidak pernah dibaca |
 
 ## Pipeline sanitasi — perintah yang BENAR-BENAR menghasilkan tiap artefak
 
@@ -81,14 +81,30 @@ Satu-satunya artefak yang BUKAN pembacaan control-plane. Ia menguji apakah
 invocation audit memaksa jalur media gagal-tertutup, dan **tidak menyentuh
 jaringan, database, maupun storage** — hanya konstruksi config lokal.
 
-Transcript memuat: isi skrip probe, kedua invocation beserta hasil dan exit
-status, serta pemeriksaan keberadaan variabel R2 di `.env.local`. Skrip
+Transcript memuat: pengikatan source, isi skrip probe, dan tiga jalankan
+(default / invocation lama / invocation baru) beserta exit status. Skrip
 probe-nya dihapus sesudah dijalankan; isinya diarsipkan di dalam transcript
 supaya bisa dijalankan ulang.
 
-**Sanitasi bagian C**: yang dicetak hanya `ADA` / `tidak-ada` per nama
-variabel. Nilai kredensial tidak pernah dibaca maupun dicetak — klaim tentang
-isi `.env.local` harus bisa dibuktikan tanpa membocorkan isinya.
+**Pengikatan source.** Probe meng-import lewat path RELATIF dari working
+directory yang dicatat, dan transcript membuktikan berkas yang dieksekusi sama
+dengan isi tree ber-SHA lewat perbandingan hash:
+`git hash-object lib/storage.ts` vs `git rev-parse HEAD:lib/storage.ts`
+(idem `lib/config.ts`) — keduanya IDENTIK. Versi sebelumnya meng-import lewat
+path ABSOLUT tanpa mencatat SHA, working directory, atau kebersihan checkout,
+sehingga hasilnya tidak bisa diatribusikan ke commit mana pun.
+
+Catatan membaca `git status --porcelain` di dalam transcript: dua entri yang
+muncul adalah artefak dari perekaman itu sendiri — skrip probe (dihapus
+sesudahnya) dan transcript yang sedang ditulis. Klaimnya bukan "worktree
+bersih", melainkan "berkas sumber yang dieksekusi identik dengan tree ber-SHA",
+dan itu dibuktikan oleh hash di atas.
+
+**Sanitasi.** Yang dicetak hanya `NONEMPTY` / `EMPTY_OR_MISSING` per variabel,
+dibaca dari konfigurasi EFEKTIF (sesudah dotenv dan pewarisan environment) —
+bukan dari `grep` atas berkas, yang hanya membuktikan adanya baris assignment
+dan tidak membuktikan nilainya non-kosong. Nilai kredensial tidak pernah dibaca
+maupun dicetak.
 
 ## Batas yang melekat pada artefak ini
 
