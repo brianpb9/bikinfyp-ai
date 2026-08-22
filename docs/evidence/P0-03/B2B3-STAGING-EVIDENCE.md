@@ -183,12 +183,19 @@ alatnya memang tidak bisa dijalankan dari sini:
      invocation ini hanya menyetel `STORAGE_MODE=r2`, dan akan gagal TERBUKA
      begitu `R2_ENDPOINT` serta `R2_BUCKET` ikut ada. Temuan Reviewer.
 
-     Diuji, bukan disimpulkan (2026-08-22, mesin ini):
+     Diuji, bukan disimpulkan. Transcript lengkap beserta provenance ada di
+     `staging-20260822/probe-gagal-tertutup.txt` (2026-08-22T13:19:41Z, exit 0),
+     memuat isi skrip probe, kedua invocation, dan pemeriksaan `.env.local`:
 
      ```
-     invocation BARU  -> MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, R2_BUCKET, ...
-     invocation LAMA  -> MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, R2_BUCKET, ...
+     A. invocation BARU -> MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, ...
+     B. invocation LAMA -> MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, ...
+     C. R2_ENDPOINT tidak-ada | R2_BUCKET tidak-ada
+        R2_ACCESS_KEY_ID ADA  | R2_SECRET_ACCESS_KEY ADA
      ```
+
+     Bagian C mencetak KEBERADAAN saja; nilai kredensial tidak pernah dibaca
+     maupun ditulis ke repo.
 
      Keduanya gagal-tertutup HARI INI — karena `R2_ENDPOINT` dan `R2_BUCKET`
      kebetulan belum ada di sini. Itu justru inti temuannya: yang lama
@@ -243,8 +250,12 @@ yang bisa dibaca dari deploy mana pun saat ini.
 
 ## 5. Bukti sifat hanya-baca
 
-- Perintah yang dijalankan hanya: `curl` GET, `render services/deploys/postgres
-  list` (subperintah baca).
+- Perintah yang dijalankan: `curl` GET, `render services/deploys/postgres list`
+  (subperintah baca), dan satu **probe konfigurasi lokal** yang tidak menyentuh
+  jaringan/database/storage (`staging-20260822/probe-gagal-tertutup.txt`).
+  Versi sebelumnya menulis "hanya curl dan render" sementara batang tubuh
+  dokumen mengklaim sebuah probe — inventaris yang bertentangan dengan isinya
+  sendiri. Temuan Reviewer.
 - Nol `render deploy`, nol `render restart`, nol `psql`, nol koneksi database.
 - `/api/meta` dicoba dan mengembalikan **401 UNAUTHORIZED** — dicatat apa adanya
   sebagai batas akses, bukan dilewati diam-diam.

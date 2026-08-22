@@ -1,0 +1,30 @@
+# probe: apakah invocation memaksa jalur media GAGAL-TERTUTUP
+# waktu_utc : 2026-08-22T13:19:41Z
+# skrip     : probe-gagal-tertutup.ts (isi di bawah), dihapus sesudah dijalankan
+# jaringan  : TIDAK ADA — hanya konstruksi config lokal
+
+--- isi probe ---
+// Probe: apakah invocation memaksa jalur media GAGAL-TERTUTUP?
+// Tidak menyentuh jaringan, database, maupun storage — hanya konstruksi config.
+const { mediaStorage } = await import("/Users/hadrava/HDRV/03_UGC_AI_ID/app/lib/storage");
+try { mediaStorage(); console.log("RESULT=TIDAK_MELEMPAR (gagal TERBUKA)"); }
+catch (e) { console.log("RESULT=MELEMPAR:", (e as Error).message.slice(0, 80)); }
+
+--- A. invocation BARU ---
+$ RACUN_NO_DOTENV=1 RACUN_DB_RUNTIME=postgres STORAGE_MODE=r2 \
+    R2_ENDPOINT= R2_BUCKET= R2_ACCESS_KEY_ID= R2_SECRET_ACCESS_KEY= \
+    npx tsx probe-gagal-tertutup.ts
+RESULT=MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, and R2_SECRET
+exit=0
+
+--- B. invocation LAMA (hanya STORAGE_MODE=r2) ---
+$ RACUN_DB_RUNTIME=postgres STORAGE_MODE=r2 npx tsx probe-gagal-tertutup.ts
+RESULT=MELEMPAR: STORAGE_MODE=r2 requires R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY_ID, and R2_SECRET
+exit=0
+
+--- C. variabel R2 di .env.local: KEBERADAAN saja, NILAI TIDAK DICETAK ---
+$ for v in R2_ENDPOINT R2_BUCKET R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY; do grep -q "^$v=" .env.local && echo "$v ADA" || echo "$v tidak-ada"; done
+R2_ENDPOINT tidak-ada
+R2_BUCKET tidak-ada
+R2_ACCESS_KEY_ID ADA
+R2_SECRET_ACCESS_KEY ADA

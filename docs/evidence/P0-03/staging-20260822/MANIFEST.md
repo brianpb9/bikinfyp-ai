@@ -16,6 +16,7 @@ koneksi database, nol tulis.
 | `postgres.json` | `render postgres list --output json --confirm` | 2026-08-22T12:51:37Z | 0 | F3 |
 | `health-web.txt` | `curl -sS -m 45 -o - -w '\nHTTP_STATUS=%{http_code}\n' https://racun-ai-staging-web.onrender.com/api/health` | 2026-08-22T12:51:37Z | 0 | tidak ada (transcript apa adanya) |
 | `meta-web.txt` | `curl -sS -m 30 -o - -w '\nHTTP_STATUS=%{http_code}\n' https://racun-ai-staging-web.onrender.com/api/meta` | 2026-08-22T13:00:04Z | 0 | tidak ada (transcript apa adanya) |
+| `probe-gagal-tertutup.txt` | tiga bagian A/B/C, tercetak lengkap di dalam transcript | 2026-08-22T13:19:41Z | 0 | bagian C: keberadaan variabel saja, NILAI tidak pernah dicetak |
 
 ## Pipeline sanitasi — perintah yang BENAR-BENAR menghasilkan tiap artefak
 
@@ -73,6 +74,21 @@ print(json.dumps(out,indent=2))" > postgres.json
 
 Ketiganya membuang seluruh field selain yang disebut — termasuk `envVars`,
 `connectionString`, dan `dashboardUrl`.
+
+## Probe gagal-tertutup (`probe-gagal-tertutup.txt`)
+
+Satu-satunya artefak yang BUKAN pembacaan control-plane. Ia menguji apakah
+invocation audit memaksa jalur media gagal-tertutup, dan **tidak menyentuh
+jaringan, database, maupun storage** — hanya konstruksi config lokal.
+
+Transcript memuat: isi skrip probe, kedua invocation beserta hasil dan exit
+status, serta pemeriksaan keberadaan variabel R2 di `.env.local`. Skrip
+probe-nya dihapus sesudah dijalankan; isinya diarsipkan di dalam transcript
+supaya bisa dijalankan ulang.
+
+**Sanitasi bagian C**: yang dicetak hanya `ADA` / `tidak-ada` per nama
+variabel. Nilai kredensial tidak pernah dibaca maupun dicetak — klaim tentang
+isi `.env.local` harus bisa dibuktikan tanpa membocorkan isinya.
 
 ## Batas yang melekat pada artefak ini
 
