@@ -8,9 +8,9 @@ render berbayar. Seluruh perintah di bawah adalah pembacaan.
 ## Ringkasan satu kalimat
 
 **Staging tidak bisa menjawab pertanyaan T43: build yang hidup di sana
-bertanggal 2026-08-04, sudah 366 commit sebelum gerbang P0 (`38466a3`) bahkan
-dimulai — seluruh instrumentasi yang dibangun untuk menjawabnya belum pernah
-ada di sana.**
+bertanggal 2026-08-04, sudah 323 commit sebelum commit PERTAMA gelombang P0-03
+(`8cd2888`, 2026-08-20) — seluruh instrumentasi yang dibangun untuk menjawabnya
+belum pernah ada di sana.**
 
 ## 1. Identitas service dan deploy AKTIF (tanpa membuat deploy)
 
@@ -45,19 +45,24 @@ Deploy aktif web: `dep-d9rugpuq1p3s73ajvvpg`, commit
 waktu pengambilan**, bukan jaminan saat dibaca — deploy bisa berganti. Yang
 immutable adalah `deployId` dan `commit`-nya.
 
-Kedua SHA bertanggal **2026-08-04**. Jarak ke HEAD:
+Kedua SHA bertanggal **2026-08-04**. Jarak dari deploy yang hidup ke awal gelombang P0-03:
 
 Dihitung terhadap **jangkar TETAP**, bukan terhadap HEAD dan bukan terhadap SHA
 review mana pun:
 
 ```
-git rev-list --count 5fe53f2..38466a3  = 366     # deploy web -> gerbang P0
-git rev-list --count 78d8468..38466a3  = 370     # deploy worker -> gerbang P0
+git rev-list --count 5fe53f2..8cd2888  = 323     # deploy web    -> awal P0-03
+git rev-list --count 78d8468..8cd2888  = 327     # deploy worker -> awal P0-03
 ```
 
-`38466a3` dipilih karena ia commit historis yang TIDAK BERGERAK: gerbang tempat
-gelombang product-truth dimulai. Jarak ke commit mana pun sesudahnya lebih
-besar lagi.
+`8cd2888` (2026-08-20, "P0-03: path x case matrix dari call-site nyata") dipilih
+karena ia commit **pertama** gelombang P0-03 dan historis — tidak bergerak.
+Jarak ke commit mana pun sesudahnya lebih besar lagi.
+
+(Versi sebelumnya memakai `38466a3` dan menyebutnya "gerbang tempat gelombang
+dimulai". Salah, dan Reviewer benar: `38466a3` adalah **"P0-A ronde 11"**, dan
+`8cd2888` serta `f2ad65b` adalah leluhurnya. Angka 366/370 mengukur jarak ke
+AKHIR ronde 11, bukan ke awal gelombang.)
 
 Kenapa berjangkar tetap, dan bukan "terhadap HEAD": angka yang diikat ke HEAD di
 dalam berkas yang IKUT MENGUBAH HEAD adalah cacat yang mereproduksi dirinya
@@ -65,7 +70,8 @@ sendiri. Ia sudah terjadi dua kali di dokumen ini — 398/402 (terhadap `f28851c
 saat review mengikat `f28851c`), lalu 399/403 (terhadap `f28851c` saat review
 mengikat `6c0f4eb`). Memperbaikinya sekali lagi dengan angka baru hanya menunda
 kesalahan ketiga. Untuk rujukan: `f28851c` adalah jangkar review SEBELUMNYA
-(399/403), bukan HEAD dan bukan SHA review saat ini.
+(399/403), bukan HEAD dan bukan SHA review saat ini; `38466a3` adalah jangkar
+ronde 11 (366/370), bukan awal gelombang.
 
 Dan yang menentukan:
 
@@ -136,12 +142,40 @@ alatnya memang tidak bisa dijalankan dari sini:
    (`images` = `[]`). Hanya produk dengan daftar foto yang sah dan tidak kosong
    yang sampai ke storage.
 
-   Artinya, dengan `DATABASE_URL` saja tanpa R2:
-   - **bisa dihitung**: `produk`, `produkKolomRusak`, `produkTanpaFoto`,
-     beserta rincian sebab kolom rusaknya;
-   - **tidak bisa dinilai**: seluruh ember berbasis media — `produkTerbrick`,
-     `fotoTersetujui`, `perAlasan`, `perRinci` — karena semuanya menuntut
-     pembacaan sidecar dan bytes.
+   Artinya ember struktural bisa dihitung tanpa R2 — **tapi `DATABASE_URL` saja
+   TIDAK cukup untuk menjalankannya, dan versi sebelumnya menyiratkan begitu.**
+   Dua default menggagalkannya, dan yang kedua berbahaya:
+
+   - `lib/config.ts:33` — `dbRuntime` default **sqlite** kalau
+     `NODE_ENV !== "production"`. `lib/audit-sumber-produk.ts` mengikuti
+     `config.dbRuntime`, jadi `DATABASE_URL` saja tetap membaca SQLite lokal.
+   - `lib/config.ts:48` — `storageMode` default **filesystem**. Ini yang
+     berbahaya: `mediaStorage()` TIDAK melempar, ia membaca storage LOKAL. Foto
+     produksi lalu divonis dengan isi disk mesin ini — vonis media PALSU yang
+     terlihat seperti kerusakan legacy, bukan gagal-tertutup.
+
+   Invocation yang benar harus memilih Postgres SECARA EKSPLISIT dan memaksa
+   jalur media gagal-tertutup:
+
+   ```sh
+   RACUN_DB_RUNTIME=postgres \
+   DATABASE_URL='<staging>' \
+   STORAGE_MODE=r2 \
+     npx tsx scripts/audit-bukti-produk.ts --json
+   ```
+
+   `STORAGE_MODE=r2` TANPA kredensial dipilih dengan sengaja: itulah yang
+   membuat `assertStorageConfiguration()` melempar, sehingga produk berfoto
+   masuk `produkGagalDiperiksa` alih-alih menerima vonis dari disk lokal.
+
+   Hasil yang bisa dipercaya dari invocation itu:
+   - **terhitung**: `produk`, `produkKolomRusak`, `produkTanpaFoto`, `perKolomRusak`;
+   - **tidak dinilai**: `produkTerbrick`, `fotoTersetujui`, `perAlasan`,
+     `perRinci` — seluruhnya menuntut sidecar dan bytes.
+
+   Alternatif yang lebih bersih kalau ini akan sering dipakai: mode
+   structural-only yang tidak menyentuh resolver media sama sekali. TIDAK
+   dibangun di sini — menambah mode produksi bukan lingkup tugas bukti ini.
 
    Dan karena isi `racun_staging` belum pernah diperiksa, dokumen ini juga tidak
    boleh menebak berapa banyak produk yang akan jatuh ke ember mana.
@@ -188,7 +222,7 @@ yang bisa dibaca dari deploy mana pun saat ini.
 
 Sebelum ini, "deploy staging lalu baca /api/health" terdengar seperti satu
 langkah kecil. Ternyata bukan: staging bukan sekadar belum di-deploy ulang, ia
-**366 commit sebelum gerbang P0 dimulai**. Men-deploy-nya berarti memindahkan 18 hari perubahan
+**323 commit sebelum gelombang P0-03 dimulai**. Men-deploy-nya berarti memindahkan 18 hari perubahan
 sekaligus ke lingkungan yang belum pernah menjalankannya — termasuk
 `preDeployCommand: node scripts/migrate-postgres-runtime.mjs`, yaitu **migrasi
 schema**, yang dilarang keras di lingkup tugas ini dan bukan tindakan yang boleh
