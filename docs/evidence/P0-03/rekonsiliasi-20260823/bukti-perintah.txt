@@ -1,0 +1,70 @@
+# Bukti rekonsiliasi acceptance matrix — perintah persis, bisa dijalankan ulang
+# waktu_utc : 2026-08-22T23:54:29Z
+# HEAD      : e8a00a5bd581a156865f145de22accc7daa6fe12
+# worktree  : 1 berkas berubah sebelum rekonsiliasi
+
+--- 1. reason code USULAN vs yang ADA di kode ---
+$ for rc in ...; do rg -l "\"$rc\"" lib app scripts; done
+REF_PROMOTIONAL        lib/product-truth.ts
+TYPE_MISMATCH          
+BRAND_MISMATCH         
+LABEL_UNREADABLE       
+CATEGORY_UNKNOWN       
+OCR_FAILED             
+CLASSIFIER_FAILED      lib/product-truth.ts
+EVIDENCE_INVALID       lib/product-truth.ts
+SNAPSHOT_IMMUTABLE     
+LEGACY_UNVALIDATED     
+REF_MISSING            lib/product-truth.ts
+REF_HASH_MISMATCH      lib/product-truth.ts
+
+--- 2. jalur ingestion -> fungsi penyimpan -> tulisSidecar ---
+$ rg -n 'tulisSidecar' lib/product-images.ts lib/product-image-download.ts
+lib/product-images.ts:271:      await tulisSidecar(rel, bytesTersimpan, abs);
+lib/product-images.ts:327:        await tulisSidecar(rel, normalized, abs);
+lib/product-image-download.ts:48:        await tulisSidecar(rel, normalized, abs);
+
+--- 3. worker memakai resolver + snapshot ---
+$ rg -n 'resolveApprovedReference|ambilSnapshotTersetujui' lib/worker.ts lib/postgres/worker.ts
+lib/worker.ts:122:    const referensi = await resolveApprovedReference(images);
+lib/worker.ts:139:    const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
+lib/worker.ts:166:        extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
+lib/postgres/worker.ts:340:  const referensi = await resolveApprovedReference(images);
+lib/postgres/worker.ts:355:  const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
+lib/postgres/worker.ts:377:      extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
+
+--- 4. admission (A1..A7): adakah gerbang bukti? ---
+$ rg -ln 'resolveApprovedReference|referensiLayak' app/api/jobs app/api/dashboard
+(NOL berkas — admission tidak memanggil gerbang bukti)
+
+--- 5. gerbang label E4 hanya foto PERTAMA (lubang 20 Agu, masih ada) ---
+$ rg -n 'existing.length === 0' app/api/products/[id]/photos/route.ts
+84:    if (existing.length === 0 && blobs[0]) {
+
+--- 6. E8 memanggil periksaLabelFoto TANPA merekTerdaftar (lubang 20 Agu, masih ada) ---
+$ rg -n 'periksaLabelFoto' app/api/dashboard/campaign/product/[id]/photos/route.ts
+52:        const label = await periksaLabelFoto(tmpFile, owned.product.name);
+
+--- 7. OCR FAIL-OPEN (lubang 20 Agu, masih ada) ---
+$ rg -n 'return \{ terbaca: true' lib/media/label-terbaca.ts
+157:    if (!merek) return { terbaca: true, kata, cocokNama, cocokMerek: null };
+182:    return { terbaca: true, kata, cocokNama, cocokMerek: true };
+188:    return { terbaca: true, kata: [], cocokNama: true, cocokMerek: null };
+
+--- 8. DELETE foto kini ikut menghapus sidecar ---
+$ rg -n 'relMeta' lib/product-images.ts
+360:  const sasaran = keys.flatMap((key) => [key, relMeta(key)]);
+361-  await Promise.all(sasaran.map(async (key) => {
+
+--- 9. test yang memetakan kasus C secara eksplisit ---
+$ rg -n -o '(W1|W2) C[0-9]+' tests/
+tests/pg-product-truth-w1.test.ts:344:W1 C1
+tests/pg-product-truth-w1.test.ts:360:W1 C1
+tests/pg-product-truth-w1.test.ts:401:W1 C8
+tests/pg-product-truth-w1.test.ts:413:W1 C8
+tests/product-truth-worker-reference.test.ts:219:W2 C1
+tests/product-truth-worker-reference.test.ts:234:W2 C1
+tests/product-truth-worker-reference.test.ts:258:W2 C8
+tests/product-truth-worker-reference.test.ts:270:W2 C8
+tests/product-truth-worker-reference.test.ts:288:W2 C8
+tests/product-truth-worker-reference.test.ts:300:W2 C8
