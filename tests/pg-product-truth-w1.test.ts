@@ -690,12 +690,19 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
   const jobId = await siapkanStoryAdsTanpaTemplateRequest(rel, injection);
   const persisted = (await pool.query("SELECT template_id,format,avatar_custom_desc FROM jobs WHERE id=$1", [jobId])).rows[0];
   assert.deepEqual(persisted, { template_id: "ads-meja-kosong", format: "ads", avatar_custom_desc: injection });
+  // Resume/legacy: kolom job hilang, snapshot admisi script tetap otoritatif.
+  await pool.query("UPDATE jobs SET template_id=NULL WHERE id=$1", [jobId]);
   await jalankan(jobId, new Map([[rel, png], [`${rel}.meta.json`, sidecar(png, true)]]), true);
   assert.equal(amatan.dipanggil, true, "W1 tidak mencapai provider observer");
   assert.equal(amatan.utamaPath, null, "neutral Story Ads mengirim primary product reference");
   assert.deepEqual(amatan.extraPaths, [], "neutral Story Ads mengirim extra product references");
   assert.match(amatan.promptText, /neutral blank props|plain unprinted|blank/i);
   assert.doesNotMatch(amatan.promptText, /ACME|holding a bottle|marked ACME/i);
+  const archive = (await pool.query("SELECT spec_json,model_params FROM job_prompts WHERE job_id=$1", [jobId])).rows[0];
+  assert.ok(archive, "prompt provider-bound tidak diarsipkan");
+  assert.equal(JSON.parse(archive.model_params).template_id, "ads-meja-kosong");
+  assert.deepEqual(JSON.parse(archive.model_params).storyBridgeSources.sort(), ["spoken_approved_price", "spoken_product_name"]);
+  assert.doesNotMatch(archive.spec_json, /ACME|holding a bottle|marked ACME/i);
 });
 
 test("shared confirm memblokir empat snapshot real-footage saat request template_id dihilangkan, tanpa side effect", async (t) => {

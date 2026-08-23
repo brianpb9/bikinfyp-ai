@@ -58,6 +58,7 @@ export const SkemaSegmen = z.object({
   mode: z.string().default(""),
   /** Story Ads: saksi SPIKE wajib selamat sampai validator. */
   saksi: z.string().min(3).optional(),
+  bridge_source: z.enum(["spoken_product_name", "spoken_product_category", "spoken_approved_price"]).optional(),
 });
 
 export const SkemaNaskah = z.object({
@@ -186,6 +187,7 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     '      "camera": "<e.g. static, slow push in, handheld drift>",',
     '      "action": "<sequenced: ..., then ..., then ...>",',
     '      "product_state": "hidden" | "partial" | "hero",',
+    '      "bridge_source": "<spoken_product_name | spoken_product_category | spoken_approved_price; Ads bridge beat only>",',
     '      "expression": "<visible emotion, or \"not visible\" for hands-only>",',
     '      "audio_note": "<ambient/sound design, may be empty>",',
     '      "why": "<setup | tension | payoff — and one clause saying how>",',
@@ -381,9 +383,10 @@ function blokTugas(r: PermintaanNaskah): string {
           "4. FRICTION (write last): pressure rises at least TWICE between hook and spike. Label each one FRICTION.",
           "   Every friction beat must MOVE something in its action — a position, a decision, an object.",
           "   Enemies that work: your own reflex, time running out, a voice calling you.",
-          "BRIDGING — at least TWO of three, and never say the benefit out loud:",
-          "  (a) an honest action with the blank prop during friction, (b) the blank prop present in frame 1 without",
-          "  being explained, (c) a light admission in the button before the CTA phrase.",
+          "BRIDGING — use two evidence-backed spoken bridges, never blank-prop theatre:",
+          `  One FRICTION says the exact product name "${r.productName}" and sets bridge_source="spoken_product_name".`,
+          '  Another says the approved PRODUCT price as words and sets bridge_source="spoken_approved_price".',
+          "  A blank prop/action/product_state is NEVER a product bridge. Keep product_state='hidden' on every Ads beat.",
           "BODY IS NOT EXPLANATION: no 'aslinya...', no describing the product, no benefit claims. The viewer concludes.",
         ].join("\n")
       : "";
@@ -518,6 +521,7 @@ export function keSegmentDraft(s: SegmenLlm[], contentType?: "affiliate" | "ads"
     mode: x.mode,
     label: x.label as SegmentDraft["label"],
     ...(x.saksi ? { saksi: x.saksi } : {}),
+    ...(x.bridge_source ? { bridge_source: x.bridge_source } : {}),
     product_state: x.product_state,
     start_state: x.start_state,
   })) as SegmentDraft[];

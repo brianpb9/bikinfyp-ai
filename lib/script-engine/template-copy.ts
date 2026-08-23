@@ -1,6 +1,5 @@
 import type { TemplateCtx } from "./templates";
 import { neutralStoryAdsActionContradictions } from "./ads-visual-contract";
-import { hargaTerbilang } from "./terbilang";
 
 /**
  * Copy katalog bersifat template-owned. Setiap template aktif mempunyai satu
@@ -26,6 +25,7 @@ export interface AdsStoryBeat {
   text: string;
   action: string;
   product_state: "hidden" | "partial" | "hero";
+  bridge_source?: "spoken_product_name" | "spoken_product_category" | "spoken_approved_price";
   saksi?: string;
 }
 
@@ -306,25 +306,29 @@ function storyAds(templateId: string, variantIndex: number, c: TemplateCtx, base
   // tidak dibuang; ia pindah ke FRICTION pertama agar isi dan nada tetap utuh.
   const pembukaLisan = withDelivery(adegan.hooks[variantIndex], base.hook);
   const button = `${adegan.questions[variantIndex]} Detailnya ada di bawah ya.`;
-  const hargaAktif = [
-    `Kini harganya ${hargaTerbilang(c.harga)}.`,
-    `Angkanya ${hargaTerbilang(c.harga)}, ya.`,
-    `Harga aktif ${hargaTerbilang(c.harga)}.`,
-    `Tercantum ${hargaTerbilang(c.harga)}, deh.`,
-  ];
-  const tekananSatu = templateId === "promo-terbatas"
-    ? hargaAktif[variantIndex]
-    : adegan.friction1[variantIndex];
-  const frictionPertama = templateId === "promo-terbatas" ? tekananSatu : pembukaLisan;
-  const frictionKedua = templateId === "promo-terbatas" ? pembukaLisan : tekananSatu;
+  // SA6: dua bridge lisan yang bisa diverifikasi terhadap ProductInput.
+  // Identitas ini hanya menuju TTS/caption; planner neutral Ads membuangnya
+  // dari prompt visual provider.
+  // Pertanyaan khas konsep menjaga baris lisan pertama tetap berbeda pada
+  // sembilan Story Ads tanpa menjadikan prop blank sebagai bukti produk.
+  const bridgeNama = `${adegan.questions[variantIndex]} Nah, ${c.produk}.`;
+  const bridgeHarga = [
+    `Harganya ${c.harga}, ya.`, `Angkanya ${c.harga}, sih.`,
+    `Nah, tercantum ${c.harga}, loh.`, `Nilainya ${c.harga}, deh.`,
+  ][variantIndex];
+  // Price-led promo harus menyebut nominal di beat demo pertama (L-02),
+  // sedangkan template Story Ads lain membuka bridge dengan nama produk.
+  const promoPriceLed = templateId === "promo-terbatas";
+  const frictionPertama = withDelivery(promoPriceLed ? bridgeHarga : bridgeNama, pembukaLisan);
+  const frictionKedua = promoPriceLed ? bridgeNama : bridgeHarga;
   const story: AdsStoryBeat[] = [
-    { role: "hook", label: "HOOK", text: "", action: "kartu warna polos tanpa tulisan terlihat sejak frame pertama", product_state: "partial" },
-    { role: "demo", label: "FRICTION", text: templateId === "promo-terbatas"
-      ? `${JEDA_VARIAN[variantIndex]} ${frictionPertama}`
-      : `${frictionPertama} ${JEDA_VARIAN[variantIndex]}`, action: aksiSatu, product_state: "partial" },
-    { role: "story", label: "FRICTION", text: frictionKedua, action: aksiDua, product_state: "hero" },
-    { role: "story", label: "SPIKE", text: adegan.spikes[variantIndex], action: "kartu warna polos diletakkan di depan saksi", product_state: "hero", saksi: adegan.saksi },
-    { role: "cta", label: "BUTTON", text: button, action: "talent menunjuk blok warna pada kartu blank sambil menyisakan pertanyaan", product_state: "hero" },
+    { role: "hook", label: "HOOK", text: "", action: "kartu warna polos tanpa tulisan terlihat sejak frame pertama", product_state: "hidden" },
+    { role: "demo", label: "FRICTION", text: `${frictionPertama} ${JEDA_VARIAN[variantIndex]}`, action: aksiSatu, product_state: "hidden", bridge_source: promoPriceLed ? "spoken_approved_price" : "spoken_product_name" },
+    { role: "story", label: "FRICTION", text: frictionKedua, action: aksiDua, product_state: "hidden", bridge_source: promoPriceLed ? "spoken_product_name" : "spoken_approved_price" },
+    { role: "story", label: "SPIKE", text: templateId === "ads-tembus-dinding"
+      ? `${adegan.spikes[variantIndex]} Saksi tetap melihat.`
+      : adegan.spikes[variantIndex], action: "kartu warna polos diletakkan di depan saksi", product_state: "hidden", saksi: adegan.saksi },
+    { role: "cta", label: "BUTTON", text: button, action: "talent menunjuk blok warna pada kartu blank sambil menyisakan pertanyaan", product_state: "hidden" },
   ];
   const contradictions = story.flatMap((beat) => neutralStoryAdsActionContradictions(beat.action));
   if (contradictions.length > 0) {

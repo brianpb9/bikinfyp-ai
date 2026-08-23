@@ -101,6 +101,8 @@ export interface VisualSpec {
   /** Menandai kontrak provider-bound: tidak satu pun referensi produk boleh
    * ikut ke shot atau daftar ekstra. */
   visualSubjectPolicy?: "neutral_story_ads";
+  /** Hanya jenis provenance SA6; nilai identitas/harga tidak masuk payload visual. */
+  storyBridgeSources?: Array<"spoken_product_name" | "spoken_product_category" | "spoken_approved_price">;
 }
 
 export interface VideoAsset {

@@ -63,5 +63,6 @@ export function ringkasParams(spec: VisualSpec) {
     maxPeople: spec.maxPeople ?? null,
     jumlahReferensiTambahan: spec.extraReferenceImagePaths?.length ?? 0,
     referenceOnlyImages: spec.referenceOnlyImages === true,
+    storyBridgeSources: spec.storyBridgeSources ?? [],
   };
 }

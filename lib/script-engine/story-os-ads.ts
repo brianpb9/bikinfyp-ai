@@ -17,9 +17,10 @@
 // dapat dicek mesin dari struktur; SA3/SA5/SA7 via juri FYP Gate — label
 // jujur: 'kode' vs 'juri'".
 
-import type { SegmentDraft } from "./templates";
+import { formatHargaNatural, type SegmentDraft } from "./templates";
 import { stripDeliveryTags } from "./delivery-tags";
 import { isNeutralStoryAdsTemplate } from "./ads-visual-contract";
+import { hargaTerbilang } from "./price-mentions";
 
 export type PenegakanSA = "kode" | "juri";
 
@@ -72,7 +73,15 @@ type SegmenAds = SegmentDraft & {
   voiceover?: string;
   narration?: string;
   transcript?: string;
+  bridge_source?: StoryAdsBridgeSource;
 };
+
+export type StoryAdsBridgeSource = "spoken_product_name" | "spoken_product_category" | "spoken_approved_price";
+export interface StoryAdsProductEvidence {
+  productName?: string | null;
+  productCategory?: string | null;
+  productPriceIdr?: number | null;
+}
 
 const PUNYA_TANYA = /\?|(\bnggak\b|\bgak\b|\bkan\b|\bya\b)\s*[?]?$/i;
 const CTA_ADS = /detailnya\s+ada\s+di\s+bawah/i;
@@ -125,7 +134,7 @@ export function temuanHookSenyapAds(segments: Array<Record<string, unknown>>): s
   return [...new Set(findings)];
 }
 
-export interface StoryAdsIdentity {
+export interface StoryAdsIdentity extends StoryAdsProductEvidence {
   contentType?: "affiliate" | "ads" | null;
   templateId?: string | null;
 }
@@ -157,6 +166,51 @@ export function temuanStrukturStoryAds(segments: Array<Record<string, unknown>>)
   return findings;
 }
 
+const normalisasiBukti = (value: string) => stripDeliveryTags(value).toLowerCase().replace(/[^a-z0-9]+/gi, " ").trim();
+
+/** Provenance SA6 berasal dari dialog + ProductInput, bukan dari prop visual. */
+export function bridgeStoryAdsTerbukti(
+  segments: Array<Record<string, unknown>>,
+  product: StoryAdsProductEvidence
+): StoryAdsBridgeSource[] {
+  const verified = new Set<StoryAdsBridgeSource>();
+  const productName = normalisasiBukti(String(product.productName ?? ""));
+  const productCategory = normalisasiBukti(String(product.productCategory ?? ""));
+  const exactPrice = Number(product.productPriceIdr ?? 0);
+  const roundedPrice = exactPrice > 0
+    ? Number(formatHargaNatural(exactPrice).match(/\d+(?:[.,]\d+)?/)?.[0].replace(",", ".")) * (/juta/i.test(formatHargaNatural(exactPrice)) ? 1_000_000 : 1_000)
+    : 0;
+  for (const raw of segments) {
+    const source = raw.bridge_source as StoryAdsBridgeSource | undefined;
+    if (!source) continue;
+    const spoken = String(raw.tts_text ?? raw.text ?? "");
+    const normalized = normalisasiBukti(spoken);
+    if (source === "spoken_product_name" && productName && (` ${normalized} `).includes(` ${productName} `)) verified.add(source);
+    if (source === "spoken_product_category" && productCategory && (` ${normalized} `).includes(` ${productCategory} `)) verified.add(source);
+    if (source === "spoken_approved_price" && exactPrice > 0) {
+      const digitAmounts = [...spoken.matchAll(/(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi)].map((match) =>
+        Math.round(Number(match[1].replace(",", ".")) * (/juta|jt/i.test(match[2]) ? 1_000_000 : 1_000)));
+      const wordAmounts = hargaTerbilang(spoken).map((item) => item.nilai);
+      if ([...digitAmounts, ...wordAmounts].some((amount) => amount === exactPrice || amount === Math.round(roundedPrice))) verified.add(source);
+    }
+  }
+  return [...verified];
+}
+
+export function temuanBridgeStoryAds(
+  segments: Array<Record<string, unknown>>,
+  product: StoryAdsProductEvidence
+): TemuanSA[] {
+  const findings: TemuanSA[] = [];
+  const fakeVisualState = segments.filter((segment) => String(segment.product_state ?? "hidden") !== "hidden").length;
+  if (fakeVisualState) findings.push({ gerbang: "SA6", pesan: `${fakeVisualState} prop blank mengaku product_state partial/hero; prop netral bukan produk` });
+  const verified = bridgeStoryAdsTerbukti(segments, product);
+  if (verified.length < 2) {
+    findings.push({ gerbang: "SA6", pesan: `bridge produk terverifikasi cuma ${verified.length} dari 2 (${verified.join(",") || "nol"}); wajib cocok dengan nama/kategori/harga ProductInput` });
+  }
+  return findings;
+}
+
 /** Offset VO final. Hanya Story Ads beridentitas otoritatif yang dikenai SA3;
  * Affiliate boleh memiliki label bebas HOOK dengan dialog pada detik nol. */
 export function voiceoverStartSecForSegments(segments: SegmentDraft[], identity: StoryAdsIdentity): number {
@@ -165,6 +219,7 @@ export function voiceoverStartSecForSegments(segments: SegmentDraft[], identity:
     const findings = [
       ...temuanHookSenyapAds(records),
       ...temuanStrukturStoryAds(records).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
+      ...temuanBridgeStoryAds(records, identity).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
     ];
     if (findings.length) throw new Error(`Kontrak Story Ads worker dilanggar: ${findings.join(", ")}`);
   }
@@ -180,7 +235,7 @@ export function voiceoverStartSecForSegments(segments: SegmentDraft[], identity:
  */
 export function periksaStoryOsAds(
   script: { segments: SegmenAds[] },
-  ctx: { contentType?: "affiliate" | "ads" | null; durationSec?: number | null }
+  ctx: { contentType?: "affiliate" | "ads" | null; durationSec?: number | null } & StoryAdsProductEvidence
 ): TemuanSA[] {
   if (ctx.contentType !== "ads") return [];
   const segs = script.segments ?? [];
@@ -253,22 +308,8 @@ export function periksaStoryOsAds(
     }
   }
 
-  // ---- SA6 Bridging >= 2 --------------------------------------------------
-  // (a) aksi jujur dengan produk di friction; (b) produk hadir di frame
-  // pertama tanpa dijelaskan; (c) pengakuan ringan di button sebelum CTA.
-  const jembatan: string[] = [];
-  const aksiProduk = friction.some((s) => /\b(sikat|tuang|oles|semprot|buka|ambil|masuk\w*|pegang|usap|pakai)\b/i.test(String(s.action ?? "")));
-  if (aksiProduk) jembatan.push("a");
-  const hookAwal = segs[0];
-  if ((hookAwal.product_state ?? "hidden") !== "hidden") jembatan.push("b");
-  const pengakuan = teksButton.replace(CTA_ADS, "").trim();
-  if (/\b(tadi|barusan|udah|sempat|nggak aku hapus|aku kabarin)\b/i.test(pengakuan)) jembatan.push("c");
-  if (jembatan.length < 2) {
-    temuan.push({
-      gerbang: "SA6",
-      pesan: `bridging cuma ${jembatan.length} dari 3 (${jembatan.join(",") || "nol"}) — penonton tidak tahu kenapa produknya ini`,
-    });
-  }
+  // ---- SA6 provenance produk >= 2 ----------------------------------------
+  temuan.push(...temuanBridgeStoryAds(segs as unknown as Array<Record<string, unknown>>, ctx));
 
   // ---- SA8 Body bukan penjelasan -----------------------------------------
   for (const s of segs.slice(1, -1)) {

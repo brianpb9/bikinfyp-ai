@@ -33,6 +33,7 @@ import { MAKS_REFERENSI_PER_GENERASI } from "./product-images";
 import { personSafeReferencePhotos } from "./media/person-safe-refs";
 import { normalizeHookLevel } from "./config/hooks";
 import { bacaSnapshot } from "./script-engine/admisi";
+import { isNeutralStoryAdsTemplate } from "./script-engine/ads-visual-contract";
 import { pesanTanpaReferensi } from "./product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "./job-reference-manifest";
@@ -92,6 +93,8 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
 
   try {
     const script = db.prepare("SELECT * FROM scripts WHERE id = ?").get(job.script_id) as ScriptRow;
+    const admisi = bacaSnapshot(script.validation_result);
+    const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: admisi?.templateId ?? null };
     let product = db.prepare("SELECT * FROM products WHERE id = ?").get(job.product_id) as ProductRow;
     const persona = job.persona_id
       ? (db.prepare("SELECT * FROM personas WHERE id = ?").get(job.persona_id) as PersonaRow | undefined)
@@ -103,7 +106,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // avatar premium diam-diam tidak berpengaruh di dev.
     const presetKategori = getCreatorCategory(persona?.creator_category ?? "hijaber")!;
     const descKustom = (job as { avatar_custom_desc?: string | null }).avatar_custom_desc?.trim();
-    const category = descKustom
+    const category = descKustom && !isNeutralStoryAdsTemplate(storyIdentity.templateId)
       ? { ...presetKategori, promptSeed: descKustom, handsPrompt: descKustom }
       : presetKategori;
     const productSnapshot = await loadOrCreateJobProductSnapshot({
@@ -144,10 +147,10 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     };
 
     const segments = JSON.parse(script.segments) as SegmentDraft[];
-    const admisi = bacaSnapshot(script.validation_result);
-    const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: admisi?.templateId ?? null };
     // Fail-closed sebelum materialisasi referensi atau panggilan provider.
-    const voiceoverStartSec = voiceoverStartSecForSegments(segments, storyIdentity);
+    const voiceoverStartSec = voiceoverStartSecForSegments(segments, {
+      ...storyIdentity, productName: product.name, productCategory: product.category, productPriceIdr: product.price_idr,
+    });
     const images = JSON.parse(product.images) as string[];
 
     const workDir = path.join(config.storageDir, "jobs", job.id);
@@ -234,6 +237,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       category,
       productName: product.name,
       productCategory: product.category,
+      productPriceIdr: product.price_idr,
       productVisualDesc: product.product_visual_desc,
       brandBrief: product.brand_brief,
       imageRefPath: primaryRef,

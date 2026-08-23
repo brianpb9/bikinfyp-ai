@@ -36,7 +36,7 @@ import { getRecordingStyle, type StyleFormat } from "./recording-styles";
 import { blokKontrakMode, framingUntukMode, modeDikenal } from "./mode-kamera";
 import { formatById } from "../script-engine/format-katalog";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
-import { isStructuredStoryAds, temuanHookSenyapAds, temuanStrukturStoryAds } from "../script-engine/story-os-ads";
+import { bridgeStoryAdsTerbukti, isStructuredStoryAds, temuanBridgeStoryAds, temuanHookSenyapAds, temuanStrukturStoryAds } from "../script-engine/story-os-ads";
 import {
   isNeutralStoryAdsTemplate,
   neutralStoryAdsActionContradictions,
@@ -52,6 +52,7 @@ export interface ShotPlanInput {
   category: CreatorCategory;
   productName: string;
   productCategory: string;
+  productPriceIdr?: number | null;
   /** Deskripsi visual produk dari user (opsional) — memperkuat konsistensi identitas. */
   productVisualDesc?: string | null;
   /** M8 (dashboard brand): arahan kreatif bebas dari brand, disuntik ke tiap shot. */
@@ -1284,6 +1285,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const storyFindings = [
       ...temuanHookSenyapAds(records),
       ...temuanStrukturStoryAds(records).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
+      ...temuanBridgeStoryAds(records, {
+        productName: input.productName, productCategory: input.productCategory, productPriceIdr: input.productPriceIdr,
+      }).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
     ];
     if (storyFindings.length > 0) {
       throw new Error(`Kontrak Story Ads dilanggar sebelum prompt provider: ${storyFindings.join(", ")}`);
@@ -1301,8 +1305,6 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         }
       }
       for (const [fieldName, field] of Object.entries({
-        text: segment.text,
-        tts_text: segment.tts_text,
         role: segment.role,
         label: segment.label,
         mode: segment.mode,
@@ -1841,7 +1843,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // menggambar WAJAH pembicara di format tanpa-wajah -> QC-09 menolak (benar).
     // r4 (Brian 2026-08-07): harga di dialog WAJIB terbilang — model membaca
     // "Rp299.000" ngaco. Hanya pola harga yang dikonversi (kode produk aman).
-    const dialogue = hargaTerbilang(dialogueForShot(i).filter(Boolean).join(" "));
+    const dialogue = neutralStoryAds ? "" : hargaTerbilang(dialogueForShot(i).filter(Boolean).join(" "));
     const isLast = i === numShots - 1;
     // Bar kualitas suara (Brian 2026-08-07): "VO kayak real, tidak cepet, ada
     // pause/jeda" — tempo santai + jeda antar kalimat ditulis eksplisit.
@@ -2002,6 +2004,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       ? { extraReferenceImagePaths: input.extraImageRefPaths.slice(0, 7) }
       : {}), // neutral Story Ads = text-to-video; foto produk tidak boleh bocor
     ...(neutralStoryAds ? { visualSubjectPolicy: "neutral_story_ads" as const } : {}),
+    ...(neutralStoryAds ? { storyBridgeSources: bridgeStoryAdsTerbukti(
+      input.segments as Array<SegmentDraft & Record<string, unknown>>,
+      { productName: input.productName, productCategory: input.productCategory, productPriceIdr: input.productPriceIdr }
+    ) } : {}),
     // Iklan jasa: visual bisnis dipakai sebagai REFERENSI, bukan frame
     // pertama — kalau tidak, hasilnya video tentang logo, bukan orang yang
     // berbicara. Lihat catatan referenceOnlyImages di lib/providers/types.ts.

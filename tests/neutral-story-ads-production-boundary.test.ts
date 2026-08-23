@@ -35,7 +35,7 @@ test("snapshot confirm -> job persisten -> normalisasi worker menjaga kontrak 9 
     const spec = planShots({
       jobId: `persisted-${template.id}`, durationSec: template.durationSec, segments: script.segments,
       category: getCreatorCategory("hijaber")!, productName: product.name,
-      productCategory: product.category, imageRefPath: "/tmp/authoritative-product.jpg",
+      productCategory: product.category, productPriceIdr: product.price_idr, imageRefPath: "/tmp/authoritative-product.jpg",
       extraImageRefPaths: ["/tmp/extra-product.jpg"], qualityTier: template.tier,
       format: persistedFormat, ugcTemplate: persistedTemplateId,
       shotCountOverride: template.shotCount,
@@ -83,7 +83,7 @@ test("neutral Story Ads selalu memakai descriptor persona terkurasi, custom avat
     const injectedCategory = { ...curated, promptSeed: injection, handsPrompt: injection };
     const neutral = planShots({
       jobId: "neutral-custom", durationSec: 15, segments: script.segments,
-      category: injectedCategory, productName: product.name, productCategory: product.category,
+      category: injectedCategory, productName: product.name, productCategory: product.category, productPriceIdr: product.price_idr,
       imageRefPath: "/tmp/product.jpg", qualityTier: template.tier,
       format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
     });
@@ -112,13 +112,16 @@ test("scaffold angka hanya menerima nilai exact planner; disguise field gagal se
   });
   const base = {
     jobId: "scaffold", durationSec: 15, category: getCreatorCategory("hijaber")!,
-    productName: product.name, productCategory: product.category,
+    productName: product.name, productCategory: product.category, productPriceIdr: product.price_idr,
     imageRefPath: "/tmp/product.jpg", qualityTier: template.tier,
     format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
   } as const;
   const safe = planShots({ ...base, segments: script.segments });
   assert.ok(safe.shots.every((shot) => shot.trustedNumericScaffolds?.length));
   assert.ok(safe.shots.flatMap((shot) => buildTaskContent(safe, shot, "dreamina-seedance-2-0-mini-260615")).length > 0);
+  const safeProviderPayload = safe.shots.flatMap((shot) => buildTaskContent(
+    safe, shot, "dreamina-seedance-2-0-mini-260615"
+  ));
 
   const reordered = structuredClone(script.segments);
   [reordered[0], reordered[1]] = [reordered[1], reordered[0]];
@@ -155,7 +158,18 @@ test("scaffold angka hanya menerima nilai exact planner; disguise field gagal se
     "189000-second offer", "Shot 189000 of 1 offer", "at 189000-189001 seconds offer",
     "15-second", "Shot 1 of 4", "at 3-6 seconds",
   ]) {
-    for (const field of ["text", "tts_text", "role", "label", "mode", "saksi", "action", "visual_direction", "start_state", "framing", "angle", "camera", "expression"] as const) {
+    // Kanal lisan memang boleh memuat identitas/nominal yang terbukti, tetapi
+    // tidak pernah diteruskan ke model visual neutral Story Ads.
+    for (const field of ["text"] as const) {
+      const segments = structuredClone(script.segments);
+      (segments[1] as unknown as Record<string, string>)[field] = disguised;
+      const spec = planShots({ ...base, segments });
+      const payload = spec.shots.flatMap((shot) => buildTaskContent(
+        spec, shot, "dreamina-seedance-2-0-mini-260615"
+      ));
+      assert.deepEqual(payload, safeProviderPayload, `${field}: mutasi ucapan mengubah payload visual`);
+    }
+    for (const field of ["tts_text", "role", "label", "mode", "saksi", "action", "visual_direction", "start_state", "framing", "angle", "camera", "expression"] as const) {
       const segments = structuredClone(script.segments);
       (segments[1] as unknown as Record<string, string>)[field] = field === "action"
         ? `talent membuka kartu blank ${disguised} di meja`

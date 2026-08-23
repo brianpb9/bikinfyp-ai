@@ -57,8 +57,8 @@ const AUTHORED_COPY_SNAPSHOT: Record<string, string[]> = {
   "t09-bahan-aktif": ["f7b8d72e75bdb6ac", "0c89d79923fe6c9c", "0ff1d991acffd261", "9f1d03aee94a2b08"],
   "t10-bukti-di-lengan": ["cb8455f1c8977c93", "1201f68e4cf37a81", "aabc8a9738e2deaa", "08e4cb36d834351d"],
   "t12-vox-pop": ["2b26db49870ce97f", "773729dc5473f4ff", "68382594e9b4ad92", "d85df3510a64ce24"],
-    "kenalin-bisnis": ["1fccb9e0fd0c189a", "3319a10cb0b65433", "8f1ad75dd7088fc2", "9fede81ed1a4f351"],
-    "promo-terbatas": ["191ca2880def9d18", "38d6b2f5a5a9943e", "80f639c6ec7376f3", "2cef2dcbbcb03e5e"],
+  "kenalin-bisnis": ["cdf2ed14511e80c7", "410be6c57145d1dd", "99134d353eacdc8f", "e73c54ff89dab462"],
+  "promo-terbatas": ["c1c437fac0dc26f9", "a5a272ba0ca1f770", "3900ca5368ea6945", "e652cee1829b0084"],
   "tvc-the-drop": ["c3aef3e716baae43", "8609eacc96558a7f", "ca68bed87976479c", "eb8b38ee0097b061"],
   "tvc-tersangka": ["4524bd2c7fed0c14", "6d0e08dbfcb8e7b3", "3841466ada75069b", "5b3df2443a0f2d9d"],
   "tvc-seharian": ["859aaf1eb141f049", "16df12a1db6028a2", "7640aacca7b4ab50", "f027e138aec292b8"],
@@ -457,6 +457,11 @@ test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasi
       assert.equal(variant.segments[0].tts_text, undefined, `${template.id}: SA3 hook masih punya TTS`);
       assert.equal(variant.segments[0].start, 0, `${template.id}: HOOK tidak mulai di nol`);
       assert.ok(variant.segments.slice(1).every((segment) => segment.start > 0), `${template.id}: beat setelah HOOK mulai di nol`);
+      assert.ok(variant.segments.every((segment) => segment.product_state === "hidden"), `${template.id}: prop blank menyamar sebagai produk`);
+      assert.deepEqual(
+        variant.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(),
+        ["spoken_approved_price", "spoken_product_name"], `${template.id}: provenance SA6 tidak lengkap`
+      );
       assert.equal(variant.segments.filter((segment) => segment.role === "demo").length, 1);
       for (const segment of variant.segments.filter((item) => item.label === "FRICTION" || item.label === "SPIKE")) {
         const words = segment.text.replace(/\[[^\]]+\]/g, "").trim().split(/\s+/).filter(Boolean);
@@ -562,7 +567,8 @@ test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik
         jobId: `contract-${template.id}-${category}-${variantIndex}`,
         durationSec: template.durationSec, segments: variant.segments,
         category: getCreatorCategory("hijaber")!, productName: product.name,
-        productCategory: category, productVisualDesc: `bottle labelled ${product.name}`,
+        productCategory: category, productPriceIdr: product.price_idr,
+        productVisualDesc: `bottle labelled ${product.name}`,
         brandBrief: `show ${product.name} as a readable product name`,
         imageRefPath: "/tmp/contract-product.jpg", qualityTier: template.tier,
         format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
@@ -575,6 +581,9 @@ test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik
       for (const shot of spec.shots) {
         const content = buildTaskContent(spec, shot, "dreamina-seedance-2-0-mini-260615") as Array<{ type?: string }>;
         assert.equal(content.filter((item) => item.type === "image_url").length, 0, `${template.id}/${category} mengirim image ke provider`);
+        const providerPayload = JSON.stringify(content);
+        assert.doesNotMatch(providerPayload, new RegExp(product.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+        assert.doesNotMatch(providerPayload, /189(?:[ .]?000|\s*ribu)/i, `${template.id}/${category} harga bocor ke provider`);
       }
       const prompts = spec.shots.map((shot) => shot.prompt);
       for (const [shotIndex, prompt] of prompts.entries()) {
@@ -697,7 +706,7 @@ test("mutasi subjek produk tetap terdeteksi setelah action dirakit menjadi promp
     assert.throws(() => planShots({
         jobId: "mutated-final-prompt", durationSec: template.durationSec, segments,
         category: getCreatorCategory("hijaber")!, productName: product.name,
-        productCategory: product.category, imageRefPath: "/tmp/product.jpg",
+        productCategory: product.category, productPriceIdr: product.price_idr, imageRefPath: "/tmp/product.jpg",
         qualityTier: template.tier, format: template.format, ugcTemplate: template.id,
         shotCountOverride: template.shotCount,
       }),

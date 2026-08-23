@@ -9,6 +9,8 @@ import { formatHargaNatural } from "./templates";
 import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
 import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
 import { periksaStoryOsAds } from "./story-os-ads";
+import { hargaTerbilang } from "./price-mentions";
+export { hargaTerbilang } from "./price-mentions";
 import { pilihTokenMerek } from "../merek";
 import { tutupiNama } from "../media/pemicu-filter";
 import {
@@ -313,69 +315,6 @@ function spokenPriceAmount(priceIdr: number): number | null {
  * Hanya rangkaian yang DIAKHIRI satuan (ribu/juta) yang dihitung. "dua kali
  * sehari" atau "tiga puluh detik" bukan harga dan tidak ikut terjaring.
  */
-const KATA_SATUAN: Record<string, number> = {
-  nol: 0, satu: 1, se: 1, dua: 2, tiga: 3, empat: 4, lima: 5,
-  enam: 6, tujuh: 7, delapan: 8, sembilan: 9,
-};
-
-export function hargaTerbilang(text: string): { frasa: string; nilai: number }[] {
-  const kata = text.toLowerCase().match(/[a-z]+/g) ?? [];
-  const hasil: { frasa: string; nilai: number }[] = [];
-  let kelompok = 0;      // ratusan/puluhan yang sudah ditutup
-  let tertunda = 0;      // satuan yang belum ditutup
-  let total = 0;         // AKUMULASI satu rangkaian: "satu juta dua ratus ribu"
-  let pengaliTerakhir = Infinity; // satuan hanya boleh MENGECIL dalam satu rangkaian
-  let mulai = -1;
-  let punyaAngka = false;
-  const reset = () => { kelompok = 0; tertunda = 0; total = 0; pengaliTerakhir = Infinity; mulai = -1; punyaAngka = false; };
-  /** Tutup rangkaian: sisa kelompok tanpa satuan ikut sebagai sisa nominal. */
-  const tutup = (sampai: number) => {
-    if (total > 0) {
-      const sisa = kelompok + tertunda;
-      hasil.push({ frasa: kata.slice(mulai, sampai).join(" "), nilai: Math.round(total + sisa) });
-    }
-    reset();
-  };
-  for (let i = 0; i < kata.length; i++) {
-    const w = kata[i];
-    const tandai = () => { if (mulai < 0) mulai = i; punyaAngka = true; };
-    if (w in KATA_SATUAN) { tandai(); tertunda = KATA_SATUAN[w]; continue; }
-    if (w === "sepuluh") { tandai(); tertunda = 10; continue; }
-    if (w === "sebelas") { tandai(); tertunda = 11; continue; }
-    if (w === "belas") { tandai(); tertunda = 10 + tertunda; continue; }
-    if (w === "puluh") { tandai(); kelompok += tertunda * 10; tertunda = 0; continue; }
-    // "dua setengah juta" = 2.500.000. Bentuk ini dipakai orang Indonesia
-    // sehari-hari dan sebelumnya tidak terbaca sama sekali — jadi klaim harga
-    // dalam bentuk itu lewat gerbang kebenaran tanpa diperiksa.
-    if (w === "setengah") { tandai(); tertunda += 0.5; continue; }
-    if (w === "ratus" || w === "seratus") {
-      tandai();
-      kelompok += (w === "seratus" ? 1 : tertunda || 1) * 100;
-      tertunda = 0;
-      continue;
-    }
-    if (w === "ribu" || w === "seribu" || w === "juta" || w === "sejuta") {
-      const seSendiri = w.startsWith("se");
-      // "85 ribu" angkanya DIGIT, dan jalur digit sudah memeriksanya. Satuan
-      // yang berdiri tanpa kata bilangan di depannya bukan harga terbilang.
-      if (!punyaAngka && !seSendiri) { tutup(i); continue; }
-      const pengali = w.includes("juta") ? 1_000_000 : 1_000;
-      // Satuan yang MEMBESAR berarti rangkaian baru ("dua ribu... lima juta").
-      if (pengali >= pengaliTerakhir) tutup(i);
-      tandai();
-      const nominal = seSendiri ? 1 : (kelompok + tertunda) || 1;
-      total += nominal * pengali;
-      pengaliTerakhir = pengali;
-      kelompok = 0;
-      tertunda = 0;
-      continue;
-    }
-    tutup(i);
-  }
-  tutup(kata.length);
-  return hasil;
-}
-
 export const PRICE_REQUIRED_TEMPLATE_IDS = ["diskon-gede", "promo-terbatas"] as const;
 
 export function templateRequiresPriceMention(templateId: string | null | undefined): boolean {
@@ -1059,7 +998,13 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // sendiri dan sudah dijaga L-03/A-01/A-02.
   for (const t of periksaStoryOsAds(
     { segments: script.segments as never },
-    { contentType: script.contentType ?? null, durationSec: script.durationSec ?? null }
+    {
+      contentType: script.contentType ?? null,
+      durationSec: script.durationSec ?? null,
+      productName: script.productName,
+      productCategory: script.productCategory,
+      productPriceIdr: script.priceIdr,
+    }
   )) {
     push(false, { rule: t.gerbang, message_id: t.pesan });
   }

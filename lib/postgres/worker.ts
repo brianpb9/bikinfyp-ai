@@ -343,7 +343,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const admisi = bacaSnapshot(row.script_validation_result);
   const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: row.template_id ?? admisi?.templateId ?? null };
   // Fail-closed sebelum snapshot/materialisasi/panggilan provider berbayar.
-  const voiceoverStartSec = voiceoverStartSecForSegments(segments, storyIdentity);
+  const voiceoverStartSec = voiceoverStartSecForSegments(segments, {
+    ...storyIdentity, productName: row.product_name, productCategory: row.product_category, productPriceIdr: row.product_price_idr,
+  });
   const productSnapshot = await loadOrCreateJobProductSnapshot({
     existingRaw: row.job_product_snapshot,
     candidate: () => ({
@@ -430,7 +432,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // hasilnya "terinspirasi foto", bukan wajah persis (BytePlus menolak foto
   // wajah asli sebagai referensi, lihat lib/promo/avatar.ts).
   const customDesc = row.avatar_custom_desc?.trim();
-  const category = customDesc && !isNeutralStoryAdsTemplate(row.template_id)
+  const category = customDesc && !isNeutralStoryAdsTemplate(storyIdentity.templateId)
     ? { ...presetCategory, promptSeed: customDesc, handsPrompt: customDesc }
     : presetCategory;
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
@@ -438,6 +440,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const format = normalisasiFormatWorker(row.format);
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
+    productPriceIdr: row.product_price_idr,
     extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
     contentType: storyIdentity.contentType,
@@ -457,7 +460,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // rute yang ditambahkan belakangan sampai ke database tapi tidak pernah
     // sampai ke perencana shot.
     tvcRoute: TVC_ROUTES.includes(row.tvc_route as never) ? (row.tvc_route as TvcRoute) : undefined,
-    ugcTemplate: row.template_id,
+    ugcTemplate: storyIdentity.templateId,
     recordStyle: row.record_style });
 
   // KONTRAK PENYEDIA DIPERIKSA DI SINI, bukan nanti di registry.
@@ -514,7 +517,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       specJson: JSON.stringify(ringkasSpec(spec, modelTier)),
       segmentsJson: JSON.stringify(segments),
       negativePrompt: spec.negativePrompt,
-      modelParams: JSON.stringify({ ...ringkasParams(spec), format, template_id: row.template_id ?? null }),
+      modelParams: JSON.stringify({ ...ringkasParams(spec), format, template_id: storyIdentity.templateId }),
       ideId: jejakIde.ideId,
       ideSkor: jejakIde.ideSkor,
     });

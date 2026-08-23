@@ -79,6 +79,7 @@ async function rencana(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
     jobId: tpl.id, durationSec: tpl.durationSec,
     segments: skrip.segments.length ? skrip.segments : (SEG as never),
     category: getCreatorCategory("hijaber")!, productName: PRODUK.name, productCategory: "beauty",
+    productPriceIdr: PRODUK.price_idr,
     imageRefPath: "/tmp/x.jpg", qualityTier: "high_quality", format: tpl.format,
     hookLevel: tpl.hookLevel, ugcTemplate: tpl.id,
     tvcRoute: tpl.tvcRoute, shotCountOverride: tpl.shotCount, ratio: tpl.ratio,

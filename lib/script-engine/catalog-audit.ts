@@ -845,6 +845,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
             category: getCreatorCategory("hijaber")!,
             productName: product.name,
             productCategory: product.category,
+            productPriceIdr: product.price_idr,
             imageRefPath: "/tmp/catalog-script-audit-product.jpg",
             qualityTier: template.tier,
             format: template.format,

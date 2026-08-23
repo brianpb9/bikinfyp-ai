@@ -62,6 +62,9 @@ export interface SegmentDraft {
   /** Label dan saksi beat Story OS pada copy template Ads. */
   label?: "HOOK" | "FRICTION" | "SPIKE" | "BUTTON";
   saksi?: string;
+  /** Provenance bridge SA6. Validator tetap mencocokkan bukti ini dengan
+   * ProductInput; label ini sendiri tidak pernah cukup sebagai bukti. */
+  bridge_source?: "spoken_product_name" | "spoken_product_category" | "spoken_approved_price";
 }
 
 type Triple = { hook: string; demo: string; cta: string };
