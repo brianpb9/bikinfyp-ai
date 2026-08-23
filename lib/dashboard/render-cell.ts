@@ -93,6 +93,15 @@ export function kontradiksiNaskah(
   return null;
 }
 
+/** Template yang benar-benar dipersist ke job. Snapshot menang; request hanya
+ * fallback untuk naskah legacy yang memang belum punya provenance. */
+export function templateIdRenderOtoritatif(
+  snap: { templateId?: string | null } | undefined,
+  requested: string | null
+): string | null {
+  return snap?.templateId ?? requested;
+}
+
 export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<HasilSel> {
   const { pool, jobsRepo, creditsRepo } = alat;
   const gagal = (reason: string): HasilSel => ({ status: "failed", script_id: sel.scriptId, reason });
@@ -106,6 +115,14 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   if (!script || script.product_id !== sel.productId || script.job_id) {
     return gagal("Skrip tidak ditemukan atau sudah pernah dipakai.");
   }
+  // Nama/kategori request hanya untuk UI. Kontrak visual harus membaca fakta
+  // produk organisasi yang otoritatif, supaya klien tidak bisa menyamarkan
+  // identitas produk saat meminta render.
+  const produkOtoritatif = (await pool.query<{ name: string; category: string }>(
+    "SELECT name,category FROM products WHERE id=$1 AND org_id=$2",
+    [sel.productId, sel.orgId]
+  )).rows[0];
+  if (!produkOtoritatif) return gagal("Produk organisasi tidak ditemukan.");
   const segments = JSON.parse(script.segments) as SegmentDraft[];
   // Tier & durasi diturunkan dari skrip tersimpan (otoritatif) — tidak pernah
   // dipercaya dari body request, sama seperti /api/jobs retail.
@@ -126,6 +143,10 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   const jejak = bacaJejak(script.validation_result);
   const bentrok = kontradiksiNaskah(jejak.admisi, { format: sel.format, templateId: sel.templateId });
   if (bentrok) return gagal(bentrok);
+  // Snapshot naskah adalah sumber immutable. Request lama boleh tidak membawa
+  // template_id, tetapi job tetap wajib menyimpan ID snapshot agar worker
+  // tidak kehilangan kontrak neutral_story_ads.
+  const templateIdOtoritatif = templateIdRenderOtoritatif(jejak.admisi, sel.templateId);
   const validation = periksaAdmisi({
     segments,
     // Snapshot menang atas isi request: genre naskah ditentukan saat ia
@@ -133,14 +154,15 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     snapshot: jejak.admisi,
     hookFamily: script.hook_family,
     register: script.register,
-    productName: sel.productName,
+    productName: produkOtoritatif.name,
+    productCategory: produkOtoritatif.category,
     productPriceIdr: sel.productPriceIdr,
     productSourceUrl: sel.productSourceUrl ?? null,
     promoPriceBeforeIdr: sel.promoPriceBeforeIdr,
     qualityTier: tier,
     durationSec: durationS,
     format: sel.format,
-    templateId: sel.templateId,
+    templateId: templateIdOtoritatif,
   });
   if (!validation.passed) {
     return gagal(`Skrip belum memenuhi standar: ${validation.errors.map((e) => e.message_id).join(" ")}`);
@@ -171,7 +193,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,job_product_snapshot,state,created_at,state_changed_at)
        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,$18,'QUEUED',$19,$19)`,
       [jobId, sel.userId, sel.orgId, sel.runId, sel.avatarCustomDesc, sel.productId, sel.personaId, sel.scriptId,
-        sel.format, tier, durationS, sel.shotCount, sel.ratio, sel.noModel, sel.tvcRoute, sel.templateId, sel.recordStyle, productSnapshotRaw, now]
+        sel.format, tier, durationS, sel.shotCount, sel.ratio, sel.noModel, sel.tvcRoute, templateIdOtoritatif, sel.recordStyle, productSnapshotRaw, now]
     );
     // KLAIM ATOMIK, bukan pemeriksaan tambahan.
     //

@@ -110,6 +110,14 @@ export function bacaJejakIde(validationResult: string | null): { ideId: string |
   }
 }
 
+/** Normalisasi format persisten di satu tempat. `ads` adalah format produksi,
+ * bukan alias hands_only: ia mengubah framing, jumlah orang, dan negative prompt. */
+export function normalisasiFormatWorker(format: string): "hands_only" | "talking_head" | "vo_broll" | "tvc" | "ads" {
+  return format === "talking_head" || format === "vo_broll" || format === "tvc" || format === "ads"
+    ? format
+    : "hands_only";
+}
+
 /**
  * Boleh memakai frame TURUNAN CAST-REF (bukan sekadar frame pertama buatan)?
  *
@@ -420,7 +428,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     : presetCategory;
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
   const withAudio = tier !== "silent_caption";
-  const format = row.format === "talking_head" || row.format === "vo_broll" || row.format === "tvc" ? row.format : "hands_only";
+  const format = normalisasiFormatWorker(row.format);
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
     extraImageRefPaths: extraRefs, qualityTier: tier,

@@ -1063,7 +1063,10 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   if (script.contentType === "ads" && isNeutralStoryAdsTemplate(script.templateId)) {
     for (const segment of script.segments) {
       if (!segment.action) continue;
-      const contradictions = neutralStoryAdsActionContradictions(segment.action);
+      const contradictions = neutralStoryAdsActionContradictions(segment.action, {
+        productName: script.productName,
+        productCategory: script.productCategory,
+      });
       if (contradictions.length > 0) {
         push(true, {
           rule: "A-03",

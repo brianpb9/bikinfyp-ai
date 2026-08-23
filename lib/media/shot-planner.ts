@@ -36,7 +36,11 @@ import { getRecordingStyle, type StyleFormat } from "./recording-styles";
 import { blokKontrakMode, framingUntukMode, modeDikenal } from "./mode-kamera";
 import { formatById } from "../script-engine/format-katalog";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
-import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
+import {
+  isNeutralStoryAdsTemplate,
+  neutralStoryAdsActionContradictions,
+  neutralStoryAdsPromptContradictions,
+} from "../script-engine/ads-visual-contract";
 
 export interface ShotPlanInput {
   jobId: string;
@@ -1252,6 +1256,18 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   };
 
   const neutralStoryAds = isNeutralStoryAdsTemplate(input.ugcTemplate);
+  if (neutralStoryAds) {
+    for (const segment of input.segments) {
+      if (!segment.action) continue;
+      const contradictions = neutralStoryAdsActionContradictions(segment.action, {
+        productName: input.productName,
+        productCategory: input.productCategory,
+      });
+      if (contradictions.length > 0) {
+        throw new Error(`Kontrak visual neutral Story Ads dilanggar sebelum prompt final: ${contradictions.join(", ")}`);
+      }
+    }
+  }
   const shots: ShotSpec[] = Array.from({ length: numShots }, (_, i) => {
     const isFirst = i === 0;
     // "Closing beat" cuma dipakai kalau shot terakhir BUKAN shot pertama juga
@@ -1909,7 +1925,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // ekspresi panjang.
   const menahanProduk = format === "tvc" && (input.tvcRoute === "fabric" || input.tvcRoute === "intimate");
 
-  return {
+  const spec: VisualSpec = {
     jobId: input.jobId,
     width: 720,
     height: 1280,
@@ -1943,6 +1959,17 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     referenceOnlyImages: format === "ads" || menahanProduk,
     ratio: input.ratio ?? "9:16",
   };
+  if (neutralStoryAds) {
+    for (const shot of spec.shots) {
+      const contradictions = neutralStoryAdsPromptContradictions(shot.prompt, {
+        productName: input.productName,
+      });
+      if (contradictions.length > 0) {
+        throw new Error(`Kontrak prompt final neutral Story Ads dilanggar: ${contradictions.join(", ")}`);
+      }
+    }
+  }
+  return spec;
 }
 
 export { HANDS_ONLY_FRAMING, HANDS_ONLY_NEGATIVE, IDENTITY_INSTRUCTION, MANDATORY_NEGATIVE_PROMPT };

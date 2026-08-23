@@ -577,8 +577,26 @@ test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik
 });
 
 test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
-  assert.notDeepEqual(neutralStoryAdsActionContradictions("talent menahan produk di depan saksi"), []);
+  const identity = { productName: "Kemeja Uji", productCategory: "fashion" };
+  for (const action of [
+    "talent menahan produk di depan saksi",
+    "talent memutar kemasannya di samping swatch blank",
+    "talent mengangkat botolnya sambil memegang kartu blank",
+    "talent mengangkat Kemeja Uji di samping kartu blank",
+    "talent mengangkat fashion di samping kartu blank",
+  ]) assert.notDeepEqual(neutralStoryAdsActionContradictions(action, identity), [], action);
+  for (const safe of [
+    "talent membuka kartu warna polos di meja",
+    "talent menunjuk blok warna pada kartu blank",
+    "swatch blank dipindahkan mendekati saksi",
+  ]) assert.deepEqual(neutralStoryAdsActionContradictions(safe, identity), [], safe);
   assert.notDeepEqual(neutralStoryAdsPromptContradictions("Product hero, label squarely readable to camera."), []);
+  for (const prompt of [
+    "talent memutar kemasannya di samping swatch blank",
+    "talent mengangkat botolnya sambil memegang kartu blank",
+    "talent mengangkat Kemeja Uji di samping kartu blank",
+    "talent mengangkat fashion di samping kartu blank",
+  ]) assert.notDeepEqual(neutralStoryAdsPromptContradictions(prompt, identity), [], prompt);
   const mutation = structuredClone(audit.templates);
   mutation.find((template) => template.templateId === "ads-atap-jebol")!.variants[0].assembledShotDirections[0] =
     "Presenter holding product, label readable, true small size about the width of a hand.";
@@ -598,6 +616,34 @@ test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
   providerVariant.providerReferencePaths = ["/tmp/product.jpg"];
   providerVariant.providerContentImageCount = 1;
   assert.ok(adsProviderReferenceFindings(providerMutation).length > 0);
+});
+
+test("mutasi subjek produk tetap terdeteksi setelah action dirakit menjadi prompt final", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-unboxing-pov")!;
+  const product = { id: "final-prompt", name: "Kemeja Uji", price_idr: 189000, category: "fashion" };
+  const [base] = await generateScripts({
+    product, register: "netral", qualityTier: template.tier, durationSec: template.durationSec,
+    contentType: "ads", templateId: template.id, count: 1, tanpaLlm: true,
+  });
+  for (const action of [
+    "talent memutar kemasannya di samping swatch blank",
+    "talent mengangkat botolnya sambil memegang kartu blank",
+    "talent mengangkat Kemeja Uji di samping kartu blank",
+    "talent mengangkat fashion di samping kartu blank",
+  ]) {
+    const segments = structuredClone(base.segments);
+    segments[1].action = action;
+    assert.throws(() => planShots({
+        jobId: "mutated-final-prompt", durationSec: template.durationSec, segments,
+        category: getCreatorCategory("hijaber")!, productName: product.name,
+        productCategory: product.category, imageRefPath: "/tmp/product.jpg",
+        qualityTier: template.tier, format: template.format, ugcTemplate: template.id,
+        shotCountOverride: template.shotCount,
+      }),
+      /Kontrak (?:visual|prompt final) neutral Story Ads dilanggar/,
+      `prompt final meloloskan: ${action}`
+    );
+  }
 });
 
 test("mutasi outcome visual mematikan target audit secara end-to-end", async () => {

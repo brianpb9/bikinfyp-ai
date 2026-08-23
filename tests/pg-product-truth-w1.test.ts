@@ -340,6 +340,59 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
   };
 }
 
+/** Confirm nyata untuk Story Ads: request sengaja menghilangkan templateId. */
+async function siapkanStoryAdsTanpaTemplateRequest(image: string) {
+  const orgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
+  await pool.query("INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,'Org Ads Boundary',$2,$3)",
+    [orgId, `org-ads-boundary-${process.pid}`, t]);
+  await pool.query("INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$4)",
+    [uid(), orgId, userId, t]);
+  await pool.query(
+    `INSERT INTO products (id,user_id,org_id,name,price_idr,category,images,raw_meta,created_at)
+     VALUES ($1,$2,$3,'Jasa Uji',189000,'jasa',$4,'{}',$5)`,
+    [productId, userId, orgId, JSON.stringify([image]), t]
+  );
+  await pool.query(
+    "INSERT INTO personas (id,user_id,name,creator_category,voice_id,register,created_at) VALUES ($1,$2,'Persona Ads','hijaber','id_female_1','netral',$3)",
+    [personaId, userId, t]
+  );
+  const { generateScripts } = await import("../lib/script-engine");
+  const [script] = await generateScripts({
+    product: { id: productId, name: "Jasa Uji", price_idr: 189000, category: "jasa" },
+    register: "netral", qualityTier: "high_quality", durationSec: 15,
+    contentType: "ads", templateId: "ads-meja-kosong", count: 1, tanpaLlm: true,
+  });
+  const validationResult = JSON.stringify({
+    ...script.validation,
+    admisi: {
+      contentType: "ads", format: "ads", durationSec: 15,
+      templateId: "ads-meja-kosong", hookLevel: "agak_gila", productCategory: "jasa",
+    },
+  });
+  await pool.query(
+    `INSERT INTO scripts
+      (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,created_at)
+     VALUES ($1,$2,'H13','penasaran','netral',$3,'caption','[]',$4,'high_quality',$5)`,
+    [scriptId, productId, JSON.stringify(script.segments), validationResult, t]
+  );
+  await pool.query("INSERT INTO credit_ledger (id,user_id,org_id,delta,type,created_at) VALUES ($1,$2,$3,100000,'bonus',$4)",
+    [uid(), userId, orgId, t]);
+  const { renderSatuSel } = await import("../lib/dashboard/render-cell");
+  const { PgJobsRepository } = await import("../lib/postgres/jobs");
+  const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  const result = await renderSatuSel({
+    userId, orgId, productId, productName: "NAMA REQUEST PALSU", productPriceIdr: 189000,
+    productSourceUrl: null, promoPriceBeforeIdr: null, scriptId, personaId,
+    avatarCustomDesc: null, format: "ads", ratio: "9:16", noModel: false,
+    tvcRoute: null, templateId: null, recordStyle: null, shotCount: 4,
+    runId: `ads-boundary-${process.pid}`,
+  }, {
+    pool, jobsRepo: new PgJobsRepository(URL_UJI), creditsRepo: new PgCreditPaymentRepository(URL_UJI),
+  });
+  assert.equal(result.status, "queued", JSON.stringify(result));
+  return result.job_id;
+}
+
 async function patchProdukOrg(token: string, body: Record<string, unknown>) {
   const { cookieName } = await import("../lib/auth");
   const { PATCH } = await import("../app/api/dashboard/campaign/product/route");
@@ -569,6 +622,21 @@ test("W1 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", 
   assert.equal(r.lolos, 1);
   assert.equal(r.ditolak, 0);
   assert.deepEqual(r.perAlasan, {}, "penolakan dicatat padahal referensinya lolos");
+});
+
+test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol reference Story Ads", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  await pasangProviderPengamat();
+  const rel = `uploads/w1-neutral-story-ads-${process.pid}/0.png`;
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  const jobId = await siapkanStoryAdsTanpaTemplateRequest(rel);
+  const persisted = (await pool.query("SELECT template_id,format FROM jobs WHERE id=$1", [jobId])).rows[0];
+  assert.deepEqual(persisted, { template_id: "ads-meja-kosong", format: "ads" });
+  await jalankan(jobId, new Map([[rel, png], [`${rel}.meta.json`, sidecar(png, true)]]), true);
+  assert.equal(amatan.dipanggil, true, "W1 tidak mencapai provider observer");
+  assert.equal(amatan.utamaPath, null, "neutral Story Ads mengirim primary product reference");
+  assert.deepEqual(amatan.extraPaths, [], "neutral Story Ads mengirim extra product references");
+  assert.match(amatan.promptText, /neutral blank props|plain unprinted|blank/i);
 });
 
 // ------------------------------------------------------------------- C1

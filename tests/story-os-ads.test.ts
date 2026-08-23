@@ -161,39 +161,52 @@ test("A-03 keras di strict dan light, safe control tetap bebas A-03", async () =
   const { keSegmentDraft } = await import("../lib/script-engine/llm");
   const { validateScript } = await import("../lib/script-engine/validator");
   const safe = keSegmentDraft(structuredClone(LIVE_ADS_SAFE) as never);
-  const unsafe = structuredClone(safe);
-  unsafe[2].action = "talent menahan produk di depan saksi";
   const context = {
     hook_family: "H8", register: "netral", productName: "Kemeja Uji", priceIdr: 189000,
     productCategory: "fashion", qualityTier: "high_quality", durationSec: 15,
     contentType: "ads", templateId: "ads-unboxing-pov", segments: safe,
   } as const;
   assert.ok(!validateScript(context as never, "strict").errors.some((issue) => issue.rule === "A-03"));
-  for (const mode of ["strict", "light"] as const) {
-    assert.ok(validateScript({ ...context, segments: unsafe } as never, mode).errors.some((issue) => issue.rule === "A-03"));
+  for (const action of [
+    "talent memutar kemasannya di samping swatch blank",
+    "talent mengangkat botolnya sambil memegang kartu blank",
+    "talent mengangkat Kemeja Uji di samping kartu blank",
+    "talent mengangkat fashion di samping kartu blank",
+  ]) {
+    const unsafe = structuredClone(safe);
+    unsafe[2].action = action;
+    for (const mode of ["strict", "light"] as const) {
+      assert.ok(validateScript({ ...context, segments: unsafe } as never, mode).errors.some((issue) => issue.rule === "A-03"), `${mode} meloloskan ${action}`);
+    }
   }
 });
 
 test("live LLM Ads menolak aksi produk lalu menerima perbaikan prop netral sebelum provider", async () => {
   const { generateScripts } = await import("../lib/script-engine");
   const fetchAsli = globalThis.fetch;
-  let calls = 0;
-  globalThis.fetch = (async () => {
-    calls++;
-    const segments = structuredClone(LIVE_ADS_SAFE);
-    if (calls === 1) segments[2].action = "talent menahan produk di depan saksi";
-    return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
-  }) as never;
   try {
-    const [result] = await generateScripts({
-      product: { id: "live-ads", name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
-      register: "netral", qualityTier: "high_quality", durationSec: 15,
-      contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
-      hookFamilies: ["H8"], lockHookFamily: true,
-    });
-    assert.equal(calls, 2, "aksi tidak aman harus memicu repair LLM, bukan diterima");
-    assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
-    assert.ok(result.segments.every((segment) => !/produk|product/i.test(segment.action ?? "")));
+    for (const unsafeAction of [
+      "talent memutar kemasannya di samping swatch blank",
+      "talent mengangkat botolnya sambil memegang kartu blank",
+      "talent mengangkat Kemeja Uji di samping kartu blank",
+      "talent mengangkat fashion di samping kartu blank",
+    ]) {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls++;
+        const segments = structuredClone(LIVE_ADS_SAFE);
+        if (calls === 1) segments[2].action = unsafeAction;
+        return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+      }) as never;
+      const [result] = await generateScripts({
+        product: { id: `live-ads-${calls}`, name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+        register: "netral", qualityTier: "high_quality", durationSec: 15,
+        contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+        hookFamilies: ["H8"], lockHookFamily: true,
+      });
+      assert.equal(calls, 2, `aksi tidak aman harus direpair: ${unsafeAction}`);
+      assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    }
   } finally {
     globalThis.fetch = fetchAsli;
   }
