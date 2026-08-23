@@ -81,8 +81,8 @@ bagian E.2, dan arti tiap status di E.0.
 |---|---|---|---|---|---|
 | C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,A1..A5,**A6**,W1,W2 | **produk DITERIMA**; foto#1 berstatus promotional; approved reference WAJIB foto#2 + hash-nya. **A6 (approve/regenerate) wajib MEMPERTAHANKAN snapshot** — ia membangunkan worker lagi. `REF_PROMOTIONAL` adalah STATUS FOTO, bukan penolakan produk | `REF_PROMOTIONAL` (status) | **PARTIAL** |
 | C2 | Toothpaste diberi kategori facewash | E1,E3,E6,E7,A1..A4 | reject sebelum spend | `TYPE_MISMATCH` | **BLOCKED** |
-| C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` | **BLOCKED** |
-| C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` | **BLOCKED** |
+| C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` | **PARTIAL** |
+| C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` | **PARTIAL** |
 | C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` | **BLOCKED** |
 | C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` | **BLOCKED** |
 | C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` | **PASS** |
@@ -145,7 +145,7 @@ database, provider berbayar, penegakan admission, maupun keputusan T43.
 | **BLOCKED** | penerimaan belum dapat dinyatakan karena implementasi lokal belum ada, atau karena T43 / kredensial / deploy; penyebab wajib disebut eksplisit |
 | **NOT-APPLICABLE** | tidak relevan pada kontrak yang berlaku sekarang |
 
-`BLOCKED` bukan klaim bahwa penyebabnya selalu eksternal. Untuk C2-C6 dan D1-D2
+`BLOCKED` bukan klaim bahwa penyebabnya selalu eksternal. Untuk C2, C5, C6 dan D1-D2
 di bawah, penerimaan diblokir oleh pekerjaan lokal yang belum diimplementasikan
 atau belum diaudit; tidak ada dependensi eksternal yang menghalangi Builder
 mengerjakannya sebagai task terpisah.
@@ -174,8 +174,8 @@ mengerjakannya sebagai task terpisah.
 |---|---|---|
 | C1 | **PARTIAL** | `REF_PROMOTIONAL` ada (`lib/product-truth.ts`). Test `W1 C1` (`tests/pg-product-truth-w1.test.ts:344`) dan `W2 C1` (`tests/product-truth-worker-reference.test.ts:219`) membuktikan worker memilih packshot foto#2 beserta sha256-nya. Namun jalur E/A lain belum dicakup dan A6 tidak mempertahankan snapshot sebelum regenerate: setiap invocation worker membaca ulang `products.images` lalu membuat snapshot baru (`lib/postgres/worker.ts:273-278,323-355`) |
 | C2 | **BLOCKED** | Diblokir implementasi lokal: `TYPE_MISMATCH` dan validasi terkait belum ada di kode mana pun; tidak ada penghalang eksternal |
-| C3 | **BLOCKED** | Diblokir implementasi lokal: `BRAND_MISMATCH` belum ada. E8 juga tidak meneruskan `merekTerdaftar`, jadi `cocokMerek` tidak pernah diperiksa di jalur org |
-| C4 | **BLOCKED** | Diblokir implementasi lokal: `LABEL_UNREADABLE` belum ada dan gerbang label E4 hanya menyentuh foto pertama |
+| C3 | **PARTIAL** | E4 menolak `cocokMerek === false` untuk foto pertama (`app/api/products/[id]/photos/route.ts:91-100`). Cakupan belum lengkap: E1 tidak menjalankan gerbang merek, E8 tidak meneruskan `merekTerdaftar`, W1/W2 tidak menegakkan brand mismatch, foto tambahan E4 tidak diperiksa, dan reason code khusus `BRAND_MISMATCH` belum ada |
+| C4 | **PARTIAL** | E4 dan E8 menolak `!label.terbaca` untuk foto pertama (`app/api/products/[id]/photos/route.ts:84-100`; `app/api/dashboard/campaign/product/[id]/photos/route.ts:47-54`). Cakupan belum lengkap: E1 tidak menjalankan gerbang label, foto tambahan E4/E8 tidak diperiksa, dan reason code khusus `LABEL_UNREADABLE` belum ada |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PASS** | `CLASSIFIER_FAILED` ada; `belum_diperiksa` adalah keadaan ketiga yang eksplisit, bukan vonis promosi. Diuji di `tests/klasifikasi-gambar.test.ts` dan `tests/product-truth-evidence.test.ts` |
@@ -194,7 +194,7 @@ boundary test C1/C8 dan reason code masih usulan. Per e8a00a5:
 - boundary test C1 dan C8 **ADA** di kedua worker (lihat E.2);
 - lima reason code sudah nyata (`REF_PROMOTIONAL`, `CLASSIFIER_FAILED`,
   `EVIDENCE_INVALID`, `REF_MISSING`, `REF_HASH_MISMATCH`); tujuh sisanya masih
-  usulan dan penerimaannya tetap BLOCKED oleh implementasi lokal yang belum ada;
+  usulan; status kasusnya tetap PARTIAL atau BLOCKED sesuai cakupan nyata;
 - jalur promo tetap di luar cakupan dan tetap belum diputuskan siapa pun.
 
 ### E.4 Sisa P0/P1, dipisah menurut APA yang menahannya
@@ -211,7 +211,8 @@ dikerjakan di slice ini:**
    baris C6 mengharapkan fail-closed. **Salah satu dari keduanya harus
    dikoreksi** — matriks atau kodenya; itu keputusan produk, bukan pembersihan
    dokumen.
-4. C2/C3/C4/C5 belum punya reason code maupun jalur penegakan.
+4. C2/C5 belum punya reason code maupun jalur penegakan; C3/C4 belum punya
+   reason code khusus dan jalur penegakannya baru parsial seperti dirinci E.2.
 5. D1/D2 (penulis DB langsung) belum diaudit ulang sejak 20 Agu.
 6. **A6 tidak mempertahankan snapshot yang sudah disetujui** — cacat produk
    nyata, ditemukan lewat temuan Reviewer atas rekonsiliasi ini. Worker PG
@@ -222,21 +223,21 @@ dikerjakan di slice ini:**
 
 **(b) Butuh kredensial/data:**
 
-6. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
+7. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
    juga butuh R2 yang BERPASANGAN dengan database itu.
 
 **(c) Butuh deploy/migrasi:**
 
-7. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
+8. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
    staging; `preDeployCommand` staging menjalankan migrasi schema.
 
 **(d) Butuh keputusan Founder T43:**
 
-8. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
+9. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
 
 ### E.5 Yang TIDAK dilakukan di slice ini
 
 Nol perubahan produk atau test. Tidak satu pun status dinaikkan untuk membuat
-matriks hijau: lima baris tetap BLOCKED oleh gap lokal dan lima baris PARTIAL
-karena cakupannya belum lengkap. Kelima gap di E.4(a) dicatat sebagai kandidat task, bukan
+matriks hijau: tiga baris tetap BLOCKED oleh gap lokal dan tujuh baris PARTIAL
+karena cakupannya belum lengkap. Keenam gap di E.4(a) dicatat sebagai kandidat task, bukan
 diimplementasikan.
