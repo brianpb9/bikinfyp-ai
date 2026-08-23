@@ -158,7 +158,7 @@ mengerjakannya sebagai task terpisah.
 | E2 extract URL | UNGATED | **PARTIAL** | `downloadProductImages` → `tulisSidecar` (`lib/product-image-download.ts:48`). Dulu nol sidecar |
 | E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar, tetapi E3 tetap jalur wajib C2/C3/C5 dan belum melakukan validasi type/brand/category |
 | E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; **lubang 20 Agu MASIH ADA**: gerbang label hanya jalan bila `existing.length === 0` (`route.ts:84`) |
-| E5 DELETE foto retail | UNGATED | **PARTIAL** | hanya memfilter daftar lalu `persistImages` (`app/api/products/[id]/photos/route.ts:153-155`); file foto dan sidecar sengaja dibiarkan orphan. Daftar baru juga belum direvalidasi agar tetap punya foto layak |
+| E5 DELETE foto retail | UNGATED | **PARTIAL** | sesudah `persistImages`, memanggil `deleteStoredProductImages([target])` best-effort dan mengembalikan `cleanup_failed`; test mengunci urutan persist→cleanup, foto+sidecar target hilang, objek lain utuh, serta kegagalan cleanup tidak menghidupkan entry DB. Daftar baru tetap belum direvalidasi dan identitas lintas mutasi belum dipatok |
 | E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. Dulu nol |
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
@@ -167,7 +167,7 @@ mengerjakannya sebagai task terpisah.
 | W2 worker inline | UNGATED | **PARTIAL** | Sub-kontrak resolver+snapshot serta boundary C1/C8/C11 tertutup (`lib/worker.ts:122,139`); C8/C11 memakai observer provider langsung dengan reset `t.after`. Gap yang tersisa: C3 dan identitas lintas invocation C9/C12 |
 | A1..A7 admission | UNGATED | **BLOCKED (T43)** | Transcript §4 menguji tujuh path literal: semuanya `ADA`, `gerbang_bukti=0`, `exit=1`, termasuk A4 dan A7. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
 | D1 penulis produk/brand | UNGATED | **PARTIAL** | Reachable production melalui E1/E2/E3/E6. Semua create yang membawa image keys didahului helper bersidecar; direct caller lain hanya verifier disposable. Namun writer menerima `images` mentah dan mutation E3 name/category/brand tidak merevalidasi product-truth. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
-| D2 penulis daftar images | UNGATED | **PARTIAL** | Reachable production hanya melalui E4/E5/E8/E9. Add menerima keys dari helper bersidecar; delete dan append tetap mewarisi gap revalidation E5/E8/E9. Tidak ada CLI/direct caller tersembunyi. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
+| D2 penulis daftar images | UNGATED | **PARTIAL** | Reachable production hanya melalui E4/E5/E8/E9. Add menerima keys dari helper bersidecar; delete retail/org sudah membersihkan storage, tetapi revalidation E5/E9 dan gerbang E8 tetap belum lengkap. Tidak ada CLI/direct caller tersembunyi. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
 
 ### E.2 Kasus C1-C13 — alasan tiap status
 
@@ -230,9 +230,7 @@ dikerjakan di slice ini:**
    approve/regenerate memakai keadaan foto SAAT ITU, bukan yang disetujui saat
    admission. Ini yang membuat C1 dan C9 tidak bisa PASS. Kandidat task
    berikutnya; TIDAK diimplementasikan di slice rekonsiliasi ini.
-6. E5 DELETE retail hanya menghapus path dari daftar produk; file foto dan
-   sidecar tetap orphan di storage (`app/api/products/[id]/photos/route.ts:139-155`).
-7. **Tidak ada identitas persetujuan yang dipatok lintas mutasi.** Referensi
+6. **Tidak ada identitas persetujuan yang dipatok lintas mutasi.** Referensi
    utama dipilih dari URUTAN daftar (`lib/product-truth.ts:341` —
    `utama: tersetujui[0] ?? null`), jadi E5/E9 yang memutasi daftar bisa
    mengubah foto utama tanpa satu pun gerbang, dan worker membaca daftar
@@ -242,22 +240,22 @@ dikerjakan di slice ini:**
    sah tidak mengubah hash mana pun. Jadi yang dibutuhkan KONTRAK BARU
    (identitas dipatok atau digest manifest berurutan) beserta reason code-nya,
    bukan sekadar test E5/E9 -> W1/W2.
-8. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
+7. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
    tanpa resolver, sedangkan E4 meninggalkan bytes tersimpan saat tidak ada
    referensi layak. Belum ada test nol efek storage untuk ketiga jalur itu.
 **(b) Butuh kredensial/data:**
 
-9. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
+8. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
    juga butuh R2 yang BERPASANGAN dengan database itu.
 
 **(c) Butuh deploy/migrasi:**
 
-10. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
+9. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
    staging; `preDeployCommand` staging menjalankan migrasi schema.
 
 **(d) Butuh keputusan Founder T43:**
 
-11. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
+10. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
 
 ### E.5 Yang TIDAK dilakukan di slice ini
 
@@ -297,3 +295,20 @@ TASK=P0-C11-WORKER-BOUNDARY-PROOF-20260823
   → **13/13 PASS**; database uji di-drop oleh trap gate.
 - Gap lokal C11 ditutup. C11 menjadi **PASS** karena jalur wajibnya hanya W1/W2;
   status W1 dan W2 keseluruhan tetap **PARTIAL** akibat gap C3/C9/C12.
+
+### E.8 Follow-up E5 retail delete storage cleanup — 2026-08-23
+
+TASK=P0-E5-RETAIL-DELETE-STORAGE-CLEANUP-20260823
+
+- Setelah daftar foto baru berhasil dipersist, E5 memanggil
+  `deleteStoredProductImages([target])`, yang menghapus foto dan sidecar sebagai
+  satu unit. Semantik kegagalan sama dengan E9: cleanup best-effort,
+  `cleanup_failed` terlihat di respons, dan entry DB tidak dikembalikan.
+- `tests/retail-photo-delete.test.ts` membuktikan target+sidecar dibersihkan,
+  foto lain tidak disentuh, persist terjadi sebelum cleanup, dan kegagalan
+  cleanup tetap ter-log/terlihat tanpa merusak daftar DB; penghapusan foto
+  terakhir tetap menghasilkan daftar kosong seperti kontrak sebelumnya.
+- Focus test → **3/3 PASS**; gabungan focus + product-truth ingestion + storage
+  → **13/13 PASS**; `tsc --noEmit` → **PASS**.
+- Gap orphan-cleanup E5 ditutup. E5 tetap **PARTIAL** karena revalidation daftar
+  hasil dan identitas persetujuan lintas mutasi (C12) di luar scope task ini.

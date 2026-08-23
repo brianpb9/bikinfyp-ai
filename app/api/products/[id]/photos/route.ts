@@ -2,7 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, audit, type ProductRow } from "@/lib/db";
 import { createSignedUrl } from "@/lib/signed-url";
-import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, deleteStoredProductImages, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { pgAudit, pgSetProductImages, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import fs from "node:fs";
@@ -137,8 +137,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 // DELETE /api/products/[id]/photos {path} — buang satu foto dari produk
-// (tombol ✕ di S2). File storage dibiarkan (orphan best-effort; path tetap
-// privat di balik signed URL + owner check).
+// (tombol ✕ di S2). Daftar DB dipersist DULU, baru foto+sidecar dibersihkan
+// best-effort. Kegagalan cleanup tidak boleh menghidupkan lagi entry yang sudah
+// dihapus dari daftar; client mendapat flag yang sama dengan jalur org E9.
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser(req);
@@ -152,11 +153,15 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     if (!owned.images.includes(target)) throw ERR.NOT_FOUND("Fotonya");
     const images = owned.images.filter((p) => p !== target);
     await persistImages(user.id, id, images);
+    let cleanupPending = false;
+    try { await deleteStoredProductImages([target]); }
+    catch { cleanupPending = true; }
     await auditBoth(user.id, "product.photo_removed", id, { removed: target, total: images.length });
     return Response.json({
       product_id: id,
       images,
       image_urls: images.map((rel) => createSignedUrl(rel)),
+      cleanup_failed: cleanupPending,
     });
   } catch (err) {
     return errorResponse(err);

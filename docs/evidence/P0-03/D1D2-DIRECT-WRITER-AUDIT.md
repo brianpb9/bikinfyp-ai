@@ -56,6 +56,7 @@ DEPLOYED REACHABILITY — bukti call-site + manifest RACUN_DB_RUNTIME=postgres
 │     └─ persistImages → D2.pgSetProductImages
 ├─ E5 DELETE /api/products/[id]/photos
 │  └─ persistImages → D2.pgSetProductImages
+│     └─ deleteStoredProductImages([target]) best-effort
 ├─ E6 POST /api/dashboard/campaign/product
 │  ├─ URL: downloadProductImages → tulisSidecar
 │  │  └─ smokeCreateProduct → D1.createProduct → D1.insertProduct
@@ -111,8 +112,8 @@ Ia tetap tercatat sebagai E7 PARTIAL dan tidak dipindahkan secara keliru ke D1.
 
 - `pgSetProductImages` punya satu caller production helper, `persistImages`,
   yang dipakai E4 dan E5. E4 sudah menerbitkan sidecar dan memanggil
-  `referensiLayak`; E5 hanya memfilter daftar, tidak memeriksa bahwa referensi
-  layak masih tersisa, dan sengaja membiarkan objek+sidecar orphan.
+  `referensiLayak`; E5 memfilter daftar lalu membersihkan objek+sidecar target
+  best-effort, tetapi tidak memeriksa bahwa referensi layak masih tersisa.
 - `pgAppendOrgProductImages` hanya dipanggil E8. Keys datang dari
   `saveUniqueProductImages`, yang menerbitkan sidecar. E8 masih hanya memeriksa
   label foto pertama, tanpa `merekTerdaftar`, dan tidak memanggil
@@ -130,8 +131,8 @@ Ia tetap tercatat sebagai E7 PARTIAL dan tidak dipindahkan secara keliru ke D1.
    admission berikutnya. Jangan menaruh klasifikasi berbayar/IO diam-diam di
    repository generik tanpa keputusan kontrak C9/C12.
 2. E5/E9 delete: hitung daftar hasil dan tolak/karantina mutation bila tidak
-   tersisa referensi layak; satukan keputusan DB/storage agar rollback-nya
-   eksplisit.
+   tersisa referensi layak. Cleanup storage sesudah persist sudah best-effort;
+   kegagalannya tidak boleh menghidupkan kembali entry daftar.
 3. E8 append: terus wajibkan keys berasal dari helper bersidecar, lalu tutup
    gap brand (`merekTerdaftar`) dan eligibility daftar pada route boundary.
 
