@@ -22,7 +22,6 @@ function assertLabelGateBeforePersistence(source: string, context: string) {
   const post = posts[0];
   assert.ok(post.body, `${context}: exported POST wajib punya body`);
 
-  const gateCalls: ts.CallExpression[] = [];
   const persistenceCalls: ts.CallExpression[] = [];
   const functionBoundary = (node: ts.Node) =>
     ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)
@@ -36,74 +35,122 @@ function assertLabelGateBeforePersistence(source: string, context: string) {
     return null;
   };
 
-  const visitNode = (node: ts.Node): void => {
-    if (node !== post && functionBoundary(node)) return; // fungsi lokal bukan control flow POST
-    if (ts.isBlock(node)) { visitBlock(node); return; }
-    if (ts.isStatement(node)) { visitStatement(node); return; }
+  // Persistence wajib satu call aktual di POST; nested helper tidak dihitung.
+  const collectPersistence = (node: ts.Node): void => {
+    if (node !== post && functionBoundary(node)) return;
     if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression)) {
       const callee = node.expression.expression;
-      if (ts.isIdentifier(callee) && callee.text === "periksaLabelFoto") gateCalls.push(node.expression);
       if (ts.isIdentifier(callee) && callee.text === "saveUniqueProductImages") persistenceCalls.push(node.expression);
     }
-    ts.forEachChild(node, visitNode);
+    ts.forEachChild(node, collectPersistence);
   };
-  const visitBlock = (block: ts.Block): void => {
-    let reachable = true;
-    for (const statement of block.statements) {
-      if (!reachable) break;
-      reachable = visitStatement(statement);
-    }
-  };
-  const visitStatement = (statement: ts.Statement): boolean => {
-    if (ts.isFunctionDeclaration(statement)) return true;
-    if (ts.isBlock(statement)) { visitBlock(statement); return true; }
-    if (ts.isIfStatement(statement)) {
-      visitNode(statement.expression);
-      const known = constantBoolean(statement.expression);
-      if (known !== false) visitStatement(statement.thenStatement);
-      if (known !== true && statement.elseStatement) visitStatement(statement.elseStatement);
-      return true;
-    }
-    if (ts.isWhileStatement(statement)) {
-      visitNode(statement.expression);
-      if (constantBoolean(statement.expression) !== false) visitStatement(statement.statement);
-      return true;
-    }
-    if (ts.isForStatement(statement)) {
-      if (statement.initializer) visitNode(statement.initializer);
-      if (statement.condition) visitNode(statement.condition);
-      if (!statement.condition || constantBoolean(statement.condition) !== false) visitStatement(statement.statement);
-      if (statement.incrementor) visitNode(statement.incrementor);
-      return true;
-    }
-    if (ts.isForInStatement(statement) || ts.isForOfStatement(statement)) {
-      visitNode(statement.initializer); visitNode(statement.expression); visitStatement(statement.statement);
-      return true;
-    }
-    if (ts.isDoStatement(statement)) {
-      visitStatement(statement.statement); visitNode(statement.expression);
-      return true;
-    }
-    if (ts.isTryStatement(statement)) {
-      visitBlock(statement.tryBlock);
-      if (statement.catchClause) visitBlock(statement.catchClause.block);
-      if (statement.finallyBlock) visitBlock(statement.finallyBlock);
-      return true;
-    }
-    if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
-      if (statement.expression) visitNode(statement.expression);
-      return false;
-    }
-    ts.forEachChild(statement, visitNode);
-    return true;
+  collectPersistence(post.body);
+  assert.equal(persistenceCalls.length, 1, `${context}: wajib tepat satu call persistence aktual`);
+  const persistence = persistenceCalls[0];
+
+  type GateState = Set<boolean>; // false=belum melewati gate, true=sudah
+  const gabung = (...sets: GateState[]): GateState => new Set(sets.flatMap((set) => [...set]));
+  const markGate = (node: ts.Node, input: GateState): GateState => {
+    let found = false;
+    const visit = (child: ts.Node): void => {
+      if (child !== node && functionBoundary(child)) return;
+      if (ts.isAwaitExpression(child) && ts.isCallExpression(child.expression)) {
+        const callee = child.expression.expression;
+        if (ts.isIdentifier(callee) && callee.text === "periksaLabelFoto") found = true;
+      }
+      ts.forEachChild(child, visit);
+    };
+    visit(node);
+    return found ? new Set([true]) : new Set(input);
   };
 
-  visitBlock(post.body);
-  assert.equal(gateCalls.length, 1, `${context}: wajib tepat satu call label gate aktual`);
-  assert.equal(persistenceCalls.length, 1, `${context}: wajib tepat satu call persistence aktual`);
-  assert.ok(
-    gateCalls[0].getStart(ast) < persistenceCalls[0].getStart(ast),
-    `${context}: gerbang label harus mendahului persistence`
+  const flowBlock = (block: ts.Block, input: GateState): GateState => {
+    let states = new Set(input);
+    for (const statement of block.statements) {
+      if (states.size === 0) break;
+      states = flowStatement(statement, states);
+    }
+    return states;
+  };
+  const flowStatement = (statement: ts.Statement, input: GateState): GateState => {
+    if (ts.isFunctionDeclaration(statement)) return new Set(input);
+    if (ts.isBlock(statement)) return flowBlock(statement, input);
+    if (ts.isIfStatement(statement)) {
+      const afterCondition = markGate(statement.expression, input);
+      const known = constantBoolean(statement.expression);
+      const thenOut = known === false ? new Set<boolean>() : flowStatement(statement.thenStatement, afterCondition);
+      const elseOut = known === true
+        ? new Set<boolean>()
+        : statement.elseStatement ? flowStatement(statement.elseStatement, afterCondition) : afterCondition;
+      return gabung(thenOut, elseOut);
+    }
+    if (ts.isTryStatement(statement)) {
+      const tryOut = flowBlock(statement.tryBlock, input);
+      // Catch dapat dimasuki karena gate melempar SEBELUM sukses; ia harus
+      // mulai dari state masuk, bukan state normal keluaran try.
+      const catchOut = statement.catchClause
+        ? flowBlock(statement.catchClause.block, input)
+        : new Set<boolean>();
+      const normalOut = gabung(tryOut, catchOut);
+      return statement.finallyBlock ? flowBlock(statement.finallyBlock, normalOut) : normalOut;
+    }
+    if (ts.isWhileStatement(statement) || ts.isForStatement(statement)
+      || ts.isForInStatement(statement) || ts.isForOfStatement(statement)) {
+      // Loop mungkin nol iterasi; jalur itu wajib ikut merge.
+      return gabung(input, flowStatement(statement.statement, input));
+    }
+    if (ts.isDoStatement(statement)) return flowStatement(statement.statement, input);
+    const after = markGate(statement, input);
+    if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)
+      || ts.isBreakStatement(statement) || ts.isContinueStatement(statement)) return new Set();
+    return after;
+  };
+
+  const directStatementIn = (node: ts.Node, block: ts.Block): ts.Statement | null => {
+    let current: ts.Node = node;
+    while (current.parent && current.parent !== block) current = current.parent;
+    return current.parent === block && ts.isStatement(current) ? current : null;
+  };
+  const isFirstPhotoCondition = (expression: ts.Expression): boolean => {
+    let hasFirstBlob = false;
+    let hasEmptyImages = false;
+    const visit = (node: ts.Node): void => {
+      if (ts.isElementAccessExpression(node)
+        && ts.isIdentifier(node.expression) && node.expression.text === "blobs"
+        && node.argumentExpression && ts.isNumericLiteral(node.argumentExpression)
+        && node.argumentExpression.text === "0") hasFirstBlob = true;
+      if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken
+        && ts.isPropertyAccessExpression(node.operand) && node.operand.name.text === "length") hasEmptyImages = true;
+      if (ts.isBinaryExpression(node)
+        && [ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken].includes(node.operatorToken.kind)) {
+        const lengthVsZero = (left: ts.Expression, right: ts.Expression) =>
+          ts.isPropertyAccessExpression(left) && left.name.text === "length"
+          && ts.isNumericLiteral(right) && right.text === "0";
+        if (lengthVsZero(node.left, node.right) || lengthVsZero(node.right, node.left)) hasEmptyImages = true;
+      }
+      ts.forEachChild(node, visit);
+    };
+    visit(expression);
+    return hasFirstBlob && hasEmptyImages;
+  };
+  const candidates: ts.IfStatement[] = [];
+  const findGuardedBranch = (node: ts.Node): void => {
+    if (node !== post && functionBoundary(node)) return;
+    if (ts.isIfStatement(node) && ts.isBlock(node.parent)) {
+      const persistenceStatement = directStatementIn(persistence, node.parent);
+      const branchIndex = node.parent.statements.indexOf(node);
+      const persistenceIndex = persistenceStatement ? node.parent.statements.indexOf(persistenceStatement) : -1;
+      const exits = flowStatement(node.thenStatement, new Set([false]));
+      if (constantBoolean(node.expression) !== false && isFirstPhotoCondition(node.expression)
+        && persistenceIndex > branchIndex && exits.size > 0 && [...exits].every(Boolean)) candidates.push(node);
+    }
+    ts.forEachChild(node, findGuardedBranch);
+  };
+  findGuardedBranch(post.body);
+  assert.equal(
+    candidates.length,
+    1,
+    `${context}: persistence wajib sesudah tepat satu branch foto-pertama yang semua normal exit-nya melewati gate`
   );
 }
 
@@ -194,11 +241,23 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
       await saveUniqueProductImages(id, blobs);
       await periksaLabelFoto(tmpFile, product.name);
     }`],
+    ["mutually exclusive if/else", `export async function POST() {
+      if (existing.length === 0 && blobs[0]) {
+        if (flag) await periksaLabelFoto(tmpFile, product.name);
+        else await saveUniqueProductImages(id, blobs);
+      }
+    }`],
+    ["catch persists after gate failure", `export async function POST() {
+      if (existing.length === 0 && blobs[0]) {
+        try { await periksaLabelFoto(tmpFile, product.name); }
+        catch { await saveUniqueProductImages(id, blobs); }
+      }
+    }`],
   ] as const;
   for (const [judul, source] of ditolak) {
     assert.throws(
       () => assertLabelGateBeforePersistence(source, `counterexample ${judul}`),
-      /call label gate aktual|gerbang label harus mendahului persistence/,
+      /call persistence aktual|persistence wajib sesudah tepat satu branch foto-pertama/,
       `${judul} tidak boleh memenangkan structural guard`
     );
   }
