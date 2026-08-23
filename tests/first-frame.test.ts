@@ -31,11 +31,13 @@ function shots(templateId: string) {
   }).shots;
 }
 
-test("shot yang menahan produk terdeteksi butuh frame buatan", () => {
+test("pembuka staging Ads tidak lagi menyamar sebagai shot tanpa produk", () => {
   for (const id of ["ads-atap-jebol", "ads-dobrak-pintu", "ads-tembus-dinding", "ads-waktu-berhenti", "ads-panas-ekstrem"]) {
     const p = shots(id)[0];
-    assert.ok(perluFrameBuatan(p), `${id}: pembuka tidak terdeteksi butuh frame buatan`);
-    assert.ok(harusMenahanProduk(p), `${id}: pembuka tidak terdeteksi menahan produk`);
+    assert.match(p.prompt, /stage|staged|theatrical|prop|cardboard|paper|printed|red practical lamp/i, `${id}: staging pembuka hilang`);
+    assert.match(p.prompt, /card|identity/i, `${id}: kontinuitas identitas hilang dari prompt final`);
+    assert.equal(harusMenahanProduk(p), false, `${id}: pembuka netral masih menahan produk`);
+    assert.equal(perluFrameBuatan(p), false, `${id}: frame buatan legacy masih diminta`);
   }
 });
 

@@ -2,6 +2,9 @@ import { CAMPAIGN_TEMPLATES, type CampaignTemplate } from "../templates";
 import { DELIVERY_EMPHASIS_TAGS, DELIVERY_TAGS, misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
 import { TEMPLATE_COPY } from "./template-copy";
 import { generateScripts, type GeneratedScript, type ProductInput } from "./index";
+import { planShots } from "../media/shot-planner";
+import { getCreatorCategory } from "../personas";
+import { ugcRolesFor } from "../media/ugc-template-roles";
 
 /**
  * Satu produk dipakai untuk seluruh katalog supaya perbedaan yang dihitung
@@ -140,7 +143,10 @@ export interface CatalogTemplateAudit {
       text: string;
       ttsText: string | null;
       normalized: string;
+      action: string | null;
+      visualDirection: string | null;
     }>;
+    assembledShotDirections: string[];
     delivery: {
       mode: "voiced" | "silent";
       allowedTags: string[];
@@ -268,6 +274,59 @@ export interface CatalogScriptAudit {
   };
 }
 
+/** Satu-satunya evaluator target Ads visual. Dipakai audit produksi dan tes
+ * mutasi supaya action, visual_direction, role table, dan prompt akhir tidak
+ * pernah punya jalur pemeriksaan yang berbeda. */
+export function adsUnsupportedOutcomeFindings(templates: CatalogTemplateAudit[]): CatalogLanguageFinding[] {
+  const rendered = templates
+    .filter((template) => template.group === "ads")
+    .flatMap((template) => template.variants.flatMap((variant) =>
+      [
+        ...variant.segments.flatMap((segment) => [
+          { role: segment.role, text: segment.text },
+          ...(segment.action ? [{ role: `${segment.role}:action`, text: segment.action }] : []),
+          ...(segment.visualDirection ? [{ role: `${segment.role}:visual_direction`, text: segment.visualDirection }] : []),
+        ]),
+        ...variant.assembledShotDirections.map((text, shotIndex) => ({ role: `shot_prompt_${shotIndex + 1}`, text })),
+      ].flatMap((evidence) => {
+        const matches = unsupportedAdsOutcomeClaims(evidence.text);
+        return matches.length === 0 ? [] : [{
+          templateId: template.templateId,
+          variantIndex: variant.variantIndex,
+          role: evidence.role,
+          text: evidence.text,
+          matches,
+        }];
+      })
+    ));
+  const roles = templates
+    .filter((template) => template.group === "ads")
+    .flatMap((template) => {
+      const table = ugcRolesFor(template.templateId);
+      if (!table) return [];
+      const evidence = [
+        ...(table.opening ? [{ role: "ugc_role_opening", text: `${table.opening.role} ${table.opening.camera}` }] : []),
+        ...table.middle.map((role, index) => ({ role: `ugc_role_middle_${index + 1}`, text: `${role.role} ${role.camera}` })),
+        ...(table.closing ? [{ role: "ugc_role_closing", text: `${table.closing.role} ${table.closing.camera}` }] : []),
+      ];
+      return evidence.flatMap((item) => {
+        const matches = unsupportedAdsOutcomeClaims(item.text);
+        return matches.length === 0 ? [] : [{
+          templateId: template.templateId,
+          variantIndex: -1,
+          role: item.role,
+          text: item.text,
+          matches,
+        }];
+      });
+    });
+  return [...rendered, ...roles];
+}
+
+export function adsStayOutcomeNeutral(templates: CatalogTemplateAudit[]): boolean {
+  return adsUnsupportedOutcomeFindings(templates).length === 0;
+}
+
 /**
  * Normalisasi exact-match sengaja menghapus kapitalisasi, emoji, tanda baca,
  * aksen, dan spasi ganda. Perubahan kosmetik tidak boleh dihitung sebagai
@@ -342,6 +401,13 @@ const ADS_UNSUPPORTED_OUTCOMES = [
   /\b(?:ampuh|efektif|berkhasiat|memudahkan|mendinginkan|menyejukkan)\b/giu,
   /\b(?:segel(?:nya)? (?:terbuka|lepas) mulus|lebih (?:mudah|praktis|nyaman|cepat|ringkas)|jadi (?:lebih )?(?:mudah|praktis|nyaman|cepat|sejuk|dingin))\b/giu,
   /\b(?:tetap utuh|masih bekerja|tetap bekerja)\b[^.!?;]{0,45}\b(?:setelah|sesudah|habis)\b/giu,
+  /\b(?:breaks? through the wall|broken wall|ceiling gives way|kicked open|debris and dust bursting)\b/giu,
+  /\b(?:undamaged|dazed but unhurt|completely composed|proof this really happened)\b/giu,
+  /\b(?:the only thing still moving|world snaps back into motion)\b/giu,
+  /\b(?:work finishing by itself|progress bar completing|finished result on screen|objects begin vanishing)\b/giu,
+  /\b(?:first moment of relief|visibly fine|changed reaction|product in hand and working)\b/giu,
+  /\b(?:deadline|limited stock|stock countdown|urgency in delivery|offer is worth taking)\b/giu,
+  /\b(?:dashboard|progress bar|queue moving|service result|automatic work)\b/giu,
 ];
 
 const CREATIVE_ANALYSIS_PHRASES = [
@@ -668,7 +734,24 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
         text: segment.text,
         ttsText: segment.tts_text ?? null,
         normalized: normalizeAuditText(segment.text),
+        action: segment.action?.trim() || null,
+        visualDirection: segment.visual_direction?.trim() || null,
       }));
+      const assembledShotDirections = template.group === "ads"
+        ? planShots({
+            jobId: `catalog-audit-${template.id}-${variantIndex}`,
+            durationSec: template.durationSec,
+            segments: variant.segments,
+            category: getCreatorCategory("hijaber")!,
+            productName: product.name,
+            productCategory: product.category,
+            imageRefPath: "/tmp/catalog-script-audit-product.jpg",
+            qualityTier: template.tier,
+            format: template.format,
+            ugcTemplate: template.id,
+            shotCountOverride: template.shotCount,
+          }).shots.map((shot) => shot.prompt)
+        : [];
       const ttsTexts = variant.segments.flatMap((segment) => segment.tts_text ? [segment.tts_text] : []);
       const allowedTags = ttsTexts.flatMap(allowedDeliveryTags);
       const signature = variant.segments
@@ -692,6 +775,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
         hook: hookSegment ? textRef(template.id, variantIndex, hookSegment.text) : null,
         scriptNormalized: segments.map((segment) => `${segment.role}:${segment.normalized}`).join("|"),
         segments,
+        assembledShotDirections,
         delivery: {
           mode,
           allowedTags,
@@ -863,20 +947,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     ));
   const productionJargonRefs = languageFindings(spokenProductionJargon);
   const unsupportedClaimRefs = languageFindings(unsupportedFactualClaims);
-  const adsUnsupportedOutcomeRefs = rawTemplates
-    .filter((template) => template.group === "ads")
-    .flatMap((template) => template.variants.flatMap((variant) =>
-      variant.segments.flatMap((segment) => {
-        const matches = unsupportedAdsOutcomeClaims(segment.text);
-        return matches.length === 0 ? [] : [{
-          templateId: template.templateId,
-          variantIndex: variant.variantIndex,
-          role: segment.role,
-          text: segment.text,
-          matches,
-        }];
-      })
-    ));
+  const adsUnsupportedOutcomeRefs = adsUnsupportedOutcomeFindings(rawTemplates);
   const creativeAnalysisRefs = languageFindings(spokenCreativeAnalysis);
   const danglingFragmentRefs = languageFindings(danglingFragmentReasons);
   const mechanicalPhraseRefs = rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
@@ -1031,7 +1102,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     noSharedBodyBlocks: repeatedBodyBlocks.length === 0,
     noSpokenProductionJargon: productionJargonRefs.length === 0,
     noUnsupportedFactualClaims: unsupportedClaimRefs.length === 0,
-    adsStayOutcomeNeutral: adsUnsupportedOutcomeRefs.length === 0,
+    adsStayOutcomeNeutral: adsStayOutcomeNeutral(rawTemplates),
     noSpokenCreativeAnalysis: creativeAnalysisRefs.length === 0,
     riskyEvidenceTemplatesStayNeutral: semanticRiskRefs.length === 0,
     noDanglingFragments: danglingFragmentRefs.length === 0,

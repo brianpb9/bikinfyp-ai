@@ -4,6 +4,8 @@ import { createHash } from "node:crypto";
 import { DELIVERY_TAGS } from "../lib/script-engine/delivery-tags";
 import {
   SCRIPT_CATALOG_AUDIT_FIXTURE,
+  adsStayOutcomeNeutral,
+  adsUnsupportedOutcomeFindings,
   auditProductForTemplate,
   bannedHookBoilerplateStarter,
   danglingFragmentReasons,
@@ -24,6 +26,7 @@ import { CAMPAIGN_TEMPLATES, KATALOG_BUTUH_COPY } from "../lib/templates";
 import { generateScripts } from "../lib/script-engine";
 import { periksaStoryOsAds } from "../lib/script-engine/story-os-ads";
 import { COMPACTED_TEMPLATE_IDS } from "../lib/script-engine/template-copy";
+import { UGC_TEMPLATE_ROLES } from "../lib/media/ugc-template-roles";
 
 const audit = await generateCatalogScriptAudit();
 const { summary } = audit;
@@ -480,6 +483,80 @@ test("sembilan Story Ads menolak outcome tanpa bukti dan menerima staging netral
   for (const [templateId, copy] of Object.entries(mutations)) {
     assert.ok(unsupportedAdsOutcomeClaims(copy).length > 0, `${templateId}: ${copy}`);
     assert.deepEqual(unsupportedAdsOutcomeClaims(safeControls[templateId]), [], `${templateId}: ${safeControls[templateId]}`);
+  }
+});
+
+test("prompt shot final 9 Story Ads x 4 varian tetap outcome-neutral", () => {
+  const adsTemplates = audit.templates.filter((template) => template.group === "ads");
+  assert.equal(adsTemplates.length, 9);
+  for (const template of adsTemplates) {
+    assert.equal(template.variants.length, 4);
+    for (const variant of template.variants) {
+      assert.ok(variant.assembledShotDirections.length > 0, `${template.templateId}#${variant.variantIndex} tanpa prompt final`);
+      for (const prompt of variant.assembledShotDirections) {
+        assert.deepEqual(
+          unsupportedAdsOutcomeClaims(prompt),
+          [],
+          `${template.templateId}#${variant.variantIndex} prompt visual: ${prompt.slice(0, 240)}`
+        );
+      }
+    }
+  }
+  assert.equal(summary.targets.adsStayOutcomeNeutral, true);
+  assert.deepEqual(summary.adsUnsupportedOutcomeRefs, []);
+});
+
+test("mutasi outcome visual mematikan target audit secara end-to-end", async () => {
+  const mutations: Array<[string, string, string]> = [
+    ["ads-tembus-dinding", "durability", "the product remains undamaged beside a broken wall"],
+    ["ads-atap-jebol", "destruction", "the ceiling gives way with debris and dust bursting forward"],
+    ["ads-meja-kosong", "automatic-work", "a dashboard shows work finishing by itself and a progress bar completing"],
+    ["ads-panas-ekstrem", "relief", "the product activates and creates the first moment of relief"],
+    ["ads-waktu-berhenti", "efficacy", "the product is the only thing still moving in the scene"],
+    ["kenalin-bisnis", "service-result", "a dashboard shows the queue moving and a service result"],
+    ["promo-terbatas", "scarcity", "a deadline and limited stock countdown fill the screen"],
+  ];
+  for (const [templateId, outcomeClass, mutation] of mutations) {
+    const opening = UGC_TEMPLATE_ROLES[templateId].opening!;
+    const original = opening.role;
+    try {
+      opening.role = mutation;
+      const mutatedAudit = await generateCatalogScriptAudit();
+      assert.equal(mutatedAudit.summary.targets.adsStayOutcomeNeutral, false, `${templateId}:${outcomeClass}`);
+      assert.ok(
+        mutatedAudit.summary.adsUnsupportedOutcomeRefs.some((ref) =>
+          ref.templateId === templateId && ref.role.startsWith("shot_prompt_")
+        ),
+        `${templateId}:${outcomeClass} tidak tertangkap pada prompt final`
+      );
+    } finally {
+      opening.role = original;
+    }
+  }
+});
+
+test("evaluator target yang sama menangkap mutasi action dan visual_direction", () => {
+  const actionMutation = structuredClone(audit.templates);
+  const actionSegment = actionMutation.find((template) => template.templateId === "ads-meja-kosong")!.variants[0].segments[0];
+  actionSegment.action = "a dashboard shows work finishing by itself and a progress bar completing";
+  assert.equal(adsStayOutcomeNeutral(actionMutation), false);
+  assert.ok(adsUnsupportedOutcomeFindings(actionMutation).some((ref) => ref.role.endsWith(":action")));
+
+  const visualMutation = structuredClone(audit.templates);
+  const visualSegment = visualMutation.find((template) => template.templateId === "ads-tembus-dinding")!.variants[0].segments[0];
+  visualSegment.visualDirection = "the product remains undamaged beside a broken wall";
+  assert.equal(adsStayOutcomeNeutral(visualMutation), false);
+  assert.ok(adsUnsupportedOutcomeFindings(visualMutation).some((ref) => ref.role.endsWith(":visual_direction")));
+});
+
+test("role staging kesembilan Ads adalah safe controls", () => {
+  for (const template of CAMPAIGN_TEMPLATES.filter((item) => item.group === "ads")) {
+    const roles = UGC_TEMPLATE_ROLES[template.id];
+    assert.ok(roles, `${template.id} tanpa role table`);
+    const directions = [roles.opening, ...roles.middle, roles.closing].filter(Boolean);
+    for (const direction of directions) {
+      assert.deepEqual(unsupportedAdsOutcomeClaims(direction!.role), [], `${template.id}: ${direction!.role}`);
+    }
   }
 });
 

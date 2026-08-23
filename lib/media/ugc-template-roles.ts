@@ -53,26 +53,6 @@ export interface UgcTemplateRoles {
 }
 
 
-/** JANGKAR DUNIA untuk template pattern-interrupt yang merusak sesuatu.
- *
- *  Ditemukan lewat review kreatif 2026-08-14: "ads-tembus-dinding" keluar
- *  dengan latar KOTA HANCUR bermandi senja di shot penutup — untuk iklan sabun
- *  mandi. Peran-nya sudah menulis "the same room" dan "the broken wall still in
- *  frame", tapi tidak pernah menyebut apa yang ada DI BALIK lubangnya. Model
- *  mengisi kekosongan itu dengan menaikkan taruhannya: dinding jebol menjadi
- *  kiamat.
- *
- *  Sekali lagi polanya sama seperti empat cacat sebelumnya — bukan larangan
- *  yang kurang keras, tapi permintaan yang tidak lengkap. Kalau sebuah detail
- *  penting tidak dinyatakan, model akan mengarangnya, dan arangannya selalu
- *  lebih dramatis daripada yang kita mau.
- *
- *  Ditulis positif: sebutkan dunianya, bukan larang bencananya. */
-const JANGKAR_DUNIA =
-  " Beyond the breach is simply the next room of an ordinary Indonesian home — plain painted wall, " +
-  "everyday furniture, normal daylight. This is a small domestic surprise, not a disaster: no ruined " +
-  "city, no rubble field, no smoke, no apocalyptic sky, nothing outside the house is damaged.";
-
 export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   // T01 — produk dibawa ke tempat yang bikin memakainya merepotkan.
   // Kunci dari dokumennya: hanya 13% durasi yang benar-benar iklan, dan satu
@@ -278,74 +258,60 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
       camera: `static selfie, natural micro-shake`,
     },
   },
-  // --- ENAM ADS LAMA (tabel ditambahkan 2026-08-13) ---
-  //
-  // Keenamnya tayang sejak awal TANPA tabel peran, jadi selama ini semuanya
-  // jatuh ke beat generik: presenter memegang produk sambil bicara. Nama
-  // kartunya menjanjikan atap runtuh, pintu didobrak, waktu berhenti — dan
-  // tidak satu pun pernah terjadi di videonya. Ini gap yang sama persis yang
-  // ditemukan pada tiga ads baru lewat render, cuma di template yang lebih
-  // lama dan karena itu lebih lama diam.
-  //
-  // EMPAT PATTERN-INTERRUPT punya bentuk yang sama: interupsi dulu, produk
-  // BELAKANGAN. Yang membedakan hanya ARAH interupsinya — dari belakang, dari
-  // atas, dari depan, atau waktu yang membeku. Perbedaan arah itulah yang
-  // harus ditulis; kalau tidak, keempatnya keluar sama seperti sekarang.
+  // Story Ads memakai properti panggung yang terlihat jelas sebagai staging.
+  // Role hanya boleh mengatur komposisi kartu/label/nama/kategori/harga yang
+  // disetujui. Outcome produk, hasil layanan, kelangkaan, dan daya tahan tidak
+  // boleh lahir dari tabel visual ketika input hanya memberi identitas dasar.
   "ads-tembus-dinding": {
     opening: {
-      role: `an ordinary quiet room with a person going about something mundane in the foreground, then WITHOUT WARNING something massive breaks through the wall directly behind them — debris and dust bursting forward. The product is NOT visible yet.${JANGKAR_DUNIA}`,
-      withholdProduct: true,
-      camera: `static wide, locked off so the breach reads clearly`,
+      role: `a clearly theatrical cardboard wall panel on a tabletop stage shifts sideways while lightweight white foam pieces fall in front of it; a printed identity card is already visible beside the panel`,
+      camera: `static wide, locked off so the cardboard panel and identity card read clearly`,
     },
     middle: [
-      { role: `the aftermath in the same room: dust settling, the person turning to look, still processing what just happened`,
-        camera: `slight handheld push in toward their reaction` },
-      { role: `the product finally raised into frame, calm and undamaged, the chaos still visible behind it`,
-        camera: `steady close-up on the product with the wreckage soft behind` },
+      { role: `a hand slides the printed identity card through the opening in the cardboard panel, with only the product name or category readable`,
+        camera: `slight handheld push toward the card and cardboard texture` },
+      { role: `the label or service card is held beside the foam panel as a plain identity display`,
+        camera: `steady close-up on the readable card` },
     ],
     closing: {
-      role: `one continuous shot: product held to camera, the closing line spoken, the broken wall still in frame as proof this really happened.${JANGKAR_DUNIA}`,
+      role: `one continuous shot of the readable identity card under a small lamp, with the cardboard panel and foam props still visibly theatrical behind it`,
       camera: `single continuous take, no cuts` },
   },
   "ads-atap-jebol": {
     opening: {
-      role: `a calm interior seen from below, then the CEILING gives way and someone drops into frame from above in a burst of dust and debris, landing hard. The product is NOT visible yet.${JANGKAR_DUNIA}`,
-      withholdProduct: true,
-      camera: `low angle looking up, locked off, so the fall enters from the top of frame` },
+      role: `a paper ceiling panel on a small indoor stage slides open and white confetti descends on strings; a printed product or service card hangs below it`,
+      camera: `low angle looking up, locked off so the paper panel and hanging card stay readable` },
     middle: [
-      { role: `the person picking themselves up amid fallen ceiling pieces, dazed but unhurt, the room now untidy around them but still clearly an ordinary home`,
-        camera: `handheld at their level, slightly unsteady` },
+      { role: `a hand lowers the identity card through the paper opening while the confetti continues to fall as an obvious stage effect`,
+        camera: `handheld at card level, gently following downward` },
     ],
     closing: {
-      role: `one continuous shot: they hold the product up to camera, completely composed now, ceiling debris still on the floor`,
+      role: `one continuous shot of the card or label facing camera beneath the paper panel, showing only its printed identity`,
       camera: `single continuous take, steady` },
   },
   "ads-dobrak-pintu": {
     opening: {
-      role: `an empty quiet room, nothing happening at all, held just long enough to feel still — then the door is KICKED OPEN and someone charges straight toward the camera. The product is NOT visible yet`,
-      withholdProduct: true,
-      pembukaDiam: true,
-      camera: `static frame facing the closed door, locked off` },
+      role: `a lightweight freestanding stage-door panel is tapped from behind, then its handle turns and a printed identity card slides into view through the opening`,
+      camera: `static frame facing the stage-door panel, locked off` },
     middle: [
-      { role: `they arrive right at the lens, out of breath, and hold the product up close so it fills the frame — the first time it is seen at all`,
-        camera: `static, the person and product coming to the camera rather than the camera moving` },
+      { role: `a uniformed stage attendant lifts the card near the open panel so the printed name or category faces camera`,
+        camera: `static, with the card moving toward the lens` },
     ],
     closing: {
-      role: `one continuous shot: product in hand, closing line spoken directly to camera, the open door still visible behind`,
+      role: `one continuous shot of the readable card resting beside the stage-door panel as a plain identity display`,
       camera: `single continuous take, no cuts` },
   },
   "ads-waktu-berhenti": {
     opening: {
-      role: `a busy everyday Indonesian scene full of motion — market stalls, steam rising, people walking — then EVERYTHING freezes mid-motion at once, steam suspended in the air, people mid-step. The product is NOT visible yet`,
-      withholdProduct: true,
-      camera: `slow steady drift through the frozen scene` },
+      role: `actors on a small market-style stage deliberately hold still poses beside a stopped prop clock, while a printed identity card remains visible on the counter`,
+      camera: `slow steady drift through the clearly staged tableau` },
     middle: [
-      { role: `the camera keeps moving through the frozen world and finds the product — the ONLY thing still moving in the entire frame`,
-        camera: `continuing the same drift, arriving on the product` },
+      { role: `the cashier lifts a printed card while every actor continues holding the rehearsed pose; the card shows only a name, category, or approved price`,
+        camera: `continuing the same drift, arriving on the readable card` },
     ],
     closing: {
-      role: `one continuous shot: the world snaps back into motion around the product while it stays perfectly steady, closing line spoken`,
-      camera: `single continuous take, locked off on the product` },
+      role: `one continuous shot of the prop clock, posed actors, and readable card together as a theatrical tableau`,
+      camera: `single continuous take, locked off on the card` },
   },
 
   // DUA ADS PENJELAS. Bentuknya kebalikan dari empat di atas: tidak ada
@@ -353,30 +319,30 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   // Yang dijual kejelasan, bukan kejutan.
   "kenalin-bisnis": {
     opening: {
-      role: `the person introducing themselves and the business straight to camera, standing where the business actually happens — a shop counter, a workshop, a desk — not a blank studio`,
+      role: `a person opens a folded information card at a plain desk; the business name and category are printed clearly against blank paper props`,
       camera: `static at eye level, no movement` },
     middle: [
-      { role: `showing what the business actually does, in the real place, with real hands doing the real work`,
-        camera: `handheld following the work` },
-      { role: `who it is for and what changes for them, spoken plainly with the workplace still visible behind`,
-        camera: `static medium shot` },
+      { role: `hands point to the printed business name and category on the card, then place it in front of an off-camera witness`,
+        camera: `handheld following the card` },
+      { role: `the same identity card is turned toward camera beside a blank note page as a plain identity display`,
+        camera: `static medium close-up` },
     ],
     closing: {
-      role: `one continuous shot: a plain, unhurried invitation to get in touch, spoken directly to camera`,
+      role: `one continuous shot of the printed business identity card facing camera on the desk`,
       camera: `single continuous take, static` },
   },
   "promo-terbatas": {
     opening: {
-      role: `straight to the offer with no preamble at all — the product held up and the deadline stated in the first breath`,
-      camera: `static close, product already in frame` },
+      role: `a price card is opened beside the product or service identity card, showing the approved price supplied in the brief`,
+      camera: `static close, both cards already in frame` },
     middle: [
-      { role: `the reason the offer is worth taking, shown rather than claimed: the product being used or opened`,
-        camera: `close handheld on the product in use` },
-      { role: `the offer restated with the product clearly readable, urgency in delivery rather than in graphics`,
-        camera: `static, product centred` },
+      { role: `a hand points once to the approved number on the price card and once to the printed product name`,
+        camera: `close handheld on the two cards` },
+      { role: `the price card is turned toward a cashier witness while the identity card stays readable beside it`,
+        camera: `static, cards centred` },
     ],
     closing: {
-      role: `one continuous shot: the deadline repeated once and a direct instruction to act, product still in hand`,
+      role: `one continuous shot of the approved price and identity cards together on the same plain counter`,
       camera: `single continuous take, no cuts` },
   },
 
@@ -389,72 +355,63 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   // tanpa menambah strukturnya = menambah label, bukan menambah video.
   "ads-unboxing-pov": {
     opening: {
-      // Aturan #5 dokumen Brian: MASALAH DULU, BARU PRODUK. Di sini
-      // "masalahnya" adalah rasa penasaran — kardus yang belum dibuka.
-      role: `POV from INSIDE a closed cardboard box looking up: the flaps are pulled open from above and a face appears in the opening, lit by the light flooding in, reacting with genuine surprise — the product is NOT visible yet`,
-      withholdProduct: true,
+      role: `POV from inside a lightweight cardboard prop box looking up as the flaps open and a printed package label enters the light; the staging shows only the package identity`,
       camera: `static from inside the box looking straight up, the flaps opening into frame`,
     },
     middle: [
       {
-        role: `the product lifted out of the box for the first time and held up to camera, packaging still visible around it, the first proper look at what it actually is`,
-        camera: `handheld, following the product up out of the box`,
+        role: `a hand lifts the package identity card out of the prop box and turns the printed name toward camera`,
+        camera: `handheld, following the card up out of the box`,
       },
       {
-        role: `the product now in use or worn, the box discarded in the background — the moment it stops being a parcel and becomes something owned`,
-        camera: `static medium shot, presenter moving within the frame`,
+        role: `the product or service card rests beside the opened cardboard box while a hand points to its printed category`,
+        camera: `static medium close-up, hand moving within frame`,
       },
     ],
     closing: {
-      // Aturan #4: penutup SATU SHOT MENERUS, tidak bolak-balik antar scene.
-      role: `one continuous unbroken shot: wearing or holding the product, turning once to show it, speaking the closing line straight to camera — no cuts inside this shot`,
+      role: `one continuous unbroken shot of the open prop box and readable identity card together`,
       camera: `single continuous take, slow gentle handheld, no cuts`,
     },
   },
 
   "ads-meja-kosong": {
     opening: {
-      // Format anti-produksi: yang diperlihatkan BUKAN produknya, tapi
-      // hilangnya pekerjaan. Karena itu tidak ada produk sama sekali di sini.
-      role: `a working desk crowded with production gear — camera, tripod, lights, notebooks, cables — then the objects begin vanishing one by one, fastest at the start`,
-      camera: `locked-off wide on the desk, no movement at all so the disappearances read clearly`,
+      role: `a plain desk holds three printed information cards, a small lamp, and a pen; a hand opens the centre card so its identity line faces camera`,
+      camera: `locked-off wide on the desk so every staged prop remains visible`,
     },
     middle: [
       {
-        role: `the desk now almost empty, only a laptop left, the room noticeably quieter and cleaner than it was`,
-        camera: `very slow push in toward the laptop`,
+        role: `the centre card moves closer to an off-camera witness while the other two cards remain stationary`,
+        camera: `very slow push toward the printed card`,
       },
       {
-        role: `a screen showing work finishing by itself — a progress bar completing, a result appearing — no hands touching anything`,
-        camera: `static close on the screen`,
+        role: `a hand points to the printed name or category on the card beside a blank sheet of paper`,
+        camera: `static close on the card`,
       },
     ],
     closing: {
-      role: `one continuous shot of the empty tidy desk with the finished result on screen, calm and resolved — the point is what is NO LONGER there`,
+      role: `one continuous shot of the same three staged cards, with the centre identity line readable`,
       camera: `single continuous take, locked off, holds to the end`,
     },
   },
 
   "ads-panas-ekstrem": {
     opening: {
-      // Aturan #5 lagi, dan ini paling keras: kalau produk sudah aktif sejak
-      // frame pertama, tidak ada yang diselesaikan dan hook-nya mati.
-      role: `the everyday problem pushed to an absurd extreme, and the person visibly SUFFERING from it — uncomfortable, exasperated, on the edge of giving up. The product must NOT be visible or in use yet`,
-      withholdProduct: true,
-      camera: `handheld selfie at arm's length, slightly unsteady from the discomfort`,
+      role: `a clearly staged red lamp, paper fan, misted prop glass, and thin theatrical haze surround a printed identity card already visible on the table`,
+      camera: `handheld at table height, gently moving among the staged props`,
     },
     middle: [
       {
-        role: `the product finally raised into frame and switched on, held close to camera so what it does is unmistakable — the first moment of relief`,
-        camera: `product pushed toward the lens, then settling`,
+        role: `a hand lifts the paper fan and turns its printed product or service name toward the lens as a static identity display`,
+        camera: `card and fan move toward the lens, then settle`,
       },
       {
-        role: `the same person, same place, same absurd conditions — but now visibly fine, the contrast doing all the work without a single claim being spoken`,
-        camera: `static, holding on the changed reaction`,
+        role: `the printed label is held beside the red lamp and prop glass while the theatrical conditions remain unchanged`,
+        camera: `static, holding on the label and props`,
       },
     ],
     closing: {
-      role: `one continuous shot: still in the extreme setting, product in hand and working, speaking the closing line straight to camera with a small satisfied smile`,
+      role: `one continuous shot of the readable identity card among the same red-light props and theatrical haze`,
       camera: `single continuous take, steady handheld, no cuts`,
     },
   },

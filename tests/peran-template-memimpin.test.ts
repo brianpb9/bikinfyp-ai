@@ -41,7 +41,7 @@ test("tiga template UGC Ads baru punya tabel peran shot", () => {
 
 test("format ads TIDAK lagi membuang tabel peran yang sudah ada", () => {
   const p = shots("ads-meja-kosong")[0].prompt;
-  assert.match(p, /crowded with production gear|vanishing one by one/i, "peran template ads dibuang lagi");
+  assert.match(p, /three printed information cards|centre card/i, "peran template ads dibuang lagi");
 });
 
 // Inti perbaikannya: peran memimpin, framing bawaan tidak ikut. Kalau framing
@@ -61,14 +61,14 @@ test("ketiga template menghasilkan shot pembuka yang BERBEDA", () => {
   assert.equal(new Set(p).size, 3, "tiga template ads masih menghasilkan pembuka identik");
 });
 
-// Aturan #5 dokumen Brian: MASALAH DULU, BARU PRODUK.
-test("template 'masalah dulu' menahan produk di shot pembuka", () => {
+test("template panas memakai properti panggung, bukan outcome pendinginan", () => {
   const p = shots("ads-panas-ekstrem")[0].prompt;
-  assert.match(p, /must NOT be visible or in use yet/i, "produk tidak ditahan — hook-nya mati");
+  assert.match(p, /staged red lamp|paper fan|theatrical haze/i);
+  assert.doesNotMatch(p, /first moment of relief|visibly fine|product in hand and working/i);
 });
 
 test("unboxing membuka dari DALAM kardus, bukan dari wajah", () => {
-  assert.match(shots("ads-unboxing-pov")[0].prompt, /INSIDE a closed cardboard box/i);
+  assert.match(shots("ads-unboxing-pov")[0].prompt, /inside a lightweight cardboard prop box/i);
 });
 
 // Template LAMA tidak boleh ikut berubah perilakunya.
