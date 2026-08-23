@@ -341,7 +341,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   if (config.providerVideo === "mock") throw new Error("Worker PostgreSQL membutuhkan PROVIDER_VIDEO nyata; fixture hanya diizinkan untuk test lokal eksplisit.");
   const segments = JSON.parse(row.script_segments) as SegmentDraft[];
   const admisi = bacaSnapshot(row.script_validation_result);
-  const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: row.template_id ?? admisi?.templateId ?? null };
+  const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: row.template_id ?? admisi?.templateId ?? null, durationSec: row.duration_s };
   if (isStructuredStoryAds(storyIdentity) && !row.job_product_snapshot) {
     throw new UnsafeLegacyProductSnapshot(
       "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: Story Ads lama tanpa harga admission tidak boleh memakai row produk mutable."

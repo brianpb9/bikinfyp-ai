@@ -94,7 +94,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
   try {
     const script = db.prepare("SELECT * FROM scripts WHERE id = ?").get(job.script_id) as ScriptRow;
     const admisi = bacaSnapshot(script.validation_result);
-    const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: admisi?.templateId ?? null };
+    const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: admisi?.templateId ?? null, durationSec: job.duration_s };
     let product = db.prepare("SELECT * FROM products WHERE id = ?").get(job.product_id) as ProductRow;
     const persona = job.persona_id
       ? (db.prepare("SELECT * FROM personas WHERE id = ?").get(job.persona_id) as PersonaRow | undefined)

@@ -28,7 +28,7 @@ import {
   AKU_TOKENS, FILLER_PHRASES, FILLER_TOKENS, GUE_TOKENS, KAMU_TOKENS, LO_TOKENS, PARTICLES,
 } from "./validator";
 import type { SegmentDraft } from "./templates";
-import { temuanHookSenyapAds } from "./story-os-ads";
+import { storyAdsTimeRanges, temuanHookSenyapAds } from "./story-os-ads";
 
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
 const VERSI_API = "2023-06-01";
@@ -377,10 +377,9 @@ function blokTugas(r: PermintaanNaskah): string {
   const jumlah = r.contentType === "ads"
     ? 5 // HOOK + 2×FRICTION + SPIKE + BUTTON adalah bentuk minimum Story OS
     : r.durationSec <= 15 ? 3 : r.durationSec <= 20 ? 4 : r.durationSec <= 30 ? 5 : 6;
-  const batasAds = [0, 0.2, 0.43, 0.67, 0.8, 1]
-    .map((ratio) => Number((ratio * r.durationSec).toFixed(2)));
-  const jadwalAds = batasAds.slice(0, -1)
-    .map((start, index) => `${start}-${batasAds[index + 1]}`).join(", ");
+  const jadwalAds = r.contentType === "ads"
+    ? storyAdsTimeRanges(r.durationSec).map(({ start, end }) => `${start}-${end}`).join(", ")
+    : "";
   // TIGA genre, bukan dua.
   //
   // Sampai render nyata 18 Agu, TVC tidak punya cabang di sini — jadi penulis

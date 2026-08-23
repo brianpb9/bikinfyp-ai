@@ -137,6 +137,35 @@ export function temuanHookSenyapAds(segments: Array<Record<string, unknown>>): s
 export interface StoryAdsIdentity extends StoryAdsProductEvidence {
   contentType?: "affiliate" | "ads" | null;
   templateId?: string | null;
+  durationSec?: number | null;
+}
+
+export interface StoryAdsTimeRange {
+  start: number;
+  end: number;
+}
+
+/**
+ * Satu-satunya sumber pembagian waktu Story Ads.
+ *
+ * Empat boundary awal menjaga SPIKE pada 67%; BUTTON memakai 20% durasi
+ * dengan clamp 3–6 detik. Durasi produksi aktif minimal 15 detik, sehingga
+ * kelima rentang selalu positif. Pembulatan dua desimal sama dengan angka
+ * yang ditulis ke prompt JSON dan dipakai fallback deterministik.
+ */
+export function storyAdsTimeRanges(durationSec: number): StoryAdsTimeRange[] {
+  if (!Number.isFinite(durationSec) || durationSec < 10) {
+    throw new Error(`STORY_ADS_DURATION_UNSCHEDULABLE: ${durationSec}`);
+  }
+  const round = (value: number) => Number(value.toFixed(2));
+  const buttonDuration = Math.min(6, Math.max(3, durationSec * 0.2));
+  const boundaries = [0, durationSec * 0.2, durationSec * 0.43, durationSec * 0.67, durationSec - buttonDuration, durationSec]
+    .map(round);
+  const ranges = boundaries.slice(0, -1).map((start, index) => ({ start, end: boundaries[index + 1] }));
+  if (ranges.some((range) => range.end <= range.start)) {
+    throw new Error(`STORY_ADS_DURATION_UNSCHEDULABLE: ${durationSec}`);
+  }
+  return ranges;
 }
 
 /** Genre Story Ads hanya boleh datang dari snapshot admisi/template resmi.
@@ -162,6 +191,53 @@ export function temuanStrukturStoryAds(segments: Array<Record<string, unknown>>)
   }
   if (labels.length === expected.length && labels.some((value, index) => value !== expected[index])) {
     findings.push({ gerbang: "SA4", pesan: `urutan beat wajib ${expected.join("→")}; ditemukan ${labels.join("→")}` });
+  }
+  return findings;
+}
+
+/** Timing provider-bound wajib identik dengan schedule bersama, bukan sekadar
+ * terlihat berurutan. Dengan begitu prompt, fallback, dan gate tidak hanyut. */
+export function temuanTimingStoryAds(segments: Array<Record<string, unknown>>, durationSec: number): TemuanSA[] {
+  const findings: TemuanSA[] = [];
+  let expected: StoryAdsTimeRange[];
+  try {
+    expected = storyAdsTimeRanges(durationSec);
+  } catch (error) {
+    return [{ gerbang: "SA4", pesan: error instanceof Error ? error.message : String(error) }];
+  }
+  if (segments.length !== expected.length) return findings;
+  const actual = segments.map((segment) => ({ start: Number(segment.start), end: Number(segment.end) }));
+  for (const [index, range] of actual.entries()) {
+    if (!Number.isFinite(range.start) || !Number.isFinite(range.end) || range.end <= range.start) {
+      findings.push({ gerbang: "SA4", pesan: `timing beat ${index} wajib berdurasi positif` });
+    }
+  }
+  if (actual[0].start !== 0) findings.push({ gerbang: "SA3", pesan: `timing HOOK wajib mulai 0, ditemukan ${actual[0].start}` });
+  for (let index = 1; index < actual.length; index++) {
+    if (actual[index].start > actual[index - 1].end) {
+      findings.push({ gerbang: "SA4", pesan: `timing gap antara beat ${index - 1} dan ${index}` });
+    } else if (actual[index].start < actual[index - 1].end) {
+      findings.push({ gerbang: "SA4", pesan: `timing overlap antara beat ${index - 1} dan ${index}` });
+    }
+  }
+  if (actual.at(-1)?.end !== durationSec) {
+    findings.push({ gerbang: "SA4", pesan: `timing final wajib berakhir tepat ${durationSec}, ditemukan ${actual.at(-1)?.end}` });
+  }
+  for (const [index, range] of actual.entries()) {
+    if (range.start !== expected[index].start || range.end !== expected[index].end) {
+      findings.push({
+        gerbang: "SA4",
+        pesan: `timing boundary beat ${index} wajib ${expected[index].start}-${expected[index].end}, ditemukan ${range.start}-${range.end}`,
+      });
+    }
+  }
+  const spikeRatio = actual[3].start / durationSec;
+  if (spikeRatio < 0.65 || spikeRatio > 0.8) {
+    findings.push({ gerbang: "SA2", pesan: `timing SPIKE wajib mulai 65-80%, ditemukan ${Math.round(spikeRatio * 100)}%` });
+  }
+  const buttonDuration = actual[4].end - actual[4].start;
+  if (buttonDuration < 3 || buttonDuration > 6) {
+    findings.push({ gerbang: "SA1", pesan: `timing BUTTON wajib 3-6 detik, ditemukan ${buttonDuration}` });
   }
   return findings;
 }
@@ -219,6 +295,9 @@ export function voiceoverStartSecForSegments(segments: SegmentDraft[], identity:
     const findings = [
       ...temuanHookSenyapAds(records),
       ...temuanStrukturStoryAds(records).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
+      ...(identity.durationSec == null
+        ? []
+        : temuanTimingStoryAds(records, identity.durationSec).map((finding) => `${finding.gerbang}: ${finding.pesan}`)),
       ...temuanBridgeStoryAds(records, identity).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
     ];
     if (findings.length) throw new Error(`Kontrak Story Ads worker dilanggar: ${findings.join(", ")}`);
@@ -250,6 +329,7 @@ export function periksaStoryOsAds(
     temuan.push({ gerbang: "SA3", pesan });
   }
   temuan.push(...temuanStrukturStoryAds(segs as unknown as Array<Record<string, unknown>>));
+  temuan.push(...temuanTimingStoryAds(segs as unknown as Array<Record<string, unknown>>, durasi));
 
   // Temuan struktural lengkap sudah tersedia untuk payload pendek. Jangan
   // dereference BUTTON/SPIKE yang memang tidak ada.
@@ -281,17 +361,6 @@ export function periksaStoryOsAds(
       SAKSI_TEKS.test(`${spike.start_state ?? ""} ${spike.action ?? ""} ${spike.visual_direction ?? ""}`);
     if (!punyaSaksi) {
       temuan.push({ gerbang: "SA2", pesan: "spike tanpa saksi — pelampiasan pribadi tidak terasa; sebut saksinya (boleh suara saja, off camera)" });
-    }
-    // Posisi 65–80% durasi. Diberi kelonggaran ke bawah untuk 10 detik, di
-    // mana satu segmen saja sudah 40% durasi dan aritmetikanya mustahil pas.
-    const mulai = Number(spike.start ?? 0);
-    const rasio = durasi > 0 ? mulai / durasi : 0;
-    const batasBawah = durasi <= 10 ? 0.4 : 0.5;
-    if (rasio < batasBawah || rasio > 0.9) {
-      temuan.push({
-        gerbang: "SA2",
-        pesan: `spike mulai di ${Math.round(rasio * 100)}% durasi — Story OS menaruhnya di 65–80% (toleransi ${Math.round(batasBawah * 100)}–90%)`,
-      });
     }
   }
 

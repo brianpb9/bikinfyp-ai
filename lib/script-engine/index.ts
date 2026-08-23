@@ -28,6 +28,7 @@ import { templateCopy, TEMPLATE_COPY_CAPACITY, type AdsStoryBeat } from "./templ
 import { isTvcTemplate, jendelaKata, templateRequiresPriceMention, tokenMerek, validateScript, type ValidationResult } from "./validator";
 import { konteksAdmisi, type SnapshotAdmisi } from "./admisi";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
+import { storyAdsTimeRanges } from "./story-os-ads";
 import { compileDeliveryText } from "./delivery-tags";
 import { keSegmentDraft, laporJatuhKeTemplate, llmSengajaDimatikan, llmSiap, tulisNaskah } from "./llm";
 import { bolehIdeaStage, petunjukNaskah, pilihIde, type Ide, type IdeTerpilih } from "./ide";
@@ -655,13 +656,13 @@ function normalizeSegments(segments: SegmentDraft[]): SegmentDraft[] {
   }));
 }
 
-/** Lima beat Story OS; SPIKE mulai 68% durasi, di dalam jendela kanonik 65–80%. */
+/** Lima beat Story OS memakai schedule tunggal yang juga mengikat prompt + gate. */
 function storyKeSegmen(beats: AdsStoryBeat[], durationSec: number): SegmentDraft[] {
-  const batas = [0, 0.18, 0.4, 0.68, 0.84, 1].map((rasio) => Math.round(rasio * durationSec));
+  const ranges = storyAdsTimeRanges(durationSec);
   return beats.map((beat, index) => ({
     ...beat,
-    start: batas[index],
-    end: batas[index + 1],
+    start: ranges[index].start,
+    end: ranges[index].end,
     visual_direction: beat.action,
   }));
 }

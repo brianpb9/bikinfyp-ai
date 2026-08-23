@@ -18,7 +18,7 @@ process.env.STORAGE_DIR = `/tmp/racun-test-storyos-storage-${process.pid}`;
 process.env.SCRIPT_LLM = "1";
 process.env.ANTHROPIC_API_KEY = "kunci-uji-story-ads";
 
-const { GERBANG_SA, periksaStoryOsAds, penegakanSA } = await import("../lib/script-engine/story-os-ads");
+const { GERBANG_SA, periksaStoryOsAds, penegakanSA, voiceoverStartSecForSegments } = await import("../lib/script-engine/story-os-ads");
 
 /** Naskah Ads yang MEMENUHI Story OS — dipakai sebagai kontrol positif. */
 const LULUS = {
@@ -30,19 +30,19 @@ const LULUS = {
       why: "setup", mode: "CCTV", visual_direction: "meja rias, tanpa wajah",
     },
     {
-      block: "BODY", label: "FRICTION", start: 4, end: 8, text: "Untuk Serum Uji, jangan sekarang dong.",
+      block: "BODY", label: "FRICTION", start: 4, end: 8.6, text: "Untuk Serum Uji, jangan sekarang dong.",
       start_state: "Timer di layar HP menyala, waktunya habis",
       action: "tangan naik lagi ke mulut, lalu ditarik", product_state: "hidden", bridge_source: "spoken_product_name",
       why: "tension", mode: "SELFIE", visual_direction: "meja rias",
     },
     {
-      block: "BODY", label: "FRICTION", start: 8, end: 12, text: "Harganya 89 ribu. Bentar.",
+      block: "BODY", label: "FRICTION", start: 8.6, end: 13.4, text: "Harganya 89 ribu. Bentar.",
       start_state: "Suara petugas memanggil dari luar pintu",
       action: "dia berdiri, menggeser kursi, mengambil produk dan memasukkannya ke saku",
       product_state: "hidden", bridge_source: "spoken_approved_price", why: "tension", mode: "HANDHELD", visual_direction: "beranjak",
     },
     {
-      block: "BODY", label: "SPIKE", start: 12, end: 16, text: "Udah. Masuk aja.",
+      block: "BODY", label: "SPIKE", start: 13.4, end: 16, text: "Udah. Masuk aja.",
       start_state: "Petugas berdiri di ambang pintu, suara off camera",
       action: "dia tersenyum lepas di depan petugas", product_state: "hidden",
       why: "payoff", mode: "GENERAL", visual_direction: "ruang tunggu",
@@ -387,6 +387,7 @@ test("kontrak gabungan system+task Ads mewajibkan hidden dan lolos SA6", async (
 
 test("task Ads memberi tepat lima timecode kontigu sampai exact duration seluruh katalog aktif", async () => {
   const { blokAturan, blokTugasUntukUji } = await import("../lib/script-engine/llm");
+  const { storyAdsTimeRanges } = await import("../lib/script-engine/story-os-ads");
   const { CAMPAIGN_TEMPLATES } = await import("../lib/templates");
   const durations = [...new Set(CAMPAIGN_TEMPLATES.filter((template) => template.kind === "ads")
     .map((template) => template.durationSec))].sort((a, b) => a - b);
@@ -408,6 +409,8 @@ test("task Ads memberi tepat lima timecode kontigu sampai exact duration seluruh
       assert.ok(match, `format timecode tidak dapat diparse: ${range}`);
       return [Number(match[1]), Number(match[2])] as const;
     });
+    assert.deepEqual(ranges, storyAdsTimeRanges(duration).map(({ start, end }) => [start, end]),
+      `${duration}s prompt tidak memakai schedule helper bersama`);
     assert.equal(ranges.length, 5, `${duration}s tidak menghasilkan tepat lima beat`);
     assert.equal(ranges[0][0], 0);
     for (let index = 0; index < ranges.length; index++) {
@@ -421,6 +424,53 @@ test("task Ads memberi tepat lima timecode kontigu sampai exact duration seluruh
     const buttonDuration = ranges[4][1] - ranges[4][0];
     assert.ok(buttonDuration >= 3 && buttonDuration <= 6,
       `${duration}s BUTTON berdurasi ${buttonDuration}s, di luar kontrak 3-6s`);
+  }
+});
+
+test("gate timing Story Ads menolak gap, overlap, boundary, dan durasi beat rusak", () => {
+  const findingsFor = (mutate: (segments: Array<Record<string, unknown>>) => void) => {
+    const segments = structuredClone((LULUS as unknown as { segments: Array<Record<string, unknown>> }).segments);
+    mutate(segments);
+    return periksaStoryOsAds({ segments } as never, ADS_CTX).map((finding) => finding.pesan);
+  };
+  const cases: Array<[string, (segments: Array<Record<string, unknown>>) => void, RegExp]> = [
+    ["gap", (segments) => { segments[1].start = 4.1; }, /timing gap/],
+    ["overlap", (segments) => { segments[1].start = 3.9; }, /timing overlap/],
+    ["wrong start", (segments) => { segments[0].start = 0.1; }, /HOOK wajib mulai 0/],
+    ["wrong final", (segments) => { segments[4].end = 19.9; }, /final wajib berakhir tepat 20/],
+    ["wrong interior boundary", (segments) => { segments[1].end = 9; segments[2].start = 9; }, /boundary beat [12]/],
+    ["nonpositive", (segments) => { segments[2].end = segments[2].start; }, /wajib berdurasi positif/],
+    ["BUTTON terlalu pendek", (segments) => { segments[3].end = 17.5; segments[4].start = 17.5; }, /BUTTON wajib 3-6 detik/],
+    ["BUTTON terlalu panjang", (segments) => { segments[3].end = 13.5; segments[4].start = 13.5; }, /BUTTON wajib 3-6 detik/],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const findings = findingsFor(mutate);
+    assert.ok(findings.some((message) => expected.test(message)), `${label} tidak ditolak secara eksplisit: ${findings.join(" | ")}`);
+  }
+  const providerBoundary = structuredClone((LULUS as unknown as { segments: Array<Record<string, unknown>> }).segments);
+  providerBoundary[1].start = 4.1;
+  assert.throws(() => voiceoverStartSecForSegments(providerBoundary as never, {
+    contentType: "ads", templateId: "ads-meja-kosong", durationSec: 20,
+    productName: "Serum Uji", productCategory: "beauty", productPriceIdr: 89_000,
+  }), /timing gap|timing boundary/, "worker pre-provider boundary tidak menegakkan schedule bersama");
+});
+
+test("fallback katalog Story Ads memakai schedule helper yang sama", async () => {
+  const { CAMPAIGN_TEMPLATES } = await import("../lib/templates");
+  const { generateScripts } = await import("../lib/script-engine");
+  const { storyAdsTimeRanges } = await import("../lib/script-engine/story-os-ads");
+  const activeByDuration = new Map<number, (typeof CAMPAIGN_TEMPLATES)[number]>();
+  for (const template of CAMPAIGN_TEMPLATES.filter((item) => item.kind === "ads")) {
+    if (!activeByDuration.has(template.durationSec)) activeByDuration.set(template.durationSec, template);
+  }
+  for (const [durationSec, template] of activeByDuration) {
+    const [script] = await generateScripts({
+      product: { id: `fallback-${durationSec}`, name: "Jasa Uji", category: template.bestFor[0], price_idr: 89_000 },
+      register: "netral", qualityTier: template.tier, durationSec,
+      contentType: "ads", templateId: template.id, count: 1, tanpaLlm: true,
+    });
+    assert.deepEqual(script.segments.map(({ start, end }) => ({ start, end })), storyAdsTimeRanges(durationSec),
+      `${template.id} fallback tidak memakai schedule helper bersama`);
   }
 });
 
@@ -439,10 +489,10 @@ test("prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta 
 
 const LIVE_ADS_SAFE = [
   { block: "HOOK", label: "HOOK", start: 0, end: 3, text: "", start_state: "kartu blank sudah di meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos bergerak sejak frame pertama", product_state: "hidden", expression: "curious", audio_note: "", why: "setup conflict", mode: "GENERAL" },
-  { block: "BODY", label: "FRICTION", start: 3, end: 6.5, text: "Nah, Kemeja Uji.", bridge_source: "spoken_product_name", start_state: "kartu blank dekat tangan", framing: "medium shot", angle: "eye level", camera: "slow push", action: "talent buka kartu warna polos perlahan", product_state: "hidden", expression: "focused", audio_note: "", why: "tension rises", mode: "GENERAL" },
-  { block: "BODY", label: "FRICTION", start: 6.5, end: 10, text: "Seratus delapan puluh sembilan ribu.", bridge_source: "spoken_approved_price", start_state: "swatch blank sudah terbuka", framing: "close shot", angle: "eye level", camera: "slow drift", action: "swatch blank dipindahkan mendekati saksi", product_state: "hidden", expression: "focused", audio_note: "", why: "tension rises again", mode: "GENERAL" },
-  { block: "BODY", label: "SPIKE", start: 10, end: 12.5, text: "Udah, lihat.", start_state: "kasir berada di samping meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos diletakkan di depan kasir", product_state: "hidden", expression: "relieved", audio_note: "", why: "payoff witnessed", mode: "GENERAL", saksi: "kasir off camera" },
-  { block: "CTA", label: "BUTTON", start: 12.5, end: 15, text: "Tadi ragu, cocok nggak? Detailnya ada di bawah ya.", start_state: "kartu blank menghadap kamera", framing: "close shot", angle: "eye level", camera: "static camera", action: "talent menunjuk blok warna pada kartu blank", product_state: "hidden", expression: "warm", audio_note: "", why: "button payoff", mode: "GENERAL" },
+  { block: "BODY", label: "FRICTION", start: 3, end: 6.45, text: "Nah, Kemeja Uji.", bridge_source: "spoken_product_name", start_state: "kartu blank dekat tangan", framing: "medium shot", angle: "eye level", camera: "slow push", action: "talent buka kartu warna polos perlahan", product_state: "hidden", expression: "focused", audio_note: "", why: "tension rises", mode: "GENERAL" },
+  { block: "BODY", label: "FRICTION", start: 6.45, end: 10.05, text: "Seratus delapan puluh sembilan ribu.", bridge_source: "spoken_approved_price", start_state: "swatch blank sudah terbuka", framing: "close shot", angle: "eye level", camera: "slow drift", action: "swatch blank dipindahkan mendekati saksi", product_state: "hidden", expression: "focused", audio_note: "", why: "tension rises again", mode: "GENERAL" },
+  { block: "BODY", label: "SPIKE", start: 10.05, end: 12, text: "Udah, lihat.", start_state: "kasir berada di samping meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos diletakkan di depan kasir", product_state: "hidden", expression: "relieved", audio_note: "", why: "payoff witnessed", mode: "GENERAL", saksi: "kasir off camera" },
+  { block: "CTA", label: "BUTTON", start: 12, end: 15, text: "Tadi ragu, cocok nggak? Detailnya ada di bawah ya.", start_state: "kartu blank menghadap kamera", framing: "close shot", angle: "eye level", camera: "static camera", action: "talent menunjuk blok warna pada kartu blank", product_state: "hidden", expression: "warm", audio_note: "", why: "button payoff", mode: "GENERAL" },
 ];
 
 test("A-03 keras di strict dan light, safe control tetap bebas A-03", async () => {
