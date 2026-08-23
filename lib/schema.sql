@@ -181,7 +181,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   created_at TEXT NOT NULL,
   completed_at TEXT,
   state_changed_at TEXT, -- kapan state terakhir berubah (untuk timeout per-state)
-  approved_reference_manifest TEXT -- manifest referensi tersetujui immutable per job (P0 A6/C9)
+  approved_reference_manifest TEXT, -- manifest referensi tersetujui immutable per job (P0 A6/C9)
+  job_product_snapshot TEXT -- metadata product-truth immutable per job (P0 C9)
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);

@@ -159,13 +159,14 @@ interface AmatanProvider {
   utamaSha: string | null;
   utamaPath: string | null;
   extraPaths: string[];
+  promptText: string;
   dipanggil: boolean;
 }
-let amatan: AmatanProvider = { utamaSha: null, utamaPath: null, extraPaths: [], dipanggil: false };
+let amatan: AmatanProvider = { utamaSha: null, utamaPath: null, extraPaths: [], promptText: "", dipanggil: false };
 
 async function pasangProviderPengamat() {
   const { setVideoProvidersForTests } = await import("../lib/providers/registry");
-  amatan = { utamaSha: null, utamaPath: null, extraPaths: [], dipanggil: false };
+  amatan = { utamaSha: null, utamaPath: null, extraPaths: [], promptText: "", dipanggil: false };
   setVideoProvidersForTests([
     {
       name: "pengamat-uji",
@@ -175,12 +176,13 @@ async function pasangProviderPengamat() {
       estimateCost() {
         return 0;
       },
-      async generate(spec: { shots: { imageRefPath: string }[]; extraReferenceImagePaths?: string[] }) {
+      async generate(spec: { shots: { imageRefPath: string; prompt: string }[]; extraReferenceImagePaths?: string[] }) {
         amatan.dipanggil = true;
         const utama = spec.shots[0]?.imageRefPath ?? null;
         amatan.utamaPath = utama;
         if (utama && fs.existsSync(utama)) amatan.utamaSha = sha256(fs.readFileSync(utama));
         amatan.extraPaths = [...(spec.extraReferenceImagePaths ?? [])];
+        amatan.promptText = spec.shots.map((shot) => shot.prompt).join("\n");
         throw new Error("provider pengamat: berhenti sebelum biaya keluar");
       },
     } as never,
@@ -370,6 +372,21 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2,
     [`${relPackshot}.meta.json`, sidecar(PACKSHOT, true)],
   ]);
   const jobId = await siapkanJob([relBanner, relPackshot]);
+  const productId = (await pool.query("SELECT product_id FROM jobs WHERE id=$1", [jobId])).rows[0].product_id;
+  const productSnapshot = JSON.stringify({
+    version: 1,
+    productName: "Serum Glow Bright",
+    category: "beauty",
+    trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
+    productVisualDesc: "BOTOL-AMBER-AWAL",
+    brandBrief: "ARAH-BRAND-AWAL",
+    claims: ["klaim awal"],
+  });
+  await pool.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [productSnapshot, jobId]);
+  await pool.query(
+    "UPDATE products SET name='NAMA MUTASI',category='food',product_visual_desc='DESC-MUTASI',brand_brief='BRIEF-MUTASI',claims='bukan-json',raw_meta='{}' WHERE id=$1",
+    [productId]
+  );
   // wujudkan: eksekusi HARUS berlanjut sampai provider, kalau tidak asersi
   // hash di bawah tidak pernah mengamati apa pun.
   const spy = await jalankan(jobId, isi, true);
@@ -399,6 +416,12 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2,
     `bytes yang SAMPAI KE PROVIDER bukan packshot yang buktinya sah (path ${amatan.utamaPath}).`
   );
   assert.notEqual(amatan.utamaSha, sha256(BANNER), "BANNER sampai ke provider");
+  assert.match(amatan.promptText, /Serum Glow Bright/);
+  assert.match(amatan.promptText, /BOTOL-AMBER-AWAL/);
+  assert.match(amatan.promptText, /ARAH-BRAND-AWAL/);
+  assert.doesNotMatch(amatan.promptText, /NAMA MUTASI|DESC-MUTASI|BRIEF-MUTASI/);
+  const durableProduct = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
+  assert.equal(durableProduct, productSnapshot, "snapshot metadata W1 ditimpa dari produk mutasi");
 });
 
 test("W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images", async (t) => {
@@ -446,6 +469,32 @@ test("W1 manifest create konkuren: row lock menghasilkan tepat satu pemenang", a
   assert.equal(durable, a);
 });
 
+test("W1 product snapshot create konkuren: row lock menghasilkan tepat satu pemenang", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const jobId = await siapkanJob([]);
+  const { PgJobsRepository } = await import("../lib/postgres/jobs");
+  const repoA = new PgJobsRepository(URL_UJI);
+  const repoB = new PgJobsRepository(URL_UJI);
+  const base = {
+    version: 1,
+    category: "beauty",
+    trustedBrand: { source: "products.raw_meta.brand", value: "Merek" },
+    productVisualDesc: null,
+    brandBrief: null,
+    claims: [],
+  };
+  const rawA = JSON.stringify({ ...base, productName: "A" });
+  const rawB = JSON.stringify({ ...base, productName: "B" });
+  const [a, b] = await Promise.all([
+    repoA.installProductSnapshotIfSafe(jobId, rawA),
+    repoB.installProductSnapshotIfSafe(jobId, rawB),
+  ]);
+  assert.ok(a && b);
+  assert.equal(a, b, "dua worker memegang metadata snapshot berbeda untuk job sama");
+  const durable = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
+  assert.equal(durable, a);
+});
+
 test("W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   await pasangProviderPengamat();
@@ -455,8 +504,9 @@ test("W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot",
   const spy = await jalankan(jobId, new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]));
   assert.deepEqual(spy.materializeCalls, [], "legacy unsafe mencapai materialize");
   assert.equal(amatan.dipanggil, false, "legacy unsafe mencapai provider");
-  const row = (await pool.query("SELECT approved_reference_manifest,state FROM jobs WHERE id=$1", [jobId])).rows[0];
+  const row = (await pool.query("SELECT approved_reference_manifest,job_product_snapshot,state FROM jobs WHERE id=$1", [jobId])).rows[0];
   assert.equal(row.approved_reference_manifest, null);
+  assert.equal(row.job_product_snapshot, null);
   assert.ok(["FAILED", "REFUNDED"].includes(row.state));
   assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM outputs WHERE job_id=$1", [jobId]), 0);
   assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','regen')", [jobId]), 0);

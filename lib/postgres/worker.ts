@@ -55,6 +55,7 @@ import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
 import { pesanTanpaReferensi } from "../product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "../kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "../job-reference-manifest";
+import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta } from "../job-product-snapshot";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -85,6 +86,7 @@ type WorkerRow = {
   product_raw_meta: string | null;
   creator_category: string | null;
   approved_reference_manifest: string | null;
+  job_product_snapshot: string | null;
 };
 
 /**
@@ -175,13 +177,7 @@ async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: str
  * tebakan dihentikan sama sekali. Tanpa sumber ini, gerbang hero UNVERIFIED.
  */
 export function merekTepercaya(row: { product_raw_meta?: string | null }): string | null {
-  try {
-    const meta = JSON.parse(row.product_raw_meta ?? "{}") as { brand?: unknown };
-    const b = typeof meta.brand === "string" ? meta.brand.trim() : "";
-    return b || null;
-  } catch {
-    return null;
-  }
+  return trustedBrandFromRawMeta(row.product_raw_meta);
 }
 
 /** Verdict QC-F1 per shot, untuk diarsipkan bersama promptnya. */
@@ -322,6 +318,29 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // still use the established SQLite rollback path for mock experimentation.
   if (config.providerVideo === "mock") throw new Error("Worker PostgreSQL membutuhkan PROVIDER_VIDEO nyata; fixture hanya diizinkan untuk test lokal eksplisit.");
   const segments = JSON.parse(row.script_segments) as SegmentDraft[];
+  const productSnapshot = await loadOrCreateJobProductSnapshot({
+    existingRaw: row.job_product_snapshot,
+    candidate: () => ({
+      productName: row.product_name,
+      category: row.product_category,
+      trustedBrand: { source: "products.raw_meta.brand", value: trustedBrandFromRawMeta(row.product_raw_meta) },
+      productVisualDesc: row.product_visual_desc,
+      brandBrief: row.brand_brief,
+      claims: claimsFromRaw(row.product_claims),
+    }),
+    persistIfAbsentAndSafe: (candidateRaw) => jobs.installProductSnapshotIfSafe(row.id, candidateRaw),
+  });
+  // Semua consumer hilir tetap memakai WorkerRow, tetapi nilainya kini datang
+  // dari snapshot job, bukan JOIN products yang dapat berubah saat resume.
+  row.product_name = productSnapshot.productName;
+  row.product_category = productSnapshot.category;
+  row.product_visual_desc = productSnapshot.productVisualDesc;
+  row.brand_brief = productSnapshot.brandBrief;
+  row.product_claims = JSON.stringify(productSnapshot.claims);
+  row.product_raw_meta = JSON.stringify(productSnapshot.trustedBrand.value
+    ? { brand: productSnapshot.trustedBrand.value }
+    : {});
+
   const images = JSON.parse(row.product_images) as string[];
   // REFERENSI DIPILIH DARI BUKTI, BUKAN DARI URUTAN UNGGAH.
   //

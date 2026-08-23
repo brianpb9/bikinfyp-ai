@@ -34,6 +34,7 @@ import { normalizeHookLevel } from "./config/hooks";
 import { pesanTanpaReferensi } from "./product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "./job-reference-manifest";
+import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta } from "./job-product-snapshot";
 
 const CONCURRENCY = 1;
 
@@ -89,7 +90,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
 
   try {
     const script = db.prepare("SELECT * FROM scripts WHERE id = ?").get(job.script_id) as ScriptRow;
-    const product = db.prepare("SELECT * FROM products WHERE id = ?").get(job.product_id) as ProductRow;
+    let product = db.prepare("SELECT * FROM products WHERE id = ?").get(job.product_id) as ProductRow;
     const persona = job.persona_id
       ? (db.prepare("SELECT * FROM personas WHERE id = ?").get(job.persona_id) as PersonaRow | undefined)
       : undefined;
@@ -103,6 +104,43 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const category = descKustom
       ? { ...presetKategori, promptSeed: descKustom, handsPrompt: descKustom }
       : presetKategori;
+    const productSnapshot = await loadOrCreateJobProductSnapshot({
+      existingRaw: job.job_product_snapshot ?? null,
+      candidate: () => ({
+        productName: product.name,
+        category: product.category,
+        trustedBrand: { source: "products.raw_meta.brand", value: trustedBrandFromRawMeta(product.raw_meta) },
+        productVisualDesc: product.product_visual_desc ?? null,
+        brandBrief: product.brand_brief ?? null,
+        claims: claimsFromRaw(product.claims),
+      }),
+      persistIfAbsentAndSafe: async (candidateRaw) => db.transaction(() => {
+        const row = db.prepare(
+          "SELECT job_product_snapshot,provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=?"
+        ).get(job.id) as { job_product_snapshot: string | null; provider_video: string | null; provider_voice: string | null; output_url: string | null; cost_actual_idr: number } | undefined;
+        if (!row) throw new Error("Job tidak ditemukan saat mematok snapshot metadata produk.");
+        if (row.job_product_snapshot) return row.job_product_snapshot;
+        const traces = db.prepare(
+          `SELECT
+            EXISTS(SELECT 1 FROM outputs WHERE job_id=?) OR
+            EXISTS(SELECT 1 FROM provider_tasks WHERE job_id=?) OR
+            EXISTS(SELECT 1 FROM job_shots WHERE job_id=?) AS unsafe`
+        ).get(job.id, job.id, job.id) as { unsafe: number };
+        if (row.provider_video || row.provider_voice || row.output_url || row.cost_actual_idr > 0 || traces.unsafe) return null;
+        db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?").run(candidateRaw, job.id);
+        return candidateRaw;
+      })(),
+    });
+    product = {
+      ...product,
+      name: productSnapshot.productName,
+      category: productSnapshot.category,
+      product_visual_desc: productSnapshot.productVisualDesc,
+      brand_brief: productSnapshot.brandBrief,
+      claims: JSON.stringify(productSnapshot.claims),
+      raw_meta: JSON.stringify(productSnapshot.trustedBrand.value ? { brand: productSnapshot.trustedBrand.value } : {}),
+    };
+
     const segments = JSON.parse(script.segments) as SegmentDraft[];
     const images = JSON.parse(product.images) as string[];
 

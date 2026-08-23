@@ -14,6 +14,7 @@ import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
 import { materializeJobReferenceManifest, parseJobReferenceManifest } from "@/lib/job-reference-manifest";
+import { parseJobProductSnapshot } from "@/lib/job-product-snapshot";
 import path from "node:path";
 
 export const runtime = "nodejs";
@@ -36,12 +37,13 @@ type JobRowLite = {
   requires_approval: boolean; product_name: string; segments: string;
   quality_tier: string;
   approved_reference_manifest: string | null;
+  job_product_snapshot: string | null;
 };
 
 async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRowLite | null> {
   const res = await pool.query<JobRowLite>(
     `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier,
-            j.approved_reference_manifest,
+            j.approved_reference_manifest, j.job_product_snapshot,
             p.name AS product_name, s.segments
      FROM jobs j JOIN products p ON p.id=j.product_id JOIN scripts s ON s.id=j.script_id
      WHERE j.id=$1 AND j.org_id=$2`,
@@ -147,13 +149,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       // provider, jadi provenance-nya tidak boleh direkonstruksi diam-diam.
       try {
         if (!job.approved_reference_manifest) throw new Error("REF_MANIFEST_LEGACY_UNSAFE");
+        if (!job.job_product_snapshot) throw new Error("PRODUCT_SNAPSHOT_LEGACY_UNSAFE");
+        parseJobProductSnapshot(job.job_product_snapshot);
         const manifest = parseJobReferenceManifest(job.approved_reference_manifest);
         await materializeJobReferenceManifest(manifest, path.join(config.storageDir, "jobs", jobId));
       } catch (error) {
-        console.error(`[referensi] A6 job ${jobId} dihentikan sebelum ${action}:`, error);
+        console.error(`[product-truth] A6 job ${jobId} dihentikan sebelum ${action}:`, error);
         throw ERR.BAD_REQUEST(
-          "Foto acuan yang disetujui sudah hilang atau berubah. Job dihentikan sebelum persetujuan atau biaya regenerate.",
-          "Approved reference is missing or changed; no approval/regeneration side effect was applied."
+          "Snapshot data produk atau foto acuan tidak sah. Job dihentikan sebelum persetujuan atau biaya regenerate.",
+          "Product metadata snapshot or approved reference is invalid; no approval/regeneration side effect was applied."
         );
       }
 

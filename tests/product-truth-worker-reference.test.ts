@@ -653,6 +653,7 @@ test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetuj
   } as never);
 
   let utamaDiterima: string | null = null;
+  let promptDiterima = "";
   setVideoProvidersForTests([
     {
       name: "pengamat-w2",
@@ -662,9 +663,10 @@ test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetuj
       estimateCost() {
         return 0;
       },
-      async generate(spec: { shots: { imageRefPath: string }[] }) {
+      async generate(spec: { shots: { imageRefPath: string; prompt: string }[] }) {
         const p = spec.shots[0]?.imageRefPath;
         if (p && fs.existsSync(p)) utamaDiterima = sha256Uji(fs.readFileSync(p));
+        promptDiterima = spec.shots.map((shot) => shot.prompt).join("\n");
         throw new Error("provider pengamat W2: berhenti sebelum biaya keluar");
       },
     } as never,
@@ -672,6 +674,18 @@ test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetuj
 
   try {
     const { jobId } = siapkanJob([relSah1, relSah2], "high_quality");
+    const productId = (db.prepare("SELECT product_id FROM jobs WHERE id=?").get(jobId) as { product_id: string }).product_id;
+    const productSnapshot = JSON.stringify({
+      version: 1,
+      productName: "Serum Glow Bright",
+      category: "beauty",
+      trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
+      productVisualDesc: "BOTOL-AMBER-AWAL",
+      brandBrief: "ARAH-BRAND-AWAL",
+      claims: ["klaim awal"],
+    });
+    db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?").run(productSnapshot, jobId);
+    db.prepare("UPDATE products SET name='NAMA MUTASI',category='food',product_visual_desc='DESC-MUTASI',brand_brief='BRIEF-MUTASI',claims='bukan-json',raw_meta='{}' WHERE id=?").run(productId);
     await processJob(jobId);
 
     assertNolEfekSamping(jobId, { putCalls }, "W2 hilir");
@@ -687,6 +701,10 @@ test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetuj
       "provider menerima isi PATH BERSAMA sebagai referensi utama. Snapshot dibuat tapi tidak " +
         "dipakai di hilir — sama tidak bergunanya dengan tidak dibuat sama sekali."
     );
+    assert.match(promptDiterima, /Serum Glow Bright/);
+    assert.match(promptDiterima, /BOTOL-AMBER-AWAL/);
+    assert.match(promptDiterima, /ARAH-BRAND-AWAL/);
+    assert.doesNotMatch(promptDiterima, /NAMA MUTASI|DESC-MUTASI|BRIEF-MUTASI/);
   } finally {
     setVideoProvidersForTests(undefined);
     fs.rmSync(tmp, { recursive: true, force: true });
@@ -853,9 +871,24 @@ test("W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot"
   await processJob(jobId);
 
   assert.deepEqual(spy.materializeCalls, [], "legacy unsafe mencapai materialize/provider");
-  const row = db.prepare("SELECT approved_reference_manifest,state FROM jobs WHERE id=?").get(jobId) as { approved_reference_manifest: string | null; state: string };
+  const row = db.prepare("SELECT approved_reference_manifest,job_product_snapshot,state FROM jobs WHERE id=?").get(jobId) as { approved_reference_manifest: string | null; job_product_snapshot: string | null; state: string };
   assert.equal(row.approved_reference_manifest, null);
+  assert.equal(row.job_product_snapshot, null);
   assert.ok(["FAILED", "REFUNDED"].includes(row.state));
+});
+
+test("W2 product snapshot invalid gagal tertutup sebelum materialize/provider", async () => {
+  const rel = "uploads/w2-product-snapshot-invalid/0.webp";
+  const bytes = Buffer.from("INVALID-SNAPSHOT-W2");
+  const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
+  setMediaStorageForTests(spy.storage);
+  const { jobId } = siapkanJob([rel]);
+  db.prepare("UPDATE jobs SET job_product_snapshot='{}' WHERE id=?").run(jobId);
+
+  await processJob(jobId);
+
+  assert.deepEqual(spy.materializeCalls, []);
+  assertNolEfekSamping(jobId, spy, "W2 product snapshot invalid");
 });
 
 after(() => {
