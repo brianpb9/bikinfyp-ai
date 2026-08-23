@@ -10,6 +10,21 @@ import path from "node:path";
 
 const baca = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
 
+function assertLabelGateBeforePersistence(source: string, context: string) {
+  // Cocokkan CALL yang benar-benar di-await, bukan nama pada import, komentar,
+  // atau string. Guard lama menangkap import `periksaLabelFoto` lalu mencari
+  // persistence API yang sudah pensiun, sehingga tidak lagi menguji urutan
+  // production yang diklaimnya.
+  const gateCalls = [...source.matchAll(/\bawait\s+periksaLabelFoto\s*\(/g)];
+  const persistenceCalls = [...source.matchAll(/\bawait\s+saveUniqueProductImages\s*\(/g)];
+  assert.equal(gateCalls.length, 1, `${context}: wajib tepat satu call label gate aktual`);
+  assert.equal(persistenceCalls.length, 1, `${context}: wajib tepat satu call persistence aktual`);
+  assert.ok(
+    gateCalls[0].index < persistenceCalls[0].index,
+    `${context}: gerbang label harus mendahului persistence`
+  );
+}
+
 test("bawaan mode referensi adalah r2v, i2v hanya cadangan eksplisit", async () => {
   const { modeReferensi } = await import("../lib/providers/stubs/byteplus");
   const retail = { qualityTier: "high_quality", shots: [] } as never;
@@ -67,12 +82,29 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   assert.match(s, /const MIN_CONF = 60/, "ambang keyakinan diturunkan dari sebaran terukur");
   assert.match(s, /"tsv"/, "butuh TSV untuk mendapat kolom keyakinan");
   assert.match(s, /Sdadpgeer/, "kenapa panjang huruf tidak cukup harus tertulis di kode");
-  // Gerbangnya dipasang SEBELUM foto disimpan.
-  const r = baca("app/api/products/[id]/photos/route.ts");
-  assert.match(r, /periksaLabelFoto\(tmpFile, owned\.product\.name[,)]/);
-  const iGerbang = r.indexOf("periksaLabelFoto");
-  const iSimpan = r.indexOf("saveProductImages(id, blobs");
-  assert.ok(iGerbang > 0 && iGerbang < iSimpan, "gerbang harus mendahului penyimpanan");
+  // Gerbangnya dipasang SEBELUM foto disimpan di kedua mutation boundary:
+  // E4 Retail dan E8 Enterprise. Persistence production kini memakai helper
+  // dedupe, bukan saveProductImages lama.
+  const retail = baca("app/api/products/[id]/photos/route.ts");
+  assert.match(retail, /periksaLabelFoto\(tmpFile, owned\.product\.name[,)]/);
+  assertLabelGateBeforePersistence(retail, "E4 Retail");
+
+  const enterprise = baca("app/api/dashboard/campaign/product/[id]/photos/route.ts");
+  assert.match(enterprise, /periksaLabelFoto\(tmpFile, owned\.product\.name\)/);
+  assertLabelGateBeforePersistence(enterprise, "E8 Enterprise");
+
+  // Counterexample: guard harus benar-benar merah bila persistence kelak
+  // dipindah ke depan validasi. Ini mencegah regresi ke assertion yang sekadar
+  // menemukan dua nama simbol tanpa membuktikan urutan call production.
+  assert.throws(
+    () => assertLabelGateBeforePersistence(`
+      async function upload() {
+        await saveUniqueProductImages(id, blobs);
+        await periksaLabelFoto(tmpFile, product.name);
+      }
+    `, "counterexample persistence-first"),
+    /gerbang label harus mendahului persistence/
+  );
 });
 
 test("ketidakcocokan nama adalah peringatan, bukan penolakan", () => {
