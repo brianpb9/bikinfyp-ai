@@ -341,7 +341,7 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
 }
 
 /** Confirm nyata untuk Story Ads: request sengaja menghilangkan templateId. */
-async function siapkanStoryAdsTanpaTemplateRequest(image: string) {
+async function siapkanStoryAdsTanpaTemplateRequest(image: string, avatarCustomDesc: string | null = null) {
   const orgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
   await pool.query("INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,'Org Ads Boundary',$2,$3)",
     [orgId, `org-ads-boundary-${process.pid}`, t]);
@@ -383,7 +383,7 @@ async function siapkanStoryAdsTanpaTemplateRequest(image: string) {
   const result = await renderSatuSel({
     userId, orgId, productId, productName: "NAMA REQUEST PALSU", productPriceIdr: 189000,
     productSourceUrl: null, promoPriceBeforeIdr: null, scriptId, personaId,
-    avatarCustomDesc: null, format: "ads", ratio: "9:16", noModel: false,
+    avatarCustomDesc, format: "ads", ratio: "9:16", noModel: false,
     tvcRoute: null, templateId: null, recordStyle: null, shotCount: 4,
     runId: `ads-boundary-${process.pid}`,
   }, {
@@ -686,14 +686,16 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
   await pasangProviderPengamat();
   const rel = `uploads/w1-neutral-story-ads-${process.pid}/0.png`;
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
-  const jobId = await siapkanStoryAdsTanpaTemplateRequest(rel);
-  const persisted = (await pool.query("SELECT template_id,format FROM jobs WHERE id=$1", [jobId])).rows[0];
-  assert.deepEqual(persisted, { template_id: "ads-meja-kosong", format: "ads" });
+  const injection = "woman holding a bottle marked ACME beside a blank card";
+  const jobId = await siapkanStoryAdsTanpaTemplateRequest(rel, injection);
+  const persisted = (await pool.query("SELECT template_id,format,avatar_custom_desc FROM jobs WHERE id=$1", [jobId])).rows[0];
+  assert.deepEqual(persisted, { template_id: "ads-meja-kosong", format: "ads", avatar_custom_desc: injection });
   await jalankan(jobId, new Map([[rel, png], [`${rel}.meta.json`, sidecar(png, true)]]), true);
   assert.equal(amatan.dipanggil, true, "W1 tidak mencapai provider observer");
   assert.equal(amatan.utamaPath, null, "neutral Story Ads mengirim primary product reference");
   assert.deepEqual(amatan.extraPaths, [], "neutral Story Ads mengirim extra product references");
   assert.match(amatan.promptText, /neutral blank props|plain unprinted|blank/i);
+  assert.doesNotMatch(amatan.promptText, /ACME|holding a bottle|marked ACME/i);
 });
 
 test("shared confirm memblokir empat snapshot real-footage saat request template_id dihilangkan, tanpa side effect", async (t) => {

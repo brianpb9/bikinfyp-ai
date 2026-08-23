@@ -56,6 +56,7 @@ import { pesanTanpaReferensi } from "../product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "../kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "../job-reference-manifest";
 import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta } from "../job-product-snapshot";
+import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -423,7 +424,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // hasilnya "terinspirasi foto", bukan wajah persis (BytePlus menolak foto
   // wajah asli sebagai referensi, lihat lib/promo/avatar.ts).
   const customDesc = row.avatar_custom_desc?.trim();
-  const category = customDesc
+  const category = customDesc && !isNeutralStoryAdsTemplate(row.template_id)
     ? { ...presetCategory, promptSeed: customDesc, handsPrompt: customDesc }
     : presetCategory;
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;

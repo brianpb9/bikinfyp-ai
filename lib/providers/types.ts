@@ -51,6 +51,9 @@ export interface ShotSpec {
    * Kosong pada jalur template — di situ frame turunan memakai prompt shot.
    */
   startState?: string;
+  /** Substring angka yang dibuat planner sendiri (durasi/index/timecode),
+   * bukan berasal dari field prompt pengguna. Dipakai guard neutral Ads. */
+  trustedNumericScaffolds?: string[];
 }
 
 export interface VisualSpec {

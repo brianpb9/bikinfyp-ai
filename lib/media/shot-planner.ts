@@ -25,7 +25,7 @@
 import { config } from "../config";
 import type { VisualSpec, ShotSpec, QualityTier } from "../providers/types";
 import { latarUntukTemplate } from "./latar-template";
-import type { CreatorCategory } from "../personas";
+import { getCreatorCategory, type CreatorCategory } from "../personas";
 import type { SegmentDraft } from "../script-engine/templates";
 import { CATEGORY_NOUN, CATEGORY_PAIN } from "../config/hooks";
 import { hargaTerbilang } from "../script-engine/terbilang";
@@ -40,6 +40,7 @@ import {
   isNeutralStoryAdsTemplate,
   neutralStoryAdsActionContradictions,
   neutralStoryAdsPromptContradictions,
+  neutralStoryAdsUntrustedFieldContradictions,
 } from "../script-engine/ads-visual-contract";
 
 export interface ShotPlanInput {
@@ -825,6 +826,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       return terbaik === i;
     });
 
+  const trustedNumericScaffoldsForShot = (i: number): string[] => [
+    `${input.durationSec}-second`,
+    `Shot ${i + 1} of ${numShots}`,
+    ...segmenMilikShot(i).map((sg, index) =>
+      `${index === 0 ? "at" : "then at"} ${sg.start}-${sg.end} seconds`
+    ),
+  ];
+
   const dialogueForShot = (i: number): string[] =>
     // TVC dipecah jadi 3-6 modul, jadi tangga "hook / demo / sisanya CTA" di
     // bawah tidak bisa dipakai: shot 3,4,5 semuanya akan kebagian kalimat
@@ -1256,6 +1265,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   };
 
   const neutralStoryAds = isNeutralStoryAdsTemplate(input.ugcTemplate);
+  const curatedNeutralCategory = neutralStoryAds ? getCreatorCategory(input.category.id) : null;
+  if (neutralStoryAds && !curatedNeutralCategory) {
+    throw new Error(`Kontrak neutral Story Ads: persona "${input.category.id}" tidak ada di allowlist terkurasi.`);
+  }
+  const visualCategory = curatedNeutralCategory ?? input.category;
   if (neutralStoryAds) {
     for (const segment of input.segments) {
       if (!segment.action) continue;
@@ -1265,6 +1279,20 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       });
       if (contradictions.length > 0) {
         throw new Error(`Kontrak visual neutral Story Ads dilanggar sebelum prompt final: ${contradictions.join(", ")}`);
+      }
+      for (const [fieldName, field] of Object.entries({
+        visual_direction: segment.visual_direction,
+        start_state: segment.start_state,
+        framing: segment.framing,
+        angle: segment.angle,
+        camera: segment.camera,
+        expression: segment.expression,
+      })) {
+        if (!field) continue;
+        const fieldFindings = neutralStoryAdsUntrustedFieldContradictions(field);
+        if (fieldFindings.length > 0) {
+          throw new Error(`Kontrak field ${fieldName} neutral Story Ads dilanggar: ${fieldFindings.join(", ")}`);
+        }
       }
     }
   }
@@ -1348,10 +1376,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       // Shot pembuka tanpa wajah: subjeknya TANGAN, bukan persona — promptSeed
       // mendeskripsikan wajah, dan menyebutnya di sini memanggil wajah ke frame.
       : bukaTanpaWajah
-      ? input.category.handsPrompt
+      ? visualCategory.handsPrompt
       : format === "talking_head" || format === "tvc" || format === "ads"
-      ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
-      : input.category.handsPrompt;
+      ? `${visualCategory.promptSeed}, ${visualCategory.deliveryPrompt}`
+      : visualCategory.handsPrompt;
     // Bentuk produk mengalahkan kategori: kategori tahu JENIS-nya, bentuk tahu
     // apa yang FISIKNYA MUNGKIN. Kategori beauty untuk sabun batang tetap
     // beauty, tapi "menuangkan sedikit produk" tidak pernah bisa benar.
@@ -1761,6 +1789,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       return {
         index: i, durationSec: perShot, prompt: base,
         ...(!neutralStoryAds ? { imageRefPath: input.imageRefPath } : {}),
+        ...(neutralStoryAds ? { trustedNumericScaffolds: trustedNumericScaffoldsForShot(i) } : {}),
       };
     }
 
@@ -1865,6 +1894,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     return {
       index: i, durationSec: perShot, prompt,
       ...(!neutralStoryAds ? { imageRefPath: input.imageRefPath } : {}),
+      ...(neutralStoryAds ? { trustedNumericScaffolds: trustedNumericScaffoldsForShot(i) } : {}),
       ...(menahanProdukDiShot(i) ? { withholdProduct: true } : {}),
       ...(beatTvc?.tanpaOrang ? { tanpaOrang: true } : {}),
       ...(awalShot?.start_state ? { startState: awalShot.start_state } : {}),
@@ -1873,7 +1903,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
 
   // Negative prompt per-format: hands_only melarang wajah sepenuhnya (bukan sekadar
   // "no face distortion"); format lain memakai negative kategori apa adanya.
-  let negativePrompt = input.category.negativePrompt;
+  let negativePrompt = visualCategory.negativePrompt;
   // r8: larangan bersama (format ber-video-AI saja — vo_broll pakai FOTO ASLI
   // user, tidak ada model video sama sekali, jadi tak relevan & tak diubah).
   // Model jangan "mencoba" merender teks kecil label sebagai tajam lalu gagal
@@ -1963,7 +1993,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     for (const shot of spec.shots) {
       const contradictions = neutralStoryAdsPromptContradictions(shot.prompt, {
         productName: input.productName,
-      });
+      }, shot.trustedNumericScaffolds);
       if (contradictions.length > 0) {
         throw new Error(`Kontrak prompt final neutral Story Ads dilanggar: ${contradictions.join(", ")}`);
       }

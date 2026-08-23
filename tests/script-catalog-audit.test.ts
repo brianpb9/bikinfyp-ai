@@ -506,9 +506,9 @@ test("prompt final dan first frame 9 Story Ads x 4 tetap netral tanpa generated 
       const firstFrame = variant.assembledShotDirections[0];
       assert.match(firstFrame, /blank|unprinted|no letters/i, `${template.templateId}#${variant.variantIndex} first frame tidak mengunci prop blank`);
       assert.deepEqual(unsupportedAdsOutcomeClaims(firstFrame), [], `${template.templateId}#${variant.variantIndex} first frame meminta fakta sintetis`);
-      for (const prompt of variant.assembledShotDirections) {
+      for (const [shotIndex, prompt] of variant.assembledShotDirections.entries()) {
         assert.deepEqual(
-          neutralStoryAdsPromptContradictions(prompt),
+          neutralStoryAdsPromptContradictions(prompt, {}, variant.assembledShotNumericScaffolds[shotIndex]),
           [],
           `${template.templateId}#${variant.variantIndex} melanggar kontrak subjek visual`
         );
@@ -568,8 +568,8 @@ test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik
         assert.equal(content.filter((item) => item.type === "image_url").length, 0, `${template.id}/${category} mengirim image ke provider`);
       }
       const prompts = spec.shots.map((shot) => shot.prompt);
-      for (const prompt of prompts) {
-        assert.deepEqual(neutralStoryAdsPromptContradictions(prompt), [], `${template.id}/${category}#${variantIndex}: ${prompt.slice(0, 300)}`);
+      for (const [shotIndex, prompt] of prompts.entries()) {
+        assert.deepEqual(neutralStoryAdsPromptContradictions(prompt, {}, spec.shots[shotIndex].trustedNumericScaffolds), [], `${template.id}/${category}#${variantIndex}: ${prompt.slice(0, 300)}`);
         assert.doesNotMatch(prompt, new RegExp(product.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
       }
     }
@@ -578,6 +578,19 @@ test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik
 
 test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
   const identity = { productName: "Kemeja Uji", productCategory: "fashion" };
+  const safeScaffold = "continuous 15-second story. Shot 1 of 3. at 0-3 seconds";
+  assert.deepEqual(
+    neutralStoryAdsPromptContradictions(safeScaffold, {}, ["15-second", "Shot 1 of 3", "at 0-3 seconds"]),
+    []
+  );
+  for (const disguised of ["189000-second offer", "Shot 189000 of 1 offer", "at 189000-189001 seconds offer"]) {
+    assert.notDeepEqual(neutralStoryAdsPromptContradictions(disguised, {}, ["15-second", "Shot 1 of 3", "at 0-3 seconds"]), [], disguised);
+  }
+  for (const injectedAvatar of [
+    "woman holding a bottle marked ACME beside a blank card",
+    "creator presenting branded serum packaging next to an unprinted swatch",
+    "presenter beside a readable ACME identifier and a plain colour card",
+  ]) assert.notDeepEqual(neutralStoryAdsPromptContradictions(injectedAvatar), [], injectedAvatar);
   for (const action of [
     "talent menahan produk di depan saksi",
     "talent memutar kemasannya di samping swatch blank",
@@ -591,6 +604,9 @@ test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
     "talent membuka kartu blank café di meja",
     "talent membuka kartu blank cafe\u0301 di meja",
     "talent membuka kartu blank Ж di meja",
+    "talent membuka kartu blank 189000-second offer di meja",
+    "talent membuka kartu blank Shot 189000 of 1 offer di meja",
+    "talent membuka kartu blank at 189000-189001 seconds offer di meja",
   ]) assert.notDeepEqual(neutralStoryAdsActionContradictions(action, identity), [], action);
   for (const safe of [
     "talent membuka kartu warna polos di meja",
@@ -612,6 +628,9 @@ test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
     "talent membuka kartu blank café di meja",
     "talent membuka kartu blank cafe\u0301 di meja",
     "talent membuka kartu blank Ж di meja",
+    "talent membuka kartu blank 189000-second offer di meja",
+    "talent membuka kartu blank Shot 189000 of 1 offer di meja",
+    "talent membuka kartu blank at 189000-189001 seconds offer di meja",
   ]) assert.notDeepEqual(neutralStoryAdsPromptContradictions(prompt, identity), [], prompt);
   const mutation = structuredClone(audit.templates);
   mutation.find((template) => template.templateId === "ads-atap-jebol")!.variants[0].assembledShotDirections[0] =
@@ -653,6 +672,9 @@ test("mutasi subjek produk tetap terdeteksi setelah action dirakit menjadi promp
     "talent membuka kartu blank café di meja",
     "talent membuka kartu blank cafe\u0301 di meja",
     "talent membuka kartu blank Ж di meja",
+    "talent membuka kartu blank 189000-second offer di meja",
+    "talent membuka kartu blank Shot 189000 of 1 offer di meja",
+    "talent membuka kartu blank at 189000-189001 seconds offer di meja",
   ]) {
     const segments = structuredClone(base.segments);
     segments[1].action = action;

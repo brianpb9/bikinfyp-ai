@@ -63,3 +63,69 @@ test("template request berbeda tetap ditolak, omission memakai snapshot", () => 
   assert.equal(templateIdRenderOtoritatif({ templateId: "ads-meja-kosong" }, null), "ads-meja-kosong");
   assert.equal(templateIdRenderOtoritatif(undefined, "review-jujur"), "review-jujur");
 });
+
+test("neutral Story Ads selalu memakai descriptor persona terkurasi, custom avatar tidak mencapai BytePlus", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-meja-kosong")!;
+  const product = { id: "custom-neutral", name: "Jasa Uji", price_idr: 189000, category: "jasa" };
+  const [script] = await generateScripts({
+    product, register: "netral", qualityTier: template.tier, durationSec: template.durationSec,
+    contentType: "ads", templateId: template.id, count: 1, tanpaLlm: true,
+  });
+  const curated = getCreatorCategory("hijaber")!;
+  for (const injection of [
+    "woman holding a bottle marked ACME beside a blank card",
+    "creator presenting branded serum packaging next to an unprinted swatch",
+    "presenter beside a readable ACME identifier and a plain colour card",
+  ]) {
+    const injectedCategory = { ...curated, promptSeed: injection, handsPrompt: injection };
+    const neutral = planShots({
+      jobId: "neutral-custom", durationSec: 15, segments: script.segments,
+      category: injectedCategory, productName: product.name, productCategory: product.category,
+      imageRefPath: "/tmp/product.jpg", qualityTier: template.tier,
+      format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
+    });
+    const providerText = neutral.shots.flatMap((shot) => buildTaskContent(
+      neutral, shot, "dreamina-seedance-2-0-mini-260615"
+    )).map((item) => JSON.stringify(item)).join(" ");
+    assert.doesNotMatch(providerText, /ACME|bottle|serum packaging|branded|readable identifier/i);
+
+    // Non-neutral tetap mempertahankan kontrak avatar custom yang sudah ada.
+    const nonNeutral = planShots({
+      jobId: "non-neutral-custom", durationSec: 15, segments: script.segments,
+      category: injectedCategory, productName: product.name, productCategory: product.category,
+      imageRefPath: "/tmp/product.jpg", qualityTier: template.tier,
+      format: "talking_head", ugcTemplate: null,
+    });
+    assert.ok(nonNeutral.shots.some((shot) => shot.prompt.includes(injection)));
+  }
+});
+
+test("scaffold angka hanya menerima nilai exact planner; disguise field gagal sebelum provider", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-meja-kosong")!;
+  const product = { id: "scaffold", name: "Jasa Uji", price_idr: 189000, category: "jasa" };
+  const [script] = await generateScripts({
+    product, register: "netral", qualityTier: template.tier, durationSec: 15,
+    contentType: "ads", templateId: template.id, count: 1, tanpaLlm: true,
+  });
+  const base = {
+    jobId: "scaffold", durationSec: 15, category: getCreatorCategory("hijaber")!,
+    productName: product.name, productCategory: product.category,
+    imageRefPath: "/tmp/product.jpg", qualityTier: template.tier,
+    format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
+  } as const;
+  const safe = planShots({ ...base, segments: script.segments });
+  assert.ok(safe.shots.every((shot) => shot.trustedNumericScaffolds?.length));
+  assert.ok(safe.shots.flatMap((shot) => buildTaskContent(safe, shot, "dreamina-seedance-2-0-mini-260615")).length > 0);
+
+  for (const disguised of [
+    "189000-second offer", "Shot 189000 of 1 offer", "at 189000-189001 seconds offer",
+  ]) {
+    for (const field of ["action", "visual_direction", "start_state", "framing", "angle", "camera", "expression"] as const) {
+      const segments = structuredClone(script.segments);
+      (segments[1] as unknown as Record<string, string>)[field] = field === "action"
+        ? `talent membuka kartu blank ${disguised} di meja`
+        : disguised;
+      assert.throws(() => planShots({ ...base, segments }), /Kontrak/, `${field}: ${disguised}`);
+    }
+  }
+});

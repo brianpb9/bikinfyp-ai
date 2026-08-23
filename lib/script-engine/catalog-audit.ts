@@ -153,6 +153,7 @@ export interface CatalogTemplateAudit {
       visualDirection: string | null;
     }>;
     assembledShotDirections: string[];
+    assembledShotNumericScaffolds: string[][];
     providerReferencePaths: string[];
     providerContentImageCount: number;
     delivery: {
@@ -353,7 +354,9 @@ export function adsVisualContractFindings(templates: CatalogTemplateAudit[]): Ca
         }];
       }),
       ...variant.assembledShotDirections.flatMap((text, shotIndex) => {
-        const matches = neutralStoryAdsPromptContradictions(text);
+        const matches = neutralStoryAdsPromptContradictions(
+          text, {}, variant.assembledShotNumericScaffolds[shotIndex] ?? []
+        );
         return matches.length === 0 ? [] : [{
           templateId: template.templateId, variantIndex: variant.variantIndex,
           role: `shot_prompt_${shotIndex + 1}`, text, matches,
@@ -845,6 +848,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
         : null;
       if (visualSpec) assertVisualSpec(visualSpec);
       const assembledShotDirections = visualSpec?.shots.map((shot) => shot.prompt) ?? [];
+      const assembledShotNumericScaffolds = visualSpec?.shots.map((shot) => shot.trustedNumericScaffolds ?? []) ?? [];
       const providerReferencePaths = visualSpec
         ? [...visualSpec.shots.flatMap((shot) => shot.imageRefPath ? [shot.imageRefPath] : []), ...(visualSpec.extraReferenceImagePaths ?? [])]
         : [];
@@ -877,6 +881,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
         scriptNormalized: segments.map((segment) => `${segment.role}:${segment.normalized}`).join("|"),
         segments,
         assembledShotDirections,
+        assembledShotNumericScaffolds,
         providerReferencePaths,
         providerContentImageCount,
         delivery: {

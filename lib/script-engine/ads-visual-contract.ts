@@ -37,7 +37,11 @@ function literalPattern(value?: string | null): RegExp | null {
   return new RegExp(`\\b${words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")}\\b`, "i");
 }
 
-function characterContradictions(input: string, kind: "action" | "prompt"): string[] {
+function escapeLiteral(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function characterContradictions(input: string, kind: "action" | "prompt", trustedNumericScaffolds: string[] = []): string[] {
   const normalized = input.normalize("NFC");
   const findings: string[] = [];
   if (/[^\x00-\x7F]/u.test(normalized.replace(/—/g, ""))) {
@@ -50,14 +54,24 @@ function characterContradictions(input: string, kind: "action" | "prompt"): stri
     // Grammar aksi hanya membutuhkan spasi dan tanda baca staging sederhana.
     if (/[^A-Za-z\s,.'—-]/u.test(normalized)) findings.push("punctuation/symbol outside approved neutral action grammar");
   } else {
-    // Prompt produksi memang punya nomor shot/durasi. Hanya tiga bentuk
-    // struktural itu yang dibolehkan; angka lain adalah calon fakta sintetis.
-    const withoutStructuralNumbers = normalized
-      .replace(/\b\d+(?:\.\d+)?-second\b/gi, "")
-      .replace(/\bShot\s+\d+\s+of\s+\d+\b/gi, "")
-      .replace(/\b(?:at|then at)\s+\d+(?:\.\d+)?-\d+(?:\.\d+)?\s+seconds\b/gi, "");
+    // Hanya substring scaffold yang dibuat planner dari metadata shot ini
+    // yang boleh membawa angka. Regex generik pernah melegalkan
+    // "189000-second offer" dari field tak tepercaya.
+    let withoutStructuralNumbers = normalized;
+    for (const scaffold of trustedNumericScaffolds) {
+      if (!scaffold || !/\d/.test(scaffold)) continue;
+      withoutStructuralNumbers = withoutStructuralNumbers.replace(new RegExp(escapeLiteral(scaffold), "g"), "");
+    }
     if (/\p{N}/u.test(withoutStructuralNumbers)) findings.push("non-structural digits forbidden in neutral final prompt");
   }
+  return findings;
+}
+
+/** Field visual tak tepercaya sebelum dirakit dengan scaffold planner. */
+export function neutralStoryAdsUntrustedFieldContradictions(field: string): string[] {
+  const findings = characterContradictions(field, "prompt");
+  const unsafe = field.match(/\b(?:product\w*|produk\w*|bottle\w*|botol\w*|packag\w*|kemasan\w*|brand\w*|merek\w*|logo\w*|label\w*|marked|printed|readable|claim\w*|klaim\w*|price\w*|harga\w*|reference\w*|referensi\w*)\b/i)?.[0];
+  if (unsafe) findings.push(`untrusted visual field contains product/brand/text instruction: ${unsafe}`);
   return findings;
 }
 
@@ -94,11 +108,16 @@ const FORBIDDEN_PROMPT_PATTERNS: Array<[string, RegExp]> = [
   ["product identity instruction", /\b(same product as|product identity|identity details)\b/i],
   ["product-name visual setup", /\bstory about\s+["“][^"”]+["”]|\b(presenter|hands?)\b.{0,35}\b(holding|lifting)\s+["“][^"”]+["”]/i],
   ["Indonesian product manipulation", /\b(?:memutar(?:kan)?|mengangkat(?:kan)?|menahan|memegang|membuka|menunjuk(?:kan)?|mengarahkan|memindahkan|meletakkan)\s+(?:produk\w*|kemasan\w*|botol\w*|label\w*|merek\w*)/i],
+  ["custom avatar product/brand injection", /\bholding\s+(?:a\s+)?(?:bottle|packag\w*)\b|\bpresenting\s+(?:a\s+)?(?:branded\s+)?(?:[A-Za-z]+\s+){0,2}packag\w*\b|\bbeside\s+(?:a\s+)?readable\s+[A-Z][A-Za-z0-9_-]*\s+identifier\b|\bmarked\s+[A-Z][A-Za-z0-9_-]*\b/],
 ];
 
-export function neutralStoryAdsPromptContradictions(prompt: string, identity: NeutralVisualProductIdentity = {}): string[] {
+export function neutralStoryAdsPromptContradictions(
+  prompt: string,
+  identity: NeutralVisualProductIdentity = {},
+  trustedNumericScaffolds: string[] = []
+): string[] {
   const findings = [
-    ...characterContradictions(prompt, "prompt"),
+    ...characterContradictions(prompt, "prompt", trustedNumericScaffolds),
     ...FORBIDDEN_PROMPT_PATTERNS.flatMap(([label, pattern]) => pattern.test(prompt) ? [label] : []),
   ];
   for (const [label, value] of [["product name", identity.productName], ["product category", identity.productCategory]] as const) {
