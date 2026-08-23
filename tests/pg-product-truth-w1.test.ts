@@ -547,7 +547,7 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2,
   assert.equal(durableProduct, productSnapshot, "snapshot metadata W1 ditimpa dari produk mutasi");
 });
 
-test("E9 HTTP DELETE non-approved + resume W1 tetap memakai snapshot job berurutan", async (t) => {
+test("E9 HTTP DELETE approved source + resume W1 tetap memakai snapshot job berurutan", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   const s = await siapkanJobOrgDenganManifest("stable");
   const values = new Map<string, Buffer>([
@@ -565,25 +565,25 @@ test("E9 HTTP DELETE non-approved + resume W1 tetap memakai snapshot job berurut
   assert.equal(forbidden.status, 404, "anggota org lain dapat menghapus foto E9");
   assert.deepEqual(JSON.parse((await pool.query("SELECT images FROM products WHERE id=$1", [s.productId])).rows[0].images), [s.approvedSource, s.approvedSecondSource, s.otherSource]);
 
-  const response = await hapusFotoOrg(s.productId, s.otherSource, s.ownerToken);
+  const response = await hapusFotoOrg(s.productId, s.approvedSource, s.ownerToken);
   const body = await response.json() as { images: string[]; cleanup_failed: boolean };
   assert.equal(response.status, 200);
   assert.equal(body.cleanup_failed, false, "cleanup E9 sukses dilaporkan gagal");
-  assert.deepEqual(body.images, [s.approvedSource, s.approvedSecondSource]);
+  assert.deepEqual(body.images, [s.approvedSecondSource, s.otherSource]);
   const authoritative = JSON.parse((await pool.query("SELECT images FROM products WHERE id=$1", [s.productId])).rows[0].images);
   assert.deepEqual(authoritative, body.images, "response E9 bukan daftar pasca-mutasi otoritatif");
-  assert.equal(values.has(s.otherSource), false);
-  assert.equal(values.has(`${s.otherSource}.meta.json`), false, "sidecar target E9 tidak dihapus");
-  assert.deepEqual(storage.deleteCalls, [s.otherSource, `${s.otherSource}.meta.json`], "cleanup E9 menyasar object yang salah");
-  assert.equal(values.has(s.approvedSource), true, "foto unrelated ikut terhapus");
-  assert.equal(values.has(`${s.approvedSource}.meta.json`), true, "sidecar unrelated ikut terhapus");
+  assert.equal(values.has(s.approvedSource), false, "approved source target E9 tidak dihapus");
+  assert.equal(values.has(`${s.approvedSource}.meta.json`), false, "sidecar approved target E9 tidak dihapus");
+  assert.deepEqual(storage.deleteCalls, [s.approvedSource, `${s.approvedSource}.meta.json`], "cleanup E9 menyasar object yang salah");
+  assert.equal(values.has(s.otherSource), true, "foto unrelated ikut terhapus");
+  assert.equal(values.has(`${s.otherSource}.meta.json`), true, "sidecar unrelated ikut terhapus");
   assert.equal(values.has(`${s.approvedSecondSource}.meta.json`), true, "sidecar kedua unrelated ikut terhapus");
   assert.equal(values.has(s.snapshotRel), true, "cleanup E9 menghapus object privat job");
 
   const { processPostgresJob } = await import("../lib/postgres/worker");
   await processPostgresJob(s.jobId);
   assert.equal(amatan.dipanggil, true, "resume W1 tidak mencapai provider observer");
-  assert.equal(amatan.utamaSha, sha256(s.approvedBytes), "resume W1 memilih current list, bukan snapshot job lama");
+  assert.equal(amatan.utamaSha, sha256(s.approvedBytes), "resume W1 memilih approved kedua dari current list, bukan snapshot job lama");
   assert.deepEqual(storage.materializeCalls.slice(0, 2), [s.snapshotRel, s.snapshotRelSecond], "urutan manifest W1 berubah saat resume");
   await assertNoPaidEffectsPg(s.jobId, storage);
 });

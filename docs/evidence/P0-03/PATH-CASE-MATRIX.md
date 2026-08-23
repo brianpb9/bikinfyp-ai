@@ -384,9 +384,12 @@ TASK=P0-C12-HTTP-MUTATION-RESUME-PROOF-20260823
   entrypoint W1 `processPostgresJob` pada PostgreSQL disposable. Tidak ada
   mutasi DB manual yang menggantikan operasi HTTP yang sedang diuji.
 - Kedua jalur membuktikan isolasi owner/org, response dan row `products.images`
-  pasca-mutasi yang sama/otoritatif, serta cleanup foto+sidecar. Menghapus entry
-  non-approved tidak mengubah input provider: bytes dan urutan tetap berasal
-  dari `approved_reference_manifest` job, bukan daftar produk terbaru.
+  pasca-mutasi yang sama/otoritatif, serta cleanup foto+sidecar. Handler nyata
+  menghapus approved source pertama dari daftar dan storage, sehingga current
+  list kini akan memilih approved source kedua. Resume tetap mengirim bytes
+  source pertama dan mempertahankan urutan dua entry dari
+  `approved_reference_manifest` job; ini counterexample langsung terhadap
+  implementasi yang diam-diam me-resolve daftar produk terbaru.
 - Fault storage terkontrol pada cleanup HTTP menghilangkan object privat yang
   dirujuk manifest. Resume W1/W2 lalu gagal tertutup dengan `REF_MISSING`
   sebelum provider, capture, regen, atau output; test tidak mengarang reason

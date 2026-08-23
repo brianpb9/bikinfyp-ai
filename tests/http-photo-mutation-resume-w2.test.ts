@@ -137,7 +137,7 @@ function noPaidSideEffects(jobId: string, storage: MemoryStorage) {
   assert.deepEqual(storage.putCalls, [], `worker meninggalkan object storage: ${JSON.stringify(storage.putCalls)}`);
 }
 
-test("E5 HTTP DELETE non-approved + resume W2 tetap memakai snapshot job berurutan", async (t) => {
+test("E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan", async (t) => {
   const s = await scenario("stable");
   const storage = new MemoryStorage();
   storage.values.set(s.approvedSource, s.approvedBytes);
@@ -154,12 +154,17 @@ test("E5 HTTP DELETE non-approved + resume W2 tetap memakai snapshot job berurut
   assert.equal(forbidden.status, 404, "user lain dapat menghapus foto retail owner");
   assert.deepEqual(currentImages(s.productId), [s.approvedSource, s.approvedSecondSource, s.otherSource]);
 
-  const response = await deleteRequest(s.productId, s.otherSource, s.ownerToken);
-  const body = await response.json() as { images: string[] };
+  const response = await deleteRequest(s.productId, s.approvedSource, s.ownerToken);
+  const body = await response.json() as { images: string[]; cleanup_failed: boolean };
   assert.equal(response.status, 200);
-  assert.deepEqual(body.images, [s.approvedSource, s.approvedSecondSource]);
+  assert.equal(body.cleanup_failed, false);
+  assert.deepEqual(body.images, [s.approvedSecondSource, s.otherSource]);
   assert.deepEqual(currentImages(s.productId), body.images, "response E5 bukan daftar pasca-mutasi otoritatif");
-  assert.equal(storage.values.has(s.otherSource), false);
+  assert.equal(storage.values.has(s.approvedSource), false, "approved source E5 tidak dibersihkan");
+  assert.equal(storage.values.has(`${s.approvedSource}.meta.json`), false, "sidecar approved source E5 tidak dibersihkan");
+  assert.deepEqual(storage.deleteCalls, [s.approvedSource, `${s.approvedSource}.meta.json`], "cleanup E5 menyasar object yang salah");
+  assert.equal(storage.values.has(s.approvedSecondSource), true, "approved source kedua ikut terhapus");
+  assert.equal(storage.values.has(`${s.approvedSecondSource}.meta.json`), true, "sidecar approved kedua ikut terhapus");
   assert.equal(storage.values.has(s.snapshotRel), true, "cleanup E5 menghapus object privat job");
 
   let providerCalls = 0; let providerHash = "";
@@ -171,7 +176,7 @@ test("E5 HTTP DELETE non-approved + resume W2 tetap memakai snapshot job berurut
     } } as never]);
   await processJob(s.jobId);
   assert.equal(providerCalls, 1, "resume W2 tidak mencapai provider observer");
-  assert.equal(providerHash, sha(s.approvedBytes), "resume memilih current list, bukan snapshot job lama");
+  assert.equal(providerHash, sha(s.approvedBytes), "resume memilih approved kedua dari current list, bukan snapshot job lama");
   assert.deepEqual(storage.materializeCalls.slice(0, 2), [s.snapshotRel, s.snapshotRelSecond], "urutan manifest W2 berubah saat resume");
   noPaidSideEffects(s.jobId, storage);
 });
