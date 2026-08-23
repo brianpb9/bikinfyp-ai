@@ -241,6 +241,33 @@ async function siapkanJob(images: string[], tier = "silent_caption"): Promise<st
   return jid;
 }
 
+/** Admission produksi PostgreSQL, bukan INSERT fixture worker. */
+async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string; productId: string }> {
+  const productId = uid(), scriptId = uid(), t = at();
+  await pool.query(
+    `INSERT INTO products
+      (id,user_id,name,price_idr,category,images,raw_meta,product_visual_desc,brand_brief,claims,created_at)
+     VALUES ($1,$2,'Serum Glow Bright',85000,'beauty',$3,$4,'BOTOL-AMBER-AWAL','ARAH-BRAND-AWAL',$5,$6)`,
+    [productId, userId, JSON.stringify(images), JSON.stringify({ brand: "Merek Awal" }), JSON.stringify(["klaim awal"]), t]
+  );
+  await pool.query(
+    `INSERT INTO scripts
+      (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,created_at)
+     VALUES ($1,$2,'H1','senang','bestie',$3,'caption','[]','{}','silent_caption',$4)`,
+    [scriptId, productId, JSON.stringify(segmen), t]
+  );
+  await pool.query(
+    "INSERT INTO credit_ledger (id,user_id,delta,type,created_at) VALUES ($1,$2,50000,'bonus',$3)",
+    [uid(), userId, t]
+  );
+  const { smokeCreateJob } = await import("../lib/postgres/smoke-runtime");
+  const admitted = await smokeCreateJob(userId, {
+    productId, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr: 12000,
+  });
+  assert.equal(admitted.duplicate, false);
+  return { jobId: admitted.jobId, productId };
+}
+
 const hitung = async (sql: string, args: unknown[]) =>
   Number((await pool.query(sql, args)).rows[0].n);
 
@@ -371,18 +398,9 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2,
     [relPackshot, PACKSHOT],
     [`${relPackshot}.meta.json`, sidecar(PACKSHOT, true)],
   ]);
-  const jobId = await siapkanJob([relBanner, relPackshot]);
-  const productId = (await pool.query("SELECT product_id FROM jobs WHERE id=$1", [jobId])).rows[0].product_id;
-  const productSnapshot = JSON.stringify({
-    version: 1,
-    productName: "Serum Glow Bright",
-    category: "beauty",
-    trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
-    productVisualDesc: "BOTOL-AMBER-AWAL",
-    brandBrief: "ARAH-BRAND-AWAL",
-    claims: ["klaim awal"],
-  });
-  await pool.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [productSnapshot, jobId]);
+  const { jobId, productId } = await siapkanJobLewatAdmisi([relBanner, relPackshot]);
+  const productSnapshot = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
+  assert.ok(productSnapshot, "admission PostgreSQL wajib memasang snapshot sebelum worker mulai");
   await pool.query(
     "UPDATE products SET name='NAMA MUTASI',category='food',product_visual_desc='DESC-MUTASI',brand_brief='BRIEF-MUTASI',claims='bukan-json',raw_meta='{}' WHERE id=$1",
     [productId]
@@ -405,10 +423,11 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2,
   // yang BENAR-BENAR DITERIMA provider — jadi asersi ini menangkap juga
   // perubahan di hilir (path tertukar, primaryRef ditimpa) yang tidak bisa
   // dilihat dari daftar materialize.
+  const auditJob = (await pool.query("SELECT action,meta FROM audit_log WHERE entity_id=$1 ORDER BY created_at", [jobId])).rows;
   assert.ok(
     amatan.dipanggil,
     "provider tidak pernah menerima spec — eksekusi berhenti sebelum boundary, jadi asersi hash " +
-      "di bawah tidak akan mengamati apa pun"
+      `di bawah tidak akan mengamati apa pun. Audit: ${JSON.stringify(auditJob)}`
   );
   assert.equal(
     amatan.utamaSha,

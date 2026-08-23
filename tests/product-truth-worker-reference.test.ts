@@ -32,6 +32,7 @@ import { execFileSync } from "node:child_process";
 
 process.env.RACUN_NO_DOTENV = "1";
 process.env.RACUN_WORKER_DISABLED = "1"; // pump() tidak boleh jalan sendiri
+process.env.JOB_INTAKE_MODE = "open";
 process.env.STORAGE_MODE = "filesystem";
 process.env.DB_PATH = `/tmp/racun-test-p003-w2-${process.pid}.db`;
 process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "p003-w2-store-"));
@@ -197,6 +198,36 @@ function siapkanJob(images: string[], tier = "silent_caption"): { jobId: string;
   ).run(jobId, userId, productId, scriptId, tier, now(), now());
   db.prepare("UPDATE scripts SET job_id = ? WHERE id = ?").run(jobId, scriptId);
   return { jobId, productId };
+}
+
+/** Admission HTTP SQLite sungguhan, lalu worker sengaja belum dijalankan. */
+async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string; productId: string }> {
+  const productId = uuid();
+  db.prepare(
+    `INSERT INTO products
+      (id,user_id,source_url,name,price_idr,category,images,raw_meta,product_visual_desc,brand_brief,claims,created_at)
+     VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(productId, userId, null, "Serum Glow Bright", 85000, "beauty", JSON.stringify(images),
+    JSON.stringify({ brand: "Merek Awal" }), "BOTOL-AMBER-AWAL", "ARAH-BRAND-AWAL", JSON.stringify(["klaim awal"]), now());
+  const scriptId = uuid();
+  db.prepare(
+    `INSERT INTO scripts
+      (id,job_id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,hook_level,approved_by_user_at,edited_by_user,created_at)
+     VALUES (?,NULL,?,'H1','senang','bestie',?,'caption','[]','{}','high_quality','normal',?,0,?)`
+  ).run(scriptId, productId, JSON.stringify(segmen), now(), now());
+  db.prepare("INSERT INTO credit_ledger (id,user_id,delta,type,created_at) VALUES (?,?,50000,'bonus',?)")
+    .run(uuid(), userId, now());
+  const { issueToken } = await import("../lib/auth");
+  const { POST } = await import("../app/api/jobs/route");
+  const token = await issueToken(userId, "081200000003");
+  const response = await POST(new Request("http://localhost/api/jobs", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: `racun_token=${encodeURIComponent(token)}` },
+    body: JSON.stringify({ script_id: scriptId, format: "hands_only", quality_tier: "high_quality", duration_s: 15 }),
+  }));
+  if (response.status !== 201) assert.fail(`admission SQLite gagal (${response.status}): ${await response.text()}`);
+  const body = await response.json() as { job_id: string };
+  return { jobId: body.job_id, productId };
 }
 
 const jumlah = (sql: string, ...args: unknown[]) =>
@@ -673,18 +704,9 @@ test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetuj
   ]);
 
   try {
-    const { jobId } = siapkanJob([relSah1, relSah2], "high_quality");
-    const productId = (db.prepare("SELECT product_id FROM jobs WHERE id=?").get(jobId) as { product_id: string }).product_id;
-    const productSnapshot = JSON.stringify({
-      version: 1,
-      productName: "Serum Glow Bright",
-      category: "beauty",
-      trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
-      productVisualDesc: "BOTOL-AMBER-AWAL",
-      brandBrief: "ARAH-BRAND-AWAL",
-      claims: ["klaim awal"],
-    });
-    db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?").run(productSnapshot, jobId);
+    const { jobId, productId } = await siapkanJobLewatAdmisi([relSah1, relSah2]);
+    const productSnapshot = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(jobId) as { job_product_snapshot: string | null }).job_product_snapshot;
+    assert.ok(productSnapshot, "admission SQLite wajib memasang snapshot sebelum worker mulai");
     db.prepare("UPDATE products SET name='NAMA MUTASI',category='food',product_visual_desc='DESC-MUTASI',brand_brief='BRIEF-MUTASI',claims='bukan-json',raw_meta='{}' WHERE id=?").run(productId);
     await processJob(jobId);
 

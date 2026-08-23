@@ -22,6 +22,7 @@ import type { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import type { PgJobsRepository } from "@/lib/postgres/jobs";
 import { pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
+import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
 
 export type HasilSel =
   | { status: "queued"; script_id: string; job_id: string }
@@ -151,14 +152,26 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
+    // Freeze product truth under a row lock in this admission transaction.
+    // The org predicate is authoritative for dashboard ownership; caller
+    // fields are used for validation/UI only, never for the durable snapshot.
+    const admissionProduct = await client.query<{
+      name: string; category: string; raw_meta: string | null;
+      product_visual_desc: string | null; brand_brief: string | null; claims: string | null;
+    }>("SELECT name,category,raw_meta,product_visual_desc,brand_brief,claims FROM products WHERE id=$1 AND org_id=$2 FOR SHARE", [sel.productId, sel.orgId]);
+    if (!admissionProduct.rows[0]) {
+      await client.query("ROLLBACK");
+      return gagal("Produk organisasi tidak ditemukan.");
+    }
+    const productSnapshotRaw = createJobProductSnapshotRaw(admissionProduct.rows[0]);
     // requires_approval=TRUE: job dashboard brand SELALU berhenti di gerbang
     // review scene (M11). Brand menilai gambar & pesan tiap scene sebelum
     // digabung. Retail tidak pernah menyalakan ini.
     await client.query(
-      `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,state,created_at,state_changed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,'QUEUED',$18,$18)`,
+      `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,job_product_snapshot,state,created_at,state_changed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,$18,'QUEUED',$19,$19)`,
       [jobId, sel.userId, sel.orgId, sel.runId, sel.avatarCustomDesc, sel.productId, sel.personaId, sel.scriptId,
-        sel.format, tier, durationS, sel.shotCount, sel.ratio, sel.noModel, sel.tvcRoute, sel.templateId, sel.recordStyle, now]
+        sel.format, tier, durationS, sel.shotCount, sel.ratio, sel.noModel, sel.tvcRoute, sel.templateId, sel.recordStyle, productSnapshotRaw, now]
     );
     // KLAIM ATOMIK, bukan pemeriksaan tambahan.
     //

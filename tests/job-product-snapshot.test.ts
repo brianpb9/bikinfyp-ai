@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import {
+  createJobProductSnapshotRaw,
   loadOrCreateJobProductSnapshot,
   parseJobProductSnapshot,
   UnsafeLegacyProductSnapshot,
@@ -54,6 +55,22 @@ test("snapshot invalid gagal tertutup", () => {
   assert.throws(() => parseJobProductSnapshot(JSON.stringify({ ...awal, version: 1, trustedBrand: { source: "guessed", value: "X" } })), /PRODUCT_SNAPSHOT_INVALID/);
 });
 
+test("admission builder membekukan seluruh metadata dari bentuk row database", () => {
+  const raw = createJobProductSnapshotRaw({
+    name: "Serum Admission", category: "beauty",
+    raw_meta: JSON.stringify({ brand: "Merek Admission", ignored: "bukan sumber" }),
+    product_visual_desc: "botol amber", brand_brief: "faktual",
+    claims: JSON.stringify(["ringan", "tanpa pewangi"]),
+  });
+  assert.deepEqual(parseJobProductSnapshot(raw), {
+    version: 1, productName: "Serum Admission", category: "beauty",
+    trustedBrand: { source: "products.raw_meta.brand", value: "Merek Admission" },
+    productVisualDesc: "botol amber", brandBrief: "faktual",
+    claims: ["ringan", "tanpa pewangi"],
+  });
+  assert.throws(() => createJobProductSnapshotRaw({ name: "X", category: "Y", claims: "{}" }), /SOURCE_INVALID/);
+});
+
 test("legacy dengan jejak provider tanpa snapshot ditolak", async () => {
   await assert.rejects(
     () => loadOrCreateJobProductSnapshot({ existingRaw: null, candidate: awal, persistIfAbsentAndSafe: async () => null }),
@@ -77,4 +94,36 @@ test("A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan 
   ]) {
     assert.ok(source.indexOf(token) > guard, `${token} terjadi sebelum snapshot metadata diverifikasi`);
   }
+});
+
+test("semua admission produksi memasang snapshot pada INSERT job yang sama", () => {
+  const roots = ["app", "lib"];
+  const creators: string[] = [];
+  const walk = (dir: string) => {
+    for (const entry of fs.readdirSync(path.join(process.cwd(), dir), { withFileTypes: true })) {
+      const rel = path.join(dir, entry.name);
+      if (entry.isDirectory()) walk(rel);
+      else if (entry.name.endsWith(".ts")) {
+        const source = fs.readFileSync(path.join(process.cwd(), rel), "utf8");
+        if (/INSERT INTO jobs\b/.test(source)) creators.push(rel);
+      }
+    }
+  };
+  roots.forEach(walk);
+  assert.deepEqual(creators.sort(), [
+    "app/api/jobs/route.ts",
+    "lib/dashboard/render-cell.ts",
+    "lib/postgres/smoke-runtime.ts",
+  ]);
+  for (const rel of creators) {
+    const source = fs.readFileSync(path.join(process.cwd(), rel), "utf8");
+    assert.match(source, /createJobProductSnapshotRaw/, `${rel} tidak membangun snapshot admission kanonik`);
+    for (const insert of source.matchAll(/INSERT INTO jobs[\s\S]{0,700}?(?:`|\")/g)) {
+      assert.match(insert[0], /job_product_snapshot/, `${rel} punya INSERT jobs tanpa snapshot atomik`);
+    }
+  }
+  const retail = fs.readFileSync(path.join(process.cwd(), "app/api/jobs/route.ts"), "utf8");
+  assert.match(retail, /smokeCreateJob\(/, "call-site admission PostgreSQL retail hilang");
+  const pgAdmission = fs.readFileSync(path.join(process.cwd(), "lib/postgres/smoke-runtime.ts"), "utf8");
+  assert.match(pgAdmission, /FOR SHARE[\s\S]+job_product_snapshot/, "PG admission tidak mengunci produk sebelum snapshot+INSERT");
 });

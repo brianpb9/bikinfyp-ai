@@ -15,6 +15,7 @@ import type { FypQualityTier, FypVideoFormat } from "@/lib/fyp-score";
 import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnapshot, postgresRuntimeEnabled, postgresSmokeEnabled, smokeCompleteJob, smokeCreateJob, smokeGetProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan } from "@/lib/fyp-score";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
+import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -203,11 +204,17 @@ export async function POST(req: Request) {
         .get(script.id) as { id: string } | undefined;
       if (active) return { jobId: active.id, duplicate: true };
       if (getBalance(user.id) < priceIdr) throw ERR.INSUFFICIENT_CREDITS();
+      // Read and freeze product truth inside the same transaction that admits
+      // the job. A mutation after the earlier HTTP validation therefore cannot
+      // slip between admission and snapshot creation.
+      const admissionProduct = db!.prepare("SELECT * FROM products WHERE id=? AND user_id=?").get(product.id, user.id) as ProductRow | undefined;
+      if (!admissionProduct) throw ERR.NOT_FOUND("Produknya");
+      const productSnapshotRaw = createJobProductSnapshotRaw(admissionProduct);
       const jobId = uuid();
       db!.prepare(
-        `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, state, created_at, state_changed_at)
-         VALUES (?,?,?,?,?,?,?,?, 'QUEUED', ?, ?)`
-      ).run(jobId, user.id, product.id, personaId, script.id, format, tier, durationS, now(), now());
+        `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, job_product_snapshot, state, created_at, state_changed_at)
+         VALUES (?,?,?,?,?,?,?,?,?, 'QUEUED', ?, ?)`
+      ).run(jobId, user.id, product.id, personaId, script.id, format, tier, durationS, productSnapshotRaw, now(), now());
       if (!holdCredits(user.id, jobId, priceIdr)) throw ERR.INSUFFICIENT_CREDITS();
       db!.prepare("UPDATE scripts SET job_id = ? WHERE id = ?").run(jobId, script.id);
       return { jobId, duplicate: false };

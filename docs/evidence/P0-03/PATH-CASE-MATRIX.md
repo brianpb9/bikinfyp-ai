@@ -352,3 +352,24 @@ TASK=P0-C9-JOB-PRODUCT-METADATA-SNAPSHOT-20260823
   `tsc --noEmit` dan `git diff --check` → **PASS**.
 - C9 tetap **PARTIAL** secara konservatif: mutasi HTTP E3/E7→resume belum diuji
   end-to-end dan reason code `SNAPSHOT_IMMUTABLE` belum diterbitkan.
+
+#### Koreksi review: snapshot dipasang saat admission
+
+- Tiga pembuat job produksi diaudit: retail SQLite (`app/api/jobs/route.ts`),
+  retail PostgreSQL (`smokeCreateJob`), dan dashboard brand PostgreSQL
+  (`renderSatuSel`). Ketiganya kini membangun snapshot kanonik dari row produk
+  di dalam transaksi admission dan menulisnya pada `INSERT jobs` yang sama;
+  jalur PostgreSQL menahan `FOR SHARE` sampai commit. Guard struktural gagal
+  bila muncul pembuat job produksi baru atau `INSERT jobs` tanpa snapshot.
+- Regresi W1 dan W2 tidak lagi pre-seed `job_product_snapshot`: job dibuat
+  lewat admission nyata, produk dimutasi sebelum worker dimulai (termasuk
+  claims menjadi JSON rusak), dan boundary provider tetap menerima metadata
+  admission. Fallback worker tetap hanya untuk legacy pristine.
+- Helper/parser/A6/admission guard → **7/7 PASS**; W2 → **16/16 PASS**;
+  affected admission/product-truth suite → **135/135 PASS**; W1 PostgreSQL
+  disposable → **17/17 PASS**; admission concurrency PostgreSQL → **PASS**;
+  jobs parity PostgreSQL → **PASS**; production migration runner → **PASS**;
+  `tsc --noEmit` dan `git diff --check` → **PASS**.
+- Status C9 tetap **PARTIAL**: bukti ini menutup race admission→worker untuk W1
+  dan W2, tetapi tidak mengarang reason code `SNAPSHOT_IMMUTABLE` maupun
+  cakupan HTTP E3/E7→resume/regenerate end-to-end yang belum diuji.

@@ -66,6 +66,34 @@ export function claimsFromRaw(raw: string | null | undefined): string[] {
   return [...value];
 }
 
+/**
+ * Build the canonical bytes written by a job-admission transaction.
+ *
+ * This deliberately accepts the database-shaped product row, so every real
+ * admission path uses the same strict source rules instead of reconstructing
+ * a subtly different snapshot.  The returned JSON has already passed the
+ * runtime parser used by workers and A6.
+ */
+export function createJobProductSnapshotRaw(product: {
+  name: string;
+  category: string;
+  raw_meta?: string | null;
+  product_visual_desc?: string | null;
+  brand_brief?: string | null;
+  claims?: string | null;
+}): string {
+  const snapshot = parseJobProductSnapshot(JSON.stringify({
+    version: JOB_PRODUCT_SNAPSHOT_VERSION,
+    productName: product.name,
+    category: product.category,
+    trustedBrand: { source: TRUSTED_BRAND_SOURCE, value: trustedBrandFromRawMeta(product.raw_meta) },
+    productVisualDesc: product.product_visual_desc ?? null,
+    brandBrief: product.brand_brief ?? null,
+    claims: claimsFromRaw(product.claims),
+  }));
+  return JSON.stringify(snapshot);
+}
+
 export async function loadOrCreateJobProductSnapshot(input: {
   existingRaw: string | null;
   /** Lazy form prevents mutable product columns from being parsed on resume. */
