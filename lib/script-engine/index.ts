@@ -548,7 +548,7 @@ async function generateOne(
           keluhan: keluhan.length ? keluhan : undefined,
           ide: petunjukIde,
         });
-        const kandidat = rakitDanNilai(keSegmentDraft(segs), true);
+        const kandidat = rakitDanNilai(keSegmentDraft(segs, contentType), true);
         if (kandidat.validation.passed) {
           // Baris POSITIF, sengaja. Sampai sekarang jalur LLM hanya menulis log
           // saat GAGAL, jadi keberhasilannya tidak bisa dibuktikan dari log —

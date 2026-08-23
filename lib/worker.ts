@@ -18,6 +18,7 @@ import { buildPhotoPanVideo } from "./media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "./media/vo-tts";
 import { synthesizeGeminiVoiceover } from "./media/gemini-tts";
 import { stripDeliveryTags } from "./script-engine/delivery-tags";
+import { voiceoverStartSecForSegments } from "./script-engine/story-os-ads";
 import { hargaTerbilang } from "./script-engine/terbilang";
 import { buildCaptionCards } from "./media/captions";
 import { renderCaptionPngs } from "./media/render-captions";
@@ -374,7 +375,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         clipPaths,
         mode: compositeMode,
         voiceoverWavPath: compositeMode === "embedded" ? geminiVoPath : undefined,
-        voiceoverStartSec: segments.find((segment) => stripDeliveryTags(segment.tts_text ?? segment.text).trim())?.start ?? 0,
+        voiceoverStartSec: voiceoverStartSecForSegments(segments),
         vo: compositeMode === "vo" ? vo : undefined,
         captions: captionCards,
         musicPath,

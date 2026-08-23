@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { embeddedVoiceoverInputFilter } from "../lib/media/compositor";
+import { voiceoverStartSecForSegments } from "../lib/script-engine/story-os-ads";
 import fs from "node:fs";
 import { AUDIO_TARGET, audioEncoderArgs, loudnormFilter, measureLoudness, memenuhiStandar } from "../lib/media/audio-master";
 
@@ -32,6 +33,14 @@ test("filter loudnorm selalu membawa ketiga target", () => {
 test("VO embedded dapat ditunda melewati HOOK Story Ads yang senyap", () => {
   assert.match(embeddedVoiceoverInputFilter(4, 3), /adelay=delays=3000:all=1/);
   assert.match(embeddedVoiceoverInputFilter(4, 0), /adelay=delays=0:all=1/);
+  const safe = [
+    { role: "hook", label: "HOOK", start: 0, end: 3, text: "", visual_direction: "blank" },
+    { role: "demo", label: "FRICTION", start: 3, end: 6, text: "Nah, mulai.", visual_direction: "blank" },
+  ] as never;
+  assert.equal(voiceoverStartSecForSegments(safe), 3);
+  const reordered = structuredClone(safe) as unknown as Array<Record<string, unknown>>;
+  [reordered[0], reordered[1]] = [reordered[1], reordered[0]];
+  assert.throws(() => voiceoverStartSecForSegments(reordered as never), /SA3 worker/);
 });
 
 test("filter dua-lewatan memakai hasil pengukuran, bukan mengulang target", () => {

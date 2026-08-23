@@ -79,17 +79,26 @@ test("naskah Ads yang memenuhi Story OS: NOL temuan keras", () => {
   assert.deepEqual(temuan, [], `naskah sah ditolak: ${JSON.stringify(temuan)}`);
 });
 
-test("SA3 menolak text maupun tts_text HOOK di strict dan light", async () => {
+test("SA3 menolak reordered, duplicate, missing, text, tts, alias suara, dan start nol di strict dan light", async () => {
   const { validateScript } = await import("../lib/script-engine/validator");
-  for (const mutation of [{ text: "Eh, dialog bocor." }, { tts_text: "[excited] Eh, TTS bocor." }]) {
+  const mutations: Array<[string, (segments: Record<string, unknown>[]) => void]> = [
+    ["reordered HOOK", (segments) => { [segments[0], segments[1]] = [segments[1], segments[0]]; }],
+    ["duplicate HOOK", (segments) => { segments.splice(1, 0, structuredClone(segments[0])); }],
+    ["missing HOOK", (segments) => { segments[0].block = "BODY"; segments[0].label = "FRICTION"; }],
+    ["nonempty text", (segments) => { segments[0].text = "Eh, dialog bocor."; }],
+    ["nonempty tts_text", (segments) => { segments[0].tts_text = "[excited] Eh, TTS bocor."; }],
+    ["speech alias", (segments) => { segments[0].dialogue = "Eh, alias bocor."; }],
+    ["later segment starts at zero", (segments) => { segments[1].start = 0; }],
+  ];
+  for (const [name, mutate] of mutations) {
     const segments = structuredClone((LULUS as unknown as { segments: Record<string, unknown>[] }).segments);
-    Object.assign(segments[0], mutation);
+    mutate(segments);
     for (const mode of ["strict", "light"] as const) {
       const result = validateScript({
         segments, hookFamily: "H1", register: "netral", productName: "Serum Uji",
         productPriceIdr: 89000, contentType: "ads", durationSec: 20, quality_tier: "super_hq",
       } as never, mode);
-      assert.ok(result.errors.some((issue) => issue.rule === "SA3"), `${mode} meloloskan ${JSON.stringify(mutation)}`);
+      assert.ok(result.errors.some((issue) => issue.rule === "SA3"), `${mode} meloloskan ${name}`);
     }
   }
 });
@@ -97,9 +106,56 @@ test("SA3 menolak text maupun tts_text HOOK di strict dan light", async () => {
 test("schema LLM Ads menolak HOOK bersuara dan menerima kontrol senyap", async () => {
   const { SkemaNaskahAds } = await import("../lib/script-engine/llm");
   assert.equal(SkemaNaskahAds.safeParse({ segments: LIVE_ADS_SAFE }).success, true);
-  const noisy = structuredClone(LIVE_ADS_SAFE);
-  noisy[0].text = "Eh, bocor.";
-  assert.equal(SkemaNaskahAds.safeParse({ segments: noisy }).success, false);
+  for (const mutate of [
+    (segments: typeof LIVE_ADS_SAFE) => { [segments[0], segments[1]] = [segments[1], segments[0]]; },
+    (segments: typeof LIVE_ADS_SAFE) => { segments.splice(1, 0, structuredClone(segments[0])); },
+    (segments: typeof LIVE_ADS_SAFE) => { segments[0].block = "BODY"; segments[0].label = "FRICTION"; },
+    (segments: typeof LIVE_ADS_SAFE) => { segments[0].text = "Eh, bocor."; },
+  ]) {
+    const unsafe = structuredClone(LIVE_ADS_SAFE);
+    mutate(unsafe);
+    assert.equal(SkemaNaskahAds.safeParse({ segments: unsafe }).success, false);
+  }
+  const unknownSpeechAlias = structuredClone(LIVE_ADS_SAFE) as Array<Record<string, unknown>>;
+  unknownSpeechAlias[0].tts_text = "Eh, alias yang semula dibuang.";
+  assert.equal(SkemaNaskahAds.safeParse({ segments: unknownSpeechAlias }).success, false, "schema strict tidak boleh membuang alias suara diam-diam");
+});
+
+test("mapper Ads menolak susunan HOOK tidak kanonis tanpa mengurutkan ulang", async () => {
+  const { keSegmentDraft } = await import("../lib/script-engine/llm");
+  const reordered = structuredClone(LIVE_ADS_SAFE);
+  [reordered[0], reordered[1]] = [reordered[1], reordered[0]];
+  assert.throws(() => keSegmentDraft(reordered as never, "ads"), /Kontrak SA3 mapper/);
+
+  const safe = keSegmentDraft(structuredClone(LIVE_ADS_SAFE) as never, "ads");
+  assert.equal(safe[0].label, "HOOK");
+  assert.equal(safe[0].text, "");
+});
+
+test("live LLM Ads menolak reordered HOOK lalu menerima respons perbaikan tanpa normalisasi diam-diam", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      if (calls === 1) [segments[0], segments[1]] = [segments[1], segments[0]];
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [result] = await generateScripts({
+      product: { id: "live-reordered-hook", name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+      hookFamilies: ["H8"], lockHookFamily: true,
+    });
+    assert.equal(calls, 2);
+    assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    assert.equal(result.segments[0].label, "HOOK");
+    assert.equal(result.segments[0].text, "");
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
 });
 
 test("SA1 — CTA tanpa tanya yang tersisa ditolak", () => {

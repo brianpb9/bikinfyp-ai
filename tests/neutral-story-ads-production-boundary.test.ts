@@ -120,6 +120,17 @@ test("scaffold angka hanya menerima nilai exact planner; disguise field gagal se
   assert.ok(safe.shots.every((shot) => shot.trustedNumericScaffolds?.length));
   assert.ok(safe.shots.flatMap((shot) => buildTaskContent(safe, shot, "dreamina-seedance-2-0-mini-260615")).length > 0);
 
+  const reordered = structuredClone(script.segments);
+  [reordered[0], reordered[1]] = [reordered[1], reordered[0]];
+  assert.throws(() => planShots({ ...base, segments: reordered }), /SA3/);
+  const duplicate = structuredClone(script.segments);
+  duplicate.splice(1, 0, structuredClone(duplicate[0]));
+  assert.throws(() => planShots({ ...base, segments: duplicate }), /SA3/);
+  const missing = structuredClone(script.segments);
+  missing[0].role = "demo";
+  missing[0].label = "FRICTION";
+  assert.throws(() => planShots({ ...base, segments: missing }), /SA3/);
+
   for (const disguised of [
     "189000-second offer", "Shot 189000 of 1 offer", "at 189000-189001 seconds offer",
     "15-second", "Shot 1 of 4", "at 3-6 seconds",

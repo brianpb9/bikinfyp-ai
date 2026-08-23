@@ -452,8 +452,11 @@ test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasi
     });
     for (const variant of variants) {
       assert.deepEqual(variant.segments.map((segment) => segment.label), ["HOOK", "FRICTION", "FRICTION", "SPIKE", "BUTTON"]);
+      assert.equal(variant.segments.filter((segment) => segment.label === "HOOK").length, 1);
       assert.equal(variant.segments[0].text, "", `${template.id}: SA3 hook tidak senyap`);
       assert.equal(variant.segments[0].tts_text, undefined, `${template.id}: SA3 hook masih punya TTS`);
+      assert.equal(variant.segments[0].start, 0, `${template.id}: HOOK tidak mulai di nol`);
+      assert.ok(variant.segments.slice(1).every((segment) => segment.start > 0), `${template.id}: beat setelah HOOK mulai di nol`);
       assert.equal(variant.segments.filter((segment) => segment.role === "demo").length, 1);
       for (const segment of variant.segments.filter((item) => item.label === "FRICTION" || item.label === "SPIKE")) {
         const words = segment.text.replace(/\[[^\]]+\]/g, "").trim().split(/\s+/).filter(Boolean);

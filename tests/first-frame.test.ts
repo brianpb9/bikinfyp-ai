@@ -16,7 +16,7 @@ import type { SegmentDraft } from "../lib/script-engine/templates";
 // punya meja kosong. Frame buatan yang menyelesaikannya.
 
 const SEG: SegmentDraft[] = [
-  { role: "hook", text: "a", start: 0, end: 5, visual_direction: "x" },
+  { role: "hook", text: "", start: 0, end: 5, visual_direction: "x" },
   { role: "demo", text: "b", start: 5, end: 11, visual_direction: "y" },
   { role: "cta", text: "c", start: 11, end: 15, visual_direction: "z" },
 ];

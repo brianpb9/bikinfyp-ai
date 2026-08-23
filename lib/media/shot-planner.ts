@@ -36,6 +36,7 @@ import { getRecordingStyle, type StyleFormat } from "./recording-styles";
 import { blokKontrakMode, framingUntukMode, modeDikenal } from "./mode-kamera";
 import { formatById } from "../script-engine/format-katalog";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
+import { temuanHookSenyapAds } from "../script-engine/story-os-ads";
 import {
   isNeutralStoryAdsTemplate,
   neutralStoryAdsActionContradictions,
@@ -1277,6 +1278,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   }
   const visualCategory = curatedNeutralCategory ?? input.category;
   if (neutralStoryAds) {
+    const sa3Findings = temuanHookSenyapAds(input.segments as Array<SegmentDraft & Record<string, unknown>>);
+    if (sa3Findings.length > 0) {
+      throw new Error(`Kontrak SA3 neutral Story Ads dilanggar sebelum prompt provider: ${sa3Findings.join(", ")}`);
+    }
     for (const segment of input.segments) {
       if (segment.action) {
         const contradictions = neutralStoryAdsActionContradictions(segment.action, {

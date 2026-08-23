@@ -65,6 +65,12 @@ type SegmenAds = SegmentDraft & {
   product_state?: "hidden" | "partial" | "hero";
   /** Siapa yang menyaksikan pelampiasan. Boleh "suara saja, off camera". */
   saksi?: string;
+  dialogue?: string;
+  spoken_text?: string;
+  speech?: string;
+  voiceover?: string;
+  narration?: string;
+  transcript?: string;
 };
 
 const PUNYA_TANYA = /\?|(\bnggak\b|\bgak\b|\bkan\b|\bya\b)\s*[?]?$/i;
@@ -78,6 +84,60 @@ const KLAIM_MANFAAT = /\b(bikin (gigi|kulit|wajah) (lebih )?(bersih|putih|cerah)
 
 const label = (s: SegmenAds) => String(s.label ?? s.block ?? s.role ?? "").toUpperCase();
 const teks = (s: SegmenAds) => stripDeliveryTags(String(s.text ?? "")).trim();
+
+const SPEECH_FIELDS = ["text", "tts_text", "dialogue", "spoken_text", "speech", "voiceover", "narration", "transcript"] as const;
+
+function hookSignals(s: SegmenAds): boolean[] {
+  return [
+    s.block !== undefined && String(s.block).toUpperCase() === "HOOK",
+    s.label !== undefined && String(s.label).toUpperCase() === "HOOK",
+    s.role !== undefined && String(s.role).toLowerCase() === "hook",
+  ];
+}
+
+/** Invariant struktural SA3 yang dipakai schema, mapper, validator, planner,
+ * dan worker. Tidak mengurutkan atau menormalkan input secara diam-diam. */
+export function temuanHookSenyapAds(segments: Array<Record<string, unknown>>): string[] {
+  const findings: string[] = [];
+  if (segments.length === 0) return ["SA3: tepat satu HOOK wajib ada sebagai segments[0]"];
+  const candidates = segments.map((segment) => hookSignals(segment as unknown as SegmenAds).some(Boolean));
+  const count = candidates.filter(Boolean).length;
+  if (count !== 1) findings.push(`SA3: tepat satu HOOK wajib ada; ditemukan ${count}`);
+  if (!candidates[0]) findings.push("SA3: HOOK wajib segments[0]; beat sebelum HOOK dilarang");
+  for (const [field, expected] of [["block", "HOOK"], ["label", "HOOK"], ["role", "hook"]] as const) {
+    if (!segments.some((segment) => segment[field] !== undefined)) continue;
+    const matches = segments.map((segment) => String(segment[field] ?? "").toLowerCase() === expected.toLowerCase());
+    if (matches.filter(Boolean).length !== 1 || !matches[0]) {
+      findings.push(`SA3: penanda ${field} wajib unik dan menunjuk segments[0]`);
+    }
+  }
+
+  const first = segments[0];
+  for (const key of SPEECH_FIELDS) {
+    const value = first?.[key];
+    if (typeof value === "string" && value.trim()) findings.push(`SA3: segments[0].${key} wajib kosong`);
+  }
+  if (Number(first?.start) !== 0) findings.push("SA3: HOOK wajib mulai tepat pada detik 0");
+  for (let index = 1; index < segments.length; index++) {
+    if (Number(segments[index]?.start) <= 0) findings.push(`SA3: segmen ${index} tidak boleh mulai pada detik 0 atau sebelumnya`);
+  }
+  return [...new Set(findings)];
+}
+
+export function isStructuredStoryAds(segments: Array<Record<string, unknown>>): boolean {
+  return segments.some((segment) => /^(HOOK|FRICTION|SPIKE|BUTTON)$/i.test(String(segment.label ?? segment.block ?? "")));
+}
+
+/** Offset VO final. Story Ads terstruktur divalidasi dulu agar worker tidak
+ * pernah mengubah reordered/duplicate HOOK menjadi audio mulai detik nol. */
+export function voiceoverStartSecForSegments(segments: SegmentDraft[]): number {
+  const records = segments as unknown as Array<Record<string, unknown>>;
+  if (isStructuredStoryAds(records)) {
+    const findings = temuanHookSenyapAds(records);
+    if (findings.length) throw new Error(`Kontrak SA3 worker dilanggar: ${findings.join(", ")}`);
+  }
+  return segments.find((segment) => stripDeliveryTags(segment.tts_text ?? segment.text).trim())?.start ?? 0;
+}
 
 /**
  * Periksa naskah Ads terhadap gerbang SA yang bisa dicek mesin.
@@ -100,10 +160,8 @@ export function periksaStoryOsAds(
   // Mutu konflik visualnya tetap wilayah juri, tetapi syarat kanonik yang
   // objektif tidak boleh dibiarkan sebagai harapan: beat HOOK tidak membawa
   // dialog, termasuk jalur TTS opsional.
-  const hook = segs.find((s) => label(s).includes("HOOK")) ?? segs[0];
-  const hookTts = stripDeliveryTags(String((hook as SegmenAds & { tts_text?: string }).tts_text ?? "")).trim();
-  if (teks(hook) || hookTts) {
-    temuan.push({ gerbang: "SA3", pesan: "HOOK Story Ads wajib senyap: text dan tts_text harus kosong" });
+  for (const pesan of temuanHookSenyapAds(segs as unknown as Array<Record<string, unknown>>)) {
+    temuan.push({ gerbang: "SA3", pesan });
   }
 
   // ---- SA1 Button-first ---------------------------------------------------

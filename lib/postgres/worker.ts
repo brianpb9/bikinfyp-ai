@@ -38,6 +38,7 @@ import { buildPhotoPanVideo } from "../media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
 import { synthesizeGeminiVoiceover } from "../media/gemini-tts";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
+import { voiceoverStartSecForSegments } from "../script-engine/story-os-ads";
 import { hargaTerbilang } from "../script-engine/terbilang";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
@@ -776,7 +777,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     if (!(await jobs.transition(row.id, "COMPOSITING", { worker: "postgres", retry }))) return;
     const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths, mode,
       voiceoverWavPath: mode === "embedded" ? geminiVoPath : undefined,
-      voiceoverStartSec: segments.find((segment) => stripDeliveryTags(segment.tts_text ?? segment.text).trim())?.start ?? 0,
+      voiceoverStartSec: voiceoverStartSecForSegments(segments),
       vo: mode === "vo" ? vo : undefined, captions, musicPath, durationSec: row.duration_s,
       priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,
       demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });

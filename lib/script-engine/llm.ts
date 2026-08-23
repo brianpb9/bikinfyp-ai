@@ -28,6 +28,7 @@ import {
   AKU_TOKENS, FILLER_PHRASES, FILLER_TOKENS, GUE_TOKENS, KAMU_TOKENS, LO_TOKENS, PARTICLES,
 } from "./validator";
 import type { SegmentDraft } from "./templates";
+import { temuanHookSenyapAds } from "./story-os-ads";
 
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
 const VERSI_API = "2023-06-01";
@@ -65,10 +66,13 @@ export const SkemaNaskah = z.object({
 
 /** Schema khusus Ads: SA3 bukan sekadar instruksi prompt. Respons dengan
  * dialog pada HOOK gagal parse dan diminta ulang sebelum masuk pipeline. */
-export const SkemaNaskahAds = SkemaNaskah.superRefine((script, ctx) => {
-  const hook = script.segments.find((segment) => segment.label.toUpperCase() === "HOOK") ?? script.segments[0];
-  if (hook?.text.trim()) {
-    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["segments", script.segments.indexOf(hook), "text"], message: "SA3: HOOK Ads must be silent" });
+export const SkemaNaskahAds = z.object({
+  // Strict khusus jalur Ads: alias suara tak dikenal tidak boleh dibuang
+  // sebelum invariant SA3 sempat melihatnya. Jalur Affiliate tetap kompatibel.
+  segments: z.array(SkemaSegmen.strict()).min(3).max(8),
+}).superRefine((script, ctx) => {
+  for (const message of temuanHookSenyapAds(script.segments as Array<SegmenLlm & Record<string, unknown>>)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["segments"], message });
   }
 });
 
@@ -493,7 +497,11 @@ export async function tulisNaskah(r: PermintaanNaskah): Promise<SegmenLlm[]> {
  * berangkat dari foto produk: model diberi barang yang diperintahkan
  * disembunyikan. Terlihat di jalankan STEP 2, 17 Agu, segmen 0.
  */
-export function keSegmentDraft(s: SegmenLlm[]): SegmentDraft[] {
+export function keSegmentDraft(s: SegmenLlm[], contentType?: "affiliate" | "ads" | null): SegmentDraft[] {
+  if (contentType === "ads") {
+    const findings = temuanHookSenyapAds(s as Array<SegmenLlm & Record<string, unknown>>);
+    if (findings.length) throw new Error(`Kontrak SA3 mapper dilanggar: ${findings.join(", ")}`);
+  }
   return s.map((x) => ({
     role: x.block === "HOOK" ? "hook" : x.block === "CTA" ? "cta" : "demo",
     start: x.start,
