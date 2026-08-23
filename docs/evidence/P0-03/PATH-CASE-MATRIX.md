@@ -164,7 +164,7 @@ mengerjakannya sebagai task terpisah.
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Daftar baru belum direvalidasi agar tetap punya foto layak |
 | W1 worker PG | UNGATED | **PARTIAL** | **Tertutup pada sub-kontrak resolver+snapshot:** `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340,355`), termasuk boundary C1/C8 di PostgreSQL nyata. **Belum:** brand mismatch C3; identitas lintas invocation C9/C12; boundary C11 nol provider/capture/regen/deliverable |
-| W2 worker inline | UNGATED | **PARTIAL** | Sub-kontrak resolver+snapshot serta boundary C1/C8 tertutup (`lib/worker.ts:122,139`). Gap C3, C9/C12, dan boundary C11 sama dengan W1 |
+| W2 worker inline | UNGATED | **PARTIAL** | Sub-kontrak resolver+snapshot dan C1 tertutup (`lib/worker.ts:122,139`). C8 membuktikan nol materialize/ledger/output/fetch, tetapi belum punya observer panggilan provider langsung. Gap C3, C9/C12, dan boundary C11 sama dengan W1 |
 | A1..A7 admission | UNGATED | **BLOCKED (T43)** | Transcript §4 menguji tujuh path literal: semuanya `ADA`, `gerbang_bukti=0`, `exit=1`, termasuk A4 dan A7. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
 | D1, D2 penulis DB | UNGATED | **BLOCKED** | penerimaan diblokir audit lokal yang belum dilakukan; bukan dependensi eksternal dan bukan bagian slice ini |
 
@@ -187,7 +187,7 @@ sebenarnya: belum satu pun kasus penerimaan tertutup penuh.
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PARTIAL** | **Sudah tertutup:** classifier menghasilkan keadaan ketiga `belum_diperiksa` (bukan vonis promosi), dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED` — diuji di `tests/klasifikasi-gambar.test.ts` dan `tests/product-truth-evidence.test.ts`. **Gap yang tersisa:** jalur wajib C7 adalah E1, E4, E8, dan tidak satu pun membuktikan fail-closed. `rg --include-zero -c 'resolveApprovedReference|referensiLayak'` -> E1 (`app/api/products/route.ts`) = **0**, E8 (org photos) = **0**; keduanya menyimpan/menerima foto tanpa memanggil resolver sama sekali. E4 memanggilnya, tapi MENYIMPAN foto lebih dulu dan tidak membersihkannya saat tidak ada referensi layak — jadi kontrak 'nol efek storage' juga belum terbukti. Diturunkan dari PASS atas temuan Reviewer |
-| C8 | **PARTIAL** | Tertutup dan diuji di W1/W2: `W1 C8` × 3 (korup, hilang, hash beda) dan `W2 C8` × 2, seluruhnya menuntut nol materialize, nol provider, gagal-tertutup, nol capture/regen. **TIDAK tertutup di A1..A7** — itu isi T43 |
+| C8 | **PARTIAL** | W1 C8 ×3 membuktikan korup/hilang/hash-beda gagal-tertutup dengan observer provider langsung. W2 C8 ×2 membuktikan nol materialize, capture/regen, output, storage write, dan fetch, tetapi tidak memasang `setVideoProvidersForTests`; field provider DB yang tetap null tidak menangkap panggilan `generate` yang melempar sebelum field dicatat. Jadi nol panggilan provider langsung belum dibuktikan di W2. C8 juga belum tertutup di A1..A7 (T43) |
 | C9 | **PARTIAL** | Snapshot per job ADA (`ambilSnapshotTersetujui`) dan diuji lewat empat kasus TOCTOU, termasuk "path bersama ditimpa SESUDAH diperiksa". Yang belum: reason code `SNAPSHOT_IMMUTABLE` tidak ada, dan mutasi E3/E7 tidak memicu revalidasi (kini tidak lagi memengaruhi vonis referensi) |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
 | C11 | **PARTIAL** | **Sudah tertutup:** kontrak resolver — `REF_MISSING` ada, dan urutan vonisnya dikunci (sidecar diperiksa lebih dulu; `REF_MISSING` hanya muncul saat sidecar SAH ada tapi bytes hilang). **Gap yang tersisa:** baris C11 mewajibkan W1 DAN W2 fail-closed tanpa capture, dan tidak ada test BERNAMA C11 di kedua worker — pemetaan nama test hanya punya C1 dan C8 (`rg -o '(W1|W2) C[0-9]+' tests/`). Jadi nol provider / nol capture / nol regen / nol deliverable untuk kasus berkas hilang belum dibuktikan di boundary. Diturunkan dari PASS atas temuan Reviewer |
@@ -247,24 +247,27 @@ dikerjakan di slice ini:**
 10. C11 baru dibuktikan pada resolver; belum ada test boundary W1/W2 yang
     membuktikan nol provider, capture, regen, dan deliverable saat file referensi
     hilang ketika worker mulai.
+11. W2 C8 belum punya observer provider-call langsung per kasus. Test saat ini
+    membuktikan nol materialize/ledger/output/fetch, tetapi panggilan provider
+    yang melempar sebelum field DB dicatat masih tidak terlihat.
 
 **(b) Butuh kredensial/data:**
 
-11. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
+12. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
    juga butuh R2 yang BERPASANGAN dengan database itu.
 
 **(c) Butuh deploy/migrasi:**
 
-12. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
+13. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
    staging; `preDeployCommand` staging menjalankan migrasi schema.
 
 **(d) Butuh keputusan Founder T43:**
 
-13. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
+14. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
 
 ### E.5 Yang TIDAK dilakukan di slice ini
 
 Nol perubahan produk atau test. Tidak satu pun status dinaikkan untuk membuat
 matriks hijau: tiga baris tetap BLOCKED oleh gap lokal, sepuluh baris PARTIAL,
-dan nol baris PASS. Kesepuluh gap di E.4(a) dicatat sebagai kandidat task, bukan
+dan nol baris PASS. Kesebelas gap di E.4(a) dicatat sebagai kandidat task, bukan
 diimplementasikan.
