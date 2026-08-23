@@ -17,7 +17,8 @@
 // dan itulah bukti cacatnya.
 //
 // LARANGAN YANG DIPATUHI: SQLite lokal (bukan Postgres/Redis/R2), nol
-// jaringan (fetch dijebak + dihitung), nol provider, nol ffmpeg, nol OCR.
+// jaringan (fetch dijebak + dihitung), nol provider nyata (hanya seam pengamat
+// lokal), nol ffmpeg, nol OCR.
 // W1 (lib/postgres/worker.ts) TIDAK dijalankan di sini — ia butuh PostgreSQL;
 // cakupannya struktural, di tests/product-truth-worker-wiring.test.ts.
 
@@ -52,6 +53,7 @@ globalThis.fetch = (async (...args: unknown[]) => {
 
 const { getDb, now, uuid } = await import("../lib/db");
 const { setMediaStorageForTests } = await import("../lib/storage");
+const { setVideoProvidersForTests } = await import("../lib/providers/registry");
 const { processJob } = await import("../lib/worker");
 const { ringkasanKanari, resetKanariUntukTest, GagalTanpaReferensi, KODE_KANARI } = await import("../lib/kanari-bukti");
 const { ALASAN_TOLAK, RINCI_TOLAK } = await import("../lib/product-truth");
@@ -119,6 +121,34 @@ function storageSpy(isi: Map<string, Buffer>) {
     },
   };
   return { storage, materializeCalls, getCalls, putCalls };
+}
+
+/**
+ * Observer langsung untuk boundary provider. Counter bertambah SEBELUM fake
+ * provider melempar, jadi panggilan generate yang gagal sebelum field DB
+ * tercatat tetap terlihat oleh test.
+ */
+function pasangObserverProviderC8() {
+  let panggilanGenerate = 0;
+  setVideoProvidersForTests([
+    {
+      name: "pengamat-w2-c8",
+      async healthCheck() {
+        return true;
+      },
+      estimateCost() {
+        return 0;
+      },
+      async generate() {
+        panggilanGenerate++;
+        throw new Error("provider pengamat W2 C8: bukti invalid mencapai boundary provider");
+      },
+    } as never,
+  ]);
+  return {
+    jumlah: () => panggilanGenerate,
+    reset: () => setVideoProvidersForTests(undefined),
+  };
 }
 
 const userId = uuid();
@@ -255,7 +285,44 @@ test("W2 C1: worker wajib memilih packshot sah, bukan images[0] (banner promo)",
 // sebelumnya menulis "tidak boleh menyentuh storage sama sekali" — itu terlalu
 // keras dan akan memaksa implementasi yang benar jadi merah.
 
-test("W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti sah", async () => {
+test("W2 C8 KONTROL: observer provider benar-benar terpasang (asersi nol tidak hampa)", async (t) => {
+  // Asersi "nol panggilan provider" hanya bermakna kalau observernya SUNGGUH
+  // terdaftar. Kalau `setVideoProvidersForTests` tidak berpengaruh, cacahnya
+  // akan selalu 0 dan kedua kasus C8 lulus tanpa menguji apa pun — kelulusan
+  // HAMPA. Kontrol ini membuktikan arah sebaliknya: begitu jalur provider
+  // BENAR-BENAR dilalui, observer yang sama menaikkan cacahnya.
+  const provider = pasangObserverProviderC8();
+  t.after(provider.reset);
+  const { registeredVideoProviders, generateVideoWithFailover } = await import("../lib/providers/registry");
+  assert.deepEqual(
+    registeredVideoProviders(),
+    ["pengamat-w2-c8"],
+    "observer tidak terdaftar di registry — asersi nol pada kedua kasus C8 tidak membuktikan apa pun"
+  );
+  assert.equal(provider.jumlah(), 0, "cacah bocor sebelum provider dipanggil");
+  await assert.rejects(
+    () =>
+      generateVideoWithFailover(
+        {
+          jobId: "w2-c8-observer-control",
+          width: 720,
+          height: 1280,
+          shots: [],
+          negativePrompt: "added text overlay",
+          qualityTier: "silent_caption",
+          generateAudio: false,
+        },
+        os.tmpdir()
+      ),
+    /provider pengamat W2 C8/,
+    "provider pengamat tidak dipanggil walau jalur provider dilalui"
+  );
+  assert.equal(provider.jumlah(), 1, "observer tidak mencatat panggilan yang nyata-nyata terjadi");
+});
+
+test("W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti sah", async (t) => {
+  const provider = pasangObserverProviderC8();
+  t.after(provider.reset);
   const relFoto = "uploads/w2-c8-korup/0.webp";
   const isi = new Map<string, Buffer>([
     [relFoto, PACKSHOT],
@@ -268,6 +335,7 @@ test("W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti 
   await processJob(jobId);
 
   assertNolEfekSamping(jobId, spy, "W2 C8 korup");
+  assert.equal(provider.jumlah(), 0, "W2 C8 korup: provider generate sempat dipanggil");
   assert.deepEqual(
     spy.materializeCalls,
     [],
@@ -285,7 +353,9 @@ test("W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti 
   );
 });
 
-test("W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize sebelum bukti sah", async () => {
+test("W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize sebelum bukti sah", async (t) => {
+  const provider = pasangObserverProviderC8();
+  t.after(provider.reset);
   // Persis produk jalur org: `saveUniqueProductImages` tidak pernah menulis
   // sidecar sama sekali (matriks P0-03 baris E8), jadi ini bukan kasus
   // hipotetis — ini keadaan normal untuk setiap produk yang dibuat lewat
@@ -298,6 +368,7 @@ test("W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize s
   await processJob(jobId);
 
   assertNolEfekSamping(jobId, spy, "W2 C8 hilang");
+  assert.equal(provider.jumlah(), 0, "W2 C8 hilang: provider generate sempat dipanggil");
   assert.deepEqual(
     spy.materializeCalls,
     [],
@@ -474,7 +545,6 @@ test("W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tet
  */
 test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetujui", async (t) => {
   if (!punyaPersonSafe()) return t.skip("python/OpenCV/model YuNet tidak ada — jalur hilir tidak bisa ditempuh");
-  const { setVideoProvidersForTests } = await import("../lib/providers/registry");
   const sharp = (await import("sharp")).default;
   const gambar = (r: number, g: number, b: number) =>
     sharp({ create: { width: 800, height: 800, channels: 3, background: { r, g, b } } }).png().toBuffer();
