@@ -17,6 +17,7 @@ import {
   riskyEvidenceClaims,
   spokenCreativeAnalysis,
   spokenProductionJargon,
+  unsupportedAdsOutcomeClaims,
   unsupportedFactualClaims,
 } from "../lib/script-engine/catalog-audit";
 import { CAMPAIGN_TEMPLATES, KATALOG_BUTUH_COPY } from "../lib/templates";
@@ -43,8 +44,8 @@ const AUTHORED_COPY_SNAPSHOT: Record<string, string[]> = {
   "t09-bahan-aktif": ["f7b8d72e75bdb6ac", "0c89d79923fe6c9c", "0ff1d991acffd261", "9f1d03aee94a2b08"],
   "t10-bukti-di-lengan": ["cb8455f1c8977c93", "1201f68e4cf37a81", "aabc8a9738e2deaa", "08e4cb36d834351d"],
   "t12-vox-pop": ["2b26db49870ce97f", "773729dc5473f4ff", "68382594e9b4ad92", "d85df3510a64ce24"],
-  "kenalin-bisnis": ["94a72e8790ffe713", "b09eb6ed71232038", "cbbedd50c3a68066", "a48fa5f3061179e4"],
-  "promo-terbatas": ["8527ef44f7259489", "b73df90d6301bb2e", "15f03ee6edaec8f7", "d9de026b6fe8ba0c"],
+  "kenalin-bisnis": ["e64abd0db31302bf", "d8d5999fc65f4c01", "2423a80c5b957f52", "50b14123cdc357ed"],
+  "promo-terbatas": ["005337f61b859bd4", "2074fd3acd07a4eb", "9a3d607d3a81f1b5", "bcb11e5839b23ea3"],
   "tvc-the-drop": ["c3aef3e716baae43", "8609eacc96558a7f", "ca68bed87976479c", "eb8b38ee0097b061"],
   "tvc-tersangka": ["4524bd2c7fed0c14", "6d0e08dbfcb8e7b3", "3841466ada75069b", "5b3df2443a0f2d9d"],
   "tvc-seharian": ["859aaf1eb141f049", "16df12a1db6028a2", "7640aacca7b4ab50", "f027e138aec292b8"],
@@ -137,7 +138,10 @@ test("guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen meng
   for (const templateId of ["before-after", "t05-before-after", "t08-day-1-vs-day-7", "t10-bukti-di-lengan"]) {
     assert.ok(riskyEvidenceClaims(templateId, "Sesudah pemakaian, hasilnya berubah").length > 0, templateId);
     assert.ok(riskyEvidenceClaims(templateId, "Hasil produk berubah jelas").length > 0, templateId);
+    assert.ok(riskyEvidenceClaims(templateId, "Kedua kondisi dibandingkan untuk melihat peningkatan").length > 0, templateId);
   }
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Minggu pertama dan minggu kedua terlihat berbeda").length > 0);
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Kondisinya membaik sepekan kemudian").length > 0);
   const safeControls: Record<string, string> = {
     "before-after": "Lihat satu tampilan dan catat atributnya",
     "t05-before-after": "Periksa produk pada cahaya netral",
@@ -442,7 +446,40 @@ test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasi
       const ratio = spike.start / template.durationSec;
       assert.ok(ratio >= 0.65 && ratio <= 0.8, `${template.id} SPIKE mulai ${Math.round(ratio * 100)}%`);
       assert.equal(variant.validation.passed, true, JSON.stringify(variant.validation.errors));
+      for (const segment of variant.segments) {
+        assert.deepEqual(unsupportedAdsOutcomeClaims(segment.text), [], `${template.id}: ${segment.text}`);
+      }
     }
+  }
+});
+
+test("sembilan Story Ads menolak outcome tanpa bukti dan menerima staging netral", () => {
+  const mutations: Record<string, string> = {
+    "ads-unboxing-pov": "Segelnya terbuka mulus.",
+    "ads-meja-kosong": "Nah, alurnya ringkas dan tugasnya tersusun.",
+    "ads-panas-ekstrem": "Produknya mendinginkan ruangan jadi sejuk.",
+    "ads-tembus-dinding": "Produknya tetap utuh setelah benturan.",
+    "ads-atap-jebol": "Produknya masih bekerja setelah jatuh.",
+    "ads-dobrak-pintu": "Pesannya sampai otomatis.",
+    "ads-waktu-berhenti": "Semua pekerjaan jadi lebih cepat.",
+    "kenalin-bisnis": "Antreannya bergerak dan layanannya merespons.",
+    "promo-terbatas": "Kualitasnya meningkat.",
+  };
+  const safeControls: Record<string, string> = {
+    "ads-unboxing-pov": "Nama pada label kardus terlihat.",
+    "ads-meja-kosong": "Kartu nama diletakkan di meja.",
+    "ads-panas-ekstrem": "Lampu panggung merah menyala.",
+    "ads-tembus-dinding": "Panel karton panggung digeser.",
+    "ads-atap-jebol": "Konfeti putih turun dari panel.",
+    "ads-dobrak-pintu": "Petugas mengangkat kartu nama.",
+    "ads-waktu-berhenti": "Aktor menahan pose di panggung.",
+    "kenalin-bisnis": "Nama layanan tertulis pada kartu.",
+    "promo-terbatas": "Harga 189 ribu tertulis pada label.",
+  };
+  assert.deepEqual(Object.keys(mutations).sort(), CAMPAIGN_TEMPLATES.filter((item) => item.group === "ads").map((item) => item.id).sort());
+  for (const [templateId, copy] of Object.entries(mutations)) {
+    assert.ok(unsupportedAdsOutcomeClaims(copy).length > 0, `${templateId}: ${copy}`);
+    assert.deepEqual(unsupportedAdsOutcomeClaims(safeControls[templateId]), [], `${templateId}: ${safeControls[templateId]}`);
   }
 });
 

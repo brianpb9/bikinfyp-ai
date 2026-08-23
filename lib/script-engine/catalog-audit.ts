@@ -192,6 +192,7 @@ export interface CatalogScriptAudit {
     sharedBodyBlocks: Array<{ block: string; templateIds: string[] }>;
     productionJargonRefs: CatalogLanguageFinding[];
     unsupportedClaimRefs: CatalogLanguageFinding[];
+    adsUnsupportedOutcomeRefs: CatalogLanguageFinding[];
     creativeAnalysisRefs: CatalogLanguageFinding[];
     semanticRiskRefs: CatalogLanguageFinding[];
     danglingFragmentRefs: CatalogLanguageFinding[];
@@ -244,6 +245,7 @@ export interface CatalogScriptAudit {
       noSharedBodyBlocks: boolean;
       noSpokenProductionJargon: boolean;
       noUnsupportedFactualClaims: boolean;
+      adsStayOutcomeNeutral: boolean;
       noSpokenCreativeAnalysis: boolean;
       riskyEvidenceTemplatesStayNeutral: boolean;
       noDanglingFragments: boolean;
@@ -328,6 +330,20 @@ const UNSUPPORTED_FACTUAL_CLAIMS = [
   /\bbertahan sampai hari selesai\b/giu,
 ];
 
+const ADS_UNSUPPORTED_OUTCOMES = [
+  /\balur(?:nya)? (?:lebih )?(?:ringkas|cepat|mudah|rapi)\b/giu,
+  /\b(?:tugas|jadwal)(?:nya)? (?:otomatis )?(?:tersusun|teratur|selesai)\b/giu,
+  /\bantrean(?:nya)? (?:bergerak|berkurang|maju|lancar|lebih cepat)\b/giu,
+  /\b(?:layanan|aplikasi)(?:nya)? (?:merespons|memproses|bekerja|berfungsi)\b/giu,
+  /\bstatus(?:nya)? (?:berubah|selesai|diproses)\b/giu,
+  /\b(?:pesan|balasan|notifikasi)(?:nya)? (?:sampai|terkirim|terjawab)(?: otomatis)?\b/giu,
+  /\b(?:udara(?:nya)? bergerak|uap(?:nya)? menghilang|ruangan(?:nya)? (?:berubah|sejuk|dingin)|panas(?:nya)? (?:turun|reda))\b/giu,
+  /\b(?:kualitas|mutu|efikasi|khasiat)(?:nya)? (?:meningkat|membaik|bagus|baik|terbukti)\b/giu,
+  /\b(?:ampuh|efektif|berkhasiat|memudahkan|mendinginkan|menyejukkan)\b/giu,
+  /\b(?:segel(?:nya)? (?:terbuka|lepas) mulus|lebih (?:mudah|praktis|nyaman|cepat|ringkas)|jadi (?:lebih )?(?:mudah|praktis|nyaman|cepat|sejuk|dingin))\b/giu,
+  /\b(?:tetap utuh|masih bekerja|tetap bekerja)\b[^.!?;]{0,45}\b(?:setelah|sesudah|habis)\b/giu,
+];
+
 const CREATIVE_ANALYSIS_PHRASES = [
   /\bkejutan(?:nya)?\b/giu, /\bpembuka(?:nya)?\b/giu,
   /\b(?:menarik|merebut|menangkap) perhatian\b/giu, /\befek dramatis\b/giu,
@@ -346,8 +362,8 @@ const CREATIVE_ANALYSIS_PHRASES = [
 
 const BANNED_HOOK_STARTERS = /^(?:di harga|pada harga|untuk banderol|dengan nilai)\b/iu;
 
-const COMMON_OUTCOME_COMPARISON = /\b(?:sebelum|sesudah|setelah|awal(?:nya)?|akhir(?:nya)?|hasil(?:nya)?|berubah|perubahan(?:nya)?|perbedaan(?:nya)?)\b/giu;
-const COMMON_COMPARISON_STRUCTURE = /\b(?:dua (?:kondisi|tampilan|sisi)|kedua sisi|awal dan akhir|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|bandingkan|perbandingan)\b/giu;
+const COMMON_OUTCOME_COMPARISON = /\b(?:sebelum|sesudah|setelah|awal(?:nya)?|akhir(?:nya)?|hasil(?:nya)?|berubah|perubahan(?:nya)?|perbedaan(?:nya)?|peningkatan(?:nya)?|meningkat|membaik)\b/giu;
+const COMMON_COMPARISON_STRUCTURE = /\b(?:dua (?:kondisi|tampilan|sisi)|kedua (?:kondisi|tampilan|sisi)|awal dan akhir|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|(?:di|mem|per)?banding(?:kan|an)?)\b/giu;
 
 const RISKY_EVIDENCE_PATTERNS: Record<string, RegExp[]> = {
   "before-after": [
@@ -361,7 +377,7 @@ const RISKY_EVIDENCE_PATTERNS: Record<string, RegExp[]> = {
   "t08-day-1-vs-day-7": [
     COMMON_OUTCOME_COMPARISON,
     COMMON_COMPARISON_STRUCTURE,
-    /\b(?:hari (?:pertama|ke[- ]?\w+)|day\s*\d+|rutinitas|catatan lanjutan(?:nya)?|dua waktu|jadwalkan pemeriksaan)\b/giu,
+    /\b(?:hari (?:pertama|ke[- ]?\w+)|minggu (?:pertama|kedua|ke[- ]?\w+)|day\s*\d+|rutinitas|catatan lanjutan(?:nya)?|dua waktu|jadwalkan pemeriksaan|sepekan (?:kemudian|lalu))\b/giu,
   ],
   "t10-bukti-di-lengan": [
     COMMON_OUTCOME_COMPARISON,
@@ -377,6 +393,10 @@ function regexMatches(text: string, patterns: RegExp[]): string[] {
 
 export function spokenProductionJargon(text: string): string[] {
   return regexMatches(text, PRODUCTION_JARGON);
+}
+
+export function unsupportedAdsOutcomeClaims(text: string): string[] {
+  return regexMatches(text, ADS_UNSUPPORTED_OUTCOMES);
 }
 
 export function spokenCreativeAnalysis(text: string): string[] {
@@ -843,6 +863,20 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     ));
   const productionJargonRefs = languageFindings(spokenProductionJargon);
   const unsupportedClaimRefs = languageFindings(unsupportedFactualClaims);
+  const adsUnsupportedOutcomeRefs = rawTemplates
+    .filter((template) => template.group === "ads")
+    .flatMap((template) => template.variants.flatMap((variant) =>
+      variant.segments.flatMap((segment) => {
+        const matches = unsupportedAdsOutcomeClaims(segment.text);
+        return matches.length === 0 ? [] : [{
+          templateId: template.templateId,
+          variantIndex: variant.variantIndex,
+          role: segment.role,
+          text: segment.text,
+          matches,
+        }];
+      })
+    ));
   const creativeAnalysisRefs = languageFindings(spokenCreativeAnalysis);
   const danglingFragmentRefs = languageFindings(danglingFragmentReasons);
   const mechanicalPhraseRefs = rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
@@ -997,6 +1031,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     noSharedBodyBlocks: repeatedBodyBlocks.length === 0,
     noSpokenProductionJargon: productionJargonRefs.length === 0,
     noUnsupportedFactualClaims: unsupportedClaimRefs.length === 0,
+    adsStayOutcomeNeutral: adsUnsupportedOutcomeRefs.length === 0,
     noSpokenCreativeAnalysis: creativeAnalysisRefs.length === 0,
     riskyEvidenceTemplatesStayNeutral: semanticRiskRefs.length === 0,
     noDanglingFragments: danglingFragmentRefs.length === 0,
@@ -1051,6 +1086,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       sharedBodyBlocks: repeatedBodyBlocks,
       productionJargonRefs,
       unsupportedClaimRefs,
+      adsUnsupportedOutcomeRefs,
       creativeAnalysisRefs,
       semanticRiskRefs,
       danglingFragmentRefs,
