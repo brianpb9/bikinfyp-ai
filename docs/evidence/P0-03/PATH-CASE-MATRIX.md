@@ -89,7 +89,7 @@ bagian E.2, dan arti tiap status di E.0.
 | C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` | **PARTIAL** |
 | C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` | **PARTIAL** |
 | C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` | **PARTIAL** |
-| C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | **PASS** |
+| C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | **PARTIAL** |
 | C12 | Urutan images diubah/dirusak | E5,E9,W1,W2 | pakai hash tersetujui | `REF_HASH_MISMATCH` | **PARTIAL** |
 | C13 | **Produk valid** (positif) | seluruh E,A,W | DITERIMA | — | **PARTIAL** |
 
@@ -163,12 +163,20 @@ mengerjakannya sebagai task terpisah.
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Daftar baru belum direvalidasi agar tetap punya foto layak |
-| W1 worker PG | UNGATED | **PASS** | `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340`); diuji di PostgreSQL nyata, 12 test |
-| W2 worker inline | UNGATED | **PASS** | idem (`lib/worker.ts:122,139`); 11 test |
+| W1 worker PG | UNGATED | **PARTIAL** | **Tertutup pada sub-kontrak resolver+snapshot:** `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340,355`), diuji di PostgreSQL nyata (12 test). **BELUM tertutup:** merek tidak ditegakkan di worker (C3); daftar foto dibaca TERKINI tiap invocation tanpa identitas persetujuan yang dipatok, jadi urutan bisa berubah (C12) dan regenerate menyetujui ulang (C9/A6). PASS menyeluruh bertentangan dengan gap yang dicatat dokumen ini sendiri |
+| W2 worker inline | UNGATED | **PARTIAL** | Lingkup dan gap sama dengan W1 (`lib/worker.ts:122,139`; 11 test) |
 | A1..A7 admission | UNGATED | **BLOCKED (T43)** | `rg -ln 'resolveApprovedReference|referensiLayak' app/api/jobs app/api/dashboard lib/dashboard/render-cell.ts app/api/scripts/generate/route.ts` → stdout kosong, exit 1. Scope mencakup A4 dan A7. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
 | D1, D2 penulis DB | UNGATED | **BLOCKED** | penerimaan diblokir audit lokal yang belum dilakukan; bukan dependensi eksternal dan bukan bagian slice ini |
 
 ### E.2 Kasus C1-C13 — alasan tiap status
+
+**Cacah akhir sesudah lima ronde review: NOL kasus berstatus PASS.**
+Sepuluh PARTIAL, tiga BLOCKED. Empat kasus (C1, C7, C11, C12) sempat ditandai
+PASS oleh ronde-ronde awal rekonsiliasi ini dan DITURUNKAN semuanya setelah
+Reviewer menunjukkan pola yang sama berulang: bukti yang dirujuk membuktikan
+kontrak RESOLVER, sementara baris kasusnya menuntut JALUR (E/A/W) — dua hal
+yang tidak sama. Angka ini dicatat apa adanya karena itulah hasil audit yang
+sebenarnya: belum satu pun kasus penerimaan tertutup penuh.
 
 | # | Status | Alasan dan bukti |
 |---|---|---|
@@ -182,8 +190,8 @@ mengerjakannya sebagai task terpisah.
 | C8 | **PARTIAL** | Tertutup dan diuji di W1/W2: `W1 C8` × 3 (korup, hilang, hash beda) dan `W2 C8` × 2, seluruhnya menuntut nol materialize, nol provider, gagal-tertutup, nol capture/regen. **TIDAK tertutup di A1..A7** — itu isi T43 |
 | C9 | **PARTIAL** | Snapshot per job ADA (`ambilSnapshotTersetujui`) dan diuji lewat empat kasus TOCTOU, termasuk "path bersama ditimpa SESUDAH diperiksa". Yang belum: reason code `SNAPSHOT_IMMUTABLE` tidak ada, dan mutasi E3/E7 tidak memicu revalidasi (kini tidak lagi memengaruhi vonis referensi) |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
-| C11 | **PASS** | `REF_MISSING` ada; diuji lewat kontrak resolver dan urutan vonis (sidecar diperiksa lebih dulu) |
-| C12 | **PARTIAL** | **Sudah tertutup:** integritas BYTES dalam satu invocation — `REF_HASH_MISMATCH` ada, `tests/kontrak-hash-sidecar.test.ts` mengunci hash dihitung dari bytes tersimpan, dan empat kasus TOCTOU membuktikan bytes yang DITERIMA PROVIDER tetap yang disetujui. **Gap yang tersisa:** perubahan URUTAN belum ditahan. `resolveApprovedReference` mempertahankan urutan input dan memilih yang pertama sah (`lib/product-truth.ts:341` — `utama: tersetujui[0] ?? null`), sementara E5/E9 memutasi daftar dan worker membaca daftar TERKINI tiap invocation. Jadi menukar urutan mengubah foto mana yang jadi utama, tanpa identitas persetujuan yang dipatok lintas mutasi. Belum ada test E5/E9 -> W1/W2. Diturunkan dari PASS atas temuan Reviewer |
+| C11 | **PARTIAL** | **Sudah tertutup:** kontrak resolver — `REF_MISSING` ada, dan urutan vonisnya dikunci (sidecar diperiksa lebih dulu; `REF_MISSING` hanya muncul saat sidecar SAH ada tapi bytes hilang). **Gap yang tersisa:** baris C11 mewajibkan W1 DAN W2 fail-closed tanpa capture, dan tidak ada test BERNAMA C11 di kedua worker — pemetaan nama test hanya punya C1 dan C8 (`rg -o '(W1|W2) C[0-9]+' tests/`). Jadi nol provider / nol capture / nol regen / nol deliverable untuk kasus berkas hilang belum dibuktikan di boundary. Diturunkan dari PASS atas temuan Reviewer |
+| C12 | **PARTIAL** | **Sudah tertutup:** integritas BYTES dalam satu invocation — `tests/kontrak-hash-sidecar.test.ts` mengunci hash dihitung dari bytes tersimpan, dan dari EMPAT test TOCTOU **dua** benar-benar mencapai provider (`W2 TOCTOU: bytes yang DITERIMA PROVIDER…` dan padanan W1); dua sisanya sengaja berhenti sebelum langkah berbayar. **Gap yang tersisa, dan lebih dalam dari cakupan test:** reason code yang diusulkan baris ini — `REF_HASH_MISMATCH` — SECARA KONSEP tidak bisa mendeteksi perubahan urutan. Kode mendefinisikannya sebagai ketidakcocokan hash sidecar dengan bytes berkas; MENUKAR dua foto yang sama-sama sah tidak mengubah hash salah satu pun, jadi ia tidak akan pernah terpicu. Yang dibutuhkan bukan test tambahan melainkan KONTRAK BARU: identitas persetujuan yang dipatok (rel+sha256 disimpan saat admission) atau digest manifest BERURUTAN, beserta reason code-nya sendiri. Diturunkan dari PASS, lalu diperdalam, atas temuan Reviewer |
 | C13 | **PARTIAL** | Kontrol positif W1 (`tests/pg-product-truth-w1.test.ts:740`) dan W2 (`tests/product-truth-worker-reference.test.ts:638`) membuktikan worker menerima bukti sah. Itu belum membuktikan produk valid diterima melalui seluruh E1..E9 dan A1..A7 yang diwajibkan baris ini |
 
 ### E.3 Bagian D dokumen ini sudah usang — dikoreksi
@@ -228,7 +236,10 @@ dikerjakan di slice ini:**
    mengubah foto utama tanpa satu pun gerbang, dan worker membaca daftar
    TERKINI tiap invocation. Ini yang membuat C12 tidak bisa PASS, dan
    berkerabat dengan butir 6 (A6): keduanya soal keadaan yang disetujui tidak
-   dipatok. Butuh test E5/E9 -> W1/W2.
+   dipatok. Dan `REF_HASH_MISMATCH` tidak bisa menangkapnya: menukar dua foto
+   sah tidak mengubah hash mana pun. Jadi yang dibutuhkan KONTRAK BARU
+   (identitas dipatok atau digest manifest berurutan) beserta reason code-nya,
+   bukan sekadar test E5/E9 -> W1/W2.
 9. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
    tanpa resolver, sedangkan E4 meninggalkan bytes tersimpan saat tidak ada
    referensi layak. Belum ada test nol efek storage untuk ketiga jalur itu.
