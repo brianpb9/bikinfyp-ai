@@ -5,6 +5,10 @@ import { generateScripts, type GeneratedScript, type ProductInput } from "./inde
 import { planShots } from "../media/shot-planner";
 import { getCreatorCategory } from "../personas";
 import { ugcRolesFor } from "../media/ugc-template-roles";
+import {
+  neutralStoryAdsActionContradictions,
+  neutralStoryAdsPromptContradictions,
+} from "./ads-visual-contract";
 
 /**
  * Satu produk dipakai untuk seluruh katalog supaya perbedaan yang dihitung
@@ -199,6 +203,7 @@ export interface CatalogScriptAudit {
     productionJargonRefs: CatalogLanguageFinding[];
     unsupportedClaimRefs: CatalogLanguageFinding[];
     adsUnsupportedOutcomeRefs: CatalogLanguageFinding[];
+    adsVisualContractRefs: CatalogLanguageFinding[];
     creativeAnalysisRefs: CatalogLanguageFinding[];
     semanticRiskRefs: CatalogLanguageFinding[];
     danglingFragmentRefs: CatalogLanguageFinding[];
@@ -252,6 +257,7 @@ export interface CatalogScriptAudit {
       noSpokenProductionJargon: boolean;
       noUnsupportedFactualClaims: boolean;
       adsStayOutcomeNeutral: boolean;
+      adsVisualContractClean: boolean;
       noSpokenCreativeAnalysis: boolean;
       riskyEvidenceTemplatesStayNeutral: boolean;
       noDanglingFragments: boolean;
@@ -325,6 +331,30 @@ export function adsUnsupportedOutcomeFindings(templates: CatalogTemplateAudit[])
 
 export function adsStayOutcomeNeutral(templates: CatalogTemplateAudit[]): boolean {
   return adsUnsupportedOutcomeFindings(templates).length === 0;
+}
+
+/** Hermetic end-to-end guard for the visual subject boundary: authored
+ * actions and final assembled prompts are checked by the same audit. */
+export function adsVisualContractFindings(templates: CatalogTemplateAudit[]): CatalogLanguageFinding[] {
+  return templates.filter((template) => template.group === "ads").flatMap((template) =>
+    template.variants.flatMap((variant) => [
+      ...variant.segments.flatMap((segment) => {
+        if (!segment.action) return [];
+        const matches = neutralStoryAdsActionContradictions(segment.action);
+        return matches.length === 0 ? [] : [{
+          templateId: template.templateId, variantIndex: variant.variantIndex,
+          role: `${segment.role}:action`, text: segment.action, matches,
+        }];
+      }),
+      ...variant.assembledShotDirections.flatMap((text, shotIndex) => {
+        const matches = neutralStoryAdsPromptContradictions(text);
+        return matches.length === 0 ? [] : [{
+          templateId: template.templateId, variantIndex: variant.variantIndex,
+          role: `shot_prompt_${shotIndex + 1}`, text, matches,
+        }];
+      }),
+    ])
+  );
 }
 
 /**
@@ -988,6 +1018,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
   const productionJargonRefs = languageFindings(spokenProductionJargon);
   const unsupportedClaimRefs = languageFindings(unsupportedFactualClaims);
   const adsUnsupportedOutcomeRefs = adsUnsupportedOutcomeFindings(rawTemplates);
+  const adsVisualContractRefs = adsVisualContractFindings(rawTemplates);
   const creativeAnalysisRefs = languageFindings(spokenCreativeAnalysis);
   const danglingFragmentRefs = languageFindings(danglingFragmentReasons);
   const mechanicalPhraseRefs = rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
@@ -1143,6 +1174,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     noSpokenProductionJargon: productionJargonRefs.length === 0,
     noUnsupportedFactualClaims: unsupportedClaimRefs.length === 0,
     adsStayOutcomeNeutral: adsStayOutcomeNeutral(rawTemplates),
+    adsVisualContractClean: adsVisualContractRefs.length === 0,
     noSpokenCreativeAnalysis: creativeAnalysisRefs.length === 0,
     riskyEvidenceTemplatesStayNeutral: semanticRiskRefs.length === 0,
     noDanglingFragments: danglingFragmentRefs.length === 0,
@@ -1198,6 +1230,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       productionJargonRefs,
       unsupportedClaimRefs,
       adsUnsupportedOutcomeRefs,
+      adsVisualContractRefs,
       creativeAnalysisRefs,
       semanticRiskRefs,
       danglingFragmentRefs,

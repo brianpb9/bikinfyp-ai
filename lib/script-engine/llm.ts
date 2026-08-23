@@ -319,9 +319,9 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
  * dan tesnya tidak perlu merakit PermintaanNaskah lengkap hanya untuk membaca
  * satu blok instruksi.
  */
-export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; durationSec: number; format?: string }): string {
+export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; durationSec: number; format?: string; productName?: string; productCategory?: string }): string {
   return blokTugas({
-    productName: "Serum Glow Bening", productCategory: "beauty", priceIdr: 89000,
+    productName: p.productName ?? "Serum Glow Bening", productCategory: p.productCategory ?? "beauty", priceIdr: 89000,
     durationSec: p.durationSec, contentType: p.contentType, cartLabel: "keranjang kuning",
     register: "netral", hookFamily: "H1", hookLevel: "normal", format: p.format ?? "talking_head",
   } as PermintaanNaskah);
@@ -354,16 +354,18 @@ function blokTugas(r: PermintaanNaskah): string {
           "",
           "STORY OS (Ads only) — write the beats in THIS order, then lay them out in time:",
           "1. BUTTON first (the last 3-6s): one small question left unanswered, and the CTA lives INSIDE it,",
-          "   preceded by a story clause. Label this segment BUTTON. Product hero, label readable.",
+          "   preceded by a story clause. Label this segment BUTTON. The visual hero is a plain unprinted colour",
+          "   card or swatch with no letters, numbers, logos, labels, prices, product names, categories, or readable marks.",
           "2. SPIKE: the protagonist beats their own pressure IN FRONT OF A WITNESS (a voice off camera is enough:",
           "   petugas, ibu, pewawancara, penghulu, anak). Put it at 65-80% of the duration. Label it SPIKE and",
           '   fill the field "saksi" with who witnesses it.',
-          "3. HOOK: the conflict is already in frame 1, with NO dialogue. Label it HOOK.",
+          "3. HOOK: the conflict and a plain unprinted colour card or swatch are already in frame 1, with NO dialogue.",
+          "   The prop remains blank and non-factual in every beat. Label it HOOK.",
           "4. FRICTION (write last): pressure rises at least TWICE between hook and spike. Label each one FRICTION.",
           "   Every friction beat must MOVE something in its action — a position, a decision, an object.",
           "   Enemies that work: your own reflex, time running out, a voice calling you.",
           "BRIDGING — at least TWO of three, and never say the benefit out loud:",
-          "  (a) an honest action with the product during friction, (b) the product present in frame 1 without",
+          "  (a) an honest action with the blank prop during friction, (b) the blank prop present in frame 1 without",
           "  being explained, (c) a light admission in the button before the CTA phrase.",
           "BODY IS NOT EXPLANATION: no 'aslinya...', no describing the product, no benefit claims. The viewer concludes.",
         ].join("\n")

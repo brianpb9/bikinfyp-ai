@@ -5,6 +5,7 @@ import { DELIVERY_TAGS } from "../lib/script-engine/delivery-tags";
 import {
   SCRIPT_CATALOG_AUDIT_FIXTURE,
   adsStayOutcomeNeutral,
+  adsVisualContractFindings,
   adsUnsupportedOutcomeFindings,
   auditProductForTemplate,
   bannedHookBoilerplateStarter,
@@ -27,6 +28,12 @@ import { generateScripts } from "../lib/script-engine";
 import { periksaStoryOsAds } from "../lib/script-engine/story-os-ads";
 import { COMPACTED_TEMPLATE_IDS } from "../lib/script-engine/template-copy";
 import { UGC_TEMPLATE_ROLES } from "../lib/media/ugc-template-roles";
+import {
+  neutralStoryAdsActionContradictions,
+  neutralStoryAdsPromptContradictions,
+} from "../lib/script-engine/ads-visual-contract";
+import { planShots } from "../lib/media/shot-planner";
+import { getCreatorCategory } from "../lib/personas";
 
 const audit = await generateCatalogScriptAudit();
 const { summary } = audit;
@@ -498,6 +505,11 @@ test("prompt final dan first frame 9 Story Ads x 4 tetap netral tanpa generated 
       assert.deepEqual(unsupportedAdsOutcomeClaims(firstFrame), [], `${template.templateId}#${variant.variantIndex} first frame meminta fakta sintetis`);
       for (const prompt of variant.assembledShotDirections) {
         assert.deepEqual(
+          neutralStoryAdsPromptContradictions(prompt),
+          [],
+          `${template.templateId}#${variant.variantIndex} melanggar kontrak subjek visual`
+        );
+        assert.deepEqual(
           unsupportedAdsOutcomeClaims(prompt),
           [],
           `${template.templateId}#${variant.variantIndex} prompt visual: ${prompt.slice(0, 240)}`
@@ -507,6 +519,50 @@ test("prompt final dan first frame 9 Story Ads x 4 tetap netral tanpa generated 
   }
   assert.equal(summary.targets.adsStayOutcomeNeutral, true);
   assert.deepEqual(summary.adsUnsupportedOutcomeRefs, []);
+  assert.equal(summary.targets.adsVisualContractClean, true);
+  assert.deepEqual(summary.adsVisualContractRefs, []);
+  assert.deepEqual(adsVisualContractFindings(audit.templates), []);
+});
+
+test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik maupun layanan", async () => {
+  const adsTemplates = CAMPAIGN_TEMPLATES.filter((template) => template.group === "ads");
+  for (const template of adsTemplates) for (const category of ["beauty", "jasa"]) {
+    const product = { ...auditProductForTemplate(template), category };
+    const variants = await generateScripts({
+      product, register: "bunda", tanpaLlm: true, contentType: "ads",
+      qualityTier: template.tier as never, durationSec: template.durationSec,
+      templateId: template.id, count: 4,
+      hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+    });
+    for (const [variantIndex, variant] of variants.entries()) {
+      for (const segment of variant.segments) {
+        assert.ok(segment.action, `${template.id}#${variantIndex} tanpa action`);
+        assert.deepEqual(neutralStoryAdsActionContradictions(segment.action!), [], `${template.id}#${variantIndex}: ${segment.action}`);
+      }
+      const prompts = planShots({
+        jobId: `contract-${template.id}-${category}-${variantIndex}`,
+        durationSec: template.durationSec, segments: variant.segments,
+        category: getCreatorCategory("hijaber")!, productName: product.name,
+        productCategory: category, productVisualDesc: `bottle labelled ${product.name}`,
+        brandBrief: `show ${product.name} as a readable product name`,
+        imageRefPath: "/tmp/contract-product.jpg", qualityTier: template.tier,
+        format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
+      }).shots.map((shot) => shot.prompt);
+      for (const prompt of prompts) {
+        assert.deepEqual(neutralStoryAdsPromptContradictions(prompt), [], `${template.id}/${category}#${variantIndex}: ${prompt.slice(0, 300)}`);
+        assert.doesNotMatch(prompt, new RegExp(product.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+      }
+    }
+  }
+});
+
+test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
+  assert.notDeepEqual(neutralStoryAdsActionContradictions("talent menahan produk di depan saksi"), []);
+  assert.notDeepEqual(neutralStoryAdsPromptContradictions("Product hero, label squarely readable to camera."), []);
+  const mutation = structuredClone(audit.templates);
+  mutation.find((template) => template.templateId === "ads-atap-jebol")!.variants[0].assembledShotDirections[0] =
+    "Presenter holding product, label readable, true small size about the width of a hand.";
+  assert.ok(adsVisualContractFindings(mutation).length > 0);
 });
 
 test("mutasi outcome visual mematikan target audit secara end-to-end", async () => {

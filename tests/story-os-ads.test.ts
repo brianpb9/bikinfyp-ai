@@ -134,6 +134,19 @@ test("penulis Ads menerima instruksi Story OS, Affiliate tidak", async () => {
   assert.ok(!/BUTTON-first|SPIKE/i.test(aff), "Affiliate tidak boleh diberi beat Story OS Ads");
 });
 
+test("prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta label produk", async () => {
+  const { blokTugasUntukUji } = await import("../lib/script-engine/llm");
+  for (const fixture of [
+    { productName: "Serum Glow Bening", productCategory: "beauty" },
+    { productName: "Jasa Kilat Beres", productCategory: "jasa" },
+  ]) {
+    const prompt = blokTugasUntukUji({ contentType: "ads", durationSec: 20, format: "ads", ...fixture });
+    assert.match(prompt, /plain unprinted colour card or swatch/i);
+    assert.match(prompt, /no letters, numbers, logos, labels, prices, product names, categories, or readable marks/i);
+    assert.doesNotMatch(prompt, /Product hero|label readable|action with the product|product present in frame 1/i);
+  }
+});
+
 test("validator menolak naskah Ads yang gagal SA — bukan sekadar mencatat", async () => {
   const { validateScript } = await import("../lib/script-engine/validator");
   const rusak = JSON.parse(JSON.stringify(LULUS));

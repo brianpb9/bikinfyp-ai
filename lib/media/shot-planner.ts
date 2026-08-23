@@ -36,6 +36,7 @@ import { getRecordingStyle, type StyleFormat } from "./recording-styles";
 import { blokKontrakMode, framingUntukMode, modeDikenal } from "./mode-kamera";
 import { formatById } from "../script-engine/format-katalog";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
+import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
 
 export interface ShotPlanInput {
   jobId: string;
@@ -193,6 +194,10 @@ const SINGLE_SUBJECT_LOCK =
   "and appears a single time. That one person has exactly two hands, " +
   "both clearly visible and naturally attached to her own arms, and only those two hands ever touch " +
   "the product. ";
+const NEUTRAL_SINGLE_SUBJECT_LOCK =
+  "EXACTLY ONE person is present in the entire frame from start to finish — she is alone in the shot " +
+  "and appears a single time. That one person has exactly two hands, both clearly visible and naturally " +
+  "attached to her own arms, and only those two hands ever touch the staged blank props. ";
 
 /** Berapa orang yang BOLEH ada di frame untuk konfigurasi ini.
  *
@@ -495,6 +500,10 @@ const DEMO_ACTION: Record<string, string> = {
 const DETIK_PERTAMA =
   "The very first frame is ALREADY mid-action — the shot never opens on a held pose or a static " +
   "product. Within the first second something visibly changes: the subject is already moving, " +
+  "turning, reaching, or reacting, and the camera is already drifting. No frozen opening beat. ";
+const DETIK_PERTAMA_NETRAL =
+  "The very first frame is ALREADY mid-action — the shot opens on the blank prop already moving within " +
+  "the staged action. Within the first second something visibly changes: the subject is already moving, " +
   "turning, reaching, or reacting, and the camera is already drifting. No frozen opening beat. ";
 
 const CRAZY_OPENER: Record<"hands_only" | "talking_head", string> = {
@@ -1396,6 +1405,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // gambarnya. Character-lock disebut ulang tiap shot karena itu yang
     // menjaga wajah tetap sama antar generate (pelajaran dari dokumen TVC).
     const ugcRoles = ugcRolesFor(input.ugcTemplate);
+    const neutralStoryAds = isNeutralStoryAdsTemplate(input.ugcTemplate);
+    const noPhysicalProduct = isServiceLike(input.productCategory);
+    const neutralVisual = neutralStoryAds || noPhysicalProduct;
     /** Peran template untuk shot ke-i, sebagai OBJEK. Dipisah dari ugcBeat
      *  yang mengembalikan teks, supaya penanda withholdProduct bisa dibaca
      *  tanpa harus mengurai kalimatnya lagi. */
@@ -1452,24 +1464,27 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       if (!pick) return null;
       return (
         `${i === 0
-          ? `This is the OPENING shot of a continuous ${input.durationSec}-second story about "${input.productName}". `
+          ? neutralVisual
+            ? `This is the OPENING shot of a continuous ${input.durationSec}-second staged story using only neutral blank props. `
+            : `This is the OPENING shot of a continuous ${input.durationSec}-second story about "${input.productName}". `
           : isLastShot(i, numShots)
             ? `This is the FINAL shot, resolving what the earlier shots built up. `
             : `This shot continues directly from the previous one — same place, same person, same look, one step further on. `}` +
         `Shot ${i + 1} of ${numShots}: ${pick.role}. Camera: ${pick.camera}. ` +
         `This is the SAME woman from the earlier shots, seen at a LATER MOMENT — same face, same hair, same outfit. She exists only ONCE inside this frame: the continuity runs across time between shots, never as a side-by-side comparison within a single frame. ` +
-        `${IDENTITY_INSTRUCTION}`
+        `${neutralVisual ? "All generated props remain unprinted and non-factual." : IDENTITY_INSTRUCTION}`
       );
     };
     // Tanpa-produk ditentukan KATEGORI, bukan format: iklan untuk barang fisik
     // tetap menampilkan barangnya. Lihat isServiceLike di lib/config/hooks.ts.
-    const noPhysicalProduct = isServiceLike(input.productCategory);
     const beatTvc = format === "tvc" ? tvcBeat(i) : null;
     // AKSI PENULIS MENANG atas tabel beat (board review 20 Agu). Kalimatnya
     // dirakit dengan kunci identitas produk supaya presisi koreografi tidak
     // menukar presisi identitas — keduanya harus ada, bukan salah satu.
     const aksiPenulis = sinema
-      ? `${noPhysicalProduct ? "" : praAksiHadir(input.productName)}${sinema.aksi}, ${IDENTITY_INSTRUCTION}`
+      ? neutralVisual
+        ? sinema.aksi
+        : `${praAksiHadir(input.productName)}${sinema.aksi}, ${IDENTITY_INSTRUCTION}`
       : null;
     const peranTemplate = ugcBeat(i);
     const beat =
@@ -1486,7 +1501,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         // mengarang produk yang tidak pernah ada, dan itu justru menyesatkan
         // calon pembeli jasa.
         ? isFirst
-          ? `A person talking straight to camera about "${input.productName}", relaxed and convincing, hands free and gesturing naturally — holding no product of any kind. The place around them fits the business being described`
+          ? `A person presenting a service concept straight to camera, relaxed and convincing, hands free and gesturing naturally. The place around them fits the business being described`
           : isLastShot(i, numShots)
             ? `The same person wrapping up, looking straight at camera with a warm inviting nod, hands open in a natural gesture — still holding nothing`
             : `The same person continuing, gesturing naturally to make a point, the surroundings quietly reinforcing what the business does — no product in hand at any moment`
@@ -1553,7 +1568,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Level gila: pembuka pattern-interrupt HANYA di shot pertama; vo_broll
     // (pan foto, tanpa model video) tidak punya jalur ini.
     const crazyOpener =
-      isFirst && (format === "hands_only" || format === "talking_head")
+      !neutralVisual && isFirst && (format === "hands_only" || format === "talking_head")
         ? input.hookLevel === "gila"
           ? CRAZY_OPENER[bukaTanpaWajah ? "hands_only" : format]
           // Level 4 ("agak gila"): produk tetap naik cepat ke tengah frame,
@@ -1602,7 +1617,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const perluSubjekTunggal =
       maksOrangPerFrame({ format, noModel: input.noModel, tvcRoute: input.tvcRoute }) === 1 &&
       !(beatTvc?.tanpaOrang ?? false);
-    const kunciSubjek = perluSubjekTunggal ? SINGLE_SUBJECT_LOCK : "";
+    const kunciSubjek = perluSubjekTunggal
+      ? neutralVisual ? NEUTRAL_SINGLE_SUBJECT_LOCK : SINGLE_SUBJECT_LOCK
+      : "";
 
     // LATAR per template — hanya untuk template yang beat-nya BELUM menentukan
     // tempat. Template dengan tabel peran sendiri sudah menyebut ruangannya,
@@ -1630,7 +1647,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       input.tvcRoute === "intimate" || (i === 0 && ugcRoles?.opening?.pembukaDiam === true);
     const pakaiPembukaGenerikHandsOnly = format === "hands_only" && !punyaPeranTemplate;
     const detikPertama =
-      i === 0 && !pakaiPembukaGenerikHandsOnly && !kediamanDisengaja ? DETIK_PERTAMA : "";
+      i === 0 && !pakaiPembukaGenerikHandsOnly && !kediamanDisengaja
+        ? neutralVisual ? DETIK_PERTAMA_NETRAL : DETIK_PERTAMA
+        : "";
 
     const latar = !punyaPeranTemplate && input.ugcTemplate
       ? `${latarUntukTemplate(input.ugcTemplate).teks}. `
@@ -1654,14 +1673,25 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     //                  dipamerkan sejak frame pertama, CTA kehilangan bobot.
     //   Expression   — beat yang tidak menyebut ekspresi keluar datar.
     const busur = numShots <= 1 ? "hero" : isFirst ? "idle" : isLastShot(i, numShots) ? "hero" : "partial";
-    const produkAkhir =
-      busur === "idle"
+    const produkAkhir = neutralStoryAds
+      ? busur === "idle"
+        ? `Prop state at the end of this shot: the same plain unprinted colour card or swatch remains in the staged scene without being presented as merchandise.`
+        : busur === "partial"
+          ? `Prop state at the end of this shot: the same blank colour card or swatch has moved within the staged action; its surface remains plain and non-factual.`
+          : `Prop state at the end of this shot: the same blank colour card or swatch settles as the compositional focus, still without letters, numbers, logos, labels, prices, names, categories, or readable marks.`
+      : noPhysicalProduct
+        ? `Service state at the end of this shot: the presenter and setting carry the idea through natural gestures; no physical merchandise is introduced.`
+      : busur === "idle"
         ? `Product state at the end of this shot: still idle — present in frame but not yet held up or presented, its label not turned to camera.`
         : busur === "partial"
           ? `Product state at the end of this shot: partially revealed — in her hands and clearly in use, but not yet held up as a hero shot.`
           : `Product state at the end of this shot: hero — held up, label squarely readable to camera, and held still for the final second.`;
     const mulaiDari = isFirst
       ? `Start state: the first frame is already mid-action, not a posed opening.`
+      : neutralStoryAds
+        ? `Start state: this shot begins exactly where the previous one ended, with the same blank prop already moving in the staged action.`
+      : noPhysicalProduct
+        ? `Start state: this shot begins exactly where the previous one ended, with the same presenter and setting continuing naturally.`
       : `Start state: this shot begins exactly where the previous one ended — ${
           busur === "hero"
             ? `the product is already in her hands from the very first frame, so no time is spent picking it up`
@@ -1688,7 +1718,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
 
     // Kunci ukuran asli (§C.10) di TIAP shot — termasuk shot tanpa suara, yang
     // punya cacat produk-raksasa yang sama.
-    const ukuran = ` ${kunciUkuranAsli(input.productName)}`;
+    const ukuran = neutralVisual ? "" : ` ${kunciUkuranAsli(input.productName)}`;
     // Kontrak talent mode ikut, terpisah dari framing: framing mengatur KAMERA,
     // kalimat ini mengatur apa yang dilakukan orangnya.
     const kontrak = framingMode ? ` ${blokKontrakMode(modeShot)}` : "";
@@ -1705,9 +1735,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const petunjukFormat = petunjukFormatIde(input.ideaFormat);
     const blokFormat = petunjukFormat ? ` ${petunjukFormat}` : "";
 
+    const visualProductDesc = neutralVisual ? "" : productDesc;
+    const visualBrandBrief = neutralVisual ? "" : brandBrief;
     const base = rapikan(punyaPeranTemplate
-      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}.${kameraPenulis} ${productDesc}${brandBrief}${panggung}${kontrak}${blokFormat}${ukuran}`
-      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}.${kameraPenulis} ${productDesc}${brandBrief}${beat}${panggung}${kontrak}${blokFormat}${ukuran}`);
+      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}.${kameraPenulis} ${visualProductDesc}${visualBrandBrief}${panggung}${kontrak}${blokFormat}${ukuran}`
+      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}.${kameraPenulis} ${visualProductDesc}${visualBrandBrief}${beat}${panggung}${kontrak}${blokFormat}${ukuran}`);
 
     if (!withAudio) {
       return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
@@ -1752,17 +1784,17 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             ? `A composed, confident Indonesian brand voiceover is heard over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed. The narration stays entirely off-screen while the frame keeps to the product: "${dialogue}". `
             : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed; the voice comes from off-screen while anyone in frame keeps their lips closed and simply acts and reacts: "${dialogue}". `
         : format === "hands_only"
-        ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to hands and product): "${dialogue}". `
+        ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to ${neutralVisual ? "the staged action and blank props" : "hands and product"}): "${dialogue}". `
         : lipSyncPresenter
           ? bukaTanpaWajah
             // Preseden job a1192101: frasa "presenter speaks to camera" membuat
             // model MENGGAMBAR wajah pembicara di shot yang harus tanpa wajah.
             // Shot pembuka memakai kalimat VO hands_only; presenter bicara ke
             // kamera baru mulai shot 2.
-            ? `A warm female VOICEOVER speaks in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words (the speaker stays entirely off-screen in this opening shot; the frame keeps to hands and product): "${dialogue}". `
+            ? `A warm female VOICEOVER speaks in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words (the speaker stays entirely off-screen in this opening shot; the frame keeps to ${neutralVisual ? "the staged action and blank props" : "hands and product"}): "${dialogue}". `
             : `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting with a friend, easy and unsalesy, saying: "${dialogue}". `
           : bukaTanpaWajah
-          ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words (the narration stays entirely off-screen in this opening shot; the frame keeps to hands and product): "${dialogue}". `
+          ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words (the narration stays entirely off-screen in this opening shot; the frame keeps to ${neutralVisual ? "the staged action and blank props" : "hands and product"}): "${dialogue}". `
           : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally with her lips closed and relaxed throughout, listening rather than speaking: "${dialogue}". `;
     const pacing =
       format === "tvc"
@@ -1779,7 +1811,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
         : isLast
           ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `
-          : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `;
+          : neutralVisual
+            ? `She pauses for a full second, taking a visible breath, before continuing the staged blank-prop action — the pause should be clearly noticeable, not rushed. `
+            : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `;
     // rapikan() dipakai di prompt AKHIR, bukan cuma di base: titik gandanya
     // justru lahir DI SINI, saat `${base}. ` menempel pada base yang sudah
     // berakhir titik. Menormalkan potongannya saja meninggalkan cacat yang
@@ -1799,7 +1833,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const prompt = rapikan(
       format === "talking_head" && !lipSyncPresenter && !bukaTanpaWajah
         ? `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Natural warm reactive expression throughout, with her lips closed and relaxed as she listens. ${bahasa.penutup}`
-        : `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader. ${bahasa.penutup}`
+        : neutralVisual
+          ? `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Natural conversational Indonesian, not a newsreader. ${bahasa.penutup}`
+          : `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader. ${bahasa.penutup}`
     );
     // Penanda menahan-produk ikut sebagai DATA. Sumbernya peran template
     // (ugcRoles) atau tabel rute TVC — keduanya menandainya eksplisit.

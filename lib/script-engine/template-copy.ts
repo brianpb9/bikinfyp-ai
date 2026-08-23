@@ -1,5 +1,5 @@
 import type { TemplateCtx } from "./templates";
-import { isServiceLike } from "../config/hooks";
+import { neutralStoryAdsActionContradictions } from "./ads-visual-contract";
 
 /**
  * Copy katalog bersifat template-owned. Setiap template aktif mempunyai satu
@@ -288,12 +288,6 @@ const ADEGAN_ADS: Record<string, AdsScene> = {
   },
 };
 
-const VARIASI_GESER = [
-  ["buka sisi produk hingga bergeser", "produk berpindah ke tengah meja"],
-  ["ambil produk lalu pindahkan posisinya", "produk diputar menghadap saksi"],
-  ["usap produk lalu geser ke kanan", "produk diangkat mendekati saksi"],
-  ["pegang produk lalu buka penutupnya", "produk dibuka di depan saksi"],
-] as const;
 const VARIASI_LAYANAN = [
   ["talent buka kartu warna polos di meja", "kartu blank dipindahkan mendekati saksi"],
   ["talent buka lipatan kartu tanpa tulisan", "blok warna diarahkan kepada saksi"],
@@ -306,8 +300,7 @@ const JEDA_VARIAN = ["[short pause]", "[medium pause]", "[long pause]", "[slow]"
 function storyAds(templateId: string, variantIndex: number, c: TemplateCtx, base: CopyTriple): CopyTriple {
   const adegan = ADEGAN_ADS[templateId];
   if (!adegan) return base;
-  const nonPhysical = isServiceLike(c.category ?? "");
-  const [aksiSatu, aksiDua] = (nonPhysical ? VARIASI_LAYANAN : VARIASI_GESER)[variantIndex];
+  const [aksiSatu, aksiDua] = VARIASI_LAYANAN[variantIndex];
   const hook = withDelivery(adegan.hooks[variantIndex], base.hook);
   const button = `${adegan.questions[variantIndex]} Detailnya ada di bawah ya.`;
   const hargaAktif = [
@@ -320,12 +313,16 @@ function storyAds(templateId: string, variantIndex: number, c: TemplateCtx, base
     ? hargaAktif[variantIndex]
     : adegan.friction1[variantIndex];
   const story: AdsStoryBeat[] = [
-    { role: "hook", label: "HOOK", text: hook, action: nonPhysical ? "kartu warna polos tanpa tulisan terlihat sejak frame pertama" : "anomali terlihat sejak frame pertama", product_state: "partial" },
+    { role: "hook", label: "HOOK", text: hook, action: "kartu warna polos tanpa tulisan terlihat sejak frame pertama", product_state: "partial" },
     { role: "demo", label: "FRICTION", text: `${JEDA_VARIAN[variantIndex]} ${tekananSatu}`, action: aksiSatu, product_state: "partial" },
     { role: "story", label: "FRICTION", text: adegan.friction2[variantIndex], action: aksiDua, product_state: "hero" },
-    { role: "story", label: "SPIKE", text: adegan.spikes[variantIndex], action: nonPhysical ? "kartu warna polos diletakkan di depan saksi" : `${c.produk} berhenti tepat di depan saksi`, product_state: "hero", saksi: adegan.saksi },
-    { role: "cta", label: "BUTTON", text: button, action: nonPhysical ? "talent menunjuk blok warna pada kartu blank sambil menyisakan pertanyaan" : "talent menahan produk sambil menyisakan pertanyaan", product_state: "hero" },
+    { role: "story", label: "SPIKE", text: adegan.spikes[variantIndex], action: "kartu warna polos diletakkan di depan saksi", product_state: "hero", saksi: adegan.saksi },
+    { role: "cta", label: "BUTTON", text: button, action: "talent menunjuk blok warna pada kartu blank sambil menyisakan pertanyaan", product_state: "hero" },
   ];
+  const contradictions = story.flatMap((beat) => neutralStoryAdsActionContradictions(beat.action));
+  if (contradictions.length > 0) {
+    throw new Error(`Kontrak visual Story Ads dilanggar (${templateId}): ${contradictions.join(", ")}`);
+  }
   return { hook: story[0].text, demo: story.slice(1, 4).map((beat) => beat.text).join(" "), cta: button, story };
 }
 
