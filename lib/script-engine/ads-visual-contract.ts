@@ -37,10 +37,34 @@ function literalPattern(value?: string | null): RegExp | null {
   return new RegExp(`\\b${words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")}\\b`, "i");
 }
 
+function characterContradictions(input: string, kind: "action" | "prompt"): string[] {
+  const normalized = input.normalize("NFC");
+  const findings: string[] = [];
+  if (/[^\x00-\x7F]/u.test(normalized.replace(/—/g, ""))) {
+    const unicodeLetters = [...new Set(normalized.match(/[\p{L}\p{M}]/gu)?.filter((char) => !/[A-Za-z]/.test(char)) ?? [])];
+    if (unicodeLetters.length > 0) findings.push(`non-ASCII letters/marks forbidden: ${unicodeLetters.join("")}`);
+  }
+  if (/\p{Sc}|%/u.test(normalized)) findings.push("currency/percent marker forbidden");
+  if (kind === "action") {
+    if (/\p{N}/u.test(normalized)) findings.push("digits forbidden on blank prop action");
+    // Grammar aksi hanya membutuhkan spasi dan tanda baca staging sederhana.
+    if (/[^A-Za-z\s,.'—-]/u.test(normalized)) findings.push("punctuation/symbol outside approved neutral action grammar");
+  } else {
+    // Prompt produksi memang punya nomor shot/durasi. Hanya tiga bentuk
+    // struktural itu yang dibolehkan; angka lain adalah calon fakta sintetis.
+    const withoutStructuralNumbers = normalized
+      .replace(/\b\d+(?:\.\d+)?-second\b/gi, "")
+      .replace(/\bShot\s+\d+\s+of\s+\d+\b/gi, "")
+      .replace(/\b(?:at|then at)\s+\d+(?:\.\d+)?-\d+(?:\.\d+)?\s+seconds\b/gi, "");
+    if (/\p{N}/u.test(withoutStructuralNumbers)) findings.push("non-structural digits forbidden in neutral final prompt");
+  }
+  return findings;
+}
+
 /** Returns contradictions instead of a boolean so audits can identify the
  * exact production instruction that regressed. */
 export function neutralStoryAdsActionContradictions(action: string, identity: NeutralVisualProductIdentity = {}): string[] {
-  const findings: string[] = [];
+  const findings: string[] = characterContradictions(action, "action");
   if (!ALLOWED_PROP.test(action)) findings.push("missing allowed neutral visual subject");
   const unknownWords = [...new Set((action.toLocaleLowerCase("id-ID").match(/[a-z]+/g) ?? [])
     .filter((word) => !APPROVED_ACTION_WORDS.has(word)))];
@@ -73,7 +97,10 @@ const FORBIDDEN_PROMPT_PATTERNS: Array<[string, RegExp]> = [
 ];
 
 export function neutralStoryAdsPromptContradictions(prompt: string, identity: NeutralVisualProductIdentity = {}): string[] {
-  const findings = FORBIDDEN_PROMPT_PATTERNS.flatMap(([label, pattern]) => pattern.test(prompt) ? [label] : []);
+  const findings = [
+    ...characterContradictions(prompt, "prompt"),
+    ...FORBIDDEN_PROMPT_PATTERNS.flatMap(([label, pattern]) => pattern.test(prompt) ? [label] : []),
+  ];
   for (const [label, value] of [["product name", identity.productName], ["product category", identity.productCategory]] as const) {
     const pattern = literalPattern(value);
     if (pattern?.test(prompt)) findings.push(`authoritative ${label} present in final prompt: ${value}`);

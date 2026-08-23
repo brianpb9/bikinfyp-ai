@@ -23,6 +23,7 @@ import type { PgJobsRepository } from "@/lib/postgres/jobs";
 import { pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
+import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 
 export type HasilSel =
   | { status: "queued"; script_id: string; job_id: string }
@@ -115,6 +116,16 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   if (!script || script.product_id !== sel.productId || script.job_id) {
     return gagal("Skrip tidak ditemukan atau sudah pernah dipakai.");
   }
+  const jejak = bacaJejak(script.validation_result);
+  const bentrok = kontradiksiNaskah(jejak.admisi, { format: sel.format, templateId: sel.templateId });
+  if (bentrok) return gagal(bentrok);
+  // Guard otoritatif WAJIB hidup di sel bersama, bukan hanya route. Request
+  // lama dapat menghilangkan template_id; snapshot immutable tetap mengetahui
+  // bahwa template bukti membutuhkan footage asli. Posisi ini mendahului
+  // approval, job, kredit, dan enqueue.
+  const templateIdOtoritatif = templateIdRenderOtoritatif(jejak.admisi, sel.templateId);
+  const renderBlockMessage = aiRenderBlockMessage(templateIdOtoritatif);
+  if (renderBlockMessage) return gagal(renderBlockMessage);
   // Nama/kategori request hanya untuk UI. Kontrak visual harus membaca fakta
   // produk organisasi yang otoritatif, supaya klien tidak bisa menyamarkan
   // identitas produk saat meminta render.
@@ -140,13 +151,9 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   // jadi TVC yang sah justru DITOLAK: aturan T-01..T-03 tidak pernah
   // dijalankan sementara aturan lisan afiliasi (L-03/L-19) dipaksakan ke
   // naskah yang memang bukan afiliasi.
-  const jejak = bacaJejak(script.validation_result);
-  const bentrok = kontradiksiNaskah(jejak.admisi, { format: sel.format, templateId: sel.templateId });
-  if (bentrok) return gagal(bentrok);
   // Snapshot naskah adalah sumber immutable. Request lama boleh tidak membawa
   // template_id, tetapi job tetap wajib menyimpan ID snapshot agar worker
   // tidak kehilangan kontrak neutral_story_ads.
-  const templateIdOtoritatif = templateIdRenderOtoritatif(jejak.admisi, sel.templateId);
   const validation = periksaAdmisi({
     segments,
     // Snapshot menang atas isi request: genre naskah ditentukan saat ia

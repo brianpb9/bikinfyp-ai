@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { AI_RENDER_BLOCKED_TEMPLATE_IDS, aiRenderBlockMessage } from "../lib/template-render-safety";
+import { templateIdRenderOtoritatif } from "../lib/dashboard/render-cell";
 
 test("legacy before-after serta T05 T08 T10 diblokir dari render AI dengan alasan footage asli", () => {
   assert.deepEqual([...AI_RENDER_BLOCKED_TEMPLATE_IDS], [
@@ -13,6 +14,25 @@ test("legacy before-after serta T05 T08 T10 diblokir dari render AI dengan alasa
     assert.match(message ?? "", /Render AI diblokir/i);
   }
   assert.equal(aiRenderBlockMessage("t06-swatch-shade"), null);
+});
+
+test("request tanpa template_id tetap memakai snapshot blocked yang otoritatif", () => {
+  for (const id of AI_RENDER_BLOCKED_TEMPLATE_IDS) {
+    const authoritative = templateIdRenderOtoritatif({ templateId: id }, null);
+    assert.equal(authoritative, id);
+    assert.equal(aiRenderBlockMessage(authoritative), aiRenderBlockMessage(id));
+  }
+});
+
+test("shared renderSatuSel memblokir snapshot sebelum approval/job/kredit/enqueue", () => {
+  const source = readFileSync(new URL("../lib/dashboard/render-cell.ts", import.meta.url), "utf8");
+  const derive = source.indexOf("templateIdRenderOtoritatif(jejak.admisi, sel.templateId)");
+  const block = source.indexOf("aiRenderBlockMessage(templateIdOtoritatif)");
+  assert.ok(derive > 0 && block > derive, "shared cell tidak memblokir ID snapshot otoritatif");
+  for (const sideEffect of ["await smokeApproveScript(", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
+    const index = source.indexOf(sideEffect);
+    assert.ok(index > block, `${sideEffect} mendahului real-footage block`);
+  }
 });
 
 // Empat template bukti (before/after, day 1 vs day 7, bukti di lengan) tidak

@@ -393,6 +393,63 @@ async function siapkanStoryAdsTanpaTemplateRequest(image: string) {
   return result.job_id;
 }
 
+async function assertBlockedSnapshotTanpaSideEffect(templateId: string) {
+  const orgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
+  await pool.query("INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,$2,$3,$4)",
+    [orgId, `Org Block ${templateId}`, `org-block-${templateId}-${process.pid}`, t]);
+  await pool.query("INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$4)",
+    [uid(), orgId, userId, t]);
+  await pool.query(
+    "INSERT INTO products (id,user_id,org_id,name,price_idr,category,images,raw_meta,created_at) VALUES ($1,$2,$3,'Serum Bukti',85000,'beauty','[]','{}',$4)",
+    [productId, userId, orgId, t]
+  );
+  await pool.query(
+    "INSERT INTO personas (id,user_id,name,creator_category,voice_id,register,created_at) VALUES ($1,$2,$3,'hijaber','id_female_1','netral',$4)",
+    [personaId, userId, `Persona ${templateId}`, t]
+  );
+  const segments = [
+    { role: "hook", start: 0, end: 3, text: "Pembuka bukti.", visual_direction: "x" },
+    { role: "demo", start: 3, end: 10, text: "Isi bukti.", visual_direction: "x" },
+    { role: "cta", start: 10, end: 15, text: "Penutup bukti.", visual_direction: "x" },
+  ];
+  const validationResult = JSON.stringify({
+    passed: true, errors: [], warnings: [], checked_at: t,
+    admisi: { contentType: "affiliate", format: "hands_only", durationSec: 15, templateId },
+  });
+  await pool.query(
+    `INSERT INTO scripts
+      (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,created_at)
+     VALUES ($1,$2,'H1','netral','netral',$3,'caption','[]',$4,'silent_caption',$5)`,
+    [scriptId, productId, JSON.stringify(segments), validationResult, t]
+  );
+  await pool.query("INSERT INTO credit_ledger (id,user_id,org_id,delta,type,created_at) VALUES ($1,$2,$3,50000,'bonus',$4)",
+    [uid(), userId, orgId, t]);
+  const { renderSatuSel } = await import("../lib/dashboard/render-cell");
+  const { PgJobsRepository } = await import("../lib/postgres/jobs");
+  const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  const { aiRenderBlockMessage } = await import("../lib/template-render-safety");
+  const result = await renderSatuSel({
+    userId, orgId, productId, productName: "Serum Bukti", productPriceIdr: 85000,
+    productSourceUrl: null, promoPriceBeforeIdr: null, scriptId, personaId,
+    avatarCustomDesc: null, format: "hands_only", ratio: "9:16", noModel: false,
+    tvcRoute: null, templateId: null, recordStyle: null, shotCount: null,
+    runId: `block-${templateId}-${process.pid}`,
+  }, {
+    pool, jobsRepo: new PgJobsRepository(URL_UJI), creditsRepo: new PgCreditPaymentRepository(URL_UJI),
+  });
+  assert.deepEqual(result, { status: "failed", script_id: scriptId, reason: aiRenderBlockMessage(templateId)! });
+  const scriptAfter = (await pool.query(
+    "SELECT job_id,approved_by_user_at,edited_by_user,segments,validation_result FROM scripts WHERE id=$1", [scriptId]
+  )).rows[0];
+  assert.deepEqual(scriptAfter, {
+    job_id: null, approved_by_user_at: null, edited_by_user: 0,
+    segments: JSON.stringify(segments), validation_result: validationResult,
+  });
+  assert.equal(Number((await pool.query("SELECT COUNT(*) AS n FROM jobs WHERE script_id=$1", [scriptId])).rows[0].n), 0);
+  assert.equal(Number((await pool.query("SELECT COUNT(*) AS n FROM credit_ledger WHERE org_id=$1 AND type='hold'", [orgId])).rows[0].n), 0);
+  assert.equal(Number((await pool.query("SELECT COUNT(*) AS n FROM audit_log WHERE entity_id=$1 AND action='script.approved'", [scriptId])).rows[0].n), 0);
+}
+
 async function patchProdukOrg(token: string, body: Record<string, unknown>) {
   const { cookieName } = await import("../lib/auth");
   const { PATCH } = await import("../app/api/dashboard/campaign/product/route");
@@ -637,6 +694,13 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
   assert.equal(amatan.utamaPath, null, "neutral Story Ads mengirim primary product reference");
   assert.deepEqual(amatan.extraPaths, [], "neutral Story Ads mengirim extra product references");
   assert.match(amatan.promptText, /neutral blank props|plain unprinted|blank/i);
+});
+
+test("shared confirm memblokir empat snapshot real-footage saat request template_id dihilangkan, tanpa side effect", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  for (const templateId of ["before-after", "t05-before-after", "t08-day-1-vs-day-7", "t10-bukti-di-lengan"]) {
+    await assertBlockedSnapshotTanpaSideEffect(templateId);
+  }
 });
 
 // ------------------------------------------------------------------- C1

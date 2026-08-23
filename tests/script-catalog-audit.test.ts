@@ -584,11 +584,20 @@ test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
     "talent mengangkat botolnya sambil memegang kartu blank",
     "talent mengangkat Kemeja Uji di samping kartu blank",
     "talent mengangkat fashion di samping kartu blank",
+    "talent membuka kartu blank 189000 di meja",
+    "talent membuka kartu blank Rp189.000 di meja",
+    "talent membuka kartu blank 50% di meja",
+    "talent membuka kartu blank 7 di meja",
+    "talent membuka kartu blank café di meja",
+    "talent membuka kartu blank cafe\u0301 di meja",
+    "talent membuka kartu blank Ж di meja",
   ]) assert.notDeepEqual(neutralStoryAdsActionContradictions(action, identity), [], action);
   for (const safe of [
     "talent membuka kartu warna polos di meja",
     "talent menunjuk blok warna pada kartu blank",
     "swatch blank dipindahkan mendekati saksi",
+    "talent membuka kartu blank di meja.",
+    "kartu blank bergerak — perlahan",
   ]) assert.deepEqual(neutralStoryAdsActionContradictions(safe, identity), [], safe);
   assert.notDeepEqual(neutralStoryAdsPromptContradictions("Product hero, label squarely readable to camera."), []);
   for (const prompt of [
@@ -596,6 +605,13 @@ test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
     "talent mengangkat botolnya sambil memegang kartu blank",
     "talent mengangkat Kemeja Uji di samping kartu blank",
     "talent mengangkat fashion di samping kartu blank",
+    "talent membuka kartu blank 189000 di meja",
+    "talent membuka kartu blank Rp189.000 di meja",
+    "talent membuka kartu blank 50% di meja",
+    "talent membuka kartu blank 7 di meja",
+    "talent membuka kartu blank café di meja",
+    "talent membuka kartu blank cafe\u0301 di meja",
+    "talent membuka kartu blank Ж di meja",
   ]) assert.notDeepEqual(neutralStoryAdsPromptContradictions(prompt, identity), [], prompt);
   const mutation = structuredClone(audit.templates);
   mutation.find((template) => template.templateId === "ads-atap-jebol")!.variants[0].assembledShotDirections[0] =
@@ -630,6 +646,13 @@ test("mutasi subjek produk tetap terdeteksi setelah action dirakit menjadi promp
     "talent mengangkat botolnya sambil memegang kartu blank",
     "talent mengangkat Kemeja Uji di samping kartu blank",
     "talent mengangkat fashion di samping kartu blank",
+    "talent membuka kartu blank 189000 di meja",
+    "talent membuka kartu blank Rp189.000 di meja",
+    "talent membuka kartu blank 50% di meja",
+    "talent membuka kartu blank 7 di meja",
+    "talent membuka kartu blank café di meja",
+    "talent membuka kartu blank cafe\u0301 di meja",
+    "talent membuka kartu blank Ж di meja",
   ]) {
     const segments = structuredClone(base.segments);
     segments[1].action = action;
