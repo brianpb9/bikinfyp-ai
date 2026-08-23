@@ -25,13 +25,13 @@ kasar. `NOT-APPLICABLE` salah karena deployment web mengaktifkan PostgreSQL.
 
 | Write literal | Field product-truth yang disentuh | Lingkungan reachable |
 |---|---|---|
-| D1 `createProduct` → `insertProduct` | membuat `images`, `name`, `category`, `raw_meta` (termasuk brand bila caller memberi) | production + staging E1/E2/E6; HTTP smoke lewat route yang sama; direct verifier disposable |
+| D1 `createProduct` → `insertProduct` | membuat `images`, `name`, `category`, `raw_meta` (termasuk brand bila caller memberi) | deployed call-sites E1/E2/E6; HTTP runtime smoke mengeksekusi E1 saja; direct verifier disposable |
 | D1 `createExtractedProduct` → `insertProduct` | membuat field yang sama | test-only verifier parity; tidak ada wrapper/runtime/migration caller |
-| D1 `updateOwnedProduct` | mutasi `name`, `category`; tidak menyentuh `images`/brand | production + staging E3; verifier disposable |
-| D1 `setOwnedProductBrand` | mutasi `raw_meta.brand`; tidak menyentuh `images`/name/category | production + staging E3 |
-| D2 `pgSetProductImages` | mengganti seluruh `images` | production + staging E4/E5; mungkin dilalui HTTP smoke bila route foto dipanggil, tanpa jalur CLI langsung |
-| D2 `pgAppendOrgProductImages` | append `images` | production + staging E8; tidak ada CLI/migration caller |
-| D2 `pgRemoveOrgProductImage` | remove dari `images` | production + staging E9; tidak ada CLI/migration caller |
+| D1 `updateOwnedProduct` | mutasi `name`, `category`; tidak menyentuh `images`/brand | deployed call-site E3; tidak dilalui runtime smoke; verifier disposable |
+| D1 `setOwnedProductBrand` | mutasi `raw_meta.brand`; tidak menyentuh `images`/name/category | deployed call-site E3; tidak dilalui runtime smoke |
+| D2 `pgSetProductImages` | mengganti seluruh `images` | deployed call-sites E4/E5 berdasarkan inspeksi; tidak dilalui runtime smoke; tanpa jalur CLI langsung |
+| D2 `pgAppendOrgProductImages` | append `images` | deployed call-site E8 berdasarkan inspeksi; tidak dilalui runtime smoke; tidak ada CLI/migration caller |
+| D2 `pgRemoveOrgProductImage` | remove dari `images` | deployed call-site E9 berdasarkan inspeksi; tidak dilalui runtime smoke; tidak ada CLI/migration caller |
 
 Tidak ada migration yang mengimpor D1/D2. Tidak ada export barrel lain:
 D1 diekspor dari file asal dan dibungkus `smoke-runtime`; D2 diekspor langsung
@@ -41,7 +41,7 @@ deployment.
 ## Call graph ringkas
 
 ```text
-RACUN_DB_RUNTIME=postgres
+DEPLOYED REACHABILITY — bukti call-site + manifest RACUN_DB_RUNTIME=postgres
 ├─ E1 POST /api/products
 │  └─ saveProductImages → tulisSidecar
 │     └─ smokeCreateProduct → D1.createProduct → D1.insertProduct
@@ -72,8 +72,15 @@ package.json:test:postgres-product-persona-script
    └─ D1.createProduct/createExtractedProduct/updateOwnedProduct (test-only direct calls)
 
 package.json:test:postgres-runtime-smoke
-└─ disposable DB + RACUN_POSTGRES_SMOKE=1 → HTTP smoke → route graph above
+└─ disposable DB + RACUN_POSTGRES_SMOKE=1
+   └─ POST /api/products (E1 SAJA)
+      └─ saveProductImages → tulisSidecar
+         └─ smokeCreateProduct → D1.createProduct → D1.insertProduct
 ```
+
+Cabang E2–E9/D2 pada graph pertama adalah reachability hasil inspeksi call-site,
+bukan bukti eksekusi runtime smoke. `scripts/smoke-e2e.sh` hanya memanggil
+`POST /api/products` untuk keluarga product writer ini.
 
 E7 PATCH org menulis `products` lewat SQL langsung di route, bukan lewat D1.
 Ia tetap tercatat sebagai E7 PARTIAL dan tidak dipindahkan secara keliru ke D1.
@@ -202,9 +209,11 @@ rg -n 'postgresRuntimeEnabled|RACUN_DB_RUNTIME' \
 ```
 
 Exit `0`. `postgresRuntimeEnabled` menerima `RACUN_DB_RUNTIME=postgres`
-(`smoke-runtime.ts:31-32`); default production juga postgres (`config.ts:33`);
-`render.yaml:21-22,99-100` dan `render.production.yaml:22-23,114-115`
-menetapkan `value: postgres`.
+secara LANGSUNG dari `process.env` (`smoke-runtime.ts:31-32`). Default
+`config.dbRuntime` tidak mengaktifkan switch ini karena tidak dibaca oleh
+`postgresRuntimeEnabled`. Reachability deployed dibuktikan oleh nilai eksplisit
+`RACUN_DB_RUNTIME=postgres` di `render.yaml:21-22,99-100` dan
+`render.production.yaml:22-23,114-115`.
 
 ### 6. CLI/package scripts
 
@@ -212,12 +221,17 @@ menetapkan `value: postgres`.
 rg -n 'test:postgres-product-persona-script|test:postgres-runtime-smoke' package.json
 rg -n 'verify-product-persona-script-parity|RACUN_POSTGRES_SMOKE' \
   scripts/test-postgres-product-persona-script.sh scripts/test-postgres-runtime-smoke.sh
+rg -n 'api/products|api/dashboard|/photos|/extract|method.*PATCH|method.*DELETE' \
+  scripts/smoke-e2e.sh
 ```
 
-Keduanya exit `0`. Package scripts berada di `package.json:24,28`. Parity
+Ketiganya exit `0`. Package scripts berada di `package.json:24,28`. Parity
 runner memanggil verifier pada SQLite dan PostgreSQL disposable
 (`test-postgres-product-persona-script.sh:22-23`); runtime smoke memakai
 `RACUN_POSTGRES_SMOKE=1` dan database disposable (`test-postgres-runtime-smoke.sh:25`).
+Untuk keluarga writer produk, pencarian literal atas `scripts/smoke-e2e.sh`
+hanya menemukan `POST "$BASE/api/products"` pada baris 60; tidak ada extract,
+PATCH, photo, DELETE, atau route organisasi. Jadi bukti eksekusinya hanya E1.
 
 ### 7. Pemeriksaan kontradiksi R2A/B3
 
