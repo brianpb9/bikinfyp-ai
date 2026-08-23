@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import fs from "node:fs";
 import { type MediaStorage, setMediaStorageForTests, mediaStorage } from "../lib/storage";
 
 class MemoryObjectStorage implements MediaStorage {
@@ -23,4 +24,28 @@ test("storage contract supports private object writes and byte ranges without R2
   assert.equal((await mediaStorage().get("uploads/user/photo.webp", { start: 2, end: 4 }))?.body.toString(), "cde");
   assert.equal(await mediaStorage().get("uploads/user/missing.webp"), null);
   setMediaStorageForTests();
+});
+
+test("filesystem materialize: hanya ENOENT menjadi null; kegagalan stat I/O dipropagasikan", async () => {
+  setMediaStorageForTests();
+  const key = `jobs/storage-stat-${process.pid}/approved-references/ref.webp`;
+  await mediaStorage().put(key, Buffer.from("snapshot"));
+  assert.equal(await mediaStorage().materialize(`${key}.missing`), null, "ENOENT bukan missing/null");
+
+  const originalStat = fs.promises.stat;
+  const io = Object.assign(new Error("disk read failure"), { code: "EIO" });
+  fs.promises.stat = (async (target: fs.PathLike) => {
+    if (String(target).endsWith(key)) throw io;
+    return originalStat(target);
+  }) as typeof fs.promises.stat;
+  try {
+    await assert.rejects(
+      () => mediaStorage().materialize(key),
+      (error) => error === io && (error as NodeJS.ErrnoException).code === "EIO"
+    );
+  } finally {
+    fs.promises.stat = originalStat;
+    await mediaStorage().delete(key);
+    setMediaStorageForTests();
+  }
 });

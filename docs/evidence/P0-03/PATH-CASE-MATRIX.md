@@ -327,8 +327,8 @@ TASK=P0-A6-REFERENCE-SNAPSHOT-IMMUTABLE-20260823
 - Kegagalan infrastruktur storage (auth/network/I/O) diteruskan apa adanya dan
   tidak lagi disamarkan sebagai `REF_MISSING`; hanya hasil `null` bermakna objek
   snapshot memang hilang.
-- `tests/job-reference-manifest.test.ts` → **5/5 PASS**; W2 worker → **15/15
-  PASS**; affected product-truth gabungan → **120/120 PASS**; W1 PostgreSQL
+- `tests/job-reference-manifest.test.ts` → **6/6 PASS**; W2 worker → **15/15
+  PASS**; affected product-truth gabungan → **122/122 PASS**; W1 PostgreSQL
   disposable → **16/16 PASS**; `tsc --noEmit` → **PASS**.
 - A6/C1/C9 reference-identity gap ditutup. Status kasus keseluruhan tetap
   konservatif sesuai gap non-referensi dan jalur lain yang tercatat di E.2.

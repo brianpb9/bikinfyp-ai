@@ -386,8 +386,12 @@ export async function bytesTersetujuiCocok(absLokal: string, ref: ReferensiTerse
   try {
     const isi = await fsp.readFile(absLokal);
     return crypto.createHash("sha256").update(isi).digest("hex") === ref.sha256;
-  } catch {
-    return false;
+  } catch (error) {
+    // Hanya berkas yang benar-benar hilang merupakan mismatch provenance.
+    // EACCES/EIO dan kegagalan disk transien harus tetap menjadi kegagalan
+    // infrastruktur agar caller dapat retry dan diagnosis aslinya tidak hilang.
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return false;
+    throw error;
   }
 }
 

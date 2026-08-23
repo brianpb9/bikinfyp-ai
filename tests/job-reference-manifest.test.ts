@@ -21,6 +21,7 @@ const sha = (bytes: Buffer) => crypto.createHash("sha256").update(bytes).digest(
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "manifest-ref-materialize-"));
 const values = new Map<string, Buffer>();
 const materializeFailures = new Set<string>();
+const materializePathOverrides = new Map<string, string>();
 
 function sidecar(bytes: Buffer) {
   return Buffer.from(JSON.stringify({
@@ -36,6 +37,8 @@ setMediaStorageForTests({
   async stat(key) { const body = values.get(key); return body ? { size: body.length } : null; },
   async materialize(key) {
     if (materializeFailures.has(key)) throw new Error("R2 authentication unavailable");
+    const overridden = materializePathOverrides.get(key);
+    if (overridden) return overridden;
     const body = values.get(key);
     if (!body) return null;
     const out = path.join(tmp, `${crypto.randomUUID()}-${path.basename(key)}`);
@@ -158,6 +161,28 @@ test("manifest missing/hash-changed dan legacy tak terbukti gagal tertutup", asy
     /R2 authentication unavailable/
   );
   materializeFailures.delete(snapshotRel);
+});
+
+test("readFile I/O sesudah materialize berhasil dipropagasikan, bukan REF_HASH_MISMATCH", async () => {
+  values.clear();
+  const rel = "uploads/read-io/a.webp";
+  const bytes = Buffer.from("READ-IO");
+  const snapshotRel = "jobs/job-read-io/approved-references/0-read-io.webp";
+  values.set(snapshotRel, bytes);
+  const manifest = { version: 1 as const, references: [{ rel, sha256: sha(bytes), versiBukti: 1, snapshotRel }] };
+
+  // materialize sukses mengembalikan path, tetapi path itu tidak bisa dibaca
+  // sebagai file. Node menghasilkan EISDIR dari readFile: error I/O non-ENOENT.
+  materializePathOverrides.set(snapshotRel, tmp);
+  try {
+    await assert.rejects(
+      () => materializeJobReferenceManifest(manifest, path.join(tmp, "read-io")),
+      (error) => (error as NodeJS.ErrnoException).code === "EISDIR"
+        && !(error as Error).message.includes("REF_HASH_MISMATCH")
+    );
+  } finally {
+    materializePathOverrides.delete(snapshotRel);
+  }
 });
 
 test("A6 menempatkan verifikasi manifest sebelum approve, regen charge, task reset, dan enqueue", () => {

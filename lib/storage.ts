@@ -95,7 +95,12 @@ class FilesystemStorage implements MediaStorage {
 
   async materialize(key: string): Promise<string | null> {
     const target = localPath(key);
-    try { return (await fs.promises.stat(target)).isFile() ? target : null; } catch { return null; }
+    try {
+      return (await fs.promises.stat(target)).isFile() ? target : null;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+      throw error;
+    }
   }
 }
 
