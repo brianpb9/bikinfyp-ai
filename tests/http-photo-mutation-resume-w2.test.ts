@@ -16,9 +16,11 @@ const { getDb, now, uuid } = await import("../lib/db");
 const { issueToken, cookieName } = await import("../lib/auth");
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+const { setPersonSafeReferencePhotosForTests } = await import("../lib/media/person-safe-refs");
 const { resolveApprovedReference } = await import("../lib/product-truth");
-const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
+const { createJobProductSnapshotRaw, parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
 const { DELETE: deleteRetailPhoto } = await import("../app/api/products/[id]/photos/route");
+const { PATCH: patchRetailProduct } = await import("../app/api/products/[id]/route");
 const { processJob } = await import("../lib/worker");
 type MediaStorage = import("../lib/storage").MediaStorage;
 
@@ -139,6 +141,56 @@ function currentImages(productId: string): string[] {
   return JSON.parse(row.images) as string[];
 }
 
+async function admittedProductMutationScenario(storage: MemoryStorage) {
+  const ownerId = uuid(), intruderId = uuid(), productId = uuid(), scriptId = uuid();
+  const approvedSource = `uploads/e3-${process.pid}/approved.webp`;
+  const approvedBytes = Buffer.from("APPROVED-E3-C9");
+  const timestamp = now();
+  const admissionSegments = [
+    { role: "hook", start: 0, end: 4, text: "Bestie kenapa rutinitas pagiku sekarang jauh lebih praktis?", visual_direction: "x" },
+    { role: "demo", start: 4, end: 11, text: "Makanya Serum Admission E3 ringan dan mudah diratakan", visual_direction: "x" },
+    { role: "cta", start: 11, end: 15, text: "Kalau penasaran cek keranjang sekarang ya", visual_direction: "x" },
+  ];
+  for (const [id, phone] of [[ownerId, "081230000031"], [intruderId, "081230000032"]]) {
+    db.prepare("INSERT INTO users (id,phone,tier,locale,created_at) VALUES (?,?,'free','id-ID',?)").run(id, phone, timestamp);
+  }
+  db.prepare(
+    `INSERT INTO products
+      (id,user_id,name,price_idr,category,images,raw_meta,product_visual_desc,brand_brief,claims,created_at)
+     VALUES (?,?,?,85000,'beauty',?,?,?,?,?,?)`
+  ).run(productId, ownerId, "Serum Admission E3", JSON.stringify([approvedSource]), JSON.stringify({ brand: "Merek Admission E3" }),
+    "BOTOL-ADMISSION-E3", "BRIEF-ADMISSION-E3", JSON.stringify(["klaim admission E3"]), timestamp);
+  db.prepare(
+    `INSERT INTO scripts
+      (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,approved_by_user_at,created_at)
+     VALUES (?,?,'H1','senang','bestie',?,'caption','[]','{}','high_quality',?,?)`
+  ).run(scriptId, productId, JSON.stringify(admissionSegments), timestamp, timestamp);
+  db.prepare("INSERT INTO credit_ledger (id,user_id,delta,type,created_at) VALUES (?,?,50000,'bonus',?)")
+    .run(uuid(), ownerId, timestamp);
+  storage.values.set(approvedSource, approvedBytes);
+  storage.values.set(`${approvedSource}.meta.json`, approvedSidecar(approvedBytes));
+  setMediaStorageForTests(storage);
+  const ownerToken = await issueToken(ownerId, "081230000031");
+  const intruderToken = await issueToken(intruderId, "081230000032");
+  const { POST } = await import("../app/api/jobs/route");
+  const admission = await POST(new Request("http://localhost/api/jobs", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(ownerToken)}` },
+    body: JSON.stringify({ script_id: scriptId, format: "hands_only", quality_tier: "high_quality", duration_s: 15 }),
+  }));
+  if (admission.status !== 201) assert.fail(`admission E3 gagal (${admission.status}): ${await admission.text()}`);
+  const admitted = await admission.json() as { job_id: string };
+  return { ownerId, intruderId, productId, jobId: admitted.job_id, approvedSource, approvedBytes, ownerToken, intruderToken };
+}
+
+function patchRetailRequest(productId: string, token: string, body: Record<string, unknown>) {
+  return patchRetailProduct(new Request(`http://localhost/api/products/${productId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
+    body: JSON.stringify(body),
+  }), { params: Promise.resolve({ id: productId }) });
+}
+
 function noPaidSideEffects(jobId: string, storage: MemoryStorage) {
   const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...(args as [])) as { n: number }).n;
   assert.equal(count("SELECT COUNT(*) n FROM outputs WHERE job_id=?", jobId), 0);
@@ -147,8 +199,73 @@ function noPaidSideEffects(jobId: string, storage: MemoryStorage) {
   assert.ok(["FAILED", "REFUNDED"].includes(String(job.state)), `job berhenti di state aktif ${String(job.state)}`);
   assert.equal(job.provider_video, null); assert.equal(job.provider_voice, null);
   assert.equal(job.output_url, null); assert.equal(job.cost_actual_idr, 0);
-  assert.deepEqual(storage.putCalls, [], `worker meninggalkan object storage: ${JSON.stringify(storage.putCalls)}`);
+  assert.deepEqual(storage.putCalls.filter((key) => !key.includes("/approved-references/")), [],
+    `worker meninggalkan output object storage: ${JSON.stringify(storage.putCalls)}`);
 }
+
+test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async (t) => {
+  const storage = new MemoryStorage();
+  const originalFetch = globalThis.fetch;
+  let networkCalls = 0;
+  globalThis.fetch = (async () => { networkCalls++; throw new Error("E3 C9 tidak boleh jaringan"); }) as typeof fetch;
+  setPersonSafeReferencePhotosForTests(async (photoPaths) => ({ safe: [...photoPaths], cropped: 0, dropped: 0, resized: 0 }));
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    setMediaStorageForTests(undefined);
+    setVideoProvidersForTests(undefined);
+    setPersonSafeReferencePhotosForTests(undefined);
+  });
+  const s = await admittedProductMutationScenario(storage);
+  const snapshotRaw = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(s.jobId) as { job_product_snapshot: string }).job_product_snapshot;
+  const admissionSnapshot = parseJobProductSnapshot(snapshotRaw);
+
+  const mutation = {
+    name: "Nama Mutasi E3 Deterministik", price_idr: 72000, category: "food",
+    product_visual_desc: "DESC-MUTASI-E3-DETERMINISTIK", brand: "Merek Mutasi E3 Deterministik",
+    promo_price_before_idr: 99000, promo_ends_at: "2030-01-02T03:04:05.000Z", promo_stock_left: 7,
+  };
+  const forbidden = await patchRetailRequest(s.productId, s.intruderToken, mutation);
+  assert.equal(forbidden.status, 404, "intruder dapat memutasi E3");
+  assert.equal((db.prepare("SELECT name FROM products WHERE id=?").get(s.productId) as { name: string }).name, "Serum Admission E3");
+  const response = await patchRetailRequest(s.productId, s.ownerToken, mutation);
+  if (response.status !== 200) assert.fail(`PATCH E3 gagal (${response.status}): ${await response.text()}`);
+  assert.deepEqual(await response.json(), {
+    ok: true, product_id: s.productId, name: mutation.name, price_idr: mutation.price_idr, category: mutation.category,
+  });
+  const current = db.prepare(
+    "SELECT name,price_idr,category,product_visual_desc,brand_brief,claims,raw_meta,promo_price_before_idr,promo_ends_at,promo_stock_left FROM products WHERE id=?"
+  ).get(s.productId) as {
+    name: string; price_idr: number; category: string; product_visual_desc: string | null; brand_brief: string | null;
+    claims: string | null; raw_meta: string | null; promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
+  };
+  assert.equal(current.name, mutation.name); assert.equal(current.category, mutation.category);
+  assert.equal(current.product_visual_desc, mutation.product_visual_desc);
+  assert.equal((JSON.parse(current.raw_meta ?? "{}") as { brand?: string }).brand, mutation.brand);
+  assert.equal(current.promo_price_before_idr, mutation.promo_price_before_idr);
+  assert.equal(current.promo_ends_at, mutation.promo_ends_at); assert.equal(current.promo_stock_left, mutation.promo_stock_left);
+  assert.deepEqual(admissionSnapshot, {
+    version: 1, productName: "Serum Admission E3", category: "beauty",
+    trustedBrand: { source: "products.raw_meta.brand", value: "Merek Admission E3" },
+    productVisualDesc: "BOTOL-ADMISSION-E3", brandBrief: "BRIEF-ADMISSION-E3", claims: ["klaim admission E3"],
+  });
+  const rereadCurrent = parseJobProductSnapshot(createJobProductSnapshotRaw(current));
+  assert.notDeepEqual(rereadCurrent, admissionSnapshot, "counterexample re-read current tidak berbeda dari admission");
+  assert.equal(rereadCurrent.productName, mutation.name); assert.equal(rereadCurrent.trustedBrand.value, mutation.brand);
+
+  let providerCalls = 0; let prompt = "";
+  setVideoProvidersForTests([{ name: "e3-c9-observer", async healthCheck() { return true; }, estimateCost() { return 0; },
+    async generate(spec: { shots: { prompt: string }[] }) {
+      providerCalls++; prompt = spec.shots.map((shot) => shot.prompt).join("\n"); throw new Error("observer stop");
+    } } as never]);
+  storage.putCalls.length = 0; // admission snapshot writes are setup, not worker output.
+  await processJob(s.jobId);
+  assert.equal(providerCalls, 1, "E3 proof tidak mencapai provider");
+  assert.match(prompt, /Serum Admission E3/); assert.match(prompt, /BOTOL-ADMISSION-E3/); assert.match(prompt, /BRIEF-ADMISSION-E3/);
+  assert.doesNotMatch(prompt, /Nama Mutasi E3 Deterministik|DESC-MUTASI-E3-DETERMINISTIK/);
+  assert.equal((db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(s.jobId) as { job_product_snapshot: string }).job_product_snapshot, snapshotRaw);
+  assert.equal(networkCalls, 0, "E3 C9 menyentuh jaringan");
+  noPaidSideEffects(s.jobId, storage);
+});
 
 test("E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan", async (t) => {
   const s = await scenario("stable");

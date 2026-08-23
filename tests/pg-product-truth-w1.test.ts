@@ -43,6 +43,11 @@ if (!lewati) {
   process.env.DATABASE_URL = URL_UJI;
   process.env.RACUN_DB_RUNTIME = "postgres";
   process.env.RACUN_NO_DOTENV = "1";
+  // Admission dashboard harus berhenti setelah enqueue boundary. Worker W1
+  // dipanggil eksplisit oleh test; jangan pernah memulai inline SQLite atau
+  // mewarisi konfigurasi Redis eksternal dari shell pemanggil.
+  process.env.RACUN_WORKER_DISABLED = "1";
+  process.env.RACUN_QUEUE_MODE = "inline";
   process.env.STORAGE_MODE = "filesystem";
   process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "w1-store-"));
   // runProviderPipeline MENOLAK provider "mock" secara eksplisit; nilai nyata
@@ -311,6 +316,8 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
   const { renderSatuSel } = await import("../lib/dashboard/render-cell");
   const { PgJobsRepository } = await import("../lib/postgres/jobs");
   const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  assert.equal(process.env.RACUN_WORKER_DISABLED, "1", "fixture E7 dapat auto-process saat admission");
+  assert.equal(process.env.RACUN_QUEUE_MODE, "inline", "fixture E7 dapat enqueue ke Redis eksternal");
   const result = await renderSatuSel({
     userId, orgId, productId, productName: "Serum Glow Bright", productPriceIdr: 85000,
     productSourceUrl: null, promoPriceBeforeIdr: 110000, scriptId, personaId,
@@ -322,6 +329,9 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
     creditsRepo: new PgCreditPaymentRepository(URL_UJI),
   });
   assert.equal(result.status, "queued", `admission dashboard E7 gagal: ${JSON.stringify(result)}`);
+  const admittedState = (await pool.query("SELECT state,provider_video,provider_voice FROM jobs WHERE id=$1", [result.job_id])).rows[0];
+  assert.deepEqual(admittedState, { state: "QUEUED", provider_video: null, provider_voice: null },
+    "admission E7 menjalankan worker otomatis sebelum processPostgresJob eksplisit");
   const { issueToken } = await import("../lib/auth");
   return {
     jobId: result.job_id, productId, orgId,

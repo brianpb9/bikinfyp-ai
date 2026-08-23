@@ -129,14 +129,22 @@ test("semua admission produksi memasang snapshot pada INSERT job yang sama", () 
 });
 
 test("C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi", () => {
-  const w2 = fs.readFileSync(path.join(process.cwd(), "tests/product-truth-worker-reference.test.ts"), "utf8");
+  const w2 = fs.readFileSync(path.join(process.cwd(), "tests/http-photo-mutation-resume-w2.test.ts"), "utf8");
   assert.match(w2, /PATCH: patchRetailProduct/);
-  assert.match(w2, /patchRetailProduct\([\s\S]+await processJob\(jobId\)/,
+  assert.doesNotMatch(w2, /E3 HTTP PATCH[^\n]+[\s\S]{0,300}\.skip\(/,
+    "bukti E3 masih opsional/skip");
+  assert.match(w2, /await patchRetailRequest\(s\.productId, s\.ownerToken[\s\S]+await processJob\(s\.jobId\)/,
     "bukti E3 tidak menempuh PATCH aktual sebelum entrypoint W2");
   const w1 = fs.readFileSync(path.join(process.cwd(), "tests/pg-product-truth-w1.test.ts"), "utf8");
   assert.match(w1, /app\/api\/dashboard\/campaign\/product\/route/);
   assert.match(w1, /await patchProdukOrg\(ownerToken[\s\S]+await jalankan\(jobId/,
     "bukti E7 tidak menempuh PATCH aktual sebelum entrypoint W1");
+  assert.match(w1, /process\.env\.RACUN_WORKER_DISABLED = "1"/);
+  assert.match(w1, /process\.env\.RACUN_QUEUE_MODE = "inline"/);
+  assert.ok(w1.indexOf('process.env.RACUN_WORKER_DISABLED = "1"') < w1.indexOf('await import("../lib/dashboard/render-cell")'),
+    "fixture E7 tidak mematikan auto-worker sebelum import admission");
+  assert.ok(w1.indexOf('process.env.RACUN_QUEUE_MODE = "inline"') < w1.indexOf('await import("../lib/dashboard/render-cell")'),
+    "fixture E7 dapat mewarisi queue Redis eksternal");
   const retailRoute = fs.readFileSync(path.join(process.cwd(), "app/api/products/[id]/route.ts"), "utf8");
   const orgRoute = fs.readFileSync(path.join(process.cwd(), "app/api/dashboard/campaign/product/route.ts"), "utf8");
   assert.match(retailRoute, /export async function PATCH/);

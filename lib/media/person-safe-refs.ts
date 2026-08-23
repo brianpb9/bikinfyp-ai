@@ -26,6 +26,15 @@ export interface PersonSafeRefs {
   resized: number;
 }
 
+type PersonSafeOverride = (photoPaths: string[], workDir: string) => Promise<PersonSafeRefs>;
+let personSafeOverride: PersonSafeOverride | undefined;
+
+/** Test seam untuk membuktikan boundary worker tanpa bergantung Python/OpenCV.
+ * Tidak pernah dipasang oleh runtime produksi. */
+export function setPersonSafeReferencePhotosForTests(override?: PersonSafeOverride): void {
+  personSafeOverride = override;
+}
+
 function pythonBin(): string {
   const venv = path.join(process.cwd(), ".venv", "bin", "python");
   return fs.existsSync(venv) ? venv : "python3";
@@ -37,6 +46,7 @@ function pythonBin(): string {
  * (job harus gagal jelas + refund, bukan ditolak provider tanpa penjelasan).
  */
 export async function personSafeReferencePhotos(photoPaths: string[], workDir: string): Promise<PersonSafeRefs> {
+  if (personSafeOverride) return personSafeOverride(photoPaths, workDir);
   if (photoPaths.length === 0) return { safe: [], cropped: 0, dropped: 0, resized: 0 };
   const model = path.join(process.cwd(), "assets", "models", "face_detection_yunet_2023mar.onnx");
   const outDir = path.join(workDir, "safe-refs");

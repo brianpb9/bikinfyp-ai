@@ -423,8 +423,15 @@ TASK=P0-C9-HTTP-PRODUCT-MUTATION-RESUME-20260824
   deskripsi visual, dan brand brief admission; snapshot durable tetap membawa
   source/value trusted brand dan claims admission, tidak ditimpa worker.
 - Guard struktural mengikat bukti ke export `PATCH` aktual dan entrypoint worker
-  produksi. Test fokus E3/W2 + helper/guard → **24/24 PASS**; W1 PostgreSQL
-  disposable → **20/20 PASS**.
+  produksi. Setelah koreksi review, gate mandiri E3/W2 + helper/guard →
+  **12/12 PASS, 0 skip**; W1 PostgreSQL disposable → **20/20 PASS, 0 skip**.
+- Bukti E3 non-opsional tidak bergantung `.venv`, PATH, Python, atau OpenCV:
+  seam person-safe deterministik hanya-test meneruskan path yang sama, lalu
+  observer provider membuktikan counterexample admission→PATCH→worker. Fixture
+  E7 menetapkan `RACUN_WORKER_DISABLED=1` dan queue inline sebelum import
+  admission; row job diasersi tetap `QUEUED` tanpa provider sampai pemanggilan
+  eksplisit `processPostgresJob`. Full suite → **1033 total, 999 PASS, 34
+  skip, 0 fail**; `tsc --noEmit` dan `git diff --check` → **PASS**.
 - C9 tetap **PARTIAL**: bukti ini tidak menerbitkan reason code fiktif
   `SNAPSHOT_IMMUTABLE`, dan tidak mengklaim jalur regenerate/entry lain yang
   belum diuji. Gap HTTP E3/E7→resume yang sebelumnya dicatat sudah tertutup.
