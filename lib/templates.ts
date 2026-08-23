@@ -363,14 +363,14 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
   // ── T12 ───────────────────────────────────────────────────────────────────
   {
     id: "t12-vox-pop", group: "format",
-    name: "Vox Pop Jalanan",
-    when: "Produk dibeli karena pendapat orang lain. Menjual dengan tekanan sosial, bukan dengan fitur.",
+    name: "Kartu Tanya Produk",
+    when: "Produk perlu dijelaskan lewat pertanyaan netral yang jawabannya tersedia pada label atau tampilan barang.",
     kind: "affiliate", format: "talking_head", durationSec: 30, tier: "high_quality",
     hookLevel: "berani", hookFamily: "H4", count: 2, shotCount: 4,
     bestFor: ["beauty", "fashion", "gadget"],
     source: { durationSec: 23, shots: 4, bpm: 116 },
-    caution: { badge: "Wajib diberi label", note:
-      "Vox pop bekerja karena penonton percaya ini orang sungguhan. Narasumber AI yang ditampilkan sebagai wawancara jalanan nyata adalah testimoni palsu — kalau tetap dibuat AI, videonya WAJIB diberi label dramatisasi." },
+    caution: { badge: "Tanpa testimoni sintetis", note:
+      "Format ini memakai kartu pertanyaan anonim dan inspeksi produk. Jangan menampilkan narasumber, pendapat, rekomendasi, atau pengalaman pemakaian buatan." },
     beats: { hookEnd: 0.178, demoEnd: 0.889 },
     preview: "/previews/t12-vox-pop.mp4", accent: "sky",
   },

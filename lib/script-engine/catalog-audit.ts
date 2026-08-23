@@ -322,6 +322,10 @@ const UNSUPPORTED_FACTUAL_CLAIMS = [
   /\bkualitasnya cocok\b/giu,
   /\b(?:jatuh|terjatuh|benturan|terbentur|impact)\b[^.!?;]{0,60}\bmasih utuh\b/giu,
   /\bmasih utuh\b[^.!?;]{0,60}\b(?:setelah|sesudah|habis)\s+(?:jatuh|terjatuh|benturan|terbentur|impact)\b/giu,
+  /\bdibuat setetes demi setetes\b/giu,
+  /\bterbukti di ruang sidang\b/giu,
+  /\bketahuan bagus\b/giu,
+  /\bbertahan sampai hari selesai\b/giu,
 ];
 
 const CREATIVE_ANALYSIS_PHRASES = [
@@ -343,14 +347,19 @@ const CREATIVE_ANALYSIS_PHRASES = [
 const BANNED_HOOK_STARTERS = /^(?:di harga|pada harga|untuk banderol|dengan nilai)\b/iu;
 
 const RISKY_EVIDENCE_PATTERNS: Record<string, RegExp[]> = {
+  "before-after": [
+    /\b(?:dua (?:kondisi|tampilan|sisi)|kedua sisi|awal dan akhir|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|bandingkan|perbandingan)\b/giu,
+  ],
   "t05-before-after": [
     /\b(?:sebelum|sesudah|setelah|awal|akhir|hasil|berubah|perubahan|perbedaan)\b/giu,
+    /\b(?:dua (?:kondisi|tampilan|sisi)|kedua sisi|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|bandingkan|perbandingan)\b/giu,
   ],
   "t08-day-1-vs-day-7": [
     /\b(?:hari (?:pertama|ke[- ]?\w+)|day\s*\d+|setelah|hasil|berubah|perubahan|rutinitas)\b/giu,
   ],
   "t10-bukti-di-lengan": [
     /\b(?:(?:satu|dua|kedua) lengan|lengan[^.!?;]{0,35}(?:beda|hasil|banding)|(?:beda|hasil|banding)[^.!?;]{0,35}lengan)\b/giu,
+    /\b(?:dua (?:kondisi|tampilan|sisi)|kedua sisi|awal dan akhir|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|bandingkan|perbandingan)\b/giu,
   ],
 };
 

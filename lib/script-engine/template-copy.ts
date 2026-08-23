@@ -122,16 +122,16 @@ const AUTHORED_COMPACT: Record<string, AuthoredSet> = {
     { hook: "Belum mulai, kok poin pertama terisi?", demo: `Uji ${c.produk}; catat ciri ${c.proof}, ya.` },
   ],
   "t10-bukti-di-lengan": (c) => [
-    { hook: "Nah, aturan uji kecilnya sudah jelas?", demo: `Oleskan ${c.produk} pada sisi pembanding, ya.` },
-    { hook: "Eh, jangan ubah cahaya di tengah.", demo: `Samakan posisi ${c.produk} saat diperiksa, deh.` },
-    { hook: "Bun, bukti tanpa konteks bisa dipercaya?", demo: `Nah, tandai sisi uji ${c.produk}.` },
-    { hook: "Kalau kondisinya beda, masih bisa dipercaya?", demo: `Bandingkan ${c.produk} pada cahaya setara, ya.` },
+    { hook: "Nah, area kecil mana yang perlu diperiksa?", demo: `Dekatkan ${c.produk}; amati ${c.proof} pada satu area, ya.` },
+    { hook: "Eh, cahayanya sudah cukup netral, belum?", demo: `Taruh ${c.produk}; periksa ${c.proof} dalam satu tampilan, deh.` },
+    { hook: "Bun, atributnya terlihat dari posisi ini?", demo: `Nah, arahkan ${c.produk}; catat ${c.proof} yang tampak.` },
+    { hook: "Satu area ini sudah terlihat jelas?", demo: `Dekati ${c.produk}; catat ${c.proof} pada posisi tetap, ya.` },
   ],
   "before-after": (c) => [
-    { hook: "Kelihatan beda, tapi acuannya sudah sama belum?", demo: `Taruh ${c.produk} pada dua kondisi setara. Nah, bandingkan ${c.proof}, cahaya, dan sudutnya secara berdampingan, ya.` },
-    { hook: "Eh, jangan percaya aku; lihat dua sisinya.", demo: `Pisahkan tampilan awal dan akhir ${c.produk}. Samakan sudut, lalu periksa ${c.proof} pada kedua sisi, deh.` },
-    { hook: "Nah, sudutnya sama; apa yang terlihat beda?", demo: `Sejajarkan ${c.produk} dalam cahaya serupa. Jeda videonya, lalu amati ${c.proof} pada tiap sisi secara bergantian, ya.` },
-    { hook: "Jangan percaya perbandingan dengan kondisi berbeda.", demo: `Letakkan dua tampilan ${c.produk} berdampingan. Cocokkan jarak, permukaan, dan ${c.proof} sebelum menilai secara teliti, deh.` },
+    { hook: "Nah, satu tampilan ini cukup untuk diperiksa?", demo: `Letakkan ${c.produk} pada permukaan netral. Catat ${c.proof}, pencahayaan, jarak, dan sudut dalam tampilan yang sama secara teliti, ya.` },
+    { hook: "Eh, atribut mana terlihat pada satu keadaan?", demo: `Tempatkan ${c.produk} di cahaya merata. Tahan posisinya, lalu periksa ${c.proof} pada bingkai yang sama dengan pelan, deh.` },
+    { hook: "Bun, detail mana yang terlihat sekarang?", demo: `Arahkan ${c.produk} ke cahaya netral. Jeda videonya, lalu amati ${c.proof}, label, dan permukaan dalam keadaan yang sama, ya.` },
+    { hook: "Satu pengamatan teliti sudah cukup, belum?", demo: `Taruh ${c.produk} di atas meja. Pertahankan jarak dan pencahayaan, lalu catat ${c.proof} yang benar-benar tampak sekarang, deh.` },
   ],
   "t02-bedah-fitur": (c) => [
     { hook: "Nah, bagian penting mana yang harus dibedah?", demo: `Buka ${c.produk}, tunjuk bagian yang sering disentuh, lalu periksa sambungan, cara pakai, dan ${c.proof} secara pelan, deh.` },
@@ -152,28 +152,28 @@ const AUTHORED_COMPACT: Record<string, AuthoredSet> = {
     { hook: "Fakta dan kesan sudah dipisahkan, belum?", demo: `Buka informasi ${c.produk}, tandai istilah penting, lalu hubungkan ${c.proof} dengan tulisan yang tersedia secara teliti, ya.` },
   ],
   "t12-vox-pop": (c) => [
-    { hook: "Nah, apa yang pertama kamu nilai?", demo: `Tanya satu orang tentang ${c.produk}, lalu minta alasan spesifik. Cocokkan jawabannya dengan ${c.proof} yang terlihat, ya.` },
-    { hook: "Bun, standar sederhana menurut kalian apa?", demo: `Ajukan pertanyaan yang sama tentang ${c.produk}. Dengarkan jawabannya, lalu periksa apakah ${c.proof} ikut disebut, deh.` },
-    { hook: "Nah, rekomendasinya punya alasan apa?", demo: `Minta alasan sebelum menyebut ${c.produk}. Setelah jawabannya jelas, tunjukkan ${c.proof} dan beri label dramatisasi, ya.` },
-    { hook: "Eh, pendapat orang bisa sejauh apa?", demo: `Bandingkan dua jawaban tentang ${c.produk}. Pisahkan selera pribadi dari ${c.proof} yang benar-benar dapat diperiksa secara bergantian, sih.` },
+    { hook: "Nah, pertanyaan mana yang perlu diperiksa?", demo: `Baca satu kartu tentang ${c.produk}. Cari jawabannya hanya pada label dan ${c.proof} yang terlihat hari ini, ya.` },
+    { hook: "Bun, informasi mana yang belum jelas?", demo: `Susun kartu pertanyaan tanpa nama. Periksa ${c.produk}, lalu tandai ${c.proof} yang benar-benar terlihat, deh.` },
+    { hook: "Nah, pertanyaannya sudah cukup spesifik?", demo: `Pilih satu kartu, lalu arahkan ${c.produk} ke cahaya. Tulis ${c.proof} sebagaimana terlihat saat ini, ya.` },
+    { hook: "Eh, semua kartu sudah terjawab?", demo: `Balik kartu di samping ${c.produk}. Isi jawabannya hanya dengan ${c.proof} yang dapat diperiksa dari dekat sekarang, sih.` },
   ],
   "tvc-the-drop": (c) => [
-    { hook: "Satu tetes jatuh. Ceritanya dimulai.", demo: `Ia menyentuh permukaan dan melambat. Cahaya mengikuti bentuknya sampai ${c.proof} terlihat jelas, sementara gerak berikutnya menunggu dengan sabar.` },
-    { hook: "Kenapa harus sepelan ini?", demo: `Setiap tetes punya waktu untuk terbentuk. Geraknya dijaga perlahan sampai ${c.proof} muncul utuh di permukaan tanpa diburu. Kamera tetap dekat.` },
-    { hook: "Jarak pipet dan permukaan begitu pendek.", demo: `Di jarak itu, tetesan harus tetap utuh. Kamera mengikuti pendaratannya sampai ${c.proof} terbaca jelas pada permukaan.` },
-    { hook: "Satu tetes menyimpan cerita panjang.", demo: `Lapisannya bergerak dan cahaya berpindah perlahan. Dari dekat, ${c.proof} muncul sebelum bentuk akhirnya berhenti di permukaan. Kamera tetap dekat.` },
+    { hook: "Satu tetes air jatuh di meja.", demo: `Pantulannya bergerak pelan menuju ${c.produk}. Cahaya ruangan meredup ketika nama pada kemasan mulai terlihat.` },
+    { hook: "Kenapa cahaya bergerak sepelan ini?", demo: `Tetes air melintas di depan ${c.produk}. Bayangannya bergeser perlahan, lalu berhenti di tepi meja yang gelap.` },
+    { hook: "Jarak pipet dan meja begitu pendek.", demo: `Air jatuh di permukaan tanpa mengenai ${c.produk}. Pantulannya melewati kemasan, kemudian cahaya ruangan kembali tenang.` },
+    { hook: "Satu tetes membuka adegan yang sunyi.", demo: `${c.produk} berada di belakang tetesan air. Cahaya berpindah di meja, lalu nama pada kemasan menutup adegan.` },
   ],
   "tvc-tersangka": (c) => [
-    { hook: "Sidang dibuka. Apa tuduhannya?", demo: `Saksi menunjuk meja bukti dan ruangan mendadak hening. Hakim meminta jawaban, lalu ${c.proof} terlihat saat benda itu diangkat. Semua menunggu putusan.` },
-    { hook: "Yang mulia, saya keberatan.", demo: `Semua mata berpindah ke meja bukti. Barangnya sederhana, tetapi ${c.proof} terlihat jelas ketika saksi mendekat dan memeriksanya. Semua menunggu putusan.` },
-    { hook: "Penuduh malah memotret barang buktinya.", demo: `Hakim bertanya sekali lagi dan ruangan menunggu. Kamera menangkap tangan si penuduh tepat saat ${c.proof} terlihat di meja. Semua menunggu putusan.` },
-    { hook: "Sejak kapan terdakwa berubah?", demo: `Terdakwa diam sebelum menjawab. Ia membuka tas, menaruh barang bukti, lalu menunjukkan ${c.proof} kepada seluruh ruangan. Semua menunggu putusan.` },
+    { hook: "Sidang rekaan dibuka. Apa barangnya?", demo: `Sebuah kotak diletakkan di meja. Hakim membuka catatan, lalu membaca nama ${c.produk} sebelum ruangan kembali hening.` },
+    { hook: "Yang mulia, catat namanya.", demo: `Petugas membawa ${c.produk} ke meja sidang rekaan. Semua menunggu saat hakim memeriksa tulisan pada kemasan dengan teliti.` },
+    { hook: "Penuduh memotret meja barang bukti.", demo: `Hakim bertanya sekali lagi. Tangan si penuduh mengarah ke ${c.produk}, lalu petugas menutup catatan perkara rekaan.` },
+    { hook: "Apa nama benda di dalam tas?", demo: `Terdakwa membuka tas lalu meletakkan ${c.produk} di meja. Hakim membaca namanya, kemudian mengetuk palu untuk menutup adegan.` },
   ],
   "tvc-seharian": (c) => [
-    { hook: "Jam tujuh pagi masih aman.", demo: `Panas jalanan, ruangan dingin, rapat panjang, dan macet datang bergantian. Menjelang malam, ${c.proof} menjadi catatan terakhir hari itu.` },
-    { hook: "Hari tidak menunggu siapa pun siap.", demo: `Jadwal maju dan jalanan memadat sejak pagi. Saat akhirnya pulang, kamera kembali memeriksa ${c.proof} dalam cahaya rumah.` },
-    { hook: "Ada dua belas jam sebelum pulang.", demo: `Panas dan ruangan dingin bergantian sepanjang perjalanan. Sesudah semua berlalu, ${c.proof} baru dinilai pada jam terakhir.` },
-    { hook: "Pertanyaannya: masih bagus jam berapa?", demo: `Pagi membuat semuanya tampak serupa. Perbedaannya muncul menjelang sore, ketika tenaga habis dan ${c.proof} harus terlihat apa adanya.` },
+    { hook: "Jam tujuh pagi membuka perjalanan.", demo: `Pagi, siang, dan malam berganti di jendela. ${c.produk} berpindah dari meja kerja ke meja rumah dalam rangkaian adegan.` },
+    { hook: "Hari bergerak tanpa menilai apa pun.", demo: `Jalanan ramai lalu ruangan menjadi sunyi. ${c.produk} muncul kembali di meja ketika lampu rumah dinyalakan.` },
+    { hook: "Perjalanan dimulai sebelum matahari tinggi.", demo: `${c.produk} terlihat di beberapa tempat sepanjang hari. Waktu dan lokasi menjadi satu-satunya hal yang terus berganti.` },
+    { hook: "Pagi dan sore punya cahaya berbeda.", demo: `Cahaya jendela berubah perlahan di sekitar ${c.produk}. Kemasan tetap menjadi benda yang sama sampai adegan terakhir.` },
   ],
   "tvc-kain-lari": (c) => [
     { hook: "Baju dipotret diam. Itu masalahnya.", demo: `Kain sebenarnya dipakai sambil berjalan, berbelok, dan duduk. Kamera mengikuti geraknya sampai ${c.proof} terlihat saat langkah berubah cepat.` },
@@ -182,10 +182,10 @@ const AUTHORED_COMPACT: Record<string, AuthoredSet> = {
     { hook: "Ini busana untuk hari yang sibuk.", demo: `Naik motor, duduk lama, lalu berdiri cepat mengubah lipatan kain. Sesudahnya, ${c.proof} menjadi detail yang dinilai. Kamera mengikuti geraknya.` },
   ],
   "tvc-jam-tiga": (c) => [
-    { hook: "Jam tiga pagi. Rumah masih sunyi.", demo: `Satu lampu kecil menyala saat tangan mengulang rutinitasnya. Dalam keheningan itu, ${c.proof} membantu setiap gerakan tetap terarah.` },
-    { hook: "Malam menuntut semuanya tetap pelan.", demo: `Satu suara keras bisa membangunkan rumah. Karena itu, tangan memilih urutan sederhana dan mengandalkan ${c.proof} sambil setengah sadar.` },
-    { hook: "Rumah diam. Satu orang belum selesai.", demo: `Ia bergerak hati-hati melewati perabot dan lantai yang berbunyi. Benda pilihannya tetap sama karena ${c.proof} sudah dikenalnya.` },
-    { hook: "Pekerjaan ini tak masuk foto keluarga.", demo: `Rutinitasnya selesai sebelum orang lain bangun. Pada jam seperti itu, ${c.proof} menjadi alasan benda ini tetap dipilih.` },
+    { hook: "Jam tiga pagi. Rumah masih sunyi.", demo: `Satu lampu kecil menyala. Tangan merapikan meja, lalu meletakkan ${c.produk} di sampingnya sebelum cahaya diredupkan lagi.` },
+    { hook: "Malam membuat setiap gerakan terdengar.", demo: `Tangan membuka laci pelan, kemudian meletakkan ${c.produk} di atas meja. Rumah tetap sunyi sampai lampunya padam.` },
+    { hook: "Rumah diam. Satu lampu masih menyala.", demo: `Seseorang berjalan melewati perabot sambil membawa ${c.produk}, lalu memilih tempat di bawah lampu yang kembali meredup.` },
+    { hook: "Ada kegiatan kecil sebelum pagi.", demo: `Meja dirapikan sebelum orang lain bangun. ${c.produk} ditempatkan di dekat lampu, lalu tangan keluar dari bingkai.` },
   ],
 };
 
@@ -295,10 +295,10 @@ const VARIASI_GESER = [
   ["pegang produk lalu buka penutupnya", "produk dibuka di depan saksi"],
 ] as const;
 const VARIASI_LAYANAN = [
-  ["buka dashboard lalu antrean berubah status", "jadwal berikutnya tersusun otomatis di layar"],
-  ["buka permintaan pada kolom diproses", "notifikasi pelanggan menerima balasan terjadwal"],
-  ["buka formulir menjadi tugas terurut", "status layanan diperbarui di depan saksi"],
-  ["buka daftar tunggu pada layar layanan", "jadwal bentrok berubah menjadi slot tersedia"],
+  ["talent buka kartu nama layanan di meja", "kartu dipindahkan mendekati saksi"],
+  ["talent buka lipatan kartu informasi", "nama layanan diarahkan kepada saksi"],
+  ["talent buka amplop berisi kartu nama", "kartu diletakkan di depan saksi"],
+  ["talent buka halaman catatan kosong", "nama layanan ditulis di depan saksi"],
 ] as const;
 
 const JEDA_VARIAN = ["[short pause]", "[medium pause]", "[long pause]", "[slow]"] as const;
@@ -320,11 +320,11 @@ function storyAds(templateId: string, variantIndex: number, c: TemplateCtx, base
     ? hargaAktif[variantIndex]
     : adegan.friction1[variantIndex];
   const story: AdsStoryBeat[] = [
-    { role: "hook", label: "HOOK", text: hook, action: nonPhysical ? "masalah layanan terlihat pada dashboard sejak frame pertama" : "anomali terlihat sejak frame pertama", product_state: "partial" },
+    { role: "hook", label: "HOOK", text: hook, action: nonPhysical ? "kartu nama layanan terlihat sejak frame pertama" : "anomali terlihat sejak frame pertama", product_state: "partial" },
     { role: "demo", label: "FRICTION", text: `${JEDA_VARIAN[variantIndex]} ${tekananSatu}`, action: aksiSatu, product_state: "partial" },
     { role: "story", label: "FRICTION", text: adegan.friction2[variantIndex], action: aksiDua, product_state: "hero" },
-    { role: "story", label: "SPIKE", text: adegan.spikes[variantIndex], action: nonPhysical ? `hasil layanan ${c.produk} berubah di depan saksi` : `${c.produk} berhenti tepat di depan saksi`, product_state: "hero", saksi: adegan.saksi },
-    { role: "cta", label: "BUTTON", text: button, action: nonPhysical ? "talent menunjuk perubahan status layanan sambil menyisakan pertanyaan" : "talent menahan produk sambil menyisakan pertanyaan", product_state: "hero" },
+    { role: "story", label: "SPIKE", text: adegan.spikes[variantIndex], action: nonPhysical ? `kartu nama ${c.produk} diletakkan di depan saksi` : `${c.produk} berhenti tepat di depan saksi`, product_state: "hero", saksi: adegan.saksi },
+    { role: "cta", label: "BUTTON", text: button, action: nonPhysical ? "talent menunjuk nama layanan pada kartu sambil menyisakan pertanyaan" : "talent menahan produk sambil menyisakan pertanyaan", product_state: "hero" },
   ];
   return { hook: story[0].text, demo: story.slice(1, 4).map((beat) => beat.text).join(" "), cta: button, story };
 }
@@ -407,10 +407,10 @@ const T04: CopyFn[] = [
 ];
 
 const T05: CopyFn[] = [
-  (c) => ({ hook: `Nah, dua acuan ini siap dibandingkan berdampingan`, demo: `Letakkan ${c.produk} berdampingan, lalu telaah atribut ${c.proof} saja`, cta: `Cek keranjang kuning deh` }),
-  (c) => ({ hook: `Eh, sisi kiri dan kanan jangan sampai tertukar`, demo: `Gunakan acuan tampilan setara untuk menilai ${c.proof} pada ${c.produk} sih`, cta: `Perbandingannya ada di keranjang kuning sih` }),
-  (c) => ({ hook: `Nah, biarkan dua tampilan setara menjawab perbedaannya`, demo: `Gunakan referensi setara untuk menelaah ${c.proof} milik ${c.produk} loh`, cta: `Buka keranjang kuning deh` }),
-  (c) => ({ hook: `Jangan dibandingkan kalau cahaya dan sudutnya nggak sama, sumpah`, demo: `Perbandingan ini hanya memeriksa ${c.proof} dari ${c.produk} ya`, cta: `Cek keranjang kuning ya` }),
+  (c) => ({ hook: `Nah, satu tampilan ini siap diperiksa?`, demo: `Letakkan ${c.produk} pada cahaya netral, lalu catat ${c.proof} yang terlihat ya`, cta: `Cek rinciannya di keranjang kuning deh` }),
+  (c) => ({ hook: `Eh, posisi produknya sudah tetap?`, demo: `Amati ${c.proof} pada ${c.produk} dalam keadaan yang sama sih`, cta: `Catat detailnya lewat keranjang kuning sih` }),
+  (c) => ({ hook: `Nah, detail mana yang terlihat sekarang?`, demo: `Arahkan ${c.produk} ke cahaya merata dan periksa ${c.proof} loh`, cta: `Buka rinciannya di keranjang kuning deh` }),
+  (c) => ({ hook: `Satu pengamatan tetap sudah cukup, belum?`, demo: `Nah, jaga posisi ${c.produk}, lalu catat ${c.proof} yang tampak saat ini ya`, cta: `Cek catatannya di keranjang kuning ya` }),
 ];
 
 const T06: CopyFn[] = [
@@ -456,10 +456,10 @@ const T11: CopyFn[] = [
 ];
 
 const T12: CopyFn[] = [
-  (c) => ({ hook: `[excited] Nah, kalau pilih ${c.noun}, apa yang pertama ${c.reg.you} nilai sebelum memutuskan membeli barangnya hari ini?`, demo: `[short pause] ${c.reg.sapaan}, kalau lihat kategori ${c.noun}, bagian apa yang pertama kali kalian cek? Kalau jawabannya ${c.proof}, alasannya apa? Sekarang lihat ${c.produk} dari dekat. Setuju atau punya jawaban lain ya?`, cta: `Bandingkan pendapatnya lewat keranjang kuning dong` }),
-  (c) => ({ hook: `[fast] ${c.reg.sapaan}, standar sederhana buat ${c.noun} menurut kalian apa saat sedang pilih barang?`, demo: `[medium pause] Satu orang bilang praktis, yang lain fokus ke detail. Kalau ${c.proof} jadi pertimbangan kalian, apa yang ingin dilihat lebih dulu dari ${c.produk}? Sebut alasan pilihan kalian secara singkat sih`, cta: `Nah, lihat pilihan produknya ada di keranjang kuning deh` }),
-  (c) => ({ hook: `[fast] Nah, rekomendasi yang berguna selalu punya alasan; alasanmu apa sebelum ikut membeli?`, demo: `[long pause] Pertanyaannya simpel: kapan kalian memakai kategori ini, dan detail apa yang menentukan pilihan? Setelah dengar jawabannya, lihat apakah ${c.proof} pada ${c.produk} menjawab kebutuhan itu. Apa alasan pilihanmu ya?`, cta: `Informasi aslinya juga ada di keranjang kuning sekarang ya` }),
-  (c) => ({ hook: `[slow] Eh, seberapa jauh pendapat orang tentang ${c.noun} bisa berbeda dari satu pertanyaan?`, demo: `[short pause] Eh, ada yang fokus bentuk, ada yang melihat fungsi, dan ada yang bertanya harga. Sekarang giliran ${c.reg.you}: bagaimana melihat detail ${c.proof} dari ${c.produk}? Ceritakan alasan dan urutan pertimbanganmu secara terbuka deh`, cta: `Bandingkan jawabanmu lewat keranjang kuning loh` }),
+  (c) => ({ hook: `[excited] Nah, kalau pilih ${c.noun}, apa yang pertama ${c.reg.you} nilai sebelum memutuskan membeli barangnya hari ini?`, demo: `[short pause] ${c.reg.sapaan}, kalau lihat kategori ${c.noun}, bagian apa yang pertama kali kalian cek? Kalau jawabannya ${c.proof}, alasannya apa? Sekarang lihat ${c.produk} dari dekat. Setuju atau punya jawaban lain ya?`, cta: `Cocokkan tulisan kartunya dengan rincian di keranjang kuning dong` }),
+  (c) => ({ hook: `[fast] ${c.reg.sapaan}, standar sederhana buat ${c.noun} menurut kalian apa saat sedang pilih barang?`, demo: `[medium pause] Satu orang bilang praktis, yang lain fokus ke detail. Kalau ${c.proof} jadi pertimbangan kalian, apa yang ingin dilihat lebih dulu dari ${c.produk}? Sebut alasan pilihan kalian secara singkat sih`, cta: `Nah, baca nama produknya di keranjang kuning deh` }),
+  (c) => ({ hook: `[fast] Nah, rekomendasi yang berguna selalu punya alasan; alasanmu apa sebelum ikut membeli?`, demo: `[long pause] Pertanyaannya simpel: kapan kalian memakai kategori ini, dan detail apa yang menentukan pilihan? Setelah dengar jawabannya, lihat apakah ${c.proof} pada ${c.produk} menjawab kebutuhan itu. Apa alasan pilihanmu ya?`, cta: `Informasi pada kartu tersedia di keranjang kuning sekarang ya` }),
+  (c) => ({ hook: `[slow] Eh, seberapa jauh pendapat orang tentang ${c.noun} bisa berbeda dari satu pertanyaan?`, demo: `[short pause] Eh, ada yang fokus bentuk, ada yang melihat fungsi, dan ada yang bertanya harga. Sekarang giliran ${c.reg.you}: bagaimana melihat detail ${c.proof} dari ${c.produk}? Ceritakan alasan dan urutan pertimbanganmu secara terbuka deh`, cta: `Periksa lagi nama pada kartunya lewat keranjang kuning loh` }),
 ];
 
 const ADS_UNBOXING_POV: CopyFn[] = [
@@ -558,22 +558,22 @@ const TVC_DROP: CopyFn[] = [
   (c) => ({
     hook: `[serious] Satu tetes jatuh, dan seluruh ceritanya dimulai dari sana.`,
     demo: `[medium pause] Ia menyentuh permukaan, melambat, lalu menemukan bentuknya sendiri. Bagian inilah yang paling sering diburu orang, padahal justru di sini semuanya ditentukan. Yang membuat ${c.noun} ini mahal bukan kemasannya, melainkan ${c.proof} yang cuma muncul kalau prosesnya sabar.`,
-    cta: `[short pause] ${c.produk}. Dibuat setetes demi setetes.`,
+    cta: `[short pause] ${c.produk}. Namanya terlihat di kemasan.`,
   }),
   (c) => ({
     hook: `Kenapa harus sepelan ini? Karena yang bagus memang tidak bisa diburu.`,
     demo: `[medium pause] Setiap tetes butuh waktunya sendiri untuk terbentuk, dan waktu itu tidak bisa ditawar sedikit pun. Cepat semenit saja, ${c.proof} yang dikejar bertahun-tahun hilang begitu saja dari permukaannya, dan tidak ada cara mengulangnya.`,
-    cta: `[short pause] ${c.produk}. Lambat, karena memang harus.`,
+    cta: `[short pause] Pandangan berhenti pada ${c.produk}.`,
   }),
   (c) => ({
     hook: `Ada jarak sangat pendek antara ujung pipet dan permukaan kulit.`,
     demo: `[long pause] Di jarak sependek itulah semuanya ditentukan, walau hampir tidak ada yang memperhatikannya. Sedikit saja goyah, hasilnya berubah. Tetesannya harus utuh saat mendarat, karena ${c.proof} hanya terbaca kalau bentuknya sampai tanpa pecah di tengah jalan menuju permukaan.`,
-    cta: `[short pause] ${c.produk}. Utuh sampai ke permukaan.`,
+    cta: `[short pause] Nama pada kemasan: ${c.produk}.`,
   }),
   (c) => ({
     hook: `Kalau diperbesar, satu tetes ternyata punya isi yang panjang ceritanya.`,
     demo: `[short pause] Lapisannya bergerak, cahayanya berpindah, dan ${c.proof} baru benar-benar terbaca di detik keempat. Tiga detik pertama belum menceritakan apa-apa. Itu sebabnya ${c.noun} ini dibuat untuk dilihat dari dekat, pelan-pelan, bukan dinilai sekilas dari jauh sambil lewat.`,
-    cta: `[medium pause] ${c.produk}. Semakin dekat, semakin jelas.`,
+    cta: `[medium pause] ${c.produk}. Terlihat di akhir adegan.`,
   }),
 ];
 
@@ -581,22 +581,22 @@ const TVC_TERSANGKA: CopyFn[] = [
   (c) => ({
     hook: `[serious] Sidang dibuka. Terdakwa dituduh terlihat jauh lebih segar dari biasanya.`,
     demo: `[medium pause] Saksi bersikeras ada yang berubah sejak dua minggu terakhir. Jaksa menuntut bukti, penonton mulai berbisik, dan suasananya berubah tegang. Hakim mengetuk palu meminta tenang. Terdakwa akhirnya mengaku, lalu mengeluarkan satu benda kecil dari tasnya, lengkap dengan ${c.proof}.`,
-    cta: `[short pause] ${c.produk}. Barang buktinya.`,
+    cta: `[short pause] ${c.produk}. Nama di meja rekaan.`,
   }),
   (c) => ({
     hook: `Yang mulia, saya keberatan. Saksi terlihat terlalu segar untuk jam segini.`,
     demo: `[medium pause] Ruangan langsung hening dan semua mata pindah ke meja barang bukti. Ternyata yang tergeletak di sana sederhana sekali, sama sekali tidak mewah, tapi ${c.proof} terbaca jelas bahkan dari kursi penonton paling belakang.`,
-    cta: `[short pause] ${c.produk}. Terbukti di ruang sidang.`,
+    cta: `[short pause] Hakim rekaan menyebut ${c.produk}.`,
   }),
   (c) => ({
     hook: `Kasus hari ini aneh: yang menuduh justru ikut mencatat nama barangnya.`,
     demo: `[long pause] Hakim bertanya sekali lagi dengan nada lebih tinggi, dan si penuduh mengelak sambil menunduk. Ruangan menunggu jawaban yang tidak datang. Sayangnya kamera ruang sidang menangkap tangannya sedang memotret meja bukti, tepat di bagian ${c.proof} yang tadi dia ributkan.`,
-    cta: `[short pause] ${c.produk}. Ketahuan bagus.`,
+    cta: `[short pause] Catatan itu menyebut ${c.produk}.`,
   }),
   (c) => ({
     hook: `Pertanyaannya cuma satu: sejak kapan terdakwa mulai terlihat seperti ini?`,
     demo: `[short pause] Terdakwa diam agak lama, seperti menimbang harus jujur atau tidak. Ruangan ikut menunggu. Lalu dia menjawab pelan bahwa semuanya berubah sejak dia berhenti mencoba banyak hal sekaligus, dan menyisakan satu saja yang ${c.proof} konsisten.`,
-    cta: `[medium pause] ${c.produk}. Satu-satunya yang dia akui.`,
+    cta: `[medium pause] ${c.produk}. Adegan sidang selesai.`,
   }),
 ];
 
@@ -604,22 +604,22 @@ const TVC_SEHARIAN: CopyFn[] = [
   (c) => ({
     hook: `[serious] Jam tujuh pagi semuanya masih aman. Masalahnya, hari belum mulai.`,
     demo: `[medium pause] Lalu datang panas jalanan, ruangan ber-AC yang kering, rapat yang mundur dua jam, dan macet panjang di jalan pulang. Semuanya menumpuk sejak pagi. Baru jam tujuh malam ketahuan siapa yang benar-benar bertahan, dan ${c.proof} yang menjawab.`,
-    cta: `[short pause] ${c.produk}. Diuji oleh hari.`,
+    cta: `[short pause] ${c.produk}. Nama di akhir hari.`,
   }),
   (c) => ({
     hook: `Hari tidak pernah menunggu siapa pun siap. Termasuk hari ini.`,
     demo: `[medium pause] Jadwal maju, jalanan padat, semuanya minta serba cepat sejak pagi buta. Yang bagus bukan yang terlihat bagus jam delapan pagi waktu belum terjadi apa-apa, tapi yang ${c.proof} masih utuh waktu kamu sampai rumah.`,
-    cta: `[short pause] ${c.produk}. Bertahan sampai hari selesai.`,
+    cta: `[short pause] Lampu rumah menyorot ${c.produk}.`,
   }),
   (c) => ({
     hook: `Ada jarak dua belas jam antara berangkat dan sampai rumah lagi.`,
     demo: `[long pause] Dua belas jam itu yang hampir tidak pernah ditunjukkan siapa pun. Panas, keringat, ruangan dingin, lalu panas lagi, berulang-ulang tanpa jeda. Berulang setiap hari kerja. ${c.proof} baru jujur sesudah melewati semuanya, bukan sebelum.`,
-    cta: `[short pause] ${c.produk}. Dinilai di jam terakhir.`,
+    cta: `[short pause] Hari ditutup oleh ${c.produk}.`,
   }),
   (c) => ({
     hook: `Pertanyaannya bukan bagus atau tidak. Tapi masih bagus jam berapa.`,
     demo: `[short pause] Pagi hampir semuanya kelihatan sama saja, susah dibedakan. Semuanya masih terlihat menjanjikan. Bedanya baru muncul menjelang sore, waktu tenaga habis, waktu tidak ada yang sempat memperbaiki apa pun, dan ${c.proof} harus bekerja sendirian.`,
-    cta: `[medium pause] ${c.produk}. Masih bekerja waktu yang lain menyerah.`,
+    cta: `[medium pause] ${c.produk}. Ada di bingkai terakhir.`,
   }),
 ];
 
@@ -627,22 +627,22 @@ const TVC_KAIN: CopyFn[] = [
   (c) => ({
     hook: `[serious] Semua orang memotret baju sambil berdiri diam. Itu masalahnya.`,
     demo: `[medium pause] Karena kamu memakainya sambil berjalan, berbelok, duduk, lalu buru-buru berdiri lagi. Sepanjang hari, tanpa jeda. Yang bagus bukan yang cantik waktu diam di depan kamera, tapi yang ${c.proof} tetap terjaga persis waktu kamu bergerak cepat.`,
-    cta: `[short pause] ${c.produk}. Kain yang ikut lari.`,
+    cta: `[short pause] ${c.produk}. Nama pada busana itu.`,
   }),
   (c) => ({
     hook: `Coba nilai satu potongan dari foto diam. Hampir selalu meleset.`,
     demo: `[medium pause] Bentuk aslinya baru keluar waktu tubuh berbelok dan lipatannya menyusul setengah detik kemudian, bukan sebelum itu. Foto tidak pernah menangkap bagian ini. Di situ ${c.proof} terbaca paling jujur, dan di situ juga potongan yang biasa saja langsung ketahuan.`,
-    cta: `[short pause] ${c.produk}. Dinilai saat bergerak.`,
+    cta: `[short pause] Gerakan berhenti pada ${c.produk}.`,
   }),
   (c) => ({
     hook: `Ada setengah detik antara langkah kaki dan kain yang menyusul.`,
     demo: `[long pause] Setengah detik itu yang membedakan jatuh bahan mahal dari yang murah, dan hampir tidak ada yang menyadarinya. Padahal justru di sana bedanya. Kalau ${c.proof} benar, kainnya berhenti sesudah kamu berhenti, bukan mendahului langkahmu sendiri.`,
-    cta: `[short pause] ${c.produk}. Jatuhnya menyusul langkahmu.`,
+    cta: `[short pause] Nama busana itu: ${c.produk}.`,
   }),
   (c) => ({
     hook: `Bukan busana yang bagus untuk berpose. Ini untuk hari yang sibuk.`,
     demo: `[short pause] Naik motor, masuk ruangan dingin, duduk lama di kursi kantor, lalu berdiri lagi buru-buru. Belum termasuk cuaca di jalan. Semua itu meremas kain sepanjang hari. Yang tersisa sesudahnya, ${c.proof}, itu yang menentukan pantas atau tidak.`,
-    cta: `[medium pause] ${c.produk}. Dinilai sesudah dipakai.`,
+    cta: `[medium pause] ${c.produk}. Terlihat di bingkai akhir.`,
   }),
 ];
 
@@ -650,22 +650,22 @@ const TVC_JAM_TIGA: CopyFn[] = [
   (c) => ({
     hook: `[serious] Jam tiga pagi. Tidak ada yang melihat, tidak ada yang memuji.`,
     demo: `[medium pause] Cuma satu lampu kecil di sudut ruangan, gerakan sepelan mungkin, dan tangan yang sudah hafal urutannya tanpa berpikir. Di jam seperti ini ${c.proof} baru terasa berarti, karena sama sekali tidak ada waktu untuk mengulang.`,
-    cta: `[short pause] ${c.produk}. Menemani jam paling sepi.`,
+    cta: `[short pause] ${c.produk}. Nama di ujung malam.`,
   }),
   (c) => ({
     hook: `Yang paling sulit dari malam bukan lelahnya. Tapi harus tetap pelan.`,
     demo: `[medium pause] Satu suara terlalu keras saja, semua usaha satu jam tadi hilang begitu saja, dan harus diulang. Makanya yang dipilih untuk jam segini selalu yang paling sederhana, yang ${c.proof} masih bisa dipercaya sambil setengah sadar.`,
-    cta: `[short pause] ${c.produk}. Untuk tangan yang mengantuk.`,
+    cta: `[short pause] Lampu menyorot nama ${c.produk}.`,
   }),
   (c) => ({
     hook: `Rumah sudah diam sejak tadi. Satu orang masih belum selesai.`,
     demo: `[long pause] Dia bergerak hati-hati di antara perabot, hafal betul di bagian mana lantainya berbunyi. Semua sudah dihafalnya sejak lama. Yang dia bawa malam ini cuma satu benda, dan ${c.proof} sudah dia hafal jauh sebelum malam ini datang.`,
-    cta: `[short pause] ${c.produk}. Ada di jam tersepi.`,
+    cta: `[short pause] Meja itu memuat ${c.produk}.`,
   }),
   (c) => ({
     hook: `Ada pekerjaan yang tidak pernah masuk foto keluarga siapa pun.`,
     demo: `[short pause] Yang jam tiga pagi, yang tidak pernah diceritakan ke siapa-siapa, yang sudah selesai sebelum orang serumah bangun. Tidak ada yang tahu. Untuk jam seperti itu, ${c.proof} bukan sekadar fitur tambahan. Itu satu-satunya alasan barangnya dipilih.`,
-    cta: `[medium pause] ${c.produk}. Untuk yang bangun paling awal.`,
+    cta: `[medium pause] ${c.produk}. Terlihat sebelum pagi.`,
   }),
 ];
 

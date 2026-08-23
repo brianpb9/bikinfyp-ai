@@ -80,11 +80,11 @@ test("template lama yang sudah punya peran tetap berjalan seperti sebelumnya", (
 
 test("satu shot talking-head memuat seluruh timeline termasuk dua role story", () => {
   const timeline: SegmentDraft[] = [
-    { role: "hook", text: "HOOK UNIK membuka masalah.", start: 0, end: 2, visual_direction: "x" },
-    { role: "demo", text: "FRICTION SATU menambah tekanan.", start: 2, end: 6, visual_direction: "y" },
-    { role: "story", text: "FRICTION DUA tetap terdengar.", start: 6, end: 10, visual_direction: "z" },
-    { role: "story", text: "SPIKE UNIK membalik keadaan.", start: 10, end: 13, visual_direction: "z" },
-    { role: "cta", text: "BUTTON UNIK menutup cerita.", start: 13, end: 15, visual_direction: "z" },
+    { role: "hook", label: "HOOK", text: "HOOK UNIK membuka masalah.", action: "AKSI HOOK memperlihatkan kartu pertama", start: 0, end: 2, visual_direction: "x" },
+    { role: "demo", label: "FRICTION", text: "FRICTION SATU menambah tekanan.", action: "AKSI FRICTION SATU memindahkan kartu", start: 2, end: 6, visual_direction: "y" },
+    { role: "story", label: "FRICTION", text: "FRICTION DUA tetap terdengar.", action: "AKSI FRICTION DUA membuka lipatan", start: 6, end: 10, visual_direction: "z" },
+    { role: "story", label: "SPIKE", text: "SPIKE UNIK membalik keadaan.", action: "AKSI SPIKE meletakkan nama di meja", start: 10, end: 13, visual_direction: "z" },
+    { role: "cta", label: "BUTTON", text: "BUTTON UNIK menutup cerita.", action: "AKSI BUTTON menunjuk nama layanan", start: 13, end: 15, visual_direction: "z" },
   ];
   const prompt = planShots({
     jobId: "story-timeline", durationSec: 15, segments: timeline,
@@ -95,4 +95,17 @@ test("satu shot talking-head memuat seluruh timeline termasuk dua role story", (
   const positions = timeline.map((segment) => prompt.indexOf(segment.text));
   assert.ok(positions.every((position) => position >= 0), `segmen hilang dari prompt: ${positions.join(",")}`);
   assert.deepEqual([...positions].sort((a, b) => a - b), positions, "urutan dialog tidak mengikuti timeline");
+  const actionPositions = timeline.map((segment) => prompt.indexOf(segment.action!));
+  assert.ok(actionPositions.every((position) => position >= 0), `aksi hilang dari prompt: ${actionPositions.join(",")}`);
+  assert.deepEqual([...actionPositions].sort((a, b) => a - b), actionPositions, "urutan aksi tidak mengikuti timeline");
+  for (const segment of timeline) assert.match(prompt, new RegExp(`${segment.start}-${segment.end} seconds`));
+
+  const tanpaSpike = timeline.map((segment) => segment.label === "SPIKE" ? { ...segment, action: "" } : segment);
+  const promptMutasi = planShots({
+    jobId: "story-timeline-mutasi", durationSec: 15, segments: tanpaSpike,
+    category: getCreatorCategory("hijaber")!, productName: "Botol", productCategory: "beauty",
+    imageRefPath: "/tmp/x.jpg", qualityTier: "high_quality" as QualityTier,
+    format: "talking_head",
+  }).shots[0].prompt;
+  assert.doesNotMatch(promptMutasi, /AKSI SPIKE meletakkan nama di meja/, "mutasi aksi SPIKE seharusnya terdeteksi");
 });

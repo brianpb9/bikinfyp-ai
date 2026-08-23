@@ -31,7 +31,7 @@ const AUTHORED_COPY_SNAPSHOT: Record<string, string[]> = {
   "racun-checkout": ["6484cfddc459a814", "c5575d9c9c7d8826", "0fe6dbb747c30d72", "74d613b890569213"],
   "review-jujur": ["8bb47f4b1d3ca292", "6651f93e708e30bc", "2cb54d26ff7c7dea", "237c288bdda522f3"],
   unboxing: ["ce7cdd0391284281", "834e793b77b0d5b9", "5d7729e2367f35b1", "f7430ed8a77e8fa9"],
-  "before-after": ["c6cdd1da4a2e87ca", "fe79d6a1e8304fab", "2096d8d004de8b41", "0764caf6653fd7a2"],
+  "before-after": ["0b8a4238771d7842", "1bcf040bd291d035", "5d24902c57798b81", "c740711a364237d5"],
   "diskon-gede": ["53ef2a4a896b18a5", "fb7af64ecce4c417", "e7d29fab73fe4550", "43ce1482a5ad74bb"],
   "buat-kamu-yang": ["1551320b1675031b", "4fccecc08d34ce1b", "d24cead7ad8eff8b", "86211dbbce35ed8e"],
   "spill-rahasia": ["21134b501bc3ecd2", "cee27d1267678075", "c9e6ba1cc252189c", "0ecce1b36a001035"],
@@ -41,15 +41,15 @@ const AUTHORED_COPY_SNAPSHOT: Record<string, string[]> = {
   "t04-hook-indrawi": ["66dbcb984e12f2ad", "c97ad8a822e81e42", "fee794df6c5bba7e", "f8ca6d2a7a9dc78d"],
   "t07-checklist-berjalan": ["153f4f05d5290914", "2c95c172c992736d", "802906857346f818", "c8ca64d35c9f8d83"],
   "t09-bahan-aktif": ["f7b8d72e75bdb6ac", "0c89d79923fe6c9c", "0ff1d991acffd261", "9f1d03aee94a2b08"],
-  "t10-bukti-di-lengan": ["e65ffdc01c65a363", "50d19844639acac3", "c60161149ea263f0", "3a90e1c223b74c16"],
-  "t12-vox-pop": ["6d1c531a760cf89b", "3c76a0c73ef9af6b", "2f40edb84997bff2", "94c1aaa2f32668c5"],
+  "t10-bukti-di-lengan": ["cb8455f1c8977c93", "1201f68e4cf37a81", "aabc8a9738e2deaa", "08e4cb36d834351d"],
+  "t12-vox-pop": ["2b26db49870ce97f", "773729dc5473f4ff", "68382594e9b4ad92", "d85df3510a64ce24"],
   "kenalin-bisnis": ["94a72e8790ffe713", "b09eb6ed71232038", "cbbedd50c3a68066", "a48fa5f3061179e4"],
   "promo-terbatas": ["8527ef44f7259489", "b73df90d6301bb2e", "15f03ee6edaec8f7", "d9de026b6fe8ba0c"],
-  "tvc-the-drop": ["5700da534b4af017", "e3f10a687ebf3c15", "8aa3c5cbcc216dcc", "3089925d4e852d55"],
-  "tvc-tersangka": ["20e7f08886154547", "f0526370752aa98d", "6846ae0dc194b4ba", "12386f1a152e7b6f"],
-  "tvc-seharian": ["c5e8c022d6d7e21d", "3a1ad1a56b06ea5d", "69c9605b347382a0", "6b6aca290aae4aa0"],
-  "tvc-kain-lari": ["89cf1d36bfa3183e", "713bcd021d5d3daa", "1d8bf33a00ed55ab", "f72e9ad89c652c37"],
-  "tvc-jam-tiga": ["6e0bd949c961447d", "ff64ef322319728b", "b1726eafe3cda348", "54a502183e7d551b"],
+  "tvc-the-drop": ["c3aef3e716baae43", "8609eacc96558a7f", "ca68bed87976479c", "eb8b38ee0097b061"],
+  "tvc-tersangka": ["4524bd2c7fed0c14", "6d0e08dbfcb8e7b3", "3841466ada75069b", "5b3df2443a0f2d9d"],
+  "tvc-seharian": ["859aaf1eb141f049", "16df12a1db6028a2", "7640aacca7b4ab50", "f027e138aec292b8"],
+  "tvc-kain-lari": ["0b2e4feff92fd4f4", "983c62d0fe1ee1aa", "51e0f31ebe4e08d8", "581f28fbdcfd4533"],
+  "tvc-jam-tiga": ["498f7a640a1c84e6", "ffdac0e2addebd63", "8e39b08fbf71c728", "d68f3507d9b34c2e"],
 };
 
 test("snapshot seluruh copy authored mengunci 22 template x 4 varian tanpa pemotongan token", () => {
@@ -128,7 +128,10 @@ test("guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen meng
   assert.ok(riskyEvidenceClaims("t05-before-after", "Setelah dipakai, hasil akhirnya berubah").length > 0);
   assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Hari ketujuh menunjukkan hasil setelah rutinitas").length > 0);
   assert.ok(riskyEvidenceClaims("t10-bukti-di-lengan", "Dua lengan menunjukkan hasil yang beda").length > 0);
-  assert.deepEqual(riskyEvidenceClaims("t05-before-after", "Lihat dua sisi dan nilai atributnya"), []);
+  assert.ok(riskyEvidenceClaims("t05-before-after", "Lihat dua sisi dan nilai atributnya").length > 0);
+  assert.ok(riskyEvidenceClaims("before-after", "Taruh dua tampilan berdampingan").length > 0);
+  assert.ok(riskyEvidenceClaims("t10-bukti-di-lengan", "Gunakan sisi pembanding lalu bandingkan").length > 0);
+  assert.deepEqual(riskyEvidenceClaims("t05-before-after", "Lihat satu tampilan dan catat atributnya"), []);
   assert.ok(proofPriceSkeleton("Teksturnya terlihat, harganya 189 ribu")?.includes("placeholder_bukti"));
   assert.deepEqual(bannedHookBoilerplateStarter("[fast] Di harga 189 ribu, lihat ini"), ["di harga"]);
   assert.deepEqual(normalizedHookPrefixes("[fast] Di harga 189 ribu, lihat ini").slice(0, 2), [
@@ -150,6 +153,14 @@ test("guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen meng
     "Jika manfaat tidak tertulis, jangan disebut",
   ]) {
     assert.ok(spokenCreativeAnalysis(phrase).length > 0, `meta-policy lolos: ${phrase}`);
+  }
+  for (const phrase of [
+    "Dibuat setetes demi setetes",
+    "Terbukti di ruang sidang",
+    "Ketahuan bagus",
+    "Bertahan sampai hari selesai",
+  ]) {
+    assert.ok(unsupportedFactualClaims(phrase).length > 0, `klaim TVC lolos: ${phrase}`);
   }
 });
 
@@ -420,18 +431,54 @@ test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasi
   }
 });
 
-test("Ads kategori layanan memakai aksi dashboard nonfisik", async () => {
+test("Ads kategori layanan tanpa bukti fitur memakai aksi kartu yang netral", async () => {
   const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-meja-kosong")!;
-  const [variant] = await generateScripts({
-    product: { ...auditProductForTemplate(template), category: "app" }, register: "bunda", tanpaLlm: true,
-    contentType: "ads", qualityTier: template.tier as never,
-    durationSec: template.durationSec, templateId: template.id,
-    count: 1, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
-  });
-  const actions = variant.segments.map((segment) => segment.action ?? "").join(" ");
-  assert.match(actions, /dashboard|status layanan|jadwal|antrean/);
-  assert.doesNotMatch(actions, /pegang produk|putar produk|produk berpindah|buka sisi produk/);
-  assert.equal(variant.validation.passed, true, JSON.stringify(variant.validation.errors));
+  for (const category of ["app", "jasa", "toko"]) {
+    const variants = await generateScripts({
+      product: { ...auditProductForTemplate(template), category }, register: "bunda", tanpaLlm: true,
+      contentType: "ads", qualityTier: template.tier as never,
+      durationSec: template.durationSec, templateId: template.id,
+      count: 4, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+    });
+    for (const variant of variants) {
+      const actions = variant.segments.map((segment) => segment.action ?? "").join(" ");
+      assert.match(actions, /kartu|catatan|amplop/);
+      assert.doesNotMatch(actions, /dashboard|status|jadwal|antrean|otomatis|notifikasi|balasan|slot|diproses/);
+      assert.doesNotMatch(actions, /pegang produk|putar produk|produk berpindah|buka sisi produk/);
+      assert.equal(variant.validation.passed, true, JSON.stringify(variant.validation.errors));
+    }
+  }
+});
+
+test("T05, T10, dan before-after seluruhnya tinggal inspeksi satu keadaan", () => {
+  for (const templateId of ["before-after", "t05-before-after", "t10-bukti-di-lengan"]) {
+    const template = audit.templates.find((item) => item.templateId === templateId)!;
+    assert.equal(template.variants.length, 4);
+    for (const variant of template.variants) {
+      for (const segment of variant.segments) {
+        assert.deepEqual(riskyEvidenceClaims(templateId, segment.text), [], `${templateId}#${variant.variantIndex}: ${segment.text}`);
+      }
+    }
+  }
+});
+
+test("empat varian Kartu Tanya Produk bebas narasumber dan testimoni sintetis", () => {
+  const template = audit.templates.find((item) => item.templateId === "t12-vox-pop")!;
+  assert.equal(template.variants.length, 4);
+  for (const variant of template.variants) {
+    const copy = variant.segments.map((segment) => segment.text).join(" ");
+    assert.doesNotMatch(copy, /narasumber|testimoni|wawancara|pendapat|rekomendasi|tanya(?:kan)? (?:satu )?orang|kata (?:dia|mereka)/i);
+  }
+});
+
+test("seluruh penutup TVC bebas klaim proses, kualitas, dan ketahanan terlarang", () => {
+  for (const template of audit.templates.filter((item) => item.group === "tvc")) {
+    for (const variant of template.variants) {
+      const cta = variant.segments.find((segment) => segment.role === "cta")!;
+      assert.deepEqual(unsupportedFactualClaims(cta.text), [], `${template.templateId}#${variant.variantIndex}: ${cta.text}`);
+      assert.doesNotMatch(cta.text, /dibuat setetes|terbukti|ketahuan bagus|bertahan|diuji|masih bekerja|dinilai sesudah/i);
+    }
+  }
 });
 
 test("mutasi beat Ads yang menghapus SPIKE dan BUTTON kembali ditolak", async () => {

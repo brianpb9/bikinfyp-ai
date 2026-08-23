@@ -615,7 +615,11 @@ function tumpulkanMacro(kamera: string, adaLabel: boolean): string {
 }
 
 function sinematografiPenulis(segs: SegmentDraft[], adaLabel: boolean): { aksi: string; kamera: string; tanpaWajah: boolean } | null {
-  const utama = segs.find((sg) => (sg.action ?? "").trim().length > 12);
+  const beraksi = segs
+    .filter((sg) => (sg.action ?? "").trim().length > 12)
+    .slice()
+    .sort((a, b) => a.start - b.start);
+  const utama = beraksi[0];
   if (!utama) return null;
   const kamera = tumpulkanMacro(
     [utama.framing, utama.angle, utama.camera]
@@ -624,8 +628,15 @@ function sinematografiPenulis(segs: SegmentDraft[], adaLabel: boolean): { aksi: 
       .join(", "),
     adaLabel
   );
+  const aksi = beraksi.length === 1
+    ? String(utama.action).trim()
+    : `single-shot timed progression: ${beraksi.map((sg, index) => {
+        const label = sg.label ?? sg.role.toUpperCase();
+        const transisi = index === 0 ? "at" : "then at";
+        return `${transisi} ${sg.start}-${sg.end} seconds [${label}], ${String(sg.action).trim()}`;
+      }).join("; ")}`;
   return {
-    aksi: String(utama.action).trim(),
+    aksi,
     kamera,
     // Penulis menandai sendiri bahwa wajah tidak terlihat di beat ini. Sebelum
     // ini penandanya diabaikan dan kamera memanggil wajah kembali ke frame —
