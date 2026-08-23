@@ -385,8 +385,10 @@ TASK=P0-C12-HTTP-MUTATION-RESUME-PROOF-20260823
   mutasi DB manual yang menggantikan operasi HTTP yang sedang diuji.
 - Kedua jalur membuktikan isolasi owner/org, response dan row `products.images`
   pasca-mutasi yang sama/otoritatif, serta cleanup foto+sidecar. Handler nyata
-  menghapus approved source pertama dari daftar dan storage, sehingga current
-  list kini akan memilih approved source kedua. Resume tetap mengirim bytes
+  menghapus approved source pertama dari daftar dan storage. Sidecar source
+  kedua dibentuk valid dan terikat hash bytes-nya menurut policy kini; asersi
+  eksplisit ke `resolveApprovedReference` atas daftar pasca-DELETE membuktikan
+  resolver canonical memilih source kedua. Resume tetap mengirim bytes
   source pertama dan mempertahankan urutan dua entry dari
   `approved_reference_manifest` job; ini counterexample langsung terhadap
   implementasi yang diam-diam me-resolve daftar produk terbaru.

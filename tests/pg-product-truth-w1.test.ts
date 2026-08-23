@@ -552,7 +552,7 @@ test("E9 HTTP DELETE approved source + resume W1 tetap memakai snapshot job beru
   const s = await siapkanJobOrgDenganManifest("stable");
   const values = new Map<string, Buffer>([
     [s.approvedSource, s.approvedBytes], [`${s.approvedSource}.meta.json`, Buffer.from("meta")],
-    [s.approvedSecondSource, s.approvedSecondBytes], [`${s.approvedSecondSource}.meta.json`, Buffer.from("meta")],
+    [s.approvedSecondSource, s.approvedSecondBytes], [`${s.approvedSecondSource}.meta.json`, sidecar(s.approvedSecondBytes, true)],
     [s.otherSource, Buffer.from("OTHER-E9")], [`${s.otherSource}.meta.json`, Buffer.from("meta")],
     [s.snapshotRel, s.approvedBytes], [s.snapshotRelSecond, s.approvedSecondBytes],
   ]);
@@ -579,6 +579,12 @@ test("E9 HTTP DELETE approved source + resume W1 tetap memakai snapshot job beru
   assert.equal(values.has(`${s.otherSource}.meta.json`), true, "sidecar unrelated ikut terhapus");
   assert.equal(values.has(`${s.approvedSecondSource}.meta.json`), true, "sidecar kedua unrelated ikut terhapus");
   assert.equal(values.has(s.snapshotRel), true, "cleanup E9 menghapus object privat job");
+
+  const { resolveApprovedReference } = await import("../lib/product-truth");
+  const currentResolution = await resolveApprovedReference(authoritative);
+  assert.equal(currentResolution.utama?.rel, s.approvedSecondSource, "resolver canonical tidak memilih source #2 dari daftar E9 pasca-DELETE");
+  assert.equal(currentResolution.utama?.sha256, sha256(s.approvedSecondBytes), "resolver canonical memilih identitas bytes source #2 E9 yang salah");
+  assert.deepEqual(currentResolution.tersetujui.map((ref) => ref.rel), [s.approvedSecondSource], "daftar current-policy E9 bukan counterexample tunggal source #2");
 
   const { processPostgresJob } = await import("../lib/postgres/worker");
   await processPostgresJob(s.jobId);

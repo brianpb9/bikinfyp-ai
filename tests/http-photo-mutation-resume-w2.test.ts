@@ -16,6 +16,7 @@ const { getDb, now, uuid } = await import("../lib/db");
 const { issueToken, cookieName } = await import("../lib/auth");
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+const { resolveApprovedReference } = await import("../lib/product-truth");
 const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
 const { DELETE: deleteRetailPhoto } = await import("../app/api/products/[id]/photos/route");
 const { processJob } = await import("../lib/worker");
@@ -24,6 +25,18 @@ type MediaStorage = import("../lib/storage").MediaStorage;
 const db = getDb();
 const sha = (body: Buffer) => crypto.createHash("sha256").update(body).digest("hex");
 const tempMaterialize = fs.mkdtempSync(path.join(os.tmpdir(), "http-mutation-w2-materialize-"));
+
+function approvedSidecar(bytes: Buffer): Buffer {
+  return Buffer.from(JSON.stringify({
+    sha256: sha(bytes),
+    jenis: "product_photo",
+    layakReferensi: true,
+    rasioAreaTeks: 0.004,
+    jumlahKata: 2,
+    alasan: "foto produk",
+    versiBukti: 1,
+  }));
+}
 
 after(() => {
   setMediaStorageForTests(undefined);
@@ -143,7 +156,7 @@ test("E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job beru
   storage.values.set(s.approvedSource, s.approvedBytes);
   storage.values.set(`${s.approvedSource}.meta.json`, Buffer.from("meta"));
   storage.values.set(s.approvedSecondSource, s.approvedSecondBytes);
-  storage.values.set(`${s.approvedSecondSource}.meta.json`, Buffer.from("meta"));
+  storage.values.set(`${s.approvedSecondSource}.meta.json`, approvedSidecar(s.approvedSecondBytes));
   storage.values.set(s.otherSource, Buffer.from("OTHER"));
   storage.values.set(`${s.otherSource}.meta.json`, Buffer.from("meta"));
   storage.values.set(s.snapshotRel, s.approvedBytes);
@@ -166,6 +179,11 @@ test("E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job beru
   assert.equal(storage.values.has(s.approvedSecondSource), true, "approved source kedua ikut terhapus");
   assert.equal(storage.values.has(`${s.approvedSecondSource}.meta.json`), true, "sidecar approved kedua ikut terhapus");
   assert.equal(storage.values.has(s.snapshotRel), true, "cleanup E5 menghapus object privat job");
+
+  const currentResolution = await resolveApprovedReference(currentImages(s.productId));
+  assert.equal(currentResolution.utama?.rel, s.approvedSecondSource, "resolver canonical tidak memilih source #2 dari daftar pasca-DELETE");
+  assert.equal(currentResolution.utama?.sha256, sha(s.approvedSecondBytes), "resolver canonical memilih identitas bytes source #2 yang salah");
+  assert.deepEqual(currentResolution.tersetujui.map((ref) => ref.rel), [s.approvedSecondSource], "daftar current-policy pasca-DELETE bukan counterexample tunggal source #2");
 
   let providerCalls = 0; let providerHash = "";
   setVideoProvidersForTests([{ name: "e5-observer", async healthCheck() { return true; }, estimateCost() { return 0; },
