@@ -385,6 +385,45 @@ test("W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize s
   );
 });
 
+// ------------------------------------------------------------------ W2 / C11
+
+test("W2 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping", async (t) => {
+  const provider = pasangObserverProviderC8();
+  t.after(provider.reset);
+  t.after(() => setMediaStorageForTests(undefined));
+  resetKanariUntukTest();
+
+  const relFoto = "uploads/w2-c11-hilang/0.webp";
+  // Sidecar ini sah dan menunjuk hash PACKSHOT, tetapi bytes utamanya sengaja
+  // tidak ada sejak SEBELUM processJob dimulai. Ini membedakan C11 dari C8
+  // sidecar-hilang dan dari TOCTOU sesudah resolver.
+  const spy = storageSpy(
+    new Map<string, Buffer>([[`${relFoto}.meta.json`, sidecar(PACKSHOT, true)]])
+  );
+  setMediaStorageForTests(spy.storage);
+
+  const { jobId } = siapkanJob([relFoto]);
+  await processJob(jobId);
+
+  assert.deepEqual(
+    spy.getCalls,
+    [`${relFoto}.meta.json`, relFoto],
+    "fixture C11 tidak melewati urutan sidecar sah lalu payload hilang"
+  );
+  assert.deepEqual(spy.materializeCalls, [], "W2 C11: payload hilang tetap dicoba materialize");
+  assert.equal(provider.jumlah(), 0, "W2 C11: provider generate sempat dipanggil");
+  assertNolEfekSamping(jobId, spy, "W2 C11 REF_MISSING");
+
+  const kanari = ringkasanKanari();
+  assert.equal(kanari.dinilai, 1, "W2 C11: boundary resolver tidak tercatat");
+  assert.equal(kanari.ditolak, 1, "W2 C11: referensi hilang tidak ditolak");
+  assert.equal(
+    kanari.perAlasan[ALASAN_TOLAK.BERKAS_HILANG],
+    1,
+    "W2 C11: jalur yang ditempuh bukan REF_MISSING"
+  );
+});
+
 // ------------------------------------------- bytes berubah sesudah disetujui
 
 /**

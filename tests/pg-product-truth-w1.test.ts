@@ -97,9 +97,11 @@ const jalurMaterialize = new Map<string, string>();
  */
 function storageSpy(isi: Map<string, Buffer>, wujudkan = false) {
   const materializeCalls: string[] = [];
+  const getCalls: string[] = [];
   const putCalls: string[] = [];
   return {
     materializeCalls,
+    getCalls,
     putCalls,
     storage: {
       async put(key: string, body: Buffer) {
@@ -110,6 +112,7 @@ function storageSpy(isi: Map<string, Buffer>, wujudkan = false) {
         isi.delete(key);
       },
       async get(key: string) {
+        getCalls.push(key);
         const body = isi.get(key);
         return body ? { body, size: body.length } : null;
       },
@@ -428,6 +431,48 @@ for (const [judul, buatIsi] of [
     assert.ok(["FAILED", "REFUNDED"].includes(state), `job dengan ${judul} berakhir ${state}, bukan gagal-tertutup`);
   });
 }
+
+// ------------------------------------------------------------------- C11
+
+test("W1 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const { setMediaStorageForTests } = await import("../lib/storage");
+  const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+  t.after(() => {
+    setMediaStorageForTests(undefined);
+    setVideoProvidersForTests(undefined);
+  });
+  const { resetKanariUntukTest, ringkasanKanari } = await import("../lib/kanari-bukti");
+  const { ALASAN_TOLAK } = await import("../lib/product-truth");
+  resetKanariUntukTest();
+  await pasangProviderPengamat();
+
+  const rel = `uploads/w1-c11-hilang-${process.pid}/0.webp`;
+  // Sidecar sah sudah ada ketika worker mulai, tetapi payload yang dirujuknya
+  // tidak ada. Dengan demikian vonis yang benar REF_MISSING, bukan C8
+  // EVIDENCE_INVALID dan bukan race sesudah materialize.
+  const isi = new Map<string, Buffer>([[`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
+  const jobId = await siapkanJob([rel]);
+  const spy = await jalankan(jobId, isi);
+
+  assert.deepEqual(
+    spy.getCalls,
+    [`${rel}.meta.json`, rel],
+    "fixture C11 tidak melewati urutan sidecar sah lalu payload hilang"
+  );
+  assert.deepEqual(spy.materializeCalls, [], "W1 C11: payload hilang tetap dicoba materialize");
+  assert.equal(amatan.dipanggil, false, "W1 C11: provider sempat dipanggil");
+  await assertNolEfekSamping(jobId, spy.putCalls, "W1 C11 REF_MISSING");
+
+  const kanari = ringkasanKanari();
+  assert.equal(kanari.dinilai, 1, "W1 C11: boundary resolver tidak tercatat");
+  assert.equal(kanari.ditolak, 1, "W1 C11: referensi hilang tidak ditolak");
+  assert.equal(
+    kanari.perAlasan[ALASAN_TOLAK.BERKAS_HILANG],
+    1,
+    "W1 C11: jalur yang ditempuh bukan REF_MISSING"
+  );
+});
 
 // ------------------------------------------------- referensi tambahan
 

@@ -89,7 +89,7 @@ bagian E.2, dan arti tiap status di E.0.
 | C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` | **PARTIAL** |
 | C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` | **PARTIAL** |
 | C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` | **PARTIAL** |
-| C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | **PARTIAL** |
+| C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | **PASS** |
 | C12 | Urutan images diubah/dirusak | E5,E9,W1,W2 | pertahankan identitas/snapshot atau digest manifest berurutan yang disetujui lintas mutasi | `REFERENCE_IDENTITY_CHANGED` (usul) | **PARTIAL** |
 | C13 | **Produk valid** (positif) | seluruh E,A,W | DITERIMA | — | **PARTIAL** |
 
@@ -163,20 +163,21 @@ mengerjakannya sebagai task terpisah.
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Daftar baru belum direvalidasi agar tetap punya foto layak |
-| W1 worker PG | UNGATED | **PARTIAL** | **Tertutup pada sub-kontrak resolver+snapshot:** `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340,355`), termasuk boundary C1/C8 di PostgreSQL nyata. **Belum:** brand mismatch C3; identitas lintas invocation C9/C12; boundary C11 nol provider/capture/regen/deliverable |
-| W2 worker inline | UNGATED | **PARTIAL** | Sub-kontrak resolver+snapshot, C1, dan boundary C8 tertutup (`lib/worker.ts:122,139`): tiap invalid-evidence case kini punya observer provider langsung + reset `t.after`, dengan control counterexample. Gap C3, C9/C12, dan boundary C11 sama dengan W1 |
+| W1 worker PG | UNGATED | **PARTIAL** | **Tertutup pada sub-kontrak resolver+snapshot:** `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340,355`), termasuk boundary C1/C8/C11 di PostgreSQL nyata. **Belum:** brand mismatch C3 dan identitas lintas invocation C9/C12 |
+| W2 worker inline | UNGATED | **PARTIAL** | Sub-kontrak resolver+snapshot serta boundary C1/C8/C11 tertutup (`lib/worker.ts:122,139`); C8/C11 memakai observer provider langsung dengan reset `t.after`. Gap yang tersisa: C3 dan identitas lintas invocation C9/C12 |
 | A1..A7 admission | UNGATED | **BLOCKED (T43)** | Transcript §4 menguji tujuh path literal: semuanya `ADA`, `gerbang_bukti=0`, `exit=1`, termasuk A4 dan A7. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
 | D1, D2 penulis DB | UNGATED | **BLOCKED** | penerimaan diblokir audit lokal yang belum dilakukan; bukan dependensi eksternal dan bukan bagian slice ini |
 
 ### E.2 Kasus C1-C13 — alasan tiap status
 
-**Cacah akhir sesudah lima ronde review: NOL kasus berstatus PASS.**
-Sepuluh PARTIAL, tiga BLOCKED. Empat kasus (C1, C7, C11, C12) sempat ditandai
-PASS oleh ronde-ronde awal rekonsiliasi ini dan DITURUNKAN semuanya setelah
+**Cacah setelah follow-up C11: satu PASS, sembilan PARTIAL, tiga BLOCKED.**
+C11 kini punya bukti boundary langsung pada kedua jalur wajibnya, W1 dan W2.
+Empat kasus (C1, C7, C11, C12) sempat ditandai
+PASS oleh ronde-ronde awal rekonsiliasi; semuanya sempat DITURUNKAN setelah
 Reviewer menunjukkan pola yang sama berulang: bukti yang dirujuk membuktikan
 kontrak RESOLVER, sementara baris kasusnya menuntut JALUR (E/A/W) — dua hal
-yang tidak sama. Angka ini dicatat apa adanya karena itulah hasil audit yang
-sebenarnya: belum satu pun kasus penerimaan tertutup penuh.
+yang tidak sama. Follow-up C11 kemudian menutup bukti JALUR itu secara langsung,
+tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 
 | # | Status | Alasan dan bukti |
 |---|---|---|
@@ -190,7 +191,7 @@ sebenarnya: belum satu pun kasus penerimaan tertutup penuh.
 | C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7 (T43) |
 | C9 | **PARTIAL** | Snapshot per job ADA (`ambilSnapshotTersetujui`) dan diuji lewat empat kasus TOCTOU, termasuk "path bersama ditimpa SESUDAH diperiksa". Yang belum: reason code `SNAPSHOT_IMMUTABLE` tidak ada, dan mutasi E3/E7 tidak memicu revalidasi (kini tidak lagi memengaruhi vonis referensi) |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
-| C11 | **PARTIAL** | **Sudah tertutup:** kontrak resolver — `REF_MISSING` ada, dan urutan vonisnya dikunci (sidecar diperiksa lebih dulu; `REF_MISSING` hanya muncul saat sidecar SAH ada tapi bytes hilang). **Gap yang tersisa:** baris C11 mewajibkan W1 DAN W2 fail-closed tanpa capture, dan tidak ada test BERNAMA C11 di kedua worker — pemetaan nama test hanya punya C1 dan C8 (`rg -o '(W1|W2) C[0-9]+' tests/`). Jadi nol provider / nol capture / nol regen / nol deliverable untuk kasus berkas hilang belum dibuktikan di boundary. Diturunkan dari PASS atas temuan Reviewer |
+| C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
 | C12 | **PARTIAL** | **Sudah tertutup:** integritas BYTES dalam satu invocation — `tests/kontrak-hash-sidecar.test.ts` mengunci hash dihitung dari bytes tersimpan, dan dari EMPAT test TOCTOU **dua** benar-benar mencapai provider (`W2 TOCTOU: bytes yang DITERIMA PROVIDER…` dan padanan W1); dua sisanya sengaja berhenti sebelum langkah berbayar. **Gap:** `REF_HASH_MISMATCH` yang sudah ada tidak bisa mendeteksi reorder karena menukar dua foto sah tidak mengubah hash file. Baris ini karena itu mengusulkan kontrak identitas persetujuan yang dipatok atau digest manifest berurutan, dengan reason code baru `REFERENCE_IDENTITY_CHANGED`; kontrak, kode, dan test E5/E9 → W1/W2 tersebut belum ada |
 | C13 | **PARTIAL** | Kontrol positif W1 (`tests/pg-product-truth-w1.test.ts:740`) dan W2 (`tests/product-truth-worker-reference.test.ts:638`) membuktikan worker menerima bukti sah. Itu belum membuktikan produk valid diterima melalui seluruh E1..E9 dan A1..A7 yang diwajibkan baris ini |
 
@@ -244,29 +245,25 @@ dikerjakan di slice ini:**
 9. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
    tanpa resolver, sedangkan E4 meninggalkan bytes tersimpan saat tidak ada
    referensi layak. Belum ada test nol efek storage untuk ketiga jalur itu.
-10. C11 baru dibuktikan pada resolver; belum ada test boundary W1/W2 yang
-    membuktikan nol provider, capture, regen, dan deliverable saat file referensi
-    hilang ketika worker mulai.
 **(b) Butuh kredensial/data:**
 
-11. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
+10. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
    juga butuh R2 yang BERPASANGAN dengan database itu.
 
 **(c) Butuh deploy/migrasi:**
 
-12. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
+11. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
    staging; `preDeployCommand` staging menjalankan migrasi schema.
 
 **(d) Butuh keputusan Founder T43:**
 
-13. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
+12. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
 
 ### E.5 Yang TIDAK dilakukan di slice ini
 
-Nol perubahan produk atau test. Tidak satu pun status dinaikkan untuk membuat
-matriks hijau: tiga baris tetap BLOCKED oleh gap lokal, sepuluh baris PARTIAL,
-dan nol baris PASS. Kesepuluh gap di E.4(a) dicatat sebagai kandidat task, bukan
-diimplementasikan.
+Pada slice rekonsiliasi asal, nol perubahan produk atau test dilakukan dan
+tidak satu pun status dinaikkan. Follow-up terpisah E.6 dan E.7 menambahkan
+bukti test langsung untuk gap yang kemudian disetujui sebagai task bounded.
 
 ### E.6 Follow-up W2 C8 provider observer — 2026-08-23
 
@@ -282,3 +279,21 @@ TASK=P0-W2-C8-PROVIDER-OBSERVER-20260823
   worker-wiring) → **99/99 PASS**.
 - Gap lokal observer W2 C8 ditutup. Status C8 tetap **PARTIAL** karena A1..A7
   masih belum menegakkan evidence gate dan tetap bergantung pada T43.
+
+### E.7 Follow-up C11 worker boundary proof — 2026-08-23
+
+TASK=P0-C11-WORKER-BOUNDARY-PROOF-20260823
+
+- `tests/product-truth-worker-reference.test.ts`: W2 dijalankan dengan sidecar
+  sah dan payload absen sejak worker mulai; jalur `REF_MISSING`, urutan baca,
+  nol materialize/provider/fetch/capture/regen/output/storage write, dan state
+  fail-closed diasersi langsung.
+- `tests/pg-product-truth-w1.test.ts`: bukti yang sama dijalankan pada W1 dengan
+  PostgreSQL disposable. Provider dan storage seam direset lewat `t.after`.
+- Observer provider tidak hampa: control W2 dan jalur positif W1 di suite yang
+  sama membuktikan observer mencatat panggilan nyata.
+- `tsx --test tests/product-truth-worker-reference.test.ts` → **13/13 PASS**.
+- `npm run test:postgres-product-truth-w1` dengan PostgreSQL lokal disposable
+  → **13/13 PASS**; database uji di-drop oleh trap gate.
+- Gap lokal C11 ditutup. C11 menjadi **PASS** karena jalur wajibnya hanya W1/W2;
+  status W1 dan W2 keseluruhan tetap **PARTIAL** akibat gap C3/C9/C12.
