@@ -374,132 +374,122 @@ export const CAMPAIGN_TEMPLATES: CampaignTemplate[] = [
     beats: { hookEnd: 0.178, demoEnd: 0.889 },
     preview: "/previews/t12-vox-pop.mp4", accent: "sky",
   },
-  // ── UGC ADS: PATTERN-INTERRUPT ────────────────────────────────────────────
-  //
-  // Tiga template ini diturunkan dari render KAMI SENDIRI (test_output/
-  // viral-hook-test, Brian 2026-08-11) — bukan portfolio pihak lain, jadi
-  // pratinjaunya memang hasil mesin kita.
-  //
-  // Polanya sama di ketiganya dan itu yang membedakannya dari UGC Ads biasa:
-  // buka dengan kejadian yang mustahil, lalu POTONG KERAS ke produk aslinya
-  // di tangan. Yang menahan penonton adalah keanehannya, yang menjual adalah
-  // potongan kerasnya. Karena itu hookLevel-nya "gila" — di level itulah
-  // perencana shot memasang pembuka pattern-interrupt.
-  // --- TIGA UGC ADS PRODUKSI SENDIRI (Brian, 13 Agustus 2026) ---
-  //
-  // DITARUH PALING DEPAN atas permintaan Brian: ketiganya diproduksi tim
-  // sendiri dan sudah lolos revisi sampai dinyatakan siap tayang, sedangkan
-  // empat ads di bawahnya adalah konsep pattern-interrupt yang belum melewati
-  // seleksi seketat itu. Yang paling terbukti pantas dilihat lebih dulu.
-  //
-  // Lima aturan di dokumennya lahir dari PENOLAKAN, bukan teori, dan
-  // ketiganya masuk sebagai peringatan di kartu — bukan cuma jadi catatan.
+  // ── UGC ADS: STAGING NETRAL ───────────────────────────────────────────────
+  // Kesembilan kartu ini menjanjikan komposisi properti panggung yang benar-
+  // benar sama dengan role render. Preview legacy ditahan sampai ada render
+  // baru untuk konsep netral; menampilkan klip lama akan menjadi janji palsu.
   {
     id: "ads-unboxing-pov", group: "ads",
-    name: "Unboxing dari Dalam Kardus",
-    when: "Produk yang kesan pertamanya ada di momen dibuka — tas, gadget, hampers.",
+    name: "POV Kardus Panggung",
+    when: "Butuh pembuka POV dari dalam kardus dengan swatch warna polos sebagai properti visual.",
     kind: "ads", format: "talking_head", durationSec: 15, tier: "high_quality",
     hookLevel: "berani", hookFamily: "H8", count: 3,
     bestFor: ["fashion", "muslim_fashion", "gadget", "home", "kids"],
     ratio: "9:16", shotCount: 3,
     source: { durationSec: 18, shots: 3 },
     caution: {
-      badge: "Tanpa teks overlay",
-      note: "CTA diucapkan talent, bukan kartu teks. Teks tempelan langsung membocorkan bahwa videonya dirakit.",
+      badge: "Properti tanpa tulisan",
+      note: "Swatch di video selalu polos; nama dan CTA disampaikan lewat suara atau caption yang bersumber dari data produk.",
     },
-    preview: "/previews/ads-unboxing-pov.mp4", accent: "amber",
+    preview: null, accent: "amber",
   },
   {
     id: "ads-meja-kosong", group: "ads",
-    name: "Meja Kosong",
-    when: "Jasa, app, atau SaaS. Alat-alat produksi lenyap satu per satu — yang dijual adalah hilangnya kerepotan.",
+    name: "Tiga Kartu di Meja",
+    when: "Jasa, app, atau toko yang cocok dijelaskan lewat gerak tiga kartu warna pada meja sederhana.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
     hookLevel: "agak_gila", hookFamily: "H13", count: 3,
     bestFor: ["jasa", "app", "toko"],
     ratio: "9:16", shotCount: 4,
     source: { durationSec: 18, shots: 4 },
     caution: {
-      badge: "Anti-produksi",
-      note: "Yang diperlihatkan bukan produknya, tapi hilangnya pekerjaan. Cocok untuk yang tidak punya barang fisik.",
+      badge: "Tanpa hasil layanan",
+      note: "Kartu hanya properti warna polos; layar, progres, pekerjaan otomatis, dan hasil layanan tidak disintesis.",
     },
-    preview: "/previews/ads-meja-kosong.mp4", accent: "violet",
+    preview: null, accent: "violet",
   },
   {
     id: "ads-panas-ekstrem", group: "ads",
-    name: "Masalah Dilebih-lebihkan",
-    when: "Produk yang menyelesaikan satu keluhan sehari-hari — kipas, cooling, anti-gerah, anti-bau.",
+    name: "Panggung Lampu Merah",
+    when: "Butuh suasana teatrikal lewat lampu merah, kipas kertas, gelas properti, dan haze tipis.",
     kind: "ads", format: "talking_head", durationSec: 15, tier: "high_quality",
     hookLevel: "gila", hookFamily: "H2", count: 3,
     bestFor: ["gadget", "electronics", "beauty", "home"],
     ratio: "9:16", shotCount: 3,
     source: { durationSec: 18, shots: 3 },
     caution: {
-      badge: "Masalah dulu",
-      note: "Produknya WAJIB diam sampai masalahnya terasa. Kalau produk sudah aktif sejak frame pertama, tidak ada yang diselesaikan dan hook-nya mati.",
+      badge: "Suasana, bukan hasil",
+      note: "Kondisi panggung dan ekspresi talent tetap sama dari awal hingga akhir; properti hanya membangun suasana.",
     },
-    preview: "/previews/ads-panas-ekstrem.mp4", accent: "rose",
+    preview: null, accent: "rose",
   },
   {
     id: "ads-tembus-dinding", group: "ads",
-    name: "Tembus Dinding",
-    when: "Butuh perhatian dalam 2 detik. Sesuatu menembus ruangan di belakang presenter, lalu produknya yang menutup.",
+    name: "Panel Karton Bergeser",
+    when: "Butuh interupsi dua detik lewat panel karton panggung yang bergeser dan foam ringan yang jatuh.",
     kind: "ads", format: "ads", durationSec: 30, tier: "high_quality",
     hookLevel: "gila", hookFamily: "H6", count: 2, shotCount: 4,
     bestFor: ["gadget", "app", "toko", "jasa"],
     source: { durationSec: 21, shots: 4 },
     beats: { hookEnd: 0.280, demoEnd: 0.790 },
-    preview: "/previews/ads-tembus-dinding.mp4", accent: "sky",
+    caution: { badge: "Staging teatrikal", note: "Panel, foam, dan kartu warna harus tampak sebagai properti; tidak ada dinding rusak atau bukti daya tahan." },
+    preview: null, accent: "sky",
   },
   {
     id: "ads-atap-jebol", group: "ads",
-    name: "Atap Jebol",
-    when: "Interupsi datang dari atas — atap runtuh, orangnya jatuh masuk frame, langsung ke produk.",
+    name: "Konfeti dari Panel",
+    when: "Butuh interupsi dari atas lewat panel kertas panggung dan konfeti putih yang turun pada tali.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
     hookLevel: "gila", hookFamily: "H15", count: 2, shotCount: 3,
     bestFor: ["gadget", "app", "toko", "jasa"],
     source: { durationSec: 12, shots: 3 },
     beats: { hookEnd: 0.324, demoEnd: 0.648 },
-    preview: "/previews/ads-atap-jebol.mp4", accent: "amber",
+    caution: { badge: "Panel kertas aman", note: "Adegan hanya memakai panel kertas, tali, dan konfeti ringan sebagai properti panggung." },
+    preview: null, accent: "amber",
   },
   {
     id: "ads-dobrak-pintu", group: "ads",
-    name: "Dobrak Pintu",
-    when: "Ruangan kosong, lalu seseorang mendobrak masuk dan lari ke kamera. Paling murah dibuat dari ketiganya.",
+    name: "Pintu Panggung Terbuka",
+    when: "Butuh interupsi depan lewat panel pintu ringan yang diketuk, dibuka, lalu disusul kartu warna polos.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
     hookLevel: "gila", hookFamily: "H8", count: 2, shotCount: 3,
     bestFor: ["gadget", "app", "toko", "jasa"],
     source: { durationSec: 12, shots: 3 },
     beats: { hookEnd: 0.324, demoEnd: 0.648 },
-    preview: "/previews/ads-dobrak-pintu.mp4", accent: "violet",
+    caution: { badge: "Gerak properti ringan", note: "Panel dibuka pelan; kartu warna tetap polos dan tidak memuat tulisan buatan model." },
+    preview: null, accent: "violet",
   },
   {
     id: "ads-waktu-berhenti", group: "ads",
-    name: "Waktu Berhenti",
-    when: "Semua yang bergerak membeku — pasar, uap, orang — dan cuma produkmu yang masih jalan.",
+    name: "Tableau Jam Properti",
+    when: "Butuh komposisi pasar panggung dengan aktor yang sengaja menahan pose di samping jam properti.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
     hookLevel: "gila", hookFamily: "H6", count: 2, shotCount: 3,
     bestFor: ["gadget", "app", "toko", "jasa", "food"],
     source: { durationSec: 14, shots: 3 },
     beats: { hookEnd: 0.300, demoEnd: 0.680 },
-    preview: "/previews/ads-waktu-berhenti.mp4", accent: "emerald",
+    caution: { badge: "Pose yang disengaja", note: "Semua aktor hanya berpose; produk tidak diklaim sebagai satu-satunya benda bergerak dan dunia tidak memulai ulang." },
+    preview: null, accent: "emerald",
   },
   {
     id: "kenalin-bisnis", group: "ads",
-    name: "Kenalin Bisnismu",
-    when: "Buat app, jasa, atau toko yang belum banyak dikenal. Presenter yang menjelaskan.",
+    name: "Kartu Lipat di Meja",
+    when: "Buat app, jasa, atau toko yang membutuhkan presenter dan gerak kartu lipat pada meja polos.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
     hookLevel: "normal", hookFamily: "H12", count: 3,
     bestFor: ["jasa", "app", "toko"],
-    preview: "/previews/ads-dobrak-pintu.mp4", accent: "sky",
+    caution: { badge: "Fakta lewat audio", note: "Kartu di video tetap polos; nama dan kategori bisnis hanya disampaikan lewat naskah yang bersumber dari input." },
+    preview: null, accent: "sky",
   },
   {
     id: "promo-terbatas", group: "ads",
-    name: "Promo Terbatas",
-    when: "Ada penawaran yang benar-benar berbatas waktu. Langsung ke ajakan, tanpa basa-basi.",
+    name: "Dua Kartu Warna",
+    when: "Penawaran dengan harga input yang perlu dibacakan sambil dua kartu warna polos bergerak di meja.",
     kind: "ads", format: "ads", durationSec: 15, tier: "high_quality",
     hookLevel: "berani", hookFamily: "H10", count: 4,
     bestFor: ["jasa", "toko", "beauty", "fashion", "food"],
-    preview: "/previews/ads-atap-jebol.mp4", accent: "rose",
+    caution: { badge: "Harga tidak digambar AI", note: "Harga hanya diucapkan dari data produk; kedua kartu di video tetap berupa warna solid." },
+    preview: null, accent: "rose",
   },
   // Dua template TVC dinamai persis seperti produksi Brian yang memang sudah
   // jadi — "THE DROP" dan "SEHARIAN". Preview-nya potongan dari video aslinya,

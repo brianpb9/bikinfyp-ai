@@ -41,7 +41,8 @@ test("tiga template UGC Ads baru punya tabel peran shot", () => {
 
 test("format ads TIDAK lagi membuang tabel peran yang sudah ada", () => {
   const p = shots("ads-meja-kosong")[0].prompt;
-  assert.match(p, /three printed information cards|centre card/i, "peran template ads dibuang lagi");
+  assert.match(p, /three unprinted colour cards|centre card/i, "peran template ads dibuang lagi");
+  assert.match(p, /no letters, numbers, logos, labels, or readable marks/i, "kartu blank tidak dikunci");
 });
 
 // Inti perbaikannya: peran memimpin, framing bawaan tidak ikut. Kalau framing
@@ -69,6 +70,7 @@ test("template panas memakai properti panggung, bukan outcome pendinginan", () =
 
 test("unboxing membuka dari DALAM kardus, bukan dari wajah", () => {
   assert.match(shots("ads-unboxing-pov")[0].prompt, /inside a lightweight cardboard prop box/i);
+  assert.match(shots("ads-unboxing-pov")[0].prompt, /plain unprinted colour swatch/i);
 });
 
 // Template LAMA tidak boleh ikut berubah perilakunya.

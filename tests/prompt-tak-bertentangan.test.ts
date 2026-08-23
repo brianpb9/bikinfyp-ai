@@ -206,7 +206,9 @@ test("template interupsi karton menjangkarkan staging yang jujur", async () => {
     if (!tpl) continue;
     const pembuka = (await rencana(tpl)).shots[0].prompt;
     assert.match(pembuka, /cardboard|paper panel|foam|confetti|stage/i, `${id}: properti staging hilang`);
-    assert.match(pembuka, /printed identity card|printed product or service card/i, `${id}: kartu identitas hilang`);
+    assert.match(pembuka, /plain unprinted colour card/i, `${id}: kartu blank hilang`);
+    assert.match(pembuka, /no letters, numbers, logos, labels, or readable marks/i, `${id}: generated text belum dilarang`);
+    assert.doesNotMatch(pembuka, /printed identity|product name|category readable|approved price/i);
     assert.doesNotMatch(pembuka, /broken wall|ceiling gives way|debris and dust bursting|undamaged/i);
   }
 });

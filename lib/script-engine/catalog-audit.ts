@@ -389,7 +389,47 @@ const UNSUPPORTED_FACTUAL_CLAIMS = [
   /\bbertahan sampai hari selesai\b/giu,
 ];
 
+/** Klaim visual yang tidak boleh disintesis oleh model gambar/video.
+ *
+ * Pola sengaja mencakup bahasa Indonesia + Inggris dan hubungan semantik
+ * subjek→hasil, bukan hanya frasa dari role lama. Daftar ini juga menolak
+ * instruksi untuk membuat tulisan faktual terbaca. Model sudah terbukti
+ * mengarang huruf/angka; fakta produk hanya boleh masuk lewat asset asli atau
+ * overlay post-production deterministik yang benar-benar terhubung. */
 const ADS_UNSUPPORTED_OUTCOMES = [
+  // Durability / survival.
+  /\b(?:shockproof|drop[- ]?proof|impact[- ]?resistant|damage[- ]?resistant|survives? (?:a |the )?(?:drop|fall|impact)|withstands? (?:a |the )?(?:drop|fall|impact))\b/giu,
+  /\b(?:tahan (?:benturan|jatuh)|anti[- ]?(?:pecah|bentur))\b/giu,
+  // Efficacy / solved problem / quality result.
+  /\b(?:produk(?:nya| ini)?|product|formula|device)\b[^.!?;]{0,55}\b(?:ampuh|efektif|berkhasiat|bekerja|berfungsi|menyelesaikan|mengatasi|works?|effective|delivers? results?|solves?|fixes?|improves?)\b/giu,
+  /\b(?:hasil(?:nya)? (?:terlihat|muncul|nyata|bagus)|visible results?|proven results?|masalah(?:nya)? (?:selesai|teratasi|hilang)|problem (?:solved|gone|fixed))\b/giu,
+  // Automatic work / completion.
+  /\b(?:service|layanan|system|sistem|app|aplikasi|workflow|alur|platform)\b[^.!?;]{0,70}\b(?:automatically|otomatis)\b[^.!?;]{0,50}\b(?:completes?|finishes?|processes?|does?|handles?|menyelesaikan|menuntaskan|memproses|mengerjakan)\b/giu,
+  /\b(?:completes?|finishes?|processes?|does?|handles?|menyelesaikan|menuntaskan|memproses|mengerjakan)\b[^.!?;]{0,45}\b(?:every|all|setiap|semua)?\s*(?:jobs?|tasks?|work|requests?|orders?|pekerjaan|tugas|permintaan|pesanan)?\b[^.!?;]{0,20}\b(?:automatically|otomatis|by itself|sendiri)\b/giu,
+  /\b(?:pekerjaan|tugas|proses|work|job|task|process)\b[^.!?;]{0,45}\b(?:selesai sendiri|tuntas otomatis|finishes? itself|completes? automatically|done automatically)\b/giu,
+  // Relief / cooling / visible comfort change.
+  /\b(?:produk(?:nya| ini)?|product|device|fan)\b[^.!?;]{0,55}\b(?:mendinginkan|menyejukkan|meredakan|menghilangkan|cools?|relieves?|soothes?|eliminates?)\b/giu,
+  /\b(?:keluhan|gerah|panas|tidak nyaman|discomfort|heat|complaint)\b[^.!?;]{0,45}\b(?:reda|hilang|teratasi|resolved|gone|relieved|eases?)\b/giu,
+  /\b(?:terasa|terlihat|becomes?|looks?)\b[^.!?;]{0,30}\b(?:lega|nyaman|sejuk|dingin|relieved|comfortable|cooler)\b/giu,
+  // Scarcity / deadline pressure.
+  /\b(?:promo|offer|deal|sale|penawaran)\b[^.!?;]{0,55}\b(?:berakhir|habis|ends?|expires?|until|sampai)\b[^.!?;]{0,30}\b(?:hari ini|malam ini|besok|today|tonight|tomorrow|midnight|tanggal|\d)\b/giu,
+  /\b(?:stok|stock|slots?|kuota|units?)\b[^.!?;]{0,30}\b(?:tinggal|tersisa|left|remaining|limited|terbatas)\b/giu,
+  /\b(?:deadline|limited stock|stock countdown|countdown timer|last chance|kesempatan terakhir|buruan|sebelum kehabisan)\b/giu,
+  // Exclusive motion / frozen-world efficacy metaphor.
+  /\b(?:only|cuma|hanya)\b[^.!?;]{0,35}\b(?:product|produk(?:nya)?|device)\b[^.!?;]{0,35}\b(?:moves?|moving|bergerak|runs?|berjalan)\b/giu,
+  /\b(?:everything|semuanya|dunia|world|orang lain|everyone else)\b[^.!?;]{0,35}\b(?:freezes?|frozen|membeku|berhenti)\b[^.!?;]{0,45}\b(?:product|produk(?:nya)?)\b[^.!?;]{0,25}\b(?:moves?|moving|bergerak|runs?|berjalan)\b/giu,
+  // Service results and UI/workflow improvement.
+  /\b(?:queue|antrean|inbox|requests?|permintaan|orders?|pesanan)\b[^.!?;]{0,45}\b(?:cleared|completed|approved|processed|delivered|confirmed|selesai|habis|disetujui|diproses|terkirim|dikonfirmasi|bergerak|berkurang)\b/giu,
+  /\b(?:message|pesan|notification|notifikasi|booking|reservation|pemesanan|payment|pembayaran)\b[^.!?;]{0,45}\b(?:delivered|sent|confirmed|approved|completed|terkirim|sampai|dikonfirmasi|disetujui|selesai)\b/giu,
+  /\b(?:dashboard|screen|layar|ui|interface|workflow|alur)\b[^.!?;]{0,60}\b(?:faster|quicker|simpler|cleaner|improved|complete|completed|lebih cepat|lebih ringkas|lebih mudah|lebih rapi|selesai|tuntas)\b/giu,
+  /\b(?:progress bar|status bar|indikator progres)\b[^.!?;]{0,35}\b(?:complete|completed|finishes?|100\s*%|selesai|penuh)\b/giu,
+  // Generated readable factual text: reject regardless of whether the fact is
+  // otherwise approved; model pixels are not a deterministic data channel.
+  /\b(?:card|label|sign|screen|display|kartu|label|papan|layar)\b[^.!?;]{0,60}\b(?:readable|legible|shows?|displays?|terbaca|tercetak|tertulis|menampilkan)\b[^.!?;]{0,45}\b(?:product|service|business|brand|name|category|price|number|deadline|stock|produk|layanan|bisnis|merek|nama|kategori|harga|angka|stok|tanggal)\b/giu,
+  /\b(?:product|service|business|brand|name|category|price|number|deadline|stock|produk|layanan|bisnis|merek|nama|kategori|harga|angka|stok|tanggal)\b[^.!?;]{0,45}\b(?:readable|legible|written|shown|displayed|terbaca|tercetak|tertulis|ditampilkan)\b[^.!?;]{0,35}\b(?:card|label|sign|screen|display|kartu|label|papan|layar)\b/giu,
+  /\b(?:readable|legible|written|terbaca|tercetak|tertulis)\b[^.!?;]{0,30}\b(?:product name|service name|business name|brand name|category|price|number|nama produk|nama layanan|nama bisnis|nama merek|kategori|harga|angka)\b/giu,
+  /\bprinted\s+(?:product name|service name|business name|brand name|category|price|number)\b/giu,
+  /\b(?:nama (?:produk|layanan|bisnis|merek)|kategori|harga|angka|stok|tanggal|product name|service name|business name|brand name|category|price|number|stock|date)\b[^.!?;]{0,55}\b(?:kartu|label|papan|layar|card|label|sign|screen)?\b[^.!?;]{0,35}\b(?:didekatkan|diarahkan|ditunjuk|disorot|diputar|ditulis|dibaca|muncul|menghadap|terlihat|ditampilkan|moved closer|pointed at|highlighted|turned|written|read aloud|appears?|faces? camera|shown|displayed)\b/giu,
   /\balur(?:nya)? (?:lebih )?(?:ringkas|cepat|mudah|rapi)\b/giu,
   /\b(?:tugas|jadwal)(?:nya)? (?:otomatis )?(?:tersusun|teratur|selesai)\b/giu,
   /\bantrean(?:nya)? (?:bergerak|berkurang|maju|lancar|lebih cepat)\b/giu,

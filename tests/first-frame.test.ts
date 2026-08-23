@@ -35,7 +35,9 @@ test("pembuka staging Ads tidak lagi menyamar sebagai shot tanpa produk", () => 
   for (const id of ["ads-atap-jebol", "ads-dobrak-pintu", "ads-tembus-dinding", "ads-waktu-berhenti", "ads-panas-ekstrem"]) {
     const p = shots(id)[0];
     assert.match(p.prompt, /stage|staged|theatrical|prop|cardboard|paper|printed|red practical lamp/i, `${id}: staging pembuka hilang`);
-    assert.match(p.prompt, /card|identity/i, `${id}: kontinuitas identitas hilang dari prompt final`);
+    assert.match(p.prompt, /card/i, `${id}: kontinuitas properti kartu hilang dari prompt final`);
+    assert.match(p.prompt, /unprinted|no letters|blank/i, `${id}: kartu tidak dikunci blank`);
+    assert.doesNotMatch(p.prompt, /readable (?:identity|name|category|price)|printed (?:identity|name|category|price)/i);
     assert.equal(harusMenahanProduk(p), false, `${id}: pembuka netral masih menahan produk`);
     assert.equal(perluFrameBuatan(p), false, `${id}: frame buatan legacy masih diminta`);
   }

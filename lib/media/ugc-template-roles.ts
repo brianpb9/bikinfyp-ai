@@ -259,59 +259,60 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
     },
   },
   // Story Ads memakai properti panggung yang terlihat jelas sebagai staging.
-  // Role hanya boleh mengatur komposisi kartu/label/nama/kategori/harga yang
-  // disetujui. Outcome produk, hasil layanan, kelangkaan, dan daya tahan tidak
-  // boleh lahir dari tabel visual ketika input hanya memberi identitas dasar.
+  // Model video TIDAK pernah diminta merender fakta pada kartu: semua kartu
+  // polos tanpa huruf/angka/logo dan menyisakan ruang untuk overlay
+  // deterministik di masa depan. Hari ini nama/kategori/harga hanya hidup di
+  // audio/caption yang memang dirakit dari data produk, bukan generated pixels.
   "ads-tembus-dinding": {
     opening: {
-      role: `a clearly theatrical cardboard wall panel on a tabletop stage shifts sideways while lightweight white foam pieces fall in front of it; a printed identity card is already visible beside the panel`,
-      camera: `static wide, locked off so the cardboard panel and identity card read clearly`,
+      role: `a clearly theatrical cardboard wall panel on a tabletop stage shifts sideways while lightweight white foam pieces fall in front of it; a plain unprinted colour card with no letters, numbers, logos, labels, or readable marks sits beside the panel, leaving clean negative space above it`,
+      camera: `static wide, locked off so the cardboard panel, blank card, and overlay-safe negative space remain clear`,
     },
     middle: [
-      { role: `a hand slides the printed identity card through the opening in the cardboard panel, with only the product name or category readable`,
+      { role: `a hand slides the same plain unprinted colour card through the opening in the cardboard panel, its surface completely blank and non-factual`,
         camera: `slight handheld push toward the card and cardboard texture` },
-      { role: `the label or service card is held beside the foam panel as a plain identity display`,
-        camera: `steady close-up on the readable card` },
+      { role: `the same blank colour card is held beside the foam panel as a simple compositional prop`,
+        camera: `steady medium close-up with empty overlay-safe space above the card` },
     ],
     closing: {
-      role: `one continuous shot of the readable identity card under a small lamp, with the cardboard panel and foam props still visibly theatrical behind it`,
+      role: `one continuous shot of the same blank colour card under a small lamp, with the cardboard panel and foam props still visibly theatrical behind it`,
       camera: `single continuous take, no cuts` },
   },
   "ads-atap-jebol": {
     opening: {
-      role: `a paper ceiling panel on a small indoor stage slides open and white confetti descends on strings; a printed product or service card hangs below it`,
-      camera: `low angle looking up, locked off so the paper panel and hanging card stay readable` },
+      role: `a paper ceiling panel on a small indoor stage slides open and white confetti descends on strings; a plain unprinted colour card with no letters, numbers, logos, labels, or readable marks hangs below it`,
+      camera: `low angle looking up, locked off so the paper panel and blank hanging card stay clear` },
     middle: [
-      { role: `a hand lowers the identity card through the paper opening while the confetti continues to fall as an obvious stage effect`,
+      { role: `a hand lowers the same blank colour card through the paper opening while the confetti continues to fall as an obvious stage effect`,
         camera: `handheld at card level, gently following downward` },
     ],
     closing: {
-      role: `one continuous shot of the card or label facing camera beneath the paper panel, showing only its printed identity`,
+      role: `one continuous shot of the completely blank card facing camera beneath the paper panel, with clean overlay-safe space beside it`,
       camera: `single continuous take, steady` },
   },
   "ads-dobrak-pintu": {
     opening: {
-      role: `a lightweight freestanding stage-door panel is tapped from behind, then its handle turns and a printed identity card slides into view through the opening`,
+      role: `a lightweight freestanding stage-door panel is tapped from behind, then its handle turns and a plain unprinted colour card with no letters, numbers, logos, labels, or readable marks slides into view`,
       camera: `static frame facing the stage-door panel, locked off` },
     middle: [
-      { role: `a uniformed stage attendant lifts the card near the open panel so the printed name or category faces camera`,
+      { role: `a uniformed stage attendant lifts the same completely blank colour card near the open panel`,
         camera: `static, with the card moving toward the lens` },
     ],
     closing: {
-      role: `one continuous shot of the readable card resting beside the stage-door panel as a plain identity display`,
+      role: `one continuous shot of the blank colour card resting beside the stage-door panel, with clean negative space left above it`,
       camera: `single continuous take, no cuts` },
   },
   "ads-waktu-berhenti": {
     opening: {
-      role: `actors on a small market-style stage deliberately hold still poses beside a stopped prop clock, while a printed identity card remains visible on the counter`,
+      role: `actors on a small market-style stage deliberately hold still poses beside a stopped prop clock, while a plain unprinted colour card with no letters, numbers, logos, labels, or readable marks remains on the counter`,
       camera: `slow steady drift through the clearly staged tableau` },
     middle: [
-      { role: `the cashier lifts a printed card while every actor continues holding the rehearsed pose; the card shows only a name, category, or approved price`,
-        camera: `continuing the same drift, arriving on the readable card` },
+      { role: `the cashier lifts the same completely blank colour card while every actor continues holding the rehearsed pose`,
+        camera: `continuing the same drift, arriving on the blank prop card` },
     ],
     closing: {
-      role: `one continuous shot of the prop clock, posed actors, and readable card together as a theatrical tableau`,
-      camera: `single continuous take, locked off on the card` },
+      role: `one continuous shot of the prop clock, posed actors, and blank colour card together as a theatrical tableau, with clean overlay-safe space beside the clock`,
+      camera: `single continuous take, locked off on the tableau` },
   },
 
   // DUA ADS PENJELAS. Bentuknya kebalikan dari empat di atas: tidak ada
@@ -319,30 +320,30 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   // Yang dijual kejelasan, bukan kejutan.
   "kenalin-bisnis": {
     opening: {
-      role: `a person opens a folded information card at a plain desk; the business name and category are printed clearly against blank paper props`,
+      role: `a person opens a folded blank colour card at a plain desk; it has no letters, numbers, logos, labels, or readable marks, with clean negative space on the wall behind`,
       camera: `static at eye level, no movement` },
     middle: [
-      { role: `hands point to the printed business name and category on the card, then place it in front of an off-camera witness`,
+      { role: `hands point to one solid colour block on the otherwise blank card, then place it in front of an off-camera witness`,
         camera: `handheld following the card` },
-      { role: `the same identity card is turned toward camera beside a blank note page as a plain identity display`,
+      { role: `the same blank colour card is turned toward camera beside a blank note page as a simple compositional prop`,
         camera: `static medium close-up` },
     ],
     closing: {
-      role: `one continuous shot of the printed business identity card facing camera on the desk`,
+      role: `one continuous shot of the completely blank colour card facing camera on the desk, with overlay-safe negative space above it`,
       camera: `single continuous take, static` },
   },
   "promo-terbatas": {
     opening: {
-      role: `a price card is opened beside the product or service identity card, showing the approved price supplied in the brief`,
-      camera: `static close, both cards already in frame` },
+      role: `two contrasting plain colour cards are opened side by side; both are unprinted with no letters, numbers, currency symbols, logos, labels, or readable marks`,
+      camera: `static close, both blank cards and clean overlay-safe space already in frame` },
     middle: [
-      { role: `a hand points once to the approved number on the price card and once to the printed product name`,
+      { role: `a hand points once to each solid colour card`,
         camera: `close handheld on the two cards` },
-      { role: `the price card is turned toward a cashier witness while the identity card stays readable beside it`,
+      { role: `one blank colour card is turned toward a cashier witness while the other remains stationary beside it`,
         camera: `static, cards centred` },
     ],
     closing: {
-      role: `one continuous shot of the approved price and identity cards together on the same plain counter`,
+      role: `one continuous shot of the same two completely blank colour cards together on the plain counter`,
       camera: `single continuous take, no cuts` },
   },
 
@@ -355,63 +356,63 @@ export const UGC_TEMPLATE_ROLES: Record<string, UgcTemplateRoles> = {
   // tanpa menambah strukturnya = menambah label, bukan menambah video.
   "ads-unboxing-pov": {
     opening: {
-      role: `POV from inside a lightweight cardboard prop box looking up as the flaps open and a printed package label enters the light; the staging shows only the package identity`,
+      role: `POV from inside a lightweight cardboard prop box looking up as the flaps open and a plain unprinted colour swatch enters the light; it has no letters, numbers, logos, labels, or readable marks`,
       camera: `static from inside the box looking straight up, the flaps opening into frame`,
     },
     middle: [
       {
-        role: `a hand lifts the package identity card out of the prop box and turns the printed name toward camera`,
+        role: `a hand lifts the same completely blank colour swatch out of the prop box and turns its solid surface toward camera`,
         camera: `handheld, following the card up out of the box`,
       },
       {
-        role: `the product or service card rests beside the opened cardboard box while a hand points to its printed category`,
+        role: `the blank colour swatch rests beside the opened cardboard box while a hand points to its plain surface`,
         camera: `static medium close-up, hand moving within frame`,
       },
     ],
     closing: {
-      role: `one continuous unbroken shot of the open prop box and readable identity card together`,
+      role: `one continuous unbroken shot of the open prop box and blank colour swatch together, leaving clean overlay-safe space above them`,
       camera: `single continuous take, slow gentle handheld, no cuts`,
     },
   },
 
   "ads-meja-kosong": {
     opening: {
-      role: `a plain desk holds three printed information cards, a small lamp, and a pen; a hand opens the centre card so its identity line faces camera`,
+      role: `a plain desk holds three unprinted colour cards, a small lamp, and a pen; every card has no letters, numbers, logos, labels, or readable marks, and a hand opens the centre card toward camera`,
       camera: `locked-off wide on the desk so every staged prop remains visible`,
     },
     middle: [
       {
         role: `the centre card moves closer to an off-camera witness while the other two cards remain stationary`,
-        camera: `very slow push toward the printed card`,
+        camera: `very slow push toward the blank centre card`,
       },
       {
-        role: `a hand points to the printed name or category on the card beside a blank sheet of paper`,
+        role: `a hand points to the solid colour block on the centre card beside a blank sheet of paper`,
         camera: `static close on the card`,
       },
     ],
     closing: {
-      role: `one continuous shot of the same three staged cards, with the centre identity line readable`,
+      role: `one continuous shot of the same three blank staged cards, with clean overlay-safe negative space above the centre card`,
       camera: `single continuous take, locked off, holds to the end`,
     },
   },
 
   "ads-panas-ekstrem": {
     opening: {
-      role: `a clearly staged red lamp, paper fan, misted prop glass, and thin theatrical haze surround a printed identity card already visible on the table`,
+      role: `a clearly staged red lamp, paper fan, misted prop glass, and thin theatrical haze surround a plain unprinted colour card with no letters, numbers, logos, labels, or readable marks`,
       camera: `handheld at table height, gently moving among the staged props`,
     },
     middle: [
       {
-        role: `a hand lifts the paper fan and turns its printed product or service name toward the lens as a static identity display`,
+        role: `a hand lifts the paper fan and turns its solid unprinted colour patch toward the lens as a simple stage prop`,
         camera: `card and fan move toward the lens, then settle`,
       },
       {
-        role: `the printed label is held beside the red lamp and prop glass while the theatrical conditions remain unchanged`,
-        camera: `static, holding on the label and props`,
+        role: `the completely blank colour card is held beside the red lamp and prop glass while the theatrical conditions remain unchanged`,
+        camera: `static, holding on the blank card and props`,
       },
     ],
     closing: {
-      role: `one continuous shot of the readable identity card among the same red-light props and theatrical haze`,
+      role: `one continuous shot of the blank colour card among the same red-light props and theatrical haze, leaving clean overlay-safe space beside it`,
       camera: `single continuous take, steady handheld, no cuts`,
     },
   },
