@@ -36,7 +36,7 @@ import { getRecordingStyle, type StyleFormat } from "./recording-styles";
 import { blokKontrakMode, framingUntukMode, modeDikenal } from "./mode-kamera";
 import { formatById } from "../script-engine/format-katalog";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
-import { temuanHookSenyapAds } from "../script-engine/story-os-ads";
+import { isStructuredStoryAds, temuanHookSenyapAds, temuanStrukturStoryAds } from "../script-engine/story-os-ads";
 import {
   isNeutralStoryAdsTemplate,
   neutralStoryAdsActionContradictions,
@@ -101,6 +101,8 @@ export interface ShotPlanInput {
    * (kamera nyaris tidak pindah) menghasilkan struktur shot yang identik.
    * Tabelnya di lib/media/ugc-template-roles.ts. */
   ugcTemplate?: string | null;
+  /** Genre otoritatif dari snapshot admisi; jangan diturunkan dari label beat. */
+  contentType?: "affiliate" | "ads" | null;
   /** Gaya rekam (lib/media/recording-styles.ts) — sumbu "bagaimana direkam",
    *  terpisah dari "apa yang dijual". NULL / "standar" = perilaku lama persis.
    *
@@ -1277,11 +1279,17 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     throw new Error(`Kontrak neutral Story Ads: persona "${input.category.id}" tidak ada di allowlist terkurasi.`);
   }
   const visualCategory = curatedNeutralCategory ?? input.category;
-  if (neutralStoryAds) {
-    const sa3Findings = temuanHookSenyapAds(input.segments as Array<SegmentDraft & Record<string, unknown>>);
-    if (sa3Findings.length > 0) {
-      throw new Error(`Kontrak SA3 neutral Story Ads dilanggar sebelum prompt provider: ${sa3Findings.join(", ")}`);
+  if (isStructuredStoryAds({ contentType: input.contentType, templateId: input.ugcTemplate })) {
+    const records = input.segments as Array<SegmentDraft & Record<string, unknown>>;
+    const storyFindings = [
+      ...temuanHookSenyapAds(records),
+      ...temuanStrukturStoryAds(records).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
+    ];
+    if (storyFindings.length > 0) {
+      throw new Error(`Kontrak Story Ads dilanggar sebelum prompt provider: ${storyFindings.join(", ")}`);
     }
+  }
+  if (neutralStoryAds) {
     for (const segment of input.segments) {
       if (segment.action) {
         const contradictions = neutralStoryAdsActionContradictions(segment.action, {

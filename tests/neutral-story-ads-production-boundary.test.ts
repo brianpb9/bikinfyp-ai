@@ -131,6 +131,26 @@ test("scaffold angka hanya menerima nilai exact planner; disguise field gagal se
   missing[0].label = "FRICTION";
   assert.throws(() => planShots({ ...base, segments: missing }), /SA3/);
 
+  let providerCalls = 0;
+  for (const length of [0, 1, 2]) {
+    assert.throws(() => {
+      const spec = planShots({ ...base, contentType: "ads", segments: structuredClone(script.segments).slice(0, length) });
+      providerCalls++;
+      return buildTaskContent(spec, spec.shots[0], "dreamina-seedance-2-0-mini-260615");
+    }, /Story Ads.*(?:5 beat|SA3)/, `${length}: payload pendek mencapai seam provider`);
+  }
+  assert.equal(providerCalls, 0, "Ads pendek mencapai provider");
+
+  const affiliateSegments = [
+    { role: "hook", label: "HOOK", start: 0, end: 4, text: "Eh, hook Affiliate bersuara.", visual_direction: "produk" },
+    { role: "demo", label: "BODY", start: 4, end: 10, text: "Aku cek produknya.", visual_direction: "produk" },
+    { role: "cta", label: "CTA", start: 10, end: 15, text: "Cek keranjang.", visual_direction: "produk" },
+  ] as never;
+  assert.doesNotThrow(() => planShots({
+    ...base, segments: affiliateSegments, contentType: "affiliate", ugcTemplate: null,
+    format: "talking_head", shotCountOverride: 1,
+  }), "Affiliate berlabel HOOK tidak boleh dianggap Story Ads");
+
   for (const disguised of [
     "189000-second offer", "Shot 189000 of 1 offer", "at 189000-189001 seconds offer",
     "15-second", "Shot 1 of 4", "at 3-6 seconds",

@@ -79,6 +79,30 @@ test("naskah Ads yang memenuhi Story OS: NOL temuan keras", () => {
   assert.deepEqual(temuan, [], `naskah sah ditolak: ${JSON.stringify(temuan)}`);
 });
 
+test("Ads 0/1/2 segmen gagal struktur lengkap di strict dan light", async () => {
+  const { validateScript } = await import("../lib/script-engine/validator");
+  const source = structuredClone((LULUS as unknown as { segments: Record<string, unknown>[] }).segments);
+  for (const length of [0, 1, 2]) {
+    const segments = source.slice(0, length);
+    const direct = periksaStoryOsAds({ segments } as never, { contentType: "ads", durationSec: 20 });
+    if (length === 0) assert.ok(direct.some((finding) => finding.gerbang === "SA3"), `${length}: tanpa SA3`);
+    assert.ok(direct.some((finding) => finding.gerbang === "SA4" && /5 beat/.test(finding.pesan)), `${length}: tanpa panjang`);
+    assert.ok(direct.some((finding) => finding.gerbang === "SA4" && /FRICTION/.test(finding.pesan)), `${length}: tanpa FRICTION`);
+    assert.ok(direct.some((finding) => finding.gerbang === "SA2" && /SPIKE/.test(finding.pesan)), `${length}: tanpa SPIKE`);
+    assert.ok(direct.some((finding) => finding.gerbang === "SA1" && /BUTTON/.test(finding.pesan)), `${length}: tanpa BUTTON`);
+    for (const mode of ["strict", "light"] as const) {
+      const result = validateScript({
+        segments, hookFamily: "H1", register: "netral", productName: "Serum Uji",
+        productPriceIdr: 89000, contentType: "ads", durationSec: 20, quality_tier: "super_hq",
+      } as never, mode);
+      assert.equal(result.passed, false, `${mode} meloloskan Ads ${length} segmen`);
+      for (const rule of ["SA1", "SA2", "SA4", ...(length === 0 ? ["SA3"] : [])]) {
+        assert.ok(result.errors.some((issue) => issue.rule === rule), `${mode}/${length}: tanpa ${rule}`);
+      }
+    }
+  }
+});
+
 test("SA3 menolak reordered, duplicate, missing, text, tts, alias suara, dan start nol di strict dan light", async () => {
   const { validateScript } = await import("../lib/script-engine/validator");
   const mutations: Array<[string, (segments: Record<string, unknown>[]) => void]> = [
@@ -153,6 +177,32 @@ test("live LLM Ads menolak reordered HOOK lalu menerima respons perbaikan tanpa 
     assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
     assert.equal(result.segments[0].label, "HOOK");
     assert.equal(result.segments[0].text, "");
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
+test("live LLM Ads memperbaiki keluaran 0/1/2 segmen sebelum pipeline", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  try {
+    for (const length of [0, 1, 2]) {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls++;
+        const segments = calls === 1 ? structuredClone(LIVE_ADS_SAFE).slice(0, length) : structuredClone(LIVE_ADS_SAFE);
+        return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+      }) as never;
+      const [result] = await generateScripts({
+        product: { id: `live-short-${length}`, name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+        register: "netral", qualityTier: "high_quality", durationSec: 15,
+        contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+        hookFamilies: ["H8"], lockHookFamily: true,
+      });
+      assert.equal(calls, 2, `${length}: tidak direpair tepat sekali`);
+      assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+      assert.deepEqual(result.segments.map((segment) => segment.label), ["HOOK", "FRICTION", "FRICTION", "SPIKE", "BUTTON"]);
+    }
   } finally {
     globalThis.fetch = fetchAsli;
   }

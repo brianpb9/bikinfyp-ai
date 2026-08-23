@@ -18,9 +18,11 @@ import type { SegmentDraft } from "../lib/script-engine/templates";
 //   3. format "ads" mengabaikan tabel peran walau tabelnya ada
 
 const SEG: SegmentDraft[] = [
-  { role: "hook", text: "", start: 0, end: 4, visual_direction: "x" },
-  { role: "demo", text: "b", start: 4, end: 11, visual_direction: "y" },
-  { role: "cta", text: "c", start: 11, end: 15, visual_direction: "z" },
+  { role: "hook", label: "HOOK", text: "", start: 0, end: 3, visual_direction: "x" },
+  { role: "demo", label: "FRICTION", text: "b", start: 3, end: 6, visual_direction: "y" },
+  { role: "demo", label: "FRICTION", text: "c", start: 6, end: 9, visual_direction: "y" },
+  { role: "demo", label: "SPIKE", text: "d", start: 9, end: 12, visual_direction: "y" },
+  { role: "cta", label: "BUTTON", text: "e", start: 12, end: 15, visual_direction: "z" },
 ];
 
 function shots(id: string) {

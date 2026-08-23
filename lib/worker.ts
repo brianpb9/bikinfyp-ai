@@ -32,6 +32,7 @@ import { mediaStorage } from "./storage";
 import { MAKS_REFERENSI_PER_GENERASI } from "./product-images";
 import { personSafeReferencePhotos } from "./media/person-safe-refs";
 import { normalizeHookLevel } from "./config/hooks";
+import { bacaSnapshot } from "./script-engine/admisi";
 import { pesanTanpaReferensi } from "./product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "./job-reference-manifest";
@@ -143,6 +144,10 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     };
 
     const segments = JSON.parse(script.segments) as SegmentDraft[];
+    const admisi = bacaSnapshot(script.validation_result);
+    const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: admisi?.templateId ?? null };
+    // Fail-closed sebelum materialisasi referensi atau panggilan provider.
+    const voiceoverStartSec = voiceoverStartSecForSegments(segments, storyIdentity);
     const images = JSON.parse(product.images) as string[];
 
     const workDir = path.join(config.storageDir, "jobs", job.id);
@@ -235,6 +240,8 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       extraImageRefPaths: extraRefs,
       qualityTier: tier,
       format,
+      contentType: storyIdentity.contentType,
+      ugcTemplate: storyIdentity.templateId,
       // Level hook dari skrip (S3): hanya "gila" yang mengubah prompt shot 1.
       hookLevel: normalizeHookLevel(script.hook_level),
     });
@@ -375,7 +382,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         clipPaths,
         mode: compositeMode,
         voiceoverWavPath: compositeMode === "embedded" ? geminiVoPath : undefined,
-        voiceoverStartSec: voiceoverStartSecForSegments(segments),
+        voiceoverStartSec,
         vo: compositeMode === "vo" ? vo : undefined,
         captions: captionCards,
         musicPath,

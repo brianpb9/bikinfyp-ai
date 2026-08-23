@@ -19,6 +19,7 @@
 
 import type { SegmentDraft } from "./templates";
 import { stripDeliveryTags } from "./delivery-tags";
+import { isNeutralStoryAdsTemplate } from "./ads-visual-contract";
 
 export type PenegakanSA = "kode" | "juri";
 
@@ -124,17 +125,48 @@ export function temuanHookSenyapAds(segments: Array<Record<string, unknown>>): s
   return [...new Set(findings)];
 }
 
-export function isStructuredStoryAds(segments: Array<Record<string, unknown>>): boolean {
-  return segments.some((segment) => /^(HOOK|FRICTION|SPIKE|BUTTON)$/i.test(String(segment.label ?? segment.block ?? "")));
+export interface StoryAdsIdentity {
+  contentType?: "affiliate" | "ads" | null;
+  templateId?: string | null;
 }
 
-/** Offset VO final. Story Ads terstruktur divalidasi dulu agar worker tidak
- * pernah mengubah reordered/duplicate HOOK menjadi audio mulai detik nol. */
-export function voiceoverStartSecForSegments(segments: SegmentDraft[]): number {
+/** Genre Story Ads hanya boleh datang dari snapshot admisi/template resmi.
+ * Label bebas keluaran LLM bukan identitas genre. */
+export function isStructuredStoryAds(identity: StoryAdsIdentity): boolean {
+  return identity.contentType === "ads" || isNeutralStoryAdsTemplate(identity.templateId);
+}
+
+/** Struktur minimum/kanonik Story OS yang harus gagal sebelum provider. */
+export function temuanStrukturStoryAds(segments: Array<Record<string, unknown>>): TemuanSA[] {
+  const findings: TemuanSA[] = [];
+  const labels = segments.map((segment) => String(segment.label ?? segment.block ?? segment.role ?? "").toUpperCase());
+  const expected = ["HOOK", "FRICTION", "FRICTION", "SPIKE", "BUTTON"];
+  if (segments.length !== expected.length) {
+    findings.push({ gerbang: "SA4", pesan: `struktur Story Ads wajib tepat 5 beat; ditemukan ${segments.length}` });
+  }
+  const required: Array<[string, number, string]> = [
+    ["FRICTION", 2, "SA4"], ["SPIKE", 1, "SA2"], ["BUTTON", 1, "SA1"],
+  ];
+  for (const [name, count, gate] of required) {
+    const actual = labels.filter((value) => value === name).length;
+    if (actual !== count) findings.push({ gerbang: gate, pesan: `${name} wajib ${count} beat; ditemukan ${actual}` });
+  }
+  if (labels.length === expected.length && labels.some((value, index) => value !== expected[index])) {
+    findings.push({ gerbang: "SA4", pesan: `urutan beat wajib ${expected.join("→")}; ditemukan ${labels.join("→")}` });
+  }
+  return findings;
+}
+
+/** Offset VO final. Hanya Story Ads beridentitas otoritatif yang dikenai SA3;
+ * Affiliate boleh memiliki label bebas HOOK dengan dialog pada detik nol. */
+export function voiceoverStartSecForSegments(segments: SegmentDraft[], identity: StoryAdsIdentity): number {
   const records = segments as unknown as Array<Record<string, unknown>>;
-  if (isStructuredStoryAds(records)) {
-    const findings = temuanHookSenyapAds(records);
-    if (findings.length) throw new Error(`Kontrak SA3 worker dilanggar: ${findings.join(", ")}`);
+  if (isStructuredStoryAds(identity)) {
+    const findings = [
+      ...temuanHookSenyapAds(records),
+      ...temuanStrukturStoryAds(records).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
+    ];
+    if (findings.length) throw new Error(`Kontrak Story Ads worker dilanggar: ${findings.join(", ")}`);
   }
   return segments.find((segment) => stripDeliveryTags(segment.tts_text ?? segment.text).trim())?.start ?? 0;
 }
@@ -152,7 +184,6 @@ export function periksaStoryOsAds(
 ): TemuanSA[] {
   if (ctx.contentType !== "ads") return [];
   const segs = script.segments ?? [];
-  if (segs.length < 3) return [];
   const temuan: TemuanSA[] = [];
   const durasi = ctx.durationSec ?? (segs[segs.length - 1]?.end ?? 15);
 
@@ -163,6 +194,11 @@ export function periksaStoryOsAds(
   for (const pesan of temuanHookSenyapAds(segs as unknown as Array<Record<string, unknown>>)) {
     temuan.push({ gerbang: "SA3", pesan });
   }
+  temuan.push(...temuanStrukturStoryAds(segs as unknown as Array<Record<string, unknown>>));
+
+  // Temuan struktural lengkap sudah tersedia untuk payload pendek. Jangan
+  // dereference BUTTON/SPIKE yang memang tidak ada.
+  if (segs.length < 3) return temuan;
 
   // ---- SA1 Button-first ---------------------------------------------------
   // Button = segmen terakhir. Ia wajib memuat CTA Ads DAN satu tanya kecil

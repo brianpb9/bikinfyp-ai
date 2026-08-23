@@ -58,6 +58,7 @@ import { catatKanariReferensi, GagalTanpaReferensi } from "../kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "../job-reference-manifest";
 import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta } from "../job-product-snapshot";
 import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
+import { bacaSnapshot } from "../script-engine/admisi";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -339,6 +340,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // still use the established SQLite rollback path for mock experimentation.
   if (config.providerVideo === "mock") throw new Error("Worker PostgreSQL membutuhkan PROVIDER_VIDEO nyata; fixture hanya diizinkan untuk test lokal eksplisit.");
   const segments = JSON.parse(row.script_segments) as SegmentDraft[];
+  const admisi = bacaSnapshot(row.script_validation_result);
+  const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: row.template_id ?? admisi?.templateId ?? null };
+  // Fail-closed sebelum snapshot/materialisasi/panggilan provider berbayar.
+  const voiceoverStartSec = voiceoverStartSecForSegments(segments, storyIdentity);
   const productSnapshot = await loadOrCreateJobProductSnapshot({
     existingRaw: row.job_product_snapshot,
     candidate: () => ({
@@ -435,6 +440,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
     extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
+    contentType: storyIdentity.contentType,
     // Format IDE (knowledge/formats) menyeberang ke kamera lewat snapshot
     // admisi — slice 3, 20 Agu. Tanpa baris ini format ide berhenti di
     // penulis naskah dan shot-nya digambar seolah formatnya tidak pernah ada.
@@ -777,7 +783,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     if (!(await jobs.transition(row.id, "COMPOSITING", { worker: "postgres", retry }))) return;
     const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths, mode,
       voiceoverWavPath: mode === "embedded" ? geminiVoPath : undefined,
-      voiceoverStartSec: voiceoverStartSecForSegments(segments),
+      voiceoverStartSec,
       vo: mode === "vo" ? vo : undefined, captions, musicPath, durationSec: row.duration_s,
       priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,
       demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });
