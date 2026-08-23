@@ -19,6 +19,7 @@ import {
   normalizedHookPrefixes,
   proofPriceSkeleton,
   riskyEvidenceClaims,
+  semanticRiskFindings,
   spokenCreativeAnalysis,
   spokenProductionJargon,
   unsupportedAdsOutcomeClaims,
@@ -45,7 +46,7 @@ const AUTHORED_COPY_SNAPSHOT: Record<string, string[]> = {
   "racun-checkout": ["6484cfddc459a814", "c5575d9c9c7d8826", "0fe6dbb747c30d72", "74d613b890569213"],
   "review-jujur": ["8bb47f4b1d3ca292", "6651f93e708e30bc", "2cb54d26ff7c7dea", "237c288bdda522f3"],
   unboxing: ["ce7cdd0391284281", "834e793b77b0d5b9", "5d7729e2367f35b1", "f7430ed8a77e8fa9"],
-  "before-after": ["0b8a4238771d7842", "1bcf040bd291d035", "5d24902c57798b81", "c740711a364237d5"],
+  "before-after": ["93ca23c220b514e7", "36b2213f8923401e", "5d24902c57798b81", "c740711a364237d5"],
   "diskon-gede": ["53ef2a4a896b18a5", "fb7af64ecce4c417", "e7d29fab73fe4550", "43ce1482a5ad74bb"],
   "buat-kamu-yang": ["1551320b1675031b", "4fccecc08d34ce1b", "d24cead7ad8eff8b", "86211dbbce35ed8e"],
   "spill-rahasia": ["21134b501bc3ecd2", "cee27d1267678075", "c9e6ba1cc252189c", "0ecce1b36a001035"],
@@ -861,6 +862,19 @@ test("T05, T08, T10, dan before-after seluruhnya tinggal inspeksi satu keadaan",
         assert.deepEqual(riskyEvidenceClaims(templateId, segment.text), [], `${templateId}#${variant.variantIndex}: ${segment.text}`);
       }
     }
+  }
+  assert.deepEqual(summary.semanticRiskRefs, [], "audit lintas-field masih menemukan bukti komparatif");
+});
+
+test("audit risiko memeriksa text, TTS, action, dan visual direction hasil generator", () => {
+  const template = structuredClone(audit.templates.find((item) => item.templateId === "before-after")!);
+  const segment = template.variants[0].segments[1];
+  for (const field of ["text", "ttsText", "action", "visualDirection"] as const) {
+    const mutated = structuredClone(template);
+    const target = mutated.variants[0].segments[1];
+    target[field] = "Taruh dua tampilan berdampingan untuk melihat perubahan hasil.";
+    const findings = semanticRiskFindings([mutated]);
+    assert.ok(findings.some((finding) => finding.field === field), `${field} tidak dipindai audit risiko`);
   }
 });
 

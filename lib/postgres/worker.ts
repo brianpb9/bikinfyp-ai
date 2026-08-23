@@ -38,7 +38,7 @@ import { buildPhotoPanVideo } from "../media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
 import { synthesizeGeminiVoiceover } from "../media/gemini-tts";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
-import { voiceoverStartSecForSegments } from "../script-engine/story-os-ads";
+import { isStructuredStoryAds, voiceoverStartSecForSegments } from "../script-engine/story-os-ads";
 import { hargaTerbilang } from "../script-engine/terbilang";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
@@ -56,7 +56,7 @@ import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
 import { pesanTanpaReferensi } from "../product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "../kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "../job-reference-manifest";
-import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta } from "../job-product-snapshot";
+import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot } from "../job-product-snapshot";
 import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
 import { bacaSnapshot } from "../script-engine/admisi";
 
@@ -342,15 +342,17 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const segments = JSON.parse(row.script_segments) as SegmentDraft[];
   const admisi = bacaSnapshot(row.script_validation_result);
   const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: row.template_id ?? admisi?.templateId ?? null };
-  // Fail-closed sebelum snapshot/materialisasi/panggilan provider berbayar.
-  const voiceoverStartSec = voiceoverStartSecForSegments(segments, {
-    ...storyIdentity, productName: row.product_name, productCategory: row.product_category, productPriceIdr: row.product_price_idr,
-  });
+  if (isStructuredStoryAds(storyIdentity) && !row.job_product_snapshot) {
+    throw new UnsafeLegacyProductSnapshot(
+      "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: Story Ads lama tanpa harga admission tidak boleh memakai row produk mutable."
+    );
+  }
   const productSnapshot = await loadOrCreateJobProductSnapshot({
     existingRaw: row.job_product_snapshot,
     candidate: () => ({
       productName: row.product_name,
       category: row.product_category,
+      priceIdr: row.product_price_idr,
       trustedBrand: { source: "products.raw_meta.brand", value: trustedBrandFromRawMeta(row.product_raw_meta) },
       productVisualDesc: row.product_visual_desc,
       brandBrief: row.brand_brief,
@@ -362,12 +364,21 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // dari snapshot job, bukan JOIN products yang dapat berubah saat resume.
   row.product_name = productSnapshot.productName;
   row.product_category = productSnapshot.category;
+  row.product_price_idr = productSnapshot.priceIdr;
   row.product_visual_desc = productSnapshot.productVisualDesc;
   row.brand_brief = productSnapshot.brandBrief;
   row.product_claims = JSON.stringify(productSnapshot.claims);
   row.product_raw_meta = JSON.stringify(productSnapshot.trustedBrand.value
     ? { brand: productSnapshot.trustedBrand.value }
     : {});
+  // SA6 hanya membaca ProductInput yang dibekukan saat admission, tidak
+  // pernah JOIN products yang dapat berubah selama job mengantre/resume.
+  const voiceoverStartSec = voiceoverStartSecForSegments(segments, {
+    ...storyIdentity,
+    productName: productSnapshot.productName,
+    productCategory: productSnapshot.category,
+    productPriceIdr: productSnapshot.priceIdr,
+  });
 
   const images = JSON.parse(row.product_images) as string[];
   // REFERENSI DIPILIH DARI BUKTI, BUKAN DARI URUTAN UNGGAH.

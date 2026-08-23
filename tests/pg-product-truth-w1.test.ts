@@ -498,7 +498,7 @@ async function siapkanJobOrgDenganManifest(label: string) {
     { rel: approvedSecondSource, sha256: sha256(approvedSecondBytes), versiBukti: 1, snapshotRel: snapshotRelSecond },
   ] });
   const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
-  const productSnapshot = createJobProductSnapshotRaw({ name: `Serum E9 ${label}`, category: "beauty", raw_meta: JSON.stringify({ brand: "Merek E9" }) });
+  const productSnapshot = createJobProductSnapshotRaw({ name: `Serum E9 ${label}`, category: "beauty", price_idr: 85_000, raw_meta: JSON.stringify({ brand: "Merek E9" }) });
   await pool.query(
     `INSERT INTO jobs
       (id,user_id,org_id,product_id,script_id,format,quality_tier,duration_s,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at)
@@ -692,12 +692,17 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
   assert.deepEqual(persisted, { template_id: "ads-meja-kosong", format: "ads", avatar_custom_desc: injection });
   // Resume/legacy: kolom job hilang, snapshot admisi script tetap otoritatif.
   await pool.query("UPDATE jobs SET template_id=NULL WHERE id=$1", [jobId]);
+  await pool.query(
+    "UPDATE products SET name='MUTASI SA6 PG',category='food',price_idr=73000 WHERE id=(SELECT product_id FROM jobs WHERE id=$1)",
+    [jobId]
+  );
   await jalankan(jobId, new Map([[rel, png], [`${rel}.meta.json`, sidecar(png, true)]]), true);
   assert.equal(amatan.dipanggil, true, "W1 tidak mencapai provider observer");
   assert.equal(amatan.utamaPath, null, "neutral Story Ads mengirim primary product reference");
   assert.deepEqual(amatan.extraPaths, [], "neutral Story Ads mengirim extra product references");
   assert.match(amatan.promptText, /neutral blank props|plain unprinted|blank/i);
   assert.doesNotMatch(amatan.promptText, /ACME|holding a bottle|marked ACME/i);
+  assert.doesNotMatch(amatan.promptText, /MUTASI SA6 PG/i);
   const archive = (await pool.query("SELECT spec_json,model_params FROM job_prompts WHERE job_id=$1", [jobId])).rows[0];
   assert.ok(archive, "prompt provider-bound tidak diarsipkan");
   assert.equal(JSON.parse(archive.model_params).template_id, "ads-meja-kosong");
@@ -755,20 +760,20 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
     "SELECT name,price_idr,category,product_visual_desc,brand_brief,claims,raw_meta,promo_price_before_idr,promo_ends_at,promo_stock_left FROM products WHERE id=$1",
     [productId]
   )).rows[0];
-  assert.equal(current.name, mutasi.name); assert.equal(current.category, mutasi.category);
+  assert.equal(current.name, mutasi.name); assert.equal(current.category, mutasi.category); assert.equal(current.price_idr, mutasi.price_idr);
   assert.equal(current.product_visual_desc, mutasi.product_visual_desc); assert.equal(current.brand_brief, mutasi.brand_brief);
   assert.deepEqual(JSON.parse(current.claims), mutasi.claims);
   assert.equal(current.promo_price_before_idr, mutasi.promo_price_before_idr);
   const { parseJobProductSnapshot, createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
   const admission = parseJobProductSnapshot(productSnapshot);
   assert.deepEqual(admission, {
-    version: 1, productName: "Serum Glow Bright", category: "beauty",
+    version: 2, productName: "Serum Glow Bright", category: "beauty", priceIdr: 85_000,
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
     productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
   });
   const rereadNow = parseJobProductSnapshot(createJobProductSnapshotRaw(current));
   assert.notDeepEqual(rereadNow, admission, "counterexample gagal: re-read produk kini sama dengan snapshot admission");
-  assert.equal(rereadNow.productName, mutasi.name); assert.equal(rereadNow.category, mutasi.category);
+  assert.equal(rereadNow.productName, mutasi.name); assert.equal(rereadNow.category, mutasi.category); assert.equal(rereadNow.priceIdr, mutasi.price_idr);
   assert.equal(rereadNow.productVisualDesc, mutasi.product_visual_desc); assert.equal(rereadNow.brandBrief, mutasi.brand_brief);
   assert.deepEqual(rereadNow.claims, mutasi.claims);
   // wujudkan: eksekusi HARUS berlanjut sampai provider, kalau tidak asersi

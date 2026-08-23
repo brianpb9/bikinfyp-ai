@@ -240,9 +240,9 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
         // A shared row lock keeps product mutation behind COMMIT while the
         // admission snapshot and job row are installed atomically.
         const product = await client.query<{
-          name: string; category: string; raw_meta: string | null;
+          name: string; category: string; price_idr: number; raw_meta: string | null;
           product_visual_desc: string | null; brand_brief: string | null; claims: string | null;
-        }>("SELECT name,category,raw_meta,product_visual_desc,brand_brief,claims FROM products WHERE id=$1 AND user_id=$2 FOR SHARE", [input.productId, userId]);
+        }>("SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims FROM products WHERE id=$1 AND user_id=$2 FOR SHARE", [input.productId, userId]);
         if (!product.rows[0]) throw new Error("PRODUCT_NOT_FOUND");
         const productSnapshotRaw = createJobProductSnapshotRaw(product.rows[0]);
         const balance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);

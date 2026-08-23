@@ -236,6 +236,35 @@ async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string;
   return { jobId: body.job_id, productId };
 }
 
+async function siapkanStoryAdsW2(image: string, snapshotRaw: string): Promise<{ jobId: string; productId: string }> {
+  const productId = uuid();
+  db.prepare(
+    "INSERT INTO products (id,user_id,name,price_idr,category,images,raw_meta,created_at) VALUES (?,?,?,189000,'jasa',?,'{}',?)"
+  ).run(productId, userId, "Jasa Uji Snapshot", JSON.stringify([image]), now());
+  const { generateScripts } = await import("../lib/script-engine");
+  const [script] = await generateScripts({
+    product: { id: productId, name: "Jasa Uji Snapshot", price_idr: 189000, category: "jasa" },
+    register: "netral", qualityTier: "silent_caption", durationSec: 15,
+    contentType: "ads", templateId: "ads-meja-kosong", count: 1, tanpaLlm: true,
+  });
+  const scriptId = uuid();
+  const validationResult = JSON.stringify({
+    ...script.validation,
+    admisi: { contentType: "ads", format: "ads", durationSec: 15, templateId: "ads-meja-kosong", productCategory: "jasa" },
+  });
+  db.prepare(
+    `INSERT INTO scripts (id,job_id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,hook_level,approved_by_user_at,edited_by_user,created_at)
+     VALUES (?,NULL,?,'H8','penasaran','netral',?,'caption','[]',?,'silent_caption','agak_gila',?,0,?)`
+  ).run(scriptId, productId, JSON.stringify(script.segments), validationResult, now(), now());
+  const jobId = uuid();
+  db.prepare(
+    `INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,job_product_snapshot,state,created_at,state_changed_at)
+     VALUES (?,?,?,NULL,?,'ads','silent_caption',15,?,'QUEUED',?,?)`
+  ).run(jobId, userId, productId, scriptId, snapshotRaw, now(), now());
+  db.prepare("UPDATE scripts SET job_id=? WHERE id=?").run(jobId, scriptId);
+  return { jobId, productId };
+}
+
 async function patchProdukRetail(productId: string, user: string, phone: string, body: Record<string, unknown>) {
   const { issueToken, cookieName } = await import("../lib/auth");
   const token = await issueToken(user, phone);
@@ -751,20 +780,20 @@ test("E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission", as
       brand_brief: string | null; claims: string | null; raw_meta: string | null;
       promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
     };
-    assert.equal(current.name, mutasi.name); assert.equal(current.category, mutasi.category);
+    assert.equal(current.name, mutasi.name); assert.equal(current.category, mutasi.category); assert.equal(current.price_idr, mutasi.price_idr);
     assert.equal(current.product_visual_desc, mutasi.product_visual_desc);
     assert.equal((JSON.parse(current.raw_meta ?? "{}") as { brand?: string }).brand, mutasi.brand);
     assert.equal(current.promo_price_before_idr, mutasi.promo_price_before_idr);
     assert.equal(current.promo_ends_at, mutasi.promo_ends_at); assert.equal(current.promo_stock_left, mutasi.promo_stock_left);
     const admission = parseJobProductSnapshot(productSnapshot);
     assert.deepEqual(admission, {
-      version: 1, productName: "Serum Glow Bright", category: "beauty",
+      version: 2, productName: "Serum Glow Bright", category: "beauty", priceIdr: 85_000,
       trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
       productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
     });
     const rereadNow = parseJobProductSnapshot(createJobProductSnapshotRaw(current));
     assert.notDeepEqual(rereadNow, admission, "counterexample gagal: re-read produk kini sama dengan snapshot admission");
-    assert.equal(rereadNow.productName, mutasi.name); assert.equal(rereadNow.category, mutasi.category);
+    assert.equal(rereadNow.productName, mutasi.name); assert.equal(rereadNow.category, mutasi.category); assert.equal(rereadNow.priceIdr, mutasi.price_idr);
     assert.equal(rereadNow.trustedBrand.value, mutasi.brand); assert.equal(rereadNow.productVisualDesc, mutasi.product_visual_desc);
     await processJob(jobId);
 
@@ -971,6 +1000,71 @@ test("W2 product snapshot invalid gagal tertutup sebelum materialize/provider", 
 
   assert.deepEqual(spy.materializeCalls, []);
   assertNolEfekSamping(jobId, spy, "W2 product snapshot invalid");
+});
+
+test("W2 Story Ads SA6 memakai name/category/price snapshot admission setelah row produk dimutasi", async () => {
+  const rel = "uploads/w2-story-ads-snapshot/0.webp";
+  const bytes = Buffer.from("STORY-ADS-SNAPSHOT-W2");
+  const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
+  setMediaStorageForTests(spy.storage);
+  const snapshotRaw = createJobProductSnapshotRaw({
+    name: "Jasa Uji Snapshot", category: "jasa", price_idr: 189_000, raw_meta: "{}",
+  });
+  const { jobId, productId } = await siapkanStoryAdsW2(rel, snapshotRaw);
+  db.prepare("UPDATE products SET name='MUTASI SA6 W2',category='food',price_idr=73000 WHERE id=?").run(productId);
+
+  let providerCalls = 0;
+  setVideoProvidersForTests([{
+    name: "story-ads-snapshot-observer-w2",
+    async healthCheck() { return true; },
+    estimateCost() { return 0; },
+    async generate() {
+      providerCalls++;
+      throw new Error("observer stop sebelum biaya keluar");
+    },
+  } as never]);
+
+  try {
+    await processJob(jobId);
+    assert.ok(spy.materializeCalls.length > 0,
+      "Story Ads W2 berhenti sebelum reference boundary: SA6 kemungkinan membaca name/category/price row mutasi");
+    assert.equal(providerCalls, 0, "fixture harus berhenti di materialize sebelum provider");
+    assert.deepEqual(parseJobProductSnapshot(snapshotRaw), {
+      version: 2, productName: "Jasa Uji Snapshot", category: "jasa", priceIdr: 189_000,
+      trustedBrand: { source: "products.raw_meta.brand", value: null }, productVisualDesc: null, brandBrief: null, claims: [],
+    });
+    const durable = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(jobId) as { job_product_snapshot: string }).job_product_snapshot;
+    assert.equal(durable, snapshotRaw, "worker W2 menimpa snapshot admission dengan row produk mutasi");
+  } finally {
+    setVideoProvidersForTests(undefined);
+  }
+});
+
+test("W2 Story Ads snapshot legacy tanpa price gagal tertutup sebelum referensi/provider", async () => {
+  const rel = "uploads/w2-story-ads-legacy-price/0.webp";
+  const bytes = Buffer.from("STORY-ADS-LEGACY-PRICE-W2");
+  const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
+  setMediaStorageForTests(spy.storage);
+  const legacyRaw = JSON.stringify({
+    version: 1, productName: "Jasa Uji Snapshot", category: "jasa",
+    trustedBrand: { source: "products.raw_meta.brand", value: null }, productVisualDesc: null, brandBrief: null, claims: [],
+  });
+  const { jobId } = await siapkanStoryAdsW2(rel, legacyRaw);
+  let providerCalls = 0;
+  setVideoProvidersForTests([{
+    name: "legacy-price-must-not-run-w2", async healthCheck() { return true; }, estimateCost() { return 0; },
+    async generate() { providerCalls++; throw new Error("provider tidak boleh dipanggil"); },
+  } as never]);
+
+  try {
+    await processJob(jobId);
+    assert.equal(providerCalls, 0);
+    assert.deepEqual(spy.getCalls, [], "legacy missing-price membaca bukti sebelum ditolak");
+    assert.deepEqual(spy.materializeCalls, [], "legacy missing-price mencapai materialize");
+    assertNolEfekSamping(jobId, spy, "W2 Story Ads legacy missing price");
+  } finally {
+    setVideoProvidersForTests(undefined);
+  }
 });
 
 after(() => {

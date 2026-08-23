@@ -185,9 +185,9 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     // The org predicate is authoritative for dashboard ownership; caller
     // fields are used for validation/UI only, never for the durable snapshot.
     const admissionProduct = await client.query<{
-      name: string; category: string; raw_meta: string | null;
+      name: string; category: string; price_idr: number; raw_meta: string | null;
       product_visual_desc: string | null; brand_brief: string | null; claims: string | null;
-    }>("SELECT name,category,raw_meta,product_visual_desc,brand_brief,claims FROM products WHERE id=$1 AND org_id=$2 FOR SHARE", [sel.productId, sel.orgId]);
+    }>("SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims FROM products WHERE id=$1 AND org_id=$2 FOR SHARE", [sel.productId, sel.orgId]);
     if (!admissionProduct.rows[0]) {
       await client.query("ROLLBACK");
       return gagal("Produk organisasi tidak ditemukan.");

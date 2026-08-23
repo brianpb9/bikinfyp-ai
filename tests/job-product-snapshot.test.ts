@@ -12,6 +12,7 @@ import {
 const awal = {
   productName: "Serum Awal",
   category: "beauty",
+  priceIdr: 89_000,
   trustedBrand: { source: "products.raw_meta.brand" as const, value: "Merek Sah" },
   productVisualDesc: "botol amber",
   brandBrief: "tenang dan faktual",
@@ -51,24 +52,26 @@ test("dua create konkuren kembali dengan satu pemenang durable", async () => {
 
 test("snapshot invalid gagal tertutup", () => {
   assert.throws(() => parseJobProductSnapshot("{}"), /PRODUCT_SNAPSHOT_INVALID/);
-  assert.throws(() => parseJobProductSnapshot(JSON.stringify({ ...awal, version: 1, claims: [7] })), /PRODUCT_SNAPSHOT_INVALID/);
-  assert.throws(() => parseJobProductSnapshot(JSON.stringify({ ...awal, version: 1, trustedBrand: { source: "guessed", value: "X" } })), /PRODUCT_SNAPSHOT_INVALID/);
+  assert.throws(() => parseJobProductSnapshot(JSON.stringify({ ...awal, version: 2, claims: [7] })), /PRODUCT_SNAPSHOT_INVALID/);
+  assert.throws(() => parseJobProductSnapshot(JSON.stringify({ ...awal, version: 2, trustedBrand: { source: "guessed", value: "X" } })), /PRODUCT_SNAPSHOT_INVALID/);
+  const { priceIdr: _missing, ...legacyWithoutPrice } = awal;
+  assert.throws(() => parseJobProductSnapshot(JSON.stringify({ ...legacyWithoutPrice, version: 1 })), /PRODUCT_SNAPSHOT_INVALID/);
 });
 
 test("admission builder membekukan seluruh metadata dari bentuk row database", () => {
   const raw = createJobProductSnapshotRaw({
-    name: "Serum Admission", category: "beauty",
+    name: "Serum Admission", category: "beauty", price_idr: 91_000,
     raw_meta: JSON.stringify({ brand: "Merek Admission", ignored: "bukan sumber" }),
     product_visual_desc: "botol amber", brand_brief: "faktual",
     claims: JSON.stringify(["ringan", "tanpa pewangi"]),
   });
   assert.deepEqual(parseJobProductSnapshot(raw), {
-    version: 1, productName: "Serum Admission", category: "beauty",
+    version: 2, productName: "Serum Admission", category: "beauty", priceIdr: 91_000,
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Admission" },
     productVisualDesc: "botol amber", brandBrief: "faktual",
     claims: ["ringan", "tanpa pewangi"],
   });
-  assert.throws(() => createJobProductSnapshotRaw({ name: "X", category: "Y", claims: "{}" }), /SOURCE_INVALID/);
+  assert.throws(() => createJobProductSnapshotRaw({ name: "X", category: "Y", price_idr: 1, claims: "{}" }), /SOURCE_INVALID/);
 });
 
 test("legacy dengan jejak provider tanpa snapshot ditolak", async () => {
@@ -126,6 +129,24 @@ test("semua admission produksi memasang snapshot pada INSERT job yang sama", () 
   assert.match(retail, /smokeCreateJob\(/, "call-site admission PostgreSQL retail hilang");
   const pgAdmission = fs.readFileSync(path.join(process.cwd(), "lib/postgres/smoke-runtime.ts"), "utf8");
   assert.match(pgAdmission, /FOR SHARE[\s\S]+job_product_snapshot/, "PG admission tidak mengunci produk sebelum snapshot+INSERT");
+  assert.match(pgAdmission, /SELECT[\s\S]{0,300}price_idr[\s\S]{0,300}FROM products/, "PG retail admission tidak membaca harga untuk snapshot");
+  const dashboardAdmission = fs.readFileSync(path.join(process.cwd(), "lib/dashboard/render-cell.ts"), "utf8");
+  assert.match(dashboardAdmission, /SELECT[\s\S]{0,300}price_idr[\s\S]{0,300}FROM products/, "PG dashboard admission tidak membaca harga untuk snapshot");
+});
+
+test("kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot", () => {
+  for (const rel of ["lib/worker.ts", "lib/postgres/worker.ts"]) {
+    const source = fs.readFileSync(path.join(process.cwd(), rel), "utf8");
+    const load = source.indexOf("const productSnapshot = await loadOrCreateJobProductSnapshot");
+    const sa6 = source.indexOf("const voiceoverStartSec = voiceoverStartSecForSegments");
+    assert.ok(load > 0 && sa6 > load, `${rel}: SA6 berjalan sebelum snapshot produk immutable dimuat`);
+    const sa6Block = source.slice(sa6, sa6 + 500);
+    assert.match(sa6Block, /productSnapshot\.productName/);
+    assert.match(sa6Block, /productSnapshot\.category/);
+    assert.match(sa6Block, /productSnapshot\.priceIdr/);
+    assert.match(source, /isStructuredStoryAds\([^)]+\)[\s\S]{0,180}!\w+\.job_product_snapshot[\s\S]{0,220}PRODUCT_SNAPSHOT_LEGACY_UNSAFE/,
+      `${rel}: Story Ads legacy tanpa snapshot tidak gagal tertutup`);
+  }
 });
 
 test("C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi", () => {

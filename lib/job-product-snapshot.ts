@@ -1,10 +1,12 @@
-export const JOB_PRODUCT_SNAPSHOT_VERSION = 1 as const;
+export const JOB_PRODUCT_SNAPSHOT_VERSION = 2 as const;
 export const TRUSTED_BRAND_SOURCE = "products.raw_meta.brand" as const;
 
 export interface JobProductSnapshot {
   version: typeof JOB_PRODUCT_SNAPSHOT_VERSION;
   productName: string;
   category: string;
+  /** Harga ProductInput pada saat job diterima; sumber bridge SA6 immutable. */
+  priceIdr: number;
   trustedBrand: { source: typeof TRUSTED_BRAND_SOURCE; value: string | null };
   productVisualDesc: string | null;
   brandBrief: string | null;
@@ -27,6 +29,7 @@ export function parseJobProductSnapshot(raw: string): JobProductSnapshot {
   if (!x || x.version !== JOB_PRODUCT_SNAPSHOT_VERSION
       || typeof x.productName !== "string" || !x.productName.trim()
       || typeof x.category !== "string" || !x.category.trim()
+      || !Number.isSafeInteger(x.priceIdr) || Number(x.priceIdr) < 0
       || !x.trustedBrand || x.trustedBrand.source !== TRUSTED_BRAND_SOURCE
       || !nullableString(x.trustedBrand.value)
       || !nullableString(x.productVisualDesc)
@@ -38,6 +41,7 @@ export function parseJobProductSnapshot(raw: string): JobProductSnapshot {
     version: JOB_PRODUCT_SNAPSHOT_VERSION,
     productName: x.productName,
     category: x.category,
+    priceIdr: Number(x.priceIdr),
     trustedBrand: { source: TRUSTED_BRAND_SOURCE, value: x.trustedBrand.value },
     productVisualDesc: x.productVisualDesc,
     brandBrief: x.brandBrief,
@@ -77,6 +81,7 @@ export function claimsFromRaw(raw: string | null | undefined): string[] {
 export function createJobProductSnapshotRaw(product: {
   name: string;
   category: string;
+  price_idr: number;
   raw_meta?: string | null;
   product_visual_desc?: string | null;
   brand_brief?: string | null;
@@ -86,6 +91,7 @@ export function createJobProductSnapshotRaw(product: {
     version: JOB_PRODUCT_SNAPSHOT_VERSION,
     productName: product.name,
     category: product.category,
+    priceIdr: product.price_idr,
     trustedBrand: { source: TRUSTED_BRAND_SOURCE, value: trustedBrandFromRawMeta(product.raw_meta) },
     productVisualDesc: product.product_visual_desc ?? null,
     brandBrief: product.brand_brief ?? null,

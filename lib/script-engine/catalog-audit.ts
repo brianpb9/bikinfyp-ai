@@ -100,6 +100,7 @@ export interface CatalogLanguageFinding {
   templateId: string;
   variantIndex: number;
   role: string;
+  field?: "text" | "ttsText" | "action" | "visualDirection";
   text: string;
   matches: string[];
 }
@@ -663,6 +664,23 @@ export function riskyEvidenceClaims(templateId: string, text: string): string[] 
   return regexMatches(text, RISKY_EVIDENCE_PATTERNS[templateId] ?? []);
 }
 
+/** Scan every generated segment channel that can influence speech or render. */
+export function semanticRiskFindings(templates: CatalogTemplateAudit[]): CatalogLanguageFinding[] {
+  return templates.flatMap((template) => template.variants.flatMap((variant) =>
+    variant.segments.flatMap((segment) => ([
+      ["text", segment.text], ["ttsText", segment.ttsText],
+      ["action", segment.action], ["visualDirection", segment.visualDirection],
+    ] as const).flatMap(([field, value]) => {
+      if (!value) return [];
+      const matches = riskyEvidenceClaims(template.templateId, value);
+      return matches.length === 0 ? [] : [{
+        templateId: template.templateId, variantIndex: variant.variantIndex,
+        role: segment.role, field, text: value, matches,
+      }];
+    }))
+  ));
+}
+
 export function unsupportedFactualClaims(text: string): string[] {
   const matches = regexMatches(text, UNSUPPORTED_FACTUAL_CLAIMS);
   const normalized = normalizeAuditText(text);
@@ -1080,18 +1098,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       }];
     })
   ));
-  const semanticRiskRefs = rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
-    variant.segments.flatMap((segment) => {
-      const matches = riskyEvidenceClaims(template.templateId, segment.text);
-      return matches.length === 0 ? [] : [{
-        templateId: template.templateId,
-        variantIndex: variant.variantIndex,
-        role: segment.role,
-        text: segment.text,
-        matches,
-      }];
-    })
-  ));
+  const semanticRiskRefs = semanticRiskFindings(rawTemplates);
   const demoRefs = rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
     variant.segments.filter((segment) => segment.role === "demo").map((segment) => ({
       templateId: template.templateId,

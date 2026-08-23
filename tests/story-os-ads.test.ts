@@ -241,6 +241,31 @@ test("live LLM Ads menolak bridge blank-only lalu menerima provenance lisan yang
   }
 });
 
+test("live LLM Ads menolak ketaatan CTA telanjang lalu menerima BUTTON bertanya", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      if (calls === 1) segments[4].text = "Detailnya ada di bawah ya.";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [result] = await generateScripts({
+      product: { id: "live-bare-cta", name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+      hookFamilies: ["H8"], lockHookFamily: true,
+    });
+    assert.equal(calls, 2, "CTA telanjang harus direpair tepat sekali");
+    assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    assert.match(result.segments[4].text, /\?[\s\S]*Detailnya ada di bawah ya/i);
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
 test("SA1 — CTA tanpa tanya yang tersisa ditolak", () => {
   const rusak = JSON.parse(JSON.stringify(LULUS));
   rusak.segments[4].text = "Detailnya ada di bawah ya.";
@@ -299,6 +324,10 @@ test("penulis Ads menerima instruksi Story OS, Affiliate tidak", async () => {
     assert.ok(new RegExp(kata, "i").test(ads), `instruksi Ads tidak menyebut ${kata}`);
   }
   assert.ok(!/BUTTON-first|SPIKE/i.test(aff), "Affiliate tidak boleh diberi beat Story OS Ads");
+  assert.match(ads, /must contain the exact CTA phrase[\s\S]+as a substring/i);
+  assert.match(ads, /unresolved story question or clause/i);
+  assert.match(ads, /must never be the whole line/i);
+  assert.doesNotMatch(ads, /CTA line must be exactly/i);
 });
 
 test("prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta label produk", async () => {

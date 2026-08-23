@@ -18,7 +18,7 @@ import { buildPhotoPanVideo } from "./media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "./media/vo-tts";
 import { synthesizeGeminiVoiceover } from "./media/gemini-tts";
 import { stripDeliveryTags } from "./script-engine/delivery-tags";
-import { voiceoverStartSecForSegments } from "./script-engine/story-os-ads";
+import { isStructuredStoryAds, voiceoverStartSecForSegments } from "./script-engine/story-os-ads";
 import { hargaTerbilang } from "./script-engine/terbilang";
 import { buildCaptionCards } from "./media/captions";
 import { renderCaptionPngs } from "./media/render-captions";
@@ -37,7 +37,7 @@ import { isNeutralStoryAdsTemplate } from "./script-engine/ads-visual-contract";
 import { pesanTanpaReferensi } from "./product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "./job-reference-manifest";
-import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta } from "./job-product-snapshot";
+import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot } from "./job-product-snapshot";
 
 const CONCURRENCY = 1;
 
@@ -109,11 +109,17 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const category = descKustom && !isNeutralStoryAdsTemplate(storyIdentity.templateId)
       ? { ...presetKategori, promptSeed: descKustom, handsPrompt: descKustom }
       : presetKategori;
+    if (isStructuredStoryAds(storyIdentity) && !job.job_product_snapshot) {
+      throw new UnsafeLegacyProductSnapshot(
+        "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: Story Ads lama tanpa harga admission tidak boleh memakai row produk mutable."
+      );
+    }
     const productSnapshot = await loadOrCreateJobProductSnapshot({
       existingRaw: job.job_product_snapshot ?? null,
       candidate: () => ({
         productName: product.name,
         category: product.category,
+        priceIdr: product.price_idr,
         trustedBrand: { source: "products.raw_meta.brand", value: trustedBrandFromRawMeta(product.raw_meta) },
         productVisualDesc: product.product_visual_desc ?? null,
         brandBrief: product.brand_brief ?? null,
@@ -140,6 +146,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       ...product,
       name: productSnapshot.productName,
       category: productSnapshot.category,
+      price_idr: productSnapshot.priceIdr,
       product_visual_desc: productSnapshot.productVisualDesc,
       brand_brief: productSnapshot.brandBrief,
       claims: JSON.stringify(productSnapshot.claims),
@@ -149,7 +156,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const segments = JSON.parse(script.segments) as SegmentDraft[];
     // Fail-closed sebelum materialisasi referensi atau panggilan provider.
     const voiceoverStartSec = voiceoverStartSecForSegments(segments, {
-      ...storyIdentity, productName: product.name, productCategory: product.category, productPriceIdr: product.price_idr,
+      ...storyIdentity, productName: productSnapshot.productName, productCategory: productSnapshot.category, productPriceIdr: productSnapshot.priceIdr,
     });
     const images = JSON.parse(product.images) as string[];
 

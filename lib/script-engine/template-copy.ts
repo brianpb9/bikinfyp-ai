@@ -359,10 +359,10 @@ const UNBOXING: CopyFn[] = [
 ];
 
 const BEFORE_AFTER: CopyFn[] = [
-  (c) => ({ hook: `[serious] Kelihatan beda banget ya, tapi jangan percaya dulu sebelum acuan kedua sisinya benar-benar disamakan`, demo: `[short pause] Taruh ${c.produk} pada dua kondisi setara. Nah, lihat ${c.proof} berdampingan, samakan cahaya dan sudut, lalu sebut perbedaan yang benar-benar kelihatan. Kalian lihat bagian yang sama nggak ya?`, cta: `Kalau metodenya masuk akal buatmu, cek keranjang kuning dong` }),
-  (c) => ({ hook: `[fast] Eh, jangan percaya omongan ${c.reg.me}; lihat sendiri kedua sisinya secara pelan-pelan sekarang`, demo: `[medium pause] Pisahkan tampilan awal dan akhir. Apakah ${c.proof} terlihat berbeda pada ${c.produk} ketika sudut dan cahayanya sama? Kalau patokannya berubah, ulang dari sudut pertama agar perbandingannya jelas sih`, cta: `Detail pemakaian lengkap saat ini ada di keranjang kuning deh` }),
-  (c) => ({ hook: `[fast] Nah, cahaya dan sudutnya sudah sama, perbedaan mana yang kelihatan di layar?`, demo: `[long pause] Samakan cahaya, jarak, dan sudut. Setelah ${c.produk} disejajarkan, bagian ${c.proof} mana yang benar-benar terlihat berbeda? Coba jeda videonya, lalu tulis detail yang kalian lihat pada kedua sisi secara bergantian ya`, cta: `Detail produknya ada di keranjang kuning ya` }),
-  (c) => ({ hook: `[slow] Jangan percaya perbandingan apa pun kalau kondisi kedua sisinya nggak benar-benar setara`, demo: `[short pause] Letakkan dua tampilan ${c.produk} berdampingan. Nah, cocokkan acuannya, perhatikan ${c.proof} selama beberapa detik penuh dulu, lalu tanyakan bagian mana yang berubah. Ulangi dengan posisi tangan, jarak, dan permukaan yang sama deh`, cta: `Panduan produknya ada di keranjang kuning loh` }),
+  (c) => ({ hook: `[serious] Satu tampilan ini cukup jelas untuk diperiksa ya`, demo: `[short pause] Nah, taruh ${c.produk} pada permukaan netral. Catat ${c.proof}, cahaya, jarak, dan sudut yang terlihat dalam bingkai ini saja`, cta: `Kalau pemeriksaannya masuk akal, cek keranjang kuning dong` }),
+  (c) => ({ hook: `[fast] Eh, atribut mana yang benar-benar terlihat sekarang`, demo: `[medium pause] Tempatkan ${c.produk} di cahaya merata. Tahan posisinya, lalu periksa ${c.proof} pada satu bingkai secara pelan, ya`, cta: `Detail pemakaian lengkap ada di keranjang kuning deh` }),
+  (c) => ({ hook: `[fast] Nah, bagian mana yang tampak dari posisi ini`, demo: `[long pause] Arahkan ${c.produk} ke cahaya netral. Jeda videonya, lalu amati ${c.proof}, label, dan permukaan pada keadaan tetap, ya`, cta: `Detail produknya ada di keranjang kuning ya` }),
+  (c) => ({ hook: `[slow] Satu pengamatan teliti cukup untuk menilai atributnya`, demo: `[short pause] Taruh ${c.produk} di atas meja. Pertahankan jarak dan pencahayaan, lalu catat ${c.proof} yang benar-benar tampak, deh`, cta: `Panduan produknya ada di keranjang kuning loh` }),
 ];
 
 const DISKON_GEDE: CopyFn[] = [

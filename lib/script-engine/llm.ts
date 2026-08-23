@@ -358,7 +358,7 @@ function blokTugas(r: PermintaanNaskah): string {
     r.format === "tvc"
       ? `The CTA line is an announcer sign-off: it MUST name the brand "${r.merek || r.productName}" and MUST NOT mention "keranjang", a cart, a link, or any shopping action. Never stack two negations in one sentence.`
       : r.contentType === "ads"
-        ? `The CTA line must be exactly: "Detailnya ada di bawah ya". No on-screen text anywhere.`
+        ? `The BUTTON line must contain the exact CTA phrase "Detailnya ada di bawah ya" as a substring AFTER a short unresolved story question or clause; the CTA phrase must never be the whole line. Example shape: "Masih cocok nggak ya? Detailnya ada di bawah ya." No on-screen text anywhere.`
         : `The CTA line must be spoken and must contain "${r.cartLabel}".`;
   // STORY OS ADS (slice 2, 19 Agu) — knowledge/rules/STORY-OS-ADS-v1.md.
   //

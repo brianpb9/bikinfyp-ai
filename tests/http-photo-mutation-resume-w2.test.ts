@@ -111,7 +111,7 @@ async function scenario(label: string) {
       { rel: approvedSecondSource, sha256: sha(approvedSecondBytes), versiBukti: 1, snapshotRel: snapshotRelSecond },
     ],
   });
-  const productSnapshot = createJobProductSnapshotRaw({ name: `Serum ${label}`, category: "beauty", raw_meta: JSON.stringify({ brand: "Merek Awal" }) });
+  const productSnapshot = createJobProductSnapshotRaw({ name: `Serum ${label}`, category: "beauty", price_idr: 85_000, raw_meta: JSON.stringify({ brand: "Merek Awal" }) });
   db.prepare(
     `INSERT INTO jobs
       (id,user_id,product_id,script_id,format,quality_tier,duration_s,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at)
@@ -238,19 +238,19 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
     name: string; price_idr: number; category: string; product_visual_desc: string | null; brand_brief: string | null;
     claims: string | null; raw_meta: string | null; promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   };
-  assert.equal(current.name, mutation.name); assert.equal(current.category, mutation.category);
+  assert.equal(current.name, mutation.name); assert.equal(current.category, mutation.category); assert.equal(current.price_idr, mutation.price_idr);
   assert.equal(current.product_visual_desc, mutation.product_visual_desc);
   assert.equal((JSON.parse(current.raw_meta ?? "{}") as { brand?: string }).brand, mutation.brand);
   assert.equal(current.promo_price_before_idr, mutation.promo_price_before_idr);
   assert.equal(current.promo_ends_at, mutation.promo_ends_at); assert.equal(current.promo_stock_left, mutation.promo_stock_left);
   assert.deepEqual(admissionSnapshot, {
-    version: 1, productName: "Serum Admission E3", category: "beauty",
+    version: 2, productName: "Serum Admission E3", category: "beauty", priceIdr: 85_000,
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Admission E3" },
     productVisualDesc: "BOTOL-ADMISSION-E3", brandBrief: "BRIEF-ADMISSION-E3", claims: ["klaim admission E3"],
   });
   const rereadCurrent = parseJobProductSnapshot(createJobProductSnapshotRaw(current));
   assert.notDeepEqual(rereadCurrent, admissionSnapshot, "counterexample re-read current tidak berbeda dari admission");
-  assert.equal(rereadCurrent.productName, mutation.name); assert.equal(rereadCurrent.trustedBrand.value, mutation.brand);
+  assert.equal(rereadCurrent.productName, mutation.name); assert.equal(rereadCurrent.priceIdr, mutation.price_idr); assert.equal(rereadCurrent.trustedBrand.value, mutation.brand);
 
   let providerCalls = 0; let prompt = "";
   setVideoProvidersForTests([{ name: "e3-c9-observer", async healthCheck() { return true; }, estimateCost() { return 0; },
