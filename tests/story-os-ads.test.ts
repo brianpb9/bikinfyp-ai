@@ -330,6 +330,34 @@ test("penulis Ads menerima instruksi Story OS, Affiliate tidak", async () => {
   assert.doesNotMatch(ads, /CTA line must be exactly/i);
 });
 
+test("prompt live Ads memberi grammar action yang benar-benar diterima A-03", async () => {
+  const { blokAturan, blokTugasUntukUji } = await import("../lib/script-engine/llm");
+  const { neutralStoryAdsActionContradictions } = await import("../lib/script-engine/ads-visual-contract");
+  const aturanAds = blokAturan("ads");
+  const aturanAffiliate = blokAturan("affiliate");
+  const tugasAds = blokTugasUntukUji({ contentType: "ads", durationSec: 15, format: "ads" });
+
+  assert.match(aturanAds, /ADS ACTION LANGUAGE EXCEPTION[\s\S]+restricted Indonesian neutral-prop grammar accepted by A-03/i);
+  assert.match(aturanAds, /write all other non-dialogue fields in English/i);
+  assert.doesNotMatch(aturanAds, /Write every other field in English/i,
+    "prompt Ads masih memerintahkan action berbahasa Inggris tanpa pengecualian");
+  assert.match(aturanAds, /restricted Indonesian A-03 neutral-prop action/i);
+  assert.match(tugasAds, /STORY OS \(Ads only\)/i, "task block kehilangan konteks Ads yang memilih system contract ini");
+  assert.doesNotMatch(aturanAffiliate, /ADS ACTION LANGUAGE EXCEPTION/i);
+
+  for (const action of [
+    "talent buka kartu warna polos perlahan",
+    "swatch blank dipindahkan mendekati saksi",
+    "kartu warna polos diletakkan di depan kasir",
+    "talent menunjuk blok warna pada kartu blank",
+  ]) {
+    assert.match(aturanAds, new RegExp(action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+      `grammar prompt tidak memuat contoh model-compliant: ${action}`);
+    assert.deepEqual(neutralStoryAdsActionContradictions(action), [],
+      `prompt memerintahkan action yang ditolak A-03: ${action}`);
+  }
+});
+
 test("prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta label produk", async () => {
   const { blokTugasUntukUji } = await import("../lib/script-engine/llm");
   for (const fixture of [

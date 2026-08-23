@@ -140,7 +140,15 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     "  the prompt, so anything you do not state as already true will be invented.",
     "- 'why' must say which story beat the segment serves: setup, tension, or payoff.",
     "",
-    "WRITE dialogue in casual Indonesian. Write every other field in English.",
+    contentType === "ads"
+      ? [
+          "WRITE dialogue in casual Indonesian.",
+          "ADS ACTION LANGUAGE EXCEPTION — write every action field in the restricted Indonesian neutral-prop grammar accepted by A-03; write all other non-dialogue fields in English.",
+          "A model-compliant action may follow exactly this grammar: talent buka kartu warna polos perlahan.",
+          "Other accepted shapes include: swatch blank dipindahkan mendekati saksi; kartu warna polos diletakkan di depan kasir; talent menunjuk blok warna pada kartu blank.",
+          "Do not translate these action shapes into English and do not add synonyms, product, packaging, brand, label, price, digits, or readable text.",
+        ].join("\n")
+      : "WRITE dialogue in casual Indonesian. Write every other field in English.",
     "",
     // STANDAR 10/10 (knowledge/rules/standard-10.md). Disuntikkan UTUH, bukan
     // diringkas: seksi A memutuskan genre idenya dan seksi B adalah 12 baris
@@ -185,7 +193,9 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     '      "framing": "<e.g. tight macro, medium selfie>",',
     '      "angle": "<e.g. eye level, slight top-down>",',
     '      "camera": "<e.g. static, slow push in, handheld drift>",',
-    '      "action": "<sequenced: ..., then ..., then ...>",',
+    contentType === "ads"
+      ? '      "action": "<restricted Indonesian A-03 neutral-prop action, e.g. talent buka kartu warna polos perlahan>",'
+      : '      "action": "<sequenced: ..., then ..., then ...>",',
     '      "product_state": "hidden" | "partial" | "hero",',
     '      "bridge_source": "<spoken_product_name | spoken_product_category | spoken_approved_price; Ads bridge beat only>",',
     '      "expression": "<visible emotion, or \"not visible\" for hands-only>",',
