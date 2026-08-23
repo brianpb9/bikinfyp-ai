@@ -158,11 +158,11 @@ mengerjakannya sebagai task terpisah.
 | E2 extract URL | UNGATED | **PARTIAL** | `downloadProductImages` → `tulisSidecar` (`lib/product-image-download.ts:48`). Dulu nol sidecar |
 | E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar, tetapi E3 tetap jalur wajib C2/C3/C5 dan belum melakukan validasi type/brand/category |
 | E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; **lubang 20 Agu MASIH ADA**: gerbang label hanya jalan bila `existing.length === 0` (`route.ts:84`) |
-| E5 DELETE foto retail | UNGATED | **PARTIAL** | `deleteStoredProductImages` kini menghapus `key` DAN `relMeta(key)` (`lib/product-images.ts:360`) — sidecar tidak lagi yatim. Masih bisa menyisakan daftar tanpa foto layak |
+| E5 DELETE foto retail | UNGATED | **PARTIAL** | hanya memfilter daftar lalu `persistImages` (`app/api/products/[id]/photos/route.ts:153-155`); file foto dan sidecar sengaja dibiarkan orphan. Daftar baru juga belum direvalidasi agar tetap punya foto layak |
 | E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. Dulu nol |
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
-| E9 DELETE foto org | UNGATED | **PARTIAL** | sama dengan E5 |
+| E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Daftar baru belum direvalidasi agar tetap punya foto layak |
 | W1 worker PG | UNGATED | **PASS** | `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340`); diuji di PostgreSQL nyata, 12 test |
 | W2 worker inline | UNGATED | **PASS** | idem (`lib/worker.ts:122,139`); 11 test |
 | A1..A7 admission | UNGATED | **BLOCKED (T43)** | `rg -ln 'resolveApprovedReference|referensiLayak' app/api/jobs app/api/dashboard` → **NOL berkas**. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
@@ -220,24 +220,26 @@ dikerjakan di slice ini:**
    approve/regenerate memakai keadaan foto SAAT ITU, bukan yang disetujui saat
    admission. Ini yang membuat C1 dan C9 tidak bisa PASS. Kandidat task
    berikutnya; TIDAK diimplementasikan di slice rekonsiliasi ini.
+7. E5 DELETE retail hanya menghapus path dari daftar produk; file foto dan
+   sidecar tetap orphan di storage (`app/api/products/[id]/photos/route.ts:139-155`).
 
 **(b) Butuh kredensial/data:**
 
-7. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
+8. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
    juga butuh R2 yang BERPASANGAN dengan database itu.
 
 **(c) Butuh deploy/migrasi:**
 
-8. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
+9. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
    staging; `preDeployCommand` staging menjalankan migrasi schema.
 
 **(d) Butuh keputusan Founder T43:**
 
-9. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
+10. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
 
 ### E.5 Yang TIDAK dilakukan di slice ini
 
 Nol perubahan produk atau test. Tidak satu pun status dinaikkan untuk membuat
 matriks hijau: tiga baris tetap BLOCKED oleh gap lokal dan tujuh baris PARTIAL
-karena cakupannya belum lengkap. Keenam gap di E.4(a) dicatat sebagai kandidat task, bukan
+karena cakupannya belum lengkap. Ketujuh gap di E.4(a) dicatat sebagai kandidat task, bukan
 diimplementasikan.
