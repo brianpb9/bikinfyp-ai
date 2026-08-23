@@ -11,7 +11,7 @@ import ts from "typescript";
 
 const baca = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
 
-function assertLabelGateBeforePersistence(source: string, context: string) {
+function assertLabelGateBeforePersistence(source: string, context: string, route: "E4" | "E8") {
   const ast = ts.createSourceFile(`${context}.ts`, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
   const posts = ast.statements.filter((statement): statement is ts.FunctionDeclaration =>
     ts.isFunctionDeclaration(statement)
@@ -22,135 +22,116 @@ function assertLabelGateBeforePersistence(source: string, context: string) {
   const post = posts[0];
   assert.ok(post.body, `${context}: exported POST wajib punya body`);
 
-  const persistenceCalls: ts.CallExpression[] = [];
   const functionBoundary = (node: ts.Node) =>
     ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)
     || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
-  const constantBoolean = (expression: ts.Expression): boolean | null => {
-    while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
-    if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
-    if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
-    if (ts.isNumericLiteral(expression)) return Number(expression.text) !== 0;
-    if (ts.isStringLiteral(expression)) return expression.text.length > 0;
-    return null;
-  };
-
-  // Persistence wajib satu call aktual di POST; nested helper tidak dihitung.
-  const collectPersistence = (node: ts.Node): void => {
+  const gateAwaits: ts.AwaitExpression[] = [];
+  const persistenceAwaits: ts.AwaitExpression[] = [];
+  const collectCalls = (node: ts.Node): void => {
     if (node !== post && functionBoundary(node)) return;
     if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression)) {
       const callee = node.expression.expression;
-      if (ts.isIdentifier(callee) && callee.text === "saveUniqueProductImages") persistenceCalls.push(node.expression);
+      if (ts.isIdentifier(callee) && callee.text === "periksaLabelFoto") gateAwaits.push(node);
+      if (ts.isIdentifier(callee) && callee.text === "saveUniqueProductImages") persistenceAwaits.push(node);
     }
-    ts.forEachChild(node, collectPersistence);
+    ts.forEachChild(node, collectCalls);
   };
-  collectPersistence(post.body);
-  assert.equal(persistenceCalls.length, 1, `${context}: wajib tepat satu call persistence aktual`);
-  const persistence = persistenceCalls[0];
+  collectCalls(post.body);
+  assert.equal(gateAwaits.length, 1, `${context}: wajib tepat satu awaited label gate aktual di POST`);
+  assert.equal(persistenceAwaits.length, 1, `${context}: wajib tepat satu awaited persistence aktual di POST`);
 
-  type GateState = Set<boolean>; // false=belum melewati gate, true=sudah
-  const gabung = (...sets: GateState[]): GateState => new Set(sets.flatMap((set) => [...set]));
-  const markGate = (node: ts.Node, input: GateState): GateState => {
-    let found = false;
-    const visit = (child: ts.Node): void => {
-      if (child !== node && functionBoundary(child)) return;
-      if (ts.isAwaitExpression(child) && ts.isCallExpression(child.expression)) {
-        const callee = child.expression.expression;
-        if (ts.isIdentifier(callee) && callee.text === "periksaLabelFoto") found = true;
-      }
-      ts.forEachChild(child, visit);
-    };
-    visit(node);
-    return found ? new Set([true]) : new Set(input);
+  const unwrap = (expression: ts.Expression): ts.Expression => {
+    while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+    return expression;
   };
-
-  const flowBlock = (block: ts.Block, input: GateState): GateState => {
-    let states = new Set(input);
-    for (const statement of block.statements) {
-      if (states.size === 0) break;
-      states = flowStatement(statement, states);
-    }
-    return states;
+  const firstBlob = (expression: ts.Expression): boolean => {
+    expression = unwrap(expression);
+    return ts.isElementAccessExpression(expression)
+      && ts.isIdentifier(expression.expression) && expression.expression.text === "blobs"
+      && !!expression.argumentExpression && ts.isNumericLiteral(expression.argumentExpression)
+      && expression.argumentExpression.text === "0";
   };
-  const flowStatement = (statement: ts.Statement, input: GateState): GateState => {
-    if (ts.isFunctionDeclaration(statement)) return new Set(input);
-    if (ts.isBlock(statement)) return flowBlock(statement, input);
-    if (ts.isIfStatement(statement)) {
-      const afterCondition = markGate(statement.expression, input);
-      const known = constantBoolean(statement.expression);
-      const thenOut = known === false ? new Set<boolean>() : flowStatement(statement.thenStatement, afterCondition);
-      const elseOut = known === true
-        ? new Set<boolean>()
-        : statement.elseStatement ? flowStatement(statement.elseStatement, afterCondition) : afterCondition;
-      return gabung(thenOut, elseOut);
-    }
-    if (ts.isTryStatement(statement)) {
-      const tryOut = flowBlock(statement.tryBlock, input);
-      // Catch dapat dimasuki karena gate melempar SEBELUM sukses; ia harus
-      // mulai dari state masuk, bukan state normal keluaran try.
-      const catchOut = statement.catchClause
-        ? flowBlock(statement.catchClause.block, input)
-        : new Set<boolean>();
-      const normalOut = gabung(tryOut, catchOut);
-      return statement.finallyBlock ? flowBlock(statement.finallyBlock, normalOut) : normalOut;
-    }
-    if (ts.isWhileStatement(statement) || ts.isForStatement(statement)
-      || ts.isForInStatement(statement) || ts.isForOfStatement(statement)) {
-      // Loop mungkin nol iterasi; jalur itu wajib ikut merge.
-      return gabung(input, flowStatement(statement.statement, input));
-    }
-    if (ts.isDoStatement(statement)) return flowStatement(statement.statement, input);
-    const after = markGate(statement, input);
-    if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)
-      || ts.isBreakStatement(statement) || ts.isContinueStatement(statement)) return new Set();
-    return after;
+  const retailEmpty = (expression: ts.Expression): boolean => {
+    expression = unwrap(expression);
+    if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken) return false;
+    const left = unwrap(expression.left); const right = unwrap(expression.right);
+    return ts.isPropertyAccessExpression(left) && ts.isIdentifier(left.expression)
+      && left.expression.text === "existing" && left.name.text === "length"
+      && ts.isNumericLiteral(right) && right.text === "0";
+  };
+  const enterpriseEmpty = (expression: ts.Expression): boolean => {
+    expression = unwrap(expression);
+    if (!ts.isPrefixUnaryExpression(expression) || expression.operator !== ts.SyntaxKind.ExclamationToken) return false;
+    const length = unwrap(expression.operand);
+    return ts.isPropertyAccessExpression(length) && length.name.text === "length"
+      && ts.isPropertyAccessExpression(length.expression)
+      && ts.isIdentifier(length.expression.expression) && length.expression.expression.text === "owned"
+      && length.expression.name.text === "images";
+  };
+  const exactFirstPhotoCondition = (expression: ts.Expression): boolean => {
+    expression = unwrap(expression);
+    if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken) return false;
+    return (route === "E4" ? retailEmpty(expression.left) : enterpriseEmpty(expression.left))
+      && firstBlob(expression.right);
   };
 
-  const directStatementIn = (node: ts.Node, block: ts.Block): ts.Statement | null => {
-    let current: ts.Node = node;
-    while (current.parent && current.parent !== block) current = current.parent;
-    return current.parent === block && ts.isStatement(current) ? current : null;
-  };
-  const isFirstPhotoCondition = (expression: ts.Expression): boolean => {
-    let hasFirstBlob = false;
-    let hasEmptyImages = false;
-    const visit = (node: ts.Node): void => {
-      if (ts.isElementAccessExpression(node)
-        && ts.isIdentifier(node.expression) && node.expression.text === "blobs"
-        && node.argumentExpression && ts.isNumericLiteral(node.argumentExpression)
-        && node.argumentExpression.text === "0") hasFirstBlob = true;
-      if (ts.isPrefixUnaryExpression(node) && node.operator === ts.SyntaxKind.ExclamationToken
-        && ts.isPropertyAccessExpression(node.operand) && node.operand.name.text === "length") hasEmptyImages = true;
-      if (ts.isBinaryExpression(node)
-        && [ts.SyntaxKind.EqualsEqualsToken, ts.SyntaxKind.EqualsEqualsEqualsToken].includes(node.operatorToken.kind)) {
-        const lengthVsZero = (left: ts.Expression, right: ts.Expression) =>
-          ts.isPropertyAccessExpression(left) && left.name.text === "length"
-          && ts.isNumericLiteral(right) && right.text === "0";
-        if (lengthVsZero(node.left, node.right) || lengthVsZero(node.right, node.left)) hasEmptyImages = true;
-      }
-      ts.forEachChild(node, visit);
-    };
-    visit(expression);
-    return hasFirstBlob && hasEmptyImages;
-  };
-  const candidates: ts.IfStatement[] = [];
-  const findGuardedBranch = (node: ts.Node): void => {
+  const branches: ts.IfStatement[] = [];
+  const collectBranches = (node: ts.Node): void => {
     if (node !== post && functionBoundary(node)) return;
-    if (ts.isIfStatement(node) && ts.isBlock(node.parent)) {
-      const persistenceStatement = directStatementIn(persistence, node.parent);
-      const branchIndex = node.parent.statements.indexOf(node);
-      const persistenceIndex = persistenceStatement ? node.parent.statements.indexOf(persistenceStatement) : -1;
-      const exits = flowStatement(node.thenStatement, new Set([false]));
-      if (constantBoolean(node.expression) !== false && isFirstPhotoCondition(node.expression)
-        && persistenceIndex > branchIndex && exits.size > 0 && [...exits].every(Boolean)) candidates.push(node);
-    }
-    ts.forEachChild(node, findGuardedBranch);
+    if (ts.isIfStatement(node) && exactFirstPhotoCondition(node.expression)) branches.push(node);
+    ts.forEachChild(node, collectBranches);
   };
-  findGuardedBranch(post.body);
-  assert.equal(
-    candidates.length,
-    1,
-    `${context}: persistence wajib sesudah tepat satu branch foto-pertama yang semua normal exit-nya melewati gate`
+  collectBranches(post.body);
+  assert.equal(branches.length, 1, `${context}: wajib tepat satu branch foto-pertama dengan kondisi ${route} exact`);
+  const branch = branches[0];
+  assert.ok(ts.isBlock(branch.thenStatement), `${context}: body branch foto-pertama wajib block`);
+  assert.equal(branch.elseStatement, undefined, `${context}: branch foto-pertama tidak boleh punya else bypass`);
+  const branchBlock = branch.parent;
+  assert.ok(ts.isBlock(branchBlock), `${context}: branch foto-pertama wajib direct statement dalam block POST`);
+
+  const gate = gateAwaits[0];
+  let current: ts.Node = gate;
+  let reachedBranch = false;
+  while (current.parent) {
+    const parent = current.parent;
+    if (parent === branch.thenStatement) { reachedBranch = true; break; }
+    assert.ok(!functionBoundary(parent), `${context}: gate tidak boleh berada di fungsi nested`);
+    assert.ok(
+      !ts.isIfStatement(parent) && !ts.isConditionalExpression(parent)
+      && !ts.isSwitchStatement(parent) && !ts.isCaseClause(parent) && !ts.isDefaultClause(parent)
+      && !ts.isForStatement(parent) && !ts.isForInStatement(parent) && !ts.isForOfStatement(parent)
+      && !ts.isWhileStatement(parent) && !ts.isDoStatement(parent)
+      && !(ts.isBinaryExpression(parent) && [ts.SyntaxKind.AmpersandAmpersandToken,
+        ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(parent.operatorToken.kind)),
+      `${context}: awaited gate wajib unconditional di dalam branch foto-pertama`
+    );
+    if (ts.isCatchClause(parent)) assert.fail(`${context}: gate tidak boleh berada di catch`);
+    if (ts.isTryStatement(parent)) {
+      assert.equal(parent.catchClause, undefined, `${context}: gate failure tidak boleh dipulihkan catch sebelum persistence`);
+      assert.ok(gate.getStart(ast) >= parent.tryBlock.getStart(ast) && gate.getEnd() <= parent.tryBlock.getEnd(),
+        `${context}: gate wajib berada di try block, bukan finally`);
+    }
+    current = parent;
+  }
+  assert.ok(reachedBranch, `${context}: awaited gate wajib berada di branch foto-pertama exact`);
+  assert.ok(
+    (ts.isVariableDeclaration(gate.parent) && gate.parent.initializer === gate)
+      || (ts.isExpressionStatement(gate.parent) && gate.parent.expression === gate),
+    `${context}: gate wajib awaited call/initializer langsung, bukan expression bersyarat`
+  );
+
+  const persistence = persistenceAwaits[0];
+  let persistenceStatement: ts.Node = persistence;
+  while (persistenceStatement.parent && persistenceStatement.parent !== branchBlock) persistenceStatement = persistenceStatement.parent;
+  assert.ok(persistenceStatement.parent === branchBlock && ts.isStatement(persistenceStatement),
+    `${context}: persistence wajib direct sibling branch foto-pertama`);
+  const siblings = branchBlock.statements;
+  assert.ok(siblings.indexOf(persistenceStatement as ts.Statement) > siblings.indexOf(branch),
+    `${context}: persistence wajib direct sibling sesudah branch foto-pertama`);
+  assert.ok(
+    (ts.isVariableDeclaration(persistence.parent) && persistence.parent.initializer === persistence)
+      || (ts.isExpressionStatement(persistence.parent) && persistence.parent.expression === persistence),
+    `${context}: persistence wajib awaited call/initializer langsung`
   );
 }
 
@@ -216,48 +197,82 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   // dedupe, bukan saveProductImages lama.
   const retail = baca("app/api/products/[id]/photos/route.ts");
   assert.match(retail, /periksaLabelFoto\(tmpFile, owned\.product\.name[,)]/);
-  assertLabelGateBeforePersistence(retail, "E4 Retail");
+  assertLabelGateBeforePersistence(retail, "E4 Retail", "E4");
 
   const enterprise = baca("app/api/dashboard/campaign/product/[id]/photos/route.ts");
   assert.match(enterprise, /periksaLabelFoto\(tmpFile, owned\.product\.name\)/);
-  assertLabelGateBeforePersistence(enterprise, "E8 Enterprise");
+  assertLabelGateBeforePersistence(enterprise, "E8 Enterprise", "E8");
 
   const ditolak = [
     ["comment", `export async function POST() {
-      // await periksaLabelFoto(tmpFile, product.name);
+      if (existing.length === 0 && blobs[0]) {
+        // await periksaLabelFoto(tmpFile, product.name);
+      }
       await saveUniqueProductImages(id, blobs);
     }`],
     ["string", `export async function POST() {
-      const decoy = "await periksaLabelFoto(tmpFile, product.name)";
+      if (existing.length === 0 && blobs[0]) {
+        const decoy = "await periksaLabelFoto(tmpFile, product.name)";
+      }
       await saveUniqueProductImages(id, blobs);
     }`],
     ["unrelated function", `async function helper() { await periksaLabelFoto(tmpFile, product.name); }
-    export async function POST() { await saveUniqueProductImages(id, blobs); }`],
+    export async function POST() {
+      if (existing.length === 0 && blobs[0]) {}
+      await saveUniqueProductImages(id, blobs);
+    }`],
     ["unreachable block", `export async function POST() {
-      if (false) { await periksaLabelFoto(tmpFile, product.name); }
+      if (existing.length === 0 && blobs[0]) {
+        if (false) { await periksaLabelFoto(tmpFile, product.name); }
+      }
       await saveUniqueProductImages(id, blobs);
     }`],
     ["persistence first", `export async function POST() {
       await saveUniqueProductImages(id, blobs);
-      await periksaLabelFoto(tmpFile, product.name);
+      if (existing.length === 0 && blobs[0]) {
+        await periksaLabelFoto(tmpFile, product.name);
+      }
     }`],
     ["mutually exclusive if/else", `export async function POST() {
       if (existing.length === 0 && blobs[0]) {
         if (flag) await periksaLabelFoto(tmpFile, product.name);
-        else await saveUniqueProductImages(id, blobs);
+        else doSomethingElse();
       }
+      await saveUniqueProductImages(id, blobs);
     }`],
     ["catch persists after gate failure", `export async function POST() {
       if (existing.length === 0 && blobs[0]) {
         try { await periksaLabelFoto(tmpFile, product.name); }
-        catch { await saveUniqueProductImages(id, blobs); }
+        catch { recover(); }
       }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["conditional short-circuit gate", `export async function POST() {
+      if (existing.length === 0 && blobs[0]) {
+        skip || await periksaLabelFoto(tmpFile, product.name);
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["do-loop break bypass", `export async function POST() {
+      if (existing.length === 0 && blobs[0]) {
+        do {
+          if (skip) break;
+          await periksaLabelFoto(tmpFile, product.name);
+        } while (false);
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["decoy length", `export async function POST() {
+      if (existing.length > 0 && decoy.length === 0 && blobs[0]) {
+        await periksaLabelFoto(tmpFile, product.name);
+      }
+      await saveUniqueProductImages(id, blobs);
     }`],
   ] as const;
   for (const [judul, source] of ditolak) {
     assert.throws(
-      () => assertLabelGateBeforePersistence(source, `counterexample ${judul}`),
-      /call persistence aktual|persistence wajib sesudah tepat satu branch foto-pertama/,
+      () => assertLabelGateBeforePersistence(source, `counterexample ${judul}`, "E4"),
+      /label gate aktual|kondisi E4 exact|unconditional|dipulihkan catch|direct sibling|sesudah branch/,
       `${judul} tidak boleh memenangkan structural guard`
     );
   }
