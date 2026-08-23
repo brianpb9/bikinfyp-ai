@@ -51,10 +51,32 @@ $ rg -n 'return \{ terbaca: true' lib/media/label-terbaca.ts
 182:    return { terbaca: true, kata, cocokNama, cocokMerek: true };
 188:    return { terbaca: true, kata: [], cocokNama: true, cocokMerek: null };
 
---- 8. DELETE foto kini ikut menghapus sidecar ---
-$ rg -n 'relMeta' lib/product-images.ts
+--- 8. DELETE foto: E5 dan E9 BERBEDA (dikoreksi 2026-08-23T00:17:03Z) ---
+# Versi pertama bagian ini berjudul 'DELETE foto kini ikut menghapus sidecar'
+# dan hanya menunjukkan implementasi helper — bukan siapa yang MEMANGGILNYA.
+# Judul itu menggeneralisasi ke kedua jalur DELETE padahal hanya E9 benar.
+# Temuan Reviewer atas aa53c32.
+
+# 8a. HELPER: menghapus key DAN sidecar-nya
+$ rg -n 'const sasaran = keys.flatMap' -A1 lib/product-images.ts
 360:  const sasaran = keys.flatMap((key) => [key, relMeta(key)]);
 361-  await Promise.all(sasaran.map(async (key) => {
+
+# 8b. E5 (DELETE retail): TIDAK memanggil helper itu sama sekali
+$ rg -c 'deleteStoredProductImages' app/api/products/[id]/photos/route.ts
+0
+$ rg -n 'persistImages\(' app/api/products/[id]/photos/route.ts
+127:    await persistImages(user.id, id, images);
+154:    await persistImages(user.id, id, images);
+# -> hanya menyaring daftar lalu mempersist; bytes DAN sidecar ditinggal yatim.
+
+# 8c. E9 (DELETE org): SATU-SATUNYA yang memanggil helper
+$ rg -n 'deleteStoredProductImages' app/api/dashboard/campaign/product/[id]/photos/route.ts
+7:import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, deleteStoredProductImages, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+64:      await deleteStoredProductImages(added);
+68:      await deleteStoredProductImages(added);
+97:    try { await deleteStoredProductImages([target]); }
+# -> kegagalannya hanya ditandai cleanupPending, tidak dicoba ulang.
 
 --- 9. test yang memetakan kasus C secara eksplisit ---
 $ rg -n -o '(W1|W2) C[0-9]+' tests/
