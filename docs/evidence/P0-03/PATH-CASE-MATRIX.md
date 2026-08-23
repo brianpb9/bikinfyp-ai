@@ -190,7 +190,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PARTIAL** | **Sudah tertutup:** classifier menghasilkan keadaan ketiga `belum_diperiksa` (bukan vonis promosi), dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED` — diuji di `tests/klasifikasi-gambar.test.ts` dan `tests/product-truth-evidence.test.ts`. **Gap yang tersisa:** jalur wajib C7 adalah E1, E4, E8, dan tidak satu pun membuktikan fail-closed. `rg --include-zero -c 'resolveApprovedReference|referensiLayak'` -> E1 (`app/api/products/route.ts`) = **0**, E8 (org photos) = **0**; keduanya menyimpan/menerima foto tanpa memanggil resolver sama sekali. E4 memanggilnya, tapi MENYIMPAN foto lebih dulu dan tidak membersihkannya saat tidak ada referensi layak — jadi kontrak 'nol efek storage' juga belum terbukti. Diturunkan dari PASS atas temuan Reviewer |
 | C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7 (T43) |
-| C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata worker tertutup: W1/W2 memakai manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, dan claims; mutasi kolom produk tidak mengubah prompt provider. Tetap PARTIAL karena belum ada test HTTP E3/E7→resume/regenerate end-to-end dan reason code `SNAPSHOT_IMMUTABLE` tidak diterbitkan |
+| C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata worker tertutup: W1/W2 memakai manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, dan claims. HTTP E3→W2 dan E7→W1 membuktikan mutasi handler aktual tidak mengubah bahan admission di provider. Tetap PARTIAL karena reason code `SNAPSHOT_IMMUTABLE` tidak diterbitkan dan regenerate/entry lain belum seluruhnya tertutup |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
 | C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
 | C12 | **PARTIAL** | Identitas dan urutan referensi dipatok dalam manifest job versioned; create konkuren kembali dengan satu pemenang, W1/W2 tidak membaca ulang daftar saat manifest ada, dan test HTTP E5/E9→resume membuktikan boundary route/list/storage. Tetap PARTIAL karena reason code usulan `REFERENCE_IDENTITY_CHANGED` tidak diterbitkan; bukti memakai reason truthful yang sudah ada (`REF_MISSING`) |
@@ -225,8 +225,8 @@ dikerjakan di slice ini:**
 4. C2/C5 belum punya reason code maupun jalur penegakan; C3/C4 belum punya
    reason code khusus dan jalur penegakannya baru parsial seperti dirinci E.2.
 5. Snapshot metadata job kini menutup pembacaan ulang nama/brand/kategori dan
-   field prompt W1/W2. C9 tetap PARTIAL sampai mutasi HTTP E3/E7→resume dan
-   reason code kontraknya dibuktikan end-to-end.
+   field prompt W1/W2. HTTP E3/E7→resume dibuktikan di E.12; C9 tetap PARTIAL
+   sampai regenerate/entry lain dan reason code kontraknya ditutup.
 6. Test HTTP penuh E5/E9→resume kini ada (E.11): handler mutation, daftar
    otoritatif, cleanup storage, isolasi owner/org, dan resume W1/W2 dibuktikan
    langsung. C12 tetap PARTIAL hanya karena reason code usulan
@@ -351,8 +351,9 @@ TASK=P0-C9-JOB-PRODUCT-METADATA-SNAPSHOT-20260823
 - Helper/parser → **5/5 PASS**; W2 → **16/16 PASS**; affected product-truth/job
   suites → **128/128 PASS**; PostgreSQL disposable W1 → **17/17 PASS**;
   `tsc --noEmit` dan `git diff --check` → **PASS**.
-- C9 tetap **PARTIAL** secara konservatif: mutasi HTTP E3/E7→resume belum diuji
-  end-to-end dan reason code `SNAPSHOT_IMMUTABLE` belum diterbitkan.
+- C9 tetap **PARTIAL** secara konservatif: pada titik tugas ini mutasi HTTP
+  E3/E7→resume belum diuji end-to-end dan reason code `SNAPSHOT_IMMUTABLE`
+  belum diterbitkan. Follow-up E.12 kemudian menutup gap HTTP resume tersebut.
 
 #### Koreksi review: snapshot dipasang saat admission
 
@@ -372,8 +373,8 @@ TASK=P0-C9-JOB-PRODUCT-METADATA-SNAPSHOT-20260823
   jobs parity PostgreSQL → **PASS**; production migration runner → **PASS**;
   `tsc --noEmit` dan `git diff --check` → **PASS**.
 - Status C9 tetap **PARTIAL**: bukti ini menutup race admission→worker untuk W1
-  dan W2, tetapi tidak mengarang reason code `SNAPSHOT_IMMUTABLE` maupun
-  cakupan HTTP E3/E7→resume/regenerate end-to-end yang belum diuji.
+  dan W2, tetapi tidak mengarang reason code `SNAPSHOT_IMMUTABLE`. Follow-up
+  E.12 menutup HTTP E3/E7→resume; regenerate/entry lain tetap terbuka.
 
 ### E.11 Follow-up C12 HTTP photo mutation → resume — 2026-08-24
 
@@ -402,3 +403,28 @@ TASK=P0-C12-HTTP-MUTATION-RESUME-PROOF-20260823
 - C12 tetap **PARTIAL** hanya karena reason code usulan
   `REFERENCE_IDENTITY_CHANGED` belum diimplementasikan. Gap HTTP E5/E9→resume
   yang sebelumnya dicatat sudah tertutup oleh bukti route-boundary ini.
+
+### E.12 Follow-up C9 HTTP product mutation → resume — 2026-08-24
+
+TASK=P0-C9-HTTP-PRODUCT-MUTATION-RESUME-20260824
+
+- E3 retail diuji lewat `PATCH /api/products/[id]` aktual setelah admission
+  HTTP `/api/jobs`, lalu entrypoint W2 `processJob`. E7 organisasi diuji lewat
+  `PATCH /api/dashboard/campaign/product` aktual setelah admission dashboard
+  `renderSatuSel`, lalu entrypoint W1 `processPostgresJob` pada PostgreSQL
+  disposable. Mutasi yang diuji tidak digantikan oleh SQL manual.
+- Kedua jalur membuktikan isolasi owner/org dan response+row produk terbaru.
+  Gabungannya mencakup nama, kategori, trusted brand E3, deskripsi visual,
+  brand brief dan claims E7, serta promo yang didukung masing-masing handler.
+  E7 memang tidak menyediakan mutasi brand; E3 memang tidak menyediakan
+  mutasi brand brief/claims, sehingga bukti tidak mengarang kemampuan route.
+- Counterexample membangun snapshot dari row terbaru dan membuktikannya berbeda
+  dari `job_product_snapshot` admission. Provider tetap menerima nama,
+  deskripsi visual, dan brand brief admission; snapshot durable tetap membawa
+  source/value trusted brand dan claims admission, tidak ditimpa worker.
+- Guard struktural mengikat bukti ke export `PATCH` aktual dan entrypoint worker
+  produksi. Test fokus E3/W2 + helper/guard → **24/24 PASS**; W1 PostgreSQL
+  disposable → **20/20 PASS**.
+- C9 tetap **PARTIAL**: bukti ini tidak menerbitkan reason code fiktif
+  `SNAPSHOT_IMMUTABLE`, dan tidak mengklaim jalur regenerate/entry lain yang
+  belum diuji. Gap HTTP E3/E7→resume yang sebelumnya dicatat sudah tertutup.

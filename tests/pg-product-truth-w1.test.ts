@@ -268,6 +268,78 @@ async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string;
   return { jobId: admitted.jobId, productId };
 }
 
+/** Admission dashboard organisasi sungguhan melalui renderSatuSel. */
+async function siapkanJobOrgLewatAdmisi(images: string[]) {
+  const orgId = uid(), intruderId = uid(), intruderOrgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
+  const segmenAdmisi = [
+    { role: "hook", start: 0, end: 4, text: "Bestie Serum Glow Bright ini bikin rutinitas pagiku terasa praktis dan kemasannya cantik banget di meja rias", visual_direction: "x" },
+    { role: "demo", start: 4, end: 11, text: "Makanya teksturnya ringan mudah diratakan dan nyaman dipakai sebelum makeup setiap hari", visual_direction: "x" },
+    { role: "cta", start: 11, end: 15, text: "Kalau penasaran cek keranjang sekarang ya", visual_direction: "x" },
+  ];
+  await pool.query(
+    "INSERT INTO users (id,phone,email,name,tier,locale,created_at) VALUES ($1,$2,$3,'Intruder E7','free','id-ID',$4)",
+    [intruderId, `08127${process.pid}`, `w1-e7-intruder-${process.pid}@contoh.test`, t]
+  );
+  await pool.query(
+    "INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,'Org E7',$2,$5),($3,'Org E7 lain',$4,$5)",
+    [orgId, `org-e7-${process.pid}`, intruderOrgId, `org-e7-lain-${process.pid}`, t]
+  );
+  await pool.query(
+    "INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$7),($4,$5,$6,'owner',$7)",
+    [uid(), orgId, userId, uid(), intruderOrgId, intruderId, t]
+  );
+  await pool.query(
+    `INSERT INTO products
+      (id,user_id,org_id,name,price_idr,category,images,raw_meta,product_visual_desc,brand_brief,claims,promo_price_before_idr,created_at)
+     VALUES ($1,$2,$3,'Serum Glow Bright',85000,'beauty',$4,$5,'BOTOL-AMBER-AWAL','ARAH-BRAND-AWAL',$6,110000,$7)`,
+    [productId, userId, orgId, JSON.stringify(images), JSON.stringify({ brand: "Merek Awal" }), JSON.stringify(["klaim awal"]), t]
+  );
+  await pool.query(
+    "INSERT INTO personas (id,user_id,name,creator_category,voice_id,register,created_at) VALUES ($1,$2,'Persona E7','hijaber','id_female_1','bestie',$3)",
+    [personaId, userId, t]
+  );
+  await pool.query(
+    `INSERT INTO scripts
+      (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,created_at)
+     VALUES ($1,$2,'H1','senang','bestie',$3,'caption','[]','{}','silent_caption',$4)`,
+    [scriptId, productId, JSON.stringify(segmenAdmisi), t]
+  );
+  await pool.query(
+    "INSERT INTO credit_ledger (id,user_id,org_id,delta,type,created_at) VALUES ($1,$2,$3,50000,'bonus',$4)",
+    [uid(), userId, orgId, t]
+  );
+  const { renderSatuSel } = await import("../lib/dashboard/render-cell");
+  const { PgJobsRepository } = await import("../lib/postgres/jobs");
+  const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  const result = await renderSatuSel({
+    userId, orgId, productId, productName: "Serum Glow Bright", productPriceIdr: 85000,
+    productSourceUrl: null, promoPriceBeforeIdr: 110000, scriptId, personaId,
+    avatarCustomDesc: null, format: "talking_head", ratio: "9:16", noModel: false,
+    tvcRoute: null, templateId: null, recordStyle: null, shotCount: null, runId: `e7-${process.pid}`,
+  }, {
+    pool,
+    jobsRepo: new PgJobsRepository(URL_UJI),
+    creditsRepo: new PgCreditPaymentRepository(URL_UJI),
+  });
+  assert.equal(result.status, "queued", `admission dashboard E7 gagal: ${JSON.stringify(result)}`);
+  const { issueToken } = await import("../lib/auth");
+  return {
+    jobId: result.job_id, productId, orgId,
+    ownerToken: await issueToken(userId, "081200000091"),
+    intruderToken: await issueToken(intruderId, `08127${process.pid}`),
+  };
+}
+
+async function patchProdukOrg(token: string, body: Record<string, unknown>) {
+  const { cookieName } = await import("../lib/auth");
+  const { PATCH } = await import("../app/api/dashboard/campaign/product/route");
+  return PATCH(new Request("http://localhost/api/dashboard/campaign/product", {
+    method: "PATCH",
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
+    body: JSON.stringify(body),
+  }));
+}
+
 async function siapkanJobOrgDenganManifest(label: string) {
   const ownerId = uid(), intruderId = uid(), orgId = uid(), intruderOrgId = uid();
   const productId = uid(), scriptId = uid(), jobId = uid(), t = at();
@@ -491,7 +563,7 @@ test("W1 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", 
 
 // ------------------------------------------------------------------- C1
 
-test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2, dengan sha256-nya", async (t) => {
+test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packshot sah", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   await pasangProviderPengamat();
   const relBanner = `uploads/w1-c1-${process.pid}/0.webp`;
@@ -502,13 +574,52 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2,
     [relPackshot, PACKSHOT],
     [`${relPackshot}.meta.json`, sidecar(PACKSHOT, true)],
   ]);
-  const { jobId, productId } = await siapkanJobLewatAdmisi([relBanner, relPackshot]);
+  const { jobId, productId, ownerToken, intruderToken } = await siapkanJobOrgLewatAdmisi([relBanner, relPackshot]);
   const productSnapshot = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
   assert.ok(productSnapshot, "admission PostgreSQL wajib memasang snapshot sebelum worker mulai");
-  await pool.query(
-    "UPDATE products SET name='NAMA MUTASI',category='food',product_visual_desc='DESC-MUTASI',brand_brief='BRIEF-MUTASI',claims='bukan-json',raw_meta='{}' WHERE id=$1",
+  const mutasi = {
+    product_id: productId,
+    name: "NAMA MUTASI E7",
+    price_idr: 73000,
+    category: "food",
+    product_visual_desc: "DESC-MUTASI-E7",
+    brand_brief: "BRIEF-MUTASI-E7",
+    claims: ["klaim mutasi satu", "klaim mutasi dua"],
+    promo_price_before_idr: 98000,
+    promo_ends_at: "2031-02-03T04:05:06.000Z",
+    promo_stock_left: 9,
+  };
+  const forbidden = await patchProdukOrg(intruderToken, mutasi);
+  assert.equal(forbidden.status, 404, "anggota org lain dapat memutasi produk E7");
+  assert.equal((await pool.query("SELECT name FROM products WHERE id=$1", [productId])).rows[0].name, "Serum Glow Bright");
+  const response = await patchProdukOrg(ownerToken, mutasi);
+  if (response.status !== 200) assert.fail(`PATCH E7 gagal (${response.status}): ${await response.text()}`);
+  const responseBody = await response.json() as Record<string, unknown>;
+  assert.equal(responseBody.product_id, productId); assert.equal(responseBody.name, mutasi.name);
+  assert.equal(responseBody.category, mutasi.category); assert.equal(responseBody.product_visual_desc, mutasi.product_visual_desc);
+  assert.equal(responseBody.brand_brief, mutasi.brand_brief); assert.deepEqual(responseBody.claims, mutasi.claims);
+  assert.equal(responseBody.promo_price_before_idr, mutasi.promo_price_before_idr);
+  assert.equal(responseBody.promo_ends_at, mutasi.promo_ends_at); assert.equal(responseBody.promo_stock_left, mutasi.promo_stock_left);
+  const current = (await pool.query(
+    "SELECT name,price_idr,category,product_visual_desc,brand_brief,claims,raw_meta,promo_price_before_idr,promo_ends_at,promo_stock_left FROM products WHERE id=$1",
     [productId]
-  );
+  )).rows[0];
+  assert.equal(current.name, mutasi.name); assert.equal(current.category, mutasi.category);
+  assert.equal(current.product_visual_desc, mutasi.product_visual_desc); assert.equal(current.brand_brief, mutasi.brand_brief);
+  assert.deepEqual(JSON.parse(current.claims), mutasi.claims);
+  assert.equal(current.promo_price_before_idr, mutasi.promo_price_before_idr);
+  const { parseJobProductSnapshot, createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
+  const admission = parseJobProductSnapshot(productSnapshot);
+  assert.deepEqual(admission, {
+    version: 1, productName: "Serum Glow Bright", category: "beauty",
+    trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
+    productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
+  });
+  const rereadNow = parseJobProductSnapshot(createJobProductSnapshotRaw(current));
+  assert.notDeepEqual(rereadNow, admission, "counterexample gagal: re-read produk kini sama dengan snapshot admission");
+  assert.equal(rereadNow.productName, mutasi.name); assert.equal(rereadNow.category, mutasi.category);
+  assert.equal(rereadNow.productVisualDesc, mutasi.product_visual_desc); assert.equal(rereadNow.brandBrief, mutasi.brand_brief);
+  assert.deepEqual(rereadNow.claims, mutasi.claims);
   // wujudkan: eksekusi HARUS berlanjut sampai provider, kalau tidak asersi
   // hash di bawah tidak pernah mengamati apa pun.
   const spy = await jalankan(jobId, isi, true);
@@ -542,7 +653,7 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2,
   assert.match(amatan.promptText, /Serum Glow Bright/);
   assert.match(amatan.promptText, /BOTOL-AMBER-AWAL/);
   assert.match(amatan.promptText, /ARAH-BRAND-AWAL/);
-  assert.doesNotMatch(amatan.promptText, /NAMA MUTASI|DESC-MUTASI|BRIEF-MUTASI/);
+  assert.doesNotMatch(amatan.promptText, /NAMA MUTASI E7|DESC-MUTASI-E7|BRIEF-MUTASI-E7/);
   const durableProduct = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
   assert.equal(durableProduct, productSnapshot, "snapshot metadata W1 ditimpa dari produk mutasi");
 });

@@ -127,3 +127,20 @@ test("semua admission produksi memasang snapshot pada INSERT job yang sama", () 
   const pgAdmission = fs.readFileSync(path.join(process.cwd(), "lib/postgres/smoke-runtime.ts"), "utf8");
   assert.match(pgAdmission, /FOR SHARE[\s\S]+job_product_snapshot/, "PG admission tidak mengunci produk sebelum snapshot+INSERT");
 });
+
+test("C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi", () => {
+  const w2 = fs.readFileSync(path.join(process.cwd(), "tests/product-truth-worker-reference.test.ts"), "utf8");
+  assert.match(w2, /PATCH: patchRetailProduct/);
+  assert.match(w2, /patchRetailProduct\([\s\S]+await processJob\(jobId\)/,
+    "bukti E3 tidak menempuh PATCH aktual sebelum entrypoint W2");
+  const w1 = fs.readFileSync(path.join(process.cwd(), "tests/pg-product-truth-w1.test.ts"), "utf8");
+  assert.match(w1, /app\/api\/dashboard\/campaign\/product\/route/);
+  assert.match(w1, /await patchProdukOrg\(ownerToken[\s\S]+await jalankan\(jobId/,
+    "bukti E7 tidak menempuh PATCH aktual sebelum entrypoint W1");
+  const retailRoute = fs.readFileSync(path.join(process.cwd(), "app/api/products/[id]/route.ts"), "utf8");
+  const orgRoute = fs.readFileSync(path.join(process.cwd(), "app/api/dashboard/campaign/product/route.ts"), "utf8");
+  assert.match(retailRoute, /export async function PATCH/);
+  assert.match(orgRoute, /export async function PATCH/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/worker.ts"), "utf8"), /export async function processJob/);
+  assert.match(fs.readFileSync(path.join(process.cwd(), "lib/postgres/worker.ts"), "utf8"), /export async function processPostgresJob/);
+});

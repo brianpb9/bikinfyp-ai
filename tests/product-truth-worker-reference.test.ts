@@ -56,6 +56,8 @@ const { getDb, now, uuid } = await import("../lib/db");
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { setVideoProvidersForTests } = await import("../lib/providers/registry");
 const { processJob } = await import("../lib/worker");
+const { PATCH: patchRetailProduct } = await import("../app/api/products/[id]/route");
+const { createJobProductSnapshotRaw, parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
 const { ringkasanKanari, resetKanariUntukTest, GagalTanpaReferensi, KODE_KANARI } = await import("../lib/kanari-bukti");
 const { ALASAN_TOLAK, RINCI_TOLAK } = await import("../lib/product-truth");
 type MediaStorage = import("../lib/storage").MediaStorage;
@@ -162,6 +164,7 @@ function pasangObserverProviderC8() {
 }
 
 const userId = uuid();
+const intruderId = uuid();
 db.prepare("INSERT INTO users (id, phone, email, name, tier, locale, created_at) VALUES (?,?,?,?,?,?,?)").run(
   userId,
   "081200000003",
@@ -170,6 +173,9 @@ db.prepare("INSERT INTO users (id, phone, email, name, tier, locale, created_at)
   "free",
   "id-ID",
   now()
+);
+db.prepare("INSERT INTO users (id, phone, email, name, tier, locale, created_at) VALUES (?,?,?,?,?,?,?)").run(
+  intruderId, "081200000004", `p003-w2-intruder-${process.pid}@contoh.test`, "Uji P0-03 lain", "free", "id-ID", now()
 );
 
 const segmen = [
@@ -228,6 +234,16 @@ async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string;
   if (response.status !== 201) assert.fail(`admission SQLite gagal (${response.status}): ${await response.text()}`);
   const body = await response.json() as { job_id: string };
   return { jobId: body.job_id, productId };
+}
+
+async function patchProdukRetail(productId: string, user: string, phone: string, body: Record<string, unknown>) {
+  const { issueToken, cookieName } = await import("../lib/auth");
+  const token = await issueToken(user, phone);
+  return patchRetailProduct(new Request(`http://localhost/api/products/${productId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
+    body: JSON.stringify(body),
+  }), { params: Promise.resolve({ id: productId }) });
 }
 
 const jumlah = (sql: string, ...args: unknown[]) =>
@@ -638,7 +654,7 @@ test("W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tet
  * `setVideoProvidersForTests`, dengan PNG sungguhan supaya person-safe
  * melewatinya apa adanya, lalu membaca bytes yang BENAR-BENAR diterima.
  */
-test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetujui", async (t) => {
+test("E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission", async (t) => {
   if (!punyaPersonSafe()) return t.skip("python/OpenCV/model YuNet tidak ada — jalur hilir tidak bisa ditempuh");
   const sharp = (await import("sharp")).default;
   const gambar = (r: number, g: number, b: number) =>
@@ -707,7 +723,49 @@ test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetuj
     const { jobId, productId } = await siapkanJobLewatAdmisi([relSah1, relSah2]);
     const productSnapshot = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(jobId) as { job_product_snapshot: string | null }).job_product_snapshot;
     assert.ok(productSnapshot, "admission SQLite wajib memasang snapshot sebelum worker mulai");
-    db.prepare("UPDATE products SET name='NAMA MUTASI',category='food',product_visual_desc='DESC-MUTASI',brand_brief='BRIEF-MUTASI',claims='bukan-json',raw_meta='{}' WHERE id=?").run(productId);
+    const mutasi = {
+      name: "NAMA MUTASI E3",
+      price_idr: 72000,
+      category: "food",
+      product_visual_desc: "DESC-MUTASI-E3",
+      brand: "Merek Mutasi E3",
+      promo_price_before_idr: 99000,
+      promo_ends_at: "2030-01-02T03:04:05.000Z",
+      promo_stock_left: 7,
+    };
+    const forbidden = await patchProdukRetail(productId, intruderId, "081200000004", mutasi);
+    assert.equal(forbidden.status, 404, "user lain dapat memutasi produk E3 milik owner");
+    const beforeOwner = db.prepare("SELECT name FROM products WHERE id=?").get(productId) as { name: string };
+    assert.equal(beforeOwner.name, "Serum Glow Bright", "PATCH intruder mengubah row sebelum owner bertindak");
+
+    const response = await patchProdukRetail(productId, userId, "081200000003", mutasi);
+    if (response.status !== 200) assert.fail(`PATCH E3 gagal (${response.status}): ${await response.text()}`);
+    const responseBody = await response.json() as { ok: boolean; product_id: string; name: string; price_idr: number; category: string };
+    assert.deepEqual(responseBody, {
+      ok: true, product_id: productId, name: mutasi.name, price_idr: mutasi.price_idr, category: mutasi.category,
+    }, "response E3 bukan subset pasca-mutasi otoritatif");
+    const current = db.prepare(
+      "SELECT name,price_idr,category,product_visual_desc,brand_brief,claims,raw_meta,promo_price_before_idr,promo_ends_at,promo_stock_left FROM products WHERE id=?"
+    ).get(productId) as {
+      name: string; price_idr: number; category: string; product_visual_desc: string | null;
+      brand_brief: string | null; claims: string | null; raw_meta: string | null;
+      promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
+    };
+    assert.equal(current.name, mutasi.name); assert.equal(current.category, mutasi.category);
+    assert.equal(current.product_visual_desc, mutasi.product_visual_desc);
+    assert.equal((JSON.parse(current.raw_meta ?? "{}") as { brand?: string }).brand, mutasi.brand);
+    assert.equal(current.promo_price_before_idr, mutasi.promo_price_before_idr);
+    assert.equal(current.promo_ends_at, mutasi.promo_ends_at); assert.equal(current.promo_stock_left, mutasi.promo_stock_left);
+    const admission = parseJobProductSnapshot(productSnapshot);
+    assert.deepEqual(admission, {
+      version: 1, productName: "Serum Glow Bright", category: "beauty",
+      trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
+      productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
+    });
+    const rereadNow = parseJobProductSnapshot(createJobProductSnapshotRaw(current));
+    assert.notDeepEqual(rereadNow, admission, "counterexample gagal: re-read produk kini sama dengan snapshot admission");
+    assert.equal(rereadNow.productName, mutasi.name); assert.equal(rereadNow.category, mutasi.category);
+    assert.equal(rereadNow.trustedBrand.value, mutasi.brand); assert.equal(rereadNow.productVisualDesc, mutasi.product_visual_desc);
     await processJob(jobId);
 
     assertNolEfekSamping(jobId, { putCalls }, "W2 hilir");
@@ -726,7 +784,9 @@ test("W2 TOCTOU: bytes yang DITERIMA PROVIDER tetap referensi utama yang disetuj
     assert.match(promptDiterima, /Serum Glow Bright/);
     assert.match(promptDiterima, /BOTOL-AMBER-AWAL/);
     assert.match(promptDiterima, /ARAH-BRAND-AWAL/);
-    assert.doesNotMatch(promptDiterima, /NAMA MUTASI|DESC-MUTASI|BRIEF-MUTASI/);
+    assert.doesNotMatch(promptDiterima, /NAMA MUTASI E3|DESC-MUTASI-E3/);
+    const durableProduct = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(jobId) as { job_product_snapshot: string }).job_product_snapshot;
+    assert.equal(durableProduct, productSnapshot, "worker W2 menimpa snapshot dari produk E3 mutasi");
   } finally {
     setVideoProvidersForTests(undefined);
     fs.rmSync(tmp, { recursive: true, force: true });
