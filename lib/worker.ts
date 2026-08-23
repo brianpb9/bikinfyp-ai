@@ -31,8 +31,9 @@ import { mediaStorage } from "./storage";
 import { MAKS_REFERENSI_PER_GENERASI } from "./product-images";
 import { personSafeReferencePhotos } from "./media/person-safe-refs";
 import { normalizeHookLevel } from "./config/hooks";
-import { ambilSnapshotTersetujui, bytesTersetujuiCocok, pastikanBytesTersetujui, pesanTanpaReferensi, resolveApprovedReference } from "./product-truth";
+import { pesanTanpaReferensi } from "./product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
+import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "./job-reference-manifest";
 
 const CONCURRENCY = 1;
 
@@ -104,7 +105,6 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       : presetKategori;
     const segments = JSON.parse(script.segments) as SegmentDraft[];
     const images = JSON.parse(product.images) as string[];
-    if (images.length === 0) throw new Error("Produk tidak punya foto — upload minimal 1 foto.");
 
     const workDir = path.join(config.storageDir, "jobs", job.id);
     fs.mkdirSync(workDir, { recursive: true });
@@ -119,29 +119,41 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // GAGAL-TERTUTUP SEBELUM LANGKAH BERBAYAR. Resolver tidak pernah melempar;
     // yang melempar di sini adalah pemanggilnya, dan ia melempar SEBELUM satu
     // byte pun diambil — jadi nol materialize, nol provider, nol capture.
-    const referensi = await resolveApprovedReference(images);
-    // KANARI, BUKAN GERBANG. Dicatat SEBELUM vonis dan untuk KEDUA hasil: angka
-    // yang dibutuhkan adalah rasio, dan mencatat kegagalan saja memberi
-    // pembilang tanpa penyebut. Ia tidak mengubah apa pun di bawah ini.
-    catatKanariReferensi(referensi, { jobId, produkId: product.id, runtime: "worker-sqlite" });
-    if (!referensi.utama) throw new GagalTanpaReferensi(pesanTanpaReferensi(referensi), referensi);
-    const imageRef = await mediaStorage().materialize(referensi.utama.rel);
-    if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
-    // Bytes yang BENAR-BENAR akan dikirim wajib sama dengan yang disetujui.
-    // materialize() adalah pembacaan KEDUA (di R2: GET kedua ke jaringan), dan
-    // objeknya bisa berubah di antara keduanya. Tanpa baris ini, seluruh rantai
-    // bukti di atasnya jadi hiasan.
-    await pastikanBytesTersetujui(imageRef, referensi.utama);
-    // SNAPSHOT PRIVAT: path dari materialize() masih bisa ditimpa penulis lain
-    // sesudah diperiksa. Yang dikirim ke hilir hanya salinan milik job ini,
-    // dan salinan ITU yang diverifikasi.
-    const dirSnapshot = path.join(workDir, "ref-tersetujui");
-    const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
+    const hasilManifest = await loadOrCreateJobReferenceManifest({
+      existingRaw: job.approved_reference_manifest ?? null,
+      candidateRels: images,
+      onResolved: (referensi) => {
+        catatKanariReferensi(referensi, { jobId, produkId: product.id, runtime: "worker-sqlite" });
+        if (!referensi.utama) throw new GagalTanpaReferensi(pesanTanpaReferensi(referensi), referensi);
+      },
+      persistIfAbsentAndSafe: async (candidateRaw) => db.transaction(() => {
+        const row = db.prepare(
+          "SELECT approved_reference_manifest,provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=?"
+        ).get(job.id) as { approved_reference_manifest: string | null; provider_video: string | null; provider_voice: string | null; output_url: string | null; cost_actual_idr: number } | undefined;
+        if (!row) throw new Error("Job tidak ditemukan saat mematok manifest referensi.");
+        if (row.approved_reference_manifest) return row.approved_reference_manifest;
+        const traces = db.prepare(
+          `SELECT
+            EXISTS(SELECT 1 FROM outputs WHERE job_id=?) OR
+            EXISTS(SELECT 1 FROM provider_tasks WHERE job_id=?) OR
+            EXISTS(SELECT 1 FROM job_shots WHERE job_id=?) AS unsafe`
+        ).get(job.id, job.id, job.id) as { unsafe: number };
+        if (row.provider_video || row.provider_voice || row.output_url || row.cost_actual_idr > 0 || traces.unsafe) return null;
+        db.prepare("UPDATE jobs SET approved_reference_manifest=? WHERE id=?").run(candidateRaw, job.id);
+        return candidateRaw;
+      })(),
+    });
+    const snapshots = await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+    const pastikanManifestSebelumEfek = async () => {
+      await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+    };
+    const refUtama = snapshots[0];
 
     const tier = (job.quality_tier ?? "silent_caption") as QualityTier;
     const withAudio = tier !== "silent_caption";
-    // Foto ke-2..5 = referensi identitas tambahan (hanya berlaku di model r2v /
-    // tier bersuara — provider yang memutuskan; gagal materialize = lewati saja).
+    // Foto tambahan = referensi identitas (hanya berlaku di model r2v/tier
+    // bersuara). Sesudah masuk manifest, satu pun tidak boleh hilang diam-diam:
+    // missing/hash-changed menggagalkan attempt sebelum provider.
     let primaryRef = refUtama;
     const extraRefs: string[] = [];
     if (withAudio) {
@@ -154,17 +166,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       // menghitung primary + tambahan; slice(1, MAX_IMAGES=8) sebelumnya
       // menghasilkan primary + tujuh = DELAPAN referensi, melewati kontraknya
       // sendiri.
-      for (const ref of referensi.tersetujui.slice(1, MAKS_REFERENSI_PER_GENERASI)) {
-        const p = await mediaStorage().materialize(ref.rel).catch(() => null);
-        if (!p) continue;
-        // Referensi tambahan yang bytes-nya berubah DIBUANG, bukan menjatuhkan
-        // job: ia opsional, dan membuangnya sudah gagal-tertutup untuk foto itu.
-        if (!(await bytesTersetujuiCocok(p, ref))) {
-          console.warn(`[referensi] ${ref.rel} berubah sesudah disetujui — dibuang dari referensi tambahan`);
-          continue;
-        }
-        extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
-      }
+      extraRefs.push(...snapshots.slice(1, MAKS_REFERENSI_PER_GENERASI));
       // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
       // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
       // model; terbukti crop lolos moderasi, lab fashion-r2b 2026-08-07).
@@ -206,7 +208,13 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     assertVisualSpec(spec);
     const reused = format === "vo_broll" ? null : await findReusableClips(workDir, spec);
     if (reused) console.log(`[job ${job.id.slice(0, 8)}] resume: ${reused.assets.length} klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi`);
-    const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir));
+    let video;
+    if (reused) video = reused;
+    else if (format === "vo_broll") video = await buildPhotoPanVideo(spec, workDir);
+    else {
+      await pastikanManifestSebelumEfek();
+      video = await generateVideoWithFailover(spec, workDir);
+    }
     setJobProviders(job.id, video.providerName);
     addCost(job.id, video.costIdr);
 
@@ -236,6 +244,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     } else if (format === "vo_broll") {
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
+        await pastikanManifestSebelumEfek();
         const res = await synthesizeElevenLabsVoiceover(stripDeliveryTags(seg.text), path.join(workDir, `vo_real_${i}.mp3`));
         vo.push({ path: res.filePath, startSec: seg.start });
         addCost(job.id, res.costIdr);
@@ -254,6 +263,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       // video DIGANTI VO TTS ber-voice terkunci per avatar (gerak bibir klip
       // tetap dipakai — dialog prompt = teks yang sama dengan TTS).
       const voText = hargaTerbilang(segments.map((seg) => seg.tts_text ?? seg.text).join(" ... "));
+      await pastikanManifestSebelumEfek();
       const tts = await synthesizeGeminiVoiceover(voText, category.voiceName, category.voiceStyle, path.join(workDir, "vo_gemini.wav"));
       geminiVoPath = tts.filePath;
       addCost(job.id, tts.costIdr);
@@ -263,6 +273,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       let voiceProvider = "";
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
+        await pastikanManifestSebelumEfek();
         const res = await synthesizeVoiceWithFailover(
           {
             jobId: job.id,
@@ -389,6 +400,10 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     }
 
     // --- LABELING (watermark sudah dibakar saat compositing; verifikasi via QC-08) ---
+    // Storage kanonik diverifikasi lagi sesudah seluruh provider dan sebelum
+    // output/capture. Delete/overwrite yang terjadi di tengah render tidak
+    // boleh menghasilkan deliverable dari provenance yang sudah hilang.
+    await pastikanManifestSebelumEfek();
     advance(job.id, "LABELING", { watermark: renderParams.watermarkText });
 
     // --- READY ---

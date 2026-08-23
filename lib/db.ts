@@ -56,6 +56,9 @@ export function getDb(): Database.Database {
       db.exec("ALTER TABLE jobs ADD COLUMN state_changed_at TEXT");
       db.exec("UPDATE jobs SET state_changed_at = created_at WHERE state_changed_at IS NULL");
     }
+    if (!cols.includes("approved_reference_manifest")) {
+      db.exec("ALTER TABLE jobs ADD COLUMN approved_reference_manifest TEXT");
+    }
     if (!cols.includes("quality_tier")) {
       db.exec("ALTER TABLE jobs ADD COLUMN quality_tier TEXT NOT NULL DEFAULT 'silent_caption'");
     }
@@ -141,4 +144,4 @@ export interface UserRow { id: string; phone: string | null; email: string | nul
 export interface ProductRow { id: string; user_id: string; org_id?: string | null; source_url: string | null; name: string; price_idr: number; category: string; product_visual_desc?: string | null; brand_brief?: string | null; images: string; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; raw_meta: string | null; created_at: string }
 export interface PersonaRow { id: string; user_id: string; name: string; creator_category: string; voice_id: string; register: string; created_at: string }
 export interface ScriptRow { id: string; job_id: string | null; product_id: string; hook_family: string; emotion: string; register: string; segments: string; caption: string; hashtags: string; validation_result: string; quality_tier: string; hook_level?: string; approved_by_user_at: string | null; edited_by_user: number; created_at: string }
-export interface JobRow { id: string; user_id: string; org_id: string | null; bulk_run_id: string | null; avatar_custom_desc?: string | null; product_id: string; persona_id: string | null; script_id: string; format: string; quality_tier: string; duration_s: number; state: string; provider_video: string | null; provider_voice: string | null; cost_actual_idr: number; qc_result: string | null; output_url: string | null; qc_retry_count: number; created_at: string; completed_at: string | null; state_changed_at?: string | null }
+export interface JobRow { id: string; user_id: string; org_id: string | null; bulk_run_id: string | null; avatar_custom_desc?: string | null; product_id: string; persona_id: string | null; script_id: string; format: string; quality_tier: string; duration_s: number; state: string; provider_video: string | null; provider_voice: string | null; cost_actual_idr: number; qc_result: string | null; output_url: string | null; qc_retry_count: number; created_at: string; completed_at: string | null; state_changed_at?: string | null; approved_reference_manifest?: string | null }

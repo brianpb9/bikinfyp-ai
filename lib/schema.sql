@@ -180,7 +180,8 @@ CREATE TABLE IF NOT EXISTS jobs (
   qc_retry_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   completed_at TEXT,
-  state_changed_at TEXT -- kapan state terakhir berubah (untuk timeout per-state)
+  state_changed_at TEXT, -- kapan state terakhir berubah (untuk timeout per-state)
+  approved_reference_manifest TEXT -- manifest referensi tersetujui immutable per job (P0 A6/C9)
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);

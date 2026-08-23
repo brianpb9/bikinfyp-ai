@@ -793,6 +793,49 @@ test("W2 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih", as
   assert.ok(["FAILED", "REFUNDED"].includes(job.state), `job harus berakhir gagal-tertutup, bukan ${job.state}`);
 });
 
+test("W2 A6/C9: manifest lama menang atas reorder/delete/add products.images", async () => {
+  const approvedRel = "uploads/w2-manifest/approved.webp";
+  const currentRel = "uploads/w2-manifest/current.webp";
+  const approvedBytes = Buffer.from("APPROVED-IMMUTABLE-W2");
+  const currentBytes = Buffer.from("CURRENT-NOT-APPROVED-W2");
+  const spy = storageSpy(new Map<string, Buffer>([
+    [approvedRel, approvedBytes],
+    [currentRel, currentBytes],
+    [`${currentRel}.meta.json`, sidecar(currentBytes, true)],
+  ]));
+  setMediaStorageForTests(spy.storage);
+  const { jobId } = siapkanJob([currentRel]);
+  const raw = JSON.stringify({
+    version: 1,
+    references: [{ rel: approvedRel, sha256: sha(approvedBytes), versiBukti: 1 }],
+  });
+  db.prepare("UPDATE jobs SET approved_reference_manifest=? WHERE id=?").run(raw, jobId);
+
+  await processJob(jobId);
+
+  assert.deepEqual(spy.materializeCalls, [approvedRel], "W2 memilih ulang current products.images");
+  assert.deepEqual(spy.getCalls, [], "W2 membaca sidecar/list terkini walau manifest durable sudah ada");
+  const saved = db.prepare("SELECT approved_reference_manifest FROM jobs WHERE id=?").get(jobId) as { approved_reference_manifest: string };
+  assert.equal(saved.approved_reference_manifest, raw, "manifest immutable ditimpa saat resume");
+  assertNolEfekSamping(jobId, spy, "W2 manifest reuse");
+});
+
+test("W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot", async () => {
+  const rel = "uploads/w2-legacy/0.webp";
+  const bytes = Buffer.from("LEGACY-W2");
+  const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
+  setMediaStorageForTests(spy.storage);
+  const { jobId } = siapkanJob([rel]);
+  db.prepare("UPDATE jobs SET provider_video='legacy-provider' WHERE id=?").run(jobId);
+
+  await processJob(jobId);
+
+  assert.deepEqual(spy.materializeCalls, [], "legacy unsafe mencapai materialize/provider");
+  const row = db.prepare("SELECT approved_reference_manifest,state FROM jobs WHERE id=?").get(jobId) as { approved_reference_manifest: string | null; state: string };
+  assert.equal(row.approved_reference_manifest, null);
+  assert.ok(["FAILED", "REFUNDED"].includes(row.state));
+});
+
 after(() => {
   setMediaStorageForTests(undefined);
   fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });

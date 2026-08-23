@@ -334,7 +334,8 @@ test("W1 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", 
   const jobId = await siapkanJob([rel]);
   const spy = await jalankan(jobId, isi, true);
 
-  assert.deepEqual(spy.materializeCalls, [rel], "kontrol positif tidak sampai ke materialize; penilaian LOLOS tidak pernah terjadi");
+  assert.ok(spy.materializeCalls.length >= 1, "kontrol positif tidak sampai ke materialize; penilaian LOLOS tidak pernah terjadi");
+  assert.ok(spy.materializeCalls.every((key) => key === rel), "worker meminta referensi di luar manifest");
   const r = ringkasanKanari();
   assert.equal(r.dinilai, 1, "penilaian yang LOLOS tidak dicatat; kanari hanya punya pembilang");
   assert.equal(r.lolos, 1);
@@ -385,6 +386,65 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2,
     `bytes yang SAMPAI KE PROVIDER bukan packshot yang buktinya sah (path ${amatan.utamaPath}).`
   );
   assert.notEqual(amatan.utamaSha, sha256(BANNER), "BANNER sampai ke provider");
+});
+
+test("W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const approvedRel = `uploads/w1-manifest-${process.pid}/approved.webp`;
+  const currentRel = `uploads/w1-manifest-${process.pid}/current.webp`;
+  const approvedBytes = Buffer.from("APPROVED-IMMUTABLE-W1");
+  const currentBytes = Buffer.from("CURRENT-NOT-APPROVED-W1");
+  const jobId = await siapkanJob([currentRel]);
+  const raw = JSON.stringify({
+    version: 1,
+    references: [{ rel: approvedRel, sha256: sha256(approvedBytes), versiBukti: 1 }],
+  });
+  await pool.query("UPDATE jobs SET approved_reference_manifest=$1 WHERE id=$2", [raw, jobId]);
+  const spy = await jalankan(jobId, new Map<string, Buffer>([
+    [approvedRel, approvedBytes],
+    [currentRel, currentBytes],
+    [`${currentRel}.meta.json`, sidecar(currentBytes, true)],
+  ]));
+
+  assert.deepEqual(spy.materializeCalls, [approvedRel], "W1 memilih ulang products.images terkini");
+  assert.deepEqual(spy.getCalls, [], "W1 membaca ulang sidecar produk walau manifest durable sudah ada");
+  const saved = (await pool.query("SELECT approved_reference_manifest FROM jobs WHERE id=$1", [jobId])).rows[0];
+  assert.equal(saved.approved_reference_manifest, raw, "manifest W1 ditimpa saat resume");
+  await assertNolEfekSamping(jobId, spy.putCalls, "W1 manifest reuse");
+});
+
+test("W1 manifest create konkuren: row lock menghasilkan tepat satu pemenang", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const jobId = await siapkanJob([]);
+  const { PgJobsRepository } = await import("../lib/postgres/jobs");
+  const repoA = new PgJobsRepository(URL_UJI);
+  const repoB = new PgJobsRepository(URL_UJI);
+  const rawA = JSON.stringify({ version: 1, references: [{ rel: "a.webp", sha256: "a".repeat(64), versiBukti: 1 }] });
+  const rawB = JSON.stringify({ version: 1, references: [{ rel: "b.webp", sha256: "b".repeat(64), versiBukti: 1 }] });
+  const [a, b] = await Promise.all([
+    repoA.installReferenceManifestIfSafe(jobId, rawA),
+    repoB.installReferenceManifestIfSafe(jobId, rawB),
+  ]);
+  assert.ok(a && b);
+  assert.equal(a, b, "dua worker memegang manifest berbeda untuk job sama");
+  const durable = (await pool.query("SELECT approved_reference_manifest FROM jobs WHERE id=$1", [jobId])).rows[0].approved_reference_manifest;
+  assert.equal(durable, a);
+});
+
+test("W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  await pasangProviderPengamat();
+  const rel = `uploads/w1-legacy-${process.pid}/0.webp`;
+  const jobId = await siapkanJob([rel]);
+  await pool.query("UPDATE jobs SET provider_video='legacy-provider' WHERE id=$1", [jobId]);
+  const spy = await jalankan(jobId, new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]));
+  assert.deepEqual(spy.materializeCalls, [], "legacy unsafe mencapai materialize");
+  assert.equal(amatan.dipanggil, false, "legacy unsafe mencapai provider");
+  const row = (await pool.query("SELECT approved_reference_manifest,state FROM jobs WHERE id=$1", [jobId])).rows[0];
+  assert.equal(row.approved_reference_manifest, null);
+  assert.ok(["FAILED", "REFUNDED"].includes(row.state));
+  assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM outputs WHERE job_id=$1", [jobId]), 0);
+  assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','regen')", [jobId]), 0);
 });
 
 // ------------------------------------------------------------------- C8
@@ -685,7 +745,7 @@ test("W1: delapan foto tersetujui — provider menerima satu primary + maksimal 
     !shaDiterima.has(sha256(bytesPer[7])),
     "foto KEDELAPAN sampai ke provider — batas generasi tidak diterapkan"
   );
-  assert.ok(spy.materializeCalls.length <= 7, `worker meminta ${spy.materializeCalls.length} referensi`);
+  assert.ok(new Set(spy.materializeCalls).size <= 7, `worker meminta ${new Set(spy.materializeCalls).size} identitas referensi`);
 });
 
 // ------------------- path bersama ditimpa SESUDAH diperiksa (TOCTOU nyata)
@@ -764,7 +824,10 @@ test("W1 TOCTOU: path bersama ditimpa sesudah diperiksa — provider tetap mener
   await processPostgresJob(jobId);
 
   await assertNolEfekSamping(jobId, putCalls, "W1 TOCTOU");
-  assert.deepEqual(materializeCalls, [relSah1, relSah2], "kedua referensi wajib diminta");
+  assert.equal(materializeCalls.length % 2, 0, "verifikasi manifest tidak terdiri dari batch lengkap");
+  for (let i = 0; i < materializeCalls.length; i += 2) {
+    assert.deepEqual(materializeCalls.slice(i, i + 2), [relSah1, relSah2], "setiap boundary provider wajib memverifikasi kedua referensi berurutan");
+  }
   assert.equal(
     sha256(fs.readFileSync(pathBersama)),
     sha256(sah2),

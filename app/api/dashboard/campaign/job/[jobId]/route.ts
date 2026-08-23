@@ -13,6 +13,8 @@ import { pgForgetShotTask } from "@/lib/postgres/task-memo";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
+import { materializeJobReferenceManifest, parseJobReferenceManifest } from "@/lib/job-reference-manifest";
+import path from "node:path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,11 +35,13 @@ type JobRowLite = {
   id: string; state: string; org_id: string | null; approved_at: string | null;
   requires_approval: boolean; product_name: string; segments: string;
   quality_tier: string;
+  approved_reference_manifest: string | null;
 };
 
 async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRowLite | null> {
   const res = await pool.query<JobRowLite>(
     `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier,
+            j.approved_reference_manifest,
             p.name AS product_name, s.segments
      FROM jobs j JOIN products p ON p.id=j.product_id JOIN scripts s ON s.id=j.script_id
      WHERE j.id=$1 AND j.org_id=$2`,
@@ -134,6 +138,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       if (!job.requires_approval) throw ERR.BAD_REQUEST("Job ini tidak memakai review scene.", "Job has no approval gate.");
       if (job.state !== "AWAITING_APPROVAL") {
         throw ERR.BAD_REQUEST("Scene-nya belum siap ditinjau, atau sudah lewat tahap ini.", `Job is in ${job.state}.`);
+      }
+
+      // A6 adalah boundary berbayar: approve bisa melanjutkan provider/TTS dan
+      // regenerate langsung menulis ledger `regen`. Keduanya wajib memeriksa
+      // manifest durable + bytes SEBELUM mutation, charge, task reset, atau
+      // enqueue. Job review legacy tanpa manifest sudah pasti punya scene
+      // provider, jadi provenance-nya tidak boleh direkonstruksi diam-diam.
+      try {
+        if (!job.approved_reference_manifest) throw new Error("REF_MANIFEST_LEGACY_UNSAFE");
+        const manifest = parseJobReferenceManifest(job.approved_reference_manifest);
+        await materializeJobReferenceManifest(manifest, path.join(config.storageDir, "jobs", jobId));
+      } catch (error) {
+        console.error(`[referensi] A6 job ${jobId} dihentikan sebelum ${action}:`, error);
+        throw ERR.BAD_REQUEST(
+          "Foto acuan yang disetujui sudah hilang atau berubah. Job dihentikan sebelum persetujuan atau biaya regenerate.",
+          "Approved reference is missing or changed; no approval/regeneration side effect was applied."
+        );
       }
 
       if (action === "approve") {

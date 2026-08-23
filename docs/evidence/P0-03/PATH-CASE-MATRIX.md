@@ -32,7 +32,7 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 | A3 | `app/api/dashboard/campaign/generate/route.ts:44-49` | generate campaign | **UNGATED** | cek `length===0` saja |
 | A4 | `lib/dashboard/render-cell.ts:158-160,225` | INSERT QUEUED + enqueue | **UNGATED** | tidak ada |
 | A5 | `app/api/dashboard/campaign/confirm/route.ts:45` | confirm campaign → enqueue | **UNGATED** | tidak ada |
-| A6 | `app/api/dashboard/campaign/job/[jobId]/route.ts:128,164,283` | approve / regenerate job | **UNGATED** | tidak ada — bisa memilih ulang referensi |
+| A6 | `app/api/dashboard/campaign/job/[jobId]/route.ts` | approve / regenerate job | **PARTIAL** | manifest job immutable diverifikasi sebelum approve/regen charge/task reset/enqueue; admission gate umum A1..A7 tetap T43 |
 | A7 | `app/api/scripts/generate/route.ts` | generate naskah (provider-consuming, BUKAN admission render berbayar) | **UNGATED** | tidak ada |
 | D1 | `lib/postgres/product-persona-script.ts:57,112,134-136,255,264` | penulis DB produk/brand | **UNGATED** | tidak ada |
 | D2 | `lib/postgres/smoke-runtime.ts:310,319,336` | set/append/remove images | **UNGATED** | tidak ada |
@@ -163,8 +163,8 @@ mengerjakannya sebagai task terpisah.
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Daftar baru belum direvalidasi agar tetap punya foto layak |
-| W1 worker PG | UNGATED | **PARTIAL** | **Tertutup pada sub-kontrak resolver+snapshot:** `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340,355`), termasuk boundary C1/C8/C11 di PostgreSQL nyata. **Belum:** brand mismatch C3 dan identitas lintas invocation C9/C12 |
-| W2 worker inline | UNGATED | **PARTIAL** | Sub-kontrak resolver+snapshot serta boundary C1/C8/C11 tertutup (`lib/worker.ts:122,139`); C8/C11 memakai observer provider langsung dengan reset `t.after`. Gap yang tersisa: C3 dan identitas lintas invocation C9/C12 |
+| W1 worker PG | UNGATED | **PARTIAL** | Resolver, manifest job atomik/idempoten, reuse lintas invocation, verifikasi bytes di boundary provider/output, C1/C8/C11, dan legacy fail-closed dibuktikan di PostgreSQL disposable. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
+| W2 worker inline | UNGATED | **PARTIAL** | Kontrak manifest/reuse/verifikasi/legacy yang sama dibuktikan langsung pada worker SQLite; C8/C11 tetap memakai observer provider. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
 | A1..A7 admission | UNGATED | **BLOCKED (T43)** | Transcript §4 menguji tujuh path literal: semuanya `ADA`, `gerbang_bukti=0`, `exit=1`, termasuk A4 dan A7. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
 | D1 penulis produk/brand | UNGATED | **PARTIAL** | Reachable production melalui E1/E2/E3/E6. Semua create yang membawa image keys didahului helper bersidecar; direct caller lain hanya verifier disposable. Namun writer menerima `images` mentah dan mutation E3 name/category/brand tidak merevalidasi product-truth. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
 | D2 penulis daftar images | UNGATED | **PARTIAL** | Reachable production hanya melalui E4/E5/E8/E9. Add menerima keys dari helper bersidecar; delete retail/org sudah membersihkan storage, tetapi revalidation E5/E9 dan gerbang E8 tetap belum lengkap. Tidak ada CLI/direct caller tersembunyi. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
@@ -182,7 +182,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 
 | # | Status | Alasan dan bukti |
 |---|---|---|
-| C1 | **PARTIAL** | `REF_PROMOTIONAL` ada (`lib/product-truth.ts`). Test `W1 C1` (`tests/pg-product-truth-w1.test.ts:344`) dan `W2 C1` (`tests/product-truth-worker-reference.test.ts:219`) membuktikan worker memilih packshot foto#2 beserta sha256-nya. Namun jalur E/A lain belum dicakup dan A6 tidak mempertahankan snapshot sebelum regenerate: setiap invocation worker membaca ulang `products.images` lalu membuat snapshot baru (`lib/postgres/worker.ts:273-278,323-355`) |
+| C1 | **PARTIAL** | W1/W2 memilih packshot sah beserta hash lalu mematok manifest ordered `{rel,sha256,versiBukti}` tepat sekali; A6 approve/regenerate memakai manifest itu dan tidak memilih ulang. Tetap PARTIAL karena jalur E/A lain pada baris C1 belum seluruhnya dicakup |
 | C2 | **BLOCKED** | Diblokir implementasi lokal: `TYPE_MISMATCH` dan validasi terkait belum ada di kode mana pun; tidak ada penghalang eksternal |
 | C3 | **PARTIAL** | E4 menolak `cocokMerek === false` untuk foto pertama (`app/api/products/[id]/photos/route.ts:91-100`). Cakupan belum lengkap: E1 tidak menjalankan gerbang merek, E8 tidak meneruskan `merekTerdaftar`, W1/W2 tidak menegakkan brand mismatch, foto tambahan E4 tidak diperiksa, dan reason code khusus `BRAND_MISMATCH` belum ada |
 | C4 | **PARTIAL** | E4 dan E8 menolak `!label.terbaca` untuk foto pertama (`app/api/products/[id]/photos/route.ts:84-100`; `app/api/dashboard/campaign/product/[id]/photos/route.ts:47-54`). Cakupan belum lengkap: E1 tidak menjalankan gerbang label, foto tambahan E4/E8 tidak diperiksa, dan reason code khusus `LABEL_UNREADABLE` belum ada |
@@ -190,10 +190,10 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PARTIAL** | **Sudah tertutup:** classifier menghasilkan keadaan ketiga `belum_diperiksa` (bukan vonis promosi), dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED` — diuji di `tests/klasifikasi-gambar.test.ts` dan `tests/product-truth-evidence.test.ts`. **Gap yang tersisa:** jalur wajib C7 adalah E1, E4, E8, dan tidak satu pun membuktikan fail-closed. `rg --include-zero -c 'resolveApprovedReference|referensiLayak'` -> E1 (`app/api/products/route.ts`) = **0**, E8 (org photos) = **0**; keduanya menyimpan/menerima foto tanpa memanggil resolver sama sekali. E4 memanggilnya, tapi MENYIMPAN foto lebih dulu dan tidak membersihkannya saat tidak ada referensi layak — jadi kontrak 'nol efek storage' juga belum terbukti. Diturunkan dari PASS atas temuan Reviewer |
 | C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7 (T43) |
-| C9 | **PARTIAL** | Snapshot per job ADA (`ambilSnapshotTersetujui`) dan diuji lewat empat kasus TOCTOU, termasuk "path bersama ditimpa SESUDAH diperiksa". Yang belum: reason code `SNAPSHOT_IMMUTABLE` tidak ada, dan mutasi E3/E7 tidak memicu revalidasi (kini tidak lagi memengaruhi vonis referensi) |
+| C9 | **PARTIAL** | Sub-kontrak identitas FOTO tertutup: W1/W2 memakai manifest durable walau `products.images` direorder/delete/add; bytes missing/changed gagal sebelum provider/output/capture/regen. Tetap PARTIAL karena nama/brand/kategori belum dipatok sebagai snapshot job dan reason code `SNAPSHOT_IMMUTABLE` tidak diterbitkan |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
 | C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
-| C12 | **PARTIAL** | **Sudah tertutup:** integritas BYTES dalam satu invocation — `tests/kontrak-hash-sidecar.test.ts` mengunci hash dihitung dari bytes tersimpan, dan dari EMPAT test TOCTOU **dua** benar-benar mencapai provider (`W2 TOCTOU: bytes yang DITERIMA PROVIDER…` dan padanan W1); dua sisanya sengaja berhenti sebelum langkah berbayar. **Gap:** `REF_HASH_MISMATCH` yang sudah ada tidak bisa mendeteksi reorder karena menukar dua foto sah tidak mengubah hash file. Baris ini karena itu mengusulkan kontrak identitas persetujuan yang dipatok atau digest manifest berurutan, dengan reason code baru `REFERENCE_IDENTITY_CHANGED`; kontrak, kode, dan test E5/E9 → W1/W2 tersebut belum ada |
+| C12 | **PARTIAL** | Identitas dan urutan referensi kini dipatok dalam manifest job versioned; create konkuren kembali dengan satu pemenang, dan W1/W2 tidak membaca ulang daftar saat manifest ada. Tetap PARTIAL karena belum ada test HTTP E5/E9→resume end-to-end dan reason code `REFERENCE_IDENTITY_CHANGED` tidak diterbitkan |
 | C13 | **PARTIAL** | Kontrol positif W1 (`tests/pg-product-truth-w1.test.ts:740`) dan W2 (`tests/product-truth-worker-reference.test.ts:638`) membuktikan worker menerima bukti sah. Itu belum membuktikan produk valid diterima melalui seluruh E1..E9 dan A1..A7 yang diwajibkan baris ini |
 
 ### E.3 Bagian D dokumen ini sudah usang — dikoreksi
@@ -224,22 +224,12 @@ dikerjakan di slice ini:**
    dokumen.
 4. C2/C5 belum punya reason code maupun jalur penegakan; C3/C4 belum punya
    reason code khusus dan jalur penegakannya baru parsial seperti dirinci E.2.
-5. **A6 tidak mempertahankan snapshot yang sudah disetujui** — cacat produk
-   nyata, ditemukan lewat temuan Reviewer atas rekonsiliasi ini. Worker PG
-   membaca `p.images` segar tiap invocation lalu menyetujui ULANG, jadi
-   approve/regenerate memakai keadaan foto SAAT ITU, bukan yang disetujui saat
-   admission. Ini yang membuat C1 dan C9 tidak bisa PASS. Kandidat task
-   berikutnya; TIDAK diimplementasikan di slice rekonsiliasi ini.
-6. **Tidak ada identitas persetujuan yang dipatok lintas mutasi.** Referensi
-   utama dipilih dari URUTAN daftar (`lib/product-truth.ts:341` —
-   `utama: tersetujui[0] ?? null`), jadi E5/E9 yang memutasi daftar bisa
-   mengubah foto utama tanpa satu pun gerbang, dan worker membaca daftar
-   TERKINI tiap invocation. Ini yang membuat C12 tidak bisa PASS, dan
-   berkerabat dengan butir 5 (A6): keduanya soal keadaan yang disetujui tidak
-   dipatok. Dan `REF_HASH_MISMATCH` tidak bisa menangkapnya: menukar dua foto
-   sah tidak mengubah hash mana pun. Jadi yang dibutuhkan KONTRAK BARU
-   (identitas dipatok atau digest manifest berurutan) beserta reason code-nya,
-   bukan sekadar test E5/E9 -> W1/W2.
+5. Snapshot nama/brand/kategori job belum ada. Manifest task A6 menutup
+   identitas foto, tetapi W1/W2 masih membaca field produk non-referensi saat
+   invocation; C9 karena itu tetap PARTIAL.
+6. Test HTTP penuh E5/E9→resume belum ada. Worker dan helper sudah membuktikan
+   daftar reorder/delete/add tidak mengubah manifest, tetapi C12 tetap PARTIAL
+   sampai jalur mutation HTTP dan reason code kontraknya dibuktikan langsung.
 7. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
    tanpa resolver, sedangkan E4 meninggalkan bytes tersimpan saat tidak ada
    referensi layak. Belum ada test nol efek storage untuk ketiga jalur itu.
@@ -313,4 +303,23 @@ TASK=P0-E5-RETAIL-DELETE-STORAGE-CLEANUP-20260823
 - Focus test → **6/6 PASS**; gabungan focus + product-truth ingestion + storage
   → **16/16 PASS**; `tsc --noEmit` → **PASS**.
 - Gap orphan-cleanup E5 ditutup. E5 tetap **PARTIAL** karena revalidation daftar
-  hasil dan identitas persetujuan lintas mutasi (C12) di luar scope task ini.
+  hasil; identitas referensi lintas mutasi kini dipatok oleh manifest job A6.
+
+### E.9 Follow-up A6 immutable approved-reference manifest — 2026-08-23
+
+TASK=P0-A6-REFERENCE-SNAPSHOT-IMMUTABLE-20260823
+
+- SQLite dan PostgreSQL menyimpan manifest job versioned dan ordered berisi
+  `rel`, `sha256`, dan `versiBukti`. Instalasi memakai transaksi/CAS sehingga
+  retry dan create konkuren selalu membaca satu pemenang durable.
+- W1/W2 tidak memilih ulang dari `products.images` bila manifest sudah ada.
+  Seluruh entry di-materialize dan diverifikasi sebelum boundary provider,
+  regenerate, output, dan capture; missing/hash-changed gagal tertutup.
+- A6 memverifikasi manifest sebelum approve mutation, klaim/ledger regenerate,
+  reset task, atau enqueue. Legacy job tanpa manifest hanya boleh dipatok bila
+  belum ada provider task/output/job-shot/cost; provenance tak terbukti ditolak.
+- `tests/job-reference-manifest.test.ts` → **4/4 PASS**; W2 worker → **15/15
+  PASS**; affected product-truth gabungan → **111/111 PASS**; W1 PostgreSQL
+  disposable → **16/16 PASS**; `tsc --noEmit` → **PASS**.
+- A6/C1/C9 reference-identity gap ditutup. Status kasus keseluruhan tetap
+  konservatif sesuai gap non-referensi dan jalur lain yang tercatat di E.2.

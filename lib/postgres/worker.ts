@@ -52,8 +52,9 @@ import { pgTaskMemo } from "./task-memo";
 import { appendEndcard, ENDCARD_DEFAULT_COLOR, ENDCARD_DURASI_DTK } from "../media/endcard";
 import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
-import { ambilSnapshotTersetujui, bytesTersetujuiCocok, pastikanBytesTersetujui, pesanTanpaReferensi, resolveApprovedReference } from "../product-truth";
+import { pesanTanpaReferensi } from "../product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "../kanari-bukti";
+import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "../job-reference-manifest";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -83,6 +84,7 @@ type WorkerRow = {
   /** JSON bebas dari intake. Sumber MEREK TEPERCAYA (raw_meta.brand). */
   product_raw_meta: string | null;
   creator_category: string | null;
+  approved_reference_manifest: string | null;
 };
 
 /**
@@ -321,7 +323,6 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   if (config.providerVideo === "mock") throw new Error("Worker PostgreSQL membutuhkan PROVIDER_VIDEO nyata; fixture hanya diizinkan untuk test lokal eksplisit.");
   const segments = JSON.parse(row.script_segments) as SegmentDraft[];
   const images = JSON.parse(row.product_images) as string[];
-  if (images.length === 0) throw new Error("Produk tidak punya foto — upload minimal 1 foto.");
   // REFERENSI DIPILIH DARI BUKTI, BUKAN DARI URUTAN UNGGAH.
   //
   // Sampai 21 Agu baris ini `materialize(images[0])`: foto PERTAMA menang
@@ -337,22 +338,20 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // rumah itu harus milik job ini. Dulu ia dibuat sesudah materialize.
   const workDir = path.join(config.storageDir, row.id ? `jobs/${row.id}` : "jobs/tanpa-id");
   fs.mkdirSync(workDir, { recursive: true });
-  const referensi = await resolveApprovedReference(images);
-  // KANARI, BUKAN GERBANG. Lihat catatan padanannya di lib/worker.ts.
-  catatKanariReferensi(referensi, { jobId: row.id, produkId: row.product_id, runtime: "worker-postgres" });
-  if (!referensi.utama) throw new GagalTanpaReferensi(pesanTanpaReferensi(referensi), referensi);
-  const imageRef = await mediaStorage().materialize(referensi.utama.rel);
-  if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
-  // Bytes yang BENAR-BENAR akan dikirim wajib sama dengan yang disetujui.
-  // materialize() adalah pembacaan KEDUA (di R2: GET kedua ke jaringan), dan
-  // objeknya bisa berubah di antara keduanya. Tanpa baris ini, seluruh rantai
-  // bukti di atasnya jadi hiasan.
-  await pastikanBytesTersetujui(imageRef, referensi.utama);
-  // SNAPSHOT PRIVAT: path dari materialize() masih bisa ditimpa penulis lain
-  // sesudah diperiksa. Yang dikirim ke hilir hanya salinan milik job ini,
-  // dan salinan ITU yang diverifikasi.
-  const dirSnapshot = path.join(workDir, "ref-tersetujui");
-  const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
+  const hasilManifest = await loadOrCreateJobReferenceManifest({
+    existingRaw: row.approved_reference_manifest,
+    candidateRels: images,
+    onResolved: (referensi) => {
+      catatKanariReferensi(referensi, { jobId: row.id, produkId: row.product_id, runtime: "worker-postgres" });
+      if (!referensi.utama) throw new GagalTanpaReferensi(pesanTanpaReferensi(referensi), referensi);
+    },
+    persistIfAbsentAndSafe: (candidateRaw) => jobs.installReferenceManifestIfSafe(row.id, candidateRaw),
+  });
+  const snapshots = await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+  const pastikanManifestSebelumEfek = async () => {
+    await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+  };
+  const refUtama = snapshots[0];
   let primaryRef = refUtama;
   const extraRefs: string[] = [];
   if ((row.quality_tier ?? "silent_caption") !== "silent_caption") {
@@ -365,17 +364,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // menghitung primary + tambahan; slice(1, MAX_IMAGES=8) sebelumnya
     // menghasilkan primary + tujuh = DELAPAN referensi, melewati kontraknya
     // sendiri.
-    for (const ref of referensi.tersetujui.slice(1, MAKS_REFERENSI_PER_GENERASI)) {
-      const p = await mediaStorage().materialize(ref.rel).catch(() => null);
-      if (!p) continue;
-      // Referensi tambahan yang bytes-nya berubah DIBUANG, bukan menjatuhkan
-      // job: ia opsional, dan membuangnya sudah gagal-tertutup untuk foto itu.
-      if (!(await bytesTersetujuiCocok(p, ref))) {
-        console.warn(`[referensi] ${ref.rel} berubah sesudah disetujui — dibuang dari referensi tambahan`);
-        continue;
-      }
-      extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
-    }
+    extraRefs.push(...snapshots.slice(1, MAKS_REFERENSI_PER_GENERASI));
     // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
     // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
     // model; terbukti lolos moderasi, lab fashion-r2b 2026-08-07). Bila tidak
@@ -536,6 +525,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       if (shot.idx >= spec.shots.length) continue;
       const tmpDir = path.join(workDir, `regen-${shot.idx}`);
       fs.mkdirSync(tmpDir, { recursive: true });
+      await pastikanManifestSebelumEfek();
       const single = await generateVideoWithFailover({ ...spec, shots: [spec.shots[shot.idx]] }, tmpDir);
       await jobs.addCost(row.id, single.costIdr);
       fs.copyFileSync(single.assets[0].filePath, path.join(workDir, `shot${shot.idx}.mp4`));
@@ -567,6 +557,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   let qcF1: RingkasanQcF1[] = [];
   let specSiap: VisualSpec;
   if (bolehFrameTurunan({ format, tier, orgId: row.org_id })) {
+    await pastikanManifestSebelumEfek();
     const turunan = await siapkanFrameTurunan(spec, workDir, row.id, {
       kunci: kunciCastRef({ presetId: row.creator_category, customDesc: customDesc ?? null }),
       deskripsi: category.promptSeed,
@@ -582,6 +573,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     qcF1 = turunan.qcF1;
     if (turunan.biayaIdr > 0) await jobs.addCost(row.id, turunan.biayaIdr);
   } else {
+    await pastikanManifestSebelumEfek();
     specSiap = await siapkanFramePertama(spec, workDir, row.id);
   }
   // Verdict QC-F1 ikut ke arsip prompt lewat modelParams — SENGAJA belum kolom
@@ -601,7 +593,13 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     }
   }
 
-  const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(specSiap, workDir) : await generateVideoWithFailover(specSiap, workDir));
+  let video;
+  if (reused) video = reused;
+  else if (format === "vo_broll") video = await buildPhotoPanVideo(specSiap, workDir);
+  else {
+    await pastikanManifestSebelumEfek();
+    video = await generateVideoWithFailover(specSiap, workDir);
+  }
   await jobs.setProviders(row.id, video.providerName);
   await jobs.addCost(row.id, video.costIdr);
 
@@ -682,6 +680,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // real TTS is the only option, unlike hands_only/talking_head's mock-only rule.
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
+      await pastikanManifestSebelumEfek();
       const result = await synthesizeElevenLabsVoiceover(stripDeliveryTags(segment.text), path.join(workDir, `vo_real_${i}.mp3`));
       vo.push({ path: result.filePath, startSec: segment.start });
       await jobs.addCost(row.id, result.costIdr);
@@ -695,6 +694,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // SUARA RESMI = Gemini TTS (Brian 2026-08-07): audio embedded model video
     // diganti VO TTS ber-voice terkunci per avatar.
     const voText = hargaTerbilang(segments.map((segment) => segment.tts_text ?? segment.text).join(" ... "));
+    await pastikanManifestSebelumEfek();
     const tts = await synthesizeGeminiVoiceover(voText, category.voiceName, category.voiceStyle, path.join(workDir, "vo_gemini.wav"));
     geminiVoPath = tts.filePath;
     await jobs.addCost(row.id, tts.costIdr);
@@ -703,6 +703,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     let voiceProvider = "";
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
+      await pastikanManifestSebelumEfek();
       const result = await synthesizeVoiceWithFailover({ jobId: row.id, text: stripDeliveryTags(segment.text), segmentIndex: i, slotSec: segment.end - segment.start, language: "id-ID", register: row.script_register }, workDir);
       if (!voiceProvider) voiceProvider = result.providerName;
       vo.push({ path: result.asset.filePath, startSec: segment.start });
@@ -848,6 +849,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
         const tmpDir = path.join(workDir, `qcfix-${idx}`);
         fs.mkdirSync(tmpDir, { recursive: true });
         try {
+          await pastikanManifestSebelumEfek();
           const ulang = await generateVideoWithFailover({ ...specSiap, shots: [specSiap.shots[idx]] }, tmpDir);
           await jobs.addCost(row.id, ulang.costIdr);
           fs.copyFileSync(ulang.assets[0].filePath, clipPaths[idx]);
@@ -870,6 +872,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     }
   }
   if (!qc?.passed) throw new Error("QC tidak menghasilkan output lulus.");
+  await pastikanManifestSebelumEfek();
   if (!(await jobs.transition(row.id, "LABELING", { watermark: renderParams.watermarkText }))) return;
   const relVideo = path.relative(config.storageDir, outputPath).split(path.sep).join("/");
   await persistReadyOutput(row, jobs, pool, relVideo, outputPath, qc);
