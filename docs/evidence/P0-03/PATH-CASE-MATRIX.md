@@ -85,12 +85,12 @@ bagian E.2, dan arti tiap status di E.0.
 | C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` | **PARTIAL** |
 | C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` | **BLOCKED** |
 | C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` | **BLOCKED** |
-| C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` | **PASS** |
+| C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` | **PARTIAL** |
 | C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` | **PARTIAL** |
 | C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` | **PARTIAL** |
 | C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` | **PARTIAL** |
 | C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | **PASS** |
-| C12 | Urutan images diubah/dirusak | E5,E9,W1,W2 | pakai hash tersetujui | `REF_HASH_MISMATCH` | **PASS** |
+| C12 | Urutan images diubah/dirusak | E5,E9,W1,W2 | pakai hash tersetujui | `REF_HASH_MISMATCH` | **PARTIAL** |
 | C13 | **Produk valid** (positif) | seluruh E,A,W | DITERIMA | — | **PARTIAL** |
 
 Tiap penolakan wajib membuktikan: reason code stabil, pesan bisa ditindaklanjuti,
@@ -165,7 +165,7 @@ mengerjakannya sebagai task terpisah.
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Daftar baru belum direvalidasi agar tetap punya foto layak |
 | W1 worker PG | UNGATED | **PASS** | `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340`); diuji di PostgreSQL nyata, 12 test |
 | W2 worker inline | UNGATED | **PASS** | idem (`lib/worker.ts:122,139`); 11 test |
-| A1..A7 admission | UNGATED | **BLOCKED (T43)** | `rg -ln 'resolveApprovedReference|referensiLayak' app/api/jobs app/api/dashboard` → **NOL berkas**. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
+| A1..A7 admission | UNGATED | **BLOCKED (T43)** | `rg -ln 'resolveApprovedReference|referensiLayak' app/api/jobs app/api/dashboard lib/dashboard/render-cell.ts app/api/scripts/generate/route.ts` → stdout kosong, exit 1. Scope mencakup A4 dan A7. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
 | D1, D2 penulis DB | UNGATED | **BLOCKED** | penerimaan diblokir audit lokal yang belum dilakukan; bukan dependensi eksternal dan bukan bagian slice ini |
 
 ### E.2 Kasus C1-C13 — alasan tiap status
@@ -178,12 +178,12 @@ mengerjakannya sebagai task terpisah.
 | C4 | **PARTIAL** | E4 dan E8 menolak `!label.terbaca` untuk foto pertama (`app/api/products/[id]/photos/route.ts:84-100`; `app/api/dashboard/campaign/product/[id]/photos/route.ts:47-54`). Cakupan belum lengkap: E1 tidak menjalankan gerbang label, foto tambahan E4/E8 tidak diperiksa, dan reason code khusus `LABEL_UNREADABLE` belum ada |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
-| C7 | **PASS** | `CLASSIFIER_FAILED` ada; `belum_diperiksa` adalah keadaan ketiga yang eksplisit, bukan vonis promosi. Diuji di `tests/klasifikasi-gambar.test.ts` dan `tests/product-truth-evidence.test.ts` |
+| C7 | **PARTIAL** | **Sudah tertutup:** classifier menghasilkan keadaan ketiga `belum_diperiksa` (bukan vonis promosi), dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED` — diuji di `tests/klasifikasi-gambar.test.ts` dan `tests/product-truth-evidence.test.ts`. **Gap yang tersisa:** jalur wajib C7 adalah E1, E4, E8, dan tidak satu pun membuktikan fail-closed. `rg --include-zero -c 'resolveApprovedReference|referensiLayak'` -> E1 (`app/api/products/route.ts`) = **0**, E8 (org photos) = **0**; keduanya menyimpan/menerima foto tanpa memanggil resolver sama sekali. E4 memanggilnya, tapi MENYIMPAN foto lebih dulu dan tidak membersihkannya saat tidak ada referensi layak — jadi kontrak 'nol efek storage' juga belum terbukti. Diturunkan dari PASS atas temuan Reviewer |
 | C8 | **PARTIAL** | Tertutup dan diuji di W1/W2: `W1 C8` × 3 (korup, hilang, hash beda) dan `W2 C8` × 2, seluruhnya menuntut nol materialize, nol provider, gagal-tertutup, nol capture/regen. **TIDAK tertutup di A1..A7** — itu isi T43 |
 | C9 | **PARTIAL** | Snapshot per job ADA (`ambilSnapshotTersetujui`) dan diuji lewat empat kasus TOCTOU, termasuk "path bersama ditimpa SESUDAH diperiksa". Yang belum: reason code `SNAPSHOT_IMMUTABLE` tidak ada, dan mutasi E3/E7 tidak memicu revalidasi (kini tidak lagi memengaruhi vonis referensi) |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
 | C11 | **PASS** | `REF_MISSING` ada; diuji lewat kontrak resolver dan urutan vonis (sidecar diperiksa lebih dulu) |
-| C12 | **PASS** | `REF_HASH_MISMATCH` ada; `tests/kontrak-hash-sidecar.test.ts` plus TOCTOU "bytes yang DITERIMA PROVIDER tetap referensi utama yang disetujui" |
+| C12 | **PARTIAL** | **Sudah tertutup:** integritas BYTES dalam satu invocation — `REF_HASH_MISMATCH` ada, `tests/kontrak-hash-sidecar.test.ts` mengunci hash dihitung dari bytes tersimpan, dan empat kasus TOCTOU membuktikan bytes yang DITERIMA PROVIDER tetap yang disetujui. **Gap yang tersisa:** perubahan URUTAN belum ditahan. `resolveApprovedReference` mempertahankan urutan input dan memilih yang pertama sah (`lib/product-truth.ts:341` — `utama: tersetujui[0] ?? null`), sementara E5/E9 memutasi daftar dan worker membaca daftar TERKINI tiap invocation. Jadi menukar urutan mengubah foto mana yang jadi utama, tanpa identitas persetujuan yang dipatok lintas mutasi. Belum ada test E5/E9 -> W1/W2. Diturunkan dari PASS atas temuan Reviewer |
 | C13 | **PARTIAL** | Kontrol positif W1 (`tests/pg-product-truth-w1.test.ts:740`) dan W2 (`tests/product-truth-worker-reference.test.ts:638`) membuktikan worker menerima bukti sah. Itu belum membuktikan produk valid diterima melalui seluruh E1..E9 dan A1..A7 yang diwajibkan baris ini |
 
 ### E.3 Bagian D dokumen ini sudah usang — dikoreksi
@@ -222,24 +222,34 @@ dikerjakan di slice ini:**
    berikutnya; TIDAK diimplementasikan di slice rekonsiliasi ini.
 7. E5 DELETE retail hanya menghapus path dari daftar produk; file foto dan
    sidecar tetap orphan di storage (`app/api/products/[id]/photos/route.ts:139-155`).
+8. **Tidak ada identitas persetujuan yang dipatok lintas mutasi.** Referensi
+   utama dipilih dari URUTAN daftar (`lib/product-truth.ts:341` —
+   `utama: tersetujui[0] ?? null`), jadi E5/E9 yang memutasi daftar bisa
+   mengubah foto utama tanpa satu pun gerbang, dan worker membaca daftar
+   TERKINI tiap invocation. Ini yang membuat C12 tidak bisa PASS, dan
+   berkerabat dengan butir 6 (A6): keduanya soal keadaan yang disetujui tidak
+   dipatok. Butuh test E5/E9 -> W1/W2.
+9. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
+   tanpa resolver, sedangkan E4 meninggalkan bytes tersimpan saat tidak ada
+   referensi layak. Belum ada test nol efek storage untuk ketiga jalur itu.
 
 **(b) Butuh kredensial/data:**
 
-8. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
+10. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
    juga butuh R2 yang BERPASANGAN dengan database itu.
 
 **(c) Butuh deploy/migrasi:**
 
-9. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
+11. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
    staging; `preDeployCommand` staging menjalankan migrasi schema.
 
 **(d) Butuh keputusan Founder T43:**
 
-10. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
+12. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
 
 ### E.5 Yang TIDAK dilakukan di slice ini
 
 Nol perubahan produk atau test. Tidak satu pun status dinaikkan untuk membuat
-matriks hijau: tiga baris tetap BLOCKED oleh gap lokal dan tujuh baris PARTIAL
-karena cakupannya belum lengkap. Ketujuh gap di E.4(a) dicatat sebagai kandidat task, bukan
+matriks hijau: tiga baris tetap BLOCKED oleh gap lokal dan sembilan baris PARTIAL
+karena cakupannya belum lengkap. Kesembilan gap di E.4(a) dicatat sebagai kandidat task, bukan
 diimplementasikan.

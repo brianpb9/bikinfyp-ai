@@ -3,18 +3,20 @@
 # HEAD      : e8a00a5bd581a156865f145de22accc7daa6fe12
 # worktree  : 1 berkas berubah sebelum rekonsiliasi
 
---- 1. reason code USULAN vs yang ADA di kode ---
-$ for rc in ...; do rg -l "\"$rc\"" lib app scripts; done
+--- 1. reason code USULAN vs yang ADA di kode (direkam ulang 2026-08-23T00:27:02Z) ---
+# Daftar literal; bukan placeholder. `|| true` mempertahankan baris kosong saat
+# satu reason code tidak ditemukan.
+$ for rc in REF_PROMOTIONAL TYPE_MISMATCH BRAND_MISMATCH LABEL_UNREADABLE CATEGORY_UNKNOWN OCR_FAILED CLASSIFIER_FAILED EVIDENCE_INVALID SNAPSHOT_IMMUTABLE LEGACY_UNVALIDATED REF_MISSING REF_HASH_MISMATCH; do hits=$(rg -l "\"$rc\"" lib app scripts 2>/dev/null || true); if [ -n "$hits" ]; then printf '%-23s%s\n' "$rc" "$hits"; else printf '%s\n' "$rc"; fi; done
 REF_PROMOTIONAL        lib/product-truth.ts
-TYPE_MISMATCH          
-BRAND_MISMATCH         
-LABEL_UNREADABLE       
-CATEGORY_UNKNOWN       
-OCR_FAILED             
+TYPE_MISMATCH
+BRAND_MISMATCH
+LABEL_UNREADABLE
+CATEGORY_UNKNOWN
+OCR_FAILED
 CLASSIFIER_FAILED      lib/product-truth.ts
 EVIDENCE_INVALID       lib/product-truth.ts
-SNAPSHOT_IMMUTABLE     
-LEGACY_UNVALIDATED     
+SNAPSHOT_IMMUTABLE
+LEGACY_UNVALIDATED
 REF_MISSING            lib/product-truth.ts
 REF_HASH_MISMATCH      lib/product-truth.ts
 
@@ -33,10 +35,11 @@ lib/postgres/worker.ts:340:  const referensi = await resolveApprovedReference(im
 lib/postgres/worker.ts:355:  const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
 lib/postgres/worker.ts:377:      extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
 
---- 4. admission (A1..A7): adakah gerbang bukti? ---
-$ rg -ln 'resolveApprovedReference|referensiLayak' app/api/jobs app/api/dashboard
-(NOL berkas — admission tidak memanggil gerbang bukti)
-
+--- 4. admission A1..A7: adakah gerbang bukti? (diperluas 2026-08-23T00:27:02Z) ---
+$ rg -ln 'resolveApprovedReference|referensiLayak' app/api/jobs app/api/dashboard lib/dashboard/render-cell.ts app/api/scripts/generate/route.ts; echo "exit=$?"
+exit=1
+# -> stdout kosong. Scope mencakup A1..A3/A5/A6 di app/api/jobs+dashboard,
+# A4 di lib/dashboard/render-cell.ts, dan A7 di app/api/scripts/generate/route.ts.
 --- 5. gerbang label E4 hanya foto PERTAMA (lubang 20 Agu, masih ada) ---
 $ rg -n 'existing.length === 0' app/api/products/[id]/photos/route.ts
 84:    if (existing.length === 0 && blobs[0]) {
