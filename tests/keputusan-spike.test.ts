@@ -26,19 +26,25 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
     ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)
     || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
   const gateAwaits: ts.AwaitExpression[] = [];
-  const persistenceAwaits: ts.AwaitExpression[] = [];
+  const persistenceCalls: ts.CallExpression[] = [];
   const collectCalls = (node: ts.Node): void => {
     if (node !== post && functionBoundary(node)) return;
     if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression)) {
       const callee = node.expression.expression;
       if (ts.isIdentifier(callee) && callee.text === "periksaLabelFoto") gateAwaits.push(node);
-      if (ts.isIdentifier(callee) && callee.text === "saveUniqueProductImages") persistenceAwaits.push(node);
+    }
+    if (ts.isCallExpression(node)) {
+      const callee = node.expression;
+      if (ts.isIdentifier(callee) && callee.text === "saveUniqueProductImages") persistenceCalls.push(node);
     }
     ts.forEachChild(node, collectCalls);
   };
   collectCalls(post.body);
   assert.equal(gateAwaits.length, 1, `${context}: wajib tepat satu awaited label gate aktual di POST`);
-  assert.equal(persistenceAwaits.length, 1, `${context}: wajib tepat satu awaited persistence aktual di POST`);
+  assert.equal(persistenceCalls.length, 1, `${context}: wajib tepat satu persistence call total di POST`);
+  const persistenceCall = persistenceCalls[0];
+  assert.ok(ts.isAwaitExpression(persistenceCall.parent) && persistenceCall.parent.expression === persistenceCall,
+    `${context}: satu-satunya persistence call wajib langsung di-await`);
 
   const unwrap = (expression: ts.Expression): ts.Expression => {
     while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
@@ -120,7 +126,7 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
     `${context}: gate wajib awaited call/initializer langsung, bukan expression bersyarat`
   );
 
-  const persistence = persistenceAwaits[0];
+  const persistence = persistenceCall.parent;
   let persistenceStatement: ts.Node = persistence;
   while (persistenceStatement.parent && persistenceStatement.parent !== branchBlock) persistenceStatement = persistenceStatement.parent;
   assert.ok(persistenceStatement.parent === branchBlock && ts.isStatement(persistenceStatement),
@@ -233,6 +239,13 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
         await periksaLabelFoto(tmpFile, product.name);
       }
     }`],
+    ["unawaited persistence first", `export async function POST() {
+      saveUniqueProductImages(id, blobs);
+      if (existing.length === 0 && blobs[0]) {
+        await periksaLabelFoto(tmpFile, product.name);
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
     ["mutually exclusive if/else", `export async function POST() {
       if (existing.length === 0 && blobs[0]) {
         if (flag) await periksaLabelFoto(tmpFile, product.name);
@@ -272,7 +285,7 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   for (const [judul, source] of ditolak) {
     assert.throws(
       () => assertLabelGateBeforePersistence(source, `counterexample ${judul}`, "E4"),
-      /label gate aktual|kondisi E4 exact|unconditional|dipulihkan catch|direct sibling|sesudah branch/,
+      /label gate aktual|persistence call total|langsung di-await|kondisi E4 exact|unconditional|dipulihkan catch|direct sibling|sesudah branch/,
       `${judul} tidak boleh memenangkan structural guard`
     );
   }
