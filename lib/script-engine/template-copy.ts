@@ -428,10 +428,10 @@ const T07: CopyFn[] = [
 ];
 
 const T08: CopyFn[] = [
-  (c) => ({ hook: `Nah, catat kondisi hari ini; nanti nggak terulang`, demo: `Pada ${c.produk}, catat tampilan ${c.proof} dalam kondisi terukur ya`, cta: `Cara pakai ada di keranjang kuning ya` }),
-  (c) => ({ hook: `Eh, kalau kondisi awalnya nggak disimpan, catatan lanjutannya nggak berarti`, demo: `Ikuti petunjuk ${c.produk}, lalu jadwalkan pemeriksaan ${c.proof} sih`, cta: `Waktunya ada di keranjang kuning sih` }),
-  (c) => ({ hook: `Nah, waktu saja nggak cukup; kondisi pengamatannya harus setara`, demo: `Bandingkan ${c.proof} hanya dengan kondisi pengamatan yang tercatat loh`, cta: `Petunjuknya ada di keranjang kuning ya` }),
-  (c) => ({ hook: `Dua waktu ini nggak berarti tanpa catatan, sumpah`, demo: `Rencana awal dan akhir cukup memeriksa ${c.proof} pada ${c.produk} ya`, cta: `Catatannya ada di keranjang kuning deh` }),
+  (c) => ({ hook: `Nah, atribut apa yang terlihat di sini?`, demo: `Arahkan ${c.produk}; tulis ${c.proof} yang tampak ya`, cta: `Cara pakai ada di keranjang kuning ya` }),
+  (c) => ({ hook: `Eh, satu pengamatan ini sudah cukup jelas?`, demo: `Baca label ${c.produk}, kemudian periksa ${c.proof} dalam posisi tetap sih`, cta: `Rinciannya ada di keranjang kuning sih` }),
+  (c) => ({ hook: `Nah, kondisi cahayanya sudah merata?`, demo: `Taruh ${c.produk} di meja; amati ${c.proof} tanpa menggeser posisinya, loh`, cta: `Petunjuknya ada di keranjang kuning ya` }),
+  (c) => ({ hook: `Sumpah, detail kecilnya mudah terlewat, ya?`, demo: `Dekatkan ${c.produk} tanpa memindahkannya, lalu tulis ${c.proof} yang tampak ya`, cta: `Catatannya ada di keranjang kuning deh` }),
 ];
 
 const T09: CopyFn[] = [

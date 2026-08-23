@@ -131,7 +131,22 @@ test("guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen meng
   assert.ok(riskyEvidenceClaims("t05-before-after", "Lihat dua sisi dan nilai atributnya").length > 0);
   assert.ok(riskyEvidenceClaims("before-after", "Taruh dua tampilan berdampingan").length > 0);
   assert.ok(riskyEvidenceClaims("t10-bukti-di-lengan", "Gunakan sisi pembanding lalu bandingkan").length > 0);
-  assert.deepEqual(riskyEvidenceClaims("t05-before-after", "Lihat satu tampilan dan catat atributnya"), []);
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Eh, kalau kondisi awalnya nggak disimpan, catatan lanjutannya nggak berarti").length > 0);
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Bandingkan teksturnya hanya dengan kondisi pengamatan yang tercatat loh").length > 0);
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Rencana awal dan akhir cukup memeriksa teksturnya pada Serum Uji Katalog ya").length > 0);
+  for (const templateId of ["before-after", "t05-before-after", "t08-day-1-vs-day-7", "t10-bukti-di-lengan"]) {
+    assert.ok(riskyEvidenceClaims(templateId, "Sesudah pemakaian, hasilnya berubah").length > 0, templateId);
+    assert.ok(riskyEvidenceClaims(templateId, "Hasil produk berubah jelas").length > 0, templateId);
+  }
+  const safeControls: Record<string, string> = {
+    "before-after": "Lihat satu tampilan dan catat atributnya",
+    "t05-before-after": "Periksa produk pada cahaya netral",
+    "t08-day-1-vs-day-7": "Amati label produk dalam posisi tetap",
+    "t10-bukti-di-lengan": "Catat atribut yang terlihat pada satu area",
+  };
+  for (const [templateId, copy] of Object.entries(safeControls)) {
+    assert.deepEqual(riskyEvidenceClaims(templateId, copy), [], templateId);
+  }
   assert.ok(proofPriceSkeleton("Teksturnya terlihat, harganya 189 ribu")?.includes("placeholder_bukti"));
   assert.deepEqual(bannedHookBoilerplateStarter("[fast] Di harga 189 ribu, lihat ini"), ["di harga"]);
   assert.deepEqual(normalizedHookPrefixes("[fast] Di harga 189 ribu, lihat ini").slice(0, 2), [
@@ -450,8 +465,8 @@ test("Ads kategori layanan tanpa bukti fitur memakai aksi kartu yang netral", as
   }
 });
 
-test("T05, T10, dan before-after seluruhnya tinggal inspeksi satu keadaan", () => {
-  for (const templateId of ["before-after", "t05-before-after", "t10-bukti-di-lengan"]) {
+test("T05, T08, T10, dan before-after seluruhnya tinggal inspeksi satu keadaan", () => {
+  for (const templateId of ["before-after", "t05-before-after", "t08-day-1-vs-day-7", "t10-bukti-di-lengan"]) {
     const template = audit.templates.find((item) => item.templateId === templateId)!;
     assert.equal(template.variants.length, 4);
     for (const variant of template.variants) {

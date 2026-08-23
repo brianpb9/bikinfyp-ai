@@ -346,20 +346,27 @@ const CREATIVE_ANALYSIS_PHRASES = [
 
 const BANNED_HOOK_STARTERS = /^(?:di harga|pada harga|untuk banderol|dengan nilai)\b/iu;
 
+const COMMON_OUTCOME_COMPARISON = /\b(?:sebelum|sesudah|setelah|awal(?:nya)?|akhir(?:nya)?|hasil(?:nya)?|berubah|perubahan(?:nya)?|perbedaan(?:nya)?)\b/giu;
+const COMMON_COMPARISON_STRUCTURE = /\b(?:dua (?:kondisi|tampilan|sisi)|kedua sisi|awal dan akhir|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|bandingkan|perbandingan)\b/giu;
+
 const RISKY_EVIDENCE_PATTERNS: Record<string, RegExp[]> = {
   "before-after": [
-    /\b(?:dua (?:kondisi|tampilan|sisi)|kedua sisi|awal dan akhir|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|bandingkan|perbandingan)\b/giu,
+    COMMON_OUTCOME_COMPARISON,
+    COMMON_COMPARISON_STRUCTURE,
   ],
   "t05-before-after": [
-    /\b(?:sebelum|sesudah|setelah|awal|akhir|hasil|berubah|perubahan|perbedaan)\b/giu,
-    /\b(?:dua (?:kondisi|tampilan|sisi)|kedua sisi|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|bandingkan|perbandingan)\b/giu,
+    COMMON_OUTCOME_COMPARISON,
+    COMMON_COMPARISON_STRUCTURE,
   ],
   "t08-day-1-vs-day-7": [
-    /\b(?:hari (?:pertama|ke[- ]?\w+)|day\s*\d+|setelah|hasil|berubah|perubahan|rutinitas)\b/giu,
+    COMMON_OUTCOME_COMPARISON,
+    COMMON_COMPARISON_STRUCTURE,
+    /\b(?:hari (?:pertama|ke[- ]?\w+)|day\s*\d+|rutinitas|catatan lanjutan(?:nya)?|dua waktu|jadwalkan pemeriksaan)\b/giu,
   ],
   "t10-bukti-di-lengan": [
+    COMMON_OUTCOME_COMPARISON,
+    COMMON_COMPARISON_STRUCTURE,
     /\b(?:(?:satu|dua|kedua) lengan|lengan[^.!?;]{0,35}(?:beda|hasil|banding)|(?:beda|hasil|banding)[^.!?;]{0,35}lengan)\b/giu,
-    /\b(?:dua (?:kondisi|tampilan|sisi)|kedua sisi|awal dan akhir|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|bandingkan|perbandingan)\b/giu,
   ],
 };
 
