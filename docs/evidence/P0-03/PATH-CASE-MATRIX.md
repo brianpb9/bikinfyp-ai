@@ -227,9 +227,10 @@ dikerjakan di slice ini:**
 5. Snapshot metadata job kini menutup pembacaan ulang nama/brand/kategori dan
    field prompt W1/W2. C9 tetap PARTIAL sampai mutasi HTTP E3/E7→resume dan
    reason code kontraknya dibuktikan end-to-end.
-6. Test HTTP penuh E5/E9→resume belum ada. Worker dan helper sudah membuktikan
-   daftar reorder/delete/add tidak mengubah manifest, tetapi C12 tetap PARTIAL
-   sampai jalur mutation HTTP dan reason code kontraknya dibuktikan langsung.
+6. Test HTTP penuh E5/E9→resume kini ada (E.11): handler mutation, daftar
+   otoritatif, cleanup storage, isolasi owner/org, dan resume W1/W2 dibuktikan
+   langsung. C12 tetap PARTIAL hanya karena reason code usulan
+   `REFERENCE_IDENTITY_CHANGED` belum diterbitkan.
 7. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
    tanpa resolver, sedangkan E4 meninggalkan bytes tersimpan saat tidak ada
    referensi layak. Belum ada test nol efek storage untuk ketiga jalur itu.

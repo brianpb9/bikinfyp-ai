@@ -35,9 +35,10 @@ after(() => {
 class MemoryStorage implements MediaStorage {
   values = new Map<string, Buffer>();
   deleteCalls: string[] = [];
+  putCalls: string[] = [];
   materializeCalls: string[] = [];
   cascade = new Map<string, string>();
-  async put(key: string, body: Buffer) { this.values.set(key, Buffer.from(body)); }
+  async put(key: string, body: Buffer) { this.putCalls.push(key); this.values.set(key, Buffer.from(body)); }
   async delete(key: string) {
     this.deleteCalls.push(key);
     this.values.delete(key);
@@ -125,13 +126,15 @@ function currentImages(productId: string): string[] {
   return JSON.parse(row.images) as string[];
 }
 
-function noPaidSideEffects(jobId: string) {
+function noPaidSideEffects(jobId: string, storage: MemoryStorage) {
   const count = (sql: string, ...args: unknown[]) => (db.prepare(sql).get(...(args as [])) as { n: number }).n;
   assert.equal(count("SELECT COUNT(*) n FROM outputs WHERE job_id=?", jobId), 0);
   assert.equal(count("SELECT COUNT(*) n FROM credit_ledger WHERE job_id=? AND type IN ('capture','regen')", jobId), 0);
-  const job = db.prepare("SELECT provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=?").get(jobId) as Record<string, unknown>;
+  const job = db.prepare("SELECT state,provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=?").get(jobId) as Record<string, unknown>;
+  assert.ok(["FAILED", "REFUNDED"].includes(String(job.state)), `job berhenti di state aktif ${String(job.state)}`);
   assert.equal(job.provider_video, null); assert.equal(job.provider_voice, null);
   assert.equal(job.output_url, null); assert.equal(job.cost_actual_idr, 0);
+  assert.deepEqual(storage.putCalls, [], `worker meninggalkan object storage: ${JSON.stringify(storage.putCalls)}`);
 }
 
 test("E5 HTTP DELETE non-approved + resume W2 tetap memakai snapshot job berurutan", async (t) => {
@@ -170,7 +173,7 @@ test("E5 HTTP DELETE non-approved + resume W2 tetap memakai snapshot job berurut
   assert.equal(providerCalls, 1, "resume W2 tidak mencapai provider observer");
   assert.equal(providerHash, sha(s.approvedBytes), "resume memilih current list, bukan snapshot job lama");
   assert.deepEqual(storage.materializeCalls.slice(0, 2), [s.snapshotRel, s.snapshotRelSecond], "urutan manifest W2 berubah saat resume");
-  noPaidSideEffects(s.jobId);
+  noPaidSideEffects(s.jobId, storage);
 });
 
 test("E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider", async (t) => {
@@ -201,7 +204,7 @@ test("E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum 
 
   await processJob(s.jobId);
   assert.equal(providerCalls, 0, "manifest missing mencapai provider");
-  noPaidSideEffects(s.jobId);
+  noPaidSideEffects(s.jobId, storage);
   const audit = db.prepare("SELECT meta FROM audit_log WHERE entity_id=? AND action='job.transition' ORDER BY created_at").all(s.jobId) as { meta: string }[];
   assert.ok(audit.some((row) => row.meta.includes("REF_MISSING")), "alasan truthful REF_MISSING tidak tercatat");
 });

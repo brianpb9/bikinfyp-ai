@@ -340,11 +340,12 @@ async function hapusFotoOrg(productId: string, target: string, token: string) {
 
 function storageE9(values: Map<string, Buffer>, cascade?: { from: string; to: string }) {
   const deleteCalls: string[] = [];
+  const putCalls: string[] = [];
   const materializeCalls: string[] = [];
   return {
-    deleteCalls, materializeCalls,
+    deleteCalls, putCalls, materializeCalls,
     storage: {
-      async put(key: string, body: Buffer) { values.set(key, Buffer.from(body)); },
+      async put(key: string, body: Buffer) { putCalls.push(key); values.set(key, Buffer.from(body)); },
       async delete(key: string) {
         deleteCalls.push(key); values.delete(key);
         if (cascade?.from === key) values.delete(cascade.to);
@@ -361,12 +362,14 @@ function storageE9(values: Map<string, Buffer>, cascade?: { from: string; to: st
   };
 }
 
-async function assertNoPaidEffectsPg(jobId: string) {
+async function assertNoPaidEffectsPg(jobId: string, storage: ReturnType<typeof storageE9>) {
   assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM outputs WHERE job_id=$1", [jobId]), 0);
   assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','regen')", [jobId]), 0);
-  const row = (await pool.query("SELECT provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=$1", [jobId])).rows[0];
+  const row = (await pool.query("SELECT state,provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=$1", [jobId])).rows[0];
+  assert.ok(["FAILED", "REFUNDED"].includes(row.state), `job berhenti di state aktif ${row.state}`);
   assert.equal(row.provider_video, null); assert.equal(row.provider_voice, null);
   assert.equal(row.output_url, null); assert.equal(Number(row.cost_actual_idr), 0);
+  assert.deepEqual(storage.putCalls, [], `worker meninggalkan object storage: ${JSON.stringify(storage.putCalls)}`);
 }
 
 const hitung = async (sql: string, args: unknown[]) =>
@@ -563,12 +566,18 @@ test("E9 HTTP DELETE non-approved + resume W1 tetap memakai snapshot job berurut
   assert.deepEqual(JSON.parse((await pool.query("SELECT images FROM products WHERE id=$1", [s.productId])).rows[0].images), [s.approvedSource, s.approvedSecondSource, s.otherSource]);
 
   const response = await hapusFotoOrg(s.productId, s.otherSource, s.ownerToken);
-  const body = await response.json() as { images: string[] };
+  const body = await response.json() as { images: string[]; cleanup_failed: boolean };
   assert.equal(response.status, 200);
+  assert.equal(body.cleanup_failed, false, "cleanup E9 sukses dilaporkan gagal");
   assert.deepEqual(body.images, [s.approvedSource, s.approvedSecondSource]);
   const authoritative = JSON.parse((await pool.query("SELECT images FROM products WHERE id=$1", [s.productId])).rows[0].images);
   assert.deepEqual(authoritative, body.images, "response E9 bukan daftar pasca-mutasi otoritatif");
   assert.equal(values.has(s.otherSource), false);
+  assert.equal(values.has(`${s.otherSource}.meta.json`), false, "sidecar target E9 tidak dihapus");
+  assert.deepEqual(storage.deleteCalls, [s.otherSource, `${s.otherSource}.meta.json`], "cleanup E9 menyasar object yang salah");
+  assert.equal(values.has(s.approvedSource), true, "foto unrelated ikut terhapus");
+  assert.equal(values.has(`${s.approvedSource}.meta.json`), true, "sidecar unrelated ikut terhapus");
+  assert.equal(values.has(`${s.approvedSecondSource}.meta.json`), true, "sidecar kedua unrelated ikut terhapus");
   assert.equal(values.has(s.snapshotRel), true, "cleanup E9 menghapus object privat job");
 
   const { processPostgresJob } = await import("../lib/postgres/worker");
@@ -576,7 +585,7 @@ test("E9 HTTP DELETE non-approved + resume W1 tetap memakai snapshot job berurut
   assert.equal(amatan.dipanggil, true, "resume W1 tidak mencapai provider observer");
   assert.equal(amatan.utamaSha, sha256(s.approvedBytes), "resume W1 memilih current list, bukan snapshot job lama");
   assert.deepEqual(storage.materializeCalls.slice(0, 2), [s.snapshotRel, s.snapshotRelSecond], "urutan manifest W1 berubah saat resume");
-  await assertNoPaidEffectsPg(s.jobId);
+  await assertNoPaidEffectsPg(s.jobId, storage);
 });
 
 test("E9 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider W1", async (t) => {
@@ -606,7 +615,7 @@ test("E9 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum 
   const { processPostgresJob } = await import("../lib/postgres/worker");
   await processPostgresJob(s.jobId);
   assert.equal(providerCalls, 0, "manifest missing E9 mencapai provider");
-  await assertNoPaidEffectsPg(s.jobId);
+  await assertNoPaidEffectsPg(s.jobId, storage);
   const audit = (await pool.query("SELECT meta FROM audit_log WHERE entity_id=$1 AND action='job.transition' ORDER BY created_at", [s.jobId])).rows;
   assert.ok(audit.some((row) => String(row.meta).includes("REF_MISSING")), "alasan truthful REF_MISSING E9 tidak tercatat");
 });
