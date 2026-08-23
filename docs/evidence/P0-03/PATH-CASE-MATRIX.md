@@ -145,9 +145,9 @@ database, provider berbayar, penegakan admission, maupun keputusan T43.
 | **BLOCKED** | penerimaan belum dapat dinyatakan karena implementasi lokal belum ada, atau karena T43 / kredensial / deploy; penyebab wajib disebut eksplisit |
 | **NOT-APPLICABLE** | tidak relevan pada kontrak yang berlaku sekarang |
 
-`BLOCKED` bukan klaim bahwa penyebabnya selalu eksternal. Untuk C2, C5, C6 dan D1-D2
-di bawah, penerimaan diblokir oleh pekerjaan lokal yang belum diimplementasikan
-atau belum diaudit; tidak ada dependensi eksternal yang menghalangi Builder
+`BLOCKED` bukan klaim bahwa penyebabnya selalu eksternal. Untuk C2, C5, dan C6
+di bawah, penerimaan diblokir oleh pekerjaan lokal yang belum diimplementasikan;
+tidak ada dependensi eksternal yang menghalangi Builder
 mengerjakannya sebagai task terpisah.
 
 ### E.1 Entrypoint: apa yang BERUBAH sejak 2026-08-20
@@ -166,7 +166,8 @@ mengerjakannya sebagai task terpisah.
 | W1 worker PG | UNGATED | **PARTIAL** | **Tertutup pada sub-kontrak resolver+snapshot:** `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340,355`), termasuk boundary C1/C8/C11 di PostgreSQL nyata. **Belum:** brand mismatch C3 dan identitas lintas invocation C9/C12 |
 | W2 worker inline | UNGATED | **PARTIAL** | Sub-kontrak resolver+snapshot serta boundary C1/C8/C11 tertutup (`lib/worker.ts:122,139`); C8/C11 memakai observer provider langsung dengan reset `t.after`. Gap yang tersisa: C3 dan identitas lintas invocation C9/C12 |
 | A1..A7 admission | UNGATED | **BLOCKED (T43)** | Transcript §4 menguji tujuh path literal: semuanya `ADA`, `gerbang_bukti=0`, `exit=1`, termasuk A4 dan A7. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
-| D1, D2 penulis DB | UNGATED | **BLOCKED** | penerimaan diblokir audit lokal yang belum dilakukan; bukan dependensi eksternal dan bukan bagian slice ini |
+| D1 penulis produk/brand | UNGATED | **PARTIAL** | Reachable production melalui E1/E2/E3/E6. Semua create yang membawa image keys didahului helper bersidecar; direct caller lain hanya verifier disposable. Namun writer menerima `images` mentah dan mutation E3 name/category/brand tidak merevalidasi product-truth. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
+| D2 penulis daftar images | UNGATED | **PARTIAL** | Reachable production hanya melalui E4/E5/E8/E9. Add menerima keys dari helper bersidecar; delete dan append tetap mewarisi gap revalidation E5/E8/E9. Tidak ada CLI/direct caller tersembunyi. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
 
 ### E.2 Kasus C1-C13 — alasan tiap status
 
@@ -223,41 +224,40 @@ dikerjakan di slice ini:**
    dokumen.
 4. C2/C5 belum punya reason code maupun jalur penegakan; C3/C4 belum punya
    reason code khusus dan jalur penegakannya baru parsial seperti dirinci E.2.
-5. D1/D2 (penulis DB langsung) belum diaudit ulang sejak 20 Agu.
-6. **A6 tidak mempertahankan snapshot yang sudah disetujui** — cacat produk
+5. **A6 tidak mempertahankan snapshot yang sudah disetujui** — cacat produk
    nyata, ditemukan lewat temuan Reviewer atas rekonsiliasi ini. Worker PG
    membaca `p.images` segar tiap invocation lalu menyetujui ULANG, jadi
    approve/regenerate memakai keadaan foto SAAT ITU, bukan yang disetujui saat
    admission. Ini yang membuat C1 dan C9 tidak bisa PASS. Kandidat task
    berikutnya; TIDAK diimplementasikan di slice rekonsiliasi ini.
-7. E5 DELETE retail hanya menghapus path dari daftar produk; file foto dan
+6. E5 DELETE retail hanya menghapus path dari daftar produk; file foto dan
    sidecar tetap orphan di storage (`app/api/products/[id]/photos/route.ts:139-155`).
-8. **Tidak ada identitas persetujuan yang dipatok lintas mutasi.** Referensi
+7. **Tidak ada identitas persetujuan yang dipatok lintas mutasi.** Referensi
    utama dipilih dari URUTAN daftar (`lib/product-truth.ts:341` —
    `utama: tersetujui[0] ?? null`), jadi E5/E9 yang memutasi daftar bisa
    mengubah foto utama tanpa satu pun gerbang, dan worker membaca daftar
    TERKINI tiap invocation. Ini yang membuat C12 tidak bisa PASS, dan
-   berkerabat dengan butir 6 (A6): keduanya soal keadaan yang disetujui tidak
+   berkerabat dengan butir 5 (A6): keduanya soal keadaan yang disetujui tidak
    dipatok. Dan `REF_HASH_MISMATCH` tidak bisa menangkapnya: menukar dua foto
    sah tidak mengubah hash mana pun. Jadi yang dibutuhkan KONTRAK BARU
    (identitas dipatok atau digest manifest berurutan) beserta reason code-nya,
    bukan sekadar test E5/E9 -> W1/W2.
-9. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
+8. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
    tanpa resolver, sedangkan E4 meninggalkan bytes tersimpan saat tidak ada
    referensi layak. Belum ada test nol efek storage untuk ketiga jalur itu.
 **(b) Butuh kredensial/data:**
 
-10. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
+9. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
    juga butuh R2 yang BERPASANGAN dengan database itu.
 
 **(c) Butuh deploy/migrasi:**
 
-11. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
+10. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
    staging; `preDeployCommand` staging menjalankan migrasi schema.
 
 **(d) Butuh keputusan Founder T43:**
 
-12. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
+11. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
 
 ### E.5 Yang TIDAK dilakukan di slice ini
 
