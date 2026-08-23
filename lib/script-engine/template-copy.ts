@@ -1,4 +1,5 @@
 import type { TemplateCtx } from "./templates";
+import { isServiceLike } from "../config/hooks";
 
 /**
  * Copy katalog bersifat template-owned. Setiap template aktif mempunyai satu
@@ -32,7 +33,7 @@ type CopyFn = (c: TemplateCtx) => CopyTriple;
 /** Satu naskah utama dan tiga alternatif lengkap per template. */
 export const TEMPLATE_COPY_CAPACITY = 4 as const;
 
-const COPY_RINGKAS = new Set([
+export const COMPACTED_TEMPLATE_IDS = new Set([
   "racun-checkout", "review-jujur", "unboxing", "before-after", "diskon-gede",
   "buat-kamu-yang", "spill-rahasia", "t01-tempat-susah", "t02-bedah-fitur",
   "t03-liputan-event", "t04-hook-indrawi", "t07-checklist-berjalan",
@@ -47,57 +48,244 @@ const ADS_IDS = new Set([
   "ads-waktu-berhenti", "kenalin-bisnis", "promo-terbatas",
 ]);
 
-const KATA_SAMBUNG_AKHIR = new Set([
-  "dan", "atau", "karena", "kalau", "ketika", "lalu", "dengan", "untuk",
-  "yang", "dari", "di", "ke", "pada", "tapi", "tetapi", "sebelum", "setelah",
-]);
+type AuthoredPair = { hook: string; demo: string };
+type AuthoredSet = (c: TemplateCtx) => AuthoredPair[];
 
-/** Pangkas di batas kata, lalu buang kata sambung yang tertinggal di ujung. */
-function kalimatRingkas(text: string, maksimal: number): string {
-  const tag = text.match(/^\[[^\]]+\]\s*/)?.[0] ?? "";
-  const bersih = text.slice(tag.length).trim();
-  let kata = bersih.split(/\s+/).slice(0, maksimal);
-  while (kata.length > 1 && KATA_SAMBUNG_AKHIR.has(kata[kata.length - 1].replace(/[^a-z]/gi, "").toLowerCase())) kata.pop();
-  let hasil = kata.join(" ").replace(/[,:;.-]+$/, "");
-  const retoris = /[?]|\b(nggak|gak|jangan|kirain|jujur|kenapa|siapa|apa|mana|berapa|ternyata|eh|nah)\b/i.test(hasil);
-  hasil += retoris ? "?" : ".";
-  return `${tag}${hasil}`;
+/** Cue pembawaan tidak ikut jatah kata dan tidak boleh dipotong jadi fragmen. */
+function deliveryPrefix(text: string): string {
+  return (text.match(/\[[^\]]+\]/g) ?? []).join(" ");
+}
+
+function withDelivery(authored: string, source: string): string {
+  const prefix = deliveryPrefix(source);
+  return prefix ? `${prefix} ${authored}` : authored;
 }
 
 /**
- * Copy katalog lama dikalibrasi ke 25–30 kata/15 dtk. Gate saat ini 16–22;
- * ini memilih kalimat utuh yang paling depan dari copy milik template,
- * bukan memotong hasil validator atau menyembunyikan kegagalannya.
+ * Naskah pendek ini ditulis per-template, bukan hasil pemotongan token.
+ * Setiap entri adalah klausa Indonesia lengkap dan selalu menyebut nama
+ * produk sebagai satu kesatuan ketika nama itu diperlukan.
  */
-function ringkasCopy(templateId: string, base: CopyTriple): CopyTriple {
-  if (!COPY_RINGKAS.has(templateId) || ADS_IDS.has(templateId)) return base;
+const AUTHORED_COMPACT: Record<string, AuthoredSet> = {
+  "racun-checkout": (c) => [
+    { hook: "Nah, detail ini ternyata beda, loh.", demo: `Balik ${c.produk}; cari ciri ${c.proof}, ya.` },
+    { hook: "Eh, bagian mana yang paling penting?", demo: `${c.produk} memperlihatkan ${c.proof}, sih.` },
+    { hook: "Ternyata racunnya ada di detail, Bun.", demo: `Nah, sorot ciri ${c.proof} milik ${c.produk}.` },
+    { hook: "Kirain biasa, eh ternyata menarik, sih.", demo: `Balik ${c.produk}; temukan ciri ${c.proof}.` },
+  ],
+  "review-jujur": (c) => [
+    { hook: "Jujur ya, awalnya aku ragu, sih.", demo: `Nah, ${c.proof} pada ${c.produk} terlihat jelas.` },
+    { hook: "Nggak aku manis-manisin, ini ulasan jujur.", demo: `${c.produk} menunjukkan ${c.proof}, ya.` },
+    { hook: "Ada bagusnya, tapi apa kekurangannya?", demo: `Nah, periksa ${c.proof} milik ${c.produk}.` },
+    { hook: "Pujian kosong? Lewat saja, deh.", demo: `Aku telusuri ${c.produk}; cirinya ${c.proof}, ya.` },
+  ],
+  unboxing: (c) => [
+    { hook: "Belum dibuka, eh isinya bikin penasaran.", demo: `Cocokkan isi ${c.produk} dengan daftarnya, ya.` },
+    { hook: "Eh, isi paketnya lengkap nggak, ya?", demo: `Periksa jumlah dan ${c.proof} pada ${c.produk}.` },
+    { hook: "Kardusnya masih tertutup, kok bikin penasaran?", demo: `Balik ${c.produk}; baca ${c.proof} pada labelnya.` },
+    { hook: "Bun, jangan buru-buru buka paketnya, deh.", demo: `Nah, cek isi ${c.produk} satu-satu.` },
+  ],
+  "diskon-gede": (c) => [
+    { hook: `Bun, ${c.harga} bikin aku cek ulang.`, demo: `Nah, bandingkan ${c.produk} dan ${c.proof}, ya.` },
+    { hook: `Eh, banderol ${c.harga} ini serius?`, demo: `Telusuri ${c.produk}; pastikan ciri ${c.proof}, sih.` },
+    { hook: `Nah, punya bujet ${c.harga}?`, demo: `Amati ${c.produk} dan ${c.proof} dulu.` },
+    { hook: `Yakin ${c.harga} ini wajar?`, demo: `Nah, cocokkan ${c.produk} dengan ciri ${c.proof}.` },
+  ],
+  "buat-kamu-yang": (c) => [
+    { hook: `Sering ${c.aktivitas}? Merapat sebentar, ya.`, demo: `Nah, lihat ${c.proof} milik ${c.produk}.` },
+    { hook: `${c.reg.sapaan}, ${c.pain} masih mengganggu, nggak?`, demo: `${c.produk} punya detail ${c.proof}, sih.` },
+    { hook: `Eh, sering ${c.aktivitas}? Cek ini.`, demo: `${c.produk} menampilkan ${c.proof}, loh.` },
+    { hook: `${c.reg.sapaan}, ${c.pain} kelihatan dari jauh?`, demo: `Nah, dekatkan ${c.produk} hingga ${c.proof} terlihat.` },
+  ],
+  "spill-rahasia": (c) => [
+    { hook: "Detail ini nggak terlihat sekilas, loh.", demo: `Nah, dekati ${c.produk} dan cek ${c.proof}.` },
+    { hook: "Bagian kecil ini sering kelewat, ya?", demo: `Sorot permukaan ${c.produk}; temukan ${c.proof}, ya.` },
+    { hook: "Bun, rahasianya ada di cara mengecek?", demo: `Nah, cocokkan ${c.proof} milik ${c.produk}.` },
+    { hook: "Nggak kelihatan jauh, eh coba dekatkan.", demo: `Aku dekatkan ${c.produk}; ${c.proof} tampak, ya.` },
+  ],
+  "t01-tempat-susah": (c) => [
+    { hook: "Sering bepergian, tapi nggak mau ribet?", demo: `Ukur kemasan ${c.produk} sebelum dibawa, ya.` },
+    { hook: "Nah, ruang bawaanmu terbatas, Bun?", demo: `Pastikan ${c.produk} muat dengan aman, sih.` },
+    { hook: "Sering keluar rumah? Cara menyimpan penting.", demo: `Nah, periksa kemasan ${c.produk} dan ${c.proof}.` },
+    { hook: "Jauh dari rumah? Siapkan ruang khusus.", demo: `Lihat ukuran ${c.produk} sebelum dibawa, deh.` },
+  ],
+  "t04-hook-indrawi": (c) => [
+    { hook: "Nah, bunyi apa yang bikin penasaran?", demo: `Buka ${c.produk}, lalu baca labelnya, ya.` },
+    { hook: "Kirain harus dicicip, eh dengar dulu.", demo: `Dengarkan ${c.produk}; cocokkan bunyi dengan ${c.proof}, sih.` },
+    { hook: "Bun, teksturnya bisa kedengaran, ya?", demo: `Baca komposisi ${c.produk} sebelum mencicip.` },
+    { hook: "Belum terlihat, eh suaranya bikin penasaran.", demo: `Dengarkan ${c.produk}, lalu baca labelnya, deh.` },
+  ],
+  "t07-checklist-berjalan": (c) => [
+    { hook: "Bingung mulai dari mana? Pakai checklist.", demo: `Nah, cocokkan tiap poin pada ${c.produk}, ya.` },
+    { hook: "Bun, jangan centang sebelum terlihat, deh.", demo: `Tunjukkan ${c.produk}; tandai ciri ${c.proof}, sih.` },
+    { hook: "Setiap poin harus punya jawaban, kan?", demo: `Nah, periksa ${c.produk} langkah demi langkah.` },
+    { hook: "Belum mulai, kok poin pertama terisi?", demo: `Uji ${c.produk}; catat ciri ${c.proof}, ya.` },
+  ],
+  "t10-bukti-di-lengan": (c) => [
+    { hook: "Nah, aturan uji kecilnya sudah jelas?", demo: `Oleskan ${c.produk} pada sisi pembanding, ya.` },
+    { hook: "Eh, jangan ubah cahaya di tengah.", demo: `Samakan posisi ${c.produk} saat diperiksa, deh.` },
+    { hook: "Bun, bukti tanpa konteks bisa dipercaya?", demo: `Nah, tandai sisi uji ${c.produk}.` },
+    { hook: "Kalau kondisinya beda, masih bisa dipercaya?", demo: `Bandingkan ${c.produk} pada cahaya setara, ya.` },
+  ],
+  "before-after": (c) => [
+    { hook: "Kelihatan beda, tapi acuannya sudah sama belum?", demo: `Taruh ${c.produk} pada dua kondisi setara. Nah, bandingkan ${c.proof}, cahaya, dan sudutnya secara berdampingan, ya.` },
+    { hook: "Eh, jangan percaya aku; lihat dua sisinya.", demo: `Pisahkan tampilan awal dan akhir ${c.produk}. Samakan sudut, lalu periksa ${c.proof} pada kedua sisi, deh.` },
+    { hook: "Nah, sudutnya sama; apa yang terlihat beda?", demo: `Sejajarkan ${c.produk} dalam cahaya serupa. Jeda videonya, lalu amati ${c.proof} pada tiap sisi secara bergantian, ya.` },
+    { hook: "Jangan percaya perbandingan dengan kondisi berbeda.", demo: `Letakkan dua tampilan ${c.produk} berdampingan. Cocokkan jarak, permukaan, dan ${c.proof} sebelum menilai secara teliti, deh.` },
+  ],
+  "t02-bedah-fitur": (c) => [
+    { hook: "Nah, bagian penting mana yang harus dibedah?", demo: `Buka ${c.produk}, tunjuk bagian yang sering disentuh, lalu periksa sambungan, cara pakai, dan ${c.proof} secara pelan, deh.` },
+    { hook: "Eh, jangan nilai bentuk luarnya dulu.", demo: `Baca nama bagian ${c.produk}, cocokkan petunjuknya, lalu gerakkan komponen yang tersedia dan lihat ${c.proof}, sih.` },
+    { hook: "Bun, bagian ini menjawab pertanyaan apa?", demo: `Putar ${c.produk}, cek sambungan dan kontrolnya, lalu pastikan ${c.proof} terlihat dari tiap sisi, ya.` },
+    { hook: "Barang teknis harus diperiksa, bukan langsung dipuji.", demo: `Mulai dari bagian utama ${c.produk}. Ikuti cara pakai, tunjukkan ${c.proof}, lalu nilai bagian yang relevan, deh.` },
+  ],
+  "t03-liputan-event": (c) => [
+    { hook: "Nah, ikut aku keliling dari pintu masuk.", demo: `Suasananya langsung terasa saat masuk. Dekati ${c.produk}, lihat ${c.proof}, lalu tanyakan cara mendapatkannya kepada staf, ya.` },
+    { hook: "Bun, sudut mana yang paling ramai?", demo: `Mulai dari area utama, lalu cari ${c.produk}. Baca keterangannya, periksa ${c.proof}, dan lanjutkan keliling, sih.` },
+    { hook: "Nah, temuan apa yang dekat pintu?", demo: `Berhenti di area ${c.produk}, lalu amati ${c.proof} dari dekat. Setelah itu, lihat aktivitas lain di sekitarnya, ya.` },
+    { hook: "Suasananya terasa sebelum barang terlihat, ya?", demo: `Keliling sebentar, lalu berhenti di ${c.produk}. Cek ${c.proof} dan tanyakan rinciannya langsung kepada penjaga, deh.` },
+  ],
+  "t09-bahan-aktif": (c) => [
+    { hook: "Suka riset? Jangan berhenti di label depan.", demo: `Balik ${c.produk}, baca daftar resminya, lalu cocokkan istilah yang tertulis dengan ${c.proof} tanpa menebak, ya.` },
+    { hook: "Bun, nama teknis belum menjelaskan semuanya.", demo: `Cari keterangan pada ${c.produk}. Baca urutannya, periksa ${c.proof}, lalu pisahkan fakta tertulis dari kesan pribadi, sih.` },
+    { hook: "Nah, formula harus dibaca, bukan ditebak.", demo: `Tunjukkan label ${c.produk}, lalu baca informasi yang tersedia. Cocokkan ${c.proof} hanya dengan keterangan resmi, deh.` },
+    { hook: "Fakta dan kesan sudah dipisahkan, belum?", demo: `Buka informasi ${c.produk}, tandai istilah penting, lalu hubungkan ${c.proof} dengan tulisan yang tersedia secara teliti, ya.` },
+  ],
+  "t12-vox-pop": (c) => [
+    { hook: "Nah, apa yang pertama kamu nilai?", demo: `Tanya satu orang tentang ${c.produk}, lalu minta alasan spesifik. Cocokkan jawabannya dengan ${c.proof} yang terlihat, ya.` },
+    { hook: "Bun, standar sederhana menurut kalian apa?", demo: `Ajukan pertanyaan yang sama tentang ${c.produk}. Dengarkan jawabannya, lalu periksa apakah ${c.proof} ikut disebut, deh.` },
+    { hook: "Nah, rekomendasinya punya alasan apa?", demo: `Minta alasan sebelum menyebut ${c.produk}. Setelah jawabannya jelas, tunjukkan ${c.proof} dan beri label dramatisasi, ya.` },
+    { hook: "Eh, pendapat orang bisa sejauh apa?", demo: `Bandingkan dua jawaban tentang ${c.produk}. Pisahkan selera pribadi dari ${c.proof} yang benar-benar dapat diperiksa secara bergantian, sih.` },
+  ],
+  "tvc-the-drop": (c) => [
+    { hook: "Satu tetes jatuh. Ceritanya dimulai.", demo: `Ia menyentuh permukaan dan melambat. Cahaya mengikuti bentuknya sampai ${c.proof} terlihat jelas, sementara gerak berikutnya menunggu dengan sabar.` },
+    { hook: "Kenapa harus sepelan ini?", demo: `Setiap tetes punya waktu untuk terbentuk. Geraknya dijaga perlahan sampai ${c.proof} muncul utuh di permukaan tanpa diburu. Kamera tetap dekat.` },
+    { hook: "Jarak pipet dan permukaan begitu pendek.", demo: `Di jarak itu, tetesan harus tetap utuh. Kamera mengikuti pendaratannya sampai ${c.proof} terbaca jelas pada permukaan.` },
+    { hook: "Satu tetes menyimpan cerita panjang.", demo: `Lapisannya bergerak dan cahaya berpindah perlahan. Dari dekat, ${c.proof} muncul sebelum bentuk akhirnya berhenti di permukaan. Kamera tetap dekat.` },
+  ],
+  "tvc-tersangka": (c) => [
+    { hook: "Sidang dibuka. Apa tuduhannya?", demo: `Saksi menunjuk meja bukti dan ruangan mendadak hening. Hakim meminta jawaban, lalu ${c.proof} terlihat saat benda itu diangkat. Semua menunggu putusan.` },
+    { hook: "Yang mulia, saya keberatan.", demo: `Semua mata berpindah ke meja bukti. Barangnya sederhana, tetapi ${c.proof} terlihat jelas ketika saksi mendekat dan memeriksanya. Semua menunggu putusan.` },
+    { hook: "Penuduh malah memotret barang buktinya.", demo: `Hakim bertanya sekali lagi dan ruangan menunggu. Kamera menangkap tangan si penuduh tepat saat ${c.proof} terlihat di meja. Semua menunggu putusan.` },
+    { hook: "Sejak kapan terdakwa berubah?", demo: `Terdakwa diam sebelum menjawab. Ia membuka tas, menaruh barang bukti, lalu menunjukkan ${c.proof} kepada seluruh ruangan. Semua menunggu putusan.` },
+  ],
+  "tvc-seharian": (c) => [
+    { hook: "Jam tujuh pagi masih aman.", demo: `Panas jalanan, ruangan dingin, rapat panjang, dan macet datang bergantian. Menjelang malam, ${c.proof} menjadi catatan terakhir hari itu.` },
+    { hook: "Hari tidak menunggu siapa pun siap.", demo: `Jadwal maju dan jalanan memadat sejak pagi. Saat akhirnya pulang, kamera kembali memeriksa ${c.proof} dalam cahaya rumah.` },
+    { hook: "Ada dua belas jam sebelum pulang.", demo: `Panas dan ruangan dingin bergantian sepanjang perjalanan. Sesudah semua berlalu, ${c.proof} baru dinilai pada jam terakhir.` },
+    { hook: "Pertanyaannya: masih bagus jam berapa?", demo: `Pagi membuat semuanya tampak serupa. Perbedaannya muncul menjelang sore, ketika tenaga habis dan ${c.proof} harus terlihat apa adanya.` },
+  ],
+  "tvc-kain-lari": (c) => [
+    { hook: "Baju dipotret diam. Itu masalahnya.", demo: `Kain sebenarnya dipakai sambil berjalan, berbelok, dan duduk. Kamera mengikuti geraknya sampai ${c.proof} terlihat saat langkah berubah cepat.` },
+    { hook: "Foto diam sering membuat penilaian meleset.", demo: `Bentuknya baru terbaca ketika tubuh berbelok dan lipatan menyusul. Pada gerakan itu, ${c.proof} terlihat tanpa bantuan pose.` },
+    { hook: "Kain menyusul setengah detik setelah langkah.", demo: `Jeda kecil itu terlihat saat tubuh berhenti. Kamera menahan gerak sampai ${c.proof} mengikuti langkah terakhir dengan jelas.` },
+    { hook: "Ini busana untuk hari yang sibuk.", demo: `Naik motor, duduk lama, lalu berdiri cepat mengubah lipatan kain. Sesudahnya, ${c.proof} menjadi detail yang dinilai. Kamera mengikuti geraknya.` },
+  ],
+  "tvc-jam-tiga": (c) => [
+    { hook: "Jam tiga pagi. Rumah masih sunyi.", demo: `Satu lampu kecil menyala saat tangan mengulang rutinitasnya. Dalam keheningan itu, ${c.proof} membantu setiap gerakan tetap terarah.` },
+    { hook: "Malam menuntut semuanya tetap pelan.", demo: `Satu suara keras bisa membangunkan rumah. Karena itu, tangan memilih urutan sederhana dan mengandalkan ${c.proof} sambil setengah sadar.` },
+    { hook: "Rumah diam. Satu orang belum selesai.", demo: `Ia bergerak hati-hati melewati perabot dan lantai yang berbunyi. Benda pilihannya tetap sama karena ${c.proof} sudah dikenalnya.` },
+    { hook: "Pekerjaan ini tak masuk foto keluarga.", demo: `Rutinitasnya selesai sebelum orang lain bangun. Pada jam seperti itu, ${c.proof} menjadi alasan benda ini tetap dipilih.` },
+  ],
+};
+
+function authoredCompact(templateId: string, variantIndex: number, c: TemplateCtx, base: CopyTriple): CopyTriple {
+  if (!COMPACTED_TEMPLATE_IDS.has(templateId) || ADS_IDS.has(templateId)) return base;
+  const authored = AUTHORED_COMPACT[templateId]?.(c)[variantIndex];
+  if (!authored) throw new Error(`Copy ringkas ${templateId}#${variantIndex} belum ditulis.`);
   const tvc = templateId.startsWith("tvc-");
-  const durasi30 = tvc || new Set([
-    "before-after", "t02-bedah-fitur", "t03-liputan-event", "t09-bahan-aktif", "t12-vox-pop",
-  ]).has(templateId);
-  const kalimatHookTvc = tvc ? base.hook.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() : null;
-  const kataHookTvc = kalimatHookTvc?.split(/\s+/).length ?? 0;
-  const pakaiKalimatHookTvc = kataHookTvc <= 10 && (kataHookTvc >= 4 || (templateId === "tvc-jam-tiga" && kataHookTvc >= 3));
-  const hookAwal = kalimatHookTvc && pakaiKalimatHookTvc
-    ? kalimatHookTvc
-    : kalimatRingkas(base.hook, durasi30 ? 10 : 6);
-  const hook = tvc ? hookAwal : hookAwal.replace(/[.]$/, "?");
-  let demo = kalimatRingkas(durasi30 ? base.demo : `Nah, ${base.demo}`, durasi30 ? 20 : (templateId === "review-jujur" ? 10 : 6));
-  if (durasi30 && !tvc && !/\b(deh|sih|dong|ya|loh|tuh)\b/i.test(demo)) demo = `${demo.replace(/[?.]$/, "")} deh.`;
-  const cta = base.cta;
-  return { hook, demo, cta };
+  const hasFiller = /\b(nah|eh|sumpah)\b|jadi gini/i.test(`${authored.hook} ${authored.demo}`);
+  const demo = !tvc && !hasFiller ? `Nah, ${authored.demo}` : authored.demo;
+  return {
+    hook: withDelivery(authored.hook, base.hook),
+    demo: withDelivery(demo, base.demo),
+    cta: base.cta,
+  };
 }
 
-const ADEGAN_ADS: Record<string, { tekanan: [string, string]; spike: string; saksi: string }> = {
-  "ads-unboxing-pov": { tekanan: ["Tutup kardus nyangkut deh", "Segelnya ikut tertarik sih"], spike: "Paket akhirnya terbuka, nah", saksi: "ibu di samping meja" },
-  "ads-meja-kosong": { tekanan: ["Kabel pertama lenyap deh", "Alat kedua ikut hilang sih"], spike: "Mejanya kosong, nah", saksi: "teman kerja off camera" },
-  "ads-panas-ekstrem": { tekanan: ["Kipas kertas berhenti deh", "Es terakhir mencair sih"], spike: "Udara bergerak lagi, nah", saksi: "teman di samping" },
-  "ads-tembus-dinding": { tekanan: ["Retaknya melebar pelan deh", "Debunya menutup meja sih"], spike: "Bendanya mendarat, nah", saksi: "satpam di pintu" },
-  "ads-atap-jebol": { tekanan: ["Plafonnya mulai retak deh", "Serbuknya terus jatuh sih"], spike: "Orangnya mendarat, nah", saksi: "ibu off camera" },
-  "ads-dobrak-pintu": { tekanan: ["Gagangnya bergetar deh", "Engselnya ikut bergeser sih"], spike: "Pintunya terbuka, nah", saksi: "petugas di lorong" },
-  "ads-waktu-berhenti": { tekanan: ["Uapnya membeku deh", "Orang pasar ikut diam sih"], spike: "Satu tangan bergerak, nah", saksi: "kasir yang membeku" },
-  "kenalin-bisnis": { tekanan: ["Pesan pertama menumpuk deh", "Antrean kedua bertambah sih"], spike: "Layanannya menjawab, nah", saksi: "teman kerja off camera" },
-  "promo-terbatas": { tekanan: ["Pilihan pertama habis deh", "Daftarnya makin pendek sih"], spike: "Harganya tampil, nah", saksi: "kasir di samping" },
+type FourLines = [string, string, string, string];
+interface AdsScene {
+  hooks: FourLines;
+  friction1: FourLines;
+  friction2: FourLines;
+  spikes: FourLines;
+  questions: FourLines;
+  saksi: string;
+}
+
+const ADEGAN_ADS: Record<string, AdsScene> = {
+  "ads-unboxing-pov": {
+    hooks: ["Nah, siapa membuka kardus?", "Eh, tangan siapa itu?", "Kirain tutupnya terbuka sendiri?", "Bun, paketnya bergerak?"],
+    friction1: ["Tutupnya macet, deh.", "Kardusnya tertahan, deh.", "Lipatannya menahan, deh.", "Tangannya tertahan, deh."],
+    friction2: ["Segelnya tertarik, sih.", "Perekatnya melekat, sih.", "Sudutnya tersangkut, sih.", "Paketnya terangkat, sih."],
+    spikes: ["Nah, paketnya terbuka.", "Nah, kardusnya terbuka.", "Nah, segelnya lepas.", "Nah, tutupnya terbuka."],
+    questions: ["Bisa lihat, paketnya?", "Terbuka utuh, paketnya?", "Segelnya lepas, paketnya?", "Tutup terbuka, paketnya?"],
+    saksi: "ibu di samping meja",
+  },
+  "ads-meja-kosong": {
+    hooks: ["Nah, alatnya pergi ke mana?", "Eh, mejanya makin kosong?", "Kenapa kabelnya menghilang?", "Bun, siapa merapikan meja?"],
+    friction1: ["Kabelnya kusut, deh.", "Berkasnya menumpuk, deh.", "Aplikasinya tertunda, deh.", "Antreannya tersendat, deh."],
+    friction2: ["Alatnya menghilang, sih.", "Langkahnya bertambah, sih.", "Jadwalnya bentrok, sih.", "Notifikasinya menumpuk, sih."],
+    spikes: ["Nah, alurnya ringkas.", "Nah, mejanya kosong.", "Nah, tugasnya tersusun.", "Nah, antreannya bergerak."],
+    questions: ["Sudah ringkas, alurnya?", "Mejanya kosong, alurnya?", "Tugas tersusun, alurnya?", "Antrean bergerak, alurnya?"],
+    saksi: "teman kerja off camera",
+  },
+  "ads-panas-ekstrem": {
+    hooks: ["Nah, kenapa ruangannya berasap?", "Eh, panasnya naik lagi?", "Bun, esnya mencair secepat itu?", "Kirain cuma gerah biasa?"],
+    friction1: ["Kipasnya berhenti, deh.", "Keringatnya bertahan, deh.", "Esnya mencair, deh.", "Udaranya memberat, deh."],
+    friction2: ["Uapnya menutup, sih.", "Jendelanya berembun, sih.", "Tangannya melambat, sih.", "Temannya menjauh, sih."],
+    spikes: ["Nah, udaranya bergerak.", "Nah, uapnya menghilang.", "Nah, kipasnya berputar.", "Nah, ruangannya berubah."],
+    questions: ["Mulai bergerak, udaranya?", "Uap menghilang, udaranya?", "Kipas berputar, udaranya?", "Ruangan berubah, udaranya?"],
+    saksi: "teman di samping",
+  },
+  "ads-tembus-dinding": {
+    hooks: ["Eh, apa yang menembus dinding?", "Nah, benturan apa tadi?", "Kirain cuma angin dari belakang?", "Bun, lihat retakan temboknya?"],
+    friction1: ["Retaknya melebar dan debu mulai turun, deh.", "Benturan kedua membuat bingkainya ikut bergeser, deh.", "Suara berikutnya mendekat dari balik tembok, deh.", "Debunya menutup meja dan lampu, deh."],
+    friction2: ["Celah temboknya membuka sedikit demi sedikit, sih.", "Bayangannya kini terlihat di balik debu, sih.", "Mejanya ikut bergetar saat retakannya memanjang, sih.", "Satpamnya mendekat ketika serpihan terakhir jatuh, sih."],
+    spikes: ["Nah, bendanya mendarat tepat di depan satpam.", "Nah, sumber benturannya akhirnya terlihat oleh satpam.", "Nah, barangnya berhenti utuh di meja satpam.", "Nah, retakannya berhenti saat satpam menoleh."],
+    questions: ["Benda mendarat, benturannya?", "Sumber terlihat, benturannya?", "Barang berhenti, benturannya?", "Satpam menoleh, benturannya?"],
+    saksi: "satpam di pintu",
+  },
+  "ads-atap-jebol": {
+    hooks: ["Nah, siapa jatuh dari atap?", "Eh, suara apa dari atas?", "Bun, plafonnya retak lagi?", "Kirain cuma debu biasa?"],
+    friction1: ["Plafonnya retak, deh.", "Langkahnya mendekat, deh.", "Serbuknya jatuh, deh.", "Bayangannya muncul, deh."],
+    friction2: ["Retakannya memanjang, sih.", "Lampunya bergoyang, sih.", "Orangnya menengadah, sih.", "Debunya menutup, sih."],
+    spikes: ["Nah, orangnya mendarat.", "Nah, sumbernya terlihat.", "Nah, plafonnya berhenti.", "Nah, matanya menoleh."],
+    questions: ["Orangnya mendarat, plafonnya?", "Sumber muncul, plafonnya?", "Retakan berhenti, plafonnya?", "Saksi menoleh, plafonnya?"],
+    saksi: "ibu off camera",
+  },
+  "ads-dobrak-pintu": {
+    hooks: ["Nah, siapa mendobrak pintunya?", "Eh, gagangnya bergerak sendiri?", "Bun, engselnya bergeser lagi?", "Kirain cuma ketukan biasa?"],
+    friction1: ["Gagangnya bergetar, deh.", "Ketukannya mengeras, deh.", "Engselnya bergeser, deh.", "Bayangannya terlihat, deh."],
+    friction2: ["Kuncinya berputar, sih.", "Ruangannya hening, sih.", "Petugasnya mendekat, sih.", "Pintunya membuka, sih."],
+    spikes: ["Nah, pintunya terbuka.", "Nah, orangnya masuk.", "Nah, jawabannya terlihat.", "Nah, pesannya sampai."],
+    questions: ["Sudah terbuka, pintunya?", "Orangnya masuk, pintunya?", "Jawaban terlihat, pintunya?", "Pesan sampai, pintunya?"],
+    saksi: "petugas di lorong",
+  },
+  "ads-waktu-berhenti": {
+    hooks: ["Eh, kenapa semua orang membeku?", "Nah, pasarnya mendadak diam?", "Bun, uapnya berhenti bergerak?", "Kirain waktunya masih berjalan?"],
+    friction1: ["Uapnya membeku, deh.", "Pedagangnya berhenti, deh.", "Koinnya diam, deh.", "Jamnya berhenti, deh."],
+    friction2: ["Suaranya hilang, sih.", "Kasirnya tertahan, sih.", "Tangannya membeku, sih.", "Antreannya diam, sih."],
+    spikes: ["Nah, tangannya bergerak.", "Nah, waktunya berjalan.", "Nah, kasirnya menoleh.", "Nah, pasarnya hidup."],
+    questions: ["Tangan bergerak, waktunya?", "Mulai berjalan, waktunya?", "Kasir menoleh, waktunya?", "Pasar hidup, waktunya?"],
+    saksi: "kasir yang membeku",
+  },
+  "kenalin-bisnis": {
+    hooks: ["Nah, kenapa antreannya panjang?", "Eh, pesan siapa belum terjawab?", "Bun, jadwalnya bentrok lagi?", "Kirain layanan ini selalu rumit?"],
+    friction1: ["Pesannya tertunda, deh.", "Jadwalnya bentrok, deh.", "Formulirnya bertambah, deh.", "Antreannya tersendat, deh."],
+    friction2: ["Permintaannya menunggu, sih.", "Statusnya menetap, sih.", "Pelanggannya bertanya, sih.", "Responsnya melambat, sih."],
+    spikes: ["Nah, layanannya merespons.", "Nah, jadwalnya tersusun.", "Nah, statusnya berubah.", "Nah, antreannya berkurang."],
+    questions: ["Sudah merespons, layanannya?", "Jadwal tersusun, layanannya?", "Status berubah, layanannya?", "Antrean berkurang, layanannya?"],
+    saksi: "teman kerja off camera",
+  },
+  "promo-terbatas": {
+    hooks: ["Nah, harga mana aktif?", "Eh, pilihannya tinggal berapa?", "Bun, daftarnya berubah lagi?", "Yakin harganya masih sama?"],
+    friction1: ["Pilihannya habis, deh.", "Daftarnya memendek, deh.", "Harganya tertunda, deh.", "Stoknya berubah, deh."],
+    friction2: ["Kasirnya mengecek, sih.", "Pembelinya menunggu, sih.", "Labelnya terlihat, sih.", "Daftarnya diperbarui, sih."],
+    spikes: ["Nah, harganya tampil.", "Nah, pilihannya terlihat.", "Nah, labelnya jelas.", "Nah, kasirnya memastikan."],
+    questions: ["Harga tampil, promonya?", "Pilihan terlihat, promonya?", "Label jelas, promonya?", "Kasir memastikan, promonya?"],
+    saksi: "kasir di samping",
+  },
 };
 
 const VARIASI_GESER = [
@@ -106,44 +294,37 @@ const VARIASI_GESER = [
   ["usap produk lalu geser ke kanan", "produk diangkat mendekati saksi"],
   ["pegang produk lalu buka penutupnya", "produk dibuka di depan saksi"],
 ] as const;
+const VARIASI_LAYANAN = [
+  ["buka dashboard lalu antrean berubah status", "jadwal berikutnya tersusun otomatis di layar"],
+  ["buka permintaan pada kolom diproses", "notifikasi pelanggan menerima balasan terjadwal"],
+  ["buka formulir menjadi tugas terurut", "status layanan diperbarui di depan saksi"],
+  ["buka daftar tunggu pada layar layanan", "jadwal bentrok berubah menjadi slot tersedia"],
+] as const;
 
 const JEDA_VARIAN = ["[short pause]", "[medium pause]", "[long pause]", "[slow]"] as const;
-const WARNA_VARIAN = ["pelan", "mendadak", "lagi", "barusan"] as const;
-const TANYA_ADEGAN: Record<string, string> = {
-  "ads-unboxing-pov": "Kardus keras",
-  "ads-meja-kosong": "Peralatan lenyap",
-  "ads-panas-ekstrem": "Udara gerah",
-  "ads-tembus-dinding": "Retakan tembok",
-  "ads-atap-jebol": "Serbuk atap",
-  "ads-dobrak-pintu": "Engsel pintu",
-  "ads-waktu-berhenti": "Pasar beku",
-  "kenalin-bisnis": "Antrean pesan",
-  "promo-terbatas": "Daftar harga",
-};
 
 function storyAds(templateId: string, variantIndex: number, c: TemplateCtx, base: CopyTriple): CopyTriple {
   const adegan = ADEGAN_ADS[templateId];
   if (!adegan) return base;
-  const [aksiSatu, aksiDua] = VARIASI_GESER[variantIndex];
-  const panjang = templateId === "ads-tembus-dinding";
-  const hook = kalimatRingkas(base.hook, panjang ? 8 : 4).replace(/[.]$/, "?");
-  const button = `Detailnya ada di bawah ya; ${TANYA_ADEGAN[templateId]} ${WARNA_VARIAN[variantIndex]}?`;
-  let tekananSatu = panjang
-    ? `${adegan.tekanan[0].replace(/[?.]$/, "")}, tangan ${WARNA_VARIAN[variantIndex]} menahan produk`
-    : `${adegan.tekanan[0].split(/\s+/)[0]} ${WARNA_VARIAN[variantIndex]} deh`;
-  const tekananDua = panjang
-    ? `${adegan.tekanan[1].replace(/[?.]$/, "")}, produk bergeser ${WARNA_VARIAN[variantIndex]}`
-    : `${adegan.tekanan[1].split(/\s+/)[0]} bergeser sih`;
-  const spike = panjang
-    ? `${adegan.spike.replace(/[?.]$/, "")}, saksi langsung menoleh`
-    : `Nah, ${adegan.spike.split(/\s+/)[0]}`;
-  if (templateId === "promo-terbatas") tekananSatu = `Kini ${c.harga} ${WARNA_VARIAN[variantIndex]} ya`;
+  const nonPhysical = isServiceLike(c.category ?? "");
+  const [aksiSatu, aksiDua] = (nonPhysical ? VARIASI_LAYANAN : VARIASI_GESER)[variantIndex];
+  const hook = withDelivery(adegan.hooks[variantIndex], base.hook);
+  const button = `${adegan.questions[variantIndex]} Detailnya ada di bawah ya.`;
+  const hargaAktif = [
+    `Kini harganya ${c.harga}.`,
+    `Angkanya ${c.harga}, ya.`,
+    `Harga aktif ${c.harga}.`,
+    `Tercantum ${c.harga}, deh.`,
+  ];
+  const tekananSatu = templateId === "promo-terbatas"
+    ? hargaAktif[variantIndex]
+    : adegan.friction1[variantIndex];
   const story: AdsStoryBeat[] = [
-    { role: "hook", label: "HOOK", text: hook, action: "anomali terlihat sejak frame pertama", product_state: "partial" },
+    { role: "hook", label: "HOOK", text: hook, action: nonPhysical ? "masalah layanan terlihat pada dashboard sejak frame pertama" : "anomali terlihat sejak frame pertama", product_state: "partial" },
     { role: "demo", label: "FRICTION", text: `${JEDA_VARIAN[variantIndex]} ${tekananSatu}`, action: aksiSatu, product_state: "partial" },
-    { role: "story", label: "FRICTION", text: tekananDua, action: aksiDua, product_state: "hero" },
-    { role: "story", label: "SPIKE", text: spike, action: `${c.produk} berhenti tepat di depan saksi`, product_state: "hero", saksi: adegan.saksi },
-    { role: "cta", label: "BUTTON", text: button, action: "talent menahan produk sambil menyisakan pertanyaan", product_state: "hero" },
+    { role: "story", label: "FRICTION", text: adegan.friction2[variantIndex], action: aksiDua, product_state: "hero" },
+    { role: "story", label: "SPIKE", text: adegan.spikes[variantIndex], action: nonPhysical ? `hasil layanan ${c.produk} berubah di depan saksi` : `${c.produk} berhenti tepat di depan saksi`, product_state: "hero", saksi: adegan.saksi },
+    { role: "cta", label: "BUTTON", text: button, action: nonPhysical ? "talent menunjuk perubahan status layanan sambil menyisakan pertanyaan" : "talent menahan produk sambil menyisakan pertanyaan", product_state: "hero" },
   ];
   return { hook: story[0].text, demo: story.slice(1, 4).map((beat) => beat.text).join(" "), cta: button, story };
 }
@@ -540,5 +721,5 @@ export function templateCopy(
     );
   }
   const base = list[i](c);
-  return storyAds(templateId, i, c, ringkasCopy(templateId, base));
+  return storyAds(templateId, i, c, authoredCompact(templateId, i, c, base));
 }

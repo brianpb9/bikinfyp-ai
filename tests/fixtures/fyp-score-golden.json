@@ -80,7 +80,7 @@
       "label_hook_verbal": 1,
       "label_hook_text": 0,
       "label_hook_visual": 0,
-      "transcript_word_count": 26,
+      "transcript_word_count": 21,
       "transcript_has_question": 1,
       "transcript_has_price_mention": 0,
       "ocr_word_count": 4,
@@ -88,7 +88,7 @@
       "ocr_has_cta_word": 0
     },
     "expected": {
-      "raw_probability": 0.44339328700745956,
+      "raw_probability": 0.444114185917883,
       "score": 64,
       "model_version": "ckpt18-n691"
     }
@@ -174,15 +174,15 @@
       "label_hook_verbal": 1,
       "label_hook_text": 0,
       "label_hook_visual": null,
-      "transcript_word_count": 85,
+      "transcript_word_count": 60,
       "transcript_has_question": 0,
-      "transcript_has_price_mention": 1,
+      "transcript_has_price_mention": 0,
       "ocr_word_count": 4,
       "ocr_has_price_mention": 1,
       "ocr_has_cta_word": 0
     },
     "expected": {
-      "raw_probability": 0.5162275770787015,
+      "raw_probability": 0.5169167808159586,
       "score": 72,
       "model_version": "ckpt18-n691"
     }

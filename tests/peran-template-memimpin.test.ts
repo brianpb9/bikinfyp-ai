@@ -77,3 +77,22 @@ test("template lama yang sudah punya peran tetap berjalan seperti sebelumnya", (
   assert.equal(p.length > 0, true);
   assert.match(p[0].prompt, /OPENING shot/i);
 });
+
+test("satu shot talking-head memuat seluruh timeline termasuk dua role story", () => {
+  const timeline: SegmentDraft[] = [
+    { role: "hook", text: "HOOK UNIK membuka masalah.", start: 0, end: 2, visual_direction: "x" },
+    { role: "demo", text: "FRICTION SATU menambah tekanan.", start: 2, end: 6, visual_direction: "y" },
+    { role: "story", text: "FRICTION DUA tetap terdengar.", start: 6, end: 10, visual_direction: "z" },
+    { role: "story", text: "SPIKE UNIK membalik keadaan.", start: 10, end: 13, visual_direction: "z" },
+    { role: "cta", text: "BUTTON UNIK menutup cerita.", start: 13, end: 15, visual_direction: "z" },
+  ];
+  const prompt = planShots({
+    jobId: "story-timeline", durationSec: 15, segments: timeline,
+    category: getCreatorCategory("hijaber")!, productName: "Botol", productCategory: "beauty",
+    imageRefPath: "/tmp/x.jpg", qualityTier: "high_quality" as QualityTier,
+    format: "talking_head",
+  }).shots[0].prompt;
+  const positions = timeline.map((segment) => prompt.indexOf(segment.text));
+  assert.ok(positions.every((position) => position >= 0), `segmen hilang dari prompt: ${positions.join(",")}`);
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions, "urutan dialog tidak mengikuti timeline");
+});

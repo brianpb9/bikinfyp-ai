@@ -309,6 +309,7 @@ export function pickHookFamilies(
 function buildCtx(product: ProductInput, register: Register): TemplateCtx {
   const cat = product.category;
   return {
+    category: cat,
     reg: REGISTERS[register],
     harga: formatHargaNatural(product.price_idr),
     produk: product.name,
@@ -654,9 +655,9 @@ function normalizeSegments(segments: SegmentDraft[]): SegmentDraft[] {
   }));
 }
 
-/** Lima beat Story OS dengan spike mulai 60% durasi (di dalam toleransi gate). */
+/** Lima beat Story OS; SPIKE mulai 68% durasi, di dalam jendela kanonik 65–80%. */
 function storyKeSegmen(beats: AdsStoryBeat[], durationSec: number): SegmentDraft[] {
-  const batas = [0, 0.18, 0.38, 0.6, 0.82, 1].map((rasio) => Math.round(rasio * durationSec));
+  const batas = [0, 0.18, 0.4, 0.68, 0.84, 1].map((rasio) => Math.round(rasio * durationSec));
   return beats.map((beat, index) => ({
     ...beat,
     start: batas[index],

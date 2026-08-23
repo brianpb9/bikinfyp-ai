@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { DELIVERY_TAGS } from "../lib/script-engine/delivery-tags";
 import {
   SCRIPT_CATALOG_AUDIT_FIXTURE,
@@ -21,9 +22,57 @@ import {
 import { CAMPAIGN_TEMPLATES, KATALOG_BUTUH_COPY } from "../lib/templates";
 import { generateScripts } from "../lib/script-engine";
 import { periksaStoryOsAds } from "../lib/script-engine/story-os-ads";
+import { COMPACTED_TEMPLATE_IDS } from "../lib/script-engine/template-copy";
 
 const audit = await generateCatalogScriptAudit();
 const { summary } = audit;
+
+const AUTHORED_COPY_SNAPSHOT: Record<string, string[]> = {
+  "racun-checkout": ["6484cfddc459a814", "c5575d9c9c7d8826", "0fe6dbb747c30d72", "74d613b890569213"],
+  "review-jujur": ["8bb47f4b1d3ca292", "6651f93e708e30bc", "2cb54d26ff7c7dea", "237c288bdda522f3"],
+  unboxing: ["ce7cdd0391284281", "834e793b77b0d5b9", "5d7729e2367f35b1", "f7430ed8a77e8fa9"],
+  "before-after": ["c6cdd1da4a2e87ca", "fe79d6a1e8304fab", "2096d8d004de8b41", "0764caf6653fd7a2"],
+  "diskon-gede": ["53ef2a4a896b18a5", "fb7af64ecce4c417", "e7d29fab73fe4550", "43ce1482a5ad74bb"],
+  "buat-kamu-yang": ["1551320b1675031b", "4fccecc08d34ce1b", "d24cead7ad8eff8b", "86211dbbce35ed8e"],
+  "spill-rahasia": ["21134b501bc3ecd2", "cee27d1267678075", "c9e6ba1cc252189c", "0ecce1b36a001035"],
+  "t01-tempat-susah": ["0f25a3f507eee336", "eae08e283012cb29", "289149dbb08865bf", "e1f9e79239191ed0"],
+  "t02-bedah-fitur": ["d2df54ab86f1cdb0", "fce5dbe724309a96", "26a5b21296ceff46", "1b98ce981ffed5fd"],
+  "t03-liputan-event": ["a79c517906d545b2", "34210aa3fead3651", "8ef5a2ea59013dbb", "bd1257a959c97d0c"],
+  "t04-hook-indrawi": ["66dbcb984e12f2ad", "c97ad8a822e81e42", "fee794df6c5bba7e", "f8ca6d2a7a9dc78d"],
+  "t07-checklist-berjalan": ["153f4f05d5290914", "2c95c172c992736d", "802906857346f818", "c8ca64d35c9f8d83"],
+  "t09-bahan-aktif": ["f7b8d72e75bdb6ac", "0c89d79923fe6c9c", "0ff1d991acffd261", "9f1d03aee94a2b08"],
+  "t10-bukti-di-lengan": ["e65ffdc01c65a363", "50d19844639acac3", "c60161149ea263f0", "3a90e1c223b74c16"],
+  "t12-vox-pop": ["6d1c531a760cf89b", "3c76a0c73ef9af6b", "2f40edb84997bff2", "94c1aaa2f32668c5"],
+  "kenalin-bisnis": ["94a72e8790ffe713", "b09eb6ed71232038", "cbbedd50c3a68066", "a48fa5f3061179e4"],
+  "promo-terbatas": ["8527ef44f7259489", "b73df90d6301bb2e", "15f03ee6edaec8f7", "d9de026b6fe8ba0c"],
+  "tvc-the-drop": ["5700da534b4af017", "e3f10a687ebf3c15", "8aa3c5cbcc216dcc", "3089925d4e852d55"],
+  "tvc-tersangka": ["20e7f08886154547", "f0526370752aa98d", "6846ae0dc194b4ba", "12386f1a152e7b6f"],
+  "tvc-seharian": ["c5e8c022d6d7e21d", "3a1ad1a56b06ea5d", "69c9605b347382a0", "6b6aca290aae4aa0"],
+  "tvc-kain-lari": ["89cf1d36bfa3183e", "713bcd021d5d3daa", "1d8bf33a00ed55ab", "f72e9ad89c652c37"],
+  "tvc-jam-tiga": ["6e0bd949c961447d", "ff64ef322319728b", "b1726eafe3cda348", "54a502183e7d551b"],
+};
+
+test("snapshot seluruh copy authored mengunci 22 template x 4 varian tanpa pemotongan token", () => {
+  assert.deepEqual([...COMPACTED_TEMPLATE_IDS].sort(), Object.keys(AUTHORED_COPY_SNAPSHOT).sort());
+  const actual = Object.fromEntries(audit.templates
+    .filter((template) => COMPACTED_TEMPLATE_IDS.has(template.templateId))
+    .map((template) => [template.templateId, template.variants.map((variant) => createHash("sha256")
+      .update(variant.segments.map((segment) => `${segment.role}:${segment.text}`).join("|"))
+      .digest("hex").slice(0, 16))]));
+  assert.deepEqual(actual, AUTHORED_COPY_SNAPSHOT);
+});
+
+test("copy authored selalu berupa kalimat utuh dan delivery tag tidak bocor ke spoken text", () => {
+  for (const template of audit.templates.filter((item) => COMPACTED_TEMPLATE_IDS.has(item.templateId))) {
+    for (const variant of template.variants) for (const segment of variant.segments) {
+      assert.deepEqual(danglingFragmentReasons(segment.text), [], `${template.templateId}#${variant.variantIndex}: ${segment.text}`);
+      assert.doesNotMatch(segment.text, /\[[^\]]+\]/, `${template.templateId}#${variant.variantIndex}: delivery tag bocor`);
+      if (segment.role !== "cta") {
+        assert.match(segment.text, /[.!?]$/, `${template.templateId}#${variant.variantIndex}: kalimat tidak selesai`);
+      }
+    }
+  }
+});
 
 test("whitelist delivery Gemini terkunci ke tag yang disepakati", async () => {
   assert.deepEqual([...DELIVERY_TAGS], [
@@ -344,19 +393,45 @@ test("seluruh aturan yang dulu dikecualikan sekarang tepat nol", async () => {
   }
 });
 
-test("copy template Ads membawa lima beat Story OS sampai hasil generator", async () => {
-  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-unboxing-pov")!;
-  const variants = await generateScripts({
-    product: auditProductForTemplate(template), register: "bunda", tanpaLlm: true,
+test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasil generator", async () => {
+  const adsTemplates = CAMPAIGN_TEMPLATES.filter((item) => item.group === "ads");
+  assert.equal(adsTemplates.length, 9);
+  for (const template of adsTemplates) {
+    const variants = await generateScripts({
+      product: auditProductForTemplate(template), register: "bunda", tanpaLlm: true,
+      contentType: "ads", qualityTier: template.tier as never,
+      durationSec: template.durationSec, templateId: template.id,
+      count: 4, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+    });
+    for (const variant of variants) {
+      assert.deepEqual(variant.segments.map((segment) => segment.label), ["HOOK", "FRICTION", "FRICTION", "SPIKE", "BUTTON"]);
+      assert.equal(variant.segments.filter((segment) => segment.role === "demo").length, 1);
+      for (const segment of variant.segments.filter((item) => item.label === "FRICTION" || item.label === "SPIKE")) {
+        const words = segment.text.replace(/\[[^\]]+\]/g, "").trim().split(/\s+/).filter(Boolean);
+        assert.ok(words.length <= 8, `${template.id} ${segment.label} terlalu panjang: ${segment.text}`);
+        assert.ok(words.length >= 2, `${template.id} ${segment.label} bukan kalimat utuh: ${segment.text}`);
+        assert.match(segment.text, /[.!?]$/, `${template.id} ${segment.label} tidak selesai: ${segment.text}`);
+      }
+      const spike = variant.segments.find((segment) => segment.label === "SPIKE")!;
+      const ratio = spike.start / template.durationSec;
+      assert.ok(ratio >= 0.65 && ratio <= 0.8, `${template.id} SPIKE mulai ${Math.round(ratio * 100)}%`);
+      assert.equal(variant.validation.passed, true, JSON.stringify(variant.validation.errors));
+    }
+  }
+});
+
+test("Ads kategori layanan memakai aksi dashboard nonfisik", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-meja-kosong")!;
+  const [variant] = await generateScripts({
+    product: { ...auditProductForTemplate(template), category: "app" }, register: "bunda", tanpaLlm: true,
     contentType: "ads", qualityTier: template.tier as never,
     durationSec: template.durationSec, templateId: template.id,
-    count: 4, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+    count: 1, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
   });
-  for (const variant of variants) {
-    assert.deepEqual(variant.segments.map((segment) => segment.label), ["HOOK", "FRICTION", "FRICTION", "SPIKE", "BUTTON"]);
-    assert.equal(variant.segments.filter((segment) => segment.role === "demo").length, 1);
-    assert.equal(variant.validation.passed, true, JSON.stringify(variant.validation.errors));
-  }
+  const actions = variant.segments.map((segment) => segment.action ?? "").join(" ");
+  assert.match(actions, /dashboard|status layanan|jadwal|antrean/);
+  assert.doesNotMatch(actions, /pegang produk|putar produk|produk berpindah|buka sisi produk/);
+  assert.equal(variant.validation.passed, true, JSON.stringify(variant.validation.errors));
 });
 
 test("mutasi beat Ads yang menghapus SPIKE dan BUTTON kembali ditolak", async () => {

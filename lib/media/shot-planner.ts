@@ -760,7 +760,6 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // format berpresenter — larangan itu ada semata karena VO-nya dulu diganti.
   const lipSyncPresenter = format === "talking_head" || format === "tvc";
 
-  const segText = (role: string) => stripDeliveryTags(input.segments.find((s) => s.role === role)?.text ?? "");
   const noun = CATEGORY_NOUN[input.productCategory] ?? CATEGORY_NOUN.default;
   const pain = CATEGORY_PAIN[input.productCategory] ?? CATEGORY_PAIN.default;
 
@@ -824,7 +823,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // sengaja dibiarkan TANPA dialog — beat visual murni, dan itu justru yang
     // membuat beat sensorik (busa, tuang, tekstur) punya ruang bernapas.
     numShots === 1
-      ? [segText("hook"), segText("demo"), segText("cta")]
+      // Satu klip talking-head tetap memuat SELURUH timeline. Story OS Ads
+      // punya dua beat role="story" (FRICTION kedua + SPIKE); menyusun dialog
+      // dari tiga nama role lama membuang keduanya dari performance prompt
+      // sementara TTS final tetap mengucapkannya.
+      ? input.segments.slice().sort((a, b) => a.start - b.start).map((sg) => stripDeliveryTags(sg.text))
       : segmenMilikShot(i).map((sg) => stripDeliveryTags(sg.text));
 
   // --- TVC (M9, 2026-08-11) ---
@@ -1454,11 +1457,18 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // AKSI PENULIS MENANG atas tabel beat (board review 20 Agu). Kalimatnya
     // dirakit dengan kunci identitas produk supaya presisi koreografi tidak
     // menukar presisi identitas — keduanya harus ada, bukan salah satu.
+    const aksiPenulis = sinema
+      ? `${noPhysicalProduct ? "" : praAksiHadir(input.productName)}${sinema.aksi}, ${IDENTITY_INSTRUCTION}`
+      : null;
+    const peranTemplate = ugcBeat(i);
     const beat =
-      (sinema
-        ? `${noPhysicalProduct ? "" : praAksiHadir(input.productName)}${sinema.aksi}, ${IDENTITY_INSTRUCTION}`
-        : null) ??
-      ugcBeat(i) ??
+      (peranTemplate && aksiPenulis
+        // Peran template memegang dunia, komposisi, dan kesinambungan yang
+        // sudah dibuktikan render; aksi terstruktur penulis tetap menang pada
+        // koreografi DI DALAM dunia itu. Membuang salah satunya membuat Ads
+        // kembali generik atau kehilangan jangkarnya.
+        ? `${peranTemplate} Scripted action inside that exact setup: ${aksiPenulis}`
+        : aksiPenulis ?? peranTemplate) ??
       (format === "ads" && noPhysicalProduct
         // Iklan jasa: yang diperagakan adalah MANFAAT, bukan benda. Presenter
         // tidak memegang apa pun — begitu diminta memegang sesuatu, model akan
