@@ -51,32 +51,60 @@ $ rg -n 'return \{ terbaca: true' lib/media/label-terbaca.ts
 182:    return { terbaca: true, kata, cocokNama, cocokMerek: true };
 188:    return { terbaca: true, kata: [], cocokNama: true, cocokMerek: null };
 
---- 8. DELETE foto: E5 dan E9 BERBEDA (dikoreksi 2026-08-23T00:17:03Z) ---
-# Versi pertama bagian ini berjudul 'DELETE foto kini ikut menghapus sidecar'
-# dan hanya menunjukkan implementasi helper — bukan siapa yang MEMANGGILNYA.
-# Judul itu menggeneralisasi ke kedua jalur DELETE padahal hanya E9 benar.
-# Temuan Reviewer atas aa53c32.
+--- 8. DELETE foto: E5 dan E9 BERBEDA (direkam ulang 2026-08-23T00:21:25Z) ---
+# Dua koreksi atas versi sebelumnya, keduanya temuan Reviewer:
+#  (i) 'rg -c' TANPA match tidak mencetak 0 — stdout kosong, exit 1. Versi
+#      lalu memakai '|| echo 0' sehingga transcript menampilkan angka yang
+#      TIDAK dihasilkan perintah yang tertulis. Kini pakai --include-zero
+#      dan exit code dicatat apa adanya.
+#  (ii) '-A1' berhenti sebelum mediaStorage().delete, jadi body helper tidak
+#      pernah benar-benar terlihat — dan kesimpulan 'tidak dicoba ulang'
+#      SALAH: helper mencoba TIGA kali inline.
+# rg version: ripgrep 15.1.0 (rev af60c2de9d)
 
-# 8a. HELPER: menghapus key DAN sidecar-nya
-$ rg -n 'const sasaran = keys.flatMap' -A1 lib/product-images.ts
-360:  const sasaran = keys.flatMap((key) => [key, relMeta(key)]);
-361-  await Promise.all(sasaran.map(async (key) => {
+# 8a. HELPER — body penuh
+$ sed -n '358,373p' lib/product-images.ts
+export async function deleteStoredProductImages(keys: string[]): Promise<void> {
+  const failed: string[] = [];
+  const sasaran = keys.flatMap((key) => [key, relMeta(key)]);
+  await Promise.all(sasaran.map(async (key) => {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try { await mediaStorage().delete(key); return; }
+      catch (error) {
+        if (attempt === 3) {
+          failed.push(key);
+          console.error(`[storage] gagal menghapus ${key} setelah 3 percobaan:`, error);
+        }
+      }
+    }
+  }));
+  if (failed.length) throw new Error(`Storage cleanup failed for ${failed.length} object(s).`);
+}
+# -> sasaran = key DAN relMeta(key); TIGA percobaan inline per objek;
+#    yang tetap gagal dikumpulkan lalu helper MELEMPAR.
 
-# 8b. E5 (DELETE retail): TIDAK memanggil helper itu sama sekali
-$ rg -c 'deleteStoredProductImages' app/api/products/[id]/photos/route.ts
+# 8b. E5 (DELETE retail) — TIDAK memanggil helper
+$ rg --include-zero -c 'deleteStoredProductImages' 'app/api/products/[id]/photos/route.ts'; echo "exit=$?"
 0
-$ rg -n 'persistImages\(' app/api/products/[id]/photos/route.ts
+exit=1
+# -> '0' dengan exit 1: ripgrep keluar 1 saat nol match, bahkan dengan --include-zero.
+$ rg -n 'await persistImages\(' 'app/api/products/[id]/photos/route.ts'
 127:    await persistImages(user.id, id, images);
 154:    await persistImages(user.id, id, images);
 # -> hanya menyaring daftar lalu mempersist; bytes DAN sidecar ditinggal yatim.
 
-# 8c. E9 (DELETE org): SATU-SATUNYA yang memanggil helper
-$ rg -n 'deleteStoredProductImages' app/api/dashboard/campaign/product/[id]/photos/route.ts
-7:import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, deleteStoredProductImages, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
-64:      await deleteStoredProductImages(added);
-68:      await deleteStoredProductImages(added);
-97:    try { await deleteStoredProductImages([target]); }
-# -> kegagalannya hanya ditandai cleanupPending, tidak dicoba ulang.
+# 8c. E9 (DELETE org) — satu-satunya pemanggil, dan apa yang terjadi saat gagal
+$ sed -n '96,101p' 'app/api/dashboard/campaign/product/[id]/photos/route.ts'
+    let cleanupPending = false;
+    try { await deleteStoredProductImages([target]); }
+    catch { cleanupPending = true; }
+    void pgAudit(user.id, "product.photo_removed", "products", id, { org_id: membership.org_id, removed: target, total: images.length })
+      .catch((error) => console.error("[audit] product.photo_removed failed:", error));
+    return Response.json({ product_id: id, images, image_urls: images.map((image) => createSignedUrl(image)), cleanup_failed: cleanupPending });
+# -> lemparan helper (sesudah 3 percobaan inline habis) DITANGKAP jadi
+#    cleanupPending, dilaporkan ke klien sebagai cleanup_failed, lalu
+#    SELESAI. Jadi: ada retry inline, TIDAK ada retry tertunda/antrean
+#    pada jalur E9 ini setelah tiga percobaan inline habis.
 
 --- 9. test yang memetakan kasus C secara eksplisit ---
 $ rg -n -o '(W1|W2) C[0-9]+' tests/
