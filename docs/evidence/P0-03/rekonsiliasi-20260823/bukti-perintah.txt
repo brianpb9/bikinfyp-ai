@@ -68,3 +68,30 @@ tests/product-truth-worker-reference.test.ts:258:W2 C8
 tests/product-truth-worker-reference.test.ts:270:W2 C8
 tests/product-truth-worker-reference.test.ts:288:W2 C8
 tests/product-truth-worker-reference.test.ts:300:W2 C8
+
+===================================================================
+--- 10. A6: apakah regenerate MEMPERTAHANKAN snapshot? (temuan review b1a3e06) ---
+# waktu_utc : 2026-08-23T00:01:50Z
+# HEAD      : b1a3e06814c5a47d88097383b418a9fdc1f4eac0
+
+$ rg -n 'p.images AS product_images' lib/postgres/worker.ts
+274:      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
+
+$ rg -n 'resolveApprovedReference\(images\)|ambilSnapshotTersetujui\(' lib/postgres/worker.ts
+340:  const referensi = await resolveApprovedReference(images);
+355:  const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
+377:      extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
+
+$ rg -n 'enqueueJobResume' app/api/dashboard/campaign/job/[jobId]/route.ts
+7:import { enqueueJobResume } from "@/lib/job-queue";
+153:        // Akibatnya dua enqueueJobResume() dengan id BullMQ berbeda, dua
+164:        await enqueueJobResume(jobId, "approve");
+283:      await enqueueJobResume(jobId, `regen${idx}`);
+
+# KESIMPULAN: SELECT worker mengambil p.images SEGAR tiap invocation, lalu
+# resolveApprovedReference + ambilSnapshotTersetujui membuat snapshot BARU.
+# Jadi regenerate/resume (A6) TIDAK mempertahankan snapshot yang disetujui
+# sebelumnya — ia menyetujui ulang terhadap images SAAT ITU.
+
+$ rg -ln 'snapshot' app/api/dashboard/campaign/job    # adakah pemeliharaan snapshot di A6?
+(NOL berkas)

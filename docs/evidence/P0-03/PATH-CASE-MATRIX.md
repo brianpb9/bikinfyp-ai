@@ -79,19 +79,19 @@ bagian E.2, dan arti tiap status di E.0.
 
 | # | Kasus | Jalur wajib diuji | Keputusan diharapkan | reason code (usul) | Status |
 |---|---|---|---|---|---|
-| C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,A1..A5,**A6**,W1,W2 | **produk DITERIMA**; foto#1 berstatus promotional; approved reference WAJIB foto#2 + hash-nya. **A6 (approve/regenerate) wajib MEMPERTAHANKAN snapshot** — ia membangunkan worker lagi. `REF_PROMOTIONAL` adalah STATUS FOTO, bukan penolakan produk | `REF_PROMOTIONAL` (status) | **PASS** |
-| C2 | Toothpaste diberi kategori facewash | E1,E3,E6,E7,A1..A4 | reject sebelum spend | `TYPE_MISMATCH` | **TERBUKA** |
-| C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` | **TERBUKA** |
-| C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` | **TERBUKA** |
-| C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` | **TERBUKA** |
-| C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` | **TERBUKA** |
+| C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,A1..A5,**A6**,W1,W2 | **produk DITERIMA**; foto#1 berstatus promotional; approved reference WAJIB foto#2 + hash-nya. **A6 (approve/regenerate) wajib MEMPERTAHANKAN snapshot** — ia membangunkan worker lagi. `REF_PROMOTIONAL` adalah STATUS FOTO, bukan penolakan produk | `REF_PROMOTIONAL` (status) | **PARTIAL** |
+| C2 | Toothpaste diberi kategori facewash | E1,E3,E6,E7,A1..A4 | reject sebelum spend | `TYPE_MISMATCH` | **BLOCKED** |
+| C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` | **BLOCKED** |
+| C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` | **BLOCKED** |
+| C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` | **BLOCKED** |
+| C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` | **BLOCKED** |
 | C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` | **PASS** |
 | C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` | **PARTIAL** |
 | C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` | **PARTIAL** |
 | C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` | **PARTIAL** |
 | C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | **PASS** |
 | C12 | Urutan images diubah/dirusak | E5,E9,W1,W2 | pakai hash tersetujui | `REF_HASH_MISMATCH` | **PASS** |
-| C13 | **Produk valid** (positif) | seluruh E,A,W | DITERIMA | — | **PASS** |
+| C13 | **Produk valid** (positif) | seluruh E,A,W | DITERIMA | — | **PARTIAL** |
 
 Tiap penolakan wajib membuktikan: reason code stabil, pesan bisa ditindaklanjuti,
 **nol** credit hold/capture, **nol** enqueue, **nol** panggilan provider,
@@ -142,16 +142,13 @@ database, provider berbayar, penegakan admission, maupun keputusan T43.
 |---|---|
 | **PASS** | ada bukti LANGSUNG (test bernama / call-site) bahwa invarian berlaku |
 | **PARTIAL** | sebagian tertutup dan dibuktikan; sisanya disebut eksplisit |
-| **BLOCKED** | tertahan hal di luar kendali Builder (T43 / kredensial / deploy) |
+| **BLOCKED** | penerimaan belum dapat dinyatakan karena implementasi lokal belum ada, atau karena T43 / kredensial / deploy; penyebab wajib disebut eksplisit |
 | **NOT-APPLICABLE** | tidak relevan pada kontrak yang berlaku sekarang |
-| **TERBUKA** | belum dibangun sama sekali; TIDAK ada penghalang eksternal |
 
-**Kenapa ada status kelima.** Tugas meminta empat status. Untuk C2-C6 tidak satu
-pun cocok tanpa menyesatkan: menyebutnya `BLOCKED` mengarang penghalang
-eksternal yang tidak ada, `NOT-APPLICABLE` mengarang bahwa kasusnya tidak
-relevan, dan `PARTIAL` mengarang cakupan yang tidak ada. `TERBUKA` dipakai apa
-adanya: pekerjaan lokal yang belum dikerjakan. Ini penyimpangan sadar dari
-instruksi, disebut supaya bisa ditolak — bukan diselipkan.
+`BLOCKED` bukan klaim bahwa penyebabnya selalu eksternal. Untuk C2-C6 dan D1-D2
+di bawah, penerimaan diblokir oleh pekerjaan lokal yang belum diimplementasikan
+atau belum diaudit; tidak ada dependensi eksternal yang menghalangi Builder
+mengerjakannya sebagai task terpisah.
 
 ### E.1 Entrypoint: apa yang BERUBAH sejak 2026-08-20
 
@@ -159,35 +156,35 @@ instruksi, disebut supaya bisa ditolak — bukan diselipkan.
 |---|---|---|---|
 | E1 create manual | PARTIAL | **PARTIAL** | `saveProductImages` → `tulisSidecar` (`lib/product-images.ts:271`). Bukti terbit; gerbang label tidak dipanggil |
 | E2 extract URL | UNGATED | **PARTIAL** | `downloadProductImages` → `tulisSidecar` (`lib/product-image-download.ts:48`). Dulu nol sidecar |
-| E3 PATCH retail | UNGATED | **NOT-APPLICABLE** untuk kontrak bukti | vonis referensi kini dari sidecar+hash, bukan dari `name`/`brand`. Tetap relevan untuk C2/C3/C5 yang TERBUKA |
+| E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar, tetapi E3 tetap jalur wajib C2/C3/C5 dan belum melakukan validasi type/brand/category |
 | E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; **lubang 20 Agu MASIH ADA**: gerbang label hanya jalan bila `existing.length === 0` (`route.ts:84`) |
 | E5 DELETE foto retail | UNGATED | **PARTIAL** | `deleteStoredProductImages` kini menghapus `key` DAN `relMeta(key)` (`lib/product-images.ts:360`) — sidecar tidak lagi yatim. Masih bisa menyisakan daftar tanpa foto layak |
 | E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. Dulu nol |
-| E7 PATCH org | UNGATED | **NOT-APPLICABLE** untuk kontrak bukti | alasan sama dengan E3 |
+| E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sama dengan E5 |
 | W1 worker PG | UNGATED | **PASS** | `resolveApprovedReference` + `ambilSnapshotTersetujui` (`lib/postgres/worker.ts:340`); diuji di PostgreSQL nyata, 12 test |
 | W2 worker inline | UNGATED | **PASS** | idem (`lib/worker.ts:122,139`); 11 test |
-| A1..A7 admission | UNGATED | **BLOCKED** | `rg -ln 'resolveApprovedReference|referensiLayak' app/api/jobs app/api/dashboard` → **NOL berkas**. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
-| D1, D2 penulis DB | UNGATED | **TERBUKA** | belum diaudit ulang; bukan bagian slice ini |
+| A1..A7 admission | UNGATED | **BLOCKED (T43)** | `rg -ln 'resolveApprovedReference|referensiLayak' app/api/jobs app/api/dashboard` → **NOL berkas**. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
+| D1, D2 penulis DB | UNGATED | **BLOCKED** | penerimaan diblokir audit lokal yang belum dilakukan; bukan dependensi eksternal dan bukan bagian slice ini |
 
 ### E.2 Kasus C1-C13 — alasan tiap status
 
 | # | Status | Alasan dan bukti |
 |---|---|---|
-| C1 | **PASS** | `REF_PROMOTIONAL` ada (`lib/product-truth.ts`). Test bernama `W1 C1` (`tests/pg-product-truth-w1.test.ts:344`, PostgreSQL nyata) dan `W2 C1` (`tests/product-truth-worker-reference.test.ts:219`): banner di foto#1, packshot di foto#2, yang SAMPAI KE PROVIDER foto#2 beserta sha256-nya |
-| C2 | **TERBUKA** | `TYPE_MISMATCH` tidak ada di kode mana pun |
-| C3 | **TERBUKA** | `BRAND_MISMATCH` tidak ada. Diperberat: E8 tidak meneruskan `merekTerdaftar`, jadi `cocokMerek` tidak pernah diperiksa di jalur org |
-| C4 | **TERBUKA** | `LABEL_UNREADABLE` tidak ada. Gerbang label E4 hanya menyentuh foto pertama |
-| C5 | **TERBUKA** | `CATEGORY_UNKNOWN` tidak ada |
-| C6 | **TERBUKA** | `OCR_FAILED` tidak ada, dan jalurnya **fail-OPEN**: `label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal — perilaku yang disengaja dan dikomentari, tapi berlawanan dengan "fail-closed" yang diharapkan baris C6 |
+| C1 | **PARTIAL** | `REF_PROMOTIONAL` ada (`lib/product-truth.ts`). Test `W1 C1` (`tests/pg-product-truth-w1.test.ts:344`) dan `W2 C1` (`tests/product-truth-worker-reference.test.ts:219`) membuktikan worker memilih packshot foto#2 beserta sha256-nya. Namun jalur E/A lain belum dicakup dan A6 tidak mempertahankan snapshot sebelum regenerate: setiap invocation worker membaca ulang `products.images` lalu membuat snapshot baru (`lib/postgres/worker.ts:273-278,323-355`) |
+| C2 | **BLOCKED** | Diblokir implementasi lokal: `TYPE_MISMATCH` dan validasi terkait belum ada di kode mana pun; tidak ada penghalang eksternal |
+| C3 | **BLOCKED** | Diblokir implementasi lokal: `BRAND_MISMATCH` belum ada. E8 juga tidak meneruskan `merekTerdaftar`, jadi `cocokMerek` tidak pernah diperiksa di jalur org |
+| C4 | **BLOCKED** | Diblokir implementasi lokal: `LABEL_UNREADABLE` belum ada dan gerbang label E4 hanya menyentuh foto pertama |
+| C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
+| C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PASS** | `CLASSIFIER_FAILED` ada; `belum_diperiksa` adalah keadaan ketiga yang eksplisit, bukan vonis promosi. Diuji di `tests/klasifikasi-gambar.test.ts` dan `tests/product-truth-evidence.test.ts` |
 | C8 | **PARTIAL** | Tertutup dan diuji di W1/W2: `W1 C8` × 3 (korup, hilang, hash beda) dan `W2 C8` × 2, seluruhnya menuntut nol materialize, nol provider, gagal-tertutup, nol capture/regen. **TIDAK tertutup di A1..A7** — itu isi T43 |
 | C9 | **PARTIAL** | Snapshot per job ADA (`ambilSnapshotTersetujui`) dan diuji lewat empat kasus TOCTOU, termasuk "path bersama ditimpa SESUDAH diperiksa". Yang belum: reason code `SNAPSHOT_IMMUTABLE` tidak ada, dan mutasi E3/E7 tidak memicu revalidasi (kini tidak lagi memengaruhi vonis referensi) |
-| C10 | **PARTIAL** | Mekanismenya PASS: produk legacy tanpa sidecar ditolak `EVIDENCE_INVALID`/`SIDECAR_MISSING`, diuji di W1 (`:302`) dan W2 (`:288`). Yang belum: **ANGKA** legacy — alat audit siap tapi butuh `DATABASE_URL` staging |
+| C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
 | C11 | **PASS** | `REF_MISSING` ada; diuji lewat kontrak resolver dan urutan vonis (sidecar diperiksa lebih dulu) |
 | C12 | **PASS** | `REF_HASH_MISMATCH` ada; `tests/kontrak-hash-sidecar.test.ts` plus TOCTOU "bytes yang DITERIMA PROVIDER tetap referensi utama yang disetujui" |
-| C13 | **PASS** | Kontrol positif di kedua worker: `W1 kontrol positif` (`:740`) dan `W2 kontrol positif` (`:638`) — bukti SAH sampai ke materialize lalu halt bersih |
+| C13 | **PARTIAL** | Kontrol positif W1 (`tests/pg-product-truth-w1.test.ts:740`) dan W2 (`tests/product-truth-worker-reference.test.ts:638`) membuktikan worker menerima bukti sah. Itu belum membuktikan produk valid diterima melalui seluruh E1..E9 dan A1..A7 yang diwajibkan baris ini |
 
 ### E.3 Bagian D dokumen ini sudah usang — dikoreksi
 
@@ -197,7 +194,7 @@ boundary test C1/C8 dan reason code masih usulan. Per e8a00a5:
 - boundary test C1 dan C8 **ADA** di kedua worker (lihat E.2);
 - lima reason code sudah nyata (`REF_PROMOTIONAL`, `CLASSIFIER_FAILED`,
   `EVIDENCE_INVALID`, `REF_MISSING`, `REF_HASH_MISMATCH`); tujuh sisanya masih
-  usulan dan itulah isi baris TERBUKA;
+  usulan dan penerimaannya tetap BLOCKED oleh implementasi lokal yang belum ada;
 - jalur promo tetap di luar cakupan dan tetap belum diputuskan siapa pun.
 
 ### E.4 Sisa P0/P1, dipisah menurut APA yang menahannya
@@ -216,6 +213,12 @@ dikerjakan di slice ini:**
    dokumen.
 4. C2/C3/C4/C5 belum punya reason code maupun jalur penegakan.
 5. D1/D2 (penulis DB langsung) belum diaudit ulang sejak 20 Agu.
+6. **A6 tidak mempertahankan snapshot yang sudah disetujui** — cacat produk
+   nyata, ditemukan lewat temuan Reviewer atas rekonsiliasi ini. Worker PG
+   membaca `p.images` segar tiap invocation lalu menyetujui ULANG, jadi
+   approve/regenerate memakai keadaan foto SAAT ITU, bukan yang disetujui saat
+   admission. Ini yang membuat C1 dan C9 tidak bisa PASS. Kandidat task
+   berikutnya; TIDAK diimplementasikan di slice rekonsiliasi ini.
 
 **(b) Butuh kredensial/data:**
 
@@ -234,6 +237,6 @@ dikerjakan di slice ini:**
 ### E.5 Yang TIDAK dilakukan di slice ini
 
 Nol perubahan produk atau test. Tidak satu pun status dinaikkan untuk membuat
-matriks hijau: lima baris tetap TERBUKA dan tiga PARTIAL justru karena buktinya
-tidak ada. Kelima gap di E.4(a) dicatat sebagai kandidat task, bukan
+matriks hijau: lima baris tetap BLOCKED oleh gap lokal dan lima baris PARTIAL
+karena cakupannya belum lengkap. Kelima gap di E.4(a) dicatat sebagai kandidat task, bukan
 diimplementasikan.
