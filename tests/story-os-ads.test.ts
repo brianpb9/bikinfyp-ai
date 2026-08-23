@@ -358,6 +358,72 @@ test("prompt live Ads memberi grammar action yang benar-benar diterima A-03", as
   }
 });
 
+test("kontrak gabungan system+task Ads mewajibkan hidden dan lolos SA6", async () => {
+  const { blokAturan, blokTugasUntukUji } = await import("../lib/script-engine/llm");
+  const system = blokAturan("ads");
+  const combined = `${system}\n${blokTugasUntukUji({ contentType: "ads", durationSec: 15, format: "ads" })}`;
+  assert.match(combined, /product_state is 'hidden' on EVERY beat including BUTTON/i);
+  assert.match(combined, /Keep product_state='hidden' on every Ads beat/i);
+  assert.doesNotMatch(system, /The CTA is always 'hero'/i,
+    "system prompt Ads masih mengalahkan kontrak hidden milik task");
+  assert.match(system, /ADS STORY-AND-PIXEL OVERRIDE[\s\S]+exactly five positive contiguous[\s\S]+never use partial or hero/i);
+  assert.ok(system.lastIndexOf("ADS STORY-AND-PIXEL OVERRIDE") > system.lastIndexOf("15 detik = 3 shot"),
+    "override Ads tidak berada sesudah source text legacy tiga-shot yang dikoreksi");
+  assert.ok(system.lastIndexOf("ADS STORY-AND-PIXEL OVERRIDE") > system.lastIndexOf("produk hero"),
+    "override Ads tidak berada sesudah source text legacy yang dikoreksi");
+  assert.match(system, /"product_state": "hidden",/);
+  assert.doesNotMatch(system, /"product_state": "hidden" \| "partial" \| "hero"/,
+    "output shape Ads masih menawarkan state yang pasti ditolak SA6");
+
+  const compliant = structuredClone((LULUS as unknown as { segments: Record<string, unknown>[] }).segments);
+  compliant[1].text = "Untuk Serum Glow Bening, jangan sekarang dong.";
+  for (const segment of compliant) segment.product_state = "hidden";
+  const sa6 = periksaStoryOsAds({ segments: compliant } as never, {
+    contentType: "ads", durationSec: 20, productName: "Serum Glow Bening",
+    productCategory: "beauty", productPriceIdr: 89_000,
+  }).filter((finding) => finding.gerbang === "SA6");
+  assert.deepEqual(sa6, [], `kontrak product_state gabungan ditolak SA6: ${JSON.stringify(sa6)}`);
+});
+
+test("task Ads memberi tepat lima timecode kontigu sampai exact duration seluruh katalog aktif", async () => {
+  const { blokAturan, blokTugasUntukUji } = await import("../lib/script-engine/llm");
+  const { CAMPAIGN_TEMPLATES } = await import("../lib/templates");
+  const durations = [...new Set(CAMPAIGN_TEMPLATES.filter((template) => template.kind === "ads")
+    .map((template) => template.durationSec))].sort((a, b) => a - b);
+  assert.ok(durations.includes(15), "fixture tidak mencakup delapan template Ads 15 detik");
+  assert.ok(durations.some((duration) => duration !== 15), "fixture tidak mencakup durasi katalog Ads selain 15 detik");
+
+  const system = blokAturan("ads");
+  assert.doesNotMatch(system, /Each segment 4-6 seconds|CTA >= 4s/i);
+  assert.match(system, /NO generic 4-6 second minimum per beat/i);
+  const affiliateSystem = blokAturan("affiliate");
+  assert.match(affiliateSystem, /Each segment 4-6 seconds\. HOOK 3-5s\. CTA >= 4s\./i);
+  assert.match(affiliateSystem, /The CTA is always 'hero'/i, "cabang Ads mengubah kontrak Affiliate");
+  for (const duration of durations) {
+    const task = blokTugasUntukUji({ contentType: "ads", durationSec: duration, format: "ads" });
+    const line = task.match(new RegExp(`^ADS EXACT TIMECODES FOR THIS ${duration}-SECOND REQUEST: (.+)\\.$`, "m"));
+    assert.ok(line, `jadwal exact ${duration} detik tidak ada di task prompt`);
+    const ranges = line[1].split(", ").map((range) => {
+      const match = range.match(/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/);
+      assert.ok(match, `format timecode tidak dapat diparse: ${range}`);
+      return [Number(match[1]), Number(match[2])] as const;
+    });
+    assert.equal(ranges.length, 5, `${duration}s tidak menghasilkan tepat lima beat`);
+    assert.equal(ranges[0][0], 0);
+    for (let index = 0; index < ranges.length; index++) {
+      assert.ok(ranges[index][1] > ranges[index][0], `${duration}s beat ${index} tidak berdurasi positif`);
+      if (index > 0) assert.equal(ranges[index][0], ranges[index - 1][1], `${duration}s punya gap/overlap pada beat ${index}`);
+    }
+    assert.equal(ranges.at(-1)?.[1], duration, `${duration}s tidak berakhir tepat pada requested duration`);
+    const spikeStartRatio = ranges[3][0] / duration;
+    assert.ok(spikeStartRatio >= 0.65 && spikeStartRatio <= 0.8,
+      `${duration}s SPIKE mulai di ${spikeStartRatio * 100}%, di luar kontrak 65-80%`);
+    const buttonDuration = ranges[4][1] - ranges[4][0];
+    assert.ok(buttonDuration >= 3 && buttonDuration <= 6,
+      `${duration}s BUTTON berdurasi ${buttonDuration}s, di luar kontrak 3-6s`);
+  }
+});
+
 test("prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta label produk", async () => {
   const { blokTugasUntukUji } = await import("../lib/script-engine/llm");
   for (const fixture of [

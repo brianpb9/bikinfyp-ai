@@ -132,10 +132,19 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     "  'she listens quietly'. Say what IS there.",
     "",
     "STRUCTURE:",
-    "- Exactly one HOOK first, 1-5 BODY, exactly one CTA last. Timecodes contiguous, no gaps.",
-    "- Each segment 4-6 seconds. HOOK 3-5s. CTA >= 4s.",
-    "- product_state follows an arc: the hook is 'hidden' or 'partial' and NEVER 'hero'.",
-    "  The CTA is always 'hero'. Nothing is a hero before the CTA.",
+    contentType === "ads"
+      ? [
+          "- Ads use exactly five beats: HOOK, FRICTION, FRICTION, SPIKE, BUTTON.",
+          "- Ads timecodes are positive, contiguous with no gaps/overlaps, start at 0, and the BUTTON ends exactly at the requested duration.",
+          "- Ads have NO generic 4-6 second minimum per beat; follow the exact five-beat schedule in the task block.",
+          "- For Ads, product_state is 'hidden' on EVERY beat including BUTTON. Neutral blank props are never partial or hero products.",
+        ].join("\n")
+      : [
+          "- Exactly one HOOK first, 1-5 BODY, exactly one CTA last. Timecodes contiguous, no gaps.",
+          "- Each segment 4-6 seconds. HOOK 3-5s. CTA >= 4s.",
+          "- product_state follows an arc: the hook is 'hidden' or 'partial' and NEVER 'hero'.",
+          "  The CTA is always 'hero'. Nothing is a hero before the CTA.",
+        ].join("\n"),
     "- start_state describes what is ALREADY TRUE in the first frame. The video model moves TOWARD",
     "  the prompt, so anything you do not state as already true will be invented.",
     "- 'why' must say which story beat the segment serves: setup, tension, or payoff.",
@@ -163,6 +172,14 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     // kalimat CTA, jadi naskah Ads lahir sebagai naskah afiliasi yang cuma
     // ditukar penutupnya.
     blokMaster(contentType),
+    "",
+    contentType === "ads"
+      ? [
+          "ADS STORY-AND-PIXEL OVERRIDE (newer and controlling): any legacy source wording above about three shots, a product hero, physical packshot, partial product, or hero CTA does NOT apply to generated Story Ads.",
+          "Story Ads always use exactly five positive contiguous time ranges from 0 through the requested duration; use the exact schedule in the task block.",
+          "The generated visual uses only neutral blank props. Set product_state='hidden' on HOOK, both FRICTION beats, SPIKE, and BUTTON; never use partial or hero.",
+        ].join("\n")
+      : "",
     "",
     // Jumlahnya DITURUNKAN dari yang benar-benar menolak keluaranmu (audit A2,
     // 19 Agu). Sebelumnya tertulis "six" lalu hanya empat yang didaftar, dan
@@ -196,7 +213,9 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     contentType === "ads"
       ? '      "action": "<restricted Indonesian A-03 neutral-prop action, e.g. talent buka kartu warna polos perlahan>",'
       : '      "action": "<sequenced: ..., then ..., then ...>",',
-    '      "product_state": "hidden" | "partial" | "hero",',
+    contentType === "ads"
+      ? '      "product_state": "hidden",'
+      : '      "product_state": "hidden" | "partial" | "hero",',
     '      "bridge_source": "<spoken_product_name | spoken_product_category | spoken_approved_price; Ads bridge beat only>",',
     '      "expression": "<visible emotion, or \"not visible\" for hands-only>",',
     '      "audio_note": "<ambient/sound design, may be empty>",',
@@ -358,6 +377,10 @@ function blokTugas(r: PermintaanNaskah): string {
   const jumlah = r.contentType === "ads"
     ? 5 // HOOK + 2×FRICTION + SPIKE + BUTTON adalah bentuk minimum Story OS
     : r.durationSec <= 15 ? 3 : r.durationSec <= 20 ? 4 : r.durationSec <= 30 ? 5 : 6;
+  const batasAds = [0, 0.2, 0.43, 0.67, 0.8, 1]
+    .map((ratio) => Number((ratio * r.durationSec).toFixed(2)));
+  const jadwalAds = batasAds.slice(0, -1)
+    .map((start, index) => `${start}-${batasAds[index + 1]}`).join(", ");
   // TIGA genre, bukan dua.
   //
   // Sampai render nyata 18 Agu, TVC tidak punya cabang di sini — jadi penulis
@@ -382,8 +405,10 @@ function blokTugas(r: PermintaanNaskah): string {
       ? [
           "",
           "STORY OS (Ads only) — write the beats in THIS order, then lay them out in time:",
+          `ADS EXACT TIMECODES FOR THIS ${r.durationSec}-SECOND REQUEST: ${jadwalAds}.`,
+          "Use those five ranges in order for HOOK, FRICTION, FRICTION, SPIKE, BUTTON; do not round them into gaps or extend past DURATION.",
           "1. BUTTON first (the last 3-6s): one small question left unanswered, and the CTA lives INSIDE it,",
-          "   preceded by a story clause. Label this segment BUTTON. The visual hero is a plain unprinted colour",
+          "   preceded by a story clause. Label this segment BUTTON. The visual focus is a plain unprinted colour",
           "   card or swatch with no letters, numbers, logos, labels, prices, product names, categories, or readable marks.",
           "2. SPIKE: the protagonist beats their own pressure IN FRONT OF A WITNESS (a voice off camera is enough:",
           "   petugas, ibu, pewawancara, penghulu, anak). Put it at 65-80% of the duration. Label it SPIKE and",
