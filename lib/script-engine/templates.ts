@@ -2,7 +2,7 @@
 // Setiap keluarga menghasilkan 3 segmen: hook (0-3 dtk), demo (3-10 dtk), cta (10-15 dtk).
 // Aturan yang dijaga oleh template (diverifikasi validator):
 // - harga eksplisit di hook atau demo (L-02), CTA menyebut "keranjang kuning" (L-03),
-// - >=2 partikel + >=1 filler (L-01, L-04), total 32-48 kata (L-05),
+// - >=2 partikel + >=1 filler (L-01, L-04), total sesuai tier/durasi (L-05),
 // - produk tidak disebut di hook kecuali H4/H11 (L-06),
 // - tanpa angka selain harga (L-14), tanpa overclaim/medis/formal/urgensi palsu (L-10..L-13).
 
@@ -22,7 +22,7 @@ export interface TemplateCtx {
 }
 
 export interface SegmentDraft {
-  role: "hook" | "demo" | "cta";
+  role: "hook" | "demo" | "story" | "cta";
   start: number;
   end: number;
   text: string;
@@ -58,6 +58,9 @@ export interface SegmentDraft {
   action?: string;
   expression?: string;
   mode?: string;
+  /** Label dan saksi beat Story OS pada copy template Ads. */
+  label?: "HOOK" | "FRICTION" | "SPIKE" | "BUTTON";
+  saksi?: string;
 }
 
 type Triple = { hook: string; demo: string; cta: string };
@@ -469,20 +472,19 @@ export function renderSegmentsForTier(
   // cuma ngisi ~10,4dtk dari 15dtk = ~4,6dtk hening di ujung, kerasa kayak
   // suara "kabur" duluan sebelum video abis). [20,34] ternyata juga bisa
   // MELUBER di ujung atas (34 kata/15dtk = ~17,6dtk, video cuma 15dtk ->
-  // audio kepotong tengah kalimat). Dipersempit ke [25,30] (~1,93 kata/dtk
-  // asli) supaya batas bawah ngisi ~90% durasi video (minim hening) DAN
-  // batas atas tidak pernah melebihi durasi video (minim terpotong).
+  // audio kepotong tengah kalimat). Rentang itu kemudian digantikan keputusan
+  // Brian 1,5 kata/detik: [16,22] untuk 15 detik, sinkron dengan validator.
   //
   // r19b (Brian 2026-08-09, lanjutan investigasi bug yang sama): loop ini
   // dulu HANYA jalan di dalam blok `durationSec > 15` di atas — artinya
   // kasus durasi DASAR 15dtk (paling umum, termasuk video dress yang
   // dilaporkan) TIDAK PERNAH dapat kalimat lanjutan sama sekali, walau
   // basis COMPACT_T tier bersuara cuma ~20-21 kata (di bawah minWc baru
-  // 25). Sekarang loop jalan di SEMUA durasi; hanya perilaku "wajib minimal
+  // 16). Sekarang loop jalan di SEMUA durasi; hanya perilaku "wajib minimal
   // 1 lanjutan" (forceAtLeastOne) yang tetap dikunci ke durasi >15dtk biar
   // silent_caption di 15dtk (yang templatenya sudah penuh/pas) tidak
   // dipaksa nambah baris yang tidak perlu dan berisiko kebentur maxWc.
-  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [25, 30];
+  const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [16, 22];
   const scale = durationSec / 15;
   // JATAH KATA TEMPLATE menimpa rentang di atas, dan sengaja TIDAK diskalakan
   // durasi — karena batasnya bukan kecepatan bicara, tapi beban baca.
@@ -496,9 +498,9 @@ export function renderSegmentsForTier(
   // perbandingan itu satu-satunya alasan videonya jalan.
   //
   // Template BER-VO sengaja tidak diberi jatah ini. Angka di dokumen (56, 62,
-  // 86 kata) dihitung dari kecepatan bicara manusia 2,8 kata/detik; TTS kami
-  // terukur ~1,93 kata/detik, jadi menyalinnya membuat audio lebih panjang
-  // dari videonya. Rentang [25,30] yang sudah dikalibrasi ITU yang setara.
+  // 86 kata) dihitung dari kecepatan bicara manusia 2,8 kata/detik; gate
+  // produk membatasi 1,5 kata/detik, sehingga target authoring memakai
+  // [16,22] yang sama dengan validator.
   const minWc = wordBudget ? Math.round(wordBudget * 0.85) : Math.round(baseMinWc * scale);
   const maxWc = wordBudget ? Math.round(wordBudget * 1.15) : Math.round(baseMaxWc * scale);
   const targetWc = wordBudget ? wordBudget : Math.round(((baseMinWc + baseMaxWc) / 2) * scale);

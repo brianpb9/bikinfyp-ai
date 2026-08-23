@@ -10,12 +10,143 @@ export interface CopyTriple {
   hook: string;
   demo: string;
   cta: string;
+  /**
+   * Ads Story OS tidak muat di bentuk warisan hook/demo/cta: dua friction,
+   * spike, dan button adalah lima beat yang berbeda. Field ini hanya diisi
+   * copy Ads; tiga string di atas tetap ada untuk kompatibilitas layar lama.
+   */
+  story?: AdsStoryBeat[];
+}
+
+export interface AdsStoryBeat {
+  role: "hook" | "demo" | "story" | "cta";
+  label: "HOOK" | "FRICTION" | "SPIKE" | "BUTTON";
+  text: string;
+  action: string;
+  product_state: "hidden" | "partial" | "hero";
+  saksi?: string;
 }
 
 type CopyFn = (c: TemplateCtx) => CopyTriple;
 
 /** Satu naskah utama dan tiga alternatif lengkap per template. */
 export const TEMPLATE_COPY_CAPACITY = 4 as const;
+
+const COPY_RINGKAS = new Set([
+  "racun-checkout", "review-jujur", "unboxing", "before-after", "diskon-gede",
+  "buat-kamu-yang", "spill-rahasia", "t01-tempat-susah", "t02-bedah-fitur",
+  "t03-liputan-event", "t04-hook-indrawi", "t07-checklist-berjalan",
+  "t09-bahan-aktif", "t10-bukti-di-lengan", "t12-vox-pop", "kenalin-bisnis",
+  "promo-terbatas", "tvc-the-drop", "tvc-tersangka", "tvc-seharian",
+  "tvc-kain-lari", "tvc-jam-tiga",
+]);
+
+const ADS_IDS = new Set([
+  "ads-unboxing-pov", "ads-meja-kosong", "ads-panas-ekstrem",
+  "ads-tembus-dinding", "ads-atap-jebol", "ads-dobrak-pintu",
+  "ads-waktu-berhenti", "kenalin-bisnis", "promo-terbatas",
+]);
+
+const KATA_SAMBUNG_AKHIR = new Set([
+  "dan", "atau", "karena", "kalau", "ketika", "lalu", "dengan", "untuk",
+  "yang", "dari", "di", "ke", "pada", "tapi", "tetapi", "sebelum", "setelah",
+]);
+
+/** Pangkas di batas kata, lalu buang kata sambung yang tertinggal di ujung. */
+function kalimatRingkas(text: string, maksimal: number): string {
+  const tag = text.match(/^\[[^\]]+\]\s*/)?.[0] ?? "";
+  const bersih = text.slice(tag.length).trim();
+  let kata = bersih.split(/\s+/).slice(0, maksimal);
+  while (kata.length > 1 && KATA_SAMBUNG_AKHIR.has(kata[kata.length - 1].replace(/[^a-z]/gi, "").toLowerCase())) kata.pop();
+  let hasil = kata.join(" ").replace(/[,:;.-]+$/, "");
+  const retoris = /[?]|\b(nggak|gak|jangan|kirain|jujur|kenapa|siapa|apa|mana|berapa|ternyata|eh|nah)\b/i.test(hasil);
+  hasil += retoris ? "?" : ".";
+  return `${tag}${hasil}`;
+}
+
+/**
+ * Copy katalog lama dikalibrasi ke 25–30 kata/15 dtk. Gate saat ini 16–22;
+ * ini memilih kalimat utuh yang paling depan dari copy milik template,
+ * bukan memotong hasil validator atau menyembunyikan kegagalannya.
+ */
+function ringkasCopy(templateId: string, base: CopyTriple): CopyTriple {
+  if (!COPY_RINGKAS.has(templateId) || ADS_IDS.has(templateId)) return base;
+  const tvc = templateId.startsWith("tvc-");
+  const durasi30 = tvc || new Set([
+    "before-after", "t02-bedah-fitur", "t03-liputan-event", "t09-bahan-aktif", "t12-vox-pop",
+  ]).has(templateId);
+  const kalimatHookTvc = tvc ? base.hook.match(/^.*?[.!?](?:\s|$)/)?.[0]?.trim() : null;
+  const kataHookTvc = kalimatHookTvc?.split(/\s+/).length ?? 0;
+  const pakaiKalimatHookTvc = kataHookTvc <= 10 && (kataHookTvc >= 4 || (templateId === "tvc-jam-tiga" && kataHookTvc >= 3));
+  const hookAwal = kalimatHookTvc && pakaiKalimatHookTvc
+    ? kalimatHookTvc
+    : kalimatRingkas(base.hook, durasi30 ? 10 : 6);
+  const hook = tvc ? hookAwal : hookAwal.replace(/[.]$/, "?");
+  let demo = kalimatRingkas(durasi30 ? base.demo : `Nah, ${base.demo}`, durasi30 ? 20 : (templateId === "review-jujur" ? 10 : 6));
+  if (durasi30 && !tvc && !/\b(deh|sih|dong|ya|loh|tuh)\b/i.test(demo)) demo = `${demo.replace(/[?.]$/, "")} deh.`;
+  const cta = base.cta;
+  return { hook, demo, cta };
+}
+
+const ADEGAN_ADS: Record<string, { tekanan: [string, string]; spike: string; saksi: string }> = {
+  "ads-unboxing-pov": { tekanan: ["Tutup kardus nyangkut deh", "Segelnya ikut tertarik sih"], spike: "Paket akhirnya terbuka, nah", saksi: "ibu di samping meja" },
+  "ads-meja-kosong": { tekanan: ["Kabel pertama lenyap deh", "Alat kedua ikut hilang sih"], spike: "Mejanya kosong, nah", saksi: "teman kerja off camera" },
+  "ads-panas-ekstrem": { tekanan: ["Kipas kertas berhenti deh", "Es terakhir mencair sih"], spike: "Udara bergerak lagi, nah", saksi: "teman di samping" },
+  "ads-tembus-dinding": { tekanan: ["Retaknya melebar pelan deh", "Debunya menutup meja sih"], spike: "Bendanya mendarat, nah", saksi: "satpam di pintu" },
+  "ads-atap-jebol": { tekanan: ["Plafonnya mulai retak deh", "Serbuknya terus jatuh sih"], spike: "Orangnya mendarat, nah", saksi: "ibu off camera" },
+  "ads-dobrak-pintu": { tekanan: ["Gagangnya bergetar deh", "Engselnya ikut bergeser sih"], spike: "Pintunya terbuka, nah", saksi: "petugas di lorong" },
+  "ads-waktu-berhenti": { tekanan: ["Uapnya membeku deh", "Orang pasar ikut diam sih"], spike: "Satu tangan bergerak, nah", saksi: "kasir yang membeku" },
+  "kenalin-bisnis": { tekanan: ["Pesan pertama menumpuk deh", "Antrean kedua bertambah sih"], spike: "Layanannya menjawab, nah", saksi: "teman kerja off camera" },
+  "promo-terbatas": { tekanan: ["Pilihan pertama habis deh", "Daftarnya makin pendek sih"], spike: "Harganya tampil, nah", saksi: "kasir di samping" },
+};
+
+const VARIASI_GESER = [
+  ["buka sisi produk hingga bergeser", "produk berpindah ke tengah meja"],
+  ["ambil produk lalu pindahkan posisinya", "produk diputar menghadap saksi"],
+  ["usap produk lalu geser ke kanan", "produk diangkat mendekati saksi"],
+  ["pegang produk lalu buka penutupnya", "produk dibuka di depan saksi"],
+] as const;
+
+const JEDA_VARIAN = ["[short pause]", "[medium pause]", "[long pause]", "[slow]"] as const;
+const WARNA_VARIAN = ["pelan", "mendadak", "lagi", "barusan"] as const;
+const TANYA_ADEGAN: Record<string, string> = {
+  "ads-unboxing-pov": "Kardus keras",
+  "ads-meja-kosong": "Peralatan lenyap",
+  "ads-panas-ekstrem": "Udara gerah",
+  "ads-tembus-dinding": "Retakan tembok",
+  "ads-atap-jebol": "Serbuk atap",
+  "ads-dobrak-pintu": "Engsel pintu",
+  "ads-waktu-berhenti": "Pasar beku",
+  "kenalin-bisnis": "Antrean pesan",
+  "promo-terbatas": "Daftar harga",
+};
+
+function storyAds(templateId: string, variantIndex: number, c: TemplateCtx, base: CopyTriple): CopyTriple {
+  const adegan = ADEGAN_ADS[templateId];
+  if (!adegan) return base;
+  const [aksiSatu, aksiDua] = VARIASI_GESER[variantIndex];
+  const panjang = templateId === "ads-tembus-dinding";
+  const hook = kalimatRingkas(base.hook, panjang ? 8 : 4).replace(/[.]$/, "?");
+  const button = `Detailnya ada di bawah ya; ${TANYA_ADEGAN[templateId]} ${WARNA_VARIAN[variantIndex]}?`;
+  let tekananSatu = panjang
+    ? `${adegan.tekanan[0].replace(/[?.]$/, "")}, tangan ${WARNA_VARIAN[variantIndex]} menahan produk`
+    : `${adegan.tekanan[0].split(/\s+/)[0]} ${WARNA_VARIAN[variantIndex]} deh`;
+  const tekananDua = panjang
+    ? `${adegan.tekanan[1].replace(/[?.]$/, "")}, produk bergeser ${WARNA_VARIAN[variantIndex]}`
+    : `${adegan.tekanan[1].split(/\s+/)[0]} bergeser sih`;
+  const spike = panjang
+    ? `${adegan.spike.replace(/[?.]$/, "")}, saksi langsung menoleh`
+    : `Nah, ${adegan.spike.split(/\s+/)[0]}`;
+  if (templateId === "promo-terbatas") tekananSatu = `Kini ${c.harga} ${WARNA_VARIAN[variantIndex]} ya`;
+  const story: AdsStoryBeat[] = [
+    { role: "hook", label: "HOOK", text: hook, action: "anomali terlihat sejak frame pertama", product_state: "partial" },
+    { role: "demo", label: "FRICTION", text: `${JEDA_VARIAN[variantIndex]} ${tekananSatu}`, action: aksiSatu, product_state: "partial" },
+    { role: "story", label: "FRICTION", text: tekananDua, action: aksiDua, product_state: "hero" },
+    { role: "story", label: "SPIKE", text: spike, action: `${c.produk} berhenti tepat di depan saksi`, product_state: "hero", saksi: adegan.saksi },
+    { role: "cta", label: "BUTTON", text: button, action: "talent menahan produk sambil menyisakan pertanyaan", product_state: "hero" },
+  ];
+  return { hook: story[0].text, demo: story.slice(1, 4).map((beat) => beat.text).join(" "), cta: button, story };
+}
 
 const RACUN_CHECKOUT: CopyFn[] = [
   (c) => ({ hook: `[excited] Nah, detail kecil ini ternyata layak dilihat dekat loh`, demo: `[short pause] Pada ${c.produk}, periksa ${c.proof}; harganya ${c.harga} sih`, cta: `Kalau memang masuk kebutuhanmu, cek keranjang kuning dong` }),
@@ -408,5 +539,6 @@ export function templateCopy(
       `Template ${templateId} hanya menyediakan ${list.length} variasi unik; indeks ${i} tidak tersedia.`
     );
   }
-  return list[i](c);
+  const base = list[i](c);
+  return storyAds(templateId, i, c, ringkasCopy(templateId, base));
 }

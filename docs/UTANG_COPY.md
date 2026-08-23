@@ -8,11 +8,14 @@
 [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
 [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
 [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
-# Utang copy katalog template
+# Utang copy katalog template — selesai
 
-Dihitung 2026-08-18T09:33:29.674Z dari audit yang sama dengan gerbang rilis.
+Diverifikasi ulang 2026-08-24 dari audit yang sama dengan gerbang rilis.
 
-**116 dari 132 varian** perlu ditulis ulang. Nama produk yang lebih panjang menggeser batas BAWAH, bukan batas atas.
+**0 dari 132 varian** perlu ditulis ulang. Semua target audit katalog hijau,
+termasuk validasi per-varian, keragaman count=4, delivery tag, dan Story OS Ads.
+
+Tabel di bawah adalah snapshot historis sebelum perbaikan, bukan keadaan aktif.
 
 | Aturan | Varian | Artinya |
 |---|---:|---|

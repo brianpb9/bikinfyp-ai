@@ -19,6 +19,8 @@ import {
   unsupportedFactualClaims,
 } from "../lib/script-engine/catalog-audit";
 import { CAMPAIGN_TEMPLATES, KATALOG_BUTUH_COPY } from "../lib/templates";
+import { generateScripts } from "../lib/script-engine";
+import { periksaStoryOsAds } from "../lib/script-engine/story-os-ads";
 
 const audit = await generateCatalogScriptAudit();
 const { summary } = audit;
@@ -325,74 +327,54 @@ test("count=4 tidak mengulang hook atau naskah pada template mana pun", async ()
   );
 });
 
-test("katalog template: hanya TIGA jenis utang yang diketahui, tidak ada yang lain", async () => {
-  // DIPERTAJAM, bukan dilonggarkan (18 Agu). Sampai hari ini invariannya
-  // "semua 132 varian lolos". Dua gate baru membatalkan sebagian:
-  //
-  //   L-05  batas Brian 1,5 kata/detik (22 kata untuk 15 dtk). Template
-  //         dikalibrasi ke jendela lama 25-30 kata.
-  //   L-19  hook wajib memakai perangkat retoris yang dikenali.
-  //
-  //   A-01/A-02  genre Ads. SELURUH copy template Ads adalah copy AFILIASI:
-  //         penutupnya menyuruh "cek keranjang kuning" untuk iklan jasa/app
-  //         yang tidak punya keranjang sama sekali. Sebelum 18 Agu ini tidak
-  //         terlihat karena naskah Ads dinilai dengan aturan afiliasi — jadi
-  //         copy yang salah genre justru yang lolos, dan CTA Ads yang BENAR
-  //         ("Detailnya ada di bawah ya") yang ditolak.
-  //
-  // Ketiganya UTANG COPY yang disengaja dan tercatat. Yang dijaga tes ini:
-  // tidak ada JENIS kegagalan lain yang menyusup di baliknya. Kalau suatu hari
-  // ada varian gagal karena L-03, L-16, atau apa pun di luar tiga itu, tes ini
-  // merah — dan itu memang gunanya.
-  //
-  // Jalur LLM sudah menulis CTA Ads yang benar (llm.ts blokTugas). Yang merah
-  // hanya template cadangan — dan naskah cadangan yang gagal gate memang tidak
-  // boleh dirender.
-  //
-  // SA1/SA2/SA4/SA6 ditambahkan 19 Agu (slice 2, Story OS Ads) — dan ini utang
-  // COPY yang sama, bukan jenis baru yang menyusup: seluruh template Ads
-  // ditulis sebagai HOOK-BODY-CTA afiliasi, jadi tidak satu pun punya beat
-  // BUTTON/SPIKE/FRICTION atau jembatan produk. Template Ads yang gagal
-  // memang TIDAK BOLEH dirender (script_source degraded), dan jalur LLM sudah
-  // diberi instruksi Story OS penuh. Yang menghapus utang ini adalah penulisan
-  // ulang copy template Ads ke bentuk Story OS — pekerjaan copy, milik Brian.
-  const UTANG_DIKENAL = new Set([
-    "L-05", "L-19", "A-01", "A-02", "S-04", "S-09",
-    "SA1", "SA2", "SA4", "SA6", "SA8",
-  ]);
-  const lain = summary.validationFailureRefs
-    .map((ref) => ({ ref, aturan: ref.errors.map((e) => e.rule).filter((r) => !UTANG_DIKENAL.has(r)) }))
-    .filter((x) => x.aturan.length > 0);
-  assert.deepEqual(
-    lain.map((x) => `${x.ref.templateId}#${x.ref.variantIndex}: ${x.aturan.join(",")}`),
-    [],
-    "varian gagal karena sebab DI LUAR dua utang yang diketahui"
-  );
+test("132/132 varian katalog lolos validator tanpa daftar utang", async () => {
+  assert.equal(summary.validationFailureRefs.length, 0,
+    summary.validationFailureRefs.map((ref) => `${ref.templateId}#${ref.variantIndex}: ${ref.errors.map((e) => e.rule).join(",")}`).join("; "));
+  assert.equal(summary.targets.everyVariantPassesValidation, true);
+  assert.deepEqual([...KATALOG_BUTUH_COPY], []);
 });
 
-test("utang template tercatat angkanya per jenis, bukan diam-diam", async () => {
-  // Angkanya ditulis supaya perbaikan copy terlihat maju: begitu template
-  // ditulis ulang, angka ini turun dan tesnya memaksa diperbarui.
-  const hitung = (aturan: string) =>
-    summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule === aturan)).length;
-  const panjang = hitung("L-05");
-  const perangkat = hitung("L-19");
-  const genreAds = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule.startsWith("A-"))).length;
-  // STANDAR 10/10 baris 9 (kata per shot). TIDAK menambah varian gagal —
-  // 82 dari 116 yang sudah gagal L-05 juga melanggar batas per shot. Angkanya
-  // dicatat supaya perbaikan copy terlihat maju di dua sumbu, bukan satu.
-  const perShot = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule === "S-09")).length;
-  assert.ok(perShot > 0 && perShot <= 116, `varian melanggar batas kata per shot: ${perShot}/132`);
-  assert.ok(panjang > 0 && panjang <= 130, `varian melanggar batas 22 kata: ${panjang}/132`);
-  // Story OS Ads: angkanya dicatat supaya penulisan ulang copy Ads terlihat
-  // maju. Nol berarti seluruh template Ads sudah berbentuk Story OS.
-  const storyOs = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule.startsWith("SA"))).length;
-  assert.ok(storyOs >= 0 && storyOs <= 132, `varian Ads belum berbentuk Story OS: ${storyOs}/132`);
-  assert.ok(perangkat > 0 && perangkat <= 17, `varian tanpa perangkat retoris: ${perangkat}/132`);
-  // 9 template Ads x 4 varian = 36. Semuanya berpenutup afiliasi.
-  assert.ok(genreAds > 0 && genreAds <= 36, `varian Ads dengan CTA salah genre: ${genreAds}/132`);
-  // Kalau keduanya nol, katalognya sudah bersih: hapus tes ini dan kembalikan
-  // invarian "semua varian lolos".
+test("seluruh aturan yang dulu dikecualikan sekarang tepat nol", async () => {
+  for (const rule of [
+    "L-05", "L-19", "A-01", "A-02", "S-04", "S-09",
+    "SA1", "SA2", "SA4", "SA6", "SA8",
+  ]) {
+    const refs = summary.validationFailureRefs.filter((ref) => ref.errors.some((error) => error.rule === rule));
+    assert.deepEqual(refs, [], `${rule} kembali menjadi utang: ${refs.map((ref) => `${ref.templateId}#${ref.variantIndex}`).join(", ")}`);
+  }
+});
+
+test("copy template Ads membawa lima beat Story OS sampai hasil generator", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-unboxing-pov")!;
+  const variants = await generateScripts({
+    product: auditProductForTemplate(template), register: "bunda", tanpaLlm: true,
+    contentType: "ads", qualityTier: template.tier as never,
+    durationSec: template.durationSec, templateId: template.id,
+    count: 4, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+  });
+  for (const variant of variants) {
+    assert.deepEqual(variant.segments.map((segment) => segment.label), ["HOOK", "FRICTION", "FRICTION", "SPIKE", "BUTTON"]);
+    assert.equal(variant.segments.filter((segment) => segment.role === "demo").length, 1);
+    assert.equal(variant.validation.passed, true, JSON.stringify(variant.validation.errors));
+  }
+});
+
+test("mutasi beat Ads yang menghapus SPIKE dan BUTTON kembali ditolak", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-unboxing-pov")!;
+  const [variant] = await generateScripts({
+    product: auditProductForTemplate(template), register: "bunda", tanpaLlm: true,
+    contentType: "ads", qualityTier: template.tier as never,
+    durationSec: template.durationSec, templateId: template.id,
+    count: 1, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+  });
+  const mutated = variant.segments.map((segment) => ({ ...segment }));
+  const spike = mutated.find((segment) => segment.label === "SPIKE")!;
+  spike.label = "FRICTION";
+  mutated[mutated.length - 1].text = "Beli sekarang ya";
+  const rules = periksaStoryOsAds({ segments: mutated as never }, { contentType: "ads", durationSec: template.durationSec })
+    .map((finding) => finding.gerbang);
+  assert.ok(rules.includes("SA1"), `BUTTON rusak tidak ditangkap: ${rules.join(",")}`);
+  assert.ok(rules.includes("SA2"), `SPIKE hilang tidak ditangkap: ${rules.join(",")}`);
 });
 
 

@@ -91,30 +91,17 @@ test("harga muncul eksplisit di hook atau demo untuk berbagai nominal", async ()
   }
 });
 
-test("tier bersuara: template lama masih 25-30 kata — UTANG yang tercatat, bukan hilang", async () => {
-  // Angka 25-30 dulu adalah TARGET. Sejak batas Brian 1,5 kata/detik dipasang
-  // (22 kata untuk 15 detik), angka itu berubah jadi UTANG: template memang
-  // masih menulis sepanjang itu, dan karena itu ditolak L-05.
-  //
-  // Tes ini sengaja tidak dihapus. Ia mengunci fakta bahwa copy templatenya
-  // BELUM ditulis ulang, dan sifat lain yang tidak ikut berubah tetap dijaga.
+test("tier bersuara: target authoring sinkron dengan gate 16-22 kata", async () => {
   const variants = await generateScripts({ tanpaLlm: true, product, register: "bestie", qualityTier: "high_quality" });
   assert.equal(variants.length, 3);
   for (const v of variants) {
     const full = v.segments.map((s) => s.text).join(" ");
     const wc = full.split(/\s+/).filter(Boolean).length;
-    assert.ok(wc >= 25 && wc <= 30, `${v.hook_family}: ${wc} kata — kalau sudah <=22, perbarui tes ini`);
+    assert.ok(wc >= 16 && wc <= 22, `${v.hook_family}: ${wc} kata`);
     assert.ok(!/[()]/.test(full), `${v.hook_family}: ada tanda kurung`);
     assert.equal(v.quality_tier, "high_quality");
-    // Satu-satunya sebab gagal yang boleh ada di sini adalah utang copy.
-    // S-09 (kata per shot, STANDAR 10/10 baris 9) masuk daftar yang sama: ia
-    // menolak demo template yang memang sudah kepanjangan menurut L-05 — sumbu
-    // ukur baru untuk copy yang sama, bukan cacat baru.
-    const lain = v.validation.errors.map((e) => e.rule).filter((r) => !["L-05", "L-19", "S-09", "S-04"].includes(r));
-    assert.deepEqual(lain, [], `${v.hook_family}: gagal di luar utang copy: ${JSON.stringify(v.validation.errors)}`);
-    // Dan sumbernya WAJIB tertandai degraded — naskah yang tidak lolos gate
-    // tidak boleh menyamar sebagai keluaran normal (reviewer A2).
-    assert.equal(v.script_source, "degraded");
+    assert.deepEqual(v.validation.errors, [], `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
+    assert.equal(v.script_source, "template");
   }
 });
 

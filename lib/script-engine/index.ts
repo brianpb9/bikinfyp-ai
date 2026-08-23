@@ -24,7 +24,7 @@ import { COMPLIANCE_CHECKLIST } from "../config/compliance";
 import { kategoriJenuh } from "./standar-10";
 import { REGISTERS, type Register } from "./registers";
 import { renderSegmentsForTier, formatHargaNatural, type SegmentDraft, type TemplateCtx } from "./templates";
-import { templateCopy, TEMPLATE_COPY_CAPACITY } from "./template-copy";
+import { templateCopy, TEMPLATE_COPY_CAPACITY, type AdsStoryBeat } from "./template-copy";
 import { isTvcTemplate, jendelaKata, templateRequiresPriceMention, tokenMerek, validateScript, type ValidationResult } from "./validator";
 import { konteksAdmisi, type SnapshotAdmisi } from "./admisi";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
@@ -419,7 +419,8 @@ async function generateOne(
   // ulang di sini berarti dua rumus waktu yang bisa berbeda diam-diam.
   const dasar = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats, wordBudget, hargaMahal);
   const variasi = templateCopy(templateId, variantIndex, ctx);
-  const teksVariasi = variasi ? [variasi.hook, variasi.demo, variasi.cta] : null;
+  const teksVariasi = variasi && !variasi.story ? [variasi.hook, variasi.demo, variasi.cta] : null;
+  const segmenStory = variasi?.story ? storyKeSegmen(variasi.story, durationSec) : null;
   // ---- JALUR PENULIS LLM ----
   //
   // Menggantikan kalimat template. Yang TIDAK diganti: delivery tags, promo,
@@ -592,11 +593,10 @@ async function generateOne(
 
   // Jalur template — CADANGAN, dan sejak gate dikeraskan ia tidak lagi setara.
   //
-  // Template dikalibrasi ke jendela lama 25-30 kata. Dengan batas Brian 1,5
-  // kata/detik (22 kata untuk 15 detik), 130 dari 132 varian melanggar — jadi
-  // "jatuh ke template" hampir selalu berarti naskah yang TIDAK memenuhi
-  // standar. Ia tetap dicoba, tapi hasilnya ditandai apa adanya dan tidak
-  // pernah disajikan sebagai keluaran normal.
+  // Template tetap jalur cadangan dan harus melewati validator yang sama.
+  // Target authoring-nya kini sinkron dengan batas Brian 1,5 kata/detik;
+  // kegagalan apa pun tetap ditandai apa adanya dan tidak pernah disajikan
+  // sebagai keluaran normal.
   // TOLAK, JANGAN SAJIKAN (keputusan Brian 20 Agu). Jalur anonim tetap boleh:
   // ia menampilkan contoh, tidak pernah dirender, dan mematikannya akan
   // membunuh magic moment tanpa login tanpa alasan.
@@ -611,7 +611,7 @@ async function generateOne(
   }
   let sumberNaskah: SumberNaskah = hasil ? "llm" : "template";
   if (!hasil) {
-    hasil = rakitDanNilai(dasar, false);
+    hasil = rakitDanNilai(segmenStory ?? dasar, false);
     for (let attempt = 0; attempt < MAX_REGEN && !hasil.validation.passed; attempt++) {
       const rapi = normalizeSegments(hasil.segments);
       hasil = { segments: rapi, validation: validate(rapi) };
@@ -651,6 +651,17 @@ function normalizeSegments(segments: SegmentDraft[]): SegmentDraft[] {
     ...s,
     text: normalize(s.text),
     ...(s.tts_text ? { tts_text: normalize(s.tts_text) } : {}),
+  }));
+}
+
+/** Lima beat Story OS dengan spike mulai 60% durasi (di dalam toleransi gate). */
+function storyKeSegmen(beats: AdsStoryBeat[], durationSec: number): SegmentDraft[] {
+  const batas = [0, 0.18, 0.38, 0.6, 0.82, 1].map((rasio) => Math.round(rasio * durationSec));
+  return beats.map((beat, index) => ({
+    ...beat,
+    start: batas[index],
+    end: batas[index + 1],
+    visual_direction: beat.action,
   }));
 }
 
