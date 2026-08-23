@@ -1,25 +1,32 @@
 import path from "node:path";
+import crypto from "node:crypto";
 import { mediaStorage } from "./storage";
 import { ambilSnapshotTersetujui, pastikanBytesTersetujui, resolveApprovedReference, type HasilResolusiReferensi, type ReferensiTersetujui } from "./product-truth";
 import { MAKS_REFERENSI_PER_GENERASI } from "./product-images";
 
 export const REFERENCE_MANIFEST_VERSION = 1 as const;
 
+export interface JobReferenceManifestEntry extends ReferensiTersetujui {
+  /** Immutable object owned by this job, never by products.images cleanup. */
+  snapshotRel: string;
+}
+
 export interface JobReferenceManifest {
   version: typeof REFERENCE_MANIFEST_VERSION;
-  references: ReferensiTersetujui[];
+  references: JobReferenceManifestEntry[];
 }
 
 export class UnsafeLegacyReferenceSnapshot extends Error {
   readonly code = "REF_MANIFEST_LEGACY_UNSAFE";
 }
 
-function validReference(value: unknown): value is ReferensiTersetujui {
+function validReference(value: unknown): value is JobReferenceManifestEntry {
   if (!value || typeof value !== "object") return false;
   const ref = value as Record<string, unknown>;
   return typeof ref.rel === "string" && ref.rel.length > 0
     && typeof ref.sha256 === "string" && /^[0-9a-f]{64}$/.test(ref.sha256)
-    && typeof ref.versiBukti === "number" && Number.isInteger(ref.versiBukti) && ref.versiBukti > 0;
+    && typeof ref.versiBukti === "number" && Number.isInteger(ref.versiBukti) && ref.versiBukti > 0
+    && typeof ref.snapshotRel === "string" && ref.snapshotRel.startsWith("jobs/") && ref.snapshotRel.length > 10;
 }
 
 export function parseJobReferenceManifest(raw: string): JobReferenceManifest {
@@ -38,6 +45,7 @@ export function parseJobReferenceManifest(raw: string): JobReferenceManifest {
 
 export async function loadOrCreateJobReferenceManifest(input: {
   existingRaw: string | null;
+  jobId: string;
   candidateRels: string[];
   onResolved?: (resolution: HasilResolusiReferensi) => void;
   /** Atomic CAS. Null means a legacy job already has provider/output evidence. */
@@ -52,18 +60,44 @@ export async function loadOrCreateJobReferenceManifest(input: {
   if (!resolution.utama) {
     throw new Error("REF_MANIFEST_EMPTY: tidak ada referensi tersetujui untuk dipatok pada job.");
   }
-  const candidate: JobReferenceManifest = {
-    version: REFERENCE_MANIFEST_VERSION,
-    references: resolution.tersetujui.slice(0, MAKS_REFERENSI_PER_GENERASI),
-  };
-  const persistedRaw = await input.persistIfAbsentAndSafe(JSON.stringify(candidate));
+  const references: JobReferenceManifestEntry[] = [];
+  for (const [index, ref] of resolution.tersetujui.slice(0, MAKS_REFERENSI_PER_GENERASI).entries()) {
+    // Resolver's get and this get are intentionally separate. The second read
+    // is the exact byte sequence copied into immutable job-owned storage.
+    const object = await mediaStorage().get(ref.rel);
+    if (!object) throw new Error(`REF_MISSING: referensi ${ref.rel} hilang sebelum snapshot durable dibuat.`);
+    const actual = crypto.createHash("sha256").update(object.body).digest("hex");
+    if (actual !== ref.sha256) {
+      throw new Error(`REF_HASH_MISMATCH: isi ${ref.rel} berubah sebelum snapshot durable dibuat.`);
+    }
+    const ext = path.posix.extname(ref.rel);
+    const snapshotRel = path.posix.join("jobs", input.jobId, "approved-references", `${index}-${ref.sha256}${ext}`);
+    await mediaStorage().put(snapshotRel, object.body);
+    references.push({ ...ref, snapshotRel });
+  }
+  const candidate: JobReferenceManifest = { version: REFERENCE_MANIFEST_VERSION, references };
+  let persistedRaw: string | null;
+  try {
+    persistedRaw = await input.persistIfAbsentAndSafe(JSON.stringify(candidate));
+  } catch (error) {
+    // A failed CAS can be an ambiguous commit/network result. Snapshot keys
+    // are deterministic, so deleting here could remove bytes concurrently
+    // adopted by a successful worker. A retry safely overwrites any orphan.
+    throw error;
+  }
   if (!persistedRaw) {
+    await Promise.all(references.map((ref) => mediaStorage().delete(ref.snapshotRel).catch(() => undefined)));
     throw new UnsafeLegacyReferenceSnapshot(
       "REF_MANIFEST_LEGACY_UNSAFE: job lama sudah punya jejak provider/output; provenance tidak dapat dibuktikan, jadi worker gagal tertutup."
     );
   }
+  const winner = parseJobReferenceManifest(persistedRaw);
+  const winnerKeys = new Set(winner.references.map((ref) => ref.snapshotRel));
+  await Promise.all(references
+    .filter((ref) => !winnerKeys.has(ref.snapshotRel))
+    .map((ref) => mediaStorage().delete(ref.snapshotRel).catch(() => undefined)));
   // CAS yang kalah wajib memakai pemenang dari database, bukan kandidatnya.
-  return { manifest: parseJobReferenceManifest(persistedRaw), resolution };
+  return { manifest: winner, resolution };
 }
 
 /**
@@ -79,9 +113,12 @@ export async function materializeJobReferenceManifest(
   const dir = path.join(workDir, "ref-tersetujui");
   const snapshots: string[] = [];
   for (const ref of manifest.references) {
-    const source = await mediaStorage().materialize(ref.rel).catch(() => null);
+    // Do not collapse infrastructure exceptions into not-found. A thrown R2
+    // auth/network/I/O error is retryable infrastructure failure; only null is
+    // the provenance error REF_MISSING.
+    const source = await mediaStorage().materialize(ref.snapshotRel);
     if (!source) {
-      throw new Error(`REF_MISSING: referensi yang dipatok ${ref.rel} tidak ada; job dihentikan sebelum provider.`);
+      throw new Error(`REF_MISSING: snapshot durable untuk ${ref.rel} tidak ada; job dihentikan sebelum provider.`);
     }
     await pastikanBytesTersetujui(source, ref);
     snapshots.push(await ambilSnapshotTersetujui(source, ref, dir));

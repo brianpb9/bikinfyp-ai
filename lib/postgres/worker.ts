@@ -340,6 +340,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   fs.mkdirSync(workDir, { recursive: true });
   const hasilManifest = await loadOrCreateJobReferenceManifest({
     existingRaw: row.approved_reference_manifest,
+    jobId: row.id,
     candidateRels: images,
     onResolved: (referensi) => {
       catatKanariReferensi(referensi, { jobId: row.id, produkId: row.product_id, runtime: "worker-postgres" });

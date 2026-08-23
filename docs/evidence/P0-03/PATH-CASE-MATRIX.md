@@ -310,16 +310,25 @@ TASK=P0-E5-RETAIL-DELETE-STORAGE-CLEANUP-20260823
 TASK=P0-A6-REFERENCE-SNAPSHOT-IMMUTABLE-20260823
 
 - SQLite dan PostgreSQL menyimpan manifest job versioned dan ordered berisi
-  `rel`, `sha256`, dan `versiBukti`. Instalasi memakai transaksi/CAS sehingga
-  retry dan create konkuren selalu membaca satu pemenang durable.
+  `rel`, `sha256`, `versiBukti`, dan `snapshotRel`. Setiap `snapshotRel`
+  menunjuk ke salinan bytes immutable milik job di `jobs/<jobId>/approved-references/`,
+  bukan lagi objek mutable milik `products.images`. Instalasi memakai
+  transaksi/CAS sehingga retry dan create konkuren selalu membaca satu
+  pemenang durable; kandidat CAS yang kalah dibersihkan.
 - W1/W2 tidak memilih ulang dari `products.images` bila manifest sudah ada.
   Seluruh entry di-materialize dan diverifikasi sebelum boundary provider,
-  regenerate, output, dan capture; missing/hash-changed gagal tertutup.
+  regenerate, output, dan capture; missing/hash-changed gagal tertutup. Test
+  menghapus objek sumber produk sesudah snapshot dibuat dan membuktikan retry
+  tetap memakai bytes job-owned yang sama, menutup race cleanup produk sebelum
+  ledger/reset/enqueue A6.
 - A6 memverifikasi manifest sebelum approve mutation, klaim/ledger regenerate,
   reset task, atau enqueue. Legacy job tanpa manifest hanya boleh dipatok bila
   belum ada provider task/output/job-shot/cost; provenance tak terbukti ditolak.
-- `tests/job-reference-manifest.test.ts` → **4/4 PASS**; W2 worker → **15/15
-  PASS**; affected product-truth gabungan → **111/111 PASS**; W1 PostgreSQL
+- Kegagalan infrastruktur storage (auth/network/I/O) diteruskan apa adanya dan
+  tidak lagi disamarkan sebagai `REF_MISSING`; hanya hasil `null` bermakna objek
+  snapshot memang hilang.
+- `tests/job-reference-manifest.test.ts` → **5/5 PASS**; W2 worker → **15/15
+  PASS**; affected product-truth gabungan → **120/120 PASS**; W1 PostgreSQL
   disposable → **16/16 PASS**; `tsc --noEmit` → **PASS**.
 - A6/C1/C9 reference-identity gap ditutup. Status kasus keseluruhan tetap
   konservatif sesuai gap non-referensi dan jalur lain yang tercatat di E.2.

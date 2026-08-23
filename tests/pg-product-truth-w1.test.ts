@@ -99,6 +99,7 @@ function storageSpy(isi: Map<string, Buffer>, wujudkan = false) {
   const materializeCalls: string[] = [];
   const getCalls: string[] = [];
   const putCalls: string[] = [];
+  const snapshotSources = new Map<string, string>();
   return {
     materializeCalls,
     getCalls,
@@ -106,6 +107,14 @@ function storageSpy(isi: Map<string, Buffer>, wujudkan = false) {
     storage: {
       async put(key: string, body: Buffer) {
         putCalls.push(key);
+        if (key.includes("/approved-references/")) {
+          const source = [...isi.entries()].find(([candidate, bytes]) =>
+            !candidate.endsWith(".meta.json")
+            && !candidate.includes("/approved-references/")
+            && bytes.equals(body)
+          )?.[0];
+          if (source) snapshotSources.set(key, source);
+        }
         isi.set(key, body);
       },
       async delete(key: string) {
@@ -121,13 +130,13 @@ function storageSpy(isi: Map<string, Buffer>, wujudkan = false) {
         return body ? { size: body.length } : null;
       },
       async materialize(key: string) {
-        materializeCalls.push(key);
+        materializeCalls.push(snapshotSources.get(key) ?? key);
         if (!wujudkan) return null; // HALT sebelum langkah berbayar apa pun
         const body = isi.get(key);
         if (!body) return null;
         const abs = path.join(tmpMaterialize, `${materializeCalls.length}-${path.basename(key)}`);
         fs.writeFileSync(abs, body);
-        jalurMaterialize.set(abs, key);
+        jalurMaterialize.set(abs, snapshotSources.get(key) ?? key);
         return abs;
       },
     },
@@ -270,7 +279,11 @@ async function assertNolEfekSamping(jobId: string, putCalls: string[], konteks: 
   assert.equal(job.provider_voice, null, `${konteks}: provider_voice tercatat`);
   assert.equal(job.output_url, null, `${konteks}: output_url terisi padahal worker berhenti`);
   assert.equal(Number(job.cost_actual_idr ?? 0), 0, `${konteks}: cost_actual_idr bukan 0`);
-  assert.deepEqual(putCalls, [], `${konteks}: worker menulis ke storage`);
+  assert.deepEqual(
+    putCalls.filter((key) => !key.includes("/approved-references/")),
+    [],
+    `${konteks}: worker menulis output ke storage`
+  );
   assert.equal(panggilanJaringan, 0, `${konteks}: ada panggilan fetch`);
 }
 
@@ -395,18 +408,20 @@ test("W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images"
   const approvedBytes = Buffer.from("APPROVED-IMMUTABLE-W1");
   const currentBytes = Buffer.from("CURRENT-NOT-APPROVED-W1");
   const jobId = await siapkanJob([currentRel]);
+  const snapshotRel = `jobs/${jobId}/approved-references/0-approved.webp`;
   const raw = JSON.stringify({
     version: 1,
-    references: [{ rel: approvedRel, sha256: sha256(approvedBytes), versiBukti: 1 }],
+    references: [{ rel: approvedRel, sha256: sha256(approvedBytes), versiBukti: 1, snapshotRel }],
   });
   await pool.query("UPDATE jobs SET approved_reference_manifest=$1 WHERE id=$2", [raw, jobId]);
   const spy = await jalankan(jobId, new Map<string, Buffer>([
     [approvedRel, approvedBytes],
+    [snapshotRel, approvedBytes],
     [currentRel, currentBytes],
     [`${currentRel}.meta.json`, sidecar(currentBytes, true)],
   ]));
 
-  assert.deepEqual(spy.materializeCalls, [approvedRel], "W1 memilih ulang products.images terkini");
+  assert.deepEqual(spy.materializeCalls, [snapshotRel], "W1 tidak memakai snapshot durable manifest");
   assert.deepEqual(spy.getCalls, [], "W1 membaca ulang sidecar produk walau manifest durable sudah ada");
   const saved = (await pool.query("SELECT approved_reference_manifest FROM jobs WHERE id=$1", [jobId])).rows[0];
   assert.equal(saved.approved_reference_manifest, raw, "manifest W1 ditimpa saat resume");
@@ -419,8 +434,8 @@ test("W1 manifest create konkuren: row lock menghasilkan tepat satu pemenang", a
   const { PgJobsRepository } = await import("../lib/postgres/jobs");
   const repoA = new PgJobsRepository(URL_UJI);
   const repoB = new PgJobsRepository(URL_UJI);
-  const rawA = JSON.stringify({ version: 1, references: [{ rel: "a.webp", sha256: "a".repeat(64), versiBukti: 1 }] });
-  const rawB = JSON.stringify({ version: 1, references: [{ rel: "b.webp", sha256: "b".repeat(64), versiBukti: 1 }] });
+  const rawA = JSON.stringify({ version: 1, references: [{ rel: "a.webp", sha256: "a".repeat(64), versiBukti: 1, snapshotRel: `jobs/${jobId}/approved-references/a.webp` }] });
+  const rawB = JSON.stringify({ version: 1, references: [{ rel: "b.webp", sha256: "b".repeat(64), versiBukti: 1, snapshotRel: `jobs/${jobId}/approved-references/b.webp` }] });
   const [a, b] = await Promise.all([
     repoA.installReferenceManifestIfSafe(jobId, rawA),
     repoB.installReferenceManifestIfSafe(jobId, rawB),
@@ -792,11 +807,16 @@ test("W1 TOCTOU: path bersama ditimpa sesudah diperiksa — provider tetap mener
   const { setMediaStorageForTests } = await import("../lib/storage");
   const materializeCalls: string[] = [];
   const putCalls: string[] = [];
+  const snapshotSources = new Map<string, string>();
   // SATU path untuk semua materialize — inilah "path bersama" itu.
   const pathBersama = path.join(tmpMaterialize, `bersama-${process.pid}.png`);
   setMediaStorageForTests({
     async put(key: string, body: Buffer) {
       putCalls.push(key);
+      if (key.includes("/approved-references/")) {
+        const source = [relSah1, relSah2].find((rel) => isi.get(rel)?.equals(body));
+        if (source) snapshotSources.set(key, source);
+      }
       isi.set(key, body);
     },
     async delete(key: string) {
@@ -811,7 +831,7 @@ test("W1 TOCTOU: path bersama ditimpa sesudah diperiksa — provider tetap mener
       return body ? { size: body.length } : null;
     },
     async materialize(key: string) {
-      materializeCalls.push(key);
+      materializeCalls.push(snapshotSources.get(key) ?? key);
       const body = isi.get(key);
       if (!body) return null;
       fs.writeFileSync(pathBersama, body); // menimpa isi materialize sebelumnya

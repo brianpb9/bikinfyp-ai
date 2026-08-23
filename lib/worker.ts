@@ -121,6 +121,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // byte pun diambil — jadi nol materialize, nol provider, nol capture.
     const hasilManifest = await loadOrCreateJobReferenceManifest({
       existingRaw: job.approved_reference_manifest ?? null,
+      jobId: job.id,
       candidateRels: images,
       onResolved: (referensi) => {
         catatKanariReferensi(referensi, { jobId, produkId: product.id, runtime: "worker-sqlite" });

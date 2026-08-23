@@ -758,66 +758,91 @@ test(`API pusat ${MODUL_PUSAT}.ts ada dan BENAR-BENAR mengekspor ${EKSPOR_PUSAT}
 
 // --------------------------------------------------------------- wiring W1+W2
 
-test(`W1+W2: kedua worker mengimpor ${EKSPOR_PUSAT} dari ${MODUL_PUSAT} (AST, bukan teks)`, () => {
+const MODUL_MANIFEST = "lib/job-reference-manifest";
+const EKSPOR_LOAD_MANIFEST = "loadOrCreateJobReferenceManifest";
+const EKSPOR_MATERIALIZE_MANIFEST = "materializeJobReferenceManifest";
+
+function analisisWiringManifest(rel: string, isi: string) {
+  const sf = parse(rel, isi);
+  const binding = new Map<string, string>();
+  jelajah(sf, (node) => {
+    if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier)) return;
+    if (normalkanModul(rel, node.moduleSpecifier.text) !== MODUL_MANIFEST) return;
+    const named = node.importClause?.namedBindings;
+    if (!named || !ts.isNamedImports(named)) return;
+    for (const el of named.elements) binding.set((el.propertyName ?? el.name).text, el.name.text);
+  });
+  const loader = binding.get(EKSPOR_LOAD_MANIFEST);
+  const materializer = binding.get(EKSPOR_MATERIALIZE_MANIFEST);
+  const loadCalls: ts.CallExpression[] = [];
+  const materializeCalls: ts.CallExpression[] = [];
+  jelajah(sf, (node) => {
+    if (!ts.isCallExpression(node) || !ts.isIdentifier(node.expression)) return;
+    if (node.expression.text === loader) loadCalls.push(node);
+    if (node.expression.text === materializer) materializeCalls.push(node);
+  });
+  return { sf, binding, loadCalls, materializeCalls };
+}
+
+test(`W1+W2: kedua worker mengimpor gerbang manifest job dari ${MODUL_MANIFEST} (AST, bukan teks)`, () => {
   const kurang: string[] = [];
   for (const [label, rel] of Object.entries(SUMBER) as [Label, string][]) {
-    if (hasil[label].binding.length === 0) kurang.push(`${rel} (${label})`);
+    const a = analisisWiringManifest(rel, teks[label]);
+    if (!a.binding.has(EKSPOR_LOAD_MANIFEST) || !a.binding.has(EKSPOR_MATERIALIZE_MANIFEST)) {
+      kurang.push(`${rel} (${label})`);
+    }
   }
   assert.deepEqual(
     kurang,
     [],
-    `Worker berikut TIDAK mengimpor ${EKSPOR_PUSAT} dari ${MODUL_PUSAT}:\n  ${kurang.join("\n  ")}\n` +
-      "Selama pemilihan referensi tidak lewat satu API pusat, gerbang bukti yang dipasang di satu " +
-      "worker tidak pernah berlaku di worker yang lain."
+    `Worker berikut TIDAK mengimpor loader+materializer manifest dari ${MODUL_MANIFEST}:\n  ${kurang.join("\n  ")}\n` +
+      "Manifest job adalah satu API pusat yang memanggil resolver, mematok bytes durable, lalu " +
+      "memverifikasi snapshot yang sama pada kedua worker."
   );
 });
 
-test(`W1+W2: kedua worker MEMANGGIL ${EKSPOR_PUSAT} atas daftar ${DAFTAR_FOTO}`, () => {
-  // Mengimpor tanpa memanggil adalah gerbang hias; memanggil atas daftar LAIN
-  // adalah gerbang yang salah alamat. Keduanya diperiksa di satu tempat karena
-  // keduanya berarti hal yang sama: referensi utama masih dipilih dengan cara
-  // lain.
+test(`W1+W2: loader manifest menerima daftar ${DAFTAR_FOTO} sebagai candidateRels`, () => {
   const kurang: string[] = [];
   for (const [label, rel] of Object.entries(SUMBER) as [Label, string][]) {
-    const a = hasil[label];
-    if (a.panggilan.length === 0) kurang.push(`${rel} (${label}): tidak pernah memanggil ${EKSPOR_PUSAT}()`);
-    else if (a.panggilanDenganDaftarFoto.length === 0)
-      kurang.push(`${rel} (${label}): memanggil ${EKSPOR_PUSAT}() tapi tidak pernah atas daftar \`${DAFTAR_FOTO}\``);
+    const a = analisisWiringManifest(rel, teks[label]);
+    const benar = a.loadCalls.some((call) => call.arguments.some((arg) => {
+      if (!ts.isObjectLiteralExpression(arg)) return false;
+      return arg.properties.some((prop) => ts.isPropertyAssignment(prop)
+        && prop.name.getText(a.sf) === "candidateRels"
+        && menunjukDaftarFoto(prop.initializer));
+    }));
+    if (!benar) kurang.push(`${rel} (${label}): loader manifest tidak menerima candidateRels dari images`);
   }
   assert.deepEqual(
     kurang,
     [],
-    `Wiring resolver belum benar:\n  ${kurang.join("\n  ")}\n` +
-      "Referensi utamanya masih dipilih dengan cara lain."
+    `Wiring manifest belum benar:\n  ${kurang.join("\n  ")}\n` +
+      "Daftar produk wajib masuk ke loader yang menjalankan resolver pusat dan membuat snapshot durable."
   );
 });
 
-test("W1+W2: setiap materialize() memakai hasil resolver, bukan daftar mentah", () => {
-  // Gerbang penentu. Impor + panggilan + tidak ada indeks mentah masih bisa
-  // dipenuhi oleh resolver yang hasilnya dibuang; yang tidak bisa dipalsukan
-  // adalah ALIRAN DATA-nya sampai ke pengambilan payload.
-  //
-  // Berlaku untuk SELURUH materialize di kedua worker, bukan hanya referensi
-  // utama: foto ke-2 dst juga dikirim ke model sebagai referensi identitas,
-  // jadi keduanya sama-sama harus berasal dari daftar tersetujui.
+test("W1+W2: materializer menerima manifest loader, bukan daftar images mentah", () => {
   const pelanggaran: string[] = [];
   for (const [label, rel] of Object.entries(SUMBER) as [Label, string][]) {
-    const a = hasil[label];
-    if (a.materialize.length === 0) {
-      pelanggaran.push(`${rel} (${label}): tidak ada materialize() sama sekali — fixture/parser salah`);
+    const a = analisisWiringManifest(rel, teks[label]);
+    if (a.materializeCalls.length === 0) {
+      pelanggaran.push(`${rel} (${label}): tidak ada materializeJobReferenceManifest()`);
       continue;
     }
-    for (const m of a.materialize) {
-      if (!m.dariResolver) pelanggaran.push(`${rel}:${m.baris}: ${m.teks}`);
+    for (const call of a.materializeCalls) {
+      const first = call.arguments[0];
+      if (!first || menunjukDaftarFoto(first) || !menyebut(first, "manifest")) {
+        const baris = a.sf.getLineAndCharacterOfPosition(call.getStart(a.sf)).line + 1;
+        pelanggaran.push(`${rel}:${baris}: ${call.getText(a.sf).replace(/\s+/g, " ")}`);
+      }
     }
   }
   assert.deepEqual(
     pelanggaran,
     [],
-    "Payload referensi diambil dari nilai yang TIDAK berasal dari hasil resolver:\n  " +
+    "Payload referensi tidak berasal dari manifest job durable:\n  " +
       pelanggaran.join("\n  ") +
-      `\nMemanggil ${EKSPOR_PUSAT}() lalu membuang hasilnya adalah gerbang hias. Nilai yang ` +
-      "di-materialize wajib turunan dari daftar tersetujui yang dikembalikan resolver."
+      "\nMaterializer wajib menerima manifest hasil loader, bukan daftar produk mutable."
   );
 });
 

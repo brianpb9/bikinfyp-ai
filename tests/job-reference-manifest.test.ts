@@ -20,6 +20,7 @@ const {
 const sha = (bytes: Buffer) => crypto.createHash("sha256").update(bytes).digest("hex");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "manifest-ref-materialize-"));
 const values = new Map<string, Buffer>();
+const materializeFailures = new Set<string>();
 
 function sidecar(bytes: Buffer) {
   return Buffer.from(JSON.stringify({
@@ -34,6 +35,7 @@ setMediaStorageForTests({
   async get(key) { const body = values.get(key); return body ? { body, size: body.length } : null; },
   async stat(key) { const body = values.get(key); return body ? { size: body.length } : null; },
   async materialize(key) {
+    if (materializeFailures.has(key)) throw new Error("R2 authentication unavailable");
     const body = values.get(key);
     if (!body) return null;
     const out = path.join(tmp, `${crypto.randomUUID()}-${path.basename(key)}`);
@@ -56,9 +58,10 @@ test("manifest dibuat sekali; retry/reorder/delete/add tetap memakai identitas a
     return durable;
   };
 
-  const first = await loadOrCreateJobReferenceManifest({ existingRaw: null, candidateRels: [a, b], persistIfAbsentAndSafe: persist });
+  const first = await loadOrCreateJobReferenceManifest({ existingRaw: null, jobId: "job-first", candidateRels: [a, b], persistIfAbsentAndSafe: persist });
   const retry = await loadOrCreateJobReferenceManifest({
     existingRaw: durable,
+    jobId: "job-first",
     candidateRels: [c, b, a], // product list berubah total sesudah approval
     persistIfAbsentAndSafe: async () => assert.fail("retry tidak boleh menulis/resnapshot"),
   });
@@ -68,6 +71,7 @@ test("manifest dibuat sekali; retry/reorder/delete/add tetap memakai identitas a
   assert.deepEqual(retry.manifest, first.manifest);
   assert.equal(first.manifest.references[0].sha256, sha(ba));
   assert.equal(first.manifest.references[0].versiBukti, 1);
+  values.delete(a); values.delete(b); // product cleanup tidak menyentuh snapshot job
   const paths = await materializeJobReferenceManifest(retry.manifest, path.join(tmp, "job-retry"));
   assert.deepEqual(paths.map((p) => sha(fs.readFileSync(p))), [sha(ba), sha(bb)]);
 });
@@ -87,32 +91,73 @@ test("dua create konkuren kembali dengan satu pemenang durable", async () => {
     return durable;
   };
   const [x, y] = await Promise.all([
-    loadOrCreateJobReferenceManifest({ existingRaw: null, candidateRels: [a], persistIfAbsentAndSafe: cas }),
-    loadOrCreateJobReferenceManifest({ existingRaw: null, candidateRels: [b], persistIfAbsentAndSafe: cas }),
+    loadOrCreateJobReferenceManifest({ existingRaw: null, jobId: "job-race", candidateRels: [a], persistIfAbsentAndSafe: cas }),
+    loadOrCreateJobReferenceManifest({ existingRaw: null, jobId: "job-race", candidateRels: [b], persistIfAbsentAndSafe: cas }),
   ]);
   assert.equal(writes, 1);
   assert.deepEqual(x.manifest, y.manifest);
   assert.deepEqual(parseJobReferenceManifest(durable!).references, x.manifest.references);
 });
 
+test("crash/hasil CAS ambigu tidak menghapus snapshot yang dapat diadopsi retry", async () => {
+  values.clear();
+  const rel = "uploads/crash-retry/a.webp";
+  const bytes = Buffer.from("CRASH-RECOVERY");
+  values.set(rel, bytes);
+  values.set(`${rel}.meta.json`, sidecar(bytes));
+
+  await assert.rejects(
+    () => loadOrCreateJobReferenceManifest({
+      existingRaw: null,
+      jobId: "job-crash",
+      candidateRels: [rel],
+      persistIfAbsentAndSafe: async () => { throw new Error("connection lost after commit uncertainty"); },
+    }),
+    /connection lost/
+  );
+  const snapshotRel = `jobs/job-crash/approved-references/0-${sha(bytes)}.webp`;
+  assert.deepEqual(values.get(snapshotRel), bytes, "hasil CAS ambigu menghapus snapshot yang mungkin sudah diadopsi");
+
+  let durable: string | null = null;
+  const retry = await loadOrCreateJobReferenceManifest({
+    existingRaw: null,
+    jobId: "job-crash",
+    candidateRels: [rel],
+    persistIfAbsentAndSafe: async (candidate) => (durable ??= candidate),
+  });
+  assert.equal(retry.manifest.references[0].snapshotRel, snapshotRel);
+  const paths = await materializeJobReferenceManifest(retry.manifest, path.join(tmp, "crash-retry"));
+  assert.equal(sha(fs.readFileSync(paths[0])), sha(bytes));
+});
+
 test("manifest missing/hash-changed dan legacy tak terbukti gagal tertutup", async () => {
   values.clear();
   const rel = "uploads/fail-closed/a.webp";
   const approved = Buffer.from("APPROVED");
-  const manifest = { version: 1 as const, references: [{ rel, sha256: sha(approved), versiBukti: 1 }] };
+  const snapshotRel = "jobs/job-fail/approved-references/0-approved.webp";
+  const manifest = { version: 1 as const, references: [{ rel, sha256: sha(approved), versiBukti: 1, snapshotRel }] };
   await assert.rejects(() => materializeJobReferenceManifest(manifest, path.join(tmp, "missing")), /REF_MISSING/);
   const changed = Buffer.from("CHANGED");
-  values.set(rel, changed);
+  values.set(snapshotRel, changed);
   await assert.rejects(() => materializeJobReferenceManifest(manifest, path.join(tmp, "changed")), /REF_HASH_MISMATCH/);
   values.set(`${rel}.meta.json`, sidecar(changed));
+  values.set(rel, changed);
   await assert.rejects(
     () => loadOrCreateJobReferenceManifest({
       existingRaw: null,
+      jobId: "job-legacy",
       candidateRels: [rel],
       persistIfAbsentAndSafe: async () => null,
     }),
     UnsafeLegacyReferenceSnapshot
   );
+
+  materializeFailures.add(snapshotRel);
+  await assert.rejects(
+    () => materializeJobReferenceManifest(manifest, path.join(tmp, "infra")),
+    /R2 authentication unavailable/
+  );
+  materializeFailures.delete(snapshotRel);
 });
 
 test("A6 menempatkan verifikasi manifest sebelum approve, regen charge, task reset, dan enqueue", () => {

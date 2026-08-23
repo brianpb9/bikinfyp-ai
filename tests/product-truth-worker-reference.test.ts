@@ -98,9 +98,18 @@ function storageSpy(isi: Map<string, Buffer>) {
   const materializeCalls: string[] = [];
   const getCalls: string[] = [];
   const putCalls: string[] = [];
+  const snapshotSources = new Map<string, string>();
   const storage: MediaStorage = {
     async put(key, body) {
       putCalls.push(key);
+      if (key.includes("/approved-references/")) {
+        const source = [...isi.entries()].find(([candidate, bytes]) =>
+          !candidate.endsWith(".meta.json")
+          && !candidate.includes("/approved-references/")
+          && bytes.equals(body)
+        )?.[0];
+        if (source) snapshotSources.set(key, source);
+      }
       isi.set(key, body);
     },
     async delete(key) {
@@ -116,7 +125,7 @@ function storageSpy(isi: Map<string, Buffer>) {
       return body ? { size: body.length } : null;
     },
     async materialize(key) {
-      materializeCalls.push(key);
+      materializeCalls.push(snapshotSources.get(key) ?? key);
       return null; // HALT: worker berhenti sebelum langkah berbayar apa pun
     },
   };
@@ -240,7 +249,8 @@ function assertNolEfekSamping(
   assert.equal(job.provider_voice, null, `${konteks}: provider_voice tercatat — ada panggilan provider suara`);
   assert.equal(job.output_url, null, `${konteks}: output_url terisi padahal worker berhenti`);
   assert.equal(job.cost_actual_idr, 0, `${konteks}: cost_actual_idr bukan 0 — ada biaya provider tercatat`);
-  assert.equal(spy.putCalls.length, 0, `${konteks}: worker menulis ke storage (${JSON.stringify(spy.putCalls)})`);
+  const outputWrites = spy.putCalls.filter((key) => !key.includes("/approved-references/"));
+  assert.equal(outputWrites.length, 0, `${konteks}: worker menulis output ke storage (${JSON.stringify(outputWrites)})`);
   assert.equal(panggilanJaringan, 0, `${konteks}: ada panggilan fetch — worker menyentuh jaringan`);
 }
 
@@ -451,10 +461,15 @@ test("W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhent
   ]);
   const materializeCalls: string[] = [];
   const putCalls: string[] = [];
+  const snapshotSources = new Map<string, string>();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "w2-toctou-"));
   setMediaStorageForTests({
     async put(key: string, body: Buffer) {
       putCalls.push(key);
+      if (key.includes("/approved-references/")) {
+        const source = isi.get(relFoto)?.equals(body) ? relFoto : undefined;
+        if (source) snapshotSources.set(key, source);
+      }
       isi.set(key, body);
     },
     async delete(key: string) {
@@ -469,7 +484,7 @@ test("W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhent
       return body ? { size: body.length } : null;
     },
     async materialize(key: string) {
-      materializeCalls.push(key);
+      materializeCalls.push(snapshotSources.get(key) ?? key);
       // Bytes DITUKAR di jendela antara get() dan materialize().
       const abs = path.join(tmp, path.basename(key));
       fs.writeFileSync(abs, Buffer.from("BYTES-DITUKAR-SESUDAH-DISETUJUI"));
@@ -519,11 +534,16 @@ test("W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tet
   ]);
   const materializeCalls: string[] = [];
   const putCalls: string[] = [];
+  const snapshotSources = new Map<string, string>();
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "w2-bersama-"));
   const pathBersama = path.join(tmp, "bersama.webp");
   setMediaStorageForTests({
     async put(key: string, body: Buffer) {
       putCalls.push(key);
+      if (key.includes("/approved-references/")) {
+        const source = [relSah1, relSah2].find((rel) => isi.get(rel)?.equals(body));
+        if (source) snapshotSources.set(key, source);
+      }
       isi.set(key, body);
     },
     async delete(key: string) {
@@ -538,7 +558,7 @@ test("W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tet
       return body ? { size: body.length } : null;
     },
     async materialize(key: string) {
-      materializeCalls.push(key);
+      materializeCalls.push(snapshotSources.get(key) ?? key);
       const body = isi.get(key);
       if (!body) return null;
       fs.writeFileSync(pathBersama, body); // menimpa isi materialize sebelumnya
@@ -798,8 +818,10 @@ test("W2 A6/C9: manifest lama menang atas reorder/delete/add products.images", a
   const currentRel = "uploads/w2-manifest/current.webp";
   const approvedBytes = Buffer.from("APPROVED-IMMUTABLE-W2");
   const currentBytes = Buffer.from("CURRENT-NOT-APPROVED-W2");
+  const snapshotRel = `jobs/w2-manifest-fixture/approved-references/0-approved.webp`;
   const spy = storageSpy(new Map<string, Buffer>([
     [approvedRel, approvedBytes],
+    [snapshotRel, approvedBytes],
     [currentRel, currentBytes],
     [`${currentRel}.meta.json`, sidecar(currentBytes, true)],
   ]));
@@ -807,13 +829,13 @@ test("W2 A6/C9: manifest lama menang atas reorder/delete/add products.images", a
   const { jobId } = siapkanJob([currentRel]);
   const raw = JSON.stringify({
     version: 1,
-    references: [{ rel: approvedRel, sha256: sha(approvedBytes), versiBukti: 1 }],
+    references: [{ rel: approvedRel, sha256: sha(approvedBytes), versiBukti: 1, snapshotRel }],
   });
   db.prepare("UPDATE jobs SET approved_reference_manifest=? WHERE id=?").run(raw, jobId);
 
   await processJob(jobId);
 
-  assert.deepEqual(spy.materializeCalls, [approvedRel], "W2 memilih ulang current products.images");
+  assert.deepEqual(spy.materializeCalls, [snapshotRel], "W2 tidak memakai snapshot durable manifest");
   assert.deepEqual(spy.getCalls, [], "W2 membaca sidecar/list terkini walau manifest durable sudah ada");
   const saved = db.prepare("SELECT approved_reference_manifest FROM jobs WHERE id=?").get(jobId) as { approved_reference_manifest: string };
   assert.equal(saved.approved_reference_manifest, raw, "manifest immutable ditimpa saat resume");
