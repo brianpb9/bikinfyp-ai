@@ -37,10 +37,6 @@ function literalPattern(value?: string | null): RegExp | null {
   return new RegExp(`\\b${words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("\\s+")}\\b`, "i");
 }
 
-function escapeLiteral(value: string): string {
-  return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-}
-
 function characterContradictions(input: string, kind: "action" | "prompt", trustedNumericScaffolds: string[] = []): string[] {
   const normalized = input.normalize("NFC");
   const findings: string[] = [];
@@ -54,15 +50,32 @@ function characterContradictions(input: string, kind: "action" | "prompt", trust
     // Grammar aksi hanya membutuhkan spasi dan tanda baca staging sederhana.
     if (/[^A-Za-z\s,.'—-]/u.test(normalized)) findings.push("punctuation/symbol outside approved neutral action grammar");
   } else {
-    // Hanya substring scaffold yang dibuat planner dari metadata shot ini
-    // yang boleh membawa angka. Regex generik pernah melegalkan
-    // "189000-second offer" dari field tak tepercaya.
-    let withoutStructuralNumbers = normalized;
-    for (const scaffold of trustedNumericScaffolds) {
-      if (!scaffold || !/\d/.test(scaffold)) continue;
-      withoutStructuralNumbers = withoutStructuralNumbers.replace(new RegExp(escapeLiteral(scaffold), "g"), "");
+    // Claim tepat SATU occurrence untuk tiap entri scaffold. Daftar boleh
+    // memuat duplikat bila planner memang menulis scaffold dua kali. Ini
+    // sengaja bukan replace global: string identik yang diselundupkan field
+    // tak tepercaya tidak ikut diputihkan dan tetap menyisakan digit.
+    const claimed = new Set<number>();
+    for (const scaffold of trustedNumericScaffolds.filter((value) => value && /\d/.test(value))) {
+      let from = 0;
+      let found = -1;
+      while (from <= normalized.length) {
+        const candidate = normalized.indexOf(scaffold, from);
+        if (candidate < 0) break;
+        const overlaps = Array.from({ length: scaffold.length }, (_, offset) => candidate + offset)
+          .some((index) => claimed.has(index));
+        if (!overlaps) { found = candidate; break; }
+        from = candidate + 1;
+      }
+      if (found < 0) {
+        // Metadata memuat seluruh scaffold yang mungkin dipakai shot ini;
+        // sebagian (opening/timeline) memang tidak hadir pada beat tertentu.
+        // Yang penting: entri yang tak hadir tidak memberi allowance apa pun.
+        continue;
+      }
+      for (let index = found; index < found + scaffold.length; index++) claimed.add(index);
     }
-    if (/\p{N}/u.test(withoutStructuralNumbers)) findings.push("non-structural digits forbidden in neutral final prompt");
+    const unclaimedDigit = [...normalized].some((char, index) => /\p{N}/u.test(char) && !claimed.has(index));
+    if (unclaimedDigit) findings.push("non-structural digits forbidden in neutral final prompt");
   }
   return findings;
 }
@@ -73,6 +86,12 @@ export function neutralStoryAdsUntrustedFieldContradictions(field: string): stri
   const unsafe = field.match(/\b(?:product\w*|produk\w*|bottle\w*|botol\w*|packag\w*|kemasan\w*|brand\w*|merek\w*|logo\w*|label\w*|marked|printed|readable|claim\w*|klaim\w*|price\w*|harga\w*|reference\w*|referensi\w*)\b/i)?.[0];
   if (unsafe) findings.push(`untrusted visual field contains product/brand/text instruction: ${unsafe}`);
   return findings;
+}
+
+/** Dialog/metadata boleh menyebut fakta produk dalam kata-kata, tetapi tidak
+ * boleh membawa angka yang dapat bertabrakan dengan scaffold milik planner. */
+export function neutralStoryAdsUntrustedNumericContradictions(field: string): string[] {
+  return characterContradictions(field, "prompt");
 }
 
 /** Returns contradictions instead of a boolean so audits can identify the

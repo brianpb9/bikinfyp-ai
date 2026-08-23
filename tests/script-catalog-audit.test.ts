@@ -57,8 +57,8 @@ const AUTHORED_COPY_SNAPSHOT: Record<string, string[]> = {
   "t09-bahan-aktif": ["f7b8d72e75bdb6ac", "0c89d79923fe6c9c", "0ff1d991acffd261", "9f1d03aee94a2b08"],
   "t10-bukti-di-lengan": ["cb8455f1c8977c93", "1201f68e4cf37a81", "aabc8a9738e2deaa", "08e4cb36d834351d"],
   "t12-vox-pop": ["2b26db49870ce97f", "773729dc5473f4ff", "68382594e9b4ad92", "d85df3510a64ce24"],
-  "kenalin-bisnis": ["f71a58415431ad54", "08a799736b3bfa0a", "a71eb509f26df29d", "889faaa6151b5ad1"],
-  "promo-terbatas": ["2ced17ac4cc93e7c", "992549574c1e857b", "c39be4419ebe5c64", "86bdda2ecbcf15ad"],
+    "kenalin-bisnis": ["1fccb9e0fd0c189a", "3319a10cb0b65433", "8f1ad75dd7088fc2", "9fede81ed1a4f351"],
+    "promo-terbatas": ["191ca2880def9d18", "38d6b2f5a5a9943e", "80f639c6ec7376f3", "2cef2dcbbcb03e5e"],
   "tvc-the-drop": ["c3aef3e716baae43", "8609eacc96558a7f", "ca68bed87976479c", "eb8b38ee0097b061"],
   "tvc-tersangka": ["4524bd2c7fed0c14", "6d0e08dbfcb8e7b3", "3841466ada75069b", "5b3df2443a0f2d9d"],
   "tvc-seharian": ["859aaf1eb141f049", "16df12a1db6028a2", "7640aacca7b4ab50", "f027e138aec292b8"],
@@ -79,6 +79,10 @@ test("snapshot seluruh copy authored mengunci 22 template x 4 varian tanpa pemot
 test("copy authored selalu berupa kalimat utuh dan delivery tag tidak bocor ke spoken text", () => {
   for (const template of audit.templates.filter((item) => COMPACTED_TEMPLATE_IDS.has(item.templateId))) {
     for (const variant of template.variants) for (const segment of variant.segments) {
+      if (template.group === "ads" && segment.role === "hook") {
+        assert.equal(segment.text, "", `${template.templateId}#${variant.variantIndex}: SA3 hook harus senyap`);
+        continue;
+      }
       assert.deepEqual(danglingFragmentReasons(segment.text), [], `${template.templateId}#${variant.variantIndex}: ${segment.text}`);
       assert.doesNotMatch(segment.text, /\[[^\]]+\]/, `${template.templateId}#${variant.variantIndex}: delivery tag bocor`);
       if (segment.role !== "cta") {
@@ -448,6 +452,8 @@ test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasi
     });
     for (const variant of variants) {
       assert.deepEqual(variant.segments.map((segment) => segment.label), ["HOOK", "FRICTION", "FRICTION", "SPIKE", "BUTTON"]);
+      assert.equal(variant.segments[0].text, "", `${template.id}: SA3 hook tidak senyap`);
+      assert.equal(variant.segments[0].tts_text, undefined, `${template.id}: SA3 hook masih punya TTS`);
       assert.equal(variant.segments.filter((segment) => segment.role === "demo").length, 1);
       for (const segment of variant.segments.filter((item) => item.label === "FRICTION" || item.label === "SPIKE")) {
         const words = segment.text.replace(/\[[^\]]+\]/g, "").trim().split(/\s+/).filter(Boolean);
@@ -585,6 +591,13 @@ test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
   );
   for (const disguised of ["189000-second offer", "Shot 189000 of 1 offer", "at 189000-189001 seconds offer"]) {
     assert.notDeepEqual(neutralStoryAdsPromptContradictions(disguised, {}, ["15-second", "Shot 1 of 3", "at 0-3 seconds"]), [], disguised);
+  }
+  for (const [prompt, allowed] of [
+    ["continuous 15-second story; injected 15-second", "15-second"],
+    ["Shot 1 of 4; injected Shot 1 of 4", "Shot 1 of 4"],
+    ["at 3-6 seconds; injected at 3-6 seconds", "at 3-6 seconds"],
+  ] as const) {
+    assert.notDeepEqual(neutralStoryAdsPromptContradictions(prompt, {}, [allowed]), [], `collision exact lolos: ${allowed}`);
   }
   for (const injectedAvatar of [
     "woman holding a bottle marked ACME beside a blank card",

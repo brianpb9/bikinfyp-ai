@@ -499,7 +499,7 @@ async function generateOne(
   };
 
   const { minWc, maxWc } = jendelaKata({
-    qualityTier: tier, durationSec, wordBudget, productName: product.name,
+    qualityTier: tier, durationSec, wordBudget, productName: product.name, contentType,
   });
 
   // ---- LINGKAR PERBAIKAN LLM ----

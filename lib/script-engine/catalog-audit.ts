@@ -823,6 +823,12 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
 
     const variantEvidence = variants.map((variant, variantIndex) => {
       const hookSegment = variant.segments.find((segment) => segment.role === "hook") ?? null;
+      // Story Ads sengaja membuka dengan HOOK senyap. Untuk metrik keragaman
+      // copy, ukur baris lisan pertama; jangan menyimpulkan sembilan template
+      // identik hanya karena kontrak SA3 mereka sama-sama kosong.
+      const diversityHookSegment = template.group === "ads"
+        ? variant.segments.find((segment) => stripDeliveryTags(segment.text).trim()) ?? hookSegment
+        : hookSegment;
       const segments = variant.segments.map((segment) => ({
         role: segment.role,
         text: segment.text,
@@ -877,7 +883,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       return {
         variantIndex,
         hookFamily: variant.hook_family,
-        hook: hookSegment ? textRef(template.id, variantIndex, hookSegment.text) : null,
+        hook: diversityHookSegment ? textRef(template.id, variantIndex, diversityHookSegment.text) : null,
         scriptNormalized: segments.map((segment) => `${segment.role}:${segment.normalized}`).join("|"),
         segments,
         assembledShotDirections,
@@ -1043,6 +1049,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
   const languageFindings = (detector: (text: string) => string[]): CatalogLanguageFinding[] =>
     rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
       variant.segments.flatMap((segment) => {
+        if (template.group === "ads" && segment.role === "hook" && !segment.text.trim()) return [];
         const matches = detector(segment.text);
         return matches.length === 0 ? [] : [{
           templateId: template.templateId,

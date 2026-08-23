@@ -1,5 +1,6 @@
 import type { TemplateCtx } from "./templates";
 import { neutralStoryAdsActionContradictions } from "./ads-visual-contract";
+import { hargaTerbilang } from "./terbilang";
 
 /**
  * Copy katalog bersifat template-owned. Setiap template aktif mempunyai satu
@@ -263,7 +264,7 @@ const ADEGAN_ADS: Record<string, AdsScene> = {
     saksi: "petugas di lorong",
   },
   "ads-waktu-berhenti": {
-    hooks: ["Eh, kenapa aktornya diam?", "Nah, siapa menahan jam?", "Bun, kartunya ikut diam?", "Kirain panggungnya bergerak?"],
+    hooks: ["Eh, kenapa aktornya diam, ya?", "Nah, siapa menahan jam?", "Bun, kartunya ikut diam?", "Kirain panggungnya bergerak?"],
     friction1: ["Para aktor menahan pose.", "Jam propertinya ditahan.", "Kartu putih diam.", "Lampu panggung menetap."],
     friction2: ["Kartu polos didekatkan, sih.", "Kasir mengangkat swatch, sih.", "Bidang putih diputar, sih.", "Kartu warna masuk, sih."],
     spikes: ["Jam panggung tampak.", "Nah, pose kasirnya jelas.", "Nah, pose kasir berlanjut.", "Nah, tableau tetap tertata."],
@@ -301,21 +302,27 @@ function storyAds(templateId: string, variantIndex: number, c: TemplateCtx, base
   const adegan = ADEGAN_ADS[templateId];
   if (!adegan) return base;
   const [aksiSatu, aksiDua] = VARIASI_LAYANAN[variantIndex];
-  const hook = withDelivery(adegan.hooks[variantIndex], base.hook);
+  // SA3: opening Story Ads adalah konflik visual murni. Kalimat pembuka lama
+  // tidak dibuang; ia pindah ke FRICTION pertama agar isi dan nada tetap utuh.
+  const pembukaLisan = withDelivery(adegan.hooks[variantIndex], base.hook);
   const button = `${adegan.questions[variantIndex]} Detailnya ada di bawah ya.`;
   const hargaAktif = [
-    `Kini harganya ${c.harga}.`,
-    `Angkanya ${c.harga}, ya.`,
-    `Harga aktif ${c.harga}.`,
-    `Tercantum ${c.harga}, deh.`,
+    `Kini harganya ${hargaTerbilang(c.harga)}.`,
+    `Angkanya ${hargaTerbilang(c.harga)}, ya.`,
+    `Harga aktif ${hargaTerbilang(c.harga)}.`,
+    `Tercantum ${hargaTerbilang(c.harga)}, deh.`,
   ];
   const tekananSatu = templateId === "promo-terbatas"
     ? hargaAktif[variantIndex]
     : adegan.friction1[variantIndex];
+  const frictionPertama = templateId === "promo-terbatas" ? tekananSatu : pembukaLisan;
+  const frictionKedua = templateId === "promo-terbatas" ? pembukaLisan : tekananSatu;
   const story: AdsStoryBeat[] = [
-    { role: "hook", label: "HOOK", text: hook, action: "kartu warna polos tanpa tulisan terlihat sejak frame pertama", product_state: "partial" },
-    { role: "demo", label: "FRICTION", text: `${JEDA_VARIAN[variantIndex]} ${tekananSatu}`, action: aksiSatu, product_state: "partial" },
-    { role: "story", label: "FRICTION", text: adegan.friction2[variantIndex], action: aksiDua, product_state: "hero" },
+    { role: "hook", label: "HOOK", text: "", action: "kartu warna polos tanpa tulisan terlihat sejak frame pertama", product_state: "partial" },
+    { role: "demo", label: "FRICTION", text: templateId === "promo-terbatas"
+      ? `${JEDA_VARIAN[variantIndex]} ${frictionPertama}`
+      : `${frictionPertama} ${JEDA_VARIAN[variantIndex]}`, action: aksiSatu, product_state: "partial" },
+    { role: "story", label: "FRICTION", text: frictionKedua, action: aksiDua, product_state: "hero" },
     { role: "story", label: "SPIKE", text: adegan.spikes[variantIndex], action: "kartu warna polos diletakkan di depan saksi", product_state: "hero", saksi: adegan.saksi },
     { role: "cta", label: "BUTTON", text: button, action: "talent menunjuk blok warna pada kartu blank sambil menyisakan pertanyaan", product_state: "hero" },
   ];

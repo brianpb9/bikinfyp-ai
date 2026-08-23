@@ -78,10 +78,14 @@ test("setiap template yang punya variasi memang ada di katalog", async () => {
   }
 });
 
-test("tiap variasi punya hook, demo, dan cta yang terisi", async () => {
+test("tiap variasi punya beat lisan terisi; HOOK Story Ads sengaja senyap", async () => {
   for (const [id] of Object.entries(TEMPLATE_COPY)) {
     for (const x of await skrip(id)) {
       for (const seg of x.segments) {
+        if (seg.role === "hook" && seg.label === "HOOK") {
+          assert.equal(seg.text, "", `${id}: HOOK Story Ads harus senyap`);
+          continue;
+        }
         assert.ok(seg.text.trim().length > 0, `${id}: ada segmen kosong`);
       }
     }

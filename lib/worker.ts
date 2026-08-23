@@ -374,6 +374,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         clipPaths,
         mode: compositeMode,
         voiceoverWavPath: compositeMode === "embedded" ? geminiVoPath : undefined,
+        voiceoverStartSec: segments.find((segment) => stripDeliveryTags(segment.tts_text ?? segment.text).trim())?.start ?? 0,
         vo: compositeMode === "vo" ? vo : undefined,
         captions: captionCards,
         musicPath,

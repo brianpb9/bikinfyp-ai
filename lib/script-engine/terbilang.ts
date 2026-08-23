@@ -28,7 +28,7 @@ export function terbilang(n: number): string {
  * - "Rp299.000" / "Rp 299.000"  -> "dua ratus sembilan puluh sembilan ribu rupiah"
  * - "299.000" (format ribuan)    -> "dua ratus sembilan puluh sembilan ribu"
  * - "85rb" / "85 ribu"           -> "delapan puluh lima ribu"
- * - "1,5jt" TIDAK didukung (desimal jarang di skrip kita; 1.499.000 didukung)
+ * - "1,5jt" -> "satu juta lima ratus ribu"
  * Angka polos tanpa penanda harga (kode produk, "7 hari") TIDAK disentuh.
  */
 export function hargaTerbilang(text: string): string {
@@ -42,7 +42,9 @@ export function hargaTerbilang(text: string): string {
   // 2) Format ribuan tanpa Rp: 299.000 (>= 4 digit efektif — bukan kode produk)
   out = out.replace(/\b(\d{1,3}(?:\.\d{3})+)\b/g, (_m, num: string) => terbilang(Number(num.replace(/\./g, ""))));
   // 3) Akhiran rb/ribu/jt/juta tanpa Rp: "85rb", "85 ribu", "2jt"
-  out = out.replace(/\b(\d+)\s?(rb|ribu)\b/gi, (_m, num: string) => `${terbilang(Number(num) * 1000)}`);
-  out = out.replace(/\b(\d+)\s?(jt|juta)\b/gi, (_m, num: string) => `${terbilang(Number(num) * 1_000_000)}`);
+  out = out.replace(/\b(\d+(?:[.,]\d+)?)\s?(rb|ribu)\b/gi, (_m, num: string) =>
+    terbilang(Math.round(Number(num.replace(",", ".")) * 1000)));
+  out = out.replace(/\b(\d+(?:[.,]\d+)?)\s?(jt|juta)\b/gi, (_m, num: string) =>
+    terbilang(Math.round(Number(num.replace(",", ".")) * 1_000_000)));
   return out;
 }

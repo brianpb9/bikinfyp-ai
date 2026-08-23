@@ -776,6 +776,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     if (!(await jobs.transition(row.id, "COMPOSITING", { worker: "postgres", retry }))) return;
     const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths, mode,
       voiceoverWavPath: mode === "embedded" ? geminiVoPath : undefined,
+      voiceoverStartSec: segments.find((segment) => stripDeliveryTags(segment.tts_text ?? segment.text).trim())?.start ?? 0,
       vo: mode === "vo" ? vo : undefined, captions, musicPath, durationSec: row.duration_s,
       priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,
       demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });

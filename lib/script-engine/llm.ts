@@ -63,6 +63,15 @@ export const SkemaNaskah = z.object({
   segments: z.array(SkemaSegmen).min(3).max(8),
 });
 
+/** Schema khusus Ads: SA3 bukan sekadar instruksi prompt. Respons dengan
+ * dialog pada HOOK gagal parse dan diminta ulang sebelum masuk pipeline. */
+export const SkemaNaskahAds = SkemaNaskah.superRefine((script, ctx) => {
+  const hook = script.segments.find((segment) => segment.label.toUpperCase() === "HOOK") ?? script.segments[0];
+  if (hook?.text.trim()) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["segments", script.segments.indexOf(hook), "text"], message: "SA3: HOOK Ads must be silent" });
+  }
+});
+
 export type SegmenLlm = z.infer<typeof SkemaSegmen>;
 
 export class LlmTidakTersedia extends Error {
@@ -465,7 +474,8 @@ export async function tulisNaskah(r: PermintaanNaskah): Promise<SegmenLlm[]> {
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
     const teks = (data.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
     try {
-      return SkemaNaskah.parse(JSON.parse(ambilObjekJson(teks))).segments;
+      const schema = r.contentType === "ads" ? SkemaNaskahAds : SkemaNaskah;
+      return schema.parse(JSON.parse(ambilObjekJson(teks))).segments;
     } catch (err) {
       galatTerakhir = (err as Error).message.slice(0, 200);
       console.warn(`[llm] keluaran tidak sesuai skema (percobaan ${percobaan + 1}/2): ${galatTerakhir}`);

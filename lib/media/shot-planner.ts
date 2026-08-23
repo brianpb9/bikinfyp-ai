@@ -41,6 +41,7 @@ import {
   neutralStoryAdsActionContradictions,
   neutralStoryAdsPromptContradictions,
   neutralStoryAdsUntrustedFieldContradictions,
+  neutralStoryAdsUntrustedNumericContradictions,
 } from "../script-engine/ads-visual-contract";
 
 export interface ShotPlanInput {
@@ -760,7 +761,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // Seedance maksimal 15 detik. Di atas 15 detik, talking_head memang belum
   // punya jaminan identitas — itu yang harus dikatakan ke pengguna, bukan
   // ditutupi.
-  const wajahTerkunci = format === "talking_head" && !config.seedanceFaceRef;
+  const neutralStoryAds = isNeutralStoryAdsTemplate(input.ugcTemplate);
+  // Story Ads membutuhkan shot pembuka provider yang benar-benar senyap.
+  // Karena itu override modulnya tetap dihormati meski format presenter;
+  // persona netral terkurasi menjaga identitas tanpa referensi pengguna.
+  const wajahTerkunci = format === "talking_head" && !config.seedanceFaceRef && !neutralStoryAds;
   const numShots = wajahTerkunci
     ? Math.max(1, Math.ceil(input.durationSec / 15))
     : requested !== null ? requested : format === "talking_head"
@@ -826,9 +831,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       return terbaik === i;
     });
 
-  const trustedNumericScaffoldsForShot = (i: number): string[] => [
+  const trustedNumericScaffoldsForShot = (i: number, shotLabelOccurrences = 1): string[] => [
     `${input.durationSec}-second`,
-    `Shot ${i + 1} of ${numShots}`,
+    ...Array.from({ length: shotLabelOccurrences }, () => `Shot ${i + 1} of ${numShots}`),
     ...segmenMilikShot(i).map((sg, index) =>
       `${index === 0 ? "at" : "then at"} ${sg.start}-${sg.end} seconds`
     ),
@@ -855,7 +860,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // yang jendela waktunya memang beririsan dengannya. Shot tanpa irisan
     // sengaja dibiarkan TANPA dialog — beat visual murni, dan itu justru yang
     // membuat beat sensorik (busa, tuang, tekstur) punya ruang bernapas.
-    numShots === 1
+    neutralStoryAds && i === 0
+      ? []
+      : numShots === 1
       // Satu klip talking-head tetap memuat SELURUH timeline. Story OS Ads
       // punya dua beat role="story" (FRICTION kedua + SPIKE); menyusun dialog
       // dari tiga nama role lama membuang keduanya dari performance prompt
@@ -1264,7 +1271,6 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     ), tanpaOrang };
   };
 
-  const neutralStoryAds = isNeutralStoryAdsTemplate(input.ugcTemplate);
   const curatedNeutralCategory = neutralStoryAds ? getCreatorCategory(input.category.id) : null;
   if (neutralStoryAds && !curatedNeutralCategory) {
     throw new Error(`Kontrak neutral Story Ads: persona "${input.category.id}" tidak ada di allowlist terkurasi.`);
@@ -1272,13 +1278,28 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   const visualCategory = curatedNeutralCategory ?? input.category;
   if (neutralStoryAds) {
     for (const segment of input.segments) {
-      if (!segment.action) continue;
-      const contradictions = neutralStoryAdsActionContradictions(segment.action, {
-        productName: input.productName,
-        productCategory: input.productCategory,
-      });
-      if (contradictions.length > 0) {
-        throw new Error(`Kontrak visual neutral Story Ads dilanggar sebelum prompt final: ${contradictions.join(", ")}`);
+      if (segment.action) {
+        const contradictions = neutralStoryAdsActionContradictions(segment.action, {
+          productName: input.productName,
+          productCategory: input.productCategory,
+        });
+        if (contradictions.length > 0) {
+          throw new Error(`Kontrak visual neutral Story Ads dilanggar sebelum prompt final: ${contradictions.join(", ")}`);
+        }
+      }
+      for (const [fieldName, field] of Object.entries({
+        text: segment.text,
+        tts_text: segment.tts_text,
+        role: segment.role,
+        label: segment.label,
+        mode: segment.mode,
+        saksi: segment.saksi,
+      })) {
+        if (!field) continue;
+        const findings = neutralStoryAdsUntrustedNumericContradictions(String(field));
+        if (findings.length > 0) {
+          throw new Error(`Kontrak chunk ${fieldName} neutral Story Ads dilanggar: ${findings.join(", ")}`);
+        }
       }
       for (const [fieldName, field] of Object.entries({
         visual_direction: segment.visual_direction,
@@ -1789,7 +1810,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       return {
         index: i, durationSec: perShot, prompt: base,
         ...(!neutralStoryAds ? { imageRefPath: input.imageRefPath } : {}),
-        ...(neutralStoryAds ? { trustedNumericScaffolds: trustedNumericScaffoldsForShot(i) } : {}),
+        ...(neutralStoryAds ? { trustedNumericScaffolds: trustedNumericScaffoldsForShot(i, punyaPeranTemplate ? 2 : 1) } : {}),
       };
     }
 
@@ -1894,7 +1915,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     return {
       index: i, durationSec: perShot, prompt,
       ...(!neutralStoryAds ? { imageRefPath: input.imageRefPath } : {}),
-      ...(neutralStoryAds ? { trustedNumericScaffolds: trustedNumericScaffoldsForShot(i) } : {}),
+      ...(neutralStoryAds ? { trustedNumericScaffolds: trustedNumericScaffoldsForShot(i, punyaPeranTemplate ? 2 : 1) } : {}),
       ...(menahanProdukDiShot(i) ? { withholdProduct: true } : {}),
       ...(beatTvc?.tanpaOrang ? { tanpaOrang: true } : {}),
       ...(awalShot?.start_state ? { startState: awalShot.start_state } : {}),

@@ -5,10 +5,10 @@
 // (HOOK→BODY→CTA 15 detik) dan tidak boleh dinilai dengan gerbang ini.
 //
 // PEMBAGIAN PENEGAKAN — dan ini yang paling mudah dibohongi:
-//   SA1, SA2, SA4, SA6, SA8 → "kode". Bisa dijawab dari STRUKTUR naskah
+//   SA1, SA2, SA3 (bagian hook senyap), SA4, SA6, SA8 → "kode". Bisa dijawab dari STRUKTUR naskah
 //     (label beat, field saksi, product_state, regex dialog). Gagal = ditolak.
-//   SA3, SA5, SA7 → "juri". Menuntut penilaian: apakah konflik terbaca tanpa
-//     kata, apakah tiap transisi benar-benar kausal, apakah satu emosi
+//   SA5, SA7 serta kualitas visual SA3 → "juri". Menuntut penilaian: apakah
+//     konflik terbaca, apakah tiap transisi benar-benar kausal, apakah satu emosi
 //     dominan dijaga. Mesin bisa mencari kata "karena", tapi kata "karena"
 //     bukan kausalitas — dan gerbang yang mengukur ejaan sambil mengaku
 //     mengukur cerita jauh lebih berbahaya daripada tidak ada gerbang.
@@ -33,10 +33,7 @@ export interface GerbangSA {
 export const GERBANG_SA: GerbangSA[] = [
   { id: "SA1", judul: "Button-first: tanya tersisa + CTA di dalamnya", penegakan: "kode" },
   { id: "SA2", judul: "Spike di 65–80% durasi, di depan saksi", penegakan: "kode" },
-  {
-    id: "SA3", judul: "Hook terbaca tanpa kata, shot 1 tanpa wajah", penegakan: "juri",
-    catatan: "apakah KONFLIK terbaca tanpa dialog hanya bisa dinilai dari maknanya; ketiadaan dialog di shot 1 saja tidak membuktikannya",
-  },
+  { id: "SA3", judul: "Hook senyap; konflik visual dinilai juri", penegakan: "kode" },
   { id: "SA4", judul: "Friction naik minimal dua kali, tiap tekanan menggeser", penegakan: "kode" },
   {
     id: "SA5", judul: "Kausalitas keras antar beat", penegakan: "juri",
@@ -99,6 +96,16 @@ export function periksaStoryOsAds(
   const temuan: TemuanSA[] = [];
   const durasi = ctx.durationSec ?? (segs[segs.length - 1]?.end ?? 15);
 
+  // ---- SA3 Hook senyap ---------------------------------------------------
+  // Mutu konflik visualnya tetap wilayah juri, tetapi syarat kanonik yang
+  // objektif tidak boleh dibiarkan sebagai harapan: beat HOOK tidak membawa
+  // dialog, termasuk jalur TTS opsional.
+  const hook = segs.find((s) => label(s).includes("HOOK")) ?? segs[0];
+  const hookTts = stripDeliveryTags(String((hook as SegmenAds & { tts_text?: string }).tts_text ?? "")).trim();
+  if (teks(hook) || hookTts) {
+    temuan.push({ gerbang: "SA3", pesan: "HOOK Story Ads wajib senyap: text dan tts_text harus kosong" });
+  }
+
   // ---- SA1 Button-first ---------------------------------------------------
   // Button = segmen terakhir. Ia wajib memuat CTA Ads DAN satu tanya kecil
   // yang tersisa; CTA telanjang tanpa tanya adalah penutup iklan biasa, dan
@@ -158,8 +165,8 @@ export function periksaStoryOsAds(
   const jembatan: string[] = [];
   const aksiProduk = friction.some((s) => /\b(sikat|tuang|oles|semprot|buka|ambil|masuk\w*|pegang|usap|pakai)\b/i.test(String(s.action ?? "")));
   if (aksiProduk) jembatan.push("a");
-  const hook = segs[0];
-  if ((hook.product_state ?? "hidden") !== "hidden") jembatan.push("b");
+  const hookAwal = segs[0];
+  if ((hookAwal.product_state ?? "hidden") !== "hidden") jembatan.push("b");
   const pengakuan = teksButton.replace(CTA_ADS, "").trim();
   if (/\b(tadi|barusan|udah|sempat|nggak aku hapus|aku kabarin)\b/i.test(pengakuan)) jembatan.push("c");
   if (jembatan.length < 2) {

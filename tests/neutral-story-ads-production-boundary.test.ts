@@ -41,6 +41,9 @@ test("snapshot confirm -> job persisten -> normalisasi worker menjaga kontrak 9 
       shotCountOverride: template.shotCount,
     });
     assert.equal(spec.visualSubjectPolicy, "neutral_story_ads");
+    assert.ok(spec.shots.length >= 2, `${template.id}: Story Ads harus punya shot pembuka provider terpisah`);
+    assert.match(spec.shots[0].prompt, /No spoken words in this shot/i, `${template.id}: shot provider pertama tidak senyap`);
+    assert.doesNotMatch(spec.shots[0].prompt, /Indonesian dialogue, spoken exactly|VOICEOVER (?:speaks|narrates)|presenter speaks/i);
     assert.deepEqual(spec.shots.flatMap((shot) => shot.imageRefPath ? [shot.imageRefPath] : []), []);
     assert.deepEqual(spec.extraReferenceImagePaths ?? [], []);
     for (const shot of spec.shots) {
@@ -119,8 +122,9 @@ test("scaffold angka hanya menerima nilai exact planner; disguise field gagal se
 
   for (const disguised of [
     "189000-second offer", "Shot 189000 of 1 offer", "at 189000-189001 seconds offer",
+    "15-second", "Shot 1 of 4", "at 3-6 seconds",
   ]) {
-    for (const field of ["action", "visual_direction", "start_state", "framing", "angle", "camera", "expression"] as const) {
+    for (const field of ["text", "tts_text", "role", "label", "mode", "saksi", "action", "visual_direction", "start_state", "framing", "angle", "camera", "expression"] as const) {
       const segments = structuredClone(script.segments);
       (segments[1] as unknown as Record<string, string>)[field] = field === "action"
         ? `talent membuka kartu blank ${disguised} di meja`

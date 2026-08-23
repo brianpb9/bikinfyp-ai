@@ -140,6 +140,7 @@ export function jendelaKata(script: {
   durationSec?: number | null;
   wordBudget?: number | null;
   productName?: string | null;
+  contentType?: "affiliate" | "ads" | null;
 }): { minWc: number; maxWc: number } {
   const tier = script.qualityTier ?? "silent_caption";
   const durationScale = (script.durationSec ?? 15) / 15;
@@ -154,11 +155,14 @@ export function jendelaKata(script: {
   // menyentuh 10 — dan naskah 10 kata untuk 15 detik memang terlalu sepi.
   const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [16, 22];
   const kelonggaranNama = Math.min(6, wordCount(script.productName ?? ""));
+  // Story Ads menyisihkan opening visual tanpa ucapan (SA3). Batas bawah VO
+  // mengikuti waktu bicara yang benar-benar tersedia; batas atas tetap sama.
+  const kelonggaranHookSenyap = script.contentType === "ads" ? Math.max(1, Math.round(3 * durationScale)) : 0;
   const minWc = Math.max(
     1,
     (script.wordBudget
       ? Math.round(script.wordBudget * 0.85)
-      : Math.round(baseMinWc * durationScale)) - kelonggaranNama
+      : Math.round(baseMinWc * durationScale)) - kelonggaranNama - kelonggaranHookSenyap
   );
   const maxWc = script.wordBudget
     ? Math.round(script.wordBudget * 1.15)
@@ -449,7 +453,7 @@ export const SELALU_KERAS = new Set([
   "S-10",
   // Story OS Ads (slice 2, 19 Agu). Gerbang SA yang bisa dicek mesin: gagal
   // satu = naskah tidak dirender (STORY-OS-ADS-v1 §3).
-  "SA1", "SA2", "SA4", "SA6", "SA8",
+  "SA1", "SA2", "SA3", "SA4", "SA6", "SA8",
 ]);
 
 /**
@@ -610,7 +614,10 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // L-02 bukan aturan global. Hanya template price-led/promo yang memberi
   // sinyal eksplisit boleh mewajibkan harga; template lain justru perlu ruang
   // untuk hook masalah, rasa penasaran, bukti, atau cerita tanpa boilerplate.
-  if (script.requirePriceMention && !PRICE_REGEX.test(hookDemo))
+  // L-02 hanya mengecek KEHADIRAN harga; kebenaran nominal (termasuk
+  // pembulatan formatter resmi 24.620 -> 25 ribu) diperiksa L-14.
+  const hargaAwalTerbilang = hargaTerbilang(hookDemo).length > 0;
+  if (script.requirePriceMention && !PRICE_REGEX.test(hookDemo) && !hargaAwalTerbilang)
     push(false, { rule: "L-02", message_id: "Harganya belum disebut di awal video — pembeli butuh dengar angkanya (mis. '85 ribu').", segment: "demo" });
 
   // L-03: CTA menyebut "keranjang" — "kuning" cuma untuk TikTok Shop (istilah
@@ -939,7 +946,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // "keras bahkan di mode light", dan di mode strict SEMUANYA jadi error. Jadi
   // push(false, ...) tetap menjatuhkan naskah di strict — persis kebalikan dari
   // yang dimaksud, dan tesnya yang menangkapnya.
-  if (!isTvc && hookSeg && !memakaiPerangkat(stripDeliveryTags(hookSeg.text))) {
+  if (!isTvc && !isAds && hookSeg && !memakaiPerangkat(stripDeliveryTags(hookSeg.text))) {
     push(false, {
       rule: "L-19",
       message_id: "Hook belum memakai perangkat retoris yang dikenali — pakai pertanyaan, negasi, sebut harga, atau pengakuan pribadi.",

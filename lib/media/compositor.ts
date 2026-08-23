@@ -47,11 +47,21 @@ export interface CompositeInput {
   /** Mode embedded: GANTI audio klip dengan VO eksternal (Gemini TTS — suara
    * resmi semua video sejak 2026-08-07; gerak bibir dari klip tetap dipakai). */
   voiceoverWavPath?: string;
+  /** Tunda VO eksternal sampai beat lisan pertama; Story Ads memakai ini agar
+   * HOOK visual SA3 tetap benar-benar senyap di master final. */
+  voiceoverStartSec?: number;
 }
 
 export interface CompositeResult {
   outPath: string;
   renderParams: { watermark: true; watermarkText: string };
+}
+
+/** Filter sumber VO embedded, diekspor agar offset hook-senyap dapat diuji
+ * tanpa menjalankan encode FFmpeg penuh. */
+export function embeddedVoiceoverInputFilter(voIdx: number, startSec = 0, output = "vopre"): string {
+  const delayMs = Math.max(0, Math.round(startSec * 1000));
+  return `[${voIdx}:a]aresample=${AUDIO_TARGET.sampleRate},adelay=delays=${delayMs}:all=1,apad[${output}]`;
 }
 
 let drawtextSupported: boolean | null = null;
@@ -224,10 +234,10 @@ export async function compositeVideo(input: CompositeInput): Promise<CompositeRe
     const labels = Array.from({ length: n }, (_, i) => `[${i}:v]`).join("");
     vChain.push(`${labels}concat=n=${n}:v=1:a=0[vcat]`);
     if (musikDiDuck) {
-      aChain.push(`[${voIdx}:a]aresample=${AUDIO_TARGET.sampleRate},apad[vopre]`);
+      aChain.push(embeddedVoiceoverInputFilter(voIdx, input.voiceoverStartSec, "vopre"));
       aChain.push(...rantaiMusik("vopre", "aout"));
     } else {
-      aChain.push(`[${voIdx}:a]aresample=${AUDIO_TARGET.sampleRate},apad[aout]`);
+      aChain.push(embeddedVoiceoverInputFilter(voIdx, input.voiceoverStartSec, "aout"));
     }
     mapAudio = "[aout]";
   } else if (input.mode === "embedded") {

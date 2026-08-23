@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { embeddedVoiceoverInputFilter } from "../lib/media/compositor";
 import fs from "node:fs";
 import { AUDIO_TARGET, audioEncoderArgs, loudnormFilter, measureLoudness, memenuhiStandar } from "../lib/media/audio-master";
 
@@ -26,6 +27,11 @@ test("argumen encoder selalu menyetel sample rate secara eksplisit", () => {
 test("filter loudnorm selalu membawa ketiga target", () => {
   const f = loudnormFilter(null);
   assert.match(f, /I=-14/); assert.match(f, /TP=-1/); assert.match(f, /LRA=7/);
+});
+
+test("VO embedded dapat ditunda melewati HOOK Story Ads yang senyap", () => {
+  assert.match(embeddedVoiceoverInputFilter(4, 3), /adelay=delays=3000:all=1/);
+  assert.match(embeddedVoiceoverInputFilter(4, 0), /adelay=delays=0:all=1/);
 });
 
 test("filter dua-lewatan memakai hasil pengukuran, bukan mengulang target", () => {

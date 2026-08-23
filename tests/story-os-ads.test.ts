@@ -58,14 +58,14 @@ const LULUS = {
   ],
 } as never;
 
-test("SA yang diklaim 'kode' hanya SA1, SA2, SA4, SA6, SA8 — sisanya 'juri'", () => {
+test("SA3 silent-hook kini kode; kualitas konflik SA3 serta SA5/SA7 tetap dinilai juri", () => {
   assert.deepEqual(
     GERBANG_SA.filter((g) => g.penegakan === "kode").map((g) => g.id).sort(),
-    ["SA1", "SA2", "SA4", "SA6", "SA8"]
+    ["SA1", "SA2", "SA3", "SA4", "SA6", "SA8"]
   );
   assert.deepEqual(
     GERBANG_SA.filter((g) => g.penegakan === "juri").map((g) => g.id).sort(),
-    ["SA3", "SA5", "SA7"]
+    ["SA5", "SA7"]
   );
   // Tiap gerbang wajib menyebut siapa yang menegakkannya — supaya tidak ada
   // yang membaca daftar ini lalu mengira delapan-duanya dicek mesin.
@@ -77,6 +77,29 @@ test("SA yang diklaim 'kode' hanya SA1, SA2, SA4, SA6, SA8 — sisanya 'juri'", 
 test("naskah Ads yang memenuhi Story OS: NOL temuan keras", () => {
   const temuan = periksaStoryOsAds(LULUS, { contentType: "ads", durationSec: 20 });
   assert.deepEqual(temuan, [], `naskah sah ditolak: ${JSON.stringify(temuan)}`);
+});
+
+test("SA3 menolak text maupun tts_text HOOK di strict dan light", async () => {
+  const { validateScript } = await import("../lib/script-engine/validator");
+  for (const mutation of [{ text: "Eh, dialog bocor." }, { tts_text: "[excited] Eh, TTS bocor." }]) {
+    const segments = structuredClone((LULUS as unknown as { segments: Record<string, unknown>[] }).segments);
+    Object.assign(segments[0], mutation);
+    for (const mode of ["strict", "light"] as const) {
+      const result = validateScript({
+        segments, hookFamily: "H1", register: "netral", productName: "Serum Uji",
+        productPriceIdr: 89000, contentType: "ads", durationSec: 20, quality_tier: "super_hq",
+      } as never, mode);
+      assert.ok(result.errors.some((issue) => issue.rule === "SA3"), `${mode} meloloskan ${JSON.stringify(mutation)}`);
+    }
+  }
+});
+
+test("schema LLM Ads menolak HOOK bersuara dan menerima kontrol senyap", async () => {
+  const { SkemaNaskahAds } = await import("../lib/script-engine/llm");
+  assert.equal(SkemaNaskahAds.safeParse({ segments: LIVE_ADS_SAFE }).success, true);
+  const noisy = structuredClone(LIVE_ADS_SAFE);
+  noisy[0].text = "Eh, bocor.";
+  assert.equal(SkemaNaskahAds.safeParse({ segments: noisy }).success, false);
 });
 
 test("SA1 — CTA tanpa tanya yang tersisa ditolak", () => {
@@ -150,7 +173,7 @@ test("prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta 
 });
 
 const LIVE_ADS_SAFE = [
-  { block: "HOOK", label: "HOOK", start: 0, end: 3, text: "Eh, kok diam?", start_state: "kartu blank sudah di meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos bergerak sejak frame pertama", product_state: "partial", expression: "curious", audio_note: "", why: "setup conflict", mode: "GENERAL" },
+  { block: "HOOK", label: "HOOK", start: 0, end: 3, text: "", start_state: "kartu blank sudah di meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos bergerak sejak frame pertama", product_state: "partial", expression: "curious", audio_note: "", why: "setup conflict", mode: "GENERAL" },
   { block: "BODY", label: "FRICTION", start: 3, end: 6.5, text: "Nah, kartunya maju.", start_state: "kartu blank dekat tangan", framing: "medium shot", angle: "eye level", camera: "slow push", action: "talent buka kartu warna polos perlahan", product_state: "partial", expression: "focused", audio_note: "", why: "tension rises", mode: "GENERAL" },
   { block: "BODY", label: "FRICTION", start: 6.5, end: 10, text: "Warnanya berbalik, deh.", start_state: "swatch blank sudah terbuka", framing: "close shot", angle: "eye level", camera: "slow drift", action: "swatch blank dipindahkan mendekati saksi", product_state: "hero", expression: "focused", audio_note: "", why: "tension rises again", mode: "GENERAL" },
   { block: "BODY", label: "SPIKE", start: 10, end: 12.5, text: "Udah, lihat, ya.", start_state: "kasir berada di samping meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos diletakkan di depan kasir", product_state: "hero", expression: "relieved", audio_note: "", why: "payoff witnessed", mode: "GENERAL", saksi: "kasir off camera" },
