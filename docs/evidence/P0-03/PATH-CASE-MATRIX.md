@@ -158,11 +158,11 @@ mengerjakannya sebagai task terpisah.
 | E2 extract URL | UNGATED | **PARTIAL** | `downloadProductImages` → `tulisSidecar` (`lib/product-image-download.ts:48`). Dulu nol sidecar |
 | E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar, tetapi E3 tetap jalur wajib C2/C3/C5 dan belum melakukan validasi type/brand/category |
 | E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; append daftar atomik dan memakai key UUID agar tidak menimpa upload paralel. **Lubang 20 Agu MASIH ADA**: gerbang label hanya jalan bila `existing.length === 0` (`route.ts:79`) |
-| E5 DELETE foto retail | UNGATED | **PARTIAL** | `removeRetailProductImage` menghitung daftar otoritatif secara atomik, lalu `deleteStoredProductImages([target])` best-effort; `cleanup_failed` terlihat, audit pasca-commit non-fatal, dan test mengunci delete/delete serta add/delete tanpa resurrect. Daftar baru tetap belum direvalidasi dan identitas lintas mutasi belum dipatok |
+| E5 DELETE foto retail | UNGATED | **PARTIAL** | `removeRetailProductImage` menghitung daftar otoritatif secara atomik, lalu `deleteStoredProductImages([target])` best-effort; `cleanup_failed` terlihat, audit pasca-commit non-fatal, dan test HTTP→resume W2 membuktikan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru tetap belum direvalidasi |
 | E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. Dulu nol |
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
-| E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Daftar baru belum direvalidasi agar tetap punya foto layak |
+| E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Test HTTP→resume W1 membuktikan isolasi org, daftar otoritatif, dan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru belum direvalidasi agar tetap punya foto layak |
 | W1 worker PG | UNGATED | **PARTIAL** | Resolver, manifest job atomik/idempoten, reuse lintas invocation, verifikasi bytes di boundary provider/output, C1/C8/C11, dan legacy fail-closed dibuktikan di PostgreSQL disposable. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
 | W2 worker inline | UNGATED | **PARTIAL** | Kontrak manifest/reuse/verifikasi/legacy yang sama dibuktikan langsung pada worker SQLite; C8/C11 tetap memakai observer provider. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
 | A1..A7 admission | UNGATED | **BLOCKED (T43)** | Transcript §4 menguji tujuh path literal: semuanya `ADA`, `gerbang_bukti=0`, `exit=1`, termasuk A4 dan A7. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
@@ -193,7 +193,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata worker tertutup: W1/W2 memakai manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, dan claims; mutasi kolom produk tidak mengubah prompt provider. Tetap PARTIAL karena belum ada test HTTP E3/E7→resume/regenerate end-to-end dan reason code `SNAPSHOT_IMMUTABLE` tidak diterbitkan |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
 | C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
-| C12 | **PARTIAL** | Identitas dan urutan referensi kini dipatok dalam manifest job versioned; create konkuren kembali dengan satu pemenang, dan W1/W2 tidak membaca ulang daftar saat manifest ada. Tetap PARTIAL karena belum ada test HTTP E5/E9→resume end-to-end dan reason code `REFERENCE_IDENTITY_CHANGED` tidak diterbitkan |
+| C12 | **PARTIAL** | Identitas dan urutan referensi dipatok dalam manifest job versioned; create konkuren kembali dengan satu pemenang, W1/W2 tidak membaca ulang daftar saat manifest ada, dan test HTTP E5/E9→resume membuktikan boundary route/list/storage. Tetap PARTIAL karena reason code usulan `REFERENCE_IDENTITY_CHANGED` tidak diterbitkan; bukti memakai reason truthful yang sudah ada (`REF_MISSING`) |
 | C13 | **PARTIAL** | Kontrol positif W1 (`tests/pg-product-truth-w1.test.ts:740`) dan W2 (`tests/product-truth-worker-reference.test.ts:638`) membuktikan worker menerima bukti sah. Itu belum membuktikan produk valid diterima melalui seluruh E1..E9 dan A1..A7 yang diwajibkan baris ini |
 
 ### E.3 Bagian D dokumen ini sudah usang — dikoreksi
@@ -373,3 +373,26 @@ TASK=P0-C9-JOB-PRODUCT-METADATA-SNAPSHOT-20260823
 - Status C9 tetap **PARTIAL**: bukti ini menutup race admission→worker untuk W1
   dan W2, tetapi tidak mengarang reason code `SNAPSHOT_IMMUTABLE` maupun
   cakupan HTTP E3/E7→resume/regenerate end-to-end yang belum diuji.
+
+### E.11 Follow-up C12 HTTP photo mutation → resume — 2026-08-24
+
+TASK=P0-C12-HTTP-MUTATION-RESUME-PROOF-20260823
+
+- E5 retail diuji lewat handler `DELETE` aktual lalu entrypoint W2
+  `processJob`; E9 organisasi diuji lewat handler `DELETE` aktual lalu
+  entrypoint W1 `processPostgresJob` pada PostgreSQL disposable. Tidak ada
+  mutasi DB manual yang menggantikan operasi HTTP yang sedang diuji.
+- Kedua jalur membuktikan isolasi owner/org, response dan row `products.images`
+  pasca-mutasi yang sama/otoritatif, serta cleanup foto+sidecar. Menghapus entry
+  non-approved tidak mengubah input provider: bytes dan urutan tetap berasal
+  dari `approved_reference_manifest` job, bukan daftar produk terbaru.
+- Fault storage terkontrol pada cleanup HTTP menghilangkan object privat yang
+  dirujuk manifest. Resume W1/W2 lalu gagal tertutup dengan `REF_MISSING`
+  sebelum provider, capture, regen, atau output; test tidak mengarang reason
+  code `REFERENCE_IDENTITY_CHANGED` yang memang belum ada.
+- E5/W2 focused + structural guard → **3/3 PASS**; W1 PostgreSQL disposable,
+  termasuk E9 + structural guard → **20/20 PASS**; affected route/product-truth
+  suite → **124/124 PASS**; `tsc --noEmit` dan `git diff --check` → **PASS**.
+- C12 tetap **PARTIAL** hanya karena reason code usulan
+  `REFERENCE_IDENTITY_CHANGED` belum diimplementasikan. Gap HTTP E5/E9→resume
+  yang sebelumnya dicatat sudah tertutup oleh bukti route-boundary ini.

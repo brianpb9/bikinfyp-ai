@@ -268,6 +268,107 @@ async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string;
   return { jobId: admitted.jobId, productId };
 }
 
+async function siapkanJobOrgDenganManifest(label: string) {
+  const ownerId = uid(), intruderId = uid(), orgId = uid(), intruderOrgId = uid();
+  const productId = uid(), scriptId = uid(), jobId = uid(), t = at();
+  const approvedSource = `uploads/e9-${label}/approved.webp`;
+  const approvedSecondSource = `uploads/e9-${label}/approved-second.webp`;
+  const otherSource = `uploads/e9-${label}/other.webp`;
+  const approvedBytes = Buffer.from(`APPROVED-E9-${label}`);
+  const approvedSecondBytes = Buffer.from(`APPROVED-SECOND-E9-${label}`);
+  const snapshotRel = `jobs/${jobId}/approved-references/0-${sha256(approvedBytes)}.webp`;
+  const snapshotRelSecond = `jobs/${jobId}/approved-references/1-${sha256(approvedSecondBytes)}.webp`;
+  await pool.query(
+    "INSERT INTO users (id,phone,tier,locale,created_at) VALUES ($1,$2,'free','id-ID',$3),($4,$5,'free','id-ID',$3)",
+    [ownerId, `08129${label}01`, t, intruderId, `08129${label}02`]
+  );
+  await pool.query(
+    "INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,$2,$3,$5),($4,$6,$7,$5)",
+    [orgId, `Org ${label}`, `org-${label}-${process.pid}`, intruderOrgId, t, `Org lain ${label}`, `org-lain-${label}-${process.pid}`]
+  );
+  await pool.query(
+    "INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$6),($4,$5,$7,'owner',$6)",
+    [uid(), orgId, ownerId, uid(), intruderOrgId, t, intruderId]
+  );
+  await pool.query(
+    `INSERT INTO products
+      (id,user_id,org_id,name,price_idr,category,images,raw_meta,created_at)
+     VALUES ($1,$2,$3,$4,85000,'beauty',$5,$6,$7)`,
+    [productId, ownerId, orgId, `Serum E9 ${label}`, JSON.stringify([approvedSource, approvedSecondSource, otherSource]), JSON.stringify({ brand: "Merek E9" }), t]
+  );
+  await pool.query(
+    `INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,approved_by_user_at,created_at)
+     VALUES ($1,$2,'H1','senang','bestie',$3,'caption','[]','{}','silent_caption',$4,$4)`,
+    [scriptId, productId, JSON.stringify(segmen), t]
+  );
+  const manifest = JSON.stringify({ version: 1, references: [
+    { rel: approvedSource, sha256: sha256(approvedBytes), versiBukti: 1, snapshotRel },
+    { rel: approvedSecondSource, sha256: sha256(approvedSecondBytes), versiBukti: 1, snapshotRel: snapshotRelSecond },
+  ] });
+  const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
+  const productSnapshot = createJobProductSnapshotRaw({ name: `Serum E9 ${label}`, category: "beauty", raw_meta: JSON.stringify({ brand: "Merek E9" }) });
+  await pool.query(
+    `INSERT INTO jobs
+      (id,user_id,org_id,product_id,script_id,format,quality_tier,duration_s,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at)
+     VALUES ($1,$2,$3,$4,$5,'talking_head','silent_caption',15,$6,$7,'QUEUED',$8,$8)`,
+    [jobId, ownerId, orgId, productId, scriptId, manifest, productSnapshot, t]
+  );
+  await pool.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId, scriptId]);
+  await pool.query(
+    `INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,created_at)
+     VALUES ($1,$2,$3,50000,'bonus',NULL,$6),($4,$2,$3,-12000,'hold',$5,$6)`,
+    [uid(), ownerId, orgId, uid(), jobId, t]
+  );
+  const { issueToken } = await import("../lib/auth");
+  return {
+    ownerId, intruderId, orgId, productId, jobId, approvedSource, approvedSecondSource, otherSource,
+    approvedBytes, approvedSecondBytes, snapshotRel, snapshotRelSecond,
+    ownerToken: await issueToken(ownerId, `08129${label}01`),
+    intruderToken: await issueToken(intruderId, `08129${label}02`),
+  };
+}
+
+async function hapusFotoOrg(productId: string, target: string, token: string) {
+  const { cookieName } = await import("../lib/auth");
+  const { DELETE: deleteOrgPhoto } = await import("../app/api/dashboard/campaign/product/[id]/photos/route");
+  return deleteOrgPhoto(new Request(`http://localhost/api/dashboard/campaign/product/${productId}/photos`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
+    body: JSON.stringify({ path: target }),
+  }), { params: Promise.resolve({ id: productId }) });
+}
+
+function storageE9(values: Map<string, Buffer>, cascade?: { from: string; to: string }) {
+  const deleteCalls: string[] = [];
+  const materializeCalls: string[] = [];
+  return {
+    deleteCalls, materializeCalls,
+    storage: {
+      async put(key: string, body: Buffer) { values.set(key, Buffer.from(body)); },
+      async delete(key: string) {
+        deleteCalls.push(key); values.delete(key);
+        if (cascade?.from === key) values.delete(cascade.to);
+      },
+      async get(key: string) { const body = values.get(key); return body ? { body: Buffer.from(body), size: body.length } : null; },
+      async stat(key: string) { const body = values.get(key); return body ? { size: body.length } : null; },
+      async materialize(key: string) {
+        materializeCalls.push(key);
+        const body = values.get(key); if (!body) return null;
+        const target = path.join(tmpMaterialize, `${uid()}-${path.basename(key)}`);
+        fs.writeFileSync(target, body); jalurMaterialize.set(target, key); return target;
+      },
+    },
+  };
+}
+
+async function assertNoPaidEffectsPg(jobId: string) {
+  assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM outputs WHERE job_id=$1", [jobId]), 0);
+  assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','regen')", [jobId]), 0);
+  const row = (await pool.query("SELECT provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=$1", [jobId])).rows[0];
+  assert.equal(row.provider_video, null); assert.equal(row.provider_voice, null);
+  assert.equal(row.output_url, null); assert.equal(Number(row.cost_actual_idr), 0);
+}
+
 const hitung = async (sql: string, args: unknown[]) =>
   Number((await pool.query(sql, args)).rows[0].n);
 
@@ -441,6 +542,80 @@ test("W1 C1: foto#1 banner + foto#2 packshot — yang SAMPAI KE PROVIDER foto#2,
   assert.doesNotMatch(amatan.promptText, /NAMA MUTASI|DESC-MUTASI|BRIEF-MUTASI/);
   const durableProduct = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
   assert.equal(durableProduct, productSnapshot, "snapshot metadata W1 ditimpa dari produk mutasi");
+});
+
+test("E9 HTTP DELETE non-approved + resume W1 tetap memakai snapshot job berurutan", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const s = await siapkanJobOrgDenganManifest("stable");
+  const values = new Map<string, Buffer>([
+    [s.approvedSource, s.approvedBytes], [`${s.approvedSource}.meta.json`, Buffer.from("meta")],
+    [s.approvedSecondSource, s.approvedSecondBytes], [`${s.approvedSecondSource}.meta.json`, Buffer.from("meta")],
+    [s.otherSource, Buffer.from("OTHER-E9")], [`${s.otherSource}.meta.json`, Buffer.from("meta")],
+    [s.snapshotRel, s.approvedBytes], [s.snapshotRelSecond, s.approvedSecondBytes],
+  ]);
+  const storage = storageE9(values);
+  const { setMediaStorageForTests } = await import("../lib/storage");
+  setMediaStorageForTests(storage.storage as never);
+  await pasangProviderPengamat();
+
+  const forbidden = await hapusFotoOrg(s.productId, s.approvedSource, s.intruderToken);
+  assert.equal(forbidden.status, 404, "anggota org lain dapat menghapus foto E9");
+  assert.deepEqual(JSON.parse((await pool.query("SELECT images FROM products WHERE id=$1", [s.productId])).rows[0].images), [s.approvedSource, s.approvedSecondSource, s.otherSource]);
+
+  const response = await hapusFotoOrg(s.productId, s.otherSource, s.ownerToken);
+  const body = await response.json() as { images: string[] };
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.images, [s.approvedSource, s.approvedSecondSource]);
+  const authoritative = JSON.parse((await pool.query("SELECT images FROM products WHERE id=$1", [s.productId])).rows[0].images);
+  assert.deepEqual(authoritative, body.images, "response E9 bukan daftar pasca-mutasi otoritatif");
+  assert.equal(values.has(s.otherSource), false);
+  assert.equal(values.has(s.snapshotRel), true, "cleanup E9 menghapus object privat job");
+
+  const { processPostgresJob } = await import("../lib/postgres/worker");
+  await processPostgresJob(s.jobId);
+  assert.equal(amatan.dipanggil, true, "resume W1 tidak mencapai provider observer");
+  assert.equal(amatan.utamaSha, sha256(s.approvedBytes), "resume W1 memilih current list, bukan snapshot job lama");
+  assert.deepEqual(storage.materializeCalls.slice(0, 2), [s.snapshotRel, s.snapshotRelSecond], "urutan manifest W1 berubah saat resume");
+  await assertNoPaidEffectsPg(s.jobId);
+});
+
+test("E9 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider W1", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const s = await siapkanJobOrgDenganManifest("missing");
+  const values = new Map<string, Buffer>([
+    [s.approvedSource, s.approvedBytes], [`${s.approvedSource}.meta.json`, Buffer.from("meta")],
+    [s.approvedSecondSource, s.approvedSecondBytes], [`${s.approvedSecondSource}.meta.json`, Buffer.from("meta")],
+    [s.otherSource, Buffer.from("OTHER-E9")], [`${s.otherSource}.meta.json`, Buffer.from("meta")],
+    [s.snapshotRel, s.approvedBytes], [s.snapshotRelSecond, s.approvedSecondBytes],
+  ]);
+  const storage = storageE9(values, { from: s.approvedSource, to: s.snapshotRel });
+  const { setMediaStorageForTests } = await import("../lib/storage");
+  const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+  setMediaStorageForTests(storage.storage as never);
+  let providerCalls = 0;
+  setVideoProvidersForTests([{ name: "must-not-run-e9", async healthCheck() { return true; }, estimateCost() { return 0; },
+    async generate() { providerCalls++; throw new Error("provider called"); } } as never]);
+
+  const response = await hapusFotoOrg(s.productId, s.approvedSource, s.ownerToken);
+  const body = await response.json() as { images: string[] };
+  assert.equal(response.status, 200);
+  assert.deepEqual(body.images, [s.approvedSecondSource, s.otherSource]);
+  assert.deepEqual(JSON.parse((await pool.query("SELECT images FROM products WHERE id=$1", [s.productId])).rows[0].images), body.images);
+  assert.equal(values.has(s.snapshotRel), false, "fixture tidak menghilangkan object manifest saat cleanup E9");
+
+  const { processPostgresJob } = await import("../lib/postgres/worker");
+  await processPostgresJob(s.jobId);
+  assert.equal(providerCalls, 0, "manifest missing E9 mencapai provider");
+  await assertNoPaidEffectsPg(s.jobId);
+  const audit = (await pool.query("SELECT meta FROM audit_log WHERE entity_id=$1 AND action='job.transition' ORDER BY created_at", [s.jobId])).rows;
+  assert.ok(audit.some((row) => String(row.meta).includes("REF_MISSING")), "alasan truthful REF_MISSING E9 tidak tercatat");
+});
+
+test("guard: bukti C12 memanggil handler E9 dan resume W1 nyata", () => {
+  const source = fs.readFileSync(new URL(import.meta.url), "utf8");
+  assert.match(source, /DELETE: deleteOrgPhoto/);
+  assert.match(source, /await hapusFotoOrg/);
+  assert.match(source, /await processPostgresJob\(s\.jobId\)/);
 });
 
 test("W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images", async (t) => {
