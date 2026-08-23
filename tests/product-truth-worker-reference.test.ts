@@ -413,6 +413,11 @@ test("W2 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING
   assert.deepEqual(spy.materializeCalls, [], "W2 C11: payload hilang tetap dicoba materialize");
   assert.equal(provider.jumlah(), 0, "W2 C11: provider generate sempat dipanggil");
   assertNolEfekSamping(jobId, spy, "W2 C11 REF_MISSING");
+  const job = db.prepare("SELECT state FROM jobs WHERE id = ?").get(jobId) as { state: string };
+  assert.ok(
+    ["FAILED", "REFUNDED"].includes(job.state),
+    `W2 C11: job berakhir ${job.state}, bukan terminal gagal-tertutup FAILED/REFUNDED`
+  );
 
   const kanari = ringkasanKanari();
   assert.equal(kanari.dinilai, 1, "W2 C11: boundary resolver tidak tercatat");
