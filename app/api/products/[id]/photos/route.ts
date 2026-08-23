@@ -2,14 +2,15 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, audit, type ProductRow } from "@/lib/db";
 import { createSignedUrl } from "@/lib/signed-url";
-import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, deleteStoredProductImages, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
-import { pgAudit, pgSetProductImages, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, deleteStoredProductImages, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+import { pgAudit, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { periksaLabelFoto, merekTerdaftar } from "@/lib/media/label-terbaca";
 import { referensiLayak, bacaMetaGambar } from "@/lib/product-images";
+import { appendRetailProductImages, removeRetailProductImage } from "@/lib/retail-product-images";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,11 +27,6 @@ async function ownedProduct(userId: string, productId: string): Promise<{ produc
   // scene + library org). Lihat pastikanBukanProdukOrg.
   pastikanBukanProdukOrg(product);
   return { product, images: JSON.parse(product.images || "[]") as string[] };
-}
-
-async function persistImages(userId: string, productId: string, images: string[]): Promise<void> {
-  if (postgresRuntimeEnabled()) await pgSetProductImages(userId, productId, images);
-  else getDb().prepare("UPDATE products SET images = ? WHERE id = ?").run(JSON.stringify(images), productId);
 }
 
 async function auditBoth(userId: string, action: string, productId: string, meta: Record<string, unknown>): Promise<void> {
@@ -103,7 +99,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
     }
 
-    const added = await saveProductImages(id, blobs, existing.length);
+    // UUID keys avoid object overwrite when two uploads observed the same
+    // starting list length. Publication into the list remains atomic below.
+    const added = await saveUniqueProductImages(id, blobs);
 
     // WIZARD BUTUH MINIMAL SATU FOTO PRODUK YANG LAYAK JADI ACUAN.
     //
@@ -123,9 +121,15 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         "No reference-eligible product photo."
       );
     }
-    const images = [...existing, ...added];
-    await persistImages(user.id, id, images);
-    await auditBoth(user.id, "product.photos_added", id, { added: added.length, total: images.length });
+    const images = await appendRetailProductImages(user.id, id, added, MAX_IMAGES);
+    if (!images) {
+      await deleteStoredProductImages(added);
+      throw ERR.BAD_REQUEST("Daftar fotonya baru saja berubah. Muat ulang lalu coba lagi; maksimal 8 foto.", "Concurrent photo update rejected.");
+    }
+    // Telemetry pasca-commit tidak boleh menghasilkan false 500 dan mengundang
+    // retry yang menggandakan mutasi.
+    void auditBoth(user.id, "product.photos_added", id, { added: added.length, total: images.length })
+      .catch((error) => console.error("[audit] product.photos_added failed:", error));
     return Response.json({
       product_id: id,
       images,
@@ -151,12 +155,13 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const body = await req.json().catch(() => ({}));
     const target = String(body.path ?? "");
     if (!owned.images.includes(target)) throw ERR.NOT_FOUND("Fotonya");
-    const images = owned.images.filter((p) => p !== target);
-    await persistImages(user.id, id, images);
+    const images = await removeRetailProductImage(user.id, id, target);
+    if (!images) throw ERR.NOT_FOUND("Fotonya");
     let cleanupPending = false;
     try { await deleteStoredProductImages([target]); }
     catch { cleanupPending = true; }
-    await auditBoth(user.id, "product.photo_removed", id, { removed: target, total: images.length });
+    void auditBoth(user.id, "product.photo_removed", id, { removed: target, total: images.length })
+      .catch((error) => console.error("[audit] product.photo_removed failed:", error));
     return Response.json({
       product_id: id,
       images,

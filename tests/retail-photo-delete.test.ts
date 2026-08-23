@@ -14,6 +14,8 @@ process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "retail-photo-de
 const { getDb, now, uuid } = await import("../lib/db");
 const { findOrCreateUserByPhone, issueToken, cookieName } = await import("../lib/auth");
 const { setMediaStorageForTests } = await import("../lib/storage");
+const { deleteStoredProductImages } = await import("../lib/product-images");
+const { appendRetailProductImages, removeRetailProductImage } = await import("../lib/retail-product-images");
 const { DELETE: deletePhoto } = await import("../app/api/products/[id]/photos/route");
 type MediaStorage = import("../lib/storage").MediaStorage;
 
@@ -154,6 +156,117 @@ test("E5 DELETE: foto terakhir tetap boleh dihapus menjadi daftar kosong", async
   assert.equal(body.cleanup_failed, false);
   assert.deepEqual(daftarFoto(productId), [], "semantik lama mengizinkan penghapusan foto terakhir");
   assert.deepEqual([...storage.values.keys()], [], "foto terakhir dan sidecar tidak dibersihkan");
+});
+
+test("E5 DELETE paralel: dua target berbeda hilang dari DB sebelum storage dibersihkan", async (t) => {
+  const targetA = "uploads/e5-race/a.webp";
+  const targetB = "uploads/e5-race/b.webp";
+  const lain = "uploads/e5-race/c.webp";
+  const productId = siapkanProduk([targetA, targetB, lain]);
+  const storage = new StorageMemori();
+  for (const key of [targetA, targetB, lain]) {
+    storage.values.set(key, Buffer.from(key));
+    storage.values.set(`${key}.meta.json`, Buffer.from(`meta:${key}`));
+  }
+  const daftarSaatCleanup: string[][] = [];
+  storage.sebelumDelete = () => { daftarSaatCleanup.push(daftarFoto(productId)); };
+  setMediaStorageForTests(storage);
+  t.after(() => setMediaStorageForTests(undefined));
+
+  const [responseA, responseB] = await Promise.all([
+    requestHapus(productId, targetA),
+    requestHapus(productId, targetB),
+  ]);
+
+  assert.equal(responseA.status, 200);
+  assert.equal(responseB.status, 200);
+  assert.deepEqual(daftarFoto(productId), [lain], "stale delete menghidupkan kembali target lain");
+  assert.ok(
+    daftarSaatCleanup.every((images) => !images.includes(targetA) || !images.includes(targetB)),
+    "cleanup storage dimulai sebelum salah satu mutasi DB atomik selesai"
+  );
+  for (const target of [targetA, targetB]) {
+    assert.equal(storage.values.has(target), false);
+    assert.equal(storage.values.has(`${target}.meta.json`), false);
+  }
+  assert.equal(storage.values.has(lain), true);
+  assert.equal(storage.values.has(`${lain}.meta.json`), true);
+});
+
+test("E4/E5 add-delete paralel memakai daftar otoritatif dan tidak resurrect target", async (t) => {
+  const target = "uploads/e5-add-delete/target.webp";
+  const lain = "uploads/e5-add-delete/lain.webp";
+  const added = "uploads/e5-add-delete/uuid-baru.webp";
+  const productId = siapkanProduk([target, lain]);
+  const targetReverse = "uploads/e5-add-delete/target-reverse.webp";
+  const lainReverse = "uploads/e5-add-delete/lain-reverse.webp";
+  const addedReverse = "uploads/e5-add-delete/uuid-reverse.webp";
+  const productIdReverse = siapkanProduk([targetReverse, lainReverse]);
+  const storage = new StorageMemori();
+  for (const key of [target, lain, added, targetReverse, lainReverse, addedReverse]) {
+    storage.values.set(key, Buffer.from(key));
+    storage.values.set(`${key}.meta.json`, Buffer.from(`meta:${key}`));
+  }
+  setMediaStorageForTests(storage);
+  t.after(() => setMediaStorageForTests(undefined));
+
+  const [hasilAdd, hasilDelete] = await Promise.all([
+    appendRetailProductImages(user.id, productId, [added], 8),
+    removeRetailProductImage(user.id, productId, target),
+  ]);
+  const [hasilDeleteReverse, hasilAddReverse] = await Promise.all([
+    removeRetailProductImage(user.id, productIdReverse, targetReverse),
+    appendRetailProductImages(user.id, productIdReverse, [addedReverse], 8),
+  ]);
+
+  assert.ok(hasilAdd, "append atomik ditolak oleh fixture yang masih di bawah batas");
+  assert.ok(hasilDelete, "delete atomik tidak menemukan target fixture");
+  assert.ok(hasilDeleteReverse);
+  assert.ok(hasilAddReverse);
+  assert.deepEqual(daftarFoto(productId), [lain, added], "append stale resurrect target yang sudah dihapus");
+  assert.deepEqual(
+    daftarFoto(productIdReverse),
+    [lainReverse, addedReverse],
+    "hasil berubah saat serialisasi delete menang lebih dulu"
+  );
+  assert.equal(storage.values.has(target), true, "storage dibersihkan sebelum kedua mutasi DB selesai");
+  assert.equal(storage.values.has(targetReverse), true, "storage reverse dibersihkan sebelum kedua mutasi DB selesai");
+  await deleteStoredProductImages([target, targetReverse]);
+  assert.equal(storage.values.has(target), false);
+  assert.equal(storage.values.has(`${target}.meta.json`), false);
+  assert.equal(storage.values.has(added), true);
+  assert.equal(storage.values.has(`${added}.meta.json`), true);
+  assert.equal(storage.values.has(addedReverse), true);
+  assert.equal(storage.values.has(`${addedReverse}.meta.json`), true);
+});
+
+test("E5 DELETE: kegagalan audit pasca-commit tercatat tanpa false 500", async (t) => {
+  const target = "uploads/e5-audit/target.webp";
+  const lain = "uploads/e5-audit/lain.webp";
+  const productId = siapkanProduk([target, lain]);
+  const storage = new StorageMemori();
+  for (const key of [target, `${target}.meta.json`, lain, `${lain}.meta.json`]) {
+    storage.values.set(key, Buffer.from(key));
+  }
+  setMediaStorageForTests(storage);
+  t.after(() => setMediaStorageForTests(undefined));
+  db.exec(`CREATE TRIGGER retail_photo_audit_failure
+    BEFORE INSERT ON audit_log BEGIN SELECT RAISE(FAIL, 'audit sink down'); END`);
+  t.after(() => db.exec("DROP TRIGGER IF EXISTS retail_photo_audit_failure"));
+  const consoleErrorAsli = console.error;
+  const logError: unknown[][] = [];
+  console.error = (...args: unknown[]) => { logError.push(args); };
+  t.after(() => { console.error = consoleErrorAsli; });
+
+  const response = await requestHapus(productId, target);
+  const body = await response.json() as { images: string[]; cleanup_failed: boolean };
+  await new Promise<void>((resolve) => setImmediate(resolve));
+
+  assert.equal(response.status, 200, "audit pasca-commit mengubah delete sukses menjadi false 500");
+  assert.deepEqual(body.images, [lain]);
+  assert.equal(body.cleanup_failed, false);
+  assert.deepEqual(daftarFoto(productId), [lain]);
+  assert.ok(logError.some((args) => String(args[0]).includes("product.photo_removed failed")), "audit gagal tidak tercatat");
 });
 
 after(() => {

@@ -305,13 +305,39 @@ export async function pgListJobs(userId: string) {
   finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 
-/** Update daftar foto produk (append/hapus dari route photos) — owner check di
- * pemanggil via smokeGetProduct. */
-export async function pgSetProductImages(userId: string, productId: string, images: string[]) {
+/** Atomic retail append. The resulting list is derived inside PostgreSQL so a
+ * concurrent delete cannot be resurrected by a stale route snapshot. */
+export async function pgAppendRetailProductImages(userId: string, productId: string, added: string[], maxImages: number) {
   const pool = getPool(url());
   try {
-    await pool.query("UPDATE products SET images=$1 WHERE id=$2 AND user_id=$3", [JSON.stringify(images), productId, userId]);
-  } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
+    const result = await pool.query(
+      `UPDATE products
+       SET images=(COALESCE(NULLIF(images,''),'[]')::jsonb || $3::jsonb)::text
+       WHERE id=$1 AND user_id=$2 AND org_id IS NULL
+         AND jsonb_array_length(COALESCE(NULLIF(images,''),'[]')::jsonb) + $4 <= $5
+       RETURNING images`,
+      [productId, userId, JSON.stringify(added), added.length, maxImages]
+    );
+    return result.rows[0]?.images ? JSON.parse(result.rows[0].images) as string[] : null;
+  } finally { /* shared pool */ }
+}
+
+/** Atomic retail removal paired with pgAppendRetailProductImages. */
+export async function pgRemoveRetailProductImage(userId: string, productId: string, target: string) {
+  const pool = getPool(url());
+  try {
+    const result = await pool.query(
+      `UPDATE products
+       SET images=(SELECT COALESCE(jsonb_agg(value),'[]'::jsonb)::text
+                   FROM jsonb_array_elements_text(COALESCE(NULLIF(images,''),'[]')::jsonb) AS value
+                   WHERE value <> $3)
+       WHERE id=$1 AND user_id=$2 AND org_id IS NULL
+         AND COALESCE(NULLIF(images,''),'[]')::jsonb ? $3
+       RETURNING images`,
+      [productId, userId, target]
+    );
+    return result.rows[0]?.images ? JSON.parse(result.rows[0].images) as string[] : null;
+  } finally { /* shared pool */ }
 }
 
 /** Organization product photo mutation. The org key is part of the UPDATE,

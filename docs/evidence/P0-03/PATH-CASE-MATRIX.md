@@ -157,8 +157,8 @@ mengerjakannya sebagai task terpisah.
 | E1 create manual | PARTIAL | **PARTIAL** | `saveProductImages` → `tulisSidecar` (`lib/product-images.ts:271`). Bukti terbit; gerbang label tidak dipanggil |
 | E2 extract URL | UNGATED | **PARTIAL** | `downloadProductImages` → `tulisSidecar` (`lib/product-image-download.ts:48`). Dulu nol sidecar |
 | E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar, tetapi E3 tetap jalur wajib C2/C3/C5 dan belum melakukan validasi type/brand/category |
-| E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; **lubang 20 Agu MASIH ADA**: gerbang label hanya jalan bila `existing.length === 0` (`route.ts:84`) |
-| E5 DELETE foto retail | UNGATED | **PARTIAL** | sesudah `persistImages`, memanggil `deleteStoredProductImages([target])` best-effort dan mengembalikan `cleanup_failed`; test mengunci urutan persist→cleanup, foto+sidecar target hilang, objek lain utuh, serta kegagalan cleanup tidak menghidupkan entry DB. Daftar baru tetap belum direvalidasi dan identitas lintas mutasi belum dipatok |
+| E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; append daftar atomik dan memakai key UUID agar tidak menimpa upload paralel. **Lubang 20 Agu MASIH ADA**: gerbang label hanya jalan bila `existing.length === 0` (`route.ts:79`) |
+| E5 DELETE foto retail | UNGATED | **PARTIAL** | `removeRetailProductImage` menghitung daftar otoritatif secara atomik, lalu `deleteStoredProductImages([target])` best-effort; `cleanup_failed` terlihat, audit pasca-commit non-fatal, dan test mengunci delete/delete serta add/delete tanpa resurrect. Daftar baru tetap belum direvalidasi dan identitas lintas mutasi belum dipatok |
 | E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. Dulu nol |
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
@@ -300,15 +300,17 @@ TASK=P0-C11-WORKER-BOUNDARY-PROOF-20260823
 
 TASK=P0-E5-RETAIL-DELETE-STORAGE-CLEANUP-20260823
 
-- Setelah daftar foto baru berhasil dipersist, E5 memanggil
+- Setelah daftar foto baru berhasil dipersist secara atomik, E5 memanggil
   `deleteStoredProductImages([target])`, yang menghapus foto dan sidecar sebagai
   satu unit. Semantik kegagalan sama dengan E9: cleanup best-effort,
   `cleanup_failed` terlihat di respons, dan entry DB tidak dikembalikan.
 - `tests/retail-photo-delete.test.ts` membuktikan target+sidecar dibersihkan,
   foto lain tidak disentuh, persist terjadi sebelum cleanup, dan kegagalan
   cleanup tetap ter-log/terlihat tanpa merusak daftar DB; penghapusan foto
-  terakhir tetap menghasilkan daftar kosong seperti kontrak sebelumnya.
-- Focus test → **3/3 PASS**; gabungan focus + product-truth ingestion + storage
-  → **13/13 PASS**; `tsc --noEmit` → **PASS**.
+  terakhir tetap menghasilkan daftar kosong seperti kontrak sebelumnya. Bukti
+  tambahan mengunci race delete/delete dan add/delete, key upload UUID, serta
+  audit pasca-commit yang gagal tanpa false 500.
+- Focus test → **6/6 PASS**; gabungan focus + product-truth ingestion + storage
+  → **16/16 PASS**; `tsc --noEmit` → **PASS**.
 - Gap orphan-cleanup E5 ditutup. E5 tetap **PARTIAL** karena revalidation daftar
   hasil dan identitas persetujuan lintas mutasi (C12) di luar scope task ini.

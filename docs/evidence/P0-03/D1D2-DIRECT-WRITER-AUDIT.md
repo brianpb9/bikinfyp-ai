@@ -8,12 +8,16 @@ Scope ini read-only terhadap kode dan data: tidak ada koneksi database,
 credential, deploy, migrasi, perubahan produk, atau perubahan test. Hanya
 dokumen bukti dan matriks yang berubah.
 
+Follow-up `P0-E5-RETAIL-DELETE-STORAGE-CLEANUP-20260823` kemudian mengganti
+writer retail E4/E5 dengan mutasi atomik; bagian D2 di bawah disinkronkan ke
+exact tree follow-up tanpa mengubah kesimpulan status **PARTIAL**.
+
 ## Kesimpulan
 
 | Writer | Reachability | Status | Kesimpulan |
 |---|---|---|---|
 | D1 `PgProductPersonaScriptRepository` | production/staging, plus verifier disposable | **PARTIAL** | Seluruh create production yang membawa image keys lebih dulu memakai helper yang menerbitkan sidecar. Tetapi writer menerima `images` mentah dan tidak punya gate sendiri; mutation production E3 untuk name/category/brand juga tidak merevalidasi product-truth. |
-| D2 `pgSetProductImages` / `pgAppendOrgProductImages` / `pgRemoveOrgProductImage` | production/staging melalui E4/E5/E8/E9 | **PARTIAL** | Add retail/org menerima keys dari helper bersidecar. Delete retail/org dan append org tetap mewarisi gap E5/E8/E9: tidak ada revalidasi daftar tersisa, dan E8 belum menegakkan brand/reference eligibility lengkap. |
+| D2 `pgAppendRetailProductImages` / `pgRemoveRetailProductImage` / writer org | production/staging melalui E4/E5/E8/E9 | **PARTIAL** | Mutasi daftar retail/org atomik; add menerima keys dari helper bersidecar dan delete membersihkan storage best-effort. Gap E5/E8/E9 tetap: tidak ada revalidasi daftar tersisa, dan E8 belum menegakkan brand/reference eligibility lengkap. |
 
 D1/D2 bukan dead code, bukan smoke-only, dan bukan entrypoint baru yang
 tersembunyi. Semua caller production-nya sudah terpetakan ke E1–E9. Karena
@@ -29,7 +33,8 @@ kasar. `NOT-APPLICABLE` salah karena deployment web mengaktifkan PostgreSQL.
 | D1 `createExtractedProduct` → `insertProduct` | membuat field yang sama | test-only verifier parity; tidak ada wrapper/runtime/migration caller |
 | D1 `updateOwnedProduct` | mutasi `name`, `category`; tidak menyentuh `images`/brand | deployed call-site E3; tidak dilalui runtime smoke; verifier disposable |
 | D1 `setOwnedProductBrand` | mutasi `raw_meta.brand`; tidak menyentuh `images`/name/category | deployed call-site E3; tidak dilalui runtime smoke |
-| D2 `pgSetProductImages` | mengganti seluruh `images` | deployed call-sites E4/E5 berdasarkan inspeksi; tidak dilalui runtime smoke; tanpa jalur CLI langsung |
+| D2 `pgAppendRetailProductImages` | append atomik `images` retail | deployed call-site E4; tidak dilalui runtime smoke; tanpa jalur CLI langsung |
+| D2 `pgRemoveRetailProductImage` | remove atomik dari `images` retail | deployed call-site E5; tidak dilalui runtime smoke; tanpa jalur CLI langsung |
 | D2 `pgAppendOrgProductImages` | append `images` | deployed call-site E8 berdasarkan inspeksi; tidak dilalui runtime smoke; tidak ada CLI/migration caller |
 | D2 `pgRemoveOrgProductImage` | remove dari `images` | deployed call-site E9 berdasarkan inspeksi; tidak dilalui runtime smoke; tidak ada CLI/migration caller |
 
@@ -52,10 +57,10 @@ DEPLOYED REACHABILITY — bukti call-site + manifest RACUN_DB_RUNTIME=postgres
 │  ├─ pgUpdateProduct → D1.updateOwnedProduct       (name/category)
 │  └─ pgSetProductBrand → D1.setOwnedProductBrand  (raw_meta.brand)
 ├─ E4 POST /api/products/[id]/photos
-│  └─ saveProductImages → tulisSidecar → referensiLayak
-│     └─ persistImages → D2.pgSetProductImages
+│  └─ saveUniqueProductImages → tulisSidecar → referensiLayak
+│     └─ D2.pgAppendRetailProductImages
 ├─ E5 DELETE /api/products/[id]/photos
-│  └─ persistImages → D2.pgSetProductImages
+│  └─ D2.pgRemoveRetailProductImage
 │     └─ deleteStoredProductImages([target]) best-effort
 ├─ E6 POST /api/dashboard/campaign/product
 │  ├─ URL: downloadProductImages → tulisSidecar
@@ -110,10 +115,11 @@ Ia tetap tercatat sebagai E7 PARTIAL dan tidak dipindahkan secara keliru ke D1.
 
 ### D2
 
-- `pgSetProductImages` punya satu caller production helper, `persistImages`,
-  yang dipakai E4 dan E5. E4 sudah menerbitkan sidecar dan memanggil
-  `referensiLayak`; E5 memfilter daftar lalu membersihkan objek+sidecar target
-  best-effort, tetapi tidak memeriksa bahwa referensi layak masih tersisa.
+- `pgAppendRetailProductImages` dan `pgRemoveRetailProductImage` masing-masing
+  dipanggil E4/E5 melalui helper lintas-runtime. Keduanya menghitung hasil dari
+  row terkini sehingga add/delete paralel tidak menghidupkan path yang sudah
+  dihapus. E4 memakai key UUID; E5 baru membersihkan foto+sidecar sesudah
+  mutation berhasil. Daftar hasil tetap belum diperiksa punya referensi layak.
 - `pgAppendOrgProductImages` hanya dipanggil E8. Keys datang dari
   `saveUniqueProductImages`, yang menerbitkan sidecar. E8 masih hanya memeriksa
   label foto pertama, tanpa `merekTerdaftar`, dan tidak memanggil
@@ -121,8 +127,9 @@ Ia tetap tercatat sebagai E7 PARTIAL dan tidak dipindahkan secara keliru ke D1.
 - `pgRemoveOrgProductImage` hanya dipanggil E9. Sesudah DB update, route
   menghapus foto+sidecar dengan `deleteStoredProductImages` secara best-effort.
   Daftar hasil tidak direvalidasi agar masih punya referensi layak.
-- Tidak ada CLI/package script yang memanggil ketiga D2 function secara
-  langsung. Test struktural hanya mengunci call E8/E9; ia bukan writer baru.
+- Tidak ada CLI/package script yang memanggil keempat D2 function secara
+  langsung. Test retail memanggil helper lintas-runtime sebagai verifier
+  konkurensi disposable; test struktural E8/E9 juga bukan writer production.
 
 ## Remediasi terkecil yang tercatat, tidak diimplementasikan
 
@@ -178,15 +185,17 @@ Tidak ada caller lain di `app/lib/scripts/tests` selain definisi wrapper.
 
 ```sh
 rg -n --glob '!node_modules/**' --glob '!.git/**' \
-  '\b(pgSetProductImages|pgAppendOrgProductImages|pgRemoveOrgProductImage)\b' \
+  '\b(pgAppendRetailProductImages|pgRemoveRetailProductImage|pgAppendOrgProductImages|pgRemoveOrgProductImage)\b' \
   app lib scripts tests
 ```
 
-Exit `0`. Selain tiga definisi `smoke-runtime.ts:310,319,336`, output hanya:
+Exit `0`. Selain empat definisi writer di `smoke-runtime.ts`, output hanya:
 
-- E4/E5: import `app/api/products/[id]/photos/route.ts:6`, call `:32`;
+- E4/E5: helper `lib/retail-product-images.ts`, dipanggil route retail;
 - E8/E9: import `app/api/dashboard/campaign/product/[id]/photos/route.ts:9`,
   calls `:62,94`;
+- `tests/retail-photo-delete.test.ts`: verifier SQLite disposable untuk race
+  add/delete; bukan entrypoint production;
 - `tests/avatar-picker-unification.test.ts:69-70`, asersi struktural, bukan writer.
 
 ### 4. Penerbit sidecar
@@ -237,7 +246,7 @@ PATCH, photo, DELETE, atau route organisasi. Jadi bukti eksekusinya hanya E1.
 ### 7. Pemeriksaan kontradiksi R2A/B3
 
 ```sh
-rg -n '\bD1\b|\bD2\b|product-persona-script|pgSetProductImages|pgAppendOrgProductImages|pgRemoveOrgProductImage' \
+rg -n '\bD1\b|\bD2\b|product-persona-script|pgAppendRetailProductImages|pgRemoveRetailProductImage|pgAppendOrgProductImages|pgRemoveOrgProductImage' \
   docs/evidence/P0-03/R2A-KONTRAK.md docs/evidence/P0-03/B3-AUDIT-LEGACY.md
 ```
 
