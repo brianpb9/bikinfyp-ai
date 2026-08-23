@@ -27,19 +27,27 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
     || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
   const gateAwaits: ts.AwaitExpression[] = [];
   const persistenceCalls: ts.CallExpression[] = [];
-  const collectCalls = (node: ts.Node): void => {
+  // Gate harus berasal dari control-flow POST sendiri; helper nested tidak
+  // boleh menjadi decoy gate. Persistence sebaliknya dipindai di SELURUH
+  // subtree POST: closure/callback/IIFE yang menyimpan tetap side effect dan
+  // harus menggagalkan cardinality, terlepas dari bentuk eksekusinya.
+  const collectGates = (node: ts.Node): void => {
     if (node !== post && functionBoundary(node)) return;
     if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression)) {
       const callee = node.expression.expression;
       if (ts.isIdentifier(callee) && callee.text === "periksaLabelFoto") gateAwaits.push(node);
     }
+    ts.forEachChild(node, collectGates);
+  };
+  const collectPersistence = (node: ts.Node): void => {
     if (ts.isCallExpression(node)) {
       const callee = node.expression;
       if (ts.isIdentifier(callee) && callee.text === "saveUniqueProductImages") persistenceCalls.push(node);
     }
-    ts.forEachChild(node, collectCalls);
+    ts.forEachChild(node, collectPersistence);
   };
-  collectCalls(post.body);
+  collectGates(post.body);
+  collectPersistence(post.body);
   assert.equal(gateAwaits.length, 1, `${context}: wajib tepat satu awaited label gate aktual di POST`);
   assert.equal(persistenceCalls.length, 1, `${context}: wajib tepat satu persistence call total di POST`);
   const persistenceCall = persistenceCalls[0];
@@ -241,6 +249,20 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
     }`],
     ["unawaited persistence first", `export async function POST() {
       saveUniqueProductImages(id, blobs);
+      if (existing.length === 0 && blobs[0]) {
+        await periksaLabelFoto(tmpFile, product.name);
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["IIFE persistence first", `export async function POST() {
+      (() => { saveUniqueProductImages(id, blobs); })();
+      if (existing.length === 0 && blobs[0]) {
+        await periksaLabelFoto(tmpFile, product.name);
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["synchronous callback persistence first", `export async function POST() {
+      [blobs[0]].forEach(() => { saveUniqueProductImages(id, blobs); });
       if (existing.length === 0 && blobs[0]) {
         await periksaLabelFoto(tmpFile, product.name);
       }
