@@ -205,6 +205,7 @@ export function konteksAdmisi(sumber: SumberAdmisi) {
   const format = genre === "tvc" ? "tvc" : formatRekam === "tvc" ? undefined : formatRekam;
   return {
     contentType,
+    templateId: templateId ?? null,
     hook_family: sumber.hookFamily,
     register: sumber.register,
     segments: sumber.segments,

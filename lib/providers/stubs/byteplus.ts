@@ -175,6 +175,11 @@ export function modeReferensi(
   spec: VisualSpec,
   model: string
 ): "reference_image (r2v)" | "first_frame (i2v)" | "text_to_video" {
+  // Neutral Story Ads deliberately carry no product references. Keep this
+  // explicit policy separate from the legacy empty-spec probe used by the
+  // provider mode decision tests: absence alone is not sufficient evidence
+  // that a normal product render should switch away from its configured mode.
+  if (spec.visualSubjectPolicy === "neutral_story_ads") return "text_to_video";
   const modelDukungR2v = model.includes("dreamina-seedance-2");
   if (modelDukungR2v && spec.preferI2v !== true) return "reference_image (r2v)";
   return "first_frame (i2v)";
@@ -190,6 +195,7 @@ export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string
   // ke BytePlus, API menerima 8 foto referensi tanpa error (bukan API yg
   // membatasi 5, itu batas kode lama).
   const extras = (spec.extraReferenceImagePaths ?? []).slice(0, 7);
+  if (!shot.imageRefPath) return [textItem];
   // r2v adalah BAWAAN untuk model yang mendukungnya. Dulu ia hanya dipakai
   // kalau ada foto tambahan atau referenceOnlyImages dinyalakan — artinya
   // jalur retail (satu foto produk) selalu jatuh ke i2v, yaitu mode yang

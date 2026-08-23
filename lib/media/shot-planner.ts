@@ -1251,6 +1251,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     ), tanpaOrang };
   };
 
+  const neutralStoryAds = isNeutralStoryAdsTemplate(input.ugcTemplate);
   const shots: ShotSpec[] = Array.from({ length: numShots }, (_, i) => {
     const isFirst = i === 0;
     // "Closing beat" cuma dipakai kalau shot terakhir BUKAN shot pertama juga
@@ -1405,7 +1406,6 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // gambarnya. Character-lock disebut ulang tiap shot karena itu yang
     // menjaga wajah tetap sama antar generate (pelajaran dari dokumen TVC).
     const ugcRoles = ugcRolesFor(input.ugcTemplate);
-    const neutralStoryAds = isNeutralStoryAdsTemplate(input.ugcTemplate);
     const noPhysicalProduct = isServiceLike(input.productCategory);
     const neutralVisual = neutralStoryAds || noPhysicalProduct;
     /** Peran template untuk shot ke-i, sebagai OBJEK. Dipisah dari ugcBeat
@@ -1742,7 +1742,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}.${kameraPenulis} ${visualProductDesc}${visualBrandBrief}${beat}${panggung}${kontrak}${blokFormat}${ukuran}`);
 
     if (!withAudio) {
-      return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
+      return {
+        index: i, durationSec: perShot, prompt: base,
+        ...(!neutralStoryAds ? { imageRefPath: input.imageRefPath } : {}),
+      };
     }
 
     // Kunci bahasa 4 lapis. Lapis "perShot" mengikuti siapa yang terdengar:
@@ -1844,7 +1847,8 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // pertama; prompt shot menggambarkan gerakannya, bukan keadaan awalnya.
     const awalShot = segmenMilikShot(i).slice().sort((a, b) => a.start - b.start)[0];
     return {
-      index: i, durationSec: perShot, prompt, imageRefPath: input.imageRefPath,
+      index: i, durationSec: perShot, prompt,
+      ...(!neutralStoryAds ? { imageRefPath: input.imageRefPath } : {}),
       ...(menahanProdukDiShot(i) ? { withholdProduct: true } : {}),
       ...(beatTvc?.tanpaOrang ? { tanpaOrang: true } : {}),
       ...(awalShot?.start_state ? { startState: awalShot.start_state } : {}),
@@ -1914,7 +1918,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     negativePrompt, // tetap mengandung MANDATORY_NEGATIVE_PROMPT dari kategori
     qualityTier: tier,
     generateAudio: withAudio, // konsisten dengan tier — ditegakkan juga di registry
-    extraReferenceImagePaths: input.extraImageRefPaths?.slice(0, 7), // r13: 4->7 (+1 primer = 8 total)
+    ...(!neutralStoryAds && input.extraImageRefPaths?.length
+      ? { extraReferenceImagePaths: input.extraImageRefPaths.slice(0, 7) }
+      : {}), // neutral Story Ads = text-to-video; foto produk tidak boleh bocor
+    ...(neutralStoryAds ? { visualSubjectPolicy: "neutral_story_ads" as const } : {}),
     // Iklan jasa: visual bisnis dipakai sebagai REFERENSI, bukan frame
     // pertama — kalau tidak, hasilnya video tentang logo, bukan orang yang
     // berbicara. Lihat catatan referenceOnlyImages di lib/providers/types.ts.

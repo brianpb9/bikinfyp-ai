@@ -6,6 +6,7 @@ import {
   SCRIPT_CATALOG_AUDIT_FIXTURE,
   adsStayOutcomeNeutral,
   adsVisualContractFindings,
+  adsProviderReferenceFindings,
   adsUnsupportedOutcomeFindings,
   auditProductForTemplate,
   bannedHookBoilerplateStarter,
@@ -34,6 +35,8 @@ import {
 } from "../lib/script-engine/ads-visual-contract";
 import { planShots } from "../lib/media/shot-planner";
 import { getCreatorCategory } from "../lib/personas";
+import { assertVisualSpec } from "../lib/providers/types";
+import { buildTaskContent } from "../lib/providers/stubs/byteplus";
 
 const audit = await generateCatalogScriptAudit();
 const { summary } = audit;
@@ -522,6 +525,13 @@ test("prompt final dan first frame 9 Story Ads x 4 tetap netral tanpa generated 
   assert.equal(summary.targets.adsVisualContractClean, true);
   assert.deepEqual(summary.adsVisualContractRefs, []);
   assert.deepEqual(adsVisualContractFindings(audit.templates), []);
+  assert.equal(summary.targets.adsProviderReferencesClean, true);
+  assert.deepEqual(summary.adsProviderReferenceRefs, []);
+  assert.deepEqual(adsProviderReferenceFindings(audit.templates), []);
+  for (const template of adsTemplates) for (const variant of template.variants) {
+    assert.deepEqual(variant.providerReferencePaths, []);
+    assert.equal(variant.providerContentImageCount, 0);
+  }
 });
 
 test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik maupun layanan", async () => {
@@ -539,7 +549,7 @@ test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik
         assert.ok(segment.action, `${template.id}#${variantIndex} tanpa action`);
         assert.deepEqual(neutralStoryAdsActionContradictions(segment.action!), [], `${template.id}#${variantIndex}: ${segment.action}`);
       }
-      const prompts = planShots({
+      const spec = planShots({
         jobId: `contract-${template.id}-${category}-${variantIndex}`,
         durationSec: template.durationSec, segments: variant.segments,
         category: getCreatorCategory("hijaber")!, productName: product.name,
@@ -547,7 +557,17 @@ test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik
         brandBrief: `show ${product.name} as a readable product name`,
         imageRefPath: "/tmp/contract-product.jpg", qualityTier: template.tier,
         format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
-      }).shots.map((shot) => shot.prompt);
+        extraImageRefPaths: ["/tmp/extra-product-a.jpg", "/tmp/extra-product-b.jpg"],
+      });
+      assert.equal(spec.visualSubjectPolicy, "neutral_story_ads");
+      assert.deepEqual(spec.shots.flatMap((shot) => shot.imageRefPath ? [shot.imageRefPath] : []), []);
+      assert.deepEqual(spec.extraReferenceImagePaths ?? [], []);
+      assert.doesNotThrow(() => assertVisualSpec(spec));
+      for (const shot of spec.shots) {
+        const content = buildTaskContent(spec, shot, "dreamina-seedance-2-0-mini-260615") as Array<{ type?: string }>;
+        assert.equal(content.filter((item) => item.type === "image_url").length, 0, `${template.id}/${category} mengirim image ke provider`);
+      }
+      const prompts = spec.shots.map((shot) => shot.prompt);
       for (const prompt of prompts) {
         assert.deepEqual(neutralStoryAdsPromptContradictions(prompt), [], `${template.id}/${category}#${variantIndex}: ${prompt.slice(0, 300)}`);
         assert.doesNotMatch(prompt, new RegExp(product.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
@@ -563,6 +583,21 @@ test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
   mutation.find((template) => template.templateId === "ads-atap-jebol")!.variants[0].assembledShotDirections[0] =
     "Presenter holding product, label readable, true small size about the width of a hand.";
   assert.ok(adsVisualContractFindings(mutation).length > 0);
+  assert.throws(
+    () => assertVisualSpec({
+      jobId: "mutation", width: 720, height: 1280,
+      shots: [{ index: 0, durationSec: 5, prompt: "blank card", imageRefPath: "/tmp/product.jpg" }],
+      extraReferenceImagePaths: ["/tmp/extra-product.jpg"],
+      negativePrompt: "added text overlay", qualityTier: "high_quality", generateAudio: true,
+      visualSubjectPolicy: "neutral_story_ads",
+    }),
+    /tanpa referensi gambar produk/
+  );
+  const providerMutation = structuredClone(audit.templates);
+  const providerVariant = providerMutation.find((template) => template.templateId === "ads-atap-jebol")!.variants[0];
+  providerVariant.providerReferencePaths = ["/tmp/product.jpg"];
+  providerVariant.providerContentImageCount = 1;
+  assert.ok(adsProviderReferenceFindings(providerMutation).length > 0);
 });
 
 test("mutasi outcome visual mematikan target audit secara end-to-end", async () => {

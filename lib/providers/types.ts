@@ -29,8 +29,9 @@ export interface ShotSpec {
   index: number;
   durationSec: number;
   prompt: string;
-  /** Foto produk asli pengguna sebagai image reference — AI tidak menggambar produk dari nol. */
-  imageRefPath: string;
+  /** Foto produk asli pengguna sebagai image reference. Kosong hanya untuk
+   * kebijakan text-to-video eksplisit seperti neutral Story Ads. */
+  imageRefPath?: string;
   /** Produk TIDAK boleh terlihat di shot ini (dari peran template/rute).
    *
    *  Dibawa sebagai DATA, bukan disimpulkan dari teks prompt: keputusan yang
@@ -94,6 +95,9 @@ export interface VisualSpec {
    *  shot-planner). Dibawa di spec supaya QC-11 memeriksa aturan yang PERSIS
    *  sama dengan yang diperintahkan ke model, bukan tebakannya sendiri. */
   maxPeople?: number;
+  /** Menandai kontrak provider-bound: tidak satu pun referensi produk boleh
+   * ikut ke shot atau daftar ekstra. */
+  visualSubjectPolicy?: "neutral_story_ads";
 }
 
 export interface VideoAsset {
@@ -163,5 +167,14 @@ export function assertVisualSpec(spec: VisualSpec) {
       "DILARANG: prompt ke model video wajib menyertakan negative instruction 'added text overlay' " +
         "(melarang lapisan teks tambahan, BUKAN melarang tulisan yang tercetak di produk)."
     );
+  }
+  if (spec.visualSubjectPolicy === "neutral_story_ads") {
+    const refs = [
+      ...spec.shots.flatMap((shot) => shot.imageRefPath ? [shot.imageRefPath] : []),
+      ...(spec.extraReferenceImagePaths ?? []),
+    ];
+    if (refs.length > 0) {
+      throw new Error("DILARANG: neutral Story Ads harus text-to-video tanpa referensi gambar produk.");
+    }
   }
 }

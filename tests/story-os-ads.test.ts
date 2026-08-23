@@ -15,6 +15,8 @@ import assert from "node:assert/strict";
 process.env.RACUN_NO_DOTENV = "1";
 process.env.DB_PATH = `/tmp/racun-test-storyos-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-storyos-storage-${process.pid}`;
+process.env.SCRIPT_LLM = "1";
+process.env.ANTHROPIC_API_KEY = "kunci-uji-story-ads";
 
 const { GERBANG_SA, periksaStoryOsAds, penegakanSA } = await import("../lib/script-engine/story-os-ads");
 
@@ -144,6 +146,56 @@ test("prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta 
     assert.match(prompt, /plain unprinted colour card or swatch/i);
     assert.match(prompt, /no letters, numbers, logos, labels, prices, product names, categories, or readable marks/i);
     assert.doesNotMatch(prompt, /Product hero|label readable|action with the product|product present in frame 1/i);
+  }
+});
+
+const LIVE_ADS_SAFE = [
+  { block: "HOOK", label: "HOOK", start: 0, end: 3, text: "Eh, kok diam?", start_state: "kartu blank sudah di meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos bergerak sejak frame pertama", product_state: "partial", expression: "curious", audio_note: "", why: "setup conflict", mode: "GENERAL" },
+  { block: "BODY", label: "FRICTION", start: 3, end: 6.5, text: "Nah, kartunya maju.", start_state: "kartu blank dekat tangan", framing: "medium shot", angle: "eye level", camera: "slow push", action: "talent buka kartu warna polos perlahan", product_state: "partial", expression: "focused", audio_note: "", why: "tension rises", mode: "GENERAL" },
+  { block: "BODY", label: "FRICTION", start: 6.5, end: 10, text: "Warnanya berbalik, deh.", start_state: "swatch blank sudah terbuka", framing: "close shot", angle: "eye level", camera: "slow drift", action: "swatch blank dipindahkan mendekati saksi", product_state: "hero", expression: "focused", audio_note: "", why: "tension rises again", mode: "GENERAL" },
+  { block: "BODY", label: "SPIKE", start: 10, end: 12.5, text: "Udah, lihat, ya.", start_state: "kasir berada di samping meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos diletakkan di depan kasir", product_state: "hero", expression: "relieved", audio_note: "", why: "payoff witnessed", mode: "GENERAL", saksi: "kasir off camera" },
+  { block: "CTA", label: "BUTTON", start: 12.5, end: 15, text: "Tadi ragu, cocok nggak? Detailnya ada di bawah ya.", start_state: "kartu blank menghadap kamera", framing: "close shot", angle: "eye level", camera: "static camera", action: "talent menunjuk blok warna pada kartu blank", product_state: "hero", expression: "warm", audio_note: "", why: "button payoff", mode: "GENERAL" },
+];
+
+test("A-03 keras di strict dan light, safe control tetap bebas A-03", async () => {
+  const { keSegmentDraft } = await import("../lib/script-engine/llm");
+  const { validateScript } = await import("../lib/script-engine/validator");
+  const safe = keSegmentDraft(structuredClone(LIVE_ADS_SAFE) as never);
+  const unsafe = structuredClone(safe);
+  unsafe[2].action = "talent menahan produk di depan saksi";
+  const context = {
+    hook_family: "H8", register: "netral", productName: "Kemeja Uji", priceIdr: 189000,
+    productCategory: "fashion", qualityTier: "high_quality", durationSec: 15,
+    contentType: "ads", templateId: "ads-unboxing-pov", segments: safe,
+  } as const;
+  assert.ok(!validateScript(context as never, "strict").errors.some((issue) => issue.rule === "A-03"));
+  for (const mode of ["strict", "light"] as const) {
+    assert.ok(validateScript({ ...context, segments: unsafe } as never, mode).errors.some((issue) => issue.rule === "A-03"));
+  }
+});
+
+test("live LLM Ads menolak aksi produk lalu menerima perbaikan prop netral sebelum provider", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = (async () => {
+    calls++;
+    const segments = structuredClone(LIVE_ADS_SAFE);
+    if (calls === 1) segments[2].action = "talent menahan produk di depan saksi";
+    return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+  }) as never;
+  try {
+    const [result] = await generateScripts({
+      product: { id: "live-ads", name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+      hookFamilies: ["H8"], lockHookFamily: true,
+    });
+    assert.equal(calls, 2, "aksi tidak aman harus memicu repair LLM, bukan diterima");
+    assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    assert.ok(result.segments.every((segment) => !/produk|product/i.test(segment.action ?? "")));
+  } finally {
+    globalThis.fetch = fetchAsli;
   }
 });
 

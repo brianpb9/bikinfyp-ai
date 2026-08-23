@@ -9,6 +9,8 @@ import {
   neutralStoryAdsActionContradictions,
   neutralStoryAdsPromptContradictions,
 } from "./ads-visual-contract";
+import { buildTaskContent } from "../providers/stubs/byteplus";
+import { assertVisualSpec } from "../providers/types";
 
 /**
  * Satu produk dipakai untuk seluruh katalog supaya perbedaan yang dihitung
@@ -151,6 +153,8 @@ export interface CatalogTemplateAudit {
       visualDirection: string | null;
     }>;
     assembledShotDirections: string[];
+    providerReferencePaths: string[];
+    providerContentImageCount: number;
     delivery: {
       mode: "voiced" | "silent";
       allowedTags: string[];
@@ -204,6 +208,7 @@ export interface CatalogScriptAudit {
     unsupportedClaimRefs: CatalogLanguageFinding[];
     adsUnsupportedOutcomeRefs: CatalogLanguageFinding[];
     adsVisualContractRefs: CatalogLanguageFinding[];
+    adsProviderReferenceRefs: CatalogLanguageFinding[];
     creativeAnalysisRefs: CatalogLanguageFinding[];
     semanticRiskRefs: CatalogLanguageFinding[];
     danglingFragmentRefs: CatalogLanguageFinding[];
@@ -258,6 +263,7 @@ export interface CatalogScriptAudit {
       noUnsupportedFactualClaims: boolean;
       adsStayOutcomeNeutral: boolean;
       adsVisualContractClean: boolean;
+      adsProviderReferencesClean: boolean;
       noSpokenCreativeAnalysis: boolean;
       riskyEvidenceTemplatesStayNeutral: boolean;
       noDanglingFragments: boolean;
@@ -354,6 +360,21 @@ export function adsVisualContractFindings(templates: CatalogTemplateAudit[]): Ca
         }];
       }),
     ])
+  );
+}
+
+export function adsProviderReferenceFindings(templates: CatalogTemplateAudit[]): CatalogLanguageFinding[] {
+  return templates.filter((template) => template.group === "ads").flatMap((template) =>
+    template.variants.flatMap((variant) => {
+      const matches = [
+        ...(variant.providerReferencePaths.length ? ["provider-bound reference path present"] : []),
+        ...(variant.providerContentImageCount > 0 ? ["provider content contains image item"] : []),
+      ];
+      return matches.length === 0 ? [] : [{
+        templateId: template.templateId, variantIndex: variant.variantIndex,
+        role: "provider_payload", text: variant.providerReferencePaths.join(", "), matches,
+      }];
+    })
   );
 }
 
@@ -807,7 +828,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
         action: segment.action?.trim() || null,
         visualDirection: segment.visual_direction?.trim() || null,
       }));
-      const assembledShotDirections = template.group === "ads"
+      const visualSpec = template.group === "ads"
         ? planShots({
             jobId: `catalog-audit-${template.id}-${variantIndex}`,
             durationSec: template.durationSec,
@@ -820,8 +841,18 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
             format: template.format,
             ugcTemplate: template.id,
             shotCountOverride: template.shotCount,
-          }).shots.map((shot) => shot.prompt)
+          })
+        : null;
+      if (visualSpec) assertVisualSpec(visualSpec);
+      const assembledShotDirections = visualSpec?.shots.map((shot) => shot.prompt) ?? [];
+      const providerReferencePaths = visualSpec
+        ? [...visualSpec.shots.flatMap((shot) => shot.imageRefPath ? [shot.imageRefPath] : []), ...(visualSpec.extraReferenceImagePaths ?? [])]
         : [];
+      const providerContentImageCount = visualSpec
+        ? visualSpec.shots.reduce((total, shot) => total + buildTaskContent(
+            visualSpec, shot, "dreamina-seedance-2-0-mini-260615"
+          ).filter((item) => (item as { type?: string }).type === "image_url").length, 0)
+        : 0;
       const ttsTexts = variant.segments.flatMap((segment) => segment.tts_text ? [segment.tts_text] : []);
       const allowedTags = ttsTexts.flatMap(allowedDeliveryTags);
       const signature = variant.segments
@@ -846,6 +877,8 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
         scriptNormalized: segments.map((segment) => `${segment.role}:${segment.normalized}`).join("|"),
         segments,
         assembledShotDirections,
+        providerReferencePaths,
+        providerContentImageCount,
         delivery: {
           mode,
           allowedTags,
@@ -1019,6 +1052,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
   const unsupportedClaimRefs = languageFindings(unsupportedFactualClaims);
   const adsUnsupportedOutcomeRefs = adsUnsupportedOutcomeFindings(rawTemplates);
   const adsVisualContractRefs = adsVisualContractFindings(rawTemplates);
+  const adsProviderReferenceRefs = adsProviderReferenceFindings(rawTemplates);
   const creativeAnalysisRefs = languageFindings(spokenCreativeAnalysis);
   const danglingFragmentRefs = languageFindings(danglingFragmentReasons);
   const mechanicalPhraseRefs = rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
@@ -1175,6 +1209,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     noUnsupportedFactualClaims: unsupportedClaimRefs.length === 0,
     adsStayOutcomeNeutral: adsStayOutcomeNeutral(rawTemplates),
     adsVisualContractClean: adsVisualContractRefs.length === 0,
+    adsProviderReferencesClean: adsProviderReferenceRefs.length === 0,
     noSpokenCreativeAnalysis: creativeAnalysisRefs.length === 0,
     riskyEvidenceTemplatesStayNeutral: semanticRiskRefs.length === 0,
     noDanglingFragments: danglingFragmentRefs.length === 0,
@@ -1231,6 +1266,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       unsupportedClaimRefs,
       adsUnsupportedOutcomeRefs,
       adsVisualContractRefs,
+      adsProviderReferenceRefs,
       creativeAnalysisRefs,
       semanticRiskRefs,
       danglingFragmentRefs,

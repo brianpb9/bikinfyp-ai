@@ -26,6 +26,7 @@ const ZOOM_STEP = 0.0018;
 export async function buildPhotoPanVideo(spec: VisualSpec, outDir: string): Promise<VideoGenResult> {
   const assets: VideoAsset[] = [];
   for (const shot of spec.shots) {
+    if (!shot.imageRefPath) throw new Error("photo-pan wajib menerima foto sumber nyata");
     const frames = Math.max(1, Math.round(shot.durationSec * FPS));
     const outPath = path.join(outDir, `photo_pan_${shot.index}.mp4`);
     // Alternate zoom direction per shot so the two clips don't feel identical.

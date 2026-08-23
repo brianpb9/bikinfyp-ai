@@ -32,6 +32,9 @@ export async function renderZoompanShot(opts: {
   costIdr: number;
 }): Promise<VideoAsset> {
   const { shot, outPath, width, height, direction, costIdr } = opts;
+  if (!shot.imageRefPath) {
+    throw new Error("mock video tidak mendukung text-to-video tanpa reference image; gagal tertutup");
+  }
   const fps = opts.fps ?? 25;
   const frames = Math.round(shot.durationSec * fps);
 

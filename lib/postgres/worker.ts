@@ -140,6 +140,9 @@ export function bolehFrameTurunan(input: {
 /** Ganti imageRefPath shot yang perannya menuntut komposisi berbeda dengan
  *  frame pertama buatan. Shot lain dibiarkan memakai foto produk asli. */
 async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: string): Promise<VisualSpec> {
+  // Neutral Story Ads sengaja text-to-video. Membuat frame pertama di sini
+  // akan memasukkan kembali foto produk yang baru saja dibuang planner.
+  if (spec.visualSubjectPolicy === "neutral_story_ads") return spec;
   // Jatahnya dibatasi MARGIN, bukan kebutuhan: frame ~Rp600 sedangkan margin
   // tier bersuara cuma Rp3.198. Yang dapat jatah lebih dulu adalah shot yang
   // WAJIB menahan produk — tanpa frame buatan shot itu mustahil benar.
@@ -150,6 +153,7 @@ async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: str
 
   const shots = await Promise.all(spec.shots.map(async (sh) => {
     if (!dipilih.has(sh.index)) return sh;
+    if (!sh.imageRefPath) throw new Error("frame pertama turunan wajib menerima reference image");
     try {
       const { path: p, biayaIdr } = await generateFirstFrame({
         productPhotoPath: sh.imageRefPath,
@@ -210,6 +214,12 @@ async function siapkanFrameTurunan(
   jobId: string,
   identitas: { kunci: string; deskripsi: string; productName: string; merekEksplisit?: string | null }
 ): Promise<{ spec: VisualSpec; qcF1: RingkasanQcF1[]; biayaIdr: number }> {
+  // Jalur CAST-REF dipilih dari tier/format, sehingga neutral Story Ads bisa
+  // tiba di sini meski planner sudah sengaja membuang semua foto produk.
+  // Jangan membuat paket cast yang tidak akan dipakai atau menyuntikkan ref.
+  if (spec.visualSubjectPolicy === "neutral_story_ads") {
+    return { spec, qcF1: [], biayaIdr: 0 };
+  }
   const { paketCastRefTersimpan, turunkanFrameAwalTerperiksa } = await import("../media/cast-ref");
   const qcF1: RingkasanQcF1[] = [];
   let biaya = 0;
@@ -230,6 +240,7 @@ async function siapkanFrameTurunan(
   // 429, ikut mematikan TTS produksi (catatan spike 17 Agu).
   const shots: typeof spec.shots = [];
   for (const sh of spec.shots) {
+    if (!sh.imageRefPath) throw new Error("frame cast turunan wajib menerima reference image");
     const productState = harusMenahanProduk(sh) ? "partial" : "hero";
     try {
       const hasil = await turunkanFrameAwalTerperiksa({

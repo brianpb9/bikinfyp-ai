@@ -11,6 +11,10 @@ import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
 import { periksaStoryOsAds } from "./story-os-ads";
 import { pilihTokenMerek } from "../merek";
 import { tutupiNama } from "../media/pemicu-filter";
+import {
+  isNeutralStoryAdsTemplate,
+  neutralStoryAdsActionContradictions,
+} from "./ads-visual-contract";
 
 export interface ScriptToValidate {
   hook_family: string;
@@ -66,6 +70,8 @@ export interface ScriptToValidate {
    * keranjang. Jadi setiap naskah Ads yang BENAR ditolak gerbang, dan yang
    * lolos justru yang salah genre. */
   contentType?: "affiliate" | "ads";
+  /** Identitas template kanonik; visual contract Ads tidak boleh ditebak dari format. */
+  templateId?: string | null;
   /** Level hook naskah — dipakai S-05 (STANDAR 10/10 baris 5). */
   hookLevel?: string | null;
   /** Kategori produk — S-05 memakainya untuk mengenali kategori jenuh. */
@@ -434,7 +440,7 @@ function wordCount(text: string): number {
  */
 export const SELALU_KERAS = new Set([
   "L-03", "L-05", "L-10", "L-11", "L-13", "L-14", "L-19", "L-21",
-  "T-01", "T-02", "T-03", "A-01", "A-02", "L-22",
+  "T-01", "T-02", "T-03", "A-01", "A-02", "A-03", "L-22",
   // STANDAR 10/10 (knowledge/rules/standard-10.md). Ketiganya aturan MUTU yang
   // bisa diperiksa mesin, dan Brian menyebutnya syarat render — bukan saran.
   "S-04", "S-05", "S-09", "L-23",
@@ -1049,6 +1055,23 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     { contentType: script.contentType ?? null, durationSec: script.durationSec ?? null }
   )) {
     push(false, { rule: t.gerbang, message_id: t.pesan });
+  }
+
+  // A-03: action hasil LLM benar-benar disisipkan verbatim ke prompt provider.
+  // Karena itu instruksi Story Ads yang menyentuh produk nyata bukan masalah
+  // copy, melainkan pelanggaran boundary piksel dan harus keras di semua gate.
+  if (script.contentType === "ads" && isNeutralStoryAdsTemplate(script.templateId)) {
+    for (const segment of script.segments) {
+      if (!segment.action) continue;
+      const contradictions = neutralStoryAdsActionContradictions(segment.action);
+      if (contradictions.length > 0) {
+        push(true, {
+          rule: "A-03",
+          segment: segment.role,
+          message_id: `Aksi visual Story Ads wajib memakai kartu/swatch/prop netral blank: ${contradictions.join(", ")}.`,
+        });
+      }
+    }
   }
 
   return { passed: errors.length === 0, errors, warnings, checked_at: new Date().toISOString() };

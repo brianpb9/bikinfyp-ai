@@ -55,6 +55,8 @@ export const SkemaSegmen = z.object({
   // hanya karena field ini tidak ditulis. Membuang naskah bagus karena label
   // kosmetik adalah biaya yang dibayar dua kali tanpa dapat apa-apa.
   mode: z.string().default(""),
+  /** Story Ads: saksi SPIKE wajib selamat sampai validator. */
+  saksi: z.string().min(3).optional(),
 });
 
 export const SkemaNaskah = z.object({
@@ -328,7 +330,9 @@ export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; duratio
 }
 
 function blokTugas(r: PermintaanNaskah): string {
-  const jumlah = r.durationSec <= 15 ? 3 : r.durationSec <= 20 ? 4 : r.durationSec <= 30 ? 5 : 6;
+  const jumlah = r.contentType === "ads"
+    ? 5 // HOOK + 2×FRICTION + SPIKE + BUTTON adalah bentuk minimum Story OS
+    : r.durationSec <= 15 ? 3 : r.durationSec <= 20 ? 4 : r.durationSec <= 30 ? 5 : 6;
   // TIGA genre, bukan dua.
   //
   // Sampai render nyata 18 Agu, TVC tidak punya cabang di sini — jadi penulis
@@ -494,6 +498,8 @@ export function keSegmentDraft(s: SegmenLlm[]): SegmentDraft[] {
     action: x.action,
     expression: x.expression,
     mode: x.mode,
+    label: x.label as SegmentDraft["label"],
+    ...(x.saksi ? { saksi: x.saksi } : {}),
     product_state: x.product_state,
     start_state: x.start_state,
   })) as SegmentDraft[];
