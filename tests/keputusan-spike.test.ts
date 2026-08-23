@@ -7,20 +7,102 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
+import ts from "typescript";
 
 const baca = (rel: string) => fs.readFileSync(path.join(process.cwd(), rel), "utf8");
 
 function assertLabelGateBeforePersistence(source: string, context: string) {
-  // Cocokkan CALL yang benar-benar di-await, bukan nama pada import, komentar,
-  // atau string. Guard lama menangkap import `periksaLabelFoto` lalu mencari
-  // persistence API yang sudah pensiun, sehingga tidak lagi menguji urutan
-  // production yang diklaimnya.
-  const gateCalls = [...source.matchAll(/\bawait\s+periksaLabelFoto\s*\(/g)];
-  const persistenceCalls = [...source.matchAll(/\bawait\s+saveUniqueProductImages\s*\(/g)];
+  const ast = ts.createSourceFile(`${context}.ts`, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
+  const posts = ast.statements.filter((statement): statement is ts.FunctionDeclaration =>
+    ts.isFunctionDeclaration(statement)
+    && statement.name?.text === "POST"
+    && statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) === true
+  );
+  assert.equal(posts.length, 1, `${context}: wajib tepat satu exported POST handler`);
+  const post = posts[0];
+  assert.ok(post.body, `${context}: exported POST wajib punya body`);
+
+  const gateCalls: ts.CallExpression[] = [];
+  const persistenceCalls: ts.CallExpression[] = [];
+  const functionBoundary = (node: ts.Node) =>
+    ts.isFunctionDeclaration(node) || ts.isFunctionExpression(node) || ts.isArrowFunction(node)
+    || ts.isMethodDeclaration(node) || ts.isGetAccessorDeclaration(node) || ts.isSetAccessorDeclaration(node);
+  const constantBoolean = (expression: ts.Expression): boolean | null => {
+    while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
+    if (expression.kind === ts.SyntaxKind.TrueKeyword) return true;
+    if (expression.kind === ts.SyntaxKind.FalseKeyword) return false;
+    if (ts.isNumericLiteral(expression)) return Number(expression.text) !== 0;
+    if (ts.isStringLiteral(expression)) return expression.text.length > 0;
+    return null;
+  };
+
+  const visitNode = (node: ts.Node): void => {
+    if (node !== post && functionBoundary(node)) return; // fungsi lokal bukan control flow POST
+    if (ts.isBlock(node)) { visitBlock(node); return; }
+    if (ts.isStatement(node)) { visitStatement(node); return; }
+    if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression)) {
+      const callee = node.expression.expression;
+      if (ts.isIdentifier(callee) && callee.text === "periksaLabelFoto") gateCalls.push(node.expression);
+      if (ts.isIdentifier(callee) && callee.text === "saveUniqueProductImages") persistenceCalls.push(node.expression);
+    }
+    ts.forEachChild(node, visitNode);
+  };
+  const visitBlock = (block: ts.Block): void => {
+    let reachable = true;
+    for (const statement of block.statements) {
+      if (!reachable) break;
+      reachable = visitStatement(statement);
+    }
+  };
+  const visitStatement = (statement: ts.Statement): boolean => {
+    if (ts.isFunctionDeclaration(statement)) return true;
+    if (ts.isBlock(statement)) { visitBlock(statement); return true; }
+    if (ts.isIfStatement(statement)) {
+      visitNode(statement.expression);
+      const known = constantBoolean(statement.expression);
+      if (known !== false) visitStatement(statement.thenStatement);
+      if (known !== true && statement.elseStatement) visitStatement(statement.elseStatement);
+      return true;
+    }
+    if (ts.isWhileStatement(statement)) {
+      visitNode(statement.expression);
+      if (constantBoolean(statement.expression) !== false) visitStatement(statement.statement);
+      return true;
+    }
+    if (ts.isForStatement(statement)) {
+      if (statement.initializer) visitNode(statement.initializer);
+      if (statement.condition) visitNode(statement.condition);
+      if (!statement.condition || constantBoolean(statement.condition) !== false) visitStatement(statement.statement);
+      if (statement.incrementor) visitNode(statement.incrementor);
+      return true;
+    }
+    if (ts.isForInStatement(statement) || ts.isForOfStatement(statement)) {
+      visitNode(statement.initializer); visitNode(statement.expression); visitStatement(statement.statement);
+      return true;
+    }
+    if (ts.isDoStatement(statement)) {
+      visitStatement(statement.statement); visitNode(statement.expression);
+      return true;
+    }
+    if (ts.isTryStatement(statement)) {
+      visitBlock(statement.tryBlock);
+      if (statement.catchClause) visitBlock(statement.catchClause.block);
+      if (statement.finallyBlock) visitBlock(statement.finallyBlock);
+      return true;
+    }
+    if (ts.isReturnStatement(statement) || ts.isThrowStatement(statement)) {
+      if (statement.expression) visitNode(statement.expression);
+      return false;
+    }
+    ts.forEachChild(statement, visitNode);
+    return true;
+  };
+
+  visitBlock(post.body);
   assert.equal(gateCalls.length, 1, `${context}: wajib tepat satu call label gate aktual`);
   assert.equal(persistenceCalls.length, 1, `${context}: wajib tepat satu call persistence aktual`);
   assert.ok(
-    gateCalls[0].index < persistenceCalls[0].index,
+    gateCalls[0].getStart(ast) < persistenceCalls[0].getStart(ast),
     `${context}: gerbang label harus mendahului persistence`
   );
 }
@@ -93,18 +175,33 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   assert.match(enterprise, /periksaLabelFoto\(tmpFile, owned\.product\.name\)/);
   assertLabelGateBeforePersistence(enterprise, "E8 Enterprise");
 
-  // Counterexample: guard harus benar-benar merah bila persistence kelak
-  // dipindah ke depan validasi. Ini mencegah regresi ke assertion yang sekadar
-  // menemukan dua nama simbol tanpa membuktikan urutan call production.
-  assert.throws(
-    () => assertLabelGateBeforePersistence(`
-      async function upload() {
-        await saveUniqueProductImages(id, blobs);
-        await periksaLabelFoto(tmpFile, product.name);
-      }
-    `, "counterexample persistence-first"),
-    /gerbang label harus mendahului persistence/
-  );
+  const ditolak = [
+    ["comment", `export async function POST() {
+      // await periksaLabelFoto(tmpFile, product.name);
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["string", `export async function POST() {
+      const decoy = "await periksaLabelFoto(tmpFile, product.name)";
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["unrelated function", `async function helper() { await periksaLabelFoto(tmpFile, product.name); }
+    export async function POST() { await saveUniqueProductImages(id, blobs); }`],
+    ["unreachable block", `export async function POST() {
+      if (false) { await periksaLabelFoto(tmpFile, product.name); }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["persistence first", `export async function POST() {
+      await saveUniqueProductImages(id, blobs);
+      await periksaLabelFoto(tmpFile, product.name);
+    }`],
+  ] as const;
+  for (const [judul, source] of ditolak) {
+    assert.throws(
+      () => assertLabelGateBeforePersistence(source, `counterexample ${judul}`),
+      /call label gate aktual|gerbang label harus mendahului persistence/,
+      `${judul} tidak boleh memenangkan structural guard`
+    );
+  }
 });
 
 test("ketidakcocokan nama adalah peringatan, bukan penolakan", () => {
