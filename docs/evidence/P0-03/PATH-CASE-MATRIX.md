@@ -5,9 +5,9 @@ BRANCH=work/p0-product-truth-20260820
 TIMESTAMP=2026-08-20
 METODE=call-site search read-only (Route Mapper subagent), BUKAN daftar handover
 STATUS (20 Agu, historis)=inventaris SELESAI · red-before tests BELUM DITULIS
-STATUS (23 Agu)=**direkonsiliasi terhadap e8a00a5 — lihat bagian E di bawah.**
-Kolom Status pada tabel C sudah diperbarui; bagian A dan D di bawah dibiarkan
-apa adanya sebagai catatan 20 Agu, dan dikoreksi di E.1 dan E.3.
+STATUS (24 Agu current)=**lihat E.29–E.34 untuk closure E1/C3/C8/new admission.**
+Bagian A dan D adalah inventaris historis 20 Agu; kolom C menyatakan aggregate
+case dan harus dibaca bersama closure current di E.29–E.34, bukan sendiri.
 
 ## A. Inventaris entrypoint — dari call-site nyata
 
@@ -25,15 +25,15 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 | E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | mengubah `name`, `price`, **`category`**, visual desc, `brand_brief`, promo, claims (:113 dst) TANPA revalidasi. TIDAK menyentuh `raw_meta.brand`. Defect kedua: jalur org TIDAK PERNAH mengisi `raw_meta.brand`, padahal worker hanya mempercayai field itu (`merekTepercaya`) |
 | E8 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:26` | POST add-photo (org) | **PARTIAL** | Setiap upload baru melewati `periksaLabelFoto` + `merekTerdaftar` sebelum storage/list/audit, termasuk saat produk sudah punya foto; sesudah ingestion, `referensiLayak([...existing, ...added])` wajib menemukan minimal satu acuan. Append PostgreSQL memakai CAS exact ordered snapshot existing yang dinilai. OCR fail-open dan gap lain tetap terbuka |
 | E9 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:84` | DELETE foto (org) | **UNGATED** | tidak ada |
-| W1 | `lib/postgres/worker.ts:321-323` | worker PG pilih `images[0]` | **UNGATED** | tidak ada; `personSafeReferencePhotos` (:338) hanya soal orang |
-| W2 | `lib/worker.ts:104-109` | worker inline/SQLite pilih `images[0]` | **UNGATED** | **anggap REACHABLE sampai ditutup struktural**: `enqueueJob`/`enqueueJobResume` (`lib/job-queue.ts:67`) masih bisa memilih inline tanpa memanggil `assertQueueConfiguration`. Wajib diuji C1, C3, C8 |
-| A1 | `app/api/jobs/route.ts:29,62-67` | admission retail + payload | **UNGATED** | payload tanpa validasi gambar |
-| A2 | `app/api/dashboard/matrix/route.ts:93,106` | admission matrix | **UNGATED** | cek gambar hanya "ada/tidak" |
-| A3 | `app/api/dashboard/campaign/generate/route.ts:44-49` | generate campaign | **UNGATED** | cek `length===0` saja |
-| A4 | `lib/dashboard/render-cell.ts:158-160,225` | INSERT QUEUED + enqueue | **UNGATED** | tidak ada |
-| A5 | `app/api/dashboard/campaign/confirm/route.ts:45` | confirm campaign → enqueue | **UNGATED** | tidak ada |
-| A6 | `app/api/dashboard/campaign/job/[jobId]/route.ts` | approve / regenerate job | **PARTIAL** | manifest job immutable diverifikasi sebelum approve/regen charge/task reset/enqueue; admission gate umum A1..A7 belum diimplementasikan, walau T43 technical authority kini ada |
-| A7 | `app/api/scripts/generate/route.ts` | generate naskah (provider-consuming, BUKAN admission render berbayar) | **UNGATED** | tidak ada |
+| W1 | `lib/postgres/worker.ts:321-323` | worker PG | **PARTIAL** | manifest/evidence gate dan explicit C3 brand mismatch diterapkan pre-provider; null/unreadable OCR dan aggregate cases lain tetap partial |
+| W2 | `lib/worker.ts:104-109` | worker inline/SQLite | **PARTIAL** | manifest/evidence gate dan explicit C3 brand mismatch diterapkan pre-provider; null/unreadable OCR dan aggregate cases lain tetap partial |
+| A1 | `app/api/jobs/route.ts:29,62-67` | admission retail + payload | **PARTIAL** | E.31 bounded evidence lease accepted pre-provider/setup; case non-C8 tetap partial |
+| A2 | `app/api/dashboard/matrix/route.ts:93,106` | admission matrix | **PARTIAL** | E.31 bounded evidence lease accepted pre-provider/setup; duplicate replay dipertahankan; case non-C8 tetap partial |
+| A3 | `app/api/dashboard/campaign/generate/route.ts:44-49` | generate campaign | **PARTIAL** | E.31 bounded evidence lease accepted pre-provider/setup; case non-C8 tetap partial |
+| A4 | `lib/dashboard/render-cell.ts:158-160,225` | INSERT QUEUED + enqueue | **PARTIAL** | durable manifest boundary dan E.31 C8 counterexamples accepted; case non-C8 tetap partial |
+| A5 | `app/api/dashboard/campaign/confirm/route.ts:45` | confirm campaign → enqueue | **PARTIAL** | E.31 bounded evidence lease accepted pre-provider/setup; case non-C8 tetap partial |
+| A6 | `app/api/dashboard/campaign/job/[jobId]/route.ts` | approve / regenerate job | **PARTIAL** | manifest immutable dan E.31 evidence lease accepted sebelum charge/reset/enqueue; case non-C8 tetap partial |
+| A7 | `app/api/scripts/generate/route.ts` | generate naskah (provider-consuming, BUKAN admission render berbayar) | **PARTIAL** | E.31 bounded evidence lease accepted pre-provider/setup; case non-C8 tetap partial |
 | D1 | `lib/postgres/product-persona-script.ts:57,112,134-136,255,264` | penulis DB produk/brand | **UNGATED** | tidak ada |
 | D2 | `lib/postgres/smoke-runtime.ts:310,319,336` | set/append/remove images | **UNGATED** | tidak ada |
 
@@ -82,12 +82,12 @@ bagian E.2, dan arti tiap status di E.0.
 |---|---|---|---|---|---|
 | C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,A1..A5,**A6**,W1,W2 | **produk DITERIMA**; foto#1 berstatus promotional; approved reference WAJIB foto#2 + hash-nya. **A6 (approve/regenerate) wajib MEMPERTAHANKAN snapshot** — ia membangunkan worker lagi. `REF_PROMOTIONAL` adalah STATUS FOTO, bukan penolakan produk | `REF_PROMOTIONAL` (status) | **PARTIAL** |
 | C2 | Toothpaste diberi kategori facewash | E1,E3,E6,E7,A1..A4 | reject sebelum spend | `TYPE_MISMATCH` (**usul**) | **BLOCKED** |
-| C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` (**canonical E4/E8; enforcement lain partial**) | **PARTIAL** |
+| C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` (**canonical dan explicit-false enforcement accepted di seluruh jalur ini; null/unreadable policy terpisah**) | **PARTIAL aggregate** |
 | C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` (**canonical E4/E8; enforcement lain partial**) | **PARTIAL** |
 | C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` (**usul**) | **BLOCKED** |
 | C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` (**usul**) | **BLOCKED** |
 | C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` (**canonical; coverage partial**) | **PARTIAL** |
-| C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` (**canonical; coverage partial**) | **PARTIAL** |
+| C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` (**canonical; A1–A7/new admission accepted E.31**) | **PARTIAL aggregate; admission slice PASS** |
 | C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` (**usul**) | **PARTIAL** |
 | C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` (**usul**) | **PARTIAL** |
 | C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` (**canonical**) | **PASS** |
@@ -167,9 +167,9 @@ mengerjakannya sebagai task terpisah.
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`). **Gap label/brand ditutup 24 Agu:** setiap upload baru memakai `periksaLabelFoto` + `merekTerdaftar(owned.product)` sebelum persistence, bukan hanya foto pertama. **Gap rollback C7 ditutup 24 Agu:** resolver menilai existing+added dan append mengikat exact ordered existing snapshot lewat optimistic CAS. Tetap PARTIAL karena OCR fail-open dan gap lain pada matriks |
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Test HTTP→resume W1 membuktikan isolasi org, daftar otoritatif, dan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru belum direvalidasi agar tetap punya foto layak |
-| W1 worker PG | UNGATED | **PARTIAL** | Resolver, manifest job atomik/idempoten, reuse lintas invocation, verifikasi bytes di boundary provider/output, C1/C8/C11, dan legacy fail-closed dibuktikan di PostgreSQL disposable. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
-| W2 worker inline | UNGATED | **PARTIAL** | Kontrak manifest/reuse/verifikasi/legacy yang sama dibuktikan langsung pada worker SQLite; C8/C11 tetap memakai observer provider. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
-| A1..A7 admission | UNGATED | **BLOCKED (NOT IMPLEMENTED; T43 AUTHORIZED 24 AUG)** | Transcript §4 menguji tujuh path literal: semuanya `ADA`, `gerbang_bukti=0`, `exit=1`, termasuk A4 dan A7. Founder authority untuk bounded technical enforcement/admission kini ada; implementasi dan exact-SHA proof belum ada |
+| W1 worker PG | UNGATED | **PARTIAL** | Resolver, manifest job atomik/idempoten, reuse lintas invocation, verifikasi bytes di boundary provider/output, C1/C8/C11, explicit C3 brand mismatch, dan legacy fail-closed dibuktikan di PostgreSQL disposable. Snapshot field produk non-referensi dan aggregate cases lain tetap partial |
+| W2 worker inline | UNGATED | **PARTIAL** | Kontrak manifest/reuse/verifikasi/legacy dan explicit C3 brand mismatch yang sama dibuktikan langsung pada worker SQLite; C8/C11 tetap memakai observer provider. Snapshot field produk non-referensi dan aggregate cases lain tetap partial |
+| A1..A7 admission | UNGATED | **PASS untuk C8/new admission** | Accepted E.31: tujuh path mengambil bounded product-evidence lease sebelum provider/setup effect, fail-closed pada evidence invalid, mempertahankan duplicate replay, dan punya exact-SHA counterexamples. Ini tidak memilih treatment legacy atau OCR/promo policy |
 | D1 penulis produk/brand | UNGATED | **PARTIAL** | Reachable production melalui E1/E2/E3/E6. Semua create yang membawa image keys didahului helper bersidecar; direct caller lain hanya verifier disposable. Namun writer menerima `images` mentah dan mutation E3 name/category/brand tidak merevalidasi product-truth. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
 | D2 penulis daftar images | UNGATED | **PARTIAL** | Reachable production hanya melalui E4/E5/E8/E9. Add menerima keys dari helper bersidecar; delete retail/org sudah membersihkan storage, tetapi revalidation E5/E9 dan gerbang E8 tetap belum lengkap. Tidak ada CLI/direct caller tersembunyi. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
 
@@ -188,14 +188,14 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 |---|---|---|
 | C1 | **PARTIAL** | W1/W2 memilih packshot sah beserta hash lalu mematok manifest ordered `{rel,sha256,versiBukti}` tepat sekali; A6 approve/regenerate memakai manifest itu dan tidak memilih ulang. Tetap PARTIAL karena jalur E/A lain pada baris C1 belum seluruhnya dicakup |
 | C2 | **BLOCKED** | Diblokir implementasi lokal: `TYPE_MISMATCH` dan validasi terkait belum ada di kode mana pun; tidak ada penghalang eksternal |
-| C3 | **PARTIAL** | E1, E4, dan E8 menolak `cocokMerek === false` untuk setiap blob baru sebelum persistence dengan canonical `BRAND_MISMATCH` (HTTP 400, `retryable:false`, alasan Indonesia dari classifier atau fallback actionable). E1 memakai trusted brand dari raw metadata yang sama melalui `merekTerdaftar`; E8 memakai `merekTerdaftar(owned.product)`. Cakupan belum lengkap: W1/W2 tidak menegakkan brand mismatch |
+| C3 | **PARTIAL** | E1, E4, E8, W1, dan W2 menolak explicit `cocokMerek === false` dengan canonical `BRAND_MISMATCH` sebelum persistence/provider effect; W1/W2 closure accepted di E.30. Aggregate tetap PARTIAL untuk jalur lain dan null/unreadable OCR policy; bukan karena explicit worker mismatch belum diimplementasikan |
 | C4 | **PARTIAL** | E1, E4, dan E8 menolak `!label.terbaca` untuk setiap blob baru sebelum persistence dengan canonical `LABEL_UNREADABLE` (HTTP 400, `retryable:false`, alasan Indonesia dari OCR atau fallback actionable). Cakupan belum lengkap: kebijakan OCR execution error tetap fail-open |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E1, E4, dan E8 kini fail-closed sebelum persistence/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. Cakupan kasus lain pada matriks belum lengkap; karena itu C7 tetap PARTIAL |
-| C8 | **PARTIAL** | E1 actual POST menolak sidecar hilang/korup dan hash mismatch melalui canonical resolver sebelum SQLite/PG persistence, dengan exact rollback bytes+sidecar; W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 memasang observer provider dan counterexample positif. C8 tetap belum tertutup pada seluruh jalur yang diwajibkan matriks |
+| C8 | **PASS untuk new admission** | E1 actual POST, W1/W2, dan accepted E.31 A1–A7 menolak evidence hilang/korup/hash mismatch sebelum persistence/provider/setup effect, dengan rollback/observer/counterexample langsung. Legacy treatment tetap dicatat terpisah pada C10/C12 |
 | C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata core worker tertutup: W1/W2 memakai admission manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, claims, dan sell price. Actual E3→W2 serta E7→W1 membuktikan prompt tetap admission-bound tetapi rendered promo before/deadline dibaca live; frame W2 gain/removal dan W1 change diterima di E.23. Stock juga live tetapi inert di formatter. Tetap PARTIAL sampai Founder memilih `PROMO_POLICY=SNAPSHOT` atau `LIVE_INTENTIONAL`; `SNAPSHOT_IMMUTABLE` tetap proposal-only |
-| C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada. T43 mengizinkan enforcement teknis bounded, tetapi treatment data legacy tidak ditentukan. Secara terpisah, angka media legacy belum diketahui karena R2 staging berpasangan belum tersedia |
+| C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`), dan E.31 menutup fail-closed A1–A7 untuk new admission. Treatment data legacy tetap belum ditentukan; angka media legacy juga belum diketahui karena R2 staging berpasangan belum tersedia |
 | C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
 | C12 | **PARTIAL** | Gap local admission-time identity untuk job baru sudah tertutup: tiga production admission memasang ordered job-owned manifest sebelum job/hold/queue visible; known non-winner cleanup dan successful-retry surplus pruning mempertahankan winner/ambiguity. W1/W2 tidak membaca ulang daftar, dan E5/E9→resume memakai bytes admission. Agregat tetap PARTIAL karena legacy fallback/treatment dan reason code usulan `REFERENCE_IDENTITY_CHANGED` belum canonical; tidak diperlukan task implementasi admission-manifest baru |
 | C13 | **PARTIAL** | Kontrol positif W1 (`tests/pg-product-truth-w1.test.ts:740`) dan W2 (`tests/product-truth-worker-reference.test.ts:638`) membuktikan worker menerima bukti sah. Itu belum membuktikan produk valid diterima melalui seluruh E1..E9 dan A1..A7 yang diwajibkan baris ini |
@@ -230,11 +230,10 @@ dikerjakan di slice ini:**
    baris C6 mengharapkan fail-closed. **Salah satu dari keduanya harus
    dikoreksi** — matriks atau kodenya; itu keputusan produk, bukan pembersihan
    dokumen.
-4. C2/C5 belum punya reason code maupun jalur penegakan. **Sub-gap reason code
-   C3/C4 sudah DITUTUP di gate E4/E8:** keduanya memakai canonical
-   `BRAND_MISMATCH`/`LABEL_UNREADABLE`. Agregat C3/C4 tetap PARTIAL karena E1
-   belum menjalankan gate, W1/W2 belum menegakkan brand mismatch, dan OCR error
-   tetap fail-open, seperti dirinci E.16.
+4. C2/C5 belum punya reason code maupun jalur penegakan. **Explicit C3 sudah
+   DITUTUP di E1/E4/E8 dan W1/W2:** semuanya memakai canonical
+   `BRAND_MISMATCH`. Agregat C3/C4 tetap PARTIAL untuk jalur lain dan karena OCR
+   error/null tetap fail-open, seperti dirinci E.30/E.31.
 5. Snapshot metadata job menutup pembacaan ulang core prompt W1/W2. Rendered
    frame proof E.23 menunjukkan promo before/deadline tetap live dan stock live
    tetapi inert; perubahan berikutnya menunggu pilihan Founder
@@ -244,10 +243,10 @@ dikerjakan di slice ini:**
    successful-retry pruning dibuktikan. C12 agregat tetap PARTIAL hanya untuk
    legacy/treatment dan reason-code authority, bukan karena implementasi
    admission manifest masih diperlukan.
-7. C7 belum fail-closed pada seluruh boundary. **Sub-gap E4 dan E8 ditutup
-   24 Agu:** no-reference/resolver error me-rollback exact object baru sebelum
-   append/audit; cleanup fault tetap non-success dan observable, dengan risiko
-   residual dicatat jujur. E1 masih menerima foto tanpa resolver.
+7. C7 belum fail-closed pada seluruh boundary. **Sub-gap E1, E4, dan E8 sudah
+   ditutup 24 Agu:** no-reference/resolver error me-rollback exact object baru
+   sebelum row/append/audit; cleanup fault tetap non-success dan observable,
+   dengan risiko residual dicatat jujur.
 **(b) Butuh kredensial/data:**
 
 8. Angka audit legacy P0-B3 (C10) — akses agregat database staging sudah
@@ -268,12 +267,15 @@ dikerjakan di slice ini:**
    `managed-classifier-retry-20260824/`. Ini tidak mengizinkan production atau
    real money.
 
-**(d) T43 sudah diotorisasi; butuh task implementasi bounded:**
+**(d) T43 sudah diotorisasi; bounded admission selesai, sisa scope harus
+dibatasi ulang:**
 
-10. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
-    Authority persis dan batas HOLD ada di
+10. Penegakan admission A1..A7/P0-B5 sudah accepted di E.31. Hanya P0-B4
+    action di luar explicit C3 yang mungkin masih punya slice policy-free;
+    authority persis dan batas HOLD ada di
     `managed-staging-exact-sha-20260824/FOUNDER-DECISION-UGC-AUTHORITY-UNBLOCK.md`;
-    tidak satu pun item ini boleh disebut implemented sebelum exact-SHA PASS.
+    Reviewer harus membatasi slice itu atau menyatakan tidak ada scope teknis
+    tersisa tanpa keputusan OCR/legacy/promo.
 
 ### E.5 Yang TIDAK dilakukan di slice ini
 
@@ -281,7 +283,7 @@ Pada slice rekonsiliasi asal, nol perubahan produk atau test dilakukan dan
 tidak satu pun status dinaikkan. Follow-up terpisah E.6 dan E.7 menambahkan
 bukti test langsung untuk gap yang kemudian disetujui sebagai task bounded.
 
-### E.6 Follow-up W2 C8 provider observer — 2026-08-23
+### E.6 Follow-up W2 C8 provider observer — 2026-08-23 (HISTORICAL slice; superseded by E.31)
 
 TASK=P0-W2-C8-PROVIDER-OBSERVER-20260823
 
@@ -293,9 +295,9 @@ TASK=P0-W2-C8-PROVIDER-OBSERVER-20260823
 - `tsx --test tests/product-truth-worker-reference.test.ts` → **12/12 PASS**.
 - Suite product-truth non-PG terdampak (`product-truth-evidence`, ingestion,
   worker-wiring) → **99/99 PASS**.
-- Gap lokal observer W2 C8 ditutup. Status C8 tetap **PARTIAL** karena A1..A7
-  masih belum menegakkan evidence gate. T43 kemudian diotorisasi 24 Agu, tetapi
-  task implementasi bounded dan exact-SHA PASS tetap diperlukan.
+- Pada slice historis ini gap observer W2 C8 ditutup, tetapi A1–A7 saat itu
+  belum menegakkan evidence gate. Status itu disupersede E.31: bounded A1–A7
+  new-admission enforcement kini accepted exact SHA.
 
 ### E.7 Follow-up C11 worker boundary proof — 2026-08-23
 
@@ -464,7 +466,7 @@ TASK=P0-C9-HTTP-PRODUCT-MUTATION-RESUME-20260824
   `SNAPSHOT_IMMUTABLE`, dan tidak mengklaim jalur regenerate/entry lain yang
   belum diuji. Gap HTTP E3/E7→resume yang sebelumnya dicatat sudah tertutup.
 
-### E.13 Follow-up C7 E4 rejected-reference rollback — 2026-08-24
+### E.13 Follow-up C7 E4 rejected-reference rollback — 2026-08-24 (HISTORICAL slice; E1 superseded by E.29)
 
 TASK=P0-E4-REJECTED-REFERENCE-ROLLBACK-20260824
 
@@ -489,7 +491,7 @@ TASK=P0-E4-REJECTED-REFERENCE-ROLLBACK-20260824
 - E4 dan C7 tetap **PARTIAL**: E1 belum menjalankan resolver, kebijakan OCR
   E4 tetap fail-open, dan gap lain pada matriks tidak diubah oleh slice ini.
 
-### E.14 Follow-up C7 E8 reference eligibility rollback — 2026-08-24
+### E.14 Follow-up C7 E8 reference eligibility rollback — 2026-08-24 (HISTORICAL slice; E1 superseded by E.29)
 
 TASK=P0-E8-REFERENCE-ELIGIBILITY-ROLLBACK-20260824
 
@@ -542,7 +544,7 @@ TASK=P0-E8-ALL-UPLOADS-LABEL-BRAND-GATE-20260824
   enforcement, reason code khusus, dan OCR fail-open berada di luar slice itu.
   Status current tree setelah reason-code follow-up dicatat di E.16.
 
-### E.16 Follow-up C3/C4 canonical API reason codes — 2026-08-24
+### E.16 Follow-up C3/C4 canonical API reason codes — 2026-08-24 (HISTORICAL slice; E1/W1/W2 superseded by E.29/E.30)
 
 TASK=P0-C3C4-CANONICAL-API-REASON-CODES-20260824
 

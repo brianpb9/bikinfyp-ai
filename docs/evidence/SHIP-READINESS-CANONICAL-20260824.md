@@ -284,9 +284,11 @@ hanya karena kandidat itu tertulis.
 ### Founder actions yang diperlukan sekarang
 
 Managed staging exact-SHA sudah dijalankan; authority T43 untuk enforcement
-teknis in-scope sudah diterima dan direkam, tetapi enforcement belum
-diimplementasikan. Keduanya bukan lagi permintaan approval terbuka. Record
-immutable berada di
+teknis in-scope sudah diterima dan direkam. Bounded C8 A1–A7/new admission,
+E1 create/reference, dan explicit C3 W1/W2 mismatch sudah diimplementasikan
+dan accepted; hanya P0-B4 policy-free coverage di luar slice tersebut yang
+masih mungkin dibatasi Reviewer. Authority dan slice accepted itu bukan lagi
+permintaan approval terbuka. Record immutable berada di
 `docs/evidence/P0-03/managed-staging-exact-sha-20260824/FOUNDER-DECISION-UGC-AUTHORITY-UNBLOCK.md`.
 Keputusan/bukti eksternal yang masih diperlukan:
 

@@ -1,5 +1,5 @@
 {
-  "source": ".agent-bus/archive",
+  "source": "BUS-SOURCE-MESSAGES.json (immutable sanitized copies from .agent-bus/archive)",
   "all_exact": true,
   "result": [
     { "task": "P0-T43-C8-ADMISSION-ENFORCEMENT-20260824", "sha": "d49c9730f5701fbd12b602cf49d20ae4880c6acf", "pass": 1, "pass_ts": "2026-08-24T14:40:20Z", "done": 1, "done_ts": "2026-08-24T14:41:41Z" },

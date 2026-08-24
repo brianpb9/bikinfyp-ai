@@ -35,8 +35,9 @@ or go-live authority.
 - A parser that accepted only one-letter evidence tiers omitted the `V/C` row
   and produced 12 rows / 70. The corrected parser explicitly accepts `V/C` and
   proves 13 rows / 77. This guards against a plausible false score.
-- Exact PASS and DONE messages are required for each new accepted task; a
-  READY or local test claim is not counted.
+- Exact PASS and DONE messages are required for each new accepted task; the ten
+  source messages are preserved immutably in this bundle and verified against
+  runtime before commit. A READY or local test claim is not counted.
 - Managed parity is checked against four independent receipt types: service
   deploy, health, DB/queue, and exact canary response shapes.
 - The score remains held by concrete negative controls: Duitku status 404/HOLD,
@@ -45,8 +46,9 @@ or go-live authority.
 
 ## Evidence classification
 
-- `VERIFIED_REPOSITORY`: exact source-board arithmetic, Git ancestry, archived
-  PASS/DONE, immutable receipt parsing, links, JSON, checksums, and diff checks.
+- `VERIFIED_REPOSITORY`: exact source-board arithmetic, Git ancestry, immutable
+  sanitized PASS/DONE source messages, receipt parsing, links, JSON, checksums,
+  and diff checks.
 - `VERIFIED_MANAGED_FROM_ACCEPTED_RECEIPTS`: exact staging deploy/health/data/
   canary facts already accepted at `0fa86ca...`; this task made no remote call.
 - `HISTORICAL`: E.25–E.27 deployment/classifier snapshots, now labeled and
