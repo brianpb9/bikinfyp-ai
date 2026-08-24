@@ -348,12 +348,17 @@ export function paymentsLive(): boolean {
 }
 
 export function ensureDirs() {
-  for (const d of [
-    path.dirname(config.dbPath),
+  const dirs = [
     config.storageDir,
     path.join(config.storageDir, "uploads"),
     path.join(config.storageDir, "jobs"),
-  ]) {
+  ];
+  // PostgreSQL runtime must not depend on, or try to create, the rollback
+  // SQLite directory. The managed container intentionally runs non-root and
+  // only its storage/cache paths are writable; touching ./data here blocked
+  // otherwise-valid E1 uploads before Product Truth could run.
+  if (config.dbRuntime !== "postgres") dirs.unshift(path.dirname(config.dbPath));
+  for (const d of dirs) {
     fs.mkdirSync(d, { recursive: true });
   }
 }
