@@ -53,9 +53,10 @@ export async function GET() {
     // KAPABILITAS KLASIFIKASI — bukti deployment, bukan asumsi.
     //
     // Seluruh jalur unggah foto produk berjalan di service INI, sementara
-    // ffmpeg/ffprobe/tesseract hanya dijamin oleh Dockerfile.worker; blueprint
-    // Render memakai `runtime: node` untuk web. Tanpa laporan ini, tidak ada
-    // cara membuktikan runtime produksi bisa menerbitkan bukti yang berupa
+    // Secara historis ffmpeg/ffprobe/tesseract hanya dijamin Dockerfile.worker.
+    // Staging kini punya candidate Dockerfile.web, tetapi production masih
+    // `runtime: node`, dan konfigurasi bukan bukti bahwa image itu hidup.
+    // Tanpa laporan ini, tidak ada cara membuktikan runtime bisa menerbitkan bukti yang berupa
     // VONIS — dan setiap klaim product-truth hijau jadi klaim dari mesin
     // pengembang, yang kebetulan punya ketiga binernya.
     //

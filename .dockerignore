@@ -5,6 +5,14 @@ node_modules
 data
 storage
 test_output
-.env.local
+.env*
+.agent-bus
+.claude
+.hdrv
+.DS_Store
+MAIN-GOAL.md
+PROJECT-WORK-ORDER.md
+docs
+docs-sumber
 .venv
 npm-debug.log*

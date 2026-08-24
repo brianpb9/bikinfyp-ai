@@ -259,6 +259,9 @@ dikerjakan di slice ini:**
 9. Kapabilitas klasifikasi runtime web (P0-B2) — **TERUKUR DI STAGING** pada
    exact `4a1d258`: ffmpeg/ffprobe ada, tesseract tidak, `mampu=false`. Ini
    menutup pertanyaan observasi dan membuka gap remediation deployment.
+   Candidate `Dockerfile.web` staging-only dibuat pada task
+   `P0-B2-WEB-CLASSIFIER-CAPABLE-20260824`, tetapi tetap local/pending review
+   dan tidak mengubah jawaban managed sebelum deploy+health smoke berikutnya.
 
 **(d) T43 sudah diotorisasi; butuh task implementasi bounded:**
 
@@ -831,3 +834,22 @@ TASK=`P0-MANAGED-STAGING-EXACT-SHA-20260824`
   `managed-staging-exact-sha-20260824/FOUNDER-DECISION-UGC-AUTHORITY-UNBLOCK.md`:
   T43 permits bounded technical enforcement/admission, but does not itself
   implement A1–A7, choose legacy treatment, or relax any production HOLD.
+
+### E.26 Staging web classifier-capable image candidate — 2026-08-24
+
+TASK=`P0-B2-WEB-CLASSIFIER-CAPABLE-20260824`
+
+- Added staging-only `Dockerfile.web` with ffmpeg/ffprobe, tesseract English,
+  committed probe asset, Next runtime, staging migrations, non-root UID 10001,
+  and owned writable cache/storage paths.
+- Staging Blueprint binds web to `Dockerfile.web`, keeps worker on
+  `Dockerfile.worker`, and validates through Render CLI. Production Blueprint
+  is byte-identical to accepted baseline.
+- Contract suite is counterexample-sensitive for all required binaries/assets,
+  migration/runtime files, non-root/writable paths, staging wiring, worker
+  isolation, production drift, and Docker-context exclusions: 26/26 PASS.
+  Targeted classifier+container total 40/40 PASS; build and TypeScript PASS.
+- No local container engine was available, so image execution is explicitly
+  unproven. No remote mutation occurred. P0-B2 stays **managed incapable** and
+  readiness stays **58/100** pending exact-SHA review followed by the managed
+  build/probe plan in `web-classifier-capable-20260824/managed-follow-up.md`.

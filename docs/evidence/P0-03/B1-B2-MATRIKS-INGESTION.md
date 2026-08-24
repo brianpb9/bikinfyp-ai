@@ -79,6 +79,13 @@ tampak sah.
 | Web production | `render.production.yaml`, service `bikinfyp-ai-production-web`: `runtime: node` | **tidak dijamin oleh konfigurasi mana pun** |
 | Mac pengembang | `which ffmpeg ffprobe tesseract` → ketiganya ada di `/opt/homebrew/bin` | ya — dan **justru itu masalahnya** |
 
+**Addendum current 24 Agu:** tabel di atas adalah keadaan saat matriks ini
+ditulis. `P0-B2-WEB-CLASSIFIER-CAPABLE-20260824` kemudian menambahkan candidate
+`Dockerfile.web` dan wiring Docker khusus staging; production tetap native
+Node. Candidate belum deployed, sehingga fakta managed current tetap
+`mampu=false` sampai exact-SHA managed build dan health smoke membuktikan
+sebaliknya. Lihat `web-classifier-capable-20260824/`.
+
 Seluruh ingestion (I1..I5) berjalan di web. Seluruh biner hanya dijamin di
 worker. Komentar di `scripts/worker.ts` bahkan sudah menyatakan batas itu untuk
 pipeline lain: *"Runs in this same Docker container because that's where

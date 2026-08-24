@@ -1150,7 +1150,7 @@ TERAKHIR, bukan pertama.
 |---|---|---|
 | P0-A | kontrak/test diperbaiki | **gelombang ini** |
 | P0-B1 | setiap jalur ingestion sah memproduksi sidecar (`saveUniqueProductImages`, `downloadProductImages`, …) | **SELESAI** (78883a3) — kelima route di `app/api/**` memakai tepat TIGA fungsi penyimpan, dan ketiganya memanggil `tulisSidecar`: `saveProductImages`, `saveUniqueProductImages`, `downloadProductImages` |
-| P0-B2 | batas runtime ffmpeg/ffprobe/tesseract di web Render | **TERUKUR DI STAGING** (managed 2026-08-24) — ffmpeg/ffprobe ada, tesseract/OCR language/smoke gagal, sehingga `mampu=false`; lihat `managed-staging-exact-sha-20260824/`. Ini jawaban negatif, bukan shipping PASS |
+| P0-B2 | batas runtime ffmpeg/ffprobe/tesseract di web Render | **TERUKUR DI STAGING: INCAPABLE** — ffmpeg/ffprobe ada, tesseract/OCR language/smoke gagal. Candidate image web staging-only yang membawa dependency+probe kini local/pending review di `web-classifier-capable-20260824/`; status tidak berubah sampai managed deploy+smoke membuktikan `mampu=true` |
 | **P0-B4b** | **test runtime W1 di atas PostgreSQL nyata** (disetujui Reviewer ronde 7) | **HIJAU** — `npm run test:postgres-product-truth-w1`, 12 test, 12 lulus |
 | P0-B3 | audit legacy offline + karantina | **ALAT SELESAI** (PASS a29569f); akses agregat database staging kini terbukti, tetapi ANGKA media belum: R2 yang berpasangan tidak tersedia dan audit legacy tidak dijalankan |
 | P0-B4 observasi | kanari bukti di batas KEDUA worker — nol penegakan | **SELESAI** — lihat docs/evidence/P0-03/B3-AUDIT-LEGACY.md §6 |
@@ -1242,6 +1242,11 @@ Verifikasi P0-B2 (dibaca ulang pada 0c443ff):
 * `Dockerfile.worker` memasang ketiganya (+ `tesseract-ocr-eng`);
 * `render.yaml` dan `render.production.yaml`: service web memakai
   `runtime: node`, **bukan** image itu. Klasifikasi saat unggah berjalan di web.
+
+Addendum current 24 Agu: dua bullet konfigurasi di atas adalah pembacaan
+historis pada `0c443ff`. Staging Blueprint kini mempunyai candidate
+`Dockerfile.web`; production tetap `runtime: node`. Candidate belum deployed,
+jadi managed truth masih `mampu=false`, bukan capability PASS.
 
 Mac lokal punya ketiga biner (`/opt/homebrew/bin/…`) — itulah tepatnya kenapa
 hijau lokal bukan bukti deployment.

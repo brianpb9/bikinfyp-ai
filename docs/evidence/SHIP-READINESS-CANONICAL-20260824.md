@@ -234,7 +234,7 @@ syarat ADR dan Founder go-live terpenuhi.
 
 | Gap | Status | Owner/authority | Artefak penutup yang dibutuhkan |
 |---|---|---|---|
-| P0-B2 runtime classification web | **VERIFIED_MANAGED: incapable** | Release/Builder under approved scope | add/relocate tesseract-capable classification boundary, then repeat managed probe |
+| P0-B2 runtime classification web | **VERIFIED_MANAGED: incapable**; staging-only web image candidate local/pending review | Reviewer then managed staging task | exact-SHA PASS, Render image build, sustained health `mampu=true`, zero-money positive canary, rollback evidence |
 | P0-B3 angka legacy C10 | partial credential/data | Data/Release owner | DB aggregate access proven; still needs paired staging R2 and sanitized legacy audit JSON |
 | T43 / P0-B4 action / P0-B5 / A1..A7 | Founder authority versioned for in-scope technical enforcement/admission; implementation coverage still partial | Reviewer dispatches bounded remaining scope | exact boundary evidence; legacy treatment remains undecided; do not infer implementation from authority |
 | C2 `TYPE_MISMATCH` | local implementation, belum bounded-approved | Builder setelah scope approval | route/admission boundary + canonical code + counterexamples |

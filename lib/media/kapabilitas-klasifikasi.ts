@@ -2,16 +2,17 @@
 //
 // Pertanyaannya bukan retoris. Seluruh jalur unggah foto produk berjalan di
 // service WEB (lima route; lihat docs/evidence/P0-03/B1-B2-MATRIKS-INGESTION.md),
-// sementara ffmpeg/ffprobe/tesseract hanya dijamin oleh `Dockerfile.worker`.
-// `render.yaml` dan `render.production.yaml` keduanya memakai `runtime: node`
-// untuk service web, dan tidak ada satu pun konfigurasi yang menjanjikan ketiga
-// biner ada di sana.
+// sementara secara historis ffmpeg/ffprobe/tesseract hanya dijamin oleh
+// `Dockerfile.worker`. `render.yaml` kini punya candidate `Dockerfile.web`
+// staging-only dengan ketiga dependency itu; production tetap `runtime: node`.
+// Dockerfile tetap bukan bukti deployment, jadi probe ini tetap menjadi hakim
+// atas runtime yang benar-benar hidup.
 //
-// Selama ini tidak ada bukti ke arah mana pun — dan itu masalahnya. Mesin
-// pengembang punya ketiganya (`/opt/homebrew/bin`), jadi setiap test lokal
-// hijau tanpa mengatakan apa pun tentang produksi. Modul ini menjawabnya di
-// LINGKUNGAN SUNGGUHAN, lalu `/api/health` mengeksposnya supaya jawabannya bisa
-// dibaca dari luar tanpa akses shell.
+// Probe ini awalnya menutup ketiadaan bukti itu; managed staging kemudian
+// menjawab negatif (`mampu=false`). Mesin pengembang punya ketiganya
+// (`/opt/homebrew/bin`), jadi test lokal atau Dockerfile candidate tetap tidak
+// mengatakan apa pun tentang runtime managed sampai `/api/health` menjawabnya
+// di LINGKUNGAN SUNGGUHAN.
 //
 // TIGA KEPUTUSAN DESAIN, ketiganya berasal dari cacat nyata:
 //

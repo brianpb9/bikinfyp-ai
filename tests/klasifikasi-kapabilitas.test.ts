@@ -2,11 +2,10 @@
 //
 // KENAPA PROBE, BUKAN ASUMSI. Seluruh jalur unggah berjalan di service web
 // (lima route, lihat B1-B2-MATRIKS-INGESTION.md), sementara ffmpeg/ffprobe/
-// tesseract hanya dijamin oleh `Dockerfile.worker`. `render.yaml` dan
-// `render.production.yaml` keduanya memakai `runtime: node` untuk service web.
-// Tidak ada satu pun bukti, ke arah mana pun, tentang apakah runtime itu punya
-// ketiga biner — dan Mac pengembang punya ketiganya, jadi hijau lokal tidak
-// membuktikan apa-apa.
+// tesseract awalnya hanya dijamin oleh `Dockerfile.worker`. Staging kini punya
+// candidate `Dockerfile.web`, sementara production tetap `runtime: node`.
+// Konfigurasi/image candidate bukan bukti deployment — dan Mac pengembang punya
+// ketiganya, jadi hijau lokal tetap tidak membuktikan runtime managed.
 //
 // Probe inilah bukti deployment yang diminta: ia dievaluasi DI LINGKUNGAN
 // SUNGGUHAN, bukan disimpulkan dari Dockerfile atau dari mesin pengembang.
