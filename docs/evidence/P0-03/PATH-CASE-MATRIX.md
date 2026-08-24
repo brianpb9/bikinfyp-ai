@@ -551,5 +551,18 @@ TASK=P0-C9-RESUME-ENTRY-INVENTORY-PROOF-20260824
   eksplisit karena `UJI_PG_URL` kosong; katalog tidak dijalankan karena tidak
   terdampak. Ini satu full tambahan yang diotorisasi sesudah CHANGES_REQUESTED,
   bukan pengulangan tanpa batas.
+- Koreksi review kedua mengklasifikasikan **setiap** `.add("render", ...)`
+  terlebih dahulu tanpa asumsi bentuk payload, lalu memvalidasi payload exact
+  `{ jobId }` secara terpisah. Fixture filesystem membuktikan payload
+  `{ traceId, jobId }` dan variable tetap terdeteksi sebagai call-site lalu
+  ditolak. Parser konservatif A6 kini menerima validator hanya sebagai direct
+  top-level statement di common fail-closed `try`: logical short-circuit,
+  ternary, comma sequence, wrapper, nested if/loop/function semuanya ditolak.
+  Ini jaminan direct-statement source, bukan klaim AST penuh.
+- Verifikasi koreksi kedua: guard mandiri PASS; focused `23/23 PASS`;
+  affected `87 total / 63 PASS / 24 skip / 0 fail`; tepat satu bounded full
+  `1122 total / 1082 PASS / 40 skip / 0 fail`; `npx tsc --noEmit` dan
+  `git diff --check` PASS. Skip PostgreSQL tetap karena `UJI_PG_URL` kosong;
+  katalog tidak dijalankan karena tidak terdampak.
 - C9 tetap **PARTIAL**: slice ini tidak mengarang reason code
   `SNAPSHOT_IMMUTABLE` dan tidak mengubah keputusan admission T43.

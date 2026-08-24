@@ -69,6 +69,22 @@ export function maskNonCode(source) {
   return chars.join("");
 }
 
+function maskComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, (value) => value.replace(/[^\n]/g, " "))
+    .replace(/\/\/[^\n]*/g, (value) => " ".repeat(value.length));
+}
+
+export function assertDirectRenderWakePayloads(source) {
+  const code = maskComments(source);
+  const calls = [...code.matchAll(/\.add\s*\(\s*["']render["']\s*,/g)];
+  for (const call of calls) {
+    const tail = code.slice(call.index);
+    assert.match(tail, /^\.add\s*\(\s*["']render["']\s*,\s*\{\s*jobId\s*\}\s*(?:,|\))/,
+      "direct render wake must pass the exact { jobId } payload; classify payload changes separately");
+  }
+  return calls.length;
+}
+
 function productionFiles(root) {
   const result = [];
   const walk = (rel) => {
@@ -121,9 +137,7 @@ export function deriveCallInventory(root) {
     // A caller bypassing job-queue via Queue.add is a worker wake even if it
     // never imports one of our named helpers. Keep string contents here so the
     // render queue operation is classified, while comments remain masked.
-    const commentsMasked = source.replace(/\/\*[\s\S]*?\*\//g, (value) => value.replace(/[^\n]/g, " "))
-      .replace(/\/\/[^\n]*/g, (value) => " ".repeat(value.length));
-    const direct = commentsMasked.match(/\.add\s*\(\s*["']render["']\s*,\s*\{\s*jobId\b/g)?.length ?? 0;
+    const direct = maskComments(source).match(/\.add\s*\(\s*["']render["']\s*,/g)?.length ?? 0;
     if (direct) inventory.directRedisRenderWake[rel] = direct;
   }
   return inventory;
@@ -154,6 +168,30 @@ export function assertA6ResumeSafety(source) {
   assert.ok(common, "A6 durable validations must share a fail-closed block");
   const commonHeader = code.slice(Math.max(0, common.start - 40), common.start);
   assert.match(commonHeader, /\btry\s*$/, "both A6 validations must be unconditional in the same try block");
+  const assertDirectTopLevelCall = (position, prefix, label) => {
+    const nestedBlock = braceRanges.some((range) => range.start > common.start && range.end < common.end
+      && range.start < position && range.end > position);
+    assert.equal(nestedBlock, false, `${label} must be a top-level statement in the common fail-closed try`);
+    const previousSemicolon = code.lastIndexOf(";", position);
+    const statementStart = Math.max(common.start + 1, previousSemicolon + 1);
+    assert.equal(code.slice(statementStart, position).trim(), prefix,
+      `${label} must be a direct unconditional statement without logical/ternary/sequence/wrapper control`);
+    const open = code.indexOf("(", position);
+    assert.ok(open > position, `${label} call has no argument list`);
+    let depth = 0;
+    let close = -1;
+    for (let i = open; i < common.end; i++) {
+      if (code[i] === "(") depth += 1;
+      else if (code[i] === ")" && --depth === 0) { close = i; break; }
+    }
+    assert.ok(close > open, `${label} call is not balanced`);
+    const terminator = code.indexOf(";", close);
+    assert.ok(terminator > close && terminator < common.end, `${label} direct statement is not terminated`);
+    assert.equal(code.slice(close + 1, terminator).trim(), "",
+      `${label} must not be followed by a conditional, comma sequence, or wrapper expression`);
+  };
+  assertDirectTopLevelCall(productValidation, "", "product snapshot validation");
+  assertDirectTopLevelCall(referenceValidation, "await deps.", "reference manifest materialization");
   const afterGuard = code.slice(common.end, common.end + 500);
   assert.match(afterGuard, /^\s*}\s*catch\s*\([^)]*\)\s*\{[\s\S]*?throw\s+ERR\.BAD_REQUEST/,
     "A6 validation block must fail closed through BAD_REQUEST");
@@ -196,6 +234,9 @@ function assertForwardingAndWorkerLoads(root) {
 export function auditResumeEntryInventory(root = process.cwd()) {
   const inventory = deriveCallInventory(root);
   assertExactCallInventory(inventory);
+  for (const rel of productionFiles(root)) {
+    assertDirectRenderWakePayloads(fs.readFileSync(path.join(root, rel), "utf8"));
+  }
   const route = fs.readFileSync(path.join(root, "app/api/dashboard/campaign/job/[jobId]/route.ts"), "utf8");
   assertA6ResumeSafety(route);
   assertForwardingAndWorkerLoads(root);
