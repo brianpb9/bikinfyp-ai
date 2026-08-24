@@ -6,7 +6,7 @@
     "passed": 11,
     "failed": 0
   },
-  "typecheck": { "command": "npm run typecheck --if-present", "exit_code": 0 },
+  "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0, "performed_real_typescript_check": true },
   "diff_check": { "command": "git diff --check", "exit_code": 0 },
   "secret_scan": {
     "environment_files_considered": 1,
@@ -14,10 +14,10 @@
     "exact_value_hits": 0
   },
   "runner_provenance": {
-    "job": "job-da6b8rjm8hqs73erdlvg",
+    "job": "job-da6bcoe1egvs73a14jbg",
     "embedded_runner_matches_repository_bytes": true,
-    "runner_sha256": "2e6f3a1e207644dc9113802b12844bb5d95e11f2a460d0e6b7b7775738039036",
-    "runner_bytes": 13365
+    "runner_sha256": "58b09c5c5557cd44fc5d22b0aecdb1367cfaf89df194223d7ee08f147a4e58e0",
+    "runner_bytes": 15093
   },
   "final_health_samples": [
     { "http": 200, "ok": true, "build_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "classifier_capable": true },

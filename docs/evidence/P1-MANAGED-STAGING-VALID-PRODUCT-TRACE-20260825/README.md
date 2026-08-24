@@ -9,6 +9,8 @@ The trace used a dedicated disposable identity and deterministic product-photo
 fixture. The positive request returned HTTP 201 and created an exact PostgreSQL
 product row plus an R2 image and evidence sidecar. The sidecar identified a
 valid product photo, a readable three-word label, and a matching content digest.
+The row assertion covers the exact owner and ID, all nullable create fields,
+the persisted `raw_meta.brand`, and ordered DB images equal to the API/R2 keys.
 Bounded counterexamples returned `BRAND_MISMATCH` and `LABEL_UNREADABLE`.
 
 No job-admission request was made. In the PostgreSQL retail path, the balance

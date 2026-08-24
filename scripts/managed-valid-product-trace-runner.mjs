@@ -173,10 +173,29 @@ try {
   positiveProductId = positive.body.product_id;
   imageKeys.push(...positive.body.images.map(String));
   const product = (await pool.query(
-    "SELECT id,user_id,name,price_idr,category,images,raw_meta FROM products WHERE id=$1 AND user_id=$2",
+    `SELECT id,user_id,org_id,source_url,name,price_idr,category,
+            product_visual_desc,brand_brief,images,promo_price_before_idr,
+            promo_ends_at,promo_stock_left,raw_meta
+       FROM products WHERE id=$1 AND user_id=$2`,
     [positiveProductId, userId],
   )).rows[0];
   if (!product) throw new Error("positive product row missing");
+  const persistedImages = JSON.parse(product.images);
+  const persistedRawMeta = product.raw_meta === null ? null : JSON.parse(product.raw_meta);
+  const exactCreateData = product.id === positiveProductId
+    && product.user_id === userId
+    && product.org_id === null
+    && product.source_url === null
+    && product.name === "Nova Serum Skincare"
+    && Number(product.price_idr) === 12000
+    && product.category === "beauty"
+    && product.product_visual_desc === null
+    && product.brand_brief === null
+    && JSON.stringify(persistedImages) === JSON.stringify(imageKeys)
+    && product.promo_price_before_idr === null
+    && product.promo_ends_at === null
+    && product.promo_stock_left === null
+    && JSON.stringify(persistedRawMeta) === JSON.stringify({ brand: "NOVA" });
   const key = imageKeys[0];
   const object = await getBytes(key);
   const sidecarBytes = await getBytes(`${key}.meta.json`);
@@ -186,7 +205,17 @@ try {
     product_row_exact_owner: product.user_id === userId,
     product_id_matches: product.id === positiveProductId,
     product_fields_match: product.name === "Nova Serum Skincare" && Number(product.price_idr) === 12000 && product.category === "beauty",
-    image_count: JSON.parse(product.images).length,
+    product_row_exact_create_data: exactCreateData,
+    nullable_create_fields_exact: product.org_id === null
+      && product.source_url === null
+      && product.product_visual_desc === null
+      && product.brand_brief === null
+      && product.promo_price_before_idr === null
+      && product.promo_ends_at === null
+      && product.promo_stock_left === null,
+    raw_meta_exact: JSON.stringify(persistedRawMeta) === JSON.stringify({ brand: "NOVA" }),
+    ordered_images_equal_api_and_r2_keys: JSON.stringify(persistedImages) === JSON.stringify(imageKeys),
+    image_count: persistedImages.length,
     image_object_present: true,
     sidecar_present: true,
     sidecar: {
@@ -243,6 +272,11 @@ try {
   }
   if (receipt.counterexamples.label_unreadable.http !== 400 || receipt.counterexamples.label_unreadable.code !== "LABEL_UNREADABLE") {
     throw new Error("LABEL_UNREADABLE counterexample failed");
+  }
+  if (!receipt.positive.product_row_exact_create_data
+    || !receipt.positive.raw_meta_exact
+    || !receipt.positive.ordered_images_equal_api_and_r2_keys) {
+    throw new Error("positive PostgreSQL row does not exactly match immutable create data");
   }
   if (receipt.positive.sidecar.jenis !== "product_photo" || receipt.positive.sidecar.layak_referensi !== true || !receipt.positive.sidecar.sha256_matches_object) {
     throw new Error("positive Product Truth sidecar failed");

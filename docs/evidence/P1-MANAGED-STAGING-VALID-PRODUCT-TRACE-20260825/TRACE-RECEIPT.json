@@ -1,8 +1,8 @@
 {
   "schema": "managed-valid-product-trace/v1",
   "task": "P1-MANAGED-STAGING-VALID-PRODUCT-TRACE-20260825",
-  "started_at": "2026-08-24T21:15:40.506Z",
-  "finished_at": "2026-08-24T21:15:48.803Z",
+  "started_at": "2026-08-24T21:23:59.580Z",
+  "finished_at": "2026-08-24T21:24:07.198Z",
   "deployed_app_sha_expected": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
   "execution": "MANAGED_STAGING_ONE_OFF_PLUS_PUBLIC_HTTP",
   "preconditions": {
@@ -29,6 +29,10 @@
     "product_row_exact_owner": true,
     "product_id_matches": true,
     "product_fields_match": true,
+    "product_row_exact_create_data": true,
+    "nullable_create_fields_exact": true,
+    "raw_meta_exact": true,
+    "ordered_images_equal_api_and_r2_keys": true,
     "image_count": 1,
     "image_object_present": true,
     "sidecar_present": true,
@@ -73,11 +77,11 @@
   "cleanup": { "database": true, "media": true },
   "result": "PASS",
   "provenance": {
-    "render_job": "job-da6b8rjm8hqs73erdlvg",
+    "render_job": "job-da6bcoe1egvs73a14jbg",
     "job_status": "succeeded",
-    "job_created_at": "2026-08-24T21:15:26.6372Z",
-    "job_started_at": "2026-08-24T21:15:26Z",
-    "job_finished_at": "2026-08-24T21:15:55Z",
+    "job_created_at": "2026-08-24T21:23:45.613032Z",
+    "job_started_at": "2026-08-24T21:23:45Z",
+    "job_finished_at": "2026-08-24T21:24:21Z",
     "source": "sanitized structured stdout fetched through Render logs"
   }
 }
