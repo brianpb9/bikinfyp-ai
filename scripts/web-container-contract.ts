@@ -5,6 +5,8 @@ import { fileURLToPath } from "node:url";
 
 export interface WebContainerInputs {
   dockerfile: string;
+  instrumentation: string;
+  runtimeSecretAssertion: string;
   stagingBlueprint: string;
   productionBlueprint: string;
   dockerignore: string;
@@ -50,6 +52,7 @@ export function verifyWebContainerContract(inputs: WebContainerInputs): Contract
     ["FROM node:22-bookworm-slim AS runtime", "WEB_DOCKER_RUNTIME_STAGE", "runtime stage missing"],
     ["RUN npm ci", "WEB_DOCKER_REPRODUCIBLE_INSTALL", "npm ci missing"],
     ["RUN npm run build", "WEB_DOCKER_NEXT_BUILD", "Next build missing"],
+    ["COPY instrumentation.ts middleware.ts", "WEB_DOCKER_INSTRUMENTATION", "runtime instrumentation source missing from build"],
     ["npm prune --omit=dev", "WEB_DOCKER_PRODUCTION_DEPS", "production dependency prune missing"],
     ["ffmpeg tesseract-ocr tesseract-ocr-eng", "WEB_DOCKER_CLASSIFIER_PACKAGES", "classifier packages or OCR language missing"],
     ["FFMPEG_PATH=/usr/bin/ffmpeg", "WEB_DOCKER_FFMPEG_PATH", "FFmpeg path missing"],
@@ -74,6 +77,14 @@ export function verifyWebContainerContract(inputs: WebContainerInputs): Contract
   if (/^COPY\s+\.\s+\./m.test(inputs.dockerfile)) {
     findings.push({ code: "WEB_DOCKER_COPY_ALL", message: "Dockerfile must not copy the whole local context" });
   }
+  if (/\bAUTH_SECRET\b|\b(?:ARG|ENV)\s+[^\n]*(?:SECRET|TOKEN|DATABASE_URL|API_KEY)/i.test(inputs.dockerfile)) {
+    findings.push({ code: "WEB_DOCKER_BUILD_SECRET", message: "runtime secret material is referenced by Docker build" });
+  }
+
+  requireText(findings, inputs.instrumentation, 'process.env.NEXT_RUNTIME !== "nodejs"', "WEB_RUNTIME_NODE_BOUNDARY", "Node runtime boundary missing");
+  requireText(findings, inputs.instrumentation, 'await import("./lib/runtime/assert-runtime-auth-secret")', "WEB_RUNTIME_LAZY_ASSERTION", "runtime assertion is not lazily imported");
+  requireText(findings, inputs.instrumentation, "assertRuntimeAuthSecretSafe();", "WEB_RUNTIME_ASSERTION_CALL", "runtime assertion call missing");
+  requireText(findings, inputs.runtimeSecretAssertion, "assertAuthSecretSafe(process.env)", "WEB_RUNTIME_FAIL_CLOSED", "runtime assertion no longer fails closed");
 
   const web = serviceBlock(inputs.stagingBlueprint, "racun-ai-staging-web");
   for (const [expected, code, message] of [
@@ -105,12 +116,17 @@ export function verifyWebContainerContract(inputs: WebContainerInputs): Contract
   for (const ignored of [".env*", ".agent-bus", ".hdrv", "MAIN-GOAL.md", "PROJECT-WORK-ORDER.md"]) {
     requireText(findings, inputs.dockerignore, ignored, "DOCKER_CONTEXT_EXCLUSION", `missing Docker context exclusion: ${ignored}`);
   }
+  if (/^!\.env/m.test(inputs.dockerignore)) {
+    findings.push({ code: "DOCKER_CONTEXT_ENV_REINCLUDED", message: "secret-bearing env file is re-included" });
+  }
   return findings;
 }
 
 export function readWebContainerInputs(root = process.cwd()): WebContainerInputs {
   return {
     dockerfile: fs.readFileSync(path.join(root, "Dockerfile.web"), "utf8"),
+    instrumentation: fs.readFileSync(path.join(root, "instrumentation.ts"), "utf8"),
+    runtimeSecretAssertion: fs.readFileSync(path.join(root, "lib/runtime/assert-runtime-auth-secret.ts"), "utf8"),
     stagingBlueprint: fs.readFileSync(path.join(root, "render.yaml"), "utf8"),
     productionBlueprint: fs.readFileSync(path.join(root, "render.production.yaml"), "utf8"),
     dockerignore: fs.readFileSync(path.join(root, ".dockerignore"), "utf8"),

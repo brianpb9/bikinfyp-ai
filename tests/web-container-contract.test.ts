@@ -40,6 +40,7 @@ const dockerMutations: Array<[string, string]> = [
   ["chown -R racun:racun /srv/app/.next /srv/app/storage", "WEB_DOCKER_WRITABLE_OWNERSHIP"],
   ["USER racun", "WEB_DOCKER_NON_ROOT"],
   ['CMD ["npm", "start"]', "WEB_DOCKER_START"],
+  ["COPY instrumentation.ts middleware.ts", "WEB_DOCKER_INSTRUMENTATION"],
 ];
 
 for (const [text, code] of dockerMutations) {
@@ -49,6 +50,26 @@ for (const [text, code] of dockerMutations) {
 test("whole-context COPY is rejected", () => {
   rejectsCode({ ...source, dockerfile: `${source.dockerfile}\nCOPY . .\n` }, "WEB_DOCKER_COPY_ALL");
 });
+
+for (const secretDirective of [
+  "ARG AUTH_SECRET",
+  "ENV AUTH_SECRET=build-placeholder",
+  "ARG DATABASE_URL",
+  "ENV PROVIDER_API_KEY=placeholder",
+]) {
+  test(`build secret directive is rejected: ${secretDirective.split(" ")[0]}`, () => {
+    rejectsCode({ ...source, dockerfile: `${source.dockerfile}\n${secretDirective}\n` }, "WEB_DOCKER_BUILD_SECRET");
+  });
+}
+
+for (const [key, text, code] of [
+  ["instrumentation", 'process.env.NEXT_RUNTIME !== "nodejs"', "WEB_RUNTIME_NODE_BOUNDARY"],
+  ["instrumentation", 'await import("./lib/runtime/assert-runtime-auth-secret")', "WEB_RUNTIME_LAZY_ASSERTION"],
+  ["instrumentation", "assertRuntimeAuthSecretSafe();", "WEB_RUNTIME_ASSERTION_CALL"],
+  ["runtimeSecretAssertion", "assertAuthSecretSafe(process.env)", "WEB_RUNTIME_FAIL_CLOSED"],
+] as Array<[keyof WebContainerInputs, string, string]>) {
+  test(`runtime boundary counterexample ${code} fails closed`, () => rejectsCode(mutate(key, text), code));
+}
 
 for (const [text, code] of [
   ["runtime: docker", "STAGING_WEB_RUNTIME"],
@@ -71,4 +92,8 @@ test("production Blueprint byte drift fails closed", () => {
 
 test("secret/bootstrap Docker context exclusions are guarded", () => {
   rejectsCode(mutate("dockerignore", ".hdrv"), "DOCKER_CONTEXT_EXCLUSION");
+});
+
+test("secret-bearing env files cannot be re-included", () => {
+  rejectsCode({ ...source, dockerignore: `${source.dockerignore}\n!.env.local\n` }, "DOCKER_CONTEXT_ENV_REINCLUDED");
 });

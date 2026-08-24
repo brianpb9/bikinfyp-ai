@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import { config } from "./config";
+import { runtimeAuthSecret } from "./auth-secret-policy";
 import { getDb, now, uuid, audit, type UserRow } from "./db";
 import { postgresRuntimeEnabled, smokeFindOrCreateUser, smokeGetUser } from "./postgres/smoke-runtime";
 
@@ -19,7 +20,7 @@ const COOKIE_NAME = "racun_token";
  *
  *  Keduanya WAJIB memakai angka ini. */
 export const SESSION_MAX_AGE_SEC = 24 * 3600;
-const secret = () => new TextEncoder().encode(config.authSecret);
+const secret = () => new TextEncoder().encode(runtimeAuthSecret());
 
 export async function issueToken(userId: string, phone: string): Promise<string> {
   return new SignJWT({ phone })

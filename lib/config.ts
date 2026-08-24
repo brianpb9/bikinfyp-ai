@@ -25,7 +25,6 @@ function env(key: string, fallback: string): string {
 }
 
 export const config = {
-  authSecret: env("AUTH_SECRET", "dev-secret-racun-ai-jangan-dipakai-produksi"),
   // Disiapkan pada checkpoint 1A. Adapter runtime masih SQLite hingga checkpoint 1C.
   databaseUrl: env("DATABASE_URL", ""),
   // Cutover is explicit and reversible.  SQLite remains available until the
@@ -358,10 +357,3 @@ export function ensureDirs() {
     fs.mkdirSync(d, { recursive: true });
   }
 }
-
-// Gagal-tertutup pada rahasia tanda tangan. Diletakkan di sini, bukan di
-// getDb(), karena config diimpor oleh SEMUA jalur — termasuk runtime Postgres
-// yang tidak pernah menyentuh SQLite. Pemeriksaan yang hanya jalan di jalur
-// SQLite tidak akan pernah berjalan di produksi.
-import { assertAuthSecretSafe } from "./secrets";
-assertAuthSecretSafe();

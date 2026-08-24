@@ -44,7 +44,8 @@ export async function POST(req: Request) {
     const user = postgresRuntimeEnabled() ? await (async () => {
       const { PgAuthOtpAuditRepository } = await import("@/lib/postgres/auth-otp-audit");
       const { config } = await import("@/lib/config");
-      const repo = new PgAuthOtpAuditRepository(config.databaseUrl, { authSecret: config.authSecret, otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
+      const { runtimeAuthSecret } = await import("@/lib/auth-secret-policy");
+      const repo = new PgAuthOtpAuditRepository(config.databaseUrl, { authSecret: runtimeAuthSecret(), otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
       try { return await repo.findOrCreateUserByEmail(email); } finally { await repo.close(); }
     })() : findOrCreateUserByEmail(email);
     if (postgresRuntimeEnabled()) await pgAudit(user.id, "auth.otp_verified", "users", user.id, {});

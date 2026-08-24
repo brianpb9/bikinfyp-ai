@@ -25,7 +25,7 @@ COPY assets ./assets
 COPY knowledge ./knowledge
 COPY migrations ./migrations
 COPY scripts/migrate-postgres-runtime.mjs ./scripts/migrate-postgres-runtime.mjs
-COPY middleware.ts next.config.ts postcss.config.mjs tailwind.config.ts tsconfig.json ./
+COPY instrumentation.ts middleware.ts next.config.ts postcss.config.mjs tailwind.config.ts tsconfig.json ./
 
 RUN npm run build \
   && npm prune --omit=dev

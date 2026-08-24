@@ -857,3 +857,19 @@ TASK=`P0-B2-WEB-CLASSIFIER-CAPABLE-20260824`
   unproven. No remote mutation occurred. P0-B2 stays **managed incapable** and
   readiness stays **58/100** pending exact-SHA review followed by the managed
   build/probe plan in `web-classifier-capable-20260824/managed-follow-up.md`.
+
+### E.27 Secret-safe web build/runtime boundary — 2026-08-24
+
+TASK=`P0-B2-SECRET-SAFE-WEB-BUILD-20260824`
+
+- Removed eager production `AUTH_SECRET` validation from config import and
+  moved fail-closed startup validation to lazy root Next Node instrumentation.
+- Auth/JWT/OTP/signing consumers read and validate the current runtime secret;
+  rotation is not frozen at build/import, and later missing/short values fail.
+- Secretless full Next build PASS without dummy/real build secrets. Full tests
+  are 1,179 total / 1,135 PASS / 0 fail / 44 classified skip; targeted boundary
+  tests are 61/61 PASS and staging Blueprint validation passes.
+- Docker remains unavailable locally, so image execution is not claimed. No
+  managed mutation occurred. P0-B2 remains managed incapable until reviewed
+  exact-SHA managed rebuild, sustained health, and zero-money canary with
+  contemporaneous raw evidence.

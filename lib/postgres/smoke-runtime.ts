@@ -13,6 +13,7 @@ import path from "node:path";
 import { Pool } from "pg";
 import type { UserRow } from "../db";
 import { config } from "../config";
+import { runtimeAuthSecret } from "../auth-secret-policy";
 import { SQL_RIWAYAT_PG, bersihkanRiwayat } from "../script-engine/riwayat-mekanik";
 import { PgAuthOtpAuditRepository } from "./auth-otp-audit";
 import { PgProductPersonaScriptRepository, type PgProductInput, type PgScriptInput } from "./product-persona-script";
@@ -44,7 +45,7 @@ const id = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
 
 export async function smokeFindOrCreateUser(phone: string): Promise<UserRow> {
-  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: config.authSecret, otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
+  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: runtimeAuthSecret(), otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
   try { return await repo.findOrCreateUserByPhone(phone); } finally { await repo.close(); }
 }
 export async function smokeGetUser(userId: string): Promise<UserRow | null> {
@@ -98,19 +99,19 @@ export async function pgCanExtract(userId: string): Promise<boolean> {
   } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 export async function pgAudit(actor: string, action: string, entity: string, entityId: string | null, meta: unknown = {}) {
-  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: config.authSecret, otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
+  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: runtimeAuthSecret(), otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
   try { await repo.appendAudit(actor, action, entity, entityId, meta); } finally { await repo.close(); }
 }
 export async function pgCanRequestOtp(email: string) {
-  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: config.authSecret, otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
+  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: runtimeAuthSecret(), otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
   try { return await repo.canRequestOtp(email); } finally { await repo.close(); }
 }
 export async function pgStoreOtp(email: string, code: string) {
-  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: config.authSecret, otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
+  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: runtimeAuthSecret(), otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
   try { await repo.storeOtp(email, code); } finally { await repo.close(); }
 }
 export async function pgVerifyOtp(email: string, code: string) {
-  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: config.authSecret, otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
+  const repo = new PgAuthOtpAuditRepository(url(), { authSecret: runtimeAuthSecret(), otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
   try { return await repo.verifyOtp(email, code); } finally { await repo.close(); }
 }
 export async function smokeCreateProduct(userId: string, input: PgProductInput, productId?: string) {

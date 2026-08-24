@@ -1,10 +1,9 @@
 import crypto from "node:crypto";
+import { runtimeAuthSecret } from "./auth-secret-policy";
+export { assertAuthSecretSafe, runtimeAuthSecret, SecretConfigurationError } from "./auth-secret-policy";
 
-// SENGAJA tidak mengimpor ./config. config.ts memanggil assertAuthSecretSafe()
-// saat modulnya dimuat, jadi impor balik ke config akan membentuk lingkaran
-// dan `config` bisa masih undefined saat berkas ini dievaluasi. Membaca
-// process.env langsung memutus lingkaran itu dan tidak kehilangan apa pun —
-// nilainya sama persis.
+// SENGAJA tidak mengimpor ./config. Rahasia runtime dibaca saat dipakai,
+// bukan dibekukan ketika modul/config diimpor saat `next build`.
 
 // Higienitas rahasia (masukan tester lewat Brian, 2026-08-11).
 //
@@ -30,64 +29,23 @@ import crypto from "node:crypto";
 // hanya berumur 1 jam dan OTP beberapa menit, jadi paling buruk ada tautan
 // yang perlu dimuat ulang.
 
-const DEFAULT_DEV_SECRET = "dev-secret-racun-ai-jangan-dipakai-produksi";
-const MIN_SECRET_BYTES = 32;
-
-export class SecretConfigurationError extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = "SecretConfigurationError";
-  }
-}
-
-/** Gagal-tertutup saat boot. Mengikuti pola assertLegacySqliteRuntimeAllowed
- * di lib/database-config.ts: di luar production tidak melakukan apa-apa,
- * di production menolak menyala dengan konfigurasi yang tidak aman. */
-export function assertAuthSecretSafe(
-  env: Partial<Pick<NodeJS.ProcessEnv, "NODE_ENV" | "AUTH_SECRET">> = process.env
-): void {
-  if (env.NODE_ENV !== "production") return;
-  const secret = env.AUTH_SECRET ?? "";
-  if (!secret) {
-    throw new SecretConfigurationError("AUTH_SECRET wajib diisi di production — tidak ada nilai bawaan yang aman.");
-  }
-  if (secret === DEFAULT_DEV_SECRET) {
-    throw new SecretConfigurationError("AUTH_SECRET masih memakai nilai bawaan pengembangan. Ganti sebelum deploy.");
-  }
-  // Panjang: sekarang MENOLAK boot.
-  //
-  // Sebelumnya ini hanya peringatan karena panjang secret produksi tidak bisa
-  // saya periksa dari repo — render.yaml hanya mendefinisikan staging.
-  // Diverifikasi langsung di Shell Render 2026-08-11: web DAN worker sama-sama
-  // 32 karakter, jadi menaikkannya tidak akan mematikan apa pun yang sedang
-  // berjalan. Menegakkannya di sini mencegah deploy berikutnya menurunkan
-  // standar tanpa ada yang sadar.
-  const len = Buffer.byteLength(secret, "utf8");
-  if (len < MIN_SECRET_BYTES) {
-    throw new SecretConfigurationError(
-      `AUTH_SECRET terlalu pendek (${len} byte). Minimal ${MIN_SECRET_BYTES} byte acak.`
-    );
-  }
-}
-
 /** Kunci turunan per fungsi lewat HKDF-SHA256. Satu master di env, kunci
  * berbeda per pemakaian — membocorkan salah satunya tidak membocorkan yang
  * lain, dan tiap fungsi bisa dirotasi sendiri nanti dengan mengubah info-nya. */
-function masterSecret(): string {
-  return process.env.AUTH_SECRET || DEFAULT_DEV_SECRET;
-}
-
-function derive(purpose: string): Buffer {
+function derive(purpose: string, master: string): Buffer {
   return Buffer.from(
-    crypto.hkdfSync("sha256", Buffer.from(masterSecret(), "utf8"), Buffer.alloc(0), Buffer.from(purpose, "utf8"), 32)
+    crypto.hkdfSync("sha256", Buffer.from(master, "utf8"), Buffer.alloc(0), Buffer.from(purpose, "utf8"), 32)
   );
 }
 
-const cache = new Map<string, Buffer>();
+const cache = new Map<string, { master: string; key: Buffer }>();
 function cached(purpose: string): Buffer {
-  let k = cache.get(purpose);
-  if (!k) { k = derive(purpose); cache.set(purpose, k); }
-  return k;
+  const master = runtimeAuthSecret();
+  const existing = cache.get(purpose);
+  if (existing?.master === master) return existing.key;
+  const key = derive(purpose, master);
+  cache.set(purpose, { master, key });
+  return key;
 }
 
 /** Kunci HMAC untuk URL media bertanda tangan (lib/signed-url.ts). */
