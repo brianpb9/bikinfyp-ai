@@ -1,0 +1,17 @@
+{
+  "observed_at": "2026-08-24T11:26:53.838Z",
+  "source": "GET https://racun-ai-staging-web.onrender.com/api/health; HTTP 200",
+  "ok": true,
+  "intake": "open",
+  "payments_provider": "midtrans",
+  "payments_env": "sandbox",
+  "payments_live": false,
+  "build_sha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+  "migrations_pending": null,
+  "klasifikasi": {
+    "mampu": false,
+    "biner": { "ffmpeg": true, "ffprobe": true, "tesseract": false },
+    "bahasaOcr": false,
+    "smoke": false
+  }
+}

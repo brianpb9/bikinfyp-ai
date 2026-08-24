@@ -20,9 +20,13 @@ stopped with `SecretConfigurationError`: `AUTH_SECRET` was unavailable inside
 the Docker build context. This is a build/runtime secret-boundary mismatch; it
 does not prove the candidate runtime capable.
 
-The service stayed behind maintenance hold throughout the failed attempt. No
-positive classifier/admission canary ran, no paid provider was invoked, and no
-production resource was mutated.
+The contemporaneous PATCH response recorded maintenance enabled on the
+candidate configuration and the health probe returned HTTP 503 before deploy.
+Maintenance was explicitly disabled only after the rollback deploy reported
+live. There was no continuous external sampler, so this bundle does not claim
+continuous independent observation between those endpoints. No positive
+classifier/admission canary command ran, this operator invoked no paid
+provider, and production control-plane identity did not change.
 
 ## Rollback proof
 
