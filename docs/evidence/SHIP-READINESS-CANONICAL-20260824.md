@@ -109,16 +109,20 @@ Yang **tidak boleh dihitung**:
   `1118 total / 1078 pass / 40 skip / 0 fail`; ini membuktikan tidak ada fail
   di mesin Builder, bukan eksekusi pihak kedua.
 - `git diff --check` dan dependency-free checks dapat diulang tanpa network.
-- Artefak staging 22 Agu memiliki provenance tersanitasi, tetapi hanya
-  membuktikan deployment lama yang diamati saat itu.
+- Artefak staging 22 Agu memiliki provenance tersanitasi. Refresh read-only
+  24 Agu mengonfirmasi deployment lama itu masih live; keduanya tidak
+  membuktikan current accepted tree telah di-deploy.
 
-Latest staging evidence yang authoritative adalah pengambilan read-only 22 Agu:
+Latest staging evidence yang authoritative adalah refresh read-only 24 Agu di
+`docs/evidence/P0-03/STAGING-CONTROL-PLANE-READONLY-REFRESH-20260824.md`:
 web `5fe53f27436d917d5232e23ef6c6e624eb00428a`, worker
-`78d8468` (keduanya commit 4 Agu). Terhadap jangkar awal P0-03 `8cd2888`, web
-tertinggal 323 commit dan worker 327 commit. `/api/health` web hanya menjawab
-`{"ok":true,"intake":"open"}`; absence blok classification berarti probe
-belum deployed, bukan runtime dinyatakan mampu/tidak mampu. Bukti ini tidak
-memberi credit pada current HEAD.
+`78d84685de6db63724ac2715ef516917d0c4ce3c`. SHA web/worker berbeda,
+`autoDeploy=no`, dan keduanya tidak suspended. `/api/health` web pada
+`2026-08-24 12:41:34 Asia/Jakarta` hanya menjawab
+`{"ok":true,"intake":"open"}` dengan HTTP 200; tidak ada `build_sha`, blok
+classification, migration, atau payment proof. Absence blok classification
+berarti probe belum terbukti deployed, bukan runtime dinyatakan mampu/tidak
+mampu. Bukti ini tidak memberi credit pada current HEAD dan skor tetap 58/100.
 
 ### Local-only
 
