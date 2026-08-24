@@ -1,0 +1,79 @@
+{
+  "schema": "duitku-sandbox-verification/v1",
+  "observed_at": "2026-08-24T15:39:29.665Z",
+  "execution": "REAL_SANDBOX_API",
+  "authentication_at_execution": {
+    "create_invoice": "LEGACY_RAW_SHA256_OBSOLETE",
+    "transaction_status_refresh": "HMAC_SHA256_CURRENT"
+  },
+  "preflight": {
+    "credentials_present": true,
+    "provider": "duitku",
+    "payments_env": "sandbox",
+    "payments_live": false,
+    "payments_go_live": false,
+    "api_origin": "https://api-sandbox.duitku.com",
+    "callback_origin": "https://racun-ai-staging-web.onrender.com",
+    "callback_url": "https://racun-ai-staging-web.onrender.com/api/webhooks/duitku"
+  },
+  "package": {
+    "id": "hq5",
+    "name": "5× AI Bersuara",
+    "price_idr": 60000
+  },
+  "prohibitions": {
+    "payment_page_opened": false,
+    "invoice_paid": false,
+    "real_charge": false,
+    "refund": false,
+    "settlement": false,
+    "production_mutation": false
+  },
+  "replacement_attempted": true,
+  "real_sandbox_api": {
+    "executed": true,
+    "provider_originated_facts": true,
+    "order_id": "bikinfyp-sandbox-verify-20260824153929-c9dc999e",
+    "create_invoice": {
+      "accepted": true,
+      "redirect_origin": "https://app-sandbox.duitku.com",
+      "provider_reference_sha256": "840b85a15b2a084d6e8fe82767e17ce03e8ce912c19151b70b5a779b35885ca8"
+    },
+    "transaction_status": {
+      "queried": true,
+      "queried_at": "2026-08-24T15:43:27.344Z",
+      "http_status": 404,
+      "content_type": "application/json; charset=utf-8",
+      "body_sha256": "f5ef9c2a3621f591edfa2df900b3cd5ef52360259b581cb4063e98a694eb6c79",
+      "body_keys": [
+        "Message"
+      ],
+      "status_code": null,
+      "status_message": null,
+      "amount": null,
+      "reference_matches_create": null
+    }
+  },
+  "managed_callback": {
+    "execution": "NOT_RUN",
+    "evidence_class": "READ_ONLY_MANAGED_HEALTH",
+    "reason": "managed staging payments_provider=midtrans, expected duitku",
+    "health": {
+      "http_status": 200,
+      "build_sha": "73280ffa342945dc08cee2fc664956975c8d5735",
+      "payments_provider": "midtrans",
+      "payments_env": "sandbox",
+      "payments_live": false
+    }
+  },
+  "first_attempt": {
+    "evidence_class": "REAL_SANDBOX_API",
+    "create_invoice": "ACCEPTED",
+    "order_id": null,
+    "reason_order_id_missing": "pre-fix runner rejected redirect origin before durable order journal",
+    "payment_page_opened": false,
+    "invoice_paid": false,
+    "transaction_status": "UNRECOVERABLE_WITHOUT_ORDER_ID",
+    "provider_expiry": "EXPECTED_NOT_OBSERVED"
+  }
+}

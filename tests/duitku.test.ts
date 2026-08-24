@@ -1,6 +1,5 @@
 // Verifikasi signature Duitku — jalur uang sungguhan, formula dari SDK resmi
-// duitkupg/duitku-php: callback md5(merchantCode + amount + merchantOrderId + apiKey),
-// createInvoice sha256(merchantCode + timestampMs + apiKey).
+// Duitku POP saat ini: semua signature menggunakan HMAC-SHA256 dengan API key.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -12,10 +11,16 @@ process.env.DUITKU_MERCHANT_CODE = "DTEST1";
 process.env.DUITKU_API_KEY = "kunci-uji-duitku";
 process.env.APP_BASE_URL = "https://bikinfyp.com";
 
-const { verifyDuitkuCallbackSignature, createDuitkuInvoice, duitkuBase } = await import("../lib/duitku");
+const {
+  verifyDuitkuCallbackSignature,
+  createDuitkuInvoice,
+  duitkuBase,
+  duitkuTransactionStatusDetailed,
+  duitkuTransactionStatusUrl,
+} = await import("../lib/duitku");
 
 const sign = (merchantCode: string, amount: string, orderId: string, apiKey: string) =>
-  crypto.createHash("md5").update(merchantCode + amount + orderId + apiKey).digest("hex");
+  crypto.createHmac("sha256", apiKey).update(merchantCode + amount + orderId).digest("hex");
 
 test("callback dengan signature sah diterima", () => {
   const payload = {
@@ -80,12 +85,42 @@ test("createInvoice mengirim header signature yang benar dan membaca paymentUrl"
     assert.equal(c.url, "https://api-sandbox.duitku.com/api/merchant/createInvoice");
     assert.equal(c.headers["x-duitku-merchantcode"], "DTEST1");
     const ts = c.headers["x-duitku-timestamp"];
-    const expected = crypto.createHash("sha256").update("DTEST1" + ts + "kunci-uji-duitku").digest("hex");
+    const expected = crypto.createHmac("sha256", "kunci-uji-duitku").update("DTEST1" + ts).digest("hex");
     assert.equal(c.headers["x-duitku-signature"], expected);
     assert.equal(c.body.paymentAmount, 60000);
     assert.equal(c.body.merchantOrderId, "racun-abc-123");
     assert.equal(c.body.callbackUrl, "https://bikinfyp.com/api/webhooks/duitku");
     assert.equal(c.body.returnUrl, "https://bikinfyp.com/kredit");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
+test("transactionStatus memakai endpoint webapi sandbox dan HMAC-SHA256", async () => {
+  assert.equal(duitkuTransactionStatusUrl(), "https://sandbox.duitku.com/webapi/api/merchant/transactionStatus");
+  const realFetch = globalThis.fetch;
+  let capturedUrl = "";
+  let capturedBody: Record<string, string> = {};
+  globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
+    capturedUrl = String(url);
+    capturedBody = JSON.parse(String(init?.body));
+    return new Response(JSON.stringify({ statusCode: "01", statusMessage: "PENDING", reference: "D0001", amount: 60000 }), {
+      status: 200,
+      headers: { "content-type": "application/json" },
+    });
+  }) as typeof fetch;
+  try {
+    const detail = await duitkuTransactionStatusDetailed("racun-abc-123");
+    assert.equal(capturedUrl, "https://sandbox.duitku.com/webapi/api/merchant/transactionStatus");
+    assert.equal(capturedBody.merchantCode, "DTEST1");
+    assert.equal(capturedBody.merchantOrderId, "racun-abc-123");
+    assert.equal(
+      capturedBody.signature,
+      crypto.createHmac("sha256", "kunci-uji-duitku").update("DTEST1racun-abc-123").digest("hex")
+    );
+    assert.equal(detail.httpStatus, 200);
+    assert.equal(detail.statusCode, "01");
+    assert.deepEqual(detail.bodyKeys, ["amount", "reference", "statusCode", "statusMessage"]);
   } finally {
     globalThis.fetch = realFetch;
   }

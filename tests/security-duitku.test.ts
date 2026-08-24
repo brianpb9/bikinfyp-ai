@@ -42,7 +42,7 @@ function callbackPayload(orderId: string, opts?: { signatureOverride?: string; a
   const amount = opts?.amount ?? "120000";
   const sig =
     opts?.signatureOverride ??
-    crypto.createHash("md5").update(MERCHANT_CODE + amount + orderId + API_KEY).digest("hex");
+    crypto.createHmac("sha256", API_KEY).update(MERCHANT_CODE + amount + orderId).digest("hex");
   return {
     merchantCode: MERCHANT_CODE,
     amount,
@@ -145,7 +145,7 @@ test("order tidak dikenal -> 200 ignored, tanpa side effect", async () => {
 
 test("callback merchantCode lain -> 401 walau signature konsisten dengan kuncinya sendiri", async () => {
   const orderId = makePendingOrder();
-  const sig = crypto.createHash("md5").update("ORANGLAIN" + "120000" + orderId + API_KEY).digest("hex");
+  const sig = crypto.createHmac("sha256", API_KEY).update("ORANGLAIN" + "120000" + orderId).digest("hex");
   const res = await callWebhook({ ...callbackPayload(orderId), merchantCode: "ORANGLAIN", signature: sig });
   assert.equal(res.status, 401);
 });

@@ -2,11 +2,11 @@
 // Docs: https://docs.duitku.com/pop/en/ — formula diverifikasi terhadap SDK
 // resmi duitkupg/duitku-php (Pop.php, 2026-08-19):
 //  - createInvoice: POST {base}/api/merchant/createInvoice
-//    header x-duitku-signature = sha256(merchantCode + timestampMs + apiKey)
+//    header x-duitku-signature = HMAC-SHA256(merchantCode + timestampMs, apiKey)
 //  - callback: POST x-www-form-urlencoded,
-//    signature = md5(merchantCode + amount + merchantOrderId + apiKey)
-//  - transactionStatus: POST {base}/api/merchant/transactionStatus,
-//    signature = md5(merchantCode + merchantOrderId + apiKey)
+//    signature = HMAC-SHA256(merchantCode + amount + merchantOrderId, apiKey)
+//  - transactionStatus: POST endpoint webapi sesuai environment,
+//    signature = HMAC-SHA256(merchantCode + merchantOrderId, apiKey)
 
 import crypto from "node:crypto";
 import { config } from "./config";
@@ -54,6 +54,12 @@ export function duitkuBase(): string {
     : "https://api-sandbox.duitku.com";
 }
 
+export function duitkuTransactionStatusUrl(): string {
+  return config.duitkuIsProduction
+    ? "https://passport.duitku.com/webapi/api/merchant/transactionStatus"
+    : "https://sandbox.duitku.com/webapi/api/merchant/transactionStatus";
+}
+
 export async function createDuitkuInvoice(opts: {
   orderId: string;
   packageId: string;
@@ -70,8 +76,8 @@ export async function createDuitkuInvoice(opts: {
 
   const timestamp = Date.now();
   const signature = crypto
-    .createHash("sha256")
-    .update(config.duitkuMerchantCode + timestamp + config.duitkuApiKey)
+    .createHmac("sha256", config.duitkuApiKey)
+    .update(config.duitkuMerchantCode + timestamp)
     .digest("hex");
 
   const res = await fetch(`${duitkuBase()}/api/merchant/createInvoice`, {
@@ -110,7 +116,7 @@ export async function createDuitkuInvoice(opts: {
 
 /**
  * Verifikasi signature callback Duitku. WAJIB sebelum side effect apa pun.
- * Formula: md5(merchantCode + amount + merchantOrderId + apiKey) — pakai string
+ * Formula: HMAC-SHA256(merchantCode + amount + merchantOrderId, apiKey) — pakai string
  * mentah persis seperti yang dikirim Duitku, tanpa normalisasi angka.
  */
 export function verifyDuitkuCallbackSignature(payload: {
@@ -125,8 +131,8 @@ export function verifyDuitkuCallbackSignature(payload: {
   // Callback untuk merchant lain tidak pernah sah di sini.
   if (merchantCode !== config.duitkuMerchantCode) return false;
   const expected = crypto
-    .createHash("md5")
-    .update(merchantCode + amount + merchantOrderId + config.duitkuApiKey)
+    .createHmac("sha256", config.duitkuApiKey)
+    .update(merchantCode + amount + merchantOrderId)
     .digest("hex");
   const a = Buffer.from(expected, "utf8");
   const b = Buffer.from(String(signature).toLowerCase(), "utf8");
@@ -140,17 +146,55 @@ export async function duitkuTransactionStatus(orderId: string): Promise<{
   reference?: string;
   amount?: string;
 }> {
+  const detail = await duitkuTransactionStatusDetailed(orderId);
+  return {
+    statusCode: detail.statusCode,
+    statusMessage: detail.statusMessage,
+    reference: detail.reference,
+    amount: detail.amount,
+  };
+}
+
+/** Bukti status secret-safe untuk runner sandbox dan rekonsiliasi diagnostik. */
+export async function duitkuTransactionStatusDetailed(orderId: string): Promise<{
+  httpStatus: number;
+  contentType: string | null;
+  bodySha256: string;
+  bodyKeys: string[];
+  statusCode?: string;
+  statusMessage?: string;
+  reference?: string;
+  amount?: string;
+}> {
   if (!config.duitkuMerchantCode || !config.duitkuApiKey) throw new DuitkuNotConfigured();
   const signature = crypto
-    .createHash("md5")
-    .update(config.duitkuMerchantCode + orderId + config.duitkuApiKey)
+    .createHmac("sha256", config.duitkuApiKey)
+    .update(config.duitkuMerchantCode + orderId)
     .digest("hex");
-  const res = await fetch(`${duitkuBase()}/api/merchant/transactionStatus`, {
+  const res = await fetch(duitkuTransactionStatusUrl(), {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ merchantCode: config.duitkuMerchantCode, merchantOrderId: orderId, signature }),
   });
-  return (await res.json().catch(() => ({}))) as {
+  const raw = await res.text();
+  const data = (() => {
+    try { return JSON.parse(raw) as Record<string, unknown>; }
+    catch { return {}; }
+  })();
+  return {
+    httpStatus: res.status,
+    contentType: res.headers.get("content-type"),
+    bodySha256: crypto.createHash("sha256").update(raw).digest("hex"),
+    bodyKeys: Object.keys(data).sort(),
+    statusCode: typeof data.statusCode === "string" ? data.statusCode : undefined,
+    statusMessage: typeof data.statusMessage === "string" ? data.statusMessage : undefined,
+    reference: typeof data.reference === "string" ? data.reference : undefined,
+    amount: typeof data.amount === "string" || typeof data.amount === "number" ? String(data.amount) : undefined,
+  } as {
+    httpStatus: number;
+    contentType: string | null;
+    bodySha256: string;
+    bodyKeys: string[];
     statusCode?: string;
     statusMessage?: string;
     reference?: string;

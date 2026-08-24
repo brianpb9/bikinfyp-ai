@@ -129,7 +129,7 @@ await check("webhook: signature palsu -> 401 tanpa side effect", async () => {
 if (MERCHANT && APIKEY) {
   await check("webhook: signature SAH order tak dikenal -> 200 ignored", async () => {
     const orderId = `smoke-tak-dikenal-${Date.now()}`;
-    const sig = crypto.createHash("md5").update(MERCHANT + "60000" + orderId + APIKEY).digest("hex");
+    const sig = crypto.createHmac("sha256", APIKEY).update(MERCHANT + "60000" + orderId).digest("hex");
     const r = await fetch(`${BASE}/api/webhooks/duitku`, {
       method: "POST", headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({ merchantCode: MERCHANT, amount: "60000", merchantOrderId: orderId, resultCode: "00", signature: sig }).toString(),
@@ -140,8 +140,11 @@ if (MERCHANT && APIKEY) {
 
   // ---- 5. API Duitku dari sisi merchant (read-only) ----
   await check("Duitku transactionStatus order paid -> statusCode 00", async () => {
-    const sig = crypto.createHash("md5").update(MERCHANT + PAID_ORDER + APIKEY).digest("hex");
-    const r = await fetch(`${DUITKU_BASE}/api/merchant/transactionStatus`, {
+    const sig = crypto.createHmac("sha256", APIKEY).update(MERCHANT + PAID_ORDER).digest("hex");
+    const statusUrl = DUITKU_BASE.includes("sandbox")
+      ? "https://sandbox.duitku.com/webapi/api/merchant/transactionStatus"
+      : "https://passport.duitku.com/webapi/api/merchant/transactionStatus";
+    const r = await fetch(statusUrl, {
       method: "POST", headers: { "content-type": "application/json" },
       body: JSON.stringify({ merchantCode: MERCHANT, merchantOrderId: PAID_ORDER, signature: sig }),
     });
