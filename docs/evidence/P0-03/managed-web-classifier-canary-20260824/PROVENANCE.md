@@ -6,6 +6,7 @@
 | `control-plane-attempt.json` | later file transcription of the contemporaneous official PATCH response + health status probe + deploy list shown in the operator session | candidate config, maintenance boolean, HTTP status, exact SHA/status | token, response headers/body from 503 |
 | `control-plane-final.json` | official Render service API + deploy lists after rollback | allowlisted config/deploy fields and DB allowlist count | token, env vars/values, IP/CIDR |
 | `health-final.json` | public staging `/api/health` | operational booleans and exact build SHA | verbose user-facing classifier reason |
+| `build-failure.txt` | evidence-scoped summary of deploy terminal record and bounded Render log | failed build/result availability; provider state explicitly not independently proven | credentials and unrelated logs |
 | `failed-build-log.txt` | Render logs bounded to task window | Docker stages and terminal error class | unrelated lines; any secret or request material |
 | `commands.md` | later reconstruction from operator-session tool calls | literal sanitized invocations, per-command timestamps/results, artifact links | bearer token value |
 

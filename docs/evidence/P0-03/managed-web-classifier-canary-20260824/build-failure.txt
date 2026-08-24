@@ -7,5 +7,5 @@ docker_next_build_compile=PASS
 docker_next_page_data=FAIL
 error_class=SecretConfigurationError
 error_summary=AUTH_SECRET unavailable inside Docker build context while collecting page data for /api/promo/jobs
-canary_executed=false
-paid_provider_invoked=false
+canary_result=none
+paid_provider_invocation=not_independently_proven

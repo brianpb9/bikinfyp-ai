@@ -1,4 +1,4 @@
-# P0-B2 managed web classifier canary — fail-safe rollback
+# P0-B2 managed web classifier canary — failed build and final restoration
 
 TASK=`P0-B2-MANAGED-WEB-CLASSIFIER-CANARY-20260824`
 
@@ -54,8 +54,8 @@ production interval-level non-mutation is not independently proven.
 
 ## Gate disposition
 
-`MANAGED_CLASSIFIER_CANARY=FAIL`, `FINAL_STATE_ROLLBACK=PASS`, and
-`FAILSAFE_SEQUENCE_EVIDENCE=INCOMPLETE`.
+`CANDIDATE_BUILD=FAIL`, `MANAGED_CLASSIFIER_CANARY=NOT_RUN`,
+`FINAL_STATE_ROLLBACK=PASS`, and `FAILSAFE_SEQUENCE_EVIDENCE=INCOMPLETE`.
 
 Durable conclusion: the candidate build failed, no canary result exists, and a
 later direct final-state read shows staging web restored live and healthy on the
