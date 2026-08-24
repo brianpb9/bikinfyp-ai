@@ -4,11 +4,12 @@ import path from "node:path";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { createSignedUrl } from "@/lib/signed-url";
-import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, deleteStoredProductImages, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, bacaMetaGambar, deleteStoredProductImages, referensiLayak, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
 import { pgAudit, pgRemoveOrgProductImage, postgresRuntimeEnabled, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { orgPhotoPostDependencies } from "@/lib/org-photo-post-dependencies";
+import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -69,6 +70,21 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
 
     const added = await saveUniqueProductImages(id, blobs);
+    try {
+      const semua = [...owned.images, ...added];
+      const layak = await referensiLayak(semua);
+      if (layak.length === 0) {
+        const metaBaru = await Promise.all(added.map((rel) => bacaMetaGambar(rel)));
+        const sebab = metaBaru.find((meta) => meta && !meta.layakReferensi)?.alasan
+          ?? "Belum ada foto produk yang bisa dipakai jadi acuan.";
+        throw ERR.BAD_REQUEST(
+          `${sebab} Butuh minimal satu foto produk polos supaya videonya punya acuan yang benar.`,
+          "No reference-eligible product photo."
+        );
+      }
+    } catch (referenceError) {
+      await rejectAfterReferenceCheck("E8", added, referenceError);
+    }
     let images: string[] | null;
     try {
       images = await dependencies.pgAppendOrgProductImages(membership.org_id, id, added, MAX_IMAGES);

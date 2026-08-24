@@ -224,36 +224,47 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
   );
 }
 
-function assertE4ReferenceRollback(source: string, context: string) {
-  const ast = ts.createSourceFile(`${context}.ts`, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
-  const namedFunction = (name: string) => ast.statements.find((statement): statement is ts.FunctionDeclaration =>
+function parseSource(source: string, context: string) {
+  return ts.createSourceFile(`${context}.ts`, source, ts.ScriptTarget.ESNext, true, ts.ScriptKind.TS);
+}
+
+function namedFunction(ast: ts.SourceFile, name: string) {
+  return ast.statements.find((statement): statement is ts.FunctionDeclaration =>
     ts.isFunctionDeclaration(statement) && statement.name?.text === name
   );
-  const helper = namedFunction("rejectAfterReferenceCheck");
-  const post = namedFunction("POST");
+}
+
+function callName(call: ts.CallExpression): string | undefined {
+  if (ts.isIdentifier(call.expression)) return call.expression.text;
+  if (ts.isPropertyAccessExpression(call.expression)) return call.expression.name.text;
+  return undefined;
+}
+
+function callsNamed(root: ts.Node, name: string): ts.CallExpression[] {
+  const found: ts.CallExpression[] = [];
+  const visit = (node: ts.Node): void => {
+    if (ts.isCallExpression(node) && callName(node) === name) found.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(root);
+  return found;
+}
+
+function ancestor<T extends ts.Node>(node: ts.Node, predicate: (candidate: ts.Node) => candidate is T): T | undefined {
+  let current = node.parent;
+  while (current) {
+    if (predicate(current)) return current;
+    current = current.parent;
+  }
+  return undefined;
+}
+
+function assertReferenceRollbackHelper(source: string, context: string) {
+  const ast = parseSource(source, context);
+  const helper = namedFunction(ast, "rejectAfterReferenceCheck");
   assert.ok(helper?.body, `${context}: helper rollback exact wajib ada`);
-  assert.ok(post?.body && post.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword),
-    `${context}: exported POST wajib ada`);
 
-  const calls = (root: ts.Node, name: string): ts.CallExpression[] => {
-    const found: ts.CallExpression[] = [];
-    const visit = (node: ts.Node): void => {
-      if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === name) found.push(node);
-      ts.forEachChild(node, visit);
-    };
-    visit(root);
-    return found;
-  };
-  const ancestor = <T extends ts.Node>(node: ts.Node, predicate: (candidate: ts.Node) => candidate is T): T | undefined => {
-    let current = node.parent;
-    while (current) {
-      if (predicate(current)) return current;
-      current = current.parent;
-    }
-    return undefined;
-  };
-
-  const deletes = calls(helper.body, "deleteStoredProductImages");
+  const deletes = callsNamed(helper.body, "deleteStoredProductImages");
   assert.equal(deletes.length, 1, `${context}: helper wajib tepat satu cleanup storage`);
   const deletion = deletes[0];
   assert.ok(ts.isAwaitExpression(deletion.parent) && deletion.parent.expression === deletion,
@@ -270,12 +281,21 @@ function assertE4ReferenceRollback(source: string, context: string) {
   const helperTail = helper.body.statements[helper.body.statements.length - 1];
   assert.ok(ts.isThrowStatement(helperTail) && ts.isIdentifier(helperTail.expression)
     && helperTail.expression.text === "referenceError", `${context}: cleanup sukses wajib melempar ulang error referensi asli`);
+}
 
-  const save = calls(post.body, "saveUniqueProductImages");
-  const resolve = calls(post.body, "referensiLayak");
-  const rollback = calls(post.body, "rejectAfterReferenceCheck");
-  const append = calls(post.body, "appendRetailProductImages");
-  const audit = calls(post.body, "auditBoth");
+function assertReferenceRollbackBeforePublication(source: string, context: string, boundary: "E4" | "E8") {
+  const ast = parseSource(source, context);
+  const post = namedFunction(ast, "POST");
+  assert.ok(post?.body && post.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword),
+    `${context}: exported POST wajib ada`);
+  const appendName = boundary === "E4" ? "appendRetailProductImages" : "pgAppendOrgProductImages";
+  const auditName = boundary === "E4" ? "auditBoth" : "pgAudit";
+  const expectedCombined = boundary === "E4" ? "[...existing,...added]" : "[...owned.images,...added]";
+  const save = callsNamed(post.body, "saveUniqueProductImages");
+  const resolve = callsNamed(post.body, "referensiLayak");
+  const rollback = callsNamed(post.body, "rejectAfterReferenceCheck");
+  const append = callsNamed(post.body, appendName);
+  const audit = callsNamed(post.body, auditName);
   assert.equal(save.length, 1, `${context}: wajib satu save ingestion`);
   assert.equal(resolve.length, 1, `${context}: wajib satu resolver referensi`);
   assert.equal(rollback.length, 1, `${context}: wajib satu pemanggilan rollback`);
@@ -283,10 +303,19 @@ function assertE4ReferenceRollback(source: string, context: string) {
   assert.equal(audit.length, 1, `${context}: wajib satu audit sukses`);
   assert.ok(ts.isAwaitExpression(rollback[0].parent) && rollback[0].parent.expression === rollback[0],
     `${context}: rollback failure boundary wajib di-await`);
-  assert.equal(rollback[0].arguments.map((arg) => arg.getText(ast)).join(","), "added,referenceError",
-    `${context}: rollback wajib menerima exact added dan error resolver`);
+  assert.equal(rollback[0].arguments.map((arg) => arg.getText(ast)).join(","), `"${boundary}",added,referenceError`,
+    `${context}: rollback wajib menerima boundary, exact added, dan error resolver`);
   const referenceTry = ancestor(resolve[0], ts.isTryStatement);
   assert.ok(referenceTry?.catchClause, `${context}: resolver/no-reference wajib punya catch rollback`);
+  const combined = referenceTry.tryBlock.statements.flatMap((statement) => {
+    if (!ts.isVariableStatement(statement)) return [];
+    return statement.declarationList.declarations.filter((declaration) =>
+      ts.isIdentifier(declaration.name) && declaration.name.text === "semua"
+    );
+  });
+  assert.equal(combined.length, 1, `${context}: daftar otoritatif existing+added wajib eksplisit`);
+  assert.equal(combined[0].initializer?.getText(ast).replace(/\s/g, ""), expectedCombined,
+    `${context}: resolver wajib memakai existing lalu exact added`);
   assert.ok(rollback[0].getStart(ast) >= referenceTry.catchClause.getStart(ast)
     && rollback[0].getEnd() <= referenceTry.catchClause.getEnd(), `${context}: rollback wajib berada di catch resolver`);
   assert.ok(save[0].getEnd() < resolve[0].getStart(ast), `${context}: resolver wajib sesudah ingestion`);
@@ -511,67 +540,88 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   }
 });
 
-test("E4 menjaga rollback exact setelah resolver dan sebelum append/audit", () => {
+test("E4 dan E8 menjaga rollback exact setelah resolver dan sebelum append/audit", () => {
+  const helper = baca("lib/reference-rejection-rollback.ts");
   const retail = baca("app/api/products/[id]/photos/route.ts");
-  assertE4ReferenceRollback(retail, "E4 production rollback");
+  const org = baca("app/api/dashboard/campaign/product/[id]/photos/route.ts");
+  assertReferenceRollbackHelper(helper, "shared production rollback helper");
+  assertReferenceRollbackBeforePublication(retail, "E4 production rollback", "E4");
+  assertReferenceRollbackBeforePublication(org, "E8 production rollback", "E8");
 
-  const helperSah = `async function rejectAfterReferenceCheck(added, referenceError) {
+  const helperSah = `export async function rejectAfterReferenceCheck(boundary, added, referenceError) {
     try { await deleteStoredProductImages(added); }
     catch (cleanupError) { throw new Error("residual storage objects may remain"); }
     throw referenceError;
   }`;
-  const postSah = `export async function POST() {
+  const postE8Sah = `export async function POST() {
     const added = await saveUniqueProductImages(id, blobs);
     try {
+      const semua = [...owned.images, ...added];
       const layak = await referensiLayak(semua);
       if (!layak.length) throw referenceError;
     } catch (referenceError) {
-      await rejectAfterReferenceCheck(added, referenceError);
+      await rejectAfterReferenceCheck("E8", added, referenceError);
     }
-    const images = await appendRetailProductImages(user.id, id, added, MAX_IMAGES);
-    auditBoth(user.id, "product.photos_added", id, {});
+    const images = await dependencies.pgAppendOrgProductImages(user.id, id, added, MAX_IMAGES);
+    dependencies.pgAudit(user.id, "product.photos_added", id, {});
   }`;
-  assertE4ReferenceRollback(`${helperSah}\n${postSah}`, "E4 structural control");
+  assertReferenceRollbackHelper(helperSah, "shared structural control");
+  assertReferenceRollbackBeforePublication(postE8Sah, "E8 structural control", "E8");
 
-  const counterexamples = [
-    ["menghapus existing", `async function rejectAfterReferenceCheck(added, referenceError) {
+  const helperCounterexamples = [
+    ["menghapus existing", `async function rejectAfterReferenceCheck(boundary, added, referenceError) {
       try { await deleteStoredProductImages(existing); }
       catch (cleanupError) { throw new Error("residual storage objects may remain"); }
       throw referenceError;
-    }\n${postSah}`],
-    ["cleanup tidak awaited", `async function rejectAfterReferenceCheck(added, referenceError) {
+    }`],
+    ["cleanup tidak awaited", `async function rejectAfterReferenceCheck(boundary, added, referenceError) {
       try { deleteStoredProductImages(added); }
       catch (cleanupError) { throw new Error("residual storage objects may remain"); }
       throw referenceError;
-    }\n${postSah}`],
-    ["cleanup failure disamarkan", `async function rejectAfterReferenceCheck(added, referenceError) {
+    }`],
+    ["cleanup failure disamarkan", `async function rejectAfterReferenceCheck(boundary, added, referenceError) {
       try { await deleteStoredProductImages(added); }
       catch (cleanupError) { throw referenceError; }
       throw referenceError;
-    }\n${postSah}`],
-    ["append masih di dalam failure boundary", `${helperSah}\nexport async function POST() {
-      const added = await saveUniqueProductImages(id, blobs);
-      try {
-        const layak = await referensiLayak(semua);
-        const images = await appendRetailProductImages(user.id, id, added, MAX_IMAGES);
-      } catch (referenceError) {
-        await rejectAfterReferenceCheck(added, referenceError);
-      }
-      auditBoth(user.id, "product.photos_added", id, {});
-    }`],
-    ["rollback di luar catch", `${helperSah}\nexport async function POST() {
-      const added = await saveUniqueProductImages(id, blobs);
-      const layak = await referensiLayak(semua);
-      await rejectAfterReferenceCheck(added, referenceError);
-      const images = await appendRetailProductImages(user.id, id, added, MAX_IMAGES);
-      auditBoth(user.id, "product.photos_added", id, {});
     }`],
   ] as const;
-  for (const [name, source] of counterexamples) {
+  for (const [name, source] of helperCounterexamples) {
     assert.throws(
-      () => assertE4ReferenceRollback(source, `counterexample E4 rollback ${name}`),
-      /cleanup exact wajib di-await|cleanup hanya boleh menyasar added|cleanup failure|risiko residual|catch rollback|rollback wajib berada di catch|append list wajib sesudah failure boundary/,
-      `${name} tidak boleh memenangkan structural guard rollback`
+      () => assertReferenceRollbackHelper(source, `counterexample shared rollback ${name}`),
+      /cleanup exact wajib di-await|cleanup hanya boleh menyasar added|cleanup failure|risiko residual/,
+      `${name} tidak boleh memenangkan structural guard helper rollback`
+    );
+  }
+
+  const routeCounterexamples = [
+    ["urutan daftar dibalik", postE8Sah.replace("[...owned.images, ...added]", "[...added, ...owned.images]")],
+    ["boundary salah", postE8Sah.replace('"E8", added, referenceError', '"E4", added, referenceError')],
+    ["append masih di dalam failure boundary", `export async function POST() {
+      const added = await saveUniqueProductImages(id, blobs);
+      try {
+        const semua = [...owned.images, ...added];
+        const layak = await referensiLayak(semua);
+        const images = await dependencies.pgAppendOrgProductImages(user.id, id, added, MAX_IMAGES);
+      } catch (referenceError) {
+        await rejectAfterReferenceCheck("E8", added, referenceError);
+      }
+      dependencies.pgAudit(user.id, "product.photos_added", id, {});
+    }`],
+    ["rollback di luar catch", `export async function POST() {
+      const added = await saveUniqueProductImages(id, blobs);
+      const semua = [...owned.images, ...added];
+      const layak = await referensiLayak(semua);
+      await rejectAfterReferenceCheck("E8", added, referenceError);
+      const images = await dependencies.pgAppendOrgProductImages(user.id, id, added, MAX_IMAGES);
+      dependencies.pgAudit(user.id, "product.photos_added", id, {});
+    }`],
+    ["resolver hilang", postE8Sah.replace("const layak = await referensiLayak(semua);", "const layak = semua;")],
+  ] as const;
+  for (const [name, source] of routeCounterexamples) {
+    assert.throws(
+      () => assertReferenceRollbackBeforePublication(source, `counterexample E8 rollback ${name}`, "E8"),
+      /resolver referensi|boundary, exact added|existing lalu exact added|catch rollback|rollback wajib berada di catch|append list wajib sesudah failure boundary/,
+      `${name} tidak boleh memenangkan structural guard route rollback`
     );
   }
 });

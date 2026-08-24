@@ -2,15 +2,15 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, audit, type ProductRow } from "@/lib/db";
 import { createSignedUrl } from "@/lib/signed-url";
-import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, deleteStoredProductImages, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, bacaMetaGambar, deleteStoredProductImages, referensiLayak, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { pgAudit, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { periksaLabelFoto, merekTerdaftar } from "@/lib/media/label-terbaca";
-import { referensiLayak, bacaMetaGambar } from "@/lib/product-images";
 import { appendRetailProductImages, removeRetailProductImage } from "@/lib/retail-product-images";
+import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,29 +32,6 @@ async function ownedProduct(userId: string, productId: string): Promise<{ produc
 async function auditBoth(userId: string, action: string, productId: string, meta: Record<string, unknown>): Promise<void> {
   if (postgresRuntimeEnabled()) await pgAudit(userId, action, "products", productId, meta);
   else audit(userId, action, "products", productId, meta);
-}
-
-async function rejectAfterReferenceCheck(added: string[], referenceError: unknown): Promise<never> {
-  try {
-    // Hanya object dari request ini. Foto existing sudah dipersist sebelum
-    // request dimulai dan tidak boleh ikut rollback karena resolver menolak
-    // gabungan daftar.
-    await deleteStoredProductImages(added);
-  } catch (cleanupError) {
-    const referenceMessage = referenceError instanceof Error ? referenceError.message : String(referenceError);
-    const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
-    // errorResponse mencatat Error ini sebagai unexpected error. Responsnya
-    // sengaja 500 (bukan BAD_REQUEST palsu): list belum pernah di-append,
-    // tetapi sebagian bytes/sidecar baru mungkin masih tertinggal dan perlu
-    // rekonsiliasi operator.
-    throw new Error(
-      `E4 reference rejection cleanup failed for ${added.length} newly added image(s); ` +
-      `the existing product list was not changed, but residual storage objects may remain. ` +
-      `Reference failure: ${referenceMessage}. Cleanup failure: ${cleanupMessage}`,
-      { cause: cleanupError }
-    );
-  }
-  throw referenceError;
 }
 
 // POST /api/products/[id]/photos — TAMBAH foto ke produk yang sudah ada
@@ -146,7 +123,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         );
       }
     } catch (referenceError) {
-      await rejectAfterReferenceCheck(added, referenceError);
+      await rejectAfterReferenceCheck("E4", added, referenceError);
     }
     const images = await appendRetailProductImages(user.id, id, added, MAX_IMAGES);
     if (!images) {
