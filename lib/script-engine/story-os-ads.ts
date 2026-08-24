@@ -141,7 +141,7 @@ export interface StoryAdsIdentity extends StoryAdsProductEvidence {
 }
 
 /** Identitas genre yang dipakai seragam oleh worker dan semua boundary biaya.
- * Snapshot admisi menang untuk content type; kolom job melengkapi provenance
+ * Snapshot admisi menang untuk content type dan template; kolom job hanya melengkapi provenance
  * legacy (terutama template_id null pada talking_head Story Ads lama). */
 export function deriveStoryAdsIdentity(
   admission: { contentType?: "affiliate" | "ads" | null; templateId?: string | null } | null | undefined,
@@ -149,7 +149,7 @@ export function deriveStoryAdsIdentity(
 ): StoryAdsIdentity {
   return {
     contentType: admission?.contentType ?? (job.format === "ads" ? "ads" : null),
-    templateId: job.templateId ?? admission?.templateId ?? null,
+    templateId: admission?.templateId ?? job.templateId ?? null,
     durationSec: job.durationSec ?? null,
   };
 }
@@ -289,14 +289,46 @@ export function bridgeStoryAdsTerbukti(
 
 export function temuanBridgeStoryAds(
   segments: Array<Record<string, unknown>>,
-  product: StoryAdsProductEvidence
+  product: StoryAdsIdentity
 ): TemuanSA[] {
   const findings: TemuanSA[] = [];
   const fakeVisualState = segments.filter((segment) => String(segment.product_state ?? "hidden") !== "hidden").length;
   if (fakeVisualState) findings.push({ gerbang: "SA6", pesan: `${fakeVisualState} prop blank mengaku product_state partial/hero; prop netral bukan produk` });
+  const priceLed = product.templateId === "promo-terbatas" && Number(product.productPriceIdr ?? 0) > 0;
+  const expected: StoryAdsBridgeSource[] = priceLed
+    ? ["spoken_product_name", "spoken_approved_price"]
+    : ["spoken_product_name", "spoken_product_category"];
+  const declared = [...new Set(segments.flatMap((segment) => {
+    const source = segment.bridge_source;
+    return source === "spoken_product_name" || source === "spoken_product_category" || source === "spoken_approved_price"
+      ? [source as StoryAdsBridgeSource]
+      : [];
+  }))];
+  const forbidden = declared.filter((source) => !expected.includes(source));
+  const missing = expected.filter((source) => !declared.includes(source));
+  if (forbidden.length || missing.length) {
+    findings.push({
+      gerbang: "SA6",
+      pesan: `set bridge wajib tepat ${expected.join("+")}; terlarang=${forbidden.join(",") || "nol"}; hilang=${missing.join(",") || "nol"}`,
+    });
+  }
+  if (!priceLed) {
+    const priceTextCount = segments.filter((segment) => {
+      const spoken = String(segment.tts_text ?? segment.text ?? "");
+      return /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/i.test(spoken) || hargaTerbilang(spoken).length > 0;
+    }).length;
+    if (priceTextCount > 0) {
+      findings.push({ gerbang: "SA6", pesan: `${priceTextCount} beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif` });
+    }
+  }
   const verified = bridgeStoryAdsTerbukti(segments, product);
-  if (verified.length < 2) {
-    findings.push({ gerbang: "SA6", pesan: `bridge produk terverifikasi cuma ${verified.length} dari 2 (${verified.join(",") || "nol"}); wajib cocok dengan nama/kategori/harga ProductInput` });
+  const unverifiedExpected = expected.filter((source) => !verified.includes(source));
+  const verifiedForbidden = verified.filter((source) => !expected.includes(source));
+  if (unverifiedExpected.length || verifiedForbidden.length) {
+    findings.push({
+      gerbang: "SA6",
+      pesan: `bridge terverifikasi wajib tepat ${expected.join("+")}; terverifikasi=${verified.join(",") || "nol"}; belum terbukti=${unverifiedExpected.join(",") || "nol"}`,
+    });
   }
   return findings;
 }
@@ -328,7 +360,7 @@ export function voiceoverStartSecForSegments(segments: SegmentDraft[], identity:
  */
 export function periksaStoryOsAds(
   script: { segments: SegmenAds[] },
-  ctx: { contentType?: "affiliate" | "ads" | null; durationSec?: number | null } & StoryAdsProductEvidence
+  ctx: StoryAdsIdentity
 ): TemuanSA[] {
   if (ctx.contentType !== "ads") return [];
   const segs = script.segments ?? [];

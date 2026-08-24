@@ -36,7 +36,7 @@ test("VO embedded dapat ditunda melewati HOOK Story Ads yang senyap", () => {
   const safe = [
     { role: "hook", label: "HOOK", start: 0, end: 3, text: "", visual_direction: "blank" },
     { role: "demo", label: "FRICTION", start: 3, end: 6, text: "Untuk Serum Uji, mulai.", bridge_source: "spoken_product_name", visual_direction: "blank" },
-    { role: "demo", label: "FRICTION", start: 6, end: 9, text: "Harganya 89 ribu.", bridge_source: "spoken_approved_price", visual_direction: "blank" },
+    { role: "demo", label: "FRICTION", start: 6, end: 9, text: "Kategorinya beauty.", bridge_source: "spoken_product_category", visual_direction: "blank" },
     { role: "demo", label: "SPIKE", start: 9, end: 12, text: "Sekarang lihat.", visual_direction: "blank" },
     { role: "cta", label: "BUTTON", start: 12, end: 15, text: "Cek detailnya.", visual_direction: "blank" },
   ] as never;

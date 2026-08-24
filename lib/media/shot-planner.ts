@@ -1293,6 +1293,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       ...temuanHookSenyapAds(records),
       ...temuanStrukturStoryAds(records).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
       ...temuanBridgeStoryAds(records, {
+        contentType: input.contentType, templateId: input.ugcTemplate,
         productName: input.productName, productCategory: input.productCategory, productPriceIdr: input.productPriceIdr,
       }).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
     ];

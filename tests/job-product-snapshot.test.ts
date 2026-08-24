@@ -94,6 +94,16 @@ test("A6 identity: talking_head + template job null tetap Story Ads dari snapsho
   ), UnsafeLegacyProductSnapshot);
 });
 
+test("template snapshot admisi menang atas kolom job yang menyimpang", () => {
+  assert.deepEqual(
+    deriveStoryAdsIdentity(
+      { contentType: "ads", templateId: "ads-meja-kosong" },
+      { format: "ads", templateId: "promo-terbatas", durationSec: 15 }
+    ),
+    { contentType: "ads", templateId: "ads-meja-kosong", durationSec: 15 }
+  );
+});
+
 test("admission builder membekukan seluruh metadata dari bentuk row database", () => {
   const raw = createJobProductSnapshotRaw({
     name: "Serum Admission", category: "beauty", price_idr: 91_000,

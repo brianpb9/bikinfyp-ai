@@ -1000,6 +1000,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     { segments: script.segments as never },
     {
       contentType: script.contentType ?? null,
+      templateId: script.templateId ?? null,
       durationSec: script.durationSec ?? null,
       productName: script.productName,
       productCategory: script.productCategory,

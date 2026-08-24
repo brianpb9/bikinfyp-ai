@@ -58,7 +58,7 @@ const LULUS = {
   ],
 } as never;
 
-const ADS_CTX = { contentType: "ads" as const, durationSec: 20, productName: "Serum Uji", productCategory: "beauty", productPriceIdr: 89000 };
+const ADS_CTX = { contentType: "ads" as const, templateId: "promo-terbatas", durationSec: 20, productName: "Serum Uji", productCategory: "beauty", productPriceIdr: 89000 };
 
 test("SA3 silent-hook kini kode; kualitas konflik SA3 serta SA5/SA7 tetap dinilai juri", () => {
   assert.deepEqual(
@@ -210,7 +210,7 @@ test("live LLM Ads memperbaiki keluaran 0/1/2 segmen sebelum pipeline", async ()
   }
 });
 
-test("live LLM Ads menolak bridge blank-only lalu menerima provenance lisan yang terbukti", async () => {
+test("live LLM Ads non-price menolak name+price lalu menerima name+category", async () => {
   const { generateScripts } = await import("../lib/script-engine");
   const fetchAsli = globalThis.fetch;
   let calls = 0;
@@ -219,8 +219,8 @@ test("live LLM Ads menolak bridge blank-only lalu menerima provenance lisan yang
       calls++;
       const segments = structuredClone(LIVE_ADS_SAFE);
       if (calls === 1) {
-        delete segments[1].bridge_source;
-        delete segments[2].bridge_source;
+        segments[2].text = "Harganya seratus delapan puluh sembilan ribu.";
+        segments[2].bridge_source = "spoken_approved_price";
       }
       return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
     }) as never;
@@ -230,7 +230,7 @@ test("live LLM Ads menolak bridge blank-only lalu menerima provenance lisan yang
       contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
       hookFamilies: ["H8"], lockHookFamily: true,
     });
-    assert.equal(calls, 2, "bridge tanpa provenance harus direpair tepat sekali");
+    assert.equal(calls, 2, "bridge harga terlarang harus direpair tepat sekali");
     assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
     assert.deepEqual(
       result.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(),
@@ -301,7 +301,7 @@ test("SA6 — prop blank partial/hero dan aksi generik tidak pernah menjadi brid
   rusak.segments[2].action = "talent buka lalu pegang kartu blank";
   const t = periksaStoryOsAds(rusak, ADS_CTX);
   assert.ok(t.some((x) => x.gerbang === "SA6" && /prop blank/.test(x.pesan)), JSON.stringify(t));
-  assert.ok(t.some((x) => x.gerbang === "SA6" && /terverifikasi cuma 0/.test(x.pesan)), JSON.stringify(t));
+  assert.ok(t.some((x) => x.gerbang === "SA6" && /belum terbukti=spoken_product_name,spoken_approved_price/.test(x.pesan)), JSON.stringify(t));
 });
 
 test("SA8 — body yang menjelaskan hook/produk ditolak", () => {
@@ -379,7 +379,7 @@ test("kontrak gabungan system+task Ads mewajibkan hidden dan lolos SA6", async (
   compliant[1].text = "Untuk Serum Glow Bening, jangan sekarang dong.";
   for (const segment of compliant) segment.product_state = "hidden";
   const sa6 = periksaStoryOsAds({ segments: compliant } as never, {
-    contentType: "ads", durationSec: 20, productName: "Serum Glow Bening",
+    contentType: "ads", templateId: "promo-terbatas", durationSec: 20, productName: "Serum Glow Bening",
     productCategory: "beauty", productPriceIdr: 89_000,
   }).filter((finding) => finding.gerbang === "SA6");
   assert.deepEqual(sa6, [], `kontrak product_state gabungan ditolak SA6: ${JSON.stringify(sa6)}`);
@@ -532,6 +532,64 @@ const LIVE_ADS_SAFE = [
   { block: "BODY", label: "SPIKE", start: 10.05, end: 12, text: "Udah, lihat.", start_state: "kasir berada di samping meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos diletakkan di depan kasir", product_state: "hidden", expression: "relieved", audio_note: "", why: "payoff witnessed", mode: "GENERAL", saksi: "kasir off camera" },
   { block: "CTA", label: "BUTTON", start: 12, end: 15, text: "Tadi ragu, cocok nggak? Detailnya ada di bawah ya.", start_state: "kartu blank menghadap kamera", framing: "close shot", angle: "eye level", camera: "static camera", action: "talent menunjuk blok warna pada kartu blank", product_state: "hidden", expression: "warm", audio_note: "", why: "button payoff", mode: "GENERAL" },
 ];
+
+test("SA6 strict mengunci exact bridge set menurut template dan harga immutable", async () => {
+  const { keSegmentDraft } = await import("../lib/script-engine/llm");
+  const { validateScript } = await import("../lib/script-engine/validator");
+  const validate = (segments: typeof LIVE_ADS_SAFE, templateId: string, productName: string, productCategory: string, priceIdr: number) =>
+    validateScript({
+      hook_family: "H13", register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", templateId, productName, productCategory, priceIdr,
+      segments: keSegmentDraft(structuredClone(segments) as never),
+    } as never, "strict");
+
+  const nonPrice = structuredClone(LIVE_ADS_SAFE);
+  assert.equal(validate(nonPrice, "ads-meja-kosong", "Kemeja Uji", "fashion", 189_000).passed, true);
+  nonPrice[2].text = "Harganya seratus delapan puluh sembilan ribu.";
+  nonPrice[2].bridge_source = "spoken_approved_price";
+  const forbidden = validate(nonPrice, "ads-meja-kosong", "Kemeja Uji", "fashion", 189_000);
+  assert.equal(forbidden.passed, false);
+  assert.ok(forbidden.errors.some((error) => error.rule === "SA6" && /set bridge wajib tepat/.test(error.message_id)));
+  assert.ok(forbidden.errors.some((error) => error.rule === "SA6" && /non-price memuat harga lisan/.test(error.message_id)));
+
+  const promo = structuredClone(LIVE_ADS_SAFE);
+  promo[2].text = "Harganya seratus delapan puluh sembilan ribu.";
+  promo[2].bridge_source = "spoken_approved_price";
+  assert.equal(validate(promo, "promo-terbatas", "Kemeja Uji", "fashion", 189_000).passed, true);
+  const promoWithCategory = validate(LIVE_ADS_SAFE, "promo-terbatas", "Kemeja Uji", "fashion", 189_000);
+  assert.equal(promoWithCategory.passed, false);
+  assert.ok(promoWithCategory.errors.some((error) => error.rule === "SA6" && /terlarang=spoken_product_category/.test(error.message_id)));
+
+  const zeroService = structuredClone(LIVE_ADS_SAFE);
+  zeroService[1].text = "Nah, Jasa Kilat Beres.";
+  zeroService[2].text = "Konteksnya kategori jasa, sih.";
+  assert.equal(validate(zeroService, "ads-meja-kosong", "Jasa Kilat Beres", "jasa", 0).passed, true);
+  assert.equal(validate(zeroService, "promo-terbatas", "Jasa Kilat Beres", "jasa", 0).errors.some((error) => error.rule === "SA6"), false);
+});
+
+test("live LLM non-price yang terus mengirim name+price habis retry dan tidak disajikan", async () => {
+  const { generateScripts, TemplateTidakDisajikan } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      segments[2].text = "Harganya seratus delapan puluh sembilan ribu.";
+      segments[2].bridge_source = "spoken_approved_price";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    await assert.rejects(() => generateScripts({
+      product: { id: "price-exhaust", name: "Kemeja Uji", price_idr: 189_000, category: "fashion" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", format: "ads", templateId: "ads-meja-kosong", count: 1,
+      hookFamilies: ["H13"], lockHookFamily: true,
+    }), TemplateTidakDisajikan);
+    assert.equal(calls, 3);
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
 
 test("A-03 keras di strict dan light, safe control tetap bebas A-03", async () => {
   const { keSegmentDraft } = await import("../lib/script-engine/llm");

@@ -20,7 +20,7 @@ import type { SegmentDraft } from "../lib/script-engine/templates";
 const SEG: SegmentDraft[] = [
   { role: "hook", label: "HOOK", text: "", start: 0, end: 3, visual_direction: "x" },
   { role: "demo", label: "FRICTION", text: "Untuk Botol, lihat.", bridge_source: "spoken_product_name", start: 3, end: 6, visual_direction: "y" },
-  { role: "demo", label: "FRICTION", text: "Harganya 89 ribu.", bridge_source: "spoken_approved_price", start: 6, end: 9, visual_direction: "y" },
+  { role: "demo", label: "FRICTION", text: "Kategorinya beauty.", bridge_source: "spoken_product_category", start: 6, end: 9, visual_direction: "y" },
   { role: "demo", label: "SPIKE", text: "d", start: 9, end: 12, visual_direction: "y" },
   { role: "cta", label: "BUTTON", text: "e", start: 12, end: 15, visual_direction: "z" },
 ];
