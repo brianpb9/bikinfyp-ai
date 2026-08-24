@@ -43,6 +43,12 @@ function redisConnection() {
 }
 
 let redisQueue: Queue<{ jobId: string }> | undefined;
+let enqueueObserverForTests: ((event: { jobId: string; resumeReason?: string }) => void) | undefined;
+export function setEnqueueObserverForTests(
+  observer?: (event: { jobId: string; resumeReason?: string }) => void
+): void {
+  enqueueObserverForTests = observer;
+}
 export function getRedisJobQueue(): Queue<{ jobId: string }> {
   if (!redisQueue) redisQueue = new Queue<{ jobId: string }>(config.redisQueueName, { connection: redisConnection() });
   return redisQueue;
@@ -65,6 +71,7 @@ export async function enqueueRedisJob(jobId: string): Promise<void> {
  * the SQLite rollback path.
  */
 export async function enqueueJob(jobId: string): Promise<void> {
+  enqueueObserverForTests?.({ jobId });
   if (process.env.RACUN_WORKER_DISABLED === "1") return;
   if (queueMode() === "redis") return enqueueRedisJob(jobId);
   const inline = await import("./worker");
@@ -81,6 +88,7 @@ export async function enqueueJob(jobId: string): Promise<void> {
  * Karena itu id BullMQ-nya unik per percobaan; payload {jobId} tetap sama,
  * dan itulah yang dibaca worker (scripts/worker.ts: job.data.jobId). */
 export async function enqueueJobResume(jobId: string, reason: string): Promise<void> {
+  enqueueObserverForTests?.({ jobId, resumeReason: reason });
   if (process.env.RACUN_WORKER_DISABLED === "1") return;
   if (queueMode() === "redis") {
     await getRedisJobQueue().add("render", { jobId }, {

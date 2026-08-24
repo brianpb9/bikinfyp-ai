@@ -1,16 +1,15 @@
-import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit, type ProductRow } from "@/lib/db";
-import { generateScripts, TemplateTidakDisajikan, IdeTidakTersedia, IdeGateGagal } from "@/lib/script-engine";
+import { TemplateTidakDisajikan, IdeTidakTersedia, IdeGateGagal } from "@/lib/script-engine";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { REGISTERS, type Register } from "@/lib/script-engine/registers";
-import { pgAudit, postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { tierMasihDijual } from "@/lib/paket-kredit";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
-import { allowRate } from "@/lib/rate-limit";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
-import { assertAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
+import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
+import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,8 +32,10 @@ function ideDipilihDariBody(body: Record<string, unknown>) {
 }
 
 export async function POST(req: Request) {
+  let evidenceLease: Awaited<ReturnType<typeof acquireAdmissionReferenceEvidence>> | null = null;
   try {
-    const user = await getAuthUser(req);
+    const routeDeps = admissionRouteDependencies();
+    const user = await routeDeps.getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
 
     // BATAS 5 PER JAM PER PENGGUNA.
@@ -49,7 +50,7 @@ export async function POST(req: Request) {
     // dibatasi perbuatan orangnya. Fail-open mengikuti allowRate — memblokir
     // orang yang membayar karena Redis ngadat lebih merugikan daripada
     // meloloskan beberapa permintaan ekstra.
-    if (!(await allowRate("skrip:generate", user.id, 5, 3600))) {
+    if (!(await routeDeps.allowRate("skrip:generate", user.id, 5, 3600))) {
       throw ERR.BAD_REQUEST(
         "Sudah 5 kali buat skrip dalam sejam terakhir. Tunggu sebentar ya — tiap permintaan menulis naskah baru dari awal.",
         "Rate limited: scripts/generate 5/hour"
@@ -81,28 +82,29 @@ export async function POST(req: Request) {
       throw ERR.BAD_REQUEST("Register-nya pilih salah satu: bunda, bestie, genz, atau netral.", "Invalid register.");
     const durationSec = [15, 30, 45].includes(Number(body.duration_s)) ? Number(body.duration_s) : 15;
 
-    const product = postgresRuntimeEnabled()
-      ? await smokeGetProduct(user.id, productId)
+    const product = routeDeps.postgresRuntimeEnabled()
+      ? await routeDeps.smokeGetProduct(user.id, productId)
       : getDb().prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(productId, user.id) as ProductRow | undefined;
     if (!product) throw ERR.NOT_FOUND("Produknya");
     // Produk organisasi WAJIB lewat dashboard (RBAC belanja + gerbang review
     // scene + library org). Lihat pastikanBukanProdukOrg.
     pastikanBukanProdukOrg(product);
 
-    // A7 is provider-consuming even though it does not create a render job.
-    // Invalid provenance must stop before the script LLM is invoked or a
-    // script row is persisted.
-    await assertAdmissionReferenceEvidence({
+    // Keep E5 serialized until provider + script persistence finish. In the
+    // PostgreSQL runtime the lease additionally holds the product row FOR
+    // SHARE; SQLite coordinates through the same keyed lock as DELETE.
+    evidenceLease = await acquireAdmissionReferenceEvidence({
       productId: product.id,
-      candidateRels: JSON.parse(product.images || "[]") as string[],
+      owner: { kind: "user", id: user.id },
       boundary: "A7",
+      loadSqliteCandidateRels: () => JSON.parse(product.images || "[]") as string[],
     });
 
     // Jaring pengaman nama (canary temuan #4): nama sah 4-6 kata bisa memakan
     // jendela kata L-05/S-09 sampai penulis mustahil lolos. Enterprise sudah
     // punya jaring ini; retail-lah yang kena di canary — tangga asli -> bersih
     // -> nama panggung merek, berhenti di anak tangga pertama yang lolos.
-    const jalan = (namaProduk: string) => generateScripts({
+    const jalan = (namaProduk: string) => routeDeps.generateScripts({
       product: {
         id: product.id, name: namaProduk, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
@@ -147,8 +149,8 @@ export async function POST(req: Request) {
     const hasilValidasi = (v: typeof variants[number]) =>
       amplopValidasi(v.validation, { script_source: v.script_source, admisi: v.admisi });
     const makeOut = (v: typeof variants[number], id: string) => ({ id, ...v });
-    if (postgresRuntimeEnabled()) {
-      const created = await smokeCreateScripts(user.id, product.id, sah.map((v) => ({
+    if (routeDeps.postgresRuntimeEnabled()) {
+      const created = await routeDeps.smokeCreateScripts(user.id, product.id, sah.map((v) => ({
         hookFamily: v.hook_family, emotion: v.emotion, register: v.register, segments: v.segments,
         caption: v.caption, hashtags: v.hashtags, validationResult: hasilValidasi(v), qualityTier: tier,
         hookLevel,
@@ -234,5 +236,7 @@ export async function POST(req: Request) {
       );
     }
     return errorResponse(err);
+  } finally {
+    await evidenceLease?.release();
   }
 }

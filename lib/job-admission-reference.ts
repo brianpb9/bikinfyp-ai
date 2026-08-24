@@ -2,6 +2,88 @@ import { parseJobReferenceManifest, prepareJobReferenceManifest, type JobReferen
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { pesanTanpaReferensi, resolveApprovedReference } from "./product-truth";
 import { mediaStorage } from "./storage";
+import { config } from "./config";
+import { getPool } from "./postgres/pool";
+import type { PoolClient } from "pg";
+
+type ProductEvidenceBoundary = "A2" | "A3" | "A5" | "A7";
+type ProductOwner = { kind: "user" | "org"; id: string };
+const postgresRuntimeEnabled = () =>
+  process.env.RACUN_POSTGRES_SMOKE === "1" || process.env.RACUN_DB_RUNTIME === "postgres";
+
+const productOperationTails = new Map<string, Promise<void>>();
+
+async function acquireLocalProductOperation(productId: string): Promise<() => void> {
+  const previous = productOperationTails.get(productId) ?? Promise.resolve();
+  let release!: () => void;
+  const current = new Promise<void>((resolve) => { release = resolve; });
+  const tail = previous.then(() => current);
+  productOperationTails.set(productId, tail);
+  await previous;
+  return () => {
+    release();
+    if (productOperationTails.get(productId) === tail) productOperationTails.delete(productId);
+  };
+}
+
+/** Serialize SQLite mutation paths with provider/setup operations. PostgreSQL
+ * mutations are additionally serialized by the row lock held below. */
+export async function withProductEvidenceMutationLock<T>(productId: string, mutation: () => Promise<T>): Promise<T> {
+  const release = await acquireLocalProductOperation(productId);
+  try { return await mutation(); } finally { release(); }
+}
+
+export type AdmissionEvidenceLease = { release(): Promise<void> };
+
+/**
+ * Keep the verified product identity stable until the provider/setup operation
+ * completes. PostgreSQL holds FOR SHARE across the operation, so E5/E9 updates
+ * wait. SQLite uses the same keyed lock as its E5 mutation path.
+ */
+export async function acquireAdmissionReferenceEvidence(input: {
+  productId: string;
+  owner: ProductOwner;
+  boundary: ProductEvidenceBoundary;
+  loadSqliteCandidateRels: () => Promise<string[]> | string[];
+}): Promise<AdmissionEvidenceLease> {
+  const releaseLocal = await acquireLocalProductOperation(input.productId);
+  let client: PoolClient | null = null;
+  let released = false;
+  try {
+    let candidateRels: string[];
+    if (postgresRuntimeEnabled()) {
+      client = await getPool(config.databaseUrl).connect();
+      await client.query("BEGIN");
+      const ownerColumn = input.owner.kind === "org" ? "org_id" : "user_id";
+      const locked = await client.query<{ images: string }>(
+        `SELECT images FROM products WHERE id=$1 AND ${ownerColumn}=$2 FOR SHARE`,
+        [input.productId, input.owner.id]
+      );
+      if (!locked.rows[0]) throw new Error(`Admission product ${input.productId} disappeared before ${input.boundary}`);
+      candidateRels = JSON.parse(locked.rows[0].images || "[]") as string[];
+    } else {
+      candidateRels = await input.loadSqliteCandidateRels();
+    }
+    await assertAdmissionReferenceEvidence({
+      productId: input.productId,
+      candidateRels,
+      boundary: input.boundary,
+    });
+    return {
+      async release() {
+        if (released) return;
+        released = true;
+        try { if (client) await client.query("COMMIT"); }
+        finally { client?.release(); releaseLocal(); }
+      },
+    };
+  } catch (error) {
+    if (client) await client.query("ROLLBACK").catch(() => undefined);
+    client?.release();
+    releaseLocal();
+    throw error;
+  }
+}
 
 /**
  * Read-only product-evidence gate for provider-consuming work that happens
@@ -17,7 +99,7 @@ import { mediaStorage } from "./storage";
 export async function assertAdmissionReferenceEvidence(input: {
   productId: string;
   candidateRels: string[];
-  boundary: "A2" | "A3" | "A5" | "A7";
+  boundary: ProductEvidenceBoundary;
 }): Promise<void> {
   const resolution = await resolveApprovedReference(input.candidateRels);
   catatKanariReferensi(resolution, {

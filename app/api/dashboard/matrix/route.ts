@@ -2,25 +2,21 @@ import crypto from "node:crypto";
 import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { AVATAR_PRESETS, getAvatarPreset } from "@/lib/avatar-presets";
 import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
-import { generateScripts } from "@/lib/script-engine";
 import type { HookCode } from "@/lib/config/hooks";
 import { getCreatorCategory } from "@/lib/personas";
 import { tierPriceIdr } from "@/lib/credits";
 import { tierMasihDijual } from "@/lib/paket-kredit";
-import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
-import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { getPool } from "@/lib/postgres/pool";
-import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
+import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
-import { assertPaidAdmission } from "@/lib/job-intake";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
-import { assertAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
+import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
+import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -81,17 +77,18 @@ function pastikanMatriksAktif() {
 
 export async function POST(req: Request) {
   try {
+    const routeDeps = admissionRouteDependencies();
     pastikanMatriksAktif();
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard matrix requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
-    await assertDashboardRate("confirm", membership.org_id);
+    if (!routeDeps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard matrix requires Postgres runtime.");
+    const { user, membership } = await routeDeps.requireOrgContextApi(req);
+    await routeDeps.assertDashboardRate("confirm", membership.org_id);
     // Matriks adalah pengeluaran terbesar yang bisa dipicu satu klik di produk
     // ini. Kalau ada satu tempat yang perannya wajib diperiksa, ini tempatnya.
     pastikanBolehBelanja(membership.role);
     // Satu gerbang untuk semua yang memakan uang. Sebelumnya jalur ini cuma
     // memeriksa migrasi, jadi ia tetap membuka diri walau JOB_INTAKE_MODE
     // sudah "closed" untuk perawatan.
-    await assertPaidAdmission();
+    await routeDeps.assertPaidAdmission();
     const body = await req.json().catch(() => ({}));
 
     // ---- produk ----
@@ -101,18 +98,10 @@ export async function POST(req: Request) {
     // dibayar dari dompetnya, jadi produk buatan rekan satu tim harus bisa
     // dipakai. Daftar di GET sudah di-query per org — memvalidasi per user di
     // sini akan menampilkan produk lalu menolaknya saat ditekan.
-    const product = await smokeGetOrgProduct(membership.org_id, productId);
+    const product = await routeDeps.smokeGetOrgProduct(membership.org_id, productId);
     if (!product) throw ERR.NOT_FOUND("Produknya");
     if (!product.price_idr) throw ERR.BAD_REQUEST("Isi harga produknya dulu — harga dipakai di skrip dan overlay.", "Product price is required.");
     const productImages = JSON.parse(product.images || "[]") as string[];
-    if (productImages.length === 0) {
-      throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko untuk iklan jasa.", "At least one image is required.");
-    }
-    // A2 can call the script provider before renderSatuSel reaches the durable
-    // A4 job admission. Reject invalid evidence before that first provider
-    // boundary; A4 still repeats the authoritative check under its row lock.
-    await assertAdmissionReferenceEvidence({ productId: product.id, candidateRels: productImages, boundary: "A2" });
-
     // ---- format: TIDAK ADA format global ----
     //
     // Setiap template membawa formatnya SENDIRI (talking_head, hands_only,
@@ -237,9 +226,7 @@ export async function POST(req: Request) {
       throw ERR.BAD_REQUEST("Permintaan tidak menyertakan kunci idempotensi yang sah.", "idempotency_key required (8-200 chars).");
     }
     const runId = runIdDariKunci(membership.org_id, kunciIdem);
-    const pool = getPool(config.databaseUrl);
-    const jobsRepo = new PgJobsRepository(config.databaseUrl);
-    const creditsRepo = new PgCreditPaymentRepository(config.databaseUrl);
+    const { pool, jobsRepo, creditsRepo } = routeDeps.createMatrixResources();
     const hasil: (HasilSel & { avatar_id: string; template_id: string })[] = [];
 
     // PENEGAKAN IDEMPOTENSI.
@@ -276,13 +263,27 @@ export async function POST(req: Request) {
       });
     }
 
+    // Duplicate replay above is authoritative and uses immutable job
+    // manifests. Only genuinely new matrix work needs current product
+    // evidence. Keep the product row stable until every new provider/setup
+    // operation finishes so E9 cannot slip through after this check.
+    let evidenceLease: Awaited<ReturnType<typeof acquireAdmissionReferenceEvidence>> | null = null;
     try {
+      if (productImages.length === 0) {
+        throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko untuk iklan jasa.", "At least one image is required.");
+      }
+      evidenceLease = await acquireAdmissionReferenceEvidence({
+        productId: product.id,
+        owner: { kind: "org", id: membership.org_id },
+        boundary: "A2",
+        loadSqliteCandidateRels: () => productImages,
+      });
       // Persona dibuat sekali per avatar, bukan sekali per sel: satu avatar
       // dipakai di semua skenario, dan membuat ulang personanya tiap sel cuma
       // menambah baris kembar tanpa efek apa pun.
       const personaPerAvatar = new Map<string, string>();
       for (const { preset, category } of avatars) {
-        personaPerAvatar.set(preset.id, (await pgFindOrCreatePersona(user.id, category)).id);
+        personaPerAvatar.set(preset.id, (await routeDeps.pgFindOrCreatePersona(user.id, category)).id);
       }
 
       for (const t of skenario) {
@@ -291,7 +292,7 @@ export async function POST(req: Request) {
         // kalimatnya tidak ikut berubah.
         // Jaring pengaman nama (canary temuan #4) — sama seperti campaign &
         // retail: nama sah yang kepanjangan diturunkan bertangga sampai lolos.
-        const jalanSkenario = (namaProduk: string) => generateScripts({
+        const jalanSkenario = (namaProduk: string) => routeDeps.generateScripts({
           product: {
             id: product.id, name: namaProduk, price_idr: product.price_idr, category: product.category,
             sourceUrl: product.source_url, promoPriceBeforeIdr: product.promo_price_before_idr,
@@ -326,7 +327,7 @@ export async function POST(req: Request) {
           continue;
         }
         // Satu baris skrip per avatar — lihat catatan klaim atomik di atas.
-        const barisSkrip = await smokeCreateScripts(user.id, productId, avatars.map(() => ({
+        const barisSkrip = await routeDeps.smokeCreateScripts(user.id, productId, avatars.map(() => ({
           hookFamily: lolos.hook_family, emotion: lolos.emotion, register: lolos.register,
           segments: lolos.segments, caption: lolos.caption, hashtags: lolos.hashtags,
           // Amplop lengkap (snapshot + provenance) — lihat campaign/generate.
@@ -373,6 +374,7 @@ export async function POST(req: Request) {
       }
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
+      await evidenceLease?.release();
       await kunciLock.query("SELECT pg_advisory_unlock(hashtext($1))", [runId]).catch(() => undefined);
       kunciLock.release();
       await jobsRepo.close();

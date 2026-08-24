@@ -9,6 +9,7 @@ import { merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
 import { pgAudit, pgRemoveOrgProductImage, postgresRuntimeEnabled, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { orgPhotoPostDependencies } from "@/lib/org-photo-post-dependencies";
+import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
 
 export const runtime = "nodejs";
@@ -125,11 +126,14 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const body = await req.json().catch(() => ({}));
     const target = String(body.path ?? "");
     if (!owned.images.includes(target)) throw ERR.NOT_FOUND("Fotonya");
-    const images = await pgRemoveOrgProductImage(membership.org_id, id, target);
-    if (!images) throw ERR.NOT_FOUND("Fotonya");
-    let cleanupPending = false;
-    try { await deleteStoredProductImages([target]); }
-    catch { cleanupPending = true; }
+    const { images, cleanupPending } = await withProductEvidenceMutationLock(id, async () => {
+      const images = await pgRemoveOrgProductImage(membership.org_id, id, target);
+      if (!images) throw ERR.NOT_FOUND("Fotonya");
+      let cleanupPending = false;
+      try { await deleteStoredProductImages([target]); }
+      catch { cleanupPending = true; }
+      return { images, cleanupPending };
+    });
     void pgAudit(user.id, "product.photo_removed", "products", id, { org_id: membership.org_id, removed: target, total: images.length })
       .catch((error) => console.error("[audit] product.photo_removed failed:", error));
     return Response.json({ product_id: id, images, image_urls: images.map((image) => createSignedUrl(image)), cleanup_failed: cleanupPending });

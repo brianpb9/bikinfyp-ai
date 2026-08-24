@@ -57,7 +57,10 @@ for (const rel of ROUTE_PEMAKAI_SEL) {
     const source = readFileSync(new URL(rel, import.meta.url), "utf8");
     const blockIndex = source.indexOf("aiRenderBlockMessage(templateId)");
     const personaIndex = source.indexOf("pgFindOrCreatePersona(");
-    const poolIndex = source.indexOf("const pool = getPool(");
+    const poolIndex = Math.max(
+      source.indexOf("const pool = getPool("),
+      source.indexOf("const { pool, jobsRepo, creditsRepo } = routeDeps.createMatrixResources()"),
+    );
     const selIndex = source.indexOf("renderSatuSel(");
     assert.ok(blockIndex > 0, "route tidak memanggil safety guard");
     assert.ok(personaIndex > blockIndex, "blok harus terjadi sebelum membuat persona");

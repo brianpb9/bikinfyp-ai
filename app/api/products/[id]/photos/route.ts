@@ -10,6 +10,7 @@ import os from "node:os";
 import path from "node:path";
 import { periksaLabelFoto, merekTerdaftar } from "@/lib/media/label-terbaca";
 import { appendRetailProductImages, removeRetailProductImage } from "@/lib/retail-product-images";
+import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
 
 export const runtime = "nodejs";
@@ -159,11 +160,14 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const body = await req.json().catch(() => ({}));
     const target = String(body.path ?? "");
     if (!owned.images.includes(target)) throw ERR.NOT_FOUND("Fotonya");
-    const images = await removeRetailProductImage(user.id, id, target);
-    if (!images) throw ERR.NOT_FOUND("Fotonya");
-    let cleanupPending = false;
-    try { await deleteStoredProductImages([target]); }
-    catch { cleanupPending = true; }
+    const { images, cleanupPending } = await withProductEvidenceMutationLock(id, async () => {
+      const images = await removeRetailProductImage(user.id, id, target);
+      if (!images) throw ERR.NOT_FOUND("Fotonya");
+      let cleanupPending = false;
+      try { await deleteStoredProductImages([target]); }
+      catch { cleanupPending = true; }
+      return { images, cleanupPending };
+    });
     void auditBoth(user.id, "product.photo_removed", id, { removed: target, total: images.length })
       .catch((error) => console.error("[audit] product.photo_removed failed:", error));
     return Response.json({
