@@ -61,7 +61,7 @@ export function tanpaNominalHargaTertulis(text: string): string {
   return text
     .replace(/\b(?:rp|idr)\s*\.?\s*\d+(?:[.,]\d{3})*\b(?![.,]\d)/gi, " ")
     .replace(/\d+(?:[.,]\d{3})*\s*rupiah\b/gi, " ")
-    .replace(/\d+(?:[.,]\d+)?\s*(?:ribu|rb|ribuan|juta|jt)\b/gi, " ");
+    .replace(/\d+(?:[.,]\d+)?\s*(?:ribu|rb|ribuan|juta|jt|perak)\b/gi, " ");
 }
 
 /**
@@ -81,17 +81,28 @@ export function deteksiHargaIndonesia(text: string): HargaIndonesiaMention[] {
   };
   const overlaps = (match: RegExpExecArray) => occupied.some(([start, end]) => match.index < end && match.index + match[0].length > start);
 
-  const unit = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
+  const unit = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt|perak)\b/gi;
   for (const match of text.matchAll(unit)) {
     const value = Number(match[1].replace(",", "."));
-    add(match, value * (/juta|jt/i.test(match[2]) ? 1_000_000 : 1_000), "unit");
+    const multiplier = /juta|jt/i.test(match[2]) ? 1_000_000 : /perak/i.test(match[2]) ? 1 : 1_000;
+    add(match, value * multiplier, "unit");
   }
   const currency = /\b(?:rp|idr)\s*\.?\s*(\d+(?:[.,]\d{3})*)\b(?![.,]\d)/gi;
   for (const match of text.matchAll(currency)) if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "currency");
   const rupiah = /(\d+(?:[.,]\d{3})*)\s*rupiah\b/gi;
   for (const match of text.matchAll(rupiah)) if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "rupiah");
-  const spelledZero = /\b(?:nol|zero)\s*(?:rupiah|ribu|rb|juta|jt)\b|\b(?:harga(?:nya)?|biaya(?:nya)?|tarif(?:nya)?|banderol(?:nya)?)\s*(?:[:=–—-]\s*)?(?:(?:itu|adalah|sekarang|saat\s+ini|jadi|tetap|cuma|hanya)\s+)?(?:nol|zero)\b/gi;
-  for (const match of text.matchAll(spelledZero)) if (!overlaps(match)) add(match, 0, "terbilang");
+  const zero = String.raw`(?:0+(?:[.,]0+)?|nol|zero)`;
+  const unitHarga = String.raw`(?:rupiah|ribu|rb|juta|jt|perak)`;
+  const labelHarga = String.raw`(?:harga(?:nya)?|biaya(?:nya)?|tarif(?:nya)?|banderol(?:nya)?)`;
+  const linker = String.raw`(?:itu|adalah|sekarang|saat|ini|jadi|tetap|cuma|hanya|sebesar|senilai)`;
+  const zeroGrammars = [
+    new RegExp(String.raw`\b(?:rp|idr)\s*\.?\s*${zero}\b`, "gi"),
+    new RegExp(String.raw`\b${zero}\s*${unitHarga}\b`, "gi"),
+    new RegExp(String.raw`\b${labelHarga}\s*(?:[:=–—-]\s*)?(?:(?:${linker})\s+){0,3}${zero}\b`, "gi"),
+  ];
+  for (const grammar of zeroGrammars) {
+    for (const match of text.matchAll(grammar)) if (!overlaps(match)) add(match, 0, "terbilang");
+  }
   for (const mention of hargaTerbilang(text)) {
     hasil.push({ ...mention, bentuk: "terbilang" });
   }
