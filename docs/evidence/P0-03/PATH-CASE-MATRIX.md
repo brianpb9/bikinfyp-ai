@@ -19,7 +19,7 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 | E1 | `app/api/products/route.ts:15` | POST create manual (retail) | **PARTIAL** | `saveProductImages` (sidecar ditulis); TANPA `periksaLabelFoto`, TANPA `referensiLayak` |
 | E2 | `app/api/products/extract/route.ts:17` | POST extract URL → buat produk | **UNGATED** | tidak ada; pakai `downloadProductImages` |
 | E3 | `app/api/products/[id]/route.ts:13` | PATCH nama/harga/kategori/brand | **UNGATED** | tidak ada — memutasi `name` + `raw_meta.brand`, dua input yang justru dibaca gerbang |
-| E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **PARTIAL** | Setiap blob baru melewati `periksaLabelFoto`+`merekTerdaftar` sebelum persistence; `referensiLayak` tetap sesudah ingestion. DUA lubang lain tetap: `periksaLabelFoto` FAIL-OPEN saat OCR gagal (`label-terbaca.ts` mengembalikan `terbaca:true`); hash sidecar tidak pernah diverifikasi ulang terhadap isi berkas |
+| E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **PARTIAL** | Setiap blob baru melewati `periksaLabelFoto`+`merekTerdaftar` sebelum persistence; `referensiLayak` sesudah ingestion kini me-rollback exact object baru saat reject/error sebelum append/audit. DUA lubang lain tetap: `periksaLabelFoto` FAIL-OPEN saat OCR gagal (`label-terbaca.ts` mengembalikan `terbaca:true`); hash sidecar tidak pernah diverifikasi ulang terhadap isi berkas |
 | E5 | `app/api/products/[id]/photos/route.ts:142` | DELETE foto (retail) | **UNGATED** | tidak ada — bisa menghapus satu-satunya foto layak |
 | E6 | `app/api/dashboard/campaign/product/route.ts:45` | POST produk org | **UNGATED** | tidak ada; `downloadProductImages` → sidecar tidak ditulis |
 | E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | mengubah `name`, `price`, **`category`**, visual desc, `brand_brief`, promo, claims (:113 dst) TANPA revalidasi. TIDAK menyentuh `raw_meta.brand`. Defect kedua: jalur org TIDAK PERNAH mengisi `raw_meta.brand`, padahal worker hanya mempercayai field itu (`merekTepercaya`) |
@@ -157,7 +157,7 @@ mengerjakannya sebagai task terpisah.
 | E1 create manual | PARTIAL | **PARTIAL** | `saveProductImages` → `tulisSidecar` (`lib/product-images.ts:271`). Bukti terbit; gerbang label tidak dipanggil |
 | E2 extract URL | UNGATED | **PARTIAL** | `downloadProductImages` → `tulisSidecar` (`lib/product-image-download.ts:48`). Dulu nol sidecar |
 | E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar, tetapi E3 tetap jalur wajib C2/C3/C5 dan belum melakukan validasi type/brand/category |
-| E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; append daftar atomik memakai key UUID. **Gap foto #2+ ditutup 24 Agu:** seluruh blob decodable melewati label+brand gate sebelum satu pun persistence; kegagalan akhir multipart terbukti nol efek storage/list/audit. Status tetap PARTIAL karena fail-open OCR dan verifikasi ulang hash masih terbuka |
+| E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; append daftar atomik memakai key UUID. **Gap foto #2+ ditutup 24 Agu:** seluruh blob decodable melewati label+brand gate sebelum satu pun persistence. **Gap rollback C7 ditutup 24 Agu:** no-reference atau resolver error membersihkan exact foto baru+sidecar sebelum append/audit; bila cleanup sendiri gagal, respons 500 dan log menyatakan risiko residual—bukan klaim nol-storage palsu. Status tetap PARTIAL karena fail-open OCR dan verifikasi ulang hash masih terbuka |
 | E5 DELETE foto retail | UNGATED | **PARTIAL** | `removeRetailProductImage` menghitung daftar otoritatif secara atomik, lalu `deleteStoredProductImages([target])` best-effort; `cleanup_failed` terlihat, audit pasca-commit non-fatal, dan test HTTP→resume W2 membuktikan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru tetap belum direvalidasi |
 | E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. Dulu nol |
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
@@ -188,7 +188,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C4 | **PARTIAL** | E4 menolak `!label.terbaca` untuk **setiap blob baru** sebelum persistence; E8 masih hanya memeriksa foto pertama (`app/api/products/[id]/photos/route.ts`; `app/api/dashboard/campaign/product/[id]/photos/route.ts:47-54`). Cakupan belum lengkap: E1 tidak menjalankan gerbang label, foto tambahan E8 tidak diperiksa, dan reason code khusus `LABEL_UNREADABLE` belum ada |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
-| C7 | **PARTIAL** | **Sudah tertutup:** classifier menghasilkan keadaan ketiga `belum_diperiksa` (bukan vonis promosi), dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED` — diuji di `tests/klasifikasi-gambar.test.ts` dan `tests/product-truth-evidence.test.ts`. **Gap yang tersisa:** jalur wajib C7 adalah E1, E4, E8, dan tidak satu pun membuktikan fail-closed. `rg --include-zero -c 'resolveApprovedReference|referensiLayak'` -> E1 (`app/api/products/route.ts`) = **0**, E8 (org photos) = **0**; keduanya menyimpan/menerima foto tanpa memanggil resolver sama sekali. E4 memanggilnya, tapi MENYIMPAN foto lebih dulu dan tidak membersihkannya saat tidak ada referensi layak — jadi kontrak 'nol efek storage' juga belum terbukti. Diturunkan dari PASS atas temuan Reviewer |
+| C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E4 kini fail-closed sebelum append/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. **Gap yang tersisa:** E1 dan E8 tidak memanggil resolver (`resolveApprovedReference|referensiLayak` = 0), sehingga kedua boundary itu belum fail-closed. C7/E4 tetap PARTIAL untuk cakupan kasus lain yang dicatat di matriks |
 | C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7 (T43) |
 | C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata worker tertutup: W1/W2 memakai manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, dan claims. HTTP E3→W2 dan E7→W1 membuktikan mutasi handler aktual tidak mengubah bahan admission di provider. Tetap PARTIAL karena reason code `SNAPSHOT_IMMUTABLE` tidak diterbitkan dan regenerate/entry lain belum seluruhnya tertutup |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
@@ -232,9 +232,10 @@ dikerjakan di slice ini:**
    otoritatif, cleanup storage, isolasi owner/org, dan resume W1/W2 dibuktikan
    langsung. C12 tetap PARTIAL hanya karena reason code usulan
    `REFERENCE_IDENTITY_CHANGED` belum diterbitkan.
-7. C7 belum fail-closed pada seluruh boundary E1/E4/E8: E1/E8 menerima foto
-   tanpa resolver, sedangkan E4 meninggalkan bytes tersimpan saat tidak ada
-   referensi layak. Belum ada test nol efek storage untuk ketiga jalur itu.
+7. C7 belum fail-closed pada seluruh boundary E1/E4/E8. **Sub-gap E4 ditutup
+   24 Agu:** no-reference/resolver error me-rollback exact object baru sebelum
+   append/audit; cleanup fault tetap non-success dan observable, dengan risiko
+   residual dicatat jujur. E1/E8 masih menerima foto tanpa resolver.
 **(b) Butuh kredensial/data:**
 
 8. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
@@ -436,3 +437,28 @@ TASK=P0-C9-HTTP-PRODUCT-MUTATION-RESUME-20260824
 - C9 tetap **PARTIAL**: bukti ini tidak menerbitkan reason code fiktif
   `SNAPSHOT_IMMUTABLE`, dan tidak mengklaim jalur regenerate/entry lain yang
   belum diuji. Gap HTTP E3/E7→resume yang sebelumnya dicatat sudah tertutup.
+
+### E.13 Follow-up C7 E4 rejected-reference rollback — 2026-08-24
+
+TASK=P0-E4-REJECTED-REFERENCE-ROLLBACK-20260824
+
+- Sesudah `saveUniqueProductImages`, seluruh keputusan `referensiLayak` hingga
+  no-reference berada dalam satu failure boundary sebelum
+  `appendRetailProductImages` dan audit. Reject normal dan resolver error
+  membersihkan hanya `added` beserta sidecar; foto existing dan object tak
+  terkait tidak disentuh.
+- Cleanup sukses melempar ulang error asli: no-reference tetap BAD_REQUEST
+  yang actionable. Cleanup fault tidak mengarang atomic success: list/audit
+  tetap nol-mutasi, respons 500, dan log menyatakan bahwa object residual
+  mungkin tersisa serta memerlukan rekonsiliasi operator.
+- Exported POST test memakai storage/classifier deterministik dan mencakup
+  reject promosi, resolver throw, delete fault terkontrol, serta control foto
+  layak. Guard AST menolak cleanup terhadap `existing`, cleanup tanpa await,
+  cleanup fault yang disamarkan, append di dalam failure boundary, dan
+  rollback di luar catch resolver.
+- Focused route+guard → **11/11 PASS**; affected ingestion/evidence/route →
+  **132/132 PASS**; full suite → **1115 total, 1076 PASS, 39 skip, 0 fail**;
+  `tsc --noEmit` dan `git diff --check` → **PASS**. Audit script catalog tidak
+  dijalankan karena slice tidak mengubah katalog, template, atau naskah.
+- E4 dan C7 tetap **PARTIAL**: E1/E8 belum menjalankan resolver, kebijakan OCR
+  E4 tetap fail-open, dan gap lain pada matriks tidak diubah oleh slice ini.

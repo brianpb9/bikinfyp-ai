@@ -34,6 +34,29 @@ async function auditBoth(userId: string, action: string, productId: string, meta
   else audit(userId, action, "products", productId, meta);
 }
 
+async function rejectAfterReferenceCheck(added: string[], referenceError: unknown): Promise<never> {
+  try {
+    // Hanya object dari request ini. Foto existing sudah dipersist sebelum
+    // request dimulai dan tidak boleh ikut rollback karena resolver menolak
+    // gabungan daftar.
+    await deleteStoredProductImages(added);
+  } catch (cleanupError) {
+    const referenceMessage = referenceError instanceof Error ? referenceError.message : String(referenceError);
+    const cleanupMessage = cleanupError instanceof Error ? cleanupError.message : String(cleanupError);
+    // errorResponse mencatat Error ini sebagai unexpected error. Responsnya
+    // sengaja 500 (bukan BAD_REQUEST palsu): list belum pernah di-append,
+    // tetapi sebagian bytes/sidecar baru mungkin masih tertinggal dan perlu
+    // rekonsiliasi operator.
+    throw new Error(
+      `E4 reference rejection cleanup failed for ${added.length} newly added image(s); ` +
+      `the existing product list was not changed, but residual storage objects may remain. ` +
+      `Reference failure: ${referenceMessage}. Cleanup failure: ${cleanupMessage}`,
+      { cause: cleanupError }
+    );
+  }
+  throw referenceError;
+}
+
 // POST /api/products/[id]/photos — TAMBAH foto ke produk yang sudah ada
 // (multipart field "photos"), maks total 5. Dipakai kartu konfirmasi S2 saat
 // foto dari link gagal/kurang.
@@ -110,16 +133,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // ditolak di sini keadaan "produk ini tidak punya SATU pun foto yang bisa
     // dipakai", karena itu berarti setiap render sesudahnya dijamin memakai
     // bahan yang salah.
-    const semua = [...existing, ...added];
-    const layak = await referensiLayak(semua);
-    if (layak.length === 0) {
-      const metaBaru = await Promise.all(added.map((rel) => bacaMetaGambar(rel)));
-      const sebab = metaBaru.find((m) => m && !m.layakReferensi)?.alasan
-        ?? "Belum ada foto produk yang bisa dipakai jadi acuan.";
-      throw ERR.BAD_REQUEST(
-        `${sebab} Butuh minimal satu foto produk polos supaya videonya punya acuan yang benar.`,
-        "No reference-eligible product photo."
-      );
+    try {
+      const semua = [...existing, ...added];
+      const layak = await referensiLayak(semua);
+      if (layak.length === 0) {
+        const metaBaru = await Promise.all(added.map((rel) => bacaMetaGambar(rel)));
+        const sebab = metaBaru.find((m) => m && !m.layakReferensi)?.alasan
+          ?? "Belum ada foto produk yang bisa dipakai jadi acuan.";
+        throw ERR.BAD_REQUEST(
+          `${sebab} Butuh minimal satu foto produk polos supaya videonya punya acuan yang benar.`,
+          "No reference-eligible product photo."
+        );
+      }
+    } catch (referenceError) {
+      await rejectAfterReferenceCheck(added, referenceError);
     }
     const images = await appendRetailProductImages(user.id, id, added, MAX_IMAGES);
     if (!images) {

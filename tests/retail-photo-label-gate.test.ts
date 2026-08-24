@@ -29,9 +29,18 @@ class MemoryStorage implements MediaStorage {
   values = new Map<string, Buffer>();
   putCalls: string[] = [];
   deleteCalls: string[] = [];
+  failGetKeys = new Set<string>();
+  failDelete: ((key: string) => boolean) | undefined;
   async put(key: string, body: Buffer) { this.putCalls.push(key); this.values.set(key, Buffer.from(body)); }
-  async delete(key: string) { this.deleteCalls.push(key); this.values.delete(key); }
-  async get(key: string) { const body = this.values.get(key); return body ? { body: Buffer.from(body), size: body.length } : null; }
+  async delete(key: string) {
+    this.deleteCalls.push(key);
+    if (this.failDelete?.(key)) throw new Error(`controlled delete failure: ${key}`);
+    this.values.delete(key);
+  }
+  async get(key: string) {
+    if (this.failGetKeys.has(key)) throw new Error(`controlled resolver failure: ${key}`);
+    const body = this.values.get(key); return body ? { body: Buffer.from(body), size: body.length } : null;
+  }
   async stat(key: string) { const body = this.values.get(key); return body ? { size: body.length } : null; }
   async materialize() { return null; }
 }
@@ -125,4 +134,101 @@ test("E4 exported POST memeriksa setiap foto tambahan dan menolak batch secara a
   assert.deepEqual(imagesFor(mixedLaterInvalid.product.id), mixedLaterInvalid.product.existing);
   assert.deepEqual(mixedLaterInvalid.storage.putCalls, []); assert.deepEqual(mixedLaterInvalid.storage.deleteCalls, []);
   assert.equal(auditCount(mixedLaterInvalid.product.id), 0);
+});
+
+test("E4 rollback referensi membersihkan hanya object baru dan membuat kegagalan cleanup terlihat", async () => {
+  const png = await sharp({ create: { width: 400, height: 400, channels: 3, background: "#7c3aed" } }).png().toBuffer();
+  setPeriksaLabelFotoForTests(async () => LABEL_VALID);
+
+  const run = async (
+    label: string,
+    classifier: { jenis: "product_photo" | "promotional_graphic"; layakReferensi: boolean; rasioAreaTeks: number; jumlahKata: number; alasan: string },
+    configure?: (storage: MemoryStorage, product: { id: string; existing: string[] }) => void
+  ) => {
+    const product = createProduct(label);
+    const storage = new MemoryStorage();
+    const unrelated = `uploads/unrelated-${product.id}/keep.webp`;
+    storage.values.set(product.existing[0], Buffer.from("existing-object-must-survive"));
+    storage.values.set(unrelated, Buffer.from("unrelated-object-must-survive"));
+    configure?.(storage, product);
+    setMediaStorageForTests(storage);
+    setProductImageClassifierForTests(async () => classifier);
+    const response = await requestAdd(product.id, [png]);
+    const added = storage.putCalls.find((key) => !key.endsWith(".meta.json"));
+    assert.ok(added, `${label}: ingestion tidak menulis foto baru`);
+    return { product, storage, response, added, unrelated };
+  };
+
+  const promotional = {
+    jenis: "promotional_graphic" as const,
+    layakReferensi: false,
+    rasioAreaTeks: 0.35,
+    jumlahKata: 14,
+    alasan: "grafis promosi tidak layak jadi acuan",
+  };
+  const rejected = await run("reference-rejected", promotional);
+  assert.equal(rejected.response.status, 400, await rejected.response.clone().text());
+  assert.equal((await rejected.response.json()).message_en, "No reference-eligible product photo.");
+  assert.deepEqual(imagesFor(rejected.product.id), rejected.product.existing);
+  assert.equal(auditCount(rejected.product.id), 0);
+  assert.deepEqual(
+    [...new Set(rejected.storage.deleteCalls)].sort(),
+    [rejected.added, `${rejected.added}.meta.json`].sort(),
+    "normal rejection wajib membersihkan exact foto baru + sidecar"
+  );
+  assert.deepEqual([...rejected.storage.values.keys()].sort(), [rejected.product.existing[0], rejected.unrelated].sort());
+
+  const resolverLogs: unknown[][] = [];
+  const consoleErrorBeforeResolver = console.error;
+  console.error = (...args: unknown[]) => { resolverLogs.push(args); };
+  let resolverError: Awaited<ReturnType<typeof run>>;
+  try {
+    resolverError = await run("resolver-error", promotional, (storage, product) => {
+      storage.failGetKeys.add(`${product.existing[0]}.meta.json`);
+    });
+  } finally {
+    console.error = consoleErrorBeforeResolver;
+  }
+  assert.equal(resolverError.response.status, 500, "resolver failure harus tetap non-success");
+  assert.deepEqual(imagesFor(resolverError.product.id), resolverError.product.existing);
+  assert.equal(auditCount(resolverError.product.id), 0);
+  assert.deepEqual([...resolverError.storage.values.keys()].sort(), [resolverError.product.existing[0], resolverError.unrelated].sort());
+  assert.ok(resolverLogs.some((args) => args.some((arg) => String(arg).includes("controlled resolver failure"))));
+
+  const logged: unknown[][] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => { logged.push(args); };
+  let cleanupFailure: Awaited<ReturnType<typeof run>>;
+  try {
+    cleanupFailure = await run("cleanup-failure", promotional, (storage, product) => {
+      storage.failDelete = (key) => key.startsWith(`uploads/${product.id}/`) && !key.endsWith(".meta.json") && key !== product.existing[0];
+    });
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(cleanupFailure.response.status, 500, "cleanup failure tidak boleh menyamar sebagai sukses atomik");
+  assert.deepEqual(imagesFor(cleanupFailure.product.id), cleanupFailure.product.existing);
+  assert.equal(auditCount(cleanupFailure.product.id), 0);
+  assert.equal(cleanupFailure.storage.values.has(cleanupFailure.product.existing[0]), true);
+  assert.equal(cleanupFailure.storage.values.has(cleanupFailure.unrelated), true);
+  assert.equal(cleanupFailure.storage.values.has(cleanupFailure.added), true, "fault fixture wajib meninggalkan residual yang dilaporkan");
+  assert.ok(
+    logged.some((args) => args.some((arg) => String(arg).includes("residual storage objects may remain"))),
+    "risiko residual cleanup tidak terlihat di log operator"
+  );
+
+  const accepted = await run("eligible-control", {
+    jenis: "product_photo",
+    layakReferensi: true,
+    rasioAreaTeks: 0.001,
+    jumlahKata: 2,
+    alasan: "foto produk layak",
+  });
+  assert.equal(accepted.response.status, 200, await accepted.response.clone().text());
+  assert.deepEqual(imagesFor(accepted.product.id), [...accepted.product.existing, accepted.added]);
+  assert.equal(auditCount(accepted.product.id), 1);
+  assert.equal(accepted.storage.values.has(accepted.product.existing[0]), true);
+  assert.equal(accepted.storage.values.has(accepted.unrelated), true);
+  assert.equal(accepted.storage.values.has(accepted.added), true);
+  assert.equal(accepted.storage.values.has(`${accepted.added}.meta.json`), true);
 });
