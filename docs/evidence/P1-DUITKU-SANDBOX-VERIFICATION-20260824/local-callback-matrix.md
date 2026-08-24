@@ -22,4 +22,6 @@ Command:
 node --import tsx --test tests/duitku.test.ts tests/security-duitku.test.ts tests/pembayaran-sandbox.test.ts tests/duitku-sandbox-runner.test.ts
 ```
 
-Result: 26 passed, 0 failed.
+Result on the current remediation snapshot: 29 passed, 0 failed. The immutable
+secret-safe output and reproducible pre-evidence tree binding are stored in
+`focused-remediation.tap`.

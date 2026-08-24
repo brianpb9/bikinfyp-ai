@@ -2,13 +2,14 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import path from "node:path";
 import fs from "node:fs";
+import os from "node:os";
 import { spawnSync } from "node:child_process";
 
 const root = path.resolve(import.meta.dirname, "..");
 const runner = path.join(root, "scripts", "verify-duitku-sandbox.ts");
 const tsx = path.join(root, "node_modules", ".bin", "tsx");
 
-function run(overrides: Record<string, string> = {}) {
+function run(overrides: Record<string, string> = {}, args: string[] = []) {
   const env = {
     ...process.env,
     RACUN_NO_DOTENV: "1",
@@ -21,7 +22,7 @@ function run(overrides: Record<string, string> = {}) {
     DUITKU_SANDBOX_JOURNAL: path.join(root, ".agent-bus", "tmp", `must-not-execute-${process.pid}.json`),
     ...overrides,
   };
-  return spawnSync(tsx, [runner], { cwd: root, env, encoding: "utf8" });
+  return spawnSync(tsx, [runner, ...args], { cwd: root, env, encoding: "utf8" });
 }
 
 test("runner bawaan hanya PLAN dan tidak membocorkan credential", () => {
@@ -51,6 +52,46 @@ test("runner mengunci redirect real hanya ke app-sandbox.duitku.com", () => {
   );
   assert.match(source, /transactionStatus\.verification\.outcome !== "PASS"/);
   assert.match(source, /DUITKU_STATUS_VERIFICATION_HOLD/);
+});
+
+test("refresh status JSON null keluar nonzero dan menimpa PASS lama menjadi HOLD", () => {
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "duitku-null-status-"));
+  const journal = path.join(temporary, "journal.json");
+  const preload = path.join(root, "tests", "fixtures", "mock-duitku-null-status.mjs");
+  fs.writeFileSync(journal, `${JSON.stringify({
+    schema: "duitku-sandbox-verification/v1",
+    execution: "REAL_SANDBOX_API",
+    verification_result: "PASS",
+    replacement_attempted: true,
+    real_sandbox_api: {
+      order_id: "bikinfyp-sandbox-verify-20260824154351-2a4e286b",
+      create_invoice: { provider_reference_sha256: "b".repeat(64) },
+      transaction_status: { verification: { outcome: "PASS", blockers: [] } },
+    },
+  }, null, 2)}\n`);
+  try {
+    const result = run({
+      DUITKU_SANDBOX_JOURNAL: journal,
+      NODE_OPTIONS: `${process.env.NODE_OPTIONS ? `${process.env.NODE_OPTIONS} ` : ""}--import=${preload}`,
+    }, ["--refresh-status"]);
+    assert.equal(result.status, 2, `${result.stdout}\n${result.stderr}`);
+    const updated = JSON.parse(fs.readFileSync(journal, "utf8")) as {
+      verification_result: string;
+      real_sandbox_api: { transaction_status: { body_keys: string[]; verification: { outcome: string; blockers: string[] } } };
+    };
+    assert.equal(updated.verification_result, "HOLD");
+    assert.deepEqual(updated.real_sandbox_api.transaction_status.body_keys, []);
+    assert.equal(updated.real_sandbox_api.transaction_status.verification.outcome, "HOLD");
+    assert.deepEqual(updated.real_sandbox_api.transaction_status.verification.blockers, [
+      "MISSING_MERCHANT_ORDER_ID",
+      "MISSING_REFERENCE",
+      "MISSING_AMOUNT",
+      "MISSING_STATUS_CODE",
+      "MISSING_STATUS_MESSAGE",
+    ]);
+  } finally {
+    fs.rmSync(temporary, { recursive: true, force: true });
+  }
 });
 
 for (const [name, overrides, expected] of [

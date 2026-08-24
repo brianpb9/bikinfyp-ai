@@ -1,0 +1,47 @@
+TAP version 13
+# task: P1-DUITKU-SANDBOX-VERIFICATION-20260824
+# base_commit: 5e929578cf49abc51889884512d2a59048802556
+# pre_evidence_git_tree: a40045761333cfc580a5eb6bc67d244da2582335
+# package_lock_git_blob: 91e024aa3974f126c6922af6be8d888729896134
+# node: v22.23.1
+# npm: 10.9.8
+# command: node --import tsx --test tests/duitku.test.ts tests/security-duitku.test.ts tests/pembayaran-sandbox.test.ts tests/duitku-sandbox-runner.test.ts
+# normalization: secret-safe TAP; per-test timing blocks omitted, assertion order and final counters preserved
+ok 1 - runner bawaan hanya PLAN dan tidak membocorkan credential
+ok 2 - runner mengunci redirect real hanya ke app-sandbox.duitku.com
+ok 3 - refresh status JSON null keluar nonzero dan menimpa PASS lama menjadi HOLD
+ok 4 - runner fail-closed untuk production
+ok 5 - runner fail-closed untuk go-live
+ok 6 - runner fail-closed untuk gateway
+ok 7 - runner fail-closed untuk callback production
+ok 8 - runner fail-closed untuk credential
+ok 9 - callback dengan signature sah diterima
+ok 10 - HTTP 404 tanpa skema status Duitku menghasilkan HOLD, bukan bukti sukses
+ok 11 - status JSON null, array, dan primitif aman diperlakukan sebagai record kosong
+ok 12 - signature salah / field hilang / merchant lain semuanya ditolak
+ok 13 - default non-produksi mengarah ke sandbox Duitku
+ok 14 - createInvoice mengirim header signature yang benar dan membaca paymentUrl
+ok 15 - transactionStatus memakai endpoint webapi sandbox dan HMAC-SHA256
+ok 16 - statusCode selain 00 dilempar sebagai error, bukan sukses diam-diam
+ok 17 - kontrak health: provider duitku, env sandbox, live FALSE
+ok 18 - PAYMENTS_GO_LIVE=true TIDAK bisa membuat sandbox jadi live
+ok 19 - production + kunci terpasang tapi TANPA izin -> tetap tidak live
+ok 20 - callback sandbox TIDAK mengkredit dompet pengguna biasa
+ok 21 - callback sandbox TETAP mengkredit penguji terdaftar
+ok 22 - signature PALSU -> 401 dan saldo TIDAK berubah
+ok 23 - signature VALID resultCode 00 -> 200, kredit masuk, status paid
+ok 24 - signature valid dengan amount salah -> 422, diaudit, saldo TIDAK berubah
+ok 25 - callback sama 2x -> idempoten (saldo hanya +1x)
+ok 26 - resultCode 01 (gagal) -> status failed, tanpa kredit
+ok 27 - resultCode 01 SETELAH paid tidak menurunkan status paid
+ok 28 - order tidak dikenal -> 200 ignored, tanpa side effect
+ok 29 - callback merchantCode lain -> 401 walau signature konsisten dengan kuncinya sendiri
+1..29
+# tests 29
+# suites 0
+# pass 29
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 971.312542

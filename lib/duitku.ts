@@ -180,7 +180,12 @@ export async function duitkuTransactionStatusDetailed(orderId: string): Promise<
   });
   const raw = await res.text();
   const data = (() => {
-    try { return JSON.parse(raw) as Record<string, unknown>; }
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
+        ? parsed as Record<string, unknown>
+        : {};
+    }
     catch { return {}; }
   })();
   return {

@@ -57,6 +57,24 @@ test("HTTP 404 tanpa skema status Duitku menghasilkan HOLD, bukan bukti sukses",
   assert.notEqual(evidence.verification.outcome, "PASS");
 });
 
+test("status JSON null, array, dan primitif aman diperlakukan sebagai record kosong", async () => {
+  const realFetch = globalThis.fetch;
+  try {
+    for (const raw of ["null", "[]", "42", '"teks"']) {
+      globalThis.fetch = (async () => new Response(raw, {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      })) as typeof fetch;
+      const detail = await duitkuTransactionStatusDetailed("racun-shape-test");
+      assert.deepEqual(detail.bodyKeys, []);
+      assert.equal(detail.merchantOrderId, undefined);
+      assert.equal(detail.statusCode, undefined);
+    }
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});
+
 test("signature salah / field hilang / merchant lain semuanya ditolak", () => {
   const base = { merchantCode: "DTEST1", amount: "60000", merchantOrderId: "racun-abc-123" };
   assert.equal(verifyDuitkuCallbackSignature({ ...base, signature: "deadbeef" }), false);

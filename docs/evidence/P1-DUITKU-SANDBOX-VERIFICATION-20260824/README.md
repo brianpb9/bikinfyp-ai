@@ -77,7 +77,9 @@ a synthetic callback there would therefore not be valid evidence.
 ## Verification result
 
 - TypeScript typecheck: PASS
-- focused Duitku/sandbox matrix: 26 passed, 0 failed
-- full test suite: 1,218 total; 1,171 passed; 0 failed; 47 skipped
+- focused Duitku/sandbox matrix on the current remediation snapshot: 29 passed, 0 failed
+- immutable focused output: `focused-remediation.tap` (bound to the pre-evidence Git tree recorded in its header)
+- locked dependency source: tracked `package-lock.json`; locally installed core versions matched its exact entries
+- earlier full-suite baseline: 1,218 total; 1,171 passed; 0 failed; 47 skipped
 - production build: PASS
 - real Duitku credential scan across all scoped source and evidence: PASS
