@@ -59,13 +59,20 @@ test("E8 exported POST meneruskan merek terdaftar dan menolak brand salah tanpa 
     jenis: "product_photo", layakReferensi: true, rasioAreaTeks: 0.001, jumlahKata: 2, alasan: "fixture produk org",
   }));
 
-  const run = async (label: string, rawMeta: string, verdict: HasilLabel, expectedStatus: number) => {
+  const run = async (
+    label: string,
+    rawMeta: string,
+    verdict: HasilLabel,
+    expectedStatus: number,
+    existing: string[] = []
+  ) => {
     const storage = new MemoryStorage();
     setMediaStorageForTests(storage);
     const productId = `e8-${label}-${process.pid}`;
     let slotReleases = 0;
     let appendCalls = 0;
     let auditCalls = 0;
+    const expectedSnapshots: string[][] = [];
     const seenBrands: Array<string | null | undefined> = [];
     const tempFiles: string[] = [];
     setPeriksaLabelFotoForTests(async (fotoPath, _productName, brand) => {
@@ -84,14 +91,15 @@ test("E8 exported POST meneruskan merek terdaftar dan menolak brand salah tanpa 
       smokeGetOrgProduct: async () => ({
         id: productId,
         name: `Serum ${label}`,
-        images: "[]",
+        images: JSON.stringify(existing),
         raw_meta: rawMeta,
       }) as never,
       acquirePhotoUploadSlot: async () => () => { slotReleases += 1; },
       readSinglePhotoMultipart: async () => ({ mime: "image/png", data: png }),
-      pgAppendOrgProductImages: async (_orgId, _id, _expected, added) => {
+      pgAppendOrgProductImages: async (_orgId, _id, expected, added) => {
         appendCalls += 1;
-        return added;
+        expectedSnapshots.push([...expected]);
+        return [...existing, ...added];
       },
       pgAudit: async () => { auditCalls += 1; },
     });
@@ -101,9 +109,9 @@ test("E8 exported POST meneruskan merek terdaftar dan menolak brand salah tanpa 
     }), { params: Promise.resolve({ id: productId }) });
     assert.equal(response.status, expectedStatus, `${label}: ${await response.clone().text()}`);
     assert.equal(slotReleases, 1, `${label}: permit upload bocor`);
-    assert.equal(tempFiles.length, 1, `${label}: policy foto pertama berubah`);
+    assert.equal(tempFiles.length, 1, `${label}: setiap upload wajib diperiksa tepat sekali`);
     assert.ok(tempFiles.every((file) => !fs.existsSync(file) && !fs.existsSync(path.dirname(file))), `${label}: temp tidak bersih`);
-    return { response, storage, appendCalls, auditCalls, seenBrands };
+    return { response, storage, appendCalls, auditCalls, seenBrands, expectedSnapshots };
   };
 
   const wrongBrand = await run("wrong-brand", JSON.stringify({ brand: "Merek Org" }), {
@@ -131,6 +139,39 @@ test("E8 exported POST meneruskan merek terdaftar dan menolak brand salah tanpa 
   assert.equal(nullBrand.storage.putCalls.length, 2, "tanpa brand terdaftar tetap mempertahankan perilaku lama");
   assert.equal(nullBrand.appendCalls, 1);
   assert.equal(nullBrand.auditCalls, 1);
+
+  const existing = ["uploads/existing-product/photo.webp"];
+  const additionalUnreadable = await run("additional-unreadable", JSON.stringify({ brand: "Merek Org" }), {
+    terbaca: false,
+    kata: [],
+    cocokNama: false,
+    cocokMerek: null,
+    alasan: "label tambahan tidak terbaca",
+  }, 400, existing);
+  assert.equal((await additionalUnreadable.response.json()).message_en, "Product label not OCR-readable.");
+  assert.deepEqual(seenKeys(additionalUnreadable.storage), []);
+  assert.equal(additionalUnreadable.appendCalls, 0);
+  assert.equal(additionalUnreadable.auditCalls, 0);
+  assert.deepEqual(additionalUnreadable.seenBrands, ["Merek Org"]);
+
+  const additionalWrongBrand = await run("additional-wrong-brand", JSON.stringify({ brand: "Merek Org" }), {
+    terbaca: true,
+    kata: ["Merek", "Lain"],
+    cocokNama: true,
+    cocokMerek: false,
+    alasan: "merek foto tambahan tidak cocok",
+  }, 400, existing);
+  assert.equal((await additionalWrongBrand.response.json()).message_en, "Product label does not match the registered brand.");
+  assert.deepEqual(seenKeys(additionalWrongBrand.storage), []);
+  assert.equal(additionalWrongBrand.appendCalls, 0);
+  assert.equal(additionalWrongBrand.auditCalls, 0);
+  assert.deepEqual(additionalWrongBrand.seenBrands, ["Merek Org"]);
+
+  const additionalValid = await run("additional-valid", JSON.stringify({ brand: "Merek Org" }), LABEL_VALID, 200, existing);
+  assert.equal(additionalValid.appendCalls, 1, "foto tambahan valid wajib mencapai resolver/CAS append");
+  assert.equal(additionalValid.auditCalls, 1);
+  assert.deepEqual(additionalValid.expectedSnapshots, [existing], "CAS memakai exact existing snapshot");
+  assert.deepEqual(additionalValid.seenBrands, ["Merek Org"]);
 });
 
 test("E8 resolver menolak produk tanpa referensi dan rollback exact sebelum PG append/audit", async () => {
@@ -202,7 +243,7 @@ test("E8 resolver menolak produk tanpa referensi dan rollback exact sebelum PG a
     const added = storage.putCalls.find((key) => !key.endsWith(".meta.json"));
     assert.ok(added, `${label}: ingestion tidak menulis foto baru`);
     assert.equal(slotReleases, 1, `${label}: permit upload bocor`);
-    assert.equal(tempFiles.length, existing.length ? 0 : 1, `${label}: policy foto pertama berubah`);
+    assert.equal(tempFiles.length, 1, `${label}: setiap upload E8 wajib melewati label gate`);
     assert.ok(tempFiles.every((file) => !fs.existsSync(file) && !fs.existsSync(path.dirname(file))), `${label}: temp tidak bersih`);
     return { response, productId, existing, unrelated, storage, added, appendCalls, auditCalls, expectedSnapshots };
   };

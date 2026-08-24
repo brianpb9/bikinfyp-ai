@@ -54,7 +54,7 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
   assert.ok(ts.isAwaitExpression(persistenceCall.parent) && persistenceCall.parent.expression === persistenceCall,
     `${context}: satu-satunya persistence call wajib langsung di-await`);
 
-  if (route === "E4") {
+  {
     const gate = gateAwaits[0];
     let loop: ts.ForOfStatement | undefined;
     let cursor: ts.Node = gate;
@@ -87,141 +87,48 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
     assert.equal(hasEarlyExit, false, `${context}: loop label tidak boleh melewati blob dengan early exit`);
 
     let firstPhotoBypass = false;
-    const scanFirstPhotoBypass = (node: ts.Node): void => {
-      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
-        && /existing\.length/.test(node.getText(ast)) && /(?:^|\D)0(?:\D|$)/.test(node.getText(ast))) firstPhotoBypass = true;
-      ts.forEachChild(node, scanFirstPhotoBypass);
-    };
-    scanFirstPhotoBypass(post.body);
-    assert.equal(firstPhotoBypass, false, `${context}: existing.length===0 tidak boleh membatasi gerbang`);
+    let loopAncestor: ts.Node | undefined = loop.parent;
+    while (loopAncestor && loopAncestor !== post.body) {
+      if (ts.isIfStatement(loopAncestor)
+        && /(?:existing\.length|owned\.images\.length)/.test(loopAncestor.expression.getText(ast))) firstPhotoBypass = true;
+      loopAncestor = loopAncestor.parent;
+    }
+    assert.equal(firstPhotoBypass, false, `${context}: jumlah foto existing tidak boleh membatasi gerbang`);
     assert.ok(loop.getEnd() < persistenceCall.getStart(ast), `${context}: persistence wajib sesudah semua label awaits`);
     const gateCall = gate.expression as ts.CallExpression;
-    assert.equal(gateCall.arguments.length, 3, `${context}: brand terdaftar wajib diteruskan ke setiap gate`);
+    assert.equal(gateCall.arguments.length, 3, `${context}: brand terdaftar wajib diteruskan ke setiap gate ${route}`);
     assert.equal(gateCall.arguments[2].getText(ast), "merekTerdaftar(owned.product)",
       `${context}: gate wajib memakai brand otoritatif produk`);
+    assert.ok(ts.isVariableDeclaration(gate.parent) && ts.isIdentifier(gate.parent.name),
+      `${context}: hasil label wajib dipakai untuk keputusan reject`);
+    const labelName = gate.parent.name.text;
+    let unreadableReject = false;
+    let brandReject = false;
+    const branchThrows = (branch: ts.Statement): boolean => {
+      let found = false;
+      const visit = (node: ts.Node): void => {
+        if (node !== branch && functionBoundary(node)) return;
+        if (ts.isThrowStatement(node)) found = true;
+        ts.forEachChild(node, visit);
+      };
+      visit(branch);
+      return found;
+    };
+    const scanRejects = (node: ts.Node): void => {
+      if (node !== loop!.statement && functionBoundary(node)) return;
+      if (ts.isIfStatement(node) && branchThrows(node.thenStatement)) {
+        const condition = node.expression.getText(ast).replace(/\s/g, "");
+        if (condition === `!${labelName}.terbaca`) unreadableReject = true;
+        if (condition === `${labelName}.cocokMerek===false`) brandReject = true;
+      }
+      ts.forEachChild(node, scanRejects);
+    };
+    scanRejects(loop.statement);
+    assert.equal(unreadableReject, true, `${context}: label tidak terbaca wajib melempar sebelum persistence`);
+    assert.equal(brandReject, true, `${context}: cocokMerek false wajib melempar sebelum persistence`);
     return;
   }
 
-  const unwrap = (expression: ts.Expression): ts.Expression => {
-    while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
-    return expression;
-  };
-  const firstBlob = (expression: ts.Expression): boolean => {
-    expression = unwrap(expression);
-    return ts.isElementAccessExpression(expression)
-      && ts.isIdentifier(expression.expression) && expression.expression.text === "blobs"
-      && !!expression.argumentExpression && ts.isNumericLiteral(expression.argumentExpression)
-      && expression.argumentExpression.text === "0";
-  };
-  const enterpriseEmpty = (expression: ts.Expression): boolean => {
-    expression = unwrap(expression);
-    if (!ts.isPrefixUnaryExpression(expression) || expression.operator !== ts.SyntaxKind.ExclamationToken) return false;
-    const length = unwrap(expression.operand);
-    return ts.isPropertyAccessExpression(length) && length.name.text === "length"
-      && ts.isPropertyAccessExpression(length.expression)
-      && ts.isIdentifier(length.expression.expression) && length.expression.expression.text === "owned"
-      && length.expression.name.text === "images";
-  };
-  const exactFirstPhotoCondition = (expression: ts.Expression): boolean => {
-    expression = unwrap(expression);
-    if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken) return false;
-    return enterpriseEmpty(expression.left) && firstBlob(expression.right);
-  };
-
-  const branches: ts.IfStatement[] = [];
-  const collectBranches = (node: ts.Node): void => {
-    if (node !== post && functionBoundary(node)) return;
-    if (ts.isIfStatement(node) && exactFirstPhotoCondition(node.expression)) branches.push(node);
-    ts.forEachChild(node, collectBranches);
-  };
-  collectBranches(post.body);
-  assert.equal(branches.length, 1, `${context}: wajib tepat satu branch foto-pertama dengan kondisi ${route} exact`);
-  const branch = branches[0];
-  assert.ok(ts.isBlock(branch.thenStatement), `${context}: body branch foto-pertama wajib block`);
-  assert.equal(branch.elseStatement, undefined, `${context}: branch foto-pertama tidak boleh punya else bypass`);
-  const branchBlock = branch.parent;
-  assert.ok(ts.isBlock(branchBlock), `${context}: branch foto-pertama wajib direct statement dalam block POST`);
-
-  const gate = gateAwaits[0];
-  const gateCall = gate.expression as ts.CallExpression;
-  assert.equal(gateCall.arguments.length, 3, `${context}: brand terdaftar wajib diteruskan ke gate foto pertama`);
-  assert.equal(gateCall.arguments[2].getText(ast), "merekTerdaftar(owned.product)",
-    `${context}: gate wajib memakai brand otoritatif produk`);
-  let current: ts.Node = gate;
-  let reachedBranch = false;
-  while (current.parent) {
-    const parent = current.parent;
-    if (parent === branch.thenStatement) { reachedBranch = true; break; }
-    assert.ok(!functionBoundary(parent), `${context}: gate tidak boleh berada di fungsi nested`);
-    assert.ok(
-      !ts.isIfStatement(parent) && !ts.isConditionalExpression(parent)
-      && !ts.isSwitchStatement(parent) && !ts.isCaseClause(parent) && !ts.isDefaultClause(parent)
-      && !ts.isForStatement(parent) && !ts.isForInStatement(parent) && !ts.isForOfStatement(parent)
-      && !ts.isWhileStatement(parent) && !ts.isDoStatement(parent)
-      && !(ts.isBinaryExpression(parent) && [ts.SyntaxKind.AmpersandAmpersandToken,
-        ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(parent.operatorToken.kind)),
-      `${context}: awaited gate wajib unconditional di dalam branch foto-pertama`
-    );
-    if (ts.isCatchClause(parent)) assert.fail(`${context}: gate tidak boleh berada di catch`);
-    if (ts.isTryStatement(parent)) {
-      assert.equal(parent.catchClause, undefined, `${context}: gate failure tidak boleh dipulihkan catch sebelum persistence`);
-      assert.ok(gate.getStart(ast) >= parent.tryBlock.getStart(ast) && gate.getEnd() <= parent.tryBlock.getEnd(),
-        `${context}: gate wajib berada di try block, bukan finally`);
-    }
-    current = parent;
-  }
-  assert.ok(reachedBranch, `${context}: awaited gate wajib berada di branch foto-pertama exact`);
-  assert.ok(
-    (ts.isVariableDeclaration(gate.parent) && gate.parent.initializer === gate)
-      || (ts.isExpressionStatement(gate.parent) && gate.parent.expression === gate),
-    `${context}: gate wajib awaited call/initializer langsung, bukan expression bersyarat`
-  );
-
-  assert.ok(ts.isVariableDeclaration(gate.parent) && ts.isIdentifier(gate.parent.name),
-    `${context}: hasil label wajib ditahan untuk keputusan merek`);
-  const labelName = gate.parent.name.text;
-  const brandRejects: ts.IfStatement[] = [];
-  const collectBrandRejects = (node: ts.Node): void => {
-    if (node !== branch.thenStatement && functionBoundary(node)) return;
-    if (ts.isIfStatement(node)) {
-      const condition = unwrap(node.expression);
-      if (ts.isBinaryExpression(condition)
-        && condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
-        && condition.right.kind === ts.SyntaxKind.FalseKeyword
-        && ts.isPropertyAccessExpression(condition.left)
-        && ts.isIdentifier(condition.left.expression)
-        && condition.left.expression.text === labelName
-        && condition.left.name.text === "cocokMerek") brandRejects.push(node);
-    }
-    ts.forEachChild(node, collectBrandRejects);
-  };
-  collectBrandRejects(branch.thenStatement);
-  assert.equal(brandRejects.length, 1, `${context}: cocokMerek === false wajib ditolak tepat sekali`);
-  const brandReject = brandRejects[0];
-  let throws = 0;
-  const countThrows = (node: ts.Node): void => {
-    if (node !== brandReject.thenStatement && functionBoundary(node)) return;
-    if (ts.isThrowStatement(node)) throws += 1;
-    ts.forEachChild(node, countThrows);
-  };
-  countThrows(brandReject.thenStatement);
-  assert.ok(throws > 0, `${context}: branch brand-false wajib melempar sebelum persistence`);
-  assert.ok(gate.getEnd() < brandReject.getStart(ast), `${context}: keputusan brand wajib memakai hasil gate aktual`);
-  assert.ok(brandReject.getEnd() < persistenceCall.getStart(ast), `${context}: brand-false wajib ditolak sebelum persistence`);
-
-  const persistence = persistenceCall.parent;
-  let persistenceStatement: ts.Node = persistence;
-  while (persistenceStatement.parent && persistenceStatement.parent !== branchBlock) persistenceStatement = persistenceStatement.parent;
-  assert.ok(persistenceStatement.parent === branchBlock && ts.isStatement(persistenceStatement),
-    `${context}: persistence wajib direct sibling branch foto-pertama`);
-  const siblings = branchBlock.statements;
-  assert.ok(siblings.indexOf(persistenceStatement as ts.Statement) > siblings.indexOf(branch),
-    `${context}: persistence wajib direct sibling sesudah branch foto-pertama`);
-  assert.ok(
-    (ts.isVariableDeclaration(persistence.parent) && persistence.parent.initializer === persistence)
-      || (ts.isExpressionStatement(persistence.parent) && persistence.parent.expression === persistence),
-    `${context}: persistence wajib awaited call/initializer langsung`
-  );
 }
 
 function parseSource(source: string, context: string) {
@@ -401,7 +308,7 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   assert.match(s, /"tsv"/, "butuh TSV untuk mendapat kolom keyakinan");
   assert.match(s, /Sdadpgeer/, "kenapa panjang huruf tidak cukup harus tertulis di kode");
   // Gerbangnya dipasang SEBELUM foto disimpan di kedua mutation boundary.
-  // E4 wajib memeriksa SETIAP blob; E8 tetap kontrak foto-pertama task lain.
+  // E4 dan E8 wajib memeriksa SETIAP blob tanpa bypass jumlah foto existing.
   const retail = baca("app/api/products/[id]/photos/route.ts");
   assert.match(retail, /periksaLabelFoto\(tmpFile, owned\.product\.name[,)]/);
   assertLabelGateBeforePersistence(retail, "E4 Retail", "E4");
@@ -410,39 +317,54 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   assert.match(enterprise, /periksaLabelFoto\(tmpFile, owned\.product\.name, merekTerdaftar\(owned\.product\)\)/);
   assertLabelGateBeforePersistence(enterprise, "E8 Enterprise", "E8");
 
+  const e8Control = `export async function POST() {
+      for (const blob of blobs) {
+        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
+        if (!label.terbaca) throw new Error("unreadable");
+        if (label.cocokMerek === false) throw new Error("brand");
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`;
+  assertLabelGateBeforePersistence(e8Control, "E8 structural control", "E8");
+
   const e8Ditolak = [
     ["brand arg hilang", `export async function POST() {
-      if (!owned.images.length && blobs[0]) {
+      for (const blob of blobs) {
         const label = await periksaLabelFoto(tmpFile, owned.product.name);
+        if (!label.terbaca) throw new Error("unreadable");
+        if (label.cocokMerek === false) throw new Error("brand");
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["hasil unreadable dibuang", `export async function POST() {
+      for (const blob of blobs) {
+        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
         if (label.cocokMerek === false) throw new Error("brand");
       }
       await saveUniqueProductImages(id, blobs);
     }`],
     ["hasil brand dibuang", `export async function POST() {
-      if (!owned.images.length && blobs[0]) {
+      for (const blob of blobs) {
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
+        if (!label.terbaca) throw new Error("unreadable");
       }
       await saveUniqueProductImages(id, blobs);
     }`],
-    ["brand false tidak melempar", `export async function POST() {
-      if (!owned.images.length && blobs[0]) {
+    ["masih dibatasi foto pertama", `export async function POST() {
+      if (!owned.images.length) {
+        for (const blob of blobs) {
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        if (label.cocokMerek === false) log(label);
-      }
-      await saveUniqueProductImages(id, blobs);
-    }`],
-    ["brand diperiksa setelah persistence", `export async function POST() {
-      if (!owned.images.length && blobs[0]) {
-        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        await saveUniqueProductImages(id, blobs);
+        if (!label.terbaca) throw new Error("unreadable");
         if (label.cocokMerek === false) throw new Error("brand");
+        }
       }
+      await saveUniqueProductImages(id, blobs);
     }`],
   ] as const;
   for (const [judul, source] of e8Ditolak) {
     assert.throws(
       () => assertLabelGateBeforePersistence(source, `counterexample E8 ${judul}`, "E8"),
-      /brand terdaftar|brand otoritatif|cocokMerek|wajib melempar|sebelum persistence|direct sibling/,
+      /brand terdaftar|brand otoritatif|label tidak terbaca|cocokMerek false|jumlah foto existing|for-of seluruh blobs|sebelum persistence/,
       `${judul} tidak boleh memenangkan structural guard E8`
     );
   }
@@ -549,7 +471,7 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   for (const [judul, source] of ditolak) {
     assert.throws(
       () => assertLabelGateBeforePersistence(source, `counterexample ${judul}`, "E4"),
-      /label gate aktual|persistence call total|langsung di-await|brand terdaftar|brand otoritatif|seluruh blobs|unconditional|dipulihkan catch|existing\.length|sesudah semua label awaits/,
+      /label gate aktual|persistence call total|langsung di-await|brand terdaftar|brand otoritatif|seluruh blobs|unconditional|dipulihkan catch|jumlah foto existing|sesudah semua label awaits/,
       `${judul} tidak boleh memenangkan structural guard`
     );
   }

@@ -54,11 +54,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       blob.mime = mime;
     }
 
-    if (!owned.images.length && blobs[0]) {
+    for (const blob of blobs) {
       const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "org-intake-label-"));
       const tmpFile = path.join(tmpDir, "foto");
       try {
-        fs.writeFileSync(tmpFile, blobs[0].data);
+        fs.writeFileSync(tmpFile, blob.data);
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
         if (!label.terbaca) throw ERR.BAD_REQUEST(label.alasan!, "Product label not OCR-readable.");
         if (label.cocokMerek === false) {
