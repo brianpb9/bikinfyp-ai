@@ -18,7 +18,7 @@ import { buildPhotoPanVideo } from "./media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "./media/vo-tts";
 import { synthesizeGeminiVoiceover } from "./media/gemini-tts";
 import { stripDeliveryTags } from "./script-engine/delivery-tags";
-import { isStructuredStoryAds, voiceoverStartSecForSegments } from "./script-engine/story-os-ads";
+import { deriveStoryAdsIdentity, isStructuredStoryAds, voiceoverStartSecForSegments } from "./script-engine/story-os-ads";
 import { hargaTerbilang } from "./script-engine/terbilang";
 import { buildCaptionCards } from "./media/captions";
 import { renderCaptionPngs } from "./media/render-captions";
@@ -94,7 +94,11 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
   try {
     const script = db.prepare("SELECT * FROM scripts WHERE id = ?").get(job.script_id) as ScriptRow;
     const admisi = bacaSnapshot(script.validation_result);
-    const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: admisi?.templateId ?? null, durationSec: job.duration_s };
+    const storyIdentity = deriveStoryAdsIdentity(admisi, {
+      format: job.format,
+      templateId: (job as typeof job & { template_id?: string | null }).template_id,
+      durationSec: job.duration_s,
+    });
     let product = db.prepare("SELECT * FROM products WHERE id = ?").get(job.product_id) as ProductRow;
     const persona = job.persona_id
       ? (db.prepare("SELECT * FROM personas WHERE id = ?").get(job.persona_id) as PersonaRow | undefined)

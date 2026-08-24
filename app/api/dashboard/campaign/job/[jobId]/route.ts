@@ -15,7 +15,8 @@ import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
 import { materializeJobReferenceManifest, parseJobReferenceManifest } from "@/lib/job-reference-manifest";
 import { parseJobProductSnapshot } from "@/lib/job-product-snapshot";
-import { isStructuredStoryAds } from "@/lib/script-engine/story-os-ads";
+import { bacaSnapshot } from "@/lib/script-engine/admisi";
+import { deriveStoryAdsIdentity, isStructuredStoryAds } from "@/lib/script-engine/story-os-ads";
 import path from "node:path";
 
 export const runtime = "nodejs";
@@ -38,6 +39,7 @@ type JobRowLite = {
   requires_approval: boolean; product_name: string; segments: string;
   quality_tier: string;
   format: string; template_id: string | null;
+  script_validation_result: string | null;
   approved_reference_manifest: string | null;
   job_product_snapshot: string | null;
 };
@@ -46,7 +48,7 @@ async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRow
   const res = await pool.query<JobRowLite>(
     `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier, j.format, j.template_id,
             j.approved_reference_manifest, j.job_product_snapshot,
-            p.name AS product_name, s.segments
+            p.name AS product_name, s.segments, s.validation_result AS script_validation_result
      FROM jobs j JOIN products p ON p.id=j.product_id JOIN scripts s ON s.id=j.script_id
      WHERE j.id=$1 AND j.org_id=$2`,
     [jobId, orgId]
@@ -153,10 +155,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
         if (!job.approved_reference_manifest) throw new Error("REF_MANIFEST_LEGACY_UNSAFE");
         if (!job.job_product_snapshot) throw new Error("PRODUCT_SNAPSHOT_LEGACY_UNSAFE");
         parseJobProductSnapshot(job.job_product_snapshot, {
-          requirePrice: isStructuredStoryAds({
-            contentType: job.format === "ads" ? "ads" : null,
-            templateId: job.template_id,
-          }),
+          requirePrice: isStructuredStoryAds(deriveStoryAdsIdentity(
+            bacaSnapshot(job.script_validation_result),
+            { format: job.format, templateId: job.template_id }
+          )),
         });
         const manifest = parseJobReferenceManifest(job.approved_reference_manifest);
         await materializeJobReferenceManifest(manifest, path.join(config.storageDir, "jobs", jobId));

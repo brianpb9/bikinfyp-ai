@@ -8,6 +8,7 @@ import {
   parseJobProductSnapshot,
   UnsafeLegacyProductSnapshot,
 } from "../lib/job-product-snapshot";
+import { deriveStoryAdsIdentity, isStructuredStoryAds } from "../lib/script-engine/story-os-ads";
 
 const awal = {
   productName: "Serum Awal",
@@ -77,6 +78,22 @@ test("snapshot v1 hanya kompatibel untuk non-Story-Ads; v2 tetap membawa harga",
   assert.equal(v2.version, 2); assert.equal(v2.priceIdr, 89_000);
 });
 
+test("A6 identity: talking_head + template job null tetap Story Ads dari snapshot admisi", () => {
+  const identity = deriveStoryAdsIdentity(
+    { contentType: "ads", templateId: "ads-unboxing-pov" },
+    { format: "talking_head", templateId: null }
+  );
+  assert.deepEqual(identity, {
+    contentType: "ads", templateId: "ads-unboxing-pov", durationSec: null,
+  });
+  assert.equal(isStructuredStoryAds(identity), true);
+  const { priceIdr: _missing, ...legacyWithoutPrice } = awal;
+  assert.throws(() => parseJobProductSnapshot(
+    JSON.stringify({ ...legacyWithoutPrice, version: 1 }),
+    { requirePrice: isStructuredStoryAds(identity) }
+  ), UnsafeLegacyProductSnapshot);
+});
+
 test("admission builder membekukan seluruh metadata dari bentuk row database", () => {
   const raw = createJobProductSnapshotRaw({
     name: "Serum Admission", category: "beauty", price_idr: 91_000,
@@ -116,8 +133,10 @@ test("A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan 
   ]) {
     assert.ok(source.indexOf(token) > guard, `${token} terjadi sebelum snapshot metadata diverifikasi`);
   }
-  assert.match(source.slice(guard, guard + 500), /requirePrice:[\s\S]+isStructuredStoryAds[\s\S]+job\.format === "ads"/,
-    "A6 tidak membatasi penolakan v1 ke Story Ads");
+  assert.match(source, /s\.validation_result AS script_validation_result/,
+    "A6 tidak memuat snapshot admisi script");
+  assert.match(source.slice(guard, guard + 650), /isStructuredStoryAds\(deriveStoryAdsIdentity\([\s\S]+bacaSnapshot\(job\.script_validation_result\)[\s\S]+format: job\.format[\s\S]+templateId: job\.template_id/,
+    "A6 tidak memakai helper identitas Story Ads yang sama dengan worker");
 });
 
 test("semua admission produksi memasang snapshot pada INSERT job yang sama", () => {

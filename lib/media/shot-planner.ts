@@ -633,20 +633,27 @@ function tumpulkanMacro(kamera: string, adaLabel: boolean): string {
   return adaLabel ? kamera.replace(MACRO, "close, at arm's-length viewing distance") : kamera;
 }
 
-function sinematografiPenulis(segs: SegmentDraft[], adaLabel: boolean): { aksi: string; kamera: string; tanpaWajah: boolean } | null {
+function sinematografiPenulis(
+  segs: SegmentDraft[],
+  adaLabel: boolean,
+  gunakanKomposisiPenulis = true
+): { aksi: string; kamera: string; tanpaWajah: boolean } | null {
   const beraksi = segs
     .filter((sg) => (sg.action ?? "").trim().length > 12)
     .slice()
     .sort((a, b) => a.start - b.start);
   const utama = beraksi[0];
   if (!utama) return null;
-  const kamera = tumpulkanMacro(
+  // Neutral Story Ads hanya mempercayai aksi yang lolos grammar blank-prop.
+  // Framing/angle/camera/expression LLM tidak pernah mencapai prompt; dunia
+  // dan komposisinya selalu berasal dari tabel role netral yang dikurasi.
+  const kamera = gunakanKomposisiPenulis ? tumpulkanMacro(
     [utama.framing, utama.angle, utama.camera]
       .map((x) => (x ?? "").trim())
       .filter(Boolean)
       .join(", "),
     adaLabel
-  );
+  ) : "";
   const aksi = beraksi.length === 1
     ? String(utama.action).trim()
     : `single-shot timed progression: ${beraksi.map((sg, index) => {
@@ -660,7 +667,7 @@ function sinematografiPenulis(segs: SegmentDraft[], adaLabel: boolean): { aksi: 
     // Penulis menandai sendiri bahwa wajah tidak terlihat di beat ini. Sebelum
     // ini penandanya diabaikan dan kamera memanggil wajah kembali ke frame —
     // persis konfigurasi yang catatan filter kita beri 0 dari 3 kelulusan.
-    tanpaWajah: /not visible|tidak terlihat|off camera/i.test(utama.expression ?? ""),
+    tanpaWajah: gunakanKomposisiPenulis && /not visible|tidak terlihat|off camera/i.test(utama.expression ?? ""),
   };
 }
 
@@ -1325,7 +1332,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         expression: segment.expression,
       })) {
         if (!field) continue;
-        const fieldFindings = neutralStoryAdsUntrustedFieldContradictions(field);
+        const fieldFindings = neutralStoryAdsUntrustedFieldContradictions(field, {
+          productName: input.productName,
+          productCategory: input.productCategory,
+        });
         if (fieldFindings.length > 0) {
           throw new Error(`Kontrak field ${fieldName} neutral Story Ads dilanggar: ${fieldFindings.join(", ")}`);
         }
@@ -1368,7 +1378,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // "jadikan ini default, bukan pilihan" — tapi kodenya hanya memberlakukannya
     // pada talking_head, sehingga format ads dikirim ke antrean berbayar
     // dengan konfigurasi yang catatan kita sendiri beri 0% kelulusan.
-    const sinema = sinematografiPenulis(segmenMilikShot(i), !isServiceLike(input.productCategory));
+    const sinema = sinematografiPenulis(
+      segmenMilikShot(i),
+      !isServiceLike(input.productCategory),
+      !neutralStoryAds
+    );
     const formatBukaTanpaWajah = format === "talking_head" || format === "ads" || format === "tvc";
     const bukaTanpaWajah =
       // Penanda penulis "expression: not visible" ikut memutuskan, bukan cuma
@@ -2033,6 +2047,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     for (const shot of spec.shots) {
       const contradictions = neutralStoryAdsPromptContradictions(shot.prompt, {
         productName: input.productName,
+        productCategory: input.productCategory,
       }, shot.trustedNumericScaffolds);
       if (contradictions.length > 0) {
         throw new Error(`Kontrak prompt final neutral Story Ads dilanggar: ${contradictions.join(", ")}`);

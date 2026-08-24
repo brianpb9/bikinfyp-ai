@@ -81,10 +81,22 @@ function characterContradictions(input: string, kind: "action" | "prompt", trust
 }
 
 /** Field visual tak tepercaya sebelum dirakit dengan scaffold planner. */
-export function neutralStoryAdsUntrustedFieldContradictions(field: string): string[] {
+// "box" sendiri adalah properti panggung sah untuk ads-unboxing-pov. Yang
+// terlarang adalah bentuk merchandise generik (skincare box/product box),
+// sementara jar/tube sudah cukup spesifik untuk selalu dianggap barang.
+const GENERIC_MERCHANDISE = /\b(?:jar\w*|tube\w*|(?:unbranded|serum|skincare|cosmetic|product|merchandise|retail)\s+(?:box(?:es)?|container\w*|carton\w*|pouch\w*|sachet\w*))\b/i;
+
+export function neutralStoryAdsUntrustedFieldContradictions(
+  field: string,
+  identity: NeutralVisualProductIdentity = {}
+): string[] {
   const findings = characterContradictions(field, "prompt");
   const unsafe = field.match(/\b(?:product\w*|produk\w*|bottle\w*|botol\w*|packag\w*|kemasan\w*|brand\w*|merek\w*|logo\w*|label\w*|marked|printed|readable|claim\w*|klaim\w*|price\w*|harga\w*|reference\w*|referensi\w*)\b/i)?.[0];
   if (unsafe) findings.push(`untrusted visual field contains product/brand/text instruction: ${unsafe}`);
+  const merchandise = field.match(GENERIC_MERCHANDISE)?.[0];
+  if (merchandise) findings.push(`untrusted visual field contains generic merchandise: ${merchandise}`);
+  const category = literalPattern(identity.productCategory);
+  if (category?.test(field)) findings.push(`authoritative product category used in untrusted composition: ${identity.productCategory}`);
   return findings;
 }
 
@@ -139,9 +151,22 @@ export function neutralStoryAdsPromptContradictions(
     ...characterContradictions(prompt, "prompt", trustedNumericScaffolds),
     ...FORBIDDEN_PROMPT_PATTERNS.flatMap(([label, pattern]) => pattern.test(prompt) ? [label] : []),
   ];
-  for (const [label, value] of [["product name", identity.productName], ["product category", identity.productCategory]] as const) {
+  const merchandise = prompt.match(GENERIC_MERCHANDISE)?.[0];
+  if (merchandise) findings.push(`generic merchandise present in final neutral prompt: ${merchandise}`);
+  // Nama produk tidak pernah punya alasan sah berada di visual netral. Kategori
+  // tidak diperiksa sebagai token final: descriptor persona terkurasi dapat
+  // sah memuat kata seperti "beauty". Injeksi kategori tetap ditolak pada
+  // field LLM sebelum field itu dibuang dari komposisi.
+  for (const [label, value] of [["product name", identity.productName]] as const) {
     const pattern = literalPattern(value);
     if (pattern?.test(prompt)) findings.push(`authoritative ${label} present in final prompt: ${value}`);
+  }
+  const categoryPattern = literalPattern(identity.productCategory);
+  if (categoryPattern && new RegExp(
+    `\\b(?:holding|holds|lifting|picking up|turning|presenting|memegang|mengangkat|memutar|menunjukkan)\\b[^,.;]{0,45}${categoryPattern.source}`,
+    "i"
+  ).test(prompt)) {
+    findings.push(`authoritative product category used as visual merchandise: ${identity.productCategory}`);
   }
   return findings;
 }

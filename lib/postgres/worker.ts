@@ -38,7 +38,7 @@ import { buildPhotoPanVideo } from "../media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
 import { synthesizeGeminiVoiceover } from "../media/gemini-tts";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
-import { isStructuredStoryAds, voiceoverStartSecForSegments } from "../script-engine/story-os-ads";
+import { deriveStoryAdsIdentity, isStructuredStoryAds, voiceoverStartSecForSegments, type StoryAdsIdentity } from "../script-engine/story-os-ads";
 import { hargaTerbilang } from "../script-engine/terbilang";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
@@ -64,6 +64,19 @@ const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
 function assertUrl() { if (!/^postgres(?:ql)?:\/\//i.test(config.databaseUrl)) throw new Error("DATABASE_URL PostgreSQL wajib untuk worker pg."); return config.databaseUrl; }
 function deterministicFixtureAllowed() { return process.env.RACUN_WORKER_DETERMINISTIC === "1" && process.env.NODE_ENV !== "production"; }
+
+/** Provider dialogue is deliberately absent for neutral Story Ads. Keeping
+ * embedded audio there would produce a paid silent video, so those jobs must
+ * take the external narration branch even when their format is talking_head. */
+export function shouldPreserveEmbeddedLipsync(input: {
+  format: string;
+  providerName: string;
+  storyIdentity: StoryAdsIdentity;
+}): boolean {
+  return !isMockProviderName(input.providerName)
+    && (input.format === "talking_head" || input.format === "tvc")
+    && !isStructuredStoryAds(input.storyIdentity);
+}
 
 type WorkerRow = {
   id: string; user_id: string; org_id: string | null; product_id: string; persona_id: string | null; script_id: string;
@@ -341,7 +354,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   if (config.providerVideo === "mock") throw new Error("Worker PostgreSQL membutuhkan PROVIDER_VIDEO nyata; fixture hanya diizinkan untuk test lokal eksplisit.");
   const segments = JSON.parse(row.script_segments) as SegmentDraft[];
   const admisi = bacaSnapshot(row.script_validation_result);
-  const storyIdentity = { contentType: admisi?.contentType ?? null, templateId: row.template_id ?? admisi?.templateId ?? null, durationSec: row.duration_s };
+  const storyIdentity = deriveStoryAdsIdentity(admisi, {
+    format: row.format, templateId: row.template_id, durationSec: row.duration_s,
+  });
   if (isStructuredStoryAds(storyIdentity) && !row.job_product_snapshot) {
     throw new UnsafeLegacyProductSnapshot(
       "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: Story Ads lama tanpa harga admission tidak boleh memakai row produk mutable."
@@ -736,7 +751,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // Gemini TTS TETAP dipakai untuk hands_only dan vo_broll — di sana
   // pembicaranya memang tidak pernah terlihat, jadi narasi luar-kamera adalah
   // bentuk yang benar, bukan kompromi.
-  const isPresenterLipsync = format === "talking_head" || format === "tvc";
+  const isPresenterLipsync = shouldPreserveEmbeddedLipsync({
+    format, providerName: video.providerName, storyIdentity,
+  });
   if (!withAudio) await jobs.setProviders(row.id, undefined, "none-silent-caption");
   else if (format === "vo_broll") {
     // No embedded audio is possible here (no video model call happened) —
@@ -749,7 +766,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       await jobs.addCost(row.id, result.costIdr);
     }
     await jobs.setProviders(row.id, undefined, "elevenlabs-tts");
-  } else if (!usedMockVideo && isPresenterLipsync) {
+  } else if (isPresenterLipsync) {
     // Presenter/Lipsync (Super HQ): audio embedded asli dipertahankan — TIDAK
     // diganti Gemini TTS, supaya lip-sync sungguhan dari model tetap utuh.
     await jobs.setProviders(row.id, undefined, "embedded-model-lipsync");

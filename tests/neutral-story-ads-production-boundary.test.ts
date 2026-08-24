@@ -11,8 +11,9 @@ import { generateScripts } from "../lib/script-engine";
 import { planShots } from "../lib/media/shot-planner";
 import { getCreatorCategory } from "../lib/personas";
 import { templateIdRenderOtoritatif } from "../lib/dashboard/render-cell";
-import { normalisasiFormatWorker } from "../lib/postgres/worker";
+import { normalisasiFormatWorker, shouldPreserveEmbeddedLipsync } from "../lib/postgres/worker";
 import { buildTaskContent } from "../lib/providers/stubs/byteplus";
+import { voiceoverStartSecForSegments } from "../lib/script-engine/story-os-ads";
 
 test("snapshot confirm -> job persisten -> normalisasi worker menjaga kontrak 9 Story Ads", async () => {
   const templates = CAMPAIGN_TEMPLATES.filter((template) => template.group === "ads");
@@ -65,6 +66,88 @@ test("snapshot confirm -> job persisten -> normalisasi worker menjaga kontrak 9 
 test("template request berbeda tetap ditolak, omission memakai snapshot", () => {
   assert.equal(templateIdRenderOtoritatif({ templateId: "ads-meja-kosong" }, null), "ads-meja-kosong");
   assert.equal(templateIdRenderOtoritatif(undefined, "review-jujur"), "review-jujur");
+});
+
+test("W1: dua talking_head Story Ads memakai narasi eksternal tertunda tanpa duplikasi ucapan provider", async () => {
+  for (const templateId of ["ads-unboxing-pov", "ads-panas-ekstrem"]) {
+    const template = CAMPAIGN_TEMPLATES.find((item) => item.id === templateId)!;
+    const product = { id: `voice-${templateId}`, name: "Serum Uji", price_idr: 189000, category: "beauty" };
+    const [script] = await generateScripts({
+      product, register: "netral", qualityTier: template.tier, durationSec: template.durationSec,
+      contentType: "ads", templateId, count: 1, tanpaLlm: true,
+    });
+    const identity = { contentType: "ads" as const, templateId, durationSec: template.durationSec };
+    assert.equal(shouldPreserveEmbeddedLipsync({
+      format: "talking_head", providerName: "seedance-production", storyIdentity: identity,
+    }), false, `${templateId}: W1 masih memilih embedded lipsync`);
+    assert.equal(voiceoverStartSecForSegments(script.segments, {
+      ...identity, productName: product.name, productCategory: product.category, productPriceIdr: product.price_idr,
+    }), script.segments[0].end, `${templateId}: narasi tidak ditunda sesudah HOOK`);
+
+    const spoken = script.segments.slice(1).map((segment) => segment.tts_text ?? segment.text).join(" ");
+    assert.match(spoken, /Serum Uji/i, `${templateId}: bridge nama produk hilang dari TTS`);
+    assert.match(spoken, /189 ribu/i, `${templateId}: bridge harga hilang dari TTS`);
+    assert.match(spoken, /detailnya ada di bawah/i, `${templateId}: BUTTON hilang dari TTS`);
+
+    const spec = planShots({
+      jobId: `voice-${templateId}`, durationSec: template.durationSec, segments: script.segments,
+      category: getCreatorCategory("hijaber")!, productName: product.name,
+      productCategory: product.category, productPriceIdr: product.price_idr,
+      imageRefPath: "/tmp/product.jpg", qualityTier: template.tier,
+      format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
+    });
+    for (const shot of spec.shots) {
+      assert.match(shot.prompt, /No spoken words in this shot/i);
+      assert.doesNotMatch(shot.prompt, /Indonesian dialogue, spoken exactly|presenter speaks|VOICEOVER (?:speaks|narrates)/i,
+        `${templateId}: provider dan TTS akan mengucapkan naskah ganda`);
+    }
+  }
+});
+
+test("framing/camera LLM neutral tidak dapat menyuntik merchandise, termasuk sinonim di luar blacklist", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-unboxing-pov")!;
+  const product = { id: "composition", name: "Serum Uji", price_idr: 189000, category: "beauty" };
+  const [script] = await generateScripts({
+    product, register: "netral", qualityTier: template.tier, durationSec: template.durationSec,
+    contentType: "ads", templateId: template.id, count: 1, tanpaLlm: true,
+  });
+  const base = {
+    jobId: "composition", durationSec: template.durationSec,
+    category: getCreatorCategory("hijaber")!, productName: product.name,
+    productCategory: product.category, productPriceIdr: product.price_idr,
+    imageRefPath: "/tmp/product.jpg", qualityTier: template.tier,
+    format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
+  } as const;
+  const safeSegments = structuredClone(script.segments);
+  Object.assign(safeSegments[1], {
+    action: "talent membuka kartu blank di depan meja",
+    framing: "medium staged view", angle: "eye level", camera: "static camera",
+  });
+  const safe = planShots({ ...base, segments: safeSegments });
+  const safePayload = safe.shots.flatMap((shot) => buildTaskContent(safe, shot, "dreamina-seedance-2-0-mini-260615"));
+
+  for (const [field, injection] of [
+    ["framing", "macro shot of an unbranded serum jar beside a blank colour card"],
+    ["camera", "slow orbit around a cosmetic tube"],
+    ["camera", "push toward a skincare box"],
+    ["framing", "wide beauty merchandise shelf"],
+  ] as const) {
+    const segments = structuredClone(safeSegments);
+    (segments[1] as unknown as Record<string, string>)[field] = injection;
+    assert.throws(() => planShots({ ...base, segments }), /Kontrak field/, `${field}: ${injection}`);
+  }
+
+  // Sinonim sengaja tidak ada di blacklist. Ia boleh lolos parser, tetapi
+  // wajib dibuang total: payload provider harus byte-for-byte identik.
+  const synonymSegments = structuredClone(safeSegments);
+  synonymSegments[1].framing = "macro vial beside a compact applicator packet";
+  synonymSegments[1].camera = "slow orbit around a canister";
+  const synonym = planShots({ ...base, segments: synonymSegments });
+  const synonymPayload = synonym.shots.flatMap((shot) => buildTaskContent(
+    synonym, shot, "dreamina-seedance-2-0-mini-260615"
+  ));
+  assert.deepEqual(synonymPayload, safePayload, "komposisi LLM neutral masih memengaruhi provider payload");
+  assert.doesNotMatch(JSON.stringify(synonymPayload), /vial|compact applicator|packet|canister/i);
 });
 
 test("neutral Story Ads selalu memakai descriptor persona terkurasi, custom avatar tidak mencapai BytePlus", async () => {

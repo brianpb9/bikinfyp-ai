@@ -188,10 +188,14 @@ test("arsip prompt mencatat mode yang BENAR-BENAR dikirim, bukan menurunkannya s
     "arsip tidak boleh menurunkan ulang mode referensi");
 });
 
-test("presenter yang terlihat benar-benar bicara, bukan dibungkam", () => {
+test("presenter biasa memakai audio native; Story Ads senyap-provider dikecualikan", () => {
   const w = baca("lib/postgres/worker.ts");
-  assert.match(w, /const isPresenterLipsync = format === "talking_head" \|\| format === "tvc"/,
-    "audio native jadi bawaan untuk format berpresenter");
+  assert.match(w, /const isPresenterLipsync = shouldPreserveEmbeddedLipsync\(/,
+    "worker tidak memakai keputusan audio presenter bersama");
+  assert.match(w, /input\.format === "talking_head" \|\| input\.format === "tvc"/,
+    "audio native bukan bawaan untuk format berpresenter");
+  assert.match(w, /&& !isStructuredStoryAds\(input\.storyIdentity\)/,
+    "Story Ads dengan dialog provider yang sengaja kosong masih memakai audio embedded");
   const p = baca("lib/media/shot-planner.ts");
   assert.match(p, /const lipSyncPresenter = format === "talking_head" \|\| format === "tvc"/);
   // Larangan itu dulu ada SEMATA karena VO-nya diganti Gemini TTS.

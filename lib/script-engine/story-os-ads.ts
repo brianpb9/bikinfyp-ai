@@ -140,6 +140,20 @@ export interface StoryAdsIdentity extends StoryAdsProductEvidence {
   durationSec?: number | null;
 }
 
+/** Identitas genre yang dipakai seragam oleh worker dan semua boundary biaya.
+ * Snapshot admisi menang untuk content type; kolom job melengkapi provenance
+ * legacy (terutama template_id null pada talking_head Story Ads lama). */
+export function deriveStoryAdsIdentity(
+  admission: { contentType?: "affiliate" | "ads" | null; templateId?: string | null } | null | undefined,
+  job: { format?: string | null; templateId?: string | null; durationSec?: number | null }
+): StoryAdsIdentity {
+  return {
+    contentType: admission?.contentType ?? (job.format === "ads" ? "ads" : null),
+    templateId: job.templateId ?? admission?.templateId ?? null,
+    durationSec: job.durationSec ?? null,
+  };
+}
+
 export interface StoryAdsTimeRange {
   start: number;
   end: number;

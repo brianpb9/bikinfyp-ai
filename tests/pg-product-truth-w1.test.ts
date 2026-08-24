@@ -54,6 +54,7 @@ if (!lewati) {
   // dipasang supaya jalurnya terbuka. Provider tidak pernah benar-benar
   // dipanggil — worker berhenti di materialize, dan itu diasersi.
   process.env.PROVIDER_VIDEO = "byteplus";
+  process.env.GEMINI_API_KEY = "gemini-key-fixture-w1";
   // Jangan sampai jalur fixture deterministik yang jalan; yang diuji di sini
   // justru runProviderPipeline.
   delete process.env.RACUN_WORKER_DETERMINISTIC;
@@ -61,8 +62,17 @@ if (!lewati) {
 
 // Nol jaringan: setiap fetch dihitung DAN dilempar.
 let panggilanJaringan = 0;
+let amatiTtsGemini = false;
+const permintaanTtsGemini: string[] = [];
 const fetchAsli = globalThis.fetch;
 globalThis.fetch = (async (...args: unknown[]) => {
+  if (amatiTtsGemini && String(args[0]).includes("generativelanguage.googleapis.com")) {
+    const init = args[1] as RequestInit | undefined;
+    permintaanTtsGemini.push(String(init?.body ?? ""));
+    return new Response(JSON.stringify({ error: "fixture berhenti setelah boundary TTS" }), {
+      status: 400, headers: { "content-type": "application/json" },
+    });
+  }
   panggilanJaringan++;
   throw new Error(`W1 tidak boleh menyentuh jaringan di test ini: ${String(args[0])}`);
 }) as unknown as typeof fetch;
@@ -192,6 +202,25 @@ async function pasangProviderPengamat() {
       },
     } as never,
   ]);
+}
+
+async function pasangProviderVideoSuksesSampaiTts() {
+  const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+  amatan = { utamaSha: null, utamaPath: null, extraPaths: [], promptText: "", dipanggil: false };
+  setVideoProvidersForTests([{
+    name: "pengamat-audio-w1",
+    async healthCheck() { return true; },
+    estimateCost() { return 0; },
+    async generate(spec: { shots: { prompt: string; durationSec: number }[] }, outDir: string) {
+      amatan.dipanggil = true;
+      amatan.promptText = spec.shots.map((shot) => shot.prompt).join("\n");
+      return spec.shots.map((shot, index) => {
+        const filePath = path.join(outDir, `audio-boundary-${index}.mp4`);
+        fs.copyFileSync(path.join(process.cwd(), "public/previews/ads-unboxing-pov.mp4"), filePath);
+        return { filePath, durationSec: shot.durationSec, costIdr: 0, hasAudio: true };
+      });
+    },
+  } as never]);
 }
 
 let userId = "";
@@ -344,7 +373,8 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
 async function siapkanStoryAdsTanpaTemplateRequest(
   image: string,
   avatarCustomDesc: string | null = null,
-  admissionPool: Pool = pool
+  admissionPool: Pool = pool,
+  templateId = "ads-meja-kosong"
 ) {
   const orgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
   await pool.query("INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,'Org Ads Boundary',$2,$3)",
@@ -361,16 +391,18 @@ async function siapkanStoryAdsTanpaTemplateRequest(
     [personaId, userId, t]
   );
   const { generateScripts } = await import("../lib/script-engine");
+  const { CAMPAIGN_TEMPLATES } = await import("../lib/templates");
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === templateId)!;
   const [script] = await generateScripts({
     product: { id: productId, name: "Jasa Uji", price_idr: 189000, category: "jasa" },
-    register: "netral", qualityTier: "high_quality", durationSec: 15,
-    contentType: "ads", templateId: "ads-meja-kosong", count: 1, tanpaLlm: true,
+    register: "netral", qualityTier: template.tier, durationSec: template.durationSec,
+    contentType: "ads", templateId, count: 1, tanpaLlm: true,
   });
   const validationResult = JSON.stringify({
     ...script.validation,
     admisi: {
-      contentType: "ads", format: "ads", durationSec: 15,
-      templateId: "ads-meja-kosong", hookLevel: "agak_gila", productCategory: "jasa",
+      contentType: "ads", format: template.format, durationSec: template.durationSec,
+      templateId, hookLevel: template.hookLevel, productCategory: "jasa",
     },
   });
   await pool.query(
@@ -387,8 +419,8 @@ async function siapkanStoryAdsTanpaTemplateRequest(
   const result = await renderSatuSel({
     userId, orgId, productId, productName: "NAMA REQUEST PALSU", productPriceIdr: 189000,
     productSourceUrl: null, promoPriceBeforeIdr: null, scriptId, personaId,
-    avatarCustomDesc, format: "ads", ratio: "9:16", noModel: false,
-    tvcRoute: null, templateId: null, recordStyle: null, shotCount: 4,
+    avatarCustomDesc, format: template.format, ratio: "9:16", noModel: false,
+    tvcRoute: null, templateId: null, recordStyle: null, shotCount: template.shotCount ?? null,
     runId: `ads-boundary-${process.pid}`,
   }, {
     pool: admissionPool, jobsRepo: new PgJobsRepository(URL_UJI), creditsRepo: new PgCreditPaymentRepository(URL_UJI),
@@ -712,6 +744,36 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
   assert.equal(JSON.parse(archive.model_params).template_id, "ads-meja-kosong");
   assert.deepEqual(JSON.parse(archive.model_params).storyBridgeSources.sort(), ["spoken_approved_price", "spoken_product_name"]);
   assert.doesNotMatch(archive.spec_json, /ACME|holding a bottle|marked ACME/i);
+});
+
+test("W1 talking_head Story Ads memanggil TTS eksternal sekali setelah prompt provider tanpa ucapan", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  for (const templateId of ["ads-unboxing-pov", "ads-panas-ekstrem"]) {
+    await pasangProviderVideoSuksesSampaiTts();
+    permintaanTtsGemini.length = 0;
+    const rel = `uploads/w1-audio-${templateId}-${process.pid}/0.png`;
+    const jobId = await siapkanStoryAdsTanpaTemplateRequest(rel, null, pool, templateId);
+    amatiTtsGemini = true;
+    try {
+      await jalankan(jobId, new Map([[rel, png], [`${rel}.meta.json`, sidecar(png, true)]]), true);
+    } finally {
+      amatiTtsGemini = false;
+    }
+
+    assert.equal(amatan.dipanggil, true, `${templateId}: W1 tidak mencapai provider video`);
+    assert.match(amatan.promptText, /No spoken words in this shot/i);
+    assert.doesNotMatch(amatan.promptText, /Indonesian dialogue, spoken exactly|presenter speaks|VOICEOVER (?:speaks|narrates)/i,
+      `${templateId}: provider video masih diminta berbicara`);
+    assert.equal(permintaanTtsGemini.length, 1, `${templateId}: TTS eksternal tidak dipilih tepat sekali`);
+    assert.match(permintaanTtsGemini[0], /Jasa Uji/i, `${templateId}: bridge nama hilang dari request TTS`);
+    assert.match(permintaanTtsGemini[0], /189 ribu/i, `${templateId}: bridge harga hilang dari request TTS`);
+    assert.match(permintaanTtsGemini[0], /detailnya ada di bawah/i, `${templateId}: BUTTON hilang dari request TTS`);
+    const row = (await pool.query("SELECT provider_video,provider_voice,state FROM jobs WHERE id=$1", [jobId])).rows[0];
+    assert.equal(row.provider_video, "pengamat-audio-w1");
+    assert.notEqual(row.provider_voice, "embedded-model-lipsync");
+    assert.ok(["FAILED", "REFUNDED"].includes(row.state), `${templateId}: fixture TTS gagal tidak ditutup bersih`);
+  }
 });
 
 test("dashboard lock membuat validasi Story Ads dan snapshot melihat versi row yang identik", async (t) => {
