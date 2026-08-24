@@ -256,16 +256,17 @@ dikerjakan di slice ini:**
 
 **(c) Butuh deploy/migrasi:**
 
-9. Kapabilitas klasifikasi runtime web (P0-B2) — **TERUKUR DI STAGING** pada
-   exact `4a1d258`: ffmpeg/ffprobe ada, tesseract tidak, `mampu=false`. Ini
-   menutup pertanyaan observasi dan membuka gap remediation deployment.
-   Candidate `Dockerfile.web` staging-only dibuat pada task
-   `P0-B2-WEB-CLASSIFIER-CAPABLE-20260824`. Managed exact-SHA build berikutnya
-   gagal karena `AUTH_SECRET` tidak tersedia di Docker build context. Final
-   staging terbaca kembali live/healthy pada Node/SHA prestate, tetapi bukti
-   interval-level fail-safe tidak lengkap; bundle ada di
-   `managed-web-classifier-canary-20260824/`
-   dan tidak mengubah jawaban managed sebelum deploy+health smoke berikutnya.
+9. Kapabilitas klasifikasi runtime web (P0-B2) — **VERIFIED_MANAGED: capable**
+   pada exact `73280ffa342945dc08cee2fc664956975c8d5735`, deploy
+   `dep-da63g43tqb8s739gkasg`. Managed Docker build, 35/35 migration, exact
+   build identity, sandbox/non-live payment state, ffmpeg/ffprobe/tesseract,
+   OCR language, dan production-pipeline classifier smoke semuanya PASS.
+   Maintenance sampler merekam hold 503 sepanjang rollout dan stabil 200
+   setelah release; aggregate task-window tetap nol dan allowlist DB dipulihkan.
+   Safe admission-only canary `NOT_RUN` karena tidak ada endpoint non-paid yang
+   aman; tidak ada job/provider yang dibuat. Bukti ada di
+   `managed-classifier-retry-20260824/`. Ini tidak mengizinkan production atau
+   real money.
 
 **(d) T43 sudah diotorisasi; butuh task implementasi bounded:**
 

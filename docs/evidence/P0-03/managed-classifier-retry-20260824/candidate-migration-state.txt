@@ -1,0 +1,43 @@
+ applied_count | first_version |       last_version
+---------------+---------------+---------------------------
+            35 | 0001_initial  | 0035_job_product_snapshot
+(1 row)
+
+              version
+------------------------------------
+ 0001_initial
+ 0002_credit_ledger_append_only
+ 0003_jobs_state_guard
+ 0004_promo_jobs
+ 0005_promo_jobs_multi_clip
+ 0006_promo_jobs_virality_checklist
+ 0007_fyp_snapshots
+ 0008_scripts_hook_level
+ 0009_products_promo
+ 0010_events
+ 0011_promo_jobs_hook_avatar
+ 0012_organizations
+ 0013_org_id_columns
+ 0014_organizations_brand_profile
+ 0015_products_brand_brief
+ 0016_jobs_avatar_custom_desc
+ 0017_scene_approval
+ 0018_org_onboarded
+ 0019_post_plans
+ 0020_org_templates
+ 0021_provider_tasks
+ 0022_jobs_shot_count_ratio
+ 0023_org_brand_kit
+ 0024_products_claims
+ 0025_jobs_no_model
+ 0026_jobs_tvc_route
+ 0027_jobs_template_id
+ 0028_org_product_category
+ 0029_jobs_record_style
+ 0030_regen_ledger_type
+ 0031_terminal_ledger_unique
+ 0032_job_prompts
+ 0033_koreksi_ledger_type
+ 0034_job_reference_manifest
+ 0035_job_product_snapshot
+(35 rows)

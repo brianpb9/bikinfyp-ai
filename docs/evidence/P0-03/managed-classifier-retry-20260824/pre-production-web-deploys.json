@@ -1,0 +1,13 @@
+{
+  "id": "dep-da3bfg142hec73arfot0",
+  "status": "live",
+  "commit": {
+    "id": "00ee62efd86ae7e10453a2a1896e63b62228aa4d",
+    "createdAt": "2026-08-20T08:15:56Z"
+  },
+  "createdAt": "2026-08-20T08:16:00.470163Z",
+  "startedAt": "2026-08-20T08:16:00.429511Z",
+  "finishedAt": "2026-08-20T08:20:32.109544Z",
+  "trigger": "new_commit",
+  "updatedAt": "2026-08-20T08:21:07.659577Z"
+}

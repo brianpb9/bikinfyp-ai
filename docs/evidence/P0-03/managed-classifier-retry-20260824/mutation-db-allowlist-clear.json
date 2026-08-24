@@ -1,0 +1,24 @@
+{
+  "data": {
+    "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+    "name": "racun-ai-staging-postgres",
+    "status": "available",
+    "suspended": "not_suspended",
+    "plan": "free",
+    "region": "singapore",
+    "version": "16",
+    "ipAllowList": [],
+    "updatedAt": "2026-08-01T16:37:18.722431Z"
+  },
+  "diff": {
+    "ipAllowList": {
+      "before": [
+        {
+          "cidrBlock": "<REDACTED_IP>/32",
+          "description": "p0-b2-retry-20260824"
+        }
+      ],
+      "after": []
+    }
+  }
+}

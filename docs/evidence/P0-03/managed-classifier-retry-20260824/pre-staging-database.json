@@ -1,0 +1,13 @@
+{
+  "data": {
+    "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+    "name": "racun-ai-staging-postgres",
+    "status": "available",
+    "suspended": "not_suspended",
+    "plan": "free",
+    "region": "singapore",
+    "version": "16",
+    "connectionPool": "none",
+    "updatedAt": "2026-08-01T16:37:18.722431Z"
+  }
+}

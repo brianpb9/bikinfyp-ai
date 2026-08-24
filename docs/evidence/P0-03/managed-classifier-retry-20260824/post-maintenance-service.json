@@ -1,0 +1,33 @@
+{
+  "observedAt": "2026-08-24T12:24:24.744Z",
+  "request": {
+    "method": "GET",
+    "path": "/v1/services/srv-d9n28tijnfac73a87lt0",
+    "action": "get-service",
+    "payload": null
+  },
+  "response": {
+    "id": "srv-d9n28tijnfac73a87lt0",
+    "name": "racun-ai-staging-web",
+    "type": "web_service",
+    "repo": "https://github.com/brianpb9/bikinfyp-ai",
+    "branch": "main",
+    "autoDeploy": "no",
+    "suspended": "not_suspended",
+    "updatedAt": "2026-08-24T12:24:24.270085Z",
+    "serviceDetails": {
+      "runtime": "node",
+      "plan": "starter",
+      "region": "singapore",
+      "healthCheckPath": "",
+      "maintenanceMode": {
+        "enabled": true,
+        "uri": ""
+      },
+      "envSpecificDetails": {
+        "buildCommand": "npm ci --include=dev && npm run build",
+        "startCommand": "npm start"
+      }
+    }
+  }
+}

@@ -1,0 +1,25 @@
+Render CLI v2.22.0
+
+Trigger a service deploy and stream logs in real time
+
+USAGE
+  render deploys create [serviceID] [flags]
+
+FLAGS
+      --clear-cache          Clear build cache before deploying
+      --commit <COMMIT_ID>   Deploy the specified commit ID
+  -h, --help                 Show help for this command
+      --image <IMAGE_URL>    Deploy the specified Docker image URL
+      --wait                 Wait for deploy completion and exit non-zero if deploy fails
+      --confirm              Skip all confirmation prompts
+  -o, --output <FORMAT>      Set output format to interactive, json, yaml, or text. Auto-switches to text on non-TTY (default: "interactive")
+
+EXAMPLES
+  # Trigger a deploy for a service
+  render deploys create srv-abc123
+
+  # Deploy a specific commit
+  render deploys create srv-abc123 --commit 0123abcd
+
+  # Wait until deploy completes
+  render deploys create srv-abc123 --wait

@@ -1,0 +1,35 @@
+Render CLI v2.22.0
+
+Open a psql session to a Render Postgres database
+
+USAGE
+  render psql [postgresID|postgresName] [flags]
+
+FLAGS
+  -c, --command <SQL>     Execute a SQL command in non-interactive mode
+  -h, --help              Show help for this command
+      --confirm           Skip all confirmation prompts
+  -o, --output <FORMAT>   Set output format to interactive, json, yaml, or text. Auto-switches to text on non-TTY (default: "interactive")
+
+EXAMPLES
+  # Open an interactive psql session
+  render psql pg-abc123
+
+  # Execute a SQL command in non-interactive mode
+  render psql pg-abc123 --command "SELECT * FROM users;" --output text
+
+  # Pass through psql arguments
+  render psql pg-abc123 -- --csv -q
+
+DETAILS
+Open a psql session to a Render Postgres database.
+
+Optionally pass the database ID or name as an argument. To pass arguments to
+psql, use:
+  render psql [postgresID|postgresName] -- [psql args]
+
+For non-interactive usage, use the --command flag:
+  render psql [postgresID|postgresName] -c "SELECT * FROM users;" -o text
+
+Additional psql flags can be passed after --:
+  render psql [postgresID|postgresName] -c "SELECT 1;" -o json -- --csv -q

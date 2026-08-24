@@ -1,0 +1,33 @@
+Render CLI v2.22.0
+
+SSH into a service instance
+
+USAGE
+  render ssh [serviceID|serviceName|instanceID] [flags]
+
+FLAGS
+  -e, --ephemeral         Connect to an ephemeral instance
+  -h, --help              Show help for this command
+      --plan <string>     Plan name to use for the ephemeral instance (e.g. starter, standard, pro). Only valid with --ephemeral
+      --confirm           Skip all confirmation prompts
+  -o, --output <FORMAT>   Set output format to interactive, json, yaml, or text. Auto-switches to text on non-TTY (default: "interactive")
+
+EXAMPLES
+  # Open an SSH session for a service
+  render ssh srv-abc123
+
+  # Connect to an ephemeral instance
+  render ssh srv-abc123 --ephemeral
+
+  # Connect to an ephemeral instance with a specific plan
+  render ssh srv-abc123 --ephemeral --plan standard
+
+  # Pass through ssh arguments
+  render ssh srv-abc123 -- -L 5432:localhost:5432
+
+DETAILS
+SSH into a service instance. This command only supports interactive mode.
+
+You can specify the service ID, service name, or specific instance ID as an
+argument. To pass arguments to ssh, use:
+  render ssh [serviceID|serviceName|instanceID] -- [ssh args]

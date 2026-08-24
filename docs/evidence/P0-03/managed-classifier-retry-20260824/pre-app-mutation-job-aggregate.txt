@@ -1,0 +1,4 @@
+  task_window_start   | jobs_created | jobs_cost_idr | provider_tasks_for_window_jobs | promo_jobs_created | promo_cost_idr | credit_mutations | payments_created | payments_amount_idr
+----------------------+--------------+---------------+--------------------------------+--------------------+----------------+------------------+------------------+---------------------
+ 2026-08-24T12:19:14Z |            0 |             0 |                              0 |                  0 |              0 |                0 |                0 |                   0
+(1 row)
