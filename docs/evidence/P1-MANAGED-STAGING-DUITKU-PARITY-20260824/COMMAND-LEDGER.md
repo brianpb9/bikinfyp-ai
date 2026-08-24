@@ -25,7 +25,7 @@ All times are UTC. Exit `0` means the command completed successfully. Secret-bea
 | 2026-08-24T16:21:46Z | 0 | Locally signed unknown-order callback canary | HTTP 200, ignored=true, no credit |
 | 2026-08-24T16:22:07Z | 0 | Final DB/queue read-only probes | Both succeeded; matched baseline |
 | 2026-08-24T16:22:20Z | 0 | Initial post-task read-only production deploy/ref check | Values unchanged; terminal output was not file-preserved and is not the claimed source receipt |
-| 2026-08-24T16:25:00Z | 0 | Exact-value secret scan over evidence | 2 keys compared, zero matches |
 | 2026-08-24T16:31:13Z | 0 | Preserved post-task production service/deploy/ref read | `PRODUCTION-POST-READ.json`; values match immutable pre-task deploy baseline |
+| 2026-08-24T16:35:40Z | 0 | Exact-value secret scan over final evidence set | 14 files, 2 keys compared, zero matches |
 
 No deploy-create command was repeated. Repeated deploy commands in the terminal were read-only list/poll operations.
