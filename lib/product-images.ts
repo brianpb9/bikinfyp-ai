@@ -12,6 +12,12 @@ import { config, ensureDirs } from "./config";
 import { mediaStorage } from "./storage";
 import { klasifikasiGambar, KEBIJAKAN_KLASIFIKASI, type HasilKlasifikasi, type JenisGambar } from "./media/klasifikasi-gambar";
 
+let klasifikasiGambarUntukTest: ((path: string) => Promise<HasilKlasifikasi>) | undefined;
+/** Seam deterministik ingestion-test; tidak mengubah classifier produksi. */
+export function setProductImageClassifierForTests(classifier?: (path: string) => Promise<HasilKlasifikasi>): void {
+  klasifikasiGambarUntukTest = classifier;
+}
+
 export const ALLOWED_MIME: Record<string, string> = {
   "image/png": ".png",
   "image/jpeg": ".jpg",
@@ -268,7 +274,7 @@ export async function saveProductImages(
       // responsnya, dan rollback tetap harus tahu kunci mana yang harus dibuang.
       rels.push(rel);
       await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
-      await tulisSidecar(rel, bytesTersimpan, abs);
+      await tulisSidecar(rel, bytesTersimpan, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar);
       if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
     }
     return rels;
@@ -324,7 +330,7 @@ export async function saveUniqueProductImages(
       try {
         const abs = path.join(tmpKlas, path.basename(rel));
         fs.writeFileSync(abs, normalized);
-        await tulisSidecar(rel, normalized, abs);
+        await tulisSidecar(rel, normalized, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar);
       } finally {
         try {
           fs.rmSync(tmpKlas, { recursive: true, force: true });

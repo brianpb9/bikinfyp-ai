@@ -54,6 +54,54 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
   assert.ok(ts.isAwaitExpression(persistenceCall.parent) && persistenceCall.parent.expression === persistenceCall,
     `${context}: satu-satunya persistence call wajib langsung di-await`);
 
+  if (route === "E4") {
+    const gate = gateAwaits[0];
+    let loop: ts.ForOfStatement | undefined;
+    let cursor: ts.Node = gate;
+    while (cursor.parent && cursor.parent !== post.body) {
+      const parent: ts.Node = cursor.parent;
+      assert.ok(!functionBoundary(parent), `${context}: gate tidak boleh berada di fungsi nested`);
+      assert.ok(
+        !ts.isIfStatement(parent) && !ts.isConditionalExpression(parent)
+        && !ts.isSwitchStatement(parent) && !ts.isCaseClause(parent) && !ts.isDefaultClause(parent)
+        && !ts.isWhileStatement(parent) && !ts.isDoStatement(parent)
+        && !(ts.isBinaryExpression(parent) && [ts.SyntaxKind.AmpersandAmpersandToken,
+          ts.SyntaxKind.BarBarToken, ts.SyntaxKind.QuestionQuestionToken].includes(parent.operatorToken.kind)),
+        `${context}: label gate setiap blob wajib unconditional`
+      );
+      if (ts.isCatchClause(parent)) assert.fail(`${context}: label gate tidak boleh dipulihkan catch`);
+      if (ts.isTryStatement(parent)) assert.equal(parent.catchClause, undefined, `${context}: label gate tidak boleh dipulihkan catch`);
+      if (ts.isForOfStatement(parent)) { loop = parent; break; }
+      cursor = parent;
+    }
+    assert.ok(loop, `${context}: awaited label gate wajib berada dalam for-of seluruh blobs`);
+    assert.match(loop.expression.getText(ast), /^blobs(?:\.entries\(\))?$/,
+      `${context}: loop label wajib mengiterasi seluruh blobs`);
+    let hasEarlyExit = false;
+    const scanEarlyExit = (node: ts.Node): void => {
+      if (node !== loop && functionBoundary(node)) return;
+      if (ts.isBreakStatement(node) || ts.isContinueStatement(node) || ts.isReturnStatement(node)) hasEarlyExit = true;
+      ts.forEachChild(node, scanEarlyExit);
+    };
+    scanEarlyExit(loop.statement);
+    assert.equal(hasEarlyExit, false, `${context}: loop label tidak boleh melewati blob dengan early exit`);
+
+    let firstPhotoBypass = false;
+    const scanFirstPhotoBypass = (node: ts.Node): void => {
+      if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
+        && /existing\.length/.test(node.getText(ast)) && /(?:^|\D)0(?:\D|$)/.test(node.getText(ast))) firstPhotoBypass = true;
+      ts.forEachChild(node, scanFirstPhotoBypass);
+    };
+    scanFirstPhotoBypass(post.body);
+    assert.equal(firstPhotoBypass, false, `${context}: existing.length===0 tidak boleh membatasi gerbang`);
+    assert.ok(loop.getEnd() < persistenceCall.getStart(ast), `${context}: persistence wajib sesudah semua label awaits`);
+    const gateCall = gate.expression as ts.CallExpression;
+    assert.equal(gateCall.arguments.length, 3, `${context}: brand terdaftar wajib diteruskan ke setiap gate`);
+    assert.equal(gateCall.arguments[2].getText(ast), "merekTerdaftar(owned.product)",
+      `${context}: gate wajib memakai brand otoritatif produk`);
+    return;
+  }
+
   const unwrap = (expression: ts.Expression): ts.Expression => {
     while (ts.isParenthesizedExpression(expression)) expression = expression.expression;
     return expression;
@@ -64,14 +112,6 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
       && ts.isIdentifier(expression.expression) && expression.expression.text === "blobs"
       && !!expression.argumentExpression && ts.isNumericLiteral(expression.argumentExpression)
       && expression.argumentExpression.text === "0";
-  };
-  const retailEmpty = (expression: ts.Expression): boolean => {
-    expression = unwrap(expression);
-    if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.EqualsEqualsEqualsToken) return false;
-    const left = unwrap(expression.left); const right = unwrap(expression.right);
-    return ts.isPropertyAccessExpression(left) && ts.isIdentifier(left.expression)
-      && left.expression.text === "existing" && left.name.text === "length"
-      && ts.isNumericLiteral(right) && right.text === "0";
   };
   const enterpriseEmpty = (expression: ts.Expression): boolean => {
     expression = unwrap(expression);
@@ -85,8 +125,7 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
   const exactFirstPhotoCondition = (expression: ts.Expression): boolean => {
     expression = unwrap(expression);
     if (!ts.isBinaryExpression(expression) || expression.operatorToken.kind !== ts.SyntaxKind.AmpersandAmpersandToken) return false;
-    return (route === "E4" ? retailEmpty(expression.left) : enterpriseEmpty(expression.left))
-      && firstBlob(expression.right);
+    return enterpriseEmpty(expression.left) && firstBlob(expression.right);
   };
 
   const branches: ts.IfStatement[] = [];
@@ -210,9 +249,8 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   assert.match(s, /const MIN_CONF = 60/, "ambang keyakinan diturunkan dari sebaran terukur");
   assert.match(s, /"tsv"/, "butuh TSV untuk mendapat kolom keyakinan");
   assert.match(s, /Sdadpgeer/, "kenapa panjang huruf tidak cukup harus tertulis di kode");
-  // Gerbangnya dipasang SEBELUM foto disimpan di kedua mutation boundary:
-  // E4 Retail dan E8 Enterprise. Persistence production kini memakai helper
-  // dedupe, bukan saveProductImages lama.
+  // Gerbangnya dipasang SEBELUM foto disimpan di kedua mutation boundary.
+  // E4 wajib memeriksa SETIAP blob; E8 tetap kontrak foto-pertama task lain.
   const retail = baca("app/api/products/[id]/photos/route.ts");
   assert.match(retail, /periksaLabelFoto\(tmpFile, owned\.product\.name[,)]/);
   assertLabelGateBeforePersistence(retail, "E4 Retail", "E4");
@@ -222,6 +260,18 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   assertLabelGateBeforePersistence(enterprise, "E8 Enterprise", "E8");
 
   const ditolak = [
+    ["persistence sebelum label blob selesai", `export async function POST() {
+      for (const blob of blobs) {
+        await saveUniqueProductImages(id, blobs);
+        await periksaLabelFoto(tmpFile, product.name);
+      }
+    }`],
+    ["loop tetap dibatasi foto pertama", `export async function POST() {
+      if (existing.length === 0) {
+        for (const blob of blobs) await periksaLabelFoto(tmpFile, product.name);
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
     ["comment", `export async function POST() {
       if (existing.length === 0 && blobs[0]) {
         // await periksaLabelFoto(tmpFile, product.name);
@@ -311,7 +361,7 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   for (const [judul, source] of ditolak) {
     assert.throws(
       () => assertLabelGateBeforePersistence(source, `counterexample ${judul}`, "E4"),
-      /label gate aktual|persistence call total|langsung di-await|kondisi E4 exact|unconditional|dipulihkan catch|direct sibling|sesudah branch/,
+      /label gate aktual|persistence call total|langsung di-await|brand terdaftar|brand otoritatif|seluruh blobs|unconditional|dipulihkan catch|existing\.length|sesudah semua label awaits/,
       `${judul} tidak boleh memenangkan structural guard`
     );
   }

@@ -69,6 +69,14 @@ export interface HasilLabel {
   alasan?: string;
 }
 
+type PemeriksaLabelFoto = (fotoPath: string, productName: string, merek?: string | null) => Promise<HasilLabel>;
+let pemeriksaLabelFotoUntukTest: PemeriksaLabelFoto | undefined;
+
+/** Seam deterministik route-test; produksi selalu memakai OCR di bawah. */
+export function setPeriksaLabelFotoForTests(pemeriksa?: PemeriksaLabelFoto): void {
+  pemeriksaLabelFotoUntukTest = pemeriksa;
+}
+
 /**
  * Merek terdaftar dari baris produk (raw_meta.brand).
  *
@@ -96,6 +104,7 @@ export async function periksaLabelFoto(
    */
   merekTerdaftar?: string | null
 ): Promise<HasilLabel> {
+  if (pemeriksaLabelFotoUntukTest) return pemeriksaLabelFotoUntukTest(fotoPath, productName, merekTerdaftar);
   // Direktori sementara di dalam ruang kerja proses, BUKAN /tmp global:
   // tesseract pada sebagian lingkungan tidak bisa membaca berkas yang ditulis
   // proses lain ke /tmp (terbukti saat audit 17 Agu — ffmpeg menulis PNG yang

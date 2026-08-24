@@ -75,13 +75,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // lolos, dan penggunanya membayar untuk kegagalan yang sudah bisa
     // diketahui di sini.
     //
-    // Diperiksa hanya untuk foto PERTAMA produk (yang jadi referensi utama);
-    // foto tambahan boleh berupa sudut lain yang labelnya tidak menghadap.
-    if (existing.length === 0 && blobs[0]) {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "intake-label-"));
-      const tmpFile = path.join(tmpDir, "foto");
-      try {
-        fs.writeFileSync(tmpFile, blobs[0].data);
+    // SETIAP blob baru diperiksa sebelum satu pun byte/sidecar/list/audit
+    // dipersist. Foto #2+ tidak boleh menjadi jalan memutar gerbang merek.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "intake-label-"));
+    try {
+      for (const [index, blob] of blobs.entries()) {
+        const tmpFile = path.join(tmpDir, `foto-${index}`);
+        fs.writeFileSync(tmpFile, blob.data);
         // Merek TERDAFTAR ikut — sumber yang sama dengan QC-F1
         // (products.raw_meta.brand), bukan tebakan dari nama produk.
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
@@ -94,9 +94,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         if (label.cocokMerek === false) {
           throw ERR.BAD_REQUEST(label.alasan!, "Product label does not match the registered brand.");
         }
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
       }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
     }
 
     // UUID keys avoid object overwrite when two uploads observed the same

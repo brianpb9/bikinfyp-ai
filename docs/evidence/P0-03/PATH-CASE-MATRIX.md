@@ -19,7 +19,7 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 | E1 | `app/api/products/route.ts:15` | POST create manual (retail) | **PARTIAL** | `saveProductImages` (sidecar ditulis); TANPA `periksaLabelFoto`, TANPA `referensiLayak` |
 | E2 | `app/api/products/extract/route.ts:17` | POST extract URL → buat produk | **UNGATED** | tidak ada; pakai `downloadProductImages` |
 | E3 | `app/api/products/[id]/route.ts:13` | PATCH nama/harga/kategori/brand | **UNGATED** | tidak ada — memutasi `name` + `raw_meta.brand`, dua input yang justru dibaca gerbang |
-| E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **PARTIAL** | `periksaLabelFoto`+`merekTerdaftar` (:91), `referensiLayak` (:116). TIGA lubang: gerbang label hanya jalan bila `existing.length===0` (:84); `periksaLabelFoto` FAIL-OPEN saat OCR gagal (`label-terbaca.ts:188` mengembalikan `terbaca:true`); hash sidecar tidak pernah diverifikasi ulang terhadap isi berkas |
+| E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **PARTIAL** | Setiap blob baru melewati `periksaLabelFoto`+`merekTerdaftar` sebelum persistence; `referensiLayak` tetap sesudah ingestion. DUA lubang lain tetap: `periksaLabelFoto` FAIL-OPEN saat OCR gagal (`label-terbaca.ts` mengembalikan `terbaca:true`); hash sidecar tidak pernah diverifikasi ulang terhadap isi berkas |
 | E5 | `app/api/products/[id]/photos/route.ts:142` | DELETE foto (retail) | **UNGATED** | tidak ada — bisa menghapus satu-satunya foto layak |
 | E6 | `app/api/dashboard/campaign/product/route.ts:45` | POST produk org | **UNGATED** | tidak ada; `downloadProductImages` → sidecar tidak ditulis |
 | E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | mengubah `name`, `price`, **`category`**, visual desc, `brand_brief`, promo, claims (:113 dst) TANPA revalidasi. TIDAK menyentuh `raw_meta.brand`. Defect kedua: jalur org TIDAK PERNAH mengisi `raw_meta.brand`, padahal worker hanya mempercayai field itu (`merekTepercaya`) |
@@ -59,8 +59,8 @@ Work order menyebut tiga bypass (create utama, extract, worker). Yang nyata:
    dibaca gerbang — tanpa revalidasi. E7 TIDAK mengubah `raw_meta.brand`;
    masalah brand di jalur org adalah field itu tidak pernah diisi sejak awal.
 5. **DELETE foto (E5, E9) bisa menyisakan daftar berisi promo saja.**
-6. **Gerbang label E4 hanya jalan pada foto PERTAMA** (`existing.length===0`),
-   jadi banner yang diunggah sebagai foto kedua tidak pernah diperiksa label.
+6. **DITUTUP 24 Agu:** gerbang label E4 sekarang mengiterasi setiap blob baru
+   sebelum persistence; foto kedua dan batch campuran tidak lagi melewati gate.
 
 ## C. Matriks kasus × jalur
 
@@ -157,7 +157,7 @@ mengerjakannya sebagai task terpisah.
 | E1 create manual | PARTIAL | **PARTIAL** | `saveProductImages` → `tulisSidecar` (`lib/product-images.ts:271`). Bukti terbit; gerbang label tidak dipanggil |
 | E2 extract URL | UNGATED | **PARTIAL** | `downloadProductImages` → `tulisSidecar` (`lib/product-image-download.ts:48`). Dulu nol sidecar |
 | E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar, tetapi E3 tetap jalur wajib C2/C3/C5 dan belum melakukan validasi type/brand/category |
-| E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; append daftar atomik dan memakai key UUID agar tidak menimpa upload paralel. **Lubang 20 Agu MASIH ADA**: gerbang label hanya jalan bila `existing.length === 0` (`route.ts:79`) |
+| E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; append daftar atomik memakai key UUID. **Gap foto #2+ ditutup 24 Agu:** seluruh blob decodable melewati label+brand gate sebelum satu pun persistence; kegagalan akhir multipart terbukti nol efek storage/list/audit. Status tetap PARTIAL karena fail-open OCR dan verifikasi ulang hash masih terbuka |
 | E5 DELETE foto retail | UNGATED | **PARTIAL** | `removeRetailProductImage` menghitung daftar otoritatif secara atomik, lalu `deleteStoredProductImages([target])` best-effort; `cleanup_failed` terlihat, audit pasca-commit non-fatal, dan test HTTP→resume W2 membuktikan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru tetap belum direvalidasi |
 | E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. Dulu nol |
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
@@ -213,8 +213,8 @@ boundary test C1/C8 dan reason code masih usulan. Per e8a00a5:
 **(a) Bisa dikerjakan LOKAL sekarang — kandidat task berikutnya, TIDAK
 dikerjakan di slice ini:**
 
-1. Gerbang label E4 hanya menyentuh foto pertama (`route.ts:84`) — banner yang
-   diunggah sebagai foto kedua tidak pernah diperiksa label.
+1. **DITUTUP 24 Agu:** gerbang label E4 memeriksa semua blob baru sebelum
+   persistence; foto #2+ dan mixed multipart invalid ditolak atomik.
 2. E8 memanggil `periksaLabelFoto` tanpa `merekTerdaftar` (`route.ts:52`) —
    `cocokMerek` tidak pernah diperiksa di jalur org.
 3. `label-terbaca.ts:188` fail-OPEN saat pemeriksaan gagal. Keputusannya
