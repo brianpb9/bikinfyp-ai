@@ -33,6 +33,7 @@ This is not production, payment, legal, incident-response, or shipping approval.
 | `runtime-logs.txt` | allowlisted Render log messages/counts after deploy | worker startup lines, migration result, provider/failure aggregate only |
 | `rollback.md` | captured prior deploys and exact explicit deploy command path | no execution claimed; rollback was not needed |
 | `commands.txt` | reproducible command classes, UTC/exit status | secrets/CIDR/cookies/phone/connection strings omitted |
+| `FOUNDER-DECISION-UGC-AUTHORITY-UNBLOCK.md` | scoped Founder authority received in the current UGC session and preserved in bus transport record `1787566560000` | only explicit decision boundaries; no credential or personal data |
 | `SHA256SUMS` | local SHA-256 over bundle payload files, excluding this manifest and checksum file | integrity metadata only |
 
 ## Security and money boundary

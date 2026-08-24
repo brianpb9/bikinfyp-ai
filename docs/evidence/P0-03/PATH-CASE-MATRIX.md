@@ -32,7 +32,7 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 | A3 | `app/api/dashboard/campaign/generate/route.ts:44-49` | generate campaign | **UNGATED** | cek `length===0` saja |
 | A4 | `lib/dashboard/render-cell.ts:158-160,225` | INSERT QUEUED + enqueue | **UNGATED** | tidak ada |
 | A5 | `app/api/dashboard/campaign/confirm/route.ts:45` | confirm campaign → enqueue | **UNGATED** | tidak ada |
-| A6 | `app/api/dashboard/campaign/job/[jobId]/route.ts` | approve / regenerate job | **PARTIAL** | manifest job immutable diverifikasi sebelum approve/regen charge/task reset/enqueue; admission gate umum A1..A7 tetap T43 |
+| A6 | `app/api/dashboard/campaign/job/[jobId]/route.ts` | approve / regenerate job | **PARTIAL** | manifest job immutable diverifikasi sebelum approve/regen charge/task reset/enqueue; admission gate umum A1..A7 belum diimplementasikan, walau T43 technical authority kini ada |
 | A7 | `app/api/scripts/generate/route.ts` | generate naskah (provider-consuming, BUKAN admission render berbayar) | **UNGATED** | tidak ada |
 | D1 | `lib/postgres/product-persona-script.ts:57,112,134-136,255,264` | penulis DB produk/brand | **UNGATED** | tidak ada |
 | D2 | `lib/postgres/smoke-runtime.ts:310,319,336` | set/append/remove images | **UNGATED** | tidak ada |
@@ -146,7 +146,7 @@ database, provider berbayar, penegakan admission, maupun keputusan T43.
 |---|---|
 | **PASS** | ada bukti LANGSUNG (test bernama / call-site) bahwa invarian berlaku |
 | **PARTIAL** | sebagian tertutup dan dibuktikan; sisanya disebut eksplisit |
-| **BLOCKED** | penerimaan belum dapat dinyatakan karena implementasi lokal belum ada, atau karena T43 / kredensial / deploy; penyebab wajib disebut eksplisit |
+| **BLOCKED** | penerimaan belum dapat dinyatakan karena implementasi lokal belum ada, atau karena authority/kredensial/deploy; penyebab wajib disebut eksplisit |
 | **NOT-APPLICABLE** | tidak relevan pada kontrak yang berlaku sekarang |
 
 `BLOCKED` bukan klaim bahwa penyebabnya selalu eksternal. Untuk C2, C5, dan C6
@@ -169,7 +169,7 @@ mengerjakannya sebagai task terpisah.
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Test HTTP→resume W1 membuktikan isolasi org, daftar otoritatif, dan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru belum direvalidasi agar tetap punya foto layak |
 | W1 worker PG | UNGATED | **PARTIAL** | Resolver, manifest job atomik/idempoten, reuse lintas invocation, verifikasi bytes di boundary provider/output, C1/C8/C11, dan legacy fail-closed dibuktikan di PostgreSQL disposable. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
 | W2 worker inline | UNGATED | **PARTIAL** | Kontrak manifest/reuse/verifikasi/legacy yang sama dibuktikan langsung pada worker SQLite; C8/C11 tetap memakai observer provider. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
-| A1..A7 admission | UNGATED | **BLOCKED (T43)** | Transcript §4 menguji tujuh path literal: semuanya `ADA`, `gerbang_bukti=0`, `exit=1`, termasuk A4 dan A7. Penegakan admission adalah isi T43; melarang mengubahnya adalah bagian lingkup tugas ini |
+| A1..A7 admission | UNGATED | **BLOCKED (NOT IMPLEMENTED; T43 AUTHORIZED 24 AUG)** | Transcript §4 menguji tujuh path literal: semuanya `ADA`, `gerbang_bukti=0`, `exit=1`, termasuk A4 dan A7. Founder authority untuk bounded technical enforcement/admission kini ada; implementasi dan exact-SHA proof belum ada |
 | D1 penulis produk/brand | UNGATED | **PARTIAL** | Reachable production melalui E1/E2/E3/E6. Semua create yang membawa image keys didahului helper bersidecar; direct caller lain hanya verifier disposable. Namun writer menerima `images` mentah dan mutation E3 name/category/brand tidak merevalidasi product-truth. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
 | D2 penulis daftar images | UNGATED | **PARTIAL** | Reachable production hanya melalui E4/E5/E8/E9. Add menerima keys dari helper bersidecar; delete retail/org sudah membersihkan storage, tetapi revalidation E5/E9 dan gerbang E8 tetap belum lengkap. Tidak ada CLI/direct caller tersembunyi. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
 
@@ -193,9 +193,9 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E4 dan E8 kini fail-closed sebelum append/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. **Gap yang tersisa:** E1 tidak memanggil resolver, dan cakupan kasus lain yang dicatat di matriks belum lengkap; karena itu C7 tetap PARTIAL |
-| C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7 (T43) |
+| C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7; T43 sudah mengizinkan bounded technical enforcement, tetapi kode/proof belum diterima |
 | C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata core worker tertutup: W1/W2 memakai admission manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, claims, dan sell price. Actual E3→W2 serta E7→W1 membuktikan prompt tetap admission-bound tetapi rendered promo before/deadline dibaca live; frame W2 gain/removal dan W1 change diterima di E.23. Stock juga live tetapi inert di formatter. Tetap PARTIAL sampai Founder memilih `PROMO_POLICY=SNAPSHOT` atau `LIVE_INTENTIONAL`; `SNAPSHOT_IMMUTABLE` tetap proposal-only |
-| C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
+| C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada. T43 mengizinkan enforcement teknis bounded, tetapi treatment data legacy tidak ditentukan. Secara terpisah, angka media legacy belum diketahui karena R2 staging berpasangan belum tersedia |
 | C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
 | C12 | **PARTIAL** | Gap local admission-time identity untuk job baru sudah tertutup: tiga production admission memasang ordered job-owned manifest sebelum job/hold/queue visible; known non-winner cleanup dan successful-retry surplus pruning mempertahankan winner/ambiguity. W1/W2 tidak membaca ulang daftar, dan E5/E9→resume memakai bytes admission. Agregat tetap PARTIAL karena legacy fallback/treatment dan reason code usulan `REFERENCE_IDENTITY_CHANGED` belum canonical; tidak diperlukan task implementasi admission-manifest baru |
 | C13 | **PARTIAL** | Kontrol positif W1 (`tests/pg-product-truth-w1.test.ts:740`) dan W2 (`tests/product-truth-worker-reference.test.ts:638`) membuktikan worker menerima bukti sah. Itu belum membuktikan produk valid diterima melalui seluruh E1..E9 dan A1..A7 yang diwajibkan baris ini |
@@ -260,9 +260,12 @@ dikerjakan di slice ini:**
    exact `4a1d258`: ffmpeg/ffprobe ada, tesseract tidak, `mampu=false`. Ini
    menutup pertanyaan observasi dan membuka gap remediation deployment.
 
-**(d) Butuh keputusan Founder T43:**
+**(d) T43 sudah diotorisasi; butuh task implementasi bounded:**
 
 10. Penegakan admission A1..A7 (C8 di luar worker), P0-B4 tindakan, dan P0-B5.
+    Authority persis dan batas HOLD ada di
+    `managed-staging-exact-sha-20260824/FOUNDER-DECISION-UGC-AUTHORITY-UNBLOCK.md`;
+    tidak satu pun item ini boleh disebut implemented sebelum exact-SHA PASS.
 
 ### E.5 Yang TIDAK dilakukan di slice ini
 
@@ -283,7 +286,8 @@ TASK=P0-W2-C8-PROVIDER-OBSERVER-20260823
 - Suite product-truth non-PG terdampak (`product-truth-evidence`, ingestion,
   worker-wiring) → **99/99 PASS**.
 - Gap lokal observer W2 C8 ditutup. Status C8 tetap **PARTIAL** karena A1..A7
-  masih belum menegakkan evidence gate dan tetap bergantung pada T43.
+  masih belum menegakkan evidence gate. T43 kemudian diotorisasi 24 Agu, tetapi
+  task implementasi bounded dan exact-SHA PASS tetap diperlukan.
 
 ### E.7 Follow-up C11 worker boundary proof — 2026-08-23
 
@@ -791,10 +795,12 @@ TASK=`SHIP-READINESS-CANONICAL-C9C12-RECONCILE-20260824`
   actual rendered frames prove mixed current behavior: core prompt/sell price
   admission-bound, promo before/deadline live. Stock is live but inert in
   compositor formatting.
-- No approved local implementation task remains queued after this docs-only
-  reconciliation. C9 requires Founder `PROMO_POLICY=SNAPSHOT` (Reviewer
-  recommendation) or `LIVE_INTENTIONAL`; C12 remainder requires legacy/T43 or
-  reason-code authority. Other gaps remain policy, deploy, credentials, paid,
+- At the time of this docs-only reconciliation, no approved local
+  implementation task remained queued. This statement predates and is
+  superseded for T43 scope by the 24 August Founder decision recorded in E.25.
+  C9 still requires Founder `PROMO_POLICY=SNAPSHOT` (Reviewer
+  recommendation) or `LIVE_INTENTIONAL`; C12 remainder requires legacy or
+  reason-code authority, bukan T43 technical authority baru. Other gaps remain policy, deploy, credentials, paid,
   legal, incident/DR, or release-owner boundaries.
 - No policy, reason code, production behavior, deployment, or score changed.
   Canonical shipping readiness remains **58/100**.
@@ -821,3 +827,7 @@ TASK=`P0-MANAGED-STAGING-EXACT-SHA-20260824`
 - Production deploys were unchanged. Production/payment/legal/incident credit
   remains zero, C9/C12 aggregate statuses remain PARTIAL, and canonical
   shipping readiness remains **58/100** pending independent review.
+- Founder authority is versioned in
+  `managed-staging-exact-sha-20260824/FOUNDER-DECISION-UGC-AUTHORITY-UNBLOCK.md`:
+  T43 permits bounded technical enforcement/admission, but does not itself
+  implement A1–A7, choose legacy treatment, or relax any production HOLD.

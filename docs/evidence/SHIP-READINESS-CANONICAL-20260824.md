@@ -41,11 +41,11 @@ baru. Ledger requirement-by-requirement tetap memakai angka raw board:
 
 | Requirement/domain board | Raw /10 | Keadaan bukti current |
 |---|---:|---|
-| Money safety | 9 | Bukti live historis ada; perubahan sesudahnya belum deployed |
+| Money safety | 9 | Bukti live historis ada; accepted tree kini deployed ke staging saja, belum production/current paid E2E |
 | Auth intent & failure path | 7 | Kode/unit; browser Google-cancel production belum ada |
 | Mobile UI 375 | 7 | Bukti 375 historis; 768/1024 dan wizard Postgres belum lengkap |
 | Hydration/interaction canary CI | 8 | CI historis terverifikasi; dashboard production belum dicakup |
-| Content engine standard | 7 | Local gates kuat; accepted 24 Agu belum deployed |
+| Content engine standard | 7 | Local gates kuat dan accepted tree hidup di staging; valid-product E2E/production belum ada |
 | Brand fidelity | 6 | E4/E8 canonical; E1/worker dan OCR policy masih partial |
 | Anti-slop produksi | 7 | Campuran bukti terbuka dan prompt/local-only |
 | Prompt/verdict archive | 8 | Migrasi historis live; belum ada trace production current end-to-end |
@@ -234,15 +234,15 @@ Tidak satu pun keduanya boleh dinilai live sebelum syarat ADR terpenuhi.
 |---|---|---|---|
 | P0-B2 runtime classification web | **VERIFIED_MANAGED: incapable** | Release/Builder under approved scope | add/relocate tesseract-capable classification boundary, then repeat managed probe |
 | P0-B3 angka legacy C10 | partial credential/data | Data/Release owner | DB aggregate access proven; still needs paired staging R2 and sanitized legacy audit JSON |
-| T43 / P0-B4 action / P0-B5 / A1..A7 | authority received for in-scope technical enforcement; implementation coverage still partial | Reviewer dispatches bounded remaining scope | exact boundary evidence and legacy treatment; do not infer all A1..A7 from authority alone |
+| T43 / P0-B4 action / P0-B5 / A1..A7 | Founder authority versioned for in-scope technical enforcement/admission; implementation coverage still partial | Reviewer dispatches bounded remaining scope | exact boundary evidence; legacy treatment remains undecided; do not infer implementation from authority |
 | C2 `TYPE_MISMATCH` | local implementation, belum bounded-approved | Builder setelah scope approval | route/admission boundary + canonical code + counterexamples |
 | C5 `CATEGORY_UNKNOWN`/manual review | product policy + local | Founder lalu Builder | policy manual-review tertulis dan boundary test |
-| C3/C4 E1/worker enforcement | partial | Founder untuk admission policy; Builder sesudahnya | policy + exact route/worker tests; E4/E8 saja sudah canonical |
+| C3/C4 E1/worker enforcement | partial | Reviewer bounded task within T43; OCR policy remains Founder boundary | exact route/worker tests; E4/E8 saja sudah canonical |
 | C6 OCR fail-open vs fail-closed | policy conflict | Founder | keputusan policy dan acceptance matrix selaras |
-| C7 E1 resolver | dikarantina | Founder lalu Builder | T43-compatible rollback contract + independent exact-SHA proof |
-| C8 admission A1..A7 | partial | Founder T43 | fail-closed boundary sebelum hold/enqueue di seluruh A1..A7 |
+| C7 E1 resolver | dikarantina | Reviewer bounded task lalu Builder | rollback contract within scoped T43 authority + independent exact-SHA proof |
+| C8 admission A1..A7 | partial | Reviewer bounded task lalu Builder | fail-closed boundary sebelum hold/enqueue di seluruh A1..A7; authority exists, implementation does not |
 | C9 promo admission→output | partial; rendered behavior accepted | Founder policy | pilih `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau `LIVE_INTENTIONAL`; core prompt sudah admission-bound, tetapi before/deadline live dan stock live namun inert di formatter |
-| C12 aggregate | partial; local admission-time identity slice closed | Founder/T43 + legacy/reason-code authority | new jobs sudah admission-bound; legacy fallback/treatment dan proposal `REFERENCE_IDENTITY_CHANGED` tidak boleh diputuskan Builder |
+| C12 aggregate | partial; local admission-time identity slice closed | legacy/reason-code authority still required | new jobs sudah admission-bound; T43 technical authority exists, tetapi legacy fallback/treatment dan proposal `REFERENCE_IDENTITY_CHANGED` tidak boleh diputuskan Builder |
 | C1/C13 seluruh E/A/W positif | partial/external | QA/Release | satu trace end-to-end exact evidence, bukan resolver-only test |
 | Duitku + price/COGS | external/Founder | Brian + Payments owner | approval, keputusan harga, settlement/webhook/replay report |
 | Legal/PDP | external | Brian + counsel | signed/versioned approval dan halaman tanpa placeholder |
@@ -254,21 +254,26 @@ P0/P1 di atas, dan bus history melalui C12 PASS/DONE, C9 rendered-output
 PASS/DONE, serta bounded task rekonsiliasi docs ini. Sesudah rekonsiliasi ini
 diterima, hasilnya:
 
-`APPROVED_LOCAL_IMPLEMENTATION_TASK_CURRENTLY_QUEUED = false`.
+`APPROVED_TECHNICAL_SCOPE_REMAINS = true`.
 
-Ini bukan klaim bahwa tidak ada pekerjaan lokal selamanya. Matrix mencatat
-kandidat C2/C5, E1, OCR, C9, dan sisa agregat C12, tetapi tidak satu pun
-mempunyai bounded approval implementasi aktif yang bebas keputusan kebijakan,
-legacy/T43, kredensial, atau external authority. C12 tidak membutuhkan task
-implementasi admission-manifest baru: slice itu sudah accepted. Builder tidak
-boleh memilih promo policy, mengubah reason-code contract, deploy, atau
-payments hanya karena kandidat itu tertulis.
+`BOUNDED_IMPLEMENTATION_TASK_CURRENTLY_QUEUED = false`.
+
+T43 memberi authority untuk technical enforcement/admission in-scope, sehingga
+Reviewer harus memilih bounded slice berikutnya dari A1–A7/P0-B4/P0-B5 tanpa
+menunggu perintah `continue`. Authority bukan implementasi dan tidak memilih
+legacy treatment, OCR policy, reason-code contract, atau desain A/B/C. C12
+tidak membutuhkan task admission-manifest baru: slice itu sudah accepted.
+Builder tidak boleh memilih promo policy, legacy treatment, mengubah reason
+code, deploy, atau payments hanya karena kandidat itu tertulis.
 
 ### Founder actions yang diperlukan sekarang
 
-Managed staging exact-SHA dan authority T43 untuk enforcement teknis in-scope
-sudah diterima dan dijalankan sesuai tranche. Keduanya bukan lagi permintaan
-approval terbuka. Keputusan/bukti eksternal yang masih diperlukan:
+Managed staging exact-SHA sudah dijalankan; authority T43 untuk enforcement
+teknis in-scope sudah diterima dan direkam, tetapi enforcement belum
+diimplementasikan. Keduanya bukan lagi permintaan approval terbuka. Record
+immutable berada di
+`docs/evidence/P0-03/managed-staging-exact-sha-20260824/FOUNDER-DECISION-UGC-AUTHORITY-UNBLOCK.md`.
+Keputusan/bukti eksternal yang masih diperlukan:
 
 1. Tetapkan `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau
    `PROMO_POLICY=LIVE_INTENTIONAL`; keputusan ini harus menjelaskan before
@@ -294,7 +299,7 @@ bahwa pihak eksternal akan selesai.
 | Selesai 24 Agu | Deploy **accepted exact SHA** ke staging web+worker; jalankan migrasi staging sesuai blueprint | `managed-staging-exact-sha-20260824/`: deploy IDs, exact SHA web/worker, migrasi, health, classifier negatif, control-state cleanup |
 | 0–2 jam berikutnya | Founder menetapkan promo policy, treatment legacy, price/COGS, release owner, incident owner, dan counsel contact; release owner mematikan auto-deploy production web+worker setelah authority | satu decision record versioned + sanitized read-only post-change artifact yang menunjukkan kedua service off dan tidak ada deploy tak terotorisasi |
 | 4–8 jam | Audit legacy read-only memakai Postgres staging dan bucket R2 yang dibuktikan berpasangan | JSON signed/timestamped: total, no-photo, corrupt-column, approved, per-reason, failed-to-inspect; nol nilai credential |
-| 6–18 jam | Jika T43 mengizinkan, Reviewer menerbitkan bounded task untuk E1/admission dan treatment legacy | accepted exact SHA + route/worker boundary tests + independent dependency-backed run; tidak ada deploy otomatis |
+| 6–18 jam | Dengan T43 technical authority yang sudah ada, Reviewer menerbitkan bounded task enforcement E1/admission; legacy treatment tetap dipisahkan sampai diputuskan | accepted exact SHA + route/worker boundary tests + independent dependency-backed run; tidak ada deploy otomatis |
 | 18–24 jam | Deploy ulang accepted remediation ke staging dan jalankan positive/negative product trace | exact deploy SHA + trace C1/C3/C4/C6/C7/C8/C10/C13, zero-cost assertions, rollback/list/audit evidence |
 | 0–24 jam paralel | Duitku approval dan sandbox settlement/webhook/replay; counsel dan incident preparation | merchant approval reference; redacted settlement report; valid/invalid/duplicate/out-of-order webhook proof; signed legal approval; runbook+alert delivery |
 | 24–36 jam | Sesudah approval dan otorisasi biaya, satu controlled production E2E OTP→topup→render→QC→delivery/refund dengan approved pricing | timestamped trace IDs, ledger reconciliation, QC audio/frame artifacts, delivery and controlled refund, exact deployed SHA |
@@ -302,9 +307,9 @@ bahwa pihak eksternal akan selesai.
 
 ### Tranche skor
 
-- **58 → maksimum code-only 70:** hanya sesudah accepted changes benar-benar
-  deployed dan staging artifact di atas lulus. Ini ceiling, bukan kenaikan
-  otomatis 12 poin.
+- **58 → maksimum code-only 70:** deployment exact-SHA sendiri sudah terbukti,
+  tetapi kenaikan memerlukan remediation classifier/admission dan valid-product
+  staging E2E yang accepted. Ini ceiling, bukan kenaikan otomatis 12 poin.
 - **70 → 80:** hanya sesudah Duitku production/settlement/webhook/replay,
   keputusan biaya/harga, satu E2E production-like lengkap, dan intake live
   terverifikasi seperti work order `SHIP-80`.
@@ -315,7 +320,8 @@ bahwa pihak eksternal akan selesai.
 `80/100` baru sah bila semuanya ada:
 
 1. exact accepted SHA deployed dan terverifikasi pada web+worker;
-2. T43 dan treatment legacy diputuskan, audit legacy nyata selesai;
+2. bounded T43 enforcement diimplementasikan dan accepted; treatment legacy
+   diputuskan dan audit legacy nyata selesai;
 3. Duitku production approved; settlement, signature invalid/valid, duplicate,
    late/out-of-order, wrong amount, expired/cancelled/unknown, dan rekonsiliasi
    order↔payment↔ledger lulus;

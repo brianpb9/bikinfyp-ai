@@ -1154,7 +1154,7 @@ TERAKHIR, bukan pertama.
 | **P0-B4b** | **test runtime W1 di atas PostgreSQL nyata** (disetujui Reviewer ronde 7) | **HIJAU** — `npm run test:postgres-product-truth-w1`, 12 test, 12 lulus |
 | P0-B3 | audit legacy offline + karantina | **ALAT SELESAI** (PASS a29569f); akses agregat database staging kini terbukti, tetapi ANGKA media belum: R2 yang berpasangan tidak tersedia dan audit legacy tidak dijalankan |
 | P0-B4 observasi | kanari bukti di batas KEDUA worker — nol penegakan | **SELESAI** — lihat docs/evidence/P0-03/B3-AUDIT-LEGACY.md §6 |
-| P0-B4 tindakan | apa yang DILAKUKAN saat kanari menyala | authority T43 untuk enforcement teknis in-scope sudah diterima; coverage implementasi dan treatment legacy tetap harus dibatasi task Reviewer |
+| P0-B4 tindakan | apa yang DILAKUKAN saat kanari menyala | authority T43 untuk enforcement teknis in-scope sudah diterima dan versioned di `managed-staging-exact-sha-20260824/FOUNDER-DECISION-UGC-AUTHORITY-UNBLOCK.md`; coverage implementasi dan treatment legacy tetap harus dibatasi task Reviewer |
 | ~~P0-B4b~~ | dipindah ke atas: ia bagian slice implementasi PERTAMA, bukan tahap tersendiri sesudah B4 | — |
 | P0-B5 | resolver ketat jadi otoritatif di admission | authority T43 teknis in-scope sudah diterima; belum boleh diklaim selesai sampai Reviewer menerbitkan task implementasi bounded dan exact-SHA proof diterima |
 

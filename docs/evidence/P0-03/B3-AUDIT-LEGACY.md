@@ -115,16 +115,18 @@ merah). Itu mitigasi, bukan verifikasi pihak kedua.
 ## 6. Urutan yang tersisa, dan gerbangnya
 
 **P0-B4 dipecah dua, dan itu koreksi atas penilaian Builder sendiri.** Catatan
-versi pertama dokumen ini menyebut seluruh P0-B4 tertahan T43. Yang tertahan
-adalah TINDAKANNYA (hold, tolak, atau revalidasi). PENGAMATANNYA dibutuhkan sama
-saja di ketiga opsi — dan justru pengamatan itulah yang menghasilkan angka untuk
-memutuskan T43.
+versi pertama dokumen ini menyebut seluruh P0-B4 tertahan T43. Pada 24 Agu,
+Founder memberi authority untuk bounded technical enforcement/admission;
+decision record current ada di
+`managed-staging-exact-sha-20260824/FOUNDER-DECISION-UGC-AUTHORITY-UNBLOCK.md`.
+Authority itu tidak memilih opsi A/B/C atau treatment legacy. PENGAMATAN tetap
+dibutuhkan untuk mengukur dampak dan memverifikasi implementasi.
 
 | Bagian | Isi | Status |
 |---|---|---|
 | P0-B4 observasi | kanari bukti (`lib/kanari-bukti.ts`): kode alasan sebagai data, satu baris terstruktur per penilaian di KEDUA worker, `ditolakSemuaBelumDiperiksa` dihitung sendiri | **SELESAI** — nol penegakan |
-| P0-B4 tindakan | apa yang DILAKUKAN saat kanari menyala | menunggu T43 |
-| P0-B5 | resolver ketat jadi otoritatif di admission | menunggu T43 |
+| P0-B4 tindakan | apa yang DILAKUKAN saat kanari menyala | T43 authorized; belum implemented, menunggu bounded Reviewer task + exact-SHA PASS |
+| P0-B5 | resolver ketat jadi otoritatif di admission | T43 authorized; belum implemented, menunggu bounded Reviewer task + exact-SHA PASS |
 
 Kanari TIDAK memblokir, TIDAK menunda, TIDAK mengubah satu pun vonis, dan TIDAK
 PERNAH MELEMPAR — termasuk saat penulisannya sendiri melempar. Cacahnya
@@ -134,8 +136,9 @@ milik web); permukaan agregasi yang sebenarnya adalah baris lognya.
 Ia juga hanya menghasilkan angka KALAU DI-DEPLOY. Di mesin pengembang ia tidak
 membuktikan apa pun tentang produksi.
 
-**T43 — di meja Founder, belum dijawab.** Penegakan tidak bisa dinyalakan
-sebelum ada jalur revalidasi: di runtime web tanpa biner klasifikasi, setiap
+**T43 — authority teknis bounded sudah dijawab 24 Agu.** Penegakan belum boleh
+disebut selesai atau dinyalakan tanpa implementasi accepted. Runtime web
+managed terbukti tanpa tesseract, sehingga setiap
 unggahan menghasilkan `belum_diperiksa` yang SAH, worker menolak setiap render,
 dan unggah ulang menghasilkan keadaan yang sama. Titik penegakannya
 `lib/job-intake.ts:104` (`assertPaidAdmission`).
@@ -146,10 +149,12 @@ dan unggah ulang menghasilkan keadaan yang sama. Titik penegakannya
 | B | admission digerbangi kapabilitas |
 | C | ubah kapabilitas/deployment web |
 
-Rekomendasi Builder: **A+B**, didahului satu deploy staging untuk membaca
-`/api/health` (probe kapabilitas sudah ada sejak 0028850) — supaya kapabilitas
-runtime web diukur, bukan ditebak.
+Rekomendasi historis Builder: **A+B**; Founder authority tidak menetapkan
+pilihan ini sebagai policy. Deploy staging kini sudah membaca `/api/health`
+dan membuktikan classifier incapable, sehingga kapabilitas runtime web diukur,
+bukan ditebak.
 
-Prasyarat lain yang tidak boleh dilewati: **angka audit di bagian 5 harus ada
-lebih dulu.** Menyalakan penegakan tanpanya persis kesalahan yang alat ini
-dibangun untuk mencegah.
+Treatment populasi legacy tidak boleh diimprovisasi: angka audit bagian 5 dan
+keputusan treatment tetap diperlukan sebelum enforcement diterapkan pada data
+legacy. Ini tidak membatalkan authority untuk bounded technical work yang tidak
+memutuskan treatment tersebut.
