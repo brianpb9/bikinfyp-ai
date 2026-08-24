@@ -597,12 +597,17 @@ TASK=`P1-C9-C12-STRUCTURAL-INVENTORY-20260824`
   `products.images` list and install the post-mutation identity. This is not a
   violation of the settled after-install rule; adopting the stronger
   admission-time identity contract requires an approved implementation task.
-- Current reference errors remain `REF_MISSING`, `REF_HASH_MISMATCH`, and
-  `REF_MANIFEST_INVALID`; `REFERENCE_IDENTITY_CHANGED` is proposal-only.
+- Current reference errors include `NO_APPROVED_REFERENCE`, `REF_MISSING`,
+  `REF_HASH_MISMATCH`, `REF_MANIFEST_INVALID`, and
+  `REF_MANIFEST_LEGACY_UNSAFE`; `REFERENCE_IDENTITY_CHANGED` is proposal-only.
+- Retail E3/E5 select SQLite or PostgreSQL at runtime, so they can resume into
+  W2 or W1. Existing direct route evidence covers E3/E5→W2 and E7/E9→W1;
+  E3/E5→W1 is explicitly uncovered.
 - Bounded follow-up recommendation: install the reference manifest atomically at
   all three production admission boundaries and add W1/W2 admission → queued
-  E5/E9 mutation → first-worker tests. Preserve current reason codes unless a
-  separate approved work order authorizes a change.
+  E5/E9 mutation → first-worker tests, plus direct retail PostgreSQL E3/E5→W1
+  cases. Preserve the full current reason-code set unless a separate approved
+  work order authorizes a change.
 - Exact-baseline verification: structural/route **31/31**, W2 **19/19**, W1
   disposable PostgreSQL **25/25**, and TypeScript all PASS. Full inventory and
   raw proof: `C9-C12-STRUCTURAL-INVENTORY-20260824.md` and

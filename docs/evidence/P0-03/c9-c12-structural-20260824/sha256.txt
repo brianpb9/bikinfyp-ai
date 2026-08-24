@@ -1,5 +1,6 @@
 88dc4cc89adf39576509a773178bf72702672cd7a386bd5814dbbe2ac466c4c1  docs/evidence/P0-03/c9-c12-structural-20260824/mechanical-inventory.txt
 8fb6fa2ff251fbad00d35194d968b1025ba8c68609389bed74005207e36fc168  docs/evidence/P0-03/c9-c12-structural-20260824/proof.txt
+b41bf1f5a4d049736f7987a60bb00719c944a1d0c34f8d08dfd87324491cdbd9  docs/evidence/P0-03/c9-c12-structural-20260824/reviewer-corrections.txt
 4e4d25a7b9021c1ab4f025c343bda08ced1d894d36083943dcb9902054a7a334  docs/evidence/P0-03/c9-c12-structural-20260824/structural-assertions.txt
 e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/evidence/P0-03/c9-c12-structural-20260824/targeted.stderr.txt
 4cde5afbc30a4096ca77b6c2693a646a022d10e1cbf8a729cfa15ef2159b31e5  docs/evidence/P0-03/c9-c12-structural-20260824/targeted.stdout.txt

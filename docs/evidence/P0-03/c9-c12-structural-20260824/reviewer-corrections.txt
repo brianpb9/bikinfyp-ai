@@ -1,0 +1,20 @@
+REVIEW_SHA=974c1e50c12b5d7c1de70565bfcc1a08fb836f7b
+STALE=false
+
+[RETAIL POSTGRESQL ROUTE SWITCHES]
+app/api/products/[id]/route.ts:18:    const db = postgresRuntimeEnabled() ? null : getDb();
+app/api/products/[id]/route.ts:58:    if (postgresRuntimeEnabled()) await pgUpdateProduct(user.id, id, { name, priceIdr, category, productVisualDesc: visualDesc, ...promo });
+lib/retail-product-images.ts:43:  if (postgresRuntimeEnabled()) {
+lib/retail-product-images.ts:44:    return pgRemoveRetailProductImage(userId, productId, target);
+scripts/worker.ts:28:  async (job) => postgresRuntimeEnabled() ? processPostgresJob(job.data.jobId, { retryViaQueue: true }) : processJob(job.data.jobId, { retryViaQueue: true }),
+
+[ACTIVE REFERENCE FAILURE CODES]
+lib/kanari-bukti.ts:39:  TANPA_REFERENSI: "NO_APPROVED_REFERENCE",
+lib/job-reference-manifest.ts:20:  readonly code = "REF_MANIFEST_LEGACY_UNSAFE";
+lib/job-reference-manifest.ts:35:  catch { throw new Error("REF_MANIFEST_INVALID: manifest referensi job bukan JSON sah."); }
+lib/job-reference-manifest.ts:68:    if (!object) throw new Error(`REF_MISSING: referensi ${ref.rel} hilang sebelum snapshot durable dibuat.`);
+lib/job-reference-manifest.ts:71:      throw new Error(`REF_HASH_MISMATCH: isi ${ref.rel} berubah sebelum snapshot durable dibuat.`);
+
+DIRECT_RETAIL_E3_E5_TO_W1_TEST_STATUS=UNCOVERED
+SOURCE_ONLY_CORRECTION=true
+REMOTE=false paid=false deploy=false production_data=false
