@@ -196,8 +196,8 @@ test("A6 menempatkan verifikasi manifest sebelum approve, regen charge, task res
     ["approve mutation", "UPDATE jobs SET approved_at"],
     ["regen claim", "UPDATE job_shots SET regen_requested=TRUE"],
     ["regen ledger", "INSERT INTO credit_ledger"],
-    ["task reset", "await pgForgetShotTask"],
-    ["enqueue", "await enqueueJobResume"],
+    ["task reset", "await deps.pgForgetShotTask"],
+    ["enqueue", "await deps.enqueueJobResume"],
   ] as const) {
     assert.ok(source.indexOf(token) > guard, `${name} terjadi sebelum manifest diverifikasi`);
   }

@@ -18,6 +18,7 @@ import { parseJobProductSnapshot } from "@/lib/job-product-snapshot";
 import { bacaSnapshot } from "@/lib/script-engine/admisi";
 import { deriveStoryAdsIdentity, isStructuredStoryAds } from "@/lib/script-engine/story-os-ads";
 import path from "node:path";
+import { dashboardJobPostOverridesForTests } from "@/lib/dashboard-job-post-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -54,6 +55,35 @@ async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRow
     [jobId, orgId]
   );
   return res.rows[0] ?? null;
+}
+
+type DashboardJobPostDependencies = {
+  postgresRuntimeEnabled: typeof postgresRuntimeEnabled;
+  requireOrgContextApi: typeof requireOrgContextApi;
+  getPool: typeof getPool;
+  loadJob: typeof loadJob;
+  pastikanBolehBelanja: typeof pastikanBolehBelanja;
+  assertPaidAdmission: typeof assertPaidAdmission;
+  assertDashboardRate: typeof assertDashboardRate;
+  materializeJobReferenceManifest: typeof materializeJobReferenceManifest;
+  pgForgetShotTask: typeof pgForgetShotTask;
+  enqueueJobResume: typeof enqueueJobResume;
+};
+
+function dashboardJobPostDependencies(): DashboardJobPostDependencies {
+  return {
+    postgresRuntimeEnabled,
+    requireOrgContextApi,
+    getPool,
+    loadJob,
+    pastikanBolehBelanja,
+    assertPaidAdmission,
+    assertDashboardRate,
+    materializeJobReferenceManifest,
+    pgForgetShotTask,
+    enqueueJobResume,
+    ...(dashboardJobPostOverridesForTests() as Partial<DashboardJobPostDependencies>),
+  };
 }
 
 // GET — daftar scene untuk layar review brand: gambar, kalimat skrip, dan
@@ -109,8 +139,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
 // kredensial provider hanya ada di container worker.
 export async function POST(req: Request, ctx: { params: Promise<{ jobId: string }> }) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
+    const deps = dashboardJobPostDependencies();
+    if (!deps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
+    const { user, membership } = await deps.requireOrgContextApi(req);
     const { jobId } = await ctx.params;
     const body = await req.json().catch(() => ({}));
     const action = body.action === "approve" ? "approve" : body.action === "regenerate" ? "regenerate" : null;
@@ -126,7 +157,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
     // render yang sudah ditahan menjadi final. Menyetujui atas nama merek juga
     // gerbang HITL (aturan keras #5), dan gerbang yang bisa ditekan siapa saja
     // bukan gerbang.
-    pastikanBolehBelanja(membership.role);
+    deps.pastikanBolehBelanja(membership.role);
 
     // Regenerate memanggil provider DAN memotong saldo; approve melepas job ke
     // compositing (provider lagi). Keduanya wajib lewat gerbang yang sama.
@@ -135,11 +166,11 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
     // type='regen', tapi migrasi yang mengizinkan tipe itu (0030) belum
     // terpasang di produksi — tanpa gerbang ini, permintaannya berujung 500
     // dengan saldo yang sudah tersentuh.
-    await assertPaidAdmission();
+    await deps.assertPaidAdmission();
 
-    const pool = getPool(config.databaseUrl);
+    const pool = deps.getPool(config.databaseUrl);
     try {
-      const job = await loadJob(pool, jobId, membership.org_id);
+      const job = await deps.loadJob(pool, jobId, membership.org_id);
       if (!job) throw ERR.NOT_FOUND("Job-nya");
       if (!job.requires_approval) throw ERR.BAD_REQUEST("Job ini tidak memakai review scene.", "Job has no approval gate.");
       if (job.state !== "AWAITING_APPROVAL") {
@@ -161,7 +192,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
           )),
         });
         const manifest = parseJobReferenceManifest(job.approved_reference_manifest);
-        await materializeJobReferenceManifest(manifest, path.join(config.storageDir, "jobs", jobId));
+        await deps.materializeJobReferenceManifest(manifest, path.join(config.storageDir, "jobs", jobId));
       } catch (error) {
         console.error(`[product-truth] A6 job ${jobId} dihentikan sebelum ${action}:`, error);
         throw ERR.BAD_REQUEST(
@@ -195,13 +226,13 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
           "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES (gen_random_uuid()::text,$1,'scene.approved','jobs',$2,$3,$4)",
           [user.id, jobId, JSON.stringify({ org_id: membership.org_id }), new Date().toISOString()]
         );
-        await enqueueJobResume(jobId, "approve");
+        await deps.enqueueJobResume(jobId, "approve");
         return Response.json({ job_id: jobId, approved: true });
       }
 
       // Batas laju SEBELUM apa pun disentuh: tiap regenerate memanggil
       // provider video, jadi ini jalur uang paling mudah disalahgunakan.
-      await assertDashboardRate("regenerate", membership.org_id);
+      await deps.assertDashboardRate("regenerate", membership.org_id);
 
       // Setelah approved_at terisi, job sudah dilepas ke worker untuk
       // digabung. Meminta ganti scene di titik ini berarti mengubah bahan di
@@ -313,8 +344,8 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       // Kalau tidak, worker akan melanjutkan polling task LAMA dan
       // mengembalikan video yang sama persis — brand sudah ditagih token,
       // dan tombol "Ganti scene" jadi tidak berfungsi sama sekali.
-      await pgForgetShotTask(jobId, idx);
-      await enqueueJobResume(jobId, `regen${idx}`);
+      await deps.pgForgetShotTask(jobId, idx);
+      await deps.enqueueJobResume(jobId, `regen${idx}`);
       return Response.json({ job_id: jobId, idx, regenerating: true, tokens_charged: chargedTokens });
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */

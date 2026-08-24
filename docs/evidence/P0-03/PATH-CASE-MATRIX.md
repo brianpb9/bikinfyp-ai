@@ -521,11 +521,14 @@ TASK=P0-E8-ALL-UPLOADS-LABEL-BRAND-GATE-20260824
 TASK=P0-C9-RESUME-ENTRY-INVENTORY-PROOF-20260824
 
 - Inventaris tidak memakai daftar asumsi: guard Node dependency-free berjalan
-  atas seluruh TypeScript runtime di `app/`, `lib/`, dan worker produksi.
+  rekursif atas seluruh extension executable `.ts/.tsx/.js/.jsx/.mjs/.cjs`
+  di `app/`, `lib/`, dan `scripts/`, termasuk alias import/lokal serta direct
+  Redis `Queue.add("render", { jobId })` yang mencoba melewati helper.
   Hasilnya: admission `enqueueJob` ada 3 call-site; `enqueueJobResume` hanya
-  dua call A6 (approve + regenerate); wake internal terdiri dari satu caller
-  `enqueueRedisJob`, dua caller `enqueueInlineJob`, W2 dari pump+worker Redis,
-  dan W1 hanya dari worker Redis.
+  dua call A6 (approve + regenerate); wake runtime internal terdiri dari satu
+  caller `enqueueRedisJob`, dua caller `enqueueInlineJob`, W2 dari pump+worker
+  Redis, dan W1 hanya dari worker Redis. Lima `enqueueRedisJob` tambahan pada
+  tiga script verifikasi juga terinventaris eksplisit, bukan diabaikan.
 - Tidak ditemukan bypass implementasi. A6 sudah memvalidasi
   `job_product_snapshot` dan mem-parse + materialize
   `approved_reference_manifest` sebelum kedua enqueue. Queue hanya membawa
@@ -536,11 +539,17 @@ TASK=P0-C9-RESUME-ENTRY-INVENTORY-PROOF-20260824
   snapshot di A6, forwarding queue yang membawa ulang produk, atau worker wake
   yang tidak lagi mengadopsi kedua field durable. Counterexample untuk
   call-site baru, enqueue terlalu dini, dan rebuild dijalankan di test.
-- Verifikasi akhir: guard mandiri `node scripts/guard-resume-entry-inventory.mjs`
-  PASS; focused `22/22 PASS`; affected `86 total / 62 PASS / 24 skip / 0 fail`;
-  tepat satu full suite `1121 total / 1081 PASS / 40 skip / 0 fail`;
-  `npx tsc --noEmit` dan `git diff --check` PASS. Dua puluh empat skip affected
-  dan bagian PostgreSQL dari 40 skip full tetap eksplisit karena `UJI_PG_URL`
-  kosong; audit katalog tidak dijalankan karena katalog/naskah tidak berubah.
+- Koreksi review menambah fixture filesystem nyata untuk TSX alias dan direct
+  queue wake, counterexample validasi di bawah `if (false)`, overwrite, dan
+  rebuild. Exported `POST` diuji untuk approve/regenerate dengan snapshot
+  missing/invalid: semuanya 400 dengan nol approval/regen query, ledger,
+  audit, koneksi transaksi, materialize, task reset, maupun enqueue.
+- Verifikasi remediasi akhir: guard mandiri PASS; focused `23/23 PASS`;
+  affected `87 total / 63 PASS / 24 skip / 0 fail`; tepat satu bounded full
+  remediasi `1122 total / 1082 PASS / 40 skip / 0 fail`;
+  `npx tsc --noEmit` dan `git diff --check` PASS. Skip PostgreSQL tetap
+  eksplisit karena `UJI_PG_URL` kosong; katalog tidak dijalankan karena tidak
+  terdampak. Ini satu full tambahan yang diotorisasi sesudah CHANGES_REQUESTED,
+  bukan pengulangan tanpa batas.
 - C9 tetap **PARTIAL**: slice ini tidak mengarang reason code
   `SNAPSHOT_IMMUTABLE` dan tidak mengubah keputusan admission T43.

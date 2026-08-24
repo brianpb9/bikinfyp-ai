@@ -138,8 +138,8 @@ test("A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan 
     "UPDATE jobs SET approved_at",
     "UPDATE job_shots SET regen_requested=TRUE",
     "INSERT INTO credit_ledger",
-    "await pgForgetShotTask",
-    "await enqueueJobResume",
+    "await deps.pgForgetShotTask",
+    "await deps.enqueueJobResume",
   ]) {
     assert.ok(source.indexOf(token) > guard, `${token} terjadi sebelum snapshot metadata diverifikasi`);
   }
