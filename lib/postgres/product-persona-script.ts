@@ -38,6 +38,23 @@ export interface PgScriptInput {
   hookLevel?: import("../config/hooks").HookLevel;
 }
 
+/**
+ * Transaction-phase evidence for retail PostgreSQL product creation.
+ * Callers must never infer rollback from an ordinary network/driver error.
+ */
+export class PgProductCreateFailure extends Error {
+  readonly commitAttempted: boolean;
+  readonly rollbackSucceeded: boolean;
+
+  constructor(cause: unknown, phase: { commitAttempted: boolean; rollbackSucceeded: boolean }) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(`PostgreSQL product create failed: ${message}`, { cause });
+    this.name = "PgProductCreateFailure";
+    this.commitAttempted = phase.commitAttempted;
+    this.rollbackSucceeded = phase.rollbackSucceeded;
+  }
+}
+
 export class PgProductPersonaScriptRepository {
   private readonly pool: Pool;
   private readonly now: () => string;
@@ -56,15 +73,17 @@ export class PgProductPersonaScriptRepository {
 
   async createProduct(userId: string, input: PgProductInput): Promise<ProductRow> {
     const client = await this.pool.connect();
+    let commitAttempted = false;
     try {
       await client.query("BEGIN");
       const product = await this.insertProduct(client, userId, input);
       await this.insertAudit(client, userId, "product.created", "products", product.id, { name: product.name, category: product.category });
+      commitAttempted = true;
       await client.query("COMMIT");
       return product;
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
+      const rollbackSucceeded = await client.query("ROLLBACK").then(() => true, () => false);
+      throw new PgProductCreateFailure(error, { commitAttempted, rollbackSucceeded });
     } finally { client.release(); }
   }
 

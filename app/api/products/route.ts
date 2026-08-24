@@ -8,6 +8,7 @@ import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
 import { merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
 import { resolveApprovedReference, pesanTanpaReferensi } from "@/lib/product-truth";
 import { GagalTanpaReferensi } from "@/lib/kanari-bukti";
+import { PgProductCreateFailure } from "@/lib/postgres/product-persona-script";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -174,7 +175,18 @@ export async function POST(req: Request) {
         );
       }
       if (reconciliation === "absent") {
-        await rejectAfterReferenceCheck("E1", images, creationError);
+        const postgresRollbackProven =
+          creationError instanceof PgProductCreateFailure
+          && !creationError.commitAttempted
+          && creationError.rollbackSucceeded;
+        if (!usePostgres || postgresRollbackProven) {
+          await rejectAfterReferenceCheck("E1", images, creationError);
+        }
+        throw new Error(
+          `E1 PostgreSQL product create outcome unknown for ${id}; reconciliation observed no row, ` +
+          `but references were retained because COMMIT may have been attempted or pre-COMMIT rollback was not proven.`,
+          { cause: creationError },
+        );
       }
       if (reconciliation === "mismatch") {
         throw new Error(

@@ -16,6 +16,7 @@ const { setProductImageClassifierForTests } = await import("../lib/product-image
 const { setPeriksaLabelFotoForTests } = await import("../lib/media/label-terbaca");
 const { setProductCreateDependenciesForTests, productCreationRowMatchesExpected } = await import("../lib/product-create-dependencies");
 const { POST: createProduct } = await import("../app/api/products/route");
+const { PgProductCreateFailure } = await import("../lib/postgres/product-persona-script");
 type MediaStorage = import("../lib/storage").MediaStorage;
 type HasilLabel = import("../lib/media/label-terbaca").HasilLabel;
 type HasilKlasifikasi = import("../lib/media/klasifikasi-gambar").HasilKlasifikasi;
@@ -104,7 +105,7 @@ interface RunOptions {
   classifierFailure?: boolean;
   labels?: HasilLabel[];
   readMutation?: ReadMutation;
-  persistenceFault?: "before-commit" | "after-commit";
+  persistenceFault?: "before-commit" | "before-commit-rollback-failed" | "after-commit" | "commit-attempted-delayed";
   reconciliation?: "automatic" | "absent" | "exact" | "mismatch" | "failure";
   failDeletePhoto?: boolean;
 }
@@ -135,6 +136,7 @@ async function run(label: string, options: RunOptions = {}) {
   let audits = 0;
   let reconciliationCalls = 0;
   const insertedImages: string[][] = [];
+  let delayedImages: string[] | null = null;
   const productId = `e1-${label}-${process.pid}`;
   setProductCreateDependenciesForTests({
     getAuthUser: async () => ({ id: "user-e1" }) as never,
@@ -142,9 +144,32 @@ async function run(label: string, options: RunOptions = {}) {
     postgresRuntimeEnabled: () => options.postgres ?? false,
     smokeCreateProduct: async (_userId, input) => {
       pgAttempts += 1;
-      if (options.persistenceFault === "before-commit") throw new Error("controlled PostgreSQL pre-commit failure");
+      if (options.persistenceFault === "before-commit") {
+        throw new PgProductCreateFailure(new Error("controlled PostgreSQL pre-commit failure"), {
+          commitAttempted: false,
+          rollbackSucceeded: true,
+        });
+      }
+      if (options.persistenceFault === "before-commit-rollback-failed") {
+        throw new PgProductCreateFailure(new Error("controlled PostgreSQL rollback failure"), {
+          commitAttempted: false,
+          rollbackSucceeded: false,
+        });
+      }
+      if (options.persistenceFault === "commit-attempted-delayed") {
+        delayedImages = [...input.images];
+        throw new PgProductCreateFailure(new Error("controlled delayed COMMIT acknowledgement failure"), {
+          commitAttempted: true,
+          rollbackSucceeded: false,
+        });
+      }
       insertedImages.push([...input.images]);
-      if (options.persistenceFault === "after-commit") throw new Error("controlled PostgreSQL commit acknowledgement failure");
+      if (options.persistenceFault === "after-commit") {
+        throw new PgProductCreateFailure(new Error("controlled PostgreSQL commit acknowledgement failure"), {
+          commitAttempted: true,
+          rollbackSucceeded: false,
+        });
+      }
       return {} as never;
     },
     getDb: () => ({
@@ -169,6 +194,13 @@ async function run(label: string, options: RunOptions = {}) {
       assert.deepEqual(expected.images, [0, 1].slice(0, verdicts.length).map((index) => `uploads/${productId}/${index}.webp`));
       if (options.reconciliation === "failure") throw new Error("controlled authoritative reconciliation failure");
       if (options.reconciliation && options.reconciliation !== "automatic") return options.reconciliation;
+      if (options.persistenceFault === "commit-attempted-delayed" && delayedImages) {
+        // Deterministic visibility race: this read decides "absent", then the
+        // already-attempted COMMIT becomes visible immediately afterward.
+        insertedImages.push(delayedImages);
+        delayedImages = null;
+        return "absent";
+      }
       return insertedImages.length > 0 ? "exact" : "absent";
     },
   });
@@ -338,6 +370,29 @@ test("E1 memulihkan commit-then-throw exact dan mempertahankan storage saat outc
   }
 });
 
+test("E1 PG tidak memakai absent-first sebagai otoritas setelah COMMIT attempted atau rollback gagal", async () => {
+  const delayed = await quiet(() => run("pg-delayed-commit", {
+    postgres: true,
+    persistenceFault: "commit-attempted-delayed",
+  }));
+  assert.equal(delayed.value.response.status, 500);
+  assert.equal(delayed.value.reconciliationCalls, 1, "hanya satu read yang sempat melihat absent");
+  assert.equal(delayed.value.insertedImages.length, 1, "COMMIT menjadi visible sesudah absent read");
+  assert.equal(createdKeys(delayed.value).length, 2, "bytes+sidecar wajib bertahan untuk row yang terlambat visible");
+  assert.deepEqual(delayed.value.storage.deleteCalls, []);
+  assert.match(delayed.logs.flat().map(String).join(" "), /COMMIT may have been attempted/);
+
+  const rollbackFailed = await quiet(() => run("pg-rollback-unproven", {
+    postgres: true,
+    persistenceFault: "before-commit-rollback-failed",
+  }));
+  assert.equal(rollbackFailed.value.response.status, 500);
+  assert.equal(rollbackFailed.value.insertedImages.length, 0, "control belum mencatat row visible");
+  assert.equal(rollbackFailed.value.reconciliationCalls, 1);
+  assert.equal(createdKeys(rollbackFailed.value).length, 2, "rollback yang tidak terbukti wajib menahan storage");
+  assert.deepEqual(rollbackFailed.value.storage.deleteCalls, []);
+});
+
 test("E1 authoritative reconciliation membutuhkan exact ID, owner, ordered images, dan seluruh create data", () => {
   const expected = {
     id: "product-exact",
@@ -392,6 +447,28 @@ test("E1 authoritative reconciliation membutuhkan exact ID, owner, ordered image
   }
 });
 
+test("PG create phase marker dipasang tepat sebelum COMMIT dikirim", () => {
+  const source = fs.readFileSync(path.join(process.cwd(), "lib/postgres/product-persona-script.ts"), "utf8");
+  const createStart = source.indexOf("async createProduct(");
+  const createEnd = source.indexOf("/** Mirrors /api/products/extract", createStart);
+  const create = source.slice(createStart, createEnd);
+  const assertPhase = (candidate: string, context: string) => {
+    const marker = candidate.indexOf("commitAttempted = true");
+    const commit = candidate.indexOf('client.query("COMMIT")');
+    const rollback = candidate.indexOf('client.query("ROLLBACK")');
+    const typed = candidate.indexOf("new PgProductCreateFailure");
+    assert.ok(marker >= 0 && commit > marker, `${context}: phase wajib true sebelum COMMIT dikirim`);
+    assert.ok(rollback > commit && typed > rollback, `${context}: rollback outcome wajib direkam dalam typed failure`);
+  };
+  assertPhase(create, "production");
+
+  const movedAfterCommit = create.replace(
+    'commitAttempted = true;\n      await client.query("COMMIT");',
+    'await client.query("COMMIT");\n      commitAttempted = true;',
+  );
+  assert.throws(() => assertPhase(movedAfterCommit, "counterexample marker terlambat"), /sebelum COMMIT/);
+});
+
 test("E1 cleanup failure setelah reference rejection tetap terlihat sebagai 500", async () => {
 
   const cleanup = await quiet(() => run("cleanup-failure", { verdicts: [PROMOTIONAL], failDeletePhoto: true }));
@@ -440,8 +517,8 @@ test("E1 structural mutation guard menolak bypass label, resolver, persistence a
       "await dependencies.smokeCreateProduct(user.id, {} as never, id);\n    const resolution = await resolveApprovedReference(images)"
     ), /persistence seam wajib sesudah resolver/],
     ["rollback wrong set", production.replace(
-      '      if (reconciliation === "absent") {\n        await rejectAfterReferenceCheck("E1", images, creationError);\n      }',
-      '      if (reconciliation === "absent") {\n        await rejectAfterReferenceCheck("E1", images.slice(1), creationError);\n      }'
+      'await rejectAfterReferenceCheck("E1", images, creationError)',
+      'await rejectAfterReferenceCheck("E1", images.slice(1), creationError)'
     ), /DB rollback storage hanya boleh/],
     ["reconciliation bypass", production.replace(
       "await dependencies.reconcileProductCreation(expectedCreation, usePostgres)",

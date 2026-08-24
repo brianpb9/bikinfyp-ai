@@ -930,12 +930,19 @@ TASK=`P0-T43-E1-REFERENCE-GATE-20260824`
   absent cleanup leaves no new storage, row, or success audit. Cleanup failure
   is an observable 500 and explicitly logs possible residual storage;
   unrelated objects survive.
+- PostgreSQL create failures carry typed transaction-phase evidence. Exact
+  cleanup authority requires `commitAttempted=false` AND
+  `rollbackSucceeded=true`; once COMMIT was attempted, an immediate absent read
+  is treated as potentially stale visibility and can never authorize deletion.
+  If rollback itself is unproven, storage is retained as well. SQLite remains
+  scoped to its synchronous authoritative row reconciliation.
 - `tests/e1-reference-gate.test.ts` exercises the exported POST through both DB
   seams with positive packshot, banner-first+packshot, multiple-valid, and all
   listed negative/fault cases, including SQLite/PG pre-commit failure,
   commit-then-throw exact recovery, reconciliation mismatch, and reconciliation
-  failure. Its mutation guard rejects label/brand bypass, resolver bypass,
-  early SQLite/PG persistence, reconciliation bypass, and non-exact rollback.
+  failure, plus absent-first/delayed-COMMIT and rollback-failure controls. Its
+  mutation guard rejects label/brand bypass, resolver bypass, early SQLite/PG
+  persistence, reconciliation bypass, and non-exact rollback.
 - This slice does not change OCR execution policy, type/category policy,
   legacy treatment, payment/provider behavior, deployment, or production
   state. Aggregate matrix statuses remain bounded as listed above and
