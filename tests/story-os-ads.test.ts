@@ -234,7 +234,7 @@ test("live LLM Ads menolak bridge blank-only lalu menerima provenance lisan yang
     assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
     assert.deepEqual(
       result.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(),
-      ["spoken_approved_price", "spoken_product_name"]
+      ["spoken_product_category", "spoken_product_name"]
     );
   } finally {
     globalThis.fetch = fetchAsli;
@@ -484,13 +484,51 @@ test("prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta 
     assert.match(prompt, /plain unprinted colour card or swatch/i);
     assert.match(prompt, /no letters, numbers, logos, labels, prices, product names, categories, or readable marks/i);
     assert.doesNotMatch(prompt, /Product hero|label readable|action with the product|product present in frame 1/i);
+    assert.match(prompt, /spoken_product_category/);
+    assert.doesNotMatch(prompt, /positive approved price/);
+    assert.doesNotMatch(prompt, /price 89000|write it as words if spoken/i);
+  }
+  const promoPrompt = blokTugasUntukUji({ contentType: "ads", durationSec: 15, format: "ads", templateId: "promo-terbatas", priceIdr: 89_000 });
+  assert.match(promoPrompt, /positive approved price/);
+  assert.match(promoPrompt, /spoken_approved_price/);
+  const zeroPromoPrompt = blokTugasUntukUji({ contentType: "ads", durationSec: 15, format: "ads", templateId: "promo-terbatas", priceIdr: 0 });
+  assert.match(zeroPromoPrompt, /spoken_product_category/);
+  assert.match(zeroPromoPrompt, /Do NOT mention a price/);
+});
+
+test("provider LLM menerima Story Ads jasa harga nol dengan bridge nama dan kategori", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      segments[1].text = "Nah, Jasa Kilat Beres.";
+      segments[2].text = "Konteksnya kategori jasa, sih.";
+      segments[2].bridge_source = "spoken_product_category";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [result] = await generateScripts({
+      product: { id: "jasa-zero", name: "Jasa Kilat Beres", price_idr: 0, category: "jasa" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", format: "ads", templateId: "ads-meja-kosong", count: 1,
+      hookFamilies: ["H13"], lockHookFamily: true,
+    });
+    assert.equal(calls, 1);
+    assert.equal(result.script_source, "llm");
+    assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    assert.deepEqual(result.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(), ["spoken_product_category", "spoken_product_name"]);
+    assert.doesNotMatch(result.segments.map((segment) => segment.text).join(" "), /\b(?:harga|ribu|juta|banderol)\b/i);
+  } finally {
+    globalThis.fetch = fetchAsli;
   }
 });
 
 const LIVE_ADS_SAFE = [
   { block: "HOOK", label: "HOOK", start: 0, end: 3, text: "", start_state: "kartu blank sudah di meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos bergerak sejak frame pertama", product_state: "hidden", expression: "curious", audio_note: "", why: "setup conflict", mode: "GENERAL" },
   { block: "BODY", label: "FRICTION", start: 3, end: 6.45, text: "Nah, Kemeja Uji.", bridge_source: "spoken_product_name", start_state: "kartu blank dekat tangan", framing: "medium shot", angle: "eye level", camera: "slow push", action: "talent buka kartu warna polos perlahan", product_state: "hidden", expression: "focused", audio_note: "", why: "tension rises", mode: "GENERAL" },
-  { block: "BODY", label: "FRICTION", start: 6.45, end: 10.05, text: "Seratus delapan puluh sembilan ribu.", bridge_source: "spoken_approved_price", start_state: "swatch blank sudah terbuka", framing: "close shot", angle: "eye level", camera: "slow drift", action: "swatch blank dipindahkan mendekati saksi", product_state: "hidden", expression: "focused", audio_note: "", why: "tension rises again", mode: "GENERAL" },
+  { block: "BODY", label: "FRICTION", start: 6.45, end: 10.05, text: "Konteksnya kategori fashion, sih.", bridge_source: "spoken_product_category", start_state: "swatch blank sudah terbuka", framing: "close shot", angle: "eye level", camera: "slow drift", action: "swatch blank dipindahkan mendekati saksi", product_state: "hidden", expression: "focused", audio_note: "", why: "tension rises again", mode: "GENERAL" },
   { block: "BODY", label: "SPIKE", start: 10.05, end: 12, text: "Udah, lihat.", start_state: "kasir berada di samping meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos diletakkan di depan kasir", product_state: "hidden", expression: "relieved", audio_note: "", why: "payoff witnessed", mode: "GENERAL", saksi: "kasir off camera" },
   { block: "CTA", label: "BUTTON", start: 12, end: 15, text: "Tadi ragu, cocok nggak? Detailnya ada di bawah ya.", start_state: "kartu blank menghadap kamera", framing: "close shot", angle: "eye level", camera: "static camera", action: "talent menunjuk blok warna pada kartu blank", product_state: "hidden", expression: "warm", audio_note: "", why: "button payoff", mode: "GENERAL" },
 ];

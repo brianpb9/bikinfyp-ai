@@ -111,6 +111,8 @@ export interface CatalogTemplateAudit {
   group: string | null;
   kind: string;
   configuration: {
+    contentType: "affiliate" | "ads";
+    format: string;
     durationSec: number;
     tier: string;
     hookLevel: string;
@@ -142,6 +144,7 @@ export interface CatalogTemplateAudit {
   }>;
   variants: Array<{
     variantIndex: number;
+    admission: Pick<GeneratedScript["admisi"], "contentType" | "format" | "templateId" | "durationSec">;
     hookFamily: string;
     hook: AuditTextRef | null;
     scriptNormalized: string;
@@ -152,6 +155,7 @@ export interface CatalogTemplateAudit {
       normalized: string;
       action: string | null;
       visualDirection: string | null;
+      bridgeSource: string | null;
     }>;
     assembledShotDirections: string[];
     assembledShotNumericScaffolds: string[][];
@@ -248,6 +252,11 @@ export interface CatalogScriptAudit {
       variantIndex: number;
       errors: GeneratedScript["validation"]["errors"];
     }>;
+    admissionConfigurationRefs: Array<{
+      templateId: string;
+      variantIndex: number;
+      mismatches: string[];
+    }>;
     targets: {
       templateCount: boolean;
       everyTemplateHasCopy: boolean;
@@ -283,6 +292,7 @@ export interface CatalogScriptAudit {
       deliverySignaturesUnique: boolean;
       everyVoicedTemplateHasEmphasisCue: boolean;
       everyVariantPassesValidation: boolean;
+      everyAdmissionMatchesConfiguration: boolean;
     };
     passed: boolean;
   };
@@ -335,6 +345,20 @@ export function adsUnsupportedOutcomeFindings(templates: CatalogTemplateAudit[])
       });
     });
   return [...rendered, ...roles];
+}
+
+/** Audit provenance harus gagal kalau generator berjalan dengan default yang
+ * berbeda dari kartu katalog. Diekspor agar mutasi regresi memakai evaluator
+ * yang sama dengan laporan produksi. */
+export function admissionConfigurationFindings(templates: CatalogTemplateAudit[]) {
+  return templates.flatMap((template) => template.variants.flatMap((variant) => {
+    const mismatches: string[] = [];
+    if (variant.admission.contentType !== template.configuration.contentType) mismatches.push("contentType");
+    if (variant.admission.format !== template.configuration.format) mismatches.push("format");
+    if (variant.admission.templateId !== template.templateId) mismatches.push("templateId");
+    if (variant.admission.durationSec !== template.configuration.durationSec) mismatches.push("durationSec");
+    return mismatches.length === 0 ? [] : [{ templateId: template.templateId, variantIndex: variant.variantIndex, mismatches }];
+  }));
 }
 
 export function adsStayOutcomeNeutral(templates: CatalogTemplateAudit[]): boolean {
@@ -818,6 +842,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     const fixtureSourceCategory = template.bestFor[0] ?? "default";
     const fixtureCategory = product.category;
     const fixtureCompatible = normalizeBestForCategory(fixtureSourceCategory) === fixtureCategory;
+    const contentType: "affiliate" | "ads" = template.kind === "ads" ? "ads" : "affiliate";
     const variants = await generateScripts({
       // Audit ini MENGUKUR copy template — itu memang jalur template, dan
       // sejak 20 Agu jalur itu tidak lagi disajikan ke pengguna (keputusan
@@ -828,6 +853,8 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       product,
       register: fixture.register,
       qualityTier: template.tier,
+      contentType,
+      format: template.format,
       durationSec: template.durationSec,
       count: fixture.variantsPerTemplate,
       hookLevel: template.hookLevel,
@@ -854,6 +881,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
         normalized: normalizeAuditText(segment.text),
         action: segment.action?.trim() || null,
         visualDirection: segment.visual_direction?.trim() || null,
+        bridgeSource: segment.bridge_source ?? null,
       }));
       const visualSpec = template.group === "ads"
         ? planShots({
@@ -901,6 +929,12 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       }
       return {
         variantIndex,
+        admission: {
+          contentType: variant.admisi.contentType,
+          format: variant.admisi.format,
+          templateId: variant.admisi.templateId,
+          durationSec: variant.admisi.durationSec,
+        },
         hookFamily: variant.hook_family,
         hook: diversityHookSegment ? textRef(template.id, variantIndex, diversityHookSegment.text) : null,
         scriptNormalized: segments.map((segment) => `${segment.role}:${segment.normalized}`).join("|"),
@@ -954,6 +988,8 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       group: template.group ?? null,
       kind: template.kind,
       configuration: {
+        contentType,
+        format: template.format,
         durationSec: template.durationSec,
         tier: template.tier,
         hookLevel: template.hookLevel,
@@ -1170,6 +1206,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       errors: variant.validation.errors,
     }])
   );
+  const admissionConfigurationRefs = admissionConfigurationFindings(rawTemplates);
   const deliveryFailureRefs = rawTemplates.flatMap((template) =>
     template.variants.flatMap((variant) => variant.delivery.passed ? [] : [{
       templateId: template.templateId,
@@ -1247,6 +1284,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     deliverySignaturesUnique: deliverySignatureFailureTemplateIds.length === 0,
     everyVoicedTemplateHasEmphasisCue: missingEmphasisCueTemplateIds.length === 0,
     everyVariantPassesValidation: validationFailureRefs.length === 0,
+    everyAdmissionMatchesConfiguration: admissionConfigurationRefs.length === 0,
   };
 
   return {
@@ -1309,6 +1347,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       deliveryFailureRefs,
       unknownAudioTagRefs,
       validationFailureRefs,
+      admissionConfigurationRefs,
       targets,
       passed: Object.values(targets).every(Boolean),
     },

@@ -11,6 +11,8 @@ import type { RegisterSpec } from "./registers";
 
 export interface TemplateCtx {
   category?: string;
+  /** Nilai otoritatif; nol berarti konsep tidak boleh membuat bridge harga. */
+  priceIdr?: number;
   reg: RegisterSpec;
   harga: string; // frasa harga natural, mis. "85 ribu" / "1,5 juta"
   produk: string; // nama produk

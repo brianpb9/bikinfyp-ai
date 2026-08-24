@@ -742,7 +742,7 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
   const archive = (await pool.query("SELECT spec_json,model_params FROM job_prompts WHERE job_id=$1", [jobId])).rows[0];
   assert.ok(archive, "prompt provider-bound tidak diarsipkan");
   assert.equal(JSON.parse(archive.model_params).template_id, "ads-meja-kosong");
-  assert.deepEqual(JSON.parse(archive.model_params).storyBridgeSources.sort(), ["spoken_approved_price", "spoken_product_name"]);
+  assert.deepEqual(JSON.parse(archive.model_params).storyBridgeSources.sort(), ["spoken_product_category", "spoken_product_name"]);
   assert.doesNotMatch(archive.spec_json, /ACME|holding a bottle|marked ACME/i);
 });
 

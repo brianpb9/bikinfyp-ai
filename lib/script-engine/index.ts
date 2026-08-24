@@ -311,6 +311,7 @@ function buildCtx(product: ProductInput, register: Register): TemplateCtx {
   const cat = product.category;
   return {
     category: cat,
+    priceIdr: product.price_idr ?? 0,
     reg: REGISTERS[register],
     harga: formatHargaNatural(product.price_idr),
     produk: product.name,
@@ -542,6 +543,7 @@ async function generateOne(
           productName: product.name, productCategory: product.category,
           priceIdr: product.price_idr ?? 0, durationSec, contentType, cartLabel,
           register, hookFamily: family, hookLevel: "normal", format,
+          templateId: templateId ?? null,
           // Penutup TVC menyebut MEREK, bukan seluruh nama SKU — lihat T-01.
           merek: tokenMerek(product.name),
           contoh: variasi ? `${variasi.hook} / ${variasi.demo} / ${variasi.cta}` : null,

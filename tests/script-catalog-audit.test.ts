@@ -7,6 +7,7 @@ import {
   adsStayOutcomeNeutral,
   adsVisualContractFindings,
   adsProviderReferenceFindings,
+  admissionConfigurationFindings,
   adsUnsupportedOutcomeFindings,
   auditProductForTemplate,
   bannedHookBoilerplateStarter,
@@ -58,7 +59,7 @@ const AUTHORED_COPY_SNAPSHOT: Record<string, string[]> = {
   "t09-bahan-aktif": ["f7b8d72e75bdb6ac", "0c89d79923fe6c9c", "0ff1d991acffd261", "9f1d03aee94a2b08"],
   "t10-bukti-di-lengan": ["cb8455f1c8977c93", "1201f68e4cf37a81", "aabc8a9738e2deaa", "08e4cb36d834351d"],
   "t12-vox-pop": ["2b26db49870ce97f", "773729dc5473f4ff", "68382594e9b4ad92", "d85df3510a64ce24"],
-  "kenalin-bisnis": ["cdf2ed14511e80c7", "410be6c57145d1dd", "99134d353eacdc8f", "e73c54ff89dab462"],
+  "kenalin-bisnis": ["0c105458b0a6d441", "36c5369cbd74f00b", "820a2fae6ae7c958", "b6f47081e3d38a89"],
   "promo-terbatas": ["c1c437fac0dc26f9", "a5a272ba0ca1f770", "3900ca5368ea6945", "e652cee1829b0084"],
   "tvc-the-drop": ["c3aef3e716baae43", "8609eacc96558a7f", "ca68bed87976479c", "eb8b38ee0097b061"],
   "tvc-tersangka": ["4524bd2c7fed0c14", "6d0e08dbfcb8e7b3", "3841466ada75069b", "5b3df2443a0f2d9d"],
@@ -441,6 +442,55 @@ test("seluruh aturan yang dulu dikecualikan sekarang tepat nol", async () => {
   }
 });
 
+test("audit generator memakai konfigurasi produksi dan mengunci snapshot admisi tiap template", () => {
+  for (const template of CAMPAIGN_TEMPLATES) {
+    const audited = audit.templates.find((item) => item.templateId === template.id)!;
+    const expectedContentType = template.kind === "ads" ? "ads" : "affiliate";
+    assert.equal(audited.configuration.contentType, expectedContentType, `${template.id}: contentType audit`);
+    assert.equal(audited.configuration.format, template.format, `${template.id}: format audit`);
+    for (const variant of audited.variants) {
+      assert.deepEqual(variant.admission, {
+        contentType: expectedContentType,
+        format: template.format,
+        templateId: template.id,
+        durationSec: template.durationSec,
+      }, `${template.id}#${variant.variantIndex}: snapshot admisi bukan konfigurasi aktif`);
+    }
+  }
+  assert.ok(audit.templates.some((item) => item.configuration.contentType === "ads" && item.configuration.format === "ads"));
+  assert.ok(audit.templates.some((item) => item.configuration.contentType === "ads" && item.configuration.format === "talking_head"));
+  assert.ok(audit.templates.some((item) => item.configuration.format === "tvc"));
+  assert.deepEqual(audit.summary.admissionConfigurationRefs, []);
+  assert.equal(audit.summary.targets.everyAdmissionMatchesConfiguration, true);
+});
+
+test("audit admission berubah merah saat snapshot menyimpang dari konfigurasi aktif", () => {
+  const mutated = structuredClone(audit.templates);
+  mutated[0]!.variants[0]!.admission.contentType = mutated[0]!.configuration.contentType === "ads" ? "affiliate" : "ads";
+  mutated[0]!.variants[1]!.admission.format = "format-salah";
+  mutated[0]!.variants[2]!.admission.templateId = "template-salah";
+  mutated[0]!.variants[3]!.admission.durationSec = Number(mutated[0]!.variants[3]!.admission.durationSec) + 1;
+  const refs = admissionConfigurationFindings(mutated);
+  assert.deepEqual(refs.map((ref) => ref.mismatches), [["contentType"], ["format"], ["templateId"], ["durationSec"]]);
+});
+
+test("harga dan provenance harga hanya muncul di Story Ads price-led; body non-price beragam", () => {
+  const ads = audit.templates.filter((item) => item.group === "ads");
+  const nonPriceBodies = new Set<string>();
+  for (const template of ads) for (const variant of template.variants) {
+    const sources = variant.segments.flatMap((segment) => segment.bridgeSource ? [segment.bridgeSource] : []).sort();
+    if (template.templateId === "promo-terbatas") {
+      assert.ok(variant.segments.some((segment) => /\b(?:ribu|juta)\b/i.test(segment.text)));
+      assert.deepEqual(sources, ["spoken_approved_price", "spoken_product_name"]);
+      continue;
+    }
+    assert.ok(variant.segments.every((segment) => !/\b(?:harga|banderol|nominal|tercantum|nilai)\b/i.test(segment.text)), `${template.templateId}#${variant.variantIndex}`);
+    assert.deepEqual(sources, ["spoken_product_category", "spoken_product_name"]);
+    nonPriceBodies.add(variant.segments.filter((segment) => segment.role !== "hook" && segment.role !== "cta").map((segment) => segment.normalized).join("|"));
+  }
+  assert.equal(nonPriceBodies.size, 8 * 4, "body non-price masih memakai skeleton lintas template");
+});
+
 test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasil generator", async () => {
   const adsTemplates = CAMPAIGN_TEMPLATES.filter((item) => item.group === "ads");
   assert.equal(adsTemplates.length, 9);
@@ -448,7 +498,7 @@ test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasi
     const variants = await generateScripts({
       product: auditProductForTemplate(template), register: "bunda", tanpaLlm: true,
       contentType: "ads", qualityTier: template.tier as never,
-      durationSec: template.durationSec, templateId: template.id,
+      durationSec: template.durationSec, templateId: template.id, format: template.format,
       count: 4, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
     });
     for (const variant of variants) {
@@ -459,9 +509,12 @@ test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasi
       assert.equal(variant.segments[0].start, 0, `${template.id}: HOOK tidak mulai di nol`);
       assert.ok(variant.segments.slice(1).every((segment) => segment.start > 0), `${template.id}: beat setelah HOOK mulai di nol`);
       assert.ok(variant.segments.every((segment) => segment.product_state === "hidden"), `${template.id}: prop blank menyamar sebagai produk`);
+      const expectedSources = template.id === "promo-terbatas"
+        ? ["spoken_approved_price", "spoken_product_name"]
+        : ["spoken_product_category", "spoken_product_name"];
       assert.deepEqual(
         variant.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(),
-        ["spoken_approved_price", "spoken_product_name"], `${template.id}: provenance SA6 tidak lengkap`
+        expectedSources, `${template.id}: provenance SA6 tidak lengkap`
       );
       assert.equal(variant.segments.filter((segment) => segment.role === "demo").length, 1);
       for (const segment of variant.segments.filter((item) => item.label === "FRICTION" || item.label === "SPIKE")) {

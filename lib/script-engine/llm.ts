@@ -281,6 +281,8 @@ interface PermintaanNaskah {
   hookFamily: string;
   hookLevel: string;
   format: string;
+  /** Identitas katalog otoritatif; menentukan apakah konsep memang price-led. */
+  templateId?: string | null;
   /** Contoh few-shot dari template-copy, kalau ada. */
   contoh?: string | null;
   /**
@@ -365,11 +367,11 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
  * dan tesnya tidak perlu merakit PermintaanNaskah lengkap hanya untuk membaca
  * satu blok instruksi.
  */
-export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; durationSec: number; format?: string; productName?: string; productCategory?: string }): string {
+export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; durationSec: number; format?: string; productName?: string; productCategory?: string; priceIdr?: number; templateId?: string | null }): string {
   return blokTugas({
-    productName: p.productName ?? "Serum Glow Bening", productCategory: p.productCategory ?? "beauty", priceIdr: 89000,
+    productName: p.productName ?? "Serum Glow Bening", productCategory: p.productCategory ?? "beauty", priceIdr: p.priceIdr ?? 89000,
     durationSec: p.durationSec, contentType: p.contentType, cartLabel: "keranjang kuning",
-    register: "netral", hookFamily: "H1", hookLevel: "normal", format: p.format ?? "talking_head",
+    register: "netral", hookFamily: "H1", hookLevel: "normal", format: p.format ?? "talking_head", templateId: p.templateId,
   } as PermintaanNaskah);
 }
 
@@ -380,6 +382,7 @@ function blokTugas(r: PermintaanNaskah): string {
   const jadwalAds = r.contentType === "ads"
     ? storyAdsTimeRanges(r.durationSec).map(({ start, end }) => `${start}-${end}`).join(", ")
     : "";
+  const priceLedStoryAds = r.templateId === "promo-terbatas" && r.priceIdr > 0;
   // TIGA genre, bukan dua.
   //
   // Sampai render nyata 18 Agu, TVC tidak punya cabang di sini — jadi penulis
@@ -419,7 +422,9 @@ function blokTugas(r: PermintaanNaskah): string {
           "   Enemies that work: your own reflex, time running out, a voice calling you.",
           "BRIDGING — use two evidence-backed spoken bridges, never blank-prop theatre:",
           `  One FRICTION says the exact product name "${r.productName}" and sets bridge_source="spoken_product_name".`,
-          '  Another says the approved PRODUCT price as words and sets bridge_source="spoken_approved_price".',
+          priceLedStoryAds
+            ? '  This authoritative promo-terbatas concept has a positive approved price: another FRICTION says that PRODUCT price as words and sets bridge_source="spoken_approved_price".'
+            : `  This concept is not price-led: another FRICTION says the exact product category "${r.productCategory}" and sets bridge_source="spoken_product_category". Do NOT mention a price or use spoken_approved_price.`,
           "  A blank prop/action/product_state is NEVER a product bridge. Keep product_state='hidden' on every Ads beat.",
           "BODY IS NOT EXPLANATION: no 'aslinya...', no describing the product, no benefit claims. The viewer concludes.",
         ].join("\n")
@@ -435,9 +440,12 @@ function blokTugas(r: PermintaanNaskah): string {
         "two most common ways this repair fails. Keep whatever was already working; do not rewrite the idea.",
       ].join("\n")
     : "";
+  const productBrief = r.contentType === "ads" && !priceLedStoryAds
+    ? `PRODUCT: ${r.productName} (${r.productCategory}).`
+    : `PRODUCT: ${r.productName} (${r.productCategory}), price ${r.priceIdr} rupiah — write it as words if spoken.`;
   return [
     r.ide ? `${r.ide}\n` : "",
-    `PRODUCT: ${r.productName} (${r.productCategory}), price ${r.priceIdr} rupiah — write it as words if spoken.`,
+    productBrief,
     `DURATION: ${r.durationSec} seconds, exactly ${jumlah} segments.`,
     `CONTENT TYPE: ${r.contentType}. ${cta}`,
     storyOs,

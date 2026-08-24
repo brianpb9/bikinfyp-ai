@@ -93,7 +93,8 @@ test("W1: dua talking_head Story Ads memakai narasi eksternal tertunda tanpa dup
 
     const spoken = script.segments.slice(1).map((segment) => segment.tts_text ?? segment.text).join(" ");
     assert.match(spoken, /Serum Uji/i, `${templateId}: bridge nama produk hilang dari TTS`);
-    assert.match(spoken, /189 ribu/i, `${templateId}: bridge harga hilang dari TTS`);
+    assert.match(spoken, /beauty/i, `${templateId}: bridge kategori produk hilang dari TTS`);
+    assert.doesNotMatch(spoken, /189 ribu|harga|banderol/i, `${templateId}: konsep non-price menyisipkan harga`);
     assert.match(spoken, /detailnya ada di bawah/i, `${templateId}: BUTTON hilang dari TTS`);
 
     const spec = planShots({

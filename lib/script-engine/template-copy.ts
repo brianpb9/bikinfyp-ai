@@ -298,6 +298,23 @@ const VARIASI_LAYANAN = [
 
 const JEDA_VARIAN = ["[short pause]", "[medium pause]", "[long pause]", "[slow]"] as const;
 
+/**
+ * Bridge kategori sengaja ditulis per konsep, bukan satu kerangka global yang
+ * cuma mengganti slot kategori. Dengan begitu SA6 tetap punya dua bukti saat
+ * harga nol tanpa meratakan delapan cerita menjadi body yang sama.
+ */
+const BRIDGE_KATEGORI_ADS: Record<string, readonly [string, string, string, string]> = {
+  "ads-unboxing-pov": ["Isi kardus mengarah ke {category}.", "Swatch ini menandai kategori {category}.", "Konteks bukanya tetap {category}.", "Dari dalam, arahnya kategori {category}."],
+  "ads-meja-kosong": ["Meja ini membahas kategori {category}.", "Tiga kartu mewakili konteks {category}.", "Susunannya masuk ranah {category}.", "Topiknya kategori {category}."],
+  "ads-panas-ekstrem": ["Panggung merah membingkai kategori {category}.", "Kipasnya mengantar konteks {category}.", "Suasana ini mengarah ke {category}.", "Di balik haze, topiknya {category}."],
+  "ads-tembus-dinding": ["Panel bergeser menuju kategori {category}.", "Celah karton membuka konteks {category}.", "Foam jatuh mengantar topik {category}.", "Lewat panel, arahnya tetap {category}."],
+  "ads-atap-jebol": ["Konfeti turun untuk kategori {category}.", "Panel atas membuka konteks {category}.", "Tali putih mengantar topik {category}.", "Dari atas, arahnya kategori {category}."],
+  "ads-dobrak-pintu": ["Pintu panggung membuka kategori {category}.", "Ketukan tadi mengantar konteks {category}.", "Swatch masuk membawa topik {category}.", "Di balik pintu, arahnya {category}."],
+  "ads-waktu-berhenti": ["Tableau ini membingkai kategori {category}.", "Jam diam menahan konteks {category}.", "Pose kasir mengantar topik {category}.", "Saat beku, arahnya tetap {category}."],
+  "kenalin-bisnis": ["Kartu lipat mengenalkan kategori {category}.", "Amplop ini membuka konteks {category}.", "Halaman kosong mengantar topik {category}.", "Dari meja, bidangnya kategori {category}."],
+  "promo-terbatas": ["Dua kartu membingkai kategori {category}.", "Warna kedua mengantar konteks {category}.", "Pilihan ini tetap ranah {category}.", "Di meja, topiknya kategori {category}."],
+};
+
 function storyAds(templateId: string, variantIndex: number, c: TemplateCtx, base: CopyTriple): CopyTriple {
   const adegan = ADEGAN_ADS[templateId];
   if (!adegan) return base;
@@ -312,19 +329,20 @@ function storyAds(templateId: string, variantIndex: number, c: TemplateCtx, base
   // Pertanyaan khas konsep menjaga baris lisan pertama tetap berbeda pada
   // sembilan Story Ads tanpa menjadikan prop blank sebagai bukti produk.
   const bridgeNama = `${adegan.questions[variantIndex]} Nah, ${c.produk}.`;
+  const bridgeKategori = BRIDGE_KATEGORI_ADS[templateId][variantIndex].replace("{category}", c.category ?? c.noun);
   const bridgeHarga = [
     `Harganya ${c.harga}, ya.`, `Angkanya ${c.harga}, sih.`,
     `Nah, tercantum ${c.harga}, loh.`, `Nilainya ${c.harga}, deh.`,
   ][variantIndex];
   // Price-led promo harus menyebut nominal di beat demo pertama (L-02),
   // sedangkan template Story Ads lain membuka bridge dengan nama produk.
-  const promoPriceLed = templateId === "promo-terbatas";
+  const promoPriceLed = templateId === "promo-terbatas" && (c.priceIdr ?? 0) > 0;
   const frictionPertama = withDelivery(promoPriceLed ? bridgeHarga : bridgeNama, pembukaLisan);
-  const frictionKedua = promoPriceLed ? bridgeNama : bridgeHarga;
+  const frictionKedua = promoPriceLed ? bridgeNama : bridgeKategori;
   const story: AdsStoryBeat[] = [
     { role: "hook", label: "HOOK", text: "", action: "kartu warna polos tanpa tulisan terlihat sejak frame pertama", product_state: "hidden" },
     { role: "demo", label: "FRICTION", text: `${frictionPertama} ${JEDA_VARIAN[variantIndex]}`, action: aksiSatu, product_state: "hidden", bridge_source: promoPriceLed ? "spoken_approved_price" : "spoken_product_name" },
-    { role: "story", label: "FRICTION", text: frictionKedua, action: aksiDua, product_state: "hidden", bridge_source: promoPriceLed ? "spoken_product_name" : "spoken_approved_price" },
+    { role: "story", label: "FRICTION", text: frictionKedua, action: aksiDua, product_state: "hidden", bridge_source: promoPriceLed ? "spoken_product_name" : "spoken_product_category" },
     { role: "story", label: "SPIKE", text: templateId === "ads-tembus-dinding"
       ? `${adegan.spikes[variantIndex]} Saksi tetap melihat.`
       : adegan.spikes[variantIndex], action: "kartu warna polos diletakkan di depan saksi", product_state: "hidden", saksi: adegan.saksi },
