@@ -947,3 +947,29 @@ TASK=`P0-T43-E1-REFERENCE-GATE-20260824`
   legacy treatment, payment/provider behavior, deployment, or production
   state. Aggregate matrix statuses remain bounded as listed above and
   canonical shipping readiness remains **58/100**.
+
+### E.30 C3 worker brand gate — 2026-08-24
+
+TASK=`P0-T43-C3-WORKER-BRAND-GATE-20260824`
+
+- W1 PostgreSQL and W2 SQLite now inspect every immutable job-owned approved
+  reference that is eligible to reach the selected provider tier. The trusted
+  comparison brand comes only from `job_product_snapshot.trustedBrand`; a
+  later mutation of `products.raw_meta.brand` cannot change the verdict.
+- Only an explicit `cocokMerek === false` rejects, using canonical
+  `BRAND_MISMATCH` (`retryable:false`) before person-safe processing, planning,
+  any video/image/audio provider, capture, deliverable, or success state.
+  OCR unreadable/runtime-failure (`cocokMerek:null`) and authoritative null
+  trusted brand retain the existing fail-open policy.
+- Direct W2 execution proves a mismatched second reference is rejected, both
+  references are checked against the admission brand after live-product
+  mutation, retry reaches the stable failure/refund contract, and provider,
+  capture, and deliverable counts stay zero. Matching, unreadable/null OCR,
+  and null-brand controls reach a provider double. Suite: 21/21 PASS.
+- The same counterexamples execute W1 against a disposable local PostgreSQL
+  database, including canonical error data, stable failure/refund, zero paid
+  effects, mutation protection, and positive controls. The full W1 contract
+  suite is 31/31 PASS; its database was dropped by the gate on exit.
+- This is direct C3 proof for W1/W2 only. It does not change C6 OCR policy,
+  C9/C12, deployment/payment/provider state, aggregate non-worker gaps, or
+  canonical shipping readiness **58/100**.

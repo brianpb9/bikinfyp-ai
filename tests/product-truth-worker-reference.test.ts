@@ -55,6 +55,7 @@ globalThis.fetch = (async (...args: unknown[]) => {
 const { getDb, now, uuid } = await import("../lib/db");
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+const { setPeriksaLabelFotoForTests } = await import("../lib/media/label-terbaca");
 const { processJob } = await import("../lib/worker");
 const { PATCH: patchRetailProduct } = await import("../app/api/products/[id]/route");
 const { createJobProductSnapshotRaw, parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
@@ -133,6 +134,35 @@ function storageSpy(isi: Map<string, Buffer>) {
     },
   };
   return { storage, materializeCalls, getCalls, putCalls };
+}
+
+/** Storage yang benar-benar mewujudkan snapshot privat agar brand gate dan
+ * provider boundary dapat ditempuh tanpa storage/jaringan eksternal. */
+function storageTerwujud(isi: Map<string, Buffer>) {
+  const putCalls: string[] = [];
+  const materializeCalls: string[] = [];
+  const dir = fs.mkdtempSync(path.join(process.env.STORAGE_DIR!, "c3-materialize-"));
+  const storage: MediaStorage = {
+    async put(key, body) { putCalls.push(key); isi.set(key, Buffer.from(body)); },
+    async delete(key) { isi.delete(key); },
+    async get(key) {
+      const body = isi.get(key);
+      return body ? { body: Buffer.from(body), size: body.length } : null;
+    },
+    async stat(key) {
+      const body = isi.get(key);
+      return body ? { size: body.length } : null;
+    },
+    async materialize(key) {
+      materializeCalls.push(key);
+      const body = isi.get(key);
+      if (!body) return null;
+      const target = path.join(dir, `${materializeCalls.length}-${path.basename(key)}`);
+      fs.writeFileSync(target, body);
+      return target;
+    },
+  };
+  return { storage, putCalls, materializeCalls };
 }
 
 /**
@@ -277,6 +307,102 @@ async function patchProdukRetail(productId: string, user: string, phone: string,
 
 const jumlah = (sql: string, ...args: unknown[]) =>
   (db.prepare(sql).get(...(args as [])) as { n: number }).n;
+
+// --------------------------------------------------------- P0-T43 C3 / W2
+
+test("W2 C3: mismatch eksplisit pada referensi kedua memakai brand admission dan gagal sebelum provider", async () => {
+  const rel1 = "uploads/w2-c3/0.webp";
+  const rel2 = "uploads/w2-c3/1.webp";
+  const cocok = Buffer.from("W2-C3-MEREK-COCOK");
+  const salah = Buffer.from("W2-C3-MEREK-SALAH");
+  const isi = new Map<string, Buffer>([
+    [rel1, cocok], [`${rel1}.meta.json`, sidecar(cocok, true)],
+    [rel2, salah], [`${rel2}.meta.json`, sidecar(salah, true)],
+  ]);
+  const storage = storageTerwujud(isi);
+  setMediaStorageForTests(storage.storage);
+  const { jobId, productId } = siapkanJob([rel1, rel2], "high_quality");
+  const snapshot = createJobProductSnapshotRaw({
+    name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
+    raw_meta: JSON.stringify({ brand: "Merek Admission" }),
+  });
+  db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?").run(snapshot, jobId);
+  db.prepare("UPDATE products SET raw_meta=? WHERE id=?")
+    .run(JSON.stringify({ brand: "Merek Mutasi" }), productId);
+
+  const brandDilihat: Array<string | null | undefined> = [];
+  setPeriksaLabelFotoForTests(async (foto, _nama, brand) => {
+    brandDilihat.push(brand);
+    const body = fs.readFileSync(foto);
+    return {
+      terbaca: true, kata: ["Merek", "Produk"], cocokNama: true,
+      cocokMerek: !body.equals(salah),
+      alasan: body.equals(salah) ? "merek referensi kedua tidak cocok" : undefined,
+    };
+  });
+  const provider = pasangObserverProviderC8();
+
+  try {
+    await assert.rejects(
+      processJob(jobId, { retryViaQueue: true }),
+      (error: unknown) => {
+        const actual = error as { body?: { code?: string; retryable?: boolean } };
+        assert.equal(actual.body?.code, "BRAND_MISMATCH");
+        assert.equal(actual.body?.retryable, false);
+        return true;
+      },
+    );
+    assert.equal(provider.jumlah(), 0, "mismatch referensi kedua mencapai provider");
+    assert.deepEqual(brandDilihat, ["Merek Admission", "Merek Admission"],
+      "worker membaca brand row produk mutable atau berhenti setelah referensi pertama");
+
+    brandDilihat.length = 0;
+    await processJob(jobId);
+    assert.equal(provider.jumlah(), 0, "retry mismatch mencapai provider");
+    assertNolEfekSamping(jobId, storage, "W2 C3 mismatch");
+    const row = db.prepare("SELECT state,job_product_snapshot FROM jobs WHERE id=?").get(jobId) as { state: string; job_product_snapshot: string };
+    assert.ok(["FAILED", "REFUNDED"].includes(row.state));
+    assert.equal(row.job_product_snapshot, snapshot, "snapshot brand admission ditimpa saat retry");
+  } finally {
+    provider.reset();
+    setPeriksaLabelFotoForTests(undefined);
+  }
+});
+
+test("W2 C3: brand cocok dan brand null tetap dapat mencapai provider", async () => {
+  for (const kontrol of [
+    { trustedBrand: "Merek Cocok", cocokMerek: true as const },
+    { trustedBrand: "Merek OCR", cocokMerek: null },
+    { trustedBrand: null, cocokMerek: null },
+  ]) {
+    const { trustedBrand, cocokMerek } = kontrol;
+    const rel = `uploads/w2-c3-positive/${trustedBrand ?? "null"}.webp`;
+    const bytes = Buffer.from(`W2-C3-${trustedBrand ?? "NULL"}`);
+    const storage = storageTerwujud(new Map([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
+    setMediaStorageForTests(storage.storage);
+    const { jobId } = siapkanJob([rel], "silent_caption");
+    db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?").run(createJobProductSnapshotRaw({
+      name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
+      raw_meta: trustedBrand ? JSON.stringify({ brand: trustedBrand }) : "{}",
+    }), jobId);
+    let ocr = 0;
+    let providerCalls = 0;
+    setPeriksaLabelFotoForTests(async () => {
+      ocr++;
+      return { terbaca: cocokMerek !== null, kata: [], cocokNama: true, cocokMerek };
+    });
+    setVideoProvidersForTests([{
+      name: "w2-c3-positive", async healthCheck() { return true; }, estimateCost() { return 0; },
+      async generate() { providerCalls++; throw new Error("stop di provider positif W2 C3"); },
+    } as never]);
+    await processJob(jobId);
+    assert.equal(providerCalls, 1, `${trustedBrand}: provider tidak tercapai`);
+    assert.equal(ocr, trustedBrand ? 1 : 0, `${trustedBrand}: kebijakan unreadable/null/matching berubah`);
+    assertNolEfekSamping(jobId, storage, `W2 C3 positif ${trustedBrand}`);
+  }
+  setVideoProvidersForTests(undefined);
+  setPeriksaLabelFotoForTests(undefined);
+});
 
 /**
  * NOL EFEK SAMPING PADA JOB YANG SAMA.

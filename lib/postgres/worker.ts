@@ -27,6 +27,7 @@ import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
 import { shotUntukDetik } from "../media/qc-vision";
 import { appendPackshotUntukQc, buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../media/packshot-asli";
+import { assertApprovedReferenceBrands } from "../worker-reference-brand-gate";
 import { buildCaptionCards } from "../media/captions";
 import { resolvePromo, formatPromoOverlayText } from "../promo";
 import { renderCaptionPngs } from "../media/render-captions";
@@ -431,9 +432,19 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
   };
   const refUtama = snapshots[0];
+  const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
+  const withAudio = tier !== "silent_caption";
+  const providerEligibleSnapshots = withAudio
+    ? snapshots.slice(0, MAKS_REFERENSI_PER_GENERASI)
+    : [refUtama];
+  await assertApprovedReferenceBrands(
+    providerEligibleSnapshots,
+    productSnapshot.productName,
+    productSnapshot.trustedBrand.value,
+  );
   let primaryRef = refUtama;
   const extraRefs: string[] = [];
-  if ((row.quality_tier ?? "silent_caption") !== "silent_caption") {
+  if (withAudio) {
     // Referensi tambahan juga HANYA dari daftar tersetujui. Foto ke-2 dst
     // dikirim ke model sebagai referensi identitas — sama berbahayanya kalau
     // salah. Batasnya dipertahankan sama persis dengan sebelumnya
@@ -443,7 +454,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // menghitung primary + tambahan; slice(1, MAX_IMAGES=8) sebelumnya
     // menghasilkan primary + tujuh = DELAPAN referensi, melewati kontraknya
     // sendiri.
-    extraRefs.push(...snapshots.slice(1, MAKS_REFERENSI_PER_GENERASI));
+    extraRefs.push(...providerEligibleSnapshots.slice(1));
     // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
     // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
     // model; terbukti lolos moderasi, lab fashion-r2b 2026-08-07). Bila tidak
@@ -466,8 +477,6 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const category = customDesc && !isNeutralStoryAdsTemplate(storyIdentity.templateId)
     ? { ...presetCategory, promptSeed: customDesc, handsPrompt: customDesc }
     : presetCategory;
-  const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
-  const withAudio = tier !== "silent_caption";
   const format = normalisasiFormatWorker(row.format);
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,

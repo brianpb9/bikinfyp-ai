@@ -62,6 +62,7 @@ delete process.env.RACUN_WORKER_DETERMINISTIC;
 
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { setCompositeObserverForTests } = await import("../lib/media/compositor");
+const { setPeriksaLabelFotoForTests } = await import("../lib/media/label-terbaca");
 
 // Nol jaringan: setiap fetch dihitung DAN dilempar.
 let panggilanJaringan = 0;
@@ -269,6 +270,7 @@ after(async () => {
   setCompositeObserverForTests(undefined);
   const { setPostgresQcRunnerForTests } = await import("../lib/postgres/worker");
   setPostgresQcRunnerForTests(undefined);
+  setPeriksaLabelFotoForTests(undefined);
   if (tmpMaterialize) fs.rmSync(tmpMaterialize, { recursive: true, force: true });
   if (pool) await pool.end();
   const { closePool } = await import("../lib/postgres/pool");
@@ -1799,6 +1801,100 @@ test("W1 TOCTOU: path bersama ditimpa sesudah diperiksa — provider tetap mener
     "provider menerima bytes referensi TAMBAHAN sebagai referensi UTAMA. Path dari materialize() " +
       "ditimpa sesudah diperiksa; yang dikirim wajib salinan privat job ini, bukan path bersama."
   );
+});
+
+// --------------------------------------------------------- P0-T43 C3 / W1
+
+test("W1 C3: mismatch eksplisit pada referensi kedua memakai brand admission dan gagal sebelum provider", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const rel1 = `uploads/w1-c3-${process.pid}/0.webp`;
+  const rel2 = `uploads/w1-c3-${process.pid}/1.webp`;
+  const cocok = Buffer.from("W1-C3-MEREK-COCOK");
+  const salah = Buffer.from("W1-C3-MEREK-SALAH");
+  const isi = new Map<string, Buffer>([
+    [rel1, cocok], [`${rel1}.meta.json`, sidecar(cocok, true)],
+    [rel2, salah], [`${rel2}.meta.json`, sidecar(salah, true)],
+  ]);
+  const jobId = await siapkanJob([rel1, rel2], "high_quality");
+  const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
+  const snapshot = createJobProductSnapshotRaw({
+    name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
+    raw_meta: JSON.stringify({ brand: "Merek Admission" }),
+  });
+  const productId = (await pool.query("SELECT product_id FROM jobs WHERE id=$1", [jobId])).rows[0].product_id;
+  await pool.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [snapshot, jobId]);
+  await pool.query("UPDATE products SET raw_meta=$1 WHERE id=$2", [JSON.stringify({ brand: "Merek Mutasi" }), productId]);
+
+  const brandDilihat: Array<string | null | undefined> = [];
+  setPeriksaLabelFotoForTests(async (foto, _nama, brand) => {
+    brandDilihat.push(brand);
+    const body = fs.readFileSync(foto);
+    return {
+      terbaca: true, kata: ["Merek", "Produk"], cocokNama: true,
+      cocokMerek: !body.equals(salah),
+      alasan: body.equals(salah) ? "merek referensi kedua tidak cocok" : undefined,
+    };
+  });
+  await pasangProviderPengamat();
+  const spy = storageSpy(isi, true);
+  setMediaStorageForTests(spy.storage as never);
+  const { processPostgresJob } = await import("../lib/postgres/worker");
+
+  try {
+    await assert.rejects(
+      processPostgresJob(jobId, { retryViaQueue: true }),
+      (error: unknown) => {
+        const actual = error as { body?: { code?: string; retryable?: boolean } };
+        assert.equal(actual.body?.code, "BRAND_MISMATCH");
+        assert.equal(actual.body?.retryable, false);
+        return true;
+      },
+    );
+    assert.equal(amatan.dipanggil, false, "mismatch referensi kedua mencapai provider W1");
+    assert.deepEqual(brandDilihat, ["Merek Admission", "Merek Admission"],
+      "W1 membaca brand row mutable atau berhenti setelah referensi pertama");
+
+    brandDilihat.length = 0;
+    await processPostgresJob(jobId);
+    assert.equal(amatan.dipanggil, false, "retry mismatch mencapai provider W1");
+    await assertNolEfekSamping(jobId, spy.putCalls, "W1 C3 mismatch");
+    const row = (await pool.query("SELECT state,job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0];
+    assert.ok(["FAILED", "REFUNDED"].includes(row.state));
+    assert.equal(row.job_product_snapshot, snapshot, "snapshot brand admission ditimpa saat retry W1");
+  } finally {
+    setPeriksaLabelFotoForTests(undefined);
+  }
+});
+
+test("W1 C3: brand cocok dan brand null tetap dapat mencapai provider", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
+  for (const kontrol of [
+    { trustedBrand: "Merek Cocok", cocokMerek: true as const },
+    { trustedBrand: "Merek OCR", cocokMerek: null },
+    { trustedBrand: null, cocokMerek: null },
+  ]) {
+    const { trustedBrand, cocokMerek } = kontrol;
+    const rel = `uploads/w1-c3-positive-${process.pid}/${trustedBrand ?? "null"}.webp`;
+    const bytes = Buffer.from(`W1-C3-${trustedBrand ?? "NULL"}`);
+    const isi = new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]);
+    const jobId = await siapkanJob([rel], "silent_caption");
+    await pool.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [createJobProductSnapshotRaw({
+      name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
+      raw_meta: trustedBrand ? JSON.stringify({ brand: trustedBrand }) : "{}",
+    }), jobId]);
+    let ocr = 0;
+    setPeriksaLabelFotoForTests(async () => {
+      ocr++;
+      return { terbaca: cocokMerek !== null, kata: [], cocokNama: true, cocokMerek };
+    });
+    await pasangProviderPengamat();
+    const spy = await jalankan(jobId, isi, true);
+    assert.equal(amatan.dipanggil, true, `${trustedBrand}: provider W1 tidak tercapai`);
+    assert.equal(ocr, trustedBrand ? 1 : 0, `${trustedBrand}: kebijakan unreadable/null/matching W1 berubah`);
+    await assertNolEfekSamping(jobId, spy.putCalls, `W1 C3 positif ${trustedBrand}`);
+  }
+  setPeriksaLabelFotoForTests(undefined);
 });
 
 // -------------------------------------------------------- kontrol positif

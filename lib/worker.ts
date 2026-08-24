@@ -40,6 +40,7 @@ import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } fro
 import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot } from "./job-product-snapshot";
 import { normalisasiFormatWorker } from "./media/worker-format";
 import { appendPackshotUntukQc } from "./media/packshot-asli";
+import { assertApprovedReferenceBrands } from "./worker-reference-brand-gate";
 
 const CONCURRENCY = 1;
 
@@ -232,6 +233,14 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
 
     const tier = (job.quality_tier ?? "silent_caption") as QualityTier;
     const withAudio = tier !== "silent_caption";
+    const providerEligibleSnapshots = withAudio
+      ? snapshots.slice(0, MAKS_REFERENSI_PER_GENERASI)
+      : [refUtama];
+    await assertApprovedReferenceBrands(
+      providerEligibleSnapshots,
+      productSnapshot.productName,
+      productSnapshot.trustedBrand.value,
+    );
     // Foto tambahan = referensi identitas (hanya berlaku di model r2v/tier
     // bersuara). Sesudah masuk manifest, satu pun tidak boleh hilang diam-diam:
     // missing/hash-changed menggagalkan attempt sebelum provider.
@@ -247,7 +256,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       // menghitung primary + tambahan; slice(1, MAX_IMAGES=8) sebelumnya
       // menghasilkan primary + tujuh = DELAPAN referensi, melewati kontraknya
       // sendiri.
-      extraRefs.push(...snapshots.slice(1, MAKS_REFERENSI_PER_GENERASI));
+      extraRefs.push(...providerEligibleSnapshots.slice(1));
       // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
       // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
       // model; terbukti crop lolos moderasi, lab fashion-r2b 2026-08-07).
