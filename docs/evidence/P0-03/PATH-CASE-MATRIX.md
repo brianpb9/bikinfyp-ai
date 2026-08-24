@@ -121,7 +121,10 @@ Stabilitas suite: dijalankan DUA kali berturut-turut pada SHA ini, keduanya
 
 - Belum ada red-before test boundary C1/C8. (Test kontrak hash sidecar SUDAH
   ada dan hijau, tapi ia bukan boundary test C1/C8.)
-- Reason code di atas adalah USULAN, belum ada di kode.
+- **CATATAN HISTORIS 20 Agu (sudah disupersede E.3/E.16):** reason code di
+  atas saat itu masih usulan. Pada tree kini `BRAND_MISMATCH` dan
+  `LABEL_UNREADABLE` sudah canonical di gate E4/E8; cakupan agregatnya tetap
+  parsial seperti dirinci E.16.
 - Jalur promo (`lib/promo/worker.ts`, `app/api/promo/jobs/route.ts`) sengaja
   di luar cakupan: pipeline terpisah tanpa tabel produk. Perlu keputusan apakah
   ikut Product Truth — belum diputuskan siapa pun.
@@ -207,6 +210,9 @@ boundary test C1/C8 dan reason code masih usulan. Per e8a00a5:
   `EVIDENCE_INVALID`, `REF_MISSING`, `REF_HASH_MISMATCH`). Dengan usulan baru
   `REFERENCE_IDENTITY_CHANGED`, delapan reason code masih usulan; status
   kasusnya tetap PARTIAL atau BLOCKED sesuai cakupan nyata;
+- **Pembaruan current tree (E.16):** `BRAND_MISMATCH` dan `LABEL_UNREADABLE`
+  juga sudah nyata pada E4/E8. Pernyataan hitungan di butir sebelumnya adalah
+  rekonsiliasi historis exact tree `e8a00a5`, bukan status current tree;
 - jalur promo tetap di luar cakupan dan tetap belum diputuskan siapa pun.
 
 ### E.4 Sisa P0/P1, dipisah menurut APA yang menahannya
@@ -224,8 +230,11 @@ dikerjakan di slice ini:**
    baris C6 mengharapkan fail-closed. **Salah satu dari keduanya harus
    dikoreksi** — matriks atau kodenya; itu keputusan produk, bukan pembersihan
    dokumen.
-4. C2/C5 belum punya reason code maupun jalur penegakan; C3/C4 belum punya
-   reason code khusus dan jalur penegakannya baru parsial seperti dirinci E.2.
+4. C2/C5 belum punya reason code maupun jalur penegakan. **Sub-gap reason code
+   C3/C4 sudah DITUTUP di gate E4/E8:** keduanya memakai canonical
+   `BRAND_MISMATCH`/`LABEL_UNREADABLE`. Agregat C3/C4 tetap PARTIAL karena E1
+   belum menjalankan gate, W1/W2 belum menegakkan brand mismatch, dan OCR error
+   tetap fail-open, seperti dirinci E.16.
 5. Snapshot metadata job kini menutup pembacaan ulang nama/brand/kategori dan
    field prompt W1/W2. HTTP E3/E7→resume dibuktikan di E.12; C9 tetap PARTIAL
    sampai regenerate/entry lain dan reason code kontraknya ditutup.
@@ -513,8 +522,9 @@ TASK=P0-E8-ALL-UPLOADS-LABEL-BRAND-GATE-20260824
   `1118 total / 1078 pass / 40 skip / 0 fail`; `npx tsc --noEmit` PASS;
   `git diff --check` PASS. Skip PostgreSQL tetap eksplisit karena
   `UJI_PG_URL` kosong; katalog tidak dijalankan karena tidak terdampak.
-- E8/C3/C4 tetap **PARTIAL**: E1, worker brand enforcement, reason code khusus,
-  dan OCR fail-open berada di luar slice ini.
+- Pada SHA slice E.15, E8/C3/C4 tetap **PARTIAL** karena E1, worker brand
+  enforcement, reason code khusus, dan OCR fail-open berada di luar slice itu.
+  Status current tree setelah reason-code follow-up dicatat di E.16.
 
 ### E.16 Follow-up C3/C4 canonical API reason codes — 2026-08-24
 
