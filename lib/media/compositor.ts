@@ -57,6 +57,15 @@ export interface CompositeResult {
   renderParams: { watermark: true; watermarkText: string };
 }
 
+type CompositeObserver = (input: Readonly<CompositeInput>) => void | Promise<void>;
+let compositeObserverForTests: CompositeObserver | undefined;
+
+/** Test-only observation point at the production compositor boundary.
+ * Unset in production; observers may throw to stop before FFmpeg encoding. */
+export function setCompositeObserverForTests(observer?: CompositeObserver): void {
+  compositeObserverForTests = observer;
+}
+
 /** Filter sumber VO embedded, diekspor agar offset hook-senyap dapat diuji
  * tanpa menjalankan encode FFmpeg penuh. */
 export function embeddedVoiceoverInputFilter(voIdx: number, startSec = 0, output = "vopre"): string {
@@ -143,6 +152,7 @@ const MUSIK_GAIN = Number(process.env.MUSIK_GAIN ?? 1);
 const DUCK = { threshold: 0.03, ratio: 6, attack: 15, release: 350 } as const;
 
 export async function compositeVideo(input: CompositeInput): Promise<CompositeResult> {
+  await compositeObserverForTests?.(input);
   const font = detectFont();
   const outPath = path.join(input.workDir, "output.mp4");
   const useDrawtext = await hasDrawtext();

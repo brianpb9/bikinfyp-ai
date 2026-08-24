@@ -17,6 +17,7 @@ const { issueToken, cookieName } = await import("../lib/auth");
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { setVideoProvidersForTests } = await import("../lib/providers/registry");
 const { setPersonSafeReferencePhotosForTests } = await import("../lib/media/person-safe-refs");
+const { setCompositeObserverForTests } = await import("../lib/media/compositor");
 const { resolveApprovedReference } = await import("../lib/product-truth");
 const { createJobProductSnapshotRaw, parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
 const { DELETE: deleteRetailPhoto } = await import("../app/api/products/[id]/photos/route");
@@ -43,6 +44,7 @@ function approvedSidecar(bytes: Buffer): Buffer {
 after(() => {
   setMediaStorageForTests(undefined);
   setVideoProvidersForTests(undefined);
+  setCompositeObserverForTests(undefined);
   fs.rmSync(tempMaterialize, { recursive: true, force: true });
   fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });
 });
@@ -311,6 +313,106 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
   assert.equal((db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(s.jobId) as { job_product_snapshot: string }).job_product_snapshot, snapshotRaw);
   assert.equal(networkCalls, 0, "E3 C9 menyentuh jaringan");
   noPaidSideEffects(s.jobId, storage);
+});
+
+test("C9 counterexample E3→W2: promo live dapat muncul dan hilang di input compositor sementara prompt tetap snapshot admission", async (t) => {
+  const originalFetch = globalThis.fetch;
+  let networkCalls = 0;
+  globalThis.fetch = (async () => { networkCalls++; throw new Error("C9 compositor W2 tidak boleh jaringan"); }) as typeof fetch;
+  setPersonSafeReferencePhotosForTests(async (photoPaths) => ({ safe: [...photoPaths], cropped: 0, dropped: 0, resized: 0 }));
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    setMediaStorageForTests(undefined);
+    setVideoProvidersForTests(undefined);
+    setPersonSafeReferencePhotosForTests(undefined);
+    setCompositeObserverForTests(undefined);
+  });
+
+  for (const variant of ["gain", "remove"] as const) {
+    const storage = new MemoryStorage();
+    const s = await admittedProductMutationScenario(
+      storage,
+      variant === "remove"
+        ? ({ productId }) => db.prepare(
+            "UPDATE products SET promo_price_before_idr=110000,promo_ends_at='2031-01-02T03:04:05.000Z',promo_stock_left=11 WHERE id=?"
+          ).run(productId)
+        : undefined
+    );
+    const snapshotRaw = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(s.jobId) as { job_product_snapshot: string }).job_product_snapshot;
+    const admissionSnapshot = parseJobProductSnapshot(snapshotRaw);
+    assert.equal(admissionSnapshot.productName, "Serum Admission E3");
+    assert.equal(admissionSnapshot.priceIdr, 85_000);
+
+    const mutation = variant === "gain"
+      ? {
+          name: "Nama Mutasi Promo Gain E3", price_idr: 72_000, category: "food",
+          product_visual_desc: "DESC-MUTASI-PROMO-GAIN-E3", brand: "Merek Mutasi Promo Gain E3",
+          promo_price_before_idr: 99_000, promo_ends_at: "2031-02-03T04:05:06.000Z", promo_stock_left: 7,
+        }
+      : {
+          name: "Nama Mutasi Promo Remove E3", price_idr: 72_000, category: "food",
+          product_visual_desc: "DESC-MUTASI-PROMO-REMOVE-E3", brand: "Merek Mutasi Promo Remove E3",
+          promo_price_before_idr: null, promo_ends_at: null, promo_stock_left: null,
+        };
+    const response = await patchRetailRequest(s.productId, s.ownerToken, mutation);
+    if (response.status !== 200) assert.fail(`PATCH promo E3 ${variant} gagal (${response.status}): ${await response.text()}`);
+    const live = db.prepare(
+      "SELECT promo_price_before_idr,promo_ends_at,promo_stock_left FROM products WHERE id=?"
+    ).get(s.productId) as { promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null };
+    assert.deepEqual(live, variant === "gain"
+      ? { promo_price_before_idr: 99_000, promo_ends_at: "2031-02-03T04:05:06.000Z", promo_stock_left: 7 }
+      : { promo_price_before_idr: null, promo_ends_at: null, promo_stock_left: null });
+
+    let providerPrompt = "";
+    setVideoProvidersForTests([{ name: `mock-c9-w2-${variant}`, async healthCheck() { return true; }, estimateCost() { return 0; },
+      async generate(spec: { shots: { prompt: string; durationSec: number }[] }, outDir: string) {
+        providerPrompt = spec.shots.map((shot) => shot.prompt).join("\n");
+        return spec.shots.map((shot, index) => {
+          const filePath = path.join(outDir, `c9-${variant}-${index}.mp4`);
+          fs.copyFileSync(path.join(process.cwd(), "public/previews/ads-unboxing-pov.mp4"), filePath);
+          return { filePath, durationSec: shot.durationSec, costIdr: 0 };
+        });
+      } } as never]);
+    let compositorInput: import("../lib/media/compositor").CompositeInput | null = null;
+    setCompositeObserverForTests((input) => {
+      compositorInput = { ...input };
+      throw new Error(`C9_COMPOSITOR_OBSERVED_${variant.toUpperCase()}`);
+    });
+    storage.putCalls.length = 0;
+    await processJob(s.jobId);
+
+    assert.match(providerPrompt, /Serum Admission E3/);
+    assert.match(providerPrompt, /BOTOL-ADMISSION-E3/);
+    assert.doesNotMatch(providerPrompt, /Nama Mutasi Promo|DESC-MUTASI-PROMO/);
+    const observed = compositorInput as unknown as import("../lib/media/compositor").CompositeInput;
+    assert.ok(observed, `W2 ${variant} tidak mencapai compositeVideo`);
+    assert.equal(observed.mode, "vo");
+    if (variant === "gain") {
+      assert.equal(observed.priceInCaptionMode, false);
+      assert.equal(observed.priceText, "Rp99.000 > Rp85.000\n-14% · s.d. 3 Feb");
+      assert.doesNotMatch(observed.priceText, /stok|\b7\b/i,
+        "promo_stock_left saat ini inert di formatter compositor; jangan klaim scarcity dirender");
+    } else {
+      assert.equal(observed.priceInCaptionMode, false);
+      assert.equal(observed.priceText, "Cuma Rp85.000");
+    }
+    assert.equal((db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(s.jobId) as { job_product_snapshot: string }).job_product_snapshot, snapshotRaw);
+    const count = (sql: string) => (db.prepare(sql).get(s.jobId) as { n: number }).n;
+    assert.equal(count("SELECT COUNT(*) n FROM outputs WHERE job_id=?"), 0);
+    assert.equal(count("SELECT COUNT(*) n FROM credit_ledger WHERE job_id=? AND type IN ('capture','regen')"), 0);
+    const job = db.prepare("SELECT state,provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=?").get(s.jobId) as {
+      state: string; provider_video: string | null; provider_voice: string | null; output_url: string | null; cost_actual_idr: number;
+    };
+    assert.ok(["FAILED", "REFUNDED"].includes(job.state), `W2 ${variant} berhenti di ${job.state}`);
+    assert.equal(job.output_url, null);
+    assert.equal(job.provider_video, `mock-c9-w2-${variant}`);
+    assert.match(job.provider_voice ?? "", /^mock-voice-/);
+    assert.equal(job.cost_actual_idr, 300, "biaya fixture voice lokal berubah; ini bukan provider berbayar/network");
+    assert.deepEqual(storage.putCalls.filter((key) => !key.includes("/approved-references/")), [],
+      `W2 ${variant} menulis output storage sebelum sentinel compositor`);
+    setCompositeObserverForTests(undefined);
+  }
+  assert.equal(networkCalls, 0, "counterexample C9 W2 menyentuh jaringan");
 });
 
 test("admission W2 -> queue delay -> E5 hapus source tetap memakai bytes admission tanpa install worker", async (t) => {

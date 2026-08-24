@@ -61,6 +61,7 @@ delete process.env.RACUN_WORKER_DETERMINISTIC;
 }
 
 const { setMediaStorageForTests } = await import("../lib/storage");
+const { setCompositeObserverForTests } = await import("../lib/media/compositor");
 
 // Nol jaringan: setiap fetch dihitung DAN dilempar.
 let panggilanJaringan = 0;
@@ -248,6 +249,7 @@ after(async () => {
   setMediaStorageForTests(undefined);
   const { setVideoProvidersForTests } = await import("../lib/providers/registry");
   setVideoProvidersForTests(undefined);
+  setCompositeObserverForTests(undefined);
   if (tmpMaterialize) fs.rmSync(tmpMaterialize, { recursive: true, force: true });
   if (pool) await pool.end();
   const { closePool } = await import("../lib/postgres/pool");
@@ -985,6 +987,94 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
   assert.doesNotMatch(amatan.promptText, /NAMA MUTASI E7|DESC-MUTASI-E7|BRIEF-MUTASI-E7/);
   const durableProduct = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
   assert.equal(durableProduct, productSnapshot, "snapshot metadata W1 ditimpa dari produk mutasi");
+});
+
+test("C9 counterexample E7→W1: promo live berubah di input compositor sementara prompt tetap snapshot admission", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  await pasangProviderVideoSuksesSampaiTts();
+  t.after(() => setCompositeObserverForTests(undefined));
+  const rel = `uploads/w1-c9-promo-${process.pid}/${uid()}.webp`;
+  const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
+  const { jobId, productId, ownerToken } = await siapkanJobOrgLewatAdmisi([rel], isi);
+  const admissionRow = (await pool.query(
+    "SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId]
+  )).rows[0];
+  const productSnapshot = admissionRow.job_product_snapshot as string;
+  const { parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
+  assert.deepEqual(parseJobProductSnapshot(productSnapshot), {
+    version: 2, productName: "Serum Glow Bright", category: "beauty", priceIdr: 85_000,
+    trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
+    productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
+  });
+
+  const mutation = {
+    product_id: productId,
+    name: "NAMA MUTASI PROMO E7",
+    price_idr: 73_000,
+    category: "food",
+    product_visual_desc: "DESC-MUTASI-PROMO-E7",
+    brand_brief: "BRIEF-MUTASI-PROMO-E7",
+    claims: ["klaim mutasi promo E7"],
+    promo_price_before_idr: 98_000,
+    promo_ends_at: "2031-02-03T04:05:06.000Z",
+    promo_stock_left: 9,
+  };
+  const patched = await patchProdukOrg(ownerToken, mutation);
+  if (patched.status !== 200) assert.fail(`PATCH promo E7 gagal (${patched.status}): ${await patched.text()}`);
+  const live = (await pool.query(
+    "SELECT promo_price_before_idr,promo_ends_at,promo_stock_left FROM products WHERE id=$1", [productId]
+  )).rows[0];
+  assert.deepEqual(live, {
+    promo_price_before_idr: 98_000,
+    promo_ends_at: "2031-02-03T04:05:06.000Z",
+    promo_stock_left: 9,
+  });
+
+  // First W1 attempt executes the real provider boundary, then stops at the
+  // normal organization scene-review gate. The next resume reaches the real
+  // compositor call after the production approval handler releases it.
+  const first = await jalankan(jobId, isi, true);
+  assert.equal((await pool.query("SELECT state FROM jobs WHERE id=$1", [jobId])).rows[0].state, "AWAITING_APPROVAL");
+  assert.equal(amatan.dipanggil, true, "E7 counterexample tidak mencapai provider boundary");
+  assert.match(amatan.promptText, /Serum Glow Bright/);
+  assert.match(amatan.promptText, /BOTOL-AMBER-AWAL/);
+  assert.match(amatan.promptText, /ARAH-BRAND-AWAL/);
+  assert.doesNotMatch(amatan.promptText, /NAMA MUTASI PROMO E7|DESC-MUTASI-PROMO-E7|BRIEF-MUTASI-PROMO-E7/);
+
+  const { cookieName } = await import("../lib/auth");
+  const { POST: reviewJob } = await import("../app/api/dashboard/campaign/job/[jobId]/route");
+  const approval = await reviewJob(new Request(`http://localhost/api/dashboard/campaign/job/${jobId}`, {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(ownerToken)}` },
+    body: JSON.stringify({ action: "approve" }),
+  }), { params: Promise.resolve({ jobId }) });
+  if (approval.status !== 200) assert.fail(`approval scene E7 gagal (${approval.status}): ${await approval.text()}`);
+
+  let compositorInput: import("../lib/media/compositor").CompositeInput | null = null;
+  setCompositeObserverForTests((input) => {
+    compositorInput = { ...input };
+    throw new Error("C9_COMPOSITOR_OBSERVED_E7_CHANGE");
+  });
+  const resumed = await jalankan(jobId, isi, true);
+  const observed = compositorInput as unknown as import("../lib/media/compositor").CompositeInput;
+  assert.ok(observed, "resume W1 E7 tidak mencapai compositeVideo");
+  assert.equal(observed.mode, "caption");
+  assert.equal(observed.priceInCaptionMode, true);
+  // Harga jual tetap 85k dari snapshot admission; harga-sebelum dan deadline
+  // datang dari row live yang diubah E7 setelah admission. Stock juga live,
+  // tetapi formatter compositor saat ini tidak merender scarcity.
+  assert.equal(observed.priceText, "Rp98.000 > Rp85.000\n-13% · s.d. 3 Feb");
+  assert.doesNotMatch(observed.priceText, /stok|\b9\b/i,
+    "promo_stock_left saat ini inert di formatter compositor; jangan klaim scarcity dirender");
+  assert.equal((await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot, productSnapshot);
+  assert.equal(panggilanJaringan, 0, "counterexample C9 W1 menyentuh jaringan");
+  assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM outputs WHERE job_id=$1", [jobId]), 0);
+  assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM credit_ledger WHERE job_id=$1 AND type='regen'", [jobId]), 0);
+  assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM credit_ledger WHERE job_id=$1 AND type='capture'", [jobId]), 1,
+    "handler approval A6 nyata harus memfinalkan hold sekali sebelum resume compositor");
+  assert.equal(Number((await pool.query("SELECT cost_actual_idr FROM jobs WHERE id=$1", [jobId])).rows[0].cost_actual_idr), 0);
+  assert.ok(first.putCalls.some((key) => /\/shot\d+\.mp4$/.test(key)), "first W1 tidak mempersist scene sebelum review gate");
+  assert.deepEqual(resumed.putCalls, [], "resume compositor observer menulis output baru ke storage");
 });
 
 test("retail PostgreSQL admission -> E3 -> first W1 memakai reference admission tanpa install worker", async (t) => {
