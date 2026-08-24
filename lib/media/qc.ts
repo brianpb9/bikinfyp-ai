@@ -10,7 +10,7 @@ import { probeDurationSec, probeHasVideoStream, probeFormatTags, volumeDetect, r
 import { periksaKataTerlarang, validateScript } from "../script-engine/validator";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { isServiceLike } from "../config/hooks";
-import { neutralStoryAdsViolations, qcVision, POSISI_SAMPEL, type TemuanFrame } from "./qc-vision";
+import { neutralStoryAdsCoverageViolations, neutralStoryAdsViolations, qcVision, POSISI_SAMPEL, type TemuanFrame } from "./qc-vision";
 import { qcSuara } from "./qc-suara";
 import { merekCocok } from "./qc-frame";
 import { GENERIC_PRODUCT_WORDS, KATA_DEPAN_MEREK } from "../merek";
@@ -217,12 +217,19 @@ export interface QcInput {
  * QC-03/QC-10 lama menuntut produk berada di pixel generated, tepat kebalikan
  * dari kontrak neutral. Keduanya N/A untuk bagian generated, tetapi provenance
  * packshot foto asli tetap hard gate bila packshot memang ditambahkan. */
-export function neutralStoryAdsIdentityChecks(input: Pick<QcInput, "packshotSidik" | "refImagePath">): QcCheck[] {
+export function neutralStoryAdsIdentityChecks(
+  input: Pick<QcInput, "packshotSidik" | "refImagePath" | "productCategory">,
+): QcCheck[] {
   let provenance: QcCheck;
-  if (!input.packshotSidik) {
+  if (!input.packshotSidik && isServiceLike(input.productCategory)) {
     provenance = {
       code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip",
-      detail: "N/A: neutral Story Ads melarang produk/label di pixel generated; tidak ada packshot penutup untuk diverifikasi.",
+      detail: "N/A: kategori jasa/app/toko secara eksplisit tidak punya produk fisik atau packshot untuk diverifikasi.",
+    };
+  } else if (!input.packshotSidik) {
+    provenance = {
+      code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
+      detail: "Produk fisik neutral wajib punya packshot foto asli; append/provenance packshot tidak tersedia.",
     };
   } else if (!input.refImagePath || !fs.existsSync(input.refImagePath)) {
     provenance = {
@@ -1003,7 +1010,7 @@ export function periksaQc07(
 export interface RunQcOverrides {
   /** Test-only seam for the paid vision boundary. All local ffmpeg/OCR/policy
    * checks still execute; production callers never pass this argument. */
-  neutralVisionFindings?: TemuanFrame[];
+  neutralVisionResults?: Array<TemuanFrame | null>;
 }
 
 export async function runQc(input: QcInput, overrides: RunQcOverrides = {}): Promise<QcResult> {
@@ -1228,16 +1235,20 @@ export async function runQc(input: QcInput, overrides: RunQcOverrides = {}): Pro
   // ada manusia hasil generate untuk dihitung.
   if (qcFormat === "vo_broll") {
     checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "N/A: visual dari foto produk asli, bukan orang hasil AI." });
-  } else if (input.visualSubjectPolicy === "neutral_story_ads" && overrides.neutralVisionFindings) {
-    const violations = overrides.neutralVisionFindings.length
-      ? overrides.neutralVisionFindings.flatMap(neutralStoryAdsViolations)
+  } else if (input.visualSubjectPolicy === "neutral_story_ads" && overrides.neutralVisionResults) {
+    const findings = overrides.neutralVisionResults.filter((item): item is TemuanFrame => item !== null);
+    const violations = overrides.neutralVisionResults.length
+      ? [
+          ...neutralStoryAdsCoverageViolations(overrides.neutralVisionResults),
+          ...findings.flatMap(neutralStoryAdsViolations),
+        ]
       : ["kontrak neutral tidak terbukti: nol frame diperiksa"];
     checks.push({
       code: "QC-11", name: "Kontrak visual neutral Story Ads",
       status: violations.length ? "fail" : "pass",
       detail: violations.length
         ? violations.join("; ")
-        : `${overrides.neutralVisionFindings.length} frame: blank prop tanpa produk/teks terverifikasi`,
+        : `${findings.length} frame: blank prop tanpa produk/teks terverifikasi`,
     });
   } else if (input.isMockProvider) {
     checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "N/A: provider mock (dev/e2e) — konten sintetis tidak punya subjek nyata." });

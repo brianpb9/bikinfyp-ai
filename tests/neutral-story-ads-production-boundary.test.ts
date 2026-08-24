@@ -11,14 +11,16 @@ import { generateScripts } from "../lib/script-engine";
 import { planShots } from "../lib/media/shot-planner";
 import { getCreatorCategory } from "../lib/personas";
 import { templateIdRenderOtoritatif } from "../lib/dashboard/render-cell";
-import { normalisasiFormatWorker, shouldPreserveEmbeddedLipsync } from "../lib/postgres/worker";
+import { shouldPreserveEmbeddedLipsync } from "../lib/postgres/worker";
+import { normalisasiFormatWorker } from "../lib/media/worker-format";
+import { planSqliteWorkerShots } from "../lib/worker";
 import { buildTaskContent } from "../lib/providers/stubs/byteplus";
 import { voiceoverStartSecForSegments } from "../lib/script-engine/story-os-ads";
 import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import { evaluateQcPolicy, neutralStoryAdsIdentityChecks, runQc, type QcCheck } from "../lib/media/qc";
-import { neutralStoryAdsViolations, type TemuanFrame } from "../lib/media/qc-vision";
+import { neutralStoryAdsCoverageViolations, neutralStoryAdsViolations, type TemuanFrame } from "../lib/media/qc-vision";
 
 test("snapshot confirm -> job persisten -> normalisasi worker menjaga kontrak 9 Story Ads", async () => {
   const templates = CAMPAIGN_TEMPLATES.filter((template) => template.group === "ads");
@@ -130,7 +132,7 @@ test("QC path: dua Story Ads produk fisik tidak direfund oleh QC-03/QC-10 yang b
         shotCountOverride: template.shotCount,
       });
       assert.equal(spec.visualSubjectPolicy, "neutral_story_ads");
-      const [qc10, qc03] = neutralStoryAdsIdentityChecks({ packshotSidik: sha, refImagePath: ref });
+      const [qc10, qc03] = neutralStoryAdsIdentityChecks({ packshotSidik: sha, refImagePath: ref, productCategory: "beauty" });
       assert.equal(qc10.status, "pass", `${templateId}: provenance packshot harus tetap diverifikasi`);
       assert.equal(qc03.status, "skip", `${templateId}: pixel produk generated harus N/A`);
       const checks: QcCheck[] = [
@@ -166,7 +168,7 @@ test("QC path: dua Story Ads produk fisik tidak direfund oleh QC-03/QC-10 yang b
           refImagePath: ref, packshotSidik: sha, format: template.format,
           isMockProvider: true, maxPeople: spec.maxPeople, presenterLipsync: false,
           overlayTextExpectations: [], visualSubjectPolicy: spec.visualSubjectPolicy,
-        }, { neutralVisionFindings: [finding] });
+        }, { neutralVisionResults: [finding] });
         assert.equal(result.checks.find((c) => c.code === "QC-03")?.status, "skip");
         assert.equal(result.checks.find((c) => c.code === "QC-10")?.status, "pass");
         assert.equal(result.checks.find((c) => c.code === "QC-11")?.status, "pass");
@@ -179,9 +181,20 @@ test("QC path: dua Story Ads produk fisik tidak direfund oleh QC-03/QC-10 yang b
           refImagePath: ref, packshotSidik: sha, format: template.format,
           isMockProvider: true, maxPeople: spec.maxPeople, presenterLipsync: false,
           overlayTextExpectations: [], visualSubjectPolicy: spec.visualSubjectPolicy,
-        }, { neutralVisionFindings: [{ ...finding, produkTerlihat: true, teksTerlihat: true }] });
+        }, { neutralVisionResults: [{ ...finding, produkTerlihat: true, teksTerlihat: true }] });
         assert.equal(bad.checks.find((c) => c.code === "QC-11")?.status, "fail");
         assert.equal(bad.passed, false, `${templateId}: pelanggaran neutral lolos runQc`);
+
+        const appendFailed = await runQc({
+          filePath: video, targetDurationSec: template.durationSec, finalTexts: ["aman"],
+          hookFamily: "story_ads", register: "netral", productName: "Serum Uji",
+          productCategory: "beauty", priceIdr: 189000, renderParams: { watermark: true },
+          refImagePath: ref, format: template.format, isMockProvider: true,
+          maxPeople: spec.maxPeople, presenterLipsync: false, overlayTextExpectations: [],
+          visualSubjectPolicy: spec.visualSubjectPolicy,
+        }, { neutralVisionResults: [finding] });
+        assert.equal(appendFailed.checks.find((c) => c.code === "QC-10")?.status, "fail");
+        assert.equal(appendFailed.passed, false, `${templateId}: appendPackshot gagal masih lolos/refund palsu`);
       } finally {
         fs.rmSync(video, { force: true });
       }
@@ -218,6 +231,88 @@ test("QC path: pelanggaran produk/teks di pixel generated neutral tetap hard-fai
   const oldSchema = { ...finding, teksTerlihat: false, produkTerlihat: false, neutralFieldsComplete: false };
   assert.match(neutralStoryAdsViolations(oldSchema).join(" "), /tidak terbukti/,
     "respons visi schema lama/malformed tidak boleh diam-diam lulus neutral");
+});
+
+test("QC-10 neutral: produk fisik wajib packshot sukses/provenance; jasa saja boleh N/A", () => {
+  const missingPhysical = neutralStoryAdsIdentityChecks({ productCategory: "beauty" })[0];
+  assert.equal(missingPhysical.status, "fail");
+  assert.match(missingPhysical.detail ?? "", /wajib punya packshot/);
+
+  const appendFailure = neutralStoryAdsIdentityChecks({ productCategory: "fashion", refImagePath: "/tmp/ada-tapi-append-gagal.jpg" })[0];
+  assert.equal(appendFailure.status, "fail", "appendPackshot gagal tidak boleh berakhir PASS");
+
+  const ref = `/tmp/racun-neutral-qc-mismatch-${process.pid}.jpg`;
+  fs.writeFileSync(ref, "foto yang benar");
+  try {
+    const mismatch = neutralStoryAdsIdentityChecks({
+      productCategory: "beauty", refImagePath: ref, packshotSidik: "0".repeat(64),
+    })[0];
+    assert.equal(mismatch.status, "fail");
+    assert.match(mismatch.detail ?? "", /bukan foto produk job/);
+  } finally {
+    fs.rmSync(ref, { force: true });
+  }
+
+  for (const category of ["jasa", "app", "toko"]) {
+    const service = neutralStoryAdsIdentityChecks({ productCategory: category })[0];
+    assert.equal(service.status, "skip", `${category}: route tanpa produk harus N/A`);
+  }
+});
+
+test("QC-11 neutral: satu sampel timeout/unparsable menggagalkan runQc", async () => {
+  const clean: TemuanFrame = {
+    detik: 2, jumlahOrang: 1, jumlahOrangUtama: 1, jumlahWajah: 1, jumlahTangan: 2,
+    teksAcak: false, teksTerlihat: false, neutralFieldsComplete: true,
+    anatomiRusak: false, produkTerlihat: false, fisikaJanggal: false, catatan: "blank card",
+  };
+  assert.deepEqual(neutralStoryAdsCoverageViolations([clean, null], [2, 7]), [
+    "detik 7: respons visi timeout/tidak dapat diparse",
+  ]);
+
+  const video = `/tmp/racun-neutral-qc-coverage-${process.pid}.mp4`;
+  execFileSync("ffmpeg", ["-y", "-v", "error",
+    "-f", "lavfi", "-i", "color=c=gray:s=360x640:r=24:d=15",
+    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=15",
+    "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+    "-metadata", "racun_aigc=true", "-movflags", "use_metadata_tags", video]);
+  try {
+    const result = await runQc({
+      filePath: video, targetDurationSec: 15, finalTexts: ["aman"], hookFamily: "story_ads",
+      register: "netral", productName: "Jasa Uji", productCategory: "jasa", priceIdr: 0,
+      renderParams: { watermark: true }, format: "ads", isMockProvider: true, maxPeople: 1,
+      presenterLipsync: false, overlayTextExpectations: [], visualSubjectPolicy: "neutral_story_ads",
+    }, { neutralVisionResults: [clean, null] });
+    assert.equal(result.checks.find((check) => check.code === "QC-11")?.status, "fail");
+    assert.equal(result.passed, false);
+  } finally {
+    fs.rmSync(video, { force: true });
+  }
+});
+
+test("W2 actual planner mempertahankan format ads dan perilaku format lain", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-meja-kosong")!;
+  const product = { id: "w2-ads", name: "Serum Uji", category: "beauty", price_idr: 189000 };
+  const [script] = await generateScripts({
+    product, register: "netral", qualityTier: template.tier, durationSec: template.durationSec,
+    contentType: "ads", templateId: template.id, count: 1, tanpaLlm: true,
+  });
+  const common = {
+    jobId: "w2-ads", durationSec: template.durationSec, segments: script.segments,
+    category: getCreatorCategory("hijaber")!, productName: product.name,
+    productCategory: product.category, productPriceIdr: product.price_idr,
+    imageRefPath: "/tmp/service.jpg", qualityTier: template.tier,
+    contentType: "ads" as const, ugcTemplate: template.id,
+  };
+  const ads = planSqliteWorkerShots({ ...common, persistedFormat: "ads" });
+  assert.equal(ads.visualSubjectPolicy, "neutral_story_ads");
+  assert.equal(ads.maxPeople, 1);
+  assert.equal(ads.referenceOnlyImages, true);
+  assert.doesNotMatch(ads.negativePrompt, /no face visible anywhere/i);
+
+  assert.equal(normalisasiFormatWorker("talking_head"), "talking_head");
+  assert.equal(normalisasiFormatWorker("vo_broll"), "vo_broll");
+  assert.equal(normalisasiFormatWorker("tvc"), "tvc");
+  assert.equal(normalisasiFormatWorker("unknown"), "hands_only");
 });
 
 test("kedua worker meneruskan visualSubjectPolicy planner ke runQc", () => {

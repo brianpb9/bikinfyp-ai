@@ -38,10 +38,20 @@ import { pesanTanpaReferensi } from "./product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "./job-reference-manifest";
 import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot } from "./job-product-snapshot";
+import { normalisasiFormatWorker } from "./media/worker-format";
 
 const CONCURRENCY = 1;
 
 class JobNoLongerActive extends Error {}
+
+/** Planning boundary W2. Diekspor agar regression menjalankan fungsi yang
+ * benar-benar dipakai processJob, bukan menyusun ulang normalisasinya di tes. */
+export function planSqliteWorkerShots(
+  input: Omit<Parameters<typeof planShots>[0], "format"> & { persistedFormat: string },
+) {
+  const { persistedFormat, ...planInput } = input;
+  return planShots({ ...planInput, format: normalisasiFormatWorker(persistedFormat) });
+}
 
 function advance(jobId: string, state: Parameters<typeof transition>[1], meta?: Record<string, unknown>) {
   if (!transition(jobId, state, meta)) throw new JobNoLongerActive("Job sudah berakhir saat worker masih berjalan.");
@@ -242,8 +252,8 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
 
     // --- GENERATING_VISUAL ---
     advance(job.id, "GENERATING_VISUAL");
-    const format = job.format === "talking_head" || job.format === "vo_broll" ? job.format : "hands_only";
-    const spec = planShots({
+    const format = normalisasiFormatWorker(job.format);
+    const spec = planSqliteWorkerShots({
       jobId: job.id,
       durationSec: job.duration_s,
       segments,
@@ -256,7 +266,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       imageRefPath: primaryRef,
       extraImageRefPaths: extraRefs,
       qualityTier: tier,
-      format,
+      persistedFormat: job.format,
       contentType: storyIdentity.contentType,
       ugcTemplate: storyIdentity.templateId,
       // Level hook dari skrip (S3): hanya "gila" yang mengubah prompt shot 1.

@@ -206,6 +206,25 @@ export function neutralStoryAdsViolations(t: TemuanFrame): string[] {
   return violations;
 }
 
+/** Coverage contract for neutral pixels. Every scheduled sample must produce
+ * a parseable response; one clean frame cannot stand in for timed-out or
+ * malformed frames elsewhere in the video. */
+export function neutralStoryAdsCoverageViolations(
+  results: Array<TemuanFrame | null>,
+  scheduledSeconds?: number[],
+): string[] {
+  const violations: string[] = [];
+  results.forEach((result, index) => {
+    if (result === null) {
+      const at = scheduledSeconds?.[index];
+      violations.push(at === undefined
+        ? `sampel ${index + 1}: respons visi timeout/tidak dapat diparse`
+        : `detik ${at}: respons visi timeout/tidak dapat diparse`);
+    }
+  });
+  return violations;
+}
+
 const SKEMA = `Answer ONLY with a JSON object, no markdown fence:
 {"jumlahOrang": <int>, "jumlahOrangUtama": <int>, "jumlahWajah": <int>, "jumlahTangan": <int>, "teksAcak": <bool>, "teksTerlihat": <bool>,
  "anatomiRusak": <bool>, "produkTerlihat": <bool>, "fisikaJanggal": <bool>, "catatan": "<max 15 words>"}
@@ -339,7 +358,8 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     const durasiDiperiksa = input.neutralStoryAds
       ? Math.max(0.5, durasi - Math.max(0, input.ekorSec ?? 0))
       : durasi;
-    for (const p of posisiSampel(durasiDiperiksa)) {
+    const posisiTerjadwal = posisiSampel(durasiDiperiksa);
+    for (const p of posisiTerjadwal) {
       const detik = Math.max(0.1, durasiDiperiksa * p);
       const f = path.join(dir, `f${Math.round(detik * 10)}.jpg`);
       await runFfmpeg(["-y", "-ss", String(detik), "-i", input.videoPath, "-frames:v", "1", "-q:v", "3", f]);
@@ -357,7 +377,7 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     // Yang pasti: jumlahnya masih di atas ambang minimal, jadi vonisnya sah.
     const hasil = await Promise.all(berkasFrame.map(({ f, detik }) => periksaFrame(f, detik)));
     const temuan: TemuanFrame[] = hasil.filter((t): t is TemuanFrame => t !== null);
-    if (temuan.length === 0) return { temuan: null, lolos: false, masalah: ["tidak satu pun frame bisa diperiksa"], peringatan: [], detikGagal: [] };
+    if (temuan.length === 0 && !input.neutralStoryAds) return { temuan: null, lolos: false, masalah: ["tidak satu pun frame bisa diperiksa"], peringatan: [], detikGagal: [] };
 
     // PENGHALANG vs PERINGATAN, dan pembagiannya diuji pada video nyata.
     //
@@ -375,7 +395,14 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     //     periksa sendiri dan jarinya ambigu, tidak jelas rusak bagi penonton
     //     biasa. QC yang mengada-ada lebih buruk daripada tidak ada — sekali
     //     orang berhenti memercayainya, ia berhenti berguna.
-    const masalah: string[] = [];
+    const masalah: string[] = input.neutralStoryAds
+      ? [
+          ...(berkasFrame.length === posisiTerjadwal.length
+            ? []
+            : [`coverage neutral tidak lengkap: ${berkasFrame.length}/${posisiTerjadwal.length} frame berhasil diekstrak`]),
+          ...neutralStoryAdsCoverageViolations(hasil, berkasFrame.map((item) => item.detik)),
+        ]
+      : [];
     const peringatan: string[] = [];
     const detikGagal: number[] = [];
     for (const t of temuan) {

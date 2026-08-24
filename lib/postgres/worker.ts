@@ -59,6 +59,7 @@ import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } fro
 import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot } from "../job-product-snapshot";
 import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
 import { bacaSnapshot } from "../script-engine/admisi";
+import { normalisasiFormatWorker } from "../media/worker-format";
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
@@ -124,14 +125,6 @@ export function bacaJejakIde(validationResult: string | null): { ideId: string |
   } catch {
     return { ideId: null, ideSkor: null, ideaFormat: null };
   }
-}
-
-/** Normalisasi format persisten di satu tempat. `ads` adalah format produksi,
- * bukan alias hands_only: ia mengubah framing, jumlah orang, dan negative prompt. */
-export function normalisasiFormatWorker(format: string): "hands_only" | "talking_head" | "vo_broll" | "tvc" | "ads" {
-  return format === "talking_head" || format === "vo_broll" || format === "tvc" || format === "ads"
-    ? format
-    : "hands_only";
 }
 
 /**
