@@ -1,6 +1,6 @@
 # Shipping readiness canonical — 24 Agustus 2026
 
-TASK=`SHIP-READINESS-CANONICAL-POSTGRES-RECONCILE-20260824`
+TASK=`SHIP-READINESS-CANONICAL-C9C12-RECONCILE-20260824`
 
 ## Putusan
 
@@ -10,11 +10,11 @@ Ini satu-satunya skor current yang dapat dipertanggungjawabkan. Baseline
 accepted setelah seluruh task yang diterima pada 24 Agustus adalah:
 
 ```text
-ACCEPTED_BASELINE_HEAD=9e1d13d5544d8a996998283d9cc8496848848a6b
-LATEST_PRODUCT_CODE_SHA=de1a6ef53bdfb4de14d01e8c13cc223a54cddd61
-LATEST_PRODUCT_TREE=14028daa2120321ffd05a1cd6e1a57c615488229
+ACCEPTED_BASELINE_HEAD=0b2985cb6bab0bd101ad90a8230c28ba8e948aab
+LATEST_PRODUCT_CODE_SHA=e1e80c052ee7d77339239af09f83eb2b37649289
+LATEST_PRODUCT_TREE=9955de4c9daf0704322e29f95ec662442702a9cf
 BRANCH=work/p0-product-truth-20260820
-WORKTREE_PADA_INSPEKSI=clean
+WORKTREE_PADA_INSPEKSI=tracked-clean; bootstrap untracked preserved/excluded
 ```
 
 Commit yang menambahkan dokumen ini tentu mempunyai SHA/tree berbeda; angka di
@@ -95,6 +95,8 @@ Builder karena itu tetap **local-only**, bukan eksekusi independen.
 | `P0-C3C4-CANONICAL-API-REASON-CODES-20260824` | `03f1ea011b737c067ecf26ebc64c34f8b5f1ada3` | canonical E4/E8 codes; agregat tetap partial |
 | `P1-W1-DISPOSABLE-PG-GATE-REMEDIATION-20260824` | evidence `09cddfbb5940f2d6d72a3624c0ea2ff6d2f7a410`; code `b6bc116b1640fd561c982349262e5e070fa07f64` | W1 PostgreSQL disposable 25/25; money 11/11; D2 4/4; cleanup terjamin |
 | `P1-FULL-DISPOSABLE-PG-ZERO-SKIP-20260824` | evidence `9e1d13d5544d8a996998283d9cc8496848848a6b`; code `de1a6ef53bdfb4de14d01e8c13cc223a54cddd61` | full 1.119: 1.115 PASS, 0 fail, 4 gated skip; retry serializable stabil; tsc/build/catalog PASS |
+| `P0-C12-ADMISSION-REFERENCE-SNAPSHOT-20260824` | evidence `2073ba84fe179c9fde82bdd7b27027c4cec88ca3`; code `57d1a34883f68088d7f5cd8d5f4ffa736acfc54e` | tiga admission memasang manifest reference job-owned; cleanup known-loser dan pruning successful-retry aman; targeted 56/56, W1 28/28, full 1.133: 1.090 PASS / 0 fail / 43 skip |
+| `P1-C9-PROMO-OUTPUT-COUNTEREXAMPLE-20260824` | evidence `0b2985cb6bab0bd101ad90a8230c28ba8e948aab`; code `e1e80c052ee7d77339239af09f83eb2b37649289` | actual compositor frame W2 gain/removal dan W1 change; affected 19/19, W1 29/29, full 1.135: 1.091 PASS / 0 fail / 44 skip |
 
 Yang **tidak boleh dihitung**:
 
@@ -106,24 +108,61 @@ Yang **tidak boleh dihitung**:
 - Setiap `CHANGES_REQUESTED`, local full suite, atau commit yang kemudian
   direvert bukan PASS shipping dan mendapat nol poin.
 
+### Rekonsiliasi accepted C12 dan C9
+
+**C12.** Code `57d1a348...` / evidence `2073ba84...` adalah state accepted
+terakhir. Retail SQLite, retail PostgreSQL, dan organization PostgreSQL
+memasang ordered job-owned reference manifest pada admission bersama snapshot
+produk. Preparation failure, known rollback, insufficient balance, duplicate
+loser, dan retry exhaustion membersihkan key hanya sesudah database
+authoritative membuktikan tidak ada winner; commit/network/CAS ambiguity tidak
+memicu delete. Sesudah successful retry, pruning membandingkan target tracked
+dengan manifest committed dan hanya menghapus surplus, termasuk jalur
+PostgreSQL `40001`. Ini menutup local admission-time identity gap untuk job
+baru, bukan seluruh C12: legacy fallback/treatment dan reason code proposal
+`REFERENCE_IDENTITY_CHANGED` tetap belum canonical.
+
+**C9.** Code `e1e80c0...` / evidence `0b2985cb...` membuktikan actual admission
+→ HTTP mutation → worker → production compositor output. W2 gain/removal
+memberi crop frame berbeda dan substantif; W1 E7 change juga menghasilkan
+frame compositor substantif. Exact compositor input dan OCR/pixel hashes
+membuktikan core prompt tetap admission-bound sementara promo before/deadline
+dibaca live. Koreksi penting: `promo_stock_left` juga dibaca live tetapi tidak
+dipakai `formatPromoOverlayText()`, sehingga stock saat ini **inert** dan tidak
+boleh diklaim dirender. Bukti memilih nol policy; Founder harus memilih
+`PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau `LIVE_INTENTIONAL`.
+
+Keduanya local-only dan tidak mengubah skor **58/100**. Tidak ada accepted
+deploy exact SHA, staging gate, T43, legacy audit, payment/legal/incident/DR,
+auto-deploy remediation, production E2E, atau operational-cycle evidence baru.
+
 ## Verified, local-only, dan external/missing
 
 ### Verified
 
 - Exact-SHA Reviewer PASS dan bus history untuk task pada tabel di atas.
 - Current source/diff untuk E4/E8 canonical code dan matrix current state.
-- Latest local full suite authoritative pada accepted evidence `9e1d13d...`:
-  **1.119 total / 1.115 pass / 0 fail / 4 skip / 0 cancelled / 0 todo**.
-  Keempat skip adalah test QCF1 yang sudah ada: artefak historis PALSU
+- Latest local full suite authoritative pada accepted C9 evidence
+  `0b2985cb...`: **1.135 total / 1.091 pass / 0 fail / 44 skip / 0 cancelled /
+  0 todo**. Empat skip adalah test QCF1 yang sudah ada: artefak historis PALSU
   `/tmp/bikinfyp-audit.r8g5CW/c-no-face-2.5.png` tidak tersedia; tiga di
   antaranya juga memerlukan opt-in eksplisit untuk panggilan Gemini berbayar.
-  Task tidak mengizinkan panggilan berbayar maupun membuat artefak pengganti.
-  Ini membuktikan hasil lokal Builder, bukan eksekusi dependency-backed pihak
-  kedua.
-- Exact evidence yang sama mencatat W1 **25/25**, money **11/11**, D2 **4/4**,
+  Empat puluh skip lain adalah gate PostgreSQL generic tanpa `UJI_PG_URL` (D2,
+  money/reconciler, dan W1); gate W1 dijalankan terpisah terhadap database
+  disposable dan lulus **29/29**. Task tidak mengizinkan panggilan berbayar
+  maupun membuat artefak pengganti. Ini membuktikan hasil lokal Builder, bukan
+  eksekusi dependency-backed pihak kedua.
+- Exact evidence C9 yang sama mencatat affected **19/19**, W1 **29/29**,
   `tsc --noEmit`, build, dan audit katalog semuanya PASS. Database PostgreSQL
   loopback disposable dibuat, dimigrasi, lalu dihapus dengan
   `DROP ... WITH (FORCE)` dan residue katalog nol.
+- Accepted C12 evidence `2073ba84...` mencatat targeted **56/56**, W1
+  **28/28**, money **11/11**, full **1.133 total / 1.090 pass / 0 fail / 43
+  skip**, TypeScript/build/catalog PASS, retry/prune PostgreSQL PASS, dan
+  residue nol. Cleanup hanya menghapus target tracked sesudah non-winner
+  dibuktikan authoritatively; commit/network/CAS ambiguity mempertahankan key.
+  Setelah commit sukses, pruning hanya menghapus surplus yang tidak ada pada
+  manifest committed, termasuk retry `40001`, sehingga winner tetap utuh.
 - `git diff --check` dan dependency-free checks dapat diulang tanpa network.
 - Artefak staging 22 Agu memiliki provenance tersanitasi. Refresh read-only
   24 Agu mengonfirmasi deployment lama itu masih live; keduanya tidak
@@ -161,9 +200,10 @@ menaikkan skor 58/100.
 
 - Seluruh perubahan setelah SHA staging lama, termasuk accepted task 24 Agu.
 - Full npm/tsx, TypeScript, catalog, dan test dengan PostgreSQL disposable yang
-  hanya dijalankan Builder. PostgreSQL lokal loopback tersedia dan seluruh gate
-  PostgreSQL yang dibutuhkan aggregate dijalankan; empat skip tersisa hanya
-  klasifikasi QCF1 di atas, bukan skip environment PostgreSQL.
+  hanya dijalankan Builder. Aggregate generic latest memiliki 40 skip
+  environment PostgreSQL; gate W1 yang relevan dijalankan terpisah 29/29 pada
+  PostgreSQL loopback disposable. Empat skip lain adalah klasifikasi QCF1 di
+  atas. Tidak satu pun skip itu boleh disamarkan sebagai deployment proof.
 - Presence kredensial di laptop tidak membuktikan pasangan staging, approval
   merchant, settlement, atau kesiapan produksi.
 
@@ -200,36 +240,44 @@ Tidak satu pun keduanya boleh dinilai live sebelum syarat ADR terpenuhi.
 | C6 OCR fail-open vs fail-closed | policy conflict | Founder | keputusan policy dan acceptance matrix selaras |
 | C7 E1 resolver | dikarantina | Founder lalu Builder | T43-compatible rollback contract + independent exact-SHA proof |
 | C8 admission A1..A7 | partial | Founder T43 | fail-closed boundary sebelum hold/enqueue di seluruh A1..A7 |
-| C9 resume inventory/reason | partial; proof lama unsound | Builder, butuh bounded task baru | structural inventory yang sound + `SNAPSHOT_IMMUTABLE` bila disetujui |
-| C12 reason code | partial | Builder, butuh bounded task baru | canonical `REFERENCE_IDENTITY_CHANGED` + route/worker proof |
+| C9 promo admission→output | partial; rendered behavior accepted | Founder policy | pilih `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau `LIVE_INTENTIONAL`; core prompt sudah admission-bound, tetapi before/deadline live dan stock live namun inert di formatter |
+| C12 aggregate | partial; local admission-time identity slice closed | Founder/T43 + legacy/reason-code authority | new jobs sudah admission-bound; legacy fallback/treatment dan proposal `REFERENCE_IDENTITY_CHANGED` tidak boleh diputuskan Builder |
 | C1/C13 seluruh E/A/W positif | partial/external | QA/Release | satu trace end-to-end exact evidence, bukan resolver-only test |
 | Duitku + price/COGS | external/Founder | Brian + Payments owner | approval, keputusan harga, settlement/webhook/replay report |
 | Legal/PDP | external | Brian + counsel | signed/versioned approval dan halaman tanpa placeholder |
 | Monitoring/DR | external/owner | Brian + incident owner | owner, alert delivery, runbook, restore/incident drill report |
 | Production auto-deploy drift | P1 external configuration/control | Release owner + Render production administrator | authorized disable pada web+worker, lalu sanitized read-only artifact `autoDeploy=no`/off untuk kedua service dan bukti tidak ada deploy tak terotorisasi |
 
-Re-audit pada accepted baseline `9e1d13d...` membaca matriks canonical, daftar
-P0/P1 di atas, dan bus history sampai task ini. Hasilnya:
+Re-audit pada accepted baseline `0b2985cb...` membaca matriks canonical, daftar
+P0/P1 di atas, dan bus history melalui C12 PASS/DONE, C9 rendered-output
+PASS/DONE, serta bounded task rekonsiliasi docs ini. Sesudah rekonsiliasi ini
+diterima, hasilnya:
 
 `APPROVED_LOCAL_IMPLEMENTATION_TASK_CURRENTLY_QUEUED = false`.
 
 Ini bukan klaim bahwa tidak ada pekerjaan lokal selamanya. Matrix mencatat
-kandidat C2/C5, E1, OCR, C9, dan C12, tetapi tidak satu pun mempunyai bounded
-approval aktif yang bebas keputusan kebijakan. Builder tidak boleh mengubah
-reason-code contract, deploy, atau payments hanya karena kandidat itu tertulis.
+kandidat C2/C5, E1, OCR, C9, dan sisa agregat C12, tetapi tidak satu pun
+mempunyai bounded approval implementasi aktif yang bebas keputusan kebijakan,
+legacy/T43, kredensial, atau external authority. C12 tidak membutuhkan task
+implementasi admission-manifest baru: slice itu sudah accepted. Builder tidak
+boleh memilih promo policy, mengubah reason-code contract, deploy, atau
+payments hanya karena kandidat itu tertulis.
 
 ### Founder actions yang diperlukan sekarang
 
 1. `APPROVE STAGING` untuk exact accepted SHA dan migration/evidence tranche.
-2. Tetapkan `T43=A+B`, atau tulis pilihan T43 eksplisit lain beserta treatment
+2. Tetapkan `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau
+   `PROMO_POLICY=LIVE_INTENTIONAL`; keputusan ini harus menjelaskan before
+   price/deadline dan apakah stock yang saat ini live namun inert tetap inert.
+3. Tetapkan `T43=A+B`, atau tulis pilihan T43 eksplisit lain beserta treatment
    legacy dan urutan rollout.
-3. Tetapkan `RELEASE_OWNER`.
-4. Berikan `APPROVE DISABLE PRODUCTION AUTODEPLOY` untuk web dan worker; setelah
+4. Tetapkan `RELEASE_OWNER`.
+5. Berikan `APPROVE DISABLE PRODUCTION AUTODEPLOY` untuk web dan worker; setelah
    tindakan terotorisasi, wajib ada refresh read-only yang membuktikan off.
-5. Putuskan price/COGS.
-6. Tetapkan incident owner.
-7. Tetapkan counsel/legal approver.
-8. Berikan authority Duitku yang diperlukan untuk approval dan pengujian
+6. Putuskan price/COGS.
+7. Tetapkan incident owner.
+8. Tetapkan counsel/legal approver.
+9. Berikan authority Duitku yang diperlukan untuk approval dan pengujian
    settlement/webhook; ini bukan izin payments go-live otomatis.
 
 ## Critical path 48 jam
@@ -239,7 +287,7 @@ bahwa pihak eksternal akan selesai.
 
 | Window | Aksi/gate | Exact artifact untuk membuka tranche berikutnya |
 |---|---|---|
-| 0–2 jam | Founder menetapkan T43, price/COGS, release owner, incident owner, dan counsel contact; release owner mematikan auto-deploy production web+worker | satu decision record versioned + sanitized read-only post-change artifact yang menunjukkan kedua service off dan tidak ada deploy tak terotorisasi |
+| 0–2 jam | Founder menetapkan promo policy, T43, price/COGS, release owner, incident owner, dan counsel contact; release owner mematikan auto-deploy production web+worker | satu decision record versioned + sanitized read-only post-change artifact yang menunjukkan kedua service off dan tidak ada deploy tak terotorisasi |
 | 2–6 jam | Deploy **accepted exact SHA** ke staging web+worker; jalankan migrasi staging sesuai blueprint | sanitized manifest berisi deploy IDs, exact SHA web/worker, migration exit, `/api/health` HTTP/status termasuk classification/DB/Redis readiness |
 | 4–8 jam | Audit legacy read-only memakai Postgres staging dan bucket R2 yang dibuktikan berpasangan | JSON signed/timestamped: total, no-photo, corrupt-column, approved, per-reason, failed-to-inspect; nol nilai credential |
 | 6–18 jam | Jika T43 mengizinkan, Reviewer menerbitkan bounded task untuk E1/admission dan treatment legacy | accepted exact SHA + route/worker boundary tests + independent dependency-backed run; tidak ada deploy otomatis |
@@ -286,7 +334,7 @@ bahwa pihak eksternal akan selesai.
 
 ## Next autonomous action
 
-`NEXT_AUTONOMOUS_ACTION = AWAIT_EXPLICIT_EXTERNAL_AUTHORITY_RUNTIME_ARMED`.
+`NEXT_AUTONOMOUS_ACTION = AWAIT_EXPLICIT_POLICY_OR_EXTERNAL_AUTHORITY_RUNTIME_ARMED`.
 
 Reviewer harus mengonsumsi DONE task ini. Sesudah itu loop boleh memilih task
 baru hanya jika Founder memberikan decision artifact atau Reviewer menerbitkan
@@ -299,10 +347,12 @@ Reviewer tetap armed; menunggu authority bukan mematikan runtime.
 - Parser dependency-free membaca 13 nilai `Baru` langsung dari source board:
   `ROWS=13`, `SUM=77`; 13 row ledger dokumen ini juga `SUM=77`.
 - Semua accepted code/evidence SHA pada tabel adalah ancestor
-  `ACCEPTED_BASELINE_HEAD` atau identik dengannya.
+  `ACCEPTED_BASELINE_HEAD` atau identik dengannya, termasuk C12
+  `57d1a348...`/`2073ba84...` dan C9 `e1e80c0...`/`0b2985cb...`.
 - `git diff 4e91cf2..3d00a6c` kosong (E1 quarantine) dan
   `git diff 90e2b05..739276b` kosong (C9 proof quarantine).
-- `git diff --check` PASS dan slice ini hanya mengubah canonical readiness serta
-  appendendum current-state pada canonical path/case matrix.
+- Dependency-free SHA ancestry, Markdown link-target, score-token, stale-phrase,
+  and checksum checks PASS; `git diff --check` PASS. Slice ini hanya mengubah
+  canonical readiness, canonical path/case matrix, dan evidence rekonsiliasi.
 - Tidak ada npm/full suite yang diulang: task docs-only, dan hasil package
   lokal tidak akan mengubah tier evidence atau score.

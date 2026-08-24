@@ -194,10 +194,10 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E4 dan E8 kini fail-closed sebelum append/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. **Gap yang tersisa:** E1 tidak memanggil resolver, dan cakupan kasus lain yang dicatat di matriks belum lengkap; karena itu C7 tetap PARTIAL |
 | C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7 (T43) |
-| C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata worker tertutup: W1/W2 memakai manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, dan claims. HTTP E3→W2 dan E7→W1 membuktikan mutasi handler aktual tidak mengubah bahan admission di provider. Tetap PARTIAL karena reason code `SNAPSHOT_IMMUTABLE` tidak diterbitkan dan regenerate/entry lain belum seluruhnya tertutup |
+| C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata core worker tertutup: W1/W2 memakai admission manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, claims, dan sell price. Actual E3→W2 serta E7→W1 membuktikan prompt tetap admission-bound tetapi rendered promo before/deadline dibaca live; frame W2 gain/removal dan W1 change diterima di E.23. Stock juga live tetapi inert di formatter. Tetap PARTIAL sampai Founder memilih `PROMO_POLICY=SNAPSHOT` atau `LIVE_INTENTIONAL`; `SNAPSHOT_IMMUTABLE` tetap proposal-only |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
 | C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
-| C12 | **PARTIAL** | Identitas dan urutan referensi dipatok dalam manifest job versioned; create konkuren kembali dengan satu pemenang, W1/W2 tidak membaca ulang daftar saat manifest ada, dan test HTTP E5/E9→resume membuktikan boundary route/list/storage. Tetap PARTIAL karena reason code usulan `REFERENCE_IDENTITY_CHANGED` tidak diterbitkan; bukti memakai reason truthful yang sudah ada (`REF_MISSING`) |
+| C12 | **PARTIAL** | Gap local admission-time identity untuk job baru sudah tertutup: tiga production admission memasang ordered job-owned manifest sebelum job/hold/queue visible; known non-winner cleanup dan successful-retry surplus pruning mempertahankan winner/ambiguity. W1/W2 tidak membaca ulang daftar, dan E5/E9→resume memakai bytes admission. Agregat tetap PARTIAL karena legacy fallback/treatment dan reason code usulan `REFERENCE_IDENTITY_CHANGED` belum canonical; tidak diperlukan task implementasi admission-manifest baru |
 | C13 | **PARTIAL** | Kontrol positif W1 (`tests/pg-product-truth-w1.test.ts:740`) dan W2 (`tests/product-truth-worker-reference.test.ts:638`) membuktikan worker menerima bukti sah. Itu belum membuktikan produk valid diterima melalui seluruh E1..E9 dan A1..A7 yang diwajibkan baris ini |
 
 ### E.3 Bagian D dokumen ini sudah usang — dikoreksi
@@ -235,13 +235,15 @@ dikerjakan di slice ini:**
    `BRAND_MISMATCH`/`LABEL_UNREADABLE`. Agregat C3/C4 tetap PARTIAL karena E1
    belum menjalankan gate, W1/W2 belum menegakkan brand mismatch, dan OCR error
    tetap fail-open, seperti dirinci E.16.
-5. Snapshot metadata job kini menutup pembacaan ulang nama/brand/kategori dan
-   field prompt W1/W2. HTTP E3/E7→resume dibuktikan di E.12; C9 tetap PARTIAL
-   sampai regenerate/entry lain dan reason code kontraknya ditutup.
-6. Test HTTP penuh E5/E9→resume kini ada (E.11): handler mutation, daftar
-   otoritatif, cleanup storage, isolasi owner/org, dan resume W1/W2 dibuktikan
-   langsung. C12 tetap PARTIAL hanya karena reason code usulan
-   `REFERENCE_IDENTITY_CHANGED` belum diterbitkan.
+5. Snapshot metadata job menutup pembacaan ulang core prompt W1/W2. Rendered
+   frame proof E.23 menunjukkan promo before/deadline tetap live dan stock live
+   tetapi inert; perubahan berikutnya menunggu pilihan Founder
+   `PROMO_POLICY=SNAPSHOT` atau `LIVE_INTENTIONAL`.
+6. **DITUTUP 24 Agu untuk new-job admission identity:** tiga admission memasang
+   manifest sebelum visibility; E5/E9→resume, cleanup known-loser, serta
+   successful-retry pruning dibuktikan. C12 agregat tetap PARTIAL hanya untuk
+   legacy/treatment dan reason-code authority, bukan karena implementasi
+   admission manifest masih diperlukan.
 7. C7 belum fail-closed pada seluruh boundary. **Sub-gap E4 dan E8 ditutup
    24 Agu:** no-reference/resolver error me-rollback exact object baru sebelum
    append/audit; cleanup fault tetap non-success dan observable, dengan risiko
@@ -770,3 +772,27 @@ TASK=`P1-C9-PROMO-OUTPUT-COUNTEREXAMPLE-20260824`
   TypeScript/build/catalog PASS with zero disposable database residue. C9
   remains **PARTIAL**, no policy was chosen, and readiness remains **58/100**.
   Raw evidence is under `c9-promo-rendered-output-remediation-20260824/`.
+
+### E.24 Canonical C9/C12 readiness reconciliation — 2026-08-24
+
+TASK=`SHIP-READINESS-CANONICAL-C9C12-RECONCILE-20260824`
+
+- Accepted C12 state is code
+  `57d1a34883f68088d7f5cd8d5f4ffa736acfc54e` plus evidence
+  `2073ba84fe179c9fde82bdd7b27027c4cec88ca3`. The local new-job
+  admission-time manifest gap is closed with known-loser cleanup and
+  successful-retry surplus pruning; ambiguity preserves keys. Aggregate C12
+  remains PARTIAL for legacy/treatment and proposal-only reason-code scope.
+- Accepted C9 state is code
+  `e1e80c052ee7d77339239af09f83eb2b37649289` plus evidence
+  `0b2985cb6bab0bd101ad90a8230c28ba8e948aab`. W2 gain/removal and W1 change
+  actual rendered frames prove mixed current behavior: core prompt/sell price
+  admission-bound, promo before/deadline live. Stock is live but inert in
+  compositor formatting.
+- No approved local implementation task remains queued after this docs-only
+  reconciliation. C9 requires Founder `PROMO_POLICY=SNAPSHOT` (Reviewer
+  recommendation) or `LIVE_INTENTIONAL`; C12 remainder requires legacy/T43 or
+  reason-code authority. Other gaps remain policy, deploy, credentials, paid,
+  legal, incident/DR, or release-owner boundaries.
+- No policy, reason code, production behavior, deployment, or score changed.
+  Canonical shipping readiness remains **58/100**.
