@@ -85,6 +85,23 @@ const at = () => new Date().toISOString();
 const uid = () => crypto.randomUUID();
 const sha256 = (b: Buffer) => crypto.createHash("sha256").update(b).digest("hex");
 
+function inspectRenderedDemo(videoPath: string, label: string, atSec: number): { ocr: string; cropSha: string; cropBytes: number } {
+  assert.ok(fs.existsSync(videoPath) && fs.statSync(videoPath).size > 0, `compositor W1 tidak menghasilkan video ${label}`);
+  const frame = path.join(tmpMaterialize, `${label}-demo.png`);
+  execFileSync("ffmpeg", [
+    "-y", "-v", "error", "-ss", String(atSec), "-i", videoPath,
+    "-frames:v", "1", "-vf", "crop=iw:ih*0.25:0:ih*0.55,scale=1440:-1", frame,
+  ]);
+  const body = fs.readFileSync(frame);
+  assert.ok(body.length > 1_000, `crop frame demo W1 tidak substantif ${label}`);
+  return {
+    ocr: execFileSync("tesseract", [frame, "stdout", "-l", "eng", "--psm", "6"], { encoding: "utf8" })
+      .replace(/\s+/g, " ").trim(),
+    cropSha: sha256(body),
+    cropBytes: body.length,
+  };
+}
+
 const BANNER = Buffer.from("BYTES-BANNER-PROMO-W1");
 const PACKSHOT = Buffer.from("BYTES-PACKSHOT-SAH-W1");
 const PACKSHOT2 = Buffer.from("BYTES-PACKSHOT-KEDUA-W1");
@@ -250,6 +267,8 @@ after(async () => {
   const { setVideoProvidersForTests } = await import("../lib/providers/registry");
   setVideoProvidersForTests(undefined);
   setCompositeObserverForTests(undefined);
+  const { setPostgresQcRunnerForTests } = await import("../lib/postgres/worker");
+  setPostgresQcRunnerForTests(undefined);
   if (tmpMaterialize) fs.rmSync(tmpMaterialize, { recursive: true, force: true });
   if (pool) await pool.end();
   const { closePool } = await import("../lib/postgres/pool");
@@ -989,10 +1008,26 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
   assert.equal(durableProduct, productSnapshot, "snapshot metadata W1 ditimpa dari produk mutasi");
 });
 
-test("C9 counterexample E7→W1: promo live berubah di input compositor sementara prompt tetap snapshot admission", async (t) => {
+test("C9 counterexample E7→W1: frame render promo live berubah sementara prompt tetap snapshot admission", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
-  await pasangProviderVideoSuksesSampaiTts();
-  t.after(() => setCompositeObserverForTests(undefined));
+  const { setVideoProvidersForTests } = await import("../lib/providers/registry");
+  amatan = { utamaSha: null, utamaPath: null, extraPaths: [], promptText: "", dipanggil: false };
+  setVideoProvidersForTests([{ name: "pengamat-render-c9-w1", async healthCheck() { return true; }, estimateCost() { return 0; },
+    async generate(spec: { shots: { prompt: string; durationSec: number }[] }, outDir: string) {
+      amatan.dipanggil = true;
+      amatan.promptText = spec.shots.map((shot) => shot.prompt).join("\n");
+      return spec.shots.map((shot, index) => {
+        const filePath = path.join(outDir, `c9-render-${index}.mp4`);
+        execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i",
+          `color=c=gray:s=360x640:r=24:d=${shot.durationSec}`, "-c:v", "libx264", "-pix_fmt", "yuv420p", filePath]);
+        return { filePath, durationSec: shot.durationSec, costIdr: 0 };
+      });
+    } } as never]);
+  const { setPostgresQcRunnerForTests } = await import("../lib/postgres/worker");
+  t.after(() => {
+    setCompositeObserverForTests(undefined);
+    setPostgresQcRunnerForTests(undefined);
+  });
   const rel = `uploads/w1-c9-promo-${process.pid}/${uid()}.webp`;
   const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
   const { jobId, productId, ownerToken } = await siapkanJobOrgLewatAdmisi([rel], isi);
@@ -1051,9 +1086,16 @@ test("C9 counterexample E7→W1: promo live berubah di input compositor sementar
   if (approval.status !== 200) assert.fail(`approval scene E7 gagal (${approval.status}): ${await approval.text()}`);
 
   let compositorInput: import("../lib/media/compositor").CompositeInput | null = null;
+  let demoAtSec = 0;
   setCompositeObserverForTests((input) => {
     compositorInput = { ...input };
-    throw new Error("C9_COMPOSITOR_OBSERVED_E7_CHANGE");
+    demoAtSec = (input.demoRange[0] + input.demoRange[1]) / 2;
+  });
+  let rendered = { ocr: "", cropSha: "", cropBytes: 0 };
+  setPostgresQcRunnerForTests(async (input) => {
+    rendered = inspectRenderedDemo(input.filePath, "w1-e7-change", demoAtSec);
+    console.log(`[c9-rendered-frame] ${JSON.stringify({ runtime: "W1", variant: "change", demoAtSec, ...rendered })}`);
+    throw new Error("C9_RENDERED_FRAME_OBSERVED_E7_CHANGE");
   });
   const resumed = await jalankan(jobId, isi, true);
   const observed = compositorInput as unknown as import("../lib/media/compositor").CompositeInput;
@@ -1066,6 +1108,12 @@ test("C9 counterexample E7→W1: promo live berubah di input compositor sementar
   assert.equal(observed.priceText, "Rp98.000 > Rp85.000\n-13% · s.d. 3 Feb");
   assert.doesNotMatch(observed.priceText, /stok|\b9\b/i,
     "promo_stock_left saat ini inert di formatter compositor; jangan klaim scarcity dirender");
+  assert.ok(rendered.cropBytes > 1_000 && rendered.cropSha.length === 64,
+    `frame crop W1 tidak menghasilkan bukti pixel: ${JSON.stringify(rendered)}`);
+  assert.match(rendered.ocr, /Rp98[:.]000/i, `frame W1 tidak menampilkan harga-sebelum live: ${rendered.ocr}`);
+  assert.match(rendered.ocr, /Rp.?85[:.]000/i, `frame W1 tidak menampilkan harga jual admission: ${rendered.ocr}`);
+  assert.match(rendered.ocr, /\D13\D/i, `frame W1 tidak menampilkan diskon berubah: ${rendered.ocr}`);
+  assert.match(rendered.ocr, /s-d\s*5?3\)?\s*Feb/i, `frame W1 tidak menampilkan deadline 3 Feb: ${rendered.ocr}`);
   assert.equal((await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot, productSnapshot);
   assert.equal(panggilanJaringan, 0, "counterexample C9 W1 menyentuh jaringan");
   assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM outputs WHERE job_id=$1", [jobId]), 0);

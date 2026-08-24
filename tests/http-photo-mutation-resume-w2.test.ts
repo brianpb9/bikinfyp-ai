@@ -4,6 +4,7 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { execFileSync } from "node:child_process";
 
 process.env.RACUN_NO_DOTENV = "1";
 process.env.RACUN_DB_RUNTIME = "sqlite";
@@ -22,7 +23,7 @@ const { resolveApprovedReference } = await import("../lib/product-truth");
 const { createJobProductSnapshotRaw, parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
 const { DELETE: deleteRetailPhoto } = await import("../app/api/products/[id]/photos/route");
 const { PATCH: patchRetailProduct } = await import("../app/api/products/[id]/route");
-const { processJob } = await import("../lib/worker");
+const { processJob, setSqliteQcRunnerForTests } = await import("../lib/worker");
 type MediaStorage = import("../lib/storage").MediaStorage;
 
 const db = getDb();
@@ -45,6 +46,7 @@ after(() => {
   setMediaStorageForTests(undefined);
   setVideoProvidersForTests(undefined);
   setCompositeObserverForTests(undefined);
+  setSqliteQcRunnerForTests(undefined);
   fs.rmSync(tempMaterialize, { recursive: true, force: true });
   fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });
 });
@@ -251,6 +253,23 @@ function noPaidSideEffects(jobId: string, storage: MemoryStorage) {
     `worker meninggalkan output object storage: ${JSON.stringify(storage.putCalls)}`);
 }
 
+function inspectDemoOverlay(videoPath: string, label: string, atSec: number): { ocr: string; cropSha: string; cropBytes: number } {
+  assert.ok(fs.existsSync(videoPath) && fs.statSync(videoPath).size > 0, `compositor tidak menghasilkan video ${label}`);
+  const frame = path.join(tempMaterialize, `${label}-demo.png`);
+  execFileSync("ffmpeg", [
+    "-y", "-v", "error", "-ss", String(atSec), "-i", videoPath,
+    "-frames:v", "1", "-vf", "crop=iw:ih*0.25:0:ih*0.55,scale=1440:-1", frame,
+  ]);
+  const body = fs.readFileSync(frame);
+  assert.ok(body.length > 0, `crop frame demo kosong ${label}`);
+  return {
+    ocr: execFileSync("tesseract", [frame, "stdout", "-l", "eng", "--psm", "6"], { encoding: "utf8" })
+      .replace(/\s+/g, " ").trim(),
+    cropSha: sha(body),
+    cropBytes: body.length,
+  };
+}
+
 test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async (t) => {
   const storage = new MemoryStorage();
   const originalFetch = globalThis.fetch;
@@ -315,7 +334,7 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
   noPaidSideEffects(s.jobId, storage);
 });
 
-test("C9 counterexample E3→W2: promo live dapat muncul dan hilang di input compositor sementara prompt tetap snapshot admission", async (t) => {
+test("C9 counterexample E3→W2: frame render promo live dapat muncul dan hilang sementara prompt tetap snapshot admission", async (t) => {
   const originalFetch = globalThis.fetch;
   let networkCalls = 0;
   globalThis.fetch = (async () => { networkCalls++; throw new Error("C9 compositor W2 tidak boleh jaringan"); }) as typeof fetch;
@@ -326,8 +345,10 @@ test("C9 counterexample E3→W2: promo live dapat muncul dan hilang di input com
     setVideoProvidersForTests(undefined);
     setPersonSafeReferencePhotosForTests(undefined);
     setCompositeObserverForTests(undefined);
+    setSqliteQcRunnerForTests(undefined);
   });
 
+  const renderedCrops = new Map<string, string>();
   for (const variant of ["gain", "remove"] as const) {
     const storage = new MemoryStorage();
     const s = await admittedProductMutationScenario(
@@ -369,14 +390,22 @@ test("C9 counterexample E3→W2: promo live dapat muncul dan hilang di input com
         providerPrompt = spec.shots.map((shot) => shot.prompt).join("\n");
         return spec.shots.map((shot, index) => {
           const filePath = path.join(outDir, `c9-${variant}-${index}.mp4`);
-          fs.copyFileSync(path.join(process.cwd(), "public/previews/ads-unboxing-pov.mp4"), filePath);
+          execFileSync("ffmpeg", ["-y", "-v", "error", "-f", "lavfi", "-i",
+            `color=c=gray:s=360x640:r=24:d=${shot.durationSec}`, "-c:v", "libx264", "-pix_fmt", "yuv420p", filePath]);
           return { filePath, durationSec: shot.durationSec, costIdr: 0 };
         });
       } } as never]);
     let compositorInput: import("../lib/media/compositor").CompositeInput | null = null;
+    let demoAtSec = 0;
     setCompositeObserverForTests((input) => {
       compositorInput = { ...input };
-      throw new Error(`C9_COMPOSITOR_OBSERVED_${variant.toUpperCase()}`);
+      demoAtSec = (input.demoRange[0] + input.demoRange[1]) / 2;
+    });
+    let rendered = { ocr: "", cropSha: "", cropBytes: 0 };
+    setSqliteQcRunnerForTests(async (input) => {
+      rendered = inspectDemoOverlay(input.filePath, `w2-${variant}`, demoAtSec);
+      console.log(`[c9-rendered-frame] ${JSON.stringify({ runtime: "W2", variant, demoAtSec, ...rendered })}`);
+      throw new Error(`C9_RENDERED_FRAME_OBSERVED_${variant.toUpperCase()}`);
     });
     storage.putCalls.length = 0;
     await processJob(s.jobId);
@@ -392,9 +421,18 @@ test("C9 counterexample E3→W2: promo live dapat muncul dan hilang di input com
       assert.equal(observed.priceText, "Rp99.000 > Rp85.000\n-14% · s.d. 3 Feb");
       assert.doesNotMatch(observed.priceText, /stok|\b7\b/i,
         "promo_stock_left saat ini inert di formatter compositor; jangan klaim scarcity dirender");
+      // OCR atas teks putih+stroke di video lossy dapat membaca 8 sebagai S
+      // dan tanda persen sebagai °7%; token struktur/harga/deadline berikut
+      // stabil, sementara hash crop menjaga bukti pixel tidak vakum.
+      assert.match(rendered.ocr, />\s*Rp.{0,2}[8S]?5[:.]000/i, `frame promo gain tidak menampilkan dua harga: ${rendered.ocr}`);
+      assert.match(rendered.ocr, /14.{0,4}%/i, `frame promo gain tidak menampilkan diskon: ${rendered.ocr}`);
+      assert.match(rendered.ocr, /s.d.?\s*3\)?\s*Feb/i, `frame promo gain tidak menampilkan deadline 3 Feb: ${rendered.ocr}`);
     } else {
       assert.equal(observed.priceInCaptionMode, false);
       assert.equal(observed.priceText, "Cuma Rp85.000");
+      assert.match(rendered.ocr, /Rp.{0,2}[8S]?5[:.]000/i, `frame promo removal tidak menampilkan harga admission: ${rendered.ocr}`);
+      assert.doesNotMatch(rendered.ocr, />|%|s.d.?|Feb/i,
+        `frame promo removal masih menampilkan promo lama: ${rendered.ocr}`);
     }
     assert.equal((db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(s.jobId) as { job_product_snapshot: string }).job_product_snapshot, snapshotRaw);
     const count = (sql: string) => (db.prepare(sql).get(s.jobId) as { n: number }).n;
@@ -409,9 +447,14 @@ test("C9 counterexample E3→W2: promo live dapat muncul dan hilang di input com
     assert.match(job.provider_voice ?? "", /^mock-voice-/);
     assert.equal(job.cost_actual_idr, 300, "biaya fixture voice lokal berubah; ini bukan provider berbayar/network");
     assert.deepEqual(storage.putCalls.filter((key) => !key.includes("/approved-references/")), [],
-      `W2 ${variant} menulis output storage sebelum sentinel compositor`);
+      `W2 ${variant} menulis output storage sebelum sentinel QC pasca-render`);
     setCompositeObserverForTests(undefined);
+    setSqliteQcRunnerForTests(undefined);
+    assert.ok(rendered.cropBytes > 1_000, `crop frame demo ${variant} tidak substantif`);
+    renderedCrops.set(variant, rendered.cropSha);
   }
+  assert.notEqual(renderedCrops.get("gain"), renderedCrops.get("remove"),
+    "crop frame gain/removal identik walau overlay seharusnya berbeda");
   assert.equal(networkCalls, 0, "counterexample C9 W2 menyentuh jaringan");
 });
 

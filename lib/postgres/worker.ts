@@ -61,6 +61,15 @@ import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract"
 import { bacaSnapshot } from "../script-engine/admisi";
 import { normalisasiFormatWorker } from "../media/worker-format";
 
+type PostgresQcRunner = typeof runQc;
+let postgresQcRunner: PostgresQcRunner = runQc;
+
+/** Test-only post-compositor observation seam. `undefined` restores runQc;
+ * production has no flag or configuration path that can replace it. */
+export function setPostgresQcRunnerForTests(runner?: PostgresQcRunner): void {
+  postgresQcRunner = runner ?? runQc;
+}
+
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
 function assertUrl() { if (!/^postgres(?:ql)?:\/\//i.test(config.databaseUrl)) throw new Error("DATABASE_URL PostgreSQL wajib untuk worker pg."); return config.databaseUrl; }
@@ -873,7 +882,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       }
     }
     if (!(await jobs.transition(row.id, "QC_CHECK", { worker: "postgres" }))) return;
-    qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
+    qc = await postgresQcRunner({ filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
       // Ekor yang SENGAJA ditambahkan sesudah konten — QC-05 memakai ini
       // supaya video yang lengkap tidak dinilai kelebihan durasi, dan QC-10
       // memakainya untuk mengeluarkan segmen packshot dari jendela OCR.

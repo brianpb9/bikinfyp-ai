@@ -364,7 +364,7 @@ test("W2 actual planner mempertahankan format ads dan perilaku format lain", asy
 test("kedua worker meneruskan visualSubjectPolicy planner ke runQc", () => {
   for (const file of ["lib/postgres/worker.ts", "lib/worker.ts"]) {
     const source = fs.readFileSync(file, "utf8");
-    assert.match(source, /(?:runQc|sqliteQcRunner)\(\{[\s\S]*?visualSubjectPolicy:\s*spec\.visualSubjectPolicy/,
+    assert.match(source, /(?:runQc|sqliteQcRunner|postgresQcRunner)\(\{[\s\S]*?visualSubjectPolicy:\s*spec\.visualSubjectPolicy/,
       `${file}: policy neutral hilang sebelum QC`);
   }
 });
