@@ -56,13 +56,16 @@ export interface HargaIndonesiaMention {
 
 const nilaiNominalPenuh = (raw: string): number => Number(raw.replace(/[.,\s]/g, ""));
 const ANGKA_PERAK_TERKELOMPOK = String.raw`\d+(?:[.,]\d{3})*`;
-const TANDA_PERAK = String.raw`[+\-\u2212]`;
+// Satu sumber untuk semua tanda yang bermakna plus/minus, termasuk bentuk
+// compatibility NFKC. Teks tidak dinormalisasi agar offset redaction tetap asli.
+const KARAKTER_TANDA_PERAK = String.raw`+\-\u00B1\u02D6\u02D7\u207A\u207B\u208A\u208B\u2212\u2795\u2796\uFE62\uFE63\uFF0B\uFF0D`;
+const TANDA_PERAK = String.raw`[${KARAKTER_TANDA_PERAK}]`;
 const regexPerakBertanda = () => new RegExp(
-  String.raw`${TANDA_PERAK}[\s()[\]{}:,;=+\-\u2212]*(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
+  String.raw`${TANDA_PERAK}[\s()[\]{}:,;=${KARAKTER_TANDA_PERAK}]*(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
   "gi"
 );
 const regexPerakTanpaTanda = () => new RegExp(
-  String.raw`(?<![\w.,+\-\u2212])(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
+  String.raw`(?<![\w.,${KARAKTER_TANDA_PERAK}])(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
   "gi"
 );
 

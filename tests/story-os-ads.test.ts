@@ -651,6 +651,8 @@ test("SA6 strict mengunci exact bridge set menurut template dan harga immutable"
     "-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak",
     "Rp+5000 perak", "harga- 5.000 perak", "Harganya,+5,000 perak",
     "(+5000 perak)", "+-5000 perak", "− 5.000 perak", "+ (5.000 perak)",
+    "＋5000 perak", "－5000 perak", "±5000 perak", "﹢ 5.000 perak", "﹣5,000 perak",
+    "⁺5000 perak", "⁻5000 perak", "₊5000 perak", "₋5000 perak", "➕5000 perak", "➖5000 perak",
   ]) {
     const signed = structuredClone(LIVE_ADS_SAFE);
     signed[2].text = `Harganya ${signedPerak}.`;
@@ -713,6 +715,8 @@ test("detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka
     "-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak", "+0 perak",
     "Rp+5000 perak", "harga- 5.000 perak", "Harganya,+5,000 perak",
     "(+5000 perak)", "+-5000 perak", "− 5.000 perak", "+ (5.000 perak)",
+    "＋5000 perak", "－5000 perak", "±5000 perak", "﹢ 5.000 perak", "﹣5,000 perak",
+    "⁺5000 perak", "⁻5000 perak", "₊5000 perak", "₋5000 perak", "➕5000 perak", "➖5000 perak",
   ]) {
     assert.deepEqual(deteksiHargaIndonesia(signedPerak), [], signedPerak);
     assert.equal(tanpaNominalHargaTertulis(signedPerak), signedPerak, `redactor: ${signedPerak}`);
