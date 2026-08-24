@@ -89,6 +89,16 @@ export class PgProductPersonaScriptRepository {
   }
 
   /**
+   * Exact-ID read used only to reconcile an ambiguous create acknowledgement.
+   * Deliberately does not filter by owner: an ID collision/foreign row is a
+   * mismatch that must retain storage, never "absent" followed by deletion.
+   */
+  async getProductByIdForCreateReconciliation(productId: string): Promise<ProductRow | null> {
+    const found = await this.pool.query<ProductRow>("SELECT * FROM products WHERE id = $1", [productId]);
+    return found.rows[0] ?? null;
+  }
+
+  /**
    * Produk milik ORGANISASI, bukan milik anggota yang kebetulan membuatnya.
    *
    * Kepemilikan per-user benar untuk retail dan SALAH untuk dashboard brand:

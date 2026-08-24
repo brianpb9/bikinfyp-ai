@@ -921,13 +921,21 @@ TASK=`P0-T43-E1-REFERENCE-GATE-20260824`
   evidence, missing/corrupt evidence, hash mismatch, and resolver errors all
   fail before either SQLite or PostgreSQL product persistence.
 - Any resolver rejection/error or DB persistence failure invokes E1 exact-set
-  rollback for the new image bytes and sidecars. Successful cleanup leaves no
-  new storage, row, or success audit. Cleanup failure is an observable 500 and
-  explicitly logs possible residual storage; unrelated objects survive.
+  rollback for the new image bytes and sidecars only after authoritative
+  exact-ID reconciliation proves the row absent. A commit whose acknowledgement
+  failed is recovered as success only when owner, retail scope, ordered images,
+  and every immutable create input match exactly; SQLite completion audit is
+  idempotent. Reconciliation failure/mismatch retains storage and returns a
+  visible 500 rather than creating dangling DB references. Successful confirmed-
+  absent cleanup leaves no new storage, row, or success audit. Cleanup failure
+  is an observable 500 and explicitly logs possible residual storage;
+  unrelated objects survive.
 - `tests/e1-reference-gate.test.ts` exercises the exported POST through both DB
   seams with positive packshot, banner-first+packshot, multiple-valid, and all
-  listed negative/fault cases. Its mutation guard rejects label/brand bypass,
-  resolver bypass, early SQLite/PG persistence, and non-exact rollback.
+  listed negative/fault cases, including SQLite/PG pre-commit failure,
+  commit-then-throw exact recovery, reconciliation mismatch, and reconciliation
+  failure. Its mutation guard rejects label/brand bypass, resolver bypass,
+  early SQLite/PG persistence, reconciliation bypass, and non-exact rollback.
 - This slice does not change OCR execution policy, type/category policy,
   legacy treatment, payment/provider behavior, deployment, or production
   state. Aggregate matrix statuses remain bounded as listed above and

@@ -120,12 +120,35 @@ export async function POST(req: Request) {
 
     const id = dependencies.uuid();
     const images = await saveProductImages(id, blobs);
+    const usePostgres = dependencies.postgresRuntimeEnabled();
+    const expectedCreation = {
+      id,
+      userId: user.id,
+      sourceUrl,
+      name: validName,
+      priceIdr,
+      category,
+      productVisualDesc: visualDesc,
+      images,
+      promoPriceBeforeIdr: promo.promoPriceBeforeIdr,
+      promoEndsAt: promo.promoEndsAt,
+      promoStockLeft: promo.promoStockLeft,
+      rawMeta,
+    };
+    const resolution = await resolveApprovedReference(images).catch((resolutionError) =>
+      // Resolver infrastructure errors are known to occur before DB create.
+      rejectAfterReferenceCheck("E1", images, resolutionError)
+    );
+    if (!resolution.utama) {
+      await rejectAfterReferenceCheck(
+        "E1",
+        images,
+        new GagalTanpaReferensi(pesanTanpaReferensi(resolution), resolution),
+      );
+    }
+
     try {
-      const resolution = await resolveApprovedReference(images);
-      if (!resolution.utama) {
-        throw new GagalTanpaReferensi(pesanTanpaReferensi(resolution), resolution);
-      }
-      if (dependencies.postgresRuntimeEnabled()) {
+      if (usePostgres) {
         await dependencies.smokeCreateProduct(user.id, { sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, rawMeta, ...promo }, id);
       } else {
         dependencies.getDb()
@@ -135,10 +158,35 @@ export async function POST(req: Request) {
           .run(id, user.id, sourceUrl, validName, priceIdr, category, visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, rawMeta ? JSON.stringify(rawMeta) : null, dependencies.now());
       }
     } catch (creationError) {
-      await rejectAfterReferenceCheck("E1", images, creationError);
+      // A DB exception may mean COMMIT succeeded and only its
+      // acknowledgement failed. Deleting storage in that state would leave a
+      // durable row pointing at missing objects, so reconcile exact ID+owner+
+      // immutable create data before deciding whether deletion is safe.
+      let reconciliation: Awaited<ReturnType<typeof dependencies.reconcileProductCreation>>;
+      try {
+        reconciliation = await dependencies.reconcileProductCreation(expectedCreation, usePostgres);
+      } catch (reconciliationError) {
+        throw new Error(
+          `E1 product create outcome unknown for ${id}; newly stored references were retained. ` +
+          `Persistence failure: ${(creationError as Error).message}. ` +
+          `Reconciliation failure: ${(reconciliationError as Error).message}`,
+          { cause: reconciliationError },
+        );
+      }
+      if (reconciliation === "absent") {
+        await rejectAfterReferenceCheck("E1", images, creationError);
+      }
+      if (reconciliation === "mismatch") {
+        throw new Error(
+          `E1 product create reconciliation mismatch for ${id}; newly stored references were retained because the durable row does not exactly match owner and immutable create data.`,
+          { cause: creationError },
+        );
+      }
+      // exact = the transaction committed despite its failed acknowledgement.
+      // Continue as success; SQLite's audit is completed idempotently below.
     }
-    if (!dependencies.postgresRuntimeEnabled()) {
-      dependencies.audit(user.id, "product.created", "products", id, { name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null });
+    if (!usePostgres) {
+      dependencies.auditProductCreatedOnce(user.id, id, { name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null });
     }
 
     return Response.json({ product_id: id, name: validName, price_idr: priceIdr, category, images }, { status: 201 });

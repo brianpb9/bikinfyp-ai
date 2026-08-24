@@ -14,7 +14,7 @@ process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "e1-reference-ga
 const { setMediaStorageForTests } = await import("../lib/storage");
 const { setProductImageClassifierForTests } = await import("../lib/product-images");
 const { setPeriksaLabelFotoForTests } = await import("../lib/media/label-terbaca");
-const { setProductCreateDependenciesForTests } = await import("../lib/product-create-dependencies");
+const { setProductCreateDependenciesForTests, productCreationRowMatchesExpected } = await import("../lib/product-create-dependencies");
 const { POST: createProduct } = await import("../app/api/products/route");
 type MediaStorage = import("../lib/storage").MediaStorage;
 type HasilLabel = import("../lib/media/label-terbaca").HasilLabel;
@@ -104,7 +104,8 @@ interface RunOptions {
   classifierFailure?: boolean;
   labels?: HasilLabel[];
   readMutation?: ReadMutation;
-  dbFailure?: boolean;
+  persistenceFault?: "before-commit" | "after-commit";
+  reconciliation?: "automatic" | "absent" | "exact" | "mismatch" | "failure";
   failDeletePhoto?: boolean;
 }
 
@@ -132,6 +133,7 @@ async function run(label: string, options: RunOptions = {}) {
   let sqliteAttempts = 0;
   let pgAttempts = 0;
   let audits = 0;
+  let reconciliationCalls = 0;
   const insertedImages: string[][] = [];
   const productId = `e1-${label}-${process.pid}`;
   setProductCreateDependenciesForTests({
@@ -140,22 +142,35 @@ async function run(label: string, options: RunOptions = {}) {
     postgresRuntimeEnabled: () => options.postgres ?? false,
     smokeCreateProduct: async (_userId, input) => {
       pgAttempts += 1;
-      if (options.dbFailure) throw new Error("controlled PostgreSQL persistence failure");
+      if (options.persistenceFault === "before-commit") throw new Error("controlled PostgreSQL pre-commit failure");
       insertedImages.push([...input.images]);
+      if (options.persistenceFault === "after-commit") throw new Error("controlled PostgreSQL commit acknowledgement failure");
       return {} as never;
     },
     getDb: () => ({
       prepare: () => ({
         run: (...args: unknown[]) => {
           sqliteAttempts += 1;
-          if (options.dbFailure) throw new Error("controlled SQLite persistence failure");
+          if (options.persistenceFault === "before-commit") throw new Error("controlled SQLite pre-commit failure");
           insertedImages.push(JSON.parse(String(args[7])) as string[]);
+          if (options.persistenceFault === "after-commit") throw new Error("controlled SQLite commit acknowledgement failure");
           return {};
         },
       }),
     }) as never,
     now: () => "2026-08-24T00:00:00.000Z",
-    audit: () => { audits += 1; },
+    auditProductCreatedOnce: () => { audits += 1; },
+    reconcileProductCreation: async (expected, usePostgres) => {
+      reconciliationCalls += 1;
+      assert.equal(expected.id, productId);
+      assert.equal(expected.userId, "user-e1");
+      assert.equal(usePostgres, options.postgres ?? false);
+      assert.equal(expected.name, `Serum ${label}`);
+      assert.deepEqual(expected.images, [0, 1].slice(0, verdicts.length).map((index) => `uploads/${productId}/${index}.webp`));
+      if (options.reconciliation === "failure") throw new Error("controlled authoritative reconciliation failure");
+      if (options.reconciliation && options.reconciliation !== "automatic") return options.reconciliation;
+      return insertedImages.length > 0 ? "exact" : "absent";
+    },
   });
 
   const pngs = await Promise.all(verdicts.map((_, index) =>
@@ -176,7 +191,7 @@ async function run(label: string, options: RunOptions = {}) {
   }));
 
   assert.ok(labelCalls.every((call) => !fs.existsSync(call.path) && !fs.existsSync(path.dirname(call.path))), `${label}: temp label wajib dibersihkan`);
-  return { response, storage, productId, sqliteAttempts, pgAttempts, audits, insertedImages, labelCalls };
+  return { response, storage, productId, sqliteAttempts, pgAttempts, audits, reconciliationCalls, insertedImages, labelCalls };
 }
 
 function createdKeys(result: Awaited<ReturnType<typeof run>>): string[] {
@@ -280,18 +295,104 @@ test("E1 resolver fail-closed mempertahankan reason code dan rollback exact", as
   assert.ok(failed.logs.some((args) => args.some((arg) => String(arg).includes("controlled E1 resolver failure"))));
 });
 
-test("E1 rollback DB failure di SQLite dan PG, sementara cleanup failure terlihat sebagai 500", async () => {
+test("E1 hanya rollback persistence yang terbukti pre-commit di SQLite dan PG", async () => {
   for (const postgres of [false, true]) {
     const runtime = postgres ? "pg" : "sqlite";
-    const failed = await quiet(() => run(`${runtime}-db-failure`, { postgres, dbFailure: true }));
+    const failed = await quiet(() => run(`${runtime}-db-failure`, { postgres, persistenceFault: "before-commit" }));
     assert.equal(failed.value.response.status, 500);
     assert.equal(failed.value.sqliteAttempts, postgres ? 0 : 1);
     assert.equal(failed.value.pgAttempts, postgres ? 1 : 0);
     assert.equal(failed.value.audits, 0);
+    assert.equal(failed.value.reconciliationCalls, 1);
     assert.deepEqual(failed.value.insertedImages, [], "fixture DB gagal sebelum row durable");
     assert.deepEqual(createdKeys(failed.value), [], `${runtime}: DB failure wajib membersihkan exact bytes+sidecar`);
     assert.equal(failed.value.storage.values.has("uploads/unrelated/keep.webp"), true);
   }
+});
+
+test("E1 memulihkan commit-then-throw exact dan mempertahankan storage saat outcome unknown/mismatch", async () => {
+  for (const postgres of [false, true]) {
+    const runtime = postgres ? "pg" : "sqlite";
+    const recovered = await run(`${runtime}-commit-then-throw`, { postgres, persistenceFault: "after-commit" });
+    assert.equal(recovered.response.status, 201, await recovered.response.clone().text());
+    assert.equal(recovered.reconciliationCalls, 1);
+    assert.equal(recovered.insertedImages.length, 1, "fixture wajib merekam row durable sebelum acknowledgement gagal");
+    assert.equal(recovered.audits, postgres ? 0 : 1, "SQLite audit dipulihkan once; audit PG atomik dengan create");
+    assert.equal(createdKeys(recovered).length, 2, "row exact recovered wajib mempertahankan bytes+sidecar");
+
+    for (const reconciliation of ["mismatch", "failure"] as const) {
+      const ambiguous = await quiet(() => run(`${runtime}-${reconciliation}`, {
+        postgres,
+        persistenceFault: "after-commit",
+        reconciliation,
+      }));
+      assert.equal(ambiguous.value.response.status, 500);
+      assert.equal(ambiguous.value.reconciliationCalls, 1);
+      assert.equal(ambiguous.value.insertedImages.length, 1, "fixture wajib punya row durable/unknown");
+      assert.equal(ambiguous.value.audits, 0, "outcome non-exact tidak boleh menerbitkan audit sukses tambahan");
+      assert.equal(createdKeys(ambiguous.value).length, 2, `${runtime}/${reconciliation}: storage wajib ditahan`);
+      assert.deepEqual(ambiguous.value.storage.deleteCalls, [], `${runtime}/${reconciliation}: tidak boleh menghapus saat outcome unknown`);
+      const logText = ambiguous.logs.flat().map(String).join(" ");
+      assert.match(logText, reconciliation === "mismatch" ? /reconciliation mismatch/ : /outcome unknown/);
+    }
+  }
+});
+
+test("E1 authoritative reconciliation membutuhkan exact ID, owner, ordered images, dan seluruh create data", () => {
+  const expected = {
+    id: "product-exact",
+    userId: "owner-exact",
+    sourceUrl: "https://example.test/product",
+    name: "Serum Exact",
+    priceIdr: 50000,
+    category: "beauty",
+    productVisualDesc: "botol ungu",
+    images: ["uploads/product-exact/0.webp", "uploads/product-exact/1.webp"],
+    promoPriceBeforeIdr: 70000,
+    promoEndsAt: "2026-09-01T00:00:00.000Z",
+    promoStockLeft: 3,
+    rawMeta: { brand: "HDRV" },
+  };
+  const row = {
+    id: expected.id,
+    user_id: expected.userId,
+    org_id: null,
+    source_url: expected.sourceUrl,
+    name: expected.name,
+    price_idr: expected.priceIdr,
+    category: expected.category,
+    product_visual_desc: expected.productVisualDesc,
+    brand_brief: null,
+    images: JSON.stringify(expected.images),
+    promo_price_before_idr: expected.promoPriceBeforeIdr,
+    promo_ends_at: expected.promoEndsAt,
+    promo_stock_left: expected.promoStockLeft,
+    raw_meta: JSON.stringify(expected.rawMeta),
+    created_at: "2026-08-24T00:00:00.000Z",
+  };
+  assert.equal(productCreationRowMatchesExpected(row, expected), true);
+  const mutations = [
+    { id: "other-id" },
+    { user_id: "other-owner" },
+    { org_id: "org-not-retail" },
+    { source_url: null },
+    { name: "Other" },
+    { price_idr: 1 },
+    { category: "other" },
+    { product_visual_desc: null },
+    { brand_brief: "unexpected" },
+    { images: JSON.stringify([...expected.images].reverse()) },
+    { promo_price_before_idr: null },
+    { promo_ends_at: null },
+    { promo_stock_left: null },
+    { raw_meta: JSON.stringify({ brand: "OTHER" }) },
+  ];
+  for (const mutation of mutations) {
+    assert.equal(productCreationRowMatchesExpected({ ...row, ...mutation }, expected), false, JSON.stringify(mutation));
+  }
+});
+
+test("E1 cleanup failure setelah reference rejection tetap terlihat sebagai 500", async () => {
 
   const cleanup = await quiet(() => run("cleanup-failure", { verdicts: [PROMOTIONAL], failDeletePhoto: true }));
   assert.equal(cleanup.value.response.status, 500);
@@ -309,14 +410,16 @@ function assertE1BoundarySource(source: string, context: string): void {
   const resolve = source.indexOf("await resolveApprovedReference(images)");
   const pg = source.indexOf("await dependencies.smokeCreateProduct(");
   const sqlite = source.indexOf("dependencies.getDb()");
-  const rollback = source.indexOf('await rejectAfterReferenceCheck("E1", images, creationError)');
-  const audit = source.indexOf("dependencies.audit(");
+  const reconcile = source.indexOf("await dependencies.reconcileProductCreation(expectedCreation, usePostgres)");
+  const rollback = source.lastIndexOf('await rejectAfterReferenceCheck("E1", images, creationError)');
+  const audit = source.indexOf("dependencies.auditProductCreatedOnce(");
 
   assert.ok(label >= 0 && unreadable > label && brand > unreadable, `${context}: every-blob label/brand gate wajib lengkap`);
   assert.ok(save > brand, `${context}: storage tidak boleh mendahului label/brand gate`);
   assert.ok(resolve > save, `${context}: canonical resolver wajib sesudah ingestion`);
   assert.ok(pg > resolve && sqlite > resolve, `${context}: kedua persistence seam wajib sesudah resolver`);
-  assert.ok(rollback > resolve, `${context}: exact rollback E1 wajib melindungi resolver/persistence`);
+  assert.ok(reconcile > pg && reconcile > sqlite, `${context}: persistence exception wajib direkonsiliasi authoritative`);
+  assert.ok(rollback > reconcile, `${context}: DB rollback storage hanya boleh sesudah reconciliation absent`);
   assert.ok(audit > rollback, `${context}: audit sukses wajib sesudah guarded persistence`);
 }
 
@@ -329,17 +432,21 @@ test("E1 structural mutation guard menolak bypass label, resolver, persistence a
     ["brand bypass", production.replace("if (label.cocokMerek === false)", "if (false)"), /label\/brand gate wajib lengkap/],
     ["resolver bypass", production.replace("await resolveApprovedReference(images)", "await resolveAnything(images)"), /canonical resolver wajib/],
     ["SQLite before resolver", production.replace(
-      "const resolution = await resolveApprovedReference(images);",
-      "dependencies.getDb();\n      const resolution = await resolveApprovedReference(images);"
+      "const resolution = await resolveApprovedReference(images)",
+      "dependencies.getDb();\n    const resolution = await resolveApprovedReference(images)"
     ), /persistence seam wajib sesudah resolver/],
     ["PG before resolver", production.replace(
-      "const resolution = await resolveApprovedReference(images);",
-      "await dependencies.smokeCreateProduct(user.id, {} as never, id);\n      const resolution = await resolveApprovedReference(images);"
+      "const resolution = await resolveApprovedReference(images)",
+      "await dependencies.smokeCreateProduct(user.id, {} as never, id);\n    const resolution = await resolveApprovedReference(images)"
     ), /persistence seam wajib sesudah resolver/],
     ["rollback wrong set", production.replace(
-      'await rejectAfterReferenceCheck("E1", images, creationError)',
-      'await rejectAfterReferenceCheck("E1", images.slice(1), creationError)'
-    ), /exact rollback E1 wajib/],
+      '      if (reconciliation === "absent") {\n        await rejectAfterReferenceCheck("E1", images, creationError);\n      }',
+      '      if (reconciliation === "absent") {\n        await rejectAfterReferenceCheck("E1", images.slice(1), creationError);\n      }'
+    ), /DB rollback storage hanya boleh/],
+    ["reconciliation bypass", production.replace(
+      "await dependencies.reconcileProductCreation(expectedCreation, usePostgres)",
+      "await Promise.resolve('absent')"
+    ), /direkonsiliasi authoritative/],
   ] as const;
 
   for (const [name, source, expected] of counterexamples) {

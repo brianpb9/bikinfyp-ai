@@ -122,6 +122,10 @@ export async function smokeGetProduct(userId: string, productId: string) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.getOwnedProduct(userId, productId); } finally { await repo.close(); }
 }
+export async function smokeGetProductByIdForCreateReconciliation(productId: string) {
+  const repo = new PgProductPersonaScriptRepository(url());
+  try { return await repo.getProductByIdForCreateReconciliation(productId); } finally { await repo.close(); }
+}
 export async function pgUpdateProduct(userId: string, productId: string, patch: { name: string; priceIdr: number; category: string; productVisualDesc: string | null; promoPriceBeforeIdr?: number | null; promoEndsAt?: string | null; promoStockLeft?: number | null }) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.updateOwnedProduct(userId, productId, patch); } finally { await repo.close(); }
