@@ -57,7 +57,7 @@
     "valid_signature_unknown_order": {
       "http_status": 200,
       "ignored": true,
-      "credited": false,
+      "credited_derived_from_postcanary_db": false,
       "order": "parity-unknown-20260824-1622"
     },
     "money_operation_performed": false
@@ -74,6 +74,10 @@
   },
   "production": {
     "mutated": false,
+    "pre_task_receipt_observed_at": "2026-08-24T11:31:30Z",
+    "post_task_receipt_observed_at": "2026-08-24T16:31:13Z",
+    "same_task_raw_pretask_capture_preserved": false,
+    "comparison_uses_independent_immutable_pretask_receipt": true,
     "branch": "main",
     "origin_main": "00ee62efd86ae7e10453a2a1896e63b62228aa4d",
     "web_deploy": "dep-da3bfg142hec73arfot0",

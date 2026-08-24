@@ -22,7 +22,11 @@
       "path": "/api/webhooks/duitku",
       "order": "parity-unknown-20260824-1622",
       "http": 200,
-      "response": { "ok": true, "ignored": true, "credited": false, "reason": "order tidak dikenal" }
+      "response": { "ok": true, "ignored": true, "reason": "order tidak dikenal" },
+      "derived_invariant": {
+        "credited": false,
+        "basis": "post-canary payments and credit_ledger snapshots exactly match baseline"
+      }
     }
   ],
   "invoice_created": false,

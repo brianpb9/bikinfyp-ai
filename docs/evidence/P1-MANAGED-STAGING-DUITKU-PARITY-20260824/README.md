@@ -75,13 +75,21 @@ For every snapshot, rows created since task start (`2026-08-24T16:08:41Z`) were 
 
 ## Production no-touch proof
 
-Production state before and after the staging work remained:
+An independently committed production receipt observed at
+`2026-08-24T11:31:30Z` and a preserved post-task read at
+`2026-08-24T16:31:13Z` contain the same live deploy IDs and SHAs:
 
 - Web service `srv-d9nhccfqj5pc73et9hrg`: branch `main`, `autoDeploy=yes`, live deploy `dep-da3bfg142hec73arfot0`, SHA `00ee62efd86ae7e10453a2a1896e63b62228aa4d`.
 - Worker service `srv-d9ni3ndaeets73c07kq0`: branch `main`, `autoDeploy=yes`, live deploy `dep-da3bfg142hec73arfpfg`, SHA `00ee62efd86ae7e10453a2a1896e63b62228aa4d`.
 - `origin/main`: `00ee62efd86ae7e10453a2a1896e63b62228aa4d`.
 
 No production API mutation or Git push to `main` occurred.
+
+Provenance limit: the task also performed a same-task production read before
+staging mutation, but its terminal output was not persisted. It is therefore
+not used as evidence. `PRODUCTION-NO-TOUCH.json` identifies the earlier
+immutable receipt and exact checksum, the preserved post-task source receipt,
+and limits the comparison to fields independently present in those artifacts.
 
 ## Rollback target (captured, not executed)
 

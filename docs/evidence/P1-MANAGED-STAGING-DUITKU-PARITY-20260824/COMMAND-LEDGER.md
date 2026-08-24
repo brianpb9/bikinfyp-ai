@@ -4,6 +4,7 @@ All times are UTC. Exit `0` means the command completed successfully. Secret-bea
 
 | UTC | Exit | Operation | Receipt/result |
 | --- | ---: | --- | --- |
+| 2026-08-24T11:31:30Z | 0 | Reuse immutable pre-task production control-plane receipt | `docs/evidence/P0-03/managed-web-classifier-canary-20260824/control-plane-final.json`; committed before this task |
 | 2026-08-24T16:08:41Z | 0 | Consume canonical TASK with `bus-read builder` | Task SHA `89cfdf0...`, stale=false |
 | 2026-08-24T16:12:24Z | 0 | Render API: staging web maintenance on | HTTP 200; public health transitioned 200, 200, 503 |
 | 2026-08-24T16:12:29Z | 0 | Render API: suspend staging worker | HTTP 202 |
@@ -23,7 +24,8 @@ All times are UTC. Exit `0` means the command completed successfully. Secret-bea
 | 2026-08-24T16:21:35Z | 0 | Invalid-signature callback canary | HTTP 401 `INVALID_SIGNATURE` |
 | 2026-08-24T16:21:46Z | 0 | Locally signed unknown-order callback canary | HTTP 200, ignored=true, no credit |
 | 2026-08-24T16:22:07Z | 0 | Final DB/queue read-only probes | Both succeeded; matched baseline |
-| 2026-08-24T16:22:20Z | 0 | Read-only production deploy/ref checks | Before/after fingerprints unchanged |
+| 2026-08-24T16:22:20Z | 0 | Initial post-task read-only production deploy/ref check | Values unchanged; terminal output was not file-preserved and is not the claimed source receipt |
 | 2026-08-24T16:25:00Z | 0 | Exact-value secret scan over evidence | 2 keys compared, zero matches |
+| 2026-08-24T16:31:13Z | 0 | Preserved post-task production service/deploy/ref read | `PRODUCTION-POST-READ.json`; values match immutable pre-task deploy baseline |
 
 No deploy-create command was repeated. Repeated deploy commands in the terminal were read-only list/poll operations.

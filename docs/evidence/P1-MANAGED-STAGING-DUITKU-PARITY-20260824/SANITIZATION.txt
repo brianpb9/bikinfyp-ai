@@ -1,5 +1,5 @@
 observed_utc=2026-08-24T16:25:00Z
-files_scanned=13
+files_scanned=14
 secret_keys_compared=2
 exact_secret_matches=0
 secret_derived_digests_recorded=0

@@ -1,0 +1,13 @@
+{
+  "observed_at": "2026-08-24T16:31:13Z",
+  "source": "read-only Render CLI service/deploy lists plus git ls-remote",
+  "services": [
+    { "id": "srv-d9ni3ndaeets73c07kq0", "name": "bikinfyp-ai-production-worker", "branch": "main", "autoDeploy": "yes", "suspended": "not_suspended", "type": "background_worker", "runtime": "docker" },
+    { "id": "srv-d9nhccfqj5pc73et9hrg", "name": "bikinfyp-ai-production-web", "branch": "main", "autoDeploy": "yes", "suspended": "not_suspended", "type": "web_service", "runtime": "node" }
+  ],
+  "deploys": {
+    "web": { "id": "dep-da3bfg142hec73arfot0", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d", "createdAt": "2026-08-20T08:16:00.470163Z", "finishedAt": "2026-08-20T08:20:32.109544Z", "trigger": "new_commit" },
+    "worker": { "id": "dep-da3bfg142hec73arfpfg", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d", "createdAt": "2026-08-20T08:16:00.552472Z", "finishedAt": "2026-08-20T08:18:50.342834Z", "trigger": "new_commit" }
+  },
+  "origin_main": "00ee62efd86ae7e10453a2a1896e63b62228aa4d"
+}
