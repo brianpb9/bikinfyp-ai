@@ -23,5 +23,5 @@ const url = new URL(process.argv[2]); url.pathname = `/${process.argv[3]}`; proc
 NODE
 )"
 DATABASE_URL="$test_url" bash scripts/migrate-postgres.sh >/dev/null
-UJI_PG_URL="$test_url" RACUN_NO_DOTENV=1 SCRIPT_LLM=0 npx tsx --test tests/pg-product-truth-w1.test.ts
+DATABASE_URL="$test_url" UJI_PG_URL="$test_url" RACUN_NO_DOTENV=1 SCRIPT_LLM=0 npx tsx --test tests/pg-product-truth-w1.test.ts
 echo "PASS: kontrak referensi W1 tervalidasi pada database disposable $database."

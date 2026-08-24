@@ -82,6 +82,7 @@ export function shouldPreserveEmbeddedLipsync(input: {
 type WorkerRow = {
   id: string; user_id: string; org_id: string | null; product_id: string; persona_id: string | null; script_id: string;
   format: string; quality_tier: string; duration_s: number; state: string;
+  provider_video: string | null;
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
   script_hook_level: string | null;
   /** Snapshot admisi (JSON) — membawa jejak ide sampai ke arsip prompt. */
@@ -671,7 +672,12 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     await pastikanManifestSebelumEfek();
     video = await generateVideoWithFailover(specSiap, workDir);
   }
-  await jobs.setProviders(row.id, video.providerName);
+  // Resume scene yang sudah disetujui membawa provider sintetis
+  // `reused-from-disk`; itu mekanisme pemuatan, bukan penyedia yang membayar
+  // render awal. Pertahankan provenance provider asli dan gunakan identitas
+  // itu juga untuk keputusan audio/compositor di bawah.
+  const effectiveVideoProvider = reused ? row.provider_video ?? video.providerName : video.providerName;
+  if (!reused) await jobs.setProviders(row.id, effectiveVideoProvider);
   await jobs.addCost(row.id, video.costIdr);
 
   // M11: berhenti di sini untuk job brand yang belum disetujui. Suara,
@@ -723,7 +729,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   if (!(await jobs.transition(row.id, "GENERATING_VOICE", { worker: "postgres" }))) return;
   const vo: { path: string; startSec: number }[] = [];
   let geminiVoPath: string | undefined;
-  const usedMockVideo = isMockProviderName(video.providerName);
+  const usedMockVideo = isMockProviderName(effectiveVideoProvider);
   // r7 (Brian 2026-08-07): "presenter/lipsync jual Super HQ 80rb-an, sisanya
   // video+VO mulut nggak lipsync" — satu-satunya kombinasi berlip-sync
   // sungguhan adalah Wajah AI di tier Super HQ (audio embedded asli
@@ -745,7 +751,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // pembicaranya memang tidak pernah terlihat, jadi narasi luar-kamera adalah
   // bentuk yang benar, bukan kompromi.
   const isPresenterLipsync = shouldPreserveEmbeddedLipsync({
-    format, providerName: video.providerName, storyIdentity,
+    format, providerName: effectiveVideoProvider, storyIdentity,
   });
   if (!withAudio) await jobs.setProviders(row.id, undefined, "none-silent-caption");
   else if (format === "vo_broll") {
@@ -812,7 +818,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       voiceoverStartSec,
       vo: mode === "vo" ? vo : undefined, captions, musicPath, durationSec: row.duration_s,
       priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,
-      demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });
+      demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: effectiveVideoProvider });
     outputPath = composite.outPath; renderParams = composite.renderParams;
 
     // Overlay klaim dipasang SEBELUM endcard, supaya klaim menempel di konten

@@ -39,6 +39,7 @@ import { stripDeliveryTags } from "../script-engine/delivery-tags";
 import { bridgeStoryAdsTerbukti, isStructuredStoryAds, temuanBridgeStoryAds, temuanHookSenyapAds, temuanStrukturStoryAds } from "../script-engine/story-os-ads";
 import {
   isNeutralStoryAdsTemplate,
+  NEUTRAL_PROP_SIZE_LOCK,
   neutralStoryAdsActionContradictions,
   neutralStoryAdsPromptContradictions,
   neutralStoryAdsUntrustedFieldContradictions,
@@ -544,6 +545,15 @@ function kunciUkuranAsli(namaProduk: string): string {
     `Every "${namaProduk}" in frame is at its true small size, about the width of a hand, ` +
     `resting on a surface or held in her hand, and the camera keeps a normal conversational distance from it.`
   );
+}
+
+/**
+ * Padanan kunci ukuran untuk visual netral yang memang tidak boleh membawa
+ * nama, foto, atau identitas produk. Gerbang akhir tetap keras pada skala dan
+ * jarak kamera, tetapi subjeknya adalah properti polos yang aman.
+ */
+function kunciUkuranPropertiNetral(): string {
+  return NEUTRAL_PROP_SIZE_LOCK;
 }
 
 /**
@@ -1813,7 +1823,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
 
     // Kunci ukuran asli (§C.10) di TIAP shot — termasuk shot tanpa suara, yang
     // punya cacat produk-raksasa yang sama.
-    const ukuran = neutralVisual ? "" : ` ${kunciUkuranAsli(input.productName)}`;
+    const ukuran = neutralVisual
+      ? ` ${kunciUkuranPropertiNetral()}`
+      : ` ${kunciUkuranAsli(input.productName)}`;
     // Kontrak talent mode ikut, terpisah dari framing: framing mengatur KAMERA,
     // kalimat ini mengatur apa yang dilakukan orangnya.
     const kontrak = framingMode ? ` ${blokKontrakMode(modeShot)}` : "";

@@ -178,6 +178,7 @@ interface AmatanProvider {
   dipanggil: boolean;
 }
 let amatan: AmatanProvider = { utamaSha: null, utamaPath: null, extraPaths: [], promptText: "", dipanggil: false };
+let panggilanVideoAudio = 0;
 
 async function pasangProviderPengamat() {
   const { setVideoProvidersForTests } = await import("../lib/providers/registry");
@@ -207,11 +208,13 @@ async function pasangProviderPengamat() {
 async function pasangProviderVideoSuksesSampaiTts() {
   const { setVideoProvidersForTests } = await import("../lib/providers/registry");
   amatan = { utamaSha: null, utamaPath: null, extraPaths: [], promptText: "", dipanggil: false };
+  panggilanVideoAudio = 0;
   setVideoProvidersForTests([{
     name: "pengamat-audio-w1",
     async healthCheck() { return true; },
     estimateCost() { return 0; },
     async generate(spec: { shots: { prompt: string; durationSec: number }[] }, outDir: string) {
+      panggilanVideoAudio++;
       amatan.dipanggil = true;
       amatan.promptText = spec.shots.map((shot) => shot.prompt).join("\n");
       return spec.shots.map((shot, index) => {
@@ -304,33 +307,33 @@ async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string;
 
 /** Admission dashboard organisasi sungguhan melalui renderSatuSel. */
 async function siapkanJobOrgLewatAdmisi(images: string[]) {
-  const orgId = uid(), intruderId = uid(), intruderOrgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
+  const ownerId = uid(), orgId = uid(), intruderId = uid(), intruderOrgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
   const segmenAdmisi = [
     { role: "hook", start: 0, end: 4, text: "Bestie Serum Glow Bright ini bikin rutinitas pagiku terasa praktis dan kemasannya cantik banget di meja rias", visual_direction: "x" },
     { role: "demo", start: 4, end: 11, text: "Makanya teksturnya ringan mudah diratakan dan nyaman dipakai sebelum makeup setiap hari", visual_direction: "x" },
     { role: "cta", start: 11, end: 15, text: "Kalau penasaran cek keranjang sekarang ya", visual_direction: "x" },
   ];
   await pool.query(
-    "INSERT INTO users (id,phone,email,name,tier,locale,created_at) VALUES ($1,$2,$3,'Intruder E7','free','id-ID',$4)",
-    [intruderId, `08127${process.pid}`, `w1-e7-intruder-${process.pid}@contoh.test`, t]
+    "INSERT INTO users (id,phone,email,name,tier,locale,created_at) VALUES ($1,$2,$3,'Owner E7','free','id-ID',$7),($4,$5,$6,'Intruder E7','free','id-ID',$7)",
+    [ownerId, `08126${process.pid}`, `w1-e7-owner-${ownerId}@contoh.test`, intruderId, `08127${process.pid}`, `w1-e7-intruder-${intruderId}@contoh.test`, t]
   );
   await pool.query(
     "INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,'Org E7',$2,$5),($3,'Org E7 lain',$4,$5)",
-    [orgId, `org-e7-${process.pid}`, intruderOrgId, `org-e7-lain-${process.pid}`, t]
+    [orgId, `org-e7-${orgId}`, intruderOrgId, `org-e7-lain-${intruderOrgId}`, t]
   );
   await pool.query(
     "INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$7),($4,$5,$6,'owner',$7)",
-    [uid(), orgId, userId, uid(), intruderOrgId, intruderId, t]
+    [uid(), orgId, ownerId, uid(), intruderOrgId, intruderId, t]
   );
   await pool.query(
     `INSERT INTO products
       (id,user_id,org_id,name,price_idr,category,images,raw_meta,product_visual_desc,brand_brief,claims,promo_price_before_idr,created_at)
      VALUES ($1,$2,$3,'Serum Glow Bright',85000,'beauty',$4,$5,'BOTOL-AMBER-AWAL','ARAH-BRAND-AWAL',$6,110000,$7)`,
-    [productId, userId, orgId, JSON.stringify(images), JSON.stringify({ brand: "Merek Awal" }), JSON.stringify(["klaim awal"]), t]
+    [productId, ownerId, orgId, JSON.stringify(images), JSON.stringify({ brand: "Merek Awal" }), JSON.stringify(["klaim awal"]), t]
   );
   await pool.query(
     "INSERT INTO personas (id,user_id,name,creator_category,voice_id,register,created_at) VALUES ($1,$2,'Persona E7','hijaber','id_female_1','bestie',$3)",
-    [personaId, userId, t]
+    [personaId, ownerId, t]
   );
   await pool.query(
     `INSERT INTO scripts
@@ -340,7 +343,7 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
   );
   await pool.query(
     "INSERT INTO credit_ledger (id,user_id,org_id,delta,type,created_at) VALUES ($1,$2,$3,50000,'bonus',$4)",
-    [uid(), userId, orgId, t]
+    [uid(), ownerId, orgId, t]
   );
   const { renderSatuSel } = await import("../lib/dashboard/render-cell");
   const { PgJobsRepository } = await import("../lib/postgres/jobs");
@@ -348,10 +351,10 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
   assert.equal(process.env.RACUN_WORKER_DISABLED, "1", "fixture E7 dapat auto-process saat admission");
   assert.equal(process.env.RACUN_QUEUE_MODE, "inline", "fixture E7 dapat enqueue ke Redis eksternal");
   const result = await renderSatuSel({
-    userId, orgId, productId, productName: "Serum Glow Bright", productPriceIdr: 85000,
+    userId: ownerId, orgId, productId, productName: "Serum Glow Bright", productPriceIdr: 85000,
     productSourceUrl: null, promoPriceBeforeIdr: 110000, scriptId, personaId,
     avatarCustomDesc: null, format: "talking_head", ratio: "9:16", noModel: false,
-    tvcRoute: null, templateId: null, recordStyle: null, shotCount: null, runId: `e7-${process.pid}`,
+    tvcRoute: null, templateId: null, recordStyle: null, shotCount: null, runId: `e7-${orgId}`,
   }, {
     pool,
     jobsRepo: new PgJobsRepository(URL_UJI),
@@ -364,7 +367,7 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
   const { issueToken } = await import("../lib/auth");
   return {
     jobId: result.job_id, productId, orgId,
-    ownerToken: await issueToken(userId, "081200000091"),
+    ownerToken: await issueToken(ownerId, `08126${process.pid}`),
     intruderToken: await issueToken(intruderId, `08127${process.pid}`),
   };
 }
@@ -376,19 +379,24 @@ async function siapkanStoryAdsTanpaTemplateRequest(
   admissionPool: Pool = pool,
   templateId = "ads-meja-kosong"
 ) {
-  const orgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
+  const ownerId = uid(), orgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
+  const ownerPhone = `08128${crypto.randomInt(100_000_000, 999_999_999)}`;
+  await pool.query(
+    "INSERT INTO users (id,phone,email,name,tier,locale,created_at) VALUES ($1,$2,$3,'Owner Ads Boundary','free','id-ID',$4)",
+    [ownerId, ownerPhone, `w1-ads-owner-${ownerId}@contoh.test`, t]
+  );
   await pool.query("INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,'Org Ads Boundary',$2,$3)",
-    [orgId, `org-ads-boundary-${process.pid}`, t]);
+    [orgId, `org-ads-boundary-${orgId}`, t]);
   await pool.query("INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$4)",
-    [uid(), orgId, userId, t]);
+    [uid(), orgId, ownerId, t]);
   await pool.query(
     `INSERT INTO products (id,user_id,org_id,name,price_idr,category,images,raw_meta,created_at)
      VALUES ($1,$2,$3,'Jasa Uji',189000,'jasa',$4,'{}',$5)`,
-    [productId, userId, orgId, JSON.stringify([image]), t]
+    [productId, ownerId, orgId, JSON.stringify([image]), t]
   );
   await pool.query(
     "INSERT INTO personas (id,user_id,name,creator_category,voice_id,register,created_at) VALUES ($1,$2,'Persona Ads','hijaber','id_female_1','netral',$3)",
-    [personaId, userId, t]
+    [personaId, ownerId, t]
   );
   const { generateScripts } = await import("../lib/script-engine");
   const { CAMPAIGN_TEMPLATES } = await import("../lib/templates");
@@ -412,21 +420,22 @@ async function siapkanStoryAdsTanpaTemplateRequest(
     [scriptId, productId, JSON.stringify(script.segments), validationResult, t]
   );
   await pool.query("INSERT INTO credit_ledger (id,user_id,org_id,delta,type,created_at) VALUES ($1,$2,$3,100000,'bonus',$4)",
-    [uid(), userId, orgId, t]);
+    [uid(), ownerId, orgId, t]);
   const { renderSatuSel } = await import("../lib/dashboard/render-cell");
   const { PgJobsRepository } = await import("../lib/postgres/jobs");
   const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
   const result = await renderSatuSel({
-    userId, orgId, productId, productName: "NAMA REQUEST PALSU", productPriceIdr: 189000,
+    userId: ownerId, orgId, productId, productName: "NAMA REQUEST PALSU", productPriceIdr: 189000,
     productSourceUrl: null, promoPriceBeforeIdr: null, scriptId, personaId,
     avatarCustomDesc, format: template.format, ratio: "9:16", noModel: false,
     tvcRoute: null, templateId: null, recordStyle: null, shotCount: template.shotCount ?? null,
-    runId: `ads-boundary-${process.pid}`,
+    runId: `ads-boundary-${orgId}`,
   }, {
     pool: admissionPool, jobsRepo: new PgJobsRepository(URL_UJI), creditsRepo: new PgCreditPaymentRepository(URL_UJI),
   });
   assert.equal(result.status, "queued", JSON.stringify(result));
-  return result.job_id;
+  const { issueToken } = await import("../lib/auth");
+  return { jobId: result.job_id, ownerToken: await issueToken(ownerId, ownerPhone) };
 }
 
 async function assertBlockedSnapshotTanpaSideEffect(templateId: string) {
@@ -723,7 +732,7 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
   const rel = `uploads/w1-neutral-story-ads-${process.pid}/0.png`;
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
   const injection = "woman holding a bottle marked ACME beside a blank card";
-  const jobId = await siapkanStoryAdsTanpaTemplateRequest(rel, injection);
+  const { jobId } = await siapkanStoryAdsTanpaTemplateRequest(rel, injection);
   const persisted = (await pool.query("SELECT template_id,format,avatar_custom_desc FROM jobs WHERE id=$1", [jobId])).rows[0];
   assert.deepEqual(persisted, { template_id: "ads-meja-kosong", format: "ads", avatar_custom_desc: injection });
   // Resume/legacy: kolom job hilang, snapshot admisi script tetap otoritatif.
@@ -753,10 +762,23 @@ test("W1 talking_head Story Ads memanggil TTS eksternal sekali setelah prompt pr
     await pasangProviderVideoSuksesSampaiTts();
     permintaanTtsGemini.length = 0;
     const rel = `uploads/w1-audio-${templateId}-${process.pid}/0.png`;
-    const jobId = await siapkanStoryAdsTanpaTemplateRequest(rel, null, pool, templateId);
+    const { jobId, ownerToken } = await siapkanStoryAdsTanpaTemplateRequest(rel, null, pool, templateId);
+    const isi = new Map([[rel, png], [`${rel}.meta.json`, sidecar(png, true)]]);
     amatiTtsGemini = true;
     try {
-      await jalankan(jobId, new Map([[rel, png], [`${rel}.meta.json`, sidecar(png, true)]]), true);
+      await jalankan(jobId, isi, true);
+      assert.equal((await pool.query("SELECT state FROM jobs WHERE id=$1", [jobId])).rows[0].state, "AWAITING_APPROVAL");
+      assert.equal(permintaanTtsGemini.length, 0, `${templateId}: TTS berjalan sebelum persetujuan scene`);
+
+      const { cookieName } = await import("../lib/auth");
+      const { POST } = await import("../app/api/dashboard/campaign/job/[jobId]/route");
+      const approval = await POST(new Request(`http://localhost/api/dashboard/campaign/job/${jobId}`, {
+        method: "POST",
+        headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(ownerToken)}` },
+        body: JSON.stringify({ action: "approve" }),
+      }), { params: Promise.resolve({ jobId }) });
+      if (approval.status !== 200) assert.fail(`${templateId}: approval gagal (${approval.status}): ${await approval.text()}`);
+      await jalankan(jobId, isi, true);
     } finally {
       amatiTtsGemini = false;
     }
@@ -766,8 +788,9 @@ test("W1 talking_head Story Ads memanggil TTS eksternal sekali setelah prompt pr
     assert.doesNotMatch(amatan.promptText, /Indonesian dialogue, spoken exactly|presenter speaks|VOICEOVER (?:speaks|narrates)/i,
       `${templateId}: provider video masih diminta berbicara`);
     assert.equal(permintaanTtsGemini.length, 1, `${templateId}: TTS eksternal tidak dipilih tepat sekali`);
+    assert.equal(panggilanVideoAudio, 1, `${templateId}: resume sesudah approval membayar provider video lagi`);
     assert.match(permintaanTtsGemini[0], /Jasa Uji/i, `${templateId}: bridge nama hilang dari request TTS`);
-    assert.match(permintaanTtsGemini[0], /189 ribu/i, `${templateId}: bridge harga hilang dari request TTS`);
+    assert.match(permintaanTtsGemini[0], /jasa/i, `${templateId}: bridge kategori hilang dari request TTS`);
     assert.match(permintaanTtsGemini[0], /detailnya ada di bawah/i, `${templateId}: BUTTON hilang dari request TTS`);
     const row = (await pool.query("SELECT provider_video,provider_voice,state FROM jobs WHERE id=$1", [jobId])).rows[0];
     assert.equal(row.provider_video, "pengamat-audio-w1");
@@ -806,7 +829,7 @@ test("dashboard lock membuat validasi Story Ads dan snapshot melihat versi row y
     },
   } as unknown as Pool;
 
-  const jobId = await siapkanStoryAdsTanpaTemplateRequest(
+  const { jobId } = await siapkanStoryAdsTanpaTemplateRequest(
     `uploads/w1-lock-version-${process.pid}/0.png`, null, admissionPool
   );
   assert.equal(lockSeen, true, "admission tidak mengambil FOR SHARE product lock");

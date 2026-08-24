@@ -10,6 +10,11 @@ export function isNeutralStoryAdsTemplate(templateId?: string | null): boolean {
   return Boolean(templateId && NEUTRAL_STORY_ADS_TEMPLATE_IDS.has(templateId));
 }
 
+/** Kunci ukuran kanonik untuk properti visual netral, tanpa identitas produk. */
+export const NEUTRAL_PROP_SIZE_LOCK =
+  "Every ordinary blank prop in frame stays at its true small size, about the width of a hand, " +
+  "resting on a surface or held naturally, and the camera keeps a normal conversational distance from it.";
+
 const ALLOWED_PROP_SOURCE = "(?:kartu(?: warna)?(?: polos| blank)?|swatch(?: polos| blank)?|blok warna|bidang kosong|halaman catatan(?: kosong)?|amplop|lipatan kartu)";
 const ALLOWED_PROP = new RegExp(`\\b${ALLOWED_PROP_SOURCE}\\b`, "i");
 // Stem, bukan kata utuh: bahasa Indonesia menempelkan -nya/-ku dan imbuhan
@@ -147,9 +152,14 @@ export function neutralStoryAdsPromptContradictions(
   identity: NeutralVisualProductIdentity = {},
   trustedNumericScaffolds: string[] = []
 ): string[] {
+  // Kunci ukuran wajib di gerbang provider juga memuat frasa yang dahulu
+  // menandai pemaksaan ukuran PRODUK. Hanya kalimat kanonik yang subjeknya
+  // properti polos dikecualikan; frasa ukuran yang diikat ke produk tetap
+  // ditolak oleh pola di bawah.
+  const promptWithoutNeutralSizeLock = prompt.replaceAll(NEUTRAL_PROP_SIZE_LOCK, "");
   const findings = [
     ...characterContradictions(prompt, "prompt", trustedNumericScaffolds),
-    ...FORBIDDEN_PROMPT_PATTERNS.flatMap(([label, pattern]) => pattern.test(prompt) ? [label] : []),
+    ...FORBIDDEN_PROMPT_PATTERNS.flatMap(([label, pattern]) => pattern.test(promptWithoutNeutralSizeLock) ? [label] : []),
   ];
   const merchandise = prompt.match(GENERIC_MERCHANDISE)?.[0];
   if (merchandise) findings.push(`generic merchandise present in final neutral prompt: ${merchandise}`);
