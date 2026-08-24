@@ -215,7 +215,7 @@ menaikkan skor 58/100.
 | Render CLI + config | present | akses control-plane mungkin ada; bukan izin deploy |
 | PostgreSQL staging | akses read-only agregat sementara terbukti dan allow-list dipulihkan kosong | DB half tersedia; audit media tetap memerlukan R2 staging yang terbukti berpasangan |
 | R2 effective | endpoint/bucket empty; key id/secret nonempty | tidak ada pasangan DB+bucket yang sah untuk audit; jangan hubungkan silang |
-| Duitku effective | merchant/api key nonempty; production=false | key lokal ada, approval/settlement/go-live tidak terbukti |
+| Duitku effective | merchant/api key nonempty; production=false; sandbox/test authority granted | bounded sandbox webhook/replay may proceed; merchant approval, production activation, real-money settlement, and go-live remain unproven/HOLD |
 | Midtrans effective | rollback keys nonempty | jalur rollback sesuai ADR; bukan gateway current atau bukti settlement |
 | `PAYMENTS_GO_LIVE` | false | paid public tetap tertutup |
 | Ops alert | Resend key nonempty; alert destination empty | monitoring aktif belum dapat dianggap mengirim alert |
@@ -224,9 +224,11 @@ menaikkan skor 58/100.
 | Production release control | web+worker teramati `autoDeploy=yes`; committed blueprint/runbook mensyaratkan off | unresolved P1 config/control gap; HOLD sampai release owner mematikan keduanya dan bukti read-only immutable mengonfirmasi off |
 
 Koreksi status penting: baris Payments pada board 19 Agu menyebut Midtrans
-sandbox. Itu benar secara historis, tetapi current decision adalah **Duitku
-aktif, Midtrans rollback** (`docs/adr/0001-gateway-duitku-midtrans-rollback.md`).
-Tidak satu pun keduanya boleh dinilai live sebelum syarat ADR terpenuhi.
+sandbox. Itu benar secara historis, tetapi current gateway decision memilih
+**Duitku sebagai primary target, Midtrans rollback**
+(`docs/adr/0001-gateway-duitku-midtrans-rollback.md`). Duitku sandbox/test sudah
+diotorisasi; tidak satu pun gateway boleh dinilai production-live sebelum
+syarat ADR dan Founder go-live terpenuhi.
 
 ## P0/P1 yang belum selesai dan batas kewenangan
 
@@ -244,7 +246,7 @@ Tidak satu pun keduanya boleh dinilai live sebelum syarat ADR terpenuhi.
 | C9 promo admission→output | partial; rendered behavior accepted | Founder policy | pilih `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau `LIVE_INTENTIONAL`; core prompt sudah admission-bound, tetapi before/deadline live dan stock live namun inert di formatter |
 | C12 aggregate | partial; local admission-time identity slice closed | legacy/reason-code authority still required | new jobs sudah admission-bound; T43 technical authority exists, tetapi legacy fallback/treatment dan proposal `REFERENCE_IDENTITY_CHANGED` tidak boleh diputuskan Builder |
 | C1/C13 seluruh E/A/W positif | partial/external | QA/Release | satu trace end-to-end exact evidence, bukan resolver-only test |
-| Duitku + price/COGS | external/Founder | Brian + Payments owner | approval, keputusan harga, settlement/webhook/replay report |
+| Duitku production + price/COGS | sandbox/test authorized; production external/HOLD | Brian + Payments owner | sandbox webhook/replay may run now; merchant approval, final price/COGS, production activation, real-money settlement, and explicit `PAYMENTS_GO_LIVE` remain required |
 | Legal/PDP | external | Brian + counsel | signed/versioned approval dan halaman tanpa placeholder |
 | Monitoring/DR | external/owner | Brian + incident owner | owner, alert delivery, runbook, restore/incident drill report |
 | Production auto-deploy drift | P1 external configuration/control | Release owner + Render production administrator | authorized disable pada web+worker, lalu sanitized read-only artifact `autoDeploy=no`/off untuk kedua service dan bukti tidak ada deploy tak terotorisasi |
@@ -286,8 +288,9 @@ Keputusan/bukti eksternal yang masih diperlukan:
 5. Putuskan price/COGS.
 6. Tetapkan incident owner.
 7. Tetapkan counsel/legal approver.
-8. Berikan authority Duitku yang diperlukan untuk approval dan pengujian
-   settlement/webhook; ini bukan izin payments go-live otomatis.
+8. Gunakan authority Duitku sandbox/test yang sudah ada untuk bounded
+   webhook/replay testing. Secara terpisah, merchant approval, production
+   activation, real-money settlement, dan `PAYMENTS_GO_LIVE` tetap external/HOLD.
 
 ## Critical path 48 jam
 
@@ -301,7 +304,7 @@ bahwa pihak eksternal akan selesai.
 | 4–8 jam | Audit legacy read-only memakai Postgres staging dan bucket R2 yang dibuktikan berpasangan | JSON signed/timestamped: total, no-photo, corrupt-column, approved, per-reason, failed-to-inspect; nol nilai credential |
 | 6–18 jam | Dengan T43 technical authority yang sudah ada, Reviewer menerbitkan bounded task enforcement E1/admission; legacy treatment tetap dipisahkan sampai diputuskan | accepted exact SHA + route/worker boundary tests + independent dependency-backed run; tidak ada deploy otomatis |
 | 18–24 jam | Deploy ulang accepted remediation ke staging dan jalankan positive/negative product trace | exact deploy SHA + trace C1/C3/C4/C6/C7/C8/C10/C13, zero-cost assertions, rollback/list/audit evidence |
-| 0–24 jam paralel | Duitku approval dan sandbox settlement/webhook/replay; counsel dan incident preparation | merchant approval reference; redacted settlement report; valid/invalid/duplicate/out-of-order webhook proof; signed legal approval; runbook+alert delivery |
+| 0–24 jam paralel | Dengan authority yang sudah ada, jalankan Duitku sandbox webhook/replay; secara terpisah kejar merchant approval, counsel, dan incident preparation | redacted sandbox result + valid/invalid/duplicate/out-of-order webhook proof; merchant approval reference terpisah; signed legal approval; runbook+alert delivery |
 | 24–36 jam | Sesudah approval dan otorisasi biaya, satu controlled production E2E OTP→topup→render→QC→delivery/refund dengan approved pricing | timestamped trace IDs, ledger reconciliation, QC audio/frame artifacts, delivery and controlled refund, exact deployed SHA |
 | 36–48 jam | Independent release review dan Founder gate | Reviewer PASS atas artifact bundle + Founder `PAYMENTS_GO_LIVE`/intake decision; jika satu artifact hilang, HOLD tetap |
 
