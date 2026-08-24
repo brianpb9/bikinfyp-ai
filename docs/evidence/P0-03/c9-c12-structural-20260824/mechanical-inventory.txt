@@ -1,0 +1,131 @@
+[PRODUCTION JOB INSERTS: app+lib]
+lib/dashboard/render-cell.ts:207:      `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,job_product_snapshot,state,created_at,state_changed_at)
+lib/postgres/smoke-runtime.ts:254:        await client.query("INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,avatar_custom_desc,job_product_snapshot,state,created_at,state_changed_at) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,'QUEUED',$10,$10)", [jobId,userId,input.productId,input.scriptId,input.format,input.qualityTier,input.durationS,input.avatarCustomDesc ?? null,productSnapshotRaw,timestamp]);
+app/api/jobs/route.ts:215:        `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, job_product_snapshot, state, created_at, state_changed_at)
+[PRODUCTION SNAPSHOT/MANIFEST COLUMN WRITERS: app+lib]
+lib/dashboard/render-cell.ts:207:      `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,job_product_snapshot,state,created_at,state_changed_at)
+lib/worker.ts:166:        db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?").run(candidateRaw, job.id);
+lib/worker.ts:223:        db.prepare("UPDATE jobs SET approved_reference_manifest=? WHERE id=?").run(candidateRaw, job.id);
+app/api/jobs/route.ts:215:        `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, job_product_snapshot, state, created_at, state_changed_at)
+lib/postgres/smoke-runtime.ts:254:        await client.query("INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,avatar_custom_desc,job_product_snapshot,state,created_at,state_changed_at) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,'QUEUED',$10,$10)", [jobId,userId,input.productId,input.scriptId,input.format,input.qualityTier,input.durationS,input.avatarCustomDesc ?? null,productSnapshotRaw,timestamp]);
+lib/postgres/jobs.ts:79:      await client.query("UPDATE jobs SET approved_reference_manifest=$1 WHERE id=$2", [candidateRaw, id]);
+lib/postgres/jobs.ts:111:      await client.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [candidateRaw, id]);
+[REFERENCE/PRODUCT SNAPSHOT LOAD-INSTALL-MATERIALIZE CALLS: app+lib]
+lib/worker.ts:141:    const productSnapshot = await loadOrCreateJobProductSnapshot({
+lib/worker.ts:202:    const hasilManifest = await loadOrCreateJobReferenceManifest({
+lib/worker.ts:227:    const snapshots = await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+lib/worker.ts:229:      await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+lib/postgres/worker.ts:359:  const productSnapshot = await loadOrCreateJobProductSnapshot({
+lib/postgres/worker.ts:371:    persistIfAbsentAndSafe: (candidateRaw) => jobs.installProductSnapshotIfSafe(row.id, candidateRaw),
+lib/postgres/worker.ts:410:  const hasilManifest = await loadOrCreateJobReferenceManifest({
+lib/postgres/worker.ts:418:    persistIfAbsentAndSafe: (candidateRaw) => jobs.installReferenceManifestIfSafe(row.id, candidateRaw),
+lib/postgres/worker.ts:420:  const snapshots = await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+lib/postgres/worker.ts:422:    await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+lib/postgres/jobs.ts:53:  async installReferenceManifestIfSafe(id: string, candidateRaw: string): Promise<string | null> {
+lib/postgres/jobs.ts:85:  async installProductSnapshotIfSafe(id: string, candidateRaw: string): Promise<string | null> {
+lib/job-product-snapshot.ts:112:export async function loadOrCreateJobProductSnapshot(input: {
+lib/job-reference-manifest.ts:46:export async function loadOrCreateJobReferenceManifest(input: {
+lib/job-reference-manifest.ts:109:export async function materializeJobReferenceManifest(
+app/api/dashboard/campaign/job/[jobId]/route.ts:164:        await materializeJobReferenceManifest(manifest, path.join(config.storageDir, "jobs", jobId));
+[PRODUCT METADATA WRITES: app+lib]
+lib/retail-product-images.ts:31:      "UPDATE products SET images = ? WHERE id = ? AND user_id = ? AND org_id IS NULL"
+lib/retail-product-images.ts:56:      "UPDATE products SET images = ? WHERE id = ? AND user_id = ? AND org_id IS NULL"
+app/api/products/route.ts:103:          "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+app/api/products/[id]/route.ts:61:        "UPDATE products SET name = ?, price_idr = ?, category = ?, product_visual_desc = ?, promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?"
+app/api/products/[id]/route.ts:77:        db!.prepare("UPDATE products SET raw_meta = ? WHERE id = ?").run(serialized, id);
+lib/postgres/smoke-runtime.ts:323:      `UPDATE products
+lib/postgres/smoke-runtime.ts:339:      `UPDATE products
+lib/postgres/smoke-runtime.ts:364:      `UPDATE products
+lib/postgres/smoke-runtime.ts:382:      `UPDATE products
+app/api/products/extract/route.ts:60:        "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+lib/postgres/product-persona-script.ts:112:      `UPDATE products SET name = $1, price_idr = $2, category = $3, product_visual_desc = $4,
+lib/postgres/product-persona-script.ts:134:        ? `UPDATE products SET raw_meta = nullif((coalesce(raw_meta,'{}')::jsonb - 'brand')::text, '{}')
+lib/postgres/product-persona-script.ts:136:        : `UPDATE products SET raw_meta = (coalesce(raw_meta,'{}')::jsonb || jsonb_build_object('brand', $3::text))::text
+lib/postgres/product-persona-script.ts:264:      `INSERT INTO products (id, user_id, org_id, source_url, name, price_idr, category, product_visual_desc, brand_brief, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at)
+app/api/dashboard/campaign/product/route.ts:145:        "UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4, brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8, claims=COALESCE($11, claims) WHERE id=$9 AND org_id=$10",
+[PRODUCT IMAGE LIST WRITES: app+lib]
+lib/retail-product-images.ts:31:      "UPDATE products SET images = ? WHERE id = ? AND user_id = ? AND org_id IS NULL"
+lib/retail-product-images.ts:56:      "UPDATE products SET images = ? WHERE id = ? AND user_id = ? AND org_id IS NULL"
+lib/postgres/smoke-runtime.ts:324:       SET images=(COALESCE(NULLIF(images,''),'[]')::jsonb || $3::jsonb)::text
+lib/postgres/smoke-runtime.ts:340:       SET images=(SELECT COALESCE(jsonb_agg(value),'[]'::jsonb)::text
+lib/postgres/smoke-runtime.ts:365:       SET images=(COALESCE(NULLIF(images,''),'[]')::jsonb || $4::jsonb)::text
+lib/postgres/smoke-runtime.ts:383:       SET images=(SELECT COALESCE(jsonb_agg(value),'[]'::jsonb)::text
+[QUEUE/RESUME/WORKER ENTRY CALLS: app+lib+scripts]
+scripts/worker.ts:28:  async (job) => postgresRuntimeEnabled() ? processPostgresJob(job.data.jobId, { retryViaQueue: true }) : processJob(job.data.jobId, { retryViaQueue: true }),
+lib/worker.ts:100:    void processJob(jobId)
+lib/worker.ts:109:export async function processJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
+lib/job-queue.ts:67:export async function enqueueJob(jobId: string): Promise<void> {
+lib/job-queue.ts:77: * enqueueJob() TIDAK bisa dipakai di sini: BullMQ men-dedupe berdasarkan
+lib/job-queue.ts:83:export async function enqueueJobResume(jobId: string, reason: string): Promise<void> {
+lib/postgres/worker.ts:292:export async function processPostgresJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
+app/api/jobs/route.ts:195:      if (!created.duplicate && !postgresSmokeEnabled()) await enqueueJob(created.jobId);
+app/api/jobs/route.ts:242:      await enqueueJob(jobId);
+lib/dashboard/render-cell.ts:276:    await enqueueJob(jobId);
+app/api/dashboard/campaign/job/[jobId]/route.ts:187:        // Akibatnya dua enqueueJobResume() dengan id BullMQ berbeda, dua
+app/api/dashboard/campaign/job/[jobId]/route.ts:198:        await enqueueJobResume(jobId, "approve");
+app/api/dashboard/campaign/job/[jobId]/route.ts:317:      await enqueueJobResume(jobId, `regen${idx}`);
+[DIRECT RELEVANT TESTS]
+tests/product-truth-worker-reference.test.ts:335:test("W2 C1: worker wajib memilih packshot sah, bukan images[0] (banner promo)", async () => {
+tests/product-truth-worker-reference.test.ts:374:test("W2 C8 KONTROL: observer provider benar-benar terpasang (asersi nol tidak hampa)", async (t) => {
+tests/product-truth-worker-reference.test.ts:409:test("W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti sah", async (t) => {
+tests/product-truth-worker-reference.test.ts:442:test("W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize sebelum bukti sah", async (t) => {
+tests/product-truth-worker-reference.test.ts:476:test("W2 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping", async (t) => {
+tests/product-truth-worker-reference.test.ts:532:test("W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhenti sebelum berbayar", async () => {
+tests/product-truth-worker-reference.test.ts:599:test("W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tetap bytes yang disetujui", async () => {
+tests/product-truth-worker-reference.test.ts:686:test("E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission", async (t) => {
+tests/product-truth-worker-reference.test.ts:835:test("W2: delapan foto tersetujui menghasilkan paling banyak TUJUH referensi", async () => {
+tests/product-truth-worker-reference.test.ts:901:test("W2 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih", async () => {
+tests/product-truth-worker-reference.test.ts:945:test("W2 A6/C9: manifest lama menang atas reorder/delete/add products.images", async () => {
+tests/product-truth-worker-reference.test.ts:974:test("W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot", async () => {
+tests/product-truth-worker-reference.test.ts:991:test("W2 product snapshot invalid gagal tertutup sebelum materialize/provider", async () => {
+tests/product-truth-worker-reference.test.ts:1005:test("W2 non-Ads melanjutkan snapshot v1 tanpa harga dan mempertahankan bytes durable", async () => {
+tests/product-truth-worker-reference.test.ts:1026:test("W2 Story Ads SA6 memakai name/category/price snapshot admission setelah row produk dimutasi", async () => {
+tests/product-truth-worker-reference.test.ts:1064:test("W2 Story Ads snapshot legacy tanpa price gagal tertutup sebelum referensi/provider", async () => {
+tests/product-truth-worker-reference.test.ts:1106:test("W2 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah", async () => {
+tests/product-truth-worker-reference.test.ts:1130:test("W2 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", async () => {
+tests/product-truth-worker-reference.test.ts:1147:test("W2 KANARI: galat yang dilempar worker membawa kode, bukan hanya kalimat", () => {
+tests/pg-product-truth-w1.test.ts:681:test("W1 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah", async (t) => {
+tests/pg-product-truth-w1.test.ts:709:test("W1 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", async (t) => {
+tests/pg-product-truth-w1.test.ts:729:test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol reference Story Ads", async (t) => {
+tests/pg-product-truth-w1.test.ts:758:test("W1 talking_head Story Ads memanggil TTS eksternal sekali setelah prompt provider tanpa ucapan", async (t) => {
+tests/pg-product-truth-w1.test.ts:802:test("dashboard lock membuat validasi Story Ads dan snapshot melihat versi row yang identik", async (t) => {
+tests/pg-product-truth-w1.test.ts:849:test("shared confirm memblokir empat snapshot real-footage saat request template_id dihilangkan, tanpa side effect", async (t) => {
+tests/pg-product-truth-w1.test.ts:858:test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packshot sah", async (t) => {
+tests/pg-product-truth-w1.test.ts:953:test("E9 HTTP DELETE approved source + resume W1 tetap memakai snapshot job berurutan", async (t) => {
+tests/pg-product-truth-w1.test.ts:1000:test("E9 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider W1", async (t) => {
+tests/pg-product-truth-w1.test.ts:1032:test("guard: bukti C12 memanggil handler E9 dan resume W1 nyata", () => {
+tests/pg-product-truth-w1.test.ts:1039:test("W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images", async (t) => {
+tests/pg-product-truth-w1.test.ts:1066:test("W1 manifest create konkuren: row lock menghasilkan tepat satu pemenang", async (t) => {
+tests/pg-product-truth-w1.test.ts:1084:test("W1 product snapshot create konkuren: row lock menghasilkan tepat satu pemenang", async (t) => {
+tests/pg-product-truth-w1.test.ts:1110:test("W1 non-Ads melanjutkan snapshot produk v1 tanpa harga", async (t) => {
+tests/pg-product-truth-w1.test.ts:1127:test("W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot", async (t) => {
+tests/pg-product-truth-w1.test.ts:1191:test("W1 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping", async (t) => {
+tests/pg-product-truth-w1.test.ts:1233:test("W1: loop referensi tambahan HANYA meminta yang tersetujui, urut (berhenti di boundary person-safe)", async (t) => {
+tests/pg-product-truth-w1.test.ts:1337:test("W1: referensi tambahan yang DITERIMA PROVIDER — urutan, hash, dan tanpa banner", async (t) => {
+tests/pg-product-truth-w1.test.ts:1402:test("W1: delapan foto tersetujui — provider menerima satu primary + maksimal enam tambahan", async (t) => {
+tests/pg-product-truth-w1.test.ts:1465:test("W1 TOCTOU: path bersama ditimpa sesudah diperiksa — provider tetap menerima bytes yang disetujui", async (t) => {
+tests/pg-product-truth-w1.test.ts:1547:test("W1 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih", async (t) => {
+tests/pg-product-truth-w1.test.ts:1565:test("nol jaringan selama seluruh berkas test ini", (t) => {
+tests/job-product-snapshot.test.ts:23:test("snapshot dibuat sekali dan mutation candidate tidak mengubah retry", async () => {
+tests/job-product-snapshot.test.ts:38:test("dua create konkuren kembali dengan satu pemenang durable", async () => {
+tests/job-product-snapshot.test.ts:54:test("snapshot invalid gagal tertutup", () => {
+tests/job-product-snapshot.test.ts:64:test("snapshot v1 hanya kompatibel untuk non-Story-Ads; v2 tetap membawa harga", async () => {
+tests/job-product-snapshot.test.ts:81:test("A6 identity: talking_head + template job null tetap Story Ads dari snapshot admisi", () => {
+tests/job-product-snapshot.test.ts:97:test("template snapshot admisi menang atas kolom job yang menyimpang", () => {
+tests/job-product-snapshot.test.ts:107:test("admission builder membekukan seluruh metadata dari bentuk row database", () => {
+tests/job-product-snapshot.test.ts:123:test("legacy dengan jejak provider tanpa snapshot ditolak", async () => {
+tests/job-product-snapshot.test.ts:130:test("A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan enqueue", () => {
+tests/job-product-snapshot.test.ts:152:test("semua admission produksi memasang snapshot pada INSERT job yang sama", () => {
+tests/job-product-snapshot.test.ts:187:test("kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot", () => {
+tests/job-product-snapshot.test.ts:204:test("dashboard mengunci satu row produk sebelum validasi dan memakai row itu sampai snapshot job", () => {
+tests/job-product-snapshot.test.ts:222:test("C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi", () => {
+tests/job-reference-manifest.test.ts:50:test("manifest dibuat sekali; retry/reorder/delete/add tetap memakai identitas awal", async () => {
+tests/job-reference-manifest.test.ts:82:test("dua create konkuren kembali dengan satu pemenang durable", async () => {
+tests/job-reference-manifest.test.ts:105:test("crash/hasil CAS ambigu tidak menghapus snapshot yang dapat diadopsi retry", async () => {
+tests/job-reference-manifest.test.ts:136:test("manifest missing/hash-changed dan legacy tak terbukti gagal tertutup", async () => {
+tests/job-reference-manifest.test.ts:166:test("readFile I/O sesudah materialize berhasil dipropagasikan, bukan REF_HASH_MISMATCH", async () => {
+tests/job-reference-manifest.test.ts:188:test("A6 menempatkan verifikasi manifest sebelum approve, regen charge, task reset, dan enqueue", () => {
+tests/http-photo-mutation-resume-w2.test.ts:206:test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async (t) => {
+tests/http-photo-mutation-resume-w2.test.ts:270:test("E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan", async (t) => {
+tests/http-photo-mutation-resume-w2.test.ts:319:test("E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider", async (t) => {
+tests/http-photo-mutation-resume-w2.test.ts:352:test("guard: bukti C12 memanggil handler E5 dan resume W2 nyata", () => {

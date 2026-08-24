@@ -1,0 +1,159 @@
+TAP version 13
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"9ea51557-666c-411b-9e5e-48c023e34122","produkId":"285f1fd8-4ab0-4a67-8895-5c4cc7d188bb","lolos":true,"foto":2,"tersetujui":1,"perAlasan":{"REF_PROMOTIONAL":1},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 9ea51557] -> REFUNDED {"refunded_credits":0}
+# [failover] video pengamat-w2-c8 gagal: provider pengamat W2 C8: bukti invalid mencapai boundary provider -> coba provider berikutnya
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"09fd11bb-7e60-4b7c-b19f-91c576ebb3b2","produkId":"2f382d50-8b40-4ba3-b5e0-25a407f599b8","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"EVIDENCE_INVALID":1},"perRinci":{"SIDECAR_CORRUPT":1},"semuaBelumDiperiksa":false}
+# [job 09fd11bb] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"864242ad-2ddd-4dfd-95c1-5f335066f56b","produkId":"4112a224-38ea-4a9e-a950-b42a2d7a6409","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"EVIDENCE_INVALID":1},"perRinci":{"SIDECAR_MISSING":1},"semuaBelumDiperiksa":false}
+# [job 864242ad] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"a2fed846-faa8-4654-af4b-80cf9be1f6b6","produkId":"aef4fc9d-6391-47d0-8eb2-bf859db867d7","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"REF_MISSING":1},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job a2fed846] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"4d2335f7-7c8e-4212-ad67-52a6956e161d","produkId":"0c82ef8b-1c6a-44bb-8fcf-e1ed6ddaf606","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: W2 C1: worker wajib memilih packshot sah, bukan images[0] (banner promo)
+ok 1 - W2 C1: worker wajib memilih packshot sah, bukan images[0] (banner promo)
+  ---
+  duration_ms: 2.641834
+  type: 'test'
+  ...
+# Subtest: W2 C8 KONTROL: observer provider benar-benar terpasang (asersi nol tidak hampa)
+ok 2 - W2 C8 KONTROL: observer provider benar-benar terpasang (asersi nol tidak hampa)
+  ---
+  duration_ms: 0.795584
+  type: 'test'
+  ...
+# Subtest: W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti sah
+ok 3 - W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti sah
+  ---
+  duration_ms: 0.767
+  type: 'test'
+  ...
+# Subtest: W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize sebelum bukti sah
+ok 4 - W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize sebelum bukti sah
+  ---
+  duration_ms: 0.634458
+  type: 'test'
+  ...
+# Subtest: W2 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping
+ok 5 - W2 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping
+  ---
+  duration_ms: 0.998333
+  type: 'test'
+  ...
+# [job 4d2335f7] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"0373c49a-26be-4411-97cd-73bc6095bb5a","produkId":"a58a7965-8f4f-4437-a13b-7b102ca8deb2","lolos":true,"foto":2,"tersetujui":2,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhenti sebelum berbayar
+ok 6 - W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhenti sebelum berbayar
+  ---
+  duration_ms: 4.218875
+  type: 'test'
+  ...
+# [job 0373c49a] -> REFUNDED {"refunded_credits":0}
+# Subtest: W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tetap bytes yang disetujui
+ok 7 - W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tetap bytes yang disetujui
+  ---
+  duration_ms: 199.044458
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"9ba546e6-cb28-4a6c-8ba1-3641ad067b97","produkId":"68040ab5-4592-4eb5-baa8-2f85bf86d208","lolos":true,"foto":2,"tersetujui":2,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 9ba546e6] -> GENERATING_VISUAL
+# [failover] video pengamat-w2 gagal: provider pengamat W2: berhenti sebelum biaya keluar -> coba provider berikutnya
+# [job 9ba546e6] -> REFUNDED {"refunded_credits":12000}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"da9cd0ac-9377-44ec-b3ad-617a155a711b","produkId":"b96201e3-d01b-4707-8025-c0c831eb6ad8","lolos":true,"foto":8,"tersetujui":8,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission
+ok 8 - E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission
+  ---
+  duration_ms: 310.015166
+  type: 'test'
+  ...
+# [job da9cd0ac] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"c549215d-d7b1-49d1-82ed-2c894736d876","produkId":"680bf7f6-ea3c-4886-8838-1f6c0bd04b97","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job c549215d] -> REFUNDED {"refunded_credits":0}
+# [job a9031670] -> REFUNDED {"refunded_credits":0}
+# [job 01305f4d] -> REFUNDED {"refunded_credits":0}
+# [job d002ea3a] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"e02675c1-1f4f-4bea-a38e-96165c7ade95","produkId":"074f0e4d-5d49-4868-88f6-3f736e877b63","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job e02675c1] -> REFUNDED {"refunded_credits":0}
+# [script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "Jasa Uji Snapshot" — LLM gagal dan template cadangan ikut ditolak gate: L-05 Panjang skrip 22 kata — untuk video 15 detik harus 26–48 kata.
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"db9a9822-4fa3-4f30-9d89-9170e2977d71","produkId":"0ce7030a-3ce9-4fad-ab22-4445e4fcb415","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job db9a9822] -> REFUNDED {"refunded_credits":0}
+# [script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "Jasa Uji Snapshot" — LLM gagal dan template cadangan ikut ditolak gate: L-05 Panjang skrip 22 kata — untuk video 15 detik harus 26–48 kata.
+# [job 992ca340] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"fef9a834-4dc1-41d8-87ec-8dafd0520fdd","produkId":"5c84913c-0062-42b6-9a25-705a57e42a2a","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"EVIDENCE_INVALID":1},"perRinci":{"SIDECAR_MISSING":1},"semuaBelumDiperiksa":false}
+# [job fef9a834] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"e621c806-3581-4ec7-9a4a-7e63e288e0e3","produkId":"49e89659-1907-4e0e-bd5c-8d74b5411a7d","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job e621c806] -> REFUNDED {"refunded_credits":0}
+# Subtest: W2: delapan foto tersetujui menghasilkan paling banyak TUJUH referensi
+ok 9 - W2: delapan foto tersetujui menghasilkan paling banyak TUJUH referensi
+  ---
+  duration_ms: 101.675333
+  type: 'test'
+  ...
+# Subtest: W2 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih
+ok 10 - W2 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih
+  ---
+  duration_ms: 0.945875
+  type: 'test'
+  ...
+# Subtest: W2 A6/C9: manifest lama menang atas reorder/delete/add products.images
+ok 11 - W2 A6/C9: manifest lama menang atas reorder/delete/add products.images
+  ---
+  duration_ms: 0.556042
+  type: 'test'
+  ...
+# Subtest: W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot
+ok 12 - W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot
+  ---
+  duration_ms: 0.412917
+  type: 'test'
+  ...
+# Subtest: W2 product snapshot invalid gagal tertutup sebelum materialize/provider
+ok 13 - W2 product snapshot invalid gagal tertutup sebelum materialize/provider
+  ---
+  duration_ms: 0.351292
+  type: 'test'
+  ...
+# Subtest: W2 non-Ads melanjutkan snapshot v1 tanpa harga dan mempertahankan bytes durable
+ok 14 - W2 non-Ads melanjutkan snapshot v1 tanpa harga dan mempertahankan bytes durable
+  ---
+  duration_ms: 0.547
+  type: 'test'
+  ...
+# Subtest: W2 Story Ads SA6 memakai name/category/price snapshot admission setelah row produk dimutasi
+ok 15 - W2 Story Ads SA6 memakai name/category/price snapshot admission setelah row produk dimutasi
+  ---
+  duration_ms: 6.243334
+  type: 'test'
+  ...
+# Subtest: W2 Story Ads snapshot legacy tanpa price gagal tertutup sebelum referensi/provider
+ok 16 - W2 Story Ads snapshot legacy tanpa price gagal tertutup sebelum referensi/provider
+  ---
+  duration_ms: 1.525125
+  type: 'test'
+  ...
+# Subtest: W2 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah
+ok 17 - W2 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah
+  ---
+  duration_ms: 0.508334
+  type: 'test'
+  ...
+# Subtest: W2 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil
+ok 18 - W2 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil
+  ---
+  duration_ms: 0.488792
+  type: 'test'
+  ...
+# Subtest: W2 KANARI: galat yang dilempar worker membawa kode, bukan hanya kalimat
+ok 19 - W2 KANARI: galat yang dilempar worker membawa kode, bukan hanya kalimat
+  ---
+  duration_ms: 0.048958
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 885.4185

@@ -579,3 +579,32 @@ TASK=SHIP-READINESS-CANONICAL-POSTGRES-RECONCILE-20260824
   deployed exact SHA, staging/E2E, payments, legal, incident/DR, atau satu
   production cycle. Skor shipping canonical tetap **58/100** dan production
   `autoDeploy=yes` tetap P1 unresolved.
+
+### E.18 C9/C12 structural inventory — 2026-08-24
+
+TASK=`P1-C9-C12-STRUCTURAL-INVENTORY-20260824`
+
+- Exact-baseline inventory at `752684eefc60a3ccb13f59e5b3daf98a83adf652`
+  mechanically found three production job admissions. All three atomically
+  install `job_product_snapshot`; none installs
+  `approved_reference_manifest`.
+- C9 metadata identity is therefore admission-bound across E3/E7, retry/resume,
+  A6, W1, and W2. The requested `SNAPSHOT_IMMUTABLE` reason/status remains a
+  proposal and is absent from the current runtime.
+- Correction/addition to the earlier C12 summary: after the first manifest
+  install, E5/E9, retry/resume, A6, W1, and W2 preserve and reverify immutable
+  job-owned bytes. Before that install, a queued job can observe a mutated
+  `products.images` list and install the post-mutation identity. This is not a
+  violation of the settled after-install rule; adopting the stronger
+  admission-time identity contract requires an approved implementation task.
+- Current reference errors remain `REF_MISSING`, `REF_HASH_MISMATCH`, and
+  `REF_MANIFEST_INVALID`; `REFERENCE_IDENTITY_CHANGED` is proposal-only.
+- Bounded follow-up recommendation: install the reference manifest atomically at
+  all three production admission boundaries and add W1/W2 admission → queued
+  E5/E9 mutation → first-worker tests. Preserve current reason codes unless a
+  separate approved work order authorizes a change.
+- Exact-baseline verification: structural/route **31/31**, W2 **19/19**, W1
+  disposable PostgreSQL **25/25**, and TypeScript all PASS. Full inventory and
+  raw proof: `C9-C12-STRUCTURAL-INVENTORY-20260824.md` and
+  `c9-c12-structural-20260824/`.
+- C9 and C12 remain **PARTIAL**; shipping readiness remains **58/100**.

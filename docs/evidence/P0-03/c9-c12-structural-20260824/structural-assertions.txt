@@ -1,0 +1,8 @@
+BASELINE_SHA=752684eefc60a3ccb13f59e5b3daf98a83adf652
+PRODUCTION_JOB_CREATORS=3 app/api/jobs/route.ts,lib/dashboard/render-cell.ts,lib/postgres/smoke-runtime.ts
+ALL_JOB_CREATORS_INSTALL_PRODUCT_SNAPSHOT=true
+ANY_JOB_CREATOR_INSTALLS_REFERENCE_MANIFEST=false
+REFERENCE_MANIFEST_WRITERS=lib/postgres/jobs.ts,lib/worker.ts
+PRODUCT_SNAPSHOT_FALLBACK_WRITERS=lib/postgres/jobs.ts,lib/worker.ts
+REFERENCE_MANIFEST_LOADERS=lib/job-reference-manifest.ts,lib/postgres/worker.ts,lib/worker.ts
+STRUCTURAL_ASSERTIONS=PASS
