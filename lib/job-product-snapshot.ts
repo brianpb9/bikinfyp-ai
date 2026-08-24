@@ -2,11 +2,11 @@ export const JOB_PRODUCT_SNAPSHOT_VERSION = 2 as const;
 export const TRUSTED_BRAND_SOURCE = "products.raw_meta.brand" as const;
 
 export interface JobProductSnapshot {
-  version: typeof JOB_PRODUCT_SNAPSHOT_VERSION;
+  version: 1 | typeof JOB_PRODUCT_SNAPSHOT_VERSION;
   productName: string;
   category: string;
   /** Harga ProductInput pada saat job diterima; sumber bridge SA6 immutable. */
-  priceIdr: number;
+  priceIdr: number | null;
   trustedBrand: { source: typeof TRUSTED_BRAND_SOURCE; value: string | null };
   productVisualDesc: string | null;
   brandBrief: string | null;
@@ -21,15 +21,19 @@ function nullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
-export function parseJobProductSnapshot(raw: string): JobProductSnapshot {
+export function parseJobProductSnapshot(raw: string, options: { requirePrice?: boolean } = {}): JobProductSnapshot {
   let value: unknown;
   try { value = JSON.parse(raw); }
   catch { throw new Error("PRODUCT_SNAPSHOT_INVALID: snapshot metadata produk bukan JSON sah."); }
   const x = value as Partial<JobProductSnapshot> | null;
-  if (!x || x.version !== JOB_PRODUCT_SNAPSHOT_VERSION
+  const versionValid = x?.version === 1 || x?.version === JOB_PRODUCT_SNAPSHOT_VERSION;
+  const priceValid = x?.version === 1
+    ? x.priceIdr === undefined
+    : Number.isSafeInteger(x?.priceIdr) && Number(x?.priceIdr) >= 0;
+  if (!x || !versionValid
       || typeof x.productName !== "string" || !x.productName.trim()
       || typeof x.category !== "string" || !x.category.trim()
-      || !Number.isSafeInteger(x.priceIdr) || Number(x.priceIdr) < 0
+      || !priceValid
       || !x.trustedBrand || x.trustedBrand.source !== TRUSTED_BRAND_SOURCE
       || !nullableString(x.trustedBrand.value)
       || !nullableString(x.productVisualDesc)
@@ -37,11 +41,16 @@ export function parseJobProductSnapshot(raw: string): JobProductSnapshot {
       || !Array.isArray(x.claims) || !x.claims.every((claim) => typeof claim === "string")) {
     throw new Error("PRODUCT_SNAPSHOT_INVALID: bentuk snapshot metadata produk tidak sah.");
   }
+  if (x.version === 1 && options.requirePrice) {
+    throw new UnsafeLegacyProductSnapshot(
+      "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: Story Ads snapshot v1 tidak memiliki harga admission immutable."
+    );
+  }
   return {
-    version: JOB_PRODUCT_SNAPSHOT_VERSION,
+    version: x.version as 1 | typeof JOB_PRODUCT_SNAPSHOT_VERSION,
     productName: x.productName,
     category: x.category,
-    priceIdr: Number(x.priceIdr),
+    priceIdr: x.version === 1 ? null : Number(x.priceIdr),
     trustedBrand: { source: TRUSTED_BRAND_SOURCE, value: x.trustedBrand.value },
     productVisualDesc: x.productVisualDesc,
     brandBrief: x.brandBrief,
@@ -103,10 +112,13 @@ export function createJobProductSnapshotRaw(product: {
 export async function loadOrCreateJobProductSnapshot(input: {
   existingRaw: string | null;
   /** Lazy form prevents mutable product columns from being parsed on resume. */
-  candidate: Omit<JobProductSnapshot, "version"> | (() => Omit<JobProductSnapshot, "version">);
+  candidate: Omit<JobProductSnapshot, "version" | "priceIdr"> & { priceIdr: number }
+    | (() => Omit<JobProductSnapshot, "version" | "priceIdr"> & { priceIdr: number });
   persistIfAbsentAndSafe: (candidateRaw: string) => Promise<string | null>;
+  /** Story Ads membutuhkan price immutable; Affiliate/TVC v1 tetap resumable. */
+  requirePrice?: boolean;
 }): Promise<JobProductSnapshot> {
-  if (input.existingRaw) return parseJobProductSnapshot(input.existingRaw);
+  if (input.existingRaw) return parseJobProductSnapshot(input.existingRaw, { requirePrice: input.requirePrice });
   const source = typeof input.candidate === "function" ? input.candidate() : input.candidate;
   const candidate = parseJobProductSnapshot(JSON.stringify({ version: JOB_PRODUCT_SNAPSHOT_VERSION, ...source }));
   const persisted = await input.persistIfAbsentAndSafe(JSON.stringify(candidate));
@@ -115,5 +127,5 @@ export async function loadOrCreateJobProductSnapshot(input: {
       "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: job lama sudah punya jejak provider/output tanpa snapshot metadata produk."
     );
   }
-  return parseJobProductSnapshot(persisted);
+  return parseJobProductSnapshot(persisted, { requirePrice: input.requirePrice });
 }

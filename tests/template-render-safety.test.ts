@@ -29,7 +29,7 @@ test("shared renderSatuSel memblokir snapshot sebelum approval/job/kredit/enqueu
   const derive = source.indexOf("templateIdRenderOtoritatif(jejak.admisi, sel.templateId)");
   const block = source.indexOf("aiRenderBlockMessage(templateIdOtoritatif)");
   assert.ok(derive > 0 && block > derive, "shared cell tidak memblokir ID snapshot otoritatif");
-  for (const sideEffect of ["await smokeApproveScript(", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
+  for (const sideEffect of ["UPDATE scripts\n       SET segments=", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
     const index = source.indexOf(sideEffect);
     assert.ok(index > block, `${sideEffect} mendahului real-footage block`);
   }
@@ -69,12 +69,12 @@ for (const rel of ROUTE_PEMAKAI_SEL) {
 
 test("side effect render hanya hidup di sel bersama, bukan tersebar di route", () => {
   const sel = readFileSync(new URL("../lib/dashboard/render-cell.ts", import.meta.url), "utf8");
-  for (const jejak of ["await smokeApproveScript(", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
+  for (const jejak of ["UPDATE scripts\n       SET segments=", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
     assert.ok(sel.includes(jejak), `${jejak} harus ada di sel render bersama`);
   }
   for (const rel of ROUTE_PEMAKAI_SEL) {
     const source = readFileSync(new URL(rel, import.meta.url), "utf8");
-    for (const jejak of ["await smokeApproveScript(", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
+    for (const jejak of ["UPDATE scripts\n       SET segments=", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
       assert.ok(!source.includes(jejak), `${rel} menyalin ulang "${jejak}" — aturan uang harus satu salinan`);
     }
   }

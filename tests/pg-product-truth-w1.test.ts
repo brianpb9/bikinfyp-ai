@@ -341,7 +341,11 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
 }
 
 /** Confirm nyata untuk Story Ads: request sengaja menghilangkan templateId. */
-async function siapkanStoryAdsTanpaTemplateRequest(image: string, avatarCustomDesc: string | null = null) {
+async function siapkanStoryAdsTanpaTemplateRequest(
+  image: string,
+  avatarCustomDesc: string | null = null,
+  admissionPool: Pool = pool
+) {
   const orgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
   await pool.query("INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,'Org Ads Boundary',$2,$3)",
     [orgId, `org-ads-boundary-${process.pid}`, t]);
@@ -387,7 +391,7 @@ async function siapkanStoryAdsTanpaTemplateRequest(image: string, avatarCustomDe
     tvcRoute: null, templateId: null, recordStyle: null, shotCount: 4,
     runId: `ads-boundary-${process.pid}`,
   }, {
-    pool, jobsRepo: new PgJobsRepository(URL_UJI), creditsRepo: new PgCreditPaymentRepository(URL_UJI),
+    pool: admissionPool, jobsRepo: new PgJobsRepository(URL_UJI), creditsRepo: new PgCreditPaymentRepository(URL_UJI),
   });
   assert.equal(result.status, "queued", JSON.stringify(result));
   return result.job_id;
@@ -710,6 +714,53 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
   assert.doesNotMatch(archive.spec_json, /ACME|holding a bottle|marked ACME/i);
 });
 
+test("dashboard lock membuat validasi Story Ads dan snapshot melihat versi row yang identik", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  let lockSeen = false;
+  let mutation: Promise<unknown> | null = null;
+  const admissionPool = {
+    async connect() {
+      const client = await pool.connect();
+      return new Proxy(client, {
+        get(target, prop, receiver) {
+          if (prop === "query") return async (...args: unknown[]) => {
+            const result = await (target.query as (...queryArgs: unknown[]) => Promise<unknown>)(...args);
+            const sql = String(args[0] ?? "");
+            if (!lockSeen && /FROM products[\s\S]+FOR SHARE/i.test(sql)) {
+              lockSeen = true;
+              const params = args[1] as unknown[];
+              mutation = pool.query(
+                "UPDATE products SET name='MUTASI KONKUREN LOCK',category='food',price_idr=73000 WHERE id=$1",
+                [params[0]]
+              );
+              await new Promise<void>((resolve) => setImmediate(resolve));
+            }
+            return result;
+          };
+          const value = Reflect.get(target, prop, receiver);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      });
+    },
+  } as unknown as Pool;
+
+  const jobId = await siapkanStoryAdsTanpaTemplateRequest(
+    `uploads/w1-lock-version-${process.pid}/0.png`, null, admissionPool
+  );
+  assert.equal(lockSeen, true, "admission tidak mengambil FOR SHARE product lock");
+  assert.ok(mutation, "mutation konkuren tidak dimulai setelah lock");
+  await mutation;
+
+  const job = (await pool.query("SELECT product_id,job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0];
+  const { parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
+  const snapshot = parseJobProductSnapshot(job.job_product_snapshot, { requirePrice: true });
+  assert.equal(snapshot.productName, "Jasa Uji");
+  assert.equal(snapshot.category, "jasa");
+  assert.equal(snapshot.priceIdr, 189_000);
+  const current = (await pool.query("SELECT name,category,price_idr FROM products WHERE id=$1", [job.product_id])).rows[0];
+  assert.deepEqual(current, { name: "MUTASI KONKUREN LOCK", category: "food", price_idr: 73000 });
+});
+
 test("shared confirm memblokir empat snapshot real-footage saat request template_id dihilangkan, tanpa side effect", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   for (const templateId of ["before-after", "t05-before-after", "t08-day-1-vs-day-7", "t10-bukti-di-lengan"]) {
@@ -969,6 +1020,23 @@ test("W1 product snapshot create konkuren: row lock menghasilkan tepat satu peme
   assert.equal(a, b, "dua worker memegang metadata snapshot berbeda untuk job sama");
   const durable = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
   assert.equal(durable, a);
+});
+
+test("W1 non-Ads melanjutkan snapshot produk v1 tanpa harga", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const rel = `uploads/w1-affiliate-v1-${process.pid}/0.webp`;
+  const jobId = await siapkanJob([rel]);
+  const legacyRaw = JSON.stringify({
+    version: 1, productName: "Serum Glow Bright", category: "beauty",
+    trustedBrand: { source: "products.raw_meta.brand", value: null },
+    productVisualDesc: null, brandBrief: null, claims: [],
+  });
+  await pool.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [legacyRaw, jobId]);
+  const spy = await jalankan(jobId, new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]));
+  assert.ok(spy.materializeCalls.length > 0, "W1 Affiliate v1 ditolak sebelum reference boundary");
+  const durable = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
+  assert.equal(durable, legacyRaw, "W1 menimpa snapshot v1 durable dengan row produk mutable");
+  await assertNolEfekSamping(jobId, spy.putCalls, "W1 Affiliate snapshot v1");
 });
 
 test("W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot", async (t) => {

@@ -349,6 +349,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   }
   const productSnapshot = await loadOrCreateJobProductSnapshot({
     existingRaw: row.job_product_snapshot,
+    requirePrice: isStructuredStoryAds(storyIdentity),
     candidate: () => ({
       productName: row.product_name,
       category: row.product_category,
@@ -360,11 +361,12 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     }),
     persistIfAbsentAndSafe: (candidateRaw) => jobs.installProductSnapshotIfSafe(row.id, candidateRaw),
   });
+  const snapshotPriceIdr = productSnapshot.priceIdr ?? row.product_price_idr;
   // Semua consumer hilir tetap memakai WorkerRow, tetapi nilainya kini datang
   // dari snapshot job, bukan JOIN products yang dapat berubah saat resume.
   row.product_name = productSnapshot.productName;
   row.product_category = productSnapshot.category;
-  row.product_price_idr = productSnapshot.priceIdr;
+  row.product_price_idr = snapshotPriceIdr;
   row.product_visual_desc = productSnapshot.productVisualDesc;
   row.brand_brief = productSnapshot.brandBrief;
   row.product_claims = JSON.stringify(productSnapshot.claims);
@@ -377,7 +379,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     ...storyIdentity,
     productName: productSnapshot.productName,
     productCategory: productSnapshot.category,
-    productPriceIdr: productSnapshot.priceIdr,
+    productPriceIdr: snapshotPriceIdr,
   });
 
   const images = JSON.parse(row.product_images) as string[];

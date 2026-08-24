@@ -1002,6 +1002,27 @@ test("W2 product snapshot invalid gagal tertutup sebelum materialize/provider", 
   assertNolEfekSamping(jobId, spy, "W2 product snapshot invalid");
 });
 
+test("W2 non-Ads melanjutkan snapshot v1 tanpa harga dan mempertahankan bytes durable", async () => {
+  const rel = "uploads/w2-affiliate-snapshot-v1/0.webp";
+  const bytes = Buffer.from("AFFILIATE-SNAPSHOT-V1-W2");
+  const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
+  setMediaStorageForTests(spy.storage);
+  const { jobId } = siapkanJob([rel]);
+  const legacyRaw = JSON.stringify({
+    version: 1, productName: "Serum Glow Bright", category: "beauty",
+    trustedBrand: { source: "products.raw_meta.brand", value: null },
+    productVisualDesc: null, brandBrief: null, claims: [],
+  });
+  db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?").run(legacyRaw, jobId);
+
+  await processJob(jobId);
+
+  assert.ok(spy.materializeCalls.length > 0, "resume Affiliate v1 ditolak sebelum reference boundary");
+  const durable = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(jobId) as { job_product_snapshot: string }).job_product_snapshot;
+  assert.equal(durable, legacyRaw, "worker menimpa snapshot v1 durable dengan row produk mutable");
+  assertNolEfekSamping(jobId, spy, "W2 Affiliate snapshot v1");
+});
+
 test("W2 Story Ads SA6 memakai name/category/price snapshot admission setelah row produk dimutasi", async () => {
   const rel = "uploads/w2-story-ads-snapshot/0.webp";
   const bytes = Buffer.from("STORY-ADS-SNAPSHOT-W2");

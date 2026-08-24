@@ -116,6 +116,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     }
     const productSnapshot = await loadOrCreateJobProductSnapshot({
       existingRaw: job.job_product_snapshot ?? null,
+      requirePrice: isStructuredStoryAds(storyIdentity),
       candidate: () => ({
         productName: product.name,
         category: product.category,
@@ -142,11 +143,12 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         return candidateRaw;
       })(),
     });
+    const snapshotPriceIdr = productSnapshot.priceIdr ?? product.price_idr;
     product = {
       ...product,
       name: productSnapshot.productName,
       category: productSnapshot.category,
-      price_idr: productSnapshot.priceIdr,
+      price_idr: snapshotPriceIdr,
       product_visual_desc: productSnapshot.productVisualDesc,
       brand_brief: productSnapshot.brandBrief,
       claims: JSON.stringify(productSnapshot.claims),
@@ -156,7 +158,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const segments = JSON.parse(script.segments) as SegmentDraft[];
     // Fail-closed sebelum materialisasi referensi atau panggilan provider.
     const voiceoverStartSec = voiceoverStartSecForSegments(segments, {
-      ...storyIdentity, productName: productSnapshot.productName, productCategory: productSnapshot.category, productPriceIdr: productSnapshot.priceIdr,
+      ...storyIdentity, productName: productSnapshot.productName, productCategory: productSnapshot.category, productPriceIdr: snapshotPriceIdr,
     });
     const images = JSON.parse(product.images) as string[];
 

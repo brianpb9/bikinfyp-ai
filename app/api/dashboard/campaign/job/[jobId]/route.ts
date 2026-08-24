@@ -15,6 +15,7 @@ import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
 import { materializeJobReferenceManifest, parseJobReferenceManifest } from "@/lib/job-reference-manifest";
 import { parseJobProductSnapshot } from "@/lib/job-product-snapshot";
+import { isStructuredStoryAds } from "@/lib/script-engine/story-os-ads";
 import path from "node:path";
 
 export const runtime = "nodejs";
@@ -36,13 +37,14 @@ type JobRowLite = {
   id: string; state: string; org_id: string | null; approved_at: string | null;
   requires_approval: boolean; product_name: string; segments: string;
   quality_tier: string;
+  format: string; template_id: string | null;
   approved_reference_manifest: string | null;
   job_product_snapshot: string | null;
 };
 
 async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRowLite | null> {
   const res = await pool.query<JobRowLite>(
-    `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier,
+    `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier, j.format, j.template_id,
             j.approved_reference_manifest, j.job_product_snapshot,
             p.name AS product_name, s.segments
      FROM jobs j JOIN products p ON p.id=j.product_id JOIN scripts s ON s.id=j.script_id
@@ -150,7 +152,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       try {
         if (!job.approved_reference_manifest) throw new Error("REF_MANIFEST_LEGACY_UNSAFE");
         if (!job.job_product_snapshot) throw new Error("PRODUCT_SNAPSHOT_LEGACY_UNSAFE");
-        parseJobProductSnapshot(job.job_product_snapshot);
+        parseJobProductSnapshot(job.job_product_snapshot, {
+          requirePrice: isStructuredStoryAds({
+            contentType: job.format === "ads" ? "ads" : null,
+            templateId: job.template_id,
+          }),
+        });
         const manifest = parseJobReferenceManifest(job.approved_reference_manifest);
         await materializeJobReferenceManifest(manifest, path.join(config.storageDir, "jobs", jobId));
       } catch (error) {
