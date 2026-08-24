@@ -551,3 +551,31 @@ TASK=P0-C3C4-CANONICAL-API-REASON-CODES-20260824
 - C3/C4 tetap **PARTIAL** secara agregat: E1 belum menjalankan gate, W1/W2 belum
   menegakkan brand mismatch, dan kebijakan OCR error tetap fail-open. Slice ini
   hanya menutup reason-code sub-gap pada gate E4/E8 yang sudah ada.
+
+### E.17 Current PostgreSQL evidence reconciliation — 2026-08-24
+
+TASK=SHIP-READINESS-CANONICAL-POSTGRES-RECONCILE-20260824
+
+- Angka full suite 40 skip pada E.14–E.16 adalah hasil historis exact slice,
+  bukan latest current evidence. Current accepted evidence adalah
+  `9e1d13d5544d8a996998283d9cc8496848848a6b` atas code
+  `de1a6ef53bdfb4de14d01e8c13cc223a54cddd61`: **1.119 total / 1.115 PASS /
+  0 fail / 4 skip / 0 cancelled / 0 todo**.
+- Empat skip hanya berasal dari `qcf1-tiga-keadaan`: artefak historis PALSU
+  tidak tersedia, dan tiga test juga perlu opt-in eksplisit Gemini berbayar.
+  Tidak ada izin panggilan berbayar atau pembuatan artefak pengganti.
+- PostgreSQL lokal tersedia. Aggregate memakai database unik pada
+  loopback, menjalankan migrasi dan kedua env DB pada URL disposable yang sama,
+  lalu `DROP ... WITH (FORCE)` dengan residue nol. W1 **25/25**, money **11/11**,
+  dan D2 **4/4** berasal dari evidence accepted
+  `09cddfbb5940f2d6d72a3624c0ea2ff6d2f7a410` atas code
+  `b6bc116b1640fd561c982349262e5e070fa07f64`; TypeScript, build, dan audit
+  katalog juga PASS.
+- Perbaikan retry tidak mengubah matrix acceptance: isolation tetap
+  `SERIALIZABLE`, seluruh transaksi diulang hanya untuk `40001`/`40P01`, dan
+  backoff/retry tetap bounded. C3/C4 dan gap E/A/W lain tetap pada status
+  sebelumnya.
+- Bukti lokal ini menutup gap reliabilitas evidence/test, bukan R2A ceiling,
+  deployed exact SHA, staging/E2E, payments, legal, incident/DR, atau satu
+  production cycle. Skor shipping canonical tetap **58/100** dan production
+  `autoDeploy=yes` tetap P1 unresolved.

@@ -1,24 +1,26 @@
 # Shipping readiness canonical — 24 Agustus 2026
 
-TASK=`SHIP-READINESS-CANONICAL-RECONCILE-20260824`
+TASK=`SHIP-READINESS-CANONICAL-POSTGRES-RECONCILE-20260824`
 
 ## Putusan
 
 **SHIPPING_READINESS = 58/100.**
 
-Ini satu-satunya skor current yang dapat dipertanggungjawabkan. Basis kode
-setelah seluruh task yang diterima pada 24 Agustus adalah:
+Ini satu-satunya skor current yang dapat dipertanggungjawabkan. Baseline
+accepted setelah seluruh task yang diterima pada 24 Agustus adalah:
 
 ```text
-BASIS_HEAD=03f1ea011b737c067ecf26ebc64c34f8b5f1ada3
-BASIS_TREE=fd9a974972afade2f3373fd11e9f1549b2764037
+ACCEPTED_BASELINE_HEAD=9e1d13d5544d8a996998283d9cc8496848848a6b
+LATEST_PRODUCT_CODE_SHA=de1a6ef53bdfb4de14d01e8c13cc223a54cddd61
+LATEST_PRODUCT_TREE=14028daa2120321ffd05a1cd6e1a57c615488229
 BRANCH=work/p0-product-truth-20260820
 WORKTREE_PADA_INSPEKSI=clean
 ```
 
 Commit yang menambahkan dokumen ini tentu mempunyai SHA/tree berbeda; angka di
-atas sengaja mengikat tree produk yang dinilai, bukan membuat referensi diri
-yang berubah setiap kali dokumen dikoreksi.
+atas membedakan baseline evidence yang sudah diterima dari exact tree produk
+yang diuji, bukan membuat referensi diri yang berubah setiap kali dokumen
+dikoreksi.
 
 Skor tidak naik karena task 24 Agustus masih local-only dan belum di-deploy.
 `R2A-KONTRAK.md` menetapkan ceiling gelombang product-truth **55–58**, sedangkan
@@ -91,6 +93,8 @@ Builder karena itu tetap **local-only**, bukan eksekusi independen.
 | `P0-E8-ALL-UPLOADS-LABEL-BRAND-GATE-20260824` | `90e2b05568a48975b3e93d2356fc7e94b0320448` | E8 gate semua upload |
 | `P0-C9-UNSOUND-PROOF-QUARANTINE-20260824` | `739276b542e0cb009165199f7598e6f0dd52d1ce` | proof C9 yang unsound dibuang seluruhnya |
 | `P0-C3C4-CANONICAL-API-REASON-CODES-20260824` | `03f1ea011b737c067ecf26ebc64c34f8b5f1ada3` | canonical E4/E8 codes; agregat tetap partial |
+| `P1-W1-DISPOSABLE-PG-GATE-REMEDIATION-20260824` | evidence `09cddfbb5940f2d6d72a3624c0ea2ff6d2f7a410`; code `b6bc116b1640fd561c982349262e5e070fa07f64` | W1 PostgreSQL disposable 25/25; money 11/11; D2 4/4; cleanup terjamin |
+| `P1-FULL-DISPOSABLE-PG-ZERO-SKIP-20260824` | evidence `9e1d13d5544d8a996998283d9cc8496848848a6b`; code `de1a6ef53bdfb4de14d01e8c13cc223a54cddd61` | full 1.119: 1.115 PASS, 0 fail, 4 gated skip; retry serializable stabil; tsc/build/catalog PASS |
 
 Yang **tidak boleh dihitung**:
 
@@ -108,9 +112,18 @@ Yang **tidak boleh dihitung**:
 
 - Exact-SHA Reviewer PASS dan bus history untuk task pada tabel di atas.
 - Current source/diff untuk E4/E8 canonical code dan matrix current state.
-- Latest local full suite yang tercatat pada accepted slice C3/C4:
-  `1118 total / 1078 pass / 40 skip / 0 fail`; ini membuktikan tidak ada fail
-  di mesin Builder, bukan eksekusi pihak kedua.
+- Latest local full suite authoritative pada accepted evidence `9e1d13d...`:
+  **1.119 total / 1.115 pass / 0 fail / 4 skip / 0 cancelled / 0 todo**.
+  Keempat skip adalah test QCF1 yang sudah ada: artefak historis PALSU
+  `/tmp/bikinfyp-audit.r8g5CW/c-no-face-2.5.png` tidak tersedia; tiga di
+  antaranya juga memerlukan opt-in eksplisit untuk panggilan Gemini berbayar.
+  Task tidak mengizinkan panggilan berbayar maupun membuat artefak pengganti.
+  Ini membuktikan hasil lokal Builder, bukan eksekusi dependency-backed pihak
+  kedua.
+- Exact evidence yang sama mencatat W1 **25/25**, money **11/11**, D2 **4/4**,
+  `tsc --noEmit`, build, dan audit katalog semuanya PASS. Database PostgreSQL
+  loopback disposable dibuat, dimigrasi, lalu dihapus dengan
+  `DROP ... WITH (FORCE)` dan residue katalog nol.
 - `git diff --check` dan dependency-free checks dapat diulang tanpa network.
 - Artefak staging 22 Agu memiliki provenance tersanitasi. Refresh read-only
   24 Agu mengonfirmasi deployment lama itu masih live; keduanya tidak
@@ -148,8 +161,9 @@ menaikkan skor 58/100.
 
 - Seluruh perubahan setelah SHA staging lama, termasuk accepted task 24 Agu.
 - Full npm/tsx, TypeScript, catalog, dan test dengan PostgreSQL disposable yang
-  hanya dijalankan Builder. Skip 40 pada full terbaru tidak boleh menjadi PASS;
-  mayoritas adalah gate PostgreSQL yang environment-nya tidak tersedia.
+  hanya dijalankan Builder. PostgreSQL lokal loopback tersedia dan seluruh gate
+  PostgreSQL yang dibutuhkan aggregate dijalankan; empat skip tersisa hanya
+  klasifikasi QCF1 di atas, bukan skip environment PostgreSQL.
 - Presence kredensial di laptop tidak membuktikan pasangan staging, approval
   merchant, settlement, atau kesiapan produksi.
 
@@ -158,7 +172,7 @@ menaikkan skor 58/100.
 | Input/gate | Presence/status yang diamati | Kesimpulan yang diizinkan |
 |---|---|---|
 | Render CLI + config | present | akses control-plane mungkin ada; bukan izin deploy |
-| `DATABASE_URL`/`UJI_PG_URL` efektif | empty/missing | audit staging dan independent PG gate tidak bisa dijalankan dari sesi ini |
+| PostgreSQL / `DATABASE_URL` staging | loopback lokal `localhost:5432` terverifikasi; kredensial/URL staging tetap tidak tersedia | disposable local PG gate dapat dan sudah dijalankan; audit data staging tetap memerlukan pasangan staging yang sah |
 | R2 effective | endpoint/bucket empty; key id/secret nonempty | tidak ada pasangan DB+bucket yang sah untuk audit; jangan hubungkan silang |
 | Duitku effective | merchant/api key nonempty; production=false | key lokal ada, approval/settlement/go-live tidak terbukti |
 | Midtrans effective | rollback keys nonempty | jalur rollback sesuai ADR; bukan gateway current atau bukti settlement |
@@ -194,11 +208,29 @@ Tidak satu pun keduanya boleh dinilai live sebelum syarat ADR terpenuhi.
 | Monitoring/DR | external/owner | Brian + incident owner | owner, alert delivery, runbook, restore/incident drill report |
 | Production auto-deploy drift | P1 external configuration/control | Release owner + Render production administrator | authorized disable pada web+worker, lalu sanitized read-only artifact `autoDeploy=no`/off untuk kedua service dan bukti tidak ada deploy tak terotorisasi |
 
-`APPROVED_LOCAL_WORK_REMAINS = false` setelah task dokumen ini. Matrix memang
-mencatat kandidat local, tetapi tidak ada task bounded berikutnya yang sudah
-disetujui dan bebas keputusan kebijakan. Builder tidak boleh mengubah C2/C5,
-E1, OCR, reason-code contract baru, deploy, atau payments hanya karena kandidat
-itu tertulis.
+Re-audit pada accepted baseline `9e1d13d...` membaca matriks canonical, daftar
+P0/P1 di atas, dan bus history sampai task ini. Hasilnya:
+
+`APPROVED_LOCAL_IMPLEMENTATION_TASK_CURRENTLY_QUEUED = false`.
+
+Ini bukan klaim bahwa tidak ada pekerjaan lokal selamanya. Matrix mencatat
+kandidat C2/C5, E1, OCR, C9, dan C12, tetapi tidak satu pun mempunyai bounded
+approval aktif yang bebas keputusan kebijakan. Builder tidak boleh mengubah
+reason-code contract, deploy, atau payments hanya karena kandidat itu tertulis.
+
+### Founder actions yang diperlukan sekarang
+
+1. `APPROVE STAGING` untuk exact accepted SHA dan migration/evidence tranche.
+2. Tetapkan `T43=A+B`, atau tulis pilihan T43 eksplisit lain beserta treatment
+   legacy dan urutan rollout.
+3. Tetapkan `RELEASE_OWNER`.
+4. Berikan `APPROVE DISABLE PRODUCTION AUTODEPLOY` untuk web dan worker; setelah
+   tindakan terotorisasi, wajib ada refresh read-only yang membuktikan off.
+5. Putuskan price/COGS.
+6. Tetapkan incident owner.
+7. Tetapkan counsel/legal approver.
+8. Berikan authority Duitku yang diperlukan untuk approval dan pengujian
+   settlement/webhook; ini bukan izin payments go-live otomatis.
 
 ## Critical path 48 jam
 
@@ -254,21 +286,23 @@ bahwa pihak eksternal akan selesai.
 
 ## Next autonomous action
 
-`NEXT_AUTONOMOUS_ACTION = IDLE_COMPLETE_AWAIT_EXTERNAL_GATES`.
+`NEXT_AUTONOMOUS_ACTION = AWAIT_EXPLICIT_EXTERNAL_AUTHORITY_RUNTIME_ARMED`.
 
 Reviewer harus mengonsumsi DONE task ini. Sesudah itu loop boleh memilih task
 baru hanya jika Founder memberikan decision artifact atau Reviewer menerbitkan
 bounded approval baru. Tidak ada deploy, audit remote, paid call, secret readout,
-atau policy decision yang boleh diasumsikan dari dokumen ini.
+atau policy decision yang boleh diasumsikan dari dokumen ini. Builder dan
+Reviewer tetap armed; menunggu authority bukan mematikan runtime.
 
 ## Consistency checks slice ini
 
 - Parser dependency-free membaca 13 nilai `Baru` langsung dari source board:
   `ROWS=13`, `SUM=77`; 13 row ledger dokumen ini juga `SUM=77`.
-- Semua 13 accepted SHA pada tabel adalah ancestor `BASIS_HEAD`.
+- Semua accepted code/evidence SHA pada tabel adalah ancestor
+  `ACCEPTED_BASELINE_HEAD` atau identik dengannya.
 - `git diff 4e91cf2..3d00a6c` kosong (E1 quarantine) dan
   `git diff 90e2b05..739276b` kosong (C9 proof quarantine).
-- `git diff --check` PASS dan satu-satunya path yang diubah slice ini adalah
-  dokumen evidence ini.
+- `git diff --check` PASS dan slice ini hanya mengubah canonical readiness serta
+  appendendum current-state pada canonical path/case matrix.
 - Tidak ada npm/full suite yang diulang: task docs-only, dan hasil package
   lokal tidak akan mengubah tier evidence atau score.
