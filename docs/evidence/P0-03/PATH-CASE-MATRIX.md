@@ -624,3 +624,33 @@ TASK=`P1-C9-C12-STRUCTURAL-INVENTORY-20260824`
   raw proof: `C9-C12-STRUCTURAL-INVENTORY-20260824.md` and
   `c9-c12-structural-20260824/`.
 - C9 and C12 remain **PARTIAL**; shipping readiness remains **58/100**.
+
+### E.19 C12 admission-time approved reference snapshot — 2026-08-24
+
+TASK=`P0-C12-ADMISSION-REFERENCE-SNAPSHOT-20260824`
+
+- On code `6c3b1d431a8564c13e51b218af5403dbfb8bb3e0`, exactly three production
+  application job INSERT creators were found. Retail SQLite, retail PostgreSQL,
+  and organization PostgreSQL now atomically install both
+  `approved_reference_manifest` and `job_product_snapshot` at admission.
+- Storage-first preparation resolves approval, re-reads and hashes exact bytes,
+  and writes ordered deterministic job-owned keys. SQLite rechecks exact raw
+  image identity with bounded same-id retry; PostgreSQL holds the product row
+  through preparation and INSERT. Queue/hold visibility cannot precede the
+  committed manifest boundary.
+- Admission/W2 proves actual E5 deletion still uses original bytes without
+  first-worker install. Disposable W1 proves retail E3, retail E5 deletion, and
+  organization E9 deletion preserve admission bytes/order without install.
+  Helper and retry tests cover partial storage failure, source-hash mutation,
+  empty/rejected input, idempotence, ambiguous-CAS no-delete, exact one hold,
+  duplicate semantics, and terminal readmission.
+- Exact evidence: targeted **52/52**, W1 disposable **28/28**, full suite
+  **1,129 total / 1,086 PASS / 0 fail / 43 classified skip**, PostgreSQL retry
+  **20 jobs / 20 holds**, TypeScript/build/catalog PASS, and disposable residue
+  zero. Raw evidence and hashes are under
+  `c12-admission-reference-20260824/`; full report is
+  `C12-ADMISSION-REFERENCE-SNAPSHOT-20260824.md`.
+- This closes the approved local C12 admission-time identity gap for new jobs;
+  legacy worker fallback remains for legacy rows. It does not change promo
+  policy, add a reason code, prove deployment, or close unrelated C9 gaps.
+  Canonical shipping readiness remains **58/100**.
