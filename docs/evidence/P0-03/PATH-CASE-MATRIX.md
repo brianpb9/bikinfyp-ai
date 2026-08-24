@@ -191,7 +191,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E4 dan E8 kini fail-closed sebelum append/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. **Gap yang tersisa:** E1 tidak memanggil resolver, dan cakupan kasus lain yang dicatat di matriks belum lengkap; karena itu C7 tetap PARTIAL |
 | C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7 (T43) |
-| C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata worker tertutup: W1/W2 memakai manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, dan claims. HTTP E3→W2 dan E7→W1 membuktikan mutasi handler aktual tidak mengubah bahan admission di provider. Tetap PARTIAL karena reason code `SNAPSHOT_IMMUTABLE` tidak diterbitkan dan regenerate/entry lain belum seluruhnya tertutup |
+| C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata worker tertutup: W1/W2 memakai manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, dan claims. HTTP E3→W2 dan E7→W1 membuktikan mutasi handler aktual tidak mengubah bahan admission di provider. Inventaris source E.16 menutup gap call-site resume/regenerate: hanya A6 yang memanggil `enqueueJobResume`, kedua call berada sesudah validasi dua snapshot, queue hanya meneruskan `jobId`, dan semua wake worker berujung ke loader durable W1/W2. Tetap PARTIAL karena reason code usulan `SNAPSHOT_IMMUTABLE` tidak diterbitkan; keputusan admission global T43 juga tidak diubah oleh bukti ini |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
 | C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
 | C12 | **PARTIAL** | Identitas dan urutan referensi dipatok dalam manifest job versioned; create konkuren kembali dengan satu pemenang, W1/W2 tidak membaca ulang daftar saat manifest ada, dan test HTTP E5/E9→resume membuktikan boundary route/list/storage. Tetap PARTIAL karena reason code usulan `REFERENCE_IDENTITY_CHANGED` tidak diterbitkan; bukti memakai reason truthful yang sudah ada (`REF_MISSING`) |
@@ -515,3 +515,32 @@ TASK=P0-E8-ALL-UPLOADS-LABEL-BRAND-GATE-20260824
   `UJI_PG_URL` kosong; katalog tidak dijalankan karena tidak terdampak.
 - E8/C3/C4 tetap **PARTIAL**: E1, worker brand enforcement, reason code khusus,
   dan OCR fail-open berada di luar slice ini.
+
+### E.16 Follow-up C9 resume-entry inventory proof — 2026-08-24
+
+TASK=P0-C9-RESUME-ENTRY-INVENTORY-PROOF-20260824
+
+- Inventaris tidak memakai daftar asumsi: guard Node dependency-free berjalan
+  atas seluruh TypeScript runtime di `app/`, `lib/`, dan worker produksi.
+  Hasilnya: admission `enqueueJob` ada 3 call-site; `enqueueJobResume` hanya
+  dua call A6 (approve + regenerate); wake internal terdiri dari satu caller
+  `enqueueRedisJob`, dua caller `enqueueInlineJob`, W2 dari pump+worker Redis,
+  dan W1 hanya dari worker Redis.
+- Tidak ditemukan bypass implementasi. A6 sudah memvalidasi
+  `job_product_snapshot` dan mem-parse + materialize
+  `approved_reference_manifest` sebelum kedua enqueue. Queue hanya membawa
+  `jobId`; W1/W2 memasukkan field durable sebagai `existingRaw`, sehingga
+  helper mengembalikannya sebelum kandidat dari row produk mutable dinilai.
+- Guard gagal bila ada call-site production baru yang belum diklasifikasi,
+  enqueue approve/regenerate sebelum salah satu validasi, overwrite/rebuild
+  snapshot di A6, forwarding queue yang membawa ulang produk, atau worker wake
+  yang tidak lagi mengadopsi kedua field durable. Counterexample untuk
+  call-site baru, enqueue terlalu dini, dan rebuild dijalankan di test.
+- Verifikasi akhir: guard mandiri `node scripts/guard-resume-entry-inventory.mjs`
+  PASS; focused `22/22 PASS`; affected `86 total / 62 PASS / 24 skip / 0 fail`;
+  tepat satu full suite `1121 total / 1081 PASS / 40 skip / 0 fail`;
+  `npx tsc --noEmit` dan `git diff --check` PASS. Dua puluh empat skip affected
+  dan bagian PostgreSQL dari 40 skip full tetap eksplisit karena `UJI_PG_URL`
+  kosong; audit katalog tidak dijalankan karena katalog/naskah tidak berubah.
+- C9 tetap **PARTIAL**: slice ini tidak mengarang reason code
+  `SNAPSHOT_IMMUTABLE` dan tidak mengubah keputusan admission T43.
