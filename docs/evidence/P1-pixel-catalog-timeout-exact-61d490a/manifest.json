@@ -1,0 +1,201 @@
+{
+  "schema": "pixel-timeout-evidence-v1",
+  "generated_utc": "2026-08-24T07:07:30.197Z",
+  "code_under_test": {
+    "head": "61d490a85d35c91500e31d6a5d14fc28697533dc",
+    "tree": "abe7d2fa5ba98981413f98e2671ffbfd3a5ea2e0",
+    "initial_worktree_clean": true,
+    "expected_head": "61d490a85d35c91500e31d6a5d14fc28697533dc"
+  },
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v22.23.1"
+  },
+  "constraints": {
+    "pixel_hard_bound_ms": 480000,
+    "internal_test_timeout_ms": 600000,
+    "full_hard_bound_ms": 900000,
+    "sample_per_second": 2,
+    "eligible_floor": 29,
+    "pixel_skip_gate_required_state": "UNSET"
+  },
+  "eligible": {
+    "evidence_book": "/Users/hadrava/HDRV/03_UGC_AI_ID/test_output/bukti-render.json",
+    "eligible_count": 29,
+    "eligible_ids": [
+      "racun-checkout",
+      "review-jujur",
+      "unboxing",
+      "before-after",
+      "diskon-gede",
+      "buat-kamu-yang",
+      "spill-rahasia",
+      "t01-tempat-susah",
+      "t02-bedah-fitur",
+      "t03-liputan-event",
+      "t04-hook-indrawi",
+      "t05-before-after",
+      "t07-checklist-berjalan",
+      "t08-day-1-vs-day-7",
+      "t09-bahan-aktif",
+      "t10-bukti-di-lengan",
+      "t11-hook-misteri",
+      "t12-vox-pop",
+      "ads-unboxing-pov",
+      "ads-panas-ekstrem",
+      "ads-tembus-dinding",
+      "ads-atap-jebol",
+      "ads-dobrak-pintu",
+      "ads-waktu-berhenti",
+      "kenalin-bisnis",
+      "promo-terbatas",
+      "tvc-seharian",
+      "tvc-kain-lari",
+      "tvc-jam-tiga"
+    ]
+  },
+  "pixel_tap_summary": {
+    "tests": 3,
+    "suites": 0,
+    "pass": 3,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 0,
+    "todo": 0,
+    "duration_ms": 42469.057916
+  },
+  "full_tap_summary": {
+    "tests": 1119,
+    "suites": 0,
+    "pass": 1079,
+    "fail": 0,
+    "cancelled": 0,
+    "skipped": 40,
+    "todo": 0,
+    "duration_ms": 92408.446
+  },
+  "records": [
+    {
+      "name": "eligible-count",
+      "command": [
+        "npx",
+        "tsx",
+        "-e",
+        "import fs from \"node:fs\"; import path from \"node:path\"; import { CAMPAIGN_TEMPLATES } from \"./lib/templates.ts\"; const p=path.resolve(process.cwd(),\"..\",\"test_output\",\"bukti-render.json\"); const b=JSON.parse(fs.readFileSync(p,\"utf8\")); const eligible=CAMPAIGN_TEMPLATES.filter(t=>b[t.id]?.visiLolos===true&&fs.existsSync(b[t.id].berkas)); console.log(JSON.stringify({evidence_book:p,eligible_count:eligible.length,eligible_ids:eligible.map(t=>t.id)}));"
+      ],
+      "timeout_ms": 60000,
+      "environment": {
+        "SCRIPT_LLM": "0",
+        "LEWATI_TES_PIKSEL": "UNSET"
+      },
+      "started_utc": "2026-08-24T07:05:12.362Z",
+      "started_asia_jakarta": "2026-08-24T14:05:12+07:00",
+      "ended_utc": "2026-08-24T07:05:12.893Z",
+      "duration_ms": 528.186,
+      "exit_code": 0,
+      "signal": null,
+      "spawn_error": null,
+      "stdout_file": "eligible.stdout.json",
+      "stdout_bytes": 636,
+      "stdout_sha256": "26d54f933df826cbda83f40369227f612ea92205523635aa86b5725410c14035",
+      "stderr_file": "eligible.stderr.txt",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "isolated-pixel",
+      "command": [
+        "npx",
+        "tsx",
+        "--test",
+        "tests/bukti-katalog-piksel.test.ts"
+      ],
+      "timeout_ms": 480000,
+      "environment": {
+        "SCRIPT_LLM": "0",
+        "LEWATI_TES_PIKSEL": "UNSET"
+      },
+      "started_utc": "2026-08-24T07:05:12.905Z",
+      "started_asia_jakarta": "2026-08-24T14:05:12+07:00",
+      "ended_utc": "2026-08-24T07:05:55.587Z",
+      "duration_ms": 42682.025,
+      "exit_code": 0,
+      "signal": null,
+      "spawn_error": null,
+      "stdout_file": "pixel.tap",
+      "stdout_bytes": 674,
+      "stdout_sha256": "63b01a5368cc65a3043457d48e1885a629640425bdad660743b0a39ef8bc0b90",
+      "stderr_file": "pixel.stderr.txt",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "full-npm-test",
+      "command": [
+        "npm",
+        "test"
+      ],
+      "timeout_ms": 900000,
+      "environment": {
+        "SCRIPT_LLM": "0",
+        "LEWATI_TES_PIKSEL": "UNSET"
+      },
+      "started_utc": "2026-08-24T07:05:55.591Z",
+      "started_asia_jakarta": "2026-08-24T14:05:55+07:00",
+      "ended_utc": "2026-08-24T07:07:28.269Z",
+      "duration_ms": 92677.485,
+      "exit_code": 0,
+      "signal": null,
+      "spawn_error": null,
+      "stdout_file": "full.tap.gz",
+      "stdout_bytes": 54221,
+      "stdout_sha256": "025723c93be9b50d1e768e355db52755ace9a64c9dd81ca9755a2b8bd3bd89dc",
+      "stderr_file": "full.stderr.txt",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stdout_uncompressed_file": "full.tap",
+      "stdout_uncompressed_bytes": 364676,
+      "stdout_uncompressed_sha256": "0cb144807e4d995d37844a61eb2c844813204b0b1093b5dfaa043588ec2d9665",
+      "stdout_encoding": "gzip"
+    },
+    {
+      "name": "typescript",
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "timeout_ms": 120000,
+      "environment": {
+        "SCRIPT_LLM": "0",
+        "LEWATI_TES_PIKSEL": "UNSET"
+      },
+      "started_utc": "2026-08-24T07:07:28.271Z",
+      "started_asia_jakarta": "2026-08-24T14:07:28+07:00",
+      "ended_utc": "2026-08-24T07:07:30.195Z",
+      "duration_ms": 1923.913,
+      "exit_code": 0,
+      "signal": null,
+      "spawn_error": null,
+      "stdout_file": "tsc.stdout.txt",
+      "stdout_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_file": "tsc.stderr.txt",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "success": true,
+  "packaging": {
+    "full_tap": {
+      "encoding": "gzip",
+      "lossless": true,
+      "gzip_mtime": 0,
+      "uncompressed_bytes": 364676,
+      "uncompressed_sha256": "0cb144807e4d995d37844a61eb2c844813204b0b1093b5dfaa043588ec2d9665",
+      "compressed_bytes": 54221,
+      "compressed_sha256": "025723c93be9b50d1e768e355db52755ace9a64c9dd81ca9755a2b8bd3bd89dc"
+    }
+  }
+}

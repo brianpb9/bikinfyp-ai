@@ -71,6 +71,48 @@ wajah raw dan dua wajah utama.
 
 Semua command memastikan `LEWATI_TES_PIKSEL` tidak aktif untuk pixel/full run.
 
+### Capture machine-generated exact code SHA
+
+Artefak decisive yang dapat diperiksa langsung berada di
+`docs/evidence/P1-pixel-catalog-timeout-exact-61d490a/`:
+
+- `manifest.json` — command argv, UTC/Jakarta timestamp, hard timeout,
+  environment state, duration, exit/signal/spawn error, byte count, dan SHA-256
+  stdout/stderr;
+- `pixel.tap` — raw TAP isolated pixel;
+- `full.tap.gz` — raw TAP full suite dalam lossless deterministic gzip; manifest
+  menyimpan hash dan ukuran compressed maupun uncompressed;
+- `eligible.stdout.json` — 29 ID eligible dari buku bukti dan source template;
+- stdout/stderr TypeScript dan stderr tiap command, termasuk berkas kosong yang
+  di-hash sebagai bukti tidak ada output tersembunyi.
+
+Capture dimulai dari worktree bersih dan mengikat:
+
+```text
+CODE_SHA=61d490a85d35c91500e31d6a5d14fc28697533dc
+CODE_TREE=abe7d2fa5ba98981413f98e2671ffbfd3a5ea2e0
+INITIAL_WORKTREE_CLEAN=true
+```
+
+Manifest machine-generated mencatat `LEWATI_TES_PIKSEL=UNSET` pada seluruh
+record dan `success=true`. Hasil exact-code capture:
+
+| Command | Bound | Exit | Machine-parsed result | Wall record |
+|---|---:|---:|---|---:|
+| eligible-count | 60 s | 0 | 29 eligible | 528,186 ms |
+| isolated pixel | 480 s | 0 | 3 pass / 0 fail / **0 skip** | 42682,025 ms |
+| full `npm test` | 900 s | 0 | 1119 total / 1079 pass / 40 skip / 0 fail | 92677,485 ms |
+| `npx tsc --noEmit` | 120 s | 0 | stdout/stderr kosong | 1923,913 ms |
+
+`pixel.tap` sendiri melaporkan suite duration `42469,058 ms`; selisih kecil ke
+wall record mencakup startup process. Raw TAP full melaporkan duration
+`92408,446 ms` dan dapat dibaca dengan `gzip -dc full.tap.gz`. SHA-256 raw files
+ada di manifest, sehingga perubahan satu byte pada transcript dapat dideteksi.
+
+Commit evidence sesudah capture hanya boleh mengubah `docs/evidence/**`
+relatif terhadap `CODE_SHA`; tidak ada rerun yang diatribusikan ke tree kode
+lain.
+
 | Verifikasi | Hard bound | Hasil | Timing |
 |---|---:|---|---:|
 | lifecycle + outcome focused | — | 5 pass, 0 fail, 0 skip | node 6855 ms; wall 13,14 s |
