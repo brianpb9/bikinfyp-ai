@@ -60,13 +60,16 @@ const ANGKA_PERAK_TERKELOMPOK = String.raw`\d+(?:[.,]\d{3})*`;
 // compatibility NFKC. Teks tidak dinormalisasi agar offset redaction tetap asli.
 const KARAKTER_TANDA_PERAK = String.raw`+\-\u00B1\u02D6\u02D7\u207A\u207B\u208A\u208B\u2212\u2795\u2796\uFE62\uFE63\uFF0B\uFF0D`;
 const TANDA_PERAK = String.raw`[${KARAKTER_TANDA_PERAK}]`;
+// Binary Unicode property ini mencakup VS15/VS16 + supplement, ZWSP/ZWNJ/ZWJ,
+// word joiner, CGJ, soft hyphen, serta kontrol bidi/default-ignorable lain.
+const JEMBATAN_TANDA_PERAK = String.raw`[\s()[\]{}:,;=${KARAKTER_TANDA_PERAK}\p{Default_Ignorable_Code_Point}]*`;
 const regexPerakBertanda = () => new RegExp(
-  String.raw`${TANDA_PERAK}[\s()[\]{}:,;=${KARAKTER_TANDA_PERAK}]*(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
-  "gi"
+  String.raw`${TANDA_PERAK}${JEMBATAN_TANDA_PERAK}(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
+  "giu"
 );
 const regexPerakTanpaTanda = () => new RegExp(
   String.raw`(?<![\w.,${KARAKTER_TANDA_PERAK}])(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
-  "gi"
+  "giu"
 );
 
 const rentangPerakBertanda = (text: string): Array<[number, number]> =>
