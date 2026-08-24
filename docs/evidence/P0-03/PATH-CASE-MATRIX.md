@@ -78,19 +78,19 @@ bagian E.2, dan arti tiap status di E.0.
 4. defensive worker test untuk W1 dan W2;
 5. E2E lokal/mocked untuk C1 dan C8.
 
-| # | Kasus | Jalur wajib diuji | Keputusan diharapkan | reason code (usul) | Status |
+| # | Kasus | Jalur wajib diuji | Keputusan diharapkan | reason code / status implementasi | Status |
 |---|---|---|---|---|---|
 | C1 | Foto#1 banner, foto#2 packshot valid | E1,E2,E4,E6,E8,A1..A5,**A6**,W1,W2 | **produk DITERIMA**; foto#1 berstatus promotional; approved reference WAJIB foto#2 + hash-nya. **A6 (approve/regenerate) wajib MEMPERTAHANKAN snapshot** — ia membangunkan worker lagi. `REF_PROMOTIONAL` adalah STATUS FOTO, bukan penolakan produk | `REF_PROMOTIONAL` (status) | **PARTIAL** |
-| C2 | Toothpaste diberi kategori facewash | E1,E3,E6,E7,A1..A4 | reject sebelum spend | `TYPE_MISMATCH` | **BLOCKED** |
-| C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` | **PARTIAL** |
-| C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` | **PARTIAL** |
-| C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` | **BLOCKED** |
-| C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` | **BLOCKED** |
-| C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` | **PARTIAL** |
-| C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` | **PARTIAL** |
-| C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` | **PARTIAL** |
-| C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` | **PARTIAL** |
-| C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` | **PASS** |
+| C2 | Toothpaste diberi kategori facewash | E1,E3,E6,E7,A1..A4 | reject sebelum spend | `TYPE_MISMATCH` (**usul**) | **BLOCKED** |
+| C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` (**canonical E4/E8; enforcement lain partial**) | **PARTIAL** |
+| C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` (**canonical E4/E8; enforcement lain partial**) | **PARTIAL** |
+| C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` (**usul**) | **BLOCKED** |
+| C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` (**usul**) | **BLOCKED** |
+| C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` (**canonical; coverage partial**) | **PARTIAL** |
+| C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` (**canonical; coverage partial**) | **PARTIAL** |
+| C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` (**usul**) | **PARTIAL** |
+| C10 | Produk legacy tanpa evidence | W1,W2,A1..A4 | karantina | `LEGACY_UNVALIDATED` (**usul**) | **PARTIAL** |
+| C11 | Berkas referensi hilang saat worker mulai | W1,W2 | fail-closed, tanpa capture | `REF_MISSING` (**canonical**) | **PASS** |
 | C12 | Urutan images diubah/dirusak | E5,E9,W1,W2 | pertahankan identitas/snapshot atau digest manifest berurutan yang disetujui lintas mutasi | `REFERENCE_IDENTITY_CHANGED` (usul) | **PARTIAL** |
 | C13 | **Produk valid** (positif) | seluruh E,A,W | DITERIMA | — | **PARTIAL** |
 
