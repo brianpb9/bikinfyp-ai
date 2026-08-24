@@ -1,0 +1,52 @@
+{
+  "observed_at": "2026-08-24T16:50:20Z",
+  "scope": "docs/evidence-only reconciliation",
+  "score": {
+    "counterexample_single_tier_rows": 12,
+    "counterexample_single_tier_sum": 70,
+    "accepted_v_c_parser_rows": 13,
+    "accepted_v_c_parser_sum": 77,
+    "canonical_ledger_rows": 13,
+    "canonical_ledger_sum": 77,
+    "reported_score": 58,
+    "pass": true
+  },
+  "accepted_bus": {
+    "tasks_checked": 5,
+    "exact_reviewer_pass_each": 1,
+    "exact_builder_done_each": 1,
+    "pass": true
+  },
+  "git_ancestry": {
+    "baseline": "0fa86ca60882fed1ff6881bfb028e53e2a1124a9",
+    "shas_checked": 5,
+    "all_ancestors_or_equal": true
+  },
+  "managed_receipts": {
+    "web_and_worker_live_exact_app_sha": true,
+    "intended_deploy_count_one_each": true,
+    "exact_health_samples": 3,
+    "matching_data_snapshots": 3,
+    "exact_non_money_canary_shapes": 3,
+    "duitku_status_hold_http_404": true,
+    "production_auto_deploy_yes_both": true,
+    "pass": true
+  },
+  "static_validation": {
+    "json_payload_files_checked": 4,
+    "json_invalid": 0,
+    "markdown_relative_links_checked": 0,
+    "markdown_relative_links_missing": 0,
+    "forbidden_stale_current_phrase_hits": 0,
+    "git_diff_check": "PASS"
+  },
+  "secret_scan": {
+    "payload_files_checked_before_this_aggregate_receipt": 8,
+    "local_keys_checked": 2,
+    "exact_value_hits": 0,
+    "values_or_derived_digests_recorded": false
+  },
+  "remote_calls": "NOT_RUN",
+  "full_regression": "NOT_RUN",
+  "overall": "PASS"
+}

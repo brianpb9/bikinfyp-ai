@@ -1,0 +1,11 @@
+{
+  "source": ".agent-bus/archive",
+  "all_exact": true,
+  "result": [
+    { "task": "P0-T43-C8-ADMISSION-ENFORCEMENT-20260824", "sha": "d49c9730f5701fbd12b602cf49d20ae4880c6acf", "pass": 1, "pass_ts": "2026-08-24T14:40:20Z", "done": 1, "done_ts": "2026-08-24T14:41:41Z" },
+    { "task": "P0-T43-E1-REFERENCE-GATE-20260824", "sha": "da34ba945a8693f67a6762ba914286b9154f8365", "pass": 1, "pass_ts": "2026-08-24T15:18:15Z", "done": 1, "done_ts": "2026-08-24T15:18:50Z" },
+    { "task": "P0-T43-C3-WORKER-BRAND-GATE-20260824", "sha": "8a37f2eceb8ed55b4c62bd2472c61da1edc67882", "pass": 1, "pass_ts": "2026-08-24T15:32:50Z", "done": 1, "done_ts": "2026-08-24T15:34:09Z" },
+    { "task": "P1-DUITKU-SANDBOX-VERIFICATION-20260824", "sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3", "pass": 1, "pass_ts": "2026-08-24T16:07:29Z", "done": 1, "done_ts": "2026-08-24T16:08:14Z" },
+    { "task": "P1-MANAGED-STAGING-DUITKU-PARITY-20260824", "sha": "0fa86ca60882fed1ff6881bfb028e53e2a1124a9", "pass": 1, "pass_ts": "2026-08-24T16:40:51Z", "done": 1, "done_ts": "2026-08-24T16:41:27Z" }
+  ]
+}

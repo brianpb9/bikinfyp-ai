@@ -1,0 +1,22 @@
+{
+  "sources": [
+    "docs/evidence/P1-MANAGED-STAGING-DUITKU-PARITY-20260824/SERVICE-DEPLOY-RECEIPTS.json",
+    "docs/evidence/P1-MANAGED-STAGING-DUITKU-PARITY-20260824/HEALTH-RECEIPTS.json",
+    "docs/evidence/P1-MANAGED-STAGING-DUITKU-PARITY-20260824/DATA-RECEIPTS.json",
+    "docs/evidence/P1-MANAGED-STAGING-DUITKU-PARITY-20260824/CANARY-RECEIPTS.json"
+  ],
+  "checks": {
+    "web_live_exact": true,
+    "worker_live_exact": true,
+    "deploy_counts_one": true,
+    "health_three_exact": true,
+    "data_three_equal": true,
+    "canary_shapes": [
+      { "name": "unauthenticated_checkout", "http": 401, "response": { "code": "UNAUTHORIZED", "retryable": false } },
+      { "name": "invalid_signature_callback", "http": 401, "response": { "code": "INVALID_SIGNATURE", "retryable": false } },
+      { "name": "valid_signature_unknown_order", "http": 200, "response": { "ok": true, "ignored": true, "reason": "order tidak dikenal" } }
+    ]
+  },
+  "pass": true,
+  "remote_read_or_mutation_by_this_task": false
+}

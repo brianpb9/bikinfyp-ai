@@ -1,0 +1,21 @@
+{
+  "observed_at": "2026-08-24T16:47:57Z",
+  "source": "docs/evidence/board-jawaban-2026-08-19.md",
+  "counterexample": {
+    "parser_contract": "single-letter tier only",
+    "rows": 12,
+    "sum": 70,
+    "reason_rejected": "omits the Anti-slop V/C tier row"
+  },
+  "accepted_parser": {
+    "tiers": ["V", "C", "N", "V/C"],
+    "rows": 13,
+    "values": [9, 7, 7, 8, 7, 6, 7, 8, 6, 2, 2, 2, 6],
+    "sum": 77,
+    "denominator": 130,
+    "normalized": 59.23
+  },
+  "existing_r2a_evidence_ceiling": 58,
+  "canonical_reported_score": 58,
+  "new_weights_or_policy": false
+}

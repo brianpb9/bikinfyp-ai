@@ -813,7 +813,7 @@ TASK=`SHIP-READINESS-CANONICAL-C9C12-RECONCILE-20260824`
 - No policy, reason code, production behavior, deployment, or score changed.
   Canonical shipping readiness remains **58/100**.
 
-### E.25 Managed staging exact-SHA — 2026-08-24
+### E.25 Managed staging exact-SHA — 2026-08-24 (HISTORICAL; superseded by E.28/E.33)
 
 TASK=`P0-MANAGED-STAGING-EXACT-SHA-20260824`
 
@@ -840,7 +840,7 @@ TASK=`P0-MANAGED-STAGING-EXACT-SHA-20260824`
   T43 permits bounded technical enforcement/admission, but does not itself
   implement A1–A7, choose legacy treatment, or relax any production HOLD.
 
-### E.26 Staging web classifier-capable image candidate — 2026-08-24
+### E.26 Staging web classifier-capable image candidate — 2026-08-24 (HISTORICAL candidate)
 
 TASK=`P0-B2-WEB-CLASSIFIER-CAPABLE-20260824`
 
@@ -859,7 +859,7 @@ TASK=`P0-B2-WEB-CLASSIFIER-CAPABLE-20260824`
   readiness stays **58/100** pending exact-SHA review followed by the managed
   build/probe plan in `web-classifier-capable-20260824/managed-follow-up.md`.
 
-### E.27 Secret-safe web build/runtime boundary — 2026-08-24
+### E.27 Secret-safe web build/runtime boundary — 2026-08-24 (HISTORICAL predeploy)
 
 TASK=`P0-B2-SECRET-SAFE-WEB-BUILD-20260824`
 
@@ -878,7 +878,7 @@ TASK=`P0-B2-SECRET-SAFE-WEB-BUILD-20260824`
   exact-SHA managed rebuild, sustained health, and zero-money canary with
   contemporaneous raw evidence.
 
-### E.28 Managed classifier runtime and web/worker parity — 2026-08-24
+### E.28 Managed classifier runtime and web/worker parity — 2026-08-24 (accepted ancestor; deploy state superseded by E.33)
 
 TASK=`P0-B2-MANAGED-CLASSIFIER-RETRY-20260824`
 
@@ -973,3 +973,81 @@ TASK=`P0-T43-C3-WORKER-BRAND-GATE-20260824`
 - This is direct C3 proof for W1/W2 only. It does not change C6 OCR policy,
   C9/C12, deployment/payment/provider state, aggregate non-worker gaps, or
   canonical shipping readiness **58/100**.
+
+### E.31 A1–A7 admission enforcement — 2026-08-24
+
+TASK=`P0-T43-C8-ADMISSION-ENFORCEMENT-20260824`
+
+- Exact accepted SHA: `d49c9730f5701fbd12b602cf49d20ae4880c6acf`.
+- A1/A4/A6 retain their durable admission-manifest boundaries. A2/A3/A5/A7
+  now acquire bounded product-evidence leases before any provider/setup effect.
+  PostgreSQL locks use dedicated bounded pools, not the application pool;
+  saturation fails before provider work, and unlock failure evicts the
+  potentially lock-bearing session.
+- Duplicate A2 replay is resolved before current-product evidence enforcement,
+  preserving idempotency for already admitted immutable jobs.
+- Route-level counterexamples cover corrupt evidence, concurrent E5/E9 delete,
+  work beyond the former idle-transaction timeout, `PG_POOL_MAX=1`, saturated
+  lock capacity, and unlock failure. The accepted boundary reports canonical
+  evidence failure with zero provider/setup effect.
+- This closes C8 A1–A7 and P0-B5 for **new admission**. It does not decide
+  legacy treatment, OCR fail-open/fail-closed, promo policy, or C9/C12 aggregate
+  status. Shipping readiness remains **58/100**.
+
+### E.32 Duitku HMAC sandbox verification — 2026-08-24
+
+TASK=`P1-DUITKU-SANDBOX-VERIFICATION-20260824`
+
+- Exact accepted app SHA: `89cfdf0ebf3290aa3b42376a9da194988f6d6db3`.
+- Current POP create/callback uses HMAC-SHA256 and timing-safe comparison. Local
+  callback counterexamples cover invalid signature, amount mismatch, duplicate,
+  failed/late, unknown order, wrong merchant, and sandbox tester allowlisting.
+- The authorized external sandbox create returned a strict sandbox redirect,
+  but the exact-order HMAC status query returned sanitized HTTP 404 without the
+  required schema. Its persisted result is `HOLD`, not PASS. No invoice was
+  paid or opened; no charge/refund/settlement/production mutation occurred.
+- This closes the code/local sandbox-contract slice only. Authoritative POP
+  known-order reconciliation, merchant approval, production activation, real
+  settlement, price/COGS approval, and `PAYMENTS_GO_LIVE` remain open.
+
+### E.33 Managed staging Duitku parity — 2026-08-24
+
+TASK=`P1-MANAGED-STAGING-DUITKU-PARITY-20260824`
+
+- Accepted evidence SHA: `0fa86ca60882fed1ff6881bfb028e53e2a1124a9`;
+  deployed app SHA: `89cfdf0ebf3290aa3b42376a9da194988f6d6db3`.
+- Staging web deploy `dep-da66sk3ncjis73asgu80` and worker deploy
+  `dep-da66slm417fc739h2mf0` are live, exactly one intended deploy each,
+  `autoDeploy=no`, worker resumed, and maintenance off.
+- Three public health samples return 200 with exact build SHA, classifier
+  capable, Duitku sandbox, and payments live false. Web managed credential
+  slots were local-equal in memory; worker credential slots remain absent.
+- Non-money managed canaries: unauthenticated checkout 401, invalid callback
+  signature 401, and a validly signed unknown-order callback 200/ignored.
+  Baseline, postdeploy, and post-canary DB/queue receipts match exactly.
+- Production deploy IDs/SHA remain unchanged against independently committed
+  pre-task evidence and a preserved post-task read. Same-task raw pre-read was
+  not persisted and is explicitly not claimed as evidence.
+- This supersedes E.25/E.26/E.27 negative classifier/deploy state as current
+  managed truth. Those sections remain historical. It does not prove paid or
+  known-order settlement and does not change readiness **58/100**.
+
+### E.34 Canonical readiness reconciliation at `0fa86ca` — 2026-08-24
+
+TASK=`P1-SHIP-READINESS-RECONCILE-20260824`
+
+- Board rubric is unchanged: 13 raw rows sum to 77/130; normalized 59 is still
+  capped by the existing R2A evidence ceiling at **58/100**. No new weight or
+  policy was introduced.
+- Current closed bounded slices: managed classifier capability, C8 A1–A7/new
+  admission, E1 create/reference rollback, explicit C3 W1/W2 mismatch, Duitku
+  HMAC code/local matrix, and managed Duitku staging parity.
+- Current open P0/P1 includes paired legacy DB+R2 audit, P0-B4 action beyond
+  the accepted explicit C3 slice, C2/C4/C5/C6 policy/coverage gaps, C9/C12
+  aggregate/legacy treatment, positive exact-tree E2E, POP known-order status
+  reconciliation, production release-control drift, legal, monitoring/DR,
+  owner, price/COGS, and production/go-live authority.
+- Next autonomous work may be only a Reviewer-bounded P0-B4 technical slice
+  that does not choose OCR, legacy, promo, reason-code, owner, price, or
+  production policy. Otherwise the technical queue is complete and waits for
+  the exact decision/external artifact.

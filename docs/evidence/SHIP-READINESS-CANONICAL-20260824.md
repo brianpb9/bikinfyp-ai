@@ -1,6 +1,6 @@
 # Shipping readiness canonical — 24 Agustus 2026
 
-TASK=`SHIP-READINESS-CANONICAL-C9C12-RECONCILE-20260824`
+TASK=`P1-SHIP-READINESS-RECONCILE-20260824`
 
 ## Putusan
 
@@ -10,11 +10,12 @@ Ini satu-satunya skor current yang dapat dipertanggungjawabkan. Baseline
 accepted setelah seluruh task yang diterima pada 24 Agustus adalah:
 
 ```text
-ACCEPTED_BASELINE_HEAD=0b2985cb6bab0bd101ad90a8230c28ba8e948aab
-LATEST_PRODUCT_CODE_SHA=e1e80c052ee7d77339239af09f83eb2b37649289
-LATEST_PRODUCT_TREE=9955de4c9daf0704322e29f95ec662442702a9cf
+ACCEPTED_BASELINE_HEAD=0fa86ca60882fed1ff6881bfb028e53e2a1124a9
+LATEST_PRODUCT_CODE_SHA=89cfdf0ebf3290aa3b42376a9da194988f6d6db3
+LATEST_PRODUCT_TREE=150784edeb9232780d5ccd7dc25825f14f3febe8
 BRANCH=work/p0-product-truth-20260820
-WORKTREE_PADA_INSPEKSI=tracked-clean; bootstrap untracked preserved/excluded
+WORKTREE_PADA_INSPEKSI=scoped docs/evidence diff only; unrelated tracked
+bus-send modification and bootstrap untracked files preserved/excluded
 ```
 
 Commit yang menambahkan dokumen ini tentu mempunyai SHA/tree berbeda; angka di
@@ -22,9 +23,12 @@ atas membedakan baseline evidence yang sudah diterima dari exact tree produk
 yang diuji, bukan membuat referensi diri yang berubah setiap kali dokumen
 dikoreksi.
 
-Skor tidak naik sesudah managed staging deploy karena bukti deployment justru
-menemukan web runtime tidak punya tesseract (`klasifikasi.mampu=false`), belum
-ada valid-product end-to-end canary, dan external gates produksi tetap HOLD.
+Skor tidak naik sesudah remediation dan managed staging parity. Classifier
+staging sekarang **capable**, A1–A7 admission, E1, serta C3 worker sudah
+accepted, dan exact product SHA `89cfdf0...` hidup pada web+worker. Namun belum
+ada valid-product end-to-end canary pada tree itu; C9/C12 aggregate, legacy,
+OCR policy, production payment/status reconciliation, legal, incident/DR, dan
+release-control gates masih partial atau external/HOLD.
 `R2A-KONTRAK.md` menetapkan ceiling gelombang product-truth **55–58**, sedangkan
 work order `SHIP-80-20260821` menetapkan code-only maksimum 70 dan mensyaratkan
 Founder/external gates untuk 80. Tidak ada bukti baru yang membatalkan batas
@@ -46,11 +50,11 @@ baru. Ledger requirement-by-requirement tetap memakai angka raw board:
 | Mobile UI 375 | 7 | Bukti 375 historis; 768/1024 dan wizard Postgres belum lengkap |
 | Hydration/interaction canary CI | 8 | CI historis terverifikasi; dashboard production belum dicakup |
 | Content engine standard | 7 | Local gates kuat dan accepted tree hidup di staging; valid-product E2E/production belum ada |
-| Brand fidelity | 6 | E4/E8 canonical; E1/worker dan OCR policy masih partial |
+| Brand fidelity | 6 | E4/E8, E1, dan explicit C3 worker mismatch accepted; OCR unreadable/null policy dan aggregate coverage masih partial |
 | Anti-slop produksi | 7 | Campuran bukti terbuka dan prompt/local-only |
 | Prompt/verdict archive | 8 | Migrasi historis live; belum ada trace production current end-to-end |
 | NSFW rejection | 6 | Canary n=11 historis; KPI job production belum cukup |
-| Payments | 2 | External/missing; go-live false |
+| Payments | 2 | Managed Duitku sandbox parity/non-money callbacks verified; status reconciliation tetap HOLD, production/go-live/settlement belum ada |
 | Legal/PDP | 2 | External/missing; halaman masih menandai counsel review belum final |
 | DR/monitoring/incident owner | 2 | External/missing; owner dan drill belum terbukti |
 | Landing/pricing consistency | 6 | Copy historis; keputusan harga/COGS Founder belum ada |
@@ -68,10 +72,11 @@ R2A_EVIDENCE_CEILING = 58/100
 CANONICAL_REPORTED_SCORE = min(59, 58) = 58/100
 ```
 
-Cap 58 diperlukan karena sebagian bukti board bertingkat C/N, managed staging
-menemukan classifier incapable dan belum mempunyai valid-product E2E, serta
-external gates produksi belum tersedia. Deployment exact-SHA memperkuat level
-bukti tree produk, tetapi tidak otomatis menaikkan shipping score.
+Cap 58 tetap diperlukan karena sebagian bukti board bertingkat C/N, belum ada
+valid-product E2E pada exact tree current, C9/C12/legacy/OCR policy belum
+tertutup, dan external gates produksi belum tersedia. Classifier yang kini
+capable dan deployment exact-SHA memperkuat evidence level, tetapi rubrik yang
+sama tidak memberi kenaikan otomatis.
 
 ## Bukti yang diterima, dikarantina, dan tidak diterima
 
@@ -99,6 +104,11 @@ Builder karena itu tetap **local-only**, bukan eksekusi independen.
 | `P1-FULL-DISPOSABLE-PG-ZERO-SKIP-20260824` | evidence `9e1d13d5544d8a996998283d9cc8496848848a6b`; code `de1a6ef53bdfb4de14d01e8c13cc223a54cddd61` | full 1.119: 1.115 PASS, 0 fail, 4 gated skip; retry serializable stabil; tsc/build/catalog PASS |
 | `P0-C12-ADMISSION-REFERENCE-SNAPSHOT-20260824` | evidence `2073ba84fe179c9fde82bdd7b27027c4cec88ca3`; code `57d1a34883f68088d7f5cd8d5f4ffa736acfc54e` | tiga admission memasang manifest reference job-owned; cleanup known-loser dan pruning successful-retry aman; targeted 56/56, W1 28/28, full 1.133: 1.090 PASS / 0 fail / 43 skip |
 | `P1-C9-PROMO-OUTPUT-COUNTEREXAMPLE-20260824` | evidence `0b2985cb6bab0bd101ad90a8230c28ba8e948aab`; code `e1e80c052ee7d77339239af09f83eb2b37649289` | actual compositor frame W2 gain/removal dan W1 change; affected 19/19, W1 29/29, full 1.135: 1.091 PASS / 0 fail / 44 skip |
+| `P0-T43-C8-ADMISSION-ENFORCEMENT-20260824` | `d49c9730f5701fbd12b602cf49d20ae4880c6acf` | A1–A7 fail-closed before provider/setup effects; bounded cross-process evidence locks and replay semantics accepted |
+| `P0-T43-E1-REFERENCE-GATE-20260824` | `da34ba945a8693f67a6762ba914286b9154f8365` | E1 every-upload gate, strict approved-reference eligibility, exact rollback/reconciliation accepted |
+| `P0-T43-C3-WORKER-BRAND-GATE-20260824` | `8a37f2eceb8ed55b4c62bd2472c61da1edc67882` | W1/W2 explicit brand mismatch rejects pre-provider; null/unreadable OCR policy unchanged |
+| `P1-DUITKU-SANDBOX-VERIFICATION-20260824` | `89cfdf0ebf3290aa3b42376a9da194988f6d6db3` | current HMAC contract and local callback matrix accepted; external POP status read remains HTTP 404/HOLD |
+| `P1-MANAGED-STAGING-DUITKU-PARITY-20260824` | evidence `0fa86ca60882fed1ff6881bfb028e53e2a1124a9`; deployed app `89cfdf0ebf3290aa3b42376a9da194988f6d6db3` | managed web+worker exact parity; Duitku sandbox/live=false; non-money canaries and invariant DB/queue receipts accepted |
 
 Yang **tidak boleh dihitung**:
 
@@ -134,11 +144,11 @@ dipakai `formatPromoOverlayText()`, sehingga stock saat ini **inert** dan tidak
 boleh diklaim dirender. Bukti memilih nol policy; Founder harus memilih
 `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau `LIVE_INTENTIONAL`.
 
-Kedua slice kode itu kini termasuk dalam exact SHA `4a1d258...` yang hidup di
-staging. Ini menaikkan evidence level deployment untuk tree tersebut, tetapi
-tidak menutup status agregat C9/C12 atau mengubah skor **58/100**. Tidak ada
-legacy media audit, payment/legal/incident/DR, production E2E, atau
-operational-cycle evidence baru.
+Kedua slice historis itu sekarang ancestor dari exact SHA `89cfdf0...` yang
+hidup di staging. Deployment current juga mencakup accepted C8/E1/C3 dan
+Duitku sandbox code. Ini tidak menutup status agregat C9/C12 atau mengubah skor
+**58/100**. Tidak ada legacy media audit, production payment/legal/incident/DR
+E2E, atau operational-cycle evidence baru.
 
 ## Verified, local-only, dan external/missing
 
@@ -172,14 +182,14 @@ operational-cycle evidence baru.
   24 Agu mengonfirmasi deployment lama itu masih live; keduanya tidak
   membuktikan current accepted tree telah di-deploy.
 
-Latest staging evidence yang authoritative adalah bundle managed
-`docs/evidence/P0-03/managed-staging-exact-sha-20260824/`. Web dan worker live
-di exact accepted `4a1d258155b128fee0fcd5a6143198f36a558163`, `autoDeploy=no`,
-tidak suspended, dan health 200 tiga kali berurutan. Semua 35 migrasi hidup.
-Probe menjawab secara managed bahwa web punya ffmpeg/ffprobe tetapi tidak punya
-tesseract, sehingga `mampu=false`. Bukti ini menggantikan snapshot read-only
-lama sebagai keadaan current, tetapi jawaban negatif classifier dan ketiadaan
-valid-product E2E menahan skor di 58/100.
+Latest staging evidence authoritative adalah
+`docs/evidence/P1-MANAGED-STAGING-DUITKU-PARITY-20260824/`. Web dan worker live
+di exact accepted app SHA `89cfdf0ebf3290aa3b42376a9da194988f6d6db3`,
+`autoDeploy=no`, tidak suspended, dan maintenance off. Tiga health sample
+menjawab 200 dengan classifier capable, `payments_provider=duitku`,
+`payments_env=sandbox`, dan `payments_live=false`. Receipt DB/queue sebelum,
+sesudah deploy, dan sesudah canary identik. Bundle lama `4a1d258...` dan probe
+classifier-incapable adalah **historical**, bukan current truth.
 
 Production juga mempunyai refresh read-only tersanitasi di
 `docs/evidence/P0-03/production-20260824/`, dengan provenance di `MANIFEST.md`
@@ -198,8 +208,9 @@ menaikkan skor 58/100.
 
 ### Local-only
 
-- Dokumen evidence commit sesudah deployed `4a1d258...`; tree produk yang
-  dikandung `4a1d258...` sendiri sudah verified-managed di staging.
+- Evidence commit `0fa86ca...` berada sesudah deployed app `89cfdf0...`; app
+  tree itulah yang verified-managed di staging, sedangkan docs receipt tidak
+  diklaim deployed.
 - Full npm/tsx, TypeScript, catalog, dan test dengan PostgreSQL disposable yang
   hanya dijalankan Builder. Aggregate generic latest memiliki 40 skip
   environment PostgreSQL; gate W1 yang relevan dijalankan terpisah 29/29 pada
@@ -215,7 +226,7 @@ menaikkan skor 58/100.
 | Render CLI + config | present | akses control-plane mungkin ada; bukan izin deploy |
 | PostgreSQL staging | akses read-only agregat sementara terbukti dan allow-list dipulihkan kosong | DB half tersedia; audit media tetap memerlukan R2 staging yang terbukti berpasangan |
 | R2 effective | endpoint/bucket empty; key id/secret nonempty | tidak ada pasangan DB+bucket yang sah untuk audit; jangan hubungkan silang |
-| Duitku effective | merchant/api key nonempty; production=false; sandbox/test authority granted | bounded sandbox webhook/replay may proceed; merchant approval, production activation, real-money settlement, and go-live remain unproven/HOLD |
+| Duitku effective | managed web slots present/local-equal, production=false; three non-money managed canaries accepted; POP status query remained HTTP 404/HOLD | unknown-order/invalid-signature safety verified; known-order reconciliation, merchant approval, production activation, real-money settlement, and go-live remain unproven/HOLD |
 | Midtrans effective | rollback keys nonempty | jalur rollback sesuai ADR; bukan gateway current atau bukti settlement |
 | `PAYMENTS_GO_LIVE` | false | paid public tetap tertutup |
 | Ops alert | Resend key nonempty; alert destination empty | monitoring aktif belum dapat dianggap mengirim alert |
@@ -236,37 +247,39 @@ syarat ADR dan Founder go-live terpenuhi.
 |---|---|---|---|
 | P0-B2 runtime classification web | **VERIFIED_MANAGED: capable** at exact `73280ffa342945dc08cee2fc664956975c8d5735`; web deploy `dep-da63g43tqb8s739gkasg` and canonical worker replay deploy `dep-da64cfbncjis73alvbn0` live, classifier managed smoke positive | Closed for staging runtime capability; production remains separately unauthorized | `managed-classifier-retry-20260824/`: retained external 503 before worker-suspended fingerprint/queue baseline, second 503 after immediate+sustained exact-deploy parity, 35/35 migrations, sandbox/non-live, all binaries+OCR+smoke true, DB allowlist restored, and post-replay production service objects equivalent to pre-task. The old narrow zero-money aggregate is explicitly unproven and not relied upon; safe admission-only canary NOT_RUN because no safe non-paid route exists |
 | P0-B3 angka legacy C10 | partial credential/data | Data/Release owner | DB aggregate access proven; still needs paired staging R2 and sanitized legacy audit JSON |
-| T43 / P0-B4 action / P0-B5 / A1..A7 | Founder authority versioned for in-scope technical enforcement/admission; implementation coverage still partial | Reviewer dispatches bounded remaining scope | exact boundary evidence; legacy treatment remains undecided; do not infer implementation from authority |
+| P0-B4 action | explicit C3 mismatch action accepted; broader canary/action coverage and legacy treatment remain partial | Reviewer may dispatch only a bounded technical slice under T43; Founder owns any policy/legacy choice | exact worker boundary/counterexamples without changing OCR or legacy policy |
+| P0-B5 / A1..A7 admission | **Closed for new admission** at `d49c973...`; exact replay ordering, provider/setup boundary, bounded evidence locks, and zero-effect counterexamples accepted | No new authority needed for this accepted slice | do not reopen merely because aggregate C9/C12 remains partial |
 | C2 `TYPE_MISMATCH` | local implementation, belum bounded-approved | Builder setelah scope approval | route/admission boundary + canonical code + counterexamples |
 | C5 `CATEGORY_UNKNOWN`/manual review | product policy + local | Founder lalu Builder | policy manual-review tertulis dan boundary test |
-| C3/C4 E1/worker enforcement | partial | Reviewer bounded task within T43; OCR policy remains Founder boundary | exact route/worker tests; E4/E8 saja sudah canonical |
+| C3 explicit brand mismatch | **Closed for W1/W2** at `8a37f2e...` | no further authority for this bounded slice | explicit false rejects pre-provider; null/unreadable remains current policy, not a PASS for C6 |
+| C4 label/unreadable aggregate | partial | Reviewer technical scope only; Founder owns OCR fail-open/fail-closed policy | bounded route/worker evidence after policy decision where required |
 | C6 OCR fail-open vs fail-closed | policy conflict | Founder | keputusan policy dan acceptance matrix selaras |
-| C7 E1 resolver | dikarantina | Reviewer bounded task lalu Builder | rollback contract within scoped T43 authority + independent exact-SHA proof |
-| C8 admission A1..A7 | partial | Reviewer bounded task lalu Builder | fail-closed boundary sebelum hold/enqueue di seluruh A1..A7; authority exists, implementation does not |
+| C7 E1 resolver | **Closed for E1 create path** at `da34ba9...` | no further authority for this bounded slice | exact rollback/reconciliation and every-upload checks accepted |
+| C8 admission A1..A7 | **Closed** at `d49c973...` | no further authority for this bounded slice | fail-closed evidence lease precedes provider/setup effects; duplicate replay preserved |
 | C9 promo admission→output | partial; rendered behavior accepted | Founder policy | pilih `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau `LIVE_INTENTIONAL`; core prompt sudah admission-bound, tetapi before/deadline live dan stock live namun inert di formatter |
 | C12 aggregate | partial; local admission-time identity slice closed | legacy/reason-code authority still required | new jobs sudah admission-bound; T43 technical authority exists, tetapi legacy fallback/treatment dan proposal `REFERENCE_IDENTITY_CHANGED` tidak boleh diputuskan Builder |
 | C1/C13 seluruh E/A/W positif | partial/external | QA/Release | satu trace end-to-end exact evidence, bukan resolver-only test |
-| Duitku production + price/COGS | sandbox/test authorized; production external/HOLD | Brian + Payments owner | sandbox webhook/replay may run now; merchant approval, final price/COGS, production activation, real-money settlement, and explicit `PAYMENTS_GO_LIVE` remain required |
+| Duitku reconciliation/production + price/COGS | HMAC sandbox create attempted; managed invalid/unknown-order callbacks accepted; POP status read HTTP 404/HOLD; production external/HOLD | Brian + Payments owner + Duitku support for authoritative POP status mechanism | known-order status/reconciliation mechanism, merchant approval, final price/COGS, production activation, real-money settlement, and explicit `PAYMENTS_GO_LIVE` |
 | Legal/PDP | external | Brian + counsel | signed/versioned approval dan halaman tanpa placeholder |
 | Monitoring/DR | external/owner | Brian + incident owner | owner, alert delivery, runbook, restore/incident drill report |
 | Production auto-deploy drift | P1 external configuration/control | Release owner + Render production administrator | authorized disable pada web+worker, lalu sanitized read-only artifact `autoDeploy=no`/off untuk kedua service dan bukti tidak ada deploy tak terotorisasi |
 
-Re-audit pada accepted baseline `0b2985cb...` membaca matriks canonical, daftar
-P0/P1 di atas, dan bus history melalui C12 PASS/DONE, C9 rendered-output
-PASS/DONE, serta bounded task rekonsiliasi docs ini. Sesudah rekonsiliasi ini
-diterima, hasilnya:
+Re-audit pada accepted baseline `0fa86ca...` membaca matriks canonical, daftar
+P0/P1 di atas, dan bus history melalui C8/E1/C3, Duitku sandbox, managed parity
+PASS/DONE, serta task rekonsiliasi docs ini. Sesudah rekonsiliasi ini diterima,
+hasilnya:
 
 `APPROVED_TECHNICAL_SCOPE_REMAINS = true`.
 
 `BOUNDED_IMPLEMENTATION_TASK_CURRENTLY_QUEUED = false`.
 
-T43 memberi authority untuk technical enforcement/admission in-scope, sehingga
-Reviewer harus memilih bounded slice berikutnya dari A1–A7/P0-B4/P0-B5 tanpa
-menunggu perintah `continue`. Authority bukan implementasi dan tidak memilih
-legacy treatment, OCR policy, reason-code contract, atau desain A/B/C. C12
-tidak membutuhkan task admission-manifest baru: slice itu sudah accepted.
-Builder tidak boleh memilih promo policy, legacy treatment, mengubah reason
-code, deploy, atau payments hanya karena kandidat itu tertulis.
+T43 tetap memberi authority untuk bounded technical enforcement yang belum
+selesai, terutama bagian P0-B4 action yang tidak memilih policy. A1–A7/P0-B5,
+E1, dan explicit C3 mismatch tidak boleh didispatch ulang sebagai pekerjaan
+baru: slice itu sudah accepted. Authority tidak memilih legacy treatment, OCR
+policy, reason-code contract, atau desain A/B/C. Builder tidak boleh memilih
+promo policy, legacy treatment, mengubah reason code, deploy, atau payments
+hanya karena kandidat itu tertulis.
 
 ### Founder actions yang diperlukan sekarang
 
@@ -288,9 +301,10 @@ Keputusan/bukti eksternal yang masih diperlukan:
 5. Putuskan price/COGS.
 6. Tetapkan incident owner.
 7. Tetapkan counsel/legal approver.
-8. Gunakan authority Duitku sandbox/test yang sudah ada untuk bounded
-   webhook/replay testing. Secara terpisah, merchant approval, production
-   activation, real-money settlement, dan `PAYMENTS_GO_LIVE` tetap external/HOLD.
+8. Minta Duitku support/account mengonfirmasi atau membuka authoritative POP
+   status/reconciliation mechanism. Managed invalid/unknown-order callback
+   canaries sudah selesai; known-order settlement, merchant approval,
+   production activation, dan `PAYMENTS_GO_LIVE` tetap external/HOLD.
 
 ## Critical path 48 jam
 
@@ -299,10 +313,10 @@ bahwa pihak eksternal akan selesai.
 
 | Window | Aksi/gate | Exact artifact untuk membuka tranche berikutnya |
 |---|---|---|
-| Selesai 24 Agu | Deploy **accepted exact SHA** ke staging web+worker; jalankan migrasi staging sesuai blueprint | `managed-staging-exact-sha-20260824/`: deploy IDs, exact SHA web/worker, migrasi, health, classifier negatif, control-state cleanup |
+| Selesai 24 Agu | Deploy accepted exact product SHA ke staging web+worker dan restore Duitku sandbox parity | `P1-MANAGED-STAGING-DUITKU-PARITY-20260824/`: app SHA `89cfdf0...`, classifier capable, Duitku sandbox/live=false, DB/queue invariants, maintenance off, worker resumed |
 | 0–2 jam berikutnya | Founder menetapkan promo policy, treatment legacy, price/COGS, release owner, incident owner, dan counsel contact; release owner mematikan auto-deploy production web+worker setelah authority | satu decision record versioned + sanitized read-only post-change artifact yang menunjukkan kedua service off dan tidak ada deploy tak terotorisasi |
 | 4–8 jam | Audit legacy read-only memakai Postgres staging dan bucket R2 yang dibuktikan berpasangan | JSON signed/timestamped: total, no-photo, corrupt-column, approved, per-reason, failed-to-inspect; nol nilai credential |
-| 6–18 jam | Dengan T43 technical authority yang sudah ada, Reviewer menerbitkan bounded task enforcement E1/admission; legacy treatment tetap dipisahkan sampai diputuskan | accepted exact SHA + route/worker boundary tests + independent dependency-backed run; tidak ada deploy otomatis |
+| Selesai 24 Agu | T43 bounded C8 admission, E1, dan C3 worker mismatch | accepted exact SHAs `d49c973...`, `da34ba9...`, `8a37f2e...`; legacy/OCR policy tetap dipisahkan |
 | 18–24 jam | Deploy ulang accepted remediation ke staging dan jalankan positive/negative product trace | exact deploy SHA + trace C1/C3/C4/C6/C7/C8/C10/C13, zero-cost assertions, rollback/list/audit evidence |
 | 0–24 jam paralel | Dengan authority yang sudah ada, jalankan Duitku sandbox webhook/replay; secara terpisah kejar merchant approval, counsel, dan incident preparation | redacted sandbox result + valid/invalid/duplicate/out-of-order webhook proof; merchant approval reference terpisah; signed legal approval; runbook+alert delivery |
 | 24–36 jam | Sesudah approval dan otorisasi biaya, satu controlled production E2E OTP→topup→render→QC→delivery/refund dengan approved pricing | timestamped trace IDs, ledger reconciliation, QC audio/frame artifacts, delivery and controlled refund, exact deployed SHA |
@@ -310,9 +324,10 @@ bahwa pihak eksternal akan selesai.
 
 ### Tranche skor
 
-- **58 → maksimum code-only 70:** deployment exact-SHA sendiri sudah terbukti,
-  tetapi kenaikan memerlukan remediation classifier/admission dan valid-product
-  staging E2E yang accepted. Ini ceiling, bukan kenaikan otomatis 12 poin.
+- **58 → maksimum code-only 70:** classifier/admission/E1/C3 dan deployment
+  exact-SHA sudah terbukti, tetapi kenaikan masih memerlukan penutupan bounded
+  P0/P1 tersisa dan valid-product staging E2E yang accepted. Ini ceiling, bukan
+  kenaikan otomatis 12 poin.
 - **70 → 80:** hanya sesudah Duitku production/settlement/webhook/replay,
   keputusan biaya/harga, satu E2E production-like lengkap, dan intake live
   terverifikasi seperti work order `SHIP-80`.
@@ -347,21 +362,23 @@ bahwa pihak eksternal akan selesai.
 
 ## Next autonomous action
 
-`NEXT_AUTONOMOUS_ACTION = AWAIT_EXPLICIT_POLICY_OR_EXTERNAL_AUTHORITY_RUNTIME_ARMED`.
+`NEXT_AUTONOMOUS_ACTION = REVIEWER_DISPATCH_BOUNDED_P0_B4_ACTION_OR_DECLARE_NO_POLICY_FREE_SLICE`.
 
-Reviewer harus mengonsumsi DONE task ini. Sesudah itu loop boleh memilih task
-baru hanya jika Founder memberikan decision artifact atau Reviewer menerbitkan
-bounded approval baru. Tidak ada deploy, audit remote, paid call, secret readout,
-atau policy decision yang boleh diasumsikan dari dokumen ini. Builder dan
-Reviewer tetap armed; menunggu authority bukan mematikan runtime.
+Reviewer harus mengonsumsi DONE task ini. Sesudah itu loop boleh memilih satu
+bounded P0-B4 technical slice yang tidak memutus OCR/legacy/promo policy; jika
+tidak ada slice seperti itu, current technical queue adalah complete dan loop
+harus menunggu decision/external artifact. Tidak ada deploy, audit remote, paid
+call, secret readout, atau policy decision yang boleh diasumsikan dari dokumen
+ini.
 
 ## Consistency checks slice ini
 
 - Parser dependency-free membaca 13 nilai `Baru` langsung dari source board:
   `ROWS=13`, `SUM=77`; 13 row ledger dokumen ini juga `SUM=77`.
 - Semua accepted code/evidence SHA pada tabel adalah ancestor
-  `ACCEPTED_BASELINE_HEAD` atau identik dengannya, termasuk C12
-  `57d1a348...`/`2073ba84...` dan C9 `e1e80c0...`/`0b2985cb...`.
+  `ACCEPTED_BASELINE_HEAD` atau identik dengannya, termasuk C12/C9 serta C8
+  `d49c973...`, E1 `da34ba9...`, C3 `8a37f2e...`, Duitku app `89cfdf0...`, dan
+  managed parity evidence `0fa86ca...`.
 - `git diff 4e91cf2..3d00a6c` kosong (E1 quarantine) dan
   `git diff 90e2b05..739276b` kosong (C9 proof quarantine).
 - Dependency-free SHA ancestry, Markdown link-target, score-token, stale-phrase,
