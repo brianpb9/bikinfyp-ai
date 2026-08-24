@@ -1,0 +1,7 @@
+observed_utc=2026-08-24T16:22:20Z
+accepted_sha=89cfdf0ebf3290aa3b42376a9da194988f6d6db3
+remote_staging_ref=refs/heads/staging/exact-89cfdf0-20260824
+remote_staging_sha=89cfdf0ebf3290aa3b42376a9da194988f6d6db3
+remote_main_ref=refs/heads/main
+remote_main_sha=00ee62efd86ae7e10453a2a1896e63b62228aa4d
+main_unchanged=true

@@ -1,0 +1,25 @@
+{
+  "classification": "VERIFIED_MANAGED_READ_ONLY",
+  "snapshots": [
+    {
+      "phase": "baseline",
+      "observed_at": "2026-08-24T16:14:51Z",
+      "db": { "jobs": { "rows": 74, "active": 0, "fp": "a41e0cd975ff0e06e7e68cccf581d6ae" }, "promo_jobs": { "rows": 15, "active": 4, "fp": "3592f7bf2ab1d34c9df1cb7fce136f78" }, "provider_tasks": { "rows": 0, "fp": "d41d8cd98f00b204e9800998ecf8427e" }, "credit_ledger": { "rows": 341, "total": "2203000", "fp": "87247fe22040a2d474b6e31e26f04dd4" }, "payments": { "rows": 13, "total": "1520000", "fp": "a5a12d4f3a42178280a36aec385ef3e3" }, "created_since_task": { "jobs": 0, "promo_jobs": 0, "provider_tasks": 0, "credit_ledger": 0, "payments": 0 } },
+      "queues": { "racun-jobs-staging": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "paused": false }, "racun-promo-jobs": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "paused": false } }
+    },
+    {
+      "phase": "postdeploy_pre_release",
+      "observed_at": "2026-08-24T16:20:36Z",
+      "matches_baseline": true,
+      "db_job": "job-da66uhrncjis73asm31g",
+      "queue_job": "job-da66uhu7bikc73b2ll70"
+    },
+    {
+      "phase": "post_canary",
+      "observed_at": "2026-08-24T16:22:07Z",
+      "matches_baseline": true,
+      "db_job": "job-da66v8bncjis73aso1l0",
+      "queue_job": "job-da66v8bbc2fs73b49v40"
+    }
+  ]
+}

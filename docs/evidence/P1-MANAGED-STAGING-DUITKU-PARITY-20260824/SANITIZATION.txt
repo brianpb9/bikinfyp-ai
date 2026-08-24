@@ -1,0 +1,11 @@
+observed_utc=2026-08-24T16:25:00Z
+files_scanned=13
+secret_keys_compared=2
+exact_secret_matches=0
+secret_derived_digests_recorded=0
+result=PASS
+
+Method: parse the two local Duitku sandbox slots in memory, require both
+nonempty, and compare each exact value against every evidence file. Only the
+aggregate result above was printed or persisted. JSON parsing and git
+whitespace checks also passed.

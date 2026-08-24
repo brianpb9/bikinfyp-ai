@@ -1,0 +1,15 @@
+{
+  "classification": "VERIFIED_MANAGED_READ_ONLY",
+  "before": {
+    "web": { "service_id": "srv-d9nhccfqj5pc73et9hrg", "branch": "main", "auto_deploy": "yes", "suspended": "not_suspended", "deploy_id": "dep-da3bfg142hec73arfot0", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "worker": { "service_id": "srv-d9ni3ndaeets73c07kq0", "branch": "main", "auto_deploy": "yes", "suspended": "not_suspended", "deploy_id": "dep-da3bfg142hec73arfpfg", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "origin_main": "00ee62efd86ae7e10453a2a1896e63b62228aa4d"
+  },
+  "after": {
+    "web": { "service_id": "srv-d9nhccfqj5pc73et9hrg", "branch": "main", "auto_deploy": "yes", "suspended": "not_suspended", "deploy_id": "dep-da3bfg142hec73arfot0", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "worker": { "service_id": "srv-d9ni3ndaeets73c07kq0", "branch": "main", "auto_deploy": "yes", "suspended": "not_suspended", "deploy_id": "dep-da3bfg142hec73arfpfg", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "origin_main": "00ee62efd86ae7e10453a2a1896e63b62228aa4d"
+  },
+  "unchanged": true,
+  "production_mutation_count": 0
+}

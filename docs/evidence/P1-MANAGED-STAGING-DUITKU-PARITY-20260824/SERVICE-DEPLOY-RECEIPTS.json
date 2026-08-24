@@ -1,0 +1,59 @@
+{
+  "classification": "VERIFIED_MANAGED_ALLOWLISTED",
+  "before": {
+    "observed_at": "2026-08-24T16:12:00Z",
+    "web": {
+      "service_id": "srv-d9n28tijnfac73a87lt0",
+      "branch": "staging/exact-73280ff-20260824",
+      "auto_deploy": "no",
+      "suspended": "not_suspended",
+      "runtime": "docker",
+      "dockerfile": "Dockerfile.web",
+      "maintenance": false,
+      "deploy_id": "dep-da63g43tqb8s739gkasg",
+      "deploy_status": "live",
+      "deploy_sha": "73280ffa342945dc08cee2fc664956975c8d5735"
+    },
+    "worker": {
+      "service_id": "srv-d9n28ue417fc73ch2b60",
+      "branch": "staging/exact-73280ff-20260824",
+      "auto_deploy": "no",
+      "suspended": "not_suspended",
+      "runtime": "docker",
+      "dockerfile": "Dockerfile.worker",
+      "deploy_id": "dep-da64cfbncjis73alvbn0",
+      "deploy_status": "live",
+      "deploy_sha": "73280ffa342945dc08cee2fc664956975c8d5735"
+    }
+  },
+  "after": {
+    "observed_at": "2026-08-24T16:22:20Z",
+    "web": {
+      "service_id": "srv-d9n28tijnfac73a87lt0",
+      "branch": "staging/exact-89cfdf0-20260824",
+      "auto_deploy": "no",
+      "suspended": "not_suspended",
+      "runtime": "docker",
+      "dockerfile": "Dockerfile.web",
+      "maintenance": false,
+      "deploy_id": "dep-da66sk3ncjis73asgu80",
+      "deploy_trigger": "api",
+      "deploy_status": "live",
+      "deploy_sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3",
+      "finished_at": "2026-08-24T16:20:05.737881Z"
+    },
+    "worker": {
+      "service_id": "srv-d9n28ue417fc73ch2b60",
+      "branch": "staging/exact-89cfdf0-20260824",
+      "auto_deploy": "no",
+      "suspended": "not_suspended",
+      "runtime": "docker",
+      "dockerfile": "Dockerfile.worker",
+      "deploy_id": "dep-da66slm417fc739h2mf0",
+      "deploy_trigger": "service_resumed",
+      "deploy_status": "live",
+      "deploy_sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3"
+    }
+  },
+  "intended_deploy_count": { "web": 1, "worker": 1 }
+}

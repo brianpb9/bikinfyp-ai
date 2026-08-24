@@ -1,0 +1,23 @@
+{
+  "classification": "VERIFIED_MANAGED_SECRET_SAFE",
+  "observed_at": "2026-08-24T16:15:45.389Z",
+  "atomic_put_http": 200,
+  "before_slot_count": 26,
+  "after_slot_count": 30,
+  "changed_keys": ["PAYMENT_GATEWAY", "DUITKU_IS_PRODUCTION", "DUITKU_MERCHANT_CODE", "DUITKU_API_KEY"],
+  "unrelated_values_preserved": true,
+  "web": {
+    "PAYMENT_GATEWAY": "duitku",
+    "DUITKU_IS_PRODUCTION": "false",
+    "PAYMENTS_GO_LIVE": "false_or_absent",
+    "APP_BASE_URL": "exact_approved_staging_origin",
+    "DUITKU_MERCHANT_CODE": "present_nonempty_local_equal",
+    "DUITKU_API_KEY": "present_nonempty_local_equal"
+  },
+  "worker": {
+    "DUITKU_MERCHANT_CODE": "absent",
+    "DUITKU_API_KEY": "absent"
+  },
+  "comparison": "constant_time_in_memory",
+  "secret_value_or_secret_digest_recorded": false
+}

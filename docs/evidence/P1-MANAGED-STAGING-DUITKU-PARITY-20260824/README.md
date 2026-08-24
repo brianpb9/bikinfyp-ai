@@ -8,6 +8,10 @@ Authority: managed staging configuration, deploy, non-money canaries, and rollba
 
 `VERIFIED_MANAGED: PASS`
 
+Sanitized primary receipts are stored beside this report. `MANIFEST.sha256`
+binds every receipt without including any credential value or
+credential-derived digest.
+
 - Accepted application SHA: `89cfdf0ebf3290aa3b42376a9da194988f6d6db3`.
 - Staging-only branch: `staging/exact-89cfdf0-20260824`.
 - Web deploy: `dep-da66sk3ncjis73asgu80`, trigger `api`, one intended deploy, terminal `live` at the accepted SHA.
