@@ -1,11 +1,10 @@
-import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
-import { getDb, now, uuid, audit } from "@/lib/db";
 import { ensureDirs } from "@/lib/config";
 import { validBrand, validPriceIdr, validProductName } from "@/lib/product-validation";
-import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, bacaMetaGambar, referensiLayak, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { parsePromoFields } from "@/lib/promo";
-import { postgresRuntimeEnabled, smokeCreateProduct } from "@/lib/postgres/smoke-runtime";
+import { productCreateDependencies } from "@/lib/product-create-dependencies";
+import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +13,8 @@ export const dynamic = "force-dynamic";
 // (multipart form-data: field "photos"; atau JSON: images_base64[]).
 export async function POST(req: Request) {
   try {
-    const user = await getAuthUser(req);
+    const dependencies = productCreateDependencies();
+    const user = await dependencies.getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
 
     let name = "", priceRaw: unknown = "", category = "default", sourceUrl: string | null = null;
@@ -89,21 +89,35 @@ export async function POST(req: Request) {
       b.mime = sniffed;
     }
 
-    const id = uuid();
+    const id = dependencies.uuid();
     const images = await saveProductImages(id, blobs);
+    try {
+      const layak = await referensiLayak(images);
+      if (layak.length === 0) {
+        const meta = await Promise.all(images.map((rel) => bacaMetaGambar(rel)));
+        const sebab = meta.find((item) => item && !item.layakReferensi)?.alasan
+          ?? "Belum ada foto produk yang bisa dipakai jadi acuan.";
+        throw ERR.BAD_REQUEST(
+          `${sebab} Butuh minimal satu foto produk polos supaya videonya punya acuan yang benar.`,
+          "No reference-eligible product photo."
+        );
+      }
+    } catch (referenceError) {
+      await rejectAfterReferenceCheck("E1", images, referenceError);
+    }
     // raw_meta.brand: alamat fallback yang dibaca merekTepercaya() (worker) —
     // kolom products.brand (migrasi 0033, sesi lain) menang begitu di-land.
     const brand = validBrand(brandRaw);
     const rawMeta = brand ? { brand } : null;
-    if (postgresRuntimeEnabled()) {
-      await smokeCreateProduct(user.id, { sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, rawMeta, ...promo }, id);
+    if (dependencies.postgresRuntimeEnabled()) {
+      await dependencies.smokeCreateProduct(user.id, { sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, rawMeta, ...promo }, id);
     } else {
-      getDb()
+      dependencies.getDb()
         .prepare(
           "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
         )
-        .run(id, user.id, sourceUrl, validName, priceIdr, category, visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, rawMeta ? JSON.stringify(rawMeta) : null, now());
-      audit(user.id, "product.created", "products", id, { name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null });
+        .run(id, user.id, sourceUrl, validName, priceIdr, category, visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, rawMeta ? JSON.stringify(rawMeta) : null, dependencies.now());
+      dependencies.audit(user.id, "product.created", "products", id, { name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null });
     }
 
     return Response.json({ product_id: id, name: validName, price_idr: priceIdr, category, images }, { status: 201 });

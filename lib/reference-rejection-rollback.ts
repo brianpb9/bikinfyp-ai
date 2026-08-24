@@ -1,6 +1,6 @@
 import { deleteStoredProductImages } from "./product-images";
 
-export type ReferenceBoundary = "E4" | "E8";
+export type ReferenceBoundary = "E1" | "E4" | "E8";
 
 /**
  * Rollback exact object baru setelah resolver/no-reference menolak ingestion.
