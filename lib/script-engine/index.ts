@@ -453,7 +453,7 @@ async function generateOne(
     templateId: templateId ?? null,
     wordBudget: wordBudget ?? null,
     cartLabel,
-    requirePriceMention: templateRequiresPriceMention(templateId),
+    requirePriceMention: templateRequiresPriceMention(templateId) && (product.price_idr ?? 0) > 0,
     hookLevel,
     productCategory: product.category,
     ...(mekanikIde ? { mechanic: mekanikIde } : {}),

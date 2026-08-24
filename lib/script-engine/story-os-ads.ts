@@ -20,7 +20,7 @@
 import { formatHargaNatural, type SegmentDraft } from "./templates";
 import { stripDeliveryTags } from "./delivery-tags";
 import { isNeutralStoryAdsTemplate } from "./ads-visual-contract";
-import { hargaTerbilang } from "./price-mentions";
+import { deteksiHargaIndonesia } from "./price-mentions";
 
 export type PenegakanSA = "kode" | "juri";
 
@@ -278,10 +278,8 @@ export function bridgeStoryAdsTerbukti(
     if (source === "spoken_product_name" && productName && (` ${normalized} `).includes(` ${productName} `)) verified.add(source);
     if (source === "spoken_product_category" && productCategory && (` ${normalized} `).includes(` ${productCategory} `)) verified.add(source);
     if (source === "spoken_approved_price" && exactPrice > 0) {
-      const digitAmounts = [...spoken.matchAll(/(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi)].map((match) =>
-        Math.round(Number(match[1].replace(",", ".")) * (/juta|jt/i.test(match[2]) ? 1_000_000 : 1_000)));
-      const wordAmounts = hargaTerbilang(spoken).map((item) => item.nilai);
-      if ([...digitAmounts, ...wordAmounts].some((amount) => amount === exactPrice || amount === Math.round(roundedPrice))) verified.add(source);
+      const amounts = deteksiHargaIndonesia(spoken).map((item) => item.nilai);
+      if (amounts.some((amount) => amount === exactPrice || amount === Math.round(roundedPrice))) verified.add(source);
     }
   }
   return [...verified];
@@ -315,7 +313,7 @@ export function temuanBridgeStoryAds(
   if (!priceLed) {
     const priceTextCount = segments.filter((segment) => {
       const spoken = String(segment.tts_text ?? segment.text ?? "");
-      return /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/i.test(spoken) || hargaTerbilang(spoken).length > 0;
+      return deteksiHargaIndonesia(spoken).length > 0;
     }).length;
     if (priceTextCount > 0) {
       findings.push({ gerbang: "SA6", pesan: `${priceTextCount} beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif` });

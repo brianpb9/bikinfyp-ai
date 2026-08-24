@@ -44,3 +44,49 @@ export function hargaTerbilang(text: string): { frasa: string; nilai: number }[]
   tutup(kata.length);
   return hasil;
 }
+
+export interface HargaIndonesiaMention {
+  frasa: string;
+  nilai: number;
+  bentuk: "unit" | "currency" | "rupiah" | "terbilang";
+}
+
+const nilaiNominalPenuh = (raw: string): number => Number(raw.replace(/[.,\s]/g, ""));
+
+/** Hilangkan hanya span nominal berdigit sebelum pemeriksaan angka umum L-14. */
+export function tanpaNominalHargaTertulis(text: string): string {
+  return text
+    .replace(/\b(?:rp|idr)\s*\.?\s*\d+(?:[.,]\d{3})*\b(?![.,]\d)/gi, " ")
+    .replace(/\d+(?:[.,]\d{3})*\s*rupiah\b/gi, " ")
+    .replace(/\d+(?:[.,]\d+)?\s*(?:ribu|rb|ribuan|juta|jt)\b/gi, " ");
+}
+
+/**
+ * Detektor harga bersama untuk naskah tertulis maupun lisan. Angka biasa
+ * seperti "3 kartu" atau "15 detik" sengaja tidak dihitung: nominal wajib
+ * membawa penanda mata uang/satuan, atau ditulis terbilang sampai ribu/juta.
+ */
+export function deteksiHargaIndonesia(text: string): HargaIndonesiaMention[] {
+  const hasil: HargaIndonesiaMention[] = [];
+  const occupied: Array<[number, number]> = [];
+  const add = (match: RegExpExecArray, nilai: number, bentuk: HargaIndonesiaMention["bentuk"]) => {
+    if (!Number.isFinite(nilai) || nilai <= 0) return;
+    hasil.push({ frasa: match[0], nilai: Math.round(nilai), bentuk });
+    occupied.push([match.index, match.index + match[0].length]);
+  };
+  const overlaps = (match: RegExpExecArray) => occupied.some(([start, end]) => match.index < end && match.index + match[0].length > start);
+
+  const unit = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
+  for (const match of text.matchAll(unit)) {
+    const value = Number(match[1].replace(",", "."));
+    add(match, value * (/juta|jt/i.test(match[2]) ? 1_000_000 : 1_000), "unit");
+  }
+  const currency = /\b(?:rp|idr)\s*\.?\s*(\d+(?:[.,]\d{3})*)\b(?![.,]\d)/gi;
+  for (const match of text.matchAll(currency)) if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "currency");
+  const rupiah = /(\d+(?:[.,]\d{3})*)\s*rupiah\b/gi;
+  for (const match of text.matchAll(rupiah)) if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "rupiah");
+  for (const mention of hargaTerbilang(text)) {
+    hasil.push({ ...mention, bentuk: "terbilang" });
+  }
+  return hasil;
+}

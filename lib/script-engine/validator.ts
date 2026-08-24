@@ -9,7 +9,7 @@ import { formatHargaNatural } from "./templates";
 import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
 import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
 import { periksaStoryOsAds } from "./story-os-ads";
-import { hargaTerbilang } from "./price-mentions";
+import { deteksiHargaIndonesia, hargaTerbilang, tanpaNominalHargaTertulis } from "./price-mentions";
 export { hargaTerbilang } from "./price-mentions";
 import { pilihTokenMerek } from "../merek";
 import { tutupiNama } from "../media/pemicu-filter";
@@ -292,7 +292,6 @@ export const LO_TOKENS = new Set(["lo", "lu", "elu"]);
 export const KAMU_TOKENS = new Set(["kamu", "kau", "anda"]);
 
 const PRICE_REGEX = /\d+([.,]\d+)?\s*(ribu|rb|ribuan|juta|jt)\b/i;
-const PRICE_MENTION_REGEX = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
 
 function spokenPriceAmount(priceIdr: number): number | null {
   const match = formatHargaNatural(priceIdr).match(PRICE_REGEX);
@@ -555,8 +554,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // untuk hook masalah, rasa penasaran, bukti, atau cerita tanpa boilerplate.
   // L-02 hanya mengecek KEHADIRAN harga; kebenaran nominal (termasuk
   // pembulatan formatter resmi 24.620 -> 25 ribu) diperiksa L-14.
-  const hargaAwalTerbilang = hargaTerbilang(hookDemo).length > 0;
-  if (script.requirePriceMention && !PRICE_REGEX.test(hookDemo) && !hargaAwalTerbilang)
+  if (script.requirePriceMention && deteksiHargaIndonesia(hookDemo).length === 0)
     push(false, { rule: "L-02", message_id: "Harganya belum disebut di awal video — pembeli butuh dengar angkanya (mis. '85 ribu').", segment: "demo" });
 
   // L-03: CTA menyebut "keranjang" — "kuning" cuma untuk TikTok Shop (istilah
@@ -744,7 +742,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // Angka di dalam frasa harga diperiksa utuh (nominal + unit) di bawah.
   // Jangan pecah "24,62 ribu" menjadi token 24 dan 62 lalu menolaknya
   // sebelum pemeriksaan harga semantik sempat berjalan.
-  const nonPriceTokens = tokens(fullText.replace(PRICE_MENTION_REGEX, " "));
+  const nonPriceTokens = tokens(tanpaNominalHargaTertulis(fullText));
   // Angka DI DALAM NAMA PRODUK bukan klaim — tapi izinnya melekat pada
   // KEMUNCULAN namanya, bukan pada angkanya di mana pun.
   //
@@ -772,22 +770,9 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     const spoken = spokenPriceAmount(amount);
     if (spoken !== null) allowedPriceAmounts.add(spoken);
   }
-  const wrongPrice = [...fullText.matchAll(PRICE_MENTION_REGEX)].find((match) => {
-    const number = Number(match[1].replace(",", "."));
-    const multiplier = /juta|jt/i.test(match[2]) ? 1_000_000 : 1_000;
-    return !allowedPriceAmounts.has(Math.round(number * multiplier));
-  });
+  const wrongPrice = deteksiHargaIndonesia(fullText).find((mention) => !allowedPriceAmounts.has(mention.nilai));
   if (wrongPrice) {
-    push(false, { rule: "L-14", message_id: `Harga "${wrongPrice[0]}" tidak cocok dengan harga produk yang diberikan.` });
-  }
-  // Harga yang ditulis dengan KATA — jalur yang justru kita perintahkan
-  // sendiri ke penulis LLM, dan satu-satunya jalur yang belum diperiksa.
-  const salahTerbilang = hargaTerbilang(fullText).find((h) => !allowedPriceAmounts.has(h.nilai));
-  if (salahTerbilang) {
-    push(false, {
-      rule: "L-14",
-      message_id: `Harga "${salahTerbilang.frasa}" (${salahTerbilang.nilai}) tidak cocok dengan harga produk yang diberikan.`,
-    });
+    push(false, { rule: "L-14", message_id: `Harga "${wrongPrice.frasa}" (${wrongPrice.nilai}) tidak cocok dengan harga produk yang diberikan.` });
   }
 
   // L-15: merek pesaing yang direndahkan

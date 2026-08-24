@@ -210,7 +210,7 @@ test("live LLM Ads memperbaiki keluaran 0/1/2 segmen sebelum pipeline", async ()
   }
 });
 
-test("live LLM Ads non-price menolak name+price lalu menerima name+category", async () => {
+test("live LLM Ads non-price menolak nominal Rp meski source benar lalu memperbaiki", async () => {
   const { generateScripts } = await import("../lib/script-engine");
   const fetchAsli = globalThis.fetch;
   let calls = 0;
@@ -219,8 +219,7 @@ test("live LLM Ads non-price menolak name+price lalu menerima name+category", as
       calls++;
       const segments = structuredClone(LIVE_ADS_SAFE);
       if (calls === 1) {
-        segments[2].text = "Harganya seratus delapan puluh sembilan ribu.";
-        segments[2].bridge_source = "spoken_approved_price";
+        segments[3].text = "Nah, harga Rp189000.";
       }
       return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
     }) as never;
@@ -230,7 +229,7 @@ test("live LLM Ads non-price menolak name+price lalu menerima name+category", as
       contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
       hookFamilies: ["H8"], lockHookFamily: true,
     });
-    assert.equal(calls, 2, "bridge harga terlarang harus direpair tepat sekali");
+    assert.equal(calls, 2, "nominal non-price harus direpair tepat sekali");
     assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
     assert.deepEqual(
       result.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(),
@@ -533,6 +532,42 @@ const LIVE_ADS_SAFE = [
   { block: "CTA", label: "BUTTON", start: 12, end: 15, text: "Tadi ragu, cocok nggak? Detailnya ada di bawah ya.", start_state: "kartu blank menghadap kamera", framing: "close shot", angle: "eye level", camera: "static camera", action: "talent menunjuk blok warna pada kartu blank", product_state: "hidden", expression: "warm", audio_note: "", why: "button payoff", mode: "GENERAL" },
 ];
 
+test("promo-terbatas harga nol lolos template dan provider tanpa L-02/SA6", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const product = { id: "promo-zero", name: "Jasa Promo Nol", price_idr: 0, category: "jasa" };
+  const common = {
+    product, register: "netral" as const, qualityTier: "high_quality" as const, durationSec: 15,
+    contentType: "ads" as const, format: "ads", templateId: "promo-terbatas", count: 1,
+    hookFamilies: ["H10" as const], lockHookFamily: true,
+  };
+  const [fallback] = await generateScripts({ ...common, tanpaLlm: true });
+  assert.equal(fallback.admisi.requirePriceMention, false);
+  assert.equal(fallback.validation.passed, true, JSON.stringify(fallback.validation.errors));
+  assert.deepEqual(fallback.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(), ["spoken_product_category", "spoken_product_name"]);
+  const [positive] = await generateScripts({ ...common, product: { ...product, price_idr: 89_000 }, tanpaLlm: true });
+  assert.equal(positive.admisi.requirePriceMention, true);
+  assert.equal(positive.validation.passed, true, JSON.stringify(positive.validation.errors));
+
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      segments[1].text = "Nah, Jasa Promo Nol.";
+      segments[2].text = "Konteksnya kategori jasa, sih.";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [live] = await generateScripts(common);
+    assert.equal(calls, 1);
+    assert.equal(live.admisi.requirePriceMention, false);
+    assert.equal(live.validation.passed, true, JSON.stringify(live.validation.errors));
+    assert.ok(!live.validation.errors.some((error) => error.rule === "L-02" || error.rule === "SA6"));
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
 test("SA6 strict mengunci exact bridge set menurut template dan harga immutable", async () => {
   const { keSegmentDraft } = await import("../lib/script-engine/llm");
   const { validateScript } = await import("../lib/script-engine/validator");
@@ -553,7 +588,7 @@ test("SA6 strict mengunci exact bridge set menurut template dan harga immutable"
   assert.ok(forbidden.errors.some((error) => error.rule === "SA6" && /non-price memuat harga lisan/.test(error.message_id)));
 
   const promo = structuredClone(LIVE_ADS_SAFE);
-  promo[2].text = "Harganya seratus delapan puluh sembilan ribu.";
+  promo[2].text = "Harganya Rp189000.";
   promo[2].bridge_source = "spoken_approved_price";
   assert.equal(validate(promo, "promo-terbatas", "Kemeja Uji", "fashion", 189_000).passed, true);
   const promoWithCategory = validate(LIVE_ADS_SAFE, "promo-terbatas", "Kemeja Uji", "fashion", 189_000);
@@ -567,6 +602,27 @@ test("SA6 strict mengunci exact bridge set menurut template dan harga immutable"
   assert.equal(validate(zeroService, "promo-terbatas", "Jasa Kilat Beres", "jasa", 0).errors.some((error) => error.rule === "SA6"), false);
 });
 
+test("SA6 non-price menangkap notasi harga Indonesia tanpa menolak angka biasa", () => {
+  for (const nominal of [
+    "Rp189000", "Rp 189.000", "189000 rupiah", "189.000 rupiah", "IDR 189000",
+    "189 ribu", "189 rb", "0,189 juta", "seratus delapan puluh sembilan ribu",
+  ]) {
+    const segments = structuredClone(LIVE_ADS_SAFE);
+    segments[3].text = `Nah, ${nominal}.`;
+    const findings = periksaStoryOsAds({ segments } as never, {
+      contentType: "ads", templateId: "ads-meja-kosong", durationSec: 15,
+      productName: "Kemeja Uji", productCategory: "fashion", productPriceIdr: 189_000,
+    });
+    assert.ok(findings.some((finding) => finding.gerbang === "SA6" && /non-price memuat harga lisan/.test(finding.pesan)), nominal);
+  }
+  const ordinary = structuredClone(LIVE_ADS_SAFE);
+  ordinary[3].text = "Nah, 3 kartu bergerak selama 15 detik.";
+  assert.equal(periksaStoryOsAds({ segments: ordinary } as never, {
+    contentType: "ads", templateId: "ads-meja-kosong", durationSec: 15,
+    productName: "Kemeja Uji", productCategory: "fashion", productPriceIdr: 189_000,
+  }).some((finding) => finding.gerbang === "SA6"), false);
+});
+
 test("live LLM non-price yang terus mengirim name+price habis retry dan tidak disajikan", async () => {
   const { generateScripts, TemplateTidakDisajikan } = await import("../lib/script-engine");
   const fetchAsli = globalThis.fetch;
@@ -575,8 +631,7 @@ test("live LLM non-price yang terus mengirim name+price habis retry dan tidak di
     globalThis.fetch = (async () => {
       calls++;
       const segments = structuredClone(LIVE_ADS_SAFE);
-      segments[2].text = "Harganya seratus delapan puluh sembilan ribu.";
-      segments[2].bridge_source = "spoken_approved_price";
+      segments[3].text = "Nah, IDR 189000.";
       return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
     }) as never;
     await assert.rejects(() => generateScripts({
