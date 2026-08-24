@@ -19,6 +19,7 @@ process.env.SCRIPT_LLM = "1";
 process.env.ANTHROPIC_API_KEY = "kunci-uji-story-ads";
 
 const { GERBANG_SA, periksaStoryOsAds, penegakanSA, voiceoverStartSecForSegments } = await import("../lib/script-engine/story-os-ads");
+const { deteksiHargaIndonesia } = await import("../lib/script-engine/price-mentions");
 
 /** Naskah Ads yang MEMENUHI Story OS — dipakai sebagai kontrol positif. */
 const LULUS = {
@@ -600,6 +601,12 @@ test("SA6 strict mengunci exact bridge set menurut template dan harga immutable"
   zeroService[2].text = "Konteksnya kategori jasa, sih.";
   assert.equal(validate(zeroService, "ads-meja-kosong", "Jasa Kilat Beres", "jasa", 0).passed, true);
   assert.equal(validate(zeroService, "promo-terbatas", "Jasa Kilat Beres", "jasa", 0).errors.some((error) => error.rule === "SA6"), false);
+  const zeroClaim = structuredClone(zeroService);
+  zeroClaim[3].text = "Nah, Rp0.";
+  const rejectedZero = validate(zeroClaim, "promo-terbatas", "Jasa Kilat Beres", "jasa", 0);
+  assert.equal(rejectedZero.passed, false);
+  assert.ok(rejectedZero.errors.some((error) => error.rule === "SA6" && /non-price memuat harga lisan/.test(error.message_id)));
+  assert.ok(rejectedZero.errors.some((error) => error.rule === "L-14" && /Rp0/.test(error.message_id)));
 });
 
 test("SA6 non-price menangkap notasi harga Indonesia tanpa menolak angka biasa", () => {
@@ -621,6 +628,58 @@ test("SA6 non-price menangkap notasi harga Indonesia tanpa menolak angka biasa",
     contentType: "ads", templateId: "ads-meja-kosong", durationSec: 15,
     productName: "Kemeja Uji", productCategory: "fashion", productPriceIdr: 189_000,
   }).some((finding) => finding.gerbang === "SA6"), false);
+});
+
+test("detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka biasa", () => {
+  for (const nominal of [
+    "Rp0", "Rp 0", "IDR0", "0 rupiah", "0 ribu", "0 rb", "0 juta", "0 jt",
+    "nol rupiah", "zero rupiah", "harganya nol", "biaya zero",
+  ]) {
+    const mentions = deteksiHargaIndonesia(nominal);
+    assert.ok(mentions.some((mention) => mention.nilai === 0), `${nominal}: ${JSON.stringify(mentions)}`);
+  }
+  assert.deepEqual(deteksiHargaIndonesia("3 kartu bergerak selama 15 detik"), []);
+});
+
+test("live promo harga nol merepair klaim Rp0 lalu exhaustion tidak menyajikan fallback", async () => {
+  const { generateScripts, TemplateTidakDisajikan } = await import("../lib/script-engine");
+  const request = {
+    product: { id: "promo-zero-live", name: "Jasa Promo Nol", price_idr: 0, category: "jasa" },
+    register: "netral" as const, qualityTier: "high_quality" as const, durationSec: 15,
+    contentType: "ads" as const, format: "ads", templateId: "promo-terbatas", count: 1,
+    hookFamilies: ["H10" as const], lockHookFamily: true,
+  };
+  const safeResponse = () => {
+    const segments = structuredClone(LIVE_ADS_SAFE);
+    segments[1].text = "Nah, Jasa Promo Nol.";
+    segments[2].text = "Konteksnya kategori jasa, sih.";
+    return segments;
+  };
+  const fetchAsli = globalThis.fetch;
+  try {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = safeResponse();
+      if (calls === 1) segments[3].text = "Nah, Rp0.";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [repaired] = await generateScripts(request);
+    assert.equal(calls, 2);
+    assert.equal(repaired.validation.passed, true, JSON.stringify(repaired.validation.errors));
+
+    calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = safeResponse();
+      segments[3].text = "Nah, nol rupiah.";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    await assert.rejects(() => generateScripts(request), TemplateTidakDisajikan);
+    assert.equal(calls, 3);
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
 });
 
 test("live LLM non-price yang terus mengirim name+price habis retry dan tidak disajikan", async () => {

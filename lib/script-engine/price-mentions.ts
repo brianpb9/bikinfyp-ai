@@ -70,7 +70,9 @@ export function deteksiHargaIndonesia(text: string): HargaIndonesiaMention[] {
   const hasil: HargaIndonesiaMention[] = [];
   const occupied: Array<[number, number]> = [];
   const add = (match: RegExpExecArray, nilai: number, bentuk: HargaIndonesiaMention["bentuk"]) => {
-    if (!Number.isFinite(nilai) || nilai <= 0) return;
+    // Nol tetap sebuah KLAIM HARGA bila penanda mata uang/satuannya eksplisit.
+    // approved price 0 berarti "tidak ada klaim harga", bukan izin berkata Rp0.
+    if (!Number.isFinite(nilai) || nilai < 0) return;
     hasil.push({ frasa: match[0], nilai: Math.round(nilai), bentuk });
     occupied.push([match.index, match.index + match[0].length]);
   };
@@ -85,6 +87,8 @@ export function deteksiHargaIndonesia(text: string): HargaIndonesiaMention[] {
   for (const match of text.matchAll(currency)) if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "currency");
   const rupiah = /(\d+(?:[.,]\d{3})*)\s*rupiah\b/gi;
   for (const match of text.matchAll(rupiah)) if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "rupiah");
+  const spelledZero = /\b(?:nol|zero)\s*(?:rupiah|ribu|rb|juta|jt)\b|\b(?:harga(?:nya)?|biaya|tarif|banderol)\s+(?:nol|zero)\b/gi;
+  for (const match of text.matchAll(spelledZero)) if (!overlaps(match)) add(match, 0, "terbilang");
   for (const mention of hargaTerbilang(text)) {
     hasil.push({ ...mention, bentuk: "terbilang" });
   }
