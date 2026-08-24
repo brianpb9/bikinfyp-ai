@@ -83,7 +83,7 @@ Builder karena itu tetap **local-only**, bukan eksekusi independen.
 | `P0-E4-ADDITIONAL-PHOTO-LABEL-GATE-20260824` | `52ce68d4c7494de19bc2cf4cbe5a30afff5f3e5a` | E4 setiap blob |
 | `P0-E8-REGISTERED-BRAND-GATE-20260824` | `02071aab920ac18a96995f0b5df908a3ea454b5b` | E8 registered-brand gate |
 | `P0-E4-REJECTED-REFERENCE-ROLLBACK-20260824` | `e25799d8a07df056ad8602db29801e438570de66` | rollback exact E4 |
-| `P0-E8-REFERENCE-ELIGIBILITY-ROLLBACK-20260824` | `4e91cf2fa0882eb6421a745131c1745a4046357fc` | rollback/CAS exact E8 |
+| `P0-E8-REFERENCE-ELIGIBILITY-ROLLBACK-20260824` | `4e91cf2fa0882eb6421a745fd990f15427b105cc` | rollback/CAS exact E8 |
 | `P0-E1-POLICY-QUARANTINE-REVERT-20260824` | `3d00a6c8a739bef6d74051f42f089e93af8985c6` | E1 policy dikembalikan ke state accepted |
 | `P0-E8-ALL-UPLOADS-LABEL-BRAND-GATE-20260824` | `90e2b05568a48975b3e93d2356fc7e94b0320448` | E8 gate semua upload |
 | `P0-C9-UNSOUND-PROOF-QUARANTINE-20260824` | `739276b542e0cb009165199f7598e6f0dd52d1ce` | proof C9 yang unsound dibuang seluruhnya |
