@@ -123,6 +123,17 @@ export function errorResponse(err: unknown): Response {
   if (err instanceof ApiError) {
     return Response.json(err.body, { status: err.status });
   }
+  // Admission now enforces the same reference verdict that workers already
+  // used. Preserve its established machine code instead of laundering it into
+  // INTERNAL merely because it is reached before queue visibility.
+  if (err instanceof Error && (err as Error & { kode?: string }).kode === "NO_APPROVED_REFERENCE") {
+    return Response.json({
+      code: "NO_APPROVED_REFERENCE",
+      message_id: err.message,
+      message_en: "No approved product reference is available for this render.",
+      retryable: false,
+    } satisfies ApiErrorBody, { status: 422 });
+  }
   console.error("[api] unexpected error:", err);
   const e = ERR.INTERNAL();
   return Response.json(e.body, { status: e.status });

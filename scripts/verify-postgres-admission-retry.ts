@@ -13,6 +13,7 @@ import { Pool } from "pg";
 const databaseUrl = process.env.DATABASE_URL;
 assert.ok(databaseUrl, "DATABASE_URL database disposable wajib tersedia.");
 const { smokeCreateJob } = await import("../lib/postgres/smoke-runtime");
+const { setMediaStorageForTests } = await import("../lib/storage");
 
 const count = 20;
 const userId = `admission-user-${crypto.randomUUID()}`;
@@ -21,6 +22,23 @@ const scriptIds = Array.from({ length: count }, () => `admission-script-${crypto
 const priceIdr = 5_000;
 const now = new Date().toISOString();
 const pool = new Pool({ connectionString: databaseUrl });
+const referenceRel = `uploads/${productId}/approved.webp`;
+const referenceBytes = Buffer.from("POSTGRES-ADMISSION-RETRY-REFERENCE");
+const referenceSha = crypto.createHash("sha256").update(referenceBytes).digest("hex");
+const objects = new Map<string, Buffer>([
+  [referenceRel, referenceBytes],
+  [`${referenceRel}.meta.json`, Buffer.from(JSON.stringify({
+    sha256: referenceSha, jenis: "product_photo", layakReferensi: true,
+    rasioAreaTeks: 0, jumlahKata: 0, alasan: "fixture admission retry", versiBukti: 1,
+  }))],
+]);
+setMediaStorageForTests({
+  async put(key, body) { objects.set(key, Buffer.from(body)); },
+  async delete(key) { objects.delete(key); },
+  async get(key) { const body = objects.get(key); return body ? { body: Buffer.from(body), size: body.length } : null; },
+  async stat(key) { const body = objects.get(key); return body ? { size: body.length } : null; },
+  async materialize() { return null; },
+});
 
 try {
   await pool.query(
@@ -28,8 +46,8 @@ try {
     [userId, `${userId}@local.test`, now]
   );
   await pool.query(
-    "INSERT INTO products (id,user_id,name,price_idr,category,images,created_at) VALUES ($1,$2,'Produk admission',1000,'test','[]',$3)",
-    [productId, userId, now]
+    "INSERT INTO products (id,user_id,name,price_idr,category,images,created_at) VALUES ($1,$2,'Produk admission',1000,'test',$3,$4)",
+    [productId, userId, JSON.stringify([referenceRel]), now]
   );
   for (const scriptId of scriptIds) {
     await pool.query(
@@ -52,11 +70,12 @@ try {
   assert.equal(new Set(accepted.map((entry) => entry.jobId)).size, count, "setiap script harus mendapat job unik");
   assert.equal(accepted.filter((entry) => entry.duplicate).length, 0, "20 script berbeda tidak boleh dianggap duplikat");
 
-  const jobs = await pool.query<{ script_id: string; n: string }>(
-    "SELECT script_id,COUNT(*)::text n FROM jobs WHERE user_id=$1 GROUP BY script_id ORDER BY script_id", [userId]
+  const jobs = await pool.query<{ script_id: string; n: string; manifests: string }>(
+    "SELECT script_id,COUNT(*)::text n,COUNT(approved_reference_manifest)::text manifests FROM jobs WHERE user_id=$1 GROUP BY script_id ORDER BY script_id", [userId]
   );
   assert.equal(jobs.rowCount, count, "harus ada tepat 20 job");
   assert.ok(jobs.rows.every((row) => Number(row.n) === 1), "setiap script harus memiliki tepat satu job");
+  assert.ok(jobs.rows.every((row) => Number(row.manifests) === 1), "setiap job harus visible bersama manifest admission");
   const holds = await pool.query<{ job_id: string; n: string; delta: string }>(
     "SELECT job_id,COUNT(*)::text n,SUM(delta)::text delta FROM credit_ledger WHERE user_id=$1 AND type='hold' GROUP BY job_id ORDER BY job_id", [userId]
   );
@@ -84,5 +103,6 @@ try {
 
   process.stdout.write(JSON.stringify({ admissions: count, jobs: jobs.rowCount, holds: holds.rowCount, active_duplicate: true, terminal_readmission: true, balance: Number(balance.rows[0]?.balance) }) + "\n");
 } finally {
+  setMediaStorageForTests(undefined);
   await pool.end();
 }

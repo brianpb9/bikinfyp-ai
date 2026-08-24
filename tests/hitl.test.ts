@@ -3,6 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -28,6 +29,15 @@ const png1x1 = Buffer.from(
   "base64"
 );
 fs.writeFileSync(path.join(storageDir, "uploads", productId, "0.png"), png1x1);
+fs.writeFileSync(path.join(storageDir, "uploads", productId, "0.png.meta.json"), JSON.stringify({
+  sha256: crypto.createHash("sha256").update(png1x1).digest("hex"),
+  jenis: "product_photo",
+  layakReferensi: true,
+  rasioAreaTeks: 0,
+  jumlahKata: 0,
+  alasan: "fixture HITL packshot",
+  versiBukti: 1,
+}));
 db.prepare(
   "INSERT INTO products (id, user_id, source_url, name, price_idr, category, images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
 ).run(productId, user.id, null, "Serum Glow Bright", 85000, "beauty", JSON.stringify([`uploads/${productId}/0.png`]), null, now());

@@ -53,7 +53,12 @@ class MemoryStorage implements MediaStorage {
   putCalls: string[] = [];
   materializeCalls: string[] = [];
   cascade = new Map<string, string>();
-  async put(key: string, body: Buffer) { this.putCalls.push(key); this.values.set(key, Buffer.from(body)); }
+  onApprovedReferencePut: ((key: string) => void) | null = null;
+  async put(key: string, body: Buffer) {
+    this.putCalls.push(key);
+    this.values.set(key, Buffer.from(body));
+    if (key.includes("/approved-references/")) this.onApprovedReferencePut?.(key);
+  }
   async delete(key: string) {
     this.deleteCalls.push(key);
     this.values.delete(key);
@@ -141,7 +146,10 @@ function currentImages(productId: string): string[] {
   return JSON.parse(row.images) as string[];
 }
 
-async function admittedProductMutationScenario(storage: MemoryStorage) {
+async function admittedProductMutationScenario(
+  storage: MemoryStorage,
+  configureBeforeAdmission?: (input: { productId: string; ownerId: string }) => void
+) {
   const ownerId = uuid(), intruderId = uuid(), productId = uuid(), scriptId = uuid();
   const approvedSource = `uploads/e3-${process.pid}/approved.webp`;
   const approvedBytes = Buffer.from("APPROVED-E3-C9");
@@ -169,6 +177,7 @@ async function admittedProductMutationScenario(storage: MemoryStorage) {
     .run(uuid(), ownerId, timestamp);
   storage.values.set(approvedSource, approvedBytes);
   storage.values.set(`${approvedSource}.meta.json`, approvedSidecar(approvedBytes));
+  configureBeforeAdmission?.({ productId, ownerId });
   setMediaStorageForTests(storage);
   const ownerToken = await issueToken(ownerId, "081230000031");
   const intruderToken = await issueToken(intruderId, "081230000032");
@@ -265,6 +274,96 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
   assert.equal((db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(s.jobId) as { job_product_snapshot: string }).job_product_snapshot, snapshotRaw);
   assert.equal(networkCalls, 0, "E3 C9 menyentuh jaringan");
   noPaidSideEffects(s.jobId, storage);
+});
+
+test("admission W2 -> queue delay -> E5 hapus source tetap memakai bytes admission tanpa install worker", async (t) => {
+  const storage = new MemoryStorage();
+  const s = await admittedProductMutationScenario(storage);
+  setPersonSafeReferencePhotosForTests(async (photoPaths) => ({ safe: [...photoPaths], cropped: 0, dropped: 0, resized: 0 }));
+  t.after(() => {
+    setMediaStorageForTests(undefined);
+    setPersonSafeReferencePhotosForTests(undefined);
+  });
+  const before = db.prepare(
+    "SELECT approved_reference_manifest FROM jobs WHERE id=?"
+  ).get(s.jobId) as { approved_reference_manifest: string };
+  assert.ok(before.approved_reference_manifest, "admission W2 commit tanpa manifest");
+  const manifest = JSON.parse(before.approved_reference_manifest) as {
+    references: { rel: string; snapshotRel: string; sha256: string }[];
+  };
+  assert.deepEqual(manifest.references.map((ref) => ref.rel), [s.approvedSource]);
+  const snapshotRel = manifest.references[0].snapshotRel;
+  assert.deepEqual(storage.values.get(snapshotRel), s.approvedBytes, "bytes job-owned tidak siap saat admission commit");
+
+  const deleted = await deleteRequest(s.productId, s.approvedSource, s.ownerToken);
+  assert.equal(deleted.status, 200);
+  assert.equal(storage.values.has(s.approvedSource), false, "E5 tidak menghapus source produk aktual");
+  assert.equal(storage.values.has(snapshotRel), true, "E5 menghapus bytes privat admission");
+
+  storage.putCalls.length = 0;
+  let providerCalls = 0; let providerHash = "";
+  setVideoProvidersForTests([{ name: "admission-e5-w2-observer", async healthCheck() { return true; }, estimateCost() { return 0; },
+    async generate(spec: { shots: { imageRefPath: string }[] }) {
+      providerCalls++;
+      providerHash = sha(fs.readFileSync(spec.shots[0].imageRefPath));
+      throw new Error("observer stop");
+    } } as never]);
+  await processJob(s.jobId);
+  const transitions = db.prepare("SELECT meta FROM audit_log WHERE entity_id=? AND action='job.transition' ORDER BY created_at").all(s.jobId) as { meta: string }[];
+  assert.equal(providerCalls, 1, `first W2 tidak mencapai provider: ${JSON.stringify(transitions)}`);
+  assert.equal(providerHash, sha(s.approvedBytes), "first W2 tidak memakai bytes admission");
+  assert.equal(storage.putCalls.filter((key) => key.includes("/approved-references/")).length, 0,
+    "first W2 meng-install ulang manifest yang seharusnya sudah ada");
+  const after = db.prepare("SELECT approved_reference_manifest FROM jobs WHERE id=?").get(s.jobId) as { approved_reference_manifest: string };
+  assert.equal(after.approved_reference_manifest, before.approved_reference_manifest, "worker mengganti manifest admission");
+  noPaidSideEffects(s.jobId, storage);
+});
+
+test("SQLite admission mengulang bounded saat exact images berubah sebelum INSERT", async (t) => {
+  const storage = new MemoryStorage();
+  const secondRel = `uploads/sqlite-admission-race-${process.pid}/second.webp`;
+  const secondBytes = Buffer.from("SQLITE-ADMISSION-RACE-SECOND");
+  let firstPreparedKey = "";
+  const s = await admittedProductMutationScenario(storage, ({ productId }) => {
+    storage.values.set(secondRel, secondBytes);
+    storage.values.set(`${secondRel}.meta.json`, approvedSidecar(secondBytes));
+    storage.onApprovedReferencePut = (key) => {
+      storage.onApprovedReferencePut = null;
+      firstPreparedKey = key;
+      db.prepare("UPDATE products SET images=? WHERE id=?").run(JSON.stringify([secondRel]), productId);
+    };
+  });
+  t.after(() => setMediaStorageForTests(undefined));
+
+  const row = db.prepare(
+    "SELECT approved_reference_manifest FROM jobs WHERE id=?"
+  ).get(s.jobId) as { approved_reference_manifest: string };
+  const manifest = JSON.parse(row.approved_reference_manifest) as { references: { rel: string; snapshotRel: string }[] };
+  assert.deepEqual(manifest.references.map((ref) => ref.rel), [secondRel],
+    "admission commit memakai candidate images sebelum mutation race");
+  assert.deepEqual(storage.values.get(manifest.references[0].snapshotRel), secondBytes);
+  assert.ok(firstPreparedKey && firstPreparedKey !== manifest.references[0].snapshotRel,
+    "fixture tidak memicu re-prepare dengan key deterministik berbeda");
+  const holds = (db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE job_id=? AND type='hold'").get(s.jobId) as { n: number }).n;
+  assert.equal(holds, 1, "bounded re-prepare membuat hold ganda");
+});
+
+test("storage preparation gagal sebelum job, hold, dan queue visibility SQLite", async (t) => {
+  const storage = new MemoryStorage();
+  let productId = "", ownerId = "";
+  await assert.rejects(
+    () => admittedProductMutationScenario(storage, (ids) => {
+      ({ productId, ownerId } = ids);
+      storage.onApprovedReferencePut = () => { throw new Error("injected admission storage failure"); };
+    }),
+    /admission E3 gagal \(500\)/
+  );
+  t.after(() => setMediaStorageForTests(undefined));
+  assert.ok(productId && ownerId, "fixture gagal mencapai preparation boundary");
+  const jobs = (db.prepare("SELECT COUNT(*) n FROM jobs WHERE product_id=?").get(productId) as { n: number }).n;
+  const holds = (db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE user_id=? AND type='hold'").get(ownerId) as { n: number }).n;
+  assert.equal(jobs, 0, "storage failure meninggalkan job visible");
+  assert.equal(holds, 0, "storage failure meninggalkan hold");
 });
 
 test("E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan", async (t) => {

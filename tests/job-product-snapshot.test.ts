@@ -149,7 +149,7 @@ test("A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan 
     "A6 tidak memakai helper identitas Story Ads yang sama dengan worker");
 });
 
-test("semua admission produksi memasang snapshot pada INSERT job yang sama", () => {
+test("tepat tiga admission produksi memasang product snapshot + reference manifest pada INSERT yang sama", () => {
   const roots = ["app", "lib"];
   const creators: string[] = [];
   const walk = (dir: string) => {
@@ -171,14 +171,16 @@ test("semua admission produksi memasang snapshot pada INSERT job yang sama", () 
   for (const rel of creators) {
     const source = fs.readFileSync(path.join(process.cwd(), rel), "utf8");
     assert.match(source, /createJobProductSnapshotRaw/, `${rel} tidak membangun snapshot admission kanonik`);
+    assert.match(source, /prepareAdmissionReferenceManifest/, `${rel} tidak menyiapkan reference admission kanonik`);
     for (const insert of source.matchAll(/INSERT INTO jobs[\s\S]{0,700}?(?:`|\")/g)) {
       assert.match(insert[0], /job_product_snapshot/, `${rel} punya INSERT jobs tanpa snapshot atomik`);
+      assert.match(insert[0], /approved_reference_manifest/, `${rel} punya INSERT jobs tanpa manifest referensi atomik`);
     }
   }
   const retail = fs.readFileSync(path.join(process.cwd(), "app/api/jobs/route.ts"), "utf8");
   assert.match(retail, /smokeCreateJob\(/, "call-site admission PostgreSQL retail hilang");
   const pgAdmission = fs.readFileSync(path.join(process.cwd(), "lib/postgres/smoke-runtime.ts"), "utf8");
-  assert.match(pgAdmission, /FOR SHARE[\s\S]+job_product_snapshot/, "PG admission tidak mengunci produk sebelum snapshot+INSERT");
+  assert.match(pgAdmission, /FOR SHARE[\s\S]+approved_reference_manifest[\s\S]+job_product_snapshot/, "PG admission tidak mengunci produk sebelum manifest+snapshot+INSERT");
   assert.match(pgAdmission, /SELECT[\s\S]{0,300}price_idr[\s\S]{0,300}FROM products/, "PG retail admission tidak membaca harga untuk snapshot");
   const dashboardAdmission = fs.readFileSync(path.join(process.cwd(), "lib/dashboard/render-cell.ts"), "utf8");
   assert.match(dashboardAdmission, /SELECT[\s\S]{0,300}price_idr[\s\S]{0,300}FROM products/, "PG dashboard admission tidak membaca harga untuk snapshot");

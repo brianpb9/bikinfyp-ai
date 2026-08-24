@@ -16,6 +16,7 @@ import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnap
 import { scoreScriptPlan } from "@/lib/fyp-score";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
+import { prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -196,29 +197,63 @@ export async function POST(req: Request) {
       return Response.json({ job_id: created.jobId, state: created.duplicate ? "QUEUED" : (postgresSmokeEnabled() ? "READY" : "QUEUED"), quality_tier: tier, hold_idr: priceIdr, ...(created.duplicate ? { duplicate: true } : {}) }, { status: created.duplicate ? 200 : 201 });
     }
 
-    // Buat job + hold dalam satu transaksi. Submit ganda yang sangat cepat
-    // mengembalikan job aktif yang sama, tanpa hold/charge kedua.
-    const created = db!.transaction(() => {
-      const active = db!
-        .prepare("SELECT id FROM jobs WHERE script_id = ? AND state NOT IN ('FAILED','REFUNDED','READY')")
-        .get(script.id) as { id: string } | undefined;
-      if (active) return { jobId: active.id, duplicate: true };
-      if (getBalance(user.id) < priceIdr) throw ERR.INSUFFICIENT_CREDITS();
-      // Read and freeze product truth inside the same transaction that admits
-      // the job. A mutation after the earlier HTTP validation therefore cannot
-      // slip between admission and snapshot creation.
-      const admissionProduct = db!.prepare("SELECT * FROM products WHERE id=? AND user_id=?").get(product.id, user.id) as ProductRow | undefined;
-      if (!admissionProduct) throw ERR.NOT_FOUND("Produknya");
-      const productSnapshotRaw = createJobProductSnapshotRaw(admissionProduct);
-      const jobId = uuid();
-      db!.prepare(
-        `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, job_product_snapshot, state, created_at, state_changed_at)
-         VALUES (?,?,?,?,?,?,?,?,?, 'QUEUED', ?, ?)`
-      ).run(jobId, user.id, product.id, personaId, script.id, format, tier, durationS, productSnapshotRaw, now(), now());
-      if (!holdCredits(user.id, jobId, priceIdr)) throw ERR.INSUFFICIENT_CREDITS();
-      db!.prepare("UPDATE scripts SET job_id = ? WHERE id = ?").run(jobId, script.id);
-      return { jobId, duplicate: false };
-    })();
+    // Submit ganda yang sudah tampak tidak perlu menyalin reference bytes lagi.
+    const activeBeforePrepare = db!
+      .prepare("SELECT id FROM jobs WHERE script_id = ? AND state NOT IN ('FAILED','REFUNDED','READY')")
+      .get(script.id) as { id: string } | undefined;
+    let created: { jobId: string; duplicate: boolean } | null = activeBeforePrepare
+      ? { jobId: activeBeforePrepare.id, duplicate: true }
+      : null;
+    const preparedJobId = uuid();
+
+    // better-sqlite3 transactions cannot await object storage. Prepare bytes
+    // first, then compare the exact ordered images JSON inside the synchronous
+    // admission transaction. A mutation race causes a bounded re-prepare with
+    // the same job id/deterministic keys; no job, hold, or queue becomes visible
+    // from a mismatched attempt.
+    for (let attempt = 0; !created && attempt < 3; attempt++) {
+      const candidateProduct = db!
+        .prepare("SELECT * FROM products WHERE id=? AND user_id=?")
+        .get(product.id, user.id) as ProductRow | undefined;
+      if (!candidateProduct) throw ERR.NOT_FOUND("Produknya");
+      const candidateImagesRaw = candidateProduct.images;
+      const candidateImages = JSON.parse(candidateImagesRaw) as string[];
+      const preparedReference = await prepareAdmissionReferenceManifest({
+        jobId: preparedJobId,
+        productId: product.id,
+        candidateRels: candidateImages,
+        runtime: "admission-sqlite",
+      });
+
+      const outcome = db!.transaction(() => {
+        const active = db!
+          .prepare("SELECT id FROM jobs WHERE script_id = ? AND state NOT IN ('FAILED','REFUNDED','READY')")
+          .get(script.id) as { id: string } | undefined;
+        if (active) return { kind: "created" as const, value: { jobId: active.id, duplicate: true } };
+        if (getBalance(user.id) < priceIdr) throw ERR.INSUFFICIENT_CREDITS();
+        // Read and freeze product truth inside the same transaction that admits
+        // the job. A mutation after the earlier HTTP validation therefore cannot
+        // slip between admission and snapshot creation.
+        const admissionProduct = db!.prepare("SELECT * FROM products WHERE id=? AND user_id=?").get(product.id, user.id) as ProductRow | undefined;
+        if (!admissionProduct) throw ERR.NOT_FOUND("Produknya");
+        if (admissionProduct.images !== candidateImagesRaw) return { kind: "images_changed" as const };
+        const productSnapshotRaw = createJobProductSnapshotRaw(admissionProduct);
+        db!.prepare(
+          `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, approved_reference_manifest, job_product_snapshot, state, created_at, state_changed_at)
+           VALUES (?,?,?,?,?,?,?,?,?,?, 'QUEUED', ?, ?)`
+        ).run(preparedJobId, user.id, product.id, personaId, script.id, format, tier, durationS, preparedReference.raw, productSnapshotRaw, now(), now());
+        if (!holdCredits(user.id, preparedJobId, priceIdr)) throw ERR.INSUFFICIENT_CREDITS();
+        db!.prepare("UPDATE scripts SET job_id = ? WHERE id = ?").run(preparedJobId, script.id);
+        return { kind: "created" as const, value: { jobId: preparedJobId, duplicate: false } };
+      })();
+      if (outcome.kind === "created") created = outcome.value;
+    }
+    if (!created) {
+      throw ERR.BAD_REQUEST(
+        "Daftar foto produk berubah saat render diterima. Coba kirim lagi ya.",
+        "Product images changed repeatedly during admission. Please retry."
+      );
+    }
     const jobId = created.jobId;
     if (!created.duplicate) {
       audit(user.id, "job.created", "jobs", jobId, { script_id: script.id, format, quality_tier: tier, price_idr: priceIdr });

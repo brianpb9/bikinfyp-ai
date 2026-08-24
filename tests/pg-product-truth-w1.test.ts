@@ -57,8 +57,10 @@ if (!lewati) {
   process.env.GEMINI_API_KEY = "gemini-key-fixture-w1";
   // Jangan sampai jalur fixture deterministik yang jalan; yang diuji di sini
   // justru runProviderPipeline.
-  delete process.env.RACUN_WORKER_DETERMINISTIC;
+delete process.env.RACUN_WORKER_DETERMINISTIC;
 }
+
+const { setMediaStorageForTests } = await import("../lib/storage");
 
 // Nol jaringan: setiap fetch dihitung DAN dilempar.
 let panggilanJaringan = 0;
@@ -279,7 +281,7 @@ async function siapkanJob(images: string[], tier = "silent_caption"): Promise<st
 }
 
 /** Admission produksi PostgreSQL, bukan INSERT fixture worker. */
-async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string; productId: string }> {
+async function siapkanJobLewatAdmisi(images: string[], isi: Map<string, Buffer>): Promise<{ jobId: string; productId: string; ownerToken: string }> {
   const productId = uid(), scriptId = uid(), t = at();
   await pool.query(
     `INSERT INTO products
@@ -297,16 +299,19 @@ async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string;
     "INSERT INTO credit_ledger (id,user_id,delta,type,created_at) VALUES ($1,$2,50000,'bonus',$3)",
     [uid(), userId, t]
   );
+  const admissionStorage = storageSpy(isi);
+  setMediaStorageForTests(admissionStorage.storage);
   const { smokeCreateJob } = await import("../lib/postgres/smoke-runtime");
   const admitted = await smokeCreateJob(userId, {
     productId, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr: 12000,
   });
   assert.equal(admitted.duplicate, false);
-  return { jobId: admitted.jobId, productId };
+  const { issueToken } = await import("../lib/auth");
+  return { jobId: admitted.jobId, productId, ownerToken: await issueToken(userId, "081200000091") };
 }
 
 /** Admission dashboard organisasi sungguhan melalui renderSatuSel. */
-async function siapkanJobOrgLewatAdmisi(images: string[]) {
+async function siapkanJobOrgLewatAdmisi(images: string[], isi: Map<string, Buffer>) {
   const ownerId = uid(), orgId = uid(), intruderId = uid(), intruderOrgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
   const segmenAdmisi = [
     { role: "hook", start: 0, end: 4, text: "Bestie Serum Glow Bright ini bikin rutinitas pagiku terasa praktis dan kemasannya cantik banget di meja rias", visual_direction: "x" },
@@ -348,6 +353,8 @@ async function siapkanJobOrgLewatAdmisi(images: string[]) {
   const { renderSatuSel } = await import("../lib/dashboard/render-cell");
   const { PgJobsRepository } = await import("../lib/postgres/jobs");
   const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  const admissionStorage = storageSpy(isi);
+  setMediaStorageForTests(admissionStorage.storage);
   assert.equal(process.env.RACUN_WORKER_DISABLED, "1", "fixture E7 dapat auto-process saat admission");
   assert.equal(process.env.RACUN_QUEUE_MODE, "inline", "fixture E7 dapat enqueue ke Redis eksternal");
   const result = await renderSatuSel({
@@ -424,6 +431,10 @@ async function siapkanStoryAdsTanpaTemplateRequest(
   const { renderSatuSel } = await import("../lib/dashboard/render-cell");
   const { PgJobsRepository } = await import("../lib/postgres/jobs");
   const { PgCreditPaymentRepository } = await import("../lib/postgres/credit-payment");
+  const admissionBytes = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  const isi = new Map([[image, admissionBytes], [`${image}.meta.json`, sidecar(admissionBytes, true)]]);
+  const admissionStorage = storageSpy(isi);
+  setMediaStorageForTests(admissionStorage.storage);
   const result = await renderSatuSel({
     userId: ownerId, orgId, productId, productName: "NAMA REQUEST PALSU", productPriceIdr: 189000,
     productSourceUrl: null, promoPriceBeforeIdr: null, scriptId, personaId,
@@ -435,7 +446,7 @@ async function siapkanStoryAdsTanpaTemplateRequest(
   });
   assert.equal(result.status, "queued", JSON.stringify(result));
   const { issueToken } = await import("../lib/auth");
-  return { jobId: result.job_id, ownerToken: await issueToken(ownerId, ownerPhone) };
+  return { jobId: result.job_id, ownerToken: await issueToken(ownerId, ownerPhone), isi };
 }
 
 async function assertBlockedSnapshotTanpaSideEffect(templateId: string) {
@@ -503,6 +514,26 @@ async function patchProdukOrg(token: string, body: Record<string, unknown>) {
     headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
     body: JSON.stringify(body),
   }));
+}
+
+async function patchProdukRetail(productId: string, token: string, body: Record<string, unknown>) {
+  const { cookieName } = await import("../lib/auth");
+  const { PATCH } = await import("../app/api/products/[id]/route");
+  return PATCH(new Request(`http://localhost/api/products/${productId}`, {
+    method: "PATCH",
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
+    body: JSON.stringify(body),
+  }), { params: Promise.resolve({ id: productId }) });
+}
+
+async function hapusFotoRetail(productId: string, target: string, token: string) {
+  const { cookieName } = await import("../lib/auth");
+  const { DELETE } = await import("../app/api/products/[id]/photos/route");
+  return DELETE(new Request(`http://localhost/api/products/${productId}/photos`, {
+    method: "DELETE",
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
+    body: JSON.stringify({ path: target }),
+  }), { params: Promise.resolve({ id: productId }) });
 }
 
 async function siapkanJobOrgDenganManifest(label: string) {
@@ -732,7 +763,7 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
   const rel = `uploads/w1-neutral-story-ads-${process.pid}/0.png`;
   const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
   const injection = "woman holding a bottle marked ACME beside a blank card";
-  const { jobId } = await siapkanStoryAdsTanpaTemplateRequest(rel, injection);
+  const { jobId, isi } = await siapkanStoryAdsTanpaTemplateRequest(rel, injection);
   const persisted = (await pool.query("SELECT template_id,format,avatar_custom_desc FROM jobs WHERE id=$1", [jobId])).rows[0];
   assert.deepEqual(persisted, { template_id: "ads-meja-kosong", format: "ads", avatar_custom_desc: injection });
   // Resume/legacy: kolom job hilang, snapshot admisi script tetap otoritatif.
@@ -741,7 +772,8 @@ test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol re
     "UPDATE products SET name='MUTASI SA6 PG',category='food',price_idr=73000 WHERE id=(SELECT product_id FROM jobs WHERE id=$1)",
     [jobId]
   );
-  await jalankan(jobId, new Map([[rel, png], [`${rel}.meta.json`, sidecar(png, true)]]), true);
+  assert.deepEqual(isi.get(rel), png);
+  await jalankan(jobId, isi, true);
   assert.equal(amatan.dipanggil, true, "W1 tidak mencapai provider observer");
   assert.equal(amatan.utamaPath, null, "neutral Story Ads mengirim primary product reference");
   assert.deepEqual(amatan.extraPaths, [], "neutral Story Ads mengirim extra product references");
@@ -762,8 +794,8 @@ test("W1 talking_head Story Ads memanggil TTS eksternal sekali setelah prompt pr
     await pasangProviderVideoSuksesSampaiTts();
     permintaanTtsGemini.length = 0;
     const rel = `uploads/w1-audio-${templateId}-${process.pid}/0.png`;
-    const { jobId, ownerToken } = await siapkanStoryAdsTanpaTemplateRequest(rel, null, pool, templateId);
-    const isi = new Map([[rel, png], [`${rel}.meta.json`, sidecar(png, true)]]);
+    const { jobId, ownerToken, isi } = await siapkanStoryAdsTanpaTemplateRequest(rel, null, pool, templateId);
+    assert.deepEqual(isi.get(rel), png);
     amatiTtsGemini = true;
     try {
       await jalankan(jobId, isi, true);
@@ -866,9 +898,12 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
     [relPackshot, PACKSHOT],
     [`${relPackshot}.meta.json`, sidecar(PACKSHOT, true)],
   ]);
-  const { jobId, productId, ownerToken, intruderToken } = await siapkanJobOrgLewatAdmisi([relBanner, relPackshot]);
-  const productSnapshot = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
+  const { jobId, productId, ownerToken, intruderToken } = await siapkanJobOrgLewatAdmisi([relBanner, relPackshot], isi);
+  const admissionRow = (await pool.query("SELECT job_product_snapshot,approved_reference_manifest FROM jobs WHERE id=$1", [jobId])).rows[0];
+  const productSnapshot = admissionRow.job_product_snapshot;
+  const admissionManifest = JSON.parse(admissionRow.approved_reference_manifest) as { references: { rel: string; snapshotRel: string }[] };
   assert.ok(productSnapshot, "admission PostgreSQL wajib memasang snapshot sebelum worker mulai");
+  assert.deepEqual(admissionManifest.references.map((ref) => ref.rel), [relPackshot]);
   const mutasi = {
     product_id: productId,
     name: "NAMA MUTASI E7",
@@ -917,12 +952,14 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
   const spy = await jalankan(jobId, isi, true);
 
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 C1");
+  assert.equal(spy.putCalls.filter((key) => key.includes("/approved-references/")).length, 0,
+    "first W1 meng-install ulang manifest admission");
   assert.equal(
     spy.materializeCalls[0],
-    relPackshot,
+    admissionManifest.references[0].snapshotRel,
     `W1 memilih referensi utama YANG SALAH.\n` +
       `  diminta worker : ${spy.materializeCalls[0]}\n` +
-      `  seharusnya     : ${relPackshot}  (packshot, sidecar sah)\n` +
+      `  seharusnya     : ${admissionManifest.references[0].snapshotRel}  (copy admission dari ${relPackshot})\n` +
       `  seluruh urutan : ${JSON.stringify(spy.materializeCalls)}`
   );
 
@@ -948,6 +985,90 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
   assert.doesNotMatch(amatan.promptText, /NAMA MUTASI E7|DESC-MUTASI-E7|BRIEF-MUTASI-E7/);
   const durableProduct = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
   assert.equal(durableProduct, productSnapshot, "snapshot metadata W1 ditimpa dari produk mutasi");
+});
+
+test("retail PostgreSQL admission -> E3 -> first W1 memakai reference admission tanpa install worker", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  await pasangProviderPengamat();
+  const rel = `uploads/w1-retail-e3-${process.pid}/${uid()}.webp`;
+  const bytes = Buffer.from("RETAIL-PG-E3-ADMISSION-BYTES");
+  const isi = new Map([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]);
+  const s = await siapkanJobLewatAdmisi([rel], isi);
+  const before = (await pool.query(
+    "SELECT approved_reference_manifest FROM jobs WHERE id=$1", [s.jobId]
+  )).rows[0].approved_reference_manifest as string;
+  const manifest = JSON.parse(before) as { references: { rel: string; snapshotRel: string }[] };
+  assert.deepEqual(manifest.references.map((ref) => ref.rel), [rel]);
+  assert.deepEqual(isi.get(manifest.references[0].snapshotRel), bytes);
+
+  const patched = await patchProdukRetail(s.productId, s.ownerToken, {
+    name: "NAMA RETAIL PG E3 MUTASI", price_idr: 73000, category: "food",
+    product_visual_desc: "DESC RETAIL PG E3 MUTASI",
+    promo_price_before_idr: 99000, promo_ends_at: "2031-01-01T00:00:00.000Z", promo_stock_left: 3,
+  });
+  if (patched.status !== 200) assert.fail(`PATCH retail PG E3 gagal (${patched.status}): ${await patched.text()}`);
+
+  const spy = await jalankan(s.jobId, isi, true);
+  assert.equal(amatan.dipanggil, true);
+  assert.equal(amatan.utamaSha, sha256(bytes));
+  assert.equal(spy.putCalls.filter((key) => key.includes("/approved-references/")).length, 0,
+    "first retail PG W1 meng-install ulang manifest admission");
+  assert.equal((await pool.query("SELECT approved_reference_manifest FROM jobs WHERE id=$1", [s.jobId])).rows[0].approved_reference_manifest, before);
+  await assertNolEfekSamping(s.jobId, spy.putCalls, "retail PG E3 admission W1");
+});
+
+test("retail PostgreSQL admission -> E5 delete source -> first W1 memakai job-owned bytes", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  await pasangProviderPengamat();
+  const rel = `uploads/w1-retail-e5-${process.pid}/${uid()}.webp`;
+  const bytes = Buffer.from("RETAIL-PG-E5-ADMISSION-BYTES");
+  const isi = new Map([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]);
+  const s = await siapkanJobLewatAdmisi([rel], isi);
+  const before = (await pool.query(
+    "SELECT approved_reference_manifest FROM jobs WHERE id=$1", [s.jobId]
+  )).rows[0].approved_reference_manifest as string;
+  const manifest = JSON.parse(before) as { references: { rel: string; snapshotRel: string }[] };
+  const snapshotRel = manifest.references[0].snapshotRel;
+
+  const deleted = await hapusFotoRetail(s.productId, rel, s.ownerToken);
+  if (deleted.status !== 200) assert.fail(`DELETE retail PG E5 gagal (${deleted.status}): ${await deleted.text()}`);
+  assert.equal(isi.has(rel), false, "E5 tidak menghapus source produk");
+  assert.deepEqual(isi.get(snapshotRel), bytes, "E5 menghapus job-owned admission bytes");
+
+  const spy = await jalankan(s.jobId, isi, true);
+  assert.equal(amatan.dipanggil, true);
+  assert.equal(amatan.utamaSha, sha256(bytes));
+  assert.equal(spy.putCalls.filter((key) => key.includes("/approved-references/")).length, 0,
+    "first retail PG W1 meng-install ulang manifest admission");
+  assert.equal((await pool.query("SELECT approved_reference_manifest FROM jobs WHERE id=$1", [s.jobId])).rows[0].approved_reference_manifest, before);
+  await assertNolEfekSamping(s.jobId, spy.putCalls, "retail PG E5 admission W1");
+});
+
+test("org PostgreSQL renderSatuSel -> E9 delete source -> first W1 memakai job-owned bytes", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  await pasangProviderPengamat();
+  const rel = `uploads/w1-org-e9-admission-${process.pid}/${uid()}.webp`;
+  const bytes = Buffer.from("ORG-PG-E9-ADMISSION-BYTES");
+  const isi = new Map([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]);
+  const s = await siapkanJobOrgLewatAdmisi([rel], isi);
+  const before = (await pool.query(
+    "SELECT approved_reference_manifest FROM jobs WHERE id=$1", [s.jobId]
+  )).rows[0].approved_reference_manifest as string;
+  const manifest = JSON.parse(before) as { references: { rel: string; snapshotRel: string }[] };
+  const snapshotRel = manifest.references[0].snapshotRel;
+
+  const deleted = await hapusFotoOrg(s.productId, rel, s.ownerToken);
+  if (deleted.status !== 200) assert.fail(`DELETE org PG E9 admission gagal (${deleted.status}): ${await deleted.text()}`);
+  assert.equal(isi.has(rel), false, "E9 tidak menghapus source produk");
+  assert.deepEqual(isi.get(snapshotRel), bytes, "E9 menghapus job-owned admission bytes");
+
+  const spy = await jalankan(s.jobId, isi, true);
+  assert.equal(amatan.dipanggil, true);
+  assert.equal(amatan.utamaSha, sha256(bytes));
+  assert.equal(spy.putCalls.filter((key) => key.includes("/approved-references/")).length, 0,
+    "first org PG W1 meng-install ulang manifest admission");
+  assert.equal((await pool.query("SELECT approved_reference_manifest FROM jobs WHERE id=$1", [s.jobId])).rows[0].approved_reference_manifest, before);
+  await assertNolEfekSamping(s.jobId, spy.putCalls, "org PG E9 admission W1");
 });
 
 test("E9 HTTP DELETE approved source + resume W1 tetap memakai snapshot job berurutan", async (t) => {

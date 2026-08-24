@@ -14,8 +14,12 @@ const {
   loadOrCreateJobReferenceManifest,
   materializeJobReferenceManifest,
   parseJobReferenceManifest,
+  prepareJobReferenceManifest,
   UnsafeLegacyReferenceSnapshot,
 } = await import("../lib/job-reference-manifest");
+const { prepareAdmissionReferenceManifest } = await import("../lib/job-admission-reference");
+const { GagalTanpaReferensi, KODE_KANARI } = await import("../lib/kanari-bukti");
+const { errorResponse } = await import("../lib/errors");
 
 const sha = (bytes: Buffer) => crypto.createHash("sha256").update(bytes).digest("hex");
 const tmp = fs.mkdtempSync(path.join(os.tmpdir(), "manifest-ref-materialize-"));
@@ -30,7 +34,7 @@ function sidecar(bytes: Buffer) {
   }));
 }
 
-setMediaStorageForTests({
+const memoryStorage = {
   async put(key, body) { values.set(key, Buffer.from(body)); },
   async delete(key) { values.delete(key); },
   async get(key) { const body = values.get(key); return body ? { body, size: body.length } : null; },
@@ -45,6 +49,96 @@ setMediaStorageForTests({
     fs.writeFileSync(out, body);
     return out;
   },
+} satisfies import("../lib/storage").MediaStorage;
+setMediaStorageForTests(memoryStorage);
+
+test("preparation admission idempoten pada key deterministik dan raw identik", async () => {
+  values.clear();
+  const rel = "uploads/admission-idempotent/a.webp";
+  const bytes = Buffer.from("ADMISSION-IDEMPOTENT");
+  values.set(rel, bytes); values.set(`${rel}.meta.json`, sidecar(bytes));
+
+  const first = await prepareJobReferenceManifest({ jobId: "job-admission-same", candidateRels: [rel] });
+  const retry = await prepareJobReferenceManifest({ jobId: "job-admission-same", candidateRels: [rel] });
+
+  assert.equal(retry.raw, first.raw);
+  assert.deepEqual(retry.manifest, first.manifest);
+  assert.deepEqual(values.get(first.manifest.references[0].snapshotRel), bytes);
+});
+
+test("partial storage PUT gagal sebelum callback persistence/DB", async () => {
+  values.clear();
+  const a = "uploads/admission-put-fail/a.webp", b = "uploads/admission-put-fail/b.webp";
+  const ba = Buffer.from("PUT-A"), bb = Buffer.from("PUT-B");
+  for (const [rel, bytes] of [[a, ba], [b, bb]] as const) {
+    values.set(rel, bytes); values.set(`${rel}.meta.json`, sidecar(bytes));
+  }
+  let puts = 0; let persistenceCalls = 0;
+  setMediaStorageForTests({
+    ...memoryStorage,
+    async put(key, body) {
+      puts++;
+      if (puts === 2) throw new Error("storage put injected failure");
+      values.set(key, Buffer.from(body));
+    },
+  });
+  try {
+    await assert.rejects(() => loadOrCreateJobReferenceManifest({
+      existingRaw: null,
+      jobId: "job-admission-put-fail",
+      candidateRels: [a, b],
+      persistIfAbsentAndSafe: async (raw) => { persistenceCalls++; return raw; },
+    }), /storage put injected failure/);
+    assert.equal(persistenceCalls, 0, "DB/persistence callback dipanggil sesudah partial PUT gagal");
+  } finally {
+    setMediaStorageForTests(memoryStorage);
+  }
+});
+
+test("source berubah antara resolver dan copy admission gagal REF_HASH_MISMATCH", async () => {
+  values.clear();
+  const rel = "uploads/admission-toctou/a.webp";
+  const approved = Buffer.from("APPROVED-AT-RESOLVE");
+  values.set(rel, approved); values.set(`${rel}.meta.json`, sidecar(approved));
+  let sourceReads = 0;
+  setMediaStorageForTests({
+    ...memoryStorage,
+    async get(key) {
+      if (key === rel && ++sourceReads === 2) {
+        const changed = Buffer.from("CHANGED-BEFORE-COPY");
+        return { body: changed, size: changed.length };
+      }
+      return memoryStorage.get(key);
+    },
+  });
+  try {
+    await assert.rejects(
+      () => prepareJobReferenceManifest({ jobId: "job-admission-toctou", candidateRels: [rel] }),
+      /REF_HASH_MISMATCH/
+    );
+  } finally {
+    setMediaStorageForTests(memoryStorage);
+  }
+});
+
+test("admission kosong/seluruhnya ditolak mempertahankan NO_APPROVED_REFERENCE", async () => {
+  values.clear();
+  let caught: unknown;
+  try {
+    await prepareAdmissionReferenceManifest({
+      jobId: "job-admission-empty",
+      productId: "product-admission-empty",
+      candidateRels: [],
+      runtime: "admission-sqlite",
+    });
+  } catch (error) {
+    caught = error;
+  }
+  assert.ok(caught instanceof GagalTanpaReferensi);
+  assert.equal(caught.kode, KODE_KANARI.TANPA_REFERENSI);
+  const response = errorResponse(caught);
+  assert.equal(response.status, 422);
+  assert.equal((await response.json()).code, KODE_KANARI.TANPA_REFERENSI);
 });
 
 test("manifest dibuat sekali; retry/reorder/delete/add tetap memakai identitas awal", async () => {

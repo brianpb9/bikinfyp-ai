@@ -23,6 +23,7 @@ import type { PgJobsRepository } from "@/lib/postgres/jobs";
 import { pgAudit, pgSaveFypSnapshot, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
+import { prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 
 export type HasilSel =
@@ -152,7 +153,8 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       name: string; category: string; price_idr: number; raw_meta: string | null;
       product_visual_desc: string | null; brand_brief: string | null; claims: string | null;
       source_url: string | null; promo_price_before_idr: number | null;
-    }>("SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,source_url,promo_price_before_idr FROM products WHERE id=$1 AND org_id=$2 FOR SHARE", [sel.productId, sel.orgId]);
+      images: string;
+    }>("SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,source_url,promo_price_before_idr,images FROM products WHERE id=$1 AND org_id=$2 FOR SHARE", [sel.productId, sel.orgId]);
     if (!admissionProduct.rows[0]) {
       await client.query("ROLLBACK");
       return gagal("Produk organisasi tidak ditemukan.");
@@ -199,15 +201,24 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       [crypto.randomUUID(), sel.userId, sel.scriptId, JSON.stringify({ edited: false }), now]
     );
     const productSnapshotRaw = createJobProductSnapshotRaw(lockedProduct);
+    // Hold the product row through storage-first preparation and job INSERT so
+    // E8/E9 cannot change the ordered identity between resolution and commit.
+    // Failure here precedes job visibility and the later credit hold.
+    const preparedReference = await prepareAdmissionReferenceManifest({
+      jobId,
+      productId: sel.productId,
+      candidateRels: JSON.parse(lockedProduct.images) as string[],
+      runtime: "admission-postgres-org",
+    });
     admittedProduct = { name: lockedProduct.name, priceIdr: lockedProduct.price_idr };
     // requires_approval=TRUE: job dashboard brand SELALU berhenti di gerbang
     // review scene (M11). Brand menilai gambar & pesan tiap scene sebelum
     // digabung. Retail tidak pernah menyalakan ini.
     await client.query(
-      `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,job_product_snapshot,state,created_at,state_changed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,$18,'QUEUED',$19,$19)`,
+      `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,$18,$19,'QUEUED',$20,$20)`,
       [jobId, sel.userId, sel.orgId, sel.runId, sel.avatarCustomDesc, sel.productId, sel.personaId, sel.scriptId,
-        sel.format, tier, durationS, sel.shotCount, sel.ratio, sel.noModel, sel.tvcRoute, templateIdOtoritatif, sel.recordStyle, productSnapshotRaw, now]
+        sel.format, tier, durationS, sel.shotCount, sel.ratio, sel.noModel, sel.tvcRoute, templateIdOtoritatif, sel.recordStyle, preparedReference.raw, productSnapshotRaw, now]
     );
     // KLAIM ATOMIK, bukan pemeriksaan tambahan.
     //

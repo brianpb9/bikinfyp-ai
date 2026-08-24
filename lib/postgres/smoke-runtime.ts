@@ -22,6 +22,7 @@ import { runFf } from "../media/ffmpeg";
 import { mediaStorage } from "../storage";
 import { getPool } from "./pool";
 import { createJobProductSnapshotRaw } from "../job-product-snapshot";
+import { prepareAdmissionReferenceManifest } from "../job-admission-reference";
 
 /**
  * PostgreSQL runtime switch.  `RACUN_POSTGRES_SMOKE=1` is retained solely for
@@ -217,6 +218,9 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
     // serializes duplicate decisions. Read Committed then observes the latest
     // balance after the lock wait; SERIALIZABLE would retain a pre-wait
     // snapshot and abort independent admissions under a burst.
+    // One id across bounded transaction retries makes storage-first writes
+    // deterministic and idempotent even after 40001/40P01.
+    const jobId = id();
     for (let attempt = 0; attempt < 5; attempt++) {
       const client = await pool.connect();
       try {
@@ -241,17 +245,25 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
         // admission snapshot and job row are installed atomically.
         const product = await client.query<{
           name: string; category: string; price_idr: number; raw_meta: string | null;
-          product_visual_desc: string | null; brand_brief: string | null; claims: string | null;
-        }>("SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims FROM products WHERE id=$1 AND user_id=$2 FOR SHARE", [input.productId, userId]);
+          product_visual_desc: string | null; brand_brief: string | null; claims: string | null; images: string;
+        }>("SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,images FROM products WHERE id=$1 AND user_id=$2 FOR SHARE", [input.productId, userId]);
         if (!product.rows[0]) throw new Error("PRODUCT_NOT_FOUND");
         const productSnapshotRaw = createJobProductSnapshotRaw(product.rows[0]);
+        // Product FOR SHARE blocks E3/E5 until the job row and exact manifest
+        // commit. Storage failure happens before hold/queue visibility.
+        const preparedReference = await prepareAdmissionReferenceManifest({
+          jobId,
+          productId: input.productId,
+          candidateRels: JSON.parse(product.rows[0].images) as string[],
+          runtime: "admission-postgres-retail",
+        });
         const balance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);
         if (Number(balance.rows[0].balance) < input.priceIdr) throw new Error("INSUFFICIENT_CREDITS");
-        const jobId = id(); const timestamp = at();
+        const timestamp = at();
         // avatar_custom_desc ikut ditulis: sejak avatar premium dibuka untuk
         // retail, deskripsi presetnya harus sampai ke worker — worker Postgres
         // sudah membacanya sejak M8, jalur retail yang belum mengirimnya.
-        await client.query("INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,avatar_custom_desc,job_product_snapshot,state,created_at,state_changed_at) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,'QUEUED',$10,$10)", [jobId,userId,input.productId,input.scriptId,input.format,input.qualityTier,input.durationS,input.avatarCustomDesc ?? null,productSnapshotRaw,timestamp]);
+        await client.query("INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,avatar_custom_desc,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,'QUEUED',$11,$11)", [jobId,userId,input.productId,input.scriptId,input.format,input.qualityTier,input.durationS,input.avatarCustomDesc ?? null,preparedReference.raw,productSnapshotRaw,timestamp]);
         await client.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,'hold',$4,NULL,$5)", [id(),userId,-input.priceIdr,jobId,timestamp]);
         await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId,input.scriptId]);
         await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true }),timestamp]);

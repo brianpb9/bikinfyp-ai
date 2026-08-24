@@ -43,18 +43,23 @@ export function parseJobReferenceManifest(raw: string): JobReferenceManifest {
   return { version: REFERENCE_MANIFEST_VERSION, references: manifest.references };
 }
 
-export async function loadOrCreateJobReferenceManifest(input: {
-  existingRaw: string | null;
+/**
+ * Prepare immutable, job-owned reference bytes before a job becomes visible.
+ *
+ * Storage and the application database cannot share a transaction. The safe
+ * ordering is therefore storage-first: a database row may be absent after a
+ * crash (leaving harmless orphan objects), but a committed manifest must never
+ * point at bytes that were not durably written. Keys are deterministic, so a
+ * bounded admission retry with the same job id is an idempotent overwrite.
+ * Callers MUST NOT delete these keys when a database commit result is
+ * ambiguous. Orphan collection needs a grace period and a fresh authoritative
+ * database absence check.
+ */
+export async function prepareJobReferenceManifest(input: {
   jobId: string;
   candidateRels: string[];
   onResolved?: (resolution: HasilResolusiReferensi) => void;
-  /** Atomic CAS. Null means a legacy job already has provider/output evidence. */
-  persistIfAbsentAndSafe: (candidateRaw: string) => Promise<string | null>;
-}): Promise<{ manifest: JobReferenceManifest; resolution: HasilResolusiReferensi | null }> {
-  if (input.existingRaw) {
-    return { manifest: parseJobReferenceManifest(input.existingRaw), resolution: null };
-  }
-
+}): Promise<{ manifest: JobReferenceManifest; raw: string; resolution: HasilResolusiReferensi }> {
   const resolution = await resolveApprovedReference(input.candidateRels);
   input.onResolved?.(resolution);
   if (!resolution.utama) {
@@ -75,10 +80,28 @@ export async function loadOrCreateJobReferenceManifest(input: {
     await mediaStorage().put(snapshotRel, object.body);
     references.push({ ...ref, snapshotRel });
   }
-  const candidate: JobReferenceManifest = { version: REFERENCE_MANIFEST_VERSION, references };
+  const manifest: JobReferenceManifest = { version: REFERENCE_MANIFEST_VERSION, references };
+  const raw = JSON.stringify(manifest);
+  return { manifest, raw, resolution };
+}
+
+export async function loadOrCreateJobReferenceManifest(input: {
+  existingRaw: string | null;
+  jobId: string;
+  candidateRels: string[];
+  onResolved?: (resolution: HasilResolusiReferensi) => void;
+  /** Atomic CAS. Null means a legacy job already has provider/output evidence. */
+  persistIfAbsentAndSafe: (candidateRaw: string) => Promise<string | null>;
+}): Promise<{ manifest: JobReferenceManifest; resolution: HasilResolusiReferensi | null }> {
+  if (input.existingRaw) {
+    return { manifest: parseJobReferenceManifest(input.existingRaw), resolution: null };
+  }
+
+  const prepared = await prepareJobReferenceManifest(input);
+  const references = prepared.manifest.references;
   let persistedRaw: string | null;
   try {
-    persistedRaw = await input.persistIfAbsentAndSafe(JSON.stringify(candidate));
+    persistedRaw = await input.persistIfAbsentAndSafe(prepared.raw);
   } catch (error) {
     // A failed CAS can be an ambiguous commit/network result. Snapshot keys
     // are deterministic, so deleting here could remove bytes concurrently
@@ -97,7 +120,7 @@ export async function loadOrCreateJobReferenceManifest(input: {
     .filter((ref) => !winnerKeys.has(ref.snapshotRel))
     .map((ref) => mediaStorage().delete(ref.snapshotRel).catch(() => undefined)));
   // CAS yang kalah wajib memakai pemenang dari database, bukan kandidatnya.
-  return { manifest: winner, resolution };
+  return { manifest: winner, resolution: prepared.resolution };
 }
 
 /**
