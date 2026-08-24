@@ -1,0 +1,192 @@
+{
+  "schema": "w1-disposable-pg-evidence-v1",
+  "generated_utc": "2026-08-24T07:24:39.621Z",
+  "task": "P1-W1-DISPOSABLE-PG-GATE-REMEDIATION-20260824",
+  "code_under_test": {
+    "head": "b6bc116b1640fd561c982349262e5e070fa07f64",
+    "tree": "7484f05d1b77a86de838f1d2c25adc459024390a",
+    "initial_worktree_clean": true,
+    "expected_head": "b6bc116b1640fd561c982349262e5e070fa07f64"
+  },
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v22.23.1"
+  },
+  "safety": {
+    "database_scope": "loopback only",
+    "database_url_recorded": false,
+    "w1_disposable_create_drop": true,
+    "money_disposable_create_drop": true,
+    "d2_disposable_create_drop": true
+  },
+  "records": [
+    {
+      "name": "w1",
+      "command": [
+        "npm",
+        "run",
+        "test:postgres-product-truth-w1"
+      ],
+      "timeout_ms": 120000,
+      "environment": {
+        "DATABASE_URL": "LOOPBACK_SUPPLIED_REDACTED",
+        "RACUN_NO_DOTENV": "1",
+        "SCRIPT_LLM": "0"
+      },
+      "started_utc": "2026-08-24T07:23:58.206Z",
+      "ended_utc": "2026-08-24T07:24:03.607Z",
+      "duration_ms": 5401.761,
+      "exit_code": 0,
+      "signal": null,
+      "spawn_error": null,
+      "stdout_file": "w1.tap",
+      "stdout_bytes": 11998,
+      "stdout_sha256": "b56f82698d6a4e0ead5ba2a3c3c42b1911c737aa141a3f85af7e40878f238c69",
+      "stderr_file": "w1.stderr.txt",
+      "stderr_bytes": 165,
+      "stderr_sha256": "a68bd324ff83904752fcb39fc9bc67bb6ec7443b60a3072fed6ffb6edd4423e8",
+      "tap_summary": {
+        "tests": 25,
+        "pass": 25,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0
+      }
+    },
+    {
+      "name": "money",
+      "command": [
+        "npm",
+        "run",
+        "gate:uang"
+      ],
+      "timeout_ms": 120000,
+      "environment": {
+        "DATABASE_URL": "LOOPBACK_SUPPLIED_REDACTED",
+        "RACUN_NO_DOTENV": "1",
+        "SCRIPT_LLM": "0"
+      },
+      "started_utc": "2026-08-24T07:24:03.609Z",
+      "ended_utc": "2026-08-24T07:24:06.432Z",
+      "duration_ms": 2822.657,
+      "exit_code": 0,
+      "signal": null,
+      "spawn_error": null,
+      "stdout_file": "money.tap",
+      "stdout_bytes": 2288,
+      "stdout_sha256": "a1dd916f9bdcd5988aa8dc7ff571605cd611d56404155d87e7950f31a1e4c7f1",
+      "stderr_file": "money.stderr.txt",
+      "stderr_bytes": 165,
+      "stderr_sha256": "a68bd324ff83904752fcb39fc9bc67bb6ec7443b60a3072fed6ffb6edd4423e8",
+      "tap_summary": {
+        "tests": 11,
+        "pass": 11,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0
+      }
+    },
+    {
+      "name": "d2-cas",
+      "command": [
+        "bash",
+        "-lc",
+        "create disposable loopback PostgreSQL DB; run tests/org-photo-brand-gate.test.ts with UJI_PG_URL; guaranteed DROP in EXIT trap"
+      ],
+      "timeout_ms": 120000,
+      "environment": {
+        "DATABASE_URL": "LOOPBACK_SUPPLIED_REDACTED",
+        "RACUN_NO_DOTENV": "1",
+        "SCRIPT_LLM": "0"
+      },
+      "started_utc": "2026-08-24T07:24:38.512Z",
+      "ended_utc": "2026-08-24T07:24:39.621Z",
+      "duration_ms": 1107.982,
+      "exit_code": 0,
+      "signal": null,
+      "spawn_error": null,
+      "stdout_file": "d2-cas.tap",
+      "stdout_bytes": 970,
+      "stdout_sha256": "6d302febf3c67dc474d795e7deb49f05dd96907ddf624d28bc93e114614d903c",
+      "stderr_file": "d2-cas.stderr.txt",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tap_summary": {
+        "tests": 4,
+        "pass": 4,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0
+      }
+    },
+    {
+      "name": "affected-unit",
+      "command": [
+        "npx",
+        "tsx",
+        "--test",
+        "tests/script-catalog-audit.test.ts",
+        "tests/prompt-akhir-kunci-bahasa.test.ts",
+        "tests/story-os-ads.test.ts",
+        "tests/job-product-snapshot.test.ts"
+      ],
+      "timeout_ms": 180000,
+      "environment": {
+        "DATABASE_URL": "LOOPBACK_SUPPLIED_REDACTED",
+        "RACUN_NO_DOTENV": "1",
+        "SCRIPT_LLM": "0"
+      },
+      "started_utc": "2026-08-24T07:24:07.751Z",
+      "ended_utc": "2026-08-24T07:24:16.696Z",
+      "duration_ms": 8945.025,
+      "exit_code": 0,
+      "signal": null,
+      "spawn_error": null,
+      "stdout_file": "affected-unit.tap",
+      "stdout_bytes": 43025,
+      "stdout_sha256": "5384e51d54013ff485aecd361762be3135ed15151afc835f4521e31f59e30234",
+      "stderr_file": "affected-unit.stderr.txt",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "tap_summary": {
+        "tests": 119,
+        "pass": 119,
+        "fail": 0,
+        "skipped": 0,
+        "cancelled": 0,
+        "todo": 0
+      }
+    },
+    {
+      "name": "typescript",
+      "command": [
+        "npx",
+        "tsc",
+        "--noEmit"
+      ],
+      "timeout_ms": 120000,
+      "environment": {
+        "DATABASE_URL": "LOOPBACK_SUPPLIED_REDACTED",
+        "RACUN_NO_DOTENV": "1",
+        "SCRIPT_LLM": "0"
+      },
+      "started_utc": "2026-08-24T07:24:16.697Z",
+      "ended_utc": "2026-08-24T07:24:18.355Z",
+      "duration_ms": 1658.493,
+      "exit_code": 0,
+      "signal": null,
+      "spawn_error": null,
+      "stdout_file": "tsc.stdout.txt",
+      "stdout_bytes": 0,
+      "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "stderr_file": "typescript.stderr.txt",
+      "stderr_bytes": 0,
+      "stderr_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    }
+  ],
+  "success": true
+}

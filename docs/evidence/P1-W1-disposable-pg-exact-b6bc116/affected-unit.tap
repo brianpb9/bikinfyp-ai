@@ -1,0 +1,909 @@
+TAP version 13
+# Subtest: snapshot dibuat sekali dan mutation candidate tidak mengubah retry
+ok 1 - snapshot dibuat sekali dan mutation candidate tidak mengubah retry
+  ---
+  duration_ms: 0.842083
+  type: 'test'
+  ...
+# Subtest: dua create konkuren kembali dengan satu pemenang durable
+ok 2 - dua create konkuren kembali dengan satu pemenang durable
+  ---
+  duration_ms: 2.80075
+  type: 'test'
+  ...
+# Subtest: snapshot invalid gagal tertutup
+ok 3 - snapshot invalid gagal tertutup
+  ---
+  duration_ms: 0.394458
+  type: 'test'
+  ...
+# Subtest: snapshot v1 hanya kompatibel untuk non-Story-Ads; v2 tetap membawa harga
+ok 4 - snapshot v1 hanya kompatibel untuk non-Story-Ads; v2 tetap membawa harga
+  ---
+  duration_ms: 0.2045
+  type: 'test'
+  ...
+# Subtest: A6 identity: talking_head + template job null tetap Story Ads dari snapshot admisi
+ok 5 - A6 identity: talking_head + template job null tetap Story Ads dari snapshot admisi
+  ---
+  duration_ms: 0.083792
+  type: 'test'
+  ...
+# Subtest: template snapshot admisi menang atas kolom job yang menyimpang
+ok 6 - template snapshot admisi menang atas kolom job yang menyimpang
+  ---
+  duration_ms: 0.040792
+  type: 'test'
+  ...
+# Subtest: admission builder membekukan seluruh metadata dari bentuk row database
+ok 7 - admission builder membekukan seluruh metadata dari bentuk row database
+  ---
+  duration_ms: 0.155417
+  type: 'test'
+  ...
+# Subtest: legacy dengan jejak provider tanpa snapshot ditolak
+ok 8 - legacy dengan jejak provider tanpa snapshot ditolak
+  ---
+  duration_ms: 0.059833
+  type: 'test'
+  ...
+# Subtest: A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan enqueue
+ok 9 - A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan enqueue
+  ---
+  duration_ms: 0.804625
+  type: 'test'
+  ...
+# Subtest: semua admission produksi memasang snapshot pada INSERT job yang sama
+ok 10 - semua admission produksi memasang snapshot pada INSERT job yang sama
+  ---
+  duration_ms: 30.187875
+  type: 'test'
+  ...
+# Subtest: kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot
+ok 11 - kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot
+  ---
+  duration_ms: 0.293209
+  type: 'test'
+  ...
+# Subtest: dashboard mengunci satu row produk sebelum validasi dan memakai row itu sampai snapshot job
+ok 12 - dashboard mengunci satu row produk sebelum validasi dan memakai row itu sampai snapshot job
+  ---
+  duration_ms: 0.125541
+  type: 'test'
+  ...
+# Subtest: C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi
+ok 13 - C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi
+  ---
+  duration_ms: 0.72475
+  type: 'test'
+  ...
+# Subtest: [ads] prompt akhir memuat kunci bahasa 4 lapis + no English speech
+ok 14 - [ads] prompt akhir memuat kunci bahasa 4 lapis + no English speech
+  ---
+  duration_ms: 2.729666
+  type: 'test'
+  ...
+# Subtest: [ads] prompt akhir mengunci ukuran ASLI produk (§C.10)
+ok 15 - [ads] prompt akhir mengunci ukuran ASLI produk (§C.10)
+  ---
+  duration_ms: 0.28325
+  type: 'test'
+  ...
+# Subtest: [ads] kunci baru tidak memicu penyaring penyedia
+ok 16 - [ads] kunci baru tidak memicu penyaring penyedia
+  ---
+  duration_ms: 2.417041
+  type: 'test'
+  ...
+# Subtest: [ads] gerbang prompt akhir MELULUSKAN prompt yang benar
+ok 17 - [ads] gerbang prompt akhir MELULUSKAN prompt yang benar
+  ---
+  duration_ms: 1.872458
+  type: 'test'
+  ...
+# Subtest: [talking_head] prompt akhir memuat kunci bahasa 4 lapis + no English speech
+ok 18 - [talking_head] prompt akhir memuat kunci bahasa 4 lapis + no English speech
+  ---
+  duration_ms: 0.251417
+  type: 'test'
+  ...
+# Subtest: [talking_head] prompt akhir mengunci ukuran ASLI produk (§C.10)
+ok 19 - [talking_head] prompt akhir mengunci ukuran ASLI produk (§C.10)
+  ---
+  duration_ms: 0.123458
+  type: 'test'
+  ...
+# Subtest: [talking_head] kunci baru tidak memicu penyaring penyedia
+ok 20 - [talking_head] kunci baru tidak memicu penyaring penyedia
+  ---
+  duration_ms: 0.226542
+  type: 'test'
+  ...
+# Subtest: [talking_head] gerbang prompt akhir MELULUSKAN prompt yang benar
+ok 21 - [talking_head] gerbang prompt akhir MELULUSKAN prompt yang benar
+  ---
+  duration_ms: 0.262792
+  type: 'test'
+  ...
+# Subtest: [hands_only] prompt akhir memuat kunci bahasa 4 lapis + no English speech
+ok 22 - [hands_only] prompt akhir memuat kunci bahasa 4 lapis + no English speech
+  ---
+  duration_ms: 0.540875
+  type: 'test'
+  ...
+# Subtest: [hands_only] prompt akhir mengunci ukuran ASLI produk (§C.10)
+ok 23 - [hands_only] prompt akhir mengunci ukuran ASLI produk (§C.10)
+  ---
+  duration_ms: 0.369875
+  type: 'test'
+  ...
+# Subtest: [hands_only] kunci baru tidak memicu penyaring penyedia
+ok 24 - [hands_only] kunci baru tidak memicu penyaring penyedia
+  ---
+  duration_ms: 0.401917
+  type: 'test'
+  ...
+# Subtest: [hands_only] gerbang prompt akhir MELULUSKAN prompt yang benar
+ok 25 - [hands_only] gerbang prompt akhir MELULUSKAN prompt yang benar
+  ---
+  duration_ms: 0.376375
+  type: 'test'
+  ...
+# Subtest: gerbang MENOLAK (keras) prompt tanpa kunci bahasa
+ok 26 - gerbang MENOLAK (keras) prompt tanpa kunci bahasa
+  ---
+  duration_ms: 0.184084
+  type: 'test'
+  ...
+# Subtest: gerbang MENOLAK (keras) prompt tanpa kunci ukuran asli
+ok 27 - gerbang MENOLAK (keras) prompt tanpa kunci ukuran asli
+  ---
+  duration_ms: 0.063917
+  type: 'test'
+  ...
+# Subtest: gerbang MENOLAK (keras) kosakata pemicu di prompt akhir — bukan lagi peringatan
+ok 28 - gerbang MENOLAK (keras) kosakata pemicu di prompt akhir — bukan lagi peringatan
+  ---
+  duration_ms: 0.088209
+  type: 'test'
+  ...
+# Subtest: gerbang tetap MENOLAK negasi tentang orang (perilaku lama dipertahankan)
+ok 29 - gerbang tetap MENOLAK negasi tentang orang (perilaku lama dipertahankan)
+  ---
+  duration_ms: 0.054625
+  type: 'test'
+  ...
+# Subtest: vo_broll: gerbang dilewati — tidak ada penyedia video yang dipanggil
+ok 30 - vo_broll: gerbang dilewati — tidak ada penyedia video yang dipanggil
+  ---
+  duration_ms: 0.028209
+  type: 'test'
+  ...
+# Subtest: planShots menolak kategori cacat, tidak menyelundupkan 'undefined' ke prompt berbayar
+ok 31 - planShots menolak kategori cacat, tidak menyelundupkan 'undefined' ke prompt berbayar
+  ---
+  duration_ms: 0.200833
+  type: 'test'
+  ...
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Kemeja Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Jasa Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Gadget Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Gadget Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Gadget Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Gadget Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Gadget Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Jasa Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Jasa Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Uji Katalog" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# Subtest: snapshot seluruh copy authored mengunci 22 template x 4 varian tanpa pemotongan token
+ok 32 - snapshot seluruh copy authored mengunci 22 template x 4 varian tanpa pemotongan token
+  ---
+  duration_ms: 0.942792
+  type: 'test'
+  ...
+# Subtest: copy authored selalu berupa kalimat utuh dan delivery tag tidak bocor ke spoken text
+ok 33 - copy authored selalu berupa kalimat utuh dan delivery tag tidak bocor ke spoken text
+  ---
+  duration_ms: 0.658917
+  type: 'test'
+  ...
+# Subtest: whitelist delivery Gemini terkunci ke tag yang disepakati
+ok 34 - whitelist delivery Gemini terkunci ke tag yang disepakati
+  ---
+  duration_ms: 0.048542
+  type: 'test'
+  ...
+# Subtest: normalisasi menetralkan nama produk dan bentuk harga fixture
+ok 35 - normalisasi menetralkan nama produk dan bentuk harga fixture
+  ---
+  duration_ms: 0.069459
+  type: 'test'
+  ...
+# Subtest: normalisasi uniqueness membuang delivery tag Gemini
+ok 36 - normalisasi uniqueness membuang delivery tag Gemini
+  ---
+  duration_ms: 0.09775
+  type: 'test'
+  ...
+# Subtest: fixture audit mencakup tepat 33 template katalog aktif
+ok 37 - fixture audit mencakup tepat 33 template katalog aktif
+  ---
+  duration_ms: 0.031542
+  type: 'test'
+  ...
+# Subtest: fixture tiap template mengikuti kategori bestFor yang dinormalisasi
+ok 38 - fixture tiap template mengikuti kategori bestFor yang dinormalisasi
+  ---
+  duration_ms: 0.106417
+  type: 'test'
+  ...
+# Subtest: guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen menggantung
+ok 39 - guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen menggantung
+  ---
+  duration_ms: 0.738167
+  type: 'test'
+  ...
+# Subtest: 33/33 template mempunyai copy khusus
+ok 40 - 33/33 template mempunyai copy khusus
+  ---
+  duration_ms: 0.178542
+  type: 'test'
+  ...
+# Subtest: 33/33 fixed hook unik setelah normalisasi
+ok 41 - 33/33 fixed hook unik setelah normalisasi
+  ---
+  duration_ms: 0.221042
+  type: 'test'
+  ...
+# Subtest: 132/132 hook count=4 unik setelah normalisasi
+ok 42 - 132/132 hook count=4 unik setelah normalisasi
+  ---
+  duration_ms: 0.07275
+  type: 'test'
+  ...
+# Subtest: harga render maksimal muncul di 33/132 hook dan 8/33 fixed hook
+ok 43 - harga render maksimal muncul di 33/132 hook dan 8/33 fixed hook
+  ---
+  duration_ms: 0.033792
+  type: 'test'
+  ...
+# Subtest: hook bebas starter harga boilerplate dan prefix bersama di atas cap
+ok 44 - hook bebas starter harga boilerplate dan prefix bersama di atas cap
+  ---
+  duration_ms: 0.034917
+  type: 'test'
+  ...
+# Subtest: hook tidak mengulang makna yang sama di dua klausa
+ok 45 - hook tidak mengulang makna yang sama di dua klausa
+  ---
+  duration_ms: 0.02325
+  type: 'test'
+  ...
+# Subtest: spoken copy bebas CTA mekanis, berkas produk, dan pola aksi/subjek berulang
+ok 46 - spoken copy bebas CTA mekanis, berkas produk, dan pola aksi/subjek berulang
+  ---
+  duration_ms: 0.022042
+  type: 'test'
+  ...
+# Subtest: seluruh empat varian menghasilkan minimal 150 segment-sentence unik
+ok 47 - seluruh empat varian menghasilkan minimal 150 segment-sentence unik
+  ---
+  duration_ms: 0.021584
+  type: 'test'
+  ...
+# Subtest: body expansion menghasilkan minimal 100 demo+CTA unik tanpa mengandalkan hook
+ok 48 - body expansion menghasilkan minimal 100 demo+CTA unik tanpa mengandalkan hook
+  ---
+  duration_ms: 0.021041
+  type: 'test'
+  ...
+# Subtest: body tidak near-duplicate lintas template
+ok 49 - body tidak near-duplicate lintas template
+  ---
+  duration_ms: 0.022833
+  type: 'test'
+  ...
+# Subtest: body tidak berbagi blok enam kata lintas template
+ok 50 - body tidak berbagi blok enam kata lintas template
+  ---
+  duration_ms: 0.026167
+  type: 'test'
+  ...
+# Subtest: spoken script bebas jargon produksi
+ok 51 - spoken script bebas jargon produksi
+  ---
+  duration_ms: 0.021334
+  type: 'test'
+  ...
+# Subtest: spoken script bebas klaim faktual yang tidak ditopang input produk
+ok 52 - spoken script bebas klaim faktual yang tidak ditopang input produk
+  ---
+  duration_ms: 0.02375
+  type: 'test'
+  ...
+# Subtest: maksimal 66 dari 132 demo menyebut harga render
+ok 53 - maksimal 66 dari 132 demo menyebut harga render
+  ---
+  duration_ms: 0.021792
+  type: 'test'
+  ...
+# Subtest: skeleton proof-slot + harga generik maksimal 20 persen dan tidak dibagi lintas template
+ok 54 - skeleton proof-slot + harga generik maksimal 20 persen dan tidak dibagi lintas template
+  ---
+  duration_ms: 0.026167
+  type: 'test'
+  ...
+# Subtest: spoken VO tidak mengomentari mekanik kreatif iklannya sendiri
+ok 55 - spoken VO tidak mengomentari mekanik kreatif iklannya sendiri
+  ---
+  duration_ms: 0.021
+  type: 'test'
+  ...
+# Subtest: T05 T08 T10 hanya inspeksi atribut netral, bukan bukti perubahan sintetis
+ok 56 - T05 T08 T10 hanya inspeksi atribut netral, bukan bukti perubahan sintetis
+  ---
+  duration_ms: 0.020583
+  type: 'test'
+  ...
+# Subtest: tidak ada fragmen kalimat menggantung
+ok 57 - tidak ada fragmen kalimat menggantung
+  ---
+  duration_ms: 0.02025
+  type: 'test'
+  ...
+# Subtest: count=4 memberi empat demo berbeda pada setiap template
+ok 58 - count=4 memberi empat demo berbeda pada setiap template
+  ---
+  duration_ms: 0.0205
+  type: 'test'
+  ...
+# Subtest: CTA tidak exact-repeat lintas template setelah frasa platform dinetralkan
+ok 59 - CTA tidak exact-repeat lintas template setelah frasa platform dinetralkan
+  ---
+  duration_ms: 0.02075
+  type: 'test'
+  ...
+# Subtest: delivery voiced punya minimal dua tag, silent tanpa tts_text, dan tidak ada unknown tag
+ok 60 - delivery voiced punya minimal dua tag, silent tanpa tts_text, dan tidak ada unknown tag
+  ---
+  duration_ms: 0.022791
+  type: 'test'
+  ...
+# Subtest: inventaris voiced benar-benar memakai seluruh delivery tag
+ok 61 - inventaris voiced benar-benar memakai seluruh delivery tag
+  ---
+  duration_ms: 0.032166
+  type: 'test'
+  ...
+# Subtest: setiap template voiced punya minimal satu cue emphasis di empat variannya
+ok 62 - setiap template voiced punya minimal satu cue emphasis di empat variannya
+  ---
+  duration_ms: 0.02225
+  type: 'test'
+  ...
+# Subtest: empat varian tiap template voiced punya empat delivery-tag signature unik
+ok 63 - empat varian tiap template voiced punya empat delivery-tag signature unik
+  ---
+  duration_ms: 0.048625
+  type: 'test'
+  ...
+# Subtest: count=4 tidak mengulang hook atau naskah pada template mana pun
+ok 64 - count=4 tidak mengulang hook atau naskah pada template mana pun
+  ---
+  duration_ms: 0.019875
+  type: 'test'
+  ...
+# Subtest: 132/132 varian katalog lolos validator tanpa daftar utang
+ok 65 - 132/132 varian katalog lolos validator tanpa daftar utang
+  ---
+  duration_ms: 0.024125
+  type: 'test'
+  ...
+# Subtest: seluruh aturan yang dulu dikecualikan sekarang tepat nol
+ok 66 - seluruh aturan yang dulu dikecualikan sekarang tepat nol
+  ---
+  duration_ms: 0.085708
+  type: 'test'
+  ...
+# Subtest: audit generator memakai konfigurasi produksi dan mengunci snapshot admisi tiap template
+ok 67 - audit generator memakai konfigurasi produksi dan mengunci snapshot admisi tiap template
+  ---
+  duration_ms: 0.202791
+  type: 'test'
+  ...
+# Subtest: audit admission berubah merah saat snapshot menyimpang dari konfigurasi aktif
+ok 68 - audit admission berubah merah saat snapshot menyimpang dari konfigurasi aktif
+  ---
+  duration_ms: 1.381459
+  type: 'test'
+  ...
+# Subtest: harga dan provenance harga hanya muncul di Story Ads price-led; body non-price beragam
+ok 69 - harga dan provenance harga hanya muncul di Story Ads price-led; body non-price beragam
+  ---
+  duration_ms: 0.3125
+  type: 'test'
+  ...
+# Subtest: seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasil generator
+ok 70 - seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasil generator
+  ---
+  duration_ms: 10.979792
+  type: 'test'
+  ...
+# Subtest: sembilan Story Ads menolak outcome tanpa bukti dan menerima staging netral
+ok 71 - sembilan Story Ads menolak outcome tanpa bukti dan menerima staging netral
+  ---
+  duration_ms: 0.46075
+  type: 'test'
+  ...
+# Subtest: prompt final dan first frame 9 Story Ads x 4 tetap netral tanpa generated factual text
+ok 72 - prompt final dan first frame 9 Story Ads x 4 tetap netral tanpa generated factual text
+  ---
+  duration_ms: 119.470958
+  type: 'test'
+  ...
+# Subtest: aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik maupun layanan
+ok 73 - aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik maupun layanan
+  ---
+  duration_ms: 93.981125
+  type: 'test'
+  ...
+# Subtest: mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads
+ok 74 - mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads
+  ---
+  duration_ms: 20.969208
+  type: 'test'
+  ...
+# Subtest: mutasi subjek produk tetap terdeteksi setelah action dirakit menjadi prompt final
+ok 75 - mutasi subjek produk tetap terdeteksi setelah action dirakit menjadi prompt final
+  ---
+  duration_ms: 6.302791
+  type: 'test'
+  ...
+# Subtest: mutasi outcome visual mematikan target audit secara end-to-end
+ok 76 - mutasi outcome visual mematikan target audit secara end-to-end
+  ---
+  duration_ms: 2564.342291
+  type: 'test'
+  ...
+# Subtest: shared evaluator menangkap exact phrase dan paraphrase pada setiap layer visual
+ok 77 - shared evaluator menangkap exact phrase dan paraphrase pada setiap layer visual
+  ---
+  duration_ms: 5382.424792
+  type: 'test'
+  ...
+# Subtest: role staging kesembilan Ads adalah safe controls
+ok 78 - role staging kesembilan Ads adalah safe controls
+  ---
+  duration_ms: 1.935042
+  type: 'test'
+  ...
+# Subtest: katalog 9 Ads konsisten dengan role render netral dan menahan preview legacy
+ok 79 - katalog 9 Ads konsisten dengan role render netral dan menahan preview legacy
+  ---
+  duration_ms: 0.537458
+  type: 'test'
+  ...
+# Subtest: Ads kategori layanan tanpa bukti fitur memakai aksi kartu yang netral
+ok 80 - Ads kategori layanan tanpa bukti fitur memakai aksi kartu yang netral
+  ---
+  duration_ms: 2.381709
+  type: 'test'
+  ...
+# Subtest: T05, T08, T10, dan before-after seluruhnya tinggal inspeksi satu keadaan
+ok 81 - T05, T08, T10, dan before-after seluruhnya tinggal inspeksi satu keadaan
+  ---
+  duration_ms: 0.251959
+  type: 'test'
+  ...
+# Subtest: audit risiko memeriksa text, TTS, action, dan visual direction hasil generator
+ok 82 - audit risiko memeriksa text, TTS, action, dan visual direction hasil generator
+  ---
+  duration_ms: 0.472875
+  type: 'test'
+  ...
+# Subtest: empat varian Kartu Tanya Produk bebas narasumber dan testimoni sintetis
+ok 83 - empat varian Kartu Tanya Produk bebas narasumber dan testimoni sintetis
+  ---
+  duration_ms: 0.141042
+  type: 'test'
+  ...
+# Subtest: seluruh penutup TVC bebas klaim proses, kualitas, dan ketahanan terlarang
+ok 84 - seluruh penutup TVC bebas klaim proses, kualitas, dan ketahanan terlarang
+  ---
+  duration_ms: 0.559125
+  type: 'test'
+  ...
+# Subtest: mutasi beat Ads yang menghapus SPIKE dan BUTTON kembali ditolak
+ok 85 - mutasi beat Ads yang menghapus SPIKE dan BUTTON kembali ditolak
+  ---
+  duration_ms: 0.349208
+  type: 'test'
+  ...
+# Subtest: daftar KATALOG_BUTUH_COPY cocok dengan kenyataan audit
+ok 86 - daftar KATALOG_BUTUH_COPY cocok dengan kenyataan audit
+  ---
+  duration_ms: 0.100417
+  type: 'test'
+  ...
+# [llm] keluaran tidak sesuai skema (percobaan 1/2): [
+#   {
+#     "code": "custom",
+#     "path": [
+#       "segments"
+#     ],
+#     "message": "SA3: HOOK wajib segments[0]; beat sebelum HOOK dilarang"
+#   },
+#   {
+#     "code": "custom",
+#     "path": [
+#       "segments"
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 1/3, tier high_quality)
+# [llm] keluaran tidak sesuai skema (percobaan 1/2): [
+#   {
+#     "origin": "array",
+#     "code": "too_small",
+#     "minimum": 3,
+#     "inclusive": true,
+#     "path": [
+#       "segments"
+#     ],
+#     "message": "Too small: expected array to have >=3 items"
+#   },
+#  
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 1/3, tier high_quality)
+# [llm] keluaran tidak sesuai skema (percobaan 1/2): [
+#   {
+#     "origin": "array",
+#     "code": "too_small",
+#     "minimum": 3,
+#     "inclusive": true,
+#     "path": [
+#       "segments"
+#     ],
+#     "message": "Too small: expected array to have >=3 items"
+#   }
+# ]
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 1/3, tier high_quality)
+# [llm] keluaran tidak sesuai skema (percobaan 1/2): [
+#   {
+#     "origin": "array",
+#     "code": "too_small",
+#     "minimum": 3,
+#     "inclusive": true,
+#     "path": [
+#       "segments"
+#     ],
+#     "message": "Too small: expected array to have >=3 items"
+#   }
+# ]
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 1/3, tier high_quality)
+# [script-engine] naskah LLM "Kemeja Uji" ditolak validator (percobaan 1/3): 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 2/3, tier high_quality)
+# [script-engine] naskah LLM "Kemeja Uji" ditolak validator (percobaan 1/3): button tidak menyisakan satu tanya kecil — CTA berdiri sendiri, itu penutup iklan biasa
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 2/3, tier high_quality)
+# [script-engine] naskah LLM DIPAKAI untuk "Jasa Kilat Beres" (percobaan 1/3, tier high_quality)
+# [script-engine] naskah LLM DIPAKAI untuk "Jasa Promo Nol" (percobaan 1/3, tier high_quality)
+# [script-engine] naskah LLM "Jasa Promo Nol" ditolak validator (percobaan 1/3): Harga "Harganya, nol" (0) tidak cocok dengan harga produk yang diberikan. | 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif
+# [script-engine] naskah LLM DIPAKAI untuk "Jasa Promo Nol" (percobaan 2/3, tier high_quality)
+# [script-engine] naskah LLM "Jasa Promo Nol" ditolak validator (percobaan 1/3): Harga "Harga itu adalah: nol" (0) tidak cocok dengan harga produk yang diberikan. | 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif
+# [script-engine] naskah LLM "Jasa Promo Nol" ditolak validator (percobaan 2/3): Harga "Harga itu adalah: nol" (0) tidak cocok dengan harga produk yang diberikan. | 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif
+# [script-engine] naskah LLM "Jasa Promo Nol" ditolak validator (percobaan 3/3): Harga "Harga itu adalah: nol" (0) tidak cocok dengan harga produk yang diberikan. | 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif
+# [script-engine] JATUH KE TEMPLATE untuk "Jasa Promo Nol" — naskah yang keluar adalah template pengisi, BUKAN tulisan LLM. Sebab: naskah tidak lolos validator setelah 3 percobaan: Harga "Harga itu adalah: nol" (0) tidak cocok dengan harga produk yang diberikan. | 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif. Ini bukan kondisi normal: pasang ANTHROPIC_API_KEY di layanan web.
+# [script-engine] naskah LLM "Kemeja Uji" ditolak validator (percobaan 1/3): 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif
+# [script-engine] naskah LLM "Kemeja Uji" ditolak validator (percobaan 2/3): 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif
+# [script-engine] naskah LLM "Kemeja Uji" ditolak validator (percobaan 3/3): 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif
+# [script-engine] JATUH KE TEMPLATE untuk "Kemeja Uji" — naskah yang keluar adalah template pengisi, BUKAN tulisan LLM. Sebab: naskah tidak lolos validator setelah 3 percobaan: 1 beat non-price memuat harga lisan; harga hanya boleh pada promo-terbatas dengan harga positif. Ini bukan kondisi normal: pasang ANTHROPIC_API_KEY di layanan web.
+# [script-engine] naskah LLM "Kemeja Uji" ditolak validator (percobaan 1/3): Aksi visual Story Ads wajib memakai kartu/swatch/prop netral blank: outside approved neutral action schema: memutar, kemasannya, samping, forbidden factual/product subject: kemasannya, unapproved manipulated visual subject: kemasannya di samping swatch blank.
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 2/3, tier high_quality)
+# [script-engine] naskah LLM "Kemeja Uji" ditolak validator (percobaan 1/3): Aksi visual Story Ads wajib memakai kartu/swatch/prop netral blank: outside approved neutral action schema: mengangkat, botolnya, memegang, forbidden factual/product subject: botolnya, unapproved manipulated visual subject: botolnya sambil memegang kartu blank.
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 2/3, tier high_quality)
+# [script-engine] naskah LLM "Kemeja Uji" ditolak validator (percobaan 1/3): Aksi visual Story Ads wajib memakai kartu/swatch/prop netral blank: outside approved neutral action schema: mengangkat, kemeja, uji, samping, authoritative product name used as visual subject: Kemeja Uji, unapproved manipulated visual subject: Kemeja Uji di samping kartu blank.
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 2/3, tier high_quality)
+# [script-engine] naskah LLM "Kemeja Uji" ditolak validator (percobaan 1/3): Aksi visual Story Ads wajib memakai kartu/swatch/prop netral blank: outside approved neutral action schema: mengangkat, fashion, samping, authoritative product category used as visual subject: fashion, unapproved manipulated visual subject: fashion di samping kartu blank.
+# [script-engine] naskah LLM DIPAKAI untuk "Kemeja Uji" (percobaan 2/3, tier high_quality)
+# Subtest: SA3 silent-hook kini kode; kualitas konflik SA3 serta SA5/SA7 tetap dinilai juri
+ok 87 - SA3 silent-hook kini kode; kualitas konflik SA3 serta SA5/SA7 tetap dinilai juri
+  ---
+  duration_ms: 1.089917
+  type: 'test'
+  ...
+# Subtest: naskah Ads yang memenuhi Story OS: NOL temuan keras
+ok 88 - naskah Ads yang memenuhi Story OS: NOL temuan keras
+  ---
+  duration_ms: 2.508667
+  type: 'test'
+  ...
+# Subtest: Ads 0/1/2 segmen gagal struktur lengkap di strict dan light
+ok 89 - Ads 0/1/2 segmen gagal struktur lengkap di strict dan light
+  ---
+  duration_ms: 11.208667
+  type: 'test'
+  ...
+# Subtest: SA3 menolak reordered, duplicate, missing, text, tts, alias suara, dan start nol di strict dan light
+ok 90 - SA3 menolak reordered, duplicate, missing, text, tts, alias suara, dan start nol di strict dan light
+  ---
+  duration_ms: 3.850708
+  type: 'test'
+  ...
+# Subtest: schema LLM Ads menolak HOOK bersuara dan menerima kontrol senyap
+ok 91 - schema LLM Ads menolak HOOK bersuara dan menerima kontrol senyap
+  ---
+  duration_ms: 52.484625
+  type: 'test'
+  ...
+# Subtest: mapper Ads menolak susunan HOOK tidak kanonis tanpa mengurutkan ulang
+ok 92 - mapper Ads menolak susunan HOOK tidak kanonis tanpa mengurutkan ulang
+  ---
+  duration_ms: 0.42625
+  type: 'test'
+  ...
+# Subtest: live LLM Ads menolak reordered HOOK lalu menerima respons perbaikan tanpa normalisasi diam-diam
+ok 93 - live LLM Ads menolak reordered HOOK lalu menerima respons perbaikan tanpa normalisasi diam-diam
+  ---
+  duration_ms: 21.790958
+  type: 'test'
+  ...
+# Subtest: live LLM Ads memperbaiki keluaran 0/1/2 segmen sebelum pipeline
+ok 94 - live LLM Ads memperbaiki keluaran 0/1/2 segmen sebelum pipeline
+  ---
+  duration_ms: 2.4975
+  type: 'test'
+  ...
+# Subtest: live LLM Ads non-price menolak nominal Rp meski source benar lalu memperbaiki
+ok 95 - live LLM Ads non-price menolak nominal Rp meski source benar lalu memperbaiki
+  ---
+  duration_ms: 1.515833
+  type: 'test'
+  ...
+# Subtest: live LLM Ads menolak ketaatan CTA telanjang lalu menerima BUTTON bertanya
+ok 96 - live LLM Ads menolak ketaatan CTA telanjang lalu menerima BUTTON bertanya
+  ---
+  duration_ms: 1.295083
+  type: 'test'
+  ...
+# Subtest: SA1 — CTA tanpa tanya yang tersisa ditolak
+ok 97 - SA1 — CTA tanpa tanya yang tersisa ditolak
+  ---
+  duration_ms: 0.162583
+  type: 'test'
+  ...
+# Subtest: SA2 — spike tanpa saksi ditolak
+ok 98 - SA2 — spike tanpa saksi ditolak
+  ---
+  duration_ms: 0.1965
+  type: 'test'
+  ...
+# Subtest: SA4 — friction cuma sekali ditolak
+ok 99 - SA4 — friction cuma sekali ditolak
+  ---
+  duration_ms: 0.081166
+  type: 'test'
+  ...
+# Subtest: SA6 — prop blank partial/hero dan aksi generik tidak pernah menjadi bridge
+ok 100 - SA6 — prop blank partial/hero dan aksi generik tidak pernah menjadi bridge
+  ---
+  duration_ms: 0.083667
+  type: 'test'
+  ...
+# Subtest: SA8 — body yang menjelaskan hook/produk ditolak
+ok 101 - SA8 — body yang menjelaskan hook/produk ditolak
+  ---
+  duration_ms: 0.064833
+  type: 'test'
+  ...
+# Subtest: Affiliate TIDAK dikenai Story OS Ads — ia punya bentuknya sendiri
+ok 102 - Affiliate TIDAK dikenai Story OS Ads — ia punya bentuknya sendiri
+  ---
+  duration_ms: 0.026
+  type: 'test'
+  ...
+# Subtest: penulis Ads menerima instruksi Story OS, Affiliate tidak
+ok 103 - penulis Ads menerima instruksi Story OS, Affiliate tidak
+  ---
+  duration_ms: 0.3635
+  type: 'test'
+  ...
+# Subtest: prompt live Ads memberi grammar action yang benar-benar diterima A-03
+ok 104 - prompt live Ads memberi grammar action yang benar-benar diterima A-03
+  ---
+  duration_ms: 0.777042
+  type: 'test'
+  ...
+# Subtest: kontrak gabungan system+task Ads mewajibkan hidden dan lolos SA6
+ok 105 - kontrak gabungan system+task Ads mewajibkan hidden dan lolos SA6
+  ---
+  duration_ms: 0.404666
+  type: 'test'
+  ...
+# Subtest: task Ads memberi tepat lima timecode kontigu sampai exact duration seluruh katalog aktif
+ok 106 - task Ads memberi tepat lima timecode kontigu sampai exact duration seluruh katalog aktif
+  ---
+  duration_ms: 0.423292
+  type: 'test'
+  ...
+# Subtest: gate timing Story Ads menolak gap, overlap, boundary, dan durasi beat rusak
+ok 107 - gate timing Story Ads menolak gap, overlap, boundary, dan durasi beat rusak
+  ---
+  duration_ms: 0.598
+  type: 'test'
+  ...
+# Subtest: fallback katalog Story Ads memakai schedule helper yang sama
+ok 108 - fallback katalog Story Ads memakai schedule helper yang sama
+  ---
+  duration_ms: 8.571375
+  type: 'test'
+  ...
+# Subtest: prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta label produk
+ok 109 - prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta label produk
+  ---
+  duration_ms: 0.300958
+  type: 'test'
+  ...
+# Subtest: provider LLM menerima Story Ads jasa harga nol dengan bridge nama dan kategori
+ok 110 - provider LLM menerima Story Ads jasa harga nol dengan bridge nama dan kategori
+  ---
+  duration_ms: 1.158791
+  type: 'test'
+  ...
+# Subtest: promo-terbatas harga nol lolos template dan provider tanpa L-02/SA6
+ok 111 - promo-terbatas harga nol lolos template dan provider tanpa L-02/SA6
+  ---
+  duration_ms: 1.35625
+  type: 'test'
+  ...
+# Subtest: SA6 strict mengunci exact bridge set menurut template dan harga immutable
+ok 112 - SA6 strict mengunci exact bridge set menurut template dan harga immutable
+  ---
+  duration_ms: 13.264542
+  type: 'test'
+  ...
+# Subtest: SA6 non-price menangkap notasi harga Indonesia tanpa menolak angka biasa
+ok 113 - SA6 non-price menangkap notasi harga Indonesia tanpa menolak angka biasa
+  ---
+  duration_ms: 0.751583
+  type: 'test'
+  ...
+# Subtest: detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka biasa
+ok 114 - detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka biasa
+  ---
+  duration_ms: 0.971417
+  type: 'test'
+  ...
+# Subtest: live promo harga nol merepair currency-word zero lalu exhaustion tidak menyajikan fallback
+ok 115 - live promo harga nol merepair currency-word zero lalu exhaustion tidak menyajikan fallback
+  ---
+  duration_ms: 2.256916
+  type: 'test'
+  ...
+# Subtest: live LLM non-price yang terus mengirim name+price habis retry dan tidak disajikan
+ok 116 - live LLM non-price yang terus mengirim name+price habis retry dan tidak disajikan
+  ---
+  duration_ms: 1.247083
+  type: 'test'
+  ...
+# Subtest: A-03 keras di strict dan light, safe control tetap bebas A-03
+ok 117 - A-03 keras di strict dan light, safe control tetap bebas A-03
+  ---
+  duration_ms: 1.796833
+  type: 'test'
+  ...
+# Subtest: live LLM Ads menolak aksi produk lalu menerima perbaikan prop netral sebelum provider
+ok 118 - live LLM Ads menolak aksi produk lalu menerima perbaikan prop netral sebelum provider
+  ---
+  duration_ms: 2.831125
+  type: 'test'
+  ...
+# Subtest: validator menolak naskah Ads yang gagal SA — bukan sekadar mencatat
+ok 119 - validator menolak naskah Ads yang gagal SA — bukan sekadar mencatat
+  ---
+  duration_ms: 0.461625
+  type: 'test'
+  ...
+1..119
+# tests 119
+# suites 0
+# pass 119
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 8727.953084
