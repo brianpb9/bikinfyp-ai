@@ -884,6 +884,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       // QC-11: batas orang datang DARI SPEC yang dipakai merender, bukan
       // diturunkan ulang di QC — satu aturan, satu tempat.
       maxPeople: spec.maxPeople,
+      visualSubjectPolicy: spec.visualSubjectPolicy,
       presenterLipsync: isPresenterLipsync,
       finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), `Cek ${cartLabel}`, AIGC_WATERMARK_TEXT],
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, productCategory: row.product_category, priceIdr: row.product_price_idr,

@@ -433,6 +433,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         // QC-11: batas orang datang DARI SPEC yang dipakai merender, bukan
         // diturunkan ulang di QC — satu aturan, satu tempat.
         maxPeople: spec.maxPeople,
+        visualSubjectPolicy: spec.visualSubjectPolicy,
         // Jalur SQLite dev tidak punya tier presenter-lipsync.
         presenterLipsync: false,
         // critical = teks kepatuhan/konversi (watermark, harga/promo, CTA) —

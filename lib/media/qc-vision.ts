@@ -128,6 +128,12 @@ export interface TemuanFrame {
   jumlahTangan: number;
   /** Ada tulisan yang tidak terbaca / huruf acak? */
   teksAcak: boolean;
+  /** Ada tulisan apa pun yang terlihat. Untuk neutral Story Ads, bahkan teks
+   * yang terbaca rapi dilarang pada blank prop di bagian generated. */
+  teksTerlihat: boolean;
+  /** true hanya bila respons model memuat kedua field kontrak neutral sebagai
+   * boolean eksplisit. Schema lama/malformed tidak boleh berarti "aman". */
+  neutralFieldsComplete?: boolean;
   /** Ada anggota badan yang salah — jari berlebih, tangan tanpa pemilik,
    *  anggota badan berlipat. */
   anatomiRusak: boolean;
@@ -161,6 +167,10 @@ export interface QcVisionInput {
    *  di format ini — yang diperiksa jumlah wajah (harus 0) dan jumlah tangan
    *  (satu orang). */
   tanpaWajah?: boolean;
+  /** Blank-prop contract: pixel generated tidak boleh memuat produk atau teks. */
+  neutralStoryAds?: boolean;
+  /** Ekor packshot/endcard asli dikeluarkan dari sampling kontrak neutral. */
+  ekorSec?: number;
 }
 
 export interface QcVisionResult {
@@ -182,8 +192,22 @@ export interface QcVisionResult {
   detikGagal: number[];
 }
 
+/** Hard violations unique to generated pixels of neutral Story Ads. Kept
+ * pure so the fail-closed contract can be regression-tested without paying
+ * for a vision request. */
+export function neutralStoryAdsViolations(t: TemuanFrame): string[] {
+  const violations: string[] = [];
+  if (t.neutralFieldsComplete !== true) {
+    violations.push(`detik ${t.detik}: kontrak neutral tidak terbukti (field produkTerlihat/teksTerlihat tidak lengkap)`);
+    return violations;
+  }
+  if (t.produkTerlihat) violations.push(`detik ${t.detik}: produk/kemasan terlihat di bagian generated neutral`);
+  if (t.teksTerlihat) violations.push(`detik ${t.detik}: tulisan terlihat pada blank prop di bagian generated neutral`);
+  return violations;
+}
+
 const SKEMA = `Answer ONLY with a JSON object, no markdown fence:
-{"jumlahOrang": <int>, "jumlahOrangUtama": <int>, "jumlahWajah": <int>, "jumlahTangan": <int>, "teksAcak": <bool>,
+{"jumlahOrang": <int>, "jumlahOrangUtama": <int>, "jumlahWajah": <int>, "jumlahTangan": <int>, "teksAcak": <bool>, "teksTerlihat": <bool>,
  "anatomiRusak": <bool>, "produkTerlihat": <bool>, "fisikaJanggal": <bool>, "catatan": "<max 15 words>"}
 
 Definitions, be literal and count what you actually see:
@@ -201,6 +225,7 @@ Definitions, be literal and count what you actually see:
 - jumlahTangan: how many human hands are visible in total.
 - teksAcak: true if any visible writing is malformed, misspelled, or
   unreadable gibberish (common on product labels).
+- teksTerlihat: true if ANY readable or unreadable writing is visible.
 - anatomiRusak: true if there are extra fingers, hands not attached to a
   visible arm, duplicated or bent-wrong limbs.
 - produkTerlihat: true if a consumer product package is clearly visible.
@@ -271,6 +296,8 @@ async function periksaFrame(framePath: string, detik: number, percobaan = 0): Pr
       jumlahWajah: Number(j.jumlahWajah ?? 0),
       jumlahTangan: Number(j.jumlahTangan ?? 0),
       teksAcak: Boolean(j.teksAcak),
+      teksTerlihat: Boolean(j.teksTerlihat ?? j.teksAcak),
+      neutralFieldsComplete: typeof j.teksTerlihat === "boolean" && typeof j.produkTerlihat === "boolean",
       anatomiRusak: Boolean(j.anatomiRusak),
       produkTerlihat: Boolean(j.produkTerlihat),
       fisikaJanggal: Boolean(j.fisikaJanggal),
@@ -309,8 +336,11 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     // menjalankan belasan proses ffmpeg sekaligus justru merebut CPU dari
     // compositing yang berjalan di worker yang sama.
     const berkasFrame: { f: string; detik: number }[] = [];
-    for (const p of posisiSampel(durasi)) {
-      const detik = Math.max(0.1, durasi * p);
+    const durasiDiperiksa = input.neutralStoryAds
+      ? Math.max(0.5, durasi - Math.max(0, input.ekorSec ?? 0))
+      : durasi;
+    for (const p of posisiSampel(durasiDiperiksa)) {
+      const detik = Math.max(0.1, durasiDiperiksa * p);
       const f = path.join(dir, `f${Math.round(detik * 10)}.jpg`);
       await runFfmpeg(["-y", "-ss", String(detik), "-i", input.videoPath, "-frames:v", "1", "-q:v", "3", f]);
       if (fs.existsSync(f)) berkasFrame.push({ f, detik: Math.round(detik * 10) / 10 });
@@ -349,6 +379,13 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     const peringatan: string[] = [];
     const detikGagal: number[] = [];
     for (const t of temuan) {
+      if (input.neutralStoryAds) {
+        const neutralViolations = neutralStoryAdsViolations(t);
+        if (neutralViolations.length) {
+          masalah.push(...neutralViolations);
+          detikGagal.push(t.detik);
+        }
+      }
       if (input.tanpaWajah) {
         // hands_only melarang WAJAH, bukan manusia. Jumlah orang TIDAK diperiksa
         // di sini: shot yang benar pun selalu punya pemilik tangan.

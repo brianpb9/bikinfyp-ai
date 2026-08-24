@@ -14,6 +14,11 @@ import { templateIdRenderOtoritatif } from "../lib/dashboard/render-cell";
 import { normalisasiFormatWorker, shouldPreserveEmbeddedLipsync } from "../lib/postgres/worker";
 import { buildTaskContent } from "../lib/providers/stubs/byteplus";
 import { voiceoverStartSecForSegments } from "../lib/script-engine/story-os-ads";
+import { createHash } from "node:crypto";
+import fs from "node:fs";
+import { execFileSync } from "node:child_process";
+import { evaluateQcPolicy, neutralStoryAdsIdentityChecks, runQc, type QcCheck } from "../lib/media/qc";
+import { neutralStoryAdsViolations, type TemuanFrame } from "../lib/media/qc-vision";
 
 test("snapshot confirm -> job persisten -> normalisasi worker menjaga kontrak 9 Story Ads", async () => {
   const templates = CAMPAIGN_TEMPLATES.filter((template) => template.group === "ads");
@@ -101,6 +106,125 @@ test("W1: dua talking_head Story Ads memakai narasi eksternal tertunda tanpa dup
       assert.doesNotMatch(shot.prompt, /Indonesian dialogue, spoken exactly|presenter speaks|VOICEOVER (?:speaks|narrates)/i,
         `${templateId}: provider dan TTS akan mengucapkan naskah ganda`);
     }
+  }
+});
+
+test("QC path: dua Story Ads produk fisik tidak direfund oleh QC-03/QC-10 yang berlawanan dengan kontrak neutral", async () => {
+  const ref = `/tmp/racun-neutral-qc-ref-${process.pid}.jpg`;
+  fs.writeFileSync(ref, "authoritative product photo");
+  const sha = createHash("sha256").update(fs.readFileSync(ref)).digest("hex");
+  try {
+    for (const templateId of ["ads-unboxing-pov", "ads-panas-ekstrem"]) {
+      const template = CAMPAIGN_TEMPLATES.find((item) => item.id === templateId)!;
+      const [script] = await generateScripts({
+        product: { id: `qc-${templateId}`, name: "Serum Uji", category: "beauty", price_idr: 189000 },
+        register: "netral", qualityTier: template.tier, durationSec: template.durationSec,
+        contentType: "ads", templateId, count: 1, tanpaLlm: true,
+      });
+      const spec = planShots({
+        jobId: `qc-${templateId}`, durationSec: template.durationSec,
+        segments: script.segments,
+        category: getCreatorCategory("hijaber")!, productName: "Serum Uji",
+        productCategory: "beauty", productPriceIdr: 189000, imageRefPath: ref,
+        qualityTier: template.tier, format: template.format, ugcTemplate: template.id,
+        shotCountOverride: template.shotCount,
+      });
+      assert.equal(spec.visualSubjectPolicy, "neutral_story_ads");
+      const [qc10, qc03] = neutralStoryAdsIdentityChecks({ packshotSidik: sha, refImagePath: ref });
+      assert.equal(qc10.status, "pass", `${templateId}: provenance packshot harus tetap diverifikasi`);
+      assert.equal(qc03.status, "skip", `${templateId}: pixel produk generated harus N/A`);
+      const checks: QcCheck[] = [
+        { code: "QC-01", name: "voice", status: "skip" },
+        { code: "QC-02", name: "morph", status: "pass" }, qc10, qc03,
+        { code: "QC-04", name: "audio", status: "pass" },
+        { code: "QC-05", name: "duration", status: "pass" },
+        { code: "QC-06", name: "overlay", status: "skip" },
+        { code: "QC-07", name: "claims", status: "pass" },
+        { code: "QC-08", name: "aigc", status: "pass" },
+        { code: "QC-11", name: "neutral visual", status: "pass" },
+        { code: "QC-12", name: "speech", status: "skip" },
+      ];
+      assert.equal(evaluateQcPolicy(template.format, checks, spec.visualSubjectPolicy), true,
+        `${templateId}: output neutral compliant ditolak/refund oleh policy QC lama`);
+
+      const video = `/tmp/racun-neutral-qc-${templateId}-${process.pid}.mp4`;
+      execFileSync("ffmpeg", ["-y", "-v", "error",
+        "-f", "lavfi", "-i", `color=c=gray:s=360x640:r=24:d=${template.durationSec}`,
+        "-f", "lavfi", "-i", `sine=frequency=440:sample_rate=48000:duration=${template.durationSec}`,
+        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-shortest",
+        "-metadata", "racun_aigc=true", "-movflags", "use_metadata_tags", video]);
+      try {
+        const finding: TemuanFrame = {
+          detik: 4.2, jumlahOrang: 1, jumlahOrangUtama: 1, jumlahWajah: 1, jumlahTangan: 2,
+          teksAcak: false, teksTerlihat: false, neutralFieldsComplete: true,
+          anatomiRusak: false, produkTerlihat: false, fisikaJanggal: false, catatan: "blank card",
+        };
+        const result = await runQc({
+          filePath: video, targetDurationSec: template.durationSec, finalTexts: ["aman"],
+          hookFamily: "story_ads", register: "netral", productName: "Serum Uji",
+          productCategory: "beauty", priceIdr: 189000, renderParams: { watermark: true },
+          refImagePath: ref, packshotSidik: sha, format: template.format,
+          isMockProvider: true, maxPeople: spec.maxPeople, presenterLipsync: false,
+          overlayTextExpectations: [], visualSubjectPolicy: spec.visualSubjectPolicy,
+        }, { neutralVisionFindings: [finding] });
+        assert.equal(result.checks.find((c) => c.code === "QC-03")?.status, "skip");
+        assert.equal(result.checks.find((c) => c.code === "QC-10")?.status, "pass");
+        assert.equal(result.checks.find((c) => c.code === "QC-11")?.status, "pass");
+        assert.equal(result.passed, true, `${templateId}: runQc compliant masih memicu reject/refund: ${JSON.stringify(result.checks)}`);
+
+        const bad = await runQc({
+          filePath: video, targetDurationSec: template.durationSec, finalTexts: ["aman"],
+          hookFamily: "story_ads", register: "netral", productName: "Serum Uji",
+          productCategory: "beauty", priceIdr: 189000, renderParams: { watermark: true },
+          refImagePath: ref, packshotSidik: sha, format: template.format,
+          isMockProvider: true, maxPeople: spec.maxPeople, presenterLipsync: false,
+          overlayTextExpectations: [], visualSubjectPolicy: spec.visualSubjectPolicy,
+        }, { neutralVisionFindings: [{ ...finding, produkTerlihat: true, teksTerlihat: true }] });
+        assert.equal(bad.checks.find((c) => c.code === "QC-11")?.status, "fail");
+        assert.equal(bad.passed, false, `${templateId}: pelanggaran neutral lolos runQc`);
+      } finally {
+        fs.rmSync(video, { force: true });
+      }
+    }
+  } finally {
+    fs.rmSync(ref, { force: true });
+  }
+});
+
+test("QC path: pelanggaran produk/teks di pixel generated neutral tetap hard-fail", () => {
+  const finding: TemuanFrame = {
+    detik: 4.2, jumlahOrang: 1, jumlahOrangUtama: 1, jumlahWajah: 1, jumlahTangan: 2,
+    teksAcak: false, teksTerlihat: true, neutralFieldsComplete: true,
+    anatomiRusak: false, produkTerlihat: true,
+    fisikaJanggal: false, catatan: "branded bottle on card",
+  };
+  const violations = neutralStoryAdsViolations(finding);
+  assert.equal(violations.length, 2);
+  assert.match(violations.join(" "), /produk\/kemasan/);
+  assert.match(violations.join(" "), /tulisan terlihat/);
+
+  const checks: QcCheck[] = [
+    { code: "QC-02", name: "morph", status: "pass" },
+    { code: "QC-03", name: "identity", status: "skip" },
+    { code: "QC-04", name: "audio", status: "pass" },
+    { code: "QC-05", name: "duration", status: "pass" },
+    { code: "QC-07", name: "claims", status: "pass" },
+    { code: "QC-08", name: "aigc", status: "pass" },
+    { code: "QC-10", name: "packshot", status: "pass" },
+    { code: "QC-11", name: "neutral visual", status: "fail", detail: violations.join("; ") },
+  ];
+  assert.equal(evaluateQcPolicy("talking_head", checks, "neutral_story_ads"), false);
+
+  const oldSchema = { ...finding, teksTerlihat: false, produkTerlihat: false, neutralFieldsComplete: false };
+  assert.match(neutralStoryAdsViolations(oldSchema).join(" "), /tidak terbukti/,
+    "respons visi schema lama/malformed tidak boleh diam-diam lulus neutral");
+});
+
+test("kedua worker meneruskan visualSubjectPolicy planner ke runQc", () => {
+  for (const file of ["lib/postgres/worker.ts", "lib/worker.ts"]) {
+    const source = fs.readFileSync(file, "utf8");
+    assert.match(source, /runQc\(\{[\s\S]*?visualSubjectPolicy:\s*spec\.visualSubjectPolicy/,
+      `${file}: policy neutral hilang sebelum QC`);
   }
 });
 
