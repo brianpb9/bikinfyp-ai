@@ -160,3 +160,46 @@ utc_start	utc_end	exit_code	sanitized_invocation	artifact	sha256
 2026-08-24T13:17:51Z	2026-08-24T13:17:51Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-final-json-parse.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 2026-08-24T13:18:00Z	2026-08-24T13:18:01Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	replay-final-sanitization.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
 2026-08-24T13:18:01Z	2026-08-24T13:18:02Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	replay-final-ledger-integrity.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:23:34Z	2026-08-24T13:23:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-maintenance-enable.json	f1ea8164ae9004bd42086c28e6304479c993f4ab6f3e5c1de915f4ef943727c5
+2026-08-24T13:23:34Z	2026-08-24T13:23:37Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-hold-propagation.txt	e0b508dec77f711151e425f92927ec628e3861649d2fb87cb38f229927d9595c
+2026-08-24T13:23:37Z	2026-08-24T13:23:37Z	0	scripts/staging-health-probe.sh	canonical-hold-503.txt	65bd2d5e1810921fceec0494925e0efb9a161173935e0d0678808a83064f3d08
+2026-08-24T13:23:52Z	2026-08-24T13:23:53Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-suspend.txt	91a446d241e4eac85e68eb76d1593b226378e7c606048f3d678995c0410070a4
+2026-08-24T13:23:54Z	2026-08-24T13:23:55Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-suspended-service.json	5e333af307b9954f679ad1790743a8fe3d6faccc94c17b1a3e0977242489e79a
+2026-08-24T13:24:01Z	2026-08-24T13:24:03Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-db-allowlist-add.json	e5a9412cb52042251f50df05bb120a94b5e1a32481a282a08f5fb3c78e12b20e
+2026-08-24T13:24:03Z	2026-08-24T13:24:03Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-db-allowlist-readback.json	e5a9412cb52042251f50df05bb120a94b5e1a32481a282a08f5fb3c78e12b20e
+2026-08-24T13:24:10Z	2026-08-24T13:24:13Z	0	scripts/staging-task-window-aggregate.sh	canonical-pre-rollout-fingerprint.txt	730aa8d6b2fa0b139fd82784e9c23f6274ad5bd63bd8ba4136fefb5bed97bfdd
+2026-08-24T13:24:57Z	2026-08-24T13:24:57Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-pre-rollout-queue-job.json	3e2d7ae22bb039d2c3ceeb98e32bb380c95c94a78b8d87d5423a79227713b50c
+2026-08-24T13:24:57Z	2026-08-24T13:24:58Z	0	render logs --resources job-da64c1e417fc739a4ll0 --start 2026-08-24T13:24:15Z --end 2026-08-24T13:24:55Z --text CANONICAL_QUEUE_PRE --output text	canonical-pre-rollout-queue-counts.txt	c4d7191658dd37112322cd22a258fc7b2e74e5309980ea40b2c44e712cc4551a
+2026-08-24T13:25:16Z	2026-08-24T13:25:17Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-resume.txt	6e4472d3ae744a5f205d5ba100c314697308020c4ca01496f665ba0f00d69bb8
+2026-08-24T13:25:19Z	2026-08-24T13:25:20Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-deploy-created.json	49067e4b965c45b80fb0b54ae522ca039cb8e6eee8a7fad7510d4e6a948a8ca2
+2026-08-24T13:26:41Z	2026-08-24T13:26:41Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-deploy-live.json	b9cfddddd51f51ab7a6e43da74fb95cbc3515175b57bd6c24a1ee01f306c883d
+2026-08-24T13:26:41Z	2026-08-24T13:26:42Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-live-service.json	cb1e5e78bf8c7a435d9b7c61a2d176d6fb266af26fdeee2a66d5bc6d512a83c4
+2026-08-24T13:26:42Z	2026-08-24T13:26:43Z	0	render logs --resources srv-d9n28ue417fc73ch2b60 --start 2026-08-24T13:26:25Z --text '<REDACTED_COMPLEX_ARG>' --output text	canonical-worker-startup.txt	1ba9c60c4dad3203c96527dbaac90a102d0c2be535d9f2e241b3dae9a7358ec5
+2026-08-24T13:26:43Z	2026-08-24T13:26:46Z	0	scripts/staging-task-window-aggregate.sh	canonical-post-rollout-fingerprint.txt	f685ff4591b89e090f9d8eb5b70cdf1ef2d49219988ff215f976bb0df951fec1
+2026-08-24T13:27:31Z	2026-08-24T13:27:31Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-post-rollout-queue-job.json	c4b559f15b4bf5f927422f7c96f5ef5aed2758d833e7850b1f4744dd7cdbef45
+2026-08-24T13:27:31Z	2026-08-24T13:27:52Z	0	render logs --resources job-da64d761egvs73a20qng --start 2026-08-24T13:26:48Z --end 2026-08-24T13:27:30Z --text CANONICAL_QUEUE_POST --output text	canonical-post-rollout-queue-counts.txt	5a0bee58e6c996147589efdd58048bc184391acea4f8a613d4aa017c280d6726
+2026-08-24T13:28:02Z	2026-08-24T13:28:05Z	0	scripts/staging-task-window-aggregate.sh	canonical-sustained-fingerprint.txt	11f9b69862328a88b85f18128232bb81f3942e4c66bfd0a68c647463ecdb2b76
+2026-08-24T13:28:41Z	2026-08-24T13:28:42Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-sustained-queue-job.json	6454db587a5c53d866443b5f36f818d413fa7d908dec736faa472e38c16e76dc
+2026-08-24T13:28:42Z	2026-08-24T13:28:42Z	0	render logs --resources job-da64dpek1f9s7390i0ng --start 2026-08-24T13:28:00Z --end 2026-08-24T13:28:35Z --text CANONICAL_QUEUE_SUSTAINED --output text	canonical-sustained-queue-counts.txt	2be0fa162316e4c92dcff4079eea457150080445a4c6a77087cbfdf912a69349
+2026-08-24T13:28:50Z	2026-08-24T13:28:50Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-complete-window-compare.txt	5f4ae3201f8fc62749f6907494d647b07f81b0f14ff4339cf5be9b44a23d7e9e
+2026-08-24T13:29:00Z	2026-08-24T13:29:00Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-complete-window-verified.txt	a710b11a7b5bd00ff6d38043638fc649af8c9e4e42808ddda633167b3ce55312
+2026-08-24T13:29:17Z	2026-08-24T13:29:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-production-web-service-final.json	ae0821bb2122e286c2c33664bb9a96f84aa59b86b8e6d7488a68a8ccc4752070
+2026-08-24T13:29:18Z	2026-08-24T13:29:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-production-worker-service-final.json	8ef6ca41137dcdd22d4439707163738d579258bd14c1c2fe4bcb6faa27df7d3c
+2026-08-24T13:29:18Z	2026-08-24T13:29:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-production-service-compare.txt	6912f249786f0a5d40fae43d4100e8033f12bb25ba9c44766fe015b66d614358
+2026-08-24T13:29:26Z	2026-08-24T13:29:26Z	0	scripts/staging-health-probe.sh	canonical-hold-final-503.txt	b6ae8b62702cc4aecf72bc4629514ee1fd787fd436cd62542ec980b7591df8e5
+2026-08-24T13:29:26Z	2026-08-24T13:29:27Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-db-allowlist-clear.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T13:29:27Z	2026-08-24T13:29:28Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-db-allowlist-final.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T13:29:28Z	2026-08-24T13:29:28Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-maintenance-disable.json	3f86518d272f8cc12267cb25dcb3d8ee0fbef0c39164631bd3d1e26bba0b57bb
+2026-08-24T13:29:34Z	2026-08-24T13:29:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-release-propagation.txt	cf8660c65b07c4d2306dd77319b188eea8b91d3a0bd654631db078bd60ecba71
+2026-08-24T13:29:34Z	2026-08-24T13:29:34Z	0	scripts/staging-health-probe.sh	canonical-release-health-200.txt	76d9fc89ab9e70d1be123e8af44752843247c4be42021a64f3d136943be34ecb
+2026-08-24T13:30:12Z	2026-08-24T13:30:12Z	0	scripts/staging-health-probe.sh	canonical-release-sustained-200.txt	3f7a6870be210681946b2d9be7e4512e37b5f4024797edc869855c182a714bf8
+2026-08-24T13:30:18Z	2026-08-24T13:30:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-staging-web-service-final.json	0a1a3e155edd0a1d10e5aa551fdd858f8a81e25de8619348437094d04d4752a0
+2026-08-24T13:30:18Z	2026-08-24T13:30:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-staging-worker-service-final.json	1c1a911e51d7c7b8a54aba1e9b1f2018769f869bf593e4c1791233928f7dab09
+2026-08-24T13:30:19Z	2026-08-24T13:30:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-staging-worker-deploy-final.json	b9cfddddd51f51ab7a6e43da74fb95cbc3515175b57bd6c24a1ee01f306c883d
+2026-08-24T13:30:19Z	2026-08-24T13:30:20Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-origin-main-final.txt	79ebea1ae427fb0fc23eca67d15c532280b89ddaa30f4f1fc9cf5a0b91a27669
+2026-08-24T13:32:41Z	2026-08-24T13:32:42Z	0	npm run test:web-container	canonical-final-web-container-tests.txt	26c1c2de600a30605c9b6d50982ce66014c2724caaafd413291a42fa96e575b1
+2026-08-24T13:32:42Z	2026-08-24T13:32:44Z	0	npx tsc --noEmit	canonical-final-tsc.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:32:44Z	2026-08-24T13:32:44Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-final-shell-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:32:44Z	2026-08-24T13:32:44Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-final-json-parse.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:32:44Z	2026-08-24T13:32:44Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	canonical-final-sanitization.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
+2026-08-24T13:33:09Z	2026-08-24T13:33:11Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	canonical-final-ledger-integrity.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

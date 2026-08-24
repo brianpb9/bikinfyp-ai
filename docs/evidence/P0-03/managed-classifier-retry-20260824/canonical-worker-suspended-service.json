@@ -1,0 +1,18 @@
+{
+  "id": "srv-d9n28ue417fc73ch2b60",
+  "branch": "staging/exact-73280ff-20260824",
+  "autoDeploy": "no",
+  "suspended": "suspended",
+  "updatedAt": "2026-08-24T13:23:52.537812Z",
+  "type": "background_worker",
+  "serviceDetails": {
+    "runtime": "docker",
+    "plan": "standard",
+    "region": "singapore",
+    "envSpecificDetails": {
+      "dockerCommand": "",
+      "dockerContext": ".",
+      "dockerfilePath": "Dockerfile.worker"
+    }
+  }
+}

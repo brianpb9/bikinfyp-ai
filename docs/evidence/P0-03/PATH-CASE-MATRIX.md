@@ -893,12 +893,14 @@ TASK=`P0-B2-MANAGED-CLASSIFIER-RETRY-20260824`
   **UNPROVEN** and is not used. Remediation held web intake, suspended worker,
   accounted for four legacy non-terminal promo rows, and proved both BullMQ
   queues empty before worker rollout.
-- The final retained replay fingerprints every row of jobs, promo jobs,
-  provider tasks, all credit-ledger types, and payments including mutable
-  status/payload fields before resume while worker is suspended, immediately
-  after exact deploy, and after a sustained wait. Both queues are also counted
-  at all three boundaries. Normalized snapshots match exactly; counts, costs,
-  ledger delta, payment amount, and queue counts did not change.
+- The final canonical replay first retains an actual external HTTP 503, then
+  fingerprints every row of jobs, promo jobs, provider tasks, all
+  credit-ledger types, and payments including mutable status/payload fields
+  before resume while worker is suspended, immediately after exact deploy,
+  and after a sustained wait. Both queues are also counted at all three
+  boundaries, followed by a second retained 503. Normalized snapshots match
+  exactly; counts, costs, ledger delta, payment amount, and queue counts did
+  not change.
 - The temporary database `/32` was cleared, maintenance was released only
   after exact-SHA parity, and sustained public health remained exact-SHA and
   classifier-capable. Production services and origin `main` were untouched.

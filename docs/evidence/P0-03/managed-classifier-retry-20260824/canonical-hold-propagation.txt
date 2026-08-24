@@ -1,0 +1,2 @@
+observed_at=2026-08-24T13:23:35Z attempt=1 http_status=200
+observed_at=2026-08-24T13:23:37Z attempt=2 http_status=503

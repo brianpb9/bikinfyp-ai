@@ -53,3 +53,11 @@ The first replay queue-inspection one-off job failed before connecting because
 its inline JavaScript was over-escaped. Its failed terminal status is retained.
 The successful replacement job then emitted both pre-rollout queue counts while
 the main worker remained suspended; no failed attempt output is used as proof.
+
+Reviewer returned a third `CHANGES_REQUESTED` because the earlier
+`replay-hold-503.txt` actually recorded HTTP 200 during maintenance
+propagation. That replay is invalid as a controlled-window proof even though
+its later snapshots matched. The final proof uses only `canonical-*`: it
+retains the 200-to-503 propagation, a separate 503 before suspend/baseline, a
+second 503 after all sustained comparisons, and the final 200 release probes.
+No `replay-*` fingerprint or queue artifact is used for the canonical verdict.

@@ -48,6 +48,16 @@ Evidence groups:
 - `replay-production-*-service-final.json` plus
   `replay-production-service-compare.txt`: post-replay allowlisted production
   configuration and exact comparison with pre-task baselines.
+- `canonical-hold-propagation.txt`, `canonical-hold-503.txt`, and
+  `canonical-hold-final-503.txt`: the fail-closed final hold sequence, including
+  an external 503 both before the suspended baseline and after sustained
+  comparisons;
+- `canonical-pre-rollout-*`, `canonical-post-rollout-*`, and
+  `canonical-sustained-*`: the only fingerprint and queue artifacts used for
+  the final controlled-window verdict; and
+- `canonical-production-*`, `canonical-db-*`, `canonical-release-*`, and
+  `canonical-staging-*`: final production equivalence, allowlist restoration,
+  release health, and staging control state.
 
 The first four `pre-*-service.json` files ending without `-retry` record a
 capture-helper credential-parser failure before the successful allowlisted
@@ -57,11 +67,14 @@ database aggregate failure is likewise retained.
 The evidence ledger covers all captured external reads and mutations used for
 the managed conclusion. An earlier remediation attempt had uncaptured initial
 transitions and only post-rollout fingerprints; it is historical and not the
-final safety basis. The final `replay-*` sequence retains maintenance hold,
-worker suspend/resume, suspended service readback, pre-resume fingerprints and
-queue counts, deploy terminal state, immediate and sustained observations,
-allowlist restoration, post-replay production service readbacks, and release
-health.
+final safety basis. The later `replay-*` sequence also failed the
+controlled-window standard because its supposed pre-baseline hold artifact
+returned HTTP 200. It is retained but invalid for the final verdict. Only the
+final `canonical-*` sequence retains an actual external 503 before worker
+suspend/baseline, another 503 after sustained comparisons, worker
+suspend/resume, pre-resume fingerprints and queue counts, deploy terminal
+state, immediate and sustained observations, allowlist restoration,
+post-window production service readbacks, and release health.
 Additional local `jq`, `sed`, `rg`, `head`, `tail`, and `wc` inspections were
 read-only conveniences and are not the sole source for any conclusion.
 Pre-helper read-only discovery is disclosed in `NOTES.md` without invented

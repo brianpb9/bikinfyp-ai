@@ -18,9 +18,10 @@ The original task-window aggregate was insufficient and is explicitly
 **UNPROVEN**: it did not fingerprint pre-existing rows or every ledger/payment
 mutation. It is retained as historical evidence, but it is not the basis for
 the final safety verdict. Reviewer remediation ultimately established a
-retained replay window using complete-table fingerprints and queue probes from
-before worker resume/deploy through immediate and sustained post-deploy
-observations. Only that replay is the basis for the final safety verdict.
+retained canonical window using complete-table fingerprints and queue probes
+from before worker resume/deploy through immediate and sustained post-deploy
+observations. Only the `canonical-*` replay is the basis for the final safety
+verdict.
 
 Staging web and worker are live on the accepted exact SHA. Web uses `runtime=docker`,
 `Dockerfile.web`, context `.`, `/api/health`, branch
@@ -28,7 +29,7 @@ Staging web and worker are live on the accepted exact SHA. Web uses `runtime=doc
 Worker uses the same exact staging branch, `runtime=docker`, context `.`,
 `Dockerfile.worker`, and `autoDeploy=no`. Its original explicit parity deploy
 is `dep-da63u33bc2fs73as12j0` (`trigger=api`); the final retained replay deploy
-is `dep-da645pu1egvs73a1fljg` (`trigger=service_resumed`), also live on the
+is `dep-da64cfbncjis73alvbn0` (`trigger=service_resumed`), also live on the
 exact accepted SHA.
 The managed health body repeatedly reports:
 
@@ -83,11 +84,11 @@ aggregate remained identical before the allowlist was restored to its empty
 prestate. Those narrow aggregates are not sufficient to prove the old
 zero-money claim and are superseded for the final verdict.
 
-The final replay fingerprinted every row of `jobs`, `promo_jobs`,
+The final canonical replay fingerprinted every row of `jobs`, `promo_jobs`,
 `provider_tasks`, `credit_ledger` (all types), and `payments` (including status
-and payload fields) at `2026-08-24T13:09:37Z` while worker was suspended, at
-`13:12:48Z` immediately after exact-SHA deploy `dep-da645pu1egvs73a1fljg`
-became live, and at `13:13:54Z` after a sustained wait. Normalized snapshots
+and payload fields) at `2026-08-24T13:24:13Z` while worker was suspended, at
+`13:26:46Z` immediately after exact-SHA deploy `dep-da64cfbncjis73alvbn0`
+became live, and at `13:28:05Z` after a sustained wait. Normalized snapshots
 match exactly. Counts, total costs, ledger delta, payment amount, and all
 fingerprints remained identical; no row was created in the window. Jobs had
 zero active/queued rows. Four legacy promo rows remained non-terminal but
@@ -112,18 +113,20 @@ Three interim probes from `2026-08-24T12:59:39Z` through
 `2026-08-24T13:01:14Z` all returned HTTP
 200 with the identical health-body SHA-256 and exact accepted build SHA.
 
-The final replay re-enabled maintenance at `2026-08-24T13:09:07Z`, retained
-external HTTP 503, and kept that hold through the complete pre/post/sustained
-fingerprint and queue comparisons. After database allowlist restoration,
-maintenance release propagated from one retained 503 at `13:15:16Z` to HTTP
-200 at `13:15:35Z` and sustained identical HTTP 200 at `13:16:05Z`.
+The final canonical replay enabled maintenance at `2026-08-24T13:23:34Z`,
+polled external health from HTTP 200 to HTTP 503, separately retained that 503
+at `13:23:37Z`, and only then suspended worker and captured the baseline. A
+second 503 at `13:29:26Z` proves the hold remained through the complete
+pre/post/sustained fingerprint and queue comparisons. After database allowlist
+restoration, maintenance release returned HTTP 200 at `13:29:34Z` and
+sustained identical HTTP 200 at `13:30:12Z`.
 
 Staging worker service/config now intentionally matches web at the accepted
 exact SHA while preserving its Docker worker contract. The worker startup log
 shows both `racun-jobs-staging` and `racun-promo-jobs` consumers, and the
 post-deploy read-only queue probe shows zero work in both queues.
 Production web and worker allowlisted service API objects were read back after
-the replay at `2026-08-24T13:15Z`. Their complete allowlisted `response`
+the canonical replay at `2026-08-24T13:29Z`. Their complete allowlisted `response`
 objects—including branch, runtime, commands, suspension, maintenance, and
 auto-deploy state—are byte-equivalent to the pre-task baselines. Their latest
 deploy records are unchanged. Origin `main` stayed at
