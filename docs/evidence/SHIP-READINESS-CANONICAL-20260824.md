@@ -126,6 +126,17 @@ classification, migration, atau payment proof. Absence blok classification
 berarti probe belum terbukti deployed, bukan runtime dinyatakan mampu/tidak
 mampu. Bukti ini tidak memberi credit pada current HEAD dan skor tetap 58/100.
 
+Production juga mempunyai refresh read-only tersanitasi di
+`docs/evidence/P0-03/production-20260824/`, dengan provenance di `MANIFEST.md`
+dan ringkasan di
+`docs/evidence/P0-03/PRODUCTION-CONTROL-PLANE-READONLY-REFRESH-20260824.md`.
+Web dan worker live pada SHA lama yang sama,
+`00ee62efd86ae7e10453a2a1896e63b62228aa4d`; health HTTP 200 mengikat
+`build_sha` itu serta melaporkan intake closed, Duitku sandbox, dan
+`payments_live=false`. `/api/meta` publik menjawab 401. Tiga URL legal menjawab
+200 dengan body non-kosong, tetapi availability bukan counsel signoff. Bukti
+production ini tidak menutup external gates atau menaikkan skor 58/100.
+
 ### Local-only
 
 - Seluruh perubahan setelah SHA staging lama, termasuk accepted task 24 Agu.

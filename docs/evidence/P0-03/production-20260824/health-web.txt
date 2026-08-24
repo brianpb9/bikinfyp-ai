@@ -1,0 +1,6 @@
+OBSERVED_START_UTC=2026-08-24T06:01:32Z
+OBSERVED_START_LOCAL=2026-08-24T13:01:32+0700 Asia/Jakarta
+{"ok":true,"intake":"closed","payments_provider":"duitku","payments_env":"sandbox","payments_live":false,"build_sha":"00ee62efd86ae7e10453a2a1896e63b62228aa4d"}
+HTTP_STATUS=200
+EXIT=0
+OBSERVED_END_UTC=2026-08-24T06:01:32Z
