@@ -61,7 +61,11 @@ export function tanpaNominalHargaTertulis(text: string): string {
   return text
     .replace(/\b(?:rp|idr)\s*\.?\s*\d+(?:[.,]\d{3})*\b(?![.,]\d)/gi, " ")
     .replace(/\d+(?:[.,]\d{3})*\s*rupiah\b/gi, " ")
-    .replace(/\d+(?:[.,]\d+)?\s*(?:ribu|rb|ribuan|juta|jt|perak)\b/gi, " ");
+    // Harus identik dengan grammar integer `perak` di detektor. Bentuk
+    // malformed seperti "1,5 perak" sengaja tidak dihapus agar digitnya
+    // tetap diperiksa L-14.
+    .replace(/(?<![\w.,])\d+(?:[.,]\d{3})*\s*perak\b/gi, " ")
+    .replace(/\d+(?:[.,]\d+)?\s*(?:ribu|rb|ribuan|juta|jt)\b/gi, " ");
 }
 
 /**
@@ -83,7 +87,7 @@ export function deteksiHargaIndonesia(text: string): HargaIndonesiaMention[] {
 
   // Perak adalah rupiah bulat: titik/koma tiga digit merupakan pemisah
   // ribuan Indonesia, bukan pecahan seperti pada "1,5 juta".
-  const perak = /(\d+(?:[.,]\d{3})*)\s*perak\b/gi;
+  const perak = /(?<![\w.,])(\d+(?:[.,]\d{3})*)\s*perak\b/gi;
   for (const match of text.matchAll(perak)) add(match, nilaiNominalPenuh(match[1]), "unit");
   const unit = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
   for (const match of text.matchAll(unit)) {

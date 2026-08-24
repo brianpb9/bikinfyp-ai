@@ -638,6 +638,15 @@ test("SA6 strict mengunci exact bridge set menurut template dan harga immutable"
     assert.ok(mismatch.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)), groupedPerak);
     assert.ok(mismatch.errors.some((error) => error.rule === "L-14" && /1000/.test(error.message_id)), groupedPerak);
   }
+  for (const [malformedPerak, suffixPrice] of [["1,5 perak", 5], ["12.34 perak", 34]] as const) {
+    const malformed = structuredClone(LIVE_ADS_SAFE);
+    malformed[2].text = `Harganya ${malformedPerak}.`;
+    malformed[2].bridge_source = "spoken_approved_price";
+    const rejected = validate(malformed, "promo-terbatas", "Kemeja Uji", "fashion", suffixPrice);
+    assert.equal(rejected.passed, false, malformedPerak);
+    assert.ok(rejected.errors.some((error) => error.rule === "L-14"), `${malformedPerak}: ${JSON.stringify(rejected.errors)}`);
+    assert.ok(rejected.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)), malformedPerak);
+  }
 });
 
 test("SA6 non-price menangkap notasi harga Indonesia tanpa menolak angka biasa", () => {
@@ -684,6 +693,9 @@ test("detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka
   assert.deepEqual(deteksiHargaIndonesia("Rp189000").map((mention) => mention.nilai), [189_000]);
   assert.deepEqual(deteksiHargaIndonesia("1.000 perak").map((mention) => mention.nilai), [1_000]);
   assert.deepEqual(deteksiHargaIndonesia("1,000 perak").map((mention) => mention.nilai), [1_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1,5 perak"), []);
+  assert.deepEqual(deteksiHargaIndonesia("12.34 perak"), []);
+  assert.deepEqual(deteksiHargaIndonesia("kode5 perak"), []);
   assert.deepEqual(deteksiHargaIndonesia("1.000 ribu").map((mention) => mention.nilai), [1_000]);
   assert.deepEqual(deteksiHargaIndonesia("1,000 juta").map((mention) => mention.nilai), [1_000_000]);
   assert.deepEqual(deteksiHargaIndonesia("1,5 ribu").map((mention) => mention.nilai), [1_500]);
