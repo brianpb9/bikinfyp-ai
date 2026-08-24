@@ -17,6 +17,7 @@ import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
+import { releaseSessionAdvisoryLock } from "@/lib/postgres/evidence-lock-pool";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -235,7 +236,7 @@ export async function POST(req: Request) {
     // Advisory lock membuat dua permintaan kembar yang datang bersamaan
     // berbaris, bukan sama-sama lolos pemeriksaan "belum ada" lalu sama-sama
     // membuat 24 job. Lock dilepas di blok finally di bawah.
-    const kunciLock = await pool.connect();
+    const kunciLock = await routeDeps.connectMatrixRunLockClient();
     let sudahAda: { job_id: string }[] = [];
     try {
       await kunciLock.query("SELECT pg_advisory_lock(hashtext($1))", [runId]);
@@ -244,15 +245,24 @@ export async function POST(req: Request) {
       );
       sudahAda = lama.rows.map((r) => ({ job_id: r.id }));
     } catch (err) {
-      kunciLock.release();
+      await releaseSessionAdvisoryLock({
+        client: kunciLock,
+        sql: "SELECT pg_advisory_unlock(hashtext($1)) AS unlocked",
+        values: [runId],
+        label: "matrix-run-lock",
+      });
       throw err;
     }
 
     // Permintaan ini sudah pernah dijalankan. Jawab dengan hasil yang SAMA,
     // tanpa membuat skrip, job, atau tahanan kredit apa pun yang baru.
     if (sudahAda.length) {
-      await kunciLock.query("SELECT pg_advisory_unlock(hashtext($1))", [runId]).catch(() => undefined);
-      kunciLock.release();
+      await releaseSessionAdvisoryLock({
+        client: kunciLock,
+        sql: "SELECT pg_advisory_unlock(hashtext($1)) AS unlocked",
+        values: [runId],
+        label: "matrix-run-lock",
+      });
       await jobsRepo.close(); await creditsRepo.close();
       return Response.json({
         run_id: runId, duplicated: true,
@@ -375,8 +385,12 @@ export async function POST(req: Request) {
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
       await evidenceLease?.release();
-      await kunciLock.query("SELECT pg_advisory_unlock(hashtext($1))", [runId]).catch(() => undefined);
-      kunciLock.release();
+      await releaseSessionAdvisoryLock({
+        client: kunciLock,
+        sql: "SELECT pg_advisory_unlock(hashtext($1)) AS unlocked",
+        values: [runId],
+        label: "matrix-run-lock",
+      });
       await jobsRepo.close();
       await creditsRepo.close();
     }

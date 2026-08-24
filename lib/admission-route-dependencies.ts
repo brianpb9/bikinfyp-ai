@@ -15,6 +15,7 @@ import { config } from "./config";
 import { getPool } from "./postgres/pool";
 import { PgJobsRepository } from "./postgres/jobs";
 import { PgCreditPaymentRepository } from "./postgres/credit-payment";
+import { connectMatrixRunLockClient } from "./postgres/evidence-lock-pool";
 
 const productionDependencies = {
   getAuthUser,
@@ -28,6 +29,7 @@ const productionDependencies = {
   smokeCreateScripts,
   smokeGetOrgProduct,
   smokeGetProduct,
+  connectMatrixRunLockClient: () => connectMatrixRunLockClient(config.databaseUrl),
   createMatrixResources: () => ({
     pool: getPool(config.databaseUrl),
     jobsRepo: new PgJobsRepository(config.databaseUrl),

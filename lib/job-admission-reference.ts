@@ -3,7 +3,7 @@ import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { pesanTanpaReferensi, resolveApprovedReference } from "./product-truth";
 import { mediaStorage } from "./storage";
 import { config } from "./config";
-import { getPool } from "./postgres/pool";
+import { connectEvidenceLockClient, releaseSessionAdvisoryLock } from "./postgres/evidence-lock-pool";
 import type { PoolClient } from "pg";
 
 type ProductEvidenceBoundary = "A2" | "A3" | "A5" | "A7";
@@ -14,7 +14,7 @@ const postgresRuntimeEnabled = () =>
 type EvidenceLockClient = PoolClient;
 const productionLockDependencies = {
   postgresRuntimeEnabled,
-  connect: async (): Promise<EvidenceLockClient> => getPool(config.databaseUrl).connect(),
+  connect: async (): Promise<EvidenceLockClient> => connectEvidenceLockClient(config.databaseUrl),
   useProcessLocalLock: true,
 };
 type EvidenceLockDependencies = typeof productionLockDependencies;
@@ -52,27 +52,12 @@ async function acquireLocalProductOperation(productId: string): Promise<() => vo
 }
 
 async function unlockAndRelease(client: EvidenceLockClient, productId: string): Promise<void> {
-  let unlockError: Error | null = null;
-  try {
-    const result = await client.query<{ unlocked: boolean }>(
-      "SELECT pg_advisory_unlock(hashtextextended($1, 881731)) AS unlocked",
-      [productId],
-    );
-    if (!result.rows[0]?.unlocked) throw new Error(`Evidence advisory lock ${productId} was not held`);
-  } catch (error) {
-    unlockError = error instanceof Error ? error : new Error(String(error));
-  }
-  if (unlockError) {
-    // Never return a possibly lock-bearing connection to the pool. Passing the
-    // error destroys it, and cleanup failure must not replace a provider/setup
-    // result after effects have already happened.
-    try { client.release(unlockError); }
-    catch (releaseError) { console.error("[admission-evidence] failed to evict lock client:", releaseError); }
-    console.error("[admission-evidence] advisory unlock failed:", unlockError);
-    return;
-  }
-  try { client.release(); }
-  catch (releaseError) { console.error("[admission-evidence] failed to return unlocked client:", releaseError); }
+  await releaseSessionAdvisoryLock({
+    client,
+    sql: "SELECT pg_advisory_unlock(hashtextextended($1, 881731)) AS unlocked",
+    values: [productId],
+    label: "admission-evidence",
+  });
 }
 
 async function acquirePostgresProductLock(productId: string): Promise<EvidenceLockClient> {

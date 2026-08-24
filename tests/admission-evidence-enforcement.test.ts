@@ -299,6 +299,7 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
   const fakeClient = {
     async query(sql: string) {
       if (sql.includes("SELECT id FROM jobs")) return { rows: duplicateRows, rowCount: duplicateRows.length };
+      if (sql.includes("pg_advisory_unlock")) return { rows: [{ unlocked: true }], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     },
     release() {},
@@ -330,6 +331,7 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
     pgFindOrCreatePersona: async () => { effects.db++; throw new Error("VALID_CONTROL_DB_BOUNDARY"); },
     generateScripts: async () => { effects.provider++; throw new Error("VALID_CONTROL_PROVIDER_BOUNDARY"); },
     smokeCreateScripts: async () => { effects.db++; return []; },
+    connectMatrixRunLockClient: async () => fakeClient as never,
     createMatrixResources: () => fakeResources as never,
   });
   setMediaStorageForTests({
