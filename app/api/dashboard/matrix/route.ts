@@ -20,6 +20,7 @@ import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
+import { assertAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -103,9 +104,14 @@ export async function POST(req: Request) {
     const product = await smokeGetOrgProduct(membership.org_id, productId);
     if (!product) throw ERR.NOT_FOUND("Produknya");
     if (!product.price_idr) throw ERR.BAD_REQUEST("Isi harga produknya dulu — harga dipakai di skrip dan overlay.", "Product price is required.");
-    if ((JSON.parse(product.images || "[]") as string[]).length === 0) {
+    const productImages = JSON.parse(product.images || "[]") as string[];
+    if (productImages.length === 0) {
       throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko untuk iklan jasa.", "At least one image is required.");
     }
+    // A2 can call the script provider before renderSatuSel reaches the durable
+    // A4 job admission. Reject invalid evidence before that first provider
+    // boundary; A4 still repeats the authoritative check under its row lock.
+    await assertAdmissionReferenceEvidence({ productId: product.id, candidateRels: productImages, boundary: "A2" });
 
     // ---- format: TIDAK ADA format global ----
     //

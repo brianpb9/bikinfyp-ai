@@ -10,6 +10,7 @@ import { tierMasihDijual } from "@/lib/paket-kredit";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { allowRate } from "@/lib/rate-limit";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
+import { assertAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,6 +88,15 @@ export async function POST(req: Request) {
     // Produk organisasi WAJIB lewat dashboard (RBAC belanja + gerbang review
     // scene + library org). Lihat pastikanBukanProdukOrg.
     pastikanBukanProdukOrg(product);
+
+    // A7 is provider-consuming even though it does not create a render job.
+    // Invalid provenance must stop before the script LLM is invoked or a
+    // script row is persisted.
+    await assertAdmissionReferenceEvidence({
+      productId: product.id,
+      candidateRels: JSON.parse(product.images || "[]") as string[],
+      boundary: "A7",
+    });
 
     // Jaring pengaman nama (canary temuan #4): nama sah 4-6 kata bisa memakan
     // jendela kata L-05/S-09 sampai penulis mustahil lolos. Enterprise sudah

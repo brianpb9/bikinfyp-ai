@@ -21,6 +21,7 @@ import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
+import { assertAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -52,6 +53,13 @@ export async function POST(req: Request) {
     // menolak rekan satu tim atas produk yang jelas ada di daftar mereka.
     const product = await smokeGetOrgProduct(membership.org_id, productId);
     if (!product) throw ERR.NOT_FOUND("Produknya");
+    // A5 creates/reuses persona rows before its per-cell A4 transaction. Gate
+    // evidence first so an invalid product leaves no admission setup behind.
+    await assertAdmissionReferenceEvidence({
+      productId: product.id,
+      candidateRels: JSON.parse(product.images || "[]") as string[],
+      boundary: "A5",
+    });
 
     const scriptIds: string[] = (Array.isArray(body.script_ids) ? body.script_ids : [])
       .map((s: unknown) => String(s ?? "")).filter(Boolean).slice(0, MAX_VIDEOS);

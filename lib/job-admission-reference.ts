@@ -1,7 +1,33 @@
 import { parseJobReferenceManifest, prepareJobReferenceManifest, type JobReferenceManifest } from "./job-reference-manifest";
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
-import { pesanTanpaReferensi } from "./product-truth";
+import { pesanTanpaReferensi, resolveApprovedReference } from "./product-truth";
 import { mediaStorage } from "./storage";
+
+/**
+ * Read-only product-evidence gate for provider-consuming work that happens
+ * before a job id exists (script generation, matrix expansion, and campaign
+ * confirmation setup).
+ *
+ * This deliberately does not create the durable per-job snapshot; the
+ * authoritative admission path still calls prepareAdmissionReferenceManifest
+ * under its product-row lock. The preflight only prevents an invalid product
+ * from reaching an LLM/provider or leaving setup rows behind before that
+ * authoritative transaction runs.
+ */
+export async function assertAdmissionReferenceEvidence(input: {
+  productId: string;
+  candidateRels: string[];
+  boundary: "A2" | "A3" | "A5" | "A7";
+}): Promise<void> {
+  const resolution = await resolveApprovedReference(input.candidateRels);
+  catatKanariReferensi(resolution, {
+    produkId: input.productId,
+    runtime: `admission-preflight-${input.boundary}`,
+  });
+  if (!resolution.utama) {
+    throw new GagalTanpaReferensi(pesanTanpaReferensi(resolution), resolution);
+  }
+}
 
 /**
  * Canonical admission wrapper. It preserves the worker's existing

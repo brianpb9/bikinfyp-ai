@@ -10,6 +10,7 @@ import { normalizeHookLevel } from "@/lib/config/hooks";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { tierMasihDijual } from "@/lib/paket-kredit";
 import { getAvatarPreset } from "@/lib/avatar-presets";
+import { assertAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -47,6 +48,9 @@ export async function POST(req: Request) {
     // sampai terbukti; meminta satu visual bisnis jauh lebih murah daripada
     // menjanjikan sesuatu yang belum tentu jalan.
     if (images.length === 0) throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko/screenshot app untuk iklan jasa.", "At least one image is required.");
+    // A3 invokes the script writer. Evidence must be valid before that paid
+    // provider call or any script row can be created.
+    await assertAdmissionReferenceEvidence({ productId: product.id, candidateRels: images, boundary: "A3" });
 
     const count = Number.isFinite(Number(body.count)) ? Math.round(Number(body.count)) : 0;
     if (count < MIN_VIDEOS || count > MAX_VIDEOS) {
