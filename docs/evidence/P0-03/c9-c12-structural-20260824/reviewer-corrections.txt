@@ -18,3 +18,12 @@ lib/job-reference-manifest.ts:71:      throw new Error(`REF_HASH_MISMATCH: isi $
 DIRECT_RETAIL_E3_E5_TO_W1_TEST_STATUS=UNCOVERED
 SOURCE_ONLY_CORRECTION=true
 REMOTE=false paid=false deploy=false production_data=false
+
+[C9 LIVE PROMO EXCEPTION]
+lib/job-product-snapshot.ts:3-16: JobProductSnapshot excludes promo_price_before_idr, promo_ends_at, promo_stock_left.
+lib/worker.ts:396-401: W2 resolvePromo reads current product promo fields.
+lib/postgres/worker.ts:808-809: W1 resolvePromo reads current joined product promo fields.
+tests/product-truth-worker-reference.test.ts:761-787: E3 test mutates/asserts promo row but provider observer does not reach compositor.
+tests/pg-product-truth-w1.test.ts:880-902: E7 test mutates/asserts promo row but provider observer does not reach compositor.
+DIRECT_W1_W2_PROMO_OUTPUT_BOUNDARY_STATUS=UNCOVERED
+PROMO_SNAPSHOT_VS_INTENTIONALLY_LIVE_POLICY=UNRESOLVED

@@ -588,9 +588,17 @@ TASK=`P1-C9-C12-STRUCTURAL-INVENTORY-20260824`
   mechanically found three production job admissions. All three atomically
   install `job_product_snapshot`; none installs
   `approved_reference_manifest`.
-- C9 metadata identity is therefore admission-bound across E3/E7, retry/resume,
-  A6, W1, and W2. The requested `SNAPSHOT_IMMUTABLE` reason/status remains a
-  proposal and is absent from the current runtime.
+- C9 is admission-bound only for the core fields represented by
+  `job_product_snapshot`: name, category, price, trusted brand, visual
+  description, brand brief, and claims. Promo price-before, deadline, and stock
+  are excluded; W1/W2 read them from the current product row and use them in
+  `resolvePromo`/compositor overlays. E3/E7 can therefore change rendered promo
+  claims after admission. Existing mutation tests stop at provider-prompt
+  observers and do not cover this output boundary. `SNAPSHOT_IMMUTABLE` remains
+  proposal-only.
+- This is an append-only correction to the broader historical wording in the
+  main C9 row and E.10/E.12: “metadata snapshot” there means only the represented
+  core subset, not promo overlay inputs.
 - Correction/addition to the earlier C12 summary: after the first manifest
   install, E5/E9, retry/resume, A6, W1, and W2 preserve and reverify immutable
   job-owned bytes. Before that install, a queued job can observe a mutated
@@ -608,6 +616,9 @@ TASK=`P1-C9-C12-STRUCTURAL-INVENTORY-20260824`
   E5/E9 mutation → first-worker tests, plus direct retail PostgreSQL E3/E5→W1
   cases. Preserve the full current reason-code set unless a separate approved
   work order authorizes a change.
+- Separate C9 evidence/policy boundary: add W1/W2 rendered-output tests for E3/E7
+  promo mutation, then obtain approval to snapshot promo fields or declare them
+  intentionally live. This inventory chooses neither behavior.
 - Exact-baseline verification: structural/route **31/31**, W2 **19/19**, W1
   disposable PostgreSQL **25/25**, and TypeScript all PASS. Full inventory and
   raw proof: `C9-C12-STRUCTURAL-INVENTORY-20260824.md` and
