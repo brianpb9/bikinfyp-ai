@@ -2,12 +2,13 @@
 
 TASK=`STAGING-CONTROL-PLANE-READONLY-REFRESH-20260824`
 
-Dokumen ini merekam proyeksi tersanitasi dari snapshot read-only yang dikirim
-Reviewer melalui `.agent-bus` pada `2026-08-24T05:41:51Z`. Snapshot hanya
-membaca keadaan control-plane dan endpoint health. Builder tidak menjalankan
+Task awal membawa observasi read-only melalui `.agent-bus` pada
+`2026-08-24T05:41:51Z`. Karena bus runtime diabaikan Git, Builder mengulang
+pembacaan secara read-only dan mengikat klaim di bawah ke artefak immutable
+`staging-20260824/` beserta perintah, timestamp, exit status, dan filter
+deterministik di `staging-20260824/MANIFEST.md`. Builder tidak menjalankan
 deploy, restart, migrasi, koneksi database, perubahan konfigurasi, atau mutasi
-remote lain untuk task ini. Tidak ada nilai environment atau credential yang
-direkam.
+remote lain. Tidak ada nilai environment atau credential yang direkam.
 
 ## Service dan live deploy yang diamati
 
@@ -27,7 +28,10 @@ service telah mengambilnya.
 
 ## Health web
 
-Pembacaan berikut dicatat pada `2026-08-24 12:41:34 Asia/Jakarta`:
+Task awal melaporkan body yang sama pada
+`2026-08-24 12:41:34 Asia/Jakarta`. Pembacaan ulang yang sekarang mempunyai
+transcript committed dimulai pada
+`2026-08-24T12:53:07+0700 Asia/Jakarta`:
 
 ```text
 GET https://racun-ai-staging-web.onrender.com/api/health

@@ -113,12 +113,14 @@ Yang **tidak boleh dihitung**:
   24 Agu mengonfirmasi deployment lama itu masih live; keduanya tidak
   membuktikan current accepted tree telah di-deploy.
 
-Latest staging evidence yang authoritative adalah refresh read-only 24 Agu di
+Latest staging evidence yang authoritative adalah artefak read-only 24 Agu di
+`docs/evidence/P0-03/staging-20260824/`, dengan provenance dan filter di
+`MANIFEST.md` serta ringkasan di
 `docs/evidence/P0-03/STAGING-CONTROL-PLANE-READONLY-REFRESH-20260824.md`:
 web `5fe53f27436d917d5232e23ef6c6e624eb00428a`, worker
 `78d84685de6db63724ac2715ef516917d0c4ce3c`. SHA web/worker berbeda,
 `autoDeploy=no`, dan keduanya tidak suspended. `/api/health` web pada
-`2026-08-24 12:41:34 Asia/Jakarta` hanya menjawab
+`2026-08-24T12:53:07+0700 Asia/Jakarta` hanya menjawab
 `{"ok":true,"intake":"open"}` dengan HTTP 200; tidak ada `build_sha`, blok
 classification, migration, atau payment proof. Absence blok classification
 berarti probe belum terbukti deployed, bukan runtime dinyatakan mampu/tidak
