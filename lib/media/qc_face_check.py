@@ -40,6 +40,12 @@ def main() -> None:
     out = []
     max_faces = 0
     max_utama = 0
+    # Model YuNet mahal untuk di-load. Satu invocation menerima seluruh frame
+    # satu video, jadi detector harus hidup sepanjang invocation — bukan dibuat
+    # ulang untuk setiap frame. Input size tetap di-set sebelum SETIAP detect:
+    # katalog dapat berisi frame landscape dan portrait dalam invocation yang
+    # sama, dan FaceDetectorYN mensyaratkan ukuran aktual input.
+    det = cv2.FaceDetectorYN_create(model, "", (320, 320), score_threshold=0.8)
     for path in sys.argv[2:]:
         img = cv2.imread(path)
         if img is None:
@@ -52,7 +58,7 @@ def main() -> None:
         # 2 foto wajah asli sungguhan: skor wajah nyata 0.91 & 0.93 -- gap lebar
         # ke false-positive tertinggi (0.71), jadi 0.8 aman di tengah tanpa
         # kehilangan deteksi wajah sungguhan.
-        det = cv2.FaceDetectorYN_create(model, "", (w, h), score_threshold=0.8)
+        det.setInputSize((w, h))
         _, faces = det.detect(img)
         n = 0 if faces is None else len(faces)
         best = 0.0 if faces is None or len(faces) == 0 else round(float(max(x[-1] for x in faces)), 2)
