@@ -85,14 +85,14 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         // Merek TERDAFTAR ikut — sumber yang sama dengan QC-F1
         // (products.raw_meta.brand), bukan tebakan dari nama produk.
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        if (!label.terbaca) throw ERR.BAD_REQUEST(label.alasan!, "Product label not OCR-readable.");
+        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
         // LUBANG YANG DITUTUP 20 Agu: sampai hari itu hasil kecocokan merek
         // dihitung lalu DIBUANG — hanya `terbaca` yang diperiksa. Karena itu
         // foto AI berlabel "bdodpgeer" lolos jadi referensi dan ikut ke lima
         // render berbayar. Label yang terbaca tapi bukan merek penjualnya
         // sendiri bukan foto produknya.
         if (label.cocokMerek === false) {
-          throw ERR.BAD_REQUEST(label.alasan!, "Product label does not match the registered brand.");
+          throw ERR.BRAND_MISMATCH(label.alasan);
         }
       }
     } finally {

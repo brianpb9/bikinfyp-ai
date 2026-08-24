@@ -104,22 +104,38 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
     const labelName = gate.parent.name.text;
     let unreadableReject = false;
     let brandReject = false;
-    const branchThrows = (branch: ts.Statement): boolean => {
-      let found = false;
+    const assertCanonicalThrow = (branch: ts.Statement, factory: "LABEL_UNREADABLE" | "BRAND_MISMATCH") => {
+      const throws: ts.ThrowStatement[] = [];
       const visit = (node: ts.Node): void => {
         if (node !== branch && functionBoundary(node)) return;
-        if (ts.isThrowStatement(node)) found = true;
+        if (ts.isThrowStatement(node)) throws.push(node);
         ts.forEachChild(node, visit);
       };
       visit(branch);
-      return found;
+      assert.equal(throws.length, 1, `${context}: branch ${factory} wajib tepat satu throw canonical`);
+      const expression = throws[0].expression;
+      assert.ok(expression && ts.isCallExpression(expression)
+        && ts.isPropertyAccessExpression(expression.expression)
+        && ts.isIdentifier(expression.expression.expression)
+        && expression.expression.expression.text === "ERR",
+      `${context}: branch ${factory} wajib memakai factory ERR canonical`);
+      assert.equal(expression.expression.name.text, factory,
+        `${context}: branch wajib memakai reason code ${factory}, bukan generic/tertukar`);
+      assert.deepEqual(expression.arguments.map((arg) => arg.getText(ast)), [`${labelName}.alasan`],
+        `${context}: ${factory} wajib memakai label.alasan dengan fallback factory`);
     };
     const scanRejects = (node: ts.Node): void => {
       if (node !== loop!.statement && functionBoundary(node)) return;
-      if (ts.isIfStatement(node) && branchThrows(node.thenStatement)) {
+      if (ts.isIfStatement(node)) {
         const condition = node.expression.getText(ast).replace(/\s/g, "");
-        if (condition === `!${labelName}.terbaca`) unreadableReject = true;
-        if (condition === `${labelName}.cocokMerek===false`) brandReject = true;
+        if (condition === `!${labelName}.terbaca`) {
+          assertCanonicalThrow(node.thenStatement, "LABEL_UNREADABLE");
+          unreadableReject = true;
+        }
+        if (condition === `${labelName}.cocokMerek===false`) {
+          assertCanonicalThrow(node.thenStatement, "BRAND_MISMATCH");
+          brandReject = true;
+        }
       }
       ts.forEachChild(node, scanRejects);
     };
@@ -320,8 +336,8 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   const e8Control = `export async function POST() {
       for (const blob of blobs) {
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        if (!label.terbaca) throw new Error("unreadable");
-        if (label.cocokMerek === false) throw new Error("brand");
+        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
+        if (label.cocokMerek === false) throw ERR.BRAND_MISMATCH(label.alasan);
       }
       await saveUniqueProductImages(id, blobs);
     }`;
@@ -331,22 +347,22 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
     ["brand arg hilang", `export async function POST() {
       for (const blob of blobs) {
         const label = await periksaLabelFoto(tmpFile, owned.product.name);
-        if (!label.terbaca) throw new Error("unreadable");
-        if (label.cocokMerek === false) throw new Error("brand");
+        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
+        if (label.cocokMerek === false) throw ERR.BRAND_MISMATCH(label.alasan);
       }
       await saveUniqueProductImages(id, blobs);
     }`],
     ["hasil unreadable dibuang", `export async function POST() {
       for (const blob of blobs) {
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        if (label.cocokMerek === false) throw new Error("brand");
+        if (label.cocokMerek === false) throw ERR.BRAND_MISMATCH(label.alasan);
       }
       await saveUniqueProductImages(id, blobs);
     }`],
     ["hasil brand dibuang", `export async function POST() {
       for (const blob of blobs) {
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        if (!label.terbaca) throw new Error("unreadable");
+        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
       }
       await saveUniqueProductImages(id, blobs);
     }`],
@@ -354,8 +370,8 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
       if (!owned.images.length) {
         for (const blob of blobs) {
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        if (!label.terbaca) throw new Error("unreadable");
-        if (label.cocokMerek === false) throw new Error("brand");
+        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
+        if (label.cocokMerek === false) throw ERR.BRAND_MISMATCH(label.alasan);
         }
       }
       await saveUniqueProductImages(id, blobs);
@@ -364,8 +380,34 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   for (const [judul, source] of e8Ditolak) {
     assert.throws(
       () => assertLabelGateBeforePersistence(source, `counterexample E8 ${judul}`, "E8"),
-      /brand terdaftar|brand otoritatif|label tidak terbaca|cocokMerek false|jumlah foto existing|for-of seluruh blobs|sebelum persistence/,
+      /brand terdaftar|brand otoritatif|label tidak terbaca|cocokMerek false|jumlah foto existing|for-of seluruh blobs|sebelum persistence|reason code|factory ERR canonical/,
       `${judul} tidak boleh memenangkan structural guard E8`
+    );
+  }
+
+  const reasonCodeDitolak = [
+    ["generic", `export async function POST() {
+      for (const blob of blobs) {
+        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
+        if (!label.terbaca) throw ERR.BAD_REQUEST(label.alasan);
+        if (label.cocokMerek === false) throw ERR.BAD_REQUEST(label.alasan);
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["tertukar", `export async function POST() {
+      for (const blob of blobs) {
+        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
+        if (!label.terbaca) throw ERR.BRAND_MISMATCH(label.alasan);
+        if (label.cocokMerek === false) throw ERR.LABEL_UNREADABLE(label.alasan);
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+  ] as const;
+  for (const [judul, source] of reasonCodeDitolak) {
+    assert.throws(
+      () => assertLabelGateBeforePersistence(source, `counterexample reason code ${judul}`, "E8"),
+      /reason code (?:LABEL_UNREADABLE|BRAND_MISMATCH), bukan generic\/tertukar/,
+      `${judul} tidak boleh memenangkan guard reason code`
     );
   }
 

@@ -50,6 +50,20 @@ export const ERR = {
     }),
   BAD_REQUEST: (msgId: string, msgEn = "Bad request.") =>
     new ApiError(400, { code: "BAD_REQUEST", message_id: msgId, message_en: msgEn, retryable: false }),
+  LABEL_UNREADABLE: (msgId?: string | null) =>
+    new ApiError(400, {
+      code: "LABEL_UNREADABLE",
+      message_id: msgId?.trim() || "Label produknya belum terbaca. Upload foto yang lebih terang dan fokus ya.",
+      message_en: "Product label not OCR-readable.",
+      retryable: false,
+    }),
+  BRAND_MISMATCH: (msgId?: string | null) =>
+    new ApiError(400, {
+      code: "BRAND_MISMATCH",
+      message_id: msgId?.trim() || "Merek pada foto tidak cocok dengan merek produk. Upload foto produk dengan merek yang benar ya.",
+      message_en: "Product label does not match the registered brand.",
+      retryable: false,
+    }),
   PAYLOAD_TOO_LARGE: (msgId: string, msgEn = "Payload too large.") =>
     new ApiError(413, { code: "PAYLOAD_TOO_LARGE", message_id: msgId, message_en: msgEn, retryable: false }),
   // 403, BUKAN 401: penggunanya sudah masuk dan identitasnya jelas — yang

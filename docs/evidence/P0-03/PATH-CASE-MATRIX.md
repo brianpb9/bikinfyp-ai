@@ -185,8 +185,8 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 |---|---|---|
 | C1 | **PARTIAL** | W1/W2 memilih packshot sah beserta hash lalu mematok manifest ordered `{rel,sha256,versiBukti}` tepat sekali; A6 approve/regenerate memakai manifest itu dan tidak memilih ulang. Tetap PARTIAL karena jalur E/A lain pada baris C1 belum seluruhnya dicakup |
 | C2 | **BLOCKED** | Diblokir implementasi lokal: `TYPE_MISMATCH` dan validasi terkait belum ada di kode mana pun; tidak ada penghalang eksternal |
-| C3 | **PARTIAL** | E4 dan E8 menolak `cocokMerek === false` untuk **setiap blob baru** sebelum persistence; E8 selalu memakai `merekTerdaftar(owned.product)`, termasuk foto tambahan. Cakupan belum lengkap: E1 tidak menjalankan gerbang merek, W1/W2 tidak menegakkan brand mismatch, dan reason code khusus `BRAND_MISMATCH` belum ada |
-| C4 | **PARTIAL** | E4 dan E8 menolak `!label.terbaca` untuk **setiap blob baru** sebelum persistence. Cakupan belum lengkap: E1 tidak menjalankan gerbang label, kebijakan OCR error tetap fail-open, dan reason code khusus `LABEL_UNREADABLE` belum ada |
+| C3 | **PARTIAL** | E4 dan E8 menolak `cocokMerek === false` untuk **setiap blob baru** sebelum persistence dengan canonical `BRAND_MISMATCH` (HTTP 400, `retryable:false`, alasan Indonesia dari classifier atau fallback actionable); E8 selalu memakai `merekTerdaftar(owned.product)`, termasuk foto tambahan. Cakupan belum lengkap: E1 tidak menjalankan gerbang merek dan W1/W2 tidak menegakkan brand mismatch |
+| C4 | **PARTIAL** | E4 dan E8 menolak `!label.terbaca` untuk **setiap blob baru** sebelum persistence dengan canonical `LABEL_UNREADABLE` (HTTP 400, `retryable:false`, alasan Indonesia dari OCR atau fallback actionable). Cakupan belum lengkap: E1 tidak menjalankan gerbang label dan kebijakan OCR error tetap fail-open |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E4 dan E8 kini fail-closed sebelum append/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. **Gap yang tersisa:** E1 tidak memanggil resolver, dan cakupan kasus lain yang dicatat di matriks belum lengkap; karena itu C7 tetap PARTIAL |
@@ -515,3 +515,29 @@ TASK=P0-E8-ALL-UPLOADS-LABEL-BRAND-GATE-20260824
   `UJI_PG_URL` kosong; katalog tidak dijalankan karena tidak terdampak.
 - E8/C3/C4 tetap **PARTIAL**: E1, worker brand enforcement, reason code khusus,
   dan OCR fail-open berada di luar slice ini.
+
+### E.16 Follow-up C3/C4 canonical API reason codes — 2026-08-24
+
+TASK=P0-C3C4-CANONICAL-API-REASON-CODES-20260824
+
+- Factory `ApiError` canonical `BRAND_MISMATCH` dan `LABEL_UNREADABLE`
+  mempertahankan status HTTP 400, `retryable:false`, English meaning yang sudah
+  berlaku, serta `label.alasan` Indonesia bila terisi. Alasan kosong/whitespace
+  mendapat fallback Indonesia yang actionable; tidak ada perubahan pada
+  semantics acceptance classifier/OCR.
+- Empat branch gate yang sudah enforced—E4 unreadable/brand dan E8
+  unreadable/brand—tidak lagi memakai generic `BAD_REQUEST`. Tidak ada perubahan
+  E1, worker, classifier, OCR fail-open, T43, atau staging.
+- Exported route-boundary tests mencakup foto pertama dan tambahan untuk kedua
+  reason code, exact code/status/message/retryable, nol storage/list/audit pada
+  reject, dan control valid. Guard AST mengikat condition ke factory canonical
+  dan menolak implementasi generic maupun reason code yang tertukar.
+- Focused route+guard → **15 total, 14 PASS, 1 skip, 0 fail**; affected
+  route/intake/ownership/resume → **83 total, 58 PASS, 25 skip, 0 fail**;
+  tepat satu full suite → **1118 total, 1078 PASS, 40 skip, 0 fail**;
+  `npx tsc --noEmit` dan `git diff --check` → **PASS**. Skip PostgreSQL tetap
+  eksplisit karena `UJI_PG_URL` kosong; katalog tidak dijalankan karena slice
+  tidak mengubah katalog, template, atau naskah.
+- C3/C4 tetap **PARTIAL** secara agregat: E1 belum menjalankan gate, W1/W2 belum
+  menegakkan brand mismatch, dan kebijakan OCR error tetap fail-open. Slice ini
+  hanya menutup reason-code sub-gap pada gate E4/E8 yang sudah ada.

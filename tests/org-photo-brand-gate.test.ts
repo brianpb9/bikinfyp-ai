@@ -126,7 +126,22 @@ test("E8 exported POST meneruskan merek terdaftar dan menolak brand salah tanpa 
   assert.equal(wrongBrand.appendCalls, 0, "brand salah tidak boleh memutasi daftar foto");
   assert.equal(wrongBrand.auditCalls, 0, "brand salah tidak boleh menulis audit sukses");
   assert.deepEqual(wrongBrand.seenBrands, ["Merek Org"]);
-  assert.equal((await wrongBrand.response.json()).message_en, "Product label does not match the registered brand.");
+  assert.deepEqual(await wrongBrand.response.json(), {
+    code: "BRAND_MISMATCH", message_id: "merek foto tidak cocok",
+    message_en: "Product label does not match the registered brand.", retryable: false,
+  });
+
+  const unreadableFirst = await run("unreadable-first", JSON.stringify({ brand: "Merek Org" }), {
+    terbaca: false, kata: [], cocokNama: false, cocokMerek: null, alasan: "",
+  }, 400);
+  assert.deepEqual(await unreadableFirst.response.json(), {
+    code: "LABEL_UNREADABLE",
+    message_id: "Label produknya belum terbaca. Upload foto yang lebih terang dan fokus ya.",
+    message_en: "Product label not OCR-readable.", retryable: false,
+  });
+  assert.deepEqual(seenKeys(unreadableFirst.storage), []);
+  assert.equal(unreadableFirst.appendCalls, 0);
+  assert.equal(unreadableFirst.auditCalls, 0);
 
   const validBrand = await run("valid-brand", JSON.stringify({ brand: " Merek Org " }), LABEL_VALID, 200);
   assert.deepEqual(validBrand.seenBrands, ["Merek Org"]);
@@ -148,7 +163,10 @@ test("E8 exported POST meneruskan merek terdaftar dan menolak brand salah tanpa 
     cocokMerek: null,
     alasan: "label tambahan tidak terbaca",
   }, 400, existing);
-  assert.equal((await additionalUnreadable.response.json()).message_en, "Product label not OCR-readable.");
+  assert.deepEqual(await additionalUnreadable.response.json(), {
+    code: "LABEL_UNREADABLE", message_id: "label tambahan tidak terbaca",
+    message_en: "Product label not OCR-readable.", retryable: false,
+  });
   assert.deepEqual(seenKeys(additionalUnreadable.storage), []);
   assert.equal(additionalUnreadable.appendCalls, 0);
   assert.equal(additionalUnreadable.auditCalls, 0);
@@ -161,7 +179,10 @@ test("E8 exported POST meneruskan merek terdaftar dan menolak brand salah tanpa 
     cocokMerek: false,
     alasan: "merek foto tambahan tidak cocok",
   }, 400, existing);
-  assert.equal((await additionalWrongBrand.response.json()).message_en, "Product label does not match the registered brand.");
+  assert.deepEqual(await additionalWrongBrand.response.json(), {
+    code: "BRAND_MISMATCH", message_id: "merek foto tambahan tidak cocok",
+    message_en: "Product label does not match the registered brand.", retryable: false,
+  });
   assert.deepEqual(seenKeys(additionalWrongBrand.storage), []);
   assert.equal(additionalWrongBrand.appendCalls, 0);
   assert.equal(additionalWrongBrand.auditCalls, 0);

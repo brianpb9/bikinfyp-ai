@@ -60,9 +60,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       try {
         fs.writeFileSync(tmpFile, blob.data);
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        if (!label.terbaca) throw ERR.BAD_REQUEST(label.alasan!, "Product label not OCR-readable.");
+        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
         if (label.cocokMerek === false) {
-          throw ERR.BAD_REQUEST(label.alasan!, "Product label does not match the registered brand.");
+          throw ERR.BRAND_MISMATCH(label.alasan);
         }
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });

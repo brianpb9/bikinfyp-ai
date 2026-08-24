@@ -114,16 +114,50 @@ test("E4 exported POST memeriksa setiap foto tambahan dan menolak batch secara a
   assert.equal(accepted.storage.putCalls.length, 4, "dua foto sah wajib menghasilkan dua bytes + dua sidecar");
   assert.equal(imagesFor(accepted.product.id).length, 3, "foto #2+ produk existing tidak ditambahkan");
 
+  const unreadableFirst = await run("unreadable-first", [{
+    terbaca: false, kata: [], cocokNama: false, cocokMerek: null, alasan: "",
+  }], 400);
+  assert.deepEqual(await unreadableFirst.response.json(), {
+    code: "LABEL_UNREADABLE",
+    message_id: "Label produknya belum terbaca. Upload foto yang lebih terang dan fokus ya.",
+    message_en: "Product label not OCR-readable.",
+    retryable: false,
+  });
+  assert.deepEqual(imagesFor(unreadableFirst.product.id), unreadableFirst.product.existing);
+  assert.deepEqual(unreadableFirst.storage.putCalls, []); assert.deepEqual(unreadableFirst.storage.deleteCalls, []);
+  assert.equal(auditCount(unreadableFirst.product.id), 0);
+
   const unreadable = await run("unreadable-second", [LABEL_VALID, {
     terbaca: false, kata: [], cocokNama: false, cocokMerek: null, alasan: "foto kedua tidak terbaca",
   }], 400);
+  assert.deepEqual(await unreadable.response.json(), {
+    code: "LABEL_UNREADABLE", message_id: "foto kedua tidak terbaca",
+    message_en: "Product label not OCR-readable.", retryable: false,
+  });
   assert.deepEqual(imagesFor(unreadable.product.id), unreadable.product.existing);
   assert.deepEqual(unreadable.storage.putCalls, []); assert.deepEqual(unreadable.storage.deleteCalls, []);
   assert.equal(auditCount(unreadable.product.id), 0);
 
+  const wrongBrandFirst = await run("wrong-brand-first", [{
+    terbaca: true, kata: ["Merek", "Lain"], cocokNama: true, cocokMerek: false, alasan: " ",
+  }], 400);
+  assert.deepEqual(await wrongBrandFirst.response.json(), {
+    code: "BRAND_MISMATCH",
+    message_id: "Merek pada foto tidak cocok dengan merek produk. Upload foto produk dengan merek yang benar ya.",
+    message_en: "Product label does not match the registered brand.",
+    retryable: false,
+  });
+  assert.deepEqual(imagesFor(wrongBrandFirst.product.id), wrongBrandFirst.product.existing);
+  assert.deepEqual(wrongBrandFirst.storage.putCalls, []); assert.deepEqual(wrongBrandFirst.storage.deleteCalls, []);
+  assert.equal(auditCount(wrongBrandFirst.product.id), 0);
+
   const wrongBrand = await run("wrong-brand-second", [LABEL_VALID, {
     terbaca: true, kata: ["Merek", "Lain"], cocokNama: true, cocokMerek: false, alasan: "merek foto kedua salah",
   }], 400);
+  assert.deepEqual(await wrongBrand.response.json(), {
+    code: "BRAND_MISMATCH", message_id: "merek foto kedua salah",
+    message_en: "Product label does not match the registered brand.", retryable: false,
+  });
   assert.deepEqual(imagesFor(wrongBrand.product.id), wrongBrand.product.existing);
   assert.deepEqual(wrongBrand.storage.putCalls, []); assert.deepEqual(wrongBrand.storage.deleteCalls, []);
   assert.equal(auditCount(wrongBrand.product.id), 0);
@@ -131,6 +165,10 @@ test("E4 exported POST memeriksa setiap foto tambahan dan menolak batch secara a
   const mixedLaterInvalid = await run("mixed-later-invalid", [LABEL_VALID, LABEL_VALID, {
     terbaca: false, kata: [], cocokNama: false, cocokMerek: null, alasan: "foto terakhir tidak terbaca",
   }], 400);
+  assert.deepEqual(await mixedLaterInvalid.response.json(), {
+    code: "LABEL_UNREADABLE", message_id: "foto terakhir tidak terbaca",
+    message_en: "Product label not OCR-readable.", retryable: false,
+  });
   assert.deepEqual(imagesFor(mixedLaterInvalid.product.id), mixedLaterInvalid.product.existing);
   assert.deepEqual(mixedLaterInvalid.storage.putCalls, []); assert.deepEqual(mixedLaterInvalid.storage.deleteCalls, []);
   assert.equal(auditCount(mixedLaterInvalid.product.id), 0);
