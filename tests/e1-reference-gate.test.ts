@@ -1,0 +1,348 @@
+import { after, test } from "node:test";
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import sharp from "sharp";
+
+process.env.RACUN_NO_DOTENV = "1";
+process.env.RACUN_WORKER_DISABLED = "1";
+process.env.RACUN_DB_RUNTIME = "sqlite";
+process.env.STORAGE_MODE = "filesystem";
+process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "e1-reference-gate-store-"));
+
+const { setMediaStorageForTests } = await import("../lib/storage");
+const { setProductImageClassifierForTests } = await import("../lib/product-images");
+const { setPeriksaLabelFotoForTests } = await import("../lib/media/label-terbaca");
+const { setProductCreateDependenciesForTests } = await import("../lib/product-create-dependencies");
+const { POST: createProduct } = await import("../app/api/products/route");
+type MediaStorage = import("../lib/storage").MediaStorage;
+type HasilLabel = import("../lib/media/label-terbaca").HasilLabel;
+type HasilKlasifikasi = import("../lib/media/klasifikasi-gambar").HasilKlasifikasi;
+
+type ReadMutation = "none" | "missing-image" | "missing-sidecar" | "corrupt-sidecar" | "hash-mismatch" | "resolver-error";
+
+class MemoryStorage implements MediaStorage {
+  values = new Map<string, Buffer>([["uploads/unrelated/keep.webp", Buffer.from("must-survive")]]);
+  putCalls: string[] = [];
+  deleteCalls: string[] = [];
+  readMutation: ReadMutation = "none";
+  failDeletePhoto = false;
+
+  async put(key: string, body: Buffer) {
+    this.putCalls.push(key);
+    this.values.set(key, Buffer.from(body));
+  }
+
+  async delete(key: string) {
+    this.deleteCalls.push(key);
+    if (this.failDeletePhoto && !key.endsWith(".meta.json")) {
+      throw new Error(`controlled E1 delete failure: ${key}`);
+    }
+    this.values.delete(key);
+  }
+
+  async get(key: string) {
+    const isSidecar = key.endsWith(".meta.json");
+    if (this.readMutation === "resolver-error" && isSidecar) throw new Error(`controlled E1 resolver failure: ${key}`);
+    if (this.readMutation === "missing-sidecar" && isSidecar) return null;
+    if (this.readMutation === "missing-image" && !isSidecar && key !== "uploads/unrelated/keep.webp") return null;
+    const stored = this.values.get(key);
+    if (!stored) return null;
+    if (this.readMutation === "corrupt-sidecar" && isSidecar) {
+      return { body: Buffer.from("{not-json"), size: 9 };
+    }
+    if (this.readMutation === "hash-mismatch" && !isSidecar && key !== "uploads/unrelated/keep.webp") {
+      const body = Buffer.concat([stored, Buffer.from("tampered")]);
+      return { body, size: body.length };
+    }
+    return { body: Buffer.from(stored), size: stored.length };
+  }
+
+  async stat(key: string) {
+    const body = this.values.get(key);
+    return body ? { size: body.length } : null;
+  }
+
+  async materialize() { return null; }
+}
+
+after(() => {
+  setProductCreateDependenciesForTests(undefined);
+  setPeriksaLabelFotoForTests(undefined);
+  setProductImageClassifierForTests(undefined);
+  setMediaStorageForTests(undefined);
+  fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });
+});
+
+const ELIGIBLE: HasilKlasifikasi = {
+  jenis: "product_photo",
+  layakReferensi: true,
+  rasioAreaTeks: 0.001,
+  jumlahKata: 2,
+  alasan: "foto produk layak",
+};
+
+const PROMOTIONAL: HasilKlasifikasi = {
+  jenis: "promotional_graphic",
+  layakReferensi: false,
+  rasioAreaTeks: 0.4,
+  jumlahKata: 12,
+  alasan: "grafis promosi tidak layak jadi acuan",
+};
+
+const LABEL_VALID: HasilLabel = {
+  terbaca: true,
+  kata: ["HDRV", "Serum"],
+  cocokNama: true,
+  cocokMerek: true,
+};
+
+interface RunOptions {
+  postgres?: boolean;
+  verdicts?: HasilKlasifikasi[];
+  classifierFailure?: boolean;
+  labels?: HasilLabel[];
+  readMutation?: ReadMutation;
+  dbFailure?: boolean;
+  failDeletePhoto?: boolean;
+}
+
+async function run(label: string, options: RunOptions = {}) {
+  const verdicts = options.verdicts ?? [ELIGIBLE];
+  const storage = new MemoryStorage();
+  storage.readMutation = options.readMutation ?? "none";
+  storage.failDeletePhoto = options.failDeletePhoto ?? false;
+  setMediaStorageForTests(storage);
+
+  let classifierIndex = 0;
+  setProductImageClassifierForTests(async () => {
+    if (options.classifierFailure) throw new Error("controlled classifier unavailable");
+    return verdicts[classifierIndex++] ?? verdicts.at(-1)!;
+  });
+
+  const labelCalls: Array<{ path: string; name: string; brand?: string | null }> = [];
+  let labelIndex = 0;
+  setPeriksaLabelFotoForTests(async (fotoPath, productName, brand) => {
+    assert.equal(fs.existsSync(fotoPath), true, `${label}: bytes upload wajib tersedia selama label gate`);
+    labelCalls.push({ path: fotoPath, name: productName, brand });
+    return options.labels?.[labelIndex++] ?? LABEL_VALID;
+  });
+
+  let sqliteAttempts = 0;
+  let pgAttempts = 0;
+  let audits = 0;
+  const insertedImages: string[][] = [];
+  const productId = `e1-${label}-${process.pid}`;
+  setProductCreateDependenciesForTests({
+    getAuthUser: async () => ({ id: "user-e1" }) as never,
+    uuid: () => productId,
+    postgresRuntimeEnabled: () => options.postgres ?? false,
+    smokeCreateProduct: async (_userId, input) => {
+      pgAttempts += 1;
+      if (options.dbFailure) throw new Error("controlled PostgreSQL persistence failure");
+      insertedImages.push([...input.images]);
+      return {} as never;
+    },
+    getDb: () => ({
+      prepare: () => ({
+        run: (...args: unknown[]) => {
+          sqliteAttempts += 1;
+          if (options.dbFailure) throw new Error("controlled SQLite persistence failure");
+          insertedImages.push(JSON.parse(String(args[7])) as string[]);
+          return {};
+        },
+      }),
+    }) as never,
+    now: () => "2026-08-24T00:00:00.000Z",
+    audit: () => { audits += 1; },
+  });
+
+  const pngs = await Promise.all(verdicts.map((_, index) =>
+    sharp({
+      create: { width: 400, height: 400, channels: 3, background: index % 2 ? "#16a34a" : "#7c3aed" },
+    }).png().toBuffer()
+  ));
+  const response = await createProduct(new Request("http://localhost/api/products", {
+    method: "POST",
+    headers: { "content-type": "application/json" },
+    body: JSON.stringify({
+      name: `Serum ${label}`,
+      brand: " HDRV ",
+      price_idr: 50000,
+      category: "beauty",
+      images_base64: pngs.map((png) => `data:image/png;base64,${png.toString("base64")}`),
+    }),
+  }));
+
+  assert.ok(labelCalls.every((call) => !fs.existsSync(call.path) && !fs.existsSync(path.dirname(call.path))), `${label}: temp label wajib dibersihkan`);
+  return { response, storage, productId, sqliteAttempts, pgAttempts, audits, insertedImages, labelCalls };
+}
+
+function createdKeys(result: Awaited<ReturnType<typeof run>>): string[] {
+  return [...result.storage.values.keys()].filter((key) => key.startsWith(`uploads/${result.productId}/`)).sort();
+}
+
+async function quiet<T>(operation: () => Promise<T>): Promise<{ value: T; logs: unknown[][] }> {
+  const logs: unknown[][] = [];
+  const original = console.error;
+  console.error = (...args: unknown[]) => { logs.push(args); };
+  try {
+    return { value: await operation(), logs };
+  } finally {
+    console.error = original;
+  }
+}
+
+test("E1 POST menerima packshot sah dan memilih referensi sah pertama dalam urutan upload", async () => {
+  const sqlite = await run("sqlite-valid", { verdicts: [ELIGIBLE] });
+  assert.equal(sqlite.response.status, 201, await sqlite.response.clone().text());
+  assert.equal(sqlite.sqliteAttempts, 1);
+  assert.equal(sqlite.pgAttempts, 0);
+  assert.equal(sqlite.audits, 1);
+  assert.equal(sqlite.labelCalls.length, 1);
+  assert.deepEqual(sqlite.labelCalls.map((call) => call.brand), ["HDRV"]);
+  const sqliteBody = await sqlite.response.json() as { images: string[] };
+  assert.deepEqual(sqlite.insertedImages, [sqliteBody.images]);
+  assert.deepEqual(createdKeys(sqlite), sqliteBody.images.flatMap((rel) => [rel, `${rel}.meta.json`]).sort());
+
+  const bannerFirst = await run("banner-first", { verdicts: [PROMOTIONAL, ELIGIBLE] });
+  assert.equal(bannerFirst.response.status, 201, await bannerFirst.response.clone().text());
+  const bannerBody = await bannerFirst.response.json() as { images: string[] };
+  assert.deepEqual(bannerBody.images, [
+    `uploads/${bannerFirst.productId}/0.webp`,
+    `uploads/${bannerFirst.productId}/1.webp`,
+  ]);
+  assert.deepEqual(bannerFirst.insertedImages, [bannerBody.images], "DB wajib menerima urutan ingestion exact, resolver memilih yang sah");
+  assert.equal(bannerFirst.labelCalls.length, 2, "semua blob harus melewati label gate");
+
+  const postgres = await run("pg-multiple-valid", { postgres: true, verdicts: [ELIGIBLE, ELIGIBLE] });
+  assert.equal(postgres.response.status, 201, await postgres.response.clone().text());
+  assert.equal(postgres.sqliteAttempts, 0);
+  assert.equal(postgres.pgAttempts, 1);
+  assert.equal(postgres.audits, 0, "audit PG dimiliki smokeCreateProduct atomik, bukan SQLite audit");
+  assert.equal(postgres.labelCalls.length, 2);
+  assert.equal(postgres.insertedImages[0].length, 2);
+});
+
+test("E1 label dan brand gate menolak sebelum storage, row, dan audit", async () => {
+  const wrongBrand = await run("wrong-brand", {
+    verdicts: [ELIGIBLE, ELIGIBLE],
+    labels: [LABEL_VALID, { ...LABEL_VALID, cocokMerek: false, alasan: "merek foto kedua salah" }],
+  });
+  assert.equal(wrongBrand.response.status, 400);
+  assert.deepEqual(await wrongBrand.response.json(), {
+    code: "BRAND_MISMATCH",
+    message_id: "merek foto kedua salah",
+    message_en: "Product label does not match the registered brand.",
+    retryable: false,
+  });
+  assert.equal(wrongBrand.labelCalls.length, 2);
+  assert.deepEqual(wrongBrand.storage.putCalls, []);
+  assert.deepEqual(createdKeys(wrongBrand), []);
+  assert.equal(wrongBrand.sqliteAttempts + wrongBrand.pgAttempts + wrongBrand.audits, 0);
+
+  const unreadable = await run("unreadable", {
+    labels: [{ terbaca: false, kata: [], cocokNama: false, cocokMerek: null, alasan: "label terlalu buram" }],
+  });
+  assert.equal(unreadable.response.status, 400);
+  assert.equal((await unreadable.response.json()).code, "LABEL_UNREADABLE");
+  assert.deepEqual(unreadable.storage.putCalls, []);
+  assert.deepEqual(createdKeys(unreadable), []);
+  assert.equal(unreadable.sqliteAttempts + unreadable.pgAttempts + unreadable.audits, 0);
+});
+
+test("E1 resolver fail-closed mempertahankan reason code dan rollback exact", async () => {
+  const cases: Array<{ label: string; options: RunOptions; reason: RegExp }> = [
+    { label: "promotional-only", options: { verdicts: [PROMOTIONAL] }, reason: /REF_PROMOTIONAL/ },
+    { label: "classifier-failed", options: { classifierFailure: true }, reason: /CLASSIFIER_FAILED/ },
+    { label: "missing-image", options: { readMutation: "missing-image" }, reason: /REF_MISSING/ },
+    { label: "missing-sidecar", options: { readMutation: "missing-sidecar" }, reason: /EVIDENCE_INVALID/ },
+    { label: "corrupt-sidecar", options: { readMutation: "corrupt-sidecar" }, reason: /EVIDENCE_INVALID/ },
+    { label: "hash-mismatch", options: { readMutation: "hash-mismatch" }, reason: /REF_HASH_MISMATCH/ },
+  ];
+
+  for (const fixture of cases) {
+    const result = await run(fixture.label, fixture.options);
+    assert.equal(result.response.status, 422, `${fixture.label}: ${await result.response.clone().text()}`);
+    const body = await result.response.json() as { code: string; message_id: string };
+    assert.equal(body.code, "NO_APPROVED_REFERENCE");
+    assert.match(body.message_id, fixture.reason);
+    assert.equal(result.sqliteAttempts + result.pgAttempts + result.audits, 0);
+    assert.deepEqual(createdKeys(result), [], `${fixture.label}: bytes+sidecar baru harus hilang`);
+    assert.equal(result.storage.values.has("uploads/unrelated/keep.webp"), true, `${fixture.label}: object lain tidak boleh disentuh`);
+  }
+
+  const failed = await quiet(() => run("resolver-error", { readMutation: "resolver-error" }));
+  assert.equal(failed.value.response.status, 500);
+  assert.equal(failed.value.sqliteAttempts + failed.value.pgAttempts + failed.value.audits, 0);
+  assert.deepEqual(createdKeys(failed.value), []);
+  assert.ok(failed.logs.some((args) => args.some((arg) => String(arg).includes("controlled E1 resolver failure"))));
+});
+
+test("E1 rollback DB failure di SQLite dan PG, sementara cleanup failure terlihat sebagai 500", async () => {
+  for (const postgres of [false, true]) {
+    const runtime = postgres ? "pg" : "sqlite";
+    const failed = await quiet(() => run(`${runtime}-db-failure`, { postgres, dbFailure: true }));
+    assert.equal(failed.value.response.status, 500);
+    assert.equal(failed.value.sqliteAttempts, postgres ? 0 : 1);
+    assert.equal(failed.value.pgAttempts, postgres ? 1 : 0);
+    assert.equal(failed.value.audits, 0);
+    assert.deepEqual(failed.value.insertedImages, [], "fixture DB gagal sebelum row durable");
+    assert.deepEqual(createdKeys(failed.value), [], `${runtime}: DB failure wajib membersihkan exact bytes+sidecar`);
+    assert.equal(failed.value.storage.values.has("uploads/unrelated/keep.webp"), true);
+  }
+
+  const cleanup = await quiet(() => run("cleanup-failure", { verdicts: [PROMOTIONAL], failDeletePhoto: true }));
+  assert.equal(cleanup.value.response.status, 500);
+  assert.equal(cleanup.value.sqliteAttempts + cleanup.value.pgAttempts + cleanup.value.audits, 0);
+  assert.ok(createdKeys(cleanup.value).some((key) => !key.endsWith(".meta.json")), "fault fixture wajib menyisakan residual foto");
+  assert.ok(cleanup.logs.some((args) => args.some((arg) => String(arg).includes("E1 reference rejection cleanup failed"))));
+  assert.ok(cleanup.logs.some((args) => args.some((arg) => String(arg).includes("residual storage objects may remain"))));
+});
+
+function assertE1BoundarySource(source: string, context: string): void {
+  const label = source.indexOf("await periksaLabelFoto(");
+  const unreadable = source.indexOf("if (!label.terbaca)");
+  const brand = source.indexOf("if (label.cocokMerek === false)");
+  const save = source.indexOf("await saveProductImages(");
+  const resolve = source.indexOf("await resolveApprovedReference(images)");
+  const pg = source.indexOf("await dependencies.smokeCreateProduct(");
+  const sqlite = source.indexOf("dependencies.getDb()");
+  const rollback = source.indexOf('await rejectAfterReferenceCheck("E1", images, creationError)');
+  const audit = source.indexOf("dependencies.audit(");
+
+  assert.ok(label >= 0 && unreadable > label && brand > unreadable, `${context}: every-blob label/brand gate wajib lengkap`);
+  assert.ok(save > brand, `${context}: storage tidak boleh mendahului label/brand gate`);
+  assert.ok(resolve > save, `${context}: canonical resolver wajib sesudah ingestion`);
+  assert.ok(pg > resolve && sqlite > resolve, `${context}: kedua persistence seam wajib sesudah resolver`);
+  assert.ok(rollback > resolve, `${context}: exact rollback E1 wajib melindungi resolver/persistence`);
+  assert.ok(audit > rollback, `${context}: audit sukses wajib sesudah guarded persistence`);
+}
+
+test("E1 structural mutation guard menolak bypass label, resolver, persistence awal, dan rollback non-exact", () => {
+  const production = fs.readFileSync(path.join(process.cwd(), "app/api/products/route.ts"), "utf8");
+  assertE1BoundarySource(production, "E1 production");
+
+  const counterexamples = [
+    ["label bypass", production.replace("await periksaLabelFoto(", "await bypassLabel("), /label\/brand gate wajib lengkap/],
+    ["brand bypass", production.replace("if (label.cocokMerek === false)", "if (false)"), /label\/brand gate wajib lengkap/],
+    ["resolver bypass", production.replace("await resolveApprovedReference(images)", "await resolveAnything(images)"), /canonical resolver wajib/],
+    ["SQLite before resolver", production.replace(
+      "const resolution = await resolveApprovedReference(images);",
+      "dependencies.getDb();\n      const resolution = await resolveApprovedReference(images);"
+    ), /persistence seam wajib sesudah resolver/],
+    ["PG before resolver", production.replace(
+      "const resolution = await resolveApprovedReference(images);",
+      "await dependencies.smokeCreateProduct(user.id, {} as never, id);\n      const resolution = await resolveApprovedReference(images);"
+    ), /persistence seam wajib sesudah resolver/],
+    ["rollback wrong set", production.replace(
+      'await rejectAfterReferenceCheck("E1", images, creationError)',
+      'await rejectAfterReferenceCheck("E1", images.slice(1), creationError)'
+    ), /exact rollback E1 wajib/],
+  ] as const;
+
+  for (const [name, source, expected] of counterexamples) {
+    assert.throws(() => assertE1BoundarySource(source, `counterexample ${name}`), expected, `${name} tidak boleh lolos guard`);
+  }
+});

@@ -16,7 +16,7 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 
 | # | file:line | jalur | status | memanggil |
 |---|---|---|---|---|
-| E1 | `app/api/products/route.ts:15` | POST create manual (retail) | **PARTIAL** | `saveProductImages` (sidecar ditulis); TANPA `periksaLabelFoto`, TANPA `referensiLayak` |
+| E1 | `app/api/products/route.ts:20` | POST create manual (retail) | **PARTIAL** | Setiap blob decodable melewati `periksaLabelFoto` + trusted `merekTerdaftar` sebelum storage. Sesudah ingestion, canonical `resolveApprovedReference(images)` wajib menemukan acuan sah sebelum SQLite/PG persistence; reject, resolver error, atau persistence failure me-rollback exact bytes+sidecar baru sebelum row/audit. OCR fail-open dan gap kasus lain tetap terbuka |
 | E2 | `app/api/products/extract/route.ts:17` | POST extract URL → buat produk | **UNGATED** | tidak ada; pakai `downloadProductImages` |
 | E3 | `app/api/products/[id]/route.ts:13` | PATCH nama/harga/kategori/brand | **UNGATED** | tidak ada — memutasi `name` + `raw_meta.brand`, dua input yang justru dibaca gerbang |
 | E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **PARTIAL** | Setiap blob baru melewati `periksaLabelFoto`+`merekTerdaftar` sebelum persistence; `referensiLayak` sesudah ingestion kini me-rollback exact object baru saat reject/error sebelum append/audit. DUA lubang lain tetap: `periksaLabelFoto` FAIL-OPEN saat OCR gagal (`label-terbaca.ts` mengembalikan `terbaca:true`); hash sidecar tidak pernah diverifikasi ulang terhadap isi berkas |
@@ -158,7 +158,7 @@ mengerjakannya sebagai task terpisah.
 
 | # | Status 20 Agu | Status 23 Agu | Bukti |
 |---|---|---|---|
-| E1 create manual | PARTIAL | **PARTIAL** | `saveProductImages` → `tulisSidecar` (`lib/product-images.ts:271`). Bukti terbit; gerbang label tidak dipanggil |
+| E1 create manual | PARTIAL | **PARTIAL** | `saveProductImages` → `tulisSidecar`, lalu canonical resolver sebelum kedua seam persistence. **Gap E1 label/brand/reference ditutup 24 Agu:** setiap blob memakai `periksaLabelFoto` + `merekTerdaftar`; reject/resolver/DB failure membersihkan exact object baru sebelum row/audit. Actual exported POST diuji di SQLite dan PG seam, termasuk packshot sah, banner-first+packshot, multi-valid, wrong brand, unreadable, classifier failure, evidence missing/corrupt/hash mismatch, DB failure, dan cleanup fault. Tetap PARTIAL karena OCR fail-open dan gap matriks lain |
 | E2 extract URL | UNGATED | **PARTIAL** | `downloadProductImages` → `tulisSidecar` (`lib/product-image-download.ts:48`). Dulu nol sidecar |
 | E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar, tetapi E3 tetap jalur wajib C2/C3/C5 dan belum melakukan validasi type/brand/category |
 | E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; append daftar atomik memakai key UUID. **Gap foto #2+ ditutup 24 Agu:** seluruh blob decodable melewati label+brand gate sebelum satu pun persistence. **Gap rollback C7 ditutup 24 Agu:** no-reference atau resolver error membersihkan exact foto baru+sidecar sebelum append/audit; bila cleanup sendiri gagal, respons 500 dan log menyatakan risiko residual—bukan klaim nol-storage palsu. Status tetap PARTIAL karena fail-open OCR dan verifikasi ulang hash masih terbuka |
@@ -188,12 +188,12 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 |---|---|---|
 | C1 | **PARTIAL** | W1/W2 memilih packshot sah beserta hash lalu mematok manifest ordered `{rel,sha256,versiBukti}` tepat sekali; A6 approve/regenerate memakai manifest itu dan tidak memilih ulang. Tetap PARTIAL karena jalur E/A lain pada baris C1 belum seluruhnya dicakup |
 | C2 | **BLOCKED** | Diblokir implementasi lokal: `TYPE_MISMATCH` dan validasi terkait belum ada di kode mana pun; tidak ada penghalang eksternal |
-| C3 | **PARTIAL** | E4 dan E8 menolak `cocokMerek === false` untuk **setiap blob baru** sebelum persistence dengan canonical `BRAND_MISMATCH` (HTTP 400, `retryable:false`, alasan Indonesia dari classifier atau fallback actionable); E8 selalu memakai `merekTerdaftar(owned.product)`, termasuk foto tambahan. Cakupan belum lengkap: E1 tidak menjalankan gerbang merek dan W1/W2 tidak menegakkan brand mismatch |
-| C4 | **PARTIAL** | E4 dan E8 menolak `!label.terbaca` untuk **setiap blob baru** sebelum persistence dengan canonical `LABEL_UNREADABLE` (HTTP 400, `retryable:false`, alasan Indonesia dari OCR atau fallback actionable). Cakupan belum lengkap: E1 tidak menjalankan gerbang label dan kebijakan OCR error tetap fail-open |
+| C3 | **PARTIAL** | E1, E4, dan E8 menolak `cocokMerek === false` untuk setiap blob baru sebelum persistence dengan canonical `BRAND_MISMATCH` (HTTP 400, `retryable:false`, alasan Indonesia dari classifier atau fallback actionable). E1 memakai trusted brand dari raw metadata yang sama melalui `merekTerdaftar`; E8 memakai `merekTerdaftar(owned.product)`. Cakupan belum lengkap: W1/W2 tidak menegakkan brand mismatch |
+| C4 | **PARTIAL** | E1, E4, dan E8 menolak `!label.terbaca` untuk setiap blob baru sebelum persistence dengan canonical `LABEL_UNREADABLE` (HTTP 400, `retryable:false`, alasan Indonesia dari OCR atau fallback actionable). Cakupan belum lengkap: kebijakan OCR execution error tetap fail-open |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
-| C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E4 dan E8 kini fail-closed sebelum append/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. **Gap yang tersisa:** E1 tidak memanggil resolver, dan cakupan kasus lain yang dicatat di matriks belum lengkap; karena itu C7 tetap PARTIAL |
-| C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7; T43 sudah mengizinkan bounded technical enforcement, tetapi kode/proof belum diterima |
+| C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E1, E4, dan E8 kini fail-closed sebelum persistence/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. Cakupan kasus lain pada matriks belum lengkap; karena itu C7 tetap PARTIAL |
+| C8 | **PARTIAL** | E1 actual POST menolak sidecar hilang/korup dan hash mismatch melalui canonical resolver sebelum SQLite/PG persistence, dengan exact rollback bytes+sidecar; W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 memasang observer provider dan counterexample positif. C8 tetap belum tertutup pada seluruh jalur yang diwajibkan matriks |
 | C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata core worker tertutup: W1/W2 memakai admission manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, claims, dan sell price. Actual E3→W2 serta E7→W1 membuktikan prompt tetap admission-bound tetapi rendered promo before/deadline dibaca live; frame W2 gain/removal dan W1 change diterima di E.23. Stock juga live tetapi inert di formatter. Tetap PARTIAL sampai Founder memilih `PROMO_POLICY=SNAPSHOT` atau `LIVE_INTENTIONAL`; `SNAPSHOT_IMMUTABLE` tetap proposal-only |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada. T43 mengizinkan enforcement teknis bounded, tetapi treatment data legacy tidak ditentukan. Secara terpisah, angka media legacy belum diketahui karena R2 staging berpasangan belum tersedia |
 | C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
@@ -907,3 +907,28 @@ TASK=`P0-B2-MANAGED-CLASSIFIER-RETRY-20260824`
 - P0-B2 is **VERIFIED_MANAGED: capable** for staging runtime only. This does
   not authorize production, paid-provider work, or real money, and it does not
   change canonical shipping readiness **58/100**.
+
+### E.29 E1 label/brand and canonical reference gate — 2026-08-24
+
+TASK=`P0-T43-E1-REFERENCE-GATE-20260824`
+
+- The actual exported retail create `POST` checks every decoded upload through
+  the same label/registered-brand gate used by E4/E8 before any storage or DB
+  publication. Canonical `LABEL_UNREADABLE` and `BRAND_MISMATCH` responses are
+  preserved.
+- After sidecar-bearing ingestion, `resolveApprovedReference(images)` is the
+  sole eligibility judge. No approved reference, classifier-unavailable
+  evidence, missing/corrupt evidence, hash mismatch, and resolver errors all
+  fail before either SQLite or PostgreSQL product persistence.
+- Any resolver rejection/error or DB persistence failure invokes E1 exact-set
+  rollback for the new image bytes and sidecars. Successful cleanup leaves no
+  new storage, row, or success audit. Cleanup failure is an observable 500 and
+  explicitly logs possible residual storage; unrelated objects survive.
+- `tests/e1-reference-gate.test.ts` exercises the exported POST through both DB
+  seams with positive packshot, banner-first+packshot, multiple-valid, and all
+  listed negative/fault cases. Its mutation guard rejects label/brand bypass,
+  resolver bypass, early SQLite/PG persistence, and non-exact rollback.
+- This slice does not change OCR execution policy, type/category policy,
+  legacy treatment, payment/provider behavior, deployment, or production
+  state. Aggregate matrix statuses remain bounded as listed above and
+  canonical shipping readiness remains **58/100**.

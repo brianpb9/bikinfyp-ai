@@ -7,7 +7,7 @@
 // jalur di sini SENGAJA memakai raw_meta.brand, alamat fallback yang sudah
 // dibaca merekTepercaya() di lib/postgres/worker.ts.
 
-import { test } from "node:test";
+import { after, test } from "node:test";
 import assert from "node:assert/strict";
 
 process.env.RACUN_NO_DOTENV = "1";
@@ -20,6 +20,28 @@ const { findOrCreateUserByPhone, issueToken, cookieName } = await import("../lib
 const { POST: createProduct } = await import("../app/api/products/route");
 const { PATCH: patchProduct } = await import("../app/api/products/[id]/route");
 const { usulMerekDariNama } = await import("../lib/media/qc");
+const { setPeriksaLabelFotoForTests } = await import("../lib/media/label-terbaca");
+const { setProductImageClassifierForTests } = await import("../lib/product-images");
+
+// Test ini mengunci persistence brand, bukan kualitas OCR/classifier. Sejak E1
+// menegakkan kedua gate, kontrol positif harus menyatakan bukti sah eksplisit.
+setPeriksaLabelFotoForTests(async (_fotoPath, _productName, brand) => ({
+  terbaca: true,
+  kata: ["Glowbening", "Serum"],
+  cocokNama: true,
+  cocokMerek: brand ? true : null,
+}));
+setProductImageClassifierForTests(async () => ({
+  jenis: "product_photo",
+  layakReferensi: true,
+  rasioAreaTeks: 0.001,
+  jumlahKata: 2,
+  alasan: "fixture brand intake adalah packshot sah",
+}));
+after(() => {
+  setPeriksaLabelFotoForTests(undefined);
+  setProductImageClassifierForTests(undefined);
+});
 
 const user = findOrCreateUserByPhone("085555000333");
 const token = await issueToken(user.id, user.phone ?? "");

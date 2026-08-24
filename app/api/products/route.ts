@@ -1,11 +1,16 @@
-import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
-import { getDb, now, uuid, audit } from "@/lib/db";
 import { ensureDirs } from "@/lib/config";
 import { validBrand, validPriceIdr, validProductName } from "@/lib/product-validation";
 import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { parsePromoFields } from "@/lib/promo";
-import { postgresRuntimeEnabled, smokeCreateProduct } from "@/lib/postgres/smoke-runtime";
+import { productCreateDependencies } from "@/lib/product-create-dependencies";
+import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
+import { merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
+import { resolveApprovedReference, pesanTanpaReferensi } from "@/lib/product-truth";
+import { GagalTanpaReferensi } from "@/lib/kanari-bukti";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,7 +19,8 @@ export const dynamic = "force-dynamic";
 // (multipart form-data: field "photos"; atau JSON: images_base64[]).
 export async function POST(req: Request) {
   try {
-    const user = await getAuthUser(req);
+    const dependencies = productCreateDependencies();
+    const user = await dependencies.getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
 
     let name = "", priceRaw: unknown = "", category = "default", sourceUrl: string | null = null;
@@ -89,21 +95,50 @@ export async function POST(req: Request) {
       b.mime = sniffed;
     }
 
-    const id = uuid();
-    const images = await saveProductImages(id, blobs);
     // raw_meta.brand: alamat fallback yang dibaca merekTepercaya() (worker) —
     // kolom products.brand (migrasi 0033, sesi lain) menang begitu di-land.
     const brand = validBrand(brandRaw);
     const rawMeta = brand ? { brand } : null;
-    if (postgresRuntimeEnabled()) {
-      await smokeCreateProduct(user.id, { sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, rawMeta, ...promo }, id);
-    } else {
-      getDb()
-        .prepare(
-          "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
-        )
-        .run(id, user.id, sourceUrl, validName, priceIdr, category, visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, rawMeta ? JSON.stringify(rawMeta) : null, now());
-      audit(user.id, "product.created", "products", id, { name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null });
+    const brandTerdaftar = merekTerdaftar({ raw_meta: rawMeta ? JSON.stringify(rawMeta) : null });
+
+    // E1 must apply the same gate as E4/E8 to every normalized upload before
+    // any storage or product-row publication. OCR execution failures retain
+    // the existing fail-open policy inside periksaLabelFoto; this route does
+    // not invent C6 policy.
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "e1-intake-label-"));
+    try {
+      for (const [index, blob] of blobs.entries()) {
+        const tmpFile = path.join(tmpDir, `foto-${index}`);
+        fs.writeFileSync(tmpFile, blob.data);
+        const label = await periksaLabelFoto(tmpFile, validName, brandTerdaftar);
+        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
+        if (label.cocokMerek === false) throw ERR.BRAND_MISMATCH(label.alasan);
+      }
+    } finally {
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+    }
+
+    const id = dependencies.uuid();
+    const images = await saveProductImages(id, blobs);
+    try {
+      const resolution = await resolveApprovedReference(images);
+      if (!resolution.utama) {
+        throw new GagalTanpaReferensi(pesanTanpaReferensi(resolution), resolution);
+      }
+      if (dependencies.postgresRuntimeEnabled()) {
+        await dependencies.smokeCreateProduct(user.id, { sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, rawMeta, ...promo }, id);
+      } else {
+        dependencies.getDb()
+          .prepare(
+            "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+          )
+          .run(id, user.id, sourceUrl, validName, priceIdr, category, visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, rawMeta ? JSON.stringify(rawMeta) : null, dependencies.now());
+      }
+    } catch (creationError) {
+      await rejectAfterReferenceCheck("E1", images, creationError);
+    }
+    if (!dependencies.postgresRuntimeEnabled()) {
+      dependencies.audit(user.id, "product.created", "products", id, { name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null });
     }
 
     return Response.json({ product_id: id, name: validName, price_idr: priceIdr, category, images }, { status: 201 });
