@@ -87,14 +87,20 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
     let images: string[] | null;
     try {
-      images = await dependencies.pgAppendOrgProductImages(membership.org_id, id, added, MAX_IMAGES);
+      images = await dependencies.pgAppendOrgProductImages(membership.org_id, id, owned.images, added, MAX_IMAGES);
     } catch (error) {
       await deleteStoredProductImages(added);
       throw error;
     }
     if (!images) {
-      await deleteStoredProductImages(added);
-      throw ERR.BAD_REQUEST("Daftar fotonya baru saja berubah. Muat ulang lalu coba lagi; maksimal 8 foto.", "Concurrent photo update rejected.");
+      return await rejectAfterReferenceCheck(
+        "E8",
+        added,
+        ERR.BAD_REQUEST(
+          "Daftar fotonya baru saja berubah. Muat ulang lalu coba lagi; maksimal 8 foto.",
+          "Concurrent photo update rejected."
+        )
+      );
     }
     // Telemetry must never turn a committed upload into a visible 500 that
     // invites a duplicate retry.

@@ -351,16 +351,23 @@ export async function pgRemoveRetailProductImage(userId: string, productId: stri
 
 /** Organization product photo mutation. The org key is part of the UPDATE,
  * not merely checked beforehand, so a cross-org id cannot win a race. */
-export async function pgAppendOrgProductImages(orgId: string, productId: string, added: string[], maxImages: number) {
+export async function pgAppendOrgProductImages(
+  orgId: string,
+  productId: string,
+  expectedImages: string[],
+  added: string[],
+  maxImages: number
+) {
   const pool = getPool(url());
   try {
     const result = await pool.query(
       `UPDATE products
-       SET images=(COALESCE(NULLIF(images,''),'[]')::jsonb || $3::jsonb)::text
+       SET images=(COALESCE(NULLIF(images,''),'[]')::jsonb || $4::jsonb)::text
        WHERE id=$1 AND org_id=$2
-         AND jsonb_array_length(COALESCE(NULLIF(images,''),'[]')::jsonb) + $4 <= $5
+         AND COALESCE(NULLIF(images,''),'[]')::jsonb = $3::jsonb
+         AND jsonb_array_length(COALESCE(NULLIF(images,''),'[]')::jsonb) + $5 <= $6
        RETURNING images`,
-      [productId, orgId, JSON.stringify(added), added.length, maxImages]
+      [productId, orgId, JSON.stringify(expectedImages), JSON.stringify(added), added.length, maxImages]
     );
     return result.rows[0]?.images ? JSON.parse(result.rows[0].images) as string[] : null;
   } finally { /* shared pool */ }

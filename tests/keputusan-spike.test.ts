@@ -293,14 +293,29 @@ function assertReferenceRollbackBeforePublication(source: string, context: strin
   const expectedCombined = boundary === "E4" ? "[...existing,...added]" : "[...owned.images,...added]";
   const save = callsNamed(post.body, "saveUniqueProductImages");
   const resolve = callsNamed(post.body, "referensiLayak");
-  const rollback = callsNamed(post.body, "rejectAfterReferenceCheck");
+  const allRollbacks = callsNamed(post.body, "rejectAfterReferenceCheck");
+  const rollback = allRollbacks.filter((call) => call.arguments[2]?.getText(ast) === "referenceError");
   const append = callsNamed(post.body, appendName);
   const audit = callsNamed(post.body, auditName);
   assert.equal(save.length, 1, `${context}: wajib satu save ingestion`);
   assert.equal(resolve.length, 1, `${context}: wajib satu resolver referensi`);
-  assert.equal(rollback.length, 1, `${context}: wajib satu pemanggilan rollback`);
+  assert.equal(rollback.length, 1, `${context}: wajib satu rollback resolver`);
+  assert.equal(allRollbacks.length, boundary === "E8" ? 2 : 1,
+    `${context}: E8 wajib punya rollback resolver dan CAS miss saja`);
   assert.equal(append.length, 1, `${context}: wajib satu append list`);
   assert.equal(audit.length, 1, `${context}: wajib satu audit sukses`);
+  if (boundary === "E8") {
+    assert.equal(append[0].arguments.length, 5, `${context}: append E8 wajib menerima kontrak CAS lengkap`);
+    assert.equal(append[0].arguments.slice(2).map((arg) => arg.getText(ast)).join(","),
+      "owned.images,added,MAX_IMAGES",
+      `${context}: append E8 wajib memakai exact snapshot yang dinilai`);
+    const casRollback = allRollbacks.find((call) => call !== rollback[0]);
+    assert.ok(casRollback, `${context}: CAS miss wajib membersihkan added`);
+    assert.equal(casRollback.arguments[0]?.getText(ast), '"E8"', `${context}: CAS cleanup wajib boundary E8`);
+    assert.equal(casRollback.arguments[1]?.getText(ast), "added", `${context}: CAS cleanup hanya menyasar added`);
+    assert.ok(append[0].getEnd() < casRollback.getStart(ast), `${context}: CAS cleanup wajib sesudah append miss`);
+    assert.ok(casRollback.getEnd() < audit[0].getStart(ast), `${context}: audit wajib sesudah CAS success boundary`);
+  }
   assert.ok(ts.isAwaitExpression(rollback[0].parent) && rollback[0].parent.expression === rollback[0],
     `${context}: rollback failure boundary wajib di-await`);
   assert.equal(rollback[0].arguments.map((arg) => arg.getText(ast)).join(","), `"${boundary}",added,referenceError`,
@@ -562,7 +577,8 @@ test("E4 dan E8 menjaga rollback exact setelah resolver dan sebelum append/audit
     } catch (referenceError) {
       await rejectAfterReferenceCheck("E8", added, referenceError);
     }
-    const images = await dependencies.pgAppendOrgProductImages(user.id, id, added, MAX_IMAGES);
+    const images = await dependencies.pgAppendOrgProductImages(user.id, id, owned.images, added, MAX_IMAGES);
+    if (!images) return await rejectAfterReferenceCheck("E8", added, staleError);
     dependencies.pgAudit(user.id, "product.photos_added", id, {});
   }`;
   assertReferenceRollbackHelper(helperSah, "shared structural control");
@@ -596,12 +612,13 @@ test("E4 dan E8 menjaga rollback exact setelah resolver dan sebelum append/audit
   const routeCounterexamples = [
     ["urutan daftar dibalik", postE8Sah.replace("[...owned.images, ...added]", "[...added, ...owned.images]")],
     ["boundary salah", postE8Sah.replace('"E8", added, referenceError', '"E4", added, referenceError')],
+    ["append tanpa snapshot yang dinilai", postE8Sah.replace("owned.images, added, MAX_IMAGES", "added, MAX_IMAGES")],
     ["append masih di dalam failure boundary", `export async function POST() {
       const added = await saveUniqueProductImages(id, blobs);
       try {
         const semua = [...owned.images, ...added];
         const layak = await referensiLayak(semua);
-        const images = await dependencies.pgAppendOrgProductImages(user.id, id, added, MAX_IMAGES);
+        const images = await dependencies.pgAppendOrgProductImages(user.id, id, owned.images, added, MAX_IMAGES);
       } catch (referenceError) {
         await rejectAfterReferenceCheck("E8", added, referenceError);
       }
@@ -612,7 +629,7 @@ test("E4 dan E8 menjaga rollback exact setelah resolver dan sebelum append/audit
       const semua = [...owned.images, ...added];
       const layak = await referensiLayak(semua);
       await rejectAfterReferenceCheck("E8", added, referenceError);
-      const images = await dependencies.pgAppendOrgProductImages(user.id, id, added, MAX_IMAGES);
+      const images = await dependencies.pgAppendOrgProductImages(user.id, id, owned.images, added, MAX_IMAGES);
       dependencies.pgAudit(user.id, "product.photos_added", id, {});
     }`],
     ["resolver hilang", postE8Sah.replace("const layak = await referensiLayak(semua);", "const layak = semua;")],
@@ -620,7 +637,7 @@ test("E4 dan E8 menjaga rollback exact setelah resolver dan sebelum append/audit
   for (const [name, source] of routeCounterexamples) {
     assert.throws(
       () => assertReferenceRollbackBeforePublication(source, `counterexample E8 rollback ${name}`, "E8"),
-      /resolver referensi|boundary, exact added|existing lalu exact added|catch rollback|rollback wajib berada di catch|append list wajib sesudah failure boundary/,
+      /resolver referensi|boundary, exact added|existing lalu exact added|kontrak CAS lengkap|exact snapshot yang dinilai|rollback resolver dan CAS miss|CAS miss wajib|catch rollback|rollback wajib berada di catch|append list wajib sesudah failure boundary/,
       `${name} tidak boleh memenangkan structural guard route rollback`
     );
   }
