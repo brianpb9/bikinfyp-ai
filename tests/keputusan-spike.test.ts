@@ -143,6 +143,10 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
   assert.ok(ts.isBlock(branchBlock), `${context}: branch foto-pertama wajib direct statement dalam block POST`);
 
   const gate = gateAwaits[0];
+  const gateCall = gate.expression as ts.CallExpression;
+  assert.equal(gateCall.arguments.length, 3, `${context}: brand terdaftar wajib diteruskan ke gate foto pertama`);
+  assert.equal(gateCall.arguments[2].getText(ast), "merekTerdaftar(owned.product)",
+    `${context}: gate wajib memakai brand otoritatif produk`);
   let current: ts.Node = gate;
   let reachedBranch = false;
   while (current.parent) {
@@ -172,6 +176,38 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
       || (ts.isExpressionStatement(gate.parent) && gate.parent.expression === gate),
     `${context}: gate wajib awaited call/initializer langsung, bukan expression bersyarat`
   );
+
+  assert.ok(ts.isVariableDeclaration(gate.parent) && ts.isIdentifier(gate.parent.name),
+    `${context}: hasil label wajib ditahan untuk keputusan merek`);
+  const labelName = gate.parent.name.text;
+  const brandRejects: ts.IfStatement[] = [];
+  const collectBrandRejects = (node: ts.Node): void => {
+    if (node !== branch.thenStatement && functionBoundary(node)) return;
+    if (ts.isIfStatement(node)) {
+      const condition = unwrap(node.expression);
+      if (ts.isBinaryExpression(condition)
+        && condition.operatorToken.kind === ts.SyntaxKind.EqualsEqualsEqualsToken
+        && condition.right.kind === ts.SyntaxKind.FalseKeyword
+        && ts.isPropertyAccessExpression(condition.left)
+        && ts.isIdentifier(condition.left.expression)
+        && condition.left.expression.text === labelName
+        && condition.left.name.text === "cocokMerek") brandRejects.push(node);
+    }
+    ts.forEachChild(node, collectBrandRejects);
+  };
+  collectBrandRejects(branch.thenStatement);
+  assert.equal(brandRejects.length, 1, `${context}: cocokMerek === false wajib ditolak tepat sekali`);
+  const brandReject = brandRejects[0];
+  let throws = 0;
+  const countThrows = (node: ts.Node): void => {
+    if (node !== brandReject.thenStatement && functionBoundary(node)) return;
+    if (ts.isThrowStatement(node)) throws += 1;
+    ts.forEachChild(node, countThrows);
+  };
+  countThrows(brandReject.thenStatement);
+  assert.ok(throws > 0, `${context}: branch brand-false wajib melempar sebelum persistence`);
+  assert.ok(gate.getEnd() < brandReject.getStart(ast), `${context}: keputusan brand wajib memakai hasil gate aktual`);
+  assert.ok(brandReject.getEnd() < persistenceCall.getStart(ast), `${context}: brand-false wajib ditolak sebelum persistence`);
 
   const persistence = persistenceCall.parent;
   let persistenceStatement: ts.Node = persistence;
@@ -256,8 +292,45 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   assertLabelGateBeforePersistence(retail, "E4 Retail", "E4");
 
   const enterprise = baca("app/api/dashboard/campaign/product/[id]/photos/route.ts");
-  assert.match(enterprise, /periksaLabelFoto\(tmpFile, owned\.product\.name\)/);
+  assert.match(enterprise, /periksaLabelFoto\(tmpFile, owned\.product\.name, merekTerdaftar\(owned\.product\)\)/);
   assertLabelGateBeforePersistence(enterprise, "E8 Enterprise", "E8");
+
+  const e8Ditolak = [
+    ["brand arg hilang", `export async function POST() {
+      if (!owned.images.length && blobs[0]) {
+        const label = await periksaLabelFoto(tmpFile, owned.product.name);
+        if (label.cocokMerek === false) throw new Error("brand");
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["hasil brand dibuang", `export async function POST() {
+      if (!owned.images.length && blobs[0]) {
+        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["brand false tidak melempar", `export async function POST() {
+      if (!owned.images.length && blobs[0]) {
+        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
+        if (label.cocokMerek === false) log(label);
+      }
+      await saveUniqueProductImages(id, blobs);
+    }`],
+    ["brand diperiksa setelah persistence", `export async function POST() {
+      if (!owned.images.length && blobs[0]) {
+        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
+        await saveUniqueProductImages(id, blobs);
+        if (label.cocokMerek === false) throw new Error("brand");
+      }
+    }`],
+  ] as const;
+  for (const [judul, source] of e8Ditolak) {
+    assert.throws(
+      () => assertLabelGateBeforePersistence(source, `counterexample E8 ${judul}`, "E8"),
+      /brand terdaftar|brand otoritatif|cocokMerek|wajib melempar|sebelum persistence|direct sibling/,
+      `${judul} tidak boleh memenangkan structural guard E8`
+    );
+  }
 
   const ditolak = [
     ["persistence sebelum label blob selesai", `export async function POST() {

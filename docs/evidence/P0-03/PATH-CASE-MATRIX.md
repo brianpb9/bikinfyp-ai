@@ -23,7 +23,7 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 | E5 | `app/api/products/[id]/photos/route.ts:142` | DELETE foto (retail) | **UNGATED** | tidak ada — bisa menghapus satu-satunya foto layak |
 | E6 | `app/api/dashboard/campaign/product/route.ts:45` | POST produk org | **UNGATED** | tidak ada; `downloadProductImages` → sidecar tidak ditulis |
 | E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | mengubah `name`, `price`, **`category`**, visual desc, `brand_brief`, promo, claims (:113 dst) TANPA revalidasi. TIDAK menyentuh `raw_meta.brand`. Defect kedua: jalur org TIDAK PERNAH mengisi `raw_meta.brand`, padahal worker hanya mempercayai field itu (`merekTepercaya`) |
-| E8 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:26` | POST add-photo (org) | **PARTIAL** | `periksaLabelFoto` (:52) TANPA argumen `merekTerdaftar` → `cocokMerek` tidak pernah diperiksa; `saveUniqueProductImages` (:59) TIDAK menulis sidecar |
+| E8 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:26` | POST add-photo (org) | **PARTIAL** | Kini foto pertama melewati `periksaLabelFoto` + `merekTerdaftar` dan `cocokMerek === false` ditolak sebelum persistence. Catatan historis 20 Agu: `saveUniqueProductImages` saat itu belum menulis sidecar |
 | E9 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:84` | DELETE foto (org) | **UNGATED** | tidak ada |
 | W1 | `lib/postgres/worker.ts:321-323` | worker PG pilih `images[0]` | **UNGATED** | tidak ada; `personSafeReferencePhotos` (:338) hanya soal orang |
 | W2 | `lib/worker.ts:104-109` | worker inline/SQLite pilih `images[0]` | **UNGATED** | **anggap REACHABLE sampai ditutup struktural**: `enqueueJob`/`enqueueJobResume` (`lib/job-queue.ts:67`) masih bisa memilih inline tanpa memanggil `assertQueueConfiguration`. Wajib diuji C1, C3, C8 |
@@ -161,7 +161,7 @@ mengerjakannya sebagai task terpisah.
 | E5 DELETE foto retail | UNGATED | **PARTIAL** | `removeRetailProductImage` menghitung daftar otoritatif secara atomik, lalu `deleteStoredProductImages([target])` best-effort; `cleanup_failed` terlihat, audit pasca-commit non-fatal, dan test HTTP→resume W2 membuktikan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru tetap belum direvalidasi |
 | E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. Dulu nol |
 | E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
-| E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Lubang 20 Agu MASIH ADA**: `periksaLabelFoto` dipanggil tanpa `merekTerdaftar` (`route.ts:52`) |
+| E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`); dulu TIDAK menulis sidecar sama sekali. **Gap brand ditutup 24 Agu:** foto pertama memakai `merekTerdaftar(owned.product)` dan menolak `cocokMerek === false` sebelum bytes/sidecar/list/audit. Tetap PARTIAL karena kebijakan foto-pertama saja, fail-open OCR, dan belum ada resolver kelayakan |
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Test HTTP→resume W1 membuktikan isolasi org, daftar otoritatif, dan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru belum direvalidasi agar tetap punya foto layak |
 | W1 worker PG | UNGATED | **PARTIAL** | Resolver, manifest job atomik/idempoten, reuse lintas invocation, verifikasi bytes di boundary provider/output, C1/C8/C11, dan legacy fail-closed dibuktikan di PostgreSQL disposable. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
 | W2 worker inline | UNGATED | **PARTIAL** | Kontrak manifest/reuse/verifikasi/legacy yang sama dibuktikan langsung pada worker SQLite; C8/C11 tetap memakai observer provider. **Belum:** brand mismatch C3 dan snapshot field produk non-referensi |
@@ -184,7 +184,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 |---|---|---|
 | C1 | **PARTIAL** | W1/W2 memilih packshot sah beserta hash lalu mematok manifest ordered `{rel,sha256,versiBukti}` tepat sekali; A6 approve/regenerate memakai manifest itu dan tidak memilih ulang. Tetap PARTIAL karena jalur E/A lain pada baris C1 belum seluruhnya dicakup |
 | C2 | **BLOCKED** | Diblokir implementasi lokal: `TYPE_MISMATCH` dan validasi terkait belum ada di kode mana pun; tidak ada penghalang eksternal |
-| C3 | **PARTIAL** | E4 menolak `cocokMerek === false` untuk **setiap blob baru** sebelum persistence (`app/api/products/[id]/photos/route.ts`). Cakupan belum lengkap: E1 tidak menjalankan gerbang merek, E8 tidak meneruskan `merekTerdaftar`, W1/W2 tidak menegakkan brand mismatch, dan reason code khusus `BRAND_MISMATCH` belum ada |
+| C3 | **PARTIAL** | E4 menolak `cocokMerek === false` untuk **setiap blob baru**; E8 meneruskan `merekTerdaftar(owned.product)` dan menolak brand salah pada foto pertama sebelum persistence. Cakupan belum lengkap: E1 tidak menjalankan gerbang merek, foto tambahan E8 tetap tidak diperiksa, W1/W2 tidak menegakkan brand mismatch, dan reason code khusus `BRAND_MISMATCH` belum ada |
 | C4 | **PARTIAL** | E4 menolak `!label.terbaca` untuk **setiap blob baru** sebelum persistence; E8 masih hanya memeriksa foto pertama (`app/api/products/[id]/photos/route.ts`; `app/api/dashboard/campaign/product/[id]/photos/route.ts:47-54`). Cakupan belum lengkap: E1 tidak menjalankan gerbang label, foto tambahan E8 tidak diperiksa, dan reason code khusus `LABEL_UNREADABLE` belum ada |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
@@ -215,8 +215,9 @@ dikerjakan di slice ini:**
 
 1. **DITUTUP 24 Agu:** gerbang label E4 memeriksa semua blob baru sebelum
    persistence; foto #2+ dan mixed multipart invalid ditolak atomik.
-2. E8 memanggil `periksaLabelFoto` tanpa `merekTerdaftar` (`route.ts:52`) —
-   `cocokMerek` tidak pernah diperiksa di jalur org.
+2. **DITUTUP 24 Agu:** E8 meneruskan `merekTerdaftar(owned.product)` ke
+   `periksaLabelFoto` dan menolak `cocokMerek === false` sebelum persistence;
+   kebijakan foto-pertama tetap sengaja dipertahankan dalam slice ini.
 3. `label-terbaca.ts:188` fail-OPEN saat pemeriksaan gagal. Keputusannya
    disengaja dan beralasan ("menyaring foto buruk, bukan menjaga uang"), tapi
    baris C6 mengharapkan fail-closed. **Salah satu dari keduanya harus
