@@ -17,7 +17,7 @@ import {
 } from "@aws-sdk/client-s3";
 
 const TASK = "P1-MANAGED-STAGING-VALID-PRODUCT-TRACE-20260825";
-const APP_SHA = "89cfdf0ebf3290aa3b42376a9da194988f6d6db3";
+const APP_SHA = "246fa65949a487e82e4594c0bebb6ecc5a4e53bb";
 const origin = "https://racun-ai-staging-web.onrender.com";
 const startedAt = new Date().toISOString();
 const suffix = crypto.randomUUID();
