@@ -26,27 +26,43 @@ const unfundedScriptId = `admission-unfunded-script-${crypto.randomUUID()}`;
 const rollbackUserId = `admission-rollback-user-${crypto.randomUUID()}`;
 const rollbackProductId = `admission-rollback-product-${crypto.randomUUID()}`;
 const rollbackScriptId = `admission-rollback-script-${crypto.randomUUID()}`;
+const retryUserId = `admission-retry-user-${crypto.randomUUID()}`;
+const retryProductId = `admission-retry-product-${crypto.randomUUID()}`;
+const retryScriptId = `admission-retry-script-${crypto.randomUUID()}`;
 const priceIdr = 5_000;
 const now = new Date().toISOString();
 const pool = new Pool({ connectionString: databaseUrl });
 const referenceRel = `uploads/${productId}/approved.webp`;
 const referenceBytes = Buffer.from("POSTGRES-ADMISSION-RETRY-REFERENCE");
 const referenceSha = crypto.createHash("sha256").update(referenceBytes).digest("hex");
+const retryReferenceRel = `uploads/${retryProductId}/approved-retry.webp`;
+const retryReferenceBytes = Buffer.from("POSTGRES-ADMISSION-RETRY-REFERENCE-CHANGED");
+const retryReferenceSha = crypto.createHash("sha256").update(retryReferenceBytes).digest("hex");
 const objects = new Map<string, Buffer>([
   [referenceRel, referenceBytes],
   [`${referenceRel}.meta.json`, Buffer.from(JSON.stringify({
     sha256: referenceSha, jenis: "product_photo", layakReferensi: true,
     rasioAreaTeks: 0, jumlahKata: 0, alasan: "fixture admission retry", versiBukti: 1,
   }))],
+  [retryReferenceRel, retryReferenceBytes],
+  [`${retryReferenceRel}.meta.json`, Buffer.from(JSON.stringify({
+    sha256: retryReferenceSha, jenis: "product_photo", layakReferensi: true,
+    rasioAreaTeks: 0, jumlahKata: 0, alasan: "fixture admission retry changed", versiBukti: 1,
+  }))],
 ]);
 const putCalls: string[] = [];
 let failSnapshotPutAfterWrite = false;
+let retrySnapshotPutAfterWrite = false;
 setMediaStorageForTests({
   async put(key, body) {
     putCalls.push(key); objects.set(key, Buffer.from(body));
     if (key.includes("/approved-references/") && failSnapshotPutAfterWrite) {
       failSnapshotPutAfterWrite = false;
       throw new Error("injected PG storage failure after write");
+    }
+    if (key.includes("/approved-references/") && retrySnapshotPutAfterWrite) {
+      retrySnapshotPutAfterWrite = false;
+      throw Object.assign(new Error("injected PG serialization retry after write"), { code: "40001" });
     }
   },
   async delete(key) { objects.delete(key); },
@@ -69,6 +85,10 @@ try {
     [rollbackUserId, `${rollbackUserId}@local.test`, now]
   );
   await pool.query(
+    "INSERT INTO users (id,email,tier,locale,created_at) VALUES ($1,$2,'free','id-ID',$3)",
+    [retryUserId, `${retryUserId}@local.test`, now]
+  );
+  await pool.query(
     "INSERT INTO products (id,user_id,name,price_idr,category,images,created_at) VALUES ($1,$2,'Produk admission',1000,'test',$3,$4)",
     [productId, userId, JSON.stringify([referenceRel]), now]
   );
@@ -79,6 +99,10 @@ try {
   await pool.query(
     "INSERT INTO products (id,user_id,name,price_idr,category,images,created_at) VALUES ($1,$2,'Produk admission rollback',1000,'test',$3,$4)",
     [rollbackProductId, rollbackUserId, JSON.stringify([referenceRel]), now]
+  );
+  await pool.query(
+    "INSERT INTO products (id,user_id,name,price_idr,category,images,created_at) VALUES ($1,$2,'Produk admission transient retry',1000,'test',$3,$4)",
+    [retryProductId, retryUserId, JSON.stringify([referenceRel]), now]
   );
   for (const scriptId of [...scriptIds, duplicateScriptId]) {
     await pool.query(
@@ -93,6 +117,10 @@ try {
   await pool.query(
     "INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,created_at) VALUES ($1,$2,'hook','neutral','casual','[]','caption','[]','{}','silent_caption',$3)",
     [rollbackScriptId, rollbackProductId, now]
+  );
+  await pool.query(
+    "INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,created_at) VALUES ($1,$2,'hook','neutral','casual','[]','caption','[]','{}','silent_caption',$3)",
+    [retryScriptId, retryProductId, now]
   );
 
   const putsBeforeInsufficient = putCalls.length;
@@ -126,6 +154,30 @@ try {
     "PG rollback yang terbukti tidak commit meninggalkan prepared snapshot");
   assert.equal(Number((await pool.query<{ n: string }>("SELECT COUNT(*)::text n FROM jobs WHERE user_id=$1", [rollbackUserId])).rows[0].n), 0);
   assert.equal(Number((await pool.query<{ n: string }>("SELECT COUNT(*)::text n FROM credit_ledger WHERE user_id=$1 AND type='hold'", [rollbackUserId])).rows[0].n), 0);
+
+  await pool.query(
+    "INSERT INTO credit_ledger (id,user_id,delta,type,created_at) VALUES ($1,$2,$3,'topup',$4)",
+    [`retry-credit-${crypto.randomUUID()}`, retryUserId, priceIdr, now]
+  );
+  retrySnapshotPutAfterWrite = true;
+  let retryHookCalls = 0;
+  const retried = await smokeCreateJob(retryUserId, {
+    productId: retryProductId, scriptId: retryScriptId,
+    format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+    onRetryForTests: async ({ code }) => {
+      retryHookCalls++;
+      assert.equal(code, "40001");
+      await pool.query("UPDATE products SET images=$1 WHERE id=$2", [JSON.stringify([retryReferenceRel]), retryProductId]);
+    },
+  });
+  assert.equal(retryHookCalls, 1, "fixture transient retry tidak menembus catch 40001");
+  const retryManifestRaw = (await pool.query<{ approved_reference_manifest: string }>(
+    "SELECT approved_reference_manifest FROM jobs WHERE id=$1", [retried.jobId]
+  )).rows[0].approved_reference_manifest;
+  const retryWinnerKeys = new Set((JSON.parse(retryManifestRaw) as { references: { snapshotRel: string }[] }).references.map((ref) => ref.snapshotRel));
+  const retryRetainedKeys = new Set([...objects.keys()].filter((key) => key.startsWith(`jobs/${retried.jobId}/approved-references/`)));
+  assert.deepEqual(retryRetainedKeys, retryWinnerKeys,
+    "successful PG retry meninggalkan key attempt lama di dalam winner prefix");
 
   await pool.query(
     "INSERT INTO credit_ledger (id,user_id,delta,type,created_at) VALUES ($1,$2,$3,'topup',$4)",
@@ -185,14 +237,14 @@ try {
   const balance = await pool.query<{ balance: string }>("SELECT balance::text FROM v_credit_balance WHERE user_id=$1", [userId]);
   assert.equal(Number(balance.rows[0]?.balance), 0, "saldo harus habis persis tanpa hold ganda/terlewat");
 
-  const admittedJobIds = new Set((await pool.query<{ id: string }>("SELECT id FROM jobs WHERE user_id=$1", [userId])).rows.map((row) => row.id));
+  const admittedJobIds = new Set((await pool.query<{ id: string }>("SELECT id FROM jobs")).rows.map((row) => row.id));
   const retainedPrefixes = new Set([...objects.keys()]
     .filter((key) => key.includes("/approved-references/"))
     .map((key) => key.split("/")[1]));
   assert.deepEqual(retainedPrefixes, admittedJobIds,
     "storage PG menyisakan prefix loser/non-job atau kehilangan prefix winner");
 
-  process.stdout.write(JSON.stringify({ admissions: count, jobs: jobs.rowCount, holds: holds.rowCount, insufficient_puts: 0, known_rollback_cleanup: true, concurrent_duplicate_calls: 8, concurrent_duplicate_winners: 1, retained_prefixes_match_jobs: true, active_duplicate: true, terminal_readmission: true, balance: Number(balance.rows[0]?.balance) }) + "\n");
+  process.stdout.write(JSON.stringify({ admissions: count, jobs: jobs.rowCount, holds: holds.rowCount, insufficient_puts: 0, known_rollback_cleanup: true, transient_retry_pruned_to_manifest: true, concurrent_duplicate_calls: 8, concurrent_duplicate_winners: 1, retained_prefixes_match_jobs: true, active_duplicate: true, terminal_readmission: true, balance: Number(balance.rows[0]?.balance) }) + "\n");
 } finally {
   setMediaStorageForTests(undefined);
   await pool.end();

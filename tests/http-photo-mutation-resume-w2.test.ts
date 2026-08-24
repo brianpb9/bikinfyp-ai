@@ -381,6 +381,13 @@ test("SQLite admission mengulang bounded saat exact images berubah sebelum INSER
   assert.deepEqual(storage.values.get(manifest.references[0].snapshotRel), secondBytes);
   assert.ok(firstPreparedKey && firstPreparedKey !== manifest.references[0].snapshotRel,
     "fixture tidak memicu re-prepare dengan key deterministik berbeda");
+  assert.equal(storage.values.has(firstPreparedKey), false,
+    "successful re-prepare meninggalkan snapshot attempt lama");
+  assert.deepEqual(
+    new Set([...storage.values.keys()].filter((key) => key.startsWith(`jobs/${s.jobId}/approved-references/`))),
+    new Set(manifest.references.map((ref) => ref.snapshotRel)),
+    "retained key job bukan persis committed manifest"
+  );
   const holds = (db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE job_id=? AND type='hold'").get(s.jobId) as { n: number }).n;
   assert.equal(holds, 1, "bounded re-prepare membuat hold ganda");
 });

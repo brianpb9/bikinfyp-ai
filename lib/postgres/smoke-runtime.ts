@@ -22,7 +22,7 @@ import { runFf } from "../media/ffmpeg";
 import { mediaStorage } from "../storage";
 import { getPool } from "./pool";
 import { createJobProductSnapshotRaw } from "../job-product-snapshot";
-import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "../job-admission-reference";
+import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "../job-admission-reference";
 
 /**
  * PostgreSQL runtime switch.  `RACUN_POSTGRES_SMOKE=1` is retained solely for
@@ -211,7 +211,12 @@ export async function smokeApproveScript(userId: string, scriptId: string, updat
   try { return await repo.approveOwnedScript(userId, scriptId, update, orgId); } finally { await repo.close(); }
 }
 
-export async function smokeCreateJob(userId: string, input: { productId: string; scriptId: string; format: string; qualityTier: string; durationS: number; priceIdr: number; avatarCustomDesc?: string | null }) {
+export async function smokeCreateJob(userId: string, input: {
+  productId: string; scriptId: string; format: string; qualityTier: string;
+  durationS: number; priceIdr: number; avatarCustomDesc?: string | null;
+  /** Disposable PostgreSQL verifier only; application routes never set it. */
+  onRetryForTests?: (event: { attempt: number; jobId: string; code: "40001" | "40P01" }) => Promise<void>;
+}) {
   const pool = getPool(url());
   try {
     // The user-row lock serializes wallet spends and the script-row lock
@@ -287,11 +292,21 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
         await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId,input.scriptId]);
         await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true }),timestamp]);
         commitAttempted = true;
-        await client.query("COMMIT"); return { jobId, duplicate: false };
+        await client.query("COMMIT");
+        await cleanupSupersededReferenceKeys({
+          jobId,
+          snapshotRels: preparedSnapshotRels,
+          runtime: "admission-postgres-retail",
+          readCommittedManifest: async () => (await client.query<{ approved_reference_manifest: string }>(
+            "SELECT approved_reference_manifest FROM jobs WHERE id=$1", [jobId]
+          )).rows[0]?.approved_reference_manifest ?? null,
+        });
+        return { jobId, duplicate: false };
       } catch (error) {
         const rollbackSucceeded = await client.query("ROLLBACK").then(() => true, () => false);
         const code = (error as { code?: string }).code;
         if ((code === "40001" || code === "40P01") && attempt < 4) {
+          await input.onRetryForTests?.({ attempt, jobId, code });
           await new Promise((resolve) => setTimeout(resolve, 25 * (2 ** attempt) + Math.floor(Math.random() * 25)));
           continue;
         }

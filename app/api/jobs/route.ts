@@ -16,7 +16,7 @@ import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnap
 import { scoreScriptPlan } from "@/lib/fyp-score";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
-import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
+import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -269,7 +269,21 @@ export async function POST(req: Request) {
       })();
       if (outcome.kind === "created") {
         created = outcome.value;
-        if (created.duplicate) await cleanupKnownNonAdmission();
+        if (created.duplicate) {
+          await cleanupKnownNonAdmission();
+        } else {
+          // The transaction wrapper returned only after COMMIT succeeded. Its
+          // stored manifest is now authoritative, so retry keys not named by
+          // that row can be pruned without touching ambiguous outcomes.
+          await cleanupSupersededReferenceKeys({
+            jobId: preparedJobId,
+            snapshotRels: preparedSnapshotRels,
+            runtime: "admission-sqlite",
+            readCommittedManifest: async () => (db!
+              .prepare("SELECT approved_reference_manifest FROM jobs WHERE id=?")
+              .get(preparedJobId) as { approved_reference_manifest: string } | undefined)?.approved_reference_manifest ?? null,
+          });
+        }
       } else if (outcome.kind === "insufficient") {
         await cleanupKnownNonAdmission();
         throw ERR.INSUFFICIENT_CREDITS();

@@ -1,4 +1,4 @@
-import { prepareJobReferenceManifest, type JobReferenceManifest } from "./job-reference-manifest";
+import { parseJobReferenceManifest, prepareJobReferenceManifest, type JobReferenceManifest } from "./job-reference-manifest";
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { pesanTanpaReferensi } from "./product-truth";
 import { mediaStorage } from "./storage";
@@ -76,4 +76,42 @@ export async function cleanupUnadmittedReferenceKeys(input: {
     }
   }
   return { provenAbsent: true, attempted: keys.length, deleted, failed };
+}
+
+/** Prune retry artifacts only after the committed row names the exact winners. */
+export async function cleanupSupersededReferenceKeys(input: {
+  jobId: string;
+  snapshotRels: Iterable<string>;
+  runtime: "admission-sqlite" | "admission-postgres-retail" | "admission-postgres-org";
+  readCommittedManifest: () => Promise<string | null>;
+}): Promise<{ committedManifestProven: boolean; attempted: number; deleted: number; failed: string[] }> {
+  let raw: string | null = null;
+  try {
+    raw = await input.readCommittedManifest();
+  } catch (error) {
+    console.error(`[admission-reference-cleanup] committed manifest proof failed; retaining retry keys runtime=${input.runtime} job=${input.jobId}`, error);
+  }
+  if (!raw) return { committedManifestProven: false, attempted: 0, deleted: 0, failed: [] };
+
+  let winners: Set<string>;
+  try {
+    winners = new Set(parseJobReferenceManifest(raw).references.map((ref) => ref.snapshotRel));
+  } catch (error) {
+    console.error(`[admission-reference-cleanup] committed manifest invalid; retaining retry keys runtime=${input.runtime} job=${input.jobId}`, error);
+    return { committedManifestProven: false, attempted: 0, deleted: 0, failed: [] };
+  }
+  const obsolete = [...new Set(input.snapshotRels)].filter((key) =>
+    key.startsWith(`jobs/${input.jobId}/approved-references/`) && !winners.has(key));
+  const failed: string[] = [];
+  let deleted = 0;
+  for (const key of obsolete) {
+    try {
+      await mediaStorage().delete(key);
+      deleted++;
+    } catch (error) {
+      failed.push(key);
+      console.error(`[admission-reference-cleanup] retry-key delete failed; orphan retained runtime=${input.runtime} job=${input.jobId} key=${key}`, error);
+    }
+  }
+  return { committedManifestProven: true, attempted: obsolete.length, deleted, failed };
 }
