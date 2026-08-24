@@ -81,11 +81,15 @@ export function deteksiHargaIndonesia(text: string): HargaIndonesiaMention[] {
   };
   const overlaps = (match: RegExpExecArray) => occupied.some(([start, end]) => match.index < end && match.index + match[0].length > start);
 
-  const unit = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt|perak)\b/gi;
+  // Perak adalah rupiah bulat: titik/koma tiga digit merupakan pemisah
+  // ribuan Indonesia, bukan pecahan seperti pada "1,5 juta".
+  const perak = /(\d+(?:[.,]\d{3})*)\s*perak\b/gi;
+  for (const match of text.matchAll(perak)) add(match, nilaiNominalPenuh(match[1]), "unit");
+  const unit = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
   for (const match of text.matchAll(unit)) {
     const value = Number(match[1].replace(",", "."));
-    const multiplier = /juta|jt/i.test(match[2]) ? 1_000_000 : /perak/i.test(match[2]) ? 1 : 1_000;
-    add(match, value * multiplier, "unit");
+    const multiplier = /juta|jt/i.test(match[2]) ? 1_000_000 : 1_000;
+    if (!overlaps(match)) add(match, value * multiplier, "unit");
   }
   const currency = /\b(?:rp|idr)\s*\.?\s*(\d+(?:[.,]\d{3})*)\b(?![.,]\d)/gi;
   for (const match of text.matchAll(currency)) if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "currency");
@@ -95,10 +99,13 @@ export function deteksiHargaIndonesia(text: string): HargaIndonesiaMention[] {
   const unitHarga = String.raw`(?:rupiah|ribu|rb|juta|jt|perak)`;
   const labelHarga = String.raw`(?:harga(?:nya)?|biaya(?:nya)?|tarif(?:nya)?|banderol(?:nya)?)`;
   const linker = String.raw`(?:itu|adalah|sekarang|saat|ini|jadi|tetap|cuma|hanya|sebesar|senilai)`;
+  // Separator dibatasi pada tanda baca penghubung internal. Titik/tanya/seru
+  // sengaja tidak diterima agar "harga. Nol ..." tidak tersambung lintas kalimat.
+  const batasHarga = String.raw`(?:\s+|\s*[,;:=–—-]\s*)`;
   const zeroGrammars = [
     new RegExp(String.raw`\b(?:rp|idr)\s*\.?\s*${zero}\b`, "gi"),
     new RegExp(String.raw`\b${zero}\s*${unitHarga}\b`, "gi"),
-    new RegExp(String.raw`\b${labelHarga}\s*(?:[:=–—-]\s*)?(?:(?:${linker})\s+){0,3}${zero}\b`, "gi"),
+    new RegExp(String.raw`\b${labelHarga}${batasHarga}(?:(?:${linker})${batasHarga}){0,3}${zero}\b`, "gi"),
   ];
   for (const grammar of zeroGrammars) {
     for (const match of text.matchAll(grammar)) if (!overlaps(match)) add(match, 0, "terbilang");

@@ -611,6 +611,8 @@ test("SA6 strict mengunci exact bridge set menurut template dan harga immutable"
     "Rp nol", "Rp. zero", "IDR nol", "IDR zero", "harga 0", "harganya = 0",
     "biaya itu 0", "harga itu adalah nol", "harga: nol", "harganya = zero",
     "biaya itu nol", "tarif adalah nol", "banderol sekarang nol", "nol perak", "0 perak",
+    "Harganya, nol", "Harganya itu, nol", "Harga itu adalah: nol",
+    "biayanya; sekarang, zero", "tarifnya = saat ini: 0",
   ]) {
     const labeled = structuredClone(zeroService);
     labeled[3].text = `Nah, ${label}.`;
@@ -624,6 +626,18 @@ test("SA6 strict mengunci exact bridge set menurut template dan harga immutable"
   const zeroCannotVerifyPositive = validate(positivePromoZeroBridge, "promo-terbatas", "Kemeja Uji", "fashion", 1_000);
   assert.equal(zeroCannotVerifyPositive.passed, false);
   assert.ok(zeroCannotVerifyPositive.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)));
+
+  for (const groupedPerak of ["1.000 perak", "1,000 perak"]) {
+    const truthful = structuredClone(LIVE_ADS_SAFE);
+    truthful[2].text = `Harganya ${groupedPerak}.`;
+    truthful[2].bridge_source = "spoken_approved_price";
+    const accepted = validate(truthful, "promo-terbatas", "Kemeja Uji", "fashion", 1_000);
+    assert.equal(accepted.passed, true, `${groupedPerak}: ${JSON.stringify(accepted.errors)}`);
+    const mismatch = validate(truthful, "promo-terbatas", "Kemeja Uji", "fashion", 1);
+    assert.equal(mismatch.passed, false, groupedPerak);
+    assert.ok(mismatch.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)), groupedPerak);
+    assert.ok(mismatch.errors.some((error) => error.rule === "L-14" && /1000/.test(error.message_id)), groupedPerak);
+  }
 });
 
 test("SA6 non-price menangkap notasi harga Indonesia tanpa menolak angka biasa", () => {
@@ -654,6 +668,8 @@ test("detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka
     "Rp nol", "Rp. zero", "IDR nol", "IDR zero", "harganya nol", "biaya zero",
     "harga 0", "harganya = 0", "biaya itu 0", "harga itu adalah nol",
     "harga: nol", "harganya = zero", "biaya itu nol", "tarif adalah nol", "banderol sekarang nol",
+    "Harganya, nol", "Harganya itu, nol", "Harga itu adalah: nol",
+    "biayanya; sekarang, zero", "tarifnya = saat ini: 0",
   ]) {
     const mentions = deteksiHargaIndonesia(nominal);
     assert.deepEqual(mentions.map((mention) => mention.nilai), [0], `${nominal}: ${JSON.stringify(mentions)}`);
@@ -661,9 +677,17 @@ test("detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka
   assert.deepEqual(deteksiHargaIndonesia("3 kartu bergerak selama 15 detik"), []);
   assert.deepEqual(deteksiHargaIndonesia("nol kesempatan tersisa"), []);
   assert.deepEqual(deteksiHargaIndonesia("0 kartu, zero masalah"), []);
+  assert.deepEqual(deteksiHargaIndonesia("harganyanol kesempatan"), []);
+  assert.deepEqual(deteksiHargaIndonesia("Harga. Nol kesempatan"), []);
   assert.deepEqual(deteksiHargaIndonesia("seribu rupiah").map((mention) => mention.nilai), [1_000]);
   assert.deepEqual(deteksiHargaIndonesia("sejuta rupiah").map((mention) => mention.nilai), [1_000_000]);
   assert.deepEqual(deteksiHargaIndonesia("Rp189000").map((mention) => mention.nilai), [189_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1.000 perak").map((mention) => mention.nilai), [1_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1,000 perak").map((mention) => mention.nilai), [1_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1.000 ribu").map((mention) => mention.nilai), [1_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1,000 juta").map((mention) => mention.nilai), [1_000_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1,5 ribu").map((mention) => mention.nilai), [1_500]);
+  assert.deepEqual(deteksiHargaIndonesia("1.5 juta").map((mention) => mention.nilai), [1_500_000]);
 });
 
 test("live promo harga nol merepair currency-word zero lalu exhaustion tidak menyajikan fallback", async () => {
@@ -686,7 +710,7 @@ test("live promo harga nol merepair currency-word zero lalu exhaustion tidak men
     globalThis.fetch = (async () => {
       calls++;
       const segments = safeResponse();
-      if (calls === 1) segments[3].text = "Nah, Rp nol.";
+      if (calls === 1) segments[3].text = "Nah, Harganya, nol.";
       return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
     }) as never;
     const [repaired] = await generateScripts(request);
@@ -697,7 +721,7 @@ test("live promo harga nol merepair currency-word zero lalu exhaustion tidak men
     globalThis.fetch = (async () => {
       calls++;
       const segments = safeResponse();
-      segments[3].text = "Nah, harga itu adalah nol.";
+      segments[3].text = "Nah, Harga itu adalah: nol.";
       return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
     }) as never;
     await assert.rejects(() => generateScripts(request), TemplateTidakDisajikan);

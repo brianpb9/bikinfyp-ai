@@ -268,7 +268,7 @@ export function bridgeStoryAdsTerbukti(
   const productCategory = normalisasiBukti(String(product.productCategory ?? ""));
   const exactPrice = Number(product.productPriceIdr ?? 0);
   const roundedPrice = exactPrice > 0
-    ? Number(formatHargaNatural(exactPrice).match(/\d+(?:[.,]\d+)?/)?.[0].replace(",", ".")) * (/juta/i.test(formatHargaNatural(exactPrice)) ? 1_000_000 : 1_000)
+    ? deteksiHargaIndonesia(formatHargaNatural(exactPrice))[0]?.nilai ?? 0
     : 0;
   for (const raw of segments) {
     const source = raw.bridge_source as StoryAdsBridgeSource | undefined;
