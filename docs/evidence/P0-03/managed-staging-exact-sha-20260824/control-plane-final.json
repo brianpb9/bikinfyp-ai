@@ -1,0 +1,46 @@
+{
+  "observedUtc": "2026-08-24T10:34:18Z",
+  "staging": [
+    {
+      "serviceId": "srv-d9n28tijnfac73a87lt0",
+      "name": "racun-ai-staging-web",
+      "deployId": "dep-da61oebl550s73864vsg",
+      "status": "live",
+      "sha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+      "finishedAt": "2026-08-24T10:31:11.705401Z",
+      "autoDeploy": "no",
+      "suspended": "not_suspended",
+      "maintenance": false
+    },
+    {
+      "serviceId": "srv-d9n28ue417fc73ch2b60",
+      "name": "racun-ai-staging-worker",
+      "deployId": "dep-da61n0qjobas73894nfg",
+      "status": "live",
+      "sha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+      "finishedAt": "2026-08-24T10:25:52.593457Z",
+      "autoDeploy": "no",
+      "suspended": "not_suspended"
+    }
+  ],
+  "stagingPostgres": {
+    "serviceId": "dpg-d9n21fnlk1mc73djm8q0-a",
+    "status": "available",
+    "suspended": "not_suspended",
+    "ipAllowListLength": 0
+  },
+  "productionUnchanged": [
+    {
+      "serviceId": "srv-d9nhccfqj5pc73et9hrg",
+      "deployId": "dep-da3bfg142hec73arfot0",
+      "status": "live",
+      "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d"
+    },
+    {
+      "serviceId": "srv-d9ni3ndaeets73c07kq0",
+      "deployId": "dep-da3bfg142hec73arfpfg",
+      "status": "live",
+      "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d"
+    }
+  ]
+}

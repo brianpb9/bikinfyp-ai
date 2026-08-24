@@ -1150,13 +1150,13 @@ TERAKHIR, bukan pertama.
 |---|---|---|
 | P0-A | kontrak/test diperbaiki | **gelombang ini** |
 | P0-B1 | setiap jalur ingestion sah memproduksi sidecar (`saveUniqueProductImages`, `downloadProductImages`, …) | **SELESAI** (78883a3) — kelima route di `app/api/**` memakai tepat TIGA fungsi penyimpan, dan ketiganya memanggil `tulisSidecar`: `saveProductImages`, `saveUniqueProductImages`, `downloadProductImages` |
-| P0-B2 | batas runtime ffmpeg/ffprobe/tesseract — klasifikasi di web Render (`runtime: node`) TIDAK DIJAMIN/belum diverifikasi punya binernya (koreksi: baris ini sempat menyatakan "tidak punya" sebagai fakta pasti — itu klaim yang lebih kuat dari buktinya; sel ini dan matriks B1-B2 selalu benar menyatakan "tidak diketahui") | **ALAT SELESAI** (0028850) — probe `lib/media/kapabilitas-klasifikasi.ts` + permukaan `/api/health`. JAWABANNYA belum: butuh satu deploy staging untuk membaca kapabilitas runtime web yang SEBENARNYA |
+| P0-B2 | batas runtime ffmpeg/ffprobe/tesseract di web Render | **TERUKUR DI STAGING** (managed 2026-08-24) — ffmpeg/ffprobe ada, tesseract/OCR language/smoke gagal, sehingga `mampu=false`; lihat `managed-staging-exact-sha-20260824/`. Ini jawaban negatif, bukan shipping PASS |
 | **P0-B4b** | **test runtime W1 di atas PostgreSQL nyata** (disetujui Reviewer ronde 7) | **HIJAU** — `npm run test:postgres-product-truth-w1`, 12 test, 12 lulus |
-| P0-B3 | audit legacy offline + karantina | **ALAT SELESAI** (PASS a29569f) — ANGKANYA belum: butuh akses database nyata |
+| P0-B3 | audit legacy offline + karantina | **ALAT SELESAI** (PASS a29569f); akses agregat database staging kini terbukti, tetapi ANGKA media belum: R2 yang berpasangan tidak tersedia dan audit legacy tidak dijalankan |
 | P0-B4 observasi | kanari bukti di batas KEDUA worker — nol penegakan | **SELESAI** — lihat docs/evidence/P0-03/B3-AUDIT-LEGACY.md §6 |
-| P0-B4 tindakan | apa yang DILAKUKAN saat kanari menyala | menunggu T43 |
+| P0-B4 tindakan | apa yang DILAKUKAN saat kanari menyala | authority T43 untuk enforcement teknis in-scope sudah diterima; coverage implementasi dan treatment legacy tetap harus dibatasi task Reviewer |
 | ~~P0-B4b~~ | dipindah ke atas: ia bagian slice implementasi PERTAMA, bukan tahap tersendiri sesudah B4 | — |
-| P0-B5 | resolver ketat jadi otoritatif di admission | **menunggu T43** (P0-B4b sudah hijau; penahannya sekarang keputusan Founder, bukan test) |
+| P0-B5 | resolver ketat jadi otoritatif di admission | authority T43 teknis in-scope sudah diterima; belum boleh diklaim selesai sampai Reviewer menerbitkan task implementasi bounded dan exact-SHA proof diterima |
 
 ### P0-B4b — kriteria lulus, dan kenapa ia prasyarat dan bukan utang
 

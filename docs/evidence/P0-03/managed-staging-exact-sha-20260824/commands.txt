@@ -1,0 +1,44 @@
+All commands ran from the repository physical root. Secret-bearing values,
+temporary CIDR, synthetic phone, cookies, user IDs, and connection strings are
+intentionally omitted.
+
+1. Local target proof
+   git cat-file -t <target-sha>                         exit 0
+   git merge-base --is-ancestor <target-sha> HEAD       exit 0
+   git diff --quiet <target-sha> HEAD -- tracked tree   exit 0
+
+2. Baseline
+   render services --output json | jq <allowlist>       exit 0
+   render deploys list <service-id> --output json       exit 0
+   curl GET staging /api/health                         exit 0, HTTP 200
+
+3. Temporary DB observation
+   render postgres get <staging-pg-id>                  exit 0
+   resolve current IPv4 into a non-printed shell value
+   install EXIT/INT/TERM/HUP cleanup trap
+   render postgres update <staging-pg-id> --ip-allow-list <redacted-/32>
+   render psql <staging-pg-id> --command 'BEGIN READ ONLY; aggregate queries; COMMIT;'
+   render postgres update <staging-pg-id> --clear-ip-allow-list
+   render postgres get ... | verify ipAllowList length=0
+
+4. Publish and traffic hold
+   git push origin <target-sha>:refs/heads/staging/exact-4a1d258-20260824   exit 0
+   render services update <staging-web-id> --maintenance-mode             exit 0
+   curl staging /api/health during hold                                    HTTP 503
+
+5. Exact deploys, foreground wait
+   render deploys create <staging-worker-id> --commit <target-sha> --wait  exit 0
+   render deploys create <staging-web-id> --commit <target-sha> --wait     exit 0
+   render services update <staging-web-id> --maintenance-mode=false       exit 0
+
+6. Managed verification
+   render deploys list / render services / render postgres get             exit 0
+   curl staging /api/health, one full + three spaced samples               HTTP 200
+   authenticated staging dev-login, credits/jobs GET, missing-script POST  200/200/200/404
+   render logs with strict message filters                                 exit 0
+
+7. Cleanup proof
+   staging Postgres allow-list length=0
+   staging maintenance=false
+   staging autoDeploy=no for web+worker
+   production latest deploy IDs/SHAs unchanged

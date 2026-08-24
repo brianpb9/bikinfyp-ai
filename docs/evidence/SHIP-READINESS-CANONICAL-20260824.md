@@ -22,7 +22,9 @@ atas membedakan baseline evidence yang sudah diterima dari exact tree produk
 yang diuji, bukan membuat referensi diri yang berubah setiap kali dokumen
 dikoreksi.
 
-Skor tidak naik karena task 24 Agustus masih local-only dan belum di-deploy.
+Skor tidak naik sesudah managed staging deploy karena bukti deployment justru
+menemukan web runtime tidak punya tesseract (`klasifikasi.mampu=false`), belum
+ada valid-product end-to-end canary, dan external gates produksi tetap HOLD.
 `R2A-KONTRAK.md` menetapkan ceiling gelombang product-truth **55–58**, sedangkan
 work order `SHIP-80-20260821` menetapkan code-only maksimum 70 dan mensyaratkan
 Founder/external gates untuk 80. Tidak ada bukti baru yang membatalkan batas
@@ -66,10 +68,10 @@ R2A_EVIDENCE_CEILING = 58/100
 CANONICAL_REPORTED_SCORE = min(59, 58) = 58/100
 ```
 
-Cap 58 diperlukan karena sebagian bukti board bertingkat C/N, bukti live sudah
-tua, dan accepted changes sesudahnya belum hidup di staging/produksi. Perubahan
-24 Agustus memperkuat isi domain, tetapi tidak menaikkan shipping score sampai
-artefak deployment dan external gates tersedia.
+Cap 58 diperlukan karena sebagian bukti board bertingkat C/N, managed staging
+menemukan classifier incapable dan belum mempunyai valid-product E2E, serta
+external gates produksi belum tersedia. Deployment exact-SHA memperkuat level
+bukti tree produk, tetapi tidak otomatis menaikkan shipping score.
 
 ## Bukti yang diterima, dikarantina, dan tidak diterima
 
@@ -132,9 +134,11 @@ dipakai `formatPromoOverlayText()`, sehingga stock saat ini **inert** dan tidak
 boleh diklaim dirender. Bukti memilih nol policy; Founder harus memilih
 `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau `LIVE_INTENTIONAL`.
 
-Keduanya local-only dan tidak mengubah skor **58/100**. Tidak ada accepted
-deploy exact SHA, staging gate, T43, legacy audit, payment/legal/incident/DR,
-auto-deploy remediation, production E2E, atau operational-cycle evidence baru.
+Kedua slice kode itu kini termasuk dalam exact SHA `4a1d258...` yang hidup di
+staging. Ini menaikkan evidence level deployment untuk tree tersebut, tetapi
+tidak menutup status agregat C9/C12 atau mengubah skor **58/100**. Tidak ada
+legacy media audit, payment/legal/incident/DR, production E2E, atau
+operational-cycle evidence baru.
 
 ## Verified, local-only, dan external/missing
 
@@ -168,18 +172,14 @@ auto-deploy remediation, production E2E, atau operational-cycle evidence baru.
   24 Agu mengonfirmasi deployment lama itu masih live; keduanya tidak
   membuktikan current accepted tree telah di-deploy.
 
-Latest staging evidence yang authoritative adalah artefak read-only 24 Agu di
-`docs/evidence/P0-03/staging-20260824/`, dengan provenance dan filter di
-`MANIFEST.md` serta ringkasan di
-`docs/evidence/P0-03/STAGING-CONTROL-PLANE-READONLY-REFRESH-20260824.md`:
-web `5fe53f27436d917d5232e23ef6c6e624eb00428a`, worker
-`78d84685de6db63724ac2715ef516917d0c4ce3c`. SHA web/worker berbeda,
-`autoDeploy=no`, dan keduanya tidak suspended. `/api/health` web pada
-`2026-08-24T12:53:07+0700 Asia/Jakarta` hanya menjawab
-`{"ok":true,"intake":"open"}` dengan HTTP 200; tidak ada `build_sha`, blok
-classification, migration, atau payment proof. Absence blok classification
-berarti probe belum terbukti deployed, bukan runtime dinyatakan mampu/tidak
-mampu. Bukti ini tidak memberi credit pada current HEAD dan skor tetap 58/100.
+Latest staging evidence yang authoritative adalah bundle managed
+`docs/evidence/P0-03/managed-staging-exact-sha-20260824/`. Web dan worker live
+di exact accepted `4a1d258155b128fee0fcd5a6143198f36a558163`, `autoDeploy=no`,
+tidak suspended, dan health 200 tiga kali berurutan. Semua 35 migrasi hidup.
+Probe menjawab secara managed bahwa web punya ffmpeg/ffprobe tetapi tidak punya
+tesseract, sehingga `mampu=false`. Bukti ini menggantikan snapshot read-only
+lama sebagai keadaan current, tetapi jawaban negatif classifier dan ketiadaan
+valid-product E2E menahan skor di 58/100.
 
 Production juga mempunyai refresh read-only tersanitasi di
 `docs/evidence/P0-03/production-20260824/`, dengan provenance di `MANIFEST.md`
@@ -198,7 +198,8 @@ menaikkan skor 58/100.
 
 ### Local-only
 
-- Seluruh perubahan setelah SHA staging lama, termasuk accepted task 24 Agu.
+- Dokumen evidence commit sesudah deployed `4a1d258...`; tree produk yang
+  dikandung `4a1d258...` sendiri sudah verified-managed di staging.
 - Full npm/tsx, TypeScript, catalog, dan test dengan PostgreSQL disposable yang
   hanya dijalankan Builder. Aggregate generic latest memiliki 40 skip
   environment PostgreSQL; gate W1 yang relevan dijalankan terpisah 29/29 pada
@@ -212,7 +213,7 @@ menaikkan skor 58/100.
 | Input/gate | Presence/status yang diamati | Kesimpulan yang diizinkan |
 |---|---|---|
 | Render CLI + config | present | akses control-plane mungkin ada; bukan izin deploy |
-| PostgreSQL / `DATABASE_URL` staging | loopback lokal `localhost:5432` terverifikasi; kredensial/URL staging tetap tidak tersedia | disposable local PG gate dapat dan sudah dijalankan; audit data staging tetap memerlukan pasangan staging yang sah |
+| PostgreSQL staging | akses read-only agregat sementara terbukti dan allow-list dipulihkan kosong | DB half tersedia; audit media tetap memerlukan R2 staging yang terbukti berpasangan |
 | R2 effective | endpoint/bucket empty; key id/secret nonempty | tidak ada pasangan DB+bucket yang sah untuk audit; jangan hubungkan silang |
 | Duitku effective | merchant/api key nonempty; production=false | key lokal ada, approval/settlement/go-live tidak terbukti |
 | Midtrans effective | rollback keys nonempty | jalur rollback sesuai ADR; bukan gateway current atau bukti settlement |
@@ -231,9 +232,9 @@ Tidak satu pun keduanya boleh dinilai live sebelum syarat ADR terpenuhi.
 
 | Gap | Status | Owner/authority | Artefak penutup yang dibutuhkan |
 |---|---|---|---|
-| P0-B2 runtime classification web | external/deploy | Founder/Release owner | deploy exact SHA + sanitized deploy/health probe yang menampilkan kapabilitas |
-| P0-B3 angka legacy C10 | credential/data | Data/Release owner | JSON audit read-only dengan `DATABASE_URL` dan R2 yang terbukti berpasangan |
-| T43 / P0-B4 action / P0-B5 / A1..A7 | Founder decision | Brian | keputusan tertulis A/B/C, treatment legacy, dan urutan rollout |
+| P0-B2 runtime classification web | **VERIFIED_MANAGED: incapable** | Release/Builder under approved scope | add/relocate tesseract-capable classification boundary, then repeat managed probe |
+| P0-B3 angka legacy C10 | partial credential/data | Data/Release owner | DB aggregate access proven; still needs paired staging R2 and sanitized legacy audit JSON |
+| T43 / P0-B4 action / P0-B5 / A1..A7 | authority received for in-scope technical enforcement; implementation coverage still partial | Reviewer dispatches bounded remaining scope | exact boundary evidence and legacy treatment; do not infer all A1..A7 from authority alone |
 | C2 `TYPE_MISMATCH` | local implementation, belum bounded-approved | Builder setelah scope approval | route/admission boundary + canonical code + counterexamples |
 | C5 `CATEGORY_UNKNOWN`/manual review | product policy + local | Founder lalu Builder | policy manual-review tertulis dan boundary test |
 | C3/C4 E1/worker enforcement | partial | Founder untuk admission policy; Builder sesudahnya | policy + exact route/worker tests; E4/E8 saja sudah canonical |
@@ -265,19 +266,22 @@ payments hanya karena kandidat itu tertulis.
 
 ### Founder actions yang diperlukan sekarang
 
-1. `APPROVE STAGING` untuk exact accepted SHA dan migration/evidence tranche.
-2. Tetapkan `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau
+Managed staging exact-SHA dan authority T43 untuk enforcement teknis in-scope
+sudah diterima dan dijalankan sesuai tranche. Keduanya bukan lagi permintaan
+approval terbuka. Keputusan/bukti eksternal yang masih diperlukan:
+
+1. Tetapkan `PROMO_POLICY=SNAPSHOT` (Reviewer recommendation) atau
    `PROMO_POLICY=LIVE_INTENTIONAL`; keputusan ini harus menjelaskan before
    price/deadline dan apakah stock yang saat ini live namun inert tetap inert.
-3. Tetapkan `T43=A+B`, atau tulis pilihan T43 eksplisit lain beserta treatment
-   legacy dan urutan rollout.
-4. Tetapkan `RELEASE_OWNER`.
-5. Berikan `APPROVE DISABLE PRODUCTION AUTODEPLOY` untuk web dan worker; setelah
+2. Tetapkan treatment legacy dan urutan rollout yang belum ditentukan oleh
+   authority enforcement teknis T43.
+3. Tetapkan `RELEASE_OWNER`.
+4. Berikan `APPROVE DISABLE PRODUCTION AUTODEPLOY` untuk web dan worker; setelah
    tindakan terotorisasi, wajib ada refresh read-only yang membuktikan off.
-6. Putuskan price/COGS.
-7. Tetapkan incident owner.
-8. Tetapkan counsel/legal approver.
-9. Berikan authority Duitku yang diperlukan untuk approval dan pengujian
+5. Putuskan price/COGS.
+6. Tetapkan incident owner.
+7. Tetapkan counsel/legal approver.
+8. Berikan authority Duitku yang diperlukan untuk approval dan pengujian
    settlement/webhook; ini bukan izin payments go-live otomatis.
 
 ## Critical path 48 jam
@@ -287,8 +291,8 @@ bahwa pihak eksternal akan selesai.
 
 | Window | Aksi/gate | Exact artifact untuk membuka tranche berikutnya |
 |---|---|---|
-| 0–2 jam | Founder menetapkan promo policy, T43, price/COGS, release owner, incident owner, dan counsel contact; release owner mematikan auto-deploy production web+worker | satu decision record versioned + sanitized read-only post-change artifact yang menunjukkan kedua service off dan tidak ada deploy tak terotorisasi |
-| 2–6 jam | Deploy **accepted exact SHA** ke staging web+worker; jalankan migrasi staging sesuai blueprint | sanitized manifest berisi deploy IDs, exact SHA web/worker, migration exit, `/api/health` HTTP/status termasuk classification/DB/Redis readiness |
+| Selesai 24 Agu | Deploy **accepted exact SHA** ke staging web+worker; jalankan migrasi staging sesuai blueprint | `managed-staging-exact-sha-20260824/`: deploy IDs, exact SHA web/worker, migrasi, health, classifier negatif, control-state cleanup |
+| 0–2 jam berikutnya | Founder menetapkan promo policy, treatment legacy, price/COGS, release owner, incident owner, dan counsel contact; release owner mematikan auto-deploy production web+worker setelah authority | satu decision record versioned + sanitized read-only post-change artifact yang menunjukkan kedua service off dan tidak ada deploy tak terotorisasi |
 | 4–8 jam | Audit legacy read-only memakai Postgres staging dan bucket R2 yang dibuktikan berpasangan | JSON signed/timestamped: total, no-photo, corrupt-column, approved, per-reason, failed-to-inspect; nol nilai credential |
 | 6–18 jam | Jika T43 mengizinkan, Reviewer menerbitkan bounded task untuk E1/admission dan treatment legacy | accepted exact SHA + route/worker boundary tests + independent dependency-backed run; tidak ada deploy otomatis |
 | 18–24 jam | Deploy ulang accepted remediation ke staging dan jalankan positive/negative product trace | exact deploy SHA + trace C1/C3/C4/C6/C7/C8/C10/C13, zero-cost assertions, rollback/list/audit evidence |

@@ -1,0 +1,20 @@
+WEB PREDEPLOY 2026-08-24T10:29:54.327234814Z
+status=PASS
+applied=0007_fyp_snapshots..0035_job_product_snapshot (29 migrations)
+skipped=0001_initial..0006_promo_jobs_virality_checklist (6 migrations)
+
+WEB START 2026-08-24T10:31:10.752515271Z
+Next.js=Ready in 2.3s
+
+WORKER START 2026-08-24T10:25:54.010637857Z
+queue=racun-jobs-staging
+concurrency=1
+
+WORKER AUXILIARY START 2026-08-24T10:25:54.010829162Z
+queue=racun-promo-jobs
+concurrency=1
+
+SANITIZED LOG AGGREGATE 2026-08-24T10:25:40Z..10:34:30Z
+records_scanned=81
+provider_activity_matches=0
+worker_failure_event_matches=0

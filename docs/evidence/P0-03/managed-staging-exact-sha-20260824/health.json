@@ -1,0 +1,27 @@
+{
+  "fullObservation": {
+    "observedUtc": "2026-08-24T10:32:09Z",
+    "http": 200,
+    "ok": true,
+    "intake": "open",
+    "paymentsProvider": "midtrans",
+    "paymentsEnv": "sandbox",
+    "paymentsLive": false,
+    "buildSha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+    "migrationsPending": [],
+    "classification": {
+      "capable": false,
+      "ffmpeg": true,
+      "ffprobe": true,
+      "tesseract": false,
+      "ocrLanguage": false,
+      "smoke": false,
+      "checkedAt": "2026-08-24T10:32:10.539Z"
+    }
+  },
+  "sustainedSamples": [
+    { "observedUtc": "2026-08-24T10:33:58Z", "http": 200, "ok": true, "intake": "open", "paymentsEnv": "sandbox", "paymentsLive": false, "buildSha": "4a1d258155b128fee0fcd5a6143198f36a558163", "migrationsPending": [], "classifierCapable": false },
+    { "observedUtc": "2026-08-24T10:34:08Z", "http": 200, "ok": true, "intake": "open", "paymentsEnv": "sandbox", "paymentsLive": false, "buildSha": "4a1d258155b128fee0fcd5a6143198f36a558163", "migrationsPending": [], "classifierCapable": false },
+    { "observedUtc": "2026-08-24T10:34:18Z", "http": 200, "ok": true, "intake": "open", "paymentsEnv": "sandbox", "paymentsLive": false, "buildSha": "4a1d258155b128fee0fcd5a6143198f36a558163", "migrationsPending": [], "classifierCapable": false }
+  ]
+}

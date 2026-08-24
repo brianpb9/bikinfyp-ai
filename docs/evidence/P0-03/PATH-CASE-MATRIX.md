@@ -250,13 +250,15 @@ dikerjakan di slice ini:**
    residual dicatat jujur. E1 masih menerima foto tanpa resolver.
 **(b) Butuh kredensial/data:**
 
-8. Angka audit legacy P0-B3 (C10) — butuh `DATABASE_URL` staging; ember media
-   juga butuh R2 yang BERPASANGAN dengan database itu.
+8. Angka audit legacy P0-B3 (C10) — akses agregat database staging sudah
+   terbukti 24 Agu, tetapi ember media tetap butuh R2 yang BERPASANGAN; audit
+   legacy tidak dijalankan.
 
 **(c) Butuh deploy/migrasi:**
 
-9. Kapabilitas klasifikasi runtime web (P0-B2) — probe `0028850` belum hidup di
-   staging; `preDeployCommand` staging menjalankan migrasi schema.
+9. Kapabilitas klasifikasi runtime web (P0-B2) — **TERUKUR DI STAGING** pada
+   exact `4a1d258`: ffmpeg/ffprobe ada, tesseract tidak, `mampu=false`. Ini
+   menutup pertanyaan observasi dan membuka gap remediation deployment.
 
 **(d) Butuh keputusan Founder T43:**
 
@@ -796,3 +798,26 @@ TASK=`SHIP-READINESS-CANONICAL-C9C12-RECONCILE-20260824`
   legal, incident/DR, or release-owner boundaries.
 - No policy, reason code, production behavior, deployment, or score changed.
   Canonical shipping readiness remains **58/100**.
+
+### E.25 Managed staging exact-SHA — 2026-08-24
+
+TASK=`P0-MANAGED-STAGING-EXACT-SHA-20260824`
+
+- Web and worker staging are `live` on exact accepted SHA
+  `4a1d258155b128fee0fcd5a6143198f36a558163`; deploy IDs and sanitized
+  provenance are in `managed-staging-exact-sha-20260824/`.
+- Admission was held with staging-only maintenance throughout the mismatch
+  window. Job total stayed 74 and active/queued stayed zero. Maintenance was
+  restored false; both services retain `autoDeploy=no`.
+- Migrations advanced from 6 to all 35, through `0035_job_product_snapshot`.
+  The terminal-ledger unique index, capture-delta check, and `regen` ledger type
+  were queried as actual DB artifacts.
+- Managed P0-B2 answer: web classification is **not capable** because tesseract
+  is unavailable. The application reports this honestly as
+  `belum_diperiksa`; no capability or Product Truth end-to-end PASS is claimed.
+- Authenticated zero-money boundary smoke created no job and no
+  hold/capture/regen row; worker queue startup was observed and provider
+  activity was zero. A successful paid/render canary was deliberately not run.
+- Production deploys were unchanged. Production/payment/legal/incident credit
+  remains zero, C9/C12 aggregate statuses remain PARTIAL, and canonical
+  shipping readiness remains **58/100** pending independent review.

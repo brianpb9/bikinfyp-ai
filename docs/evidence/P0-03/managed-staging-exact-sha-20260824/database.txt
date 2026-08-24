@@ -1,0 +1,39 @@
+PRE_DEPLOY 2026-08-24T10:22:30Z
+allowlist_pre_length=0
+allowlist_temporary_length=1 cidr=REDACTED label_match=1
+jobs_total=74
+active_or_queued=0
+states=READY:20,REFUNDED:54
+migration_count=6
+first_version=0001_initial
+last_version=0006_promo_jobs_virality_checklist
+allowlist_restore=PASS post_length=0
+
+POST_DEPLOY 2026-08-24T10:31:48Z
+allowlist_pre_length=0
+allowlist_temporary_length=1 cidr=REDACTED label_match=1
+jobs_total=74
+active_or_queued=0
+migration_count=35
+first_version=0001_initial
+last_version=0035_job_product_snapshot
+required_versions=0030_regen_ledger_type,0031_terminal_ledger_unique,0034_job_reference_manifest,0035_job_product_snapshot
+allowlist_restore=PASS post_length=0
+
+POST_SMOKE 2026-08-24T10:33:45Z
+allowlist_pre_length=0
+allowlist_temporary_length=1 cidr=REDACTED label_match=1
+jobs_total=74
+active_or_queued=0
+migration_count=35
+uniq_ledger_terminal_per_job=present
+credit_ledger_capture_delta_check=present
+ledger_type_regen=allowed
+synthetic_users=1
+synthetic_spend_rows_hold_capture_regen=0
+allowlist_restore=PASS post_length=0
+
+NOTE: an initial read-only query attempted timestamp arithmetic against the
+legacy text-typed created_at column and failed with an operator type error.
+The transaction wrote nothing and the trap restored allow-list length zero.
+The successful observation removed that invalid type assumption.
