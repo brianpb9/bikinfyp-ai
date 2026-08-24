@@ -1,6 +1,7 @@
 // Duitku POP: buat invoice + verifikasi signature callback (uang sungguhan).
-// Docs: https://docs.duitku.com/pop/en/ — formula diverifikasi terhadap SDK
-// resmi duitkupg/duitku-php (Pop.php, 2026-08-19):
+// Create/callback: https://docs.duitku.com/pop/en/
+// Status (general API, bukan dijamin kompatibel lintas produk POP):
+// https://docs.duitku.com/api/en/
 //  - createInvoice: POST {base}/api/merchant/createInvoice
 //    header x-duitku-signature = HMAC-SHA256(merchantCode + timestampMs, apiKey)
 //  - callback: POST x-www-form-urlencoded,
@@ -161,6 +162,7 @@ export async function duitkuTransactionStatusDetailed(orderId: string): Promise<
   contentType: string | null;
   bodySha256: string;
   bodyKeys: string[];
+  merchantOrderId?: string;
   statusCode?: string;
   statusMessage?: string;
   reference?: string;
@@ -186,6 +188,7 @@ export async function duitkuTransactionStatusDetailed(orderId: string): Promise<
     contentType: res.headers.get("content-type"),
     bodySha256: crypto.createHash("sha256").update(raw).digest("hex"),
     bodyKeys: Object.keys(data).sort(),
+    merchantOrderId: typeof data.merchantOrderId === "string" ? data.merchantOrderId : undefined,
     statusCode: typeof data.statusCode === "string" ? data.statusCode : undefined,
     statusMessage: typeof data.statusMessage === "string" ? data.statusMessage : undefined,
     reference: typeof data.reference === "string" ? data.reference : undefined,
@@ -195,9 +198,54 @@ export async function duitkuTransactionStatusDetailed(orderId: string): Promise<
     contentType: string | null;
     bodySha256: string;
     bodyKeys: string[];
+    merchantOrderId?: string;
     statusCode?: string;
     statusMessage?: string;
     reference?: string;
     amount?: string;
+  };
+}
+
+export type DuitkuStatusDetail = Awaited<ReturnType<typeof duitkuTransactionStatusDetailed>>;
+
+/**
+ * Bangun bukti status fail-closed. Hanya response 2xx dengan seluruh identitas
+ * transaksi yang cocok boleh menjadi PASS; error JSON provider tetap HOLD.
+ */
+export function buildDuitkuStatusEvidence(
+  detail: DuitkuStatusDetail,
+  expected: { orderId: string; amountIdr: number; providerReferenceSha256: string },
+  queriedAt = new Date().toISOString(),
+) {
+  const referenceSha256 = detail.reference
+    ? crypto.createHash("sha256").update(detail.reference).digest("hex")
+    : null;
+  const blockers: string[] = [];
+  if (detail.httpStatus < 200 || detail.httpStatus >= 300) blockers.push(`HTTP_${detail.httpStatus}`);
+  if (!detail.merchantOrderId) blockers.push("MISSING_MERCHANT_ORDER_ID");
+  else if (detail.merchantOrderId !== expected.orderId) blockers.push("MERCHANT_ORDER_ID_MISMATCH");
+  if (!detail.reference) blockers.push("MISSING_REFERENCE");
+  else if (referenceSha256 !== expected.providerReferenceSha256) blockers.push("REFERENCE_MISMATCH");
+  if (!detail.amount) blockers.push("MISSING_AMOUNT");
+  else if (!/^\d+$/.test(detail.amount) || Number(detail.amount) !== expected.amountIdr) blockers.push("AMOUNT_MISMATCH");
+  if (!detail.statusCode) blockers.push("MISSING_STATUS_CODE");
+  else if (!["00", "01", "02"].includes(detail.statusCode)) blockers.push("UNKNOWN_STATUS_CODE");
+  if (!detail.statusMessage?.trim()) blockers.push("MISSING_STATUS_MESSAGE");
+
+  return {
+    queried: true,
+    queried_at: queriedAt,
+    http_status: detail.httpStatus,
+    content_type: detail.contentType,
+    body_sha256: detail.bodySha256,
+    body_keys: detail.bodyKeys,
+    merchant_order_id_matches: detail.merchantOrderId ? detail.merchantOrderId === expected.orderId : null,
+    status_code: detail.statusCode ?? null,
+    status_message: detail.statusMessage ?? null,
+    amount: detail.amount ?? null,
+    reference_matches_create: referenceSha256 ? referenceSha256 === expected.providerReferenceSha256 : null,
+    verification: blockers.length === 0
+      ? { outcome: "PASS" as const, blockers: [] as string[] }
+      : { outcome: "HOLD" as const, blockers },
   };
 }

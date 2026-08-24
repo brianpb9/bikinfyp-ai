@@ -154,30 +154,23 @@ if (refreshStatus) {
     throw new Error("SANDBOX_JOURNAL_INVALID_FOR_STATUS_REFRESH");
   }
   const detail = await duitku.duitkuTransactionStatusDetailed(orderId);
+  const transactionStatus = duitku.buildDuitkuStatusEvidence(detail, {
+    orderId,
+    amountIdr: selectedPackage.priceIdr,
+    providerReferenceSha256: journal.real_sandbox_api.create_invoice.provider_reference_sha256,
+  });
   const refreshed = {
     ...journal,
+    verification_result: transactionStatus.verification.outcome,
     first_attempt: common.first_attempt,
     real_sandbox_api: {
       ...journal.real_sandbox_api,
-      transaction_status: {
-        queried: true,
-        queried_at: new Date().toISOString(),
-        http_status: detail.httpStatus,
-        content_type: detail.contentType,
-        body_sha256: detail.bodySha256,
-        body_keys: detail.bodyKeys,
-        status_code: detail.statusCode ?? null,
-        status_message: detail.statusMessage ?? null,
-        amount: detail.amount ?? null,
-        reference_matches_create: detail.reference
-          ? crypto.createHash("sha256").update(detail.reference).digest("hex") === journal.real_sandbox_api?.create_invoice?.provider_reference_sha256
-          : null,
-      },
+      transaction_status: transactionStatus,
     },
   };
   fs.writeFileSync(journalPath, `${JSON.stringify(refreshed, null, 2)}\n`, { mode: 0o600 });
   console.log(JSON.stringify(refreshed, null, 2));
-  process.exit(detail.httpStatus >= 200 && detail.httpStatus < 300 ? 0 : 2);
+  process.exit(transactionStatus.verification.outcome === "PASS" ? 0 : 2);
 }
 
 if (fs.existsSync(journalPath)) {
@@ -263,12 +256,15 @@ if (redirect.origin !== APPROVED_SANDBOX_REDIRECT_ORIGIN) {
   throw new Error(`Invoice tidak mengarah ke sandbox Duitku (${redirect.origin}).`);
 }
 const status = await duitku.duitkuTransactionStatusDetailed(orderId);
-if (status.amount !== undefined && Number(status.amount) !== selectedPackage.priceIdr) {
-  throw new Error(`Status amount tidak cocok dengan TOPUP_PACKAGES (${status.amount}).`);
-}
+const transactionStatus = duitku.buildDuitkuStatusEvidence(status, {
+  orderId,
+  amountIdr: selectedPackage.priceIdr,
+  providerReferenceSha256,
+});
 
 const finalEvidence = {
   ...common,
+  verification_result: transactionStatus.verification.outcome,
   replacement_attempted: true,
   real_sandbox_api: {
     executed: true,
@@ -279,20 +275,12 @@ const finalEvidence = {
       redirect_origin: redirect.origin,
       provider_reference_sha256: providerReferenceSha256,
     },
-    transaction_status: {
-      queried: true,
-      queried_at: new Date().toISOString(),
-      http_status: status.httpStatus,
-      content_type: status.contentType,
-      body_sha256: status.bodySha256,
-      body_keys: status.bodyKeys,
-      status_code: status.statusCode ?? null,
-      status_message: status.statusMessage ?? null,
-      amount: status.amount ?? null,
-      reference_matches_create: status.reference ? status.reference === invoice.providerRef : null,
-    },
+    transaction_status: transactionStatus,
   },
   managed_callback: managedCallback,
 };
 fs.writeFileSync(journalPath, `${JSON.stringify(finalEvidence, null, 2)}\n`, { mode: 0o600 });
 console.log(JSON.stringify(finalEvidence, null, 2));
+if (transactionStatus.verification.outcome !== "PASS") {
+  throw new Error(`DUITKU_STATUS_VERIFICATION_HOLD: ${transactionStatus.verification.blockers.join(",")}`);
+}

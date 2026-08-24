@@ -2,6 +2,9 @@
   "schema": "duitku-sandbox-verification/v1",
   "observed_at": "2026-08-24T15:43:51.755Z",
   "execution": "REAL_SANDBOX_API",
+  "verification_result": "HOLD",
+  "classification_note": "Retrospective fail-closed classification of the stored response; no additional provider request was made.",
+  "external_blocker": "Duitku must confirm or enable a supported read-only reconciliation mechanism for POP-created sandbox invoices; the documented general-API transactionStatus route returned HTTP 404 without a valid status schema.",
   "authentication_at_execution": {
     "create_invoice": "HMAC_SHA256_CURRENT",
     "transaction_status": "HMAC_SHA256_CURRENT",
@@ -59,10 +62,22 @@
       "body_keys": [
         "Message"
       ],
+      "merchant_order_id_matches": null,
       "status_code": null,
       "status_message": null,
       "amount": null,
-      "reference_matches_create": null
+      "reference_matches_create": null,
+      "verification": {
+        "outcome": "HOLD",
+        "blockers": [
+          "HTTP_404",
+          "MISSING_MERCHANT_ORDER_ID",
+          "MISSING_REFERENCE",
+          "MISSING_AMOUNT",
+          "MISSING_STATUS_CODE",
+          "MISSING_STATUS_MESSAGE"
+        ]
+      }
     }
   },
   "managed_callback": {

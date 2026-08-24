@@ -49,6 +49,8 @@ test("runner mengunci redirect real hanya ke app-sandbox.duitku.com", () => {
     source.indexOf('state: "CREATE_ACCEPTED"') < source.lastIndexOf("duitku.duitkuTransactionStatusDetailed(orderId)"),
     "CREATE_ACCEPTED journal wajib durable sebelum status query",
   );
+  assert.match(source, /transactionStatus\.verification\.outcome !== "PASS"/);
+  assert.match(source, /DUITKU_STATUS_VERIFICATION_HOLD/);
 });
 
 for (const [name, overrides, expected] of [

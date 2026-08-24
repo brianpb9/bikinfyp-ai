@@ -17,6 +17,7 @@ const {
   duitkuBase,
   duitkuTransactionStatusDetailed,
   duitkuTransactionStatusUrl,
+  buildDuitkuStatusEvidence,
 } = await import("../lib/duitku");
 
 const sign = (merchantCode: string, amount: string, orderId: string, apiKey: string) =>
@@ -30,6 +31,30 @@ test("callback dengan signature sah diterima", () => {
     signature: sign("DTEST1", "60000", "racun-abc-123", "kunci-uji-duitku"),
   };
   assert.equal(verifyDuitkuCallbackSignature(payload), true);
+});
+
+test("HTTP 404 tanpa skema status Duitku menghasilkan HOLD, bukan bukti sukses", () => {
+  const evidence = buildDuitkuStatusEvidence({
+    httpStatus: 404,
+    contentType: "application/json; charset=utf-8",
+    bodySha256: "a".repeat(64),
+    bodyKeys: ["Message"],
+  }, {
+    orderId: "bikinfyp-sandbox-verify-20260824154351-2a4e286b",
+    amountIdr: 60000,
+    providerReferenceSha256: "b".repeat(64),
+  }, "2026-08-24T15:43:52.734Z");
+
+  assert.equal(evidence.verification.outcome, "HOLD");
+  assert.deepEqual(evidence.verification.blockers, [
+    "HTTP_404",
+    "MISSING_MERCHANT_ORDER_ID",
+    "MISSING_REFERENCE",
+    "MISSING_AMOUNT",
+    "MISSING_STATUS_CODE",
+    "MISSING_STATUS_MESSAGE",
+  ]);
+  assert.notEqual(evidence.verification.outcome, "PASS");
 });
 
 test("signature salah / field hilang / merchant lain semuanya ditolak", () => {
@@ -104,7 +129,13 @@ test("transactionStatus memakai endpoint webapi sandbox dan HMAC-SHA256", async 
   globalThis.fetch = (async (url: RequestInfo | URL, init?: RequestInit) => {
     capturedUrl = String(url);
     capturedBody = JSON.parse(String(init?.body));
-    return new Response(JSON.stringify({ statusCode: "01", statusMessage: "PENDING", reference: "D0001", amount: 60000 }), {
+    return new Response(JSON.stringify({
+      merchantOrderId: "racun-abc-123",
+      statusCode: "01",
+      statusMessage: "PENDING",
+      reference: "D0001",
+      amount: 60000,
+    }), {
       status: 200,
       headers: { "content-type": "application/json" },
     });
@@ -120,7 +151,13 @@ test("transactionStatus memakai endpoint webapi sandbox dan HMAC-SHA256", async 
     );
     assert.equal(detail.httpStatus, 200);
     assert.equal(detail.statusCode, "01");
-    assert.deepEqual(detail.bodyKeys, ["amount", "reference", "statusCode", "statusMessage"]);
+    assert.deepEqual(detail.bodyKeys, ["amount", "merchantOrderId", "reference", "statusCode", "statusMessage"]);
+    const evidence = buildDuitkuStatusEvidence(detail, {
+      orderId: "racun-abc-123",
+      amountIdr: 60000,
+      providerReferenceSha256: crypto.createHash("sha256").update("D0001").digest("hex"),
+    });
+    assert.equal(evidence.verification.outcome, "PASS");
   } finally {
     globalThis.fetch = realFetch;
   }
