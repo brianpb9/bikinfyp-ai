@@ -1,6 +1,7 @@
 {
   "observed_at": "2026-08-24T11:15:00Z",
-  "source": "GET https://api.render.com/v1/services/{id}; render deploys list {id} --output json",
+  "source": "later transcription of pre-mutation operator-session GET/deploy-list outputs; not a contemporaneous raw capture file",
+  "independently_proven": false,
   "staging_web": {
     "id": "srv-d9n28tijnfac73a87lt0",
     "branch": "main",
@@ -18,6 +19,22 @@
     "latestSha": "4a1d258155b128fee0fcd5a6143198f36a558163",
     "latestStatus": "live",
     "updatedAt": "2026-08-24T10:32:00.241843Z"
+  },
+  "staging_worker": {
+    "id": "srv-d9n28ue417fc73ch2b60",
+    "runtime": "docker",
+    "dockerfilePath": "Dockerfile.worker",
+    "latestDeploy": "dep-da61n0qjobas73894nfg",
+    "latestSha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+    "latestStatus": "live",
+    "updatedAt": "2026-08-24T10:25:52.595322Z"
+  },
+  "staging_database": {
+    "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+    "status": "available",
+    "ipAllowListCount": 0,
+    "jobAggregateObserved": false,
+    "nonMutationIndependentlyProven": false
   },
   "production_web": {
     "id": "srv-d9nhccfqj5pc73et9hrg",

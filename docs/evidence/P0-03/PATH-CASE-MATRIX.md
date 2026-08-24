@@ -261,8 +261,9 @@ dikerjakan di slice ini:**
    menutup pertanyaan observasi dan membuka gap remediation deployment.
    Candidate `Dockerfile.web` staging-only dibuat pada task
    `P0-B2-WEB-CLASSIFIER-CAPABLE-20260824`. Managed exact-SHA build berikutnya
-   gagal aman karena `AUTH_SECRET` tidak tersedia di Docker build context;
-   staging dikembalikan ke Node/SHA prestate dan bukti ada di
+   gagal karena `AUTH_SECRET` tidak tersedia di Docker build context. Final
+   staging terbaca kembali live/healthy pada Node/SHA prestate, tetapi bukti
+   interval-level fail-safe tidak lengkap; bundle ada di
    `managed-web-classifier-canary-20260824/`
    dan tidak mengubah jawaban managed sebelum deploy+health smoke berikutnya.
 

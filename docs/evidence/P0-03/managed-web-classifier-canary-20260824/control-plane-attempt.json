@@ -1,7 +1,23 @@
 {
-  "observed_at": "2026-08-24T11:18:37.125791Z",
-  "source": "allowlisted response from official Render PATCH plus HTTP status probe and deploy list",
-  "hold_probe": { "url": "https://racun-ai-staging-web.onrender.com/api/health", "http_status": 503 },
+  "source": "later transcription of separate contemporaneous operator-session outputs; not a raw capture file",
+  "observations": [
+    {
+      "observed_before": "2026-08-24T11:18:37.125791Z",
+      "kind": "health probe after maintenance enable",
+      "url": "https://racun-ai-staging-web.onrender.com/api/health",
+      "http_status": 503
+    },
+    {
+      "observed_at": "2026-08-24T11:18:37.125791Z",
+      "kind": "candidate PATCH response",
+      "maintenance_enabled": true
+    },
+    {
+      "observed_at": "2026-08-24T11:20:48.598666Z",
+      "kind": "deploy terminal record",
+      "deploy_status": "build_failed"
+    }
+  ],
   "staging_web": {
     "id": "srv-d9n28tijnfac73a87lt0",
     "branch": "staging/exact-d2edab0-20260824",

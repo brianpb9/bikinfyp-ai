@@ -20,13 +20,15 @@ stopped with `SecretConfigurationError`: `AUTH_SECRET` was unavailable inside
 the Docker build context. This is a build/runtime secret-boundary mismatch; it
 does not prove the candidate runtime capable.
 
-The contemporaneous PATCH response recorded maintenance enabled on the
-candidate configuration and the health probe returned HTTP 503 before deploy.
-Maintenance was explicitly disabled only after the rollback deploy reported
-live. There was no continuous external sampler, so this bundle does not claim
-continuous independent observation between those endpoints. No positive
-classifier/admission canary command ran, this operator invoked no paid
-provider, and production control-plane identity did not change.
+The later transcript transcription records maintenance enabled on the
+candidate PATCH response and an HTTP 503 probe before deploy. It also records
+rollback live before the maintenance-disable response, but those intermediate
+outputs were not preserved as contemporaneous raw files. Therefore this bundle
+does **not** independently prove continuous hold sequencing. No positive canary
+evidence exists and the canary is treated as not executed; absence of a paid
+provider call is not independently proven. The retrospective prestate
+transcription and final capture show matching production identity, but
+production interval-level non-mutation is not independently proven.
 
 ## Rollback proof
 
@@ -40,14 +42,26 @@ provider, and production control-plane identity did not change.
   `payments_live=false`, and the exact rollback SHA;
 - the restored native runtime truthfully remains classifier-incapable:
   ffmpeg/ffprobe true, tesseract/OCR language/smoke false;
-- staging worker remains live at `4a1d258155b128fee0fcd5a6143198f36a558163`;
-- production web and worker remain live at
+- the final capture shows staging worker live at
+  `4a1d258155b128fee0fcd5a6143198f36a558163`; interval-level worker
+  non-mutation is not independently proven;
+- the final capture shows production web and worker live at
   `00ee62efd86ae7e10453a2a1896e63b62228aa4d`;
-- staging database IP allowlist count is zero.
+- the final capture shows staging database IP allowlist count zero; baseline
+  equality is retrospective and not independently proven;
+- no task-window job aggregate was captured, so no job-state non-mutation claim
+  is made.
 
 ## Gate disposition
 
-`MANAGED_CLASSIFIER_CANARY=FAIL` and `ROLLBACK=PASS`.
+`MANAGED_CLASSIFIER_CANARY=FAIL`, `FINAL_STATE_ROLLBACK=PASS`, and
+`FAILSAFE_SEQUENCE_EVIDENCE=INCOMPLETE`.
+
+Durable conclusion: the candidate build failed, no canary result exists, and a
+later direct final-state read shows staging web restored live and healthy on the
+prestate SHA/config. Maintenance continuity, the full mutation ledger, worker /
+database / production interval-level non-mutation, job aggregates, and absence
+of provider commands are **NOT INDEPENDENTLY PROVEN**.
 
 P0-B2 remains **VERIFIED_MANAGED: incapable**. A follow-up must provide a
 secret-safe Docker build contract (without baking production/runtime secrets
