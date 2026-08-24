@@ -339,46 +339,6 @@ function assertReferenceRollbackBeforePublication(source: string, context: strin
   assert.ok(append[0].getEnd() < audit[0].getStart(ast), `${context}: audit wajib sesudah append sukses`);
 }
 
-function assertE1ReferenceBoundary(source: string, context: string) {
-  const ast = parseSource(source, context);
-  const post = namedFunction(ast, "POST");
-  assert.ok(post?.body && post.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword),
-    `${context}: exported E1 POST wajib ada`);
-  const save = callsNamed(post.body, "saveProductImages");
-  const resolve = callsNamed(post.body, "referensiLayak");
-  const rollback = callsNamed(post.body, "rejectAfterReferenceCheck");
-  const pgCreate = callsNamed(post.body, "smokeCreateProduct");
-  const sqliteRun = callsNamed(post.body, "run");
-  const audit = callsNamed(post.body, "audit");
-  assert.equal(save.length, 1, `${context}: E1 wajib satu ingestion`);
-  assert.equal(resolve.length, 1, `${context}: E1 wajib satu resolver`);
-  assert.equal(rollback.length, 1, `${context}: E1 wajib satu rollback resolver`);
-  assert.equal(pgCreate.length, 1, `${context}: branch PostgreSQL wajib tetap ada`);
-  assert.equal(sqliteRun.length, 1, `${context}: branch SQLite INSERT wajib tetap ada`);
-  assert.equal(audit.length, 1, `${context}: audit SQLite wajib tetap ada`);
-  assert.equal(resolve[0].arguments[0]?.getText(ast), "images", `${context}: resolver wajib exact ordered images baru`);
-  assert.equal(rollback[0].arguments.map((arg) => arg.getText(ast)).join(","), '"E1",images,referenceError',
-    `${context}: rollback wajib exact seluruh images baru`);
-  assert.ok(ts.isAwaitExpression(rollback[0].parent), `${context}: rollback E1 wajib di-await`);
-  const referenceTry = ancestor(resolve[0], ts.isTryStatement);
-  assert.ok(referenceTry?.catchClause, `${context}: resolver E1 wajib punya catch rollback`);
-  assert.ok(rollback[0].getStart(ast) >= referenceTry.catchClause.getStart(ast)
-    && rollback[0].getEnd() <= referenceTry.catchClause.getEnd(), `${context}: rollback E1 wajib berada di catch resolver`);
-  assert.ok(save[0].getEnd() < resolve[0].getStart(ast), `${context}: resolver wajib sesudah ingestion`);
-  for (const persistence of [...pgCreate, ...sqliteRun, ...audit]) {
-    assert.ok(referenceTry.getEnd() < persistence.getStart(ast), `${context}: persistence/audit wajib sesudah resolver boundary`);
-  }
-  const runtimeBranch = ancestor(pgCreate[0], ts.isIfStatement);
-  assert.ok(runtimeBranch && callsNamed(runtimeBranch.expression, "postgresRuntimeEnabled").length === 1,
-    `${context}: PostgreSQL create wajib di runtime branch otoritatif`);
-  assert.ok(runtimeBranch.elseStatement, `${context}: runtime branch wajib punya SQLite else`);
-  assert.ok(sqliteRun[0].getStart(ast) >= runtimeBranch.elseStatement.getStart(ast)
-    && sqliteRun[0].getEnd() <= runtimeBranch.elseStatement.getEnd(), `${context}: SQLite INSERT wajib berada di else branch`);
-  assert.ok(audit[0].getStart(ast) >= runtimeBranch.elseStatement.getStart(ast)
-    && audit[0].getEnd() <= runtimeBranch.elseStatement.getEnd(), `${context}: audit SQLite wajib berada di else branch`);
-  assert.ok(sqliteRun[0].getEnd() < audit[0].getStart(ast), `${context}: audit wajib sesudah SQLite INSERT`);
-}
-
 test("bawaan mode referensi adalah r2v, i2v hanya cadangan eksplisit", async () => {
   const { modeReferensi } = await import("../lib/providers/stubs/byteplus");
   const retail = { qualityTier: "high_quality", shots: [] } as never;
@@ -679,60 +639,6 @@ test("E4 dan E8 menjaga rollback exact setelah resolver dan sebelum append/audit
       () => assertReferenceRollbackBeforePublication(source, `counterexample E8 rollback ${name}`, "E8"),
       /resolver referensi|boundary, exact added|existing lalu exact added|kontrak CAS lengkap|exact snapshot yang dinilai|rollback resolver dan CAS miss|CAS miss wajib|catch rollback|rollback wajib berada di catch|append list wajib sesudah failure boundary/,
       `${name} tidak boleh memenangkan structural guard route rollback`
-    );
-  }
-});
-
-test("E1 menjaga resolver dan rollback sebelum kedua branch persistence", () => {
-  const production = baca("app/api/products/route.ts");
-  assertE1ReferenceBoundary(production, "E1 production boundary");
-
-  const control = `export async function POST() {
-    const images = await saveProductImages(id, blobs);
-    try {
-      const layak = await referensiLayak(images);
-      if (!layak.length) throw referenceError;
-    } catch (referenceError) {
-      await rejectAfterReferenceCheck("E1", images, referenceError);
-    }
-    if (dependencies.postgresRuntimeEnabled()) {
-      await dependencies.smokeCreateProduct(user.id, input, id);
-    } else {
-      dependencies.getDb().prepare(sql).run(id, JSON.stringify(images));
-      dependencies.audit(user.id, "product.created", "products", id, {});
-    }
-  }`;
-  assertE1ReferenceBoundary(control, "E1 structural control");
-
-  const counterexamples = [
-    ["SQLite INSERT sebelum resolver", control.replace(
-      "const images = await saveProductImages(id, blobs);",
-      "const images = await saveProductImages(id, blobs); dependencies.getDb().prepare(sql).run(id);"
-    ).replace("dependencies.getDb().prepare(sql).run(id, JSON.stringify(images));", "void images;")],
-    ["PostgreSQL create sebelum resolver", control
-      .replace("await dependencies.smokeCreateProduct(user.id, input, id);", "void input;")
-      .replace(
-        "const images = await saveProductImages(id, blobs);",
-        "const images = await saveProductImages(id, blobs); await dependencies.smokeCreateProduct(user.id, input, id);"
-      )],
-    ["audit sebelum resolver", control.replace(
-      "const images = await saveProductImages(id, blobs);",
-      "const images = await saveProductImages(id, blobs); dependencies.audit(user.id, 'early', 'products', id, {});"
-    ).replace("dependencies.audit(user.id, \"product.created\", \"products\", id, {});", "void user;")],
-    ["rollback di luar catch", control.replace(
-      `} catch (referenceError) {
-      await rejectAfterReferenceCheck("E1", images, referenceError);
-    }`,
-      `} catch (referenceError) { throw referenceError; }
-    await rejectAfterReferenceCheck("E1", images, referenceError);`
-    )],
-    ["branch PostgreSQL hilang", control.replace("await dependencies.smokeCreateProduct(user.id, input, id);", "void input;")],
-  ] as const;
-  for (const [name, source] of counterexamples) {
-    assert.throws(
-      () => assertE1ReferenceBoundary(source, `counterexample E1 ${name}`),
-      /branch PostgreSQL|branch SQLite|audit SQLite|persistence\/audit wajib sesudah resolver boundary|catch rollback|rollback E1 wajib berada di catch resolver/,
-      `${name} tidak boleh memenangkan E1 structural guard`
     );
   }
 });
