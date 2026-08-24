@@ -26,6 +26,24 @@ function output(result: ReturnType<typeof child>) {
   return `${result.stdout}\n${result.stderr}`;
 }
 
+function workerChild(authSecret: string | undefined, queueMode = "redis") {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    RACUN_NO_DOTENV: "1",
+    NODE_ENV: "production",
+    RACUN_QUEUE_MODE: queueMode,
+    REDIS_URL: "redis://127.0.0.1:1",
+  };
+  delete env.AUTH_SECRET;
+  if (authSecret !== undefined) env.AUTH_SECRET = authSecret;
+  return spawnSync(process.execPath, ["--import", tsx, "scripts/worker.ts"], {
+    cwd: root,
+    env,
+    encoding: "utf8",
+    timeout: 10_000,
+  });
+}
+
 test("secretless production module imports are build-safe", () => {
   for (const modulePath of ["./lib/config.ts", "./instrumentation.ts", "./app/api/promo/jobs/route.ts"]) {
     const result = child(`await import(${JSON.stringify(modulePath)});`);
@@ -48,6 +66,26 @@ for (const [name, secret, message] of [
 test("Node server registration accepts a valid runtime secret", () => {
   const result = child('const { register } = await import("./instrumentation.ts"); await register();', "x".repeat(32));
   assert.equal(result.status, 0, output(result));
+});
+
+for (const [name, secret, message] of [
+  ["missing", undefined, "AUTH_SECRET wajib diisi"],
+  ["development default", "dev-secret-racun-ai-jangan-dipakai-produksi", "nilai bawaan pengembangan"],
+  ["too short", "pendek123", "terlalu pendek"],
+] as const) {
+  test(`dedicated production worker rejects ${name} AUTH_SECRET before BullMQ startup`, () => {
+    const result = workerChild(secret);
+    assert.notEqual(result.status, 0, output(result));
+    assert.match(output(result), new RegExp(message));
+    assert.doesNotMatch(output(result), /ECONNREFUSED|Worker terpisah membutuhkan/);
+  });
+}
+
+test("dedicated production worker accepts a valid AUTH_SECRET and preserves queue validation", () => {
+  const result = workerChild("w".repeat(32), "inline");
+  assert.notEqual(result.status, 0, output(result));
+  assert.match(output(result), /Production wajib RACUN_QUEUE_MODE=redis; worker inline ditolak/);
+  assert.doesNotMatch(output(result), /AUTH_SECRET/);
 });
 
 test("JWT consumers read the current runtime secret instead of an import snapshot", () => {

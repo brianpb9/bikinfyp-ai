@@ -13,6 +13,10 @@ Baseline accepted SHA: `4f5eb05c109817ffa8f41bff819c1eccce22ba05`
   formerly failing `/api/promo/jobs` route succeeds in secretless production.
 - Missing, development-default, and sub-32-byte secrets are still rejected by
   Node registration. A valid 32-byte secret is accepted.
+- The dedicated production worker invokes the same assertion before memo
+  wiring, queue validation, or either BullMQ worker is created. Startup tests
+  reject missing/default/short secrets and prove a valid secret reaches the
+  pre-existing queue-mode validation without creating an external worker.
 - Every JWT/OTP/signing-key consumer now reads and validates the current
   runtime value. Valid rotation changes the key; deletion or shortening after
   import fails closed instead of falling back or using a frozen value.
@@ -28,9 +32,9 @@ Baseline accepted SHA: `4f5eb05c109817ffa8f41bff819c1eccce22ba05`
 | Check | Result |
 |---|---|
 | `npx tsc --noEmit` | PASS |
-| secret/auth/runtime/container targeted suite | 65/65 PASS |
-| runtime+secret+container focused suite | 54/54 PASS |
-| full `npm test` | 1,183 total; 1,139 PASS; 0 fail; 44 classified skip |
+| secret/auth/runtime/container targeted suite | 69/69 PASS |
+| runtime+secret+container focused suite | 58/58 PASS |
+| full `npm test` | 1,187 total; 1,143 PASS; 0 fail; 44 classified skip |
 | secretless `npm run build` with AUTH_SECRET, DATABASE_URL, and provider keys removed | PASS |
 | `npm run test:web-container` | 36/36 PASS; static contract PASS |
 | Docker image execution | unavailable locally; not claimed |
