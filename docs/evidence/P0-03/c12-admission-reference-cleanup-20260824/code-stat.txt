@@ -1,0 +1,10 @@
+e52e0ef (HEAD -> work/p0-product-truth-20260820) fix: clean rejected admission snapshots safely
+ app/api/jobs/route.ts                       |  46 ++++++++---
+ lib/dashboard/render-cell.ts                |  22 +++++-
+ lib/job-admission-reference.ts              |  48 ++++++++++++
+ lib/job-reference-manifest.ts               |   3 +
+ lib/postgres/smoke-runtime.ts               |  37 ++++++++-
+ scripts/verify-postgres-admission-retry.ts  | 101 ++++++++++++++++++++++--
+ tests/http-photo-mutation-resume-w2.test.ts | 116 +++++++++++++++++++++++++++-
+ tests/job-reference-manifest.test.ts        |  67 ++++++++++++++--
+ 8 files changed, 412 insertions(+), 28 deletions(-)

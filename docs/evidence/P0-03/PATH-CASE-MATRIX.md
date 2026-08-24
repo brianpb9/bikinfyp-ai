@@ -654,3 +654,28 @@ TASK=`P0-C12-ADMISSION-REFERENCE-SNAPSHOT-20260824`
   legacy worker fallback remains for legacy rows. It does not change promo
   policy, add a reason code, prove deployment, or close unrelated C9 gaps.
   Canonical shipping readiness remains **58/100**.
+
+### E.20 C12 rejected-admission storage cleanup — 2026-08-24
+
+TASK=`P0-C12-ADMISSION-REFERENCE-SNAPSHOT-20260824`
+
+- Reviewer finding `1787561141000` against `58ef444e` identified durable
+  object leakage from known non-winning storage-first admissions. Remediation
+  code `e52e0ef15113ebb6d6fe2817bdc50c7d62d9df7d` adds balance preflight before
+  PUT while retaining the authoritative transactional check.
+- Attempted deterministic keys are cleaned only after fresh authoritative DB
+  absence proof for partial failure, SQLite duplicate loser/retry exhaustion,
+  and PostgreSQL known rollback. COMMIT/network or CAS ambiguity retains keys.
+  Cleanup delete failure is logged and preserves the original safe outcome.
+- SQLite regressions prove insufficient **0 PUT / 0 job / 0 hold**, two
+  concurrent requests **1 job / 1 hold / winner keys only**, and repeated
+  image-change exhaustion/partial PUT leave zero prepared keys. PostgreSQL
+  proves insufficient **0 PUT / 0 job / 0 hold**, a known rollback cleans its
+  key, and 8 same-script calls yield one winner with retained prefixes equal to
+  database jobs.
+- Exact follow-up checks: targeted **56/56**, W1 **28/28**, money **11/11**,
+  full **1,133 total / 1,090 PASS / 0 fail / 43 classified skip**, plus
+  TypeScript/build/catalog PASS and disposable residue zero. Raw hashes are in
+  `c12-admission-reference-cleanup-20260824/`.
+- The local C12 admission slice remains closed without changing reason codes,
+  promo policy, deployment state, or canonical shipping readiness **58/100**.

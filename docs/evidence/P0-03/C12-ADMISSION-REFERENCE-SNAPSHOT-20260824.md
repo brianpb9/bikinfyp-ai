@@ -73,3 +73,36 @@ legacy rows. No promo-field behavior or reference reason code was changed;
 This evidence closes the approved local admission-time C12 slice. It does not
 claim deployment, staging exact-SHA proof, production traffic, or resolution of
 unrelated C9 promo semantics. Canonical shipping readiness remains **58/100**.
+
+## Reviewer follow-up: rejected-admission storage cleanup
+
+Reviewer finding `1787561141000` correctly identified that storage-first
+preparation could leave persistent job-prefixed objects for known-insufficient
+SQLite/retail PostgreSQL requests and SQLite concurrent duplicate losers. The
+follow-up code `e52e0ef15113ebb6d6fe2817bdc50c7d62d9df7d` closes that leak without
+weakening the immutable snapshot boundary:
+
+- SQLite and retail PostgreSQL perform a balance preflight before storage, but
+  retain the authoritative admission-transaction balance check.
+- Every attempted deterministic target is tracked before PUT. Partial PUT
+  failure, SQLite duplicate loser, bounded images-change exhaustion, and known
+  PostgreSQL rollback clean only this prepared job id after a fresh database
+  read proves the job absent.
+- PostgreSQL marks COMMIT as attempted before issuing it. COMMIT/network
+  uncertainty never deletes prepared keys. Legacy ambiguous CAS behavior is
+  unchanged.
+- Cleanup is best-effort. A delete failure retains the orphan, records an
+  explicit operational error, and does not change a safe duplicate/failure
+  outcome into a retry that could charge twice.
+- Regressions prove zero PUT/job/hold for known-insufficient SQLite and
+  PostgreSQL requests; SQLite same-script concurrency leaves one job, one hold,
+  and winner keys only; PostgreSQL 8-way same-script concurrency has one winner
+  and storage prefixes exactly equal admitted job ids; partial PUT and repeated
+  SQLite mutation exhaustion leave zero prepared keys; a known PostgreSQL
+  rollback cleans its attempted key.
+
+Exact follow-up evidence: targeted **56/56**, W1 **28/28**, money **11/11**,
+full suite **1,133 total / 1,090 PASS / 0 fail / 43 classified skip**, plus
+TypeScript/build/catalog PASS and disposable PostgreSQL residue zero. Raw logs
+and hashes are in `c12-admission-reference-cleanup-20260824/`. Shipping
+readiness remains **58/100**; no deployment claim is added.
