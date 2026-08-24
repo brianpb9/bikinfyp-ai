@@ -1,0 +1,203 @@
+TAP version 13
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"01ec17d9-d643-498b-956f-5a88584f3761","produkId":"ae084fd4-f0ef-465b-ae12-6521a14b5240","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 01ec17d9] -> GENERATING_VISUAL
+# [failover] video e3-c9-observer gagal: observer stop -> coba provider berikutnya
+# [job 01ec17d9] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission
+ok 1 - E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission
+  ---
+  duration_ms: 164.753292
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"89b7d3cb-f56a-41a0-952e-7a40c4ee0a24","produkId":"8940aea4-1bb1-477a-bdd4-f9da0768a5bd","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 89b7d3cb] -> GENERATING_VISUAL
+# [job 89b7d3cb] -> GENERATING_VOICE
+# [provider] mock-voice-a: segmen 0 TTS voice=Damayanti (4.2 dtk)
+# [provider] mock-voice-a: segmen 1 TTS voice=Damayanti (4.1 dtk)
+# [provider] mock-voice-a: segmen 2 TTS voice=Damayanti (2.6 dtk)
+# [job 89b7d3cb] -> COMPOSITING
+# [compositor] job 89b7d3cb-f56a-41a0-952e-7a40c4ee0a24: audio -14.9 -> -14 LUFS @ 44100 Hz
+# [compositor] job 89b7d3cb-f56a-41a0-952e-7a40c4ee0a24: output.mp4 selesai (mode=vo, label AIGC via metadata — tanpa watermark visual)
+# [packshot] gagal menambahkan penutup: dimensi video tidak terbaca: /var/folders/p3/kywdrgk17tj048962gtczncw0000gn/T/http-mutation-w2-store-Tp2gzT/jobs/89b7d3cb-f56a-41a0-952e-7a40c4ee0a24/ref-tersetujui/4b414a52b31b9f4fff34c5699109239711ca61e7d468ff17f64b1bb62340f7dc.webp
+# [job 89b7d3cb] -> QC_CHECK
+# [c9-rendered-frame] {"runtime":"W2","variant":"gain","demoAtSec":7.5,"ocr":"RpI9°000)> Rp85:000 -147% - s°d:3) Feb","cropSha":"9d38a479fa934bd74461017fae3fc6957f5db594f7da8339928ee16d17233351","cropBytes":172131}
+# [job 89b7d3cb] -> REFUNDED {"refunded_credits":12000}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"22fdbe4c-6636-4547-a454-222c447f2358","produkId":"02fb1d49-a05d-49b3-af59-a77ecede50d1","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 22fdbe4c] -> GENERATING_VISUAL
+# [job 22fdbe4c] -> GENERATING_VOICE
+# [provider] mock-voice-a: segmen 0 TTS voice=Damayanti (4.2 dtk)
+# [provider] mock-voice-a: segmen 1 TTS voice=Damayanti (4.1 dtk)
+# [provider] mock-voice-a: segmen 2 TTS voice=Damayanti (2.6 dtk)
+# [job 22fdbe4c] -> COMPOSITING
+# [compositor] job 22fdbe4c-6636-4547-a454-222c447f2358: audio -14.9 -> -14 LUFS @ 44100 Hz
+# [compositor] job 22fdbe4c-6636-4547-a454-222c447f2358: output.mp4 selesai (mode=vo, label AIGC via metadata — tanpa watermark visual)
+# [packshot] gagal menambahkan penutup: dimensi video tidak terbaca: /var/folders/p3/kywdrgk17tj048962gtczncw0000gn/T/http-mutation-w2-store-Tp2gzT/jobs/22fdbe4c-6636-4547-a454-222c447f2358/ref-tersetujui/4b414a52b31b9f4fff34c5699109239711ca61e7d468ff17f64b1bb62340f7dc.webp
+# [job 22fdbe4c] -> QC_CHECK
+# [c9-rendered-frame] {"runtime":"W2","variant":"remove","demoAtSec":7.5,"ocr":"Cuma! Rp&s5:000","cropSha":"28991a686325ac29234e0d1d937e84ec94a4387ecaf0f9dd5f5b191fc789321c","cropBytes":77529}
+# [job 22fdbe4c] -> REFUNDED {"refunded_credits":12000}
+# Subtest: C9 counterexample E3→W2: frame render promo live dapat muncul dan hilang sementara prompt tetap snapshot admission
+ok 2 - C9 counterexample E3→W2: frame render promo live dapat muncul dan hilang sementara prompt tetap snapshot admission
+  ---
+  duration_ms: 10675.33475
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"5fbe6760-84aa-427e-94e4-2b4589cdf834","produkId":"1f9cf634-6dbe-4db4-afdc-a89e37757e21","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 5fbe6760] -> GENERATING_VISUAL
+# [failover] video admission-e5-w2-observer gagal: observer stop -> coba provider berikutnya
+# [job 5fbe6760] -> REFUNDED {"refunded_credits":12000}
+# Subtest: admission W2 -> queue delay -> E5 hapus source tetap memakai bytes admission tanpa install worker
+ok 3 - admission W2 -> queue delay -> E5 hapus source tetap memakai bytes admission tanpa install worker
+  ---
+  duration_ms: 7.6805
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"40b6be66-c90e-4c26-a9cc-10f999e5c681","produkId":"7eca5c1c-7ced-4add-b48b-fd1bd07165c9","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"40b6be66-c90e-4c26-a9cc-10f999e5c681","produkId":"7eca5c1c-7ced-4add-b48b-fd1bd07165c9","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: SQLite admission mengulang bounded saat exact images berubah sebelum INSERT
+ok 4 - SQLite admission mengulang bounded saat exact images berubah sebelum INSERT
+  ---
+  duration_ms: 2.908583
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"3a295a89-1a3c-4021-8471-430e44518ff3","produkId":"3cee13f9-1d2a-4d98-9978-9eed6e77586f","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [api] unexpected error: Error: injected admission storage failure
+#     at MemoryStorage.storage.onApprovedReferencePut (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:546:54)
+#     at MemoryStorage.put (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:64:59)
+#     at prepareJobReferenceManifest (/Users/hadrava/HDRV/03_UGC_AI_ID/app/lib/job-reference-manifest.ts:83:26)
+#     at async prepareAdmissionReferenceManifest (/Users/hadrava/HDRV/03_UGC_AI_ID/app/lib/job-admission-reference.ts:18:20)
+#     at async POST (/Users/hadrava/HDRV/03_UGC_AI_ID/app/app/api/jobs/route.ts:236:29)
+#     at async admittedProductMutationScenario (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:189:21)
+#     at async waitForActual (node:assert:644:5)
+#     at async Function.rejects (node:assert:767:25)
+#     at async TestContext.<anonymous> (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:543:3)
+#     at async Test.run (node:internal/test_runner/test:1054:7)
+# Subtest: storage preparation gagal sebelum job, hold, dan queue visibility SQLite
+ok 5 - storage preparation gagal sebelum job, hold, dan queue visibility SQLite
+  ---
+  duration_ms: 4.604834
+  type: 'test'
+  ...
+# Subtest: SQLite saldo known-insufficient ditolak sebelum PUT, job, dan hold
+ok 6 - SQLite saldo known-insufficient ditolak sebelum PUT, job, dan hold
+  ---
+  duration_ms: 1.486917
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"09a6105e-f9f4-4573-904a-dc735264f72f","produkId":"20dd6ed3-9895-4789-a39b-52bf0df97da8","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"3e9d4039-8886-4226-99f7-237e5cece3ce","produkId":"20dd6ed3-9895-4789-a39b-52bf0df97da8","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: dua admission SQLite konkuren menyisakan hanya object milik job pemenang
+ok 7 - dua admission SQLite konkuren menyisakan hanya object milik job pemenang
+  ---
+  duration_ms: 2.479042
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"e47a847d-8e01-4ac6-bf74-ff63ef8aea13","produkId":"18d4dd2b-76e6-444e-92cb-86e85026f986","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"e47a847d-8e01-4ac6-bf74-ff63ef8aea13","produkId":"18d4dd2b-76e6-444e-92cb-86e85026f986","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"e47a847d-8e01-4ac6-bf74-ff63ef8aea13","produkId":"18d4dd2b-76e6-444e-92cb-86e85026f986","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: SQLite images berubah sampai retry habis membersihkan seluruh prepared prefix
+ok 8 - SQLite images berubah sampai retry habis membersihkan seluruh prepared prefix
+  ---
+  duration_ms: 1.411416
+  type: 'test'
+  ...
+# [job ae4890d8] -> GENERATING_VISUAL
+# [failover] video e5-observer gagal: observer stop -> coba provider berikutnya
+# [job ae4890d8] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan
+ok 9 - E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan
+  ---
+  duration_ms: 4.697042
+  type: 'test'
+  ...
+# [job e31aa048] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider
+ok 10 - E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider
+  ---
+  duration_ms: 3.619958
+  type: 'test'
+  ...
+# Subtest: guard: bukti C12 memanggil handler E5 dan resume W2 nyata
+ok 11 - guard: bukti C12 memanggil handler E5 dan resume W2 nyata
+  ---
+  duration_ms: 1.629167
+  type: 'test'
+  ...
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum X" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# Subtest: resolvePromo: aktif hanya bila harga normal > harga jual dan belum lewat
+ok 12 - resolvePromo: aktif hanya bila harga normal > harga jual dan belum lewat
+  ---
+  duration_ms: 0.553541
+  type: 'test'
+  ...
+# Subtest: frasa deadline skrip: tanpa angka, tanpa frasa terlarang L-13
+ok 13 - frasa deadline skrip: tanpa angka, tanpa frasa terlarang L-13
+  ---
+  duration_ms: 0.149583
+  type: 'test'
+  ...
+# Subtest: injeksi promo: harga coret di demo + deadline di CTA, lolos validator (silent)
+ok 14 - injeksi promo: harga coret di demo + deadline di CTA, lolos validator (silent)
+  ---
+  duration_ms: 44.019666
+  type: 'test'
+  ...
+# Subtest: injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator
+ok 15 - injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator
+  ---
+  duration_ms: 3.1695
+  type: 'test'
+  ...
+# Subtest: semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)
+ok 16 - semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)
+  ---
+  duration_ms: 33.614166
+  type: 'test'
+  ...
+# Subtest: promo kedaluwarsa: skrip identik dengan tanpa promo (drop diam-diam)
+ok 17 - promo kedaluwarsa: skrip identik dengan tanpa promo (drop diam-diam)
+  ---
+  duration_ms: 0.875167
+  type: 'test'
+  ...
+# Subtest: caption memuat angka promo (%, harga, stok, tanggal)
+ok 18 - caption memuat angka promo (%, harga, stok, tanggal)
+  ---
+  duration_ms: 1.042916
+  type: 'test'
+  ...
+# Subtest: L-14: angka harga normal sah hanya bila promoPriceBeforeIdr diberikan
+ok 19 - L-14: angka harga normal sah hanya bila promoPriceBeforeIdr diberikan
+  ---
+  duration_ms: 0.214791
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 11290.202666

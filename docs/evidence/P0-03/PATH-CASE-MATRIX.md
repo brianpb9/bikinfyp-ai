@@ -735,3 +735,38 @@ TASK=`P1-C9-PROMO-OUTPUT-COUNTEREXAMPLE-20260824`
   / 1,091 PASS / 0 fail / 44 classified skip**, TypeScript/build/catalog PASS,
   no network provider calls, and disposable PostgreSQL residue zero. Immutable
   raw evidence is under `c9-promo-output-counterexample-20260824/`.
+
+### E.23 C9 rendered-frame follow-up — 2026-08-24
+
+TASK=`P1-C9-PROMO-OUTPUT-COUNTEREXAMPLE-20260824`
+
+- Reviewer finding `1787563838000` correctly identified that E.22 observed
+  compositor input only and stopped before FFmpeg. Remediation code
+  `e1e80c052ee7d77339239af09f83eb2b37649289` lets the production compositor
+  finish, then uses a test-only QC seam to inspect an actual frame at the
+  midpoint derived from `demoRange`.
+- W2 gain renders a substantive 172,131-byte crop with SHA
+  `9d38a479fa934bd74461017fae3fc6957f5db594f7da8339928ee16d17233351`;
+  OCR retains the two prices, discount 14, and 3 Feb deadline. W2 removal
+  renders a different 77,529-byte crop with SHA
+  `28991a686325ac29234e0d1d937e84ec94a4387ecaf0f9dd5f5b191fc789321c`;
+  OCR retains only the admission sell price and no promo separator, percent,
+  or deadline.
+- W1 E7 change renders a 260,975-byte crop with SHA
+  `13466b394de276bfebaaf3700184fb566c9eeec63a2212b3225faaecbe7d912a`;
+  OCR independently retains before price 98,000, admission sell price 85,000,
+  discount 13, and 3 Feb. Exact `CompositeInput` assertions remain alongside
+  pixel proof because lossy video OCR confuses some glyphs (`8/S`, punctuation).
+- Stock remains explicitly inert; no scarcity claim is inferred. Provider
+  fixtures, voice, FFmpeg, OCR, and PostgreSQL are local/deterministic and no
+  provider network call occurs.
+- Initial aggregate run exposed one deterministic static-guard mismatch
+  (**1,090 PASS / 1 fail / 44 skip**): the guard recognized `runQc` and
+  `sqliteQcRunner`, but not the new production-equivalent `postgresQcRunner`
+  test seam. The guard was expanded without weakening its required
+  `visualSubjectPolicy` assertion; the final exact-code run is **1,135 total /
+  1,091 PASS / 0 fail / 44 classified skip**.
+- Affected tests are **19/19**, disposable W1 **29/29**, and
+  TypeScript/build/catalog PASS with zero disposable database residue. C9
+  remains **PARTIAL**, no policy was chosen, and readiness remains **58/100**.
+  Raw evidence is under `c9-promo-rendered-output-remediation-20260824/`.

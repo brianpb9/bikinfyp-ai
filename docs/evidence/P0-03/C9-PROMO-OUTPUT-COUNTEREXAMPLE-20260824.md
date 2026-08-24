@@ -57,3 +57,39 @@ PostgreSQL skips without `UJI_PG_URL` (1 D2, 11 money/reconciler, 28 W1) plus
 four unavailable historical QCF1 artifact cases, three also requiring paid
 Gemini opt-in. W1 ran separately against disposable loopback PostgreSQL. No
 network provider call occurred and database residue was zero.
+
+## Reviewer follow-up: rendered frame proof
+
+Reviewer finding `1787563838000` correctly rejected the input-only boundary
+above as proof of rendered output. Code-under-test
+`e1e80c052ee7d77339239af09f83eb2b37649289` now lets the actual compositor
+finish. A test-only QC seam then extracts a crop at the midpoint calculated
+from the compositor's `demoRange` and runs local OCR over that rendered frame.
+Production behavior and the default QC runner are unchanged.
+
+- W2 gain: 172,131-byte crop,
+  `9d38a479fa934bd74461017fae3fc6957f5db594f7da8339928ee16d17233351`;
+  OCR `RpI9°000)> Rp85:000 -147% - s°d:3) Feb`.
+- W2 removal: 77,529-byte crop,
+  `28991a686325ac29234e0d1d937e84ec94a4387ecaf0f9dd5f5b191fc789321c`;
+  OCR `Cuma! Rp&s5:000`; the crop differs and contains no promo separator,
+  percent, or deadline.
+- W1 E7 change: 260,975-byte crop,
+  `13466b394de276bfebaaf3700184fb566c9eeec63a2212b3225faaecbe7d912a`;
+  OCR retains before price 98,000, admission price 85,000, discount 13, and
+  deadline 3 Feb despite lossy glyph confusion.
+
+The tests still assert the exact compositor strings and admission-bound core
+prompt. OCR is treated honestly as lossy corroboration, not as the sole source
+of truth; substantive, distinct pixel hashes prove the rendered outputs are
+not empty or identical. Stock 7/9 remains absent and semantically inert.
+
+The first aggregate run after adding the PostgreSQL QC seam was **1,090 PASS /
+1 fail / 44 skip**. Its only failure was a source guard whose callee regex knew
+`runQc|sqliteQcRunner` but not `postgresQcRunner`; the required
+`visualSubjectPolicy` was still present in runtime code. Extending that guard
+to recognize all three runners yielded a focused **13/13 PASS** and final
+exact-code aggregate **1,091 PASS / 0 fail / 44 skip**. Affected tests are
+**19/19**, disposable W1 **29/29**, TypeScript/build/catalog PASS, and database
+residue zero. The policy boundary is unchanged: C9 remains **PARTIAL** and
+canonical readiness remains **58/100**.
