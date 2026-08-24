@@ -26,7 +26,7 @@ import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
 import { shotUntukDetik } from "../media/qc-vision";
-import { appendPackshot, buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../media/packshot-asli";
+import { appendPackshotUntukQc, buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../media/packshot-asli";
 import { buildCaptionCards } from "../media/captions";
 import { resolvePromo, formatPromoOverlayText } from "../promo";
 import { renderCaptionPngs } from "../media/render-captions";
@@ -831,16 +831,15 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // dikirim ke model video — ia foto yang diunggah penjual sendiri.
     let ekorPackshotSec = 0;
     let sidikPackshot: string | undefined;
-    if (primaryRef) {
-      const pack = await appendPackshot({
-        videoPath: outputPath, workDir, fotoPath: primaryRef, musicPath,
-      });
-      outputPath = pack.path;
-      ekorPackshotSec = pack.ekorSec;
-      sidikPackshot = pack.sidik;
-      if (pack.ditambahkan) {
-        console.log(`[job ${row.id.slice(0, 8)}] packshot penutup foto asli ditambahkan (${pack.ekorSec} dtk) — label dijamin benar`);
-      }
+    const pack = await appendPackshotUntukQc({
+      videoPath: outputPath, workDir, fotoPath: primaryRef, musicPath,
+      productCategory: row.product_category, visualSubjectPolicy: spec.visualSubjectPolicy,
+    });
+    outputPath = pack.path;
+    ekorPackshotSec = pack.ekorSec;
+    sidikPackshot = pack.sidik;
+    if (pack.ditambahkan) {
+      console.log(`[job ${row.id.slice(0, 8)}] packshot penutup foto asli ditambahkan (${pack.ekorSec} dtk) — label dijamin benar`);
     }
 
     // Endcard ber-brand, SESUDAH compositing dan SEBELUM QC.

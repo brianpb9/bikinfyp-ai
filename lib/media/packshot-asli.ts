@@ -28,6 +28,7 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { runFfmpeg, probeVideoSize } from "./ffmpeg";
 import { METADATA_IKUT } from "./metadata-aigc";
+import { isServiceLike } from "../config/hooks";
 
 const FPS = 24;
 
@@ -212,6 +213,32 @@ export async function appendPackshot(input: {
     console.warn(`[packshot] gagal menambahkan penutup: ${(err as Error).message}`);
     return { path: input.videoPath, ditambahkan: false, ekorSec: 0 };
   }
+}
+
+/** Satu policy packshot untuk W1 dan W2.
+ *
+ * Neutral Story Ads jasa/app/toko memang productless dan tidak mendapat
+ * packshot. Produk fisik (neutral maupun non-neutral) tetap mencoba append;
+ * kegagalannya dibawa sebagai `ditambahkan:false`/tanpa sidik ke QC agar
+ * physical-neutral fail closed, bukan disembunyikan worker. */
+export async function appendPackshotUntukQc(input: {
+  videoPath: string;
+  workDir: string;
+  fotoPath?: string;
+  musicPath?: string;
+  productCategory?: string | null;
+  visualSubjectPolicy?: "neutral_story_ads";
+}): Promise<{ path: string; ditambahkan: boolean; ekorSec: number; sidik?: string }> {
+  if (input.visualSubjectPolicy === "neutral_story_ads" && isServiceLike(input.productCategory)) {
+    return { path: input.videoPath, ditambahkan: false, ekorSec: 0 };
+  }
+  if (!input.fotoPath) return { path: input.videoPath, ditambahkan: false, ekorSec: 0 };
+  return appendPackshot({
+    videoPath: input.videoPath,
+    workDir: input.workDir,
+    fotoPath: input.fotoPath,
+    musicPath: input.musicPath,
+  });
 }
 
 /** Apakah shot ini sebaiknya memakai foto asli, bukan video generate?

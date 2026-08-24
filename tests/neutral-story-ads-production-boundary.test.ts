@@ -20,7 +20,7 @@ import { createHash } from "node:crypto";
 import fs from "node:fs";
 import { execFileSync } from "node:child_process";
 import { evaluateQcPolicy, neutralStoryAdsIdentityChecks, runQc, type QcCheck } from "../lib/media/qc";
-import { neutralStoryAdsCoverageViolations, neutralStoryAdsViolations, type TemuanFrame } from "../lib/media/qc-vision";
+import { neutralStoryAdsCoverageViolations, neutralStoryAdsViolations, parseVisionFrameResponse, periksaFrameVision, type TemuanFrame } from "../lib/media/qc-vision";
 
 test("snapshot confirm -> job persisten -> normalisasi worker menjaga kontrak 9 Story Ads", async () => {
   const templates = CAMPAIGN_TEMPLATES.filter((template) => template.group === "ads");
@@ -289,6 +289,51 @@ test("QC-11 neutral: satu sampel timeout/unparsable menggagalkan runQc", async (
   }
 });
 
+test("parser visi aktual retry lalu menolak schema parsial/coercion/count invalid", async (t) => {
+  const frame = `/tmp/racun-qc-vision-wire-${process.pid}.jpg`;
+  fs.writeFileSync(frame, "fake jpeg bytes: fetch dimock, decoder tidak dipakai");
+  const originalFetch = globalThis.fetch;
+  t.after(() => {
+    globalThis.fetch = originalFetch;
+    fs.rmSync(frame, { force: true });
+  });
+  const valid = {
+    jumlahOrang: 1, jumlahOrangUtama: 1, jumlahWajah: 1, jumlahTangan: 2,
+    teksAcak: false, teksTerlihat: false, anatomiRusak: false,
+    produkTerlihat: false, fisikaJanggal: false, catatan: "blank card",
+  };
+  const invalid: Array<[string, string]> = [
+    ["missing fields", JSON.stringify({ produkTerlihat: false, teksTerlihat: false })],
+    ["numeric string", JSON.stringify({ ...valid, jumlahOrang: "1" })],
+    ["wrong boolean", JSON.stringify({ ...valid, fisikaJanggal: 0 })],
+    ["negative", JSON.stringify({ ...valid, jumlahTangan: -1 })],
+    ["fraction", JSON.stringify({ ...valid, jumlahWajah: 0.5 })],
+    ["NaN", JSON.stringify(valid).replace('"jumlahOrang":1', '"jumlahOrang":NaN')],
+    ["primary exceeds total", JSON.stringify({ ...valid, jumlahOrang: 1, jumlahOrangUtama: 2 })],
+    ["faces exceed people", JSON.stringify({ ...valid, jumlahOrang: 0, jumlahWajah: 1 })],
+    ["catatan not string", JSON.stringify({ ...valid, catatan: 12 })],
+  ];
+  for (const [label, wire] of invalid) {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: wire }] } }] }), { status: 200 });
+    }) as typeof fetch;
+    assert.equal(await periksaFrameVision(frame, 3.5, 0, [0, 0, 0]), null, label);
+    assert.equal(calls, 3, `${label}: invalid schema tidak diretry sampai batas`);
+  }
+
+  let validCalls = 0;
+  globalThis.fetch = (async () => {
+    validCalls++;
+    return new Response(JSON.stringify({ candidates: [{ content: { parts: [{ text: JSON.stringify(valid) }] } }] }), { status: 200 });
+  }) as typeof fetch;
+  const parsed = await periksaFrameVision(frame, 3.5, 0, [0, 0, 0]);
+  assert.deepEqual(parsed, { detik: 3.5, ...valid, neutralFieldsComplete: true });
+  assert.equal(validCalls, 1);
+  assert.equal(parseVisionFrameResponse({ ...valid, jumlahOrang: Infinity }, 1), null);
+});
+
 test("W2 actual planner mempertahankan format ads dan perilaku format lain", async () => {
   const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-meja-kosong")!;
   const product = { id: "w2-ads", name: "Serum Uji", category: "beauty", price_idr: 189000 };
@@ -318,7 +363,7 @@ test("W2 actual planner mempertahankan format ads dan perilaku format lain", asy
 test("kedua worker meneruskan visualSubjectPolicy planner ke runQc", () => {
   for (const file of ["lib/postgres/worker.ts", "lib/worker.ts"]) {
     const source = fs.readFileSync(file, "utf8");
-    assert.match(source, /runQc\(\{[\s\S]*?visualSubjectPolicy:\s*spec\.visualSubjectPolicy/,
+    assert.match(source, /(?:runQc|sqliteQcRunner)\(\{[\s\S]*?visualSubjectPolicy:\s*spec\.visualSubjectPolicy/,
       `${file}: policy neutral hilang sebelum QC`);
   }
 });

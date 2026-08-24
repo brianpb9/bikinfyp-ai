@@ -39,8 +39,18 @@ import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "./job-reference-manifest";
 import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot } from "./job-product-snapshot";
 import { normalisasiFormatWorker } from "./media/worker-format";
+import { appendPackshotUntukQc } from "./media/packshot-asli";
 
 const CONCURRENCY = 1;
+
+type SqliteQcRunner = typeof runQc;
+let sqliteQcRunner: SqliteQcRunner = runQc;
+
+/** Observer seam untuk processJob integration. `undefined` selalu memulihkan
+ * runQc produksi; tidak ada environment flag yang dapat mengaktifkannya. */
+export function setSqliteQcRunnerForTests(runner?: SqliteQcRunner): void {
+  sqliteQcRunner = runner ?? runQc;
+}
 
 class JobNoLongerActive extends Error {}
 
@@ -424,11 +434,23 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       outPath = comp.outPath;
       renderParams = comp.renderParams;
 
+      // Sama persis dengan W1: konten generated neutral tidak membawa pixel
+      // produk, jadi physical-product wajib mendapat ekor foto asli sebelum
+      // QC. Kegagalan append tetap diteruskan sebagai sidik kosong agar QC-10
+      // menolak; jasa/app/toko productless sengaja N/A.
+      const pack = await appendPackshotUntukQc({
+        videoPath: outPath, workDir, fotoPath: primaryRef, musicPath,
+        productCategory: product.category, visualSubjectPolicy: spec.visualSubjectPolicy,
+      });
+      outPath = pack.path;
+
       // --- QC_CHECK ---
       advance(job.id, "QC_CHECK");
-      qc = await runQc({
+      qc = await sqliteQcRunner({
         filePath: outPath,
         targetDurationSec: job.duration_s,
+        ekorDisengajaSec: pack.ekorSec,
+        packshotSidik: pack.sidik,
         finalTexts,
         hookFamily: script.hook_family,
         register: script.register,

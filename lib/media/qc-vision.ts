@@ -273,9 +273,49 @@ const JEDA_MS = [0, 4_000, 15_000];
 
 const tidur = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function periksaFrame(framePath: string, detik: number, percobaan = 0): Promise<TemuanFrame | null> {
-  if (percobaan > 0) await tidur(JEDA_MS[Math.min(percobaan, JEDA_MS.length - 1)]);
+/** Strict parser untuk wire schema Gemini. Tidak ada coercion/default:
+ * missing field, numeric string, NaN/Infinity, negatif, pecahan, atau boolean
+ * palsu semuanya invalid dan harus memicu retry di periksaFrameVision. */
+export function parseVisionFrameResponse(value: unknown, detik: number): TemuanFrame | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const j = value as Record<string, unknown>;
+  const countKeys = ["jumlahOrang", "jumlahOrangUtama", "jumlahWajah", "jumlahTangan"] as const;
+  for (const key of countKeys) {
+    const v = j[key];
+    if (typeof v !== "number" || !Number.isFinite(v) || !Number.isInteger(v) || v < 0) return null;
+  }
+  const booleanKeys = ["teksAcak", "teksTerlihat", "anatomiRusak", "produkTerlihat", "fisikaJanggal"] as const;
+  for (const key of booleanKeys) if (typeof j[key] !== "boolean") return null;
+  if (typeof j.catatan !== "string") return null;
+  if ((j.jumlahOrangUtama as number) > (j.jumlahOrang as number)) return null;
+  if ((j.jumlahWajah as number) > (j.jumlahOrang as number)) return null;
+  return {
+    detik,
+    jumlahOrang: j.jumlahOrang as number,
+    jumlahOrangUtama: j.jumlahOrangUtama as number,
+    jumlahWajah: j.jumlahWajah as number,
+    jumlahTangan: j.jumlahTangan as number,
+    teksAcak: j.teksAcak as boolean,
+    teksTerlihat: j.teksTerlihat as boolean,
+    neutralFieldsComplete: true,
+    anatomiRusak: j.anatomiRusak as boolean,
+    produkTerlihat: j.produkTerlihat as boolean,
+    fisikaJanggal: j.fisikaJanggal as boolean,
+    catatan: (j.catatan as string).slice(0, 120),
+  };
+}
+
+export async function periksaFrameVision(
+  framePath: string,
+  detik: number,
+  percobaan = 0,
+  jedaMs: readonly number[] = JEDA_MS,
+): Promise<TemuanFrame | null> {
+  if (percobaan > 0) await tidur(jedaMs[Math.min(percobaan, jedaMs.length - 1)] ?? 0);
   const buf = fs.readFileSync(framePath);
+  const retry = () => percobaan < jedaMs.length - 1
+    ? periksaFrameVision(framePath, detik, percobaan + 1, jedaMs)
+    : Promise.resolve(null);
   let res: Response;
   try {
     res = await fetch(`${ENDPOINT}/${MODEL}:generateContent`, {
@@ -291,40 +331,30 @@ async function periksaFrame(framePath: string, detik: number, percobaan = 0): Pr
     // tanpa tangkapan ini satu panggilan lambat membatalkan seluruh
     // pemeriksaan. Terjadi sungguhan saat menjalankan papan nilai: satu frame
     // timeout, empat video sisanya tidak pernah diperiksa.
-    if (percobaan < JEDA_MS.length - 1) return periksaFrame(framePath, detik, percobaan + 1);
-    return null;
+    return retry();
   }
   if (!res.ok) {
     // 503/429 = layanan sibuk, bukan permintaan kita yang salah. Itu layak
     // ditunggu. Galat lain (400 permintaan salah, 403 kunci ditolak) tidak
     // akan membaik dengan menunggu — jangan buang waktu job untuk itu.
     const layakDiulang = res.status === 503 || res.status === 429 || res.status >= 500;
-    if (layakDiulang && percobaan < JEDA_MS.length - 1) return periksaFrame(framePath, detik, percobaan + 1);
+    if (layakDiulang) return retry();
     return null;
   }
-  const d = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  let d: { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  try {
+    d = await res.json() as typeof d;
+  } catch {
+    return retry();
+  }
   const teks = d.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
   const m = teks.match(/\{[\s\S]*\}/);
-  if (!m) return null;
+  if (!m) return retry();
   try {
-    const j = JSON.parse(m[0]);
-    return {
-      detik,
-      jumlahOrang: Number(j.jumlahOrang ?? 0),
-      jumlahOrangUtama: Number(j.jumlahOrangUtama ?? j.jumlahOrang ?? 0),
-      jumlahWajah: Number(j.jumlahWajah ?? 0),
-      jumlahTangan: Number(j.jumlahTangan ?? 0),
-      teksAcak: Boolean(j.teksAcak),
-      teksTerlihat: Boolean(j.teksTerlihat ?? j.teksAcak),
-      neutralFieldsComplete: typeof j.teksTerlihat === "boolean" && typeof j.produkTerlihat === "boolean",
-      anatomiRusak: Boolean(j.anatomiRusak),
-      produkTerlihat: Boolean(j.produkTerlihat),
-      fisikaJanggal: Boolean(j.fisikaJanggal),
-      catatan: String(j.catatan ?? "").slice(0, 120),
-    };
+    const parsed = parseVisionFrameResponse(JSON.parse(m[0]), detik);
+    return parsed ?? retry();
   } catch {
-    if (percobaan < JEDA_MS.length - 1) return periksaFrame(framePath, detik, percobaan + 1);
-    return null;
+    return retry();
   }
 }
 
@@ -375,7 +405,7 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     //
     // Penyebab frame ke-6 belum diketahui dan sengaja tidak ditebak lagi.
     // Yang pasti: jumlahnya masih di atas ambang minimal, jadi vonisnya sah.
-    const hasil = await Promise.all(berkasFrame.map(({ f, detik }) => periksaFrame(f, detik)));
+    const hasil = await Promise.all(berkasFrame.map(({ f, detik }) => periksaFrameVision(f, detik)));
     const temuan: TemuanFrame[] = hasil.filter((t): t is TemuanFrame => t !== null);
     if (temuan.length === 0 && !input.neutralStoryAds) return { temuan: null, lolos: false, masalah: ["tidak satu pun frame bisa diperiksa"], peringatan: [], detikGagal: [] };
 
