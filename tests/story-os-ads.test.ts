@@ -19,7 +19,7 @@ process.env.SCRIPT_LLM = "1";
 process.env.ANTHROPIC_API_KEY = "kunci-uji-story-ads";
 
 const { GERBANG_SA, periksaStoryOsAds, penegakanSA, voiceoverStartSecForSegments } = await import("../lib/script-engine/story-os-ads");
-const { deteksiHargaIndonesia } = await import("../lib/script-engine/price-mentions");
+const { deteksiHargaIndonesia, tanpaNominalHargaTertulis } = await import("../lib/script-engine/price-mentions");
 
 /** Naskah Ads yang MEMENUHI Story OS — dipakai sebagai kontrol positif. */
 const LULUS = {
@@ -647,7 +647,11 @@ test("SA6 strict mengunci exact bridge set menurut template dan harga immutable"
     assert.ok(rejected.errors.some((error) => error.rule === "L-14"), `${malformedPerak}: ${JSON.stringify(rejected.errors)}`);
     assert.ok(rejected.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)), malformedPerak);
   }
-  for (const signedPerak of ["-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak"]) {
+  for (const signedPerak of [
+    "-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak",
+    "Rp+5000 perak", "harga- 5.000 perak", "Harganya,+5,000 perak",
+    "(+5000 perak)", "+-5000 perak", "− 5.000 perak", "+ (5.000 perak)",
+  ]) {
     const signed = structuredClone(LIVE_ADS_SAFE);
     signed[2].text = `Harganya ${signedPerak}.`;
     signed[2].bridge_source = "spoken_approved_price";
@@ -705,9 +709,15 @@ test("detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka
   assert.deepEqual(deteksiHargaIndonesia("1,5 perak"), []);
   assert.deepEqual(deteksiHargaIndonesia("12.34 perak"), []);
   assert.deepEqual(deteksiHargaIndonesia("kode5 perak"), []);
-  for (const signedPerak of ["-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak", "+0 perak"]) {
+  for (const signedPerak of [
+    "-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak", "+0 perak",
+    "Rp+5000 perak", "harga- 5.000 perak", "Harganya,+5,000 perak",
+    "(+5000 perak)", "+-5000 perak", "− 5.000 perak", "+ (5.000 perak)",
+  ]) {
     assert.deepEqual(deteksiHargaIndonesia(signedPerak), [], signedPerak);
+    assert.equal(tanpaNominalHargaTertulis(signedPerak), signedPerak, `redactor: ${signedPerak}`);
   }
+  assert.doesNotMatch(tanpaNominalHargaTertulis("1.000 perak"), /\d|perak/i);
   assert.deepEqual(deteksiHargaIndonesia("1.000 ribu").map((mention) => mention.nilai), [1_000]);
   assert.deepEqual(deteksiHargaIndonesia("1,000 juta").map((mention) => mention.nilai), [1_000_000]);
   assert.deepEqual(deteksiHargaIndonesia("1,5 ribu").map((mention) => mention.nilai), [1_500]);

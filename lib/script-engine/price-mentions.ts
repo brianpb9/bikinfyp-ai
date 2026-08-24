@@ -56,27 +56,38 @@ export interface HargaIndonesiaMention {
 
 const nilaiNominalPenuh = (raw: string): number => Number(raw.replace(/[.,\s]/g, ""));
 const ANGKA_PERAK_TERKELOMPOK = String.raw`\d+(?:[.,]\d{3})*`;
-const regexPerakBerdigit = () => new RegExp(
-  String.raw`(?<![\w.,])([+-]\s*)?(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
+const TANDA_PERAK = String.raw`[+\-\u2212]`;
+const regexPerakBertanda = () => new RegExp(
+  String.raw`${TANDA_PERAK}[\s()[\]{}:,;=+\-\u2212]*(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
+  "gi"
+);
+const regexPerakTanpaTanda = () => new RegExp(
+  String.raw`(?<![\w.,+\-\u2212])(${ANGKA_PERAK_TERKELOMPOK})\s*perak\b`,
   "gi"
 );
 
+const rentangPerakBertanda = (text: string): Array<[number, number]> =>
+  [...text.matchAll(regexPerakBertanda())].map((match) => [match.index, match.index + match[0].length]);
+
 /** Nominal perak bertanda selalu invalid sebagai approved price lisan. */
 export function deteksiNominalPerakBertanda(text: string): string[] {
-  return [...text.matchAll(regexPerakBerdigit())]
-    .filter((match) => Boolean(match[1]))
-    .map((match) => match[0]);
+  return [...text.matchAll(regexPerakBertanda())].map((match) => match[0]);
 }
 
 /** Hilangkan hanya span nominal berdigit sebelum pemeriksaan angka umum L-14. */
 export function tanpaNominalHargaTertulis(text: string): string {
-  return text
+  const signedRanges = rentangPerakBertanda(text);
+  const tanpaPerakUnsigned = text.replace(
+    regexPerakTanpaTanda(),
+    (match: string, _angka: string, offset: number) =>
+      signedRanges.some(([start, end]) => offset < end && offset + match.length > start) ? match : " "
+  );
+  return tanpaPerakUnsigned
     .replace(/\b(?:rp|idr)\s*\.?\s*\d+(?:[.,]\d{3})*\b(?![.,]\d)/gi, " ")
     .replace(/\d+(?:[.,]\d{3})*\s*rupiah\b/gi, " ")
     // Harus identik dengan grammar integer `perak` di detektor. Bentuk
     // malformed seperti "1,5 perak" sengaja tidak dihapus agar digitnya
     // tetap diperiksa L-14.
-    .replace(regexPerakBerdigit(), (match, tanda: string | undefined) => tanda ? match : " ")
     .replace(/\d+(?:[.,]\d+)?\s*(?:ribu|rb|ribuan|juta|jt)\b/gi, " ");
 }
 
@@ -99,14 +110,11 @@ export function deteksiHargaIndonesia(text: string): HargaIndonesiaMention[] {
 
   // Perak adalah rupiah bulat: titik/koma tiga digit merupakan pemisah
   // ribuan Indonesia, bukan pecahan seperti pada "1,5 juta".
-  const perak = regexPerakBerdigit();
-  for (const match of text.matchAll(perak)) {
-    if (match[1]) {
-      // Konsumsi span invalid agar grammar nol tidak suffix-match `+0 perak`.
-      occupied.push([match.index, match.index + match[0].length]);
-      continue;
-    }
-    add(match, nilaiNominalPenuh(match[2]), "unit");
+  // Signed dipindai lebih dulu dan tidak berbagi regex dengan unsigned:
+  // optional-sign tidak boleh backtrack menjadi harga positif.
+  for (const [start, end] of rentangPerakBertanda(text)) occupied.push([start, end]);
+  for (const match of text.matchAll(regexPerakTanpaTanda())) {
+    if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "unit");
   }
   const unit = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
   for (const match of text.matchAll(unit)) {
