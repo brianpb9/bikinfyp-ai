@@ -17,7 +17,7 @@ const {
   prepareJobReferenceManifest,
   UnsafeLegacyReferenceSnapshot,
 } = await import("../lib/job-reference-manifest");
-const { prepareAdmissionReferenceManifest } = await import("../lib/job-admission-reference");
+const { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } = await import("../lib/job-admission-reference");
 const { GagalTanpaReferensi, KODE_KANARI } = await import("../lib/kanari-bukti");
 const { errorResponse } = await import("../lib/errors");
 
@@ -74,6 +74,7 @@ test("partial storage PUT gagal sebelum callback persistence/DB", async () => {
     values.set(rel, bytes); values.set(`${rel}.meta.json`, sidecar(bytes));
   }
   let puts = 0; let persistenceCalls = 0;
+  const attempted = new Set<string>();
   setMediaStorageForTests({
     ...memoryStorage,
     async put(key, body) {
@@ -83,13 +84,27 @@ test("partial storage PUT gagal sebelum callback persistence/DB", async () => {
     },
   });
   try {
-    await assert.rejects(() => loadOrCreateJobReferenceManifest({
-      existingRaw: null,
-      jobId: "job-admission-put-fail",
-      candidateRels: [a, b],
-      persistIfAbsentAndSafe: async (raw) => { persistenceCalls++; return raw; },
-    }), /storage put injected failure/);
+    await assert.rejects(async () => {
+      try {
+        await prepareJobReferenceManifest({
+          jobId: "job-admission-put-fail",
+          candidateRels: [a, b],
+          onSnapshotTarget: (key) => attempted.add(key),
+        });
+        persistenceCalls++;
+      } catch (error) {
+        await cleanupUnadmittedReferenceKeys({
+          jobId: "job-admission-put-fail",
+          snapshotRels: attempted,
+          runtime: "admission-sqlite",
+          proveJobAbsent: async () => true,
+        });
+        throw error;
+      }
+    }, /storage put injected failure/);
     assert.equal(persistenceCalls, 0, "DB/persistence callback dipanggil sesudah partial PUT gagal");
+    assert.deepEqual([...values.keys()].filter((key) => key.includes("job-admission-put-fail/approved-references")), [],
+      "partial PUT meninggalkan snapshot key sesudah non-admission terbukti");
   } finally {
     setMediaStorageForTests(memoryStorage);
   }
@@ -139,6 +154,44 @@ test("admission kosong/seluruhnya ditolak mempertahankan NO_APPROVED_REFERENCE",
   const response = errorResponse(caught);
   assert.equal(response.status, 422);
   assert.equal((await response.json()).code, KODE_KANARI.TANPA_REFERENSI);
+});
+
+test("cleanup admission butuh bukti absent; kegagalan delete tercatat tanpa mengubah outcome", async () => {
+  values.clear();
+  const jobId = "job-cleanup-observable";
+  const key = `jobs/${jobId}/approved-references/0-${"a".repeat(64)}.webp`;
+  values.set(key, Buffer.from("ORPHAN"));
+  let deletes = 0;
+  setMediaStorageForTests({
+    ...memoryStorage,
+    async delete(candidate) {
+      deletes++;
+      throw new Error(`injected cleanup failure ${candidate}`);
+    },
+  });
+  const errors: unknown[][] = [];
+  const originalError = console.error;
+  console.error = (...args: unknown[]) => { errors.push(args); };
+  try {
+    const ambiguous = await cleanupUnadmittedReferenceKeys({
+      jobId, snapshotRels: [key], runtime: "admission-sqlite",
+      proveJobAbsent: async () => false,
+    });
+    assert.deepEqual(ambiguous, { provenAbsent: false, attempted: 0, deleted: 0, failed: [] });
+    assert.equal(deletes, 0, "cleanup menyentuh storage tanpa bukti job absent");
+
+    const knownAbsent = await cleanupUnadmittedReferenceKeys({
+      jobId, snapshotRels: [key], runtime: "admission-sqlite",
+      proveJobAbsent: async () => true,
+    });
+    assert.deepEqual(knownAbsent, { provenAbsent: true, attempted: 1, deleted: 0, failed: [key] });
+    assert.equal(values.has(key), true, "fixture cleanup failure tidak mempertahankan orphan");
+    assert.ok(errors.some((args) => String(args[0]).includes("delete failed; orphan retained")),
+      "cleanup failure tidak diekspos ke log operasional");
+  } finally {
+    console.error = originalError;
+    setMediaStorageForTests(memoryStorage);
+  }
 });
 
 test("manifest dibuat sekali; retry/reorder/delete/add tetap memakai identitas awal", async () => {

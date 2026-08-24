@@ -53,11 +53,11 @@ class MemoryStorage implements MediaStorage {
   putCalls: string[] = [];
   materializeCalls: string[] = [];
   cascade = new Map<string, string>();
-  onApprovedReferencePut: ((key: string) => void) | null = null;
+  onApprovedReferencePut: ((key: string) => void | Promise<void>) | null = null;
   async put(key: string, body: Buffer) {
     this.putCalls.push(key);
     this.values.set(key, Buffer.from(body));
-    if (key.includes("/approved-references/")) this.onApprovedReferencePut?.(key);
+    if (key.includes("/approved-references/")) await this.onApprovedReferencePut?.(key);
   }
   async delete(key: string) {
     this.deleteCalls.push(key);
@@ -190,6 +190,43 @@ async function admittedProductMutationScenario(
   if (admission.status !== 201) assert.fail(`admission E3 gagal (${admission.status}): ${await admission.text()}`);
   const admitted = await admission.json() as { job_id: string };
   return { ownerId, intruderId, productId, jobId: admitted.job_id, approvedSource, approvedBytes, ownerToken, intruderToken };
+}
+
+async function rawAdmissionCandidate(storage: MemoryStorage, label: string, creditIdr: number) {
+  const ownerId = uuid(), productId = uuid(), scriptId = uuid();
+  const approvedSource = `uploads/admission-${label}/approved.webp`;
+  const approvedBytes = Buffer.from(`APPROVED-${label}`);
+  const timestamp = now();
+  const phone = `08124${crypto.randomUUID().replaceAll("-", "").slice(0, 8)}`;
+  db.prepare("INSERT INTO users (id,phone,tier,locale,created_at) VALUES (?,?,'free','id-ID',?)")
+    .run(ownerId, phone, timestamp);
+  db.prepare(
+    "INSERT INTO products (id,user_id,name,price_idr,category,images,raw_meta,created_at) VALUES (?,?,?,85000,'beauty',?,?,?)"
+  ).run(productId, ownerId, "Serum Admission E3", JSON.stringify([approvedSource]), JSON.stringify({ brand: "Merek Admission" }), timestamp);
+  db.prepare(
+    `INSERT INTO scripts
+      (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,approved_by_user_at,created_at)
+     VALUES (?,?,'H1','senang','bestie',?,'caption','[]','{}','high_quality',?,?)`
+  ).run(scriptId, productId, JSON.stringify([
+    { role: "hook", start: 0, end: 4, text: "Bestie kenapa rutinitas pagiku sekarang jauh lebih praktis?", visual_direction: "x" },
+    { role: "demo", start: 4, end: 11, text: "Makanya Serum Admission E3 ringan dan mudah diratakan", visual_direction: "x" },
+    { role: "cta", start: 11, end: 15, text: "Kalau penasaran cek keranjang sekarang ya", visual_direction: "x" },
+  ]), timestamp, timestamp);
+  if (creditIdr > 0) {
+    db.prepare("INSERT INTO credit_ledger (id,user_id,delta,type,created_at) VALUES (?,?,?,'bonus',?)")
+      .run(uuid(), ownerId, creditIdr, timestamp);
+  }
+  storage.values.set(approvedSource, approvedBytes);
+  storage.values.set(`${approvedSource}.meta.json`, approvedSidecar(approvedBytes));
+  setMediaStorageForTests(storage);
+  const token = await issueToken(ownerId, phone);
+  const { POST } = await import("../app/api/jobs/route");
+  const submit = () => POST(new Request("http://localhost/api/jobs", {
+    method: "POST",
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
+    body: JSON.stringify({ script_id: scriptId, format: "hands_only", quality_tier: "high_quality", duration_s: 15 }),
+  }));
+  return { ownerId, productId, scriptId, submit };
 }
 
 function patchRetailRequest(productId: string, token: string, body: Record<string, unknown>) {
@@ -364,6 +401,81 @@ test("storage preparation gagal sebelum job, hold, dan queue visibility SQLite",
   const holds = (db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE user_id=? AND type='hold'").get(ownerId) as { n: number }).n;
   assert.equal(jobs, 0, "storage failure meninggalkan job visible");
   assert.equal(holds, 0, "storage failure meninggalkan hold");
+  assert.deepEqual([...storage.values.keys()].filter((key) => key.includes("/approved-references/")), [],
+    "PUT yang gagal sesudah menulis bytes meninggalkan orphan walau jobId terbukti absent");
+});
+
+test("SQLite saldo known-insufficient ditolak sebelum PUT, job, dan hold", async (t) => {
+  const storage = new MemoryStorage();
+  const s = await rawAdmissionCandidate(storage, `insufficient-${process.pid}`, 0);
+  t.after(() => setMediaStorageForTests(undefined));
+  const response = await s.submit();
+  assert.equal(response.status, 402);
+  assert.equal((await response.json() as { code: string }).code, "INSUFFICIENT_CREDITS");
+  assert.equal(storage.putCalls.filter((key) => key.includes("/approved-references/")).length, 0,
+    "saldo insufficient sudah menulis snapshot storage");
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM jobs WHERE product_id=?").get(s.productId) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE user_id=? AND type='hold'").get(s.ownerId) as { n: number }).n, 0);
+});
+
+test("dua admission SQLite konkuren menyisakan hanya object milik job pemenang", async (t) => {
+  const storage = new MemoryStorage();
+  const s = await rawAdmissionCandidate(storage, `duplicate-${process.pid}`, 50_000);
+  t.after(() => setMediaStorageForTests(undefined));
+  let releaseFirst!: () => void;
+  let firstStarted!: () => void;
+  const released = new Promise<void>((resolve) => { releaseFirst = resolve; });
+  const started = new Promise<void>((resolve) => { firstStarted = resolve; });
+  let prepared = 0;
+  storage.onApprovedReferencePut = async () => {
+    if (++prepared === 1) {
+      firstStarted();
+      await released;
+    }
+  };
+
+  const firstPromise = s.submit();
+  await started;
+  const secondResponse = await s.submit();
+  releaseFirst();
+  const firstResponse = await firstPromise;
+  const responses = [firstResponse, secondResponse];
+  assert.deepEqual(responses.map((response) => response.status).sort(), [200, 201]);
+  const bodies = await Promise.all(responses.map((response) => response.json() as Promise<{ job_id: string; duplicate?: boolean }>));
+  assert.equal(new Set(bodies.map((body) => body.job_id)).size, 1, "dua request tidak menunjuk satu pemenang");
+  assert.equal(bodies.filter((body) => body.duplicate).length, 1);
+  const winnerId = bodies[0].job_id;
+  const row = db.prepare("SELECT approved_reference_manifest FROM jobs WHERE id=?").get(winnerId) as { approved_reference_manifest: string };
+  const winnerKeys = new Set((JSON.parse(row.approved_reference_manifest) as { references: { snapshotRel: string }[] }).references.map((ref) => ref.snapshotRel));
+  const retainedKeys = [...storage.values.keys()].filter((key) => key.includes("/approved-references/"));
+  assert.deepEqual(new Set(retainedKeys), winnerKeys, "object prefix admission yang kalah masih tertinggal");
+  assert.ok(storage.deleteCalls.some((key) => key.includes("/approved-references/")), "loser tidak menjalankan cleanup");
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM jobs WHERE product_id=?").get(s.productId) as { n: number }).n, 1);
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE user_id=? AND type='hold'").get(s.ownerId) as { n: number }).n, 1);
+});
+
+test("SQLite images berubah sampai retry habis membersihkan seluruh prepared prefix", async (t) => {
+  const storage = new MemoryStorage();
+  const s = await rawAdmissionCandidate(storage, `exhausted-${process.pid}`, 50_000);
+  t.after(() => setMediaStorageForTests(undefined));
+  const first = `uploads/admission-exhausted-${process.pid}/first.webp`;
+  const second = `uploads/admission-exhausted-${process.pid}/second.webp`;
+  for (const [rel, bytes] of [[first, Buffer.from("EXHAUSTED-FIRST")], [second, Buffer.from("EXHAUSTED-SECOND")]] as const) {
+    storage.values.set(rel, bytes);
+    storage.values.set(`${rel}.meta.json`, approvedSidecar(bytes));
+  }
+  db.prepare("UPDATE products SET images=? WHERE id=?").run(JSON.stringify([first]), s.productId);
+  let mutation = 0;
+  storage.onApprovedReferencePut = () => {
+    const next = mutation++ % 2 === 0 ? second : first;
+    db.prepare("UPDATE products SET images=? WHERE id=?").run(JSON.stringify([next]), s.productId);
+  };
+  const response = await s.submit();
+  assert.equal(response.status, 400);
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM jobs WHERE product_id=?").get(s.productId) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE user_id=? AND type='hold'").get(s.ownerId) as { n: number }).n, 0);
+  assert.deepEqual([...storage.values.keys()].filter((key) => key.includes("/approved-references/")), [],
+    "retry exhaustion meninggalkan prepared keys walau jobId terbukti absent");
 });
 
 test("E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan", async (t) => {

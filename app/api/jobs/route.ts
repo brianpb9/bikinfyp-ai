@@ -16,7 +16,7 @@ import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnap
 import { scoreScriptPlan } from "@/lib/fyp-score";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
-import { prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
+import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -205,6 +205,19 @@ export async function POST(req: Request) {
       ? { jobId: activeBeforePrepare.id, duplicate: true }
       : null;
     const preparedJobId = uuid();
+    const preparedSnapshotRels = new Set<string>();
+
+    // Cheap preflight prevents a known-insufficient request from writing any
+    // object. The identical check remains in the admitting transaction below;
+    // this read is an optimization, never the authority to charge.
+    if (!created && getBalance(user.id) < priceIdr) throw ERR.INSUFFICIENT_CREDITS();
+
+    const cleanupKnownNonAdmission = () => cleanupUnadmittedReferenceKeys({
+      jobId: preparedJobId,
+      snapshotRels: preparedSnapshotRels,
+      runtime: "admission-sqlite",
+      proveJobAbsent: async () => !db!.prepare("SELECT id FROM jobs WHERE id=?").get(preparedJobId),
+    });
 
     // better-sqlite3 transactions cannot await object storage. Prepare bytes
     // first, then compare the exact ordered images JSON inside the synchronous
@@ -218,19 +231,27 @@ export async function POST(req: Request) {
       if (!candidateProduct) throw ERR.NOT_FOUND("Produknya");
       const candidateImagesRaw = candidateProduct.images;
       const candidateImages = JSON.parse(candidateImagesRaw) as string[];
-      const preparedReference = await prepareAdmissionReferenceManifest({
-        jobId: preparedJobId,
-        productId: product.id,
-        candidateRels: candidateImages,
-        runtime: "admission-sqlite",
-      });
+      let preparedReference: Awaited<ReturnType<typeof prepareAdmissionReferenceManifest>>;
+      try {
+        preparedReference = await prepareAdmissionReferenceManifest({
+          jobId: preparedJobId,
+          productId: product.id,
+          candidateRels: candidateImages,
+          runtime: "admission-sqlite",
+          onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
+        });
+      } catch (error) {
+        await cleanupKnownNonAdmission();
+        throw error;
+      }
+      preparedReference.manifest.references.forEach((ref) => preparedSnapshotRels.add(ref.snapshotRel));
 
       const outcome = db!.transaction(() => {
         const active = db!
           .prepare("SELECT id FROM jobs WHERE script_id = ? AND state NOT IN ('FAILED','REFUNDED','READY')")
           .get(script.id) as { id: string } | undefined;
         if (active) return { kind: "created" as const, value: { jobId: active.id, duplicate: true } };
-        if (getBalance(user.id) < priceIdr) throw ERR.INSUFFICIENT_CREDITS();
+        if (getBalance(user.id) < priceIdr) return { kind: "insufficient" as const };
         // Read and freeze product truth inside the same transaction that admits
         // the job. A mutation after the earlier HTTP validation therefore cannot
         // slip between admission and snapshot creation.
@@ -246,9 +267,16 @@ export async function POST(req: Request) {
         db!.prepare("UPDATE scripts SET job_id = ? WHERE id = ?").run(preparedJobId, script.id);
         return { kind: "created" as const, value: { jobId: preparedJobId, duplicate: false } };
       })();
-      if (outcome.kind === "created") created = outcome.value;
+      if (outcome.kind === "created") {
+        created = outcome.value;
+        if (created.duplicate) await cleanupKnownNonAdmission();
+      } else if (outcome.kind === "insufficient") {
+        await cleanupKnownNonAdmission();
+        throw ERR.INSUFFICIENT_CREDITS();
+      }
     }
     if (!created) {
+      await cleanupKnownNonAdmission();
       throw ERR.BAD_REQUEST(
         "Daftar foto produk berubah saat render diterima. Coba kirim lagi ya.",
         "Product images changed repeatedly during admission. Please retry."

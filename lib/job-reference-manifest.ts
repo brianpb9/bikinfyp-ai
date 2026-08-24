@@ -59,6 +59,8 @@ export async function prepareJobReferenceManifest(input: {
   jobId: string;
   candidateRels: string[];
   onResolved?: (resolution: HasilResolusiReferensi) => void;
+  /** Admission callers track attempted deterministic keys for safe rollback. */
+  onSnapshotTarget?: (snapshotRel: string) => void;
 }): Promise<{ manifest: JobReferenceManifest; raw: string; resolution: HasilResolusiReferensi }> {
   const resolution = await resolveApprovedReference(input.candidateRels);
   input.onResolved?.(resolution);
@@ -77,6 +79,7 @@ export async function prepareJobReferenceManifest(input: {
     }
     const ext = path.posix.extname(ref.rel);
     const snapshotRel = path.posix.join("jobs", input.jobId, "approved-references", `${index}-${ref.sha256}${ext}`);
+    input.onSnapshotTarget?.(snapshotRel);
     await mediaStorage().put(snapshotRel, object.body);
     references.push({ ...ref, snapshotRel });
   }

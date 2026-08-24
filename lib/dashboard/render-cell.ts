@@ -23,7 +23,7 @@ import type { PgJobsRepository } from "@/lib/postgres/jobs";
 import { pgAudit, pgSaveFypSnapshot, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
-import { prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
+import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 
 export type HasilSel =
@@ -141,9 +141,11 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   const priceIdr = tierPriceIdr(tier, durationS);
 
   const jobId = crypto.randomUUID();
+  const preparedSnapshotRels = new Set<string>();
   const now = new Date().toISOString();
   let admittedProduct: { name: string; priceIdr: number } | null = null;
   const client = await pool.connect();
+  let commitAttempted = false;
   try {
     await client.query("BEGIN");
     // Freeze product truth under a row lock in this admission transaction.
@@ -209,6 +211,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       productId: sel.productId,
       candidateRels: JSON.parse(lockedProduct.images) as string[],
       runtime: "admission-postgres-org",
+      onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
     });
     admittedProduct = { name: lockedProduct.name, priceIdr: lockedProduct.price_idr };
     // requires_approval=TRUE: job dashboard brand SELALU berhenti di gerbang
@@ -233,6 +236,12 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     const klaim = await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2 AND job_id IS NULL", [jobId, sel.scriptId]);
     if (klaim.rowCount !== 1) {
       await client.query("ROLLBACK");
+      await cleanupUnadmittedReferenceKeys({
+        jobId,
+        snapshotRels: preparedSnapshotRels,
+        runtime: "admission-postgres-org",
+        proveJobAbsent: async () => !(await client.query("SELECT id FROM jobs WHERE id=$1", [jobId])).rows[0],
+      });
       return gagal("Skrip ini sudah dipakai permintaan lain.");
     }
     await client.query(
@@ -240,9 +249,18 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       [crypto.randomUUID(), sel.userId, jobId,
         JSON.stringify({ script_id: sel.scriptId, campaign_run_id: sel.runId, org_id: sel.orgId, custom_avatar: Boolean(sel.avatarCustomDesc) }), now]
     );
+    commitAttempted = true;
     await client.query("COMMIT");
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
+    const rollbackSucceeded = await client.query("ROLLBACK").then(() => true, () => false);
+    if (!commitAttempted && rollbackSucceeded && preparedSnapshotRels.size > 0) {
+      await cleanupUnadmittedReferenceKeys({
+        jobId,
+        snapshotRels: preparedSnapshotRels,
+        runtime: "admission-postgres-org",
+        proveJobAbsent: async () => !(await client.query("SELECT id FROM jobs WHERE id=$1", [jobId])).rows[0],
+      });
+    }
     throw error;
   } finally {
     client.release();

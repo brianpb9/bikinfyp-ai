@@ -22,7 +22,7 @@ import { runFf } from "../media/ffmpeg";
 import { mediaStorage } from "../storage";
 import { getPool } from "./pool";
 import { createJobProductSnapshotRaw } from "../job-product-snapshot";
-import { prepareAdmissionReferenceManifest } from "../job-admission-reference";
+import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "../job-admission-reference";
 
 /**
  * PostgreSQL runtime switch.  `RACUN_POSTGRES_SMOKE=1` is retained solely for
@@ -221,8 +221,10 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
     // One id across bounded transaction retries makes storage-first writes
     // deterministic and idempotent even after 40001/40P01.
     const jobId = id();
+    const preparedSnapshotRels = new Set<string>();
     for (let attempt = 0; attempt < 5; attempt++) {
       const client = await pool.connect();
+      let commitAttempted = false;
       try {
         await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
         // Serialize spends for the same wallet before any predicate read. It
@@ -239,8 +241,23 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
         if (!script.rows[0]) throw new Error("SCRIPT_NOT_FOUND");
         if (script.rows[0].job_id) {
           const active = await client.query<{ id: string }>("SELECT id FROM jobs WHERE id=$1 AND state NOT IN ('FAILED','REFUNDED','READY') FOR UPDATE", [script.rows[0].job_id]);
-          if (active.rows[0]) { await client.query("COMMIT"); return { jobId: active.rows[0].id, duplicate: true }; }
+          if (active.rows[0]) {
+            commitAttempted = true;
+            await client.query("COMMIT");
+            await cleanupUnadmittedReferenceKeys({
+              jobId,
+              snapshotRels: preparedSnapshotRels,
+              runtime: "admission-postgres-retail",
+              proveJobAbsent: async () => !(await client.query("SELECT id FROM jobs WHERE id=$1", [jobId])).rows[0],
+            });
+            return { jobId: active.rows[0].id, duplicate: true };
+          }
         }
+        // Preflight under the wallet lock prevents known-insufficient requests
+        // from producing durable objects. The final balance read remains after
+        // preparation and is still the authoritative admission check.
+        const preflightBalance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);
+        if (Number(preflightBalance.rows[0].balance) < input.priceIdr) throw new Error("INSUFFICIENT_CREDITS");
         // A shared row lock keeps product mutation behind COMMIT while the
         // admission snapshot and job row are installed atomically.
         const product = await client.query<{
@@ -256,7 +273,9 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
           productId: input.productId,
           candidateRels: JSON.parse(product.rows[0].images) as string[],
           runtime: "admission-postgres-retail",
+          onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
         });
+        preparedReference.manifest.references.forEach((ref) => preparedSnapshotRels.add(ref.snapshotRel));
         const balance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);
         if (Number(balance.rows[0].balance) < input.priceIdr) throw new Error("INSUFFICIENT_CREDITS");
         const timestamp = at();
@@ -267,13 +286,25 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
         await client.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,'hold',$4,NULL,$5)", [id(),userId,-input.priceIdr,jobId,timestamp]);
         await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId,input.scriptId]);
         await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true }),timestamp]);
+        commitAttempted = true;
         await client.query("COMMIT"); return { jobId, duplicate: false };
       } catch (error) {
-        await client.query("ROLLBACK").catch(() => undefined);
+        const rollbackSucceeded = await client.query("ROLLBACK").then(() => true, () => false);
         const code = (error as { code?: string }).code;
         if ((code === "40001" || code === "40P01") && attempt < 4) {
           await new Promise((resolve) => setTimeout(resolve, 25 * (2 ** attempt) + Math.floor(Math.random() * 25)));
           continue;
+        }
+        // A successful rollback before COMMIT plus a fresh absent-row query is
+        // positive proof that this job id did not win. COMMIT/network errors
+        // remain ambiguous and deliberately retain the deterministic objects.
+        if (!commitAttempted && rollbackSucceeded && preparedSnapshotRels.size > 0) {
+          await cleanupUnadmittedReferenceKeys({
+            jobId,
+            snapshotRels: preparedSnapshotRels,
+            runtime: "admission-postgres-retail",
+            proveJobAbsent: async () => !(await client.query("SELECT id FROM jobs WHERE id=$1", [jobId])).rows[0],
+          });
         }
         throw error;
       } finally { client.release(); }
