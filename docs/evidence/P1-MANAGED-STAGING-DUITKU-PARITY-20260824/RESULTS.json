@@ -1,0 +1,97 @@
+{
+  "schema": "hdrv-managed-staging-evidence/v1",
+  "task": "P1-MANAGED-STAGING-DUITKU-PARITY-20260824",
+  "classification": "VERIFIED_MANAGED",
+  "result": "PASS",
+  "accepted_app_sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3",
+  "staging": {
+    "branch": "staging/exact-89cfdf0-20260824",
+    "auto_deploy": false,
+    "maintenance_final": false,
+    "worker_suspended_final": false,
+    "web": {
+      "service_id": "srv-d9n28tijnfac73a87lt0",
+      "deploy_id": "dep-da66sk3ncjis73asgu80",
+      "deploy_count_for_task": 1,
+      "status": "live",
+      "sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3"
+    },
+    "worker": {
+      "service_id": "srv-d9n28ue417fc73ch2b60",
+      "deploy_id": "dep-da66slm417fc739h2mf0",
+      "deploy_count_for_task": 1,
+      "status": "live",
+      "sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3"
+    },
+    "health": {
+      "consecutive_http_200": 3,
+      "payments_provider": "duitku",
+      "payments_env": "sandbox",
+      "payments_live": false,
+      "build_sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3",
+      "classifier_capable": true
+    }
+  },
+  "managed_env": {
+    "atomic_update_http_status": 200,
+    "before_count": 26,
+    "after_count": 30,
+    "changed_keys": [
+      "PAYMENT_GATEWAY",
+      "DUITKU_IS_PRODUCTION",
+      "DUITKU_MERCHANT_CODE",
+      "DUITKU_API_KEY"
+    ],
+    "unrelated_preserved": true,
+    "gateway_is_duitku": true,
+    "duitku_is_production_false": true,
+    "payments_go_live_false_or_absent": true,
+    "app_base_url_exact": true,
+    "managed_local_credential_equality": true,
+    "worker_credential_slots_absent": true,
+    "secret_values_recorded": false
+  },
+  "canaries": {
+    "unauthenticated_checkout": { "http_status": 401, "code": "UNAUTHORIZED" },
+    "invalid_signature_callback": { "http_status": 401, "code": "INVALID_SIGNATURE" },
+    "valid_signature_unknown_order": {
+      "http_status": 200,
+      "ignored": true,
+      "credited": false,
+      "order": "parity-unknown-20260824-1622"
+    },
+    "money_operation_performed": false
+  },
+  "safety": {
+    "queue_snapshots_matching": 3,
+    "queue_counts_zero": true,
+    "database_snapshots_matching": 3,
+    "payments_rows": 13,
+    "payments_total_idr": 1520000,
+    "credit_ledger_rows": 341,
+    "credit_ledger_total": 2203000,
+    "tracked_rows_created_since_task": 0
+  },
+  "production": {
+    "mutated": false,
+    "branch": "main",
+    "origin_main": "00ee62efd86ae7e10453a2a1896e63b62228aa4d",
+    "web_deploy": "dep-da3bfg142hec73arfot0",
+    "worker_deploy": "dep-da3bfg142hec73arfpfg",
+    "live_sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d"
+  },
+  "rollback": {
+    "executed": false,
+    "target_sha": "73280ffa342945dc08cee2fc664956975c8d5735",
+    "web_deploy": "dep-da63g43tqb8s739gkasg",
+    "worker_deploy": "dep-da64cfbncjis73alvbn0"
+  },
+  "not_run": [
+    "invoice_creation",
+    "payment",
+    "refund",
+    "settlement",
+    "production_mutation",
+    "rollback"
+  ]
+}
