@@ -647,6 +647,15 @@ test("SA6 strict mengunci exact bridge set menurut template dan harga immutable"
     assert.ok(rejected.errors.some((error) => error.rule === "L-14"), `${malformedPerak}: ${JSON.stringify(rejected.errors)}`);
     assert.ok(rejected.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)), malformedPerak);
   }
+  for (const signedPerak of ["-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak"]) {
+    const signed = structuredClone(LIVE_ADS_SAFE);
+    signed[2].text = `Harganya ${signedPerak}.`;
+    signed[2].bridge_source = "spoken_approved_price";
+    const rejected = validate(signed, "promo-terbatas", "Kemeja Uji", "fashion", 5_000);
+    assert.equal(rejected.passed, false, signedPerak);
+    assert.ok(rejected.errors.some((error) => error.rule === "L-14" && /bertanda/.test(error.message_id)), `${signedPerak}: ${JSON.stringify(rejected.errors)}`);
+    assert.ok(rejected.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)), signedPerak);
+  }
 });
 
 test("SA6 non-price menangkap notasi harga Indonesia tanpa menolak angka biasa", () => {
@@ -696,6 +705,9 @@ test("detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka
   assert.deepEqual(deteksiHargaIndonesia("1,5 perak"), []);
   assert.deepEqual(deteksiHargaIndonesia("12.34 perak"), []);
   assert.deepEqual(deteksiHargaIndonesia("kode5 perak"), []);
+  for (const signedPerak of ["-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak", "+0 perak"]) {
+    assert.deepEqual(deteksiHargaIndonesia(signedPerak), [], signedPerak);
+  }
   assert.deepEqual(deteksiHargaIndonesia("1.000 ribu").map((mention) => mention.nilai), [1_000]);
   assert.deepEqual(deteksiHargaIndonesia("1,000 juta").map((mention) => mention.nilai), [1_000_000]);
   assert.deepEqual(deteksiHargaIndonesia("1,5 ribu").map((mention) => mention.nilai), [1_500]);

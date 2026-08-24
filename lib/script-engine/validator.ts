@@ -9,7 +9,7 @@ import { formatHargaNatural } from "./templates";
 import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
 import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
 import { periksaStoryOsAds } from "./story-os-ads";
-import { deteksiHargaIndonesia, hargaTerbilang, tanpaNominalHargaTertulis } from "./price-mentions";
+import { deteksiHargaIndonesia, deteksiNominalPerakBertanda, hargaTerbilang, tanpaNominalHargaTertulis } from "./price-mentions";
 export { hargaTerbilang } from "./price-mentions";
 import { pilihTokenMerek } from "../merek";
 import { tutupiNama } from "../media/pemicu-filter";
@@ -760,6 +760,9 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   );
   if (badDigit)
     push(false, { rule: "L-14", message_id: `Ada angka "${badDigit}" yang tidak ada di data produk — klaim harus sesuai data yang kamu kasih.` });
+  const signedPerak = deteksiNominalPerakBertanda(fullText)[0];
+  if (signedPerak)
+    push(false, { rule: "L-14", message_id: `Harga bertanda "${signedPerak}" tidak sah sebagai harga produk.` });
   const sourcePriceAmounts = [script.priceIdr, script.promoPriceBeforeIdr]
     .filter((value): value is number => Boolean(value));
   // Copy lisan sengaja memakai formatHargaNatural (mis. Rp24.620 ->
