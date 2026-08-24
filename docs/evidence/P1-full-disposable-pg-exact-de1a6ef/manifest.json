@@ -1,0 +1,237 @@
+{
+  "schema": "p1-full-disposable-pg-evidence-v1",
+  "generated_utc": "2026-08-24T07:41:44.189Z",
+  "task": "P1-FULL-DISPOSABLE-PG-ZERO-SKIP-20260824",
+  "code_under_test": {
+    "head": "de1a6ef53bdfb4de14d01e8c13cc223a54cddd61",
+    "tree": "14028daa2120321ffd05a1cd6e1a57c615488229",
+    "baseline_head": "09cddfbb5940f2d6d72a3624c0ea2ff6d2f7a410",
+    "initial_worktree_clean": true
+  },
+  "machine": {
+    "platform": "darwin",
+    "arch": "arm64",
+    "node": "v22.23.1"
+  },
+  "safety": {
+    "database_scope": "loopback-only unique disposable PostgreSQL",
+    "endpoint": "localhost:5432",
+    "database_url_recorded": false,
+    "both_database_envs_supplied_same_url": true,
+    "create": "PASS",
+    "migrate": "PASS",
+    "drop_with_force": "PASS",
+    "post_drop_catalog_count": 0,
+    "network_calls_authorized": false,
+    "paid_calls_authorized": false,
+    "pixel_skip_env": "UNSET",
+    "qcf1_paid_opt_in": "UNSET",
+    "score_changed": false
+  },
+  "baseline": {
+    "tests": 1119,
+    "pass": 1113,
+    "fail": 2,
+    "skipped": 4,
+    "cancelled": 0,
+    "todo": 0,
+    "failures": [
+      {
+        "test": 538,
+        "name": "8 reconciler paralel atas 30 job READY: tepat satu capture per job",
+        "pg_code": "40001"
+      },
+      {
+        "test": 550,
+        "name": "confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol reference Story Ads",
+        "pg_code": "40001"
+      }
+    ],
+    "disposable_create_migrate_drop": "PASS"
+  },
+  "exact_sha_result": {
+    "aggregate": {
+      "tests": 1119,
+      "pass": 1115,
+      "fail": 0,
+      "skipped": 4,
+      "cancelled": 0,
+      "todo": 0,
+      "duration_ms": 91952.517417,
+      "exit_code": 0
+    },
+    "w1": {
+      "tests": 25,
+      "pass": 25,
+      "fail": 0,
+      "skipped": 0,
+      "exit_code": 0
+    },
+    "money": {
+      "tests": 11,
+      "pass": 11,
+      "fail": 0,
+      "skipped": 0,
+      "exit_code": 0
+    },
+    "typescript": {
+      "exit_code": 0
+    },
+    "build": {
+      "exit_code": 0
+    },
+    "script_catalog_audit": {
+      "exit_code": 0,
+      "passed": true
+    }
+  },
+  "classified_skips": [
+    {
+      "test": 771,
+      "name": "frame SCARLET/pump/10ml GAGAL — frame yang dulu false-pass",
+      "reason": "historical PALSU artifact absent; paid Gemini test not opted in"
+    },
+    {
+      "test": 772,
+      "name": "foto asli dibandingkan dirinya sendiri LULUS",
+      "reason": "historical PALSU artifact absent; paid Gemini test not opted in"
+    },
+    {
+      "test": 773,
+      "name": "OCR pada frame palsu NYATA menolak mereknya — tanpa jaringan",
+      "reason": "historical PALSU artifact absent"
+    },
+    {
+      "test": 775,
+      "name": "hero tanpa merek tepercaya = UNVERIFIED, bukan menebak",
+      "reason": "historical PALSU artifact absent; paid Gemini test not opted in"
+    }
+  ],
+  "runner_provenance": {
+    "failed_pre_execution_attempts": 2,
+    "failed_endpoint": "project default localhost:54329",
+    "stopped_before_database_creation": true,
+    "exact_run_endpoint_verified": "localhost:5432"
+  },
+  "artifacts": [
+    {
+      "name": "README.md",
+      "bytes": 2803,
+      "sha256": "dcede22f0b77ed63c260fd91e59515db703f3137411e61bbfba3ffcef77226fd"
+    },
+    {
+      "name": "aggregate-proof.txt",
+      "bytes": 442,
+      "sha256": "a9b57079f78df73a3d89b3b1eac50b4f0ec1f33d6ace2d19c84abdc474b17bbc"
+    },
+    {
+      "name": "aggregate.stderr.txt",
+      "bytes": 165,
+      "sha256": "a68bd324ff83904752fcb39fc9bc67bb6ec7443b60a3072fed6ffb6edd4423e8"
+    },
+    {
+      "name": "aggregate.tap",
+      "bytes": 373352,
+      "sha256": "78a268a32b3595a4968181d29bb22aadc5a9b72b7157ce2e16661cde4069e31a"
+    },
+    {
+      "name": "audit.proof.txt",
+      "bytes": 106,
+      "sha256": "1b60fd95eb9549e730d62d581c7b87de13d91b2a6076e41e8bd87ea155c7fd87"
+    },
+    {
+      "name": "audit.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "audit.stdout.txt",
+      "bytes": 757073,
+      "sha256": "6b1d7ad37ddfd1a5f9f8f45c9044c30ccec2931e389e29c7413329eb9606f0f8"
+    },
+    {
+      "name": "baseline-09cddfbb.aggregate.tap",
+      "bytes": 371923,
+      "sha256": "06bdfa6a17ebe7d2c28e69a59f984a01b58f51379495d9189f55977526a76106"
+    },
+    {
+      "name": "baseline-09cddfbb.cleanup.txt",
+      "bytes": 191,
+      "sha256": "1c245e804b896f3364f5c8716dff573059cbfdcb2acc63bf1198ffb695caa350"
+    },
+    {
+      "name": "baseline-09cddfbb.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "build.proof.txt",
+      "bytes": 107,
+      "sha256": "c66beb989eef2dda6321430495e98df4874ccd810d9ba366e00ba3b09fa0546d"
+    },
+    {
+      "name": "build.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "build.stdout.txt",
+      "bytes": 7878,
+      "sha256": "a0f5c96fc9001d6f9953171341cfc3600ab665005af884b154e9bf0ff3492983"
+    },
+    {
+      "name": "fixture-metadata.txt",
+      "bytes": 597,
+      "sha256": "1b00117b2cacd078858887765a42ec90db554db9068bfb7fc5c3c609da6f15a9"
+    },
+    {
+      "name": "money.proof.txt",
+      "bytes": 106,
+      "sha256": "3163e9ac540f80615f31f6f3808d81fe6334ec74b59a55e7b7ba1338630326d6"
+    },
+    {
+      "name": "money.stderr.txt",
+      "bytes": 165,
+      "sha256": "a68bd324ff83904752fcb39fc9bc67bb6ec7443b60a3072fed6ffb6edd4423e8"
+    },
+    {
+      "name": "money.stdout.txt",
+      "bytes": 2292,
+      "sha256": "5abb0e87d73a6e813757ec60077b5f7517e0b17868f6980563065e9a11f803d2"
+    },
+    {
+      "name": "typescript.proof.txt",
+      "bytes": 111,
+      "sha256": "f6f617b3f4a7ad04be45b8bc5c0876ab22105694dfcdf85e47a802308b0f2c67"
+    },
+    {
+      "name": "typescript.stderr.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "typescript.stdout.txt",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "name": "w1.proof.txt",
+      "bytes": 103,
+      "sha256": "b1ff8233bc8750db97d50d9e1cd7de115bbd2f5e253d41cb3fad0318d8d88ea6"
+    },
+    {
+      "name": "w1.stderr.txt",
+      "bytes": 165,
+      "sha256": "a68bd324ff83904752fcb39fc9bc67bb6ec7443b60a3072fed6ffb6edd4423e8"
+    },
+    {
+      "name": "w1.stdout.txt",
+      "bytes": 11995,
+      "sha256": "2aa35cf6e997aefa12f5d691fefd2f2922e9d094f154227e54c545ac27104598"
+    }
+  ],
+  "secret_scan": {
+    "forbidden_runtime_url_or_credential_matches": 0
+  },
+  "success": true
+}

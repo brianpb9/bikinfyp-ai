@@ -1,0 +1,85 @@
+
+> racun-ai@0.1.0 gate:uang
+> npm run test:pg
+
+
+> racun-ai@0.1.0 test:pg
+> bash scripts/test-postgres-konkurensi-kredit.sh
+
+TAP version 13
+# Subtest: indeks unik menolak catatan terminal kedua untuk satu job
+ok 1 - indeks unik menolak catatan terminal kedua untuk satu job
+  ---
+  duration_ms: 30.261833
+  type: 'test'
+  ...
+# Subtest: 8 reconciler paralel atas 30 job READY: tepat satu capture per job
+ok 2 - 8 reconciler paralel atas 30 job READY: tepat satu capture per job
+  ---
+  duration_ms: 105.713334
+  type: 'test'
+  ...
+# Subtest: promo READY yang hold-nya menggantung ikut dirapikan
+ok 3 - promo READY yang hold-nya menggantung ikut dirapikan
+  ---
+  duration_ms: 2.359167
+  type: 'test'
+  ...
+# Subtest: promo READY tidak bisa ditimpa jadi FAILED, jadi tidak bisa direfund
+ok 4 - promo READY tidak bisa ditimpa jadi FAILED, jadi tidak bisa direfund
+  ---
+  duration_ms: 3.356417
+  type: 'test'
+  ...
+# Subtest: event funnel benar-benar mendarat di PostgreSQL
+ok 5 - event funnel benar-benar mendarat di PostgreSQL
+  ---
+  duration_ms: 51.810458
+  type: 'test'
+  ...
+# Subtest: regenerate berkali-kali tidak menabrak indeks terminal
+ok 6 - regenerate berkali-kali tidak menabrak indeks terminal
+  ---
+  duration_ms: 2.026834
+  type: 'test'
+  ...
+# Subtest: capture final tetap bisa terjadi setelah regenerate
+ok 7 - capture final tetap bisa terjadi setelah regenerate
+  ---
+  duration_ms: 2.67475
+  type: 'test'
+  ...
+# Subtest: job GAGAL setelah regenerate tetap direfund penuh
+ok 8 - job GAGAL setelah regenerate tetap direfund penuh
+  ---
+  duration_ms: 2.905333
+  type: 'test'
+  ...
+# Subtest: capture berdelta bukan nol ditolak database
+ok 9 - capture berdelta bukan nol ditolak database
+  ---
+  duration_ms: 1.298292
+  type: 'test'
+  ...
+# Subtest: grantBonus idempoten walau dijalankan berbarengan
+ok 10 - grantBonus idempoten walau dijalankan berbarengan
+  ---
+  duration_ms: 14.635708
+  type: 'test'
+  ...
+# Subtest: grantBonus menolak jumlah yang tidak masuk akal
+ok 11 - grantBonus menolak jumlah yang tidak masuk akal
+  ---
+  duration_ms: 0.259708
+  type: 'test'
+  ...
+1..11
+# tests 11
+# suites 0
+# pass 11
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 299.540833
+PASS: sebelas invarian uang tervalidasi pada database disposable racun_konkurensi_27833_222.
