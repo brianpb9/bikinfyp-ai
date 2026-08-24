@@ -28,9 +28,9 @@ Baseline accepted SHA: `4f5eb05c109817ffa8f41bff819c1eccce22ba05`
 | Check | Result |
 |---|---|
 | `npx tsc --noEmit` | PASS |
-| secret/auth/runtime/container targeted suite | 61/61 PASS |
-| runtime+secret+container focused suite | 50/50 PASS |
-| full `npm test` | 1,179 total; 1,135 PASS; 0 fail; 44 classified skip |
+| secret/auth/runtime/container targeted suite | 65/65 PASS |
+| runtime+secret+container focused suite | 54/54 PASS |
+| full `npm test` | 1,183 total; 1,139 PASS; 0 fail; 44 classified skip |
 | secretless `npm run build` with AUTH_SECRET, DATABASE_URL, and provider keys removed | PASS |
 | `npm run test:web-container` | 36/36 PASS; static contract PASS |
 | Docker image execution | unavailable locally; not claimed |

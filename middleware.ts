@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import { runtimeAuthSecret } from "./lib/auth-secret-policy";
 
 // Rewrite dashboard hostname (F-ENT-01) ke /dashboard/** — mati total
 // (no-op) selama DASHBOARD_HOSTNAME belum di-set di env produksi. Ini
@@ -10,10 +11,11 @@ const DASHBOARD_HOST = process.env.DASHBOARD_HOSTNAME;
 
 const COOKIE = "racun_token";
 
-// Kunci verifikasi. Middleware jalan di Edge, jadi TIDAK boleh mengimpor
-// lib/config.ts (menyeret modul Node). AUTH_SECRET dibaca langsung — nilainya
-// sama persis dengan yang dipakai lib/auth.ts saat menandatangani.
-const secret = () => new TextEncoder().encode(process.env.AUTH_SECRET ?? "");
+// Kunci verifikasi. Middleware berjalan di Edge, jadi memakai accessor runtime
+// tervalidasi yang Edge-compatible. Accessor yang sama dipakai lib/auth.ts,
+// sehingga verifikasi selalu memakai secret saat ini dan gagal tertutup bila
+// nilainya hilang, default pengembangan, atau terlalu pendek.
+const secret = () => new TextEncoder().encode(runtimeAuthSecret());
 
 function toOnboarding(req: NextRequest, clearCookie: boolean) {
   const url = req.nextUrl.clone();
@@ -60,12 +62,6 @@ export async function middleware(req: NextRequest) {
   if (pathname.startsWith("/brands") || pathname.startsWith("/onboarding") || pathname.startsWith("/coba") || pathname.startsWith("/mulai") || pathname.startsWith("/harga") || pathname.startsWith("/kontak") || pathname.startsWith("/legal") || pathname.startsWith("/.well-known")) return NextResponse.next();
   const token = req.cookies.get(COOKIE)?.value;
   if (!token) return toOnboarding(req, false);
-
-  // AUTH_SECRET kosong berarti salah konfigurasi, bukan pengguna yang salah.
-  // Boot produksi sudah ditolak lebih dulu oleh lib/secrets.ts; pengecekan di
-  // sini menjaga agar middleware tidak diam-diam meloloskan semua orang kalau
-  // env-nya hilang di lingkungan lain.
-  if (!process.env.AUTH_SECRET) return toOnboarding(req, true);
 
   try {
     await jwtVerify(token, secret());

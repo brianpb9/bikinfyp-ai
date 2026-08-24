@@ -96,3 +96,65 @@ test("derived signing keys refresh when the runtime secret changes", () => {
   `, "a".repeat(32));
   assert.equal(result.status, 0, output(result));
 });
+
+test("actual SQLite OTP hashing rotates and fails closed on later invalid secrets", () => {
+  const result = child(`
+    process.env.AUTH_SECRET = "a".repeat(32);
+    const { hashCode } = await import("./lib/otp.ts");
+    const first = hashCode("user@example.test", "123456");
+    process.env.AUTH_SECRET = "b".repeat(32);
+    const second = hashCode("user@example.test", "123456");
+    if (first === second) throw new Error("OTP hash remained frozen after rotation");
+    delete process.env.AUTH_SECRET;
+    try { hashCode("user@example.test", "123456"); throw new Error("missing secret accepted"); }
+    catch (error) { if (!String(error).includes("AUTH_SECRET wajib diisi")) throw error; }
+    process.env.AUTH_SECRET = "pendek123";
+    try { hashCode("user@example.test", "123456"); throw new Error("short secret accepted"); }
+    catch (error) { if (!String(error).includes("terlalu pendek")) throw error; }
+  `, "a".repeat(32));
+  assert.equal(result.status, 0, output(result));
+});
+
+for (const [name, invalidSecret] of [
+  ["short", "pendek123"],
+  ["development default", "dev-secret-racun-ai-jangan-dipakai-produksi"],
+] as const) {
+  test(`Edge middleware cannot accept a JWT signed with a ${name} runtime secret`, () => {
+    const result = child(`
+      const { SignJWT } = await import("jose");
+      const token = await new SignJWT({ phone: "user@example.test" })
+        .setProtectedHeader({ alg: "HS256" })
+        .setSubject("user-a")
+        .sign(new TextEncoder().encode(process.env.AUTH_SECRET));
+      const { NextRequest } = await import("next/server");
+      const { middleware } = await import("./middleware.ts");
+      const request = new NextRequest("http://localhost/dashboard", {
+        headers: { cookie: "racun_token=" + encodeURIComponent(token) },
+      });
+      const response = await middleware(request);
+      if (response.status !== 307 || !response.headers.get("location")?.includes("/brands")) {
+        throw new Error("middleware accepted invalid runtime secret");
+      }
+    `, invalidSecret);
+    assert.equal(result.status, 0, output(result));
+  });
+}
+
+test("Edge middleware accepts a JWT signed with the valid current runtime secret", () => {
+  const result = child(`
+    const { SignJWT } = await import("jose");
+    const token = await new SignJWT({ phone: "user@example.test" })
+      .setProtectedHeader({ alg: "HS256" })
+      .setSubject("user-a")
+      .sign(new TextEncoder().encode(process.env.AUTH_SECRET));
+    const { NextRequest } = await import("next/server");
+    const { middleware } = await import("./middleware.ts");
+    const response = await middleware(new NextRequest("http://localhost/dashboard", {
+      headers: { cookie: "racun_token=" + encodeURIComponent(token) },
+    }));
+    if (response.status !== 200 || response.headers.get("x-middleware-next") !== "1") {
+      throw new Error("middleware rejected valid current runtime secret");
+    }
+  `, "v".repeat(32));
+  assert.equal(result.status, 0, output(result));
+});

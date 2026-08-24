@@ -234,7 +234,7 @@ syarat ADR dan Founder go-live terpenuhi.
 
 | Gap | Status | Owner/authority | Artefak penutup yang dibutuhkan |
 |---|---|---|---|
-| P0-B2 runtime classification web | **VERIFIED_MANAGED: incapable**; prior Docker build failed at build-time `AUTH_SECRET`; secret-safe build/runtime boundary now implemented and locally proven, pending exact-SHA review | Review code, then repeat managed staging build/canary with contemporaneous raw captures | `secret-safe-web-build-20260824/`: secretless build + 1,179-test proof; no managed capability/canary result yet. Prior interval-level evidence remains incomplete |
+| P0-B2 runtime classification web | **VERIFIED_MANAGED: incapable**; prior Docker build failed at build-time `AUTH_SECRET`; secret-safe build/runtime boundary now implemented and locally proven, pending exact-SHA review | Review code, then repeat managed staging build/canary with contemporaneous raw captures | `secret-safe-web-build-20260824/`: secretless build + 1,183-test proof; no managed capability/canary result yet. Prior interval-level evidence remains incomplete |
 | P0-B3 angka legacy C10 | partial credential/data | Data/Release owner | DB aggregate access proven; still needs paired staging R2 and sanitized legacy audit JSON |
 | T43 / P0-B4 action / P0-B5 / A1..A7 | Founder authority versioned for in-scope technical enforcement/admission; implementation coverage still partial | Reviewer dispatches bounded remaining scope | exact boundary evidence; legacy treatment remains undecided; do not infer implementation from authority |
 | C2 `TYPE_MISMATCH` | local implementation, belum bounded-approved | Builder setelah scope approval | route/admission boundary + canonical code + counterexamples |

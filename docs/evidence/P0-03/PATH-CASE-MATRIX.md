@@ -867,8 +867,8 @@ TASK=`P0-B2-SECRET-SAFE-WEB-BUILD-20260824`
 - Auth/JWT/OTP/signing consumers read and validate the current runtime secret;
   rotation is not frozen at build/import, and later missing/short values fail.
 - Secretless full Next build PASS without dummy/real build secrets. Full tests
-  are 1,179 total / 1,135 PASS / 0 fail / 44 classified skip; targeted boundary
-  tests are 61/61 PASS and staging Blueprint validation passes.
+  are 1,183 total / 1,139 PASS / 0 fail / 44 classified skip; targeted boundary
+  tests are 65/65 PASS and staging Blueprint validation passes.
 - Docker remains unavailable locally, so image execution is not claimed. No
   managed mutation occurred. P0-B2 remains managed incapable until reviewed
   exact-SHA managed rebuild, sustained health, and zero-money canary with
