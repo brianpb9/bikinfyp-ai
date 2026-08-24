@@ -39,6 +39,15 @@ Evidence groups:
   and exact-deploy fields after web/worker parity remediation; and
 - `remediation-health-*.txt`: direct public health probes after the controlled
   hold was released.
+- `replay-pre-rollout-*`, `replay-post-rollout-*`, and `replay-sustained-*`:
+  the final retained worker-suspended baseline, exact-SHA rollout, and
+  immediate/sustained full-table plus BullMQ observations;
+- `replay-worker-suspend.txt`, `replay-worker-resume.txt`, and matching service
+  and deploy artifacts: retained control-plane transitions for the final
+  replay; and
+- `replay-production-*-service-final.json` plus
+  `replay-production-service-compare.txt`: post-replay allowlisted production
+  configuration and exact comparison with pre-task baselines.
 
 The first four `pre-*-service.json` files ending without `-retry` record a
 capture-helper credential-parser failure before the successful allowlisted
@@ -46,11 +55,13 @@ reads. They contain only the error and no credential material. The initial
 database aggregate failure is likewise retained.
 
 The evidence ledger covers all captured external reads and mutations used for
-the managed conclusion. The immediate maintenance re-enable, worker branch
-update, suspend/resume transition, initial baseline inspection, and first
-exact worker resume deploy occurred before remediation capture resumed; their
-terminal state is independently retained by later service, deploy, HTTP,
-queue, and database artifacts, and the sequence is disclosed in `NOTES.md`.
+the managed conclusion. An earlier remediation attempt had uncaptured initial
+transitions and only post-rollout fingerprints; it is historical and not the
+final safety basis. The final `replay-*` sequence retains maintenance hold,
+worker suspend/resume, suspended service readback, pre-resume fingerprints and
+queue counts, deploy terminal state, immediate and sustained observations,
+allowlist restoration, post-replay production service readbacks, and release
+health.
 Additional local `jq`, `sed`, `rg`, `head`, `tail`, and `wc` inspections were
 read-only conveniences and are not the sole source for any conclusion.
 Pre-helper read-only discovery is disclosed in `NOTES.md` without invented

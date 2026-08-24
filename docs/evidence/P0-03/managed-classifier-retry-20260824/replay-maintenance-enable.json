@@ -1,0 +1,41 @@
+{
+  "observedAt": "2026-08-24T13:09:09.975Z",
+  "request": {
+    "method": "PATCH",
+    "path": "/v1/services/srv-d9n28tijnfac73a87lt0",
+    "action": "maintenance-on",
+    "payload": {
+      "serviceDetails": {
+        "maintenanceMode": {
+          "enabled": true,
+          "uri": ""
+        }
+      }
+    }
+  },
+  "response": {
+    "id": "srv-d9n28tijnfac73a87lt0",
+    "name": "racun-ai-staging-web",
+    "type": "web_service",
+    "repo": "https://github.com/brianpb9/bikinfyp-ai",
+    "branch": "staging/exact-73280ff-20260824",
+    "autoDeploy": "no",
+    "suspended": "not_suspended",
+    "updatedAt": "2026-08-24T13:09:09.923558Z",
+    "serviceDetails": {
+      "runtime": "docker",
+      "plan": "starter",
+      "region": "singapore",
+      "healthCheckPath": "/api/health",
+      "maintenanceMode": {
+        "enabled": true,
+        "uri": ""
+      },
+      "envSpecificDetails": {
+        "dockerCommand": "",
+        "dockerContext": ".",
+        "dockerfilePath": "Dockerfile.web"
+      }
+    }
+  }
+}

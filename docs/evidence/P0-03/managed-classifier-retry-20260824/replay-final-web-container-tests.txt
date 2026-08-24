@@ -1,0 +1,232 @@
+
+> racun-ai@0.1.0 test:web-container
+> bash scripts/test-web-container.sh
+
+[web-container] PASS static contract
+TAP version 13
+# Subtest: current staging web container contract passes
+ok 1 - current staging web container contract passes
+  ---
+  duration_ms: 1.8045
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_CLASSIFIER_PACKAGES fails closed
+ok 2 - counterexample WEB_DOCKER_CLASSIFIER_PACKAGES fails closed
+  ---
+  duration_ms: 0.302042
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_FFMPEG_PATH fails closed
+ok 3 - counterexample WEB_DOCKER_FFMPEG_PATH fails closed
+  ---
+  duration_ms: 0.082916
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_FFPROBE_PATH fails closed
+ok 4 - counterexample WEB_DOCKER_FFPROBE_PATH fails closed
+  ---
+  duration_ms: 0.068708
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_ASSETS fails closed
+ok 5 - counterexample WEB_DOCKER_ASSETS fails closed
+  ---
+  duration_ms: 0.175416
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_PROBE_ASSET fails closed
+ok 6 - counterexample WEB_DOCKER_PROBE_ASSET fails closed
+  ---
+  duration_ms: 0.082
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_OCR_LANGUAGE_CHECK fails closed
+ok 7 - counterexample WEB_DOCKER_OCR_LANGUAGE_CHECK fails closed
+  ---
+  duration_ms: 0.152708
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_MIGRATIONS fails closed
+ok 8 - counterexample WEB_DOCKER_MIGRATIONS fails closed
+  ---
+  duration_ms: 0.069084
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_PREDEPLOY_SCRIPT fails closed
+ok 9 - counterexample WEB_DOCKER_PREDEPLOY_SCRIPT fails closed
+  ---
+  duration_ms: 0.258709
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_NEXT_RUNTIME fails closed
+ok 10 - counterexample WEB_DOCKER_NEXT_RUNTIME fails closed
+  ---
+  duration_ms: 0.278667
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_NODE_MODULES fails closed
+ok 11 - counterexample WEB_DOCKER_NODE_MODULES fails closed
+  ---
+  duration_ms: 0.105291
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_PUBLIC fails closed
+ok 12 - counterexample WEB_DOCKER_PUBLIC fails closed
+  ---
+  duration_ms: 0.056292
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_WRITABLE_PATHS fails closed
+ok 13 - counterexample WEB_DOCKER_WRITABLE_PATHS fails closed
+  ---
+  duration_ms: 0.053125
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_WRITABLE_OWNERSHIP fails closed
+ok 14 - counterexample WEB_DOCKER_WRITABLE_OWNERSHIP fails closed
+  ---
+  duration_ms: 0.044375
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_NON_ROOT fails closed
+ok 15 - counterexample WEB_DOCKER_NON_ROOT fails closed
+  ---
+  duration_ms: 0.044458
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_START fails closed
+ok 16 - counterexample WEB_DOCKER_START fails closed
+  ---
+  duration_ms: 0.042584
+  type: 'test'
+  ...
+# Subtest: counterexample WEB_DOCKER_INSTRUMENTATION fails closed
+ok 17 - counterexample WEB_DOCKER_INSTRUMENTATION fails closed
+  ---
+  duration_ms: 0.059334
+  type: 'test'
+  ...
+# Subtest: whole-context COPY is rejected
+ok 18 - whole-context COPY is rejected
+  ---
+  duration_ms: 0.071834
+  type: 'test'
+  ...
+# Subtest: build secret directive is rejected: ARG
+ok 19 - build secret directive is rejected: ARG
+  ---
+  duration_ms: 0.055667
+  type: 'test'
+  ...
+# Subtest: build secret directive is rejected: ENV
+ok 20 - build secret directive is rejected: ENV
+  ---
+  duration_ms: 0.044541
+  type: 'test'
+  ...
+# Subtest: build secret directive is rejected: ARG
+ok 21 - build secret directive is rejected: ARG
+  ---
+  duration_ms: 0.045625
+  type: 'test'
+  ...
+# Subtest: build secret directive is rejected: ENV
+ok 22 - build secret directive is rejected: ENV
+  ---
+  duration_ms: 0.042708
+  type: 'test'
+  ...
+# Subtest: runtime boundary counterexample WEB_RUNTIME_NODE_BOUNDARY fails closed
+ok 23 - runtime boundary counterexample WEB_RUNTIME_NODE_BOUNDARY fails closed
+  ---
+  duration_ms: 0.049333
+  type: 'test'
+  ...
+# Subtest: runtime boundary counterexample WEB_RUNTIME_LAZY_ASSERTION fails closed
+ok 24 - runtime boundary counterexample WEB_RUNTIME_LAZY_ASSERTION fails closed
+  ---
+  duration_ms: 0.041375
+  type: 'test'
+  ...
+# Subtest: runtime boundary counterexample WEB_RUNTIME_ASSERTION_CALL fails closed
+ok 25 - runtime boundary counterexample WEB_RUNTIME_ASSERTION_CALL fails closed
+  ---
+  duration_ms: 0.0435
+  type: 'test'
+  ...
+# Subtest: runtime boundary counterexample WEB_RUNTIME_FAIL_CLOSED fails closed
+ok 26 - runtime boundary counterexample WEB_RUNTIME_FAIL_CLOSED fails closed
+  ---
+  duration_ms: 0.041125
+  type: 'test'
+  ...
+# Subtest: staging web counterexample STAGING_WEB_RUNTIME fails closed
+ok 27 - staging web counterexample STAGING_WEB_RUNTIME fails closed
+  ---
+  duration_ms: 0.050292
+  type: 'test'
+  ...
+# Subtest: staging web counterexample STAGING_WEB_DOCKERFILE fails closed
+ok 28 - staging web counterexample STAGING_WEB_DOCKERFILE fails closed
+  ---
+  duration_ms: 0.084666
+  type: 'test'
+  ...
+# Subtest: staging web counterexample STAGING_WEB_CONTEXT fails closed
+ok 29 - staging web counterexample STAGING_WEB_CONTEXT fails closed
+  ---
+  duration_ms: 0.063
+  type: 'test'
+  ...
+# Subtest: staging web counterexample STAGING_WEB_HEALTH fails closed
+ok 30 - staging web counterexample STAGING_WEB_HEALTH fails closed
+  ---
+  duration_ms: 0.050708
+  type: 'test'
+  ...
+# Subtest: staging web counterexample STAGING_WEB_PREDEPLOY fails closed
+ok 31 - staging web counterexample STAGING_WEB_PREDEPLOY fails closed
+  ---
+  duration_ms: 0.045125
+  type: 'test'
+  ...
+# Subtest: staging web counterexample STAGING_WEB_AUTODEPLOY fails closed
+ok 32 - staging web counterexample STAGING_WEB_AUTODEPLOY fails closed
+  ---
+  duration_ms: 0.043709
+  type: 'test'
+  ...
+# Subtest: worker remains bound to Dockerfile.worker
+ok 33 - worker remains bound to Dockerfile.worker
+  ---
+  duration_ms: 0.050083
+  type: 'test'
+  ...
+# Subtest: production Blueprint byte drift fails closed
+ok 34 - production Blueprint byte drift fails closed
+  ---
+  duration_ms: 0.063417
+  type: 'test'
+  ...
+# Subtest: secret/bootstrap Docker context exclusions are guarded
+ok 35 - secret/bootstrap Docker context exclusions are guarded
+  ---
+  duration_ms: 0.080166
+  type: 'test'
+  ...
+# Subtest: secret-bearing env files cannot be re-included
+ok 36 - secret-bearing env files cannot be re-included
+  ---
+  duration_ms: 0.047833
+  type: 'test'
+  ...
+1..36
+# tests 36
+# suites 0
+# pass 36
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 88.734959
+[web-container] PASS static; Docker engine unavailable, image execution NOT CLAIMED.

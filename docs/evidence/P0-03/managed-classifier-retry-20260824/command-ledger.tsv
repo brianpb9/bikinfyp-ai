@@ -118,3 +118,45 @@ utc_start	utc_end	exit_code	sanitized_invocation	artifact	sha256
 2026-08-24T13:02:19Z	2026-08-24T13:02:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-final-json-parse.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 2026-08-24T13:03:20Z	2026-08-24T13:03:20Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	remediation-final-sanitization.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
 2026-08-24T13:03:20Z	2026-08-24T13:03:21Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	remediation-final-ledger-integrity.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:09:07Z	2026-08-24T13:09:10Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-maintenance-enable.json	82a3280c171d48071750aa5a2ecd809349c570d987b05a294002d59d257f0eb7
+2026-08-24T13:09:10Z	2026-08-24T13:09:10Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-hold-503.txt	0956ee5fa0cee9eb0f8da10f2f66d683cbf330c79e8861760838b7f9f4199ead
+2026-08-24T13:09:17Z	2026-08-24T13:09:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-suspend.txt	91a446d241e4eac85e68eb76d1593b226378e7c606048f3d678995c0410070a4
+2026-08-24T13:09:20Z	2026-08-24T13:09:21Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-suspended-service.json	db946cdbcb1c907aad76d7a42d3fb924eab9c6fe3c37d59be55ccb9783fb21a7
+2026-08-24T13:09:27Z	2026-08-24T13:09:28Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-db-allowlist-add.json	04e71d0b0efeb91422fdbcf5545b71dd2dd9398cde82f521194a6149c0670b2f
+2026-08-24T13:09:28Z	2026-08-24T13:09:29Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-db-allowlist-readback.json	04e71d0b0efeb91422fdbcf5545b71dd2dd9398cde82f521194a6149c0670b2f
+2026-08-24T13:09:35Z	2026-08-24T13:09:37Z	0	scripts/staging-task-window-aggregate.sh	replay-pre-rollout-fingerprint.txt	aa9b309702d1ecf3834b052465ddc1efb530fc26fd817cfcebab35ef838eede6
+2026-08-24T13:09:44Z	2026-08-24T13:09:44Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-pre-rollout-queue-job.json	e1ead9c32f443d50c589b14aec75b5674d69492fc1d7d4723213f0b1e5cfe69f
+2026-08-24T13:10:45Z	2026-08-24T13:10:45Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-pre-rollout-queue-job-final.json	f181b69355b3e3f4e5d9213c8fead9cb35244fee26b2b5f2cc0a5186f36b42f4
+2026-08-24T13:10:45Z	2026-08-24T13:10:45Z	0	render logs --resources job-da645hmk1f9s738voujg --start 2026-08-24T13:10:25Z --end 2026-08-24T13:10:45Z --text REPLAY_QUEUE_PRE --output text	replay-pre-rollout-queue-counts.txt	a5b32589438eba112083d7b93ed726d2c565614f2f6eb076dbff1263d4db2f7a
+2026-08-24T13:10:45Z	2026-08-24T13:10:46Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-pre-rollout-queue-failed-attempt.json	f030fc104435c25aaeff525f7cfe94ee1b114404cf13c56bc40581e1249bf18f
+2026-08-24T13:11:01Z	2026-08-24T13:11:03Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-resume.txt	6e4472d3ae744a5f205d5ba100c314697308020c4ca01496f665ba0f00d69bb8
+2026-08-24T13:11:05Z	2026-08-24T13:11:05Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-resume-deploy-created.json	902b947ec781a077e9250655d5e384481deacf1e1b8b1bcfab965b5e897adfe2
+2026-08-24T13:12:43Z	2026-08-24T13:12:44Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-resume-deploy-live.json	1fe5322f83a0b55295564108a7daaed98d2c2f926cd0053861869f6ad3d9e029
+2026-08-24T13:12:44Z	2026-08-24T13:12:45Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-live-service.json	078757712a1767a185505841dd0e1803ac4db2cc7fc79c6185c09215e01d1009
+2026-08-24T13:12:45Z	2026-08-24T13:12:45Z	0	render logs --resources srv-d9n28ue417fc73ch2b60 --start 2026-08-24T13:12:25Z --text '<REDACTED_COMPLEX_ARG>' --output text	replay-worker-startup.txt	f1b31f14849c60560179039879bd981a7a553e310230075340ace31d9f4257fe
+2026-08-24T13:12:45Z	2026-08-24T13:12:48Z	0	scripts/staging-task-window-aggregate.sh	replay-post-rollout-fingerprint.txt	2c8eb852d6ac1b52f23dca8a42d3b7ed14c203f0210d6f0cae6c160f0dd71dc4
+2026-08-24T13:13:24Z	2026-08-24T13:13:25Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-post-rollout-queue-job-final.json	d145ef226c40dff37b1408388084e26d20214b0a5b5e7f7dc80451c2b04ec4cb
+2026-08-24T13:13:25Z	2026-08-24T13:13:25Z	0	render logs --resources job-da646lm7bikc73aqep00 --start 2026-08-24T13:12:50Z --end 2026-08-24T13:13:25Z --text REPLAY_QUEUE_POST --output text	replay-post-rollout-queue-counts.txt	7e9f4dd2c3a1c0465a7032a181b2b7440c5a9e067e26f31d4be41bd0b4c3f6f3
+2026-08-24T13:13:52Z	2026-08-24T13:13:54Z	0	scripts/staging-task-window-aggregate.sh	replay-sustained-fingerprint.txt	55f942d7386c8e96654fe7418885b6db86044e2a356f0851581cf925a923e891
+2026-08-24T13:14:35Z	2026-08-24T13:14:35Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-sustained-queue-job-final.json	7bb64ef242177351807849bb2223fce9223a333bed19b791d9e26488b0acf341
+2026-08-24T13:14:35Z	2026-08-24T13:14:36Z	0	render logs --resources job-da6476jl550s738cf7f0 --start 2026-08-24T13:14:00Z --end 2026-08-24T13:14:35Z --text REPLAY_QUEUE_SUSTAINED --output text	replay-sustained-queue-counts.txt	cbdc65979fd1ab9e8172cbb485ba1adb6b58e9ac4184a56b3e5dfd8bc5870299
+2026-08-24T13:14:48Z	2026-08-24T13:14:48Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-complete-window-compare.txt	9d8449347445d4066c5fbb6b986a536b4285a7317e97c6803151d0e26bd5791b
+2026-08-24T13:15:01Z	2026-08-24T13:15:01Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-production-web-service-final.json	dc7b2e90aea5f562e7ba3dad100b684ac5393295aa0ab5aa2bf231d9b70475e3
+2026-08-24T13:15:01Z	2026-08-24T13:15:02Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-production-worker-service-final.json	600d988cc17b3c07dcf196b151001809d5c0176adbc28fc0f0bbce5d042c7682
+2026-08-24T13:15:08Z	2026-08-24T13:15:08Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-production-service-compare.txt	6912f249786f0a5d40fae43d4100e8033f12bb25ba9c44766fe015b66d614358
+2026-08-24T13:15:14Z	2026-08-24T13:15:15Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-db-allowlist-clear.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T13:15:15Z	2026-08-24T13:15:16Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-db-allowlist-final.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T13:15:16Z	2026-08-24T13:15:16Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-maintenance-disable.json	0b639e200d126f5ef2d5796a8542d54ecc1726c9612936304c6026dbd50f6a33
+2026-08-24T13:15:16Z	2026-08-24T13:15:16Z	0	scripts/staging-health-probe.sh	replay-health-1.txt	8b8c055a63e94711eb0c662c025fe2a1ecee8437468f38dc66efb3108e6fc5b0
+2026-08-24T13:15:34Z	2026-08-24T13:15:35Z	0	scripts/staging-health-probe.sh	replay-health-2.txt	272d2f1539576d11b0833ecbf9509fec296b57a15b76dd5239e947dc82652cf7
+2026-08-24T13:16:05Z	2026-08-24T13:16:05Z	0	scripts/staging-health-probe.sh	replay-health-3.txt	7f23c08337f899f5e431e7081c6747e3963eb5953c6ed8e108a050b1a27798a0
+2026-08-24T13:17:31Z	2026-08-24T13:17:32Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-staging-web-service-final.json	cc63123761fcde267f15ff52b5a8f3c246a6b961e4ac557d34ed657b7aa711a8
+2026-08-24T13:17:32Z	2026-08-24T13:17:32Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-staging-worker-service-final.json	e900a336d8c4432c55667790c1d104b05b8a3fcec16df36906f0354ecd146cf7
+2026-08-24T13:17:32Z	2026-08-24T13:17:33Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-staging-worker-deploy-final.json	1fe5322f83a0b55295564108a7daaed98d2c2f926cd0053861869f6ad3d9e029
+2026-08-24T13:17:33Z	2026-08-24T13:17:33Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-origin-main-final.txt	79ebea1ae427fb0fc23eca67d15c532280b89ddaa30f4f1fc9cf5a0b91a27669
+2026-08-24T13:17:48Z	2026-08-24T13:17:48Z	0	npm run test:web-container	replay-final-web-container-tests.txt	558b09d8db659fdf1668f835620e739788baf5f5910f1a0908bf3014b3f3c13d
+2026-08-24T13:17:48Z	2026-08-24T13:17:51Z	0	npx tsc --noEmit	replay-final-tsc.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:17:51Z	2026-08-24T13:17:51Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-final-shell-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:17:51Z	2026-08-24T13:17:51Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-final-json-parse.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:18:00Z	2026-08-24T13:18:01Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	replay-final-sanitization.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
+2026-08-24T13:18:01Z	2026-08-24T13:18:02Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	replay-final-ledger-integrity.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

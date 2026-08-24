@@ -27,12 +27,29 @@ the original aggregate omitted changes to pre-existing work and because web
 was reopened while worker still ran an older SHA. Remediation kept web in
 maintenance, suspended the worker while accounting for four legacy
 non-terminal promo rows, proved both Redis queues empty, then deployed worker
-explicitly at the accepted SHA. The final verdict uses only the new complete
-fingerprint parity window; the old `ZERO_MONEY_WINDOW` claim is retained as
-unproven and is not promoted.
+explicitly at the accepted SHA. That first remediation attempted to use a
+post-rollout fingerprint window; second review later superseded it with the
+fully retained replay described below. The old `ZERO_MONEY_WINDOW` claim is
+retained as unproven and is not promoted.
 
 The worker resume automatically queued an exact-SHA deploy. A second explicit
 request made one second later was cancelled while queued to prevent two
 concurrent canonical rollouts. After the resume deploy reached `live`, one
 fresh explicit API deploy was issued and reached `live`; that terminal record
 is the worker parity artifact.
+
+Reviewer returned a second `CHANGES_REQUESTED` because the first retained
+fingerprint baseline began after rollout and because production service config
+had not been re-read after remediation. The final replay therefore retained
+maintenance 503, suspend and resume responses, suspended service state,
+complete database fingerprint, and both queue counts before resume. It then
+retained exact-SHA deploy terminal state plus immediate and sustained database
+and queue observations before clearing the allowlist and reopening intake.
+Post-replay production web and worker service objects were compared directly
+with pre-task baselines. The earlier post-rollout-only parity window remains
+historical and is not the final safety basis.
+
+The first replay queue-inspection one-off job failed before connecting because
+its inline JavaScript was over-escaped. Its failed terminal status is retained.
+The successful replacement job then emitted both pre-rollout queue counts while
+the main worker remained suspended; no failed attempt output is used as proof.

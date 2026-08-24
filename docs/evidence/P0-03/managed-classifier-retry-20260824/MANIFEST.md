@@ -17,16 +17,19 @@ Result: `live` at `2026-08-24T12:29:08.256059Z`
 The original task-window aggregate was insufficient and is explicitly
 **UNPROVEN**: it did not fingerprint pre-existing rows or every ledger/payment
 mutation. It is retained as historical evidence, but it is not the basis for
-the final safety verdict. Reviewer remediation established a new controlled
-window using complete-table fingerprints while web intake was held and both
-worker queues were proven empty.
+the final safety verdict. Reviewer remediation ultimately established a
+retained replay window using complete-table fingerprints and queue probes from
+before worker resume/deploy through immediate and sustained post-deploy
+observations. Only that replay is the basis for the final safety verdict.
 
 Staging web and worker are live on the accepted exact SHA. Web uses `runtime=docker`,
 `Dockerfile.web`, context `.`, `/api/health`, branch
 `staging/exact-73280ff-20260824`, `autoDeploy=no`, and maintenance disabled.
 Worker uses the same exact staging branch, `runtime=docker`, context `.`,
-`Dockerfile.worker`, and `autoDeploy=no`. Its terminal explicit deploy is
-`dep-da63u33bc2fs73as12j0` (`trigger=api`).
+`Dockerfile.worker`, and `autoDeploy=no`. Its original explicit parity deploy
+is `dep-da63u33bc2fs73as12j0` (`trigger=api`); the final retained replay deploy
+is `dep-da645pu1egvs73a1fljg` (`trigger=service_resumed`), also live on the
+exact accepted SHA.
 The managed health body repeatedly reports:
 
 - `build_sha=73280ffa342945dc08cee2fc664956975c8d5735`;
@@ -56,7 +59,7 @@ The initial execution mutations were:
    HTTP health gate had passed; and
 7. clear the temporary database allowlist entry.
 
-Reviewer remediation then:
+The first remediation (historical, not the final proof window) then:
 
 1. re-enabled web maintenance and proved external HTTP 503;
 2. pointed the staging worker at the same staging-only exact-SHA branch while
@@ -80,15 +83,17 @@ aggregate remained identical before the allowlist was restored to its empty
 prestate. Those narrow aggregates are not sufficient to prove the old
 zero-money claim and are superseded for the final verdict.
 
-The controlled parity baseline at `2026-08-24T12:57:18Z` and sustained final
-at `2026-08-24T12:58:33Z` fingerprint every row of `jobs`, `promo_jobs`,
+The final replay fingerprinted every row of `jobs`, `promo_jobs`,
 `provider_tasks`, `credit_ledger` (all types), and `payments` (including status
-and payload fields). Normalized snapshots match exactly. Counts, total costs,
-ledger delta, payment amount, and all fingerprints remained identical; no row
-was created in the window. Jobs had zero active/queued rows. Four legacy promo
-rows remained non-terminal but unchanged, and independent queue inspection
-before and after rollout proved both queues had zero work in every runnable or
-failed state.
+and payload fields) at `2026-08-24T13:09:37Z` while worker was suspended, at
+`13:12:48Z` immediately after exact-SHA deploy `dep-da645pu1egvs73a1fljg`
+became live, and at `13:13:54Z` after a sustained wait. Normalized snapshots
+match exactly. Counts, total costs, ledger delta, payment amount, and all
+fingerprints remained identical; no row was created in the window. Jobs had
+zero active/queued rows. Four legacy promo rows remained non-terminal but
+unchanged. Separate retained queue probes before resume while suspended,
+immediately post-deploy, and after the sustained wait prove both queues had
+zero waiting, active, delayed, prioritized, or failed work at every boundary.
 
 The maintenance sampler began before hold and retained 38 observations from
 `2026-08-24T12:24:13.624Z` through `2026-08-24T12:33:39.675Z`. It observed
@@ -99,20 +104,30 @@ probe immediately after disable raced control-plane propagation and still saw
 health-body hash. Sampling is periodic, not continuous packet capture; the
 ledger gives the separate mutation timestamps.
 
-During remediation, maintenance was re-enabled at
+During the first remediation, maintenance was re-enabled at
 `2026-08-24T12:47:34Z` and direct public health returned HTTP 503. It was
 disabled only after the explicit worker deploy, empty-queue proof, complete
 fingerprint parity, and database allowlist restoration. Three final probes
-from `2026-08-24T12:59:39Z` through `2026-08-24T13:01:14Z` all returned HTTP
+Three interim probes from `2026-08-24T12:59:39Z` through
+`2026-08-24T13:01:14Z` all returned HTTP
 200 with the identical health-body SHA-256 and exact accepted build SHA.
+
+The final replay re-enabled maintenance at `2026-08-24T13:09:07Z`, retained
+external HTTP 503, and kept that hold through the complete pre/post/sustained
+fingerprint and queue comparisons. After database allowlist restoration,
+maintenance release propagated from one retained 503 at `13:15:16Z` to HTTP
+200 at `13:15:35Z` and sustained identical HTTP 200 at `13:16:05Z`.
 
 Staging worker service/config now intentionally matches web at the accepted
 exact SHA while preserving its Docker worker contract. The worker startup log
 shows both `racun-jobs-staging` and `racun-promo-jobs` consumers, and the
 post-deploy read-only queue probe shows zero work in both queues.
-Production web and worker allowlisted service objects are equivalent
-before/after, and their latest-deploy artifacts are byte-identical. Origin
-`main` stayed at `00ee62efd86ae7e10453a2a1896e63b62228aa4d`.
+Production web and worker allowlisted service API objects were read back after
+the replay at `2026-08-24T13:15Z`. Their complete allowlisted `response`
+objects—including branch, runtime, commands, suspension, maintenance, and
+auto-deploy state—are byte-equivalent to the pre-task baselines. Their latest
+deploy records are unchanged. Origin `main` stayed at
+`00ee62efd86ae7e10453a2a1896e63b62228aa4d`.
 
 ## Canary disposition
 
