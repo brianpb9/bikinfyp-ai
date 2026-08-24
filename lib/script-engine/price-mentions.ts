@@ -36,7 +36,10 @@ export function hargaTerbilang(text: string): { frasa: string; nilai: number }[]
       const pengali = w.includes("juta") ? 1_000_000 : 1_000;
       if (pengali >= pengaliTerakhir) tutup(i);
       tandai();
-      total += (seSendiri ? 1 : (kelompok + tertunda) || 1) * pengali;
+      // Default satu hanya untuk bentuk implisit seribu/sejuta. Token eksplisit
+      // "nol" adalah 0, bukan alasan mengubahnya menjadi satu.
+      const nilaiDasar = seSendiri ? 1 : punyaAngka ? kelompok + tertunda : 1;
+      total += nilaiDasar * pengali;
       pengaliTerakhir = pengali; kelompok = 0; tertunda = 0; continue;
     }
     tutup(i);
@@ -87,7 +90,7 @@ export function deteksiHargaIndonesia(text: string): HargaIndonesiaMention[] {
   for (const match of text.matchAll(currency)) if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "currency");
   const rupiah = /(\d+(?:[.,]\d{3})*)\s*rupiah\b/gi;
   for (const match of text.matchAll(rupiah)) if (!overlaps(match)) add(match, nilaiNominalPenuh(match[1]), "rupiah");
-  const spelledZero = /\b(?:nol|zero)\s*(?:rupiah|ribu|rb|juta|jt)\b|\b(?:harga(?:nya)?|biaya|tarif|banderol)\s+(?:nol|zero)\b/gi;
+  const spelledZero = /\b(?:nol|zero)\s*(?:rupiah|ribu|rb|juta|jt)\b|\b(?:harga(?:nya)?|biaya(?:nya)?|tarif(?:nya)?|banderol(?:nya)?)\s*(?:[:=–—-]\s*)?(?:(?:itu|adalah|sekarang|saat\s+ini|jadi|tetap|cuma|hanya)\s+)?(?:nol|zero)\b/gi;
   for (const match of text.matchAll(spelledZero)) if (!overlaps(match)) add(match, 0, "terbilang");
   for (const mention of hargaTerbilang(text)) {
     hasil.push({ ...mention, bentuk: "terbilang" });
