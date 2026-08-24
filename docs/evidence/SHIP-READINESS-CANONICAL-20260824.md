@@ -24,7 +24,10 @@ Skor tidak naik karena task 24 Agustus masih local-only dan belum di-deploy.
 `R2A-KONTRAK.md` menetapkan ceiling gelombang product-truth **55–58**, sedangkan
 work order `SHIP-80-20260821` menetapkan code-only maksimum 70 dan mensyaratkan
 Founder/external gates untuk 80. Tidak ada bukti baru yang membatalkan batas
-itu. Public paid dan private beta tetap **HOLD**.
+itu. Public paid dan private beta tetap **HOLD**. Refresh production 24 Agu
+juga menemukan kedua service masih `autoDeploy=yes`, bertentangan dengan
+release control committed yang mensyaratkan off; drift P1 ini sendiri adalah
+alasan HOLD sampai ditutup oleh release owner dan diverifikasi read-only.
 
 ## Ledger skor — memakai basis board, bukan rubrik baru
 
@@ -135,7 +138,11 @@ Web dan worker live pada SHA lama yang sama,
 `build_sha` itu serta melaporkan intake closed, Duitku sandbox, dan
 `payments_live=false`. `/api/meta` publik menjawab 401. Tiga URL legal menjawab
 200 dengan body non-kosong, tetapi availability bukan counsel signoff. Bukti
-production ini tidak menutup external gates atau menaikkan skor 58/100.
+production ini juga menemukan **P1 release-control drift**: web dan worker
+melaporkan `autoDeploy=yes`, sedangkan `render.production.yaml:16,:107` dan
+`PRODUCTION_PROVISIONING_RUNBOOK.md:21` mewajibkan off. Ini unresolved
+production configuration/control gap; ia tidak menutup external gates atau
+menaikkan skor 58/100.
 
 ### Local-only
 
@@ -159,6 +166,7 @@ production ini tidak menutup external gates atau menaikkan skor 58/100.
 | Ops alert | Resend key nonempty; alert destination empty | monitoring aktif belum dapat dianggap mengirim alert |
 | Legal | privacy/terms/refund pages ada tetapi source menyatakan counsel review belum final | PDP/legal sign-off missing |
 | Incident/DR | tidak ditemukan incident owner/runbook canonical atau drill current | external/owner evidence missing |
+| Production release control | web+worker teramati `autoDeploy=yes`; committed blueprint/runbook mensyaratkan off | unresolved P1 config/control gap; HOLD sampai release owner mematikan keduanya dan bukti read-only immutable mengonfirmasi off |
 
 Koreksi status penting: baris Payments pada board 19 Agu menyebut Midtrans
 sandbox. Itu benar secara historis, tetapi current decision adalah **Duitku
@@ -184,6 +192,7 @@ Tidak satu pun keduanya boleh dinilai live sebelum syarat ADR terpenuhi.
 | Duitku + price/COGS | external/Founder | Brian + Payments owner | approval, keputusan harga, settlement/webhook/replay report |
 | Legal/PDP | external | Brian + counsel | signed/versioned approval dan halaman tanpa placeholder |
 | Monitoring/DR | external/owner | Brian + incident owner | owner, alert delivery, runbook, restore/incident drill report |
+| Production auto-deploy drift | P1 external configuration/control | Release owner + Render production administrator | authorized disable pada web+worker, lalu sanitized read-only artifact `autoDeploy=no`/off untuk kedua service dan bukti tidak ada deploy tak terotorisasi |
 
 `APPROVED_LOCAL_WORK_REMAINS = false` setelah task dokumen ini. Matrix memang
 mencatat kandidat local, tetapi tidak ada task bounded berikutnya yang sudah
@@ -198,7 +207,7 @@ bahwa pihak eksternal akan selesai.
 
 | Window | Aksi/gate | Exact artifact untuk membuka tranche berikutnya |
 |---|---|---|
-| 0–2 jam | Founder menetapkan T43, price/COGS, release owner, incident owner, dan counsel contact | satu decision record versioned: opsi A/B/C, treatment legacy, harga, scope beta, nama owner, izin deploy/staging audit |
+| 0–2 jam | Founder menetapkan T43, price/COGS, release owner, incident owner, dan counsel contact; release owner mematikan auto-deploy production web+worker | satu decision record versioned + sanitized read-only post-change artifact yang menunjukkan kedua service off dan tidak ada deploy tak terotorisasi |
 | 2–6 jam | Deploy **accepted exact SHA** ke staging web+worker; jalankan migrasi staging sesuai blueprint | sanitized manifest berisi deploy IDs, exact SHA web/worker, migration exit, `/api/health` HTTP/status termasuk classification/DB/Redis readiness |
 | 4–8 jam | Audit legacy read-only memakai Postgres staging dan bucket R2 yang dibuktikan berpasangan | JSON signed/timestamped: total, no-photo, corrupt-column, approved, per-reason, failed-to-inspect; nol nilai credential |
 | 6–18 jam | Jika T43 mengizinkan, Reviewer menerbitkan bounded task untuk E1/admission dan treatment legacy | accepted exact SHA + route/worker boundary tests + independent dependency-backed run; tidak ada deploy otomatis |
