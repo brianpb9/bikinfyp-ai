@@ -11,6 +11,31 @@ type ProductOwner = { kind: "user" | "org"; id: string };
 const postgresRuntimeEnabled = () =>
   process.env.RACUN_POSTGRES_SMOKE === "1" || process.env.RACUN_DB_RUNTIME === "postgres";
 
+type EvidenceLockClient = PoolClient;
+const productionLockDependencies = {
+  postgresRuntimeEnabled,
+  connect: async (): Promise<EvidenceLockClient> => getPool(config.databaseUrl).connect(),
+  useProcessLocalLock: true,
+};
+type EvidenceLockDependencies = typeof productionLockDependencies;
+let lockDependenciesForTests: Partial<EvidenceLockDependencies> | undefined;
+
+export function setEvidenceLockDependenciesForTests(
+  dependencies?: Partial<EvidenceLockDependencies>,
+): void {
+  lockDependenciesForTests = dependencies;
+}
+
+function evidenceLockDependencies(): EvidenceLockDependencies {
+  return { ...productionLockDependencies, ...lockDependenciesForTests };
+}
+
+async function acquireProcessProductOperation(productId: string): Promise<() => void> {
+  return evidenceLockDependencies().useProcessLocalLock
+    ? acquireLocalProductOperation(productId)
+    : () => undefined;
+}
+
 const productOperationTails = new Map<string, Promise<void>>();
 
 async function acquireLocalProductOperation(productId: string): Promise<() => void> {
@@ -26,19 +51,79 @@ async function acquireLocalProductOperation(productId: string): Promise<() => vo
   };
 }
 
-/** Serialize SQLite mutation paths with provider/setup operations. PostgreSQL
- * mutations are additionally serialized by the row lock held below. */
-export async function withProductEvidenceMutationLock<T>(productId: string, mutation: () => Promise<T>): Promise<T> {
-  const release = await acquireLocalProductOperation(productId);
-  try { return await mutation(); } finally { release(); }
+async function unlockAndRelease(client: EvidenceLockClient, productId: string): Promise<void> {
+  let unlockError: Error | null = null;
+  try {
+    const result = await client.query<{ unlocked: boolean }>(
+      "SELECT pg_advisory_unlock(hashtextextended($1, 881731)) AS unlocked",
+      [productId],
+    );
+    if (!result.rows[0]?.unlocked) throw new Error(`Evidence advisory lock ${productId} was not held`);
+  } catch (error) {
+    unlockError = error instanceof Error ? error : new Error(String(error));
+  }
+  if (unlockError) {
+    // Never return a possibly lock-bearing connection to the pool. Passing the
+    // error destroys it, and cleanup failure must not replace a provider/setup
+    // result after effects have already happened.
+    try { client.release(unlockError); }
+    catch (releaseError) { console.error("[admission-evidence] failed to evict lock client:", releaseError); }
+    console.error("[admission-evidence] advisory unlock failed:", unlockError);
+    return;
+  }
+  try { client.release(); }
+  catch (releaseError) { console.error("[admission-evidence] failed to return unlocked client:", releaseError); }
+}
+
+async function acquirePostgresProductLock(productId: string): Promise<EvidenceLockClient> {
+  const client = await evidenceLockDependencies().connect();
+  try {
+    const rawWait = Number(process.env.PG_EVIDENCE_LOCK_WAIT_MS);
+    const maxWaitMs = Number.isFinite(rawWait) && rawWait > 0 ? Math.floor(rawWait) : 120_000;
+    const deadline = Date.now() + maxWaitMs;
+    do {
+      const result = await client.query<{ locked: boolean }>(
+        "SELECT pg_try_advisory_lock(hashtextextended($1, 881731)) AS locked",
+        [productId],
+      );
+      if (result.rows[0]?.locked) return client;
+      await new Promise((resolve) => setTimeout(resolve, 25));
+    } while (Date.now() < deadline);
+    throw new Error(`Timed out waiting for evidence advisory lock ${productId}`);
+  } catch (error) {
+    try { client.release(error instanceof Error ? error : new Error(String(error))); }
+    catch (releaseError) { console.error("[admission-evidence] failed to evict acquire client:", releaseError); }
+    throw error;
+  }
+}
+
+/** Serialize mutation paths with provider/setup operations. PostgreSQL uses a
+ * session advisory lock (not an idle transaction), and runs the mutation on
+ * that same connection so this stays safe even when the pool size is one. */
+export async function withProductEvidenceMutationLock<T>(
+  productId: string,
+  mutation: (client?: EvidenceLockClient) => Promise<T>,
+): Promise<T> {
+  const release = await acquireProcessProductOperation(productId);
+  let client: EvidenceLockClient | null = null;
+  try {
+    if (evidenceLockDependencies().postgresRuntimeEnabled()) {
+      client = await acquirePostgresProductLock(productId);
+    }
+    return await mutation(client ?? undefined);
+  } finally {
+    if (client) await unlockAndRelease(client, productId);
+    release();
+  }
 }
 
 export type AdmissionEvidenceLease = { release(): Promise<void> };
 
 /**
  * Keep the verified product identity stable until the provider/setup operation
- * completes. PostgreSQL holds FOR SHARE across the operation, so E5/E9 updates
- * wait. SQLite uses the same keyed lock as its E5 mutation path.
+ * completes. PostgreSQL holds a session advisory lock across the operation,
+ * so it is unaffected by idle_in_transaction_session_timeout and E5/E9 wait.
+ * SQLite uses the same keyed lock as its E5 mutation path.
  */
 export async function acquireAdmissionReferenceEvidence(input: {
   productId: string;
@@ -46,17 +131,16 @@ export async function acquireAdmissionReferenceEvidence(input: {
   boundary: ProductEvidenceBoundary;
   loadSqliteCandidateRels: () => Promise<string[]> | string[];
 }): Promise<AdmissionEvidenceLease> {
-  const releaseLocal = await acquireLocalProductOperation(input.productId);
+  const releaseLocal = await acquireProcessProductOperation(input.productId);
   let client: PoolClient | null = null;
   let released = false;
   try {
     let candidateRels: string[];
-    if (postgresRuntimeEnabled()) {
-      client = await getPool(config.databaseUrl).connect();
-      await client.query("BEGIN");
+    if (evidenceLockDependencies().postgresRuntimeEnabled()) {
+      client = await acquirePostgresProductLock(input.productId);
       const ownerColumn = input.owner.kind === "org" ? "org_id" : "user_id";
       const locked = await client.query<{ images: string }>(
-        `SELECT images FROM products WHERE id=$1 AND ${ownerColumn}=$2 FOR SHARE`,
+        `SELECT images FROM products WHERE id=$1 AND ${ownerColumn}=$2`,
         [input.productId, input.owner.id]
       );
       if (!locked.rows[0]) throw new Error(`Admission product ${input.productId} disappeared before ${input.boundary}`);
@@ -73,13 +157,12 @@ export async function acquireAdmissionReferenceEvidence(input: {
       async release() {
         if (released) return;
         released = true;
-        try { if (client) await client.query("COMMIT"); }
-        finally { client?.release(); releaseLocal(); }
+        if (client) await unlockAndRelease(client, input.productId);
+        releaseLocal();
       },
     };
   } catch (error) {
-    if (client) await client.query("ROLLBACK").catch(() => undefined);
-    client?.release();
+    if (client) await unlockAndRelease(client, input.productId);
     releaseLocal();
     throw error;
   }

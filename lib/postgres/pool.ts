@@ -35,6 +35,10 @@ function intFromEnv(name: string, fallback: number): number {
   return Number.isFinite(raw) && raw > 0 ? Math.floor(raw) : fallback;
 }
 
+export function pgIdleTransactionTimeoutMs(): number {
+  return intFromEnv("PG_IDLE_TX_TIMEOUT_MS", 15_000);
+}
+
 /** Ukuran pool dibedakan web vs worker lewat env.
  *
  * Web melayani banyak permintaan pendek (bawaan 10); worker menjalankan sedikit
@@ -58,7 +62,7 @@ function baseConfig(connectionString: string): PoolConfig {
     // transaksi yang terlanjur dibuka lalu ditinggalkan (mis. proses mati di
     // tengah BEGIN) — itu jenis kebocoran yang menahan lock sampai restart.
     statement_timeout: intFromEnv("PG_STATEMENT_TIMEOUT_MS", 30_000),
-    idle_in_transaction_session_timeout: intFromEnv("PG_IDLE_TX_TIMEOUT_MS", 15_000),
+    idle_in_transaction_session_timeout: pgIdleTransactionTimeoutMs(),
   } as PoolConfig;
 }
 

@@ -4,6 +4,7 @@ import {
   pgRemoveRetailProductImage,
   postgresRuntimeEnabled,
 } from "./postgres/smoke-runtime";
+import type { PoolClient } from "pg";
 
 /**
  * Mutasi daftar foto retail harus menghitung hasil dari row terkini, bukan dari
@@ -38,10 +39,11 @@ export async function appendRetailProductImages(
 export async function removeRetailProductImage(
   userId: string,
   productId: string,
-  target: string
+  target: string,
+  client?: PoolClient,
 ): Promise<string[] | null> {
   if (postgresRuntimeEnabled()) {
-    return pgRemoveRetailProductImage(userId, productId, target);
+    return pgRemoveRetailProductImage(userId, productId, target, client);
   }
 
   return getDb().transaction(() => {

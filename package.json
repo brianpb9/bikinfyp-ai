@@ -42,6 +42,7 @@
     "gate:rilis": "npx tsc --noEmit && npm test && npm run build && npm run audit:script-catalog && npm run gate:uang",
     "laporan:nsfw": "node scripts/laporan-nsfw.mjs",
     "test:postgres-product-truth-w1": "bash scripts/test-postgres-product-truth-w1.sh",
+    "test:postgres-admission-evidence-lock": "node -e \"if(!process.env.UJI_PG_URL){console.error('UJI_PG_URL belum diisi.');process.exit(1)}\" && tsx --test tests/pg-admission-evidence-lock.test.ts",
     "audit:bukti-produk": "RACUN_NO_DOTENV=0 tsx scripts/audit-bukti-produk.ts"
   },
   "dependencies": {

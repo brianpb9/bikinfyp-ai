@@ -10,7 +10,7 @@
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { Pool } from "pg";
+import { Pool, type PoolClient } from "pg";
 import type { UserRow } from "../db";
 import { config } from "../config";
 import { runtimeAuthSecret } from "../auth-secret-policy";
@@ -391,8 +391,8 @@ export async function pgAppendRetailProductImages(userId: string, productId: str
 }
 
 /** Atomic retail removal paired with pgAppendRetailProductImages. */
-export async function pgRemoveRetailProductImage(userId: string, productId: string, target: string) {
-  const pool = getPool(url());
+export async function pgRemoveRetailProductImage(userId: string, productId: string, target: string, client?: PoolClient) {
+  const pool = client ?? getPool(url());
   try {
     const result = await pool.query(
       `UPDATE products
@@ -434,8 +434,8 @@ export async function pgAppendOrgProductImages(
 
 /** Atomic removal: concurrent appends survive, and a repeated delete cannot
  * claim success for a path that is already absent. */
-export async function pgRemoveOrgProductImage(orgId: string, productId: string, target: string) {
-  const pool = getPool(url());
+export async function pgRemoveOrgProductImage(orgId: string, productId: string, target: string, client?: PoolClient) {
+  const pool = client ?? getPool(url());
   try {
     const result = await pool.query(
       `UPDATE products

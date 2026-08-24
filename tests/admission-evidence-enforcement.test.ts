@@ -9,6 +9,7 @@ const { setMediaStorageForTests } = await import("../lib/storage");
 const {
   acquireAdmissionReferenceEvidence,
   assertAdmissionReferenceEvidence,
+  setEvidenceLockDependenciesForTests,
   withProductEvidenceMutationLock,
 } = await import("../lib/job-admission-reference");
 const { GagalTanpaReferensi } = await import("../lib/kanari-bukti");
@@ -114,6 +115,129 @@ test("E5/E9 DELETE memakai kunci mutasi evidence yang sama", () => {
     );
     assert.ok(deletion >= 0 && lock > deletion, `${relative} tidak mengunci DELETE`);
     assert.ok(mutation > lock, `${relative} memutasi produk sebelum memperoleh kunci`);
+  }
+});
+
+test("PostgreSQL advisory lease bertahan melewati idle transaction timeout dan cleanup tidak mengubah outcome", async () => {
+  values.clear();
+  const rel = "uploads/admission-pg/packshot.webp";
+  const bytes = Buffer.from("PACKSHOT-PG-SAH");
+  values.set(rel, bytes);
+  values.set(`${rel}.meta.json`, validSidecar(bytes));
+
+  const { pgIdleTransactionTimeoutMs } = await import("../lib/postgres/pool");
+  const previousIdleTimeout = process.env.PG_IDLE_TX_TIMEOUT_MS;
+  process.env.PG_IDLE_TX_TIMEOUT_MS = "15";
+  const configuredIdleTransactionTimeoutMs = pgIdleTransactionTimeoutMs();
+  const queries: string[] = [];
+  const releases: Array<Error | undefined> = [];
+  let locked = false;
+  let mutationRan = false;
+  let failNextUnlock = false;
+
+  const connect = async () => {
+    let ownsLock = false;
+    const client = {
+      async query(sql: string) {
+        queries.push(sql);
+        if (sql.includes("pg_try_advisory_lock")) {
+          if (locked) return { rows: [{ locked: false }], rowCount: 1 };
+          locked = true;
+          ownsLock = true;
+          return { rows: [{ locked: true }], rowCount: 1 };
+        }
+        if (sql.includes("pg_advisory_unlock")) {
+          if (failNextUnlock) {
+            failNextUnlock = false;
+            throw new Error("INJECTED_UNLOCK_FAILURE");
+          }
+          const unlocked = ownsLock;
+          ownsLock = false;
+          locked = false;
+          return { rows: [{ unlocked }], rowCount: 1 };
+        }
+        if (sql.includes("SELECT images FROM products")) {
+          return { rows: [{ images: JSON.stringify([rel]) }], rowCount: 1 };
+        }
+        if (sql.includes("UPDATE products")) {
+          mutationRan = true;
+          return { rows: [{ images: "[]" }], rowCount: 1 };
+        }
+        throw new Error(`Unexpected fake PG query: ${sql}`);
+      },
+      release(error?: Error) {
+        releases.push(error);
+        // Destroying a failed session releases every session advisory lock.
+        if (error && ownsLock) {
+          ownsLock = false;
+          locked = false;
+        }
+      },
+    };
+    return client as never;
+  };
+
+  setEvidenceLockDependenciesForTests({
+    postgresRuntimeEnabled: () => true,
+    connect,
+    useProcessLocalLock: false,
+  });
+  try {
+    const lease = await acquireAdmissionReferenceEvidence({
+      productId: "product-pg-lock",
+      owner: { kind: "user", id: "user-pg" },
+      boundary: "A7",
+      loadSqliteCandidateRels: () => { throw new Error("SQLite fallback tidak boleh dipakai"); },
+    });
+    const deletion = withProductEvidenceMutationLock("product-pg-lock", async (client) => {
+      await client!.query("UPDATE products SET images='[]' WHERE id=$1", ["product-pg-lock"]);
+    });
+
+    // This deliberately exceeds the configured idle-transaction timeout. A
+    // transaction/FOR SHARE lease would be killed here; a session advisory
+    // lock remains held because there is no idle transaction at all.
+    await new Promise((resolve) => setTimeout(resolve, configuredIdleTransactionTimeoutMs * 2));
+    assert.equal(mutationRan, false, "mutasi lolos setelah idle transaction timeout");
+    assert.equal(queries.some((sql) => /\b(BEGIN|COMMIT)\b/.test(sql)), false, "lease masih memakai transaksi idle");
+    await lease.release();
+    await deletion;
+    assert.equal(mutationRan, true, "mutasi tidak dilanjutkan setelah release");
+
+    // Provider/setup errors retain their original identity, and cleanup never
+    // introduces a post-effect COMMIT. Even an unlock failure is contained by
+    // evicting the connection, which releases its session lock server-side.
+    const providerError = new Error("PROVIDER_SETUP_FAILED");
+    let errorLease: Awaited<ReturnType<typeof acquireAdmissionReferenceEvidence>> | null = null;
+    let caught: unknown;
+    try {
+      errorLease = await acquireAdmissionReferenceEvidence({
+        productId: "product-pg-error",
+        owner: { kind: "user", id: "user-pg" },
+        boundary: "A7",
+        loadSqliteCandidateRels: () => [],
+      });
+      throw providerError;
+    } catch (error) {
+      caught = error;
+    } finally {
+      await errorLease?.release();
+    }
+    assert.equal(caught, providerError);
+
+    const postEffectLease = await acquireAdmissionReferenceEvidence({
+      productId: "product-pg-unlock-failure",
+      owner: { kind: "user", id: "user-pg" },
+      boundary: "A7",
+      loadSqliteCandidateRels: () => [],
+    });
+    failNextUnlock = true;
+    await postEffectLease.release();
+    assert.ok(releases.some((error) => error?.message === "INJECTED_UNLOCK_FAILURE"));
+    assert.equal(queries.some((sql) => /\bCOMMIT\b/.test(sql)), false, "cleanup melakukan COMMIT setelah efek provider");
+  } finally {
+    setEvidenceLockDependenciesForTests(undefined);
+    if (previousIdleTimeout === undefined) delete process.env.PG_IDLE_TX_TIMEOUT_MS;
+    else process.env.PG_IDLE_TX_TIMEOUT_MS = previousIdleTimeout;
   }
 });
 

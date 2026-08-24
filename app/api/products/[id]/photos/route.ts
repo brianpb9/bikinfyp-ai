@@ -160,8 +160,8 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const body = await req.json().catch(() => ({}));
     const target = String(body.path ?? "");
     if (!owned.images.includes(target)) throw ERR.NOT_FOUND("Fotonya");
-    const { images, cleanupPending } = await withProductEvidenceMutationLock(id, async () => {
-      const images = await removeRetailProductImage(user.id, id, target);
+    const { images, cleanupPending } = await withProductEvidenceMutationLock(id, async (lockClient) => {
+      const images = await removeRetailProductImage(user.id, id, target, lockClient);
       if (!images) throw ERR.NOT_FOUND("Fotonya");
       let cleanupPending = false;
       try { await deleteStoredProductImages([target]); }
