@@ -679,27 +679,3 @@ TASK=`P0-C12-ADMISSION-REFERENCE-SNAPSHOT-20260824`
   `c12-admission-reference-cleanup-20260824/`.
 - The local C12 admission slice remains closed without changing reason codes,
   promo policy, deployment state, or canonical shipping readiness **58/100**.
-
-### E.21 C12 successful-retry surplus-key pruning — 2026-08-24
-
-TASK=`P0-C12-ADMISSION-REFERENCE-SNAPSHOT-20260824`
-
-- Reviewer finding `1787562132000` against `04bc074a` identified obsolete
-  job-prefixed objects after successful SQLite re-prepare and possible
-  PostgreSQL transient retries. Remediation code
-  `57d1a34883f68088d7f5cd8d5f4ffa736acfc54e` prunes only tracked targets that
-  a fresh authoritative committed manifest proves are not winners.
-- Pruning occurs only after confirmed successful commit. Commit ambiguity,
-  authoritative-read/manifest-parse failure, and delete failure preserve keys
-  and the safe outcome while logging the operational condition.
-- SQLite now proves an image-list mutation re-prepare retains exactly the
-  committed manifest keys. PostgreSQL injects a post-PUT `40001`, changes the
-  approved images before the retry, reuses one job id, and proves its retained
-  prefix equals the committed manifest exactly.
-- Exact checks: targeted **56/56**, W1 disposable **28/28**, full **1,133 total
-  / 1,090 PASS / 0 fail / 43 classified skip**, PostgreSQL retry/prune PASS,
-  TypeScript/build/catalog PASS, and disposable residue zero. Raw hashes are
-  in `c12-admission-reference-retry-prune-20260824/`.
-- Historical bundle checksums are repaired with immutable reviewed snapshots.
-  No reason code, promo policy, deployment claim, or canonical shipping
-  readiness **58/100** changed.

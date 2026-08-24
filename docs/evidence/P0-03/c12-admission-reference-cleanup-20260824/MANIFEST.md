@@ -28,5 +28,8 @@ cases, three of which also require paid Gemini opt-in. This follow-up separately
 ran W1 and money against disposable PostgreSQL. No paid/network model call or
 replacement historical artifact was created.
 
-Validate this evidence directory and the amended task report/matrix with
-`shasum -a 256 -c sha256.txt` from this directory.
+The two `*.at-04bc074.snapshot.md` files preserve the amended task report and
+PATH matrix exactly as reviewed at evidence SHA `04bc074a`. `sha256.txt` hashes
+every file in this directory except itself. Validate from this directory with
+`shasum -a 256 -c sha256.txt`; later append-only report/matrix changes outside
+the directory cannot invalidate this historical bundle.

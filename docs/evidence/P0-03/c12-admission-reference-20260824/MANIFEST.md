@@ -27,5 +27,9 @@ opt-in. This task separately ran the entire W1 file against disposable local
 PostgreSQL (28/28) and its dedicated admission retry proof. It did not create a
 replacement historical artifact or make a paid/network model call.
 
-`sha256.txt` hashes every raw artifact and this manifest/report set. Validate
-from the evidence directory with `shasum -a 256 -c sha256.txt`.
+The two `*.at-58ef444.snapshot.md` files are immutable copies of the task report
+and append-only PATH matrix exactly as reviewed at evidence SHA `58ef444e`.
+`sha256.txt` hashes every file in this directory except itself, including those
+snapshots and this manifest. Validate from this evidence directory with
+`shasum -a 256 -c sha256.txt`; later append-only changes outside this directory
+cannot invalidate the historical bundle.

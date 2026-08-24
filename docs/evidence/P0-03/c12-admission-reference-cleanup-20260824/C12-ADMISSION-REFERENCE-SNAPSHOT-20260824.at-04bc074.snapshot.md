@@ -106,32 +106,3 @@ full suite **1,133 total / 1,090 PASS / 0 fail / 43 classified skip**, plus
 TypeScript/build/catalog PASS and disposable PostgreSQL residue zero. Raw logs
 and hashes are in `c12-admission-reference-cleanup-20260824/`. Shipping
 readiness remains **58/100**; no deployment claim is added.
-
-## Reviewer follow-up: successful-retry surplus-key pruning
-
-Reviewer finding `1787562132000` correctly identified that a successful
-SQLite re-prepare or PostgreSQL transient retry could commit a later manifest
-while leaving deterministic keys attempted by an earlier try under the same
-job prefix. Code `57d1a34883f68088d7f5cd8d5f4ffa736acfc54e` closes that gap:
-
-- After a confirmed successful commit, cleanup re-reads the authoritative
-  committed manifest and deletes only tracked job-prefixed targets that are
-  absent from that winning manifest.
-- A failed authoritative read, invalid committed manifest, delete failure, or
-  ambiguous commit outcome retains objects and logs the condition; it cannot
-  weaken the existing uncertainty boundary.
-- SQLite's successful image-list re-prepare regression now requires the exact
-  retained key set to equal the committed manifest. The PostgreSQL verifier
-  injects a post-PUT `40001`, changes the approved image list before retry,
-  admits with the same job id, and requires the retained winner prefix to
-  equal the committed manifest exactly.
-- The two earlier evidence bundles now include immutable snapshots of their
-  reviewed report and matrix. Their checksums no longer depend on later
-  append-only changes to these live documents.
-
-Exact remediation evidence: targeted **56/56**, W1 disposable **28/28**, full
-suite **1,133 total / 1,090 PASS / 0 fail / 43 classified skip**, PostgreSQL
-retry/prune PASS, TypeScript/build/catalog PASS, and disposable PostgreSQL
-residue zero. Raw logs and local-only hashes are in
-`c12-admission-reference-retry-prune-20260824/`. Reason codes, promo policy,
-deployment state, and canonical shipping readiness **58/100** are unchanged.
