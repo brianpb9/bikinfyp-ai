@@ -191,7 +191,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
 | C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E4 dan E8 kini fail-closed sebelum append/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. **Gap yang tersisa:** E1 tidak memanggil resolver, dan cakupan kasus lain yang dicatat di matriks belum lengkap; karena itu C7 tetap PARTIAL |
 | C8 | **PARTIAL** | W1 C8 ×3 dan W2 C8 ×2 membuktikan invalid evidence gagal-tertutup sebelum materialize/provider/capture/regen/output. W2 kini memasang observer `setVideoProvidersForTests` per kasus, mengasersi nol `generate`, dan reset lewat `t.after` pada success/failure; control counterexample membuktikan counter naik saat provider sengaja dipanggil. C8 tetap belum tertutup di A1..A7 (T43) |
-| C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata worker tertutup: W1/W2 memakai manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, dan claims. HTTP E3→W2 dan E7→W1 membuktikan mutasi handler aktual tidak mengubah bahan admission di provider. Inventaris source E.16 menutup gap call-site resume/regenerate: hanya A6 yang memanggil `enqueueJobResume`, kedua call berada sesudah validasi dua snapshot, queue hanya meneruskan `jobId`, dan semua wake worker berujung ke loader durable W1/W2. Tetap PARTIAL karena reason code usulan `SNAPSHOT_IMMUTABLE` tidak diterbitkan; keputusan admission global T43 juga tidak diubah oleh bukti ini |
+| C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata worker tertutup: W1/W2 memakai manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, dan claims. HTTP E3→W2 dan E7→W1 membuktikan mutasi handler aktual tidak mengubah bahan admission di provider. Tetap PARTIAL karena reason code `SNAPSHOT_IMMUTABLE` tidak diterbitkan dan regenerate/entry lain belum seluruhnya tertutup |
 | C10 | **PARTIAL** | W1/W2 menolak produk legacy tanpa sidecar dengan `EVIDENCE_INVALID`/`SIDECAR_MISSING` (`tests/pg-product-truth-w1.test.ts:302`; `tests/product-truth-worker-reference.test.ts:288`). Namun A1..A4 tidak memanggil evidence gate, sehingga karantina sebelum admission belum ada dan bergantung pada keputusan T43. Secara terpisah, angka populasi legacy belum diketahui karena audit staging memerlukan `DATABASE_URL` |
 | C11 | **PASS** | Test bernama `W1 C11` dan `W2 C11` menjalankan kedua worker dengan sidecar sah tetapi payload absen sejak worker mulai. Keduanya mengunci jalur `REF_MISSING`, urutan baca sidecar→payload, nol materialize/provider/fetch/capture/regen/output/storage write, dan state akhir fail-closed. Observer provider punya counterexample positif dari suite yang sama dan reset per-test |
 | C12 | **PARTIAL** | Identitas dan urutan referensi dipatok dalam manifest job versioned; create konkuren kembali dengan satu pemenang, W1/W2 tidak membaca ulang daftar saat manifest ada, dan test HTTP E5/E9→resume membuktikan boundary route/list/storage. Tetap PARTIAL karena reason code usulan `REFERENCE_IDENTITY_CHANGED` tidak diterbitkan; bukti memakai reason truthful yang sudah ada (`REF_MISSING`) |
@@ -515,54 +515,3 @@ TASK=P0-E8-ALL-UPLOADS-LABEL-BRAND-GATE-20260824
   `UJI_PG_URL` kosong; katalog tidak dijalankan karena tidak terdampak.
 - E8/C3/C4 tetap **PARTIAL**: E1, worker brand enforcement, reason code khusus,
   dan OCR fail-open berada di luar slice ini.
-
-### E.16 Follow-up C9 resume-entry inventory proof — 2026-08-24
-
-TASK=P0-C9-RESUME-ENTRY-INVENTORY-PROOF-20260824
-
-- Inventaris tidak memakai daftar asumsi: guard Node dependency-free berjalan
-  rekursif atas seluruh extension executable `.ts/.tsx/.js/.jsx/.mjs/.cjs`
-  di `app/`, `lib/`, dan `scripts/`, termasuk alias import/lokal serta direct
-  Redis `Queue.add("render", { jobId })` yang mencoba melewati helper.
-  Hasilnya: admission `enqueueJob` ada 3 call-site; `enqueueJobResume` hanya
-  dua call A6 (approve + regenerate); wake runtime internal terdiri dari satu
-  caller `enqueueRedisJob`, dua caller `enqueueInlineJob`, W2 dari pump+worker
-  Redis, dan W1 hanya dari worker Redis. Lima `enqueueRedisJob` tambahan pada
-  tiga script verifikasi juga terinventaris eksplisit, bukan diabaikan.
-- Tidak ditemukan bypass implementasi. A6 sudah memvalidasi
-  `job_product_snapshot` dan mem-parse + materialize
-  `approved_reference_manifest` sebelum kedua enqueue. Queue hanya membawa
-  `jobId`; W1/W2 memasukkan field durable sebagai `existingRaw`, sehingga
-  helper mengembalikannya sebelum kandidat dari row produk mutable dinilai.
-- Guard gagal bila ada call-site production baru yang belum diklasifikasi,
-  enqueue approve/regenerate sebelum salah satu validasi, overwrite/rebuild
-  snapshot di A6, forwarding queue yang membawa ulang produk, atau worker wake
-  yang tidak lagi mengadopsi kedua field durable. Counterexample untuk
-  call-site baru, enqueue terlalu dini, dan rebuild dijalankan di test.
-- Koreksi review menambah fixture filesystem nyata untuk TSX alias dan direct
-  queue wake, counterexample validasi di bawah `if (false)`, overwrite, dan
-  rebuild. Exported `POST` diuji untuk approve/regenerate dengan snapshot
-  missing/invalid: semuanya 400 dengan nol approval/regen query, ledger,
-  audit, koneksi transaksi, materialize, task reset, maupun enqueue.
-- Verifikasi remediasi akhir: guard mandiri PASS; focused `23/23 PASS`;
-  affected `87 total / 63 PASS / 24 skip / 0 fail`; tepat satu bounded full
-  remediasi `1122 total / 1082 PASS / 40 skip / 0 fail`;
-  `npx tsc --noEmit` dan `git diff --check` PASS. Skip PostgreSQL tetap
-  eksplisit karena `UJI_PG_URL` kosong; katalog tidak dijalankan karena tidak
-  terdampak. Ini satu full tambahan yang diotorisasi sesudah CHANGES_REQUESTED,
-  bukan pengulangan tanpa batas.
-- Koreksi review kedua mengklasifikasikan **setiap** `.add("render", ...)`
-  terlebih dahulu tanpa asumsi bentuk payload, lalu memvalidasi payload exact
-  `{ jobId }` secara terpisah. Fixture filesystem membuktikan payload
-  `{ traceId, jobId }` dan variable tetap terdeteksi sebagai call-site lalu
-  ditolak. Parser konservatif A6 kini menerima validator hanya sebagai direct
-  top-level statement di common fail-closed `try`: logical short-circuit,
-  ternary, comma sequence, wrapper, nested if/loop/function semuanya ditolak.
-  Ini jaminan direct-statement source, bukan klaim AST penuh.
-- Verifikasi koreksi kedua: guard mandiri PASS; focused `23/23 PASS`;
-  affected `87 total / 63 PASS / 24 skip / 0 fail`; tepat satu bounded full
-  `1122 total / 1082 PASS / 40 skip / 0 fail`; `npx tsc --noEmit` dan
-  `git diff --check` PASS. Skip PostgreSQL tetap karena `UJI_PG_URL` kosong;
-  katalog tidak dijalankan karena tidak terdampak.
-- C9 tetap **PARTIAL**: slice ini tidak mengarang reason code
-  `SNAPSHOT_IMMUTABLE` dan tidak mengubah keputusan admission T43.

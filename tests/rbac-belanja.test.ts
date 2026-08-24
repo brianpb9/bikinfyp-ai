@@ -125,7 +125,7 @@ test("pekerjaan berbayar ditolak selama migrasi invarian uang belum terpasang", 
     "app/api/dashboard/campaign/job/[jobId]/route.ts",    // regenerate + approve: provider
     "app/api/promo/jobs/route.ts",                        // promo: job + provider + saldo
   ]) {
-    assert.match(baca(rel), /await (?:deps\.)?assertPaidAdmission\(\)/,
+    assert.match(baca(rel), /await assertPaidAdmission\(\)/,
       `${rel} memakan uang tanpa lewat gerbang bersama`);
   }
 });
