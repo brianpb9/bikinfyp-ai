@@ -877,3 +877,29 @@ TASK=`P0-B2-SECRET-SAFE-WEB-BUILD-20260824`
   managed mutation occurred. P0-B2 remains managed incapable until reviewed
   exact-SHA managed rebuild, sustained health, and zero-money canary with
   contemporaneous raw evidence.
+
+### E.28 Managed classifier runtime and web/worker parity — 2026-08-24
+
+TASK=`P0-B2-MANAGED-CLASSIFIER-RETRY-20260824`
+
+- Staging web and worker are `live` on exact accepted SHA
+  `73280ffa342945dc08cee2fc664956975c8d5735`. Web retains `Dockerfile.web`;
+  worker retains `Dockerfile.worker`; both use the staging-only exact branch
+  and `autoDeploy=no`.
+- Managed web health proves ffmpeg, ffprobe, tesseract, English OCR data, and
+  the production classifier smoke all positive. Migrations are 35/35 and
+  payments remain sandbox/non-live.
+- Reviewer rejected the first narrow zero-money aggregate. It remains
+  **UNPROVEN** and is not used. Remediation held web intake, suspended worker,
+  accounted for four legacy non-terminal promo rows, and proved both BullMQ
+  queues empty before worker rollout.
+- A new controlled window fingerprints every row of jobs, promo jobs, provider
+  tasks, all credit-ledger types, and payments including mutable status/payload
+  fields. Baseline and sustained final normalized snapshots match exactly;
+  counts, costs, ledger delta, payment amount, and queue counts did not change.
+- The temporary database `/32` was cleared, maintenance was released only
+  after exact-SHA parity, and sustained public health remained exact-SHA and
+  classifier-capable. Production services and origin `main` were untouched.
+- P0-B2 is **VERIFIED_MANAGED: capable** for staging runtime only. This does
+  not authorize production, paid-provider work, or real money, and it does not
+  change canonical shipping readiness **58/100**.

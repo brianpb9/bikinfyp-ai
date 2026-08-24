@@ -29,17 +29,32 @@ Evidence groups:
 - `pre-*ref.txt`, `post-push-*`, and `final-*ref.txt`: Git remote observations;
 - `candidate-private-health-via-ssh*.txt`: failed read-only attempts retained
   rather than silently omitted.
+- `remediation-parity-baseline.txt` and
+  `remediation-parity-sustained-final.txt`: direct PostgreSQL snapshots that
+  hash every relevant table row while exposing only counts, totals, and
+  digests; `remediation-parity-compare.txt` proves normalized equality;
+- `remediation-queue-final.txt`: read-only BullMQ queue counts from a bounded
+  staging one-off job, without Redis credentials or job payloads;
+- `remediation-worker-*.json` and `remediation-web-*.json`: allowlisted service
+  and exact-deploy fields after web/worker parity remediation; and
+- `remediation-health-*.txt`: direct public health probes after the controlled
+  hold was released.
 
 The first four `pre-*-service.json` files ending without `-retry` record a
 capture-helper credential-parser failure before the successful allowlisted
 reads. They contain only the error and no credential material. The initial
 database aggregate failure is likewise retained.
 
-The evidence ledger covers all external reads and mutations used for the
-managed conclusion. Additional local `jq`, `sed`, `rg`, `head`, `tail`, and
-`wc` inspections were read-only conveniences and are not the sole source for
-any conclusion. Pre-helper read-only discovery is disclosed in `NOTES.md`
-without invented timestamps.
+The evidence ledger covers all captured external reads and mutations used for
+the managed conclusion. The immediate maintenance re-enable, worker branch
+update, suspend/resume transition, initial baseline inspection, and first
+exact worker resume deploy occurred before remediation capture resumed; their
+terminal state is independently retained by later service, deploy, HTTP,
+queue, and database artifacts, and the sequence is disclosed in `NOTES.md`.
+Additional local `jq`, `sed`, `rg`, `head`, `tail`, and `wc` inspections were
+read-only conveniences and are not the sole source for any conclusion.
+Pre-helper read-only discovery is disclosed in `NOTES.md` without invented
+timestamps.
 
 The operator IPv4 address was post-capture redacted to `<REDACTED_IP>` in the
 five artifacts that contained it. Their ledger SHA-256 fields identify the

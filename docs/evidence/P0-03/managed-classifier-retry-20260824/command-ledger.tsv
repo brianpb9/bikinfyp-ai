@@ -86,3 +86,35 @@ utc_start	utc_end	exit_code	sanitized_invocation	artifact	sha256
 2026-08-24T12:40:56Z	2026-08-24T12:40:57Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	final-sanitization-check.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
 2026-08-24T12:40:57Z	2026-08-24T12:40:57Z	0	git diff --check	final-diff-check.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
 2026-08-24T12:40:57Z	2026-08-24T12:40:57Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	final-ledger-integrity-after-checks.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:57:15Z	2026-08-24T12:57:18Z	0	scripts/staging-task-window-aggregate.sh	remediation-parity-baseline.txt	a851beedf56bc815c727f74099f7b170e8590e8671b1634bbb87972f52482e13
+2026-08-24T12:57:32Z	2026-08-24T12:57:33Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-hold-503.txt	fc6b9cec69927a2e4896b39f6bc1df2c771bbaea42050b637a77dcb755a17aaa
+2026-08-24T12:57:33Z	2026-08-24T12:57:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-service-live.json	89291b3a2ce6570a627a5c3c89331cf55441443b5b721c4c8e22c21551036662
+2026-08-24T12:57:34Z	2026-08-24T12:57:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-explicit-deploy.json	efcd3d2f87d7d28a73788497e9019e4735e0c3893dc38fdbf0fc5df538556dec
+2026-08-24T12:57:34Z	2026-08-24T12:57:35Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-startup.txt	8ed83fe4b866eb852660504f0056f63839dc970591b12789be8f7b3e3c41e577
+2026-08-24T12:57:35Z	2026-08-24T12:57:35Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-queue-final.txt	de91b37df5499c7f348c078b6baf7a9c08b9c2066b0f2ac917a4b4170f73f91e
+2026-08-24T12:57:35Z	2026-08-24T12:57:36Z	5	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-staging-db-allowlist.json	f7f5a3c62db4cb6df7e8569c34fe54f9029ece4373be1eb32f87dd0e70e61836
+2026-08-24T12:57:50Z	2026-08-24T12:57:51Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-staging-db-allowlist-readback.json	4fbe9a434d2c1a343cffd866e57ae49ec0fa646033bfd47d73bc176ce9f2484e
+2026-08-24T12:57:54Z	2026-08-24T12:57:56Z	0	scripts/staging-task-window-aggregate.sh	remediation-parity-final.txt	6021668f29c78bd61229c854b6f242b0e386c7bbcd5326ac970032b636533f26
+2026-08-24T12:58:31Z	2026-08-24T12:58:33Z	0	scripts/staging-task-window-aggregate.sh	remediation-parity-sustained-final.txt	3c5d1e64917bebee6b0220ca1e4a85846b02ec61f935617a7ca678eeccbd5151
+2026-08-24T12:58:46Z	2026-08-24T12:58:46Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-parity-compare.txt	0a845d5a338e4341b8015703b6447e5742ef14a00a4f3832752c20f795296656
+2026-08-24T12:59:10Z	2026-08-24T12:59:11Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-db-allowlist-clear.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T12:59:11Z	2026-08-24T12:59:12Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-db-allowlist-final.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T12:59:20Z	2026-08-24T12:59:21Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-web-hold-service.json	0dccc77bd37ee9a3e86eeb79ae18c45789a148bd327bae007f7034405ebc0050
+2026-08-24T12:59:21Z	2026-08-24T12:59:22Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-web-latest-deploy.json	0046e090b6911004750e760c990b769ce4472ce5d846f81af00ec09e9cacb5ad
+2026-08-24T12:59:22Z	2026-08-24T12:59:22Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-latest-deploy.json	efcd3d2f87d7d28a73788497e9019e4735e0c3893dc38fdbf0fc5df538556dec
+2026-08-24T12:59:29Z	2026-08-24T12:59:29Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-maintenance-disable.json	84e56c09533b5ad24b2b1cc1dd3d126548d8105614f991e8add710a40ff5d1eb
+2026-08-24T12:59:39Z	2026-08-24T12:59:39Z	0	scripts/staging-health-probe.sh	remediation-health-1.txt	6da8088b9c1eba37fdca441c2c827b43fdbd48a45b901b57fff09ffabbff28fb
+2026-08-24T13:00:53Z	2026-08-24T13:00:54Z	0	scripts/staging-health-probe.sh	remediation-health-2.txt	349d6320ee4ec6bd7aa1be9ce9eb227c01420bde29ec30f009c84a8bb70d234c
+2026-08-24T13:01:14Z	2026-08-24T13:01:14Z	0	scripts/staging-health-probe.sh	remediation-health-3.txt	f2e4388ca33cf33e7d63f37a380b8c6b369111731917c23d7a731d1d5b45822f
+2026-08-24T13:01:31Z	2026-08-24T13:01:32Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-web-final-service.json	2685d56ac31f0f41caf11b3e23d2531f038b9ba109a0e1c772ea4b7aae1466a8
+2026-08-24T13:01:32Z	2026-08-24T13:01:33Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-final-service.json	89291b3a2ce6570a627a5c3c89331cf55441443b5b721c4c8e22c21551036662
+2026-08-24T13:01:33Z	2026-08-24T13:01:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-production-web-latest.json	7564e36be133d945f5916a4a365c24b8a245533bdee024a47f62a9a8c1bffabb
+2026-08-24T13:01:34Z	2026-08-24T13:01:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-production-worker-latest.json	1d73a2d79e467ea725f0a867ce171d6a287b24e93b853c83dc8fa010864fddcf
+2026-08-24T13:01:34Z	2026-08-24T13:01:35Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-origin-main.txt	79ebea1ae427fb0fc23eca67d15c532280b89ddaa30f4f1fc9cf5a0b91a27669
+2026-08-24T13:02:16Z	2026-08-24T13:02:17Z	0	npm run test:web-container	remediation-final-web-container-tests.txt	d2c0898378dcfeb1ab197d0100967c70dd027549828b4f1440a178ff5503880e
+2026-08-24T13:02:17Z	2026-08-24T13:02:19Z	0	npx tsc --noEmit	remediation-final-tsc.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:02:19Z	2026-08-24T13:02:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-final-shell-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:02:19Z	2026-08-24T13:02:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-final-node-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:02:19Z	2026-08-24T13:02:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-final-json-parse.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:03:20Z	2026-08-24T13:03:20Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	remediation-final-sanitization.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
+2026-08-24T13:03:20Z	2026-08-24T13:03:21Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	remediation-final-ledger-integrity.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

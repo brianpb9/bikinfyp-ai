@@ -1,0 +1,11 @@
+{
+  "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+  "status": "available",
+  "suspended": "not_suspended",
+  "ipAllowList": [
+    {
+      "cidrBlock": "<REDACTED_IP>/32",
+      "description": "bounded-remediation-window"
+    }
+  ]
+}
