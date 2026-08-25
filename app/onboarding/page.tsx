@@ -7,6 +7,7 @@ import { PrimaryButton, ErrorText } from "../_components/ui";
 import { track } from "../_components/track";
 import { tujuanAman } from "@/lib/tujuan-login";
 import { ajakan, useKesiapan } from "../_components/kesiapan";
+import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 import { SiteFooter } from "../_components/SiteFooter";
 
@@ -51,6 +52,40 @@ function LazyClip({ src }: { src: string }) {
     />
   );
 }
+
+/** Klip template untuk strip bukti — DITURUNKAN dari katalog, bukan disalin.
+ *
+ *  Menyalin daftar ke sini berarti label halaman depan bisa menyimpang dari
+ *  katalog tanpa ada yang tahu; menurunkannya membuat keduanya mustahil beda.
+ *
+ *  DUA SARINGAN, dan keduanya punya alasan yang diuji dengan membuka berkasnya
+ *  (ffprobe, 26 Agu), bukan diasumsikan:
+ *
+ *  1. `format !== "tvc"` — kelima klip TVC berorientasi LANDSCAPE (640x360).
+ *     Strip ini 9:16; memasukkannya berarti bilah hitam atau gambar terpotong.
+ *  2. Berkas 270x480 tidak dipakai — itu mutu yang sudah ditolak sendiri oleh
+ *     tim ini ("terlihat pecah ... contoh yang buram adalah argumen yang
+ *     melawan diri sendiri"). Menambah jumlah dengan menurunkan mutu adalah
+ *     menukar kepercayaan dengan angka.
+ *
+ *  Yang lolos semuanya potret 350-360x640 — se-kelas dengan keempat klip
+ *  persona di atasnya. Jumlahnya sengaja TIDAK ditulis di sini: angka di
+ *  komentar menyimpang diam-diam begitu katalog berubah. */
+const KLIP_TEMPLATE = Object.values(
+  CAMPAIGN_TEMPLATES.filter(
+    (t): t is typeof t & { preview: string } =>
+      typeof t.preview === "string" && t.preview.startsWith("/previews/") && t.format !== "tvc",
+  ).reduce<Record<string, { src: string; label: string }>>((acc, t) => {
+    // DE-DUPLIKASI WAJIB, dan ini ditemukan dengan membuka daftarnya, bukan
+    // dibaca dari kode: tujuh preview dipakai oleh DUA template sekaligus
+    // (satu di grup "sudut", satu lagi di grup lain). Tanpa baris ini strip
+    // menayangkan klip yang sama dua kali — terlihat ceroboh, DAN
+    // menggelembungkan kesan jumlah bukti. Yang pertama menang supaya urutan
+    // katalog tetap yang menentukan.
+    acc[t.preview] ??= { src: t.preview, label: t.name };
+    return acc;
+  }, {}),
+);
 
 // S0 — ONBOARDING: nilai produk -> nomor HP -> kode OTP WhatsApp -> beranda.
 export default function OnboardingPage() {
@@ -209,6 +244,7 @@ export default function OnboardingPage() {
                   { src: "/showcase/genz.mp4", label: "Gen-Z" },
                   { src: "/showcase/ibu.mp4", label: "Ibu" },
                   { src: "/showcase/tangan.mp4", label: "Tanpa wajah" },
+                  ...KLIP_TEMPLATE,
                 ].map((s, i) => (
                   <div key={i} className="relative shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-black/5">
                     <LazyClip src={s.src} />
