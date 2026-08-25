@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import http from "node:http";
 
 process.env.RACUN_NO_DOTENV = "1";
 
@@ -81,8 +82,35 @@ test("E2 DNS/private and redirect boundaries stay fail-closed", async () => {
 });
 
 test("complete non-global IPv4, IPv6, and mapped ranges are rejected",()=>{
-  for(const ip of ["0.1.2.3","10.0.0.1","100.64.0.1","127.0.0.1","169.254.1.1","172.31.0.1","192.0.2.1","192.88.99.1","192.168.1.1","198.18.0.1","198.51.100.1","203.0.113.1","224.0.0.1","255.255.255.255","::","::1","fc00::1","fe80::1","ff02::1","2001:db8::1","2002:7f00:1::","::ffff:127.0.0.1","::ffff:7f00:1","::ffff:6440:1"])assert.equal(safety.isPrivateOrReservedIp(ip),true,ip);
+  for(const ip of ["0.1.2.3","10.0.0.1","100.64.0.1","127.0.0.1","169.254.1.1","172.31.0.1","192.0.2.1","192.88.99.1","192.168.1.1","198.18.0.1","198.51.100.1","203.0.113.1","224.0.0.1","255.255.255.255","::","::1","fc00::1","fe80::1","ff02::1","2001:db8::1","2002:7f00:1::","3fff::1","3fff:0fff:ffff::1","::ffff:127.0.0.1","::ffff:7f00:1","::ffff:6440:1"])assert.equal(safety.isPrivateOrReservedIp(ip),true,ip);
   for(const ip of ["8.8.8.8","1.1.1.1","2606:4700:4700::1111","::ffff:8.8.8.8"])assert.equal(safety.isPrivateOrReservedIp(ip),false,ip);
+});
+
+async function withHttpServer(handler:http.RequestListener,run:(port:number)=>Promise<void>){
+  const server=http.createServer(handler);await new Promise<void>((resolve,reject)=>server.listen(0,"127.0.0.1",resolve).once("error",reject));
+  const address=server.address();if(!address||typeof address==="string")throw new Error("test server address unavailable");
+  try{await run(address.port)}finally{await new Promise<void>(resolve=>server.close(()=>resolve()))}
+}
+
+test("pinned response rejects truncated and oversized bodies without hanging",async()=>{
+  await withHttpServer((_req,res)=>{res.writeHead(200,{"content-length":"100"});res.write("short");setTimeout(()=>res.destroy(),10)},async port=>{
+    await assert.rejects(safeRemote.requestPinnedForTests(new URL(`http://fixture.test:${port}/truncated`),[{address:"127.0.0.1",family:4}],{},Date.now()+500,1024),/aborted|complete|socket/i);
+  });
+  await withHttpServer((_req,res)=>{res.writeHead(200);res.end(Buffer.alloc(256,1))},async port=>{
+    await assert.rejects(safeRemote.requestPinnedForTests(new URL(`http://fixture.test:${port}/oversized`),[{address:"127.0.0.1",family:4}],{},Date.now()+500,32),/batas byte/);
+  });
+});
+
+test("one absolute deadline spans redirects, slow trickle, and address attempts",async()=>{
+  await withHttpServer((req,res)=>{
+    if(req.url==="/start"){setTimeout(()=>{res.writeHead(302,{location:"/slow"});res.end()},35);return}
+    res.writeHead(200);const timer=setInterval(()=>res.write("x"),25);res.once("close",()=>clearInterval(timer));
+  },async port=>{
+    const resolver=async(raw:string)=>({ok:true as const,url:new URL(raw),addresses:[{address:"127.0.0.2",family:4},{address:"127.0.0.1",family:4}]});
+    const started=Date.now(),result=await safeRemote.safeRemoteGetWithResolverForTests(`http://fixture.test:${port}/start`,{kind:"public",timeoutMs:90,maxBytes:1024},resolver);
+    const elapsed=Date.now()-started;assert.equal(result.ok,false);if(result.ok)assert.fail("deadline unexpectedly succeeded");
+    assert.match(result.error,/absolute deadline/);assert.ok(elapsed>=70&&elapsed<300,`deadline elapsed ${elapsed}ms`);
+  });
 });
 
 test("committed fixture is harmless synthetic SVG", () => {

@@ -81,6 +81,7 @@ export function isPrivateOrReservedIp(ip: string): boolean {
   if(words[0]===0x2001&&words[1]<0x0200)return true;
   if(words[0]===0x2001&&words[1]===0x0db8)return true;
   if(words[0]===0x2002)return true;
+  if(words[0]===0x3fff&&(words[1]&0xf000)===0)return true; // documentation-only 3fff::/20
   return false;
 }
 

@@ -2,7 +2,7 @@ import http from "node:http";
 import https from "node:https";
 import type { LookupAddress } from "node:dns";
 import type { LookupFunction } from "node:net";
-import { resolvePublicFetchUrl, validateMarketplaceFetchUrl } from "./url-safety";
+import { resolvePublicFetchUrl, validateMarketplaceFetchUrl, type ResolvedPublicUrl } from "./url-safety";
 
 export type SafeRemoteResult = { ok: true; status: number; headers: http.IncomingHttpHeaders; body: Buffer; finalUrl: string } | { ok: false; status: number; error: string };
 type SafeRemoteOptions={kind:"marketplace"|"public";headers?:Record<string,string>;timeoutMs?:number;maxBytes?:number;maxRedirects?:number;hopAllowed?:(url:string)=>boolean};
@@ -22,36 +22,50 @@ export function createPinnedLookup(addresses: LookupAddress[]): LookupFunction {
   }) as LookupFunction;
 }
 
-async function requestPinned(url: URL, addresses: LookupAddress[], headers: Record<string,string>, timeoutMs: number, maxBytes: number): Promise<{status:number;headers:http.IncomingHttpHeaders;body:Buffer}> {
+export async function requestPinnedForTests(url: URL, addresses: LookupAddress[], headers: Record<string,string>, deadlineAt: number, maxBytes: number): Promise<{status:number;headers:http.IncomingHttpHeaders;body:Buffer}> {
   let last: unknown;
   for (const address of addresses) {
+    if(Date.now()>=deadlineAt)throw new Error("absolute deadline exceeded");
     try {
       return await new Promise((resolve,reject)=>{
         const client=url.protocol==="https:"?https:http;
+        let settled=false;const finish=(error?:unknown,value?:{status:number;headers:http.IncomingHttpHeaders;body:Buffer})=>{if(settled)return;settled=true;clearTimeout(deadline);error?reject(error):resolve(value!)};
         const req=client.request(url,{method:"GET",headers,lookup:createPinnedLookup([address]),servername:url.protocol==="https:"?url.hostname:undefined},res=>{
           const chunks:Buffer[]=[];let size=0;
-          res.on("data",chunk=>{const b=Buffer.from(chunk);size+=b.length;if(size>maxBytes){req.destroy(new Error("response melewati batas byte"));return}chunks.push(b)});
-          res.on("end",()=>resolve({status:res.statusCode??0,headers:res.headers,body:Buffer.concat(chunks)}));
+          const fail=(error:unknown)=>{finish(error);res.destroy();req.destroy()};
+          res.on("data",chunk=>{const b=Buffer.from(chunk);size+=b.length;if(size>maxBytes){fail(new Error("response melewati batas byte"));return}chunks.push(b)});
+          res.once("aborted",()=>fail(new Error("response aborted before complete")));
+          res.once("error",fail);
+          res.once("end",()=>finish(undefined,{status:res.statusCode??0,headers:res.headers,body:Buffer.concat(chunks)}));
         });
-        req.setTimeout(timeoutMs,()=>req.destroy(new Error(`timeout ${timeoutMs}ms`)));req.on("error",reject);req.end();
+        const deadline=setTimeout(()=>req.destroy(new Error("absolute deadline exceeded")),Math.max(1,deadlineAt-Date.now()));
+        req.once("error",finish);req.end();
       });
     } catch (error) { last=error; }
   }
   throw last instanceof Error?last:new Error("all validated addresses failed");
 }
 
-export async function safeRemoteGet(raw:string,options:SafeRemoteOptions):Promise<SafeRemoteResult>{
-  if(testOverride)return testOverride(raw,options);
+type Resolver=(raw:string,kind:"marketplace"|"public")=>Promise<ResolvedPublicUrl>;
+const productionResolver:Resolver=(raw,kind)=>kind==="marketplace"?validateMarketplaceFetchUrl(raw):resolvePublicFetchUrl(raw);
+export async function safeRemoteGetWithResolverForTests(raw:string,options:SafeRemoteOptions,resolver:Resolver):Promise<SafeRemoteResult>{
   let current=raw;const timeoutMs=options.timeoutMs??8000,maxBytes=options.maxBytes??12*1024*1024,maxRedirects=options.maxRedirects??3;
+  const deadlineAt=Date.now()+timeoutMs;
   try{
     for(let redirects=0;redirects<=maxRedirects;redirects+=1){
+      if(Date.now()>=deadlineAt)throw new Error("absolute deadline exceeded");
       if(options.hopAllowed&&!options.hopAllowed(current))return{ok:false,status:0,error:"redirect/source provenance ditolak"};
-      const resolved=options.kind==="marketplace"?await validateMarketplaceFetchUrl(current):await resolvePublicFetchUrl(current);
+      const resolved=await resolver(current,options.kind);
       if(!resolved.ok)return{ok:false,status:0,error:`url ditolak: ${resolved.reason}`};
-      const response=await requestPinned(resolved.url,resolved.addresses,options.headers??{},timeoutMs,maxBytes);
+      const response=await requestPinnedForTests(resolved.url,resolved.addresses,options.headers??{},deadlineAt,maxBytes);
       if(response.status>=300&&response.status<400){const location=response.headers.location;if(!location)return{ok:false,status:response.status,error:"redirect tanpa location"};current=new URL(location,current).toString();continue}
       return{ok:true,...response,finalUrl:current};
     }
     return{ok:false,status:0,error:"terlalu banyak redirect"};
   }catch(error){return{ok:false,status:0,error:error instanceof Error?error.message:String(error)}}
+}
+
+export async function safeRemoteGet(raw:string,options:SafeRemoteOptions):Promise<SafeRemoteResult>{
+  if(testOverride)return testOverride(raw,options);
+  return safeRemoteGetWithResolverForTests(raw,options,productionResolver);
 }
