@@ -1,0 +1,12 @@
+{
+  "task": "P0-E2-CONTROLLED-STAGING-SOURCE-20260826",
+  "baseline_sha": "fb18b2c9e570231a10f761a7a11b896a8201e66b",
+  "deployed_code_sha": "246c48b5f311ccc04746b6ad0078bdb984137c18",
+  "focused_tests": { "command": "node --import tsx --test tests/e2-controlled-staging-source.test.ts tests/extract.test.ts tests/product-truth-ingestion.test.ts", "passed": 22, "failed": 0, "skipped": 0 },
+  "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
+  "runner_provenance": { "job": "job-da6v15ou01pc73dc1utg", "embedded_runner_matches_repository_bytes": true, "runner_sha256": "973a3f00f915bd6c6c6221411c75d8ac6245c4b8c4512b8e5356f725a722b92b", "runner_bytes": 9743 },
+  "secret_scan": { "environment_files_considered": 1, "secret_values_checked": 21, "exact_value_hits": 0 },
+  "deploy": { "staging_web": "dep-da6uv4r530ic73bhkio0", "staging_web_sha": "246c48b5f311ccc04746b6ad0078bdb984137c18", "canceled_superseded_staging_deploy": "dep-da6uudp5efls7383mukg", "maintenance_changed": false },
+  "unchanged_services": { "staging_worker_deploy": "dep-da6b6p61egvs73a0kur0", "staging_worker_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "production_web_deploy": "dep-da3bfg142hec73arfot0", "production_worker_deploy": "dep-da3bfg142hec73arfpfg", "production_sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+  "scope_guards": { "new_secret": false, "production_mutated": false, "money_used": false, "provider_called": false, "policy_changed": false }
+}

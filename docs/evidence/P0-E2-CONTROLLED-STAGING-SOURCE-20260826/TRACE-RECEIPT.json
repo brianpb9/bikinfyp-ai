@@ -1,0 +1,24 @@
+{
+  "schema": "managed-retail-e2-controlled-trace/v1",
+  "task": "P0-E2-CONTROLLED-STAGING-SOURCE-20260826",
+  "started_at": "2026-08-25T19:44:37.491Z",
+  "finished_at": "2026-08-25T19:44:42.332Z",
+  "deployed_app_sha_expected": "246c48b5f311ccc04746b6ad0078bdb984137c18",
+  "controlled_source": { "origin": "https://racun-ai-staging-web.onrender.com", "product_path": "/api/staging-fixtures/e2/product", "image_path": "/staging-fixtures/e2-product.svg", "service_identity_bound": true, "committed_synthetic_fixture": true },
+  "requested_endpoints": ["POST /api/products/extract controlled first-party source", "POST /api/products/extract negative untrusted_host", "POST /api/products/extract negative sibling_host", "POST /api/products/extract negative private_ip", "POST /api/products/extract negative link_local", "POST /api/products/extract negative unsafe_redirect"],
+  "forbidden_endpoints_called": [], "payment_url_opened": false, "generation_provider_called": false,
+  "health": { "ok": true, "build_sha": "246c48b5f311ccc04746b6ad0078bdb984137c18", "payments_live": false },
+  "before": { "target": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 }, "financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } }, "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 }, "r2_objects": 0 },
+  "positive": { "http": 200, "extracted": true, "images_downloaded": 1, "exact_owner": true, "source_exact": true, "price_exact": true, "category_exact": true, "api_pg_order_exact": true, "r2_pair_exact": true, "sidecar_hash_exact": true, "sidecar_kind": "product_photo", "sidecar_reference_eligible": true },
+  "counterexamples": {
+    "untrusted_host": { "http": 200, "extracted": false, "reason": "url ditolak: domain di luar whitelist", "product_count_unchanged": true, "r2_unchanged": true },
+    "sibling_host": { "http": 200, "extracted": false, "reason": "url ditolak: domain di luar whitelist", "product_count_unchanged": true, "r2_unchanged": true },
+    "private_ip": { "http": 200, "extracted": false, "reason": "url ditolak: IP/host internal ditolak", "product_count_unchanged": true, "r2_unchanged": true },
+    "link_local": { "http": 200, "extracted": false, "reason": "url ditolak: IP/host internal ditolak", "product_count_unchanged": true, "r2_unchanged": true },
+    "unsafe_redirect": { "http": 200, "extracted": false, "reason": "fetch gagal: url ditolak: IP/host internal ditolak", "product_count_unchanged": true, "r2_unchanged": true }
+  },
+  "before_cleanup": { "target": { "users": 1, "products": 1, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 8 }, "financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } }, "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 }, "r2_objects": 2 },
+  "after_cleanup": { "target": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 }, "financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } }, "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 }, "r2_objects": 0 },
+  "cleanup": { "media": true, "database": true }, "result": "PASS",
+  "provenance": { "render_job": "job-da6v15ou01pc73dc1utg", "job_status": "succeeded", "job_created_at": "2026-08-25T19:44:23.375736Z", "job_started_at": "2026-08-25T19:44:23Z", "job_finished_at": "2026-08-25T19:44:56Z" }
+}
