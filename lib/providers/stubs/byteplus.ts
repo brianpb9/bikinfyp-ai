@@ -32,7 +32,44 @@ const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<st
   "seedance-1-5-pro-251215": { perSecUsd: { "480p": 0.026, "720p": 0.052 } },
   "dreamina-seedance-2-0-mini-260615": { perSecUsd: { "720p": 0.034 } }, // ESTIMASI dari COGS BRD §5.3 (Rp8.802/video)
   "dreamina-seedance-2-0-260128": { perSecUsd: { "720p": 0.143 } }, // ESTIMASI dari COGS BRD §5.3 (Rp37.164/video)
+  // Seedance 2.5 — tarif TOKEN, bukan per-detik. Lihat catatan panjang di bawah.
+  "dreamina-seedance-2-5-260628": { tokenUsdPerM: 10.7 },
 };
+
+// ─────────────────────────────────────────────────────────────────────────────
+// KENAPA 2.5 MEMAKAI TARIF TOKEN, DAN KENAPA ANGKA DI ATAS BELUM BOLEH DISEBUT
+// COGS RESMI — diukur 26 Agu 2026 dari 704 task NYATA di akun ini (hanya baca,
+// nol render): scripts/tarif-seedance-25.ts
+//
+// YANG TERUKUR (fakta akun kita sendiri):
+//   Konsumsi token TIDAK bergantung versi model. Ia fungsi resolusi x durasi x
+//   mode. Pada 720p seluruh model duduk di ~21.660 token/detik; pada 1080p
+//   ~48.700 — sama untuk 2.0, 2.0-mini, DAN 2.5.
+//   Pada 15 detik/720p muncul TIGA tingkat token yang sama di ketiga model:
+//   324.900 · 540.900 · 648.900 (n=63/88/95). Jadi selisihnya datang dari MODE
+//   (jumlah gambar acuan / reference-video), bukan dari versi model.
+//
+// YANG BELUM TERUKUR: harga rupiah per token untuk AKUN INI. Tidak ada
+// kredensial tagihan di lingkungan ini (VOLC_ACCESSKEY dkk kosong), jadi
+// invoice tidak bisa dibaca. Angka 10,7 USD/1M adalah TARIF PUBLIK yang
+// diterbitkan untuk 2.5 tanpa video input (6,40 dengan video input) — sumber
+// sekunder, bukan tagihan kita.
+//
+// KONSEKUENSI YANG HARUS DIBACA SEBELUM MENETAPKAN HARGA:
+//   Pada tarif publik itu, 15 detik/720p berharga Rp56.666 (324.900 token)
+//   sampai Rp113.175 (648.900 token). FINAL-MESIN-DAN-HARGA memakai Rp37.164
+//   — angka 2.0 yang DISAMAKAN. Jadi asumsi lama BUKAN ketinggian melainkan
+//   KERENDAHAN, 1,5x sampai 3x.
+//   Tabel harga TVC di dokumen itu berdiri di atas Rp37.164. Pada 15 detik
+//   margin 60% ia menyuruh jual Rp93.000 — di bawah biaya kalau modenya
+//   menghabiskan 648.900 token.
+//
+// Karena itu tarif token dipasang di sini (adapter menghitung dari `usage`
+// AKTUAL, jadi angkanya mengikuti mode yang benar-benar dipakai), tapi
+// config.tiers TIDAK diubah dan harga TVC TIDAK ditulis: keduanya menunggu
+// tagihan sungguhan. Menulis harga dari tarif publik berarti mengunci tebakan
+// ke dalam kode, dan tebakan yang salah arah di sini menjual di bawah modal.
+// ─────────────────────────────────────────────────────────────────────────────
 
 const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
 
