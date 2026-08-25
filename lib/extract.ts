@@ -8,7 +8,7 @@
 // platform. Impor URL publik tetap best-effort OG/JSON-LD + input manual;
 // integrasi yang konsisten harus memakai API partner/OAuth toko seller resmi.
 
-import { validateMarketplaceUrl } from "./url-safety";
+import { isControlledStagingImageUrl, isControlledStagingProductUrl, validateMarketplaceFetchUrl, validateMarketplaceUrl } from "./url-safety";
 // Tabel kata kunci pindah ke lib/category-guess.ts agar bisa dipakai komponen
 // klien juga (file ini mengimpor getDb, jadi server-only).
 import { guessCategory } from "./category-guess";
@@ -132,17 +132,24 @@ export async function fetchProductHtml(url: string): Promise<{ ok: boolean; stat
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), 8000);
   try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        "user-agent": UA,
-        accept: "text/html,application/xhtml+xml",
-        "accept-language": "id-ID,id;q=0.9,en;q=0.8",
-      },
-    });
-    const html = await res.text();
-    return { ok: res.ok, status: res.status, html };
+    let current = url;
+    for (let redirects = 0; redirects <= 3; redirects += 1) {
+      const safe = await validateMarketplaceFetchUrl(current);
+      if (!safe.ok) return { ok: false, status: 0, error: `url ditolak: ${safe.reason}` };
+      const res = await fetch(current, {
+        signal: controller.signal, redirect: "manual",
+        headers: { "user-agent": UA, accept: "text/html,application/xhtml+xml", "accept-language": "id-ID,id;q=0.9,en;q=0.8" },
+      });
+      if (res.status >= 300 && res.status < 400) {
+        const location = res.headers.get("location");
+        if (!location) return { ok: false, status: res.status, error: "redirect tanpa location" };
+        current = new URL(location, current).toString();
+        continue;
+      }
+      const html = await res.text();
+      return { ok: res.ok, status: res.status, html };
+    }
+    return { ok: false, status: 0, error: "terlalu banyak redirect" };
   } catch (err) {
     const msg = err instanceof Error && err.name === "AbortError" ? "timeout 8 detik" : String(err);
     return { ok: false, status: 0, error: msg };
@@ -297,9 +304,11 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
     ...parseJsonLdImages(html),
     ...parseInlineProductImages(html),
   ].map((u) => absolutize(u, rawUrl));
+  const controlled = isControlledStagingProductUrl(rawUrl);
   const seenHash = new Set<string>();
   const imageUrls: string[] = [];
   for (const u of candidates) {
+    if (controlled && !isControlledStagingImageUrl(u)) continue;
     const hash = /\/([a-f0-9]{16,40})~/.exec(u)?.[1] ?? u;
     if (seenHash.has(hash)) continue;
     seenHash.add(hash);

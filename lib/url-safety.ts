@@ -16,7 +16,7 @@ export function validateMarketplaceUrl(raw: string): { ok: boolean; reason?: str
   const host = url.hostname.toLowerCase();
   if (/^\d{1,3}(\.\d{1,3}){3}$/.test(host) || host === "localhost" || host.endsWith(".internal"))
     return { ok: false, reason: "IP/host internal ditolak" };
-  const allowed = WHITELIST_DOMAINS.some((d) => host === d || host.endsWith("." + d));
+  const allowed = WHITELIST_DOMAINS.some((d) => host === d || host.endsWith("." + d)) || isControlledStagingProductUrl(raw);
   if (!allowed) return { ok: false, reason: "domain di luar whitelist" };
   return { ok: true };
 }
@@ -29,7 +29,32 @@ export function validateMarketplaceUrl(raw: string): { ok: boolean; reason?: str
 // tapi resolve ke IP privat saat fetch beneran terjadi).
 import dns from "node:dns";
 
-function isPrivateOrReservedIp(ip: string): boolean {
+const CONTROLLED_STAGING_SERVICE_ID = "srv-d9n28tijnfac73a87lt0";
+const CONTROLLED_STAGING_ORIGIN = "https://racun-ai-staging-web.onrender.com";
+const CONTROLLED_STAGING_PRODUCT_PATH = "/api/staging-fixtures/e2/product";
+const CONTROLLED_STAGING_IMAGE_PATH = "/staging-fixtures/e2-product.svg";
+
+export function controlledStagingFixtureEnabled(): boolean {
+  return process.env.RENDER_SERVICE_ID === CONTROLLED_STAGING_SERVICE_ID;
+}
+
+export function isControlledStagingProductUrl(raw: string): boolean {
+  if (!controlledStagingFixtureEnabled()) return false;
+  try {
+    const url = new URL(raw);
+    return url.origin === CONTROLLED_STAGING_ORIGIN && url.pathname === CONTROLLED_STAGING_PRODUCT_PATH && !url.search && !url.hash;
+  } catch { return false; }
+}
+
+export function isControlledStagingImageUrl(raw: string): boolean {
+  if (!controlledStagingFixtureEnabled()) return false;
+  try {
+    const url = new URL(raw);
+    return url.origin === CONTROLLED_STAGING_ORIGIN && url.pathname === CONTROLLED_STAGING_IMAGE_PATH && !url.search && !url.hash;
+  } catch { return false; }
+}
+
+export function isPrivateOrReservedIp(ip: string): boolean {
   // IPv4
   const v4 = ip.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (v4) {
@@ -50,6 +75,25 @@ function isPrivateOrReservedIp(ip: string): boolean {
   if (lower.startsWith("fc") || lower.startsWith("fd")) return true; // unique local (fc00::/7)
   if (lower.startsWith("::ffff:")) return isPrivateOrReservedIp(lower.slice(7)); // IPv4-mapped
   return false;
+}
+
+/** Resolve before every outbound marketplace hop. Redirect targets are checked
+ * again by the caller, so a controlled staging URL cannot redirect outside the
+ * exact first-party path and marketplace redirects cannot reach private space. */
+export async function validateMarketplaceFetchUrl(
+  raw: string,
+  lookup: typeof dns.promises.lookup = dns.promises.lookup
+): Promise<{ ok: boolean; reason?: string }> {
+  const syntactic = validateMarketplaceUrl(raw);
+  if (!syntactic.ok) return syntactic;
+  try {
+    const host = new URL(raw).hostname;
+    const addrs = await lookup(host, { all: true, verbatim: true });
+    if (!addrs.length || addrs.some((entry) => isPrivateOrReservedIp(entry.address))) {
+      return { ok: false, reason: "domain resolve ke IP privat/internal" };
+    }
+  } catch { return { ok: false, reason: "domain tidak bisa di-resolve" }; }
+  return { ok: true };
 }
 
 export async function validateGeneralWebUrl(raw: string): Promise<{ ok: boolean; reason?: string; hostname?: string }> {

@@ -8,17 +8,19 @@ import path from "node:path";
 import { config, ensureDirs } from "./config";
 import { deleteStoredProductImages, normalizeProductImageBuffer, tulisSidecar } from "./product-images";
 import { mediaStorage } from "./storage";
+import { isControlledStagingImageUrl, isControlledStagingProductUrl } from "./url-safety";
 
 const UA =
   "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
 
-export async function downloadProductImages(productId: string, urls: string[]): Promise<string[]> {
+export async function downloadProductImages(productId: string, urls: string[], sourcePageUrl?: string): Promise<string[]> {
   ensureDirs();
   const dir = path.join(config.storageDir, "uploads", productId);
   fs.mkdirSync(dir, { recursive: true });
   const rels: string[] = [];
   for (const [i, url] of urls.slice(0, 5).entries()) {
     try {
+      if (sourcePageUrl && isControlledStagingProductUrl(sourcePageUrl) && !isControlledStagingImageUrl(url)) continue;
       const res = await fetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) });
       if (!res.ok) continue;
       const buf = Buffer.from(await res.arrayBuffer());

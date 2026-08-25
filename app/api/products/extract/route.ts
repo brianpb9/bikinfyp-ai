@@ -43,7 +43,7 @@ export async function POST(req: Request) {
 
     // Buat produk langsung (form S2 menampilkan kartu konfirmasi untuk diedit user)
     const productId = uuid();
-    const images = result.imageUrls?.length ? await downloadProductImages(productId, result.imageUrls) : [];
+    const images = result.imageUrls?.length ? await downloadProductImages(productId, result.imageUrls, url) : [];
     // Harga coret hanya dipakai bila konsisten (> harga jual) — cek ulang di sini
     // karena user bisa mengubah harga di kartu konfirmasi nanti (PATCH memvalidasi lagi).
     const promoBefore =

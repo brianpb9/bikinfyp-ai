@@ -61,7 +61,7 @@ export async function POST(req: Request) {
         return Response.json({ extracted: false, reason: result.reason ?? null, message: result.message ?? "Link-nya belum bisa kami baca. Isi manual aja ya." });
       }
       const productId = crypto.randomUUID();
-      const images = result.imageUrls?.length ? await downloadProductImages(productId, result.imageUrls) : [];
+      const images = result.imageUrls?.length ? await downloadProductImages(productId, result.imageUrls, url) : [];
       const promoBefore = result.originalPriceIdr && result.priceIdr && result.originalPriceIdr > result.priceIdr ? result.originalPriceIdr : null;
       const product = await smokeCreateProduct(
         user.id,
