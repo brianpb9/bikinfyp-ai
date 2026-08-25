@@ -5,7 +5,7 @@ import { Pool } from "pg";
 import { Queue } from "bullmq";
 import { DeleteObjectCommand, GetObjectCommand, ListObjectsV2Command, S3Client } from "@aws-sdk/client-s3";
 
-const TASK="P0-E2-CONTROLLED-STAGING-SOURCE-20260826",APP_SHA="246c48b5f311ccc04746b6ad0078bdb984137c18",ORIGIN="https://racun-ai-staging-web.onrender.com",SOURCE=`${ORIGIN}/api/staging-fixtures/e2/product`,startedAt=new Date().toISOString(),suffix=crypto.randomUUID(),userId=`e2-controlled-${suffix}`,email=`e2-${suffix}@staging.invalid`;let productId=null;
+const TASK="P0-E2-CONTROLLED-STAGING-SOURCE-20260826",APP_SHA="0c541a0ccae1c9c46ab1726a24724f2a5e16727b",ORIGIN="https://racun-ai-staging-web.onrender.com",SOURCE=`${ORIGIN}/api/staging-fixtures/e2/product`,startedAt=new Date().toISOString(),suffix=crypto.randomUUID(),userId=`e2-controlled-${suffix}`,email=`e2-${suffix}@staging.invalid`;let productId=null;
 for(const k of ["DATABASE_URL","AUTH_SECRET","R2_ENDPOINT","R2_BUCKET","R2_ACCESS_KEY_ID","R2_SECRET_ACCESS_KEY","REDIS_URL"])if(!process.env[k])throw Error(`managed slot absent: ${k}`);
 if(process.env.RENDER_SERVICE_ID!=="srv-d9n28tijnfac73a87lt0"||process.env.RACUN_DB_RUNTIME!=="postgres"||process.env.STORAGE_MODE!=="r2")throw Error("exact managed staging web/PostgreSQL/R2 required");
 if((process.env.DUITKU_IS_PRODUCTION??"false").toLowerCase()==="true"||(process.env.PAYMENTS_GO_LIVE??"false").toLowerCase()==="true")throw Error("live payments forbidden");
