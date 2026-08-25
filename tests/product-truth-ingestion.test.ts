@@ -54,6 +54,7 @@ process.env.STORAGE_MODE = "filesystem";
 process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "p0b1-store-"));
 
 const { setMediaStorageForTests } = await import("../lib/storage");
+const { setSafeRemoteGetForTests } = await import("../lib/safe-remote-fetch");
 const { relMeta } = await import("../lib/product-images");
 const { resolveApprovedReference, ALASAN_TOLAK } = await import("../lib/product-truth");
 type MediaStorage = import("../lib/storage").MediaStorage;
@@ -169,14 +170,12 @@ test("I3+I4 downloadProductImages (Retail ekstrak + Enterprise) menerbitkan bukt
   const { downloadProductImages } = await import("../lib/product-image-download");
   isi.clear();
   const png = await fotoPolos();
-  const fetchAsli = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(new Uint8Array(png), { status: 200, headers: { "content-type": "image/png" } })) as typeof fetch;
+  setSafeRemoteGetForTests(async (_url) => ({ ok: true, status: 200, headers: { "content-type": "image/png" }, body: png, finalUrl: _url }));
   try {
     const rels = await downloadProductImages(`unduh-${process.pid}`, ["https://contoh.test/a.png"]);
     await assertBuktiTerbit("downloadProductImages", rels);
   } finally {
-    globalThis.fetch = fetchAsli;
+    setSafeRemoteGetForTests(undefined);
   }
 });
 
@@ -206,9 +205,7 @@ test("ROLLBACK: put sidecar yang DITOLAK tidak meninggalkan bytes tanpa bukti", 
     },
   } as never);
 
-  const fetchAsli = globalThis.fetch;
-  globalThis.fetch = (async () =>
-    new Response(new Uint8Array(png), { status: 200, headers: { "content-type": "image/png" } })) as typeof fetch;
+  setSafeRemoteGetForTests(async (_url) => ({ ok: true, status: 200, headers: { "content-type": "image/png" }, body: png, finalUrl: _url }));
   try {
     const rels = await downloadProductImages(`gagal-bukti-${process.pid}`, ["https://contoh.test/a.png"]);
     assert.deepEqual(rels, [], "URL yang buktinya gagal terbit tidak boleh dilaporkan berhasil");
@@ -219,7 +216,7 @@ test("ROLLBACK: put sidecar yang DITOLAK tidak meninggalkan bytes tanpa bukti", 
         "Foto yang buktinya gagal terbit wajib ikut dibuang, bukan ditinggalkan yatim."
     );
   } finally {
-    globalThis.fetch = fetchAsli;
+    setSafeRemoteGetForTests(undefined);
     setMediaStorageForTests(storage);
   }
 });
@@ -328,13 +325,11 @@ test("KONTROL: dengan biner sungguhan, foto polos dari SETIAP jalur benar-benar 
     [
       "downloadProductImages",
       async () => {
-        const fetchAsli = globalThis.fetch;
-        globalThis.fetch = (async () =>
-          new Response(new Uint8Array(png), { status: 200, headers: { "content-type": "image/png" } })) as typeof fetch;
+        setSafeRemoteGetForTests(async (_url) => ({ ok: true, status: 200, headers: { "content-type": "image/png" }, body: png, finalUrl: _url }));
         try {
           return await downloadProductImages(`k-unduh-${process.pid}`, ["https://contoh.test/a.png"]);
         } finally {
-          globalThis.fetch = fetchAsli;
+          setSafeRemoteGetForTests(undefined);
         }
       },
     ],

@@ -8,7 +8,8 @@
 // platform. Impor URL publik tetap best-effort OG/JSON-LD + input manual;
 // integrasi yang konsisten harus memakai API partner/OAuth toko seller resmi.
 
-import { isControlledStagingImageUrl, isControlledStagingProductUrl, validateMarketplaceFetchUrl, validateMarketplaceUrl } from "./url-safety";
+import { isControlledStagingImageUrl, isControlledStagingProductUrl, validateMarketplaceUrl } from "./url-safety";
+import { safeRemoteGet } from "./safe-remote-fetch";
 // Tabel kata kunci pindah ke lib/category-guess.ts agar bisa dipakai komponen
 // klien juga (file ini mengimpor getDb, jadi server-only).
 import { guessCategory } from "./category-guess";
@@ -129,33 +130,9 @@ function absolutize(url: string, base: string): string {
 
 /** Ambil HTML halaman produk dengan timeout 8 dtk + UA browser. */
 export async function fetchProductHtml(url: string): Promise<{ ok: boolean; status: number; html?: string; error?: string }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    let current = url;
-    for (let redirects = 0; redirects <= 3; redirects += 1) {
-      const safe = await validateMarketplaceFetchUrl(current);
-      if (!safe.ok) return { ok: false, status: 0, error: `url ditolak: ${safe.reason}` };
-      const res = await fetch(current, {
-        signal: controller.signal, redirect: "manual",
-        headers: { "user-agent": UA, accept: "text/html,application/xhtml+xml", "accept-language": "id-ID,id;q=0.9,en;q=0.8" },
-      });
-      if (res.status >= 300 && res.status < 400) {
-        const location = res.headers.get("location");
-        if (!location) return { ok: false, status: res.status, error: "redirect tanpa location" };
-        current = new URL(location, current).toString();
-        continue;
-      }
-      const html = await res.text();
-      return { ok: res.ok, status: res.status, html };
-    }
-    return { ok: false, status: 0, error: "terlalu banyak redirect" };
-  } catch (err) {
-    const msg = err instanceof Error && err.name === "AbortError" ? "timeout 8 detik" : String(err);
-    return { ok: false, status: 0, error: msg };
-  } finally {
-    clearTimeout(timer);
-  }
+  const result=await safeRemoteGet(url,{kind:"marketplace",timeoutMs:8000,maxBytes:2*1024*1024,headers:{"user-agent":UA,accept:"text/html,application/xhtml+xml","accept-language":"id-ID,id;q=0.9,en;q=0.8"}});
+  if(!result.ok)return{ok:false,status:result.status,error:result.error};
+  return{ok:result.status>=200&&result.status<300,status:result.status,html:result.body.toString("utf8")};
 }
 
 /** Ambil URL gambar dari blok JSON-LD (schema.org Product.image: string | string[]

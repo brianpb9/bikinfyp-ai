@@ -9,6 +9,7 @@ import { config, ensureDirs } from "./config";
 import { deleteStoredProductImages, normalizeProductImageBuffer, tulisSidecar } from "./product-images";
 import { mediaStorage } from "./storage";
 import { isControlledStagingImageUrl, isControlledStagingProductUrl } from "./url-safety";
+import { safeRemoteGet } from "./safe-remote-fetch";
 
 const UA =
   "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36";
@@ -21,9 +22,10 @@ export async function downloadProductImages(productId: string, urls: string[], s
   for (const [i, url] of urls.slice(0, 5).entries()) {
     try {
       if (sourcePageUrl && isControlledStagingProductUrl(sourcePageUrl) && !isControlledStagingImageUrl(url)) continue;
-      const res = await fetch(url, { headers: { "user-agent": UA }, signal: AbortSignal.timeout(8000) });
-      if (!res.ok) continue;
-      const buf = Buffer.from(await res.arrayBuffer());
+      const controlled=Boolean(sourcePageUrl&&isControlledStagingProductUrl(sourcePageUrl));
+      const res=await safeRemoteGet(url,{kind:"public",headers:{"user-agent":UA},timeoutMs:8000,maxBytes:10*1024*1024,hopAllowed:controlled?isControlledStagingImageUrl:undefined});
+      if (!res.ok || res.status < 200 || res.status >= 300) continue;
+      const buf = res.body;
       if (buf.length > 10 * 1024 * 1024) continue;
       const normalized = await normalizeProductImageBuffer(buf);
       const rel = path.join("uploads", productId, `${i}.webp`).split(path.sep).join("/");

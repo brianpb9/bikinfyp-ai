@@ -9,6 +9,7 @@ const PRODUCT = "https://racun-ai-staging-web.onrender.com/api/staging-fixtures/
 const IMAGE = "https://racun-ai-staging-web.onrender.com/staging-fixtures/e2-product.svg";
 const REDIRECT_PRIVATE = "https://racun-ai-staging-web.onrender.com/api/staging-fixtures/e2/redirect-private";
 const safety = await import("../lib/url-safety");
+const safeRemote = await import("../lib/safe-remote-fetch");
 const fixture = await import("../app/api/staging-fixtures/e2/product/route");
 
 test("E2 controlled source is exact and staging-service bound", async () => {
@@ -55,19 +56,33 @@ test("E2 DNS/private and redirect boundaries stay fail-closed", async () => {
   const previous = process.env.RENDER_SERVICE_ID;
   try {
     process.env.RENDER_SERVICE_ID = STAGING_SERVICE;
-    const privateLookup = (async () => [{ address: "169.254.169.254", family: 4 }]) as unknown as typeof import("node:dns").promises.lookup;
-    const rebinding = await safety.validateMarketplaceFetchUrl(PRODUCT, privateLookup);
-    assert.equal(rebinding.ok, false);
-    assert.match(rebinding.reason ?? "", /privat|internal/);
+    let dnsCalls=0;
+    const publicThenPrivate=(async()=>{dnsCalls+=1;return dnsCalls===1?[{address:"8.8.8.8",family:4}]:[{address:"127.0.0.1",family:4}]}) as unknown as typeof import("node:dns").promises.lookup;
+    const resolved=await safety.validateMarketplaceFetchUrl(PRODUCT,publicThenPrivate);
+    assert.equal(resolved.ok,true);
+    assert.equal(dnsCalls,1);
+    if(!resolved.ok)throw new Error("public first lookup unexpectedly rejected");
+    const pinned=safeRemote.createPinnedLookup(resolved.addresses);
+    const connected=await new Promise<{address:string;family:number}>((resolve,reject)=>pinned("racun-ai-staging-web.onrender.com",{family:0},((error:Error|null,address:string,family:number)=>error?reject(error):resolve({address,family})) as never));
+    assert.deepEqual(connected,{address:"8.8.8.8",family:4});
+    assert.equal(dnsCalls,1,"transport lookup must not perform the private second DNS resolution");
+    const second=await publicThenPrivate("racun-ai-staging-web.onrender.com",{all:true,verbatim:true});
+    assert.equal(safety.isPrivateOrReservedIp((second as {address:string}[])[0].address),true,"regression prerequisite: second DNS answer is private");
     assert.equal(safety.validateMarketplaceUrl("https://shopee.co.id@127.0.0.1/x").ok, false);
-    const source = fs.readFileSync(new URL("../lib/extract.ts", import.meta.url), "utf8");
-    assert.match(source, /redirect: "manual"/);
-    assert.ok(source.indexOf("validateMarketplaceFetchUrl(current)") < source.indexOf("fetch(current"));
-    assert.match(source, /current = new URL\(location, current\)\.toString\(\)/);
+    const transport=fs.readFileSync(new URL("../lib/safe-remote-fetch.ts",import.meta.url),"utf8"),images=fs.readFileSync(new URL("../lib/product-image-download.ts",import.meta.url),"utf8");
+    assert.match(transport,/lookup:createPinnedLookup\(\[address\]\)/);
+    assert.match(transport,/servername:url\.protocol==="https:"\?url\.hostname/);
+    assert.match(images,/safeRemoteGet\(url,\{kind:"public"/);
+    assert.match(images,/hopAllowed:controlled\?isControlledStagingImageUrl/);
   } finally {
     if (previous === undefined) delete process.env.RENDER_SERVICE_ID;
     else process.env.RENDER_SERVICE_ID = previous;
   }
+});
+
+test("complete non-global IPv4, IPv6, and mapped ranges are rejected",()=>{
+  for(const ip of ["0.1.2.3","10.0.0.1","100.64.0.1","127.0.0.1","169.254.1.1","172.31.0.1","192.0.2.1","192.88.99.1","192.168.1.1","198.18.0.1","198.51.100.1","203.0.113.1","224.0.0.1","255.255.255.255","::","::1","fc00::1","fe80::1","ff02::1","2001:db8::1","2002:7f00:1::","::ffff:127.0.0.1","::ffff:7f00:1","::ffff:6440:1"])assert.equal(safety.isPrivateOrReservedIp(ip),true,ip);
+  for(const ip of ["8.8.8.8","1.1.1.1","2606:4700:4700::1111","::ffff:8.8.8.8"])assert.equal(safety.isPrivateOrReservedIp(ip),false,ip);
 });
 
 test("committed fixture is harmless synthetic SVG", () => {
