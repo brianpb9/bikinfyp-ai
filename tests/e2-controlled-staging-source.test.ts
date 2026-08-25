@@ -7,6 +7,7 @@ process.env.RACUN_NO_DOTENV = "1";
 const STAGING_SERVICE = "srv-d9n28tijnfac73a87lt0";
 const PRODUCT = "https://racun-ai-staging-web.onrender.com/api/staging-fixtures/e2/product";
 const IMAGE = "https://racun-ai-staging-web.onrender.com/staging-fixtures/e2-product.svg";
+const REDIRECT_PRIVATE = "https://racun-ai-staging-web.onrender.com/api/staging-fixtures/e2/redirect-private";
 const safety = await import("../lib/url-safety");
 const fixture = await import("../app/api/staging-fixtures/e2/product/route");
 
@@ -15,6 +16,7 @@ test("E2 controlled source is exact and staging-service bound", async () => {
   try {
     process.env.RENDER_SERVICE_ID = STAGING_SERVICE;
     assert.equal(safety.validateMarketplaceUrl(PRODUCT).ok, true);
+    assert.equal(safety.validateMarketplaceUrl(REDIRECT_PRIVATE).ok, true);
     assert.equal(safety.isControlledStagingImageUrl(IMAGE), true);
     for (const url of [
       "https://racun-ai-staging-web.onrender.com/api/staging-fixtures/e2/product/child",

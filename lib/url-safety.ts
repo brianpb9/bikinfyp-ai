@@ -32,6 +32,7 @@ import dns from "node:dns";
 const CONTROLLED_STAGING_SERVICE_ID = "srv-d9n28tijnfac73a87lt0";
 const CONTROLLED_STAGING_ORIGIN = "https://racun-ai-staging-web.onrender.com";
 const CONTROLLED_STAGING_PRODUCT_PATH = "/api/staging-fixtures/e2/product";
+const CONTROLLED_STAGING_REDIRECT_PATH = "/api/staging-fixtures/e2/redirect-private";
 const CONTROLLED_STAGING_IMAGE_PATH = "/staging-fixtures/e2-product.svg";
 
 export function controlledStagingFixtureEnabled(): boolean {
@@ -42,7 +43,9 @@ export function isControlledStagingProductUrl(raw: string): boolean {
   if (!controlledStagingFixtureEnabled()) return false;
   try {
     const url = new URL(raw);
-    return url.origin === CONTROLLED_STAGING_ORIGIN && url.pathname === CONTROLLED_STAGING_PRODUCT_PATH && !url.search && !url.hash;
+    return url.origin === CONTROLLED_STAGING_ORIGIN &&
+      (url.pathname === CONTROLLED_STAGING_PRODUCT_PATH || url.pathname === CONTROLLED_STAGING_REDIRECT_PATH) &&
+      !url.search && !url.hash;
   } catch { return false; }
 }
 
