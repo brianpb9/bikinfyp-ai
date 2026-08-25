@@ -1,0 +1,66 @@
+{
+  "schema": "managed-retail-e2-e4-trace/v1",
+  "task": "P1-MANAGED-STAGING-RETAIL-E2-E4-TRACE-20260825",
+  "started_at": "2026-08-25T11:26:06.432Z",
+  "finished_at": "2026-08-25T11:26:19.174Z",
+  "deployed_app_sha_expected": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
+  "preconditions": { "node_env_production": true, "postgres_runtime": true, "storage_mode_r2": true, "queue_mode": "redis", "payment_gateway": "duitku", "duitku_production": false, "payments_go_live": false, "credential_values_or_digests_recorded": false },
+  "requested_endpoints": [
+    "POST /api/products/extract (controlled staging source; expected whitelist rejection)",
+    "POST /api/products (E1 fixture setup)",
+    "POST /api/products/:id/photos (valid E4)",
+    "POST /api/products/:id/photos (brand mismatch E4)",
+    "POST /api/products/:id/photos (unreadable E4)"
+  ],
+  "forbidden_endpoints_called": [],
+  "payment_url_opened": false,
+  "generation_provider_called": false,
+  "e2": {
+    "positive_executed": false,
+    "controlled_source_provenance": "same managed staging origin and health path",
+    "http": 200,
+    "extracted": false,
+    "reason": "url ditolak: domain di luar whitelist",
+    "ssrf_whitelist_bypassed": false,
+    "postgres_products_created": 0,
+    "r2_objects_created": 0,
+    "blocker": "No deterministic source is controlled under the accepted marketplace whitelist. A third-party marketplace asset is untrusted; adding a host or bypassing validation is forbidden."
+  },
+  "fixture_e1": { "http": 201, "exact_owner_retail": true, "exact_core_fields": true, "raw_meta_brand_exact": true, "ordered_images_exact": true },
+  "e4_positive": {
+    "http": 200,
+    "api_db_ordered_images_exact": true,
+    "initial_identity_preserved": true,
+    "appended_key_exact": true,
+    "r2_object_present": true,
+    "sidecar_present": true,
+    "sidecar": { "jenis": "product_photo", "layak_referensi": true, "rasio_area_teks": 0.010943769290123457, "jumlah_kata": 3, "versi_bukti": 1, "sha256_matches_object": true }
+  },
+  "counterexamples": {
+    "brand_mismatch": { "http": 400, "code": "BRAND_MISMATCH", "retryable": false, "postgres_unchanged": true, "r2_object_set_unchanged": true },
+    "label_unreadable": { "http": 400, "code": "LABEL_UNREADABLE", "retryable": false, "postgres_unchanged": true, "r2_object_set_unchanged": true },
+    "classifier_failed": { "executed": false, "reason": "No deterministic input can force classifier infrastructure failure without mutating the accepted runtime." },
+    "evidence_invalid": { "executed": false, "reason": "E4 creates sidecars internally; forcing missing/corrupt evidence requires direct R2 mutation and was not performed." }
+  },
+  "before": {
+    "target": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 },
+    "optional_financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } },
+    "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 },
+    "r2_object_count": 0
+  },
+  "before_cleanup": {
+    "target": { "users": 1, "products": 1, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 3 },
+    "optional_financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } },
+    "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 },
+    "r2_object_count": 4
+  },
+  "after_cleanup": {
+    "target": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 },
+    "optional_financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } },
+    "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 },
+    "r2_object_count": 0
+  },
+  "cleanup": { "media": true, "database": true },
+  "result": "PASS",
+  "provenance": { "render_job": "job-da6nnfid0e5s73d7gm0g", "job_status": "succeeded", "job_created_at": "2026-08-25T11:25:50.81618Z", "job_started_at": "2026-08-25T11:25:51Z", "job_finished_at": "2026-08-25T11:26:32Z" }
+}

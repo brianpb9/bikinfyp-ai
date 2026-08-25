@@ -1,0 +1,19 @@
+{
+  "task": "P1-MANAGED-STAGING-RETAIL-E2-E4-TRACE-20260825",
+  "baseline_sha": "e0a553ddb3d4ce2a09a75797fe901e41edbc25dc",
+  "deployed_code_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
+  "focused_tests": { "command": "node --import tsx --test tests/extract.test.ts tests/retail-photo-label-gate.test.ts", "passed": 11, "failed": 0, "skipped": 0 },
+  "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0, "performed_real_typescript_check": true },
+  "runner_syntax": { "command": "node --check scripts/managed-retail-e2-e4-trace-runner.mjs", "exit_code": 0 },
+  "runner_provenance": { "job": "job-da6nnfid0e5s73d7gm0g", "embedded_runner_matches_repository_bytes": true, "runner_sha256": "a72a86bb393e381c07db6e8be83734080876f4f8dd3a53946707aeea6ead0779", "runner_bytes": 17711 },
+  "secret_scan": { "environment_files_considered": 1, "secret_values_checked": 11, "exact_value_hits": 0 },
+  "control_plane": {
+    "staging_web": { "deploy_id": "dep-da6b6omk1f9s73dr94k0", "sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "branch": "staging/exact-246fa65-20260825", "auto_deploy": "no", "suspended": "not_suspended" },
+    "staging_worker": { "deploy_id": "dep-da6b6p61egvs73a0kur0", "sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "branch": "staging/exact-246fa65-20260825", "auto_deploy": "no", "suspended": "not_suspended" },
+    "production_web_unchanged": { "deploy_id": "dep-da3bfg142hec73arfot0", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "production_worker_unchanged": { "deploy_id": "dep-da3bfg142hec73arfpfg", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "maintenance_changed": false,
+    "worker_state_changed": false
+  },
+  "scope_guards": { "production_mutated": false, "real_money_used": false, "payment_provider_called": false, "generation_provider_called": false, "ssrf_policy_changed": false, "other_policy_changed": false }
+}
