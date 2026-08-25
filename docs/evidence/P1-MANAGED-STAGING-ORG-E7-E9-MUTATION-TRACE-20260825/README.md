@@ -11,9 +11,11 @@ hash-bound pair, and returned the exact remaining ordered list. An unknown
 photo target returned 404 with PostgreSQL and R2 unchanged.
 
 The first fail-closed attempt stopped at fixture verification because it
-compared PostgreSQL JSONB serialization text rather than parsed array values;
-its fixture data and media were fully removed. The successful rerun used the
-same semantic ordering assertion applied to parsed JSONB.
+compared PostgreSQL JSONB serialization text rather than parsed array values.
+`FIRST-ATTEMPT-RECEIPT.json` records that managed run's exact failure and its
+authoritative final reads: every target DB/financial/queue count and R2 object
+count was zero, with both media and database cleanup true. The successful
+rerun used the same semantic ordering assertion applied to parsed JSONB.
 
 No admitted job was created because credits, holds, or enqueue were forbidden
 by this zero-money/zero-queue task. Final authoritative reads proved zero
