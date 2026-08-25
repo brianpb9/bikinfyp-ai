@@ -7,8 +7,8 @@ import { PrimaryButton, ErrorText } from "../_components/ui";
 import { track } from "../_components/track";
 import { tujuanAman } from "@/lib/tujuan-login";
 import { ajakan, useKesiapan } from "../_components/kesiapan";
-import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
+import { ONBOARDING_AI_SHOWCASE_CLIPS } from "@/lib/onboarding-showcase";
 import { SiteFooter } from "../_components/SiteFooter";
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
@@ -53,40 +53,6 @@ function LazyClip({ src }: { src: string }) {
   );
 }
 
-/** Klip template untuk strip bukti — DITURUNKAN dari katalog, bukan disalin.
- *
- *  Menyalin daftar ke sini berarti label halaman depan bisa menyimpang dari
- *  katalog tanpa ada yang tahu; menurunkannya membuat keduanya mustahil beda.
- *
- *  DUA SARINGAN, dan keduanya punya alasan yang diuji dengan membuka berkasnya
- *  (ffprobe, 26 Agu), bukan diasumsikan:
- *
- *  1. `format !== "tvc"` — kelima klip TVC berorientasi LANDSCAPE (640x360).
- *     Strip ini 9:16; memasukkannya berarti bilah hitam atau gambar terpotong.
- *  2. Berkas 270x480 tidak dipakai — itu mutu yang sudah ditolak sendiri oleh
- *     tim ini ("terlihat pecah ... contoh yang buram adalah argumen yang
- *     melawan diri sendiri"). Menambah jumlah dengan menurunkan mutu adalah
- *     menukar kepercayaan dengan angka.
- *
- *  Yang lolos semuanya potret 350-360x640 — se-kelas dengan keempat klip
- *  persona di atasnya. Jumlahnya sengaja TIDAK ditulis di sini: angka di
- *  komentar menyimpang diam-diam begitu katalog berubah. */
-const KLIP_TEMPLATE = Object.values(
-  CAMPAIGN_TEMPLATES.filter(
-    (t): t is typeof t & { preview: string } =>
-      typeof t.preview === "string" && t.preview.startsWith("/previews/") && t.format !== "tvc",
-  ).reduce<Record<string, { src: string; label: string }>>((acc, t) => {
-    // DE-DUPLIKASI WAJIB, dan ini ditemukan dengan membuka daftarnya, bukan
-    // dibaca dari kode: tujuh preview dipakai oleh DUA template sekaligus
-    // (satu di grup "sudut", satu lagi di grup lain). Tanpa baris ini strip
-    // menayangkan klip yang sama dua kali — terlihat ceroboh, DAN
-    // menggelembungkan kesan jumlah bukti. Yang pertama menang supaya urutan
-    // katalog tetap yang menentukan.
-    acc[t.preview] ??= { src: t.preview, label: t.name };
-    return acc;
-  }, {}),
-);
-
 /** Klip merek nyata — bukti terkuat yang kita punya, dan sebelumnya menganggur.
  *
  *  Sumbernya render 720x1280 milik kita sendiri di content-lab READY-TO-PUBLISH
@@ -98,8 +64,9 @@ const KLIP_TEMPLATE = Object.values(
  *  ber-watermark platform lain di halaman depan sendiri terbaca sebagai tidak
  *  punya asetnya — padahal aslinya justru milik kita, dan lebih tajam.
  *
- *  Label produk di klip ini TERBACA (Skintific, Scarlett, Wardah) — itu yang
- *  membuatnya meyakinkan, dan itu pula yang dijaga QC-F1/QC-10 di pipeline. */
+ *  Delapan klip di bawah punya label produk yang terlihat. Render Shella
+ *  Saukia sengaja tidak ditampilkan: referensinya tidak memiliki foto tag
+ *  merek dan README sumber mencatat rerender-nya gagal QC label. */
 const KLIP_MEREK = [
   { src: "/showcase/brand/skintific-5x-ceramide.mp4", label: "Skintific" },
   { src: "/showcase/brand/scarlett-acneserum.mp4", label: "Scarlett" },
@@ -109,7 +76,6 @@ const KLIP_MEREK = [
   { src: "/showcase/brand/maybelline-superstay-matte-ink.mp4", label: "Maybelline" },
   { src: "/showcase/brand/mosseru-showergel.mp4", label: "Mosseru" },
   { src: "/showcase/brand/barberdaily-sixblade-razor.mp4", label: "Barberdaily" },
-  { src: "/showcase/brand/shellasaukia-dress-novella.mp4", label: "Shella Saukia" },
 ];
 
 // S0 — ONBOARDING: nilai produk -> nomor HP -> kode OTP WhatsApp -> beranda.
@@ -257,7 +223,7 @@ export default function OnboardingPage() {
             </div>
             <div>
               <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">
-                Produk asli, label terbaca — semuanya AI
+                Contoh render produk — semuanya AI
               </p>
               <div className="-mx-6 flex gap-3 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
                 {KLIP_MEREK.map((s, i) => (
@@ -272,7 +238,7 @@ export default function OnboardingPage() {
               {/* Wajib, dan bukan basa-basi hukum: merek-merek ini TIDAK bekerja
                   sama dengan kami. Menampilkannya tanpa kalimat ini terbaca
                   seperti mengaku punya kemitraan yang tidak ada. */}
-              <p className="mt-1.5 text-center text-[10px] leading-tight text-zinc-400">
+              <p className="mt-3 text-center text-sm leading-relaxed text-zinc-700">
                 Contoh render kami memakai produk yang dijual bebas. Merek di atas
                 bukan mitra resmi dan tidak mengendorse layanan ini.
               </p>
@@ -282,17 +248,10 @@ export default function OnboardingPage() {
                 Semua ini AI — tidak ada yang disyuting
               </p>
               <div className="-mx-6 flex gap-3 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {/* Render asli dari pipeline kita sendiri, di-encode ulang dari
-                    sumber 720p (2026-08-12). Yang lama 270x480 @120 kbps dan
-                    terlihat pecah — kami menjual kualitas video, jadi contoh
-                    yang buram adalah argumen yang melawan diri sendiri. */}
-                {[
-                  { src: "/showcase/hijaber.mp4", label: "Hijaber" },
-                  { src: "/showcase/genz.mp4", label: "Gen-Z" },
-                  { src: "/showcase/ibu.mp4", label: "Ibu" },
-                  { src: "/showcase/tangan.mp4", label: "Tanpa wajah" },
-                  ...KLIP_TEMPLATE,
-                ].map((s, i) => (
+                {/* Allowlist provenance + shared safety block berada di
+                    lib/onboarding-showcase.ts. Footage portfolio /previews
+                    tidak pernah menjadi bukti komersial di halaman ini. */}
+                {ONBOARDING_AI_SHOWCASE_CLIPS.map((s, i) => (
                   <div key={i} className="relative shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-black/5">
                     <LazyClip src={s.src} />
                     <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
