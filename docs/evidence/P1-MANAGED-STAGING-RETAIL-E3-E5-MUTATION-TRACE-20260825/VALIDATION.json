@@ -1,0 +1,11 @@
+{
+  "task": "P1-MANAGED-STAGING-RETAIL-E3-E5-MUTATION-TRACE-20260825",
+  "baseline_sha": "2adfa3261f656631ae5c608baafa9e5c8a6ca444",
+  "deployed_code_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
+  "focused_tests": { "command": "node --import tsx --test tests/retail-photo-delete.test.ts tests/job-product-snapshot.test.ts", "passed": 19, "failed": 0, "skipped": 0 },
+  "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
+  "runner_provenance": { "job": "job-da6qubu417fc73cpppig", "embedded_runner_matches_repository_bytes": true, "runner_sha256": "a7736934dc9322fcbc479f83c0364ce8109d4b29338c22a0471621e17057d4a4", "runner_bytes": 13825 },
+  "secret_scan": { "environment_files_considered": 1, "secret_values_checked": 11, "exact_value_hits": 0 },
+  "control_plane": { "staging_web_deploy": "dep-da6b6omk1f9s73dr94k0", "staging_worker_deploy": "dep-da6b6p61egvs73a0kur0", "production_web_unchanged": "dep-da3bfg142hec73arfot0", "production_worker_unchanged": "dep-da3bfg142hec73arfpfg", "maintenance_changed": false, "worker_state_changed": false },
+  "scope_guards": { "production_mutated": false, "money_used": false, "provider_called": false, "policy_changed": false }
+}

@@ -1,0 +1,20 @@
+{
+  "schema": "managed-retail-e3-e5-trace/v1",
+  "task": "P1-MANAGED-STAGING-RETAIL-E3-E5-MUTATION-TRACE-20260825",
+  "started_at": "2026-08-25T15:05:40.711Z",
+  "finished_at": "2026-08-25T15:05:52.839Z",
+  "deployed_app_sha_expected": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
+  "preconditions": { "postgres_runtime": true, "storage_mode_r2": true, "payment_gateway": "duitku", "duitku_production": false, "payments_go_live": false, "credential_values_or_digests_recorded": false },
+  "requested_endpoints": ["POST /api/products (two-image E1 fixture)", "PATCH /api/products/:id (safe E3 metadata mutation)", "DELETE /api/products/:id/photos (E5 exact target)", "DELETE /api/products/:id/photos (unknown target)"],
+  "forbidden_endpoints_called": [], "payment_url_opened": false, "generation_provider_called": false,
+  "fixture": { "http": 201, "two_ordered_images": true, "r2_image_sidecar_pairs": true },
+  "e3": { "http": 200, "api_exact": true, "postgres_exact": true, "ordered_images_unchanged": true, "brand_unchanged": true, "r2_object_set_unchanged": true },
+  "e5": { "http": 200, "cleanup_failed": false, "api_ordered_remaining_exact": true, "postgres_ordered_remaining_exact": true, "removed_object_absent": true, "removed_sidecar_absent": true, "retained_object_present": true, "retained_sidecar_present": true, "retained_sidecar_hash_exact": true },
+  "counterexample": { "unknown_target_http": 404, "postgres_unchanged": true, "r2_object_set_unchanged": true },
+  "immutable_job_snapshot": { "executed": false, "reason": "Creating an admitted job would require credits and may hold/enqueue; zero-money/zero-queue constraints forbid it." },
+  "before": { "target": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 }, "financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } }, "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 }, "r2_objects": 0 },
+  "before_cleanup": { "target": { "users": 1, "products": 1, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 3 }, "financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } }, "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 }, "r2_objects": 2 },
+  "after_cleanup": { "target": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 }, "financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } }, "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 }, "r2_objects": 0 },
+  "cleanup": { "media": true, "database": true }, "result": "PASS",
+  "provenance": { "render_job": "job-da6qubu417fc73cpppig", "job_status": "succeeded", "job_created_at": "2026-08-25T15:05:19.96315Z", "job_started_at": "2026-08-25T15:05:20Z", "job_finished_at": "2026-08-25T15:05:55Z" }
+}
