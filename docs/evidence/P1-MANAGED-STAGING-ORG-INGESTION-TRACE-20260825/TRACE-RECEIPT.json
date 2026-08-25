@@ -1,0 +1,99 @@
+{
+  "schema": "managed-org-ingestion-trace/v1",
+  "task": "P1-MANAGED-STAGING-ORG-INGESTION-TRACE-20260825",
+  "started_at": "2026-08-25T04:11:35.445Z",
+  "finished_at": "2026-08-25T04:11:44.445Z",
+  "deployed_app_sha_expected": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
+  "execution": "MANAGED_STAGING_ONE_OFF_PLUS_PUBLIC_HTTP",
+  "preconditions": {
+    "node_env_production": true,
+    "postgres_runtime": true,
+    "storage_mode_r2": true,
+    "queue_mode": "redis",
+    "payment_gateway": "duitku",
+    "duitku_production": false,
+    "payments_go_live": false,
+    "credential_values_or_digests_recorded": false
+  },
+  "requested_endpoints": [
+    "POST /api/dashboard/campaign/product (manual E6)",
+    "POST /api/dashboard/campaign/product/:id/photos (valid E8)",
+    "POST /api/dashboard/campaign/product/:id/photos (unreadable E8)"
+  ],
+  "forbidden_endpoints_called": [],
+  "payment_url_opened": false,
+  "generation_provider_called": false,
+  "e6": {
+    "http": 200,
+    "response_exact": true,
+    "postgres_exact_create_data": true,
+    "exact_org_owner": true,
+    "ordered_images_empty": true,
+    "raw_meta_brand": null
+  },
+  "e8_positive": {
+    "http": 200,
+    "api_db_ordered_images_exact": true,
+    "api_db_r2_key_identity_exact": true,
+    "object_present": true,
+    "sidecar_present": true,
+    "sidecar": {
+      "jenis": "product_photo",
+      "layak_referensi": true,
+      "rasio_area_teks": 0.010943769290123457,
+      "jumlah_kata": 3,
+      "versi_bukti": 1,
+      "sha256_matches_object": true
+    }
+  },
+  "counterexamples": {
+    "label_unreadable": {
+      "http": 400,
+      "code": "LABEL_UNREADABLE",
+      "retryable": false,
+      "postgres_unchanged": true,
+      "r2_object_set_unchanged": true
+    },
+    "brand_mismatch": {
+      "executed": false,
+      "reason": "E6 manual create has no brand input and persists raw_meta=null; E8 therefore has no registered brand to compare. Direct DB mutation or a new API contract would manufacture authority and was not done.",
+      "authoritative_blocker_observed": true
+    },
+    "classifier_failed": {
+      "executed": false,
+      "reason": "No deterministic input can force classifier infrastructure failure without mutating the accepted runtime."
+    },
+    "evidence_invalid": {
+      "executed": false,
+      "reason": "Forcing corrupt/missing R2 evidence would require direct mutation of accepted evidence; no such mutation was performed."
+    }
+  },
+  "before": {
+    "target": { "users": 0, "organizations": 0, "org_members": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 },
+    "optional_financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } },
+    "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 },
+    "r2_object_count": 0
+  },
+  "before_cleanup": {
+    "target": { "users": 1, "organizations": 1, "org_members": 1, "products": 1, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 3 },
+    "optional_financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } },
+    "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 },
+    "r2_object_count": 2
+  },
+  "after_cleanup": {
+    "target": { "users": 0, "organizations": 0, "org_members": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 },
+    "optional_financial": { "invoices": { "exists": false, "target_rows": 0 }, "refunds": { "exists": false, "target_rows": 0 }, "settlements": { "exists": false, "target_rows": 0 } },
+    "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 },
+    "r2_object_count": 0
+  },
+  "cleanup": { "media": true, "database": true },
+  "result": "PASS",
+  "provenance": {
+    "render_job": "job-da6hbsu7bikc738juoqg",
+    "job_status": "succeeded",
+    "job_created_at": "2026-08-25T04:11:31.117845Z",
+    "job_started_at": "2026-08-25T04:11:31Z",
+    "job_finished_at": "2026-08-25T04:11:47Z",
+    "source": "sanitized structured stdout fetched through Render logs"
+  }
+}

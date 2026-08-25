@@ -1,0 +1,14 @@
+{
+  "task": "P1-MANAGED-STAGING-ORG-INGESTION-TRACE-20260825",
+  "staging": {
+    "web": { "service_id": "srv-d9n28tijnfac73a87lt0", "branch": "staging/exact-246fa65-20260825", "auto_deploy": "no", "suspended": "not_suspended", "deploy_id_pre": "dep-da6b6omk1f9s73dr94k0", "deploy_id_post": "dep-da6b6omk1f9s73dr94k0", "deploy_sha_pre": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "deploy_sha_post": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb" },
+    "worker": { "service_id": "srv-d9n28ue417fc73ch2b60", "branch": "staging/exact-246fa65-20260825", "auto_deploy": "no", "suspended": "not_suspended", "deploy_id_pre": "dep-da6b6p61egvs73a0kur0", "deploy_id_post": "dep-da6b6p61egvs73a0kur0", "deploy_sha_pre": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "deploy_sha_post": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb" },
+    "maintenance_changed": false,
+    "worker_state_changed": false
+  },
+  "production_non_interference": {
+    "pre_and_post_match": true,
+    "web": { "service_id": "srv-d9nhccfqj5pc73et9hrg", "branch": "main", "auto_deploy": "yes", "suspended": "not_suspended", "deploy_id_pre": "dep-da3bfg142hec73arfot0", "deploy_id_post": "dep-da3bfg142hec73arfot0", "deploy_sha_pre": "00ee62efd86ae7e10453a2a1896e63b62228aa4d", "deploy_sha_post": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "worker": { "service_id": "srv-d9ni3ndaeets73c07kq0", "branch": "main", "auto_deploy": "yes", "suspended": "not_suspended", "deploy_id_pre": "dep-da3bfg142hec73arfpfg", "deploy_id_post": "dep-da3bfg142hec73arfpfg", "deploy_sha_pre": "00ee62efd86ae7e10453a2a1896e63b62228aa4d", "deploy_sha_post": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" }
+  }
+}
