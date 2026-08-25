@@ -16,6 +16,7 @@ import { mockVoiceA } from "./mock/voice-a";
 import { mockVoiceB } from "./mock/voice-b";
 import { byteplusVideo } from "./stubs/byteplus";
 import { dashscopeVideo } from "./stubs/dashscope";
+import { xaiGrokVideo } from "./stubs/xai-grok";
 // google-tts.ts & azure-tts.ts sengaja TIDAK diimpor: TTS terpisah tidak dipakai di
 // jalur produksi (keputusan final 31 Jul) — file dipertahankan sebagai referensi.
 
@@ -52,9 +53,23 @@ export function setVideoProvidersForTests(providers?: VideoProvider[]): void {
 
 function videoOrder(): VideoProvider[] {
   if (videoProvidersForTests) return videoProvidersForTests;
-  const active = config.providerVideo; // "mock" | "byteplus" | "dashscope"
+  const active = config.providerVideo; // "mock" | "byteplus" | "dashscope" | "xai"
   const list: VideoProvider[] = [];
-  if (active === "byteplus") list.push(byteplusVideo, dashscopeVideo);
+  // "xai" HARUS diminta eksplisit lewat PROVIDER_VIDEO, dan itu disengaja.
+  //
+  // FINAL-MESIN-DAN-HARGA (26 Agu) memilih Grok Imagine 1.5 untuk super_hq
+  // karena marginnya Rp60.440 lawan Rp42.836 — naik 41%. Tapi dokumen yang sama
+  // mencatat di §7 bahwa keluaran Grok 400x736 BELUM PERNAH dinilai ketajamannya
+  // sesudah diunggah ke TikTok, sementara BytePlus mengeluarkan 720x1280.
+  //
+  // Menjadikannya bawaan berarti menurunkan resolusi tier TERMAHAL (Rp80.000)
+  // atas dasar angka margin saja, sebelum ada satu pun mata yang menilai
+  // hasilnya. Margin yang naik karena produknya memburuk bukan margin yang
+  // didapat — itu utang yang ditagih belakangan lewat refund.
+  //
+  // Jadi: adapter siap dan teruji, tapi peralihannya menunggu bukti mata.
+  if (active === "xai") list.push(xaiGrokVideo, byteplusVideo);
+  else if (active === "byteplus") list.push(byteplusVideo, dashscopeVideo);
   else if (active === "dashscope") list.push(dashscopeVideo, byteplusVideo);
   else list.push(mockVideoA, mockVideoB);
   // Mock is a local-test aid only. A production provider outage must fail the

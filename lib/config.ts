@@ -60,6 +60,9 @@ export const config = {
   mockVoiceAFail: env("MOCK_VOICE_A_FAIL", "0") === "1",
   // Kunci provider nyata (stub — throw ProviderNotConfigured bila kosong)
   byteplusApiKey: env("BYTEPLUS_ARK_API_KEY", ""),
+  // xAI Grok Imagine — mesin video super_hq per FINAL-MESIN-DAN-HARGA (26 Agu).
+  xaiApiKey: env("XAI_API_KEY", ""),
+  xaiVideoModel: env("XAI_VIDEO_MODEL", "grok-imagine-video-1.5"),
   dashscopeApiKey: env("DASHSCOPE_API_KEY", ""),
   googleTtsApiKey: env("GOOGLE_TTS_API_KEY", ""),
   // Gemini TTS (gemini-3.1-flash-tts-preview) — suara resmi semua video sejak
@@ -278,6 +281,14 @@ export const config = {
       generateAudio: true,
     },
     super_hq: {
+      // COGS DIPERBARUI 26 Agu 2026 (FINAL-MESIN-DAN-HARGA §1) — dan ini angka
+      // BytePlus 2.0 penuh yang masih dipakai hari ini, BUKAN angka Grok.
+      //
+      // Grok Imagine 1.5 berbiaya Rp19.560, jadi margin akan naik
+      // Rp42.836 -> Rp60.440. Angka itu TIDAK ditulis di sini sampai peralihan
+      // mesinnya benar-benar terjadi: COGS yang mendahului mesinnya membuat
+      // laporan margin melaporkan uang yang belum pernah dihemat.
+      //
       // r7 (Brian 2026-08-07): "presenter/lipsync jual Super HQ 80rb-an" —
       // ini satu-satunya tier yang mempertahankan audio embedded asli (lip-
       // sync sungguhan dari model), COGS-nya juga paling tinggi (Rp37rb) —
