@@ -63,6 +63,10 @@ const receipt = { schema: "managed-retail-e3-e5-trace/v1", task: TASK, started_a
   immutable_job_snapshot: { executed: false, reason: "Creating an admitted job would require credits and may hold/enqueue; zero-money/zero-queue constraints forbid it." }, before: {}, before_cleanup: {}, after_cleanup: {}, cleanup: {}, result: "FAIL" };
 
 try {
+  const healthResponse = await fetch(`${ORIGIN}/api/health`);
+  const health = await healthResponse.json();
+  receipt.health = { http: healthResponse.status, ok: health.ok === true, build_sha: health.build_sha ?? null, payments_env: health.payments_env ?? null, payments_live: health.payments_live ?? null };
+  if (healthResponse.status !== 200 || health.ok !== true || health.build_sha !== APP_SHA || health.payments_live !== false) throw new Error("managed health/deployed SHA mismatch");
   receipt.before = { target: await target(), financial: await financial(), queue: await queueState(), r2_objects: 0 };
   await pool.query("INSERT INTO users (id,phone,email,name,tier,locale,created_at) VALUES ($1,NULL,$2,$3,'free','id-ID',$4)", [userId, email, "Managed retail E3 E5", startedAt]);
   const token = await new SignJWT({ phone: "" }).setProtectedHeader({ alg: "HS256" }).setSubject(userId).setIssuedAt().setExpirationTime("15m").sign(new TextEncoder().encode(process.env.AUTH_SECRET));
@@ -73,7 +77,9 @@ try {
   productId = fixture.body.product_id;
   const initialImages = fixture.body.images.map(String);
   const initialObjects = await objects();
-  receipt.fixture = { http: 201, two_ordered_images: initialImages.length === 2, r2_image_sidecar_pairs: initialObjects.length === 4 };
+  const expectedInitialObjects = initialImages.flatMap((key) => [key, `${key}.meta.json`]).sort();
+  receipt.fixture = { http: 201, two_ordered_images: initialImages.length === 2, r2_image_sidecar_pairs_exact: JSON.stringify(initialObjects) === JSON.stringify(expectedInitialObjects) };
+  if (!receipt.fixture.two_ordered_images || !receipt.fixture.r2_image_sidecar_pairs_exact) throw new Error("fixture R2 image/sidecar identity mismatch");
 
   receipt.requested_endpoints.push("PATCH /api/products/:id (safe E3 metadata mutation)");
   const patch = await call(token, `/api/products/${productId}`, { method: "PATCH", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: "Nova Serum Skincare", price_idr: 13000, category: "beauty", product_visual_desc: "Botol serum krem dengan tutup abu-abu." }) });
@@ -85,13 +91,14 @@ try {
   if (patch.status !== 200 || !Object.values(receipt.e3).every(Boolean)) throw new Error("E3 mutation mismatch");
 
   const removed = initialImages[0], retained = initialImages[1];
-  const retainedBytes = await bytes(retained); const retainedSidecar = JSON.parse((await bytes(`${retained}.meta.json`)).toString("utf8"));
   receipt.requested_endpoints.push("DELETE /api/products/:id/photos (E5 exact target)");
   const deleted = await call(token, `/api/products/${productId}/photos`, { method: "DELETE", headers: { "content-type": "application/json" }, body: JSON.stringify({ path: removed }) });
   const afterDelete = (await pool.query("SELECT images FROM products WHERE id=$1 AND user_id=$2", [productId, userId])).rows[0];
+  const retainedBytesAfterDelete = await bytes(retained);
+  const retainedSidecarAfterDelete = JSON.parse((await bytes(`${retained}.meta.json`)).toString("utf8"));
   receipt.e5 = { http: deleted.status, cleanup_failed: deleted.body.cleanup_failed ?? null, api_ordered_remaining_exact: JSON.stringify(deleted.body.images) === JSON.stringify([retained]), postgres_ordered_remaining_exact: afterDelete?.images === JSON.stringify([retained]),
     removed_object_absent: !(await exists(removed)), removed_sidecar_absent: !(await exists(`${removed}.meta.json`)), retained_object_present: await exists(retained), retained_sidecar_present: await exists(`${retained}.meta.json`),
-    retained_sidecar_hash_exact: retainedSidecar.sha256 === crypto.createHash("sha256").update(retainedBytes).digest("hex") };
+    retained_sidecar_hash_exact_after_delete: retainedSidecarAfterDelete.sha256 === crypto.createHash("sha256").update(retainedBytesAfterDelete).digest("hex") };
   if (deleted.status !== 200 || deleted.body.cleanup_failed !== false || !Object.entries(receipt.e5).filter(([key]) => !["http", "cleanup_failed"].includes(key)).every(([, value]) => value === true)) throw new Error("E5 deletion mismatch");
 
   const beforeUnknown = await objects();
