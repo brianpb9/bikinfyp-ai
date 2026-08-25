@@ -87,6 +87,31 @@ const KLIP_TEMPLATE = Object.values(
   }, {}),
 );
 
+/** Klip merek nyata — bukti terkuat yang kita punya, dan sebelumnya menganggur.
+ *
+ *  Sumbernya render 720x1280 milik kita sendiri di content-lab READY-TO-PUBLISH
+ *  ("lolos semua QC, 100% AI-generated"), dipotong 6 detik dan diturunkan ke
+ *  360x640 tanpa audio — strip ini memang bisu. Total sembilan klip ~860 KB.
+ *
+ *  KENAPA BUKAN DIUNDUH DARI TIKTOK, walau di sana juga ada: unduhan TikTok
+ *  membawa watermark mereka dan sudah di-encode ulang. Memasang video
+ *  ber-watermark platform lain di halaman depan sendiri terbaca sebagai tidak
+ *  punya asetnya — padahal aslinya justru milik kita, dan lebih tajam.
+ *
+ *  Label produk di klip ini TERBACA (Skintific, Scarlett, Wardah) — itu yang
+ *  membuatnya meyakinkan, dan itu pula yang dijaga QC-F1/QC-10 di pipeline. */
+const KLIP_MEREK = [
+  { src: "/showcase/brand/skintific-5x-ceramide.mp4", label: "Skintific" },
+  { src: "/showcase/brand/scarlett-acneserum.mp4", label: "Scarlett" },
+  { src: "/showcase/brand/wardah-lightening-serum.mp4", label: "Wardah" },
+  { src: "/showcase/brand/somethinc-niacinamide.mp4", label: "Somethinc" },
+  { src: "/showcase/brand/glad2glow-centella.mp4", label: "Glad2Glow" },
+  { src: "/showcase/brand/maybelline-superstay-matte-ink.mp4", label: "Maybelline" },
+  { src: "/showcase/brand/mosseru-showergel.mp4", label: "Mosseru" },
+  { src: "/showcase/brand/barberdaily-sixblade-razor.mp4", label: "Barberdaily" },
+  { src: "/showcase/brand/shellasaukia-dress-novella.mp4", label: "Shella Saukia" },
+];
+
 // S0 — ONBOARDING: nilai produk -> nomor HP -> kode OTP WhatsApp -> beranda.
 export default function OnboardingPage() {
   const router = useRouter();
@@ -229,6 +254,28 @@ export default function OnboardingPage() {
               >
                 Belum yakin? Lihat contoh skripnya dulu — tanpa daftar
               </a>
+            </div>
+            <div>
+              <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">
+                Produk asli, label terbaca — semuanya AI
+              </p>
+              <div className="-mx-6 flex gap-3 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+                {KLIP_MEREK.map((s, i) => (
+                  <div key={i} className="relative shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-black/5">
+                    <LazyClip src={s.src} />
+                    <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">
+                      {s.label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              {/* Wajib, dan bukan basa-basi hukum: merek-merek ini TIDAK bekerja
+                  sama dengan kami. Menampilkannya tanpa kalimat ini terbaca
+                  seperti mengaku punya kemitraan yang tidak ada. */}
+              <p className="mt-1.5 text-center text-[10px] leading-tight text-zinc-400">
+                Contoh render kami memakai produk yang dijual bebas. Merek di atas
+                bukan mitra resmi dan tidak mengendorse layanan ini.
+              </p>
             </div>
             <div>
               <p className="mb-2 text-center text-xs font-semibold uppercase tracking-wide text-zinc-400">
