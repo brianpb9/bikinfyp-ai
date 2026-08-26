@@ -219,9 +219,12 @@ export async function smokeApproveScript(userId: string, scriptId: string, updat
 export async function smokeCreateJob(userId: string, input: {
   productId: string; scriptId: string; format: string; qualityTier: string;
   durationS: number; priceIdr: number; avatarCustomDesc?: string | null;
+  /** Exact-identity/HMAC managed staging trace only: Rp0 and no durable ledger artifact. */
+  omitZeroLedger?: boolean;
   /** Disposable PostgreSQL verifier only; application routes never set it. */
   onRetryForTests?: (event: { attempt: number; jobId: string; code: "40001" | "40P01" }) => Promise<void>;
 }) {
+  if (input.omitZeroLedger && input.priceIdr !== 0) throw new Error("ZERO_LEDGER_TRACE_REQUIRES_ZERO_PRICE");
   const pool = getPool(url());
   try {
     // The user-row lock serializes wallet spends and the script-row lock
@@ -293,7 +296,9 @@ export async function smokeCreateJob(userId: string, input: {
         // retail, deskripsi presetnya harus sampai ke worker — worker Postgres
         // sudah membacanya sejak M8, jalur retail yang belum mengirimnya.
         await client.query("INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,avatar_custom_desc,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,$9,$10,'QUEUED',$11,$11)", [jobId,userId,input.productId,input.scriptId,input.format,input.qualityTier,input.durationS,input.avatarCustomDesc ?? null,preparedReference.raw,productSnapshotRaw,timestamp]);
-        await client.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,'hold',$4,NULL,$5)", [id(),userId,-input.priceIdr,jobId,timestamp]);
+        if (!input.omitZeroLedger) {
+          await client.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,'hold',$4,NULL,$5)", [id(),userId,-input.priceIdr,jobId,timestamp]);
+        }
         await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId,input.scriptId]);
         await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true }),timestamp]);
         commitAttempted = true;

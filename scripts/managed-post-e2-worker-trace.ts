@@ -6,12 +6,14 @@ import fs from "node:fs";
 import path from "node:path";
 import { Worker } from "bullmq";
 import { Pool } from "pg";
+import { cookieName, issueToken } from "../lib/auth";
 import { config } from "../lib/config";
-import { createJobProductSnapshotRaw } from "../lib/job-product-snapshot";
-import { prepareJobReferenceManifest } from "../lib/job-reference-manifest";
-import { enqueueRedisJob, getRedisJobQueue, closeRedisJobQueue } from "../lib/job-queue";
+import { parseJobProductSnapshot } from "../lib/job-product-snapshot";
+import { parseJobReferenceManifest } from "../lib/job-reference-manifest";
+import { getRedisJobQueue, closeRedisJobQueue } from "../lib/job-queue";
 import { KEBIJAKAN_KLASIFIKASI } from "../lib/media/klasifikasi-gambar";
 import { processPostgresJob } from "../lib/postgres/worker";
+import { MANAGED_STAGING_TRACE_HEADER, managedStagingTraceHeader } from "../lib/staging-admission-trace";
 import { mediaStorage } from "../lib/storage";
 import { managedStagingDeterministicWorkerGate } from "../lib/staging-deterministic-worker";
 
@@ -38,13 +40,14 @@ const suffix = id();
 const userId = `post-e2-user-${suffix}`;
 const productId = `post-e2-product-${suffix}`;
 const scriptId = `post-e2-script-${suffix}`;
-const jobId = `post-e2-job-${suffix}`;
+let jobId = `post-e2-unadmitted-${suffix}`;
 const productKey = `products/${userId}/controlled-e2-product.svg`;
 const sidecarKey = `${productKey}.meta.json`;
 const storageKeys = [productKey, sidecarKey];
 const pool = new Pool({ connectionString: config.databaseUrl });
 const queue = getRedisJobQueue();
 let consumer: Worker<{ jobId: string }> | undefined;
+let consumedJobId: string | null = null;
 
 const actionableCounts = async () => {
   const counts = await queue.getJobCounts("waiting", "active", "delayed", "prioritized", "paused", "failed");
@@ -89,26 +92,23 @@ try {
     versiBukti: KEBIJAKAN_KLASIFIKASI.versiBukti,
   })), "application/json");
 
-  const prepared = await prepareJobReferenceManifest({ jobId, candidateRels: [productKey] });
-  storageKeys.push(...prepared.manifest.references.map((ref) => ref.snapshotRel));
-  const snapshotRaw = createJobProductSnapshotRaw({
-    name: "NOVA Controlled Staging Serum 30ml",
-    category: "beauty",
-    price_idr: 13000,
-    raw_meta: JSON.stringify({ brand: "NOVA", trace: TASK }),
-    product_visual_desc: "Botol serum krem NOVA 30ml dengan tutup abu-abu.",
-    brand_brief: null,
-    claims: JSON.stringify([]),
-  });
-
   const now = at();
+  const segments = [
+    { role: "hook", start: 0, end: 3, text: "skincare murah vs mahal, bedanya apa sih?", visual_direction: "Close-up tangan memegang produk" },
+    { role: "demo", start: 3, end: 10, text: "nah, NOVA Serum cuma 13 ribu, nggak kalah", visual_direction: "Tangan mendemokan produk" },
+    { role: "cta", start: 10, end: 15, text: "Cek keranjang ya deh", visual_direction: "Tunjuk keranjang lalu kembali ke produk" },
+  ];
+  const admissionSnapshot = {
+    contentType: "affiliate", format: null, durationSec: 15, templateId: null,
+    wordBudget: null, cartLabel: "keranjang", requirePriceMention: false,
+    hookLevel: "agak_berani", productCategory: "beauty",
+  };
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
     await client.query("INSERT INTO users (id,email,name,tier,locale,created_at) VALUES ($1,$2,$3,'free','id-ID',$4)", [userId, `${userId}@staging.invalid`, "Post-E2 trace identity", now]);
-    await client.query("INSERT INTO products (id,user_id,name,price_idr,category,product_visual_desc,images,raw_meta,claims,created_at) VALUES ($1,$2,$3,13000,'beauty',$4,$5,$6,'[]',$7)", [productId, userId, "NOVA Controlled Staging Serum 30ml", "Botol serum krem NOVA 30ml dengan tutup abu-abu.", JSON.stringify([productKey]), JSON.stringify({ brand: "NOVA", trace: TASK }), now]);
-    await client.query("INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,approved_by_user_at,created_at) VALUES ($1,$2,'H1','senang','bestie','[]',$3,'#stagingtrace',$4,'silent_caption',$5,$5)", [scriptId, productId, "Trace deterministik tanpa provider.", JSON.stringify({ admisi: { task: TASK, accepted: true } }), now]);
-    await client.query("INSERT INTO jobs (id,user_id,product_id,script_id,format,quality_tier,duration_s,state,approved_reference_manifest,job_product_snapshot,created_at,state_changed_at) VALUES ($1,$2,$3,$4,'hands_only','silent_caption',3,'QUEUED',$5,$6,$7,$7)", [jobId, userId, productId, scriptId, prepared.raw, snapshotRaw, now]);
+    await client.query("INSERT INTO products (id,user_id,source_url,name,price_idr,category,product_visual_desc,images,raw_meta,claims,created_at) VALUES ($1,$2,NULL,$3,13000,'beauty',$4,$5,$6,'[]',$7)", [productId, userId, "NOVA Serum", "Botol serum krem NOVA 30ml dengan tutup abu-abu.", JSON.stringify([productKey]), JSON.stringify({ brand: "NOVA", trace: TASK }), now]);
+    await client.query("INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,approved_by_user_at,created_at) VALUES ($1,$2,'H9','senang','bestie',$3,$4,'#stagingtrace',$5,'high_quality',$6,$6)", [scriptId, productId, JSON.stringify(segments), "Trace admission canonical tanpa provider.", JSON.stringify({ admisi: admissionSnapshot, validation: { passed: true, errors: [] } }), now]);
     await client.query("COMMIT");
   } catch (error) {
     await client.query("ROLLBACK");
@@ -118,11 +118,28 @@ try {
   }
 
   consumer = new Worker<{ jobId: string }>(config.redisQueueName, async (job) => {
-    assert.equal(job.data.jobId, jobId, "one-off consumer menolak job lain");
+    consumedJobId = job.data.jobId;
     await processPostgresJob(job.data.jobId, { retryViaQueue: true });
   }, { connection: { url: config.redisUrl, maxRetriesPerRequest: null }, concurrency: 1 });
   await consumer.waitUntilReady();
-  await enqueueRedisJob(jobId);
+
+  const token = await issueToken(userId, "");
+  const admission = await fetch("https://racun-ai-staging-web.onrender.com/api/jobs", {
+    method: "POST",
+    headers: {
+      "content-type": "application/json",
+      cookie: `${cookieName()}=${encodeURIComponent(token)}`,
+      [MANAGED_STAGING_TRACE_HEADER]: managedStagingTraceHeader(process.env.AUTH_SECRET ?? "", expectedSha),
+    },
+    body: JSON.stringify({ script_id: scriptId, format: "hands_only", duration_s: 15, quality_tier: "high_quality" }),
+  });
+  const admissionBody = await admission.json() as Record<string, unknown>;
+  assert.equal(admission.status, 201, `canonical admission HTTP ${admission.status}: ${JSON.stringify(admissionBody)}`);
+  assert.equal(admissionBody.state, "QUEUED");
+  assert.equal(admissionBody.quality_tier, "high_quality");
+  assert.equal(admissionBody.hold_idr, 0, "managed trace admission wajib Rp0");
+  assert.equal(typeof admissionBody.job_id, "string");
+  jobId = String(admissionBody.job_id);
 
   const deadline = Date.now() + 60_000;
   let state = "";
@@ -145,15 +162,30 @@ try {
   assert.equal(providerTasks, 0);
   assert.equal(payments, 0);
   assert.deepEqual(ledger, []);
+  assert.equal(consumedJobId, jobId, "worker wajib mengonsumsi job ID hasil canonical admission");
   assert.ok(output?.video_url && await mediaStorage().stat(output.video_url));
   storageKeys.push(output.video_url);
+  const manifest = parseJobReferenceManifest(job.approved_reference_manifest);
+  const productSnapshot = parseJobProductSnapshot(job.job_product_snapshot);
+  storageKeys.push(...manifest.references.map((ref) => ref.snapshotRel));
+  const sidecarVerified = manifest.references.length === 1 && manifest.references[0].sha256 === sourceSha;
+  const admissionManifestExact = manifest.references[0].rel === productKey;
+  const admissionSnapshotExact = productSnapshot.productName === "NOVA Serum"
+    && productSnapshot.category === "beauty" && productSnapshot.priceIdr === 13000
+    && productSnapshot.trustedBrand.value === "NOVA";
+  assert.equal(sidecarVerified, true, "canonical manifest wajib membawa hash sidecar exact");
+  assert.equal(admissionManifestExact, true, "canonical manifest wajib menunjuk product key exact");
+  assert.equal(admissionSnapshotExact, true, "canonical product snapshot wajib exact");
   receipt.trace = {
     dedicated_identity: true,
     dedicated_product: true,
     source_sha256: sourceSha,
-    sidecar_verified: prepared.resolution.utama?.sha256 === sourceSha,
-    admission_manifest_exact: job.approved_reference_manifest === prepared.raw,
-    admission_snapshot_exact: job.job_product_snapshot === snapshotRaw,
+    canonical_admission_http: admission.status,
+    canonical_admission_job_id_matches_worker: consumedJobId === jobId,
+    canonical_admission_hold_idr: admissionBody.hold_idr,
+    sidecar_verified: sidecarVerified,
+    admission_manifest_exact: admissionManifestExact,
+    admission_snapshot_exact: admissionSnapshotExact,
     queue_consumed_by_one_off_worker: true,
     terminal: job.state,
     provider_video: job.provider_video,

@@ -17,6 +17,7 @@ import { scoreScriptPlan } from "@/lib/fyp-score";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
 import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
+import { authorizedManagedStagingZeroValueAdmission } from "@/lib/staging-admission-trace";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -164,13 +165,15 @@ export async function POST(req: Request) {
         `Skrip ini dibuat untuk tier ${script.quality_tier}. Bikin skrip baru untuk tier ${tier} ya.`,
         "Script was generated for a different quality tier."
       );
-    const priceIdr = tierPriceIdr(tier, durationS);
+    const listedPriceIdr = tierPriceIdr(tier, durationS);
+    const zeroValueTrace = authorizedManagedStagingZeroValueAdmission(req);
+    const priceIdr = zeroValueTrace ? 0 : listedPriceIdr;
 
     // Checkpoint 1E only: compose the parity-tested PG repositories behind
     // the same HTTP contract.  The deterministic completion hook is scoped
     // to RACUN_POSTGRES_SMOKE and never starts the production worker.
     if (postgresRuntimeEnabled()) {
-      const created = await smokeCreateJob(user.id, { productId: product.id, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc });
+      const created = await smokeCreateJob(user.id, { productId: product.id, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc, omitZeroLedger: zeroValueTrace });
       // Snapshot Skor FYP BEKU (pre-render) — non-fatal, sama seperti jalur SQLite.
       if (!created.duplicate) {
         try {
