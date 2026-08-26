@@ -58,4 +58,15 @@ The trace command was removed immediately afterward. Canonical worker deploy
     is active. `dep-da7c6mek1f9s73cvlj70` emitted the final managed PASS.
 
 The trace command was removed immediately afterward. Canonical worker deploy
-`dep-da7c7jfavr4c73bkk2u0` is the final live deploy.
+`dep-da7c7jfavr4c73bkk2u0` was the final live deploy for that remediation.
+
+15. Reviewer required queue-level isolation so held ordinary jobs could not be
+    stranded as failed. SHA `a92d9ebf91b9a37998dec27bab3d0e6e888596bd`
+    introduced a dedicated trace queue; its first managed start failed before
+    DB/queue/provider because BullMQ forbids `:` in queue names.
+16. SHA `565f3fad6446152966bd8003a0aa8f6536bd279b` used the BullMQ-valid queue
+    `racun-jobs-staging-managed-staging-trace`. `dep-da7cgv6417fc73fbuv80`
+    emitted PASS and proved the canonical queue unchanged before/after.
+
+The trace command was removed immediately afterward. Canonical worker deploy
+`dep-da7chou1egvs73e7bvig` is the final live deploy.

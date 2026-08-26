@@ -1,5 +1,5 @@
 {
-  "captured_at": "2026-08-26T10:47:20Z",
+  "captured_at": "2026-08-26T11:08:49Z",
   "mode": "read_only",
   "web": {"service_id":"srv-d9nhccfqj5pc73et9hrg","deploy_id":"dep-da79380u01pc73br2vug","sha":"ec734b186307fe3a4c79cf6632f8f5e75f8634ae","createdAt":"2026-08-26T07:11:28.276713Z","finishedAt":"2026-08-26T07:15:36.673075Z","status":"live","branch":"main","autoDeploy":"yes","maintenance":false,"suspended":"not_suspended"},
   "worker": {"service_id":"srv-d9ni3ndaeets73c07kq0","deploy_id":"dep-da79380u01pc73br30hg","sha":"ec734b186307fe3a4c79cf6632f8f5e75f8634ae","createdAt":"2026-08-26T07:11:28.340657Z","finishedAt":"2026-08-26T07:14:01.765979Z","status":"live","branch":"main","autoDeploy":"yes","suspended":"not_suspended"},

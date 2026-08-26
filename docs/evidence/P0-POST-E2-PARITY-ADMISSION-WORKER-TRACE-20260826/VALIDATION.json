@@ -1,7 +1,7 @@
 {
   "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
   "result": "PASS",
-  "app_sha": "65d54b5b682acc6cde93ca3e32034d382b7dc57d",
+  "app_sha": "565f3fad6446152966bd8003a0aa8f6536bd279b",
   "exact_sha_parity": true,
   "admission_to_worker_to_deliverable": true,
   "deterministic_worker_manifest_materialized_before_output": true,
@@ -12,6 +12,8 @@
   "zero_value_capability_replay_http": 400,
   "zero_ledger_provider_worker_rejected": true,
   "held_ordinary_job_rejected_by_trace_worker": true,
+  "trace_queue_distinct_from_canonical": true,
+  "canonical_queue_unchanged_during_trace": true,
   "cleanup_per_table_observed_zero": true,
   "zero_external_provider_calls": true,
   "zero_real_money": true,
@@ -29,8 +31,8 @@
     "missing_exact_identity_or_sha": "fail_closed"
   },
   "tests": {
-    "full_suite": { "total": 1244, "pass": 1197, "skip": 47, "fail": 0, "duration_ms": 110354.521834 },
-    "targeted_final_invariants": { "total": 13, "pass": 13, "skip": 0, "fail": 0 },
+    "full_suite": { "total": 1248, "pass": 1201, "skip": 47, "fail": 0, "duration_ms": 93448.434459 },
+    "targeted_final_invariants": { "total": 17, "pass": 17, "skip": 0, "fail": 0 },
     "typescript": "PASS",
     "worker_container_contract": "PASS_STATIC_DOCKER_UNAVAILABLE"
   }

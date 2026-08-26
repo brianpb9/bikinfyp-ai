@@ -1,7 +1,7 @@
 # Post-E2 parity admission → worker trace
 
 Managed STAGING web and worker are live at exact app SHA
-`65d54b5b682acc6cde93ca3e32034d382b7dc57d`. The deterministic harness is
+`565f3fad6446152966bd8003a0aa8f6536bd279b`. The deterministic harness is
 not a general provider toggle: production-mode execution requires staging,
 the exact canonical worker service ID, and an explicitly matching full live
 SHA. Production, web/sibling, wrong-SHA, and missing-identity counterexamples
@@ -33,6 +33,12 @@ Fixture selection is also job-bound: a ledger-less job is required. While the
 trace worker process-wide gate is active, any ordinary held job is rejected
 before both fixture and provider paths, left retryable for the canonical
 worker, and cannot be synthesized or charged by the trace worker.
+
+The trace admission is enqueued on
+`racun-jobs-staging-managed-staging-trace`; the canonical paid queue remains
+`racun-jobs-staging`. The trace Worker subscribes only to the former. Managed
+before/after receipts show both queues at the same canonical zero state, so an
+ordinary held job cannot be claimed or stranded by the trace process.
 
 Final runtime restoration is complete: worker uses the canonical image CMD,
 is not suspended, and is live at the exact app SHA; web maintenance is off.

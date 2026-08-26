@@ -30,6 +30,12 @@
 | 2026-08-26T10:45:16Z | Final isolated trace receipt | PASS; replay 400; READY; 13 table counts/R2/queue all zero |
 | 2026-08-26T10:45:33Z | Restore final canonical worker CMD | `dep-da7c7jfavr4c73bkk2u0`, live |
 | 2026-08-26T10:47:20Z | Final health and control-plane read | exact SHA; 3/3 HTTP 200; command empty; maintenance off |
+| 2026-08-26T10:55:33Z | Commit dedicated trace queue | `a92d9ebf91b9a37998dec27bab3d0e6e888596bd` |
+| 2026-08-26T11:00:08Z | First isolated-queue start | failed before DB/queue/provider: BullMQ queue names reject `:` |
+| 2026-08-26T11:00:50Z | Commit BullMQ-valid isolated queue name | `565f3fad6446152966bd8003a0aa8f6536bd279b` |
+| 2026-08-26T11:06:51Z | Final isolated-queue trace receipt | PASS; trace/canonical queues separately zero and canonical unchanged |
+| 2026-08-26T11:07:15Z | Restore canonical worker CMD | `dep-da7chou1egvs73e7bvig`, live |
+| 2026-08-26T11:08:49Z | Final health/control-plane read | exact SHA; 3/3 HTTP 200; command empty; maintenance off |
 
 Earlier failed attempts and their cleanup/termination are enumerated in
 `ATTEMPT-LINEAGE.md`. No failed attempt reached provider or payment execution.
