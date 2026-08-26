@@ -56,6 +56,9 @@ case "$B_READ" in *'"task_id":"ROUTE-B"'*'STALE=false'*) pass "B consumes only i
 "$READ" builder --task ROUTE-A --owner intruder >/dev/null 2>&1; WRONG_RC=$?
 [ "$WRONG_RC" = 8 ] && [ "$(cksum "$A_PATH")" = "$A_BEFORE" ] \
   && pass "wrong owner is rejected and cannot consume" || fail "wrong-owner rc/state mismatch"
+AGENT_BUS_POLL_SECONDS=1 "$WAIT" builder 2 --task ROUTE-A --owner intruder >/dev/null 2>&1; WRONG_WAIT_RC=$?
+[ "$WRONG_WAIT_RC" = 8 ] && [ "$(cksum "$A_PATH")" = "$A_BEFORE" ] \
+  && pass "wrong-owner waiter is rejected immediately without consuming" || fail "wrong-owner wait rc/state mismatch"
 A_READ=$("$READ" builder --task ROUTE-A --owner "$OWNER_A") || fail "A read failed"
 case "$A_READ" in *'"task_id":"ROUTE-A"'*'STALE=false'*) pass "A later consumes A" ;; *) fail "A read mismatch" ;; esac
 "$READ" builder --task ROUTE-A --owner "$OWNER_A" >/dev/null 2>&1; AGAIN_RC=$?

@@ -76,5 +76,5 @@ for (const name of names) {
 }
 
 if (role === "builder" && !task && sawRouted) fail(8, "routed messages require --task and --owner");
-if (mode === "read" && sawWrongOwner) fail(8, `owner '${owner}' does not own task '${task}'`);
+if (sawWrongOwner) fail(8, `owner '${owner}' does not own task '${task}'`);
 process.exit(5);
