@@ -1,12 +1,12 @@
 {
   "task": "P0-E2-CONTROLLED-STAGING-SOURCE-20260826",
   "baseline_sha": "fb18b2c9e570231a10f761a7a11b896a8201e66b",
-  "deployed_code_sha": "7d61f3ad6854500df9f35177a9329c85244d56cc",
-  "focused_tests": { "command": "node --import tsx --test tests/e2-controlled-staging-source.test.ts tests/extract.test.ts tests/product-truth-ingestion.test.ts", "passed": 25, "failed": 0, "skipped": 0 },
+  "deployed_code_sha": "f306b5b88fb96fe33cab58a0dcaf90182c83fcdb",
+  "focused_tests": { "command": "node --import tsx --test tests/e2-controlled-staging-source.test.ts tests/extract.test.ts tests/product-truth-ingestion.test.ts", "passed": 27, "failed": 0, "skipped": 0 },
   "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
-  "runner_provenance": { "job": "job-da71u867bikc73ek6t8g", "embedded_runner_matches_repository_bytes": true, "runner_sha256": "ce11a34c2c87617869c6c2a0ea8bcad6b7d4db37849db8058af042c72827e627", "runner_bytes": 9743 },
+  "runner_provenance": { "job": "job-da77uu142hec73ajp3qg", "embedded_runner_matches_repository_bytes": true, "runner_sha256": "baba8cdf6726608dbada831e26699340ee8e91d2afdf5581cafe57f416f84f1c", "runner_bytes": 9743 },
   "secret_scan": { "environment_files_considered": 1, "secret_values_checked": 22, "exact_value_hits": 0 },
-  "deploy": { "staging_web": "dep-da71sdoae00c738cv97g", "staging_web_sha": "7d61f3ad6854500df9f35177a9329c85244d56cc", "superseded_staging_deploy": "dep-da703kq6iojc73813ibg", "maintenance_changed": false },
+  "deploy": { "staging_web": "dep-da77t4qd0e5s73dlghcg", "staging_web_sha": "f306b5b88fb96fe33cab58a0dcaf90182c83fcdb", "superseded_staging_deploy": "dep-da71sdoae00c738cv97g", "maintenance_changed": false },
   "unchanged_services": { "staging_worker_deploy": "dep-da6b6p61egvs73a0kur0", "staging_worker_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "production_web_deploy": "dep-da3bfg142hec73arfot0", "production_worker_deploy": "dep-da3bfg142hec73arfpfg", "production_sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
   "scope_guards": { "new_secret": false, "production_mutated": false, "money_used": false, "provider_called": false, "policy_changed": false }
 }

@@ -1,7 +1,7 @@
 # Controlled staging E2 source
 
 Result: **PASS** on staging deploy
-`7d61f3ad6854500df9f35177a9329c85244d56cc`.
+`f306b5b88fb96fe33cab58a0dcaf90182c83fcdb`.
 
 The E2 source is a committed synthetic NOVA product fixture admitted only when
 `RENDER_SERVICE_ID` equals the exact managed staging web service. Its page and
@@ -14,10 +14,12 @@ there is no check/use DNS race. Image downloads use the same pinned,
 manual-redirect transport, and every controlled-image hop must remain the
 exact permitted image URL.
 
-The transport also applies one absolute wall-clock deadline across every
-validated address attempt and redirect. Truncated or aborted response streams
-and oversized bodies reject cleanly; slow trickle cannot refresh the deadline.
-The non-global IPv6 classification includes documentation-only `3fff::/20`.
+The transport also applies one absolute wall-clock deadline across DNS
+resolution, every validated address attempt, and every redirect. A delayed or
+never-settling resolver on the first hop or after a redirect is bounded by the
+same remaining deadline. Truncated or aborted response streams and oversized
+bodies reject cleanly; slow trickle cannot refresh the deadline. The non-global
+IPv6 classification includes documentation-only `3fff::/20`.
 
 The public E2 API created one retail product with exact source, price,
 category, ordered PostgreSQL image list, and an R2 image/sidecar pair whose
