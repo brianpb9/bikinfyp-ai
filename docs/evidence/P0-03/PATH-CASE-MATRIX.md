@@ -1053,3 +1053,38 @@ TASK=`P1-SHIP-READINESS-RECONCILE-20260824`
   that does not choose OCR, legacy, promo, reason-code, owner, price, or
   production policy. Otherwise the technical queue is complete and waits for
   the exact decision/external artifact.
+
+### E.35 Managed E1–E9 evidence and readiness recompute — 2026-08-26
+
+TASK=`P1-READINESS-TRANCHE-RECOMPUTE-20260826`
+
+- E1 positive managed ingestion is accepted at evidence `30c9d2d...`; E6/E8
+  organization ingestion is accepted at `e0a553d...`; E4 retail append at
+  `2adfa32...`; E3/E5 retail mutation at `26df1e1...`; and E7/E9 organization
+  mutation at `fb18b2c...`. These prove exact bounded API/PostgreSQL/R2/sidecar
+  identity and zero-residue cleanup on deployed app `246fa659...`.
+- Positive E2 controlled-source ingestion and SSRF transport hardening are
+  accepted at `633ce9c...` on staging web `f306b5b...`. The source is exact
+  staging-service/path bound; DNS/address pinning, manual redirects, one
+  absolute deadline, size/stream bounds, and production isolation are covered.
+  That task deliberately left staging worker on its prior SHA, so it is not a
+  post-E2 exact web+worker parity receipt.
+- This supersedes the old positive-E2 blocker in the E.34 snapshot. It does
+  not rewrite E.1 historical statuses or claim that every aggregate case is
+  closed.
+- None of the new managed product traces admitted a job, held credit, enqueued,
+  invoked W1/W2, called a provider, or produced an output. Therefore A1–A7
+  remain PASS only for the accepted C8/new-admission code slice; W1/W2 remain
+  PARTIAL; C9/C12, legacy, OCR, and C2/C5 remain open as previously bounded.
+- Current aggregate C1–C13 count remains **1 PASS / 9 PARTIAL / 3 BLOCKED**.
+  Managed path evidence improved, but no case is silently promoted.
+- `ONBOARDING-VIDEO-PROOF-20260826` has an authoritative PASS at `efe5524...`,
+  but that SHA is not an ancestor of current baseline `460ea44...`; it is
+  evidence for its branch, not current canonical product-tree behavior.
+- Owner-aware bus routing accepted at `460ea44...` closes orchestration
+  cross-consumption risk only. It adds no Product Truth or shipping score.
+- Board rows remain 13 and sum to 77/130. The valid-product admission→worker→
+  output condition, legacy paired audit, and other named gates remain open, so
+  canonical shipping readiness remains **58/100**. Full current reasoning and
+  machine checks: `../SHIP-READINESS-CANONICAL-20260826.md` and
+  `../P1-READINESS-TRANCHE-RECOMPUTE-20260826/`.
