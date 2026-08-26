@@ -65,20 +65,20 @@ known storage, persistence, provider-generation, script/job/audit write, credit,
 managed-trace queue, and ordinary enqueue effect must be an AST descendant
 of the seam's effect callback; a merely prior or ignored call cannot satisfy
 it. The seam rejection must be awaited or returned. Its first argument must be
-an object literal with exact AST properties `declaredToken` and
-`trustedSignal`; comments and substring lookalikes cannot satisfy it. If the
+the typed `buildAuthoritativeTypeBoundaryInput(declaredSource, trustedSource)`
+dataflow boundary; raw objects, comments, and the same expression on both sides
+cannot satisfy it. Runtime source identities reject aliases even when bindings
+have different names, while independently sourced similarly named identifiers
+remain valid. If the
 central production module later exists, the same test directly probes it with
 trusted-match, trusted-mismatch, and missing-policy inputs. Mismatch must throw,
 not merely return `REJECT_MISMATCH`, and invoke zero effects; a trusted match
-must invoke exactly one effect. Handler-level mutation controls prove that an
+must invoke exactly one effect. Boundary-level mutation controls prove that an
 ignored returned decision yields false 2xx while rejection yields non-success.
-The suite also invokes the real SQLite `PATCH /api/products/[id]` handler with
-independent opaque declared/trusted fixtures. Current mismatch behavior is
-observed as HTTP 200, one category write, and one audit write; the matching
-positive control remains HTTP 200 and advances its audit exactly once. The
-trusted fixture is deliberately out-of-band test provenance, not a claim that
-current product storage already has authoritative type truth. The normal
-`npm test` glob does not include the
+No actual handler is required to accept or reject from `category` alone:
+production has no authorised trusted-signal ingress yet, and manufacturing one
+inside this task would make the test itself define policy. The normal `npm test`
+glob does not include the
 `.red.ts` file, so an intentional RED cannot break unrelated CI.
 
 No deploy, provider call, payment, credit hold, queue mutation, database

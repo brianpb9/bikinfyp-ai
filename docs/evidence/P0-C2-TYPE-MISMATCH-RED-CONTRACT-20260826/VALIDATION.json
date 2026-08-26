@@ -3,7 +3,7 @@
   "baseline_sha": "ce05418d00b998bd4ed07a3c500358f6b10423a5",
   "scope": "engineering discovery and RED-before contract only",
   "result": "ENGINEERING_RED_COMPLETE_POLICY_INPUT_REQUIRED",
-  "review_remediation": "complete sink inventory, exact and independent AST inputs, awaited rejection, callback ownership, synthetic mutations, and actual E3 handler zero-effect/non-success probe",
+  "review_remediation": "complete sink inventory, typed/dataflow source identity, awaited rejection, callback ownership, and alias/similarly-named runtime mutations; no handler policy without approved ingress",
   "focused_red": {
     "command": "node scripts/verify-c2-type-mismatch-red.mjs",
     "verifier_exit_code": 0,

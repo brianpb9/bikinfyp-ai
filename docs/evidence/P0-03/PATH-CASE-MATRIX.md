@@ -1148,12 +1148,12 @@ TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
   Mismatch must throw so an ignored returned decision cannot become HTTP
   success; handler mutation probes require non-success with zero effects while
   the valid control advances exactly once.
-- Third remediation kills self-derived and constant-match input mutations, then
-  invokes actual SQLite E3 PATCH with independent opaque test provenance.
-  Current mismatch observation is HTTP 200 plus one category and one audit
-  write; required RED is non-success and zero named sinks. The actual valid
-  control stays HTTP 200 with exactly one audit. The trusted test fixture is
-  explicitly out-of-band and does not manufacture production type truth.
+- Third/fourth remediation replaces identifier substring guesses and the
+  unauthorised E3 trusted fixture with a typed/dataflow source-identity builder.
+  Same-expression and different-binding/same-source aliases fail at runtime;
+  similarly named independent sources remain valid. Actual PATCH behavior is
+  deliberately not prescribed until Product Policy authorises a production-
+  consumable trusted-signal ingress; `category` alone cannot become truth.
 - Opaque-token mutation controls kill both accept-all and reject-all mutants;
   the positive trusted match remains admissible and absent trusted provenance
   remains policy-undetermined. This does not define a toothpaste taxonomy.

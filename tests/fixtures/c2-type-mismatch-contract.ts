@@ -10,12 +10,38 @@ export type TrustedTypeSignal = {
   provenance: string;
 };
 
+export type DeclaredTypeSource = {
+  kind: "DECLARED_TYPE_SOURCE";
+  sourceId: string;
+  token: string;
+};
+
+export type TrustedTypeSource = {
+  kind: "TRUSTED_TYPE_SOURCE";
+  sourceId: string;
+  token: string;
+  provenance: string;
+};
+
 export type TypeBoundaryInput = {
   declaredToken: string;
   trustedSignal: TrustedTypeSignal | null;
 };
 
 export type TypeBoundaryDecision = "ADMIT" | "REJECT_MISMATCH" | "UNDETERMINED_POLICY_INPUT";
+
+export function buildReferenceBoundaryInput(
+  declared: DeclaredTypeSource,
+  trusted: TrustedTypeSource | null,
+): TypeBoundaryInput {
+  if (trusted && declared.sourceId === trusted.sourceId) {
+    throw new Error("C2_SOURCE_ALIAS: declared and trusted values must come from independent sources");
+  }
+  return {
+    declaredToken: declared.token,
+    trustedSignal: trusted ? { token: trusted.token, provenance: trusted.provenance } : null,
+  };
+}
 
 export function referenceDecision(input: TypeBoundaryInput): TypeBoundaryDecision {
   if (!input.trustedSignal?.token.trim() || !input.trustedSignal.provenance.trim()) {

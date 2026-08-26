@@ -23,9 +23,6 @@ not ok 5 - RED: every production boundary rejects supplied mismatch before its o
     A3: evidence/provider/script persistence effects are not owned by a seam callback
     A4: validation/manifest/script/audit/job/commit/hold/scoring/enqueue/failure effects are not owned by a seam callback
     CENTRAL: lib/product-type-boundary.ts is absent
-    E3_ACTUAL: mismatch returned success 200
-    E3_ACTUAL: mismatch changed the persisted category sink
-    E3_ACTUAL: mismatch advanced audit sink 1 times
   code: 'ERR_ASSERTION'
   expected: []
   operator: 'deepStrictEqual'
@@ -42,5 +39,4 @@ C2_RED_VERIFIER={"expected_nonzero":true,"intended_failure_present":true,"exactl
 
 The transcript omits nondeterministic duration/stack-location lines and
 deduplicates repeated sink diagnostics only; all test names, outcomes, boundary
-classes, actual-handler mismatch effects, totals, and verifier booleans are
-preserved.
+classes, totals, and verifier booleans are preserved.

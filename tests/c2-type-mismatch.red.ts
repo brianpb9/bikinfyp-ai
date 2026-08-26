@@ -1,25 +1,18 @@
 import assert from "node:assert/strict";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { after, test } from "node:test";
+import test from "node:test";
 import ts from "typescript";
 import {
   acceptEverythingMutation,
+  buildReferenceBoundaryInput,
   referenceDecision,
   rejectEverythingMutation,
+  type DeclaredTypeSource,
+  type TrustedTypeSource,
   type TypeBoundaryInput,
 } from "./fixtures/c2-type-mismatch-contract";
-
-process.env.RACUN_NO_DOTENV = "1";
-process.env.RACUN_DB_RUNTIME = "sqlite";
-process.env.RACUN_WORKER_DISABLED = "1";
-process.env.DB_PATH = path.join(os.tmpdir(), `racun-c2-type-red-${process.pid}.db`);
-
-after(() => {
-  for (const suffix of ["", "-wal", "-shm"]) fs.rmSync(`${process.env.DB_PATH}${suffix}`, { force: true });
-});
 
 const root = process.cwd();
 const read = (relative: string) => fs.readFileSync(path.join(root, relative), "utf8");
@@ -138,41 +131,12 @@ function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: 
   const violations: string[] = [];
   for (const seam of seams) {
     const input = seam.arguments[0];
-    const propertyNames = new Set<string>();
-    const propertyInitializers = new Map<string, ts.Expression>();
-    if (input && ts.isObjectLiteralExpression(input)) {
-      for (const property of input.properties) {
-        if (ts.isPropertyAssignment(property)) {
-          const name = property.name;
-          if (ts.isIdentifier(name) || ts.isStringLiteral(name)) {
-            propertyNames.add(name.text);
-            propertyInitializers.set(name.text, property.initializer);
-          }
-        } else if (ts.isShorthandPropertyAssignment(property)) {
-          propertyNames.add(property.name.text);
-          propertyInitializers.set(property.name.text, property.name);
-        }
-      }
-    }
-    if (!propertyNames.has("declaredToken") || !propertyNames.has("trustedSignal")) {
-      violations.push(`${expectation.id}: seam call lacks declaredToken/trustedSignal`);
-    }
-    const declaredInitializer = propertyInitializers.get("declaredToken");
-    const trustedInitializer = propertyInitializers.get("trustedSignal");
-    if (declaredInitializer && trustedInitializer) {
-      const declaredText = declaredInitializer.getText(source);
-      const trustedText = trustedInitializer.getText(source);
-      const literalLike = (node: ts.Expression) => ts.isStringLiteral(node)
-        || ts.isNoSubstitutionTemplateLiteral(node)
-        || ts.isNumericLiteral(node)
-        || node.kind === ts.SyntaxKind.TrueKeyword
-        || node.kind === ts.SyntaxKind.FalseKeyword;
-      if (declaredText === trustedText || trustedText.includes(declaredText)) {
-        violations.push(`${expectation.id}: trustedSignal is self-derived from declaredToken`);
-      }
-      if (literalLike(declaredInitializer) || literalLike(trustedInitializer)) {
-        violations.push(`${expectation.id}: seam uses a constant token instead of independent production inputs`);
-      }
+    if (!input || !ts.isCallExpression(input) || callName(input) !== "buildAuthoritativeTypeBoundaryInput") {
+      violations.push(`${expectation.id}: seam input does not come from the typed source-identity builder`);
+    } else if (input.arguments.length !== 2) {
+      violations.push(`${expectation.id}: source-identity builder requires declared and trusted inputs`);
+    } else if (input.arguments[0].getText(source) === input.arguments[1].getText(source)) {
+      violations.push(`${expectation.id}: declared and trusted builder arguments are the same expression`);
     }
     if (!ts.isAwaitExpression(seam.parent) && !ts.isReturnStatement(seam.parent)) {
       violations.push(`${expectation.id}: seam rejection is neither awaited nor returned`);
@@ -206,6 +170,10 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   const seamPath = path.join(root, "lib/product-type-boundary.ts");
   if (!fs.existsSync(seamPath)) return ["CENTRAL: lib/product-type-boundary.ts is absent"];
   const module = await import(pathToFileURL(seamPath).href) as {
+    buildAuthoritativeTypeBoundaryInput?: (
+      declared: DeclaredTypeSource,
+      trusted: TrustedTypeSource | null,
+    ) => TypeBoundaryInput;
     validateAuthoritativeProductType?: (
       input: TypeBoundaryInput,
       onAdmit?: () => unknown | Promise<unknown>,
@@ -214,71 +182,44 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   if (typeof module.validateAuthoritativeProductType !== "function") {
     return ["CENTRAL: validateAuthoritativeProductType export is absent"];
   }
+  if (typeof module.buildAuthoritativeTypeBoundaryInput !== "function") {
+    return ["CENTRAL: buildAuthoritativeTypeBoundaryInput export is absent"];
+  }
+  const build = module.buildAuthoritativeTypeBoundaryInput;
   const decide = module.validateAuthoritativeProductType;
+  const declaredA: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "request-category", token: "opaque-type-a" };
+  const trustedA: TrustedTypeSource = { kind: "TRUSTED_TYPE_SOURCE", sourceId: "catalogue-type", token: "opaque-type-a", provenance: "future-policy-fixture" };
+  const trustedB: TrustedTypeSource = { ...trustedA, token: "opaque-type-b" };
+  const builtMismatch = build(declaredA, trustedB);
+  const builtValid = build(declaredA, trustedA);
   let mismatchEffects = 0;
   let validEffects = 0;
   let mismatchRejected = false;
   try {
-    await decide(mismatch, () => { mismatchEffects += 1; });
+    await decide(builtMismatch, () => { mismatchEffects += 1; });
   } catch {
     mismatchRejected = true;
   }
-  const validDecision = await decide(trusted, () => { validEffects += 1; });
-  const missingDecision = await decide({ declaredToken: "opaque-type-a", trustedSignal: null });
+  const validDecision = await decide(builtValid, () => { validEffects += 1; });
+  const missingDecision = await decide(build(declaredA, null));
   const violations: string[] = [];
   if (!mismatchRejected) violations.push("CENTRAL: mismatch returned instead of rejecting");
   if (validDecision !== "ADMIT") violations.push(`CENTRAL: trusted match returned ${String(validDecision)}`);
   if (missingDecision !== "UNDETERMINED_POLICY_INPUT") violations.push(`CENTRAL: missing policy returned ${String(missingDecision)}`);
   if (mismatchEffects !== 0) violations.push("CENTRAL: mismatch invoked its effect callback");
   if (validEffects !== 1) violations.push(`CENTRAL: trusted match invoked effect ${validEffects} times`);
-  return violations;
-}
-
-async function inspectActualE3HandlerBehavior(): Promise<string[]> {
-  const [{ getDb, now, uuid }, { issueToken, cookieName }, { PATCH }] = await Promise.all([
-    import("../lib/db"),
-    import("../lib/auth"),
-    import("../app/api/products/[id]/route"),
-  ]);
-  const db = getDb();
-  const userId = uuid();
-  const phone = `08${String(process.pid).padStart(10, "0").slice(-10)}`;
-  db.prepare("INSERT INTO users (id,phone,tier,locale,created_at) VALUES (?,?,'free','id-ID',?)").run(userId, phone, now());
-  const token = await issueToken(userId, phone);
-  const request = (id: string, category: string) => new Request(`http://localhost/api/products/${id}`, {
-    method: "PATCH",
-    headers: { "content-type": "application/json", cookie: `${cookieName()}=${token}` },
-    body: JSON.stringify({ category }),
-  });
-  const createFixture = (category: string) => {
-    const id = uuid();
-    db.prepare("INSERT INTO products (id,user_id,name,price_idr,category,images,raw_meta,created_at) VALUES (?,?,?,85000,?,'[]','{}',?)")
-      .run(id, userId, `Opaque fixture ${id.slice(0, 6)}`, category, now());
-    return id;
-  };
-  const readCategory = (id: string) => (db.prepare("SELECT category FROM products WHERE id=?").get(id) as { category: string }).category;
-  const countAudit = (id: string) => (db.prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_id=? AND action='product.updated'").get(id) as { n: number }).n;
-  const callPatch = (id: string, category: string) => PATCH(request(id, category), { params: Promise.resolve({ id }) });
-
-  const violations: string[] = [];
-  const mismatchProduct = createFixture("opaque-type-b");
-  const independentTrustedSignal = { token: "opaque-type-b", provenance: "test-only-independent-policy-fixture" };
-  const independentlyDeclaredToken = "opaque-type-a";
-  assert.notEqual(independentlyDeclaredToken, independentTrustedSignal.token, "mismatch fixture collapsed to a self-derived match");
-  const mismatchAuditBefore = countAudit(mismatchProduct);
-  const mismatchResponse = await callPatch(mismatchProduct, independentlyDeclaredToken);
-  const mismatchAuditDelta = countAudit(mismatchProduct) - mismatchAuditBefore;
-  if (mismatchResponse.status < 400) violations.push(`E3_ACTUAL: mismatch returned success ${mismatchResponse.status}`);
-  if (readCategory(mismatchProduct) !== independentTrustedSignal.token) violations.push("E3_ACTUAL: mismatch changed the persisted category sink");
-  if (mismatchAuditDelta !== 0) violations.push(`E3_ACTUAL: mismatch advanced audit sink ${mismatchAuditDelta} times`);
-
-  const validProduct = createFixture("opaque-type-a");
-  const validAuditBefore = countAudit(validProduct);
-  const validResponse = await callPatch(validProduct, "opaque-type-a");
-  const validAuditDelta = countAudit(validProduct) - validAuditBefore;
-  if (validResponse.status !== 200) violations.push(`E3_ACTUAL: valid control returned ${validResponse.status}`);
-  if (readCategory(validProduct) !== "opaque-type-a") violations.push("E3_ACTUAL: valid control did not preserve declared category");
-  if (validAuditDelta !== 1) violations.push(`E3_ACTUAL: valid control advanced audit sink ${validAuditDelta} times instead of once`);
+  try {
+    build(declaredA, { ...trustedA, sourceId: declaredA.sourceId });
+    violations.push("CENTRAL: aliased declared/trusted source identity was accepted");
+  } catch { /* required */ }
+  try {
+    build(
+      { ...declaredA, sourceId: "category" },
+      { ...trustedA, sourceId: "categorySignal" },
+    );
+  } catch {
+    violations.push("CENTRAL: similarly named but independent source identities were rejected");
+  }
   return violations;
 }
 
@@ -322,20 +263,24 @@ test("mutation controls: comparator rejects mismatch without rejecting valid pos
   assert.notEqual(rejectEverythingMutation(trusted), "ADMIT", "reject-all mutant must be killed by the valid control");
 
   const fixture: BoundaryExpectation = { id: "MUTANT", file: "test-only.ts", handler: "POST", effects: [effect("persist"), effect("hold")] };
-  const commentOnly = `async function POST(){ /* validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => persist()) */ persist(); hold(); }`;
+  const commentOnly = `async function POST(){ /* validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => persist()) */ persist(); hold(); }`;
   assert.ok(inspectBoundary(fixture, commentOnly).some((violation) => violation.includes("persist is not owned")), "comment mutant survived");
-  const ignoredPrior = `async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => {}); persist(); hold(); }`;
+  const ignoredPrior = `async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => {}); persist(); hold(); }`;
   assert.ok(inspectBoundary(fixture, ignoredPrior).some((violation) => violation.includes("persist is not owned")), "ignored-prior-call mutant survived");
-  const oneBoundaryOnly = `async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => persist()); hold(); }`;
+  const oneBoundaryOnly = `async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => persist()); hold(); }`;
   assert.ok(inspectBoundary(fixture, oneBoundaryOnly).some((violation) => violation.includes("hold is not owned")), "single-effect mutant survived");
-  const ownedEffects = `async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => { persist(); hold(); }); }`;
+  const ownedEffects = `async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
   assert.deepEqual(inspectBoundary(fixture, ownedEffects), [], "correct callback-owned effects did not satisfy the structural contract");
-  const substringInputs = `async function POST(){ await validateAuthoritativeProductType({ notdeclaredToken: 1, untrustedSignalFallback: 2 }, () => { persist(); hold(); }); }`;
-  assert.ok(inspectBoundary(fixture, substringInputs).some((violation) => violation.includes("lacks declaredToken/trustedSignal")), "substring-property mutant survived");
-  const selfDerivedInputs = `async function POST(){ await validateAuthoritativeProductType({ declaredToken: category, trustedSignal: category }, () => { persist(); hold(); }); }`;
-  assert.ok(inspectBoundary(fixture, selfDerivedInputs).some((violation) => violation.includes("self-derived")), "self-derived-input mutant survived");
-  const constantMatchingInputs = `async function POST(){ await validateAuthoritativeProductType({ declaredToken: "same", trustedSignal: "same" }, () => { persist(); hold(); }); }`;
-  assert.ok(inspectBoundary(fixture, constantMatchingInputs).some((violation) => violation.includes("constant token")), "constant-matching-input mutant survived");
+  const rawObjectInputs = `async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, rawObjectInputs).some((violation) => violation.includes("typed source-identity builder")), "raw-object input mutant survived");
+  const sameExpressionInputs = `async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(alias, alias), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, sameExpressionInputs).some((violation) => violation.includes("same expression")), "same-expression alias mutant survived");
+
+  const declaredSource: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "category", token: "same" };
+  const aliasedTrusted: TrustedTypeSource = { kind: "TRUSTED_TYPE_SOURCE", sourceId: "category", token: "same", provenance: "alias fixture" };
+  assert.throws(() => buildReferenceBoundaryInput(declaredSource, aliasedTrusted), /C2_SOURCE_ALIAS/);
+  const similarlyNamedTrusted: TrustedTypeSource = { ...aliasedTrusted, sourceId: "categorySignal" };
+  assert.equal(referenceDecision(buildReferenceBoundaryInput(declaredSource, similarlyNamedTrusted)), "ADMIT");
 
   const probeHandler = async (
     seam: (input: TypeBoundaryInput, onAdmit: () => void) => unknown | Promise<unknown>,
@@ -365,7 +310,6 @@ test("RED: every production boundary rejects supplied mismatch before its own ef
   const violations = [
     ...boundaryExpectations.flatMap((expectation) => inspectBoundary(expectation)),
     ...await inspectProductionSeamBehavior(),
-    ...await inspectActualE3HandlerBehavior(),
   ];
   assert.deepEqual(violations, [], `C2_MISSING_INVARIANT:\n${violations.join("\n")}`);
 });
