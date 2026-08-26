@@ -211,6 +211,8 @@ penunggu_sah() { # penunggu_sah <pid>
   [ -n "$_p" ] || return 1
   case "$_p" in ''|*[!0-9]*) return 1 ;; esac
   kill -0 "$_p" 2>/dev/null || return 1
+  _stat=$(ps -o stat= -p "$_p" 2>/dev/null || true)
+  case "$_stat" in ''|*Z*) return 1 ;; esac
   _cmd=$(ps -o command= -p "$_p" 2>/dev/null || true)
   [ -n "$_cmd" ] || return 1
   # PENCOCOKAN STRING BERJANGKAR, BUKAN word-splitting (temuan Reviewer,
@@ -228,9 +230,21 @@ penunggu_sah() { # penunggu_sah <pid>
     "/bin/sh $BUS_DIR/bin/bus-wait $ROLE "*) _sisa=${_cmd#"/bin/sh $BUS_DIR/bin/bus-wait $ROLE "} ;;
     *) return 1 ;;
   esac
-  _harap="$TIMEOUT"
-  if [ -n "$TASK" ]; then _harap="$_harap --task $TASK --owner $OWNER"; fi
-  [ "$_sisa" = "$_harap" ] || return 1
+  # Timeout controls only how often a supervisor refreshes its wait cycle; it
+  # is not part of route ownership. A later arm of the same route may request
+  # a different valid timeout and must still recognize this waiter as the one
+  # canonical instance. Keep the task/owner tail exact while accepting the
+  # timeout grammar bus-wait accepts.
+  _timeout_aktif=${_sisa%% *}
+  case "$_timeout_aktif" in
+    0) ;;
+    ''|*[!0-9]*|0*) return 1 ;;
+    *) ;;
+  esac
+  _ekor=${_sisa#"$_timeout_aktif"}
+  _harap_ekor=''
+  if [ -n "$TASK" ]; then _harap_ekor=" --task $TASK --owner $OWNER"; fi
+  [ "$_ekor" = "$_harap_ekor" ] || return 1
   return 0
 }
 
@@ -578,7 +592,12 @@ while :; do
     # LOKAL di titik kill, bukan tersirat dari kondisi yang jauh di atasnya.
     penunggu_sah "$_ada" && kill "$_ada" 2>/dev/null || true
     _t=0
-    while kill -0 "$_ada" 2>/dev/null && [ "$_t" -lt 60 ]; do
+    # A terminated child can remain visible to kill -0 as a zombie until its
+    # external parent reaps it. It can no longer consume bus messages, so wait
+    # on the strong waiter identity rather than bare PID existence.
+    _batas_terminasi=$(( $(date +%s) + 5 ))
+    while penunggu_sah "$_ada" && [ "$_t" -lt 60 ]; do
+      [ "$(date +%s)" -lt "$_batas_terminasi" ] || break
       _t=$((_t + 1)); sleep 0.05 2>/dev/null || sleep 1
     done
     # GAGAL TERTUTUP: kalau yatim itu MASIH HIDUP sesudah batas waktu (sinyal
@@ -586,7 +605,7 @@ while :; do
     # tetap melahirkan penunggu BARU — itu menghasilkan DUA penunggu hidup
     # sekaligus, persis kelas cacat yang seluruh berkas ini dibangun untuk
     # mencegah. Menyerah dengan jelas lebih aman daripada diam-diam berduplikasi.
-    if kill -0 "$_ada" 2>/dev/null; then
+    if penunggu_sah "$_ada"; then
       lepas_kunci
       echo "bus-arm: penunggu $_ada tanpa supervisor MASIH HIDUP sesudah ${_t} percobaan — menyerah, TIDAK melahirkan penunggu kedua" >&2
       exit 77

@@ -139,7 +139,13 @@ sleep 1
 printf '%s\n' "$STANDALONE" > "$STANDALONE_PIDFILE"
 "$ARM" builder 20 --task "$STANDALONE_TASK" --owner "$OWNER_A" >"$BUS_DIR/tmp/route-standalone-arm.out" 2>&1 & STANDALONE_ARM=$!
 _i=0
-while [ "$_i" -lt 80 ] && [ "$(cat "$STANDALONE_PIDFILE" 2>/dev/null || true)" = "$STANDALONE" ]; do sleep 0.1; _i=$((_i + 1)); done
+# Replacement may wait through the bounded five-second TERM grace period
+# before it can safely publish a new PID; do not mistake that interval for loss.
+while [ "$_i" -lt 100 ]; do
+  _candidate=$(cat "$STANDALONE_PIDFILE" 2>/dev/null || true)
+  [ -n "$_candidate" ] && [ "$_candidate" != "$STANDALONE" ] && break
+  sleep 0.1; _i=$((_i + 1))
+done
 wait "$STANDALONE" 2>/dev/null || true
 REPLACEMENT=$(cat "$STANDALONE_PIDFILE" 2>/dev/null || true)
 if ! kill -0 "$STANDALONE" 2>/dev/null && [ -n "$REPLACEMENT" ] && [ "$REPLACEMENT" != "$STANDALONE" ] && kill -0 "$REPLACEMENT" 2>/dev/null; then
@@ -149,6 +155,40 @@ else
 fi
 kill "$REPLACEMENT" 2>/dev/null || true
 wait "$STANDALONE_ARM" 2>/dev/null || true
+
+# Timeout is refresh policy, not route identity. Re-arming one route with a
+# different timeout must retain the original waiter/supervisor singleton.
+TIMEOUT_TASK=ROUTE-TIMEOUT-IDEMPOTENT
+TIMEOUT_KEY=$(route_key "$TIMEOUT_TASK" "$OWNER_A")
+TIMEOUT_PIDFILE="$BUS_DIR/tmp/waiter-builder-$TIMEOUT_KEY.pid"
+TIMEOUT_SUPERVISOR="$BUS_DIR/tmp/supervisor-builder-$TIMEOUT_KEY.pid"
+"$ARM" builder 20 --task "$TIMEOUT_TASK" --owner "$OWNER_A" >"$BUS_DIR/tmp/route-timeout-first.out" 2>&1 & TIMEOUT_ARM=$!
+_i=0
+while [ "$_i" -lt 80 ] && [ ! -s "$TIMEOUT_PIDFILE" ]; do sleep 0.1; _i=$((_i + 1)); done
+TIMEOUT_FIRST_PID=$(cat "$TIMEOUT_PIDFILE" 2>/dev/null || true)
+TIMEOUT_FIRST_SUPERVISOR=$(cat "$TIMEOUT_SUPERVISOR" 2>/dev/null || true)
+"$ARM" builder 30 --task "$TIMEOUT_TASK" --owner "$OWNER_A" >"$BUS_DIR/tmp/route-timeout-second.out" 2>&1 & TIMEOUT_SECOND=$!
+_i=0
+while [ "$_i" -lt 40 ] && kill -0 "$TIMEOUT_SECOND" 2>/dev/null; do sleep 0.1; _i=$((_i + 1)); done
+if kill -0 "$TIMEOUT_SECOND" 2>/dev/null; then
+  TIMEOUT_SECOND_RC=99
+else
+  wait "$TIMEOUT_SECOND" 2>/dev/null; TIMEOUT_SECOND_RC=$?
+fi
+if [ "$TIMEOUT_SECOND_RC" = 0 ] && ! kill -0 "$TIMEOUT_SECOND" 2>/dev/null && \
+   [ -n "$TIMEOUT_FIRST_PID" ] && kill -0 "$TIMEOUT_FIRST_PID" 2>/dev/null && \
+   [ "$(cat "$TIMEOUT_PIDFILE" 2>/dev/null || true)" = "$TIMEOUT_FIRST_PID" ] && \
+   [ "$(cat "$TIMEOUT_SUPERVISOR" 2>/dev/null || true)" = "$TIMEOUT_FIRST_SUPERVISOR" ] && \
+   grep -q 'SUDAH ADA' "$BUS_DIR/tmp/route-timeout-second.out" 2>/dev/null; then
+  pass "same route remains singleton when re-armed with a different timeout"
+else
+  fail "different-timeout re-arm replaced or duplicated route waiter"
+fi
+send_as "$OWNER_A" branch-A /physical/worktree-A builder QUESTION "" "$TIMEOUT_TASK" wake-timeout >/dev/null
+wait_dead "$TIMEOUT_FIRST_PID" || true
+"$READ" builder --task "$TIMEOUT_TASK" --owner "$OWNER_A" >/dev/null
+wait "$TIMEOUT_ARM" 2>/dev/null || true
+wait "$TIMEOUT_SECOND" 2>/dev/null || true
 
 # Two routed arms coexist; each wakes only for its own task. Cleanup must leave
 # no waiter, supervisor claim, or route lock directory/daemon.
