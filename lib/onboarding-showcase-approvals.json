@@ -3,17 +3,6 @@
   "reviewedAt": "2026-08-26T09:00:00+07:00",
   "approvals": [
     {
-      "id": "genz-a089584",
-      "src": "/showcase/genz.mp4",
-      "assetSha256": "d8737635521cd6bd996b46df8823f414fc2c2348eaeaba967f571604eb5ac727",
-      "provenance": "owned_pipeline_render",
-      "sourceCommit": "a08958449dca018a4b6a4ecf77e4a1ebb5b10150",
-      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/genz.png",
-      "evidenceSha256": "9c1c0eab2cf152a042aba2fe63efe921d69e6bfdcdf85c411181ba323a8b4e38",
-      "sampleSeconds": [2, 7.5, 12],
-      "qcResult": "pass"
-    },
-    {
       "id": "tangan-a089584",
       "src": "/showcase/tangan.mp4",
       "assetSha256": "1ebb3455481699aae41ca0e01ad5fabae7835fd6d8c49821b61518062baab2bb",
@@ -67,9 +56,102 @@
       "evidenceSha256": "cd112d13424be2c531db4c860bd58d3d9261ca93b1611b53713e63c5b1cc6222",
       "sampleSeconds": [2, 5, 8],
       "qcResult": "pass"
+    },
+    {
+      "id": "brand-skintific-0e3ef3f",
+      "src": "/showcase/brand/skintific-5x-ceramide.mp4",
+      "assetSha256": "2ee2d0e90fe5b6dfb7a09303d0f49af4dc1c796f525950800b0696308a9e9ceb",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "0e3ef3f87f37dea0d1cc8b6001c95ad8a0053b23",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/brand-skintific-5x-ceramide.png",
+      "evidenceSha256": "b2192fdc00deae1875565001682e22eecb1d49c6d53ef3f5d989000d721cd24a",
+      "sampleSeconds": [0.5, 2.5, 4.5],
+      "qcResult": "pass"
+    },
+    {
+      "id": "brand-scarlett-0e3ef3f",
+      "src": "/showcase/brand/scarlett-acneserum.mp4",
+      "assetSha256": "272204d45011ed6f66b5f52753011f2a79fc847f0bdc4b3457121bf5c5c30545",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "0e3ef3f87f37dea0d1cc8b6001c95ad8a0053b23",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/brand-scarlett-acneserum.png",
+      "evidenceSha256": "5898924ef61f557b28674669e54f9235a49cc7a72331920fda544477364b0be2",
+      "sampleSeconds": [0.5, 2.5, 4.5],
+      "qcResult": "pass"
+    },
+    {
+      "id": "brand-wardah-0e3ef3f",
+      "src": "/showcase/brand/wardah-lightening-serum.mp4",
+      "assetSha256": "025479b1dc4ab417895d57975bf1cc9341ac29f5747e37359563ddb0103bba0a",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "0e3ef3f87f37dea0d1cc8b6001c95ad8a0053b23",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/brand-wardah-lightening-serum.png",
+      "evidenceSha256": "7613624345a09b669724701c847f6685ce89ae43614bccbd8bf62e624b816af2",
+      "sampleSeconds": [0.5, 2.5, 4.5],
+      "qcResult": "pass"
+    },
+    {
+      "id": "brand-somethinc-0e3ef3f",
+      "src": "/showcase/brand/somethinc-niacinamide.mp4",
+      "assetSha256": "861ac7e7b004024cb5a505fb3f5e60313c4e58524bfbd7856dc4488581bd2f3b",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "0e3ef3f87f37dea0d1cc8b6001c95ad8a0053b23",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/brand-somethinc-niacinamide.png",
+      "evidenceSha256": "3643b150f1d1bbebf6f2259de67c8ff7fcfa25b2eca5278487381adfd6237a9d",
+      "sampleSeconds": [0.5, 2.5, 4.5],
+      "qcResult": "pass"
+    },
+    {
+      "id": "brand-glad2glow-0e3ef3f",
+      "src": "/showcase/brand/glad2glow-centella.mp4",
+      "assetSha256": "d3bc1caada2acf9feaf09104e02a42cd2815c475bca5d82b266b36837203d1c5",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "0e3ef3f87f37dea0d1cc8b6001c95ad8a0053b23",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/brand-glad2glow-centella.png",
+      "evidenceSha256": "795c802101d844cbab7b4db89a3ab596888ade0588a910bae9b5f26e71dc41e5",
+      "sampleSeconds": [0.5, 2.5, 4.5],
+      "qcResult": "pass"
+    },
+    {
+      "id": "brand-maybelline-0e3ef3f",
+      "src": "/showcase/brand/maybelline-superstay-matte-ink.mp4",
+      "assetSha256": "b6af9530ba47984533987985d465b1b23ff04fb8644dce1568d3c40e5cabea56",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "0e3ef3f87f37dea0d1cc8b6001c95ad8a0053b23",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/brand-maybelline-superstay-matte-ink.png",
+      "evidenceSha256": "afd2612dd71f3f4f5e71b6f023dab2925415fb15ad75308a29c24536081d46b1",
+      "sampleSeconds": [0.5, 2.5, 4.5],
+      "qcResult": "pass"
+    },
+    {
+      "id": "brand-mosseru-0e3ef3f",
+      "src": "/showcase/brand/mosseru-showergel.mp4",
+      "assetSha256": "169cd1a6dbf3f4815cb9b9edb256dd36e1dde48a271feeeac8d4ab76de3c5fab",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "0e3ef3f87f37dea0d1cc8b6001c95ad8a0053b23",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/brand-mosseru-showergel.png",
+      "evidenceSha256": "9ae7fe843af57a8b56da59e6725c99cebb1b24b400e6622b6f8c4739df6eee98",
+      "sampleSeconds": [0.5, 2.5, 4.5],
+      "qcResult": "pass"
+    },
+    {
+      "id": "brand-barberdaily-0e3ef3f",
+      "src": "/showcase/brand/barberdaily-sixblade-razor.mp4",
+      "assetSha256": "b0332ca1f315550643807c5cffb3b586f793166c5ae625977483a268013d0a5c",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "0e3ef3f87f37dea0d1cc8b6001c95ad8a0053b23",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/brand-barberdaily-sixblade-razor.png",
+      "evidenceSha256": "f750eac4c86013fceffd0556d3e83d2009abd592d65720678dabbc154f42703a",
+      "sampleSeconds": [0.5, 2.5, 4.5],
+      "qcResult": "pass"
     }
   ],
   "rejected": [
+    {
+      "src": "/showcase/genz.mp4",
+      "assetSha256": "d8737635521cd6bd996b46df8823f414fc2c2348eaeaba967f571604eb5ac727",
+      "reason": "Unsupported price overlay: clip shows Rp65.574 while committed source manifest says 159 ribu."
+    },
     {
       "src": "/showcase/hijaber.mp4",
       "assetSha256": "fa7cc0ae28164851f072ef34c8869fac1f1e0c66420c26e0caf6c78cec29064a",

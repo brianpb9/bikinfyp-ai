@@ -24,13 +24,12 @@ export type OnboardingShowcaseClip = {
 /**
  * Allowlist publik ini sengaja TIDAK diturunkan dari katalog template.
  * `public/previews` berisi footage portfolio pihak lain yang hanya sah untuk
- * teardown internal. Dua berkas pertama di bawah adalah render pipeline
+ * teardown internal. Satu berkas di bawah adalah render pipeline
  * BikinFYP sendiri; empat berikutnya render model kami sendiri. Setiap baris
  * wajib terikat ke approval ledger, SHA asset, dan frame evidence yang dapat
  * diperiksa — nilai `provenance` saja tidak pernah cukup.
  */
 const PROVENANCE_APPROVED_SHOWCASE_CLIPS = [
-  { src: "/showcase/genz.mp4", label: "Gen-Z", templateId: null, approvalId: "genz-a089584", provenance: "owned_pipeline_render" },
   { src: "/showcase/tangan.mp4", label: "Tanpa wajah", templateId: null, approvalId: "tangan-a089584", provenance: "owned_pipeline_render" },
 
   // Empat karakter Grok Imagine, dirender Brian 26 Agu 2026 dari akun kami
@@ -48,6 +47,18 @@ const PROVENANCE_APPROVED_SHOWCASE_CLIPS = [
   { src: "/showcase/persona/unboxing.mp4", label: "Unboxing", templateId: null, approvalId: "persona-unboxing-2ecdc5a", provenance: "owned_model_render" },
   { src: "/showcase/persona/close-up.mp4", label: "Close-up", templateId: null, approvalId: "persona-close-up-2ecdc5a", provenance: "owned_model_render" },
   { src: "/showcase/persona/di-mobil.mp4", label: "Di mobil", templateId: null, approvalId: "persona-di-mobil-2ecdc5a", provenance: "owned_model_render" },
+] as const satisfies readonly OnboardingShowcaseClip[];
+
+/** Strip merek nyata memakai gerbang bukti yang sama dengan strip persona. */
+const PROVENANCE_APPROVED_BRAND_CLIPS = [
+  { src: "/showcase/brand/skintific-5x-ceramide.mp4", label: "Skintific", templateId: null, approvalId: "brand-skintific-0e3ef3f", provenance: "owned_pipeline_render" },
+  { src: "/showcase/brand/scarlett-acneserum.mp4", label: "Scarlett", templateId: null, approvalId: "brand-scarlett-0e3ef3f", provenance: "owned_pipeline_render" },
+  { src: "/showcase/brand/wardah-lightening-serum.mp4", label: "Wardah", templateId: null, approvalId: "brand-wardah-0e3ef3f", provenance: "owned_pipeline_render" },
+  { src: "/showcase/brand/somethinc-niacinamide.mp4", label: "Somethinc", templateId: null, approvalId: "brand-somethinc-0e3ef3f", provenance: "owned_pipeline_render" },
+  { src: "/showcase/brand/glad2glow-centella.mp4", label: "Glad2Glow", templateId: null, approvalId: "brand-glad2glow-0e3ef3f", provenance: "owned_pipeline_render" },
+  { src: "/showcase/brand/maybelline-superstay-matte-ink.mp4", label: "Maybelline", templateId: null, approvalId: "brand-maybelline-0e3ef3f", provenance: "owned_pipeline_render" },
+  { src: "/showcase/brand/mosseru-showergel.mp4", label: "Mosseru", templateId: null, approvalId: "brand-mosseru-0e3ef3f", provenance: "owned_pipeline_render" },
+  { src: "/showcase/brand/barberdaily-sixblade-razor.mp4", label: "Barberdaily", templateId: null, approvalId: "brand-barberdaily-0e3ef3f", provenance: "owned_pipeline_render" },
 ] as const satisfies readonly OnboardingShowcaseClip[];
 
 /** Kelas provenance yang boleh tampil di halaman komersial. */
@@ -73,3 +84,7 @@ export function isOnboardingShowcaseClipApproved(clip: OnboardingShowcaseClip): 
 /** Hanya klip yang lolos provenance + safety gate boleh berada di bawah klaim AI. */
 export const ONBOARDING_AI_SHOWCASE_CLIPS: readonly OnboardingShowcaseClip[] =
   PROVENANCE_APPROVED_SHOWCASE_CLIPS.filter(isOnboardingShowcaseClipApproved);
+
+/** Setiap klip pada strip merek juga wajib lolos exact-byte evidence gate. */
+export const ONBOARDING_BRAND_SHOWCASE_CLIPS: readonly OnboardingShowcaseClip[] =
+  PROVENANCE_APPROVED_BRAND_CLIPS.filter(isOnboardingShowcaseClipApproved);

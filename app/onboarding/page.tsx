@@ -8,7 +8,7 @@ import { track } from "../_components/track";
 import { tujuanAman } from "@/lib/tujuan-login";
 import { ajakan, useKesiapan } from "../_components/kesiapan";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
-import { ONBOARDING_AI_SHOWCASE_CLIPS } from "@/lib/onboarding-showcase";
+import { ONBOARDING_AI_SHOWCASE_CLIPS, ONBOARDING_BRAND_SHOWCASE_CLIPS } from "@/lib/onboarding-showcase";
 import { SiteFooter } from "../_components/SiteFooter";
 
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
@@ -57,26 +57,16 @@ function LazyClip({ src }: { src: string }) {
  *
  *  Sumbernya render 720x1280 milik kita sendiri di content-lab READY-TO-PUBLISH
  *  ("lolos semua QC, 100% AI-generated"), dipotong 6 detik dan diturunkan ke
- *  360x640 tanpa audio — strip ini memang bisu. Total sembilan klip ~860 KB.
+ *  360x640 tanpa audio — strip ini memang bisu. Delapan klip terpilih ~820 KB.
  *
  *  KENAPA BUKAN DIUNDUH DARI TIKTOK, walau di sana juga ada: unduhan TikTok
  *  membawa watermark mereka dan sudah di-encode ulang. Memasang video
  *  ber-watermark platform lain di halaman depan sendiri terbaca sebagai tidak
  *  punya asetnya — padahal aslinya justru milik kita, dan lebih tajam.
  *
- *  Delapan klip di bawah punya label produk yang terlihat. Render Shella
+ *  Delapan klip pada registry evidence punya label produk yang terlihat. Render Shella
  *  Saukia sengaja tidak ditampilkan: referensinya tidak memiliki foto tag
  *  merek dan README sumber mencatat rerender-nya gagal QC label. */
-const KLIP_MEREK = [
-  { src: "/showcase/brand/skintific-5x-ceramide.mp4", label: "Skintific" },
-  { src: "/showcase/brand/scarlett-acneserum.mp4", label: "Scarlett" },
-  { src: "/showcase/brand/wardah-lightening-serum.mp4", label: "Wardah" },
-  { src: "/showcase/brand/somethinc-niacinamide.mp4", label: "Somethinc" },
-  { src: "/showcase/brand/glad2glow-centella.mp4", label: "Glad2Glow" },
-  { src: "/showcase/brand/maybelline-superstay-matte-ink.mp4", label: "Maybelline" },
-  { src: "/showcase/brand/mosseru-showergel.mp4", label: "Mosseru" },
-  { src: "/showcase/brand/barberdaily-sixblade-razor.mp4", label: "Barberdaily" },
-];
 
 // S0 — ONBOARDING: nilai produk -> nomor HP -> kode OTP WhatsApp -> beranda.
 export default function OnboardingPage() {
@@ -226,7 +216,7 @@ export default function OnboardingPage() {
                 Contoh render produk — semuanya AI
               </p>
               <div className="-mx-6 flex gap-3 overflow-x-auto px-6 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-                {KLIP_MEREK.map((s, i) => (
+                {ONBOARDING_BRAND_SHOWCASE_CLIPS.map((s, i) => (
                   <div key={i} className="relative shrink-0 overflow-hidden rounded-2xl shadow-md ring-1 ring-black/5">
                     <LazyClip src={s.src} />
                     <span className="absolute bottom-1.5 left-1.5 rounded-full bg-black/60 px-2 py-0.5 text-[10px] font-semibold text-white backdrop-blur-sm">

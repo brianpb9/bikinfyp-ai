@@ -61,9 +61,9 @@ const STEPS = ["Brand", "Website", "Produk", "Siap"];
  *  tidak benar di layar PERTAMA yang dilihat brand — dan menaruhnya di atas
  *  frame yang secara harfiah menuliskan larangan pemakaian komersial.
  *
- *  Klip di bawah ini hasil pipeline kami sendiri, jadi klaimnya jujur. */
+ *  Klip di bawah ini render milik kami yang lolos registry evidence bersama. */
 const CONTOH_AWAL = ONBOARDING_AI_SHOWCASE_CLIPS
-  .filter((clip) => ["/showcase/genz.mp4", "/showcase/persona/ootd.mp4", "/showcase/tangan.mp4"].includes(clip.src))
+  .filter((clip) => ["/showcase/persona/unboxing.mp4", "/showcase/persona/close-up.mp4", "/showcase/tangan.mp4"].includes(clip.src))
   .map((clip) => ({
     src: clip.src,
     nama: clip.label,

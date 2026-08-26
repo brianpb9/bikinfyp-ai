@@ -7,6 +7,7 @@ import { AI_RENDER_BLOCKED_TEMPLATE_IDS } from "../lib/template-render-safety";
 import approvalLedger from "../lib/onboarding-showcase-approvals.json";
 import {
   ONBOARDING_AI_SHOWCASE_CLIPS,
+  ONBOARDING_BRAND_SHOWCASE_CLIPS,
   PROVENANCE_OWNED,
   isOnboardingShowcaseClipApproved,
   type OnboardingShowcaseClip,
@@ -55,7 +56,7 @@ test("shared real-footage blocklist tidak pernah tampil di bawah klaim AI", () =
       src: `/showcase/${blockedId}.mp4`,
       label: blockedId,
       templateId: blockedId,
-      approvalId: "genz-a089584",
+      approvalId: "tangan-a089584",
       provenance: "owned_pipeline_render",
     };
     assert.equal(isOnboardingShowcaseClipApproved(fixture), false, `${blockedId} tidak difilter shared blocklist`);
@@ -64,11 +65,21 @@ test("shared real-footage blocklist tidak pernah tampil di bawah klaim AI", () =
 
 test("halaman onboarding tidak mengambil katalog /previews dan disclosure tetap jelas", () => {
   const source = readFileSync(new URL("../app/onboarding/page.tsx", import.meta.url), "utf8");
+  const dashboardSource = readFileSync(new URL("../app/dashboard/onboarding/page.tsx", import.meta.url), "utf8");
   assert.doesNotMatch(source, /CAMPAIGN_TEMPLATES|KLIP_TEMPLATE|src:\s*["']\/previews\//);
   assert.match(source, /ONBOARDING_AI_SHOWCASE_CLIPS\.map/);
+  assert.match(source, /ONBOARDING_BRAND_SHOWCASE_CLIPS\.map/);
+  assert.doesNotMatch(source, /const\s+KLIP_MEREK|src:\s*["']\/showcase\/brand\//,
+    "strip merek bypass registry approval dengan path hard-coded");
   assert.match(source, /mt-3 text-center text-sm leading-relaxed text-zinc-700/);
   assert.match(source, /bukan mitra resmi dan tidak mengendorse layanan ini/);
   assert.doesNotMatch(source, /shellasaukia-dress-novella|Produk asli, label terbaca/);
+  assert.match(dashboardSource, /ONBOARDING_AI_SHOWCASE_CLIPS/);
+  const approvedAiSrc = new Set(ONBOARDING_AI_SHOWCASE_CLIPS.map((clip) => clip.src));
+  for (const src of dashboardSource.match(/\/showcase\/[a-z0-9/.-]+\.mp4/g) ?? []) {
+    assert.ok(approvedAiSrc.has(src), `${src}: dashboard memilih klip di luar approval gate`);
+  }
+  assert.doesNotMatch(dashboardSource, /\/showcase\/(?:genz|hijaber|ibu)\.mp4/);
 
   const linear = (hex: string) => {
     const rgb = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16) / 255);
@@ -95,9 +106,10 @@ test("SATU KARAKTER SATU KLIP — tidak ada label atau berkas yang terulang", ()
 
 test("approval showcase terikat ke SHA asset, provenance commit, dan frame evidence", () => {
   const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+  const displayedClips = [...ONBOARDING_AI_SHOWCASE_CLIPS, ...ONBOARDING_BRAND_SHOWCASE_CLIPS];
   assert.equal(approvalLedger.version, 1);
-  assert.equal(approvalLedger.approvals.length, ONBOARDING_AI_SHOWCASE_CLIPS.length);
-  for (const clip of ONBOARDING_AI_SHOWCASE_CLIPS) {
+  assert.equal(approvalLedger.approvals.length, displayedClips.length);
+  for (const clip of displayedClips) {
     const approval = approvalLedger.approvals.find((item) => item.id === clip.approvalId);
     assert.ok(approval, `${clip.src}: approval ledger hilang`);
     assert.equal(approval.src, clip.src);
@@ -109,11 +121,12 @@ test("approval showcase terikat ke SHA asset, provenance commit, dan frame evide
     assert.equal(execFileSync("git", ["log", "-1", "--format=%H", "--", `public${clip.src}`], { encoding: "utf8" }).trim(),
       approval.sourceCommit, `${clip.src}: source commit provenance tidak cocok`);
   }
-  const selected = new Set(ONBOARDING_AI_SHOWCASE_CLIPS.map((clip) => clip.src));
+  const selected = new Set(displayedClips.map((clip) => clip.src));
   for (const rejected of approvalLedger.rejected) {
     assert.ok(!selected.has(rejected.src), `${rejected.src}: artifact rejected kembali masuk public proof`);
   }
   assert.ok(approvalLedger.rejected.some((item) => item.src === "/showcase/hijaber.mp4" && /SKNTELLA/.test(item.reason)));
+  assert.ok(approvalLedger.rejected.some((item) => item.src === "/showcase/genz.mp4" && /Rp65\.574/.test(item.reason)));
 });
 
 test("klip persona memenuhi konvensi teknis showcase", async () => {
