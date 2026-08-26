@@ -19,6 +19,7 @@ import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
 import { releaseSessionAdvisoryLock } from "@/lib/postgres/evidence-lock-pool";
 
+import { DURASI_DIDUKUNG } from "@/lib/durasi";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -449,7 +450,7 @@ export async function GET(req: Request) {
       prices: Object.fromEntries(
         (["high_quality", "super_hq"] as const)
           .filter(tierMasihDijual)
-          .flatMap((t) => [15, 30, 45].map((d) => [`${t}:${d}`, tierPriceIdr(t, d)]))
+          .flatMap((t) => DURASI_DIDUKUNG.map((d) => [`${t}:${d}`, tierPriceIdr(t, d)]))
       ),
     });
   } catch (err) {

@@ -10,6 +10,7 @@ import { track } from "../../_components/track";
 import templateTerbukti from "../../../lib/config/template-terbukti.json";
 import { HOOK_LEVELS, type HookLevel } from "@/lib/config/hooks";
 
+import { DURASI_BAWAAN, DURASI_DIDUKUNG, durasiSahUntukFormat, type DurasiDidukung } from "@/lib/durasi";
 // Preset-first (2026-08-06, riset teardown kompetitor): user memilih HASIL yang
 // kelihatan, bukan label abstrak — kartu format menampilkan contoh render nyata
 // (video loop / still), fallback ikon untuk format yang belum punya sample.
@@ -77,7 +78,7 @@ export default function GayaPage() {
   const [tier, setTier] = useState<Tier>("high_quality");
   const [tiers, setTiers] = useState<TierMeta[]>([]);
   const [format, setFormat] = useState<VideoFormat>("talking_head");
-  const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
+  const [durationSec, setDurationSec] = useState<DurasiDidukung>(DURASI_BAWAAN);
   const [hookPct, setHookPct] = useState(15);
   const hookLevel = hookLevelFromPct(hookPct);
   // Template Terbukti: preset dari pola video pemenang GMV (korelasional).
@@ -93,7 +94,7 @@ export default function GayaPage() {
     setTemplateId(id);
     setFormat(t.preset.format as VideoFormat);
     setTier(t.preset.qualityTier as Tier);
-    setDurationSec(t.preset.format === "talking_head" ? 15 : (t.preset.durationSec as 15 | 30 | 45));
+    setDurationSec(t.preset.durationSec as DurasiDidukung);
   }
   const restoredFlow = loadFlow();
   const restoredAvatar = getAvatarPreset(restoredFlow.avatarId);
@@ -408,7 +409,7 @@ export default function GayaPage() {
             <section className="space-y-3">
               <div><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-700">Panjang video</p><h2 className="font-display text-xl font-bold">Durasi</h2></div>
               <div className="flex gap-2">
-                {([15, 30, 45] as const).map((d) => {
+                {DURASI_DIDUKUNG.filter((d) => durasiSahUntukFormat(format, d)).map((d) => {
                   const locked = format === "talking_head" && d > 15;
                   return (
                   <button

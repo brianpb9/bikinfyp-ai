@@ -3,6 +3,7 @@
 import type { HookLevel } from "@/lib/config/hooks";
 import type { SnapshotAdmisi } from "@/lib/script-engine/admisi";
 
+import type { DurasiDidukung } from "@/lib/durasi";
 // Konteks alur "bikin video" — disimpan di sessionStorage agar tahan tutup halaman.
 
 export interface FlowProduct {
@@ -66,7 +67,7 @@ export interface FlowState {
   emotion?: string;
   qualityTier?: "silent_caption" | "high_quality" | "super_hq";
   format?: VideoFormat;
-  durationSec?: 15 | 30 | 45;
+  durationSec?: DurasiDidukung;
   // Tipe kanonik dari lib/config/hooks.ts, bukan salinan. Versi salinan di
   // sini pernah tertinggal di tiga level saat levelnya jadi lima.
   hookLevel?: HookLevel;

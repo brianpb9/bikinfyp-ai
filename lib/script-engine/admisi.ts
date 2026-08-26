@@ -31,6 +31,7 @@ import { isTvcTemplate, templateRequiresPriceMention, validateScript, type Valid
 import { getTemplate } from "../templates";
 import type { SegmentDraft } from "./templates";
 
+import { DURASI_DIDUKUNG } from "../durasi";
 /**
  * SNAPSHOT ADMISI — bentuk naskah seperti yang DITETAPKAN saat ditulis.
  *
@@ -173,7 +174,12 @@ export function durasiDariSegmen(segments: SegmentDraft[]): number {
   const akhir = Math.max(0, ...segments.map((s) => Number(s.end) || 0));
   // Dibulatkan ke durasi yang memang dijual; nilai aneh jatuh ke 15 seperti
   // perilaku lama, bukan ke angka karangan.
-  for (const d of [15, 30, 45]) if (Math.abs(akhir - d) <= 2) return d;
+  //
+  // Cadangannya SENGAJA tetap 15, bukan DURASI_BAWAAN yang kini 8: nilai ini
+  // dipakai menafsirkan naskah LAMA yang tidak menyimpan durasinya. Menurunkan
+  // cadangan berarti menilai ulang naskah yang sudah ada dengan jendela kata
+  // yang lebih ketat, dan tiba-tiba menyatakan naskah lama terlalu panjang.
+  for (const d of DURASI_DIDUKUNG) if (Math.abs(akhir - d) <= 2) return d;
   return akhir > 0 ? Math.round(akhir) : 15;
 }
 

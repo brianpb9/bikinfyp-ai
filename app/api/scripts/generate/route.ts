@@ -11,6 +11,7 @@ import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
 
+import { durasiDidukung, DURASI_BAWAAN } from "@/lib/durasi";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -80,7 +81,7 @@ export async function POST(req: Request) {
       .slice(0, 6) as import("@/lib/config/hooks").HookCode[];
     if (!REGISTERS[register])
       throw ERR.BAD_REQUEST("Register-nya pilih salah satu: bunda, bestie, genz, atau netral.", "Invalid register.");
-    const durationSec = [15, 30, 45].includes(Number(body.duration_s)) ? Number(body.duration_s) : 15;
+    const durationSec = durasiDidukung(body.duration_s) ? Number(body.duration_s) : DURASI_BAWAAN;
 
     const product = routeDeps.postgresRuntimeEnabled()
       ? await routeDeps.smokeGetProduct(user.id, productId)

@@ -35,7 +35,27 @@ export interface CampaignTemplate {
   when: string;
   kind: TemplateKind;
   format: TemplateFormat;
-  durationSec: 15 | 30;
+  /**
+   * 8 detik SAH sebagai durasi (lihat lib/durasi.ts, bawaan sejak 26 Agu 2026),
+   * TAPI BELUM ADA SATU PUN TEMPLATE DI 8 DETIK — dan itu disengaja.
+   *
+   * Percobaan memindahkan 12 template affiliate ke 8 detik ditolak audit
+   * katalog: L-05 menghitung jatah kata berskala dari 15 detik, jadi seluruh
+   * 40 varian (10 template x 4) langsung melewati batas. Naskahnya memang
+   * ditulis untuk 15 detik.
+   *
+   * Ini persis kegagalan yang sudah pernah terjadi 11 Agu — target kata
+   * templates.ts dan batas L-05 melenceng, dan SETIAP varian empat template
+   * ditolak sampai tidak ada skrip yang bisa dibuat sama sekali (lihat
+   * catatan wordBudget di lib/script-engine/validator.ts). Mengubah angka
+   * durasi tanpa menulis ulang naskahnya mengulanginya di skala 10 template.
+   *
+   * Jadi 8 detik hidup dulu untuk skrip yang DIBUAT (mesin skrip menghitung
+   * jatah katanya sendiri dari durasi), dan preset katalog menyusul setelah
+   * naskahnya ditulis ulang untuk jatah 8 detik. Itu pekerjaan penulisan,
+   * bukan penyuntingan angka.
+   */
+  durationSec: 8 | 15 | 30;
   tier: TemplateTier;
   hookLevel: TemplateHookLevel;
   /** Keluarga hook yang dipaksa. null = biarkan mesin memilih per kategori. */

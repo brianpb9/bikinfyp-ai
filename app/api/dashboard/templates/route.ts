@@ -9,6 +9,7 @@ import { HOOK_LEVELS } from "@/lib/config/hooks";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { getAvatarPreset } from "@/lib/avatar-presets";
 
+import { durasiDidukung } from "@/lib/durasi";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -67,7 +68,7 @@ export async function POST(req: Request) {
     if (!KINDS.has(kind) || !FORMATS.has(format) || !TIERS.has(tier) || !LEVELS.has(level)) {
       throw ERR.BAD_REQUEST("Pengaturan templatenya tidak dikenal.", "Unknown template settings.");
     }
-    if (![15, 30, 45].includes(durationSec)) throw ERR.BAD_REQUEST("Durasi tidak didukung.", "Unsupported duration.");
+    if (!durasiDidukung(durationSec)) throw ERR.BAD_REQUEST("Durasi tidak didukung.", "Unsupported duration.");
     if (!Number.isInteger(count) || count < 2 || count > 6) throw ERR.BAD_REQUEST("Jumlah variasi harus 2-6.", "variant_count out of range.");
     const hookFamily = /^H([1-9]|1[0-6])$/.test(String(body.hook_family ?? "")) ? String(body.hook_family) : null;
     const avatar = getAvatarPreset(String(body.creator_category ?? ""));

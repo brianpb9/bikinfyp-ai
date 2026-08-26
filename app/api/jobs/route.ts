@@ -18,6 +18,7 @@ import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
 import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 
+import { DURASI_DIDUKUNG, durasiSahUntukFormat, durasiBawaanUntukFormat } from "@/lib/durasi";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -125,9 +126,25 @@ export async function POST(req: Request) {
         "Format video tidak dikenal. Pilih: Wajah AI atau Tangan + VO.",
         "Unknown format. Choose talking_head or hands_only."
       );
-    const durationS = Number(body.duration_s ?? 15);
-    if (![15, 30, 45].includes(durationS))
-      throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Only 15s, 30s, or 45s duration is supported.");
+    // BAWAANNYA DURASI SKRIPNYA, BUKAN KONSTANTA GLOBAL.
+    //
+    // Bawaan 8 detik (lib/durasi.ts) berlaku saat SKRIP dibuat — di sanalah
+    // jatah kata ikut menyesuaikan. Di sini tidak: job selalu punya skrip yang
+    // sudah jadi, dan skrip itu ditulis untuk durasi tertentu. Memasang
+    // konstanta global sebagai bawaan membuat setiap klien yang tidak mengirim
+    // duration_s tiba-tiba menabrak pemeriksaan kecocokan di bawah — skrip
+    // 15 detik miliknya sendiri ditolak sebagai "durasi berbeda". Terbukti
+    // langsung oleh tests/hitl.test.ts saat bawaan diubah ke 8.
+    //
+    // durasiBawaanUntukFormat dipakai hanya kalau skripnya pun tidak punya
+    // timecode — keadaan yang seharusnya tidak ada, tapi tidak boleh meledak.
+    const durasiSkrip = Math.max(0, ...segments.map((seg) => Number(seg.end) || 0));
+    const durationS = Number(body.duration_s ?? (durasiSkrip > 0 ? durasiSkrip : durasiBawaanUntukFormat(format)));
+    if (!durasiSahUntukFormat(format, durationS))
+      throw ERR.BAD_REQUEST(
+        `Durasi yang tersedia: ${DURASI_DIDUKUNG.join(", ")} detik${format === "tvc" ? " (TVC minimal 15 detik)" : ""}.`,
+        `Supported durations: ${DURASI_DIDUKUNG.join(", ")}s${format === "tvc" ? " (TVC needs at least 15s)" : ""}.`
+      );
     // Wajah AI dibatasi 15 dtk (2026-08-07): durasi >15 = multi-shot = wajah
     // presenter bisa BERGANTI antar potongan (BytePlus menolak semua gambar
     // referensi berwajah — identitas tak bisa dikunci lintas generate).
@@ -138,7 +155,7 @@ export async function POST(req: Request) {
       );
     // Skrip dibuat untuk durasi tertentu (segmen ikut skala) — job harus
     // memakai durasi yang sama, bukan durasi lain yang tidak pernah divalidasi.
-    const scriptDurationSec = Math.max(...segments.map((s) => s.end));
+    const scriptDurationSec = durasiSkrip;
     if (scriptDurationSec !== durationS)
       throw ERR.BAD_REQUEST(
         `Skrip ini dibuat untuk video ${scriptDurationSec} detik. Bikin skrip baru untuk durasi ${durationS} detik ya.`,

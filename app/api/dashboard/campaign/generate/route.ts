@@ -10,6 +10,7 @@ import { getAvatarPreset } from "@/lib/avatar-presets";
 import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
 
+import { durasiDidukung, type DurasiDidukung } from "@/lib/durasi";
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,7 @@ export async function POST(req: Request) {
     const TIERS = ["silent_caption", "high_quality", "super_hq"].filter(tierMasihDijual);
     const tier = TIERS.includes(String(body.tier)) ? (String(body.tier) as "silent_caption" | "high_quality" | "super_hq") : null;
     if (!tier) throw ERR.BAD_REQUEST("Kualitas tidak dikenal. Pilih Standard, Quality, atau High Quality.", "Unknown quality tier.");
-    const durationSec = [15, 30, 45].includes(Number(body.duration_sec)) ? (Number(body.duration_sec) as 15 | 30 | 45) : null;
+    const durationSec = durasiDidukung(body.duration_sec) ? (Number(body.duration_sec) as DurasiDidukung) : null;
     if (!durationSec) throw ERR.BAD_REQUEST("Durasi yang tersedia baru 15, 30, atau 45 detik.", "Unsupported duration.");
     const hookLevel = normalizeHookLevel(body.hook_level);
     const avatar = typeof body.avatar_id === "string" ? getAvatarPreset(body.avatar_id) : null;

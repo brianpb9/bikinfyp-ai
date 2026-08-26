@@ -25,6 +25,7 @@ import { HOOK_LEVELS } from "@/lib/config/hooks";
 import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
+import { DURASI_BAWAAN, DURASI_DIDUKUNG, durasiSahUntukFormat, type DurasiDidukung } from "@/lib/durasi";
 interface ProductPayload {
   product_id: string; name: string; price_idr: number; category: string;
   product_visual_desc: string | null; brand_brief: string | null;
@@ -216,7 +217,7 @@ export default function CampaignPage() {
   // persis perilaku sebelum fitur ini ada.
   const [recordStyle, setRecordStyle] = useState<string>(GAYA_BAWAAN);
   const [tier, setTier] = useState<Tier>("high_quality");
-  const [durationSec, setDurationSec] = useState<15 | 30 | 45>(15);
+  const [durationSec, setDurationSec] = useState<DurasiDidukung>(DURASI_BAWAAN);
   const [ratio, setRatio] = useState("9:16");
   const [multiShot, setMultiShot] = useState(false);
   const [claims, setClaims] = useState<string[]>([]);
@@ -261,7 +262,7 @@ export default function CampaignPage() {
         setKind(String(t.kind) as Kind);
         setFormat(String(t.format) as Format);
         setTier(String(t.quality_tier) as Tier);
-        setDurationSec(Number(t.duration_sec) as 15 | 30 | 45);
+        setDurationSec(Number(t.duration_sec) as DurasiDidukung);
         setHookLevel(String(t.hook_level) as HookLevel);
         setCount(Number(t.variant_count));
         const savedAvatar = getAvatarPreset(String(t.creator_category ?? ""));
@@ -1198,7 +1199,7 @@ export default function CampaignPage() {
             <div>
               <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-zinc-500">Durasi</p>
               <div className="flex gap-2">
-                {([15, 30, 45] as const).map((d) => {
+                {DURASI_DIDUKUNG.filter((d) => durasiSahUntukFormat(format, d)).map((d) => {
                   const disabled =
                     (format === "talking_head" && d !== 15) || (format === "tvc" && d === 45);
                   return (
