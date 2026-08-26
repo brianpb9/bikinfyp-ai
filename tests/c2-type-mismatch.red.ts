@@ -18,6 +18,31 @@ import {
 const root = process.cwd();
 const read = (relative: string) => fs.readFileSync(path.join(root, relative), "utf8");
 
+function constantModuleString(node: ts.Expression): string | null {
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (ts.isParenthesizedExpression(node)) return constantModuleString(node.expression);
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = constantModuleString(node.left);
+    const right = constantModuleString(node.right);
+    return left === null || right === null ? null : left + right;
+  }
+  if (ts.isTemplateExpression(node)) {
+    let value = node.head.text;
+    for (const span of node.templateSpans) {
+      const expression = constantModuleString(span.expression);
+      if (expression === null) return null;
+      value += expression + span.literal.text;
+    }
+    return value;
+  }
+  return null;
+}
+
+function isCentralModuleSpecifier(value: string): boolean {
+  const normalized = value.replace(/[?#].*$/, "").replace(/\.(?:[cm]?[jt]sx?)$/, "");
+  return normalized === "@/lib/product-type-boundary" || normalized.endsWith("/product-type-boundary");
+}
+
 const sources = {
   e1: read("app/api/products/route.ts"),
   e3: read("app/api/products/[id]/route.ts"),
@@ -124,11 +149,10 @@ function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: 
   if (!handler?.body) return [`${expectation.id}: handler ${expectation.handler} not found`];
   const handlerBody = handler.body;
 
-  const isCentralSpecifier = (value: string) => value === "@/lib/product-type-boundary" || value.endsWith("/product-type-boundary");
   const allowedCentralImports = new Set(["validateAuthoritativeProductType", "buildAuthoritativeTypeBoundaryInput"]);
   const centralImports = source.statements.filter((statement): statement is ts.ImportDeclaration => ts.isImportDeclaration(statement)
     && ts.isStringLiteral(statement.moduleSpecifier)
-    && isCentralSpecifier(statement.moduleSpecifier.text));
+    && isCentralModuleSpecifier(statement.moduleSpecifier.text));
   const importedLocalName = (importedName: string): string | null => {
     for (const declaration of centralImports) {
       const bindings = declaration.importClause?.namedBindings;
@@ -153,11 +177,27 @@ function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: 
   const hasDynamicCentralAccess = (node: ts.Node): boolean => {
     if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
       const argument = node.arguments[0];
-      if (argument && ts.isStringLiteral(argument) && isCentralSpecifier(argument.text)) return true;
+      if (argument && constantModuleString(argument) !== null && isCentralModuleSpecifier(constantModuleString(argument)!)) return true;
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "require") {
+      const argument = node.arguments[0];
+      if (argument && constantModuleString(argument) !== null && isCentralModuleSpecifier(constantModuleString(argument)!)) return true;
     }
     return ts.forEachChild(node, hasDynamicCentralAccess) ?? false;
   };
   if (hasDynamicCentralAccess(source)) violations.push(`${expectation.id}: dynamically imports the central module`);
+  if (source.statements.some((statement) => ts.isExportDeclaration(statement)
+    && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+    && isCentralModuleSpecifier(statement.moduleSpecifier.text))) {
+    violations.push(`${expectation.id}: re-exports the central module`);
+  }
+  if (source.statements.some((statement) => ts.isImportEqualsDeclaration(statement)
+    && ts.isExternalModuleReference(statement.moduleReference)
+    && statement.moduleReference.expression
+    && ts.isStringLiteral(statement.moduleReference.expression)
+    && isCentralModuleSpecifier(statement.moduleReference.expression.text))) {
+    violations.push(`${expectation.id}: uses import-equals access to the central module`);
+  }
   for (const declaration of centralImports) {
     if (!declaration.importClause || declaration.importClause.name) {
       violations.push(`${expectation.id}: central module default/side-effect import is forbidden`);
@@ -244,7 +284,6 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   const seamPath = path.join(root, "lib/product-type-boundary.ts");
   if (!fs.existsSync(seamPath)) return ["CENTRAL: lib/product-type-boundary.ts is absent"];
   const module = await import(pathToFileURL(seamPath).href) as {
-    __issueTrustedTypeCapabilityForContractTest?: (token: string, provenance: string) => TrustedTypeSource;
     buildAuthoritativeTypeBoundaryInput?: (
       declared: DeclaredTypeSource,
       trusted: TrustedTypeSource | null,
@@ -260,46 +299,25 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   if (typeof module.buildAuthoritativeTypeBoundaryInput !== "function") {
     return ["CENTRAL: buildAuthoritativeTypeBoundaryInput export is absent"];
   }
-  if (typeof module.__issueTrustedTypeCapabilityForContractTest !== "function") {
-    return ["CENTRAL: opaque capability contract-test issuer is absent"];
-  }
   const build = module.buildAuthoritativeTypeBoundaryInput;
-  const issueTrusted = module.__issueTrustedTypeCapabilityForContractTest;
   const decide = module.validateAuthoritativeProductType;
   const declaredA: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "request-category", token: "opaque-type-a" };
-  const trustedA = issueTrusted("opaque-type-a", "future-policy-fixture-a");
-  const trustedB = issueTrusted("opaque-type-b", "future-policy-fixture-b");
-  const builtMismatch = build(declaredA, trustedB);
-  const builtValid = build(declaredA, trustedA);
-  let mismatchEffects = 0;
-  let validEffects = 0;
   let missingEffects = 0;
-  let mismatchRejected = false;
-  try {
-    await decide(builtMismatch, () => { mismatchEffects += 1; });
-  } catch {
-    mismatchRejected = true;
-  }
-  const validDecision = await decide(builtValid, () => { validEffects += 1; });
   const missingDecision = await decide(build(declaredA, null), () => { missingEffects += 1; });
   const violations: string[] = [];
-  if (!mismatchRejected) violations.push("CENTRAL: mismatch returned instead of rejecting");
-  if (validDecision !== "ADMIT") violations.push(`CENTRAL: trusted match returned ${String(validDecision)}`);
   if (missingDecision !== "UNDETERMINED_POLICY_INPUT") violations.push(`CENTRAL: missing policy returned ${String(missingDecision)}`);
-  if (mismatchEffects !== 0) violations.push("CENTRAL: mismatch invoked its effect callback");
-  if (validEffects !== 1) violations.push(`CENTRAL: trusted match invoked effect ${validEffects} times`);
   if (missingEffects !== 0) violations.push(`CENTRAL: missing policy invoked effect ${missingEffects} times`);
   try {
-    build(declaredA, Object.freeze({ ...trustedA }));
-    violations.push("CENTRAL: frozen clone of issued-capability fields was accepted without object identity");
+    build(declaredA, Object.freeze({ kind: "TRUSTED_TYPE_SOURCE", sourceId: "reference-ingress:forged", token: declaredA.token, provenance: "forged" }));
+    violations.push("CENTRAL: structurally forged frozen capability was accepted");
   } catch { /* required */ }
+  violations.push("CENTRAL: approved production ingress capability fixture is not yet authorized");
   return violations;
 }
 
 function inspectProductionIssuerAccess(): string[] {
   const violations: string[] = [];
   const allowedCentralImports = new Set(["validateAuthoritativeProductType", "buildAuthoritativeTypeBoundaryInput"]);
-  const isCentralSpecifier = (value: string) => value === "@/lib/product-type-boundary" || value.endsWith("/product-type-boundary");
   const visitDirectory = (directory: string) => {
     for (const entry of fs.readdirSync(path.join(root, directory), { withFileTypes: true })) {
       const relative = path.join(directory, entry.name);
@@ -316,7 +334,7 @@ function inspectProductionIssuerAccess(): string[] {
       for (const statement of source.statements) {
         if (!ts.isImportDeclaration(statement)
           || !ts.isStringLiteral(statement.moduleSpecifier)
-          || !isCentralSpecifier(statement.moduleSpecifier.text)) continue;
+          || !isCentralModuleSpecifier(statement.moduleSpecifier.text)) continue;
         if (!statement.importClause || statement.importClause.name) {
           violations.push(`ISSUER_ACCESS: ${relative} has forbidden central default/side-effect import`);
         }
@@ -332,10 +350,28 @@ function inspectProductionIssuerAccess(): string[] {
           }
         }
       }
+      for (const statement of source.statements) {
+        if (ts.isExportDeclaration(statement) && statement.moduleSpecifier
+          && ts.isStringLiteral(statement.moduleSpecifier)
+          && isCentralModuleSpecifier(statement.moduleSpecifier.text)) {
+          violations.push(`ISSUER_ACCESS: ${relative} re-exports the central module`);
+        }
+        if (ts.isImportEqualsDeclaration(statement) && ts.isExternalModuleReference(statement.moduleReference)
+          && statement.moduleReference.expression && ts.isStringLiteral(statement.moduleReference.expression)
+          && isCentralModuleSpecifier(statement.moduleReference.expression.text)) {
+          violations.push(`ISSUER_ACCESS: ${relative} uses import-equals access to the central module`);
+        }
+      }
       const dynamicCentralAccess = (node: ts.Node): boolean => {
         if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
           const argument = node.arguments[0];
-          if (argument && ts.isStringLiteral(argument) && isCentralSpecifier(argument.text)) return true;
+          const value = argument ? constantModuleString(argument) : null;
+          if (value !== null && isCentralModuleSpecifier(value)) return true;
+        }
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "require") {
+          const argument = node.arguments[0];
+          const value = argument ? constantModuleString(argument) : null;
+          if (value !== null && isCentralModuleSpecifier(value)) return true;
         }
         return ts.forEachChild(node, dynamicCentralAccess) ?? false;
       };
@@ -344,6 +380,44 @@ function inspectProductionIssuerAccess(): string[] {
   };
   visitDirectory("app");
   visitDirectory("lib");
+  return violations;
+}
+
+function inspectCentralExportSurface(sourceText?: string): string[] {
+  const centralPath = path.join(root, "lib/product-type-boundary.ts");
+  if (sourceText === undefined && !fs.existsSync(centralPath)) return [];
+  const source = ts.createSourceFile("lib/product-type-boundary.ts", sourceText ?? fs.readFileSync(centralPath, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const allowedRuntimeExports = new Set(["validateAuthoritativeProductType", "buildAuthoritativeTypeBoundaryInput"]);
+  const violations: string[] = [];
+  const exported = (node: { modifiers?: ts.NodeArray<ts.ModifierLike> }) => node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false;
+  for (const statement of source.statements) {
+    if (ts.isExportAssignment(statement)) violations.push("CENTRAL_EXPORT: default/export-assignment surface is forbidden");
+    if (ts.isExportDeclaration(statement)) {
+      if (statement.moduleSpecifier || !statement.exportClause || !ts.isNamedExports(statement.exportClause)) {
+        violations.push("CENTRAL_EXPORT: wildcard/re-export surface is forbidden");
+      } else {
+        for (const element of statement.exportClause.elements) {
+          const exportedName = element.name.text;
+          if (!element.isTypeOnly && !statement.isTypeOnly && !allowedRuntimeExports.has(exportedName)) {
+            violations.push(`CENTRAL_EXPORT: runtime export ${exportedName} is outside the allowlist`);
+          }
+        }
+      }
+    }
+    if (ts.isFunctionDeclaration(statement) && exported(statement)) {
+      const name = statement.name?.text ?? "default";
+      if (!allowedRuntimeExports.has(name)) violations.push(`CENTRAL_EXPORT: runtime export ${name} is outside the allowlist`);
+    }
+    if (ts.isVariableStatement(statement) && exported(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        const name = ts.isIdentifier(declaration.name) ? declaration.name.text : "destructured";
+        if (!allowedRuntimeExports.has(name)) violations.push(`CENTRAL_EXPORT: runtime export ${name} is outside the allowlist`);
+      }
+    }
+    if ((ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement)) && exported(statement)) {
+      violations.push(`CENTRAL_EXPORT: runtime export ${statement.name?.text ?? "default"} is outside the allowlist`);
+    }
+  }
   return violations;
 }
 
@@ -413,6 +487,12 @@ test("mutation controls: comparator rejects mismatch without rejecting valid pos
   assert.ok(inspectBoundary(fixture, aliasedIssuerImport).some((violation) => violation.includes("outside the allowlist")), "aliased issuer export mutant survived");
   const dynamicIssuerAccess = `${centralImport} async function POST(){ const boundary = await import("@/lib/product-type-boundary"); const trusted = boundary.issueTrusted(declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
   assert.ok(inspectBoundary(fixture, dynamicIssuerAccess).some((violation) => violation.includes("dynamically imports")), "dynamic issuer access mutant survived");
+  const computedIssuerAccess = `${centralImport} async function POST(){ const boundary = await import("@/lib/" + "product-type-boundary.ts"); const trusted = boundary["issueTrusted" + "ForContractTest"](declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, computedIssuerAccess).some((violation) => violation.includes("dynamically imports")), "computed issuer access mutant survived");
+  const reExportIssuerAccess = `${centralImport} export { issueTrusted as mint } from "@/lib/product-type-boundary.js"; async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, reExportIssuerAccess).some((violation) => violation.includes("re-exports")), "re-export issuer mutant survived");
+  const maliciousCentralAlias = `export function validateAuthoritativeProductType(){} export function buildAuthoritativeTypeBoundaryInput(){} export const issueTrusted = () => ({ token: "forged" });`;
+  assert.ok(inspectCentralExportSurface(maliciousCentralAlias).some((violation) => violation.includes("issueTrusted")), "central export-alias mutant survived");
 
   const declaredSource: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "category", token: "same" };
   const forgedTrusted: TrustedTypeSource = { kind: "TRUSTED_TYPE_SOURCE", sourceId: "different-id", token: declaredSource.token, provenance: "forged" };
@@ -469,6 +549,7 @@ test("RED: every production boundary rejects supplied mismatch before its own ef
     ...boundaryExpectations.flatMap((expectation) => inspectBoundary(expectation)),
     ...await inspectProductionSeamBehavior(),
     ...inspectProductionIssuerAccess(),
+    ...inspectCentralExportSurface(),
   ];
   assert.deepEqual(violations, [], `C2_MISSING_INVARIANT:\n${violations.join("\n")}`);
 });

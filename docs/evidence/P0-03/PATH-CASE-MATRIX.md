@@ -1174,6 +1174,16 @@ TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
   all production consumers. Default/side-effect/namespace/relative access,
   non-allowlisted named aliases, indirect helpers, and dynamic imports fail;
   aliased-issuer and dynamic-access mutants are explicit controls.
+- Ninth remediation removes the contract-test issuer from the expected
+  production module entirely. Module references normalize extensions and
+  constant string expressions; computed `import()`, `require`, re-export, and
+  import-equals access are rejected. Trusted match/mismatch remains a test-only
+  reference control until an approved ingress exists; production probing is
+  limited to frozen-forgery rejection and missing-policy zero effects.
+- The future central module runtime export surface is independently allowlisted
+  to builder+validator only. Default/export-assignment, wildcard/re-export,
+  class/enum, and named issuer-alias mutants fail, so computed consumers cannot
+  mint truth from an unapproved central export.
 - Opaque-token mutation controls kill both accept-all and reject-all mutants;
   the positive trusted match remains admissible and absent trusted provenance
   remains policy-undetermined. This does not define a toothpaste taxonomy.

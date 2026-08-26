@@ -67,7 +67,9 @@ shadowed names do not satisfy it. All production `app/` and `lib/` sources are
 also scanned for direct or indirect contract-test issuer access. Each
 central-module consumer is restricted to an allowlist containing only the
 builder and validator; default, side-effect, namespace, relative-path alias,
-non-allowlisted named export, and dynamic imports fail. Every known storage,
+non-allowlisted named export, and dynamic imports fail. The central module
+export surface is also restricted to those two runtime exports; default
+assignments, wildcard/re-exports, and issuer aliases fail. Every known storage,
 persistence, provider-generation, script/job/audit write, credit,
 managed-trace queue, and ordinary enqueue effect must be an AST descendant
 of the seam's effect callback; a merely prior or ignored call cannot satisfy
@@ -80,9 +82,11 @@ objects fail while a legitimately issued similarly named source remains valid.
 Even a frozen clone of an issued capability—with identical fields and issuer-
 looking prefix—fails because runtime object identity, not caller-selected
 structure or `Object.isFrozen`, is authoritative.
-Production handlers may not import the contract-test capability issuer. If the
-central production module later exists, the same test directly probes it with
-trusted-match, trusted-mismatch, and missing-policy inputs. Mismatch must throw,
+The contract-test issuer exists only under `tests/fixtures`; no issuer is
+expected or allowed in the production central module. Reference controls probe
+trusted match/mismatch/missing behavior, while a future production module can
+only be probed for forged-capability rejection and missing-policy zero effects
+until Product Policy authorizes a real ingress fixture. Mismatch must throw,
 not merely return `REJECT_MISMATCH`, and invoke zero effects; a trusted match
 must invoke exactly one effect; missing policy must also invoke zero effects.
 Boundary-level mutation controls prove that an
