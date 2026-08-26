@@ -61,6 +61,7 @@ import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta,
 import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
 import { bacaSnapshot } from "../script-engine/admisi";
 import { normalisasiFormatWorker } from "../media/worker-format";
+import { managedStagingDeterministicWorkerGate } from "../staging-deterministic-worker";
 
 type PostgresQcRunner = typeof runQc;
 let postgresQcRunner: PostgresQcRunner = runQc;
@@ -74,7 +75,7 @@ export function setPostgresQcRunnerForTests(runner?: PostgresQcRunner): void {
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
 function assertUrl() { if (!/^postgres(?:ql)?:\/\//i.test(config.databaseUrl)) throw new Error("DATABASE_URL PostgreSQL wajib untuk worker pg."); return config.databaseUrl; }
-function deterministicFixtureAllowed() { return process.env.RACUN_WORKER_DETERMINISTIC === "1" && process.env.NODE_ENV !== "production"; }
+function deterministicFixtureAllowed() { return managedStagingDeterministicWorkerGate().allowed; }
 
 /** Provider dialogue is deliberately absent for neutral Story Ads. Keeping
  * embedded audio there would produce a paid silent video, so those jobs must
