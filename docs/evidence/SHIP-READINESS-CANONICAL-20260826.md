@@ -120,8 +120,10 @@ addendum is current:
 
 ## Code/staging versus authority gates
 
-`VERIFIED_REPOSITORY` covers board arithmetic, Git ancestry, projected bus
-receipts, JSON, links, checksums, and diff hygiene. `VERIFIED_MANAGED_FROM_ACCEPTED_RECEIPTS`
+`VERIFIED_REPOSITORY` covers board arithmetic, commit-resolving Git ancestry,
+committed sanitized bus-receipt integrity, JSON, links, checksums, and diff
+hygiene. Runtime archive recomparison is explicitly unavailable in an immutable
+review tree. `VERIFIED_MANAGED_FROM_ACCEPTED_RECEIPTS`
 covers only the staging facts in accepted bundles. `NOT_RUN` covers production,
 provider, paid, settlement, deploy, policy, secret mutation, and remote calls
 for this recompute.

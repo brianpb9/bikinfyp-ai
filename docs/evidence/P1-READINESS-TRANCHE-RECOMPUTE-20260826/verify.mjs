@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import fs from "node:fs";
 import path from "node:path";
-import { execFileSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const bundle = path.dirname(fileURLToPath(import.meta.url));
@@ -43,23 +43,24 @@ const requiredTasks = new Map([
   ["ONBOARDING-VIDEO-PROOF-20260826", "efe5524a9463ca37320bbc224e21cee60d7ffe63"],
   ["P0-AGENT-BUS-OWNER-ROUTING-20260826", "460ea44c32651f414a83c7489802a68f06b65dca"],
 ]);
+const expectedProjection = ["id", "ts", "from", "to", "type", "sha", "task", "task_id", "owner_id", "worker_id", "reply_to_id", "body"];
+if (bus.schema !== "sanitized-agent-bus-messages/v2" || bus.sanitized !== true) fail("invalid committed bus receipt schema");
+if (JSON.stringify(bus.projection) !== JSON.stringify(expectedProjection)) fail("unexpected bus projection");
 if (bus.messages.length !== requiredTasks.size * 2) fail("bus message omitted or duplicated");
 for (const [task, sha] of requiredTasks) {
   const messages = bus.messages.filter((message) => message.task === task);
   if (messages.length !== 2 || messages.filter((m) => m.type === "PASS").length !== 1 || messages.filter((m) => m.type === "DONE").length !== 1) fail(`PASS/DONE cardinality mismatch: ${task}`);
   if (messages.some((message) => message.sha !== sha)) fail(`SHA mismatch: ${task}`);
-  for (const projected of messages) {
-    const runtime = JSON.parse(fs.readFileSync(path.join(root, ".agent-bus/archive", `${projected.id}.json`), "utf8"));
-    for (const field of bus.projection) {
-      if (Object.hasOwn(projected, field) && projected[field] !== runtime[field]) fail(`runtime receipt mismatch ${projected.id}:${field}`);
-    }
-  }
+  if (messages.some((message) => !/^\d+-(reviewer-PASS|builder-DONE)$/.test(message.id) || typeof message.ts !== "string" || typeof message.body !== "string")) fail(`invalid committed receipt shape: ${task}`);
+  if (messages.some((message) => ["origin_branch", "origin_worktree", "origin_repo_id", "origin_repo_path"].some((field) => Object.hasOwn(message, field)))) fail(`unsanitized origin field: ${task}`);
 }
 
 for (const [task, sha] of requiredTasks) {
-  let ancestor = true;
-  try { execFileSync("git", ["-C", root, "merge-base", "--is-ancestor", sha, score.baseline], { stdio: "ignore" }); }
-  catch { ancestor = false; }
+  const resolved = spawnSync("git", ["-C", root, "cat-file", "-e", `${sha}^{commit}`], { stdio: "ignore" });
+  if (resolved.status !== 0) fail(`accepted SHA does not resolve to a commit: ${task}`);
+  const relation = spawnSync("git", ["-C", root, "merge-base", "--is-ancestor", sha, score.baseline], { stdio: "ignore" });
+  if (![0, 1].includes(relation.status)) fail(`fatal ancestry lookup: ${task}`);
+  const ancestor = relation.status === 0;
   if (task === "ONBOARDING-VIDEO-PROOF-20260826" ? ancestor : !ancestor) fail(`unexpected ancestry: ${task}`);
 }
 
@@ -88,4 +89,4 @@ const scopedFiles = [
 const forbiddenSecret = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+\/-]+=*|\b(?:api[_-]?key|secret[_-]?key)\s*[:=]\s*["']?[A-Za-z0-9_\/-]{16,})/i;
 if (scopedFiles.some((file) => forbiddenSecret.test(fs.readFileSync(file, "utf8")))) fail("secret-like literal found in scoped files");
 
-console.log(JSON.stringify({rows:13,sum:77,counterexample:{rows:12,sum:70},score:58,tasks:8,messages:16,markdown_links:links,secret_like_hits:0,pass:true}));
+console.log(JSON.stringify({rows:13,sum:77,counterexample:{rows:12,sum:70},score:58,tasks:8,messages:16,receipt_source:"committed_sanitized_projection",runtime_archive_recomparison:"NOT_AVAILABLE_IN_IMMUTABLE_TREE",commits_resolved:8,markdown_links:links,secret_like_hits:0,pass:true}));

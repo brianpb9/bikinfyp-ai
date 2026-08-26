@@ -15,14 +15,16 @@
   },
   "accepted_bus": {
     "tasks_checked": 8,
-    "projected_messages_checked": 16,
+    "committed_sanitized_messages_checked": 16,
     "one_pass_and_done_per_task": true,
-    "runtime_projection_mismatches": 0,
+    "runtime_archive_recomparison": "NOT_AVAILABLE_IN_IMMUTABLE_TREE",
     "pass": true
   },
   "ancestry": {
     "ancestor_or_baseline_tasks": 7,
     "accepted_non_ancestor_tasks": 1,
+    "commit_objects_resolved": 8,
+    "fatal_ancestry_lookups": 0,
     "non_ancestor_task": "ONBOARDING-VIDEO-PROOF-20260826",
     "non_ancestor_score_delta": 0,
     "pass": true
