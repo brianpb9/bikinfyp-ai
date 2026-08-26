@@ -56,8 +56,8 @@ import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
 import { pesanTanpaReferensi } from "../product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "../kanari-bukti";
-import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "../job-reference-manifest";
-import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot } from "../job-product-snapshot";
+import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest, parseJobReferenceManifest, type JobReferenceManifest } from "../job-reference-manifest";
+import { claimsFromRaw, loadOrCreateJobProductSnapshot, parseJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot, type JobProductSnapshot } from "../job-product-snapshot";
 import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
 import { bacaSnapshot } from "../script-engine/admisi";
 import { normalisasiFormatWorker } from "../media/worker-format";
@@ -344,13 +344,36 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
 
 async function runDeterministicFixture(row: WorkerRow, jobs: PgJobsRepository, pool: Pool) {
   if (process.env.RACUN_WORKER_FIXTURE_FAIL === "1") throw new Error("Forced deterministic PostgreSQL worker failure.");
+  const admission = parseDeterministicFixtureAdmission(row);
   const relVideo = `jobs/${row.id}/output.mp4`;
   const local = path.join(config.storageDir, relVideo);
   fs.mkdirSync(path.dirname(local), { recursive: true });
+  // The zero-provider branch must honor the exact same immutable admission
+  // boundary as the paid branch. Materialization verifies every job-owned
+  // snapshot byte/hash before FFmpeg can produce an output.
+  await materializeJobReferenceManifest(admission.manifest, path.dirname(local));
   await runFf(config.ffmpegPath, ["-y", "-f", "lavfi", "-i", `color=c=0x1f2937:s=720x1280:r=30:d=${row.duration_s}`, "-f", "lavfi", "-i", `sine=frequency=440:sample_rate=44100:duration=${row.duration_s}`, "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", local]);
   await jobs.setProviders(row.id, "deterministic-postgres-test", "none-silent-caption");
   for (const state of ["GENERATING_VOICE", "COMPOSITING", "QC_CHECK", "LABELING"] as const) if (!(await jobs.transition(row.id, state, { worker: "postgres-fixture" }))) return;
   await persistReadyOutput(row, jobs, pool, relVideo, local, { passed: true, checks: [{ code: "QC-08", status: "pass" }], fixture: true });
+}
+
+/** Fail-closed parser shared by the managed deterministic branch and its
+ * counterexample tests. Canonical admission always supplies both values. */
+export function parseDeterministicFixtureAdmission(row: Pick<WorkerRow, "approved_reference_manifest" | "job_product_snapshot">): {
+  manifest: JobReferenceManifest;
+  productSnapshot: JobProductSnapshot;
+} {
+  if (!row.approved_reference_manifest) {
+    throw new Error("REF_MANIFEST_INVALID: deterministic worker requires canonical admission manifest.");
+  }
+  if (!row.job_product_snapshot) {
+    throw new Error("PRODUCT_SNAPSHOT_INVALID: deterministic worker requires canonical admission snapshot.");
+  }
+  return {
+    manifest: parseJobReferenceManifest(row.approved_reference_manifest),
+    productSnapshot: parseJobProductSnapshot(row.job_product_snapshot),
+  };
 }
 
 async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool: Pool) {
