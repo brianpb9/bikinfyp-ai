@@ -1161,6 +1161,11 @@ TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
   passes. Missing policy is probed with a callback and must advance zero
   effects. E6 extraction audit, A1 cleanup/FYP-audit/fail, and A4 cleanup sinks
   are included, with an unguarded-new-sink mutation control.
+- Sixth remediation scans all central-module imports, so a split issuer import
+  cannot bypass the handler ban. Capability identity is tested by cloning the
+  exact fields of an actually issued capability: the valid ingress-looking
+  prefix and data still fail without object identity, killing structural and
+  prefix-only mutants.
 - Opaque-token mutation controls kill both accept-all and reject-all mutants;
   the positive trusted match remains admissible and absent trusted provenance
   remains policy-undetermined. This does not define a toothpaste taxonomy.

@@ -27,7 +27,7 @@
   },
   "false_green_guards": {
     "parser": "TypeScript AST CallExpression per exported handler",
-    "central_symbol_binding": "named imports from @/lib/product-type-boundary; receiver calls and local shadows rejected",
+    "central_symbol_binding": "all imports scanned; named imports from @/lib/product-type-boundary; receiver calls, local shadows, and split issuer import rejected",
     "comments_or_declarations_satisfy": false,
     "every_boundary_required": true,
     "effect_callback_ownership_required": true,
@@ -35,7 +35,7 @@
     "seam_rejection_must_be_awaited_or_returned": true,
     "required_opaque_inputs": ["typed declared source", "typed trusted provenance source"],
     "required_input_check": "buildAuthoritativeTypeBoundaryInput typed/dataflow boundary with opaque ingress-issued capability identity",
-    "input_independence_mutations": ["same-expression alias", "same-data/different-ID structural forgery", "similarly named issued-capability positive"],
+    "input_independence_mutations": ["same-expression alias", "same-data/different-ID structural forgery", "clone of actually issued fields with valid prefix", "prefix-only acceptance", "similarly named issued-capability positive"],
     "central_module_probe_inputs": ["trusted match", "trusted mismatch", "missing policy"],
     "mismatch_contract": "throws/rejects, zero callback effects, cannot be ignored into success",
     "valid_contract": "exactly one callback effect",

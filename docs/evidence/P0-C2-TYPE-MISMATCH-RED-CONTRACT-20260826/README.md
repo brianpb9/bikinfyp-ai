@@ -60,7 +60,8 @@ node scripts/verify-c2-type-mismatch-red.mjs
 The verifier succeeds only when the inner RED suite exits 1 for exactly the
 intended missing invariant, with four passing discovery/control tests and no
 compile/module/setup error. The RED test parses TypeScript AST call expressions
-per exported handler and requires named imports from
+per exported handler, scans every import declaration from the central module,
+and requires named imports from
 `@/lib/product-type-boundary`; receiver methods and locally shadowed names do
 not satisfy it. Each
 known storage, persistence, provider-generation, script/job/audit write, credit,
@@ -72,6 +73,9 @@ dataflow boundary; raw objects, comments, and the same expression on both sides
 cannot satisfy it. Trusted sources are opaque ingress-issued capabilities
 tracked by runtime identity, so structurally forged same-data/different-ID
 objects fail while a legitimately issued similarly named source remains valid.
+Even a clone of an issued capability—with identical fields and issuer-looking
+prefix—fails because runtime object identity, not caller-selected structure,
+is authoritative.
 Production handlers may not import the contract-test capability issuer. If the
 central production module later exists, the same test directly probes it with
 trusted-match, trusted-mismatch, and missing-policy inputs. Mismatch must throw,
