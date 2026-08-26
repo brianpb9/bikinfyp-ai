@@ -156,6 +156,12 @@ function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: 
   if (importsContractIssuer) {
     violations.push(`${expectation.id}: production handler imports the contract-test capability issuer`);
   }
+  if (centralImports.some((declaration) => {
+    const bindings = declaration.importClause?.namedBindings;
+    return Boolean(bindings && ts.isNamespaceImport(bindings));
+  })) {
+    violations.push(`${expectation.id}: production handler uses namespace access to the central boundary module`);
+  }
 
   const shadowed = new Set<string>();
   const findShadows = (node: ts.Node) => {
@@ -260,9 +266,39 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   if (validEffects !== 1) violations.push(`CENTRAL: trusted match invoked effect ${validEffects} times`);
   if (missingEffects !== 0) violations.push(`CENTRAL: missing policy invoked effect ${missingEffects} times`);
   try {
-    build(declaredA, { ...trustedA });
-    violations.push("CENTRAL: cloned issued-capability fields were accepted without object identity");
+    build(declaredA, Object.freeze({ ...trustedA }));
+    violations.push("CENTRAL: frozen clone of issued-capability fields was accepted without object identity");
   } catch { /* required */ }
+  return violations;
+}
+
+function inspectProductionIssuerAccess(): string[] {
+  const violations: string[] = [];
+  const visitDirectory = (directory: string) => {
+    for (const entry of fs.readdirSync(path.join(root, directory), { withFileTypes: true })) {
+      const relative = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visitDirectory(relative);
+        continue;
+      }
+      if (!/\.[cm]?[jt]sx?$/.test(entry.name) || relative === "lib/product-type-boundary.ts") continue;
+      const text = read(relative);
+      if (text.includes("__issueTrustedTypeCapabilityForContractTest")) {
+        violations.push(`ISSUER_ACCESS: ${relative} references the contract-test issuer`);
+      }
+      const source = ts.createSourceFile(relative, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+      const namespaceImport = source.statements.some((statement) => {
+        if (!ts.isImportDeclaration(statement)
+          || !ts.isStringLiteral(statement.moduleSpecifier)
+          || statement.moduleSpecifier.text !== "@/lib/product-type-boundary") return false;
+        const bindings = statement.importClause?.namedBindings;
+        return Boolean(bindings && ts.isNamespaceImport(bindings));
+      });
+      if (namespaceImport) violations.push(`ISSUER_ACCESS: ${relative} has forbidden namespace access to the central module`);
+    }
+  };
+  visitDirectory("app");
+  visitDirectory("lib");
   return violations;
 }
 
@@ -326,17 +362,22 @@ test("mutation controls: comparator rejects mismatch without rejecting valid pos
   assert.ok(inspectBoundary(fixture, receiverLocalSeam).some((violation) => violation.includes("not owned")), "local receiver-seam mutant survived");
   const splitIssuerImport = `${centralImport} import { __issueTrustedTypeCapabilityForContractTest } from "@/lib/product-type-boundary"; async function POST(){ const trusted = __issueTrustedTypeCapabilityForContractTest(declared.token, "forged"); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
   assert.ok(inspectBoundary(fixture, splitIssuerImport).some((violation) => violation.includes("imports the contract-test capability issuer")), "split-import issuer mutant survived");
+  const namespaceIssuerImport = `${centralImport} import * as boundary from "@/lib/product-type-boundary"; async function POST(){ const trusted = boundary.__issueTrustedTypeCapabilityForContractTest(declared.token, "forged"); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, namespaceIssuerImport).some((violation) => violation.includes("namespace access")), "namespace issuer mutant survived");
 
   const declaredSource: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "category", token: "same" };
   const forgedTrusted: TrustedTypeSource = { kind: "TRUSTED_TYPE_SOURCE", sourceId: "different-id", token: declaredSource.token, provenance: "forged" };
   assert.throws(() => buildReferenceBoundaryInput(declaredSource, forgedTrusted), /C2_UNTRUSTED_CAPABILITY/);
   const similarlyNamedTrusted = issueReferenceTrustedTypeCapability("same", "categorySignal");
   assert.equal(referenceDecision(buildReferenceBoundaryInput(declaredSource, similarlyNamedTrusted)), "ADMIT");
-  const clonedIssuedFields: TrustedTypeSource = { ...similarlyNamedTrusted };
+  const clonedIssuedFields: TrustedTypeSource = Object.freeze({ ...similarlyNamedTrusted });
   assert.match(clonedIssuedFields.sourceId, /^reference-ingress:/, "clone fixture lacks the issuer-looking prefix needed to kill prefix mutants");
+  assert.equal(Object.isFrozen(clonedIssuedFields), true, "clone fixture must kill frozen-object authenticity mutants");
   assert.throws(() => buildReferenceBoundaryInput(declaredSource, clonedIssuedFields), /C2_UNTRUSTED_CAPABILITY/);
   const prefixOnlyMutantAccepts = (candidate: TrustedTypeSource) => candidate.sourceId.startsWith("reference-ingress:");
   assert.equal(prefixOnlyMutantAccepts(clonedIssuedFields), true, "prefix-only mutant fixture did not demonstrate its false acceptance");
+  const frozenOnlyMutantAccepts = (candidate: TrustedTypeSource) => Object.isFrozen(candidate);
+  assert.equal(frozenOnlyMutantAccepts(clonedIssuedFields), true, "frozen-only mutant fixture did not demonstrate its false acceptance");
 
   const missingAdmitMutant = async (input: TypeBoundaryInput, onAdmit: () => void) => {
     if (!input.trustedSignal) { onAdmit(); return "UNDETERMINED_POLICY_INPUT"; }
@@ -378,6 +419,7 @@ test("RED: every production boundary rejects supplied mismatch before its own ef
   const violations = [
     ...boundaryExpectations.flatMap((expectation) => inspectBoundary(expectation)),
     ...await inspectProductionSeamBehavior(),
+    ...inspectProductionIssuerAccess(),
   ];
   assert.deepEqual(violations, [], `C2_MISSING_INVARIANT:\n${violations.join("\n")}`);
 });

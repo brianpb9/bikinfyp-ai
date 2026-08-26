@@ -62,8 +62,9 @@ intended missing invariant, with four passing discovery/control tests and no
 compile/module/setup error. The RED test parses TypeScript AST call expressions
 per exported handler, scans every import declaration from the central module,
 and requires named imports from
-`@/lib/product-type-boundary`; receiver methods and locally shadowed names do
-not satisfy it. Each
+`@/lib/product-type-boundary`; receiver methods, namespace access, and locally
+shadowed names do not satisfy it. All production `app/` and `lib/` sources are
+also scanned for direct or indirect contract-test issuer access. Each
 known storage, persistence, provider-generation, script/job/audit write, credit,
 managed-trace queue, and ordinary enqueue effect must be an AST descendant
 of the seam's effect callback; a merely prior or ignored call cannot satisfy
@@ -73,9 +74,9 @@ dataflow boundary; raw objects, comments, and the same expression on both sides
 cannot satisfy it. Trusted sources are opaque ingress-issued capabilities
 tracked by runtime identity, so structurally forged same-data/different-ID
 objects fail while a legitimately issued similarly named source remains valid.
-Even a clone of an issued capability—with identical fields and issuer-looking
-prefix—fails because runtime object identity, not caller-selected structure,
-is authoritative.
+Even a frozen clone of an issued capability—with identical fields and issuer-
+looking prefix—fails because runtime object identity, not caller-selected
+structure or `Object.isFrozen`, is authoritative.
 Production handlers may not import the contract-test capability issuer. If the
 central production module later exists, the same test directly probes it with
 trusted-match, trusted-mismatch, and missing-policy inputs. Mismatch must throw,

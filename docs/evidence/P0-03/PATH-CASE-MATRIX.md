@@ -1166,6 +1166,10 @@ TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
   exact fields of an actually issued capability: the valid ingress-looking
   prefix and data still fail without object identity, killing structural and
   prefix-only mutants.
+- Seventh remediation rejects namespace central imports and scans every
+  production `app/`/`lib/` source for direct or indirect contract-test issuer
+  access. The issued-field clone is frozen before probing, so both prefix-only
+  and superficial `Object.isFrozen` authenticity mutants are killed.
 - Opaque-token mutation controls kill both accept-all and reject-all mutants;
   the positive trusted match remains admissible and absent trusted provenance
   remains policy-undetermined. This does not define a toothpaste taxonomy.
