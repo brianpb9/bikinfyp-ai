@@ -1,10 +1,8 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { AlertCircle, ArrowRight, Check, Loader2, Sparkles } from "lucide-react";
 import { apiFetch, ApiFail } from "../../_components/api";
-import { buildBrandApproach } from "@/lib/brand-approach";
-import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 import { ONBOARDING_AI_SHOWCASE_CLIPS } from "@/lib/onboarding-showcase";
 
 // Onboarding organisasi.
@@ -21,11 +19,10 @@ import { ONBOARDING_AI_SHOWCASE_CLIPS } from "@/lib/onboarding-showcase";
 // BEKERJA, bukan dijelaskan. Warna tetap amber kita; meniru magenta mereka
 // berarti menukar identitas sendiri dengan identitas orang lain.
 //
-// Panel kanan BUKAN hiasan. Begitu brand memilih kategori, video yang tampil
-// berganti menjadi template yang memang kami rekomendasikan untuk kategori
-// itu — lewat buildBrandApproach yang sama persis dipakai kartu "Pendekatan
-// konten". Jadi layar ini adalah demonstrasi hidup dari mesin rekomendasi,
-// bukan galeri contoh yang kebetulan diputar.
+// Panel kanan BUKAN hiasan: ia memperlihatkan render AI milik kami yang sudah
+// lolos approval registry. Rekomendasi kategori baru ditampilkan setelah
+// onboarding, agar footage teardown pihak lain tidak pernah tampil sebagai
+// bukti komersial produk ini.
 
 const BUSINESS_TYPES = [
   "Brand produk sendiri", "Reseller / dropship", "Agensi / jasa konten",
@@ -84,17 +81,7 @@ export default function OnboardingPage() {
   const [audience, setAudience] = useState("");
   const [pitch, setPitch] = useState("");
 
-  // Rekomendasi dihitung di klien dari katalog yang sama dengan server.
-  // buildBrandApproach murni (tanpa I/O, tanpa akses database), jadi aman
-  // masuk bundel browser — dan berarti panel kanan berubah SEKETIKA saat
-  // kategori dipilih, tanpa menunggu jaringan.
-  const sorotan = useMemo<{ src: string; nama: string; ket: string }[]>(() => {
-    if (!category) return CONTOH_AWAL;
-    return buildBrandApproach({ category, businessType }).pakai
-      .map((s) => CAMPAIGN_TEMPLATES.find((t) => t.id === s.id))
-      .filter((t): t is NonNullable<typeof t> => Boolean(t?.preview))
-      .map((t) => ({ src: t.preview!, nama: t.name, ket: t.when }));
-  }, [category, businessType]);
+  const sorotan = CONTOH_AWAL;
 
   async function finish(skip = false) {
     setBusy(true); setError(null);
@@ -274,12 +261,10 @@ export default function OnboardingPage() {
 
         <div className="relative flex h-full flex-col justify-center px-14">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">
-            {category ? "Yang kami sarankan untuk kategorimu" : "Dibikin dengan mesin ini"}
+            Dibikin dengan mesin ini
           </p>
           <h2 className="mt-2 max-w-md font-display text-2xl font-bold leading-snug text-white">
-            {category
-              ? "Tiga template ini yang dijalankan duluan"
-              : "Semua ini video AI — tidak ada yang disyuting"}
+            Semua ini video AI — tidak ada yang disyuting
           </h2>
 
           <div className="mt-8 flex gap-5">
@@ -291,8 +276,6 @@ export default function OnboardingPage() {
               >
                 <div className="overflow-hidden rounded-2xl bg-zinc-800 shadow-2xl shadow-black/50 ring-1 ring-white/10">
                   <video
-                    // key memaksa elemen dibuat ulang saat kategori berganti;
-                    // tanpa ini browser menahan frame video lama di klip baru.
                     key={t.src}
                     src={t.src}
                     autoPlay muted loop playsInline
@@ -309,8 +292,8 @@ export default function OnboardingPage() {
 
           <p className="mt-9 max-w-md text-sm leading-relaxed text-white/40">
             {category
-              ? "Klip di atas adalah contoh FORMAT dari video pemenang yang kami bedah, bukan hasil render kami — dipasang supaya kamu tahu bentuknya sebelum memilih. Pilihannya bisa diganti kapan saja."
-              : "Pilih kategori di langkah ketiga, dan daftar ini berganti jadi template yang kami sarankan untuk produkmu."}
+              ? "Kategori produkmu sudah dipilih. Klip di atas tetap contoh render AI milik kami; rekomendasi template akan muncul setelah onboarding selesai."
+              : "Pilih kategori di langkah ketiga untuk menyiapkan rekomendasi template setelah onboarding."}
           </p>
         </div>
       </aside>

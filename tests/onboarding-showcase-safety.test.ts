@@ -75,6 +75,8 @@ test("halaman onboarding tidak mengambil katalog /previews dan disclosure tetap 
   assert.match(source, /bukan mitra resmi dan tidak mengendorse layanan ini/);
   assert.doesNotMatch(source, /shellasaukia-dress-novella|Produk asli, label terbaca/);
   assert.match(dashboardSource, /ONBOARDING_AI_SHOWCASE_CLIPS/);
+  assert.doesNotMatch(dashboardSource, /CAMPAIGN_TEMPLATES|buildBrandApproach|\/previews\/|\.preview\b/,
+    "dashboard onboarding tidak boleh melewati approval registry lewat preview template");
   const approvedAiSrc = new Set(ONBOARDING_AI_SHOWCASE_CLIPS.map((clip) => clip.src));
   for (const src of dashboardSource.match(/\/showcase\/[a-z0-9/.-]+\.mp4/g) ?? []) {
     assert.ok(approvedAiSrc.has(src), `${src}: dashboard memilih klip di luar approval gate`);
