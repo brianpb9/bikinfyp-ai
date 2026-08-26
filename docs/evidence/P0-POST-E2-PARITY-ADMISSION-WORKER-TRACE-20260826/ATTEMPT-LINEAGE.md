@@ -70,3 +70,12 @@ The trace command was removed immediately afterward. Canonical worker deploy
 
 The trace command was removed immediately afterward. Canonical worker deploy
 `dep-da7chou1egvs73e7bvig` is the final live deploy.
+
+17. Reviewer correctly rejected the fabricated in-memory queue-survival test
+    and the inconsistent three-file targeted command receipt. Code SHA
+    `ec0a5e95ed519b5bb1d608728ce9302d7053d6a0` replaces that test with an
+    isolated loopback Redis/BullMQ integration using production enqueue
+    helpers. It proved the canonical record remained `waiting` with zero
+    attempts while only the trace queue was consumed, then reached `completed`
+    after the canonical consumer started. The corrected four-file targeted
+    command passed 17/17 and its raw TAP output is preserved.

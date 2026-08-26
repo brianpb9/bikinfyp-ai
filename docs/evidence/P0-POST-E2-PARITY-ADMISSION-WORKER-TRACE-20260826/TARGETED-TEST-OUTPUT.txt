@@ -1,0 +1,115 @@
+command=npx tsx --test tests/staging-admission-trace.test.ts tests/staging-deterministic-worker.test.ts tests/staging-deterministic-admission.test.ts tests/staging-trace-queue-isolation.test.ts
+code_sha=ec0a5e95ed519b5bb1d608728ce9302d7053d6a0
+
+TAP version 13
+# Subtest: zero-value admission needs exact staging identity, request binding, and short expiry
+ok 1 - zero-value admission needs exact staging identity, request binding, and short expiry
+  ---
+  duration_ms: 11.709458
+  type: 'test'
+  ...
+# Subtest: canonical route atomically claims the nonce before zero-value admission
+ok 2 - canonical route atomically claims the nonce before zero-value admission
+  ---
+  duration_ms: 4.186208
+  type: 'test'
+  ...
+# Subtest: deterministic worker accepts canonical immutable admission values
+ok 3 - deterministic worker accepts canonical immutable admission values
+  ---
+  duration_ms: 0.417917
+  type: 'test'
+  ...
+# Subtest: deterministic worker rejects tampered manifest and snapshot shapes
+ok 4 - deterministic worker rejects tampered manifest and snapshot shapes
+  ---
+  duration_ms: 0.209917
+  type: 'test'
+  ...
+# Subtest: deterministic branch materializes immutable references before FFmpeg output
+ok 5 - deterministic branch materializes immutable references before FFmpeg output
+  ---
+  duration_ms: 0.19775
+  type: 'test'
+  ...
+# Subtest: ledger-less job is rejected unless deterministic worker gate is active
+ok 6 - ledger-less job is rejected unless deterministic worker gate is active
+  ---
+  duration_ms: 0.081417
+  type: 'test'
+  ...
+# Subtest: deterministic trace worker rejects held ordinary jobs before fixture or provider
+ok 7 - deterministic trace worker rejects held ordinary jobs before fixture or provider
+  ---
+  duration_ms: 0.152708
+  type: 'test'
+  ...
+# Subtest: managed staging deterministic worker requires exact service identity and SHA
+ok 8 - managed staging deterministic worker requires exact service identity and SHA
+  ---
+  duration_ms: 0.63
+  type: 'test'
+  ...
+# Subtest: managed fixture fails closed in production
+ok 9 - managed fixture fails closed in production
+  ---
+  duration_ms: 0.066542
+  type: 'test'
+  ...
+# Subtest: managed fixture fails closed on web or sibling service
+ok 10 - managed fixture fails closed on web or sibling service
+  ---
+  duration_ms: 0.048583
+  type: 'test'
+  ...
+# Subtest: managed fixture fails closed on wrong branch/SHA
+ok 11 - managed fixture fails closed on wrong branch/SHA
+  ---
+  duration_ms: 0.451
+  type: 'test'
+  ...
+# Subtest: managed fixture fails closed without exact staging identity
+ok 12 - managed fixture fails closed without exact staging identity
+  ---
+  duration_ms: 0.100125
+  type: 'test'
+  ...
+# Subtest: local disposable integration fixture remains available
+ok 13 - local disposable integration fixture remains available
+  ---
+  duration_ms: 0.047042
+  type: 'test'
+  ...
+# Subtest: managed trace queue is disjoint from canonical queue
+ok 14 - managed trace queue is disjoint from canonical queue
+  ---
+  duration_ms: 0.295959
+  type: 'test'
+  ...
+# Subtest: canonical admission routes only zero-value trace jobs to isolated queue
+ok 15 - canonical admission routes only zero-value trace jobs to isolated queue
+  ---
+  duration_ms: 0.17675
+  type: 'test'
+  ...
+# Subtest: trace worker consumes only isolated queue and never canonical queue
+ok 16 - trace worker consumes only isolated queue and never canonical queue
+  ---
+  duration_ms: 0.303083
+  type: 'test'
+  ...
+# Subtest: ordinary canonical BullMQ record survives trace consumption and is processed after restoration
+ok 17 - ordinary canonical BullMQ record survives trace consumption and is processed after restoration
+  ---
+  duration_ms: 118.399667
+  type: 'test'
+  ...
+1..17
+# tests 17
+# suites 0
+# pass 17
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 366.56325

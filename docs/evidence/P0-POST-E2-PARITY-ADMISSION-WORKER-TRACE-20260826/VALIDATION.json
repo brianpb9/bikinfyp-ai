@@ -14,6 +14,10 @@
   "held_ordinary_job_rejected_by_trace_worker": true,
   "trace_queue_distinct_from_canonical": true,
   "canonical_queue_unchanged_during_trace": true,
+  "redis_integration_queue_survival_test": true,
+  "canonical_record_waiting_after_trace_consumer": true,
+  "canonical_record_attempts_after_trace_consumer": 0,
+  "canonical_record_processed_after_restoration": true,
   "cleanup_per_table_observed_zero": true,
   "zero_external_provider_calls": true,
   "zero_real_money": true,
@@ -31,8 +35,8 @@
     "missing_exact_identity_or_sha": "fail_closed"
   },
   "tests": {
-    "full_suite": { "total": 1248, "pass": 1201, "skip": 47, "fail": 0, "duration_ms": 93448.434459 },
-    "targeted_final_invariants": { "total": 17, "pass": 17, "skip": 0, "fail": 0 },
+    "full_suite": { "total": 1248, "pass": 1201, "skip": 47, "fail": 0, "duration_ms": 97967.271541 },
+    "targeted_final_invariants": { "total": 17, "pass": 17, "skip": 0, "fail": 0, "duration_ms": 366.56325, "raw_output": "TARGETED-TEST-OUTPUT.txt" },
     "typescript": "PASS",
     "worker_container_contract": "PASS_STATIC_DOCKER_UNAVAILABLE"
   }

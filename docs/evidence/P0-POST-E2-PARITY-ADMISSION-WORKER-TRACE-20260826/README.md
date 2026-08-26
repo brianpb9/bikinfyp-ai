@@ -40,6 +40,14 @@ The trace admission is enqueued on
 before/after receipts show both queues at the same canonical zero state, so an
 ordinary held job cannot be claimed or stranded by the trace process.
 
+The restoration invariant also has a disposable Redis/BullMQ integration
+regression at code SHA `ec0a5e95ed519b5bb1d608728ce9302d7053d6a0`.
+It enqueues canonical and trace records through the production producer
+helpers, runs only the trace consumer, observes the canonical record still
+`waiting` with `attemptsMade=0`, and then starts the canonical consumer and
+observes that same record reach `completed`. This closes the gap that the live
+trace's initially empty canonical queue could not prove by itself.
+
 Final runtime restoration is complete: worker uses the canonical image CMD,
 is not suspended, and is live at the exact app SHA; web maintenance is off.
 Three public health samples returned HTTP 200 with the exact SHA, classifier
@@ -53,4 +61,5 @@ Primary receipts are preserved in `TRACE-RUNTIME-LOG.txt`,
 payload; `PRODUCTION-READONLY.json` states the exact boundary of the
 production non-mutation evidence. Test footers, operator actions, attempt
 lineage, validation assertions, and integrity hashes are preserved in their
-correspondingly named files.
+correspondingly named files. `TARGETED-TEST-OUTPUT.txt` preserves the raw TAP
+output from the corrected four-file 17-test command.

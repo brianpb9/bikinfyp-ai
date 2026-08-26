@@ -36,6 +36,8 @@
 | 2026-08-26T11:06:51Z | Final isolated-queue trace receipt | PASS; trace/canonical queues separately zero and canonical unchanged |
 | 2026-08-26T11:07:15Z | Restore canonical worker CMD | `dep-da7chou1egvs73e7bvig`, live |
 | 2026-08-26T11:08:49Z | Final health/control-plane read | exact SHA; 3/3 HTTP 200; command empty; maintenance off |
+| 2026-08-26T11:17:00Z | Run full suite after Redis queue-survival remediation | PASS; 1248 total; 1201 pass; 47 skip; 0 fail |
+| 2026-08-26T11:18:18Z | Run corrected four-file targeted command | PASS; raw TAP preserved; 17/17; isolated Redis/BullMQ survival and restoration observed |
 
 Earlier failed attempts and their cleanup/termination are enumerated in
 `ATTEMPT-LINEAGE.md`. No failed attempt reached provider or payment execution.
