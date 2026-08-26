@@ -1120,3 +1120,27 @@ TASK=`P1-POST-E2-CEILING-RECOMPUTE-20260826`
   remains **58/100** with no invented weight, policy, or point.
 - Machine evidence and exact arithmetic are in
   `../P1-POST-E2-CEILING-RECOMPUTE-20260826/`.
+
+### E.37 C2 authoritative type-signal RED contract — 2026-08-26
+
+TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
+
+- Inventory of E1/E3/E6/E7, A1–A4, schema, UI defaults, keyword guesser,
+  extraction, image classification, OCR, and persisted evidence found no
+  independent authoritative physical-product type signal. The persisted
+  `products.category` is user/default/heuristic input, so it cannot validate
+  itself.
+- A dedicated non-default RED suite proves all four mutation/persistence paths
+  carry unchecked category and all four admission/provider-consuming paths
+  carry the stored value to script generation, snapshot, job, hold, or enqueue
+  boundaries. Four discovery/control tests pass; exactly one assertion fails
+  with `C2_MISSING_INVARIANT`, not a compile/tool/setup failure.
+- Opaque-token mutation controls kill both accept-all and reject-all mutants;
+  the positive trusted match remains admissible and absent trusted provenance
+  remains policy-undetermined. This does not define a toothpaste taxonomy.
+- No production validation, reason code, classifier, taxonomy, deploy,
+  provider, payment, credit, queue, DB, or production mutation was introduced.
+  `TYPE_MISMATCH` remains proposal-only and C2 remains **BLOCKED on genuine
+  Product Policy input**, while engineering discovery and RED fixtures are
+  complete.
+- Evidence: `../P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826/`.

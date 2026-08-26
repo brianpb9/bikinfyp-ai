@@ -1,0 +1,42 @@
+{
+  "task": "P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826",
+  "observed_at": "2026-08-26",
+  "authoritative_type_signal_exists": false,
+  "observed_fields": {
+    "products.category": {
+      "authoritative_for_physical_product_type": false,
+      "sources": ["user input", "UI default", "keyword guess"],
+      "persisted": true
+    },
+    "products.raw_meta.brand": {
+      "authoritative_for_physical_product_type": false,
+      "purpose": "trusted brand and extraction metadata"
+    },
+    "reference_image_classifier": {
+      "authoritative_for_physical_product_type": false,
+      "purpose": "product-photo versus promotional-graphic suitability"
+    },
+    "label_ocr": {
+      "authoritative_for_physical_product_type": false,
+      "purpose": "readability and trusted-brand consistency"
+    },
+    "json_ld_extraction": {
+      "authoritative_for_physical_product_type": false,
+      "purpose": "price and image extraction; no trusted type persistence"
+    }
+  },
+  "heuristics_and_defaults": [
+    { "path": "lib/category-guess.ts", "kind": "keyword heuristic", "fallback": "default" },
+    { "path": "app/bikin/produk/page.tsx", "kind": "UI default", "value": "beauty" },
+    { "path": "app/_components/flow.ts", "kind": "UI option list" },
+    { "path": "app/dashboard/(app)/campaign/page.tsx", "kind": "UI option list" }
+  ],
+  "explicitly_not_invented": [
+    "toothpaste-to-category mapping",
+    "classifier truth",
+    "confidence threshold",
+    "unknown treatment",
+    "legacy treatment",
+    "TYPE_MISMATCH canonical reason code"
+  ]
+}

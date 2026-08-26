@@ -1,0 +1,28 @@
+{
+  "task": "P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826",
+  "case": "C2",
+  "expected_contract": "reject authoritative mismatch before persistence/admission/spend",
+  "current_state": "RED",
+  "boundaries": [
+    { "id": "E1", "path": "app/api/products/route.ts", "category_source": "request or default", "unchecked_effect": "product persistence" },
+    { "id": "E3", "path": "app/api/products/[id]/route.ts", "category_source": "request or existing row", "unchecked_effect": "product update" },
+    { "id": "E6", "path": "app/api/dashboard/campaign/product/route.ts", "category_source": "URL keyword guess, request, or default", "unchecked_effect": "organization product persistence" },
+    { "id": "E7", "path": "app/api/dashboard/campaign/product/route.ts", "category_source": "request or existing row", "unchecked_effect": "organization product update" },
+    { "id": "A1", "path": "app/api/jobs/route.ts", "category_source": "stored product row", "unchecked_effect": "job snapshot, job insert, credit hold, enqueue" },
+    { "id": "A2", "path": "app/api/dashboard/matrix/route.ts", "category_source": "stored organization product", "unchecked_effect": "matrix script/render delegation to A4" },
+    { "id": "A3", "path": "app/api/dashboard/campaign/generate/route.ts", "category_source": "stored organization product", "unchecked_effect": "provider-consuming script generation and script persistence" },
+    { "id": "A4", "path": "lib/dashboard/render-cell.ts", "category_source": "locked organization product row", "unchecked_effect": "job snapshot, job insert, credit hold, enqueue" }
+  ],
+  "proposed_seam": {
+    "working_name_only": "validateAuthoritativeProductType",
+    "production_implemented": false,
+    "requires": ["declared opaque token", "independent trusted opaque token", "provenance"],
+    "missing_policy_result": "UNDETERMINED_POLICY_INPUT",
+    "reason_code_selected": false
+  },
+  "mutation_controls": {
+    "accept_everything_killed_by": "trusted mismatch negative",
+    "reject_everything_killed_by": "trusted match positive",
+    "missing_signal": "undetermined, not fabricated"
+  }
+}

@@ -1,0 +1,39 @@
+{
+  "task": "P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826",
+  "baseline_sha": "ce05418d00b998bd4ed07a3c500358f6b10423a5",
+  "scope": "engineering discovery and RED-before contract only",
+  "result": "ENGINEERING_RED_COMPLETE_POLICY_INPUT_REQUIRED",
+  "focused_red": {
+    "command": "node scripts/verify-c2-type-mismatch-red.mjs",
+    "verifier_exit_code": 0,
+    "inner_exit_code": 1,
+    "tests": 5,
+    "pass": 4,
+    "fail": 1,
+    "intended_failure": "C2_MISSING_INVARIANT",
+    "compile_or_setup_failure": false
+  },
+  "typecheck": {
+    "command": "npx tsc --noEmit",
+    "exit_code": 0
+  },
+  "full_test": {
+    "command": "npm test",
+    "exit_code": 0,
+    "tests": 1248,
+    "pass": 1201,
+    "fail": 0,
+    "skipped": 47
+  },
+  "production_behavior_changed": false,
+  "taxonomy_selected": false,
+  "classifier_truth_selected": false,
+  "reason_code_selected": false,
+  "provider_calls": 0,
+  "payment_calls": 0,
+  "credit_holds": 0,
+  "queue_mutations": 0,
+  "database_mutations": 0,
+  "deployments": 0,
+  "new_secrets": 0
+}

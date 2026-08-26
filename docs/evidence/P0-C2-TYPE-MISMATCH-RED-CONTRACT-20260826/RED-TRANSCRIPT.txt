@@ -1,0 +1,35 @@
+$ node scripts/verify-c2-type-mismatch-red.mjs
+TAP version 13
+# Subtest: discovery: current Product Truth persistence has category but no authoritative type signal
+ok 1 - discovery: current Product Truth persistence has category but no authoritative type signal
+# Subtest: discovery: E1 E3 E6 E7 carry unchecked category into persistence
+ok 2 - discovery: E1 E3 E6 E7 carry unchecked category into persistence
+# Subtest: discovery: A1-A4 carry stored category to snapshot, generation, job, or hold boundaries
+ok 3 - discovery: A1-A4 carry stored category to snapshot, generation, job, or hold boundaries
+# Subtest: mutation controls: comparator rejects mismatch without rejecting valid positive or inventing missing policy
+ok 4 - mutation controls: comparator rejects mismatch without rejecting valid positive or inventing missing policy
+# Subtest: RED: production boundaries reject a supplied authoritative mismatch before persistence/admission/spend
+not ok 5 - RED: production boundaries reject a supplied authoritative mismatch before persistence/admission/spend
+  failureType: 'testCodeFailure'
+  error: |-
+    C2_MISSING_INVARIANT: no production boundary calls the proposed authoritative-type validation seam
+
+    false !== true
+  code: 'ERR_ASSERTION'
+  expected: true
+  actual: false
+  operator: 'strictEqual'
+1..5
+# tests 5
+# suites 0
+# pass 4
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+
+C2_RED_VERIFIER={"expected_nonzero":true,"intended_failure_present":true,"exactly_one_failure":true,"discovery_and_controls_pass":true,"no_compile_or_setup_failure":true}
+
+The transcript omits nondeterministic duration and stack-location lines only;
+all test names, outcomes, assertion payload, totals, and verifier booleans are
+preserved exactly.
