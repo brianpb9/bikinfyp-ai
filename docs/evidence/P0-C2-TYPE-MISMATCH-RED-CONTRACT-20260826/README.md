@@ -67,9 +67,12 @@ shadowed names do not satisfy it. All production `app/` and `lib/` sources are
 also scanned for direct or indirect contract-test issuer access. Each
 central-module consumer is restricted to an allowlist containing only the
 builder and validator; default, side-effect, namespace, relative-path alias,
-non-allowlisted named export, and dynamic imports fail. The central module
-export surface is also restricted to those two runtime exports; default
-assignments, wildcard/re-exports, and issuer aliases fail. Every known storage,
+non-allowlisted named export, and literal/computed/const-bound dynamic imports
+fail. The central module export surface is also restricted to those two runtime
+exports; default assignments, default-modified declarations,
+wildcard/re-exports, and issuer aliases fail. E1's directory preparation,
+temporary-file creation/write/removal, and durable image storage are each
+enumerated separately. Every known storage,
 persistence, provider-generation, script/job/audit write, credit,
 managed-trace queue, and ordinary enqueue effect must be an AST descendant
 of the seam's effect callback; a merely prior or ignored call cannot satisfy

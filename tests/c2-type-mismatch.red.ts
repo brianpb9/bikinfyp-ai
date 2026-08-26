@@ -18,18 +18,32 @@ import {
 const root = process.cwd();
 const read = (relative: string) => fs.readFileSync(path.join(root, relative), "utf8");
 
-function constantModuleString(node: ts.Expression): string | null {
+function constantModuleString(node: ts.Expression, seen = new Set<ts.Node>()): string | null {
+  if (seen.has(node)) return null;
+  seen.add(node);
   if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
-  if (ts.isParenthesizedExpression(node)) return constantModuleString(node.expression);
+  if (ts.isIdentifier(node)) {
+    const declarations: ts.VariableDeclaration[] = [];
+    const visit = (candidate: ts.Node) => {
+      if (ts.isVariableDeclaration(candidate) && ts.isIdentifier(candidate.name)
+        && candidate.name.text === node.text && candidate.initializer
+        && ts.isVariableDeclarationList(candidate.parent)
+        && (candidate.parent.flags & ts.NodeFlags.Const) !== 0) declarations.push(candidate);
+      ts.forEachChild(candidate, visit);
+    };
+    visit(node.getSourceFile());
+    return declarations.length === 1 ? constantModuleString(declarations[0]!.initializer!, seen) : null;
+  }
+  if (ts.isParenthesizedExpression(node)) return constantModuleString(node.expression, seen);
   if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
-    const left = constantModuleString(node.left);
-    const right = constantModuleString(node.right);
+    const left = constantModuleString(node.left, seen);
+    const right = constantModuleString(node.right, seen);
     return left === null || right === null ? null : left + right;
   }
   if (ts.isTemplateExpression(node)) {
     let value = node.head.text;
     for (const span of node.templateSpans) {
-      const expression = constantModuleString(span.expression);
+      const expression = constantModuleString(span.expression, seen);
       if (expression === null) return null;
       value += expression + span.literal.text;
     }
@@ -80,7 +94,8 @@ const effect = (callName: string, textIncludes?: string, label = callName): Effe
 
 const boundaryExpectations: BoundaryExpectation[] = [
   { id: "E1", file: "app/api/products/route.ts", handler: "POST", effects: [
-    effect("saveProductImages"), effect("smokeCreateProduct"), effect("run", "INSERT INTO products", "SQLite product INSERT"),
+    effect("ensureDirs"), effect("mkdtempSync"), effect("writeFileSync"), effect("rmSync"), effect("saveProductImages"),
+    effect("smokeCreateProduct"), effect("run", "INSERT INTO products", "SQLite product INSERT"),
     effect("auditProductCreatedOnce"),
   ] },
   { id: "E3", file: "app/api/products/[id]/route.ts", handler: "PATCH", effects: [
@@ -406,6 +421,9 @@ function inspectCentralExportSurface(sourceText?: string): string[] {
     }
     if (ts.isFunctionDeclaration(statement) && exported(statement)) {
       const name = statement.name?.text ?? "default";
+      if (statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) {
+        violations.push("CENTRAL_EXPORT: default runtime declaration is forbidden");
+      }
       if (!allowedRuntimeExports.has(name)) violations.push(`CENTRAL_EXPORT: runtime export ${name} is outside the allowlist`);
     }
     if (ts.isVariableStatement(statement) && exported(statement)) {
@@ -489,10 +507,14 @@ test("mutation controls: comparator rejects mismatch without rejecting valid pos
   assert.ok(inspectBoundary(fixture, dynamicIssuerAccess).some((violation) => violation.includes("dynamically imports")), "dynamic issuer access mutant survived");
   const computedIssuerAccess = `${centralImport} async function POST(){ const boundary = await import("@/lib/" + "product-type-boundary.ts"); const trusted = boundary["issueTrusted" + "ForContractTest"](declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
   assert.ok(inspectBoundary(fixture, computedIssuerAccess).some((violation) => violation.includes("dynamically imports")), "computed issuer access mutant survived");
+  const boundDynamicIssuerAccess = `${centralImport} const target = "@/lib/product-type-boundary"; async function POST(){ const boundary = await import(target); const trusted = boundary.default(declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, boundDynamicIssuerAccess).some((violation) => violation.includes("dynamically imports")), "const-bound dynamic issuer access mutant survived");
   const reExportIssuerAccess = `${centralImport} export { issueTrusted as mint } from "@/lib/product-type-boundary.js"; async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
   assert.ok(inspectBoundary(fixture, reExportIssuerAccess).some((violation) => violation.includes("re-exports")), "re-export issuer mutant survived");
   const maliciousCentralAlias = `export function validateAuthoritativeProductType(){} export function buildAuthoritativeTypeBoundaryInput(){} export const issueTrusted = () => ({ token: "forged" });`;
   assert.ok(inspectCentralExportSurface(maliciousCentralAlias).some((violation) => violation.includes("issueTrusted")), "central export-alias mutant survived");
+  const maliciousDefaultValidatorIssuer = `export default function validateAuthoritativeProductType(){} export { validateAuthoritativeProductType }; export function buildAuthoritativeTypeBoundaryInput(){}`;
+  assert.ok(inspectCentralExportSurface(maliciousDefaultValidatorIssuer).some((violation) => violation.includes("default runtime")), "default-validator issuer mutant survived");
 
   const declaredSource: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "category", token: "same" };
   const forgedTrusted: TrustedTypeSource = { kind: "TRUSTED_TYPE_SOURCE", sourceId: "different-id", token: declaredSource.token, provenance: "forged" };
@@ -519,6 +541,9 @@ test("mutation controls: comparator rejects mismatch without rejecting valid pos
   const expandedFixture: BoundaryExpectation = { ...fixture, effects: [...fixture.effects, effect("storageCleanup")] };
   const unguardedNewSink = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); storageCleanup(); }`;
   assert.ok(inspectBoundary(expandedFixture, unguardedNewSink).some((violation) => violation.includes("storageCleanup is not owned")), "newly enumerated sink mutant survived");
+  const e1StorageFixture: BoundaryExpectation = { id: "E1-STORAGE-MUTANT", file: "test-only.ts", handler: "POST", effects: [effect("ensureDirs"), effect("mkdtempSync"), effect("writeFileSync"), effect("rmSync"), effect("saveProductImages")] };
+  const unguardedTemporaryStorage = `${centralImport} async function POST(){ ensureDirs(); const dir = fs.mkdtempSync(base); fs.writeFileSync(file, bytes); fs.rmSync(dir); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => saveProductImages()); }`;
+  assert.ok(inspectBoundary(e1StorageFixture, unguardedTemporaryStorage).some((violation) => violation.includes("mkdtempSync is not owned")), "unguarded E1 temporary-storage mutant survived");
 
   const probeHandler = async (
     seam: (input: TypeBoundaryInput, onAdmit: () => void) => unknown | Promise<unknown>,

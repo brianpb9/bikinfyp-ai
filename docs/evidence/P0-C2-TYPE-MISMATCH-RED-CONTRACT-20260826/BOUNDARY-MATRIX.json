@@ -4,7 +4,7 @@
   "expected_contract": "reject authoritative mismatch before persistence/admission/spend",
   "current_state": "RED",
   "boundaries": [
-    { "id": "E1", "path": "app/api/products/route.ts", "category_source": "request or default", "unchecked_effect": "product persistence" },
+    { "id": "E1", "path": "app/api/products/route.ts", "category_source": "request or default", "unchecked_effect": "directory preparation, temporary-file writes/cleanup, image storage, product persistence, and audit" },
     { "id": "E3", "path": "app/api/products/[id]/route.ts", "category_source": "request or existing row", "unchecked_effect": "product update" },
     { "id": "E6", "path": "app/api/dashboard/campaign/product/route.ts", "category_source": "URL keyword guess, request, or default", "unchecked_effect": "organization product persistence" },
     { "id": "E7", "path": "app/api/dashboard/campaign/product/route.ts", "category_source": "request or existing row", "unchecked_effect": "organization product update" },
@@ -27,8 +27,8 @@
   },
   "false_green_guards": {
     "parser": "TypeScript AST CallExpression per exported handler",
-    "central_symbol_binding": "all handler imports plus app/lib production sources scanned; only builder and validator exports allowlisted; receiver, namespace, default, side-effect, relative, local shadow, split, aliased named export, indirect and dynamic access rejected",
-    "central_export_surface": "only builder and validator runtime exports; default, wildcard, re-export, class/enum and issuer aliases rejected",
+    "central_symbol_binding": "all handler imports plus app/lib production sources scanned; only builder and validator exports allowlisted; receiver, namespace, default, side-effect, relative, local shadow, split, aliased named export, indirect and literal/computed/const-bound dynamic access rejected",
+    "central_export_surface": "only builder and validator runtime exports; default assignments, default-modified declarations, wildcard, re-export, class/enum and issuer aliases rejected",
     "comments_or_declarations_satisfy": false,
     "every_boundary_required": true,
     "effect_callback_ownership_required": true,
