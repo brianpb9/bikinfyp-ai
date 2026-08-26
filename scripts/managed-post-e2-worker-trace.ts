@@ -10,7 +10,7 @@ import { cookieName, issueToken } from "../lib/auth";
 import { config } from "../lib/config";
 import { parseJobProductSnapshot } from "../lib/job-product-snapshot";
 import { parseJobReferenceManifest } from "../lib/job-reference-manifest";
-import { getRedisJobQueue, closeRedisJobQueue } from "../lib/job-queue";
+import { closeManagedStagingTraceQueue, closeRedisJobQueue, getManagedStagingTraceQueue, getRedisJobQueue, managedStagingTraceQueueName } from "../lib/job-queue";
 import { KEBIJAKAN_KLASIFIKASI } from "../lib/media/klasifikasi-gambar";
 import { processPostgresJob } from "../lib/postgres/worker";
 import { MANAGED_STAGING_TRACE_HEADER, managedStagingTraceHeader } from "../lib/staging-admission-trace";
@@ -45,14 +45,16 @@ const productKey = `products/${userId}/controlled-e2-product.svg`;
 const sidecarKey = `${productKey}.meta.json`;
 const storageKeys = [productKey, sidecarKey];
 const pool = new Pool({ connectionString: config.databaseUrl });
-const queue = getRedisJobQueue();
+const canonicalQueue = getRedisJobQueue();
+const queue = getManagedStagingTraceQueue();
 let consumer: Worker<{ jobId: string }> | undefined;
 let consumedJobId: string | null = null;
 
-const actionableCounts = async () => {
-  const counts = await queue.getJobCounts("waiting", "active", "delayed", "prioritized", "paused", "failed");
+const actionableCounts = async (target = queue) => {
+  const counts = await target.getJobCounts("waiting", "active", "delayed", "prioritized", "paused", "failed");
   return { ...counts, actionable: Object.values(counts).reduce((sum, n) => sum + Number(n), 0) };
 };
+let canonicalQueueBefore: Awaited<ReturnType<typeof actionableCounts>> | undefined;
 
 const receipt: Record<string, unknown> = {
   schema: "managed-post-e2-worker-trace/v1",
@@ -64,7 +66,8 @@ const receipt: Record<string, unknown> = {
     deploy_env: process.env.RACUN_DEPLOY_ENV,
     db_runtime: process.env.RACUN_DB_RUNTIME,
     storage_mode: process.env.STORAGE_MODE,
-    queue_name: config.redisQueueName,
+    queue_name: managedStagingTraceQueueName(),
+    canonical_queue_name: config.redisQueueName,
     deterministic_gate: "exact_managed_staging_worker_sha",
   },
   external_provider_calls: 0,
@@ -76,8 +79,9 @@ const receipt: Record<string, unknown> = {
 
 try {
   const before = await actionableCounts();
-  assert.equal(before.actionable, 0, `queue harus nol sebelum trace: ${JSON.stringify(before)}`);
-  receipt.queue_before = before;
+  canonicalQueueBefore = await actionableCounts(canonicalQueue);
+  assert.equal(before.actionable, 0, `trace queue harus nol sebelum trace: ${JSON.stringify(before)}`);
+  receipt.queue_before = { trace: before, canonical: canonicalQueueBefore };
 
   const sourceBytes = fs.readFileSync(path.join(process.cwd(), "public/staging-fixtures/e2-product.svg"));
   const sourceSha = crypto.createHash("sha256").update(sourceBytes).digest("hex");
@@ -117,7 +121,7 @@ try {
     client.release();
   }
 
-  consumer = new Worker<{ jobId: string }>(config.redisQueueName, async (job) => {
+  consumer = new Worker<{ jobId: string }>(managedStagingTraceQueueName(), async (job) => {
     consumedJobId = job.data.jobId;
     await processPostgresJob(job.data.jobId, { retryViaQueue: true });
   }, { connection: { url: config.redisUrl, maxRetriesPerRequest: null }, concurrency: 1 });
@@ -216,7 +220,7 @@ try {
     payment_rows: payments,
     ledger_rows: ledger,
   };
-  receipt.before_cleanup = { queue: await actionableCounts(), db_rows: { user: 1, product: 1, script: 1, job: 1, output: 1 } };
+  receipt.before_cleanup = { queue: { trace: await actionableCounts(), canonical: await actionableCounts(canonicalQueue) }, db_rows: { user: 1, product: 1, script: 1, job: 1, output: 1 } };
   receipt.result = "PASS";
 } finally {
   if (consumer) await consumer.close().catch(() => undefined);
@@ -250,7 +254,8 @@ try {
     return !(await mediaStorage().stat(key));
   }));
   (receipt.cleanup as Record<string, unknown>).r2 = storageResults.every(Boolean);
-  receipt.queue_after = await actionableCounts();
+  const canonicalQueueAfter = await actionableCounts(canonicalQueue);
+  receipt.queue_after = { trace: await actionableCounts(), canonical: canonicalQueueAfter };
   const count = async (sql: string, params: unknown[]) => Number((await pool.query(sql, params)).rows[0].n);
   const dbRows = {
     users: await count("SELECT count(*)::int AS n FROM users WHERE id=$1", [userId]),
@@ -277,12 +282,15 @@ try {
   const cleanupPassed = cleanup.database === true && cleanup.r2 === true && cleanup.queue === true
     && Object.values(dbRows).every((value) => value === 0)
     && afterCleanup.r2_objects_present === 0 && afterCleanup.queue_job_present === false
-    && (receipt.queue_after as { actionable: number }).actionable === 0;
+    && (receipt.queue_after as { trace: { actionable: number } }).trace.actionable === 0
+    && canonicalQueueBefore !== undefined
+    && JSON.stringify(canonicalQueueAfter) === JSON.stringify(canonicalQueueBefore);
   if (!cleanupPassed) {
     receipt.result = "FAIL";
     process.exitCode = 1;
   }
   receipt.finished_at = at();
+  await closeManagedStagingTraceQueue();
   await closeRedisJobQueue();
   await pool.end();
   console.log(JSON.stringify(receipt));

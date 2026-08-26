@@ -2,7 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit, type ScriptRow, type ProductRow, type JobRow, type PersonaRow } from "@/lib/db";
 import { getBalance, holdCredits, tierPriceIdr } from "@/lib/credits";
-import { claimManagedStagingTraceNonce, enqueueJob } from "@/lib/job-queue";
+import { claimManagedStagingTraceNonce, enqueueJob, enqueueManagedStagingTraceJob } from "@/lib/job-queue";
 import { failJob, getJob, sweepStaleJobs } from "@/lib/jobs";
 import { bacaJejak, periksaAdmisi } from "@/lib/script-engine/admisi";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
@@ -206,7 +206,10 @@ export async function POST(req: Request) {
       // The deterministic completion fixture belongs only to the disposable
       // smoke.  A real PostgreSQL runtime is completed by the queue worker.
       if (!created.duplicate && postgresSmokeEnabled()) await smokeCompleteJob(created.jobId);
-      if (!created.duplicate && !postgresSmokeEnabled()) await enqueueJob(created.jobId);
+      if (!created.duplicate && !postgresSmokeEnabled()) {
+        if (zeroValueTrace) await enqueueManagedStagingTraceJob(created.jobId);
+        else await enqueueJob(created.jobId);
+      }
       return Response.json({ job_id: created.jobId, state: created.duplicate ? "QUEUED" : (postgresSmokeEnabled() ? "READY" : "QUEUED"), quality_tier: tier, hold_idr: priceIdr, ...(created.duplicate ? { duplicate: true } : {}) }, { status: created.duplicate ? 200 : 201 });
     }
 

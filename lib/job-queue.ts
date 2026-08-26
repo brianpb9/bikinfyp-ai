@@ -43,6 +43,7 @@ function redisConnection() {
 }
 
 let redisQueue: Queue<{ jobId: string }> | undefined;
+let managedStagingTraceQueue: Queue<{ jobId: string }> | undefined;
 let enqueueObserverForTests: ((event: { jobId: string; resumeReason?: string }) => void) | undefined;
 export function setEnqueueObserverForTests(
   observer?: (event: { jobId: string; resumeReason?: string }) => void
@@ -52,6 +53,30 @@ export function setEnqueueObserverForTests(
 export function getRedisJobQueue(): Queue<{ jobId: string }> {
   if (!redisQueue) redisQueue = new Queue<{ jobId: string }>(config.redisQueueName, { connection: redisConnection() });
   return redisQueue;
+}
+
+export function managedStagingTraceQueueName(baseName = config.redisQueueName): string {
+  return `${baseName}:managed-staging-trace`;
+}
+
+/** Dedicated queue for the one-use Rp0 trace. It is deliberately distinct
+ * from the canonical paid queue, so a temporary trace worker can never lock,
+ * fail, delay, or synthesize an ordinary held job. */
+export function getManagedStagingTraceQueue(): Queue<{ jobId: string }> {
+  if (!managedStagingTraceQueue) {
+    managedStagingTraceQueue = new Queue<{ jobId: string }>(managedStagingTraceQueueName(), { connection: redisConnection() });
+  }
+  return managedStagingTraceQueue;
+}
+
+export async function enqueueManagedStagingTraceJob(jobId: string): Promise<void> {
+  await getManagedStagingTraceQueue().add("render", { jobId }, {
+    jobId,
+    attempts: 3,
+    backoff: { type: "exponential", delay: 1_000 },
+    removeOnComplete: { age: 3_600, count: 100 },
+    removeOnFail: { age: 86_400, count: 100 },
+  });
 }
 
 /** Atomically consumes the short-lived managed trace capability. The Redis
@@ -122,4 +147,9 @@ export async function enqueueJobResume(jobId: string, reason: string): Promise<v
 export async function closeRedisJobQueue(): Promise<void> {
   if (redisQueue) await redisQueue.close();
   redisQueue = undefined;
+}
+
+export async function closeManagedStagingTraceQueue(): Promise<void> {
+  if (managedStagingTraceQueue) await managedStagingTraceQueue.close();
+  managedStagingTraceQueue = undefined;
 }
