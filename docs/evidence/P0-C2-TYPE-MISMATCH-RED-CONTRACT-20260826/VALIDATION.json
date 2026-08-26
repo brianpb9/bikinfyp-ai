@@ -1,9 +1,11 @@
 {
   "task": "P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826",
   "baseline_sha": "ce05418d00b998bd4ed07a3c500358f6b10423a5",
+  "lineage_remediation_task": "P0-C2-TYPE-MISMATCH-RED-CONTRACT-REMEDIATION-20260826",
+  "lineage_parent_sha": "f73383f48d2fa6e093b5f403a04f145f6a0f3e89",
   "scope": "engineering discovery and RED-before contract only",
   "result": "ENGINEERING_RED_COMPLETE_POLICY_INPUT_REQUIRED",
-  "review_remediation": "complete sink inventory including E1 temporary filesystem mutations, no production test issuer, canonical literal/computed/const-bound dynamic/require/re-export/import-equals module scanning, strict central consumer and runtime-export allowlists including default-modified declarations, opaque test-reference identity, awaited rejection, callback ownership, missing-zero effects, and bypass mutations; no handler policy without approved ingress",
+  "review_remediation": "complete sink inventory including E1 temporary filesystem and stored-image rollback mutations, no production test issuer, canonical literal/computed/const-bound dynamic/require/re-export/import-equals module scanning with conservative unresolved-runtime rejection, strict direct-call-only central import usage and runtime-export allowlists including default-modified declarations, opaque test-reference identity, awaited rejection, callback ownership, missing-zero effects, and bypass mutations; no handler policy without approved ingress",
   "focused_red": {
     "command": "node scripts/verify-c2-type-mismatch-red.mjs",
     "verifier_exit_code": 0,
@@ -25,6 +27,14 @@
     "pass": 1201,
     "fail": 0,
     "skipped": 47
+  },
+  "lineage_proportional_test": {
+    "command": "SCRIPT_LLM=0 npx tsx --test tests/brand-intake.test.ts tests/e1-reference-gate.test.ts",
+    "exit_code": 0,
+    "tests": 15,
+    "pass": 15,
+    "fail": 0,
+    "skipped": 0
   },
   "production_behavior_changed": false,
   "taxonomy_selected": false,

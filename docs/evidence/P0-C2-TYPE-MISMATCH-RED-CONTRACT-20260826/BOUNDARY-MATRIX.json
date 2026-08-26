@@ -4,7 +4,7 @@
   "expected_contract": "reject authoritative mismatch before persistence/admission/spend",
   "current_state": "RED",
   "boundaries": [
-    { "id": "E1", "path": "app/api/products/route.ts", "category_source": "request or default", "unchecked_effect": "directory preparation, temporary-file writes/cleanup, image storage, product persistence, and audit" },
+    { "id": "E1", "path": "app/api/products/route.ts", "category_source": "request or default", "unchecked_effect": "directory preparation, temporary-file writes/cleanup, image storage and stored-image rollback, product persistence, and audit" },
     { "id": "E3", "path": "app/api/products/[id]/route.ts", "category_source": "request or existing row", "unchecked_effect": "product update" },
     { "id": "E6", "path": "app/api/dashboard/campaign/product/route.ts", "category_source": "URL keyword guess, request, or default", "unchecked_effect": "organization product persistence" },
     { "id": "E7", "path": "app/api/dashboard/campaign/product/route.ts", "category_source": "request or existing row", "unchecked_effect": "organization product update" },
@@ -27,7 +27,7 @@
   },
   "false_green_guards": {
     "parser": "TypeScript AST CallExpression per exported handler",
-    "central_symbol_binding": "all handler imports plus app/lib production sources scanned; only builder and validator exports allowlisted; receiver, namespace, default, side-effect, relative, local shadow, split, aliased named export, indirect and literal/computed/const-bound dynamic access rejected",
+    "central_symbol_binding": "all handler imports plus app/lib production sources scanned; only builder and validator exports allowlisted; allowed identifiers are direct calls only, while property/element access, assignment, alias escape, call/apply/bind, spread, new/optional call, receiver, namespace, default, side-effect, relative, local shadow, split, aliased named export, indirect and literal/computed/const-bound/unresolved dynamic access are rejected",
     "central_export_surface": "only builder and validator runtime exports; default assignments, default-modified declarations, wildcard, re-export, class/enum and issuer aliases rejected",
     "comments_or_declarations_satisfy": false,
     "every_boundary_required": true,
@@ -36,7 +36,7 @@
     "seam_rejection_must_be_awaited_or_returned": true,
     "required_opaque_inputs": ["typed declared source", "typed trusted provenance source"],
     "required_input_check": "buildAuthoritativeTypeBoundaryInput typed/dataflow boundary with opaque ingress-issued capability identity",
-    "input_independence_mutations": ["same-expression alias", "same-data/different-ID structural forgery", "frozen clone of actually issued fields with valid prefix", "prefix-only acceptance", "frozen-only acceptance", "similarly named issued-capability positive"],
+    "input_independence_mutations": ["same-expression alias", "same-data/different-ID structural forgery", "frozen clone of actually issued fields with valid prefix", "prefix-only acceptance", "frozen-only acceptance", "similarly named issued-capability positive", "validator function-property issuer"],
     "reference_probe_inputs": ["test-only issued trusted match", "test-only issued trusted mismatch", "missing policy"],
     "production_probe_inputs_before_ingress_authorization": ["frozen structural forgery", "missing policy"],
     "mismatch_contract": "throws/rejects, zero callback effects, cannot be ignored into success",

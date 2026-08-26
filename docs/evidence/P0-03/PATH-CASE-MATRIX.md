@@ -1193,3 +1193,24 @@ TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
   Product Policy input**, while engineering discovery and RED fixtures are
   complete.
 - Evidence: `../P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826/`.
+
+### E.38 C2 RED-contract lineage remediation — 2026-08-26
+
+TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-REMEDIATION-20260826`
+PARENT_SHA=`f73383f48d2fa6e093b5f403a04f145f6a0f3e89`
+
+- This bounded lineage task preserves and resolves exactly the three findings
+  left by the parent round ceiling. E1 now inventories the
+  `rejectAfterReferenceCheck` stored-image rollback alongside directory,
+  temporary-file, durable-storage, row, and audit effects; an unguarded
+  rollback mutant proves callback ownership is mandatory.
+- Runtime `import()`/`require()` expressions that cannot be resolved by the
+  constant evaluator fail conservatively. A nested same-name `const` can no
+  longer hide a central-module import; the shadowed-binding mutant is killed.
+- Validator and builder imports are direct-call-only. Property/element access,
+  alias or assignment escape, call/apply/bind, spread, construction, and
+  optional-call usage fail; the explicit validator-function-property issuer
+  mutant is killed.
+- Typecheck and the RED meta-verifier pass. The inner suite retains four passing
+  discovery/control tests and exactly one intended `C2_MISSING_INVARIANT` RED.
+  No production policy, signal, taxonomy, reason code, or behavior changed.

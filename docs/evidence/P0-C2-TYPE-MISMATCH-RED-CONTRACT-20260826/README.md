@@ -72,7 +72,11 @@ fail. The central module export surface is also restricted to those two runtime
 exports; default assignments, default-modified declarations,
 wildcard/re-exports, and issuer aliases fail. E1's directory preparation,
 temporary-file creation/write/removal, and durable image storage are each
-enumerated separately. Every known storage,
+enumerated separately, as is its stored-image rollback helper. Unresolved
+runtime module expressions fail conservatively, killing same-name nested-const
+shadowing. Allowed validator/builder imports may only appear as direct calls;
+property or element access, alias/assignment/spread escape, call/apply/bind,
+construction, and optional calls fail. Every known storage,
 persistence, provider-generation, script/job/audit write, credit,
 managed-trace queue, and ordinary enqueue effect must be an AST descendant
 of the seam's effect callback; a merely prior or ignored call cannot satisfy

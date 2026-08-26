@@ -25,3 +25,21 @@ inner_exit_code=1
 outer_expected-red_verifier_exit_code=0
 intended_failure=C2_MISSING_INVARIANT
 compile_or_setup_failure=false
+
+$ SCRIPT_LLM=0 npx tsx --test tests/brand-intake.test.ts tests/e1-reference-gate.test.ts
+tests=15
+pass=15
+fail=0
+skipped=0
+exit_code=0
+
+Lineage remediation rerun (parent f73383f48d2fa6e093b5f403a04f145f6a0f3e89):
+$ npx tsc --noEmit
+exit_code=0
+$ node scripts/verify-c2-type-mismatch-red.mjs
+inner_tests=5
+inner_pass=4
+inner_fail=1
+outer_expected-red_verifier_exit_code=0
+intended_failure=C2_MISSING_INVARIANT
+compile_or_setup_failure=false
