@@ -117,6 +117,18 @@ NODE
 LEGACY_OUT=$(env -u AGENT_BUS_TASK_ID -u AGENT_BUS_OWNER_ID "$READ" builder)
 case "$LEGACY_OUT" in *'"task":"ROUTE-LEGACY"'*) pass "legacy migration is explicit and unscoped" ;; *) fail "legacy unscoped migration failed" ;; esac
 
+# JSON primitives/arrays are poison rather than legacy messages. Builders fail
+# closed and leave them byte-for-byte in place for operator recovery.
+for SHAPE in null array; do
+  SHAPE_PATH="$BUS_DIR/inbox/builder/shape-$SHAPE-builder-PASS.json"
+  case "$SHAPE" in null) printf 'null\n' > "$SHAPE_PATH" ;; array) printf '[]\n' > "$SHAPE_PATH" ;; esac
+  SHAPE_BEFORE=$(cksum "$SHAPE_PATH")
+  env -u AGENT_BUS_TASK_ID -u AGENT_BUS_OWNER_ID "$READ" builder >/dev/null 2>&1; SHAPE_RC=$?
+  [ "$SHAPE_RC" = 8 ] && [ -f "$SHAPE_PATH" ] && [ "$(cksum "$SHAPE_PATH")" = "$SHAPE_BEFORE" ] \
+    && pass "Builder rejects and preserves $SHAPE JSON poison" || fail "Builder claimed or changed $SHAPE JSON poison"
+  rm -f "$SHAPE_PATH"
+done
+
 # A process that merely runs the exact scoped bus-wait command is not a
 # supervisor. bus-arm must replace it, even while its shell parent is alive.
 STANDALONE_TASK=ROUTE-STANDALONE

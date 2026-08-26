@@ -342,7 +342,13 @@ fi
 stop_active
 wait_for "runtime cleanup after staging recovery" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILURES + 1))
 
-# Case 3: a syntactically valid unknown SHA is terminal poison, not a queue lock.
+# Case 3: valid JSON with invalid shapes and a syntactically valid unknown SHA
+# are terminal poison, not queue locks. The Reviewer must archive/drop each and
+# continue to the valid READY queued behind them.
+null_poison_path=$(BUS_FROM=builder "$SEND" reviewer QUESTION "" RUNTIME-SELFTEST-NULL-POISON poison)
+printf 'null\n' > "$null_poison_path"
+array_poison_path=$(BUS_FROM=builder "$SEND" reviewer QUESTION "" RUNTIME-SELFTEST-ARRAY-POISON poison)
+printf '[]\n' > "$array_poison_path"
 poison_path=$(BUS_FROM=builder "$SEND" reviewer QUESTION "" RUNTIME-SELFTEST-POISON poison)
 node - "$poison_path" "$FAKE_SHA" <<'NODE'
 const fs = require("fs");
@@ -360,7 +366,15 @@ start_runtime 5
 if wait_for "valid message after poison" '[ "$(inbox_count builder)" -ge 1 ]'; then
   response=$(read_builder RUNTIME-SELFTEST-VALID)
   case "$response" in
-    *'"type":"PASS"'*'"task":"RUNTIME-SELFTEST-VALID"'*) printf 'PASS  poison dropped; next valid review completed\n' ;;
+    *'"type":"PASS"'*'"task":"RUNTIME-SELFTEST-VALID"'*)
+      if [ -f "$BUS_DIR/archive/$(basename "$null_poison_path")" ] && \
+         [ -f "$BUS_DIR/archive/$(basename "$array_poison_path")" ]; then
+        printf 'PASS  null/array/SHA poison dropped; next valid review completed\n'
+      else
+        printf 'FAIL  non-object poison was not archived before valid review\n'
+        FAILURES=$((FAILURES + 1))
+      fi
+      ;;
     *) printf 'FAIL  unexpected poison response\n'; FAILURES=$((FAILURES + 1)) ;;
   esac
 else

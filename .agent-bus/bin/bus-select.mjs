@@ -38,6 +38,17 @@ for (const name of names) {
     fail(8, `invalid JSON is not claimable by builder: ${name}`);
   }
 
+  if (message === null || typeof message !== "object" || Array.isArray(message)) {
+    // The canonical unscoped Reviewer owns poison recovery: it dequeues the
+    // invalid shape so its staged-message validator can archive/drop it and
+    // continue to later valid work. Builders always leave poison untouched.
+    if (role === "reviewer" && !task) {
+      process.stdout.write(`${file}\n`);
+      process.exit(0);
+    }
+    fail(8, `non-object JSON is not claimable by builder: ${name}`);
+  }
+
   const present = routedFields.filter((field) => Object.hasOwn(message, field));
   const legacy = present.length === 0;
   const complete = present.length === routedFields.length &&
