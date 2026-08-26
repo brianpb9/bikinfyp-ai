@@ -124,3 +124,62 @@ test("callback sandbox TETAP mengkredit penguji terdaftar", async () => {
   assert.equal(body.credited, true, "penguji terdaftar harus tetap bisa menguji settlement");
   assert.equal(getBalance(id), sebelum + 60000);
 });
+
+// ── Checkout sandbox dibuka 26 Agu 2026 ──────────────────────────────────────
+//
+// Pendaftaran merchant Duitku DITOLAK dengan alasan: "Mohon menambahkan fitur
+// checkout/fitur pembelian hingga pembayaran pada website (silakan
+// mengintegrasikan website dengan Sandbox Duitku)."
+//
+// Penyebabnya bukan backend — jalur /api/credits/checkout -> invoice Duitku ->
+// callback sudah lengkap. Penyebabnya halaman kredit menutup tombol beli
+// berdasarkan payments_live, dan payments_live SELALU false di sandbox. Kita
+// menutup sendiri alur yang diminta untuk diperlihatkan.
+//
+// Perbaikannya memisahkan dua pertanyaan yang selama ini satu boolean. Test di
+// bawah menjaga agar pemisahan itu tidak berubah jadi pelonggaran: sandbox
+// boleh CHECKOUT, tapi tidak pernah boleh MENGAKU uang sungguhan.
+
+import fs from "node:fs";
+import path from "node:path";
+
+const HALAMAN = fs.readFileSync(path.join(process.cwd(), "app/kredit/page.tsx"), "utf8");
+const META = fs.readFileSync(path.join(process.cwd(), "app/api/meta/route.ts"), "utf8");
+
+test("meta memisahkan 'kunci terpasang' dari 'uang sungguhan'", () => {
+  assert.match(META, /payments_configured:\s*paymentsConfigured\(\)/);
+  assert.match(META, /payments_live:\s*paymentsLive\(\)/);
+  // Invarian lama tetap: sandbox tidak pernah live.
+  assert.equal(paymentsConfigured(), true);
+  assert.equal(paymentsLive(), false);
+});
+
+test("tombol beli TIDAK lagi digantung pada payments_live", () => {
+  // Kalau tombolnya kembali dikunci payments_live, checkout mati lagi di
+  // sandbox dan penolakan Duitku terulang.
+  assert.match(HALAMAN, /disabled=\{busy !== null \|\| bisaBayar !== true\}/);
+  assert.doesNotMatch(HALAMAN, /disabled=\{busy !== null \|\| paymentsLive !== true\}/);
+});
+
+test("default tetap TERTUTUP selagi server belum menjawab", () => {
+  // "!== true", bukan "=== false": keadaan null (belum dijawab) harus ikut
+  // menutup tombol. Ini temuan audit QA 16 Agu dan tidak boleh hilang hanya
+  // karena pertanyaannya berganti.
+  assert.match(HALAMAN, /bisaBayar !== true/);
+  assert.doesNotMatch(HALAMAN, /bisaBayar === false \?\s*false/);
+});
+
+test("MODE UJI dikatakan terang-terangan, bukan disembunyikan", () => {
+  // Membiarkan orang menyelesaikan pembayaran sandbox lalu heran kreditnya
+  // tidak bertambah adalah kegagalan yang bisa diramalkan.
+  assert.match(HALAMAN, /Mode uji coba/);
+  assert.match(HALAMAN, /tidak ada uang sungguhan yang dipotong/);
+  assert.match(HALAMAN, /modeSandbox/);
+});
+
+test("klaim UANG SUNGGUHAN tetap dikunci payments_live", () => {
+  // Yang boleh longgar cuma tombolnya. Klaim keamanan/uang sungguhan tetap
+  // menunggu production + izin.
+  assert.match(HALAMAN, /paymentsLive !== true && \(/);
+  assert.match(HALAMAN, /belum memotong uang sungguhan/);
+});

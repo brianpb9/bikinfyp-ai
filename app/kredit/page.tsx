@@ -48,6 +48,20 @@ function KreditInner() {
   // r13 (review produk 2026-08-07): jangan lagi menebak status pembayaran dari
   // kegagalan fallback dev — tanya server langsung (null = belum tahu).
   const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null);
+  // DUA PERTANYAAN BERBEDA, dan menyatukannya yang membuat pendaftaran
+  // merchant Duitku ditolak.
+  //
+  //   paymentsLive  -> "ini uang sungguhan?"  (production + izin Brian)
+  //   bisaBayar     -> "gateway-nya bisa dipakai sekarang?" (kunci terpasang)
+  //
+  // Sebelum 26 Agu halaman ini cuma punya yang pertama, jadi selama Duitku
+  // masih sandbox tombol belinya mati total. Duitku justru meminta melihat
+  // checkout sampai pembayaran DI SANDBOX MEREKA — persis alur yang kita
+  // tutup sendiri. Jadi tombolnya kini terbuka begitu kuncinya terpasang,
+  // dan status "uang mainan" dinyatakan terang-terangan alih-alih
+  // disembunyikan dengan mematikan tombolnya.
+  const [bisaBayar, setBisaBayar] = useState<boolean | null>(null);
+  const [modeSandbox, setModeSandbox] = useState<boolean | null>(null);
   const checkoutLock = useRef(false);
 
   async function refresh() {
@@ -61,7 +75,13 @@ function KreditInner() {
   }
   useEffect(() => {
     refresh();
-    apiFetch<{ payments_live: boolean }>("/api/meta").then((m) => setPaymentsLive(m.payments_live)).catch(() => setPaymentsLive(false));
+    apiFetch<{ payments_live: boolean; payments_env: string; payments_configured: boolean }>("/api/meta")
+      .then((m) => {
+        setPaymentsLive(m.payments_live);
+        setBisaBayar(m.payments_configured);
+        setModeSandbox(m.payments_env === "sandbox");
+      })
+      .catch(() => { setPaymentsLive(false); setBisaBayar(false); setModeSandbox(null); });
   }, []);
 
   // Kembali dari halaman pembayaran: returnUrl Duitku membawa ?merchantOrderId=...
@@ -186,10 +206,24 @@ function KreditInner() {
             bawah. Sebelumnya tombol tetap aktif dan pengguna baru tahu setelah
             menekan "beli" lalu menerima error — kegagalan yang bisa diramalkan
             tapi tetap dibiarkan terjadi. */}
-        {paymentsLive === false && (
+        {bisaBayar === false && (
           <p className="rounded-2xl border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900">
             Pembayaran online belum aktif, jadi top-up dimatikan dulu. Kreditmu yang
             sekarang tetap bisa dipakai. Kami kabari begitu sudah bisa.
+          </p>
+        )}
+        {/* MODE UJI HARUS DIKATAKAN, BUKAN DISEMBUNYIKAN.
+            Checkout sandbox jalan penuh — tapi tidak memotong uang, dan
+            webhook sandbox hanya mengkredit akun penguji terdaftar
+            (app/api/webhooks/duitku). Membiarkan orang menyelesaikan
+            pembayaran lalu heran kreditnya tidak bertambah adalah kegagalan
+            yang bisa diramalkan; kalimat ini yang mencegahnya. */}
+        {bisaBayar === true && modeSandbox === true && (
+          <p className="rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 text-sm text-amber-900">
+            <b>Mode uji coba.</b> Pembayaran memakai sandbox Duitku, jadi{" "}
+            <b>tidak ada uang sungguhan yang dipotong</b> dan kredit belum bertambah
+            di luar akun penguji. Alur checkout sampai halaman pembayaran sudah jalan
+            penuh — ini yang sedang diverifikasi penyedia pembayaran kami.
           </p>
         )}
         {PACKAGES.map((p) => (
@@ -199,15 +233,17 @@ function KreditInner() {
             onClick={() => topup(p.id)}
             // "!== true", BUKAN "=== false".
             //
-            // paymentsLive punya TIGA keadaan: true, false, dan null selagi
+            // bisaBayar punya TIGA keadaan: true, false, dan null selagi
             // /api/meta belum menjawab. Pemeriksaan "=== false" membiarkan
             // tombolnya hidup selama keadaan null — jendela kecil di awal muat
             // halaman, tapi persis jendela yang ditekan orang tidak sabar
             // (temuan audit QA putaran kedua, 16 Agu 2026).
             //
-            // Default aman: tertutup sampai server BILANG boleh.
-            disabled={busy !== null || paymentsLive !== true}
-            aria-disabled={busy !== null || paymentsLive !== true}
+            // Default aman: tertutup sampai server BILANG boleh. Yang berubah
+            // 26 Agu hanya PERTANYAANNYA — dari "sudah uang sungguhan?" jadi
+            // "kuncinya sudah terpasang?" — bukan longgarnya default.
+            disabled={busy !== null || bisaBayar !== true}
+            aria-disabled={busy !== null || bisaBayar !== true}
             className={`relative w-full rounded-2xl border-2 border-zinc-200 bg-white p-3 text-left shadow-sm transition-transform active:scale-[0.99] active:bg-zinc-50 disabled:opacity-60`}
           >
             {p.tag && (
@@ -228,7 +264,7 @@ function KreditInner() {
                   <span className="shrink-0 font-bold">{rupiah(p.price)}</span>
                 </span>
                 <span className="mt-0.5 block text-xs font-semibold text-amber-700">{p.badge}</span>
-                <span className="block text-sm text-zinc-500">{p.perVideo} · {paymentsLive === null ? "mengecek pembayaran..." : paymentsLive === false ? "pembayaran belum aktif" : busy === p.id ? "memproses..." : "tap untuk beli"}</span>
+                <span className="block text-sm text-zinc-500">{p.perVideo} · {bisaBayar === null ? "mengecek pembayaran..." : bisaBayar === false ? "pembayaran belum aktif" : busy === p.id ? "memproses..." : modeSandbox ? "tap untuk coba (mode uji)" : "tap untuk beli"}</span>
               </span>
             </span>
           </button>
@@ -257,15 +293,27 @@ function KreditInner() {
             demo" tampil TANPA SYARAT ke SEMUA user termasuk production — padahal
             Duitku belum aktif, jadi klaimnya salah. Sekarang jujur sesuai
             status server (/api/meta payments_live), bukan asumsi tetap. */}
-        {paymentsLive ? (
-          <div className="flex gap-2">
-            {["QRIS", "GoPay", "OVO", "DANA"].map((m) => (
-              <span key={m} className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 shadow-sm">
-                {m}
-              </span>
-            ))}
-          </div>
-        ) : paymentsLive === false ? (
+        {/* Metode bayar ditampilkan begitu gateway-nya bisa dipakai — pembeli
+            memang perlu tahu akan bertemu apa di halaman pembayaran. Yang
+            TIDAK boleh ikut adalah klaim uang sungguhan; itu tetap dikunci
+            paymentsLive. */}
+        {bisaBayar === true ? (
+          <>
+            <div className="flex gap-2">
+              {["QRIS", "GoPay", "OVO", "DANA"].map((m) => (
+                <span key={m} className="rounded-xl border border-zinc-200 bg-white px-4 py-2 text-sm font-semibold text-zinc-600 shadow-sm">
+                  {m}
+                </span>
+              ))}
+            </div>
+            {paymentsLive !== true && (
+              <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
+                Metode di atas dilayani lewat sandbox Duitku selama masa verifikasi —
+                belum memotong uang sungguhan.
+              </p>
+            )}
+          </>
+        ) : bisaBayar === false ? (
           <p className="rounded-2xl bg-amber-50 p-3 text-sm text-amber-800">
             Pembayaran online sedang kami siapkan — belum bisa top-up pakai uang sungguhan dulu ya. Coba lagi dalam beberapa hari.
           </p>

@@ -28,10 +28,18 @@ test("API generate memakai daftar pensiun bersama, bukan string hardcode", () =>
 // Tombol beli yang pasti gagal bukan CTA, itu jebakan.
 test("tombol top-up mati sampai server menyatakan pembayaran aktif", () => {
   const s = baca("app/kredit/page.tsx");
-  // "!== true", bukan "=== false": paymentsLive punya tiga keadaan, dan null
-  // (selagi /api/meta belum menjawab) sempat membiarkan tombolnya hidup.
-  assert.match(s, /disabled=\{busy !== null \|\| paymentsLive !== true\}/, "default harus tertutup sampai server bilang boleh");
-  assert.ok(!/paymentsLive === false\}/.test(s), "jangan kembali memeriksa hanya keadaan false");
+  // "!== true", bukan "=== false": penanda dari server punya tiga keadaan, dan
+  // null (selagi /api/meta belum menjawab) sempat membiarkan tombolnya hidup.
+  //
+  // PENANDANYA BERGANTI 26 Agu 2026, defaultnya TIDAK.
+  // Dulu paymentsLive ("ini uang sungguhan?"), sekarang bisaBayar ("kuncinya
+  // sudah terpasang?"). Penggantian ini WAJIB, bukan pelonggaran: payments_live
+  // selalu false di sandbox, jadi asersi lama mengunci checkout mati persis di
+  // lingkungan yang diminta Duitku untuk diperlihatkan — dan pendaftaran
+  // merchant kita ditolak karenanya. Klaim uang sungguhan tetap dijaga
+  // payments_live, diperiksa di tests/pembayaran-sandbox.test.ts.
+  assert.match(s, /disabled=\{busy !== null \|\| bisaBayar !== true\}/, "default harus tertutup sampai server bilang boleh");
+  assert.ok(!/bisaBayar === false\}/.test(s), "jangan kembali memeriksa hanya keadaan false");
   assert.match(s, /pembayaran belum aktif/, "label tombol harus menjelaskan kenapa mati");
 });
 

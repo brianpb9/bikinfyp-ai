@@ -1,6 +1,6 @@
 import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
-import { config, paymentsEnv, paymentsLive, paymentsProvider } from "@/lib/config";
+import { config, paymentsConfigured, paymentsEnv, paymentsLive, paymentsProvider } from "@/lib/config";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 export const runtime = "nodejs";
@@ -40,6 +40,15 @@ export async function GET(req: Request) {
       payments_provider: paymentsProvider(),
       payments_env: paymentsEnv(),
       payments_live: paymentsLive(),
+      // KESIAPAN TEKNIS, BUKAN IZIN UANG SUNGGUHAN — dan keduanya memang beda
+      // pertanyaan. payments_live menjawab "boleh mengumumkan checkout aman
+      // untuk uang sungguhan?"; ini menjawab "gateway-nya bisa dipakai
+      // sekarang?". Sampai 26 Agu halaman kredit cuma punya payments_live,
+      // jadi di sandbox tombol belinya MATI TOTAL — dan alur checkout yang
+      // tidak bisa dijalankan itulah yang membuat pendaftaran merchant Duitku
+      // ditolak: mereka minta melihat checkout sampai pembayaran, di sandbox
+      // mereka sendiri.
+      payments_configured: paymentsConfigured(),
     });
   } catch (err) {
     return errorResponse(err);
