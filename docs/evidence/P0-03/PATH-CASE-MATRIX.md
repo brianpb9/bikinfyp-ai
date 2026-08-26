@@ -1170,6 +1170,10 @@ TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
   production `app/`/`lib/` source for direct or indirect contract-test issuer
   access. The issued-field clone is frozen before probing, so both prefix-only
   and superficial `Object.isFrozen` authenticity mutants are killed.
+- Eighth remediation allowlists only the central builder and validator across
+  all production consumers. Default/side-effect/namespace/relative access,
+  non-allowlisted named aliases, indirect helpers, and dynamic imports fail;
+  aliased-issuer and dynamic-access mutants are explicit controls.
 - Opaque-token mutation controls kill both accept-all and reject-all mutants;
   the positive trusted match remains admissible and absent trusted provenance
   remains policy-undetermined. This does not define a toothpaste taxonomy.

@@ -27,7 +27,7 @@
   },
   "false_green_guards": {
     "parser": "TypeScript AST CallExpression per exported handler",
-    "central_symbol_binding": "all handler imports plus app/lib production sources scanned; named imports from @/lib/product-type-boundary; receiver, namespace, local shadow, split and indirect issuer access rejected",
+    "central_symbol_binding": "all handler imports plus app/lib production sources scanned; only builder and validator exports allowlisted; receiver, namespace, default, side-effect, relative, local shadow, split, aliased named export, indirect and dynamic access rejected",
     "comments_or_declarations_satisfy": false,
     "every_boundary_required": true,
     "effect_callback_ownership_required": true,

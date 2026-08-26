@@ -3,7 +3,7 @@
   "baseline_sha": "ce05418d00b998bd4ed07a3c500358f6b10423a5",
   "scope": "engineering discovery and RED-before contract only",
   "result": "ENGINEERING_RED_COMPLETE_POLICY_INPUT_REQUIRED",
-  "review_remediation": "complete sink inventory, all-import and app/lib central binding, opaque capability object identity, awaited rejection, callback ownership, missing-zero effects, shadow/split/namespace/indirect/frozen-clone/prefix/new-sink mutations; no handler policy without approved ingress",
+  "review_remediation": "complete sink inventory, strict central export allowlist across app/lib, opaque capability object identity, awaited rejection, callback ownership, missing-zero effects, shadow/split/namespace/aliased/dynamic/indirect/frozen-clone/prefix/new-sink mutations; no handler policy without approved ingress",
   "focused_red": {
     "command": "node scripts/verify-c2-type-mismatch-red.mjs",
     "verifier_exit_code": 0,

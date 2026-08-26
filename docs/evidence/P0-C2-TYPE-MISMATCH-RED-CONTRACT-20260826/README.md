@@ -65,7 +65,10 @@ and requires named imports from
 `@/lib/product-type-boundary`; receiver methods, namespace access, and locally
 shadowed names do not satisfy it. All production `app/` and `lib/` sources are
 also scanned for direct or indirect contract-test issuer access. Each
-known storage, persistence, provider-generation, script/job/audit write, credit,
+central-module consumer is restricted to an allowlist containing only the
+builder and validator; default, side-effect, namespace, relative-path alias,
+non-allowlisted named export, and dynamic imports fail. Every known storage,
+persistence, provider-generation, script/job/audit write, credit,
 managed-trace queue, and ordinary enqueue effect must be an AST descendant
 of the seam's effect callback; a merely prior or ignored call cannot satisfy
 it. The seam rejection must be awaited or returned. Its first argument must be
