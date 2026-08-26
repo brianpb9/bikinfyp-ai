@@ -16,12 +16,12 @@ not ok 5 - RED: every production boundary rejects supplied mismatch before its o
     E1: storage, PostgreSQL/SQLite product persistence, and audit effects are not owned by a seam callback
     E1: no AST CallExpression to validateAuthoritativeProductType
     E3: category/brand PostgreSQL/SQLite updates and audits are not owned by a seam callback
-    E6: download, both product creates, and create audits are not owned by seam callbacks
+    E6: extraction audit, download, both product creates, and create audits are not owned by seam callbacks
     E7: PostgreSQL update and audit are not owned by a seam callback
-    A1: persona/nonce/manifest/job/snapshot/audit/hold/scoring/managed-and-ordinary-enqueue effects are not owned by seam callbacks
+    A1: persona/nonce/manifest/cleanup/job/snapshot/audit/hold/scoring/fail/managed-and-ordinary-enqueue effects are not owned by seam callbacks
     A2: evidence/persona/provider/script/render effects are not owned by a seam callback
     A3: evidence/provider/script persistence effects are not owned by a seam callback
-    A4: validation/manifest/script/audit/job/commit/hold/scoring/enqueue/failure effects are not owned by a seam callback
+    A4: validation/manifest/cleanup/script/audit/job/commit/hold/scoring/enqueue/failure effects are not owned by a seam callback
     CENTRAL: lib/product-type-boundary.ts is absent
   code: 'ERR_ASSERTION'
   expected: []

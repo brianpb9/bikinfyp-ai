@@ -23,6 +23,20 @@ export type TrustedTypeSource = {
   provenance: string;
 };
 
+const issuedTrustedCapabilities = new WeakSet<object>();
+
+/** Test-only stand-in for a future approved ingress. Structural lookalikes are rejected. */
+export function issueReferenceTrustedTypeCapability(token: string, provenance: string): TrustedTypeSource {
+  const capability: TrustedTypeSource = Object.freeze({
+    kind: "TRUSTED_TYPE_SOURCE",
+    sourceId: `reference-ingress:${provenance}`,
+    token,
+    provenance,
+  });
+  issuedTrustedCapabilities.add(capability);
+  return capability;
+}
+
 export type TypeBoundaryInput = {
   declaredToken: string;
   trustedSignal: TrustedTypeSignal | null;
@@ -34,8 +48,8 @@ export function buildReferenceBoundaryInput(
   declared: DeclaredTypeSource,
   trusted: TrustedTypeSource | null,
 ): TypeBoundaryInput {
-  if (trusted && declared.sourceId === trusted.sourceId) {
-    throw new Error("C2_SOURCE_ALIAS: declared and trusted values must come from independent sources");
+  if (trusted && !issuedTrustedCapabilities.has(trusted)) {
+    throw new Error("C2_UNTRUSTED_CAPABILITY: trusted type source was not issued by the ingress");
   }
   return {
     declaredToken: declared.token,

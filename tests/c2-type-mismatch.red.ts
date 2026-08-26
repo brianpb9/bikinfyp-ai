@@ -7,6 +7,7 @@ import ts from "typescript";
 import {
   acceptEverythingMutation,
   buildReferenceBoundaryInput,
+  issueReferenceTrustedTypeCapability,
   referenceDecision,
   rejectEverythingMutation,
   type DeclaredTypeSource,
@@ -65,7 +66,7 @@ const boundaryExpectations: BoundaryExpectation[] = [
     id: "E6",
     file: "app/api/dashboard/campaign/product/route.ts",
     handler: "POST",
-    effects: [effect("downloadProductImages"), effect("smokeCreateProduct"), effect("pgAudit", "product.extracted", "URL create audit"), effect("pgAudit", "product.created", "manual create audit")],
+    effects: [effect("pgAudit", '"product.extract"', "URL extraction audit"), effect("downloadProductImages"), effect("smokeCreateProduct"), effect("pgAudit", '"product.extracted"', "URL create audit"), effect("pgAudit", '"product.created"', "manual create audit")],
   },
   { id: "E7", file: "app/api/dashboard/campaign/product/route.ts", handler: "PATCH", effects: [
     effect("query", "UPDATE products SET", "PostgreSQL product UPDATE"), effect("pgAudit", "product.updated", "organization update audit"),
@@ -81,6 +82,8 @@ const boundaryExpectations: BoundaryExpectation[] = [
       effect("run", "UPDATE scripts SET job_id", "SQLite script claim"), effect("audit", "job.created", "SQLite job audit"), effect("createFypSnapshot"),
       effect("pgFindOrCreatePersona"), effect("run", "INSERT INTO personas", "SQLite persona INSERT"),
       effect("audit", "persona.created", "SQLite persona audit"), effect("claimManagedStagingTraceNonce"),
+      effect("cleanupUnadmittedReferenceKeys"), effect("cleanupSupersededReferenceKeys"),
+      effect("audit", '"fyp.snapshot"', "SQLite FYP audit"), effect("failJob"),
     ],
   },
   { id: "A2", file: "app/api/dashboard/matrix/route.ts", handler: "POST", effects: [
@@ -94,6 +97,7 @@ const boundaryExpectations: BoundaryExpectation[] = [
     effect("query", "UPDATE scripts", "PostgreSQL script writes"), effect("query", "INSERT INTO audit_log", "PostgreSQL audit writes"),
     effect("query", "INSERT INTO jobs", "PostgreSQL job INSERT"), effect("query", "COMMIT", "PostgreSQL admission COMMIT"),
     effect("holdCredits"), effect("pgSaveFypSnapshot"), effect("pgAudit"), effect("enqueueJob"), effect("failJob"),
+    effect("cleanupUnadmittedReferenceKeys"),
   ] },
 ];
 
@@ -120,6 +124,18 @@ function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: 
   if (!handler?.body) return [`${expectation.id}: handler ${expectation.handler} not found`];
   const handlerBody = handler.body;
 
+  const centralImport = source.statements.find((statement): statement is ts.ImportDeclaration => ts.isImportDeclaration(statement)
+    && ts.isStringLiteral(statement.moduleSpecifier)
+    && statement.moduleSpecifier.text === "@/lib/product-type-boundary");
+  const importedLocalName = (importedName: string): string | null => {
+    const bindings = centralImport?.importClause?.namedBindings;
+    if (!bindings || !ts.isNamedImports(bindings)) return null;
+    const specifier = bindings.elements.find((element) => (element.propertyName?.text ?? element.name.text) === importedName);
+    return specifier?.name.text ?? null;
+  };
+  const validatorLocal = importedLocalName("validateAuthoritativeProductType");
+  const builderLocal = importedLocalName("buildAuthoritativeTypeBoundaryInput");
+
   const calls: ts.CallExpression[] = [];
   const visit = (node: ts.Node) => {
     if (ts.isCallExpression(node)) calls.push(node);
@@ -127,11 +143,33 @@ function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: 
   };
   visit(handlerBody);
 
-  const seams = calls.filter((call) => callName(call) === "validateAuthoritativeProductType");
   const violations: string[] = [];
+  if (!validatorLocal || !builderLocal) violations.push(`${expectation.id}: central seam/builder named imports are absent`);
+  const centralBindings = centralImport?.importClause?.namedBindings;
+  if (centralBindings && ts.isNamedImports(centralBindings)
+    && centralBindings.elements.some((element) => (element.propertyName?.text ?? element.name.text) === "__issueTrustedTypeCapabilityForContractTest")) {
+    violations.push(`${expectation.id}: production handler imports the contract-test capability issuer`);
+  }
+
+  const shadowed = new Set<string>();
+  const findShadows = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) shadowed.add(node.name.text);
+    if (ts.isParameter(node) && ts.isIdentifier(node.name)) shadowed.add(node.name.text);
+    if (ts.isFunctionDeclaration(node) && node !== handler && node.name) shadowed.add(node.name.text);
+    ts.forEachChild(node, findShadows);
+  };
+  findShadows(handlerBody);
+  if (validatorLocal && shadowed.has(validatorLocal)) violations.push(`${expectation.id}: central validator import is shadowed locally`);
+  if (builderLocal && shadowed.has(builderLocal)) violations.push(`${expectation.id}: central builder import is shadowed locally`);
+
+  const seams = calls.filter((call) => ts.isIdentifier(call.expression)
+    && validatorLocal !== null
+    && call.expression.text === validatorLocal
+    && !shadowed.has(validatorLocal));
   for (const seam of seams) {
     const input = seam.arguments[0];
-    if (!input || !ts.isCallExpression(input) || callName(input) !== "buildAuthoritativeTypeBoundaryInput") {
+    if (!input || !ts.isCallExpression(input) || !ts.isIdentifier(input.expression)
+      || builderLocal === null || input.expression.text !== builderLocal || shadowed.has(builderLocal)) {
       violations.push(`${expectation.id}: seam input does not come from the typed source-identity builder`);
     } else if (input.arguments.length !== 2) {
       violations.push(`${expectation.id}: source-identity builder requires declared and trusted inputs`);
@@ -170,6 +208,7 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   const seamPath = path.join(root, "lib/product-type-boundary.ts");
   if (!fs.existsSync(seamPath)) return ["CENTRAL: lib/product-type-boundary.ts is absent"];
   const module = await import(pathToFileURL(seamPath).href) as {
+    __issueTrustedTypeCapabilityForContractTest?: (token: string, provenance: string) => TrustedTypeSource;
     buildAuthoritativeTypeBoundaryInput?: (
       declared: DeclaredTypeSource,
       trusted: TrustedTypeSource | null,
@@ -185,15 +224,20 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   if (typeof module.buildAuthoritativeTypeBoundaryInput !== "function") {
     return ["CENTRAL: buildAuthoritativeTypeBoundaryInput export is absent"];
   }
+  if (typeof module.__issueTrustedTypeCapabilityForContractTest !== "function") {
+    return ["CENTRAL: opaque capability contract-test issuer is absent"];
+  }
   const build = module.buildAuthoritativeTypeBoundaryInput;
+  const issueTrusted = module.__issueTrustedTypeCapabilityForContractTest;
   const decide = module.validateAuthoritativeProductType;
   const declaredA: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "request-category", token: "opaque-type-a" };
-  const trustedA: TrustedTypeSource = { kind: "TRUSTED_TYPE_SOURCE", sourceId: "catalogue-type", token: "opaque-type-a", provenance: "future-policy-fixture" };
-  const trustedB: TrustedTypeSource = { ...trustedA, token: "opaque-type-b" };
+  const trustedA = issueTrusted("opaque-type-a", "future-policy-fixture-a");
+  const trustedB = issueTrusted("opaque-type-b", "future-policy-fixture-b");
   const builtMismatch = build(declaredA, trustedB);
   const builtValid = build(declaredA, trustedA);
   let mismatchEffects = 0;
   let validEffects = 0;
+  let missingEffects = 0;
   let mismatchRejected = false;
   try {
     await decide(builtMismatch, () => { mismatchEffects += 1; });
@@ -201,25 +245,18 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
     mismatchRejected = true;
   }
   const validDecision = await decide(builtValid, () => { validEffects += 1; });
-  const missingDecision = await decide(build(declaredA, null));
+  const missingDecision = await decide(build(declaredA, null), () => { missingEffects += 1; });
   const violations: string[] = [];
   if (!mismatchRejected) violations.push("CENTRAL: mismatch returned instead of rejecting");
   if (validDecision !== "ADMIT") violations.push(`CENTRAL: trusted match returned ${String(validDecision)}`);
   if (missingDecision !== "UNDETERMINED_POLICY_INPUT") violations.push(`CENTRAL: missing policy returned ${String(missingDecision)}`);
   if (mismatchEffects !== 0) violations.push("CENTRAL: mismatch invoked its effect callback");
   if (validEffects !== 1) violations.push(`CENTRAL: trusted match invoked effect ${validEffects} times`);
+  if (missingEffects !== 0) violations.push(`CENTRAL: missing policy invoked effect ${missingEffects} times`);
   try {
-    build(declaredA, { ...trustedA, sourceId: declaredA.sourceId });
-    violations.push("CENTRAL: aliased declared/trusted source identity was accepted");
+    build(declaredA, { kind: "TRUSTED_TYPE_SOURCE", sourceId: "forged", token: declaredA.token, provenance: "forged" });
+    violations.push("CENTRAL: structurally forged trusted capability was accepted");
   } catch { /* required */ }
-  try {
-    build(
-      { ...declaredA, sourceId: "category" },
-      { ...trustedA, sourceId: "categorySignal" },
-    );
-  } catch {
-    violations.push("CENTRAL: similarly named but independent source identities were rejected");
-  }
   return violations;
 }
 
@@ -263,24 +300,42 @@ test("mutation controls: comparator rejects mismatch without rejecting valid pos
   assert.notEqual(rejectEverythingMutation(trusted), "ADMIT", "reject-all mutant must be killed by the valid control");
 
   const fixture: BoundaryExpectation = { id: "MUTANT", file: "test-only.ts", handler: "POST", effects: [effect("persist"), effect("hold")] };
-  const commentOnly = `async function POST(){ /* validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => persist()) */ persist(); hold(); }`;
+  const centralImport = `import { validateAuthoritativeProductType, buildAuthoritativeTypeBoundaryInput } from "@/lib/product-type-boundary";`;
+  const commentOnly = `${centralImport} async function POST(){ /* validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => persist()) */ persist(); hold(); }`;
   assert.ok(inspectBoundary(fixture, commentOnly).some((violation) => violation.includes("persist is not owned")), "comment mutant survived");
-  const ignoredPrior = `async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => {}); persist(); hold(); }`;
+  const ignoredPrior = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => {}); persist(); hold(); }`;
   assert.ok(inspectBoundary(fixture, ignoredPrior).some((violation) => violation.includes("persist is not owned")), "ignored-prior-call mutant survived");
-  const oneBoundaryOnly = `async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => persist()); hold(); }`;
+  const oneBoundaryOnly = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => persist()); hold(); }`;
   assert.ok(inspectBoundary(fixture, oneBoundaryOnly).some((violation) => violation.includes("hold is not owned")), "single-effect mutant survived");
-  const ownedEffects = `async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  const ownedEffects = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
   assert.deepEqual(inspectBoundary(fixture, ownedEffects), [], "correct callback-owned effects did not satisfy the structural contract");
-  const rawObjectInputs = `async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => { persist(); hold(); }); }`;
+  const rawObjectInputs = `${centralImport} async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => { persist(); hold(); }); }`;
   assert.ok(inspectBoundary(fixture, rawObjectInputs).some((violation) => violation.includes("typed source-identity builder")), "raw-object input mutant survived");
-  const sameExpressionInputs = `async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(alias, alias), () => { persist(); hold(); }); }`;
+  const sameExpressionInputs = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(alias, alias), () => { persist(); hold(); }); }`;
   assert.ok(inspectBoundary(fixture, sameExpressionInputs).some((violation) => violation.includes("same expression")), "same-expression alias mutant survived");
 
+  const shadowedLocalSeam = `${centralImport} async function POST(){ const validateAuthoritativeProductType = async (_i: unknown, cb: () => void) => cb(); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, shadowedLocalSeam).some((violation) => violation.includes("shadowed locally")), "shadowed local-seam mutant survived");
+  const receiverLocalSeam = `${centralImport} async function POST(){ await local.validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, receiverLocalSeam).some((violation) => violation.includes("not owned")), "local receiver-seam mutant survived");
+
   const declaredSource: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "category", token: "same" };
-  const aliasedTrusted: TrustedTypeSource = { kind: "TRUSTED_TYPE_SOURCE", sourceId: "category", token: "same", provenance: "alias fixture" };
-  assert.throws(() => buildReferenceBoundaryInput(declaredSource, aliasedTrusted), /C2_SOURCE_ALIAS/);
-  const similarlyNamedTrusted: TrustedTypeSource = { ...aliasedTrusted, sourceId: "categorySignal" };
+  const forgedTrusted: TrustedTypeSource = { kind: "TRUSTED_TYPE_SOURCE", sourceId: "different-id", token: declaredSource.token, provenance: "forged" };
+  assert.throws(() => buildReferenceBoundaryInput(declaredSource, forgedTrusted), /C2_UNTRUSTED_CAPABILITY/);
+  const similarlyNamedTrusted = issueReferenceTrustedTypeCapability("same", "categorySignal");
   assert.equal(referenceDecision(buildReferenceBoundaryInput(declaredSource, similarlyNamedTrusted)), "ADMIT");
+
+  const missingAdmitMutant = async (input: TypeBoundaryInput, onAdmit: () => void) => {
+    if (!input.trustedSignal) { onAdmit(); return "UNDETERMINED_POLICY_INPUT"; }
+    return "ADMIT";
+  };
+  let missingMutantEffects = 0;
+  assert.equal(await missingAdmitMutant(buildReferenceBoundaryInput(declaredSource, null), () => { missingMutantEffects += 1; }), "UNDETERMINED_POLICY_INPUT");
+  assert.equal(missingMutantEffects, 1, "missing-policy admission mutant fixture did not execute its forbidden effect");
+
+  const expandedFixture: BoundaryExpectation = { ...fixture, effects: [...fixture.effects, effect("storageCleanup")] };
+  const unguardedNewSink = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); storageCleanup(); }`;
+  assert.ok(inspectBoundary(expandedFixture, unguardedNewSink).some((violation) => violation.includes("storageCleanup is not owned")), "newly enumerated sink mutant survived");
 
   const probeHandler = async (
     seam: (input: TypeBoundaryInput, onAdmit: () => void) => unknown | Promise<unknown>,

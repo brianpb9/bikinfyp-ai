@@ -1154,6 +1154,13 @@ TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
   similarly named independent sources remain valid. Actual PATCH behavior is
   deliberately not prescribed until Product Policy authorises a production-
   consumable trusted-signal ingress; `category` alone cannot become truth.
+- Fifth remediation binds calls to named imports from the central module and
+  kills local-shadow/receiver mutants. Trusted truth is an opaque ingress-
+  issued runtime capability, not caller-chosen `sourceId`; structural
+  same-data/different-ID forgery fails while an issued similarly named source
+  passes. Missing policy is probed with a callback and must advance zero
+  effects. E6 extraction audit, A1 cleanup/FYP-audit/fail, and A4 cleanup sinks
+  are included, with an unguarded-new-sink mutation control.
 - Opaque-token mutation controls kill both accept-all and reject-all mutants;
   the positive trusted match remains admissible and absent trusted provenance
   remains policy-undetermined. This does not define a toothpaste taxonomy.

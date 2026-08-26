@@ -60,20 +60,24 @@ node scripts/verify-c2-type-mismatch-red.mjs
 The verifier succeeds only when the inner RED suite exits 1 for exactly the
 intended missing invariant, with four passing discovery/control tests and no
 compile/module/setup error. The RED test parses TypeScript AST call expressions
-per exported handler, so comments and declarations cannot satisfy it. Each
+per exported handler and requires named imports from
+`@/lib/product-type-boundary`; receiver methods and locally shadowed names do
+not satisfy it. Each
 known storage, persistence, provider-generation, script/job/audit write, credit,
 managed-trace queue, and ordinary enqueue effect must be an AST descendant
 of the seam's effect callback; a merely prior or ignored call cannot satisfy
 it. The seam rejection must be awaited or returned. Its first argument must be
 the typed `buildAuthoritativeTypeBoundaryInput(declaredSource, trustedSource)`
 dataflow boundary; raw objects, comments, and the same expression on both sides
-cannot satisfy it. Runtime source identities reject aliases even when bindings
-have different names, while independently sourced similarly named identifiers
-remain valid. If the
+cannot satisfy it. Trusted sources are opaque ingress-issued capabilities
+tracked by runtime identity, so structurally forged same-data/different-ID
+objects fail while a legitimately issued similarly named source remains valid.
+Production handlers may not import the contract-test capability issuer. If the
 central production module later exists, the same test directly probes it with
 trusted-match, trusted-mismatch, and missing-policy inputs. Mismatch must throw,
 not merely return `REJECT_MISMATCH`, and invoke zero effects; a trusted match
-must invoke exactly one effect. Boundary-level mutation controls prove that an
+must invoke exactly one effect; missing policy must also invoke zero effects.
+Boundary-level mutation controls prove that an
 ignored returned decision yields false 2xx while rejection yields non-success.
 No actual handler is required to accept or reject from `category` alone:
 production has no authorised trusted-signal ingress yet, and manufacturing one

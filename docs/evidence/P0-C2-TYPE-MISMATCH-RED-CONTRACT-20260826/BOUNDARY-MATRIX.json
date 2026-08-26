@@ -27,17 +27,20 @@
   },
   "false_green_guards": {
     "parser": "TypeScript AST CallExpression per exported handler",
+    "central_symbol_binding": "named imports from @/lib/product-type-boundary; receiver calls and local shadows rejected",
     "comments_or_declarations_satisfy": false,
     "every_boundary_required": true,
     "effect_callback_ownership_required": true,
     "merely_prior_or_ignored_call_satisfies": false,
     "seam_rejection_must_be_awaited_or_returned": true,
     "required_opaque_inputs": ["typed declared source", "typed trusted provenance source"],
-    "required_input_check": "buildAuthoritativeTypeBoundaryInput typed/dataflow boundary with distinct runtime source identities",
-    "input_independence_mutations": ["same-expression alias", "different-binding same-source alias", "similarly named independent positive"],
+    "required_input_check": "buildAuthoritativeTypeBoundaryInput typed/dataflow boundary with opaque ingress-issued capability identity",
+    "input_independence_mutations": ["same-expression alias", "same-data/different-ID structural forgery", "similarly named issued-capability positive"],
     "central_module_probe_inputs": ["trusted match", "trusted mismatch", "missing policy"],
     "mismatch_contract": "throws/rejects, zero callback effects, cannot be ignored into success",
     "valid_contract": "exactly one callback effect",
+    "missing_policy_contract": "UNDETERMINED_POLICY_INPUT and zero callback effects",
+    "contract_test_issuer_importable_by_handlers": false,
     "actual_handler_probe": "not required until an authoritative production-consumable signal ingress is approved",
     "sink_classes": ["storage", "product persistence", "persona persistence", "provider generation", "script persistence", "job persistence", "audit persistence", "credit hold", "managed trace queue", "ordinary queue"]
   }
