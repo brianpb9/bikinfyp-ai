@@ -1,0 +1,51 @@
+{
+  "schema": "shipping-readiness-score/v3",
+  "task": "P1-POST-E2-CEILING-RECOMPUTE-20260826",
+  "baseline": "39140dd2485ec5c679477008cb61780a3edb6a43",
+  "source_board": "docs/evidence/board-jawaban-2026-08-19.md",
+  "rows": [
+    {"domain":"Money safety","score":9,"delta":0},
+    {"domain":"Auth intent & failure path","score":7,"delta":0},
+    {"domain":"Mobile UI 375","score":7,"delta":0},
+    {"domain":"Hydration/interaction canary CI","score":8,"delta":0},
+    {"domain":"Content engine standard","score":7,"delta":0},
+    {"domain":"Brand fidelity","score":6,"delta":0},
+    {"domain":"Anti-slop produksi","score":7,"delta":0},
+    {"domain":"Prompt/verdict archive","score":8,"delta":0},
+    {"domain":"NSFW rejection","score":6,"delta":0},
+    {"domain":"Payments","score":2,"delta":0},
+    {"domain":"Legal/PDP","score":2,"delta":0},
+    {"domain":"DR/monitoring/incident owner","score":2,"delta":0},
+    {"domain":"Landing/pricing consistency","score":6,"delta":0}
+  ],
+  "arithmetic": {
+    "row_count": 13,
+    "raw_sum": 77,
+    "denominator": 130,
+    "normalized_unrounded": 59.23076923076923,
+    "normalized_rounded": 59,
+    "r2a_evidence_ceiling": 58,
+    "ceiling_decision": "retained",
+    "canonical_reported_score": 58
+  },
+  "counterexample": {
+    "parser_contract": "single-letter evidence tiers V/C/N only",
+    "row_count": 12,
+    "raw_sum": 70,
+    "reason_rejected": "omits the V/C Anti-slop row"
+  },
+  "ceiling_conditions": {
+    "managed_e1_positive": "closed",
+    "managed_e2_controlled_positive": "closed",
+    "managed_e3_e9_bounded_paths": "closed",
+    "post_e2_exact_web_worker_parity": "closed_at_managed_staging",
+    "valid_product_admission_worker_output_exact_deploy": "closed_at_managed_zero_value_deterministic_trace",
+    "legacy_paired_db_r2_audit": "open",
+    "c9_c12_aggregate": "open",
+    "ocr_policy_and_coverage": "open",
+    "representative_paid_provider_and_production_e2e": "open",
+    "production_payment_legal_incident_dr": "open"
+  },
+  "new_weights_or_policy": false,
+  "score_inflation": false
+}

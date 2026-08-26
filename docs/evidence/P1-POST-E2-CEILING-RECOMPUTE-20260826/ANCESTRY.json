@@ -1,0 +1,16 @@
+{
+  "schema": "readiness-task-ancestry/v1",
+  "prior_canonical_baseline": "460ea44c32651f414a83c7489802a68f06b65dca",
+  "prior_recompute_code": "428e86710ea30f1526902e80da8f554320f0a1ac",
+  "prior_recompute_evidence": "b56bd159fd76520ec45b59318208aa8dc84a7c7e",
+  "post_e2_task_first_commit": "8709f4a810894b810e9bdbd04ec738c0332662ff",
+  "deployed_application_sha": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+  "accepted_evidence_sha": "39140dd2485ec5c679477008cb61780a3edb6a43",
+  "required_relations": [
+    ["460ea44c32651f414a83c7489802a68f06b65dca", "428e86710ea30f1526902e80da8f554320f0a1ac"],
+    ["428e86710ea30f1526902e80da8f554320f0a1ac", "b56bd159fd76520ec45b59318208aa8dc84a7c7e"],
+    ["b56bd159fd76520ec45b59318208aa8dc84a7c7e", "8709f4a810894b810e9bdbd04ec738c0332662ff"],
+    ["8709f4a810894b810e9bdbd04ec738c0332662ff", "565f3fad6446152966bd8003a0aa8f6536bd279b"],
+    ["565f3fad6446152966bd8003a0aa8f6536bd279b", "39140dd2485ec5c679477008cb61780a3edb6a43"]
+  ]
+}

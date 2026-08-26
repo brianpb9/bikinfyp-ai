@@ -1088,3 +1088,35 @@ TASK=`P1-READINESS-TRANCHE-RECOMPUTE-20260826`
   canonical shipping readiness remains **58/100**. Full current reasoning and
   machine checks: `../SHIP-READINESS-CANONICAL-20260826.md` and
   `../P1-READINESS-TRANCHE-RECOMPUTE-20260826/`.
+
+### E.36 Post-E2 exact parity, admission→worker trace, and ceiling recompute — 2026-08-26
+
+TASK=`P1-POST-E2-CEILING-RECOMPUTE-20260826`
+
+- Accepted evidence SHA `39140dd2485ec5c679477008cb61780a3edb6a43`
+  binds Reviewer PASS and Builder DONE for
+  `P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826` with exact route owner
+  `builder-parity-e2e-20260826` and `STALE=false` consumption.
+- Staging web and canonical worker were restored live at the same post-E2 app
+  SHA `565f3fad6446152966bd8003a0aa8f6536bd279b`, `autoDeploy=no`, maintenance
+  off, and the canonical worker command restored. This closes the E.35
+  post-E2 web/worker parity condition at managed staging tier.
+- A valid synthetic product traversed canonical `/api/jobs` admission (HTTP
+  201), the dedicated BullMQ trace queue, the actual PostgreSQL worker
+  boundary, immutable manifest/snapshot verification, and an R2 deliverable in
+  terminal `READY`. Exact request replay returned 400. Provider calls,
+  payment/invoice/refund/settlement calls, ledger value, and real money were
+  zero; task-owned DB/R2/queue residue was authoritatively zero after cleanup.
+- This closes the E.35 valid-product admission→worker→output condition only at
+  its accepted zero-value deterministic managed tier. It does not promote the
+  trace into representative paid-provider or production E2E evidence.
+- W1/W2 remain **PARTIAL in aggregate**: one PostgreSQL deterministic worker
+  trace and explicit C3 boundaries are now accepted, while W2, representative
+  provider, production, C9/C12 aggregate, legacy, and OCR-policy coverage are
+  still incomplete. Current aggregate C1–C13 count remains **1 PASS / 9
+  PARTIAL / 3 BLOCKED**; no historical row is rewritten.
+- The unchanged 13 board rows still sum to 77/130 (normalized 59). Remaining
+  R2A conditions support retaining ceiling 58, so canonical shipping readiness
+  remains **58/100** with no invented weight, policy, or point.
+- Machine evidence and exact arithmetic are in
+  `../P1-POST-E2-CEILING-RECOMPUTE-20260826/`.
