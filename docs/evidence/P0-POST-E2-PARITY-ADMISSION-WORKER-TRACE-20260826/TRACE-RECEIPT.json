@@ -1,9 +1,9 @@
 {
   "schema": "managed-post-e2-worker-trace/v1",
   "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
-  "started_at": "2026-08-26T10:03:36.352Z",
-  "finished_at": "2026-08-26T10:03:44.487Z",
-  "exact_sha": "58aeb4f19874290916a1497707632ff87e7e7d0d",
+  "started_at": "2026-08-26T10:28:47.445Z",
+  "finished_at": "2026-08-26T10:28:55.503Z",
+  "exact_sha": "7a54128dbaa03f808355791edffeb25d91e69f17",
   "runtime_identity": {
     "service_id": "srv-d9n28ue417fc73ch2b60",
     "deploy_env": "staging",
@@ -23,6 +23,8 @@
     "canonical_admission_http": 201,
     "canonical_admission_job_id_matches_worker": true,
     "canonical_admission_hold_idr": 0,
+    "canonical_admission_replay_http": 400,
+    "canonical_admission_capability_one_use": true,
     "sidecar_verified": true,
     "admission_manifest_exact": true,
     "admission_snapshot_exact": true,
@@ -32,7 +34,7 @@
     "provider_voice": "none-silent-caption",
     "cost_actual_idr": 0,
     "qc": { "passed": true, "checks": [{ "code": "QC-08", "status": "pass" }], "fixture": true },
-    "deliverable_key": "jobs/84e12250-3a07-4814-a68f-50254ff625fe/output.mp4",
+    "deliverable_key": "jobs/cd31c41f-c933-4ceb-8444-77ea406aa391/output.mp4",
     "deliverable_present_in_r2": true,
     "provider_task_rows": 0,
     "payment_rows": 0,
@@ -44,6 +46,10 @@
   },
   "cleanup": { "database": true, "r2": true, "queue": true },
   "queue_after": { "waiting": 0, "active": 0, "delayed": 0, "prioritized": 0, "paused": 0, "failed": 0, "actionable": 0 },
-  "after_cleanup": { "db_rows": 0, "r2_objects_present": 0, "queue_job_present": false },
+  "after_cleanup": {
+    "db_rows": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "outputs": 0, "audit_log": 0, "fyp_snapshots": 0, "provider_tasks": 0, "payments": 0, "credit_ledger": 0, "job_prompts": 0, "job_shots": 0, "post_plans": 0 },
+    "r2_objects_present": 0,
+    "queue_job_present": false
+  },
   "result": "PASS"
 }

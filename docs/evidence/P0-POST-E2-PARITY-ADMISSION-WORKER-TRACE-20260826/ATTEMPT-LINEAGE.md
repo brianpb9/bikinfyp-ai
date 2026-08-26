@@ -36,4 +36,17 @@ The trace command was removed immediately afterward. Canonical worker deploy
     manifest before output. The receipt and cleanup both passed.
 
 The trace command was removed immediately afterward. Canonical worker deploy
-`dep-da7bk4navr4c73biljtg` is the final live deploy.
+`dep-da7bk4navr4c73biljtg` was the final live deploy for that remediation.
+
+12. Reviewer identified replayability and incomplete cleanup observation.
+    SHA `0a2a866952e1a7729c98e9f7029c567c306467c0` added a request-bound,
+    five-minute, Redis-NX capability, provider-worker zero-ledger guard, and
+    per-table cleanup counts. Its trace passed and proved the guard during
+    worker handoff.
+13. SHA `7a54128dbaa03f808355791edffeb25d91e69f17` added a direct runtime replay
+    counterexample. `dep-da7bv37avr4c73bjoih0` returned HTTP 400 for the exact
+    repeated capability, then emitted PASS with all 13 task-owned table counts
+    zero plus R2/queue absence.
+
+The trace command was removed immediately afterward. Canonical worker deploy
+`dep-da7c00id0e5s73e37ikg` is the final live deploy.

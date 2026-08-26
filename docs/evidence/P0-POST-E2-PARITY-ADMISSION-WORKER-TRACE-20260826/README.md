@@ -1,7 +1,7 @@
 # Post-E2 parity admission → worker trace
 
 Managed STAGING web and worker are live at exact app SHA
-`58aeb4f19874290916a1497707632ff87e7e7d0d`. The deterministic harness is
+`7a54128dbaa03f808355791edffeb25d91e69f17`. The deterministic harness is
 not a general provider toggle: production-mode execution requires staging,
 the exact canonical worker service ID, and an explicitly matching full live
 SHA. Production, web/sibling, wrong-SHA, and missing-identity counterexamples
@@ -21,6 +21,13 @@ The deterministic worker itself parses the immutable product snapshot and
 parses plus materializes/hash-verifies the immutable reference manifest before
 FFmpeg can create output. Missing or structurally tampered admission values
 fail closed, and byte tampering is rejected by canonical materialization.
+
+The Rp0 capability is bound to the exact user, script, format, tier, duration,
+SHA, random nonce, and five-minute expiry. Redis atomically consumes the nonce;
+an immediate replay of the exact authenticated request returned HTTP 400.
+Separately, the canonical provider worker rejected the ledger-less job before
+provider execution during the deploy handoff; only the exact deterministic
+worker gate could consume its retry.
 
 Final runtime restoration is complete: worker uses the canonical image CMD,
 is not suspended, and is live at the exact app SHA; web maintenance is off.

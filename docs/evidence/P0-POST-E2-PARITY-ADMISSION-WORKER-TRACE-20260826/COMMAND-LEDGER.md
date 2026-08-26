@@ -18,6 +18,13 @@
 | 2026-08-26T10:02:20Z | Corrected task-bound trace deploy | `dep-da7bjb1srm7s73823e60`; asserted PASS at 10:03:44Z |
 | 2026-08-26T10:04:03Z | Remove override and restore canonical worker CMD | `dep-da7bk4navr4c73biljtg`, live |
 | 2026-08-26T10:05:34Z | Final public health and control-plane reads | 3/3 HTTP 200; exact SHA; worker command empty; maintenance off |
+| 2026-08-26T10:16:50Z | Commit single-use request-bound capability, worker zero-ledger guard, and per-table cleanup observations | `0a2a866952e1a7729c98e9f7029c567c306467c0` |
+| 2026-08-26T10:22:08Z | Canonical worker sees trace job during handoff | rejected before provider: `ZERO_LEDGER_JOB_REQUIRES_DETERMINISTIC_WORKER_GATE` |
+| 2026-08-26T10:22:17Z | Exact deterministic retry and expanded cleanup receipt | PASS; 13/13 table counts zero |
+| 2026-08-26T10:24:53Z | Commit explicit runtime replay counterexample | `7a54128dbaa03f808355791edffeb25d91e69f17` |
+| 2026-08-26T10:28:55Z | Final canonical trace receipt | PASS; original HTTP 201; exact replay HTTP 400; READY; all cleanup zero |
+| 2026-08-26T10:29:22Z | Restore final canonical worker CMD | `dep-da7c00id0e5s73e37ikg`, live |
+| 2026-08-26T10:31:33Z | Final health/control-plane/production read | exact SHA; 3/3 HTTP 200; worker command empty; maintenance off; production unchanged |
 
 Earlier failed attempts and their cleanup/termination are enumerated in
 `ATTEMPT-LINEAGE.md`. No failed attempt reached provider or payment execution.
