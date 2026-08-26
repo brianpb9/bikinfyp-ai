@@ -41,12 +41,15 @@ before/after receipts show both queues at the same canonical zero state, so an
 ordinary held job cannot be claimed or stranded by the trace process.
 
 The restoration invariant also has a disposable Redis/BullMQ integration
-regression at code SHA `ec0a5e95ed519b5bb1d608728ce9302d7053d6a0`.
+regression at code/config SHA `d40811b72b5834f9d4bc300d2e01886242390f7a`.
 It enqueues canonical and trace records through the production producer
 helpers, runs only the trace consumer, observes the canonical record still
 `waiting` with `attemptsMade=0`, and then starts the canonical consumer and
 observes that same record reach `completed`. This closes the gap that the live
-trace's initially empty canonical queue could not prove by itself.
+trace's initially empty canonical queue could not prove by itself. The
+mandatory CI job explicitly installs `redis-server` before `npm test`, and the
+local prerequisite is documented in the repository README; the integration
+does not rely on an incidental runner image binary.
 
 Final runtime restoration is complete: worker uses the canonical image CMD,
 is not suspended, and is live at the exact app SHA; web maintenance is off.

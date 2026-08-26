@@ -79,3 +79,10 @@ The trace command was removed immediately afterward. Canonical worker deploy
     attempts while only the trace queue was consumed, then reached `completed`
     after the canonical consumer started. The corrected four-file targeted
     command passed 17/17 and its raw TAP output is preserved.
+
+18. Reviewer identified that clean `ubuntu-latest` did not provision the
+    system `redis-server` executable required by the mandatory integration.
+    SHA `d40811b72b5834f9d4bc300d2e01886242390f7a` adds an explicit
+    `redis-server` apt package to the CI verify setup and documents the local
+    prerequisite. Exact-SHA targeted, TypeScript, and full-suite verification
+    all passed afterward.

@@ -38,6 +38,8 @@
 | 2026-08-26T11:08:49Z | Final health/control-plane read | exact SHA; 3/3 HTTP 200; command empty; maintenance off |
 | 2026-08-26T11:17:00Z | Run full suite after Redis queue-survival remediation | PASS; 1248 total; 1201 pass; 47 skip; 0 fail |
 | 2026-08-26T11:18:18Z | Run corrected four-file targeted command | PASS; raw TAP preserved; 17/17; isolated Redis/BullMQ survival and restoration observed |
+| 2026-08-26T11:25:28Z | Provision Redis explicitly in mandatory CI and document local prerequisite | PASS; `redis-server` installed before `npm test`; no runner-manifest assumption |
+| 2026-08-26T11:26:46Z | Re-run exact config-SHA verification | targeted 17/17; TypeScript PASS; full 1248 total / 1201 pass / 47 skip / 0 fail |
 
 Earlier failed attempts and their cleanup/termination are enumerated in
 `ATTEMPT-LINEAGE.md`. No failed attempt reached provider or payment execution.

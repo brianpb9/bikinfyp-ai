@@ -6,7 +6,7 @@ full_suite_tests=1248
 full_suite_pass=1201
 full_suite_skip=47
 full_suite_fail=0
-full_suite_duration_ms=97967.271541
+full_suite_duration_ms=99857.488125
 
 targeted_command=npx tsx --test tests/staging-admission-trace.test.ts tests/staging-deterministic-worker.test.ts tests/staging-deterministic-admission.test.ts tests/staging-trace-queue-isolation.test.ts
 targeted_scope=single-use request-bound admission, dedicated queue isolation, held-job trace-worker isolation, deterministic/zero-ledger worker gate, immutable manifest/snapshot counterexamples and ordering
@@ -14,10 +14,12 @@ targeted_tests=17
 targeted_pass=17
 targeted_skip_environment=0
 targeted_fail=0
-targeted_duration_ms=366.56325
+targeted_duration_ms=445.726709
 targeted_raw_output=TARGETED-TEST-OUTPUT.txt
 queue_isolation_fixture=isolated loopback redis-server + production enqueueJob/enqueueManagedStagingTraceJob helpers + real BullMQ Workers
 queue_isolation_assertions=trace consumed; canonical remains waiting; canonical attemptsMade=0; canonical processed after canonical consumer restoration
+ci_redis_provisioning=.github/workflows/ci.yml installs redis-server explicitly before npm test
+local_redis_prerequisite=README.md documents redis-server in PATH
 
 typescript_command=npx tsc --noEmit
 typescript_result=PASS

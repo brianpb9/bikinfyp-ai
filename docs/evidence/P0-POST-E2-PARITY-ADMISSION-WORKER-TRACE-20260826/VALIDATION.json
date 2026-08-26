@@ -18,6 +18,8 @@
   "canonical_record_waiting_after_trace_consumer": true,
   "canonical_record_attempts_after_trace_consumer": 0,
   "canonical_record_processed_after_restoration": true,
+  "ci_installs_redis_server_before_mandatory_suite": true,
+  "local_redis_prerequisite_documented": true,
   "cleanup_per_table_observed_zero": true,
   "zero_external_provider_calls": true,
   "zero_real_money": true,
@@ -35,8 +37,8 @@
     "missing_exact_identity_or_sha": "fail_closed"
   },
   "tests": {
-    "full_suite": { "total": 1248, "pass": 1201, "skip": 47, "fail": 0, "duration_ms": 97967.271541 },
-    "targeted_final_invariants": { "total": 17, "pass": 17, "skip": 0, "fail": 0, "duration_ms": 366.56325, "raw_output": "TARGETED-TEST-OUTPUT.txt" },
+    "full_suite": { "total": 1248, "pass": 1201, "skip": 47, "fail": 0, "duration_ms": 99857.488125 },
+    "targeted_final_invariants": { "total": 17, "pass": 17, "skip": 0, "fail": 0, "duration_ms": 445.726709, "raw_output": "TARGETED-TEST-OUTPUT.txt" },
     "typescript": "PASS",
     "worker_container_contract": "PASS_STATIC_DOCKER_UNAVAILABLE"
   }
