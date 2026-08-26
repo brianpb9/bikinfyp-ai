@@ -111,6 +111,15 @@ export interface VideoAsset {
   costIdr: number;
   /** true bila klip membawa audio embedded (tier bersuara via provider nyata). */
   hasAudio?: boolean;
+  /**
+   * usage.total_tokens dari provider, bila providernya melaporkannya.
+   *
+   * Ada di sini karena TAGIHAN BytePlus didenominasi dalam token, bukan detik.
+   * Tanpa membawa angka ini keluar, "cocokkan nanti dengan tagihan" tidak bisa
+   * dijalankan: kita tidak punya sisi kita sendiri untuk dicocokkan. Angka ini
+   * dibaca dari respons API lalu dibuang sampai 26 Agu 2026.
+   */
+  usageTokens?: number;
 }
 
 export interface VoiceSpec {

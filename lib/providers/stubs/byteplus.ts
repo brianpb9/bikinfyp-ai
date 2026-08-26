@@ -21,20 +21,83 @@ import { taskMemo } from "../task-memo";
 // - pro-fast: 480p $0,01/dtk, 1080p $0,048/dtk — https://opper.ai/bytedance/seedance-1-0-pro-fast
 // - lite: ~$0,010/dtk — https://soravideo.art/blog/seedance-2-pricing
 // - 1.5 pro: ~$0,26 per 5 dtk 720p — https://tutorial.theaibuilders.dev (Seedance API tutorial)
-// Tarif bisa berubah; bila respons mengandung usage.total_tokens DAN model punya tarif token,
-// biaya dihitung dari usage (aktual); selain itu dari tarif/detik (estimasi, ditandai di log).
-const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<string, number> }> = {
+//
+// URUTAN HITUNG: TOKEN DULU, tarif/detik hanya kalau token tidak tersedia.
+// Alasannya ada di blok "BIAYA DITENTUKAN MODE" di bawah, dan ini bukan
+// preferensi gaya: BytePlus menagih per TOKEN, sedangkan tarif/detik secara
+// struktural BUTA terhadap penggandaan mode. Dua render 15 detik — satu tanpa
+// referensi (324.900 token), satu dengan reference_video (648.900 token) —
+// dilaporkan jalur per-detik dengan angka yang SAMA PERSIS. Itu bukan
+// ketidaktelitian tarif; itu satuan yang salah.
+type TarifModel = {
+  tokenUsdPerM?: number;
+  perSecUsd?: Record<string, number>;
+  /**
+   * Asal tokenUsdPerM — wajib diisi bila tokenUsdPerM ada, supaya tidak ada
+   * tarif yang masuk tabel ini tanpa ketahuan dari mana:
+   *   "publik"       tarif brosur/dokumentasi vendor.
+   *   "turunan-cogs" DIBALIK dari asumsi COGS BRD, jadi MELINGKAR: BRD yang
+   *                  menetapkan rupiahnya, dan angka ini hanya menyatakan
+   *                  ulang asumsi yang sama dalam satuan token. Ia TIDAK
+   *                  membuktikan apa pun tentang tarif akun kita — gunanya
+   *                  cuma satu, yaitu membuat laporan biaya ikut bergerak
+   *                  saat mode berubah.
+   */
+  asalTarifToken?: "publik" | "turunan-cogs";
+};
+const MODEL_RATES: Record<string, TarifModel> = {
   "seedance-1-0-lite-i2v-250428": { perSecUsd: { "480p": 0.01, "720p": 0.02 } }, // Retiring — jangan dipakai
   "seedance-1-0-lite-t2v-250428": { perSecUsd: { "480p": 0.01, "720p": 0.02 } }, // Retiring
   "seedance-1-0-pro-fast-251015": { perSecUsd: { "480p": 0.01, "720p": 0.024, "1080p": 0.048 } },
   "seedance-1-0-pro-fast-250528": { perSecUsd: { "480p": 0.01, "720p": 0.024, "1080p": 0.048 } },
-  "seedance-1-0-pro-250528": { tokenUsdPerM: 2.5 },
+  "seedance-1-0-pro-250528": { tokenUsdPerM: 2.5, asalTarifToken: "publik" },
   "seedance-1-5-pro-251215": { perSecUsd: { "480p": 0.026, "720p": 0.052 } },
-  "dreamina-seedance-2-0-mini-260615": { perSecUsd: { "720p": 0.034 } }, // ESTIMASI dari COGS BRD §5.3 (Rp8.802/video)
-  "dreamina-seedance-2-0-260128": { perSecUsd: { "720p": 0.143 } }, // ESTIMASI dari COGS BRD §5.3 (Rp37.164/video)
+  // KEDUA TARIF TOKEN DI BAWAH INI MELINGKAR, dan itu ditulis di sini supaya
+  // tidak ada yang mengutipnya sebagai tarif. perSecUsd lamanya ($0,034 dan
+  // $0,143) SENDIRI diturunkan dari COGS BRD §5.3 — BRD menetapkan Rp8.802,
+  // kode membaliknya jadi tarif/detik, laporan biaya menampilkan Rp8.802 lagi,
+  // lalu terlihat "cocok". Tidak pernah sekali pun diperiksa ke sesuatu di
+  // luar dirinya sendiri. Mengubahnya ke satuan token TIDAK memperbaiki itu.
+  //
+  // Yang diperbaiki cuma satu hal, dan itu yang membuatnya layak: rupiahnya
+  // kini bergerak mengikuti token nyata, jadi render dengan reference_video
+  // berhenti dilaporkan semurah render tanpa referensi.
+  //
+  //   mini      Rp 8.802 @ 324.900 token (15 dtk 720p, TANPA ref)  -> $1,66/1M
+  //   2.0 penuh Rp37.164 @ 648.900 token (15 dtk 720p, DENGAN ref) -> $3,51/1M
+  //
+  // DAN KONVERSINYA MEMBUKA SATU ANGKA LAGI: pada MODE YANG SAMA, jarak tarif
+  // mini vs 2.0 penuh cuma 2,11x — bukan 4,21x seperti yang disiratkan
+  // $0,034 vs $0,143. Tarif/detik lama menggabungkan selisih TARIF dengan
+  // selisih MODE menjadi satu angka, karena BRD menurunkan mini dari kasus
+  // tanpa referensi dan 2.0 penuh dari kasus dengan referensi. Jadi separuh
+  // dari "mini jauh lebih murah" selama ini adalah mode, bukan model.
+  "dreamina-seedance-2-0-mini-260615": {
+    tokenUsdPerM: 1.66, asalTarifToken: "turunan-cogs", perSecUsd: { "720p": 0.034 },
+  },
+  "dreamina-seedance-2-0-260128": {
+    tokenUsdPerM: 3.51, asalTarifToken: "turunan-cogs", perSecUsd: { "720p": 0.143 },
+  },
   // Seedance 2.5 — tarif TOKEN, bukan per-detik. Lihat catatan panjang di bawah.
-  "dreamina-seedance-2-5-260628": { tokenUsdPerM: 10.7 },
+  "dreamina-seedance-2-5-260628": { tokenUsdPerM: 10.7, asalTarifToken: "publik" },
 };
+
+/**
+ * Token per detik NYATA di akun ini, mode BERREFERENSI — diukur, bukan ditaksir
+ * (704 task, scripts/tarif-seedance-25.ts): 648.900 token / 15 dtk pada 720p.
+ *
+ * Dipakai HANYA untuk taksiran pra-render, saat `usage` belum ada. Yang dipakai
+ * angka mode berreferensi karena itulah mode yang benar-benar kita jalankan —
+ * wajah dikunci dengan reference_video di setiap job. Memproyeksikan dengan
+ * angka tanpa-referensi (21.660/dtk) akan menaksir SETENGAH dari biaya nyata,
+ * dan taksiran yang kemurahan persis jenis kesalahan yang membuat cap anggaran
+ * terlampaui tanpa satu pun gerbang menyadarinya.
+ *
+ * 480p dan 1080p SENGAJA tidak diisi: keduanya belum diukur per-mode di akun
+ * ini, dan menebaknya di sini berarti menaruh angka karangan tepat di jalur
+ * yang memutuskan uang. Keduanya jatuh ke tarif/detik, dan jatuhnya ditandai.
+ */
+const TOKEN_PER_DETIK_DENGAN_REF: Record<string, number> = { "720p": 43_260 };
 
 // ─────────────────────────────────────────────────────────────────────────────
 // KENAPA 2.5 MEMAKAI TARIF TOKEN, DAN KENAPA ANGKA DI ATAS BELUM BOLEH DISEBUT
@@ -142,16 +205,66 @@ interface TaskResponse {
   error?: { code?: string; message?: string };
 }
 
+/**
+ * Hasil hitung biaya. `dasar` ADA supaya laporan tidak lagi menyembunyikan
+ * perbedaan kualitas antar angka di balik satu boolean:
+ *   "token-nyata"     dari usage.total_tokens respons API — satu-satunya jalur
+ *                     yang memakai satuan yang sama dengan tagihan, dan
+ *                     satu-satunya yang bisa membedakan mode.
+ *   "token-proyeksi"  token diproyeksikan dari durasi (pra-render, belum ada
+ *                     usage), mode berreferensi.
+ *   "tarif-per-detik" JATUH ke tarif/detik — BUTA terhadap mode.
+ *   "tarif-tertinggi" model tak dikenal, ditaksir semahal-mahalnya.
+ */
+export type HasilBiaya = {
+  idr: number;
+  /** true bila idr TIDAK dihitung dari pemakaian nyata. */
+  estimated: boolean;
+  dasar: "token-nyata" | "token-proyeksi" | "tarif-per-detik" | "tarif-tertinggi";
+  /**
+   * total_tokens dari respons API bila ada. DIBAWA KELUAR, tidak dibuang:
+   * tagihan BytePlus didenominasi dalam token, jadi tanpa angka ini "tunggu
+   * tagihannya" adalah rencana yang tidak bisa dijalankan — tidak ada sisi
+   * kita untuk dicocokkan.
+   */
+  totalTokens?: number;
+  /** Asal tarif yang dipakai. "turunan-cogs" berarti MELINGKAR — lihat TarifModel. */
+  asalTarif?: "publik" | "turunan-cogs";
+};
+
 /** Diekspor untuk uji tarif — lihat tests/tarif-model-tak-dikenal.test.ts. */
 export function hitungBiayaUntukUji(model: string, totalTokens: number | undefined, durationSec: number, resolution: string) {
   return estimateCostIdr(model, totalTokens, durationSec, resolution);
 }
 
-function estimateCostIdr(model: string, totalTokens: number | undefined, durationSec: number, resolution: string): { idr: number; estimated: boolean } {
+function estimateCostIdr(model: string, totalTokens: number | undefined, durationSec: number, resolution: string): HasilBiaya {
   const rate = MODEL_RATES[model] ?? {};
+
+  // 1. PEMAKAIAN NYATA — selalu didahulukan bila ada.
   if (totalTokens && rate.tokenUsdPerM) {
-    return { idr: Math.round((totalTokens / 1_000_000) * rate.tokenUsdPerM * config.usdIdr), estimated: false };
+    return {
+      idr: Math.round((totalTokens / 1_000_000) * rate.tokenUsdPerM * config.usdIdr),
+      estimated: false,
+      dasar: "token-nyata",
+      totalTokens,
+      asalTarif: rate.asalTarifToken,
+    };
   }
+
+  // 2. PROYEKSI TOKEN — pra-render, saat usage memang belum bisa ada.
+  const tokenPerDetik = TOKEN_PER_DETIK_DENGAN_REF[resolution];
+  if (rate.tokenUsdPerM && tokenPerDetik) {
+    const proyeksi = Math.round(durationSec * tokenPerDetik);
+    return {
+      idr: Math.round((proyeksi / 1_000_000) * rate.tokenUsdPerM * config.usdIdr),
+      estimated: true,
+      dasar: "token-proyeksi",
+      asalTarif: rate.asalTarifToken,
+    };
+  }
+
+  // 3. JATUH KE TARIF/DETIK. Ditandai, bukan didiamkan: angka dari jalur ini
+  //    tidak bisa membedakan render berreferensi dari yang tidak.
   // MODEL TAK DIKENAL DITAKSIR MAHAL, BUKAN MURAH.
   //
   // Ditemukan 20 Agu dari daftar task nyata: akun ini memakai
@@ -166,7 +279,7 @@ function estimateCostIdr(model: string, totalTokens: number | undefined, duratio
   // yang aman adalah yang MAHAL.
   const tarifDikenal = rate.perSecUsd?.[resolution] ?? rate.perSecUsd?.["480p"];
   if (tarifDikenal !== undefined) {
-    return { idr: Math.round(durationSec * tarifDikenal * config.usdIdr), estimated: true };
+    return { idr: Math.round(durationSec * tarifDikenal * config.usdIdr), estimated: true, dasar: "tarif-per-detik" };
   }
   const tertinggi = Math.max(
     ...Object.values(MODEL_RATES).flatMap((r) => Object.values(r.perSecUsd ?? {})),
@@ -176,7 +289,7 @@ function estimateCostIdr(model: string, totalTokens: number | undefined, duratio
     `[byteplus] model "${model}" TIDAK ada di MODEL_RATES — biaya ditaksir dengan tarif TERTINGGI yang diketahui ` +
       `($${tertinggi}/dtk). Tambahkan tarifnya sebelum angka ini dipakai untuk keputusan harga.`
   );
-  return { idr: Math.round(durationSec * tertinggi * config.usdIdr), estimated: true };
+  return { idr: Math.round(durationSec * tertinggi * config.usdIdr), estimated: true, dasar: "tarif-tertinggi" };
 }
 
 /** Susun item content create-task. Diekspor untuk unit test.
@@ -403,10 +516,26 @@ export const byteplusVideo: VideoProvider = {
       const durSec = result.duration ?? Math.ceil(shot.durationSec);
       const tierCfg = config.tiers[spec.qualityTier] ?? config.tiers.silent_caption;
       const cost = estimateCostIdr(tierCfg.byteplusModel, result.usage?.total_tokens, durSec, tierCfg.resolution);
+      // TOKEN IKUT DICATAT DI LOG, dan itu disengaja: tagihan BytePlus
+      // didenominasi token, jadi log inilah sisi kita saat rekonsiliasi.
+      // Sebelumnya angka ini dibaca dari respons lalu dibuang begitu saja.
+      const jejakToken = cost.totalTokens !== undefined ? `, token=${cost.totalTokens}` : "";
+      const jejakTarif = cost.asalTarif === "turunan-cogs" ? " [tarif MELINGKAR: turunan asumsi COGS]" : "";
+      const peringatanButaMode =
+        cost.dasar === "tarif-per-detik" || cost.dasar === "tarif-tertinggi"
+          ? " [BUTA MODE: tarif/detik tidak membedakan render berreferensi]"
+          : "";
       console.log(
-        `[byteplus] job ${spec.jobId} shot ${shot.index}: selesai ${secs} dtk, model=${tierCfg.byteplusModel}, audio=${spec.generateAudio}, biaya Rp${cost.idr}${cost.estimated ? " (estimasi tarif)" : " (dari usage)"}`
+        `[byteplus] job ${spec.jobId} shot ${shot.index}: selesai ${secs} dtk, model=${tierCfg.byteplusModel}, ` +
+          `audio=${spec.generateAudio}, biaya Rp${cost.idr} (dasar=${cost.dasar}${jejakToken})${jejakTarif}${peringatanButaMode}`
       );
-      assets.push({ filePath: path.resolve(outPath), durationSec: durSec, costIdr: cost.idr, hasAudio: spec.generateAudio });
+      assets.push({
+        filePath: path.resolve(outPath),
+        durationSec: durSec,
+        costIdr: cost.idr,
+        hasAudio: spec.generateAudio,
+        usageTokens: cost.totalTokens,
+      });
     }
     return assets;
   },
