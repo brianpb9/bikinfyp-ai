@@ -1,17 +1,17 @@
 {
-  "captured_at": "2026-08-26T10:31:33Z",
+  "captured_at": "2026-08-26T10:47:20Z",
   "source_commands": ["render services list --output json --confirm", "render deploys list SERVICE_ID --output json --confirm"],
   "services": {
-    "staging_web": {"id":"srv-d9n28tijnfac73a87lt0","branch":"staging/exact-7a54128-20260826","autoDeploy":"no","suspended":"not_suspended","maintenanceMode":false,"dockerfilePath":"Dockerfile.web","preDeployCommand":"node scripts/migrate-postgres-runtime.mjs"},
-    "staging_worker": {"id":"srv-d9n28ue417fc73ch2b60","branch":"staging/exact-7a54128-20260826","autoDeploy":"no","suspended":"not_suspended","dockerfilePath":"Dockerfile.worker","dockerCommand":""},
+    "staging_web": {"id":"srv-d9n28tijnfac73a87lt0","branch":"staging/exact-65d54b5-20260826","autoDeploy":"no","suspended":"not_suspended","maintenanceMode":false,"dockerfilePath":"Dockerfile.web","preDeployCommand":"node scripts/migrate-postgres-runtime.mjs"},
+    "staging_worker": {"id":"srv-d9n28ue417fc73ch2b60","branch":"staging/exact-65d54b5-20260826","autoDeploy":"no","suspended":"not_suspended","dockerfilePath":"Dockerfile.worker","dockerCommand":""},
     "production_web": {"id":"srv-d9nhccfqj5pc73et9hrg","branch":"main","autoDeploy":"yes","suspended":"not_suspended","maintenanceMode":false},
     "production_worker": {"id":"srv-d9ni3ndaeets73c07kq0","branch":"main","autoDeploy":"yes","suspended":"not_suspended","dockerfilePath":"Dockerfile.worker","dockerCommand":""}
   },
   "deploys": {
-    "staging_web": {"id":"dep-da7bu1ad0e5s73e30mbg","sha":"7a54128dbaa03f808355791edffeb25d91e69f17","createdAt":"2026-08-26T10:25:09.274377Z","finishedAt":"2026-08-26T10:27:08.163040Z","status":"live","trigger":"api"},
-    "staging_worker_base": {"id":"dep-da7bu18u01pc738tdeog","sha":"7a54128dbaa03f808355791edffeb25d91e69f17","createdAt":"2026-08-26T10:25:09.162990Z","finishedAt":"2026-08-26T10:26:39.844203Z","status":"deactivated","trigger":"api"},
-    "staging_worker_trace": {"id":"dep-da7bv37avr4c73bjoih0","sha":"7a54128dbaa03f808355791edffeb25d91e69f17","createdAt":"2026-08-26T10:27:24.244552Z","finishedAt":"2026-08-26T10:28:44.888320Z","status":"deactivated","trigger":"api"},
-    "staging_worker_final": {"id":"dep-da7c00id0e5s73e37ikg","sha":"7a54128dbaa03f808355791edffeb25d91e69f17","createdAt":"2026-08-26T10:29:22.263328Z","finishedAt":"2026-08-26T10:30:44.251987Z","status":"live","trigger":"api"},
+    "staging_web": {"id":"dep-da7c572d0e5s73e3o810","sha":"65d54b5b682acc6cde93ca3e32034d382b7dc57d","createdAt":"2026-08-26T10:40:32.838531Z","finishedAt":"2026-08-26T10:43:18.247090Z","status":"live","trigger":"api"},
+    "staging_worker_base": {"id":"dep-da7c572d0e5s73e3o84g","sha":"65d54b5b682acc6cde93ca3e32034d382b7dc57d","createdAt":"2026-08-26T10:40:28.792251Z","finishedAt":"2026-08-26T10:42:04.234286Z","status":"deactivated","trigger":"api"},
+    "staging_worker_trace": {"id":"dep-da7c6mek1f9s73cvlj70","sha":"65d54b5b682acc6cde93ca3e32034d382b7dc57d","createdAt":"2026-08-26T10:43:37.821744Z","finishedAt":"2026-08-26T10:45:16.632893Z","status":"deactivated","trigger":"api"},
+    "staging_worker_final": {"id":"dep-da7c7jfavr4c73bkk2u0","sha":"65d54b5b682acc6cde93ca3e32034d382b7dc57d","createdAt":"2026-08-26T10:45:33.632675Z","finishedAt":"2026-08-26T10:46:59.205275Z","status":"live","trigger":"api"},
     "production_web": {"id":"dep-da79380u01pc73br2vug","sha":"ec734b186307fe3a4c79cf6632f8f5e75f8634ae","createdAt":"2026-08-26T07:11:28.276713Z","finishedAt":"2026-08-26T07:15:36.673075Z","status":"live"},
     "production_worker": {"id":"dep-da79380u01pc73br30hg","sha":"ec734b186307fe3a4c79cf6632f8f5e75f8634ae","createdAt":"2026-08-26T07:11:28.340657Z","finishedAt":"2026-08-26T07:14:01.765979Z","status":"live"}
   }

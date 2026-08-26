@@ -49,4 +49,13 @@ The trace command was removed immediately afterward. Canonical worker deploy
     zero plus R2/queue absence.
 
 The trace command was removed immediately afterward. Canonical worker deploy
-`dep-da7c00id0e5s73e37ikg` is the final live deploy.
+`dep-da7c00id0e5s73e37ikg` was the final live deploy for that remediation.
+
+14. Reviewer identified that a process-wide deterministic gate also needed a
+    durable per-job discriminator. SHA
+    `65d54b5b682acc6cde93ca3e32034d382b7dc57d` requires the trace job to have
+    no HOLD and explicitly rejects held ordinary jobs while the trace worker
+    is active. `dep-da7c6mek1f9s73cvlj70` emitted the final managed PASS.
+
+The trace command was removed immediately afterward. Canonical worker deploy
+`dep-da7c7jfavr4c73bkk2u0` is the final live deploy.

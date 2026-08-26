@@ -1,9 +1,9 @@
 {
   "schema": "managed-post-e2-worker-trace/v1",
   "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
-  "started_at": "2026-08-26T10:28:47.445Z",
-  "finished_at": "2026-08-26T10:28:55.503Z",
-  "exact_sha": "7a54128dbaa03f808355791edffeb25d91e69f17",
+  "started_at": "2026-08-26T10:45:06.921Z",
+  "finished_at": "2026-08-26T10:45:16.926Z",
+  "exact_sha": "65d54b5b682acc6cde93ca3e32034d382b7dc57d",
   "runtime_identity": {
     "service_id": "srv-d9n28ue417fc73ch2b60",
     "deploy_env": "staging",
@@ -34,7 +34,7 @@
     "provider_voice": "none-silent-caption",
     "cost_actual_idr": 0,
     "qc": { "passed": true, "checks": [{ "code": "QC-08", "status": "pass" }], "fixture": true },
-    "deliverable_key": "jobs/cd31c41f-c933-4ceb-8444-77ea406aa391/output.mp4",
+    "deliverable_key": "jobs/7d4400c7-41f6-4242-a2a4-eb2e622f1165/output.mp4",
     "deliverable_present_in_r2": true,
     "provider_task_rows": 0,
     "payment_rows": 0,

@@ -25,6 +25,11 @@
 | 2026-08-26T10:28:55Z | Final canonical trace receipt | PASS; original HTTP 201; exact replay HTTP 400; READY; all cleanup zero |
 | 2026-08-26T10:29:22Z | Restore final canonical worker CMD | `dep-da7c00id0e5s73e37ikg`, live |
 | 2026-08-26T10:31:33Z | Final health/control-plane/production read | exact SHA; 3/3 HTTP 200; worker command empty; maintenance off; production unchanged |
+| 2026-08-26T10:40:12Z | Commit job-specific trace isolation | `65d54b5b682acc6cde93ca3e32034d382b7dc57d`; held jobs rejected by trace worker |
+| 2026-08-26T10:43:37Z | Start final exact-SHA trace worker | `dep-da7c6mek1f9s73cvlj70` |
+| 2026-08-26T10:45:16Z | Final isolated trace receipt | PASS; replay 400; READY; 13 table counts/R2/queue all zero |
+| 2026-08-26T10:45:33Z | Restore final canonical worker CMD | `dep-da7c7jfavr4c73bkk2u0`, live |
+| 2026-08-26T10:47:20Z | Final health and control-plane read | exact SHA; 3/3 HTTP 200; command empty; maintenance off |
 
 Earlier failed attempts and their cleanup/termination are enumerated in
 `ATTEMPT-LINEAGE.md`. No failed attempt reached provider or payment execution.

@@ -1,17 +1,17 @@
 task=P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826
-app_sha=7a54128dbaa03f808355791edffeb25d91e69f17
+app_sha=65d54b5b682acc6cde93ca3e32034d382b7dc57d
 
 full_suite_command=npm test
-full_suite_tests=1243
-full_suite_pass=1196
+full_suite_tests=1244
+full_suite_pass=1197
 full_suite_skip=47
 full_suite_fail=0
-full_suite_duration_ms=104460.038458
+full_suite_duration_ms=110354.521834
 
 targeted_command=npx tsx --test tests/staging-admission-trace.test.ts tests/staging-deterministic-worker.test.ts tests/staging-deterministic-admission.test.ts
-targeted_scope=single-use request-bound staging admission, deterministic/zero-ledger worker gate, immutable manifest/snapshot counterexamples and ordering
-targeted_tests=12
-targeted_pass=12
+targeted_scope=single-use request-bound admission, held-job trace-worker isolation, deterministic/zero-ledger worker gate, immutable manifest/snapshot counterexamples and ordering
+targeted_tests=13
+targeted_pass=13
 targeted_skip_environment=0
 targeted_fail=0
 

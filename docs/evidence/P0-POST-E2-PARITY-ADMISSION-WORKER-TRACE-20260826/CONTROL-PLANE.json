@@ -1,9 +1,9 @@
 {
   "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
-  "accepted_app_sha": "7a54128dbaa03f808355791edffeb25d91e69f17",
+  "accepted_app_sha": "65d54b5b682acc6cde93ca3e32034d382b7dc57d",
   "final": {
-    "staging_web": { "service_id": "srv-d9n28tijnfac73a87lt0", "deploy_id": "dep-da7bu1ad0e5s73e30mbg", "status": "live", "sha": "7a54128dbaa03f808355791edffeb25d91e69f17", "branch": "staging/exact-7a54128-20260826", "auto_deploy": "no", "maintenance": false },
-    "staging_worker": { "service_id": "srv-d9n28ue417fc73ch2b60", "deploy_id": "dep-da7c00id0e5s73e37ikg", "status": "live", "sha": "7a54128dbaa03f808355791edffeb25d91e69f17", "branch": "staging/exact-7a54128-20260826", "auto_deploy": "no", "suspended": "not_suspended", "docker_command": "canonical image CMD" },
+    "staging_web": { "service_id": "srv-d9n28tijnfac73a87lt0", "deploy_id": "dep-da7c572d0e5s73e3o810", "status": "live", "sha": "65d54b5b682acc6cde93ca3e32034d382b7dc57d", "branch": "staging/exact-65d54b5-20260826", "auto_deploy": "no", "maintenance": false },
+    "staging_worker": { "service_id": "srv-d9n28ue417fc73ch2b60", "deploy_id": "dep-da7c7jfavr4c73bkk2u0", "status": "live", "sha": "65d54b5b682acc6cde93ca3e32034d382b7dc57d", "branch": "staging/exact-65d54b5-20260826", "auto_deploy": "no", "suspended": "not_suspended", "docker_command": "canonical image CMD" },
     "production_web": { "service_id": "srv-d9nhccfqj5pc73et9hrg", "deploy_id": "dep-da79380u01pc73br2vug", "status": "live", "sha": "ec734b186307fe3a4c79cf6632f8f5e75f8634ae", "mutated": false },
     "production_worker": { "service_id": "srv-d9ni3ndaeets73c07kq0", "deploy_id": "dep-da79380u01pc73br30hg", "status": "live", "sha": "ec734b186307fe3a4c79cf6632f8f5e75f8634ae", "mutated": false }
   },
