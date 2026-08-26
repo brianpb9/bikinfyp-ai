@@ -1,0 +1,28 @@
+{
+  "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
+  "result": "PASS",
+  "app_sha": "52653947c1afa06b921bbcdb9d0ce34b65b5194c",
+  "exact_sha_parity": true,
+  "admission_to_worker_to_deliverable": true,
+  "zero_external_provider_calls": true,
+  "zero_real_money": true,
+  "zero_payment_invoice_refund_settlement": true,
+  "production_unchanged": true,
+  "canonical_worker_restored": true,
+  "maintenance_restored_off": true,
+  "migrations_current": true,
+  "queues_zero_pre_post": true,
+  "authoritative_cleanup": true,
+  "counterexamples": {
+    "production": "not_staging",
+    "sibling_or_web_service": "wrong_service_identity",
+    "wrong_sha": "wrong_live_sha",
+    "missing_exact_identity_or_sha": "fail_closed"
+  },
+  "tests": {
+    "full_suite": { "total": 1237, "pass": 1190, "skip": 47, "fail": 0 },
+    "targeted_after_remediation": { "total": 15, "pass": 15, "fail": 0 },
+    "typescript": "PASS",
+    "worker_container_contract": "PASS_STATIC_DOCKER_UNAVAILABLE"
+  }
+}

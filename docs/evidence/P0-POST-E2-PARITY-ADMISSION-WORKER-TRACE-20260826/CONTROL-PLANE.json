@@ -1,0 +1,12 @@
+{
+  "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
+  "accepted_app_sha": "52653947c1afa06b921bbcdb9d0ce34b65b5194c",
+  "final": {
+    "staging_web": { "service_id": "srv-d9n28tijnfac73a87lt0", "deploy_id": "dep-da7b2jp5efls73cnu54g", "status": "live", "sha": "52653947c1afa06b921bbcdb9d0ce34b65b5194c", "branch": "staging/exact-5265394-20260826", "auto_deploy": "no", "maintenance": false },
+    "staging_worker": { "service_id": "srv-d9n28ue417fc73ch2b60", "deploy_id": "dep-da7b4ggae00c73ba22og", "status": "live", "sha": "52653947c1afa06b921bbcdb9d0ce34b65b5194c", "branch": "staging/exact-5265394-20260826", "auto_deploy": "no", "suspended": "not_suspended", "docker_command": "canonical image CMD" },
+    "production_web": { "service_id": "srv-d9nhccfqj5pc73et9hrg", "deploy_id": "dep-da79380u01pc73br2vug", "status": "live", "sha": "ec734b186307fe3a4c79cf6632f8f5e75f8634ae", "mutated": false },
+    "production_worker": { "service_id": "srv-d9ni3ndaeets73c07kq0", "deploy_id": "dep-da79380u01pc73br30hg", "status": "live", "sha": "ec734b186307fe3a4c79cf6632f8f5e75f8634ae", "mutated": false }
+  },
+  "web_health": { "samples": 3, "http_200": 3, "ok": true, "build_sha_exact": true, "classifier_capable": true, "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false },
+  "migrations": { "status": "PASS", "applied": [], "skipped_count": 35, "last": "0035_job_product_snapshot.sql", "source": "exact-SHA web pre-deploy log at 2026-08-26T09:28:01Z" }
+}
