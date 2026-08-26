@@ -8,7 +8,8 @@ Engineering discovery is complete and the RED contract is reproducible. The
 focused harness has four passing discovery/control tests and exactly one
 intentional failure:
 
-`C2_MISSING_INVARIANT: no production boundary calls the proposed authoritative-type validation seam`
+`C2_MISSING_INVARIANT`, followed by the exact missing seam/effect ordering for
+every E1/E3/E6/E7/A1–A4 boundary and the absent central production module.
 
 This is a Product Policy input gap, not a compiler, fixture, provider, money,
 or infrastructure failure. Current storage has only `products.category`.
@@ -57,7 +58,15 @@ node scripts/verify-c2-type-mismatch-red.mjs
 
 The verifier succeeds only when the inner RED suite exits 1 for exactly the
 intended missing invariant, with four passing discovery/control tests and no
-compile/module/setup error. The normal `npm test` glob does not include the
+compile/module/setup error. The RED test parses TypeScript AST call expressions
+per exported handler, so comments and declarations cannot satisfy it. Each
+known persistence/generation/job/hold/enqueue effect must be an AST descendant
+of the seam's effect callback; a merely prior or ignored call cannot satisfy
+it. The call must carry both opaque `declaredToken` and `trustedSignal` inputs. If the
+central production module later exists, the same test directly probes it with
+trusted-match, trusted-mismatch, and missing-policy inputs before allowing the
+effect callback to advance (zero calls for mismatch, exactly one for a trusted
+match). The normal `npm test` glob does not include the
 `.red.ts` file, so an intentional RED cannot break unrelated CI.
 
 No deploy, provider call, payment, credit hold, queue mutation, database

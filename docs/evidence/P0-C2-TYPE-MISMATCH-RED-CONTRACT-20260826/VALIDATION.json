@@ -3,6 +3,7 @@
   "baseline_sha": "ce05418d00b998bd4ed07a3c500358f6b10423a5",
   "scope": "engineering discovery and RED-before contract only",
   "result": "ENGINEERING_RED_COMPLETE_POLICY_INPUT_REQUIRED",
+  "review_remediation": "per-boundary AST effect-callback ownership and direct zero-effect probe",
   "focused_red": {
     "command": "node scripts/verify-c2-type-mismatch-red.mjs",
     "verifier_exit_code": 0,

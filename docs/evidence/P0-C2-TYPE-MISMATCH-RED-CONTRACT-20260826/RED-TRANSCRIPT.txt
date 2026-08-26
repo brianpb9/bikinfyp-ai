@@ -8,17 +8,24 @@ ok 2 - discovery: E1 E3 E6 E7 carry unchecked category into persistence
 ok 3 - discovery: A1-A4 carry stored category to snapshot, generation, job, or hold boundaries
 # Subtest: mutation controls: comparator rejects mismatch without rejecting valid positive or inventing missing policy
 ok 4 - mutation controls: comparator rejects mismatch without rejecting valid positive or inventing missing policy
-# Subtest: RED: production boundaries reject a supplied authoritative mismatch before persistence/admission/spend
-not ok 5 - RED: production boundaries reject a supplied authoritative mismatch before persistence/admission/spend
+# Subtest: RED: every production boundary rejects supplied mismatch before its own effects
+not ok 5 - RED: every production boundary rejects supplied mismatch before its own effects
   failureType: 'testCodeFailure'
   error: |-
-    C2_MISSING_INVARIANT: no production boundary calls the proposed authoritative-type validation seam
-
-    false !== true
+    C2_MISSING_INVARIANT:
+    E1: saveProductImages is not owned by a seam effect callback
+    E1: no AST CallExpression to validateAuthoritativeProductType
+    E3: pgUpdateProduct/run are not owned by a seam effect callback
+    E6: both smokeCreateProduct effects are not owned by seam effect callbacks
+    E7: query is not owned by a seam effect callback
+    A1: smokeCreateJob/snapshot/hold/enqueue are not owned by seam effect callbacks
+    A2: renderSatuSel is not owned by a seam effect callback
+    A3: generateScripts is not owned by a seam effect callback
+    A4: validation/snapshot/hold effects are not owned by a seam effect callback
+    CENTRAL: lib/product-type-boundary.ts is absent
   code: 'ERR_ASSERTION'
-  expected: true
-  actual: false
-  operator: 'strictEqual'
+  expected: []
+  operator: 'deepStrictEqual'
 1..5
 # tests 5
 # suites 0
@@ -30,6 +37,6 @@ not ok 5 - RED: production boundaries reject a supplied authoritative mismatch b
 
 C2_RED_VERIFIER={"expected_nonzero":true,"intended_failure_present":true,"exactly_one_failure":true,"discovery_and_controls_pass":true,"no_compile_or_setup_failure":true}
 
-The transcript omits nondeterministic duration and stack-location lines only;
-all test names, outcomes, assertion payload, totals, and verifier booleans are
-preserved exactly.
+The transcript omits nondeterministic duration/stack-location lines and
+deduplicates repeated sink diagnostics only; all test names, outcomes, boundary
+classes, totals, and verifier booleans are preserved.

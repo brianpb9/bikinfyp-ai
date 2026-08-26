@@ -1135,6 +1135,12 @@ TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
   carry the stored value to script generation, snapshot, job, hold, or enqueue
   boundaries. Four discovery/control tests pass; exactly one assertion fails
   with `C2_MISSING_INVARIANT`, not a compile/tool/setup failure.
+- Reviewer false-green remediation parses actual AST calls per handler and
+  requires each known effect to be owned by the seam's callback, with both
+  opaque declared/trusted inputs. A prior ignored call, declaration, or comment
+  cannot make the aggregate RED green; a future central module is directly
+  probed with match/mismatch/missing inputs, zero mismatch effects, and exactly
+  one valid-control effect.
 - Opaque-token mutation controls kill both accept-all and reject-all mutants;
   the positive trusted match remains admissible and absent trusted provenance
   remains policy-undetermined. This does not define a toothpaste taxonomy.

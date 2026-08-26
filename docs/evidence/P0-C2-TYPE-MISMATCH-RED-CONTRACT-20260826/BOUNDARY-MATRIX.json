@@ -24,5 +24,14 @@
     "accept_everything_killed_by": "trusted mismatch negative",
     "reject_everything_killed_by": "trusted match positive",
     "missing_signal": "undetermined, not fabricated"
+  },
+  "false_green_guards": {
+    "parser": "TypeScript AST CallExpression per exported handler",
+    "comments_or_declarations_satisfy": false,
+    "every_boundary_required": true,
+    "effect_callback_ownership_required": true,
+    "merely_prior_or_ignored_call_satisfies": false,
+    "required_opaque_inputs": ["declaredToken", "trustedSignal"],
+    "central_module_probe_inputs": ["trusted match", "trusted mismatch", "missing policy"]
   }
 }
