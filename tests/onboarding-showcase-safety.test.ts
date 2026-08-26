@@ -75,6 +75,10 @@ test("halaman onboarding tidak mengambil katalog /previews dan disclosure tetap 
   assert.match(source, /bukan mitra resmi dan tidak mengendorse layanan ini/);
   assert.doesNotMatch(source, /shellasaukia-dress-novella|Produk asli, label terbaca/);
   assert.match(dashboardSource, /ONBOARDING_AI_SHOWCASE_CLIPS/);
+  assert.match(dashboardSource, /Contoh render AI yang kami hasilkan/,
+    "copy dashboard harus menyatakan kepemilikan render tanpa mengklaim provenance pipeline");
+  assert.doesNotMatch(dashboardSource, /Dibikin dengan mesin ini/,
+    "owned_model_render tidak boleh diklaim sebagai output mesin produksi BikinFYP");
   assert.doesNotMatch(dashboardSource, /CAMPAIGN_TEMPLATES|buildBrandApproach|\/previews\/|\.preview\b/,
     "dashboard onboarding tidak boleh melewati approval registry lewat preview template");
   const approvedAiSrc = new Set(ONBOARDING_AI_SHOWCASE_CLIPS.map((clip) => clip.src));

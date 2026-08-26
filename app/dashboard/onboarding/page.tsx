@@ -261,7 +261,7 @@ export default function OnboardingPage() {
 
         <div className="relative flex h-full flex-col justify-center px-14">
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-white/35">
-            Dibikin dengan mesin ini
+            Contoh render AI yang kami hasilkan
           </p>
           <h2 className="mt-2 max-w-md font-display text-2xl font-bold leading-snug text-white">
             Semua ini video AI — tidak ada yang disyuting
