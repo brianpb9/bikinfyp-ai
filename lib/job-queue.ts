@@ -54,6 +54,20 @@ export function getRedisJobQueue(): Queue<{ jobId: string }> {
   return redisQueue;
 }
 
+/** Atomically consumes the short-lived managed trace capability. The Redis
+ * tombstone intentionally survives trace cleanup until expiry, preventing a
+ * captured request from being replayed while the canonical worker is live. */
+export async function claimManagedStagingTraceNonce(nonce: string, expiresAtMs: number, nowMs = Date.now()): Promise<boolean> {
+  if (!/^[0-9a-f]{32}$/.test(nonce)) return false;
+  const ttlMs = Math.min(5 * 60_000, expiresAtMs - nowMs);
+  if (!Number.isSafeInteger(ttlMs) || ttlMs <= 0) return false;
+  const redis = await getRedisJobQueue().client;
+  const claimed = await (redis as unknown as {
+    set(key: string, value: string, px: "PX", ttl: number, nx: "NX"): Promise<"OK" | null>;
+  }).set(`racun:managed-staging-trace:${nonce}`, "claimed", "PX", ttlMs, "NX");
+  return claimed === "OK";
+}
+
 /** Enqueue is durable and idempotent while the BullMQ job id exists. */
 export async function enqueueRedisJob(jobId: string): Promise<void> {
   await getRedisJobQueue().add("render", { jobId }, {

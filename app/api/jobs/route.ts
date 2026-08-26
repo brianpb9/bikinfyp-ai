@@ -2,7 +2,7 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit, type ScriptRow, type ProductRow, type JobRow, type PersonaRow } from "@/lib/db";
 import { getBalance, holdCredits, tierPriceIdr } from "@/lib/credits";
-import { enqueueJob } from "@/lib/job-queue";
+import { claimManagedStagingTraceNonce, enqueueJob } from "@/lib/job-queue";
 import { failJob, getJob, sweepStaleJobs } from "@/lib/jobs";
 import { bacaJejak, periksaAdmisi } from "@/lib/script-engine/admisi";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
@@ -166,7 +166,17 @@ export async function POST(req: Request) {
         "Script was generated for a different quality tier."
       );
     const listedPriceIdr = tierPriceIdr(tier, durationS);
-    const zeroValueTrace = authorizedManagedStagingZeroValueAdmission(req);
+    const traceCapability = authorizedManagedStagingZeroValueAdmission(req, {
+      userId: user.id,
+      scriptId: script.id,
+      format,
+      qualityTier: tier,
+      durationS,
+    });
+    const zeroValueTrace = traceCapability !== null;
+    if (traceCapability && !(await claimManagedStagingTraceNonce(traceCapability.nonce, traceCapability.expiresAtMs))) {
+      throw ERR.BAD_REQUEST("Kapabilitas trace sudah dipakai atau kedaluwarsa.", "Trace capability was already used or expired.");
+    }
     const priceIdr = zeroValueTrace ? 0 : listedPriceIdr;
 
     // Checkpoint 1E only: compose the parity-tested PG repositories behind

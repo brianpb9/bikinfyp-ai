@@ -129,7 +129,13 @@ try {
     headers: {
       "content-type": "application/json",
       cookie: `${cookieName()}=${encodeURIComponent(token)}`,
-      [MANAGED_STAGING_TRACE_HEADER]: managedStagingTraceHeader(process.env.AUTH_SECRET ?? "", expectedSha),
+      [MANAGED_STAGING_TRACE_HEADER]: managedStagingTraceHeader(process.env.AUTH_SECRET ?? "", expectedSha, {
+        userId,
+        scriptId,
+        format: "hands_only",
+        qualityTier: "high_quality",
+        durationS: 15,
+      }),
     },
     body: JSON.stringify({ script_id: scriptId, format: "hands_only", duration_s: 15, quality_tier: "high_quality" }),
   });
@@ -212,6 +218,8 @@ try {
     for (const table of ["provider_tasks", "job_prompts", "job_shots", "fyp_snapshots", "post_plans", "outputs"]) {
       await client.query(`DELETE FROM ${table} WHERE job_id=$1`, [jobId]);
     }
+    await client.query("DELETE FROM credit_ledger WHERE job_id=$1 OR user_id=$2", [jobId, userId]);
+    await client.query("DELETE FROM payments WHERE user_id=$1", [userId]);
     await client.query("DELETE FROM audit_log WHERE actor=$1 OR entity_id = ANY($2::text[])", [userId, [userId, productId, scriptId, jobId]]);
     await client.query("DELETE FROM jobs WHERE id=$1", [jobId]);
     await client.query("DELETE FROM scripts WHERE id=$1", [scriptId]);
@@ -231,15 +239,32 @@ try {
   }));
   (receipt.cleanup as Record<string, unknown>).r2 = storageResults.every(Boolean);
   receipt.queue_after = await actionableCounts();
+  const count = async (sql: string, params: unknown[]) => Number((await pool.query(sql, params)).rows[0].n);
+  const dbRows = {
+    users: await count("SELECT count(*)::int AS n FROM users WHERE id=$1", [userId]),
+    products: await count("SELECT count(*)::int AS n FROM products WHERE id=$1 OR user_id=$2", [productId, userId]),
+    scripts: await count("SELECT count(*)::int AS n FROM scripts WHERE id=$1 OR product_id=$2", [scriptId, productId]),
+    jobs: await count("SELECT count(*)::int AS n FROM jobs WHERE id=$1 OR user_id=$2", [jobId, userId]),
+    outputs: await count("SELECT count(*)::int AS n FROM outputs WHERE job_id=$1", [jobId]),
+    audit_log: await count("SELECT count(*)::int AS n FROM audit_log WHERE actor=$1 OR entity_id = ANY($2::text[])", [userId, [userId, productId, scriptId, jobId]]),
+    fyp_snapshots: await count("SELECT count(*)::int AS n FROM fyp_snapshots WHERE job_id=$1 OR script_id=$2", [jobId, scriptId]),
+    provider_tasks: await count("SELECT count(*)::int AS n FROM provider_tasks WHERE job_id=$1", [jobId]),
+    payments: await count("SELECT count(*)::int AS n FROM payments WHERE user_id=$1", [userId]),
+    credit_ledger: await count("SELECT count(*)::int AS n FROM credit_ledger WHERE job_id=$1 OR user_id=$2", [jobId, userId]),
+    job_prompts: await count("SELECT count(*)::int AS n FROM job_prompts WHERE job_id=$1", [jobId]),
+    job_shots: await count("SELECT count(*)::int AS n FROM job_shots WHERE job_id=$1", [jobId]),
+    post_plans: await count("SELECT count(*)::int AS n FROM post_plans WHERE job_id=$1", [jobId]),
+  };
   receipt.after_cleanup = {
-    db_rows: Number((await pool.query("SELECT count(*)::int AS n FROM users WHERE id=$1", [userId])).rows[0].n),
+    db_rows: dbRows,
     r2_objects_present: (await Promise.all(storageKeys.map((key) => mediaStorage().stat(key)))).filter(Boolean).length,
     queue_job_present: Boolean(await queue.getJob(jobId)),
   };
   const cleanup = receipt.cleanup as Record<string, unknown>;
   const afterCleanup = receipt.after_cleanup as Record<string, unknown>;
   const cleanupPassed = cleanup.database === true && cleanup.r2 === true && cleanup.queue === true
-    && afterCleanup.db_rows === 0 && afterCleanup.r2_objects_present === 0 && afterCleanup.queue_job_present === false
+    && Object.values(dbRows).every((value) => value === 0)
+    && afterCleanup.r2_objects_present === 0 && afterCleanup.queue_job_present === false
     && (receipt.queue_after as { actionable: number }).actionable === 0;
   if (!cleanupPassed) {
     receipt.result = "FAIL";

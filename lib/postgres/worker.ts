@@ -316,6 +316,8 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
     const row = found.rows[0];
     if (!row || ["READY", "FAILED", "REFUNDED"].includes(row.state)) return;
+    const hold = await pool.query("SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type='hold' LIMIT 1", [jobId]);
+    assertWorkerLedgerGate(hold.rowCount === 1);
     // r13 (review QA 2026-08-07): dulu SETIAP retry BullMQ untuk state != QUEUED
     // langsung gagal instan ("belum resumable") -> kegagalan transien SETELAH
     // video sukses (compositing/storage/dsb) selalu membakar biaya provider
@@ -340,6 +342,14 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     if (options.retryViaQueue) throw error;
     await jobs.failJob(jobId, error instanceof Error ? error.message : String(error));
   } finally { await jobs.close(); /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
+}
+
+/** A ledger-less job is the managed zero-value trace marker. It must never
+ * reach the paid provider branch after the canonical worker is restored. */
+export function assertWorkerLedgerGate(hasHold: boolean, env: NodeJS.ProcessEnv = process.env): void {
+  if (!hasHold && !managedStagingDeterministicWorkerGate(env).allowed) {
+    throw new Error("ZERO_LEDGER_JOB_REQUIRES_DETERMINISTIC_WORKER_GATE");
+  }
 }
 
 async function runDeterministicFixture(row: WorkerRow, jobs: PgJobsRepository, pool: Pool) {
