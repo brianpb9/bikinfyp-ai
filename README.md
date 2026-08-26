@@ -48,6 +48,12 @@ npm run dev         # http://localhost:3000
 
 Tes & bukti jalan:
 
+`npm test` memerlukan executable `ffmpeg`, `ffprobe`, `tesseract`, dan
+`redis-server` di `PATH`. Tes isolasi antrean menyalakan instance Redis
+loopback sementara pada port acak dan membersihkannya setelah selesai; tidak
+memakai atau menghapus data Redis pengembang. CI memasang paket-paket tersebut
+secara eksplisit di job `verify`.
+
 ```bash
 npm test            # unit test: validator L-01..L-16, mesin skrip, ledger, HITL, SSML, timeout
 npm run smoke       # smoke end-to-end: login -> produk -> skrip -> approve -> job -> READY -> unduh MP4
