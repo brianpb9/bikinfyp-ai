@@ -56,7 +56,7 @@ export function getRedisJobQueue(): Queue<{ jobId: string }> {
 }
 
 export function managedStagingTraceQueueName(baseName = config.redisQueueName): string {
-  return `${baseName}:managed-staging-trace`;
+  return `${baseName}-managed-staging-trace`;
 }
 
 /** Dedicated queue for the one-use Rp0 trace. It is deliberately distinct

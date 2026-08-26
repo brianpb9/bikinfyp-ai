@@ -11,7 +11,7 @@ test("managed trace queue is disjoint from canonical queue", () => {
   const canonical = "racun-jobs-staging";
   const trace = managedStagingTraceQueueName(canonical);
   assert.notEqual(trace, canonical);
-  assert.equal(trace, "racun-jobs-staging:managed-staging-trace");
+  assert.equal(trace, "racun-jobs-staging-managed-staging-trace");
 });
 
 test("canonical admission routes only zero-value trace jobs to isolated queue", () => {
