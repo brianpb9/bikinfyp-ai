@@ -124,20 +124,23 @@ try {
   await consumer.waitUntilReady();
 
   const token = await issueToken(userId, "");
+  const admissionBodyRaw = JSON.stringify({ script_id: scriptId, format: "hands_only", duration_s: 15, quality_tier: "high_quality" });
+  const traceHeader = managedStagingTraceHeader(process.env.AUTH_SECRET ?? "", expectedSha, {
+    userId,
+    scriptId,
+    format: "hands_only",
+    qualityTier: "high_quality",
+    durationS: 15,
+  });
+  const admissionHeaders = {
+    "content-type": "application/json",
+    cookie: `${cookieName()}=${encodeURIComponent(token)}`,
+    [MANAGED_STAGING_TRACE_HEADER]: traceHeader,
+  };
   const admission = await fetch("https://racun-ai-staging-web.onrender.com/api/jobs", {
     method: "POST",
-    headers: {
-      "content-type": "application/json",
-      cookie: `${cookieName()}=${encodeURIComponent(token)}`,
-      [MANAGED_STAGING_TRACE_HEADER]: managedStagingTraceHeader(process.env.AUTH_SECRET ?? "", expectedSha, {
-        userId,
-        scriptId,
-        format: "hands_only",
-        qualityTier: "high_quality",
-        durationS: 15,
-      }),
-    },
-    body: JSON.stringify({ script_id: scriptId, format: "hands_only", duration_s: 15, quality_tier: "high_quality" }),
+    headers: admissionHeaders,
+    body: admissionBodyRaw,
   });
   const admissionBody = await admission.json() as Record<string, unknown>;
   assert.equal(admission.status, 201, `canonical admission HTTP ${admission.status}: ${JSON.stringify(admissionBody)}`);
@@ -146,6 +149,13 @@ try {
   assert.equal(admissionBody.hold_idr, 0, "managed trace admission wajib Rp0");
   assert.equal(typeof admissionBody.job_id, "string");
   jobId = String(admissionBody.job_id);
+  const replay = await fetch("https://racun-ai-staging-web.onrender.com/api/jobs", {
+    method: "POST",
+    headers: admissionHeaders,
+    body: admissionBodyRaw,
+  });
+  await replay.arrayBuffer();
+  assert.equal(replay.status, 400, "kapabilitas trace yang sama wajib ditolak pada replay");
 
   const deadline = Date.now() + 60_000;
   let state = "";
@@ -189,6 +199,8 @@ try {
     canonical_admission_http: admission.status,
     canonical_admission_job_id_matches_worker: consumedJobId === jobId,
     canonical_admission_hold_idr: admissionBody.hold_idr,
+    canonical_admission_replay_http: replay.status,
+    canonical_admission_capability_one_use: replay.status === 400,
     sidecar_verified: sidecarVerified,
     admission_manifest_exact: admissionManifestExact,
     admission_snapshot_exact: admissionSnapshotExact,
