@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "reviewedAt": "2026-08-26T09:00:00+07:00",
+  "approvals": [
+    {
+      "id": "genz-a089584",
+      "src": "/showcase/genz.mp4",
+      "assetSha256": "d8737635521cd6bd996b46df8823f414fc2c2348eaeaba967f571604eb5ac727",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "a08958449dca018a4b6a4ecf77e4a1ebb5b10150",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/genz.png",
+      "evidenceSha256": "9c1c0eab2cf152a042aba2fe63efe921d69e6bfdcdf85c411181ba323a8b4e38",
+      "sampleSeconds": [2, 7.5, 12],
+      "qcResult": "pass"
+    },
+    {
+      "id": "tangan-a089584",
+      "src": "/showcase/tangan.mp4",
+      "assetSha256": "1ebb3455481699aae41ca0e01ad5fabae7835fd6d8c49821b61518062baab2bb",
+      "provenance": "owned_pipeline_render",
+      "sourceCommit": "a08958449dca018a4b6a4ecf77e4a1ebb5b10150",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/tangan.png",
+      "evidenceSha256": "aca8d138d49de1714d178e1b1da93f4ca817dc93d65389e89ecf77e88e57a571",
+      "sampleSeconds": [2, 7.5, 12],
+      "qcResult": "pass"
+    },
+    {
+      "id": "persona-ootd-2ecdc5a",
+      "src": "/showcase/persona/ootd.mp4",
+      "assetSha256": "8f19d1f51af54bcd255440b9769a14add90dd424a349626c016602c7da6373af",
+      "provenance": "owned_model_render",
+      "sourceCommit": "2ecdc5ad2da9c44f9c3b9f9812cf90153f592972",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/ootd.png",
+      "evidenceSha256": "c34e15bc1ec75eb0717615ac84fede1a894dd34093621054b607af05a8bddb9d",
+      "sampleSeconds": [2, 5, 8],
+      "qcResult": "pass"
+    },
+    {
+      "id": "persona-unboxing-2ecdc5a",
+      "src": "/showcase/persona/unboxing.mp4",
+      "assetSha256": "cc0ad04f5764fc849db58944d92354910c0aaca5fde9737dc86d3928a9db27d8",
+      "provenance": "owned_model_render",
+      "sourceCommit": "2ecdc5ad2da9c44f9c3b9f9812cf90153f592972",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/unboxing.png",
+      "evidenceSha256": "0ddf2ce6cdeb4716f4032dee4ab3f88bf03549e3c2add9f467e266d1ac1308d6",
+      "sampleSeconds": [1, 3, 5],
+      "qcResult": "pass"
+    },
+    {
+      "id": "persona-close-up-2ecdc5a",
+      "src": "/showcase/persona/close-up.mp4",
+      "assetSha256": "6e597b30dac11a3a3716971015e547e483e30fc2a2477ca592e1f120a02d9373",
+      "provenance": "owned_model_render",
+      "sourceCommit": "2ecdc5ad2da9c44f9c3b9f9812cf90153f592972",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/close-up.png",
+      "evidenceSha256": "4131f1bd438c9d016ef1b60eb7ea0fdb2e4915516e62bada114854f68aee6255",
+      "sampleSeconds": [2, 5, 8],
+      "qcResult": "pass"
+    },
+    {
+      "id": "persona-di-mobil-2ecdc5a",
+      "src": "/showcase/persona/di-mobil.mp4",
+      "assetSha256": "b690a2a36ac7cabfea887c750ff22727b1696be052d5c5f35efe6edb7211576a",
+      "provenance": "owned_model_render",
+      "sourceCommit": "2ecdc5ad2da9c44f9c3b9f9812cf90153f592972",
+      "evidencePath": "docs/evidence/onboarding-showcase-qc-20260826/di-mobil.png",
+      "evidenceSha256": "cd112d13424be2c531db4c860bd58d3d9261ca93b1611b53713e63c5b1cc6222",
+      "sampleSeconds": [2, 5, 8],
+      "qcResult": "pass"
+    }
+  ],
+  "rejected": [
+    {
+      "src": "/showcase/hijaber.mp4",
+      "assetSha256": "fa7cc0ae28164851f072ef34c8869fac1f1e0c66420c26e0caf6c78cec29064a",
+      "reason": "Known r10 product-fidelity failure: CENTELLA drifted to SKNTELLA."
+    },
+    {
+      "src": "/showcase/ibu.mp4",
+      "assetSha256": "7ee0be788a0102fbda63748d58b52f1c533611fd3d1d610a9ef82eb51a3fb494",
+      "reason": "Manual frame review found product-label gibberish; excluded conservatively."
+    },
+    {
+      "src": "/showcase/persona/review-produk.mp4",
+      "assetSha256": "2ede6bb82434bb22bb0e88aae8bd2b3e4fec2c7182bfd992b7cba7a4a0d1e44c",
+      "reason": "No reviewable source-product identity record; excluded from public proof."
+    }
+  ]
+}

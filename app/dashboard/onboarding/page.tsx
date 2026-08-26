@@ -5,6 +5,7 @@ import { AlertCircle, ArrowRight, Check, Loader2, Sparkles } from "lucide-react"
 import { apiFetch, ApiFail } from "../../_components/api";
 import { buildBrandApproach } from "@/lib/brand-approach";
 import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
+import { ONBOARDING_AI_SHOWCASE_CLIPS } from "@/lib/onboarding-showcase";
 
 // Onboarding organisasi.
 //
@@ -61,11 +62,15 @@ const STEPS = ["Brand", "Website", "Produk", "Siap"];
  *  frame yang secara harfiah menuliskan larangan pemakaian komersial.
  *
  *  Klip di bawah ini hasil pipeline kami sendiri, jadi klaimnya jujur. */
-const CONTOH_AWAL = [
-  { src: "/showcase/hijaber.mp4", nama: "Hijaber", ket: "Kreator AI memperagakan produk, tanpa syuting dan tanpa talent." },
-  { src: "/showcase/ibu.mp4", nama: "Ibu", ket: "Persona disesuaikan dengan siapa yang benar-benar membeli produkmu." },
-  { src: "/showcase/tangan.mp4", nama: "Tanpa wajah", ket: "Cukup tangan dan produk — pilihan aman untuk brand yang menjaga citra." },
-];
+const CONTOH_AWAL = ONBOARDING_AI_SHOWCASE_CLIPS
+  .filter((clip) => ["/showcase/genz.mp4", "/showcase/persona/ootd.mp4", "/showcase/tangan.mp4"].includes(clip.src))
+  .map((clip) => ({
+    src: clip.src,
+    nama: clip.label,
+    ket: clip.src === "/showcase/tangan.mp4"
+      ? "Cukup tangan dan produk — pilihan aman untuk brand yang menjaga citra."
+      : "Kreator AI memperagakan produk, tanpa syuting dan tanpa talent.",
+  }));
 
 export default function OnboardingPage() {
   const [step, setStep] = useState(0);

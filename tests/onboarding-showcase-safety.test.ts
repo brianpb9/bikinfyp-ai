@@ -1,7 +1,10 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { execFileSync } from "node:child_process";
 import { AI_RENDER_BLOCKED_TEMPLATE_IDS } from "../lib/template-render-safety";
+import approvalLedger from "../lib/onboarding-showcase-approvals.json";
 import {
   ONBOARDING_AI_SHOWCASE_CLIPS,
   PROVENANCE_OWNED,
@@ -23,18 +26,21 @@ test("showcase onboarding hanya memakai render owned yang provenance-approved", 
     src: "/showcase/persona/ootd.mp4",
     label: "OOTD",
     templateId: null,
+    approvalId: "persona-ootd-2ecdc5a",
     provenance: "owned_model_render",
   }), true);
   assert.equal(isOnboardingShowcaseClipApproved({
     src: "/showcase/persona/apa-pun.mp4",
     label: "Pihak lain menyamar",
     templateId: null,
+    approvalId: "persona-ootd-2ecdc5a",
     provenance: "third_party_portfolio",
   }), false, "footage pihak lain lolos hanya karena berada di /showcase/");
   assert.equal(isOnboardingShowcaseClipApproved({
     src: "/previews/t01-tempat-susah.mp4",
     label: "Portfolio pihak lain",
     templateId: "t01-tempat-susah",
+    approvalId: "persona-ootd-2ecdc5a",
     provenance: "third_party_portfolio",
   }), false, "footage portfolio /previews tidak boleh lolos ke halaman komersial");
 });
@@ -49,6 +55,7 @@ test("shared real-footage blocklist tidak pernah tampil di bawah klaim AI", () =
       src: `/showcase/${blockedId}.mp4`,
       label: blockedId,
       templateId: blockedId,
+      approvalId: "genz-a089584",
       provenance: "owned_pipeline_render",
     };
     assert.equal(isOnboardingShowcaseClipApproved(fixture), false, `${blockedId} tidak difilter shared blocklist`);
@@ -78,21 +85,42 @@ test("halaman onboarding tidak mengambil katalog /previews dan disclosure tetap 
 
 test("SATU KARAKTER SATU KLIP — tidak ada label atau berkas yang terulang", () => {
   // Dinding bukti yang menampilkan orang yang sama dua kali membuktikan LEBIH
-  // SEDIKIT, bukan lebih banyak. Dari tujuh klip Grok yang diberikan Brian,
-  // dua dibuang karena mengulang karakter (baju denim yang sama, baju coral
-  // yang sama).
+  // SEDIKIT, bukan lebih banyak. Duplikat karakter dibuang; satu klip lain
+  // ditahan karena belum punya source-product identity record yang reviewable.
   const label = ONBOARDING_AI_SHOWCASE_CLIPS.map((c) => c.label);
   const src = ONBOARDING_AI_SHOWCASE_CLIPS.map((c) => c.src);
   assert.equal(new Set(label).size, label.length, `label berulang: ${label.join(", ")}`);
   assert.equal(new Set(src).size, src.length, `berkas berulang: ${src.join(", ")}`);
 });
 
+test("approval showcase terikat ke SHA asset, provenance commit, dan frame evidence", () => {
+  const sha256 = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
+  assert.equal(approvalLedger.version, 1);
+  assert.equal(approvalLedger.approvals.length, ONBOARDING_AI_SHOWCASE_CLIPS.length);
+  for (const clip of ONBOARDING_AI_SHOWCASE_CLIPS) {
+    const approval = approvalLedger.approvals.find((item) => item.id === clip.approvalId);
+    assert.ok(approval, `${clip.src}: approval ledger hilang`);
+    assert.equal(approval.src, clip.src);
+    assert.equal(approval.provenance, clip.provenance);
+    assert.equal(approval.qcResult, "pass");
+    assert.equal(sha256(`public${clip.src}`), approval.assetSha256, `${clip.src}: bytes berubah tanpa review ulang`);
+    assert.ok(existsSync(approval.evidencePath), `${clip.src}: frame evidence hilang`);
+    assert.equal(sha256(approval.evidencePath), approval.evidenceSha256, `${clip.src}: frame evidence berubah`);
+    assert.equal(execFileSync("git", ["log", "-1", "--format=%H", "--", `public${clip.src}`], { encoding: "utf8" }).trim(),
+      approval.sourceCommit, `${clip.src}: source commit provenance tidak cocok`);
+  }
+  const selected = new Set(ONBOARDING_AI_SHOWCASE_CLIPS.map((clip) => clip.src));
+  for (const rejected of approvalLedger.rejected) {
+    assert.ok(!selected.has(rejected.src), `${rejected.src}: artifact rejected kembali masuk public proof`);
+  }
+  assert.ok(approvalLedger.rejected.some((item) => item.src === "/showcase/hijaber.mp4" && /SKNTELLA/.test(item.reason)));
+});
+
 test("klip persona memenuhi konvensi teknis showcase", async () => {
   // Sama seperti klip lama: 360x640, TANPA audio. Autoplay bersuara di
   // onboarding akan diblokir browser DAN mengagetkan orang.
-  const { execFileSync } = await import("node:child_process");
   const persona = ONBOARDING_AI_SHOWCASE_CLIPS.filter((c) => c.src.startsWith("/showcase/persona/"));
-  assert.ok(persona.length >= 5, "klip persona hilang dari allowlist");
+  assert.ok(persona.length >= 4, "klip persona hilang dari allowlist");
   for (const clip of persona) {
     const out = execFileSync("ffprobe", [
       "-v", "error", "-select_streams", "v:0",
