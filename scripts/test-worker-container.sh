@@ -23,6 +23,7 @@ need "NODE_OPTIONS=--max-old-space-size=256"
 need "COPY --chown=racun:racun knowledge ./knowledge"
 need "COPY --chown=racun:racun assets/fonts ./assets/fonts"
 need "COPY --chown=racun:racun assets/models ./assets/models"
+need "COPY --chown=racun:racun public/staging-fixtures/e2-product.svg ./public/staging-fixtures/e2-product.svg"
 need "USER racun"
 need 'CMD ["npm", "run", "worker"]'
 
@@ -45,6 +46,7 @@ docker run --rm --entrypoint sh "$IMAGE" -ec '
   test -f /srv/app/assets/fonts/Poppins-ExtraBold.ttf
   test -f /srv/app/assets/models/face_detection_yunet_2023mar.onnx
   test -f /srv/app/assets/music/bg-loop.m4a
+  test -f /srv/app/public/staging-fixtures/e2-product.svg
   test -f /srv/app/knowledge/rules/modes.md
   test -w /srv/app/storage/jobs
 '

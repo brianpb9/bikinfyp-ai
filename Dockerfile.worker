@@ -53,6 +53,9 @@ COPY --chown=racun:racun assets/music ./assets/music
 # melaporkan "tidak mampu" pada container yang sebenarnya sehat — laporan palsu
 # ke arah yang berlawanan, tapi tetap laporan palsu.
 COPY --chown=racun:racun assets/probe ./assets/probe
+# Exact-SHA managed staging trace fixture. Copy only this harmless committed
+# staging asset; the runtime gate rejects every other service/env/SHA.
+COPY --chown=racun:racun public/staging-fixtures/e2-product.svg ./public/staging-fixtures/e2-product.svg
 COPY --chown=racun:racun tsconfig.json ./
 
 # STORAGE_MODE=r2 is required by production config; this writable cache is
