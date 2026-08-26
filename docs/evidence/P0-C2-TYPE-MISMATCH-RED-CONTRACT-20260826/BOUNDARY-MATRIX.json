@@ -31,7 +31,12 @@
     "every_boundary_required": true,
     "effect_callback_ownership_required": true,
     "merely_prior_or_ignored_call_satisfies": false,
+    "seam_rejection_must_be_awaited_or_returned": true,
     "required_opaque_inputs": ["declaredToken", "trustedSignal"],
-    "central_module_probe_inputs": ["trusted match", "trusted mismatch", "missing policy"]
+    "required_input_check": "exact object-literal AST property names; no comments or substring aliases",
+    "central_module_probe_inputs": ["trusted match", "trusted mismatch", "missing policy"],
+    "mismatch_contract": "throws/rejects, zero callback effects, cannot be ignored into success",
+    "valid_contract": "exactly one callback effect",
+    "sink_classes": ["storage", "product persistence", "persona persistence", "provider generation", "script persistence", "job persistence", "audit persistence", "credit hold", "managed trace queue", "ordinary queue"]
   }
 }

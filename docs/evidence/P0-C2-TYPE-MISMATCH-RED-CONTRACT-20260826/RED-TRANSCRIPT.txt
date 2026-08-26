@@ -13,15 +13,15 @@ not ok 5 - RED: every production boundary rejects supplied mismatch before its o
   failureType: 'testCodeFailure'
   error: |-
     C2_MISSING_INVARIANT:
-    E1: saveProductImages is not owned by a seam effect callback
+    E1: storage, PostgreSQL/SQLite product persistence, and audit effects are not owned by a seam callback
     E1: no AST CallExpression to validateAuthoritativeProductType
-    E3: pgUpdateProduct/run are not owned by a seam effect callback
-    E6: both smokeCreateProduct effects are not owned by seam effect callbacks
-    E7: query is not owned by a seam effect callback
-    A1: smokeCreateJob/snapshot/hold/enqueue are not owned by seam effect callbacks
-    A2: renderSatuSel is not owned by a seam effect callback
-    A3: generateScripts is not owned by a seam effect callback
-    A4: validation/snapshot/hold effects are not owned by a seam effect callback
+    E3: category/brand PostgreSQL/SQLite updates and audits are not owned by a seam callback
+    E6: download, both product creates, and create audits are not owned by seam callbacks
+    E7: PostgreSQL update and audit are not owned by a seam callback
+    A1: persona/nonce/manifest/job/snapshot/audit/hold/scoring/managed-and-ordinary-enqueue effects are not owned by seam callbacks
+    A2: evidence/persona/provider/script/render effects are not owned by a seam callback
+    A3: evidence/provider/script persistence effects are not owned by a seam callback
+    A4: validation/manifest/script/audit/job/commit/hold/scoring/enqueue/failure effects are not owned by a seam callback
     CENTRAL: lib/product-type-boundary.ts is absent
   code: 'ERR_ASSERTION'
   expected: []

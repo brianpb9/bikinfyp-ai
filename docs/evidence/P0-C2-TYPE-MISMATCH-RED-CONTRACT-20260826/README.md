@@ -27,7 +27,8 @@ central seam tentatively named `validateAuthoritativeProductType` would compare
 the declared category/type token with that independent token:
 
 - matching trusted token: admit;
-- different trusted token: reject before persistence/admission/spend;
+- different trusted token: reject control flow (not a returned decision that a
+  handler can ignore) before persistence/admission/spend;
 - missing token or provenance: return an explicit policy-undetermined result,
   never silently reject or admit on the test reference model.
 
@@ -60,13 +61,18 @@ The verifier succeeds only when the inner RED suite exits 1 for exactly the
 intended missing invariant, with four passing discovery/control tests and no
 compile/module/setup error. The RED test parses TypeScript AST call expressions
 per exported handler, so comments and declarations cannot satisfy it. Each
-known persistence/generation/job/hold/enqueue effect must be an AST descendant
+known storage, persistence, provider-generation, script/job/audit write, credit,
+managed-trace queue, and ordinary enqueue effect must be an AST descendant
 of the seam's effect callback; a merely prior or ignored call cannot satisfy
-it. The call must carry both opaque `declaredToken` and `trustedSignal` inputs. If the
+it. The seam rejection must be awaited or returned. Its first argument must be
+an object literal with exact AST properties `declaredToken` and
+`trustedSignal`; comments and substring lookalikes cannot satisfy it. If the
 central production module later exists, the same test directly probes it with
-trusted-match, trusted-mismatch, and missing-policy inputs before allowing the
-effect callback to advance (zero calls for mismatch, exactly one for a trusted
-match). The normal `npm test` glob does not include the
+trusted-match, trusted-mismatch, and missing-policy inputs. Mismatch must throw,
+not merely return `REJECT_MISMATCH`, and invoke zero effects; a trusted match
+must invoke exactly one effect. Handler-level mutation controls prove that an
+ignored returned decision yields false 2xx while rejection yields non-success.
+The normal `npm test` glob does not include the
 `.red.ts` file, so an intentional RED cannot break unrelated CI.
 
 No deploy, provider call, payment, credit hold, queue mutation, database

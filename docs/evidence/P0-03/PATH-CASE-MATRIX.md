@@ -1141,6 +1141,13 @@ TASK=`P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826`
   cannot make the aggregate RED green; a future central module is directly
   probed with match/mismatch/missing inputs, zero mismatch effects, and exactly
   one valid-control effect.
+- Second remediation enumerates storage, PostgreSQL/SQLite product/persona/
+  script/job/audit writes, provider generation, credit, managed-trace queue,
+  and ordinary enqueue sinks. Seam inputs are exact object-literal AST property
+  names (not substrings/comments), and the rejection must be awaited/returned.
+  Mismatch must throw so an ignored returned decision cannot become HTTP
+  success; handler mutation probes require non-success with zero effects while
+  the valid control advances exactly once.
 - Opaque-token mutation controls kill both accept-all and reject-all mutants;
   the positive trusted match remains admissible and absent trusted provenance
   remains policy-undetermined. This does not define a toothpaste taxonomy.

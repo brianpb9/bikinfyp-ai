@@ -38,28 +38,60 @@ type BoundaryExpectation = {
   id: string;
   file: string;
   handler: string;
-  effects: string[];
+  effects: EffectExpectation[];
 };
 
+type EffectExpectation = {
+  label: string;
+  callName: string;
+  textIncludes?: string;
+};
+
+const effect = (callName: string, textIncludes?: string, label = callName): EffectExpectation => ({ label, callName, textIncludes });
+
 const boundaryExpectations: BoundaryExpectation[] = [
-  { id: "E1", file: "app/api/products/route.ts", handler: "POST", effects: ["saveProductImages"] },
-  { id: "E3", file: "app/api/products/[id]/route.ts", handler: "PATCH", effects: ["pgUpdateProduct", "run"] },
+  { id: "E1", file: "app/api/products/route.ts", handler: "POST", effects: [
+    effect("saveProductImages"), effect("smokeCreateProduct"), effect("run", "INSERT INTO products", "SQLite product INSERT"),
+    effect("auditProductCreatedOnce"),
+  ] },
+  { id: "E3", file: "app/api/products/[id]/route.ts", handler: "PATCH", effects: [
+    effect("pgUpdateProduct"), effect("run", "UPDATE products SET name", "SQLite category UPDATE"), effect("audit", "product.updated", "SQLite update audit"),
+    effect("pgSetProductBrand"), effect("run", "UPDATE products SET raw_meta", "SQLite brand UPDATE"), effect("audit", "product.brand_set", "SQLite brand audit"),
+  ] },
   {
     id: "E6",
     file: "app/api/dashboard/campaign/product/route.ts",
     handler: "POST",
-    effects: ["smokeCreateProduct"],
+    effects: [effect("downloadProductImages"), effect("smokeCreateProduct"), effect("pgAudit", "product.extracted", "URL create audit"), effect("pgAudit", "product.created", "manual create audit")],
   },
-  { id: "E7", file: "app/api/dashboard/campaign/product/route.ts", handler: "PATCH", effects: ["query"] },
+  { id: "E7", file: "app/api/dashboard/campaign/product/route.ts", handler: "PATCH", effects: [
+    effect("query", "UPDATE products SET", "PostgreSQL product UPDATE"), effect("pgAudit", "product.updated", "organization update audit"),
+  ] },
   {
     id: "A1",
     file: "app/api/jobs/route.ts",
     handler: "POST",
-    effects: ["smokeCreateJob", "createJobProductSnapshotRaw", "holdCredits", "enqueueJob"],
+    effects: [
+      effect("prepareAdmissionReferenceManifest"), effect("smokeCreateJob"), effect("pgSaveFypSnapshot"), effect("pgAudit"),
+      effect("smokeCompleteJob"), effect("enqueueManagedStagingTraceJob"), effect("enqueueJob"),
+      effect("createJobProductSnapshotRaw"), effect("run", "INSERT INTO jobs", "SQLite job INSERT"), effect("holdCredits"),
+      effect("run", "UPDATE scripts SET job_id", "SQLite script claim"), effect("audit", "job.created", "SQLite job audit"), effect("createFypSnapshot"),
+      effect("pgFindOrCreatePersona"), effect("run", "INSERT INTO personas", "SQLite persona INSERT"),
+      effect("audit", "persona.created", "SQLite persona audit"), effect("claimManagedStagingTraceNonce"),
+    ],
   },
-  { id: "A2", file: "app/api/dashboard/matrix/route.ts", handler: "POST", effects: ["renderSatuSel"] },
-  { id: "A3", file: "app/api/dashboard/campaign/generate/route.ts", handler: "POST", effects: ["generateScripts"] },
-  { id: "A4", file: "lib/dashboard/render-cell.ts", handler: "renderSatuSel", effects: ["periksaAdmisi", "createJobProductSnapshotRaw", "holdCredits"] },
+  { id: "A2", file: "app/api/dashboard/matrix/route.ts", handler: "POST", effects: [
+    effect("acquireAdmissionReferenceEvidence"), effect("pgFindOrCreatePersona"), effect("generateScripts"), effect("smokeCreateScripts"), effect("renderSatuSel"),
+  ] },
+  { id: "A3", file: "app/api/dashboard/campaign/generate/route.ts", handler: "POST", effects: [
+    effect("acquireAdmissionReferenceEvidence"), effect("generateScripts"), effect("smokeCreateScripts"),
+  ] },
+  { id: "A4", file: "lib/dashboard/render-cell.ts", handler: "renderSatuSel", effects: [
+    effect("periksaAdmisi"), effect("createJobProductSnapshotRaw"), effect("prepareAdmissionReferenceManifest"),
+    effect("query", "UPDATE scripts", "PostgreSQL script writes"), effect("query", "INSERT INTO audit_log", "PostgreSQL audit writes"),
+    effect("query", "INSERT INTO jobs", "PostgreSQL job INSERT"), effect("query", "COMMIT", "PostgreSQL admission COMMIT"),
+    effect("holdCredits"), effect("pgSaveFypSnapshot"), effect("pgAudit"), effect("enqueueJob"), effect("failJob"),
+  ] },
 ];
 
 function callName(node: ts.CallExpression): string | null {
@@ -95,9 +127,21 @@ function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: 
   const seams = calls.filter((call) => callName(call) === "validateAuthoritativeProductType");
   const violations: string[] = [];
   for (const seam of seams) {
-    const inputText = seam.arguments[0]?.getText(source) ?? "";
-    if (!/declaredToken/.test(inputText) || !/trustedSignal/.test(inputText)) {
+    const input = seam.arguments[0];
+    const propertyNames = new Set<string>();
+    if (input && ts.isObjectLiteralExpression(input)) {
+      for (const property of input.properties) {
+        if (ts.isPropertyAssignment(property) || ts.isShorthandPropertyAssignment(property)) {
+          const name = property.name;
+          if (ts.isIdentifier(name) || ts.isStringLiteral(name)) propertyNames.add(name.text);
+        }
+      }
+    }
+    if (!propertyNames.has("declaredToken") || !propertyNames.has("trustedSignal")) {
       violations.push(`${expectation.id}: seam call lacks declaredToken/trustedSignal`);
+    }
+    if (!ts.isAwaitExpression(seam.parent) && !ts.isReturnStatement(seam.parent)) {
+      violations.push(`${expectation.id}: seam rejection is neither awaited nor returned`);
     }
     const effectCallback = seam.arguments[1];
     if (!effectCallback || (!ts.isArrowFunction(effectCallback) && !ts.isFunctionExpression(effectCallback))) {
@@ -105,10 +149,11 @@ function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: 
     }
   }
 
-  for (const effectName of expectation.effects) {
-    const effects = calls.filter((call) => callName(call) === effectName);
+  for (const expectedEffect of expectation.effects) {
+    const effects = calls.filter((call) => callName(call) === expectedEffect.callName
+      && (!expectedEffect.textIncludes || call.getText(source).includes(expectedEffect.textIncludes)));
     if (effects.length === 0) {
-      violations.push(`${expectation.id}: expected effect ${effectName} not found`);
+      violations.push(`${expectation.id}: expected effect ${expectedEffect.label} not found`);
       continue;
     }
     for (const effect of effects) {
@@ -116,7 +161,7 @@ function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: 
         const callback = seam.arguments[1];
         return Boolean(callback && isDescendantOf(effect, callback));
       });
-      if (!guarded) violations.push(`${expectation.id}: ${effectName} is not owned by a seam effect callback`);
+      if (!guarded) violations.push(`${expectation.id}: ${expectedEffect.label} is not owned by a seam effect callback`);
     }
   }
   if (seams.length === 0) violations.push(`${expectation.id}: no AST CallExpression to validateAuthoritativeProductType`);
@@ -138,11 +183,16 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   const decide = module.validateAuthoritativeProductType;
   let mismatchEffects = 0;
   let validEffects = 0;
-  const mismatchDecision = await decide(mismatch, () => { mismatchEffects += 1; });
+  let mismatchRejected = false;
+  try {
+    await decide(mismatch, () => { mismatchEffects += 1; });
+  } catch {
+    mismatchRejected = true;
+  }
   const validDecision = await decide(trusted, () => { validEffects += 1; });
   const missingDecision = await decide({ declaredToken: "opaque-type-a", trustedSignal: null });
   const violations: string[] = [];
-  if (mismatchDecision !== "REJECT_MISMATCH") violations.push(`CENTRAL: mismatch returned ${String(mismatchDecision)}`);
+  if (!mismatchRejected) violations.push("CENTRAL: mismatch returned instead of rejecting");
   if (validDecision !== "ADMIT") violations.push(`CENTRAL: trusted match returned ${String(validDecision)}`);
   if (missingDecision !== "UNDETERMINED_POLICY_INPUT") violations.push(`CENTRAL: missing policy returned ${String(missingDecision)}`);
   if (mismatchEffects !== 0) violations.push("CENTRAL: mismatch invoked its effect callback");
@@ -182,22 +232,47 @@ test("discovery: A1-A4 carry stored category to snapshot, generation, job, or ho
   assert.match(sources.a4, /creditsRepo\.holdCredits/);
 });
 
-test("mutation controls: comparator rejects mismatch without rejecting valid positive or inventing missing policy", () => {
+test("mutation controls: comparator rejects mismatch without rejecting valid positive or inventing missing policy", async () => {
   assert.equal(referenceDecision(trusted), "ADMIT");
   assert.equal(referenceDecision(mismatch), "REJECT_MISMATCH");
   assert.equal(referenceDecision({ declaredToken: "opaque-type-a", trustedSignal: null }), "UNDETERMINED_POLICY_INPUT");
   assert.notEqual(acceptEverythingMutation(mismatch), "REJECT_MISMATCH", "accept-all mutant must be killed");
   assert.notEqual(rejectEverythingMutation(trusted), "ADMIT", "reject-all mutant must be killed by the valid control");
 
-  const fixture: BoundaryExpectation = { id: "MUTANT", file: "test-only.ts", handler: "POST", effects: ["persist", "hold"] };
-  const commentOnly = `function POST(){ /* validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => persist()) */ persist(); hold(); }`;
+  const fixture: BoundaryExpectation = { id: "MUTANT", file: "test-only.ts", handler: "POST", effects: [effect("persist"), effect("hold")] };
+  const commentOnly = `async function POST(){ /* validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => persist()) */ persist(); hold(); }`;
   assert.ok(inspectBoundary(fixture, commentOnly).some((violation) => violation.includes("persist is not owned")), "comment mutant survived");
-  const ignoredPrior = `function POST(){ validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => {}); persist(); hold(); }`;
+  const ignoredPrior = `async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => {}); persist(); hold(); }`;
   assert.ok(inspectBoundary(fixture, ignoredPrior).some((violation) => violation.includes("persist is not owned")), "ignored-prior-call mutant survived");
-  const oneBoundaryOnly = `function POST(){ validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => persist()); hold(); }`;
+  const oneBoundaryOnly = `async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => persist()); hold(); }`;
   assert.ok(inspectBoundary(fixture, oneBoundaryOnly).some((violation) => violation.includes("hold is not owned")), "single-effect mutant survived");
-  const ownedEffects = `function POST(){ validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => { persist(); hold(); }); }`;
+  const ownedEffects = `async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => { persist(); hold(); }); }`;
   assert.deepEqual(inspectBoundary(fixture, ownedEffects), [], "correct callback-owned effects did not satisfy the structural contract");
+  const substringInputs = `async function POST(){ await validateAuthoritativeProductType({ notdeclaredToken: 1, untrustedSignalFallback: 2 }, () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, substringInputs).some((violation) => violation.includes("lacks declaredToken/trustedSignal")), "substring-property mutant survived");
+
+  const probeHandler = async (
+    seam: (input: TypeBoundaryInput, onAdmit: () => void) => unknown | Promise<unknown>,
+    input: TypeBoundaryInput,
+  ) => {
+    let effects = 0;
+    try {
+      await seam(input, () => { effects += 1; });
+      return { status: 201, effects };
+    } catch {
+      return { status: 422, effects };
+    }
+  };
+  const ignoredResultMutant = async () => "REJECT_MISMATCH";
+  const falseGreen = await probeHandler(ignoredResultMutant, mismatch);
+  assert.equal(falseGreen.status, 201, "ignored-result mutant fixture did not demonstrate false success");
+  const rejectingSeam = async (input: TypeBoundaryInput, onAdmit: () => void) => {
+    if (referenceDecision(input) === "REJECT_MISMATCH") throw new Error("test-only mismatch rejection");
+    onAdmit();
+    return "ADMIT";
+  };
+  assert.deepEqual(await probeHandler(rejectingSeam, mismatch), { status: 422, effects: 0 });
+  assert.deepEqual(await probeHandler(rejectingSeam, trusted), { status: 201, effects: 1 });
 });
 
 test("RED: every production boundary rejects supplied mismatch before its own effects", async () => {
