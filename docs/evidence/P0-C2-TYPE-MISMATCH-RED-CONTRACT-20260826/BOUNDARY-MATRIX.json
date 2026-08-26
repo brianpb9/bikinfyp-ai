@@ -34,9 +34,17 @@
     "seam_rejection_must_be_awaited_or_returned": true,
     "required_opaque_inputs": ["declaredToken", "trustedSignal"],
     "required_input_check": "exact object-literal AST property names; no comments or substring aliases",
+    "input_independence_mutations": ["self-derived match", "constant match"],
     "central_module_probe_inputs": ["trusted match", "trusted mismatch", "missing policy"],
     "mismatch_contract": "throws/rejects, zero callback effects, cannot be ignored into success",
     "valid_contract": "exactly one callback effect",
+    "actual_handler_probe": {
+      "boundary": "E3 SQLite PATCH /api/products/[id]",
+      "mismatch_current": { "http_status": 200, "category_writes": 1, "audit_writes": 1 },
+      "mismatch_required": { "http_success": false, "category_writes": 0, "audit_writes": 0 },
+      "valid_required": { "http_status": 200, "audit_writes": 1 },
+      "trusted_fixture_provenance": "test-only independent out-of-band policy fixture; not production truth"
+    },
     "sink_classes": ["storage", "product persistence", "persona persistence", "provider generation", "script persistence", "job persistence", "audit persistence", "credit hold", "managed trace queue", "ordinary queue"]
   }
 }

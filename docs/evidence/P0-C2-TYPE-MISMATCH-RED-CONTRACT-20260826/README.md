@@ -72,7 +72,13 @@ trusted-match, trusted-mismatch, and missing-policy inputs. Mismatch must throw,
 not merely return `REJECT_MISMATCH`, and invoke zero effects; a trusted match
 must invoke exactly one effect. Handler-level mutation controls prove that an
 ignored returned decision yields false 2xx while rejection yields non-success.
-The normal `npm test` glob does not include the
+The suite also invokes the real SQLite `PATCH /api/products/[id]` handler with
+independent opaque declared/trusted fixtures. Current mismatch behavior is
+observed as HTTP 200, one category write, and one audit write; the matching
+positive control remains HTTP 200 and advances its audit exactly once. The
+trusted fixture is deliberately out-of-band test provenance, not a claim that
+current product storage already has authoritative type truth. The normal
+`npm test` glob does not include the
 `.red.ts` file, so an intentional RED cannot break unrelated CI.
 
 No deploy, provider call, payment, credit hold, queue mutation, database
