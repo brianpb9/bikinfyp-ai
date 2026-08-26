@@ -113,6 +113,30 @@ test("one absolute deadline spans redirects, slow trickle, and address attempts"
   });
 });
 
+test("absolute deadline bounds delayed and never-resolving DNS on first hop",async()=>{
+  const publicAnswer=(raw:string)=>({ok:true as const,url:new URL(raw),addresses:[{address:"8.8.8.8",family:4}]});
+  for(const [name,resolver] of [
+    ["delayed",async(raw:string)=>new Promise<ReturnType<typeof publicAnswer>>(resolve=>setTimeout(()=>resolve(publicAnswer(raw)),140))],
+    ["never",async()=>new Promise<never>(()=>{})],
+  ] as const){
+    const started=Date.now(),result=await safeRemote.safeRemoteGetWithResolverForTests("http://fixture.test/",{kind:"public",timeoutMs:25},resolver);
+    const elapsed=Date.now()-started;assert.equal(result.ok,false,name);if(result.ok)assert.fail(name);
+    assert.match(result.error,/deadline.*DNS/i);assert.ok(elapsed<100,`${name} resolver escaped deadline: ${elapsed}ms`);
+  }
+});
+
+test("absolute deadline bounds delayed and never-resolving DNS after redirect",async()=>{
+  await withHttpServer((_req,res)=>{res.writeHead(302,{location:"/next"});res.end()},async port=>{
+    for(const mode of ["delayed","never"] as const){
+      let calls=0;
+      const resolver=async(raw:string)=>{calls+=1;if(calls===1)return{ok:true as const,url:new URL(raw),addresses:[{address:"127.0.0.1",family:4}]};if(mode==="never")return new Promise<never>(()=>{});return new Promise<{ok:true;url:URL;addresses:{address:string;family:number}[]}>(resolve=>setTimeout(()=>resolve({ok:true,url:new URL(raw),addresses:[{address:"127.0.0.1",family:4}]}),140))};
+      const started=Date.now(),result=await safeRemote.safeRemoteGetWithResolverForTests(`http://fixture.test:${port}/start`,{kind:"public",timeoutMs:35},resolver);
+      const elapsed=Date.now()-started;assert.equal(result.ok,false,mode);if(result.ok)assert.fail(mode);
+      assert.match(result.error,/deadline.*DNS/i);assert.equal(calls,2);assert.ok(elapsed<110,`${mode} redirect resolver escaped deadline: ${elapsed}ms`);
+    }
+  });
+});
+
 test("committed fixture is harmless synthetic SVG", () => {
   const svg = fs.readFileSync(new URL("../public/staging-fixtures/e2-product.svg", import.meta.url), "utf8");
   assert.match(svg, /NOVA SERUM/);

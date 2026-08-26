@@ -48,6 +48,12 @@ export async function requestPinnedForTests(url: URL, addresses: LookupAddress[]
 
 type Resolver=(raw:string,kind:"marketplace"|"public")=>Promise<ResolvedPublicUrl>;
 const productionResolver:Resolver=(raw,kind)=>kind==="marketplace"?validateMarketplaceFetchUrl(raw):resolvePublicFetchUrl(raw);
+async function resolveBeforeDeadline(resolver:Resolver,raw:string,kind:"marketplace"|"public",deadlineAt:number):Promise<ResolvedPublicUrl>{
+  const remaining=deadlineAt-Date.now();if(remaining<=0)throw new Error("absolute deadline exceeded");
+  let timer:ReturnType<typeof setTimeout>|undefined;
+  try{return await Promise.race([resolver(raw,kind),new Promise<never>((_,reject)=>{timer=setTimeout(()=>reject(new Error("absolute deadline exceeded during DNS resolution")),remaining)})])}
+  finally{if(timer)clearTimeout(timer)}
+}
 export async function safeRemoteGetWithResolverForTests(raw:string,options:SafeRemoteOptions,resolver:Resolver):Promise<SafeRemoteResult>{
   let current=raw;const timeoutMs=options.timeoutMs??8000,maxBytes=options.maxBytes??12*1024*1024,maxRedirects=options.maxRedirects??3;
   const deadlineAt=Date.now()+timeoutMs;
@@ -55,7 +61,7 @@ export async function safeRemoteGetWithResolverForTests(raw:string,options:SafeR
     for(let redirects=0;redirects<=maxRedirects;redirects+=1){
       if(Date.now()>=deadlineAt)throw new Error("absolute deadline exceeded");
       if(options.hopAllowed&&!options.hopAllowed(current))return{ok:false,status:0,error:"redirect/source provenance ditolak"};
-      const resolved=await resolver(current,options.kind);
+      const resolved=await resolveBeforeDeadline(resolver,current,options.kind,deadlineAt);
       if(!resolved.ok)return{ok:false,status:0,error:`url ditolak: ${resolved.reason}`};
       const response=await requestPinnedForTests(resolved.url,resolved.addresses,options.headers??{},deadlineAt,maxBytes);
       if(response.status>=300&&response.status<400){const location=response.headers.location;if(!location)return{ok:false,status:response.status,error:"redirect tanpa location"};current=new URL(location,current).toString();continue}
