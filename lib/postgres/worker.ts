@@ -75,7 +75,6 @@ export function setPostgresQcRunnerForTests(runner?: PostgresQcRunner): void {
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
 function assertUrl() { if (!/^postgres(?:ql)?:\/\//i.test(config.databaseUrl)) throw new Error("DATABASE_URL PostgreSQL wajib untuk worker pg."); return config.databaseUrl; }
-function deterministicFixtureAllowed() { return managedStagingDeterministicWorkerGate().allowed; }
 
 /** Provider dialogue is deliberately absent for neutral Story Ads. Keeping
  * embedded audio there would produce a paid silent video, so those jobs must
@@ -317,7 +316,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     const row = found.rows[0];
     if (!row || ["READY", "FAILED", "REFUNDED"].includes(row.state)) return;
     const hold = await pool.query("SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type='hold' LIMIT 1", [jobId]);
-    assertWorkerLedgerGate(hold.rowCount === 1);
+    const executionMode = workerExecutionMode(hold.rowCount === 1);
     // r13 (review QA 2026-08-07): dulu SETIAP retry BullMQ untuk state != QUEUED
     // langsung gagal instan ("belum resumable") -> kegagalan transien SETELAH
     // video sukses (compositing/storage/dsb) selalu membakar biaya provider
@@ -331,7 +330,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     // dari upaya sebelumnya masih ada & valid di disk (lihat resume-clips.ts).
     if (!(await jobs.transition(jobId, "GENERATING_VISUAL", { worker: "postgres" }))) return;
 
-    if (deterministicFixtureAllowed()) {
+    if (executionMode === "deterministic_trace") {
       await runDeterministicFixture(row, jobs, pool);
     } else {
       await runProviderPipeline(row, jobs, pool);
@@ -346,10 +345,18 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
 
 /** A ledger-less job is the managed zero-value trace marker. It must never
  * reach the paid provider branch after the canonical worker is restored. */
-export function assertWorkerLedgerGate(hasHold: boolean, env: NodeJS.ProcessEnv = process.env): void {
-  if (!hasHold && !managedStagingDeterministicWorkerGate(env).allowed) {
+export function workerExecutionMode(
+  hasHold: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): "provider" | "deterministic_trace" {
+  const deterministic = managedStagingDeterministicWorkerGate(env).allowed;
+  if (deterministic && hasHold) {
+    throw new Error("TRACE_WORKER_REJECTS_HELD_ORDINARY_JOB");
+  }
+  if (!deterministic && !hasHold) {
     throw new Error("ZERO_LEDGER_JOB_REQUIRES_DETERMINISTIC_WORKER_GATE");
   }
+  return deterministic ? "deterministic_trace" : "provider";
 }
 
 async function runDeterministicFixture(row: WorkerRow, jobs: PgJobsRepository, pool: Pool) {

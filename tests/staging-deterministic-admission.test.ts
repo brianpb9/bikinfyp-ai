@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { assertWorkerLedgerGate, parseDeterministicFixtureAdmission } from "../lib/postgres/worker";
+import { parseDeterministicFixtureAdmission, workerExecutionMode } from "../lib/postgres/worker";
 
 const manifest = JSON.stringify({
   version: 1,
@@ -55,7 +55,14 @@ test("deterministic branch materializes immutable references before FFmpeg outpu
 });
 
 test("ledger-less job is rejected unless deterministic worker gate is active", () => {
-  assert.throws(() => assertWorkerLedgerGate(false, { NODE_ENV: "production", RACUN_DEPLOY_ENV: "staging" }), /ZERO_LEDGER_JOB_REQUIRES/);
-  assert.doesNotThrow(() => assertWorkerLedgerGate(true, { NODE_ENV: "production", RACUN_DEPLOY_ENV: "staging" }));
-  assert.doesNotThrow(() => assertWorkerLedgerGate(false, { NODE_ENV: "test", RACUN_WORKER_DETERMINISTIC: "1" }));
+  assert.throws(() => workerExecutionMode(false, { NODE_ENV: "production", RACUN_DEPLOY_ENV: "staging" }), /ZERO_LEDGER_JOB_REQUIRES/);
+  assert.equal(workerExecutionMode(true, { NODE_ENV: "production", RACUN_DEPLOY_ENV: "staging" }), "provider");
+  assert.equal(workerExecutionMode(false, { NODE_ENV: "test", RACUN_WORKER_DETERMINISTIC: "1" }), "deterministic_trace");
+});
+
+test("deterministic trace worker rejects held ordinary jobs before fixture or provider", () => {
+  assert.throws(
+    () => workerExecutionMode(true, { NODE_ENV: "test", RACUN_WORKER_DETERMINISTIC: "1" }),
+    /TRACE_WORKER_REJECTS_HELD_ORDINARY_JOB/,
+  );
 });
