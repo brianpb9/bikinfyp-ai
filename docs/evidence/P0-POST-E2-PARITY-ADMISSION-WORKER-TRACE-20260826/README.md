@@ -1,19 +1,26 @@
 # Post-E2 parity admission → worker trace
 
 Managed STAGING web and worker are live at exact app SHA
-`52653947c1afa06b921bbcdb9d0ce34b65b5194c`. The deterministic harness is
+`58aeb4f19874290916a1497707632ff87e7e7d0d`. The deterministic harness is
 not a general provider toggle: production-mode execution requires staging,
 the exact canonical worker service ID, and an explicitly matching full live
 SHA. Production, web/sibling, wrong-SHA, and missing-identity counterexamples
 all fail closed.
 
-The positive trace used a dedicated identity/product, committed synthetic E2
-asset, verified sidecar/hash, immutable admission manifest and product
+The positive trace POSTed a supported high-quality, 15-second approved script
+through canonical `/api/jobs`; HTTP 201 returned QUEUED and the worker consumed
+that exact returned job ID. It used a dedicated identity/product, committed
+synthetic E2 asset, verified sidecar/hash, immutable admission manifest and product
 snapshot, Redis consumption, deterministic H.264/AAC output, PostgreSQL
 terminal READY state, R2 deliverable presence, and QC-08 boundary. No provider
 task, payment, ledger, invoice, refund, settlement, or regeneration value was
-created; cost was Rp0. Every DB row, R2 object, and queue record was removed
+created; admission hold and cost were Rp0. Every DB row, R2 object, and queue record was removed
 and then authoritatively observed absent.
+
+The deterministic worker itself parses the immutable product snapshot and
+parses plus materializes/hash-verifies the immutable reference manifest before
+FFmpeg can create output. Missing or structurally tampered admission values
+fail closed, and byte tampering is rejected by canonical materialization.
 
 Final runtime restoration is complete: worker uses the canonical image CMD,
 is not suspended, and is live at the exact app SHA; web maintenance is off.
@@ -21,3 +28,11 @@ Three public health samples returned HTTP 200 with the exact SHA, classifier
 capability, and Duitku sandbox/live=false. The exact-SHA predeploy reported all
 35 PostgreSQL migrations already applied. Production deploy IDs and SHAs match
 the read-only pre-task baseline.
+
+Primary receipts are preserved in `TRACE-RUNTIME-LOG.txt`,
+`DEPLOY-RECEIPTS.json`, `HEALTH-SAMPLES.json`, and
+`MIGRATION-RECEIPT.json`. `TRACE-RECEIPT.json` is the pretty-printed trace
+payload; `PRODUCTION-READONLY.json` states the exact boundary of the
+production non-mutation evidence. Test footers, operator actions, attempt
+lineage, validation assertions, and integrity hashes are preserved in their
+correspondingly named files.

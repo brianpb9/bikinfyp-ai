@@ -17,5 +17,23 @@ created trace data emitted its own authoritative cleanup receipt.
 6. `dep-da7b3o942hec73atb48g`: lineage-bound remediation on app SHA
    `52653947c1afa06b921bbcdb9d0ce34b65b5194c`; emitted authoritative PASS.
 
+7. Reviewer correctly rejected that receipt because its handcrafted job row
+   bypassed canonical admission and the bundle lacked primary receipts.
+8. `dep-da7bbm8u01pc738ronpg`: canonical `/api/jobs` remediation on app SHA
+   `03acd0f706f225039e2f5f16810c6f55e7402b60`; HTTP 201 admission and exact
+   returned-job worker consumption emitted the authoritative replacement PASS.
+
 The trace command was removed immediately afterward. Canonical worker deploy
-`dep-da7b4ggae00c73ba22og` is the final live deploy.
+`dep-da7bcim417fc73f8v0c0` was the final live deploy for the first remediation.
+
+9. Reviewer clarification required the immutable checks to execute inside the
+   deterministic worker before output, not only in the observing harness.
+10. `dep-da7bi9ad0e5s73e1pv10` failed before DB/queue/provider because the
+    first command override omitted `EXPECTED_APP_SHA`; it created no trace data.
+11. `dep-da7bjb1srm7s73823e60` ran the final exact-SHA worker remediation
+    `58aeb4f19874290916a1497707632ff87e7e7d0d`; canonical admission returned
+    HTTP 201 and the worker parsed snapshot plus materialized/hash-verified the
+    manifest before output. The receipt and cleanup both passed.
+
+The trace command was removed immediately afterward. Canonical worker deploy
+`dep-da7bk4navr4c73biljtg` is the final live deploy.

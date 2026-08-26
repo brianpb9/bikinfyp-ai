@@ -1,0 +1,22 @@
+task=P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826
+app_sha=58aeb4f19874290916a1497707632ff87e7e7d0d
+
+full_suite_command=npm test
+full_suite_tests=1241
+full_suite_pass=1194
+full_suite_skip=47
+full_suite_fail=0
+full_suite_duration_ms=99839.569041
+
+targeted_command=npx tsx --test tests/staging-admission-trace.test.ts tests/staging-deterministic-worker.test.ts tests/staging-deterministic-admission.test.ts
+targeted_scope=exact staging admission gate, deterministic worker gate, immutable manifest/snapshot worker counterexamples and ordering
+targeted_tests=10
+targeted_pass=10
+targeted_skip_environment=0
+targeted_fail=0
+
+typescript_command=npx tsc --noEmit
+typescript_result=PASS
+
+worker_container_contract_result=PASS_STATIC
+worker_container_runtime_note=Docker unavailable locally; Dockerfile.worker fixture and command contract checked statically.
