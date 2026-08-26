@@ -41,13 +41,22 @@ through one atomic, bus-global monotonic sequence. This preserves send order
 across roles and message types even on macOS, whose `date` lacks millisecond
 formatting, and across clock rollback.
 
-Flat JSON, no nesting:
+Flat JSON, no nesting. Every new message carries durable routing identity:
 
 ```json
 {"id":"...","ts":"<iso8601>","from":"builder|reviewer","to":"builder|reviewer",
- "type":"READY_FOR_REVIEW|CHANGES_REQUESTED|PASS|DONE|QUESTION|FOUNDER_DECISION_REQUIRED",
- "sha":"<40-char git sha or empty>","task":"<task id>","body":"<free text>"}
+ "type":"TASK|READY_FOR_REVIEW|CHANGES_REQUESTED|PASS|DONE|QUESTION|FOUNDER_DECISION_REQUIRED",
+ "sha":"<40-char git sha or empty>","task":"<task id>","task_id":"<task id>",
+ "owner_id":"<write owner>","worker_id":"<same write owner>",
+ "origin_branch":"<branch or DETACHED>","origin_worktree":"<physical path>",
+ "origin_repo_id":"<Git-common-dir identity>","origin_repo_path":"<physical common dir>",
+ "reply_to_id":"<request id or empty>","body":"<free text>"}
 ```
+
+The first routed message for a task durably binds that `task_id` to one
+`owner_id`; a conflicting sender exits 7 without publishing. Distinct physical
+worktrees/branches may share one transport. The Reviewer remains one global
+consumer and copies the request's routing identity into its verdict.
 
 ### Atomic writes
 
@@ -60,6 +69,7 @@ whole message. It can never observe a half-written one.
 
 | Type | From | Meaning |
 |---|---|---|
+| `TASK` | reviewer | Assign approved bounded work to one routed owner. |
 | `READY_FOR_REVIEW` | builder | Work is committed at `sha`; reviewer should review that exact commit. **sha required.** |
 | `CHANGES_REQUESTED` | reviewer | Review of `sha` found problems; `body` says what must change. **sha required.** |
 | `PASS` | reviewer | `sha` reviewed and accepted. **sha required.** |
@@ -103,18 +113,31 @@ exits **6** and writes nothing.
 
 ```sh
 # send (from builder, to reviewer)
-.agent-bus/bin/bus-send reviewer READY_FOR_REVIEW "$(git rev-parse HEAD)" P0-03 "Slice 1 done, tests green"
+AGENT_BUS_OWNER_ID=builder-a .agent-bus/bin/bus-send reviewer READY_FOR_REVIEW "$(git rev-parse HEAD)" P0-03 "Slice 1 done, tests green"
 
 # a message with no commit attached
 .agent-bus/bin/bus-send builder QUESTION "" P0-03 "Should retries be idempotent?"
 
 # block until something arrives (does NOT consume)
-.agent-bus/bin/bus-wait builder            # default timeout 3600s
-.agent-bus/bin/bus-wait builder 600        # explicit timeout
+.agent-bus/bin/bus-wait builder 600 --task P0-03 --owner builder-a
 
 # consume the oldest message (prints JSON + STALE=..., then archives it)
-.agent-bus/bin/bus-read builder
+.agent-bus/bin/bus-read builder --task P0-03 --owner builder-a
+
+# persistent task/owner-scoped wake lifecycle
+.agent-bus/bin/bus-arm builder --task P0-03 --owner builder-a
 ```
+
+`AGENT_BUS_TASK_ID` and `AGENT_BUS_OWNER_ID` provide equivalent Builder
+selector defaults; explicit flags win. A scoped scan skips every other file
+without moving, rewriting, or archiving it. `bus-read` locks the inbox only for
+selection plus archive rename, so concurrent readers archive a match exactly
+once.
+
+Legacy messages with none of the routing fields are never silently assigned to
+a scoped owner. Only an explicit unscoped migration read may consume them.
+Partial routing metadata fails closed with exit 8. A Reviewer response to a
+legacy request is quarantined as `legacy-unclaimed-<request-id>`.
 
 ### Why wait and read are separate
 
@@ -135,6 +158,9 @@ explicitly archives it.
 | 4 | timeout with no message (`bus-wait`) |
 | 5 | inbox empty (`bus-read`) |
 | 6 | ROLE_SEPARATION violation, `from == to` (`bus-send`) |
+| 7 | task already belongs to another owner (`bus-send`) |
+| 8 | routing selector or ownership rejected (`bus-read`/`bus-wait`) |
+| 9 | archive collision; existing history is never overwritten (`bus-read`) |
 
 ## Lifecycle of one message
 
@@ -145,7 +171,8 @@ explicitly archives it.
 4. Reviewer runs `bus-read reviewer`: JSON + `STALE=…` are printed and the file
    moves to `.agent-bus/archive/`. The inbox is now empty; the audit trail is not.
 5. Reviewer replies with `bus-send builder PASS|CHANGES_REQUESTED <sha> …`.
-6. Builder's `bus-wait builder` returns, and the cycle repeats.
+6. Only the matching Builder's scoped `bus-wait builder --task … --owner …`
+   returns. Earlier messages for other owners remain byte-for-byte untouched.
 
 `archive/` is the append-only audit trail of everything both sides consumed.
 
@@ -158,7 +185,7 @@ equally proven.
 
 Run the wait as a **backgrounded Bash tool call**:
 
-> Bash tool, `command: .agent-bus/bin/bus-wait builder 3600`, `run_in_background: true`
+> Bash tool, `command: .agent-bus/bin/bus-wait builder 3600 --task P0-03 --owner builder-a`, `run_in_background: true`
 
 The command keeps running across turns. When a message arrives, `bus-wait`
 exits, and the Claude Code harness re-invokes Claude with the completed
@@ -265,14 +292,14 @@ Claude sendiri, dengan `run_in_background: true`** — TIDAK PERNAH shell `&`,
 pelepasan memutus bangun-otomatis, dan REGRESI NYATA yang pernah terjadi
 karenanya di bawah). Tunggu keluaran `ARMED pid=...` sebelum melanjutkan.
 
-Perintahnya: `.agent-bus/bin/bus-arm builder`
+Perintahnya: `.agent-bus/bin/bus-arm builder --task <task> --owner <owner>`
 
 ### 2. Aturan siklus hidup — PASANG DULU, BARU KIRIM
 
-Panggil `bus-arm builder` (sebagai panggilan Bash tool `run_in_background`,
+Panggil `bus-arm builder --task … --owner …` (sebagai panggilan Bash tool `run_in_background`,
 sama seperti Aturan 1) **SEBELUM** `bus-send`, bukan sesudahnya:
 
-    1. .agent-bus/bin/bus-arm builder      # dulu — Bash tool, run_in_background:true
+    1. .agent-bus/bin/bus-arm builder --task … --owner … # dulu — Bash tool, run_in_background:true
     2. .agent-bus/bin/bus-send reviewer …  # baru
 
 Urutannya dibalik pada 22 Agu, temuan Reviewer, dan ia menemukan DUA hal

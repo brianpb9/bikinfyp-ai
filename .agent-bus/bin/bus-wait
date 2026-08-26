@@ -1,95 +1,64 @@
 #!/bin/sh
-# bus-wait <role> [timeout_seconds]
+# bus-wait <role> [timeout_seconds] [--task <task_id> --owner <owner_id>]
 #
-# Blocks until at least one message exists in .agent-bus/inbox/<role>/,
-# then prints the oldest message's path and its full JSON.
-#
-# It does NOT consume the message. Reading and consuming are separate steps
-# so that a crash between "woke up" and "handled it" cannot lose a message.
-#
-# Exit codes:
-#   0  a message is waiting (path + JSON printed)
-#   2  usage error / invalid role
-#   4  timeout expired with no message
+# Waits without consuming. Scoped Builders skip messages owned by others.
 set -eu
 
-# `pwd -P` WAJIB, bukan `pwd` polos (temuan Reviewer, dibuktikan konkret:
-# repo yang sama dibuka lewat symlink DAN path asli menghasilkan DUA
-# penunggu). `pwd` logis mengembalikan ejaan path APA ADANYA (lewat
-# symlink kalau dipanggil lewat symlink); `pwd -P` selalu mengembalikan
-# path FISIK. Tanpa ini, dua proses yang membuka repo yang SAMA lewat dua
-# ejaan berbeda menghitung BUS_DIR yang berbeda secara TEKSTUAL padahal
-# menunjuk berkas fisik yang identik — dan pencocokan identitas berbasis
-# string di `penunggu_sah` gagal, menyimpulkan penunggu yang sah sebagai
-# proses asing, menghapus pidfile-nya, lalu menelurkan penunggu KEDUA.
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
 BUS_DIR=$(dirname "$SCRIPT_DIR")
-
-ROLES="builder reviewer"
-POLL_SECONDS=2
+SELECT="$SCRIPT_DIR/bus-select.mjs"
+NODE_BIN=${AGENT_BUS_NODE_BIN:-node}
+POLL_SECONDS=${AGENT_BUS_POLL_SECONDS:-2}
 
 die() { code=$1; shift; printf 'bus-wait: %s\n' "$*" >&2; exit "$code"; }
+[ $# -ge 1 ] || die 2 "usage: bus-wait <role> [timeout_seconds] [--task <task_id> --owner <owner_id>]"
+ROLE=$1; shift
+case "$ROLE" in builder|reviewer) ;; *) die 2 "invalid role '$ROLE'" ;; esac
 
-[ $# -ge 1 ] || die 2 "usage: bus-wait <role> [timeout_seconds]"
-
-ROLE=$1
-TIMEOUT=${2:-3600}
-
-case " $ROLES " in
-  *" $ROLE "*) ;;
-  *) die 2 "invalid role '$ROLE' (allowed: $ROLES)" ;;
-esac
-
-case "$TIMEOUT" in
-  '' | *[!0-9]*) die 2 "timeout must be a non-negative integer, got '$TIMEOUT'" ;;
-esac
-# ANGKA NOL DI DEPAN DITOLAK ("00", "008", ...): shell arithmetic (`$((...))`
-# di bawah) membaca literal berawalan 0 sebagai OKTAL, dan "08"/"09" bukan
-# oktal yang sah — dibuktikan langsung: `x=08; echo $((x+1))` -> "value too
-# great for base". "0" tunggal tetap diterima (kanonik, bukan "berawalan nol").
-case "$TIMEOUT" in
-  0) ;;
-  0*) die 2 "timeout must not have a leading zero, got '$TIMEOUT'" ;;
-esac
+TIMEOUT=3600; TASK=''; OWNER=''; TIMEOUT_SET=no
+if [ "$ROLE" = builder ]; then
+  TASK=${AGENT_BUS_TASK_ID:-}
+  OWNER=${AGENT_BUS_OWNER_ID:-}
+fi
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --task) [ $# -ge 2 ] || die 2 "--task requires a value"; TASK=$2; shift 2 ;;
+    --owner) [ $# -ge 2 ] || die 2 "--owner requires a value"; OWNER=$2; shift 2 ;;
+    *)
+      [ "$TIMEOUT_SET" = no ] || die 2 "unexpected argument '$1'"
+      TIMEOUT=$1; TIMEOUT_SET=yes; shift
+      ;;
+  esac
+done
+if { [ -n "$TASK" ] && [ -z "$OWNER" ]; } || { [ -z "$TASK" ] && [ -n "$OWNER" ]; }; then
+  die 2 "--task and --owner must be supplied together"
+fi
+case "$TIMEOUT" in ''|*[!0-9]*) die 2 "timeout must be a non-negative integer, got '$TIMEOUT'" ;; esac
+case "$TIMEOUT" in 0) ;; 0*) die 2 "timeout must not have a leading zero, got '$TIMEOUT'" ;; esac
 
 INBOX="$BUS_DIR/inbox/$ROLE"
 mkdir -p "$INBOX"
 
-# TOKEN KESIAPAN.
-#
-# Dipancarkan SESUDAH role dan inbox tervalidasi tapi SEBELUM pemindaian pesan
-# pertama, dan urutan itu wajib: kalau inbox SUDAH berisi pesan, proses ini
-# mencetak lalu KELUAR hampir seketika. Penerbit yang menunggu identitas lewat
-# `ps` bisa kehabisan proses untuk dilihat, menyimpulkan penunggu gagal muncul,
-# lalu menyerah — padahal pesannya sudah dibangunkan. Token yang dipancarkan
-# lebih dulu membuat "saya siap" tidak bergantung pada apakah proses ini masih
-# sempat terlihat.
-#
-# BUS_SIAP_BERKAS diisi bus-arm. BUS_UJI_TUNDA_SIAP hanya dipakai test untuk
-# melebarkan jendela pra-siap secara deterministik.
+# Publish readiness before the first scan, including the selector identity.
 if [ -n "${BUS_SIAP_BERKAS:-}" ]; then
   if [ -n "${BUS_UJI_TUNDA_SIAP:-}" ]; then sleep "$BUS_UJI_TUNDA_SIAP"; fi
-  printf 'SIAP %s %s\n' "$ROLE" "$$" > "$BUS_SIAP_BERKAS"
+  printf 'SIAP %s %s %s %s\n' "$ROLE" "$$" "$TASK" "$OWNER" > "$BUS_SIAP_BERKAS"
 fi
 
-oldest() {
-  # Filenames start with zero-padded unix-ms, so glob order == age order.
-  for f in "$INBOX"/*.json; do
-    [ -e "$f" ] || return 1
-    printf '%s' "$f"
-    return 0
-  done
-  return 1
-}
-
 DEADLINE=$(( $(date +%s) + TIMEOUT ))
-
 while :; do
-  if MSG=$(oldest); then
+  if MSG=$("$NODE_BIN" "$SELECT" wait "$INBOX" "$ROLE" "$TASK" "$OWNER"); then
     printf '%s\n' "$MSG"
     cat "$MSG"
     exit 0
+  else
+    rc=$?
+    case "$rc" in
+      5) ;;
+      8) die 8 "routing selector required or invalid for role=$ROLE" ;;
+      *) die 2 "selector failed rc=$rc" ;;
+    esac
   fi
-  [ "$(date +%s)" -lt "$DEADLINE" ] || die 4 "timeout after ${TIMEOUT}s waiting for $ROLE"
+  [ "$(date +%s)" -lt "$DEADLINE" ] || die 4 "timeout after ${TIMEOUT}s waiting for $ROLE task=${TASK:-legacy} owner=${OWNER:-legacy}"
   sleep "$POLL_SECONDS"
 done

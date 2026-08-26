@@ -7,6 +7,7 @@
 #   2  usage error / invalid role / invalid type
 #   3  SHA_BINDING violation (sha missing, malformed, or not in this repo)
 #   6  ROLE_SEPARATION violation (from == to)
+#   7  task already belongs to a different owner
 set -eu
 
 # `pwd -P` WAJIB, bukan `pwd` polos (temuan Reviewer, dibuktikan konkret:
@@ -24,7 +25,7 @@ REPO_ROOT=$(dirname "$BUS_DIR")
 NODE_BIN=${AGENT_BUS_NODE_BIN:-node}
 
 ROLES="builder reviewer"
-TYPES="READY_FOR_REVIEW CHANGES_REQUESTED PASS DONE QUESTION FOUNDER_DECISION_REQUIRED"
+TYPES="TASK READY_FOR_REVIEW CHANGES_REQUESTED PASS DONE QUESTION FOUNDER_DECISION_REQUIRED"
 SHA_REQUIRED_TYPES="READY_FOR_REVIEW CHANGES_REQUESTED PASS"
 
 die() { code=$1; shift; printf 'bus-send: %s\n' "$*" >&2; exit "$code"; }
@@ -52,6 +53,49 @@ shift 4
 BODY=$*
 
 [ -n "$TASK" ] || die 2 "task must not be empty"
+
+# --- durable routing identity --------------------------------------------
+# A worktree-derived owner is the compatibility default. Independent workers
+# should set AGENT_BUS_OWNER_ID explicitly; Reviewer replies set all origin
+# overrides from the READY message so the route is copied, never recomputed.
+WORKTREE=$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null) \
+  || die 2 "cannot resolve Git worktree"
+WORKTREE=$(CDPATH= cd -- "$WORKTREE" && pwd -P)
+COMMON_DIR=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null) \
+  || die 2 "cannot resolve Git common directory"
+case "$COMMON_DIR" in /*) ;; *) COMMON_DIR="$WORKTREE/$COMMON_DIR" ;; esac
+COMMON_DIR=$(CDPATH= cd -- "$COMMON_DIR" && pwd -P)
+DEFAULT_REPO_ID=$(printf '%s' "$COMMON_DIR" | git hash-object --stdin 2>/dev/null | cut -c1-16)
+DEFAULT_WORKER_ID=$(printf '%s' "$WORKTREE" | git hash-object --stdin 2>/dev/null | cut -c1-16)
+[ -n "$DEFAULT_REPO_ID" ] && [ -n "$DEFAULT_WORKER_ID" ] \
+  || die 2 "cannot derive routing identity"
+DEFAULT_BRANCH=$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null || printf 'DETACHED')
+
+OWNER_ID=${AGENT_BUS_OWNER_ID:-worker-$DEFAULT_WORKER_ID}
+WORKER_ID=${AGENT_BUS_WORKER_ID:-$OWNER_ID}
+REPLY_TO_ID=${AGENT_BUS_REPLY_TO_ID:-}
+[ "$OWNER_ID" = "$WORKER_ID" ] || die 2 "owner_id and worker_id must match"
+
+override_count=0
+for value in "${AGENT_BUS_ORIGIN_BRANCH:-}" "${AGENT_BUS_ORIGIN_WORKTREE:-}" \
+  "${AGENT_BUS_ORIGIN_REPO_ID:-}" "${AGENT_BUS_ORIGIN_REPO_PATH:-}"; do
+  [ -z "$value" ] || override_count=$((override_count + 1))
+done
+case "$override_count" in
+  0)
+    ORIGIN_BRANCH=$DEFAULT_BRANCH
+    ORIGIN_WORKTREE=$WORKTREE
+    ORIGIN_REPO_ID=$DEFAULT_REPO_ID
+    ORIGIN_REPO_PATH=$COMMON_DIR
+    ;;
+  4)
+    ORIGIN_BRANCH=$AGENT_BUS_ORIGIN_BRANCH
+    ORIGIN_WORKTREE=$AGENT_BUS_ORIGIN_WORKTREE
+    ORIGIN_REPO_ID=$AGENT_BUS_ORIGIN_REPO_ID
+    ORIGIN_REPO_PATH=$AGENT_BUS_ORIGIN_REPO_PATH
+    ;;
+  *) die 2 "origin routing overrides must be supplied together" ;;
+esac
 
 # --- role validation -------------------------------------------------------
 in_list "$TO" "$ROLES" || die 2 "invalid role '$TO' (allowed: $ROLES)"
@@ -141,6 +185,30 @@ else
   die 2 "lockf, flock, or shlock is required for ordered concurrent sends"
 fi
 
+# One task has one durable owner. The global sequence lock makes the history
+# scan plus the new publication atomic with respect to every other sender.
+if ! "$NODE_BIN" - "$BUS_DIR" "$TASK" "$OWNER_ID" <<'NODE'
+const fs = require("fs");
+const path = require("path");
+const [bus, task, owner] = process.argv.slice(2);
+for (const dir of [path.join(bus, "inbox", "builder"), path.join(bus, "inbox", "reviewer"), path.join(bus, "archive")]) {
+  if (!fs.existsSync(dir)) continue;
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const m = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8"));
+      if (m.task_id === task && typeof m.owner_id === "string" && m.owner_id && m.owner_id !== owner) {
+        process.stderr.write(`task ${task} is owned by ${m.owner_id}, not ${owner}\n`);
+        process.exit(7);
+      }
+    } catch {}
+  }
+}
+NODE
+then
+  die 7 "task owner mismatch for task='$TASK' owner='$OWNER_ID'"
+fi
+
 MS=$(now_ms)
 LAST_MS=$(cat "$SEQUENCE_FILE" 2>/dev/null || true)
 case "$LAST_MS" in ''|*[!0-9]*) LAST_MS=0 ;; esac
@@ -168,9 +236,17 @@ TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 # Write to tmp first, then rename into the inbox. Rename within one
 # filesystem is atomic, so a reader never sees a half-written message.
 TMPFILE="$TMPDIR_BUS/.$NAME.$$"
-"$NODE_BIN" - "$ID" "$TS" "$FROM" "$TO" "$TYPE" "$SHA" "$TASK" "$BODY" > "$TMPFILE" <<'NODE'
-const [id, ts, from, to, type, sha, task, body] = process.argv.slice(2);
-process.stdout.write(`${JSON.stringify({ id, ts, from, to, type, sha, task, body })}\n`);
+"$NODE_BIN" - "$ID" "$TS" "$FROM" "$TO" "$TYPE" "$SHA" "$TASK" "$BODY" \
+  "$OWNER_ID" "$WORKER_ID" "$ORIGIN_BRANCH" "$ORIGIN_WORKTREE" \
+  "$ORIGIN_REPO_ID" "$ORIGIN_REPO_PATH" "$REPLY_TO_ID" > "$TMPFILE" <<'NODE'
+const [id, ts, from, to, type, sha, task, body, owner_id, worker_id,
+  origin_branch, origin_worktree, origin_repo_id, origin_repo_path, reply_to_id] = process.argv.slice(2);
+const bounded = [task, owner_id, worker_id, origin_branch, origin_worktree, origin_repo_id, origin_repo_path];
+if (bounded.some((value) => !value || value.length > 4096 || /[\0\r\n]/.test(value))) process.exit(2);
+process.stdout.write(`${JSON.stringify({
+  id, ts, from, to, type, sha, task, task_id: task, owner_id, worker_id,
+  origin_branch, origin_worktree, origin_repo_id, origin_repo_path, reply_to_id, body,
+})}\n`);
 NODE
 
 mv "$TMPFILE" "$INBOX/$NAME"
@@ -192,12 +268,13 @@ printf '%s\n' "$INBOX/$NAME"
 # ia hanya membuat kegagalan senyap jadi kegagalan yang TERLIHAT, tepat di detik
 # ia terjadi. Menonaktifkan: BUS_TANPA_PERINGATAN_PENUNGGU=1.
 if [ "$FROM" = builder ] && [ "${BUS_TANPA_PERINGATAN_PENUNGGU:-}" != 1 ]; then
-  waiter_pid=$(cat "$BUS_DIR/tmp/waiter-builder.pid" 2>/dev/null || true)
+  route_key=$(printf '%s\n%s' "$TASK" "$OWNER_ID" | git hash-object --stdin 2>/dev/null | cut -c1-16)
+  waiter_pid=$(cat "$BUS_DIR/tmp/waiter-builder-$route_key.pid" 2>/dev/null || true)
   waiter_ok=no
   if [ -n "$waiter_pid" ] && kill -0 "$waiter_pid" 2>/dev/null; then
     case "$(ps -o command= -p "$waiter_pid" 2>/dev/null || true)" in
-      *"$BUS_DIR/bin/bus-wait"*builder*) waiter_ok=yes ;;
+      *"$BUS_DIR/bin/bus-wait"*builder*"--task $TASK --owner $OWNER_ID"*) waiter_ok=yes ;;
     esac
   fi
-  [ "$waiter_ok" = yes ] || printf 'PERINGATAN: nol penunggu builder sesudah %s. Balasan Reviewer tidak akan membangunkan siapa pun sampai `bus-arm builder` dijalankan.\n' "$TYPE" >&2
+  [ "$waiter_ok" = yes ] || printf 'PERINGATAN: nol penunggu builder untuk task=%s owner=%s sesudah %s. Jalankan `bus-arm builder --task ... --owner ...`.\n' "$TASK" "$OWNER_ID" "$TYPE" >&2
 fi

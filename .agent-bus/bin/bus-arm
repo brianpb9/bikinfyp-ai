@@ -1,5 +1,5 @@
 #!/bin/sh
-# bus-arm <role> [timeout] [--sekali]
+# bus-arm <role> [timeout] [--sekali] [--task <task_id> --owner <owner_id>]
 # Pasang TEPAT SATU penunggu persisten untuk <role>, dan JAGA supaya ia tetap ada.
 #
 # Ada karena cacat lifecycle 21 Agu: bus-wait sengaja KELUAR saat pesan datang
@@ -68,14 +68,23 @@ set -eu
 # string di `penunggu_sah` gagal, menyimpulkan penunggu yang sah sebagai
 # proses asing, menghapus pidfile-nya, lalu menelurkan penunggu KEDUA.
 BUS_DIR=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)
-ROLE=${1:?usage: bus-arm <builder|reviewer> [timeout] [--sekali]}
+ROLE=${1:?usage: bus-arm <builder|reviewer> [timeout] [--sekali] [--task task --owner owner]}
 shift
 TIMEOUT=86400
 SEKALI=0
-for arg in "$@"; do
-  case "$arg" in
-    --sekali) SEKALI=1 ;;
-    ''|*[!0-9]*) echo "argumen tidak sah: $arg" >&2; exit 2 ;;
+TASK=''
+OWNER=''
+if [ "$ROLE" = builder ]; then
+  TASK=${AGENT_BUS_TASK_ID:-}
+  OWNER=${AGENT_BUS_OWNER_ID:-}
+fi
+TIMEOUT_SET=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --sekali) SEKALI=1; shift ;;
+    --task) [ $# -ge 2 ] || { echo "--task memerlukan nilai" >&2; exit 2; }; TASK=$2; shift 2 ;;
+    --owner) [ $# -ge 2 ] || { echo "--owner memerlukan nilai" >&2; exit 2; }; OWNER=$2; shift 2 ;;
+    ''|*[!0-9]*) echo "argumen tidak sah: $1" >&2; exit 2 ;;
     # ANGKA NOL DI DEPAN DITOLAK ("00", "008", ...) — temuan Reviewer: "0"
     # tunggal lolos gerbang TIMEOUT=0 di bawah dengan benar, tapi "00"/"000"
     # secara STRING tidak sama dengan "0" sehingga LOLOS gerbang itu padahal
@@ -83,9 +92,9 @@ for arg in "$@"; do
     # parah: shell arithmetic membaca literal berawalan 0 sebagai OKTAL, dan
     # "08" bukan oktal yang sah (dibuktikan langsung: `x=08; echo $((x+1))` ->
     # "value too great for base") — CRASH, bukan sekadar diterima keliru.
-    0) TIMEOUT=0 ;;
-    0*) echo "argumen tidak sah (angka nol di depan): $arg" >&2; exit 2 ;;
-    *) TIMEOUT=$arg ;;
+    0) [ "$TIMEOUT_SET" = 0 ] || { echo "timeout diberikan dua kali" >&2; exit 2; }; TIMEOUT=0; TIMEOUT_SET=1; shift ;;
+    0*) echo "argumen tidak sah (angka nol di depan): $1" >&2; exit 2 ;;
+    *) [ "$TIMEOUT_SET" = 0 ] || { echo "timeout diberikan dua kali" >&2; exit 2; }; TIMEOUT=$1; TIMEOUT_SET=1; shift ;;
   esac
 done
 # TIMEOUT=0 DI MODE PERSISTEN ADALAH BUSY-LOOP, DIBUKTIKAN KONKRET (temuan
@@ -101,8 +110,21 @@ if [ "$TIMEOUT" = 0 ] && [ "$SEKALI" = 0 ]; then
 fi
 case "$ROLE" in builder|reviewer) ;; *) echo "role tidak sah: $ROLE" >&2; exit 2 ;; esac
 
-PIDFILE="$BUS_DIR/tmp/waiter-$ROLE.pid"
-SUPERVISOR_FILE="$BUS_DIR/tmp/supervisor-$ROLE.pid"
+if { [ -n "$TASK" ] && [ -z "$OWNER" ]; } || { [ -z "$TASK" ] && [ -n "$OWNER" ]; }; then
+  echo "--task dan --owner wajib diberikan bersama" >&2
+  exit 2
+fi
+ROUTE_SUFFIX=''
+ROUTE_LABEL='legacy'
+if [ -n "$TASK" ]; then
+  ROUTE_KEY=$(printf '%s\n%s' "$TASK" "$OWNER" | git hash-object --stdin 2>/dev/null | cut -c1-16)
+  [ -n "$ROUTE_KEY" ] || { echo "gagal menghitung route key" >&2; exit 2; }
+  ROUTE_SUFFIX="-$ROUTE_KEY"
+  ROUTE_LABEL="task=$TASK owner=$OWNER"
+fi
+
+PIDFILE="$BUS_DIR/tmp/waiter-$ROLE$ROUTE_SUFFIX.pid"
+SUPERVISOR_FILE="$BUS_DIR/tmp/supervisor-$ROLE$ROUTE_SUFFIX.pid"
 
 # BUKTI KEPEMILIKAN SUPERVISOR, POSITIF — bukan disimpulkan dari PPID.
 #
@@ -206,7 +228,9 @@ penunggu_sah() { # penunggu_sah <pid>
     "/bin/sh $BUS_DIR/bin/bus-wait $ROLE "*) _sisa=${_cmd#"/bin/sh $BUS_DIR/bin/bus-wait $ROLE "} ;;
     *) return 1 ;;
   esac
-  case "$_sisa" in ''|*[!0-9]*) return 1 ;; esac
+  _harap="$TIMEOUT"
+  if [ -n "$TASK" ]; then _harap="$_harap --task $TASK --owner $OWNER"; fi
+  [ "$_sisa" = "$_harap" ] || return 1
   return 0
 }
 
@@ -237,7 +261,7 @@ lepas_pidfile() { # lepas_pidfile <pid_milik_kita> [--sudah-terkunci]
 
 # --- KUNCI OS-BACKED ------------------------------------------------------
 # Dipegang HANYA selama bagian kritis yang sangat pendek, tidak selama menunggu.
-LOCKFILE="$BUS_DIR/tmp/waiter-$ROLE.lock"
+LOCKFILE="$BUS_DIR/tmp/waiter-$ROLE$ROUTE_SUFFIX.lock"
 KUNCI_JENIS=''
 
 # Satu bukti kepemilikan, dipakai di SETIAP titik kill di berkas ini (temuan
@@ -606,12 +630,16 @@ while :; do
   # Token dipancarkan bus-wait sesudah role/inbox tervalidasi tapi SEBELUM
   # pemindaian pesan pertama, jadi "saya siap" tidak bergantung pada apakah
   # prosesnya masih sempat terlihat.
-  SIAP_BERKAS="$BUS_DIR/tmp/.siap-$ROLE.$$"
+  SIAP_BERKAS="$BUS_DIR/tmp/.siap-$ROLE$ROUTE_SUFFIX.$$"
   rm -f "$SIAP_BERKAS"
   # Satu pernyataan SEBELUM `&`: dari sini, bersihkan tahu "sedang fork",
   # bukan "belum pernah fork" — lihat cabang FORKING di atas.
   PENUNGGU_STATE=FORKING
-  BUS_SIAP_BERKAS="$SIAP_BERKAS" "$BUS_DIR/bin/bus-wait" "$ROLE" "$TIMEOUT" 9>&- &
+  if [ -n "$TASK" ]; then
+    BUS_SIAP_BERKAS="$SIAP_BERKAS" "$BUS_DIR/bin/bus-wait" "$ROLE" "$TIMEOUT" --task "$TASK" --owner "$OWNER" 9>&- &
+  else
+    BUS_SIAP_BERKAS="$SIAP_BERKAS" "$BUS_DIR/bin/bus-wait" "$ROLE" "$TIMEOUT" 9>&- &
+  fi
   # BARRIER TEST-ONLY di jendela FORKING: anak SUDAH ada, tapi `WAITER=$!` di
   # bawah belum jalan, jadi tidak ada PID yang tercatat di mana pun. Inilah
   # jendela yang cabang FORKING di bersihkan() dibangun untuk menutupi, dan
@@ -638,7 +666,7 @@ while :; do
   # berarti sisa token lama, tulisan separuh, atau berkas asing bisa lolos
   # sebagai "penunggu siap".
   _token_sah=no
-  if [ -s "$SIAP_BERKAS" ] && [ "$(cat "$SIAP_BERKAS" 2>/dev/null || true)" = "SIAP $ROLE $WAITER" ]; then
+  if [ -s "$SIAP_BERKAS" ] && [ "$(cat "$SIAP_BERKAS" 2>/dev/null || true)" = "SIAP $ROLE $WAITER $TASK $OWNER" ]; then
     _token_sah=yes
   fi
   if [ "$_token_sah" = no ]; then
@@ -670,10 +698,10 @@ while :; do
   # --- akhir bagian kritis -------------------------------------------------
 
   if [ "$pertama" = 1 ]; then
-    echo "ARMED pid=$WAITER role=$ROLE timeout=$TIMEOUT"
+    echo "ARMED pid=$WAITER role=$ROLE timeout=$TIMEOUT $ROUTE_LABEL"
     pertama=0
   else
-    echo "ARMED-ULANG pid=$WAITER role=$ROLE timeout=$TIMEOUT (penunggu sebelumnya habis waktu)"
+    echo "ARMED-ULANG pid=$WAITER role=$ROLE timeout=$TIMEOUT $ROUTE_LABEL (penunggu sebelumnya habis waktu)"
   fi
 
   # `wait` non-nol TIDAK boleh menggugurkan skrip: dengan `set -e`, bus-wait yang

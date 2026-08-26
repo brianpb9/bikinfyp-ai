@@ -282,15 +282,21 @@ if (`${m.id}.json` !== sourceName || !m.id.endsWith(`-builder-${m.type}`)) fail(
 if (typeof m.task !== "string" || m.task.length < 1 || m.task.length > 512) fail("task must contain 1..512 characters");
 if (typeof m.body !== "string") fail("body must be a string");
 if (m.type === "READY_FOR_REVIEW" && !/^[0-9a-f]{40}$/.test(m.sha)) fail("READY_FOR_REVIEW requires a full lowercase SHA");
+const routeFields = ["task_id", "owner_id", "worker_id", "origin_branch", "origin_worktree", "origin_repo_id", "origin_repo_path"];
+const present = routeFields.filter((field) => Object.hasOwn(m, field));
+if (present.length !== 0) {
+  if (present.length !== routeFields.length || routeFields.some((field) => typeof m[field] !== "string" || !m[field])) fail("partial routing metadata");
+  if (m.task_id !== m.task || m.owner_id !== m.worker_id) fail("inconsistent routing metadata");
+}
 NODE
 }
 
 response_already_sent() {
-  sha=$1 task=$2 request_id=$3
-  "$NODE_BIN" - "$BUS_DIR" "$sha" "$task" "$request_id" <<'NODE'
+  sha=$1 task=$2 request_id=$3 request_owner=$4
+  "$NODE_BIN" - "$BUS_DIR" "$sha" "$task" "$request_id" "$request_owner" <<'NODE'
 const fs = require("fs");
 const path = require("path");
-const [bus, sha, task, requestId] = process.argv.slice(2);
+const [bus, sha, task, requestId, requestOwner] = process.argv.slice(2);
 const sequenceOf = (id) => {
   const match = /^(\d+)-/.exec(String(id || ""));
   return match ? BigInt(match[1]) : null;
@@ -306,12 +312,42 @@ for (const dir of [path.join(bus, "inbox", "builder"), path.join(bus, "archive")
       const responseSequence = sequenceOf(m.id);
       if (responseSequence !== null && responseSequence > requestSequence &&
           m.from === "reviewer" && m.to === "builder" && m.sha === sha && m.task === task &&
+          (m.reply_to_id === requestId || (!requestOwner && !m.reply_to_id)) &&
           ["PASS", "CHANGES_REQUESTED", "FOUNDER_DECISION_REQUIRED"].includes(m.type)) process.exit(0);
     } catch {}
   }
 }
+
 process.exit(1);
 NODE
+}
+
+send_routed_response() {
+  response_type=$1 response_sha=$2 response_task=$3 response_body=$4
+  request_id=$(json_file_field "$STATE_DIR/message.json" id) || return 1
+  owner_id=$(json_file_field "$STATE_DIR/message.json" owner_id) || return 1
+  worker_id=$(json_file_field "$STATE_DIR/message.json" worker_id) || return 1
+  origin_branch=$(json_file_field "$STATE_DIR/message.json" origin_branch) || return 1
+  origin_worktree=$(json_file_field "$STATE_DIR/message.json" origin_worktree) || return 1
+  origin_repo_id=$(json_file_field "$STATE_DIR/message.json" origin_repo_id) || return 1
+  origin_repo_path=$(json_file_field "$STATE_DIR/message.json" origin_repo_path) || return 1
+
+  if [ -z "$owner_id" ]; then
+    # Legacy requests remain reviewable, but the response is explicitly
+    # quarantined rather than silently assigned to whichever Builder polls.
+    owner_id="legacy-unclaimed-$request_id"
+    worker_id=$owner_id
+    origin_branch=LEGACY_UNAVAILABLE
+    origin_worktree=LEGACY_UNAVAILABLE
+    origin_repo_id=LEGACY_UNAVAILABLE
+    origin_repo_path=LEGACY_UNAVAILABLE
+  fi
+
+  AGENT_BUS_OWNER_ID="$owner_id" AGENT_BUS_WORKER_ID="$worker_id" \
+  AGENT_BUS_ORIGIN_BRANCH="$origin_branch" AGENT_BUS_ORIGIN_WORKTREE="$origin_worktree" \
+  AGENT_BUS_ORIGIN_REPO_ID="$origin_repo_id" AGENT_BUS_ORIGIN_REPO_PATH="$origin_repo_path" \
+  AGENT_BUS_REPLY_TO_ID="$request_id" BUS_FROM=reviewer \
+    "$SEND" builder "$response_type" "$response_sha" "$response_task" "$response_body"
 }
 
 begin_review_attempt() {
@@ -329,7 +365,7 @@ send_terminal_review_failure() {
   failure_sha=$(json_file_field "$STATE_DIR/message.json" sha) || return 1
   failure_task=$(json_file_field "$STATE_DIR/message.json" task) || return 1
   failure_body="Automated Codex review could not complete after $failure_attempt attempts (last runtime rc=$failure_rc). No PASS was issued. Fix or retry the Reviewer runtime, then submit a new READY_FOR_REVIEW for this SHA."
-  BUS_FROM=reviewer "$SEND" builder CHANGES_REQUESTED "$failure_sha" "$failure_task" "$failure_body" >> "$LOG_FILE" 2>&1 || return 1
+  send_routed_response CHANGES_REQUESTED "$failure_sha" "$failure_task" "$failure_body" >> "$LOG_FILE" 2>&1 || return 1
   log "sent terminal CHANGES_REQUESTED after $failure_attempt failed attempts task=$failure_task sha=$failure_sha; re-arming"
   rm -rf "$STATE_DIR"
 }
@@ -450,6 +486,7 @@ review_current() {
   sha=$(json_file_field "$STATE_DIR/message.json" sha) || return 2
   task=$(json_file_field "$STATE_DIR/message.json" task) || return 2
   request_id=$(json_file_field "$STATE_DIR/message.json" id) || return 2
+  request_owner=$(json_file_field "$STATE_DIR/message.json" owner_id) || return 2
 
   case "$type" in
     DONE)
@@ -470,7 +507,7 @@ review_current() {
       ;;
   esac
 
-  if response_already_sent "$sha" "$task" "$request_id"; then
+  if response_already_sent "$sha" "$task" "$request_id" "$request_owner"; then
     log "response already exists for task=$task sha=$sha; not duplicating"
     rm -rf "$STATE_DIR"
     return 0
@@ -535,7 +572,7 @@ NODE
   fi
   body=$(cat "$body_file")
 
-  BUS_FROM=reviewer "$SEND" builder "$verdict" "$sha" "$task" "$body" >> "$LOG_FILE" 2>&1 || return 3
+  send_routed_response "$verdict" "$sha" "$task" "$body" >> "$LOG_FILE" 2>&1 || return 3
   log "sent $verdict task=$task sha=$sha; re-arming"
   rm -rf "$STATE_DIR"
   return 0

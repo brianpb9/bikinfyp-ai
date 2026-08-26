@@ -21,6 +21,8 @@ CODEX_PID_FILE="$BUS_DIR/tmp/codex-reviewer-codex.pid"
 STATE_DIR="$BUS_DIR/tmp/codex-reviewer-current"
 LOCK_DIR="$BUS_DIR/tmp/codex-reviewer.lock"
 HEAD_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD)
+TEST_OWNER="worker-$(printf '%s' "$REPO_ROOT" | git hash-object --stdin | cut -c1-16)"
+export AGENT_BUS_OWNER_ID="$TEST_OWNER"
 FAKE_SHA=deadbeefdeadbeefdeadbeefdeadbeefdeadbeef
 ACTIVE_PID=''
 BOUNDED_PID=''
@@ -33,6 +35,23 @@ inbox_count() {
     count=$((count + 1))
   done
   printf '%s\n' "$count"
+}
+
+read_builder() { # read_builder <task>
+  "$READ" builder --task "$1" --owner "$TEST_OWNER"
+}
+
+routing_matches() { # routing_matches <request-file> <read-output>
+  _request=$1
+  [ -f "$_request" ] || _request="$BUS_DIR/archive/$(basename "$_request")"
+  node - "$_request" "$2" <<'NODE'
+const fs = require("fs");
+const request = JSON.parse(fs.readFileSync(process.argv[2], "utf8"));
+const response = JSON.parse(process.argv[3].split(/\r?\n/, 1)[0]);
+const fields = ["task_id", "owner_id", "worker_id", "origin_branch", "origin_worktree", "origin_repo_id", "origin_repo_path"];
+if (!fields.every((field) => response[field] === request[field])) process.exit(1);
+if (response.reply_to_id !== request.id) process.exit(1);
+NODE
 }
 
 wait_for() {
@@ -307,11 +326,16 @@ mkdir -p "$STATE_DIR"
 cp "$staging_path" "$STATE_DIR/message.json"
 start_runtime 5
 if wait_for "legacy partial staging recovery" '[ "$(inbox_count builder)" -ge 1 ]'; then
-  staging_response=$("$READ" builder)
+  staging_response=$(read_builder RUNTIME-SELFTEST-STAGING)
   case "$staging_response" in
     *'"type":"PASS"'*'"task":"RUNTIME-SELFTEST-STAGING"'*) printf 'PASS  partial staging state is recovered without message loss\n' ;;
     *) printf 'FAIL  partial staging state did not receive PASS\n'; FAILURES=$((FAILURES + 1)) ;;
   esac
+  if routing_matches "$staging_path" "$staging_response"; then
+    printf 'PASS  Reviewer verdict retains exact request owner/origin and reply identity\n'
+  else
+    printf 'FAIL  Reviewer verdict rewrote or dropped request routing identity\n'; FAILURES=$((FAILURES + 1))
+  fi
 else
   FAILURES=$((FAILURES + 1))
 fi
@@ -334,7 +358,7 @@ mv "$poison_path" "$poison_ready_path"
 BUS_FROM=builder "$SEND" reviewer READY_FOR_REVIEW "$HEAD_SHA" RUNTIME-SELFTEST-VALID valid >/dev/null
 start_runtime 5
 if wait_for "valid message after poison" '[ "$(inbox_count builder)" -ge 1 ]'; then
-  response=$($READ builder)
+  response=$(read_builder RUNTIME-SELFTEST-VALID)
   case "$response" in
     *'"type":"PASS"'*'"task":"RUNTIME-SELFTEST-VALID"'*) printf 'PASS  poison dropped; next valid review completed\n' ;;
     *) printf 'FAIL  unexpected poison response\n'; FAILURES=$((FAILURES + 1)) ;;
@@ -358,8 +382,8 @@ if wait_for "runner and Codex PID files" '[ -s "$RUNNER_PID_FILE" ] && [ -s "$CO
   ACTIVE_PID=''
   start_runtime 1
   if wait_for "bounded failure and following PASS" '[ "$(inbox_count builder)" -ge 2 ]' 300; then
-    first=$($READ builder)
-    second=$($READ builder)
+    first=$(read_builder RUNTIME-SELFTEST-HANG)
+    second=$(read_builder RUNTIME-SELFTEST-NEXT)
     case "$first" in
       *'"type":"CHANGES_REQUESTED"'*'"task":"RUNTIME-SELFTEST-HANG"'*) : ;;
       *) printf 'FAIL  first post-crash response was not bounded CHANGES_REQUESTED\n'; FAILURES=$((FAILURES + 1)) ;;
@@ -390,11 +414,11 @@ wait_for "final runtime cleanup" '[ ! -e "$LOCK_DIR" ]' 100 || FAILURES=$((FAILU
 # by the bus-global sequence, not permanently memoized by SHA+task.
 retry_task=RUNTIME-SELFTEST-RETRY
 BUS_FROM=reviewer "$SEND" builder CHANGES_REQUESTED "$HEAD_SHA" "$retry_task" "older infrastructure failure" >/dev/null
-"$READ" builder >/dev/null
+read_builder "$retry_task" >/dev/null
 BUS_FROM=builder "$SEND" reviewer READY_FOR_REVIEW "$HEAD_SHA" "$retry_task" retry >/dev/null
 start_runtime 5
 if wait_for "same-SHA retry after older response" '[ "$(inbox_count builder)" -ge 1 ]'; then
-  retry_response=$("$READ" builder)
+  retry_response=$(read_builder "$retry_task")
   case "$retry_response" in
     *'"type":"PASS"'*'"task":"RUNTIME-SELFTEST-RETRY"'*) printf 'PASS  later READY is not suppressed by an older response\n' ;;
     *) printf 'FAIL  later same-SHA READY was suppressed or misanswered\n'; FAILURES=$((FAILURES + 1)) ;;

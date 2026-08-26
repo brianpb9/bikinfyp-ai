@@ -18,6 +18,8 @@ fi
 BIN="$BUS_DIR/bin"
 RUNTIME="$BIN/codex-reviewer-runtime"
 TASK=BUS-SELFTEST
+TEST_OWNER="worker-$(printf '%s' "$REPO_ROOT" | git hash-object --stdin | cut -c1-16)"
+export AGENT_BUS_TASK_ID="$TASK" AGENT_BUS_OWNER_ID="$TEST_OWNER"
 
 FAILURES=0
 CASE_NO=0
@@ -254,7 +256,8 @@ check "24 concurrent mixed-type sends are lossless and collision-free" "$paralle
 # menjaga loop tetap hidup. Cacat lifecycle yang ditutup di bawah semuanya
 # berakhir sama: Builder diam-diam tuli sementara laporannya berkata sehat.
 
-waiter_pid_file="$BUS_DIR/tmp/waiter-builder.pid"
+TEST_ROUTE_KEY=$(printf '%s\n%s' "$TASK" "$TEST_OWNER" | git hash-object --stdin | cut -c1-16)
+waiter_pid_file="$BUS_DIR/tmp/waiter-builder-$TEST_ROUTE_KEY.pid"
 waiter_hidup() { # waiter_hidup <pid>
   [ -n "${1:-}" ] || return 1
   kill -0 "$1" 2>/dev/null || return 1
@@ -361,8 +364,8 @@ tunggu_pidfile() { # tunggu_pidfile <detik_maks>
 }
 
 matikan_penunggu() {
-  for pid in $(pgrep -f "$BIN/bus-wait builder" 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
-  for pid in $(pgrep -f "$BIN/bus-arm builder" 2>/dev/null); do kill "$pid" 2>/dev/null || true; done
+  pid=$(cat "$waiter_pid_file" 2>/dev/null || true)
+  waiter_hidup "$pid" && kill "$pid" 2>/dev/null || true
   rm -f "$waiter_pid_file"
   sleep 1
 }
@@ -734,7 +737,7 @@ matikan_penunggu
 # mkdir-sebelum-tulis dan MASIH HIDUP. Menghapusnya otomatis = merampas kunci
 # yang sedang dipegang. Karena itu hanya pemilik numerik yang terbukti MATI yang
 # dipulihkan; sisanya gagal tertutup.
-lockfile="$BUS_DIR/tmp/waiter-builder.lock"
+lockfile="$BUS_DIR/tmp/waiter-builder-$TEST_ROUTE_KEY.lock"
 
 warisan_ok=0; warisan_detail=""
 matikan_penunggu
@@ -1086,7 +1089,7 @@ matikan_penunggu
 # hidupnya. TERM dikirim TEPAT di jendela itu.
 befork_ok=0; befork_detail=""
 matikan_penunggu
-lockfile3="$BUS_DIR/tmp/waiter-builder.lock"
+lockfile3="$BUS_DIR/tmp/waiter-builder-$TEST_ROUTE_KEY.lock"
 rm -f "$lockfile3"
 ( exec 9>"$lockfile3"
   if command -v lockf >/dev/null 2>&1; then lockf 9; else flock -x 9; fi
@@ -1320,7 +1323,7 @@ tunggu_pidfile 10 || true
 anak6=$(cat "$waiter_pid_file" 2>/dev/null || true)
 waiter_hidup "$anak6" || { ambilgagal_ok=1; ambilgagal_detail="penunggu tidak terpasang"; }
 
-lockfile6="$BUS_DIR/tmp/waiter-builder.lock"
+lockfile6="$BUS_DIR/tmp/waiter-builder-$TEST_ROUTE_KEY.lock"
 [ -e "$lockfile6" ] || : > "$lockfile6"
 chmod 000 "$lockfile6" 2>/dev/null || { ambilgagal_ok=1; ambilgagal_detail="${ambilgagal_detail:-tidak bisa mencabut izin lockfile}"; }
 
@@ -1416,7 +1419,7 @@ done
 # itu. Bukti supervisi yang benar dibaca dari SUPERVISOR_FILE (klaim
 # pid+nonce), bukan dari asumsi PPID langsung, dan itu justru sumber
 # kebenaran yang SAMA yang dipakai kode produksinya sendiri.
-supervisor_file="$BUS_DIR/tmp/supervisor-builder.pid"
+supervisor_file="$BUS_DIR/tmp/supervisor-builder-$TEST_ROUTE_KEY.pid"
 _klaim=$(cat "$supervisor_file" 2>/dev/null || true)
 _spid_baru=${_klaim%%:*}
 case "$_spid_baru" in ''|*[!0-9]*) yatim_ok=1; yatim_detail="${yatim_detail:-klaim supervisor tidak terbaca atau rusak: '$_klaim'}" ;; esac
@@ -1449,12 +1452,14 @@ matikan_penunggu
 # standalone ini TIDAK PERNAH menulis klaim itu — jadi WAJIB tetap diganti.
 decoy_live_ok=0; decoy_live_detail=""
 matikan_penunggu
-rm -f "$BUS_DIR/tmp/supervisor-builder.pid"
-"$BIN/bus-wait" builder 40 >/dev/null 2>&1 &
+rm -f "$BUS_DIR/tmp/supervisor-builder-$TEST_ROUTE_KEY.pid"
+"$BIN/bus-wait" builder 40 --task "$TASK" --owner "$TEST_OWNER" >/dev/null 2>&1 &
 standalone_parent=$!
 sleep 1
-standalone_wait=$(pgrep -P "$standalone_parent" -f "$BIN/bus-wait" 2>/dev/null | head -1)
-[ -z "$standalone_wait" ] && standalone_wait=$standalone_parent
+# The directly-backgrounded script PID is the waiter. Looking for a child with
+# pgrep can accidentally capture its short-lived Node selector subprocess,
+# which inherits an argv containing bus-wait and disappears before replacement.
+standalone_wait=$standalone_parent
 kill -0 "$standalone_wait" 2>/dev/null || { decoy_live_ok=1; decoy_live_detail="bus-wait standalone tidak hidup"; }
 echo "$standalone_wait" > "$waiter_pid_file"
 _ppid_standalone=$(ps -o ppid= -p "$standalone_wait" 2>/dev/null | tr -d ' ')
@@ -1475,7 +1480,8 @@ grep -q 'SUDAH ADA' "$BUS_DIR/tmp/arm-decoylive.out" 2>/dev/null && {
   decoy_live_detail="${decoy_live_detail:-bus-arm menerima standalone berinduk-hidup sebagai SUDAH ADA — PPID bukan-1 disalahartikan sebagai supervisor}"
 }
 tunggu=0
-while [ "$tunggu" -lt 10 ] && kill -0 "$standalone_wait" 2>/dev/null; do sleep 1; tunggu=$((tunggu + 1)); done
+while [ "$tunggu" -lt 10 ] && [ "$(cat "$waiter_pid_file" 2>/dev/null || true)" = "$standalone_wait" ]; do sleep 1; tunggu=$((tunggu + 1)); done
+wait "$standalone_parent" 2>/dev/null || true
 kill -0 "$standalone_wait" 2>/dev/null && { decoy_live_ok=1; decoy_live_detail="${decoy_live_detail:-standalone TIDAK diganti}"; }
 [ "$(cacah_penunggu)" = 1 ] || { decoy_live_ok=1; decoy_live_detail="${decoy_live_detail:-penunggu=$(cacah_penunggu) sesudah penggantian}"; }
 check "bus-wait standalone berinduk HIDUP (bukan bus-arm) tetap DIGANTI, bukan diterima sebagai SUDAH ADA" "$decoy_live_ok" "$decoy_live_detail"
