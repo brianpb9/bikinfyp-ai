@@ -69,18 +69,21 @@ test("LANGGANAN sama persis dengan PAKET_LANGGANAN, tidak diketik ulang", () => 
   }
 });
 
-test("JANJI DI KARTU: Rp250.000 = 10 video 8 detik", () => {
+test("JANJI DI KARTU: Rp250.000 = 6 video 8 detik", () => {
   // Angka jual utama. Kalau ia bergeser, seluruh alasan pindah ke 8 detik
   // ikut bergeser dan kartunya menjanjikan sesuatu yang lain.
   const starter = paketById("starter");
   assert.ok(starter);
   assert.equal(starter.priceIdr, 250_000);
-  assert.equal(H.jumlahVideo(starter.kredit, "standar", 8), 10);
+  // 6, bukan 10: target margin naik 50% -> 65% pada 26 Agu 2026. Angka lama
+  // bukan "salah", ia harga margin lain — dan yang membayar selisihnya adalah
+  // jumlah video, bukan kita. Alasannya diperiksa di tests/harga-kredit.test.ts.
+  assert.equal(H.jumlahVideo(starter.kredit, "standar", 8), 6);
   // Dan pembandingnya, yang jadi alasan pindah dari 15 detik:
-  assert.equal(H.jumlahVideo(starter.kredit, "kunciWajah", 15), 2);
+  assert.equal(H.jumlahVideo(starter.kredit, "kunciWajah", 15), 1);
 });
 
 test("jumlahVideo membulatkan KE BAWAH — tidak menjanjikan video yang tak terbayar", () => {
-  assert.equal(H.jumlahVideo(199, "standar", 8), 1);
-  assert.equal(H.jumlahVideo(99, "standar", 8), 0);
+  assert.equal(H.jumlahVideo(285, "standar", 8), 1);
+  assert.equal(H.jumlahVideo(142, "standar", 8), 0);
 });

@@ -57,10 +57,10 @@ test("KUNCI WAJAH dua kali lipat biayanya — di durasi mana pun", () => {
 test("HARGA KREDIT sesuai daftar, dan TIDAK PERNAH di bawah COGS", () => {
   const berdasarLabel = Object.fromEntries(H.TARIF_RENDER.map((t) => [t.label, t.kredit]));
   assert.deepEqual(berdasarLabel, {
-    "Standar 8 detik": 100,
-    "Standar 15 detik": 187,
-    "Kunci wajah 8 detik": 200,
-    "Kunci wajah 15 detik": 374,
+    "Standar 8 detik": 143,
+    "Standar 15 detik": 267,
+    "Kunci wajah 8 detik": 285,
+    "Kunci wajah 15 detik": 534,
   });
 
   // Sifat yang sebenarnya dijaga, bukan cuma empat angka di atas: pembulatan
@@ -107,20 +107,58 @@ test("TIER RUGI tidak bisa didiamkan — dua arah", () => {
   const rugi = Object.entries(config.tiers)
     .filter(([, v]) => v.priceIdr < v.cogsIdr)
     .map(([k]) => k);
-  const terdaftar = H.TIER_RUGI_DISADARI.map((t) => t.tier);
+  const belumSelesai = H.TIER_RUGI_DISADARI.filter((t) => !t.selesai).map((t) => t.tier);
+  const sisaTercatat = H.HARGA_RUPIAH_BELUM_IKUT_KREDIT.map((r) => r.tier);
 
+  // Harga rupiah yang di bawah COGS harus ada di SALAH SATU daftar: kerugian
+  // yang masih terbuka, atau sisa jalur rupiah yang penjualannya sudah pindah
+  // ke kredit. Menandai "selesai" saja TIDAK cukup untuk mengeluarkannya —
+  // itu justru cara termudah membuat kerugian menghilang.
   for (const t of rugi) {
     assert.ok(
-      terdaftar.includes(t),
-      `tier "${t}" dijual di bawah COGS tapi tidak terdaftar di TIER_RUGI_DISADARI — ` +
+      belumSelesai.includes(t) || sisaTercatat.includes(t),
+      `tier "${t}" dijual di bawah COGS tapi tidak terdaftar di mana pun — ` +
         "kerugian tidak boleh lolos tanpa keputusan tertulis"
     );
   }
-  for (const t of terdaftar) {
+  for (const t of belumSelesai) {
     assert.ok(
       rugi.includes(t),
-      `tier "${t}" terdaftar rugi padahal sudah untung — hapus barisnya, jangan biarkan daftar ini jadi arsip mati`
+      `tier "${t}" terdaftar rugi padahal sudah untung — tandai selesai atau hapus barisnya`
     );
+  }
+
+  // "SELESAI" ADALAH KLAIM, DAN KLAIM DIPERIKSA. Tanpa ini, kerugian bisa
+  // ditutup dengan menambahkan satu kata alih-alih mengubah apa pun.
+  //
+  // Klaimnya di sini bukan "harganya sudah naik" melainkan "penjualannya
+  // pindah ke kredit". Yang diperiksa: tier itu punya harga kredit yang
+  // MEMENUHI target margin, DAN sisa harga rupiahnya tercatat terbuka —
+  // bukan ikut dianggap beres.
+  const sisaRupiah = new Map(H.HARGA_RUPIAH_BELUM_IKUT_KREDIT.map((r) => [r.tier, r]));
+  for (const baris of H.TIER_RUGI_DISADARI) {
+    if (!baris.selesai) continue;
+    const tier = (config.tiers as Record<string, { priceIdr: number; cogsIdr: number }>)[baris.tier];
+    assert.ok(tier, `tier "${baris.tier}" bertanda selesai tapi tidak ada di config`);
+
+    const kredit = H.biayaKredit(tier.cogsIdr);
+    const marginKredit = 1 - tier.cogsIdr / H.kreditKeIdr(kredit);
+    assert.ok(
+      marginKredit >= H.MARGIN_TARGET,
+      `tier "${baris.tier}" bertanda SELESAI tapi harga kreditnya cuma bermargin ${(marginKredit * 100).toFixed(1)}%`
+    );
+
+    if (tier.priceIdr < tier.cogsIdr) {
+      const sisa = sisaRupiah.get(baris.tier);
+      assert.ok(
+        sisa,
+        `tier "${baris.tier}" bertanda SELESAI padahal harga rupiahnya Rp${tier.priceIdr} masih di bawah COGS ` +
+          `Rp${tier.cogsIdr} dan sisanya tidak tercatat di HARGA_RUPIAH_BELUM_IKUT_KREDIT`
+      );
+      assert.equal(sisa.priceIdr, tier.priceIdr, `sisa rupiah "${baris.tier}" tidak lagi cocok dengan config`);
+    }
+    assert.match(baris.selesai.tanggal, /^\d{4}-\d{2}-\d{2}$/);
+    assert.ok(baris.selesai.alasan.length > 40, "alasan penutupan wajib menjelaskan caranya, bukan menyatakan selesai");
   }
   for (const baris of H.TIER_RUGI_DISADARI) {
     assert.match(baris.sejak, /^\d{4}-\d{2}-\d{2}$/, "tanggal wajib, supaya umur keputusan tertunda kelihatan");
@@ -134,4 +172,59 @@ test("COGS config diturunkan dari tagihan, bukan diketik ulang", () => {
   // Angka BRD lama tidak boleh hidup lagi di jalur mana pun.
   assert.notEqual(config.tiers.high_quality.cogsIdr, 8802);
   assert.notEqual(config.tiers.super_hq.cogsIdr, 37164);
+});
+
+test("MARGIN 65% — alasannya diperiksa ulang, bukan dipercaya", () => {
+  assert.equal(H.MARGIN_TARGET, 0.65);
+
+  // Tabel keputusan di komentar MARGIN_TARGET dihitung ulang di sini. Kalau
+  // seseorang menggeser targetnya, yang gagal bukan "konstanta berubah" —
+  // melainkan alasan yang membuat 65% dipilih.
+  const cogs8 = H.cogsIdr("standar", 8);
+  const video = (m: number) => Math.floor(1000 / Math.ceil(cogs8 / (H.IDR_PER_KREDIT * (1 - m))));
+
+  assert.equal(video(0.65), 6, "Starter tidak lagi dapat 6 video standar 8 detik");
+  assert.equal(video(0.70), 5, "naik ke 70% harusnya memotong 1 dari 6 video");
+  assert.equal(
+    video(0.75), video(0.70),
+    "75% harusnya TIDAK mengubah jumlah video — itu alasan pokok berhenti sebelum sana"
+  );
+
+  // Bantalan: tarif kita baru diketahui dari SATU tagihan.
+  const naik20 = cogs8 * 1.2;
+  const marginSetelahNaik = 1 - naik20 / (H.biayaKredit(cogs8) * H.IDR_PER_KREDIT);
+  assert.ok(
+    marginSetelahNaik > 0.55,
+    `kenaikan tarif 20% menjatuhkan margin ke ${(marginSetelahNaik * 100).toFixed(1)}% — bantalannya hilang`
+  );
+});
+
+test("TIER DI BAWAH TARGET MARGIN juga dijaga dua arah", () => {
+  const dibawah = Object.entries(config.tiers)
+    .filter(([, v]) => v.priceIdr > v.cogsIdr && 1 - v.cogsIdr / v.priceIdr < H.MARGIN_TARGET)
+    .map(([k]) => k);
+  const terdaftar = H.TIER_DI_BAWAH_TARGET_MARGIN.map((t) => t.tier);
+  for (const t of dibawah) {
+    assert.ok(terdaftar.includes(t), `tier "${t}" di bawah target margin tapi tidak terdaftar`);
+  }
+  for (const t of terdaftar) {
+    assert.ok(dibawah.includes(t), `tier "${t}" terdaftar di bawah target padahal sudah memenuhi — hapus barisnya`);
+  }
+});
+
+test("SISA HARGA RUPIAH dipatok, dan hilang sendiri kalau sudah beres", () => {
+  // Angka Rp12.000 dipatok supaya perubahan diam-diam ketahuan — ke arah mana
+  // pun. Dan begitu harga rupiahnya benar-benar disamakan dengan kredit,
+  // barisnya WAJIB dihapus; kalau tidak, test ini yang mengingatkan.
+  const tiers = config.tiers as Record<string, { priceIdr: number; cogsIdr: number }>;
+  for (const sisa of H.HARGA_RUPIAH_BELUM_IKUT_KREDIT) {
+    const tier = tiers[sisa.tier];
+    assert.ok(tier, `sisa "${sisa.tier}" tidak ada di config`);
+    assert.equal(sisa.priceIdr, tier.priceIdr, `sisa "${sisa.tier}" tidak cocok dengan config.tiers`);
+    assert.ok(
+      tier.priceIdr < H.kreditKeIdr(H.biayaKredit(tier.cogsIdr)),
+      `sisa "${sisa.tier}" sudah setara harga kredit — hapus barisnya, jangan biarkan jadi arsip mati`
+    );
+    assert.ok(sisa.catatan.length > 40, "catatan wajib menyebut apa yang harus diputuskan");
+  }
 });

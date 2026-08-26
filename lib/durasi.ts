@@ -16,8 +16,8 @@
  *
  * Kredit menyamarkan harga rupiah, tapi ia TIDAK menyamarkan jumlah video —
  * dan di situlah 8 detik mengubah nilai jualnya:
- *   Rp250.000 =  2 video (15 detik, kunci wajah)
- *   Rp250.000 = 10 video (8 detik, standar)
+ *   Rp250.000 = 1 video (15 detik, kunci wajah)
+ *   Rp250.000 = 6 video (8 detik, standar)
  * 8 detik juga format normal TikTok, dan hook yang bagus selesai di bawah itu.
  *
  * Kunci wajah dijual sebagai TAMBAHAN, bukan bawaan — ia menggandakan token,

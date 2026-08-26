@@ -277,16 +277,27 @@ export const config = {
       generateAudio: false,
     },
     high_quality: {
+      // HARGA RUPIAH INI SUDAH BUKAN HARGA JUAL, TAPI JALURNYA MASIH HIDUP.
+      //
+      // Penjualan pindah ke kredit 26 Agu 2026: 15 detik standar = 267 kredit
+      // (setara Rp66.750 pada Rp250/kredit). Rp12.000 di bawah ini adalah
+      // sisa jalur rupiah lama, dan tierPriceIdr() masih memakainya untuk
+      // menahan saldo di app/api/jobs.
+      //
+      // ANGKANYA SENGAJA TIDAK DIUBAH DI SINI. Menaikkannya ke Rp66.750
+      // adalah kenaikan harga eceran 5,5x DAN mematikan bonus pendaftaran
+      // Rp12.000 yang selama ini pas untuk satu video — dua keputusan produk
+      // yang bukan milik kode ini. Residunya dicatat terbuka di
+      // HARGA_RUPIAH_BELUM_IKUT_KREDIT (lib/harga-kredit.ts) dan dijaga test,
+      // bukan dibiarkan menghilang di antara dua sistem harga.
       priceIdr: 12000,
       // COGS NYATA, dari tagihan BytePlus Agustus 2026 ($4,41/1M token).
       // Angka lama Rp8.802 datang dari BRD dan tidak pernah diperiksa ke luar
       // dirinya sendiri — ia KERENDAHAN 2,7x.
       //
-      // TIER INI DIJUAL DI BAWAH BIAYA: Rp12.000 vs COGS Rp23.355 = RUGI
-      // Rp11.355 per video. Dan itu pada mode STANDAR; jalur render bawaan
-      // kita memakai referensi (r2v) untuk mengunci wajah, yang COGS-nya
-      // Rp46.645 — rugi Rp34.645. Lihat tests/harga-kredit.test.ts, yang
-      // GAGAL bila tier rugi kehilangan tanda keputusannya.
+      // Catatan kerugian lamanya disimpan di TIER_RUGI_DISADARI bersama
+      // tanggal penutupannya, bukan dihapus: daftar itu yang membuat kesalahan
+      // ini bisa ditelusuri, dan test menolak tanda "selesai" yang palsu.
       cogsIdr: cogsIdrNyata("standar", 15),
       byteplusModel: env("BYTEPLUS_MODEL_HQ", "dreamina-seedance-2-0-mini-260615"),
       // Resolusi bisa dinaikkan lewat env untuk uji: teks kecil di label butuh

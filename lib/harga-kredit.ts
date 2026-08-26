@@ -105,8 +105,36 @@ export function cogsIdr(mode: ModeRender, durationSec: number): number {
  */
 export const IDR_PER_KREDIT = 250;
 
-/** Margin kotor yang dituju pada harga kredit dasar. */
-export const MARGIN_TARGET = 0.5;
+/**
+ * Margin kotor yang dituju pada harga kredit dasar.
+ *
+ * 65% SEJAK 26 Agu 2026 (dari 50%). Angka ini punya alasan, dan alasannya
+ * ditulis di sini supaya tidak digeser tanpa sadar — menaikkannya terlihat
+ * gratis dari sisi kita, padahal yang membayar adalah jumlah video yang
+ * diterima pelanggan.
+ *
+ * Yang didapat Starter (1.000 kredit) untuk video standar 8 detik:
+ *
+ *   margin   harga    video    catatan
+ *    50%     100 kr     10
+ *    65%     143 kr      6     <-- di sini
+ *    70%     167 kr      5     +5 poin margin, pelanggan kehilangan 1 dari 6 (-17%)
+ *    75%     200 kr      5     jumlah video TIDAK berubah — kenaikan murni
+ *                              rugi di persepsi, pelanggan tidak dapat apa pun
+ *
+ * Melewati 70% berarti mengambil dari pelanggan tanpa ada yang kembali; 75%
+ * bahkan tidak dirasakan sebagai apa pun selain harga naik.
+ *
+ * 65% JUGA BANTALAN TERHADAP KENAIKAN TARIF. Kalau BytePlus naik 20%:
+ *   ditetapkan 65%  ->  margin jatuh ke 58%
+ *   ditetapkan 50%  ->  margin jatuh ke 40%
+ * Tarif kita baru diketahui dari SATU tagihan (Agustus 2026). Bantalan itu
+ * bukan kemewahan.
+ *
+ * Mengubah angka ini menggagalkan tests/harga-kredit.test.ts, yang memeriksa
+ * ulang tabel di atas — bukan sekadar mencocokkan konstanta.
+ */
+export const MARGIN_TARGET = 0.65;
 
 /**
  * Biaya render dalam kredit.
@@ -198,7 +226,19 @@ export function kreditKeIdr(kredit: number): number {
  * Jadi satu-satunya cara menghapus baris di bawah adalah benar-benar
  * memperbaiki harganya — bukan melupakannya.
  */
-export type TierRugiDisadari = { tier: string; sejak: string; alasan: string };
+export type TierRugiDisadari = {
+  tier: string;
+  sejak: string;
+  alasan: string;
+  /**
+   * Diisi hanya kalau kerugiannya BENAR-BENAR ditutup.
+   *
+   * Test menegakkannya sebagai klaim, bukan label: baris yang bertanda selesai
+   * TAPI tiernya masih dijual di bawah COGS akan menggagalkan suite. Jadi
+   * "selesai" tidak bisa dipakai untuk menenangkan daftar ini.
+   */
+  selesai?: { tanggal: string; alasan: string };
+};
 
 export const TIER_RUGI_DISADARI: readonly TierRugiDisadari[] = [
   {
@@ -209,6 +249,15 @@ export const TIER_RUGI_DISADARI: readonly TierRugiDisadari[] = [
       "terhadap harga jual Rp12.000 — rugi Rp11.355/video, dan Rp34.645 bila " +
       "wajah dikunci. Bukan margin tipis, melainkan menjual di bawah biaya. " +
       "MENUNGGU KEPUTUSAN BRIAN: naikkan harga, ganti mesin, atau matikan tier.",
+    selesai: {
+      tanggal: "2026-08-26",
+      alasan:
+        "Penjualan pindah ke KREDIT: 15 detik standar = 267 kredit (margin " +
+        "65%), dan itulah harga yang benar-benar ditawarkan. Rp12.000 berhenti " +
+        "menjadi harga jual. SISANYA BELUM NOL: jalur rupiah lama masih " +
+        "memakai angka Rp12.000 untuk menahan saldo — dicatat terbuka di " +
+        "HARGA_RUPIAH_BELUM_IKUT_KREDIT, bukan ikut ditandai selesai.",
+    },
   },
 ];
 
@@ -228,9 +277,95 @@ export function kredit(n: number): string {
  * Dipakai UI untuk menjawab pertanyaan yang benar-benar ditanyakan pembeli.
  * Kredit menyamarkan harga rupiah, tapi ia TIDAK menyamarkan jumlah video —
  * dan justru itu kekuatan jualnya pada 8 detik:
- *   Rp250.000 = 2 video (15 dtk kunci wajah)
- *   Rp250.000 = 10 video (8 dtk standar)
+ *   Rp250.000 =  1 video (15 dtk kunci wajah)
+ *   Rp250.000 =  6 video (8 dtk standar)
  */
 export function jumlahVideo(kreditTersedia: number, mode: ModeRender, durationSec: number): number {
   return Math.floor(kreditTersedia / biayaKredit(cogsIdr(mode, durationSec)));
 }
+
+/**
+ * SISA YANG BELUM IKUT PINDAH KE KREDIT.
+ *
+ * Penjualan sudah memakai kredit, tapi `config.tiers[].priceIdr` masih dipakai
+ * tierPriceIdr() untuk menahan saldo di jalur rupiah lama. Untuk high_quality
+ * angka itu Rp12.000 terhadap COGS Rp23.355 — jadi kalau jalur itu terpakai,
+ * ia masih menjual di bawah biaya.
+ *
+ * KENAPA TIDAK LANGSUNG DINAIKKAN SAJA. Harga kreditnya setara Rp66.750, jadi
+ * menyamakannya berarti (1) menaikkan harga eceran 5,5x dan (2) mematikan
+ * bonus pendaftaran Rp12.000 yang selama ini pas untuk tepat satu video. Dua
+ * keputusan produk, dan keduanya milik Brian — bukan efek samping dari
+ * mengubah target margin.
+ *
+ * Daftar ini membuat sisa itu tidak bisa hilang di antara dua sistem harga.
+ * Test mematok angkanya, jadi perubahan diam-diam ikut ketahuan.
+ */
+export const HARGA_RUPIAH_BELUM_IKUT_KREDIT: readonly { tier: string; priceIdr: number; catatan: string }[] = [
+  {
+    tier: "high_quality",
+    priceIdr: 12_000,
+    catatan:
+      "Setara kredit: 267 kr = Rp66.750. Menunggu keputusan Brian — samakan " +
+      "dengan harga kredit (dan atur ulang bonus pendaftaran), atau pensiunkan " +
+      "jalur rupiahnya lewat TIER_PENSIUN di lib/paket-kredit.ts.",
+  },
+];
+
+/**
+ * Tier yang harganya MASIH di bawah target margin.
+ *
+ * Bukan kerugian — mereka untung — tapi begitu ada target margin tertulis,
+ * tier yang tidak memenuhinya menjadi ketidakcocokan yang diam. Daftar ini
+ * memakai disiplin yang sama dengan TIER_RUGI_DISADARI dan dijaga dua arah:
+ * tier di bawah target yang tidak terdaftar menggagalkan suite, dan tier
+ * terdaftar yang ternyata sudah memenuhi target juga menggagalkannya.
+ */
+export type TierDiBawahTarget = { tier: string; sejak: string; alasan: string };
+
+export const TIER_DI_BAWAH_TARGET_MARGIN: readonly TierDiBawahTarget[] = [
+  {
+    tier: "super_hq",
+    sejak: "2026-08-26",
+    alasan:
+      "Harga rupiah Rp80.000 dipertahankan saat target margin naik ke 65%; " +
+      "dengan COGS kunci wajah Rp46.645 marginnya 41,7%. Harga kreditnya " +
+      "sendiri (534 kredit = Rp133.500) SUDAH memenuhi target — yang " +
+      "tertinggal hanya harga rupiah warisan. Menaikkannya 67% adalah " +
+      "keputusan harga, dan Brian belum memutuskannya.",
+  },
+  {
+    tier: "silent_caption",
+    sejak: "2026-08-26",
+    alasan:
+      "Rp5.000 terhadap COGS Rp2.445 = 51%, di bawah target 65%. TAPI COGS " +
+      "itu sendiri BELUM TERVERIFIKASI: tier ini berjalan di 480p, dan 480p " +
+      "belum pernah diukur per-mode di akun kami. Angka marginnya bisa " +
+      "bergerak ke dua arah begitu 480p diukur, jadi menaikkan harga " +
+      "sekarang berarti bereaksi pada angka yang belum ada dasarnya.",
+  },
+];
+
+/**
+ * PELUANG, BUKAN RENCANA: Grok Imagine.
+ *
+ * Tarif BROSUR Grok $0,050/detik = Rp6.520 untuk 8 detik, kira-kira SEPARUH
+ * COGS BytePlus (Rp12.456). Kalau itu terverifikasi dari console.x.ai, margin
+ * pada harga yang SAMA (143 kredit) naik dari 65% ke 82%.
+ *
+ * ANGKA ITU BELUM BOLEH DIPAKAI MEMUTUSKAN APA PUN. Ia brosur — kelas sumber
+ * yang persis baru saja terbantah tagihan: brosur Seedance menyebut $6,40 dan
+ * $10,70/1M token, tarif nyata kami $4,41. Brosur meleset ke dua arah, dan
+ * kali ini arahnya menguntungkan, yang justru membuatnya lebih mudah dipercaya
+ * tanpa diperiksa.
+ *
+ * Jadi jangan ganti mesin sebelum tagihan Grok dilihat. Adapter-nya sudah ada
+ * dan teruji di lib/providers/stubs/xai-grok.ts, di belakang PROVIDER_VIDEO=xai,
+ * dan sengaja BUKAN bawaan.
+ */
+export const PELUANG_GROK = {
+  tarifBrosurUsdPerDetik: 0.05,
+  cogsIdr8Detik: 6_520,
+  marginDiHargaSama: 0.82,
+  status: "BELUM TERVERIFIKASI — butuh tagihan console.x.ai",
+} as const;
