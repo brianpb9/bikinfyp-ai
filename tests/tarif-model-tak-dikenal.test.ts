@@ -29,27 +29,24 @@ test("model TAK DIKENAL ditaksir dengan tarif tertinggi, bukan terendah", () => 
   assert.equal(takDikenal.dasar, "tarif-tertinggi");
 });
 
-test("model yang DIKENAL tetap memakai tarifnya sendiri", () => {
-  const mini = hitungBiayaUntukUji("dreamina-seedance-2-0-mini-260615", undefined, 5, "720p");
-  const penuh = hitungBiayaUntukUji("dreamina-seedance-2-0-260128", undefined, 5, "720p");
-  assert.ok(penuh.idr > mini.idr, `tarif mini dan penuh tertukar: mini Rp${mini.idr}, penuh Rp${penuh.idr}`);
-
-  // ASERSI INI DULU BERBUNYI `> mini.idr * 3`, DAN ANGKA 3 ITU KELIRU.
+test("SATU TARIF untuk semua dreamina — model berhenti menentukan biaya", () => {
+  // ASERSI INI SUDAH DUA KALI SALAH, DAN KEDUANYA MENARIK.
   //
-  // Ia diambil dari tarif/detik lama ($0,034 vs $0,143 = 4,21x). Tapi kedua
-  // angka itu diturunkan dari kasus yang MODE-nya berbeda: BRD menurunkan mini
-  // dari render TANPA referensi (324.900 token) dan 2.0 penuh dari render
-  // DENGAN reference_video (648.900 token). Jadi 4,21x adalah selisih tarif
-  // DIKALI selisih mode, dilaporkan seolah selisih model.
+  // Mula-mula ia menuntut `penuh > mini * 3`, diambil dari tarif/detik lama
+  // ($0,034 vs $0,143 = 4,21x). Lalu ia dipatok 2,11x, sesudah satuannya
+  // dibetulkan jadi token. Tagihan Agustus 2026 membatalkan dua-duanya:
+  // tarifnya SATU, $4,41/1M untuk seluruh akun. Selisih tarif antar model
+  // dreamina tidak pernah ada — ia sepenuhnya artefak dua angka BRD yang
+  // diturunkan dari kasus dengan MODE berbeda.
   //
-  // Pada mode yang sama, jaraknya 2,11x. Separuh dari "mini jauh lebih murah"
-  // selama ini adalah mode, bukan model — dan itu bukan test yang dilonggarkan
-  // untuk lolos, itu angka yang baru bisa dilihat sesudah satuannya benar.
-  const rasio = penuh.idr / mini.idr;
-  assert.ok(
-    rasio > 2.0 && rasio < 2.25,
-    `jarak tarif mini vs 2.0 penuh pada MODE YANG SAMA harus ~2,11x, terukur ${rasio.toFixed(2)}x`
-  );
+  // Jadi yang dijaga sekarang kebalikannya: model TIDAK boleh membedakan biaya.
+  const tok = 324_900;
+  const mini = hitungBiayaUntukUji("dreamina-seedance-2-0-mini-260615", tok, 15, "720p");
+  const penuh = hitungBiayaUntukUji("dreamina-seedance-2-0-260128", tok, 15, "720p");
+  const duaLima = hitungBiayaUntukUji("dreamina-seedance-2-5-260628", tok, 15, "720p");
+  assert.equal(mini.idr, penuh.idr, "model masih membedakan biaya — tarif turunan BRD hidup lagi");
+  assert.equal(mini.idr, duaLima.idr);
+  for (const h of [mini, penuh, duaLima]) assert.equal(h.asalTarif, "tagihan");
 });
 
 test("TOKEN NYATA mengalahkan tarif/detik — dua mode berhenti dilaporkan sama", () => {
@@ -72,13 +69,18 @@ test("TOKEN NYATA mengalahkan tarif/detik — dua mode berhenti dilaporkan sama"
   assert.equal(denganRef.totalTokens, 648_900, "total_tokens hilang dari hasil — rekonsiliasi tagihan mustahil");
 });
 
-test("tarif MELINGKAR mengaku dirinya melingkar", () => {
-  // Tarif token kedua model 2.0 dibalik DARI asumsi COGS BRD. Kalau asalnya
-  // tidak ikut terbawa, angka ini akan dikutip sebagai kalau-kalau ia tarif.
-  const mini = hitungBiayaUntukUji("dreamina-seedance-2-0-mini-260615", 324_900, 15, "720p");
-  assert.equal(mini.asalTarif, "turunan-cogs");
-  const duaLima = hitungBiayaUntukUji("dreamina-seedance-2-5-260628", 648_900, 15, "720p");
-  assert.equal(duaLima.asalTarif, "publik", "tarif brosur 2.5 tidak boleh tertukar jadi turunan COGS");
+test("tidak ada tarif TURUNAN atau BROSUR yang tersisa di jalur produksi", () => {
+  // Kedua kelas itu pernah menyesatkan harga jual kita: turunan-cogs melingkar
+  // (kerendahan 2,7x), brosur tidak berlaku untuk akun kita (ketinggian 1,5x
+  // dan 2,4x). Yang boleh menentukan margin cuma tagihan.
+  for (const m of [
+    "dreamina-seedance-2-0-mini-260615",
+    "dreamina-seedance-2-0-260128",
+    "dreamina-seedance-2-5-260628",
+  ]) {
+    const h = hitungBiayaUntukUji(m, 648_900, 15, "720p");
+    assert.equal(h.asalTarif, "tagihan", `${m} masih memakai tarif ${h.asalTarif}`);
+  }
 });
 
 test("resolusi yang BELUM diukur jatuh ke tarif/detik, dan jatuhnya ditandai", () => {

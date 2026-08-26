@@ -15,6 +15,7 @@ import {
   type VideoProvider, type VideoAsset, type VisualSpec, type ShotSpec,
 } from "../types";
 import { taskMemo } from "../task-memo";
+import { TARIF_USD_PER_1M_TOKEN, TOKEN_PER_DETIK_720P } from "../../harga-kredit";
 
 // Tarif referensi (USD). Sumber:
 // - seedance-1-0-pro: $2,5/1M output tokens — https://docs.byteplus.com/docs/ModelArk/1587798
@@ -35,15 +36,16 @@ type TarifModel = {
   /**
    * Asal tokenUsdPerM — wajib diisi bila tokenUsdPerM ada, supaya tidak ada
    * tarif yang masuk tabel ini tanpa ketahuan dari mana:
-   *   "publik"       tarif brosur/dokumentasi vendor.
-   *   "turunan-cogs" DIBALIK dari asumsi COGS BRD, jadi MELINGKAR: BRD yang
-   *                  menetapkan rupiahnya, dan angka ini hanya menyatakan
-   *                  ulang asumsi yang sama dalam satuan token. Ia TIDAK
-   *                  membuktikan apa pun tentang tarif akun kita — gunanya
-   *                  cuma satu, yaitu membuat laporan biaya ikut bergerak
-   *                  saat mode berubah.
+   *   "tagihan"      DIUKUR dari tagihan BytePlus Agustus 2026. Inilah satu-
+   *                  satunya kelas yang boleh dipakai untuk vonis margin.
+   *   "publik"       tarif brosur/dokumentasi vendor — tidak berlaku untuk
+   *                  akun kita, terbantah oleh tagihan (brosur $6,40-$10,70
+   *                  vs nyata $4,41).
+   *   "turunan-cogs" dibalik dari asumsi COGS BRD, jadi MELINGKAR. Tidak
+   *                  tersisa satu pun di tabel ini; kelasnya dipertahankan
+   *                  supaya angka semacam itu tidak bisa masuk lagi diam-diam.
    */
-  asalTarifToken?: "publik" | "turunan-cogs";
+  asalTarifToken?: "tagihan" | "publik" | "turunan-cogs";
 };
 const MODEL_RATES: Record<string, TarifModel> = {
   "seedance-1-0-lite-i2v-250428": { perSecUsd: { "480p": 0.01, "720p": 0.02 } }, // Retiring — jangan dipakai
@@ -52,34 +54,22 @@ const MODEL_RATES: Record<string, TarifModel> = {
   "seedance-1-0-pro-fast-250528": { perSecUsd: { "480p": 0.01, "720p": 0.024, "1080p": 0.048 } },
   "seedance-1-0-pro-250528": { tokenUsdPerM: 2.5, asalTarifToken: "publik" },
   "seedance-1-5-pro-251215": { perSecUsd: { "480p": 0.026, "720p": 0.052 } },
-  // KEDUA TARIF TOKEN DI BAWAH INI MELINGKAR, dan itu ditulis di sini supaya
-  // tidak ada yang mengutipnya sebagai tarif. perSecUsd lamanya ($0,034 dan
-  // $0,143) SENDIRI diturunkan dari COGS BRD §5.3 — BRD menetapkan Rp8.802,
-  // kode membaliknya jadi tarif/detik, laporan biaya menampilkan Rp8.802 lagi,
-  // lalu terlihat "cocok". Tidak pernah sekali pun diperiksa ke sesuatu di
-  // luar dirinya sendiri. Mengubahnya ke satuan token TIDAK memperbaiki itu.
+  // TARIF DREAMINA = TARIF TAGIHAN, satu angka untuk ketiganya.
   //
-  // Yang diperbaiki cuma satu hal, dan itu yang membuatnya layak: rupiahnya
-  // kini bergerak mengikuti token nyata, jadi render dengan reference_video
-  // berhenti dilaporkan semurah render tanpa referensi.
+  // Sampai 26 Agu ketiganya memakai tarif turunan ($0,034 dan $0,143 per detik,
+  // dibalik dari COGS BRD) atau tarif brosur ($10,70/1M). Dua-duanya terbantah
+  // oleh tagihan: $1.300 / 295,03M token = $4,41/1M. Rinciannya di
+  // lib/harga-kredit.ts — termasuk batas bahwa ini tarif AKUN (video 94,7%),
+  // bukan tarif Seedance murni.
   //
-  //   mini      Rp 8.802 @ 324.900 token (15 dtk 720p, TANPA ref)  -> $1,66/1M
-  //   2.0 penuh Rp37.164 @ 648.900 token (15 dtk 720p, DENGAN ref) -> $3,51/1M
-  //
-  // DAN KONVERSINYA MEMBUKA SATU ANGKA LAGI: pada MODE YANG SAMA, jarak tarif
-  // mini vs 2.0 penuh cuma 2,11x — bukan 4,21x seperti yang disiratkan
-  // $0,034 vs $0,143. Tarif/detik lama menggabungkan selisih TARIF dengan
-  // selisih MODE menjadi satu angka, karena BRD menurunkan mini dari kasus
-  // tanpa referensi dan 2.0 penuh dari kasus dengan referensi. Jadi separuh
-  // dari "mini jauh lebih murah" selama ini adalah mode, bukan model.
-  "dreamina-seedance-2-0-mini-260615": {
-    tokenUsdPerM: 1.66, asalTarifToken: "turunan-cogs", perSecUsd: { "720p": 0.034 },
-  },
-  "dreamina-seedance-2-0-260128": {
-    tokenUsdPerM: 3.51, asalTarifToken: "turunan-cogs", perSecUsd: { "720p": 0.143 },
-  },
-  // Seedance 2.5 — tarif TOKEN, bukan per-detik. Lihat catatan panjang di bawah.
-  "dreamina-seedance-2-5-260628": { tokenUsdPerM: 10.7, asalTarifToken: "publik" },
+  // perSecUsd DIHAPUS dari ketiganya, bukan disimpan sebagai cadangan. Tarif
+  // per-detik buta terhadap penggandaan mode, dan menyimpannya berarti
+  // menyediakan jalan pulang ke angka yang baru saja terbukti salah. Tanpa
+  // usage, ketiganya kini jatuh ke taksiran tarif TERTINGGI — mahal, dan itu
+  // arah yang benar untuk uang.
+  "dreamina-seedance-2-0-mini-260615": { tokenUsdPerM: TARIF_USD_PER_1M_TOKEN, asalTarifToken: "tagihan" },
+  "dreamina-seedance-2-0-260128": { tokenUsdPerM: TARIF_USD_PER_1M_TOKEN, asalTarifToken: "tagihan" },
+  "dreamina-seedance-2-5-260628": { tokenUsdPerM: TARIF_USD_PER_1M_TOKEN, asalTarifToken: "tagihan" },
 };
 
 /**
@@ -97,53 +87,32 @@ const MODEL_RATES: Record<string, TarifModel> = {
  * ini, dan menebaknya di sini berarti menaruh angka karangan tepat di jalur
  * yang memutuskan uang. Keduanya jatuh ke tarif/detik, dan jatuhnya ditandai.
  */
-const TOKEN_PER_DETIK_DENGAN_REF: Record<string, number> = { "720p": 43_260 };
+const TOKEN_PER_DETIK_DENGAN_REF: Record<string, number> = { "720p": TOKEN_PER_DETIK_720P.kunciWajah };
 
 // ─────────────────────────────────────────────────────────────────────────────
-// KENAPA 2.5 MEMAKAI TARIF TOKEN, DAN KENAPA ANGKA DI ATAS BELUM BOLEH DISEBUT
-// COGS RESMI — diukur 26 Agu 2026 dari 704 task NYATA di akun ini (hanya baca,
-// nol render): scripts/tarif-seedance-25.ts
+// TARIF SUDAH TERVERIFIKASI — pertanyaan ini DITUTUP 26 Agu 2026.
 //
-// YANG TERUKUR (fakta akun kita sendiri):
-//   Konsumsi token TIDAK bergantung versi model. Ia fungsi resolusi x durasi x
-//   mode. Pada 720p seluruh model duduk di ~21.660 token/detik; pada 1080p
-//   ~48.700 — sama untuk 2.0, 2.0-mini, DAN 2.5.
-//   Pada 15 detik/720p muncul TIGA tingkat token yang sama di ketiga model:
-//   324.900 · 540.900 · 648.900 (n=63/88/95). Jadi selisihnya datang dari MODE
-//   (jumlah gambar acuan / reference-video), bukan dari versi model.
+// Catatan panjang yang dulu ada di sini menjelaskan kenapa COGS 2.5 masih
+// tebakan dan kenapa dua angka tidak cocok. Tagihan sudah datang, jadi
+// penjelasannya tidak lagi diperlukan — yang tersisa hanya jawabannya:
 //
-// BIAYA DITENTUKAN MODE, BUKAN MODEL (temuan Brian 27 Agu, 8 task malam itu —
-// dan ini yang paling penting dari seluruh pengukuran):
-//   mini TANPA referensi          324.900 token
-//   mini + reference_video        648.900 token   <-- SAMA PERSIS dengan 2.5
-//   2.0 penuh + reference_video   648.900 token
-//   2.5 + reference_video         648.900 token
+//   TAGIHAN $1.300 / 295.026.776 token = $4,41 per 1M token
 //
-//   Kita WAJIB memakai reference_video untuk mengunci wajah. Artinya SETIAP
-//   video berwajah konsisten otomatis dua kali lipat biayanya, DI TIER MANA
-//   PUN — dan model termurah dengan reference_video menghabiskan sama persis
-//   dengan model termahal. Jadi struktur tier "mini murah, 2.5 mahal" keliru
-//   secara KONSEP, bukan cuma angkanya.
+// Ketiga dugaan sebelumnya meleset, dan dua di antaranya milik kita sendiri:
+//   config tersirat $1,66/1M  KERENDAHAN 2,7x   <-- ini yang dipakai menjual
+//   NYATA           $4,41/1M
+//   brosur          $6,40/1M  ketinggian 1,5x
+//   brosur          $10,70/1M ketinggian 2,4x
 //
-// YANG BELUM TERUKUR: harga rupiah per token untuk AKUN INI. Tidak ada
-// kredensial tagihan di lingkungan ini (VOLC_ACCESSKEY dkk kosong), jadi
-// invoice tidak bisa dibaca. Brian yang mengambilnya.
+// YANG TETAP BERLAKU dari pengukuran lama, karena ia soal TOKEN dan bukan soal
+// tarif: konsumsi token tidak bergantung versi model, ia fungsi resolusi x
+// durasi x MODE. Pada 720p, 15 detik = 324.900 token tanpa referensi dan
+// 648.900 dengan referensi — sama untuk 2.0, 2.0-mini, dan 2.5. Karena
+// mengunci wajah menuntut referensi, setiap video berwajah konsisten dua kali
+// lipat biayanya di tier mana pun.
 //
-// SELISIHNYA ADALAH SELISIH TARIF, BUKAN "COGS KERENDAHAN".
-// Versi pertama catatan ini menyimpulkan COGS kita 1,5x-3x kerendahan. Itu
-// terlalu kuat: ia mengandaikan tarif brosur berlaku untuk akun kita. Yang
-// benar-benar bisa dikatakan hanya bahwa keduanya tidak cocok:
-//
-//   tarif TERSIRAT config.ts   $1,66/1M (mini, tanpa ref)
-//                              $3,51/1M (super_hq, dengan ref)
-//   tarif PUBLIK Seedance 2.5  $6,40/1M (dengan video input)
-//                              $10,70/1M (tanpa video input)
-//
-//   Config menyiratkan tarif 3,4x sampai 6,4x LEBIH MURAH dari brosur.
-//   Kalau kontrak diskon kita nyata, config benar dan brosur tidak relevan.
-//   Kalau tidak, tier Rp12.000 rugi selama ini. Arahnya ditentukan TAGIHAN,
-//   bukan oleh salah satu dari dua angka ini.
-//
+// Seluruh angka COGS, harga kredit, dan batas pengutipannya ada di
+// lib/harga-kredit.ts. Jangan menyalin angka dari sini.
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
@@ -228,8 +197,8 @@ export type HasilBiaya = {
    * kita untuk dicocokkan.
    */
   totalTokens?: number;
-  /** Asal tarif yang dipakai. "turunan-cogs" berarti MELINGKAR — lihat TarifModel. */
-  asalTarif?: "publik" | "turunan-cogs";
+  /** Asal tarif yang dipakai. Hanya "tagihan" yang sah untuk vonis margin. */
+  asalTarif?: "tagihan" | "publik" | "turunan-cogs";
 };
 
 /** Diekspor untuk uji tarif — lihat tests/tarif-model-tak-dikenal.test.ts. */
@@ -520,7 +489,13 @@ export const byteplusVideo: VideoProvider = {
       // didenominasi token, jadi log inilah sisi kita saat rekonsiliasi.
       // Sebelumnya angka ini dibaca dari respons lalu dibuang begitu saja.
       const jejakToken = cost.totalTokens !== undefined ? `, token=${cost.totalTokens}` : "";
-      const jejakTarif = cost.asalTarif === "turunan-cogs" ? " [tarif MELINGKAR: turunan asumsi COGS]" : "";
+      // Ditandai bila tarifnya BUKAN dari tagihan. Hanya "tagihan" yang sah
+      // untuk vonis margin; sisanya brosur atau turunan asumsi, dan keduanya
+      // sudah pernah menyesatkan harga jual kita.
+      const jejakTarif =
+        cost.asalTarif !== undefined && cost.asalTarif !== "tagihan"
+          ? ` [tarif TIDAK dari tagihan: ${cost.asalTarif}]`
+          : "";
       const peringatanButaMode =
         cost.dasar === "tarif-per-detik" || cost.dasar === "tarif-tertinggi"
           ? " [BUTA MODE: tarif/detik tidak membedakan render berreferensi]"

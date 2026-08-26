@@ -4,6 +4,7 @@ import {
   BIAYA_FRAME_IDR, MAKS_FRAME_PER_TIER, harusMenahanProduk, perluFrameBuatan, pilihShotUntukFrame,
 } from "../lib/media/first-frame";
 import { config } from "../lib/config";
+import { TIER_RUGI_DISADARI } from "../lib/harga-kredit";
 import { planShots } from "../lib/media/shot-planner";
 import { getCreatorCategory } from "../lib/personas";
 import { getTemplate } from "../lib/templates";
@@ -60,6 +61,23 @@ test("jatah frame per tier menjaga biaya di bawah seperempat margin", () => {
     assert.ok(t, `tier "${tier}" tidak ada di config — daftar jatah usang`);
     const margin = t.priceIdr - t.cogsIdr;
     const biaya = maks * BIAYA_FRAME_IDR;
+
+    // MARGIN NEGATIF TIDAK PUNYA "25%" YANG BERMAKNA.
+    //
+    // Tagihan BytePlus Agustus 2026 membuka COGS nyata dan membuat sebuah tier
+    // dijual di bawah biaya. Menurunkan ambang di sini akan menyembunyikan itu
+    // di balik test yang kembali hijau. Jadi pengecualiannya tidak hidup di
+    // file ini: ia tunduk pada TIER_RUGI_DISADARI, satu-satunya tempat
+    // kerugian boleh dicatat — dan daftar itu sendiri dijaga dua arah oleh
+    // tests/harga-kredit.test.ts. Begitu harganya diperbaiki, barisnya wajib
+    // dihapus dan assert di bawah kembali berlaku otomatis.
+    if (margin <= 0) {
+      assert.ok(
+        TIER_RUGI_DISADARI.some((r) => r.tier === tier),
+        `tier ${tier} bermargin negatif (Rp${margin}) tapi tidak terdaftar di TIER_RUGI_DISADARI`
+      );
+      continue;
+    }
     assert.ok(
       biaya <= margin * 0.25,
       `tier ${tier}: ${maks} frame = Rp${biaya}, lebih dari 25% margin Rp${margin}`

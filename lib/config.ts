@@ -1,5 +1,6 @@
 import fs from "node:fs";
 import path from "node:path";
+import { cogsIdr as cogsIdrNyata } from "./harga-kredit";
 
 // Muat .env.local secara manual agar skrip di luar Next (seed, tes, worker) ikut terbaca.
 // Next.js memuatnya otomatis untuk route handler; di sini kita pastikan juga untuk proses lain.
@@ -265,6 +266,11 @@ export const config = {
   tiers: {
     silent_caption: {
       priceIdr: 5000,
+      // BELUM TERVERIFIKASI, dan sengaja tidak ikut diperbarui: tier ini
+      // berjalan di 480p, dan 480p belum pernah diukur per-mode di akun kita.
+      // Tagihan Agustus hanya memberi tarif per token; tanpa token/detik 480p,
+      // menuliskan angka "nyata" di sini berarti mengarang tepat di baris yang
+      // baru saja dibersihkan dari karangan. Lihat lib/harga-kredit.ts.
       cogsIdr: 2445,
       byteplusModel: env("BYTEPLUS_MODEL_SILENT", "seedance-1-0-pro-fast-251015"),
       resolution: "480p",
@@ -272,7 +278,16 @@ export const config = {
     },
     high_quality: {
       priceIdr: 12000,
-      cogsIdr: 8802,
+      // COGS NYATA, dari tagihan BytePlus Agustus 2026 ($4,41/1M token).
+      // Angka lama Rp8.802 datang dari BRD dan tidak pernah diperiksa ke luar
+      // dirinya sendiri — ia KERENDAHAN 2,7x.
+      //
+      // TIER INI DIJUAL DI BAWAH BIAYA: Rp12.000 vs COGS Rp23.355 = RUGI
+      // Rp11.355 per video. Dan itu pada mode STANDAR; jalur render bawaan
+      // kita memakai referensi (r2v) untuk mengunci wajah, yang COGS-nya
+      // Rp46.645 — rugi Rp34.645. Lihat tests/harga-kredit.test.ts, yang
+      // GAGAL bila tier rugi kehilangan tanda keputusannya.
+      cogsIdr: cogsIdrNyata("standar", 15),
       byteplusModel: env("BYTEPLUS_MODEL_HQ", "dreamina-seedance-2-0-mini-260615"),
       // Resolusi bisa dinaikkan lewat env untuk uji: teks kecil di label butuh
       // piksel, dan 720p tidak punya cukup untuk menilai apakah sebuah model
@@ -294,7 +309,10 @@ export const config = {
       // sync sungguhan dari model), COGS-nya juga paling tinggi (Rp37rb) —
       // margin lama (Rp49rb-37rb=Rp12rb, ~24%) terlalu tipis untuk premium.
       priceIdr: 80000,
-      cogsIdr: 37164,
+      // COGS NYATA dari tagihan Agustus 2026, mode KUNCI WAJAH — tier ini
+      // satu-satunya yang mempertahankan lip-sync asli, dan lip-sync menuntut
+      // referensi. Rp80.000 - Rp46.645 = +Rp33.355 per video.
+      cogsIdr: cogsIdrNyata("kunciWajah", 15),
       byteplusModel: env("BYTEPLUS_MODEL_SUPER", "dreamina-seedance-2-0-260128"),
       resolution: "720p",
       generateAudio: true,
