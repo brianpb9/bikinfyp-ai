@@ -49,26 +49,38 @@ const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<st
 //   324.900 · 540.900 · 648.900 (n=63/88/95). Jadi selisihnya datang dari MODE
 //   (jumlah gambar acuan / reference-video), bukan dari versi model.
 //
+// BIAYA DITENTUKAN MODE, BUKAN MODEL (temuan Brian 27 Agu, 8 task malam itu —
+// dan ini yang paling penting dari seluruh pengukuran):
+//   mini TANPA referensi          324.900 token
+//   mini + reference_video        648.900 token   <-- SAMA PERSIS dengan 2.5
+//   2.0 penuh + reference_video   648.900 token
+//   2.5 + reference_video         648.900 token
+//
+//   Kita WAJIB memakai reference_video untuk mengunci wajah. Artinya SETIAP
+//   video berwajah konsisten otomatis dua kali lipat biayanya, DI TIER MANA
+//   PUN — dan model termurah dengan reference_video menghabiskan sama persis
+//   dengan model termahal. Jadi struktur tier "mini murah, 2.5 mahal" keliru
+//   secara KONSEP, bukan cuma angkanya.
+//
 // YANG BELUM TERUKUR: harga rupiah per token untuk AKUN INI. Tidak ada
 // kredensial tagihan di lingkungan ini (VOLC_ACCESSKEY dkk kosong), jadi
-// invoice tidak bisa dibaca. Angka 10,7 USD/1M adalah TARIF PUBLIK yang
-// diterbitkan untuk 2.5 tanpa video input (6,40 dengan video input) — sumber
-// sekunder, bukan tagihan kita.
+// invoice tidak bisa dibaca. Brian yang mengambilnya.
 //
-// KONSEKUENSI YANG HARUS DIBACA SEBELUM MENETAPKAN HARGA:
-//   Pada tarif publik itu, 15 detik/720p berharga Rp56.666 (324.900 token)
-//   sampai Rp113.175 (648.900 token). FINAL-MESIN-DAN-HARGA memakai Rp37.164
-//   — angka 2.0 yang DISAMAKAN. Jadi asumsi lama BUKAN ketinggian melainkan
-//   KERENDAHAN, 1,5x sampai 3x.
-//   Tabel harga TVC di dokumen itu berdiri di atas Rp37.164. Pada 15 detik
-//   margin 60% ia menyuruh jual Rp93.000 — di bawah biaya kalau modenya
-//   menghabiskan 648.900 token.
+// SELISIHNYA ADALAH SELISIH TARIF, BUKAN "COGS KERENDAHAN".
+// Versi pertama catatan ini menyimpulkan COGS kita 1,5x-3x kerendahan. Itu
+// terlalu kuat: ia mengandaikan tarif brosur berlaku untuk akun kita. Yang
+// benar-benar bisa dikatakan hanya bahwa keduanya tidak cocok:
 //
-// Karena itu tarif token dipasang di sini (adapter menghitung dari `usage`
-// AKTUAL, jadi angkanya mengikuti mode yang benar-benar dipakai), tapi
-// config.tiers TIDAK diubah dan harga TVC TIDAK ditulis: keduanya menunggu
-// tagihan sungguhan. Menulis harga dari tarif publik berarti mengunci tebakan
-// ke dalam kode, dan tebakan yang salah arah di sini menjual di bawah modal.
+//   tarif TERSIRAT config.ts   $1,66/1M (mini, tanpa ref)
+//                              $3,51/1M (super_hq, dengan ref)
+//   tarif PUBLIK Seedance 2.5  $6,40/1M (dengan video input)
+//                              $10,70/1M (tanpa video input)
+//
+//   Config menyiratkan tarif 3,4x sampai 6,4x LEBIH MURAH dari brosur.
+//   Kalau kontrak diskon kita nyata, config benar dan brosur tidak relevan.
+//   Kalau tidak, tier Rp12.000 rugi selama ini. Arahnya ditentukan TAGIHAN,
+//   bukan oleh salah satu dari dua angka ini.
+//
 // ─────────────────────────────────────────────────────────────────────────────
 
 const MIME: Record<string, string> = { ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp" };
