@@ -2,47 +2,50 @@
 
 import { useState } from "react";
 import { Check, Sparkles } from "lucide-react";
-import { rupiah, tokens } from "./format";
+import { rupiah } from "./format";
 import { BTN_PRIMARY } from "@/app/dashboard/_components/buttons";
-import { PAKET_TOKEN } from "@/lib/paket-token";
 
-// Paket token — TAMPILAN saja (permintaan Brian: "ini di buat aja dlu UI nya").
-// Belum ada Duitku untuk organisasi; token org masih diisi manual oleh tim.
+// Paket — TAMPILAN saja (permintaan Brian: "ini di buat aja dlu UI nya").
+// Belum ada Duitku untuk organisasi; kredit org masih diisi manual oleh tim.
 // Karena itu tombolnya jujur berbunyi "Ajukan" dan membuka kontak, BUKAN
 // "Bayar sekarang" yang akan berbohong soal apa yang terjadi setelah diklik.
-// Harga di bawah adalah ANGKA RANCANGAN yang belum Brian kunci (dia bilang
-// "harga bisa kita bahas nanti") — dipisah ke konstanta ini supaya sekali
-// ubah, bukan berserakan di markup.
+//
+// HARGA DAN KREDIT TIDAK LAGI ADA DI FILE INI.
+//
+// Sampai 26 Agu 2026 komponen ini menyimpan salinan harganya sendiri
+// (SUBSCRIPTIONS/TOPUPS) SEKALIGUS mengimpor PAKET_TOKEN — jadi katalog
+// "satu sumber" itu cuma dipakai untuk mengisi harga_idr saat mengirim, dan
+// yang DILIHAT pembeli datang dari array lokal. Dua sumber, dan yang di layar
+// bukan yang tercatat. Kini keduanya satu: lib/paket-token.ts.
+//
+// Yang tersisa di sini murni presentasi: kalimat dan keunggulan. Jumlah video
+// pun DIHITUNG dari kredit, bukan diketik — angka "± 25 video" yang lama sudah
+// salah sejak COGS nyata terbuka, dan angka salah di kartu harga adalah janji
+// yang tidak bisa ditepati.
 
-interface Plan {
-  id: string; name: string; priceIdr: number; tokenIdr: number;
-  blurb: string; perks: string[]; popular?: boolean;
-}
+import { PAKET_TOKEN, type PaketToken } from "@/lib/paket-token";
+import { jumlahVideo, kredit as fmtKredit } from "@/lib/harga-kredit";
 
-const SUBSCRIPTIONS: Plan[] = [
-  {
-    id: "starter", name: "Starter", priceIdr: 490_000, tokenIdr: 600_000,
+/** Presentasi per paket. Tidak boleh memuat angka harga. */
+const NARASI: Record<string, { blurb: string; perks: string[]; popular?: boolean }> = {
+  starter: {
     blurb: "Buat brand yang baru mulai rutin bikin konten.",
-    perks: ["± 25 video 15 detik / bulan", "Semua format: Affiliate, Ads, TVC", "Review scene sebelum digabung"],
+    perks: ["Semua format: Affiliate, Ads, TVC", "Review scene sebelum digabung"],
   },
-  {
-    id: "growth", name: "Growth", priceIdr: 1_900_000, tokenIdr: 2_500_000, popular: true,
+  creator: {
     blurb: "Paling pas untuk brand yang jalan tiap minggu.",
-    perks: ["± 100 video 15 detik / bulan", "Avatar kustom (foto sendiri)", "Prioritas antrean render", "Library & unduh massal"],
+    popular: true,
+    perks: ["Avatar kustom (foto sendiri)", "Prioritas antrean render", "Library & unduh massal"],
   },
-  {
-    id: "scale", name: "Scale", priceIdr: 4_900_000, tokenIdr: 7_000_000,
-    blurb: "Untuk agensi dan brand dengan banyak SKU.",
-    perks: ["± 290 video 15 detik / bulan", "Anggota tim tanpa batas", "Pendampingan skrip & konsep", "Dukungan prioritas"],
+  studio: {
+    blurb: "Untuk tim konten dengan banyak SKU.",
+    perks: ["Anggota tim tanpa batas", "Pendampingan skrip & konsep", "Dukungan prioritas"],
   },
-];
-
-const TOPUPS = [
-  { id: "t1", priceIdr: 250_000, tokenIdr: 250_000, bonus: null },
-  { id: "t2", priceIdr: 500_000, tokenIdr: 550_000, bonus: "+10%" },
-  { id: "t3", priceIdr: 1_000_000, tokenIdr: 1_150_000, bonus: "+15%" },
-  { id: "t4", priceIdr: 2_500_000, tokenIdr: 3_000_000, bonus: "+20%" },
-] as const;
+  agency: {
+    blurb: "Untuk agensi yang menangani banyak brand sekaligus.",
+    perks: ["Semua fitur Studio", "Workspace terpisah per klien", "Pendampingan langsung"],
+  },
+};
 
 export function CreditPlans() {
   const [mode, setMode] = useState<"subscription" | "topup">("subscription");
@@ -88,6 +91,9 @@ export function CreditPlans() {
     }
   }
 
+  const langganan = PAKET_TOKEN.filter((p) => p.jenis === "subscription");
+  const topup = PAKET_TOKEN.filter((p) => p.jenis === "topup");
+
   return (
     <div className="space-y-6">
       <div className="inline-flex rounded-xl border border-zinc-300 bg-white p-1">
@@ -105,9 +111,15 @@ export function CreditPlans() {
       </div>
 
       {mode === "subscription" ? (
-        <div className="grid gap-4 md:grid-cols-3">
-          {SUBSCRIPTIONS.map((plan) => {
+        <div className="grid gap-4 md:grid-cols-4">
+          {langganan.map((plan: PaketToken) => {
             const active = picked === plan.id;
+            const narasi = NARASI[plan.id];
+            // Jumlah video DIHITUNG, bukan diketik. Bawaannya 8 detik karena
+            // itu yang benar-benar dijual — dan karena kredit menyamarkan
+            // harga, tapi tidak menyamarkan jumlah video.
+            const videoStandar = jumlahVideo(plan.kredit, "standar", 8);
+            const videoKunciWajah = jumlahVideo(plan.kredit, "kunciWajah", 8);
             return (
               <button
                 key={plan.id}
@@ -116,22 +128,28 @@ export function CreditPlans() {
                   active ? "border-amber-500" : "border-zinc-200 hover:border-zinc-300"
                 }`}
               >
-                {plan.popular && (
+                {narasi?.popular && (
                   <span className="absolute -top-2.5 left-5 inline-flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-0.5 text-[10px] font-bold text-zinc-950">
                     <Sparkles size={10} /> Paling dipilih
                   </span>
                 )}
-                <p className="font-display text-lg font-bold text-zinc-900">{plan.name}</p>
-                <p className="mt-1 text-xs leading-5 text-zinc-500">{plan.blurb}</p>
+                <p className="font-display text-lg font-bold text-zinc-900">{plan.label}</p>
+                <p className="mt-1 text-xs leading-5 text-zinc-500">{narasi?.blurb}</p>
                 <p className="mt-4 font-display text-2xl font-bold text-zinc-900">
                   {rupiah(plan.priceIdr)}
                   <span className="text-sm font-semibold text-zinc-400"> /bln</span>
                 </p>
                 <p className="mt-0.5 text-xs font-semibold text-emerald-600">
-                  Dapat {tokens(plan.tokenIdr)}
+                  Dapat {fmtKredit(plan.kredit)}
+                  {plan.kreditBonus > 0 && (
+                    <span className="ml-1 text-zinc-400">(+{fmtKredit(plan.kreditBonus)} bonus)</span>
+                  )}
+                </p>
+                <p className="mt-0.5 text-xs text-zinc-500">
+                  ± {videoStandar} video 8 detik, atau {videoKunciWajah} dengan kunci wajah
                 </p>
                 <ul className="mt-4 space-y-2">
-                  {plan.perks.map((perk) => (
+                  {[...(narasi?.perks ?? [])].map((perk) => (
                     <li key={perk} className="flex items-start gap-2 text-xs leading-5 text-zinc-600">
                       <Check size={13} className="mt-0.5 shrink-0 text-emerald-500" />
                       {perk}
@@ -144,8 +162,11 @@ export function CreditPlans() {
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-4">
-          {TOPUPS.map((pack) => {
+          {topup.map((pack: PaketToken) => {
             const active = picked === pack.id;
+            const bonusPersen = pack.kreditBonus > 0
+              ? `+${Math.round((pack.kreditBonus / (pack.kredit - pack.kreditBonus)) * 100)}%`
+              : null;
             return (
               <button
                 key={pack.id}
@@ -154,13 +175,14 @@ export function CreditPlans() {
                   active ? "border-amber-500" : "border-zinc-200 hover:border-zinc-300"
                 }`}
               >
-                {pack.bonus && (
+                {bonusPersen && (
                   <span className="absolute right-4 top-4 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
-                    {pack.bonus}
+                    {bonusPersen}
                   </span>
                 )}
                 <p className="font-display text-2xl font-bold text-zinc-900">{rupiah(pack.priceIdr)}</p>
-                <p className="mt-1 text-xs font-semibold text-emerald-600">Jadi {tokens(pack.tokenIdr)}</p>
+                <p className="mt-1 text-xs font-semibold text-emerald-600">Jadi {fmtKredit(pack.kredit)} kredit</p>
+                <p className="mt-0.5 text-[11px] text-zinc-500">± {jumlahVideo(pack.kredit, "standar", 8)} video 8 detik</p>
               </button>
             );
           })}

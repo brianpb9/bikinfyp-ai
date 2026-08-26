@@ -211,3 +211,26 @@ export const TIER_RUGI_DISADARI: readonly TierRugiDisadari[] = [
       "MENUNGGU KEPUTUSAN BRIAN: naikkan harga, ganti mesin, atau matikan tier.",
   },
 ];
+
+/** "2.600" — satuannya ditulis terpisah di UI supaya bisa dirangkai bebas. */
+export function formatKredit(kredit: number): string {
+  return Math.round(kredit).toLocaleString("id-ID");
+}
+
+/** "2.600 kredit" */
+export function kredit(n: number): string {
+  return `${formatKredit(n)} kredit`;
+}
+
+/**
+ * Berapa video yang bisa dibuat dengan sejumlah kredit.
+ *
+ * Dipakai UI untuk menjawab pertanyaan yang benar-benar ditanyakan pembeli.
+ * Kredit menyamarkan harga rupiah, tapi ia TIDAK menyamarkan jumlah video —
+ * dan justru itu kekuatan jualnya pada 8 detik:
+ *   Rp250.000 = 2 video (15 dtk kunci wajah)
+ *   Rp250.000 = 10 video (8 dtk standar)
+ */
+export function jumlahVideo(kreditTersedia: number, mode: ModeRender, durationSec: number): number {
+  return Math.floor(kreditTersedia / biayaKredit(cogsIdr(mode, durationSec)));
+}
