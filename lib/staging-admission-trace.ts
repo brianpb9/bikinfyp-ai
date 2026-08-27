@@ -13,6 +13,21 @@ export type ManagedStagingTraceIntent = {
   durationS: number;
 };
 
+type ManagedStagingTraceAuthorizationContext = {
+  env: NodeJS.ProcessEnv;
+  nowMs: number;
+};
+let authorizationContextForTests: ManagedStagingTraceAuthorizationContext | undefined;
+
+/** Lets an HTTP test exercise the real production signature verifier without
+ * globally switching NODE_ENV to production (which correctly disables the
+ * SQLite adapter). Never called by application runtime code. */
+export function setManagedStagingTraceAuthorizationContextForTests(
+  context?: ManagedStagingTraceAuthorizationContext,
+): void {
+  authorizationContextForTests = context;
+}
+
 function signature(secret: string, sha: string, expiresAtMs: number, nonce: string, intent: ManagedStagingTraceIntent): string {
   const bound = JSON.stringify({ task: MANAGED_STAGING_TRACE_TASK, sha, expiresAtMs, nonce, ...intent });
   return crypto.createHmac("sha256", secret).update(bound).digest("hex");
@@ -33,8 +48,8 @@ export function managedStagingTraceHeader(
 export function authorizedManagedStagingZeroValueAdmission(
   request: Request,
   intent: ManagedStagingTraceIntent,
-  env: NodeJS.ProcessEnv = process.env,
-  nowMs = Date.now(),
+  env: NodeJS.ProcessEnv = authorizationContextForTests?.env ?? process.env,
+  nowMs = authorizationContextForTests?.nowMs ?? Date.now(),
 ): { nonce: string; expiresAtMs: number } | null {
   if (env.NODE_ENV !== "production" || env.RACUN_DEPLOY_ENV !== "staging") return null;
   if (env.RENDER_SERVICE_ID !== MANAGED_STAGING_WEB_SERVICE_ID) return null;

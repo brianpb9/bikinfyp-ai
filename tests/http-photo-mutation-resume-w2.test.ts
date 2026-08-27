@@ -22,6 +22,7 @@ const { setCompositeObserverForTests } = await import("../lib/media/compositor")
 const { resolveApprovedReference } = await import("../lib/product-truth");
 const { createJobProductSnapshotRaw, parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
 const { acquireAdmissionReferenceEvidence } = await import("../lib/job-admission-reference");
+const { managedStagingTraceHeader, MANAGED_STAGING_TRACE_HEADER, MANAGED_STAGING_WEB_SERVICE_ID, setManagedStagingTraceAuthorizationContextForTests } = await import("../lib/staging-admission-trace");
 const { DELETE: deleteRetailPhoto } = await import("../app/api/products/[id]/photos/route");
 const { PATCH: patchRetailProduct } = await import("../app/api/products/[id]/route");
 const { processJob, setSqliteQcRunnerForTests } = await import("../lib/worker");
@@ -235,10 +236,10 @@ async function rawAdmissionCandidate(storage: MemoryStorage, label: string, cred
   setMediaStorageForTests(storage);
   const token = await issueToken(ownerId, phone);
   const { POST } = await import("../app/api/jobs/route");
-  const submit = () => POST(new Request("http://localhost/api/jobs", {
+  const submit = (extraBody: Record<string, unknown> = {}, extraHeaders: Record<string, string> = {}) => POST(new Request("http://localhost/api/jobs", {
     method: "POST",
-    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
-    body: JSON.stringify({ script_id: scriptId, format: "hands_only", quality_tier: "high_quality", duration_s: 15 }),
+    headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}`, ...extraHeaders },
+    body: JSON.stringify({ script_id: scriptId, format: "hands_only", quality_tier: "high_quality", duration_s: 15, ...extraBody }),
   }));
   return { ownerId, productId, scriptId, token, approvedSource, submit };
 }
@@ -590,6 +591,65 @@ test("A1 SQLite menolak quarantine yang menyelip setelah precheck tanpa job atau
   );
 });
 
+test("A1 locked C2 recheck rejects quarantine before creator persona, audit, and trace nonce", async (t) => {
+  const oldAuthSecret = process.env.AUTH_SECRET;
+  const secret = "c2-race-managed-staging-secret-32-bytes";
+  process.env.AUTH_SECRET = secret;
+  t.after(() => {
+    if (oldAuthSecret === undefined) delete process.env.AUTH_SECRET;
+    else process.env.AUTH_SECRET = oldAuthSecret;
+    setManagedStagingTraceAuthorizationContextForTests(undefined);
+  });
+  const storage = new MemoryStorage();
+  const s = await rawAdmissionCandidate(storage, `type-effects-race-${process.pid}`, 50_000);
+  t.after(() => setMediaStorageForTests(undefined));
+  const lease = await acquireAdmissionReferenceEvidence({
+    productId: s.productId,
+    owner: { kind: "user", id: s.ownerId },
+    boundary: "A7",
+    loadSqliteCandidateRels: () => [s.approvedSource],
+  });
+
+  const liveSha = "a".repeat(40);
+  const traceNow = Date.now();
+  setManagedStagingTraceAuthorizationContextForTests({ env: {
+    NODE_ENV: "production",
+    RACUN_DEPLOY_ENV: "staging",
+    RENDER_SERVICE_ID: MANAGED_STAGING_WEB_SERVICE_ID,
+    RENDER_GIT_COMMIT: liveSha,
+    AUTH_SECRET: secret,
+  }, nowMs: traceNow });
+  const nonce = "d".repeat(32);
+  const trace = managedStagingTraceHeader(secret, liveSha, {
+    userId: s.ownerId,
+    scriptId: s.scriptId,
+    format: "hands_only",
+    qualityTier: "high_quality",
+    durationS: 15,
+  }, { nonce, nowMs: traceNow });
+
+  let settled = false;
+  const admission = s.submit(
+    { creator_category: "hijaber" },
+    { [MANAGED_STAGING_TRACE_HEADER]: trace },
+  ).finally(() => { settled = true; });
+  await new Promise((resolve) => setTimeout(resolve, 25));
+  assert.equal(settled, false, "admission did not reach the shared product lock");
+  db.prepare("UPDATE products SET product_type_state='QUARANTINED' WHERE id=?").run(s.productId);
+  await lease.release();
+
+  const response = await admission;
+  assert.equal(response.status, 422);
+  assert.equal((await response.json() as { code: string }).code, "PRODUCT_TYPE_CONFIRMATION_REQUIRED");
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM personas WHERE user_id=?").get(s.ownerId) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM audit_log WHERE actor=? AND action='persona.created'").get(s.ownerId) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM jobs WHERE product_id=?").get(s.productId) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE user_id=? AND type='hold'").get(s.ownerId) as { n: number }).n, 0);
+  // The supplied capability is valid. A Redis nonce claim would surface as a
+  // queue dependency error in this isolated SQLite fixture; the C2 response
+  // proves rejection occurred before that call.
+});
+
 test("E3 ordinary SQLite menunggu evidence lease lalu mempertahankan reconfirmation terbaru", async (t) => {
   const storage = new MemoryStorage();
   const s = await rawAdmissionCandidate(storage, `e3-c2-lock-${process.pid}`, 50_000);
@@ -671,9 +731,13 @@ test("dua admission SQLite konkuren menyisakan hanya object milik job pemenang",
 
   const firstPromise = s.submit();
   await started;
-  const secondResponse = await s.submit();
+  const secondPromise = s.submit();
+  // A1 now shares the product-operation lock with C2 quarantine. The second
+  // admission must wait, then observe the first durable winner as a duplicate
+  // without preparing its own storage prefix.
+  await new Promise<void>((resolve) => setImmediate(resolve));
   releaseFirst();
-  const firstResponse = await firstPromise;
+  const [firstResponse, secondResponse] = await Promise.all([firstPromise, secondPromise]);
   const responses = [firstResponse, secondResponse];
   assert.deepEqual(responses.map((response) => response.status).sort(), [200, 201]);
   const bodies = await Promise.all(responses.map((response) => response.json() as Promise<{ job_id: string; duplicate?: boolean }>));
@@ -684,7 +748,7 @@ test("dua admission SQLite konkuren menyisakan hanya object milik job pemenang",
   const winnerKeys = new Set((JSON.parse(row.approved_reference_manifest) as { references: { snapshotRel: string }[] }).references.map((ref) => ref.snapshotRel));
   const retainedKeys = [...storage.values.keys()].filter((key) => key.includes("/approved-references/"));
   assert.deepEqual(new Set(retainedKeys), winnerKeys, "object prefix admission yang kalah masih tertinggal");
-  assert.ok(storage.deleteCalls.some((key) => key.includes("/approved-references/")), "loser tidak menjalankan cleanup");
+  assert.equal(prepared, 1, "serialized duplicate masih menyiapkan object admission kedua");
   assert.equal((db.prepare("SELECT COUNT(*) n FROM jobs WHERE product_id=?").get(s.productId) as { n: number }).n, 1);
   assert.equal((db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE user_id=? AND type='hold'").get(s.ownerId) as { n: number }).n, 1);
 });

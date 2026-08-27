@@ -94,6 +94,13 @@ test("C2 concurrency guards preserve E3/E7 provenance and validate locked admiss
     "A1 PostgreSQL does not validate the locked product before preparation/admission");
 
   const sqliteAdmission = fs.readFileSync("app/api/jobs/route.ts", "utf8");
+  const admissionLock = sqliteAdmission.indexOf("withProductEvidenceMutationLock(product.id");
+  const admissionLockedValidation = sqliteAdmission.indexOf("locked-admission-product.product_type_token", admissionLock);
+  const personaEffect = sqliteAdmission.indexOf("pgFindOrCreatePersona(", admissionLockedValidation);
+  const nonceEffect = sqliteAdmission.indexOf("claimManagedStagingTraceNonce(", admissionLockedValidation);
+  assert.ok(admissionLock > 0 && admissionLockedValidation > admissionLock
+    && personaEffect > admissionLockedValidation && nonceEffect > admissionLockedValidation,
+    "A1 does not acquire the shared lock and revalidate C2 before persona/trace effects");
   const candidateValidation = sqliteAdmission.indexOf("admission-product.product_type_token");
   const sqlitePreparation = sqliteAdmission.indexOf("prepareAdmissionReferenceManifest({", candidateValidation);
   const transactionCas = sqliteAdmission.indexOf('return { kind: "product_type_changed"', sqlitePreparation);

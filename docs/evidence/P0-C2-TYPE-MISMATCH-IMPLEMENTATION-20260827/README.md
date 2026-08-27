@@ -40,11 +40,13 @@ payment, credit, queue, or production operation is bundled here.
 - `SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts`:
   7/7 PASS, including node-postgres timestamp shape, concurrency structure,
   and direct invalid-row probes on upgraded SQLite.
-- Focused admission/mutation regressions: 45/45 PASS. The SQLite A1 race
-  counterexample quarantines C2 after precheck and observes HTTP 422, zero job,
-  zero hold, and zero prepared-object residue.
+- Focused admission/mutation regressions: 46/46 PASS. The SQLite A1 race
+  counterexamples quarantine C2 after precheck and observe HTTP 422, zero job,
+  zero hold, and zero prepared-object residue. The locked-handler case supplies
+  both `creator_category` and a cryptographically valid managed-staging trace
+  capability, then proves rejection before persona/audit and nonce claim.
 - `npx tsc --noEmit`: PASS.
-- `npm test`: 1258 tests, 1210 pass, 0 fail, 48 skipped. The additional skip
+- `npm test`: 1259 tests, 1211 pass, 0 fail, 48 skipped. The additional skip
   is the loopback-only PostgreSQL paused-request counterexample, which passed
   separately against a disposable database.
 - `npm run build`: PASS.
@@ -75,6 +77,10 @@ runtimes omit every C2 column and return/audit the post-update row. Paused
 ordinary requests preserve a newer reconfirmation in SQLite and disposable
 PostgreSQL tests. A2/A3 reload complete C2 state under their evidence lease and
 reject an injected quarantine before provider, persona, or script effects.
+A1 now takes that same product lock and reloads C2 before creator persona/audit
+or managed-staging trace nonce effects, retaining the lock through admission.
+Concurrent duplicate admissions serialize and the follower observes the durable
+winner without preparing a second storage prefix.
 
 See `FOUNDER-DECISION.md`, `VALIDATION.json`, and `GATE-TRANSCRIPT.txt` in this
 directory for the bounded decision and machine-readable totals.

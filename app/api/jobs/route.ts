@@ -16,7 +16,7 @@ import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnap
 import { scoreScriptPlan } from "@/lib/fyp-score";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
-import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
+import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest, withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 import { authorizedManagedStagingZeroValueAdmission } from "@/lib/staging-admission-trace";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
@@ -60,7 +60,28 @@ export async function POST(req: Request) {
             version: 1, provenance: "USER_SELF_ASSERTION",
           }
         : null,
-    ), async () => {
+    ), async () => withProductEvidenceMutationLock(product.id, async () => {
+    // The first C2 check is deliberately read-only. Acquire the same product
+    // operation lock as E3/E7, then reload and validate current truth before
+    // any durable setup (persona/audit), trace nonce claim, hold, or queue.
+    // Keeping the lock through admission prevents a concurrent quarantine
+    // from landing between this check and those effects.
+    const lockedProduct = postgresRuntimeEnabled()
+      ? await smokeGetProduct(user.id, product.id)
+      : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(product.id, user.id) as ProductRow | undefined;
+    if (!lockedProduct) throw ERR.NOT_FOUND("Produknya");
+    pastikanBukanProdukOrg(lockedProduct);
+    await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-admission-product.product_type_token", token: lockedProduct.product_type_token ?? "", version: 1 },
+      lockedProduct.product_type_state === "CONFIRMED" && lockedProduct.product_type_confirmed_token
+        && lockedProduct.product_type_confirmed_by && lockedProduct.product_type_confirmed_at
+        && lockedProduct.product_type_version === 1 ? {
+          kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: lockedProduct.product_type_confirmed_token,
+          actorId: lockedProduct.product_type_confirmed_by,
+          confirmedAt: canonicalProductTypeTimestamp(lockedProduct.product_type_confirmed_at),
+          version: 1, provenance: "USER_SELF_ASSERTION",
+        } : null,
+    ), () => undefined);
 
     // --- GERBANG HITL (aturan keras #5) ---
     if (!script.approved_by_user_at) throw ERR.SCRIPT_NOT_APPROVED();
@@ -381,7 +402,7 @@ export async function POST(req: Request) {
     if (created.duplicate)
       return Response.json({ job_id: jobId, state: "QUEUED", quality_tier: tier, hold_idr: priceIdr, duplicate: true });
     return Response.json({ job_id: jobId, state: "QUEUED", quality_tier: tier, hold_idr: priceIdr }, { status: 201 });
-    });
+    }));
   } catch (err) {
     return errorResponse(err);
   }
