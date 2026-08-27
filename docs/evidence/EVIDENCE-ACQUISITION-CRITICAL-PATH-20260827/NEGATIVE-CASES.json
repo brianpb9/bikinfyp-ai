@@ -4,6 +4,8 @@
     {"id":"unknown_token","mutation":"replace first token_id with UNKNOWN","expected_error":"award unknown token"},
     {"id":"mismatched_authority","mutation":"replace first token authority with wrong class","expected_error":"award authority"},
     {"id":"mismatched_authority_scope","mutation":"change the exact evidence binding inside first token authority scope","expected_error":"award authority scope"},
+    {"id":"unrelated_authority_source","mutation":"use a TASK/PASS from another task as token authority source","expected_error":"authority source task/SHA"},
+    {"id":"source_registry_issuer_mismatch","mutation":"source body signs a different issuer than registry","expected_error":"authority signed claim"},
     {"id":"mismatched_receipts","mutation":"remove one required evidence receipt from first award","expected_error":"award evidence"},
     {"id":"out_of_order","mutation":"remove a row's first token while retaining its later token","expected_error":"award cumulative order"},
     {"id":"duplicate_token","mutation":"append a duplicate token award","expected_error":"award duplicate token"},

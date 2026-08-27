@@ -21,6 +21,10 @@
     "SLOT": "PASS",
     "TOKEN": "PASS"
   },
+  "authority_source_contract": {
+    "SCOPE": "Only the pinned amended Founder TASK raw bytes may authorize the pinned task scope.",
+    "SLOT_OR_TOKEN": "A committed raw reviewer PASS must bind this task and reviewed SHA; its body must be canonical authority-source/v1 JSON exactly matching authority_receipt_id, kind, authority_class, subject, scope, issuer, decision, task, and reviewed_sha."
+  },
   "allowed_issuers_by_class": {
     "FOUNDER_SCOPE_DIRECTION": ["reviewer-on-founder-authority"],
     "REVIEWER_PASS": ["reviewer"],

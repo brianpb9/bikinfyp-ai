@@ -43,9 +43,16 @@ full authority and receipt records, runs them through the same committed-byte,
 ancestry, issuer, authority-scope, dependency, and award validators used by the
 real registries, and is never inserted into current score state.
 
+For real records, a TASK source is accepted only for the pinned Founder SCOPE.
+Every future SLOT or TOKEN authority must cite committed raw Reviewer `PASS`
+bytes bound to this task and an ancestor reviewed SHA; its body must be exact
+canonical `authority-source/v1` JSON signing the registry's kind, class,
+issuer, subject, decision, scope, and score/evidence bindings byte-for-byte.
+
 `NEGATIVE-CASES.json` exercises unknown token, mismatched authority and
-authority scope, mismatched receipts, out-of-order and duplicate awards, false
-raw claims, and incomplete gates. Score 90 inherits the 80 gate, but its
+authority scope, unrelated TASK/PASS sources, source/registry issuer mismatch,
+mismatched receipts, out-of-order and duplicate awards, false raw claims, and
+incomplete gates. Score 90 inherits the 80 gate, but its
 incremental allocation remains undefined pending Founder authority; M/Q/I/U/K/O
 remain additional canonical 100 requirements only.
 This slice performs no deploy and cannot conflict with Lane A.
