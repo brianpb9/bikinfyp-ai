@@ -79,6 +79,31 @@ export function deriveCategoryReview(
   });
 }
 
+/** URL extraction category guesses are heuristic evidence, never an
+ * authoritative structured classification. A client-provided KNOWN flag
+ * cannot upgrade this result; only manual non-heuristic intake or C5 release
+ * can produce CLEAR. */
+export function deriveHeuristicCategoryReview(category: unknown): CategoryReviewRecord {
+  return deriveCategoryReview(category, "UNKNOWN");
+}
+
+export function effectiveCategoryReviewRole(input: {
+  configuredRole: string;
+  membershipRole: "owner" | "member";
+  actorId: string;
+  trustedOwnerIds: readonly string[];
+}): { effectiveRole: string; membershipRole: "owner" | "member"; ownerUserId: string | null } {
+  const uniqueOwnerId = input.trustedOwnerIds.length === 1 ? input.trustedOwnerIds[0] : null;
+  const founderBound = input.configuredRole === "Founder/CEO"
+    && input.membershipRole === "owner"
+    && uniqueOwnerId === input.actorId;
+  return Object.freeze({
+    effectiveRole: founderBound ? "Founder/CEO" : input.membershipRole,
+    membershipRole: input.membershipRole,
+    ownerUserId: uniqueOwnerId,
+  });
+}
+
 export function assertCategoryReviewClear(record: Partial<CategoryReviewRecord> | null | undefined): void {
   if (record?.state !== "CLEAR" || record.reason !== null || !Number.isInteger(record.version) || Number(record.version) < 1) {
     throw new ApiError(422, {

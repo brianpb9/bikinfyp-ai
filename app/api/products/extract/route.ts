@@ -6,7 +6,7 @@ import { downloadProductImages } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct } from "@/lib/postgres/smoke-runtime";
 import { usulMerekDariNama } from "@/lib/media/qc";
-import { deriveCategoryReview, parseStructuredCategoryOutcome } from "@/lib/product-type-boundary";
+import { deriveHeuristicCategoryReview } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -43,7 +43,7 @@ export async function POST(req: Request) {
     }
 
     const category = result.categoryGuess ?? "default";
-    const categoryReview = deriveCategoryReview(category, parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
+    const categoryReview = deriveHeuristicCategoryReview(category);
     // E6 quarantine may persist a review-safe internal row/audit, but it must
     // stop before remote image download, provider, spend, queue, or exposure.
     const productId = uuid();

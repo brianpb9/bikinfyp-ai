@@ -5,7 +5,7 @@ import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 import { getPool } from "@/lib/postgres/pool";
-import { authorizeCategoryReviewRelease, type CategoryReviewRecord } from "@/lib/product-type-boundary";
+import { authorizeCategoryReviewRelease, effectiveCategoryReviewRole, type CategoryReviewRecord } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,6 +25,13 @@ export async function POST(req:Request) {
       const client=await pool.connect();
       try {
         await client.query("BEGIN");
+        const configuredRole=process.env.C5_AUTHORIZED_HUMAN_REVIEW_ROLE ?? "";
+        const trustedOwners=await client.query<{user_id:string}>(
+          `SELECT user_id FROM org_members WHERE org_id=$1 AND role='owner' ORDER BY user_id FOR SHARE`,
+          [membership.org_id],
+        );
+        const roleBinding=effectiveCategoryReviewRole({configuredRole,membershipRole:membership.role,
+          actorId:user.id,trustedOwnerIds:trustedOwners.rows.map((owner)=>owner.user_id)});
         const selected=await client.query<{
           category_review_state:"CLEAR"|"QUARANTINED";category_review_reason:"CATEGORY_UNKNOWN"|"CATEGORY_AMBIGUOUS"|"CATEGORY_BUNDLE"|null;
           category_reviewed_by:string|null;category_reviewed_role:string|null;category_reviewed_at:string|Date|null;category_review_version:number;
@@ -46,16 +53,19 @@ export async function POST(req:Request) {
             const raw=prior.rows[0]?.meta;
             meta=typeof raw === "string" ? JSON.parse(raw) : raw && typeof raw === "object" ? raw : {};
           } catch { /* malformed audit cannot prove idempotency */ }
-          if (current.reviewedBy === user.id && current.reviewedRole === membership.role
+          if (current.reviewedBy === user.id && current.reviewedRole === roleBinding.effectiveRole
             && meta.reason === reviewReason && meta.previous_version === expectedVersion
+            && meta.effective_authorized_role === roleBinding.effectiveRole
+            && meta.underlying_membership_role === roleBinding.membershipRole
+            && meta.underlying_owner_user_id === roleBinding.ownerUserId
             && current.version === expectedVersion + 1) {
             await client.query("COMMIT");
             return Response.json({ok:true,idempotent:true,product_id:productId,category_review:current});
           }
         }
         const reviewedAt=new Date().toISOString();
-        const released=authorizeCategoryReviewRelease(current,{actorId:user.id,actorRole:membership.role,
-          reviewedAt,reason:reviewReason,expectedVersion},process.env.C5_AUTHORIZED_HUMAN_REVIEW_ROLE);
+        const released=authorizeCategoryReviewRelease(current,{actorId:user.id,actorRole:roleBinding.effectiveRole,
+          reviewedAt,reason:reviewReason,expectedVersion},configuredRole);
         const updated=await client.query(
           `UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_reviewed_by=$1,
              category_reviewed_role=$2,category_reviewed_at=$3,category_review_version=$4
@@ -66,7 +76,10 @@ export async function POST(req:Request) {
         await client.query(
           `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at)
            VALUES ($1,$2,'product.category_released','products',$3,$4,$5)`,
-          [crypto.randomUUID(),user.id,productId,JSON.stringify({actor_role:membership.role,reason:reviewReason,
+          [crypto.randomUUID(),user.id,productId,JSON.stringify({actor_role:roleBinding.effectiveRole,
+            effective_authorized_role:roleBinding.effectiveRole,
+            underlying_membership_role:roleBinding.membershipRole,
+            underlying_owner_user_id:roleBinding.ownerUserId,reason:reviewReason,
             previous_reason:current.reason,previous_version:current.version,new_version:released.version}),reviewedAt]);
         await client.query("COMMIT");
         return Response.json({ok:true,product_id:productId,category_review:released});

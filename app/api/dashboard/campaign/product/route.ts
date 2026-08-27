@@ -9,7 +9,7 @@ import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { sanitizeClaims } from "@/lib/media/claim-overlay";
-import { buildAuthoritativeTypeBoundaryInput, categoryReviewForMutation, deriveCategoryReview, parseStructuredCategoryOutcome, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { buildAuthoritativeTypeBoundaryInput, categoryReviewForMutation, deriveCategoryReview, deriveHeuristicCategoryReview, parseStructuredCategoryOutcome, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 
@@ -93,7 +93,7 @@ export async function POST(req: Request) {
       }
       const productId = crypto.randomUUID();
       const category = result.categoryGuess ?? "default";
-      const categoryReview = deriveCategoryReview(category, parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
+      const categoryReview = deriveHeuristicCategoryReview(category);
       if (categoryReview.state === "QUARANTINED") {
         const product = await smokeCreateProduct(user.id, {
           sourceUrl:url,name:cleanProductName(result.name ?? "Produk dari link"),priceIdr:result.priceIdr ?? 0,

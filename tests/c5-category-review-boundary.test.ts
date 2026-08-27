@@ -7,6 +7,8 @@ import {
   assertCategoryReviewClear,
   authorizeCategoryReviewRelease,
   deriveCategoryReview,
+  deriveHeuristicCategoryReview,
+  effectiveCategoryReviewRole,
 } from "../lib/product-type-boundary";
 import { CATEGORY_REVIEW_SQLITE_UPGRADE_GUARDS } from "../lib/db";
 
@@ -82,4 +84,49 @@ test("C5 PostgreSQL migration has default quarantine reason and explicit NULL-sa
   assert.match(migration,/category_review_state = 'QUARANTINED'[\s\S]*category_review_reason IS NOT NULL/);
   assert.match(migration,/category_review_version = 1[\s\S]*category_reviewed_by IS NULL/);
   assert.match(migration,/category_review_version >= 2[\s\S]*category_reviewed_by IS NOT NULL/);
+});
+
+test("C5 URL extractor heuristic and client KNOWN cannot produce CLEAR in retail or campaign", () => {
+  assert.deepEqual(deriveHeuristicCategoryReview("beauty"), {
+    state:"QUARANTINED",reason:"CATEGORY_UNKNOWN",reviewedBy:null,reviewedRole:null,reviewedAt:null,version:1,
+  });
+  for (const rel of ["../app/api/products/extract/route.ts","../app/api/dashboard/campaign/product/route.ts"]) {
+    const source=fs.readFileSync(new URL(rel,import.meta.url),"utf8");
+    const heuristicAt=source.indexOf("deriveHeuristicCategoryReview(category)");
+    const downloadAt=source.indexOf("downloadProductImages(productId",heuristicAt);
+    assert.ok(heuristicAt > 0 && downloadAt > heuristicAt,`${rel}: heuristic quarantine must precede download`);
+    const urlBlock=source.slice(Math.max(0,heuristicAt-180),downloadAt);
+    assert.doesNotMatch(urlBlock,/category_outcome|parseStructuredCategoryOutcome/,
+      `${rel}: URL classification must not trust client KNOWN`);
+  }
+});
+
+test("C5 Founder/CEO authority binds only the server-trusted unique org owner", () => {
+  const current=deriveCategoryReview("beauty","AMBIGUOUS");
+  const release={actorId:"founder-1",actorRole:"Founder/CEO",reviewedAt:"2026-08-27T18:00:00.000Z",
+    reason:"Founder reviewed source evidence",expectedVersion:1};
+  const founder=effectiveCategoryReviewRole({configuredRole:"Founder/CEO",membershipRole:"owner",
+    actorId:"founder-1",trustedOwnerIds:["founder-1"]});
+  assert.deepEqual(founder,{effectiveRole:"Founder/CEO",membershipRole:"owner",ownerUserId:"founder-1"});
+  assert.equal(authorizeCategoryReviewRelease(current,{...release,actorRole:founder.effectiveRole},"Founder/CEO").reviewedRole,"Founder/CEO");
+
+  const member=effectiveCategoryReviewRole({configuredRole:"Founder/CEO",membershipRole:"member",
+    actorId:"member-1",trustedOwnerIds:["founder-1"]});
+  assert.throws(()=>authorizeCategoryReviewRelease(current,{...release,actorId:"member-1",actorRole:member.effectiveRole},"Founder/CEO"),/role is missing or does not match/i);
+  const missing=effectiveCategoryReviewRole({configuredRole:"",membershipRole:"owner",
+    actorId:"founder-1",trustedOwnerIds:["founder-1"]});
+  assert.throws(()=>authorizeCategoryReviewRelease(current,{...release,actorRole:missing.effectiveRole},""),/role is missing or does not match/i);
+  const duplicateOwners=effectiveCategoryReviewRole({configuredRole:"Founder/CEO",membershipRole:"owner",
+    actorId:"founder-1",trustedOwnerIds:["founder-1","owner-2"]});
+  assert.equal(duplicateOwners.effectiveRole,"owner");
+  assert.equal(effectiveCategoryReviewRole({configuredRole:" Founder/CEO ",membershipRole:"owner",
+    actorId:"founder-1",trustedOwnerIds:["founder-1"]}).effectiveRole,"owner");
+});
+
+test("C5 release route audits effective Founder role and underlying trusted owner membership", () => {
+  const source=fs.readFileSync(new URL("../app/api/dashboard/campaign/product/category-review/release/route.ts",import.meta.url),"utf8");
+  assert.match(source,/org_members WHERE org_id=\$1 AND role='owner'[\s\S]*FOR SHARE/);
+  assert.match(source,/effective_authorized_role:roleBinding\.effectiveRole/);
+  assert.match(source,/underlying_membership_role:roleBinding\.membershipRole/);
+  assert.match(source,/underlying_owner_user_id:roleBinding\.ownerUserId/);
 });
