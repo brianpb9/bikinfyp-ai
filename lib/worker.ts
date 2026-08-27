@@ -40,6 +40,7 @@ import { requireCurrentJobEvidence } from "./legacy-job-quarantine";
 import { normalisasiFormatWorker } from "./media/worker-format";
 import { appendPackshotUntukQc } from "./media/packshot-asli";
 import { assertApprovedReferenceBrands } from "./worker-reference-brand-gate";
+import { withProductEvidenceMutationLock } from "./job-admission-reference";
 
 const CONCURRENCY = 1;
 
@@ -107,6 +108,22 @@ async function pump(): Promise<void> {
 }
 
 export async function processJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
+  const candidate = getJob(jobId);
+  if (!candidate || candidate.state !== "QUEUED") return;
+  // E3/E7 use this exact product-operation lock for re-quarantine. Reloading
+  // the job inside the lease closes the CLEAR-read -> paid-provider race and
+  // keeps category truth stable through READY/capture.
+  try {
+    await withProductEvidenceMutationLock(candidate.product_id, async () => {
+      await processJobWithProductLock(jobId, options);
+    });
+  } catch (error) {
+    if (options.retryViaQueue) throw error;
+    failJob(getJob(jobId) ?? candidate, errorReasonWithCode(error));
+  }
+}
+
+async function processJobWithProductLock(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
   const db = getDb();
   const job = getJob(jobId);
   if (!job || job.state !== "QUEUED") return;

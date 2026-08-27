@@ -118,9 +118,17 @@ export function effectiveCategoryReviewRole(input: {
   });
 }
 
+export function isCategoryReviewClear(
+  record: Partial<CategoryReviewRecord> | null | undefined,
+  category?: unknown,
+): boolean {
+  return record?.state === "CLEAR" && record.reason === null
+    && Number.isInteger(record.version) && Number(record.version) >= 1
+    && (category === undefined || isCanonicalC5Category(category));
+}
+
 export function assertCategoryReviewClear(record: Partial<CategoryReviewRecord> | null | undefined, category?:unknown): void {
-  if (record?.state !== "CLEAR" || record.reason !== null || !Number.isInteger(record.version) || Number(record.version) < 1
-    || (category !== undefined && !isCanonicalC5Category(category))) {
+  if (!isCategoryReviewClear(record, category)) {
     throw new ApiError(422, {
       code: "CATEGORY_REVIEW_REQUIRED",
       message_id: "Kategori produk perlu ditinjau manusia yang berwenang sebelum proses dilanjutkan.",

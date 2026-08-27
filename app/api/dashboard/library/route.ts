@@ -5,6 +5,7 @@ import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { createSignedUrl } from "@/lib/signed-url";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
+import { isCategoryReviewClear } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -23,6 +24,8 @@ type Row = {
   format: string; duration_s: number; cost_actual_idr: number;
   bulk_run_id: string | null; video_url: string | null; caption: string | null;
   thumb_key: string | null; fail_meta: string | null;
+  product_category: string; category_review_state: string;
+  category_review_reason: string | null; category_review_version: number;
 };
 
 // Alasan kegagalan hanya tersimpan di audit_log (jobs tidak punya kolomnya),
@@ -76,7 +79,8 @@ export async function GET(req: Request) {
       // tidak lewat gerbang review tidak punya baris job_shots sama sekali —
       // itu bukan kesalahan, klien tinggal jatuh ke frame pertama video.
       const result = await pool.query<Row>(
-        `SELECT j.id AS job_id, j.state, p.name AS product_name, j.created_at,
+        `SELECT j.id AS job_id, j.state, p.name AS product_name,p.category AS product_category,
+                p.category_review_state,p.category_review_reason,p.category_review_version,j.created_at,
                 j.format, j.duration_s, j.cost_actual_idr, j.bulk_run_id,
                 o.video_url, o.caption,
                 (SELECT sh.thumb_key FROM job_shots sh WHERE sh.job_id = j.id ORDER BY sh.idx ASC LIMIT 1) AS thumb_key,
@@ -100,7 +104,10 @@ export async function GET(req: Request) {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
 
-    const all = rows.map((row, i) => ({
+    const all = rows.map((row, i) => {
+      const publishable=isCategoryReviewClear({state:row.category_review_state as "CLEAR"|"QUARANTINED",
+        reason:row.category_review_reason as never,version:row.category_review_version},row.product_category);
+      return ({
       job_id: row.job_id,
       state: row.state,
       product_name: row.product_name,
@@ -110,28 +117,28 @@ export async function GET(req: Request) {
       cost_idr: row.cost_actual_idr,
       run_id: row.bulk_run_id,
       caption: row.caption,
-      video_url: row.state === "READY" && row.video_url ? createSignedUrl(row.video_url) : null,
+      video_url: publishable && row.state === "READY" && row.video_url ? createSignedUrl(row.video_url) : null,
       // URL unduh terpisah dari URL putar: yang ini membawa ?dl= supaya browser
       // MENYIMPAN berkas dengan nama produk, bukan membuka pemutar.
       download_url:
-        row.state === "READY" && row.video_url
+        publishable && row.state === "READY" && row.video_url
           ? `${createSignedUrl(row.video_url)}&dl=${encodeURIComponent(downloadName(row.product_name, i))}`
           : null,
-      thumb_url: row.thumb_key ? createSignedUrl(row.thumb_key) : null,
+      thumb_url: publishable && row.thumb_key ? createSignedUrl(row.thumb_key) : null,
       fail_reason:
         row.state === "FAILED" || row.state === "REFUNDED"
           ? friendlyFailure(failReason(row.fail_meta))
           : null,
-    }));
+    });});
 
     const counts = {
       all: all.length,
-      ready: all.filter((v) => v.state === "READY").length,
+      ready: all.filter((v) => v.state === "READY" && v.video_url !== null).length,
       review: all.filter((v) => v.state === "AWAITING_APPROVAL").length,
       failed: all.filter((v) => v.state === "FAILED" || v.state === "REFUNDED").length,
     };
     const videos =
-      filter === "ready" ? all.filter((v) => v.state === "READY")
+      filter === "ready" ? all.filter((v) => v.state === "READY" && v.video_url !== null)
       : filter === "review" ? all.filter((v) => v.state === "AWAITING_APPROVAL")
       : filter === "failed" ? all.filter((v) => v.state === "FAILED" || v.state === "REFUNDED")
       : all;

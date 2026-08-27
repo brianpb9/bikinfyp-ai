@@ -5,6 +5,7 @@ import { createSignedUrl } from "@/lib/signed-url";
 import { PRE_DOWNLOAD_NOTICE } from "@/lib/config/compliance";
 import { postgresRuntimeEnabled, smokeGetJob, smokeGetOutput } from "@/lib/postgres/smoke-runtime";
 import { computeViralityChecklist } from "@/lib/virality-checklist";
+import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,9 +18,14 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     const { id } = await ctx.params;
     const db = postgresRuntimeEnabled() ? null : getDb();
     const job = postgresRuntimeEnabled()
-      ? await smokeGetJob(user.id, id) as JobRow | null
-      : db!.prepare("SELECT * FROM jobs WHERE id = ? AND user_id = ? AND org_id IS NULL").get(id, user.id) as JobRow | undefined;
+      ? await smokeGetJob(user.id, id) as (JobRow & { product_category: string; category_review_state: string; category_review_reason: string | null; category_review_version: number }) | null
+      : db!.prepare(`SELECT j.*,p.category AS product_category,p.category_review_state,
+          p.category_review_reason,p.category_review_version
+          FROM jobs j JOIN products p ON p.id=j.product_id
+          WHERE j.id = ? AND j.user_id = ? AND j.org_id IS NULL`).get(id, user.id) as (JobRow & { product_category: string; category_review_state: string; category_review_reason: string | null; category_review_version: number }) | undefined;
     if (!job) throw ERR.NOT_FOUND("Job-nya");
+    assertCategoryReviewClear({state:job.category_review_state as "CLEAR"|"QUARANTINED",
+      reason:job.category_review_reason as never,version:job.category_review_version},job.product_category);
     if (job.state !== "READY") throw ERR.JOB_NOT_READY();
 
     const output = postgresRuntimeEnabled()

@@ -18,7 +18,7 @@ import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
 import { assertAdmissionReferenceEvidence, cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest, withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 import { authorizedManagedStagingZeroValueAdmission } from "@/lib/staging-admission-trace";
-import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, isCategoryReviewClear, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 
@@ -437,7 +437,7 @@ export async function POST(req: Request) {
  *  pertama, bukan seluruh berkas — kekhawatiran kuota yang dulu jadi alasan
  *  memakai foto produk tetap terjaga. Foto produk tinggal cadangan untuk job
  *  yang belum punya hasil (masih antre/render/gagal). */
-function attachPreview<T extends { product_images: string; output_video?: string | null }>(j: T) {
+function attachPreview<T extends { product_images: string; output_video?: string | null; product_category: string; category_review_state: string; category_review_reason: string | null; category_review_version: number }>(j: T) {
   let thumb_url: string | null = null;
   try {
     const imgs = JSON.parse(j.product_images) as string[];
@@ -445,8 +445,11 @@ function attachPreview<T extends { product_images: string; output_video?: string
   } catch {
     /* abaikan */
   }
-  const { product_images: _omit, output_video, ...rest } = j;
-  return { ...rest, thumb_url, preview_url: output_video ? createSignedUrl(output_video) : null };
+  const { product_images: _omit, output_video,product_category,category_review_state,
+    category_review_reason,category_review_version,...rest } = j;
+  const publishable=isCategoryReviewClear({state:category_review_state as "CLEAR"|"QUARANTINED",
+    reason:category_review_reason as never,version:category_review_version},product_category);
+  return { ...rest, thumb_url, preview_url: publishable && output_video ? createSignedUrl(output_video) : null };
 }
 
 // GET /api/jobs — riwayat job pengguna.
@@ -459,7 +462,8 @@ export async function GET(req: Request) {
       .prepare(
         `SELECT j.id, j.state, j.format, j.duration_s, j.created_at, j.completed_at,
                 j.provider_video, j.provider_voice, j.cost_actual_idr, j.script_id,
-                p.name AS product_name, p.images AS product_images,
+                p.name AS product_name, p.images AS product_images,p.category AS product_category,
+                p.category_review_state,p.category_review_reason,p.category_review_version,
                 o.video_url AS output_video,
                 fs.score AS fyp_score, fs.posted_url AS fyp_posted_url
          FROM jobs j JOIN products p ON p.id = j.product_id
@@ -467,7 +471,7 @@ export async function GET(req: Request) {
          LEFT JOIN fyp_snapshots fs ON fs.job_id = j.id
          WHERE j.user_id = ? AND j.org_id IS NULL ORDER BY j.created_at DESC LIMIT 50`
       )
-      .all(user.id) as (JobRow & { script_id: string; product_images: string; output_video: string | null })[];
+      .all(user.id) as (JobRow & { script_id: string; product_images: string; output_video: string | null; product_category:string; category_review_state:string; category_review_reason:string|null; category_review_version:number })[];
     const withThumbs = jobs.map(attachPreview);
     return Response.json({ jobs: withThumbs });
   } catch (err) {

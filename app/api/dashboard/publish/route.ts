@@ -7,6 +7,7 @@ import { createSignedUrl } from "@/lib/signed-url";
 import { postgresRuntimeEnabled, pgAudit } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
+import { isCategoryReviewClear } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,6 +22,7 @@ type PlanRow = {
   id: string; job_id: string; channel: string; scheduled_at: string;
   caption: string | null; status: string; posted_at: string | null;
   product_name: string; state: string; video_url: string | null;
+  product_category:string;category_review_state:string;category_review_reason:string|null;category_review_version:number;
 };
 
 function nameFor(productName: string): string {
@@ -35,7 +37,8 @@ export async function GET(req: Request) {
     try {
       const plans = (await pool.query<PlanRow>(
         `SELECT pp.id, pp.job_id, pp.channel, pp.scheduled_at, pp.caption, pp.status, pp.posted_at,
-                p.name AS product_name, j.state, o.video_url
+                p.name AS product_name,p.category AS product_category,p.category_review_state,
+                p.category_review_reason,p.category_review_version,j.state,o.video_url
          FROM post_plans pp
          JOIN jobs j ON j.id = pp.job_id
          JOIN products p ON p.id = j.product_id
@@ -62,6 +65,9 @@ export async function GET(req: Request) {
                 j.format, j.duration_s, o.caption
          FROM jobs j JOIN products p ON p.id = j.product_id JOIN outputs o ON o.job_id = j.id
          WHERE j.org_id = $1 AND j.state = 'READY' AND o.video_url IS NOT NULL
+           AND p.category_review_state='CLEAR' AND p.category_review_reason IS NULL
+           AND p.category_review_version>=1
+           AND p.category IN ('beauty','health','fashion','muslim_fashion','home','kitchen','gadget','electronics','food','kids','jasa','app','toko')
          ORDER BY j.created_at DESC LIMIT 100`,
         [membership.org_id]
       )).rows;
@@ -71,7 +77,8 @@ export async function GET(req: Request) {
           id: r.id, job_id: r.job_id, channel: r.channel, scheduled_at: r.scheduled_at,
           caption: r.caption, status: r.status, posted_at: r.posted_at,
           product_name: r.product_name,
-          download_url: r.video_url
+          download_url: r.video_url && isCategoryReviewClear(
+            {state:r.category_review_state as "CLEAR"|"QUARANTINED",reason:r.category_review_reason as never,version:r.category_review_version},r.product_category)
             ? `${createSignedUrl(r.video_url)}&dl=${encodeURIComponent(`${nameFor(r.product_name)}.mp4`)}`
             : null,
         })),
@@ -108,7 +115,12 @@ export async function POST(req: Request) {
       // Tanpa ini, siapa pun yang tahu sebuah job_id bisa menautkannya ke
       // organisasinya sendiri dan ikut mengunduh videonya lewat GET di atas.
       const owned = await pool.query(
-        "SELECT 1 FROM jobs WHERE id=$1 AND org_id=$2 AND state='READY'", [jobId, membership.org_id]
+        `SELECT 1 FROM jobs j JOIN products p ON p.id=j.product_id
+         WHERE j.id=$1 AND j.org_id=$2 AND j.state='READY'
+           AND p.category_review_state='CLEAR' AND p.category_review_reason IS NULL
+           AND p.category_review_version>=1
+           AND p.category IN ('beauty','health','fashion','muslim_fashion','home','kitchen','gadget','electronics','food','kids','jasa','app','toko')`,
+        [jobId, membership.org_id]
       );
       if (!owned.rowCount) throw ERR.NOT_FOUND("Videonya");
 

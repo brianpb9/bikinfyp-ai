@@ -62,6 +62,7 @@ import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract"
 import { bacaSnapshot } from "../script-engine/admisi";
 import { normalisasiFormatWorker } from "../media/worker-format";
 import { managedStagingDeterministicWorkerGate } from "../staging-deterministic-worker";
+import { withProductEvidenceMutationLock } from "../job-admission-reference";
 
 type PostgresQcRunner = typeof runQc;
 let postgresQcRunner: PostgresQcRunner = runQc;
@@ -81,6 +82,7 @@ const processWorkerProductionDependencies={
   createJobs:(databaseUrl:string)=>new PgJobsRepository(databaseUrl,{stateTimeoutsMin:config.stateTimeoutsMin}),
   getPool,
   createCredits:(databaseUrl:string)=>new PgCreditPaymentRepository(databaseUrl),
+  withProductEvidenceMutationLock,
 };
 type ProcessWorkerDependencies=typeof processWorkerProductionDependencies;
 let processWorkerDependencyOverrides:Partial<ProcessWorkerDependencies>|undefined;
@@ -327,6 +329,33 @@ async function siapkanFrameTurunan(
 
 export async function processPostgresJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
   const deps=processWorkerDependencies();
+  const databaseUrl = deps.databaseUrl();
+  const pool = deps.getPool(databaseUrl);
+  try {
+    const candidate = await pool.query<{ product_id: string; state: string }>(
+      "SELECT product_id,state FROM jobs WHERE id=$1",
+      [jobId],
+    );
+    const productId = candidate.rows[0]?.product_id;
+    if (!productId || ["READY", "FAILED", "REFUNDED"].includes(candidate.rows[0].state)) return;
+    // E3/E7 acquire this same cross-process advisory lock. The canonical row is
+    // reloaded only after ownership is established and remains stable until
+    // provider execution, output persistence, and capture have all completed.
+    await deps.withProductEvidenceMutationLock(productId, async () => {
+      await processPostgresJobWithProductLock(jobId, options, deps);
+    });
+  } catch (error) {
+    if (options.retryViaQueue) throw error;
+    const jobs=deps.createJobs(databaseUrl);
+    try {await jobs.failJob(jobId,errorReasonWithCode(error));} finally {await jobs.close();}
+  }
+}
+
+async function processPostgresJobWithProductLock(
+  jobId: string,
+  options: { retryViaQueue?: boolean },
+  deps: ProcessWorkerDependencies,
+): Promise<void> {
   const databaseUrl = deps.databaseUrl();
   const jobs = deps.createJobs(databaseUrl);
   const pool = deps.getPool(databaseUrl);

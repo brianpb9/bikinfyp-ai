@@ -16,6 +16,7 @@ import { assertPaidAdmission } from "@/lib/job-intake";
 import { materializeJobReferenceManifest } from "@/lib/job-reference-manifest";
 import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 import path from "node:path";
+import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,8 @@ type JobRowLite = {
   product_type_confirmed_at: string | Date | null;
   product_type_version: number | null;
   product_type_state: string | null;
+  product_category:string;category_review_state:string;category_review_reason:string|null;
+  category_reviewed_by:string|null;category_reviewed_role:string|null;category_reviewed_at:string|Date|null;category_review_version:number;
 };
 
 async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRowLite | null> {
@@ -54,6 +57,8 @@ async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRow
             j.approved_reference_manifest, j.job_product_snapshot,
             p.product_type_token, p.product_type_confirmed_token, p.product_type_confirmed_by,
             p.product_type_confirmed_at, p.product_type_version, p.product_type_state,
+            p.category AS product_category,p.category_review_state,p.category_review_reason,
+            p.category_reviewed_by,p.category_reviewed_role,p.category_reviewed_at,p.category_review_version,
             p.name AS product_name, s.segments, s.validation_result AS script_validation_result
      FROM jobs j JOIN products p ON p.id=j.product_id JOIN scripts s ON s.id=j.script_id
      WHERE j.id=$1 AND j.org_id=$2`,
@@ -74,6 +79,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
     try {
       const job = await loadJob(pool, jobId, membership.org_id);
       if (!job) throw ERR.NOT_FOUND("Job-nya");
+      assertCategoryReviewClear({state:job.category_review_state as "CLEAR"|"QUARANTINED",
+        reason:job.category_review_reason as never,version:job.category_review_version},job.product_category);
       const scenes = (await pool.query<SceneRow>(
         "SELECT idx, prompt, storage_key, thumb_key, duration_sec, regen_requested, regen_count FROM job_shots WHERE job_id=$1 ORDER BY idx ASC",
         [jobId]

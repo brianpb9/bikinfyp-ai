@@ -61,6 +61,7 @@ const { PATCH: patchRetailProduct } = await import("../app/api/products/[id]/rou
 const { createJobProductSnapshotRaw, parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
 const { ringkasanKanari, resetKanariUntukTest, GagalTanpaReferensi, KODE_KANARI } = await import("../lib/kanari-bukti");
 const { ALASAN_TOLAK, RINCI_TOLAK } = await import("../lib/product-truth");
+const { withProductEvidenceMutationLock } = await import("../lib/job-admission-reference");
 type MediaStorage = import("../lib/storage").MediaStorage;
 type StoredObject = import("../lib/storage").StoredObject;
 
@@ -1332,6 +1333,27 @@ test("W2 C5 quarantine has zero effects, then exact Founder release reaches prov
     assert.ok(spy.materializeCalls.length>0,"W2 released control never reached immutable materialization");
     assertNolEfekSamping(released.jobId,spy,"W2 C5 released control halted at observer");
   } finally { provider.reset(); }
+});
+
+test("W2 C5 reloads under the product lock when E3 re-quarantine wins the race",async()=>{
+  const rel="uploads/w2-c5-race/0.webp";const bytes=Buffer.from("W2-C5-RACE");
+  const spy=storageTerwujud(new Map<string,Buffer>([[rel,bytes],[`${rel}.meta.json`,sidecar(bytes,true)]]));
+  setMediaStorageForTests(spy.storage);
+  const {jobId,productId}=siapkanJob([rel]);
+  const provider=pasangObserverProviderC8();
+  let worker:Promise<void>|undefined;
+  try {
+    await withProductEvidenceMutationLock(productId,async()=>{
+      worker=processJob(jobId);
+      await new Promise<void>((resolve)=>setImmediate(resolve));
+      assert.equal((db.prepare("SELECT state FROM jobs WHERE id=?").get(jobId) as {state:string}).state,"QUEUED");
+      db.prepare(`UPDATE products SET category_review_state='QUARANTINED',category_review_reason='CATEGORY_UNKNOWN',
+        category_reviewed_by=NULL,category_reviewed_role=NULL,category_reviewed_at=NULL,category_review_version=2 WHERE id=?`).run(productId);
+    });
+    await worker;
+    assert.equal(provider.jumlah(),0);assert.deepEqual(spy.materializeCalls,[]);
+    assertNolEfekSamping(jobId,spy,"W2 C5 re-quarantine race");
+  } finally {provider.reset();}
 });
 
 after(() => {

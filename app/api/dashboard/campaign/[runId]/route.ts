@@ -5,6 +5,7 @@ import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { createSignedUrl } from "@/lib/signed-url";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
+import { isCategoryReviewClear } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 type BulkRunJob = {
   job_id: string; state: string; product_name: string; cost_actual_idr: number;
   video_url: string | null; caption: string | null;
+  product_category:string;category_review_state:string;category_review_reason:string|null;category_review_version:number;
 };
 
 // GET /api/dashboard/campaign/:runId — status satu campaign run, org-scoped (bukan
@@ -28,7 +30,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ runId: string }
     let rows: BulkRunJob[];
     try {
       const result = await pool.query<BulkRunJob>(
-        `SELECT j.id AS job_id, j.state, p.name AS product_name, j.cost_actual_idr,
+        `SELECT j.id AS job_id, j.state, p.name AS product_name,p.category AS product_category,
+                p.category_review_state,p.category_review_reason,p.category_review_version,j.cost_actual_idr,
                 o.video_url, o.caption
          FROM jobs j
          JOIN products p ON p.id = j.product_id
@@ -44,7 +47,10 @@ export async function GET(req: Request, ctx: { params: Promise<{ runId: string }
     if (rows.length === 0) throw ERR.NOT_FOUND("Bulk run-nya");
 
     const jobs = rows.map((row, i) => {
-      const ready = row.state === "READY" && row.video_url;
+      const ready = row.state === "READY" && row.video_url && isCategoryReviewClear(
+        {state:row.category_review_state as "CLEAR"|"QUARANTINED",reason:row.category_review_reason as never,version:row.category_review_version},
+        row.product_category,
+      );
       // Nama berkas dari nama produk + nomor urut, bukan UUID: brand mengunduh
       // 6 berkas sekaligus dan harus bisa membedakannya di folder Downloads.
       const base = row.product_name.replace(/[^\w.\- ]+/g, "").replace(/\s+/g, "-").slice(0, 50) || "video";
@@ -59,7 +65,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ runId: string }
     return Response.json({
       campaign_run_id: runId,
       jobs,
-      ready_count: jobs.filter((j) => j.state === "READY").length,
+      ready_count: jobs.filter((j) => j.state === "READY" && j.video_url !== null).length,
       failed_count: jobs.filter((j) => j.state === "FAILED" || j.state === "REFUNDED").length,
       total: jobs.length,
     });
