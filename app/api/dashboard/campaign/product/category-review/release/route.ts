@@ -16,6 +16,7 @@ const productionDependencies = {
   getPool,
   databaseUrl: () => config.databaseUrl,
   configuredRole: () => process.env.C5_AUTHORIZED_HUMAN_REVIEW_ROLE ?? "",
+  configuredPrincipalId: () => process.env.C5_AUTHORIZED_HUMAN_REVIEW_PRINCIPAL_ID ?? "",
   now: () => new Date().toISOString(),
   uuid: () => crypto.randomUUID(),
 };
@@ -49,20 +50,16 @@ export async function POST(req:Request) {
       try {
         await client.query("BEGIN");
         const configuredRole=deps.configuredRole();
-        const trustedOwners=await client.query<{user_id:string}>(
-          `SELECT user_id FROM org_members WHERE org_id=$1 AND role='owner' ORDER BY user_id FOR SHARE`,
-          [membership.org_id],
-        );
-        const roleBinding=effectiveCategoryReviewRole({configuredRole,membershipRole:membership.role,
-          actorId:user.id,trustedOwnerIds:trustedOwners.rows.map((owner)=>owner.user_id)});
+        const roleBinding=effectiveCategoryReviewRole({configuredRole,
+          configuredPrincipalId:deps.configuredPrincipalId(),membershipRole:membership.role,actorId:user.id});
         const selected=await client.query<{
           user_id:string;category:string;
           category_review_state:"CLEAR"|"QUARANTINED";category_review_reason:"CATEGORY_UNKNOWN"|"CATEGORY_AMBIGUOUS"|"CATEGORY_BUNDLE"|null;
           category_reviewed_by:string|null;category_reviewed_role:string|null;category_reviewed_at:string|Date|null;category_review_version:number;
         }>(`SELECT user_id,category,category_review_state,category_review_reason,category_reviewed_by,category_reviewed_role,
               category_reviewed_at,category_review_version FROM products
-              WHERE id=$1 AND ${retailScope ? "org_id IS NULL AND user_id=$2" : "org_id=$2"} FOR UPDATE`,
-          [productId,retailScope ? user.id : membership.org_id]);
+              WHERE id=$1 AND ${retailScope ? "org_id IS NULL" : "org_id=$2"} FOR UPDATE`,
+          retailScope ? [productId] : [productId,membership.org_id]);
         if (!selected.rows[0]) throw ERR.NOT_FOUND("Produknya");
         const row=selected.rows[0];
         const current:CategoryReviewRecord={state:row.category_review_state,reason:row.category_review_reason,
@@ -83,7 +80,7 @@ export async function POST(req:Request) {
             && meta.reason === reviewReason && meta.previous_version === expectedVersion
             && meta.effective_authorized_role === roleBinding.effectiveRole
             && meta.underlying_membership_role === roleBinding.membershipRole
-            && meta.underlying_owner_user_id === roleBinding.ownerUserId
+            && meta.founder_principal_id === roleBinding.founderPrincipalId
             && current.version === expectedVersion + 1) {
             await client.query("COMMIT");
             return Response.json({ok:true,idempotent:true,product_id:productId,category_review:current});
@@ -95,10 +92,10 @@ export async function POST(req:Request) {
         const updated=await client.query(
           `UPDATE products SET category=$1,category_review_state='CLEAR',category_review_reason=NULL,category_reviewed_by=$2,
              category_reviewed_role=$3,category_reviewed_at=$4,category_review_version=$5
-           WHERE id=$6 AND ${retailScope ? "org_id IS NULL AND user_id=$7" : "org_id=$7"}
-             AND category_review_state='QUARANTINED' AND category_review_version=$8`,
+           WHERE id=$6 AND ${retailScope ? "org_id IS NULL" : "org_id=$7"}
+             AND category_review_state='QUARANTINED' AND category_review_version=$${retailScope ? "7" : "8"}`,
           [resolvedCategory,released.reviewedBy,released.reviewedRole,released.reviewedAt,released.version,
-            productId,retailScope ? user.id : membership.org_id,expectedVersion]);
+            productId,...(retailScope ? [expectedVersion] : [membership.org_id,expectedVersion])]);
         if (updated.rowCount !== 1) throw ERR.BAD_REQUEST("Status tinjauan berubah. Muat ulang lalu coba lagi.","Category review changed concurrently.");
         await client.query(
           `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at)
@@ -106,7 +103,7 @@ export async function POST(req:Request) {
           [deps.uuid(),user.id,productId,JSON.stringify({actor_role:roleBinding.effectiveRole,
             effective_authorized_role:roleBinding.effectiveRole,
             underlying_membership_role:roleBinding.membershipRole,
-            underlying_owner_user_id:roleBinding.ownerUserId,reason:reviewReason,
+            founder_principal_id:roleBinding.founderPrincipalId,reason:reviewReason,
             product_scope:retailScope ? "retail" : "organization",product_owner_user_id:row.user_id,
             previous_category:row.category,resolved_category:resolvedCategory,
             previous_reason:current.reason,previous_version:current.version,new_version:released.version}),reviewedAt]);

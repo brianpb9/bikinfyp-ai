@@ -103,18 +103,18 @@ export function deriveHeuristicCategoryReview(category: unknown): CategoryReview
 
 export function effectiveCategoryReviewRole(input: {
   configuredRole: string;
+  configuredPrincipalId: string;
   membershipRole: "owner" | "member";
   actorId: string;
-  trustedOwnerIds: readonly string[];
-}): { effectiveRole: string; membershipRole: "owner" | "member"; ownerUserId: string | null } {
-  const uniqueOwnerId = input.trustedOwnerIds.length === 1 ? input.trustedOwnerIds[0] : null;
+}): { effectiveRole: string; membershipRole: "owner" | "member"; founderPrincipalId: string | null } {
+  const principalId=input.configuredPrincipalId.trim() || null;
   const founderBound = input.configuredRole === "Founder/CEO"
     && input.membershipRole === "owner"
-    && uniqueOwnerId === input.actorId;
+    && principalId === input.actorId;
   return Object.freeze({
     effectiveRole: founderBound ? "Founder/CEO" : input.membershipRole,
     membershipRole: input.membershipRole,
-    ownerUserId: uniqueOwnerId,
+    founderPrincipalId: principalId,
   });
 }
 
@@ -134,6 +134,7 @@ export function categoryReviewForMutation(
   current: Partial<CategoryReviewRecord> | null | undefined,
   category: unknown,
   outcome: StructuredCategoryOutcome,
+  currentCategory?:unknown,
 ): CategoryReviewRecord {
   const candidate = deriveCategoryReview(category, outcome);
   const currentVersion = Number.isInteger(current?.version) && Number(current?.version) >= 1 ? Number(current?.version) : 1;
@@ -150,6 +151,13 @@ export function categoryReviewForMutation(
       reason:current.reason === "CATEGORY_AMBIGUOUS" || current.reason === "CATEGORY_BUNDLE" ? current.reason : "CATEGORY_UNKNOWN",
       reviewedBy:null,reviewedRole:null,reviewedAt:null,version:currentVersion,
     });
+  }
+  // A Founder release is bound to the reviewed canonical category. An
+  // ordinary E3/E7 mutation cannot carry that provenance onto another value.
+  if (current?.state === "CLEAR" && currentVersion >= 2
+    && normalizeToken(category) !== normalizeToken(currentCategory)) {
+    return Object.freeze({state:"QUARANTINED",reason:"CATEGORY_UNKNOWN",reviewedBy:null,
+      reviewedRole:null,reviewedAt:null,version:currentVersion + 1});
   }
   return Object.freeze({state:"CLEAR",reason:null,reviewedBy:current?.reviewedBy ?? null,
     reviewedRole:current?.reviewedRole ?? null,reviewedAt:current?.reviewedAt ?? null,version:currentVersion});

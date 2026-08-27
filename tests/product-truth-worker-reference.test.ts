@@ -1306,6 +1306,34 @@ test("W2 C10: product type quarantine berhenti sebelum materialize/provider/capt
   }
 });
 
+test("W2 C5 quarantine has zero effects, then exact Founder release reaches provider",async()=>{
+  const rel="uploads/w2-c5/0.webp";
+  const bytes=Buffer.from("W2-C5-RELEASE");
+  const spy=storageTerwujud(new Map<string,Buffer>([[rel,bytes],[`${rel}.meta.json`,sidecar(bytes,true)]]));
+  setMediaStorageForTests(spy.storage);
+  const blocked=siapkanJob([rel]);
+  db.prepare(`UPDATE products SET category_review_state='QUARANTINED',category_review_reason='CATEGORY_UNKNOWN',
+    category_reviewed_by=NULL,category_reviewed_role=NULL,category_reviewed_at=NULL,category_review_version=1 WHERE id=?`)
+    .run(blocked.productId);
+  const provider=pasangObserverProviderC8();
+  try {
+    await processJob(blocked.jobId);
+    assert.equal(provider.jumlah(),0); assert.deepEqual(spy.materializeCalls,[]);
+    assertNolEfekSamping(blocked.jobId,spy,"W2 C5 quarantine");
+
+    const released=siapkanJob([rel]);
+    db.prepare(`UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,
+      category_reviewed_by='founder-1',category_reviewed_role='Founder/CEO',category_reviewed_at=?,
+      category_review_version=2 WHERE id=?`).run("2026-08-27T20:00:00.000Z",released.productId);
+    await processJob(released.jobId);
+    const releasedState=db.prepare("SELECT state FROM jobs WHERE id=?").get(released.jobId) as {state:string};
+    const releasedAudits=db.prepare("SELECT meta FROM audit_log WHERE entity_id=? ORDER BY created_at").all(released.jobId) as {meta:string}[];
+    assert.equal(provider.jumlah(),1,`W2 did not admit exact Founder-released product: ${releasedState.state} ${JSON.stringify(releasedAudits)}`);
+    assert.ok(spy.materializeCalls.length>0,"W2 released control never reached immutable materialization");
+    assertNolEfekSamping(released.jobId,spy,"W2 C5 released control halted at observer");
+  } finally { provider.reset(); }
+});
+
 after(() => {
   setMediaStorageForTests(undefined);
   fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });

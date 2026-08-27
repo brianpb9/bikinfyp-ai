@@ -3,7 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { parseDeterministicFixtureAdmission, workerExecutionMode } from "../lib/postgres/worker";
+import { parseDeterministicFixtureAdmission, processPostgresJob, setProcessPostgresWorkerDependenciesForTests, workerExecutionMode } from "../lib/postgres/worker";
 
 const manifest = JSON.stringify({
   version: 2,
@@ -72,6 +72,46 @@ test("deterministic W1 rejects quarantined product type before materialization",
     }),
     (error: unknown) => (error as { body?: { code?: string } }).body?.code === "PRODUCT_TYPE_CONFIRMATION_REQUIRED",
   );
+});
+
+test("deterministic W1 C5 rejects with zero execution effects and admits Founder release",()=>{
+  let executionEffects=0;
+  assert.throws(()=>{
+    parseDeterministicFixtureAdmission({approved_reference_manifest:manifest,job_product_snapshot:snapshot,
+      ...confirmedType,category_review_state:"QUARANTINED",category_review_reason:"CATEGORY_UNKNOWN"});
+    executionEffects++;
+  },(error:unknown)=>(error as {body?:{code?:string}}).body?.code === "CATEGORY_REVIEW_REQUIRED");
+  assert.equal(executionEffects,0);
+  const released=parseDeterministicFixtureAdmission({approved_reference_manifest:manifest,job_product_snapshot:snapshot,
+    ...confirmedType,category_reviewed_by:"founder-1",category_reviewed_role:"Founder/CEO",
+    category_reviewed_at:"2026-08-27T20:00:00.000Z",category_review_version:2});
+  assert.equal(released.productSnapshot.category,"beauty");
+});
+
+test("processPostgresJob W1 C5 rejects before transition/hold and released control crosses guard",async(t)=>{
+  t.after(()=>setProcessPostgresWorkerDependenciesForTests());
+  let row:Record<string,unknown>={id:"job-c5",state:"QUEUED",approved_reference_manifest:manifest,
+    job_product_snapshot:snapshot,...confirmedType,category_review_state:"QUARANTINED",
+    category_review_reason:"CATEGORY_UNKNOWN"};
+  let transitions=0,holdQueries=0,failures=0;
+  const jobs={transition:async()=>{transitions++;return false;},failJob:async()=>{failures++;},close:async()=>undefined};
+  const pool={query:async(sql:string)=>{
+    if (sql.includes("FROM jobs j")) return {rows:[row],rowCount:1};
+    if (sql.includes("credit_ledger")) {holdQueries++;return {rows:[{}],rowCount:1};}
+    throw new Error(`Unexpected SQL: ${sql}`);
+  }};
+  setProcessPostgresWorkerDependenciesForTests({databaseUrl:()=>"postgres://test",
+    createJobs:(()=>jobs) as never,getPool:(()=>pool) as never,
+    createCredits:(()=>{throw new Error("capture must not be constructed");}) as never});
+  await processPostgresJob("job-c5");
+  assert.equal(failures,1); assert.equal(transitions,0); assert.equal(holdQueries,0);
+
+  row={...row,category_review_state:"CLEAR",category_review_reason:null,
+    category_reviewed_by:"founder-1",category_reviewed_role:"Founder/CEO",
+    category_reviewed_at:"2026-08-27T20:00:00.000Z",category_review_version:2};
+  failures=0;
+  await processPostgresJob("job-c5");
+  assert.equal(failures,0); assert.equal(holdQueries,1); assert.equal(transitions,1);
 });
 
 test("deterministic branch materializes immutable references before FFmpeg output", () => {

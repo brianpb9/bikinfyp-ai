@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import {
   assertCategoryReviewClear,
   authorizeCategoryReviewRelease,
+  categoryReviewForMutation,
   deriveCategoryReview,
   deriveHeuristicCategoryReview,
   effectiveCategoryReviewRole,
@@ -106,37 +107,40 @@ test("C5 URL extractor heuristic and client KNOWN cannot produce CLEAR in retail
   }
 });
 
-test("C5 Founder/CEO authority binds only the server-trusted unique org owner", () => {
+test("C5 Founder/CEO authority binds only the explicit server-trusted principal", () => {
   const current=deriveCategoryReview("beauty","AMBIGUOUS");
   const release={actorId:"founder-1",actorRole:"Founder/CEO",reviewedAt:"2026-08-27T18:00:00.000Z",
     reason:"Founder reviewed source evidence",expectedVersion:1};
   const founder=effectiveCategoryReviewRole({configuredRole:"Founder/CEO",membershipRole:"owner",
-    actorId:"founder-1",trustedOwnerIds:["founder-1"]});
-  assert.deepEqual(founder,{effectiveRole:"Founder/CEO",membershipRole:"owner",ownerUserId:"founder-1"});
+    configuredPrincipalId:"founder-1",actorId:"founder-1"});
+  assert.deepEqual(founder,{effectiveRole:"Founder/CEO",membershipRole:"owner",founderPrincipalId:"founder-1"});
   assert.equal(authorizeCategoryReviewRelease(current,{...release,actorRole:founder.effectiveRole},"Founder/CEO").reviewedRole,"Founder/CEO");
 
   const member=effectiveCategoryReviewRole({configuredRole:"Founder/CEO",membershipRole:"member",
-    actorId:"member-1",trustedOwnerIds:["founder-1"]});
+    configuredPrincipalId:"founder-1",actorId:"member-1"});
   assert.throws(()=>authorizeCategoryReviewRelease(current,{...release,actorId:"member-1",actorRole:member.effectiveRole},"Founder/CEO"),/role is missing or does not match/i);
   const missing=effectiveCategoryReviewRole({configuredRole:"",membershipRole:"owner",
-    actorId:"founder-1",trustedOwnerIds:["founder-1"]});
+    configuredPrincipalId:"",actorId:"founder-1"});
   assert.throws(()=>authorizeCategoryReviewRelease(current,{...release,actorRole:missing.effectiveRole},""),/role is missing or does not match/i);
-  const duplicateOwners=effectiveCategoryReviewRole({configuredRole:"Founder/CEO",membershipRole:"owner",
-    actorId:"founder-1",trustedOwnerIds:["founder-1","owner-2"]});
-  assert.equal(duplicateOwners.effectiveRole,"owner");
+  const missingPrincipal=effectiveCategoryReviewRole({configuredRole:"Founder/CEO",membershipRole:"owner",
+    configuredPrincipalId:"",actorId:"founder-1"});
+  assert.equal(missingPrincipal.effectiveRole,"owner");
+  const anotherOwner=effectiveCategoryReviewRole({configuredRole:"Founder/CEO",membershipRole:"owner",
+    configuredPrincipalId:"founder-1",actorId:"owner-2"});
+  assert.equal(anotherOwner.effectiveRole,"owner");
   assert.equal(effectiveCategoryReviewRole({configuredRole:" Founder/CEO ",membershipRole:"owner",
-    actorId:"founder-1",trustedOwnerIds:["founder-1"]}).effectiveRole,"owner");
+    configuredPrincipalId:"founder-1",actorId:"founder-1"}).effectiveRole,"owner");
 });
 
-test("C5 release route audits effective Founder role and underlying trusted owner membership", () => {
+test("C5 release route audits effective Founder role and explicit principal binding", () => {
   const source=fs.readFileSync(new URL("../app/api/dashboard/campaign/product/category-review/release/route.ts",import.meta.url),"utf8");
-  assert.match(source,/org_members WHERE org_id=\$1 AND role='owner'[\s\S]*FOR SHARE/);
   assert.match(source,/effective_authorized_role:roleBinding\.effectiveRole/);
   assert.match(source,/underlying_membership_role:roleBinding\.membershipRole/);
-  assert.match(source,/underlying_owner_user_id:roleBinding\.ownerUserId/);
+  assert.match(source,/founder_principal_id:roleBinding\.founderPrincipalId/);
+  assert.match(source,/C5_AUTHORIZED_HUMAN_REVIEW_PRINCIPAL_ID/);
   assert.match(source,/resolvedCategory=requireCanonicalC5Category\(body\.resolved_category\)/);
   assert.match(source,/SET category=\$1,category_review_state='CLEAR'/);
-  assert.match(source,/retailScope \? "org_id IS NULL AND user_id=\$2"/);
+  assert.match(source,/retailScope \? "org_id IS NULL"/);
 });
 
 test("C5 release requires one canonical resolved category and CLEAR cannot bind default",()=>{
@@ -159,25 +163,34 @@ test("C5 W1 guard precedes PostgreSQL first execution transition",()=>{
   assert.ok(entry.indexOf("requireCurrentJobEvidence({") < entry.indexOf('jobs.transition(jobId, "GENERATING_VISUAL"'));
 });
 
+test("C5 ordinary category mutation cannot carry a prior Founder release to another category",()=>{
+  const released={state:"CLEAR" as const,reason:null,reviewedBy:"founder-1",reviewedRole:"Founder/CEO",
+    reviewedAt:"2026-08-27T19:00:00.000Z",version:2};
+  assert.deepEqual(categoryReviewForMutation(released,"food","KNOWN","beauty"),{
+    state:"QUARANTINED",reason:"CATEGORY_UNKNOWN",reviewedBy:null,reviewedRole:null,reviewedAt:null,version:3,
+  });
+  assert.deepEqual(categoryReviewForMutation(released,"beauty","KNOWN","beauty"),released);
+});
+
 test("C5 actual release handler is Founder-only, durable, restart-safe, and reauthorizes idempotency",async(t)=>{
   t.after(()=>setCategoryReviewReleaseDependenciesForTests());
-  const row={user_id:"founder-1",category:"default",category_review_state:"QUARANTINED" as const,
+  const row={user_id:"customer-9",category:"default",category_review_state:"QUARANTINED" as const,
     category_review_reason:"CATEGORY_UNKNOWN" as const,category_reviewed_by:null as string|null,
     category_reviewed_role:null as string|null,category_reviewed_at:null as string|null,category_review_version:1};
   const audits:Array<{actor:string;meta:Record<string,unknown>}>=[];
   let configuredRole="";
+  let configuredPrincipalId="";
   let updates=0;
   const client={
     async query(sql:string,values:unknown[]=[]){
       if (sql === "BEGIN" || sql === "COMMIT" || sql === "ROLLBACK") return {rows:[],rowCount:null};
-      if (sql.includes("FROM org_members")) return {rows:[{user_id:"founder-1"}],rowCount:1};
       if (sql.includes("FROM products")) return {rows:[{...row}],rowCount:1};
       if (sql.includes("FROM audit_log")) {
         const prior=[...audits].reverse().find((item)=>item.actor === values[1]);
         return {rows:prior ? [{meta:prior.meta}] : [],rowCount:prior ? 1 : 0};
       }
       if (sql.includes("UPDATE products SET category=")) {
-        if (row.category_review_state !== "QUARANTINED" || row.category_review_version !== values[7]) return {rows:[],rowCount:0};
+        if (row.category_review_state !== "QUARANTINED" || row.category_review_version !== values[6]) return {rows:[],rowCount:0};
         row.category=String(values[0]); row.category_review_state="CLEAR" as never;
         row.category_review_reason=null as never; row.category_reviewed_by=String(values[1]);
         row.category_reviewed_role=String(values[2]); row.category_reviewed_at=String(values[3]);
@@ -197,6 +210,7 @@ test("C5 actual release handler is Founder-only, durable, restart-safe, and reau
     withProductEvidenceMutationLock:async(_id,operation)=>operation(),
     getPool:(()=>({connect:async()=>client})) as never,databaseUrl:()=>"test",
     configuredRole:()=>configuredRole,now:()=>"2026-08-27T19:00:00.000Z",uuid:()=>"00000000-0000-4000-8000-000000000001",
+    configuredPrincipalId:()=>configuredPrincipalId,
   });
   const request=()=>new Request("http://local/api/category-review/release",{method:"POST",headers:{"content-type":"application/json"},
     body:JSON.stringify({product_id:"retail-1",scope:"retail",resolved_category:"beauty",reason:"Founder verified exact category",expected_version:1})});
@@ -206,6 +220,10 @@ test("C5 actual release handler is Founder-only, durable, restart-safe, and reau
   assert.equal(updates,0); assert.equal(audits.length,0);
 
   configuredRole="Founder/CEO";
+  const missingPrincipal=await releaseCategoryReview(request());
+  assert.equal(missingPrincipal.status,403);
+  assert.equal(updates,0); assert.equal(audits.length,0);
+  configuredPrincipalId="founder-1";
   const released=await releaseCategoryReview(request());
   assert.equal(released.status,200);
   assert.equal(updates,1); assert.equal(audits.length,1);

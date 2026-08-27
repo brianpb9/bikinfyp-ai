@@ -38,7 +38,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       reviewedBy:product.category_reviewed_by ?? null,reviewedRole:product.category_reviewed_role ?? null,
       reviewedAt:product.category_reviewed_at == null ? null : canonicalProductTypeTimestamp(product.category_reviewed_at),
       version:product.category_review_version ?? 1,
-    },category,parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
+    },category,parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"),product.category);
     const productTypeToken = String(body.product_type ?? product.product_type_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmationTouched = body.confirmed_product_type !== undefined;
     const confirmedProductTypeToken = String(confirmationTouched ? body.confirmed_product_type : product.product_type_confirmed_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");

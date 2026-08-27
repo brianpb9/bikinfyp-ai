@@ -1,17 +1,10 @@
-import crypto from "node:crypto";
-import { Pool } from "pg";
 import { ERR, errorResponse } from "@/lib/errors";
-import { config } from "@/lib/config";
-import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { extractFromUrl, cleanProductName } from "@/lib/extract";
-import { downloadProductImages } from "@/lib/product-image-download";
+import { cleanProductName } from "@/lib/extract";
 import { createSignedUrl } from "@/lib/signed-url";
-import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
-import { getPool } from "@/lib/postgres/pool";
 import { sanitizeClaims } from "@/lib/media/claim-overlay";
 import { buildAuthoritativeTypeBoundaryInput, categoryReviewForMutation, deriveCategoryReview, deriveHeuristicCategoryReview, parseStructuredCategoryOutcome, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
-import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
+import { campaignProductDependencies } from "@/lib/campaign-product-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -64,13 +57,14 @@ function productPayload(product: { id: string; name: string; price_idr: number; 
 // brand tidak boleh mentok cuma karena marketplace-nya memblokir scraper).
 export async function POST(req: Request) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
+    const deps=campaignProductDependencies();
+    if (!deps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
+    const { user, membership } = await deps.requireOrgContextApi(req);
     const body = await req.json().catch(() => ({}));
     const url = typeof body.url === "string" ? body.url.trim() : "";
     const productTypeToken = String(body.product_type ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmedProductTypeToken = String(body.confirmed_product_type ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
-    const confirmedAt = new Date().toISOString();
+    const confirmedAt = deps.now();
 
     return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "campaign-product.product_type", token: productTypeToken, version: 1 },
@@ -81,21 +75,21 @@ export async function POST(req: Request) {
     ), async () => {
 
     if (url) {
-      if (!(await pgCanExtract(user.id))) {
+      if (!(await deps.pgCanExtract(user.id))) {
         throw ERR.BAD_REQUEST("Batas ekstraksi link tercapai (10 per 15 menit). Tunggu sebentar atau isi manual.", "Extract rate limited.");
       }
-      await pgAudit(user.id, "product.extract", "products", null, { url: url.slice(0, 120), campaign: true });
-      const result = await extractFromUrl(url);
+      await deps.pgAudit(user.id, "product.extract", "products", null, { url: url.slice(0, 120), campaign: true });
+      const result = await deps.extractFromUrl(url);
       if (!result.extracted) {
         // BUKAN error — brand tetap lanjut lewat jalur manual. Client
         // menampilkan form kosong dengan pesan ini sebagai catatan.
         return Response.json({ extracted: false, reason: result.reason ?? null, message: result.message ?? "Link-nya belum bisa kami baca. Isi manual aja ya." });
       }
-      const productId = crypto.randomUUID();
+      const productId = deps.uuid();
       const category = result.categoryGuess ?? "default";
       const categoryReview = deriveHeuristicCategoryReview(category);
       if (categoryReview.state === "QUARANTINED") {
-        const product = await smokeCreateProduct(user.id, {
+        const product = await deps.smokeCreateProduct(user.id, {
           sourceUrl:url,name:cleanProductName(result.name ?? "Produk dari link"),priceIdr:result.priceIdr ?? 0,
           category,images:[],productVisualDesc:result.visualDesc ?? null,
           rawMeta:{og:{price:result.priceIdr,original:result.originalPriceIdr}},orgId:membership.org_id,
@@ -104,13 +98,13 @@ export async function POST(req: Request) {
           categoryReviewState:categoryReview.state,categoryReviewReason:categoryReview.reason,
           categoryReviewVersion:categoryReview.version,
         },productId);
-        await pgAudit(user.id,"product.category_quarantined","products",productId,
+        await deps.pgAudit(user.id,"product.category_quarantined","products",productId,
           {campaign:true,reason:categoryReview.reason,category,remote_image_downloads:0});
         return Response.json({extracted:true,...productPayload(product),images_downloaded:0},{status:202});
       }
-      const images = result.imageUrls?.length ? await downloadProductImages(productId, result.imageUrls, url) : [];
+      const images = result.imageUrls?.length ? await deps.downloadProductImages(productId, result.imageUrls, url) : [];
       const promoBefore = result.originalPriceIdr && result.priceIdr && result.originalPriceIdr > result.priceIdr ? result.originalPriceIdr : null;
-      const product = await smokeCreateProduct(
+      const product = await deps.smokeCreateProduct(
         user.id,
         {
           sourceUrl: url, name: cleanProductName(result.name ?? "Produk dari link"), priceIdr: result.priceIdr ?? 0,
@@ -124,7 +118,7 @@ export async function POST(req: Request) {
         },
         productId
       );
-      await pgAudit(user.id, "product.extracted", "products", productId, {
+      await deps.pgAudit(user.id, "product.extracted", "products", productId, {
         reason: "ok", price: result.priceIdr, campaign: true, product_type: productTypeToken,
         product_type_state: "CONFIRMED", product_type_confirmation: "USER_SELF_ASSERTION",
         product_type_confirmed_by: user.id, product_type_confirmed_at: confirmedAt, product_type_version: 1,
@@ -137,7 +131,7 @@ export async function POST(req: Request) {
     const priceIdr = Number.isFinite(Number(body.price_idr)) ? Math.max(0, Math.round(Number(body.price_idr))) : 0;
     const category = typeof body.category === "string" && body.category ? body.category : "default";
     const categoryReview = deriveCategoryReview(category, parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
-    const product = await smokeCreateProduct(user.id, {
+    const product = await deps.smokeCreateProduct(user.id, {
       sourceUrl: null, name, priceIdr, category,
       images: [], productVisualDesc: null, orgId: membership.org_id,
       productTypeToken, productTypeConfirmedToken: confirmedProductTypeToken,
@@ -145,7 +139,7 @@ export async function POST(req: Request) {
       categoryReviewState:categoryReview.state,categoryReviewReason:categoryReview.reason,
       categoryReviewVersion:categoryReview.version,
     });
-    await pgAudit(user.id, "product.created", "products", product.id, {
+    await deps.pgAudit(user.id, "product.created", "products", product.id, {
       manual: true, campaign: true, product_type: productTypeToken,
       product_type_state: "CONFIRMED", product_type_confirmation: "USER_SELF_ASSERTION",
       product_type_confirmed_by: user.id, product_type_confirmed_at: confirmedAt, product_type_version: 1,
@@ -165,17 +159,18 @@ export async function POST(req: Request) {
 // yang memang milik langkah ini.
 export async function PATCH(req: Request) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
+    const deps=campaignProductDependencies();
+    if (!deps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
+    const { user, membership } = await deps.requireOrgContextApi(req);
     const body = await req.json().catch(() => ({}));
     const productId = typeof body.product_id === "string" ? body.product_id : "";
     if (!productId) throw ERR.BAD_REQUEST("product_id wajib diisi.", "product_id is required.");
-    return await withProductEvidenceMutationLock(productId, async () => {
+    return await deps.withProductEvidenceMutationLock(productId, async () => {
 
     // Per-ORG, bukan per-user. Produk dashboard dibuat satu anggota, dibayar
     // dari dompet organisasi, dan disunting seluruh tim — pemeriksaan per-user
     // menolak rekan satu tim atas produk yang jelas ada di daftar mereka.
-    const existing = await smokeGetOrgProduct(membership.org_id, productId);
+    const existing = await deps.smokeGetOrgProduct(membership.org_id, productId);
     if (!existing) throw ERR.NOT_FOUND("Produknya");
 
     const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : existing.name;
@@ -187,13 +182,13 @@ export async function PATCH(req: Request) {
       reviewedBy:existing.category_reviewed_by ?? null,reviewedRole:existing.category_reviewed_role ?? null,
       reviewedAt:existing.category_reviewed_at == null ? null : canonicalProductTypeTimestamp(existing.category_reviewed_at),
       version:existing.category_review_version ?? 1,
-    },category,parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
+    },category,parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"),existing.category);
     const productTypeToken = String(body.product_type ?? existing.product_type_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmationTouched = body.confirmed_product_type !== undefined;
     const confirmedProductTypeToken = String(confirmationTouched ? body.confirmed_product_type : existing.product_type_confirmed_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmedBy = confirmationTouched ? user.id : String(existing.product_type_confirmed_by ?? "");
     const confirmedAt = confirmationTouched
-      ? new Date().toISOString()
+      ? deps.now()
       : canonicalProductTypeTimestamp(existing.product_type_confirmed_at);
     const visualDesc = typeof body.product_visual_desc === "string" ? body.product_visual_desc.trim().slice(0, 600) || null : existing.product_visual_desc ?? null;
     const brandBrief = typeof body.brand_brief === "string" ? body.brand_brief.trim().slice(0, 1200) || null : existing.brand_brief ?? null;
@@ -224,7 +219,7 @@ export async function PATCH(req: Request) {
         confirmedAt, version: 1, provenance: "USER_SELF_ASSERTION",
       } : null,
     ), async () => {
-    const pool = getPool(config.databaseUrl);
+    const pool = deps.getPool(deps.databaseUrl());
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -264,17 +259,17 @@ export async function PATCH(req: Request) {
       if (categoryReview.state === "QUARANTINED") await client.query(
         `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at)
          VALUES ($1,$2,'product.category_quarantined','products',$3,$4,$5)`,
-        [crypto.randomUUID(),user.id,productId,JSON.stringify({campaign:true,reason:categoryReview.reason,
-          category,version:categoryReview.version}),new Date().toISOString()]);
+        [deps.uuid(),user.id,productId,JSON.stringify({campaign:true,reason:categoryReview.reason,
+          category,version:categoryReview.version}),deps.now()]);
       await client.query("COMMIT");
     } catch(error) {
       await client.query("ROLLBACK").catch(()=>undefined);
       throw error;
     } finally { client.release(); }
-    const updated = await smokeGetOrgProduct(membership.org_id, productId);
+    const updated = await deps.smokeGetOrgProduct(membership.org_id, productId);
     if (!updated) throw ERR.NOT_FOUND("Produknya");
     const updatedConfirmedAt = canonicalProductTypeTimestamp(updated.product_type_confirmed_at);
-    await pgAudit(user.id, "product.updated", "products", productId, {
+    await deps.pgAudit(user.id, "product.updated", "products", productId, {
       campaign: true, product_type: updated.product_type_token,
       product_type_state: updated.product_type_state,
       product_type_confirmation: updated.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : null,

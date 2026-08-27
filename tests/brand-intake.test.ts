@@ -156,6 +156,28 @@ test("E3 HTTP category default re-quarantines a previously CLEAR retail product"
   assert.equal((getDb().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_id=? AND action='product.category_quarantined'").get(id) as {n:number}).n,1);
 });
 
+test("E3 HTTP canonical category change invalidates stale Founder release provenance",async()=>{
+  const id=uuid();
+  const releasedAt=now();
+  getDb().prepare(`INSERT INTO products (id,user_id,name,price_idr,category,product_type_token,
+    product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,product_type_version,
+    product_type_state,category_review_state,category_review_reason,category_reviewed_by,
+    category_reviewed_role,category_reviewed_at,category_review_version,images,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,1,'CONFIRMED','CLEAR',NULL,?,?,?,2,'[]',?)`).run(
+      id,user.id,"Serum Released",60_000,"beauty","serum wajah","serum wajah",user.id,now(),
+      "founder-1","Founder/CEO",releasedAt,now());
+  const res=await patchProduct(jsonReq(`http://localhost/api/products/${id}`,"PATCH",{
+    category:"health",category_outcome:"KNOWN",
+  }),{params:Promise.resolve({id})});
+  assert.equal(res.status,202,await res.clone().text());
+  const row=getDb().prepare(`SELECT category,category_review_state,category_review_reason,
+    category_reviewed_by,category_reviewed_role,category_reviewed_at,category_review_version
+    FROM products WHERE id=?`).get(id) as Record<string,unknown>;
+  assert.deepEqual(row,{category:"health",category_review_state:"QUARANTINED",
+    category_review_reason:"CATEGORY_UNKNOWN",category_reviewed_by:null,category_reviewed_role:null,
+    category_reviewed_at:null,category_review_version:3});
+});
+
 test("usulMerekDariNama menawarkan token merek, bukan deskriptor generik", () => {
   const usul = usulMerekDariNama("Serum Wajah Scarlett Brightening 30ml");
   assert.ok(usul, "harus ada usulan");

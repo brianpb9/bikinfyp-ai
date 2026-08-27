@@ -76,6 +76,21 @@ const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
 function assertUrl() { if (!/^postgres(?:ql)?:\/\//i.test(config.databaseUrl)) throw new Error("DATABASE_URL PostgreSQL wajib untuk worker pg."); return config.databaseUrl; }
 
+const processWorkerProductionDependencies={
+  databaseUrl:assertUrl,
+  createJobs:(databaseUrl:string)=>new PgJobsRepository(databaseUrl,{stateTimeoutsMin:config.stateTimeoutsMin}),
+  getPool,
+  createCredits:(databaseUrl:string)=>new PgCreditPaymentRepository(databaseUrl),
+};
+type ProcessWorkerDependencies=typeof processWorkerProductionDependencies;
+let processWorkerDependencyOverrides:Partial<ProcessWorkerDependencies>|undefined;
+export function setProcessPostgresWorkerDependenciesForTests(overrides?:Partial<ProcessWorkerDependencies>):void {
+  processWorkerDependencyOverrides=overrides;
+}
+function processWorkerDependencies():ProcessWorkerDependencies {
+  return {...processWorkerProductionDependencies,...processWorkerDependencyOverrides};
+}
+
 /** Provider dialogue is deliberately absent for neutral Story Ads. Keeping
  * embedded audio there would produce a paid silent video, so those jobs must
  * take the external narration branch even when their format is talking_head. */
@@ -311,9 +326,10 @@ async function siapkanFrameTurunan(
 }
 
 export async function processPostgresJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
-  const databaseUrl = assertUrl();
-  const jobs = new PgJobsRepository(databaseUrl, { stateTimeoutsMin: config.stateTimeoutsMin });
-  const pool = getPool(databaseUrl);
+  const deps=processWorkerDependencies();
+  const databaseUrl = deps.databaseUrl();
+  const jobs = deps.createJobs(databaseUrl);
+  const pool = deps.getPool(databaseUrl);
   try {
     // j.* sudah bawa org_id (kolom asli tabel jobs, M1) — WorkerRow.org_id
     // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
@@ -357,7 +373,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     } else {
       await runProviderPipeline(row, jobs, pool);
     }
-    const credits = new PgCreditPaymentRepository(databaseUrl);
+    const credits = deps.createCredits(databaseUrl);
     try { await credits.captureCredits(row.org_id ? { userId: row.user_id, orgId: row.org_id } : row.user_id, jobId); } finally { await credits.close(); }
   } catch (error) {
     if (options.retryViaQueue) throw error;
