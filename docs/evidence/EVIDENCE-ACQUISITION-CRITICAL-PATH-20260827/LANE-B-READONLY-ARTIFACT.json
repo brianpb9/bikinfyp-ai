@@ -1,0 +1,80 @@
+{
+  "schema": "lane-b-readonly-artifact/v1",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "status": "PENDING_INDEPENDENT_REVIEW",
+  "exact_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "source_bundle_manifest_sha256": "4e35408aae195c7c7592536595116a724fca481ab223e2893d5a0c1d9c11b1a2",
+  "source_file_count": 17,
+  "browser": {
+    "result": "PASS",
+    "claim": "managed page hydrated and interactive, not static-render-only",
+    "source_sha256": "66ccdd59d066578811aff36c73802cb59bbdaf18647e15c0941d65116d027925"
+  },
+  "baseline": {
+    "branch": "staging/exact-46499ac-20260827",
+    "web_service": "srv-d9n28tijnfac73a87lt0",
+    "worker_service": "srv-d9n28ue417fc73ch2b60",
+    "auto_deploy": "no",
+    "suspended": "not_suspended",
+    "maintenance": false,
+    "web_deploy": "dep-da85dqjtqb8s73du3tj0",
+    "worker_deploy": "dep-da85ffijnfac73crk8a0",
+    "health_body_sha256": "67b3eb0381a537ee4125de1bf360b7448d51e7106c44dcaff433fe7f8cf312d4"
+  },
+  "controlled_failure_recovery": {
+    "mechanism": "authorized staging maintenance mode",
+    "maintenance_enabled_at": "2026-08-27T15:34:39.119Z",
+    "failure_sample": {
+      "observed_at": "2026-08-27T15:34:42Z",
+      "http_status": 503,
+      "body_sha256": "af51f998b76af7e25f45b40bc730c0acd965285ecb9a427655fdecb7193f365d"
+    },
+    "maintenance_disabled_at": "2026-08-27T15:34:42.706Z",
+    "recovery_samples": [
+      {"observed_at":"2026-08-27T15:35:02Z","http_status":200,"body_sha256":"67b3eb0381a537ee4125de1bf360b7448d51e7106c44dcaff433fe7f8cf312d4"},
+      {"observed_at":"2026-08-27T15:35:07Z","http_status":200,"body_sha256":"67b3eb0381a537ee4125de1bf360b7448d51e7106c44dcaff433fe7f8cf312d4"},
+      {"observed_at":"2026-08-27T15:35:12Z","http_status":200,"body_sha256":"67b3eb0381a537ee4125de1bf360b7448d51e7106c44dcaff433fe7f8cf312d4"}
+    ],
+    "restored_control_plane": {
+      "observed_at": "2026-08-27T15:35:12.953Z",
+      "branch": "staging/exact-46499ac-20260827",
+      "auto_deploy": "no",
+      "suspended": "not_suspended",
+      "maintenance": false
+    },
+    "web_deploy_unchanged": true,
+    "worker_deploy_unchanged": true,
+    "exact_sha_unchanged": true
+  },
+  "kpi": {
+    "job_id": "job-da85hoek1f9s73cbt11g",
+    "service_id": "srv-d9n28ue417fc73ch2b60",
+    "command": "node scripts/laporan-nsfw.mjs 7",
+    "status": "succeeded",
+    "started_at": "2026-08-27T15:33:54Z",
+    "finished_at": "2026-08-27T15:34:21Z",
+    "window_days": 7,
+    "sample_n": 0,
+    "classification": "NON_REPRESENTATIVE",
+    "point_eligible": false,
+    "source_status_sha256": "1a868be75e5633c08d4255d2bb1fa818ea1f6807a6a4fbe97ecd5b1d5433c28c",
+    "source_log_sha256": "ae4bd0e0ca198b3ccec95ad288784e5ad3d33ba1b00532d59a1d90ddc0a71730"
+  },
+  "limits": {
+    "full_provider_e2e": "NOT_RUN_REAL_BYTEPLUS_COST_AND_STALE_RUNNER_LACKS_C2_PROOF",
+    "pitr_restore": "BLOCKED_FREE_POSTGRES_PLAN_HAS_NO_PITR_HA",
+    "operational_cycle": "NOT_RUN",
+    "paired_legacy_population_audit": "NOT_RUN",
+    "representative_kpi": "NOT_PROVEN_N_0"
+  },
+  "safety": {
+    "staging_only": true,
+    "production_mutation": false,
+    "provider_call": false,
+    "payment_or_real_money": false,
+    "final_maintenance": false,
+    "final_intake": "open",
+    "payments_env": "sandbox",
+    "payments_live": false
+  }
+}

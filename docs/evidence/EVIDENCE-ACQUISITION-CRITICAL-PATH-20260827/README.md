@@ -3,22 +3,45 @@
 Task: `EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827`
 
 This independently reviewable slice freezes the existing 13-row board and
-turns the 80/100 gates into a deterministic dependency contract. It awards no
-new point: an evidence receipt may close a named slot at its exact tier, but a
-row score can change only through an explicit authority receipt naming the
-row, old/new score, reason, and supporting evidence receipts.
+turns the score-80 gate into a deterministic, non-compensable dependency
+contract. `SCORE-80-POINT-MATRIX.json` defines the exact 27 raw points from
+77 to 104 as one-point, no-partial, strictly cumulative tokens inside the
+existing 13 rows. Weights remain 10 per row and cannot be redistributed. No
+token is currently awarded, so the certified score remains 58.
 
-The authorized source defines 80 and 100 gates but does not allocate the
-80-to-100 interval at 90. The contract therefore makes 90
-`UNDEFINED_AUTHORITY_CHOICE_REQUIRED`; it cannot be certified by interpolation.
+The current Founder direction limits work to the score-80 critical path. It
+approves the C5 fail-closed manual-review policy, approves a tightly bounded
+payment canary only in principle and only after prerequisites, and approves a
+separated release model while leaving role names missing. It does not
+substitute for implementation or actual Founder, payment-owner, release-owner,
+or independent-review receipts. No 90 acquisition work is authorized.
+
+`PITR_REQUIRED_FOR_80=false`: the canonical rubric names backup/PITR restore as
+an additional 100 requirement, not an 80 requirement. This is not a waiver of
+controlled recovery proof at 80 and does not remove PITR from 100.
 
 Lane A is marked external/in progress and Lane B depends on Lane A. A receipt
 registry covers all 13 slots and is intentionally empty until immutable
 sanitized artifacts are available. A slot can become `VERIFIED` only through a
 PASS receipt binding its exact tier, required authority class, committed
 artifact path+SHA-256, exact Git SHA, and PASS receipt IDs for every dependency.
+The verifier reads artifact bytes with `git show exact_sha:artifact_path`,
+requires that commit in reviewed ancestry, resolves the authority receipt
+against `AUTHORITY-REGISTRY.json`, and checks the exact dependency-slot set.
+For M/Q/I/U/K/O, dependency `80` expands to A/L/C5/P/G/B/R.
 This slice performs no deploy and cannot conflict with Lane A.
 Production, public launch, and real money remain OFF.
+
+`LANE-A-READONLY-ARTIFACT.json` is an independently refreshed sanitized
+artifact. It remains `PENDING_INDEPENDENT_REVIEW`, and slot A remains
+unverified with an empty receipt registry until an exact-SHA Reviewer PASS is
+consumed and bound in a follow-up commit.
+
+`LANE-B-READONLY-ARTIFACT.json` records the current-SHA managed browser PASS,
+controlled 503→recovery drill, restored exact control plane, and a successful
+seven-day KPI query. The KPI has `n=0`, is explicitly non-representative and
+point-ineligible. Paid provider E2E, PITR, operational cycle, and paired legacy
+audit remain unproven.
 
 Run `node verify.mjs`. It binds exact source rows, arithmetic, Git ancestry,
 thresholds, dependency acyclicity, authority rules, safety boundaries,

@@ -1,0 +1,75 @@
+{
+  "schema": "score-80-point-matrix/v1",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "scope": "SCORE_80_ONLY",
+  "current_raw": 77,
+  "target_raw": 104,
+  "required_raw_delta": 27,
+  "rules": {
+    "token_value_raw_points": 1,
+    "partial_tokens_allowed": false,
+    "strictly_cumulative_within_row": true,
+    "max_score_per_row": 10,
+    "weight_redistribution_allowed": false,
+    "exact_sha_evidence_and_authority_receipt_required": true,
+    "arithmetic_alone_does_not_close_noncompensable_80_slots": true
+  },
+  "rows": [
+    {"row":"Money safety","current":9,"target_80":10,"delta":1,"tokens":[
+      {"token_id":"MONEY-10","target_score":10,"evidence":"independent exact-SHA PASS that production/public/real-money remain disabled and no payment fail-open exists","authority_class":"INDEPENDENT_REVIEWER_PASS"}
+    ]},
+    {"row":"Auth intent & failure path","current":7,"target_80":10,"delta":3,"tokens":[
+      {"token_id":"AUTH-08","target_score":8,"evidence":"managed deployed OTP success plus invalid, expired, and replay rejection","authority_class":"REVIEWER_PASS"},
+      {"token_id":"AUTH-09","target_score":9,"evidence":"mobile browser recovery, retry-limit, and safe-message PASS","authority_class":"REVIEWER_PASS"},
+      {"token_id":"AUTH-10","target_score":10,"evidence":"controlled deployed OTP through delivery/refund trace has no auth P0/P1 partial","authority_class":"INDEPENDENT_REVIEWER_PASS"}
+    ]},
+    {"row":"Mobile UI 375","current":7,"target_80":10,"delta":3,"tokens":[
+      {"token_id":"MOBILE-08","target_score":8,"evidence":"375px managed browser PASS for every required core-flow screen","authority_class":"REVIEWER_PASS"},
+      {"token_id":"MOBILE-09","target_score":9,"evidence":"375px failure, empty, loading, keyboard, and recovery-state visual PASS","authority_class":"REVIEWER_PASS"},
+      {"token_id":"MOBILE-10","target_score":10,"evidence":"controlled deployed end-to-end mobile trace has no P0/P1 mobile defect","authority_class":"INDEPENDENT_REVIEWER_PASS"}
+    ]},
+    {"row":"Hydration/interaction canary CI","current":8,"target_80":10,"delta":2,"tokens":[
+      {"token_id":"CANARY-09","target_score":9,"evidence":"CI canary proves hydration and required interaction paths on exact reviewed SHA","authority_class":"QA_RELEASE_REVIEWER_PASS"},
+      {"token_id":"CANARY-10","target_score":10,"evidence":"managed canary plus controlled failure/recovery proves deterministic deployed behavior","authority_class":"QA_RELEASE_REVIEWER_PASS"}
+    ]},
+    {"row":"Content engine standard","current":7,"target_80":8,"delta":1,"tokens":[
+      {"token_id":"CONTENT-08","target_score":8,"evidence":"exact-SHA fixture and deployed trace matrix passes required generation and fail-closed paths","authority_class":"REVIEWER_PASS"}
+    ]},
+    {"row":"Brand fidelity","current":6,"target_80":8,"delta":2,"tokens":[
+      {"token_id":"BRAND-07","target_score":7,"evidence":"Founder-approved benchmark and deterministic visual rubric are committed","authority_class":"FOUNDER_DECISION_AND_REVIEWER_PASS"},
+      {"token_id":"BRAND-08","target_score":8,"evidence":"managed representative outputs independently pass the committed brand rubric","authority_class":"INDEPENDENT_REVIEWER_PASS"}
+    ]},
+    {"row":"Anti-slop produksi","current":7,"target_80":9,"delta":2,"tokens":[
+      {"token_id":"SLOP-08","target_score":8,"evidence":"exact-SHA anti-slop fixtures reject every approved defect class","authority_class":"REVIEWER_PASS"},
+      {"token_id":"SLOP-09","target_score":9,"evidence":"managed representative output audit passes approved anti-slop rubric","authority_class":"INDEPENDENT_REVIEWER_PASS"}
+    ]},
+    {"row":"Prompt/verdict archive","current":8,"target_80":10,"delta":2,"tokens":[
+      {"token_id":"ARCHIVE-09","target_score":9,"evidence":"managed trace correlates prompt, model/version, verdict, artifact, and exact request","authority_class":"REVIEWER_PASS"},
+      {"token_id":"ARCHIVE-10","target_score":10,"evidence":"controlled deployed trace proves complete retention, retrieval, and redaction behavior","authority_class":"INDEPENDENT_REVIEWER_PASS"}
+    ]},
+    {"row":"NSFW rejection","current":6,"target_80":9,"delta":3,"tokens":[
+      {"token_id":"NSFW-07","target_score":7,"evidence":"exact-SHA deterministic fixtures reject all approved NSFW classes","authority_class":"REVIEWER_PASS"},
+      {"token_id":"NSFW-08","target_score":8,"evidence":"managed multimodal rejection paths pass with safe user handling","authority_class":"REVIEWER_PASS"},
+      {"token_id":"NSFW-09","target_score":9,"evidence":"representative provider-backed controlled sample meets approved rejection thresholds","authority_class":"INDEPENDENT_REVIEWER_PASS"}
+    ]},
+    {"row":"Payments (Midtrans sandbox)","current":2,"target_80":9,"delta":7,"tokens":[
+      {"token_id":"PAY-03","target_score":3,"evidence":"merchant/provider readiness receipt and known internal test order exist","authority_class":"PAYMENT_OWNER_AND_REVIEWER_PASS"},
+      {"token_id":"PAY-04","target_score":4,"evidence":"authoritative Founder price/COGS record contains every required field","authority_class":"FOUNDER_DECISION"},
+      {"token_id":"PAY-05","target_score":5,"evidence":"sandbox create plus valid/invalid callback signature matrix passes","authority_class":"PAYMENT_OWNER_AND_REVIEWER_PASS"},
+      {"token_id":"PAY-06","target_score":6,"evidence":"known-order settlement, duplicate, late/out-of-order, wrong-amount, expired/cancelled/unknown matrix passes","authority_class":"PAYMENT_OWNER_AND_REVIEWER_PASS"},
+      {"token_id":"PAY-07","target_score":7,"evidence":"one authorized internal canary is exactly-once and ambiguous outcome stops without retry","authority_class":"PAYMENT_OWNER_AND_REVIEWER_PASS"},
+      {"token_id":"PAY-08","target_score":8,"evidence":"provider, database, and zero-difference reconciliation receipts bind the canary; settlement/refund fail closed","authority_class":"PAYMENT_OWNER_AND_REVIEWER_PASS"},
+      {"token_id":"PAY-09","target_score":9,"evidence":"Founder explicitly sets PAYMENTS_GO_LIVE and release controls verify public default remains closed until activation","authority_class":"FOUNDER_DECISION_AND_REVIEWER_PASS"}
+    ]},
+    {"row":"Legal/PDP","current":2,"target_80":2,"delta":0,"tokens":[]},
+    {"row":"DR/monitoring/incident owner","current":2,"target_80":2,"delta":0,"tokens":[]},
+    {"row":"Landing/pricing consistency","current":6,"target_80":7,"delta":1,"tokens":[
+      {"token_id":"LANDING-07","target_score":7,"evidence":"Founder-approved price/COGS and claims source of truth matches deployed landing, checkout, receipt, and product surfaces","authority_class":"FOUNDER_DECISION_AND_REVIEWER_PASS"}
+    ]}
+  ],
+  "gate_classification": {
+    "80_AND_90_INHERITED": ["A","L","C5","P","G","B","R"],
+    "90_ONLY_NOT_AUTHORIZED_NOW": ["M","Q","I","U","K","O"],
+    "BOTH_NOTE": "A 90 claim inherits every 80 slot, but no 90 acquisition work is authorized in this task."
+  }
+}

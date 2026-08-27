@@ -1,0 +1,28 @@
+{
+  "schema": "evidence-authority-registry/v1",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "required_entry_fields": [
+    "authority_receipt_id",
+    "slot_id",
+    "authority_class",
+    "subject",
+    "issuer",
+    "decision",
+    "artifact_path",
+    "artifact_sha256",
+    "exact_sha"
+  ],
+  "required_decision": "PASS",
+  "allowed_issuers_by_class": {
+    "REVIEWER_PASS": ["reviewer"],
+    "FOUNDER_DECISION_AND_REVIEWER_PASS": ["founder+reviewer"],
+    "PAYMENT_OWNER_AND_REVIEWER_PASS": ["payment-owner+reviewer"],
+    "FOUNDER_DECISION": ["founder"],
+    "RELEASE_OWNER_AND_REVIEWER_PASS": ["release-owner+reviewer"],
+    "QA_RELEASE_REVIEWER_PASS": ["qa-release-reviewer"],
+    "COUNSEL_SIGNOFF": ["counsel"],
+    "INCIDENT_OWNER_AND_REVIEWER_PASS": ["incident-owner+reviewer"],
+    "INDEPENDENT_REVIEWER_PASS": ["independent-reviewer"]
+  },
+  "entries": []
+}

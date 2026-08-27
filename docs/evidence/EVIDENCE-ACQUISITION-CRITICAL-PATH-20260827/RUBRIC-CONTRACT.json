@@ -27,18 +27,19 @@
     "certified_score": 58
   },
   "point_rule": {
-    "evidence_receipt_changes_points": false,
+    "evidence_receipt_changes_points": true,
     "default_delta": 0,
-    "row_adjustment_requires": [
+    "token_award_requires": [
       "authority_receipt_id",
-      "authorized_row",
-      "prior_score",
-      "new_score",
-      "reason",
+      "token_id",
       "evidence_receipt_ids"
     ],
     "missing_authority_result": "NO_SCORE_CHANGE",
-    "weights_may_not_be_redistributed": true
+    "weights_may_not_be_redistributed": true,
+    "partial_tokens_allowed": false,
+    "token_value_raw_points": 1,
+    "tokens_must_be_cumulative_within_row": true,
+    "ladder": "SCORE-80-POINT-MATRIX.json"
   },
   "thresholds": {
     "80": {
@@ -50,8 +51,8 @@
     "90": {
       "minimum_raw_sum": 117,
       "gate_source": null,
-      "gate": "UNDEFINED_AUTHORITY_CHOICE_REQUIRED",
-      "requires": ["80","AUTHORIZED_80_TO_100_ALLOCATION","M","Q","I","U","K","O"]
+      "gate": "NOT_AUTHORIZED_FOR_CURRENT_WORK",
+      "requires": ["80","M","Q","I","U","K","O"]
     },
     "100": {
       "minimum_raw_sum": 130,
@@ -63,11 +64,11 @@
   "slots": {
     "A": {"name":"exact managed staging deploy, PostgreSQL/R2, migrations, runtime readback","tier":"MANAGED_STAGING","state":"IN_PROGRESS_EXTERNAL_LANE","closure_authority":"REVIEWER_PASS","depends_on":[]},
     "L": {"name":"paired legacy PostgreSQL and matching R2 population audit","tier":"MANAGED_STAGING","state":"OPEN","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
-    "C5": {"name":"CATEGORY_UNKNOWN/manual-review policy and accepted implementation","tier":"AUTHORITY_AND_REPOSITORY","state":"FOUNDER_DECISION_REQUIRED","closure_authority":"FOUNDER_DECISION_AND_REVIEWER_PASS","depends_on":[]},
+    "C5": {"name":"CATEGORY_UNKNOWN/ambiguous/bundle fails closed into manual-review quarantine; no provider/publication/spend/irreversible downstream; only explicitly authorized human review role may release; no heuristic auto-map; accepted implementation required","tier":"AUTHORITY_AND_REPOSITORY","state":"FOUNDER_POLICY_APPROVED_IMPLEMENTATION_PENDING","closure_authority":"FOUNDER_DECISION_AND_REVIEWER_PASS","depends_on":[]},
     "P": {"name":"Duitku approval, known-order settlement/webhook/replay/reconciliation","tier":"PAYMENT_EXTERNAL","state":"OPEN","closure_authority":"PAYMENT_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
-    "G": {"name":"Founder price/COGS and PAYMENTS_GO_LIVE","tier":"FOUNDER_AUTHORITY","state":"FOUNDER_DECISION_REQUIRED","closure_authority":"FOUNDER_DECISION","depends_on":[]},
+    "G": {"name":"Founder price/COGS fields complete and PAYMENTS_GO_LIVE explicitly decided","tier":"FOUNDER_AUTHORITY","state":"PRICE_COGS_AND_GO_LIVE_PENDING","closure_authority":"FOUNDER_DECISION","depends_on":[]},
     "B": {"name":"controlled staging/production-like OTP-to-delivery/refund E2E and recovery","tier":"MANAGED_STAGING","state":"PENDING_A","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
-    "R": {"name":"release-owner controls and verified intake with no Retail P0 fail-open","tier":"RELEASE_AUTHORITY","state":"OWNER_REQUIRED","closure_authority":"RELEASE_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
+    "R": {"name":"separate named Release Approver, Release Operator, and Rollback Authority; controls and verified intake with no Retail P0 fail-open","tier":"RELEASE_AUTHORITY","state":"ROLE_NAMES_REQUIRED","closure_authority":"RELEASE_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
     "M": {"name":"C1-C13 PASS across all required E/A/W paths and no remaining P0/P1 partial","tier":"QA_RELEASE","state":"OPEN","closure_authority":"QA_RELEASE_REVIEWER_PASS","depends_on":["80"]},
     "Q": {"name":"legal/PDP counsel sign-off","tier":"LEGAL","state":"OWNER_REQUIRED","closure_authority":"COUNSEL_SIGNOFF","depends_on":["80"]},
     "I": {"name":"incident owner, alert delivery, restore, and drill","tier":"INCIDENT_DR","state":"OWNER_REQUIRED","closure_authority":"INCIDENT_OWNER_AND_REVIEWER_PASS","depends_on":["80"]},
@@ -80,7 +81,7 @@
     "required_fields": ["receipt_id","slot_id","artifact_path","artifact_sha256","exact_sha","evidence_tier","authority_class","authority_receipt_id","dependency_receipt_ids","verdict"],
     "required_verdict": "PASS",
     "artifact_path_prefix": "docs/evidence/",
-    "state_transition": "A slot becomes VERIFIED only when its latest valid receipt matches tier and closure_authority, binds a committed artifact SHA-256 and exact Git SHA, and names PASS receipts for every dependency."
+    "state_transition": "A slot becomes VERIFIED only when its latest valid receipt matches tier and closure_authority, binds bytes read from artifact_path at exact_sha, exact_sha is in reviewed ancestry, authority_receipt_id resolves to a committed PASS authority record for the same slot/class, and dependency_receipt_ids exactly cover PASS receipts for every dependency. A dependency on aggregate 80 expands to A,L,C5,P,G,B,R."
   },
   "receipt_registry": {
     "A": [],
@@ -97,6 +98,8 @@
     "K": [],
     "O": []
   },
-  "row_adjustments": [],
+  "authority_registry": "AUTHORITY-REGISTRY.json",
+  "founder_80_direction": "FOUNDER-80-DIRECTION.json",
+  "evidence_token_awards": [],
   "production_public_real_money": "OFF"
 }
