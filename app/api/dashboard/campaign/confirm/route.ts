@@ -20,6 +20,7 @@ import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
+import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -87,6 +88,12 @@ export async function POST(req: Request) {
       boundary: "A5",
       loadSqliteCandidateRels: () => JSON.parse(product.images || "[]") as string[],
     });
+    const lockedProductType = evidenceLease.productType;
+    assertCategoryReviewClear({
+      state: lockedProductType?.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+      reason: lockedProductType?.category_review_reason as never,
+      version: lockedProductType?.category_review_version ?? 0,
+    }, lockedProductType?.category);
     const personaId = (await routeDeps.pgFindOrCreatePersona(user.id, category)).id;
     const avatarCustomDesc = typeof body.avatar_custom_desc === "string" && body.avatar_custom_desc.trim()
       ? body.avatar_custom_desc.trim().slice(0, 600)

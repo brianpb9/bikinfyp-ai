@@ -424,6 +424,26 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
       assert.deepEqual(effects, { provider: 0, db: 0, queue: 0, storage: 0 });
     }
 
+    // C5 is checked from the row reloaded while the product lock is held.
+    // A5 must not create a persona/audit trail, and A7 must not call the
+    // script provider or persist scripts, when a previously clear product is
+    // re-quarantined after the handlers' initial product read.
+    lockedProduct = {
+      ...currentProduct,
+      category_review_state: "QUARANTINED",
+      category_review_reason: "CATEGORY_AMBIGUOUS",
+      category_review_version: 2,
+    };
+    for (const item of cases.slice(2)) {
+      effects.provider = effects.db = effects.queue = effects.storage = 0;
+      const response = await item.call();
+      const payload = await response.json() as { code?: string };
+      assert.equal(response.status, 422, `${item.boundary} menerima C5 quarantine setelah initial read`);
+      assert.equal(payload.code, "CATEGORY_REVIEW_REQUIRED");
+      assert.deepEqual(effects, { provider: 0, db: 0, queue: 0, storage: 0 },
+        `${item.boundary} menulis persona/audit/script atau memanggil provider saat C5 quarantine`);
+    }
+
     // Existing immutable jobs win over current corrupt/deleted product state.
     duplicateRows = [{ id: "existing-job" }];
     values.clear();
