@@ -1,5 +1,7 @@
 # Shipping readiness canonical — 26 Agustus 2026
 
+> Superseded by [`SHIP-READINESS-CANONICAL-20260827.md`](SHIP-READINESS-CANONICAL-20260827.md).
+
 TASK=`P1-POST-E2-CEILING-RECOMPUTE-20260826`
 
 ## Putusan

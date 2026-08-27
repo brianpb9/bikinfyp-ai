@@ -5,7 +5,7 @@ BRANCH=work/p0-product-truth-20260820
 TIMESTAMP=2026-08-20
 METODE=call-site search read-only (Route Mapper subagent), BUKAN daftar handover
 STATUS (20 Agu, historis)=inventaris SELESAI · red-before tests BELUM DITULIS
-STATUS (27 Agu current)=**lihat E.29–E.40 untuk closure E1/C2/C3/C6/C8/new admission.**
+STATUS (27 Agu current)=**lihat E.29–E.42 untuk closure dan current aggregate accounting.**
 Bagian A dan D adalah inventaris historis 20 Agu; kolom C menyatakan aggregate
 case dan harus dibaca bersama closure current di E.29–E.34, bukan sendiri.
 
@@ -1332,3 +1332,28 @@ BASELINE=`7475ddb3ccbfe6390ec79dda789d3f2d9325ca3d`
   backfill, delete, replay, provider, payment, credit call, or policy/reason-code
   change was performed.
 - Evidence: `../P0-C10-LEGACY-JOB-QUARANTINE-20260827/`.
+
+### E.42 Post-policy bundle readiness recompute — 2026-08-27
+
+TASK=`P1-POST-POLICY-BUNDLE-READINESS-RECOMPUTE-20260827`
+BASELINE=`0e953f9ccfd8991c96fecbed44bb3b892e0c8829`
+
+- Exact PASS/DONE receipts bind C2 at `dbf9669...`, C6 at `e62313c...`, C9 at
+  `7475ddb...`, and C10 at `0e953f9...`; all accepted SHAs are ancestors of the
+  baseline and every PASS has one matching DONE.
+- Aggregate C1–C13 accounting remains **3 PASS / 9 PARTIAL / 1 BLOCKED**. C2,
+  C6, and C11 are PASS. C9 remains PARTIAL until the current bundle is exercised
+  on managed W1/W2 paths, and C10 remains PARTIAL pending the paired legacy
+  PostgreSQL+R2 population audit and an executed current real-PG W1 gate. C5 is
+  the sole BLOCKED case and requires Founder category/manual-review policy.
+- This addendum supersedes the historical C2 BLOCKED, C6 partial, and broader
+  C9/C10 wording in the top table without rewriting old evidence. Repository
+  closure is not promoted into managed staging or production closure.
+- Board arithmetic is unchanged: 13 rows, 77/130, normalized 59, capped at
+  **58/100**. Exact threshold arithmetic and authority/data slots are recorded
+  in `../P1-POST-POLICY-BUNDLE-READINESS-RECOMPUTE-20260827/` and current
+  canonical decision in `../SHIP-READINESS-CANONICAL-20260827.md`.
+- No approved policy-free autonomous implementation remains. Next state is
+  `IDLE_COMPLETE`; further work requires Founder policy, matching staging
+  PostgreSQL/R2 data, QA/Release authority, or payment/legal/incident/production
+  ownership.

@@ -1,0 +1,106 @@
+{
+  "schema": "shipping-readiness-score/v4",
+  "task": "P1-POST-POLICY-BUNDLE-READINESS-RECOMPUTE-20260827",
+  "baseline": "0e953f9ccfd8991c96fecbed44bb3b892e0c8829",
+  "source_board": "docs/evidence/board-jawaban-2026-08-19.md",
+  "rows": [
+    {"domain":"Money safety","score":9,"delta":0},
+    {"domain":"Auth intent & failure path","score":7,"delta":0},
+    {"domain":"Mobile UI 375","score":7,"delta":0},
+    {"domain":"Hydration/interaction canary CI","score":8,"delta":0},
+    {"domain":"Content engine standard","score":7,"delta":0},
+    {"domain":"Brand fidelity","score":6,"delta":0},
+    {"domain":"Anti-slop produksi","score":7,"delta":0},
+    {"domain":"Prompt/verdict archive","score":8,"delta":0},
+    {"domain":"NSFW rejection","score":6,"delta":0},
+    {"domain":"Payments","score":2,"delta":0},
+    {"domain":"Legal/PDP","score":2,"delta":0},
+    {"domain":"DR/monitoring/incident owner","score":2,"delta":0},
+    {"domain":"Landing/pricing consistency","score":6,"delta":0}
+  ],
+  "arithmetic": {
+    "row_count": 13,
+    "raw_sum": 77,
+    "denominator": 130,
+    "normalized_unrounded": 59.23076923076923,
+    "normalized_rounded": 59,
+    "r2a_evidence_ceiling": 58,
+    "ceiling_decision": "retained",
+    "canonical_reported_score": 58
+  },
+  "threshold_arithmetic": {
+    "70": {"minimum_raw_sum":91,"additional_raw_points_from_77":14,"canonical_points_from_58":12},
+    "80": {"minimum_raw_sum":104,"additional_raw_points_from_77":27,"canonical_points_from_58":22},
+    "90": {"minimum_raw_sum":117,"additional_raw_points_from_77":40,"canonical_points_from_58":32}
+  },
+  "accepted_policy_bundle": {
+    "c2_type_mismatch": "closed_at_repository_and_local_test_tier",
+    "c6_ocr_fail_closed": "closed_at_repository_and_local_test_tier",
+    "c9_promo_snapshot": "closed_at_repository_new_job_tier",
+    "c10_legacy_job_quarantine": "closed_at_repository_tier_real_postgresql_not_run"
+  },
+  "acceptance_matrix": {
+    "pass": 3,
+    "partial": 9,
+    "blocked": 1,
+    "note": "C2, C6, and C11 are PASS; C9 and C10 remain PARTIAL at aggregate evidence tier; C5 remains BLOCKED."
+  },
+  "ceiling_conditions": {
+    "legacy_paired_postgresql_r2_population_audit": "open",
+    "accepted_bundle_exact_managed_deploy_and_trace": "open",
+    "c10_real_postgresql_worker_gate": "not_run_environment_unavailable",
+    "c5_category_unknown_manual_review_policy": "founder_decision_required",
+    "representative_paid_provider_and_production_e2e": "open",
+    "payment_known_order_settlement_price_and_go_live": "open",
+    "production_release_control": "open",
+    "legal_counsel": "open",
+    "incident_monitoring_restore_drill": "open"
+  },
+  "threshold_slots": {
+    "70": {
+      "status": "not_reached",
+      "required": [
+        "Founder-approved C5 CATEGORY_UNKNOWN/manual-review policy plus exact-SHA accepted implementation",
+        "sanitized paired legacy population audit against the same managed PostgreSQL and R2 dataset",
+        "exact accepted C2/C6/C9/C10 descendant deployed with web-worker parity and managed positive/negative traces, including an executed real-PostgreSQL W1 gate",
+        "independent acceptance-matrix and board-row rescore under the existing rubric"
+      ]
+    },
+    "80": {
+      "status": "not_reached",
+      "requires_all_70_slots": true,
+      "required": [
+        "Duitku production approval and known-order settlement/webhook/replay/reconciliation matrix",
+        "Founder-approved price/COGS and explicit PAYMENTS_GO_LIVE",
+        "controlled deployed OTP-to-topup-to-render-to-QC-to-delivery/refund end-to-end trace",
+        "release-owner production control and verified live intake with no Retail P0 fail-open"
+      ]
+    },
+    "90": {
+      "status": "not_computable_from_current_authorized_threshold_rubric",
+      "requires_all_80_slots": true,
+      "required_before_any_90_claim": [
+        "Founder/board-approved allocation for the 80-to-100 interval",
+        "C1-C13 closure across every required E/A/W path",
+        "legal/PDP counsel sign-off",
+        "incident owner, alert delivery, restore proof, and incident drill",
+        "production browser/mobile/auth coverage",
+        "representative production prompt/QC/NSFW/product-fidelity KPI window with independent review",
+        "one stable payment and worker operational cycle with zero-difference reconciliation"
+      ]
+    }
+  },
+  "evidence_tiers": {
+    "repository_local": "verified for accepted policy bundle, subject to recorded environment limits",
+    "managed_staging": "historical accepted pre-bundle evidence only; current bundle not deployed",
+    "production": "not_run",
+    "payment": "hold",
+    "legal": "missing_authority",
+    "incident_dr": "missing_owner_and_runtime_proof",
+    "owner_price_cogs": "missing_founder_decisions"
+  },
+  "next_autonomous_task": null,
+  "next_autonomous_action": "IDLE_COMPLETE",
+  "new_weights_or_policy": false,
+  "score_inflation": false
+}

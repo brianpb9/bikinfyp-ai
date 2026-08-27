@@ -1,0 +1,24 @@
+{
+  "schema": "readiness-recompute-validation/v1",
+  "task": "P1-POST-POLICY-BUNDLE-READINESS-RECOMPUTE-20260827",
+  "baseline": "0e953f9ccfd8991c96fecbed44bb3b892e0c8829",
+  "result": "PASS",
+  "checks": {
+    "source_board_rows": 13,
+    "source_board_sum": 77,
+    "normalized": 59,
+    "retained_ceiling": 58,
+    "canonical_score": 58,
+    "pass_done_messages": 8,
+    "accepted_tasks": 4,
+    "json": "PASS",
+    "links": "PASS",
+    "checksums": "PASS",
+    "secret_scan": "PASS",
+    "git_diff_check": "PASS"
+  },
+  "real_postgresql_c10": "NOT_RUN_LOCALHOST_54329_UNAVAILABLE",
+  "managed_staging": "NOT_RUN_FOR_CURRENT_POLICY_BUNDLE",
+  "production_payment_legal_incident_dr": "NOT_RUN",
+  "next_autonomous_action": "IDLE_COMPLETE"
+}
