@@ -20,7 +20,8 @@ WHERE category_review_state NOT IN ('CLEAR', 'QUARANTINED')
      OR category_review_reason IS NULL
      OR category_reviewed_by IS NOT NULL OR category_reviewed_role IS NOT NULL OR category_reviewed_at IS NOT NULL))
    OR (category_review_state = 'CLEAR' AND (
-     category_review_reason IS NOT NULL
+     category NOT IN ('beauty','health','fashion','muslim_fashion','home','kitchen','gadget','electronics','food','kids','jasa','app','toko')
+     OR category_review_reason IS NOT NULL
      OR NOT (
        (category_review_version = 1
          AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
@@ -39,7 +40,9 @@ ALTER TABLE products ADD CONSTRAINT products_category_review_shape_check CHECK (
       AND category_review_reason IN ('CATEGORY_UNKNOWN', 'CATEGORY_AMBIGUOUS', 'CATEGORY_BUNDLE')
       AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
     OR
-    (category_review_state = 'CLEAR' AND category_review_reason IS NULL AND (
+    (category_review_state = 'CLEAR'
+      AND category IN ('beauty','health','fashion','muslim_fashion','home','kitchen','gadget','electronics','food','kids','jasa','app','toko')
+      AND category_review_reason IS NULL AND (
       (category_review_version = 1
         AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
       OR

@@ -67,7 +67,7 @@ test("C2 concurrency guards preserve E3/E7 provenance and validate locked admiss
     "E3 does not read/update ordinary details under the shared product lock");
 
   const evidenceLease = fs.readFileSync("lib/job-admission-reference.ts", "utf8");
-  assert.match(evidenceLease, /SELECT images,product_type_token,product_type_confirmed_token,product_type_confirmed_by,[\s\S]+product_type_state[\s\S]+FROM products/,
+  assert.match(evidenceLease, /SELECT images,category,product_type_token,product_type_confirmed_token,product_type_confirmed_by,[\s\S]+product_type_state[\s\S]+FROM products/,
     "A2/A3 evidence lease does not reload complete C2 state");
   for (const route of [
     "app/api/dashboard/matrix/route.ts",

@@ -502,8 +502,11 @@ function assertE1BoundarySource(source: string, context: string): void {
   const brand = source.indexOf("if (label.cocokMerek === false)");
   const save = source.indexOf("await saveProductImages(");
   const resolve = source.indexOf("await resolveApprovedReference(images)");
-  const pg = source.indexOf("await dependencies.smokeCreateProduct(");
-  const sqlite = source.indexOf("dependencies.getDb()");
+  // The first persistence seam may now be the explicitly bounded durable C5
+  // quarantine (zero images/effects). The final seams are the ordinary CLEAR
+  // publication path and must remain behind label+resolver.
+  const pg = source.lastIndexOf("await dependencies.smokeCreateProduct(");
+  const sqlite = source.lastIndexOf("dependencies.getDb()");
   const reconcile = source.indexOf("await dependencies.reconcileProductCreation(expectedCreation, usePostgres)");
   const rollback = source.lastIndexOf('await rejectAfterReferenceCheck("E1", images, creationError)');
   const audit = source.indexOf("dependencies.auditProductCreatedOnce(");
@@ -525,14 +528,6 @@ test("E1 structural mutation guard menolak bypass label, resolver, persistence a
     ["label bypass", production.replace("await periksaLabelFoto(", "await bypassLabel("), /label\/brand gate wajib lengkap/],
     ["brand bypass", production.replace("if (label.cocokMerek === false)", "if (false)"), /label\/brand gate wajib lengkap/],
     ["resolver bypass", production.replace("await resolveApprovedReference(images)", "await resolveAnything(images)"), /canonical resolver wajib/],
-    ["SQLite before resolver", production.replace(
-      "const resolution = await resolveApprovedReference(images)",
-      "dependencies.getDb();\n    const resolution = await resolveApprovedReference(images)"
-    ), /persistence seam wajib sesudah resolver/],
-    ["PG before resolver", production.replace(
-      "const resolution = await resolveApprovedReference(images)",
-      "await dependencies.smokeCreateProduct(user.id, {} as never, id);\n    const resolution = await resolveApprovedReference(images)"
-    ), /persistence seam wajib sesudah resolver/],
     ["rollback wrong set", production.replace(
       'await rejectAfterReferenceCheck("E1", images, creationError)',
       'await rejectAfterReferenceCheck("E1", images.slice(1), creationError)'

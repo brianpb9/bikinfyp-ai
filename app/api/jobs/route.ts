@@ -45,7 +45,7 @@ export async function POST(req: Request) {
       ? await smokeGetProduct(user.id, script.product_id)
       : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(script.product_id, user.id) as ProductRow | undefined;
     if (!product) throw ERR.NOT_FOUND("Skripnya");
-    assertCategoryReviewClear({state:product.category_review_state as "CLEAR" | "QUARANTINED",reason:product.category_review_reason as never,version:product.category_review_version ?? 0});
+    assertCategoryReviewClear({state:product.category_review_state as "CLEAR" | "QUARANTINED",reason:product.category_review_reason as never,version:product.category_review_version ?? 0}, product.category);
     // Produk organisasi WAJIB lewat dashboard: RBAC belanja, gerbang review
     // scene, dan library org semuanya hidup di sana. Lihat catatan lengkapnya
     // di pastikanBukanProdukOrg.
@@ -72,7 +72,7 @@ export async function POST(req: Request) {
       ? await smokeGetProduct(user.id, product.id)
       : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(product.id, user.id) as ProductRow | undefined;
     if (!lockedProduct) throw ERR.NOT_FOUND("Produknya");
-    assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version ?? 0});
+    assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version ?? 0}, lockedProduct.category);
     pastikanBukanProdukOrg(lockedProduct);
     await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-admission-product.product_type_token", token: lockedProduct.product_type_token ?? "", version: 1 },
@@ -289,7 +289,7 @@ export async function POST(req: Request) {
         .prepare("SELECT * FROM products WHERE id=? AND user_id=?")
         .get(product.id, user.id) as ProductRow | undefined;
       if (!candidateProduct) throw ERR.NOT_FOUND("Produknya");
-      assertCategoryReviewClear({state:candidateProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:candidateProduct.category_review_reason as never,version:candidateProduct.category_review_version ?? 0});
+      assertCategoryReviewClear({state:candidateProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:candidateProduct.category_review_reason as never,version:candidateProduct.category_review_version ?? 0}, candidateProduct.category);
       try {
         await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
           { kind: "DECLARED_PRODUCT_TYPE", sourceId: "admission-product.product_type_token", token: candidateProduct.product_type_token ?? "", version: 1 },

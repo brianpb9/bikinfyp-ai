@@ -47,7 +47,7 @@ export async function POST(req: Request) {
       state: product.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
       reason: product.category_review_reason as never,
       version: product.category_review_version ?? 0,
-    });
+    }, product.category);
     return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "stored-org-product.product_type_token", token: product.product_type_token ?? "", version: 1 },
       product.product_type_state === "CONFIRMED" && product.product_type_confirmed_token
@@ -137,6 +137,7 @@ export async function POST(req: Request) {
         category_reviewed_role: product.category_reviewed_role ?? null,
         category_reviewed_at: product.category_reviewed_at ?? null,
         category_review_version: product.category_review_version ?? 0,
+        category: product.category ?? null,
       }),
     });
     const lockedProductType = evidenceLease.productType;
@@ -144,7 +145,7 @@ export async function POST(req: Request) {
       state: lockedProductType?.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
       reason: lockedProductType?.category_review_reason as never,
       version: lockedProductType?.category_review_version ?? 0,
-    });
+    }, lockedProductType?.category);
     await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-org-product.product_type_token", token: lockedProductType?.product_type_token ?? "", version: 1 },
       lockedProductType?.product_type_state === "CONFIRMED" && lockedProductType.product_type_confirmed_token

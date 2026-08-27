@@ -78,7 +78,7 @@ test("POST /api/products menulis brand terkonfirmasi ke raw_meta.brand", async (
   assert.equal(meta.brand, "Glowbening", "brand hasil konfirmasi user harus tersimpan (ter-trim)");
 });
 
-test("POST kategori default dikarantina sebelum persistence (tidak menebak diam-diam)", async () => {
+test("POST kategori default membuat item quarantine retail durable tanpa menyimpan gambar", async () => {
   const res = await createProduct(
     jsonReq("http://localhost/api/products", "POST", {
       name: "Produk Tanpa Merek",
@@ -89,9 +89,13 @@ test("POST kategori default dikarantina sebelum persistence (tidak menebak diam-
       images_base64: [`data:image/png;base64,${PNG_1X1}`],
     })
   );
-  assert.equal(res.status, 422);
-  const body = await res.json() as { code?: string };
-  assert.equal(body.code, "CATEGORY_REVIEW_REQUIRED");
+  assert.equal(res.status, 202);
+  const body = await res.json() as { product_id:string;category_review:{state:string;reason:string};images:unknown[] };
+  assert.deepEqual(body.images,[]);
+  assert.deepEqual(body.category_review,{state:"QUARANTINED",reason:"CATEGORY_UNKNOWN",reviewedBy:null,reviewedRole:null,reviewedAt:null,version:1});
+  const row=getDb().prepare("SELECT category_review_state,category_review_reason,images FROM products WHERE id=?").get(body.product_id) as Record<string,unknown>;
+  assert.deepEqual(row,{category_review_state:"QUARANTINED",category_review_reason:"CATEGORY_UNKNOWN",images:"[]"});
+  assert.equal((getDb().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_id=? AND action='product.category_quarantined'").get(body.product_id) as {n:number}).n,1);
 });
 
 test("PATCH menulis brand dan MEMPERTAHANKAN raw_meta.og hasil scrape", async () => {
@@ -134,6 +138,22 @@ test("PATCH brand kosong -> menghapus brand tanpa menyentuh og", async () => {
   const meta = JSON.parse((getDb().prepare("SELECT raw_meta FROM products WHERE id = ?").get(id) as { raw_meta: string }).raw_meta) as Record<string, unknown>;
   assert.equal(meta.brand, undefined);
   assert.deepEqual(meta.og, { price: 1 });
+});
+
+test("E3 HTTP category default re-quarantines a previously CLEAR retail product",async()=>{
+  const id=uuid();
+  getDb().prepare(`INSERT INTO products (id,user_id,name,price_idr,category,product_type_token,
+    product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,product_type_version,
+    product_type_state,category_review_state,category_review_reason,category_review_version,images,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,1,'CONFIRMED','CLEAR',NULL,1,'[]',?)`).run(
+      id,user.id,"Serum Clear",60_000,"beauty","serum wajah","serum wajah",user.id,now(),now());
+  const res=await patchProduct(jsonReq(`http://localhost/api/products/${id}`,"PATCH",{
+    category:"default",category_outcome:"KNOWN",
+  }),{params:Promise.resolve({id})});
+  assert.equal(res.status,202,await res.clone().text());
+  const row=getDb().prepare("SELECT category_review_state,category_review_reason,images FROM products WHERE id=?").get(id) as Record<string,unknown>;
+  assert.deepEqual(row,{category_review_state:"QUARANTINED",category_review_reason:"CATEGORY_UNKNOWN",images:"[]"});
+  assert.equal((getDb().prepare("SELECT COUNT(*) AS n FROM audit_log WHERE entity_id=? AND action='product.category_quarantined'").get(id) as {n:number}).n,1);
 });
 
 test("usulMerekDariNama menawarkan token merek, bukan deskriptor generik", () => {

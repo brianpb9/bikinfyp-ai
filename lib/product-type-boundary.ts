@@ -48,6 +48,20 @@ export interface CategoryReviewRelease {
 
 const CATEGORY_ID_SET = new Set<string>(C5_CATEGORY_IDS);
 
+export function isCanonicalC5Category(value: unknown): boolean {
+  return CATEGORY_ID_SET.has(normalizeToken(value));
+}
+
+export function requireCanonicalC5Category(value: unknown): string {
+  const category=normalizeToken(value);
+  if (!CATEGORY_ID_SET.has(category)) throw new ApiError(422, {
+    code:"CATEGORY_REVIEW_RESOLUTION_INVALID",
+    message_id:"Rilis kategori wajib memilih tepat satu kategori kanonik.",
+    message_en:"Category release requires exactly one canonical resolved category.",retryable:false,
+  });
+  return category;
+}
+
 export function parseStructuredCategoryOutcome(value: unknown): StructuredCategoryOutcome {
   const outcome = typeof value === "string" ? value.trim().toUpperCase() : "KNOWN";
   if (outcome === "KNOWN" || outcome === "UNKNOWN" || outcome === "AMBIGUOUS" || outcome === "BUNDLE") return outcome;
@@ -104,8 +118,9 @@ export function effectiveCategoryReviewRole(input: {
   });
 }
 
-export function assertCategoryReviewClear(record: Partial<CategoryReviewRecord> | null | undefined): void {
-  if (record?.state !== "CLEAR" || record.reason !== null || !Number.isInteger(record.version) || Number(record.version) < 1) {
+export function assertCategoryReviewClear(record: Partial<CategoryReviewRecord> | null | undefined, category?:unknown): void {
+  if (record?.state !== "CLEAR" || record.reason !== null || !Number.isInteger(record.version) || Number(record.version) < 1
+    || (category !== undefined && !isCanonicalC5Category(category))) {
     throw new ApiError(422, {
       code: "CATEGORY_REVIEW_REQUIRED",
       message_id: "Kategori produk perlu ditinjau manusia yang berwenang sebelum proses dilanjutkan.",
@@ -151,7 +166,7 @@ export function authorizeCategoryReviewRelease(
   configuredRole = process.env.C5_AUTHORIZED_HUMAN_REVIEW_ROLE ?? "",
 ): CategoryReviewRecord {
   const requiredRole = configuredRole.trim();
-  if (!requiredRole || !release.actorRole.trim() || release.actorRole !== requiredRole) {
+  if (requiredRole !== "Founder/CEO" || release.actorRole !== "Founder/CEO") {
     throw new ApiError(403, {
       code: "CATEGORY_REVIEW_ROLE_FORBIDDEN",
       message_id: "Peran peninjau kategori belum disetel atau tidak cocok.",

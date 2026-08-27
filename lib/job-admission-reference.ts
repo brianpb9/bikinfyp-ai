@@ -104,6 +104,7 @@ export async function withProductEvidenceMutationLock<T>(
 }
 
 export type LockedProductTypeState = {
+  category?: string | null;
   product_type_token: string | null;
   product_type_confirmed_token: string | null;
   product_type_confirmed_by: string | null;
@@ -146,7 +147,7 @@ export async function acquireAdmissionReferenceEvidence(input: {
       client = await acquirePostgresProductLock(input.productId);
       const ownerColumn = input.owner.kind === "org" ? "org_id" : "user_id";
       const locked = await client.query<LockedProductTypeState & { images: string }>(
-        `SELECT images,product_type_token,product_type_confirmed_token,product_type_confirmed_by,
+        `SELECT images,category,product_type_token,product_type_confirmed_token,product_type_confirmed_by,
                 product_type_confirmed_at,product_type_version,product_type_state,
                 category_review_state,category_review_reason,category_reviewed_by,
                 category_reviewed_role,category_reviewed_at,category_review_version

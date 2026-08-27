@@ -11,6 +11,7 @@ import {
   REFERENCE_MANIFEST_VERSION,
   type JobReferenceManifest,
 } from "./job-reference-manifest";
+import { isCanonicalC5Category } from "./product-type-boundary";
 
 export type LegacyJobQuarantineReason =
   | "REFERENCE_MANIFEST_MISSING"
@@ -140,7 +141,8 @@ export function classifyLegacyJobEvidence(input: {
   if (input.productType !== undefined && (!input.productType || !canonicalTypeState(input.productType))) {
     return { status: "QUARANTINED", reason: "PRODUCT_TYPE_QUARANTINED" };
   }
-  if (input.productType !== undefined && input.productType?.category_review_state !== "CLEAR") {
+  if (input.productType !== undefined && (input.productType?.category_review_state !== "CLEAR"
+    || !isCanonicalC5Category(productSnapshot.category))) {
     return { status: "QUARANTINED", reason: "CATEGORY_REVIEW_QUARANTINED" };
   }
   return { status: "CURRENT", manifest, productSnapshot };

@@ -329,6 +329,14 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
     const row = found.rows[0];
     if (!row || ["READY", "FAILED", "REFUNDED"].includes(row.state)) return;
+    // C5 must fail before the first state transition/audit. Both provider and
+    // deterministic modes re-check later, but that is already an execution
+    // effect and therefore too late for quarantined work.
+    requireCurrentJobEvidence({
+      approvedReferenceManifest:row.approved_reference_manifest,
+      jobProductSnapshot:row.job_product_snapshot,
+      productType:row,
+    });
     const hold = await pool.query("SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type='hold' LIMIT 1", [jobId]);
     const executionMode = workerExecutionMode(hold.rowCount === 1);
     // r13 (review QA 2026-08-07): dulu SETIAP retry BullMQ untuk state != QUEUED

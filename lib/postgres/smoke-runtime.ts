@@ -299,7 +299,7 @@ export async function smokeCreateJob(userId: string, input: {
              FROM products WHERE id=$1 AND user_id=$2 FOR SHARE`, [input.productId, userId]);
         if (!product.rows[0]) throw new Error("PRODUCT_NOT_FOUND");
         const lockedProduct = product.rows[0];
-        assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version});
+        assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version}, lockedProduct.category);
         await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
           { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-retail-product.product_type_token", token: lockedProduct.product_type_token ?? "", version: 1 },
           lockedProduct.product_type_state === "CONFIRMED" && lockedProduct.product_type_confirmed_token

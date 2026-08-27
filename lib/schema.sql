@@ -155,7 +155,9 @@ CREATE TABLE IF NOT EXISTS products (
       AND category_review_reason IN ('CATEGORY_UNKNOWN', 'CATEGORY_AMBIGUOUS', 'CATEGORY_BUNDLE')
       AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
     OR
-    (category_review_state = 'CLEAR' AND category_review_reason IS NULL AND (
+    (category_review_state = 'CLEAR'
+      AND category IN ('beauty','health','fashion','muslim_fashion','home','kitchen','gadget','electronics','food','kids','jasa','app','toko')
+      AND category_review_reason IS NULL AND (
       (category_review_version = 1 AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
       OR
       (category_review_version >= 2

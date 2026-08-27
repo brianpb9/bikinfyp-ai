@@ -79,9 +79,6 @@ export async function POST(req: Request) {
     const confirmedProductTypeToken = String(confirmedProductTypeRaw ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmedAt = dependencies.now();
     const categoryReview = deriveCategoryReview(category, parseStructuredCategoryOutcome(categoryOutcomeRaw));
-    // E1 has no durable review-queue model. Reject before image inspection/storage,
-    // DB rows, audit, queue, provider, spend, or publication.
-    assertCategoryReviewClear(categoryReview);
     return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "request.product_type", token: productTypeToken, version: 1 },
       confirmedProductTypeToken ? {
@@ -101,6 +98,28 @@ export async function POST(req: Request) {
       throw ERR.BAD_REQUEST("Nama produk wajib ada huruf atau angka, bukan emoji saja ya.", "Product name is required.");
     if (!priceIdr)
       throw ERR.BAD_REQUEST("Harganya wajib diisi — harga adalah bahan wajib hook videonya.", "Price is required.");
+    if (categoryReview.state === "QUARANTINED") {
+      const id=dependencies.uuid();
+      const usePostgres=dependencies.postgresRuntimeEnabled();
+      const quarantineInput={sourceUrl,name:validName,priceIdr,category,images:[] as string[],
+        productVisualDesc:visualDesc,rawMeta:null,productTypeToken,
+        productTypeConfirmedToken:confirmedProductTypeToken,productTypeConfirmedBy:user.id,
+        productTypeConfirmedAt:confirmedAt,productTypeVersion:1 as const,
+        categoryReviewState:categoryReview.state,categoryReviewReason:categoryReview.reason,
+        categoryReviewedBy:null,categoryReviewedRole:null,categoryReviewedAt:null,
+        categoryReviewVersion:categoryReview.version};
+      if (usePostgres) await dependencies.smokeCreateProduct(user.id,quarantineInput,id);
+      else dependencies.getDb().prepare(`INSERT INTO products (id,user_id,source_url,name,price_idr,category,
+        product_type_token,product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,
+        product_type_version,product_type_state,category_review_state,category_review_reason,
+        category_review_version,product_visual_desc,images,raw_meta,created_at)
+        VALUES (?,?,?,?,?,?,?,?,?,?,1,'CONFIRMED',?,?,?,?,'[]',NULL,?)`).run(
+          id,user.id,sourceUrl,validName,priceIdr,category,productTypeToken,confirmedProductTypeToken,
+          user.id,confirmedAt,categoryReview.state,categoryReview.reason,categoryReview.version,visualDesc,dependencies.now());
+      await dependencies.auditCategoryQuarantined(user.id,id,{reason:categoryReview.reason,category,stored_images:0},usePostgres);
+      return Response.json({ok:true,product_id:id,category_review:categoryReview,images:[]},{status:202});
+    }
+    assertCategoryReviewClear(categoryReview,category);
     if (blobs.length < 1 || blobs.length > MAX_IMAGES)
       throw ERR.BAD_REQUEST(`Upload fotonya dulu ya — minimal 1, maksimal ${MAX_IMAGES} foto.`, `1-${MAX_IMAGES} images required.`);
 

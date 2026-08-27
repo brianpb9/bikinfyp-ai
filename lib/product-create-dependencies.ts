@@ -1,6 +1,6 @@
 import { getAuthUser } from "./auth";
-import { getDb, now, uuid, type ProductRow } from "./db";
-import { postgresRuntimeEnabled, smokeCreateProduct, smokeGetProductByIdForCreateReconciliation } from "./postgres/smoke-runtime";
+import { audit, getDb, now, uuid, type ProductRow } from "./db";
+import { pgAudit, postgresRuntimeEnabled, smokeCreateProduct, smokeGetProductByIdForCreateReconciliation } from "./postgres/smoke-runtime";
 import { canonicalProductTypeTimestamp } from "./product-type-timestamp";
 
 export interface ExpectedProductCreation {
@@ -72,6 +72,11 @@ async function reconcileProductCreation(
   return productCreationRowMatchesExpected(row, expected) ? "exact" : "mismatch";
 }
 
+async function auditCategoryQuarantined(actor:string,productId:string,meta:unknown,usePostgres:boolean):Promise<void> {
+  if (usePostgres) await pgAudit(actor,"product.category_quarantined","products",productId,meta);
+  else audit(actor,"product.category_quarantined","products",productId,meta);
+}
+
 function auditProductCreatedOnce(
   actor: string,
   productId: string,
@@ -100,6 +105,7 @@ const productionDependencies = {
   postgresRuntimeEnabled,
   smokeCreateProduct,
   reconcileProductCreation,
+  auditCategoryQuarantined,
 };
 
 export type ProductCreateDependencies = typeof productionDependencies;

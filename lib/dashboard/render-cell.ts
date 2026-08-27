@@ -121,20 +121,21 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     return gagal("Skrip tidak ditemukan atau sudah pernah dipakai.");
   }
   const typeProduct = await pool.query<{
+    category: string | null;
     product_type_token: string | null; product_type_confirmed_token: string | null;
     product_type_confirmed_by: string | null; product_type_confirmed_at: string | Date | null;
     product_type_version: number | null; product_type_state: string;
     category_review_state: string; category_review_reason: string | null;
     category_reviewed_by: string | null; category_reviewed_role: string | null;
     category_reviewed_at: string | Date | null; category_review_version: number;
-  }>(`SELECT product_type_token,product_type_confirmed_token,product_type_confirmed_by,
+  }>(`SELECT category,product_type_token,product_type_confirmed_token,product_type_confirmed_by,
             product_type_confirmed_at,product_type_version,product_type_state,
             category_review_state,category_review_reason,category_reviewed_by,
             category_reviewed_role,category_reviewed_at,category_review_version
        FROM products WHERE id=$1 AND org_id=$2`, [sel.productId, sel.orgId]);
   const productType = typeProduct.rows[0];
   if (!productType) return gagal("Produk organisasi tidak ditemukan.");
-  assertCategoryReviewClear({state:productType.category_review_state as "CLEAR" | "QUARANTINED",reason:productType.category_review_reason as never,version:productType.category_review_version});
+  assertCategoryReviewClear({state:productType.category_review_state as "CLEAR" | "QUARANTINED",reason:productType.category_review_reason as never,version:productType.category_review_version}, productType.category);
   const productTypeConfirmedAt = canonicalProductTypeTimestamp(productType.product_type_confirmed_at);
   return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
     { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-org-product.product_type_token", token: productType.product_type_token ?? "", version: 1 },
@@ -204,7 +205,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       return gagal("Produk organisasi tidak ditemukan.");
     }
     const lockedProduct = admissionProduct.rows[0];
-    assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version});
+    assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version}, lockedProduct.category);
     if (lockedProduct.product_type_token !== productType.product_type_token
       || lockedProduct.product_type_confirmed_token !== productType.product_type_confirmed_token
       || lockedProduct.product_type_confirmed_by !== productType.product_type_confirmed_by

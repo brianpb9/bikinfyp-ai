@@ -63,7 +63,8 @@ export const CATEGORY_REVIEW_SQLITE_UPGRADE_GUARDS = `
        OR category_review_reason NOT IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE')
        OR category_reviewed_by IS NOT NULL OR category_reviewed_role IS NOT NULL OR category_reviewed_at IS NOT NULL))
      OR (category_review_state='CLEAR' AND (
-       category_review_reason IS NOT NULL
+       category NOT IN ('beauty','health','fashion','muslim_fashion','home','kitchen','gadget','electronics','food','kids','jasa','app','toko')
+       OR category_review_reason IS NOT NULL
        OR NOT (
          (category_review_version=1 AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
          OR (category_review_version>=2 AND category_reviewed_by IS NOT NULL AND length(trim(category_reviewed_by)) > 0
@@ -79,7 +80,9 @@ export const CATEGORY_REVIEW_SQLITE_UPGRADE_GUARDS = `
         AND NEW.category_review_reason IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE')
         AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
       OR
-      (NEW.category_review_state='CLEAR' AND NEW.category_review_reason IS NULL AND (
+      (NEW.category_review_state='CLEAR'
+        AND NEW.category IN ('beauty','health','fashion','muslim_fashion','home','kitchen','gadget','electronics','food','kids','jasa','app','toko')
+        AND NEW.category_review_reason IS NULL AND (
         (NEW.category_review_version=1 AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
         OR (NEW.category_review_version>=2
           AND NEW.category_reviewed_by IS NOT NULL AND length(trim(NEW.category_reviewed_by)) > 0
@@ -96,7 +99,9 @@ export const CATEGORY_REVIEW_SQLITE_UPGRADE_GUARDS = `
         AND NEW.category_review_reason IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE')
         AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
       OR
-      (NEW.category_review_state='CLEAR' AND NEW.category_review_reason IS NULL AND (
+      (NEW.category_review_state='CLEAR'
+        AND NEW.category IN ('beauty','health','fashion','muslim_fashion','home','kitchen','gadget','electronics','food','kids','jasa','app','toko')
+        AND NEW.category_review_reason IS NULL AND (
         (NEW.category_review_version=1 AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
         OR (NEW.category_review_version>=2
           AND NEW.category_reviewed_by IS NOT NULL AND length(trim(NEW.category_reviewed_by)) > 0
