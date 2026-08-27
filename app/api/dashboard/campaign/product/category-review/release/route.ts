@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 
 import { config } from "@/lib/config";
+import { getAuthUser } from "@/lib/auth";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
@@ -12,6 +13,7 @@ export const dynamic = "force-dynamic";
 
 const productionDependencies = {
   requireOrgContextApi,
+  getAuthUser,
   withProductEvidenceMutationLock,
   getPool,
   databaseUrl: () => config.databaseUrl,
@@ -36,7 +38,6 @@ function dependencies():ReleaseDependencies {
 export async function POST(req:Request) {
   try {
     const deps=dependencies();
-    const {user,membership}=await deps.requireOrgContextApi(req);
     const body=await req.json().catch(()=>({}));
     const productId=typeof body.product_id === "string" ? body.product_id.trim() : "";
     const reviewReason=typeof body.reason === "string" ? body.reason.trim() : "";
@@ -44,6 +45,10 @@ export async function POST(req:Request) {
     const expectedVersion=Number(body.expected_version);
     const retailScope=body.scope === "retail";
     if (!productId) throw ERR.BAD_REQUEST("product_id wajib diisi.","product_id is required.");
+    const orgContext=retailScope ? null : await deps.requireOrgContextApi(req);
+    const user=retailScope ? await deps.getAuthUser(req) : orgContext!.user;
+    const membership=orgContext?.membership ?? null;
+    if (!user) throw ERR.UNAUTHORIZED();
     return await deps.withProductEvidenceMutationLock(productId,async()=>{
       const pool=deps.getPool(deps.databaseUrl());
       const client=await pool.connect();
@@ -51,7 +56,7 @@ export async function POST(req:Request) {
         await client.query("BEGIN");
         const configuredRole=deps.configuredRole();
         const roleBinding=effectiveCategoryReviewRole({configuredRole,
-          configuredPrincipalId:deps.configuredPrincipalId(),membershipRole:membership.role,actorId:user.id});
+          configuredPrincipalId:deps.configuredPrincipalId(),membershipRole:membership?.role ?? null,actorId:user.id});
         const selected=await client.query<{
           user_id:string;category:string;
           category_review_state:"CLEAR"|"QUARANTINED";category_review_reason:"CATEGORY_UNKNOWN"|"CATEGORY_AMBIGUOUS"|"CATEGORY_BUNDLE"|null;
@@ -59,7 +64,7 @@ export async function POST(req:Request) {
         }>(`SELECT user_id,category,category_review_state,category_review_reason,category_reviewed_by,category_reviewed_role,
               category_reviewed_at,category_review_version FROM products
               WHERE id=$1 AND ${retailScope ? "org_id IS NULL" : "org_id=$2"} FOR UPDATE`,
-          retailScope ? [productId] : [productId,membership.org_id]);
+          retailScope ? [productId] : [productId,membership!.org_id]);
         if (!selected.rows[0]) throw ERR.NOT_FOUND("Produknya");
         const row=selected.rows[0];
         const current:CategoryReviewRecord={state:row.category_review_state,reason:row.category_review_reason,
@@ -78,6 +83,12 @@ export async function POST(req:Request) {
           if (current.reviewedBy === user.id && current.reviewedRole === roleBinding.effectiveRole
             && row.category === resolvedCategory
             && meta.reason === reviewReason && meta.previous_version === expectedVersion
+            && meta.resolved_category === resolvedCategory
+            && meta.new_version === current.version
+            && (meta.previous_reason === "CATEGORY_UNKNOWN" || meta.previous_reason === "CATEGORY_AMBIGUOUS"
+              || meta.previous_reason === "CATEGORY_BUNDLE")
+            && meta.product_scope === (retailScope ? "retail" : "organization")
+            && meta.product_owner_user_id === row.user_id
             && meta.effective_authorized_role === roleBinding.effectiveRole
             && meta.underlying_membership_role === roleBinding.membershipRole
             && meta.founder_principal_id === roleBinding.founderPrincipalId
@@ -95,7 +106,7 @@ export async function POST(req:Request) {
            WHERE id=$6 AND ${retailScope ? "org_id IS NULL" : "org_id=$7"}
              AND category_review_state='QUARANTINED' AND category_review_version=$${retailScope ? "7" : "8"}`,
           [resolvedCategory,released.reviewedBy,released.reviewedRole,released.reviewedAt,released.version,
-            productId,...(retailScope ? [expectedVersion] : [membership.org_id,expectedVersion])]);
+            productId,...(retailScope ? [expectedVersion] : [membership!.org_id,expectedVersion])]);
         if (updated.rowCount !== 1) throw ERR.BAD_REQUEST("Status tinjauan berubah. Muat ulang lalu coba lagi.","Category review changed concurrently.");
         await client.query(
           `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at)

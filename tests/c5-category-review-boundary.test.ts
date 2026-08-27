@@ -138,6 +138,7 @@ test("C5 release route audits effective Founder role and explicit principal bind
   assert.match(source,/underlying_membership_role:roleBinding\.membershipRole/);
   assert.match(source,/founder_principal_id:roleBinding\.founderPrincipalId/);
   assert.match(source,/C5_AUTHORIZED_HUMAN_REVIEW_PRINCIPAL_ID/);
+  assert.match(source,/retailScope \? await deps\.getAuthUser\(req\)/);
   assert.match(source,/resolvedCategory=requireCanonicalC5Category\(body\.resolved_category\)/);
   assert.match(source,/SET category=\$1,category_review_state='CLEAR'/);
   assert.match(source,/retailScope \? "org_id IS NULL"/);
@@ -180,6 +181,8 @@ test("C5 actual release handler is Founder-only, durable, restart-safe, and reau
   const audits:Array<{actor:string;meta:Record<string,unknown>}>=[];
   let configuredRole="";
   let configuredPrincipalId="";
+  let actorId="founder-1";
+  let orgContextCalls=0;
   let updates=0;
   const client={
     async query(sql:string,values:unknown[]=[]){
@@ -206,7 +209,8 @@ test("C5 actual release handler is Founder-only, durable, restart-safe, and reau
     release(){},
   };
   setCategoryReviewReleaseDependenciesForTests({
-    requireOrgContextApi:async()=>({user:{id:"founder-1"},membership:{org_id:"org-1",role:"owner"}}) as never,
+    requireOrgContextApi:async()=>{orgContextCalls++;return ({user:{id:actorId},membership:{org_id:"org-1",role:"owner"}}) as never;},
+    getAuthUser:async()=>({id:actorId}) as never,
     withProductEvidenceMutationLock:async(_id,operation)=>operation(),
     getPool:(()=>({connect:async()=>client})) as never,databaseUrl:()=>"test",
     configuredRole:()=>configuredRole,now:()=>"2026-08-27T19:00:00.000Z",uuid:()=>"00000000-0000-4000-8000-000000000001",
@@ -224,10 +228,16 @@ test("C5 actual release handler is Founder-only, durable, restart-safe, and reau
   assert.equal(missingPrincipal.status,403);
   assert.equal(updates,0); assert.equal(audits.length,0);
   configuredPrincipalId="founder-1";
+  actorId="customer-9";
+  const unauthorizedCustomer=await releaseCategoryReview(request());
+  assert.equal(unauthorizedCustomer.status,403);
+  assert.equal(updates,0); assert.equal(audits.length,0);
+  actorId="founder-1";
   const released=await releaseCategoryReview(request());
   assert.equal(released.status,200);
   assert.equal(updates,1); assert.equal(audits.length,1);
   assert.equal(row.category,"beauty"); assert.equal(row.category_review_version,2);
+  assert.equal(orgContextCalls,0,"retail Founder review must not require tenant org membership");
 
   // A fresh handler invocation observes durable state, but idempotency cannot
   // bypass changed/missing current Founder configuration.
@@ -239,4 +249,10 @@ test("C5 actual release handler is Founder-only, durable, restart-safe, and reau
   assert.equal(replay.status,200);
   assert.equal((await replay.json()).idempotent,true);
   assert.equal(updates,1); assert.equal(audits.length,1);
+
+  // A row/category match is insufficient if the durable release audit was
+  // altered or belongs to another category/scope/version.
+  audits[0].meta.resolved_category="health";
+  const tamperedReplay=await releaseCategoryReview(request());
+  assert.equal(tamperedReplay.status,409);
 });

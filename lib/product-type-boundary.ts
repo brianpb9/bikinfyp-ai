@@ -104,15 +104,15 @@ export function deriveHeuristicCategoryReview(category: unknown): CategoryReview
 export function effectiveCategoryReviewRole(input: {
   configuredRole: string;
   configuredPrincipalId: string;
-  membershipRole: "owner" | "member";
+  membershipRole: "owner" | "member" | null;
   actorId: string;
-}): { effectiveRole: string; membershipRole: "owner" | "member"; founderPrincipalId: string | null } {
+}): { effectiveRole: string; membershipRole: "owner" | "member" | null; founderPrincipalId: string | null } {
   const principalId=input.configuredPrincipalId.trim() || null;
   const founderBound = input.configuredRole === "Founder/CEO"
-    && input.membershipRole === "owner"
+    && (input.membershipRole === "owner" || input.membershipRole === null)
     && principalId === input.actorId;
   return Object.freeze({
-    effectiveRole: founderBound ? "Founder/CEO" : input.membershipRole,
+    effectiveRole: founderBound ? "Founder/CEO" : input.membershipRole ?? "retail",
     membershipRole: input.membershipRole,
     founderPrincipalId: principalId,
   });
