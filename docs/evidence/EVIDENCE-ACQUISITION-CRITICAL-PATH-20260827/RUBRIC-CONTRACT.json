@@ -30,8 +30,12 @@
     "evidence_receipt_changes_points": true,
     "default_delta": 0,
     "token_award_requires": [
+      "award_id",
       "authority_receipt_id",
       "token_id",
+      "row",
+      "prior_score",
+      "new_score",
       "evidence_receipt_ids"
     ],
     "missing_authority_result": "NO_SCORE_CHANGE",
@@ -101,5 +105,13 @@
   "authority_registry": "AUTHORITY-REGISTRY.json",
   "founder_80_direction": "FOUNDER-80-DIRECTION.json",
   "evidence_token_awards": [],
+  "score_state": {
+    "raw_sum": 77,
+    "normalized_rounded": 59,
+    "gate_80_closed": false,
+    "evidence_ceiling": 58,
+    "certified_score": 58,
+    "ceiling_transition": "The ceiling becomes 80 only when every A/L/C5/P/G/B/R slot is VERIFIED by a valid receipt. Certified 80 additionally requires all 27 cumulative tokens, raw sum at least 104, and normalized score at least 80."
+  },
   "production_public_real_money": "OFF"
 }

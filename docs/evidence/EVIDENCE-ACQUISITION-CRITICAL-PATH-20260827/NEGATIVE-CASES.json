@@ -1,0 +1,12 @@
+{
+  "schema": "score-80-negative-cases/v1",
+  "cases": [
+    {"id":"unknown_token","mutation":"replace first token_id with UNKNOWN","expected_error":"award unknown token"},
+    {"id":"mismatched_authority","mutation":"replace first token authority with wrong class","expected_error":"award authority"},
+    {"id":"mismatched_receipts","mutation":"remove one required evidence receipt from first award","expected_error":"award evidence"},
+    {"id":"out_of_order","mutation":"remove a row's first token while retaining its later token","expected_error":"award cumulative order"},
+    {"id":"duplicate_token","mutation":"append a duplicate token award","expected_error":"award duplicate token"},
+    {"id":"raw_recompute","mutation":"claim raw sum one below recomputed raw sum","expected_error":"score raw claim"},
+    {"id":"incomplete_noncompensable_gate","mutation":"leave L OPEN while claiming certified 80","expected_error":"score gate claim"}
+  ]
+}

@@ -1,19 +1,28 @@
 {
-  "schema": "evidence-authority-registry/v1",
+  "schema": "evidence-authority-registry/v2",
   "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
   "required_entry_fields": [
     "authority_receipt_id",
-    "slot_id",
+    "kind",
     "authority_class",
     "subject",
+    "scope",
     "issuer",
     "decision",
+    "approved_at",
+    "source_message_id",
+    "source_archive_sha256",
     "artifact_path",
     "artifact_sha256",
     "exact_sha"
   ],
-  "required_decision": "PASS",
+  "decision_by_kind": {
+    "SCOPE": "AUTHORIZED",
+    "SLOT": "PASS",
+    "TOKEN": "PASS"
+  },
   "allowed_issuers_by_class": {
+    "FOUNDER_SCOPE_DIRECTION": ["reviewer-on-founder-authority"],
     "REVIEWER_PASS": ["reviewer"],
     "FOUNDER_DECISION_AND_REVIEWER_PASS": ["founder+reviewer"],
     "PAYMENT_OWNER_AND_REVIEWER_PASS": ["payment-owner+reviewer"],

@@ -9,7 +9,8 @@ contract. `SCORE-80-POINT-MATRIX.json` defines the exact 27 raw points from
 existing 13 rows. Weights remain 10 per row and cannot be redistributed. No
 token is currently awarded, so the certified score remains 58.
 
-The current Founder direction limits work to the score-80 critical path. It
+The current Founder direction, carried by the canonical amended Reviewer TASK
+in `AMENDED-SOURCE-TASK.json`, limits work to the score-80 critical path. It
 approves the C5 fail-closed manual-review policy, approves a tightly bounded
 payment canary only in principle and only after prerequisites, and approves a
 separated release model while leaving role names missing. It does not
@@ -29,6 +30,14 @@ The verifier reads artifact bytes with `git show exact_sha:artifact_path`,
 requires that commit in reviewed ancestry, resolves the authority receipt
 against `AUTHORITY-REGISTRY.json`, and checks the exact dependency-slot set.
 For M/Q/I/U/K/O, dependency `80` expands to A/L/C5/P/G/B/R.
+
+Token awards are machine-enforced end to end: token identity, per-token
+required slot receipts, token-specific authority class, cumulative row order,
+duplicate rejection, raw/normalized recomputation, and the evidence-ceiling
+transition. The ceiling stays 58 unless all non-compensable 80 slots are
+VERIFIED; certified 80 additionally requires all 27 tokens and raw 104.
+`NEGATIVE-CASES.json` exercises unknown token, mismatched authority/receipts,
+out-of-order and duplicate awards, false raw claims, and incomplete gates.
 This slice performs no deploy and cannot conflict with Lane A.
 Production, public launch, and real money remain OFF.
 

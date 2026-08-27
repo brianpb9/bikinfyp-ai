@@ -20,9 +20,11 @@ const committedBytes = (exactSha, artifactPath, label) => {
 };
 const contract = read("RUBRIC-CONTRACT.json");
 const task = read("SOURCE-TASK.json");
+const amendedTask = read("AMENDED-SOURCE-TASK.json");
 const matrix80 = read("SCORE-80-POINT-MATRIX.json");
 const founder80 = read("FOUNDER-80-DIRECTION.json");
 const authorityRegistry = read("AUTHORITY-REGISTRY.json");
+const negativeCases = read("NEGATIVE-CASES.json");
 const laneA = read("LANE-A-READONLY-ARTIFACT.json");
 const laneB = read("LANE-B-READONLY-ARTIFACT.json");
 
@@ -46,7 +48,8 @@ for (const [threshold, expected] of [[80,104],[90,117],[100,130]]) {
 }
 if (contract.thresholds["90"].gate !== "NOT_AUTHORIZED_FOR_CURRENT_WORK" || contract.thresholds["90"].gate_source !== null) fail("90 scope boundary");
 if (!contract.point_rule.evidence_receipt_changes_points || contract.point_rule.default_delta !== 0 || contract.point_rule.missing_authority_result !== "NO_SCORE_CHANGE" || contract.point_rule.weights_may_not_be_redistributed !== true || contract.point_rule.partial_tokens_allowed || contract.point_rule.token_value_raw_points !== 1 || !contract.point_rule.tokens_must_be_cumulative_within_row || contract.point_rule.ladder !== "SCORE-80-POINT-MATRIX.json") fail("point rule drift");
-if (contract.founder_80_direction !== "FOUNDER-80-DIRECTION.json" || founder80.task !== contract.task || founder80.scope !== "SCORE_80_CRITICAL_PATH_ONLY" || founder80.production_public_real_money !== "OFF") fail("Founder 80 direction binding");
+if (amendedTask.id !== "1787845709000-reviewer-TASK" || amendedTask.from !== "reviewer" || amendedTask.to !== "builder" || amendedTask.type !== "TASK" || amendedTask.sha !== "" || amendedTask.task !== contract.task || amendedTask.task_id !== contract.task || amendedTask.owner_id !== task.owner_id || amendedTask.worker_id !== task.worker_id || !amendedTask.body.startsWith("AMENDED_FOUNDER_AUTHORITY_20260827; SCORE_80_CRITICAL_PATH_ONLY.")) fail("amended authority task binding");
+if (contract.founder_80_direction !== "FOUNDER-80-DIRECTION.json" || founder80.task !== contract.task || founder80.scope !== "SCORE_80_CRITICAL_PATH_ONLY" || founder80.production_public_real_money !== "OFF" || founder80.authority_source !== "AMENDED-SOURCE-TASK.json" || founder80.authority_message_id !== amendedTask.id) fail("Founder 80 direction binding");
 const c5 = founder80.category_unknown_policy;
 if (c5.decision !== "APPROVED" || c5.result !== "FAIL_CLOSED_MANUAL_REVIEW_QUARANTINE" || c5.heuristic_auto_map !== "FORBIDDEN" || !c5.implementation_and_exact_sha_review_still_required || c5.forbidden_before_authorized_release.length !== 4) fail("C5 Founder policy");
 const canary = founder80.payment_canary;
@@ -61,10 +64,11 @@ const matrixTokens = matrix80.rows.flatMap((row) => {
   if (row.target_80 - row.current !== row.delta) fail(`80 matrix delta ${row.row}`);
   const expectedTargets = Array.from({length:row.delta}, (_, index) => row.current + index + 1);
   if (JSON.stringify(row.tokens.map((token) => token.target_score)) !== JSON.stringify(expectedTargets)) fail(`80 matrix targets ${row.row}`);
-  for (const token of row.tokens) if (!token.token_id || !token.evidence || !token.authority_class) fail(`80 matrix token shape ${row.row}`);
+  for (const token of row.tokens) if (!token.token_id || !token.evidence || !token.authority_class || !Array.isArray(token.required_slots) || token.required_slots.length === 0 || new Set(token.required_slots).size !== token.required_slots.length) fail(`80 matrix token shape ${row.row}`);
   return row.tokens;
 });
 if (matrix80.rows.reduce((sum,row) => sum + row.target_80, 0) !== 104 || matrixTokens.length !== 27 || new Set(matrixTokens.map((token) => token.token_id)).size !== 27) fail("80 matrix exact 27 points");
+const tokenById = new Map(matrix80.rows.flatMap((row) => row.tokens.map((token) => [token.token_id,{...token,row:row.row,current:row.current}])));
 if (JSON.stringify(matrix80.gate_classification["80_AND_90_INHERITED"]) !== JSON.stringify(["A","L","C5","P","G","B","R"]) || JSON.stringify(matrix80.gate_classification["90_ONLY_NOT_AUTHORIZED_NOW"]) !== JSON.stringify(["M","Q","I","U","K","O"])) fail("80/90 slot classification");
 const pitrSource = fs.readFileSync(path.join(root, "docs/evidence/SHIP-READINESS-CANONICAL-20260824.md"), "utf8");
 if (!pitrSource.includes("100/100") || !pitrSource.includes("backup/PITR restore")) fail("PITR canonical source");
@@ -88,13 +92,20 @@ if (contract.slots.B.depends_on.join(",") !== "A" || contract.slots.L.depends_on
 
 const slotIds = Object.keys(slots);
 if (contract.authority_registry !== "AUTHORITY-REGISTRY.json") fail("authority registry binding");
-if (authorityRegistry.task !== contract.task || authorityRegistry.required_decision !== "PASS" || !Array.isArray(authorityRegistry.entries)) fail("authority registry header");
-const authorityRequired = ["authority_receipt_id","slot_id","authority_class","subject","issuer","decision","artifact_path","artifact_sha256","exact_sha"];
+if (authorityRegistry.task !== contract.task || authorityRegistry.schema !== "evidence-authority-registry/v2" || !Array.isArray(authorityRegistry.entries)) fail("authority registry header");
+const authorityRequired = ["authority_receipt_id","kind","authority_class","subject","scope","issuer","decision","approved_at","source_message_id","source_archive_sha256","artifact_path","artifact_sha256","exact_sha"];
 if (JSON.stringify(authorityRegistry.required_entry_fields) !== JSON.stringify(authorityRequired)) fail("authority registry fields");
 const authoritiesById = new Map();
 for (const authority of authorityRegistry.entries) {
   for (const field of authorityRequired) if (!(field in authority)) fail(`authority missing ${field}`);
-  if (!slotIds.includes(authority.slot_id) || authority.authority_class !== slots[authority.slot_id].closure_authority || authority.subject !== `${contract.task}:${authority.slot_id}` || authority.decision !== "PASS") fail(`authority subject/class ${authority.authority_receipt_id}`);
+  if (!Object.hasOwn(authorityRegistry.decision_by_kind, authority.kind) || authority.decision !== authorityRegistry.decision_by_kind[authority.kind]) fail(`authority decision ${authority.authority_receipt_id}`);
+  if (!Array.isArray(authority.scope) || authority.scope.length === 0 || !authority.approved_at || !authority.source_message_id || !/^[0-9a-f]{64}$/.test(authority.source_archive_sha256)) fail(`authority scope/source ${authority.authority_receipt_id}`);
+  if (authority.kind === "SLOT" && (!slotIds.includes(authority.slot_id) || authority.authority_class !== slots[authority.slot_id].closure_authority || authority.subject !== `${contract.task}:${authority.slot_id}`)) fail(`authority slot subject/class ${authority.authority_receipt_id}`);
+  if (authority.kind === "TOKEN") {
+    const token = tokenById.get(authority.token_id);
+    if (!token || authority.authority_class !== token.authority_class || authority.subject !== `${contract.task}:TOKEN:${authority.token_id}`) fail(`authority token subject/class ${authority.authority_receipt_id}`);
+  }
+  if (authority.kind === "SCOPE" && (authority.authority_class !== "FOUNDER_SCOPE_DIRECTION" || authority.subject !== contract.task || JSON.stringify(authority.scope) !== JSON.stringify(["C5_POLICY","PAYMENT_CANARY_POSTURE","RELEASE_CONTROL_MODEL","SCORE_80_REQUIRED_OUTPUT"]))) fail(`authority task scope ${authority.authority_receipt_id}`);
   const allowedIssuers = authorityRegistry.allowed_issuers_by_class[authority.authority_class];
   if (!allowedIssuers?.includes(authority.issuer)) fail(`authority issuer ${authority.authority_receipt_id}`);
   if (!authority.artifact_path.startsWith("docs/evidence/") || authority.artifact_path.includes("..") || !/^[0-9a-f]{64}$/.test(authority.artifact_sha256) || !/^[0-9a-f]{40}$/.test(authority.exact_sha) || authoritiesById.has(authority.authority_receipt_id)) fail(`authority identity ${authority.authority_receipt_id}`);
@@ -117,7 +128,7 @@ for (const id of slotIds) {
     const bytes = committedBytes(receipt.exact_sha, receipt.artifact_path, `receipt ${receipt.receipt_id}`);
     if (crypto.createHash("sha256").update(bytes).digest("hex") !== receipt.artifact_sha256) fail(`receipt artifact bytes ${id}`);
     const authority = authoritiesById.get(receipt.authority_receipt_id);
-    if (!authority || authority.slot_id !== id || authority.authority_class !== receipt.authority_class || authority.subject !== `${contract.task}:${id}` || authority.decision !== "PASS") fail(`receipt authority resolution ${id}`);
+    if (!authority || authority.kind !== "SLOT" || authority.slot_id !== id || authority.authority_class !== receipt.authority_class || authority.subject !== `${contract.task}:${id}` || authority.decision !== "PASS") fail(`receipt authority resolution ${id}`);
     const dependencyIds = slots[id].depends_on.flatMap((dep) => dep === "80" ? contract.thresholds["80"].requires : [dep]);
     if (receipt.dependency_receipt_ids.length !== dependencyIds.length || new Set(receipt.dependency_receipt_ids).size !== dependencyIds.length) fail(`receipt dependency cardinality ${id}`);
     receiptsById.set(receipt.receipt_id, receipt);
@@ -133,9 +144,72 @@ for (const id of slotIds) for (const receipt of contract.receipt_registry[id]) {
   }).sort();
   if (JSON.stringify(actualDependencySlots) !== JSON.stringify(expectedDependencySlots)) fail(`receipt dependency exact set ${id}`);
 }
-if ([...receiptsById].length !== 0) fail("unreviewed external receipt inserted");
-if ([...authoritiesById].length !== 0) fail("unreviewed authority receipt inserted");
-if (contract.evidence_token_awards.length !== 0) fail("unreviewed evidence token award inserted");
+const awardFields = ["award_id","authority_receipt_id","token_id","row","prior_score","new_score","evidence_receipt_ids"];
+if (JSON.stringify(contract.point_rule.token_award_requires) !== JSON.stringify(awardFields)) fail("token award fields");
+const validateAwards = (awards, receiptMap, authorityMap, slotState, claimed) => {
+  const seenAwardIds = new Set();
+  const seenTokenIds = new Set();
+  const awardsByToken = new Map();
+  for (const award of awards) {
+    for (const field of awardFields) if (!(field in award)) fail(`award missing ${field}`);
+    const token = tokenById.get(award.token_id);
+    if (!token) fail("award unknown token");
+    if (seenAwardIds.has(award.award_id)) fail("award duplicate id");
+    if (seenTokenIds.has(award.token_id)) fail("award duplicate token");
+    seenAwardIds.add(award.award_id); seenTokenIds.add(award.token_id); awardsByToken.set(award.token_id, award);
+    if (award.row !== token.row || award.new_score !== token.target_score || award.prior_score !== token.target_score - 1) fail("award row/score binding");
+    const authority = authorityMap.get(award.authority_receipt_id);
+    if (!authority || authority.kind !== "TOKEN" || authority.token_id !== award.token_id || authority.authority_class !== token.authority_class || authority.subject !== `${contract.task}:TOKEN:${award.token_id}` || authority.decision !== "PASS") fail("award authority");
+    if (!Array.isArray(award.evidence_receipt_ids) || award.evidence_receipt_ids.length !== token.required_slots.length || new Set(award.evidence_receipt_ids).size !== token.required_slots.length) fail("award evidence cardinality");
+    const evidenceSlots = award.evidence_receipt_ids.map((id) => {
+      const receipt = receiptMap.get(id);
+      if (!receipt || receipt.verdict !== "PASS") fail("award evidence receipt");
+      return receipt.slot_id;
+    }).sort();
+    if (JSON.stringify(evidenceSlots) !== JSON.stringify([...token.required_slots].sort())) fail("award evidence slots");
+  }
+  for (const row of matrix80.rows) {
+    let gap = false;
+    for (const token of row.tokens) {
+      if (!awardsByToken.has(token.token_id)) gap = true;
+      else if (gap) fail("award cumulative order");
+    }
+  }
+  const rawSum = raw + awards.length;
+  const normalizedRounded = Math.round(rawSum / contract.current.denominator * 100);
+  const receiptValues = [...receiptMap.values()];
+  const gate80Closed = contract.thresholds["80"].requires.every((id) => slotState[id] === contract.receipt_contract.closed_state && receiptValues.some((receipt) => receipt.slot_id === id && receipt.verdict === "PASS"));
+  const evidenceCeiling = gate80Closed ? 80 : contract.current.evidence_ceiling;
+  const certifiedScore = Math.min(normalizedRounded,evidenceCeiling);
+  if (claimed.raw_sum !== rawSum) fail("score raw claim");
+  if (claimed.normalized_rounded !== normalizedRounded) fail("score normalized claim");
+  if (claimed.gate_80_closed !== gate80Closed) fail("score gate claim");
+  if (claimed.evidence_ceiling !== evidenceCeiling) fail("score ceiling claim");
+  if (claimed.certified_score !== certifiedScore) fail("score certified claim");
+  if (certifiedScore === 80 && (awards.length !== 27 || rawSum < 104 || !gate80Closed)) fail("score 80 incomplete");
+  return {rawSum,normalizedRounded,gate80Closed,evidenceCeiling,certifiedScore};
+};
+const actualSlotState = Object.fromEntries(slotIds.map((id) => [id,slots[id].state]));
+const actualScore = validateAwards(contract.evidence_token_awards,receiptsById,authoritiesById,actualSlotState,contract.score_state);
+
+const syntheticReceipts = new Map(slotIds.map((id) => [`synthetic-receipt-${id}`,{receipt_id:`synthetic-receipt-${id}`,slot_id:id,verdict:"PASS"}]));
+const syntheticAuthorities = new Map(matrixTokens.map((token) => [`synthetic-authority-${token.token_id}`,{authority_receipt_id:`synthetic-authority-${token.token_id}`,kind:"TOKEN",token_id:token.token_id,authority_class:token.authority_class,subject:`${contract.task}:TOKEN:${token.token_id}`,decision:"PASS"}]));
+const syntheticAwards = matrix80.rows.flatMap((row) => row.tokens.map((token) => ({award_id:`synthetic-award-${token.token_id}`,authority_receipt_id:`synthetic-authority-${token.token_id}`,token_id:token.token_id,row:row.row,prior_score:token.target_score-1,new_score:token.target_score,evidence_receipt_ids:token.required_slots.map((id) => `synthetic-receipt-${id}`)})));
+const allVerified = Object.fromEntries(slotIds.map((id) => [id,"VERIFIED"]));
+const score80Claim = {raw_sum:104,normalized_rounded:80,gate_80_closed:true,evidence_ceiling:80,certified_score:80};
+validateAwards(syntheticAwards,syntheticReceipts,syntheticAuthorities,allVerified,score80Claim);
+const expectFailure = (expected, fn) => { try { fn(); } catch (error) { if (error.message.includes(expected)) return; throw error; } fail(`negative case did not fail: ${expected}`); };
+if (negativeCases.cases.length !== 7) fail("negative case count");
+for (const test of negativeCases.cases) {
+  if (test.id === "unknown_token") { const awards=structuredClone(syntheticAwards); awards[0].token_id="UNKNOWN"; expectFailure(test.expected_error,()=>validateAwards(awards,syntheticReceipts,syntheticAuthorities,allVerified,score80Claim)); }
+  else if (test.id === "mismatched_authority") { const authorities=new Map(syntheticAuthorities); authorities.set(syntheticAwards[0].authority_receipt_id,{...authorities.get(syntheticAwards[0].authority_receipt_id),authority_class:"WRONG"}); expectFailure(test.expected_error,()=>validateAwards(syntheticAwards,syntheticReceipts,authorities,allVerified,score80Claim)); }
+  else if (test.id === "mismatched_receipts") { const awards=structuredClone(syntheticAwards); awards[0].evidence_receipt_ids.pop(); expectFailure(test.expected_error,()=>validateAwards(awards,syntheticReceipts,syntheticAuthorities,allVerified,score80Claim)); }
+  else if (test.id === "out_of_order") { const awards=syntheticAwards.filter((award)=>award.token_id!=="AUTH-08"); expectFailure(test.expected_error,()=>validateAwards(awards,syntheticReceipts,syntheticAuthorities,allVerified,{...score80Claim,raw_sum:103,normalized_rounded:79})); }
+  else if (test.id === "duplicate_token") { const awards=[...syntheticAwards,{...syntheticAwards[0],award_id:"duplicate-award"}]; expectFailure(test.expected_error,()=>validateAwards(awards,syntheticReceipts,syntheticAuthorities,allVerified,score80Claim)); }
+  else if (test.id === "raw_recompute") expectFailure(test.expected_error,()=>validateAwards(syntheticAwards,syntheticReceipts,syntheticAuthorities,allVerified,{...score80Claim,raw_sum:103}));
+  else if (test.id === "incomplete_noncompensable_gate") { const state={...allVerified,L:"OPEN"}; expectFailure(test.expected_error,()=>validateAwards(syntheticAwards,syntheticReceipts,syntheticAuthorities,state,score80Claim)); }
+  else fail(`unknown negative case ${test.id}`);
+}
 if (contract.production_public_real_money !== "OFF" || !task.forbidden.includes("real money")) fail("safety boundary drift");
 
 if (laneA.status !== "PENDING_INDEPENDENT_REVIEW" || laneA.exact_sha !== contract.baseline_sha || !laneA.independent_refresh) fail("Lane A pending binding");
@@ -170,6 +244,6 @@ for (const line of manifest) {
   if (digest !== match[1]) fail(`checksum ${match[2]}`);
 }
 const secret = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+\/-]+=*|\b(?:api[_-]?key|secret[_-]?key)\s*[:=]\s*["']?[A-Za-z0-9_\/-]{16,})/i;
-for (const name of ["RUBRIC-CONTRACT.json","SOURCE-TASK.json","README.md","verify.mjs","VALIDATION.json","AUTHORITY-REGISTRY.json","FOUNDER-80-DIRECTION.json","SCORE-80-POINT-MATRIX.json","LANE-A-READONLY-ARTIFACT.json","LANE-A-COMMAND-LEDGER.md","LANE-B-READONLY-ARTIFACT.json"]) if (secret.test(fs.readFileSync(path.join(dir, name), "utf8"))) fail(`secret-like literal ${name}`);
+for (const name of ["RUBRIC-CONTRACT.json","SOURCE-TASK.json","AMENDED-SOURCE-TASK.json","README.md","verify.mjs","VALIDATION.json","AUTHORITY-REGISTRY.json","FOUNDER-80-DIRECTION.json","SCORE-80-POINT-MATRIX.json","NEGATIVE-CASES.json","LANE-A-READONLY-ARTIFACT.json","LANE-A-COMMAND-LEDGER.md","LANE-B-READONLY-ARTIFACT.json"]) if (secret.test(fs.readFileSync(path.join(dir, name), "utf8"))) fail(`secret-like literal ${name}`);
 
-console.log(JSON.stringify({source_rows:13,raw_sum:77,certified_score:58,target_80_raw:104,deterministic_58_to_80_point_tokens:27,pitr_required_for_80:false,slot_count:Object.keys(slots).length,receipt_registry_slots:Object.keys(contract.receipt_registry).length,receipts:0,authority_receipts:0,lane_A_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_kpi:"NON_REPRESENTATIVE_N_0",evidence_token_awards:0,production_public_real_money:"OFF",pass:true}));
+console.log(JSON.stringify({source_rows:13,raw_sum:actualScore.rawSum,certified_score:actualScore.certifiedScore,target_80_raw:104,deterministic_58_to_80_point_tokens:27,nonempty_award_path:"PASS_27_OF_27",negative_award_cases:negativeCases.cases.length,pitr_required_for_80:false,slot_count:Object.keys(slots).length,receipt_registry_slots:Object.keys(contract.receipt_registry).length,receipts:receiptsById.size,authority_receipts:authoritiesById.size,lane_A_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_kpi:"NON_REPRESENTATIVE_N_0",evidence_token_awards:contract.evidence_token_awards.length,production_public_real_money:"OFF",pass:true}));

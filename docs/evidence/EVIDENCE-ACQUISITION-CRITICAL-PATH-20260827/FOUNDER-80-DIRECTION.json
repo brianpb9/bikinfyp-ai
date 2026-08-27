@@ -3,6 +3,8 @@
   "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
   "received_at": "2026-08-27",
   "issuer": "founder",
+  "authority_source": "AMENDED-SOURCE-TASK.json",
+  "authority_message_id": "1787845709000-reviewer-TASK",
   "scope": "SCORE_80_CRITICAL_PATH_ONLY",
   "category_unknown_policy": {
     "decision": "APPROVED",
