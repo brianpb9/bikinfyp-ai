@@ -1057,6 +1057,41 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
   assert.equal(durableProduct, productSnapshot, "snapshot metadata W1 ditimpa dari produk mutasi");
 });
 
+test("E7 ordinary PostgreSQL menunggu evidence lease lalu mempertahankan reconfirmation terbaru", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const rel = `uploads/w1-e7-c2-lock-${process.pid}/0.webp`;
+  const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
+  const { productId, orgId, collaboratorId, collaboratorToken } = await siapkanJobOrgLewatAdmisi([rel], isi);
+  const { acquireAdmissionReferenceEvidence } = await import("../lib/job-admission-reference");
+  const lease = await acquireAdmissionReferenceEvidence({
+    productId, owner: { kind: "org", id: orgId }, boundary: "A3",
+    loadSqliteCandidateRels: () => [rel],
+  });
+  let settled = false;
+  const paused = patchProdukOrg(collaboratorToken, { product_id: productId, name: "Detail PG sesudah lock" })
+    .finally(() => { settled = true; });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "E7 PostgreSQL tidak menunggu advisory evidence lock");
+
+  const latestAt = "2026-08-27T12:34:56.000Z";
+  await pool.query(`UPDATE products SET product_type_token='serum terbaru',
+    product_type_confirmed_token='serum terbaru',product_type_confirmed_by=$1,
+    product_type_confirmed_at=$2::timestamptz,product_type_version=1,product_type_state='CONFIRMED'
+    WHERE id=$3`, [collaboratorId, latestAt, productId]);
+  await lease.release();
+  const response = await paused;
+  assert.equal(response.status, 200, await response.text());
+  const row = (await pool.query(`SELECT name,product_type_token,product_type_confirmed_token,
+    product_type_confirmed_by,product_type_confirmed_at FROM products WHERE id=$1`, [productId])).rows[0];
+  assert.deepEqual({
+    name: row.name, token: row.product_type_token, confirmed: row.product_type_confirmed_token,
+    actor: row.product_type_confirmed_by, at: new Date(row.product_type_confirmed_at).toISOString(),
+  }, {
+    name: "Detail PG sesudah lock", token: "serum terbaru", confirmed: "serum terbaru",
+    actor: collaboratorId, at: latestAt,
+  });
+});
+
 test("C9 counterexample E7→W1: frame render promo live berubah sementara prompt tetap snapshot admission", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   const { setVideoProvidersForTests } = await import("../lib/providers/registry");

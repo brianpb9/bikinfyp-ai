@@ -12,19 +12,24 @@ The timestamp probe preserves invalid strings byte-exact and canonicalizes a nod
 Concurrency guards prove ordinary E7 SQL omits C2 writes and A1 validates the locked/admitted row.
 
 $ SCRIPT_LLM=0 npx tsx --test tests/admission-evidence-enforcement.test.ts tests/http-photo-mutation-resume-w2.test.ts tests/product-truth-worker-reference.test.ts tests/hitl.test.ts
-tests=44 pass=44 fail=0 exit=0
+tests=45 pass=45 fail=0 exit=0
 The SQLite A1 race counterexample quarantines after precheck: HTTP 422, zero job/hold/orphan snapshot.
+Paused ordinary E3 waits for the evidence lease and preserves the newer reconfirmation.
 
 $ UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='dashboard lock|E7 HTTP PATCH|retail PostgreSQL admission' tests/pg-product-truth-w1.test.ts
 tests=4 pass=4 fail=0 skipped=0 exit=0
 Real node-postgres TIMESTAMPTZ values crossed retail and organization admission boundaries.
 The E7 fixture uses a different same-org member and preserves the original confirmation actor/time.
 
+$ UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='E7 ordinary PostgreSQL' tests/pg-product-truth-w1.test.ts
+tests=1 pass=1 fail=0 skipped=0 exit=0
+The paused ordinary E7 request waits on the advisory lease and preserves the newer reconfirmation.
+
 $ npx tsc --noEmit
 exit=0
 
 $ npm test
-tests=1256 pass=1209 fail=0 cancelled=0 skipped=47 exit=0
+tests=1258 pass=1210 fail=0 cancelled=0 skipped=48 exit=0
 
 $ npm run build
 exit=0

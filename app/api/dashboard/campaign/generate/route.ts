@@ -119,7 +119,27 @@ export async function POST(req: Request) {
       owner: { kind: "org", id: membership.org_id },
       boundary: "A3",
       loadSqliteCandidateRels: () => images,
+      loadSqliteProductType: () => ({
+        product_type_token: product.product_type_token ?? null,
+        product_type_confirmed_token: product.product_type_confirmed_token ?? null,
+        product_type_confirmed_by: product.product_type_confirmed_by ?? null,
+        product_type_confirmed_at: product.product_type_confirmed_at ?? null,
+        product_type_version: product.product_type_version ?? null,
+        product_type_state: product.product_type_state ?? "QUARANTINED",
+      }),
     });
+    const lockedProductType = evidenceLease.productType;
+    await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-org-product.product_type_token", token: lockedProductType?.product_type_token ?? "", version: 1 },
+      lockedProductType?.product_type_state === "CONFIRMED" && lockedProductType.product_type_confirmed_token
+        && lockedProductType.product_type_confirmed_by && lockedProductType.product_type_confirmed_at
+        && lockedProductType.product_type_version === 1 ? {
+          kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: lockedProductType.product_type_confirmed_token,
+          actorId: lockedProductType.product_type_confirmed_by,
+          confirmedAt: canonicalProductTypeTimestamp(lockedProductType.product_type_confirmed_at),
+          version: 1, provenance: "USER_SELF_ASSERTION",
+        } : null,
+    ), () => undefined);
 
     const run = (name: string) => routeDeps.generateScripts({
       product: {

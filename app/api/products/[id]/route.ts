@@ -3,10 +3,11 @@ import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, audit, type ProductRow } from "@/lib/db";
 import { validBrand, validPriceIdr, validProductName } from "@/lib/product-validation";
 import { parsePromoFields } from "@/lib/promo";
-import { pgSetProductBrand, pgUpdateProduct, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { pgSetProductBrand, pgUpdateProduct, pgUpdateProductDetails, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
+import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -17,6 +18,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const user = await getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
     const { id } = await ctx.params;
+    return await withProductEvidenceMutationLock(id, async () => {
     const db = postgresRuntimeEnabled() ? null : getDb();
     const product = postgresRuntimeEnabled()
       ? await smokeGetProduct(user.id, id)
@@ -72,25 +74,29 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         confirmedAt, version: 1, provenance: "USER_SELF_ASSERTION",
       } : null,
     ), async () => {
-    if (postgresRuntimeEnabled()) await pgUpdateProduct(user.id, id, {
-      name, priceIdr, category, productTypeToken, productTypeConfirmedToken: confirmedProductTypeToken,
-      productTypeConfirmedBy: confirmedBy, productTypeConfirmedAt: confirmedAt, productTypeVersion: 1,
-      productVisualDesc: visualDesc, ...promo,
-    });
-    else {
-      db!.prepare(
-        `UPDATE products SET name = ?, price_idr = ?, category = ?, product_type_token = ?,
-           product_type_confirmed_token = ?, product_type_confirmed_by = ?, product_type_confirmed_at = ?,
-           product_type_version = 1, product_type_state = 'CONFIRMED', product_visual_desc = ?,
-           promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?`
-      ).run(name, priceIdr, category, productTypeToken, confirmedProductTypeToken, confirmedBy, confirmedAt,
-        visualDesc, promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, id);
-      audit(user.id, "product.updated", "products", id, {
-        name, price_idr: priceIdr, promo: promo.promoPriceBeforeIdr !== null,
-        product_type: productTypeToken, product_type_state: "CONFIRMED",
-        product_type_confirmation: "USER_SELF_ASSERTION", product_type_confirmed_by: confirmedBy,
-        product_type_confirmed_at: confirmedAt, product_type_version: 1,
+    if (postgresRuntimeEnabled()) {
+      if (confirmationTouched) await pgUpdateProduct(user.id, id, {
+        name, priceIdr, category, productTypeToken, productTypeConfirmedToken: confirmedProductTypeToken,
+        productTypeConfirmedBy: confirmedBy, productTypeConfirmedAt: confirmedAt, productTypeVersion: 1,
+        productVisualDesc: visualDesc, ...promo,
       });
+      else await pgUpdateProductDetails(user.id, id, {
+        name, priceIdr, category, productVisualDesc: visualDesc, ...promo,
+      });
+    }
+    else {
+      if (confirmationTouched) db!.prepare(
+          `UPDATE products SET name = ?, price_idr = ?, category = ?, product_type_token = ?,
+             product_type_confirmed_token = ?, product_type_confirmed_by = ?, product_type_confirmed_at = ?,
+             product_type_version = 1, product_type_state = 'CONFIRMED', product_visual_desc = ?,
+             promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?`
+        ).run(name, priceIdr, category, productTypeToken, confirmedProductTypeToken, confirmedBy, confirmedAt,
+          visualDesc, promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, id);
+      else db!.prepare(
+          `UPDATE products SET name = ?, price_idr = ?, category = ?, product_visual_desc = ?,
+             promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?`
+        ).run(name, priceIdr, category, visualDesc, promo.promoPriceBeforeIdr,
+          promo.promoEndsAt, promo.promoStockLeft, id);
     }
 
     // Merek terkonfirmasi user (audit C9) → raw_meta.brand, merge — jangan
@@ -108,12 +114,27 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         audit(user.id, "product.brand_set", "products", id, { brand });
       }
     }
+    const updated = postgresRuntimeEnabled()
+      ? await smokeGetProduct(user.id, id)
+      : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(id, user.id) as ProductRow | undefined;
+    if (!updated) throw ERR.NOT_FOUND("Produknya");
+    const updatedConfirmedAt = canonicalProductTypeTimestamp(updated.product_type_confirmed_at);
+    if (!postgresRuntimeEnabled()) audit(user.id, "product.updated", "products", id, {
+      name: updated.name, price_idr: updated.price_idr, promo: updated.promo_price_before_idr !== null,
+      product_type: updated.product_type_token, product_type_state: updated.product_type_state,
+      product_type_confirmation: updated.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : null,
+      product_type_confirmed_by: updated.product_type_confirmed_by,
+      product_type_confirmed_at: updatedConfirmedAt || null, product_type_version: updated.product_type_version,
+    });
     return Response.json({
-      ok: true, product_id: id, name, price_idr: priceIdr, category, product_type: productTypeToken,
-      product_type_confirmation: {
-        state: "CONFIRMED", actor_id: confirmedBy, confirmed_at: confirmedAt,
-        version: 1, provenance: "USER_SELF_ASSERTION",
-      },
+      ok: true, product_id: id, name: updated.name, price_idr: updated.price_idr, category: updated.category,
+      product_type: updated.product_type_token ?? null,
+      product_type_confirmation: updated.product_type_state === "CONFIRMED"
+        && updated.product_type_confirmed_by && updatedConfirmedAt && updated.product_type_version === 1 ? {
+          state: "CONFIRMED", actor_id: updated.product_type_confirmed_by, confirmed_at: updatedConfirmedAt,
+          version: 1, provenance: "USER_SELF_ASSERTION",
+        } : null,
+    });
     });
     });
   } catch (err) {

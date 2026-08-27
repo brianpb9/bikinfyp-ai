@@ -172,6 +172,33 @@ export class PgProductPersonaScriptRepository {
     return product;
   }
 
+  /** Ordinary retail details never rewrite C2 confirmation provenance. */
+  async updateOwnedProductDetails(
+    userId: string,
+    productId: string,
+    patch: Pick<PgProductInput, "name" | "priceIdr" | "category" | "productVisualDesc" | "promoPriceBeforeIdr" | "promoEndsAt" | "promoStockLeft">
+  ): Promise<ProductRow | null> {
+    const result = await this.pool.query<ProductRow>(
+      `UPDATE products SET name = $1, price_idr = $2, category = $3,
+         product_visual_desc = $4, promo_price_before_idr = $5,
+         promo_ends_at = $6, promo_stock_left = $7
+       WHERE id = $8 AND user_id = $9 RETURNING *`,
+      [patch.name, patch.priceIdr, patch.category, patch.productVisualDesc ?? null,
+       patch.promoPriceBeforeIdr ?? null, patch.promoEndsAt ?? null,
+       patch.promoStockLeft ?? null, productId, userId]
+    );
+    const product = result.rows[0] ?? null;
+    if (product) await this.appendAudit(userId, "product.updated", "products", productId, {
+      name: product.name, price_idr: product.price_idr, product_type: product.product_type_token,
+      product_type_state: product.product_type_state,
+      product_type_confirmation: product.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : null,
+      product_type_confirmed_by: product.product_type_confirmed_by,
+      product_type_confirmed_at: product.product_type_confirmed_at,
+      product_type_version: product.product_type_version,
+    });
+    return product;
+  }
+
   /**
    * Merek terkonfirmasi user → raw_meta.brand (audit C9, 19 Agu).
    *

@@ -102,7 +102,19 @@ export async function withProductEvidenceMutationLock<T>(
   }
 }
 
-export type AdmissionEvidenceLease = { release(): Promise<void> };
+export type LockedProductTypeState = {
+  product_type_token: string | null;
+  product_type_confirmed_token: string | null;
+  product_type_confirmed_by: string | null;
+  product_type_confirmed_at: string | Date | null;
+  product_type_version: number | null;
+  product_type_state: string;
+};
+
+export type AdmissionEvidenceLease = {
+  productType: LockedProductTypeState | null;
+  release(): Promise<void>;
+};
 
 /**
  * Keep the verified product identity stable until the provider/setup operation
@@ -115,23 +127,29 @@ export async function acquireAdmissionReferenceEvidence(input: {
   owner: ProductOwner;
   boundary: ProductEvidenceBoundary;
   loadSqliteCandidateRels: () => Promise<string[]> | string[];
+  loadSqliteProductType?: () => Promise<LockedProductTypeState | null> | LockedProductTypeState | null;
 }): Promise<AdmissionEvidenceLease> {
   const releaseLocal = await acquireProcessProductOperation(input.productId);
   let client: PoolClient | null = null;
   let released = false;
   try {
     let candidateRels: string[];
+    let productType: LockedProductTypeState | null = null;
     if (evidenceLockDependencies().postgresRuntimeEnabled()) {
       client = await acquirePostgresProductLock(input.productId);
       const ownerColumn = input.owner.kind === "org" ? "org_id" : "user_id";
-      const locked = await client.query<{ images: string }>(
-        `SELECT images FROM products WHERE id=$1 AND ${ownerColumn}=$2`,
+      const locked = await client.query<LockedProductTypeState & { images: string }>(
+        `SELECT images,product_type_token,product_type_confirmed_token,product_type_confirmed_by,
+                product_type_confirmed_at,product_type_version,product_type_state
+           FROM products WHERE id=$1 AND ${ownerColumn}=$2`,
         [input.productId, input.owner.id]
       );
       if (!locked.rows[0]) throw new Error(`Admission product ${input.productId} disappeared before ${input.boundary}`);
       candidateRels = JSON.parse(locked.rows[0].images || "[]") as string[];
+      productType = locked.rows[0];
     } else {
       candidateRels = await input.loadSqliteCandidateRels();
+      productType = await input.loadSqliteProductType?.() ?? null;
     }
     await assertAdmissionReferenceEvidence({
       productId: input.productId,
@@ -139,6 +157,7 @@ export async function acquireAdmissionReferenceEvidence(input: {
       boundary: input.boundary,
     });
     return {
+      productType,
       async release() {
         if (released) return;
         released = true;

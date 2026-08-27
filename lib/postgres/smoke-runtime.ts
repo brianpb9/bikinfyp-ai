@@ -132,6 +132,10 @@ export async function pgUpdateProduct(userId: string, productId: string, patch: 
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.updateOwnedProduct(userId, productId, patch); } finally { await repo.close(); }
 }
+export async function pgUpdateProductDetails(userId: string, productId: string, patch: { name: string; priceIdr: number; category: string; productVisualDesc: string | null; promoPriceBeforeIdr?: number | null; promoEndsAt?: string | null; promoStockLeft?: number | null }) {
+  const repo = new PgProductPersonaScriptRepository(url());
+  try { return await repo.updateOwnedProductDetails(userId, productId, patch); } finally { await repo.close(); }
+}
 /**
  * Mekanik yang dipakai merek ini dalam jendela riwayat (slice 4, 20 Agu).
  * Dibaca dari kolom JSON yang sudah ada. (Alasan lama "migrasi terkunci"

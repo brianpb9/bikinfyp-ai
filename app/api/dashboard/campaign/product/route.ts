@@ -11,6 +11,7 @@ import { getPool } from "@/lib/postgres/pool";
 import { sanitizeClaims } from "@/lib/media/claim-overlay";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
+import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -138,6 +139,7 @@ export async function PATCH(req: Request) {
     const body = await req.json().catch(() => ({}));
     const productId = typeof body.product_id === "string" ? body.product_id : "";
     if (!productId) throw ERR.BAD_REQUEST("product_id wajib diisi.", "product_id is required.");
+    return await withProductEvidenceMutationLock(productId, async () => {
 
     // Per-ORG, bukan per-user. Produk dashboard dibuat satu anggota, dibayar
     // dari dompet organisasi, dan disunting seluruh tim — pemeriksaan per-user
@@ -226,6 +228,7 @@ export async function PATCH(req: Request) {
       product_type_version: updated.product_type_version,
     });
     return Response.json(productPayload(updated));
+    });
     });
   } catch (err) {
     return errorResponse(err);

@@ -21,6 +21,7 @@ const { setPersonSafeReferencePhotosForTests } = await import("../lib/media/pers
 const { setCompositeObserverForTests } = await import("../lib/media/compositor");
 const { resolveApprovedReference } = await import("../lib/product-truth");
 const { createJobProductSnapshotRaw, parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
+const { acquireAdmissionReferenceEvidence } = await import("../lib/job-admission-reference");
 const { DELETE: deleteRetailPhoto } = await import("../app/api/products/[id]/photos/route");
 const { PATCH: patchRetailProduct } = await import("../app/api/products/[id]/route");
 const { processJob, setSqliteQcRunnerForTests } = await import("../lib/worker");
@@ -239,7 +240,7 @@ async function rawAdmissionCandidate(storage: MemoryStorage, label: string, cred
     headers: { "content-type": "application/json", cookie: `${cookieName()}=${encodeURIComponent(token)}` },
     body: JSON.stringify({ script_id: scriptId, format: "hands_only", quality_tier: "high_quality", duration_s: 15 }),
   }));
-  return { ownerId, productId, scriptId, submit };
+  return { ownerId, productId, scriptId, token, approvedSource, submit };
 }
 
 function patchRetailRequest(productId: string, token: string, body: Record<string, unknown>) {
@@ -587,6 +588,36 @@ test("A1 SQLite menolak quarantine yang menyelip setelah precheck tanpa job atau
     [],
     "C2 race rejection meninggalkan prepared snapshot",
   );
+});
+
+test("E3 ordinary SQLite menunggu evidence lease lalu mempertahankan reconfirmation terbaru", async (t) => {
+  const storage = new MemoryStorage();
+  const s = await rawAdmissionCandidate(storage, `e3-c2-lock-${process.pid}`, 50_000);
+  t.after(() => setMediaStorageForTests(undefined));
+  const lease = await acquireAdmissionReferenceEvidence({
+    productId: s.productId,
+    owner: { kind: "user", id: s.ownerId },
+    boundary: "A7",
+    loadSqliteCandidateRels: () => [s.approvedSource],
+  });
+  let settled = false;
+  const paused = patchRetailRequest(s.productId, s.token, { name: "Detail ordinary sesudah lock" })
+    .finally(() => { settled = true; });
+  await new Promise<void>((resolve) => setImmediate(resolve));
+  assert.equal(settled, false, "E3 tidak menunggu product evidence lock");
+
+  const latestAt = "2026-08-27T12:34:56.000Z";
+  db.prepare(`UPDATE products SET product_type_token='serum terbaru', product_type_confirmed_token='serum terbaru',
+    product_type_confirmed_at=?, product_type_state='CONFIRMED' WHERE id=?`).run(latestAt, s.productId);
+  await lease.release();
+  const response = await paused;
+  assert.equal(response.status, 200, await response.text());
+  const row = db.prepare(`SELECT name,product_type_token,product_type_confirmed_token,product_type_confirmed_at
+    FROM products WHERE id=?`).get(s.productId) as Record<string, unknown>;
+  assert.deepEqual(row, {
+    name: "Detail ordinary sesudah lock", product_type_token: "serum terbaru",
+    product_type_confirmed_token: "serum terbaru", product_type_confirmed_at: latestAt,
+  });
 });
 
 test("storage preparation gagal sebelum job, hold, dan queue visibility SQLite", async (t) => {

@@ -156,8 +156,13 @@ test("PostgreSQL advisory lease bertahan melewati idle transaction timeout dan c
           locked = false;
           return { rows: [{ unlocked }], rowCount: 1 };
         }
-        if (sql.includes("SELECT images FROM products")) {
-          return { rows: [{ images: JSON.stringify([rel]) }], rowCount: 1 };
+        if (sql.includes("FROM products WHERE")) {
+          return { rows: [{
+            images: JSON.stringify([rel]), product_type_token: "serum wajah",
+            product_type_confirmed_token: "serum wajah", product_type_confirmed_by: "user-pg",
+            product_type_confirmed_at: new Date("2026-08-27T00:00:00.000Z"),
+            product_type_version: 1, product_type_state: "CONFIRMED",
+          }], rowCount: 1 };
         }
         if (sql.includes("UPDATE products")) {
           mutationRan = true;
@@ -296,10 +301,13 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
   const scenario = CAMPAIGN_TEMPLATES.find((item) => !aiRenderBlockMessage(item.id))!;
   const effects = { provider: 0, db: 0, queue: 0, storage: 0 };
   let duplicateRows: { id: string }[] = [];
+  let lockedProduct: Record<string, unknown>;
   const fakeClient = {
     async query(sql: string) {
       if (sql.includes("SELECT id FROM jobs")) return { rows: duplicateRows, rowCount: duplicateRows.length };
+      if (sql.includes("pg_try_advisory_lock")) return { rows: [{ locked: true }], rowCount: 1 };
       if (sql.includes("pg_advisory_unlock")) return { rows: [{ unlocked: true }], rowCount: 1 };
+      if (sql.includes("FROM products WHERE id=$1")) return { rows: [lockedProduct], rowCount: 1 };
       return { rows: [], rowCount: 0 };
     },
     release() {},
@@ -324,6 +332,12 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
     created_at: "now",
   };
   let currentProduct = { ...baseProduct };
+  lockedProduct = currentProduct;
+  setEvidenceLockDependenciesForTests({
+    postgresRuntimeEnabled: () => true,
+    connect: async () => fakeClient as never,
+    useProcessLocalLock: false,
+  });
   setAdmissionRouteDependenciesForTests({
     postgresRuntimeEnabled: () => true,
     requireOrgContextApi: async () => ({ user, membership }) as never,
@@ -366,6 +380,7 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
     values.set(corruptRel, Buffer.from("CORRUPT-HANDLER-BYTES"));
     values.set(`${corruptRel}.meta.json`, Buffer.from("{corrupt"));
     currentProduct = { ...baseProduct, images: JSON.stringify([corruptRel]) };
+    lockedProduct = currentProduct;
     for (const item of cases) {
       effects.provider = effects.db = effects.queue = effects.storage = 0;
       const response = await item.call();
@@ -380,12 +395,26 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
     const validBytes = Buffer.from("VALID-HANDLER-PACKSHOT");
     values.clear(); values.set(validRel, validBytes); values.set(`${validRel}.meta.json`, validSidecar(validBytes));
     currentProduct = { ...baseProduct, images: JSON.stringify([validRel]) };
+    lockedProduct = currentProduct;
     for (const item of cases) {
       effects.provider = effects.db = effects.queue = effects.storage = 0;
       const response = await item.call();
       assert.equal(response.status, 500, `${item.boundary} kontrol sah tidak mencapai seam berikutnya`);
       assert.ok(effects.provider + effects.db > 0, `${item.boundary} kontrol sah berhenti di evidence guard`);
       assert.equal(effects.storage, 0, `${item.boundary} preflight read-only menulis storage`);
+    }
+
+    // Initial row is valid, but the row reloaded under the evidence lock was
+    // quarantined before A2/A3 could create personas, scripts, or call writer.
+    currentProduct = { ...baseProduct, images: JSON.stringify([validRel]) };
+    lockedProduct = { ...currentProduct, product_type_state: "QUARANTINED" };
+    for (const item of cases.slice(0, 2)) {
+      effects.provider = effects.db = effects.queue = effects.storage = 0;
+      const response = await item.call();
+      const payload = await response.json() as { code?: string };
+      assert.equal(response.status, 422, `${item.boundary} menerima C2 quarantine setelah initial read`);
+      assert.equal(payload.code, "PRODUCT_TYPE_CONFIRMATION_REQUIRED");
+      assert.deepEqual(effects, { provider: 0, db: 0, queue: 0, storage: 0 });
     }
 
     // Existing immutable jobs win over current corrupt/deleted product state.
@@ -403,6 +432,7 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
     assert.equal((await replayAfterDelete.json() as { duplicated?: boolean }).duplicated, true);
   } finally {
     setAdmissionRouteDependenciesForTests(undefined);
+    setEvidenceLockDependenciesForTests(undefined);
     setEnqueueObserverForTests(undefined);
     setMediaStorageForTests(storage);
   }

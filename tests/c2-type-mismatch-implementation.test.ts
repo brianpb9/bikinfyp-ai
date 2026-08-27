@@ -51,13 +51,40 @@ test("C2 canonicalizes node-postgres TIMESTAMPTZ Date without normalizing invali
   );
 });
 
-test("C2 concurrency guards preserve E7 provenance and validate the A1 locked row", () => {
+test("C2 concurrency guards preserve E3/E7 provenance and validate locked admission rows", () => {
   const campaign = fs.readFileSync("app/api/dashboard/campaign/product/route.ts", "utf8");
   const ordinaryStart = campaign.indexOf("An ordinary detail save must never copy the C2 fields");
   const ordinaryEnd = campaign.indexOf("} finally", ordinaryStart);
   assert.ok(ordinaryStart > 0 && ordinaryEnd > ordinaryStart);
   assert.doesNotMatch(campaign.slice(ordinaryStart, ordinaryEnd), /product_type_(?:token|confirmed|version|state)/,
     "ordinary E7 save still writes durable confirmation fields");
+
+  const retail = fs.readFileSync("app/api/products/[id]/route.ts", "utf8");
+  const retailLock = retail.indexOf("withProductEvidenceMutationLock(id");
+  const retailRead = retail.indexOf("smokeGetProduct(user.id, id)", retailLock);
+  const retailOrdinary = retail.indexOf("pgUpdateProductDetails(user.id, id", retailRead);
+  assert.ok(retailLock > 0 && retailRead > retailLock && retailOrdinary > retailRead,
+    "E3 does not read/update ordinary details under the shared product lock");
+
+  const evidenceLease = fs.readFileSync("lib/job-admission-reference.ts", "utf8");
+  assert.match(evidenceLease, /SELECT images,product_type_token,product_type_confirmed_token,product_type_confirmed_by,[\s\S]+product_type_state[\s\S]+FROM products/,
+    "A2/A3 evidence lease does not reload complete C2 state");
+  for (const route of [
+    "app/api/dashboard/matrix/route.ts",
+    "app/api/dashboard/campaign/generate/route.ts",
+  ]) {
+    const source = fs.readFileSync(route, "utf8");
+    const lease = source.indexOf("evidenceLease = await acquireAdmissionReferenceEvidence(");
+    const lockedValidation = source.indexOf("locked-org-product.product_type_token", lease);
+    const firstEffect = Math.min(
+      ...["pgFindOrCreatePersona(", "generateScripts({", "smokeCreateScripts("].map((needle) => {
+        const found = source.indexOf(needle, lockedValidation);
+        return found < 0 ? Number.MAX_SAFE_INTEGER : found;
+      }),
+    );
+    assert.ok(lease > 0 && lockedValidation > lease && firstEffect > lockedValidation,
+      `${route} does not validate locked C2 state before its first effect`);
+  }
 
   const pgAdmission = fs.readFileSync("lib/postgres/smoke-runtime.ts", "utf8");
   const lockedRead = pgAdmission.indexOf("FROM products WHERE id=$1 AND user_id=$2 FOR SHARE");

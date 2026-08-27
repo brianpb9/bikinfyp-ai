@@ -2,7 +2,7 @@
   "task": "P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827",
   "baseline_sha": "c8588c67df8c5064e4cd231a6650d0c8b23d6e00",
   "result": "PASS_LOCAL_READY_FOR_REVIEW",
-  "reviewer_remediation": "empty/Unicode-whitespace/canonical timestamp/version durability guards for new and upgraded SQLite plus PostgreSQL constraint; node-postgres TIMESTAMPTZ Date canonicalization at E1/E3/E7/A1-A4 reads; authorized E3/E7 confirmation summary and complete mutation audit provenance; ordinary E7 saves never write C2 columns; A1 SQLite revalidates before preparation and CAS-checks inside admission while PostgreSQL validates the complete locked row",
+  "reviewer_remediation": "empty/Unicode-whitespace/canonical timestamp/version durability guards for new and upgraded SQLite plus PostgreSQL constraint; node-postgres TIMESTAMPTZ Date canonicalization; E3/E7 mutations share the evidence lock and ordinary saves omit C2 columns while returning/auditing post-update truth; A1 validates the admitted/locked row; A2/A3 reload and validate complete C2 state under their evidence lease before effects",
   "founder_decision": "approved recommended safe release bundle",
   "canonical_type_distinct_from_category": true,
   "taxonomy_invented": false,
@@ -28,27 +28,30 @@
   "focused_regression": {
     "command": "SCRIPT_LLM=0 npx tsx --test tests/admission-evidence-enforcement.test.ts tests/http-photo-mutation-resume-w2.test.ts tests/product-truth-worker-reference.test.ts tests/hitl.test.ts",
     "exit_code": 0,
-    "tests": 44,
-    "pass": 44,
+    "tests": 45,
+    "pass": 45,
     "fail": 0
   },
   "postgres_timestamp_admission_regression": {
-    "command": "UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='dashboard lock|E7 HTTP PATCH|retail PostgreSQL admission' tests/pg-product-truth-w1.test.ts",
+    "commands": [
+      "UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='dashboard lock|E7 HTTP PATCH|retail PostgreSQL admission' tests/pg-product-truth-w1.test.ts",
+      "UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='E7 ordinary PostgreSQL' tests/pg-product-truth-w1.test.ts"
+    ],
     "exit_code": 0,
-    "tests": 4,
-    "pass": 4,
+    "tests": 5,
+    "pass": 5,
     "fail": 0,
     "skipped": 0,
-    "classification": "real node-postgres TIMESTAMPTZ values crossed retail and organization admission boundaries in a loopback disposable database"
+    "classification": "real node-postgres TIMESTAMPTZ values crossed retail and organization admission boundaries; paused E7 remained blocked by the lease and preserved the newer reconfirmation"
   },
   "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
   "full_test": {
     "command": "npm test",
     "exit_code": 0,
-    "tests": 1256,
-    "pass": 1209,
+    "tests": 1258,
+    "pass": 1210,
     "fail": 0,
-    "skipped": 47
+    "skipped": 48
   },
   "build": { "command": "npm run build", "exit_code": 0 },
   "postgres_migration_contract": {
