@@ -13,7 +13,7 @@
     {"domain":"Anti-slop produksi","score":7,"delta":0},
     {"domain":"Prompt/verdict archive","score":8,"delta":0},
     {"domain":"NSFW rejection","score":6,"delta":0},
-    {"domain":"Payments","score":2,"delta":0},
+    {"domain":"Payments (Midtrans sandbox)","score":2,"delta":0},
     {"domain":"Legal/PDP","score":2,"delta":0},
     {"domain":"DR/monitoring/incident owner","score":2,"delta":0},
     {"domain":"Landing/pricing consistency","score":6,"delta":0}
@@ -43,6 +43,21 @@
     "pass": 3,
     "partial": 9,
     "blocked": 1,
+    "cases": {
+      "C1":"PARTIAL",
+      "C2":"PASS",
+      "C3":"PARTIAL",
+      "C4":"PARTIAL",
+      "C5":"BLOCKED",
+      "C6":"PASS",
+      "C7":"PARTIAL",
+      "C8":"PARTIAL",
+      "C9":"PARTIAL",
+      "C10":"PARTIAL",
+      "C11":"PASS",
+      "C12":"PARTIAL",
+      "C13":"PARTIAL"
+    },
     "note": "C2, C6, and C11 are PASS; C9 and C10 remain PARTIAL at aggregate evidence tier; C5 remains BLOCKED."
   },
   "ceiling_conditions": {

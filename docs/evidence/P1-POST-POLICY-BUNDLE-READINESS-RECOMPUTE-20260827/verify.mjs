@@ -13,7 +13,7 @@ const score = readJson(path.join(bundle, "SCORE-RECEIPT.json"));
 const bus = readJson(path.join(bundle, "BUS-SOURCE-MESSAGES.json"));
 const board = fs.readFileSync(path.join(root, score.source_board), "utf8");
 
-const domains = ["Money safety","Auth intent & failure path","Mobile UI 375","Hydration/interaction canary CI","Content engine standard","Brand fidelity","Anti-slop produksi","Prompt/verdict archive","NSFW rejection","Payments","Legal/PDP","DR/monitoring/incident owner","Landing/pricing consistency"];
+const domains = ["Money safety","Auth intent & failure path","Mobile UI 375","Hydration/interaction canary CI","Content engine standard","Brand fidelity","Anti-slop produksi","Prompt/verdict archive","NSFW rejection","Payments (Midtrans sandbox)","Legal/PDP","DR/monitoring/incident owner","Landing/pricing consistency"];
 if (score.task !== "P1-POST-POLICY-BUNDLE-READINESS-RECOMPUTE-20260827") fail("wrong task");
 if (score.baseline !== "0e953f9ccfd8991c96fecbed44bb3b892e0c8829") fail("wrong baseline");
 if (score.rows.length !== 13 || new Set(score.rows.map((r) => r.domain)).size !== 13) fail("row omission/duplicate");
@@ -27,13 +27,21 @@ for (const threshold of [70, 80, 90]) {
   const row = score.threshold_arithmetic[String(threshold)];
   if (row.minimum_raw_sum !== expected || row.additional_raw_points_from_77 !== expected - 77 || row.canonical_points_from_58 !== threshold - 58) fail(`threshold arithmetic ${threshold}`);
 }
-if (score.acceptance_matrix.pass + score.acceptance_matrix.partial + score.acceptance_matrix.blocked !== 13) fail("matrix count mismatch");
+const expectedMatrix = {pass:3, partial:9, blocked:1};
+for (const [key, value] of Object.entries(expectedMatrix)) if (score.acceptance_matrix[key] !== value) fail(`matrix tuple mismatch: ${key}`);
+const expectedCases = {C1:"PARTIAL",C2:"PASS",C3:"PARTIAL",C4:"PARTIAL",C5:"BLOCKED",C6:"PASS",C7:"PARTIAL",C8:"PARTIAL",C9:"PARTIAL",C10:"PARTIAL",C11:"PASS",C12:"PARTIAL",C13:"PARTIAL"};
+if (JSON.stringify(score.acceptance_matrix.cases) !== JSON.stringify(expectedCases)) fail("named matrix status mismatch");
+const caseCounts = Object.values(score.acceptance_matrix.cases).reduce((counts, status) => ({...counts, [status]:(counts[status] || 0) + 1}), {});
+if (caseCounts.PASS !== 3 || caseCounts.PARTIAL !== 9 || caseCounts.BLOCKED !== 1) fail("named matrix count mismatch");
 if (score.next_autonomous_task !== null || score.next_autonomous_action !== "IDLE_COMPLETE") fail("autonomous conclusion drift");
 if (score.new_weights_or_policy !== false || score.score_inflation !== false) fail("inflation/policy claimed");
 
 const section = board.split("## 1. Papan skor segar")[1]?.split("## 2.")[0] || "";
 const rows = [...section.matchAll(/^\| ([^|]+?) \| \d+ \| \*\*(\d+)\*\* \| (V|C|N|V\/C) \|/gm)];
 if (rows.length !== 13 || rows.reduce((n, r) => n + Number(r[2]), 0) !== 77) fail("source board mismatch");
+const sourcePairs = rows.map((r) => [r[1].trim(), Number(r[2])]);
+const receiptPairs = score.rows.map((r) => [r.domain, r.score]);
+if (JSON.stringify(sourcePairs) !== JSON.stringify(receiptPairs)) fail("source board ordered domain-score drift");
 
 const tasks = new Map([
   ["P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827", "dbf96691fd7b824e3d0dd0c2dc186172f02ca0bd"],
