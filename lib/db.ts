@@ -6,40 +6,50 @@ import { assertLegacySqliteRuntimeAllowed } from "./database-config";
 
 // Singleton lintas hot-reload Next dev (modul route bisa dimuat ulang).
 const g = globalThis as unknown as { __racunDb?: Database.Database };
+const SQLITE_UNICODE_WHITESPACE = "char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279)";
 
 export const PRODUCT_TYPE_SQLITE_UPGRADE_GUARDS = `
   UPDATE products SET product_type_state = 'QUARANTINED'
-   WHERE product_type_state = 'CONFIRMED' AND (
-     product_type_token IS NULL OR length(trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
+   WHERE product_type_state NOT IN ('QUARANTINED','CONFIRMED')
+      OR (product_type_state = 'CONFIRMED' AND (
+     product_type_token IS NULL OR length(trim(product_type_token, ${SQLITE_UNICODE_WHITESPACE})) = 0
      OR product_type_confirmed_token IS NULL OR product_type_token <> product_type_confirmed_token
-     OR product_type_token <> trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
-     OR product_type_confirmed_token <> trim(product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
-     OR product_type_confirmed_by IS NULL OR length(trim(product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
-     OR product_type_confirmed_at IS NULL OR julianday(product_type_confirmed_at) IS NULL
+     OR product_type_token <> trim(product_type_token, ${SQLITE_UNICODE_WHITESPACE})
+     OR product_type_confirmed_token <> trim(product_type_confirmed_token, ${SQLITE_UNICODE_WHITESPACE})
+     OR product_type_confirmed_by IS NULL OR length(trim(product_type_confirmed_by, ${SQLITE_UNICODE_WHITESPACE})) = 0
+     OR product_type_confirmed_at IS NULL
+     OR strftime('%Y-%m-%dT%H:%M:%fZ', product_type_confirmed_at) IS NULL
+     OR strftime('%Y-%m-%dT%H:%M:%fZ', product_type_confirmed_at) <> product_type_confirmed_at
      OR product_type_version IS NULL OR product_type_version <> 1
-   );
+   ));
   CREATE TRIGGER IF NOT EXISTS products_type_confirmation_insert_guard
-  BEFORE INSERT ON products WHEN NEW.product_type_state = 'CONFIRMED' AND (
-    NEW.product_type_token IS NULL OR length(trim(NEW.product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
+  BEFORE INSERT ON products WHEN NEW.product_type_state NOT IN ('QUARANTINED','CONFIRMED')
+    OR (NEW.product_type_state = 'CONFIRMED' AND (
+    NEW.product_type_token IS NULL OR length(trim(NEW.product_type_token, ${SQLITE_UNICODE_WHITESPACE})) = 0
     OR NEW.product_type_confirmed_token IS NULL OR NEW.product_type_token <> NEW.product_type_confirmed_token
-    OR NEW.product_type_token <> trim(NEW.product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
-    OR NEW.product_type_confirmed_token <> trim(NEW.product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
-    OR NEW.product_type_confirmed_by IS NULL OR length(trim(NEW.product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
-    OR NEW.product_type_confirmed_at IS NULL OR julianday(NEW.product_type_confirmed_at) IS NULL
+    OR NEW.product_type_token <> trim(NEW.product_type_token, ${SQLITE_UNICODE_WHITESPACE})
+    OR NEW.product_type_confirmed_token <> trim(NEW.product_type_confirmed_token, ${SQLITE_UNICODE_WHITESPACE})
+    OR NEW.product_type_confirmed_by IS NULL OR length(trim(NEW.product_type_confirmed_by, ${SQLITE_UNICODE_WHITESPACE})) = 0
+    OR NEW.product_type_confirmed_at IS NULL
+    OR strftime('%Y-%m-%dT%H:%M:%fZ', NEW.product_type_confirmed_at) IS NULL
+    OR strftime('%Y-%m-%dT%H:%M:%fZ', NEW.product_type_confirmed_at) <> NEW.product_type_confirmed_at
     OR NEW.product_type_version IS NULL OR NEW.product_type_version <> 1
-  ) BEGIN SELECT RAISE(ABORT, 'invalid confirmed product type'); END;
+  )) BEGIN SELECT RAISE(ABORT, 'invalid product type state or confirmation'); END;
   CREATE TRIGGER IF NOT EXISTS products_type_confirmation_update_guard
   BEFORE UPDATE OF product_type_token,product_type_confirmed_token,product_type_confirmed_by,
     product_type_confirmed_at,product_type_version,product_type_state ON products
-  WHEN NEW.product_type_state = 'CONFIRMED' AND (
-    NEW.product_type_token IS NULL OR length(trim(NEW.product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
+  WHEN NEW.product_type_state NOT IN ('QUARANTINED','CONFIRMED')
+    OR (NEW.product_type_state = 'CONFIRMED' AND (
+    NEW.product_type_token IS NULL OR length(trim(NEW.product_type_token, ${SQLITE_UNICODE_WHITESPACE})) = 0
     OR NEW.product_type_confirmed_token IS NULL OR NEW.product_type_token <> NEW.product_type_confirmed_token
-    OR NEW.product_type_token <> trim(NEW.product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
-    OR NEW.product_type_confirmed_token <> trim(NEW.product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
-    OR NEW.product_type_confirmed_by IS NULL OR length(trim(NEW.product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
-    OR NEW.product_type_confirmed_at IS NULL OR julianday(NEW.product_type_confirmed_at) IS NULL
+    OR NEW.product_type_token <> trim(NEW.product_type_token, ${SQLITE_UNICODE_WHITESPACE})
+    OR NEW.product_type_confirmed_token <> trim(NEW.product_type_confirmed_token, ${SQLITE_UNICODE_WHITESPACE})
+    OR NEW.product_type_confirmed_by IS NULL OR length(trim(NEW.product_type_confirmed_by, ${SQLITE_UNICODE_WHITESPACE})) = 0
+    OR NEW.product_type_confirmed_at IS NULL
+    OR strftime('%Y-%m-%dT%H:%M:%fZ', NEW.product_type_confirmed_at) IS NULL
+    OR strftime('%Y-%m-%dT%H:%M:%fZ', NEW.product_type_confirmed_at) <> NEW.product_type_confirmed_at
     OR NEW.product_type_version IS NULL OR NEW.product_type_version <> 1
-  ) BEGIN SELECT RAISE(ABORT, 'invalid confirmed product type'); END;
+  )) BEGIN SELECT RAISE(ABORT, 'invalid product type state or confirmation'); END;
 `;
 
 export function getDb(): Database.Database {

@@ -7,6 +7,7 @@ C2_GREEN_VERIFIER={"exit_zero":true,"all_five_pass":true,"zero_fail":true,"no_co
 
 $ SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts
 tests=5 pass=5 fail=0 exit=0
+Direct probes include impossible 31-Feb timestamp, U+00A0-only fresh/upgraded SQLite rows, and invalid upgraded state.
 
 $ SCRIPT_LLM=0 npx tsx --test tests/admission-evidence-enforcement.test.ts tests/http-photo-mutation-resume-w2.test.ts tests/product-truth-worker-reference.test.ts tests/hitl.test.ts
 tests=43 pass=43 fail=0 exit=0
@@ -14,6 +15,7 @@ tests=43 pass=43 fail=0 exit=0
 $ SCRIPT_LLM=0 npx tsx --test tests/pg-product-truth-w1.test.ts
 tests=31 pass=1 fail=0 skipped=30 exit=0
 E7 response+audit regression is present and classified skipped because UJI_PG_URL is absent.
+The E7 fixture uses a different same-org member and asserts the original confirmation actor/time are preserved.
 
 $ npx tsc --noEmit
 exit=0

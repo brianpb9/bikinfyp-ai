@@ -22,7 +22,9 @@ The PostgreSQL migration adds state/shape/equality constraints; SQLite new
 schema has equivalent constraints, while additive runtime migration quarantines
 existing invalid rows and installs insert/update guards on upgraded databases.
 Confirmed records cannot carry empty/whitespace tokens or actors, invalid
-timestamps, missing versions, or unequal tokens.
+timestamps, missing versions, or unequal tokens. SQLite's durable whitespace
+set covers ECMAScript Unicode whitespace, and timestamps must round-trip as an
+exact canonical ISO instant, so impossible calendar dates are rejected.
 
 Retail and campaign UI require an explicit type plus a separate confirmation
 checkbox explaining that the value is the user's own assertion, not staff
@@ -47,7 +49,10 @@ Reviewer remediation also makes E3/E7 return an authorized confirmation
 summary and records token, state, provenance, actor, timestamp, and version in
 mutation audits. SQLite E3 exercises response+audit directly; the PostgreSQL E7
 fixture carries the same assertions and is classified skipped without a local
-database.
+database. Ordinary campaign detail saves omit `confirmed_product_type`, so a
+different team editor can update price/claims/brief without replacing the
+original confirming actor or timestamp; only an explicit re-confirm request
+changes that provenance.
 
 See `FOUNDER-DECISION.md`, `VALIDATION.json`, and `GATE-TRANSCRIPT.txt` in this
 directory for the bounded decision and machine-readable totals.

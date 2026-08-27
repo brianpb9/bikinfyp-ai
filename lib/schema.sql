@@ -133,11 +133,12 @@ CREATE TABLE IF NOT EXISTS products (
       AND product_type_version IS NOT NULL
       AND product_type_version = 1
       AND product_type_token = product_type_confirmed_token
-      AND length(trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) > 0
-      AND product_type_token = trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
-      AND product_type_confirmed_token = trim(product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
-      AND length(trim(product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) > 0
-      AND julianday(product_type_confirmed_at) IS NOT NULL
+      AND length(trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279))) > 0
+      AND product_type_token = trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279))
+      AND product_type_confirmed_token = trim(product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279))
+      AND length(trim(product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279))) > 0
+      AND strftime('%Y-%m-%dT%H:%M:%fZ', product_type_confirmed_at) IS NOT NULL
+      AND strftime('%Y-%m-%dT%H:%M:%fZ', product_type_confirmed_at) = product_type_confirmed_at
     )
   )
 );

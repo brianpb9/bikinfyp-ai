@@ -335,7 +335,7 @@ async function siapkanJobLewatAdmisi(images: string[], isi: Map<string, Buffer>)
 
 /** Admission dashboard organisasi sungguhan melalui renderSatuSel. */
 async function siapkanJobOrgLewatAdmisi(images: string[], isi: Map<string, Buffer>) {
-  const ownerId = uid(), orgId = uid(), intruderId = uid(), intruderOrgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
+  const ownerId = uid(), collaboratorId = uid(), orgId = uid(), intruderId = uid(), intruderOrgId = uid(), productId = uid(), scriptId = uid(), personaId = uid(), t = at();
   const segmenAdmisi = [
     { role: "hook", start: 0, end: 4, text: "Bestie Serum Glow Bright ini bikin rutinitas pagiku terasa praktis dan kemasannya cantik banget di meja rias", visual_direction: "x" },
     { role: "demo", start: 4, end: 11, text: "Makanya teksturnya ringan mudah diratakan dan nyaman dipakai sebelum makeup setiap hari", visual_direction: "x" },
@@ -346,12 +346,20 @@ async function siapkanJobOrgLewatAdmisi(images: string[], isi: Map<string, Buffe
     [ownerId, `08126${process.pid}`, `w1-e7-owner-${ownerId}@contoh.test`, intruderId, `08127${process.pid}`, `w1-e7-intruder-${intruderId}@contoh.test`, t]
   );
   await pool.query(
+    "INSERT INTO users (id,phone,email,name,tier,locale,created_at) VALUES ($1,$2,$3,'Editor E7','free','id-ID',$4)",
+    [collaboratorId, `08129${process.pid}`, `w1-e7-editor-${collaboratorId}@contoh.test`, t]
+  );
+  await pool.query(
     "INSERT INTO organizations (id,name,slug,created_at) VALUES ($1,'Org E7',$2,$5),($3,'Org E7 lain',$4,$5)",
     [orgId, `org-e7-${orgId}`, intruderOrgId, `org-e7-lain-${intruderOrgId}`, t]
   );
   await pool.query(
     "INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$7),($4,$5,$6,'owner',$7)",
     [uid(), orgId, ownerId, uid(), intruderOrgId, intruderId, t]
+  );
+  await pool.query(
+    "INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'member',$4)",
+    [uid(), orgId, collaboratorId, t]
   );
   await pool.query(
     `INSERT INTO products
@@ -399,8 +407,9 @@ async function siapkanJobOrgLewatAdmisi(images: string[], isi: Map<string, Buffe
     "admission E7 menjalankan worker otomatis sebelum processPostgresJob eksplisit");
   const { issueToken } = await import("../lib/auth");
   return {
-    jobId: result.job_id, productId, orgId, ownerId,
+    jobId: result.job_id, productId, orgId, ownerId, collaboratorId, confirmedAt: t,
     ownerToken: await issueToken(ownerId, `08126${process.pid}`),
+    collaboratorToken: await issueToken(collaboratorId, `08129${process.pid}`),
     intruderToken: await issueToken(intruderId, `08127${process.pid}`),
   };
 }
@@ -423,8 +432,10 @@ async function siapkanStoryAdsTanpaTemplateRequest(
   await pool.query("INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$4)",
     [uid(), orgId, ownerId, t]);
   await pool.query(
-    `INSERT INTO products (id,user_id,org_id,name,price_idr,category,images,raw_meta,created_at)
-     VALUES ($1,$2,$3,'Jasa Uji',189000,'jasa',$4,'{}',$5)`,
+    `INSERT INTO products (id,user_id,org_id,name,price_idr,category,
+       product_type_token,product_type_confirmed_token,product_type_confirmed_by,
+       product_type_confirmed_at,product_type_version,product_type_state,images,raw_meta,created_at)
+     VALUES ($1,$2,$3,'Jasa Uji',189000,'jasa','jasa','jasa',$2,$5,1,'CONFIRMED',$4,'{}',$5)`,
     [productId, ownerId, orgId, JSON.stringify([image]), t]
   );
   await pool.query(
@@ -482,7 +493,10 @@ async function assertBlockedSnapshotTanpaSideEffect(templateId: string) {
   await pool.query("INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$4)",
     [uid(), orgId, userId, t]);
   await pool.query(
-    "INSERT INTO products (id,user_id,org_id,name,price_idr,category,images,raw_meta,created_at) VALUES ($1,$2,$3,'Serum Bukti',85000,'beauty','[]','{}',$4)",
+    `INSERT INTO products (id,user_id,org_id,name,price_idr,category,
+       product_type_token,product_type_confirmed_token,product_type_confirmed_by,
+       product_type_confirmed_at,product_type_version,product_type_state,images,raw_meta,created_at)
+     VALUES ($1,$2,$3,'Serum Bukti',85000,'beauty','serum wajah','serum wajah',$2,$4,1,'CONFIRMED','[]','{}',$4)`,
     [productId, userId, orgId, t]
   );
   await pool.query(
@@ -924,7 +938,7 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
     [relPackshot, PACKSHOT],
     [`${relPackshot}.meta.json`, sidecar(PACKSHOT, true)],
   ]);
-  const { jobId, productId, ownerId, ownerToken, intruderToken } = await siapkanJobOrgLewatAdmisi([relBanner, relPackshot], isi);
+  const { jobId, productId, ownerId, collaboratorId, confirmedAt, collaboratorToken, intruderToken } = await siapkanJobOrgLewatAdmisi([relBanner, relPackshot], isi);
   const admissionRow = (await pool.query("SELECT job_product_snapshot,approved_reference_manifest FROM jobs WHERE id=$1", [jobId])).rows[0];
   const productSnapshot = admissionRow.job_product_snapshot;
   const admissionManifest = JSON.parse(admissionRow.approved_reference_manifest) as { references: { rel: string; snapshotRel: string }[] };
@@ -945,7 +959,7 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
   const forbidden = await patchProdukOrg(intruderToken, mutasi);
   assert.equal(forbidden.status, 404, "anggota org lain dapat memutasi produk E7");
   assert.equal((await pool.query("SELECT name FROM products WHERE id=$1", [productId])).rows[0].name, "Serum Glow Bright");
-  const response = await patchProdukOrg(ownerToken, mutasi);
+  const response = await patchProdukOrg(collaboratorToken, mutasi);
   if (response.status !== 200) assert.fail(`PATCH E7 gagal (${response.status}): ${await response.text()}`);
   const responseBody = await response.json() as Record<string, unknown>;
   assert.equal(responseBody.product_id, productId); assert.equal(responseBody.name, mutasi.name);
@@ -956,14 +970,15 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
   assert.equal(responseBody.product_type, "serum wajah");
   assert.deepEqual(responseBody.product_type_confirmation, {
     state: "CONFIRMED", actor_id: ownerId,
-    confirmed_at: (responseBody.product_type_confirmation as { confirmed_at: string }).confirmed_at,
+    confirmed_at: new Date(confirmedAt).toISOString(),
     version: 1, provenance: "USER_SELF_ASSERTION",
   });
   const confirmationSummary = responseBody.product_type_confirmation as { actor_id: string; confirmed_at: string };
   const updateAudit = (await pool.query(
-    "SELECT meta FROM audit_log WHERE entity_id=$1 AND action='product.updated' ORDER BY created_at DESC LIMIT 1", [productId]
+    "SELECT actor,meta FROM audit_log WHERE entity_id=$1 AND action='product.updated' ORDER BY created_at DESC LIMIT 1", [productId]
   )).rows[0];
   assert.ok(updateAudit, "E7 tidak menulis audit product.updated");
+  assert.equal(updateAudit.actor, collaboratorId, "audit E7 tidak mengatribusikan save ke editor tim");
   const updateMeta = typeof updateAudit.meta === "string" ? JSON.parse(updateAudit.meta) : updateAudit.meta;
   assert.deepEqual({
     product_type: updateMeta.product_type, state: updateMeta.product_type_state,

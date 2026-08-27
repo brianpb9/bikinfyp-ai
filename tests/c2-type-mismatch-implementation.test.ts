@@ -57,6 +57,12 @@ test("C2 mismatch, missing confirmation, and forged capability fail closed with 
     }) as never),
     (error) => error instanceof ApiError && error.body.code === "PRODUCT_TYPE_CONFIRMATION_REQUIRED",
   );
+  assert.throws(
+    () => buildAuthoritativeTypeBoundaryInput(declared("serum wajah"), {
+      ...confirmed("serum wajah"), confirmedAt: "2026-02-31T00:00:00.000Z",
+    }),
+    (error) => error instanceof ApiError && error.body.code === "PRODUCT_TYPE_CONFIRMATION_REQUIRED",
+  );
 });
 
 test("E1 actual handler rejects mismatch before storage, persistence, or audit", async () => {
@@ -102,14 +108,22 @@ test("C2 upgraded SQLite quarantines old invalid confirmation and rejects future
   fresh.exec(fs.readFileSync("lib/schema.sql", "utf8"));
   fresh.prepare("INSERT INTO users (id,phone,tier,locale,created_at) VALUES (?,?,?,?,?)")
     .run("user-c2", "081200000001", "free", "id-ID", "2026-08-27T00:00:00.000Z");
-  assert.throws(
-    () => fresh.prepare(`INSERT INTO products
+  const freshInsert = fresh.prepare(`INSERT INTO products
       (id,user_id,name,price_idr,category,product_type_token,product_type_confirmed_token,
        product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,images,created_at)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
-        "fresh-invalid", "user-c2", "Produk", 10000, "beauty", "\t", "\t", " ", "", null,
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`);
+  assert.throws(
+    () => freshInsert.run(
+        "fresh-unicode", "user-c2", "Produk", 10000, "beauty", "\u00a0", "\u00a0", "\u00a0", "2026-08-27T00:00:00.000Z", 1,
         "CONFIRMED", "[]", "2026-08-27T00:00:00.000Z",
       ),
+    /CHECK constraint failed/,
+  );
+  assert.throws(
+    () => freshInsert.run(
+      "fresh-date", "user-c2", "Produk", 10000, "beauty", "serum wajah", "serum wajah", "user-c2",
+      "2026-02-31T00:00:00.000Z", 1, "CONFIRMED", "[]", "2026-08-27T00:00:00.000Z",
+    ),
     /CHECK constraint failed/,
   );
   fresh.close();
@@ -126,20 +140,40 @@ test("C2 upgraded SQLite quarantines old invalid confirmation and rejects future
   )`);
   upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
     .run("old-invalid", "", "", "", "", 1, "CONFIRMED");
+  upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
+    .run("old-unicode", "\u00a0", "\u00a0", "\u00a0", "2026-08-27T00:00:00.000Z", 1, "CONFIRMED");
+  upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
+    .run("old-date", "serum wajah", "serum wajah", "user-c2", "2026-02-31T00:00:00.000Z", 1, "CONFIRMED");
 
   upgraded.exec(PRODUCT_TYPE_SQLITE_UPGRADE_GUARDS);
   assert.equal((upgraded.prepare("SELECT product_type_state FROM products WHERE id='old-invalid'").get() as { product_type_state: string }).product_type_state, "QUARANTINED");
+  assert.equal(Number((upgraded.prepare("SELECT COUNT(*) AS n FROM products WHERE id IN ('old-unicode','old-date') AND product_type_state='QUARANTINED'").get() as { n: number }).n), 2);
 
   assert.throws(
     () => upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
       .run("new-invalid", " ", " ", " ", "not-a-time", null, "CONFIRMED"),
-    /invalid confirmed product type/,
+    /invalid product type/,
+  );
+  assert.throws(
+    () => upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
+      .run("new-unicode", "\u00a0", "\u00a0", "\u00a0", "2026-08-27T00:00:00.000Z", 1, "CONFIRMED"),
+    /invalid product type/,
+  );
+  assert.throws(
+    () => upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
+      .run("new-date", "serum wajah", "serum wajah", "user-c2", "2026-02-31T00:00:00.000Z", 1, "CONFIRMED"),
+    /invalid product type/,
   );
   upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
     .run("valid", "serum wajah", "serum wajah", "user-c2", "2026-08-27T00:00:00.000Z", 1, "CONFIRMED");
   assert.throws(
     () => upgraded.prepare("UPDATE products SET product_type_confirmed_by='' WHERE id='valid'").run(),
-    /invalid confirmed product type/,
+    /invalid product type/,
+  );
+  assert.throws(
+    () => upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
+      .run("bad-state", null, null, null, null, null, "UNKNOWN"),
+    /invalid product type state/,
   );
   upgraded.close();
 });

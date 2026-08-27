@@ -38,6 +38,12 @@ function normalizeToken(value: unknown): string {
   return value.normalize("NFKC").trim().toLocaleLowerCase("und");
 }
 
+function isCanonicalTimestamp(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  const parsed = new Date(value);
+  return Number.isFinite(parsed.getTime()) && parsed.toISOString() === value;
+}
+
 function policyError(code: "TYPE_MISMATCH" | "PRODUCT_TYPE_CONFIRMATION_REQUIRED", messageId: string, messageEn: string): ApiError {
   return new ApiError(422, { code, message_id: messageId, message_en: messageEn, retryable: false });
 }
@@ -59,7 +65,7 @@ export function buildAuthoritativeTypeBoundaryInput(
     || confirmation.version !== 1
     || confirmation.provenance !== "USER_SELF_ASSERTION"
     || !confirmation.actorId.trim()
-    || !Number.isFinite(Date.parse(confirmation.confirmedAt))) {
+    || !isCanonicalTimestamp(confirmation.confirmedAt)) {
     throw policyError(
       "PRODUCT_TYPE_CONFIRMATION_REQUIRED",
       "Konfirmasi jenis produk belum sah. Konfirmasi ulang dengan akunmu.",
@@ -79,7 +85,7 @@ export function buildAuthoritativeTypeBoundaryInput(
     token: confirmedToken,
     sourceId: `authenticated-user:${confirmation.actorId}`,
     actorId: confirmation.actorId,
-    confirmedAt: new Date(confirmation.confirmedAt).toISOString(),
+    confirmedAt: confirmation.confirmedAt,
     version: 1,
     provenance: "USER_SELF_ASSERTION",
   });

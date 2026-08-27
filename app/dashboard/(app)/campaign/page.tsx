@@ -498,7 +498,7 @@ export default function CampaignPage() {
         json: {
           product_id: product.product_id, name: product.name, price_idr: product.price_idr,
           category: product.category, product_type: product.product_type,
-          confirmed_product_type: product.product_type, product_visual_desc: product.product_visual_desc ?? "",
+          product_visual_desc: product.product_visual_desc ?? "",
           brand_brief: product.brand_brief ?? "",
           promo_price_before_idr: product.promo_price_before_idr ?? null,
           promo_ends_at: product.promo_ends_at ?? null,

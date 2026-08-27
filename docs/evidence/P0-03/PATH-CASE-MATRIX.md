@@ -1241,6 +1241,12 @@ BASELINE=`c8588c67df8c5064e4cd231a6650d0c8b23d6e00`
   invalid rows and installs durable insert/update guards. E3/E7 now return an
   authorized confirmation summary and audit token/state/provenance/actor/time/
   version, with direct E3 and classified E7 regression coverage.
+- Follow-up hardening uses the full ECMAScript Unicode whitespace set for
+  SQLite and an exact ISO timestamp round-trip, rejecting U+00A0-only values
+  and impossible dates such as 31 February. Ordinary E7 detail saves no longer
+  send a new confirmation, so a different team editor preserves the original
+  confirming actor/time while their mutation audit remains attributed to the
+  editor.
 - Evidence gates: GREEN contract 5/5, implementation 5/5, focused regression
   43/43, full suite 1253 tests / 1206 pass / 0 fail / 47 skipped, typecheck and
   production build PASS. PostgreSQL contract assertions passed; local schema
