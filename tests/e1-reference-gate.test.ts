@@ -177,7 +177,7 @@ async function run(label: string, options: RunOptions = {}) {
         run: (...args: unknown[]) => {
           sqliteAttempts += 1;
           if (options.persistenceFault === "before-commit") throw new Error("controlled SQLite pre-commit failure");
-          insertedImages.push(JSON.parse(String(args[13])) as string[]);
+          insertedImages.push(JSON.parse(String(args[19])) as string[]);
           if (options.persistenceFault === "after-commit") throw new Error("controlled SQLite commit acknowledgement failure");
           return {};
         },
@@ -403,6 +403,12 @@ test("E1 authoritative reconciliation membutuhkan exact ID, owner, ordered image
     name: "Serum Exact",
     priceIdr: 50000,
     category: "beauty",
+    categoryReviewState: "CLEAR" as const,
+    categoryReviewReason: null,
+    categoryReviewedBy: null,
+    categoryReviewedRole: null,
+    categoryReviewedAt: null,
+    categoryReviewVersion: 1,
     productVisualDesc: "botol ungu",
     images: ["uploads/product-exact/0.webp", "uploads/product-exact/1.webp"],
     promoPriceBeforeIdr: 70000,
@@ -418,6 +424,12 @@ test("E1 authoritative reconciliation membutuhkan exact ID, owner, ordered image
     name: expected.name,
     price_idr: expected.priceIdr,
     category: expected.category,
+    category_review_state: expected.categoryReviewState,
+    category_review_reason: expected.categoryReviewReason,
+    category_reviewed_by: expected.categoryReviewedBy,
+    category_reviewed_role: expected.categoryReviewedRole,
+    category_reviewed_at: expected.categoryReviewedAt,
+    category_review_version: expected.categoryReviewVersion,
     product_visual_desc: expected.productVisualDesc,
     brand_brief: null,
     images: JSON.stringify(expected.images),
@@ -436,6 +448,9 @@ test("E1 authoritative reconciliation membutuhkan exact ID, owner, ordered image
     { name: "Other" },
     { price_idr: 1 },
     { category: "other" },
+    { category_review_state: "QUARANTINED" },
+    { category_review_reason: "CATEGORY_UNKNOWN" },
+    { category_review_version: 2 },
     { product_visual_desc: null },
     { brand_brief: "unexpected" },
     { images: JSON.stringify([...expected.images].reverse()) },

@@ -35,6 +35,12 @@ const confirmedType = {
   product_type_confirmed_at: "2026-08-27T00:00:00.000Z",
   product_type_version: 1,
   product_type_state: "CONFIRMED",
+  category_review_state: "CLEAR",
+  category_review_reason: null,
+  category_reviewed_by: null,
+  category_reviewed_role: null,
+  category_reviewed_at: null,
+  category_review_version: 1,
 };
 
 test("deterministic worker accepts canonical immutable admission values", () => {

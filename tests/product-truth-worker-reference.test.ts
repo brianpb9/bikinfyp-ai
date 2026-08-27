@@ -255,6 +255,7 @@ function siapkanJob(images: string[], tier = "silent_caption"): { jobId: string;
       product_type_version,product_type_state,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(productId, userId, null, "Serum Glow Bright", 85000, "beauty", JSON.stringify(images), null,
     "serum wajah", "serum wajah", userId, "2026-08-27T00:00:00.000Z", 1, "CONFIRMED", now());
+  db.prepare("UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_review_version=1 WHERE id=?").run(productId);
 
   const scriptId = uuid();
   db.prepare(
@@ -287,6 +288,7 @@ async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string;
   db.prepare(`UPDATE products SET product_type_token='serum wajah', product_type_confirmed_token='serum wajah',
     product_type_confirmed_by=?, product_type_confirmed_at=?, product_type_version=1, product_type_state='CONFIRMED'
     WHERE id=?`).run(userId, now(), productId);
+  db.prepare("UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_review_version=1 WHERE id=?").run(productId);
   const scriptId = uuid();
   db.prepare(
     `INSERT INTO scripts
@@ -317,6 +319,7 @@ async function siapkanStoryAdsW2(image: string, snapshotRaw: string): Promise<{ 
      VALUES (?,?,?,189000,'jasa',?,'{}',?,?,?,?,?,?,?)`
   ).run(productId, userId, "Jasa Uji Snapshot", JSON.stringify([image]),
     "jasa", "jasa", userId, "2026-08-27T00:00:00.000Z", 1, "CONFIRMED", now());
+  db.prepare("UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_review_version=1 WHERE id=?").run(productId);
   const { generateScripts } = await import("../lib/script-engine");
   const [script] = await generateScripts({
     product: { id: productId, name: "Jasa Uji Snapshot", price_idr: 189000, category: "jasa" },

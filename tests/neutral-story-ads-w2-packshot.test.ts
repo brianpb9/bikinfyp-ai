@@ -80,6 +80,7 @@ async function setupJob(sourceRel: string, storage: MediaStorage): Promise<strin
       product.raw_meta, product.product_visual_desc, product.brand_brief, product.claims,
       "serum wajah", "serum wajah", userId, "2026-08-27T00:00:00.000Z", 1, "CONFIRMED", now(),
     );
+  db.prepare("UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_review_version=1 WHERE id=?").run(productId);
   const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-meja-kosong")!;
   const [script] = await generateScripts({
     product: { id: productId, name: product.name, category: product.category, price_idr: product.price_idr },

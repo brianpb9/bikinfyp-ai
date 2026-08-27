@@ -20,7 +20,8 @@ export type LegacyJobQuarantineReason =
   | "PRODUCT_SNAPSHOT_MISSING"
   | "PRODUCT_SNAPSHOT_MALFORMED"
   | "PRODUCT_SNAPSHOT_UNSUPPORTED_VERSION"
-  | "PRODUCT_TYPE_QUARANTINED";
+  | "PRODUCT_TYPE_QUARANTINED"
+  | "CATEGORY_REVIEW_QUARANTINED";
 
 export type ProductTypeProvenance = {
   product_type_token?: string | null;
@@ -29,6 +30,12 @@ export type ProductTypeProvenance = {
   product_type_confirmed_at?: string | Date | null;
   product_type_version?: number | null;
   product_type_state?: string | null;
+  category_review_state?: string | null;
+  category_review_reason?: string | null;
+  category_reviewed_by?: string | null;
+  category_reviewed_role?: string | null;
+  category_reviewed_at?: string | Date | null;
+  category_review_version?: number | null;
 };
 
 export type LegacyJobEvidenceClassification =
@@ -133,6 +140,9 @@ export function classifyLegacyJobEvidence(input: {
   if (input.productType !== undefined && (!input.productType || !canonicalTypeState(input.productType))) {
     return { status: "QUARANTINED", reason: "PRODUCT_TYPE_QUARANTINED" };
   }
+  if (input.productType !== undefined && input.productType?.category_review_state !== "CLEAR") {
+    return { status: "QUARANTINED", reason: "CATEGORY_REVIEW_QUARANTINED" };
+  }
   return { status: "CURRENT", manifest, productSnapshot };
 }
 
@@ -166,6 +176,13 @@ export function requireCurrentJobEvidence(input: Parameters<typeof classifyLegac
         code: "PRODUCT_TYPE_CONFIRMATION_REQUIRED",
         message_id: "Jenis produk belum dikonfirmasi. Konfirmasi jenis produk sebelum lanjut.",
         message_en: "Product type confirmation is required before continuing.",
+        retryable: false,
+      });
+    case "CATEGORY_REVIEW_QUARANTINED":
+      throw new ApiError(422, {
+        code: "CATEGORY_REVIEW_REQUIRED",
+        message_id: "Kategori produk masih dikarantina dan perlu rilis peninjau manusia berwenang.",
+        message_en: "Product category remains quarantined pending authorized human review.",
         retryable: false,
       });
   }

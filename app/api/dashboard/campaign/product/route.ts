@@ -9,7 +9,7 @@ import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
 import { sanitizeClaims } from "@/lib/media/claim-overlay";
-import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { buildAuthoritativeTypeBoundaryInput, categoryReviewForMutation, deriveCategoryReview, parseStructuredCategoryOutcome, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 
@@ -23,7 +23,7 @@ export const dynamic = "force-dynamic";
 // mungkin (makin lengkap makin bagus hasil render), baru di-fan-out ke 2-6
 // video di langkah berikutnya.
 
-function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_type_token?: string | null; product_type_confirmed_by?: string | null; product_type_confirmed_at?: string | Date | null; product_type_version?: number | null; product_type_state?: string | null; product_visual_desc?: string | null; brand_brief?: string | null; claims?: string | null; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; images: string; source_url: string | null }) {
+function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_type_token?: string | null; product_type_confirmed_by?: string | null; product_type_confirmed_at?: string | Date | null; product_type_version?: number | null; product_type_state?: string | null; category_review_state?: string | null; category_review_reason?: string | null; category_reviewed_by?: string | null; category_reviewed_role?: string | null; category_reviewed_at?: string | Date | null; category_review_version?: number | null; product_visual_desc?: string | null; brand_brief?: string | null; claims?: string | null; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; images: string; source_url: string | null }) {
   const images = JSON.parse(product.images || "[]") as string[];
   return {
     product_id: product.id,
@@ -39,6 +39,14 @@ function productPayload(product: { id: string; name: string; price_idr: number; 
           provenance: "USER_SELF_ASSERTION" as const,
         }
       : null,
+    category_review: {
+      state: product.category_review_state ?? "QUARANTINED",
+      reason: product.category_review_reason ?? "CATEGORY_UNKNOWN",
+      reviewed_by: product.category_reviewed_by ?? null,
+      reviewed_role: product.category_reviewed_role ?? null,
+      reviewed_at: product.category_reviewed_at ?? null,
+      version: product.category_review_version ?? 1,
+    },
     product_visual_desc: product.product_visual_desc ?? null,
     brand_brief: product.brand_brief ?? null,
     claims: product.claims ? JSON.parse(product.claims) : [],
@@ -84,17 +92,35 @@ export async function POST(req: Request) {
         return Response.json({ extracted: false, reason: result.reason ?? null, message: result.message ?? "Link-nya belum bisa kami baca. Isi manual aja ya." });
       }
       const productId = crypto.randomUUID();
+      const category = result.categoryGuess ?? "default";
+      const categoryReview = deriveCategoryReview(category, parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
+      if (categoryReview.state === "QUARANTINED") {
+        const product = await smokeCreateProduct(user.id, {
+          sourceUrl:url,name:cleanProductName(result.name ?? "Produk dari link"),priceIdr:result.priceIdr ?? 0,
+          category,images:[],productVisualDesc:result.visualDesc ?? null,
+          rawMeta:{og:{price:result.priceIdr,original:result.originalPriceIdr}},orgId:membership.org_id,
+          productTypeToken,productTypeConfirmedToken:confirmedProductTypeToken,productTypeConfirmedBy:user.id,
+          productTypeConfirmedAt:confirmedAt,productTypeVersion:1,
+          categoryReviewState:categoryReview.state,categoryReviewReason:categoryReview.reason,
+          categoryReviewVersion:categoryReview.version,
+        },productId);
+        await pgAudit(user.id,"product.category_quarantined","products",productId,
+          {campaign:true,reason:categoryReview.reason,category,remote_image_downloads:0});
+        return Response.json({extracted:true,...productPayload(product),images_downloaded:0},{status:202});
+      }
       const images = result.imageUrls?.length ? await downloadProductImages(productId, result.imageUrls, url) : [];
       const promoBefore = result.originalPriceIdr && result.priceIdr && result.originalPriceIdr > result.priceIdr ? result.originalPriceIdr : null;
       const product = await smokeCreateProduct(
         user.id,
         {
           sourceUrl: url, name: cleanProductName(result.name ?? "Produk dari link"), priceIdr: result.priceIdr ?? 0,
-          category: result.categoryGuess ?? "default", images, productVisualDesc: result.visualDesc ?? null,
+          category, images, productVisualDesc: result.visualDesc ?? null,
           promoPriceBeforeIdr: promoBefore, rawMeta: { og: { price: result.priceIdr, original: result.originalPriceIdr } },
           productTypeToken, productTypeConfirmedToken: confirmedProductTypeToken,
           productTypeConfirmedBy: user.id, productTypeConfirmedAt: confirmedAt, productTypeVersion: 1,
           orgId: membership.org_id,
+          categoryReviewState:categoryReview.state,categoryReviewReason:categoryReview.reason,
+          categoryReviewVersion:categoryReview.version,
         },
         productId
       );
@@ -109,18 +135,23 @@ export async function POST(req: Request) {
     const name = typeof body.name === "string" ? body.name.trim() : "";
     if (!name) throw ERR.BAD_REQUEST("Isi link produk atau nama produknya dulu.", "url or name is required.");
     const priceIdr = Number.isFinite(Number(body.price_idr)) ? Math.max(0, Math.round(Number(body.price_idr))) : 0;
+    const category = typeof body.category === "string" && body.category ? body.category : "default";
+    const categoryReview = deriveCategoryReview(category, parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
     const product = await smokeCreateProduct(user.id, {
-      sourceUrl: null, name, priceIdr, category: typeof body.category === "string" && body.category ? body.category : "default",
+      sourceUrl: null, name, priceIdr, category,
       images: [], productVisualDesc: null, orgId: membership.org_id,
       productTypeToken, productTypeConfirmedToken: confirmedProductTypeToken,
       productTypeConfirmedBy: user.id, productTypeConfirmedAt: confirmedAt, productTypeVersion: 1,
+      categoryReviewState:categoryReview.state,categoryReviewReason:categoryReview.reason,
+      categoryReviewVersion:categoryReview.version,
     });
     await pgAudit(user.id, "product.created", "products", product.id, {
       manual: true, campaign: true, product_type: productTypeToken,
       product_type_state: "CONFIRMED", product_type_confirmation: "USER_SELF_ASSERTION",
       product_type_confirmed_by: user.id, product_type_confirmed_at: confirmedAt, product_type_version: 1,
     });
-    return Response.json({ extracted: true, ...productPayload(product), images_downloaded: 0 });
+    return Response.json({ extracted: true, ...productPayload(product), images_downloaded: 0 },
+      {status:categoryReview.state === "QUARANTINED" ? 202 : 200});
     });
   } catch (err) {
     return errorResponse(err);
@@ -150,6 +181,13 @@ export async function PATCH(req: Request) {
     const name = typeof body.name === "string" && body.name.trim() ? body.name.trim() : existing.name;
     const priceIdr = Number.isFinite(Number(body.price_idr)) ? Math.max(0, Math.round(Number(body.price_idr))) : existing.price_idr;
     const category = typeof body.category === "string" && body.category ? body.category : existing.category;
+    const categoryReview = categoryReviewForMutation({
+      state:existing.category_review_state as "CLEAR"|"QUARANTINED",
+      reason:existing.category_review_reason as "CATEGORY_UNKNOWN"|"CATEGORY_AMBIGUOUS"|"CATEGORY_BUNDLE"|null,
+      reviewedBy:existing.category_reviewed_by ?? null,reviewedRole:existing.category_reviewed_role ?? null,
+      reviewedAt:existing.category_reviewed_at == null ? null : canonicalProductTypeTimestamp(existing.category_reviewed_at),
+      version:existing.category_review_version ?? 1,
+    },category,parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
     const productTypeToken = String(body.product_type ?? existing.product_type_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmationTouched = body.confirmed_product_type !== undefined;
     const confirmedProductTypeToken = String(confirmationTouched ? body.confirmed_product_type : existing.product_type_confirmed_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
@@ -187,8 +225,10 @@ export async function PATCH(req: Request) {
       } : null,
     ), async () => {
     const pool = getPool(config.databaseUrl);
+    const client = await pool.connect();
     try {
-      if (confirmationTouched) await pool.query(
+      await client.query("BEGIN");
+      if (confirmationTouched) await client.query(
         // WHERE per org, sejalan dengan pemeriksaan di atas. Kalau ini tetap
         // "user_id=$10", pemeriksaan sudah lolos tapi UPDATE-nya mengenai nol
         // baris — rekan satu tim menekan Simpan, tidak ada error, dan tidak ada
@@ -198,24 +238,39 @@ export async function PATCH(req: Request) {
            brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8,
            claims=COALESCE($11, claims), product_type_token=$12, product_type_confirmed_token=$13,
            product_type_confirmed_by=$14, product_type_confirmed_at=$15, product_type_version=1,
-           product_type_state='CONFIRMED' WHERE id=$9 AND org_id=$10`,
+           product_type_state='CONFIRMED',category_review_state=$16,category_review_reason=$17,
+           category_reviewed_by=$18,category_reviewed_role=$19,category_reviewed_at=$20,
+           category_review_version=$21 WHERE id=$9 AND org_id=$10`,
         [name, priceIdr, category, visualDesc, brandBrief, promoBefore, promoEndsAt, promoStock,
           productId, membership.org_id, claims ? JSON.stringify(claims) : null,
-          productTypeToken, confirmedProductTypeToken, confirmedBy, confirmedAt]
+          productTypeToken, confirmedProductTypeToken, confirmedBy, confirmedAt,
+          categoryReview.state,categoryReview.reason,categoryReview.reviewedBy,categoryReview.reviewedRole,
+          categoryReview.reviewedAt,categoryReview.version]
       );
-      else await pool.query(
+      else await client.query(
         // An ordinary detail save must never copy the C2 fields read above.
         // A concurrent explicit reconfirmation or quarantine therefore wins
         // durably instead of being resurrected from this request's stale row.
         `UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4,
            brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8,
-           claims=COALESCE($11, claims) WHERE id=$9 AND org_id=$10`,
+           claims=COALESCE($11, claims),category_review_state=$12,category_review_reason=$13,
+           category_reviewed_by=$14,category_reviewed_role=$15,category_reviewed_at=$16,
+           category_review_version=$17 WHERE id=$9 AND org_id=$10`,
         [name, priceIdr, category, visualDesc, brandBrief, promoBefore, promoEndsAt, promoStock,
-          productId, membership.org_id, claims ? JSON.stringify(claims) : null]
+          productId, membership.org_id, claims ? JSON.stringify(claims) : null,
+          categoryReview.state,categoryReview.reason,categoryReview.reviewedBy,categoryReview.reviewedRole,
+          categoryReview.reviewedAt,categoryReview.version]
       );
-    } finally {
-      /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
-    }
+      if (categoryReview.state === "QUARANTINED") await client.query(
+        `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at)
+         VALUES ($1,$2,'product.category_quarantined','products',$3,$4,$5)`,
+        [crypto.randomUUID(),user.id,productId,JSON.stringify({campaign:true,reason:categoryReview.reason,
+          category,version:categoryReview.version}),new Date().toISOString()]);
+      await client.query("COMMIT");
+    } catch(error) {
+      await client.query("ROLLBACK").catch(()=>undefined);
+      throw error;
+    } finally { client.release(); }
     const updated = await smokeGetOrgProduct(membership.org_id, productId);
     if (!updated) throw ERR.NOT_FOUND("Produknya");
     const updatedConfirmedAt = canonicalProductTypeTimestamp(updated.product_type_confirmed_at);
@@ -226,8 +281,10 @@ export async function PATCH(req: Request) {
       product_type_confirmed_by: updated.product_type_confirmed_by,
       product_type_confirmed_at: updatedConfirmedAt || null,
       product_type_version: updated.product_type_version,
+      category_review_state:updated.category_review_state,category_review_reason:updated.category_review_reason,
+      category_review_version:updated.category_review_version,
     });
-    return Response.json(productPayload(updated));
+    return Response.json(productPayload(updated),{status:updated.category_review_state === "QUARANTINED" ? 202 : 200});
     });
     });
   } catch (err) {

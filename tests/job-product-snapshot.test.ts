@@ -166,7 +166,7 @@ test("tepat tiga admission produksi memasang product snapshot + reference manife
   assert.match(pgAdmission, /FOR SHARE[\s\S]+approved_reference_manifest[\s\S]+job_product_snapshot/, "PG admission tidak mengunci produk sebelum manifest+snapshot+INSERT");
   assert.match(pgAdmission, /SELECT[\s\S]{0,500}price_idr[\s\S]{0,500}FROM products/, "PG retail admission tidak membaca harga untuk snapshot");
   const dashboardAdmission = fs.readFileSync(path.join(process.cwd(), "lib/dashboard/render-cell.ts"), "utf8");
-  assert.match(dashboardAdmission, /SELECT[\s\S]{0,300}price_idr[\s\S]{0,300}FROM products/, "PG dashboard admission tidak membaca harga untuk snapshot");
+  assert.match(dashboardAdmission, /SELECT[\s\S]{0,600}price_idr[\s\S]{0,600}FROM products/, "PG dashboard admission tidak membaca harga untuk snapshot");
 });
 
 test("kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot", () => {

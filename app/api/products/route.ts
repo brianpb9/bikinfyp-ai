@@ -9,7 +9,7 @@ import { assertAuthoritativeLabelResult, merekTerdaftar, periksaLabelFoto } from
 import { resolveApprovedReference, pesanTanpaReferensi } from "@/lib/product-truth";
 import { GagalTanpaReferensi } from "@/lib/kanari-bukti";
 import { PgProductCreateFailure } from "@/lib/postgres/product-persona-script";
-import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, deriveCategoryReview, parseStructuredCategoryOutcome, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +26,7 @@ export async function POST(req: Request) {
     let visualDesc: string | null = null;
     let productTypeRaw: unknown = "";
     let confirmedProductTypeRaw: unknown = "";
+    let categoryOutcomeRaw: unknown = "KNOWN";
     // Merek terkonfirmasi user (audit C9) — sumber gerbang kesetiaan merek QC-F1.
     let brandRaw: unknown = undefined;
     let promoGet: (k: string) => unknown = () => undefined;
@@ -39,6 +40,7 @@ export async function POST(req: Request) {
       category = String(form.get("category") ?? "default").trim();
       productTypeRaw = form.get("product_type");
       confirmedProductTypeRaw = form.get("confirmed_product_type");
+      categoryOutcomeRaw = form.get("category_outcome") ?? "KNOWN";
       visualDesc = form.get("product_visual_desc") ? String(form.get("product_visual_desc")).slice(0, 200) : null;
       brandRaw = form.get("brand") ?? undefined;
       sourceUrl = form.get("source_url") ? String(form.get("source_url")) : null;
@@ -57,6 +59,7 @@ export async function POST(req: Request) {
       category = String(body.category ?? "default").trim();
       productTypeRaw = body.product_type;
       confirmedProductTypeRaw = body.confirmed_product_type;
+      categoryOutcomeRaw = body.category_outcome ?? "KNOWN";
       visualDesc = body.product_visual_desc ? String(body.product_visual_desc).slice(0, 200) : null;
       brandRaw = body.brand;
       sourceUrl = body.source_url ? String(body.source_url) : null;
@@ -75,6 +78,10 @@ export async function POST(req: Request) {
     const productTypeToken = String(productTypeRaw ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmedProductTypeToken = String(confirmedProductTypeRaw ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmedAt = dependencies.now();
+    const categoryReview = deriveCategoryReview(category, parseStructuredCategoryOutcome(categoryOutcomeRaw));
+    // E1 has no durable review-queue model. Reject before image inspection/storage,
+    // DB rows, audit, queue, provider, spend, or publication.
+    assertCategoryReviewClear(categoryReview);
     return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "request.product_type", token: productTypeToken, version: 1 },
       confirmedProductTypeToken ? {
@@ -141,6 +148,12 @@ export async function POST(req: Request) {
       productTypeConfirmedBy: user.id,
       productTypeConfirmedAt: confirmedAt,
       productTypeVersion: 1 as const,
+      categoryReviewState: categoryReview.state,
+      categoryReviewReason: categoryReview.reason,
+      categoryReviewedBy: categoryReview.reviewedBy,
+      categoryReviewedRole: categoryReview.reviewedRole,
+      categoryReviewedAt: categoryReview.reviewedAt,
+      categoryReviewVersion: categoryReview.version,
       productVisualDesc: visualDesc,
       images,
       promoPriceBeforeIdr: promo.promoPriceBeforeIdr,
@@ -166,6 +179,9 @@ export async function POST(req: Request) {
           sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, rawMeta, ...promo,
           productTypeToken, productTypeConfirmedToken: confirmedProductTypeToken,
           productTypeConfirmedBy: user.id, productTypeConfirmedAt: confirmedAt, productTypeVersion: 1,
+          categoryReviewState: categoryReview.state, categoryReviewReason: categoryReview.reason,
+          categoryReviewedBy: categoryReview.reviewedBy, categoryReviewedRole: categoryReview.reviewedRole,
+          categoryReviewedAt: categoryReview.reviewedAt, categoryReviewVersion: categoryReview.version,
         }, id);
       } else {
         dependencies.getDb()
@@ -173,11 +189,15 @@ export async function POST(req: Request) {
             `INSERT INTO products (id, user_id, source_url, name, price_idr, category,
                product_type_token, product_type_confirmed_token, product_type_confirmed_by,
                product_type_confirmed_at, product_type_version, product_type_state,
+               category_review_state,category_review_reason,category_reviewed_by,category_reviewed_role,
+               category_reviewed_at,category_review_version,
                product_visual_desc, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at)
-             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
           )
           .run(id, user.id, sourceUrl, validName, priceIdr, category,
             productTypeToken, confirmedProductTypeToken, user.id, confirmedAt, 1, "CONFIRMED",
+            categoryReview.state, categoryReview.reason, categoryReview.reviewedBy, categoryReview.reviewedRole,
+            categoryReview.reviewedAt, categoryReview.version,
             visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt,
             promo.promoStockLeft, rawMeta ? JSON.stringify(rawMeta) : null, dependencies.now());
       }

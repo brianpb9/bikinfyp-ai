@@ -151,12 +151,19 @@ CREATE TABLE IF NOT EXISTS products (
   ),
   CHECK (
     (category_review_state = 'QUARANTINED'
+      AND category_review_reason IS NOT NULL
       AND category_review_reason IN ('CATEGORY_UNKNOWN', 'CATEGORY_AMBIGUOUS', 'CATEGORY_BUNDLE')
       AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
     OR
-    (category_review_state = 'CLEAR' AND category_review_reason IS NULL
-      AND length(trim(category_reviewed_by)) > 0 AND length(trim(category_reviewed_role)) > 0
-      AND strftime('%Y-%m-%dT%H:%M:%fZ', category_reviewed_at) = category_reviewed_at)
+    (category_review_state = 'CLEAR' AND category_review_reason IS NULL AND (
+      (category_review_version = 1 AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
+      OR
+      (category_review_version >= 2
+        AND category_reviewed_by IS NOT NULL AND length(trim(category_reviewed_by)) > 0
+        AND category_reviewed_role IS NOT NULL AND length(trim(category_reviewed_role)) > 0
+        AND category_reviewed_at IS NOT NULL
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', category_reviewed_at) = category_reviewed_at)
+    ))
   )
 );
 CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id);

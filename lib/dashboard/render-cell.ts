@@ -25,7 +25,7 @@ import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
 import { assertAdmissionReferenceEvidence, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
-import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 
@@ -124,11 +124,17 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     product_type_token: string | null; product_type_confirmed_token: string | null;
     product_type_confirmed_by: string | null; product_type_confirmed_at: string | Date | null;
     product_type_version: number | null; product_type_state: string;
+    category_review_state: string; category_review_reason: string | null;
+    category_reviewed_by: string | null; category_reviewed_role: string | null;
+    category_reviewed_at: string | Date | null; category_review_version: number;
   }>(`SELECT product_type_token,product_type_confirmed_token,product_type_confirmed_by,
-            product_type_confirmed_at,product_type_version,product_type_state
+            product_type_confirmed_at,product_type_version,product_type_state,
+            category_review_state,category_review_reason,category_reviewed_by,
+            category_reviewed_role,category_reviewed_at,category_review_version
        FROM products WHERE id=$1 AND org_id=$2`, [sel.productId, sel.orgId]);
   const productType = typeProduct.rows[0];
   if (!productType) return gagal("Produk organisasi tidak ditemukan.");
+  assertCategoryReviewClear({state:productType.category_review_state as "CLEAR" | "QUARANTINED",reason:productType.category_review_reason as never,version:productType.category_review_version});
   const productTypeConfirmedAt = canonicalProductTypeTimestamp(productType.product_type_confirmed_at);
   return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
     { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-org-product.product_type_token", token: productType.product_type_token ?? "", version: 1 },
@@ -183,22 +189,31 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       product_type_token: string | null; product_type_confirmed_token: string | null;
       product_type_confirmed_by: string | null; product_type_confirmed_at: string | Date | null;
       product_type_version: number | null; product_type_state: string;
+      category_review_state: string; category_review_reason: string | null;
+      category_reviewed_by: string | null; category_reviewed_role: string | null;
+      category_reviewed_at: string | Date | null; category_review_version: number;
       images: string;
     }>(`SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,source_url,
               promo_price_before_idr,promo_ends_at,promo_stock_left,product_type_token,product_type_confirmed_token,
-              product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,images
+              product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
+              category_review_state,category_review_reason,category_reviewed_by,category_reviewed_role,
+              category_reviewed_at,category_review_version,images
          FROM products WHERE id=$1 AND org_id=$2 FOR SHARE`, [sel.productId, sel.orgId]);
     if (!admissionProduct.rows[0]) {
       await client.query("ROLLBACK");
       return gagal("Produk organisasi tidak ditemukan.");
     }
     const lockedProduct = admissionProduct.rows[0];
+    assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version});
     if (lockedProduct.product_type_token !== productType.product_type_token
       || lockedProduct.product_type_confirmed_token !== productType.product_type_confirmed_token
       || lockedProduct.product_type_confirmed_by !== productType.product_type_confirmed_by
       || canonicalProductTypeTimestamp(lockedProduct.product_type_confirmed_at) !== productTypeConfirmedAt
       || lockedProduct.product_type_version !== productType.product_type_version
-      || lockedProduct.product_type_state !== productType.product_type_state) {
+      || lockedProduct.product_type_state !== productType.product_type_state
+      || lockedProduct.category_review_state !== productType.category_review_state
+      || lockedProduct.category_review_reason !== productType.category_review_reason
+      || lockedProduct.category_review_version !== productType.category_review_version) {
       await client.query("ROLLBACK");
       return gagal("Konfirmasi jenis produk berubah saat admisi. Coba lagi.");
     }

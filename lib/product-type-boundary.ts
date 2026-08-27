@@ -22,7 +22,8 @@ export interface ProductTypeBoundaryInput {
 }
 
 export const C5_CATEGORY_IDS = Object.freeze([
-  "beauty", "fashion", "muslim_fashion", "home", "kitchen", "gadget", "food", "kids",
+  "beauty", "health", "fashion", "muslim_fashion", "home", "kitchen", "gadget",
+  "electronics", "food", "kids", "jasa", "app", "toko",
 ] as const);
 
 export type CategoryReviewReason = "CATEGORY_UNKNOWN" | "CATEGORY_AMBIGUOUS" | "CATEGORY_BUNDLE";
@@ -46,6 +47,17 @@ export interface CategoryReviewRelease {
 }
 
 const CATEGORY_ID_SET = new Set<string>(C5_CATEGORY_IDS);
+
+export function parseStructuredCategoryOutcome(value: unknown): StructuredCategoryOutcome {
+  const outcome = typeof value === "string" ? value.trim().toUpperCase() : "KNOWN";
+  if (outcome === "KNOWN" || outcome === "UNKNOWN" || outcome === "AMBIGUOUS" || outcome === "BUNDLE") return outcome;
+  throw new ApiError(422, {
+    code: "CATEGORY_REVIEW_OUTCOME_INVALID",
+    message_id: "Hasil klasifikasi kategori tidak dikenal.",
+    message_en: "Unknown structured category outcome.",
+    retryable: false,
+  });
+}
 
 /** C5 accepts a structured classifier outcome only. It never guesses from text. */
 export function deriveCategoryReview(
@@ -76,6 +88,31 @@ export function assertCategoryReviewClear(record: Partial<CategoryReviewRecord> 
       retryable: false,
     });
   }
+}
+
+export function categoryReviewForMutation(
+  current: Partial<CategoryReviewRecord> | null | undefined,
+  category: unknown,
+  outcome: StructuredCategoryOutcome,
+): CategoryReviewRecord {
+  const candidate = deriveCategoryReview(category, outcome);
+  const currentVersion = Number.isInteger(current?.version) && Number(current?.version) >= 1 ? Number(current?.version) : 1;
+  if (candidate.state === "QUARANTINED") {
+    if (current?.state === "QUARANTINED" && current.reason === candidate.reason) {
+      return Object.freeze({state:"QUARANTINED",reason:candidate.reason,reviewedBy:null,reviewedRole:null,reviewedAt:null,version:currentVersion});
+    }
+    return Object.freeze({...candidate,version:currentVersion + 1});
+  }
+  // Ordinary edits and product-type self-confirmation never clear an existing C5 quarantine.
+  if (current?.state === "QUARANTINED") {
+    return Object.freeze({
+      state:"QUARANTINED",
+      reason:current.reason === "CATEGORY_AMBIGUOUS" || current.reason === "CATEGORY_BUNDLE" ? current.reason : "CATEGORY_UNKNOWN",
+      reviewedBy:null,reviewedRole:null,reviewedAt:null,version:currentVersion,
+    });
+  }
+  return Object.freeze({state:"CLEAR",reason:null,reviewedBy:current?.reviewedBy ?? null,
+    reviewedRole:current?.reviewedRole ?? null,reviewedAt:current?.reviewedAt ?? null,version:currentVersion});
 }
 
 /**

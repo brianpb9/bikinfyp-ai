@@ -106,6 +106,7 @@ function confirmProductType(productId: string, actorId: string, timestamp: strin
   db.prepare(`UPDATE products SET product_type_token='serum wajah', product_type_confirmed_token='serum wajah',
     product_type_confirmed_by=?, product_type_confirmed_at=?, product_type_version=1, product_type_state='CONFIRMED'
     WHERE id=?`).run(actorId, timestamp, productId);
+  db.prepare("UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_review_version=1 WHERE id=?").run(productId);
 }
 
 async function scenario(label: string) {
@@ -323,6 +324,9 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
     product_type_confirmation: {
       state: "CONFIRMED", actor_id: confirmation.product_type_confirmed_by,
       confirmed_at: confirmation.product_type_confirmed_at, version: 1, provenance: "USER_SELF_ASSERTION",
+    },
+    category_review: {
+      state: "CLEAR", reason: null, reviewed_by: null, reviewed_role: null, reviewed_at: null, version: 1,
     },
   });
   const auditMeta = JSON.parse((db.prepare(

@@ -115,6 +115,12 @@ type WorkerRow = {
   product_type_confirmed_at: string | Date | null;
   product_type_version: number | null;
   product_type_state: string | null;
+  category_review_state: string | null;
+  category_review_reason: string | null;
+  category_reviewed_by: string | null;
+  category_reviewed_role: string | null;
+  category_reviewed_at: string | Date | null;
+  category_review_version: number | null;
   /** JSON bebas dari intake. Sumber MEREK TEPERCAYA (raw_meta.brand). */
   product_raw_meta: string | null;
   creator_category: string | null;
@@ -316,6 +322,8 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
       p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
       p.product_type_token, p.product_type_confirmed_token, p.product_type_confirmed_by,
       p.product_type_confirmed_at, p.product_type_version, p.product_type_state,
+      p.category_review_state,p.category_review_reason,p.category_reviewed_by,
+      p.category_reviewed_role,p.category_reviewed_at,p.category_review_version,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
@@ -386,7 +394,9 @@ async function runDeterministicFixture(row: WorkerRow, jobs: PgJobsRepository, p
 export function parseDeterministicFixtureAdmission(row: Pick<WorkerRow,
   "approved_reference_manifest" | "job_product_snapshot" | "product_type_token"
   | "product_type_confirmed_token" | "product_type_confirmed_by" | "product_type_confirmed_at"
-  | "product_type_version" | "product_type_state">): {
+  | "product_type_version" | "product_type_state" | "category_review_state"
+  | "category_review_reason" | "category_reviewed_by" | "category_reviewed_role"
+  | "category_reviewed_at" | "category_review_version">): {
   manifest: JobReferenceManifest;
   productSnapshot: JobProductSnapshot;
 } {

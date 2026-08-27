@@ -6,6 +6,7 @@ import { downloadProductImages } from "@/lib/product-image-download";
 import { createSignedUrl } from "@/lib/signed-url";
 import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct } from "@/lib/postgres/smoke-runtime";
 import { usulMerekDariNama } from "@/lib/media/qc";
+import { deriveCategoryReview, parseStructuredCategoryOutcome } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,8 +42,35 @@ export async function POST(req: Request) {
       return Response.json({ extracted: false, reason: result.reason, message: result.message ?? FALLBACK_MSG });
     }
 
-    // Buat produk langsung (form S2 menampilkan kartu konfirmasi untuk diedit user)
+    const category = result.categoryGuess ?? "default";
+    const categoryReview = deriveCategoryReview(category, parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
+    // E6 quarantine may persist a review-safe internal row/audit, but it must
+    // stop before remote image download, provider, spend, queue, or exposure.
     const productId = uuid();
+    if (categoryReview.state === "QUARANTINED") {
+      const input = {
+        sourceUrl: url, name: cleanProductName(result.name ?? "Produk dari link"), priceIdr: result.priceIdr ?? 0,
+        category, images: [] as string[], productVisualDesc: result.visualDesc ?? null,
+        rawMeta: { og: { price: result.priceIdr, original: result.originalPriceIdr } },
+        categoryReviewState: categoryReview.state, categoryReviewReason: categoryReview.reason,
+        categoryReviewedBy: null, categoryReviewedRole: null, categoryReviewedAt: null,
+        categoryReviewVersion: categoryReview.version,
+      };
+      if (postgresRuntimeEnabled()) await smokeCreateProduct(user.id, input, productId);
+      else getDb().prepare(
+        `INSERT INTO products (id,user_id,source_url,name,price_idr,category,category_review_state,
+          category_review_reason,category_review_version,product_visual_desc,images,raw_meta,created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`
+      ).run(productId,user.id,url,input.name,input.priceIdr,category,categoryReview.state,
+        categoryReview.reason,categoryReview.version,input.productVisualDesc,"[]",JSON.stringify(input.rawMeta),now());
+      const meta = { reason: categoryReview.reason, category, remote_image_downloads: 0 };
+      if (postgresRuntimeEnabled()) await pgAudit(user.id,"product.category_quarantined","products",productId,meta);
+      else audit(user.id,"product.category_quarantined","products",productId,meta);
+      return Response.json({ extracted: true, product_id: productId, category, category_review: categoryReview,
+        images: [], image_urls: [], images_downloaded: 0 }, { status: 202 });
+    }
+
+    // Buat produk langsung (form S2 menampilkan kartu konfirmasi untuk diedit user)
     const images = result.imageUrls?.length ? await downloadProductImages(productId, result.imageUrls, url) : [];
     // Harga coret hanya dipakai bila konsisten (> harga jual) — cek ulang di sini
     // karena user bisa mengubah harga di kartu konfirmasi nanti (PATCH memvalidasi lagi).
@@ -52,16 +80,21 @@ export async function POST(req: Request) {
         : null;
     if (postgresRuntimeEnabled()) await smokeCreateProduct(user.id, {
       sourceUrl: url, name: cleanProductName(result.name ?? "Produk dari link"), priceIdr: result.priceIdr ?? 0,
-      category: result.categoryGuess ?? "default", images, productVisualDesc: result.visualDesc ?? null,
+      category, images, productVisualDesc: result.visualDesc ?? null,
       promoPriceBeforeIdr: promoBefore, rawMeta: { og: { price: result.priceIdr, original: result.originalPriceIdr } },
+      categoryReviewState: categoryReview.state, categoryReviewReason: categoryReview.reason,
+      categoryReviewedBy: null, categoryReviewedRole: null, categoryReviewedAt: null,
+      categoryReviewVersion: categoryReview.version,
     }, productId);
     else getDb()
       .prepare(
-        "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)"
+        `INSERT INTO products (id,user_id,source_url,name,price_idr,category,category_review_state,
+          category_review_reason,category_review_version,product_visual_desc,images,promo_price_before_idr,raw_meta,created_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
       )
       .run(
         productId, user.id, url, cleanProductName(result.name ?? "Produk dari link"),
-        result.priceIdr ?? 0, result.categoryGuess ?? "default", result.visualDesc ?? null,
+        result.priceIdr ?? 0, category, categoryReview.state, categoryReview.reason, categoryReview.version, result.visualDesc ?? null,
         JSON.stringify(images), promoBefore,
         JSON.stringify({ og: { price: result.priceIdr, original: result.originalPriceIdr } }), now()
       );

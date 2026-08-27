@@ -15,6 +15,12 @@ export interface ExpectedProductCreation {
   productTypeConfirmedBy?: string;
   productTypeConfirmedAt?: string;
   productTypeVersion?: 1;
+  categoryReviewState: "CLEAR" | "QUARANTINED";
+  categoryReviewReason: "CATEGORY_UNKNOWN" | "CATEGORY_AMBIGUOUS" | "CATEGORY_BUNDLE" | null;
+  categoryReviewedBy: string | null;
+  categoryReviewedRole: string | null;
+  categoryReviewedAt: string | null;
+  categoryReviewVersion: number;
   productVisualDesc: string | null;
   images: string[];
   promoPriceBeforeIdr: number | null;
@@ -40,6 +46,12 @@ export function productCreationRowMatchesExpected(row: ProductRow, expected: Exp
       || canonicalProductTypeTimestamp(row.product_type_confirmed_at) === expected.productTypeConfirmedAt)
     && (expected.productTypeVersion === undefined || row.product_type_version === expected.productTypeVersion)
     && (expected.productTypeVersion === undefined || row.product_type_state === "CONFIRMED")
+    && row.category_review_state === expected.categoryReviewState
+    && (row.category_review_reason ?? null) === expected.categoryReviewReason
+    && (row.category_reviewed_by ?? null) === expected.categoryReviewedBy
+    && (row.category_reviewed_role ?? null) === expected.categoryReviewedRole
+    && (row.category_reviewed_at == null ? null : canonicalProductTypeTimestamp(row.category_reviewed_at)) === expected.categoryReviewedAt
+    && row.category_review_version === expected.categoryReviewVersion
     && (row.product_visual_desc ?? null) === expected.productVisualDesc
     && (row.brand_brief ?? null) === null
     && row.images === JSON.stringify(expected.images)

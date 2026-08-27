@@ -163,6 +163,9 @@ test("PostgreSQL advisory lease bertahan melewati idle transaction timeout dan c
             product_type_confirmed_token: "serum wajah", product_type_confirmed_by: "user-pg",
             product_type_confirmed_at: new Date("2026-08-27T00:00:00.000Z"),
             product_type_version: 1, product_type_state: "CONFIRMED",
+            category_review_state: "CLEAR", category_review_reason: null,
+            category_reviewed_by: null, category_reviewed_role: null,
+            category_reviewed_at: null, category_review_version: 1,
           }], rowCount: 1 };
         }
         if (sql.includes("UPDATE products")) {
@@ -330,6 +333,9 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
     // exact runtime shape before the strict provenance boundary.
     product_type_confirmed_by: user.id, product_type_confirmed_at: new Date("2026-08-27T00:00:00.000Z"),
     product_type_version: 1, product_type_state: "CONFIRMED",
+    category_review_state: "CLEAR", category_review_reason: null,
+    category_reviewed_by: null, category_reviewed_role: null,
+    category_reviewed_at: null, category_review_version: 1,
     created_at: "now",
   };
   let currentProduct = { ...baseProduct };

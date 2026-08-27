@@ -5,7 +5,7 @@ import { validBrand, validPriceIdr, validProductName } from "@/lib/product-valid
 import { parsePromoFields } from "@/lib/promo";
 import { pgSetProductBrand, pgUpdateProduct, pgUpdateProductDetails, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
-import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { buildAuthoritativeTypeBoundaryInput, categoryReviewForMutation, parseStructuredCategoryOutcome, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 
@@ -32,6 +32,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const name = body.name !== undefined ? validProductName(body.name) : product.name;
     const priceIdr = body.price_idr !== undefined ? validPriceIdr(body.price_idr) : product.price_idr;
     const category = body.category !== undefined ? String(body.category).trim() : product.category;
+    const categoryReview = categoryReviewForMutation({
+      state:product.category_review_state as "CLEAR"|"QUARANTINED",
+      reason:product.category_review_reason as "CATEGORY_UNKNOWN"|"CATEGORY_AMBIGUOUS"|"CATEGORY_BUNDLE"|null,
+      reviewedBy:product.category_reviewed_by ?? null,reviewedRole:product.category_reviewed_role ?? null,
+      reviewedAt:product.category_reviewed_at == null ? null : canonicalProductTypeTimestamp(product.category_reviewed_at),
+      version:product.category_review_version ?? 1,
+    },category,parseStructuredCategoryOutcome(body.category_outcome ?? "KNOWN"));
     const productTypeToken = String(body.product_type ?? product.product_type_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmationTouched = body.confirmed_product_type !== undefined;
     const confirmedProductTypeToken = String(confirmationTouched ? body.confirmed_product_type : product.product_type_confirmed_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
@@ -78,25 +85,42 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       if (confirmationTouched) await pgUpdateProduct(user.id, id, {
         name, priceIdr, category, productTypeToken, productTypeConfirmedToken: confirmedProductTypeToken,
         productTypeConfirmedBy: confirmedBy, productTypeConfirmedAt: confirmedAt, productTypeVersion: 1,
+        categoryReviewState:categoryReview.state,categoryReviewReason:categoryReview.reason,
+        categoryReviewedBy:categoryReview.reviewedBy,categoryReviewedRole:categoryReview.reviewedRole,
+        categoryReviewedAt:categoryReview.reviewedAt,categoryReviewVersion:categoryReview.version,
         productVisualDesc: visualDesc, ...promo,
       });
       else await pgUpdateProductDetails(user.id, id, {
         name, priceIdr, category, productVisualDesc: visualDesc, ...promo,
+        categoryReviewState:categoryReview.state,categoryReviewReason:categoryReview.reason,
+        categoryReviewedBy:categoryReview.reviewedBy,categoryReviewedRole:categoryReview.reviewedRole,
+        categoryReviewedAt:categoryReview.reviewedAt,categoryReviewVersion:categoryReview.version,
       });
     }
     else {
+      db!.transaction(() => {
       if (confirmationTouched) db!.prepare(
           `UPDATE products SET name = ?, price_idr = ?, category = ?, product_type_token = ?,
              product_type_confirmed_token = ?, product_type_confirmed_by = ?, product_type_confirmed_at = ?,
              product_type_version = 1, product_type_state = 'CONFIRMED', product_visual_desc = ?,
-             promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?`
+             promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ?,
+             category_review_state=?,category_review_reason=?,category_reviewed_by=?,category_reviewed_role=?,
+             category_reviewed_at=?,category_review_version=? WHERE id = ?`
         ).run(name, priceIdr, category, productTypeToken, confirmedProductTypeToken, confirmedBy, confirmedAt,
-          visualDesc, promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, id);
+          visualDesc, promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft,
+          categoryReview.state,categoryReview.reason,categoryReview.reviewedBy,categoryReview.reviewedRole,
+          categoryReview.reviewedAt,categoryReview.version,id);
       else db!.prepare(
           `UPDATE products SET name = ?, price_idr = ?, category = ?, product_visual_desc = ?,
-             promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?`
+             promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ?,
+             category_review_state=?,category_review_reason=?,category_reviewed_by=?,category_reviewed_role=?,
+             category_reviewed_at=?,category_review_version=? WHERE id = ?`
         ).run(name, priceIdr, category, visualDesc, promo.promoPriceBeforeIdr,
-          promo.promoEndsAt, promo.promoStockLeft, id);
+          promo.promoEndsAt, promo.promoStockLeft,categoryReview.state,categoryReview.reason,
+          categoryReview.reviewedBy,categoryReview.reviewedRole,categoryReview.reviewedAt,categoryReview.version,id);
+      if (categoryReview.state === "QUARANTINED") audit(user.id,"product.category_quarantined","products",id,
+        {reason:categoryReview.reason,category,version:categoryReview.version});
+      })();
     }
 
     // Merek terkonfirmasi user (audit C9) → raw_meta.brand, merge — jangan
@@ -125,6 +149,8 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       product_type_confirmation: updated.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : null,
       product_type_confirmed_by: updated.product_type_confirmed_by,
       product_type_confirmed_at: updatedConfirmedAt || null, product_type_version: updated.product_type_version,
+      category_review_state:updated.category_review_state,category_review_reason:updated.category_review_reason,
+      category_review_version:updated.category_review_version,
     });
     return Response.json({
       ok: true, product_id: id, name: updated.name, price_idr: updated.price_idr, category: updated.category,
@@ -134,7 +160,10 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
           state: "CONFIRMED", actor_id: updated.product_type_confirmed_by, confirmed_at: updatedConfirmedAt,
           version: 1, provenance: "USER_SELF_ASSERTION",
         } : null,
-    });
+      category_review:{state:updated.category_review_state,reason:updated.category_review_reason,
+        reviewed_by:updated.category_reviewed_by ?? null,reviewed_role:updated.category_reviewed_role ?? null,
+        reviewed_at:updated.category_reviewed_at ?? null,version:updated.category_review_version},
+    },{status:updated.category_review_state === "QUARANTINED" ? 202 : 200});
     });
     });
   } catch (err) {

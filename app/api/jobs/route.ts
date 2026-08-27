@@ -18,7 +18,7 @@ import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
 import { assertAdmissionReferenceEvidence, cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest, withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 import { authorizedManagedStagingZeroValueAdmission } from "@/lib/staging-admission-trace";
-import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 
@@ -45,6 +45,7 @@ export async function POST(req: Request) {
       ? await smokeGetProduct(user.id, script.product_id)
       : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(script.product_id, user.id) as ProductRow | undefined;
     if (!product) throw ERR.NOT_FOUND("Skripnya");
+    assertCategoryReviewClear({state:product.category_review_state as "CLEAR" | "QUARANTINED",reason:product.category_review_reason as never,version:product.category_review_version ?? 0});
     // Produk organisasi WAJIB lewat dashboard: RBAC belanja, gerbang review
     // scene, dan library org semuanya hidup di sana. Lihat catatan lengkapnya
     // di pastikanBukanProdukOrg.
@@ -71,6 +72,7 @@ export async function POST(req: Request) {
       ? await smokeGetProduct(user.id, product.id)
       : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(product.id, user.id) as ProductRow | undefined;
     if (!lockedProduct) throw ERR.NOT_FOUND("Produknya");
+    assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version ?? 0});
     pastikanBukanProdukOrg(lockedProduct);
     await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-admission-product.product_type_token", token: lockedProduct.product_type_token ?? "", version: 1 },
@@ -287,6 +289,7 @@ export async function POST(req: Request) {
         .prepare("SELECT * FROM products WHERE id=? AND user_id=?")
         .get(product.id, user.id) as ProductRow | undefined;
       if (!candidateProduct) throw ERR.NOT_FOUND("Produknya");
+      assertCategoryReviewClear({state:candidateProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:candidateProduct.category_review_reason as never,version:candidateProduct.category_review_version ?? 0});
       try {
         await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
           { kind: "DECLARED_PRODUCT_TYPE", sourceId: "admission-product.product_type_token", token: candidateProduct.product_type_token ?? "", version: 1 },
@@ -338,7 +341,10 @@ export async function POST(req: Request) {
           || canonicalProductTypeTimestamp(admissionProduct.product_type_confirmed_at)
             !== canonicalProductTypeTimestamp(candidateProduct.product_type_confirmed_at)
           || admissionProduct.product_type_version !== candidateProduct.product_type_version
-          || admissionProduct.product_type_state !== candidateProduct.product_type_state) {
+          || admissionProduct.product_type_state !== candidateProduct.product_type_state
+          || admissionProduct.category_review_state !== candidateProduct.category_review_state
+          || admissionProduct.category_review_reason !== candidateProduct.category_review_reason
+          || admissionProduct.category_review_version !== candidateProduct.category_review_version) {
           return { kind: "product_type_changed" as const };
         }
         const productSnapshotRaw = createJobProductSnapshotRaw(admissionProduct);

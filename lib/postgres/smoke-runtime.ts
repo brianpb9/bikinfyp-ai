@@ -24,7 +24,7 @@ import { mediaStorage } from "../storage";
 import { getPool } from "./pool";
 import { createJobProductSnapshotRaw } from "../job-product-snapshot";
 import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "../job-admission-reference";
-import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "../product-type-boundary";
+import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "../product-type-boundary";
 import { canonicalProductTypeTimestamp } from "../product-type-timestamp";
 import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
 
@@ -129,11 +129,11 @@ export async function smokeGetProductByIdForCreateReconciliation(productId: stri
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.getProductByIdForCreateReconciliation(productId); } finally { await repo.close(); }
 }
-export async function pgUpdateProduct(userId: string, productId: string, patch: { name: string; priceIdr: number; category: string; productTypeToken: string; productTypeConfirmedToken: string; productTypeConfirmedBy: string; productTypeConfirmedAt: string; productTypeVersion: 1; productVisualDesc: string | null; promoPriceBeforeIdr?: number | null; promoEndsAt?: string | null; promoStockLeft?: number | null }) {
+export async function pgUpdateProduct(userId: string, productId: string, patch: { name:string; priceIdr:number; category:string; productTypeToken:string; productTypeConfirmedToken:string; productTypeConfirmedBy:string; productTypeConfirmedAt:string; productTypeVersion:1; categoryReviewState:"CLEAR"|"QUARANTINED"; categoryReviewReason:"CATEGORY_UNKNOWN"|"CATEGORY_AMBIGUOUS"|"CATEGORY_BUNDLE"|null; categoryReviewedBy:string|null; categoryReviewedRole:string|null; categoryReviewedAt:string|null; categoryReviewVersion:number; productVisualDesc:string|null; promoPriceBeforeIdr?:number|null; promoEndsAt?:string|null; promoStockLeft?:number|null }) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.updateOwnedProduct(userId, productId, patch); } finally { await repo.close(); }
 }
-export async function pgUpdateProductDetails(userId: string, productId: string, patch: { name: string; priceIdr: number; category: string; productVisualDesc: string | null; promoPriceBeforeIdr?: number | null; promoEndsAt?: string | null; promoStockLeft?: number | null }) {
+export async function pgUpdateProductDetails(userId:string,productId:string,patch:{name:string;priceIdr:number;category:string;categoryReviewState:"CLEAR"|"QUARANTINED";categoryReviewReason:"CATEGORY_UNKNOWN"|"CATEGORY_AMBIGUOUS"|"CATEGORY_BUNDLE"|null;categoryReviewedBy:string|null;categoryReviewedRole:string|null;categoryReviewedAt:string|null;categoryReviewVersion:number;productVisualDesc:string|null;promoPriceBeforeIdr?:number|null;promoEndsAt?:string|null;promoStockLeft?:number|null}) {
   const repo = new PgProductPersonaScriptRepository(url());
   try { return await repo.updateOwnedProductDetails(userId, productId, patch); } finally { await repo.close(); }
 }
@@ -287,13 +287,19 @@ export async function smokeCreateJob(userId: string, input: {
           product_type_token: string | null; product_type_confirmed_token: string | null;
           product_type_confirmed_by: string | null; product_type_confirmed_at: Date | string | null;
           product_type_version: number | null; product_type_state: string;
+          category_review_state: string; category_review_reason: string | null;
+          category_reviewed_by: string | null; category_reviewed_role: string | null;
+          category_reviewed_at: Date | string | null; category_review_version: number;
         }>(`SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,images,
                   promo_price_before_idr,promo_ends_at,promo_stock_left,
                   product_type_token,product_type_confirmed_token,product_type_confirmed_by,
-                  product_type_confirmed_at,product_type_version,product_type_state
+                  product_type_confirmed_at,product_type_version,product_type_state,
+                  category_review_state,category_review_reason,category_reviewed_by,
+                  category_reviewed_role,category_reviewed_at,category_review_version
              FROM products WHERE id=$1 AND user_id=$2 FOR SHARE`, [input.productId, userId]);
         if (!product.rows[0]) throw new Error("PRODUCT_NOT_FOUND");
         const lockedProduct = product.rows[0];
+        assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version});
         await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
           { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-retail-product.product_type_token", token: lockedProduct.product_type_token ?? "", version: 1 },
           lockedProduct.product_type_state === "CONFIRMED" && lockedProduct.product_type_confirmed_token

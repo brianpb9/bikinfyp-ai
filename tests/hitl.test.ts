@@ -46,6 +46,7 @@ db.prepare(
 ).run(productId, user.id, null, "Serum Glow Bright", 85000, "beauty",
   "serum wajah", "serum wajah", user.id, now(), 1, "CONFIRMED",
   JSON.stringify([`uploads/${productId}/0.png`]), null, now());
+db.prepare("UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_review_version=1 WHERE id=?").run(productId);
 
 // Skrip belum di-approve
 const scriptId = uuid();

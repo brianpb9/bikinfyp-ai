@@ -110,6 +110,12 @@ export type LockedProductTypeState = {
   product_type_confirmed_at: string | Date | null;
   product_type_version: number | null;
   product_type_state: string;
+  category_review_state?: string | null;
+  category_review_reason?: string | null;
+  category_reviewed_by?: string | null;
+  category_reviewed_role?: string | null;
+  category_reviewed_at?: string | Date | null;
+  category_review_version?: number | null;
 };
 
 export type AdmissionEvidenceLease = {
@@ -141,7 +147,9 @@ export async function acquireAdmissionReferenceEvidence(input: {
       const ownerColumn = input.owner.kind === "org" ? "org_id" : "user_id";
       const locked = await client.query<LockedProductTypeState & { images: string }>(
         `SELECT images,product_type_token,product_type_confirmed_token,product_type_confirmed_by,
-                product_type_confirmed_at,product_type_version,product_type_state
+                product_type_confirmed_at,product_type_version,product_type_state,
+                category_review_state,category_review_reason,category_reviewed_by,
+                category_reviewed_role,category_reviewed_at,category_review_version
            FROM products WHERE id=$1 AND ${ownerColumn}=$2`,
         [input.productId, input.owner.id]
       );

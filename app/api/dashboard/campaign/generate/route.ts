@@ -9,7 +9,7 @@ import { tierMasihDijual } from "@/lib/paket-kredit";
 import { getAvatarPreset } from "@/lib/avatar-presets";
 import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
-import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 
 export const runtime = "nodejs";
@@ -43,6 +43,11 @@ export async function POST(req: Request) {
     // menolak rekan satu tim atas produk yang jelas ada di daftar mereka.
     const product = await routeDeps.smokeGetOrgProduct(membership.org_id, productId);
     if (!product) throw ERR.NOT_FOUND("Produknya");
+    assertCategoryReviewClear({
+      state: product.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+      reason: product.category_review_reason as never,
+      version: product.category_review_version ?? 0,
+    });
     return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "stored-org-product.product_type_token", token: product.product_type_token ?? "", version: 1 },
       product.product_type_state === "CONFIRMED" && product.product_type_confirmed_token
@@ -126,9 +131,20 @@ export async function POST(req: Request) {
         product_type_confirmed_at: product.product_type_confirmed_at ?? null,
         product_type_version: product.product_type_version ?? null,
         product_type_state: product.product_type_state ?? "QUARANTINED",
+        category_review_state: product.category_review_state ?? "QUARANTINED",
+        category_review_reason: product.category_review_reason ?? "CATEGORY_UNKNOWN",
+        category_reviewed_by: product.category_reviewed_by ?? null,
+        category_reviewed_role: product.category_reviewed_role ?? null,
+        category_reviewed_at: product.category_reviewed_at ?? null,
+        category_review_version: product.category_review_version ?? 0,
       }),
     });
     const lockedProductType = evidenceLease.productType;
+    assertCategoryReviewClear({
+      state: lockedProductType?.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+      reason: lockedProductType?.category_review_reason as never,
+      version: lockedProductType?.category_review_version ?? 0,
+    });
     await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-org-product.product_type_token", token: lockedProductType?.product_type_token ?? "", version: 1 },
       lockedProductType?.product_type_state === "CONFIRMED" && lockedProductType.product_type_confirmed_token

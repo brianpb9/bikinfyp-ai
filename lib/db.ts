@@ -57,31 +57,52 @@ export const CATEGORY_REVIEW_SQLITE_UPGRADE_GUARDS = `
     category_reviewed_by=NULL, category_reviewed_role=NULL, category_reviewed_at=NULL,
     category_review_version=CASE WHEN category_review_version < 1 THEN 1 ELSE category_review_version END
   WHERE category_review_state NOT IN ('CLEAR','QUARANTINED')
-     OR category_review_state='CLEAR'
-     OR category_review_reason IS NULL
-     OR category_review_reason NOT IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE');
+     OR category_review_version < 1
+     OR (category_review_state='QUARANTINED' AND (
+       category_review_reason IS NULL
+       OR category_review_reason NOT IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE')
+       OR category_reviewed_by IS NOT NULL OR category_reviewed_role IS NOT NULL OR category_reviewed_at IS NOT NULL))
+     OR (category_review_state='CLEAR' AND (
+       category_review_reason IS NOT NULL
+       OR NOT (
+         (category_review_version=1 AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
+         OR (category_review_version>=2 AND category_reviewed_by IS NOT NULL AND length(trim(category_reviewed_by)) > 0
+           AND category_reviewed_role IS NOT NULL AND length(trim(category_reviewed_role)) > 0
+           AND category_reviewed_at IS NOT NULL
+           AND strftime('%Y-%m-%dT%H:%M:%fZ', category_reviewed_at)=category_reviewed_at)
+       )));
   CREATE TRIGGER IF NOT EXISTS products_category_review_insert_guard
   BEFORE INSERT ON products WHEN
     NEW.category_review_version < 1 OR NOT (
       (NEW.category_review_state='QUARANTINED'
+        AND NEW.category_review_reason IS NOT NULL
         AND NEW.category_review_reason IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE')
         AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
       OR
-      (NEW.category_review_state='CLEAR' AND NEW.category_review_reason IS NULL
-        AND length(trim(NEW.category_reviewed_by)) > 0 AND length(trim(NEW.category_reviewed_role)) > 0
-        AND strftime('%Y-%m-%dT%H:%M:%fZ', NEW.category_reviewed_at)=NEW.category_reviewed_at)
+      (NEW.category_review_state='CLEAR' AND NEW.category_review_reason IS NULL AND (
+        (NEW.category_review_version=1 AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
+        OR (NEW.category_review_version>=2
+          AND NEW.category_reviewed_by IS NOT NULL AND length(trim(NEW.category_reviewed_by)) > 0
+          AND NEW.category_reviewed_role IS NOT NULL AND length(trim(NEW.category_reviewed_role)) > 0
+          AND NEW.category_reviewed_at IS NOT NULL
+          AND strftime('%Y-%m-%dT%H:%M:%fZ', NEW.category_reviewed_at)=NEW.category_reviewed_at)))
     ) BEGIN SELECT RAISE(ABORT, 'invalid category review state'); END;
   CREATE TRIGGER IF NOT EXISTS products_category_review_update_guard
   BEFORE UPDATE OF category_review_state,category_review_reason,category_reviewed_by,
     category_reviewed_role,category_reviewed_at,category_review_version ON products WHEN
     NEW.category_review_version < 1 OR NOT (
       (NEW.category_review_state='QUARANTINED'
+        AND NEW.category_review_reason IS NOT NULL
         AND NEW.category_review_reason IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE')
         AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
       OR
-      (NEW.category_review_state='CLEAR' AND NEW.category_review_reason IS NULL
-        AND length(trim(NEW.category_reviewed_by)) > 0 AND length(trim(NEW.category_reviewed_role)) > 0
-        AND strftime('%Y-%m-%dT%H:%M:%fZ', NEW.category_reviewed_at)=NEW.category_reviewed_at)
+      (NEW.category_review_state='CLEAR' AND NEW.category_review_reason IS NULL AND (
+        (NEW.category_review_version=1 AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
+        OR (NEW.category_review_version>=2
+          AND NEW.category_reviewed_by IS NOT NULL AND length(trim(NEW.category_reviewed_by)) > 0
+          AND NEW.category_reviewed_role IS NOT NULL AND length(trim(NEW.category_reviewed_role)) > 0
+          AND NEW.category_reviewed_at IS NOT NULL
+          AND strftime('%Y-%m-%dT%H:%M:%fZ', NEW.category_reviewed_at)=NEW.category_reviewed_at)))
     ) BEGIN SELECT RAISE(ABORT, 'invalid category review state'); END;
 `;
 

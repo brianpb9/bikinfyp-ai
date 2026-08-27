@@ -78,7 +78,7 @@ test("POST /api/products menulis brand terkonfirmasi ke raw_meta.brand", async (
   assert.equal(meta.brand, "Glowbening", "brand hasil konfirmasi user harus tersimpan (ter-trim)");
 });
 
-test("POST tanpa brand -> raw_meta tetap tanpa brand (tidak menebak diam-diam)", async () => {
+test("POST kategori default dikarantina sebelum persistence (tidak menebak diam-diam)", async () => {
   const res = await createProduct(
     jsonReq("http://localhost/api/products", "POST", {
       name: "Produk Tanpa Merek",
@@ -89,11 +89,9 @@ test("POST tanpa brand -> raw_meta tetap tanpa brand (tidak menebak diam-diam)",
       images_base64: [`data:image/png;base64,${PNG_1X1}`],
     })
   );
-  assert.equal(res.status, 201);
-  const { product_id } = (await res.json()) as { product_id: string };
-  const row = getDb().prepare("SELECT raw_meta FROM products WHERE id = ?").get(product_id) as { raw_meta: string | null };
-  const meta = JSON.parse(row.raw_meta ?? "{}") as { brand?: string };
-  assert.equal(meta.brand, undefined);
+  assert.equal(res.status, 422);
+  const body = await res.json() as { code?: string };
+  assert.equal(body.code, "CATEGORY_REVIEW_REQUIRED");
 });
 
 test("PATCH menulis brand dan MEMPERTAHANKAN raw_meta.og hasil scrape", async () => {
@@ -105,6 +103,7 @@ test("PATCH menulis brand dan MEMPERTAHANKAN raw_meta.og hasil scrape", async ()
   ).run(id, user.id, "https://toko.example/p", "Serum Scarlett Brightening", 60000, "beauty",
     "serum wajah", "serum wajah", user.id, now(), 1, "CONFIRMED", "[]",
     JSON.stringify({ og: { price: 60000, original: 90000 } }), now());
+  getDb().prepare("UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_review_version=1 WHERE id=?").run(id);
 
   const res = await patchProduct(
     jsonReq(`http://localhost/api/products/${id}`, "PATCH", { brand: "Scarlett" }),
@@ -126,6 +125,7 @@ test("PATCH brand kosong -> menghapus brand tanpa menyentuh og", async () => {
   ).run(id, user.id, "Produk Hapus Merek", 60000, "beauty",
     "produk fisik", "produk fisik", user.id, now(), 1, "CONFIRMED", "[]",
     JSON.stringify({ brand: "Salah", og: { price: 1 } }), now());
+  getDb().prepare("UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_review_version=1 WHERE id=?").run(id);
   const res = await patchProduct(
     jsonReq(`http://localhost/api/products/${id}`, "PATCH", { brand: "" }),
     { params: Promise.resolve({ id }) }
