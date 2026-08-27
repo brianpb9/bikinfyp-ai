@@ -279,6 +279,55 @@ test("A1/A4/A6 tetap menegakkan bukti di boundary otoritatif sebelum uang/queue"
     ]);
 });
 
+test("A6 actual handler reloads C5 state under product lock before charge/reset/enqueue", async (t) => {
+  const { POST } = await import("../app/api/dashboard/campaign/job/[jobId]/route");
+  const { setCampaignJobDependenciesForTests } = await import("../lib/campaign-job-dependencies");
+  t.after(() => setCampaignJobDependenciesForTests());
+
+  let row: Record<string, unknown> = {
+    id: "job-a6-race", product_id: "product-a6-race", state: "AWAITING_APPROVAL",
+    org_id: "org-a6-race", approved_at: null, requires_approval: true,
+    quality_tier: "high_quality", format: "hands_only", template_id: "problem-solution",
+    approved_reference_manifest: null, job_product_snapshot: null,
+    product_type_token: "serum wajah", product_type_confirmed_token: "serum wajah",
+    product_type_confirmed_by: "member-a6", product_type_confirmed_at: new Date(),
+    product_type_version: 1, product_type_state: "CONFIRMED",
+    product_category: "beauty", category_review_state: "CLEAR", category_review_reason: null,
+    category_reviewed_by: "founder", category_reviewed_role: "Founder/CEO",
+    category_reviewed_at: new Date(), category_review_version: 2,
+    product_name: "Serum", segments: "[]", script_validation_result: "{}",
+  };
+  const effects: string[] = [];
+  const pool = {
+    async query(sql: string) {
+      if (sql.includes("FROM jobs j JOIN products")) return { rows: [{ ...row }], rowCount: 1 };
+      effects.push(sql);
+      return { rows: [], rowCount: 0 };
+    },
+  };
+  setCampaignJobDependenciesForTests({
+    postgresRuntimeEnabled: () => true,
+    requireOrgContextApi: async () => ({
+      user: { id: "member-a6" }, membership: { org_id: "org-a6-race", role: "owner" },
+    }) as never,
+    assertPaidAdmission: async () => undefined,
+    getPool: () => pool as never,
+    withProductEvidenceMutationLock: async (_productId, operation) => {
+      row = { ...row, category_review_state: "QUARANTINED", category_review_reason: "CATEGORY_AMBIGUOUS", category_review_version: 3 };
+      return operation();
+    },
+  });
+
+  const response = await POST(new Request("http://local/api/dashboard/campaign/job/job-a6-race", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "regenerate", idx: 0 }),
+  }), { params: Promise.resolve({ jobId: "job-a6-race" }) });
+  const payload = await response.json() as { code?: string };
+  assert.equal(response.status, 422);
+  assert.equal(payload.code, "CATEGORY_REVIEW_REQUIRED");
+  assert.deepEqual(effects, [], "A6 charged, reset, audited, or enqueued after C5 re-quarantine");
+});
+
 test("matrix menyelesaikan duplicate replay sebelum lease current-product", () => {
   const body = source("../app/api/dashboard/matrix/route.ts");
   const duplicate = body.indexOf("if (sudahAda.length)");

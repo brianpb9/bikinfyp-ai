@@ -267,6 +267,7 @@ function siapkanJob(images: string[], tier = "silent_caption"): { jobId: string;
   const jobId = uuid();
   const manifestRaw = installAdmissionManifestFixture?.(jobId, images) ?? null;
   const productSnapshot = createJobProductSnapshotRaw({
+    category_review_version: 1,
     name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
   });
   db.prepare(
@@ -374,6 +375,7 @@ test("W2 C3: mismatch eksplisit pada referensi kedua memakai brand admission dan
   setMediaStorageForTests(storage.storage);
   const { jobId, productId } = siapkanJob([rel1, rel2], "high_quality");
   const snapshot = createJobProductSnapshotRaw({
+    category_review_version: 1,
     name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
     raw_meta: JSON.stringify({ brand: "Merek Admission" }),
   });
@@ -433,6 +435,7 @@ test("W2 C3: brand cocok dan brand null tetap dapat mencapai provider", async ()
     setMediaStorageForTests(storage.storage);
     const { jobId } = siapkanJob([rel], "silent_caption");
     db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?").run(createJobProductSnapshotRaw({
+    category_review_version: 1,
       name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
       raw_meta: trustedBrand ? JSON.stringify({ brand: trustedBrand }) : "{}",
     }), jobId);
@@ -982,7 +985,7 @@ test("E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission", as
       trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
       productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
     });
-    const rereadNow = parseJobProductSnapshot(createJobProductSnapshotRaw(current));
+    const rereadNow = parseJobProductSnapshot(createJobProductSnapshotRaw({...current, category_review_version: 1}));
     assert.notDeepEqual(rereadNow, admission, "counterexample gagal: re-read produk kini sama dengan snapshot admission");
     assert.equal(rereadNow.productName, mutasi.name); assert.equal(rereadNow.category, mutasi.category); assert.equal(rereadNow.priceIdr, mutasi.price_idr);
     assert.equal(rereadNow.trustedBrand.value, mutasi.brand); assert.equal(rereadNow.productVisualDesc, mutasi.product_visual_desc);
@@ -1226,10 +1229,11 @@ test("W2 Story Ads SA6 memakai name/category/price snapshot admission setelah ro
   const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
   setMediaStorageForTests(spy.storage);
   const snapshotRaw = createJobProductSnapshotRaw({
+    category_review_version: 1,
     name: "Jasa Uji Snapshot", category: "jasa", price_idr: 189_000, raw_meta: "{}",
   });
   const { jobId, productId } = await siapkanStoryAdsW2(rel, snapshotRaw);
-  db.prepare("UPDATE products SET name='MUTASI SA6 W2',category='food',price_idr=73000 WHERE id=?").run(productId);
+  db.prepare("UPDATE products SET name='MUTASI SA6 W2',price_idr=73000 WHERE id=?").run(productId);
 
   let providerCalls = 0;
   setVideoProvidersForTests([{
@@ -1248,7 +1252,7 @@ test("W2 Story Ads SA6 memakai name/category/price snapshot admission setelah ro
       "Story Ads W2 berhenti sebelum reference boundary: SA6 kemungkinan membaca name/category/price row mutasi");
     assert.equal(providerCalls, 0, "fixture harus berhenti di materialize sebelum provider");
     assert.deepEqual(parseJobProductSnapshot(snapshotRaw), {
-      version: 3, productName: "Jasa Uji Snapshot", category: "jasa", priceIdr: 189_000,
+      version: 4, productName: "Jasa Uji Snapshot", category: "jasa", categoryReviewVersion: 1, priceIdr: 189_000,
       promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
       trustedBrand: { source: "products.raw_meta.brand", value: null }, productVisualDesc: null, brandBrief: null, claims: [],
     });
@@ -1326,6 +1330,9 @@ test("W2 C5 quarantine has zero effects, then exact Founder release reaches prov
     db.prepare(`UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,
       category_reviewed_by='founder-1',category_reviewed_role='Founder/CEO',category_reviewed_at=?,
       category_review_version=2 WHERE id=?`).run("2026-08-27T20:00:00.000Z",released.productId);
+    const releasedProduct=db.prepare("SELECT * FROM products WHERE id=?").get(released.productId) as Record<string,unknown>;
+    db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?")
+      .run(createJobProductSnapshotRaw({...releasedProduct,category_review_version:2} as never),released.jobId);
     await processJob(released.jobId);
     const releasedState=db.prepare("SELECT state FROM jobs WHERE id=?").get(released.jobId) as {state:string};
     const releasedAudits=db.prepare("SELECT meta FROM audit_log WHERE entity_id=? ORDER BY created_at").all(released.jobId) as {meta:string}[];

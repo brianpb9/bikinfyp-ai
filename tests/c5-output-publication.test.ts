@@ -27,8 +27,11 @@ test("READY retail output stops issuing signed URLs immediately after C5 re-quar
   db.prepare(`INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,
     validation_result,approved_by_user_at,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
       scriptId,productId,"problem","senang","santai","[]","caption","[]","{}",now(),now());
-  db.prepare(`INSERT INTO jobs (id,user_id,product_id,script_id,state,created_at) VALUES (?,?,?,?,'READY',?)`)
-    .run(jobId,user.id,productId,scriptId,now());
+  const snapshot=JSON.stringify({version:4,productName:"Produk READY C5",category:"beauty",categoryReviewVersion:1,
+    priceIdr:10000,promoPriceBeforeIdr:null,promoEndsAt:null,promoStockLeft:null,
+    trustedBrand:{source:"products.raw_meta.brand",value:null},productVisualDesc:null,brandBrief:null,claims:[]});
+  db.prepare(`INSERT INTO jobs (id,user_id,product_id,script_id,job_product_snapshot,state,created_at)
+    VALUES (?,?,?,?,?,'READY',?)`).run(jobId,user.id,productId,scriptId,snapshot,now());
   db.prepare(`INSERT INTO outputs (job_id,video_url,caption,hashtags,suggested_post_time,compliance_checklist)
     VALUES (?,?,?,?,?,?)`).run(jobId,"jobs/ready/output.mp4","caption","[]","19:00","[]");
   db.prepare(`INSERT INTO job_shots (id,job_id,idx,prompt,storage_key,thumb_key,duration_sec,created_at)
@@ -58,20 +61,29 @@ test("READY retail output stops issuing signed URLs immediately after C5 re-quar
   assert.equal((await quarantined.json()).code,"CATEGORY_REVIEW_REQUIRED");
   assert.equal((await fetchIssued(issued)).status,403,"old output URL remained usable");
   assert.equal((await fetchIssued(issuedScene)).status,403,"old scene URL remained usable");
+
+  db.prepare(`UPDATE products SET category='health',category_review_state='CLEAR',category_review_reason=NULL,
+    category_reviewed_by='founder-1',category_reviewed_role='Founder/CEO',category_reviewed_at=?,
+    category_review_version=3 WHERE id=?`).run(now(),productId);
+  assert.equal((await fetchIssued(issued)).status,403,"old output revived after different-category release");
+  assert.equal((await fetchIssued(issuedScene)).status,403,"old scene revived after different-category release");
 });
 
 test("PostgreSQL media authorization binds output and scene delivery to current C5 truth",async(t)=>{
   const {fileBelongsToUser,setMediaFileAccessDependenciesForTests}=await import("../lib/media-file-access");
   t.after(()=>setMediaFileAccessDependenciesForTests());
-  let clear=true;let checkedSql="";
+  let category="beauty";let version=1;const checkedSql:string[]=[];
+  const snapshot=JSON.stringify({version:4,category:"beauty",categoryReviewVersion:1});
   setMediaFileAccessDependenciesForTests({postgresRuntimeEnabled:()=>true,getPool:(()=>({
-    query:async(sql:string)=>{checkedSql=sql;return {rowCount:clear ? 1 : 0};},
+    query:async(sql:string)=>{checkedSql.push(sql);return sql.includes("FROM outputs")
+      ? {rowCount:1,rows:[{job_product_snapshot:snapshot,category,category_review_version:version}]}
+      : {rowCount:0,rows:[]};},
   })) as never});
   assert.equal(await fileBelongsToUser("jobs/pg/output.mp4","user-pg"),true);
-  assert.match(checkedSql,/outputs[\s\S]*JOIN products p/);
-  assert.match(checkedSql,/job_shots[\s\S]*JOIN products p/);
-  assert.match(checkedSql,/category_review_state='CLEAR'[\s\S]*category_review_reason IS NULL/);
-  clear=false;
+  assert.match(checkedSql[0],/outputs[\s\S]*JOIN products p/);
+  assert.match(checkedSql[0],/job_shots[\s\S]*JOIN products p/);
+  assert.match(checkedSql[0],/category_review_state='CLEAR'[\s\S]*category_review_reason IS NULL/);
+  category="health";version=3;
   assert.equal(await fileBelongsToUser("jobs/pg/output.mp4","user-pg"),false);
   assert.equal(await fileBelongsToUser("jobs/pg/scene.mp4","user-pg"),false);
 });

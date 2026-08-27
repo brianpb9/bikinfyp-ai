@@ -27,6 +27,7 @@ test("snapshot invalid gagal tertutup", () => {
   const legacyRaw = JSON.stringify({ ...legacyWithoutPrice, version: 1 });
   assert.deepEqual(parseJobProductSnapshot(legacyRaw), {
     ...legacyWithoutPrice, version: 1, priceIdr: null,
+    categoryReviewVersion: null,
     promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
   });
   assert.throws(() => parseJobProductSnapshot(legacyRaw, { requirePrice: true }), UnsafeLegacyProductSnapshot);
@@ -71,23 +72,25 @@ test("template snapshot admisi menang atas kolom job yang menyimpang", () => {
 
 test("admission builder membekukan seluruh metadata dari bentuk row database", () => {
   const raw = createJobProductSnapshotRaw({
+    category_review_version: 1,
     name: "Serum Admission", category: "beauty", price_idr: 91_000,
     raw_meta: JSON.stringify({ brand: "Merek Admission", ignored: "bukan sumber" }),
     product_visual_desc: "botol amber", brand_brief: "faktual",
     claims: JSON.stringify(["ringan", "tanpa pewangi"]),
   });
   assert.deepEqual(parseJobProductSnapshot(raw), {
-    version: 3, productName: "Serum Admission", category: "beauty", priceIdr: 91_000,
+    version: 4, productName: "Serum Admission", category: "beauty", categoryReviewVersion: 1, priceIdr: 91_000,
     promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Admission" },
     productVisualDesc: "botol amber", brandBrief: "faktual",
     claims: ["ringan", "tanpa pewangi"],
   });
-  assert.throws(() => createJobProductSnapshotRaw({ name: "X", category: "Y", price_idr: 1, claims: "{}" }), /SOURCE_INVALID/);
+  assert.throws(() => createJobProductSnapshotRaw({ category_review_version: 1, name: "X", category: "Y", price_idr: 1, claims: "{}" }), /SOURCE_INVALID/);
 });
 
-test("snapshot v3 mempertahankan promo positif persis dan menolak bentuk promo ambigu", () => {
+test("snapshot v4 mempertahankan promo dan mengikat generasi review C5", () => {
   const raw = createJobProductSnapshotRaw({
+    category_review_version: 1,
     name: "Serum Promo", category: "beauty", price_idr: 85_000,
     promo_price_before_idr: 110_000,
     promo_ends_at: "2031-01-02T03:04:05.000Z",
@@ -100,7 +103,7 @@ test("snapshot v3 mempertahankan promo positif persis dan menolak bentuk promo a
     ends: parsed.promoEndsAt,
     stock: parsed.promoStockLeft,
   }, {
-    version: 3,
+    version: 4,
     before: 110_000,
     ends: "2031-01-02T03:04:05.000Z",
     stock: 11,

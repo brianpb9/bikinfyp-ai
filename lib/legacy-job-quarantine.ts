@@ -22,9 +22,11 @@ export type LegacyJobQuarantineReason =
   | "PRODUCT_SNAPSHOT_MALFORMED"
   | "PRODUCT_SNAPSHOT_UNSUPPORTED_VERSION"
   | "PRODUCT_TYPE_QUARANTINED"
-  | "CATEGORY_REVIEW_QUARANTINED";
+  | "CATEGORY_REVIEW_QUARANTINED"
+  | "CATEGORY_REVIEW_GENERATION_MISMATCH";
 
 export type ProductTypeProvenance = {
+  category?: string | null;
   product_type_token?: string | null;
   product_type_confirmed_token?: string | null;
   product_type_confirmed_by?: string | null;
@@ -145,6 +147,12 @@ export function classifyLegacyJobEvidence(input: {
     || !isCanonicalC5Category(productSnapshot.category))) {
     return { status: "QUARANTINED", reason: "CATEGORY_REVIEW_QUARANTINED" };
   }
+  if (input.productType !== undefined && (
+    productSnapshot.category !== input.productType?.category
+    || productSnapshot.categoryReviewVersion !== input.productType?.category_review_version
+  )) {
+    return { status: "QUARANTINED", reason: "CATEGORY_REVIEW_GENERATION_MISMATCH" };
+  }
   return { status: "CURRENT", manifest, productSnapshot };
 }
 
@@ -181,6 +189,7 @@ export function requireCurrentJobEvidence(input: Parameters<typeof classifyLegac
         retryable: false,
       });
     case "CATEGORY_REVIEW_QUARANTINED":
+    case "CATEGORY_REVIEW_GENERATION_MISMATCH":
       throw new ApiError(422, {
         code: "CATEGORY_REVIEW_REQUIRED",
         message_id: "Kategori produk masih dikarantina dan perlu rilis peninjau manusia berwenang.",

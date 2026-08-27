@@ -380,7 +380,7 @@ async function processPostgresJobWithProductLock(
     requireCurrentJobEvidence({
       approvedReferenceManifest:row.approved_reference_manifest,
       jobProductSnapshot:row.job_product_snapshot,
-      productType:row,
+      productType:{...row,category:row.product_category},
     });
     const hold = await pool.query("SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type='hold' LIMIT 1", [jobId]);
     const executionMode = workerExecutionMode(hold.rowCount === 1);
@@ -449,14 +449,14 @@ export function parseDeterministicFixtureAdmission(row: Pick<WorkerRow,
   | "product_type_confirmed_token" | "product_type_confirmed_by" | "product_type_confirmed_at"
   | "product_type_version" | "product_type_state" | "category_review_state"
   | "category_review_reason" | "category_reviewed_by" | "category_reviewed_role"
-  | "category_reviewed_at" | "category_review_version">): {
+  | "category_reviewed_at" | "category_review_version" | "product_category">): {
   manifest: JobReferenceManifest;
   productSnapshot: JobProductSnapshot;
 } {
   return requireCurrentJobEvidence({
     approvedReferenceManifest: row.approved_reference_manifest,
     jobProductSnapshot: row.job_product_snapshot,
-    productType: row,
+    productType: {...row,category:row.product_category},
   });
 }
 
@@ -472,7 +472,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const currentEvidence = requireCurrentJobEvidence({
     approvedReferenceManifest: row.approved_reference_manifest,
     jobProductSnapshot: row.job_product_snapshot,
-    productType: row,
+    productType: {...row,category:row.product_category},
   });
   const productSnapshot = currentEvidence.productSnapshot;
   const snapshotPriceIdr = productSnapshot.priceIdr!;

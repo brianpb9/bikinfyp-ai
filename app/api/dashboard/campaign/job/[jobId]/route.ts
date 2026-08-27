@@ -17,6 +17,7 @@ import { materializeJobReferenceManifest } from "@/lib/job-reference-manifest";
 import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 import path from "node:path";
 import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
+import { campaignJobDependencies } from "@/lib/campaign-job-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -34,7 +35,7 @@ type SceneRow = {
   duration_sec: number; regen_requested: boolean; regen_count: number;
 };
 type JobRowLite = {
-  id: string; state: string; org_id: string | null; approved_at: string | null;
+  id: string; product_id: string; state: string; org_id: string | null; approved_at: string | null;
   requires_approval: boolean; product_name: string; segments: string;
   quality_tier: string;
   format: string; template_id: string | null;
@@ -53,7 +54,7 @@ type JobRowLite = {
 
 async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRowLite | null> {
   const res = await pool.query<JobRowLite>(
-    `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier, j.format, j.template_id,
+    `SELECT j.id, j.product_id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier, j.format, j.template_id,
             j.approved_reference_manifest, j.job_product_snapshot,
             p.product_type_token, p.product_type_confirmed_token, p.product_type_confirmed_by,
             p.product_type_confirmed_at, p.product_type_version, p.product_type_state,
@@ -122,8 +123,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
 // kredensial provider hanya ada di container worker.
 export async function POST(req: Request, ctx: { params: Promise<{ jobId: string }> }) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
+    const routeDeps = campaignJobDependencies();
+    if (!routeDeps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
+    const { user, membership } = await routeDeps.requireOrgContextApi(req);
     const { jobId } = await ctx.params;
     const body = await req.json().catch(() => ({}));
     const action = body.action === "approve" ? "approve" : body.action === "regenerate" ? "regenerate" : null;
@@ -148,12 +150,23 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
     // type='regen', tapi migrasi yang mengizinkan tipe itu (0030) belum
     // terpasang di produksi — tanpa gerbang ini, permintaannya berujung 500
     // dengan saldo yang sudah tersentuh.
-    await assertPaidAdmission();
+    await routeDeps.assertPaidAdmission();
 
-    const pool = getPool(config.databaseUrl);
+    const pool = routeDeps.getPool();
     try {
+      const initialJob = await loadJob(pool, jobId, membership.org_id);
+      if (!initialJob) throw ERR.NOT_FOUND("Job-nya");
+      return await routeDeps.withProductEvidenceMutationLock(initialJob.product_id, async () => {
+      // Reload only after acquiring the same product lock used by C5 review
+      // mutations. A row that was CLEAR during the ownership lookup may have
+      // been quarantined while this request waited for the lock.
       const job = await loadJob(pool, jobId, membership.org_id);
       if (!job) throw ERR.NOT_FOUND("Job-nya");
+      assertCategoryReviewClear({
+        state: job.category_review_state as "CLEAR" | "QUARANTINED",
+        reason: job.category_review_reason as never,
+        version: job.category_review_version,
+      }, job.product_category);
       if (!job.requires_approval) throw ERR.BAD_REQUEST("Job ini tidak memakai review scene.", "Job has no approval gate.");
       if (job.state !== "AWAITING_APPROVAL") {
         throw ERR.BAD_REQUEST("Scene-nya belum siap ditinjau, atau sudah lewat tahap ini.", `Job is in ${job.state}.`);
@@ -168,7 +181,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
         const currentEvidence = requireCurrentJobEvidence({
           approvedReferenceManifest: job.approved_reference_manifest,
           jobProductSnapshot: job.job_product_snapshot,
-          productType: job,
+          productType: {...job,category:job.product_category},
         });
         await materializeJobReferenceManifest(currentEvidence.manifest, path.join(config.storageDir, "jobs", jobId));
       } catch (error) {
@@ -325,6 +338,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       await pgForgetShotTask(jobId, idx);
       await enqueueJobResume(jobId, `regen${idx}`);
       return Response.json({ job_id: jobId, idx, regenerating: true, tokens_charged: chargedTokens });
+      });
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }

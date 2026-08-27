@@ -137,7 +137,7 @@ async function scenario(label: string) {
       { rel: approvedSecondSource, sha256: sha(approvedSecondBytes), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel: snapshotRelSecond },
     ],
   });
-  const productSnapshot = createJobProductSnapshotRaw({ name: `Serum ${label}`, category: "beauty", price_idr: 85_000, raw_meta: JSON.stringify({ brand: "Merek Awal" }) });
+  const productSnapshot = createJobProductSnapshotRaw({ category_review_version: 1, name: `Serum ${label}`, category: "beauty", price_idr: 85_000, raw_meta: JSON.stringify({ brand: "Merek Awal" }) });
   db.prepare(
     `INSERT INTO jobs
       (id,user_id,product_id,script_id,format,quality_tier,duration_s,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at)
@@ -306,7 +306,7 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
   const admissionSnapshot = parseJobProductSnapshot(snapshotRaw);
 
   const mutation = {
-    name: "Nama Mutasi E3 Deterministik", price_idr: 72000, category: "food",
+    name: "Nama Mutasi E3 Deterministik", price_idr: 72000, category: "beauty",
     product_visual_desc: "DESC-MUTASI-E3-DETERMINISTIK", brand: "Merek Mutasi E3 Deterministik",
     promo_price_before_idr: 99000, promo_ends_at: "2030-01-02T03:04:05.000Z", promo_stock_left: 7,
   };
@@ -352,12 +352,12 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
   assert.equal(current.promo_price_before_idr, mutation.promo_price_before_idr);
   assert.equal(current.promo_ends_at, mutation.promo_ends_at); assert.equal(current.promo_stock_left, mutation.promo_stock_left);
   assert.deepEqual(admissionSnapshot, {
-    version: 3, productName: "Serum Admission E3", category: "beauty", priceIdr: 85_000,
+    version: 4, productName: "Serum Admission E3", category: "beauty", categoryReviewVersion: 1, priceIdr: 85_000,
     promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Admission E3" },
     productVisualDesc: "BOTOL-ADMISSION-E3", brandBrief: "BRIEF-ADMISSION-E3", claims: ["klaim admission E3"],
   });
-  const rereadCurrent = parseJobProductSnapshot(createJobProductSnapshotRaw(current));
+  const rereadCurrent = parseJobProductSnapshot(createJobProductSnapshotRaw({...current, category_review_version: 1}));
   assert.notDeepEqual(rereadCurrent, admissionSnapshot, "counterexample re-read current tidak berbeda dari admission");
   assert.equal(rereadCurrent.productName, mutation.name); assert.equal(rereadCurrent.priceIdr, mutation.price_idr); assert.equal(rereadCurrent.trustedBrand.value, mutation.brand);
 
@@ -415,12 +415,12 @@ test("C9 E3→W2: gain/removal setelah admission tidak mengubah promo frame snap
 
     const mutation = variant === "gain"
       ? {
-          name: "Nama Mutasi Promo Gain E3", price_idr: 72_000, category: "food",
+          name: "Nama Mutasi Promo Gain E3", price_idr: 72_000, category: "beauty",
           product_visual_desc: "DESC-MUTASI-PROMO-GAIN-E3", brand: "Merek Mutasi Promo Gain E3",
           promo_price_before_idr: 99_000, promo_ends_at: "2031-02-03T04:05:06.000Z", promo_stock_left: 7,
         }
       : {
-          name: "Nama Mutasi Promo Remove E3", price_idr: 72_000, category: "food",
+          name: "Nama Mutasi Promo Remove E3", price_idr: 72_000, category: "beauty",
           product_visual_desc: "DESC-MUTASI-PROMO-REMOVE-E3", brand: "Merek Mutasi Promo Remove E3",
           promo_price_before_idr: null, promo_ends_at: null, promo_stock_left: null,
         };

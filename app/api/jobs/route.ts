@@ -347,7 +347,10 @@ export async function POST(req: Request) {
           || admissionProduct.category_review_version !== candidateProduct.category_review_version) {
           return { kind: "product_type_changed" as const };
         }
-        const productSnapshotRaw = createJobProductSnapshotRaw(admissionProduct);
+        const productSnapshotRaw = createJobProductSnapshotRaw({
+          ...admissionProduct,
+          category_review_version: admissionProduct.category_review_version ?? 0,
+        });
         requireCurrentJobEvidence({
           approvedReferenceManifest: preparedReference.raw,
           jobProductSnapshot: productSnapshotRaw,

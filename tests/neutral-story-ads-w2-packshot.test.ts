@@ -67,6 +67,7 @@ async function setupJob(sourceRel: string, storage: MediaStorage): Promise<strin
     .run(userId, `0812${String(Math.random()).slice(2, 10)}`, `${userId}@test.local`, "W2", "free", "id-ID", now());
   const productId = uuid();
   const product = {
+    category_review_version: 1,
     name: "Serum Uji", category: "beauty", price_idr: 189000,
     raw_meta: JSON.stringify({ brand: "Serum" }), product_visual_desc: "botol biru",
     brand_brief: null, claims: "[]",
