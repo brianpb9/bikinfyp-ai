@@ -1,0 +1,45 @@
+{
+  "schema": "score-80-stream-b-normalization/v1",
+  "task": "SCORE-80-EXECUTION-20260828",
+  "slot": "B",
+  "source": {
+    "receipt_path": "STREAM-B-MANAGED.raw/RECEIPT.json",
+    "receipt_sha256": "399fcff700df62717272db56d81a36bbde10f6859c2ed099b320f4b1a80aa785",
+    "manifest_path": "STREAM-B-MANAGED.raw/MANIFEST.sha256",
+    "manifest_sha256": "736b1349ff83c97fe4725b919e8cab65b988738884644a8aae673812c0320b9d",
+    "exact_deployed_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+    "evidence_tier": "MANAGED_STAGING"
+  },
+  "result": "PASS_PARTIAL_NO_SCORE",
+  "slot_closed": false,
+  "points_claimed": 0,
+  "accepted_partial_facts": [
+    "managed OTP success HTTP 200 and authenticated /me HTTP 200",
+    "managed OTP wrong-code rejection HTTP 401 with recovery HTTP 200",
+    "managed OTP replay rejection HTTP 410",
+    "managed Google cancel redirect HTTP 302",
+    "authenticated dashboard, campaign, and organization API HTTP 200",
+    "SSR plus nine Next.js chunks totaling 491069 bytes retrieved"
+  ],
+  "not_proven": [
+    "browser runtime bootstrap",
+    "executed client hydration",
+    "authenticated mobile 375 visual and keyboard flow",
+    "OTP-to-delivery-or-refund end to end",
+    "prompt-model-verdict-artifact-request correlation"
+  ],
+  "row_outcomes": [
+    {"row":"Auth intent & failure path","current":7,"status":"PARTIAL_EVIDENCE_ONLY","points_awarded":0},
+    {"row":"Mobile UI 375","current":7,"status":"BLOCKED_BROWSER_RUNTIME_BOOTSTRAP","points_awarded":0},
+    {"row":"Hydration/interaction canary CI","current":8,"status":"BLOCKED_BROWSER_RUNTIME_BOOTSTRAP","points_awarded":0},
+    {"row":"Prompt/verdict archive","current":8,"status":"NO_CORRELATED_TRACE","points_awarded":0}
+  ],
+  "safety": {
+    "payments_live": false,
+    "provider_calls": 0,
+    "real_money_idr": 0,
+    "public_price_changed": false
+  },
+  "next_evidence_required": "EXECUTED_BROWSER_BOOTSTRAP_AND_CONTROLLED_END_TO_END",
+  "review_policy": "EXACT_SHA_INDEPENDENT_PASS_REQUIRED_BEFORE_ANY_ROW_AWARD"
+}

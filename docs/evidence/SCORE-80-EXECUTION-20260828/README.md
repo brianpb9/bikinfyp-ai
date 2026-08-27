@@ -22,3 +22,17 @@ the closed canary remains blocked until every Founder prerequisite has an
 authoritative source.
 
 Run `node docs/evidence/SCORE-80-EXECUTION-20260828/verify.mjs`.
+
+## Stream B managed receipt
+
+The raw managed-staging receipt and its checksum manifest are preserved byte
+for byte under `STREAM-B-MANAGED.raw/`. Their SHA-256 values are pinned by the
+verifier and normalized in `B-RECEIPT-NORMALIZATION.json`.
+
+The normalized result is `PASS_PARTIAL_NO_SCORE`. Managed OTP success,
+wrong-code rejection, replay rejection, recovery, Google-cancel redirect, and
+authenticated dashboard HTTP evidence are retained as partial facts. The
+receipt explicitly lacks browser runtime bootstrap, so SSR and downloaded
+assets are not promoted to executed hydration or mobile-375 proof. Slot B
+remains open and Auth, Mobile, Hydration, and Prompt/archive receive zero
+points from this slice.
