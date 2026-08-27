@@ -1,16 +1,11 @@
 {
-  "schema": "score-80-negative-cases/v1",
+  "schema": "score-80-negative-cases/v2",
   "cases": [
-    {"id":"unknown_token","mutation":"replace first token_id with UNKNOWN","expected_error":"award unknown token"},
-    {"id":"mismatched_authority","mutation":"replace first token authority with wrong class","expected_error":"award authority"},
-    {"id":"mismatched_authority_scope","mutation":"change the exact evidence binding inside first token authority scope","expected_error":"award authority scope"},
-    {"id":"unrelated_authority_source","mutation":"use a TASK/PASS from another task as token authority source","expected_error":"authority source task/SHA"},
-    {"id":"source_registry_issuer_mismatch","mutation":"source body signs a different issuer than registry","expected_error":"authority signed claim"},
-    {"id":"self_authored_canonical_pass","mutation":"commit a canonical-looking PASS while independent signing authority is unavailable","expected_error":"independent signer unavailable"},
-    {"id":"mismatched_receipts","mutation":"remove one required evidence receipt from first award","expected_error":"award evidence"},
-    {"id":"out_of_order","mutation":"remove a row's first token while retaining its later token","expected_error":"award cumulative order"},
-    {"id":"duplicate_token","mutation":"append a duplicate token award","expected_error":"award duplicate token"},
-    {"id":"raw_recompute","mutation":"claim raw sum one below recomputed raw sum","expected_error":"score raw claim"},
-    {"id":"incomplete_noncompensable_gate","mutation":"leave L OPEN while claiming certified 80","expected_error":"score gate claim"}
+    {"id":"unknown_token","mutation":"attempt to award any unmapped token while accepted token count is zero","expected_error":"award unknown token"},
+    {"id":"unrelated_authority_source","mutation":"use a Reviewer PASS from another task","expected_error":"authority source task/SHA"},
+    {"id":"owner_routing_mismatch","mutation":"use a Reviewer PASS routed to another owner","expected_error":"authority source task/SHA"},
+    {"id":"builder_authored_pass","mutation":"Builder attempts to author PASS despite bus role separation","expected_error":"authority source role/type"},
+    {"id":"raw_recompute","mutation":"claim a raw point without an accepted token award","expected_error":"score raw claim"},
+    {"id":"incomplete_noncompensable_gate","mutation":"claim all mandatory gates closed while L remains OPEN","expected_error":"score gate claim"}
   ]
 }

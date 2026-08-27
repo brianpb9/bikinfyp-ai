@@ -1,12 +1,12 @@
 {
   "schema": "evidence-to-point-contract/v1",
   "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
-  "review_status": "CHANGES_REQUESTED",
+  "review_status": "CHANGES_REQUESTED_CANONICAL_TOKEN_MAPPING_REQUIRED",
   "authority_trust_state": {
-    "status": "BLOCKED_INDEPENDENT_SIGNER_REQUIRED",
-    "revoked_key_fingerprint": "6684d5c4ed97b5b60af0671ac5eeaacf0e9e6ad6f4fc283320e5a124fe256853",
-    "revoked_key_may_authorize_points": false,
-    "required_remediation": "Provision an independent signer inaccessible to Builder, rotate the key, and issue a new independently signed bootstrap before any SLOT or TOKEN authority can be accepted."
+    "status": "CANONICAL_REVIEWER_BUS",
+    "mechanism": "Singleton independent Codex exact-SHA Reviewer plus durable append-only .agent-bus archive, role separation, and STALE protection.",
+    "crypto_or_hsm_required": false,
+    "builder_may_author_review_verdict": false
   },
   "baseline_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
   "application_bundle_sha": "0e953f9ccfd8991c96fecbed44bb3b892e0c8829",
@@ -32,6 +32,13 @@
     "normalized_rounded": 59,
     "evidence_ceiling": 58,
     "certified_score": 58
+  },
+  "score_delta": {
+    "canonical_58_to_80": 22,
+    "fixed_rubric_raw_77_to_104": 27,
+    "raw_delta_is_not_canonical_delta": true,
+    "mandatory_noncompensable_gates_are_separate_from_scored_tokens": true,
+    "c5_mandatory_gate_point_gain": "UNDEFINED_ZERO_AWARDED"
   },
   "point_rule": {
     "evidence_receipt_changes_points": true,
@@ -77,7 +84,7 @@
     "A": {"name":"exact managed staging deploy, PostgreSQL/R2, migrations, runtime readback","tier":"MANAGED_STAGING","state":"IN_PROGRESS_EXTERNAL_LANE","closure_authority":"REVIEWER_PASS","depends_on":[]},
     "L": {"name":"paired legacy PostgreSQL and matching R2 population audit","tier":"MANAGED_STAGING","state":"OPEN","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
     "C5": {"name":"CATEGORY_UNKNOWN/ambiguous/bundle fails closed into manual-review quarantine; no provider/publication/spend/irreversible downstream; only explicitly authorized human review role may release; no heuristic auto-map; accepted implementation required","tier":"AUTHORITY_AND_REPOSITORY","state":"FOUNDER_POLICY_APPROVED_IMPLEMENTATION_PENDING","closure_authority":"FOUNDER_DECISION_AND_REVIEWER_PASS","depends_on":[]},
-    "P": {"name":"Duitku approval, known-order settlement/webhook/replay/reconciliation","tier":"PAYMENT_EXTERNAL","state":"OPEN","closure_authority":"PAYMENT_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
+    "P": {"name":"approved sandbox provider, closed internal max-one canary, provider receipt, DB truth, exactly-once settlement reconciliation, ambiguous STOP_NO_RETRY","tier":"PAYMENT_EXTERNAL","state":"NOT_READY_CHEAPEST_SKU_60000_EXCEEDS_50000_CAP","closure_authority":"PAYMENT_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
     "G": {"name":"Founder price/COGS fields complete and PAYMENTS_GO_LIVE explicitly decided","tier":"FOUNDER_AUTHORITY","state":"PRICE_COGS_AND_GO_LIVE_PENDING","closure_authority":"FOUNDER_DECISION","depends_on":[]},
     "B": {"name":"controlled staging/production-like OTP-to-delivery/refund E2E and recovery","tier":"MANAGED_STAGING","state":"PENDING_A","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
     "R": {"name":"separate named Release Approver, Release Operator, and Rollback Authority; controls and verified intake with no Retail P0 fail-open","tier":"RELEASE_AUTHORITY","state":"ROLE_NAMES_REQUIRED","closure_authority":"RELEASE_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
@@ -111,6 +118,7 @@
     "O": []
   },
   "authority_registry": "AUTHORITY-REGISTRY.json",
+  "compression_source_task": "COMPRESSION-SOURCE-TASK.json",
   "founder_80_direction": "FOUNDER-80-DIRECTION.json",
   "evidence_token_awards": [],
   "score_state": {
@@ -119,7 +127,7 @@
     "gate_80_closed": false,
     "evidence_ceiling": 58,
     "certified_score": 58,
-    "ceiling_transition": "The ceiling becomes 80 only when every A/L/C5/P/G/B/R slot is VERIFIED by a valid receipt. Certified 80 additionally requires all 27 cumulative tokens, raw sum at least 104, and normalized score at least 80."
+    "ceiling_transition": "The ceiling cannot become 80 until every A/L/C5/P/G/B/R slot is VERIFIED and Founder/Reviewer accepts a canonical +27 raw row allocation. No accepted allocation currently exists, so no token may be awarded."
   },
   "production_public_real_money": "OFF"
 }

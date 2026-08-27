@@ -2,12 +2,21 @@
 
 Task: `EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827`
 
+Compression authority is the canonical Reviewer TASK
+`1787849638000-reviewer-TASK`, preserved byte-for-byte in
+`COMPRESSION-SOURCE-TASK.raw.json`. Certified 58→80 is +22 canonical score,
+while the fixed 13×10 rubric must move raw 77→104, a minimum +27 raw. These are
+not interchangeable. The 27 scored tokens also do not replace mandatory
+noncompensable gates.
+
 This independently reviewable slice freezes the existing 13-row board and
 turns the score-80 gate into a deterministic, non-compensable dependency
-contract. `SCORE-80-POINT-MATRIX.json` defines the exact 27 raw points from
-77 to 104 as one-point, no-partial, strictly cumulative tokens inside the
-existing 13 rows. Weights remain 10 per row and cannot be redistributed. No
-token is currently awarded, so the certified score remains 58.
+contract. Arithmetic requires raw 77→104 (+27), but the canonical sources do
+not currently define an accepted row-by-row combination reaching 104.
+`SCORE-80-POINT-MATRIX.json` therefore records zero accepted tokens and
+`CHANGES_REQUESTED_NO_ACCEPTED_CANONICAL_COMBINATION`; it does not engineer a
+replacement allocation. No token is awarded, so the certified score remains
+58.
 
 The current Founder direction, carried by the canonical amended Reviewer TASK
 in `AMENDED-SOURCE-TASK.json`, limits work to the score-80 critical path. It
@@ -31,33 +40,29 @@ requires that commit in reviewed ancestry, resolves the authority receipt
 against `AUTHORITY-REGISTRY.json`, and checks the exact dependency-slot set.
 For M/Q/I/U/K/O, dependency `80` expands to A/L/C5/P/G/B/R.
 
-Token awards are machine-enforced end to end: token identity, per-token
-required slot receipts, token-specific authority class, cumulative row order,
-duplicate rejection, raw/normalized recomputation, and the evidence-ceiling
-transition. The ceiling stays 58 unless all non-compensable 80 slots are
-VERIFIED; certified 80 additionally requires all 27 tokens and raw 104.
+Token awards remain fail-closed: because no accepted canonical token exists,
+the registry must stay empty. Noncompensable 80 gates remain mandatory but
+cannot manufacture row points. The ceiling stays 58 until both the gates and a
+Founder/Reviewer-approved canonical +27 raw allocation exist.
 The issuer/class and decision policy is pinned in the verifier, not read as
-authority from the editable registry. The amended TASK's raw archive bytes
-are committed and match the pinned archive digest. The 27-token fixture builds
-full authority and receipt records, runs them through the same committed-byte,
-ancestry, issuer, authority-scope, dependency, and award validators used by the
-real registries, plus a separate ephemeral Ed25519 fixture key that is never
-accepted for real awards. The fixture is never inserted into current state.
+authority from the editable registry. The amended TASK and compression TASK
+raw archive bytes are committed and match their pinned archive digests. The
+27-token fixture builds full authority and receipt records and runs them
+through the same committed-byte, ancestry, issuer, authority-scope, dependency,
+and award validators used by the real registries. The fixture is never inserted
+into current state.
 
-For real records, a TASK source is accepted only for the pinned Founder SCOPE.
-SLOT and TOKEN authority is currently fail-closed. Reviewer found that the
-private key corresponding to fingerprint
-`6684d5c4ed97b5b60af0671ac5eeaacf0e9e6ad6f4fc283320e5a124fe256853`
-was readable by Builder's OS identity and removed it. That fingerprint, key id,
-bootstrap, and signature are retained only as revoked audit evidence and can
-never authorize a receipt or point. `RUBRIC-CONTRACT.json` is therefore
-`CHANGES_REQUESTED` and blocked until an independent signer inaccessible to
-Builder rotates the key and issues a new bootstrap. Same-UID file permissions
-are not treated as isolation.
+For real records, a TASK source is accepted only for pinned scope. SLOT and
+TOKEN authority relies on the canonical singleton independent Codex exact-SHA
+Reviewer and `.agent-bus`: role separation prevents Builder from authoring a
+PASS, SHA binding fixes the reviewed object, consumed messages move to the
+durable append-only archive, and `STALE=false` protects the active history.
+The canonical rubric requires no crypto, HSM, signing key, or custom signing
+service, so none is required by this contract.
 
 `NEGATIVE-CASES.json` exercises unknown token, mismatched authority and
-authority scope, unrelated TASK/PASS sources, source/registry issuer mismatch,
-self-authored PASS without a trusted signature, mismatched receipts,
+authority scope, unrelated TASK/PASS sources, owner-routing mismatch,
+Builder-authored PASS rejection, mismatched receipts,
 out-of-order and duplicate awards, false raw claims, and incomplete gates.
 Score 90 inherits the 80 gate, but its
 incremental allocation remains undefined pending Founder authority; M/Q/I/U/K/O
@@ -71,10 +76,11 @@ unverified with an empty receipt registry until an exact-SHA Reviewer PASS is
 consumed and bound in a follow-up commit.
 
 `LANE-B-READONLY-ARTIFACT.json` records the current-SHA managed browser PASS,
-controlled 503→recovery drill, restored exact control plane, and a successful
-seven-day KPI query. The KPI has `n=0`, is explicitly non-representative and
-point-ineligible. Paid provider E2E, PITR, operational cycle, and paired legacy
-audit remain unproven.
+controlled 503→recovery drill, and restored exact control plane. Its historical
+seven-day KPI query has `n=0`, remains point-ineligible, and is excluded from
+the 80 path. Legal/PDP, representative KPI/sample, PITR, incident/DR, and a
+stable production operational cycle are 100-only and cannot contribute to any
+80 token. Paid provider E2E and paired legacy audit remain unproven.
 
 Run `node verify.mjs`. It binds exact source rows, arithmetic, Git ancestry,
 thresholds, dependency acyclicity, authority rules, safety boundaries,

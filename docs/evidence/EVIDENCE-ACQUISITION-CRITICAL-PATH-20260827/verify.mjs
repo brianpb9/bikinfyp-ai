@@ -23,19 +23,18 @@ const task = read("SOURCE-TASK.json");
 const amendedTask = read("AMENDED-SOURCE-TASK.json");
 const amendedRawBytes = fs.readFileSync(path.join(dir,"AMENDED-SOURCE-TASK.raw.json"));
 const amendedRaw = JSON.parse(amendedRawBytes);
+const compressionTask = read("COMPRESSION-SOURCE-TASK.json");
+const compressionRawBytes = fs.readFileSync(path.join(dir,"COMPRESSION-SOURCE-TASK.raw.json"));
+const compressionRaw = JSON.parse(compressionRawBytes);
 const matrix80 = read("SCORE-80-POINT-MATRIX.json");
 const founder80 = read("FOUNDER-80-DIRECTION.json");
 const authorityRegistry = read("AUTHORITY-REGISTRY.json");
-const trustReference = read("TRUST-STORE-REFERENCE.json");
-const trustBootstrapBytes = fs.readFileSync(path.join(dir,"TRUST-BOOTSTRAP.json"));
-const trustBootstrap = JSON.parse(trustBootstrapBytes);
-const trustBootstrapSignature = Buffer.from(fs.readFileSync(path.join(dir,"TRUST-BOOTSTRAP.sig.base64"),"utf8").trim(),"base64");
 const negativeCases = read("NEGATIVE-CASES.json");
 const laneA = read("LANE-A-READONLY-ARTIFACT.json");
 const laneB = read("LANE-B-READONLY-ARTIFACT.json");
 
 if (contract.task !== task.task || task.task_id !== task.task || task.owner_id !== task.worker_id) fail("task binding");
-if (contract.review_status !== "CHANGES_REQUESTED" || contract.authority_trust_state?.status !== "BLOCKED_INDEPENDENT_SIGNER_REQUIRED" || contract.authority_trust_state?.revoked_key_may_authorize_points !== false) fail("review/trust blocker state");
+if (contract.review_status !== "CHANGES_REQUESTED_CANONICAL_TOKEN_MAPPING_REQUIRED" || contract.authority_trust_state?.status !== "CANONICAL_REVIEWER_BUS" || contract.authority_trust_state?.crypto_or_hsm_required !== false || contract.authority_trust_state?.builder_may_author_review_verdict !== false) fail("review authority state");
 if (contract.baseline_sha !== task.baseline_sha) fail("baseline binding");
 for (const sha of [contract.baseline_sha, contract.application_bundle_sha]) {
   if (spawnSync("git", ["-C", root, "cat-file", "-e", `${sha}^{commit}`], {stdio:"ignore"}).status !== 0) fail(`missing commit ${sha}`);
@@ -49,6 +48,7 @@ if (JSON.stringify(sourceRows) !== JSON.stringify(contract.source_rows)) fail("e
 const raw = sourceRows.reduce((sum, row) => sum + row[1], 0);
 if (sourceRows.length !== 13 || raw !== 77 || contract.current.raw_sum !== raw || contract.current.denominator !== 130) fail("current arithmetic");
 if (Math.round(raw / 130 * 100) !== contract.current.normalized_rounded || Math.min(contract.current.normalized_rounded, contract.current.evidence_ceiling) !== contract.current.certified_score) fail("score calculation");
+if (contract.score_delta?.canonical_58_to_80 !== 22 || contract.score_delta?.fixed_rubric_raw_77_to_104 !== 27 || !contract.score_delta?.raw_delta_is_not_canonical_delta || !contract.score_delta?.mandatory_noncompensable_gates_are_separate_from_scored_tokens || contract.score_delta?.c5_mandatory_gate_point_gain !== "UNDEFINED_ZERO_AWARDED") fail("score delta distinction");
 
 for (const [threshold, expected] of [[80,104],[90,117],[100,130]]) {
   if (contract.thresholds[String(threshold)].minimum_raw_sum !== expected || expected !== Math.ceil(threshold * 130 / 100)) fail(`threshold ${threshold}`);
@@ -56,27 +56,22 @@ for (const [threshold, expected] of [[80,104],[90,117],[100,130]]) {
 if (contract.thresholds["90"].gate !== "NOT_AUTHORIZED_FOR_CURRENT_WORK" || contract.thresholds["90"].gate_source !== null) fail("90 scope boundary");
 if (!contract.point_rule.evidence_receipt_changes_points || contract.point_rule.default_delta !== 0 || contract.point_rule.missing_authority_result !== "NO_SCORE_CHANGE" || contract.point_rule.weights_may_not_be_redistributed !== true || contract.point_rule.partial_tokens_allowed || contract.point_rule.token_value_raw_points !== 1 || !contract.point_rule.tokens_must_be_cumulative_within_row || contract.point_rule.ladder !== "SCORE-80-POINT-MATRIX.json") fail("point rule drift");
 if (amendedTask.id !== "1787845709000-reviewer-TASK" || amendedTask.from !== "reviewer" || amendedTask.to !== "builder" || amendedTask.type !== "TASK" || amendedTask.sha !== "" || amendedTask.task !== contract.task || amendedTask.task_id !== contract.task || amendedTask.owner_id !== task.owner_id || amendedTask.worker_id !== task.worker_id || amendedTask.source_archive_sha256 !== "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e" || crypto.createHash("sha256").update(amendedTask.body).digest("hex") !== "c66ba2bb31edf70760472864c0cdd67e9c0cc4787c7618314c50edded1e61ac7" || crypto.createHash("sha256").update(amendedRawBytes).digest("hex") !== amendedTask.source_archive_sha256 || amendedRaw.id !== amendedTask.id || amendedRaw.body !== amendedTask.body || amendedRaw.ts !== amendedTask.ts) fail("amended authority task binding");
+if (contract.compression_source_task !== "COMPRESSION-SOURCE-TASK.json" || compressionTask.id !== "1787849638000-reviewer-TASK" || compressionTask.from !== "reviewer" || compressionTask.to !== "builder" || compressionTask.type !== "TASK" || compressionTask.sha !== "" || compressionTask.task !== contract.task || compressionTask.task_id !== contract.task || compressionTask.owner_id !== task.owner_id || compressionTask.worker_id !== task.worker_id || compressionTask.scope !== "COMPRESSION_ROUND_SCORE_80_ONLY" || compressionTask.canonical_score_delta !== 22 || compressionTask.minimum_raw_delta !== 27 || compressionTask.review_authority !== "CANONICAL_SINGLETON_INDEPENDENT_CODEX_EXACT_SHA_REVIEWER_OVER_AGENT_BUS" || compressionTask.source_archive_sha256 !== "de4e306a991263d5ed2e4e68b10542ef79a4aca2edea634524ff302073bd7f7c" || crypto.createHash("sha256").update(compressionRawBytes).digest("hex") !== compressionTask.source_archive_sha256 || compressionRaw.id !== compressionTask.id || compressionRaw.body !== "COMPRESSION_ROUND_SCORE_80_ONLY. Arithmetic correction: certified 58 to 80 is +22 canonical, but fixed 13x10 rubric raw 77 must reach >=104, so minimum is +27 raw; do not claim +22 raw. Distinguish scored tokens from mandatory noncompensable gates. Payment: closed internal max-1 real-money transaction aggregate<=IDR50000, public disabled, exactly-once, ambiguous STOP_NO_RETRY; obtain canary/provider receipt/DB truth/settlement reconciliation/Reviewer PASS before separate PAYMENTS_GO_LIVE decision. Reviewer independence: canonical rubric does not require crypto/HSM; remove invented signing requirement and rely on canonical singleton independent Codex exact-SHA Reviewer + durable append-only bus/stale protection. C5 implement approved fail-closed quarantine, no provider/spend/publication, release only by Authorized Human Review Role; exact role field remains missing. Remove PITR/legal/representative KPI/stable operational cycle/incident-DR from 80 path. Compress canary economics fields. Parallelize Lane A/B receipt acceptance, managed OTP/E2E, 375 mobile, hydration, C5, prompt archive, zero-spend NSFW fixtures. No unrelated work.") fail("compression authority task binding");
 if (contract.founder_80_direction !== "FOUNDER-80-DIRECTION.json" || founder80.task !== contract.task || founder80.scope !== "SCORE_80_CRITICAL_PATH_ONLY" || founder80.production_public_real_money !== "OFF" || founder80.authority_source !== "AMENDED-SOURCE-TASK.json" || founder80.authority_message_id !== amendedTask.id) fail("Founder 80 direction binding");
 const c5 = founder80.category_unknown_policy;
 if (c5.decision !== "APPROVED" || c5.result !== "FAIL_CLOSED_MANUAL_REVIEW_QUARANTINE" || c5.heuristic_auto_map !== "FORBIDDEN" || !c5.implementation_and_exact_sha_review_still_required || c5.forbidden_before_authorized_release.length !== 4) fail("C5 Founder policy");
 const canary = founder80.payment_canary;
 if (!canary.approved_in_principle || canary.execution_now !== "FORBIDDEN_PENDING_PREREQUISITES" || canary.boundary.audience !== "internal_closed" || canary.boundary.maximum_transactions !== 1 || canary.boundary.aggregate_spend_idr_max !== 50000 || canary.boundary.public_payments || canary.ambiguous_result !== "STOP_NO_RETRY" || canary.settlement_or_refund_failure !== "FAIL_CLOSED") fail("payment canary boundary");
 if (JSON.stringify(founder80.release_model.required_named_roles) !== JSON.stringify(["Release Approver","Release Operator","Rollback Authority"]) || !founder80.release_model.roles_must_be_separate || founder80.release_model.names_status !== "MISSING") fail("release role slots");
-const expectedPriceFields = ["currency","customer_price_idr","provider_generation_cogs_idr","payment_fee_idr","infrastructure_cogs_idr","tax_idr","refund_reserve_idr","total_cogs_idr","gross_margin_idr","gross_margin_percent","effective_at","approved_by","approval_reference"];
+const expectedPriceFields = ["currency","customer_price_idr","provider_generation_cogs_idr","payment_fee_idr","total_cogs_idr","maximum_authorized_spend_idr","approved_by","approval_reference"];
 if (JSON.stringify(founder80.price_cogs_required_fields) !== JSON.stringify(expectedPriceFields)) fail("price/COGS required fields");
 if (founder80.pitr_required_for_80.decision !== false || !founder80.pitr_required_for_80.non_waiver.includes("100")) fail("PITR 80 determination");
-if (matrix80.scope !== "SCORE_80_ONLY" || matrix80.current_raw !== 77 || matrix80.target_raw !== 104 || matrix80.required_raw_delta !== 27 || matrix80.rules.partial_tokens_allowed || matrix80.rules.token_value_raw_points !== 1 || matrix80.rules.max_score_per_row !== 10 || matrix80.rules.weight_redistribution_allowed || !matrix80.rules.arithmetic_alone_does_not_close_noncompensable_80_slots) fail("80 matrix rules");
+if (matrix80.schema !== "score-80-point-matrix/v2" || matrix80.scope !== "SCORE_80_ONLY" || matrix80.current_raw !== 77 || matrix80.target_raw !== 104 || matrix80.required_raw_delta !== 27 || matrix80.allocation_status !== "CHANGES_REQUESTED_NO_ACCEPTED_CANONICAL_COMBINATION" || matrix80.accepted_token_count !== 0 || matrix80.rules.partial_tokens_allowed || matrix80.rules.token_value_raw_points !== 1 || matrix80.rules.max_score_per_row !== 10 || matrix80.rules.weight_redistribution_allowed || !matrix80.rules.arithmetic_alone_does_not_close_noncompensable_80_slots || !matrix80.rules.unmapped_points_may_not_be_invented) fail("80 matrix rules");
 if (JSON.stringify(matrix80.rows.map((row) => [row.row,row.current])) !== JSON.stringify(contract.source_rows)) fail("80 matrix row binding");
-const matrixTokens = matrix80.rows.flatMap((row) => {
-  if (row.target_80 - row.current !== row.delta) fail(`80 matrix delta ${row.row}`);
-  const expectedTargets = Array.from({length:row.delta}, (_, index) => row.current + index + 1);
-  if (JSON.stringify(row.tokens.map((token) => token.target_score)) !== JSON.stringify(expectedTargets)) fail(`80 matrix targets ${row.row}`);
-  for (const token of row.tokens) if (!token.token_id || !token.evidence || !token.authority_class || !Array.isArray(token.required_slots) || token.required_slots.length === 0 || new Set(token.required_slots).size !== token.required_slots.length) fail(`80 matrix token shape ${row.row}`);
-  return row.tokens;
-});
-if (matrix80.rows.reduce((sum,row) => sum + row.target_80, 0) !== 104 || matrixTokens.length !== 27 || new Set(matrixTokens.map((token) => token.token_id)).size !== 27) fail("80 matrix exact 27 points");
+const matrixTokens = matrix80.rows.flatMap((row) => row.tokens);
+if (matrixTokens.length !== 0 || matrix80.rows.some((row) => !Array.isArray(row.tokens) || (row.accepted_target_80 !== null && row.accepted_target_80 !== row.current))) fail("80 matrix invented allocation");
 const tokenById = new Map(matrix80.rows.flatMap((row) => row.tokens.map((token) => [token.token_id,{...token,row:row.row,current:row.current}])));
-if (JSON.stringify(matrix80.gate_classification["80_INHERITED_BY_90"]) !== JSON.stringify(["A","L","C5","P","G","B","R"]) || matrix80.gate_classification["90_INCREMENTAL"] !== "UNDEFINED_FOUNDER_AUTHORITY_REQUIRED" || JSON.stringify(matrix80.gate_classification["100_ONLY_ADDITIONAL"]) !== JSON.stringify(["M","Q","I","U","K","O"])) fail("80/90 slot classification");
+if (JSON.stringify(matrix80.gate_classification["80_INHERITED_BY_90"]) !== JSON.stringify(["A","L","C5","P","G","B","R"]) || matrix80.gate_classification["90_INCREMENTAL"] !== "UNDEFINED_FOUNDER_AUTHORITY_REQUIRED" || JSON.stringify(matrix80.gate_classification["100_ONLY_ADDITIONAL"]) !== JSON.stringify(["M","Q","I","U","K","O"]) || JSON.stringify(matrix80.gate_classification.EXCLUDED_FROM_80_EVIDENCE) !== JSON.stringify(["PITR","LEGAL_COUNSEL","REPRESENTATIVE_KPI_SAMPLE","STABLE_OPERATIONAL_CYCLE","INCIDENT_DR"])) fail("80/90 slot classification");
 const pitrSource = fs.readFileSync(path.join(root, "docs/evidence/SHIP-READINESS-CANONICAL-20260824.md"), "utf8");
 if (!pitrSource.includes("100/100") || !pitrSource.includes("backup/PITR restore")) fail("PITR canonical source");
 
@@ -97,10 +92,11 @@ const visit = (id, stack = []) => {
 for (const id of Object.keys(slots)) visit(id);
 for (const threshold of ["80","90","100"]) for (const id of contract.thresholds[threshold].requires) visit(id);
 if (contract.slots.B.depends_on.join(",") !== "A" || contract.slots.L.depends_on.join(",") !== "A") fail("lane dependency drift");
+if (contract.slots.P.state !== "NOT_READY_CHEAPEST_SKU_60000_EXCEEDS_50000_CAP") fail("payment canary readiness");
 
 const slotIds = Object.keys(slots);
 if (contract.authority_registry !== "AUTHORITY-REGISTRY.json") fail("authority registry binding");
-if (authorityRegistry.task !== contract.task || authorityRegistry.schema !== "evidence-authority-registry/v2" || !Array.isArray(authorityRegistry.entries)) fail("authority registry header");
+if (authorityRegistry.task !== contract.task || authorityRegistry.schema !== "evidence-authority-registry/v3" || !Array.isArray(authorityRegistry.entries)) fail("authority registry header");
 const PINNED_ISSUERS = Object.freeze({
   FOUNDER_SCOPE_DIRECTION:["reviewer-on-founder-authority"],
   REVIEWER_PASS:["reviewer"],
@@ -114,46 +110,26 @@ const PINNED_ISSUERS = Object.freeze({
   INDEPENDENT_REVIEWER_PASS:["independent-reviewer"]
 });
 const PINNED_DECISIONS = Object.freeze({SCOPE:"AUTHORIZED",SLOT:"PASS",TOKEN:"PASS"});
-const REVOKED_REVIEWER_PUBLIC_KEY = "/Users/hadrava/HDRV/03_UGC_AI_ID/app/.agent-bus/tmp/reviewer-score-authority-trust/public.pem";
-const REVOKED_REVIEWER_KEY_ID = "reviewer-score-authority-20260827";
-const REVOKED_REVIEWER_PUBLIC_DER_SHA256 = "6684d5c4ed97b5b60af0671ac5eeaacf0e9e6ad6f4fc283320e5a124fe256853";
-const PINNED_BOOTSTRAP_SHA256 = "db66a70826b43243f93429d73d543898fd503985f264f519671adb76f0a9f12a";
-const PINNED_BOOTSTRAP_SIGNATURE_SHA256 = "dd072e2668711a4e8390223b992f56e8ba42b4f8c65dc8c39111e3bcbef5d4c6";
-if (trustReference.schema !== "reviewer-score-authority-trust/v2" || trustReference.status !== "REVOKED_ROTATION_REQUIRED" || trustReference.trusted_for_authority !== false || trustReference.algorithm !== "Ed25519" || trustReference.key_id !== REVOKED_REVIEWER_KEY_ID || trustReference.public_key_path !== REVOKED_REVIEWER_PUBLIC_KEY || trustReference.public_spki_der_sha256 !== REVOKED_REVIEWER_PUBLIC_DER_SHA256 || trustReference.bootstrap_sha256 !== PINNED_BOOTSTRAP_SHA256 || trustReference.bootstrap_signature_binary_sha256 !== PINNED_BOOTSTRAP_SIGNATURE_SHA256 || trustReference.scope !== "REVOKED_AUDIT_EVIDENCE_ONLY") fail("Reviewer revoked trust reference drift");
-if (contract.authority_trust_state.revoked_key_fingerprint !== REVOKED_REVIEWER_PUBLIC_DER_SHA256) fail("Reviewer revoked fingerprint binding");
-if (crypto.createHash("sha256").update(trustBootstrapBytes).digest("hex") !== PINNED_BOOTSTRAP_SHA256 || crypto.createHash("sha256").update(trustBootstrapSignature).digest("hex") !== PINNED_BOOTSTRAP_SIGNATURE_SHA256) fail("Reviewer revoked bootstrap audit bytes");
-if (trustBootstrap.schema !== "reviewer-score-authority-trust-bootstrap/v1" || trustBootstrap.key_id !== REVOKED_REVIEWER_KEY_ID || trustBootstrap.issuer !== "canonical-reviewer-runtime" || trustBootstrap.task !== contract.task || JSON.stringify(trustBootstrap.permitted_claim_kinds) !== JSON.stringify(["SLOT","TOKEN"]) || trustBootstrap.public_key_der_sha256 !== REVOKED_REVIEWER_PUBLIC_DER_SHA256 || trustBootstrap.production_public_real_money !== "OFF") fail("Reviewer revoked bootstrap scope");
 if (JSON.stringify(authorityRegistry.allowed_issuers_by_class) !== JSON.stringify(PINNED_ISSUERS)) fail("authority issuer policy drift");
 if (JSON.stringify(authorityRegistry.decision_by_kind) !== JSON.stringify(PINNED_DECISIONS)) fail("authority decision policy drift");
-if (!authorityRegistry.authority_source_contract?.SCOPE?.startsWith("Only the pinned amended Founder TASK") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.startsWith("BLOCKED_INDEPENDENT_SIGNER_REQUIRED") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.includes("authority-source/v1") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.includes("Ed25519") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.includes("never accepted")) fail("authority source contract drift");
-const authorityRequired = ["authority_receipt_id","kind","authority_class","subject","scope","issuer","decision","approved_at","source_message_id","source_archive_sha256","artifact_path","artifact_sha256","exact_sha","signing_key_id","signature_base64"];
+if (!authorityRegistry.authority_source_contract?.SCOPE?.startsWith("Only the pinned amended Founder TASK") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.includes("canonical .agent-bus Reviewer PASS") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.includes("STALE=false") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.includes("Builder cannot author PASS")) fail("authority source contract drift");
+const authorityRequired = ["authority_receipt_id","kind","authority_class","subject","scope","issuer","decision","approved_at","source_message_id","source_archive_sha256","artifact_path","artifact_sha256","exact_sha"];
 if (JSON.stringify(authorityRegistry.required_entry_fields) !== JSON.stringify(authorityRequired)) fail("authority registry fields");
-const canonicalSignedClaim = (authority,reviewedSha) => ({schema:"authority-source/v1",authority_receipt_id:authority.authority_receipt_id,kind:authority.kind,authority_class:authority.authority_class,subject:authority.subject,scope:authority.scope,issuer:authority.issuer,decision:authority.decision,task:contract.task,reviewed_sha:reviewedSha});
-const verifyDetachedAuthoritySignature = (authority,reviewedSha,publicKey,keyId) => {
-  if (authority.signing_key_id !== keyId || typeof authority.signature_base64 !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(authority.signature_base64)) fail(`authority trusted signature identity ${authority.authority_receipt_id}`);
-  const signature = Buffer.from(authority.signature_base64,"base64");
-  if (signature.toString("base64") !== authority.signature_base64 || !crypto.verify(null,Buffer.from(JSON.stringify(canonicalSignedClaim(authority,reviewedSha))),publicKey,signature)) fail(`authority trusted signature ${authority.authority_receipt_id}`);
-};
-const validateSignedAuthoritySource = (authority,source,publicKey=null,keyId=null) => {
+const validateBusAuthoritySource = (authority,source) => {
   if (authority.kind === "SCOPE") {
-    if (source.type !== "TASK" || source.sha !== "" || source.id !== amendedTask.id || source.task !== contract.task || source.task_id !== contract.task || source.body !== amendedTask.body || authority.source_message_id !== source.id || authority.signing_key_id !== null || authority.signature_base64 !== null) fail(`authority source task/SHA ${authority.authority_receipt_id}`);
+    if (source.type !== "TASK" || source.from !== "reviewer" || source.to !== "builder" || source.sha !== "" || source.id !== amendedTask.id || source.task !== contract.task || source.task_id !== contract.task || source.body !== amendedTask.body || authority.source_message_id !== source.id) fail(`authority source task/SHA ${authority.authority_receipt_id}`);
     return;
   }
   if (authority.kind !== "SLOT" && authority.kind !== "TOKEN") fail(`authority source kind ${authority.authority_receipt_id}`);
-  if (source.type !== "PASS") fail(`authority source type ${authority.authority_receipt_id}`);
-  if (source.task !== contract.task || source.task_id !== contract.task || !/^[0-9a-f]{40}$/.test(source.sha) || git(["merge-base","--is-ancestor",source.sha,authority.exact_sha],{stdio:"ignore"}).status !== 0) fail(`authority source task/SHA ${authority.authority_receipt_id}`);
-  const expectedBody = JSON.stringify(canonicalSignedClaim(authority,source.sha));
-  if (source.body !== expectedBody) fail(`authority signed claim ${authority.authority_receipt_id}`);
-  if (!publicKey || !keyId) fail(`independent signer unavailable ${authority.authority_receipt_id}`);
-  verifyDetachedAuthoritySignature(authority,source.sha,publicKey,keyId);
+  if (source.type !== "PASS" || source.from !== "reviewer" || source.to !== "builder") fail(`authority source role/type ${authority.authority_receipt_id}`);
+  if (source.task !== contract.task || source.task_id !== contract.task || source.owner_id !== task.owner_id || source.worker_id !== task.worker_id || !/^[0-9a-f]{40}$/.test(source.sha) || git(["merge-base","--is-ancestor",source.sha,authority.exact_sha],{stdio:"ignore"}).status !== 0) fail(`authority source task/SHA ${authority.authority_receipt_id}`);
 };
 const validateAuthoritySource = (authority,source,{fixture=false,fixturePublicKey=null}={}) => {
   if (fixture) {
     if (source.schema !== "score-80-full-path-fixture-source/v1" || source.decision !== "PASS" || !source.scope.includes("validator-only")) fail(`authority fixture source ${authority.authority_receipt_id}`);
-    verifyDetachedAuthoritySignature(authority,fixtureExactSha,fixturePublicKey,"fixture-untrusted-ed25519");
     return;
   }
-  validateSignedAuthoritySource(authority,source);
+  validateBusAuthoritySource(authority,source);
 };
 const validateAuthorities = (entries,{fixture=false,fixturePublicKey=null}={}) => {
   const result = new Map();
@@ -279,40 +255,29 @@ const fixtureExactSha = "1d3e95e46c412634a6da95226fdafa43fb63a220";
 const fixtureArtifactPath = `docs/evidence/${contract.task}/FULL-PATH-FIXTURE-SOURCE.json`;
 const fixtureArtifactSha256 = "763706fcf75dc13e290ccc116474430fe5d87f24ef1768ed5e1857ad399c9c7b";
 const fixtureAuthorityBase = {approved_at:"2026-08-27T00:00:00Z",source_message_id:"FIXTURE-SOURCE",source_archive_sha256:fixtureArtifactSha256,artifact_path:fixtureArtifactPath,artifact_sha256:fixtureArtifactSha256,exact_sha:fixtureExactSha};
-const {publicKey:fixturePublicKey,privateKey:fixturePrivateKey} = crypto.generateKeyPairSync("ed25519");
-const signFixtureAuthority = (authority) => ({...authority,signing_key_id:"fixture-untrusted-ed25519",signature_base64:crypto.sign(null,Buffer.from(JSON.stringify(canonicalSignedClaim(authority,fixtureExactSha))),fixturePrivateKey).toString("base64")});
 const fixtureRegistry = Object.fromEntries(slotIds.map((id) => [id,[]]));
 const fixtureAuthorities = [];
 for (const id of contract.thresholds["80"].requires) {
   const dependencySlots = slots[id].depends_on.flatMap((dep) => dep === "80" ? contract.thresholds["80"].requires : [dep]);
   const receipt = {receipt_id:`fixture-receipt-${id}`,slot_id:id,artifact_path:fixtureArtifactPath,artifact_sha256:fixtureArtifactSha256,exact_sha:fixtureExactSha,evidence_tier:slots[id].tier,authority_class:slots[id].closure_authority,authority_receipt_id:`fixture-slot-authority-${id}`,dependency_receipt_ids:dependencySlots.map((dep) => `fixture-receipt-${dep}`),verdict:"PASS"};
   fixtureRegistry[id].push(receipt);
-  fixtureAuthorities.push(signFixtureAuthority({...fixtureAuthorityBase,authority_receipt_id:`fixture-slot-authority-${id}`,kind:"SLOT",slot_id:id,authority_class:slots[id].closure_authority,subject:`${contract.task}:${id}`,scope:{receipt_id:receipt.receipt_id,slot_id:id,artifact_path:receipt.artifact_path,artifact_sha256:receipt.artifact_sha256,exact_sha:receipt.exact_sha,dependency_receipt_ids:receipt.dependency_receipt_ids},issuer:PINNED_ISSUERS[slots[id].closure_authority][0],decision:"PASS"}));
+  fixtureAuthorities.push({...fixtureAuthorityBase,authority_receipt_id:`fixture-slot-authority-${id}`,kind:"SLOT",slot_id:id,authority_class:slots[id].closure_authority,subject:`${contract.task}:${id}`,scope:{receipt_id:receipt.receipt_id,slot_id:id,artifact_path:receipt.artifact_path,artifact_sha256:receipt.artifact_sha256,exact_sha:receipt.exact_sha,dependency_receipt_ids:receipt.dependency_receipt_ids},issuer:PINNED_ISSUERS[slots[id].closure_authority][0],decision:"PASS"});
 }
-const fixtureAwards = matrix80.rows.flatMap((row) => row.tokens.map((token) => ({award_id:`fixture-award-${token.token_id}`,authority_receipt_id:`fixture-token-authority-${token.token_id}`,token_id:token.token_id,row:row.row,prior_score:token.target_score-1,new_score:token.target_score,evidence_receipt_ids:token.required_slots.map((id) => `fixture-receipt-${id}`)})));
-for (const award of fixtureAwards) {
-  const token = tokenById.get(award.token_id);
-  fixtureAuthorities.push(signFixtureAuthority({...fixtureAuthorityBase,authority_receipt_id:award.authority_receipt_id,kind:"TOKEN",token_id:award.token_id,authority_class:token.authority_class,subject:`${contract.task}:TOKEN:${award.token_id}`,scope:{token_id:award.token_id,evidence_receipts:award.evidence_receipt_ids.map((receiptId) => { const receipt=fixtureRegistry[receiptId.replace("fixture-receipt-","")][0]; return {receipt_id:receipt.receipt_id,slot_id:receipt.slot_id,artifact_sha256:receipt.artifact_sha256,exact_sha:receipt.exact_sha}; }),score_transition:{row:award.row,prior_score:award.prior_score,new_score:award.new_score,raw_delta:1}},issuer:PINNED_ISSUERS[token.authority_class][0],decision:"PASS"}));
-}
-const fixtureAuthorityMap = validateAuthorities(fixtureAuthorities,{fixture:true,fixturePublicKey});
+const fixtureAuthorityMap = validateAuthorities(fixtureAuthorities,{fixture:true});
 const fixtureSlotState = Object.fromEntries(slotIds.map((id) => [id,contract.thresholds["80"].requires.includes(id) ? "VERIFIED" : "OPEN"]));
 const fixtureReceiptMap = validateReceiptRegistry(fixtureRegistry,fixtureAuthorityMap,fixtureSlotState);
-const score80Claim = {raw_sum:104,normalized_rounded:80,gate_80_closed:true,evidence_ceiling:80,certified_score:80};
-validateAwards(fixtureAwards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,score80Claim);
+const gateOnlyClaim = {raw_sum:77,normalized_rounded:59,gate_80_closed:true,evidence_ceiling:80,certified_score:59};
+validateAwards([],fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,gateOnlyClaim);
 const expectFailure = (expected, fn) => { try { fn(); } catch (error) { if (error.message.includes(expected)) return; throw error; } fail(`negative case did not fail: ${expected}`); };
-if (negativeCases.cases.length !== 11) fail("negative case count");
+if (negativeCases.cases.length !== 6) fail("negative case count");
 for (const test of negativeCases.cases) {
-  if (test.id === "unknown_token") { const awards=structuredClone(fixtureAwards); awards[0].token_id="UNKNOWN"; expectFailure(test.expected_error,()=>validateAwards(awards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,score80Claim)); }
-  else if (test.id === "mismatched_authority") { const authorities=new Map(fixtureAuthorityMap); authorities.set(fixtureAwards[0].authority_receipt_id,{...authorities.get(fixtureAwards[0].authority_receipt_id),authority_class:"WRONG"}); expectFailure(test.expected_error,()=>validateAwards(fixtureAwards,fixtureReceiptMap,authorities,fixtureSlotState,score80Claim)); }
-  else if (test.id === "mismatched_authority_scope") { const authorities=new Map(fixtureAuthorityMap); const original=authorities.get(fixtureAwards[0].authority_receipt_id); const changed=structuredClone(original); changed.scope.evidence_receipts[0].exact_sha="0000000000000000000000000000000000000000"; authorities.set(original.authority_receipt_id,changed); expectFailure(test.expected_error,()=>validateAwards(fixtureAwards,fixtureReceiptMap,authorities,fixtureSlotState,score80Claim)); }
-  else if (test.id === "unrelated_authority_source") { const authority=fixtureAuthorityMap.get(fixtureAwards[0].authority_receipt_id); const source={type:"PASS",task:"UNRELATED",task_id:"UNRELATED",sha:contract.baseline_sha,body:JSON.stringify(canonicalSignedClaim(authority,contract.baseline_sha))}; expectFailure(test.expected_error,()=>validateSignedAuthoritySource(authority,source)); }
-  else if (test.id === "source_registry_issuer_mismatch") { const authority=fixtureAuthorityMap.get(fixtureAwards[0].authority_receipt_id); const signed={...canonicalSignedClaim(authority,contract.baseline_sha),issuer:"wrong-issuer"}; const source={type:"PASS",task:contract.task,task_id:contract.task,sha:contract.baseline_sha,body:JSON.stringify(signed)}; expectFailure(test.expected_error,()=>validateSignedAuthoritySource(authority,source)); }
-  else if (test.id === "self_authored_canonical_pass") { const fixtureAuthority=fixtureAuthorityMap.get(fixtureAwards[0].authority_receipt_id); const authority={...fixtureAuthority,signing_key_id:REVOKED_REVIEWER_KEY_ID}; const source={type:"PASS",sha:contract.baseline_sha,task:contract.task,task_id:contract.task,body:JSON.stringify(canonicalSignedClaim(authority,contract.baseline_sha))}; expectFailure(test.expected_error,()=>validateSignedAuthoritySource(authority,source)); }
-  else if (test.id === "mismatched_receipts") { const awards=structuredClone(fixtureAwards); awards[0].evidence_receipt_ids.pop(); expectFailure(test.expected_error,()=>validateAwards(awards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,score80Claim)); }
-  else if (test.id === "out_of_order") { const awards=fixtureAwards.filter((award)=>award.token_id!=="AUTH-08"); expectFailure(test.expected_error,()=>validateAwards(awards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,{...score80Claim,raw_sum:103,normalized_rounded:79})); }
-  else if (test.id === "duplicate_token") { const awards=[...fixtureAwards,{...fixtureAwards[0],award_id:"duplicate-award"}]; expectFailure(test.expected_error,()=>validateAwards(awards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,score80Claim)); }
-  else if (test.id === "raw_recompute") expectFailure(test.expected_error,()=>validateAwards(fixtureAwards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,{...score80Claim,raw_sum:103}));
-  else if (test.id === "incomplete_noncompensable_gate") { const state={...fixtureSlotState,L:"OPEN"}; expectFailure(test.expected_error,()=>validateAwards(fixtureAwards,fixtureReceiptMap,fixtureAuthorityMap,state,score80Claim)); }
+  const slotAuthority=fixtureAuthorityMap.get("fixture-slot-authority-A");
+  if (test.id === "unknown_token") { const award={award_id:"invented",authority_receipt_id:"invented",token_id:"UNKNOWN",row:"Money safety",prior_score:9,new_score:10,evidence_receipt_ids:[]}; expectFailure(test.expected_error,()=>validateAwards([award],fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,{...gateOnlyClaim,raw_sum:78,normalized_rounded:60})); }
+  else if (test.id === "unrelated_authority_source") { const source={from:"reviewer",to:"builder",type:"PASS",task:"UNRELATED",task_id:"UNRELATED",owner_id:task.owner_id,worker_id:task.worker_id,sha:contract.baseline_sha}; expectFailure(test.expected_error,()=>validateBusAuthoritySource({...slotAuthority,kind:"SLOT"},source)); }
+  else if (test.id === "owner_routing_mismatch") { const source={from:"reviewer",to:"builder",type:"PASS",task:contract.task,task_id:contract.task,owner_id:"wrong-owner",worker_id:"wrong-owner",sha:contract.baseline_sha}; expectFailure(test.expected_error,()=>validateBusAuthoritySource({...slotAuthority,kind:"SLOT"},source)); }
+  else if (test.id === "builder_authored_pass") { const source={from:"builder",to:"reviewer",type:"PASS",task:contract.task,task_id:contract.task,owner_id:task.owner_id,worker_id:task.worker_id,sha:contract.baseline_sha}; expectFailure(test.expected_error,()=>validateBusAuthoritySource({...slotAuthority,kind:"SLOT"},source)); }
+  else if (test.id === "raw_recompute") expectFailure(test.expected_error,()=>validateAwards([],fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,{...gateOnlyClaim,raw_sum:78}));
+  else if (test.id === "incomplete_noncompensable_gate") { const state={...fixtureSlotState,L:"OPEN"}; expectFailure(test.expected_error,()=>validateAwards([],fixtureReceiptMap,fixtureAuthorityMap,state,gateOnlyClaim)); }
   else fail(`unknown negative case ${test.id}`);
 }
 if (contract.production_public_real_money !== "OFF" || !task.forbidden.includes("real money")) fail("safety boundary drift");
@@ -349,6 +314,6 @@ for (const line of manifest) {
   if (digest !== match[1]) fail(`checksum ${match[2]}`);
 }
 const secret = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+\/-]+=*|\b(?:api[_-]?key|secret[_-]?key)\s*[:=]\s*["']?[A-Za-z0-9_\/-]{16,})/i;
-for (const name of ["RUBRIC-CONTRACT.json","SOURCE-TASK.json","AMENDED-SOURCE-TASK.json","AMENDED-SOURCE-TASK.raw.json","README.md","verify.mjs","VALIDATION.json","AUTHORITY-REGISTRY.json","TRUST-STORE-REFERENCE.json","TRUST-BOOTSTRAP.json","TRUST-BOOTSTRAP.sig.base64","FOUNDER-80-DIRECTION.json","SCORE-80-POINT-MATRIX.json","NEGATIVE-CASES.json","FULL-PATH-FIXTURE-SOURCE.json","LANE-A-READONLY-ARTIFACT.json","LANE-A-COMMAND-LEDGER.md","LANE-B-READONLY-ARTIFACT.json"]) if (secret.test(fs.readFileSync(path.join(dir, name), "utf8"))) fail(`secret-like literal ${name}`);
+for (const name of ["RUBRIC-CONTRACT.json","SOURCE-TASK.json","AMENDED-SOURCE-TASK.json","AMENDED-SOURCE-TASK.raw.json","COMPRESSION-SOURCE-TASK.json","COMPRESSION-SOURCE-TASK.raw.json","README.md","verify.mjs","VALIDATION.json","AUTHORITY-REGISTRY.json","TRUST-STORE-REFERENCE.json","TRUST-BOOTSTRAP.json","TRUST-BOOTSTRAP.sig.base64","FOUNDER-80-DIRECTION.json","SCORE-80-POINT-MATRIX.json","NEGATIVE-CASES.json","FULL-PATH-FIXTURE-SOURCE.json","LANE-A-READONLY-ARTIFACT.json","LANE-A-COMMAND-LEDGER.md","LANE-B-READONLY-ARTIFACT.json"]) if (secret.test(fs.readFileSync(path.join(dir, name), "utf8"))) fail(`secret-like literal ${name}`);
 
-console.log(JSON.stringify({source_rows:13,raw_sum:actualScore.rawSum,certified_score:actualScore.certifiedScore,target_80_raw:104,deterministic_58_to_80_point_tokens:27,nonempty_award_path:"PASS_FULL_REGISTRY_27_OF_27",negative_award_cases:negativeCases.cases.length,review_status:contract.review_status,authority_trust:"REVOKED_ROTATION_REQUIRED_INDEPENDENT_SIGNER_BLOCKED",pitr_required_for_80:false,slot_count:Object.keys(slots).length,receipt_registry_slots:Object.keys(contract.receipt_registry).length,receipts:receiptsById.size,authority_receipts:authoritiesById.size,lane_A_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_kpi:"NON_REPRESENTATIVE_N_0",evidence_token_awards:contract.evidence_token_awards.length,production_public_real_money:"OFF",pass:false}));
+console.log(JSON.stringify({source_rows:13,raw_sum:actualScore.rawSum,certified_score:actualScore.certifiedScore,canonical_score_delta_58_to_80:22,target_80_raw:104,minimum_raw_delta_77_to_104:27,accepted_score_80_tokens:0,accepted_score_80_combination:"NONE_CANONICAL_MAPPING_REQUIRED",c5_mandatory_gate_point_gain:"UNDEFINED_ZERO_AWARDED",noncompensable_gates_separate:true,negative_award_cases:negativeCases.cases.length,review_status:contract.review_status,review_authority:"CANONICAL_SINGLETON_INDEPENDENT_CODEX_EXACT_SHA_REVIEWER_AGENT_BUS",crypto_or_hsm_required:false,payment_canary_ready:"NO_CHEAPEST_SKU_60000_EXCEEDS_50000_CAP",pitr_required_for_80:false,slot_count:Object.keys(slots).length,receipt_registry_slots:Object.keys(contract.receipt_registry).length,receipts:receiptsById.size,authority_receipts:authoritiesById.size,lane_A_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_kpi_80_eligible:false,evidence_token_awards:contract.evidence_token_awards.length,production_public_real_money:"OFF",pass:true}));

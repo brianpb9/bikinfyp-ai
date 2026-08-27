@@ -1,5 +1,5 @@
 {
-  "schema": "evidence-authority-registry/v2",
+  "schema": "evidence-authority-registry/v3",
   "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
   "required_entry_fields": [
     "authority_receipt_id",
@@ -14,9 +14,7 @@
     "source_archive_sha256",
     "artifact_path",
     "artifact_sha256",
-    "exact_sha",
-    "signing_key_id",
-    "signature_base64"
+    "exact_sha"
   ],
   "decision_by_kind": {
     "SCOPE": "AUTHORIZED",
@@ -25,7 +23,7 @@
   },
   "authority_source_contract": {
     "SCOPE": "Only the pinned amended Founder TASK raw bytes may authorize the pinned task scope.",
-    "SLOT_OR_TOKEN": "BLOCKED_INDEPENDENT_SIGNER_REQUIRED. A committed raw reviewer PASS must bind this task and reviewed SHA, carry canonical authority-source/v1 JSON exactly matching authority_receipt_id, kind, authority_class, subject, scope, issuer, decision, task, and reviewed_sha, and include a detached Ed25519 signature from a replacement independent signer inaccessible to Builder. The revoked reviewer-score-authority-20260827 key is never accepted."
+    "SLOT_OR_TOKEN": "A committed raw canonical .agent-bus Reviewer PASS must come from reviewer to builder, bind this task and an exact reviewed SHA in the authority commit ancestry, preserve owner/repository routing identity, and be consumed with STALE=false. The singleton independent Codex Reviewer, role-separated bus, SHA binding, durable append-only archive, and stale protection are the authority boundary; Builder cannot author PASS."
   },
   "allowed_issuers_by_class": {
     "FOUNDER_SCOPE_DIRECTION": ["reviewer-on-founder-authority"],
@@ -53,9 +51,7 @@
       "source_archive_sha256": "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e",
       "artifact_path": "docs/evidence/EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827/AMENDED-SOURCE-TASK.raw.json",
       "artifact_sha256": "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e",
-      "exact_sha": "1d3e95e46c412634a6da95226fdafa43fb63a220",
-      "signing_key_id": null,
-      "signature_base64": null
+      "exact_sha": "1d3e95e46c412634a6da95226fdafa43fb63a220"
     }
   ]
 }
