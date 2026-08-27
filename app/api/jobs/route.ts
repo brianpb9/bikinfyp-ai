@@ -260,6 +260,22 @@ export async function POST(req: Request) {
         .prepare("SELECT * FROM products WHERE id=? AND user_id=?")
         .get(product.id, user.id) as ProductRow | undefined;
       if (!candidateProduct) throw ERR.NOT_FOUND("Produknya");
+      try {
+        await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+          { kind: "DECLARED_PRODUCT_TYPE", sourceId: "admission-product.product_type_token", token: candidateProduct.product_type_token ?? "", version: 1 },
+          candidateProduct.product_type_state === "CONFIRMED" && candidateProduct.product_type_confirmed_token
+            && candidateProduct.product_type_confirmed_by && candidateProduct.product_type_confirmed_at
+            && candidateProduct.product_type_version === 1 ? {
+              kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: candidateProduct.product_type_confirmed_token,
+              actorId: candidateProduct.product_type_confirmed_by,
+              confirmedAt: canonicalProductTypeTimestamp(candidateProduct.product_type_confirmed_at),
+              version: 1, provenance: "USER_SELF_ASSERTION",
+            } : null,
+        ), () => undefined);
+      } catch (error) {
+        await cleanupKnownNonAdmission();
+        throw error;
+      }
       const candidateImagesRaw = candidateProduct.images;
       const candidateImages = JSON.parse(candidateImagesRaw) as string[];
       let preparedReference: Awaited<ReturnType<typeof prepareAdmissionReferenceManifest>>;
@@ -289,6 +305,15 @@ export async function POST(req: Request) {
         const admissionProduct = db!.prepare("SELECT * FROM products WHERE id=? AND user_id=?").get(product.id, user.id) as ProductRow | undefined;
         if (!admissionProduct) throw ERR.NOT_FOUND("Produknya");
         if (admissionProduct.images !== candidateImagesRaw) return { kind: "images_changed" as const };
+        if (admissionProduct.product_type_token !== candidateProduct.product_type_token
+          || admissionProduct.product_type_confirmed_token !== candidateProduct.product_type_confirmed_token
+          || admissionProduct.product_type_confirmed_by !== candidateProduct.product_type_confirmed_by
+          || canonicalProductTypeTimestamp(admissionProduct.product_type_confirmed_at)
+            !== canonicalProductTypeTimestamp(candidateProduct.product_type_confirmed_at)
+          || admissionProduct.product_type_version !== candidateProduct.product_type_version
+          || admissionProduct.product_type_state !== candidateProduct.product_type_state) {
+          return { kind: "product_type_changed" as const };
+        }
         const productSnapshotRaw = createJobProductSnapshotRaw(admissionProduct);
         db!.prepare(
           `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, approved_reference_manifest, job_product_snapshot, state, created_at, state_changed_at)
@@ -323,8 +348,8 @@ export async function POST(req: Request) {
     if (!created) {
       await cleanupKnownNonAdmission();
       throw ERR.BAD_REQUEST(
-        "Daftar foto produk berubah saat render diterima. Coba kirim lagi ya.",
-        "Product images changed repeatedly during admission. Please retry."
+        "Data produk berubah saat render diterima. Coba kirim lagi ya.",
+        "Product data changed repeatedly during admission. Please retry."
       );
     }
     const jobId = created.jobId;

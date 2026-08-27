@@ -6,12 +6,14 @@ tests=5 pass=5 fail=0 exit=0
 C2_GREEN_VERIFIER={"exit_zero":true,"all_five_pass":true,"zero_fail":true,"no_contract_violation":true}
 
 $ SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts
-tests=6 pass=6 fail=0 exit=0
+tests=7 pass=7 fail=0 exit=0
 Direct probes include impossible 31-Feb timestamp, U+00A0-only fresh/upgraded SQLite rows, and invalid upgraded state.
 The timestamp probe preserves invalid strings byte-exact and canonicalizes a node-postgres Date to ISO.
+Concurrency guards prove ordinary E7 SQL omits C2 writes and A1 validates the locked/admitted row.
 
 $ SCRIPT_LLM=0 npx tsx --test tests/admission-evidence-enforcement.test.ts tests/http-photo-mutation-resume-w2.test.ts tests/product-truth-worker-reference.test.ts tests/hitl.test.ts
-tests=43 pass=43 fail=0 exit=0
+tests=44 pass=44 fail=0 exit=0
+The SQLite A1 race counterexample quarantines after precheck: HTTP 422, zero job/hold/orphan snapshot.
 
 $ UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='dashboard lock|E7 HTTP PATCH|retail PostgreSQL admission' tests/pg-product-truth-w1.test.ts
 tests=4 pass=4 fail=0 skipped=0 exit=0
@@ -22,7 +24,7 @@ $ npx tsc --noEmit
 exit=0
 
 $ npm test
-tests=1254 pass=1207 fail=0 cancelled=0 skipped=47 exit=0
+tests=1256 pass=1209 fail=0 cancelled=0 skipped=47 exit=0
 
 $ npm run build
 exit=0

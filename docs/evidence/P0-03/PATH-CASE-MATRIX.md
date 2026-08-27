@@ -186,7 +186,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | # | Status | Alasan dan bukti |
 |---|---|---|
 | C1 | **PARTIAL** | W1/W2 memilih packshot sah beserta hash lalu mematok manifest ordered `{rel,sha256,versiBukti}` tepat sekali; A6 approve/regenerate memakai manifest itu dan tidak memilih ulang. Tetap PARTIAL karena jalur E/A lain pada baris C1 belum seluruhnya dicakup |
-| C2 | **PASS** | Accepted Product Policy E.39 memisahkan opaque canonical product type dari merchandising category, menyimpan actor/timestamp/version `USER_SELF_ASSERTION`, dan mengarantina missing/legacy state. E1/E3/E6/E7 serta A1–A4 memakai central identity-bound seam; mismatch menghasilkan `TYPE_MISMATCH` sebelum persistence/admission/spend/provider effect, missing/unconfirmed fail-closed, dan normalized match mengeksekusi callback tepat sekali. GREEN 5/5, implementation 4/4, focused regression 43/43, full suite 0 fail |
+| C2 | **PASS** | Accepted Product Policy E.39 memisahkan opaque canonical product type dari merchandising category, menyimpan actor/timestamp/version `USER_SELF_ASSERTION`, dan mengarantina missing/legacy state. E1/E3/E6/E7 serta A1–A4 memakai central identity-bound seam; mismatch menghasilkan `TYPE_MISMATCH` sebelum persistence/admission/spend/provider effect, missing/unconfirmed fail-closed, dan normalized match mengeksekusi callback tepat sekali. Ordinary E7 save tidak menulis ulang provenance; A1 merevalidasi row yang di-lock/admit. GREEN 5/5, implementation 7/7, focused regression 44/44, full suite 0 fail |
 | C3 | **PARTIAL** | E1, E4, E8, W1, dan W2 menolak explicit `cocokMerek === false` dengan canonical `BRAND_MISMATCH` sebelum persistence/provider effect; W1/W2 closure accepted di E.30. Aggregate tetap PARTIAL untuk jalur lain dan null/unreadable OCR policy; bukan karena explicit worker mismatch belum diimplementasikan |
 | C4 | **PARTIAL** | E1, E4, dan E8 menolak `!label.terbaca` untuk setiap blob baru sebelum persistence dengan canonical `LABEL_UNREADABLE` (HTTP 400, `retryable:false`, alasan Indonesia dari OCR atau fallback actionable). Cakupan belum lengkap: kebijakan OCR execution error tetap fail-open |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
@@ -1247,11 +1247,16 @@ BASELINE=`c8588c67df8c5064e4cd231a6650d0c8b23d6e00`
   send a new confirmation, so a different team editor preserves the original
   confirming actor/time while their mutation audit remains attributed to the
   editor.
-- Evidence gates: GREEN contract 5/5, implementation 5/5, focused regression
-  43/43, full suite 1253 tests / 1206 pass / 0 fail / 47 skipped, typecheck and
-  production build PASS. PostgreSQL contract assertions passed; local schema
-  and disposable migration execution could not cross readiness because local
-  PostgreSQL was unavailable, before database creation.
+- Concurrency remediation removes all C2 columns from ordinary E7 detail-save
+  SQL. A1 SQLite validates before storage preparation and CAS-compares C2 again
+  inside admission; A1 PostgreSQL validates the complete `FOR SHARE` row before
+  snapshot, preparation, job, or hold.
+- Evidence gates: GREEN contract 5/5, implementation 7/7, focused regression
+  44/44, full suite 1256 tests / 1209 pass / 0 fail / 47 skipped, typecheck and
+  production build PASS. PostgreSQL contract assertions and disposable
+  production-migration runner passed; focused real-PG admission passed 4/4.
+  The broad schema runner applied 0036 idempotently, then hit its unrelated
+  stale 10-table expectation against the current 21-table schema.
 - OCR fail-closed, promo snapshot, broader legacy remediation, owner/legal/
   price, deploy, provider, money, and production operations are explicitly not
   bundled.

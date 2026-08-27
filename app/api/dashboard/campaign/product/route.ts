@@ -186,7 +186,7 @@ export async function PATCH(req: Request) {
     ), async () => {
     const pool = getPool(config.databaseUrl);
     try {
-      await pool.query(
+      if (confirmationTouched) await pool.query(
         // WHERE per org, sejalan dengan pemeriksaan di atas. Kalau ini tetap
         // "user_id=$10", pemeriksaan sudah lolos tapi UPDATE-nya mengenai nol
         // baris — rekan satu tim menekan Simpan, tidak ada error, dan tidak ada
@@ -201,17 +201,30 @@ export async function PATCH(req: Request) {
           productId, membership.org_id, claims ? JSON.stringify(claims) : null,
           productTypeToken, confirmedProductTypeToken, confirmedBy, confirmedAt]
       );
+      else await pool.query(
+        // An ordinary detail save must never copy the C2 fields read above.
+        // A concurrent explicit reconfirmation or quarantine therefore wins
+        // durably instead of being resurrected from this request's stale row.
+        `UPDATE products SET name=$1, price_idr=$2, category=$3, product_visual_desc=$4,
+           brand_brief=$5, promo_price_before_idr=$6, promo_ends_at=$7, promo_stock_left=$8,
+           claims=COALESCE($11, claims) WHERE id=$9 AND org_id=$10`,
+        [name, priceIdr, category, visualDesc, brandBrief, promoBefore, promoEndsAt, promoStock,
+          productId, membership.org_id, claims ? JSON.stringify(claims) : null]
+      );
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }
-    await pgAudit(user.id, "product.updated", "products", productId, {
-      campaign: true, product_type: productTypeToken,
-      product_type_state: "CONFIRMED", product_type_confirmation: "USER_SELF_ASSERTION",
-      product_type_confirmed_by: confirmedBy, product_type_confirmed_at: confirmedAt, product_type_version: 1,
-    });
-
     const updated = await smokeGetOrgProduct(membership.org_id, productId);
     if (!updated) throw ERR.NOT_FOUND("Produknya");
+    const updatedConfirmedAt = canonicalProductTypeTimestamp(updated.product_type_confirmed_at);
+    await pgAudit(user.id, "product.updated", "products", productId, {
+      campaign: true, product_type: updated.product_type_token,
+      product_type_state: updated.product_type_state,
+      product_type_confirmation: updated.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : null,
+      product_type_confirmed_by: updated.product_type_confirmed_by,
+      product_type_confirmed_at: updatedConfirmedAt || null,
+      product_type_version: updated.product_type_version,
+    });
     return Response.json(productPayload(updated));
     });
   } catch (err) {

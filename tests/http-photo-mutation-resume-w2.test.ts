@@ -565,6 +565,30 @@ test("SQLite admission mengulang bounded saat exact images berubah sebelum INSER
   assert.equal(holds, 1, "bounded re-prepare membuat hold ganda");
 });
 
+test("A1 SQLite menolak quarantine yang menyelip setelah precheck tanpa job atau hold", async (t) => {
+  const storage = new MemoryStorage();
+  const s = await rawAdmissionCandidate(storage, `type-quarantine-${process.pid}`, 50_000);
+  t.after(() => setMediaStorageForTests(undefined));
+  let mutated = false;
+  storage.onApprovedReferencePut = () => {
+    if (mutated) return;
+    mutated = true;
+    db.prepare("UPDATE products SET product_type_state='QUARANTINED' WHERE id=?").run(s.productId);
+  };
+
+  const response = await s.submit();
+  assert.equal(response.status, 422);
+  assert.equal((await response.json() as { code: string }).code, "PRODUCT_TYPE_CONFIRMATION_REQUIRED");
+  assert.equal(mutated, true, "fixture tidak memutasi C2 setelah precheck");
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM jobs WHERE product_id=?").get(s.productId) as { n: number }).n, 0);
+  assert.equal((db.prepare("SELECT COUNT(*) n FROM credit_ledger WHERE user_id=? AND type='hold'").get(s.ownerId) as { n: number }).n, 0);
+  assert.deepEqual(
+    [...storage.values.keys()].filter((key) => key.includes("/approved-references/")),
+    [],
+    "C2 race rejection meninggalkan prepared snapshot",
+  );
+});
+
 test("storage preparation gagal sebelum job, hold, dan queue visibility SQLite", async (t) => {
   const storage = new MemoryStorage();
   let productId = "", ownerId = "";

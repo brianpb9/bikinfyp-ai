@@ -24,6 +24,8 @@ import { mediaStorage } from "../storage";
 import { getPool } from "./pool";
 import { createJobProductSnapshotRaw } from "../job-product-snapshot";
 import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "../job-admission-reference";
+import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "../product-type-boundary";
+import { canonicalProductTypeTimestamp } from "../product-type-timestamp";
 
 /**
  * PostgreSQL runtime switch.  `RACUN_POSTGRES_SMOKE=1` is retained solely for
@@ -276,15 +278,33 @@ export async function smokeCreateJob(userId: string, input: {
         const product = await client.query<{
           name: string; category: string; price_idr: number; raw_meta: string | null;
           product_visual_desc: string | null; brand_brief: string | null; claims: string | null; images: string;
-        }>("SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,images FROM products WHERE id=$1 AND user_id=$2 FOR SHARE", [input.productId, userId]);
+          product_type_token: string | null; product_type_confirmed_token: string | null;
+          product_type_confirmed_by: string | null; product_type_confirmed_at: Date | string | null;
+          product_type_version: number | null; product_type_state: string;
+        }>(`SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,images,
+                  product_type_token,product_type_confirmed_token,product_type_confirmed_by,
+                  product_type_confirmed_at,product_type_version,product_type_state
+             FROM products WHERE id=$1 AND user_id=$2 FOR SHARE`, [input.productId, userId]);
         if (!product.rows[0]) throw new Error("PRODUCT_NOT_FOUND");
-        const productSnapshotRaw = createJobProductSnapshotRaw(product.rows[0]);
+        const lockedProduct = product.rows[0];
+        await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+          { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-retail-product.product_type_token", token: lockedProduct.product_type_token ?? "", version: 1 },
+          lockedProduct.product_type_state === "CONFIRMED" && lockedProduct.product_type_confirmed_token
+            && lockedProduct.product_type_confirmed_by && lockedProduct.product_type_confirmed_at
+            && lockedProduct.product_type_version === 1 ? {
+              kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: lockedProduct.product_type_confirmed_token,
+              actorId: lockedProduct.product_type_confirmed_by,
+              confirmedAt: canonicalProductTypeTimestamp(lockedProduct.product_type_confirmed_at),
+              version: 1, provenance: "USER_SELF_ASSERTION",
+            } : null,
+        ), () => undefined);
+        const productSnapshotRaw = createJobProductSnapshotRaw(lockedProduct);
         // Product FOR SHARE blocks E3/E5 until the job row and exact manifest
         // commit. Storage failure happens before hold/queue visibility.
         const preparedReference = await prepareAdmissionReferenceManifest({
           jobId,
           productId: input.productId,
-          candidateRels: JSON.parse(product.rows[0].images) as string[],
+          candidateRels: JSON.parse(lockedProduct.images) as string[],
           runtime: "admission-postgres-retail",
           onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
         });

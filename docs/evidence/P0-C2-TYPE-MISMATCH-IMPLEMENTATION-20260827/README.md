@@ -38,11 +38,13 @@ payment, credit, queue, or production operation is bundled here.
 
 - `node scripts/verify-c2-type-mismatch-green.mjs`: 5/5 PASS.
 - `SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts`:
-  6/6 PASS, including node-postgres timestamp shape and direct invalid-row
-  probes on upgraded SQLite.
-- Focused admission/mutation regressions: 43/43 PASS.
+  7/7 PASS, including node-postgres timestamp shape, concurrency structure,
+  and direct invalid-row probes on upgraded SQLite.
+- Focused admission/mutation regressions: 44/44 PASS. The SQLite A1 race
+  counterexample quarantines C2 after precheck and observes HTTP 422, zero job,
+  zero hold, and zero prepared-object residue.
 - `npx tsc --noEmit`: PASS.
-- `npm test`: 1254 tests, 1207 pass, 0 fail, 47 skipped.
+- `npm test`: 1256 tests, 1209 pass, 0 fail, 47 skipped.
 - `npm run build`: PASS.
 - PostgreSQL migration contract assertions in the implementation test: PASS.
 - Disposable PostgreSQL production-migration runner: PASS. A focused real-PG
@@ -60,7 +62,12 @@ confirmation actor and time. Ordinary campaign detail saves omit
 `confirmed_product_type`, so a
 different team editor can update price/claims/brief without replacing the
 original confirming actor or timestamp; only an explicit re-confirm request
-changes that provenance.
+changes that provenance. The ordinary E7 SQL no longer writes any confirmation
+column, so a concurrent reconfirmation or quarantine cannot be resurrected
+from a stale request. A1 revalidates the candidate C2 state before SQLite
+storage preparation and compares it again inside the admitting transaction;
+PostgreSQL validates the complete locked `FOR SHARE` row before snapshot,
+storage preparation, job, or hold.
 
 See `FOUNDER-DECISION.md`, `VALIDATION.json`, and `GATE-TRANSCRIPT.txt` in this
 directory for the bounded decision and machine-readable totals.

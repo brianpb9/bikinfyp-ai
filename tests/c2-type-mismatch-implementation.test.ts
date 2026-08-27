@@ -51,6 +51,29 @@ test("C2 canonicalizes node-postgres TIMESTAMPTZ Date without normalizing invali
   );
 });
 
+test("C2 concurrency guards preserve E7 provenance and validate the A1 locked row", () => {
+  const campaign = fs.readFileSync("app/api/dashboard/campaign/product/route.ts", "utf8");
+  const ordinaryStart = campaign.indexOf("An ordinary detail save must never copy the C2 fields");
+  const ordinaryEnd = campaign.indexOf("} finally", ordinaryStart);
+  assert.ok(ordinaryStart > 0 && ordinaryEnd > ordinaryStart);
+  assert.doesNotMatch(campaign.slice(ordinaryStart, ordinaryEnd), /product_type_(?:token|confirmed|version|state)/,
+    "ordinary E7 save still writes durable confirmation fields");
+
+  const pgAdmission = fs.readFileSync("lib/postgres/smoke-runtime.ts", "utf8");
+  const lockedRead = pgAdmission.indexOf("FROM products WHERE id=$1 AND user_id=$2 FOR SHARE");
+  const lockedValidation = pgAdmission.indexOf("locked-retail-product.product_type_token", lockedRead);
+  const preparation = pgAdmission.indexOf("prepareAdmissionReferenceManifest({", lockedValidation);
+  assert.ok(lockedRead > 0 && lockedValidation > lockedRead && preparation > lockedValidation,
+    "A1 PostgreSQL does not validate the locked product before preparation/admission");
+
+  const sqliteAdmission = fs.readFileSync("app/api/jobs/route.ts", "utf8");
+  const candidateValidation = sqliteAdmission.indexOf("admission-product.product_type_token");
+  const sqlitePreparation = sqliteAdmission.indexOf("prepareAdmissionReferenceManifest({", candidateValidation);
+  const transactionCas = sqliteAdmission.indexOf('return { kind: "product_type_changed"', sqlitePreparation);
+  assert.ok(candidateValidation > 0 && sqlitePreparation > candidateValidation && transactionCas > sqlitePreparation,
+    "A1 SQLite lacks pre-prepare validation plus transaction-time C2 CAS");
+});
+
 test("C2 mismatch, missing confirmation, and forged capability fail closed with zero effects", async () => {
   for (const [input, code] of [
     [buildAuthoritativeTypeBoundaryInput(declared("pasta gigi"), confirmed("sabun wajah")), "TYPE_MISMATCH"],
