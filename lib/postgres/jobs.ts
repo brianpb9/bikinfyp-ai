@@ -81,38 +81,6 @@ export class PgJobsRepository {
     });
   }
 
-  /** Same provenance/CAS rule as the reference manifest, for product prompt truth. */
-  async installProductSnapshotIfSafe(id: string, candidateRaw: string): Promise<string | null> {
-    return this.transaction(async (client) => {
-      const result = await client.query<{
-        job_product_snapshot: string | null;
-        provider_video: string | null;
-        provider_voice: string | null;
-        output_url: string | null;
-        cost_actual_idr: number;
-      }>(
-        `SELECT job_product_snapshot,provider_video,provider_voice,output_url,cost_actual_idr
-         FROM jobs WHERE id=$1 FOR UPDATE`,
-        [id]
-      );
-      const row = result.rows[0];
-      if (!row) throw new Error("Job tidak ditemukan saat mematok snapshot metadata produk.");
-      if (row.job_product_snapshot) return row.job_product_snapshot;
-      const traces = await client.query<{ unsafe: boolean }>(
-        `SELECT (
-          $2::boolean OR
-          EXISTS (SELECT 1 FROM outputs WHERE job_id=$1) OR
-          EXISTS (SELECT 1 FROM provider_tasks WHERE job_id=$1) OR
-          EXISTS (SELECT 1 FROM job_shots WHERE job_id=$1)
-        ) AS unsafe`,
-        [id, Boolean(row.provider_video || row.provider_voice || row.output_url || Number(row.cost_actual_idr) > 0)]
-      );
-      if (traces.rows[0]?.unsafe) return null;
-      await client.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [candidateRaw, id]);
-      return candidateRaw;
-    });
-  }
-
   /** FAILED -> release ledger -> REFUNDED is one serializable transaction. */
   async failJob(id: string, reason: string): Promise<{ changed: boolean; refunded: number }> {
     return this.transaction(async (client) => {

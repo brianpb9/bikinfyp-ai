@@ -1422,33 +1422,7 @@ test("W1 manifest create konkuren: row lock menghasilkan tepat satu pemenang", a
   assert.equal(durable, a);
 });
 
-test("W1 product snapshot create konkuren: row lock menghasilkan tepat satu pemenang", async (t) => {
-  if (lewati) return t.skip("UJI_PG_URL kosong");
-  const jobId = await siapkanJob([]);
-  const { PgJobsRepository } = await import("../lib/postgres/jobs");
-  const repoA = new PgJobsRepository(URL_UJI);
-  const repoB = new PgJobsRepository(URL_UJI);
-  const base = {
-    version: 1,
-    category: "beauty",
-    trustedBrand: { source: "products.raw_meta.brand", value: "Merek" },
-    productVisualDesc: null,
-    brandBrief: null,
-    claims: [],
-  };
-  const rawA = JSON.stringify({ ...base, productName: "A" });
-  const rawB = JSON.stringify({ ...base, productName: "B" });
-  const [a, b] = await Promise.all([
-    repoA.installProductSnapshotIfSafe(jobId, rawA),
-    repoB.installProductSnapshotIfSafe(jobId, rawB),
-  ]);
-  assert.ok(a && b);
-  assert.equal(a, b, "dua worker memegang metadata snapshot berbeda untuk job sama");
-  const durable = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
-  assert.equal(durable, a);
-});
-
-test("W1 non-Ads melanjutkan snapshot produk v1 tanpa harga", async (t) => {
+test("W1 non-Ads snapshot produk v1 dikarantina sebelum reference boundary", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   const rel = `uploads/w1-affiliate-v1-${process.pid}/0.webp`;
   const jobId = await siapkanJob([rel]);
@@ -1459,10 +1433,10 @@ test("W1 non-Ads melanjutkan snapshot produk v1 tanpa harga", async (t) => {
   });
   await pool.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [legacyRaw, jobId]);
   const spy = await jalankan(jobId, new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]));
-  assert.ok(spy.materializeCalls.length > 0, "W1 Affiliate v1 ditolak sebelum reference boundary");
+  assert.deepEqual(spy.materializeCalls, [], "W1 snapshot v1 mencapai reference boundary");
   const durable = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
   assert.equal(durable, legacyRaw, "W1 menimpa snapshot v1 durable dengan row produk mutable");
-  await assertNolEfekSamping(jobId, spy.putCalls, "W1 Affiliate snapshot v1");
+  await assertNolEfekSamping(jobId, spy.putCalls, "W1 legacy snapshot v1");
 });
 
 test("W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot", async (t) => {
@@ -1470,7 +1444,7 @@ test("W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot",
   await pasangProviderPengamat();
   const rel = `uploads/w1-legacy-${process.pid}/0.webp`;
   const jobId = await siapkanJob([rel]);
-  await pool.query("UPDATE jobs SET provider_video='legacy-provider' WHERE id=$1", [jobId]);
+  await pool.query("UPDATE jobs SET provider_video='legacy-provider',job_product_snapshot=NULL WHERE id=$1", [jobId]);
   const spy = await jalankan(jobId, new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]));
   assert.deepEqual(spy.materializeCalls, [], "legacy unsafe mencapai materialize");
   assert.equal(amatan.dipanggil, false, "legacy unsafe mencapai provider");
