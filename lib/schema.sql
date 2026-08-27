@@ -106,6 +106,13 @@ CREATE TABLE IF NOT EXISTS products (
   name TEXT NOT NULL,
   price_idr INTEGER NOT NULL,
   category TEXT NOT NULL,
+  product_type_token TEXT,
+  product_type_confirmed_token TEXT,
+  product_type_confirmed_by TEXT,
+  product_type_confirmed_at TEXT,
+  product_type_version INTEGER,
+  product_type_state TEXT NOT NULL DEFAULT 'QUARANTINED'
+    CHECK (product_type_state IN ('QUARANTINED', 'CONFIRMED')),
   product_visual_desc TEXT, -- deskripsi visual produk dari user (konsistensi identitas shot)
   brand_brief TEXT, -- M8: arahan kreatif bebas dari brand (beda dari visual_desc di atas)
   claims TEXT, -- JSON array klaim singkat untuk overlay teks (ditulis brand, bukan AI)
@@ -115,7 +122,18 @@ CREATE TABLE IF NOT EXISTS products (
   promo_ends_at TEXT,             -- ISO date/datetime; lewat = promo di-drop saat dipakai
   promo_stock_left INTEGER,       -- stok tersisa (klaim user, urgensi jujur)
   raw_meta TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  CHECK (
+    product_type_state = 'QUARANTINED'
+    OR (
+      product_type_token IS NOT NULL
+      AND product_type_confirmed_token IS NOT NULL
+      AND product_type_confirmed_by IS NOT NULL
+      AND product_type_confirmed_at IS NOT NULL
+      AND product_type_version = 1
+      AND product_type_token = product_type_confirmed_token
+    )
+  )
 );
 CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id);
 CREATE INDEX IF NOT EXISTS idx_products_org ON products(org_id);

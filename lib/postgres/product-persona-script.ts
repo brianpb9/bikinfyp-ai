@@ -13,6 +13,11 @@ export interface PgProductInput {
   name: string;
   priceIdr: number;
   category: string;
+  productTypeToken?: string | null;
+  productTypeConfirmedToken?: string | null;
+  productTypeConfirmedBy?: string | null;
+  productTypeConfirmedAt?: string | null;
+  productTypeVersion?: 1 | null;
   productVisualDesc?: string | null;
   images: string[];
   rawMeta?: unknown | null;
@@ -77,7 +82,11 @@ export class PgProductPersonaScriptRepository {
     try {
       await client.query("BEGIN");
       const product = await this.insertProduct(client, userId, input);
-      await this.insertAudit(client, userId, "product.created", "products", product.id, { name: product.name, category: product.category });
+      await this.insertAudit(client, userId, "product.created", "products", product.id, {
+        name: product.name, category: product.category, product_type: product.product_type_token,
+        product_type_confirmation: product.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : "QUARANTINED",
+        product_type_version: product.product_type_version,
+      });
       commitAttempted = true;
       await client.query("COMMIT");
       return product;
@@ -135,17 +144,25 @@ export class PgProductPersonaScriptRepository {
   async updateOwnedProduct(
     userId: string,
     productId: string,
-    patch: Pick<PgProductInput, "name" | "priceIdr" | "category" | "productVisualDesc" | "promoPriceBeforeIdr" | "promoEndsAt" | "promoStockLeft">
+    patch: Pick<PgProductInput, "name" | "priceIdr" | "category" | "productTypeToken" | "productTypeConfirmedToken" | "productTypeConfirmedBy" | "productTypeConfirmedAt" | "productTypeVersion" | "productVisualDesc" | "promoPriceBeforeIdr" | "promoEndsAt" | "promoStockLeft">
   ): Promise<ProductRow | null> {
     const result = await this.pool.query<ProductRow>(
-      `UPDATE products SET name = $1, price_idr = $2, category = $3, product_visual_desc = $4,
-         promo_price_before_idr = $5, promo_ends_at = $6, promo_stock_left = $7
-       WHERE id = $8 AND user_id = $9 RETURNING *`,
-      [patch.name, patch.priceIdr, patch.category, patch.productVisualDesc ?? null,
-       patch.promoPriceBeforeIdr ?? null, patch.promoEndsAt ?? null, patch.promoStockLeft ?? null, productId, userId]
+      `UPDATE products SET name = $1, price_idr = $2, category = $3,
+         product_type_token = $4, product_type_confirmed_token = $5,
+         product_type_confirmed_by = $6, product_type_confirmed_at = $7,
+         product_type_version = $8, product_type_state = 'CONFIRMED', product_visual_desc = $9,
+         promo_price_before_idr = $10, promo_ends_at = $11, promo_stock_left = $12
+       WHERE id = $13 AND user_id = $14 RETURNING *`,
+      [patch.name, patch.priceIdr, patch.category, patch.productTypeToken, patch.productTypeConfirmedToken,
+       patch.productTypeConfirmedBy, patch.productTypeConfirmedAt, patch.productTypeVersion,
+       patch.productVisualDesc ?? null, patch.promoPriceBeforeIdr ?? null, patch.promoEndsAt ?? null,
+       patch.promoStockLeft ?? null, productId, userId]
     );
     const product = result.rows[0] ?? null;
-    if (product) await this.appendAudit(userId, "product.updated", "products", productId, { name: product.name, price_idr: product.price_idr });
+    if (product) await this.appendAudit(userId, "product.updated", "products", productId, {
+      name: product.name, price_idr: product.price_idr, product_type: product.product_type_token,
+      product_type_confirmation: "USER_SELF_ASSERTION", product_type_version: product.product_type_version,
+    });
     return product;
   }
 
@@ -285,14 +302,25 @@ export class PgProductPersonaScriptRepository {
     const product: ProductRow = {
       id: this.uuid(), user_id: userId, org_id: input.orgId ?? null, source_url: input.sourceUrl ?? null, name: input.name, price_idr: input.priceIdr,
       category: input.category, product_visual_desc: input.productVisualDesc ?? null, brand_brief: input.brandBrief ?? null, images: JSON.stringify(input.images),
+      product_type_token: input.productTypeToken ?? null, product_type_confirmed_token: input.productTypeConfirmedToken ?? null,
+      product_type_confirmed_by: input.productTypeConfirmedBy ?? null, product_type_confirmed_at: input.productTypeConfirmedAt ?? null,
+      product_type_version: input.productTypeVersion ?? null,
+      product_type_state: input.productTypeToken && input.productTypeConfirmedToken && input.productTypeConfirmedBy && input.productTypeConfirmedAt && input.productTypeVersion === 1 ? "CONFIRMED" : "QUARANTINED",
       promo_price_before_idr: input.promoPriceBeforeIdr ?? null, promo_ends_at: input.promoEndsAt ?? null,
       promo_stock_left: input.promoStockLeft ?? null,
       raw_meta: input.rawMeta === undefined || input.rawMeta === null ? null : JSON.stringify(input.rawMeta), created_at: this.now(),
     };
     await client.query(
-      `INSERT INTO products (id, user_id, org_id, source_url, name, price_idr, category, product_visual_desc, brand_brief, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-      [product.id, product.user_id, product.org_id, product.source_url, product.name, product.price_idr, product.category, product.product_visual_desc, product.brand_brief, product.images, product.promo_price_before_idr, product.promo_ends_at, product.promo_stock_left, product.raw_meta, product.created_at]
+      `INSERT INTO products (id, user_id, org_id, source_url, name, price_idr, category,
+         product_type_token, product_type_confirmed_token, product_type_confirmed_by,
+         product_type_confirmed_at, product_type_version, product_type_state,
+         product_visual_desc, brand_brief, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21)`,
+      [product.id, product.user_id, product.org_id, product.source_url, product.name, product.price_idr, product.category,
+       product.product_type_token, product.product_type_confirmed_token, product.product_type_confirmed_by,
+       product.product_type_confirmed_at, product.product_type_version, product.product_type_state,
+       product.product_visual_desc, product.brand_brief, product.images, product.promo_price_before_idr,
+       product.promo_ends_at, product.promo_stock_left, product.raw_meta, product.created_at]
     );
     return product;
   }

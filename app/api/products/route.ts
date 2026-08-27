@@ -9,6 +9,7 @@ import { merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
 import { resolveApprovedReference, pesanTanpaReferensi } from "@/lib/product-truth";
 import { GagalTanpaReferensi } from "@/lib/kanari-bukti";
 import { PgProductCreateFailure } from "@/lib/postgres/product-persona-script";
+import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
@@ -26,6 +27,8 @@ export async function POST(req: Request) {
 
     let name = "", priceRaw: unknown = "", category = "default", sourceUrl: string | null = null;
     let visualDesc: string | null = null;
+    let productTypeRaw: unknown = "";
+    let confirmedProductTypeRaw: unknown = "";
     // Merek terkonfirmasi user (audit C9) — sumber gerbang kesetiaan merek QC-F1.
     let brandRaw: unknown = undefined;
     let promoGet: (k: string) => unknown = () => undefined;
@@ -37,6 +40,8 @@ export async function POST(req: Request) {
       name = String(form.get("name") ?? "").trim();
       priceRaw = form.get("price_idr");
       category = String(form.get("category") ?? "default").trim();
+      productTypeRaw = form.get("product_type");
+      confirmedProductTypeRaw = form.get("confirmed_product_type");
       visualDesc = form.get("product_visual_desc") ? String(form.get("product_visual_desc")).slice(0, 200) : null;
       brandRaw = form.get("brand") ?? undefined;
       sourceUrl = form.get("source_url") ? String(form.get("source_url")) : null;
@@ -53,6 +58,8 @@ export async function POST(req: Request) {
       name = String(body.name ?? "").trim();
       priceRaw = body.price_idr;
       category = String(body.category ?? "default").trim();
+      productTypeRaw = body.product_type;
+      confirmedProductTypeRaw = body.confirmed_product_type;
       visualDesc = body.product_visual_desc ? String(body.product_visual_desc).slice(0, 200) : null;
       brandRaw = body.brand;
       sourceUrl = body.source_url ? String(body.source_url) : null;
@@ -68,6 +75,16 @@ export async function POST(req: Request) {
       }
     }
 
+    const productTypeToken = String(productTypeRaw ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
+    const confirmedProductTypeToken = String(confirmedProductTypeRaw ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
+    const confirmedAt = dependencies.now();
+    return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "request.product_type", token: productTypeToken, version: 1 },
+      confirmedProductTypeToken ? {
+        kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: confirmedProductTypeToken, actorId: user.id,
+        confirmedAt, version: 1, provenance: "USER_SELF_ASSERTION",
+      } : null,
+    ), async () => {
     const validName = validProductName(name);
     const priceIdr = validPriceIdr(priceRaw);
     const promo = parsePromoFields(promoGet);
@@ -129,6 +146,11 @@ export async function POST(req: Request) {
       name: validName,
       priceIdr,
       category,
+      productTypeToken,
+      productTypeConfirmedToken: confirmedProductTypeToken,
+      productTypeConfirmedBy: user.id,
+      productTypeConfirmedAt: confirmedAt,
+      productTypeVersion: 1 as const,
       productVisualDesc: visualDesc,
       images,
       promoPriceBeforeIdr: promo.promoPriceBeforeIdr,
@@ -150,13 +172,24 @@ export async function POST(req: Request) {
 
     try {
       if (usePostgres) {
-        await dependencies.smokeCreateProduct(user.id, { sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, rawMeta, ...promo }, id);
+        await dependencies.smokeCreateProduct(user.id, {
+          sourceUrl, name: validName, priceIdr, category, productVisualDesc: visualDesc, images, rawMeta, ...promo,
+          productTypeToken, productTypeConfirmedToken: confirmedProductTypeToken,
+          productTypeConfirmedBy: user.id, productTypeConfirmedAt: confirmedAt, productTypeVersion: 1,
+        }, id);
       } else {
         dependencies.getDb()
           .prepare(
-            "INSERT INTO products (id, user_id, source_url, name, price_idr, category, product_visual_desc, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+            `INSERT INTO products (id, user_id, source_url, name, price_idr, category,
+               product_type_token, product_type_confirmed_token, product_type_confirmed_by,
+               product_type_confirmed_at, product_type_version, product_type_state,
+               product_visual_desc, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at)
+             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
           )
-          .run(id, user.id, sourceUrl, validName, priceIdr, category, visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, rawMeta ? JSON.stringify(rawMeta) : null, dependencies.now());
+          .run(id, user.id, sourceUrl, validName, priceIdr, category,
+            productTypeToken, confirmedProductTypeToken, user.id, confirmedAt, 1, "CONFIRMED",
+            visualDesc, JSON.stringify(images), promo.promoPriceBeforeIdr, promo.promoEndsAt,
+            promo.promoStockLeft, rawMeta ? JSON.stringify(rawMeta) : null, dependencies.now());
       }
     } catch (creationError) {
       // A DB exception may mean COMMIT succeeded and only its
@@ -198,10 +231,14 @@ export async function POST(req: Request) {
       // Continue as success; SQLite's audit is completed idempotently below.
     }
     if (!usePostgres) {
-      dependencies.auditProductCreatedOnce(user.id, id, { name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null });
+      dependencies.auditProductCreatedOnce(user.id, id, {
+        name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null,
+        product_type: productTypeToken, product_type_confirmation: "USER_SELF_ASSERTION", product_type_version: 1,
+      });
     }
 
-    return Response.json({ product_id: id, name: validName, price_idr: priceIdr, category, images }, { status: 201 });
+    return Response.json({ product_id: id, name: validName, price_idr: priceIdr, category, product_type: productTypeToken, images }, { status: 201 });
+    });
   } catch (err) {
     return errorResponse(err);
   }

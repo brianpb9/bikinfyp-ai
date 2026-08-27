@@ -9,6 +9,7 @@ import { tierMasihDijual } from "@/lib/paket-kredit";
 import { getAvatarPreset } from "@/lib/avatar-presets";
 import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
+import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -41,6 +42,17 @@ export async function POST(req: Request) {
     // menolak rekan satu tim atas produk yang jelas ada di daftar mereka.
     const product = await routeDeps.smokeGetOrgProduct(membership.org_id, productId);
     if (!product) throw ERR.NOT_FOUND("Produknya");
+    return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "stored-org-product.product_type_token", token: product.product_type_token ?? "", version: 1 },
+      product.product_type_state === "CONFIRMED" && product.product_type_confirmed_token
+        && product.product_type_confirmed_by && product.product_type_confirmed_at && product.product_type_version === 1
+        ? {
+            kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: product.product_type_confirmed_token,
+            actorId: product.product_type_confirmed_by, confirmedAt: String(product.product_type_confirmed_at),
+            version: 1, provenance: "USER_SELF_ASSERTION",
+          }
+        : null,
+    ), async () => {
     if (!product.price_idr) throw ERR.BAD_REQUEST("Isi harga produknya dulu — harga dipakai di skrip dan overlay.", "Product price is required.");
     const images = JSON.parse(product.images || "[]") as string[];
     // Iklan jasa tetap butuh SATU visual — logo, foto toko, atau screenshot app.
@@ -201,6 +213,7 @@ export async function POST(req: Request) {
         ...(getTemplate(templateId)?.format ? { format: getTemplate(templateId)!.format } : {}),
       })),
     });
+    });
   } catch (err) {
     // Naskah template TIDAK PERNAH disajikan (keputusan Brian 20 Agu). Jawab
     // 503 yang jujur, bukan 500 generik: penyebabnya di sisi kami dan bisa
@@ -219,6 +232,6 @@ export async function POST(req: Request) {
     }
     return errorResponse(err);
   } finally {
-    await evidenceLease?.release();
+    await (evidenceLease as Awaited<ReturnType<typeof acquireAdmissionReferenceEvidence>> | null)?.release();
   }
 }

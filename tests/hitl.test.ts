@@ -39,8 +39,12 @@ fs.writeFileSync(path.join(storageDir, "uploads", productId, "0.png.meta.json"),
   versiBukti: 1,
 }));
 db.prepare(
-  "INSERT INTO products (id, user_id, source_url, name, price_idr, category, images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
-).run(productId, user.id, null, "Serum Glow Bright", 85000, "beauty", JSON.stringify([`uploads/${productId}/0.png`]), null, now());
+  `INSERT INTO products (id, user_id, source_url, name, price_idr, category,
+     product_type_token,product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
+     images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+).run(productId, user.id, null, "Serum Glow Bright", 85000, "beauty",
+  "serum wajah", "serum wajah", user.id, now(), 1, "CONFIRMED",
+  JSON.stringify([`uploads/${productId}/0.png`]), null, now());
 
 // Skrip belum di-approve
 const scriptId = uuid();

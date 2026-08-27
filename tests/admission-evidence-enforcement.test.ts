@@ -316,6 +316,9 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
     name: "Serum Handler", price_idr: 50_000, category: "beauty", images: "[]",
     source_url: null, raw_meta: "{}", product_visual_desc: null, brand_brief: null,
     claims: null, promo_price_before_idr: null, promo_ends_at: null, promo_stock_left: null,
+    product_type_token: "serum wajah", product_type_confirmed_token: "serum wajah",
+    product_type_confirmed_by: user.id, product_type_confirmed_at: "2026-08-27T00:00:00.000Z",
+    product_type_version: 1, product_type_state: "CONFIRMED",
     created_at: "now",
   };
   let currentProduct = { ...baseProduct };

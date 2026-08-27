@@ -65,6 +65,8 @@ test("POST /api/products menulis brand terkonfirmasi ke raw_meta.brand", async (
       name: "Serum Glow Bening 30ml",
       price_idr: 89000,
       category: "beauty",
+      product_type: "serum wajah",
+      confirmed_product_type: "serum wajah",
       brand: "  Glowbening  ",
       images_base64: [`data:image/png;base64,${PNG_1X1}`],
     })
@@ -82,6 +84,8 @@ test("POST tanpa brand -> raw_meta tetap tanpa brand (tidak menebak diam-diam)",
       name: "Produk Tanpa Merek",
       price_idr: 50000,
       category: "default",
+      product_type: "produk fisik tanpa merek",
+      confirmed_product_type: "produk fisik tanpa merek",
       images_base64: [`data:image/png;base64,${PNG_1X1}`],
     })
   );
@@ -95,8 +99,11 @@ test("POST tanpa brand -> raw_meta tetap tanpa brand (tidak menebak diam-diam)",
 test("PATCH menulis brand dan MEMPERTAHANKAN raw_meta.og hasil scrape", async () => {
   const id = uuid();
   getDb().prepare(
-    "INSERT INTO products (id, user_id, source_url, name, price_idr, category, images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
-  ).run(id, user.id, "https://toko.example/p", "Serum Scarlett Brightening", 60000, "beauty", "[]",
+    `INSERT INTO products (id, user_id, source_url, name, price_idr, category,
+       product_type_token,product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
+       images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(id, user.id, "https://toko.example/p", "Serum Scarlett Brightening", 60000, "beauty",
+    "serum wajah", "serum wajah", user.id, now(), 1, "CONFIRMED", "[]",
     JSON.stringify({ og: { price: 60000, original: 90000 } }), now());
 
   const res = await patchProduct(
@@ -113,8 +120,11 @@ test("PATCH menulis brand dan MEMPERTAHANKAN raw_meta.og hasil scrape", async ()
 test("PATCH brand kosong -> menghapus brand tanpa menyentuh og", async () => {
   const id = uuid();
   getDb().prepare(
-    "INSERT INTO products (id, user_id, name, price_idr, category, images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?)"
-  ).run(id, user.id, "Produk Hapus Merek", 60000, "beauty", "[]",
+    `INSERT INTO products (id, user_id, name, price_idr, category,
+       product_type_token,product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
+       images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(id, user.id, "Produk Hapus Merek", 60000, "beauty",
+    "produk fisik", "produk fisik", user.id, now(), 1, "CONFIRMED", "[]",
     JSON.stringify({ brand: "Salah", og: { price: 1 } }), now());
   const res = await patchProduct(
     jsonReq(`http://localhost/api/products/${id}`, "PATCH", { brand: "" }),

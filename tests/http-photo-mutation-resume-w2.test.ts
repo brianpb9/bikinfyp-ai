@@ -93,6 +93,12 @@ const segments = [
   { role: "cta", start: 10, end: 15, text: "linknya di keranjang kuning ya", visual_direction: "x" },
 ];
 
+function confirmProductType(productId: string, actorId: string, timestamp: string) {
+  db.prepare(`UPDATE products SET product_type_token='serum wajah', product_type_confirmed_token='serum wajah',
+    product_type_confirmed_by=?, product_type_confirmed_at=?, product_type_version=1, product_type_state='CONFIRMED'
+    WHERE id=?`).run(actorId, timestamp, productId);
+}
+
 async function scenario(label: string) {
   const ownerId = uuid(), intruderId = uuid(), productId = uuid(), scriptId = uuid(), jobId = uuid();
   const approvedSource = `uploads/${label}/approved.webp`;
@@ -109,6 +115,7 @@ async function scenario(label: string) {
   db.prepare(
     "INSERT INTO products (id,user_id,name,price_idr,category,images,raw_meta,created_at) VALUES (?,?,?,85000,'beauty',?,?,?)"
   ).run(productId, ownerId, `Serum ${label}`, JSON.stringify([approvedSource, approvedSecondSource, otherSource]), JSON.stringify({ brand: "Merek Awal" }), timestamp);
+  confirmProductType(productId, ownerId, timestamp);
   db.prepare(
     `INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,approved_by_user_at,created_at)
      VALUES (?,?,'H1','senang','bestie',?,'caption','[]','{}','silent_caption',?,?)`
@@ -172,6 +179,7 @@ async function admittedProductMutationScenario(
      VALUES (?,?,?,85000,'beauty',?,?,?,?,?,?)`
   ).run(productId, ownerId, "Serum Admission E3", JSON.stringify([approvedSource]), JSON.stringify({ brand: "Merek Admission E3" }),
     "BOTOL-ADMISSION-E3", "BRIEF-ADMISSION-E3", JSON.stringify(["klaim admission E3"]), timestamp);
+  confirmProductType(productId, ownerId, timestamp);
   db.prepare(
     `INSERT INTO scripts
       (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,approved_by_user_at,created_at)
@@ -207,6 +215,7 @@ async function rawAdmissionCandidate(storage: MemoryStorage, label: string, cred
   db.prepare(
     "INSERT INTO products (id,user_id,name,price_idr,category,images,raw_meta,created_at) VALUES (?,?,?,85000,'beauty',?,?,?)"
   ).run(productId, ownerId, "Serum Admission E3", JSON.stringify([approvedSource]), JSON.stringify({ brand: "Merek Admission" }), timestamp);
+  confirmProductType(productId, ownerId, timestamp);
   db.prepare(
     `INSERT INTO scripts
       (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,approved_by_user_at,created_at)

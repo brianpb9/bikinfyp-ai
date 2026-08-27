@@ -5,6 +5,7 @@ import { validBrand, validPriceIdr, validProductName } from "@/lib/product-valid
 import { parsePromoFields } from "@/lib/promo";
 import { pgSetProductBrand, pgUpdateProduct, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
+import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -28,6 +29,11 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const name = body.name !== undefined ? validProductName(body.name) : product.name;
     const priceIdr = body.price_idr !== undefined ? validPriceIdr(body.price_idr) : product.price_idr;
     const category = body.category !== undefined ? String(body.category).trim() : product.category;
+    const productTypeToken = String(body.product_type ?? product.product_type_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
+    const confirmationTouched = body.confirmed_product_type !== undefined;
+    const confirmedProductTypeToken = String(confirmationTouched ? body.confirmed_product_type : product.product_type_confirmed_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
+    const confirmedBy = confirmationTouched ? user.id : String(product.product_type_confirmed_by ?? "");
+    const confirmedAt = confirmationTouched ? now() : String(product.product_type_confirmed_at ?? "");
     const visualDesc =
       body.product_visual_desc !== undefined
         ? body.product_visual_desc === null || body.product_visual_desc === ""
@@ -55,11 +61,27 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         "promo_price_before_idr must exceed price_idr."
       );
 
-    if (postgresRuntimeEnabled()) await pgUpdateProduct(user.id, id, { name, priceIdr, category, productVisualDesc: visualDesc, ...promo });
+    return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "product-mutation.product_type", token: productTypeToken, version: 1 },
+      confirmedProductTypeToken && confirmedBy && confirmedAt
+        && (confirmationTouched || product.product_type_state === "CONFIRMED") ? {
+        kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: confirmedProductTypeToken, actorId: confirmedBy,
+        confirmedAt, version: 1, provenance: "USER_SELF_ASSERTION",
+      } : null,
+    ), async () => {
+    if (postgresRuntimeEnabled()) await pgUpdateProduct(user.id, id, {
+      name, priceIdr, category, productTypeToken, productTypeConfirmedToken: confirmedProductTypeToken,
+      productTypeConfirmedBy: confirmedBy, productTypeConfirmedAt: confirmedAt, productTypeVersion: 1,
+      productVisualDesc: visualDesc, ...promo,
+    });
     else {
       db!.prepare(
-        "UPDATE products SET name = ?, price_idr = ?, category = ?, product_visual_desc = ?, promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?"
-      ).run(name, priceIdr, category, visualDesc, promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, id);
+        `UPDATE products SET name = ?, price_idr = ?, category = ?, product_type_token = ?,
+           product_type_confirmed_token = ?, product_type_confirmed_by = ?, product_type_confirmed_at = ?,
+           product_type_version = 1, product_type_state = 'CONFIRMED', product_visual_desc = ?,
+           promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?`
+      ).run(name, priceIdr, category, productTypeToken, confirmedProductTypeToken, confirmedBy, confirmedAt,
+        visualDesc, promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, id);
       audit(user.id, "product.updated", "products", id, { name, price_idr: priceIdr, promo: promo.promoPriceBeforeIdr !== null });
     }
 
@@ -79,6 +101,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
       }
     }
     return Response.json({ ok: true, product_id: id, name, price_idr: priceIdr, category });
+    });
   } catch (err) {
     return errorResponse(err);
   }

@@ -330,12 +330,9 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   const seamPath = path.join(root, "lib/product-type-boundary.ts");
   if (!fs.existsSync(seamPath)) return ["CENTRAL: lib/product-type-boundary.ts is absent"];
   const module = await import(pathToFileURL(seamPath).href) as {
-    buildAuthoritativeTypeBoundaryInput?: (
-      declared: DeclaredTypeSource,
-      trusted: TrustedTypeSource | null,
-    ) => TypeBoundaryInput;
+    buildAuthoritativeTypeBoundaryInput?: (declared: Record<string, unknown>, trusted: Record<string, unknown> | null) => unknown;
     validateAuthoritativeProductType?: (
-      input: TypeBoundaryInput,
+      input: unknown,
       onAdmit?: () => unknown | Promise<unknown>,
     ) => unknown | Promise<unknown>;
   };
@@ -347,17 +344,36 @@ async function inspectProductionSeamBehavior(): Promise<string[]> {
   }
   const build = module.buildAuthoritativeTypeBoundaryInput;
   const decide = module.validateAuthoritativeProductType;
-  const declaredA: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "request-category", token: "opaque-type-a" };
+  const declaredA = { kind: "DECLARED_PRODUCT_TYPE", sourceId: "request.product_type", token: "opaque-type-a", version: 1 };
   let missingEffects = 0;
-  const missingDecision = await decide(build(declaredA, null), () => { missingEffects += 1; });
   const violations: string[] = [];
-  if (missingDecision !== "UNDETERMINED_POLICY_INPUT") violations.push(`CENTRAL: missing policy returned ${String(missingDecision)}`);
+  try {
+    await decide(build(declaredA, null), () => { missingEffects += 1; });
+    violations.push("CENTRAL: missing confirmation was admitted");
+  } catch (error) {
+    if ((error as { body?: { code?: string } }).body?.code !== "PRODUCT_TYPE_CONFIRMATION_REQUIRED") {
+      violations.push("CENTRAL: missing confirmation did not return canonical actionable code");
+    }
+  }
   if (missingEffects !== 0) violations.push(`CENTRAL: missing policy invoked effect ${missingEffects} times`);
   try {
-    build(declaredA, Object.freeze({ kind: "TRUSTED_TYPE_SOURCE", sourceId: "reference-ingress:forged", token: declaredA.token, provenance: "forged" }));
+    build(declaredA, Object.freeze({ kind: "TRUSTED_TYPE_SOURCE", sourceId: "authenticated-user:forged", token: declaredA.token, provenance: "USER_SELF_ASSERTION" }));
     violations.push("CENTRAL: structurally forged frozen capability was accepted");
   } catch { /* required */ }
-  violations.push("CENTRAL: approved production ingress capability fixture is not yet authorized");
+  const confirmation = { kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: " OPAQUE-TYPE-A ", actorId: "user-1", confirmedAt: "2026-08-27T00:00:00.000Z", version: 1, provenance: "USER_SELF_ASSERTION" };
+  let validEffects = 0;
+  await decide(build(declaredA, confirmation), () => { validEffects += 1; });
+  if (validEffects !== 1) violations.push(`CENTRAL: valid normalized match invoked ${validEffects} effects`);
+  let mismatchEffects = 0;
+  try {
+    await decide(build(declaredA, { ...confirmation, token: "opaque-type-b" }), () => { mismatchEffects += 1; });
+    violations.push("CENTRAL: explicit mismatch was admitted");
+  } catch (error) {
+    if ((error as { body?: { code?: string } }).body?.code !== "TYPE_MISMATCH") {
+      violations.push("CENTRAL: mismatch did not return TYPE_MISMATCH");
+    }
+  }
+  if (mismatchEffects !== 0) violations.push(`CENTRAL: mismatch invoked ${mismatchEffects} effects`);
   return violations;
 }
 
@@ -474,10 +490,15 @@ function inspectCentralExportSurface(sourceText?: string): string[] {
   return violations;
 }
 
-test("discovery: current Product Truth persistence has category but no authoritative type signal", () => {
+test("implementation: Product Truth persists a distinct versioned type confirmation without replacing category", () => {
   const productionInputs = [sources.e1, sources.e3, sources.e6e7, sources.sqliteSchema].join("\n");
   assert.match(productionInputs, /category/);
-  assert.doesNotMatch(productionInputs, /\b(product_type|productType|jenis_produk|authoritative_type|trusted_type)\b/);
+  assert.match(productionInputs, /product_type_token/);
+  assert.match(productionInputs, /product_type_confirmed_token/);
+  assert.match(productionInputs, /product_type_confirmed_by/);
+  assert.match(productionInputs, /product_type_confirmed_at/);
+  assert.match(productionInputs, /product_type_version/);
+  assert.match(productionInputs, /product_type_state/);
   assert.match(read("lib/category-guess.ts"), /guessCategory/);
   assert.match(read("lib/category-guess.ts"), /return "default"/);
 });
@@ -611,12 +632,12 @@ test("mutation controls: comparator rejects mismatch without rejecting valid pos
   assert.deepEqual(await probeHandler(rejectingSeam, trusted), { status: 201, effects: 1 });
 });
 
-test("RED: every production boundary rejects supplied mismatch before its own effects", async () => {
+test("GREEN: every production boundary rejects supplied mismatch before its own effects", async () => {
   const violations = [
     ...boundaryExpectations.flatMap((expectation) => inspectBoundary(expectation)),
     ...await inspectProductionSeamBehavior(),
     ...inspectProductionIssuerAccess(),
     ...inspectCentralExportSurface(),
   ];
-  assert.deepEqual(violations, [], `C2_MISSING_INVARIANT:\n${violations.join("\n")}`);
+  assert.deepEqual(violations, [], `C2_IMPLEMENTATION_VIOLATION:\n${violations.join("\n")}`);
 });

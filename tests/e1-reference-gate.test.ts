@@ -177,7 +177,7 @@ async function run(label: string, options: RunOptions = {}) {
         run: (...args: unknown[]) => {
           sqliteAttempts += 1;
           if (options.persistenceFault === "before-commit") throw new Error("controlled SQLite pre-commit failure");
-          insertedImages.push(JSON.parse(String(args[7])) as string[]);
+          insertedImages.push(JSON.parse(String(args[13])) as string[]);
           if (options.persistenceFault === "after-commit") throw new Error("controlled SQLite commit acknowledgement failure");
           return {};
         },
@@ -218,6 +218,8 @@ async function run(label: string, options: RunOptions = {}) {
       brand: " HDRV ",
       price_idr: 50000,
       category: "beauty",
+      product_type: "serum wajah",
+      confirmed_product_type: "serum wajah",
       images_base64: pngs.map((png) => `data:image/png;base64,${png.toString("base64")}`),
     }),
   }));

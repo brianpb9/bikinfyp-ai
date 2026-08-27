@@ -1,0 +1,28 @@
+P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827
+BASELINE=c8588c67df8c5064e4cd231a6650d0c8b23d6e00
+
+$ node scripts/verify-c2-type-mismatch-green.mjs
+tests=5 pass=5 fail=0 exit=0
+C2_GREEN_VERIFIER={"exit_zero":true,"all_five_pass":true,"zero_fail":true,"no_contract_violation":true}
+
+$ SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts
+tests=4 pass=4 fail=0 exit=0
+
+$ SCRIPT_LLM=0 npx tsx --test tests/admission-evidence-enforcement.test.ts tests/http-photo-mutation-resume-w2.test.ts tests/product-truth-worker-reference.test.ts tests/hitl.test.ts
+tests=43 pass=43 fail=0 exit=0
+
+$ npx tsc --noEmit
+exit=0
+
+$ npm test
+tests=1252 pass=1205 fail=0 cancelled=0 skipped=47 exit=0
+
+$ npm run build
+exit=0
+
+$ bash scripts/test-postgres-schema.sh
+exit=0
+
+$ bash scripts/test-postgres-production-migrations.sh
+NOT_RUN: local PostgreSQL readiness check failed before disposable database creation.
+No production database was contacted or mutated.

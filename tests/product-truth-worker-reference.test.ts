@@ -245,6 +245,9 @@ async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string;
      VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`
   ).run(productId, userId, null, "Serum Glow Bright", 85000, "beauty", JSON.stringify(images),
     JSON.stringify({ brand: "Merek Awal" }), "BOTOL-AMBER-AWAL", "ARAH-BRAND-AWAL", JSON.stringify(["klaim awal"]), now());
+  db.prepare(`UPDATE products SET product_type_token='serum wajah', product_type_confirmed_token='serum wajah',
+    product_type_confirmed_by=?, product_type_confirmed_at=?, product_type_version=1, product_type_state='CONFIRMED'
+    WHERE id=?`).run(userId, now(), productId);
   const scriptId = uuid();
   db.prepare(
     `INSERT INTO scripts

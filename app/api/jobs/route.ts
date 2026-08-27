@@ -18,6 +18,7 @@ import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
 import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 import { authorizedManagedStagingZeroValueAdmission } from "@/lib/staging-admission-trace";
+import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,18 @@ export async function POST(req: Request) {
     // scene, dan library org semuanya hidup di sana. Lihat catatan lengkapnya
     // di pastikanBukanProdukOrg.
     pastikanBukanProdukOrg(product);
+
+    return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "stored-product.product_type_token", token: product.product_type_token ?? "", version: 1 },
+      product.product_type_state === "CONFIRMED" && product.product_type_confirmed_token
+        && product.product_type_confirmed_by && product.product_type_confirmed_at && product.product_type_version === 1
+        ? {
+            kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: product.product_type_confirmed_token,
+            actorId: product.product_type_confirmed_by, confirmedAt: String(product.product_type_confirmed_at),
+            version: 1, provenance: "USER_SELF_ASSERTION",
+          }
+        : null,
+    ), async () => {
 
     // --- GERBANG HITL (aturan keras #5) ---
     if (!script.approved_by_user_at) throw ERR.SCRIPT_NOT_APPROVED();
@@ -341,6 +354,7 @@ export async function POST(req: Request) {
     if (created.duplicate)
       return Response.json({ job_id: jobId, state: "QUEUED", quality_tier: tier, hold_idr: priceIdr, duplicate: true });
     return Response.json({ job_id: jobId, state: "QUEUED", quality_tier: tier, hold_idr: priceIdr }, { status: 201 });
+    });
   } catch (err) {
     return errorResponse(err);
   }

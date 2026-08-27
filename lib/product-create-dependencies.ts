@@ -9,6 +9,11 @@ export interface ExpectedProductCreation {
   name: string;
   priceIdr: number;
   category: string;
+  productTypeToken?: string;
+  productTypeConfirmedToken?: string;
+  productTypeConfirmedBy?: string;
+  productTypeConfirmedAt?: string;
+  productTypeVersion?: 1;
   productVisualDesc: string | null;
   images: string[];
   promoPriceBeforeIdr: number | null;
@@ -27,6 +32,12 @@ export function productCreationRowMatchesExpected(row: ProductRow, expected: Exp
     && row.name === expected.name
     && Number(row.price_idr) === expected.priceIdr
     && row.category === expected.category
+    && (expected.productTypeToken === undefined || row.product_type_token === expected.productTypeToken)
+    && (expected.productTypeConfirmedToken === undefined || row.product_type_confirmed_token === expected.productTypeConfirmedToken)
+    && (expected.productTypeConfirmedBy === undefined || row.product_type_confirmed_by === expected.productTypeConfirmedBy)
+    && (expected.productTypeConfirmedAt === undefined || row.product_type_confirmed_at === expected.productTypeConfirmedAt)
+    && (expected.productTypeVersion === undefined || row.product_type_version === expected.productTypeVersion)
+    && (expected.productTypeVersion === undefined || row.product_type_state === "CONFIRMED")
     && (row.product_visual_desc ?? null) === expected.productVisualDesc
     && (row.brand_brief ?? null) === null
     && row.images === JSON.stringify(expected.images)
@@ -50,7 +61,7 @@ async function reconcileProductCreation(
 function auditProductCreatedOnce(
   actor: string,
   productId: string,
-  meta: { name: string; category: string; brand: string | null; promo: boolean },
+  meta: { name: string; category: string; brand: string | null; promo: boolean; product_type: string; product_type_confirmation: "USER_SELF_ASSERTION"; product_type_version: 1 },
 ): void {
   getDb().prepare(
     `INSERT INTO audit_log (id, actor, action, entity, entity_id, meta, created_at)

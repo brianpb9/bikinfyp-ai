@@ -1,0 +1,57 @@
+{
+  "task": "P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827",
+  "baseline_sha": "c8588c67df8c5064e4cd231a6650d0c8b23d6e00",
+  "result": "PASS_LOCAL_READY_FOR_REVIEW",
+  "founder_decision": "approved recommended safe release bundle",
+  "canonical_type_distinct_from_category": true,
+  "taxonomy_invented": false,
+  "confirmation_provenance": "USER_SELF_ASSERTION",
+  "legacy_default_state": "QUARANTINED",
+  "confirmed_state": "CONFIRMED",
+  "mismatch_code": "TYPE_MISMATCH",
+  "missing_code": "PRODUCT_TYPE_CONFIRMATION_REQUIRED",
+  "green_contract": {
+    "command": "node scripts/verify-c2-type-mismatch-green.mjs",
+    "exit_code": 0,
+    "tests": 5,
+    "pass": 5,
+    "fail": 0
+  },
+  "implementation_test": {
+    "command": "SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts",
+    "exit_code": 0,
+    "tests": 4,
+    "pass": 4,
+    "fail": 0
+  },
+  "focused_regression": {
+    "command": "SCRIPT_LLM=0 npx tsx --test tests/admission-evidence-enforcement.test.ts tests/http-photo-mutation-resume-w2.test.ts tests/product-truth-worker-reference.test.ts tests/hitl.test.ts",
+    "exit_code": 0,
+    "tests": 43,
+    "pass": 43,
+    "fail": 0
+  },
+  "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
+  "full_test": {
+    "command": "npm test",
+    "exit_code": 0,
+    "tests": 1252,
+    "pass": 1205,
+    "fail": 0,
+    "skipped": 47
+  },
+  "build": { "command": "npm run build", "exit_code": 0 },
+  "postgres_schema_static": { "command": "bash scripts/test-postgres-schema.sh", "exit_code": 0 },
+  "postgres_disposable_migration": {
+    "command": "bash scripts/test-postgres-production-migrations.sh",
+    "executed": false,
+    "reason": "local PostgreSQL readiness check failed before disposable database creation"
+  },
+  "provider_calls": 0,
+  "payment_calls": 0,
+  "credit_holds": 0,
+  "queue_mutations": 0,
+  "production_database_mutations": 0,
+  "deployments": 0,
+  "new_secrets": 0
+}

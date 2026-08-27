@@ -20,6 +20,8 @@ export default function ProdukPage() {
   const [name, setName] = useState("");
   const [price, setPrice] = useState("");
   const [category, setCategory] = useState("beauty");
+  const [productType, setProductType] = useState("");
+  const [productTypeConfirmed, setProductTypeConfirmed] = useState(false);
   // Kategori sudah ditentukan dari sumber yang lebih tepercaya daripada tebakan
   // nama? (pengunjung memilih sendiri, hasil ekstrak URL, draft tersimpan, atau
   // data percobaan /coba). Kalau ya, penebak tidak boleh ikut campur.
@@ -190,6 +192,8 @@ export default function ProdukPage() {
     if (submitLock.current) return;
     setError(null);
     if (!name.trim()) return setError("Nama produknya belum diisi.");
+    if (!productType.trim()) return setError("Jenis produknya belum diisi.");
+    if (!productTypeConfirmed) return setError("Konfirmasi dulu bahwa jenis produk yang kamu isi sudah benar.");
     const priceIdr = parseInt(price.replace(/[^\d]/g, ""), 10);
     if (!priceIdr || priceIdr <= 0) return setError("Harganya wajib diisi — harga adalah bahan wajib hook videonya.");
     if (extractedPreviews.length + photos.length < 1) return setError(`Upload fotonya dulu ya — minimal 1, maksimal ${MAX_PHOTOS} foto.`);
@@ -210,6 +214,8 @@ export default function ProdukPage() {
         fd.set("name", name.trim());
         fd.set("price_idr", String(priceIdr));
         fd.set("category", category);
+        fd.set("product_type", productType.trim());
+        fd.set("confirmed_product_type", productType.trim());
         if (visualDesc.trim()) fd.set("product_visual_desc", visualDesc.trim());
         if (brand.trim()) fd.set("brand", brand.trim());
         if (promoBeforeIdr) fd.set("promo_price_before_idr", String(promoBeforeIdr));
@@ -233,7 +239,8 @@ export default function ProdukPage() {
         await apiFetch(`/api/products/${id}`, {
           method: "PATCH",
           json: {
-            name: name.trim(), price_idr: priceIdr, category, product_visual_desc: visualDesc.trim() || null,
+            name: name.trim(), price_idr: priceIdr, category, product_type: productType.trim(),
+            confirmed_product_type: productType.trim(), product_visual_desc: visualDesc.trim() || null,
             brand: brand.trim() || null,
             promo_price_before_idr: promoBeforeIdr, promo_ends_at: promoEnds || null, promo_stock_left: promoStock || null,
           },
@@ -361,6 +368,22 @@ export default function ProdukPage() {
                 </option>
               ))}
             </select>
+            <input
+              type="text"
+              placeholder="Jenis produk fisik (mis. pasta gigi, serum wajah)"
+              value={productType}
+              onChange={(e) => { setProductType(e.target.value); setProductTypeConfirmed(false); }}
+              className="min-h-[52px] w-full rounded-2xl border-2 border-zinc-200 bg-white px-4 outline-none focus:border-amber-500"
+            />
+            <label className="flex items-start gap-3 rounded-2xl border border-zinc-200 bg-white p-3 text-sm text-zinc-700">
+              <input
+                type="checkbox"
+                checked={productTypeConfirmed}
+                onChange={(e) => setProductTypeConfirmed(e.target.checked)}
+                className="mt-0.5 h-4 w-4"
+              />
+              <span>Saya mengonfirmasi jenis produk ini benar. Ini pernyataan saya sendiri, bukan verifikasi staf.</span>
+            </label>
             {/* Tebakan yang tidak diberitahukan itu diam-diam mengubah hasil
                 orang. Katakan bahwa kita menebak — dan bahwa boleh diganti. */}
             {kategoriDitebak && (

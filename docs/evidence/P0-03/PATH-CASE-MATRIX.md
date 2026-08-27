@@ -149,22 +149,21 @@ database, provider berbayar, penegakan admission, maupun keputusan T43.
 | **BLOCKED** | penerimaan belum dapat dinyatakan karena implementasi lokal belum ada, atau karena authority/kredensial/deploy; penyebab wajib disebut eksplisit |
 | **NOT-APPLICABLE** | tidak relevan pada kontrak yang berlaku sekarang |
 
-`BLOCKED` bukan klaim bahwa penyebabnya selalu eksternal. Untuk C2, C5, dan C6
-di bawah, penerimaan diblokir oleh pekerjaan lokal yang belum diimplementasikan;
-tidak ada dependensi eksternal yang menghalangi Builder
-mengerjakannya sebagai task terpisah.
+`BLOCKED` bukan klaim bahwa penyebabnya selalu eksternal. C2 sudah ditutup oleh
+accepted Product Policy dan implementasi E.39. Untuk C5 dan C6 di bawah,
+penerimaan masih diblokir oleh pekerjaan/keputusan lokal yang belum selesai.
 
 ### E.1 Entrypoint: apa yang BERUBAH sejak 2026-08-20
 
 | # | Status 20 Agu | Status 23 Agu | Bukti |
 |---|---|---|---|
-| E1 create manual | PARTIAL | **PARTIAL** | `saveProductImages` → `tulisSidecar`, lalu canonical resolver sebelum kedua seam persistence. **Gap E1 label/brand/reference ditutup 24 Agu:** setiap blob memakai `periksaLabelFoto` + `merekTerdaftar`; reject/resolver/DB failure membersihkan exact object baru sebelum row/audit. Actual exported POST diuji di SQLite dan PG seam, termasuk packshot sah, banner-first+packshot, multi-valid, wrong brand, unreadable, classifier failure, evidence missing/corrupt/hash mismatch, DB failure, dan cleanup fault. Tetap PARTIAL karena OCR fail-open dan gap matriks lain |
+| E1 create manual | PARTIAL | **PARTIAL** | `saveProductImages` → `tulisSidecar`, lalu canonical resolver sebelum kedua seam persistence. **C2 ditutup E.39:** explicit product type + human self-confirmation divalidasi sebelum storage/row/audit; mismatch `TYPE_MISMATCH` bernilai nol efek. **Gap E1 label/brand/reference ditutup 24 Agu:** setiap blob memakai `periksaLabelFoto` + `merekTerdaftar`; reject/resolver/DB failure membersihkan exact object baru sebelum row/audit. Tetap PARTIAL karena OCR fail-open dan gap matriks lain |
 | E2 extract URL | UNGATED | **PARTIAL** | `downloadProductImages` → `tulisSidecar` (`lib/product-image-download.ts:48`). Dulu nol sidecar |
-| E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar, tetapi E3 tetap jalur wajib C2/C3/C5 dan belum melakukan validasi type/brand/category |
+| E3 PATCH retail | UNGATED | **PARTIAL** | mutasi ini tidak membatalkan sub-kontrak sidecar/hash karena vonis referensi membaca sidecar. **C2 ditutup E.39:** hanya confirmation baru atau durable state `CONFIRMED` yang dapat melintasi mutation callback; mismatch gagal sebelum row/audit/brand write. C3/C5 tetap terbuka |
 | E4 add-photo retail | PARTIAL | **PARTIAL** | sidecar terbit; append daftar atomik memakai key UUID. **Gap foto #2+ ditutup 24 Agu:** seluruh blob decodable melewati label+brand gate sebelum satu pun persistence. **Gap rollback C7 ditutup 24 Agu:** no-reference atau resolver error membersihkan exact foto baru+sidecar sebelum append/audit; bila cleanup sendiri gagal, respons 500 dan log menyatakan risiko residual—bukan klaim nol-storage palsu. Status tetap PARTIAL karena fail-open OCR dan verifikasi ulang hash masih terbuka |
 | E5 DELETE foto retail | UNGATED | **PARTIAL** | `removeRetailProductImage` menghitung daftar otoritatif secara atomik, lalu `deleteStoredProductImages([target])` best-effort; `cleanup_failed` terlihat, audit pasca-commit non-fatal, dan test HTTP→resume W2 membuktikan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru tetap belum direvalidasi |
-| E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. Dulu nol |
-| E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3, tetapi kontrak lengkap E7 tetap aktif untuk C2/C3/C5 dan belum ditegakkan |
+| E6 create org | UNGATED | **PARTIAL** | `downloadProductImages` → sidecar terbit. **C2 ditutup E.39:** explicit type + confirmation mendahului extraction/download/persistence/audit. Gap lain tetap terbuka |
+| E7 PATCH org | UNGATED | **PARTIAL** | observasi sidecar/hash sama dengan E3. **C2 ditutup E.39** dengan durable `CONFIRMED` state atau confirmation baru sebelum mutation/audit. C3/C5 tetap terbuka |
 | E8 add-photo org | PARTIAL | **PARTIAL** | `saveUniqueProductImages` → `tulisSidecar` (`:327`). **Gap label/brand ditutup 24 Agu:** setiap upload baru memakai `periksaLabelFoto` + `merekTerdaftar(owned.product)` sebelum persistence, bukan hanya foto pertama. **Gap rollback C7 ditutup 24 Agu:** resolver menilai existing+added dan append mengikat exact ordered existing snapshot lewat optimistic CAS. Tetap PARTIAL karena OCR fail-open dan gap lain pada matriks |
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Test HTTP→resume W1 membuktikan isolasi org, daftar otoritatif, dan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru belum direvalidasi agar tetap punya foto layak |
 | W1 worker PG | UNGATED | **PARTIAL** | Resolver, manifest job atomik/idempoten, reuse lintas invocation, verifikasi bytes di boundary provider/output, C1/C8/C11, explicit C3 brand mismatch, dan legacy fail-closed dibuktikan di PostgreSQL disposable. Snapshot field produk non-referensi dan aggregate cases lain tetap partial |
@@ -175,7 +174,7 @@ mengerjakannya sebagai task terpisah.
 
 ### E.2 Kasus C1-C13 — alasan tiap status
 
-**Cacah setelah follow-up C11: satu PASS, sembilan PARTIAL, tiga BLOCKED.**
+**Cacah setelah implementasi C2 E.39: dua PASS, sembilan PARTIAL, dua BLOCKED.**
 C11 kini punya bukti boundary langsung pada kedua jalur wajibnya, W1 dan W2.
 Empat kasus (C1, C7, C11, C12) sempat ditandai
 PASS oleh ronde-ronde awal rekonsiliasi; semuanya sempat DITURUNKAN setelah
@@ -187,7 +186,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | # | Status | Alasan dan bukti |
 |---|---|---|
 | C1 | **PARTIAL** | W1/W2 memilih packshot sah beserta hash lalu mematok manifest ordered `{rel,sha256,versiBukti}` tepat sekali; A6 approve/regenerate memakai manifest itu dan tidak memilih ulang. Tetap PARTIAL karena jalur E/A lain pada baris C1 belum seluruhnya dicakup |
-| C2 | **BLOCKED** | Diblokir implementasi lokal: `TYPE_MISMATCH` dan validasi terkait belum ada di kode mana pun; tidak ada penghalang eksternal |
+| C2 | **PASS** | Accepted Product Policy E.39 memisahkan opaque canonical product type dari merchandising category, menyimpan actor/timestamp/version `USER_SELF_ASSERTION`, dan mengarantina missing/legacy state. E1/E3/E6/E7 serta A1–A4 memakai central identity-bound seam; mismatch menghasilkan `TYPE_MISMATCH` sebelum persistence/admission/spend/provider effect, missing/unconfirmed fail-closed, dan normalized match mengeksekusi callback tepat sekali. GREEN 5/5, implementation 4/4, focused regression 43/43, full suite 0 fail |
 | C3 | **PARTIAL** | E1, E4, E8, W1, dan W2 menolak explicit `cocokMerek === false` dengan canonical `BRAND_MISMATCH` sebelum persistence/provider effect; W1/W2 closure accepted di E.30. Aggregate tetap PARTIAL untuk jalur lain dan null/unreadable OCR policy; bukan karena explicit worker mismatch belum diimplementasikan |
 | C4 | **PARTIAL** | E1, E4, dan E8 menolak `!label.terbaca` untuk setiap blob baru sebelum persistence dengan canonical `LABEL_UNREADABLE` (HTTP 400, `retryable:false`, alasan Indonesia dari OCR atau fallback actionable). Cakupan belum lengkap: kebijakan OCR execution error tetap fail-open |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
@@ -230,7 +229,8 @@ dikerjakan di slice ini:**
    baris C6 mengharapkan fail-closed. **Salah satu dari keduanya harus
    dikoreksi** — matriks atau kodenya; itu keputusan produk, bukan pembersihan
    dokumen.
-4. C2/C5 belum punya reason code maupun jalur penegakan. **Explicit C3 sudah
+4. **C2 sudah DITUTUP E.39** dengan `TYPE_MISMATCH` dan durable confirmation;
+   C5 masih belum punya reason code maupun jalur penegakan. **Explicit C3 sudah
    DITUTUP di E1/E4/E8 dan W1/W2:** semuanya memakai canonical
    `BRAND_MISMATCH`. Agregat C3/C4 tetap PARTIAL untuk jalur lain dan karena OCR
    error/null tetap fail-open, seperti dirinci E.30/E.31.
@@ -1214,3 +1214,33 @@ PARENT_SHA=`f73383f48d2fa6e093b5f403a04f145f6a0f3e89`
 - Typecheck and the RED meta-verifier pass. The inner suite retains four passing
   discovery/control tests and exactly one intended `C2_MISSING_INVARIANT` RED.
   No production policy, signal, taxonomy, reason code, or behavior changed.
+
+### E.39 C2 authoritative product-type implementation — 2026-08-27
+
+TASK=`P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827`
+BASELINE=`c8588c67df8c5064e4cd231a6650d0c8b23d6e00`
+
+- Founder approved the recommended safe bundle: a versioned opaque product type
+  separate from merchandising category, explicit human self-confirmation as
+  the second provenance input, and normalization limited to NFKC/trim/case.
+  No taxonomy list, classifier truth, or staff verification was invented.
+- Durable SQLite/PostgreSQL state records declaration, confirmation, actor,
+  timestamp, version, and `QUARANTINED`/`CONFIRMED`. PostgreSQL and new SQLite
+  schemas constrain confirmed rows to complete, equal version-1 tokens;
+  additive migration leaves existing rows quarantined.
+- E1/E3/E6/E7 and A1–A4 are protected by the central identity-bound seam.
+  Missing/unconfirmed state fails closed; mismatch throws `TYPE_MISMATCH`
+  before callback effects; normalized match executes the callback once. A4
+  rechecks the exact type state under the admission product lock.
+- Retail and org campaign UI require a separate confirmation explaining that
+  it is the user's assertion, not staff verification. Success audits persist
+  type/provenance; mismatch creates no audit.
+- Evidence gates: GREEN contract 5/5, implementation 4/4, focused regression
+  43/43, full suite 1252 tests / 1205 pass / 0 fail / 47 skipped, typecheck and
+  production build PASS. Local PostgreSQL static schema verification passed;
+  disposable migration execution was unavailable because local PostgreSQL was
+  not ready, before database creation.
+- OCR fail-closed, promo snapshot, broader legacy remediation, owner/legal/
+  price, deploy, provider, money, and production operations are explicitly not
+  bundled.
+- Evidence: `../P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827/`.

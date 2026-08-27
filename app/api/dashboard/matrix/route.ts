@@ -18,6 +18,7 @@ import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
 import { releaseSessionAdvisoryLock } from "@/lib/postgres/evidence-lock-pool";
+import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -101,6 +102,17 @@ export async function POST(req: Request) {
     // sini akan menampilkan produk lalu menolaknya saat ditekan.
     const product = await routeDeps.smokeGetOrgProduct(membership.org_id, productId);
     if (!product) throw ERR.NOT_FOUND("Produknya");
+    return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "stored-org-product.product_type_token", token: product.product_type_token ?? "", version: 1 },
+      product.product_type_state === "CONFIRMED" && product.product_type_confirmed_token
+        && product.product_type_confirmed_by && product.product_type_confirmed_at && product.product_type_version === 1
+        ? {
+            kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: product.product_type_confirmed_token,
+            actorId: product.product_type_confirmed_by, confirmedAt: String(product.product_type_confirmed_at),
+            version: 1, provenance: "USER_SELF_ASSERTION",
+          }
+        : null,
+    ), async () => {
     if (!product.price_idr) throw ERR.BAD_REQUEST("Isi harga produknya dulu — harga dipakai di skrip dan overlay.", "Product price is required.");
     const productImages = JSON.parse(product.images || "[]") as string[];
     // ---- format: TIDAK ADA format global ----
@@ -403,6 +415,7 @@ export async function POST(req: Request) {
       total_idr: totalBelanja,
       queued_count: hasil.filter((r) => r.status === "queued").length,
       results: hasil,
+    });
     });
   } catch (err) {
     return errorResponse(err);
