@@ -1,0 +1,13 @@
+{
+  "schema": "reviewer-score-authority-trust/v1",
+  "algorithm": "Ed25519",
+  "key_id": "reviewer-score-authority-20260827",
+  "public_key_path": "/Users/hadrava/HDRV/03_UGC_AI_ID/app/.agent-bus/tmp/reviewer-score-authority-trust/public.pem",
+  "public_spki_der_sha256": "6684d5c4ed97b5b60af0671ac5eeaacf0e9e6ad6f4fc283320e5a124fe256853",
+  "bootstrap_path": "TRUST-BOOTSTRAP.json",
+  "bootstrap_sha256": "db66a70826b43243f93429d73d543898fd503985f264f519671adb76f0a9f12a",
+  "bootstrap_signature_path": "TRUST-BOOTSTRAP.sig.base64",
+  "bootstrap_signature_binary_sha256": "dd072e2668711a4e8390223b992f56e8ba42b4f8c65dc8c39111e3bcbef5d4c6",
+  "private_key_policy": "Reviewer-controlled external trust store only; never read, copy, log, generate, or commit from Builder runtime.",
+  "scope": "SLOT/TOKEN authority-source/v1 claims for EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827 only"
+}

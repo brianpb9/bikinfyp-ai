@@ -26,6 +26,10 @@ const amendedRaw = JSON.parse(amendedRawBytes);
 const matrix80 = read("SCORE-80-POINT-MATRIX.json");
 const founder80 = read("FOUNDER-80-DIRECTION.json");
 const authorityRegistry = read("AUTHORITY-REGISTRY.json");
+const trustReference = read("TRUST-STORE-REFERENCE.json");
+const trustBootstrapBytes = fs.readFileSync(path.join(dir,"TRUST-BOOTSTRAP.json"));
+const trustBootstrap = JSON.parse(trustBootstrapBytes);
+const trustBootstrapSignature = Buffer.from(fs.readFileSync(path.join(dir,"TRUST-BOOTSTRAP.sig.base64"),"utf8").trim(),"base64");
 const negativeCases = read("NEGATIVE-CASES.json");
 const laneA = read("LANE-A-READONLY-ARTIFACT.json");
 const laneB = read("LANE-B-READONLY-ARTIFACT.json");
@@ -109,19 +113,32 @@ const PINNED_ISSUERS = Object.freeze({
   INDEPENDENT_REVIEWER_PASS:["independent-reviewer"]
 });
 const PINNED_DECISIONS = Object.freeze({SCOPE:"AUTHORIZED",SLOT:"PASS",TOKEN:"PASS"});
+const PINNED_REVIEWER_PUBLIC_KEY = "/Users/hadrava/HDRV/03_UGC_AI_ID/app/.agent-bus/tmp/reviewer-score-authority-trust/public.pem";
+const PINNED_REVIEWER_KEY_ID = "reviewer-score-authority-20260827";
+const PINNED_REVIEWER_PUBLIC_DER_SHA256 = "6684d5c4ed97b5b60af0671ac5eeaacf0e9e6ad6f4fc283320e5a124fe256853";
+const PINNED_BOOTSTRAP_SHA256 = "db66a70826b43243f93429d73d543898fd503985f264f519671adb76f0a9f12a";
+const PINNED_BOOTSTRAP_SIGNATURE_SHA256 = "dd072e2668711a4e8390223b992f56e8ba42b4f8c65dc8c39111e3bcbef5d4c6";
+let reviewerPublicKey;
+try { reviewerPublicKey=crypto.createPublicKey(fs.readFileSync(PINNED_REVIEWER_PUBLIC_KEY)); } catch { fail("Reviewer public trust key unavailable"); }
+const reviewerPublicDer = reviewerPublicKey.export({type:"spki",format:"der"});
+if (crypto.createHash("sha256").update(reviewerPublicDer).digest("hex") !== PINNED_REVIEWER_PUBLIC_DER_SHA256) fail("Reviewer public trust key fingerprint");
+if (trustReference.algorithm !== "Ed25519" || trustReference.key_id !== PINNED_REVIEWER_KEY_ID || trustReference.public_key_path !== PINNED_REVIEWER_PUBLIC_KEY || trustReference.public_spki_der_sha256 !== PINNED_REVIEWER_PUBLIC_DER_SHA256 || trustReference.bootstrap_sha256 !== PINNED_BOOTSTRAP_SHA256 || trustReference.bootstrap_signature_binary_sha256 !== PINNED_BOOTSTRAP_SIGNATURE_SHA256) fail("Reviewer trust reference drift");
+if (crypto.createHash("sha256").update(trustBootstrapBytes).digest("hex") !== PINNED_BOOTSTRAP_SHA256 || crypto.createHash("sha256").update(trustBootstrapSignature).digest("hex") !== PINNED_BOOTSTRAP_SIGNATURE_SHA256 || !crypto.verify(null,trustBootstrapBytes,reviewerPublicKey,trustBootstrapSignature)) fail("Reviewer trust bootstrap signature");
+if (trustBootstrap.schema !== "reviewer-score-authority-trust-bootstrap/v1" || trustBootstrap.key_id !== PINNED_REVIEWER_KEY_ID || trustBootstrap.issuer !== "canonical-reviewer-runtime" || trustBootstrap.task !== contract.task || JSON.stringify(trustBootstrap.permitted_claim_kinds) !== JSON.stringify(["SLOT","TOKEN"]) || trustBootstrap.public_key_der_sha256 !== PINNED_REVIEWER_PUBLIC_DER_SHA256 || trustBootstrap.production_public_real_money !== "OFF") fail("Reviewer trust bootstrap scope");
 if (JSON.stringify(authorityRegistry.allowed_issuers_by_class) !== JSON.stringify(PINNED_ISSUERS)) fail("authority issuer policy drift");
 if (JSON.stringify(authorityRegistry.decision_by_kind) !== JSON.stringify(PINNED_DECISIONS)) fail("authority decision policy drift");
-if (!authorityRegistry.authority_source_contract?.SCOPE?.startsWith("Only the pinned amended Founder TASK") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.includes("authority-source/v1")) fail("authority source contract drift");
-const authorityRequired = ["authority_receipt_id","kind","authority_class","subject","scope","issuer","decision","approved_at","source_message_id","source_archive_sha256","artifact_path","artifact_sha256","exact_sha"];
+if (!authorityRegistry.authority_source_contract?.SCOPE?.startsWith("Only the pinned amended Founder TASK") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.includes("authority-source/v1") || !authorityRegistry.authority_source_contract?.SLOT_OR_TOKEN?.includes("Ed25519")) fail("authority source contract drift");
+const authorityRequired = ["authority_receipt_id","kind","authority_class","subject","scope","issuer","decision","approved_at","source_message_id","source_archive_sha256","artifact_path","artifact_sha256","exact_sha","signing_key_id","signature_base64"];
 if (JSON.stringify(authorityRegistry.required_entry_fields) !== JSON.stringify(authorityRequired)) fail("authority registry fields");
 const canonicalSignedClaim = (authority,reviewedSha) => ({schema:"authority-source/v1",authority_receipt_id:authority.authority_receipt_id,kind:authority.kind,authority_class:authority.authority_class,subject:authority.subject,scope:authority.scope,issuer:authority.issuer,decision:authority.decision,task:contract.task,reviewed_sha:reviewedSha});
-const validateAuthoritySource = (authority,source,{fixture=false}={}) => {
-  if (fixture) {
-    if (source.schema !== "score-80-full-path-fixture-source/v1" || source.decision !== "PASS" || !source.scope.includes("validator-only")) fail(`authority fixture source ${authority.authority_receipt_id}`);
-    return;
-  }
+const verifyDetachedAuthoritySignature = (authority,reviewedSha,publicKey,keyId) => {
+  if (authority.signing_key_id !== keyId || typeof authority.signature_base64 !== "string" || !/^[A-Za-z0-9+/]+={0,2}$/.test(authority.signature_base64)) fail(`authority trusted signature identity ${authority.authority_receipt_id}`);
+  const signature = Buffer.from(authority.signature_base64,"base64");
+  if (signature.toString("base64") !== authority.signature_base64 || !crypto.verify(null,Buffer.from(JSON.stringify(canonicalSignedClaim(authority,reviewedSha))),publicKey,signature)) fail(`authority trusted signature ${authority.authority_receipt_id}`);
+};
+const validateSignedAuthoritySource = (authority,source,publicKey=reviewerPublicKey,keyId=PINNED_REVIEWER_KEY_ID) => {
   if (authority.kind === "SCOPE") {
-    if (source.type !== "TASK" || source.sha !== "" || source.id !== amendedTask.id || source.task !== contract.task || source.task_id !== contract.task || source.body !== amendedTask.body || authority.source_message_id !== source.id) fail(`authority source task/SHA ${authority.authority_receipt_id}`);
+    if (source.type !== "TASK" || source.sha !== "" || source.id !== amendedTask.id || source.task !== contract.task || source.task_id !== contract.task || source.body !== amendedTask.body || authority.source_message_id !== source.id || authority.signing_key_id !== null || authority.signature_base64 !== null) fail(`authority source task/SHA ${authority.authority_receipt_id}`);
     return;
   }
   if (authority.kind !== "SLOT" && authority.kind !== "TOKEN") fail(`authority source kind ${authority.authority_receipt_id}`);
@@ -129,8 +146,17 @@ const validateAuthoritySource = (authority,source,{fixture=false}={}) => {
   if (source.task !== contract.task || source.task_id !== contract.task || !/^[0-9a-f]{40}$/.test(source.sha) || git(["merge-base","--is-ancestor",source.sha,authority.exact_sha],{stdio:"ignore"}).status !== 0) fail(`authority source task/SHA ${authority.authority_receipt_id}`);
   const expectedBody = JSON.stringify(canonicalSignedClaim(authority,source.sha));
   if (source.body !== expectedBody) fail(`authority signed claim ${authority.authority_receipt_id}`);
+  verifyDetachedAuthoritySignature(authority,source.sha,publicKey,keyId);
 };
-const validateAuthorities = (entries,{fixture=false}={}) => {
+const validateAuthoritySource = (authority,source,{fixture=false,fixturePublicKey=null}={}) => {
+  if (fixture) {
+    if (source.schema !== "score-80-full-path-fixture-source/v1" || source.decision !== "PASS" || !source.scope.includes("validator-only")) fail(`authority fixture source ${authority.authority_receipt_id}`);
+    verifyDetachedAuthoritySignature(authority,fixtureExactSha,fixturePublicKey,"fixture-untrusted-ed25519");
+    return;
+  }
+  validateSignedAuthoritySource(authority,source);
+};
+const validateAuthorities = (entries,{fixture=false,fixturePublicKey=null}={}) => {
   const result = new Map();
   for (const authority of entries) {
     for (const field of authorityRequired) if (!(field in authority)) fail(`authority missing ${field}`);
@@ -149,7 +175,7 @@ const validateAuthorities = (entries,{fixture=false}={}) => {
     if (digest !== authority.artifact_sha256 || digest !== authority.source_archive_sha256) fail(`authority source bytes ${authority.authority_receipt_id}`);
     let source; try { source=JSON.parse(bytes); } catch { fail(`authority source JSON ${authority.authority_receipt_id}`); }
     if (!fixture && (source.id !== authority.source_message_id || source.ts !== authority.approved_at || source.from !== "reviewer")) fail(`authority source identity ${authority.authority_receipt_id}`);
-    validateAuthoritySource(authority,source,{fixture});
+    validateAuthoritySource(authority,source,{fixture,fixturePublicKey});
     result.set(authority.authority_receipt_id, authority);
   }
   return result;
@@ -254,32 +280,35 @@ const fixtureExactSha = "1d3e95e46c412634a6da95226fdafa43fb63a220";
 const fixtureArtifactPath = `docs/evidence/${contract.task}/FULL-PATH-FIXTURE-SOURCE.json`;
 const fixtureArtifactSha256 = "763706fcf75dc13e290ccc116474430fe5d87f24ef1768ed5e1857ad399c9c7b";
 const fixtureAuthorityBase = {approved_at:"2026-08-27T00:00:00Z",source_message_id:"FIXTURE-SOURCE",source_archive_sha256:fixtureArtifactSha256,artifact_path:fixtureArtifactPath,artifact_sha256:fixtureArtifactSha256,exact_sha:fixtureExactSha};
+const {publicKey:fixturePublicKey,privateKey:fixturePrivateKey} = crypto.generateKeyPairSync("ed25519");
+const signFixtureAuthority = (authority) => ({...authority,signing_key_id:"fixture-untrusted-ed25519",signature_base64:crypto.sign(null,Buffer.from(JSON.stringify(canonicalSignedClaim(authority,fixtureExactSha))),fixturePrivateKey).toString("base64")});
 const fixtureRegistry = Object.fromEntries(slotIds.map((id) => [id,[]]));
 const fixtureAuthorities = [];
 for (const id of contract.thresholds["80"].requires) {
   const dependencySlots = slots[id].depends_on.flatMap((dep) => dep === "80" ? contract.thresholds["80"].requires : [dep]);
   const receipt = {receipt_id:`fixture-receipt-${id}`,slot_id:id,artifact_path:fixtureArtifactPath,artifact_sha256:fixtureArtifactSha256,exact_sha:fixtureExactSha,evidence_tier:slots[id].tier,authority_class:slots[id].closure_authority,authority_receipt_id:`fixture-slot-authority-${id}`,dependency_receipt_ids:dependencySlots.map((dep) => `fixture-receipt-${dep}`),verdict:"PASS"};
   fixtureRegistry[id].push(receipt);
-  fixtureAuthorities.push({...fixtureAuthorityBase,authority_receipt_id:`fixture-slot-authority-${id}`,kind:"SLOT",slot_id:id,authority_class:slots[id].closure_authority,subject:`${contract.task}:${id}`,scope:{receipt_id:receipt.receipt_id,slot_id:id,artifact_path:receipt.artifact_path,artifact_sha256:receipt.artifact_sha256,exact_sha:receipt.exact_sha,dependency_receipt_ids:receipt.dependency_receipt_ids},issuer:PINNED_ISSUERS[slots[id].closure_authority][0],decision:"PASS"});
+  fixtureAuthorities.push(signFixtureAuthority({...fixtureAuthorityBase,authority_receipt_id:`fixture-slot-authority-${id}`,kind:"SLOT",slot_id:id,authority_class:slots[id].closure_authority,subject:`${contract.task}:${id}`,scope:{receipt_id:receipt.receipt_id,slot_id:id,artifact_path:receipt.artifact_path,artifact_sha256:receipt.artifact_sha256,exact_sha:receipt.exact_sha,dependency_receipt_ids:receipt.dependency_receipt_ids},issuer:PINNED_ISSUERS[slots[id].closure_authority][0],decision:"PASS"}));
 }
 const fixtureAwards = matrix80.rows.flatMap((row) => row.tokens.map((token) => ({award_id:`fixture-award-${token.token_id}`,authority_receipt_id:`fixture-token-authority-${token.token_id}`,token_id:token.token_id,row:row.row,prior_score:token.target_score-1,new_score:token.target_score,evidence_receipt_ids:token.required_slots.map((id) => `fixture-receipt-${id}`)})));
 for (const award of fixtureAwards) {
   const token = tokenById.get(award.token_id);
-  fixtureAuthorities.push({...fixtureAuthorityBase,authority_receipt_id:award.authority_receipt_id,kind:"TOKEN",token_id:award.token_id,authority_class:token.authority_class,subject:`${contract.task}:TOKEN:${award.token_id}`,scope:{token_id:award.token_id,evidence_receipts:award.evidence_receipt_ids.map((receiptId) => { const receipt=fixtureRegistry[receiptId.replace("fixture-receipt-","")][0]; return {receipt_id:receipt.receipt_id,slot_id:receipt.slot_id,artifact_sha256:receipt.artifact_sha256,exact_sha:receipt.exact_sha}; }),score_transition:{row:award.row,prior_score:award.prior_score,new_score:award.new_score,raw_delta:1}},issuer:PINNED_ISSUERS[token.authority_class][0],decision:"PASS"});
+  fixtureAuthorities.push(signFixtureAuthority({...fixtureAuthorityBase,authority_receipt_id:award.authority_receipt_id,kind:"TOKEN",token_id:award.token_id,authority_class:token.authority_class,subject:`${contract.task}:TOKEN:${award.token_id}`,scope:{token_id:award.token_id,evidence_receipts:award.evidence_receipt_ids.map((receiptId) => { const receipt=fixtureRegistry[receiptId.replace("fixture-receipt-","")][0]; return {receipt_id:receipt.receipt_id,slot_id:receipt.slot_id,artifact_sha256:receipt.artifact_sha256,exact_sha:receipt.exact_sha}; }),score_transition:{row:award.row,prior_score:award.prior_score,new_score:award.new_score,raw_delta:1}},issuer:PINNED_ISSUERS[token.authority_class][0],decision:"PASS"}));
 }
-const fixtureAuthorityMap = validateAuthorities(fixtureAuthorities,{fixture:true});
+const fixtureAuthorityMap = validateAuthorities(fixtureAuthorities,{fixture:true,fixturePublicKey});
 const fixtureSlotState = Object.fromEntries(slotIds.map((id) => [id,contract.thresholds["80"].requires.includes(id) ? "VERIFIED" : "OPEN"]));
 const fixtureReceiptMap = validateReceiptRegistry(fixtureRegistry,fixtureAuthorityMap,fixtureSlotState);
 const score80Claim = {raw_sum:104,normalized_rounded:80,gate_80_closed:true,evidence_ceiling:80,certified_score:80};
 validateAwards(fixtureAwards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,score80Claim);
 const expectFailure = (expected, fn) => { try { fn(); } catch (error) { if (error.message.includes(expected)) return; throw error; } fail(`negative case did not fail: ${expected}`); };
-if (negativeCases.cases.length !== 10) fail("negative case count");
+if (negativeCases.cases.length !== 11) fail("negative case count");
 for (const test of negativeCases.cases) {
   if (test.id === "unknown_token") { const awards=structuredClone(fixtureAwards); awards[0].token_id="UNKNOWN"; expectFailure(test.expected_error,()=>validateAwards(awards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,score80Claim)); }
   else if (test.id === "mismatched_authority") { const authorities=new Map(fixtureAuthorityMap); authorities.set(fixtureAwards[0].authority_receipt_id,{...authorities.get(fixtureAwards[0].authority_receipt_id),authority_class:"WRONG"}); expectFailure(test.expected_error,()=>validateAwards(fixtureAwards,fixtureReceiptMap,authorities,fixtureSlotState,score80Claim)); }
   else if (test.id === "mismatched_authority_scope") { const authorities=new Map(fixtureAuthorityMap); const original=authorities.get(fixtureAwards[0].authority_receipt_id); const changed=structuredClone(original); changed.scope.evidence_receipts[0].exact_sha="0000000000000000000000000000000000000000"; authorities.set(original.authority_receipt_id,changed); expectFailure(test.expected_error,()=>validateAwards(fixtureAwards,fixtureReceiptMap,authorities,fixtureSlotState,score80Claim)); }
-  else if (test.id === "unrelated_authority_source") { const authority=fixtureAuthorityMap.get(fixtureAwards[0].authority_receipt_id); const source={type:"PASS",task:"UNRELATED",task_id:"UNRELATED",sha:contract.baseline_sha,body:JSON.stringify(canonicalSignedClaim(authority,contract.baseline_sha))}; expectFailure(test.expected_error,()=>validateAuthoritySource(authority,source)); }
-  else if (test.id === "source_registry_issuer_mismatch") { const authority=fixtureAuthorityMap.get(fixtureAwards[0].authority_receipt_id); const signed={...canonicalSignedClaim(authority,contract.baseline_sha),issuer:"wrong-issuer"}; const source={type:"PASS",task:contract.task,task_id:contract.task,sha:contract.baseline_sha,body:JSON.stringify(signed)}; expectFailure(test.expected_error,()=>validateAuthoritySource(authority,source)); }
+  else if (test.id === "unrelated_authority_source") { const authority=fixtureAuthorityMap.get(fixtureAwards[0].authority_receipt_id); const source={type:"PASS",task:"UNRELATED",task_id:"UNRELATED",sha:contract.baseline_sha,body:JSON.stringify(canonicalSignedClaim(authority,contract.baseline_sha))}; expectFailure(test.expected_error,()=>validateSignedAuthoritySource(authority,source)); }
+  else if (test.id === "source_registry_issuer_mismatch") { const authority=fixtureAuthorityMap.get(fixtureAwards[0].authority_receipt_id); const signed={...canonicalSignedClaim(authority,contract.baseline_sha),issuer:"wrong-issuer"}; const source={type:"PASS",task:contract.task,task_id:contract.task,sha:contract.baseline_sha,body:JSON.stringify(signed)}; expectFailure(test.expected_error,()=>validateSignedAuthoritySource(authority,source)); }
+  else if (test.id === "self_authored_canonical_pass") { const fixtureAuthority=fixtureAuthorityMap.get(fixtureAwards[0].authority_receipt_id); const authority={...fixtureAuthority,signing_key_id:PINNED_REVIEWER_KEY_ID}; const source={type:"PASS",sha:contract.baseline_sha,task:contract.task,task_id:contract.task,body:JSON.stringify(canonicalSignedClaim(authority,contract.baseline_sha))}; expectFailure(test.expected_error,()=>validateSignedAuthoritySource(authority,source)); }
   else if (test.id === "mismatched_receipts") { const awards=structuredClone(fixtureAwards); awards[0].evidence_receipt_ids.pop(); expectFailure(test.expected_error,()=>validateAwards(awards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,score80Claim)); }
   else if (test.id === "out_of_order") { const awards=fixtureAwards.filter((award)=>award.token_id!=="AUTH-08"); expectFailure(test.expected_error,()=>validateAwards(awards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,{...score80Claim,raw_sum:103,normalized_rounded:79})); }
   else if (test.id === "duplicate_token") { const awards=[...fixtureAwards,{...fixtureAwards[0],award_id:"duplicate-award"}]; expectFailure(test.expected_error,()=>validateAwards(awards,fixtureReceiptMap,fixtureAuthorityMap,fixtureSlotState,score80Claim)); }
@@ -321,6 +350,6 @@ for (const line of manifest) {
   if (digest !== match[1]) fail(`checksum ${match[2]}`);
 }
 const secret = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+\/-]+=*|\b(?:api[_-]?key|secret[_-]?key)\s*[:=]\s*["']?[A-Za-z0-9_\/-]{16,})/i;
-for (const name of ["RUBRIC-CONTRACT.json","SOURCE-TASK.json","AMENDED-SOURCE-TASK.json","AMENDED-SOURCE-TASK.raw.json","README.md","verify.mjs","VALIDATION.json","AUTHORITY-REGISTRY.json","FOUNDER-80-DIRECTION.json","SCORE-80-POINT-MATRIX.json","NEGATIVE-CASES.json","FULL-PATH-FIXTURE-SOURCE.json","LANE-A-READONLY-ARTIFACT.json","LANE-A-COMMAND-LEDGER.md","LANE-B-READONLY-ARTIFACT.json"]) if (secret.test(fs.readFileSync(path.join(dir, name), "utf8"))) fail(`secret-like literal ${name}`);
+for (const name of ["RUBRIC-CONTRACT.json","SOURCE-TASK.json","AMENDED-SOURCE-TASK.json","AMENDED-SOURCE-TASK.raw.json","README.md","verify.mjs","VALIDATION.json","AUTHORITY-REGISTRY.json","TRUST-STORE-REFERENCE.json","TRUST-BOOTSTRAP.json","TRUST-BOOTSTRAP.sig.base64","FOUNDER-80-DIRECTION.json","SCORE-80-POINT-MATRIX.json","NEGATIVE-CASES.json","FULL-PATH-FIXTURE-SOURCE.json","LANE-A-READONLY-ARTIFACT.json","LANE-A-COMMAND-LEDGER.md","LANE-B-READONLY-ARTIFACT.json"]) if (secret.test(fs.readFileSync(path.join(dir, name), "utf8"))) fail(`secret-like literal ${name}`);
 
-console.log(JSON.stringify({source_rows:13,raw_sum:actualScore.rawSum,certified_score:actualScore.certifiedScore,target_80_raw:104,deterministic_58_to_80_point_tokens:27,nonempty_award_path:"PASS_FULL_REGISTRY_27_OF_27",negative_award_cases:negativeCases.cases.length,pitr_required_for_80:false,slot_count:Object.keys(slots).length,receipt_registry_slots:Object.keys(contract.receipt_registry).length,receipts:receiptsById.size,authority_receipts:authoritiesById.size,lane_A_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_kpi:"NON_REPRESENTATIVE_N_0",evidence_token_awards:contract.evidence_token_awards.length,production_public_real_money:"OFF",pass:true}));
+console.log(JSON.stringify({source_rows:13,raw_sum:actualScore.rawSum,certified_score:actualScore.certifiedScore,target_80_raw:104,deterministic_58_to_80_point_tokens:27,nonempty_award_path:"PASS_FULL_REGISTRY_27_OF_27",negative_award_cases:negativeCases.cases.length,authority_trust:"ED25519_EXTERNAL_PUBLIC_KEY_BOOTSTRAP_VERIFIED",pitr_required_for_80:false,slot_count:Object.keys(slots).length,receipt_registry_slots:Object.keys(contract.receipt_registry).length,receipts:receiptsById.size,authority_receipts:authoritiesById.size,lane_A_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_kpi:"NON_REPRESENTATIVE_N_0",evidence_token_awards:contract.evidence_token_awards.length,production_public_real_money:"OFF",pass:true}));

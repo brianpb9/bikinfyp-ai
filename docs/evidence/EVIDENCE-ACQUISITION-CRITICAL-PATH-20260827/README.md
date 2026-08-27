@@ -41,18 +41,24 @@ as authority from the editable registry. The amended TASK's raw archive bytes
 are committed and match the pinned archive digest. The 27-token fixture builds
 full authority and receipt records, runs them through the same committed-byte,
 ancestry, issuer, authority-scope, dependency, and award validators used by the
-real registries, and is never inserted into current score state.
+real registries, plus a separate ephemeral Ed25519 fixture key that is never
+accepted for real awards. The fixture is never inserted into current state.
 
 For real records, a TASK source is accepted only for the pinned Founder SCOPE.
 Every future SLOT or TOKEN authority must cite committed raw Reviewer `PASS`
 bytes bound to this task and an ancestor reviewed SHA; its body must be exact
 canonical `authority-source/v1` JSON signing the registry's kind, class,
 issuer, subject, decision, scope, and score/evidence bindings byte-for-byte.
+The claim must carry a detached Ed25519 signature verified by the external
+Reviewer public key at the pinned path and SPKI fingerprint. The committed
+Reviewer-signed bootstrap restricts that key to SLOT/TOKEN claims for this task.
+Builder neither reads nor commits the Reviewer private key.
 
 `NEGATIVE-CASES.json` exercises unknown token, mismatched authority and
 authority scope, unrelated TASK/PASS sources, source/registry issuer mismatch,
-mismatched receipts, out-of-order and duplicate awards, false raw claims, and
-incomplete gates. Score 90 inherits the 80 gate, but its
+self-authored PASS without a trusted signature, mismatched receipts,
+out-of-order and duplicate awards, false raw claims, and incomplete gates.
+Score 90 inherits the 80 gate, but its
 incremental allocation remains undefined pending Founder authority; M/Q/I/U/K/O
 remain additional canonical 100 requirements only.
 This slice performs no deploy and cannot conflict with Lane A.

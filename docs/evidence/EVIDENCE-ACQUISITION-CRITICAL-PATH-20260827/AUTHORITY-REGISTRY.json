@@ -14,7 +14,9 @@
     "source_archive_sha256",
     "artifact_path",
     "artifact_sha256",
-    "exact_sha"
+    "exact_sha",
+    "signing_key_id",
+    "signature_base64"
   ],
   "decision_by_kind": {
     "SCOPE": "AUTHORIZED",
@@ -23,7 +25,7 @@
   },
   "authority_source_contract": {
     "SCOPE": "Only the pinned amended Founder TASK raw bytes may authorize the pinned task scope.",
-    "SLOT_OR_TOKEN": "A committed raw reviewer PASS must bind this task and reviewed SHA; its body must be canonical authority-source/v1 JSON exactly matching authority_receipt_id, kind, authority_class, subject, scope, issuer, decision, task, and reviewed_sha."
+    "SLOT_OR_TOKEN": "A committed raw reviewer PASS must bind this task and reviewed SHA, carry canonical authority-source/v1 JSON exactly matching authority_receipt_id, kind, authority_class, subject, scope, issuer, decision, task, and reviewed_sha, and include a detached Ed25519 signature verifiable by the pinned external Reviewer public key."
   },
   "allowed_issuers_by_class": {
     "FOUNDER_SCOPE_DIRECTION": ["reviewer-on-founder-authority"],
@@ -51,7 +53,9 @@
       "source_archive_sha256": "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e",
       "artifact_path": "docs/evidence/EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827/AMENDED-SOURCE-TASK.raw.json",
       "artifact_sha256": "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e",
-      "exact_sha": "1d3e95e46c412634a6da95226fdafa43fb63a220"
+      "exact_sha": "1d3e95e46c412634a6da95226fdafa43fb63a220",
+      "signing_key_id": null,
+      "signature_base64": null
     }
   ]
 }
