@@ -5,6 +5,7 @@
   "issuer": "founder",
   "authority_source": "AMENDED-SOURCE-TASK.json",
   "authority_message_id": "1787845709000-reviewer-TASK",
+  "authority_receipt_id": "AUTH-1787845709000-FOUNDER-SCORE80",
   "scope": "SCORE_80_CRITICAL_PATH_ONLY",
   "category_unknown_policy": {
     "decision": "APPROVED",

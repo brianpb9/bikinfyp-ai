@@ -33,5 +33,21 @@
     "INCIDENT_OWNER_AND_REVIEWER_PASS": ["incident-owner+reviewer"],
     "INDEPENDENT_REVIEWER_PASS": ["independent-reviewer"]
   },
-  "entries": []
+  "entries": [
+    {
+      "authority_receipt_id": "AUTH-1787845709000-FOUNDER-SCORE80",
+      "kind": "SCOPE",
+      "authority_class": "FOUNDER_SCOPE_DIRECTION",
+      "subject": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+      "scope": ["C5_POLICY", "PAYMENT_CANARY_POSTURE", "RELEASE_CONTROL_MODEL", "SCORE_80_REQUIRED_OUTPUT"],
+      "issuer": "reviewer-on-founder-authority",
+      "decision": "AUTHORIZED",
+      "approved_at": "2026-08-27T15:48:29Z",
+      "source_message_id": "1787845709000-reviewer-TASK",
+      "source_archive_sha256": "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e",
+      "artifact_path": "docs/evidence/EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827/AMENDED-SOURCE-TASK.json",
+      "artifact_sha256": "828986db7f870d122933847bdd3f8374382be1f0058a2d3b61026942777d4ba3",
+      "exact_sha": "e37f8497e7fe79038012ac7c22b8e27f82a1c318"
+    }
+  ]
 }

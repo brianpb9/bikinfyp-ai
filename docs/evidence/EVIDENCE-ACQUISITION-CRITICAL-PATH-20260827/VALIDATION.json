@@ -20,7 +20,7 @@
     "canonical_gate_membership": "PASS",
     "dependency_graph": "PASS",
     "receipt_registry_slots": 13,
-    "authority_registry": "PASS_EMPTY_PENDING_REVIEW",
+    "authority_registry": "PASS_FOUNDER_SCOPE_EXACT_COMMIT_BYTES",
     "commit_byte_binding": "PASS",
     "aggregate_80_dependency_expansion": "PASS",
     "nonempty_award_path": "PASS_SYNTHETIC_27_OF_27",
