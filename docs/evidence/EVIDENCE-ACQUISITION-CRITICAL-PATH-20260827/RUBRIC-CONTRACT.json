@@ -1,0 +1,84 @@
+{
+  "schema": "evidence-to-point-contract/v1",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "baseline_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "application_bundle_sha": "0e953f9ccfd8991c96fecbed44bb3b892e0c8829",
+  "source_board": "docs/evidence/board-jawaban-2026-08-19.md",
+  "source_rows": [
+    ["Money safety",9],
+    ["Auth intent & failure path",7],
+    ["Mobile UI 375",7],
+    ["Hydration/interaction canary CI",8],
+    ["Content engine standard",7],
+    ["Brand fidelity",6],
+    ["Anti-slop produksi",7],
+    ["Prompt/verdict archive",8],
+    ["NSFW rejection",6],
+    ["Payments (Midtrans sandbox)",2],
+    ["Legal/PDP",2],
+    ["DR/monitoring/incident owner",2],
+    ["Landing/pricing consistency",6]
+  ],
+  "current": {
+    "raw_sum": 77,
+    "denominator": 130,
+    "normalized_rounded": 59,
+    "evidence_ceiling": 58,
+    "certified_score": 58
+  },
+  "point_rule": {
+    "evidence_receipt_changes_points": false,
+    "default_delta": 0,
+    "row_adjustment_requires": [
+      "authority_receipt_id",
+      "authorized_row",
+      "prior_score",
+      "new_score",
+      "reason",
+      "evidence_receipt_ids"
+    ],
+    "missing_authority_result": "NO_SCORE_CHANGE",
+    "weights_may_not_be_redistributed": true
+  },
+  "thresholds": {
+    "80": {
+      "minimum_raw_sum": 104,
+      "gate_source": "docs/evidence/SHIP-READINESS-CANONICAL-20260824.md#syarat-eksplisit-untuk-80-dan-100",
+      "gate": "DEFINED",
+      "requires": ["A","L","C5","P","G","B","R"]
+    },
+    "90": {
+      "minimum_raw_sum": 117,
+      "gate_source": null,
+      "gate": "UNDEFINED_AUTHORITY_CHOICE_REQUIRED",
+      "requires": ["AUTHORIZED_80_TO_100_ALLOCATION"]
+    },
+    "100": {
+      "minimum_raw_sum": 130,
+      "gate_source": "docs/evidence/SHIP-READINESS-CANONICAL-20260824.md#syarat-eksplisit-untuk-80-dan-100",
+      "gate": "DEFINED",
+      "requires": ["80","M","Q","I","U","K","O"]
+    }
+  },
+  "slots": {
+    "A": {"name":"exact managed staging deploy, PostgreSQL/R2, migrations, runtime readback","tier":"MANAGED_STAGING","state":"IN_PROGRESS_EXTERNAL_LANE","depends_on":[]},
+    "L": {"name":"paired legacy PostgreSQL and matching R2 population audit","tier":"MANAGED_STAGING","state":"OPEN","depends_on":["A"]},
+    "C5": {"name":"CATEGORY_UNKNOWN/manual-review policy and accepted implementation","tier":"AUTHORITY_AND_REPOSITORY","state":"FOUNDER_DECISION_REQUIRED","depends_on":[]},
+    "P": {"name":"Duitku approval, known-order settlement/webhook/replay/reconciliation","tier":"PAYMENT_EXTERNAL","state":"OPEN","depends_on":["A"]},
+    "G": {"name":"Founder price/COGS and PAYMENTS_GO_LIVE","tier":"FOUNDER_AUTHORITY","state":"FOUNDER_DECISION_REQUIRED","depends_on":[]},
+    "B": {"name":"controlled staging/production-like OTP-to-delivery/refund E2E and recovery","tier":"MANAGED_STAGING","state":"PENDING_A","depends_on":["A"]},
+    "R": {"name":"release-owner controls and verified intake with no Retail P0 fail-open","tier":"RELEASE_AUTHORITY","state":"OWNER_REQUIRED","depends_on":["A"]},
+    "M": {"name":"C1-C13 PASS across all required E/A/W paths and no remaining P0/P1 partial","tier":"QA_RELEASE","state":"OPEN","depends_on":["80"]},
+    "Q": {"name":"legal/PDP counsel sign-off","tier":"LEGAL","state":"OWNER_REQUIRED","depends_on":["80"]},
+    "I": {"name":"incident owner, alert delivery, restore, and drill","tier":"INCIDENT_DR","state":"OWNER_REQUIRED","depends_on":["80"]},
+    "U": {"name":"production browser/mobile/auth coverage","tier":"PRODUCTION","state":"OPEN","depends_on":["80"]},
+    "K": {"name":"representative production prompt/QC/NSFW/product-fidelity KPI window","tier":"PRODUCTION","state":"OPEN","depends_on":["80"]},
+    "O": {"name":"stable payment and worker operational cycle with zero-difference reconciliation","tier":"PRODUCTION_PAYMENT","state":"OPEN","depends_on":["80"]}
+  },
+  "lane_receipts": {
+    "A": [],
+    "B": []
+  },
+  "row_adjustments": [],
+  "production_public_real_money": "OFF"
+}

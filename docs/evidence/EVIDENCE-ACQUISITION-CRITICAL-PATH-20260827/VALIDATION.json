@@ -1,0 +1,24 @@
+{
+  "schema": "evidence-acquisition-validation/v1",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "slice": "D_DETERMINISTIC_RUBRIC_CONTRACT",
+  "baseline_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "result": "PASS",
+  "checks": {
+    "source_rows": 13,
+    "raw_sum": 77,
+    "certified_score": 58,
+    "threshold_80_raw": 104,
+    "threshold_90_raw": 117,
+    "threshold_100_raw": 130,
+    "dependency_graph": "PASS",
+    "authority_rule": "PASS",
+    "checksums": "PASS",
+    "secret_scan": "PASS",
+    "git_diff_check": "PASS"
+  },
+  "lane_A_receipts": 0,
+  "lane_B_receipts": 0,
+  "row_adjustments": 0,
+  "production_public_real_money": "OFF"
+}
