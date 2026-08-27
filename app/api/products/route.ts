@@ -1,7 +1,7 @@
 import { ERR, errorResponse } from "@/lib/errors";
 import { ensureDirs } from "@/lib/config";
 import { validBrand, validPriceIdr, validProductName } from "@/lib/product-validation";
-import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, prepareInspectedProductImages, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { parsePromoFields } from "@/lib/promo";
 import { productCreateDependencies } from "@/lib/product-create-dependencies";
 import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
@@ -10,9 +10,6 @@ import { resolveApprovedReference, pesanTanpaReferensi } from "@/lib/product-tru
 import { GagalTanpaReferensi } from "@/lib/kanari-bukti";
 import { PgProductCreateFailure } from "@/lib/postgres/product-persona-script";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -122,23 +119,15 @@ export async function POST(req: Request) {
     // E1 must apply the same gate as E4/E8 to every normalized upload before
     // any storage or product-row publication. C6 distinguishes runtime OCR
     // failure from an inspected unreadable label and fails closed on both.
-    const labelEvidence = [] as Awaited<ReturnType<typeof periksaLabelFoto>>[];
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "e1-intake-label-"));
-    try {
-      for (const [index, blob] of blobs.entries()) {
-        const tmpFile = path.join(tmpDir, `foto-${index}`);
-        fs.writeFileSync(tmpFile, blob.data);
-        const label = await periksaLabelFoto(tmpFile, validName, brandTerdaftar);
-        assertAuthoritativeLabelResult(label);
-        if (label.cocokMerek === false) throw ERR.BRAND_MISMATCH(label.alasan);
-        labelEvidence.push(label);
-      }
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+    const inspectedImages = await prepareInspectedProductImages(blobs, async (normalizedPath) => {
+      const label = await periksaLabelFoto(normalizedPath, validName, brandTerdaftar);
+      assertAuthoritativeLabelResult(label);
+      if (label.cocokMerek === false) throw ERR.BRAND_MISMATCH(label.alasan);
+      return label;
+    });
 
     const id = dependencies.uuid();
-    const images = await saveProductImages(id, blobs, 0, labelEvidence);
+    const images = await saveProductImages(id, blobs, 0, inspectedImages);
     const usePostgres = dependencies.postgresRuntimeEnabled();
     const expectedCreation = {
       id,

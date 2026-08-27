@@ -48,6 +48,52 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
   };
   collectGates(post.body);
   collectPersistence(post.body);
+  const prepareAwaits: ts.AwaitExpression[] = [];
+  const collectPrepare = (node: ts.Node): void => {
+    if (node !== post && functionBoundary(node)) return;
+    if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression)
+      && ts.isIdentifier(node.expression.expression)
+      && node.expression.expression.text === "prepareInspectedProductImages") prepareAwaits.push(node);
+    ts.forEachChild(node, collectPrepare);
+  };
+  collectPrepare(post.body);
+
+  if (prepareAwaits.length > 0) {
+    assert.equal(prepareAwaits.length, 1, `${context}: wajib tepat satu normalisasi+inspection batch`);
+    assert.equal(persistenceCalls.length, 1, `${context}: wajib tepat satu persistence call total di POST`);
+    const prepare = prepareAwaits[0];
+    const prepareCall = prepare.expression as ts.CallExpression;
+    assert.equal(prepareCall.arguments[0].getText(ast), "blobs", `${context}: seluruh blobs wajib dinormalisasi+diinspeksi`);
+    const callback = prepareCall.arguments[1];
+    assert.ok(callback && (ts.isArrowFunction(callback) || ts.isFunctionExpression(callback)) && callback.body,
+      `${context}: inspection callback wajib eksplisit`);
+    const callbackGates: ts.AwaitExpression[] = [];
+    const visitCallback = (node: ts.Node): void => {
+      if (node !== callback && functionBoundary(node)) return;
+      if (ts.isAwaitExpression(node) && ts.isCallExpression(node.expression)
+        && ts.isIdentifier(node.expression.expression)
+        && node.expression.expression.text === "periksaLabelFoto") callbackGates.push(node);
+      ts.forEachChild(node, visitCallback);
+    };
+    visitCallback(callback);
+    assert.equal(callbackGates.length, 1, `${context}: exact normalized bytes wajib diperiksa tepat sekali per item`);
+    const gate = callbackGates[0];
+    const gateCall = gate.expression as ts.CallExpression;
+    assert.equal(gateCall.arguments[0].getText(ast), "normalizedPath", `${context}: OCR wajib membaca bytes normalized exact`);
+    assert.equal(gateCall.arguments[2].getText(ast), "merekTerdaftar(owned.product)", `${context}: brand otoritatif wajib diteruskan`);
+    assert.ok(ts.isVariableDeclaration(gate.parent) && ts.isIdentifier(gate.parent.name));
+    const labelName = gate.parent.name.text;
+    const callbackText = callback.getText(ast).replace(/\s/g, "");
+    assert.match(callbackText, new RegExp(`assertAuthoritativeLabelResult\\(${labelName}\\)`));
+    assert.match(callbackText, new RegExp(`if\\(${labelName}\\.cocokMerek===false\\)`));
+    assert.match(callbackText, new RegExp(`throwERR\\.BRAND_MISMATCH\\(${labelName}\\.alasan\\)`));
+    const persistenceCall = persistenceCalls[0];
+    assert.ok(prepare.getEnd() < persistenceCall.getStart(ast), `${context}: seluruh inspection wajib selesai sebelum persistence`);
+    assert.ok(ts.isVariableDeclaration(prepare.parent) && ts.isIdentifier(prepare.parent.name));
+    assert.equal(persistenceCall.arguments[2]?.getText(ast), prepare.parent.name.text,
+      `${context}: persistence wajib menerima opaque batch hasil inspection exact`);
+    return;
+  }
   assert.equal(gateAwaits.length, 1, `${context}: wajib tepat satu awaited label gate aktual di POST`);
   assert.equal(persistenceCalls.length, 1, `${context}: wajib tepat satu persistence call total di POST`);
   const persistenceCall = persistenceCalls[0];
@@ -333,11 +379,11 @@ test("gerbang label intake memakai keyakinan OCR, bukan panjang huruf", () => {
   // Gerbangnya dipasang SEBELUM foto disimpan di kedua mutation boundary.
   // E4 dan E8 wajib memeriksa SETIAP blob tanpa bypass jumlah foto existing.
   const retail = baca("app/api/products/[id]/photos/route.ts");
-  assert.match(retail, /periksaLabelFoto\(tmpFile, owned\.product\.name[,)]/);
+  assert.match(retail, /periksaLabelFoto\(normalizedPath, owned\.product\.name[,)]/);
   assertLabelGateBeforePersistence(retail, "E4 Retail", "E4");
 
   const enterprise = baca("app/api/dashboard/campaign/product/[id]/photos/route.ts");
-  assert.match(enterprise, /periksaLabelFoto\(tmpFile, owned\.product\.name, merekTerdaftar\(owned\.product\)\)/);
+  assert.match(enterprise, /periksaLabelFoto\(normalizedPath, owned\.product\.name, merekTerdaftar\(owned\.product\)\)/);
   assertLabelGateBeforePersistence(enterprise, "E8 Enterprise", "E8");
 
   const e8Control = `export async function POST() {

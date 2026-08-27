@@ -315,14 +315,22 @@ test("KONTROL: manual readable ingestion is approved; extracted drafts stay quar
   // menulis sidecar `belum_diperiksa` untuk segalanya — bukti yang sah
   // bentuknya, tapi tidak pernah meloloskan satu foto pun.
   if (!punyaOcr()) return t.skip("ffmpeg/ffprobe/tesseract tidak ada di mesin ini");
-  const { saveProductImages, saveUniqueProductImages } = await import("../lib/product-images");
+  const { prepareInspectedProductImages, saveProductImages, saveUniqueProductImages } = await import("../lib/product-images");
   const { downloadProductImages } = await import("../lib/product-image-download");
   const png = await fotoPolos();
   const label = { status: "READABLE" as const, evidenceVersion: 1 as const, terbaca: true, kata: ["Merek", "Produk"], cocokNama: true, cocokMerek: null };
 
   const jalur: [string, () => Promise<string[]>][] = [
-    ["saveProductImages", () => saveProductImages(`k-retail-${process.pid}`, [{ mime: "image/png", data: png }], 0, [label])],
-    ["saveUniqueProductImages", () => saveUniqueProductImages(`k-org-${process.pid}`, [{ mime: "image/png", data: png }], [label])],
+    ["saveProductImages", async () => {
+      const blobs = [{ mime: "image/png", data: png }];
+      const inspected = await prepareInspectedProductImages(blobs, async () => label);
+      return saveProductImages(`k-retail-${process.pid}`, blobs, 0, inspected);
+    }],
+    ["saveUniqueProductImages", async () => {
+      const blobs = [{ mime: "image/png", data: png }];
+      const inspected = await prepareInspectedProductImages(blobs, async () => label);
+      return saveUniqueProductImages(`k-org-${process.pid}`, blobs, inspected);
+    }],
     [
       "downloadProductImages",
       async () => {

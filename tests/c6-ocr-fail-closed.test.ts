@@ -13,8 +13,9 @@ import { setProductCreateDependenciesForTests } from "../lib/product-create-depe
 import { setMediaStorageForTests, type MediaStorage } from "../lib/storage";
 import { POST as createProduct } from "../app/api/products/route";
 import { assertAdmissionReferenceEvidence } from "../lib/job-admission-reference";
-import { parseJobReferenceManifest } from "../lib/job-reference-manifest";
+import { parseJobReferenceManifest, prepareJobReferenceManifest } from "../lib/job-reference-manifest";
 import { assertApprovedReferenceBrands } from "../lib/worker-reference-brand-gate";
+import { prepareInspectedProductImages, saveUniqueProductImages, setProductImageClassifierForTests } from "../lib/product-images";
 
 const readable = (): HasilLabel => ({
   status: "READABLE", evidenceVersion: 1, terbaca: true,
@@ -33,6 +34,7 @@ afterEach(() => {
   setPeriksaLabelFotoForTests(undefined);
   setProductCreateDependenciesForTests(undefined);
   setMediaStorageForTests(undefined);
+  setProductImageClassifierForTests(undefined);
 });
 
 test("C6 tri-state keeps OCR_FAILED distinct from inspected LABEL_UNREADABLE", () => {
@@ -144,6 +146,37 @@ test("W1/W2 independent worker brand gate preserves OCR_FAILED and LABEL_UNREADA
   );
   setPeriksaLabelFotoForTests(async () => ({ ...readable(), cocokMerek: true }));
   await assert.doesNotReject(() => assertApprovedReferenceBrands(["/immutable/ref.webp"], "Produk C6", "Merek"));
+});
+
+test("OCR inspects the exact normalized bytes bound to sidecar and manifest SHA", async () => {
+  const original = await sharp({ create: { width: 641, height: 377, channels: 3, background: "#fafafa" } }).png().toBuffer();
+  const values = new Map<string, Buffer>();
+  setMediaStorageForTests({
+    async put(key, body) { values.set(key, Buffer.from(body)); },
+    async delete(key) { values.delete(key); },
+    async get(key) { const body = values.get(key); return body ? { body, size: body.length } : null; },
+    async stat(key) { const body = values.get(key); return body ? { size: body.length } : null; },
+    async materialize() { return null; },
+  });
+  setProductImageClassifierForTests(async () => ({
+    jenis: "product_photo", layakReferensi: true, rasioAreaTeks: 0,
+    jumlahKata: 0, alasan: "fixture product photo", versiBukti: 1,
+  }));
+  let inspectedSha = "";
+  const blobs = [{ mime: "image/png", data: original }];
+  const inspected = await prepareInspectedProductImages(blobs, async (normalizedPath) => {
+    inspectedSha = crypto.createHash("sha256").update(fs.readFileSync(normalizedPath)).digest("hex");
+    return readable();
+  });
+  const [rel] = await saveUniqueProductImages("product-c6-exact", blobs, inspected);
+  const stored = values.get(rel)!;
+  const storedSha = crypto.createHash("sha256").update(stored).digest("hex");
+  const sidecar = JSON.parse(values.get(`${rel}.meta.json`)!.toString("utf8")) as { sha256: string };
+  const prepared = await prepareJobReferenceManifest({ jobId: "job-c6-exact", candidateRels: [rel] });
+  assert.notEqual(crypto.createHash("sha256").update(original).digest("hex"), storedSha, "fixture must actually normalize bytes");
+  assert.equal(inspectedSha, storedSha);
+  assert.equal(sidecar.sha256, storedSha);
+  assert.equal(prepared.manifest.references[0].sha256, storedSha);
 });
 
 test("all ingestion/admission/worker sources place C6 guards before effects", () => {

@@ -1,10 +1,7 @@
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { createSignedUrl } from "@/lib/signed-url";
-import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, bacaMetaGambar, deleteStoredProductImages, referensiLayak, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, bacaMetaGambar, deleteStoredProductImages, prepareInspectedProductImages, referensiLayak, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { assertAuthoritativeLabelResult, merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
 import { pgAudit, pgRemoveOrgProductImage, postgresRuntimeEnabled, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
@@ -48,7 +45,6 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (owned.images.length + blobs.length > MAX_IMAGES) {
       throw ERR.BAD_REQUEST(`Total foto maksimal ${MAX_IMAGES} — produk ini sudah punya ${owned.images.length}.`, "Too many photos.");
     }
-    const labelEvidence = [] as Awaited<ReturnType<typeof periksaLabelFoto>>[];
     for (const blob of blobs) {
       const mime = sniffMime(blob.data);
       if (!mime || !ALLOWED_MIME[mime]) throw ERR.BAD_REQUEST("File-nya bukan gambar yang valid. Pakai PNG/JPG/WebP ya.", "Invalid image file.");
@@ -56,23 +52,16 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       blob.mime = mime;
     }
 
-    for (const blob of blobs) {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "org-intake-label-"));
-      const tmpFile = path.join(tmpDir, "foto");
-      try {
-        fs.writeFileSync(tmpFile, blob.data);
-        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
+    const inspectedImages = await prepareInspectedProductImages(blobs, async (normalizedPath) => {
+        const label = await periksaLabelFoto(normalizedPath, owned.product.name, merekTerdaftar(owned.product));
         assertAuthoritativeLabelResult(label);
         if (label.cocokMerek === false) {
           throw ERR.BRAND_MISMATCH(label.alasan);
         }
-        labelEvidence.push(label);
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
-    }
+        return label;
+    });
 
-    const added = await saveUniqueProductImages(id, blobs, labelEvidence);
+    const added = await saveUniqueProductImages(id, blobs, inspectedImages);
     try {
       const semua = [...owned.images, ...added];
       const layak = await referensiLayak(semua);

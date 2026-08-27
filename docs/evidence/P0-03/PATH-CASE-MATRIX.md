@@ -190,7 +190,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C3 | **PARTIAL** | E1, E4, E8, W1, dan W2 menolak explicit `cocokMerek === false` dengan canonical `BRAND_MISMATCH` sebelum persistence/provider effect; W1/W2 closure accepted di E.30. Aggregate tetap PARTIAL untuk jalur lain dan null/unreadable OCR policy; bukan karena explicit worker mismatch belum diimplementasikan |
 | C4 | **PARTIAL** | E1, E4, dan E8 menolak `!label.terbaca` untuk setiap blob baru sebelum persistence dengan canonical `LABEL_UNREADABLE` (HTTP 400, `retryable:false`, alasan Indonesia dari OCR atau fallback actionable). Cakupan belum lengkap: kebijakan OCR execution error tetap fail-open |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
-| C6 | **PASS** | Founder memilih fail-closed tri-state. E1/E4/E8 membedakan runtime/timeout/ambiguity `OCR_FAILED` (503/retryable) dari hasil inspeksi nyata `LABEL_UNREADABLE` (400/nonretryable) sebelum persistence. Sidecar membawa OCR status/version; E2/E6 hasil extraction tanpa inspeksi menjadi draft `OCR_FAILED`. A1–A7 mewajibkan exact hash-bound `READABLE` v1 sebelum spend/setup, dan manifest v2 membuat W1/W2 menolak legacy/missing/stale/forged/failed provenance sebelum provider. Timeout/error/ambiguous/forged/stale, positive, mutation, dan worker controls PASS; full suite 1265/1217/0/48 |
+| C6 | **PASS** | Founder memilih fail-closed tri-state. E1/E4/E8 menormalisasi dulu lalu memeriksa exact WebP bytes, membedakan runtime/timeout/ambiguity `OCR_FAILED` (503/retryable) dari hasil inspeksi nyata `LABEL_UNREADABLE` (400/nonretryable) sebelum persistence. Opaque batch mengikat SHA inspected=stored=sidecar=manifest; E2/E6 hasil extraction tanpa inspeksi menjadi draft `OCR_FAILED`. A1–A7 mewajibkan exact hash-bound `READABLE` v1 sebelum spend/setup, dan manifest v2 membuat W1/W2 menolak legacy/missing/stale/forged/failed provenance sebelum provider. Full suite 1266/1218/0/48 |
 | C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E1, E4, dan E8 kini fail-closed sebelum persistence/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. Cakupan kasus lain pada matriks belum lengkap; karena itu C7 tetap PARTIAL |
 | C8 | **PASS untuk new admission** | E1 actual POST, W1/W2, dan accepted E.31 A1–A7 menolak evidence hilang/korup/hash mismatch sebelum persistence/provider/setup effect, dengan rollback/observer/counterexample langsung. Legacy treatment tetap dicatat terpisah pada C10/C12 |
 | C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata core worker tertutup: W1/W2 memakai admission manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, claims, dan sell price. Actual E3→W2 serta E7→W1 membuktikan prompt tetap admission-bound tetapi rendered promo before/deadline dibaca live; frame W2 gain/removal dan W1 change diterima di E.23. Stock juga live tetapi inert di formatter. Tetap PARTIAL sampai Founder memilih `PROMO_POLICY=SNAPSHOT` atau `LIVE_INTENTIONAL`; `SNAPSHOT_IMMUTABLE` tetap proposal-only |
@@ -1286,7 +1286,10 @@ BASELINE=`dbf96691fd7b824e3d0dd0c2dc186172f02ca0bd`
   success.
 - C6 targeted controls cover timeout, runtime error, ambiguity, forged/stale/
   legacy evidence, actual E1 zero-effect HTTP failure, admission, manifest,
-  worker, positive, and mutation behavior. Typecheck, full 1265-test suite,
+  worker, positive, and mutation behavior. Reviewer remediation normalizes
+  before OCR and carries exact bytes in an opaque batch; regression proves the
+  upload SHA differs while inspected, stored, sidecar, and manifest SHA match.
+  Typecheck, full 1266-test suite,
   production build, and disposable PostgreSQL production-migration runner pass.
 - No deploy, production database, provider, payment, credit, queue, or secret
   operation was performed.

@@ -2,12 +2,9 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, audit, type ProductRow } from "@/lib/db";
 import { createSignedUrl } from "@/lib/signed-url";
-import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, bacaMetaGambar, deleteStoredProductImages, referensiLayak, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, bacaMetaGambar, deleteStoredProductImages, prepareInspectedProductImages, referensiLayak, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
 import { pgAudit, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
 import { assertAuthoritativeLabelResult, periksaLabelFoto, merekTerdaftar } from "@/lib/media/label-terbaca";
 import { appendRetailProductImages, removeRetailProductImage } from "@/lib/retail-product-images";
 import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
@@ -78,15 +75,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     //
     // SETIAP blob baru diperiksa sebelum satu pun byte/sidecar/list/audit
     // dipersist. Foto #2+ tidak boleh menjadi jalan memutar gerbang merek.
-    const labelEvidence = [] as Awaited<ReturnType<typeof periksaLabelFoto>>[];
-    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "intake-label-"));
-    try {
-      for (const [index, blob] of blobs.entries()) {
-        const tmpFile = path.join(tmpDir, `foto-${index}`);
-        fs.writeFileSync(tmpFile, blob.data);
+    const inspectedImages = await prepareInspectedProductImages(blobs, async (normalizedPath) => {
         // Merek TERDAFTAR ikut — sumber yang sama dengan QC-F1
         // (products.raw_meta.brand), bukan tebakan dari nama produk.
-        const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
+        const label = await periksaLabelFoto(normalizedPath, owned.product.name, merekTerdaftar(owned.product));
         assertAuthoritativeLabelResult(label);
         // LUBANG YANG DITUTUP 20 Agu: sampai hari itu hasil kecocokan merek
         // dihitung lalu DIBUANG — hanya `terbaca` yang diperiksa. Karena itu
@@ -96,15 +88,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         if (label.cocokMerek === false) {
           throw ERR.BRAND_MISMATCH(label.alasan);
         }
-        labelEvidence.push(label);
-      }
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
+        return label;
+    });
 
     // UUID keys avoid object overwrite when two uploads observed the same
     // starting list length. Publication into the list remains atomic below.
-    const added = await saveUniqueProductImages(id, blobs, labelEvidence);
+    const added = await saveUniqueProductImages(id, blobs, inspectedImages);
 
     // WIZARD BUTUH MINIMAL SATU FOTO PRODUK YANG LAYAK JADI ACUAN.
     //

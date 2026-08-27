@@ -11,7 +11,7 @@ import sharp from "sharp";
 import { config, ensureDirs } from "./config";
 import { mediaStorage } from "./storage";
 import { klasifikasiGambar, KEBIJAKAN_KLASIFIKASI, type HasilKlasifikasi, type JenisGambar } from "./media/klasifikasi-gambar";
-import type { HasilLabel } from "./media/label-terbaca";
+import { assertAuthoritativeLabelResult, type HasilLabel } from "./media/label-terbaca";
 
 let klasifikasiGambarUntukTest: ((path: string) => Promise<HasilKlasifikasi>) | undefined;
 /** Seam deterministik ingestion-test; tidak mengubah classifier produksi. */
@@ -74,6 +74,59 @@ export async function normalizeProductImageBuffer(data: Buffer): Promise<Buffer>
   }
   return pipeline.resize({ width: 1600, height: 1600, fit: "inside", withoutEnlargement: true })
     .webp({ quality: 82, effort: 4 }).toBuffer();
+}
+
+export interface InspectedProductImageBatch {
+  readonly count: number;
+}
+
+type InspectedProductImage = { data: Buffer; labelEvidence: HasilLabel; sha256: string };
+const inspectedBatchPayload = new WeakMap<InspectedProductImageBatch, readonly InspectedProductImage[]>();
+
+/**
+ * Normalize first, then inspect the exact immutable bytes that will be stored.
+ * The opaque batch prevents callers from attaching an upload-byte verdict to
+ * different provider-bound bytes after WebP rotation/resizing/compression.
+ */
+export async function prepareInspectedProductImages(
+  blobs: readonly { mime: string; data: Buffer }[],
+  inspect: (normalizedPath: string, index: number) => Promise<HasilLabel>,
+): Promise<InspectedProductImageBatch> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "product-image-inspection-"));
+  try {
+    const images: InspectedProductImage[] = [];
+    for (const [index, blob] of blobs.entries()) {
+      const data = await normalizeProductImageBuffer(blob.data);
+      const normalizedPath = path.join(dir, `${index}.webp`);
+      fs.writeFileSync(normalizedPath, data);
+      const labelEvidence = await inspect(normalizedPath, index);
+      assertAuthoritativeLabelResult(labelEvidence);
+      images.push({
+        data,
+        labelEvidence,
+        sha256: crypto.createHash("sha256").update(data).digest("hex"),
+      });
+    }
+    const batch = Object.freeze({ count: images.length });
+    inspectedBatchPayload.set(batch, images);
+    return batch;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function inspectedImages(batch: InspectedProductImageBatch | undefined, expected: number): readonly InspectedProductImage[] | null {
+  if (!batch) return null;
+  const images = inspectedBatchPayload.get(batch);
+  if (!images || images.length !== expected || batch.count !== expected) {
+    throw new Error("OCR_INSPECTION_BATCH_INVALID: normalized image evidence is missing or has the wrong length.");
+  }
+  for (const image of images) {
+    const actual = crypto.createHash("sha256").update(image.data).digest("hex");
+    if (actual !== image.sha256) throw new Error("OCR_INSPECTION_BYTES_MUTATED: inspected image bytes changed before persistence.");
+    assertAuthoritativeLabelResult(image.labelEvidence);
+  }
+  return images;
 }
 
 /** Simpan foto ke storage produk. startIndex untuk APPEND ke produk yang sudah
@@ -243,7 +296,7 @@ export async function saveProductImages(
   productId: string,
   blobs: { mime: string; data: Buffer }[],
   startIndex = 0,
-  labelEvidence: readonly HasilLabel[] = [],
+  inspectedBatch?: InspectedProductImageBatch,
 ): Promise<string[]> {
   ensureDirs();
   const dir = path.join(config.storageDir, "uploads", productId);
@@ -253,19 +306,25 @@ export async function saveProductImages(
   // dibuang setelah put; di mode filesystem ia berkasnya sendiri. Dicatat
   // supaya rollback tahu apa yang harus dibersihkan.
   const lokal: string[] = [];
+  const inspected = inspectedImages(inspectedBatch, blobs.length);
   try {
     for (let i = 0; i < blobs.length; i++) {
       const idx = startIndex + i;
       const ext = ALLOWED_MIME[blobs[i].mime] ?? ".png";
       let rel = path.join("uploads", productId, `${idx}${ext}`).split(path.sep).join("/");
       let abs = path.join(config.storageDir, rel);
-      let normalized: Buffer | null = null;
-      try {
-        normalized = await normalizeProductImageBuffer(blobs[i].data);
+      let normalized: Buffer | null = inspected?.[i].data ?? null;
+      if (normalized) {
         rel = path.join("uploads", productId, `${idx}.webp`).split(path.sep).join("/");
         abs = path.join(config.storageDir, rel);
-      } catch {
-        /* kompresi gagal tidak fatal — file asli tetap dipakai */
+      } else {
+        try {
+          normalized = await normalizeProductImageBuffer(blobs[i].data);
+          rel = path.join("uploads", productId, `${idx}.webp`).split(path.sep).join("/");
+          abs = path.join(config.storageDir, rel);
+        } catch {
+          /* extraction/draft compatibility: file asli stays quarantined */
+        }
       }
       fs.writeFileSync(abs, normalized ?? blobs[i].data);
       lokal.push(abs);
@@ -287,7 +346,7 @@ export async function saveProductImages(
       // responsnya, dan rollback tetap harus tahu kunci mana yang harus dibuang.
       rels.push(rel);
       await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
-      await tulisSidecar(rel, bytesTersimpan, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar, labelEvidence[i]);
+      await tulisSidecar(rel, bytesTersimpan, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar, inspected?.[i].labelEvidence);
       if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
     }
     return rels;
@@ -316,15 +375,16 @@ export async function saveProductImages(
 export async function saveUniqueProductImages(
   productId: string,
   blobs: { mime: string; data: Buffer }[],
-  labelEvidence: readonly HasilLabel[] = [],
+  inspectedBatch?: InspectedProductImageBatch,
 ): Promise<string[]> {
   ensureDirs();
   const rels: string[] = [];
+  const inspected = inspectedImages(inspectedBatch, blobs.length);
   try {
     for (const [blobIndex, blob] of blobs.entries()) {
       // Full decode + normalization is mandatory here. Never fall back to a
       // corrupt original merely because its metadata could still be parsed.
-      const normalized = await normalizeProductImageBuffer(blob.data);
+      const normalized = inspected?.[blobIndex].data ?? await normalizeProductImageBuffer(blob.data);
       const rel = path.posix.join("uploads", productId, `${crypto.randomUUID()}.webp`);
       // Track before put: an object store may commit then lose the response.
       // Cleanup must still know which idempotent key to delete.
@@ -344,7 +404,7 @@ export async function saveUniqueProductImages(
       try {
         const abs = path.join(tmpKlas, path.basename(rel));
         fs.writeFileSync(abs, normalized);
-        await tulisSidecar(rel, normalized, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar, labelEvidence[blobIndex]);
+        await tulisSidecar(rel, normalized, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar, inspected?.[blobIndex].labelEvidence);
       } finally {
         try {
           fs.rmSync(tmpKlas, { recursive: true, force: true });

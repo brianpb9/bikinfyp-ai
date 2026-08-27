@@ -8,8 +8,10 @@ C6 is implemented as a versioned tri-state contract. Runtime OCR failure is
 canonical `OCR_FAILED` (503/retryable), distinct from inspected but unreadable
 `LABEL_UNREADABLE` (400/nonretryable).
 
-E1/E4/E8 validate every new image before storage or database/audit effects and
-persist the exact verdict in the sidecar. E2/E6 extraction without inspection
+E1/E4/E8 normalize every new image first, inspect the exact WebP bytes before
+storage or database/audit effects, and persist that verdict in the sidecar.
+An opaque in-memory batch prevents attaching upload-byte evidence to different
+stored/provider-bound bytes. E2/E6 extraction without inspection
 is retained only as quarantined draft evidence. Product truth approves only a
 hash-valid image carrying `READABLE` version 1.
 
@@ -24,10 +26,11 @@ database, provider, payment, credit, queue, or secret operation was performed.
 
 ## Verification
 
-- C6 focused suite: 6/6 PASS.
-- Regression set that initially exposed four compatibility failures: 24/24 PASS.
+- C6 focused suite: 7/7 PASS, including inspected SHA = stored SHA = sidecar SHA
+  = immutable manifest SHA while the original upload SHA differs.
+- Affected remediation regression: 32 tests, 31 pass, 0 fail, 1 environment skip.
 - `npx tsc --noEmit`: PASS.
-- `npm test`: 1265 tests, 1217 pass, 0 fail, 48 skipped.
+- `npm test`: 1266 tests, 1218 pass, 0 fail, 48 skipped.
 - `npm run build`: PASS.
 - Disposable loopback PostgreSQL production-migration runner: PASS.
 
