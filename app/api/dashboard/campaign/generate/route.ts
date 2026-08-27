@@ -10,6 +10,7 @@ import { getAvatarPreset } from "@/lib/avatar-presets";
 import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -48,7 +49,8 @@ export async function POST(req: Request) {
         && product.product_type_confirmed_by && product.product_type_confirmed_at && product.product_type_version === 1
         ? {
             kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: product.product_type_confirmed_token,
-            actorId: product.product_type_confirmed_by, confirmedAt: String(product.product_type_confirmed_at),
+            actorId: product.product_type_confirmed_by,
+            confirmedAt: canonicalProductTypeTimestamp(product.product_type_confirmed_at),
             version: 1, provenance: "USER_SELF_ASSERTION",
           }
         : null,

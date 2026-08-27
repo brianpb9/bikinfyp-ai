@@ -2,7 +2,7 @@
   "task": "P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827",
   "baseline_sha": "c8588c67df8c5064e4cd231a6650d0c8b23d6e00",
   "result": "PASS_LOCAL_READY_FOR_REVIEW",
-  "reviewer_remediation": "empty/Unicode-whitespace/canonical timestamp/version durability guards for new and upgraded SQLite plus PostgreSQL constraint; authorized E3/E7 confirmation summary and complete mutation audit provenance; ordinary cross-editor detail saves preserve original confirmation actor and time",
+  "reviewer_remediation": "empty/Unicode-whitespace/canonical timestamp/version durability guards for new and upgraded SQLite plus PostgreSQL constraint; node-postgres TIMESTAMPTZ Date canonicalization at E1/E3/E7/A1-A4 reads; authorized E3/E7 confirmation summary and complete mutation audit provenance; ordinary cross-editor detail saves preserve original confirmation actor and time",
   "founder_decision": "approved recommended safe release bundle",
   "canonical_type_distinct_from_category": true,
   "taxonomy_invented": false,
@@ -14,8 +14,8 @@
   "green_contract": {
     "command": "node scripts/verify-c2-type-mismatch-green.mjs",
     "exit_code": 0,
-    "tests": 5,
-    "pass": 5,
+    "tests": 6,
+    "pass": 6,
     "fail": 0
   },
   "implementation_test": {
@@ -32,21 +32,21 @@
     "pass": 43,
     "fail": 0
   },
-  "e7_postgres_regression": {
-    "command": "SCRIPT_LLM=0 npx tsx --test tests/pg-product-truth-w1.test.ts",
+  "postgres_timestamp_admission_regression": {
+    "command": "UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='dashboard lock|E7 HTTP PATCH|retail PostgreSQL admission' tests/pg-product-truth-w1.test.ts",
     "exit_code": 0,
-    "tests": 31,
-    "pass": 1,
+    "tests": 4,
+    "pass": 4,
     "fail": 0,
-    "skipped": 30,
-    "classification": "E7 response and audit assertions present; UJI_PG_URL absent"
+    "skipped": 0,
+    "classification": "real node-postgres TIMESTAMPTZ values crossed retail and organization admission boundaries in a loopback disposable database"
   },
   "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
   "full_test": {
     "command": "npm test",
     "exit_code": 0,
-    "tests": 1253,
-    "pass": 1206,
+    "tests": 1254,
+    "pass": 1207,
     "fail": 0,
     "skipped": 47
   },
@@ -59,13 +59,17 @@
   },
   "postgres_schema_runtime": {
     "command": "bash scripts/test-postgres-schema.sh",
-    "executed": false,
-    "reason": "local PostgreSQL readiness check failed before schema application"
+    "executed": true,
+    "exit_code": 1,
+    "c2_migration_applied": true,
+    "idempotent_rerun_applied": true,
+    "reason": "unrelated stale broad-schema parity assertion expects 10 tables while current schema has 21"
   },
   "postgres_disposable_migration": {
     "command": "bash scripts/test-postgres-production-migrations.sh",
-    "executed": false,
-    "reason": "local PostgreSQL readiness check failed before disposable database creation"
+    "executed": true,
+    "exit_code": 0,
+    "result": "PASS"
   },
   "provider_calls": 0,
   "payment_calls": 0,

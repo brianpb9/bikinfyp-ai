@@ -10,6 +10,7 @@ import {
 import { setProductCreateDependenciesForTests } from "../lib/product-create-dependencies";
 import { POST as createProduct } from "../app/api/products/route";
 import { PRODUCT_TYPE_SQLITE_UPGRADE_GUARDS } from "../lib/db";
+import { canonicalProductTypeTimestamp } from "../lib/product-type-timestamp";
 
 const declared = (token: string) => ({
   kind: "DECLARED_PRODUCT_TYPE" as const,
@@ -36,6 +37,18 @@ test("C2 canonical normalization admits matching confirmation exactly once", asy
   );
   assert.equal(result, "persisted");
   assert.equal(effects, 1);
+});
+
+test("C2 canonicalizes node-postgres TIMESTAMPTZ Date without normalizing invalid strings", () => {
+  assert.equal(
+    canonicalProductTypeTimestamp(new Date("2026-08-27T00:00:00.000Z")),
+    "2026-08-27T00:00:00.000Z",
+  );
+  assert.equal(
+    canonicalProductTypeTimestamp("2026-02-31T00:00:00.000Z"),
+    "2026-02-31T00:00:00.000Z",
+    "string provenance must remain byte-exact for strict boundary rejection",
+  );
 });
 
 test("C2 mismatch, missing confirmation, and forged capability fail closed with zero effects", async () => {

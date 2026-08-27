@@ -288,7 +288,12 @@ const segmen = [
 async function siapkanJob(images: string[], tier = "silent_caption"): Promise<string> {
   const pid = uid(), sid = uid(), jid = uid(), t = at();
   await pool.query(
-    "INSERT INTO products (id,user_id,name,price_idr,category,images,created_at) VALUES ($1,$2,'Serum Glow Bright',85000,'beauty',$3,$4)",
+    `INSERT INTO products
+      (id,user_id,name,price_idr,category,product_type_token,product_type_confirmed_token,
+       product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
+       images,created_at)
+     VALUES ($1,$2,'Serum Glow Bright',85000,'beauty','serum wajah','serum wajah',
+       $2,$4::timestamptz,1,'CONFIRMED',$3,$4::text)`,
     [pid, userId, JSON.stringify(images), t]
   );
   await pool.query(
@@ -308,8 +313,11 @@ async function siapkanJobLewatAdmisi(images: string[], isi: Map<string, Buffer>)
   const productId = uid(), scriptId = uid(), t = at();
   await pool.query(
     `INSERT INTO products
-      (id,user_id,name,price_idr,category,images,raw_meta,product_visual_desc,brand_brief,claims,created_at)
-     VALUES ($1,$2,'Serum Glow Bright',85000,'beauty',$3,$4,'BOTOL-AMBER-AWAL','ARAH-BRAND-AWAL',$5,$6)`,
+      (id,user_id,name,price_idr,category,product_type_token,product_type_confirmed_token,
+       product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
+       images,raw_meta,product_visual_desc,brand_brief,claims,created_at)
+     VALUES ($1,$2,'Serum Glow Bright',85000,'beauty','serum wajah','serum wajah',
+       $2,$6::timestamptz,1,'CONFIRMED',$3,$4,'BOTOL-AMBER-AWAL','ARAH-BRAND-AWAL',$5,$6::text)`,
     [productId, userId, JSON.stringify(images), JSON.stringify({ brand: "Merek Awal" }), JSON.stringify(["klaim awal"]), t]
   );
   await pool.query(
@@ -366,8 +374,8 @@ async function siapkanJobOrgLewatAdmisi(images: string[], isi: Map<string, Buffe
       (id,user_id,org_id,name,price_idr,category,product_type_token,product_type_confirmed_token,
        product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
        images,raw_meta,product_visual_desc,brand_brief,claims,promo_price_before_idr,created_at)
-     VALUES ($1,$2,$3,'Serum Glow Bright',85000,'beauty','serum wajah','serum wajah',$2,$7,1,'CONFIRMED',
-       $4,$5,'BOTOL-AMBER-AWAL','ARAH-BRAND-AWAL',$6,110000,$7)`,
+     VALUES ($1,$2,$3,'Serum Glow Bright',85000,'beauty','serum wajah','serum wajah',$2,$7::timestamptz,1,'CONFIRMED',
+       $4,$5,'BOTOL-AMBER-AWAL','ARAH-BRAND-AWAL',$6,110000,$7::text)`,
     [productId, ownerId, orgId, JSON.stringify(images), JSON.stringify({ brand: "Merek Awal" }), JSON.stringify(["klaim awal"]), t]
   );
   await pool.query(
@@ -435,7 +443,7 @@ async function siapkanStoryAdsTanpaTemplateRequest(
     `INSERT INTO products (id,user_id,org_id,name,price_idr,category,
        product_type_token,product_type_confirmed_token,product_type_confirmed_by,
        product_type_confirmed_at,product_type_version,product_type_state,images,raw_meta,created_at)
-     VALUES ($1,$2,$3,'Jasa Uji',189000,'jasa','jasa','jasa',$2,$5,1,'CONFIRMED',$4,'{}',$5)`,
+     VALUES ($1,$2,$3,'Jasa Uji',189000,'jasa','jasa','jasa',$2,$5::timestamptz,1,'CONFIRMED',$4,'{}',$5::text)`,
     [productId, ownerId, orgId, JSON.stringify([image]), t]
   );
   await pool.query(
@@ -496,7 +504,7 @@ async function assertBlockedSnapshotTanpaSideEffect(templateId: string) {
     `INSERT INTO products (id,user_id,org_id,name,price_idr,category,
        product_type_token,product_type_confirmed_token,product_type_confirmed_by,
        product_type_confirmed_at,product_type_version,product_type_state,images,raw_meta,created_at)
-     VALUES ($1,$2,$3,'Serum Bukti',85000,'beauty','serum wajah','serum wajah',$2,$4,1,'CONFIRMED','[]','{}',$4)`,
+     VALUES ($1,$2,$3,'Serum Bukti',85000,'beauty','serum wajah','serum wajah',$2,$4::timestamptz,1,'CONFIRMED','[]','{}',$4::text)`,
     [productId, userId, orgId, t]
   );
   await pool.query(
@@ -876,6 +884,7 @@ test("dashboard lock membuat validasi Story Ads dan snapshot melihat versi row y
   let lockSeen = false;
   let mutation: Promise<unknown> | null = null;
   const admissionPool = {
+    query: pool.query.bind(pool),
     async connect() {
       const client = await pool.connect();
       return new Proxy(client, {

@@ -10,6 +10,7 @@ import { pgAudit, pgCanExtract, postgresRuntimeEnabled, smokeCreateProduct, smok
 import { getPool } from "@/lib/postgres/pool";
 import { sanitizeClaims } from "@/lib/media/claim-overlay";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -21,7 +22,7 @@ export const dynamic = "force-dynamic";
 // mungkin (makin lengkap makin bagus hasil render), baru di-fan-out ke 2-6
 // video di langkah berikutnya.
 
-function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_type_token?: string | null; product_type_confirmed_by?: string | null; product_type_confirmed_at?: string | null; product_type_version?: number | null; product_type_state?: string | null; product_visual_desc?: string | null; brand_brief?: string | null; claims?: string | null; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; images: string; source_url: string | null }) {
+function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_type_token?: string | null; product_type_confirmed_by?: string | null; product_type_confirmed_at?: string | Date | null; product_type_version?: number | null; product_type_state?: string | null; product_visual_desc?: string | null; brand_brief?: string | null; claims?: string | null; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; images: string; source_url: string | null }) {
   const images = JSON.parse(product.images || "[]") as string[];
   return {
     product_id: product.id,
@@ -33,7 +34,7 @@ function productPayload(product: { id: string; name: string; price_idr: number; 
       && product.product_type_confirmed_by && product.product_type_confirmed_at && product.product_type_version === 1
       ? {
           state: "CONFIRMED", actor_id: product.product_type_confirmed_by,
-          confirmed_at: new Date(String(product.product_type_confirmed_at)).toISOString(), version: 1,
+          confirmed_at: canonicalProductTypeTimestamp(product.product_type_confirmed_at), version: 1,
           provenance: "USER_SELF_ASSERTION" as const,
         }
       : null,
@@ -153,7 +154,7 @@ export async function PATCH(req: Request) {
     const confirmedBy = confirmationTouched ? user.id : String(existing.product_type_confirmed_by ?? "");
     const confirmedAt = confirmationTouched
       ? new Date().toISOString()
-      : existing.product_type_confirmed_at ? new Date(String(existing.product_type_confirmed_at)).toISOString() : "";
+      : canonicalProductTypeTimestamp(existing.product_type_confirmed_at);
     const visualDesc = typeof body.product_visual_desc === "string" ? body.product_visual_desc.trim().slice(0, 600) || null : existing.product_visual_desc ?? null;
     const brandBrief = typeof body.brand_brief === "string" ? body.brand_brief.trim().slice(0, 1200) || null : existing.brand_brief ?? null;
 

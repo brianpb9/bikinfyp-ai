@@ -26,6 +26,7 @@ import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
 import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 
 export type HasilSel =
   | { status: "queued"; script_id: string; job_id: string }
@@ -120,20 +121,21 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   }
   const typeProduct = await pool.query<{
     product_type_token: string | null; product_type_confirmed_token: string | null;
-    product_type_confirmed_by: string | null; product_type_confirmed_at: string | null;
+    product_type_confirmed_by: string | null; product_type_confirmed_at: string | Date | null;
     product_type_version: number | null; product_type_state: string;
   }>(`SELECT product_type_token,product_type_confirmed_token,product_type_confirmed_by,
             product_type_confirmed_at,product_type_version,product_type_state
        FROM products WHERE id=$1 AND org_id=$2`, [sel.productId, sel.orgId]);
   const productType = typeProduct.rows[0];
   if (!productType) return gagal("Produk organisasi tidak ditemukan.");
+  const productTypeConfirmedAt = canonicalProductTypeTimestamp(productType.product_type_confirmed_at);
   return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
     { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-org-product.product_type_token", token: productType.product_type_token ?? "", version: 1 },
     productType.product_type_state === "CONFIRMED" && productType.product_type_confirmed_token
       && productType.product_type_confirmed_by && productType.product_type_confirmed_at && productType.product_type_version === 1
       ? {
           kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: productType.product_type_confirmed_token,
-          actorId: productType.product_type_confirmed_by, confirmedAt: String(productType.product_type_confirmed_at),
+          actorId: productType.product_type_confirmed_by, confirmedAt: productTypeConfirmedAt,
           version: 1, provenance: "USER_SELF_ASSERTION",
         }
       : null,
@@ -177,7 +179,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       product_visual_desc: string | null; brand_brief: string | null; claims: string | null;
       source_url: string | null; promo_price_before_idr: number | null;
       product_type_token: string | null; product_type_confirmed_token: string | null;
-      product_type_confirmed_by: string | null; product_type_confirmed_at: string | null;
+      product_type_confirmed_by: string | null; product_type_confirmed_at: string | Date | null;
       product_type_version: number | null; product_type_state: string;
       images: string;
     }>(`SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,source_url,
@@ -192,7 +194,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     if (lockedProduct.product_type_token !== productType.product_type_token
       || lockedProduct.product_type_confirmed_token !== productType.product_type_confirmed_token
       || lockedProduct.product_type_confirmed_by !== productType.product_type_confirmed_by
-      || String(lockedProduct.product_type_confirmed_at) !== String(productType.product_type_confirmed_at)
+      || canonicalProductTypeTimestamp(lockedProduct.product_type_confirmed_at) !== productTypeConfirmedAt
       || lockedProduct.product_type_version !== productType.product_type_version
       || lockedProduct.product_type_state !== productType.product_type_state) {
       await client.query("ROLLBACK");

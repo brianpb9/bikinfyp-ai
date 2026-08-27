@@ -25,6 +25,9 @@ Confirmed records cannot carry empty/whitespace tokens or actors, invalid
 timestamps, missing versions, or unequal tokens. SQLite's durable whitespace
 set covers ECMAScript Unicode whitespace, and timestamps must round-trip as an
 exact canonical ISO instant, so impossible calendar dates are rejected.
+PostgreSQL `TIMESTAMPTZ` values are canonicalized from node-postgres `Date`
+objects at every protected read boundary; string inputs remain byte-exact so
+invalid timestamps cannot be repaired into apparently valid provenance.
 
 Retail and campaign UI require an explicit type plus a separate confirmation
 checkbox explaining that the value is the user's own assertion, not staff
@@ -35,21 +38,26 @@ payment, credit, queue, or production operation is bundled here.
 
 - `node scripts/verify-c2-type-mismatch-green.mjs`: 5/5 PASS.
 - `SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts`:
-  5/5 PASS, including direct invalid-row probes on upgraded SQLite.
+  6/6 PASS, including node-postgres timestamp shape and direct invalid-row
+  probes on upgraded SQLite.
 - Focused admission/mutation regressions: 43/43 PASS.
 - `npx tsc --noEmit`: PASS.
-- `npm test`: 1253 tests, 1206 pass, 0 fail, 47 skipped.
+- `npm test`: 1254 tests, 1207 pass, 0 fail, 47 skipped.
 - `npm run build`: PASS.
 - PostgreSQL migration contract assertions in the implementation test: PASS.
-- The local PostgreSQL schema and disposable production-migration scripts did
-  not cross readiness because the local server was unavailable. No disposable
-  database was created and no production database was contacted or mutated.
+- Disposable PostgreSQL production-migration runner: PASS. A focused real-PG
+  admission run queried `TIMESTAMPTZ` through retail and organization
+  boundaries: 4/4 PASS. The broad schema script applied migration 0036 and its
+  idempotent rerun, then failed an unrelated stale assertion expecting 10 total
+  tables while the current schema has 21; this is recorded as a failed broad
+  parity gate, not as a C2 PASS. No production database was contacted.
 
 Reviewer remediation also makes E3/E7 return an authorized confirmation
 summary and records token, state, provenance, actor, timestamp, and version in
 mutation audits. SQLite E3 exercises response+audit directly; the PostgreSQL E7
-fixture carries the same assertions and is classified skipped without a local
-database. Ordinary campaign detail saves omit `confirmed_product_type`, so a
+fixture executed on a disposable local database and preserved the original
+confirmation actor and time. Ordinary campaign detail saves omit
+`confirmed_product_type`, so a
 different team editor can update price/claims/brief without replacing the
 original confirming actor or timestamp; only an explicit re-confirm request
 changes that provenance.

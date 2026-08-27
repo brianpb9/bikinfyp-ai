@@ -6,6 +6,7 @@ import { parsePromoFields } from "@/lib/promo";
 import { pgSetProductBrand, pgUpdateProduct, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -35,7 +36,7 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const confirmedBy = confirmationTouched ? user.id : String(product.product_type_confirmed_by ?? "");
     const confirmedAt = confirmationTouched
       ? now()
-      : product.product_type_confirmed_at ? new Date(String(product.product_type_confirmed_at)).toISOString() : "";
+      : canonicalProductTypeTimestamp(product.product_type_confirmed_at);
     const visualDesc =
       body.product_visual_desc !== undefined
         ? body.product_visual_desc === null || body.product_visual_desc === ""

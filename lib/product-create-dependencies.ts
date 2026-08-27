@@ -1,6 +1,7 @@
 import { getAuthUser } from "./auth";
 import { getDb, now, uuid, type ProductRow } from "./db";
 import { postgresRuntimeEnabled, smokeCreateProduct, smokeGetProductByIdForCreateReconciliation } from "./postgres/smoke-runtime";
+import { canonicalProductTypeTimestamp } from "./product-type-timestamp";
 
 export interface ExpectedProductCreation {
   id: string;
@@ -35,7 +36,8 @@ export function productCreationRowMatchesExpected(row: ProductRow, expected: Exp
     && (expected.productTypeToken === undefined || row.product_type_token === expected.productTypeToken)
     && (expected.productTypeConfirmedToken === undefined || row.product_type_confirmed_token === expected.productTypeConfirmedToken)
     && (expected.productTypeConfirmedBy === undefined || row.product_type_confirmed_by === expected.productTypeConfirmedBy)
-    && (expected.productTypeConfirmedAt === undefined || row.product_type_confirmed_at === expected.productTypeConfirmedAt)
+    && (expected.productTypeConfirmedAt === undefined
+      || canonicalProductTypeTimestamp(row.product_type_confirmed_at) === expected.productTypeConfirmedAt)
     && (expected.productTypeVersion === undefined || row.product_type_version === expected.productTypeVersion)
     && (expected.productTypeVersion === undefined || row.product_type_state === "CONFIRMED")
     && (row.product_visual_desc ?? null) === expected.productVisualDesc
