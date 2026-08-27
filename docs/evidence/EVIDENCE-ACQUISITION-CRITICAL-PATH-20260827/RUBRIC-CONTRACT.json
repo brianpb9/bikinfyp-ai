@@ -56,7 +56,8 @@
       "minimum_raw_sum": 117,
       "gate_source": null,
       "gate": "NOT_AUTHORIZED_FOR_CURRENT_WORK",
-      "requires": ["80","M","Q","I","U","K","O"]
+      "requires": ["80"],
+      "incremental_requirements": "UNDEFINED_FOUNDER_AUTHORITY_REQUIRED"
     },
     "100": {
       "minimum_raw_sum": 130,

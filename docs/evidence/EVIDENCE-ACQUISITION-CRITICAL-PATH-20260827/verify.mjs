@@ -21,6 +21,8 @@ const committedBytes = (exactSha, artifactPath, label) => {
 const contract = read("RUBRIC-CONTRACT.json");
 const task = read("SOURCE-TASK.json");
 const amendedTask = read("AMENDED-SOURCE-TASK.json");
+const amendedRawBytes = fs.readFileSync(path.join(dir,"AMENDED-SOURCE-TASK.raw.json"));
+const amendedRaw = JSON.parse(amendedRawBytes);
 const matrix80 = read("SCORE-80-POINT-MATRIX.json");
 const founder80 = read("FOUNDER-80-DIRECTION.json");
 const authorityRegistry = read("AUTHORITY-REGISTRY.json");
@@ -48,7 +50,7 @@ for (const [threshold, expected] of [[80,104],[90,117],[100,130]]) {
 }
 if (contract.thresholds["90"].gate !== "NOT_AUTHORIZED_FOR_CURRENT_WORK" || contract.thresholds["90"].gate_source !== null) fail("90 scope boundary");
 if (!contract.point_rule.evidence_receipt_changes_points || contract.point_rule.default_delta !== 0 || contract.point_rule.missing_authority_result !== "NO_SCORE_CHANGE" || contract.point_rule.weights_may_not_be_redistributed !== true || contract.point_rule.partial_tokens_allowed || contract.point_rule.token_value_raw_points !== 1 || !contract.point_rule.tokens_must_be_cumulative_within_row || contract.point_rule.ladder !== "SCORE-80-POINT-MATRIX.json") fail("point rule drift");
-if (amendedTask.id !== "1787845709000-reviewer-TASK" || amendedTask.from !== "reviewer" || amendedTask.to !== "builder" || amendedTask.type !== "TASK" || amendedTask.sha !== "" || amendedTask.task !== contract.task || amendedTask.task_id !== contract.task || amendedTask.owner_id !== task.owner_id || amendedTask.worker_id !== task.worker_id || amendedTask.source_archive_sha256 !== "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e" || crypto.createHash("sha256").update(amendedTask.body).digest("hex") !== "c66ba2bb31edf70760472864c0cdd67e9c0cc4787c7618314c50edded1e61ac7") fail("amended authority task binding");
+if (amendedTask.id !== "1787845709000-reviewer-TASK" || amendedTask.from !== "reviewer" || amendedTask.to !== "builder" || amendedTask.type !== "TASK" || amendedTask.sha !== "" || amendedTask.task !== contract.task || amendedTask.task_id !== contract.task || amendedTask.owner_id !== task.owner_id || amendedTask.worker_id !== task.worker_id || amendedTask.source_archive_sha256 !== "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e" || crypto.createHash("sha256").update(amendedTask.body).digest("hex") !== "c66ba2bb31edf70760472864c0cdd67e9c0cc4787c7618314c50edded1e61ac7" || crypto.createHash("sha256").update(amendedRawBytes).digest("hex") !== amendedTask.source_archive_sha256 || amendedRaw.id !== amendedTask.id || amendedRaw.body !== amendedTask.body || amendedRaw.ts !== amendedTask.ts) fail("amended authority task binding");
 if (contract.founder_80_direction !== "FOUNDER-80-DIRECTION.json" || founder80.task !== contract.task || founder80.scope !== "SCORE_80_CRITICAL_PATH_ONLY" || founder80.production_public_real_money !== "OFF" || founder80.authority_source !== "AMENDED-SOURCE-TASK.json" || founder80.authority_message_id !== amendedTask.id) fail("Founder 80 direction binding");
 const c5 = founder80.category_unknown_policy;
 if (c5.decision !== "APPROVED" || c5.result !== "FAIL_CLOSED_MANUAL_REVIEW_QUARANTINE" || c5.heuristic_auto_map !== "FORBIDDEN" || !c5.implementation_and_exact_sha_review_still_required || c5.forbidden_before_authorized_release.length !== 4) fail("C5 Founder policy");
@@ -69,17 +71,18 @@ const matrixTokens = matrix80.rows.flatMap((row) => {
 });
 if (matrix80.rows.reduce((sum,row) => sum + row.target_80, 0) !== 104 || matrixTokens.length !== 27 || new Set(matrixTokens.map((token) => token.token_id)).size !== 27) fail("80 matrix exact 27 points");
 const tokenById = new Map(matrix80.rows.flatMap((row) => row.tokens.map((token) => [token.token_id,{...token,row:row.row,current:row.current}])));
-if (JSON.stringify(matrix80.gate_classification["80_AND_90_INHERITED"]) !== JSON.stringify(["A","L","C5","P","G","B","R"]) || JSON.stringify(matrix80.gate_classification["90_ONLY_NOT_AUTHORIZED_NOW"]) !== JSON.stringify(["M","Q","I","U","K","O"])) fail("80/90 slot classification");
+if (JSON.stringify(matrix80.gate_classification["80_INHERITED_BY_90"]) !== JSON.stringify(["A","L","C5","P","G","B","R"]) || matrix80.gate_classification["90_INCREMENTAL"] !== "UNDEFINED_FOUNDER_AUTHORITY_REQUIRED" || JSON.stringify(matrix80.gate_classification["100_ONLY_ADDITIONAL"]) !== JSON.stringify(["M","Q","I","U","K","O"])) fail("80/90 slot classification");
 const pitrSource = fs.readFileSync(path.join(root, "docs/evidence/SHIP-READINESS-CANONICAL-20260824.md"), "utf8");
 if (!pitrSource.includes("100/100") || !pitrSource.includes("backup/PITR restore")) fail("PITR canonical source");
 
 const slots = contract.slots;
 const expectedGates = {
   "80":["A","L","C5","P","G","B","R"],
-  "90":["80","M","Q","I","U","K","O"],
+  "90":["80"],
   "100":["80","M","Q","I","U","K","O"],
 };
 for (const [threshold, required] of Object.entries(expectedGates)) if (JSON.stringify(contract.thresholds[threshold].requires) !== JSON.stringify(required)) fail(`canonical gate membership ${threshold}`);
+if (contract.thresholds["90"].incremental_requirements !== "UNDEFINED_FOUNDER_AUTHORITY_REQUIRED") fail("90 incremental allocation invented");
 const visit = (id, stack = []) => {
   if (stack.includes(id)) fail(`dependency cycle ${[...stack,id].join("->")}`);
   if (id === "80") return;
@@ -246,6 +249,6 @@ for (const line of manifest) {
   if (digest !== match[1]) fail(`checksum ${match[2]}`);
 }
 const secret = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+\/-]+=*|\b(?:api[_-]?key|secret[_-]?key)\s*[:=]\s*["']?[A-Za-z0-9_\/-]{16,})/i;
-for (const name of ["RUBRIC-CONTRACT.json","SOURCE-TASK.json","AMENDED-SOURCE-TASK.json","README.md","verify.mjs","VALIDATION.json","AUTHORITY-REGISTRY.json","FOUNDER-80-DIRECTION.json","SCORE-80-POINT-MATRIX.json","NEGATIVE-CASES.json","LANE-A-READONLY-ARTIFACT.json","LANE-A-COMMAND-LEDGER.md","LANE-B-READONLY-ARTIFACT.json"]) if (secret.test(fs.readFileSync(path.join(dir, name), "utf8"))) fail(`secret-like literal ${name}`);
+for (const name of ["RUBRIC-CONTRACT.json","SOURCE-TASK.json","AMENDED-SOURCE-TASK.json","AMENDED-SOURCE-TASK.raw.json","README.md","verify.mjs","VALIDATION.json","AUTHORITY-REGISTRY.json","FOUNDER-80-DIRECTION.json","SCORE-80-POINT-MATRIX.json","NEGATIVE-CASES.json","FULL-PATH-FIXTURE-SOURCE.json","LANE-A-READONLY-ARTIFACT.json","LANE-A-COMMAND-LEDGER.md","LANE-B-READONLY-ARTIFACT.json"]) if (secret.test(fs.readFileSync(path.join(dir, name), "utf8"))) fail(`secret-like literal ${name}`);
 
 console.log(JSON.stringify({source_rows:13,raw_sum:actualScore.rawSum,certified_score:actualScore.certifiedScore,target_80_raw:104,deterministic_58_to_80_point_tokens:27,nonempty_award_path:"PASS_27_OF_27",negative_award_cases:negativeCases.cases.length,pitr_required_for_80:false,slot_count:Object.keys(slots).length,receipt_registry_slots:Object.keys(contract.receipt_registry).length,receipts:receiptsById.size,authority_receipts:authoritiesById.size,lane_A_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_artifact:"PENDING_INDEPENDENT_REVIEW",lane_B_kpi:"NON_REPRESENTATIVE_N_0",evidence_token_awards:contract.evidence_token_awards.length,production_public_real_money:"OFF",pass:true}));

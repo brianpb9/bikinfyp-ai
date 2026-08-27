@@ -68,8 +68,9 @@
     ]}
   ],
   "gate_classification": {
-    "80_AND_90_INHERITED": ["A","L","C5","P","G","B","R"],
-    "90_ONLY_NOT_AUTHORIZED_NOW": ["M","Q","I","U","K","O"],
-    "BOTH_NOTE": "A 90 claim inherits every 80 slot, but no 90 acquisition work is authorized in this task."
+    "80_INHERITED_BY_90": ["A","L","C5","P","G","B","R"],
+    "90_INCREMENTAL": "UNDEFINED_FOUNDER_AUTHORITY_REQUIRED",
+    "100_ONLY_ADDITIONAL": ["M","Q","I","U","K","O"],
+    "NOTE": "A 90 claim inherits every 80 slot. The canonical rubric defines no incremental 90 allocation; no 90 acquisition work is authorized."
   }
 }
