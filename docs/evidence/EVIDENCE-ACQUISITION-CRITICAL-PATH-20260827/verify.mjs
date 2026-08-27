@@ -36,16 +36,51 @@ for (const adjustment of contract.row_adjustments) for (const field of contract.
 if (contract.row_adjustments.length !== 0) fail("unexpected point adjustment");
 
 const slots = contract.slots;
+const expectedGates = {
+  "80":["A","L","C5","P","G","B","R"],
+  "90":["80","AUTHORIZED_80_TO_100_ALLOCATION","M","Q","I","U","K","O"],
+  "100":["80","M","Q","I","U","K","O"],
+};
+for (const [threshold, required] of Object.entries(expectedGates)) if (JSON.stringify(contract.thresholds[threshold].requires) !== JSON.stringify(required)) fail(`canonical gate membership ${threshold}`);
 const visit = (id, stack = []) => {
   if (stack.includes(id)) fail(`dependency cycle ${[...stack,id].join("->")}`);
-  if (id === "80") return;
+  if (id === "80" || id === "AUTHORIZED_80_TO_100_ALLOCATION") return;
   if (!slots[id]) fail(`missing slot ${id}`);
   for (const dep of slots[id].depends_on) visit(dep, [...stack,id]);
 };
 for (const id of Object.keys(slots)) visit(id);
-for (const threshold of ["80","100"]) for (const id of contract.thresholds[threshold].requires) visit(id);
+for (const threshold of ["80","90","100"]) for (const id of contract.thresholds[threshold].requires) visit(id);
 if (contract.slots.B.depends_on.join(",") !== "A" || contract.slots.L.depends_on.join(",") !== "A") fail("lane dependency drift");
-if (contract.lane_receipts.A.length || contract.lane_receipts.B.length) fail("unreviewed external receipt inserted");
+
+const slotIds = Object.keys(slots);
+if (JSON.stringify(Object.keys(contract.receipt_registry)) !== JSON.stringify(slotIds)) fail("receipt registry slot coverage");
+const requiredReceiptFields = ["receipt_id","slot_id","artifact_path","artifact_sha256","exact_sha","evidence_tier","authority_class","authority_receipt_id","dependency_receipt_ids","verdict"];
+if (JSON.stringify(contract.receipt_contract.required_fields) !== JSON.stringify(requiredReceiptFields) || contract.receipt_contract.required_verdict !== "PASS" || contract.receipt_contract.closed_state !== "VERIFIED") fail("receipt contract drift");
+const receiptsById = new Map();
+for (const id of slotIds) {
+  const receipts = contract.receipt_registry[id];
+  if (!Array.isArray(receipts)) fail(`receipt registry shape ${id}`);
+  for (const receipt of receipts) {
+    for (const field of requiredReceiptFields) if (!(field in receipt)) fail(`receipt ${id} missing ${field}`);
+    if (receipt.slot_id !== id || receipt.evidence_tier !== slots[id].tier || receipt.authority_class !== slots[id].closure_authority || receipt.verdict !== "PASS") fail(`receipt binding ${id}`);
+    if (!receipt.authority_receipt_id || receiptsById.has(receipt.receipt_id)) fail(`receipt authority/identity ${id}`);
+    if (!receipt.artifact_path.startsWith(contract.receipt_contract.artifact_path_prefix) || receipt.artifact_path.includes("..") || !/^[0-9a-f]{64}$/.test(receipt.artifact_sha256) || !/^[0-9a-f]{40}$/.test(receipt.exact_sha)) fail(`receipt artifact identity ${id}`);
+    const artifact = path.join(root, receipt.artifact_path);
+    if (!fs.existsSync(artifact) || crypto.createHash("sha256").update(fs.readFileSync(artifact)).digest("hex") !== receipt.artifact_sha256) fail(`receipt artifact bytes ${id}`);
+    if (spawnSync("git", ["-C", root, "cat-file", "-e", `${receipt.exact_sha}^{commit}`], {stdio:"ignore"}).status !== 0) fail(`receipt exact SHA ${id}`);
+    const dependencyIds = slots[id].depends_on.filter((dep) => dep !== "80");
+    if (receipt.dependency_receipt_ids.length !== dependencyIds.length) fail(`receipt dependency cardinality ${id}`);
+    receiptsById.set(receipt.receipt_id, receipt);
+  }
+  if (slots[id].state === contract.receipt_contract.closed_state && receipts.length === 0) fail(`closed slot without receipt ${id}`);
+}
+for (const id of slotIds) for (const receipt of contract.receipt_registry[id]) {
+  for (const dependencyReceiptId of receipt.dependency_receipt_ids) {
+    const dependencyReceipt = receiptsById.get(dependencyReceiptId);
+    if (!dependencyReceipt || !slots[id].depends_on.includes(dependencyReceipt.slot_id) || dependencyReceipt.verdict !== "PASS") fail(`receipt dependency identity ${id}`);
+  }
+}
+if ([...receiptsById].length !== 0) fail("unreviewed external receipt inserted");
 if (contract.production_public_real_money !== "OFF" || !task.forbidden.includes("real money")) fail("safety boundary drift");
 
 const manifest = fs.readFileSync(path.join(dir, "MANIFEST.sha256"), "utf8").trim().split("\n");
@@ -58,4 +93,4 @@ for (const line of manifest) {
 const secret = /(-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+\/-]+=*|\b(?:api[_-]?key|secret[_-]?key)\s*[:=]\s*["']?[A-Za-z0-9_\/-]{16,})/i;
 for (const name of ["RUBRIC-CONTRACT.json","SOURCE-TASK.json","README.md","verify.mjs","VALIDATION.json"]) if (secret.test(fs.readFileSync(path.join(dir, name), "utf8"))) fail(`secret-like literal ${name}`);
 
-console.log(JSON.stringify({source_rows:13,raw_sum:77,certified_score:58,thresholds:{80:104,90:117,100:130},slot_count:Object.keys(slots).length,lane_A_receipts:0,lane_B_receipts:0,row_adjustments:0,production_public_real_money:"OFF",pass:true}));
+console.log(JSON.stringify({source_rows:13,raw_sum:77,certified_score:58,thresholds:{80:104,90:117,100:130},slot_count:Object.keys(slots).length,receipt_registry_slots:Object.keys(contract.receipt_registry).length,receipts:0,row_adjustments:0,production_public_real_money:"OFF",pass:true}));

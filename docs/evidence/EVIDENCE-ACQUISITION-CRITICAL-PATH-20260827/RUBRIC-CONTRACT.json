@@ -51,7 +51,7 @@
       "minimum_raw_sum": 117,
       "gate_source": null,
       "gate": "UNDEFINED_AUTHORITY_CHOICE_REQUIRED",
-      "requires": ["AUTHORIZED_80_TO_100_ALLOCATION"]
+      "requires": ["80","AUTHORIZED_80_TO_100_ALLOCATION","M","Q","I","U","K","O"]
     },
     "100": {
       "minimum_raw_sum": 130,
@@ -61,23 +61,41 @@
     }
   },
   "slots": {
-    "A": {"name":"exact managed staging deploy, PostgreSQL/R2, migrations, runtime readback","tier":"MANAGED_STAGING","state":"IN_PROGRESS_EXTERNAL_LANE","depends_on":[]},
-    "L": {"name":"paired legacy PostgreSQL and matching R2 population audit","tier":"MANAGED_STAGING","state":"OPEN","depends_on":["A"]},
-    "C5": {"name":"CATEGORY_UNKNOWN/manual-review policy and accepted implementation","tier":"AUTHORITY_AND_REPOSITORY","state":"FOUNDER_DECISION_REQUIRED","depends_on":[]},
-    "P": {"name":"Duitku approval, known-order settlement/webhook/replay/reconciliation","tier":"PAYMENT_EXTERNAL","state":"OPEN","depends_on":["A"]},
-    "G": {"name":"Founder price/COGS and PAYMENTS_GO_LIVE","tier":"FOUNDER_AUTHORITY","state":"FOUNDER_DECISION_REQUIRED","depends_on":[]},
-    "B": {"name":"controlled staging/production-like OTP-to-delivery/refund E2E and recovery","tier":"MANAGED_STAGING","state":"PENDING_A","depends_on":["A"]},
-    "R": {"name":"release-owner controls and verified intake with no Retail P0 fail-open","tier":"RELEASE_AUTHORITY","state":"OWNER_REQUIRED","depends_on":["A"]},
-    "M": {"name":"C1-C13 PASS across all required E/A/W paths and no remaining P0/P1 partial","tier":"QA_RELEASE","state":"OPEN","depends_on":["80"]},
-    "Q": {"name":"legal/PDP counsel sign-off","tier":"LEGAL","state":"OWNER_REQUIRED","depends_on":["80"]},
-    "I": {"name":"incident owner, alert delivery, restore, and drill","tier":"INCIDENT_DR","state":"OWNER_REQUIRED","depends_on":["80"]},
-    "U": {"name":"production browser/mobile/auth coverage","tier":"PRODUCTION","state":"OPEN","depends_on":["80"]},
-    "K": {"name":"representative production prompt/QC/NSFW/product-fidelity KPI window","tier":"PRODUCTION","state":"OPEN","depends_on":["80"]},
-    "O": {"name":"stable payment and worker operational cycle with zero-difference reconciliation","tier":"PRODUCTION_PAYMENT","state":"OPEN","depends_on":["80"]}
+    "A": {"name":"exact managed staging deploy, PostgreSQL/R2, migrations, runtime readback","tier":"MANAGED_STAGING","state":"IN_PROGRESS_EXTERNAL_LANE","closure_authority":"REVIEWER_PASS","depends_on":[]},
+    "L": {"name":"paired legacy PostgreSQL and matching R2 population audit","tier":"MANAGED_STAGING","state":"OPEN","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
+    "C5": {"name":"CATEGORY_UNKNOWN/manual-review policy and accepted implementation","tier":"AUTHORITY_AND_REPOSITORY","state":"FOUNDER_DECISION_REQUIRED","closure_authority":"FOUNDER_DECISION_AND_REVIEWER_PASS","depends_on":[]},
+    "P": {"name":"Duitku approval, known-order settlement/webhook/replay/reconciliation","tier":"PAYMENT_EXTERNAL","state":"OPEN","closure_authority":"PAYMENT_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
+    "G": {"name":"Founder price/COGS and PAYMENTS_GO_LIVE","tier":"FOUNDER_AUTHORITY","state":"FOUNDER_DECISION_REQUIRED","closure_authority":"FOUNDER_DECISION","depends_on":[]},
+    "B": {"name":"controlled staging/production-like OTP-to-delivery/refund E2E and recovery","tier":"MANAGED_STAGING","state":"PENDING_A","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
+    "R": {"name":"release-owner controls and verified intake with no Retail P0 fail-open","tier":"RELEASE_AUTHORITY","state":"OWNER_REQUIRED","closure_authority":"RELEASE_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
+    "M": {"name":"C1-C13 PASS across all required E/A/W paths and no remaining P0/P1 partial","tier":"QA_RELEASE","state":"OPEN","closure_authority":"QA_RELEASE_REVIEWER_PASS","depends_on":["80"]},
+    "Q": {"name":"legal/PDP counsel sign-off","tier":"LEGAL","state":"OWNER_REQUIRED","closure_authority":"COUNSEL_SIGNOFF","depends_on":["80"]},
+    "I": {"name":"incident owner, alert delivery, restore, and drill","tier":"INCIDENT_DR","state":"OWNER_REQUIRED","closure_authority":"INCIDENT_OWNER_AND_REVIEWER_PASS","depends_on":["80"]},
+    "U": {"name":"production browser/mobile/auth coverage","tier":"PRODUCTION","state":"OPEN","closure_authority":"REVIEWER_PASS","depends_on":["80"]},
+    "K": {"name":"representative production prompt/QC/NSFW/product-fidelity KPI window","tier":"PRODUCTION","state":"OPEN","closure_authority":"INDEPENDENT_REVIEWER_PASS","depends_on":["80"]},
+    "O": {"name":"stable payment and worker operational cycle with zero-difference reconciliation","tier":"PRODUCTION_PAYMENT","state":"OPEN","closure_authority":"PAYMENT_OWNER_AND_REVIEWER_PASS","depends_on":["80"]}
   },
-  "lane_receipts": {
+  "receipt_contract": {
+    "closed_state": "VERIFIED",
+    "required_fields": ["receipt_id","slot_id","artifact_path","artifact_sha256","exact_sha","evidence_tier","authority_class","authority_receipt_id","dependency_receipt_ids","verdict"],
+    "required_verdict": "PASS",
+    "artifact_path_prefix": "docs/evidence/",
+    "state_transition": "A slot becomes VERIFIED only when its latest valid receipt matches tier and closure_authority, binds a committed artifact SHA-256 and exact Git SHA, and names PASS receipts for every dependency."
+  },
+  "receipt_registry": {
     "A": [],
-    "B": []
+    "L": [],
+    "C5": [],
+    "P": [],
+    "G": [],
+    "B": [],
+    "R": [],
+    "M": [],
+    "Q": [],
+    "I": [],
+    "U": [],
+    "K": [],
+    "O": []
   },
   "row_adjustments": [],
   "production_public_real_money": "OFF"

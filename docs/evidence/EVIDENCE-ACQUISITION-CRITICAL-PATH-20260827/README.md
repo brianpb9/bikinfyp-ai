@@ -12,9 +12,12 @@ The authorized source defines 80 and 100 gates but does not allocate the
 80-to-100 interval at 90. The contract therefore makes 90
 `UNDEFINED_AUTHORITY_CHOICE_REQUIRED`; it cannot be certified by interpolation.
 
-Lane A is marked external/in progress and Lane B depends on Lane A. Their
-receipt arrays are intentionally empty until immutable sanitized artifacts are
-available. This slice performs no deploy and cannot conflict with Lane A.
+Lane A is marked external/in progress and Lane B depends on Lane A. A receipt
+registry covers all 13 slots and is intentionally empty until immutable
+sanitized artifacts are available. A slot can become `VERIFIED` only through a
+PASS receipt binding its exact tier, required authority class, committed
+artifact path+SHA-256, exact Git SHA, and PASS receipt IDs for every dependency.
+This slice performs no deploy and cannot conflict with Lane A.
 Production, public launch, and real money remain OFF.
 
 Run `node verify.mjs`. It binds exact source rows, arithmetic, Git ancestry,
