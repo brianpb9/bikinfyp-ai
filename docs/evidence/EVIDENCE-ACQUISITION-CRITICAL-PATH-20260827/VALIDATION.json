@@ -19,6 +19,7 @@
     "c5_founder_policy": "APPROVED_IMPLEMENTATION_PENDING",
     "payment_canary": "APPROVED_IN_PRINCIPLE_PREREQUISITES_MISSING_NOT_EXECUTED",
     "payment_canary_ready": "NO_CHEAPEST_SKU_60000_EXCEEDS_50000_CAP",
+    "payment_order": "PRE_CANARY_ECONOMICS_AND_READINESS_THEN_ONE_CANARY_RECONCILIATION_THEN_SEPARATE_GO_LIVE",
     "release_role_names": "MISSING",
     "canonical_gate_membership": "PASS",
     "dependency_graph": "PASS",

@@ -84,8 +84,8 @@
     "A": {"name":"exact managed staging deploy, PostgreSQL/R2, migrations, runtime readback","tier":"MANAGED_STAGING","state":"IN_PROGRESS_EXTERNAL_LANE","closure_authority":"REVIEWER_PASS","depends_on":[]},
     "L": {"name":"paired legacy PostgreSQL and matching R2 population audit","tier":"MANAGED_STAGING","state":"OPEN","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
     "C5": {"name":"CATEGORY_UNKNOWN/ambiguous/bundle fails closed into manual-review quarantine; no provider/publication/spend/irreversible downstream; only explicitly authorized human review role may release; no heuristic auto-map; accepted implementation required","tier":"AUTHORITY_AND_REPOSITORY","state":"FOUNDER_POLICY_APPROVED_IMPLEMENTATION_PENDING","closure_authority":"FOUNDER_DECISION_AND_REVIEWER_PASS","depends_on":[]},
-    "P": {"name":"approved sandbox provider, closed internal max-one canary, provider receipt, DB truth, exactly-once settlement reconciliation, ambiguous STOP_NO_RETRY","tier":"PAYMENT_EXTERNAL","state":"NOT_READY_CHEAPEST_SKU_60000_EXCEEDS_50000_CAP","closure_authority":"PAYMENT_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
-    "G": {"name":"Founder price/COGS fields complete and PAYMENTS_GO_LIVE explicitly decided","tier":"FOUNDER_AUTHORITY","state":"PRICE_COGS_AND_GO_LIVE_PENDING","closure_authority":"FOUNDER_DECISION","depends_on":[]},
+    "P": {"name":"one closed internal canary, provider receipt, DB truth, exactly-once settlement reconciliation, ambiguous STOP_NO_RETRY","tier":"PAYMENT_EXTERNAL","state":"BLOCKED_PRE_CANARY_ECONOMICS_AND_MERCHANT_CHANNEL_READINESS","closure_authority":"PAYMENT_OWNER_AND_REVIEWER_PASS","depends_on":["A"],"phase_dependencies":["G.PRE_CANARY_ECONOMICS","G.MERCHANT_CHANNEL_READINESS"]},
+    "G": {"name":"ordered payment authority: pre-canary economics/readiness first, then post-canary separate PAYMENTS_GO_LIVE decision","tier":"FOUNDER_AUTHORITY","state":"PRE_CANARY_ECONOMICS_MISSING_CANARY_NOT_READY","closure_authority":"FOUNDER_DECISION","depends_on":[],"phases":{"PRE_CANARY_ECONOMICS":{"state":"MISSING_CHEAPEST_SKU_60000_EXCEEDS_50000_CAP","depends_on":[]},"MERCHANT_CHANNEL_READINESS":{"state":"MISSING","depends_on":[]},"PAYMENTS_GO_LIVE":{"state":"NOT_DECIDED_CANARY_REQUIRED_FIRST","depends_on":["P","R"]}}},
     "B": {"name":"controlled staging/production-like OTP-to-delivery/refund E2E and recovery","tier":"MANAGED_STAGING","state":"PENDING_A","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
     "R": {"name":"separate named Release Approver, Release Operator, and Rollback Authority; controls and verified intake with no Retail P0 fail-open","tier":"RELEASE_AUTHORITY","state":"ROLE_NAMES_REQUIRED","closure_authority":"RELEASE_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
     "M": {"name":"C1-C13 PASS across all required E/A/W paths and no remaining P0/P1 partial","tier":"QA_RELEASE","state":"OPEN","closure_authority":"QA_RELEASE_REVIEWER_PASS","depends_on":["80"]},
@@ -119,6 +119,17 @@
   },
   "authority_registry": "AUTHORITY-REGISTRY.json",
   "compression_source_task": "COMPRESSION-SOURCE-TASK.json",
+  "payment_sequence": {
+    "order": ["PRE_CANARY_ECONOMICS_AND_MERCHANT_CHANNEL_READINESS","ONE_CLOSED_CANARY_SETTLEMENT_RECONCILIATION","SEPARATE_PAYMENTS_GO_LIVE_DECISION"],
+    "pre_canary_required_fields_source": "FOUNDER-80-DIRECTION.json#price_cogs_required_fields",
+    "phase_receipts": {
+      "PRE_CANARY_ECONOMICS_AND_MERCHANT_CHANNEL_READINESS": ["Founder-approved economics record","merchant readiness receipt","selected channel readiness receipt"],
+      "ONE_CLOSED_CANARY_SETTLEMENT_RECONCILIATION": ["provider receipt","database truth receipt","exactly-once receipt","settlement reconciliation receipt"],
+      "SEPARATE_PAYMENTS_GO_LIVE_DECISION": ["Founder PAYMENTS_GO_LIVE decision after canary PASS","release-control receipt"]
+    },
+    "canary_may_execute_before_phase_1": false,
+    "go_live_may_be_decided_before_phase_2_pass": false
+  },
   "founder_80_direction": "FOUNDER-80-DIRECTION.json",
   "evidence_token_awards": [],
   "score_state": {

@@ -26,6 +26,14 @@ separated release model while leaving role names missing. It does not
 substitute for implementation or actual Founder, payment-owner, release-owner,
 or independent-review receipts. No 90 acquisition work is authorized.
 
+Payment ordering is non-circular and fail-closed. Founder-approved package,
+entitlement, channel, variable-COGS source/effective time, fee/tax basis,
+expected settlement, margin/test-loss, cap, and approval fields plus
+merchant/channel readiness must exist first. Only then may one closed canary
+run and produce provider, DB truth, exactly-once, settlement, and reconciliation
+receipts. `PAYMENTS_GO_LIVE` is a separate Founder decision after that canary
+passes; it cannot be inferred from pre-canary economics or decided early.
+
 `PITR_REQUIRED_FOR_80=false`: the canonical rubric names backup/PITR restore as
 an additional 100 requirement, not an 80 requirement. This is not a waiver of
 controlled recovery proof at 80 and does not remove PITR from 100.
