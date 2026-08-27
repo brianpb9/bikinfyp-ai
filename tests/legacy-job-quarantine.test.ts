@@ -4,6 +4,8 @@ import fs from "node:fs";
 
 import {
   classifyLegacyJobEvidence,
+  LEGACY_PRODUCT_REASON,
+  LEGACY_REFERENCE_REASON,
   requireCurrentJobEvidence,
   type LegacyJobQuarantineReason,
 } from "../lib/legacy-job-quarantine";
@@ -75,8 +77,28 @@ test("classifier tidak memutasi input dan current mengembalikan exact immutable 
 });
 
 test("require seam mempertahankan kelas error canonical tanpa reason code baru", () => {
-  assert.throws(() => requireCurrentJobEvidence({ approvedReferenceManifest: null, jobProductSnapshot: snapshot }), UnsafeLegacyReferenceSnapshot);
-  assert.throws(() => requireCurrentJobEvidence({ approvedReferenceManifest: manifest, jobProductSnapshot: null }), UnsafeLegacyProductSnapshot);
+  assert.throws(
+    () => requireCurrentJobEvidence({ approvedReferenceManifest: null, jobProductSnapshot: snapshot }),
+    (error: unknown) => error instanceof UnsafeLegacyReferenceSnapshot && error.message === LEGACY_REFERENCE_REASON,
+  );
+  assert.throws(
+    () => requireCurrentJobEvidence({ approvedReferenceManifest: manifest, jobProductSnapshot: null }),
+    (error: unknown) => error instanceof UnsafeLegacyProductSnapshot && error.message === LEGACY_PRODUCT_REASON,
+  );
+  assert.throws(
+    () => requireCurrentJobEvidence({
+      approvedReferenceManifest: JSON.stringify({ ...JSON.parse(manifest), version: 1 }),
+      jobProductSnapshot: snapshot,
+    }),
+    (error: unknown) => error instanceof UnsafeLegacyReferenceSnapshot && error.message === LEGACY_REFERENCE_REASON,
+  );
+  assert.throws(
+    () => requireCurrentJobEvidence({
+      approvedReferenceManifest: manifest,
+      jobProductSnapshot: JSON.stringify({ ...JSON.parse(snapshot), version: 2 }),
+    }),
+    (error: unknown) => error instanceof UnsafeLegacyProductSnapshot && error.message === LEGACY_PRODUCT_REASON,
+  );
   assert.throws(
     () => requireCurrentJobEvidence({ approvedReferenceManifest: manifest, jobProductSnapshot: snapshot, productType: { ...confirmedType, product_type_state: "QUARANTINED" } }),
     (error: unknown) => (error as { body?: { code?: string } }).body?.code === "PRODUCT_TYPE_CONFIRMATION_REQUIRED",

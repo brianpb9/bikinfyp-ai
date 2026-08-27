@@ -42,6 +42,11 @@ export type LegacyJobEvidenceClassification =
       reason: LegacyJobQuarantineReason;
     };
 
+export const LEGACY_REFERENCE_REASON =
+  "REF_MANIFEST_LEGACY_UNSAFE: job tidak memiliki manifest referensi current yang dapat diverifikasi; worker gagal tertutup.";
+export const LEGACY_PRODUCT_REASON =
+  "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: job tanpa snapshot promo v3 tidak boleh memakai row produk mutable.";
+
 function jsonObject(raw: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(raw) as unknown;
@@ -141,7 +146,7 @@ export function requireCurrentJobEvidence(input: Parameters<typeof classifyLegac
   switch (result.reason) {
     case "REFERENCE_MANIFEST_MISSING":
     case "REFERENCE_MANIFEST_UNSUPPORTED_VERSION":
-      throw new UnsafeLegacyReferenceSnapshot();
+      throw new UnsafeLegacyReferenceSnapshot(LEGACY_REFERENCE_REASON);
     case "REFERENCE_MANIFEST_MALFORMED":
     case "REFERENCE_MANIFEST_INVALID_OCR_OR_HASH":
       return { // parse again only to retain canonical OCR/manifest error semantics
@@ -150,7 +155,7 @@ export function requireCurrentJobEvidence(input: Parameters<typeof classifyLegac
       };
     case "PRODUCT_SNAPSHOT_MISSING":
     case "PRODUCT_SNAPSHOT_UNSUPPORTED_VERSION":
-      throw new UnsafeLegacyProductSnapshot();
+      throw new UnsafeLegacyProductSnapshot(LEGACY_PRODUCT_REASON);
     case "PRODUCT_SNAPSHOT_MALFORMED":
       return {
         manifest: parseJobReferenceManifest(input.approvedReferenceManifest ?? ""),

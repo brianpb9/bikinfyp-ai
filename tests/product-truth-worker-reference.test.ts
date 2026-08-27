@@ -1166,29 +1166,33 @@ test("W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot"
   const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
   setMediaStorageForTests(spy.storage);
   const { jobId } = siapkanJob([rel]);
-  db.prepare("UPDATE jobs SET provider_video='legacy-provider',approved_reference_manifest=NULL,job_product_snapshot=NULL WHERE id=?").run(jobId);
+  db.prepare("UPDATE jobs SET provider_video='legacy-provider',approved_reference_manifest=NULL WHERE id=?").run(jobId);
 
   await processJob(jobId);
 
   assert.deepEqual(spy.materializeCalls, [], "legacy unsafe mencapai materialize/provider");
   const row = db.prepare("SELECT approved_reference_manifest,job_product_snapshot,state FROM jobs WHERE id=?").get(jobId) as { approved_reference_manifest: string | null; job_product_snapshot: string | null; state: string };
   assert.equal(row.approved_reference_manifest, null);
-  assert.equal(row.job_product_snapshot, null);
+  assert.ok(row.job_product_snapshot);
   assert.ok(["FAILED", "REFUNDED"].includes(row.state));
+  const audits = db.prepare("SELECT meta FROM audit_log WHERE entity_id=? AND action='job.transition'").all(jobId) as { meta: string }[];
+  assert.ok(audits.some((entry) => entry.meta.includes("REF_MANIFEST_LEGACY_UNSAFE")), "audit kehilangan reason legacy manifest");
 });
 
-test("W2 product snapshot invalid gagal tertutup sebelum materialize/provider", async () => {
+test("W2 product snapshot missing gagal tertutup dan audit menyimpan canonical reason", async () => {
   const rel = "uploads/w2-product-snapshot-invalid/0.webp";
   const bytes = Buffer.from("INVALID-SNAPSHOT-W2");
   const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
   setMediaStorageForTests(spy.storage);
   const { jobId } = siapkanJob([rel]);
-  db.prepare("UPDATE jobs SET job_product_snapshot='{}' WHERE id=?").run(jobId);
+  db.prepare("UPDATE jobs SET job_product_snapshot=NULL WHERE id=?").run(jobId);
 
   await processJob(jobId);
 
   assert.deepEqual(spy.materializeCalls, []);
-  assertNolEfekSamping(jobId, spy, "W2 product snapshot invalid");
+  assertNolEfekSamping(jobId, spy, "W2 product snapshot missing");
+  const audits = db.prepare("SELECT meta FROM audit_log WHERE entity_id=? AND action='job.transition'").all(jobId) as { meta: string }[];
+  assert.ok(audits.some((entry) => entry.meta.includes("PRODUCT_SNAPSHOT_LEGACY_UNSAFE")), "audit kehilangan reason legacy product snapshot");
 });
 
 test("W2 non-Ads snapshot v1 dikarantina sebelum reference boundary dan tidak ditimpa", async () => {
@@ -1291,6 +1295,9 @@ test("W2 C10: product type quarantine berhenti sebelum materialize/provider/capt
     assert.equal(provider.jumlah(), 0);
     assert.deepEqual(spy.materializeCalls, []);
     assertNolEfekSamping(jobId, spy, "W2 C10 product type quarantine");
+    const audits = db.prepare("SELECT meta FROM audit_log WHERE entity_id=? AND action='job.transition'").all(jobId) as { meta: string }[];
+    assert.ok(audits.some((entry) => entry.meta.includes("PRODUCT_TYPE_CONFIRMATION_REQUIRED")),
+      "audit W2 kehilangan canonical product-type reason");
   } finally {
     provider.reset();
   }

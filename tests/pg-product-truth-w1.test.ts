@@ -285,8 +285,42 @@ const segmen = [
   { role: "cta", start: 10, end: 15, text: "linknya di keranjang kuning ya", visual_direction: "x" },
 ];
 
-/** Satu produk + skrip + job QUEUED yang siap diproses W1. */
-async function siapkanJob(images: string[], tier = "silent_caption"): Promise<string> {
+function manifestAdmisiFixture(jobId: string, images: string[], isi: Map<string, Buffer>): string | null {
+  const references = images.slice(0, 7).flatMap((rel, index) => {
+    const bytes = isi.get(rel);
+    const evidenceRaw = isi.get(`${rel}.meta.json`);
+    if (!bytes || !evidenceRaw) return [];
+    let evidence: Record<string, unknown>;
+    try { evidence = JSON.parse(evidenceRaw.toString("utf8")) as Record<string, unknown>; }
+    catch { return []; }
+    if (evidence.layakReferensi !== true || evidence.sha256 !== sha256(bytes)
+        || evidence.labelOcrStatus !== "READABLE" || evidence.labelOcrVersion !== 1) return [];
+    const snapshotRel = `jobs/${jobId}/approved-references/${index}-${sha256(bytes)}${path.extname(rel)}`;
+    isi.set(snapshotRel, Buffer.from(bytes));
+    return [{
+      rel, snapshotRel, sha256: sha256(bytes), versiBukti: Number(evidence.versiBukti),
+      labelOcrStatus: "READABLE", labelOcrVersion: 1,
+    }];
+  });
+  return references.length ? JSON.stringify({ version: 2, references }) : null;
+}
+
+async function snapshotRels(jobId: string): Promise<string[]> {
+  const raw = (await pool.query("SELECT approved_reference_manifest FROM jobs WHERE id=$1", [jobId])).rows[0]?.approved_reference_manifest;
+  if (!raw) return [];
+  return (JSON.parse(raw) as { references: { snapshotRel: string }[] }).references.map((ref) => ref.snapshotRel);
+}
+
+function assertManifestBatches(actual: string[], expected: string[], context: string): void {
+  assert.ok(expected.length > 0 && actual.length >= expected.length, `${context}: manifest tidak dimaterialize`);
+  assert.equal(actual.length % expected.length, 0, `${context}: batch manifest parsial`);
+  for (let index = 0; index < actual.length; index += expected.length) {
+    assert.deepEqual(actual.slice(index, index + expected.length), expected, `${context}: urutan snapshot berubah`);
+  }
+}
+
+/** Satu current job QUEUED dengan manifest admission-owned yang siap diproses W1. */
+async function siapkanJob(images: string[], isi: Map<string, Buffer>, tier = "silent_caption"): Promise<string> {
   const pid = uid(), sid = uid(), jid = uid(), t = at();
   await pool.query(
     `INSERT INTO products
@@ -303,9 +337,14 @@ async function siapkanJob(images: string[], tier = "silent_caption"): Promise<st
   );
   const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
   const productSnapshot = createJobProductSnapshotRaw({ name: "Serum Glow Bright", category: "beauty", price_idr: 85_000 });
+  const manifestRaw = manifestAdmisiFixture(jid, images, isi);
   await pool.query(
-    "INSERT INTO jobs (id,user_id,product_id,script_id,format,quality_tier,duration_s,job_product_snapshot,state,created_at,state_changed_at) VALUES ($1,$2,$3,$4,'hands_only',$5,15,$6,'QUEUED',$7,$7)",
-    [jid, userId, pid, sid, tier, productSnapshot, t]
+    "INSERT INTO jobs (id,user_id,product_id,script_id,format,quality_tier,duration_s,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at) VALUES ($1,$2,$3,$4,'hands_only',$5,15,$6,$7,'QUEUED',$8,$8)",
+    [jid, userId, pid, sid, tier, manifestRaw, productSnapshot, t]
+  );
+  await pool.query(
+    "INSERT INTO credit_ledger (id,user_id,delta,type,job_id,created_at) VALUES ($1,$2,-12000,'hold',$3,$4)",
+    [uid(), userId, jid, t],
   );
   await pool.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jid, sid]);
   return jid;
@@ -748,47 +787,28 @@ async function jalankan(jobId: string, isi: Map<string, Buffer>, wujudkan = fals
   return spy;
 }
 
-// ------------------------------------------------------- P0-B4 KANARI (W1)
-//
-// Temuan Reviewer atas 691bf83, dan ia benar: kanari sempat hanya punya bukti
-// runtime di worker SQLite. Mencabut pemanggilan di lib/postgres/worker.ts —
-// JALUR PRODUKSI UTAMA — tidak membuat satu pun test merah. Slice yang mengklaim
-// dua worker sementara hanya satu yang dijaga adalah klaim yang lebih luas dari
-// buktinya.
-//
-// Dua arah wajib ada. Yang DITOLAK memberi pembilang; yang LOLOS memberi
-// penyebut. Tanpa keduanya, rasio yang jadi alasan kanari ini ada tidak bisa
-// dihitung.
-
-test("W1 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah", async (t) => {
+// C10: resolver/kanari hanya milik admission. W1 mengklasifikasi evidence job
+// secara read-only dan tidak boleh membaca ulang products.images/sidecar.
+test("W1 legacy tanpa manifest tidak menjalankan ulang resolver/kanari", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   const { resetKanariUntukTest, ringkasanKanari } = await import("../lib/kanari-bukti");
-  const { ALASAN_TOLAK, RINCI_TOLAK } = await import("../lib/product-truth");
   resetKanariUntukTest();
 
   const rel = `uploads/w1-kanari-tolak-${process.pid}/0.webp`;
   const isi = new Map<string, Buffer>([[rel, PACKSHOT]]); // bytes ADA, sidecar HILANG
-  const jobId = await siapkanJob([rel]);
+  const jobId = await siapkanJob([rel], isi);
   const spy = await jalankan(jobId, isi);
 
-  // 1. Vonis tidak berubah: gagal-tertutup sebelum langkah berbayar.
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 kanari tolak");
-  assert.deepEqual(
-    spy.materializeCalls,
-    [],
-    "kanari membuat W1 mengambil bytes lebih dulu — alat ukur mengubah urutan yang diukurnya"
-  );
-
-  // 2. Kanari benar-benar menyala DI W1, dengan kode, bukan kalimat.
+  assert.deepEqual(spy.materializeCalls, []);
+  assert.deepEqual(spy.getCalls, [], "legacy W1 membaca ulang products.images/sidecar");
   const r = ringkasanKanari();
-  assert.equal(r.dinilai, 1, "kanari tidak menyala di lib/postgres/worker.ts — jalur produksi utama tanpa angka");
-  assert.equal(r.ditolak, 1);
+  assert.equal(r.dinilai, 0);
+  assert.equal(r.ditolak, 0);
   assert.equal(r.lolos, 0);
-  assert.equal(r.perAlasan[ALASAN_TOLAK.BUKTI_TIDAK_SAH], 1);
-  assert.equal(r.perRinci[RINCI_TOLAK.SIDECAR_HILANG], 1);
 });
 
-test("W1 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", async (t) => {
+test("W1 current manifest tidak menjalankan ulang resolver/kanari", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   const { resetKanariUntukTest, ringkasanKanari } = await import("../lib/kanari-bukti");
   resetKanariUntukTest();
@@ -796,16 +816,31 @@ test("W1 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", 
 
   const rel = `uploads/w1-kanari-lolos-${process.pid}/0.webp`;
   const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
-  const jobId = await siapkanJob([rel]);
+  const jobId = await siapkanJob([rel], isi);
   const spy = await jalankan(jobId, isi, true);
 
-  assert.ok(spy.materializeCalls.length >= 1, "kontrol positif tidak sampai ke materialize; penilaian LOLOS tidak pernah terjadi");
-  assert.ok(spy.materializeCalls.every((key) => key === rel), "worker meminta referensi di luar manifest");
+  assertManifestBatches(spy.materializeCalls, await snapshotRels(jobId), "W1 current no-canary");
+  assert.deepEqual(spy.getCalls, [], "current W1 membaca ulang products.images/sidecar");
   const r = ringkasanKanari();
-  assert.equal(r.dinilai, 1, "penilaian yang LOLOS tidak dicatat; kanari hanya punya pembilang");
-  assert.equal(r.lolos, 1);
+  assert.equal(r.dinilai, 0);
+  assert.equal(r.lolos, 0);
   assert.equal(r.ditolak, 0);
-  assert.deepEqual(r.perAlasan, {}, "penolakan dicatat padahal referensinya lolos");
+});
+
+test("W1 provider branch mengarantina product type sebelum materialize/provider/capture", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  await pasangProviderPengamat();
+  const rel = `uploads/w1-c10-type-${process.pid}/0.webp`;
+  const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
+  const jobId = await siapkanJob([rel], isi);
+  await pool.query("UPDATE products SET product_type_state='QUARANTINED' WHERE id=(SELECT product_id FROM jobs WHERE id=$1)", [jobId]);
+  const spy = await jalankan(jobId, isi, true);
+  assert.deepEqual(spy.materializeCalls, []);
+  assert.equal(amatan.dipanggil, false);
+  await assertNolEfekSamping(jobId, spy.putCalls, "W1 C10 product type quarantine");
+  const audits = (await pool.query("SELECT meta FROM audit_log WHERE entity_id=$1 AND action='job.transition'", [jobId])).rows;
+  assert.ok(audits.some((entry) => JSON.stringify(entry.meta).includes("PRODUCT_TYPE_CONFIRMATION_REQUIRED")),
+    "audit W1 kehilangan canonical product-type reason");
 });
 
 test("confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol reference Story Ads", async (t) => {
@@ -1383,19 +1418,20 @@ test("W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images"
   const currentRel = `uploads/w1-manifest-${process.pid}/current.webp`;
   const approvedBytes = Buffer.from("APPROVED-IMMUTABLE-W1");
   const currentBytes = Buffer.from("CURRENT-NOT-APPROVED-W1");
-  const jobId = await siapkanJob([currentRel]);
+  const fixtureIsi = new Map<string, Buffer>([
+    [approvedRel, approvedBytes],
+    [currentRel, currentBytes],
+    [`${currentRel}.meta.json`, sidecar(currentBytes, true)],
+  ]);
+  const jobId = await siapkanJob([currentRel], fixtureIsi);
   const snapshotRel = `jobs/${jobId}/approved-references/0-approved.webp`;
   const raw = JSON.stringify({
     version: 2,
     references: [{ rel: approvedRel, sha256: sha256(approvedBytes), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel }],
   });
   await pool.query("UPDATE jobs SET approved_reference_manifest=$1 WHERE id=$2", [raw, jobId]);
-  const spy = await jalankan(jobId, new Map<string, Buffer>([
-    [approvedRel, approvedBytes],
-    [snapshotRel, approvedBytes],
-    [currentRel, currentBytes],
-    [`${currentRel}.meta.json`, sidecar(currentBytes, true)],
-  ]));
+  fixtureIsi.set(snapshotRel, approvedBytes);
+  const spy = await jalankan(jobId, fixtureIsi);
 
   assert.deepEqual(spy.materializeCalls, [snapshotRel], "W1 tidak memakai snapshot durable manifest");
   assert.deepEqual(spy.getCalls, [], "W1 membaca ulang sidecar produk walau manifest durable sudah ada");
@@ -1407,14 +1443,15 @@ test("W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images"
 test("W1 non-Ads snapshot produk v1 dikarantina sebelum reference boundary", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   const rel = `uploads/w1-affiliate-v1-${process.pid}/0.webp`;
-  const jobId = await siapkanJob([rel]);
+  const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
+  const jobId = await siapkanJob([rel], isi);
   const legacyRaw = JSON.stringify({
     version: 1, productName: "Serum Glow Bright", category: "beauty",
     trustedBrand: { source: "products.raw_meta.brand", value: null },
     productVisualDesc: null, brandBrief: null, claims: [],
   });
   await pool.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [legacyRaw, jobId]);
-  const spy = await jalankan(jobId, new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]));
+  const spy = await jalankan(jobId, isi);
   assert.deepEqual(spy.materializeCalls, [], "W1 snapshot v1 mencapai reference boundary");
   const durable = (await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot;
   assert.equal(durable, legacyRaw, "W1 menimpa snapshot v1 durable dengan row produk mutable");
@@ -1425,9 +1462,10 @@ test("W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot",
   if (lewati) return t.skip("UJI_PG_URL kosong");
   await pasangProviderPengamat();
   const rel = `uploads/w1-legacy-${process.pid}/0.webp`;
-  const jobId = await siapkanJob([rel]);
-  await pool.query("UPDATE jobs SET provider_video='legacy-provider',job_product_snapshot=NULL WHERE id=$1", [jobId]);
-  const spy = await jalankan(jobId, new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]));
+  const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
+  const jobId = await siapkanJob([rel], isi);
+  await pool.query("UPDATE jobs SET provider_video='legacy-provider',approved_reference_manifest=NULL,job_product_snapshot=NULL WHERE id=$1", [jobId]);
+  const spy = await jalankan(jobId, isi);
   assert.deepEqual(spy.materializeCalls, [], "legacy unsafe mencapai materialize");
   assert.equal(amatan.dipanggil, false, "legacy unsafe mencapai provider");
   const row = (await pool.query("SELECT approved_reference_manifest,job_product_snapshot,state FROM jobs WHERE id=$1", [jobId])).rows[0];
@@ -1436,52 +1474,10 @@ test("W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot",
   assert.ok(["FAILED", "REFUNDED"].includes(row.state));
   assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM outputs WHERE job_id=$1", [jobId]), 0);
   assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','regen')", [jobId]), 0);
+  const audits = (await pool.query("SELECT meta FROM audit_log WHERE entity_id=$1 AND action='job.transition'", [jobId])).rows;
+  assert.ok(audits.some((entry) => JSON.stringify(entry.meta).includes("REF_MANIFEST_LEGACY_UNSAFE")),
+    "audit W1 kehilangan canonical legacy-manifest reason");
 });
-
-// ------------------------------------------------------------------- C8
-
-for (const [judul, buatIsi] of [
-  [
-    "sidecar KORUP",
-    (rel: string) => new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, Buffer.from('{"sha256": "abc", "jenis":')]]),
-  ],
-  ["sidecar HILANG", (rel: string) => new Map<string, Buffer>([[rel, PACKSHOT]])],
-  [
-    "sha256 BEDA dari bytes tersimpan",
-    (rel: string) =>
-      new Map<string, Buffer>([[rel, Buffer.from("BYTES-DITUKAR")], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]),
-  ],
-] as [string, (rel: string) => Map<string, Buffer>][]) {
-  test(`W1 C8: ${judul} — nol materialize, nol provider, gagal-tertutup, nol capture/regen`, async (t) => {
-    if (lewati) return t.skip("UJI_PG_URL kosong");
-    // Observer DIPASANG ULANG per kasus. Tanpa ini, fake dari kasus C1 tetap
-    // terpasang dan `amatan.dipanggil` masih membawa nilai kasus sebelumnya —
-    // jadi regresi yang MELEWATI gerbang bukti lalu memanggil provider dengan
-    // path mentah tetap memenuhi seluruh asersi lain (nol materialize, nol
-    // fetch, provider_video null, job FAILED). Temuan Reviewer 21 Agu.
-    await pasangProviderPengamat();
-    const rel = `uploads/w1-c8-${process.pid}-${judul.replace(/\W+/g, "")}/0.webp`;
-    const jobId = await siapkanJob([rel]);
-    const spy = await jalankan(jobId, buatIsi(rel));
-
-    await assertNolEfekSamping(jobId, spy.putCalls, `W1 C8 ${judul}`);
-    assert.deepEqual(
-      spy.materializeCalls,
-      [],
-      `EVIDENCE_INVALID: dengan ${judul}, W1 tetap men-materialize payload ` +
-        `${JSON.stringify(spy.materializeCalls)}. Worker wajib gagal-tertutup SEBELUM mengambil ` +
-        "bytes referensi."
-    );
-    assert.equal(
-      amatan.dipanggil,
-      false,
-      `provider DIPANGGIL walau bukti ${judul}. Nol materialize saja tidak membuktikan apa-apa ` +
-        "kalau ada jalur yang melewati gerbang lalu memanggil provider dengan path mentah."
-    );
-    const state = (await pool.query("SELECT state FROM jobs WHERE id=$1", [jobId])).rows[0].state;
-    assert.ok(["FAILED", "REFUNDED"].includes(state), `job dengan ${judul} berakhir ${state}, bukan gagal-tertutup`);
-  });
-}
 
 // ------------------------------------------------------------------- C11
 
@@ -1493,36 +1489,19 @@ test("W1 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING
     setMediaStorageForTests(undefined);
     setVideoProvidersForTests(undefined);
   });
-  const { resetKanariUntukTest, ringkasanKanari } = await import("../lib/kanari-bukti");
-  const { ALASAN_TOLAK } = await import("../lib/product-truth");
-  resetKanariUntukTest();
   await pasangProviderPengamat();
 
   const rel = `uploads/w1-c11-hilang-${process.pid}/0.webp`;
-  // Sidecar sah sudah ada ketika worker mulai, tetapi payload yang dirujuknya
-  // tidak ada. Dengan demikian vonis yang benar REF_MISSING, bukan C8
-  // EVIDENCE_INVALID dan bukan race sesudah materialize.
-  const isi = new Map<string, Buffer>([[`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
-  const jobId = await siapkanJob([rel]);
+  const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
+  const jobId = await siapkanJob([rel], isi);
+  const [snapshotRel] = await snapshotRels(jobId);
+  isi.delete(snapshotRel); // bytes admission-owned hilang saat W1 mulai
   const spy = await jalankan(jobId, isi);
 
-  assert.deepEqual(
-    spy.getCalls,
-    [`${rel}.meta.json`, rel],
-    "fixture C11 tidak melewati urutan sidecar sah lalu payload hilang"
-  );
-  assert.deepEqual(spy.materializeCalls, [], "W1 C11: payload hilang tetap dicoba materialize");
+  assert.deepEqual(spy.getCalls, [], "W1 C11 membaca ulang source/sidecar mutable");
+  assert.deepEqual(spy.materializeCalls, [snapshotRel], "W1 C11 tidak meminta snapshot immutable");
   assert.equal(amatan.dipanggil, false, "W1 C11: provider sempat dipanggil");
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 C11 REF_MISSING");
-
-  const kanari = ringkasanKanari();
-  assert.equal(kanari.dinilai, 1, "W1 C11: boundary resolver tidak tercatat");
-  assert.equal(kanari.ditolak, 1, "W1 C11: referensi hilang tidak ditolak");
-  assert.equal(
-    kanari.perAlasan[ALASAN_TOLAK.BERKAS_HILANG],
-    1,
-    "W1 C11: jalur yang ditempuh bukan REF_MISSING"
-  );
 });
 
 // ------------------------------------------------- referensi tambahan
@@ -1546,22 +1525,14 @@ test("W1: loop referensi tambahan HANYA meminta yang tersetujui, urut (berhenti 
     [relSah2, PACKSHOT2],
     [`${relSah2}.meta.json`, sidecar(PACKSHOT2, true)],
   ]);
-  const jobId = await siapkanJob([relBanner, relSah1, relSah2], "high_quality");
+  const jobId = await siapkanJob([relBanner, relSah1, relSah2], isi, "high_quality");
   const spy = await jalankan(jobId, isi, true);
+  const expectedSnapshots = await snapshotRels(jobId);
 
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 extra");
-  assert.deepEqual(
-    spy.materializeCalls,
-    [relSah1, relSah2],
-    `urutan materialize salah: ${JSON.stringify(spy.materializeCalls)}. Yang dituntut PERSIS ` +
-      "[foto sah pertama, foto sah kedua] — banner tidak boleh diminta sama sekali, dan foto sah " +
-      "kedua WAJIB benar-benar diminta (kalau ia hilang, cabang tambahan tidak pernah dilewati)."
-  );
-  assert.ok(
-    !spy.materializeCalls.includes(relBanner),
-    "banner ikut diminta sebagai referensi tambahan — foto ke-2 dst juga dikirim ke model sebagai " +
-      "referensi identitas, sama berbahayanya kalau salah"
-  );
+  assertManifestBatches(spy.materializeCalls, expectedSnapshots, "W1 extra immutable manifest");
+  assert.equal(expectedSnapshots.length, 2, "manifest admission memasukkan banner atau kehilangan foto sah");
+  assert.deepEqual(spy.getCalls, [], "W1 membaca banner/source mutable di luar manifest");
 
   // BOUNDARY BERHENTINYA: `personSafeReferencePhotos`, yang berjalan tepat
   // SESUDAH loop referensi tambahan dan SEBELUM planner/provider. Ia gagal di
@@ -1655,7 +1626,7 @@ test("W1: referensi tambahan yang DITERIMA PROVIDER — urutan, hash, dan tanpa 
     [relSah2, sah2],
     [`${relSah2}.meta.json`, sidecar(sah2, true)],
   ]);
-  const jobId = await siapkanJob([relBanner, relSah1, relSah2], "high_quality");
+  const jobId = await siapkanJob([relBanner, relSah1, relSah2], isi, "high_quality");
   const spy = await jalankan(jobId, isi, true);
 
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 provider extras");
@@ -1719,7 +1690,7 @@ test("W1: delapan foto tersetujui — provider menerima satu primary + maksimal 
     bytesPer.push(png);
   }
 
-  const jobId = await siapkanJob(rels, "high_quality");
+  const jobId = await siapkanJob(rels, isi, "high_quality");
   const spy = await jalankan(jobId, isi, true);
 
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 delapan foto");
@@ -1815,14 +1786,15 @@ test("W1 TOCTOU: path bersama ditimpa sesudah diperiksa — provider tetap mener
     },
   } as never);
 
-  const jobId = await siapkanJob([relSah1, relSah2], "high_quality");
+  const jobId = await siapkanJob([relSah1, relSah2], isi, "high_quality");
+  const expectedSnapshots = await snapshotRels(jobId);
   const { processPostgresJob } = await import("../lib/postgres/worker");
   await processPostgresJob(jobId);
 
   await assertNolEfekSamping(jobId, putCalls, "W1 TOCTOU");
   assert.equal(materializeCalls.length % 2, 0, "verifikasi manifest tidak terdiri dari batch lengkap");
   for (let i = 0; i < materializeCalls.length; i += 2) {
-    assert.deepEqual(materializeCalls.slice(i, i + 2), [relSah1, relSah2], "setiap boundary provider wajib memverifikasi kedua referensi berurutan");
+    assert.deepEqual(materializeCalls.slice(i, i + 2), expectedSnapshots, "setiap boundary provider wajib memverifikasi kedua snapshot berurutan");
   }
   assert.equal(
     sha256(fs.readFileSync(pathBersama)),
@@ -1851,7 +1823,7 @@ test("W1 C3: mismatch eksplisit pada referensi kedua memakai brand admission dan
     [rel1, cocok], [`${rel1}.meta.json`, sidecar(cocok, true)],
     [rel2, salah], [`${rel2}.meta.json`, sidecar(salah, true)],
   ]);
-  const jobId = await siapkanJob([rel1, rel2], "high_quality");
+  const jobId = await siapkanJob([rel1, rel2], isi, "high_quality");
   const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
   const snapshot = createJobProductSnapshotRaw({
     name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
@@ -1913,7 +1885,7 @@ test("W1 C3: brand cocok dan brand null tetap dapat mencapai provider", async (t
     const rel = `uploads/w1-c3-positive-${process.pid}/${trustedBrand ?? "null"}.webp`;
     const bytes = Buffer.from(`W1-C3-${trustedBrand ?? "NULL"}`);
     const isi = new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]);
-    const jobId = await siapkanJob([rel], "silent_caption");
+    const jobId = await siapkanJob([rel], isi, "silent_caption");
     await pool.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [createJobProductSnapshotRaw({
       name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
       raw_meta: trustedBrand ? JSON.stringify({ brand: trustedBrand }) : "{}",
@@ -1938,15 +1910,10 @@ test("W1 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih", as
   if (lewati) return t.skip("UJI_PG_URL kosong");
   const rel = `uploads/w1-halt-${process.pid}/0.webp`;
   const isi = new Map<string, Buffer>([[rel, PACKSHOT], [`${rel}.meta.json`, sidecar(PACKSHOT, true)]]);
-  const jobId = await siapkanJob([rel]);
+  const jobId = await siapkanJob([rel], isi);
   const spy = await jalankan(jobId, isi);
 
-  assert.deepEqual(
-    spy.materializeCalls,
-    [rel],
-    "bukti SAH harus sampai ke materialize tepat sekali — kalau ini merah, gerbangnya terlalu KETAT " +
-      "(menolak bukti yang sah), bukan terlalu longgar"
-  );
+  assertManifestBatches(spy.materializeCalls, await snapshotRels(jobId), "W1 positive immutable manifest");
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 halt");
   const state = (await pool.query("SELECT state FROM jobs WHERE id=$1", [jobId])).rows[0].state;
   assert.ok(["FAILED", "REFUNDED"].includes(state), `job berakhir ${state}`);

@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config";
+import { errorReasonWithCode } from "./errors";
 import { getDb, now, type JobRow, type ScriptRow, type ProductRow, type PersonaRow } from "./db";
 import { getJob, transition, failJob, addCost, setJobProviders } from "./jobs";
 import { planShots } from "./media/shot-planner";
@@ -476,6 +477,6 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // BullMQ owns retry/backoff. It receives the original failure until its
     // final attempt, where scripts/worker.ts applies the existing refund flow.
     if (options.retryViaQueue) throw err;
-    failJob(current, err instanceof Error ? err.message : String(err));
+    failJob(current, errorReasonWithCode(err));
   }
 }

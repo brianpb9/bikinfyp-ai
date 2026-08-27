@@ -7,13 +7,20 @@ BASELINE=`7475ddb3ccbfe6390ec79dda789d3f2d9325ca3d`
 ## Verified gates
 
 - `npx tsc --noEmit` — PASS.
-- Focused classifier, W1 deterministic, and W2 runtime controls — 33/33 PASS.
-- `npm test` — 1266 total, 1220 pass, 0 fail, 46 skipped.
+- Focused classifier, W1 deterministic/provider fixture, and W2 runtime
+  controls — PASS (real-PG cases explicitly skipped without a local server).
+- `npm test` — 1264 total, 1220 pass, 0 fail, 44 skipped.
 - `npm run build` — PASS.
 - `git diff --check` — PASS.
 - Production symbol/static guard: no worker-time
   `loadOrCreateJobReferenceManifest`, `installReferenceManifestIfSafe`, or W1
   `product_images` selection — PASS.
+
+Reviewer remediation also binds current W1 fixtures to admission-owned
+manifest bytes, retains explicit null legacy jobs, removes obsolete canary and
+mutable source-path assertions, adds a provider-branch product-type quarantine
+case, and verifies typed legacy/product-type reasons survive worker audit
+serialization.
 
 ## PostgreSQL availability
 

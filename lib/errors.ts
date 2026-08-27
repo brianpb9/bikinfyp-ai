@@ -18,6 +18,17 @@ export class ApiError extends Error {
   }
 }
 
+/** Stable worker/audit serialization for typed errors whose human message is
+ * intentionally separate from their machine-readable code. */
+export function errorReasonWithCode(error: unknown): string {
+  const value = error as { code?: unknown; body?: { code?: unknown } } | null;
+  const code = typeof value?.code === "string"
+    ? value.code
+    : typeof value?.body?.code === "string" ? value.body.code : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return code && !message.includes(code) ? `${code}: ${message}` : message;
+}
+
 export const ERR = {
   UNAUTHORIZED: () =>
     new ApiError(401, {

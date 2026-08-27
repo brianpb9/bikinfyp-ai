@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 import { config } from "../config";
+import { errorReasonWithCode } from "../errors";
 import { outputExtras, cartLabelForUrl } from "../script-engine";
 import { formatHargaOverlay, type SegmentDraft } from "../script-engine/templates";
 import { getCreatorCategory } from "../personas";
@@ -344,7 +345,7 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     try { await credits.captureCredits(row.org_id ? { userId: row.user_id, orgId: row.org_id } : row.user_id, jobId); } finally { await credits.close(); }
   } catch (error) {
     if (options.retryViaQueue) throw error;
-    await jobs.failJob(jobId, error instanceof Error ? error.message : String(error));
+    await jobs.failJob(jobId, errorReasonWithCode(error));
   } finally { await jobs.close(); /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 

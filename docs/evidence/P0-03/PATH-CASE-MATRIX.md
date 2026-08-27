@@ -1318,8 +1318,11 @@ BASELINE=`7475ddb3ccbfe6390ec79dda789d3f2d9325ca3d`
 - Direct controls cover v1/v2/missing/corrupt evidence, OCR/hash failure,
   product-type quarantine, current v3 evidence, immutable bytes, retry/regen
   boundaries, zero materialize/provider/capture/deliverable effects, and static
-  no-live-row-fallback guards. Focused C10/W1/W2 controls pass 33/33; the full
-  suite passes 1266 total / 1220 pass / 0 fail / 46 skipped; typecheck and the
+  no-live-row-fallback guards. Reviewer remediation makes real-PG current-job
+  fixtures admission-owned, removes obsolete worker-canary/source-row
+  expectations, adds a provider-branch product-type case, and preserves typed
+  reason codes in both worker audit paths. The full suite passes
+  1264 total / 1220 pass / 0 fail / 44 skipped; typecheck and the
   production build pass.
 - Disposable PostgreSQL was attempted but is not claimed as PASS: the guarded
   local endpoint `localhost:54329` refused the connection and Docker is not
