@@ -1,33 +1,53 @@
-# Bounded external evidence runner. This is intentionally separate from the
-# deployed web runtime: it supplies Playwright + Chromium without changing the
-# application image under review. Build only from the exact checked-out SHA:
-#   docker build --build-arg EVIDENCE_SOURCE_SHA=$(git rev-parse HEAD) \
-#     -f Dockerfile.mobile-evidence -t racun-mobile-evidence:$(git rev-parse HEAD) .
+# Bounded external evidence runner. The supported build entrypoint is
+# scripts/build-mobile-evidence-image.sh, which supplies an exact clean git
+# archive plus a git bundle used here to cryptographically verify its commit
+# and tree before any source reaches the runtime image.
+FROM node:22-bookworm-slim AS verified-source
+
+ARG EVIDENCE_SOURCE_SHA
+ARG EVIDENCE_SOURCE_TREE
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends git \
+  && rm -rf /var/lib/apt/lists/*
+COPY source.bundle source.tar /tmp/
+RUN git clone /tmp/source.bundle /src \
+  && test "$(git -C /src rev-parse HEAD)" = "$EVIDENCE_SOURCE_SHA" \
+  && test "$(git -C /src rev-parse HEAD^{tree})" = "$EVIDENCE_SOURCE_TREE" \
+  && git -C /src diff --quiet HEAD -- \
+  && git -C /src archive --format=tar HEAD -o /tmp/from-bundle.tar \
+  && cmp /tmp/source.tar /tmp/from-bundle.tar \
+  && mkdir /verified \
+  && tar -xf /tmp/from-bundle.tar -C /verified \
+  && node /verified/scripts/create-mobile-evidence-attestation.mjs \
+       /verified "$EVIDENCE_SOURCE_SHA" "$EVIDENCE_SOURCE_TREE" /source-attestation.json
+
 FROM node:22-bookworm-slim
 
 ARG EVIDENCE_SOURCE_SHA
-RUN test "$(printf %s "$EVIDENCE_SOURCE_SHA" | wc -c)" -eq 40 \
-  && ! printf %s "$EVIDENCE_SOURCE_SHA" | grep -Eq '[^0-9a-f]'
-
+ARG EVIDENCE_SOURCE_TREE
 LABEL org.opencontainers.image.revision=$EVIDENCE_SOURCE_SHA \
+      ai.hdrv.source.tree=$EVIDENCE_SOURCE_TREE \
       ai.hdrv.runner.role="external-managed-evidence"
 
 WORKDIR /srv/evidence
 ENV NODE_ENV=development \
     EVIDENCE_SOURCE_SHA=$EVIDENCE_SOURCE_SHA \
-    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+    EVIDENCE_SOURCE_TREE=$EVIDENCE_SOURCE_TREE \
+    PLAYWRIGHT_BROWSERS_PATH=/ms-playwright \
+    RECEIPT_DIR=/srv/receipts
 
-COPY package.json package-lock.json ./
-RUN npm ci \
-  && npx playwright install --with-deps chromium
-
-COPY lib ./lib
-COPY scripts/managed-mobile-auth-hydration.ts ./scripts/managed-mobile-auth-hydration.ts
-COPY tsconfig.json ./tsconfig.json
-
-RUN test -f scripts/managed-mobile-auth-hydration.ts \
-  && node -e "require('playwright').chromium.executablePath()" \
+COPY --from=verified-source /verified ./
+COPY --from=verified-source /source-attestation.json ./.evidence-source-attestation.json
+RUN node scripts/verify-mobile-evidence-source.mjs \
+  && npm ci \
+  && npx playwright install --with-deps chromium \
+  && mkdir -p "$RECEIPT_DIR" \
+  && chown node:node "$RECEIPT_DIR" \
   && test -x "$(node -e "process.stdout.write(require('playwright').chromium.executablePath())")"
 
 USER node
+RUN test -w "$RECEIPT_DIR" \
+  && touch "$RECEIPT_DIR/.node-write-smoke" \
+  && rm "$RECEIPT_DIR/.node-write-smoke"
+
 ENTRYPOINT ["npx", "tsx", "scripts/managed-mobile-auth-hydration.ts"]

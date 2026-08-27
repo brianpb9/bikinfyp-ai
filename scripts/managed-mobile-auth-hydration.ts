@@ -10,6 +10,7 @@
  * organization, OTP, and ledger rows.
  */
 import assert from "node:assert/strict";
+import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
@@ -23,6 +24,8 @@ const BASE = process.env.BASE ?? "https://racun-ai-staging-web.onrender.com";
 const STAGING_ORIGIN = "https://racun-ai-staging-web.onrender.com";
 const EXPECTED_SHA = process.env.EXPECTED_APP_SHA?.trim() ?? "";
 const EVIDENCE_SOURCE_SHA = process.env.EVIDENCE_SOURCE_SHA?.trim() ?? "";
+const EVIDENCE_SOURCE_TREE = process.env.EVIDENCE_SOURCE_TREE?.trim() ?? "";
+const EVIDENCE_IMAGE_DIGEST = process.env.EVIDENCE_IMAGE_DIGEST?.trim() ?? "";
 const RECEIPT_DIR = path.resolve(process.env.RECEIPT_DIR ?? "artifacts/managed-mobile-auth-hydration");
 const OTP = "842731";
 const suffix = crypto.randomUUID();
@@ -37,10 +40,16 @@ const now = () => new Date().toISOString();
 assert.match(EXPECTED_SHA, /^[0-9a-f]{40}$/, "EXPECTED_APP_SHA wajib full SHA");
 assert.equal(new URL(BASE).origin, STAGING_ORIGIN, "BASE wajib exact canonical staging origin");
 assert.equal(EVIDENCE_SOURCE_SHA, EXPECTED_SHA, "external evidence image wajib dibangun dari exact app SHA");
+assert.match(EVIDENCE_SOURCE_TREE, /^[0-9a-f]{40}$/, "evidence source tree wajib Git tree SHA");
+assert.match(EVIDENCE_IMAGE_DIGEST, /^sha256:[0-9a-f]{64}$/, "immutable evidence image digest wajib tersedia");
 assert.equal(process.env.RACUN_DEPLOY_ENV, "staging", "runner hanya boleh berjalan di staging");
 assert.equal(process.env.RACUN_DB_RUNTIME, "postgres", "runner memerlukan PostgreSQL staging");
 assert.match(config.databaseUrl, /^postgres(?:ql)?:\/\//i, "DATABASE_URL PostgreSQL wajib tersedia");
 assert.equal(config.storageMode, "r2", "runner memerlukan private R2 staging");
+const sourceAttestation = JSON.parse(execFileSync(process.execPath,
+  ["scripts/verify-mobile-evidence-source.mjs"], { encoding: "utf8" })) as {
+    commit: string; tree: string; manifest_sha256: string; files: number;
+  };
 
 fs.mkdirSync(RECEIPT_DIR, { recursive: true });
 const pool = new Pool({ connectionString: config.databaseUrl });
@@ -101,8 +110,7 @@ const focusedViewportEvidence = () => page!.evaluate(() => {
 });
 const relevantConsoleError = (message: ConsoleMessage) => {
   if (message.type() !== "error") return;
-  const text = message.text();
-  if (/hydration|content security policy|csp|evalerror/i.test(text)) consoleErrors.push(text.slice(0, 300));
+  consoleErrors.push(message.text().slice(0, 500));
 };
 
 const receipt: Record<string, unknown> = {
@@ -116,8 +124,10 @@ const receipt: Record<string, unknown> = {
   forbidden_mutation_entrypoints: forbiddenMutationEntrypoints,
   review_status: "PENDING_INDEPENDENT_REVIEW",
   points_claimed: 0,
+  evidence_runner: { source: sourceAttestation, image_digest: EVIDENCE_IMAGE_DIGEST },
   screenshots: screenshotManifest,
-  cleanup: { otp: false, membership: false, organization: false, identity_retained_with_provenance: false, net_zero: false },
+  cleanup: { otp: false, membership: false, organization: false, identity_retained_with_provenance: false,
+    net_zero: false, correction_audit_linked: false },
   result: "FAIL",
 };
 
@@ -270,14 +280,37 @@ try {
     await cleanupStep("append-net-zero", async () => {
       const balanceBefore = Number((await pool.query("SELECT COALESCE(sum(delta),0)::int AS balance FROM credit_ledger WHERE user_id=$1", [userId])).rows[0].balance);
       if (balanceBefore !== 0) {
-        await pool.query("INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,NULL,$3,'koreksi',NULL,NULL,$4)",
-          [correctionId, userId, -balanceBefore, now()]);
-        correctionInserted = true;
+        const client = await pool.connect();
+        try {
+          await client.query("BEGIN");
+          await client.query("INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,NULL,$3,'koreksi',NULL,NULL,$4)",
+            [correctionId, userId, -balanceBefore, now()]);
+          await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'credit.koreksi','credit_ledger',$3,$4,$5)",
+            [crypto.randomUUID(), userId, correctionId, JSON.stringify({ delta_idr: -balanceBefore,
+              reason: "managed_test_identity_net_zero", task: "SCORE-80-EXECUTION-20260828", exact_sha: EXPECTED_SHA }), now()]);
+          await client.query("COMMIT");
+          correctionInserted = true;
+        } catch (error) {
+          await client.query("ROLLBACK").catch(() => undefined);
+          throw error;
+        } finally { client.release(); }
       }
       const balanceAfter = Number((await pool.query("SELECT COALESCE(sum(delta),0)::int AS balance FROM credit_ledger WHERE user_id=$1", [userId])).rows[0].balance);
       const historyRows = Number((await pool.query("SELECT count(*)::int AS n FROM credit_ledger WHERE user_id=$1", [userId])).rows[0].n);
+      let correctionAuditLinked = !correctionInserted;
+      if (correctionInserted) {
+        const linked = await pool.query<{ delta: number; meta: string }>(`SELECT l.delta,a.meta FROM credit_ledger l
+          JOIN audit_log a ON a.entity='credit_ledger' AND a.entity_id=l.id AND a.action='credit.koreksi'
+          WHERE l.id=$1 AND l.user_id=$2`, [correctionId, userId]);
+        const meta = linked.rows[0] ? JSON.parse(linked.rows[0].meta) as { delta_idr?: unknown; reason?: unknown } : null;
+        correctionAuditLinked = linked.rowCount === 1 && Number(linked.rows[0]?.delta) === -balanceBefore
+          && Number(meta?.delta_idr) === -balanceBefore && meta?.reason === "managed_test_identity_net_zero";
+      }
       (receipt.cleanup as Record<string, unknown>).net_zero = balanceAfter === 0 && historyRows >= (correctionInserted ? 2 : 1);
-      receipt.ledger_cleanup = { balance_before_idr: balanceBefore, correction_appended: correctionInserted, balance_after_idr: balanceAfter, history_rows_preserved: historyRows };
+      (receipt.cleanup as Record<string, unknown>).correction_audit_linked = correctionAuditLinked;
+      receipt.ledger_cleanup = { balance_before_idr: balanceBefore, correction_appended: correctionInserted,
+        correction_id: correctionInserted ? correctionId : null, correction_audit_linked: correctionAuditLinked,
+        balance_after_idr: balanceAfter, history_rows_preserved: historyRows };
     });
     await cleanupStep("retain-identity", async () => {
       await pool.query("UPDATE users SET name=$2 WHERE id=$1", [userId, `[RETAINED TEST IDENTITY] ${EXPECTED_SHA.slice(0, 12)}`]);
@@ -294,29 +327,45 @@ try {
     Object.assign(receipt.cleanup as Record<string, unknown>, { otp: otpRows === 0, membership: memberRows === 0,
       organization: orgRows === 0, identity_retained_with_provenance: retained === 1, payments: payments === 0 });
   });
+  receipt.console_errors = consoleErrors;
+  receipt.page_errors = pageErrors;
   receipt.cleanup_errors = cleanupErrors;
   await cleanupStep("pool", async () => { await pool.end(); });
   const cleanup = receipt.cleanup as Record<string, unknown>;
   if (receipt.result === "PASS" && (cleanupErrors.length || !Object.values(cleanup).every(Boolean))) receipt.result = "FAIL_CLEANUP";
+  const executionResult = String(receipt.result);
+  receipt.execution_result = executionResult;
+  receipt.result = "PENDING_ARTIFACT_VERIFICATION";
   const receiptKey = `${artifactPrefix}/receipt.json`;
   const manifestKey = `${artifactPrefix}/manifest.json`;
   receipt.artifact_manifest = { channel: "private-r2", prefix: artifactPrefix,
     review_status: "PENDING_INDEPENDENT_REVIEW", points_claimed: 0, screenshots: screenshotManifest,
     receipt_key: receiptKey, manifest_key: manifestKey };
   receipt.finished_at = now();
-  const serialized = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
-  fs.writeFileSync(path.join(RECEIPT_DIR, "receipt.json"), serialized, { mode: 0o600 });
-  await putAndVerify(receiptKey, serialized, "application/json");
-  const manifest = {
-    schema: "managed-mobile-auth-hydration-manifest/v1",
-    exact_sha: EXPECTED_SHA,
-    artifacts: [
-      ...screenshotManifest.map((item) => ({ key: item.private_key, sha256: item.sha256, bytes: item.bytes, content_type: "image/png" })),
-      { key: receiptKey, sha256: sha256(serialized), bytes: serialized.length, content_type: "application/json" },
-    ],
-  };
-  const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
-  fs.writeFileSync(path.join(RECEIPT_DIR, "manifest.json"), manifestBytes, { mode: 0o600 });
-  await putAndVerify(manifestKey, manifestBytes, "application/json");
-  console.log(JSON.stringify({ ...receipt, manifest_key: manifestKey, manifest_sha256: sha256(manifestBytes) }));
+  try {
+    const serialized = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
+    fs.writeFileSync(path.join(RECEIPT_DIR, "receipt.json"), serialized, { mode: 0o600 });
+    await putAndVerify(receiptKey, serialized, "application/json");
+    const manifest = {
+      schema: "managed-mobile-auth-hydration-manifest/v1",
+      exact_sha: EXPECTED_SHA,
+      artifacts: [
+        ...screenshotManifest.map((item) => ({ key: item.private_key, sha256: item.sha256, bytes: item.bytes, content_type: "image/png" })),
+        { key: receiptKey, sha256: sha256(serialized), bytes: serialized.length, content_type: "application/json" },
+      ],
+    };
+    const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+    fs.writeFileSync(path.join(RECEIPT_DIR, "manifest.json"), manifestBytes, { mode: 0o600 });
+    await putAndVerify(manifestKey, manifestBytes, "application/json");
+    receipt.result = executionResult;
+    receipt.artifact_verification = { verified: true, manifest_key: manifestKey,
+      manifest_sha256: sha256(manifestBytes), receipt_key: receiptKey, receipt_sha256: sha256(serialized) };
+  } catch (error) {
+    receipt.result = "FAIL_ARTIFACT_VERIFICATION";
+    receipt.artifact_verification = { verified: false, error: String(error).slice(0, 500) };
+    process.exitCode = 1;
+  }
+  const finalBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
+  fs.writeFileSync(path.join(RECEIPT_DIR, "receipt.json"), finalBytes, { mode: 0o600 });
+  console.log(JSON.stringify(receipt));
 }
