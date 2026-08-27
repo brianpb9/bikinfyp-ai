@@ -29,6 +29,10 @@ export function errorReasonWithCode(error: unknown): string {
   return code && !message.includes(code) ? `${code}: ${message}` : message;
 }
 
+export function finalWorkerFailureReason(error: unknown, attempts: number): string {
+  return `Worker gagal setelah ${attempts} percobaan: ${errorReasonWithCode(error)}`;
+}
+
 export const ERR = {
   UNAUTHORIZED: () =>
     new ApiError(401, {

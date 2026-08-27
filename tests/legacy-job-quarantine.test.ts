@@ -12,6 +12,7 @@ import {
 import { createJobProductSnapshotRaw } from "../lib/job-product-snapshot";
 import { UnsafeLegacyReferenceSnapshot } from "../lib/job-reference-manifest";
 import { UnsafeLegacyProductSnapshot } from "../lib/job-product-snapshot";
+import { finalWorkerFailureReason } from "../lib/errors";
 
 const manifest = JSON.stringify({
   version: 2,
@@ -133,4 +134,24 @@ test("A1/A4 retail+org admissions classify current evidence before job/hold visi
     assert.match(source.slice(gate, insert), /jobProductSnapshot:\s*productSnapshotRaw/);
     assert.match(source.slice(gate, insert), /productType:\s*(?:admissionProduct|lockedProduct)/);
   }
+});
+
+test("final BullMQ failure mempertahankan typed quarantine code untuk W1 dan W2", () => {
+  let typed: unknown;
+  try {
+    requireCurrentJobEvidence({
+      approvedReferenceManifest: manifest,
+      jobProductSnapshot: snapshot,
+      productType: { ...confirmedType, product_type_state: "QUARANTINED" },
+    });
+  } catch (error) {
+    typed = error;
+  }
+  assert.match(finalWorkerFailureReason(typed, 3), /^Worker gagal setelah 3 percobaan: PRODUCT_TYPE_CONFIRMATION_REQUIRED:/);
+
+  const source = fs.readFileSync("scripts/worker.ts", "utf8");
+  assert.match(source, /const finalReason = finalWorkerFailureReason\(error, attempts\)/);
+  assert.match(source, /jobs\.failJob\(job\.data\.jobId, finalReason\)/);
+  assert.match(source, /failJob\(current, finalReason\)/);
+  assert.doesNotMatch(source, /Worker gagal setelah \$\{attempts\} percobaan: \$\{error\.message\}/);
 });

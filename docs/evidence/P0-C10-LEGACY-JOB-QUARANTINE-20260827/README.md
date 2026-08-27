@@ -9,7 +9,7 @@ BASELINE=`7475ddb3ccbfe6390ec79dda789d3f2d9325ca3d`
 - `npx tsc --noEmit` — PASS.
 - Focused classifier, W1 deterministic/provider fixture, and W2 runtime
   controls — PASS (real-PG cases explicitly skipped without a local server).
-- `npm test` — 1264 total, 1220 pass, 0 fail, 44 skipped.
+- `npm test` — 1265 total, 1221 pass, 0 fail, 44 skipped.
 - `npm run build` — PASS.
 - `git diff --check` — PASS.
 - Production symbol/static guard: no worker-time
@@ -21,6 +21,8 @@ manifest bytes, retains explicit null legacy jobs, removes obsolete canary and
 mutable source-path assertions, adds a provider-branch product-type quarantine
 case, and verifies typed legacy/product-type reasons survive worker audit
 serialization.
+The final BullMQ attempts-exhausted listener uses that same typed serializer
+for both PostgreSQL and SQLite `failJob` calls.
 
 ## PostgreSQL availability
 

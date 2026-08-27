@@ -1321,8 +1321,8 @@ BASELINE=`7475ddb3ccbfe6390ec79dda789d3f2d9325ca3d`
   no-live-row-fallback guards. Reviewer remediation makes real-PG current-job
   fixtures admission-owned, removes obsolete worker-canary/source-row
   expectations, adds a provider-branch product-type case, and preserves typed
-  reason codes in both worker audit paths. The full suite passes
-  1264 total / 1220 pass / 0 fail / 44 skipped; typecheck and the
+  reason codes in direct and final BullMQ W1/W2 audit paths. The full suite passes
+  1265 total / 1221 pass / 0 fail / 44 skipped; typecheck and the
   production build pass.
 - Disposable PostgreSQL was attempted but is not claimed as PASS: the guarded
   local endpoint `localhost:54329` refused the connection and Docker is not

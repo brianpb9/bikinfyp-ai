@@ -13,6 +13,7 @@ import { monitoringSettings, runOperationalMonitor } from "../lib/operational-mo
 import { PROMO_QUEUE_NAME } from "../lib/promo/queue";
 import { processPromoJob } from "../lib/promo/worker";
 import { assertRuntimeAuthSecretSafe } from "../lib/runtime/assert-runtime-auth-secret";
+import { finalWorkerFailureReason } from "../lib/errors";
 
 // Dedicated workers do not execute Next instrumentation. Enforce the same
 // production runtime-secret boundary before memo wiring, queue validation, or
@@ -107,9 +108,10 @@ worker.on("failed", (job, error) => {
   // BullMQ increments attemptsMade before emitting failed; only the final
   // failure enters the established FAILED -> release -> REFUNDED workflow.
   if (job.attemptsMade >= attempts) {
+    const finalReason = finalWorkerFailureReason(error, attempts);
     if (postgresRuntimeEnabled()) {
-      void (async () => { const { PgJobsRepository } = await import("../lib/postgres/jobs"); const jobs = new PgJobsRepository(config.databaseUrl, { stateTimeoutsMin: config.stateTimeoutsMin }); try { await jobs.failJob(job.data.jobId, `Worker gagal setelah ${attempts} percobaan: ${error.message}`); } finally { await jobs.close(); } })();
-    } else { const current = getJob(job.data.jobId); if (current) failJob(current, `Worker gagal setelah ${attempts} percobaan: ${error.message}`); }
+      void (async () => { const { PgJobsRepository } = await import("../lib/postgres/jobs"); const jobs = new PgJobsRepository(config.databaseUrl, { stateTimeoutsMin: config.stateTimeoutsMin }); try { await jobs.failJob(job.data.jobId, finalReason); } finally { await jobs.close(); } })();
+    } else { const current = getJob(job.data.jobId); if (current) failJob(current, finalReason); }
   }
 });
 
