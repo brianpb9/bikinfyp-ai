@@ -12,6 +12,11 @@ import crypto from "node:crypto";
 import { Pool } from "pg";
 import { config } from "../config";
 import { getPool } from "./pool";
+import { isCurrentC5JobGeneration } from "../legacy-job-quarantine";
+
+let c5ReadPoolOverride: Pick<Pool,"query"> | undefined;
+export function setPgOrgC5ReadPoolForTests(pool?:Pick<Pool,"query">):void {c5ReadPoolOverride=pool;}
+function c5ReadPool():Pick<Pool,"query"> {return c5ReadPoolOverride??getPool(url());}
 
 function url() {
   if (!/^postgres(?:ql)?:\/\//i.test(config.databaseUrl)) {
@@ -167,36 +172,33 @@ export interface RecentBulkRun {
 /** Bulk run terbaru org ini (M4) — dikelompokkan dari jobs.bulk_run_id,
  * tidak ada tabel bulk_runs terpisah (keputusan MVP di rencana M3). */
 export async function pgListRecentBulkRuns(orgId: string, limit = 5): Promise<RecentBulkRun[]> {
-  const pool = getPool(url());
+  const pool = c5ReadPool();
   try {
-    const res = await pool.query<RecentBulkRun & { created_at: string }>(
-      // Nama produk & thumbnail diambil lewat sub-query berkorelasi, BUKAN
-      // JOIN + GROUP BY: satu kampanye selalu satu produk (model M8), jadi
-      // MIN()/MAX() atas nama produk hanya akan mengaburkan maksudnya. Ini juga
-      // menghindari menyeret job_shots ke dalam agregat dan menggandakan baris.
-      `SELECT j.bulk_run_id, MIN(j.created_at) AS created_at, COUNT(*)::int AS total,
-              COUNT(*) FILTER (WHERE j.state = 'READY')::int AS ready_count,
-              COUNT(*) FILTER (WHERE j.state = 'AWAITING_APPROVAL')::int AS review_count,
-              COUNT(*) FILTER (WHERE j.state NOT IN ('READY','FAILED','REFUNDED'))::int AS pending_count,
-              COUNT(*) FILTER (WHERE j.state IN ('FAILED','REFUNDED'))::int AS failed_count,
-              (SELECT p.name FROM jobs j2 JOIN products p ON p.id = j2.product_id
-                 WHERE j2.bulk_run_id = j.bulk_run_id AND j2.org_id = $1
-                 ORDER BY j2.created_at ASC LIMIT 1) AS product_name,
-              (SELECT j4.format FROM jobs j4
-                 WHERE j4.bulk_run_id = j.bulk_run_id AND j4.org_id = $1
-                 ORDER BY j4.created_at ASC LIMIT 1) AS format,
-              (SELECT sh.thumb_key FROM jobs j3 JOIN job_shots sh ON sh.job_id = j3.id
-                 WHERE j3.bulk_run_id = j.bulk_run_id AND j3.org_id = $1 AND sh.thumb_key IS NOT NULL
-                 ORDER BY j3.created_at ASC, sh.idx ASC LIMIT 1) AS thumb_key,
-              (SELECT o.video_url FROM jobs j5 JOIN outputs o ON o.job_id = j5.id
-                 WHERE j5.bulk_run_id = j.bulk_run_id AND j5.org_id = $1
-                   AND j5.state = 'READY' AND o.video_url IS NOT NULL
-                 ORDER BY j5.created_at ASC LIMIT 1) AS video_key
-       FROM jobs j WHERE j.org_id = $1 AND j.bulk_run_id IS NOT NULL
-       GROUP BY j.bulk_run_id ORDER BY MIN(j.created_at) DESC LIMIT $2`,
-      [orgId, limit]
-    );
-    return res.rows;
+    type Raw={bulk_run_id:string;created_at:string;state:string;product_name:string;format:string;
+      thumb_key:string|null;video_key:string|null;job_product_snapshot:string|null;product_category:string;
+      category_review_state:string;category_review_reason:string|null;category_review_version:number};
+    const rows=(await pool.query<Raw>(`SELECT j.bulk_run_id,j.created_at,j.state,j.format,j.job_product_snapshot,
+             p.name AS product_name,p.category AS product_category,p.category_review_state,
+             p.category_review_reason,p.category_review_version,o.video_url AS video_key,
+             (SELECT sh.thumb_key FROM job_shots sh WHERE sh.job_id=j.id AND sh.thumb_key IS NOT NULL ORDER BY sh.idx ASC LIMIT 1) AS thumb_key
+       FROM jobs j JOIN products p ON p.id=j.product_id LEFT JOIN outputs o ON o.job_id=j.id
+       WHERE j.org_id=$1 AND j.bulk_run_id IS NOT NULL ORDER BY j.created_at ASC`,[orgId])).rows;
+    const grouped=new Map<string,RecentBulkRun>();
+    for(const row of rows){
+      const current=isCurrentC5JobGeneration(row);
+      let run=grouped.get(row.bulk_run_id);
+      if(!run){run={bulk_run_id:row.bulk_run_id,created_at:row.created_at,total:0,ready_count:0,
+        product_name:row.product_name,thumb_key:null,video_key:null,review_count:0,format:row.format,
+        pending_count:0,failed_count:0};grouped.set(row.bulk_run_id,run);}
+      run.total++;
+      if(current&&row.state==="READY")run.ready_count++;
+      if(current&&row.state==="AWAITING_APPROVAL")run.review_count++;
+      if(current&&!['READY','FAILED','REFUNDED'].includes(row.state))run.pending_count++;
+      if(['FAILED','REFUNDED'].includes(row.state))run.failed_count++;
+      if(current&&!run.thumb_key&&row.thumb_key)run.thumb_key=row.thumb_key;
+      if(current&&row.state==="READY"&&!run.video_key&&row.video_key)run.video_key=row.video_key;
+    }
+    return [...grouped.values()].sort((a,b)=>b.created_at.localeCompare(a.created_at)).slice(0,limit);
   } finally {
     /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
@@ -234,18 +236,23 @@ export interface RecentVideo {
  * pernah kelihatan tanpa masuk dua halaman lagi — padahal itu satu-satunya
  * hal yang benar-benar dibeli brand. */
 export async function pgListRecentVideos(orgId: string, limit = 6): Promise<RecentVideo[]> {
-  const pool = getPool(url());
+  const pool = c5ReadPool();
   try {
-    const res = await pool.query<RecentVideo>(
-      `SELECT j.id AS job_id, p.name AS product_name, o.video_url AS video_key, o.caption, j.created_at, j.format
+    const res = await pool.query<RecentVideo & {job_product_snapshot:string|null;product_category:string;
+      category_review_state:string;category_review_reason:string|null;category_review_version:number}>(
+      `SELECT j.id AS job_id,j.job_product_snapshot,p.name AS product_name,p.category AS product_category,
+              p.category_review_state,p.category_review_reason,p.category_review_version,
+              o.video_url AS video_key,o.caption,j.created_at,j.format
        FROM jobs j
        JOIN products p ON p.id = j.product_id
        JOIN outputs o ON o.job_id = j.id
        WHERE j.org_id = $1 AND j.state = 'READY' AND o.video_url IS NOT NULL
-       ORDER BY j.created_at DESC LIMIT $2`,
-      [orgId, limit]
+       ORDER BY j.created_at DESC LIMIT 200`,
+      [orgId]
     );
-    return res.rows;
+    return res.rows.filter(isCurrentC5JobGeneration).slice(0,limit).map(({job_product_snapshot:_snapshot,
+      product_category:_category,category_review_state:_state,category_review_reason:_reason,
+      category_review_version:_version,...row})=>row);
   } finally {
     /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
   }
@@ -263,29 +270,22 @@ export interface OrgVideoStats {
  * per org) satu COUNT jauh lebih murah daripada menjaga penghitung tersendiri
  * yang bisa melenceng. */
 export async function pgGetOrgVideoStats(orgId: string): Promise<OrgVideoStats> {
-  const pool = getPool(url());
+  const pool = c5ReadPool();
   try {
-    const res = await pool.query<{ total: string; ready: string; awaiting_review: string; spent_idr: string }>(
-      `SELECT COUNT(*)::text AS total,
-              COUNT(*) FILTER (WHERE state='READY')::text AS ready,
-              COUNT(*) FILTER (WHERE state='AWAITING_APPROVAL')::text AS awaiting_review,
-              -- Job yang GAGAL/REFUNDED tidak dihitung: tokennya sudah
-              -- dikembalikan otomatis ke saldo org, jadi bagi brand render itu
-              -- TIDAK memakan token sama sekali. cost_actual_idr sendiri terus
-              -- bertambah selama pipeline berjalan (lihat addCost), jadi job
-              -- yang gagal di tengah jalan tetap menyimpan angka bukan nol —
-              -- menjumlahkannya membuat "token terpakai" lebih besar daripada
-              -- yang benar-benar hilang dari saldo.
-              COALESCE(SUM(cost_actual_idr) FILTER (WHERE state NOT IN ('FAILED','REFUNDED')),0)::text AS spent_idr
-       FROM jobs WHERE org_id=$1`,
+    const res=await pool.query<{state:string;cost_actual_idr:number;job_product_snapshot:string|null;
+      product_category:string;category_review_state:string;category_review_reason:string|null;category_review_version:number}>(
+      `SELECT j.state,j.cost_actual_idr,j.job_product_snapshot,p.category AS product_category,
+              p.category_review_state,p.category_review_reason,p.category_review_version
+       FROM jobs j JOIN products p ON p.id=j.product_id WHERE j.org_id=$1`,
       [orgId]
     );
-    const r = res.rows[0];
+    const current=res.rows.filter(isCurrentC5JobGeneration);
     return {
-      total: Number(r?.total ?? 0),
-      ready: Number(r?.ready ?? 0),
-      awaiting_review: Number(r?.awaiting_review ?? 0),
-      spent_idr: Number(r?.spent_idr ?? 0),
+      total: res.rows.length,
+      ready: current.filter((row)=>row.state==="READY").length,
+      awaiting_review: current.filter((row)=>row.state==="AWAITING_APPROVAL").length,
+      spent_idr: res.rows.filter((row)=>!['FAILED','REFUNDED'].includes(row.state))
+        .reduce((sum,row)=>sum+Number(row.cost_actual_idr||0),0),
     };
   } finally {
     /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */

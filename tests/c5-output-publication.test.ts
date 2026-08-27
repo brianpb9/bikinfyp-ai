@@ -209,6 +209,52 @@ test("publish POST reloads eligibility after lock and leaves zero plans on inter
   assert.equal(reloads,1);assert.equal(inserts,0,"stale generation created a post_plan");
 });
 
+test("dashboard home/projects data and card withhold stale run media, captions, and ready/review counts",async(t)=>{
+  const {pgListRecentBulkRuns,pgListRecentVideos,pgGetOrgVideoStats,setPgOrgC5ReadPoolForTests}=
+    await import("../lib/postgres/org");
+  t.after(()=>setPgOrgC5ReadPoolForTests());
+  const snapshot=JSON.stringify({version:4,productName:"Produk",category:"beauty",categoryReviewVersion:1,
+    priceIdr:10000,promoPriceBeforeIdr:null,promoEndsAt:null,promoStockLeft:null,
+    trustedBrand:{source:"products.raw_meta.brand",value:null},productVisualDesc:null,brandBrief:null,claims:[]});
+  let generation={product_category:"beauty",category_review_state:"CLEAR",category_review_reason:null,
+    category_review_version:1};
+  const ready=()=>({bulk_run_id:"run-old",created_at:"2026-08-27T00:00:00.000Z",state:"READY",
+    product_name:"Produk",format:"talking_head",thumb_key:"jobs/old/thumb.webp",video_key:"jobs/old/output.mp4",
+    job_id:"job-ready",caption:"STALE CAPTION",cost_actual_idr:1000,job_product_snapshot:snapshot,...generation});
+  const review=()=>({...ready(),job_id:"job-review",state:"AWAITING_APPROVAL",video_key:null,caption:null,
+    created_at:"2026-08-27T00:00:01.000Z"});
+  setPgOrgC5ReadPoolForTests({query:(async(sql:string)=>{
+    if(sql.includes("j.bulk_run_id,j.created_at"))return {rows:[ready(),review()],rowCount:2};
+    if(sql.includes("j.id AS job_id"))return {rows:[ready()],rowCount:1};
+    if(sql.includes("j.cost_actual_idr"))return {rows:[ready(),review()],rowCount:2};
+    throw new Error(`unexpected SQL: ${sql}`);
+  }) as never});
+
+  const currentRuns=await pgListRecentBulkRuns("org-1");
+  assert.deepEqual({ready:currentRuns[0].ready_count,review:currentRuns[0].review_count,
+    thumb:currentRuns[0].thumb_key,video:currentRuns[0].video_key},{ready:1,review:1,
+    thumb:"jobs/old/thumb.webp",video:"jobs/old/output.mp4"});
+  assert.equal((await pgListRecentVideos("org-1"))[0].caption,"STALE CAPTION");
+  assert.deepEqual(await pgGetOrgVideoStats("org-1"),{total:2,ready:1,awaiting_review:1,spent_idr:2000});
+
+  for(const stale of [
+    {product_category:"beauty",category_review_state:"CLEAR",category_review_reason:null,category_review_version:3},
+    {product_category:"health",category_review_state:"CLEAR",category_review_reason:null,category_review_version:5},
+  ]){
+    generation=stale;
+    const runs=await pgListRecentBulkRuns("org-1");
+    assert.deepEqual({ready:runs[0].ready_count,review:runs[0].review_count,thumb:runs[0].thumb_key,video:runs[0].video_key},
+      {ready:0,review:0,thumb:null,video:null});
+    assert.deepEqual(await pgListRecentVideos("org-1"),[],"dashboard home retained stale caption/video row");
+    assert.deepEqual(await pgGetOrgVideoStats("org-1"),{total:2,ready:0,awaiting_review:0,spent_idr:2000});
+  }
+  const home=fs.readFileSync(new URL("../app/dashboard/(app)/page.tsx",import.meta.url),"utf8");
+  const projects=fs.readFileSync(new URL("../app/dashboard/(app)/projects/page.tsx",import.meta.url),"utf8");
+  assert.match(home,/pgListRecentVideos[\s\S]*recentVideos\.map/);
+  assert.match(home,/CampaignThumb thumbKey=\{run\.thumb_key\} videoKey=\{run\.video_key\}/);
+  assert.match(projects,/CampaignThumb thumbKey=\{run\.thumb_key\} videoKey=\{run\.video_key\}/);
+});
+
 test("PostgreSQL media authorization binds output and scene delivery to current C5 truth",async(t)=>{
   const {fileBelongsToUser,setMediaFileAccessDependenciesForTests}=await import("../lib/media-file-access");
   t.after(()=>setMediaFileAccessDependenciesForTests());
