@@ -36,8 +36,18 @@ required slot receipts, token-specific authority class, cumulative row order,
 duplicate rejection, raw/normalized recomputation, and the evidence-ceiling
 transition. The ceiling stays 58 unless all non-compensable 80 slots are
 VERIFIED; certified 80 additionally requires all 27 tokens and raw 104.
-`NEGATIVE-CASES.json` exercises unknown token, mismatched authority/receipts,
-out-of-order and duplicate awards, false raw claims, and incomplete gates.
+The issuer/class and decision trust policy is pinned in the verifier, not read
+as authority from the editable registry. The amended TASK's raw archive bytes
+are committed and match the pinned archive digest. The 27-token fixture builds
+full authority and receipt records, runs them through the same committed-byte,
+ancestry, issuer, authority-scope, dependency, and award validators used by the
+real registries, and is never inserted into current score state.
+
+`NEGATIVE-CASES.json` exercises unknown token, mismatched authority and
+authority scope, mismatched receipts, out-of-order and duplicate awards, false
+raw claims, and incomplete gates. Score 90 inherits the 80 gate, but its
+incremental allocation remains undefined pending Founder authority; M/Q/I/U/K/O
+remain additional canonical 100 requirements only.
 This slice performs no deploy and cannot conflict with Lane A.
 Production, public launch, and real money remain OFF.
 

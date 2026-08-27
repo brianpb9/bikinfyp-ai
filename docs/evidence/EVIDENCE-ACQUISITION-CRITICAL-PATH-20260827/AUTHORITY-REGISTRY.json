@@ -45,9 +45,9 @@
       "approved_at": "2026-08-27T15:48:29Z",
       "source_message_id": "1787845709000-reviewer-TASK",
       "source_archive_sha256": "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e",
-      "artifact_path": "docs/evidence/EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827/AMENDED-SOURCE-TASK.json",
-      "artifact_sha256": "828986db7f870d122933847bdd3f8374382be1f0058a2d3b61026942777d4ba3",
-      "exact_sha": "e37f8497e7fe79038012ac7c22b8e27f82a1c318"
+      "artifact_path": "docs/evidence/EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827/AMENDED-SOURCE-TASK.raw.json",
+      "artifact_sha256": "32d9c64bd8b162338ab749b2ab1d101345b26aa262ba368fb0c585b09a75444e",
+      "exact_sha": "1d3e95e46c412634a6da95226fdafa43fb63a220"
     }
   ]
 }
