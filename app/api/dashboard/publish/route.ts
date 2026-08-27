@@ -1,14 +1,7 @@
 import crypto from "node:crypto";
-import { Pool } from "pg";
 import { ERR, errorResponse } from "@/lib/errors";
-import { config } from "@/lib/config";
-import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { createSignedUrl } from "@/lib/signed-url";
-import { postgresRuntimeEnabled, pgAudit } from "@/lib/postgres/smoke-runtime";
-import { getPool } from "@/lib/postgres/pool";
-import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { assertCurrentC5JobGeneration, isCurrentC5JobGeneration } from "@/lib/legacy-job-quarantine";
-import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
+import { c5DeliveryRouteDependencies } from "@/lib/c5-delivery-route-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -33,9 +26,10 @@ function nameFor(productName: string): string {
 
 export async function GET(req: Request) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
-    const { membership } = await requireOrgContextApi(req);
-    const pool = getPool(config.databaseUrl);
+    const deps = c5DeliveryRouteDependencies();
+    if (!deps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
+    const { membership } = await deps.requireOrgContextApi(req);
+    const pool = deps.getPool();
     try {
       const plans = (await pool.query<PlanRow>(
         `SELECT pp.id, pp.job_id, pp.channel, pp.scheduled_at, pp.caption, pp.status, pp.posted_at,
@@ -79,10 +73,10 @@ export async function GET(req: Request) {
       return Response.json({
         plans: plans.map((r) => ({
           id: r.id, job_id: r.job_id, channel: r.channel, scheduled_at: r.scheduled_at,
-          caption: r.caption, status: r.status, posted_at: r.posted_at,
+          caption: isCurrentC5JobGeneration(r) ? r.caption : null, status: r.status, posted_at: r.posted_at,
           product_name: r.product_name,
           download_url: r.video_url && isCurrentC5JobGeneration(r)
-            ? `${createSignedUrl(r.video_url)}&dl=${encodeURIComponent(`${nameFor(r.product_name)}.mp4`)}`
+            ? `${deps.createSignedUrl(r.video_url)}&dl=${encodeURIComponent(`${nameFor(r.product_name)}.mp4`)}`
             : null,
         })),
         ready: ready.filter(isCurrentC5JobGeneration).map((r) => ({
@@ -100,9 +94,10 @@ export async function GET(req: Request) {
 
 export async function POST(req: Request) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
-    await assertDashboardRate("publish", membership.org_id);
+    const deps = c5DeliveryRouteDependencies();
+    if (!deps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
+    const { user, membership } = await deps.requireOrgContextApi(req);
+    await deps.assertDashboardRate("publish", membership.org_id);
     const body = await req.json().catch(() => ({}));
 
     const jobId = String(body.job_id ?? "");
@@ -112,7 +107,7 @@ export async function POST(req: Request) {
     if (!CHANNELS.has(channel)) throw ERR.BAD_REQUEST("Kanal tidak dikenal.", "Unknown channel.");
     if (Number.isNaN(Date.parse(scheduledAt))) throw ERR.BAD_REQUEST("Tanggal/jamnya belum benar.", "Invalid scheduled_at.");
 
-    const pool = getPool(config.databaseUrl);
+    const pool = deps.getPool();
     try {
       // Kepemilikan diperiksa lewat org_id job-nya, bukan lewat job_id saja.
       // Tanpa ini, siapa pun yang tahu sebuah job_id bisa menautkannya ke
@@ -122,7 +117,7 @@ export async function POST(req: Request) {
         [jobId, membership.org_id]
       );
       if (!initial.rows[0]) throw ERR.NOT_FOUND("Videonya");
-      return await withProductEvidenceMutationLock(initial.rows[0].product_id,async()=>{
+      return await deps.withProductEvidenceMutationLock(initial.rows[0].product_id,async()=>{
         const owned=await pool.query(`SELECT j.job_product_snapshot,p.category AS product_category,
           p.category_review_state,p.category_review_reason,p.category_review_version
           FROM jobs j JOIN products p ON p.id=j.product_id
@@ -136,7 +131,7 @@ export async function POST(req: Request) {
           [id, membership.org_id, jobId, channel, scheduledAt,
            String(body.caption ?? "").slice(0, 2200) || null, user.id, new Date().toISOString()]
         );
-        await pgAudit(user.id, "post.planned", "post_plans", id, { org_id: membership.org_id, channel });
+        await deps.pgAudit(user.id, "post.planned", "post_plans", id, { org_id: membership.org_id, channel });
         return Response.json({ id });
       });
     } finally {
@@ -149,22 +144,23 @@ export async function POST(req: Request) {
 
 export async function PATCH(req: Request) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
+    const deps = c5DeliveryRouteDependencies();
+    if (!deps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
+    const { user, membership } = await deps.requireOrgContextApi(req);
     const body = await req.json().catch(() => ({}));
     const id = String(body.id ?? "");
     const status = String(body.status ?? "");
     if (!id) throw ERR.BAD_REQUEST("id wajib diisi.", "id is required.");
     if (!["planned", "posted", "skipped"].includes(status)) throw ERR.BAD_REQUEST("Status tidak dikenal.", "Unknown status.");
 
-    const pool = getPool(config.databaseUrl);
+    const pool = deps.getPool();
     try {
       const res = await pool.query(
         "UPDATE post_plans SET status=$1, posted_at=$2 WHERE id=$3 AND org_id=$4",
         [status, status === "posted" ? new Date().toISOString() : null, id, membership.org_id]
       );
       if (!res.rowCount) throw ERR.NOT_FOUND("Rencananya");
-      await pgAudit(user.id, "post.status", "post_plans", id, { status });
+      await deps.pgAudit(user.id, "post.status", "post_plans", id, { status });
       return Response.json({ ok: true });
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
@@ -176,12 +172,13 @@ export async function PATCH(req: Request) {
 
 export async function DELETE(req: Request) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
-    const { membership } = await requireOrgContextApi(req);
+    const deps = c5DeliveryRouteDependencies();
+    if (!deps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
+    const { membership } = await deps.requireOrgContextApi(req);
     const body = await req.json().catch(() => ({}));
     const id = String(body.id ?? "");
     if (!id) throw ERR.BAD_REQUEST("id wajib diisi.", "id is required.");
-    const pool = getPool(config.databaseUrl);
+    const pool = deps.getPool();
     try {
       const res = await pool.query("DELETE FROM post_plans WHERE id=$1 AND org_id=$2", [id, membership.org_id]);
       if (!res.rowCount) throw ERR.NOT_FOUND("Rencananya");

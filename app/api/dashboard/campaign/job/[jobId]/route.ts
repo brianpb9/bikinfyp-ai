@@ -2,7 +2,6 @@ import { Pool } from "pg";
 import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { createSignedUrl } from "@/lib/signed-url";
 import crypto from "node:crypto";
 import { enqueueJobResume } from "@/lib/job-queue";
 import { regenerateSceneTokens } from "@/lib/credits";
@@ -73,10 +72,11 @@ async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRow
 // pesan, jadi ketiganya ditampilkan apa adanya, bukan diringkas.
 export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }> }) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
-    const { membership } = await requireOrgContextApi(req);
+    const routeDeps = campaignJobDependencies();
+    if (!routeDeps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
+    const { membership } = await routeDeps.requireOrgContextApi(req);
     const { jobId } = await ctx.params;
-    const pool = getPool(config.databaseUrl);
+    const pool = routeDeps.getPool();
     try {
       const job = await loadJob(pool, jobId, membership.org_id);
       if (!job) throw ERR.NOT_FOUND("Job-nya");
@@ -102,8 +102,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
           // brand merasa dicurangi.
           regen_tokens: regenerateSceneTokens(job.quality_tier as QualityTier, s.duration_sec),
           prompt: s.prompt,
-          video_url: createSignedUrl(s.storage_key),
-          thumb_url: s.thumb_key ? createSignedUrl(s.thumb_key) : null,
+          video_url: routeDeps.createSignedUrl(s.storage_key),
+          thumb_url: s.thumb_key ? routeDeps.createSignedUrl(s.thumb_key) : null,
           regen_requested: s.regen_requested,
           regen_count: s.regen_count,
           regen_left: Math.max(0, MAX_REGEN_PER_SCENE - s.regen_count),

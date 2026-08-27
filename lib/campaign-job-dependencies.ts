@@ -4,6 +4,7 @@ import { assertPaidAdmission } from "./job-intake";
 import { withProductEvidenceMutationLock } from "./job-admission-reference";
 import { getPool } from "./postgres/pool";
 import { postgresRuntimeEnabled } from "./postgres/smoke-runtime";
+import { createSignedUrl } from "./signed-url";
 
 const productionDependencies = {
   postgresRuntimeEnabled,
@@ -11,6 +12,7 @@ const productionDependencies = {
   assertPaidAdmission,
   getPool: () => getPool(config.databaseUrl),
   withProductEvidenceMutationLock,
+  createSignedUrl,
 };
 
 export type CampaignJobDependencies = typeof productionDependencies;

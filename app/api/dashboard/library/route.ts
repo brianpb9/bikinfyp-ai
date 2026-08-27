@@ -1,11 +1,6 @@
-import { Pool } from "pg";
 import { ERR, errorResponse } from "@/lib/errors";
-import { config } from "@/lib/config";
-import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { createSignedUrl } from "@/lib/signed-url";
-import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
-import { getPool } from "@/lib/postgres/pool";
 import { isCurrentC5JobGeneration } from "@/lib/legacy-job-quarantine";
+import { c5DeliveryRouteDependencies } from "@/lib/c5-delivery-route-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -67,13 +62,14 @@ function downloadName(productName: string, idx: number): string {
 
 export async function GET(req: Request) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Library requires Postgres runtime.");
-    const { membership } = await requireOrgContextApi(req);
+    const deps = c5DeliveryRouteDependencies();
+    if (!deps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Library requires Postgres runtime.");
+    const { membership } = await deps.requireOrgContextApi(req);
     const url = new URL(req.url);
     const filterRaw = url.searchParams.get("filter") ?? "all";
     const filter = FILTERS.has(filterRaw) ? filterRaw : "all";
 
-    const pool = getPool(config.databaseUrl);
+    const pool = deps.getPool();
     let rows: Row[];
     try {
       // thumb diambil dari scene PERTAMA (job_shots idx=0) kalau ada. Job yang
@@ -117,14 +113,14 @@ export async function GET(req: Request) {
       cost_idr: row.cost_actual_idr,
       run_id: row.bulk_run_id,
       caption: publishable ? row.caption : null,
-      video_url: publishable && row.state === "READY" && row.video_url ? createSignedUrl(row.video_url) : null,
+      video_url: publishable && row.state === "READY" && row.video_url ? deps.createSignedUrl(row.video_url) : null,
       // URL unduh terpisah dari URL putar: yang ini membawa ?dl= supaya browser
       // MENYIMPAN berkas dengan nama produk, bukan membuka pemutar.
       download_url:
         publishable && row.state === "READY" && row.video_url
-          ? `${createSignedUrl(row.video_url)}&dl=${encodeURIComponent(downloadName(row.product_name, i))}`
+          ? `${deps.createSignedUrl(row.video_url)}&dl=${encodeURIComponent(downloadName(row.product_name, i))}`
           : null,
-      thumb_url: publishable && row.thumb_key ? createSignedUrl(row.thumb_key) : null,
+      thumb_url: publishable && row.thumb_key ? deps.createSignedUrl(row.thumb_key) : null,
       fail_reason:
         row.state === "FAILED" || row.state === "REFUNDED"
           ? friendlyFailure(failReason(row.fail_meta))
