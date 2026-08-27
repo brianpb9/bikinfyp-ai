@@ -20,6 +20,7 @@ import { assertAdmissionReferenceEvidence, cleanupSupersededReferenceKeys, clean
 import { authorizedManagedStagingZeroValueAdmission } from "@/lib/staging-admission-trace";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
+import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -341,6 +342,11 @@ export async function POST(req: Request) {
           return { kind: "product_type_changed" as const };
         }
         const productSnapshotRaw = createJobProductSnapshotRaw(admissionProduct);
+        requireCurrentJobEvidence({
+          approvedReferenceManifest: preparedReference.raw,
+          jobProductSnapshot: productSnapshotRaw,
+          productType: admissionProduct,
+        });
         db!.prepare(
           `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, approved_reference_manifest, job_product_snapshot, state, created_at, state_changed_at)
            VALUES (?,?,?,?,?,?,?,?,?,?, 'QUEUED', ?, ?)`

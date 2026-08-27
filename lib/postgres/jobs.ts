@@ -45,42 +45,6 @@ export class PgJobsRepository {
     if (voice) await this.pool.query("UPDATE jobs SET provider_voice=$1 WHERE id=$2", [voice, id]);
   }
 
-  /**
-   * Install exactly once while holding the job row lock. A legacy job with any
-   * durable provider/output trace is intentionally refused: its original
-   * reference provenance cannot be reconstructed safely.
-   */
-  async installReferenceManifestIfSafe(id: string, candidateRaw: string): Promise<string | null> {
-    return this.transaction(async (client) => {
-      const result = await client.query<{
-        approved_reference_manifest: string | null;
-        provider_video: string | null;
-        provider_voice: string | null;
-        output_url: string | null;
-        cost_actual_idr: number;
-      }>(
-        `SELECT approved_reference_manifest,provider_video,provider_voice,output_url,cost_actual_idr
-         FROM jobs WHERE id=$1 FOR UPDATE`,
-        [id]
-      );
-      const row = result.rows[0];
-      if (!row) throw new Error("Job tidak ditemukan saat mematok manifest referensi.");
-      if (row.approved_reference_manifest) return row.approved_reference_manifest;
-      const traces = await client.query<{ unsafe: boolean }>(
-        `SELECT (
-          $2::boolean OR
-          EXISTS (SELECT 1 FROM outputs WHERE job_id=$1) OR
-          EXISTS (SELECT 1 FROM provider_tasks WHERE job_id=$1) OR
-          EXISTS (SELECT 1 FROM job_shots WHERE job_id=$1)
-        ) AS unsafe`,
-        [id, Boolean(row.provider_video || row.provider_voice || row.output_url || Number(row.cost_actual_idr) > 0)]
-      );
-      if (traces.rows[0]?.unsafe) return null;
-      await client.query("UPDATE jobs SET approved_reference_manifest=$1 WHERE id=$2", [candidateRaw, id]);
-      return candidateRaw;
-    });
-  }
-
   /** FAILED -> release ledger -> REFUNDED is one serializable transaction. */
   async failJob(id: string, reason: string): Promise<{ changed: boolean; refunded: number }> {
     return this.transaction(async (client) => {

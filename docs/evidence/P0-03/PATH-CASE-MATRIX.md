@@ -1294,3 +1294,38 @@ BASELINE=`dbf96691fd7b824e3d0dd0c2dc186172f02ca0bd`
 - No deploy, production database, provider, payment, credit, queue, or secret
   operation was performed.
 - Evidence: `../P0-C6-OCR-FAIL-CLOSED-BEFORE-SPEND-20260827/`.
+
+### E.41 C10 legacy-job quarantine — 2026-08-27
+
+TASK=`P0-C10-LEGACY-JOB-QUARANTINE-20260827`
+BASELINE=`7475ddb3ccbfe6390ec79dda789d3f2d9325ca3d`
+
+- A shared pure read-only classifier now distinguishes missing, malformed, and
+  unsupported manifest/snapshot versions, invalid OCR/hash evidence, and
+  quarantined product-type provenance. It performs no database, storage,
+  network, hold, queue, provider, or ledger effect and preserves the existing
+  runtime error/reason codes.
+- A1/A4 admissions require the prepared immutable reference manifest, product
+  snapshot v3 with promo fields, and confirmed product-type provenance before
+  job/hold visibility. A6, W1, W1 deterministic trace, and W2 apply the same
+  classifier before materialization, regenerate, enqueue, provider, capture,
+  or deliverable work.
+- Worker-time pristine-legacy manifest installation/backfill was removed from
+  both SQLite and PostgreSQL implementations. W1 no longer selects
+  `products.images`; W1/W2 cannot rebuild immutable job evidence from mutable
+  product rows. Existing durable manifest bytes remain hash-verified on retry
+  and resume.
+- Direct controls cover v1/v2/missing/corrupt evidence, OCR/hash failure,
+  product-type quarantine, current v3 evidence, immutable bytes, retry/regen
+  boundaries, zero materialize/provider/capture/deliverable effects, and static
+  no-live-row-fallback guards. Focused C10/W1/W2 controls pass 33/33; the full
+  suite passes 1266 total / 1220 pass / 0 fail / 46 skipped; typecheck and the
+  production build pass.
+- Disposable PostgreSQL was attempted but is not claimed as PASS: the guarded
+  local endpoint `localhost:54329` refused the connection and Docker is not
+  installed. PostgreSQL and SQLite use the same classifier seam; real-PG cases
+  remain reported as skipped in this environment.
+- No staging/production deploy or mutation, R2/database population audit,
+  backfill, delete, replay, provider, payment, credit call, or policy/reason-code
+  change was performed.
+- Evidence: `../P0-C10-LEGACY-JOB-QUARANTINE-20260827/`.

@@ -28,9 +28,17 @@ const snapshot = JSON.stringify({
   brandBrief: null,
   claims: [],
 });
+const confirmedType = {
+  product_type_token: "serum wajah",
+  product_type_confirmed_token: "serum wajah",
+  product_type_confirmed_by: "staging-fixture",
+  product_type_confirmed_at: "2026-08-27T00:00:00.000Z",
+  product_type_version: 1,
+  product_type_state: "CONFIRMED",
+};
 
 test("deterministic worker accepts canonical immutable admission values", () => {
-  const parsed = parseDeterministicFixtureAdmission({ approved_reference_manifest: manifest, job_product_snapshot: snapshot });
+  const parsed = parseDeterministicFixtureAdmission({ approved_reference_manifest: manifest, job_product_snapshot: snapshot, ...confirmedType });
   assert.equal(parsed.manifest.references[0].sha256, "a".repeat(64));
   assert.equal(parsed.productSnapshot.productName, "NOVA Serum");
 });
@@ -39,12 +47,24 @@ test("deterministic worker rejects tampered manifest and snapshot shapes", () =>
   const tamperedManifest = JSON.stringify({ ...JSON.parse(manifest), references: [{ ...JSON.parse(manifest).references[0], sha256: "tampered" }] });
   const tamperedSnapshot = JSON.stringify({ ...JSON.parse(snapshot), trustedBrand: { source: "untrusted", value: "NOVA" } });
   assert.throws(
-    () => parseDeterministicFixtureAdmission({ approved_reference_manifest: tamperedManifest, job_product_snapshot: snapshot }),
+    () => parseDeterministicFixtureAdmission({ approved_reference_manifest: tamperedManifest, job_product_snapshot: snapshot, ...confirmedType }),
     /REF_MANIFEST_INVALID/,
   );
   assert.throws(
-    () => parseDeterministicFixtureAdmission({ approved_reference_manifest: manifest, job_product_snapshot: tamperedSnapshot }),
+    () => parseDeterministicFixtureAdmission({ approved_reference_manifest: manifest, job_product_snapshot: tamperedSnapshot, ...confirmedType }),
     /PRODUCT_SNAPSHOT_INVALID/,
+  );
+});
+
+test("deterministic W1 rejects quarantined product type before materialization", () => {
+  assert.throws(
+    () => parseDeterministicFixtureAdmission({
+      approved_reference_manifest: manifest,
+      job_product_snapshot: snapshot,
+      ...confirmedType,
+      product_type_state: "QUARANTINED",
+    }),
+    (error: unknown) => (error as { body?: { code?: string } }).body?.code === "PRODUCT_TYPE_CONFIRMATION_REQUIRED",
   );
 });
 

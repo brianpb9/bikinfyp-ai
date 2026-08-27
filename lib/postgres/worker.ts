@@ -54,10 +54,9 @@ import { pgTaskMemo } from "./task-memo";
 import { appendEndcard, ENDCARD_DEFAULT_COLOR, ENDCARD_DURASI_DTK } from "../media/endcard";
 import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
-import { pesanTanpaReferensi } from "../product-truth";
-import { catatKanariReferensi, GagalTanpaReferensi } from "../kanari-bukti";
-import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest, parseJobReferenceManifest, type JobReferenceManifest } from "../job-reference-manifest";
-import { parseJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot, type JobProductSnapshot } from "../job-product-snapshot";
+import { materializeJobReferenceManifest, type JobReferenceManifest } from "../job-reference-manifest";
+import { trustedBrandFromRawMeta, type JobProductSnapshot } from "../job-product-snapshot";
+import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
 import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
 import { bacaSnapshot } from "../script-engine/admisi";
 import { normalisasiFormatWorker } from "../media/worker-format";
@@ -107,8 +106,14 @@ type WorkerRow = {
   template_id: string | null;
   product_claims: string | null;
   ratio: string | null;
-  product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_images: string; product_price_idr: number;
+  product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_price_idr: number;
   product_source_url: string | null;
+  product_type_token: string | null;
+  product_type_confirmed_token: string | null;
+  product_type_confirmed_by: string | null;
+  product_type_confirmed_at: string | Date | null;
+  product_type_version: number | null;
+  product_type_state: string | null;
   /** JSON bebas dari intake. Sumber MEREK TEPERCAYA (raw_meta.brand). */
   product_raw_meta: string | null;
   creator_category: string | null;
@@ -307,7 +312,9 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
     // (pool org untuk job dari dashboard bulk-generate, user biasa untuk retail).
     const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level, s.validation_result AS script_validation_result,
-      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
+      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
+      p.product_type_token, p.product_type_confirmed_token, p.product_type_confirmed_by,
+      p.product_type_confirmed_at, p.product_type_version, p.product_type_state,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
@@ -375,20 +382,18 @@ async function runDeterministicFixture(row: WorkerRow, jobs: PgJobsRepository, p
 
 /** Fail-closed parser shared by the managed deterministic branch and its
  * counterexample tests. Canonical admission always supplies both values. */
-export function parseDeterministicFixtureAdmission(row: Pick<WorkerRow, "approved_reference_manifest" | "job_product_snapshot">): {
+export function parseDeterministicFixtureAdmission(row: Pick<WorkerRow,
+  "approved_reference_manifest" | "job_product_snapshot" | "product_type_token"
+  | "product_type_confirmed_token" | "product_type_confirmed_by" | "product_type_confirmed_at"
+  | "product_type_version" | "product_type_state">): {
   manifest: JobReferenceManifest;
   productSnapshot: JobProductSnapshot;
 } {
-  if (!row.approved_reference_manifest) {
-    throw new Error("REF_MANIFEST_INVALID: deterministic worker requires canonical admission manifest.");
-  }
-  if (!row.job_product_snapshot) {
-    throw new Error("PRODUCT_SNAPSHOT_INVALID: deterministic worker requires canonical admission snapshot.");
-  }
-  return {
-    manifest: parseJobReferenceManifest(row.approved_reference_manifest),
-    productSnapshot: parseJobProductSnapshot(row.job_product_snapshot, { requirePromo: true }),
-  };
+  return requireCurrentJobEvidence({
+    approvedReferenceManifest: row.approved_reference_manifest,
+    jobProductSnapshot: row.job_product_snapshot,
+    productType: row,
+  });
 }
 
 async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool: Pool) {
@@ -400,16 +405,13 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const storyIdentity = deriveStoryAdsIdentity(admisi, {
     format: row.format, templateId: row.template_id, durationSec: row.duration_s,
   });
-  if (!row.job_product_snapshot) {
-    throw new UnsafeLegacyProductSnapshot(
-      "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: job tanpa snapshot promo v3 tidak boleh memakai row produk mutable."
-    );
-  }
-  const productSnapshot = parseJobProductSnapshot(row.job_product_snapshot, {
-    requirePrice: isStructuredStoryAds(storyIdentity),
-    requirePromo: true,
+  const currentEvidence = requireCurrentJobEvidence({
+    approvedReferenceManifest: row.approved_reference_manifest,
+    jobProductSnapshot: row.job_product_snapshot,
+    productType: row,
   });
-  const snapshotPriceIdr = productSnapshot.priceIdr ?? row.product_price_idr;
+  const productSnapshot = currentEvidence.productSnapshot;
+  const snapshotPriceIdr = productSnapshot.priceIdr!;
   // Semua consumer hilir tetap memakai WorkerRow, tetapi nilainya kini datang
   // dari snapshot job, bukan JOIN products yang dapat berubah saat resume.
   row.product_name = productSnapshot.productName;
@@ -430,7 +432,6 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     productPriceIdr: snapshotPriceIdr,
   });
 
-  const images = JSON.parse(row.product_images) as string[];
   // REFERENSI DIPILIH DARI BUKTI, BUKAN DARI URUTAN UNGGAH.
   //
   // Sampai 21 Agu baris ini `materialize(images[0])`: foto PERTAMA menang
@@ -446,19 +447,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // rumah itu harus milik job ini. Dulu ia dibuat sesudah materialize.
   const workDir = path.join(config.storageDir, row.id ? `jobs/${row.id}` : "jobs/tanpa-id");
   fs.mkdirSync(workDir, { recursive: true });
-  const hasilManifest = await loadOrCreateJobReferenceManifest({
-    existingRaw: row.approved_reference_manifest,
-    jobId: row.id,
-    candidateRels: images,
-    onResolved: (referensi) => {
-      catatKanariReferensi(referensi, { jobId: row.id, produkId: row.product_id, runtime: "worker-postgres" });
-      if (!referensi.utama) throw new GagalTanpaReferensi(pesanTanpaReferensi(referensi), referensi);
-    },
-    persistIfAbsentAndSafe: (candidateRaw) => jobs.installReferenceManifestIfSafe(row.id, candidateRaw),
-  });
-  const snapshots = await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+  const snapshots = await materializeJobReferenceManifest(currentEvidence.manifest, workDir);
   const pastikanManifestSebelumEfek = async () => {
-    await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+    await materializeJobReferenceManifest(currentEvidence.manifest, workDir);
   };
   const refUtama = snapshots[0];
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;

@@ -96,44 +96,6 @@ export async function prepareJobReferenceManifest(input: {
   return { manifest, raw, resolution };
 }
 
-export async function loadOrCreateJobReferenceManifest(input: {
-  existingRaw: string | null;
-  jobId: string;
-  candidateRels: string[];
-  onResolved?: (resolution: HasilResolusiReferensi) => void;
-  /** Atomic CAS. Null means a legacy job already has provider/output evidence. */
-  persistIfAbsentAndSafe: (candidateRaw: string) => Promise<string | null>;
-}): Promise<{ manifest: JobReferenceManifest; resolution: HasilResolusiReferensi | null }> {
-  if (input.existingRaw) {
-    return { manifest: parseJobReferenceManifest(input.existingRaw), resolution: null };
-  }
-
-  const prepared = await prepareJobReferenceManifest(input);
-  const references = prepared.manifest.references;
-  let persistedRaw: string | null;
-  try {
-    persistedRaw = await input.persistIfAbsentAndSafe(prepared.raw);
-  } catch (error) {
-    // A failed CAS can be an ambiguous commit/network result. Snapshot keys
-    // are deterministic, so deleting here could remove bytes concurrently
-    // adopted by a successful worker. A retry safely overwrites any orphan.
-    throw error;
-  }
-  if (!persistedRaw) {
-    await Promise.all(references.map((ref) => mediaStorage().delete(ref.snapshotRel).catch(() => undefined)));
-    throw new UnsafeLegacyReferenceSnapshot(
-      "REF_MANIFEST_LEGACY_UNSAFE: job lama sudah punya jejak provider/output; provenance tidak dapat dibuktikan, jadi worker gagal tertutup."
-    );
-  }
-  const winner = parseJobReferenceManifest(persistedRaw);
-  const winnerKeys = new Set(winner.references.map((ref) => ref.snapshotRel));
-  await Promise.all(references
-    .filter((ref) => !winnerKeys.has(ref.snapshotRel))
-    .map((ref) => mediaStorage().delete(ref.snapshotRel).catch(() => undefined)));
-  // CAS yang kalah wajib memakai pemenang dari database, bukan kandidatnya.
-  return { manifest: winner, resolution: prepared.resolution };
-}
-
 /**
  * Men-materialize SELURUH manifest dan memverifikasi bytes. Worker memanggil
  * ini pada awal attempt dan mengulanginya di setiap boundary provider serta

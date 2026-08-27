@@ -13,10 +13,8 @@ import { pgForgetShotTask } from "@/lib/postgres/task-memo";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
-import { materializeJobReferenceManifest, parseJobReferenceManifest } from "@/lib/job-reference-manifest";
-import { parseJobProductSnapshot } from "@/lib/job-product-snapshot";
-import { bacaSnapshot } from "@/lib/script-engine/admisi";
-import { deriveStoryAdsIdentity, isStructuredStoryAds } from "@/lib/script-engine/story-os-ads";
+import { materializeJobReferenceManifest } from "@/lib/job-reference-manifest";
+import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 import path from "node:path";
 
 export const runtime = "nodejs";
@@ -42,12 +40,20 @@ type JobRowLite = {
   script_validation_result: string | null;
   approved_reference_manifest: string | null;
   job_product_snapshot: string | null;
+  product_type_token: string | null;
+  product_type_confirmed_token: string | null;
+  product_type_confirmed_by: string | null;
+  product_type_confirmed_at: string | Date | null;
+  product_type_version: number | null;
+  product_type_state: string | null;
 };
 
 async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRowLite | null> {
   const res = await pool.query<JobRowLite>(
     `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier, j.format, j.template_id,
             j.approved_reference_manifest, j.job_product_snapshot,
+            p.product_type_token, p.product_type_confirmed_token, p.product_type_confirmed_by,
+            p.product_type_confirmed_at, p.product_type_version, p.product_type_state,
             p.name AS product_name, s.segments, s.validation_result AS script_validation_result
      FROM jobs j JOIN products p ON p.id=j.product_id JOIN scripts s ON s.id=j.script_id
      WHERE j.id=$1 AND j.org_id=$2`,
@@ -152,17 +158,12 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       // enqueue. Job review legacy tanpa manifest sudah pasti punya scene
       // provider, jadi provenance-nya tidak boleh direkonstruksi diam-diam.
       try {
-        if (!job.approved_reference_manifest) throw new Error("REF_MANIFEST_LEGACY_UNSAFE");
-        if (!job.job_product_snapshot) throw new Error("PRODUCT_SNAPSHOT_LEGACY_UNSAFE");
-        parseJobProductSnapshot(job.job_product_snapshot, {
-          requirePrice: isStructuredStoryAds(deriveStoryAdsIdentity(
-            bacaSnapshot(job.script_validation_result),
-            { format: job.format, templateId: job.template_id }
-          )),
-          requirePromo: true,
+        const currentEvidence = requireCurrentJobEvidence({
+          approvedReferenceManifest: job.approved_reference_manifest,
+          jobProductSnapshot: job.job_product_snapshot,
+          productType: job,
         });
-        const manifest = parseJobReferenceManifest(job.approved_reference_manifest);
-        await materializeJobReferenceManifest(manifest, path.join(config.storageDir, "jobs", jobId));
+        await materializeJobReferenceManifest(currentEvidence.manifest, path.join(config.storageDir, "jobs", jobId));
       } catch (error) {
         console.error(`[product-truth] A6 job ${jobId} dihentikan sebelum ${action}:`, error);
         throw ERR.BAD_REQUEST(

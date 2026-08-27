@@ -196,6 +196,6 @@ test("all ingestion/admission/worker sources place C6 guards before effects", ()
   assert.match(admission, /failedOcr[\s\S]+ERR\.OCR_FAILED/);
   for (const worker of ["lib/worker.ts", "lib/postgres/worker.ts"]) {
     const source = fs.readFileSync(worker, "utf8");
-    assert.ok(source.indexOf("loadOrCreateJobReferenceManifest(") < source.indexOf("generateVideoWithFailover("), `${worker} provider precedes manifest OCR proof`);
+    assert.ok(source.indexOf("requireCurrentJobEvidence(") < source.indexOf("generateVideoWithFailover("), `${worker} provider precedes manifest OCR proof`);
   }
 });

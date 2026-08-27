@@ -269,7 +269,7 @@ test("A1/A4/A6 tetap menegakkan bukti di boundary otoritatif sebelum uang/queue"
       "await enqueueJob(jobId)",
     ]);
   before(source("../app/api/dashboard/campaign/job/[jobId]/route.ts"),
-    "await materializeJobReferenceManifest(manifest", [
+    "await materializeJobReferenceManifest(currentEvidence.manifest", [
       "UPDATE jobs SET approved_at=",
       "INSERT INTO credit_ledger",
       "await enqueueJobResume(jobId, `regen${idx}`)",

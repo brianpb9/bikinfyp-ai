@@ -1404,24 +1404,6 @@ test("W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images"
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 manifest reuse");
 });
 
-test("W1 manifest create konkuren: row lock menghasilkan tepat satu pemenang", async (t) => {
-  if (lewati) return t.skip("UJI_PG_URL kosong");
-  const jobId = await siapkanJob([]);
-  const { PgJobsRepository } = await import("../lib/postgres/jobs");
-  const repoA = new PgJobsRepository(URL_UJI);
-  const repoB = new PgJobsRepository(URL_UJI);
-  const rawA = JSON.stringify({ version: 2, references: [{ rel: "a.webp", sha256: "a".repeat(64), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel: `jobs/${jobId}/approved-references/a.webp` }] });
-  const rawB = JSON.stringify({ version: 2, references: [{ rel: "b.webp", sha256: "b".repeat(64), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel: `jobs/${jobId}/approved-references/b.webp` }] });
-  const [a, b] = await Promise.all([
-    repoA.installReferenceManifestIfSafe(jobId, rawA),
-    repoB.installReferenceManifestIfSafe(jobId, rawB),
-  ]);
-  assert.ok(a && b);
-  assert.equal(a, b, "dua worker memegang manifest berbeda untuk job sama");
-  const durable = (await pool.query("SELECT approved_reference_manifest FROM jobs WHERE id=$1", [jobId])).rows[0].approved_reference_manifest;
-  assert.equal(durable, a);
-});
-
 test("W1 non-Ads snapshot produk v1 dikarantina sebelum reference boundary", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   const rel = `uploads/w1-affiliate-v1-${process.pid}/0.webp`;

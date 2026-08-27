@@ -115,7 +115,7 @@ test("A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan 
     path.join(process.cwd(), "app/api/dashboard/campaign/job/[jobId]/route.ts"),
     "utf8"
   );
-  const guard = source.indexOf("parseJobProductSnapshot(job.job_product_snapshot");
+  const guard = source.indexOf("requireCurrentJobEvidence({");
   assert.ok(guard > 0, "A6 tidak memvalidasi snapshot metadata produk");
   for (const token of [
     "UPDATE jobs SET approved_at",
@@ -128,8 +128,8 @@ test("A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan 
   }
   assert.match(source, /s\.validation_result AS script_validation_result/,
     "A6 tidak memuat snapshot admisi script");
-  assert.match(source.slice(guard, guard + 650), /isStructuredStoryAds\(deriveStoryAdsIdentity\([\s\S]+bacaSnapshot\(job\.script_validation_result\)[\s\S]+format: job\.format[\s\S]+templateId: job\.template_id/,
-    "A6 tidak memakai helper identitas Story Ads yang sama dengan worker");
+  assert.match(source.slice(guard, guard + 650), /jobProductSnapshot:\s*job\.job_product_snapshot/,
+    "A6 tidak mengirim snapshot immutable ke classifier shared");
 });
 
 test("tepat tiga admission produksi memasang product snapshot + reference manifest pada INSERT yang sama", () => {
@@ -172,19 +172,17 @@ test("tepat tiga admission produksi memasang product snapshot + reference manife
 test("kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot", () => {
   for (const rel of ["lib/worker.ts", "lib/postgres/worker.ts"]) {
     const source = fs.readFileSync(path.join(process.cwd(), rel), "utf8");
-    const load = source.indexOf("const productSnapshot = parseJobProductSnapshot");
+    const load = source.indexOf("const currentEvidence = requireCurrentJobEvidence");
     const sa6 = source.indexOf("const voiceoverStartSec = voiceoverStartSecForSegments");
     assert.ok(load > 0 && sa6 > load, `${rel}: SA6 berjalan sebelum snapshot produk immutable dimuat`);
     const sa6Block = source.slice(sa6, sa6 + 500);
     assert.match(sa6Block, /productSnapshot\.productName/);
     assert.match(sa6Block, /productSnapshot\.category/);
     assert.match(sa6Block, /productPriceIdr: snapshotPriceIdr/);
-    assert.match(source.slice(load, sa6), /requirePrice: isStructuredStoryAds\(storyIdentity\)[\s\S]+requirePromo: true/,
-      `${rel}: parser snapshot tidak membatasi kebutuhan harga ke Story Ads`);
-    assert.match(source, /!\w+\.job_product_snapshot[\s\S]{0,220}PRODUCT_SNAPSHOT_LEGACY_UNSAFE/,
-      `${rel}: legacy tanpa snapshot tidak gagal tertutup`);
-    assert.match(source.slice(load, sa6), /requirePromo: true/,
-      `${rel}: runtime tidak mewajibkan snapshot promo v3`);
+    assert.match(source.slice(load, sa6), /const productSnapshot = currentEvidence\.productSnapshot/,
+      `${rel}: worker tidak memakai snapshot current hasil classifier`);
+    assert.match(source.slice(load, sa6), /jobProductSnapshot:\s*\w+\.job_product_snapshot/,
+      `${rel}: legacy tanpa snapshot tidak masuk classifier fail-closed`);
     const promoBlock = source.slice(source.indexOf("const promo = resolvePromo"), source.indexOf("const promo = resolvePromo") + 500);
     assert.match(promoBlock, /productSnapshot\.promoPriceBeforeIdr/);
     assert.match(promoBlock, /productSnapshot\.promoEndsAt/);

@@ -27,6 +27,7 @@ import { assertAdmissionReferenceEvidence, cleanupUnadmittedReferenceKeys, prepa
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
+import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 
 export type HasilSel =
   | { status: "queued"; script_id: string; job_id: string }
@@ -256,6 +257,11 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       candidateRels: JSON.parse(lockedProduct.images) as string[],
       runtime: "admission-postgres-org",
       onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
+    });
+    requireCurrentJobEvidence({
+      approvedReferenceManifest: preparedReference.raw,
+      jobProductSnapshot: productSnapshotRaw,
+      productType: lockedProduct,
     });
     admittedProduct = { name: lockedProduct.name, priceIdr: lockedProduct.price_idr };
     // requires_approval=TRUE: job dashboard brand SELALU berhenti di gerbang

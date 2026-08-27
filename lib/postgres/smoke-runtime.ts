@@ -26,6 +26,7 @@ import { createJobProductSnapshotRaw } from "../job-product-snapshot";
 import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "../job-admission-reference";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "../product-type-boundary";
 import { canonicalProductTypeTimestamp } from "../product-type-timestamp";
+import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
 
 /**
  * PostgreSQL runtime switch.  `RACUN_POSTGRES_SMOKE=1` is retained solely for
@@ -313,6 +314,11 @@ export async function smokeCreateJob(userId: string, input: {
           candidateRels: JSON.parse(lockedProduct.images) as string[],
           runtime: "admission-postgres-retail",
           onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
+        });
+        requireCurrentJobEvidence({
+          approvedReferenceManifest: preparedReference.raw,
+          jobProductSnapshot: productSnapshotRaw,
+          productType: lockedProduct,
         });
         preparedReference.manifest.references.forEach((ref) => preparedSnapshotRels.add(ref.snapshotRel));
         const balance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);

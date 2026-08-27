@@ -98,12 +98,41 @@ function sidecar(bytes: Buffer, layak: boolean) {
   );
 }
 
+let installAdmissionManifestFixture: ((jobId: string, images: string[]) => string | null) | null = null;
+
+function buildAdmissionManifestFixture(
+  isi: Map<string, Buffer>,
+  snapshotSources: Map<string, string>,
+  jobId: string,
+  images: string[],
+): string | null {
+  const references = images.slice(0, 7).flatMap((rel, index) => {
+    const bytes = isi.get(rel);
+    const sidecarBytes = isi.get(`${rel}.meta.json`);
+    if (!bytes || !sidecarBytes) return [];
+    let evidence: Record<string, unknown>;
+    try { evidence = JSON.parse(sidecarBytes.toString("utf8")) as Record<string, unknown>; }
+    catch { return []; }
+    if (evidence.layakReferensi !== true || evidence.sha256 !== sha(bytes)
+      || evidence.labelOcrStatus !== "READABLE" || evidence.labelOcrVersion !== 1) return [];
+    const snapshotRel = `jobs/${jobId}/approved-references/${index}-${sha(bytes)}.webp`;
+    isi.set(snapshotRel, Buffer.from(bytes));
+    snapshotSources.set(snapshotRel, rel);
+    return [{
+      rel, snapshotRel, sha256: sha(bytes), versiBukti: Number(evidence.versiBukti),
+      labelOcrStatus: "READABLE", labelOcrVersion: 1,
+    }];
+  });
+  return references.length > 0 ? JSON.stringify({ version: 2, references }) : null;
+}
+
 /** Storage palsu: mencatat SETIAP materialize(key) dan selalu mengembalikan null. */
 function storageSpy(isi: Map<string, Buffer>) {
   const materializeCalls: string[] = [];
   const getCalls: string[] = [];
   const putCalls: string[] = [];
   const snapshotSources = new Map<string, string>();
+  installAdmissionManifestFixture = (jobId, images) => buildAdmissionManifestFixture(isi, snapshotSources, jobId, images);
   const storage: MediaStorage = {
     async put(key, body) {
       putCalls.push(key);
@@ -143,6 +172,8 @@ function storageTerwujud(isi: Map<string, Buffer>) {
   const putCalls: string[] = [];
   const materializeCalls: string[] = [];
   const dir = fs.mkdtempSync(path.join(process.env.STORAGE_DIR!, "c3-materialize-"));
+  const snapshotSources = new Map<string, string>();
+  installAdmissionManifestFixture = (jobId, images) => buildAdmissionManifestFixture(isi, snapshotSources, jobId, images);
   const storage: MediaStorage = {
     async put(key, body) { putCalls.push(key); isi.set(key, Buffer.from(body)); },
     async delete(key) { isi.delete(key); },
@@ -155,7 +186,7 @@ function storageTerwujud(isi: Map<string, Buffer>) {
       return body ? { size: body.length } : null;
     },
     async materialize(key) {
-      materializeCalls.push(key);
+      materializeCalls.push(snapshotSources.get(key) ?? key);
       const body = isi.get(key);
       if (!body) return null;
       const target = path.join(dir, `${materializeCalls.length}-${path.basename(key)}`);
@@ -219,8 +250,11 @@ const segmen = [
 function siapkanJob(images: string[], tier = "silent_caption"): { jobId: string; productId: string } {
   const productId = uuid();
   db.prepare(
-    "INSERT INTO products (id, user_id, source_url, name, price_idr, category, images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
-  ).run(productId, userId, null, "Serum Glow Bright", 85000, "beauty", JSON.stringify(images), null, now());
+    `INSERT INTO products (id,user_id,source_url,name,price_idr,category,images,raw_meta,
+      product_type_token,product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,
+      product_type_version,product_type_state,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+  ).run(productId, userId, null, "Serum Glow Bright", 85000, "beauty", JSON.stringify(images), null,
+    "serum wajah", "serum wajah", userId, "2026-08-27T00:00:00.000Z", 1, "CONFIRMED", now());
 
   const scriptId = uuid();
   db.prepare(
@@ -229,13 +263,14 @@ function siapkanJob(images: string[], tier = "silent_caption"): { jobId: string;
   ).run(scriptId, productId, JSON.stringify(segmen), now(), now());
 
   const jobId = uuid();
+  const manifestRaw = installAdmissionManifestFixture?.(jobId, images) ?? null;
   const productSnapshot = createJobProductSnapshotRaw({
     name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
   });
   db.prepare(
-    `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, job_product_snapshot, state, created_at, state_changed_at)
-     VALUES (?,?,?,NULL,?,'hands_only',?,15,?,'QUEUED',?,?)`
-  ).run(jobId, userId, productId, scriptId, tier, productSnapshot, now(), now());
+    `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, approved_reference_manifest, job_product_snapshot, state, created_at, state_changed_at)
+     VALUES (?,?,?,NULL,?,'hands_only',?,15,?,?,'QUEUED',?,?)`
+  ).run(jobId, userId, productId, scriptId, tier, manifestRaw, productSnapshot, now(), now());
   db.prepare("UPDATE scripts SET job_id = ? WHERE id = ?").run(jobId, scriptId);
   return { jobId, productId };
 }
@@ -276,8 +311,12 @@ async function siapkanJobLewatAdmisi(images: string[]): Promise<{ jobId: string;
 async function siapkanStoryAdsW2(image: string, snapshotRaw: string): Promise<{ jobId: string; productId: string }> {
   const productId = uuid();
   db.prepare(
-    "INSERT INTO products (id,user_id,name,price_idr,category,images,raw_meta,created_at) VALUES (?,?,?,189000,'jasa',?,'{}',?)"
-  ).run(productId, userId, "Jasa Uji Snapshot", JSON.stringify([image]), now());
+    `INSERT INTO products (id,user_id,name,price_idr,category,images,raw_meta,
+      product_type_token,product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,
+      product_type_version,product_type_state,created_at)
+     VALUES (?,?,?,189000,'jasa',?,'{}',?,?,?,?,?,?,?)`
+  ).run(productId, userId, "Jasa Uji Snapshot", JSON.stringify([image]),
+    "jasa", "jasa", userId, "2026-08-27T00:00:00.000Z", 1, "CONFIRMED", now());
   const { generateScripts } = await import("../lib/script-engine");
   const [script] = await generateScripts({
     product: { id: productId, name: "Jasa Uji Snapshot", price_idr: 189000, category: "jasa" },
@@ -294,10 +333,11 @@ async function siapkanStoryAdsW2(image: string, snapshotRaw: string): Promise<{ 
      VALUES (?,NULL,?,'H8','penasaran','netral',?,'caption','[]',?,'silent_caption','agak_gila',?,0,?)`
   ).run(scriptId, productId, JSON.stringify(script.segments), validationResult, now(), now());
   const jobId = uuid();
+  const manifestRaw = installAdmissionManifestFixture?.(jobId, [image]) ?? null;
   db.prepare(
-    `INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,job_product_snapshot,state,created_at,state_changed_at)
-     VALUES (?,?,?,NULL,?,'ads','silent_caption',15,?,'QUEUED',?,?)`
-  ).run(jobId, userId, productId, scriptId, snapshotRaw, now(), now());
+    `INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at)
+     VALUES (?,?,?,NULL,?,'ads','silent_caption',15,?,?,'QUEUED',?,?)`
+  ).run(jobId, userId, productId, scriptId, manifestRaw, snapshotRaw, now(), now());
   db.prepare("UPDATE scripts SET job_id=? WHERE id=?").run(jobId, scriptId);
   return { jobId, productId };
 }
@@ -629,8 +669,8 @@ test("W2 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING
 
   assert.deepEqual(
     spy.getCalls,
-    [`${relFoto}.meta.json`, relFoto],
-    "fixture C11 tidak melewati urutan sidecar sah lalu payload hilang"
+    [],
+    "legacy worker membaca ulang sidecar/payload dari row produk mutable"
   );
   assert.deepEqual(spy.materializeCalls, [], "W2 C11: payload hilang tetap dicoba materialize");
   assert.equal(provider.jumlah(), 0, "W2 C11: provider generate sempat dipanggil");
@@ -642,13 +682,8 @@ test("W2 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING
   );
 
   const kanari = ringkasanKanari();
-  assert.equal(kanari.dinilai, 1, "W2 C11: boundary resolver tidak tercatat");
-  assert.equal(kanari.ditolak, 1, "W2 C11: referensi hilang tidak ditolak");
-  assert.equal(
-    kanari.perAlasan[ALASAN_TOLAK.BERKAS_HILANG],
-    1,
-    "W2 C11: jalur yang ditempuh bukan REF_MISSING"
-  );
+  assert.equal(kanari.dinilai, 0, "legacy worker menjalankan ulang resolver atas products.images");
+  assert.equal(kanari.ditolak, 0);
 });
 
 // ------------------------------------------- bytes berubah sesudah disetujui
@@ -703,6 +738,7 @@ test("W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhent
       return abs;
     },
   } as never);
+  installAdmissionManifestFixture = (jobId, images) => buildAdmissionManifestFixture(isi, snapshotSources, jobId, images);
 
   try {
     const { jobId } = siapkanJob([relFoto]);
@@ -777,6 +813,7 @@ test("W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tet
       return pathBersama;
     },
   } as never);
+  installAdmissionManifestFixture = (jobId, images) => buildAdmissionManifestFixture(isi, snapshotSources, jobId, images);
 
   try {
     const { jobId } = siapkanJob([relSah1, relSah2], "high_quality");
@@ -1024,6 +1061,7 @@ test("W2: delapan foto tersetujui menghasilkan paling banyak TUJUH referensi", a
       return abs;
     },
   } as never);
+  installAdmissionManifestFixture = (jobId, images) => buildAdmissionManifestFixture(isi, new Map(), jobId, images);
 
   try {
     // Tier bersuara supaya cabang referensi tambahan benar-benar dilewati.
@@ -1128,7 +1166,7 @@ test("W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot"
   const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
   setMediaStorageForTests(spy.storage);
   const { jobId } = siapkanJob([rel]);
-  db.prepare("UPDATE jobs SET provider_video='legacy-provider',job_product_snapshot=NULL WHERE id=?").run(jobId);
+  db.prepare("UPDATE jobs SET provider_video='legacy-provider',approved_reference_manifest=NULL,job_product_snapshot=NULL WHERE id=?").run(jobId);
 
   await processJob(jobId);
 
@@ -1240,6 +1278,24 @@ test("W2 Story Ads snapshot legacy tanpa price gagal tertutup sebelum referensi/
   }
 });
 
+test("W2 C10: product type quarantine berhenti sebelum materialize/provider/capture", async () => {
+  const rel = "uploads/w2-c10-type/0.webp";
+  const bytes = Buffer.from("W2-C10-CONFIRMED-THEN-QUARANTINED");
+  const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
+  setMediaStorageForTests(spy.storage);
+  const { jobId, productId } = siapkanJob([rel]);
+  db.prepare("UPDATE products SET product_type_state='QUARANTINED' WHERE id=?").run(productId);
+  const provider = pasangObserverProviderC8();
+  try {
+    await processJob(jobId);
+    assert.equal(provider.jumlah(), 0);
+    assert.deepEqual(spy.materializeCalls, []);
+    assertNolEfekSamping(jobId, spy, "W2 C10 product type quarantine");
+  } finally {
+    provider.reset();
+  }
+});
+
 after(() => {
   setMediaStorageForTests(undefined);
   fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });
@@ -1255,7 +1311,7 @@ after(() => {
 // sini lewat worker sungguhan, bukan lewat pemanggilan modul langsung.
 // ---------------------------------------------------------------------------
 
-test("W2 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah", async () => {
+test("W2 legacy quarantine tidak menjalankan ulang resolver/kanari dari products.images", async () => {
   resetKanariUntukTest();
   const relFoto = "uploads/w2-kanari-tolak/0.webp";
   const spy = storageSpy(new Map<string, Buffer>([[relFoto, PACKSHOT]])); // sidecar HILANG
@@ -1270,16 +1326,16 @@ test("W2 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah", a
   const job = db.prepare("SELECT state FROM jobs WHERE id = ?").get(jobId) as { state: string };
   assert.ok(["FAILED", "REFUNDED"].includes(job.state), `vonis berubah gara-gara kanari: ${job.state}`);
 
-  // 2. Dan kanari benar-benar menyala DI SINI, dengan kode, bukan kalimat.
+  // Resolver/kanari belongs to admission. Legacy worker classification is
+  // read-only and must not inspect mutable product bytes again.
   const r = ringkasanKanari();
-  assert.equal(r.dinilai, 1, "kanari tidak menyala di batas worker — nol angka dari tempat vonis diambil");
-  assert.equal(r.ditolak, 1);
+  assert.equal(r.dinilai, 0);
+  assert.equal(r.ditolak, 0);
   assert.equal(r.lolos, 0);
-  assert.equal(r.perAlasan[ALASAN_TOLAK.BUKTI_TIDAK_SAH], 1);
-  assert.equal(r.perRinci[RINCI_TOLAK.SIDECAR_HILANG], 1);
+  assert.deepEqual(spy.getCalls, []);
 });
 
-test("W2 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", async () => {
+test("W2 current manifest tidak menjalankan ulang resolver/kanari dari products.images", async () => {
   resetKanariUntukTest();
   const relFoto = "uploads/w2-kanari-lolos/0.webp";
   const isi = new Map<string, Buffer>([[relFoto, PACKSHOT], [`${relFoto}.meta.json`, sidecar(PACKSHOT, true)]]);
@@ -1290,10 +1346,10 @@ test("W2 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil", 
   await processJob(jobId);
 
   const r = ringkasanKanari();
-  assert.equal(r.dinilai, 1, "penilaian yang LOLOS tidak dicatat; kanari hanya punya pembilang");
-  assert.equal(r.lolos, 1);
+  assert.equal(r.dinilai, 0);
+  assert.equal(r.lolos, 0);
   assert.equal(r.ditolak, 0);
-  assert.deepEqual(r.perAlasan, {}, "penolakan dicatat padahal referensinya lolos");
+  assert.deepEqual(spy.getCalls, [], "worker membaca ulang sidecar produk walau manifest current ada");
 });
 
 test("W2 KANARI: galat yang dilempar worker membawa kode, bukan hanya kalimat", () => {

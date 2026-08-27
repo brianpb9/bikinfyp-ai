@@ -59,7 +59,7 @@ test("kedua worker meneruskan identitas genre otoritatif sebelum efek provider",
     const source = fs.readFileSync(rel, "utf8");
     const identity = source.indexOf("const storyIdentity =");
     const preflight = source.indexOf("voiceoverStartSecForSegments(segments, {");
-    const providerBoundary = source.indexOf("loadOrCreateJobReferenceManifest", preflight);
+    const providerBoundary = source.indexOf("generateVideoWithFailover", preflight);
     assert.ok(identity >= 0 && preflight > identity, `${rel}: identity tidak diteruskan ke preflight`);
     assert.ok(providerBoundary > preflight, `${rel}: preflight Story Ads terlambat setelah boundary provider/snapshot`);
     assert.match(source, /contentType:\s*storyIdentity\.contentType/);

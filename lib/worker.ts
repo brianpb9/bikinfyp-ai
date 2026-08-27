@@ -34,10 +34,8 @@ import { personSafeReferencePhotos } from "./media/person-safe-refs";
 import { normalizeHookLevel } from "./config/hooks";
 import { bacaSnapshot } from "./script-engine/admisi";
 import { isNeutralStoryAdsTemplate } from "./script-engine/ads-visual-contract";
-import { pesanTanpaReferensi } from "./product-truth";
-import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
-import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "./job-reference-manifest";
-import { parseJobProductSnapshot, UnsafeLegacyProductSnapshot } from "./job-product-snapshot";
+import { materializeJobReferenceManifest } from "./job-reference-manifest";
+import { requireCurrentJobEvidence } from "./legacy-job-quarantine";
 import { normalisasiFormatWorker } from "./media/worker-format";
 import { appendPackshotUntukQc } from "./media/packshot-asli";
 import { assertApprovedReferenceBrands } from "./worker-reference-brand-gate";
@@ -134,16 +132,13 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const category = descKustom && !isNeutralStoryAdsTemplate(storyIdentity.templateId)
       ? { ...presetKategori, promptSeed: descKustom, handsPrompt: descKustom }
       : presetKategori;
-    if (!job.job_product_snapshot) {
-      throw new UnsafeLegacyProductSnapshot(
-        "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: job tanpa snapshot promo v3 tidak boleh memakai row produk mutable."
-      );
-    }
-    const productSnapshot = parseJobProductSnapshot(job.job_product_snapshot, {
-      requirePrice: isStructuredStoryAds(storyIdentity),
-      requirePromo: true,
+    const currentEvidence = requireCurrentJobEvidence({
+      approvedReferenceManifest: job.approved_reference_manifest,
+      jobProductSnapshot: job.job_product_snapshot,
+      productType: product,
     });
-    const snapshotPriceIdr = productSnapshot.priceIdr ?? product.price_idr;
+    const productSnapshot = currentEvidence.productSnapshot;
+    const snapshotPriceIdr = productSnapshot.priceIdr!;
     product = {
       ...product,
       name: productSnapshot.productName,
@@ -160,8 +155,6 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const voiceoverStartSec = voiceoverStartSecForSegments(segments, {
       ...storyIdentity, productName: productSnapshot.productName, productCategory: productSnapshot.category, productPriceIdr: snapshotPriceIdr,
     });
-    const images = JSON.parse(product.images) as string[];
-
     const workDir = path.join(config.storageDir, "jobs", job.id);
     fs.mkdirSync(workDir, { recursive: true });
     // REFERENSI DIPILIH DARI BUKTI, BUKAN DARI URUTAN UNGGAH.
@@ -175,34 +168,9 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // GAGAL-TERTUTUP SEBELUM LANGKAH BERBAYAR. Resolver tidak pernah melempar;
     // yang melempar di sini adalah pemanggilnya, dan ia melempar SEBELUM satu
     // byte pun diambil — jadi nol materialize, nol provider, nol capture.
-    const hasilManifest = await loadOrCreateJobReferenceManifest({
-      existingRaw: job.approved_reference_manifest ?? null,
-      jobId: job.id,
-      candidateRels: images,
-      onResolved: (referensi) => {
-        catatKanariReferensi(referensi, { jobId, produkId: product.id, runtime: "worker-sqlite" });
-        if (!referensi.utama) throw new GagalTanpaReferensi(pesanTanpaReferensi(referensi), referensi);
-      },
-      persistIfAbsentAndSafe: async (candidateRaw) => db.transaction(() => {
-        const row = db.prepare(
-          "SELECT approved_reference_manifest,provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=?"
-        ).get(job.id) as { approved_reference_manifest: string | null; provider_video: string | null; provider_voice: string | null; output_url: string | null; cost_actual_idr: number } | undefined;
-        if (!row) throw new Error("Job tidak ditemukan saat mematok manifest referensi.");
-        if (row.approved_reference_manifest) return row.approved_reference_manifest;
-        const traces = db.prepare(
-          `SELECT
-            EXISTS(SELECT 1 FROM outputs WHERE job_id=?) OR
-            EXISTS(SELECT 1 FROM provider_tasks WHERE job_id=?) OR
-            EXISTS(SELECT 1 FROM job_shots WHERE job_id=?) AS unsafe`
-        ).get(job.id, job.id, job.id) as { unsafe: number };
-        if (row.provider_video || row.provider_voice || row.output_url || row.cost_actual_idr > 0 || traces.unsafe) return null;
-        db.prepare("UPDATE jobs SET approved_reference_manifest=? WHERE id=?").run(candidateRaw, job.id);
-        return candidateRaw;
-      })(),
-    });
-    const snapshots = await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+    const snapshots = await materializeJobReferenceManifest(currentEvidence.manifest, workDir);
     const pastikanManifestSebelumEfek = async () => {
-      await materializeJobReferenceManifest(hasilManifest.manifest, workDir);
+      await materializeJobReferenceManifest(currentEvidence.manifest, workDir);
     };
     const refUtama = snapshots[0];
 

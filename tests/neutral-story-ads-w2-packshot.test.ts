@@ -61,7 +61,7 @@ function memoryStorage(values: Map<string, Buffer>) {
   return { storage, puts };
 }
 
-async function setupJob(sourceRel: string): Promise<string> {
+async function setupJob(sourceRel: string, storage: MediaStorage): Promise<string> {
   const userId = uuid();
   db.prepare("INSERT INTO users (id,phone,email,name,tier,locale,created_at) VALUES (?,?,?,?,?,?,?)")
     .run(userId, `0812${String(Math.random()).slice(2, 10)}`, `${userId}@test.local`, "W2", "free", "id-ID", now());
@@ -72,10 +72,13 @@ async function setupJob(sourceRel: string): Promise<string> {
     brand_brief: null, claims: "[]",
   };
   db.prepare(`INSERT INTO products
-    (id,user_id,name,price_idr,category,images,raw_meta,product_visual_desc,brand_brief,claims,created_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+    (id,user_id,name,price_idr,category,images,raw_meta,product_visual_desc,brand_brief,claims,
+     product_type_token,product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,
+     product_type_version,product_type_state,created_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       productId, userId, product.name, product.price_idr, product.category, JSON.stringify([sourceRel]),
-      product.raw_meta, product.product_visual_desc, product.brand_brief, product.claims, now(),
+      product.raw_meta, product.product_visual_desc, product.brand_brief, product.claims,
+      "serum wajah", "serum wajah", userId, "2026-08-27T00:00:00.000Z", 1, "CONFIRMED", now(),
     );
   const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-meja-kosong")!;
   const [script] = await generateScripts({
@@ -95,11 +98,27 @@ async function setupJob(sourceRel: string): Promise<string> {
       } }), approved: now(), created: now(),
     });
   const jobId = uuid();
+  const source = await storage.get(sourceRel);
+  assert.ok(source, "fixture admission source must exist");
+  const sourceSha = sha(source.body);
+  const snapshotRel = `jobs/${jobId}/approved-references/0-${sourceSha}${path.extname(sourceRel)}`;
+  await storage.put(snapshotRel, source.body);
+  const manifestRaw = JSON.stringify({
+    version: 2,
+    references: [{
+      rel: sourceRel,
+      sha256: sourceSha,
+      versiBukti: 1,
+      labelOcrStatus: "READABLE",
+      labelOcrVersion: 1,
+      snapshotRel,
+    }],
+  });
   db.prepare(`INSERT INTO jobs
-    (id,user_id,product_id,script_id,format,quality_tier,duration_s,job_product_snapshot,state,created_at,state_changed_at)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?)`).run(
+    (id,user_id,product_id,script_id,format,quality_tier,duration_s,job_product_snapshot,approved_reference_manifest,state,created_at,state_changed_at)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?)`).run(
       jobId, userId, productId, scriptId, "ads", "silent_caption", template.durationSec,
-      createJobProductSnapshotRaw(product), "QUEUED", now(), now(),
+      createJobProductSnapshotRaw(product), manifestRaw, "QUEUED", now(), now(),
     );
   db.prepare("UPDATE scripts SET job_id=? WHERE id=?").run(jobId, scriptId);
   return jobId;
@@ -142,7 +161,7 @@ test("processJob W2 mengirim file packshot final + tail + sidik matching ke QC d
   }));
   installProvider(false);
   t.after(() => { setMediaStorageForTests(); setVideoProvidersForTests(); setSqliteQcRunnerForTests(); setPeriksaLabelFotoForTests(); });
-  const jobId = await setupJob(sourceRel);
+  const jobId = await setupJob(sourceRel, mem.storage);
   let observed = 0;
   setSqliteQcRunnerForTests(async (input: QcInput) => {
     observed++;
@@ -170,7 +189,7 @@ test("processJob W2 append gagal: QC-10 fail tertutup dan job tidak READY", asyn
   }));
   installProvider(true);
   t.after(() => { setMediaStorageForTests(); setVideoProvidersForTests(); setSqliteQcRunnerForTests(); setPeriksaLabelFotoForTests(); });
-  const jobId = await setupJob(sourceRel);
+  const jobId = await setupJob(sourceRel, mem.storage);
   let observed = 0;
   setSqliteQcRunnerForTests(async (input: QcInput) => {
     observed++;

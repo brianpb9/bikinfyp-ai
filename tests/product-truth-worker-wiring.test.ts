@@ -758,8 +758,9 @@ test(`API pusat ${MODUL_PUSAT}.ts ada dan BENAR-BENAR mengekspor ${EKSPOR_PUSAT}
 
 // --------------------------------------------------------------- wiring W1+W2
 
-const MODUL_MANIFEST = "lib/job-reference-manifest";
-const EKSPOR_LOAD_MANIFEST = "loadOrCreateJobReferenceManifest";
+const MODUL_MANIFEST = "lib/legacy-job-quarantine";
+const MODUL_MATERIALIZE = "lib/job-reference-manifest";
+const EKSPOR_LOAD_MANIFEST = "requireCurrentJobEvidence";
 const EKSPOR_MATERIALIZE_MANIFEST = "materializeJobReferenceManifest";
 
 function analisisWiringManifest(rel: string, isi: string) {
@@ -767,7 +768,8 @@ function analisisWiringManifest(rel: string, isi: string) {
   const binding = new Map<string, string>();
   jelajah(sf, (node) => {
     if (!ts.isImportDeclaration(node) || !ts.isStringLiteral(node.moduleSpecifier)) return;
-    if (normalkanModul(rel, node.moduleSpecifier.text) !== MODUL_MANIFEST) return;
+    const module = normalkanModul(rel, node.moduleSpecifier.text);
+    if (module !== MODUL_MANIFEST && module !== MODUL_MATERIALIZE) return;
     const named = node.importClause?.namedBindings;
     if (!named || !ts.isNamedImports(named)) return;
     for (const el of named.elements) binding.set((el.propertyName ?? el.name).text, el.name.text);
@@ -801,23 +803,27 @@ test(`W1+W2: kedua worker mengimpor gerbang manifest job dari ${MODUL_MANIFEST} 
   );
 });
 
-test(`W1+W2: loader manifest menerima daftar ${DAFTAR_FOTO} sebagai candidateRels`, () => {
-  const kurang: string[] = [];
+test("W1+W2: classifier menerima hanya bukti immutable dan tidak menerima products.images", () => {
+  const pelanggaran: string[] = [];
   for (const [label, rel] of Object.entries(SUMBER) as [Label, string][]) {
     const a = analisisWiringManifest(rel, teks[label]);
     const benar = a.loadCalls.some((call) => call.arguments.some((arg) => {
       if (!ts.isObjectLiteralExpression(arg)) return false;
-      return arg.properties.some((prop) => ts.isPropertyAssignment(prop)
-        && prop.name.getText(a.sf) === "candidateRels"
-        && menunjukDaftarFoto(prop.initializer));
+      const names = new Set(arg.properties.filter(ts.isPropertyAssignment).map((prop) => prop.name.getText(a.sf)));
+      return names.has("approvedReferenceManifest") && names.has("jobProductSnapshot")
+        && !names.has("candidateRels");
     }));
-    if (!benar) kurang.push(`${rel} (${label}): loader manifest tidak menerima candidateRels dari images`);
+    if (!benar || a.loadCalls.some((call) => call.getText(a.sf).includes("candidateRels"))) {
+      pelanggaran.push(`${rel} (${label}): classifier tidak terikat hanya ke bukti immutable`);
+    }
+    if (/loadOrCreateJobReferenceManifest|installReferenceManifestIfSafe/.test(teks[label])) {
+      pelanggaran.push(`${rel} (${label}): fallback legacy masih reachable`);
+    }
   }
   assert.deepEqual(
-    kurang,
+    pelanggaran,
     [],
-    `Wiring manifest belum benar:\n  ${kurang.join("\n  ")}\n` +
-      "Daftar produk wajib masuk ke loader yang menjalankan resolver pusat dan membuat snapshot durable."
+    `Worker masih dapat merekonstruksi bukti dari row produk mutable:\n  ${pelanggaran.join("\n  ")}`
   );
 });
 
