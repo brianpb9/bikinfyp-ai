@@ -25,7 +25,7 @@
   },
   "authority_source_contract": {
     "SCOPE": "Only the pinned amended Founder TASK raw bytes may authorize the pinned task scope.",
-    "SLOT_OR_TOKEN": "A committed raw reviewer PASS must bind this task and reviewed SHA, carry canonical authority-source/v1 JSON exactly matching authority_receipt_id, kind, authority_class, subject, scope, issuer, decision, task, and reviewed_sha, and include a detached Ed25519 signature verifiable by the pinned external Reviewer public key."
+    "SLOT_OR_TOKEN": "BLOCKED_INDEPENDENT_SIGNER_REQUIRED. A committed raw reviewer PASS must bind this task and reviewed SHA, carry canonical authority-source/v1 JSON exactly matching authority_receipt_id, kind, authority_class, subject, scope, issuer, decision, task, and reviewed_sha, and include a detached Ed25519 signature from a replacement independent signer inaccessible to Builder. The revoked reviewer-score-authority-20260827 key is never accepted."
   },
   "allowed_issuers_by_class": {
     "FOUNDER_SCOPE_DIRECTION": ["reviewer-on-founder-authority"],

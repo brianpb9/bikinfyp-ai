@@ -36,8 +36,8 @@ required slot receipts, token-specific authority class, cumulative row order,
 duplicate rejection, raw/normalized recomputation, and the evidence-ceiling
 transition. The ceiling stays 58 unless all non-compensable 80 slots are
 VERIFIED; certified 80 additionally requires all 27 tokens and raw 104.
-The issuer/class and decision trust policy is pinned in the verifier, not read
-as authority from the editable registry. The amended TASK's raw archive bytes
+The issuer/class and decision policy is pinned in the verifier, not read as
+authority from the editable registry. The amended TASK's raw archive bytes
 are committed and match the pinned archive digest. The 27-token fixture builds
 full authority and receipt records, runs them through the same committed-byte,
 ancestry, issuer, authority-scope, dependency, and award validators used by the
@@ -45,14 +45,15 @@ real registries, plus a separate ephemeral Ed25519 fixture key that is never
 accepted for real awards. The fixture is never inserted into current state.
 
 For real records, a TASK source is accepted only for the pinned Founder SCOPE.
-Every future SLOT or TOKEN authority must cite committed raw Reviewer `PASS`
-bytes bound to this task and an ancestor reviewed SHA; its body must be exact
-canonical `authority-source/v1` JSON signing the registry's kind, class,
-issuer, subject, decision, scope, and score/evidence bindings byte-for-byte.
-The claim must carry a detached Ed25519 signature verified by the external
-Reviewer public key at the pinned path and SPKI fingerprint. The committed
-Reviewer-signed bootstrap restricts that key to SLOT/TOKEN claims for this task.
-Builder neither reads nor commits the Reviewer private key.
+SLOT and TOKEN authority is currently fail-closed. Reviewer found that the
+private key corresponding to fingerprint
+`6684d5c4ed97b5b60af0671ac5eeaacf0e9e6ad6f4fc283320e5a124fe256853`
+was readable by Builder's OS identity and removed it. That fingerprint, key id,
+bootstrap, and signature are retained only as revoked audit evidence and can
+never authorize a receipt or point. `RUBRIC-CONTRACT.json` is therefore
+`CHANGES_REQUESTED` and blocked until an independent signer inaccessible to
+Builder rotates the key and issues a new bootstrap. Same-UID file permissions
+are not treated as isolation.
 
 `NEGATIVE-CASES.json` exercises unknown token, mismatched authority and
 authority scope, unrelated TASK/PASS sources, source/registry issuer mismatch,

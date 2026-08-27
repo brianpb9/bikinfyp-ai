@@ -1,6 +1,13 @@
 {
   "schema": "evidence-to-point-contract/v1",
   "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "review_status": "CHANGES_REQUESTED",
+  "authority_trust_state": {
+    "status": "BLOCKED_INDEPENDENT_SIGNER_REQUIRED",
+    "revoked_key_fingerprint": "6684d5c4ed97b5b60af0671ac5eeaacf0e9e6ad6f4fc283320e5a124fe256853",
+    "revoked_key_may_authorize_points": false,
+    "required_remediation": "Provision an independent signer inaccessible to Builder, rotate the key, and issue a new independently signed bootstrap before any SLOT or TOKEN authority can be accepted."
+  },
   "baseline_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
   "application_bundle_sha": "0e953f9ccfd8991c96fecbed44bb3b892e0c8829",
   "source_board": "docs/evidence/board-jawaban-2026-08-19.md",

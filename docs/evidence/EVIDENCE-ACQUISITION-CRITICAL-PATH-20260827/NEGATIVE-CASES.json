@@ -6,7 +6,7 @@
     {"id":"mismatched_authority_scope","mutation":"change the exact evidence binding inside first token authority scope","expected_error":"award authority scope"},
     {"id":"unrelated_authority_source","mutation":"use a TASK/PASS from another task as token authority source","expected_error":"authority source task/SHA"},
     {"id":"source_registry_issuer_mismatch","mutation":"source body signs a different issuer than registry","expected_error":"authority signed claim"},
-    {"id":"self_authored_canonical_pass","mutation":"commit a canonical-looking PASS without a signature from the pinned Reviewer key","expected_error":"authority trusted signature"},
+    {"id":"self_authored_canonical_pass","mutation":"commit a canonical-looking PASS while independent signing authority is unavailable","expected_error":"independent signer unavailable"},
     {"id":"mismatched_receipts","mutation":"remove one required evidence receipt from first award","expected_error":"award evidence"},
     {"id":"out_of_order","mutation":"remove a row's first token while retaining its later token","expected_error":"award cumulative order"},
     {"id":"duplicate_token","mutation":"append a duplicate token award","expected_error":"award duplicate token"},
