@@ -8,7 +8,7 @@ import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import { periksaLabelFoto, merekTerdaftar } from "@/lib/media/label-terbaca";
+import { assertAuthoritativeLabelResult, periksaLabelFoto, merekTerdaftar } from "@/lib/media/label-terbaca";
 import { appendRetailProductImages, removeRetailProductImage } from "@/lib/retail-product-images";
 import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
@@ -78,6 +78,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     //
     // SETIAP blob baru diperiksa sebelum satu pun byte/sidecar/list/audit
     // dipersist. Foto #2+ tidak boleh menjadi jalan memutar gerbang merek.
+    const labelEvidence = [] as Awaited<ReturnType<typeof periksaLabelFoto>>[];
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "intake-label-"));
     try {
       for (const [index, blob] of blobs.entries()) {
@@ -86,7 +87,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         // Merek TERDAFTAR ikut — sumber yang sama dengan QC-F1
         // (products.raw_meta.brand), bukan tebakan dari nama produk.
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
+        assertAuthoritativeLabelResult(label);
         // LUBANG YANG DITUTUP 20 Agu: sampai hari itu hasil kecocokan merek
         // dihitung lalu DIBUANG — hanya `terbaca` yang diperiksa. Karena itu
         // foto AI berlabel "bdodpgeer" lolos jadi referensi dan ikut ke lima
@@ -95,6 +96,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
         if (label.cocokMerek === false) {
           throw ERR.BRAND_MISMATCH(label.alasan);
         }
+        labelEvidence.push(label);
       }
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -102,7 +104,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 
     // UUID keys avoid object overwrite when two uploads observed the same
     // starting list length. Publication into the list remains atomic below.
-    const added = await saveUniqueProductImages(id, blobs);
+    const added = await saveUniqueProductImages(id, blobs, labelEvidence);
 
     // WIZARD BUTUH MINIMAL SATU FOTO PRODUK YANG LAYAK JADI ACUAN.
     //

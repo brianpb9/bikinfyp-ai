@@ -37,6 +37,7 @@ fs.writeFileSync(path.join(storageDir, "uploads", productId, "0.png.meta.json"),
   jumlahKata: 0,
   alasan: "fixture HITL packshot",
   versiBukti: 1,
+  labelOcrStatus: "READABLE", labelOcrVersion: 1,
 }));
 db.prepare(
   `INSERT INTO products (id, user_id, source_url, name, price_idr, category,

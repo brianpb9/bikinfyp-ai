@@ -126,6 +126,13 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
     };
     const scanRejects = (node: ts.Node): void => {
       if (node !== loop!.statement && functionBoundary(node)) return;
+      if (ts.isCallExpression(node)
+        && ts.isIdentifier(node.expression)
+        && node.expression.text === "assertAuthoritativeLabelResult"
+        && node.arguments.length === 1
+        && node.arguments[0].getText(ast) === labelName) {
+        unreadableReject = true;
+      }
       if (ts.isIfStatement(node)) {
         const condition = node.expression.getText(ast).replace(/\s/g, "");
         if (condition === `!${labelName}.terbaca`) {
@@ -140,7 +147,7 @@ function assertLabelGateBeforePersistence(source: string, context: string, route
       ts.forEachChild(node, scanRejects);
     };
     scanRejects(loop.statement);
-    assert.equal(unreadableReject, true, `${context}: label tidak terbaca wajib melempar sebelum persistence`);
+    assert.equal(unreadableReject, true, `${context}: verdict OCR/label wajib divalidasi canonical sebelum persistence`);
     assert.equal(brandReject, true, `${context}: cocokMerek false wajib melempar sebelum persistence`);
     return;
   }

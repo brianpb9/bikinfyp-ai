@@ -62,6 +62,7 @@ function sidecar(bytes: Buffer, ubah: Record<string, unknown> = {}): Buffer {
       jumlahKata: 2,
       alasan: "foto produk",
       versiBukti: 1,
+      labelOcrStatus: "READABLE", labelOcrVersion: 1,
       ...ubah,
     })
   );

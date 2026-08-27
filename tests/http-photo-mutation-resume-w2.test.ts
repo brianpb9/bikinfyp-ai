@@ -16,6 +16,7 @@ process.env.STORAGE_DIR = fs.mkdtempSync(path.join(os.tmpdir(), "http-mutation-w
 const { getDb, now, uuid } = await import("../lib/db");
 const { issueToken, cookieName } = await import("../lib/auth");
 const { setMediaStorageForTests } = await import("../lib/storage");
+const { setPeriksaLabelFotoForTests } = await import("../lib/media/label-terbaca");
 const { setVideoProvidersForTests } = await import("../lib/providers/registry");
 const { setPersonSafeReferencePhotosForTests } = await import("../lib/media/person-safe-refs");
 const { setCompositeObserverForTests } = await import("../lib/media/compositor");
@@ -29,6 +30,10 @@ const { processJob, setSqliteQcRunnerForTests } = await import("../lib/worker");
 type MediaStorage = import("../lib/storage").MediaStorage;
 
 const db = getDb();
+setPeriksaLabelFotoForTests(async (_path, _name, brand) => ({
+  status: "READABLE", evidenceVersion: 1, terbaca: true,
+  kata: ["Merek", "Produk"], cocokNama: true, cocokMerek: brand ? true : null,
+}));
 const sha = (body: Buffer) => crypto.createHash("sha256").update(body).digest("hex");
 const tempMaterialize = fs.mkdtempSync(path.join(os.tmpdir(), "http-mutation-w2-materialize-"));
 
@@ -41,6 +46,7 @@ function approvedSidecar(bytes: Buffer): Buffer {
     jumlahKata: 2,
     alasan: "foto produk",
     versiBukti: 1,
+    labelOcrStatus: "READABLE", labelOcrVersion: 1,
   }));
 }
 
@@ -49,6 +55,7 @@ after(() => {
   setVideoProvidersForTests(undefined);
   setCompositeObserverForTests(undefined);
   setSqliteQcRunnerForTests(undefined);
+  setPeriksaLabelFotoForTests(undefined);
   fs.rmSync(tempMaterialize, { recursive: true, force: true });
   fs.rmSync(process.env.STORAGE_DIR!, { recursive: true, force: true });
 });
@@ -123,10 +130,10 @@ async function scenario(label: string) {
      VALUES (?,?,'H1','senang','bestie',?,'caption','[]','{}','silent_caption',?,?)`
   ).run(scriptId, productId, JSON.stringify(segments), timestamp, timestamp);
   const manifest = JSON.stringify({
-    version: 1,
+    version: 2,
     references: [
-      { rel: approvedSource, sha256: sha(approvedBytes), versiBukti: 1, snapshotRel },
-      { rel: approvedSecondSource, sha256: sha(approvedSecondBytes), versiBukti: 1, snapshotRel: snapshotRelSecond },
+      { rel: approvedSource, sha256: sha(approvedBytes), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel },
+      { rel: approvedSecondSource, sha256: sha(approvedSecondBytes), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel: snapshotRelSecond },
     ],
   });
   const productSnapshot = createJobProductSnapshotRaw({ name: `Serum ${label}`, category: "beauty", price_idr: 85_000, raw_meta: JSON.stringify({ brand: "Merek Awal" }) });

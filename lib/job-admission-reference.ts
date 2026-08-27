@@ -5,8 +5,9 @@ import { mediaStorage } from "./storage";
 import { config } from "./config";
 import { connectEvidenceLockClient, releaseSessionAdvisoryLock } from "./postgres/evidence-lock-pool";
 import type { PoolClient } from "pg";
+import { ERR } from "./errors";
 
-type ProductEvidenceBoundary = "A2" | "A3" | "A5" | "A7";
+type ProductEvidenceBoundary = "A1" | "A2" | "A3" | "A4" | "A5" | "A6" | "A7";
 type ProductOwner = { kind: "user" | "org"; id: string };
 const postgresRuntimeEnabled = () =>
   process.env.RACUN_POSTGRES_SMOKE === "1" || process.env.RACUN_DB_RUNTIME === "postgres";
@@ -194,6 +195,10 @@ export async function assertAdmissionReferenceEvidence(input: {
     runtime: `admission-preflight-${input.boundary}`,
   });
   if (!resolution.utama) {
+    const failedOcr = resolution.ditolak.find((item) => item.alasan === "OCR_FAILED");
+    if (failedOcr) throw ERR.OCR_FAILED(failedOcr.pesan);
+    const unreadable = resolution.ditolak.find((item) => item.alasan === "LABEL_UNREADABLE");
+    if (unreadable) throw ERR.LABEL_UNREADABLE(unreadable.pesan);
     throw new GagalTanpaReferensi(pesanTanpaReferensi(resolution), resolution);
   }
 }

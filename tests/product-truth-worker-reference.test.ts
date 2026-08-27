@@ -93,6 +93,7 @@ function sidecar(bytes: Buffer, layak: boolean) {
       jumlahKata: layak ? 2 : 15,
       alasan: layak ? "foto produk" : "materi promosi",
       versiBukti: 1,
+      labelOcrStatus: "READABLE", labelOcrVersion: 1,
     })
   );
 }
@@ -373,9 +374,9 @@ test("W2 C3: mismatch eksplisit pada referensi kedua memakai brand admission dan
 });
 
 test("W2 C3: brand cocok dan brand null tetap dapat mencapai provider", async () => {
+  const providerCalls = new Map<string, number>();
   for (const kontrol of [
     { trustedBrand: "Merek Cocok", cocokMerek: true as const },
-    { trustedBrand: "Merek OCR", cocokMerek: null },
     { trustedBrand: null, cocokMerek: null },
   ]) {
     const { trustedBrand, cocokMerek } = kontrol;
@@ -389,17 +390,20 @@ test("W2 C3: brand cocok dan brand null tetap dapat mencapai provider", async ()
       raw_meta: trustedBrand ? JSON.stringify({ brand: trustedBrand }) : "{}",
     }), jobId);
     let ocr = 0;
-    let providerCalls = 0;
+    const callKey = trustedBrand ?? "NO_BRAND";
     setPeriksaLabelFotoForTests(async () => {
       ocr++;
       return { terbaca: cocokMerek !== null, kata: [], cocokNama: true, cocokMerek };
     });
     setVideoProvidersForTests([{
       name: "w2-c3-positive", async healthCheck() { return true; }, estimateCost() { return 0; },
-      async generate() { providerCalls++; throw new Error("stop di provider positif W2 C3"); },
+      async generate() {
+        providerCalls.set(callKey, (providerCalls.get(callKey) ?? 0) + 1);
+        throw new Error(`stop di provider positif W2 C3 ${callKey}=${providerCalls.get(callKey)}`);
+      },
     } as never]);
     await processJob(jobId);
-    assert.equal(providerCalls, 1, `${trustedBrand}: provider tidak tercapai`);
+    assert.equal(providerCalls.get(callKey), 1, `${trustedBrand}: provider tidak tercapai`);
     assert.equal(ocr, trustedBrand ? 1 : 0, `${trustedBrand}: kebijakan unreadable/null/matching berubah`);
     assertNolEfekSamping(jobId, storage, `W2 C3 positif ${trustedBrand}`);
   }
@@ -877,6 +881,11 @@ test("E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission", as
     } as never,
   ]);
 
+  setPeriksaLabelFotoForTests(async (_path, _name, brand) => ({
+    status: "READABLE", evidenceVersion: 1, terbaca: true,
+    kata: ["Merek", "Awal"], cocokNama: true, cocokMerek: brand ? true : null,
+  }));
+
   try {
     const { jobId, productId } = await siapkanJobLewatAdmisi([relSah1, relSah2]);
     const productSnapshot = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(jobId) as { job_product_snapshot: string | null }).job_product_snapshot;
@@ -955,6 +964,7 @@ test("E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission", as
     assert.equal(durableProduct, productSnapshot, "worker W2 menimpa snapshot dari produk E3 mutasi");
   } finally {
     setVideoProvidersForTests(undefined);
+    setPeriksaLabelFotoForTests(undefined);
     fs.rmSync(tmp, { recursive: true, force: true });
   }
 });
@@ -1094,8 +1104,8 @@ test("W2 A6/C9: manifest lama menang atas reorder/delete/add products.images", a
   setMediaStorageForTests(spy.storage);
   const { jobId } = siapkanJob([currentRel]);
   const raw = JSON.stringify({
-    version: 1,
-    references: [{ rel: approvedRel, sha256: sha(approvedBytes), versiBukti: 1, snapshotRel }],
+    version: 2,
+    references: [{ rel: approvedRel, sha256: sha(approvedBytes), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel }],
   });
   db.prepare("UPDATE jobs SET approved_reference_manifest=? WHERE id=?").run(raw, jobId);
 

@@ -483,7 +483,7 @@ test("E1 cleanup failure setelah reference rejection tetap terlihat sebagai 500"
 
 function assertE1BoundarySource(source: string, context: string): void {
   const label = source.indexOf("await periksaLabelFoto(");
-  const unreadable = source.indexOf("if (!label.terbaca)");
+  const unreadable = source.indexOf("assertAuthoritativeLabelResult(label)");
   const brand = source.indexOf("if (label.cocokMerek === false)");
   const save = source.indexOf("await saveProductImages(");
   const resolve = source.indexOf("await resolveApprovedReference(images)");

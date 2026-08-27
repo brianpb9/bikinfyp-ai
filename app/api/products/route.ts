@@ -5,7 +5,7 @@ import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime
 import { parsePromoFields } from "@/lib/promo";
 import { productCreateDependencies } from "@/lib/product-create-dependencies";
 import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
-import { merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
+import { assertAuthoritativeLabelResult, merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
 import { resolveApprovedReference, pesanTanpaReferensi } from "@/lib/product-truth";
 import { GagalTanpaReferensi } from "@/lib/kanari-bukti";
 import { PgProductCreateFailure } from "@/lib/postgres/product-persona-script";
@@ -120,24 +120,25 @@ export async function POST(req: Request) {
     const brandTerdaftar = merekTerdaftar({ raw_meta: rawMeta ? JSON.stringify(rawMeta) : null });
 
     // E1 must apply the same gate as E4/E8 to every normalized upload before
-    // any storage or product-row publication. OCR execution failures retain
-    // the existing fail-open policy inside periksaLabelFoto; this route does
-    // not invent C6 policy.
+    // any storage or product-row publication. C6 distinguishes runtime OCR
+    // failure from an inspected unreadable label and fails closed on both.
+    const labelEvidence = [] as Awaited<ReturnType<typeof periksaLabelFoto>>[];
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "e1-intake-label-"));
     try {
       for (const [index, blob] of blobs.entries()) {
         const tmpFile = path.join(tmpDir, `foto-${index}`);
         fs.writeFileSync(tmpFile, blob.data);
         const label = await periksaLabelFoto(tmpFile, validName, brandTerdaftar);
-        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
+        assertAuthoritativeLabelResult(label);
         if (label.cocokMerek === false) throw ERR.BRAND_MISMATCH(label.alasan);
+        labelEvidence.push(label);
       }
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
 
     const id = dependencies.uuid();
-    const images = await saveProductImages(id, blobs);
+    const images = await saveProductImages(id, blobs, 0, labelEvidence);
     const usePostgres = dependencies.postgresRuntimeEnabled();
     const expectedCreation = {
       id,

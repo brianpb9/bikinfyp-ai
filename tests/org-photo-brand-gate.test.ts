@@ -222,6 +222,7 @@ test("E8 resolver menolak produk tanpa referensi dan rollback exact sebelum PG a
           jumlahKata: 2,
           alasan: "existing fixture layak",
           versiBukti: KEBIJAKAN_KLASIFIKASI.versiBukti,
+          labelOcrStatus: "READABLE", labelOcrVersion: 1,
         })));
       }
     }

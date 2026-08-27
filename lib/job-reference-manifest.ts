@@ -3,8 +3,9 @@ import crypto from "node:crypto";
 import { mediaStorage } from "./storage";
 import { ambilSnapshotTersetujui, pastikanBytesTersetujui, resolveApprovedReference, type HasilResolusiReferensi, type ReferensiTersetujui } from "./product-truth";
 import { MAKS_REFERENSI_PER_GENERASI } from "./product-images";
+import { ERR } from "./errors";
 
-export const REFERENCE_MANIFEST_VERSION = 1 as const;
+export const REFERENCE_MANIFEST_VERSION = 2 as const;
 
 export interface JobReferenceManifestEntry extends ReferensiTersetujui {
   /** Immutable object owned by this job, never by products.images cleanup. */
@@ -26,6 +27,7 @@ function validReference(value: unknown): value is JobReferenceManifestEntry {
   return typeof ref.rel === "string" && ref.rel.length > 0
     && typeof ref.sha256 === "string" && /^[0-9a-f]{64}$/.test(ref.sha256)
     && typeof ref.versiBukti === "number" && Number.isInteger(ref.versiBukti) && ref.versiBukti > 0
+    && ref.labelOcrStatus === "READABLE" && ref.labelOcrVersion === 1
     && typeof ref.snapshotRel === "string" && ref.snapshotRel.startsWith("jobs/") && ref.snapshotRel.length > 10;
 }
 
@@ -34,6 +36,12 @@ export function parseJobReferenceManifest(raw: string): JobReferenceManifest {
   try { value = JSON.parse(raw); }
   catch { throw new Error("REF_MANIFEST_INVALID: manifest referensi job bukan JSON sah."); }
   const manifest = value as Partial<JobReferenceManifest> | null;
+  if (manifest && Array.isArray(manifest.references)
+      && (manifest.version !== REFERENCE_MANIFEST_VERSION
+        || manifest.references.some((ref) => (ref as Partial<JobReferenceManifestEntry>).labelOcrStatus !== "READABLE"
+          || (ref as Partial<JobReferenceManifestEntry>).labelOcrVersion !== 1))) {
+    throw ERR.OCR_FAILED("Manifest referensi belum memiliki provenance OCR label yang sah; job dikarantina sebelum provider.");
+  }
   if (!manifest || manifest.version !== REFERENCE_MANIFEST_VERSION
       || !Array.isArray(manifest.references) || manifest.references.length === 0
       || manifest.references.length > MAKS_REFERENSI_PER_GENERASI

@@ -16,7 +16,7 @@ import { pgAudit, pgFindOrCreatePersona, pgGetPersona, pgListJobs, pgSaveFypSnap
 import { scoreScriptPlan } from "@/lib/fyp-score";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
-import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest, withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
+import { assertAdmissionReferenceEvidence, cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest, withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 import { authorizedManagedStagingZeroValueAdmission } from "@/lib/staging-admission-trace";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
@@ -82,6 +82,11 @@ export async function POST(req: Request) {
           version: 1, provenance: "USER_SELF_ASSERTION",
         } : null,
     ), () => undefined);
+    await assertAdmissionReferenceEvidence({
+      productId: lockedProduct.id,
+      candidateRels: JSON.parse(lockedProduct.images || "[]") as string[],
+      boundary: "A1",
+    });
 
     // --- GERBANG HITL (aturan keras #5) ---
     if (!script.approved_by_user_at) throw ERR.SCRIPT_NOT_APPROVED();

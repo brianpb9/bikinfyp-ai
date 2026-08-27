@@ -1,11 +1,9 @@
 // P0-03 RED WAVE R2 (P0-A) — kontrak BUKTI (C8) di pusat: referensiLayak().
 //
-// STATUS YANG DIHARAPKAN: MERAH pada 0c443ff.
-// Kode sekarang FAIL-OPEN: `referensiLayak` mendorong rel ke daftar layak
-// setiap kali sidecar tidak ada / tidak terbaca (`if (!meta || meta.layakReferensi)`,
-// lib/product-images.ts:144), dan ia TIDAK PERNAH memverifikasi ulang sha256
-// sidecar terhadap bytes yang benar-benar tersimpan, juga tidak mengenal
-// versi bukti sama sekali (MetaGambar, lib/product-images.ts:98-105).
+// STATUS HISTORIS: MERAH pada 0c443ff; kini menjadi regresi hijau.
+// Resolver sekarang memverifikasi bentuk, versi, hash bytes, klasifikasi, dan
+// provenance OCR. Bukti hilang/korup/basi serta OCR non-authoritative tidak
+// pernah dipromosikan menjadi referensi layak.
 //
 // Yang diuji di sini adalah KEPUTUSAN, bukan implementasi: bukti hilang /
 // korup / basi / hash beda => gambar TIDAK boleh keluar dari referensiLayak.
@@ -128,6 +126,7 @@ function sidecarSah(bytes: Buffer, layak: boolean, jenis: "product_photo" | "pro
       jumlahKata: layak ? 2 : 14,
       alasan: layak ? "foto produk" : "materi promosi",
       versiBukti: VERSI_BUKTI_TERKINI,
+      labelOcrStatus: "READABLE", labelOcrVersion: 1,
     })
   );
 }
@@ -267,6 +266,7 @@ function sidecarDenganField(ubah: Record<string, unknown>): Buffer {
       jumlahKata: 2,
       alasan: "foto produk",
       versiBukti: VERSI_BUKTI_TERKINI,
+      labelOcrStatus: "READABLE", labelOcrVersion: 1,
       ...ubah,
     })
   );
@@ -877,7 +877,7 @@ test("API pusat: bukti SAH -> utama terisi lengkap dengan sha256 dan versiBukti"
   const hasil = await resolveTanpaLempar(resolver, [relFoto(1)], "kontrol positif");
   assert.deepEqual(
     hasil.utama,
-    { rel: relFoto(1), sha256: sha(PACKSHOT), versiBukti: VERSI_BUKTI_TERKINI },
+    { rel: relFoto(1), sha256: sha(PACKSHOT), versiBukti: VERSI_BUKTI_TERKINI, labelOcrStatus: "READABLE", labelOcrVersion: 1 },
     "utama harus membawa identitas byte yang tersetujui, bukan sekadar nama berkas — " +
       "tanpa sha256, admission tidak punya apa pun untuk di-snapshot"
   );
@@ -967,8 +967,8 @@ test("API pusat: SETIAP entri tersetujui membawa metadata lengkap, bukan hanya r
   assert.deepEqual(
     hasil.tersetujui,
     [
-      { rel: relFoto(1), sha256: sha(PACKSHOT), versiBukti: VERSI_BUKTI_TERKINI },
-      { rel: relFoto(2), sha256: sha(KEDUA), versiBukti: VERSI_BUKTI_TERKINI },
+      { rel: relFoto(1), sha256: sha(PACKSHOT), versiBukti: VERSI_BUKTI_TERKINI, labelOcrStatus: "READABLE", labelOcrVersion: 1 },
+      { rel: relFoto(2), sha256: sha(KEDUA), versiBukti: VERSI_BUKTI_TERKINI, labelOcrStatus: "READABLE", labelOcrVersion: 1 },
     ],
     "setiap entri tersetujui wajib membawa rel + sha256 + versiBukti. Referensi ke-2 dst juga " +
       "dikirim ke model dan juga harus bisa di-snapshot admission; daftar berisi {rel} saja " +

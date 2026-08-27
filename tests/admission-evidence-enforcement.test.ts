@@ -37,6 +37,7 @@ const sha = (bytes: Buffer) => crypto.createHash("sha256").update(bytes).digest(
 const validSidecar = (bytes: Buffer) => Buffer.from(JSON.stringify({
   sha256: sha(bytes), jenis: "product_photo", layakReferensi: true,
   rasioAreaTeks: 0, jumlahKata: 0, alasan: "packshot", versiBukti: 1,
+  labelOcrStatus: "READABLE", labelOcrVersion: 1,
 }));
 
 test("preflight A2/A3/A5/A7 menolak C8 tanpa satu pun write/materialize", async () => {

@@ -310,7 +310,7 @@ test("HAPUS: foto warisan tanpa sidecar tetap bisa dihapus tanpa error", async (
 
 // ------------------------------------------------------- kontrol positif
 
-test("KONTROL: dengan biner sungguhan, foto polos dari SETIAP jalur benar-benar TERSETUJUI", async (t) => {
+test("KONTROL: manual readable ingestion is approved; extracted drafts stay quarantined", async (t) => {
   // Tanpa kontrol ini, seluruh berkas ini bisa hijau dengan implementasi yang
   // menulis sidecar `belum_diperiksa` untuk segalanya — bukti yang sah
   // bentuknya, tapi tidak pernah meloloskan satu foto pun.
@@ -318,10 +318,11 @@ test("KONTROL: dengan biner sungguhan, foto polos dari SETIAP jalur benar-benar 
   const { saveProductImages, saveUniqueProductImages } = await import("../lib/product-images");
   const { downloadProductImages } = await import("../lib/product-image-download");
   const png = await fotoPolos();
+  const label = { status: "READABLE" as const, evidenceVersion: 1 as const, terbaca: true, kata: ["Merek", "Produk"], cocokNama: true, cocokMerek: null };
 
   const jalur: [string, () => Promise<string[]>][] = [
-    ["saveProductImages", () => saveProductImages(`k-retail-${process.pid}`, [{ mime: "image/png", data: png }])],
-    ["saveUniqueProductImages", () => saveUniqueProductImages(`k-org-${process.pid}`, [{ mime: "image/png", data: png }])],
+    ["saveProductImages", () => saveProductImages(`k-retail-${process.pid}`, [{ mime: "image/png", data: png }], 0, [label])],
+    ["saveUniqueProductImages", () => saveUniqueProductImages(`k-org-${process.pid}`, [{ mime: "image/png", data: png }], [label])],
     [
       "downloadProductImages",
       async () => {
@@ -339,11 +340,12 @@ test("KONTROL: dengan biner sungguhan, foto polos dari SETIAP jalur benar-benar 
     isi.clear();
     const rels = await jalankan();
     const hasil = await resolveApprovedReference(rels);
-    assert.deepEqual(
-      hasil.tersetujui.map((r) => r.rel),
-      rels,
-      `${nama}: foto polos tidak tersetujui padahal binernya ada. Ditolak: ` +
-        JSON.stringify(hasil.ditolak.map((d) => [d.rel, d.alasan]))
-    );
+    if (nama === "downloadProductImages") {
+      assert.equal(hasil.tersetujui.length, 0);
+      assert.ok(hasil.ditolak.every((item) => item.alasan === "OCR_FAILED"));
+    } else {
+      assert.deepEqual(hasil.tersetujui.map((r) => r.rel), rels,
+        `${nama}: readable manual photo was not approved: ${JSON.stringify(hasil.ditolak.map((d) => [d.rel, d.alasan]))}`);
+    }
   }
 });

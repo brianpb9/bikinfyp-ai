@@ -50,6 +50,7 @@ test("PostgreSQL nyata: lock pool terisolasi, bounded, dan tahan >15s", {
     jumlahKata: 0,
     alasan: "packshot",
     versiBukti: 1,
+    labelOcrStatus: "READABLE", labelOcrVersion: 1,
   }));
   const stored = new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar]]);
   setMediaStorageForTests({

@@ -5,7 +5,7 @@ import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { createSignedUrl } from "@/lib/signed-url";
 import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, bacaMetaGambar, deleteStoredProductImages, referensiLayak, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
-import { merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
+import { assertAuthoritativeLabelResult, merekTerdaftar, periksaLabelFoto } from "@/lib/media/label-terbaca";
 import { pgAudit, pgRemoveOrgProductImage, postgresRuntimeEnabled, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { orgPhotoPostDependencies } from "@/lib/org-photo-post-dependencies";
@@ -48,6 +48,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     if (owned.images.length + blobs.length > MAX_IMAGES) {
       throw ERR.BAD_REQUEST(`Total foto maksimal ${MAX_IMAGES} — produk ini sudah punya ${owned.images.length}.`, "Too many photos.");
     }
+    const labelEvidence = [] as Awaited<ReturnType<typeof periksaLabelFoto>>[];
     for (const blob of blobs) {
       const mime = sniffMime(blob.data);
       if (!mime || !ALLOWED_MIME[mime]) throw ERR.BAD_REQUEST("File-nya bukan gambar yang valid. Pakai PNG/JPG/WebP ya.", "Invalid image file.");
@@ -61,16 +62,17 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       try {
         fs.writeFileSync(tmpFile, blob.data);
         const label = await periksaLabelFoto(tmpFile, owned.product.name, merekTerdaftar(owned.product));
-        if (!label.terbaca) throw ERR.LABEL_UNREADABLE(label.alasan);
+        assertAuthoritativeLabelResult(label);
         if (label.cocokMerek === false) {
           throw ERR.BRAND_MISMATCH(label.alasan);
         }
+        labelEvidence.push(label);
       } finally {
         fs.rmSync(tmpDir, { recursive: true, force: true });
       }
     }
 
-    const added = await saveUniqueProductImages(id, blobs);
+    const added = await saveUniqueProductImages(id, blobs, labelEvidence);
     try {
       const semua = [...owned.images, ...added];
       const layak = await referensiLayak(semua);

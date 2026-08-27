@@ -117,6 +117,7 @@ function sidecar(bytes: Buffer, layak: boolean): Buffer {
       jumlahKata: layak ? 2 : 15,
       alasan: layak ? "foto produk" : "materi promosi",
       versiBukti: 1,
+      labelOcrStatus: "READABLE", labelOcrVersion: 1,
     })
   );
 }
@@ -617,9 +618,9 @@ async function siapkanJobOrgDenganManifest(label: string) {
      VALUES ($1,$2,'H1','senang','bestie',$3,'caption','[]','{}','silent_caption',$4,$4)`,
     [scriptId, productId, JSON.stringify(segmen), t]
   );
-  const manifest = JSON.stringify({ version: 1, references: [
-    { rel: approvedSource, sha256: sha256(approvedBytes), versiBukti: 1, snapshotRel },
-    { rel: approvedSecondSource, sha256: sha256(approvedSecondBytes), versiBukti: 1, snapshotRel: snapshotRelSecond },
+  const manifest = JSON.stringify({ version: 2, references: [
+    { rel: approvedSource, sha256: sha256(approvedBytes), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel },
+    { rel: approvedSecondSource, sha256: sha256(approvedSecondBytes), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel: snapshotRelSecond },
   ] });
   const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
   const productSnapshot = createJobProductSnapshotRaw({ name: `Serum E9 ${label}`, category: "beauty", price_idr: 85_000, raw_meta: JSON.stringify({ brand: "Merek E9" }) });
@@ -1388,8 +1389,8 @@ test("W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images"
   const jobId = await siapkanJob([currentRel]);
   const snapshotRel = `jobs/${jobId}/approved-references/0-approved.webp`;
   const raw = JSON.stringify({
-    version: 1,
-    references: [{ rel: approvedRel, sha256: sha256(approvedBytes), versiBukti: 1, snapshotRel }],
+    version: 2,
+    references: [{ rel: approvedRel, sha256: sha256(approvedBytes), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel }],
   });
   await pool.query("UPDATE jobs SET approved_reference_manifest=$1 WHERE id=$2", [raw, jobId]);
   const spy = await jalankan(jobId, new Map<string, Buffer>([
@@ -1412,8 +1413,8 @@ test("W1 manifest create konkuren: row lock menghasilkan tepat satu pemenang", a
   const { PgJobsRepository } = await import("../lib/postgres/jobs");
   const repoA = new PgJobsRepository(URL_UJI);
   const repoB = new PgJobsRepository(URL_UJI);
-  const rawA = JSON.stringify({ version: 1, references: [{ rel: "a.webp", sha256: "a".repeat(64), versiBukti: 1, snapshotRel: `jobs/${jobId}/approved-references/a.webp` }] });
-  const rawB = JSON.stringify({ version: 1, references: [{ rel: "b.webp", sha256: "b".repeat(64), versiBukti: 1, snapshotRel: `jobs/${jobId}/approved-references/b.webp` }] });
+  const rawA = JSON.stringify({ version: 2, references: [{ rel: "a.webp", sha256: "a".repeat(64), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel: `jobs/${jobId}/approved-references/a.webp` }] });
+  const rawB = JSON.stringify({ version: 2, references: [{ rel: "b.webp", sha256: "b".repeat(64), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel: `jobs/${jobId}/approved-references/b.webp` }] });
   const [a, b] = await Promise.all([
     repoA.installReferenceManifestIfSafe(jobId, rawA),
     repoB.installReferenceManifestIfSafe(jobId, rawB),
@@ -1953,7 +1954,6 @@ test("W1 C3: brand cocok dan brand null tetap dapat mencapai provider", async (t
   const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
   for (const kontrol of [
     { trustedBrand: "Merek Cocok", cocokMerek: true as const },
-    { trustedBrand: "Merek OCR", cocokMerek: null },
     { trustedBrand: null, cocokMerek: null },
   ]) {
     const { trustedBrand, cocokMerek } = kontrol;

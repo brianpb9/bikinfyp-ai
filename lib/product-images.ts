@@ -11,6 +11,7 @@ import sharp from "sharp";
 import { config, ensureDirs } from "./config";
 import { mediaStorage } from "./storage";
 import { klasifikasiGambar, KEBIJAKAN_KLASIFIKASI, type HasilKlasifikasi, type JenisGambar } from "./media/klasifikasi-gambar";
+import type { HasilLabel } from "./media/label-terbaca";
 
 let klasifikasiGambarUntukTest: ((path: string) => Promise<HasilKlasifikasi>) | undefined;
 /** Seam deterministik ingestion-test; tidak mengubah classifier produksi. */
@@ -124,6 +125,8 @@ export interface MetaGambar {
    * berselisih.
    */
   versiBukti: number;
+  labelOcrStatus: "READABLE" | "UNREADABLE" | "OCR_FAILED";
+  labelOcrVersion: 1;
 }
 
 export const relMeta = (rel: string) => `${rel}.meta.json`;
@@ -197,7 +200,8 @@ export async function tulisSidecar(
   // sendiri dikontrak tidak pernah menolak, jadi tanpa suntikan ini blok
   // tangkapnya tidak terjangkau test mana pun — dan cabang yang tidak bisa
   // diuji adalah cabang yang diam-diam salah.
-  klasifikasi: (p: string) => Promise<HasilKlasifikasi> = klasifikasiGambar
+  klasifikasi: (p: string) => Promise<HasilKlasifikasi> = klasifikasiGambar,
+  labelEvidence?: HasilLabel,
 ): Promise<MetaGambar> {
   const sha256 = crypto.createHash("sha256").update(bytesTersimpan).digest("hex");
   let meta: MetaGambar;
@@ -211,6 +215,12 @@ export async function tulisSidecar(
       jumlahKata: k.jumlahKata,
       alasan: k.alasan,
       versiBukti: KEBIJAKAN_KLASIFIKASI.versiBukti,
+      labelOcrStatus: labelEvidence?.status === "READABLE" && labelEvidence.evidenceVersion === 1
+        ? "READABLE"
+        : labelEvidence?.status === "UNREADABLE" && labelEvidence.evidenceVersion === 1
+          ? "UNREADABLE"
+          : "OCR_FAILED",
+      labelOcrVersion: 1,
     };
   } catch (err) {
     meta = {
@@ -221,6 +231,8 @@ export async function tulisSidecar(
       jumlahKata: 0,
       alasan: `Kami belum bisa memeriksa gambar ini: ${(err as Error).message}`,
       versiBukti: KEBIJAKAN_KLASIFIKASI.versiBukti,
+      labelOcrStatus: "OCR_FAILED",
+      labelOcrVersion: 1,
     };
   }
   await mediaStorage().put(relMeta(rel), Buffer.from(JSON.stringify(meta)), "application/json");
@@ -230,7 +242,8 @@ export async function tulisSidecar(
 export async function saveProductImages(
   productId: string,
   blobs: { mime: string; data: Buffer }[],
-  startIndex = 0
+  startIndex = 0,
+  labelEvidence: readonly HasilLabel[] = [],
 ): Promise<string[]> {
   ensureDirs();
   const dir = path.join(config.storageDir, "uploads", productId);
@@ -274,7 +287,7 @@ export async function saveProductImages(
       // responsnya, dan rollback tetap harus tahu kunci mana yang harus dibuang.
       rels.push(rel);
       await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
-      await tulisSidecar(rel, bytesTersimpan, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar);
+      await tulisSidecar(rel, bytesTersimpan, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar, labelEvidence[i]);
       if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
     }
     return rels;
@@ -302,12 +315,13 @@ export async function saveProductImages(
  * the same length and overwrite the same R2 key. */
 export async function saveUniqueProductImages(
   productId: string,
-  blobs: { mime: string; data: Buffer }[]
+  blobs: { mime: string; data: Buffer }[],
+  labelEvidence: readonly HasilLabel[] = [],
 ): Promise<string[]> {
   ensureDirs();
   const rels: string[] = [];
   try {
-    for (const blob of blobs) {
+    for (const [blobIndex, blob] of blobs.entries()) {
       // Full decode + normalization is mandatory here. Never fall back to a
       // corrupt original merely because its metadata could still be parsed.
       const normalized = await normalizeProductImageBuffer(blob.data);
@@ -330,7 +344,7 @@ export async function saveUniqueProductImages(
       try {
         const abs = path.join(tmpKlas, path.basename(rel));
         fs.writeFileSync(abs, normalized);
-        await tulisSidecar(rel, normalized, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar);
+        await tulisSidecar(rel, normalized, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar, labelEvidence[blobIndex]);
       } finally {
         try {
           fs.rmSync(tmpKlas, { recursive: true, force: true });

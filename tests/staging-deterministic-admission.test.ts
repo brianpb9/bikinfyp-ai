@@ -6,11 +6,12 @@ import { fileURLToPath } from "node:url";
 import { parseDeterministicFixtureAdmission, workerExecutionMode } from "../lib/postgres/worker";
 
 const manifest = JSON.stringify({
-  version: 1,
+  version: 2,
   references: [{
     rel: "products/trace/source.svg",
     sha256: "a".repeat(64),
     versiBukti: 1,
+    labelOcrStatus: "READABLE", labelOcrVersion: 1,
     snapshotRel: `jobs/${"b".repeat(36)}/approved-references/0-${"a".repeat(64)}.svg`,
   }],
 });

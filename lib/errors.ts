@@ -57,6 +57,13 @@ export const ERR = {
       message_en: "Product label not OCR-readable.",
       retryable: false,
     }),
+  OCR_FAILED: (msgId?: string | null) =>
+    new ApiError(503, {
+      code: "OCR_FAILED",
+      message_id: msgId?.trim() || "Pemeriksaan label sedang tidak tersedia. Coba lagi sebentar ya — belum ada kredit yang dipakai.",
+      message_en: "Product-label OCR could not produce an authoritative result.",
+      retryable: true,
+    }),
   BRAND_MISMATCH: (msgId?: string | null) =>
     new ApiError(400, {
       code: "BRAND_MISMATCH",

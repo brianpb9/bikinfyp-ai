@@ -31,6 +31,7 @@ function sidecar(bytes: Buffer) {
   return Buffer.from(JSON.stringify({
     sha256: sha(bytes), jenis: "product_photo", layakReferensi: true,
     rasioAreaTeks: 0.001, jumlahKata: 1, alasan: "packshot", versiBukti: 1,
+    labelOcrStatus: "READABLE", labelOcrVersion: 1,
   }));
 }
 
@@ -285,7 +286,7 @@ test("manifest missing/hash-changed dan legacy tak terbukti gagal tertutup", asy
   const rel = "uploads/fail-closed/a.webp";
   const approved = Buffer.from("APPROVED");
   const snapshotRel = "jobs/job-fail/approved-references/0-approved.webp";
-  const manifest = { version: 1 as const, references: [{ rel, sha256: sha(approved), versiBukti: 1, snapshotRel }] };
+  const manifest = { version: 2 as const, references: [{ rel, sha256: sha(approved), versiBukti: 1, labelOcrStatus: "READABLE" as const, labelOcrVersion: 1 as const, snapshotRel }] };
   await assert.rejects(() => materializeJobReferenceManifest(manifest, path.join(tmp, "missing")), /REF_MISSING/);
   const changed = Buffer.from("CHANGED");
   values.set(snapshotRel, changed);
@@ -316,7 +317,7 @@ test("readFile I/O sesudah materialize berhasil dipropagasikan, bukan REF_HASH_M
   const bytes = Buffer.from("READ-IO");
   const snapshotRel = "jobs/job-read-io/approved-references/0-read-io.webp";
   values.set(snapshotRel, bytes);
-  const manifest = { version: 1 as const, references: [{ rel, sha256: sha(bytes), versiBukti: 1, snapshotRel }] };
+  const manifest = { version: 2 as const, references: [{ rel, sha256: sha(bytes), versiBukti: 1, labelOcrStatus: "READABLE" as const, labelOcrVersion: 1 as const, snapshotRel }] };
 
   // materialize sukses mengembalikan path, tetapi path itu tidak bisa dibaca
   // sebagai file. Node menghasilkan EISDIR dari readFile: error I/O non-ENOENT.

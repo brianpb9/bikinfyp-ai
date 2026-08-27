@@ -21,6 +21,7 @@ const { processJob, setSqliteQcRunnerForTests } = await import("../lib/worker");
 const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
 const { neutralStoryAdsIdentityChecks } = await import("../lib/media/qc");
 const { PACKSHOT_EKOR_DTK } = await import("../lib/media/packshot-asli");
+const { setPeriksaLabelFotoForTests } = await import("../lib/media/label-terbaca");
 type MediaStorage = import("../lib/storage").MediaStorage;
 type QcInput = import("../lib/media/qc").QcInput;
 
@@ -37,6 +38,7 @@ function sidecar(body: Buffer): Buffer {
   return Buffer.from(JSON.stringify({
     sha256: sha(body), jenis: "product_photo", layakReferensi: true,
     rasioAreaTeks: 0, jumlahKata: 0, alasan: "foto produk", versiBukti: 1,
+    labelOcrStatus: "READABLE", labelOcrVersion: 1,
   }));
 }
 
@@ -134,8 +136,12 @@ test("processJob W2 mengirim file packshot final + tail + sidik matching ke QC d
   const sourceRel = "uploads/r25-w2/product.png";
   const mem = memoryStorage(new Map([[sourceRel, source], [`${sourceRel}.meta.json`, sidecar(source)]]));
   setMediaStorageForTests(mem.storage);
+  setPeriksaLabelFotoForTests(async () => ({
+    status: "READABLE", evidenceVersion: 1, terbaca: true,
+    kata: ["Serum"], cocokNama: true, cocokMerek: true,
+  }));
   installProvider(false);
-  t.after(() => { setMediaStorageForTests(); setVideoProvidersForTests(); setSqliteQcRunnerForTests(); });
+  t.after(() => { setMediaStorageForTests(); setVideoProvidersForTests(); setSqliteQcRunnerForTests(); setPeriksaLabelFotoForTests(); });
   const jobId = await setupJob(sourceRel);
   let observed = 0;
   setSqliteQcRunnerForTests(async (input: QcInput) => {
@@ -158,8 +164,12 @@ test("processJob W2 append gagal: QC-10 fail tertutup dan job tidak READY", asyn
   const sourceRel = "uploads/r25-w2/fail.png";
   const mem = memoryStorage(new Map([[sourceRel, source], [`${sourceRel}.meta.json`, sidecar(source)]]));
   setMediaStorageForTests(mem.storage);
+  setPeriksaLabelFotoForTests(async () => ({
+    status: "READABLE", evidenceVersion: 1, terbaca: true,
+    kata: ["Serum"], cocokNama: true, cocokMerek: true,
+  }));
   installProvider(true);
-  t.after(() => { setMediaStorageForTests(); setVideoProvidersForTests(); setSqliteQcRunnerForTests(); });
+  t.after(() => { setMediaStorageForTests(); setVideoProvidersForTests(); setSqliteQcRunnerForTests(); setPeriksaLabelFotoForTests(); });
   const jobId = await setupJob(sourceRel);
   let observed = 0;
   setSqliteQcRunnerForTests(async (input: QcInput) => {

@@ -23,7 +23,7 @@ import type { PgJobsRepository } from "@/lib/postgres/jobs";
 import { pgAudit, pgSaveFypSnapshot, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
-import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
+import { assertAdmissionReferenceEvidence, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 import { buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
@@ -222,6 +222,11 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       await client.query("ROLLBACK");
       return gagal(`Skrip belum memenuhi standar: ${validation.errors.map((e) => e.message_id).join(" ")}`);
     }
+    await assertAdmissionReferenceEvidence({
+      productId: sel.productId,
+      candidateRels: JSON.parse(lockedProduct.images) as string[],
+      boundary: "A4",
+    });
     // Approval harus berada pada transaksi admission yang sama. Koneksi
     // terpisah dapat meng-commit approval meski INSERT job kemudian rollback,
     // dan juga tidak ikut serialisasi klaim job_id untuk request konkuren.

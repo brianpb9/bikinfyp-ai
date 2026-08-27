@@ -5,7 +5,7 @@ BRANCH=work/p0-product-truth-20260820
 TIMESTAMP=2026-08-20
 METODE=call-site search read-only (Route Mapper subagent), BUKAN daftar handover
 STATUS (20 Agu, historis)=inventaris SELESAI · red-before tests BELUM DITULIS
-STATUS (24 Agu current)=**lihat E.29–E.34 untuk closure E1/C3/C8/new admission.**
+STATUS (27 Agu current)=**lihat E.29–E.40 untuk closure E1/C2/C3/C6/C8/new admission.**
 Bagian A dan D adalah inventaris historis 20 Agu; kolom C menyatakan aggregate
 case dan harus dibaca bersama closure current di E.29–E.34, bukan sendiri.
 
@@ -16,17 +16,17 @@ kelayakan. PARTIAL = sebagian. UNGATED = tidak sama sekali.
 
 | # | file:line | jalur | status | memanggil |
 |---|---|---|---|---|
-| E1 | `app/api/products/route.ts:20` | POST create manual (retail) | **PARTIAL** | Setiap blob decodable melewati `periksaLabelFoto` + trusted `merekTerdaftar` sebelum storage. Sesudah ingestion, canonical `resolveApprovedReference(images)` wajib menemukan acuan sah sebelum SQLite/PG persistence; reject, resolver error, atau persistence failure me-rollback exact bytes+sidecar baru sebelum row/audit. OCR fail-open dan gap kasus lain tetap terbuka |
+| E1 | `app/api/products/route.ts:20` | POST create manual (retail) | **PARTIAL** | Setiap blob decodable melewati tri-state OCR + trusted `merekTerdaftar` sebelum storage. `OCR_FAILED` (503/retryable) dan actual `LABEL_UNREADABLE` (400/nonretryable) berbeda dan keduanya menolak sebelum persistence/audit; evidence OCR v1 ikut sidecar. Gap kasus non-C6 tetap terbuka |
 | E2 | `app/api/products/extract/route.ts:17` | POST extract URL → buat produk | **UNGATED** | tidak ada; pakai `downloadProductImages` |
 | E3 | `app/api/products/[id]/route.ts:13` | PATCH nama/harga/kategori/brand | **UNGATED** | tidak ada — memutasi `name` + `raw_meta.brand`, dua input yang justru dibaca gerbang |
-| E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **PARTIAL** | Setiap blob baru melewati `periksaLabelFoto`+`merekTerdaftar` sebelum persistence; `referensiLayak` sesudah ingestion kini me-rollback exact object baru saat reject/error sebelum append/audit. DUA lubang lain tetap: `periksaLabelFoto` FAIL-OPEN saat OCR gagal (`label-terbaca.ts` mengembalikan `terbaca:true`); hash sidecar tidak pernah diverifikasi ulang terhadap isi berkas |
+| E4 | `app/api/products/[id]/photos/route.ts:44` | POST add-photo (retail) | **PARTIAL** | Setiap blob baru melewati tri-state OCR + brand gate sebelum persistence; `OCR_FAILED`/`LABEL_UNREADABLE` fail-closed, dan exact OCR provenance masuk sidecar. Resolver tetap me-rollback exact object baru saat reject/error sebelum append/audit; gap non-C6 tetap terbuka |
 | E5 | `app/api/products/[id]/photos/route.ts:142` | DELETE foto (retail) | **UNGATED** | tidak ada — bisa menghapus satu-satunya foto layak |
 | E6 | `app/api/dashboard/campaign/product/route.ts:45` | POST produk org | **UNGATED** | tidak ada; `downloadProductImages` → sidecar tidak ditulis |
 | E7 | `app/api/dashboard/campaign/product/route.ts:99` | PATCH produk org | **UNGATED** | mengubah `name`, `price`, **`category`**, visual desc, `brand_brief`, promo, claims (:113 dst) TANPA revalidasi. TIDAK menyentuh `raw_meta.brand`. Defect kedua: jalur org TIDAK PERNAH mengisi `raw_meta.brand`, padahal worker hanya mempercayai field itu (`merekTepercaya`) |
-| E8 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:26` | POST add-photo (org) | **PARTIAL** | Setiap upload baru melewati `periksaLabelFoto` + `merekTerdaftar` sebelum storage/list/audit, termasuk saat produk sudah punya foto; sesudah ingestion, `referensiLayak([...existing, ...added])` wajib menemukan minimal satu acuan. Append PostgreSQL memakai CAS exact ordered snapshot existing yang dinilai. OCR fail-open dan gap lain tetap terbuka |
+| E8 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:26` | POST add-photo (org) | **PARTIAL** | Setiap upload baru melewati tri-state OCR + brand gate sebelum storage/list/audit, termasuk saat produk sudah punya foto; `OCR_FAILED`/`LABEL_UNREADABLE` fail-closed dan provenance exact ditulis. Append PostgreSQL memakai CAS exact ordered snapshot existing; gap non-C6 tetap terbuka |
 | E9 | `app/api/dashboard/campaign/product/[id]/photos/route.ts:84` | DELETE foto (org) | **UNGATED** | tidak ada |
-| W1 | `lib/postgres/worker.ts:321-323` | worker PG | **PARTIAL** | manifest/evidence gate dan explicit C3 brand mismatch diterapkan pre-provider; null/unreadable OCR dan aggregate cases lain tetap partial |
-| W2 | `lib/worker.ts:104-109` | worker inline/SQLite | **PARTIAL** | manifest/evidence gate dan explicit C3 brand mismatch diterapkan pre-provider; null/unreadable OCR dan aggregate cases lain tetap partial |
+| W1 | `lib/postgres/worker.ts:321-323` | worker PG | **PARTIAL** | manifest v2 mewajibkan hash-bound OCR `READABLE` v1; missing/stale/forged/failed provenance dan runtime OCR/label failure menolak pre-provider. Gap aggregate non-C6 tetap partial |
+| W2 | `lib/worker.ts:104-109` | worker inline/SQLite | **PARTIAL** | manifest v2 mewajibkan hash-bound OCR `READABLE` v1; missing/stale/forged/failed provenance dan runtime OCR/label failure menolak pre-provider. Gap aggregate non-C6 tetap partial |
 | A1 | `app/api/jobs/route.ts:29,62-67` | admission retail + payload | **PARTIAL** | E.31 bounded evidence lease accepted pre-provider/setup; case non-C8 tetap partial |
 | A2 | `app/api/dashboard/matrix/route.ts:93,106` | admission matrix | **PARTIAL** | E.31 bounded evidence lease accepted pre-provider/setup; duplicate replay dipertahankan; case non-C8 tetap partial |
 | A3 | `app/api/dashboard/campaign/generate/route.ts:44-49` | generate campaign | **PARTIAL** | E.31 bounded evidence lease accepted pre-provider/setup; case non-C8 tetap partial |
@@ -85,7 +85,7 @@ bagian E.2, dan arti tiap status di E.0.
 | C3 | Merek salah | E1,E4,E8,W1,**W2** | reject | `BRAND_MISMATCH` (**canonical dan explicit-false enforcement accepted di seluruh jalur ini; null/unreadable policy terpisah**) | **PARTIAL aggregate** |
 | C4 | Label gibberish / tak terbaca | E1,E4,E8 | reject | `LABEL_UNREADABLE` (**canonical E4/E8; enforcement lain partial**) | **PARTIAL** |
 | C5 | Kategori unknown/ambigu/bundle | E1,E3,E6,E7 | manual review | `CATEGORY_UNKNOWN` (**usul**) | **BLOCKED** |
-| C6 | OCR timeout/error/ambigu | E1,E4,E8 | fail-closed | `OCR_FAILED` (**usul**) | **BLOCKED** |
+| C6 | OCR timeout/error/ambigu | E1,E4,E8,A1..A7,W1,W2 | fail-closed sebelum persistence/spend/provider | `OCR_FAILED` (**canonical**, HTTP 503, retryable) | **PASS** |
 | C7 | Classifier timeout/error/ambigu | E1,E4,E8 | fail-closed | `CLASSIFIER_FAILED` (**canonical; coverage partial**) | **PARTIAL** |
 | C8 | Evidence hilang/korup/basi/hash beda | E1,**E2**,**E4**,E6,E8, mutation boundary **E3/E5/E7/E9** (stale evidence), **A1..A7**,W1,W2 | fail-closed sebelum hold/capture/**regen**/enqueue/provider/deliverable; tanpa sisa state invalid persisten. Untuk A6 khusus: buktikan **nol ledger `regen`** | `EVIDENCE_INVALID` (**canonical; A1–A7/new admission accepted E.31**) | **PARTIAL aggregate; admission slice PASS** |
 | C9 | Foto/nama/brand/kategori berubah SESUDAH admission | E3,E5,E7,E9 → W1,W2 | job pakai snapshot lama | `SNAPSHOT_IMMUTABLE` (**usul**) | **PARTIAL** |
@@ -150,8 +150,8 @@ database, provider berbayar, penegakan admission, maupun keputusan T43.
 | **NOT-APPLICABLE** | tidak relevan pada kontrak yang berlaku sekarang |
 
 `BLOCKED` bukan klaim bahwa penyebabnya selalu eksternal. C2 sudah ditutup oleh
-accepted Product Policy dan implementasi E.39. Untuk C5 dan C6 di bawah,
-penerimaan masih diblokir oleh pekerjaan/keputusan lokal yang belum selesai.
+accepted Product Policy dan implementasi E.39; C6 ditutup oleh keputusan
+Founder dan implementasi E.40. C5 tetap memerlukan keputusan/implementasi lokal.
 
 ### E.1 Entrypoint: apa yang BERUBAH sejak 2026-08-20
 
@@ -168,13 +168,13 @@ penerimaan masih diblokir oleh pekerjaan/keputusan lokal yang belum selesai.
 | E9 DELETE foto org | UNGATED | **PARTIAL** | sesudah `pgRemoveOrgProductImage`, memanggil `deleteStoredProductImages([target])` secara best-effort (`app/api/dashboard/campaign/product/[id]/photos/route.ts:94-98`), yang menghapus file dan sidecar. Test HTTP→resume W1 membuktikan isolasi org, daftar otoritatif, dan manifest job tetap menang atau `REF_MISSING` gagal tertutup. Daftar baru belum direvalidasi agar tetap punya foto layak |
 | W1 worker PG | UNGATED | **PARTIAL** | Resolver, manifest job atomik/idempoten, reuse lintas invocation, verifikasi bytes di boundary provider/output, C1/C8/C11, explicit C3 brand mismatch, dan legacy fail-closed dibuktikan di PostgreSQL disposable. Snapshot field produk non-referensi dan aggregate cases lain tetap partial |
 | W2 worker inline | UNGATED | **PARTIAL** | Kontrak manifest/reuse/verifikasi/legacy dan explicit C3 brand mismatch yang sama dibuktikan langsung pada worker SQLite; C8/C11 tetap memakai observer provider. Snapshot field produk non-referensi dan aggregate cases lain tetap partial |
-| A1..A7 admission | UNGATED | **PASS untuk C8/new admission** | Accepted E.31: tujuh path mengambil bounded product-evidence lease sebelum provider/setup effect, fail-closed pada evidence invalid, mempertahankan duplicate replay, dan punya exact-SHA counterexamples. Ini tidak memilih treatment legacy atau OCR/promo policy |
+| A1..A7 admission | UNGATED | **PASS untuk C8/new admission + C6** | Tujuh path mengambil bounded product-evidence lease sebelum provider/setup effect. E.40 mewajibkan exact hash-bound OCR `READABLE` v1; missing/stale/failed provenance dikarantina dengan `OCR_FAILED` sebelum spend/provider. Duplicate replay tetap dipertahankan |
 | D1 penulis produk/brand | UNGATED | **PARTIAL** | Reachable production melalui E1/E2/E3/E6. Semua create yang membawa image keys didahului helper bersidecar; direct caller lain hanya verifier disposable. Namun writer menerima `images` mentah dan mutation E3 name/category/brand tidak merevalidasi product-truth. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
 | D2 penulis daftar images | UNGATED | **PARTIAL** | Reachable production hanya melalui E4/E5/E8/E9. Add menerima keys dari helper bersidecar; delete retail/org sudah membersihkan storage, tetapi revalidation E5/E9 dan gerbang E8 tetap belum lengkap. Tidak ada CLI/direct caller tersembunyi. Audit: `D1D2-DIRECT-WRITER-AUDIT.md` |
 
 ### E.2 Kasus C1-C13 — alasan tiap status
 
-**Cacah setelah implementasi C2 E.39: dua PASS, sembilan PARTIAL, dua BLOCKED.**
+**Cacah setelah implementasi C6 E.40: tiga PASS, sembilan PARTIAL, satu BLOCKED.**
 C11 kini punya bukti boundary langsung pada kedua jalur wajibnya, W1 dan W2.
 Empat kasus (C1, C7, C11, C12) sempat ditandai
 PASS oleh ronde-ronde awal rekonsiliasi; semuanya sempat DITURUNKAN setelah
@@ -190,7 +190,7 @@ tanpa mengubah status W1/W2 keseluruhan yang masih punya gap kasus lain.
 | C3 | **PARTIAL** | E1, E4, E8, W1, dan W2 menolak explicit `cocokMerek === false` dengan canonical `BRAND_MISMATCH` sebelum persistence/provider effect; W1/W2 closure accepted di E.30. Aggregate tetap PARTIAL untuk jalur lain dan null/unreadable OCR policy; bukan karena explicit worker mismatch belum diimplementasikan |
 | C4 | **PARTIAL** | E1, E4, dan E8 menolak `!label.terbaca` untuk setiap blob baru sebelum persistence dengan canonical `LABEL_UNREADABLE` (HTTP 400, `retryable:false`, alasan Indonesia dari OCR atau fallback actionable). Cakupan belum lengkap: kebijakan OCR execution error tetap fail-open |
 | C5 | **BLOCKED** | Diblokir implementasi lokal: `CATEGORY_UNKNOWN` dan jalur manual review belum ada |
-| C6 | **BLOCKED** | Diblokir konflik kontrak/implementasi lokal: `OCR_FAILED` tidak ada dan jalurnya **fail-OPEN** (`label-terbaca.ts:188` mengembalikan `terbaca:true` saat pemeriksaan gagal), berlawanan dengan fail-closed yang diharapkan baris C6 |
+| C6 | **PASS** | Founder memilih fail-closed tri-state. E1/E4/E8 membedakan runtime/timeout/ambiguity `OCR_FAILED` (503/retryable) dari hasil inspeksi nyata `LABEL_UNREADABLE` (400/nonretryable) sebelum persistence. Sidecar membawa OCR status/version; E2/E6 hasil extraction tanpa inspeksi menjadi draft `OCR_FAILED`. A1–A7 mewajibkan exact hash-bound `READABLE` v1 sebelum spend/setup, dan manifest v2 membuat W1/W2 menolak legacy/missing/stale/forged/failed provenance sebelum provider. Timeout/error/ambiguous/forged/stale, positive, mutation, dan worker controls PASS; full suite 1265/1217/0/48 |
 | C7 | **PARTIAL** | Classifier menghasilkan keadaan ketiga `belum_diperiksa` dan resolver menerjemahkannya jadi `CLASSIFIER_FAILED`. E1, E4, dan E8 kini fail-closed sebelum persistence/audit serta me-rollback exact object baru pada no-reference maupun resolver error; cleanup sukses membuktikan nol object baru, sedangkan cleanup fault dilaporkan 500+log dengan risiko residual yang jujur. Cakupan kasus lain pada matriks belum lengkap; karena itu C7 tetap PARTIAL |
 | C8 | **PASS untuk new admission** | E1 actual POST, W1/W2, dan accepted E.31 A1–A7 menolak evidence hilang/korup/hash mismatch sebelum persistence/provider/setup effect, dengan rollback/observer/counterexample langsung. Legacy treatment tetap dicatat terpisah pada C10/C12 |
 | C9 | **PARTIAL** | Sub-kontrak identitas foto DAN metadata core worker tertutup: W1/W2 memakai admission manifest bytes serta snapshot job versioned untuk nama, trusted brand source/value, kategori, deskripsi visual, brand brief, claims, dan sell price. Actual E3→W2 serta E7→W1 membuktikan prompt tetap admission-bound tetapi rendered promo before/deadline dibaca live; frame W2 gain/removal dan W1 change diterima di E.23. Stock juga live tetapi inert di formatter. Tetap PARTIAL sampai Founder memilih `PROMO_POLICY=SNAPSHOT` atau `LIVE_INTENTIONAL`; `SNAPSHOT_IMMUTABLE` tetap proposal-only |
@@ -1262,3 +1262,32 @@ BASELINE=`c8588c67df8c5064e4cd231a6650d0c8b23d6e00`
   price, deploy, provider, money, and production operations are explicitly not
   bundled.
 - Evidence: `../P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827/`.
+
+### E.40 C6 OCR fail-closed before spend — 2026-08-27
+
+TASK=`P0-C6-OCR-FAIL-CLOSED-BEFORE-SPEND-20260827`
+BASELINE=`dbf96691fd7b824e3d0dd0c2dc186172f02ca0bd`
+
+- Founder approved explicit tri-state semantics: infrastructure/runtime/
+  timeout/ambiguous OCR is canonical `OCR_FAILED` (503, retryable), while a
+  completed inspection that finds the label unreadable is `LABEL_UNREADABLE`
+  (400, nonretryable).
+- E1/E4/E8 enforce the verdict before storage, row, append, or audit and bind
+  status/version 1 into the exact image sidecar. E2/E6 extracted media is not
+  silently blessed: without inspection it persists only as quarantined draft
+  evidence (`OCR_FAILED`).
+- A1–A7 require the central resolver to return an exact hash-bound reference
+  with `labelOcrStatus=READABLE` and `labelOcrVersion=1` before provider/setup,
+  hold, enqueue, or job effects. Legacy, missing, failed, or stale provenance
+  fails closed.
+- Immutable job reference manifests are version 2 and carry that provenance.
+  W1/W2 parse/load it before provider work; the independent worker brand gate
+  preserves `OCR_FAILED` and `LABEL_UNREADABLE` rather than treating either as
+  success.
+- C6 targeted controls cover timeout, runtime error, ambiguity, forged/stale/
+  legacy evidence, actual E1 zero-effect HTTP failure, admission, manifest,
+  worker, positive, and mutation behavior. Typecheck, full 1265-test suite,
+  production build, and disposable PostgreSQL production-migration runner pass.
+- No deploy, production database, provider, payment, credit, queue, or secret
+  operation was performed.
+- Evidence: `../P0-C6-OCR-FAIL-CLOSED-BEFORE-SPEND-20260827/`.

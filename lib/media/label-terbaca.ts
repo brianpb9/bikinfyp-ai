@@ -38,6 +38,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { brandTokens } from "./qc";
 import { merekCocok } from "./qc-frame";
+import { ERR } from "../errors";
 
 const jalankan = promisify(execFile);
 
@@ -47,6 +48,8 @@ const MIN_KATA = 2;
 const MIN_CONF = 60;
 
 export interface HasilLabel {
+  status?: "READABLE" | "UNREADABLE" | "OCR_FAILED";
+  evidenceVersion?: 1;
   /** false = tolak unggahannya. */
   terbaca: boolean;
   /** Kata >=4 huruf yang dikenali OCR. */
@@ -67,6 +70,16 @@ export interface HasilLabel {
   cocokMerek: boolean | null;
   /** Alasan siap-tampil kalau ditolak. */
   alasan?: string;
+}
+
+/** Canonical fail-closed interpreter. Contradictory or legacy-shaped verdicts
+ * cannot be promoted to readable evidence. */
+export function assertAuthoritativeLabelResult(label: HasilLabel): void {
+  if (label.evidenceVersion !== 1 || label.status === "OCR_FAILED") throw ERR.OCR_FAILED(label.alasan);
+  if (label.status === "UNREADABLE") throw ERR.LABEL_UNREADABLE(label.alasan);
+  if (label.status !== "READABLE" || label.terbaca !== true) {
+    throw ERR.OCR_FAILED("Hasil pemeriksaan label ambigu atau provenance-nya tidak sah. Coba lagi ya.");
+  }
 }
 
 type PemeriksaLabelFoto = (fotoPath: string, productName: string, merek?: string | null) => Promise<HasilLabel>;
@@ -104,7 +117,12 @@ export async function periksaLabelFoto(
    */
   merekTerdaftar?: string | null
 ): Promise<HasilLabel> {
-  if (pemeriksaLabelFotoUntukTest) return pemeriksaLabelFotoUntukTest(fotoPath, productName, merekTerdaftar);
+  if (pemeriksaLabelFotoUntukTest) {
+    const result = await pemeriksaLabelFotoUntukTest(fotoPath, productName, merekTerdaftar);
+    return result.status && result.evidenceVersion
+      ? result
+      : { ...result, status: result.terbaca ? "READABLE" : "UNREADABLE", evidenceVersion: 1 };
+  }
   // Direktori sementara di dalam ruang kerja proses, BUKAN /tmp global:
   // tesseract pada sebagian lingkungan tidak bisa membaca berkas yang ditulis
   // proses lain ke /tmp (terbukti saat audit 17 Agu — ffmpeg menulis PNG yang
@@ -135,6 +153,8 @@ export async function periksaLabelFoto(
 
     if (kata.length < MIN_KATA) {
       return {
+        status: "UNREADABLE",
+        evidenceVersion: 1,
         terbaca: false,
         kata,
         cocokNama: false,
@@ -163,7 +183,7 @@ export async function periksaLabelFoto(
     // untuk "Mosseru", dan itu persis kelas cacat yang gerbang ini ada untuk
     // menangkap.
     const merek = (merekTerdaftar ?? "").trim();
-    if (!merek) return { terbaca: true, kata, cocokNama, cocokMerek: null };
+    if (!merek) return { status: "READABLE", evidenceVersion: 1, terbaca: true, kata, cocokNama, cocokMerek: null };
     // Merek BERKATA BANYAK dicocokkan per kata, dan semuanya wajib ada.
     //
     // Percobaan pertama mencocokkan "Gluta Pink" sebagai satu untaian dan
@@ -178,6 +198,8 @@ export async function periksaLabelFoto(
     const cocokMerek = kataMerek.length > 0 && kataMerek.every((t) => merekCocok(teksOcr, t));
     if (!cocokMerek) {
       return {
+        status: "READABLE",
+        evidenceVersion: 1,
         terbaca: true,
         kata,
         cocokNama,
@@ -188,13 +210,14 @@ export async function periksaLabelFoto(
           "foto yang labelnya berbeda tidak bisa dipakai jadi acuan video.",
       };
     }
-    return { terbaca: true, kata, cocokNama, cocokMerek: true };
+    return { status: "READABLE", evidenceVersion: 1, terbaca: true, kata, cocokNama, cocokMerek: true };
   } catch (err) {
-    // Gagal memeriksa BUKAN alasan menolak unggahan. Pengguna tidak boleh
-    // kehilangan akses karena tesseract/ffmpeg kita bermasalah — pemeriksaan
-    // ini menyaring foto buruk, bukan menjaga uang.
-    console.warn(`[label-terbaca] pemeriksaan gagal jalan, dilewati: ${(err as Error).message}`);
-    return { terbaca: true, kata: [], cocokNama: true, cocokMerek: null };
+    console.warn(`[label-terbaca] pemeriksaan gagal tertutup: ${(err as Error).message}`);
+    return {
+      status: "OCR_FAILED", evidenceVersion: 1, terbaca: false, kata: [],
+      cocokNama: false, cocokMerek: null,
+      alasan: "Pemeriksaan label gagal atau melewati batas waktu. Coba lagi ya — belum ada kredit yang dipakai.",
+    };
   } finally {
     fs.rmSync(dir, { recursive: true, force: true });
   }

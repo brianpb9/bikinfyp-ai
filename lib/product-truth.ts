@@ -52,6 +52,8 @@ export const ALASAN_TOLAK = {
   /** Bukti JUJUR menyatakan dirinya belum diperiksa (biner klasifikasi tidak
    *  tersedia/gagal). Bisa direvalidasi — berbeda dari bukti rusak. */
   BELUM_DIPERIKSA: "CLASSIFIER_FAILED",
+  OCR_GAGAL: "OCR_FAILED",
+  LABEL_TIDAK_TERBACA: "LABEL_UNREADABLE",
 } as const;
 
 export type AlasanTolak = (typeof ALASAN_TOLAK)[keyof typeof ALASAN_TOLAK];
@@ -86,6 +88,8 @@ export interface ReferensiTersetujui {
   sha256: string;
   /** Revisi aturan yang menerbitkan bukti ini. */
   versiBukti: number;
+  labelOcrStatus: "READABLE";
+  labelOcrVersion: 1;
 }
 
 export interface ReferensiDitolak {
@@ -123,6 +127,8 @@ interface SidecarSah {
   jumlahKata: number;
   alasan: string;
   versiBukti: number;
+  labelOcrStatus: "READABLE" | "UNREADABLE" | "OCR_FAILED";
+  labelOcrVersion: 1;
 }
 
 /**
@@ -183,7 +189,10 @@ function periksaBentuk(
       rinci: RINCI_TOLAK.VERSI_TIDAK_COCOK,
     };
   }
-  return { ok: true, sidecar: m as unknown as SidecarSah };
+  const labelOcrStatus = m.labelOcrVersion === 1 && ["READABLE", "UNREADABLE", "OCR_FAILED"].includes(String(m.labelOcrStatus))
+    ? m.labelOcrStatus as SidecarSah["labelOcrStatus"]
+    : "OCR_FAILED";
+  return { ok: true, sidecar: { ...m, labelOcrStatus, labelOcrVersion: 1 } as unknown as SidecarSah };
 }
 
 /**
@@ -315,7 +324,14 @@ async function nilaiSatu(rel: string): Promise<ReferensiTersetujui | ReferensiDi
     return tolak(ALASAN_TOLAK.PROMOSI, sidecar.alasan);
   }
 
-  return { rel, sha256: sha, versiBukti: sidecar.versiBukti };
+  if (sidecar.labelOcrStatus === "OCR_FAILED") {
+    return tolak(ALASAN_TOLAK.OCR_GAGAL, "Label referensi belum memiliki hasil OCR otoritatif; foto dikarantina sampai diperiksa ulang.");
+  }
+  if (sidecar.labelOcrStatus === "UNREADABLE") {
+    return tolak(ALASAN_TOLAK.LABEL_TIDAK_TERBACA, "Label referensi sudah diperiksa dan memang tidak terbaca.");
+  }
+
+  return { rel, sha256: sha, versiBukti: sidecar.versiBukti, labelOcrStatus: "READABLE", labelOcrVersion: 1 };
 }
 
 const adalahDitolak = (x: ReferensiTersetujui | ReferensiDitolak): x is ReferensiDitolak =>
