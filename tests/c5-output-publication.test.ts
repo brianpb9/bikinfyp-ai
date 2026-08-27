@@ -12,8 +12,9 @@ delete process.env.RACUN_DB_RUNTIME;
 delete process.env.RACUN_POSTGRES_SMOKE;
 
 test("READY retail output stops issuing signed URLs immediately after C5 re-quarantine",async()=>{
-  const [{getDb,now},{findOrCreateUserByPhone,issueToken,cookieName},{GET}]=await Promise.all([
+  const [{getDb,now},{findOrCreateUserByPhone,issueToken,cookieName},{GET},{GET:fileGET},{createSignedUrl}]=await Promise.all([
     import("../lib/db"),import("../lib/auth"),import("../app/api/jobs/[id]/output/route"),
+    import("../app/api/files/[...path]/route"),import("../lib/signed-url"),
   ]);
   const db=getDb();
   const user=findOrCreateUserByPhone("+6280000000005");
@@ -30,16 +31,49 @@ test("READY retail output stops issuing signed URLs immediately after C5 re-quar
     .run(jobId,user.id,productId,scriptId,now());
   db.prepare(`INSERT INTO outputs (job_id,video_url,caption,hashtags,suggested_post_time,compliance_checklist)
     VALUES (?,?,?,?,?,?)`).run(jobId,"jobs/ready/output.mp4","caption","[]","19:00","[]");
+  db.prepare(`INSERT INTO job_shots (id,job_id,idx,prompt,storage_key,thumb_key,duration_sec,created_at)
+    VALUES (?,?,?,?,?,?,?,?)`).run("shot-ready-c5",jobId,0,"prompt","jobs/ready/scene.mp4",null,3,now());
+  fs.mkdirSync(path.join(root,"storage/jobs/ready"),{recursive:true});
+  fs.writeFileSync(path.join(root,"storage/jobs/ready/output.mp4"),Buffer.from("OUTPUT-C5"));
+  fs.writeFileSync(path.join(root,"storage/jobs/ready/scene.mp4"),Buffer.from("SCENE-C5"));
   const token=await issueToken(user.id,user.phone??"");
   const request=()=>new Request(`http://localhost/api/jobs/${jobId}/output`,{headers:{cookie:`${cookieName()}=${token}`}});
   const clear=await GET(request(),{params:Promise.resolve({id:jobId})});
-  assert.equal(clear.status,200);assert.match(String((await clear.json()).video_url),/jobs%2Fready%2Foutput\.mp4|jobs\/ready\/output\.mp4/);
+  assert.equal(clear.status,200);const issued=String((await clear.json()).video_url);
+  assert.match(issued,/jobs%2Fready%2Foutput\.mp4|jobs\/ready\/output\.mp4/);
+  const fetchIssued=async(signed:string)=>{
+    const url=new URL(signed,"http://localhost");
+    return fileGET(new Request(url,{headers:{cookie:`${cookieName()}=${token}`}}),
+      {params:Promise.resolve({path:url.pathname.slice("/api/files/".length).split("/")})});
+  };
+  const issuedScene=createSignedUrl("jobs/ready/scene.mp4");
+  const beforeOutput=await fetchIssued(issued);const beforeScene=await fetchIssued(issuedScene);
+  assert.equal(beforeOutput.status,200);assert.equal(beforeScene.status,200);
+  assert.match(beforeOutput.headers.get("cache-control")??"",/no-store/);
 
   db.prepare(`UPDATE products SET category_review_state='QUARANTINED',category_review_reason='CATEGORY_UNKNOWN',
     category_reviewed_by=NULL,category_reviewed_role=NULL,category_reviewed_at=NULL,category_review_version=2 WHERE id=?`).run(productId);
   const quarantined=await GET(request(),{params:Promise.resolve({id:jobId})});
   assert.equal(quarantined.status,422);
   assert.equal((await quarantined.json()).code,"CATEGORY_REVIEW_REQUIRED");
+  assert.equal((await fetchIssued(issued)).status,403,"old output URL remained usable");
+  assert.equal((await fetchIssued(issuedScene)).status,403,"old scene URL remained usable");
+});
+
+test("PostgreSQL media authorization binds output and scene delivery to current C5 truth",async(t)=>{
+  const {fileBelongsToUser,setMediaFileAccessDependenciesForTests}=await import("../lib/media-file-access");
+  t.after(()=>setMediaFileAccessDependenciesForTests());
+  let clear=true;let checkedSql="";
+  setMediaFileAccessDependenciesForTests({postgresRuntimeEnabled:()=>true,getPool:(()=>({
+    query:async(sql:string)=>{checkedSql=sql;return {rowCount:clear ? 1 : 0};},
+  })) as never});
+  assert.equal(await fileBelongsToUser("jobs/pg/output.mp4","user-pg"),true);
+  assert.match(checkedSql,/outputs[\s\S]*JOIN products p/);
+  assert.match(checkedSql,/job_shots[\s\S]*JOIN products p/);
+  assert.match(checkedSql,/category_review_state='CLEAR'[\s\S]*category_review_reason IS NULL/);
+  clear=false;
+  assert.equal(await fileBelongsToUser("jobs/pg/output.mp4","user-pg"),false);
+  assert.equal(await fileBelongsToUser("jobs/pg/scene.mp4","user-pg"),false);
 });
 
 test.after(()=>fs.rmSync(root,{recursive:true,force:true}));

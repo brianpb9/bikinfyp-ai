@@ -5,10 +5,7 @@ import { config } from "@/lib/config";
 import { verifySignedUrl } from "@/lib/signed-url";
 import { mediaStorage } from "@/lib/storage";
 import { getAuthUser } from "@/lib/auth";
-import { getDb } from "@/lib/db";
-import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
-import pg from "pg";
-import { getPool } from "@/lib/postgres/pool";
+import { fileBelongsToUser } from "@/lib/media-file-access";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -63,61 +60,6 @@ function contentDisposition(url: URL, relPath: string): Record<string, string> {
   return { "content-disposition": `attachment; filename="${name}"` };
 }
 
-/** A valid HMAC link is a bearer capability, never proof of account ownership. */
-async function fileBelongsToUser(relPath: string, userId: string): Promise<boolean> {
-  if (postgresRuntimeEnabled()) {
-    const pool = getPool(config.databaseUrl);
-    try {
-      const result = await pool.query(`
-        -- Baris milik ORGANISASI menuntut keanggotaan yang MASIH AKTIF, bukan
-        -- sekadar "dulu saya yang membuat". Tanpa syarat itu, anggota yang
-        -- sudah dikeluarkan — atau anggota organisasi yang DITANGGUHKAN —
-        -- tetap bisa menarik video dan foto produk merek lewat jalur berkas
-        -- umum, karena user_id-nya memang masih tercatat di baris itu.
-        SELECT 1 FROM outputs o JOIN jobs j ON j.id=o.job_id
-          WHERE o.video_url=$1 AND (
-            (j.org_id IS NULL AND j.user_id=$2)
-            OR EXISTS (SELECT 1 FROM org_members m JOIN organizations org ON org.id=m.org_id
-                       WHERE m.org_id=j.org_id AND m.user_id=$2 AND org.status='active'))
-        UNION ALL
-        SELECT 1 FROM products p CROSS JOIN LATERAL jsonb_array_elements_text(p.images::jsonb) image(path)
-          WHERE image.path=$1 AND (
-            (p.org_id IS NULL AND p.user_id=$2)
-            OR EXISTS (SELECT 1 FROM org_members m JOIN organizations org ON org.id=m.org_id
-                       WHERE m.org_id=p.org_id AND m.user_id=$2 AND org.status='active'))
-        UNION ALL
-        SELECT 1 FROM promo_jobs pj
-          WHERE pj.user_id=$2 AND $1 IN (pj.output_url, pj.generated_shot_url)
-        UNION ALL
-        SELECT 1 FROM promo_jobs pj CROSS JOIN LATERAL jsonb_array_elements_text(pj.uploaded_clip_urls::jsonb) clip(path)
-          WHERE pj.user_id=$2 AND clip.path=$1
-        UNION ALL
-        -- M11: klip & thumbnail per-scene untuk layar review brand. Dicek
-        -- ORG, bukan cuma user: layar review-nya sendiri org-scoped (semua
-        -- anggota org boleh melihat run yang sama), jadi kalau di sini
-        -- user-only, anggota kedua akan melihat gambar rusak semua.
-        SELECT 1 FROM job_shots js JOIN jobs j ON j.id=js.job_id
-          WHERE $1 IN (js.storage_key, js.thumb_key)
-            AND ((j.org_id IS NULL AND j.user_id=$2)
-                 OR EXISTS (SELECT 1 FROM org_members m JOIN organizations org ON org.id=m.org_id
-                            WHERE m.org_id=j.org_id AND m.user_id=$2 AND org.status='active'))
-        LIMIT 1`, [relPath, userId]);
-      return Boolean(result.rowCount);
-    } finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
-  }
-  const db = getDb();
-  const output = db.prepare("SELECT 1 FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.video_url=? AND j.user_id=? LIMIT 1").get(relPath, userId);
-  if (output) return true;
-  const shot = db.prepare(
-    "SELECT 1 FROM job_shots js JOIN jobs j ON j.id=js.job_id WHERE (js.storage_key=? OR js.thumb_key=?) AND j.user_id=? LIMIT 1"
-  ).get(relPath, relPath, userId);
-  if (shot) return true;
-  const products = db.prepare("SELECT images FROM products WHERE user_id=?").all(userId) as { images: string }[];
-  return products.some((product) => {
-    try { return (JSON.parse(product.images) as unknown[]).includes(relPath); } catch { return false; }
-  });
-}
-
 // GET /api/files/<path>?exp=&sig= — signed bearer URL (TTL 1 jam), plus
 // authenticated owner-session check. The HMAC remains useful for tamper/TTL;
 // it alone is deliberately insufficient to read a private object.
@@ -161,7 +103,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ path: string[] 
       headers: {
         "content-type": "image/webp",
         "content-length": String(thumb.length),
-        "cache-control": "private, max-age=300",
+        "cache-control": "private, no-store, max-age=0, must-revalidate",
       },
     });
   }
@@ -187,7 +129,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ path: string[] 
         "content-range": `bytes ${start}-${safeEnd}/${size}`,
         "content-length": String(length),
         "content-type": mime,
-        "cache-control": "private, max-age=300",
+        "cache-control": "private, no-store, max-age=0, must-revalidate",
       },
     });
   }
@@ -199,7 +141,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ path: string[] 
       "content-type": mime,
       "content-length": String(size),
       "accept-ranges": "bytes",
-      "cache-control": "private, max-age=300",
+      "cache-control": "private, no-store, max-age=0, must-revalidate",
       ...contentDisposition(url, relPath),
     },
   });
