@@ -65,8 +65,36 @@ test("READY retail output stops issuing signed URLs immediately after C5 re-quar
   db.prepare(`UPDATE products SET category='health',category_review_state='CLEAR',category_review_reason=NULL,
     category_reviewed_by='founder-1',category_reviewed_role='Founder/CEO',category_reviewed_at=?,
     category_review_version=3 WHERE id=?`).run(now(),productId);
+  const releasedStale=await GET(request(),{params:Promise.resolve({id:jobId})});
+  assert.equal(releasedStale.status,422,"output metadata revived after release at a newer generation");
+  assert.equal((await releasedStale.json()).code,"CATEGORY_REVIEW_REQUIRED");
   assert.equal((await fetchIssued(issued)).status,403,"old output revived after different-category release");
   assert.equal((await fetchIssued(issuedScene)).status,403,"old scene revived after different-category release");
+});
+
+test("all delivery/planning surfaces bind the v4 snapshot generation",async()=>{
+  const {isCurrentC5JobGeneration}=await import("../lib/legacy-job-quarantine");
+  const snapshot=JSON.stringify({version:4,productName:"Produk",category:"beauty",categoryReviewVersion:1,
+    priceIdr:10000,promoPriceBeforeIdr:null,promoEndsAt:null,promoStockLeft:null,
+    trustedBrand:{source:"products.raw_meta.brand",value:null},productVisualDesc:null,brandBrief:null,claims:[]});
+  const live={job_product_snapshot:snapshot,product_category:"beauty",category_review_state:"CLEAR",
+    category_review_reason:null,category_review_version:1};
+  assert.equal(isCurrentC5JobGeneration(live),true);
+  assert.equal(isCurrentC5JobGeneration({...live,product_category:"health",category_review_version:3}),false);
+  assert.equal(isCurrentC5JobGeneration({...live,category_review_version:3}),false);
+
+  for(const relative of [
+    "../app/api/jobs/[id]/output/route.ts","../app/api/jobs/route.ts",
+    "../app/api/dashboard/campaign/[runId]/route.ts","../app/api/dashboard/campaign/job/[jobId]/route.ts",
+    "../app/api/dashboard/library/route.ts","../app/api/dashboard/publish/route.ts",
+  ]){
+    const source=fs.readFileSync(new URL(relative,import.meta.url),"utf8");
+    assert.match(source,/CurrentC5JobGeneration/,`${relative} masih current-only`);
+    assert.match(source,/job_product_snapshot|SELECT j\.\*/,`${relative} tidak memuat snapshot admission`);
+  }
+  const publish=fs.readFileSync(new URL("../app/api/dashboard/publish/route.ts",import.meta.url),"utf8");
+  assert.match(publish,/withProductEvidenceMutationLock\(initial\.rows\[0\]\.product_id/);
+  assert.ok(publish.indexOf("assertCurrentC5JobGeneration(owned.rows[0])")<publish.indexOf("INSERT INTO post_plans"));
 });
 
 test("PostgreSQL media authorization binds output and scene delivery to current C5 truth",async(t)=>{

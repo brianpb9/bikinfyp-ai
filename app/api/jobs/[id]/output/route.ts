@@ -6,6 +6,7 @@ import { PRE_DOWNLOAD_NOTICE } from "@/lib/config/compliance";
 import { postgresRuntimeEnabled, smokeGetJob, smokeGetOutput } from "@/lib/postgres/smoke-runtime";
 import { computeViralityChecklist } from "@/lib/virality-checklist";
 import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
+import { assertCurrentC5JobGeneration } from "@/lib/legacy-job-quarantine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +27,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ id: string }> }
     if (!job) throw ERR.NOT_FOUND("Job-nya");
     assertCategoryReviewClear({state:job.category_review_state as "CLEAR"|"QUARANTINED",
       reason:job.category_review_reason as never,version:job.category_review_version},job.product_category);
+    assertCurrentC5JobGeneration(job);
     if (job.state !== "READY") throw ERR.JOB_NOT_READY();
 
     const output = postgresRuntimeEnabled()

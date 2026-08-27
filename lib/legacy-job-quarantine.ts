@@ -57,6 +57,31 @@ export const LEGACY_REFERENCE_REASON =
 export const LEGACY_PRODUCT_REASON =
   "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: job tanpa snapshot promo v3 tidak boleh memakai row produk mutable.";
 
+/** Bind delivery metadata and URLs to the exact C5 generation at admission. */
+export function isCurrentC5JobGeneration(input: {
+  job_product_snapshot?: string | null;
+  product_category?: string | null;
+  category_review_state?: string | null;
+  category_review_reason?: string | null;
+  category_review_version?: number | null;
+}): boolean {
+  if (input.category_review_state !== "CLEAR" || input.category_review_reason !== null
+      || !isCanonicalC5Category(input.product_category ?? "")) return false;
+  try {
+    const snapshot = parseJobProductSnapshot(input.job_product_snapshot ?? "");
+    return snapshot.version === JOB_PRODUCT_SNAPSHOT_VERSION
+      && snapshot.category === input.product_category
+      && snapshot.categoryReviewVersion === input.category_review_version;
+  } catch { return false; }
+}
+
+export function assertCurrentC5JobGeneration(input: Parameters<typeof isCurrentC5JobGeneration>[0]): void {
+  if (isCurrentC5JobGeneration(input)) return;
+  throw new ApiError(422, { code: "CATEGORY_REVIEW_REQUIRED",
+    message_id: "Kategori atau generasi tinjauan job sudah tidak berlaku.",
+    message_en: "Job category/review generation is no longer current.", retryable: false });
+}
+
 function jsonObject(raw: string): Record<string, unknown> | null {
   try {
     const value = JSON.parse(raw) as unknown;

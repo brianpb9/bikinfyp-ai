@@ -5,7 +5,7 @@ import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { createSignedUrl } from "@/lib/signed-url";
 import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { getPool } from "@/lib/postgres/pool";
-import { isCategoryReviewClear } from "@/lib/product-type-boundary";
+import { isCurrentC5JobGeneration } from "@/lib/legacy-job-quarantine";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -26,6 +26,7 @@ type Row = {
   thumb_key: string | null; fail_meta: string | null;
   product_category: string; category_review_state: string;
   category_review_reason: string | null; category_review_version: number;
+  job_product_snapshot: string | null;
 };
 
 // Alasan kegagalan hanya tersimpan di audit_log (jobs tidak punya kolomnya),
@@ -79,7 +80,7 @@ export async function GET(req: Request) {
       // tidak lewat gerbang review tidak punya baris job_shots sama sekali —
       // itu bukan kesalahan, klien tinggal jatuh ke frame pertama video.
       const result = await pool.query<Row>(
-        `SELECT j.id AS job_id, j.state, p.name AS product_name,p.category AS product_category,
+        `SELECT j.id AS job_id, j.state,j.job_product_snapshot, p.name AS product_name,p.category AS product_category,
                 p.category_review_state,p.category_review_reason,p.category_review_version,j.created_at,
                 j.format, j.duration_s, j.cost_actual_idr, j.bulk_run_id,
                 o.video_url, o.caption,
@@ -105,8 +106,7 @@ export async function GET(req: Request) {
     }
 
     const all = rows.map((row, i) => {
-      const publishable=isCategoryReviewClear({state:row.category_review_state as "CLEAR"|"QUARANTINED",
-        reason:row.category_review_reason as never,version:row.category_review_version},row.product_category);
+      const publishable=isCurrentC5JobGeneration(row);
       return ({
       job_id: row.job_id,
       state: row.state,
@@ -116,7 +116,7 @@ export async function GET(req: Request) {
       duration_s: row.duration_s,
       cost_idr: row.cost_actual_idr,
       run_id: row.bulk_run_id,
-      caption: row.caption,
+      caption: publishable ? row.caption : null,
       video_url: publishable && row.state === "READY" && row.video_url ? createSignedUrl(row.video_url) : null,
       // URL unduh terpisah dari URL putar: yang ini membawa ?dl= supaya browser
       // MENYIMPAN berkas dengan nama produk, bukan membuka pemutar.

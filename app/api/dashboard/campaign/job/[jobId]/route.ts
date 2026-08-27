@@ -14,7 +14,7 @@ import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
 import { materializeJobReferenceManifest } from "@/lib/job-reference-manifest";
-import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
+import { assertCurrentC5JobGeneration, requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 import path from "node:path";
 import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
 import { campaignJobDependencies } from "@/lib/campaign-job-dependencies";
@@ -82,6 +82,7 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
       if (!job) throw ERR.NOT_FOUND("Job-nya");
       assertCategoryReviewClear({state:job.category_review_state as "CLEAR"|"QUARANTINED",
         reason:job.category_review_reason as never,version:job.category_review_version},job.product_category);
+      assertCurrentC5JobGeneration(job);
       const scenes = (await pool.query<SceneRow>(
         "SELECT idx, prompt, storage_key, thumb_key, duration_sec, regen_requested, regen_count FROM job_shots WHERE job_id=$1 ORDER BY idx ASC",
         [jobId]
