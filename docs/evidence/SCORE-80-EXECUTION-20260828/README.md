@@ -36,3 +36,19 @@ receipt explicitly lacks browser runtime bootstrap, so SSR and downloaded
 assets are not promoted to executed hydration or mobile-375 proof. Slot B
 remains open and Auth, Mobile, Hydration, and Prompt/archive receive zero
 points from this slice.
+
+## Streams A and L managed receipts
+
+The complete sanitized A/L source directory is preserved byte-for-byte under
+`STREAM-A-L-MANAGED.raw/`; the verifier checks every file against the pinned
+manifest. Lane A is a `PASS_CANDIDATE_PENDING_REVIEW` for exact deployed SHA
+`46499ac5e345997b394e4ac522759e40fe2eae22`: web and worker are live on that
+SHA, PostgreSQL and R2 managed readback succeeded, migration 0036 is current,
+and health reports public payments off. `A_RECEIPT` remains pending Reviewer.
+
+Lane L's audit execution and receipt readiness are PASS candidates pending
+Reviewer, but its legacy-population gate remains failed and locked. Of 149
+products, 148 references match a primary object, all 148 lack evidence
+sidecars, 56 additional primary objects are orphaned, and one product has no
+photo. Pre/post database and R2 fingerprints are identical. Therefore
+`L_GATE_UNLOCKED=NO` and this slice claims zero points.

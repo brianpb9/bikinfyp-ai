@@ -1,0 +1,8 @@
+{
+  "id": "job-da88fhcs728c73b1v0j0",
+  "status": "pending",
+  "createdAt": "2026-08-27T18:53:57.213377994Z",
+  "startedAt": null,
+  "finishedAt": null,
+  "startCommand": "RACUN_NO_DOTENV=1 RACUN_DB_RUNTIME=postgres STORAGE_MODE=r2 npx tsx scripts/audit-bukti-produk.ts --json --batas -1"
+}

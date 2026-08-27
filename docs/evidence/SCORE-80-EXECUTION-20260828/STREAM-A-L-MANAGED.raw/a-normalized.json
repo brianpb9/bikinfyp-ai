@@ -1,0 +1,55 @@
+{
+  "schema": "score80-a-normalized/v1",
+  "observed_at": "2026-08-27T18:53:29Z",
+  "exact_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "web": {
+    "service_id": "srv-d9n28tijnfac73a87lt0",
+    "branch": "staging/exact-46499ac-20260827",
+    "suspended": "not_suspended",
+    "maintenance": false,
+    "deploy_id": "dep-da85dqjtqb8s73du3tj0",
+    "deploy_status": "live",
+    "deploy_sha": "46499ac5e345997b394e4ac522759e40fe2eae22"
+  },
+  "worker": {
+    "service_id": "srv-d9n28ue417fc73ch2b60",
+    "branch": "staging/exact-46499ac-20260827",
+    "suspended": "not_suspended",
+    "deploy_id": "dep-da85ffijnfac73crk8a0",
+    "deploy_status": "live",
+    "deploy_sha": "46499ac5e345997b394e4ac522759e40fe2eae22"
+  },
+  "postgres": {
+    "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+    "name": "racun-ai-staging-postgres",
+    "database_name": "racun_staging",
+    "status": "available",
+    "version": "16",
+    "region": "singapore",
+    "plan": "free"
+  },
+  "health": {
+    "ok": true,
+    "intake": "open",
+    "payments_provider": "duitku",
+    "payments_env": "sandbox",
+    "payments_live": false,
+    "build_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+    "klasifikasi": {
+      "mampu": true,
+      "biner": {
+        "ffmpeg": true,
+        "ffprobe": true,
+        "tesseract": true
+      },
+      "bahasaOcr": true,
+      "smoke": true,
+      "alasan": "Runtime ini bisa mengklasifikasi gambar (terbukti lewat smoke pipeline, bukan hanya -version).",
+      "diperiksaPada": "2026-08-27T15:28:38.539Z"
+    }
+  },
+  "safety": {
+    "secret_values_persisted": false,
+    "control_plane_commands_read_only": true
+  }
+}

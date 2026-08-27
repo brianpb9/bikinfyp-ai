@@ -1,37 +1,39 @@
 {
-  "schema": "score-80-lane-a-normalization/v1",
+  "schema": "score-80-lane-a-normalization/v2",
   "task": "SCORE-80-EXECUTION-20260828",
   "slot": "A",
-  "state": "WAITING_RAW_RECEIPTS",
-  "raw_receipts": [],
-  "normalized_receipts": [],
-  "required_raw_fields": [
-    "receipt_id",
-    "captured_at",
-    "artifact_path",
-    "artifact_sha256",
-    "deployed_exact_sha",
-    "environment",
-    "postgres_runtime",
-    "r2_runtime",
-    "migration_state",
-    "runtime_readback",
-    "sanitized"
-  ],
+  "state": "PASS_CANDIDATE_PENDING_REVIEW",
+  "source": {
+    "raw_dir": "STREAM-A-L-MANAGED.raw",
+    "manifest_path": "STREAM-A-L-MANAGED.raw/MANIFEST.sha256",
+    "manifest_sha256": "6611247bba5e5d05cbdad6dc5a0b37114d55a560fed56ee0d7db129eee9ff101",
+    "normalized_receipt_path": "STREAM-A-L-MANAGED.raw/a-normalized.json",
+    "managed_readback_path": "STREAM-A-L-MANAGED.raw/a-readback-normalized.json",
+    "sanitized": true
+  },
+  "exact_deployed_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "verified_facts": {
+    "web_live_exact_sha": true,
+    "worker_live_exact_sha": true,
+    "postgres_available": true,
+    "postgres_version": "16",
+    "migrations_count": 36,
+    "latest_migration": "0036_product_type_confirmation",
+    "r2_connected": true,
+    "managed_runtime_readback": true,
+    "health_ok": true,
+    "payments_live": false,
+    "mutation": false
+  },
   "normalization_rules": {
-    "environment_must_equal": "managed_staging",
-    "deployed_exact_sha_format": "40 lowercase hexadecimal characters",
-    "artifact_sha256_format": "64 lowercase hexadecimal characters",
-    "all_runtime_checks_must_pass": true,
     "secrets_forbidden": true,
-    "missing_field_result": "REJECT_NO_AWARD",
-    "sha_mismatch_result": "REJECT_NO_AWARD",
+    "manifest_all_files_must_match": true,
     "builder_may_claim_pass": false,
     "reviewer_exact_sha_pass_required": true
   },
   "output_contract": {
-    "receipt_registry_state_before_raw_input": "EMPTY",
+    "a_receipt_claim": "PENDING_REVIEWER",
     "score_delta_before_independent_pass": 0,
-    "next_action": "NORMALIZE_ONLY_AFTER_RAW_RECEIPTS_ARRIVE"
+    "next_action": "INDEPENDENT_EXACT_SHA_REVIEW"
   }
 }

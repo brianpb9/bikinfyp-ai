@@ -1,0 +1,14 @@
+{
+  "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+  "name": "racun-ai-staging-postgres",
+  "databaseName": "racun_staging",
+  "status": "available",
+  "suspended": "not_suspended",
+  "plan": "free",
+  "version": "16",
+  "region": "singapore",
+  "highAvailabilityEnabled": false,
+  "diskAutoscalingEnabled": false,
+  "createdAt": "2026-08-01T16:37:18.722431Z",
+  "updatedAt": "2026-08-01T16:37:18.722431Z"
+}

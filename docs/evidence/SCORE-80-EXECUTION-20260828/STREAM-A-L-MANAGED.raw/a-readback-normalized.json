@@ -1,0 +1,24 @@
+{
+  "schema": "lane-a-managed-readback/v1",
+  "exact_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "db": {
+    "connected": true,
+    "name": "racun_staging",
+    "migrations": 36,
+    "latest": "0036_product_type_confirmation",
+    "products": 149
+  },
+  "r2": {
+    "connected": true,
+    "key_count_at_most_one": 1,
+    "bucket_name_redacted": true
+  },
+  "slots_present": {
+    "DATABASE_URL": true,
+    "R2_ENDPOINT": true,
+    "R2_BUCKET": true,
+    "R2_ACCESS_KEY_ID": true,
+    "R2_SECRET_ACCESS_KEY": true
+  },
+  "mutation": false
+}
