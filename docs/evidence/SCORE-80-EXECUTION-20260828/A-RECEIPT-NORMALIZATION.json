@@ -1,0 +1,37 @@
+{
+  "schema": "score-80-lane-a-normalization/v1",
+  "task": "SCORE-80-EXECUTION-20260828",
+  "slot": "A",
+  "state": "WAITING_RAW_RECEIPTS",
+  "raw_receipts": [],
+  "normalized_receipts": [],
+  "required_raw_fields": [
+    "receipt_id",
+    "captured_at",
+    "artifact_path",
+    "artifact_sha256",
+    "deployed_exact_sha",
+    "environment",
+    "postgres_runtime",
+    "r2_runtime",
+    "migration_state",
+    "runtime_readback",
+    "sanitized"
+  ],
+  "normalization_rules": {
+    "environment_must_equal": "managed_staging",
+    "deployed_exact_sha_format": "40 lowercase hexadecimal characters",
+    "artifact_sha256_format": "64 lowercase hexadecimal characters",
+    "all_runtime_checks_must_pass": true,
+    "secrets_forbidden": true,
+    "missing_field_result": "REJECT_NO_AWARD",
+    "sha_mismatch_result": "REJECT_NO_AWARD",
+    "builder_may_claim_pass": false,
+    "reviewer_exact_sha_pass_required": true
+  },
+  "output_contract": {
+    "receipt_registry_state_before_raw_input": "EMPTY",
+    "score_delta_before_independent_pass": 0,
+    "next_action": "NORMALIZE_ONLY_AFTER_RAW_RECEIPTS_ARRIVE"
+  }
+}

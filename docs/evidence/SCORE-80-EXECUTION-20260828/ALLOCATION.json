@@ -1,0 +1,28 @@
+{
+  "schema": "score-80-founder-allocation/v1",
+  "task": "SCORE-80-EXECUTION-20260828",
+  "authority_message_id": "1787854482000-reviewer-TASK",
+  "baseline": {"raw": 77, "denominator": 130},
+  "target": {"raw": 104, "denominator": 130, "required_delta": 27},
+  "award_policy": "EXACT_SHA_INDEPENDENT_PASS_ROW_BY_ROW",
+  "allocation_state": "AUTHORIZED_TARGETS_UNAWARDED",
+  "rows": [
+    {"row":"Money safety","current":9,"target":10,"delta":1,"state":"UNAWARDED"},
+    {"row":"Auth intent & failure path","current":7,"target":10,"delta":3,"state":"UNAWARDED"},
+    {"row":"Mobile UI 375","current":7,"target":10,"delta":3,"state":"UNAWARDED"},
+    {"row":"Hydration/interaction canary CI","current":8,"target":10,"delta":2,"state":"UNAWARDED"},
+    {"row":"Content engine standard","current":7,"target":8,"delta":1,"state":"UNAWARDED"},
+    {"row":"Brand fidelity","current":6,"target":8,"delta":2,"state":"UNAWARDED"},
+    {"row":"Anti-slop produksi","current":7,"target":9,"delta":2,"state":"UNAWARDED"},
+    {"row":"Prompt/verdict archive","current":8,"target":10,"delta":2,"state":"UNAWARDED"},
+    {"row":"NSFW rejection","current":6,"target":9,"delta":3,"state":"UNAWARDED"},
+    {"row":"Payments","current":2,"target":9,"delta":7,"state":"UNAWARDED"},
+    {"row":"Landing/pricing consistency","current":6,"target":7,"delta":1,"state":"UNAWARDED"},
+    {"row":"Legal/PDP","current":2,"target":2,"delta":0,"state":"BASELINE_PRESERVED"},
+    {"row":"DR/monitoring/incident owner","current":2,"target":2,"delta":0,"state":"BASELINE_PRESERVED"}
+  ],
+  "claimed_raw_now": 77,
+  "claimed_certified_score_now": 58,
+  "stop_rule": "STOP_AT_FIRST_DEFENSIBLE_104",
+  "scope_exclusions": ["public payment enablement","public price changes","unapproved 90/100 work"]
+}

@@ -1,0 +1,21 @@
+{
+  "schema": "score-80-role-authority/v1",
+  "task": "SCORE-80-EXECUTION-20260828",
+  "authority_message_id": "1787854482000-reviewer-TASK",
+  "roles": {
+    "c5_authorized_human_review_role": "Founder/CEO",
+    "release_approver": "Founder/CEO",
+    "release_operator": "canonical Builder service/operator identity",
+    "rollback_authority": "Founder/CEO"
+  },
+  "separation": {
+    "approver_and_operator_must_be_separate": true,
+    "operator_may_approve": false,
+    "additional_distinct_rollback_role_required": false
+  },
+  "runtime_binding": {
+    "c5_role_value": "Founder/CEO",
+    "c5_principal_policy": "server-bound explicit Founder principal",
+    "release_operator_policy": "canonical Builder service/operator identity only"
+  }
+}
