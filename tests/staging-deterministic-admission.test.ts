@@ -16,10 +16,13 @@ const manifest = JSON.stringify({
   }],
 });
 const snapshot = JSON.stringify({
-  version: 2,
+  version: 3,
   productName: "NOVA Serum",
   category: "beauty",
   priceIdr: 13000,
+  promoPriceBeforeIdr: null,
+  promoEndsAt: null,
+  promoStockLeft: null,
   trustedBrand: { source: "products.raw_meta.brand", value: "NOVA" },
   productVisualDesc: "Botol serum NOVA",
   brandBrief: null,

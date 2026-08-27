@@ -57,7 +57,7 @@ import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
 import { pesanTanpaReferensi } from "../product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "../kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest, parseJobReferenceManifest, type JobReferenceManifest } from "../job-reference-manifest";
-import { claimsFromRaw, loadOrCreateJobProductSnapshot, parseJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot, type JobProductSnapshot } from "../job-product-snapshot";
+import { parseJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot, type JobProductSnapshot } from "../job-product-snapshot";
 import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
 import { bacaSnapshot } from "../script-engine/admisi";
 import { normalisasiFormatWorker } from "../media/worker-format";
@@ -108,7 +108,6 @@ type WorkerRow = {
   product_claims: string | null;
   ratio: string | null;
   product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_images: string; product_price_idr: number;
-  promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   product_source_url: string | null;
   /** JSON bebas dari intake. Sumber MEREK TEPERCAYA (raw_meta.brand). */
   product_raw_meta: string | null;
@@ -309,7 +308,6 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     // (pool org untuk job dari dashboard bulk-generate, user biasa untuk retail).
     const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level, s.validation_result AS script_validation_result,
       p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
-      p.promo_price_before_idr, p.promo_ends_at, p.promo_stock_left,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
@@ -389,7 +387,7 @@ export function parseDeterministicFixtureAdmission(row: Pick<WorkerRow, "approve
   }
   return {
     manifest: parseJobReferenceManifest(row.approved_reference_manifest),
-    productSnapshot: parseJobProductSnapshot(row.job_product_snapshot),
+    productSnapshot: parseJobProductSnapshot(row.job_product_snapshot, { requirePromo: true }),
   };
 }
 
@@ -402,24 +400,14 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const storyIdentity = deriveStoryAdsIdentity(admisi, {
     format: row.format, templateId: row.template_id, durationSec: row.duration_s,
   });
-  if (isStructuredStoryAds(storyIdentity) && !row.job_product_snapshot) {
+  if (!row.job_product_snapshot) {
     throw new UnsafeLegacyProductSnapshot(
-      "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: Story Ads lama tanpa harga admission tidak boleh memakai row produk mutable."
+      "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: job tanpa snapshot promo v3 tidak boleh memakai row produk mutable."
     );
   }
-  const productSnapshot = await loadOrCreateJobProductSnapshot({
-    existingRaw: row.job_product_snapshot,
+  const productSnapshot = parseJobProductSnapshot(row.job_product_snapshot, {
     requirePrice: isStructuredStoryAds(storyIdentity),
-    candidate: () => ({
-      productName: row.product_name,
-      category: row.product_category,
-      priceIdr: row.product_price_idr,
-      trustedBrand: { source: "products.raw_meta.brand", value: trustedBrandFromRawMeta(row.product_raw_meta) },
-      productVisualDesc: row.product_visual_desc,
-      brandBrief: row.brand_brief,
-      claims: claimsFromRaw(row.product_claims),
-    }),
-    persistIfAbsentAndSafe: (candidateRaw) => jobs.installProductSnapshotIfSafe(row.id, candidateRaw),
+    requirePromo: true,
   });
   const snapshotPriceIdr = productSnapshot.priceIdr ?? row.product_price_idr;
   // Semua consumer hilir tetap memakai WorkerRow, tetapi nilainya kini datang
@@ -863,9 +851,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const cartLabel = cartLabelForUrl(row.product_source_url);
   const ctaBadgeText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning »" : "Klik Keranjang »";
   const ctaQcText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning" : "Klik Keranjang";
-  // Add-on promo (cek ulang saat render — kedaluwarsa = drop overlay, lihat lib/promo.ts).
-  const promo = resolvePromo({ priceIdr: row.product_price_idr, promoPriceBeforeIdr: row.promo_price_before_idr,
-    promoEndsAt: row.promo_ends_at, promoStockLeft: row.promo_stock_left });
+  // Add-on promo dari snapshot admission; row produk mutable tidak dibaca lagi.
+  const promo = resolvePromo({ priceIdr: row.product_price_idr, promoPriceBeforeIdr: productSnapshot.promoPriceBeforeIdr,
+    promoEndsAt: productSnapshot.promoEndsAt, promoStockLeft: productSnapshot.promoStockLeft });
   const priceOverlayText = promo ? formatPromoOverlayText(promo) : `Cuma ${formatHargaOverlay(row.product_price_idr)}`;
   let outputPath = "";
   let renderParams = { watermark: true as const, watermarkText: AIGC_WATERMARK_TEXT };

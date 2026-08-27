@@ -348,7 +348,8 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
   assert.equal(current.promo_price_before_idr, mutation.promo_price_before_idr);
   assert.equal(current.promo_ends_at, mutation.promo_ends_at); assert.equal(current.promo_stock_left, mutation.promo_stock_left);
   assert.deepEqual(admissionSnapshot, {
-    version: 2, productName: "Serum Admission E3", category: "beauty", priceIdr: 85_000,
+    version: 3, productName: "Serum Admission E3", category: "beauty", priceIdr: 85_000,
+    promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Admission E3" },
     productVisualDesc: "BOTOL-ADMISSION-E3", brandBrief: "BRIEF-ADMISSION-E3", claims: ["klaim admission E3"],
   });
@@ -371,7 +372,7 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
   noPaidSideEffects(s.jobId, storage);
 });
 
-test("C9 counterexample E3→W2: frame render promo live dapat muncul dan hilang sementara prompt tetap snapshot admission", async (t) => {
+test("C9 E3→W2: gain/removal setelah admission tidak mengubah promo frame snapshot", async (t) => {
   const originalFetch = globalThis.fetch;
   let networkCalls = 0;
   globalThis.fetch = (async () => { networkCalls++; throw new Error("C9 compositor W2 tidak boleh jaringan"); }) as typeof fetch;
@@ -400,6 +401,13 @@ test("C9 counterexample E3→W2: frame render promo live dapat muncul dan hilang
     const admissionSnapshot = parseJobProductSnapshot(snapshotRaw);
     assert.equal(admissionSnapshot.productName, "Serum Admission E3");
     assert.equal(admissionSnapshot.priceIdr, 85_000);
+    assert.deepEqual({
+      before: admissionSnapshot.promoPriceBeforeIdr,
+      ends: admissionSnapshot.promoEndsAt,
+      stock: admissionSnapshot.promoStockLeft,
+    }, variant === "gain"
+      ? { before: null, ends: null, stock: null }
+      : { before: 110_000, ends: "2031-01-02T03:04:05.000Z", stock: 11 });
 
     const mutation = variant === "gain"
       ? {
@@ -455,21 +463,15 @@ test("C9 counterexample E3→W2: frame render promo live dapat muncul dan hilang
     assert.equal(observed.mode, "vo");
     if (variant === "gain") {
       assert.equal(observed.priceInCaptionMode, false);
-      assert.equal(observed.priceText, "Rp99.000 > Rp85.000\n-14% · s.d. 3 Feb");
-      assert.doesNotMatch(observed.priceText, /stok|\b7\b/i,
-        "promo_stock_left saat ini inert di formatter compositor; jangan klaim scarcity dirender");
-      // OCR atas teks putih+stroke di video lossy dapat membaca 8 sebagai S
-      // dan tanda persen sebagai °7%; token struktur/harga/deadline berikut
-      // stabil, sementara hash crop menjaga bukti pixel tidak vakum.
-      assert.match(rendered.ocr, />\s*Rp.{0,2}[8S]?5[:.]000/i, `frame promo gain tidak menampilkan dua harga: ${rendered.ocr}`);
-      assert.match(rendered.ocr, /14.{0,4}%/i, `frame promo gain tidak menampilkan diskon: ${rendered.ocr}`);
-      assert.match(rendered.ocr, /s.d.?\s*3\)?\s*Feb/i, `frame promo gain tidak menampilkan deadline 3 Feb: ${rendered.ocr}`);
+      assert.equal(observed.priceText, "Cuma Rp85.000");
+      assert.match(rendered.ocr, /Rp.{0,2}[8S]?5[:.]000/i, `frame gain tidak mempertahankan no-promo admission: ${rendered.ocr}`);
+      assert.doesNotMatch(rendered.ocr, />|%|s.d.?|Feb/i, `frame gain membaca promo live: ${rendered.ocr}`);
     } else {
       assert.equal(observed.priceInCaptionMode, false);
-      assert.equal(observed.priceText, "Cuma Rp85.000");
-      assert.match(rendered.ocr, /Rp.{0,2}[8S]?5[:.]000/i, `frame promo removal tidak menampilkan harga admission: ${rendered.ocr}`);
-      assert.doesNotMatch(rendered.ocr, />|%|s.d.?|Feb/i,
-        `frame promo removal masih menampilkan promo lama: ${rendered.ocr}`);
+      assert.equal(observed.priceText, "Rp110.000 > Rp85.000\n-23% · s.d. 2 Jan");
+      assert.match(rendered.ocr, /Rp110.{0,3}000.{0,4}Rp.{0,2}[8S]?5[:.]000/i, `frame removal kehilangan dua harga admission: ${rendered.ocr}`);
+      assert.match(rendered.ocr, /23.{0,4}%/i, `frame removal kehilangan diskon admission: ${rendered.ocr}`);
+      assert.match(rendered.ocr, /s.d.?\S*\s*2\)?\s*Jan/i, `frame removal kehilangan deadline admission: ${rendered.ocr}`);
     }
     assert.equal((db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(s.jobId) as { job_product_snapshot: string }).job_product_snapshot, snapshotRaw);
     const count = (sql: string) => (db.prepare(sql).get(s.jobId) as { n: number }).n;
@@ -491,7 +493,7 @@ test("C9 counterexample E3→W2: frame render promo live dapat muncul dan hilang
     renderedCrops.set(variant, rendered.cropSha);
   }
   assert.notEqual(renderedCrops.get("gain"), renderedCrops.get("remove"),
-    "crop frame gain/removal identik walau overlay seharusnya berbeda");
+    "crop frame no-promo/promo admission identik");
   assert.equal(networkCalls, 0, "counterexample C9 W2 menyentuh jaringan");
 });
 

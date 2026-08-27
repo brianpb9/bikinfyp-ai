@@ -1,12 +1,16 @@
-export const JOB_PRODUCT_SNAPSHOT_VERSION = 2 as const;
+export const JOB_PRODUCT_SNAPSHOT_VERSION = 3 as const;
 export const TRUSTED_BRAND_SOURCE = "products.raw_meta.brand" as const;
 
 export interface JobProductSnapshot {
-  version: 1 | typeof JOB_PRODUCT_SNAPSHOT_VERSION;
+  version: 1 | 2 | typeof JOB_PRODUCT_SNAPSHOT_VERSION;
   productName: string;
   category: string;
   /** Harga ProductInput pada saat job diterima; sumber bridge SA6 immutable. */
   priceIdr: number | null;
+  /** Kebenaran promo persis saat admission; null berarti tanpa klaim promo. */
+  promoPriceBeforeIdr: number | null;
+  promoEndsAt: string | null;
+  promoStockLeft: number | null;
   trustedBrand: { source: typeof TRUSTED_BRAND_SOURCE; value: string | null };
   productVisualDesc: string | null;
   brandBrief: string | null;
@@ -21,19 +25,24 @@ function nullableString(value: unknown): value is string | null {
   return value === null || typeof value === "string";
 }
 
-export function parseJobProductSnapshot(raw: string, options: { requirePrice?: boolean } = {}): JobProductSnapshot {
+export function parseJobProductSnapshot(raw: string, options: { requirePrice?: boolean; requirePromo?: boolean } = {}): JobProductSnapshot {
   let value: unknown;
   try { value = JSON.parse(raw); }
   catch { throw new Error("PRODUCT_SNAPSHOT_INVALID: snapshot metadata produk bukan JSON sah."); }
   const x = value as Partial<JobProductSnapshot> | null;
-  const versionValid = x?.version === 1 || x?.version === JOB_PRODUCT_SNAPSHOT_VERSION;
+  const versionValid = x?.version === 1 || x?.version === 2 || x?.version === JOB_PRODUCT_SNAPSHOT_VERSION;
   const priceValid = x?.version === 1
     ? x.priceIdr === undefined
     : Number.isSafeInteger(x?.priceIdr) && Number(x?.priceIdr) >= 0;
+  const promoValid = x?.version !== JOB_PRODUCT_SNAPSHOT_VERSION || (
+    (x.promoPriceBeforeIdr === null || (Number.isSafeInteger(x.promoPriceBeforeIdr) && Number(x.promoPriceBeforeIdr) >= 0))
+    && nullableString(x.promoEndsAt)
+    && (x.promoStockLeft === null || (Number.isSafeInteger(x.promoStockLeft) && Number(x.promoStockLeft) >= 0))
+  );
   if (!x || !versionValid
       || typeof x.productName !== "string" || !x.productName.trim()
       || typeof x.category !== "string" || !x.category.trim()
-      || !priceValid
+      || !priceValid || !promoValid
       || !x.trustedBrand || x.trustedBrand.source !== TRUSTED_BRAND_SOURCE
       || !nullableString(x.trustedBrand.value)
       || !nullableString(x.productVisualDesc)
@@ -46,11 +55,19 @@ export function parseJobProductSnapshot(raw: string, options: { requirePrice?: b
       "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: Story Ads snapshot v1 tidak memiliki harga admission immutable."
     );
   }
+  if (x.version !== JOB_PRODUCT_SNAPSHOT_VERSION && options.requirePromo) {
+    throw new UnsafeLegacyProductSnapshot(
+      "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: snapshot sebelum v3 tidak memiliki promo admission immutable."
+    );
+  }
   return {
-    version: x.version as 1 | typeof JOB_PRODUCT_SNAPSHOT_VERSION,
+    version: x.version as 1 | 2 | typeof JOB_PRODUCT_SNAPSHOT_VERSION,
     productName: x.productName,
     category: x.category,
     priceIdr: x.version === 1 ? null : Number(x.priceIdr),
+    promoPriceBeforeIdr: x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? x.promoPriceBeforeIdr ?? null : null,
+    promoEndsAt: x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? x.promoEndsAt ?? null : null,
+    promoStockLeft: x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? x.promoStockLeft ?? null : null,
     trustedBrand: { source: TRUSTED_BRAND_SOURCE, value: x.trustedBrand.value },
     productVisualDesc: x.productVisualDesc,
     brandBrief: x.brandBrief,
@@ -95,37 +112,22 @@ export function createJobProductSnapshotRaw(product: {
   product_visual_desc?: string | null;
   brand_brief?: string | null;
   claims?: string | null;
+  promo_price_before_idr?: number | null;
+  promo_ends_at?: string | null;
+  promo_stock_left?: number | null;
 }): string {
   const snapshot = parseJobProductSnapshot(JSON.stringify({
     version: JOB_PRODUCT_SNAPSHOT_VERSION,
     productName: product.name,
     category: product.category,
     priceIdr: product.price_idr,
+    promoPriceBeforeIdr: product.promo_price_before_idr ?? null,
+    promoEndsAt: product.promo_ends_at ?? null,
+    promoStockLeft: product.promo_stock_left ?? null,
     trustedBrand: { source: TRUSTED_BRAND_SOURCE, value: trustedBrandFromRawMeta(product.raw_meta) },
     productVisualDesc: product.product_visual_desc ?? null,
     brandBrief: product.brand_brief ?? null,
     claims: claimsFromRaw(product.claims),
   }));
   return JSON.stringify(snapshot);
-}
-
-export async function loadOrCreateJobProductSnapshot(input: {
-  existingRaw: string | null;
-  /** Lazy form prevents mutable product columns from being parsed on resume. */
-  candidate: Omit<JobProductSnapshot, "version" | "priceIdr"> & { priceIdr: number }
-    | (() => Omit<JobProductSnapshot, "version" | "priceIdr"> & { priceIdr: number });
-  persistIfAbsentAndSafe: (candidateRaw: string) => Promise<string | null>;
-  /** Story Ads membutuhkan price immutable; Affiliate/TVC v1 tetap resumable. */
-  requirePrice?: boolean;
-}): Promise<JobProductSnapshot> {
-  if (input.existingRaw) return parseJobProductSnapshot(input.existingRaw, { requirePrice: input.requirePrice });
-  const source = typeof input.candidate === "function" ? input.candidate() : input.candidate;
-  const candidate = parseJobProductSnapshot(JSON.stringify({ version: JOB_PRODUCT_SNAPSHOT_VERSION, ...source }));
-  const persisted = await input.persistIfAbsentAndSafe(JSON.stringify(candidate));
-  if (!persisted) {
-    throw new UnsafeLegacyProductSnapshot(
-      "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: job lama sudah punya jejak provider/output tanpa snapshot metadata produk."
-    );
-  }
-  return parseJobProductSnapshot(persisted, { requirePrice: input.requirePrice });
 }

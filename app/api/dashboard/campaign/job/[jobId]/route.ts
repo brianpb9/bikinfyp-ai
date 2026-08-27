@@ -159,6 +159,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
             bacaSnapshot(job.script_validation_result),
             { format: job.format, templateId: job.template_id }
           )),
+          requirePromo: true,
         });
         const manifest = parseJobReferenceManifest(job.approved_reference_manifest);
         await materializeJobReferenceManifest(manifest, path.join(config.storageDir, "jobs", jobId));

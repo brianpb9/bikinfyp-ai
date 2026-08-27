@@ -301,9 +301,11 @@ async function siapkanJob(images: string[], tier = "silent_caption"): Promise<st
     "INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,created_at) VALUES ($1,$2,'H1','senang','bestie',$3,'caption','[]','{}',$4)",
     [sid, pid, JSON.stringify(segmen), t]
   );
+  const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
+  const productSnapshot = createJobProductSnapshotRaw({ name: "Serum Glow Bright", category: "beauty", price_idr: 85_000 });
   await pool.query(
-    "INSERT INTO jobs (id,user_id,product_id,script_id,format,quality_tier,duration_s,state,created_at,state_changed_at) VALUES ($1,$2,$3,$4,'hands_only',$5,15,'QUEUED',$6,$6)",
-    [jid, userId, pid, sid, tier, t]
+    "INSERT INTO jobs (id,user_id,product_id,script_id,format,quality_tier,duration_s,job_product_snapshot,state,created_at,state_changed_at) VALUES ($1,$2,$3,$4,'hands_only',$5,15,$6,'QUEUED',$7,$7)",
+    [jid, userId, pid, sid, tier, productSnapshot, t]
   );
   await pool.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jid, sid]);
   return jid;
@@ -1009,7 +1011,8 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
   const { parseJobProductSnapshot, createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
   const admission = parseJobProductSnapshot(productSnapshot);
   assert.deepEqual(admission, {
-    version: 2, productName: "Serum Glow Bright", category: "beauty", priceIdr: 85_000,
+    version: 3, productName: "Serum Glow Bright", category: "beauty", priceIdr: 85_000,
+    promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
     productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
   });
@@ -1093,7 +1096,7 @@ test("E7 ordinary PostgreSQL menunggu evidence lease lalu mempertahankan reconfi
   });
 });
 
-test("C9 counterexample E7→W1: frame render promo live berubah sementara prompt tetap snapshot admission", async (t) => {
+test("C9 E7→W1: promo mutation setelah admission tidak mengubah frame snapshot", async (t) => {
   if (lewati) return t.skip("UJI_PG_URL kosong");
   const { setVideoProvidersForTests } = await import("../lib/providers/registry");
   amatan = { utamaSha: null, utamaPath: null, extraPaths: [], promptText: "", dipanggil: false };
@@ -1122,7 +1125,8 @@ test("C9 counterexample E7→W1: frame render promo live berubah sementara promp
   const productSnapshot = admissionRow.job_product_snapshot as string;
   const { parseJobProductSnapshot } = await import("../lib/job-product-snapshot");
   assert.deepEqual(parseJobProductSnapshot(productSnapshot), {
-    version: 2, productName: "Serum Glow Bright", category: "beauty", priceIdr: 85_000,
+    version: 3, productName: "Serum Glow Bright", category: "beauty", priceIdr: 85_000,
+    promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
     productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
   });
@@ -1186,19 +1190,12 @@ test("C9 counterexample E7→W1: frame render promo live berubah sementara promp
   const observed = compositorInput as unknown as import("../lib/media/compositor").CompositeInput;
   assert.ok(observed, "resume W1 E7 tidak mencapai compositeVideo");
   assert.equal(observed.mode, "caption");
-  assert.equal(observed.priceInCaptionMode, true);
-  // Harga jual tetap 85k dari snapshot admission; harga-sebelum dan deadline
-  // datang dari row live yang diubah E7 setelah admission. Stock juga live,
-  // tetapi formatter compositor saat ini tidak merender scarcity.
-  assert.equal(observed.priceText, "Rp98.000 > Rp85.000\n-13% · s.d. 3 Feb");
-  assert.doesNotMatch(observed.priceText, /stok|\b9\b/i,
-    "promo_stock_left saat ini inert di formatter compositor; jangan klaim scarcity dirender");
+  assert.equal(observed.priceInCaptionMode, false);
+  assert.equal(observed.priceText, "Cuma Rp85.000");
   assert.ok(rendered.cropBytes > 1_000 && rendered.cropSha.length === 64,
     `frame crop W1 tidak menghasilkan bukti pixel: ${JSON.stringify(rendered)}`);
-  assert.match(rendered.ocr, /Rp98[:.]000/i, `frame W1 tidak menampilkan harga-sebelum live: ${rendered.ocr}`);
   assert.match(rendered.ocr, /Rp.?85[:.]000/i, `frame W1 tidak menampilkan harga jual admission: ${rendered.ocr}`);
-  assert.match(rendered.ocr, /\D13\D/i, `frame W1 tidak menampilkan diskon berubah: ${rendered.ocr}`);
-  assert.match(rendered.ocr, /s-d\s*5?3\)?\s*Feb/i, `frame W1 tidak menampilkan deadline 3 Feb: ${rendered.ocr}`);
+  assert.doesNotMatch(rendered.ocr, /98[:.]000|\D13\D|s-d|Feb/i, `frame W1 membaca promo mutasi live: ${rendered.ocr}`);
   assert.equal((await pool.query("SELECT job_product_snapshot FROM jobs WHERE id=$1", [jobId])).rows[0].job_product_snapshot, productSnapshot);
   assert.equal(panggilanJaringan, 0, "counterexample C9 W1 menyentuh jaringan");
   assert.equal(await hitung("SELECT COUNT(*)::int AS n FROM outputs WHERE job_id=$1", [jobId]), 0);

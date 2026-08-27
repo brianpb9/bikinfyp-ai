@@ -178,12 +178,13 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       name: string; category: string; price_idr: number; raw_meta: string | null;
       product_visual_desc: string | null; brand_brief: string | null; claims: string | null;
       source_url: string | null; promo_price_before_idr: number | null;
+      promo_ends_at: string | null; promo_stock_left: number | null;
       product_type_token: string | null; product_type_confirmed_token: string | null;
       product_type_confirmed_by: string | null; product_type_confirmed_at: string | Date | null;
       product_type_version: number | null; product_type_state: string;
       images: string;
     }>(`SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,source_url,
-              promo_price_before_idr,product_type_token,product_type_confirmed_token,
+              promo_price_before_idr,promo_ends_at,promo_stock_left,product_type_token,product_type_confirmed_token,
               product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,images
          FROM products WHERE id=$1 AND org_id=$2 FOR SHARE`, [sel.productId, sel.orgId]);
     if (!admissionProduct.rows[0]) {

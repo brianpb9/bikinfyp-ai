@@ -4,7 +4,6 @@ import fs from "node:fs";
 import path from "node:path";
 import {
   createJobProductSnapshotRaw,
-  loadOrCreateJobProductSnapshot,
   parseJobProductSnapshot,
   UnsafeLegacyProductSnapshot,
 } from "../lib/job-product-snapshot";
@@ -20,62 +19,28 @@ const awal = {
   claims: ["tekstur ringan"],
 };
 
-test("snapshot dibuat sekali dan mutation candidate tidak mengubah retry", async () => {
-  let durable: string | null = null;
-  const first = await loadOrCreateJobProductSnapshot({
-    existingRaw: null,
-    candidate: awal,
-    persistIfAbsentAndSafe: async (raw) => (durable ??= raw),
-  });
-  const retry = await loadOrCreateJobProductSnapshot({
-    existingRaw: durable,
-    candidate: () => assert.fail("resume mengevaluasi kolom produk mutasi walau snapshot durable sudah ada"),
-    persistIfAbsentAndSafe: async () => assert.fail("retry menulis ulang snapshot"),
-  });
-  assert.deepEqual(retry, first);
-});
-
-test("dua create konkuren kembali dengan satu pemenang durable", async () => {
-  let durable: string | null = null;
-  let writes = 0;
-  const cas = async (raw: string) => {
-    await new Promise<void>((resolve) => setImmediate(resolve));
-    if (!durable) { durable = raw; writes++; }
-    return durable;
-  };
-  const [a, b] = await Promise.all([
-    loadOrCreateJobProductSnapshot({ existingRaw: null, candidate: awal, persistIfAbsentAndSafe: cas }),
-    loadOrCreateJobProductSnapshot({ existingRaw: null, candidate: { ...awal, productName: "Pesaing" }, persistIfAbsentAndSafe: cas }),
-  ]);
-  assert.equal(writes, 1);
-  assert.deepEqual(a, b);
-});
-
 test("snapshot invalid gagal tertutup", () => {
   assert.throws(() => parseJobProductSnapshot("{}"), /PRODUCT_SNAPSHOT_INVALID/);
   assert.throws(() => parseJobProductSnapshot(JSON.stringify({ ...awal, version: 2, claims: [7] })), /PRODUCT_SNAPSHOT_INVALID/);
   assert.throws(() => parseJobProductSnapshot(JSON.stringify({ ...awal, version: 2, trustedBrand: { source: "guessed", value: "X" } })), /PRODUCT_SNAPSHOT_INVALID/);
   const { priceIdr: _missing, ...legacyWithoutPrice } = awal;
   const legacyRaw = JSON.stringify({ ...legacyWithoutPrice, version: 1 });
-  assert.deepEqual(parseJobProductSnapshot(legacyRaw), { ...legacyWithoutPrice, version: 1, priceIdr: null });
+  assert.deepEqual(parseJobProductSnapshot(legacyRaw), {
+    ...legacyWithoutPrice, version: 1, priceIdr: null,
+    promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
+  });
   assert.throws(() => parseJobProductSnapshot(legacyRaw, { requirePrice: true }), UnsafeLegacyProductSnapshot);
 });
 
-test("snapshot v1 hanya kompatibel untuk non-Story-Ads; v2 tetap membawa harga", async () => {
+test("snapshot v1/v2 tetap terbaca untuk klasifikasi legacy, tetapi runtime promo wajib v3", () => {
   const { priceIdr: _missing, ...legacyWithoutPrice } = awal;
   const legacyRaw = JSON.stringify({ ...legacyWithoutPrice, version: 1 });
-  const nonAds = await loadOrCreateJobProductSnapshot({
-    existingRaw: legacyRaw, candidate: () => assert.fail("resume v1 non-Ads membaca row mutable"),
-    persistIfAbsentAndSafe: async () => assert.fail("resume v1 non-Ads menulis ulang snapshot durable"),
-  });
+  const nonAds = parseJobProductSnapshot(legacyRaw);
   assert.equal(nonAds.version, 1); assert.equal(nonAds.priceIdr, null);
-  await assert.rejects(() => loadOrCreateJobProductSnapshot({
-    existingRaw: legacyRaw, requirePrice: true,
-    candidate: () => assert.fail("Story Ads v1 mencoba backfill harga dari row mutable"),
-    persistIfAbsentAndSafe: async () => assert.fail("Story Ads v1 menimpa snapshot durable"),
-  }), UnsafeLegacyProductSnapshot);
+  assert.throws(() => parseJobProductSnapshot(legacyRaw, { requirePrice: true }), UnsafeLegacyProductSnapshot);
   const v2 = parseJobProductSnapshot(JSON.stringify({ ...awal, version: 2 }), { requirePrice: true });
   assert.equal(v2.version, 2); assert.equal(v2.priceIdr, 89_000);
+  assert.throws(() => parseJobProductSnapshot(JSON.stringify({ ...awal, version: 2 }), { requirePromo: true }), UnsafeLegacyProductSnapshot);
 });
 
 test("A6 identity: talking_head + template job null tetap Story Ads dari snapshot admisi", () => {
@@ -112,7 +77,8 @@ test("admission builder membekukan seluruh metadata dari bentuk row database", (
     claims: JSON.stringify(["ringan", "tanpa pewangi"]),
   });
   assert.deepEqual(parseJobProductSnapshot(raw), {
-    version: 2, productName: "Serum Admission", category: "beauty", priceIdr: 91_000,
+    version: 3, productName: "Serum Admission", category: "beauty", priceIdr: 91_000,
+    promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Admission" },
     productVisualDesc: "botol amber", brandBrief: "faktual",
     claims: ["ringan", "tanpa pewangi"],
@@ -120,11 +86,28 @@ test("admission builder membekukan seluruh metadata dari bentuk row database", (
   assert.throws(() => createJobProductSnapshotRaw({ name: "X", category: "Y", price_idr: 1, claims: "{}" }), /SOURCE_INVALID/);
 });
 
-test("legacy dengan jejak provider tanpa snapshot ditolak", async () => {
-  await assert.rejects(
-    () => loadOrCreateJobProductSnapshot({ existingRaw: null, candidate: awal, persistIfAbsentAndSafe: async () => null }),
-    UnsafeLegacyProductSnapshot
-  );
+test("snapshot v3 mempertahankan promo positif persis dan menolak bentuk promo ambigu", () => {
+  const raw = createJobProductSnapshotRaw({
+    name: "Serum Promo", category: "beauty", price_idr: 85_000,
+    promo_price_before_idr: 110_000,
+    promo_ends_at: "2031-01-02T03:04:05.000Z",
+    promo_stock_left: 11,
+  });
+  const parsed = parseJobProductSnapshot(raw, { requirePromo: true });
+  assert.deepEqual({
+    version: parsed.version,
+    before: parsed.promoPriceBeforeIdr,
+    ends: parsed.promoEndsAt,
+    stock: parsed.promoStockLeft,
+  }, {
+    version: 3,
+    before: 110_000,
+    ends: "2031-01-02T03:04:05.000Z",
+    stock: 11,
+  });
+  assert.throws(() => parseJobProductSnapshot(JSON.stringify({
+    ...parsed, version: 3, promoStockLeft: "11",
+  })), /PRODUCT_SNAPSHOT_INVALID/);
 });
 
 test("A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan enqueue", () => {
@@ -181,7 +164,7 @@ test("tepat tiga admission produksi memasang product snapshot + reference manife
   assert.match(retail, /smokeCreateJob\(/, "call-site admission PostgreSQL retail hilang");
   const pgAdmission = fs.readFileSync(path.join(process.cwd(), "lib/postgres/smoke-runtime.ts"), "utf8");
   assert.match(pgAdmission, /FOR SHARE[\s\S]+approved_reference_manifest[\s\S]+job_product_snapshot/, "PG admission tidak mengunci produk sebelum manifest+snapshot+INSERT");
-  assert.match(pgAdmission, /SELECT[\s\S]{0,300}price_idr[\s\S]{0,300}FROM products/, "PG retail admission tidak membaca harga untuk snapshot");
+  assert.match(pgAdmission, /SELECT[\s\S]{0,500}price_idr[\s\S]{0,500}FROM products/, "PG retail admission tidak membaca harga untuk snapshot");
   const dashboardAdmission = fs.readFileSync(path.join(process.cwd(), "lib/dashboard/render-cell.ts"), "utf8");
   assert.match(dashboardAdmission, /SELECT[\s\S]{0,300}price_idr[\s\S]{0,300}FROM products/, "PG dashboard admission tidak membaca harga untuk snapshot");
 });
@@ -189,17 +172,25 @@ test("tepat tiga admission produksi memasang product snapshot + reference manife
 test("kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot", () => {
   for (const rel of ["lib/worker.ts", "lib/postgres/worker.ts"]) {
     const source = fs.readFileSync(path.join(process.cwd(), rel), "utf8");
-    const load = source.indexOf("const productSnapshot = await loadOrCreateJobProductSnapshot");
+    const load = source.indexOf("const productSnapshot = parseJobProductSnapshot");
     const sa6 = source.indexOf("const voiceoverStartSec = voiceoverStartSecForSegments");
     assert.ok(load > 0 && sa6 > load, `${rel}: SA6 berjalan sebelum snapshot produk immutable dimuat`);
     const sa6Block = source.slice(sa6, sa6 + 500);
     assert.match(sa6Block, /productSnapshot\.productName/);
     assert.match(sa6Block, /productSnapshot\.category/);
     assert.match(sa6Block, /productPriceIdr: snapshotPriceIdr/);
-    assert.match(source.slice(load, sa6), /requirePrice: isStructuredStoryAds\(storyIdentity\)/,
+    assert.match(source.slice(load, sa6), /requirePrice: isStructuredStoryAds\(storyIdentity\)[\s\S]+requirePromo: true/,
       `${rel}: parser snapshot tidak membatasi kebutuhan harga ke Story Ads`);
-    assert.match(source, /isStructuredStoryAds\([^)]+\)[\s\S]{0,180}!\w+\.job_product_snapshot[\s\S]{0,220}PRODUCT_SNAPSHOT_LEGACY_UNSAFE/,
-      `${rel}: Story Ads legacy tanpa snapshot tidak gagal tertutup`);
+    assert.match(source, /!\w+\.job_product_snapshot[\s\S]{0,220}PRODUCT_SNAPSHOT_LEGACY_UNSAFE/,
+      `${rel}: legacy tanpa snapshot tidak gagal tertutup`);
+    assert.match(source.slice(load, sa6), /requirePromo: true/,
+      `${rel}: runtime tidak mewajibkan snapshot promo v3`);
+    const promoBlock = source.slice(source.indexOf("const promo = resolvePromo"), source.indexOf("const promo = resolvePromo") + 500);
+    assert.match(promoBlock, /productSnapshot\.promoPriceBeforeIdr/);
+    assert.match(promoBlock, /productSnapshot\.promoEndsAt/);
+    assert.match(promoBlock, /productSnapshot\.promoStockLeft/);
+    assert.doesNotMatch(promoBlock, /\.promo_price_before_idr|\.promo_ends_at|\.promo_stock_left/,
+      `${rel}: compositor masih membaca promo row produk mutable`);
   }
 });
 

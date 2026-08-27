@@ -282,10 +282,12 @@ export async function smokeCreateJob(userId: string, input: {
         const product = await client.query<{
           name: string; category: string; price_idr: number; raw_meta: string | null;
           product_visual_desc: string | null; brand_brief: string | null; claims: string | null; images: string;
+          promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
           product_type_token: string | null; product_type_confirmed_token: string | null;
           product_type_confirmed_by: string | null; product_type_confirmed_at: Date | string | null;
           product_type_version: number | null; product_type_state: string;
         }>(`SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,images,
+                  promo_price_before_idr,promo_ends_at,promo_stock_left,
                   product_type_token,product_type_confirmed_token,product_type_confirmed_by,
                   product_type_confirmed_at,product_type_version,product_type_state
              FROM products WHERE id=$1 AND user_id=$2 FOR SHARE`, [input.productId, userId]);

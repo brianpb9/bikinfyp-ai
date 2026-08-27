@@ -229,10 +229,13 @@ function siapkanJob(images: string[], tier = "silent_caption"): { jobId: string;
   ).run(scriptId, productId, JSON.stringify(segmen), now(), now());
 
   const jobId = uuid();
+  const productSnapshot = createJobProductSnapshotRaw({
+    name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
+  });
   db.prepare(
-    `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, state, created_at, state_changed_at)
-     VALUES (?,?,?,NULL,?,'hands_only',?,15,'QUEUED',?,?)`
-  ).run(jobId, userId, productId, scriptId, tier, now(), now());
+    `INSERT INTO jobs (id, user_id, product_id, persona_id, script_id, format, quality_tier, duration_s, job_product_snapshot, state, created_at, state_changed_at)
+     VALUES (?,?,?,NULL,?,'hands_only',?,15,?,'QUEUED',?,?)`
+  ).run(jobId, userId, productId, scriptId, tier, productSnapshot, now(), now());
   db.prepare("UPDATE scripts SET job_id = ? WHERE id = ?").run(jobId, scriptId);
   return { jobId, productId };
 }
@@ -933,7 +936,8 @@ test("E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission", as
     assert.equal(current.promo_ends_at, mutasi.promo_ends_at); assert.equal(current.promo_stock_left, mutasi.promo_stock_left);
     const admission = parseJobProductSnapshot(productSnapshot);
     assert.deepEqual(admission, {
-      version: 2, productName: "Serum Glow Bright", category: "beauty", priceIdr: 85_000,
+      version: 3, productName: "Serum Glow Bright", category: "beauty", priceIdr: 85_000,
+      promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
       trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
       productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
     });
@@ -1124,7 +1128,7 @@ test("W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot"
   const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
   setMediaStorageForTests(spy.storage);
   const { jobId } = siapkanJob([rel]);
-  db.prepare("UPDATE jobs SET provider_video='legacy-provider' WHERE id=?").run(jobId);
+  db.prepare("UPDATE jobs SET provider_video='legacy-provider',job_product_snapshot=NULL WHERE id=?").run(jobId);
 
   await processJob(jobId);
 
@@ -1149,7 +1153,7 @@ test("W2 product snapshot invalid gagal tertutup sebelum materialize/provider", 
   assertNolEfekSamping(jobId, spy, "W2 product snapshot invalid");
 });
 
-test("W2 non-Ads melanjutkan snapshot v1 tanpa harga dan mempertahankan bytes durable", async () => {
+test("W2 non-Ads snapshot v1 dikarantina sebelum reference boundary dan tidak ditimpa", async () => {
   const rel = "uploads/w2-affiliate-snapshot-v1/0.webp";
   const bytes = Buffer.from("AFFILIATE-SNAPSHOT-V1-W2");
   const spy = storageSpy(new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]));
@@ -1164,10 +1168,10 @@ test("W2 non-Ads melanjutkan snapshot v1 tanpa harga dan mempertahankan bytes du
 
   await processJob(jobId);
 
-  assert.ok(spy.materializeCalls.length > 0, "resume Affiliate v1 ditolak sebelum reference boundary");
+  assert.deepEqual(spy.materializeCalls, [], "snapshot v1 mencapai reference boundary");
   const durable = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(jobId) as { job_product_snapshot: string }).job_product_snapshot;
   assert.equal(durable, legacyRaw, "worker menimpa snapshot v1 durable dengan row produk mutable");
-  assertNolEfekSamping(jobId, spy, "W2 Affiliate snapshot v1");
+  assertNolEfekSamping(jobId, spy, "W2 legacy snapshot v1");
 });
 
 test("W2 Story Ads SA6 memakai name/category/price snapshot admission setelah row produk dimutasi", async () => {
@@ -1198,7 +1202,8 @@ test("W2 Story Ads SA6 memakai name/category/price snapshot admission setelah ro
       "Story Ads W2 berhenti sebelum reference boundary: SA6 kemungkinan membaca name/category/price row mutasi");
     assert.equal(providerCalls, 0, "fixture harus berhenti di materialize sebelum provider");
     assert.deepEqual(parseJobProductSnapshot(snapshotRaw), {
-      version: 2, productName: "Jasa Uji Snapshot", category: "jasa", priceIdr: 189_000,
+      version: 3, productName: "Jasa Uji Snapshot", category: "jasa", priceIdr: 189_000,
+      promoPriceBeforeIdr: null, promoEndsAt: null, promoStockLeft: null,
       trustedBrand: { source: "products.raw_meta.brand", value: null }, productVisualDesc: null, brandBrief: null, claims: [],
     });
     const durable = (db.prepare("SELECT job_product_snapshot FROM jobs WHERE id=?").get(jobId) as { job_product_snapshot: string }).job_product_snapshot;

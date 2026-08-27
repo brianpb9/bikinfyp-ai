@@ -37,7 +37,7 @@ import { isNeutralStoryAdsTemplate } from "./script-engine/ads-visual-contract";
 import { pesanTanpaReferensi } from "./product-truth";
 import { catatKanariReferensi, GagalTanpaReferensi } from "./kanari-bukti";
 import { loadOrCreateJobReferenceManifest, materializeJobReferenceManifest } from "./job-reference-manifest";
-import { claimsFromRaw, loadOrCreateJobProductSnapshot, trustedBrandFromRawMeta, UnsafeLegacyProductSnapshot } from "./job-product-snapshot";
+import { parseJobProductSnapshot, UnsafeLegacyProductSnapshot } from "./job-product-snapshot";
 import { normalisasiFormatWorker } from "./media/worker-format";
 import { appendPackshotUntukQc } from "./media/packshot-asli";
 import { assertApprovedReferenceBrands } from "./worker-reference-brand-gate";
@@ -134,39 +134,14 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const category = descKustom && !isNeutralStoryAdsTemplate(storyIdentity.templateId)
       ? { ...presetKategori, promptSeed: descKustom, handsPrompt: descKustom }
       : presetKategori;
-    if (isStructuredStoryAds(storyIdentity) && !job.job_product_snapshot) {
+    if (!job.job_product_snapshot) {
       throw new UnsafeLegacyProductSnapshot(
-        "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: Story Ads lama tanpa harga admission tidak boleh memakai row produk mutable."
+        "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: job tanpa snapshot promo v3 tidak boleh memakai row produk mutable."
       );
     }
-    const productSnapshot = await loadOrCreateJobProductSnapshot({
-      existingRaw: job.job_product_snapshot ?? null,
+    const productSnapshot = parseJobProductSnapshot(job.job_product_snapshot, {
       requirePrice: isStructuredStoryAds(storyIdentity),
-      candidate: () => ({
-        productName: product.name,
-        category: product.category,
-        priceIdr: product.price_idr,
-        trustedBrand: { source: "products.raw_meta.brand", value: trustedBrandFromRawMeta(product.raw_meta) },
-        productVisualDesc: product.product_visual_desc ?? null,
-        brandBrief: product.brand_brief ?? null,
-        claims: claimsFromRaw(product.claims),
-      }),
-      persistIfAbsentAndSafe: async (candidateRaw) => db.transaction(() => {
-        const row = db.prepare(
-          "SELECT job_product_snapshot,provider_video,provider_voice,output_url,cost_actual_idr FROM jobs WHERE id=?"
-        ).get(job.id) as { job_product_snapshot: string | null; provider_video: string | null; provider_voice: string | null; output_url: string | null; cost_actual_idr: number } | undefined;
-        if (!row) throw new Error("Job tidak ditemukan saat mematok snapshot metadata produk.");
-        if (row.job_product_snapshot) return row.job_product_snapshot;
-        const traces = db.prepare(
-          `SELECT
-            EXISTS(SELECT 1 FROM outputs WHERE job_id=?) OR
-            EXISTS(SELECT 1 FROM provider_tasks WHERE job_id=?) OR
-            EXISTS(SELECT 1 FROM job_shots WHERE job_id=?) AS unsafe`
-        ).get(job.id, job.id, job.id) as { unsafe: number };
-        if (row.provider_video || row.provider_voice || row.output_url || row.cost_actual_idr > 0 || traces.unsafe) return null;
-        db.prepare("UPDATE jobs SET job_product_snapshot=? WHERE id=?").run(candidateRaw, job.id);
-        return candidateRaw;
-      })(),
+      requirePromo: true,
     });
     const snapshotPriceIdr = productSnapshot.priceIdr ?? product.price_idr;
     product = {
@@ -398,15 +373,14 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const cartLabel = cartLabelForUrl(product.source_url);
     const ctaBadgeText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning »" : "Klik Keranjang »";
     const ctaQcText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning" : "Klik Keranjang";
-    // Add-on promo: overlay harga jadi harga-coret + persen + deadline. Dicek
-    // ULANG saat render (bukan saat approve) — promo yang keburu kedaluwarsa
-    // di-drop dari overlay tanpa memblokir job (keputusan 2026-08-06); teks
-    // skrip yang menyebut promo sudah melewati gerbang HITL user.
+    // Add-on promo memakai nilai snapshot admission saja. Waktu kedaluwarsa
+    // tetap dievaluasi saat render, tetapi mutation row produk tidak pernah
+    // dapat mengubah harga-coret, deadline, atau scarcity job ini.
     const promo = resolvePromo({
       priceIdr: product.price_idr,
-      promoPriceBeforeIdr: product.promo_price_before_idr,
-      promoEndsAt: product.promo_ends_at,
-      promoStockLeft: product.promo_stock_left,
+      promoPriceBeforeIdr: productSnapshot.promoPriceBeforeIdr,
+      promoEndsAt: productSnapshot.promoEndsAt,
+      promoStockLeft: productSnapshot.promoStockLeft,
     });
     const priceOverlayText = promo ? formatPromoOverlayText(promo) : `Cuma ${formatHargaOverlay(product.price_idr)}`;
     const finalTexts = [
