@@ -52,6 +52,39 @@ export const PRODUCT_TYPE_SQLITE_UPGRADE_GUARDS = `
   )) BEGIN SELECT RAISE(ABORT, 'invalid product type state or confirmation'); END;
 `;
 
+export const CATEGORY_REVIEW_SQLITE_UPGRADE_GUARDS = `
+  UPDATE products SET category_review_state='QUARANTINED', category_review_reason='CATEGORY_UNKNOWN',
+    category_reviewed_by=NULL, category_reviewed_role=NULL, category_reviewed_at=NULL,
+    category_review_version=CASE WHEN category_review_version < 1 THEN 1 ELSE category_review_version END
+  WHERE category_review_state NOT IN ('CLEAR','QUARANTINED')
+     OR category_review_state='CLEAR'
+     OR category_review_reason IS NULL
+     OR category_review_reason NOT IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE');
+  CREATE TRIGGER IF NOT EXISTS products_category_review_insert_guard
+  BEFORE INSERT ON products WHEN
+    NEW.category_review_version < 1 OR NOT (
+      (NEW.category_review_state='QUARANTINED'
+        AND NEW.category_review_reason IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE')
+        AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
+      OR
+      (NEW.category_review_state='CLEAR' AND NEW.category_review_reason IS NULL
+        AND length(trim(NEW.category_reviewed_by)) > 0 AND length(trim(NEW.category_reviewed_role)) > 0
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', NEW.category_reviewed_at)=NEW.category_reviewed_at)
+    ) BEGIN SELECT RAISE(ABORT, 'invalid category review state'); END;
+  CREATE TRIGGER IF NOT EXISTS products_category_review_update_guard
+  BEFORE UPDATE OF category_review_state,category_review_reason,category_reviewed_by,
+    category_reviewed_role,category_reviewed_at,category_review_version ON products WHEN
+    NEW.category_review_version < 1 OR NOT (
+      (NEW.category_review_state='QUARANTINED'
+        AND NEW.category_review_reason IN ('CATEGORY_UNKNOWN','CATEGORY_AMBIGUOUS','CATEGORY_BUNDLE')
+        AND NEW.category_reviewed_by IS NULL AND NEW.category_reviewed_role IS NULL AND NEW.category_reviewed_at IS NULL)
+      OR
+      (NEW.category_review_state='CLEAR' AND NEW.category_review_reason IS NULL
+        AND length(trim(NEW.category_reviewed_by)) > 0 AND length(trim(NEW.category_reviewed_role)) > 0
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', NEW.category_reviewed_at)=NEW.category_reviewed_at)
+    ) BEGIN SELECT RAISE(ABORT, 'invalid category review state'); END;
+`;
+
 export function getDb(): Database.Database {
   // Fail closed in production: this checkpoint has not installed the pg
   // adapter yet, so SQLite must never be used as an ephemeral-disk fallback.
@@ -136,6 +169,12 @@ export function getDb(): Database.Database {
       "product_type_confirmed_at TEXT",
       "product_type_version INTEGER",
       "product_type_state TEXT NOT NULL DEFAULT 'QUARANTINED'",
+      "category_review_state TEXT NOT NULL DEFAULT 'QUARANTINED'",
+      "category_review_reason TEXT DEFAULT 'CATEGORY_UNKNOWN'",
+      "category_reviewed_by TEXT",
+      "category_reviewed_role TEXT",
+      "category_reviewed_at TEXT",
+      "category_review_version INTEGER NOT NULL DEFAULT 1",
     ]) {
       const colName = colDef.split(" ")[0];
       if (!prodCols.includes(colName)) db.exec(`ALTER TABLE products ADD COLUMN ${colDef}`);
@@ -144,6 +183,7 @@ export function getDb(): Database.Database {
     // idempoten ini adalah padanan durable constraint schema baru: record yang
     // kosong/invalid tidak pernah boleh dipromosikan menjadi CONFIRMED.
     db.exec(PRODUCT_TYPE_SQLITE_UPGRADE_GUARDS);
+    db.exec(CATEGORY_REVIEW_SQLITE_UPGRADE_GUARDS);
     // Migrasi users -> email sebagai identifier (phone jadi nullable). Aman re-run:
     // hanya jalan bila skema lama terdeteksi (phone NOT NULL). FK dimatikan sesaat
     // selama rebuild (jobs/products/personas mereferensikan users).
@@ -204,7 +244,7 @@ export function audit(actor: string, action: string, entity: string, entityId: s
 
 // --- Row types ---
 export interface UserRow { id: string; phone: string | null; email: string | null; name: string | null; tier: string; locale: string; created_at: string }
-export interface ProductRow { id: string; user_id: string; org_id?: string | null; source_url: string | null; name: string; price_idr: number; category: string; product_type_token?: string | null; product_type_confirmed_token?: string | null; product_type_confirmed_by?: string | null; product_type_confirmed_at?: string | Date | null; product_type_version?: number | null; product_type_state?: string | null; product_visual_desc?: string | null; brand_brief?: string | null; claims?: string | null; images: string; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; raw_meta: string | null; created_at: string }
+export interface ProductRow { id: string; user_id: string; org_id?: string | null; source_url: string | null; name: string; price_idr: number; category: string; product_type_token?: string | null; product_type_confirmed_token?: string | null; product_type_confirmed_by?: string | null; product_type_confirmed_at?: string | Date | null; product_type_version?: number | null; product_type_state?: string | null; category_review_state?: string | null; category_review_reason?: string | null; category_reviewed_by?: string | null; category_reviewed_role?: string | null; category_reviewed_at?: string | Date | null; category_review_version?: number | null; product_visual_desc?: string | null; brand_brief?: string | null; claims?: string | null; images: string; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; raw_meta: string | null; created_at: string }
 export interface PersonaRow { id: string; user_id: string; name: string; creator_category: string; voice_id: string; register: string; created_at: string }
 export interface ScriptRow { id: string; job_id: string | null; product_id: string; hook_family: string; emotion: string; register: string; segments: string; caption: string; hashtags: string; validation_result: string; quality_tier: string; hook_level?: string; approved_by_user_at: string | null; edited_by_user: number; created_at: string }
 export interface JobRow { id: string; user_id: string; org_id: string | null; bulk_run_id: string | null; avatar_custom_desc?: string | null; product_id: string; persona_id: string | null; script_id: string; format: string; quality_tier: string; duration_s: number; state: string; provider_video: string | null; provider_voice: string | null; cost_actual_idr: number; qc_result: string | null; output_url: string | null; qc_retry_count: number; created_at: string; completed_at: string | null; state_changed_at?: string | null; approved_reference_manifest?: string | null; job_product_snapshot?: string | null }

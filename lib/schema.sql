@@ -113,6 +113,14 @@ CREATE TABLE IF NOT EXISTS products (
   product_type_version INTEGER,
   product_type_state TEXT NOT NULL DEFAULT 'QUARANTINED'
     CHECK (product_type_state IN ('QUARANTINED', 'CONFIRMED')),
+  category_review_state TEXT NOT NULL DEFAULT 'QUARANTINED'
+    CHECK (category_review_state IN ('CLEAR', 'QUARANTINED')),
+  category_review_reason TEXT DEFAULT 'CATEGORY_UNKNOWN'
+    CHECK (category_review_reason IS NULL OR category_review_reason IN ('CATEGORY_UNKNOWN', 'CATEGORY_AMBIGUOUS', 'CATEGORY_BUNDLE')),
+  category_reviewed_by TEXT,
+  category_reviewed_role TEXT,
+  category_reviewed_at TEXT,
+  category_review_version INTEGER NOT NULL DEFAULT 1 CHECK (category_review_version >= 1),
   product_visual_desc TEXT, -- deskripsi visual produk dari user (konsistensi identitas shot)
   brand_brief TEXT, -- M8: arahan kreatif bebas dari brand (beda dari visual_desc di atas)
   claims TEXT, -- JSON array klaim singkat untuk overlay teks (ditulis brand, bukan AI)
@@ -140,6 +148,15 @@ CREATE TABLE IF NOT EXISTS products (
       AND strftime('%Y-%m-%dT%H:%M:%fZ', product_type_confirmed_at) IS NOT NULL
       AND strftime('%Y-%m-%dT%H:%M:%fZ', product_type_confirmed_at) = product_type_confirmed_at
     )
+  ),
+  CHECK (
+    (category_review_state = 'QUARANTINED'
+      AND category_review_reason IN ('CATEGORY_UNKNOWN', 'CATEGORY_AMBIGUOUS', 'CATEGORY_BUNDLE')
+      AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
+    OR
+    (category_review_state = 'CLEAR' AND category_review_reason IS NULL
+      AND length(trim(category_reviewed_by)) > 0 AND length(trim(category_reviewed_role)) > 0
+      AND strftime('%Y-%m-%dT%H:%M:%fZ', category_reviewed_at) = category_reviewed_at)
   )
 );
 CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id);

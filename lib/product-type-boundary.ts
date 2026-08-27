@@ -21,6 +21,101 @@ export interface ProductTypeBoundaryInput {
   trustedSignal: TrustedProductTypeSource | null;
 }
 
+export const C5_CATEGORY_IDS = Object.freeze([
+  "beauty", "fashion", "muslim_fashion", "home", "kitchen", "gadget", "food", "kids",
+] as const);
+
+export type CategoryReviewReason = "CATEGORY_UNKNOWN" | "CATEGORY_AMBIGUOUS" | "CATEGORY_BUNDLE";
+export type StructuredCategoryOutcome = "KNOWN" | "UNKNOWN" | "AMBIGUOUS" | "BUNDLE";
+
+export interface CategoryReviewRecord {
+  state: "CLEAR" | "QUARANTINED";
+  reason: CategoryReviewReason | null;
+  reviewedBy: string | null;
+  reviewedRole: string | null;
+  reviewedAt: string | null;
+  version: number;
+}
+
+export interface CategoryReviewRelease {
+  actorId: string;
+  actorRole: string;
+  reviewedAt: string;
+  reason: string;
+  expectedVersion: number;
+}
+
+const CATEGORY_ID_SET = new Set<string>(C5_CATEGORY_IDS);
+
+/** C5 accepts a structured classifier outcome only. It never guesses from text. */
+export function deriveCategoryReview(
+  category: unknown,
+  outcome: StructuredCategoryOutcome = "KNOWN",
+): CategoryReviewRecord {
+  const token = normalizeToken(category);
+  let reason: CategoryReviewReason | null = null;
+  if (outcome === "BUNDLE") reason = "CATEGORY_BUNDLE";
+  else if (outcome === "AMBIGUOUS") reason = "CATEGORY_AMBIGUOUS";
+  else if (outcome === "UNKNOWN" || token === "default" || !CATEGORY_ID_SET.has(token)) reason = "CATEGORY_UNKNOWN";
+  return Object.freeze({
+    state: reason ? "QUARANTINED" : "CLEAR",
+    reason,
+    reviewedBy: null,
+    reviewedRole: null,
+    reviewedAt: null,
+    version: 1,
+  });
+}
+
+export function assertCategoryReviewClear(record: Partial<CategoryReviewRecord> | null | undefined): void {
+  if (record?.state !== "CLEAR" || record.reason !== null || !Number.isInteger(record.version) || Number(record.version) < 1) {
+    throw new ApiError(422, {
+      code: "CATEGORY_REVIEW_REQUIRED",
+      message_id: "Kategori produk perlu ditinjau manusia yang berwenang sebelum proses dilanjutkan.",
+      message_en: "Authorized human category review is required before continuing.",
+      retryable: false,
+    });
+  }
+}
+
+/**
+ * Produces the only legal C5 release transition. Persistence must compare-and-set
+ * state=QUARANTINED and version=expectedVersion in the same transaction as its
+ * append-only audit insert; ordinary product-type confirmation never calls this.
+ */
+export function authorizeCategoryReviewRelease(
+  current: CategoryReviewRecord,
+  release: CategoryReviewRelease,
+  configuredRole = process.env.C5_AUTHORIZED_HUMAN_REVIEW_ROLE ?? "",
+): CategoryReviewRecord {
+  const requiredRole = configuredRole.trim();
+  if (!requiredRole || !release.actorRole.trim() || release.actorRole !== requiredRole) {
+    throw new ApiError(403, {
+      code: "CATEGORY_REVIEW_ROLE_FORBIDDEN",
+      message_id: "Peran peninjau kategori belum disetel atau tidak cocok.",
+      message_en: "The authorized category-review role is missing or does not match.",
+      retryable: false,
+    });
+  }
+  if (current.state !== "QUARANTINED" || current.reason === null || release.expectedVersion !== current.version
+    || !release.actorId.trim() || !release.reason.trim() || !isCanonicalTimestamp(release.reviewedAt)) {
+    throw new ApiError(409, {
+      code: "CATEGORY_REVIEW_RELEASE_CONFLICT",
+      message_id: "Status tinjauan kategori berubah atau bukti rilis belum lengkap.",
+      message_en: "Category-review state changed or release evidence is incomplete.",
+      retryable: false,
+    });
+  }
+  return Object.freeze({
+    state: "CLEAR",
+    reason: null,
+    reviewedBy: release.actorId,
+    reviewedRole: release.actorRole,
+    reviewedAt: release.reviewedAt,
+    version: current.version + 1,
+  });
+}
+
 interface TrustedProductTypeSource {
   kind: "TRUSTED_TYPE_SOURCE";
   token: string;
