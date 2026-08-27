@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import Database from "better-sqlite3";
 import fs from "node:fs";
 import test, { afterEach } from "node:test";
 import { ApiError } from "../lib/errors";
@@ -8,6 +9,7 @@ import {
 } from "../lib/product-type-boundary";
 import { setProductCreateDependenciesForTests } from "../lib/product-create-dependencies";
 import { POST as createProduct } from "../app/api/products/route";
+import { PRODUCT_TYPE_SQLITE_UPGRADE_GUARDS } from "../lib/db";
 
 const declared = (token: string) => ({
   kind: "DECLARED_PRODUCT_TYPE" as const,
@@ -92,4 +94,52 @@ test("C2 durable schema and migration quarantine legacy rows without taxonomy co
   assert.match(postgres, /DEFAULT 'QUARANTINED'/);
   assert.match(postgres, /product_type_token\s*=\s*product_type_confirmed_token/);
   assert.doesNotMatch(postgres, /toothpaste|serum|facewash|pasta gigi/i);
+});
+
+test("C2 upgraded SQLite quarantines old invalid confirmation and rejects future invalid confirmed rows", () => {
+  const fresh = new Database(":memory:");
+  fresh.pragma("foreign_keys = ON");
+  fresh.exec(fs.readFileSync("lib/schema.sql", "utf8"));
+  fresh.prepare("INSERT INTO users (id,phone,tier,locale,created_at) VALUES (?,?,?,?,?)")
+    .run("user-c2", "081200000001", "free", "id-ID", "2026-08-27T00:00:00.000Z");
+  assert.throws(
+    () => fresh.prepare(`INSERT INTO products
+      (id,user_id,name,price_idr,category,product_type_token,product_type_confirmed_token,
+       product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,images,created_at)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`).run(
+        "fresh-invalid", "user-c2", "Produk", 10000, "beauty", "\t", "\t", " ", "", null,
+        "CONFIRMED", "[]", "2026-08-27T00:00:00.000Z",
+      ),
+    /CHECK constraint failed/,
+  );
+  fresh.close();
+
+  const upgraded = new Database(":memory:");
+  upgraded.exec(`CREATE TABLE products (
+    id TEXT PRIMARY KEY,
+    product_type_token TEXT,
+    product_type_confirmed_token TEXT,
+    product_type_confirmed_by TEXT,
+    product_type_confirmed_at TEXT,
+    product_type_version INTEGER,
+    product_type_state TEXT NOT NULL DEFAULT 'QUARANTINED'
+  )`);
+  upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
+    .run("old-invalid", "", "", "", "", 1, "CONFIRMED");
+
+  upgraded.exec(PRODUCT_TYPE_SQLITE_UPGRADE_GUARDS);
+  assert.equal((upgraded.prepare("SELECT product_type_state FROM products WHERE id='old-invalid'").get() as { product_type_state: string }).product_type_state, "QUARANTINED");
+
+  assert.throws(
+    () => upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
+      .run("new-invalid", " ", " ", " ", "not-a-time", null, "CONFIRMED"),
+    /invalid confirmed product type/,
+  );
+  upgraded.prepare("INSERT INTO products VALUES (?,?,?,?,?,?,?)")
+    .run("valid", "serum wajah", "serum wajah", "user-c2", "2026-08-27T00:00:00.000Z", 1, "CONFIRMED");
+  assert.throws(
+    () => upgraded.prepare("UPDATE products SET product_type_confirmed_by='' WHERE id='valid'").run(),
+    /invalid confirmed product type/,
+  );
+  upgraded.close();
 });

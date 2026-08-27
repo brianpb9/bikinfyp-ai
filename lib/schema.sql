@@ -130,8 +130,14 @@ CREATE TABLE IF NOT EXISTS products (
       AND product_type_confirmed_token IS NOT NULL
       AND product_type_confirmed_by IS NOT NULL
       AND product_type_confirmed_at IS NOT NULL
+      AND product_type_version IS NOT NULL
       AND product_type_version = 1
       AND product_type_token = product_type_confirmed_token
+      AND length(trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) > 0
+      AND product_type_token = trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
+      AND product_type_confirmed_token = trim(product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
+      AND length(trim(product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) > 0
+      AND julianday(product_type_confirmed_at) IS NOT NULL
     )
   )
 );

@@ -84,7 +84,10 @@ export class PgProductPersonaScriptRepository {
       const product = await this.insertProduct(client, userId, input);
       await this.insertAudit(client, userId, "product.created", "products", product.id, {
         name: product.name, category: product.category, product_type: product.product_type_token,
-        product_type_confirmation: product.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : "QUARANTINED",
+        product_type_state: product.product_type_state,
+        product_type_confirmation: product.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : null,
+        product_type_confirmed_by: product.product_type_confirmed_by,
+        product_type_confirmed_at: product.product_type_confirmed_at,
         product_type_version: product.product_type_version,
       });
       commitAttempted = true;
@@ -161,7 +164,10 @@ export class PgProductPersonaScriptRepository {
     const product = result.rows[0] ?? null;
     if (product) await this.appendAudit(userId, "product.updated", "products", productId, {
       name: product.name, price_idr: product.price_idr, product_type: product.product_type_token,
-      product_type_confirmation: "USER_SELF_ASSERTION", product_type_version: product.product_type_version,
+      product_type_state: product.product_type_state, product_type_confirmation: "USER_SELF_ASSERTION",
+      product_type_confirmed_by: product.product_type_confirmed_by,
+      product_type_confirmed_at: product.product_type_confirmed_at,
+      product_type_version: product.product_type_version,
     });
     return product;
   }

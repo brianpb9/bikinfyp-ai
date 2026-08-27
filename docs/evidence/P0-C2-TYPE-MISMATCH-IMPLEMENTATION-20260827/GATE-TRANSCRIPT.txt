@@ -6,22 +6,26 @@ tests=5 pass=5 fail=0 exit=0
 C2_GREEN_VERIFIER={"exit_zero":true,"all_five_pass":true,"zero_fail":true,"no_contract_violation":true}
 
 $ SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts
-tests=4 pass=4 fail=0 exit=0
+tests=5 pass=5 fail=0 exit=0
 
 $ SCRIPT_LLM=0 npx tsx --test tests/admission-evidence-enforcement.test.ts tests/http-photo-mutation-resume-w2.test.ts tests/product-truth-worker-reference.test.ts tests/hitl.test.ts
 tests=43 pass=43 fail=0 exit=0
+
+$ SCRIPT_LLM=0 npx tsx --test tests/pg-product-truth-w1.test.ts
+tests=31 pass=1 fail=0 skipped=30 exit=0
+E7 response+audit regression is present and classified skipped because UJI_PG_URL is absent.
 
 $ npx tsc --noEmit
 exit=0
 
 $ npm test
-tests=1252 pass=1205 fail=0 cancelled=0 skipped=47 exit=0
+tests=1253 pass=1206 fail=0 cancelled=0 skipped=47 exit=0
 
 $ npm run build
 exit=0
 
 $ bash scripts/test-postgres-schema.sh
-exit=0
+NOT_RUN: local PostgreSQL readiness check failed before schema application.
 
 $ bash scripts/test-postgres-production-migrations.sh
 NOT_RUN: local PostgreSQL readiness check failed before disposable database creation.

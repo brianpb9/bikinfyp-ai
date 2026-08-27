@@ -7,6 +7,41 @@ import { assertLegacySqliteRuntimeAllowed } from "./database-config";
 // Singleton lintas hot-reload Next dev (modul route bisa dimuat ulang).
 const g = globalThis as unknown as { __racunDb?: Database.Database };
 
+export const PRODUCT_TYPE_SQLITE_UPGRADE_GUARDS = `
+  UPDATE products SET product_type_state = 'QUARANTINED'
+   WHERE product_type_state = 'CONFIRMED' AND (
+     product_type_token IS NULL OR length(trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
+     OR product_type_confirmed_token IS NULL OR product_type_token <> product_type_confirmed_token
+     OR product_type_token <> trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
+     OR product_type_confirmed_token <> trim(product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
+     OR product_type_confirmed_by IS NULL OR length(trim(product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
+     OR product_type_confirmed_at IS NULL OR julianday(product_type_confirmed_at) IS NULL
+     OR product_type_version IS NULL OR product_type_version <> 1
+   );
+  CREATE TRIGGER IF NOT EXISTS products_type_confirmation_insert_guard
+  BEFORE INSERT ON products WHEN NEW.product_type_state = 'CONFIRMED' AND (
+    NEW.product_type_token IS NULL OR length(trim(NEW.product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
+    OR NEW.product_type_confirmed_token IS NULL OR NEW.product_type_token <> NEW.product_type_confirmed_token
+    OR NEW.product_type_token <> trim(NEW.product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
+    OR NEW.product_type_confirmed_token <> trim(NEW.product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
+    OR NEW.product_type_confirmed_by IS NULL OR length(trim(NEW.product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
+    OR NEW.product_type_confirmed_at IS NULL OR julianday(NEW.product_type_confirmed_at) IS NULL
+    OR NEW.product_type_version IS NULL OR NEW.product_type_version <> 1
+  ) BEGIN SELECT RAISE(ABORT, 'invalid confirmed product type'); END;
+  CREATE TRIGGER IF NOT EXISTS products_type_confirmation_update_guard
+  BEFORE UPDATE OF product_type_token,product_type_confirmed_token,product_type_confirmed_by,
+    product_type_confirmed_at,product_type_version,product_type_state ON products
+  WHEN NEW.product_type_state = 'CONFIRMED' AND (
+    NEW.product_type_token IS NULL OR length(trim(NEW.product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
+    OR NEW.product_type_confirmed_token IS NULL OR NEW.product_type_token <> NEW.product_type_confirmed_token
+    OR NEW.product_type_token <> trim(NEW.product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
+    OR NEW.product_type_confirmed_token <> trim(NEW.product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||' ')
+    OR NEW.product_type_confirmed_by IS NULL OR length(trim(NEW.product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||' ')) = 0
+    OR NEW.product_type_confirmed_at IS NULL OR julianday(NEW.product_type_confirmed_at) IS NULL
+    OR NEW.product_type_version IS NULL OR NEW.product_type_version <> 1
+  ) BEGIN SELECT RAISE(ABORT, 'invalid confirmed product type'); END;
+`;
+
 export function getDb(): Database.Database {
   // Fail closed in production: this checkpoint has not installed the pg
   // adapter yet, so SQLite must never be used as an ephemeral-disk fallback.
@@ -84,14 +119,21 @@ export function getDb(): Database.Database {
       db.exec("ALTER TABLE products ADD COLUMN promo_ends_at TEXT");
       db.exec("ALTER TABLE products ADD COLUMN promo_stock_left INTEGER");
     }
-    if (!prodCols.includes("product_type_token")) {
-      db.exec("ALTER TABLE products ADD COLUMN product_type_token TEXT");
-      db.exec("ALTER TABLE products ADD COLUMN product_type_confirmed_token TEXT");
-      db.exec("ALTER TABLE products ADD COLUMN product_type_confirmed_by TEXT");
-      db.exec("ALTER TABLE products ADD COLUMN product_type_confirmed_at TEXT");
-      db.exec("ALTER TABLE products ADD COLUMN product_type_version INTEGER");
-      db.exec("ALTER TABLE products ADD COLUMN product_type_state TEXT NOT NULL DEFAULT 'QUARANTINED'");
+    for (const colDef of [
+      "product_type_token TEXT",
+      "product_type_confirmed_token TEXT",
+      "product_type_confirmed_by TEXT",
+      "product_type_confirmed_at TEXT",
+      "product_type_version INTEGER",
+      "product_type_state TEXT NOT NULL DEFAULT 'QUARANTINED'",
+    ]) {
+      const colName = colDef.split(" ")[0];
+      if (!prodCols.includes(colName)) db.exec(`ALTER TABLE products ADD COLUMN ${colDef}`);
     }
+    // ALTER TABLE SQLite tidak bisa menambahkan CHECK ke tabel lama. Trigger
+    // idempoten ini adalah padanan durable constraint schema baru: record yang
+    // kosong/invalid tidak pernah boleh dipromosikan menjadi CONFIRMED.
+    db.exec(PRODUCT_TYPE_SQLITE_UPGRADE_GUARDS);
     // Migrasi users -> email sebagai identifier (phone jadi nullable). Aman re-run:
     // hanya jalan bila skema lama terdeteksi (phone NOT NULL). FK dimatikan sesaat
     // selama rebuild (jobs/products/personas mereferensikan users).

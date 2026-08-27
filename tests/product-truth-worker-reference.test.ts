@@ -898,10 +898,18 @@ test("E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission", as
 
     const response = await patchProdukRetail(productId, userId, "081200000003", mutasi);
     if (response.status !== 200) assert.fail(`PATCH E3 gagal (${response.status}): ${await response.text()}`);
-    const responseBody = await response.json() as { ok: boolean; product_id: string; name: string; price_idr: number; category: string };
-    assert.deepEqual(responseBody, {
-      ok: true, product_id: productId, name: mutasi.name, price_idr: mutasi.price_idr, category: mutasi.category,
-    }, "response E3 bukan subset pasca-mutasi otoritatif");
+    const responseBody = await response.json() as Record<string, unknown>;
+    assert.equal(responseBody.ok, true);
+    assert.equal(responseBody.product_id, productId);
+    assert.equal(responseBody.name, mutasi.name);
+    assert.equal(responseBody.price_idr, mutasi.price_idr);
+    assert.equal(responseBody.category, mutasi.category);
+    assert.equal(responseBody.product_type, "serum wajah");
+    assert.deepEqual(responseBody.product_type_confirmation, {
+      state: "CONFIRMED", actor_id: userId,
+      confirmed_at: (db.prepare("SELECT product_type_confirmed_at FROM products WHERE id=?").get(productId) as { product_type_confirmed_at: string }).product_type_confirmed_at,
+      version: 1, provenance: "USER_SELF_ASSERTION",
+    }, "response E3 tidak membawa provenance confirmation terotorisasi");
     const current = db.prepare(
       "SELECT name,price_idr,category,product_visual_desc,brand_brief,claims,raw_meta,promo_price_before_idr,promo_ends_at,promo_stock_left FROM products WHERE id=?"
     ).get(productId) as {

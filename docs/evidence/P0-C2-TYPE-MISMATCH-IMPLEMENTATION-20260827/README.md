@@ -20,7 +20,9 @@ A2, A3, and the A4 locked-cell boundary validate the durable `CONFIRMED` state
 before generation, snapshot, job, hold, enqueue, provider, or related writes.
 The PostgreSQL migration adds state/shape/equality constraints; SQLite new
 schema has equivalent constraints, while additive runtime migration quarantines
-existing rows.
+existing invalid rows and installs insert/update guards on upgraded databases.
+Confirmed records cannot carry empty/whitespace tokens or actors, invalid
+timestamps, missing versions, or unequal tokens.
 
 Retail and campaign UI require an explicit type plus a separate confirmation
 checkbox explaining that the value is the user's own assertion, not staff
@@ -31,15 +33,21 @@ payment, credit, queue, or production operation is bundled here.
 
 - `node scripts/verify-c2-type-mismatch-green.mjs`: 5/5 PASS.
 - `SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts`:
-  4/4 PASS.
+  5/5 PASS, including direct invalid-row probes on upgraded SQLite.
 - Focused admission/mutation regressions: 43/43 PASS.
 - `npx tsc --noEmit`: PASS.
-- `npm test`: 1252 tests, 1205 pass, 0 fail, 47 skipped.
+- `npm test`: 1253 tests, 1206 pass, 0 fail, 47 skipped.
 - `npm run build`: PASS.
-- PostgreSQL schema static verification: PASS.
-- Disposable PostgreSQL production-migration runner: not executed because the
-  local PostgreSQL readiness check failed before database creation. No
-  production database was contacted or mutated.
+- PostgreSQL migration contract assertions in the implementation test: PASS.
+- The local PostgreSQL schema and disposable production-migration scripts did
+  not cross readiness because the local server was unavailable. No disposable
+  database was created and no production database was contacted or mutated.
+
+Reviewer remediation also makes E3/E7 return an authorized confirmation
+summary and records token, state, provenance, actor, timestamp, and version in
+mutation audits. SQLite E3 exercises response+audit directly; the PostgreSQL E7
+fixture carries the same assertions and is classified skipped without a local
+database.
 
 See `FOUNDER-DECISION.md`, `VALIDATION.json`, and `GATE-TRANSCRIPT.txt` in this
 directory for the bounded decision and machine-readable totals.

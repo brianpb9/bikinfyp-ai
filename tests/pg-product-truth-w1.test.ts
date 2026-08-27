@@ -355,8 +355,11 @@ async function siapkanJobOrgLewatAdmisi(images: string[], isi: Map<string, Buffe
   );
   await pool.query(
     `INSERT INTO products
-      (id,user_id,org_id,name,price_idr,category,images,raw_meta,product_visual_desc,brand_brief,claims,promo_price_before_idr,created_at)
-     VALUES ($1,$2,$3,'Serum Glow Bright',85000,'beauty',$4,$5,'BOTOL-AMBER-AWAL','ARAH-BRAND-AWAL',$6,110000,$7)`,
+      (id,user_id,org_id,name,price_idr,category,product_type_token,product_type_confirmed_token,
+       product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
+       images,raw_meta,product_visual_desc,brand_brief,claims,promo_price_before_idr,created_at)
+     VALUES ($1,$2,$3,'Serum Glow Bright',85000,'beauty','serum wajah','serum wajah',$2,$7,1,'CONFIRMED',
+       $4,$5,'BOTOL-AMBER-AWAL','ARAH-BRAND-AWAL',$6,110000,$7)`,
     [productId, ownerId, orgId, JSON.stringify(images), JSON.stringify({ brand: "Merek Awal" }), JSON.stringify(["klaim awal"]), t]
   );
   await pool.query(
@@ -396,7 +399,7 @@ async function siapkanJobOrgLewatAdmisi(images: string[], isi: Map<string, Buffe
     "admission E7 menjalankan worker otomatis sebelum processPostgresJob eksplisit");
   const { issueToken } = await import("../lib/auth");
   return {
-    jobId: result.job_id, productId, orgId,
+    jobId: result.job_id, productId, orgId, ownerId,
     ownerToken: await issueToken(ownerId, `08126${process.pid}`),
     intruderToken: await issueToken(intruderId, `08127${process.pid}`),
   };
@@ -921,7 +924,7 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
     [relPackshot, PACKSHOT],
     [`${relPackshot}.meta.json`, sidecar(PACKSHOT, true)],
   ]);
-  const { jobId, productId, ownerToken, intruderToken } = await siapkanJobOrgLewatAdmisi([relBanner, relPackshot], isi);
+  const { jobId, productId, ownerId, ownerToken, intruderToken } = await siapkanJobOrgLewatAdmisi([relBanner, relPackshot], isi);
   const admissionRow = (await pool.query("SELECT job_product_snapshot,approved_reference_manifest FROM jobs WHERE id=$1", [jobId])).rows[0];
   const productSnapshot = admissionRow.job_product_snapshot;
   const admissionManifest = JSON.parse(admissionRow.approved_reference_manifest) as { references: { rel: string; snapshotRel: string }[] };
@@ -950,6 +953,26 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
   assert.equal(responseBody.brand_brief, mutasi.brand_brief); assert.deepEqual(responseBody.claims, mutasi.claims);
   assert.equal(responseBody.promo_price_before_idr, mutasi.promo_price_before_idr);
   assert.equal(responseBody.promo_ends_at, mutasi.promo_ends_at); assert.equal(responseBody.promo_stock_left, mutasi.promo_stock_left);
+  assert.equal(responseBody.product_type, "serum wajah");
+  assert.deepEqual(responseBody.product_type_confirmation, {
+    state: "CONFIRMED", actor_id: ownerId,
+    confirmed_at: (responseBody.product_type_confirmation as { confirmed_at: string }).confirmed_at,
+    version: 1, provenance: "USER_SELF_ASSERTION",
+  });
+  const confirmationSummary = responseBody.product_type_confirmation as { actor_id: string; confirmed_at: string };
+  const updateAudit = (await pool.query(
+    "SELECT meta FROM audit_log WHERE entity_id=$1 AND action='product.updated' ORDER BY created_at DESC LIMIT 1", [productId]
+  )).rows[0];
+  assert.ok(updateAudit, "E7 tidak menulis audit product.updated");
+  const updateMeta = typeof updateAudit.meta === "string" ? JSON.parse(updateAudit.meta) : updateAudit.meta;
+  assert.deepEqual({
+    product_type: updateMeta.product_type, state: updateMeta.product_type_state,
+    provenance: updateMeta.product_type_confirmation, actor: updateMeta.product_type_confirmed_by,
+    confirmed_at: String(updateMeta.product_type_confirmed_at), version: updateMeta.product_type_version,
+  }, {
+    product_type: "serum wajah", state: "CONFIRMED", provenance: "USER_SELF_ASSERTION",
+    actor: confirmationSummary.actor_id, confirmed_at: confirmationSummary.confirmed_at, version: 1,
+  });
   const current = (await pool.query(
     "SELECT name,price_idr,category,product_visual_desc,brand_brief,claims,raw_meta,promo_price_before_idr,promo_ends_at,promo_stock_left FROM products WHERE id=$1",
     [productId]

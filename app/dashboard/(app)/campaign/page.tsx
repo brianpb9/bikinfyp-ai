@@ -28,6 +28,10 @@ import { JANJI_WAKTU } from "@/lib/janji-waktu";
 interface ProductPayload {
   product_id: string; name: string; price_idr: number; category: string;
   product_type: string | null;
+  product_type_confirmation: {
+    state: "CONFIRMED"; actor_id: string; confirmed_at: string;
+    version: 1; provenance: "USER_SELF_ASSERTION";
+  } | null;
   product_visual_desc: string | null; brand_brief: string | null;
   promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   source_url: string | null; images: string[]; image_urls: string[];

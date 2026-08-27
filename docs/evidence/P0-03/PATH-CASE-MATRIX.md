@@ -1235,11 +1235,17 @@ BASELINE=`c8588c67df8c5064e4cd231a6650d0c8b23d6e00`
 - Retail and org campaign UI require a separate confirmation explaining that
   it is the user's assertion, not staff verification. Success audits persist
   type/provenance; mismatch creates no audit.
-- Evidence gates: GREEN contract 5/5, implementation 4/4, focused regression
-  43/43, full suite 1252 tests / 1205 pass / 0 fail / 47 skipped, typecheck and
-  production build PASS. Local PostgreSQL static schema verification passed;
-  disposable migration execution was unavailable because local PostgreSQL was
-  not ready, before database creation.
+- Reviewer remediation prevents empty/whitespace type or actor, invalid
+  timestamp, missing version, and unequal-token rows from becoming confirmed.
+  New SQLite/PostgreSQL schemas constrain them; upgraded SQLite quarantines old
+  invalid rows and installs durable insert/update guards. E3/E7 now return an
+  authorized confirmation summary and audit token/state/provenance/actor/time/
+  version, with direct E3 and classified E7 regression coverage.
+- Evidence gates: GREEN contract 5/5, implementation 5/5, focused regression
+  43/43, full suite 1253 tests / 1206 pass / 0 fail / 47 skipped, typecheck and
+  production build PASS. PostgreSQL contract assertions passed; local schema
+  and disposable migration execution could not cross readiness because local
+  PostgreSQL was unavailable, before database creation.
 - OCR fail-closed, promo snapshot, broader legacy remediation, owner/legal/
   price, deploy, provider, money, and production operations are explicitly not
   bundled.

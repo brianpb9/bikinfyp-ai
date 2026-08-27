@@ -61,7 +61,11 @@ async function reconcileProductCreation(
 function auditProductCreatedOnce(
   actor: string,
   productId: string,
-  meta: { name: string; category: string; brand: string | null; promo: boolean; product_type: string; product_type_confirmation: "USER_SELF_ASSERTION"; product_type_version: 1 },
+  meta: {
+    name: string; category: string; brand: string | null; promo: boolean; product_type: string;
+    product_type_state: "CONFIRMED"; product_type_confirmation: "USER_SELF_ASSERTION";
+    product_type_confirmed_by: string; product_type_confirmed_at: string; product_type_version: 1;
+  },
 ): void {
   getDb().prepare(
     `INSERT INTO audit_log (id, actor, action, entity, entity_id, meta, created_at)

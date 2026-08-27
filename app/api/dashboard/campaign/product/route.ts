@@ -21,7 +21,7 @@ export const dynamic = "force-dynamic";
 // mungkin (makin lengkap makin bagus hasil render), baru di-fan-out ke 2-6
 // video di langkah berikutnya.
 
-function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_type_token?: string | null; product_visual_desc?: string | null; brand_brief?: string | null; claims?: string | null; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; images: string; source_url: string | null }) {
+function productPayload(product: { id: string; name: string; price_idr: number; category: string; product_type_token?: string | null; product_type_confirmed_by?: string | null; product_type_confirmed_at?: string | null; product_type_version?: number | null; product_type_state?: string | null; product_visual_desc?: string | null; brand_brief?: string | null; claims?: string | null; promo_price_before_idr?: number | null; promo_ends_at?: string | null; promo_stock_left?: number | null; images: string; source_url: string | null }) {
   const images = JSON.parse(product.images || "[]") as string[];
   return {
     product_id: product.id,
@@ -29,6 +29,14 @@ function productPayload(product: { id: string; name: string; price_idr: number; 
     price_idr: product.price_idr,
     category: product.category,
     product_type: product.product_type_token ?? null,
+    product_type_confirmation: product.product_type_state === "CONFIRMED"
+      && product.product_type_confirmed_by && product.product_type_confirmed_at && product.product_type_version === 1
+      ? {
+          state: "CONFIRMED", actor_id: product.product_type_confirmed_by,
+          confirmed_at: new Date(String(product.product_type_confirmed_at)).toISOString(), version: 1,
+          provenance: "USER_SELF_ASSERTION" as const,
+        }
+      : null,
     product_visual_desc: product.product_visual_desc ?? null,
     brand_brief: product.brand_brief ?? null,
     claims: product.claims ? JSON.parse(product.claims) : [],
@@ -90,7 +98,8 @@ export async function POST(req: Request) {
       );
       await pgAudit(user.id, "product.extracted", "products", productId, {
         reason: "ok", price: result.priceIdr, campaign: true, product_type: productTypeToken,
-        product_type_confirmation: "USER_SELF_ASSERTION", product_type_version: 1,
+        product_type_state: "CONFIRMED", product_type_confirmation: "USER_SELF_ASSERTION",
+        product_type_confirmed_by: user.id, product_type_confirmed_at: confirmedAt, product_type_version: 1,
       });
       return Response.json({ extracted: true, ...productPayload(product), images_downloaded: images.length });
     }
@@ -106,7 +115,8 @@ export async function POST(req: Request) {
     });
     await pgAudit(user.id, "product.created", "products", product.id, {
       manual: true, campaign: true, product_type: productTypeToken,
-      product_type_confirmation: "USER_SELF_ASSERTION", product_type_version: 1,
+      product_type_state: "CONFIRMED", product_type_confirmation: "USER_SELF_ASSERTION",
+      product_type_confirmed_by: user.id, product_type_confirmed_at: confirmedAt, product_type_version: 1,
     });
     return Response.json({ extracted: true, ...productPayload(product), images_downloaded: 0 });
     });
@@ -141,7 +151,9 @@ export async function PATCH(req: Request) {
     const confirmationTouched = body.confirmed_product_type !== undefined;
     const confirmedProductTypeToken = String(confirmationTouched ? body.confirmed_product_type : existing.product_type_confirmed_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmedBy = confirmationTouched ? user.id : String(existing.product_type_confirmed_by ?? "");
-    const confirmedAt = confirmationTouched ? new Date().toISOString() : String(existing.product_type_confirmed_at ?? "");
+    const confirmedAt = confirmationTouched
+      ? new Date().toISOString()
+      : existing.product_type_confirmed_at ? new Date(String(existing.product_type_confirmed_at)).toISOString() : "";
     const visualDesc = typeof body.product_visual_desc === "string" ? body.product_visual_desc.trim().slice(0, 600) || null : existing.product_visual_desc ?? null;
     const brandBrief = typeof body.brand_brief === "string" ? body.brand_brief.trim().slice(0, 1200) || null : existing.brand_brief ?? null;
 
@@ -193,7 +205,8 @@ export async function PATCH(req: Request) {
     }
     await pgAudit(user.id, "product.updated", "products", productId, {
       campaign: true, product_type: productTypeToken,
-      product_type_confirmation: "USER_SELF_ASSERTION", product_type_version: 1,
+      product_type_state: "CONFIRMED", product_type_confirmation: "USER_SELF_ASSERTION",
+      product_type_confirmed_by: confirmedBy, product_type_confirmed_at: confirmedAt, product_type_version: 1,
     });
 
     const updated = await smokeGetOrgProduct(membership.org_id, productId);

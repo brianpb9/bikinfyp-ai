@@ -305,8 +305,27 @@ test("E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission", async 
   assert.equal((db.prepare("SELECT name FROM products WHERE id=?").get(s.productId) as { name: string }).name, "Serum Admission E3");
   const response = await patchRetailRequest(s.productId, s.ownerToken, mutation);
   if (response.status !== 200) assert.fail(`PATCH E3 gagal (${response.status}): ${await response.text()}`);
+  const confirmation = db.prepare(`SELECT product_type_token,product_type_confirmed_by,
+    product_type_confirmed_at,product_type_version,product_type_state FROM products WHERE id=?`)
+    .get(s.productId) as { product_type_token: string; product_type_confirmed_by: string; product_type_confirmed_at: string; product_type_version: number; product_type_state: string };
   assert.deepEqual(await response.json(), {
     ok: true, product_id: s.productId, name: mutation.name, price_idr: mutation.price_idr, category: mutation.category,
+    product_type: "serum wajah",
+    product_type_confirmation: {
+      state: "CONFIRMED", actor_id: confirmation.product_type_confirmed_by,
+      confirmed_at: confirmation.product_type_confirmed_at, version: 1, provenance: "USER_SELF_ASSERTION",
+    },
+  });
+  const auditMeta = JSON.parse((db.prepare(
+    "SELECT meta FROM audit_log WHERE entity_id=? AND action='product.updated' ORDER BY created_at DESC LIMIT 1"
+  ).get(s.productId) as { meta: string }).meta) as Record<string, unknown>;
+  assert.deepEqual({
+    product_type: auditMeta.product_type, state: auditMeta.product_type_state,
+    provenance: auditMeta.product_type_confirmation, actor: auditMeta.product_type_confirmed_by,
+    confirmed_at: auditMeta.product_type_confirmed_at, version: auditMeta.product_type_version,
+  }, {
+    product_type: "serum wajah", state: "CONFIRMED", provenance: "USER_SELF_ASSERTION",
+    actor: confirmation.product_type_confirmed_by, confirmed_at: confirmation.product_type_confirmed_at, version: 1,
   });
   const current = db.prepare(
     "SELECT name,price_idr,category,product_visual_desc,brand_brief,claims,raw_meta,promo_price_before_idr,promo_ends_at,promo_stock_left FROM products WHERE id=?"

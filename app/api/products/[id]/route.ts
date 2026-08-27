@@ -33,7 +33,9 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
     const confirmationTouched = body.confirmed_product_type !== undefined;
     const confirmedProductTypeToken = String(confirmationTouched ? body.confirmed_product_type : product.product_type_confirmed_token ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmedBy = confirmationTouched ? user.id : String(product.product_type_confirmed_by ?? "");
-    const confirmedAt = confirmationTouched ? now() : String(product.product_type_confirmed_at ?? "");
+    const confirmedAt = confirmationTouched
+      ? now()
+      : product.product_type_confirmed_at ? new Date(String(product.product_type_confirmed_at)).toISOString() : "";
     const visualDesc =
       body.product_visual_desc !== undefined
         ? body.product_visual_desc === null || body.product_visual_desc === ""
@@ -82,7 +84,12 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
            promo_price_before_idr = ?, promo_ends_at = ?, promo_stock_left = ? WHERE id = ?`
       ).run(name, priceIdr, category, productTypeToken, confirmedProductTypeToken, confirmedBy, confirmedAt,
         visualDesc, promo.promoPriceBeforeIdr, promo.promoEndsAt, promo.promoStockLeft, id);
-      audit(user.id, "product.updated", "products", id, { name, price_idr: priceIdr, promo: promo.promoPriceBeforeIdr !== null });
+      audit(user.id, "product.updated", "products", id, {
+        name, price_idr: priceIdr, promo: promo.promoPriceBeforeIdr !== null,
+        product_type: productTypeToken, product_type_state: "CONFIRMED",
+        product_type_confirmation: "USER_SELF_ASSERTION", product_type_confirmed_by: confirmedBy,
+        product_type_confirmed_at: confirmedAt, product_type_version: 1,
+      });
     }
 
     // Merek terkonfirmasi user (audit C9) → raw_meta.brand, merge — jangan
@@ -100,7 +107,13 @@ export async function PATCH(req: Request, ctx: { params: Promise<{ id: string }>
         audit(user.id, "product.brand_set", "products", id, { brand });
       }
     }
-    return Response.json({ ok: true, product_id: id, name, price_idr: priceIdr, category });
+    return Response.json({
+      ok: true, product_id: id, name, price_idr: priceIdr, category, product_type: productTypeToken,
+      product_type_confirmation: {
+        state: "CONFIRMED", actor_id: confirmedBy, confirmed_at: confirmedAt,
+        version: 1, provenance: "USER_SELF_ASSERTION",
+      },
+    });
     });
   } catch (err) {
     return errorResponse(err);

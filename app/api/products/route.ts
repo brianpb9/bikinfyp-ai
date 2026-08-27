@@ -233,11 +233,19 @@ export async function POST(req: Request) {
     if (!usePostgres) {
       dependencies.auditProductCreatedOnce(user.id, id, {
         name: validName, category, brand: brand ?? null, promo: promo.promoPriceBeforeIdr !== null,
-        product_type: productTypeToken, product_type_confirmation: "USER_SELF_ASSERTION", product_type_version: 1,
+        product_type: productTypeToken, product_type_state: "CONFIRMED",
+        product_type_confirmation: "USER_SELF_ASSERTION", product_type_confirmed_by: user.id,
+        product_type_confirmed_at: confirmedAt, product_type_version: 1,
       });
     }
 
-    return Response.json({ product_id: id, name: validName, price_idr: priceIdr, category, product_type: productTypeToken, images }, { status: 201 });
+    return Response.json({
+      product_id: id, name: validName, price_idr: priceIdr, category, product_type: productTypeToken,
+      product_type_confirmation: {
+        state: "CONFIRMED", actor_id: user.id, confirmed_at: confirmedAt,
+        version: 1, provenance: "USER_SELF_ASSERTION",
+      }, images,
+    }, { status: 201 });
     });
   } catch (err) {
     return errorResponse(err);

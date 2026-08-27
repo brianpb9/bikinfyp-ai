@@ -2,6 +2,7 @@
   "task": "P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827",
   "baseline_sha": "c8588c67df8c5064e4cd231a6650d0c8b23d6e00",
   "result": "PASS_LOCAL_READY_FOR_REVIEW",
+  "reviewer_remediation": "empty/whitespace/timestamp/version durability guards for new and upgraded SQLite plus PostgreSQL constraint; authorized E3/E7 confirmation summary and complete mutation audit provenance",
   "founder_decision": "approved recommended safe release bundle",
   "canonical_type_distinct_from_category": true,
   "taxonomy_invented": false,
@@ -20,8 +21,8 @@
   "implementation_test": {
     "command": "SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts",
     "exit_code": 0,
-    "tests": 4,
-    "pass": 4,
+    "tests": 5,
+    "pass": 5,
     "fail": 0
   },
   "focused_regression": {
@@ -31,17 +32,36 @@
     "pass": 43,
     "fail": 0
   },
+  "e7_postgres_regression": {
+    "command": "SCRIPT_LLM=0 npx tsx --test tests/pg-product-truth-w1.test.ts",
+    "exit_code": 0,
+    "tests": 31,
+    "pass": 1,
+    "fail": 0,
+    "skipped": 30,
+    "classification": "E7 response and audit assertions present; UJI_PG_URL absent"
+  },
   "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
   "full_test": {
     "command": "npm test",
     "exit_code": 0,
-    "tests": 1252,
-    "pass": 1205,
+    "tests": 1253,
+    "pass": 1206,
     "fail": 0,
     "skipped": 47
   },
   "build": { "command": "npm run build", "exit_code": 0 },
-  "postgres_schema_static": { "command": "bash scripts/test-postgres-schema.sh", "exit_code": 0 },
+  "postgres_migration_contract": {
+    "command": "SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts",
+    "exit_code": 0,
+    "invalid_sqlite_rows_directly_probed": true,
+    "postgres_constraint_asserted": true
+  },
+  "postgres_schema_runtime": {
+    "command": "bash scripts/test-postgres-schema.sh",
+    "executed": false,
+    "reason": "local PostgreSQL readiness check failed before schema application"
+  },
   "postgres_disposable_migration": {
     "command": "bash scripts/test-postgres-production-migrations.sh",
     "executed": false,
