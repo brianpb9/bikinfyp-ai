@@ -3,9 +3,11 @@ import test from "node:test";
 import fs from "node:fs";
 
 const source = fs.readFileSync(new URL("../scripts/managed-mobile-auth-hydration.ts", import.meta.url), "utf8");
+const evidenceDockerfile = fs.readFileSync(new URL("../Dockerfile.mobile-evidence", import.meta.url), "utf8");
 
 test("managed mobile runner is exact-SHA, 375px, provider-free, and cleanup-bound", () => {
-  assert.match(source, /RENDER_GIT_COMMIT[\s\S]*EXPECTED_SHA/);
+  assert.match(source, /EVIDENCE_SOURCE_SHA[\s\S]*EXPECTED_SHA/);
+  assert.match(source, /health\.build_sha, EXPECTED_SHA/);
   assert.match(source, /RACUN_DEPLOY_ENV[\s\S]*staging/);
   assert.match(source, /width: 375, height: 812/);
   assert.match(source, /width: 375, height: 520/);
@@ -27,12 +29,23 @@ test("managed mobile runner is exact-SHA, 375px, provider-free, and cleanup-boun
   assert.match(source, /DELETE FROM otp_codes/);
   assert.match(source, /DELETE FROM org_members/);
   assert.match(source, /DELETE FROM organizations/);
+  assert.match(source, /DELETE FROM org_members WHERE id=\$1/);
+  assert.match(source, /DELETE FROM organizations WHERE id=\$1/);
   assert.match(source, /RETAINED TEST IDENTITY/);
   assert.match(source, /onboarded_at/);
-  assert.match(source, /orgInserted = true[\s\S]*INSERT INTO org_members[\s\S]*membershipInserted = true/);
+  assert.match(source, /INSERT INTO organizations[\s\S]*INSERT INTO org_members/);
   assert.match(source, /SELECT id FROM users WHERE email=\$1/);
   assert.match(source, /cleanupErrors/);
   assert.match(source, /private-r2/);
+  assert.match(source, /config\.storageMode, "r2"/);
+  assert.match(source, /storage\.stat/);
+  assert.match(source, /storage\.get/);
+  assert.match(source, /R2 readback SHA mismatch/);
+  assert.match(source, /managed-mobile-auth-hydration-manifest\/v1/);
+  assert.match(source, /manifest_key/);
+  assert.match(source, /manifest_sha256/);
+  assert.ok(source.indexOf('cleanupStep("pool"') < source.indexOf("const cleanup = receipt.cleanup"),
+    "pool close outcome must precede final cleanup result");
   assert.match(source, /sha256/);
   assert.match(source, /PENDING_INDEPENDENT_REVIEW/);
   assert.match(source, /points_claimed: 0/);
@@ -45,4 +58,12 @@ test("managed mobile runner is exact-SHA, 375px, provider-free, and cleanup-boun
     assert.match(source, new RegExp(endpoint.replaceAll("/", "\\/")));
   }
   assert.doesNotMatch(source, /createDuitkuInvoice|createMidtransTransaction|enqueueJob/);
+});
+
+test("mobile evidence runner has a truthful exact-SHA external image contract", () => {
+  assert.match(evidenceDockerfile, /ARG EVIDENCE_SOURCE_SHA/);
+  assert.match(evidenceDockerfile, /org\.opencontainers\.image\.revision=\$EVIDENCE_SOURCE_SHA/);
+  assert.match(evidenceDockerfile, /npx playwright install --with-deps chromium/);
+  assert.match(evidenceDockerfile, /playwright['"]\)\.chromium\.executablePath/);
+  assert.match(evidenceDockerfile, /ENTRYPOINT \["npx", "tsx", "scripts\/managed-mobile-auth-hydration\.ts"\]/);
 });

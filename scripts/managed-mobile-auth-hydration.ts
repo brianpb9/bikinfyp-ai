@@ -2,10 +2,12 @@
 /**
  * Managed staging mobile/auth/hydration trace.
  *
- * Run inside the exact staging image with DATABASE_URL and AUTH_SECRET. The
- * request-OTP call is intercepted in Chromium, so this runner never contacts
- * Resend. It also refuses every payment/generation request and cleans its
- * temporary identity, organization, OTP, and ledger rows.
+ * Run from Dockerfile.mobile-evidence, a bounded external evidence image built
+ * from the same exact git SHA as the deployed staging image. The deployed SHA
+ * is independently bound through /api/health. The request-OTP call is
+ * intercepted in Chromium, so this runner never contacts Resend. It also
+ * refuses every payment/generation request and cleans its temporary identity,
+ * organization, OTP, and ledger rows.
  */
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
@@ -20,6 +22,7 @@ import { mediaStorage } from "../lib/storage";
 const BASE = process.env.BASE ?? "https://racun-ai-staging-web.onrender.com";
 const STAGING_ORIGIN = "https://racun-ai-staging-web.onrender.com";
 const EXPECTED_SHA = process.env.EXPECTED_APP_SHA?.trim() ?? "";
+const EVIDENCE_SOURCE_SHA = process.env.EVIDENCE_SOURCE_SHA?.trim() ?? "";
 const RECEIPT_DIR = path.resolve(process.env.RECEIPT_DIR ?? "artifacts/managed-mobile-auth-hydration");
 const OTP = "842731";
 const suffix = crypto.randomUUID();
@@ -33,10 +36,11 @@ const now = () => new Date().toISOString();
 
 assert.match(EXPECTED_SHA, /^[0-9a-f]{40}$/, "EXPECTED_APP_SHA wajib full SHA");
 assert.equal(new URL(BASE).origin, STAGING_ORIGIN, "BASE wajib exact canonical staging origin");
-assert.equal(process.env.RENDER_GIT_COMMIT, EXPECTED_SHA, "runner wajib memakai exact staging image");
+assert.equal(EVIDENCE_SOURCE_SHA, EXPECTED_SHA, "external evidence image wajib dibangun dari exact app SHA");
 assert.equal(process.env.RACUN_DEPLOY_ENV, "staging", "runner hanya boleh berjalan di staging");
 assert.equal(process.env.RACUN_DB_RUNTIME, "postgres", "runner memerlukan PostgreSQL staging");
 assert.match(config.databaseUrl, /^postgres(?:ql)?:\/\//i, "DATABASE_URL PostgreSQL wajib tersedia");
+assert.equal(config.storageMode, "r2", "runner memerlukan private R2 staging");
 
 fs.mkdirSync(RECEIPT_DIR, { recursive: true });
 const pool = new Pool({ connectionString: config.databaseUrl });
@@ -44,8 +48,6 @@ let browser: Browser | undefined;
 let context: BrowserContext | undefined;
 let page: Page | undefined;
 let userId: string | null = null;
-let orgInserted = false;
-let membershipInserted = false;
 let correctionInserted = false;
 let otpRequestIntercepted = 0;
 const forbiddenRequests: string[] = [];
@@ -59,13 +61,25 @@ const forbiddenMutationEntrypoints = [
 ] as const;
 const artifactPrefix = `managed-evidence/mobile-auth/${EXPECTED_SHA}/${suffix}`;
 const screenshotManifest: Array<{ name: string; sha256: string; bytes: number; private_key: string }> = [];
+const sha256 = (bytes: Buffer) => crypto.createHash("sha256").update(bytes).digest("hex");
+const putAndVerify = async (key: string, bytes: Buffer, contentType: string) => {
+  const storage = mediaStorage();
+  await storage.put(key, bytes, contentType);
+  const stat = await storage.stat(key);
+  assert.equal(stat?.size, bytes.length, `R2 stat size mismatch: ${key}`);
+  const readback = await storage.get(key);
+  assert.ok(readback, `R2 readback missing: ${key}`);
+  assert.equal(readback.size, bytes.length, `R2 readback size mismatch: ${key}`);
+  assert.equal(readback.body.length, bytes.length, `R2 body size mismatch: ${key}`);
+  assert.equal(sha256(readback.body), sha256(bytes), `R2 readback SHA mismatch: ${key}`);
+};
 const screenshot = async (name: string) => {
   assert.ok(page);
   const target = path.join(RECEIPT_DIR, `${name}.png`);
   const bytes = await page.screenshot({ path: target, fullPage: false });
   const privateKey = `${artifactPrefix}/${name}.png`;
-  await mediaStorage().put(privateKey, bytes, "image/png");
-  const item = { name: path.basename(target), sha256: crypto.createHash("sha256").update(bytes).digest("hex"), bytes: bytes.length, private_key: privateKey };
+  await putAndVerify(privateKey, bytes, "image/png");
+  const item = { name: path.basename(target), sha256: sha256(bytes), bytes: bytes.length, private_key: privateKey };
   screenshotManifest.push(item);
   return item;
 };
@@ -207,10 +221,8 @@ try {
   userId = user.rows[0].id;
   await pool.query("INSERT INTO organizations (id,name,slug,status,created_at,onboarded_at) VALUES ($1,$2,$3,'active',$4,$4)",
     [orgId, "Managed Mobile Trace", `managed-mobile-${suffix}`, now()]);
-  orgInserted = true;
   await pool.query("INSERT INTO org_members (id,org_id,user_id,role,created_at) VALUES ($1,$2,$3,'owner',$4)",
     [memberId, orgId, userId, now()]);
-  membershipInserted = true;
 
   await page.goto(`${BASE}/dashboard`, { waitUntil: "networkidle" });
   const menu = page.getByRole("button", { name: "Buka menu" });
@@ -250,9 +262,10 @@ try {
   });
   await cleanupStep("otp", async () => { await pool.query("DELETE FROM otp_codes WHERE id=$1 OR email=$2", [otpId, email]); });
   await cleanupStep("membership", async () => {
-    if (membershipInserted || userId) await pool.query("DELETE FROM org_members WHERE id=$1 OR user_id=$2", [memberId, userId]);
+    await pool.query("DELETE FROM org_members WHERE id=$1", [memberId]);
+    if (userId) await pool.query("DELETE FROM org_members WHERE user_id=$1", [userId]);
   });
-  await cleanupStep("organization", async () => { if (orgInserted) await pool.query("DELETE FROM organizations WHERE id=$1", [orgId]); });
+  await cleanupStep("organization", async () => { await pool.query("DELETE FROM organizations WHERE id=$1", [orgId]); });
   if (userId) {
     await cleanupStep("append-net-zero", async () => {
       const balanceBefore = Number((await pool.query("SELECT COALESCE(sum(delta),0)::int AS balance FROM credit_ledger WHERE user_id=$1", [userId])).rows[0].balance);
@@ -282,22 +295,28 @@ try {
       organization: orgRows === 0, identity_retained_with_provenance: retained === 1, payments: payments === 0 });
   });
   receipt.cleanup_errors = cleanupErrors;
+  await cleanupStep("pool", async () => { await pool.end(); });
   const cleanup = receipt.cleanup as Record<string, unknown>;
   if (receipt.result === "PASS" && (cleanupErrors.length || !Object.values(cleanup).every(Boolean))) receipt.result = "FAIL_CLEANUP";
+  const receiptKey = `${artifactPrefix}/receipt.json`;
+  const manifestKey = `${artifactPrefix}/manifest.json`;
   receipt.artifact_manifest = { channel: "private-r2", prefix: artifactPrefix,
     review_status: "PENDING_INDEPENDENT_REVIEW", points_claimed: 0, screenshots: screenshotManifest,
-    receipt_key: `${artifactPrefix}/receipt.json` };
+    receipt_key: receiptKey, manifest_key: manifestKey };
   receipt.finished_at = now();
-  await cleanupStep("pool", async () => { await pool.end(); });
-  let serialized = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
+  const serialized = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
   fs.writeFileSync(path.join(RECEIPT_DIR, "receipt.json"), serialized, { mode: 0o600 });
-  try {
-    await mediaStorage().put(`${artifactPrefix}/receipt.json`, serialized, "application/json");
-  } catch (error) {
-    cleanupErrors.push(`receipt-upload: ${String(error).slice(0, 240)}`);
-    receipt.result = "FAIL_ARTIFACT_UPLOAD";
-    serialized = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
-    fs.writeFileSync(path.join(RECEIPT_DIR, "receipt.json"), serialized, { mode: 0o600 });
-  }
-  console.log(JSON.stringify(receipt));
+  await putAndVerify(receiptKey, serialized, "application/json");
+  const manifest = {
+    schema: "managed-mobile-auth-hydration-manifest/v1",
+    exact_sha: EXPECTED_SHA,
+    artifacts: [
+      ...screenshotManifest.map((item) => ({ key: item.private_key, sha256: item.sha256, bytes: item.bytes, content_type: "image/png" })),
+      { key: receiptKey, sha256: sha256(serialized), bytes: serialized.length, content_type: "application/json" },
+    ],
+  };
+  const manifestBytes = Buffer.from(`${JSON.stringify(manifest, null, 2)}\n`);
+  fs.writeFileSync(path.join(RECEIPT_DIR, "manifest.json"), manifestBytes, { mode: 0o600 });
+  await putAndVerify(manifestKey, manifestBytes, "application/json");
+  console.log(JSON.stringify({ ...receipt, manifest_key: manifestKey, manifest_sha256: sha256(manifestBytes) }));
 }
