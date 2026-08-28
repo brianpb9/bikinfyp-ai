@@ -23,6 +23,7 @@
  * Pakai:  DATABASE_URL="postgres://…" node scripts/laporan-nsfw.mjs [hari=7]
  */
 import pg from "pg";
+import {CONTENT_REJECTION_PATTERN_SOURCE,summarizeNsfwAggregates} from "../lib/nsfw-kpi.mjs";
 
 const hari = Math.max(1, Number(process.argv[2] ?? 7));
 const url = process.env.DATABASE_URL;
@@ -39,9 +40,7 @@ if (!url || !/^postgres/i.test(url)) {
 // Sengaja TIDAK memakai kata seluas "failed"/"gagal": kegagalan infrastruktur
 // (resume state, QC retry, gerbang prompt) tidak boleh ikut terhitung sebagai
 // penolakan konten. Dijaga dua arah oleh tests/laporan-nsfw-pola.test.ts.
-const POLA_KONTEN =
-  "(sensitive|risk[_ ]?level|content polic|nsfw|may contain real person|content[_ ]?filter|prohibited content|moderation|flagged)";
-const TARGET = { hands_only: 0.2, talking_head: 0.35 };
+const POLA_KONTEN = CONTENT_REJECTION_PATTERN_SOURCE;
 
 const c = new pg.Client({ connectionString: url });
 await c.connect();
@@ -66,16 +65,13 @@ try {
   console.log(`KPI penolakan konten provider — ${hari} hari terakhir (sejak ${sejak.slice(0, 10)})`);
   if (!rows.length) { console.log("(tidak ada job di jendela ini)"); process.exit(0); }
   let adaPelanggaran = false;
-  for (const r of rows) {
-    const berangkat = Number(r.sukses) + Number(r.ditolak_konten);
-    const rate = berangkat ? Number(r.ditolak_konten) / berangkat : 0;
-    const target = TARGET[r.format];
-    const status = target === undefined ? "" : rate <= target ? " ✅" : " ⛔ DI ATAS TARGET";
-    if (target !== undefined && rate > target) adaPelanggaran = true;
+  for (const r of summarizeNsfwAggregates(rows)) {
+    const status = r.thresholdStatus === "UNSCOPED" ? "" : r.thresholdStatus === "PASS" ? " ✅" : " ⛔ DI ATAS TARGET";
+    if (r.thresholdStatus === "FAIL") adaPelanggaran = true;
     console.log(
-      `${r.format.padEnd(13)} sukses=${r.sukses}  ditolak-konten=${r.ditolak_konten}  ` +
-      `gagal-lain=${Number(r.gagal_semua) - Number(r.ditolak_konten)}  ` +
-      `rate=${(rate * 100).toFixed(1)}%${target !== undefined ? ` (target ≤${target * 100}%)` : ""}${status}`
+      `${r.format.padEnd(13)} sukses=${r.success}  ditolak-konten=${r.rejected}  ` +
+      `gagal-lain=${r.otherFailures}  ` +
+      `rate=${(r.rate * 100).toFixed(1)}%${r.target !== undefined ? ` (target ≤${r.target * 100}%)` : ""}${status}`
     );
   }
   console.log("\nCatatan: penolakan konten di-refund otomatis (failJob → release); "
