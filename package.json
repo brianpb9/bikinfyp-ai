@@ -21,6 +21,7 @@
     "test:postgres-pitr-reconciliation": "bash scripts/test-postgres-pitr-reconciliation.sh",
     "test:postgres-schema": "bash scripts/test-postgres-schema.sh",
     "test:postgres-auth-otp-audit": "bash scripts/test-postgres-auth-otp-audit.sh",
+    "test:postgres-payment-canary": "bash scripts/test-payment-production-canary-postgres.sh",
     "test:postgres-product-persona-script": "bash scripts/test-postgres-product-persona-script.sh",
     "test:postgres-credit-payment": "bash scripts/test-postgres-credit-payment.sh",
     "test:postgres-jobs": "bash scripts/test-postgres-jobs.sh",
