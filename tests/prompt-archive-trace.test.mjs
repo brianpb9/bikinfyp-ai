@@ -6,7 +6,7 @@ import { verifyPromptArchiveTrace } from "../lib/prompt-archive-trace.mjs";
 function fixture() {
   return {
     job: {
-      id: "job-1", provider_video: "byteplus-ark-seedance", output_url: "outputs/job-1.mp4",
+      id: "job-1", state: "READY", provider_video: "byteplus-ark-seedance", output_url: "outputs/job-1.mp4",
       qc_result: JSON.stringify({ passed: true, checks: [{ code: "QC-08", status: "pass" }] }),
       completed_at: "2026-08-28T05:02:00.000Z",
     },
@@ -79,6 +79,14 @@ test("fails closed when verdict or artifact is missing", () => {
   const noArtifact = fixture();
   noArtifact.job.output_url = null;
   assert.throws(() => verifyPromptArchiveTrace(noArtifact), /ARTIFACT_MISSING/);
+});
+
+test("fails closed for failed and nonterminal job states", () => {
+  for (const state of ["FAILED", "REFUNDED", "LABELING", "QC_CHECK"]) {
+    const input = fixture();
+    input.job.state = state;
+    assert.throws(() => verifyPromptArchiveTrace(input), /JOB_NOT_READY/, state);
+  }
 });
 
 test("worker freezes provider request correlation before clearing retry memo", () => {

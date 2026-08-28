@@ -11,6 +11,7 @@
   "correlation": ["prompt", "model", "verdict", "artifact", "provider_request"],
   "failure_modes": [
     "missing request-to-shot coverage",
+    "job is not terminal READY",
     "archive created after provider request",
     "provider request created after completed artifact",
     "ambiguous request per shot",

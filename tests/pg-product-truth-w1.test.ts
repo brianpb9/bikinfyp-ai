@@ -1936,6 +1936,10 @@ test("korelasi DB: archive write error mempertahankan provider_tasks", async (t)
   const jobId = await siapkanJob([], new Map());
   const dibuat = "2026-08-28T05:00:00.000Z";
   await pool.query(
+    "UPDATE jobs SET provider_video='byteplus-ark-seedance',completed_at='2026-08-28T05:02:00.000Z' WHERE id=$1",
+    [jobId],
+  );
+  await pool.query(
     `INSERT INTO job_prompts (job_id,spec_json,segments_json,negative_prompt,model_params,created_at)
      VALUES ($1,$2,'[]','negative','bukan-json',$3)`,
     [jobId, JSON.stringify({ shots: [{ idx: 0, prompt: "prompt" }] }), dibuat],

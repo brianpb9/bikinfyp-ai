@@ -19,7 +19,7 @@ if (!jobId) {
     await client.connect();
     await client.query("BEGIN TRANSACTION READ ONLY");
     const jobResult = await client.query(
-      "SELECT id,provider_video,output_url,qc_result,completed_at FROM jobs WHERE id=$1",
+      "SELECT id,state,provider_video,output_url,qc_result,completed_at FROM jobs WHERE id=$1",
       [jobId],
     );
     const archiveResult = await client.query(
