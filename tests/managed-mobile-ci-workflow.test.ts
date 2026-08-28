@@ -9,6 +9,7 @@ import { execFileSync } from "node:child_process";
 const workflow = fs.readFileSync(new URL("../.github/workflows/managed-mobile-evidence.yml", import.meta.url), "utf8");
 const ciWorkflow = fs.readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 const launcher = fs.readFileSync(new URL("../scripts/run-mobile-evidence-image.sh", import.meta.url), "utf8");
+const r2Preflight = fs.readFileSync(new URL("../scripts/preflight-staging-r2.mjs", import.meta.url), "utf8");
 
 test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-reference-only", () => {
   assert.match(workflow, /workflow_dispatch:/);
@@ -51,6 +52,34 @@ test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-ref
   const prJob = workflow.slice(workflow.indexOf("  pr-static-validation:"), workflow.indexOf("  exact-sha-mobile-evidence:"));
   assert.doesNotMatch(prJob, /environment:|secrets\.|EVIDENCE_INHERIT_STAGING_ENV|bash control\/scripts\/run-mobile-evidence-image\.sh/);
   assert.doesNotMatch(prJob, /managed-mobile-auth-hydration-runner\.test\.ts/);
+});
+
+test("managed R2 preflight runs before the full runner on the exact reviewed image", () => {
+  const preflightAt = workflow.indexOf("      - name: Preflight staging R2 write-read-delete round trip");
+  const runnerAt = workflow.indexOf("      - name: Run and sanitize provider-free staging evidence with managed secret injection");
+  assert.ok(preflightAt > 0 && runnerAt > preflightAt);
+  const step = workflow.slice(preflightAt, runnerAt);
+  assert.match(step, /RACUN_DEPLOY_ENV: staging/);
+  assert.match(step, /"\$EVIDENCE_IMAGE_DIGEST"/);
+  assert.match(step, /preflight-staging-r2\.mjs,dst=\/srv\/evidence\/scripts\/preflight-staging-r2\.mjs,readonly/);
+  assert.match(step, /--read-only/);
+  assert.match(step, /--cap-drop ALL/);
+  for (const slot of ["R2_ENDPOINT", "R2_BUCKET", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY"]) {
+    assert.ok(step.includes(`${slot}: \${{ secrets.STAGING_${slot} }}`));
+    assert.match(step, new RegExp(`--env ${slot}(?:\\s|\\\\)`));
+    assert.doesNotMatch(step, new RegExp(`--env ["']?${slot}=`));
+  }
+});
+
+test("R2 preflight is fail-closed, cleans up in finally, and emits booleans only", () => {
+  assert.match(r2Preflight, /EXPECTED_STAGING_BUCKET_SHA256 = "[0-9a-f]{64}"/);
+  assert.match(r2Preflight, /EXPECTED_STAGING_ENDPOINT_SHA256 = "[0-9a-f]{64}"/);
+  assert.match(r2Preflight, /finally \{/);
+  assert.match(r2Preflight, /DeleteObjectCommand/);
+  assert.match(r2Preflight, /HeadObjectCommand/);
+  assert.match(r2Preflight, /cleanup_absent_verified/);
+  assert.doesNotMatch(r2Preflight, /console\.(?:log|error|warn)/);
+  assert.doesNotMatch(r2Preflight, /process\.stdout\.write\([^)]*(?:R2_|bucket|endpoint|key)/i);
 });
 
 test("catalog debt remains visible without contradicting its documented non-gate status", () => {

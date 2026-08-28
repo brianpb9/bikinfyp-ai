@@ -6,9 +6,11 @@ on:
     paths:
       - .github/workflows/managed-mobile-evidence.yml
       - scripts/build-mobile-evidence-image.sh
+      - scripts/preflight-staging-r2.mjs
       - scripts/run-mobile-evidence-image.sh
       - scripts/verify-mobile-evidence-receipt.mjs
       - tests/managed-mobile-ci-workflow.test.ts
+      - tests/staging-r2-preflight.test.ts
   workflow_dispatch:
     inputs:
       reviewed_sha:
@@ -61,9 +63,9 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh
+      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs
       - run: npx tsc --noEmit
-      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts
+      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/staging-r2-preflight.test.ts
 
   exact-sha-mobile-evidence:
     # Secret-bearing execution is only available from protected default main.
@@ -126,6 +128,30 @@ jobs:
           test "$EVIDENCE_SOURCE_TREE" = "$expected_tree"
           test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$EVIDENCE_IMAGE_DIGEST")" = "$REVIEWED_SHA"
           test "$(docker image inspect --format '{{index .Config.Labels "ai.hdrv.source.tree"}}' "$EVIDENCE_IMAGE_DIGEST")" = "$expected_tree"
+
+      - name: Preflight staging R2 write-read-delete round trip
+        env:
+          RACUN_DEPLOY_ENV: staging
+          STORAGE_MODE: r2
+          R2_REGION: auto
+          R2_ENDPOINT: ${{ secrets.STAGING_R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.STAGING_R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.STAGING_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.STAGING_R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          docker run --rm --read-only --cap-drop ALL --security-opt no-new-privileges:true \
+            --entrypoint node \
+            --env RACUN_DEPLOY_ENV \
+            --env STORAGE_MODE \
+            --env R2_REGION \
+            --env R2_ENDPOINT \
+            --env R2_BUCKET \
+            --env R2_ACCESS_KEY_ID \
+            --env R2_SECRET_ACCESS_KEY \
+            --mount "type=bind,src=$GITHUB_WORKSPACE/control/scripts/preflight-staging-r2.mjs,dst=/srv/evidence/scripts/preflight-staging-r2.mjs,readonly" \
+            "$EVIDENCE_IMAGE_DIGEST" \
+            /srv/evidence/scripts/preflight-staging-r2.mjs
 
       - name: Run and sanitize provider-free staging evidence with managed secret injection
         env:
