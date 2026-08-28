@@ -247,7 +247,7 @@ export async function pgListRecentVideos(orgId: string, limit = 6): Promise<Rece
        JOIN products p ON p.id = j.product_id
        JOIN outputs o ON o.job_id = j.id
        WHERE j.org_id = $1 AND j.state = 'READY' AND o.video_url IS NOT NULL
-       ORDER BY j.created_at DESC LIMIT 200`,
+       ORDER BY j.created_at DESC`,
       [orgId]
     );
     return res.rows.filter(isCurrentC5JobGeneration).slice(0,limit).map(({job_product_snapshot:_snapshot,

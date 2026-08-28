@@ -255,6 +255,24 @@ test("dashboard home/projects data and card withhold stale run media, captions, 
   assert.match(projects,/CampaignThumb thumbKey=\{run\.thumb_key\} videoKey=\{run\.video_key\}/);
 });
 
+test("recent videos filters more than 200 newer stale rows before its effective limit",async(t)=>{
+  const {pgListRecentVideos,setPgOrgC5ReadPoolForTests}=await import("../lib/postgres/org");
+  t.after(()=>setPgOrgC5ReadPoolForTests());
+  const snapshot=JSON.stringify({version:4,productName:"Produk",category:"beauty",categoryReviewVersion:1,
+    priceIdr:10000,promoPriceBeforeIdr:null,promoEndsAt:null,promoStockLeft:null,
+    trustedBrand:{source:"products.raw_meta.brand",value:null},productVisualDesc:null,brandBrief:null,claims:[]});
+  const row=(id:string,version:number,createdAt:string)=>({job_id:id,product_name:"Produk",video_key:`jobs/${id}.mp4`,
+    caption:id,created_at:createdAt,format:"talking_head",job_product_snapshot:snapshot,product_category:"beauty",
+    category_review_state:"CLEAR",category_review_reason:null,category_review_version:version});
+  const rows=Array.from({length:201},(_,i)=>row(`stale-${i}`,3,`2026-08-28T02:${String(59-Math.floor(i/60)).padStart(2,"0")}:${String(59-i%60).padStart(2,"0")}.000Z`));
+  rows.push(row("current-older",1,"2026-08-27T00:00:00.000Z"));
+  let sqlSeen="";
+  setPgOrgC5ReadPoolForTests({query:(async(sql:string)=>{sqlSeen=sql;return {rows,rowCount:rows.length};}) as never});
+  const videos=await pgListRecentVideos("org-1",6);
+  assert.deepEqual(videos.map((video)=>video.job_id),["current-older"]);
+  assert.doesNotMatch(sqlSeen,/LIMIT\s+200/i,"query still truncates before generation filtering");
+});
+
 test("PostgreSQL media authorization binds output and scene delivery to current C5 truth",async(t)=>{
   const {fileBelongsToUser,setMediaFileAccessDependenciesForTests}=await import("../lib/media-file-access");
   t.after(()=>setMediaFileAccessDependenciesForTests());
