@@ -29,5 +29,10 @@ if ! printf '%s\n' "$image_digest" | grep -Eq '^sha256:[0-9a-f]{64}$'; then
   echo "invalid immutable image digest" >&2
   exit 1
 fi
-printf 'EVIDENCE_IMAGE=%s\nEVIDENCE_IMAGE_DIGEST=%s\nEVIDENCE_SOURCE_SHA=%s\nEVIDENCE_SOURCE_TREE=%s\n' \
-  "$tag" "$image_digest" "$sha" "$tree"
+if test -n "${EVIDENCE_BUILD_OUTPUT_FILE:-}"; then
+  printf 'EVIDENCE_IMAGE=%s\nEVIDENCE_IMAGE_DIGEST=%s\nEVIDENCE_SOURCE_SHA=%s\nEVIDENCE_SOURCE_TREE=%s\n' \
+    "$tag" "$image_digest" "$sha" "$tree" >> "$EVIDENCE_BUILD_OUTPUT_FILE"
+else
+  printf 'EVIDENCE_IMAGE=%s\nEVIDENCE_IMAGE_DIGEST=%s\nEVIDENCE_SOURCE_SHA=%s\nEVIDENCE_SOURCE_TREE=%s\n' \
+    "$tag" "$image_digest" "$sha" "$tree"
+fi

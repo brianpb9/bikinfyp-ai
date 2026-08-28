@@ -183,6 +183,25 @@ fi
       [],{env:{...env,FAKE_DOCKER_STALE_RECEIPT:"true",EVIDENCE_RECEIPT_EXPORT_DIR:path.join(dir,"stale-export")},stdio:"pipe"}));
     const staleExportLog=fs.readFileSync(path.join(state,"log"),"utf8");
     assert.doesNotMatch(staleExportLog,/^rm -f /m,"container must remain when receipt is bound to another SHA");
+
+    // Managed CI passes only env NAMES to Docker. Secret values remain in the
+    // managed process environment and must never be serialized into argv/logs.
+    fs.writeFileSync(path.join(state,"log"),"");
+    const { EVIDENCE_ENV_FILE: _unused, ...withoutEnvFile } = env;
+    const inheritedEnv={...withoutEnvFile,EVIDENCE_INHERIT_STAGING_ENV:"1",
+      EVIDENCE_RECEIPT_EXPORT_DIR:path.join(dir,"inherited-export"),
+      BASE:"https://racun-ai-staging-web.onrender.com",RACUN_DEPLOY_ENV:"staging",RACUN_DB_RUNTIME:"postgres",
+      STORAGE_MODE:"r2",R2_REGION:"auto",DATABASE_URL:"secret-db-sentinel",AUTH_SECRET:"secret-auth-sentinel",
+      R2_ENDPOINT:"secret-endpoint-sentinel",R2_BUCKET:"secret-bucket-sentinel",
+      R2_ACCESS_KEY_ID:"secret-access-sentinel",R2_SECRET_ACCESS_KEY:"secret-key-sentinel"};
+    assert.throws(()=>execFileSync(new URL("../scripts/run-mobile-evidence-image.sh",import.meta.url).pathname,
+      [],{env:inheritedEnv,stdio:"pipe"}));
+    const inheritedLog=fs.readFileSync(path.join(state,"log"),"utf8");
+    for(const name of ["BASE","DATABASE_URL","AUTH_SECRET","STORAGE_MODE","R2_ENDPOINT","R2_BUCKET",
+      "R2_ACCESS_KEY_ID","R2_SECRET_ACCESS_KEY","R2_REGION","RACUN_DEPLOY_ENV","RACUN_DB_RUNTIME"]){
+      assert.match(inheritedLog,new RegExp(`--env ${name}(?:\\s|$)`));
+    }
+    assert.doesNotMatch(inheritedLog,/secret-(?:db|auth|endpoint|bucket|access|key)-sentinel/);
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
