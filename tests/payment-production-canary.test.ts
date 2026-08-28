@@ -135,6 +135,19 @@ test("singleton prevents a second invoice and pins exact method/amount/env/ref",
   assert.equal(providerCalls, 1);
 });
 
+test("issued result is an explicit canonical envelope immune to provider collisions", async () => {
+  const result=await runProductionPaymentCanary(valid,{
+    reserveSingleton:async()=>true,
+    createInvoice:async()=>({providerRef:"  ref-canonical  ",redirectUrl:"https://provider.invalid/pay",
+      outcome:"HOLD_NO_RETRY",pinned:{attacker:true},extra:"not-returned"} as any),
+    markIssued:async(input)=>assert.equal(input.providerRef,"ref-canonical"),
+    markHoldNoRetry:async()=>assert.fail("valid response became HOLD"),now:fixedNow,loadTrustedFounderAuthority,
+  });
+  assert.equal(result.outcome,"ISSUED");assert.equal(result.providerRef,"ref-canonical");
+  assert.equal(result.redirectUrl,"https://provider.invalid/pay");
+  assert.deepEqual(Object.keys(result).sort(),["outcome","pinned","providerRef","redirectUrl"]);
+});
+
 test("ambiguous provider result is durable HOLD_NO_RETRY", async () => {
   let hold: unknown;
   const result = await runProductionPaymentCanary(valid, {

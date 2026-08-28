@@ -217,7 +217,7 @@ export async function runProductionPaymentCanary(input: PaymentCanaryPinnedInput
     catch { throw new Error("AMBIGUOUS_PROVIDER_RESPONSE"); }
     if (redirect.protocol!=="https:") throw new Error("AMBIGUOUS_PROVIDER_RESPONSE");
     await deps.markIssued({ canaryId: pinned.canaryId, providerRef, expectedState:"RESERVED" });
-    return { outcome: "ISSUED" as const, ...issued, pinned };
+    return { outcome: "ISSUED" as const, providerRef, redirectUrl:redirect.href, pinned };
   } catch (error) {
     const reason = error instanceof Error ? error.message.slice(0, 300) : "AMBIGUOUS_PROVIDER_ERROR";
     await deps.markHoldNoRetry({ canaryId: pinned.canaryId, reason, providerRef,
