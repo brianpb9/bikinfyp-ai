@@ -153,6 +153,8 @@ test("merek mengalir worker -> cast-ref -> qcF1 lewat satu nama field", async ()
   // yang dijaga adalah TIDAK ADA mata rantai yang menjatuhkan fieldnya diam-diam.
   const worker = fsx.readFileSync("lib/postgres/worker.ts", "utf8");
   const castref = fsx.readFileSync("lib/media/cast-ref.ts", "utf8");
+  assert.match(worker, /detail:\s*hasil\.qc\.detail,\s*evidence:\s*hasil\.qc\.evidence/,
+    "binding byte QC-F1 wajib ikut ke arsip prompt, bukan berhenti di return value runtime");
   const qcframe = fsx.readFileSync("lib/media/qc-frame.ts", "utf8");
   assert.match(worker, /merekEksplisit: merekTepercaya\(row\)/, "worker mengisi dari sumber tepercaya");
   assert.match(castref, /merekEksplisit\?: string \| null/, "cast-ref menerimanya");

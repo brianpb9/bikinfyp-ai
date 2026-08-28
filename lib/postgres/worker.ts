@@ -249,6 +249,7 @@ export interface RingkasanQcF1 {
   status: import("../media/qc-frame").StatusQcF1;
   ulang: number;
   detail: string;
+  evidence: import("../media/qc-frame").HasilQcF1["evidence"];
 }
 
 /**
@@ -312,7 +313,8 @@ async function siapkanFrameTurunan(
         productState,
       });
       biaya += hasil.biayaIdr;
-      qcF1.push({ shot: sh.index, productState, status: hasil.qc.status, ulang: hasil.ulang, detail: hasil.qc.detail });
+      qcF1.push({ shot: sh.index, productState, status: hasil.qc.status, ulang: hasil.ulang,
+        detail: hasil.qc.detail, evidence: hasil.qc.evidence });
       const pesan = `[QC-F1] job ${jobId} shot ${sh.index} (${productState}): ${hasil.qc.status} setelah ${hasil.ulang} ulang — ${hasil.qc.detail}`;
       if (hasil.qc.status === "PASS") console.log(pesan); else console.error(pesan);
       // HANYA PASS yang jadi referensi. FAIL berarti produknya sudah bergeser

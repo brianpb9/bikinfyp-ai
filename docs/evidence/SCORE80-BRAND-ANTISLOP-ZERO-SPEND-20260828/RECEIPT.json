@@ -7,6 +7,6 @@
   "public_action": false,
   "claim": "NO_SCORE",
   "reason": "Deterministic controls validate evidence binding and fail-closed acceptance only. A representative production output packet, evaluated through the real QC providers and independently reviewed, is still required for Brand fidelity or Anti-slop score movement.",
-  "bindings": ["approved_reference_sha256", "output_artifact_sha256", "output_frame_sha256", "qc_f1_shape_label_findings", "qc_03", "qc_10", "packshot_reference_sha256"],
-  "negative_controls": ["missing sample", "stale evaluation", "ambiguous QC", "frame mismatch", "reference mismatch", "packshot mismatch", "shape drift", "closure drift", "colour drift", "label-layout drift", "brand unreadable", "generated text", "misspelled brand"]
+  "bindings": ["exact_task", "job_id", "approved_reference_sha256", "output_artifact_sha256", "extraction_manifest_sha256", "output_frame_sha256", "qc_f1_shape_label_findings", "qc_03", "qc_10", "anti_slop_evaluation", "packshot_reference_sha256"],
+  "negative_controls": ["wrong task", "missing artifact provenance", "cross-job evidence", "artifact mismatch", "extraction mismatch", "missing sample", "stale evaluation", "ambiguous QC", "frame mismatch", "reference mismatch", "packshot mismatch", "shape drift", "closure drift", "colour drift", "label-layout drift", "brand unreadable", "generated text", "misspelled brand", "source path mutation after QC snapshot"]
 }
