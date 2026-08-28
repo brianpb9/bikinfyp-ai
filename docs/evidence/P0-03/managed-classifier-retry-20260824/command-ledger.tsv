@@ -1,0 +1,205 @@
+utc_start	utc_end	exit_code	sanitized_invocation	artifact	sha256
+2026-08-24T12:20:06Z	2026-08-24T12:20:06Z	0	sh -n scripts/managed-retry-capture.sh	helper-self-check.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:20:22Z	2026-08-24T12:20:22Z	0	render services --help	render-services-help.txt	0f1fc44e2b847ecb7f273a554c9eda8755c9cd433ca02e6017f2dafab3372139
+2026-08-24T12:20:22Z	2026-08-24T12:20:22Z	0	render psql --help	render-psql-help.txt	cc94461516b181fdb8837fbdc9dbe5207f26cf9eb5c8445e44ad5ad273acaac9
+2026-08-24T12:20:22Z	2026-08-24T12:20:22Z	0	render ssh --help	render-ssh-help.txt	08269b08d9e40296433069e50529dda021acaa36c5be8889f17078493c16d6b3
+2026-08-24T12:20:22Z	2026-08-24T12:20:22Z	0	render deploys create --help	deploy-create-help.txt	440e1a214849b0e665baba87576eef01fdc7eaa91173e7d9b6fbd604103573b2
+2026-08-24T12:20:22Z	2026-08-24T12:20:22Z	0	render services update --help	service-update-help.txt	5df2f26abf95f569a2274b9794126816c01794fe01c8295300bc6504228eef05
+2026-08-24T12:21:31Z	2026-08-24T12:21:31Z	0	node --check scripts/render-api-evidence.mjs	render-api-helper-check.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:21:31Z	2026-08-24T12:21:31Z	1	node scripts/render-api-evidence.mjs get-service srv-d9n28tijnfac73a87lt0	pre-staging-web-service.json	c63603f8518820ea16f0f025ac7e1e566dda04b1a3ae7ecf322c121a9279af14
+2026-08-24T12:21:31Z	2026-08-24T12:21:31Z	1	node scripts/render-api-evidence.mjs get-service srv-d9n28ue417fc73ch2b60	pre-staging-worker-service.json	c63603f8518820ea16f0f025ac7e1e566dda04b1a3ae7ecf322c121a9279af14
+2026-08-24T12:21:31Z	2026-08-24T12:21:31Z	1	node scripts/render-api-evidence.mjs get-service srv-d9nhccfqj5pc73et9hrg	pre-production-web-service.json	c63603f8518820ea16f0f025ac7e1e566dda04b1a3ae7ecf322c121a9279af14
+2026-08-24T12:21:31Z	2026-08-24T12:21:31Z	1	node scripts/render-api-evidence.mjs get-service srv-d9ni3ndaeets73c07kq0	pre-production-worker-service.json	c63603f8518820ea16f0f025ac7e1e566dda04b1a3ae7ecf322c121a9279af14
+2026-08-24T12:21:43Z	2026-08-24T12:21:44Z	0	node scripts/render-api-evidence.mjs get-service srv-d9n28tijnfac73a87lt0	pre-staging-web-service-retry.json	a8a9b4d6ae031ebd2a872ba8ed2842a3a709863ed060df2827d780c9b4f94c9c
+2026-08-24T12:21:44Z	2026-08-24T12:21:44Z	0	node scripts/render-api-evidence.mjs get-service srv-d9n28ue417fc73ch2b60	pre-staging-worker-service-retry.json	5bf514c3c6e1506ec6fed81465918afcfe29d945de910e974f18a700cac9f64e
+2026-08-24T12:21:44Z	2026-08-24T12:21:44Z	0	node scripts/render-api-evidence.mjs get-service srv-d9nhccfqj5pc73et9hrg	pre-production-web-service-retry.json	acc1d78a1389fc69b5bf7d57a9a3dfd64db718d166342346ae519ee82f28715e
+2026-08-24T12:21:44Z	2026-08-24T12:21:45Z	0	node scripts/render-api-evidence.mjs get-service srv-d9ni3ndaeets73c07kq0	pre-production-worker-service-retry.json	24ed0a6e5a827423ae61ba86961a90311e46b421cc6f1920bee8cbfa3c3ceb63
+2026-08-24T12:22:19Z	2026-08-24T12:22:19Z	0	render deploys list srv-d9n28tijnfac73a87lt0 --output json	pre-staging-web-deploys.json	aab9a8595fedfaac0f2dc71eacd2b0c67385d0da00340f167e10e196a7cf6f74
+2026-08-24T12:22:19Z	2026-08-24T12:22:20Z	0	render deploys list srv-d9n28ue417fc73ch2b60 --output json	pre-staging-worker-deploys.json	6b35d684c9cebd672753f331ab99137f85373d960af06bd10d15b464f950e6e0
+2026-08-24T12:22:20Z	2026-08-24T12:22:20Z	0	render deploys list srv-d9nhccfqj5pc73et9hrg --output json	pre-production-web-deploys.json	7564e36be133d945f5916a4a365c24b8a245533bdee024a47f62a9a8c1bffabb
+2026-08-24T12:22:20Z	2026-08-24T12:22:21Z	0	render deploys list srv-d9ni3ndaeets73c07kq0 --output json	pre-production-worker-deploys.json	1d73a2d79e467ea725f0a867ce171d6a287b24e93b853c83dc8fa010864fddcf
+2026-08-24T12:22:21Z	2026-08-24T12:22:21Z	0	render postgres get dpg-d9n21fnlk1mc73djm8q0-a --output json	pre-staging-database.json	c88010bd0d45555be09ce3e8162f10a75004fd92b6f6d2c9437f32eb614fb0fc
+2026-08-24T12:22:21Z	2026-08-24T12:22:23Z	1	scripts/staging-task-window-aggregate.sh	pre-task-window-job-aggregate.txt	03e9584647de8b7ede260abe93cc425e7ea96f8e9b225093986fcebbe3edf288
+2026-08-24T12:22:23Z	2026-08-24T12:22:24Z	0	git ls-remote origin refs/heads/main	pre-origin-main-ref.txt	11c7e32b23109d22ae98d2c6a8516eb97d6f2d2f11b3d0a1a0341ad13c0254dc
+2026-08-24T12:22:24Z	2026-08-24T12:22:24Z	0	curl -fsS https://racun-ai-staging-web.onrender.com/api/health	pre-staging-health.json	461645e625e70c2b5635a1583c18ee3f0c28f1c13b229680def2b33c31aa860c
+2026-08-24T12:22:41Z	2026-08-24T12:22:41Z	0	render postgres update --help	postgres-update-help.txt	b9c0d135e10fa07f932d7d5756c2f64d5f263e62a5bc12aa8aae6f333412249a
+2026-08-24T12:22:42Z	2026-08-24T12:22:42Z	0	git ls-remote --heads origin '<REDACTED_COMPLEX_ARG>'	pre-origin-staging-refs-retry.txt	f08a2dd5637222eec105575ca0fc0c919eb5a498dd368afd19e03e71f0f49b64
+2026-08-24T12:22:56Z	2026-08-24T12:22:56Z	0	node scripts/render-postgres-evidence.mjs dpg-d9n21fnlk1mc73djm8q0-a	pre-staging-database-allowlist.json	65da84936ea3e0b3b3cbcec6fa2bc962a0a44769d6c12aaaecafb07304208d30
+2026-08-24T12:23:18Z	2026-08-24T12:23:18Z	0	git rev-parse '<REDACTED_COMPLEX_ARG>'	pre-accepted-sha.txt	31553aad6933677ccce6262f8570c4ecb371eb4345f0d59bf77f69fd783a6866
+2026-08-24T12:23:18Z	2026-08-24T12:23:18Z	0	git merge-base --is-ancestor 00ee62efd86ae7e10453a2a1896e63b62228aa4d 73280ffa342945dc08cee2fc664956975c8d5735	pre-accepted-ancestry.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:23:18Z	2026-08-24T12:23:18Z	0	git status --short	pre-worktree-status.txt	e1a34a999cd414ffb5d6e7a1397b1b362f1cb57fd1a1be8117e1f700446f1368
+2026-08-24T12:23:48Z	2026-08-24T12:23:48Z	0	curl -fsS https://api.ipify.org	pre-operator-public-ip.txt	ccb3cd9f5b6dbbf9e386edeeaa01826211a046d64d1dc4c00054309f79ed4752
+2026-08-24T12:23:48Z	2026-08-24T12:23:50Z	0	scripts/staging-db-allowlist-window.sh add	mutation-db-allowlist-add.json	ad442d65e47beb6d627f0e9389f00d34c16663700ab0aa33359c71e5cdeb6464
+2026-08-24T12:23:50Z	2026-08-24T12:23:50Z	0	node scripts/render-postgres-evidence.mjs dpg-d9n21fnlk1mc73djm8q0-a	post-add-staging-database-allowlist.json	7c13d5796e6008dce5befe08023d9ef27f1682ddefc7ae0602809a81a4d7594c
+2026-08-24T12:23:50Z	2026-08-24T12:23:56Z	0	scripts/staging-task-window-aggregate.sh	pre-app-mutation-job-aggregate.txt	2932a38beda8316c7bd84df80807b1b35ab499668868c9eaf1f79120ed84bf92
+2026-08-24T12:24:05Z	2026-08-24T12:24:08Z	0	git push origin 73280ffa342945dc08cee2fc664956975c8d5735:refs/heads/staging/exact-73280ff-20260824	mutation-push-staging-ref.txt	9d958a2d2805c654f9a899f7a8fc6065d919b19cb83d49a4ccf308d28a8d6a5f
+2026-08-24T12:24:08Z	2026-08-24T12:24:09Z	0	git ls-remote origin refs/heads/staging/exact-73280ff-20260824	post-push-staging-ref.txt	8be356c06dac6087ac4492d23afb3719aa27d7e9bd6bd636131965bd416d9f92
+2026-08-24T12:24:23Z	2026-08-24T12:24:23Z	0	tail -1 docs/evidence/P0-03/managed-classifier-retry-20260824/maintenance-health-sampler.jsonl	sampler-prehold-observation.json	cc2c51ef7f93d94630fb6d68c2d7611b01b6449644a84b0d95e552004b4e8ee3
+2026-08-24T12:24:23Z	2026-08-24T12:24:24Z	0	node scripts/render-api-evidence.mjs maintenance-on srv-d9n28tijnfac73a87lt0	mutation-maintenance-enable.json	cf754886c43f19ef4c78886648c1ebcd8f1526bbc64d93608f5e5113b84ab2f0
+2026-08-24T12:24:24Z	2026-08-24T12:24:24Z	0	node scripts/render-api-evidence.mjs get-service srv-d9n28tijnfac73a87lt0	post-maintenance-service.json	a349baabbf1425941d4be5c753837ef74a7b4040919ff4a4a250b675b565f0cd
+2026-08-24T12:24:34Z	2026-08-24T12:24:34Z	0	scripts/staging-health-probe.sh	hold-external-health.txt	8fa75604d74ae7d9a47e2bc22d770459902be0a5d45af33afec6c3774106a468
+2026-08-24T12:24:34Z	2026-08-24T12:24:35Z	0	node scripts/render-api-evidence.mjs candidate srv-d9n28tijnfac73a87lt0 staging/exact-73280ff-20260824	mutation-candidate-config.json	d361f118b4f8641430ecede13ab715ac74dfeb6eda856c822fc7464b79f50557
+2026-08-24T12:24:35Z	2026-08-24T12:24:35Z	0	node scripts/render-api-evidence.mjs get-service srv-d9n28tijnfac73a87lt0	candidate-config-readback.json	121b5b27ba8d4d132952691aabdcee82c6c4e664ba649e2f10ecc69165583331
+2026-08-24T12:28:46Z	2026-08-24T12:28:47Z	0	render deploys list srv-d9n28tijnfac73a87lt0 --output json	deploy-progress-1.json	f9f688e1d8e1b27f6339037c99ca8b313c8323feedad81cec63a49d70299baec
+2026-08-24T12:24:48Z	2026-08-24T12:29:08Z	0	render deploys create srv-d9n28tijnfac73a87lt0 --commit 73280ffa342945dc08cee2fc664956975c8d5735 --wait --confirm --output json	mutation-exact-sha-deploy.json	b43b632891e01eb73aff96e3aeac3d89f987e4150097bf19c4b7255c0df146f5
+2026-08-24T12:29:32Z	2026-08-24T12:29:32Z	0	render deploys list srv-d9n28tijnfac73a87lt0 --output json	candidate-deploy-final.json	f6ce00e517235f58a62afb7b11e2f0db8a6f12d0cdbc97e031a5e147ce4ef01c
+2026-08-24T12:29:32Z	2026-08-24T12:29:33Z	0	node scripts/render-api-evidence.mjs get-service srv-d9n28tijnfac73a87lt0	candidate-service-live-readback.json	dd49db58b753d32529790b594c390a86d07e8baf9a140d54f2a2f71bc31f67cb
+2026-08-24T12:29:33Z	2026-08-24T12:29:34Z	0	render logs --resources srv-d9n28tijnfac73a87lt0 --start 2026-08-24T12:24:40Z --limit 500 --output text	candidate-build-runtime-logs.txt	c37f3d3ab5a97e5294304129c49d6a40ff268a36f209a57114fbf25508679a75
+2026-08-24T12:29:34Z	2026-08-24T12:29:34Z	0	which expect	expect-path.txt	68bc2e8b1f520f5db09923cbd2f20526351bb0e1085823aaac563a80a0ca1683
+2026-08-24T12:29:44Z	2026-08-24T12:30:29Z	124	scripts/staging-private-health.exp	candidate-private-health-via-ssh.txt	81915bb3ed5274553183bb7488a9a1cb67b0da779428310ed78e7ed008f0d355
+2026-08-24T12:30:38Z	2026-08-24T12:30:39Z	0	render services instances srv-d9n28tijnfac73a87lt0 --output json	candidate-instances.json	0309184a01945d1eaca834a8739fad9244f4ebe20c8c00fcc1dbe9f95fe3d211
+2026-08-24T12:30:49Z	2026-08-24T12:31:34Z	124	scripts/staging-private-health.exp	candidate-private-health-via-ssh-retry.txt	eff2223b9eefd68589431fd6c6487b29b7e3c80e53c55f5499f0aa5f4518a10c
+2026-08-24T12:32:05Z	2026-08-24T12:32:08Z	0	scripts/staging-migration-state.sh	candidate-migration-state.txt	28d3e457437a1bd1a419035dbd7ccee3bdce7ff60738d045de0a4d1d7d636b48
+2026-08-24T12:32:08Z	2026-08-24T12:32:10Z	0	scripts/staging-task-window-aggregate.sh	pre-release-job-aggregate.txt	2932a38beda8316c7bd84df80807b1b35ab499668868c9eaf1f79120ed84bf92
+2026-08-24T12:32:21Z	2026-08-24T12:32:21Z	0	node scripts/render-api-evidence.mjs maintenance-off srv-d9n28tijnfac73a87lt0	mutation-maintenance-disable.json	4825496950ca8512695fc790d02764f55260e948b9e9b3f0b3aa971eb0a18952
+2026-08-24T12:32:21Z	2026-08-24T12:32:21Z	0	scripts/staging-health-probe.sh	final-external-health.txt	a52b38bc4ca87160444565a92d664d1cf1a04f25b0cab2fbec06218f5117fa60
+2026-08-24T12:32:21Z	2026-08-24T12:32:22Z	0	node scripts/render-api-evidence.mjs get-service srv-d9n28tijnfac73a87lt0	post-release-service.json	3aeb8a0d47955cb4e885c04309e7faeccf3ddddb8aa4b10867aa9ac0f4f63483
+2026-08-24T12:32:34Z	2026-08-24T12:32:34Z	0	scripts/staging-health-probe.sh	final-external-health-retry.txt	be7d33a736bf9b80e86d0d7bcdaa1b94257d0237fadc71a5471657c0409d414b
+2026-08-24T12:33:13Z	2026-08-24T12:33:16Z	0	scripts/staging-task-window-aggregate.sh	final-task-window-job-aggregate.txt	2932a38beda8316c7bd84df80807b1b35ab499668868c9eaf1f79120ed84bf92
+2026-08-24T12:33:16Z	2026-08-24T12:33:16Z	0	shasum -a 256 assets/probe/probe-teks.png	final-fixture-sha256.txt	491915bd8a03dd88e357bfc723e5023db5fc70c33c758d00ae8f3741f8919c5b
+2026-08-24T12:33:16Z	2026-08-24T12:33:16Z	0	scripts/staging-db-allowlist-window.sh clear	mutation-db-allowlist-clear.json	3421b0e5a3fe5e5c6e755a185f054fd3aad53998e9e101fe5595f8094329ddf8
+2026-08-24T12:33:16Z	2026-08-24T12:33:17Z	0	node scripts/render-postgres-evidence.mjs dpg-d9n21fnlk1mc73djm8q0-a	final-staging-database-allowlist.json	e287363ad58fec3d6e97ca9ed7fbcc9bfe4fa85db00bd12a414e7e439f5be3d4
+2026-08-24T12:33:17Z	2026-08-24T12:33:32Z	0	sleep 15	sustained-wait-1.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:33:32Z	2026-08-24T12:33:32Z	0	scripts/staging-health-probe.sh	sustained-health-1.txt	91eafb31570ad26e2a04ef5d0c8deaa72278f22a5a70ebb0d459e19307d00215
+2026-08-24T12:33:32Z	2026-08-24T12:33:47Z	0	sleep 15	sustained-wait-2.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:33:47Z	2026-08-24T12:33:47Z	0	scripts/staging-health-probe.sh	sustained-health-2.txt	8eea5d0d0f49817cd000a906a9b764a383fac16a35be782344e669df45d7444b
+2026-08-24T12:24:13Z	2026-08-24T12:33:54Z	0	node scripts/maintenance-health-sampler.mjs	maintenance-health-sampler.jsonl	0d0104f257893052c337f6af5b9cd93912447990409fb89cfa9fd1954330f012
+2026-08-24T12:34:02Z	2026-08-24T12:34:03Z	0	node scripts/render-api-evidence.mjs get-service srv-d9n28tijnfac73a87lt0	final-staging-web-service.json	919ef99f673716ea1241ea68f2eb0c4273a126d07610857d500f7e11b404c0fa
+2026-08-24T12:34:03Z	2026-08-24T12:34:03Z	0	render deploys list srv-d9n28tijnfac73a87lt0 --output json	final-staging-web-deploys.json	0046e090b6911004750e760c990b769ce4472ce5d846f81af00ec09e9cacb5ad
+2026-08-24T12:34:03Z	2026-08-24T12:34:04Z	0	node scripts/render-api-evidence.mjs get-service srv-d9n28ue417fc73ch2b60	final-staging-worker-service.json	10d9135fa79cddabe360ce6abd58b296bc860614610b076150babb628c630f62
+2026-08-24T12:34:04Z	2026-08-24T12:34:04Z	0	render deploys list srv-d9n28ue417fc73ch2b60 --output json	final-staging-worker-deploys.json	6b35d684c9cebd672753f331ab99137f85373d960af06bd10d15b464f950e6e0
+2026-08-24T12:34:04Z	2026-08-24T12:34:05Z	0	node scripts/render-api-evidence.mjs get-service srv-d9nhccfqj5pc73et9hrg	final-production-web-service.json	70a627967fa43a648ca71f3b785d7f0d5c56a5fd28335ce6609a21227f95b087
+2026-08-24T12:34:05Z	2026-08-24T12:34:05Z	0	render deploys list srv-d9nhccfqj5pc73et9hrg --output json	final-production-web-deploys.json	7564e36be133d945f5916a4a365c24b8a245533bdee024a47f62a9a8c1bffabb
+2026-08-24T12:34:05Z	2026-08-24T12:34:06Z	0	node scripts/render-api-evidence.mjs get-service srv-d9ni3ndaeets73c07kq0	final-production-worker-service.json	79e46952f1da26fb3857ef67a7eba854f0d7c2eabf810ae573fa8d4e8cfb1df1
+2026-08-24T12:34:06Z	2026-08-24T12:34:06Z	0	render deploys list srv-d9ni3ndaeets73c07kq0 --output json	final-production-worker-deploys.json	1d73a2d79e467ea725f0a867ce171d6a287b24e93b853c83dc8fa010864fddcf
+2026-08-24T12:34:06Z	2026-08-24T12:34:07Z	0	git ls-remote origin refs/heads/main	final-origin-main-ref.txt	11c7e32b23109d22ae98d2c6a8516eb97d6f2d2f11b3d0a1a0341ad13c0254dc
+2026-08-24T12:34:07Z	2026-08-24T12:34:07Z	0	git ls-remote origin refs/heads/staging/exact-73280ff-20260824	final-origin-staging-ref.txt	8be356c06dac6087ac4492d23afb3719aa27d7e9bd6bd636131965bd416d9f92
+2026-08-24T12:40:37Z	2026-08-24T12:40:37Z	0	sh -n scripts/managed-retry-capture.sh scripts/staging-db-allowlist-window.sh scripts/staging-health-probe.sh scripts/staging-migration-state.sh scripts/staging-task-window-aggregate.sh scripts/verify-managed-command-ledger.sh	final-shell-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:40:37Z	2026-08-24T12:40:37Z	0	node --check scripts/render-api-evidence.mjs	final-node-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:40:37Z	2026-08-24T12:40:37Z	0	node --check scripts/render-postgres-evidence.mjs	final-node-syntax-postgres.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:40:37Z	2026-08-24T12:40:37Z	0	node --check scripts/maintenance-health-sampler.mjs	final-node-syntax-sampler.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:40:37Z	2026-08-24T12:40:37Z	0	node --check scripts/resync-managed-command-ledger.mjs	final-node-syntax-resync.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:40:37Z	2026-08-24T12:40:37Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	final-json-parse.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:40:37Z	2026-08-24T12:40:37Z	0	npm run test:web-container	final-web-container-tests.txt	00698ca8753d1aa5b7b0748e6ecbaf23fc6c7c36793855fb6219545173d5d92b
+2026-08-24T12:40:37Z	2026-08-24T12:40:39Z	0	npx tsc --noEmit	final-tsc.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:40:39Z	2026-08-24T12:40:40Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	final-ledger-integrity.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:40:56Z	2026-08-24T12:40:57Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	final-sanitization-check.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
+2026-08-24T12:40:57Z	2026-08-24T12:40:57Z	0	git diff --check	final-diff-check.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:40:57Z	2026-08-24T12:40:57Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	final-ledger-integrity-after-checks.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T12:57:15Z	2026-08-24T12:57:18Z	0	scripts/staging-task-window-aggregate.sh	remediation-parity-baseline.txt	a851beedf56bc815c727f74099f7b170e8590e8671b1634bbb87972f52482e13
+2026-08-24T12:57:32Z	2026-08-24T12:57:33Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-hold-503.txt	fc6b9cec69927a2e4896b39f6bc1df2c771bbaea42050b637a77dcb755a17aaa
+2026-08-24T12:57:33Z	2026-08-24T12:57:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-service-live.json	89291b3a2ce6570a627a5c3c89331cf55441443b5b721c4c8e22c21551036662
+2026-08-24T12:57:34Z	2026-08-24T12:57:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-explicit-deploy.json	efcd3d2f87d7d28a73788497e9019e4735e0c3893dc38fdbf0fc5df538556dec
+2026-08-24T12:57:34Z	2026-08-24T12:57:35Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-startup.txt	8ed83fe4b866eb852660504f0056f63839dc970591b12789be8f7b3e3c41e577
+2026-08-24T12:57:35Z	2026-08-24T12:57:35Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-queue-final.txt	de91b37df5499c7f348c078b6baf7a9c08b9c2066b0f2ac917a4b4170f73f91e
+2026-08-24T12:57:35Z	2026-08-24T12:57:36Z	5	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-staging-db-allowlist.json	f7f5a3c62db4cb6df7e8569c34fe54f9029ece4373be1eb32f87dd0e70e61836
+2026-08-24T12:57:50Z	2026-08-24T12:57:51Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-staging-db-allowlist-readback.json	4fbe9a434d2c1a343cffd866e57ae49ec0fa646033bfd47d73bc176ce9f2484e
+2026-08-24T12:57:54Z	2026-08-24T12:57:56Z	0	scripts/staging-task-window-aggregate.sh	remediation-parity-final.txt	6021668f29c78bd61229c854b6f242b0e386c7bbcd5326ac970032b636533f26
+2026-08-24T12:58:31Z	2026-08-24T12:58:33Z	0	scripts/staging-task-window-aggregate.sh	remediation-parity-sustained-final.txt	3c5d1e64917bebee6b0220ca1e4a85846b02ec61f935617a7ca678eeccbd5151
+2026-08-24T12:58:46Z	2026-08-24T12:58:46Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-parity-compare.txt	0a845d5a338e4341b8015703b6447e5742ef14a00a4f3832752c20f795296656
+2026-08-24T12:59:10Z	2026-08-24T12:59:11Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-db-allowlist-clear.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T12:59:11Z	2026-08-24T12:59:12Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-db-allowlist-final.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T12:59:20Z	2026-08-24T12:59:21Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-web-hold-service.json	0dccc77bd37ee9a3e86eeb79ae18c45789a148bd327bae007f7034405ebc0050
+2026-08-24T12:59:21Z	2026-08-24T12:59:22Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-web-latest-deploy.json	0046e090b6911004750e760c990b769ce4472ce5d846f81af00ec09e9cacb5ad
+2026-08-24T12:59:22Z	2026-08-24T12:59:22Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-latest-deploy.json	efcd3d2f87d7d28a73788497e9019e4735e0c3893dc38fdbf0fc5df538556dec
+2026-08-24T12:59:29Z	2026-08-24T12:59:29Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-maintenance-disable.json	84e56c09533b5ad24b2b1cc1dd3d126548d8105614f991e8add710a40ff5d1eb
+2026-08-24T12:59:39Z	2026-08-24T12:59:39Z	0	scripts/staging-health-probe.sh	remediation-health-1.txt	6da8088b9c1eba37fdca441c2c827b43fdbd48a45b901b57fff09ffabbff28fb
+2026-08-24T13:00:53Z	2026-08-24T13:00:54Z	0	scripts/staging-health-probe.sh	remediation-health-2.txt	349d6320ee4ec6bd7aa1be9ce9eb227c01420bde29ec30f009c84a8bb70d234c
+2026-08-24T13:01:14Z	2026-08-24T13:01:14Z	0	scripts/staging-health-probe.sh	remediation-health-3.txt	f2e4388ca33cf33e7d63f37a380b8c6b369111731917c23d7a731d1d5b45822f
+2026-08-24T13:01:31Z	2026-08-24T13:01:32Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-web-final-service.json	2685d56ac31f0f41caf11b3e23d2531f038b9ba109a0e1c772ea4b7aae1466a8
+2026-08-24T13:01:32Z	2026-08-24T13:01:33Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-worker-final-service.json	89291b3a2ce6570a627a5c3c89331cf55441443b5b721c4c8e22c21551036662
+2026-08-24T13:01:33Z	2026-08-24T13:01:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-production-web-latest.json	7564e36be133d945f5916a4a365c24b8a245533bdee024a47f62a9a8c1bffabb
+2026-08-24T13:01:34Z	2026-08-24T13:01:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-production-worker-latest.json	1d73a2d79e467ea725f0a867ce171d6a287b24e93b853c83dc8fa010864fddcf
+2026-08-24T13:01:34Z	2026-08-24T13:01:35Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-origin-main.txt	79ebea1ae427fb0fc23eca67d15c532280b89ddaa30f4f1fc9cf5a0b91a27669
+2026-08-24T13:02:16Z	2026-08-24T13:02:17Z	0	npm run test:web-container	remediation-final-web-container-tests.txt	d2c0898378dcfeb1ab197d0100967c70dd027549828b4f1440a178ff5503880e
+2026-08-24T13:02:17Z	2026-08-24T13:02:19Z	0	npx tsc --noEmit	remediation-final-tsc.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:02:19Z	2026-08-24T13:02:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-final-shell-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:02:19Z	2026-08-24T13:02:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-final-node-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:02:19Z	2026-08-24T13:02:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	remediation-final-json-parse.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:03:20Z	2026-08-24T13:03:20Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	remediation-final-sanitization.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
+2026-08-24T13:03:20Z	2026-08-24T13:03:21Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	remediation-final-ledger-integrity.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:09:07Z	2026-08-24T13:09:10Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-maintenance-enable.json	82a3280c171d48071750aa5a2ecd809349c570d987b05a294002d59d257f0eb7
+2026-08-24T13:09:10Z	2026-08-24T13:09:10Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-hold-503.txt	0956ee5fa0cee9eb0f8da10f2f66d683cbf330c79e8861760838b7f9f4199ead
+2026-08-24T13:09:17Z	2026-08-24T13:09:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-suspend.txt	91a446d241e4eac85e68eb76d1593b226378e7c606048f3d678995c0410070a4
+2026-08-24T13:09:20Z	2026-08-24T13:09:21Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-suspended-service.json	db946cdbcb1c907aad76d7a42d3fb924eab9c6fe3c37d59be55ccb9783fb21a7
+2026-08-24T13:09:27Z	2026-08-24T13:09:28Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-db-allowlist-add.json	04e71d0b0efeb91422fdbcf5545b71dd2dd9398cde82f521194a6149c0670b2f
+2026-08-24T13:09:28Z	2026-08-24T13:09:29Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-db-allowlist-readback.json	04e71d0b0efeb91422fdbcf5545b71dd2dd9398cde82f521194a6149c0670b2f
+2026-08-24T13:09:35Z	2026-08-24T13:09:37Z	0	scripts/staging-task-window-aggregate.sh	replay-pre-rollout-fingerprint.txt	aa9b309702d1ecf3834b052465ddc1efb530fc26fd817cfcebab35ef838eede6
+2026-08-24T13:09:44Z	2026-08-24T13:09:44Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-pre-rollout-queue-job.json	e1ead9c32f443d50c589b14aec75b5674d69492fc1d7d4723213f0b1e5cfe69f
+2026-08-24T13:10:45Z	2026-08-24T13:10:45Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-pre-rollout-queue-job-final.json	f181b69355b3e3f4e5d9213c8fead9cb35244fee26b2b5f2cc0a5186f36b42f4
+2026-08-24T13:10:45Z	2026-08-24T13:10:45Z	0	render logs --resources job-da645hmk1f9s738voujg --start 2026-08-24T13:10:25Z --end 2026-08-24T13:10:45Z --text REPLAY_QUEUE_PRE --output text	replay-pre-rollout-queue-counts.txt	a5b32589438eba112083d7b93ed726d2c565614f2f6eb076dbff1263d4db2f7a
+2026-08-24T13:10:45Z	2026-08-24T13:10:46Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-pre-rollout-queue-failed-attempt.json	f030fc104435c25aaeff525f7cfe94ee1b114404cf13c56bc40581e1249bf18f
+2026-08-24T13:11:01Z	2026-08-24T13:11:03Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-resume.txt	6e4472d3ae744a5f205d5ba100c314697308020c4ca01496f665ba0f00d69bb8
+2026-08-24T13:11:05Z	2026-08-24T13:11:05Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-resume-deploy-created.json	902b947ec781a077e9250655d5e384481deacf1e1b8b1bcfab965b5e897adfe2
+2026-08-24T13:12:43Z	2026-08-24T13:12:44Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-resume-deploy-live.json	1fe5322f83a0b55295564108a7daaed98d2c2f926cd0053861869f6ad3d9e029
+2026-08-24T13:12:44Z	2026-08-24T13:12:45Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-worker-live-service.json	078757712a1767a185505841dd0e1803ac4db2cc7fc79c6185c09215e01d1009
+2026-08-24T13:12:45Z	2026-08-24T13:12:45Z	0	render logs --resources srv-d9n28ue417fc73ch2b60 --start 2026-08-24T13:12:25Z --text '<REDACTED_COMPLEX_ARG>' --output text	replay-worker-startup.txt	f1b31f14849c60560179039879bd981a7a553e310230075340ace31d9f4257fe
+2026-08-24T13:12:45Z	2026-08-24T13:12:48Z	0	scripts/staging-task-window-aggregate.sh	replay-post-rollout-fingerprint.txt	2c8eb852d6ac1b52f23dca8a42d3b7ed14c203f0210d6f0cae6c160f0dd71dc4
+2026-08-24T13:13:24Z	2026-08-24T13:13:25Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-post-rollout-queue-job-final.json	d145ef226c40dff37b1408388084e26d20214b0a5b5e7f7dc80451c2b04ec4cb
+2026-08-24T13:13:25Z	2026-08-24T13:13:25Z	0	render logs --resources job-da646lm7bikc73aqep00 --start 2026-08-24T13:12:50Z --end 2026-08-24T13:13:25Z --text REPLAY_QUEUE_POST --output text	replay-post-rollout-queue-counts.txt	7e9f4dd2c3a1c0465a7032a181b2b7440c5a9e067e26f31d4be41bd0b4c3f6f3
+2026-08-24T13:13:52Z	2026-08-24T13:13:54Z	0	scripts/staging-task-window-aggregate.sh	replay-sustained-fingerprint.txt	55f942d7386c8e96654fe7418885b6db86044e2a356f0851581cf925a923e891
+2026-08-24T13:14:35Z	2026-08-24T13:14:35Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-sustained-queue-job-final.json	7bb64ef242177351807849bb2223fce9223a333bed19b791d9e26488b0acf341
+2026-08-24T13:14:35Z	2026-08-24T13:14:36Z	0	render logs --resources job-da6476jl550s738cf7f0 --start 2026-08-24T13:14:00Z --end 2026-08-24T13:14:35Z --text REPLAY_QUEUE_SUSTAINED --output text	replay-sustained-queue-counts.txt	cbdc65979fd1ab9e8172cbb485ba1adb6b58e9ac4184a56b3e5dfd8bc5870299
+2026-08-24T13:14:48Z	2026-08-24T13:14:48Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-complete-window-compare.txt	9d8449347445d4066c5fbb6b986a536b4285a7317e97c6803151d0e26bd5791b
+2026-08-24T13:15:01Z	2026-08-24T13:15:01Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-production-web-service-final.json	dc7b2e90aea5f562e7ba3dad100b684ac5393295aa0ab5aa2bf231d9b70475e3
+2026-08-24T13:15:01Z	2026-08-24T13:15:02Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-production-worker-service-final.json	600d988cc17b3c07dcf196b151001809d5c0176adbc28fc0f0bbce5d042c7682
+2026-08-24T13:15:08Z	2026-08-24T13:15:08Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-production-service-compare.txt	6912f249786f0a5d40fae43d4100e8033f12bb25ba9c44766fe015b66d614358
+2026-08-24T13:15:14Z	2026-08-24T13:15:15Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-db-allowlist-clear.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T13:15:15Z	2026-08-24T13:15:16Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-db-allowlist-final.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T13:15:16Z	2026-08-24T13:15:16Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-maintenance-disable.json	0b639e200d126f5ef2d5796a8542d54ecc1726c9612936304c6026dbd50f6a33
+2026-08-24T13:15:16Z	2026-08-24T13:15:16Z	0	scripts/staging-health-probe.sh	replay-health-1.txt	8b8c055a63e94711eb0c662c025fe2a1ecee8437468f38dc66efb3108e6fc5b0
+2026-08-24T13:15:34Z	2026-08-24T13:15:35Z	0	scripts/staging-health-probe.sh	replay-health-2.txt	272d2f1539576d11b0833ecbf9509fec296b57a15b76dd5239e947dc82652cf7
+2026-08-24T13:16:05Z	2026-08-24T13:16:05Z	0	scripts/staging-health-probe.sh	replay-health-3.txt	7f23c08337f899f5e431e7081c6747e3963eb5953c6ed8e108a050b1a27798a0
+2026-08-24T13:17:31Z	2026-08-24T13:17:32Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-staging-web-service-final.json	cc63123761fcde267f15ff52b5a8f3c246a6b961e4ac557d34ed657b7aa711a8
+2026-08-24T13:17:32Z	2026-08-24T13:17:32Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-staging-worker-service-final.json	e900a336d8c4432c55667790c1d104b05b8a3fcec16df36906f0354ecd146cf7
+2026-08-24T13:17:32Z	2026-08-24T13:17:33Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-staging-worker-deploy-final.json	1fe5322f83a0b55295564108a7daaed98d2c2f926cd0053861869f6ad3d9e029
+2026-08-24T13:17:33Z	2026-08-24T13:17:33Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-origin-main-final.txt	79ebea1ae427fb0fc23eca67d15c532280b89ddaa30f4f1fc9cf5a0b91a27669
+2026-08-24T13:17:48Z	2026-08-24T13:17:48Z	0	npm run test:web-container	replay-final-web-container-tests.txt	558b09d8db659fdf1668f835620e739788baf5f5910f1a0908bf3014b3f3c13d
+2026-08-24T13:17:48Z	2026-08-24T13:17:51Z	0	npx tsc --noEmit	replay-final-tsc.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:17:51Z	2026-08-24T13:17:51Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-final-shell-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:17:51Z	2026-08-24T13:17:51Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	replay-final-json-parse.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:18:00Z	2026-08-24T13:18:01Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	replay-final-sanitization.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
+2026-08-24T13:18:01Z	2026-08-24T13:18:02Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	replay-final-ledger-integrity.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:23:34Z	2026-08-24T13:23:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-maintenance-enable.json	f1ea8164ae9004bd42086c28e6304479c993f4ab6f3e5c1de915f4ef943727c5
+2026-08-24T13:23:34Z	2026-08-24T13:23:37Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-hold-propagation.txt	e0b508dec77f711151e425f92927ec628e3861649d2fb87cb38f229927d9595c
+2026-08-24T13:23:37Z	2026-08-24T13:23:37Z	0	scripts/staging-health-probe.sh	canonical-hold-503.txt	65bd2d5e1810921fceec0494925e0efb9a161173935e0d0678808a83064f3d08
+2026-08-24T13:23:52Z	2026-08-24T13:23:53Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-suspend.txt	91a446d241e4eac85e68eb76d1593b226378e7c606048f3d678995c0410070a4
+2026-08-24T13:23:54Z	2026-08-24T13:23:55Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-suspended-service.json	5e333af307b9954f679ad1790743a8fe3d6faccc94c17b1a3e0977242489e79a
+2026-08-24T13:24:01Z	2026-08-24T13:24:03Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-db-allowlist-add.json	e5a9412cb52042251f50df05bb120a94b5e1a32481a282a08f5fb3c78e12b20e
+2026-08-24T13:24:03Z	2026-08-24T13:24:03Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-db-allowlist-readback.json	e5a9412cb52042251f50df05bb120a94b5e1a32481a282a08f5fb3c78e12b20e
+2026-08-24T13:24:10Z	2026-08-24T13:24:13Z	0	scripts/staging-task-window-aggregate.sh	canonical-pre-rollout-fingerprint.txt	730aa8d6b2fa0b139fd82784e9c23f6274ad5bd63bd8ba4136fefb5bed97bfdd
+2026-08-24T13:24:57Z	2026-08-24T13:24:57Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-pre-rollout-queue-job.json	3e2d7ae22bb039d2c3ceeb98e32bb380c95c94a78b8d87d5423a79227713b50c
+2026-08-24T13:24:57Z	2026-08-24T13:24:58Z	0	render logs --resources job-da64c1e417fc739a4ll0 --start 2026-08-24T13:24:15Z --end 2026-08-24T13:24:55Z --text CANONICAL_QUEUE_PRE --output text	canonical-pre-rollout-queue-counts.txt	c4d7191658dd37112322cd22a258fc7b2e74e5309980ea40b2c44e712cc4551a
+2026-08-24T13:25:16Z	2026-08-24T13:25:17Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-resume.txt	6e4472d3ae744a5f205d5ba100c314697308020c4ca01496f665ba0f00d69bb8
+2026-08-24T13:25:19Z	2026-08-24T13:25:20Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-deploy-created.json	49067e4b965c45b80fb0b54ae522ca039cb8e6eee8a7fad7510d4e6a948a8ca2
+2026-08-24T13:26:41Z	2026-08-24T13:26:41Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-deploy-live.json	b9cfddddd51f51ab7a6e43da74fb95cbc3515175b57bd6c24a1ee01f306c883d
+2026-08-24T13:26:41Z	2026-08-24T13:26:42Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-worker-live-service.json	cb1e5e78bf8c7a435d9b7c61a2d176d6fb266af26fdeee2a66d5bc6d512a83c4
+2026-08-24T13:26:42Z	2026-08-24T13:26:43Z	0	render logs --resources srv-d9n28ue417fc73ch2b60 --start 2026-08-24T13:26:25Z --text '<REDACTED_COMPLEX_ARG>' --output text	canonical-worker-startup.txt	1ba9c60c4dad3203c96527dbaac90a102d0c2be535d9f2e241b3dae9a7358ec5
+2026-08-24T13:26:43Z	2026-08-24T13:26:46Z	0	scripts/staging-task-window-aggregate.sh	canonical-post-rollout-fingerprint.txt	f685ff4591b89e090f9d8eb5b70cdf1ef2d49219988ff215f976bb0df951fec1
+2026-08-24T13:27:31Z	2026-08-24T13:27:31Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-post-rollout-queue-job.json	c4b559f15b4bf5f927422f7c96f5ef5aed2758d833e7850b1f4744dd7cdbef45
+2026-08-24T13:27:31Z	2026-08-24T13:27:52Z	0	render logs --resources job-da64d761egvs73a20qng --start 2026-08-24T13:26:48Z --end 2026-08-24T13:27:30Z --text CANONICAL_QUEUE_POST --output text	canonical-post-rollout-queue-counts.txt	5a0bee58e6c996147589efdd58048bc184391acea4f8a613d4aa017c280d6726
+2026-08-24T13:28:02Z	2026-08-24T13:28:05Z	0	scripts/staging-task-window-aggregate.sh	canonical-sustained-fingerprint.txt	11f9b69862328a88b85f18128232bb81f3942e4c66bfd0a68c647463ecdb2b76
+2026-08-24T13:28:41Z	2026-08-24T13:28:42Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-sustained-queue-job.json	6454db587a5c53d866443b5f36f818d413fa7d908dec736faa472e38c16e76dc
+2026-08-24T13:28:42Z	2026-08-24T13:28:42Z	0	render logs --resources job-da64dpek1f9s7390i0ng --start 2026-08-24T13:28:00Z --end 2026-08-24T13:28:35Z --text CANONICAL_QUEUE_SUSTAINED --output text	canonical-sustained-queue-counts.txt	2be0fa162316e4c92dcff4079eea457150080445a4c6a77087cbfdf912a69349
+2026-08-24T13:28:50Z	2026-08-24T13:28:50Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-complete-window-compare.txt	5f4ae3201f8fc62749f6907494d647b07f81b0f14ff4339cf5be9b44a23d7e9e
+2026-08-24T13:29:00Z	2026-08-24T13:29:00Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-complete-window-verified.txt	a710b11a7b5bd00ff6d38043638fc649af8c9e4e42808ddda633167b3ce55312
+2026-08-24T13:29:17Z	2026-08-24T13:29:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-production-web-service-final.json	ae0821bb2122e286c2c33664bb9a96f84aa59b86b8e6d7488a68a8ccc4752070
+2026-08-24T13:29:18Z	2026-08-24T13:29:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-production-worker-service-final.json	8ef6ca41137dcdd22d4439707163738d579258bd14c1c2fe4bcb6faa27df7d3c
+2026-08-24T13:29:18Z	2026-08-24T13:29:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-production-service-compare.txt	6912f249786f0a5d40fae43d4100e8033f12bb25ba9c44766fe015b66d614358
+2026-08-24T13:29:26Z	2026-08-24T13:29:26Z	0	scripts/staging-health-probe.sh	canonical-hold-final-503.txt	b6ae8b62702cc4aecf72bc4629514ee1fd787fd436cd62542ec980b7591df8e5
+2026-08-24T13:29:26Z	2026-08-24T13:29:27Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-db-allowlist-clear.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T13:29:27Z	2026-08-24T13:29:28Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-db-allowlist-final.json	29fe4c3c6391c3ba12d5739d09f78feb6b8fe8eea76b1fe6cbe06848d5c4c111
+2026-08-24T13:29:28Z	2026-08-24T13:29:28Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-maintenance-disable.json	3f86518d272f8cc12267cb25dcb3d8ee0fbef0c39164631bd3d1e26bba0b57bb
+2026-08-24T13:29:34Z	2026-08-24T13:29:34Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-release-propagation.txt	cf8660c65b07c4d2306dd77319b188eea8b91d3a0bd654631db078bd60ecba71
+2026-08-24T13:29:34Z	2026-08-24T13:29:34Z	0	scripts/staging-health-probe.sh	canonical-release-health-200.txt	76d9fc89ab9e70d1be123e8af44752843247c4be42021a64f3d136943be34ecb
+2026-08-24T13:30:12Z	2026-08-24T13:30:12Z	0	scripts/staging-health-probe.sh	canonical-release-sustained-200.txt	3f7a6870be210681946b2d9be7e4512e37b5f4024797edc869855c182a714bf8
+2026-08-24T13:30:18Z	2026-08-24T13:30:18Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-staging-web-service-final.json	0a1a3e155edd0a1d10e5aa551fdd858f8a81e25de8619348437094d04d4752a0
+2026-08-24T13:30:18Z	2026-08-24T13:30:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-staging-worker-service-final.json	1c1a911e51d7c7b8a54aba1e9b1f2018769f869bf593e4c1791233928f7dab09
+2026-08-24T13:30:19Z	2026-08-24T13:30:19Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-staging-worker-deploy-final.json	b9cfddddd51f51ab7a6e43da74fb95cbc3515175b57bd6c24a1ee01f306c883d
+2026-08-24T13:30:19Z	2026-08-24T13:30:20Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-origin-main-final.txt	79ebea1ae427fb0fc23eca67d15c532280b89ddaa30f4f1fc9cf5a0b91a27669
+2026-08-24T13:32:41Z	2026-08-24T13:32:42Z	0	npm run test:web-container	canonical-final-web-container-tests.txt	26c1c2de600a30605c9b6d50982ce66014c2724caaafd413291a42fa96e575b1
+2026-08-24T13:32:42Z	2026-08-24T13:32:44Z	0	npx tsc --noEmit	canonical-final-tsc.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:32:44Z	2026-08-24T13:32:44Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-final-shell-syntax.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:32:44Z	2026-08-24T13:32:44Z	0	sh -c '<REDACTED_COMPLEX_ARG>'	canonical-final-json-parse.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+2026-08-24T13:32:44Z	2026-08-24T13:32:44Z	0	scripts/check-managed-evidence-sanitization.sh docs/evidence/P0-03/managed-classifier-retry-20260824	canonical-final-sanitization.txt	86134af6b201c53c1d45a38ec98a480d294c9cd10c55d7d7019515a089f3e378
+2026-08-24T13:33:09Z	2026-08-24T13:33:11Z	0	scripts/verify-managed-command-ledger.sh docs/evidence/P0-03/managed-classifier-retry-20260824	canonical-final-ledger-integrity.txt	e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855

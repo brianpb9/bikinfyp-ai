@@ -125,9 +125,14 @@ test("pekerjaan berbayar ditolak selama migrasi invarian uang belum terpasang", 
     "app/api/dashboard/campaign/job/[jobId]/route.ts",    // regenerate + approve: provider
     "app/api/promo/jobs/route.ts",                        // promo: job + provider + saldo
   ]) {
-    assert.match(baca(rel), /await assertPaidAdmission\(\)/,
+    assert.match(baca(rel), /await (?:routeDeps\.)?assertPaidAdmission\(\)/,
       `${rel} memakan uang tanpa lewat gerbang bersama`);
   }
+  assert.match(
+    baca("lib/admission-route-dependencies.ts"),
+    /import \{ assertPaidAdmission \} from "\.\/job-intake";[\s\S]*\n  assertPaidAdmission,/,
+    "seam route admission tidak terikat ke gerbang produksi",
+  );
 });
 
 test("health menutup intake sendiri dan membuktikan commit yang hidup", () => {
@@ -161,11 +166,11 @@ test("jalur baca retail tidak bisa melihat job organisasi", () => {
     "app/api/jobs/[id]/output/route.ts",
     "app/api/jobs/[id]/report/route.ts",
   ]) {
-    assert.match(baca(rel), /AND org_id IS NULL/,
+    assert.match(baca(rel), /AND (?:j\.)?org_id IS NULL/,
       `${rel} membocorkan job organisasi ke riwayat pribadi`);
   }
   const rt = baca("lib/postgres/smoke-runtime.ts");
-  assert.match(rt, /FROM jobs WHERE id=\$1 AND user_id=\$2 AND org_id IS NULL/);
+  assert.match(rt, /WHERE j\.id=\$1 AND j\.user_id=\$2 AND j\.org_id IS NULL/);
   assert.match(rt, /j\.user_id=\$2 AND j\.org_id IS NULL/);
 });
 
@@ -211,7 +216,7 @@ test("skrip audit tidak bisa menemukan pemblokir lalu bilang aman", () => {
 });
 
 test("aset organisasi menuntut keanggotaan yang masih aktif", () => {
-  const s = baca("app/api/files/[...path]/route.ts");
+  const s = baca("lib/media-file-access.ts");
   // "Dulu saya yang membuat" bukan izin selamanya: anggota yang dikeluarkan
   // atau organisasi yang ditangguhkan tidak boleh tetap menarik asetnya.
   const cocok = s.match(/org\.status='active'/g) ?? [];

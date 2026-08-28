@@ -1,0 +1,20 @@
+{
+  "schema": "sanitized-agent-bus-message/v1",
+  "id": "1787849638000-reviewer-TASK",
+  "ts": "2026-08-27T16:53:58Z",
+  "from": "reviewer",
+  "to": "builder",
+  "type": "TASK",
+  "sha": "",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "task_id": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "owner_id": "builder-evidence-acquisition-20260827",
+  "worker_id": "builder-evidence-acquisition-20260827",
+  "reply_to_id": "",
+  "source_archive_sha256": "de4e306a991263d5ed2e4e68b10542ef79a4aca2edea634524ff302073bd7f7c",
+  "scope": "COMPRESSION_ROUND_SCORE_80_ONLY",
+  "canonical_score_delta": 22,
+  "minimum_raw_delta": 27,
+  "review_authority": "CANONICAL_SINGLETON_INDEPENDENT_CODEX_EXACT_SHA_REVIEWER_OVER_AGENT_BUS",
+  "production_public_default": "OFF"
+}

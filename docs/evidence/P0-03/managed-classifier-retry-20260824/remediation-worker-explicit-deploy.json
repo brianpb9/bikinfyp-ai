@@ -1,0 +1,13 @@
+{
+  "id": "dep-da63u33bc2fs73as12j0",
+  "status": "live",
+  "commit": {
+    "id": "73280ffa342945dc08cee2fc664956975c8d5735",
+    "createdAt": "2026-08-24T12:13:08Z"
+  },
+  "createdAt": "2026-08-24T12:54:36.855134Z",
+  "startedAt": "2026-08-24T12:54:36.850108Z",
+  "finishedAt": "2026-08-24T12:55:58.428538Z",
+  "trigger": "api",
+  "updatedAt": "2026-08-24T12:55:58.428705Z"
+}

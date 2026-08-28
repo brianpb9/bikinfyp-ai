@@ -43,11 +43,15 @@ test("yang sengaja tanpa tabel memang template klaim-hasil atau vox pop", () => 
   }
 });
 
-test("empat pattern-interrupt menahan produk di shot pembuka", () => {
+test("empat pattern-interrupt membuka dengan staging dan kartu blank", () => {
   for (const id of ["ads-tembus-dinding", "ads-atap-jebol", "ads-dobrak-pintu", "ads-waktu-berhenti"]) {
     const r = ugcRolesFor(id);
     assert.ok(r?.opening, `${id} tanpa peran pembuka`);
-    assert.match(r!.opening!.role, /NOT visible yet/i, `${id}: produk tidak ditahan — interupsinya kehilangan gunanya`);
+    assert.match(r!.opening!.role, /stage|staged|theatrical|prop|cardboard|paper|printed/i, `${id}: pembuka bukan staging yang jujur`);
+    assert.match(r!.opening!.role, /card/i, `${id}: properti kartu tidak terlihat di staging`);
+    assert.match(r!.opening!.role, /unprinted|no letters|blank/i, `${id}: kartu masih dapat meminta tulisan faktual`);
+    assert.equal(r!.opening!.withholdProduct, undefined, `${id}: produk masih ditahan oleh aturan legacy`);
+    assert.doesNotMatch(r!.opening!.role, /printed identity|product name|category readable|approved price|undamaged|only thing still moving|kicked open|ceiling gives way|breaks through/i);
   }
 });
 

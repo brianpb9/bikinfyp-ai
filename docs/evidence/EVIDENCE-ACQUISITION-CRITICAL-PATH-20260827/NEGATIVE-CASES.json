@@ -1,0 +1,11 @@
+{
+  "schema": "score-80-negative-cases/v2",
+  "cases": [
+    {"id":"unknown_token","mutation":"attempt to award any unmapped token while accepted token count is zero","expected_error":"award unknown token"},
+    {"id":"unrelated_authority_source","mutation":"use a Reviewer PASS from another task","expected_error":"authority source task/SHA"},
+    {"id":"owner_routing_mismatch","mutation":"use a Reviewer PASS routed to another owner","expected_error":"authority source task/SHA"},
+    {"id":"builder_authored_pass","mutation":"Builder attempts to author PASS despite bus role separation","expected_error":"authority source role/type"},
+    {"id":"raw_recompute","mutation":"claim a raw point without an accepted token award","expected_error":"score raw claim"},
+    {"id":"incomplete_noncompensable_gate","mutation":"claim all mandatory gates closed while L remains OPEN","expected_error":"score gate claim"}
+  ]
+}

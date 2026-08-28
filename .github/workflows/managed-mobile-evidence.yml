@@ -1,0 +1,149 @@
+name: Managed mobile staging evidence
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - .github/workflows/managed-mobile-evidence.yml
+      - scripts/build-mobile-evidence-image.sh
+      - scripts/run-mobile-evidence-image.sh
+      - scripts/verify-mobile-evidence-receipt.mjs
+      - tests/managed-mobile-ci-workflow.test.ts
+  workflow_dispatch:
+    inputs:
+      reviewed_sha:
+        description: Exact 40-character Reviewer-approved staging bundle SHA
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: managed-mobile-staging-evidence
+  cancel-in-progress: false
+
+jobs:
+  # A PR may only prove that the control change is internally valid. It never
+  # receives an Environment and never executes a secret-bearing container.
+  pr-static-validation:
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout untrusted PR control code (secret-free)
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Prove reviewed bundle lineage
+        env:
+          REVIEWED_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397
+        run: |
+          set -euo pipefail
+          git cat-file -e "$REVIEWED_SHA^{commit}"
+          git merge-base --is-ancestor "$REVIEWED_SHA" HEAD
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh
+      - run: npx tsc --noEmit
+      - run: npx tsx --test tests/managed-mobile-auth-hydration-runner.test.ts tests/managed-mobile-ci-workflow.test.ts
+
+  exact-sha-mobile-evidence:
+    # Secret-bearing execution is only available from protected default main.
+    # PR-controlled code cannot reach this job or its staging Environment.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      REVIEWED_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397
+    steps:
+      - name: Checkout immutable default-branch control code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Validate hard-bound reviewed SHA and immutable control lineage
+        working-directory: control
+        env:
+          REQUESTED_SHA: ${{ inputs.reviewed_sha }}
+          CONTROL_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$REQUESTED_SHA" = "$REVIEWED_SHA"
+          test "$(git rev-parse HEAD)" = "$CONTROL_SHA"
+          git cat-file -e "$REVIEWED_SHA^{commit}"
+          git merge-base --is-ancestor "$REVIEWED_SHA" HEAD
+
+      - name: Detached checkout of exact reviewed bundle
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ env.REVIEWED_SHA }}
+          path: source
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Prove detached exact commit and clean tree
+        working-directory: source
+        run: |
+          set -euo pipefail
+          git checkout --detach "$REVIEWED_SHA"
+          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
+          test "$(git cat-file -t "$REVIEWED_SHA")" = commit
+          test -z "$(git status --porcelain=v1 --untracked-files=all)"
+
+      - name: Build immutable exact-source evidence image
+        working-directory: source
+        env:
+          EXPECTED_APP_SHA: ${{ env.REVIEWED_SHA }}
+          EVIDENCE_IMAGE_TAG: managed-mobile-evidence:${{ env.REVIEWED_SHA }}
+        run: EVIDENCE_BUILD_OUTPUT_FILE="$GITHUB_ENV" bash ../control/scripts/build-mobile-evidence-image.sh
+
+      - name: Independently verify OCI revision and tree labels
+        working-directory: source
+        run: |
+          set -euo pipefail
+          expected_tree="$(git rev-parse 'HEAD^{tree}')"
+          test "$EVIDENCE_SOURCE_SHA" = "$REVIEWED_SHA"
+          test "$EVIDENCE_SOURCE_TREE" = "$expected_tree"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$EVIDENCE_IMAGE_DIGEST")" = "$REVIEWED_SHA"
+          test "$(docker image inspect --format '{{index .Config.Labels "ai.hdrv.source.tree"}}' "$EVIDENCE_IMAGE_DIGEST")" = "$expected_tree"
+
+      - name: Run and sanitize provider-free staging evidence with managed secret injection
+        env:
+          EXPECTED_APP_SHA: ${{ env.REVIEWED_SHA }}
+          EVIDENCE_INHERIT_STAGING_ENV: "1"
+          EVIDENCE_RECEIPT_EXPORT_DIR: ${{ runner.temp }}/managed-mobile-receipts
+          BASE: https://racun-ai-staging-web.onrender.com
+          RACUN_DEPLOY_ENV: staging
+          RACUN_DB_RUNTIME: postgres
+          STORAGE_MODE: r2
+          R2_REGION: auto
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          AUTH_SECRET: ${{ secrets.STAGING_AUTH_SECRET }}
+          R2_ENDPOINT: ${{ secrets.STAGING_R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.STAGING_R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.STAGING_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.STAGING_R2_SECRET_ACCESS_KEY }}
+        run: |
+          set -euo pipefail
+          bash control/scripts/run-mobile-evidence-image.sh
+          node control/scripts/verify-mobile-evidence-receipt.mjs "$RUNNER_TEMP/managed-mobile-receipts" "$REVIEWED_SHA"
+
+      - name: Upload sanitized immutable receipt bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: managed-mobile-${{ env.REVIEWED_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/managed-mobile-receipts
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0

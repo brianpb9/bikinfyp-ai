@@ -2,24 +2,24 @@ import crypto from "node:crypto";
 import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { AVATAR_PRESETS, getAvatarPreset } from "@/lib/avatar-presets";
 import { CAMPAIGN_TEMPLATES } from "@/lib/templates";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
-import { generateScripts } from "@/lib/script-engine";
 import type { HookCode } from "@/lib/config/hooks";
 import { getCreatorCategory } from "@/lib/personas";
 import { tierPriceIdr } from "@/lib/credits";
 import { tierMasihDijual } from "@/lib/paket-kredit";
-import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
-import { PgJobsRepository } from "@/lib/postgres/jobs";
 import { getPool } from "@/lib/postgres/pool";
-import { postgresRuntimeEnabled, pgFindOrCreatePersona, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
+import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
-import { assertPaidAdmission } from "@/lib/job-intake";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
+import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
+import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
+import { releaseSessionAdvisoryLock } from "@/lib/postgres/evidence-lock-pool";
+import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,17 +80,18 @@ function pastikanMatriksAktif() {
 
 export async function POST(req: Request) {
   try {
+    const routeDeps = admissionRouteDependencies();
     pastikanMatriksAktif();
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard matrix requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
-    await assertDashboardRate("confirm", membership.org_id);
+    if (!routeDeps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard matrix requires Postgres runtime.");
+    const { user, membership } = await routeDeps.requireOrgContextApi(req);
+    await routeDeps.assertDashboardRate("confirm", membership.org_id);
     // Matriks adalah pengeluaran terbesar yang bisa dipicu satu klik di produk
     // ini. Kalau ada satu tempat yang perannya wajib diperiksa, ini tempatnya.
     pastikanBolehBelanja(membership.role);
     // Satu gerbang untuk semua yang memakan uang. Sebelumnya jalur ini cuma
     // memeriksa migrasi, jadi ia tetap membuka diri walau JOB_INTAKE_MODE
     // sudah "closed" untuk perawatan.
-    await assertPaidAdmission();
+    await routeDeps.assertPaidAdmission();
     const body = await req.json().catch(() => ({}));
 
     // ---- produk ----
@@ -100,13 +101,27 @@ export async function POST(req: Request) {
     // dibayar dari dompetnya, jadi produk buatan rekan satu tim harus bisa
     // dipakai. Daftar di GET sudah di-query per org — memvalidasi per user di
     // sini akan menampilkan produk lalu menolaknya saat ditekan.
-    const product = await smokeGetOrgProduct(membership.org_id, productId);
+    const product = await routeDeps.smokeGetOrgProduct(membership.org_id, productId);
     if (!product) throw ERR.NOT_FOUND("Produknya");
+    assertCategoryReviewClear({
+      state: product.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+      reason: product.category_review_reason as never,
+      version: product.category_review_version ?? 0,
+    }, product.category);
+    return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "stored-org-product.product_type_token", token: product.product_type_token ?? "", version: 1 },
+      product.product_type_state === "CONFIRMED" && product.product_type_confirmed_token
+        && product.product_type_confirmed_by && product.product_type_confirmed_at && product.product_type_version === 1
+        ? {
+            kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: product.product_type_confirmed_token,
+            actorId: product.product_type_confirmed_by,
+            confirmedAt: canonicalProductTypeTimestamp(product.product_type_confirmed_at),
+            version: 1, provenance: "USER_SELF_ASSERTION",
+          }
+        : null,
+    ), async () => {
     if (!product.price_idr) throw ERR.BAD_REQUEST("Isi harga produknya dulu — harga dipakai di skrip dan overlay.", "Product price is required.");
-    if ((JSON.parse(product.images || "[]") as string[]).length === 0) {
-      throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko untuk iklan jasa.", "At least one image is required.");
-    }
-
+    const productImages = JSON.parse(product.images || "[]") as string[];
     // ---- format: TIDAK ADA format global ----
     //
     // Setiap template membawa formatnya SENDIRI (talking_head, hands_only,
@@ -231,9 +246,7 @@ export async function POST(req: Request) {
       throw ERR.BAD_REQUEST("Permintaan tidak menyertakan kunci idempotensi yang sah.", "idempotency_key required (8-200 chars).");
     }
     const runId = runIdDariKunci(membership.org_id, kunciIdem);
-    const pool = getPool(config.databaseUrl);
-    const jobsRepo = new PgJobsRepository(config.databaseUrl);
-    const creditsRepo = new PgCreditPaymentRepository(config.databaseUrl);
+    const { pool, jobsRepo, creditsRepo } = routeDeps.createMatrixResources();
     const hasil: (HasilSel & { avatar_id: string; template_id: string })[] = [];
 
     // PENEGAKAN IDEMPOTENSI.
@@ -242,7 +255,7 @@ export async function POST(req: Request) {
     // Advisory lock membuat dua permintaan kembar yang datang bersamaan
     // berbaris, bukan sama-sama lolos pemeriksaan "belum ada" lalu sama-sama
     // membuat 24 job. Lock dilepas di blok finally di bawah.
-    const kunciLock = await pool.connect();
+    const kunciLock = await routeDeps.connectMatrixRunLockClient();
     let sudahAda: { job_id: string }[] = [];
     try {
       await kunciLock.query("SELECT pg_advisory_lock(hashtext($1))", [runId]);
@@ -251,15 +264,24 @@ export async function POST(req: Request) {
       );
       sudahAda = lama.rows.map((r) => ({ job_id: r.id }));
     } catch (err) {
-      kunciLock.release();
+      await releaseSessionAdvisoryLock({
+        client: kunciLock,
+        sql: "SELECT pg_advisory_unlock(hashtext($1)) AS unlocked",
+        values: [runId],
+        label: "matrix-run-lock",
+      });
       throw err;
     }
 
     // Permintaan ini sudah pernah dijalankan. Jawab dengan hasil yang SAMA,
     // tanpa membuat skrip, job, atau tahanan kredit apa pun yang baru.
     if (sudahAda.length) {
-      await kunciLock.query("SELECT pg_advisory_unlock(hashtext($1))", [runId]).catch(() => undefined);
-      kunciLock.release();
+      await releaseSessionAdvisoryLock({
+        client: kunciLock,
+        sql: "SELECT pg_advisory_unlock(hashtext($1)) AS unlocked",
+        values: [runId],
+        label: "matrix-run-lock",
+      });
       await jobsRepo.close(); await creditsRepo.close();
       return Response.json({
         run_id: runId, duplicated: true,
@@ -270,13 +292,59 @@ export async function POST(req: Request) {
       });
     }
 
+    // Duplicate replay above is authoritative and uses immutable job
+    // manifests. Only genuinely new matrix work needs current product
+    // evidence. Keep the product row stable until every new provider/setup
+    // operation finishes so E9 cannot slip through after this check.
+    let evidenceLease: Awaited<ReturnType<typeof acquireAdmissionReferenceEvidence>> | null = null;
     try {
+      if (productImages.length === 0) {
+        throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko untuk iklan jasa.", "At least one image is required.");
+      }
+      evidenceLease = await acquireAdmissionReferenceEvidence({
+        productId: product.id,
+        owner: { kind: "org", id: membership.org_id },
+        boundary: "A2",
+        loadSqliteCandidateRels: () => productImages,
+        loadSqliteProductType: () => ({
+          product_type_token: product.product_type_token ?? null,
+          product_type_confirmed_token: product.product_type_confirmed_token ?? null,
+          product_type_confirmed_by: product.product_type_confirmed_by ?? null,
+          product_type_confirmed_at: product.product_type_confirmed_at ?? null,
+          product_type_version: product.product_type_version ?? null,
+          product_type_state: product.product_type_state ?? "QUARANTINED",
+          category_review_state: product.category_review_state ?? "QUARANTINED",
+          category_review_reason: product.category_review_reason ?? "CATEGORY_UNKNOWN",
+          category_reviewed_by: product.category_reviewed_by ?? null,
+          category_reviewed_role: product.category_reviewed_role ?? null,
+          category_reviewed_at: product.category_reviewed_at ?? null,
+        category_review_version: product.category_review_version ?? 0,
+        category: product.category ?? null,
+        }),
+      });
+      const lockedProductType = evidenceLease.productType;
+      assertCategoryReviewClear({
+        state: lockedProductType?.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+        reason: lockedProductType?.category_review_reason as never,
+        version: lockedProductType?.category_review_version ?? 0,
+      }, lockedProductType?.category);
+      await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+        { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-org-product.product_type_token", token: lockedProductType?.product_type_token ?? "", version: 1 },
+        lockedProductType?.product_type_state === "CONFIRMED" && lockedProductType.product_type_confirmed_token
+          && lockedProductType.product_type_confirmed_by && lockedProductType.product_type_confirmed_at
+          && lockedProductType.product_type_version === 1 ? {
+            kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: lockedProductType.product_type_confirmed_token,
+            actorId: lockedProductType.product_type_confirmed_by,
+            confirmedAt: canonicalProductTypeTimestamp(lockedProductType.product_type_confirmed_at),
+            version: 1, provenance: "USER_SELF_ASSERTION",
+          } : null,
+      ), () => undefined);
       // Persona dibuat sekali per avatar, bukan sekali per sel: satu avatar
       // dipakai di semua skenario, dan membuat ulang personanya tiap sel cuma
       // menambah baris kembar tanpa efek apa pun.
       const personaPerAvatar = new Map<string, string>();
       for (const { preset, category } of avatars) {
-        personaPerAvatar.set(preset.id, (await pgFindOrCreatePersona(user.id, category)).id);
+        personaPerAvatar.set(preset.id, (await routeDeps.pgFindOrCreatePersona(user.id, category)).id);
       }
 
       for (const t of skenario) {
@@ -285,7 +353,7 @@ export async function POST(req: Request) {
         // kalimatnya tidak ikut berubah.
         // Jaring pengaman nama (canary temuan #4) — sama seperti campaign &
         // retail: nama sah yang kepanjangan diturunkan bertangga sampai lolos.
-        const jalanSkenario = (namaProduk: string) => generateScripts({
+        const jalanSkenario = (namaProduk: string) => routeDeps.generateScripts({
           product: {
             id: product.id, name: namaProduk, price_idr: product.price_idr, category: product.category,
             sourceUrl: product.source_url, promoPriceBeforeIdr: product.promo_price_before_idr,
@@ -320,7 +388,7 @@ export async function POST(req: Request) {
           continue;
         }
         // Satu baris skrip per avatar — lihat catatan klaim atomik di atas.
-        const barisSkrip = await smokeCreateScripts(user.id, productId, avatars.map(() => ({
+        const barisSkrip = await routeDeps.smokeCreateScripts(user.id, productId, avatars.map(() => ({
           hookFamily: lolos.hook_family, emotion: lolos.emotion, register: lolos.register,
           segments: lolos.segments, caption: lolos.caption, hashtags: lolos.hashtags,
           // Amplop lengkap (snapshot + provenance) — lihat campaign/generate.
@@ -367,8 +435,13 @@ export async function POST(req: Request) {
       }
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
-      await kunciLock.query("SELECT pg_advisory_unlock(hashtext($1))", [runId]).catch(() => undefined);
-      kunciLock.release();
+      await evidenceLease?.release();
+      await releaseSessionAdvisoryLock({
+        client: kunciLock,
+        sql: "SELECT pg_advisory_unlock(hashtext($1)) AS unlocked",
+        values: [runId],
+        label: "matrix-run-lock",
+      });
       await jobsRepo.close();
       await creditsRepo.close();
     }
@@ -381,6 +454,7 @@ export async function POST(req: Request) {
       total_idr: totalBelanja,
       queued_count: hasil.filter((r) => r.status === "queued").length,
       results: hasil,
+    });
     });
   } catch (err) {
     return errorResponse(err);

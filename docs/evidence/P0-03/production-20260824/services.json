@@ -1,0 +1,18 @@
+[
+  {
+    "autoDeploy": "yes",
+    "id": "srv-d9ni3ndaeets73c07kq0",
+    "name": "bikinfyp-ai-production-worker",
+    "suspended": "not_suspended",
+    "type": "background_worker",
+    "url": null
+  },
+  {
+    "autoDeploy": "yes",
+    "id": "srv-d9nhccfqj5pc73et9hrg",
+    "name": "bikinfyp-ai-production-web",
+    "suspended": "not_suspended",
+    "type": "web_service",
+    "url": "https://bikinfyp-ai.onrender.com"
+  }
+]

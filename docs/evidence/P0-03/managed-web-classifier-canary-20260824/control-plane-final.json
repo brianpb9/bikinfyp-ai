@@ -1,0 +1,44 @@
+{
+  "observed_at": "2026-08-24T11:31:30Z",
+  "source": "GET https://api.render.com/v1/services/{id}; render deploys list {id} --output json",
+  "staging_web": {
+    "id": "srv-d9n28tijnfac73a87lt0",
+    "branch": "main",
+    "autoDeploy": "no",
+    "suspended": "not_suspended",
+    "runtime": "node",
+    "plan": "starter",
+    "region": "singapore",
+    "healthCheckPath": "",
+    "maintenanceMode": { "enabled": false, "uri": "" },
+    "buildCommand": "npm ci --include=dev && npm run build",
+    "preDeployCommand": "node scripts/migrate-postgres-runtime.mjs",
+    "startCommand": "npm start",
+    "latestDeploy": "dep-da62i9ek1f9s738r52r0",
+    "latestSha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+    "latestStatus": "live",
+    "updatedAt": "2026-08-24T11:26:49.006376Z"
+  },
+  "staging_worker": {
+    "id": "srv-d9n28ue417fc73ch2b60",
+    "latestDeploy": "dep-da61n0qjobas73894nfg",
+    "latestSha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+    "latestStatus": "live",
+    "updatedAt": "2026-08-24T10:25:52.595322Z"
+  },
+  "production_web": {
+    "id": "srv-d9nhccfqj5pc73et9hrg",
+    "latestDeploy": "dep-da3bfg142hec73arfot0",
+    "latestSha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d",
+    "latestStatus": "live",
+    "updatedAt": "2026-08-20T08:20:32.112782Z"
+  },
+  "production_worker": {
+    "id": "srv-d9ni3ndaeets73c07kq0",
+    "latestDeploy": "dep-da3bfg142hec73arfpfg",
+    "latestSha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d",
+    "latestStatus": "live",
+    "updatedAt": "2026-08-20T08:18:50.344489Z"
+  },
+  "staging_database_allowlist_count": 0
+}

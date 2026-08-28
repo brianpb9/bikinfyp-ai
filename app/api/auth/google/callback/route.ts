@@ -5,6 +5,7 @@ import { audit } from "@/lib/db";
 import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { GOOGLE_NEXT_COOKIE, GOOGLE_OAUTH_STATE_COOKIE } from "@/lib/google-oauth";
 import { cookieSesi, cookieHapus } from "@/lib/cookies";
+import { runtimeAuthSecret } from "@/lib/auth-secret-policy";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -77,7 +78,7 @@ export async function GET(req: Request) {
       ? await (async () => {
           const { PgAuthOtpAuditRepository } = await import("@/lib/postgres/auth-otp-audit");
           const repo = new PgAuthOtpAuditRepository(config.databaseUrl, {
-            authSecret: config.authSecret,
+            authSecret: runtimeAuthSecret(),
             otpExpiryMin: config.otpExpiryMin,
             otpMaxAttempts: config.otpMaxAttempts,
             otpRateLimitPer15Min: config.otpRateLimitPer15Min,

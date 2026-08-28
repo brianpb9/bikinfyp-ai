@@ -1,0 +1,18 @@
+{
+  "captured_at": "2026-08-26T11:08:49Z",
+  "source_commands": ["render services list --output json --confirm", "render deploys list SERVICE_ID --output json --confirm"],
+  "services": {
+    "staging_web": {"id":"srv-d9n28tijnfac73a87lt0","branch":"staging/exact-565f3fa-20260826","autoDeploy":"no","suspended":"not_suspended","maintenanceMode":false,"dockerfilePath":"Dockerfile.web","preDeployCommand":"node scripts/migrate-postgres-runtime.mjs"},
+    "staging_worker": {"id":"srv-d9n28ue417fc73ch2b60","branch":"staging/exact-565f3fa-20260826","autoDeploy":"no","suspended":"not_suspended","dockerfilePath":"Dockerfile.worker","dockerCommand":""},
+    "production_web": {"id":"srv-d9nhccfqj5pc73et9hrg","branch":"main","autoDeploy":"yes","suspended":"not_suspended","maintenanceMode":false},
+    "production_worker": {"id":"srv-d9ni3ndaeets73c07kq0","branch":"main","autoDeploy":"yes","suspended":"not_suspended","dockerfilePath":"Dockerfile.worker","dockerCommand":""}
+  },
+  "deploys": {
+    "staging_web": {"id":"dep-da7cff7avr4c73bldrfg","sha":"565f3fad6446152966bd8003a0aa8f6536bd279b","createdAt":"2026-08-26T11:02:20.473965Z","finishedAt":"2026-08-26T11:05:08.982172Z","status":"live","trigger":"api"},
+    "staging_worker_base": {"id":"dep-da7cff1srm7s7384g1v0","sha":"565f3fad6446152966bd8003a0aa8f6536bd279b","createdAt":"2026-08-26T11:02:20.596433Z","finishedAt":"2026-08-26T11:03:34.580073Z","status":"deactivated","trigger":"api"},
+    "staging_worker_trace": {"id":"dep-da7cgv6417fc73fbuv80","sha":"565f3fad6446152966bd8003a0aa8f6536bd279b","createdAt":"2026-08-26T11:05:32.155612Z","finishedAt":"2026-08-26T11:06:40.799442Z","status":"deactivated","trigger":"api"},
+    "staging_worker_final": {"id":"dep-da7chou1egvs73e7bvig","sha":"565f3fad6446152966bd8003a0aa8f6536bd279b","createdAt":"2026-08-26T11:07:15.768996Z","finishedAt":"2026-08-26T11:08:32.310514Z","status":"live","trigger":"api"},
+    "production_web": {"id":"dep-da79380u01pc73br2vug","sha":"ec734b186307fe3a4c79cf6632f8f5e75f8634ae","createdAt":"2026-08-26T07:11:28.276713Z","finishedAt":"2026-08-26T07:15:36.673075Z","status":"live"},
+    "production_worker": {"id":"dep-da79380u01pc73br30hg","sha":"ec734b186307fe3a4c79cf6632f8f5e75f8634ae","createdAt":"2026-08-26T07:11:28.340657Z","finishedAt":"2026-08-26T07:14:01.765979Z","status":"live"}
+  }
+}

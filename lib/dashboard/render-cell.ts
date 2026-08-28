@@ -20,8 +20,14 @@ import { tierPriceIdr } from "@/lib/credits";
 import { enqueueJob } from "@/lib/job-queue";
 import type { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import type { PgJobsRepository } from "@/lib/postgres/jobs";
-import { pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { pgAudit, pgSaveFypSnapshot, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
+import { createJobProductSnapshotRaw } from "@/lib/job-product-snapshot";
+import { assertAdmissionReferenceEvidence, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
+import { aiRenderBlockMessage } from "@/lib/template-render-safety";
+import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
+import { requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 
 export type HasilSel =
   | { status: "queued"; script_id: string; job_id: string }
@@ -92,6 +98,15 @@ export function kontradiksiNaskah(
   return null;
 }
 
+/** Template yang benar-benar dipersist ke job. Snapshot menang; request hanya
+ * fallback untuk naskah legacy yang memang belum punya provenance. */
+export function templateIdRenderOtoritatif(
+  snap: { templateId?: string | null } | undefined,
+  requested: string | null
+): string | null {
+  return snap?.templateId ?? requested;
+}
+
 export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<HasilSel> {
   const { pool, jobsRepo, creditsRepo } = alat;
   const gagal = (reason: string): HasilSel => ({ status: "failed", script_id: sel.scriptId, reason });
@@ -105,6 +120,44 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   if (!script || script.product_id !== sel.productId || script.job_id) {
     return gagal("Skrip tidak ditemukan atau sudah pernah dipakai.");
   }
+  const typeProduct = await pool.query<{
+    category: string | null;
+    product_type_token: string | null; product_type_confirmed_token: string | null;
+    product_type_confirmed_by: string | null; product_type_confirmed_at: string | Date | null;
+    product_type_version: number | null; product_type_state: string;
+    category_review_state: string; category_review_reason: string | null;
+    category_reviewed_by: string | null; category_reviewed_role: string | null;
+    category_reviewed_at: string | Date | null; category_review_version: number;
+  }>(`SELECT category,product_type_token,product_type_confirmed_token,product_type_confirmed_by,
+            product_type_confirmed_at,product_type_version,product_type_state,
+            category_review_state,category_review_reason,category_reviewed_by,
+            category_reviewed_role,category_reviewed_at,category_review_version
+       FROM products WHERE id=$1 AND org_id=$2`, [sel.productId, sel.orgId]);
+  const productType = typeProduct.rows[0];
+  if (!productType) return gagal("Produk organisasi tidak ditemukan.");
+  assertCategoryReviewClear({state:productType.category_review_state as "CLEAR" | "QUARANTINED",reason:productType.category_review_reason as never,version:productType.category_review_version}, productType.category);
+  const productTypeConfirmedAt = canonicalProductTypeTimestamp(productType.product_type_confirmed_at);
+  return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+    { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-org-product.product_type_token", token: productType.product_type_token ?? "", version: 1 },
+    productType.product_type_state === "CONFIRMED" && productType.product_type_confirmed_token
+      && productType.product_type_confirmed_by && productType.product_type_confirmed_at && productType.product_type_version === 1
+      ? {
+          kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: productType.product_type_confirmed_token,
+          actorId: productType.product_type_confirmed_by, confirmedAt: productTypeConfirmedAt,
+          version: 1, provenance: "USER_SELF_ASSERTION",
+        }
+      : null,
+  ), async () => {
+  const jejak = bacaJejak(script.validation_result);
+  const bentrok = kontradiksiNaskah(jejak.admisi, { format: sel.format, templateId: sel.templateId });
+  if (bentrok) return gagal(bentrok);
+  // Guard otoritatif WAJIB hidup di sel bersama, bukan hanya route. Request
+  // lama dapat menghilangkan template_id; snapshot immutable tetap mengetahui
+  // bahwa template bukti membutuhkan footage asli. Posisi ini mendahului
+  // approval, job, kredit, dan enqueue.
+  const templateIdOtoritatif = templateIdRenderOtoritatif(jejak.admisi, sel.templateId);
+  const renderBlockMessage = aiRenderBlockMessage(templateIdOtoritatif);
+  if (renderBlockMessage) return gagal(renderBlockMessage);
   const segments = JSON.parse(script.segments) as SegmentDraft[];
   // Tier & durasi diturunkan dari skrip tersimpan (otoritatif) — tidak pernah
   // dipercaya dari body request, sama seperti /api/jobs retail.
@@ -118,47 +171,123 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
   if (sel.format === "tvc" && durationS !== 15 && durationS !== 30) return gagal("TVC tersedia untuk 15 atau 30 detik.");
   const priceIdr = tierPriceIdr(tier, durationS);
 
-  // KONTEKS ADMISI KANONIK. Versi lama tidak mengirim format maupun durasi,
-  // jadi TVC yang sah justru DITOLAK: aturan T-01..T-03 tidak pernah
-  // dijalankan sementara aturan lisan afiliasi (L-03/L-19) dipaksakan ke
-  // naskah yang memang bukan afiliasi.
-  const jejak = bacaJejak(script.validation_result);
-  const bentrok = kontradiksiNaskah(jejak.admisi, { format: sel.format, templateId: sel.templateId });
-  if (bentrok) return gagal(bentrok);
-  const validation = periksaAdmisi({
-    segments,
-    // Snapshot menang atas isi request: genre naskah ditentukan saat ia
-    // ditulis, bukan oleh sel yang mengirimnya ke render.
-    snapshot: jejak.admisi,
-    hookFamily: script.hook_family,
-    register: script.register,
-    productName: sel.productName,
-    productPriceIdr: sel.productPriceIdr,
-    productSourceUrl: sel.productSourceUrl ?? null,
-    promoPriceBeforeIdr: sel.promoPriceBeforeIdr,
-    qualityTier: tier,
-    durationSec: durationS,
-    format: sel.format,
-    templateId: sel.templateId,
-  });
-  if (!validation.passed) {
-    return gagal(`Skrip belum memenuhi standar: ${validation.errors.map((e) => e.message_id).join(" ")}`);
-  }
-  await smokeApproveScript(sel.userId, sel.scriptId, { segments, edited: false, validationResult: amplopValidasi(validation, jejak) }, sel.orgId);
-
   const jobId = crypto.randomUUID();
+  const preparedSnapshotRels = new Set<string>();
   const now = new Date().toISOString();
+  let admittedProduct: { name: string; priceIdr: number } | null = null;
   const client = await pool.connect();
+  let commitAttempted = false;
   try {
     await client.query("BEGIN");
+    // Freeze product truth under a row lock in this admission transaction.
+    // The org predicate is authoritative for dashboard ownership; caller
+    // fields are used for validation/UI only, never for the durable snapshot.
+    const admissionProduct = await client.query<{
+      name: string; category: string; price_idr: number; raw_meta: string | null;
+      product_visual_desc: string | null; brand_brief: string | null; claims: string | null;
+      source_url: string | null; promo_price_before_idr: number | null;
+      promo_ends_at: string | null; promo_stock_left: number | null;
+      product_type_token: string | null; product_type_confirmed_token: string | null;
+      product_type_confirmed_by: string | null; product_type_confirmed_at: string | Date | null;
+      product_type_version: number | null; product_type_state: string;
+      category_review_state: string; category_review_reason: string | null;
+      category_reviewed_by: string | null; category_reviewed_role: string | null;
+      category_reviewed_at: string | Date | null; category_review_version: number;
+      images: string;
+    }>(`SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,source_url,
+              promo_price_before_idr,promo_ends_at,promo_stock_left,product_type_token,product_type_confirmed_token,
+              product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
+              category_review_state,category_review_reason,category_reviewed_by,category_reviewed_role,
+              category_reviewed_at,category_review_version,images
+         FROM products WHERE id=$1 AND org_id=$2 FOR SHARE`, [sel.productId, sel.orgId]);
+    if (!admissionProduct.rows[0]) {
+      await client.query("ROLLBACK");
+      return gagal("Produk organisasi tidak ditemukan.");
+    }
+    const lockedProduct = admissionProduct.rows[0];
+    assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version}, lockedProduct.category);
+    if (lockedProduct.product_type_token !== productType.product_type_token
+      || lockedProduct.product_type_confirmed_token !== productType.product_type_confirmed_token
+      || lockedProduct.product_type_confirmed_by !== productType.product_type_confirmed_by
+      || canonicalProductTypeTimestamp(lockedProduct.product_type_confirmed_at) !== productTypeConfirmedAt
+      || lockedProduct.product_type_version !== productType.product_type_version
+      || lockedProduct.product_type_state !== productType.product_type_state
+      || lockedProduct.category_review_state !== productType.category_review_state
+      || lockedProduct.category_review_reason !== productType.category_review_reason
+      || lockedProduct.category_review_version !== productType.category_review_version) {
+      await client.query("ROLLBACK");
+      return gagal("Konfirmasi jenis produk berubah saat admisi. Coba lagi.");
+    }
+    // KONTEKS ADMISI dan snapshot membaca ROW TERKUNCI YANG SAMA. Lock ini
+    // dipertahankan sampai INSERT job + COMMIT, jadi mutation konkuren tidak
+    // dapat menyelip di antara SA6 dan bytes snapshot durable.
+    const validation = periksaAdmisi({
+      segments,
+      snapshot: jejak.admisi,
+      hookFamily: script.hook_family,
+      register: script.register,
+      productName: lockedProduct.name,
+      productCategory: lockedProduct.category,
+      productPriceIdr: lockedProduct.price_idr,
+      productSourceUrl: lockedProduct.source_url,
+      promoPriceBeforeIdr: lockedProduct.promo_price_before_idr,
+      qualityTier: tier,
+      durationSec: durationS,
+      format: sel.format,
+      templateId: templateIdOtoritatif,
+    });
+    if (!validation.passed) {
+      await client.query("ROLLBACK");
+      return gagal(`Skrip belum memenuhi standar: ${validation.errors.map((e) => e.message_id).join(" ")}`);
+    }
+    await assertAdmissionReferenceEvidence({
+      productId: sel.productId,
+      candidateRels: JSON.parse(lockedProduct.images) as string[],
+      boundary: "A4",
+    });
+    // Approval harus berada pada transaksi admission yang sama. Koneksi
+    // terpisah dapat meng-commit approval meski INSERT job kemudian rollback,
+    // dan juga tidak ikut serialisasi klaim job_id untuk request konkuren.
+    const persetujuan = await client.query(
+      `UPDATE scripts
+       SET segments=$1, edited_by_user=0, approved_by_user_at=$2, validation_result=$3
+       WHERE id=$4 AND product_id=$5 AND job_id IS NULL
+       RETURNING id`,
+      [JSON.stringify(segments), now, JSON.stringify(amplopValidasi(validation, jejak)), sel.scriptId, sel.productId]
+    );
+    if (persetujuan.rowCount !== 1) {
+      await client.query("ROLLBACK");
+      return gagal("Skrip ini sudah dipakai permintaan lain.");
+    }
+    await client.query(
+      "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'script.approved','scripts',$3,$4,$5)",
+      [crypto.randomUUID(), sel.userId, sel.scriptId, JSON.stringify({ edited: false }), now]
+    );
+    const productSnapshotRaw = createJobProductSnapshotRaw(lockedProduct);
+    // Hold the product row through storage-first preparation and job INSERT so
+    // E8/E9 cannot change the ordered identity between resolution and commit.
+    // Failure here precedes job visibility and the later credit hold.
+    const preparedReference = await prepareAdmissionReferenceManifest({
+      jobId,
+      productId: sel.productId,
+      candidateRels: JSON.parse(lockedProduct.images) as string[],
+      runtime: "admission-postgres-org",
+      onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
+    });
+    requireCurrentJobEvidence({
+      approvedReferenceManifest: preparedReference.raw,
+      jobProductSnapshot: productSnapshotRaw,
+      productType: lockedProduct,
+    });
+    admittedProduct = { name: lockedProduct.name, priceIdr: lockedProduct.price_idr };
     // requires_approval=TRUE: job dashboard brand SELALU berhenti di gerbang
     // review scene (M11). Brand menilai gambar & pesan tiap scene sebelum
     // digabung. Retail tidak pernah menyalakan ini.
     await client.query(
-      `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,state,created_at,state_changed_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,'QUEUED',$18,$18)`,
+      `INSERT INTO jobs (id,user_id,org_id,bulk_run_id,avatar_custom_desc,product_id,persona_id,script_id,format,quality_tier,duration_s,shot_count,ratio,no_model,tvc_route,template_id,record_style,requires_approval,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,TRUE,$18,$19,'QUEUED',$20,$20)`,
       [jobId, sel.userId, sel.orgId, sel.runId, sel.avatarCustomDesc, sel.productId, sel.personaId, sel.scriptId,
-        sel.format, tier, durationS, sel.shotCount, sel.ratio, sel.noModel, sel.tvcRoute, sel.templateId, sel.recordStyle, now]
+        sel.format, tier, durationS, sel.shotCount, sel.ratio, sel.noModel, sel.tvcRoute, templateIdOtoritatif, sel.recordStyle, preparedReference.raw, productSnapshotRaw, now]
     );
     // KLAIM ATOMIK, bukan pemeriksaan tambahan.
     //
@@ -173,6 +302,12 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     const klaim = await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2 AND job_id IS NULL", [jobId, sel.scriptId]);
     if (klaim.rowCount !== 1) {
       await client.query("ROLLBACK");
+      await cleanupUnadmittedReferenceKeys({
+        jobId,
+        snapshotRels: preparedSnapshotRels,
+        runtime: "admission-postgres-org",
+        proveJobAbsent: async () => !(await client.query("SELECT id FROM jobs WHERE id=$1", [jobId])).rows[0],
+      });
       return gagal("Skrip ini sudah dipakai permintaan lain.");
     }
     await client.query(
@@ -180,13 +315,24 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
       [crypto.randomUUID(), sel.userId, jobId,
         JSON.stringify({ script_id: sel.scriptId, campaign_run_id: sel.runId, org_id: sel.orgId, custom_avatar: Boolean(sel.avatarCustomDesc) }), now]
     );
+    commitAttempted = true;
     await client.query("COMMIT");
   } catch (error) {
-    await client.query("ROLLBACK").catch(() => undefined);
+    const rollbackSucceeded = await client.query("ROLLBACK").then(() => true, () => false);
+    if (!commitAttempted && rollbackSucceeded && preparedSnapshotRels.size > 0) {
+      await cleanupUnadmittedReferenceKeys({
+        jobId,
+        snapshotRels: preparedSnapshotRels,
+        runtime: "admission-postgres-org",
+        proveJobAbsent: async () => !(await client.query("SELECT id FROM jobs WHERE id=$1", [jobId])).rows[0],
+      });
+    }
     throw error;
   } finally {
     client.release();
   }
+
+  if (!admittedProduct) throw new Error("Invariant admission produk tidak tersedia setelah commit.");
 
   const held = await creditsRepo.holdCredits({ userId: sel.userId, orgId: sel.orgId }, jobId, priceIdr);
   if (!held) {
@@ -206,7 +352,7 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
         hookFamily: script.hook_family as Parameters<typeof scoreScriptPlan>[0]["hookFamily"],
         segments, qualityTier: tier, durationSec: durationS,
         format: sel.format as FypVideoFormat,
-        productName: sel.productName, priceIdr: sel.productPriceIdr,
+        productName: admittedProduct.name, priceIdr: admittedProduct.priceIdr,
       });
       await pgSaveFypSnapshot({
         jobId, scriptId: sel.scriptId, modelVersion: plan.modelVersion,
@@ -228,4 +374,5 @@ export async function renderSatuSel(sel: SelRender, alat: AlatSel): Promise<Hasi
     return gagal("Antrean render tidak tersedia — kredit dikembalikan otomatis.");
   }
   return { status: "queued", script_id: sel.scriptId, job_id: jobId };
+  });
 }

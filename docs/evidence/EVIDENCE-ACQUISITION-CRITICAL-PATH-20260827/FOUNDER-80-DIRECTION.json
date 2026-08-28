@@ -1,0 +1,60 @@
+{
+  "schema": "founder-score-80-direction/v1",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "received_at": "2026-08-27",
+  "issuer": "founder",
+  "authority_source": "AMENDED-SOURCE-TASK.json",
+  "authority_message_id": "1787845709000-reviewer-TASK",
+  "authority_receipt_id": "AUTH-1787845709000-FOUNDER-SCORE80",
+  "scope": "SCORE_80_CRITICAL_PATH_ONLY",
+  "category_unknown_policy": {
+    "decision": "APPROVED",
+    "applies_to": ["CATEGORY_UNKNOWN", "ambiguous category", "bundle category"],
+    "result": "FAIL_CLOSED_MANUAL_REVIEW_QUARANTINE",
+    "forbidden_before_authorized_release": ["provider call", "publication", "spend", "irreversible downstream action"],
+    "release_rule": "only an explicitly authorized human review role may release",
+    "heuristic_auto_map": "FORBIDDEN",
+    "implementation_and_exact_sha_review_still_required": true
+  },
+  "payment_canary": {
+    "approved_in_principle": true,
+    "execution_now": "FORBIDDEN_PENDING_PREREQUISITES",
+    "prerequisites": ["merchant/provider readiness receipt", "authoritative Founder-approved price/COGS record"],
+    "boundary": {"audience":"internal_closed","maximum_transactions":1,"aggregate_spend_idr_max":50000,"public_payments":false},
+    "required_receipts": ["exactly-once execution", "provider receipt", "database receipt", "zero-difference reconciliation receipt"],
+    "ambiguous_result": "STOP_NO_RETRY",
+    "settlement_or_refund_failure": "FAIL_CLOSED"
+  },
+  "release_model": {
+    "approved": true,
+    "roles_must_be_separate": true,
+    "required_named_roles": ["Release Approver", "Release Operator", "Rollback Authority"],
+    "names_status": "MISSING"
+  },
+  "price_cogs_required_fields": [
+    "currency",
+    "canary_package_id",
+    "canary_package_description",
+    "credited_entitlement",
+    "customer_price_idr",
+    "maximum_authorized_spend_idr",
+    "selected_payment_channel",
+    "total_variable_cogs_idr",
+    "total_variable_cogs_source",
+    "total_variable_cogs_effective_at",
+    "provider_fee_basis",
+    "tax_basis",
+    "expected_net_settlement_idr",
+    "derived_gross_margin_idr",
+    "approved_test_loss_idr_if_negative",
+    "approved_by",
+    "approval_reference"
+  ],
+  "pitr_required_for_80": {
+    "decision": false,
+    "basis": "canonical 80 gate requires exact deploy, legacy audit, payment matrix, price/COGS and go-live, controlled E2E/refund, and release/intake proof; backup/PITR restore is explicitly an additional 100 gate requirement",
+    "source": "docs/evidence/SHIP-READINESS-CANONICAL-20260824.md#syarat-eksplisit-untuk-80-dan-100",
+    "non_waiver": "PITR remains required for 100 and this does not weaken controlled recovery evidence required by slot B"
+  },
+  "production_public_real_money": "OFF"
+}

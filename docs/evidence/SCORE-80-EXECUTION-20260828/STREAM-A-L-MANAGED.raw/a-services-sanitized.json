@@ -1,0 +1,35 @@
+[
+  {
+    "id": "srv-d9n28ue417fc73ch2b60",
+    "name": "racun-ai-staging-worker",
+    "type": "background_worker",
+    "branch": "staging/exact-46499ac-20260827",
+    "autoDeploy": "no",
+    "suspended": "not_suspended",
+    "updatedAt": "2026-08-27T15:32:13.276543Z",
+    "serviceDetails": {
+      "runtime": "docker",
+      "dockerfilePath": null,
+      "maintenanceMode": null,
+      "url": null
+    }
+  },
+  {
+    "id": "srv-d9n28tijnfac73a87lt0",
+    "name": "racun-ai-staging-web",
+    "type": "web_service",
+    "branch": "staging/exact-46499ac-20260827",
+    "autoDeploy": "no",
+    "suspended": "not_suspended",
+    "updatedAt": "2026-08-27T15:34:42.583533Z",
+    "serviceDetails": {
+      "runtime": "docker",
+      "dockerfilePath": null,
+      "maintenanceMode": {
+        "enabled": false,
+        "uri": ""
+      },
+      "url": "https://racun-ai-staging-web.onrender.com"
+    }
+  }
+]

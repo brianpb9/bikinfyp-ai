@@ -1,0 +1,27 @@
+P0-C6-OCR-FAIL-CLOSED-BEFORE-SPEND-20260827
+BASELINE=dbf96691fd7b824e3d0dd0c2dc186172f02ca0bd
+
+$ node --import tsx --test tests/c6-ocr-fail-closed.test.ts
+tests=7 pass=7 fail=0 exit=0
+Tri-state, actual E1 zero effects, admission provenance, manifest provenance,
+independent worker gate, exact normalized-byte SHA binding, and structural
+order all pass.
+
+$ node --import tsx --test tests/c6-ocr-fail-closed.test.ts tests/product-truth-ingestion.test.ts tests/e1-reference-gate.test.ts tests/org-photo-brand-gate.test.ts tests/neutral-story-ads-w2-packshot.test.ts
+tests=32 pass=31 fail=0 skipped=1 exit=0
+Exact-byte ingestion, E1/E8, W2 positive READY, and append-loss QC fail-closed
+all pass. The one skip is the existing optional UJI_PG_URL CAS test.
+
+$ npx tsc --noEmit
+exit=0
+
+$ npm test
+tests=1266 pass=1218 fail=0 cancelled=0 skipped=48 exit=0
+
+$ npm run build
+exit=0
+
+$ DATABASE_URL=postgresql://localhost:5432/postgres bash scripts/test-postgres-production-migrations.sh
+exit=0 PASS
+The runner created and removed an isolated disposable database. No production
+database was contacted.

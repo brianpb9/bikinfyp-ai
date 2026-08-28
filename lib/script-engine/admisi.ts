@@ -205,6 +205,7 @@ export function konteksAdmisi(sumber: SumberAdmisi) {
   const format = genre === "tvc" ? "tvc" : formatRekam === "tvc" ? undefined : formatRekam;
   return {
     contentType,
+    templateId: templateId ?? null,
     hook_family: sumber.hookFamily,
     register: sumber.register,
     segments: sumber.segments,
@@ -226,7 +227,7 @@ export function konteksAdmisi(sumber: SumberAdmisi) {
       ? cartLabelForUrl(sumber.productSourceUrl)
       : (snap?.cartLabel ?? "keranjang"),
     ...(format ? { format: format as "hands_only" | "vo_broll" | "talking_head" | "tvc" | "ads" } : {}),
-    requirePriceMention: snap?.requirePriceMention ?? templateRequiresPriceMention(templateId),
+    requirePriceMention: snap?.requirePriceMention ?? (templateRequiresPriceMention(templateId) && Number(sumber.productPriceIdr ?? 0) > 0),
     // STANDAR 10/10 baris 4 & 5 butuh tiga hal ini; tanpa mereka aturannya
     // diam-diam tidak pernah berjalan.
     hookLevel: snap?.hookLevel ?? sumber.hookLevel ?? null,

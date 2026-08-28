@@ -1,0 +1,7 @@
+# perintah  : curl -sS -m 30 -o - -w '
+HTTP_STATUS=%{http_code}
+' https://racun-ai-staging-web.onrender.com/api/meta
+# waktu_utc : 2026-08-22T13:00:04Z
+{"code":"UNAUTHORIZED","message_id":"Kamu belum masuk. Login dulu ya, pakai nomor HP.","message_en":"Not authenticated. Please log in first.","retryable":false}
+HTTP_STATUS=401
+# exit_curl : 0

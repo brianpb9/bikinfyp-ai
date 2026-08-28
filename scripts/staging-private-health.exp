@@ -1,0 +1,18 @@
+#!/usr/bin/expect -f
+set timeout 45
+if {![info exists env(STAGING_INSTANCE_ID)]} { exit 64 }
+set instance_id $env(STAGING_INSTANCE_ID)
+spawn render ssh $instance_id --confirm
+expect {
+  -re {[$#] $} {}
+  timeout { exit 124 }
+  eof { exit 125 }
+}
+send -- "curl -fsS http://127.0.0.1:10000/api/health\r"
+expect {
+  -re {[$#] $} {}
+  timeout { exit 124 }
+  eof { exit 125 }
+}
+send -- "exit\r"
+expect eof

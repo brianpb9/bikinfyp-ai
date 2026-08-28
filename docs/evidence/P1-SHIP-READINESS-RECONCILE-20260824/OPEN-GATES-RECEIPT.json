@@ -1,0 +1,33 @@
+{
+  "duitku_known_order_status": {
+    "source": "docs/evidence/P1-DUITKU-SANDBOX-VERIFICATION-20260824/final-hmac-sandbox-api.json",
+    "verification_result": "HOLD",
+    "http_status": 404,
+    "body_keys": ["Message"],
+    "valid_status_schema": false
+  },
+  "production_release_control": {
+    "source": "docs/evidence/P1-MANAGED-STAGING-DUITKU-PARITY-20260824/PRODUCTION-POST-READ.json",
+    "web_auto_deploy": "yes",
+    "worker_auto_deploy": "yes",
+    "authority_to_mutate": false
+  },
+  "worker_ocr_policy": {
+    "source": "lib/worker-reference-brand-gate.ts and accepted W1/W2 tests",
+    "reject_condition": "cocokMerek === false",
+    "null_ocr_positive_control_reaches_provider": true,
+    "policy_changed_by_reconciliation": false
+  },
+  "other_current_open_gates": [
+    "paired legacy PostgreSQL plus R2 audit",
+    "P0-B4 action beyond explicit C3 mismatch",
+    "C2/C4/C5/C6 policy or aggregate coverage",
+    "C9/C12 aggregate and legacy treatment",
+    "valid-product exact-tree end-to-end trace",
+    "merchant approval and real settlement",
+    "price/COGS Founder decision",
+    "PAYMENTS_GO_LIVE",
+    "legal counsel sign-off",
+    "incident owner, monitoring delivery, DR/restore drill"
+  ]
+}

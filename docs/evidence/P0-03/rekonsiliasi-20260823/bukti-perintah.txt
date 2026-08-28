@@ -1,0 +1,203 @@
+# Bukti rekonsiliasi acceptance matrix — perintah persis, bisa dijalankan ulang
+# waktu_utc : 2026-08-22T23:54:29Z
+# HEAD      : e8a00a5bd581a156865f145de22accc7daa6fe12
+# worktree  : 1 berkas berubah sebelum rekonsiliasi
+
+--- 1. reason code USULAN vs yang ADA di kode (direkam ulang 2026-08-23T00:27:02Z) ---
+# Daftar literal; bukan placeholder. `|| true` mempertahankan baris kosong saat
+# satu reason code tidak ditemukan.
+$ for rc in REF_PROMOTIONAL TYPE_MISMATCH BRAND_MISMATCH LABEL_UNREADABLE CATEGORY_UNKNOWN OCR_FAILED CLASSIFIER_FAILED EVIDENCE_INVALID SNAPSHOT_IMMUTABLE LEGACY_UNVALIDATED REF_MISSING REF_HASH_MISMATCH REFERENCE_IDENTITY_CHANGED; do hits=$(rg -l "\"$rc\"" lib app scripts 2>/dev/null || true); if [ -n "$hits" ]; then printf '%-23s%s\n' "$rc" "$hits"; else printf '%s\n' "$rc"; fi; done
+REF_PROMOTIONAL        lib/product-truth.ts
+TYPE_MISMATCH
+BRAND_MISMATCH
+LABEL_UNREADABLE
+CATEGORY_UNKNOWN
+OCR_FAILED
+CLASSIFIER_FAILED      lib/product-truth.ts
+EVIDENCE_INVALID       lib/product-truth.ts
+SNAPSHOT_IMMUTABLE
+LEGACY_UNVALIDATED
+REF_MISSING            lib/product-truth.ts
+REF_HASH_MISMATCH      lib/product-truth.ts
+REFERENCE_IDENTITY_CHANGED
+
+--- 2. jalur ingestion -> fungsi penyimpan -> tulisSidecar ---
+$ rg -n 'tulisSidecar' lib/product-images.ts lib/product-image-download.ts
+lib/product-images.ts:271:      await tulisSidecar(rel, bytesTersimpan, abs);
+lib/product-images.ts:327:        await tulisSidecar(rel, normalized, abs);
+lib/product-image-download.ts:48:        await tulisSidecar(rel, normalized, abs);
+
+--- 3. worker memakai resolver + snapshot ---
+$ rg -n 'resolveApprovedReference|ambilSnapshotTersetujui' lib/worker.ts lib/postgres/worker.ts
+lib/worker.ts:122:    const referensi = await resolveApprovedReference(images);
+lib/worker.ts:139:    const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
+lib/worker.ts:166:        extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
+lib/postgres/worker.ts:340:  const referensi = await resolveApprovedReference(images);
+lib/postgres/worker.ts:355:  const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
+lib/postgres/worker.ts:377:      extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
+
+--- 4. admission A1..A7: adakah gerbang bukti? (per-entrypoint, 2026-08-23T00:33:31Z) ---
+# Versi direktori (rg -ln atas dua folder) TIDAK mendukung klaim per-entrypoint:
+# stdout kosong tidak membedakan 'tidak memanggil' dari 'berkas tidak ada',
+# dan tidak mencetak apa pun untuk A4/A7 yang di luar kedua folder itu.
+# Kini tujuh path LITERAL, masing-masing dengan uji keberadaan, hitungan,
+# dan exit status. Temuan Reviewer atas 56c5049.
+
+$ test -f 'app/api/jobs/route.ts' && echo ADA || echo TIDAK-ADA
+ADA
+$ rg --include-zero -c 'resolveApprovedReference|referensiLayak' 'app/api/jobs/route.ts'; echo "exit=$?"
+0
+exit=1
+# A1 -> berkas ADA, gerbang_bukti 0, exit 1 (ripgrep keluar 1 pada nol match)
+
+$ test -f 'app/api/dashboard/matrix/route.ts' && echo ADA || echo TIDAK-ADA
+ADA
+$ rg --include-zero -c 'resolveApprovedReference|referensiLayak' 'app/api/dashboard/matrix/route.ts'; echo "exit=$?"
+0
+exit=1
+# A2 -> berkas ADA, gerbang_bukti 0, exit 1 (ripgrep keluar 1 pada nol match)
+
+$ test -f 'app/api/dashboard/campaign/generate/route.ts' && echo ADA || echo TIDAK-ADA
+ADA
+$ rg --include-zero -c 'resolveApprovedReference|referensiLayak' 'app/api/dashboard/campaign/generate/route.ts'; echo "exit=$?"
+0
+exit=1
+# A3 -> berkas ADA, gerbang_bukti 0, exit 1 (ripgrep keluar 1 pada nol match)
+
+$ test -f 'lib/dashboard/render-cell.ts' && echo ADA || echo TIDAK-ADA
+ADA
+$ rg --include-zero -c 'resolveApprovedReference|referensiLayak' 'lib/dashboard/render-cell.ts'; echo "exit=$?"
+0
+exit=1
+# A4 -> berkas ADA, gerbang_bukti 0, exit 1 (ripgrep keluar 1 pada nol match)
+
+$ test -f 'app/api/dashboard/campaign/confirm/route.ts' && echo ADA || echo TIDAK-ADA
+ADA
+$ rg --include-zero -c 'resolveApprovedReference|referensiLayak' 'app/api/dashboard/campaign/confirm/route.ts'; echo "exit=$?"
+0
+exit=1
+# A5 -> berkas ADA, gerbang_bukti 0, exit 1 (ripgrep keluar 1 pada nol match)
+
+$ test -f 'app/api/dashboard/campaign/job/[jobId]/route.ts' && echo ADA || echo TIDAK-ADA
+ADA
+$ rg --include-zero -c 'resolveApprovedReference|referensiLayak' 'app/api/dashboard/campaign/job/[jobId]/route.ts'; echo "exit=$?"
+0
+exit=1
+# A6 -> berkas ADA, gerbang_bukti 0, exit 1 (ripgrep keluar 1 pada nol match)
+
+$ test -f 'app/api/scripts/generate/route.ts' && echo ADA || echo TIDAK-ADA
+ADA
+$ rg --include-zero -c 'resolveApprovedReference|referensiLayak' 'app/api/scripts/generate/route.ts'; echo "exit=$?"
+0
+exit=1
+# A7 -> berkas ADA, gerbang_bukti 0, exit 1 (ripgrep keluar 1 pada nol match)
+
+# -> KETUJUH entrypoint admission ADA dan tidak satu pun memanggil gerbang bukti.
+--- 5. gerbang label E4 hanya foto PERTAMA (lubang 20 Agu, masih ada) ---
+$ rg -n 'existing.length === 0' app/api/products/[id]/photos/route.ts
+84:    if (existing.length === 0 && blobs[0]) {
+
+--- 6. E8 memanggil periksaLabelFoto TANPA merekTerdaftar (lubang 20 Agu, masih ada) ---
+$ rg -n 'periksaLabelFoto' app/api/dashboard/campaign/product/[id]/photos/route.ts
+52:        const label = await periksaLabelFoto(tmpFile, owned.product.name);
+
+--- 7. OCR FAIL-OPEN (lubang 20 Agu, masih ada) ---
+$ rg -n 'return \{ terbaca: true' lib/media/label-terbaca.ts
+157:    if (!merek) return { terbaca: true, kata, cocokNama, cocokMerek: null };
+182:    return { terbaca: true, kata, cocokNama, cocokMerek: true };
+188:    return { terbaca: true, kata: [], cocokNama: true, cocokMerek: null };
+
+--- 8. DELETE foto: E5 dan E9 BERBEDA (direkam ulang 2026-08-23T00:21:25Z) ---
+# Dua koreksi atas versi sebelumnya, keduanya temuan Reviewer:
+#  (i) 'rg -c' TANPA match tidak mencetak 0 — stdout kosong, exit 1. Versi
+#      lalu memakai '|| echo 0' sehingga transcript menampilkan angka yang
+#      TIDAK dihasilkan perintah yang tertulis. Kini pakai --include-zero
+#      dan exit code dicatat apa adanya.
+#  (ii) '-A1' berhenti sebelum mediaStorage().delete, jadi body helper tidak
+#      pernah benar-benar terlihat — dan kesimpulan 'tidak dicoba ulang'
+#      SALAH: helper mencoba TIGA kali inline.
+# rg version: ripgrep 15.1.0 (rev af60c2de9d)
+
+# 8a. HELPER — body penuh
+$ sed -n '358,373p' lib/product-images.ts
+export async function deleteStoredProductImages(keys: string[]): Promise<void> {
+  const failed: string[] = [];
+  const sasaran = keys.flatMap((key) => [key, relMeta(key)]);
+  await Promise.all(sasaran.map(async (key) => {
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try { await mediaStorage().delete(key); return; }
+      catch (error) {
+        if (attempt === 3) {
+          failed.push(key);
+          console.error(`[storage] gagal menghapus ${key} setelah 3 percobaan:`, error);
+        }
+      }
+    }
+  }));
+  if (failed.length) throw new Error(`Storage cleanup failed for ${failed.length} object(s).`);
+}
+# -> sasaran = key DAN relMeta(key); TIGA percobaan inline per objek;
+#    yang tetap gagal dikumpulkan lalu helper MELEMPAR.
+
+# 8b. E5 (DELETE retail) — TIDAK memanggil helper
+$ rg --include-zero -c 'deleteStoredProductImages' 'app/api/products/[id]/photos/route.ts'; echo "exit=$?"
+0
+exit=1
+# -> '0' dengan exit 1: ripgrep keluar 1 saat nol match, bahkan dengan --include-zero.
+$ rg -n 'await persistImages\(' 'app/api/products/[id]/photos/route.ts'
+127:    await persistImages(user.id, id, images);
+154:    await persistImages(user.id, id, images);
+# -> hanya menyaring daftar lalu mempersist; bytes DAN sidecar ditinggal yatim.
+
+# 8c. E9 (DELETE org) — satu-satunya pemanggil, dan apa yang terjadi saat gagal
+$ sed -n '96,101p' 'app/api/dashboard/campaign/product/[id]/photos/route.ts'
+    let cleanupPending = false;
+    try { await deleteStoredProductImages([target]); }
+    catch { cleanupPending = true; }
+    void pgAudit(user.id, "product.photo_removed", "products", id, { org_id: membership.org_id, removed: target, total: images.length })
+      .catch((error) => console.error("[audit] product.photo_removed failed:", error));
+    return Response.json({ product_id: id, images, image_urls: images.map((image) => createSignedUrl(image)), cleanup_failed: cleanupPending });
+# -> lemparan helper (sesudah 3 percobaan inline habis) DITANGKAP jadi
+#    cleanupPending, dilaporkan ke klien sebagai cleanup_failed, lalu
+#    SELESAI. Jadi: ada retry inline, TIDAK ada retry tertunda/antrean
+#    pada jalur E9 ini setelah tiga percobaan inline habis.
+
+--- 9. test yang memetakan kasus C secara eksplisit ---
+$ rg -n -o '(W1|W2) C[0-9]+' tests/
+tests/pg-product-truth-w1.test.ts:344:W1 C1
+tests/pg-product-truth-w1.test.ts:360:W1 C1
+tests/pg-product-truth-w1.test.ts:401:W1 C8
+tests/pg-product-truth-w1.test.ts:413:W1 C8
+tests/product-truth-worker-reference.test.ts:219:W2 C1
+tests/product-truth-worker-reference.test.ts:234:W2 C1
+tests/product-truth-worker-reference.test.ts:258:W2 C8
+tests/product-truth-worker-reference.test.ts:270:W2 C8
+tests/product-truth-worker-reference.test.ts:288:W2 C8
+tests/product-truth-worker-reference.test.ts:300:W2 C8
+
+===================================================================
+--- 10. A6: apakah regenerate MEMPERTAHANKAN snapshot? (temuan review b1a3e06) ---
+# waktu_utc : 2026-08-23T00:01:50Z
+# HEAD      : b1a3e06814c5a47d88097383b418a9fdc1f4eac0
+
+$ rg -n 'p.images AS product_images' lib/postgres/worker.ts
+274:      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
+
+$ rg -n 'resolveApprovedReference\(images\)|ambilSnapshotTersetujui\(' lib/postgres/worker.ts
+340:  const referensi = await resolveApprovedReference(images);
+355:  const refUtama = await ambilSnapshotTersetujui(imageRef, referensi.utama, dirSnapshot);
+377:      extraRefs.push(await ambilSnapshotTersetujui(p, ref, dirSnapshot));
+
+$ rg -n 'enqueueJobResume' app/api/dashboard/campaign/job/[jobId]/route.ts
+7:import { enqueueJobResume } from "@/lib/job-queue";
+153:        // Akibatnya dua enqueueJobResume() dengan id BullMQ berbeda, dua
+164:        await enqueueJobResume(jobId, "approve");
+283:      await enqueueJobResume(jobId, `regen${idx}`);
+
+# KESIMPULAN: SELECT worker mengambil p.images SEGAR tiap invocation, lalu
+# resolveApprovedReference + ambilSnapshotTersetujui membuat snapshot BARU.
+# Jadi regenerate/resume (A6) TIDAK mempertahankan snapshot yang disetujui
+# sebelumnya — ia menyetujui ulang terhadap images SAAT ITU.
+
+$ rg -ln 'snapshot' app/api/dashboard/campaign/job    # adakah pemeliharaan snapshot di A6?
+(NOL berkas)

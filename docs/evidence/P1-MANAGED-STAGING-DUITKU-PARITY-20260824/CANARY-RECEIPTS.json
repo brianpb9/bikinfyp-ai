@@ -1,0 +1,36 @@
+{
+  "classification": "VERIFIED_MANAGED_NON_MONEY",
+  "receipts": [
+    {
+      "name": "unauthenticated_checkout",
+      "method": "POST",
+      "path": "/api/credits/checkout",
+      "http": 401,
+      "response": { "code": "UNAUTHORIZED", "retryable": false }
+    },
+    {
+      "name": "invalid_signature_callback",
+      "method": "POST",
+      "path": "/api/webhooks/duitku",
+      "http": 401,
+      "response": { "code": "INVALID_SIGNATURE", "retryable": false }
+    },
+    {
+      "name": "valid_signature_unknown_order",
+      "precondition": "managed/local sandbox credential equality true",
+      "method": "POST",
+      "path": "/api/webhooks/duitku",
+      "order": "parity-unknown-20260824-1622",
+      "http": 200,
+      "response": { "ok": true, "ignored": true, "reason": "order tidak dikenal" },
+      "derived_invariant": {
+        "credited": false,
+        "basis": "post-canary payments and credit_ledger snapshots exactly match baseline"
+      }
+    }
+  ],
+  "invoice_created": false,
+  "payment_performed": false,
+  "refund_performed": false,
+  "settlement_performed": false
+}

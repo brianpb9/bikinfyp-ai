@@ -44,6 +44,18 @@ terverifikasi via header/health nyata.
 
 ## 2. ALARM MARGIN — data canary vs harga landing (baru, penting)
 
+> **Diperbarui 20 Agu — satuannya DETIK, bukan klip.** Pengukuran ulang per
+> tier (docs/evidence/cogs-canary-2026-08-20.md) menghasilkan tarif per detik
+> yang konsisten dengan angka di bawah: high_quality Rp554/detik, jadi 15 detik
+> = Rp8.313 entah dirender sebagai satu klip panjang atau tiga klip pendek.
+> Angka "Rp2.771" yang muncul di catatan 20 Agu adalah klip 5 detik pada tier
+> yang SAMA — bukan tarif yang berbeda, bukan klip bisu.
+>
+> **Margin retail dipatok pada angka terukur: ~25%** (Rp3.000 dari Rp12.000),
+> sesudah memotong frame buatan ±Rp650 dan QC vision ±Rp12 seperti hitungan di
+> bawah. Angka 31% yang sempat saya tulis adalah margin KOTOR yang belum
+> memotong keduanya, dan tidak dipakai untuk keputusan apa pun.
+
 Canary mengukur **klip bersuara = Rp8.313** (bukan Rp2.771 seperti klip bisu).
 Konsekuensi terhadap "Rp12.000 per video bersuara" di landing:
 

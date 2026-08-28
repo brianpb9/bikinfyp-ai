@@ -34,6 +34,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createHash } from "node:crypto";
 import { config } from "../config";
 import { tokenMerekUtama } from "./qc";
 
@@ -58,6 +59,11 @@ export interface HasilQcF1 {
     merekTerbaca: boolean | null;
   };
   biayaIdr: number;
+  /** Binding byte-ke-byte agar verdict tidak bisa dipindahkan ke frame/foto lain. */
+  evidence: {
+    frameSha256: string | null;
+    productPhotoSha256: string | null;
+  };
 }
 
 /**
@@ -70,10 +76,10 @@ export function bolehJadiReferensi(hasil: HasilQcF1): boolean {
   return hasil.status === "PASS";
 }
 
-function dataUri(p: string) {
-  const ext = path.extname(p).toLowerCase();
+function dataUri(bytes: Buffer, sourcePath: string) {
+  const ext = path.extname(sourcePath).toLowerCase();
   const mime = ext === ".png" ? "image/png" : ext === ".webp" ? "image/webp" : "image/jpeg";
-  return { mime_type: mime, data: fs.readFileSync(p).toString("base64") };
+  return { mime_type: mime, data: bytes.toString("base64") };
 }
 
 const PERTANYAAN =
@@ -118,15 +124,17 @@ export type HasilOcr = { terbaca: boolean; teks: string } | { terbaca: null; tek
  * untuk dibaca; kegagalan menjalankan OCR MELEMPAR, supaya pemanggil bisa
  * membedakan "tidak ada merek" dari "tidak bisa diperiksa".
  */
-async function merekTerbaca(framePath: string, merekEksplisit?: string | null): Promise<HasilOcr> {
+async function merekTerbaca(frameBytes: Buffer, framePath: string, merekEksplisit?: string | null): Promise<HasilOcr> {
   const token = tokenMerekUtama(merekEksplisit);
   // null = tidak ada MEREK TEPERCAYA. Bukan "produk polos" — kita memang tidak
   // tahu, dan pemanggil yang memutuskan itu berarti UNVERIFIED untuk hero.
   if (!token) return { terbaca: null, teks: "" };
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), "qcf1-"));
   try {
+    const input = path.join(dir, `input${path.extname(framePath) || ".img"}`);
+    fs.writeFileSync(input, frameBytes);
     const png = path.join(dir, "besar.png");
-    await jalankan("ffmpeg", ["-y", "-v", "error", "-i", framePath, "-vf", "scale=1440:-2:flags=lanczos", png]);
+    await jalankan("ffmpeg", ["-y", "-v", "error", "-i", input, "-vf", "scale=1440:-2:flags=lanczos", png]);
     const { stdout } = await jalankan("tesseract", [png, "stdout", "-l", "eng", "--psm", "11"]);
     // SATU token yang menentukan, bukan "salah satu token".
     //
@@ -162,6 +170,17 @@ export async function qcF1FrameFidelity(input: {
   productState?: "hero" | "partial";
 }): Promise<HasilQcF1> {
   const kosong = { bentukSama: null, tutupSama: null, warnaSama: null, tataLetakLabelSama: null, merekTerbaca: null };
+  // Snapshot sekali. Hash, OCR, dan seluruh retry vision wajib membaca buffer
+  // immutable yang sama; path sumber boleh berubah setelah fungsi dimulai.
+  const bacaJikaAda = (p: string) => fs.existsSync(p) ? fs.readFileSync(p) : null;
+  const frameBytes = bacaJikaAda(input.framePath);
+  const productPhotoBytes = bacaJikaAda(input.productPhotoPath);
+  const hashJikaAda = (bytes: Buffer | null) => bytes
+    ? createHash("sha256").update(bytes).digest("hex") : null;
+  const evidence = {
+    frameSha256: hashJikaAda(frameBytes),
+    productPhotoSha256: hashJikaAda(productPhotoBytes),
+  };
   const hero = (input.productState ?? "hero") === "hero";
 
   if (!config.geminiApiKey) {
@@ -171,12 +190,14 @@ export async function qcF1FrameFidelity(input: {
       detail: "QC-F1 tidak dapat dijalankan: GEMINI_API_KEY belum di-set. Frame TIDAK boleh dipakai sebagai referensi.",
       temuan: kosong,
       biayaIdr: 0,
+      evidence,
     };
   }
 
   let ocr: HasilOcr;
   try {
-    ocr = await merekTerbaca(input.framePath, input.merekEksplisit);
+    if (!frameBytes) throw new Error("frame input tidak tersedia");
+    ocr = await merekTerbaca(frameBytes, input.framePath, input.merekEksplisit);
   } catch (err) {
     // OCR mati (tesseract/ffmpeg tidak ada) pada frame HERO berarti janji
     // "nama merek terbaca" tidak bisa dibuktikan — dan janji yang tidak bisa
@@ -187,6 +208,7 @@ export async function qcF1FrameFidelity(input: {
         detail: `QC-F1 tidak dapat memeriksa merek pada frame hero (${(err as Error).message}). Frame TIDAK dipakai.`,
         temuan: kosong,
         biayaIdr: 0,
+        evidence,
       };
     }
     ocr = { terbaca: null, teks: "" };
@@ -211,8 +233,8 @@ export async function qcF1FrameFidelity(input: {
       body: JSON.stringify({
         contents: [{ parts: [
           { text: PERTANYAAN },
-          { inline_data: dataUri(input.framePath) },
-          { inline_data: dataUri(input.productPhotoPath) },
+          { inline_data: frameBytes ? dataUri(frameBytes, input.framePath) : (() => { throw new Error("frame input tidak tersedia"); })() },
+          { inline_data: productPhotoBytes ? dataUri(productPhotoBytes, input.productPhotoPath) : (() => { throw new Error("foto produk tidak tersedia"); })() },
         ] }],
         generationConfig: { responseMimeType: "application/json", temperature: 0 },
       }),
@@ -231,6 +253,7 @@ export async function qcF1FrameFidelity(input: {
       detail: `QC-F1 tidak dapat dijalankan (${galatTerakhir}). Frame TIDAK dipakai sebagai referensi.`,
       temuan: { ...kosong, merekTerbaca: ocr.terbaca },
       biayaIdr: 0,
+      evidence,
     };
   }
 
@@ -248,6 +271,7 @@ export async function qcF1FrameFidelity(input: {
         "(products.brand / merek hasil intake belum ada). Frame TIDAK dipakai sebagai referensi.",
       temuan: { ...kosong, merekTerbaca: null },
       biayaIdr: BIAYA_PERIKSA_IDR,
+      evidence,
     };
   }
 
@@ -275,5 +299,6 @@ export async function qcF1FrameFidelity(input: {
     detail: gagal.length === 0 ? `QC-F1 PASS${catatan}` : `QC-F1 FAIL: ${gagal.join(", ")}${catatan}`,
     temuan,
     biayaIdr: BIAYA_PERIKSA_IDR,
+    evidence,
   };
 }

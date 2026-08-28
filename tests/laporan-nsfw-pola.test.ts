@@ -11,12 +11,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import fs from "node:fs";
+import {isProviderContentRejection} from "../lib/nsfw-kpi.mjs";
 
 const src = fs.readFileSync("scripts/laporan-nsfw.mjs", "utf8");
-// Deklarasinya boleh multi-baris (komentar panjang + string di baris berikutnya).
-const m = src.match(/const POLA_KONTEN\s*=\s*\n?\s*"([^"]+)"/);
-assert.ok(m, "POLA_KONTEN tidak ditemukan di scripts/laporan-nsfw.mjs");
-const pola = new RegExp(m![1], "i");
+assert.match(src,/CONTENT_REJECTION_PATTERN_SOURCE/);
+assert.doesNotMatch(src,/!rows\.length[^\n]*process\.exit\(0\)/,"window kosong tidak boleh exit sukses lebih awal");
+assert.match(src,/nsfwReportExitCode\(summaries\)/,"CLI wajib memakai exit policy fail-closed");
 
 /** Penolakan konten NYATA yang pernah/mungkin diterima dari penyedia. */
 const PENOLAKAN_KONTEN = [
@@ -41,12 +41,12 @@ const KEGAGALAN_INFRA = [
 
 for (const alasan of PENOLAKAN_KONTEN) {
   test(`POLA_KONTEN menangkap penolakan nyata: ${alasan.slice(0, 60)}...`, () => {
-    assert.ok(pola.test(alasan), `tidak tertangkap — KPI penolakan akan melapor nol palsu`);
+    assert.ok(isProviderContentRejection(alasan), `tidak tertangkap — KPI penolakan akan melapor nol palsu`);
   });
 }
 
 for (const alasan of KEGAGALAN_INFRA) {
   test(`POLA_KONTEN TIDAK menghitung kegagalan infra: ${alasan.slice(0, 50)}...`, () => {
-    assert.ok(!pola.test(alasan), `kegagalan infrastruktur ikut terhitung sebagai penolakan konten`);
+    assert.ok(!isProviderContentRejection(alasan), `kegagalan infrastruktur ikut terhitung sebagai penolakan konten`);
   });
 }

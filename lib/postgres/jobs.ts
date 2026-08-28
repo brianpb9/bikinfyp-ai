@@ -210,7 +210,32 @@ export class PgJobsRepository {
   async getOutput(jobId: string, userId: string) { return (await this.pool.query("SELECT o.* FROM outputs o JOIN jobs j ON j.id=o.job_id WHERE o.job_id=$1 AND j.user_id=$2", [jobId,userId])).rows[0]; }
 
   private async transaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
-    for (let attempt=0; attempt<3; attempt++) { const client=await this.pool.connect(); try { await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE"); const value=await fn(client); await client.query("COMMIT"); return value; } catch (error) { await client.query("ROLLBACK").catch(()=>undefined); const code=(error as {code?:string}).code; if ((code === "40001" || code === "40P01") && attempt < 2) continue; throw error; } finally { client.release(); } }
+    // SERIALIZABLE memang boleh mengembalikan 40001; itu instruksi untuk
+    // mengulang SELURUH transaksi, bukan kegagalan bisnis. Tiga retry tanpa
+    // jeda terbukti habis ketika reconciler uang dan worker W1 aktif bersamaan:
+    // seluruh peserta bangun pada saat yang sama lalu bertabrakan lagi.
+    // Jitter + backoff terkurung memecah herd tanpa menurunkan isolation level.
+    const maxAttempts = 8;
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+      const client = await this.pool.connect();
+      try {
+        await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+        const value = await fn(client);
+        await client.query("COMMIT");
+        return value;
+      } catch (error) {
+        await client.query("ROLLBACK").catch(() => undefined);
+        const code = (error as { code?: string }).code;
+        if ((code === "40001" || code === "40P01") && attempt < maxAttempts - 1) {
+          const backoffMs = Math.min(200, 5 * (2 ** attempt)) + Math.floor(Math.random() * 11);
+          await new Promise<void>((resolve) => setTimeout(resolve, backoffMs));
+          continue;
+        }
+        throw error;
+      } finally {
+        client.release();
+      }
+    }
     throw new Error("Transaksi PostgreSQL habis retry.");
   }
   private async audit(client: PoolClient, actor: string, action: string, entity: string, entityId: string | null, meta: unknown) { await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)", [this.uuid(),actor,action,entity,entityId,JSON.stringify(meta),this.now()]); }

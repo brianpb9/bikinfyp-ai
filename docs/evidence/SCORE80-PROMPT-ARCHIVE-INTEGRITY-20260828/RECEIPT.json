@@ -1,0 +1,26 @@
+{
+  "task": "SCORE80-PROMPT-ARCHIVE-INTEGRITY-20260828",
+  "scope": "ZERO_SPEND_READ_ONLY_CORRELATION_PREREQUISITE",
+  "production_mutation": false,
+  "provider_calls": 0,
+  "spend_idr": 0,
+  "public_payments": false,
+  "claim": "NO_SCORE",
+  "reason": "The canonical next rung still requires one production post-0032 real-job E2E. Deterministic fixtures validate the fail-closed verifier but do not substitute for that production trace.",
+  "closed_implementation_gap": "Terminal provider_tasks were deleted before a completed job could be audited; the worker now freezes per-shot provider request identities and exact provider-payload SHA-256 bindings into job_prompts.model_params before clearing the retry memo.",
+  "correlation": ["prompt", "model", "verdict", "artifact", "provider_request"],
+  "failure_modes": [
+    "missing request-to-shot coverage",
+    "job is not terminal READY",
+    "archive created after provider request",
+    "provider request created after completed artifact",
+    "ambiguous request per shot",
+    "provider mismatch",
+    "legacy provider request without payload binding",
+    "retained shot plus regenerated shot bound to different prompt/model payload versions",
+    "pre-transformation reference digest differs from finalized provider-bound reference bytes",
+    "missing or failed verdict",
+    "missing artifact",
+    "archive write failure retains provider request recovery rows"
+  ]
+}

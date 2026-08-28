@@ -1,0 +1,27 @@
+lib/job-admission-reference.ts:16:  onSnapshotTarget?: (snapshotRel: string) => void;
+lib/job-admission-reference.ts:21:    onSnapshotTarget: input.onSnapshotTarget,
+lib/job-admission-reference.ts:52:export async function cleanupUnadmittedReferenceKeys(input: {
+lib/job-reference-manifest.ts:63:  onSnapshotTarget?: (snapshotRel: string) => void;
+lib/job-reference-manifest.ts:82:    input.onSnapshotTarget?.(snapshotRel);
+app/api/jobs/route.ts:19:import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
+app/api/jobs/route.ts:213:    if (!created && getBalance(user.id) < priceIdr) throw ERR.INSUFFICIENT_CREDITS();
+app/api/jobs/route.ts:215:    const cleanupKnownNonAdmission = () => cleanupUnadmittedReferenceKeys({
+app/api/jobs/route.ts:241:          onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
+app/api/jobs/route.ts:254:        if (getBalance(user.id) < priceIdr) return { kind: "insufficient" as const };
+lib/dashboard/render-cell.ts:26:import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "@/lib/job-admission-reference";
+lib/dashboard/render-cell.ts:148:  let commitAttempted = false;
+lib/dashboard/render-cell.ts:214:      onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
+lib/dashboard/render-cell.ts:239:      await cleanupUnadmittedReferenceKeys({
+lib/dashboard/render-cell.ts:252:    commitAttempted = true;
+lib/dashboard/render-cell.ts:256:    if (!commitAttempted && rollbackSucceeded && preparedSnapshotRels.size > 0) {
+lib/dashboard/render-cell.ts:257:      await cleanupUnadmittedReferenceKeys({
+lib/postgres/smoke-runtime.ts:25:import { cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "../job-admission-reference";
+lib/postgres/smoke-runtime.ts:227:      let commitAttempted = false;
+lib/postgres/smoke-runtime.ts:245:            commitAttempted = true;
+lib/postgres/smoke-runtime.ts:247:            await cleanupUnadmittedReferenceKeys({
+lib/postgres/smoke-runtime.ts:259:        const preflightBalance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);
+lib/postgres/smoke-runtime.ts:260:        if (Number(preflightBalance.rows[0].balance) < input.priceIdr) throw new Error("INSUFFICIENT_CREDITS");
+lib/postgres/smoke-runtime.ts:276:          onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
+lib/postgres/smoke-runtime.ts:289:        commitAttempted = true;
+lib/postgres/smoke-runtime.ts:301:        if (!commitAttempted && rollbackSucceeded && preparedSnapshotRels.size > 0) {
+lib/postgres/smoke-runtime.ts:302:          await cleanupUnadmittedReferenceKeys({

@@ -28,6 +28,7 @@ import {
   AKU_TOKENS, FILLER_PHRASES, FILLER_TOKENS, GUE_TOKENS, KAMU_TOKENS, LO_TOKENS, PARTICLES,
 } from "./validator";
 import type { SegmentDraft } from "./templates";
+import { storyAdsTimeRanges, temuanHookSenyapAds } from "./story-os-ads";
 
 const ENDPOINT = "https://api.anthropic.com/v1/messages";
 const VERSI_API = "2023-06-01";
@@ -55,10 +56,25 @@ export const SkemaSegmen = z.object({
   // hanya karena field ini tidak ditulis. Membuang naskah bagus karena label
   // kosmetik adalah biaya yang dibayar dua kali tanpa dapat apa-apa.
   mode: z.string().default(""),
+  /** Story Ads: saksi SPIKE wajib selamat sampai validator. */
+  saksi: z.string().min(3).optional(),
+  bridge_source: z.enum(["spoken_product_name", "spoken_product_category", "spoken_approved_price"]).optional(),
 });
 
 export const SkemaNaskah = z.object({
   segments: z.array(SkemaSegmen).min(3).max(8),
+});
+
+/** Schema khusus Ads: SA3 bukan sekadar instruksi prompt. Respons dengan
+ * dialog pada HOOK gagal parse dan diminta ulang sebelum masuk pipeline. */
+export const SkemaNaskahAds = z.object({
+  // Strict khusus jalur Ads: alias suara tak dikenal tidak boleh dibuang
+  // sebelum invariant SA3 sempat melihatnya. Jalur Affiliate tetap kompatibel.
+  segments: z.array(SkemaSegmen.strict()).min(3).max(8),
+}).superRefine((script, ctx) => {
+  for (const message of temuanHookSenyapAds(script.segments as Array<SegmenLlm & Record<string, unknown>>)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom, path: ["segments"], message });
+  }
 });
 
 export type SegmenLlm = z.infer<typeof SkemaSegmen>;
@@ -116,15 +132,32 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     "  'she listens quietly'. Say what IS there.",
     "",
     "STRUCTURE:",
-    "- Exactly one HOOK first, 1-5 BODY, exactly one CTA last. Timecodes contiguous, no gaps.",
-    "- Each segment 4-6 seconds. HOOK 3-5s. CTA >= 4s.",
-    "- product_state follows an arc: the hook is 'hidden' or 'partial' and NEVER 'hero'.",
-    "  The CTA is always 'hero'. Nothing is a hero before the CTA.",
+    contentType === "ads"
+      ? [
+          "- Ads use exactly five beats: HOOK, FRICTION, FRICTION, SPIKE, BUTTON.",
+          "- Ads timecodes are positive, contiguous with no gaps/overlaps, start at 0, and the BUTTON ends exactly at the requested duration.",
+          "- Ads have NO generic 4-6 second minimum per beat; follow the exact five-beat schedule in the task block.",
+          "- For Ads, product_state is 'hidden' on EVERY beat including BUTTON. Neutral blank props are never partial or hero products.",
+        ].join("\n")
+      : [
+          "- Exactly one HOOK first, 1-5 BODY, exactly one CTA last. Timecodes contiguous, no gaps.",
+          "- Each segment 4-6 seconds. HOOK 3-5s. CTA >= 4s.",
+          "- product_state follows an arc: the hook is 'hidden' or 'partial' and NEVER 'hero'.",
+          "  The CTA is always 'hero'. Nothing is a hero before the CTA.",
+        ].join("\n"),
     "- start_state describes what is ALREADY TRUE in the first frame. The video model moves TOWARD",
     "  the prompt, so anything you do not state as already true will be invented.",
     "- 'why' must say which story beat the segment serves: setup, tension, or payoff.",
     "",
-    "WRITE dialogue in casual Indonesian. Write every other field in English.",
+    contentType === "ads"
+      ? [
+          "WRITE dialogue in casual Indonesian.",
+          "ADS ACTION LANGUAGE EXCEPTION — write every action field in the restricted Indonesian neutral-prop grammar accepted by A-03; write all other non-dialogue fields in English.",
+          "A model-compliant action may follow exactly this grammar: talent buka kartu warna polos perlahan.",
+          "Other accepted shapes include: swatch blank dipindahkan mendekati saksi; kartu warna polos diletakkan di depan kasir; talent menunjuk blok warna pada kartu blank.",
+          "Do not translate these action shapes into English and do not add synonyms, product, packaging, brand, label, price, digits, or readable text.",
+        ].join("\n")
+      : "WRITE dialogue in casual Indonesian. Write every other field in English.",
     "",
     // STANDAR 10/10 (knowledge/rules/standard-10.md). Disuntikkan UTUH, bukan
     // diringkas: seksi A memutuskan genre idenya dan seksi B adalah 12 baris
@@ -139,6 +172,14 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     // kalimat CTA, jadi naskah Ads lahir sebagai naskah afiliasi yang cuma
     // ditukar penutupnya.
     blokMaster(contentType),
+    "",
+    contentType === "ads"
+      ? [
+          "ADS STORY-AND-PIXEL OVERRIDE (newer and controlling): any legacy source wording above about three shots, a product hero, physical packshot, partial product, or hero CTA does NOT apply to generated Story Ads.",
+          "Story Ads always use exactly five positive contiguous time ranges from 0 through the requested duration; use the exact schedule in the task block.",
+          "The generated visual uses only neutral blank props. Set product_state='hidden' on HOOK, both FRICTION beats, SPIKE, and BUTTON; never use partial or hero.",
+        ].join("\n")
+      : "",
     "",
     // Jumlahnya DITURUNKAN dari yang benar-benar menolak keluaranmu (audit A2,
     // 19 Agu). Sebelumnya tertulis "six" lalu hanya empat yang didaftar, dan
@@ -169,8 +210,13 @@ export function blokAturan(contentType: "affiliate" | "ads" = "affiliate"): stri
     '      "framing": "<e.g. tight macro, medium selfie>",',
     '      "angle": "<e.g. eye level, slight top-down>",',
     '      "camera": "<e.g. static, slow push in, handheld drift>",',
-    '      "action": "<sequenced: ..., then ..., then ...>",',
-    '      "product_state": "hidden" | "partial" | "hero",',
+    contentType === "ads"
+      ? '      "action": "<restricted Indonesian A-03 neutral-prop action, e.g. talent buka kartu warna polos perlahan>",'
+      : '      "action": "<sequenced: ..., then ..., then ...>",',
+    contentType === "ads"
+      ? '      "product_state": "hidden",'
+      : '      "product_state": "hidden" | "partial" | "hero",',
+    '      "bridge_source": "<spoken_product_name | spoken_product_category | spoken_approved_price; Ads bridge beat only>",',
     '      "expression": "<visible emotion, or \"not visible\" for hands-only>",',
     '      "audio_note": "<ambient/sound design, may be empty>",',
     '      "why": "<setup | tension | payoff — and one clause saying how>",',
@@ -235,6 +281,8 @@ interface PermintaanNaskah {
   hookFamily: string;
   hookLevel: string;
   format: string;
+  /** Identitas katalog otoritatif; menentukan apakah konsep memang price-led. */
+  templateId?: string | null;
   /** Contoh few-shot dari template-copy, kalau ada. */
   contoh?: string | null;
   /**
@@ -319,16 +367,22 @@ function blokAturanTerukur(r: PermintaanNaskah, jumlahSegmen: number): string {
  * dan tesnya tidak perlu merakit PermintaanNaskah lengkap hanya untuk membaca
  * satu blok instruksi.
  */
-export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; durationSec: number }): string {
+export function blokTugasUntukUji(p: { contentType: "affiliate" | "ads"; durationSec: number; format?: string; productName?: string; productCategory?: string; priceIdr?: number; templateId?: string | null }): string {
   return blokTugas({
-    productName: "Serum Glow Bening", productCategory: "beauty", priceIdr: 89000,
+    productName: p.productName ?? "Serum Glow Bening", productCategory: p.productCategory ?? "beauty", priceIdr: p.priceIdr ?? 89000,
     durationSec: p.durationSec, contentType: p.contentType, cartLabel: "keranjang kuning",
-    register: "netral", hookFamily: "H1", hookLevel: "normal", format: "talking_head",
+    register: "netral", hookFamily: "H1", hookLevel: "normal", format: p.format ?? "talking_head", templateId: p.templateId,
   } as PermintaanNaskah);
 }
 
 function blokTugas(r: PermintaanNaskah): string {
-  const jumlah = r.durationSec <= 15 ? 3 : r.durationSec <= 20 ? 4 : r.durationSec <= 30 ? 5 : 6;
+  const jumlah = r.contentType === "ads"
+    ? 5 // HOOK + 2×FRICTION + SPIKE + BUTTON adalah bentuk minimum Story OS
+    : r.durationSec <= 15 ? 3 : r.durationSec <= 20 ? 4 : r.durationSec <= 30 ? 5 : 6;
+  const jadwalAds = r.contentType === "ads"
+    ? storyAdsTimeRanges(r.durationSec).map(({ start, end }) => `${start}-${end}`).join(", ")
+    : "";
+  const priceLedStoryAds = r.templateId === "promo-terbatas" && r.priceIdr > 0;
   // TIGA genre, bukan dua.
   //
   // Sampai render nyata 18 Agu, TVC tidak punya cabang di sini — jadi penulis
@@ -339,7 +393,7 @@ function blokTugas(r: PermintaanNaskah): string {
     r.format === "tvc"
       ? `The CTA line is an announcer sign-off: it MUST name the brand "${r.merek || r.productName}" and MUST NOT mention "keranjang", a cart, a link, or any shopping action. Never stack two negations in one sentence.`
       : r.contentType === "ads"
-        ? `The CTA line must be exactly: "Detailnya ada di bawah ya". No on-screen text anywhere.`
+        ? `The BUTTON line must contain the exact CTA phrase "Detailnya ada di bawah ya" as a substring AFTER a short unresolved story question or clause; the CTA phrase must never be the whole line. Example shape: "Masih cocok nggak ya? Detailnya ada di bawah ya." No on-screen text anywhere.`
         : `The CTA line must be spoken and must contain "${r.cartLabel}".`;
   // STORY OS ADS (slice 2, 19 Agu) — knowledge/rules/STORY-OS-ADS-v1.md.
   //
@@ -353,18 +407,25 @@ function blokTugas(r: PermintaanNaskah): string {
       ? [
           "",
           "STORY OS (Ads only) — write the beats in THIS order, then lay them out in time:",
+          `ADS EXACT TIMECODES FOR THIS ${r.durationSec}-SECOND REQUEST: ${jadwalAds}.`,
+          "Use those five ranges in order for HOOK, FRICTION, FRICTION, SPIKE, BUTTON; do not round them into gaps or extend past DURATION.",
           "1. BUTTON first (the last 3-6s): one small question left unanswered, and the CTA lives INSIDE it,",
-          "   preceded by a story clause. Label this segment BUTTON. Product hero, label readable.",
+          "   preceded by a story clause. Label this segment BUTTON. The visual focus is a plain unprinted colour",
+          "   card or swatch with no letters, numbers, logos, labels, prices, product names, categories, or readable marks.",
           "2. SPIKE: the protagonist beats their own pressure IN FRONT OF A WITNESS (a voice off camera is enough:",
           "   petugas, ibu, pewawancara, penghulu, anak). Put it at 65-80% of the duration. Label it SPIKE and",
           '   fill the field "saksi" with who witnesses it.',
-          "3. HOOK: the conflict is already in frame 1, with NO dialogue. Label it HOOK.",
+          "3. HOOK: the conflict and a plain unprinted colour card or swatch are already in frame 1, with NO dialogue.",
+          "   The prop remains blank and non-factual in every beat. Label it HOOK.",
           "4. FRICTION (write last): pressure rises at least TWICE between hook and spike. Label each one FRICTION.",
           "   Every friction beat must MOVE something in its action — a position, a decision, an object.",
           "   Enemies that work: your own reflex, time running out, a voice calling you.",
-          "BRIDGING — at least TWO of three, and never say the benefit out loud:",
-          "  (a) an honest action with the product during friction, (b) the product present in frame 1 without",
-          "  being explained, (c) a light admission in the button before the CTA phrase.",
+          "BRIDGING — use two evidence-backed spoken bridges, never blank-prop theatre:",
+          `  One FRICTION says the exact product name "${r.productName}" and sets bridge_source="spoken_product_name".`,
+          priceLedStoryAds
+            ? '  This authoritative promo-terbatas concept has a positive approved price: another FRICTION says that PRODUCT price as words and sets bridge_source="spoken_approved_price".'
+            : `  This concept is not price-led: another FRICTION says the exact product category "${r.productCategory}" and sets bridge_source="spoken_product_category". Do NOT mention a price or use spoken_approved_price.`,
+          "  A blank prop/action/product_state is NEVER a product bridge. Keep product_state='hidden' on every Ads beat.",
           "BODY IS NOT EXPLANATION: no 'aslinya...', no describing the product, no benefit claims. The viewer concludes.",
         ].join("\n")
       : "";
@@ -379,14 +440,33 @@ function blokTugas(r: PermintaanNaskah): string {
         "two most common ways this repair fails. Keep whatever was already working; do not rewrite the idea.",
       ].join("\n")
     : "";
+  const productBrief = r.contentType === "ads" && !priceLedStoryAds
+    ? `PRODUCT: ${r.productName} (${r.productCategory}).`
+    : `PRODUCT: ${r.productName} (${r.productCategory}), price ${r.priceIdr} rupiah — write it as words if spoken.`;
   return [
     r.ide ? `${r.ide}\n` : "",
-    `PRODUCT: ${r.productName} (${r.productCategory}), price ${r.priceIdr} rupiah — write it as words if spoken.`,
+    productBrief,
     `DURATION: ${r.durationSec} seconds, exactly ${jumlah} segments.`,
     `CONTENT TYPE: ${r.contentType}. ${cta}`,
     storyOs,
     `REGISTER: ${r.register}.`,
     blokAturanTerukur(r, jumlah),
+    // KONTRAK SHOT PEMBUKA untuk format yang kameranya memang tentang produk.
+    // Ini aturan tata bahasa shot, bukan imbauan gaya: validator menolak
+    // naskahnya (S-10). Lahir dari dua render berbayar 20 Agu — aksi hook
+    // "sweeps across the mess, THEN pauses on the bottle" membuat produk baru
+    // masuk frame di detik ~2 dari 5, dua kali berturut-turut.
+    r.format === "hands_only"
+      ? [
+          "OPENING SHOT CONTRACT (format hands_only — the camera is about hands AND the product):",
+          "- the first segment's product_state is 'partial', never 'hidden'. The product is already in the",
+          "  first frame, in shot, from frame one.",
+          "- write the opening action AROUND a product that is already there. Never choreograph the camera",
+          "  finding, revealing, or arriving at the product later ('sweeps across the table, then pauses on",
+          "  the bottle'). On a 5-second hook that spends half the shot without the thing being sold.",
+          "- the arc still holds: 'partial' at the hook, 'hero' only at the CTA.",
+        ].join("\n")
+      : "",
     `STRATEGY HINTS (these shape the angle, they are not lines to copy):`,
     `  hook family ${r.hookFamily}, hook level ${r.hookLevel}, format ${r.format}.`,
     r.contoh ? `TONE EXAMPLE (imitate the register and rhythm, never the words):\n${r.contoh}` : "",
@@ -443,7 +523,8 @@ export async function tulisNaskah(r: PermintaanNaskah): Promise<SegmenLlm[]> {
     const data = (await res.json()) as { content?: { type: string; text?: string }[] };
     const teks = (data.content ?? []).filter((c) => c.type === "text").map((c) => c.text ?? "").join("");
     try {
-      return SkemaNaskah.parse(JSON.parse(ambilObjekJson(teks))).segments;
+      const schema = r.contentType === "ads" ? SkemaNaskahAds : SkemaNaskah;
+      return schema.parse(JSON.parse(ambilObjekJson(teks))).segments;
     } catch (err) {
       galatTerakhir = (err as Error).message.slice(0, 200);
       console.warn(`[llm] keluaran tidak sesuai skema (percobaan ${percobaan + 1}/2): ${galatTerakhir}`);
@@ -461,7 +542,11 @@ export async function tulisNaskah(r: PermintaanNaskah): Promise<SegmenLlm[]> {
  * berangkat dari foto produk: model diberi barang yang diperintahkan
  * disembunyikan. Terlihat di jalankan STEP 2, 17 Agu, segmen 0.
  */
-export function keSegmentDraft(s: SegmenLlm[]): SegmentDraft[] {
+export function keSegmentDraft(s: SegmenLlm[], contentType?: "affiliate" | "ads" | null): SegmentDraft[] {
+  if (contentType === "ads") {
+    const findings = temuanHookSenyapAds(s as Array<SegmenLlm & Record<string, unknown>>);
+    if (findings.length) throw new Error(`Kontrak SA3 mapper dilanggar: ${findings.join(", ")}`);
+  }
   return s.map((x) => ({
     role: x.block === "HOOK" ? "hook" : x.block === "CTA" ? "cta" : "demo",
     start: x.start,
@@ -476,6 +561,9 @@ export function keSegmentDraft(s: SegmenLlm[]): SegmentDraft[] {
     action: x.action,
     expression: x.expression,
     mode: x.mode,
+    label: x.label as SegmentDraft["label"],
+    ...(x.saksi ? { saksi: x.saksi } : {}),
+    ...(x.bridge_source ? { bridge_source: x.bridge_source } : {}),
     product_state: x.product_state,
     start_state: x.start_state,
   })) as SegmentDraft[];

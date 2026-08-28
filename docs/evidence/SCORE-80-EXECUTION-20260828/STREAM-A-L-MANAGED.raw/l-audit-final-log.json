@@ -1,0 +1,18 @@
+{
+  "timestamp": "2026-08-27T18:56:52.746937141Z",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-da88gl67bikc73c1nvm0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "{\"schema\":\"score80-l-legacy-audit/v1\",\"observed_at\":\"2026-08-27T18:56:52.737Z\",\"exact_sha\":\"46499ac5e345997b394e4ac522759e40fe2eae22\",\"database_name\":\"racun_staging\",\"result\":{\"produk\":149,\"produkTerbrick\":148,\"produkTanpaFoto\":1,\"produkKolomRusak\":0,\"produkGagalDiperiksa\":0,\"foto\":148,\"fotoTersetujui\":0,\"perAlasan\":{\"EVIDENCE_INVALID\":148},\"perRinci\":{\"SIDECAR_MISSING\":148},\"perKolomRusak\":{},\"terbrick\":[],\"kolomRusak\":[],\"gagalDiperiksa\":[]},\"identity_fields_redacted\":true,\"mutation\":false}"
+}

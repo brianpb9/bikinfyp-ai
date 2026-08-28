@@ -1,0 +1,5 @@
+name=money
+started_utc=2026-08-24T07:40:04Z
+ended_utc=2026-08-24T07:40:07Z
+duration_seconds=3
+exit_code=0

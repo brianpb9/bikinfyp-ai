@@ -14,7 +14,7 @@ import os from "node:os";
 process.env.DB_PATH = `/tmp/racun-test-multiref-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-multiref-storage-${process.pid}`;
 
-const { buildTaskContent } = await import("../lib/providers/stubs/byteplus");
+const { buildTaskContent, bytePlusTaskPayloadSha256, modeReferensi } = await import("../lib/providers/stubs/byteplus");
 import type { VisualSpec, ShotSpec } from "../lib/providers/types";
 
 // PNG 1x1 nyata supaya imageToDataUri bisa membaca file.
@@ -77,4 +77,26 @@ test("foto ekstra + Seedance 1.0 (tier senyap): tetap i2v", () => {
 test("maks 7 foto ekstra (total 8 image) -- kelebihan (8) dipotong", () => {
   const items = buildTaskContent(spec(extras), shot, "dreamina-seedance-2-0-260128") as Item[];
   assert.equal(items.filter((i) => i.type === "image_url").length, 8);
+});
+
+test("neutral Story Ads memakai payload text-to-video tanpa image item", () => {
+  const neutral: VisualSpec = {
+    ...spec(undefined), shots: [{ index: 0, durationSec: 5, prompt: "blank colour card" }],
+    visualSubjectPolicy: "neutral_story_ads",
+  };
+  assert.equal(modeReferensi(neutral, "dreamina-seedance-2-0-mini-260615"), "text_to_video");
+  const items = buildTaskContent(neutral, neutral.shots[0], "dreamina-seedance-2-0-mini-260615") as Item[];
+  assert.deepEqual(items.map((item) => item.type), ["text"]);
+});
+
+test("digest request berubah bila prompt, model tier, atau byte referensi berubah", () => {
+  const awal = bytePlusTaskPayloadSha256(spec(undefined), shot);
+  const promptBerubah = bytePlusTaskPayloadSha256(spec(undefined), { ...shot, prompt: "changed prompt" });
+  const tierBerubah = bytePlusTaskPayloadSha256({ ...spec(undefined), qualityTier: "super_hq" }, shot);
+  fs.appendFileSync(main, Buffer.from([0]));
+  const referensiBerubah = bytePlusTaskPayloadSha256(spec(undefined), shot);
+  assert.match(awal, /^[0-9a-f]{64}$/);
+  assert.notEqual(promptBerubah, awal);
+  assert.notEqual(tierBerubah, awal);
+  assert.notEqual(referensiBerubah, awal);
 });

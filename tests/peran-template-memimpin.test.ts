@@ -18,16 +18,18 @@ import type { SegmentDraft } from "../lib/script-engine/templates";
 //   3. format "ads" mengabaikan tabel peran walau tabelnya ada
 
 const SEG: SegmentDraft[] = [
-  { role: "hook", text: "a", start: 0, end: 4, visual_direction: "x" },
-  { role: "demo", text: "b", start: 4, end: 11, visual_direction: "y" },
-  { role: "cta", text: "c", start: 11, end: 15, visual_direction: "z" },
+  { role: "hook", label: "HOOK", text: "", start: 0, end: 3, visual_direction: "x" },
+  { role: "demo", label: "FRICTION", text: "Untuk Botol, lihat.", bridge_source: "spoken_product_name", start: 3, end: 6, visual_direction: "y" },
+  { role: "demo", label: "FRICTION", text: "Kategorinya beauty.", bridge_source: "spoken_product_category", start: 6, end: 9, visual_direction: "y" },
+  { role: "demo", label: "SPIKE", text: "d", start: 9, end: 12, visual_direction: "y" },
+  { role: "cta", label: "BUTTON", text: "e", start: 12, end: 15, visual_direction: "z" },
 ];
 
 function shots(id: string) {
   const t = getTemplate(id)!;
   return planShots({
     jobId: id, durationSec: 15, segments: SEG,
-    category: getCreatorCategory("hijaber")!, productName: "Botol", productCategory: "beauty",
+    category: getCreatorCategory("hijaber")!, productName: "Botol", productCategory: "beauty", productPriceIdr: 89000,
     imageRefPath: "/tmp/x.jpg", qualityTier: "high_quality" as QualityTier,
     format: t.format as never, ugcTemplate: id, shotCountOverride: t.shotCount,
   }).shots;
@@ -41,7 +43,8 @@ test("tiga template UGC Ads baru punya tabel peran shot", () => {
 
 test("format ads TIDAK lagi membuang tabel peran yang sudah ada", () => {
   const p = shots("ads-meja-kosong")[0].prompt;
-  assert.match(p, /crowded with production gear|vanishing one by one/i, "peran template ads dibuang lagi");
+  assert.match(p, /three unprinted colour cards|centre card/i, "peran template ads dibuang lagi");
+  assert.match(p, /no letters, numbers, logos, labels, or readable marks/i, "kartu blank tidak dikunci");
 });
 
 // Inti perbaikannya: peran memimpin, framing bawaan tidak ikut. Kalau framing
@@ -61,14 +64,15 @@ test("ketiga template menghasilkan shot pembuka yang BERBEDA", () => {
   assert.equal(new Set(p).size, 3, "tiga template ads masih menghasilkan pembuka identik");
 });
 
-// Aturan #5 dokumen Brian: MASALAH DULU, BARU PRODUK.
-test("template 'masalah dulu' menahan produk di shot pembuka", () => {
+test("template panas memakai properti panggung, bukan outcome pendinginan", () => {
   const p = shots("ads-panas-ekstrem")[0].prompt;
-  assert.match(p, /must NOT be visible or in use yet/i, "produk tidak ditahan — hook-nya mati");
+  assert.match(p, /staged red lamp|paper fan|theatrical haze/i);
+  assert.doesNotMatch(p, /first moment of relief|visibly fine|product in hand and working/i);
 });
 
 test("unboxing membuka dari DALAM kardus, bukan dari wajah", () => {
-  assert.match(shots("ads-unboxing-pov")[0].prompt, /INSIDE a closed cardboard box/i);
+  assert.match(shots("ads-unboxing-pov")[0].prompt, /inside a lightweight cardboard prop box/i);
+  assert.match(shots("ads-unboxing-pov")[0].prompt, /plain unprinted colour swatch/i);
 });
 
 // Template LAMA tidak boleh ikut berubah perilakunya.
@@ -76,4 +80,36 @@ test("template lama yang sudah punya peran tetap berjalan seperti sebelumnya", (
   const p = shots("t02-bedah-fitur");
   assert.equal(p.length > 0, true);
   assert.match(p[0].prompt, /OPENING shot/i);
+});
+
+test("satu shot talking-head memuat seluruh timeline termasuk dua role story", () => {
+  const timeline: SegmentDraft[] = [
+    { role: "hook", label: "HOOK", text: "HOOK UNIK membuka masalah.", action: "AKSI HOOK memperlihatkan kartu pertama", start: 0, end: 2, visual_direction: "x" },
+    { role: "demo", label: "FRICTION", text: "FRICTION SATU menambah tekanan.", action: "AKSI FRICTION SATU memindahkan kartu", start: 2, end: 6, visual_direction: "y" },
+    { role: "story", label: "FRICTION", text: "FRICTION DUA tetap terdengar.", action: "AKSI FRICTION DUA membuka lipatan", start: 6, end: 10, visual_direction: "z" },
+    { role: "story", label: "SPIKE", text: "SPIKE UNIK membalik keadaan.", action: "AKSI SPIKE meletakkan nama di meja", start: 10, end: 13, visual_direction: "z" },
+    { role: "cta", label: "BUTTON", text: "BUTTON UNIK menutup cerita.", action: "AKSI BUTTON menunjuk nama layanan", start: 13, end: 15, visual_direction: "z" },
+  ];
+  const prompt = planShots({
+    jobId: "story-timeline", durationSec: 15, segments: timeline,
+    category: getCreatorCategory("hijaber")!, productName: "Botol", productCategory: "beauty",
+    imageRefPath: "/tmp/x.jpg", qualityTier: "high_quality" as QualityTier,
+    format: "talking_head",
+  }).shots[0].prompt;
+  const positions = timeline.map((segment) => prompt.indexOf(segment.text));
+  assert.ok(positions.every((position) => position >= 0), `segmen hilang dari prompt: ${positions.join(",")}`);
+  assert.deepEqual([...positions].sort((a, b) => a - b), positions, "urutan dialog tidak mengikuti timeline");
+  const actionPositions = timeline.map((segment) => prompt.indexOf(segment.action!));
+  assert.ok(actionPositions.every((position) => position >= 0), `aksi hilang dari prompt: ${actionPositions.join(",")}`);
+  assert.deepEqual([...actionPositions].sort((a, b) => a - b), actionPositions, "urutan aksi tidak mengikuti timeline");
+  for (const segment of timeline) assert.match(prompt, new RegExp(`${segment.start}-${segment.end} seconds`));
+
+  const tanpaSpike = timeline.map((segment) => segment.label === "SPIKE" ? { ...segment, action: "" } : segment);
+  const promptMutasi = planShots({
+    jobId: "story-timeline-mutasi", durationSec: 15, segments: tanpaSpike,
+    category: getCreatorCategory("hijaber")!, productName: "Botol", productCategory: "beauty",
+    imageRefPath: "/tmp/x.jpg", qualityTier: "high_quality" as QualityTier,
+    format: "talking_head",
+  }).shots[0].prompt;
+  assert.doesNotMatch(promptMutasi, /AKSI SPIKE meletakkan nama di meja/, "mutasi aksi SPIKE seharusnya terdeteksi");
 });

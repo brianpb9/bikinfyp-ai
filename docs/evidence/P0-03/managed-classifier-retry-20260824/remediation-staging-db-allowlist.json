@@ -1,0 +1,6 @@
+{
+  "ok": false,
+  "operation": "staging database allowlist readback",
+  "exit": 5,
+  "error": "allowlist selector expected an array but received null; successful retry retained separately"
+}

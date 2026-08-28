@@ -1,0 +1,643 @@
+import assert from "node:assert/strict";
+import fs from "node:fs";
+import path from "node:path";
+import { pathToFileURL } from "node:url";
+import test from "node:test";
+import ts from "typescript";
+import {
+  acceptEverythingMutation,
+  buildReferenceBoundaryInput,
+  issueReferenceTrustedTypeCapability,
+  referenceDecision,
+  rejectEverythingMutation,
+  type DeclaredTypeSource,
+  type TrustedTypeSource,
+  type TypeBoundaryInput,
+} from "./fixtures/c2-type-mismatch-contract";
+
+const root = process.cwd();
+const read = (relative: string) => fs.readFileSync(path.join(root, relative), "utf8");
+
+function constantModuleString(node: ts.Expression, seen = new Set<ts.Node>()): string | null {
+  if (seen.has(node)) return null;
+  seen.add(node);
+  if (ts.isStringLiteral(node) || ts.isNoSubstitutionTemplateLiteral(node)) return node.text;
+  if (ts.isIdentifier(node)) {
+    const declarations: ts.VariableDeclaration[] = [];
+    const visit = (candidate: ts.Node) => {
+      if (ts.isVariableDeclaration(candidate) && ts.isIdentifier(candidate.name)
+        && candidate.name.text === node.text && candidate.initializer
+        && ts.isVariableDeclarationList(candidate.parent)
+        && (candidate.parent.flags & ts.NodeFlags.Const) !== 0) declarations.push(candidate);
+      ts.forEachChild(candidate, visit);
+    };
+    visit(node.getSourceFile());
+    return declarations.length === 1 ? constantModuleString(declarations[0]!.initializer!, seen) : null;
+  }
+  if (ts.isParenthesizedExpression(node)) return constantModuleString(node.expression, seen);
+  if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.PlusToken) {
+    const left = constantModuleString(node.left, seen);
+    const right = constantModuleString(node.right, seen);
+    return left === null || right === null ? null : left + right;
+  }
+  if (ts.isTemplateExpression(node)) {
+    let value = node.head.text;
+    for (const span of node.templateSpans) {
+      const expression = constantModuleString(span.expression, seen);
+      if (expression === null) return null;
+      value += expression + span.literal.text;
+    }
+    return value;
+  }
+  return null;
+}
+
+function isCentralModuleSpecifier(value: string): boolean {
+  const normalized = value.replace(/[?#].*$/, "").replace(/\.(?:[cm]?[jt]sx?)$/, "");
+  return normalized === "@/lib/product-type-boundary" || normalized.endsWith("/product-type-boundary");
+}
+
+const sources = {
+  e1: read("app/api/products/route.ts"),
+  e3: read("app/api/products/[id]/route.ts"),
+  e6e7: read("app/api/dashboard/campaign/product/route.ts"),
+  a1: read("app/api/jobs/route.ts"),
+  a2: read("app/api/dashboard/matrix/route.ts"),
+  a3: read("app/api/dashboard/campaign/generate/route.ts"),
+  a4: read("lib/dashboard/render-cell.ts"),
+  sqliteSchema: read("lib/db.ts"),
+};
+
+const trusted: TypeBoundaryInput = {
+  declaredToken: "opaque-type-a",
+  trustedSignal: { token: "opaque-type-a", provenance: "future-policy-fixture" },
+};
+const mismatch: TypeBoundaryInput = {
+  declaredToken: "opaque-type-a",
+  trustedSignal: { token: "opaque-type-b", provenance: "future-policy-fixture" },
+};
+
+type BoundaryExpectation = {
+  id: string;
+  file: string;
+  handler: string;
+  effects: EffectExpectation[];
+};
+
+type EffectExpectation = {
+  label: string;
+  callName: string;
+  textIncludes?: string;
+};
+
+const effect = (callName: string, textIncludes?: string, label = callName): EffectExpectation => ({ label, callName, textIncludes });
+
+const boundaryExpectations: BoundaryExpectation[] = [
+  { id: "E1", file: "app/api/products/route.ts", handler: "POST", effects: [
+    effect("ensureDirs"), effect("mkdtempSync"), effect("writeFileSync"), effect("rmSync"), effect("saveProductImages"),
+    effect("rejectAfterReferenceCheck", undefined, "stored-image rollback"),
+    effect("smokeCreateProduct"), effect("run", "INSERT INTO products", "SQLite product INSERT"),
+    effect("auditProductCreatedOnce"),
+  ] },
+  { id: "E3", file: "app/api/products/[id]/route.ts", handler: "PATCH", effects: [
+    effect("pgUpdateProduct"), effect("run", "UPDATE products SET name", "SQLite category UPDATE"), effect("audit", "product.updated", "SQLite update audit"),
+    effect("pgSetProductBrand"), effect("run", "UPDATE products SET raw_meta", "SQLite brand UPDATE"), effect("audit", "product.brand_set", "SQLite brand audit"),
+  ] },
+  {
+    id: "E6",
+    file: "app/api/dashboard/campaign/product/route.ts",
+    handler: "POST",
+    effects: [effect("pgAudit", '"product.extract"', "URL extraction audit"), effect("downloadProductImages"), effect("smokeCreateProduct"), effect("pgAudit", '"product.extracted"', "URL create audit"), effect("pgAudit", '"product.created"', "manual create audit")],
+  },
+  { id: "E7", file: "app/api/dashboard/campaign/product/route.ts", handler: "PATCH", effects: [
+    effect("query", "UPDATE products SET", "PostgreSQL product UPDATE"), effect("pgAudit", "product.updated", "organization update audit"),
+  ] },
+  {
+    id: "A1",
+    file: "app/api/jobs/route.ts",
+    handler: "POST",
+    effects: [
+      effect("prepareAdmissionReferenceManifest"), effect("smokeCreateJob"), effect("pgSaveFypSnapshot"), effect("pgAudit"),
+      effect("smokeCompleteJob"), effect("enqueueManagedStagingTraceJob"), effect("enqueueJob"),
+      effect("createJobProductSnapshotRaw"), effect("run", "INSERT INTO jobs", "SQLite job INSERT"), effect("holdCredits"),
+      effect("run", "UPDATE scripts SET job_id", "SQLite script claim"), effect("audit", "job.created", "SQLite job audit"), effect("createFypSnapshot"),
+      effect("pgFindOrCreatePersona"), effect("run", "INSERT INTO personas", "SQLite persona INSERT"),
+      effect("audit", "persona.created", "SQLite persona audit"), effect("claimManagedStagingTraceNonce"),
+      effect("cleanupUnadmittedReferenceKeys"), effect("cleanupSupersededReferenceKeys"),
+      effect("audit", '"fyp.snapshot"', "SQLite FYP audit"), effect("failJob"),
+    ],
+  },
+  { id: "A2", file: "app/api/dashboard/matrix/route.ts", handler: "POST", effects: [
+    effect("acquireAdmissionReferenceEvidence"), effect("pgFindOrCreatePersona"), effect("generateScripts"), effect("smokeCreateScripts"), effect("renderSatuSel"),
+  ] },
+  { id: "A3", file: "app/api/dashboard/campaign/generate/route.ts", handler: "POST", effects: [
+    effect("acquireAdmissionReferenceEvidence"), effect("generateScripts"), effect("smokeCreateScripts"),
+  ] },
+  { id: "A4", file: "lib/dashboard/render-cell.ts", handler: "renderSatuSel", effects: [
+    effect("periksaAdmisi"), effect("createJobProductSnapshotRaw"), effect("prepareAdmissionReferenceManifest"),
+    effect("query", "UPDATE scripts", "PostgreSQL script writes"), effect("query", "INSERT INTO audit_log", "PostgreSQL audit writes"),
+    effect("query", "INSERT INTO jobs", "PostgreSQL job INSERT"), effect("query", "COMMIT", "PostgreSQL admission COMMIT"),
+    effect("holdCredits"), effect("pgSaveFypSnapshot"), effect("pgAudit"), effect("enqueueJob"), effect("failJob"),
+    effect("cleanupUnadmittedReferenceKeys"),
+  ] },
+];
+
+function callName(node: ts.CallExpression): string | null {
+  if (ts.isIdentifier(node.expression)) return node.expression.text;
+  if (ts.isPropertyAccessExpression(node.expression)) return node.expression.name.text;
+  return null;
+}
+
+function isDescendantOf(node: ts.Node, ancestor: ts.Node): boolean {
+  for (let current: ts.Node | undefined = node.parent; current; current = current.parent) {
+    if (current === ancestor) return true;
+  }
+  return false;
+}
+
+function inspectAllowedImportUsage(
+  source: ts.SourceFile,
+  localNames: ReadonlyMap<string, string>,
+  label: string,
+): string[] {
+  const violations: string[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isImportDeclaration(node)) return;
+    if (ts.isIdentifier(node) && localNames.has(node.text)) {
+      const call = ts.isCallExpression(node.parent) && node.parent.expression === node ? node.parent : null;
+      if (!call || call.questionDotToken) {
+        violations.push(`${label}: central ${localNames.get(node.text)} import ${node.text} escapes approved direct-call usage`);
+      }
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  return violations;
+}
+
+function inspectBoundary(expectation: BoundaryExpectation, suppliedSourceText?: string): string[] {
+  const sourceText = suppliedSourceText ?? read(expectation.file);
+  const source = ts.createSourceFile(expectation.file, sourceText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const handler = source.statements.find(
+    (statement): statement is ts.FunctionDeclaration => ts.isFunctionDeclaration(statement)
+      && statement.name?.text === expectation.handler,
+  );
+  if (!handler?.body) return [`${expectation.id}: handler ${expectation.handler} not found`];
+  const handlerBody = handler.body;
+
+  const allowedCentralImports = new Set(["validateAuthoritativeProductType", "buildAuthoritativeTypeBoundaryInput"]);
+  const centralImports = source.statements.filter((statement): statement is ts.ImportDeclaration => ts.isImportDeclaration(statement)
+    && ts.isStringLiteral(statement.moduleSpecifier)
+    && isCentralModuleSpecifier(statement.moduleSpecifier.text));
+  const importedLocalName = (importedName: string): string | null => {
+    for (const declaration of centralImports) {
+      const bindings = declaration.importClause?.namedBindings;
+      if (!bindings || !ts.isNamedImports(bindings)) continue;
+      const specifier = bindings.elements.find((element) => (element.propertyName?.text ?? element.name.text) === importedName);
+      if (specifier) return specifier.name.text;
+    }
+    return null;
+  };
+  const validatorLocal = importedLocalName("validateAuthoritativeProductType");
+  const builderLocal = importedLocalName("buildAuthoritativeTypeBoundaryInput");
+
+  const calls: ts.CallExpression[] = [];
+  const visit = (node: ts.Node) => {
+    if (ts.isCallExpression(node)) calls.push(node);
+    ts.forEachChild(node, visit);
+  };
+  visit(handlerBody);
+
+  const violations: string[] = [];
+  if (!validatorLocal || !builderLocal) violations.push(`${expectation.id}: central seam/builder named imports are absent`);
+  const allowedLocalNames = new Map<string, string>();
+  if (validatorLocal) allowedLocalNames.set(validatorLocal, "validator");
+  if (builderLocal) allowedLocalNames.set(builderLocal, "builder");
+  violations.push(...inspectAllowedImportUsage(source, allowedLocalNames, expectation.id));
+  const hasDynamicCentralAccess = (node: ts.Node): boolean => {
+    if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+      const argument = node.arguments[0];
+      if (argument) {
+        const value = constantModuleString(argument);
+        if (value === null || isCentralModuleSpecifier(value)) return true;
+      }
+    }
+    if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "require") {
+      const argument = node.arguments[0];
+      if (argument) {
+        const value = constantModuleString(argument);
+        if (value === null || isCentralModuleSpecifier(value)) return true;
+      }
+    }
+    return ts.forEachChild(node, hasDynamicCentralAccess) ?? false;
+  };
+  if (hasDynamicCentralAccess(source)) violations.push(`${expectation.id}: dynamically imports the central module`);
+  if (source.statements.some((statement) => ts.isExportDeclaration(statement)
+    && statement.moduleSpecifier && ts.isStringLiteral(statement.moduleSpecifier)
+    && isCentralModuleSpecifier(statement.moduleSpecifier.text))) {
+    violations.push(`${expectation.id}: re-exports the central module`);
+  }
+  if (source.statements.some((statement) => ts.isImportEqualsDeclaration(statement)
+    && ts.isExternalModuleReference(statement.moduleReference)
+    && statement.moduleReference.expression
+    && ts.isStringLiteral(statement.moduleReference.expression)
+    && isCentralModuleSpecifier(statement.moduleReference.expression.text))) {
+    violations.push(`${expectation.id}: uses import-equals access to the central module`);
+  }
+  for (const declaration of centralImports) {
+    if (!declaration.importClause || declaration.importClause.name) {
+      violations.push(`${expectation.id}: central module default/side-effect import is forbidden`);
+    }
+    const bindings = declaration.importClause?.namedBindings;
+    if (bindings && ts.isNamedImports(bindings)) {
+      for (const element of bindings.elements) {
+        const importedName = element.propertyName?.text ?? element.name.text;
+        if (!allowedCentralImports.has(importedName)) {
+          violations.push(`${expectation.id}: central module import ${importedName} is outside the allowlist`);
+        }
+      }
+    }
+  }
+  const importsContractIssuer = centralImports.some((declaration) => {
+    const bindings = declaration.importClause?.namedBindings;
+    return Boolean(bindings && ts.isNamedImports(bindings)
+      && bindings.elements.some((element) => (element.propertyName?.text ?? element.name.text) === "__issueTrustedTypeCapabilityForContractTest"));
+  });
+  if (importsContractIssuer) {
+    violations.push(`${expectation.id}: production handler imports the contract-test capability issuer`);
+  }
+  if (centralImports.some((declaration) => {
+    const bindings = declaration.importClause?.namedBindings;
+    return Boolean(bindings && ts.isNamespaceImport(bindings));
+  })) {
+    violations.push(`${expectation.id}: production handler uses namespace access to the central boundary module`);
+  }
+
+  const shadowed = new Set<string>();
+  const findShadows = (node: ts.Node) => {
+    if (ts.isVariableDeclaration(node) && ts.isIdentifier(node.name)) shadowed.add(node.name.text);
+    if (ts.isParameter(node) && ts.isIdentifier(node.name)) shadowed.add(node.name.text);
+    if (ts.isFunctionDeclaration(node) && node !== handler && node.name) shadowed.add(node.name.text);
+    ts.forEachChild(node, findShadows);
+  };
+  findShadows(handlerBody);
+  if (validatorLocal && shadowed.has(validatorLocal)) violations.push(`${expectation.id}: central validator import is shadowed locally`);
+  if (builderLocal && shadowed.has(builderLocal)) violations.push(`${expectation.id}: central builder import is shadowed locally`);
+
+  const seams = calls.filter((call) => ts.isIdentifier(call.expression)
+    && validatorLocal !== null
+    && call.expression.text === validatorLocal
+    && !shadowed.has(validatorLocal));
+  for (const seam of seams) {
+    const input = seam.arguments[0];
+    if (!input || !ts.isCallExpression(input) || !ts.isIdentifier(input.expression)
+      || builderLocal === null || input.expression.text !== builderLocal || shadowed.has(builderLocal)) {
+      violations.push(`${expectation.id}: seam input does not come from the typed source-identity builder`);
+    } else if (input.arguments.length !== 2) {
+      violations.push(`${expectation.id}: source-identity builder requires declared and trusted inputs`);
+    } else if (input.arguments[0].getText(source) === input.arguments[1].getText(source)) {
+      violations.push(`${expectation.id}: declared and trusted builder arguments are the same expression`);
+    }
+    if (!ts.isAwaitExpression(seam.parent) && !ts.isReturnStatement(seam.parent)) {
+      violations.push(`${expectation.id}: seam rejection is neither awaited nor returned`);
+    }
+    const effectCallback = seam.arguments[1];
+    if (!effectCallback || (!ts.isArrowFunction(effectCallback) && !ts.isFunctionExpression(effectCallback))) {
+      violations.push(`${expectation.id}: seam call does not own an effect callback`);
+    }
+  }
+
+  for (const expectedEffect of expectation.effects) {
+    const effects = calls.filter((call) => callName(call) === expectedEffect.callName
+      && (!expectedEffect.textIncludes || call.getText(source).includes(expectedEffect.textIncludes)));
+    if (effects.length === 0) {
+      violations.push(`${expectation.id}: expected effect ${expectedEffect.label} not found`);
+      continue;
+    }
+    for (const effect of effects) {
+      const guarded = seams.some((seam) => {
+        const callback = seam.arguments[1];
+        return Boolean(callback && isDescendantOf(effect, callback));
+      });
+      if (!guarded) violations.push(`${expectation.id}: ${expectedEffect.label} is not owned by a seam effect callback`);
+    }
+  }
+  if (seams.length === 0) violations.push(`${expectation.id}: no AST CallExpression to validateAuthoritativeProductType`);
+  return violations;
+}
+
+async function inspectProductionSeamBehavior(): Promise<string[]> {
+  const seamPath = path.join(root, "lib/product-type-boundary.ts");
+  if (!fs.existsSync(seamPath)) return ["CENTRAL: lib/product-type-boundary.ts is absent"];
+  const module = await import(pathToFileURL(seamPath).href) as {
+    buildAuthoritativeTypeBoundaryInput?: (declared: Record<string, unknown>, trusted: Record<string, unknown> | null) => unknown;
+    validateAuthoritativeProductType?: (
+      input: unknown,
+      onAdmit?: () => unknown | Promise<unknown>,
+    ) => unknown | Promise<unknown>;
+  };
+  if (typeof module.validateAuthoritativeProductType !== "function") {
+    return ["CENTRAL: validateAuthoritativeProductType export is absent"];
+  }
+  if (typeof module.buildAuthoritativeTypeBoundaryInput !== "function") {
+    return ["CENTRAL: buildAuthoritativeTypeBoundaryInput export is absent"];
+  }
+  const build = module.buildAuthoritativeTypeBoundaryInput;
+  const decide = module.validateAuthoritativeProductType;
+  const declaredA = { kind: "DECLARED_PRODUCT_TYPE", sourceId: "request.product_type", token: "opaque-type-a", version: 1 };
+  let missingEffects = 0;
+  const violations: string[] = [];
+  try {
+    await decide(build(declaredA, null), () => { missingEffects += 1; });
+    violations.push("CENTRAL: missing confirmation was admitted");
+  } catch (error) {
+    if ((error as { body?: { code?: string } }).body?.code !== "PRODUCT_TYPE_CONFIRMATION_REQUIRED") {
+      violations.push("CENTRAL: missing confirmation did not return canonical actionable code");
+    }
+  }
+  if (missingEffects !== 0) violations.push(`CENTRAL: missing policy invoked effect ${missingEffects} times`);
+  try {
+    build(declaredA, Object.freeze({ kind: "TRUSTED_TYPE_SOURCE", sourceId: "authenticated-user:forged", token: declaredA.token, provenance: "USER_SELF_ASSERTION" }));
+    violations.push("CENTRAL: structurally forged frozen capability was accepted");
+  } catch { /* required */ }
+  const confirmation = { kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: " OPAQUE-TYPE-A ", actorId: "user-1", confirmedAt: "2026-08-27T00:00:00.000Z", version: 1, provenance: "USER_SELF_ASSERTION" };
+  let validEffects = 0;
+  await decide(build(declaredA, confirmation), () => { validEffects += 1; });
+  if (validEffects !== 1) violations.push(`CENTRAL: valid normalized match invoked ${validEffects} effects`);
+  let mismatchEffects = 0;
+  try {
+    await decide(build(declaredA, { ...confirmation, token: "opaque-type-b" }), () => { mismatchEffects += 1; });
+    violations.push("CENTRAL: explicit mismatch was admitted");
+  } catch (error) {
+    if ((error as { body?: { code?: string } }).body?.code !== "TYPE_MISMATCH") {
+      violations.push("CENTRAL: mismatch did not return TYPE_MISMATCH");
+    }
+  }
+  if (mismatchEffects !== 0) violations.push(`CENTRAL: mismatch invoked ${mismatchEffects} effects`);
+  return violations;
+}
+
+function inspectProductionIssuerAccess(): string[] {
+  const violations: string[] = [];
+  const allowedCentralImports = new Set(["validateAuthoritativeProductType", "buildAuthoritativeTypeBoundaryInput"]);
+  const visitDirectory = (directory: string) => {
+    for (const entry of fs.readdirSync(path.join(root, directory), { withFileTypes: true })) {
+      const relative = path.join(directory, entry.name);
+      if (entry.isDirectory()) {
+        visitDirectory(relative);
+        continue;
+      }
+      if (!/\.[cm]?[jt]sx?$/.test(entry.name) || relative === "lib/product-type-boundary.ts") continue;
+      const text = read(relative);
+      if (text.includes("__issueTrustedTypeCapabilityForContractTest")) {
+        violations.push(`ISSUER_ACCESS: ${relative} references the contract-test issuer`);
+      }
+      const source = ts.createSourceFile(relative, text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+      const allowedLocalNames = new Map<string, string>();
+      for (const statement of source.statements) {
+        if (!ts.isImportDeclaration(statement)
+          || !ts.isStringLiteral(statement.moduleSpecifier)
+          || !isCentralModuleSpecifier(statement.moduleSpecifier.text)) continue;
+        if (!statement.importClause || statement.importClause.name) {
+          violations.push(`ISSUER_ACCESS: ${relative} has forbidden central default/side-effect import`);
+        }
+        const bindings = statement.importClause?.namedBindings;
+        if (bindings && ts.isNamespaceImport(bindings)) {
+          violations.push(`ISSUER_ACCESS: ${relative} has forbidden namespace access to the central module`);
+        } else if (bindings && ts.isNamedImports(bindings)) {
+          for (const element of bindings.elements) {
+            const importedName = element.propertyName?.text ?? element.name.text;
+            if (!allowedCentralImports.has(importedName)) {
+              violations.push(`ISSUER_ACCESS: ${relative} imports non-allowlisted central export ${importedName}`);
+            } else {
+              allowedLocalNames.set(element.name.text, importedName === "validateAuthoritativeProductType" ? "validator" : "builder");
+            }
+          }
+        }
+      }
+      violations.push(...inspectAllowedImportUsage(source, allowedLocalNames, `ISSUER_ACCESS: ${relative}`));
+      for (const statement of source.statements) {
+        if (ts.isExportDeclaration(statement) && statement.moduleSpecifier
+          && ts.isStringLiteral(statement.moduleSpecifier)
+          && isCentralModuleSpecifier(statement.moduleSpecifier.text)) {
+          violations.push(`ISSUER_ACCESS: ${relative} re-exports the central module`);
+        }
+        if (ts.isImportEqualsDeclaration(statement) && ts.isExternalModuleReference(statement.moduleReference)
+          && statement.moduleReference.expression && ts.isStringLiteral(statement.moduleReference.expression)
+          && isCentralModuleSpecifier(statement.moduleReference.expression.text)) {
+          violations.push(`ISSUER_ACCESS: ${relative} uses import-equals access to the central module`);
+        }
+      }
+      const dynamicCentralAccess = (node: ts.Node): boolean => {
+        if (ts.isCallExpression(node) && node.expression.kind === ts.SyntaxKind.ImportKeyword) {
+          const argument = node.arguments[0];
+          const value = argument ? constantModuleString(argument) : null;
+          if (argument && (value === null || isCentralModuleSpecifier(value))) return true;
+        }
+        if (ts.isCallExpression(node) && ts.isIdentifier(node.expression) && node.expression.text === "require") {
+          const argument = node.arguments[0];
+          const value = argument ? constantModuleString(argument) : null;
+          if (argument && (value === null || isCentralModuleSpecifier(value))) return true;
+        }
+        return ts.forEachChild(node, dynamicCentralAccess) ?? false;
+      };
+      if (dynamicCentralAccess(source)) violations.push(`ISSUER_ACCESS: ${relative} dynamically imports the central module`);
+    }
+  };
+  visitDirectory("app");
+  visitDirectory("lib");
+  return violations;
+}
+
+function inspectCentralExportSurface(sourceText?: string): string[] {
+  const centralPath = path.join(root, "lib/product-type-boundary.ts");
+  if (sourceText === undefined && !fs.existsSync(centralPath)) return [];
+  const source = ts.createSourceFile("lib/product-type-boundary.ts", sourceText ?? fs.readFileSync(centralPath, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const allowedRuntimeExports = new Set(["validateAuthoritativeProductType", "buildAuthoritativeTypeBoundaryInput"]);
+  const violations: string[] = [];
+  const exported = (node: { modifiers?: ts.NodeArray<ts.ModifierLike> }) => node.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.ExportKeyword) ?? false;
+  for (const statement of source.statements) {
+    if (ts.isExportAssignment(statement)) violations.push("CENTRAL_EXPORT: default/export-assignment surface is forbidden");
+    if (ts.isExportDeclaration(statement)) {
+      if (statement.moduleSpecifier || !statement.exportClause || !ts.isNamedExports(statement.exportClause)) {
+        violations.push("CENTRAL_EXPORT: wildcard/re-export surface is forbidden");
+      } else {
+        for (const element of statement.exportClause.elements) {
+          const exportedName = element.name.text;
+          if (!element.isTypeOnly && !statement.isTypeOnly && !allowedRuntimeExports.has(exportedName)) {
+            violations.push(`CENTRAL_EXPORT: runtime export ${exportedName} is outside the allowlist`);
+          }
+        }
+      }
+    }
+    if (ts.isFunctionDeclaration(statement) && exported(statement)) {
+      const name = statement.name?.text ?? "default";
+      if (statement.modifiers?.some((modifier) => modifier.kind === ts.SyntaxKind.DefaultKeyword)) {
+        violations.push("CENTRAL_EXPORT: default runtime declaration is forbidden");
+      }
+      if (!allowedRuntimeExports.has(name)) violations.push(`CENTRAL_EXPORT: runtime export ${name} is outside the allowlist`);
+    }
+    if (ts.isVariableStatement(statement) && exported(statement)) {
+      for (const declaration of statement.declarationList.declarations) {
+        const name = ts.isIdentifier(declaration.name) ? declaration.name.text : "destructured";
+        if (!allowedRuntimeExports.has(name)) violations.push(`CENTRAL_EXPORT: runtime export ${name} is outside the allowlist`);
+      }
+    }
+    if ((ts.isClassDeclaration(statement) || ts.isEnumDeclaration(statement)) && exported(statement)) {
+      violations.push(`CENTRAL_EXPORT: runtime export ${statement.name?.text ?? "default"} is outside the allowlist`);
+    }
+  }
+  return violations;
+}
+
+test("implementation: Product Truth persists a distinct versioned type confirmation without replacing category", () => {
+  const productionInputs = [sources.e1, sources.e3, sources.e6e7, sources.sqliteSchema].join("\n");
+  assert.match(productionInputs, /category/);
+  assert.match(productionInputs, /product_type_token/);
+  assert.match(productionInputs, /product_type_confirmed_token/);
+  assert.match(productionInputs, /product_type_confirmed_by/);
+  assert.match(productionInputs, /product_type_confirmed_at/);
+  assert.match(productionInputs, /product_type_version/);
+  assert.match(productionInputs, /product_type_state/);
+  assert.match(read("lib/category-guess.ts"), /guessCategory/);
+  assert.match(read("lib/category-guess.ts"), /return "default"/);
+});
+test("discovery: E1 E3 E6 E7 carry unchecked category into persistence", () => {
+  assert.match(sources.e1, /category = String\(body\.category \?\? "default"\)\.trim\(\)/);
+  assert.match(sources.e1, /priceIdr, category, productVisualDesc/);
+  assert.match(sources.e3, /const category = body\.category !== undefined/);
+  assert.match(sources.e3, /UPDATE products SET name = \?, price_idr = \?, category = \?/);
+  assert.match(sources.e6e7, /category: result\.categoryGuess \?\? "default"/);
+  assert.match(sources.e6e7, /category: typeof body\.category === "string" && body\.category \? body\.category : "default"/);
+  assert.match(sources.e6e7, /const category = typeof body\.category === "string" && body\.category \? body\.category : existing\.category/);
+  assert.match(sources.e6e7, /UPDATE products SET name=\$1, price_idr=\$2, category=\$3/);
+});
+
+test("discovery: A1-A4 carry stored category to snapshot, generation, job, or hold boundaries", () => {
+  assert.match(sources.a1, /createJobProductSnapshotRaw\(admissionProduct\)/);
+  assert.match(sources.a1, /INSERT INTO jobs/);
+  assert.match(sources.a1, /holdCredits\(user\.id, preparedJobId, priceIdr\)/);
+  assert.match(sources.a2, /const product = await routeDeps\.smokeGetOrgProduct/);
+  assert.match(sources.a2, /renderSatuSel/);
+  assert.match(sources.a3, /category: product\.category/);
+  assert.match(sources.a3, /routeDeps\.generateScripts/);
+  assert.match(sources.a4, /productCategory: lockedProduct\.category/);
+  assert.match(sources.a4, /createJobProductSnapshotRaw\(lockedProduct\)/);
+  assert.match(sources.a4, /INSERT INTO jobs/);
+  assert.match(sources.a4, /creditsRepo\.holdCredits/);
+});
+
+test("mutation controls: comparator rejects mismatch without rejecting valid positive or inventing missing policy", async () => {
+  assert.equal(referenceDecision(trusted), "ADMIT");
+  assert.equal(referenceDecision(mismatch), "REJECT_MISMATCH");
+  assert.equal(referenceDecision({ declaredToken: "opaque-type-a", trustedSignal: null }), "UNDETERMINED_POLICY_INPUT");
+  assert.notEqual(acceptEverythingMutation(mismatch), "REJECT_MISMATCH", "accept-all mutant must be killed");
+  assert.notEqual(rejectEverythingMutation(trusted), "ADMIT", "reject-all mutant must be killed by the valid control");
+
+  const fixture: BoundaryExpectation = { id: "MUTANT", file: "test-only.ts", handler: "POST", effects: [effect("persist"), effect("hold")] };
+  const centralImport = `import { validateAuthoritativeProductType, buildAuthoritativeTypeBoundaryInput } from "@/lib/product-type-boundary";`;
+  const commentOnly = `${centralImport} async function POST(){ /* validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => persist()) */ persist(); hold(); }`;
+  assert.ok(inspectBoundary(fixture, commentOnly).some((violation) => violation.includes("persist is not owned")), "comment mutant survived");
+  const ignoredPrior = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => {}); persist(); hold(); }`;
+  assert.ok(inspectBoundary(fixture, ignoredPrior).some((violation) => violation.includes("persist is not owned")), "ignored-prior-call mutant survived");
+  const oneBoundaryOnly = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => persist()); hold(); }`;
+  assert.ok(inspectBoundary(fixture, oneBoundaryOnly).some((violation) => violation.includes("hold is not owned")), "single-effect mutant survived");
+  const ownedEffects = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.deepEqual(inspectBoundary(fixture, ownedEffects), [], "correct callback-owned effects did not satisfy the structural contract");
+  const rawObjectInputs = `${centralImport} async function POST(){ await validateAuthoritativeProductType({ declaredToken, trustedSignal }, () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, rawObjectInputs).some((violation) => violation.includes("typed source-identity builder")), "raw-object input mutant survived");
+  const sameExpressionInputs = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(alias, alias), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, sameExpressionInputs).some((violation) => violation.includes("same expression")), "same-expression alias mutant survived");
+
+  const shadowedLocalSeam = `${centralImport} async function POST(){ const validateAuthoritativeProductType = async (_i: unknown, cb: () => void) => cb(); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, shadowedLocalSeam).some((violation) => violation.includes("shadowed locally")), "shadowed local-seam mutant survived");
+  const receiverLocalSeam = `${centralImport} async function POST(){ await local.validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, receiverLocalSeam).some((violation) => violation.includes("not owned")), "local receiver-seam mutant survived");
+  const splitIssuerImport = `${centralImport} import { __issueTrustedTypeCapabilityForContractTest } from "@/lib/product-type-boundary"; async function POST(){ const trusted = __issueTrustedTypeCapabilityForContractTest(declared.token, "forged"); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, splitIssuerImport).some((violation) => violation.includes("imports the contract-test capability issuer")), "split-import issuer mutant survived");
+  const namespaceIssuerImport = `${centralImport} import * as boundary from "@/lib/product-type-boundary"; async function POST(){ const trusted = boundary.__issueTrustedTypeCapabilityForContractTest(declared.token, "forged"); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, namespaceIssuerImport).some((violation) => violation.includes("namespace access")), "namespace issuer mutant survived");
+  const aliasedIssuerImport = `${centralImport} import { issueTrusted as mint } from "@/lib/product-type-boundary"; async function POST(){ const trusted = mint(declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, aliasedIssuerImport).some((violation) => violation.includes("outside the allowlist")), "aliased issuer export mutant survived");
+  const dynamicIssuerAccess = `${centralImport} async function POST(){ const boundary = await import("@/lib/product-type-boundary"); const trusted = boundary.issueTrusted(declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, dynamicIssuerAccess).some((violation) => violation.includes("dynamically imports")), "dynamic issuer access mutant survived");
+  const computedIssuerAccess = `${centralImport} async function POST(){ const boundary = await import("@/lib/" + "product-type-boundary.ts"); const trusted = boundary["issueTrusted" + "ForContractTest"](declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, computedIssuerAccess).some((violation) => violation.includes("dynamically imports")), "computed issuer access mutant survived");
+  const boundDynamicIssuerAccess = `${centralImport} const target = "@/lib/product-type-boundary"; async function POST(){ const boundary = await import(target); const trusted = boundary.default(declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, boundDynamicIssuerAccess).some((violation) => violation.includes("dynamically imports")), "const-bound dynamic issuer access mutant survived");
+  const shadowedBoundDynamicIssuerAccess = `${centralImport} const target = "@/lib/product-type-boundary"; function unrelated(){ const target = "unrelated"; return target; } async function POST(){ const boundary = await import(target); const trusted = boundary.default(declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, shadowedBoundDynamicIssuerAccess).some((violation) => violation.includes("dynamically imports")), "shadowed const-bound dynamic issuer access mutant survived");
+  const functionPropertyIssuerAccess = `${centralImport} async function POST(){ const trusted = (validateAuthoritativeProductType as any).issueTrusted(declared.token); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, functionPropertyIssuerAccess).some((violation) => violation.includes("escapes approved direct-call usage")), "validator function-property issuer mutant survived");
+  const reExportIssuerAccess = `${centralImport} export { issueTrusted as mint } from "@/lib/product-type-boundary.js"; async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); }`;
+  assert.ok(inspectBoundary(fixture, reExportIssuerAccess).some((violation) => violation.includes("re-exports")), "re-export issuer mutant survived");
+  const maliciousCentralAlias = `export function validateAuthoritativeProductType(){} export function buildAuthoritativeTypeBoundaryInput(){} export const issueTrusted = () => ({ token: "forged" });`;
+  assert.ok(inspectCentralExportSurface(maliciousCentralAlias).some((violation) => violation.includes("issueTrusted")), "central export-alias mutant survived");
+  const maliciousDefaultValidatorIssuer = `export default function validateAuthoritativeProductType(){} export { validateAuthoritativeProductType }; export function buildAuthoritativeTypeBoundaryInput(){}`;
+  assert.ok(inspectCentralExportSurface(maliciousDefaultValidatorIssuer).some((violation) => violation.includes("default runtime")), "default-validator issuer mutant survived");
+
+  const declaredSource: DeclaredTypeSource = { kind: "DECLARED_TYPE_SOURCE", sourceId: "category", token: "same" };
+  const forgedTrusted: TrustedTypeSource = { kind: "TRUSTED_TYPE_SOURCE", sourceId: "different-id", token: declaredSource.token, provenance: "forged" };
+  assert.throws(() => buildReferenceBoundaryInput(declaredSource, forgedTrusted), /C2_UNTRUSTED_CAPABILITY/);
+  const similarlyNamedTrusted = issueReferenceTrustedTypeCapability("same", "categorySignal");
+  assert.equal(referenceDecision(buildReferenceBoundaryInput(declaredSource, similarlyNamedTrusted)), "ADMIT");
+  const clonedIssuedFields: TrustedTypeSource = Object.freeze({ ...similarlyNamedTrusted });
+  assert.match(clonedIssuedFields.sourceId, /^reference-ingress:/, "clone fixture lacks the issuer-looking prefix needed to kill prefix mutants");
+  assert.equal(Object.isFrozen(clonedIssuedFields), true, "clone fixture must kill frozen-object authenticity mutants");
+  assert.throws(() => buildReferenceBoundaryInput(declaredSource, clonedIssuedFields), /C2_UNTRUSTED_CAPABILITY/);
+  const prefixOnlyMutantAccepts = (candidate: TrustedTypeSource) => candidate.sourceId.startsWith("reference-ingress:");
+  assert.equal(prefixOnlyMutantAccepts(clonedIssuedFields), true, "prefix-only mutant fixture did not demonstrate its false acceptance");
+  const frozenOnlyMutantAccepts = (candidate: TrustedTypeSource) => Object.isFrozen(candidate);
+  assert.equal(frozenOnlyMutantAccepts(clonedIssuedFields), true, "frozen-only mutant fixture did not demonstrate its false acceptance");
+
+  const missingAdmitMutant = async (input: TypeBoundaryInput, onAdmit: () => void) => {
+    if (!input.trustedSignal) { onAdmit(); return "UNDETERMINED_POLICY_INPUT"; }
+    return "ADMIT";
+  };
+  let missingMutantEffects = 0;
+  assert.equal(await missingAdmitMutant(buildReferenceBoundaryInput(declaredSource, null), () => { missingMutantEffects += 1; }), "UNDETERMINED_POLICY_INPUT");
+  assert.equal(missingMutantEffects, 1, "missing-policy admission mutant fixture did not execute its forbidden effect");
+
+  const expandedFixture: BoundaryExpectation = { ...fixture, effects: [...fixture.effects, effect("storageCleanup")] };
+  const unguardedNewSink = `${centralImport} async function POST(){ await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => { persist(); hold(); }); storageCleanup(); }`;
+  assert.ok(inspectBoundary(expandedFixture, unguardedNewSink).some((violation) => violation.includes("storageCleanup is not owned")), "newly enumerated sink mutant survived");
+  const e1StorageFixture: BoundaryExpectation = { id: "E1-STORAGE-MUTANT", file: "test-only.ts", handler: "POST", effects: [effect("ensureDirs"), effect("mkdtempSync"), effect("writeFileSync"), effect("rmSync"), effect("saveProductImages")] };
+  const unguardedTemporaryStorage = `${centralImport} async function POST(){ ensureDirs(); const dir = fs.mkdtempSync(base); fs.writeFileSync(file, bytes); fs.rmSync(dir); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => saveProductImages()); }`;
+  assert.ok(inspectBoundary(e1StorageFixture, unguardedTemporaryStorage).some((violation) => violation.includes("mkdtempSync is not owned")), "unguarded E1 temporary-storage mutant survived");
+  const e1RollbackFixture: BoundaryExpectation = { id: "E1-ROLLBACK-MUTANT", file: "test-only.ts", handler: "POST", effects: [effect("rejectAfterReferenceCheck", undefined, "stored-image rollback")] };
+  const unguardedStoredImageRollback = `${centralImport} async function POST(){ rejectAfterReferenceCheck(error, images); await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(declared, trusted), () => persist()); }`;
+  assert.ok(inspectBoundary(e1RollbackFixture, unguardedStoredImageRollback).some((violation) => violation.includes("stored-image rollback is not owned")), "unguarded E1 stored-image rollback mutant survived");
+
+  const probeHandler = async (
+    seam: (input: TypeBoundaryInput, onAdmit: () => void) => unknown | Promise<unknown>,
+    input: TypeBoundaryInput,
+  ) => {
+    let effects = 0;
+    try {
+      await seam(input, () => { effects += 1; });
+      return { status: 201, effects };
+    } catch {
+      return { status: 422, effects };
+    }
+  };
+  const ignoredResultMutant = async () => "REJECT_MISMATCH";
+  const falseGreen = await probeHandler(ignoredResultMutant, mismatch);
+  assert.equal(falseGreen.status, 201, "ignored-result mutant fixture did not demonstrate false success");
+  const rejectingSeam = async (input: TypeBoundaryInput, onAdmit: () => void) => {
+    if (referenceDecision(input) === "REJECT_MISMATCH") throw new Error("test-only mismatch rejection");
+    onAdmit();
+    return "ADMIT";
+  };
+  assert.deepEqual(await probeHandler(rejectingSeam, mismatch), { status: 422, effects: 0 });
+  assert.deepEqual(await probeHandler(rejectingSeam, trusted), { status: 201, effects: 1 });
+});
+
+test("GREEN: every production boundary rejects supplied mismatch before its own effects", async () => {
+  const violations = [
+    ...boundaryExpectations.flatMap((expectation) => inspectBoundary(expectation)),
+    ...await inspectProductionSeamBehavior(),
+    ...inspectProductionIssuerAccess(),
+    ...inspectCentralExportSurface(),
+  ];
+  assert.deepEqual(violations, [], `C2_IMPLEMENTATION_VIOLATION:\n${violations.join("\n")}`);
+});

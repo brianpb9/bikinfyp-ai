@@ -1,15 +1,16 @@
 import { ERR, errorResponse } from "@/lib/errors";
 import { CAMPAIGN_TEMPLATES, getTemplate } from "@/lib/templates";
 import type { HookCode } from "@/lib/config/hooks";
-import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { generateScripts, TEMPLATE_COPY_CAPACITY, TemplateTidakDisajikan } from "@/lib/script-engine";
+import { TEMPLATE_COPY_CAPACITY, TemplateTidakDisajikan } from "@/lib/script-engine";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
-import { postgresRuntimeEnabled, smokeCreateScripts, smokeGetOrgProduct } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
-import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { tierMasihDijual } from "@/lib/paket-kredit";
 import { getAvatarPreset } from "@/lib/avatar-presets";
+import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
+import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
+import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -27,10 +28,12 @@ const MAX_VIDEOS = 6;
 // TIDAK membuat job / menahan kredit di sini. Skrip AI tetap wajib lewat
 // gerbang HITL manusia (aturan keras #5) di langkah confirm.
 export async function POST(req: Request) {
+  let evidenceLease: Awaited<ReturnType<typeof acquireAdmissionReferenceEvidence>> | null = null;
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
-    await assertDashboardRate("generate", membership.org_id);
+    const routeDeps = admissionRouteDependencies();
+    if (!routeDeps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
+    const { user, membership } = await routeDeps.requireOrgContextApi(req);
+    await routeDeps.assertDashboardRate("generate", membership.org_id);
     const body = await req.json().catch(() => ({}));
 
     const productId = typeof body.product_id === "string" ? body.product_id : "";
@@ -38,8 +41,25 @@ export async function POST(req: Request) {
     // Per-ORG, bukan per-user. Produk dashboard dibuat satu anggota, dibayar
     // dari dompet organisasi, dan dipakai seluruh tim — pemeriksaan per-user
     // menolak rekan satu tim atas produk yang jelas ada di daftar mereka.
-    const product = await smokeGetOrgProduct(membership.org_id, productId);
+    const product = await routeDeps.smokeGetOrgProduct(membership.org_id, productId);
     if (!product) throw ERR.NOT_FOUND("Produknya");
+    assertCategoryReviewClear({
+      state: product.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+      reason: product.category_review_reason as never,
+      version: product.category_review_version ?? 0,
+    }, product.category);
+    return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "stored-org-product.product_type_token", token: product.product_type_token ?? "", version: 1 },
+      product.product_type_state === "CONFIRMED" && product.product_type_confirmed_token
+        && product.product_type_confirmed_by && product.product_type_confirmed_at && product.product_type_version === 1
+        ? {
+            kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: product.product_type_confirmed_token,
+            actorId: product.product_type_confirmed_by,
+            confirmedAt: canonicalProductTypeTimestamp(product.product_type_confirmed_at),
+            version: 1, provenance: "USER_SELF_ASSERTION",
+          }
+        : null,
+    ), async () => {
     if (!product.price_idr) throw ERR.BAD_REQUEST("Isi harga produknya dulu — harga dipakai di skrip dan overlay.", "Product price is required.");
     const images = JSON.parse(product.images || "[]") as string[];
     // Iklan jasa tetap butuh SATU visual — logo, foto toko, atau screenshot app.
@@ -47,7 +67,6 @@ export async function POST(req: Request) {
     // sampai terbukti; meminta satu visual bisnis jauh lebih murah daripada
     // menjanjikan sesuatu yang belum tentu jalan.
     if (images.length === 0) throw ERR.BAD_REQUEST("Upload minimal 1 gambar dulu — foto produk, atau logo/foto toko/screenshot app untuk iklan jasa.", "At least one image is required.");
-
     const count = Number.isFinite(Number(body.count)) ? Math.round(Number(body.count)) : 0;
     if (count < MIN_VIDEOS || count > MAX_VIDEOS) {
       throw ERR.BAD_REQUEST(`Jumlah video harus antara ${MIN_VIDEOS} dan ${MAX_VIDEOS}.`, "count out of range.");
@@ -100,7 +119,46 @@ export async function POST(req: Request) {
       .map((f: unknown) => String(f ?? "").toUpperCase())
       .filter((f: string) => /^H([1-9]|1[0-6])$/.test(f)) as HookCode[];
 
-    const run = (name: string) => generateScripts({
+    evidenceLease = await acquireAdmissionReferenceEvidence({
+      productId: product.id,
+      owner: { kind: "org", id: membership.org_id },
+      boundary: "A3",
+      loadSqliteCandidateRels: () => images,
+      loadSqliteProductType: () => ({
+        product_type_token: product.product_type_token ?? null,
+        product_type_confirmed_token: product.product_type_confirmed_token ?? null,
+        product_type_confirmed_by: product.product_type_confirmed_by ?? null,
+        product_type_confirmed_at: product.product_type_confirmed_at ?? null,
+        product_type_version: product.product_type_version ?? null,
+        product_type_state: product.product_type_state ?? "QUARANTINED",
+        category_review_state: product.category_review_state ?? "QUARANTINED",
+        category_review_reason: product.category_review_reason ?? "CATEGORY_UNKNOWN",
+        category_reviewed_by: product.category_reviewed_by ?? null,
+        category_reviewed_role: product.category_reviewed_role ?? null,
+        category_reviewed_at: product.category_reviewed_at ?? null,
+        category_review_version: product.category_review_version ?? 0,
+        category: product.category ?? null,
+      }),
+    });
+    const lockedProductType = evidenceLease.productType;
+    assertCategoryReviewClear({
+      state: lockedProductType?.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+      reason: lockedProductType?.category_review_reason as never,
+      version: lockedProductType?.category_review_version ?? 0,
+    }, lockedProductType?.category);
+    await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
+      { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-org-product.product_type_token", token: lockedProductType?.product_type_token ?? "", version: 1 },
+      lockedProductType?.product_type_state === "CONFIRMED" && lockedProductType.product_type_confirmed_token
+        && lockedProductType.product_type_confirmed_by && lockedProductType.product_type_confirmed_at
+        && lockedProductType.product_type_version === 1 ? {
+          kind: "HUMAN_PRODUCT_TYPE_CONFIRMATION", token: lockedProductType.product_type_confirmed_token,
+          actorId: lockedProductType.product_type_confirmed_by,
+          confirmedAt: canonicalProductTypeTimestamp(lockedProductType.product_type_confirmed_at),
+          version: 1, provenance: "USER_SELF_ASSERTION",
+        } : null,
+    ), () => undefined);
+
+    const run = (name: string) => routeDeps.generateScripts({
       product: {
         id: product.id, name, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
@@ -150,7 +208,7 @@ export async function POST(req: Request) {
       );
     }
 
-    const created = await smokeCreateScripts(user.id, product.id, passing.map((v) => ({
+    const created = await routeDeps.smokeCreateScripts(user.id, product.id, passing.map((v) => ({
       hookFamily: v.hook_family, emotion: v.emotion, register: v.register, segments: v.segments,
       caption: v.caption, hashtags: v.hashtags,
       // AMPLOP, bukan vonis polos: tanpa snapshot, confirm menilai ulang
@@ -194,6 +252,7 @@ export async function POST(req: Request) {
         ...(getTemplate(templateId)?.format ? { format: getTemplate(templateId)!.format } : {}),
       })),
     });
+    });
   } catch (err) {
     // Naskah template TIDAK PERNAH disajikan (keputusan Brian 20 Agu). Jawab
     // 503 yang jujur, bukan 500 generik: penyebabnya di sisi kami dan bisa
@@ -211,5 +270,7 @@ export async function POST(req: Request) {
       );
     }
     return errorResponse(err);
+  } finally {
+    await (evidenceLease as Awaited<ReturnType<typeof acquireAdmissionReferenceEvidence>> | null)?.release();
   }
 }

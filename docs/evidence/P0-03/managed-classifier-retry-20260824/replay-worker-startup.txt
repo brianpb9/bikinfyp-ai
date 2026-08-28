@@ -1,0 +1,2 @@
+2026-08-24 13:12:33  [worker] Redis queue racun-jobs-staging; concurrency=1
+2026-08-24 13:12:33  [worker] Promo queue racun-promo-jobs; concurrency=1

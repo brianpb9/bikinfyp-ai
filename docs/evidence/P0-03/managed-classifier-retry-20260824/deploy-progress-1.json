@@ -1,0 +1,13 @@
+{
+  "id": "dep-da63g43tqb8s739gkasg",
+  "status": "update_in_progress",
+  "commit": {
+    "id": "73280ffa342945dc08cee2fc664956975c8d5735",
+    "createdAt": "2026-08-24T12:13:08Z"
+  },
+  "createdAt": "2026-08-24T12:24:48.810906Z",
+  "startedAt": "2026-08-24T12:24:48.776654Z",
+  "finishedAt": null,
+  "trigger": "api",
+  "updatedAt": "2026-08-24T12:28:46.600131Z"
+}

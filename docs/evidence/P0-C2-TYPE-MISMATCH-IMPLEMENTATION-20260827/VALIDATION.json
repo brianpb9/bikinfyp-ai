@@ -1,0 +1,84 @@
+{
+  "task": "P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827",
+  "baseline_sha": "c8588c67df8c5064e4cd231a6650d0c8b23d6e00",
+  "result": "PASS_LOCAL_READY_FOR_REVIEW",
+  "reviewer_remediation": "empty/Unicode-whitespace/canonical timestamp/version durability guards for new and upgraded SQLite plus PostgreSQL constraint; node-postgres TIMESTAMPTZ Date canonicalization; E3/E7 mutations share the evidence lock and ordinary saves omit C2 columns while returning/auditing post-update truth; A1 acquires that lock and validates current C2 before persona/audit/trace nonce/admission effects; A2/A3 reload and validate complete C2 state under their evidence lease before effects",
+  "founder_decision": "approved recommended safe release bundle",
+  "canonical_type_distinct_from_category": true,
+  "taxonomy_invented": false,
+  "confirmation_provenance": "USER_SELF_ASSERTION",
+  "legacy_default_state": "QUARANTINED",
+  "confirmed_state": "CONFIRMED",
+  "mismatch_code": "TYPE_MISMATCH",
+  "missing_code": "PRODUCT_TYPE_CONFIRMATION_REQUIRED",
+  "green_contract": {
+    "command": "node scripts/verify-c2-type-mismatch-green.mjs",
+    "exit_code": 0,
+    "tests": 5,
+    "pass": 5,
+    "fail": 0
+  },
+  "implementation_test": {
+    "command": "SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts",
+    "exit_code": 0,
+    "tests": 7,
+    "pass": 7,
+    "fail": 0
+  },
+  "focused_regression": {
+    "command": "SCRIPT_LLM=0 npx tsx --test tests/admission-evidence-enforcement.test.ts tests/http-photo-mutation-resume-w2.test.ts tests/product-truth-worker-reference.test.ts tests/hitl.test.ts",
+    "exit_code": 0,
+    "tests": 46,
+    "pass": 46,
+    "fail": 0
+  },
+  "postgres_timestamp_admission_regression": {
+    "commands": [
+      "UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='dashboard lock|E7 HTTP PATCH|retail PostgreSQL admission' tests/pg-product-truth-w1.test.ts",
+      "UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='E7 ordinary PostgreSQL' tests/pg-product-truth-w1.test.ts"
+    ],
+    "exit_code": 0,
+    "tests": 5,
+    "pass": 5,
+    "fail": 0,
+    "skipped": 0,
+    "classification": "real node-postgres TIMESTAMPTZ values crossed retail and organization admission boundaries; paused E7 remained blocked by the lease and preserved the newer reconfirmation"
+  },
+  "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
+  "full_test": {
+    "command": "npm test",
+    "exit_code": 0,
+    "tests": 1259,
+    "pass": 1211,
+    "fail": 0,
+    "skipped": 48
+  },
+  "build": { "command": "npm run build", "exit_code": 0 },
+  "postgres_migration_contract": {
+    "command": "SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts",
+    "exit_code": 0,
+    "invalid_sqlite_rows_directly_probed": true,
+    "postgres_constraint_asserted": true
+  },
+  "postgres_schema_runtime": {
+    "command": "bash scripts/test-postgres-schema.sh",
+    "executed": true,
+    "exit_code": 1,
+    "c2_migration_applied": true,
+    "idempotent_rerun_applied": true,
+    "reason": "unrelated stale broad-schema parity assertion expects 10 tables while current schema has 21"
+  },
+  "postgres_disposable_migration": {
+    "command": "bash scripts/test-postgres-production-migrations.sh",
+    "executed": true,
+    "exit_code": 0,
+    "result": "PASS"
+  },
+  "provider_calls": 0,
+  "payment_calls": 0,
+  "credit_holds": 0,
+  "queue_mutations": 0,
+  "production_database_mutations": 0,
+  "deployments": 0,
+  "new_secrets": 0
+}

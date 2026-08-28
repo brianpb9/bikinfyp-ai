@@ -1,0 +1,10 @@
+9a38f1e889a44e6bca34b70ef5312740cba5e30507edf3773f8d9af5ed608ace  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/MANIFEST.md
+f88264aecb80f52bfff5e6a625baae31581cfd795190b2dacbdd7cb3202b985c  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/affected-tests.log
+3242a1b1367fcb621ff6cf384154a27c1b456d2032f7f8481570affc6566fed2  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/build.log
+d09440b853d7caeee61dce72a48fb2060d1be05df526b2c05562774ddbeb91cf  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/npm-test.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/postgres-residue.stderr.txt
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/postgres-residue.txt
+2cd7c56d2dba597c58c586b99fe7d583a852bb1eede9dd53ccd8e2bd4cff2efa  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/postgres-w1.log
+9ac68e221894fb4761241f26ad25165579ae5892ba63d5a149f0a78e7f32a3c0  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/proof.txt
+3ec6f1e436ab81817fbba02ede9438b5746e5a619332d97609571b1e293eb908  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/script-catalog.log
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/tsc.log

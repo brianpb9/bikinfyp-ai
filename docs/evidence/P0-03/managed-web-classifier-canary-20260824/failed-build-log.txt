@@ -1,0 +1,13 @@
+source=render logs --resources srv-d9n28tijnfac73a87lt0 --start 2026-08-24T11:18:30Z --end 2026-08-24T11:21:10Z --output text
+sanitization=allowlisted build-stage and error lines; no environment values, request bodies, headers, identities, or database rows
+
+2026-08-24 11:20:18 #8 Setting up ffmpeg (7:5.1.9-0+deb12u1) ...
+2026-08-24 11:20:18 #11 [dependencies 5/5] RUN npm ci
+2026-08-24 11:20:18 #12 [build 1/9] COPY app ./app
+2026-08-24 11:20:18 #20 [build 9/9] RUN npm run build && npm prune --omit=dev
+2026-08-24 11:20:35 #20 Compiled successfully
+2026-08-24 11:20:44 #20 Collecting page data ...
+2026-08-24 11:20:47 #20 Error [SecretConfigurationError]: AUTH_SECRET wajib diisi di production — tidak ada nilai bawaan yang aman.
+2026-08-24 11:20:47 #20 Build error occurred
+2026-08-24 11:20:47 #20 Failed to collect page data for /api/promo/jobs
+2026-08-24 11:20:47 #20 ERROR: process npm run build && npm prune --omit=dev did not complete successfully: exit code: 1

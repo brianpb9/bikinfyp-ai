@@ -1,10 +1,6 @@
-import { Pool } from "pg";
 import { ERR, errorResponse } from "@/lib/errors";
-import { config } from "@/lib/config";
-import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { createSignedUrl } from "@/lib/signed-url";
-import { postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
-import { getPool } from "@/lib/postgres/pool";
+import { isCurrentC5JobGeneration } from "@/lib/legacy-job-quarantine";
+import { c5DeliveryRouteDependencies } from "@/lib/c5-delivery-route-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -12,6 +8,8 @@ export const dynamic = "force-dynamic";
 type BulkRunJob = {
   job_id: string; state: string; product_name: string; cost_actual_idr: number;
   video_url: string | null; caption: string | null;
+  job_product_snapshot: string | null;
+  product_category:string;category_review_state:string;category_review_reason:string|null;category_review_version:number;
 };
 
 // GET /api/dashboard/campaign/:runId — status satu campaign run, org-scoped (bukan
@@ -20,15 +18,17 @@ type BulkRunJob = {
 // batas M3/M4 yang disetujui). Video hanya disertakan saat job READY.
 export async function GET(req: Request, ctx: { params: Promise<{ runId: string }> }) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
-    const { membership } = await requireOrgContextApi(req);
+    const deps = c5DeliveryRouteDependencies();
+    if (!deps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
+    const { membership } = await deps.requireOrgContextApi(req);
     const { runId } = await ctx.params;
 
-    const pool = getPool(config.databaseUrl);
+    const pool = deps.getPool();
     let rows: BulkRunJob[];
     try {
       const result = await pool.query<BulkRunJob>(
-        `SELECT j.id AS job_id, j.state, p.name AS product_name, j.cost_actual_idr,
+        `SELECT j.id AS job_id, j.state,j.job_product_snapshot, p.name AS product_name,p.category AS product_category,
+                p.category_review_state,p.category_review_reason,p.category_review_version,j.cost_actual_idr,
                 o.video_url, o.caption
          FROM jobs j
          JOIN products p ON p.id = j.product_id
@@ -44,22 +44,22 @@ export async function GET(req: Request, ctx: { params: Promise<{ runId: string }
     if (rows.length === 0) throw ERR.NOT_FOUND("Bulk run-nya");
 
     const jobs = rows.map((row, i) => {
-      const ready = row.state === "READY" && row.video_url;
+      const ready = row.state === "READY" && row.video_url && isCurrentC5JobGeneration(row);
       // Nama berkas dari nama produk + nomor urut, bukan UUID: brand mengunduh
       // 6 berkas sekaligus dan harus bisa membedakannya di folder Downloads.
       const base = row.product_name.replace(/[^\w.\- ]+/g, "").replace(/\s+/g, "-").slice(0, 50) || "video";
       return {
         job_id: row.job_id, state: row.state, product_name: row.product_name, cost_idr: row.cost_actual_idr,
-        video_url: ready ? createSignedUrl(row.video_url!) : null,
-        download_url: ready ? `${createSignedUrl(row.video_url!)}&dl=${encodeURIComponent(`${base}-${i + 1}.mp4`)}` : null,
-        caption: row.caption,
+        video_url: ready ? deps.createSignedUrl(row.video_url!) : null,
+        download_url: ready ? `${deps.createSignedUrl(row.video_url!)}&dl=${encodeURIComponent(`${base}-${i + 1}.mp4`)}` : null,
+        caption: ready ? row.caption : null,
       };
     });
 
     return Response.json({
       campaign_run_id: runId,
       jobs,
-      ready_count: jobs.filter((j) => j.state === "READY").length,
+      ready_count: jobs.filter((j) => j.state === "READY" && j.video_url !== null).length,
       failed_count: jobs.filter((j) => j.state === "FAILED" || j.state === "REFUNDED").length,
       total: jobs.length,
     });

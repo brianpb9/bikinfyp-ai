@@ -1,0 +1,20 @@
+fe49eca bukti STRUKTUR migrasi 0030-0033, bukan catatan schema_migrations
+6ee694a identitas produk canary mustahil diketik + transkripsi pulih
+5f10cb6 koreksi: jalur transkripsi TIDAK rusak — "as never" menyembunyikan bentuk salah
+1674985 canary DIHENTIKAN di #1: nama produk roster karangan, celah gerbang terungkap
+ac18981 canary: pelari satu-keluaran + uji silang tagihan dibatalkan
+315deaa KEY 2: tarif model tak dikenal ditaksir MAHAL, bukan murah
+cdf06c0 KEY 1: anotasi kompensasi diperbaiki + komentar "migrasi terkunci" dicabut
+e6a6e96 runbook CAST-REF: catat penegasan Brian sebelum sesi baru
+11ea13d runbook CAST-REF: peta kode + celah kunci versi model
+bc2c135 canary: asal-usul foto referensi per keluaran + antrean slice UI
+c703e40 bukti packshot dari sumber layak + backfill malas untuk gambar warisan
+8211891 alarm margin: satuan per detik + margin retail dipatok 25% terukur
+f094b49 classifier grafis promosi + kelayakan referensi dihitung saat unggah
+7583259 worktree per sesi, risiko mutu high_quality, checklist tarif nyata
+bdd599f gate ide kedua ditutup, konteks aman klaim, COGS per tier terukur
+0a48152 tiga gerbang: ide wajib ada, klaim hasil kulit, merek di intake
+e3308d2 packshot: penanda AIGC selamat + foto landscape tidak terpotong
+5827e64 packshot penutup foto asli + kontrak shot pembuka di hulu
+66750b6 render: kebijakan jarak label (jalan keluar A) — terbukti di piksel
+12c1b2c render: ikat aksi penulis pada kehadiran produk (bukti piksel adu 20 Agu)

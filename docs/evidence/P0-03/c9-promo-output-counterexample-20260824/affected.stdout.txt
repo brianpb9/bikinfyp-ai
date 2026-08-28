@@ -1,0 +1,193 @@
+TAP version 13
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"44c1cd4b-0f7f-41d5-96cd-6ba54a55be6d","produkId":"3a554748-0f5e-40cf-a5cb-d295ae025f53","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 44c1cd4b] -> GENERATING_VISUAL
+# [failover] video e3-c9-observer gagal: observer stop -> coba provider berikutnya
+# [job 44c1cd4b] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission
+ok 1 - E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission
+  ---
+  duration_ms: 144.019291
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"8a64815a-8587-479a-ba69-38d0c338dca2","produkId":"d2371e18-0cfa-4222-9ab8-dc4f2e3cb1e1","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 8a64815a] -> GENERATING_VISUAL
+# [job 8a64815a] -> GENERATING_VOICE
+# [provider] mock-voice-a: segmen 0 TTS voice=Damayanti (4.2 dtk)
+# [provider] mock-voice-a: segmen 1 TTS voice=Damayanti (4.1 dtk)
+# [provider] mock-voice-a: segmen 2 TTS voice=Damayanti (2.6 dtk)
+# [job 8a64815a] -> COMPOSITING
+# [job 8a64815a] -> REFUNDED {"refunded_credits":12000}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"bd693d4e-0cbd-4dcf-b053-57a726942404","produkId":"c1f8c05a-4a3b-4070-83ee-9aed315f381d","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job bd693d4e] -> GENERATING_VISUAL
+# [job bd693d4e] -> GENERATING_VOICE
+# [provider] mock-voice-a: segmen 0 TTS voice=Damayanti (4.2 dtk)
+# [provider] mock-voice-a: segmen 1 TTS voice=Damayanti (4.1 dtk)
+# [provider] mock-voice-a: segmen 2 TTS voice=Damayanti (2.6 dtk)
+# [job bd693d4e] -> COMPOSITING
+# [job bd693d4e] -> REFUNDED {"refunded_credits":12000}
+# Subtest: C9 counterexample E3→W2: promo live dapat muncul dan hilang di input compositor sementara prompt tetap snapshot admission
+ok 2 - C9 counterexample E3→W2: promo live dapat muncul dan hilang di input compositor sementara prompt tetap snapshot admission
+  ---
+  duration_ms: 4926.798584
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"11017d75-ee79-40e9-b9ff-fae32527f7f8","produkId":"9e8c7c05-144c-4f86-ba12-f9b6fb17d150","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 11017d75] -> GENERATING_VISUAL
+# [failover] video admission-e5-w2-observer gagal: observer stop -> coba provider berikutnya
+# [job 11017d75] -> REFUNDED {"refunded_credits":12000}
+# Subtest: admission W2 -> queue delay -> E5 hapus source tetap memakai bytes admission tanpa install worker
+ok 3 - admission W2 -> queue delay -> E5 hapus source tetap memakai bytes admission tanpa install worker
+  ---
+  duration_ms: 4.804625
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"e888c169-8bf3-4d0c-be64-c7b17d69da30","produkId":"d85d099f-7dab-44aa-b9fc-0d52c558a75b","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"e888c169-8bf3-4d0c-be64-c7b17d69da30","produkId":"d85d099f-7dab-44aa-b9fc-0d52c558a75b","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: SQLite admission mengulang bounded saat exact images berubah sebelum INSERT
+ok 4 - SQLite admission mengulang bounded saat exact images berubah sebelum INSERT
+  ---
+  duration_ms: 2.051208
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"5a54b99f-c9b1-45ba-8852-7a9aacdb644a","produkId":"a856cabc-af55-4a92-acca-72542a466e48","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [api] unexpected error: Error: injected admission storage failure
+#     at MemoryStorage.storage.onApprovedReferencePut (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:503:54)
+#     at MemoryStorage.put (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:62:59)
+#     at prepareJobReferenceManifest (/Users/hadrava/HDRV/03_UGC_AI_ID/app/lib/job-reference-manifest.ts:83:26)
+#     at async prepareAdmissionReferenceManifest (/Users/hadrava/HDRV/03_UGC_AI_ID/app/lib/job-admission-reference.ts:18:20)
+#     at async POST (/Users/hadrava/HDRV/03_UGC_AI_ID/app/app/api/jobs/route.ts:236:29)
+#     at async admittedProductMutationScenario (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:187:21)
+#     at async waitForActual (node:assert:644:5)
+#     at async Function.rejects (node:assert:767:25)
+#     at async TestContext.<anonymous> (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:500:3)
+#     at async Test.run (node:internal/test_runner/test:1054:7)
+# Subtest: storage preparation gagal sebelum job, hold, dan queue visibility SQLite
+ok 5 - storage preparation gagal sebelum job, hold, dan queue visibility SQLite
+  ---
+  duration_ms: 4.215917
+  type: 'test'
+  ...
+# Subtest: SQLite saldo known-insufficient ditolak sebelum PUT, job, dan hold
+ok 6 - SQLite saldo known-insufficient ditolak sebelum PUT, job, dan hold
+  ---
+  duration_ms: 1.224083
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"955500c5-9258-4efa-b0e0-ea87897fd87d","produkId":"1f49b6c7-1957-4f9b-93a3-07f9a6670d3f","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"cfa8f217-d1c9-42cd-a22d-ecde12fe798d","produkId":"1f49b6c7-1957-4f9b-93a3-07f9a6670d3f","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: dua admission SQLite konkuren menyisakan hanya object milik job pemenang
+ok 7 - dua admission SQLite konkuren menyisakan hanya object milik job pemenang
+  ---
+  duration_ms: 2.261791
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"7a0acf6d-650e-4657-be71-9a8deebd4cc1","produkId":"5e5ce93c-edf8-4cc9-be72-6434a1e83c43","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"7a0acf6d-650e-4657-be71-9a8deebd4cc1","produkId":"5e5ce93c-edf8-4cc9-be72-6434a1e83c43","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"7a0acf6d-650e-4657-be71-9a8deebd4cc1","produkId":"5e5ce93c-edf8-4cc9-be72-6434a1e83c43","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: SQLite images berubah sampai retry habis membersihkan seluruh prepared prefix
+ok 8 - SQLite images berubah sampai retry habis membersihkan seluruh prepared prefix
+  ---
+  duration_ms: 1.228834
+  type: 'test'
+  ...
+# [job d062eabe] -> GENERATING_VISUAL
+# [failover] video e5-observer gagal: observer stop -> coba provider berikutnya
+# [job d062eabe] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan
+ok 9 - E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan
+  ---
+  duration_ms: 4.077209
+  type: 'test'
+  ...
+# [job fbf8bccb] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider
+ok 10 - E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider
+  ---
+  duration_ms: 1.431667
+  type: 'test'
+  ...
+# Subtest: guard: bukti C12 memanggil handler E5 dan resume W2 nyata
+ok 11 - guard: bukti C12 memanggil handler E5 dan resume W2 nyata
+  ---
+  duration_ms: 0.150375
+  type: 'test'
+  ...
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum X" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# [standar-10] "Serum Glow Bright" kategori jenuh — level hook dinaikkan normal -> agak_berani (§B baris 5)
+# Subtest: resolvePromo: aktif hanya bila harga normal > harga jual dan belum lewat
+ok 12 - resolvePromo: aktif hanya bila harga normal > harga jual dan belum lewat
+  ---
+  duration_ms: 0.460208
+  type: 'test'
+  ...
+# Subtest: frasa deadline skrip: tanpa angka, tanpa frasa terlarang L-13
+ok 13 - frasa deadline skrip: tanpa angka, tanpa frasa terlarang L-13
+  ---
+  duration_ms: 0.130583
+  type: 'test'
+  ...
+# Subtest: injeksi promo: harga coret di demo + deadline di CTA, lolos validator (silent)
+ok 14 - injeksi promo: harga coret di demo + deadline di CTA, lolos validator (silent)
+  ---
+  duration_ms: 28.326458
+  type: 'test'
+  ...
+# Subtest: injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator
+ok 15 - injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator
+  ---
+  duration_ms: 2.915792
+  type: 'test'
+  ...
+# Subtest: semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)
+ok 16 - semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)
+  ---
+  duration_ms: 31.038209
+  type: 'test'
+  ...
+# Subtest: promo kedaluwarsa: skrip identik dengan tanpa promo (drop diam-diam)
+ok 17 - promo kedaluwarsa: skrip identik dengan tanpa promo (drop diam-diam)
+  ---
+  duration_ms: 0.963958
+  type: 'test'
+  ...
+# Subtest: caption memuat angka promo (%, harga, stok, tanggal)
+ok 18 - caption memuat angka promo (%, harga, stok, tanggal)
+  ---
+  duration_ms: 1.059708
+  type: 'test'
+  ...
+# Subtest: L-14: angka harga normal sah hanya bila promoPriceBeforeIdr diberikan
+ok 19 - L-14: angka harga normal sah hanya bila promoPriceBeforeIdr diberikan
+  ---
+  duration_ms: 0.216208
+  type: 'test'
+  ...
+1..19
+# tests 19
+# suites 0
+# pass 19
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 5504.965542

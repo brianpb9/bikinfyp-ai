@@ -1,0 +1,13 @@
+{
+  "id": "dep-da61n0qjobas73894nfg",
+  "status": "live",
+  "commit": {
+    "id": "4a1d258155b128fee0fcd5a6143198f36a558163",
+    "createdAt": "2026-08-24T09:53:35Z"
+  },
+  "createdAt": "2026-08-24T10:22:59.535501Z",
+  "startedAt": "2026-08-24T10:22:59.533004Z",
+  "finishedAt": "2026-08-24T10:25:52.593457Z",
+  "trigger": "api",
+  "updatedAt": "2026-08-24T10:25:52.593658Z"
+}

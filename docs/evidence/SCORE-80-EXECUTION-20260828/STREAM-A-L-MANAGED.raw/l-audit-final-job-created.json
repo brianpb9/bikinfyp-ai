@@ -1,0 +1,8 @@
+{
+  "id": "job-da88gl67bikc73c1nvm0",
+  "status": "pending",
+  "createdAt": "2026-08-27T18:56:20.223506616Z",
+  "startedAt": null,
+  "finishedAt": null,
+  "startCommand": "node --import tsx --input-type=module -e \"import{Pool}from\\\"pg\\\";import{auditBuktiProduk}from\\\"./lib/audit-bukti-produk.ts\\\";const pool=new Pool({connectionString:process.env.DATABASE_URL,max:1});const q=await pool.query(\\\"SELECT id,name,images FROM products ORDER BY created_at\\\");async function* src(){for(const r of q.rows){let images;try{images=typeof r.images===\\\"string\\\"?JSON.parse(r.images):r.images}catch{images=r.images}yield{id:r.id,orgId:null,nama:null,images}}}const result=await auditBuktiProduk(src(),{simpanTerbrick:-1});console.log(JSON.stringify({schema:\\\"score80-l-legacy-audit/v1\\\",observed_at:new Date().toISOString(),exact_sha:process.env.RENDER_GIT_COMMIT||null,database_name:(await pool.query(\\\"SELECT current_database() n\\\")).rows[0].n,result,identity_fields_redacted:true,mutation:false}));await pool.end();process.exit(0);\""
+}

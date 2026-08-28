@@ -1,0 +1,44 @@
+P0-C2-TYPE-MISMATCH-IMPLEMENTATION-20260827
+BASELINE=c8588c67df8c5064e4cd231a6650d0c8b23d6e00
+
+$ node scripts/verify-c2-type-mismatch-green.mjs
+tests=5 pass=5 fail=0 exit=0
+C2_GREEN_VERIFIER={"exit_zero":true,"all_five_pass":true,"zero_fail":true,"no_contract_violation":true}
+
+$ SCRIPT_LLM=0 npx tsx --test tests/c2-type-mismatch-implementation.test.ts
+tests=7 pass=7 fail=0 exit=0
+Direct probes include impossible 31-Feb timestamp, U+00A0-only fresh/upgraded SQLite rows, and invalid upgraded state.
+The timestamp probe preserves invalid strings byte-exact and canonicalizes a node-postgres Date to ISO.
+Concurrency guards prove ordinary E7 SQL omits C2 writes and A1 validates the locked/admitted row.
+
+$ SCRIPT_LLM=0 npx tsx --test tests/admission-evidence-enforcement.test.ts tests/http-photo-mutation-resume-w2.test.ts tests/product-truth-worker-reference.test.ts tests/hitl.test.ts
+tests=46 pass=46 fail=0 exit=0
+The SQLite A1 race counterexamples quarantine after precheck: HTTP 422, zero job/hold/orphan snapshot.
+The locked-handler case supplies creator_category plus a valid signed trace capability and rejects before persona/audit/nonce effects.
+Paused ordinary E3 waits for the evidence lease and preserves the newer reconfirmation.
+
+$ UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='dashboard lock|E7 HTTP PATCH|retail PostgreSQL admission' tests/pg-product-truth-w1.test.ts
+tests=4 pass=4 fail=0 skipped=0 exit=0
+Real node-postgres TIMESTAMPTZ values crossed retail and organization admission boundaries.
+The E7 fixture uses a different same-org member and preserves the original confirmation actor/time.
+
+$ UJI_PG_URL=<loopback-disposable> npx tsx --test --test-name-pattern='E7 ordinary PostgreSQL' tests/pg-product-truth-w1.test.ts
+tests=1 pass=1 fail=0 skipped=0 exit=0
+The paused ordinary E7 request waits on the advisory lease and preserves the newer reconfirmation.
+
+$ npx tsc --noEmit
+exit=0
+
+$ npm test
+tests=1259 pass=1211 fail=0 cancelled=0 skipped=48 exit=0
+
+$ npm run build
+exit=0
+
+$ bash scripts/test-postgres-schema.sh
+exit=1
+Migration 0036 applied and reran idempotently; unrelated broad parity assertion is stale (expected 10 tables, current schema has 21).
+
+$ bash scripts/test-postgres-production-migrations.sh
+exit=0 PASS
+No production database was contacted or mutated.

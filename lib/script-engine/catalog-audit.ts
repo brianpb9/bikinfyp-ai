@@ -2,6 +2,15 @@ import { CAMPAIGN_TEMPLATES, type CampaignTemplate } from "../templates";
 import { DELIVERY_EMPHASIS_TAGS, DELIVERY_TAGS, misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
 import { TEMPLATE_COPY } from "./template-copy";
 import { generateScripts, type GeneratedScript, type ProductInput } from "./index";
+import { planShots } from "../media/shot-planner";
+import { getCreatorCategory } from "../personas";
+import { ugcRolesFor } from "../media/ugc-template-roles";
+import {
+  neutralStoryAdsActionContradictions,
+  neutralStoryAdsPromptContradictions,
+} from "./ads-visual-contract";
+import { buildTaskContent } from "../providers/stubs/byteplus";
+import { assertVisualSpec } from "../providers/types";
 
 /**
  * Satu produk dipakai untuk seluruh katalog supaya perbedaan yang dihitung
@@ -91,6 +100,7 @@ export interface CatalogLanguageFinding {
   templateId: string;
   variantIndex: number;
   role: string;
+  field?: "text" | "ttsText" | "action" | "visualDirection";
   text: string;
   matches: string[];
 }
@@ -101,6 +111,8 @@ export interface CatalogTemplateAudit {
   group: string | null;
   kind: string;
   configuration: {
+    contentType: "affiliate" | "ads";
+    format: string;
     durationSec: number;
     tier: string;
     hookLevel: string;
@@ -132,6 +144,7 @@ export interface CatalogTemplateAudit {
   }>;
   variants: Array<{
     variantIndex: number;
+    admission: Pick<GeneratedScript["admisi"], "contentType" | "format" | "templateId" | "durationSec">;
     hookFamily: string;
     hook: AuditTextRef | null;
     scriptNormalized: string;
@@ -140,7 +153,14 @@ export interface CatalogTemplateAudit {
       text: string;
       ttsText: string | null;
       normalized: string;
+      action: string | null;
+      visualDirection: string | null;
+      bridgeSource: string | null;
     }>;
+    assembledShotDirections: string[];
+    assembledShotNumericScaffolds: string[][];
+    providerReferencePaths: string[];
+    providerContentImageCount: number;
     delivery: {
       mode: "voiced" | "silent";
       allowedTags: string[];
@@ -192,6 +212,9 @@ export interface CatalogScriptAudit {
     sharedBodyBlocks: Array<{ block: string; templateIds: string[] }>;
     productionJargonRefs: CatalogLanguageFinding[];
     unsupportedClaimRefs: CatalogLanguageFinding[];
+    adsUnsupportedOutcomeRefs: CatalogLanguageFinding[];
+    adsVisualContractRefs: CatalogLanguageFinding[];
+    adsProviderReferenceRefs: CatalogLanguageFinding[];
     creativeAnalysisRefs: CatalogLanguageFinding[];
     semanticRiskRefs: CatalogLanguageFinding[];
     danglingFragmentRefs: CatalogLanguageFinding[];
@@ -229,6 +252,11 @@ export interface CatalogScriptAudit {
       variantIndex: number;
       errors: GeneratedScript["validation"]["errors"];
     }>;
+    admissionConfigurationRefs: Array<{
+      templateId: string;
+      variantIndex: number;
+      mismatches: string[];
+    }>;
     targets: {
       templateCount: boolean;
       everyTemplateHasCopy: boolean;
@@ -244,6 +272,9 @@ export interface CatalogScriptAudit {
       noSharedBodyBlocks: boolean;
       noSpokenProductionJargon: boolean;
       noUnsupportedFactualClaims: boolean;
+      adsStayOutcomeNeutral: boolean;
+      adsVisualContractClean: boolean;
+      adsProviderReferencesClean: boolean;
       noSpokenCreativeAnalysis: boolean;
       riskyEvidenceTemplatesStayNeutral: boolean;
       noDanglingFragments: boolean;
@@ -261,9 +292,118 @@ export interface CatalogScriptAudit {
       deliverySignaturesUnique: boolean;
       everyVoicedTemplateHasEmphasisCue: boolean;
       everyVariantPassesValidation: boolean;
+      everyAdmissionMatchesConfiguration: boolean;
     };
     passed: boolean;
   };
+}
+
+/** Satu-satunya evaluator target Ads visual. Dipakai audit produksi dan tes
+ * mutasi supaya action, visual_direction, role table, dan prompt akhir tidak
+ * pernah punya jalur pemeriksaan yang berbeda. */
+export function adsUnsupportedOutcomeFindings(templates: CatalogTemplateAudit[]): CatalogLanguageFinding[] {
+  const rendered = templates
+    .filter((template) => template.group === "ads")
+    .flatMap((template) => template.variants.flatMap((variant) =>
+      [
+        ...variant.segments.flatMap((segment) => [
+          { role: segment.role, text: segment.text },
+          ...(segment.action ? [{ role: `${segment.role}:action`, text: segment.action }] : []),
+          ...(segment.visualDirection ? [{ role: `${segment.role}:visual_direction`, text: segment.visualDirection }] : []),
+        ]),
+        ...variant.assembledShotDirections.map((text, shotIndex) => ({ role: `shot_prompt_${shotIndex + 1}`, text })),
+      ].flatMap((evidence) => {
+        const matches = unsupportedAdsOutcomeClaims(evidence.text);
+        return matches.length === 0 ? [] : [{
+          templateId: template.templateId,
+          variantIndex: variant.variantIndex,
+          role: evidence.role,
+          text: evidence.text,
+          matches,
+        }];
+      })
+    ));
+  const roles = templates
+    .filter((template) => template.group === "ads")
+    .flatMap((template) => {
+      const table = ugcRolesFor(template.templateId);
+      if (!table) return [];
+      const evidence = [
+        ...(table.opening ? [{ role: "ugc_role_opening", text: `${table.opening.role} ${table.opening.camera}` }] : []),
+        ...table.middle.map((role, index) => ({ role: `ugc_role_middle_${index + 1}`, text: `${role.role} ${role.camera}` })),
+        ...(table.closing ? [{ role: "ugc_role_closing", text: `${table.closing.role} ${table.closing.camera}` }] : []),
+      ];
+      return evidence.flatMap((item) => {
+        const matches = unsupportedAdsOutcomeClaims(item.text);
+        return matches.length === 0 ? [] : [{
+          templateId: template.templateId,
+          variantIndex: -1,
+          role: item.role,
+          text: item.text,
+          matches,
+        }];
+      });
+    });
+  return [...rendered, ...roles];
+}
+
+/** Audit provenance harus gagal kalau generator berjalan dengan default yang
+ * berbeda dari kartu katalog. Diekspor agar mutasi regresi memakai evaluator
+ * yang sama dengan laporan produksi. */
+export function admissionConfigurationFindings(templates: CatalogTemplateAudit[]) {
+  return templates.flatMap((template) => template.variants.flatMap((variant) => {
+    const mismatches: string[] = [];
+    if (variant.admission.contentType !== template.configuration.contentType) mismatches.push("contentType");
+    if (variant.admission.format !== template.configuration.format) mismatches.push("format");
+    if (variant.admission.templateId !== template.templateId) mismatches.push("templateId");
+    if (variant.admission.durationSec !== template.configuration.durationSec) mismatches.push("durationSec");
+    return mismatches.length === 0 ? [] : [{ templateId: template.templateId, variantIndex: variant.variantIndex, mismatches }];
+  }));
+}
+
+export function adsStayOutcomeNeutral(templates: CatalogTemplateAudit[]): boolean {
+  return adsUnsupportedOutcomeFindings(templates).length === 0;
+}
+
+/** Hermetic end-to-end guard for the visual subject boundary: authored
+ * actions and final assembled prompts are checked by the same audit. */
+export function adsVisualContractFindings(templates: CatalogTemplateAudit[]): CatalogLanguageFinding[] {
+  return templates.filter((template) => template.group === "ads").flatMap((template) =>
+    template.variants.flatMap((variant) => [
+      ...variant.segments.flatMap((segment) => {
+        if (!segment.action) return [];
+        const matches = neutralStoryAdsActionContradictions(segment.action);
+        return matches.length === 0 ? [] : [{
+          templateId: template.templateId, variantIndex: variant.variantIndex,
+          role: `${segment.role}:action`, text: segment.action, matches,
+        }];
+      }),
+      ...variant.assembledShotDirections.flatMap((text, shotIndex) => {
+        const matches = neutralStoryAdsPromptContradictions(
+          text, {}, variant.assembledShotNumericScaffolds[shotIndex] ?? []
+        );
+        return matches.length === 0 ? [] : [{
+          templateId: template.templateId, variantIndex: variant.variantIndex,
+          role: `shot_prompt_${shotIndex + 1}`, text, matches,
+        }];
+      }),
+    ])
+  );
+}
+
+export function adsProviderReferenceFindings(templates: CatalogTemplateAudit[]): CatalogLanguageFinding[] {
+  return templates.filter((template) => template.group === "ads").flatMap((template) =>
+    template.variants.flatMap((variant) => {
+      const matches = [
+        ...(variant.providerReferencePaths.length ? ["provider-bound reference path present"] : []),
+        ...(variant.providerContentImageCount > 0 ? ["provider content contains image item"] : []),
+      ];
+      return matches.length === 0 ? [] : [{
+        templateId: template.templateId, variantIndex: variant.variantIndex,
+        role: "provider_payload", text: variant.providerReferencePaths.join(", "), matches,
+      }];
+    })
+  );
 }
 
 /**
@@ -322,6 +462,71 @@ const UNSUPPORTED_FACTUAL_CLAIMS = [
   /\bkualitasnya cocok\b/giu,
   /\b(?:jatuh|terjatuh|benturan|terbentur|impact)\b[^.!?;]{0,60}\bmasih utuh\b/giu,
   /\bmasih utuh\b[^.!?;]{0,60}\b(?:setelah|sesudah|habis)\s+(?:jatuh|terjatuh|benturan|terbentur|impact)\b/giu,
+  /\bdibuat setetes demi setetes\b/giu,
+  /\bterbukti di ruang sidang\b/giu,
+  /\bketahuan bagus\b/giu,
+  /\bbertahan sampai hari selesai\b/giu,
+];
+
+/** Klaim visual yang tidak boleh disintesis oleh model gambar/video.
+ *
+ * Pola sengaja mencakup bahasa Indonesia + Inggris dan hubungan semantik
+ * subjek→hasil, bukan hanya frasa dari role lama. Daftar ini juga menolak
+ * instruksi untuk membuat tulisan faktual terbaca. Model sudah terbukti
+ * mengarang huruf/angka; fakta produk hanya boleh masuk lewat asset asli atau
+ * overlay post-production deterministik yang benar-benar terhubung. */
+const ADS_UNSUPPORTED_OUTCOMES = [
+  // Durability / survival.
+  /\b(?:shockproof|drop[- ]?proof|impact[- ]?resistant|damage[- ]?resistant|survives? (?:a |the )?(?:drop|fall|impact)|withstands? (?:a |the )?(?:drop|fall|impact))\b/giu,
+  /\b(?:tahan (?:benturan|jatuh)|anti[- ]?(?:pecah|bentur))\b/giu,
+  // Efficacy / solved problem / quality result.
+  /\b(?:produk(?:nya| ini)?|product|formula|device)\b[^.!?;]{0,55}\b(?:ampuh|efektif|berkhasiat|bekerja|berfungsi|menyelesaikan|mengatasi|works?|effective|delivers? results?|solves?|fixes?|improves?)\b/giu,
+  /\b(?:hasil(?:nya)? (?:terlihat|muncul|nyata|bagus)|visible results?|proven results?|masalah(?:nya)? (?:selesai|teratasi|hilang)|problem (?:solved|gone|fixed))\b/giu,
+  // Automatic work / completion.
+  /\b(?:service|layanan|system|sistem|app|aplikasi|workflow|alur|platform)\b[^.!?;]{0,70}\b(?:automatically|otomatis)\b[^.!?;]{0,50}\b(?:completes?|finishes?|processes?|does?|handles?|menyelesaikan|menuntaskan|memproses|mengerjakan)\b/giu,
+  /\b(?:completes?|finishes?|processes?|does?|handles?|menyelesaikan|menuntaskan|memproses|mengerjakan)\b[^.!?;]{0,45}\b(?:every|all|setiap|semua)?\s*(?:jobs?|tasks?|work|requests?|orders?|pekerjaan|tugas|permintaan|pesanan)?\b[^.!?;]{0,20}\b(?:automatically|otomatis|by itself|sendiri)\b/giu,
+  /\b(?:pekerjaan|tugas|proses|work|job|task|process)\b[^.!?;]{0,45}\b(?:selesai sendiri|tuntas otomatis|finishes? itself|completes? automatically|done automatically)\b/giu,
+  // Relief / cooling / visible comfort change.
+  /\b(?:produk(?:nya| ini)?|product|device|fan)\b[^.!?;]{0,55}\b(?:mendinginkan|menyejukkan|meredakan|menghilangkan|cools?|relieves?|soothes?|eliminates?)\b/giu,
+  /\b(?:keluhan|gerah|panas|tidak nyaman|discomfort|heat|complaint)\b[^.!?;]{0,45}\b(?:reda|hilang|teratasi|resolved|gone|relieved|eases?)\b/giu,
+  /\b(?:terasa|terlihat|becomes?|looks?)\b[^.!?;]{0,30}\b(?:lega|nyaman|sejuk|dingin|relieved|comfortable|cooler)\b/giu,
+  // Scarcity / deadline pressure.
+  /\b(?:promo|offer|deal|sale|penawaran)\b[^.!?;]{0,55}\b(?:berakhir|habis|ends?|expires?|until|sampai)\b[^.!?;]{0,30}\b(?:hari ini|malam ini|besok|today|tonight|tomorrow|midnight|tanggal|\d)\b/giu,
+  /\b(?:stok|stock|slots?|kuota|units?)\b[^.!?;]{0,30}\b(?:tinggal|tersisa|left|remaining|limited|terbatas)\b/giu,
+  /\b(?:deadline|limited stock|stock countdown|countdown timer|last chance|kesempatan terakhir|buruan|sebelum kehabisan)\b/giu,
+  // Exclusive motion / frozen-world efficacy metaphor.
+  /\b(?:only|cuma|hanya)\b[^.!?;]{0,35}\b(?:product|produk(?:nya)?|device)\b[^.!?;]{0,35}\b(?:moves?|moving|bergerak|runs?|berjalan)\b/giu,
+  /\b(?:everything|semuanya|dunia|world|orang lain|everyone else)\b[^.!?;]{0,35}\b(?:freezes?|frozen|membeku|berhenti)\b[^.!?;]{0,45}\b(?:product|produk(?:nya)?)\b[^.!?;]{0,25}\b(?:moves?|moving|bergerak|runs?|berjalan)\b/giu,
+  // Service results and UI/workflow improvement.
+  /\b(?:queue|antrean|inbox|requests?|permintaan|orders?|pesanan)\b[^.!?;]{0,45}\b(?:cleared|completed|approved|processed|delivered|confirmed|selesai|habis|disetujui|diproses|terkirim|dikonfirmasi|bergerak|berkurang)\b/giu,
+  /\b(?:message|pesan|notification|notifikasi|booking|reservation|pemesanan|payment|pembayaran)\b[^.!?;]{0,45}\b(?:delivered|sent|confirmed|approved|completed|terkirim|sampai|dikonfirmasi|disetujui|selesai)\b/giu,
+  /\b(?:dashboard|screen|layar|ui|interface|workflow|alur)\b[^.!?;]{0,60}\b(?:faster|quicker|simpler|cleaner|improved|complete|completed|lebih cepat|lebih ringkas|lebih mudah|lebih rapi|selesai|tuntas)\b/giu,
+  /\b(?:progress bar|status bar|indikator progres)\b[^.!?;]{0,35}\b(?:complete|completed|finishes?|100\s*%|selesai|penuh)\b/giu,
+  // Generated readable factual text: reject regardless of whether the fact is
+  // otherwise approved; model pixels are not a deterministic data channel.
+  /\b(?:card|label|sign|screen|display|kartu|label|papan|layar)\b[^.!?;]{0,60}\b(?:readable|legible|shows?|displays?|terbaca|tercetak|tertulis|menampilkan)\b[^.!?;]{0,45}\b(?:product|service|business|brand|name|category|price|number|deadline|stock|produk|layanan|bisnis|merek|nama|kategori|harga|angka|stok|tanggal)\b/giu,
+  /\b(?:product|service|business|brand|name|category|price|number|deadline|stock|produk|layanan|bisnis|merek|nama|kategori|harga|angka|stok|tanggal)\b[^.!?;]{0,45}\b(?:readable|legible|written|shown|displayed|terbaca|tercetak|tertulis|ditampilkan)\b[^.!?;]{0,35}\b(?:card|label|sign|screen|display|kartu|label|papan|layar)\b/giu,
+  /\b(?:readable|legible|written|terbaca|tercetak|tertulis)\b[^.!?;]{0,30}\b(?:product name|service name|business name|brand name|category|price|number|nama produk|nama layanan|nama bisnis|nama merek|kategori|harga|angka)\b/giu,
+  /\bprinted\s+(?:product name|service name|business name|brand name|category|price|number)\b/giu,
+  /\b(?:nama (?:produk|layanan|bisnis|merek)|kategori|harga|angka|stok|tanggal|product name|service name|business name|brand name|category|price|number|stock|date)\b[^.!?;]{0,55}\b(?:kartu|label|papan|layar|card|label|sign|screen)?\b[^.!?;]{0,35}\b(?:didekatkan|diarahkan|ditunjuk|disorot|diputar|ditulis|dibaca|muncul|menghadap|terlihat|ditampilkan|moved closer|pointed at|highlighted|turned|written|read aloud|appears?|faces? camera|shown|displayed)\b/giu,
+  /\balur(?:nya)? (?:lebih )?(?:ringkas|cepat|mudah|rapi)\b/giu,
+  /\b(?:tugas|jadwal)(?:nya)? (?:otomatis )?(?:tersusun|teratur|selesai)\b/giu,
+  /\bantrean(?:nya)? (?:bergerak|berkurang|maju|lancar|lebih cepat)\b/giu,
+  /\b(?:layanan|aplikasi)(?:nya)? (?:merespons|memproses|bekerja|berfungsi)\b/giu,
+  /\bstatus(?:nya)? (?:berubah|selesai|diproses)\b/giu,
+  /\b(?:pesan|balasan|notifikasi)(?:nya)? (?:sampai|terkirim|terjawab)(?: otomatis)?\b/giu,
+  /\b(?:udara(?:nya)? bergerak|uap(?:nya)? menghilang|ruangan(?:nya)? (?:berubah|sejuk|dingin)|panas(?:nya)? (?:turun|reda))\b/giu,
+  /\b(?:kualitas|mutu|efikasi|khasiat)(?:nya)? (?:meningkat|membaik|bagus|baik|terbukti)\b/giu,
+  /\b(?:ampuh|efektif|berkhasiat|memudahkan|mendinginkan|menyejukkan)\b/giu,
+  /\b(?:segel(?:nya)? (?:terbuka|lepas) mulus|lebih (?:mudah|praktis|nyaman|cepat|ringkas)|jadi (?:lebih )?(?:mudah|praktis|nyaman|cepat|sejuk|dingin))\b/giu,
+  /\b(?:tetap utuh|masih bekerja|tetap bekerja)\b[^.!?;]{0,45}\b(?:setelah|sesudah|habis)\b/giu,
+  /\b(?:breaks? through the wall|broken wall|ceiling gives way|kicked open|debris and dust bursting)\b/giu,
+  /\b(?:undamaged|dazed but unhurt|completely composed|proof this really happened)\b/giu,
+  /\b(?:the only thing still moving|world snaps back into motion)\b/giu,
+  /\b(?:work finishing by itself|progress bar completing|finished result on screen|objects begin vanishing)\b/giu,
+  /\b(?:first moment of relief|visibly fine|changed reaction|product in hand and working)\b/giu,
+  /\b(?:deadline|limited stock|stock countdown|urgency in delivery|offer is worth taking)\b/giu,
+  /\b(?:dashboard|progress bar|queue moving|service result|automatic work)\b/giu,
 ];
 
 const CREATIVE_ANALYSIS_PHRASES = [
@@ -342,14 +547,26 @@ const CREATIVE_ANALYSIS_PHRASES = [
 
 const BANNED_HOOK_STARTERS = /^(?:di harga|pada harga|untuk banderol|dengan nilai)\b/iu;
 
+const COMMON_OUTCOME_COMPARISON = /\b(?:sebelum|sesudah|setelah|awal(?:nya)?|akhir(?:nya)?|hasil(?:nya)?|berubah|perubahan(?:nya)?|perbedaan(?:nya)?|peningkatan(?:nya)?|meningkat|membaik)\b/giu;
+const COMMON_COMPARISON_STRUCTURE = /\b(?:dua (?:kondisi|tampilan|sisi)|kedua (?:kondisi|tampilan|sisi)|awal dan akhir|sisi (?:pembanding|uji)|berdampingan|bergantian|tiap sisi|(?:di|mem|per)?banding(?:kan|an)?)\b/giu;
+
 const RISKY_EVIDENCE_PATTERNS: Record<string, RegExp[]> = {
+  "before-after": [
+    COMMON_OUTCOME_COMPARISON,
+    COMMON_COMPARISON_STRUCTURE,
+  ],
   "t05-before-after": [
-    /\b(?:sebelum|sesudah|setelah|awal|akhir|hasil|berubah|perubahan|perbedaan)\b/giu,
+    COMMON_OUTCOME_COMPARISON,
+    COMMON_COMPARISON_STRUCTURE,
   ],
   "t08-day-1-vs-day-7": [
-    /\b(?:hari (?:pertama|ke[- ]?\w+)|day\s*\d+|setelah|hasil|berubah|perubahan|rutinitas)\b/giu,
+    COMMON_OUTCOME_COMPARISON,
+    COMMON_COMPARISON_STRUCTURE,
+    /\b(?:hari (?:pertama|ke[- ]?\w+)|minggu (?:pertama|kedua|ke[- ]?\w+)|day\s*\d+|rutinitas|catatan lanjutan(?:nya)?|dua waktu|jadwalkan pemeriksaan|sepekan (?:kemudian|lalu))\b/giu,
   ],
   "t10-bukti-di-lengan": [
+    COMMON_OUTCOME_COMPARISON,
+    COMMON_COMPARISON_STRUCTURE,
     /\b(?:(?:satu|dua|kedua) lengan|lengan[^.!?;]{0,35}(?:beda|hasil|banding)|(?:beda|hasil|banding)[^.!?;]{0,35}lengan)\b/giu,
   ],
 };
@@ -361,6 +578,10 @@ function regexMatches(text: string, patterns: RegExp[]): string[] {
 
 export function spokenProductionJargon(text: string): string[] {
   return regexMatches(text, PRODUCTION_JARGON);
+}
+
+export function unsupportedAdsOutcomeClaims(text: string): string[] {
+  return regexMatches(text, ADS_UNSUPPORTED_OUTCOMES);
 }
 
 export function spokenCreativeAnalysis(text: string): string[] {
@@ -465,6 +686,23 @@ export function mechanicalSpokenPhraseReasons(text: string, role = ""): string[]
 
 export function riskyEvidenceClaims(templateId: string, text: string): string[] {
   return regexMatches(text, RISKY_EVIDENCE_PATTERNS[templateId] ?? []);
+}
+
+/** Scan every generated segment channel that can influence speech or render. */
+export function semanticRiskFindings(templates: CatalogTemplateAudit[]): CatalogLanguageFinding[] {
+  return templates.flatMap((template) => template.variants.flatMap((variant) =>
+    variant.segments.flatMap((segment) => ([
+      ["text", segment.text], ["ttsText", segment.ttsText],
+      ["action", segment.action], ["visualDirection", segment.visualDirection],
+    ] as const).flatMap(([field, value]) => {
+      if (!value) return [];
+      const matches = riskyEvidenceClaims(template.templateId, value);
+      return matches.length === 0 ? [] : [{
+        templateId: template.templateId, variantIndex: variant.variantIndex,
+        role: segment.role, field, text: value, matches,
+      }];
+    }))
+  ));
 }
 
 export function unsupportedFactualClaims(text: string): string[] {
@@ -604,6 +842,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     const fixtureSourceCategory = template.bestFor[0] ?? "default";
     const fixtureCategory = product.category;
     const fixtureCompatible = normalizeBestForCategory(fixtureSourceCategory) === fixtureCategory;
+    const contentType: "affiliate" | "ads" = template.kind === "ads" ? "ads" : "affiliate";
     const variants = await generateScripts({
       // Audit ini MENGUKUR copy template — itu memang jalur template, dan
       // sejak 20 Agu jalur itu tidak lagi disajikan ke pengguna (keputusan
@@ -614,6 +853,8 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       product,
       register: fixture.register,
       qualityTier: template.tier,
+      contentType,
+      format: template.format,
       durationSec: template.durationSec,
       count: fixture.variantsPerTemplate,
       hookLevel: template.hookLevel,
@@ -627,12 +868,48 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
 
     const variantEvidence = variants.map((variant, variantIndex) => {
       const hookSegment = variant.segments.find((segment) => segment.role === "hook") ?? null;
+      // Story Ads sengaja membuka dengan HOOK senyap. Untuk metrik keragaman
+      // copy, ukur baris lisan pertama; jangan menyimpulkan sembilan template
+      // identik hanya karena kontrak SA3 mereka sama-sama kosong.
+      const diversityHookSegment = template.group === "ads"
+        ? variant.segments.find((segment) => stripDeliveryTags(segment.text).trim()) ?? hookSegment
+        : hookSegment;
       const segments = variant.segments.map((segment) => ({
         role: segment.role,
         text: segment.text,
         ttsText: segment.tts_text ?? null,
         normalized: normalizeAuditText(segment.text),
+        action: segment.action?.trim() || null,
+        visualDirection: segment.visual_direction?.trim() || null,
+        bridgeSource: segment.bridge_source ?? null,
       }));
+      const visualSpec = template.group === "ads"
+        ? planShots({
+            jobId: `catalog-audit-${template.id}-${variantIndex}`,
+            durationSec: template.durationSec,
+            segments: variant.segments,
+            category: getCreatorCategory("hijaber")!,
+            productName: product.name,
+            productCategory: product.category,
+            productPriceIdr: product.price_idr,
+            imageRefPath: "/tmp/catalog-script-audit-product.jpg",
+            qualityTier: template.tier,
+            format: template.format,
+            ugcTemplate: template.id,
+            shotCountOverride: template.shotCount,
+          })
+        : null;
+      if (visualSpec) assertVisualSpec(visualSpec);
+      const assembledShotDirections = visualSpec?.shots.map((shot) => shot.prompt) ?? [];
+      const assembledShotNumericScaffolds = visualSpec?.shots.map((shot) => shot.trustedNumericScaffolds ?? []) ?? [];
+      const providerReferencePaths = visualSpec
+        ? [...visualSpec.shots.flatMap((shot) => shot.imageRefPath ? [shot.imageRefPath] : []), ...(visualSpec.extraReferenceImagePaths ?? [])]
+        : [];
+      const providerContentImageCount = visualSpec
+        ? visualSpec.shots.reduce((total, shot) => total + buildTaskContent(
+            visualSpec, shot, "dreamina-seedance-2-0-mini-260615"
+          ).filter((item) => (item as { type?: string }).type === "image_url").length, 0)
+        : 0;
       const ttsTexts = variant.segments.flatMap((segment) => segment.tts_text ? [segment.tts_text] : []);
       const allowedTags = ttsTexts.flatMap(allowedDeliveryTags);
       const signature = variant.segments
@@ -652,10 +929,20 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       }
       return {
         variantIndex,
+        admission: {
+          contentType: variant.admisi.contentType,
+          format: variant.admisi.format,
+          templateId: variant.admisi.templateId,
+          durationSec: variant.admisi.durationSec,
+        },
         hookFamily: variant.hook_family,
-        hook: hookSegment ? textRef(template.id, variantIndex, hookSegment.text) : null,
+        hook: diversityHookSegment ? textRef(template.id, variantIndex, diversityHookSegment.text) : null,
         scriptNormalized: segments.map((segment) => `${segment.role}:${segment.normalized}`).join("|"),
         segments,
+        assembledShotDirections,
+        assembledShotNumericScaffolds,
+        providerReferencePaths,
+        providerContentImageCount,
         delivery: {
           mode,
           allowedTags,
@@ -701,6 +988,8 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       group: template.group ?? null,
       kind: template.kind,
       configuration: {
+        contentType,
+        format: template.format,
         durationSec: template.durationSec,
         tier: template.tier,
         hookLevel: template.hookLevel,
@@ -815,6 +1104,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
   const languageFindings = (detector: (text: string) => string[]): CatalogLanguageFinding[] =>
     rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
       variant.segments.flatMap((segment) => {
+        if (template.group === "ads" && segment.role === "hook" && !segment.text.trim()) return [];
         const matches = detector(segment.text);
         return matches.length === 0 ? [] : [{
           templateId: template.templateId,
@@ -827,6 +1117,9 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     ));
   const productionJargonRefs = languageFindings(spokenProductionJargon);
   const unsupportedClaimRefs = languageFindings(unsupportedFactualClaims);
+  const adsUnsupportedOutcomeRefs = adsUnsupportedOutcomeFindings(rawTemplates);
+  const adsVisualContractRefs = adsVisualContractFindings(rawTemplates);
+  const adsProviderReferenceRefs = adsProviderReferenceFindings(rawTemplates);
   const creativeAnalysisRefs = languageFindings(spokenCreativeAnalysis);
   const danglingFragmentRefs = languageFindings(danglingFragmentReasons);
   const mechanicalPhraseRefs = rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
@@ -841,18 +1134,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       }];
     })
   ));
-  const semanticRiskRefs = rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
-    variant.segments.flatMap((segment) => {
-      const matches = riskyEvidenceClaims(template.templateId, segment.text);
-      return matches.length === 0 ? [] : [{
-        templateId: template.templateId,
-        variantIndex: variant.variantIndex,
-        role: segment.role,
-        text: segment.text,
-        matches,
-      }];
-    })
-  ));
+  const semanticRiskRefs = semanticRiskFindings(rawTemplates);
   const demoRefs = rawTemplates.flatMap((template) => template.variants.flatMap((variant) =>
     variant.segments.filter((segment) => segment.role === "demo").map((segment) => ({
       templateId: template.templateId,
@@ -924,6 +1206,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       errors: variant.validation.errors,
     }])
   );
+  const admissionConfigurationRefs = admissionConfigurationFindings(rawTemplates);
   const deliveryFailureRefs = rawTemplates.flatMap((template) =>
     template.variants.flatMap((variant) => variant.delivery.passed ? [] : [{
       templateId: template.templateId,
@@ -981,6 +1264,9 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     noSharedBodyBlocks: repeatedBodyBlocks.length === 0,
     noSpokenProductionJargon: productionJargonRefs.length === 0,
     noUnsupportedFactualClaims: unsupportedClaimRefs.length === 0,
+    adsStayOutcomeNeutral: adsStayOutcomeNeutral(rawTemplates),
+    adsVisualContractClean: adsVisualContractRefs.length === 0,
+    adsProviderReferencesClean: adsProviderReferenceRefs.length === 0,
     noSpokenCreativeAnalysis: creativeAnalysisRefs.length === 0,
     riskyEvidenceTemplatesStayNeutral: semanticRiskRefs.length === 0,
     noDanglingFragments: danglingFragmentRefs.length === 0,
@@ -998,6 +1284,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
     deliverySignaturesUnique: deliverySignatureFailureTemplateIds.length === 0,
     everyVoicedTemplateHasEmphasisCue: missingEmphasisCueTemplateIds.length === 0,
     everyVariantPassesValidation: validationFailureRefs.length === 0,
+    everyAdmissionMatchesConfiguration: admissionConfigurationRefs.length === 0,
   };
 
   return {
@@ -1035,6 +1322,9 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       sharedBodyBlocks: repeatedBodyBlocks,
       productionJargonRefs,
       unsupportedClaimRefs,
+      adsUnsupportedOutcomeRefs,
+      adsVisualContractRefs,
+      adsProviderReferenceRefs,
       creativeAnalysisRefs,
       semanticRiskRefs,
       danglingFragmentRefs,
@@ -1057,6 +1347,7 @@ export async function generateCatalogScriptAudit(): Promise<CatalogScriptAudit> 
       deliveryFailureRefs,
       unknownAudioTagRefs,
       validationFailureRefs,
+      admissionConfigurationRefs,
       targets,
       passed: Object.values(targets).every(Boolean),
     },

@@ -1,0 +1,29 @@
+{
+  "observedAt": "2026-08-24T13:17:32.592Z",
+  "request": {
+    "method": "GET",
+    "path": "/v1/services/srv-d9n28ue417fc73ch2b60",
+    "action": "get-service",
+    "payload": null
+  },
+  "response": {
+    "id": "srv-d9n28ue417fc73ch2b60",
+    "name": "racun-ai-staging-worker",
+    "type": "background_worker",
+    "repo": "https://github.com/brianpb9/bikinfyp-ai",
+    "branch": "staging/exact-73280ff-20260824",
+    "autoDeploy": "no",
+    "suspended": "not_suspended",
+    "updatedAt": "2026-08-24T13:12:31.038199Z",
+    "serviceDetails": {
+      "runtime": "docker",
+      "plan": "standard",
+      "region": "singapore",
+      "envSpecificDetails": {
+        "dockerCommand": "",
+        "dockerContext": ".",
+        "dockerfilePath": "Dockerfile.worker"
+      }
+    }
+  }
+}

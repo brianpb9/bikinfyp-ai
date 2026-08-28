@@ -3,6 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -28,9 +29,24 @@ const png1x1 = Buffer.from(
   "base64"
 );
 fs.writeFileSync(path.join(storageDir, "uploads", productId, "0.png"), png1x1);
+fs.writeFileSync(path.join(storageDir, "uploads", productId, "0.png.meta.json"), JSON.stringify({
+  sha256: crypto.createHash("sha256").update(png1x1).digest("hex"),
+  jenis: "product_photo",
+  layakReferensi: true,
+  rasioAreaTeks: 0,
+  jumlahKata: 0,
+  alasan: "fixture HITL packshot",
+  versiBukti: 1,
+  labelOcrStatus: "READABLE", labelOcrVersion: 1,
+}));
 db.prepare(
-  "INSERT INTO products (id, user_id, source_url, name, price_idr, category, images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?)"
-).run(productId, user.id, null, "Serum Glow Bright", 85000, "beauty", JSON.stringify([`uploads/${productId}/0.png`]), null, now());
+  `INSERT INTO products (id, user_id, source_url, name, price_idr, category,
+     product_type_token,product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
+     images, raw_meta, created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`
+).run(productId, user.id, null, "Serum Glow Bright", 85000, "beauty",
+  "serum wajah", "serum wajah", user.id, now(), 1, "CONFIRMED",
+  JSON.stringify([`uploads/${productId}/0.png`]), null, now());
+db.prepare("UPDATE products SET category_review_state='CLEAR',category_review_reason=NULL,category_review_version=1 WHERE id=?").run(productId);
 
 // Skrip belum di-approve
 const scriptId = uuid();

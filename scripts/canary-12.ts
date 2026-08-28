@@ -33,6 +33,9 @@ import { byteplusVideo } from "../lib/providers/stubs/byteplus";
 import { getCreatorCategory } from "../lib/personas";
 import { generateScripts, type ProductInput } from "../lib/script-engine";
 import { runQc } from "../lib/media/qc";
+import { klasifikasiGambar } from "../lib/media/klasifikasi-gambar";
+import { probeVideoSize } from "../lib/media/ffmpeg";
+import crypto from "node:crypto";
 
 const FOTO_DIR = path.resolve(process.cwd(), "..", "test_output");
 const OUT = path.resolve(process.cwd(), "..", "test_output", "canary_12");
@@ -92,6 +95,34 @@ async function satu(k: Klip): Promise<Record<string, unknown>> {
     return { id: k.id, sifat: k.sifat, status: "batal-naskah", errors: skrip.validation.errors };
   }
 
+  // ASAL-USUL FOTO REFERENSI — dicatat per keluaran (permintaan Brian 20 Agu).
+  //
+  // Tabel inilah yang membuktikan rantainya utuh dari ujung ke ujung: video
+  // yang bagus tidak berarti apa-apa kalau bahannya banner promo, dan itu
+  // sudah pernah terjadi (jjglow-produk.png ternyata banner bertanda
+  // JANGAN-DIPAKAI). Tanpa kolom ini, laporan canary hanya bisa mengatakan
+  // "hasilnya begini", bukan "hasilnya begini DARI bahan yang ini".
+  const asalFoto = {
+    berkas: path.basename(foto),
+    sha256: crypto.createHash("sha256").update(fs.readFileSync(foto)).digest("hex").slice(0, 16),
+    ...(await (async () => {
+      try {
+        const k = await klasifikasiGambar(foto);
+        return { klasifikasi: k.jenis, layakReferensi: k.layakReferensi, rasioAreaTeks: Number(k.rasioAreaTeks.toFixed(4)) };
+      } catch (err) {
+        return { klasifikasi: "gagal-diperiksa", layakReferensi: null, sebab: String((err as Error).message).slice(0, 80) };
+      }
+    })()),
+    ...(await (async () => {
+      try {
+        const d = await probeVideoSize(foto);
+        return { resolusi: `${d.width}x${d.height}`, sisiPanjang: Math.max(d.width, d.height) };
+      } catch {
+        return { resolusi: "?" };
+      }
+    })()),
+  };
+
   const spec = planShots({
     jobId: k.id, durationSec: k.durationSec, segments: skrip.segments,
     category: getCreatorCategory(k.persona)!, productName: k.produk.name,
@@ -136,6 +167,7 @@ async function satu(k: Klip): Promise<Record<string, unknown>> {
     id: k.id, sifat: k.sifat, status: "ok", berkas, biaya,
     format: k.format, contentType: k.contentType, durationSec: k.durationSec,
     fotoSintetis: ["canary-kopitang.jpg", "canary-arva.jpg", "canary-sabun.jpg"].includes(k.foto),
+    asalFoto,
     script_source: skrip.script_source, standar: skrip.standarGaris ?? null,
     segments: skrip.segments.map((s) => ({ role: s.role, text: s.text })),
     qc: qc?.checks.map((c) => ({ code: c.code, status: c.status, detail: c.detail })) ?? null,
@@ -165,6 +197,30 @@ async function main() {
     fs.writeFileSync(path.join(OUT, "laporan.json"), JSON.stringify({ total, laporan }, null, 2));
   }
   const ok = laporan.filter((r) => r.status === "ok").length;
+
+  // ASAL-USUL BAHAN, satu baris per keluaran. Dicetak TERPISAH dari ringkasan
+  // mutu supaya tidak bisa dibaca sekilas sebagai bagian dari skor.
+  console.log("\nASAL-USUL FOTO REFERENSI");
+  console.log("  klip                 berkas                     sha      klasifikasi          resolusi     layak");
+  for (const r of laporan) {
+    const a = r.asalFoto as Record<string, unknown> | undefined;
+    if (!a) continue;
+    const layak = a.layakReferensi === true ? "ya" : a.layakReferensi === false ? "TIDAK" : "?";
+    console.log(
+      `  ${String(r.id).padEnd(20)} ${String(a.berkas).padEnd(26)} ${String(a.sha256).slice(0, 8)} ` +
+        `${String(a.klasifikasi).padEnd(20)} ${String(a.resolusi).padEnd(12)} ${layak}`
+    );
+  }
+  const tidakLayak = laporan.filter((r) => (r.asalFoto as { layakReferensi?: unknown } | undefined)?.layakReferensi === false);
+  if (tidakLayak.length) {
+    console.log(`\n  PERINGATAN: ${tidakLayak.length} klip dirender dari foto yang TIDAK LAYAK jadi referensi.`);
+    console.log("  Mutu keluarannya tidak bisa dipakai menilai mesin — bahannya sudah salah sejak awal.");
+  }
+  const kecil = laporan.filter((r) => Number((r.asalFoto as { sisiPanjang?: number } | undefined)?.sisiPanjang ?? 9999) < 1000);
+  if (kecil.length) {
+    console.log(`  Catatan: ${kecil.length} foto bersisi panjang <1000px — penutup packshot akan melunak.`);
+  }
+
   console.log(`\nSELESAI: ${ok}/${DAFTAR.length} klip, total Rp${total.toLocaleString("id-ID")}`);
   console.log(`Laporan: ${path.join(OUT, "laporan.json")}`);
 }

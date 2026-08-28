@@ -79,6 +79,7 @@ async function rencana(tpl: (typeof CAMPAIGN_TEMPLATES)[number]) {
     jobId: tpl.id, durationSec: tpl.durationSec,
     segments: skrip.segments.length ? skrip.segments : (SEG as never),
     category: getCreatorCategory("hijaber")!, productName: PRODUK.name, productCategory: "beauty",
+    productPriceIdr: PRODUK.price_idr,
     imageRefPath: "/tmp/x.jpg", qualityTier: "high_quality", format: tpl.format,
     hookLevel: tpl.hookLevel, ugcTemplate: tpl.id,
     tvcRoute: tpl.tvcRoute, shotCountOverride: tpl.shotCount, ratio: tpl.ratio,
@@ -190,26 +191,26 @@ test("label: tidak menuntut tajam dan buram sekaligus di bidang yang sama", asyn
 
   // Dan harus MENYATAKAN apa yang seharusnya terlihat, bukan cuma melarang.
   const contoh = (await rencana(CAMPAIGN_TEMPLATES.find((t) => t.format === "hands_only")!)).shots[0].prompt;
-  assert.match(contoh, /read as fine printed TEXTURE/i, "tidak menyatakan wujud teks kecil yang benar");
+  // Sejak kebijakan jarak 20 Agu (jalan keluar A) aturan TEKSTUR ini berlaku
+  // untuk SELURUH teks di label, nama merek termasuk — bukan lagi hanya baris
+  // kecil di bawahnya. Render berbayar 20 Agu membuktikan nama merek pun
+  // keluar sebagai karangan ("jddpgeer", "SOMSONG") begitu ia ter-resolve.
+  assert.match(contoh, /reads? (only )?as fine printed TEXTURE/i, "tidak menyatakan wujud teks label yang benar");
+  assert.match(contoh, /no individual letter, word, or number resolved/i, "kebijakan jarak label tidak dinyatakan");
   assert.match(contoh, /Never render invented words/i, "tidak melarang kata karangan di label");
 });
 
-// Template perusakan wajib menyatakan DUNIANYA, bukan cuma kerusakannya.
-//
-// Review kreatif 2026-08-14: "ads-tembus-dinding" keluar dengan latar KOTA
-// HANCUR bermandi senja di shot penutup — untuk iklan sabun mandi. Perannya
-// sudah menulis "the same room", tapi tidak pernah menyebut apa yang ada DI
-// BALIK lubangnya, dan model mengisi kekosongan itu dengan menaikkan
-// taruhannya. Kalau detail penting tidak dinyatakan, model mengarangnya — dan
-// arangannya selalu lebih dramatis daripada yang kita mau.
-test("template perusakan menjangkarkan dunianya ke rumah biasa", async () => {
-  const perusakan = ["ads-tembus-dinding", "ads-atap-jebol"];
-  for (const id of perusakan) {
+test("template interupsi karton menjangkarkan staging yang jujur", async () => {
+  const staged = ["ads-tembus-dinding", "ads-atap-jebol"];
+  for (const id of staged) {
     const tpl = CAMPAIGN_TEMPLATES.find((t) => t.id === id);
     if (!tpl) continue;
     const pembuka = (await rencana(tpl)).shots[0].prompt;
-    assert.match(pembuka, /ordinary Indonesian home/i, `${id}: pembuka tidak menjangkarkan dunianya`);
-    assert.match(pembuka, /not a disaster/i, `${id}: tidak menyatakan ini kejutan rumahan, bukan bencana`);
+    assert.match(pembuka, /cardboard|paper panel|foam|confetti|stage/i, `${id}: properti staging hilang`);
+    assert.match(pembuka, /plain unprinted colour card/i, `${id}: kartu blank hilang`);
+    assert.match(pembuka, /no letters, numbers, logos, labels, or readable marks/i, `${id}: generated text belum dilarang`);
+    assert.doesNotMatch(pembuka, /printed identity|product name|category readable|approved price/i);
+    assert.doesNotMatch(pembuka, /broken wall|ceiling gives way|debris and dust bursting|undamaged/i);
   }
 });
 

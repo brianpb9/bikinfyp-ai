@@ -1,0 +1,3 @@
+DISPOSABLE_CREATE=PASS database=racun_full_zero_skip_72313_4127
+DISPOSABLE_MIGRATE=PASS database=racun_full_zero_skip_72313_4127
+DISPOSABLE_DROP=PASS database=racun_full_zero_skip_72313_4127

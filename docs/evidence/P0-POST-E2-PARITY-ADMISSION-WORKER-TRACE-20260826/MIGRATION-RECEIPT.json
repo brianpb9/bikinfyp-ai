@@ -1,0 +1,25 @@
+{
+  "source": "Render service logs for srv-d9n28tijnfac73a87lt0",
+  "source_command": "render logs --resources srv-d9n28tijnfac73a87lt0 --start 2026-08-26T11:04:25Z --end 2026-08-26T11:04:50Z --output text --confirm",
+  "deploy_id": "dep-da7cff7avr4c73bldrfg",
+  "exact_sha": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+  "started_at": "2026-08-26T11:04:30Z",
+  "receipt_at": "2026-08-26T11:04:39Z",
+  "completed_at": "2026-08-26T11:04:44Z",
+  "command": "node scripts/migrate-postgres-runtime.mjs",
+  "status": "PASS",
+  "applied": [],
+  "skipped": [
+    "0001_initial.sql", "0002_credit_ledger_append_only.sql", "0003_jobs_state_guard.sql",
+    "0004_promo_jobs.sql", "0005_promo_jobs_multi_clip.sql", "0006_promo_jobs_virality_checklist.sql",
+    "0007_fyp_snapshots.sql", "0008_scripts_hook_level.sql", "0009_products_promo.sql", "0010_events.sql",
+    "0011_promo_jobs_hook_avatar.sql", "0012_organizations.sql", "0013_org_id_columns.sql",
+    "0014_organizations_brand_profile.sql", "0015_products_brand_brief.sql", "0016_jobs_avatar_custom_desc.sql",
+    "0017_scene_approval.sql", "0018_org_onboarded.sql", "0019_post_plans.sql", "0020_org_templates.sql",
+    "0021_provider_tasks.sql", "0022_jobs_shot_count_ratio.sql", "0023_org_brand_kit.sql",
+    "0024_products_claims.sql", "0025_jobs_no_model.sql", "0026_jobs_tvc_route.sql", "0027_jobs_template_id.sql",
+    "0028_org_product_category.sql", "0029_jobs_record_style.sql", "0030_regen_ledger_type.sql",
+    "0031_terminal_ledger_unique.sql", "0032_job_prompts.sql", "0033_koreksi_ledger_type.sql",
+    "0034_job_reference_manifest.sql", "0035_job_product_snapshot.sql"
+  ]
+}

@@ -1,0 +1,39 @@
+{
+  "observedUtc": "2026-08-24T10:18:18Z",
+  "targetSha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+  "staging": [
+    {
+      "serviceId": "srv-d9n28tijnfac73a87lt0",
+      "name": "racun-ai-staging-web",
+      "type": "web_service",
+      "runtime": "node",
+      "autoDeploy": "no",
+      "suspended": "not_suspended",
+      "maintenance": false,
+      "priorDeployId": "dep-d9rugpuq1p3s73ajvvpg",
+      "priorSha": "5fe53f27436d917d5232e23ef6c6e624eb00428a"
+    },
+    {
+      "serviceId": "srv-d9n28ue417fc73ch2b60",
+      "name": "racun-ai-staging-worker",
+      "type": "background_worker",
+      "runtime": "docker",
+      "autoDeploy": "no",
+      "suspended": "not_suspended",
+      "priorDeployId": "dep-d9tgs715efls73e32hug",
+      "priorSha": "78d84685de6db63724ac2715ef516917d0c4ce3c"
+    }
+  ],
+  "health": {
+    "http": 200,
+    "body": { "ok": true, "intake": "open" }
+  },
+  "database": {
+    "allowListLength": 0,
+    "jobsTotal": 74,
+    "activeOrQueued": 0,
+    "migrationCount": 6,
+    "firstVersion": "0001_initial",
+    "lastVersion": "0006_promo_jobs_virality_checklist"
+  }
+}

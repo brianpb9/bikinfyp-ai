@@ -16,3 +16,14 @@ next-env.d.ts
 *.tmp.ts
 *.tmp.mjs
 probe-funnel-tmp.mjs
+
+# .agent-bus: pesan adalah runtime state, bukan source. Skrip + README ikut
+# commit; isi inbox/archive/tmp tidak. .gitkeep dipertahankan agar direktori
+# tetap ada di clone baru.
+.agent-bus/inbox/*/*
+!.agent-bus/inbox/*/.gitkeep
+.agent-bus/archive/*
+!.agent-bus/archive/.gitkeep
+.agent-bus/tmp/*
+!.agent-bus/tmp/.gitkeep
+.agent-bus/tmp/waiter-*.pid

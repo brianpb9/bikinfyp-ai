@@ -1,0 +1,8 @@
+?? .hdrv/
+?? MAIN-GOAL.md
+?? PROJECT-WORK-ORDER.md
+?? docs/evidence/P0-03/managed-classifier-retry-20260824/
+?? scripts/managed-retry-capture.sh
+?? scripts/render-api-evidence.mjs
+?? scripts/render-postgres-evidence.mjs
+?? scripts/staging-task-window-aggregate.sh

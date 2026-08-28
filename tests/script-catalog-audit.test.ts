@@ -1,8 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { DELIVERY_TAGS } from "../lib/script-engine/delivery-tags";
 import {
   SCRIPT_CATALOG_AUDIT_FIXTURE,
+  adsStayOutcomeNeutral,
+  adsVisualContractFindings,
+  adsProviderReferenceFindings,
+  admissionConfigurationFindings,
+  adsUnsupportedOutcomeFindings,
   auditProductForTemplate,
   bannedHookBoilerplateStarter,
   danglingFragmentReasons,
@@ -14,14 +20,79 @@ import {
   normalizedHookPrefixes,
   proofPriceSkeleton,
   riskyEvidenceClaims,
+  semanticRiskFindings,
   spokenCreativeAnalysis,
   spokenProductionJargon,
+  unsupportedAdsOutcomeClaims,
   unsupportedFactualClaims,
 } from "../lib/script-engine/catalog-audit";
 import { CAMPAIGN_TEMPLATES, KATALOG_BUTUH_COPY } from "../lib/templates";
+import { generateScripts } from "../lib/script-engine";
+import { periksaStoryOsAds } from "../lib/script-engine/story-os-ads";
+import { COMPACTED_TEMPLATE_IDS } from "../lib/script-engine/template-copy";
+import { UGC_TEMPLATE_ROLES } from "../lib/media/ugc-template-roles";
+import {
+  neutralStoryAdsActionContradictions,
+  neutralStoryAdsPromptContradictions,
+} from "../lib/script-engine/ads-visual-contract";
+import { planShots } from "../lib/media/shot-planner";
+import { getCreatorCategory } from "../lib/personas";
+import { assertVisualSpec } from "../lib/providers/types";
+import { buildTaskContent } from "../lib/providers/stubs/byteplus";
 
 const audit = await generateCatalogScriptAudit();
 const { summary } = audit;
+
+const AUTHORED_COPY_SNAPSHOT: Record<string, string[]> = {
+  "racun-checkout": ["6484cfddc459a814", "c5575d9c9c7d8826", "0fe6dbb747c30d72", "74d613b890569213"],
+  "review-jujur": ["8bb47f4b1d3ca292", "6651f93e708e30bc", "2cb54d26ff7c7dea", "237c288bdda522f3"],
+  unboxing: ["ce7cdd0391284281", "834e793b77b0d5b9", "5d7729e2367f35b1", "f7430ed8a77e8fa9"],
+  "before-after": ["93ca23c220b514e7", "36b2213f8923401e", "5d24902c57798b81", "c740711a364237d5"],
+  "diskon-gede": ["53ef2a4a896b18a5", "fb7af64ecce4c417", "e7d29fab73fe4550", "43ce1482a5ad74bb"],
+  "buat-kamu-yang": ["1551320b1675031b", "4fccecc08d34ce1b", "d24cead7ad8eff8b", "86211dbbce35ed8e"],
+  "spill-rahasia": ["21134b501bc3ecd2", "cee27d1267678075", "c9e6ba1cc252189c", "0ecce1b36a001035"],
+  "t01-tempat-susah": ["0f25a3f507eee336", "eae08e283012cb29", "289149dbb08865bf", "e1f9e79239191ed0"],
+  "t02-bedah-fitur": ["d2df54ab86f1cdb0", "fce5dbe724309a96", "26a5b21296ceff46", "1b98ce981ffed5fd"],
+  "t03-liputan-event": ["a79c517906d545b2", "34210aa3fead3651", "8ef5a2ea59013dbb", "bd1257a959c97d0c"],
+  "t04-hook-indrawi": ["66dbcb984e12f2ad", "c97ad8a822e81e42", "fee794df6c5bba7e", "f8ca6d2a7a9dc78d"],
+  "t07-checklist-berjalan": ["153f4f05d5290914", "2c95c172c992736d", "802906857346f818", "c8ca64d35c9f8d83"],
+  "t09-bahan-aktif": ["f7b8d72e75bdb6ac", "0c89d79923fe6c9c", "0ff1d991acffd261", "9f1d03aee94a2b08"],
+  "t10-bukti-di-lengan": ["cb8455f1c8977c93", "1201f68e4cf37a81", "aabc8a9738e2deaa", "08e4cb36d834351d"],
+  "t12-vox-pop": ["2b26db49870ce97f", "773729dc5473f4ff", "68382594e9b4ad92", "d85df3510a64ce24"],
+  "kenalin-bisnis": ["0c105458b0a6d441", "36c5369cbd74f00b", "820a2fae6ae7c958", "b6f47081e3d38a89"],
+  "promo-terbatas": ["c1c437fac0dc26f9", "a5a272ba0ca1f770", "3900ca5368ea6945", "e652cee1829b0084"],
+  "tvc-the-drop": ["c3aef3e716baae43", "8609eacc96558a7f", "ca68bed87976479c", "eb8b38ee0097b061"],
+  "tvc-tersangka": ["4524bd2c7fed0c14", "6d0e08dbfcb8e7b3", "3841466ada75069b", "5b3df2443a0f2d9d"],
+  "tvc-seharian": ["859aaf1eb141f049", "16df12a1db6028a2", "7640aacca7b4ab50", "f027e138aec292b8"],
+  "tvc-kain-lari": ["0b2e4feff92fd4f4", "983c62d0fe1ee1aa", "51e0f31ebe4e08d8", "581f28fbdcfd4533"],
+  "tvc-jam-tiga": ["498f7a640a1c84e6", "ffdac0e2addebd63", "8e39b08fbf71c728", "d68f3507d9b34c2e"],
+};
+
+test("snapshot seluruh copy authored mengunci 22 template x 4 varian tanpa pemotongan token", () => {
+  assert.deepEqual([...COMPACTED_TEMPLATE_IDS].sort(), Object.keys(AUTHORED_COPY_SNAPSHOT).sort());
+  const actual = Object.fromEntries(audit.templates
+    .filter((template) => COMPACTED_TEMPLATE_IDS.has(template.templateId))
+    .map((template) => [template.templateId, template.variants.map((variant) => createHash("sha256")
+      .update(variant.segments.map((segment) => `${segment.role}:${segment.text}`).join("|"))
+      .digest("hex").slice(0, 16))]));
+  assert.deepEqual(actual, AUTHORED_COPY_SNAPSHOT);
+});
+
+test("copy authored selalu berupa kalimat utuh dan delivery tag tidak bocor ke spoken text", () => {
+  for (const template of audit.templates.filter((item) => COMPACTED_TEMPLATE_IDS.has(item.templateId))) {
+    for (const variant of template.variants) for (const segment of variant.segments) {
+      if (template.group === "ads" && segment.role === "hook") {
+        assert.equal(segment.text, "", `${template.templateId}#${variant.variantIndex}: SA3 hook harus senyap`);
+        continue;
+      }
+      assert.deepEqual(danglingFragmentReasons(segment.text), [], `${template.templateId}#${variant.variantIndex}: ${segment.text}`);
+      assert.doesNotMatch(segment.text, /\[[^\]]+\]/, `${template.templateId}#${variant.variantIndex}: delivery tag bocor`);
+      if (segment.role !== "cta") {
+        assert.match(segment.text, /[.!?]$/, `${template.templateId}#${variant.variantIndex}: kalimat tidak selesai`);
+      }
+    }
+  }
+});
 
 test("whitelist delivery Gemini terkunci ke tag yang disepakati", async () => {
   assert.deepEqual([...DELIVERY_TAGS], [
@@ -77,7 +148,28 @@ test("guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen meng
   assert.ok(riskyEvidenceClaims("t05-before-after", "Setelah dipakai, hasil akhirnya berubah").length > 0);
   assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Hari ketujuh menunjukkan hasil setelah rutinitas").length > 0);
   assert.ok(riskyEvidenceClaims("t10-bukti-di-lengan", "Dua lengan menunjukkan hasil yang beda").length > 0);
-  assert.deepEqual(riskyEvidenceClaims("t05-before-after", "Lihat dua sisi dan nilai atributnya"), []);
+  assert.ok(riskyEvidenceClaims("t05-before-after", "Lihat dua sisi dan nilai atributnya").length > 0);
+  assert.ok(riskyEvidenceClaims("before-after", "Taruh dua tampilan berdampingan").length > 0);
+  assert.ok(riskyEvidenceClaims("t10-bukti-di-lengan", "Gunakan sisi pembanding lalu bandingkan").length > 0);
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Eh, kalau kondisi awalnya nggak disimpan, catatan lanjutannya nggak berarti").length > 0);
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Bandingkan teksturnya hanya dengan kondisi pengamatan yang tercatat loh").length > 0);
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Rencana awal dan akhir cukup memeriksa teksturnya pada Serum Uji Katalog ya").length > 0);
+  for (const templateId of ["before-after", "t05-before-after", "t08-day-1-vs-day-7", "t10-bukti-di-lengan"]) {
+    assert.ok(riskyEvidenceClaims(templateId, "Sesudah pemakaian, hasilnya berubah").length > 0, templateId);
+    assert.ok(riskyEvidenceClaims(templateId, "Hasil produk berubah jelas").length > 0, templateId);
+    assert.ok(riskyEvidenceClaims(templateId, "Kedua kondisi dibandingkan untuk melihat peningkatan").length > 0, templateId);
+  }
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Minggu pertama dan minggu kedua terlihat berbeda").length > 0);
+  assert.ok(riskyEvidenceClaims("t08-day-1-vs-day-7", "Kondisinya membaik sepekan kemudian").length > 0);
+  const safeControls: Record<string, string> = {
+    "before-after": "Lihat satu tampilan dan catat atributnya",
+    "t05-before-after": "Periksa produk pada cahaya netral",
+    "t08-day-1-vs-day-7": "Amati label produk dalam posisi tetap",
+    "t10-bukti-di-lengan": "Catat atribut yang terlihat pada satu area",
+  };
+  for (const [templateId, copy] of Object.entries(safeControls)) {
+    assert.deepEqual(riskyEvidenceClaims(templateId, copy), [], templateId);
+  }
   assert.ok(proofPriceSkeleton("Teksturnya terlihat, harganya 189 ribu")?.includes("placeholder_bukti"));
   assert.deepEqual(bannedHookBoilerplateStarter("[fast] Di harga 189 ribu, lihat ini"), ["di harga"]);
   assert.deepEqual(normalizedHookPrefixes("[fast] Di harga 189 ribu, lihat ini").slice(0, 2), [
@@ -99,6 +191,14 @@ test("guard bahasa mengenali jargon produksi, klaim tanpa data, dan fragmen meng
     "Jika manfaat tidak tertulis, jangan disebut",
   ]) {
     assert.ok(spokenCreativeAnalysis(phrase).length > 0, `meta-policy lolos: ${phrase}`);
+  }
+  for (const phrase of [
+    "Dibuat setetes demi setetes",
+    "Terbukti di ruang sidang",
+    "Ketahuan bagus",
+    "Bertahan sampai hari selesai",
+  ]) {
+    assert.ok(unsupportedFactualClaims(phrase).length > 0, `klaim TVC lolos: ${phrase}`);
   }
 });
 
@@ -325,74 +425,547 @@ test("count=4 tidak mengulang hook atau naskah pada template mana pun", async ()
   );
 });
 
-test("katalog template: hanya TIGA jenis utang yang diketahui, tidak ada yang lain", async () => {
-  // DIPERTAJAM, bukan dilonggarkan (18 Agu). Sampai hari ini invariannya
-  // "semua 132 varian lolos". Dua gate baru membatalkan sebagian:
-  //
-  //   L-05  batas Brian 1,5 kata/detik (22 kata untuk 15 dtk). Template
-  //         dikalibrasi ke jendela lama 25-30 kata.
-  //   L-19  hook wajib memakai perangkat retoris yang dikenali.
-  //
-  //   A-01/A-02  genre Ads. SELURUH copy template Ads adalah copy AFILIASI:
-  //         penutupnya menyuruh "cek keranjang kuning" untuk iklan jasa/app
-  //         yang tidak punya keranjang sama sekali. Sebelum 18 Agu ini tidak
-  //         terlihat karena naskah Ads dinilai dengan aturan afiliasi — jadi
-  //         copy yang salah genre justru yang lolos, dan CTA Ads yang BENAR
-  //         ("Detailnya ada di bawah ya") yang ditolak.
-  //
-  // Ketiganya UTANG COPY yang disengaja dan tercatat. Yang dijaga tes ini:
-  // tidak ada JENIS kegagalan lain yang menyusup di baliknya. Kalau suatu hari
-  // ada varian gagal karena L-03, L-16, atau apa pun di luar tiga itu, tes ini
-  // merah — dan itu memang gunanya.
-  //
-  // Jalur LLM sudah menulis CTA Ads yang benar (llm.ts blokTugas). Yang merah
-  // hanya template cadangan — dan naskah cadangan yang gagal gate memang tidak
-  // boleh dirender.
-  //
-  // SA1/SA2/SA4/SA6 ditambahkan 19 Agu (slice 2, Story OS Ads) — dan ini utang
-  // COPY yang sama, bukan jenis baru yang menyusup: seluruh template Ads
-  // ditulis sebagai HOOK-BODY-CTA afiliasi, jadi tidak satu pun punya beat
-  // BUTTON/SPIKE/FRICTION atau jembatan produk. Template Ads yang gagal
-  // memang TIDAK BOLEH dirender (script_source degraded), dan jalur LLM sudah
-  // diberi instruksi Story OS penuh. Yang menghapus utang ini adalah penulisan
-  // ulang copy template Ads ke bentuk Story OS — pekerjaan copy, milik Brian.
-  const UTANG_DIKENAL = new Set([
-    "L-05", "L-19", "A-01", "A-02", "S-04", "S-09",
-    "SA1", "SA2", "SA4", "SA6", "SA8",
-  ]);
-  const lain = summary.validationFailureRefs
-    .map((ref) => ({ ref, aturan: ref.errors.map((e) => e.rule).filter((r) => !UTANG_DIKENAL.has(r)) }))
-    .filter((x) => x.aturan.length > 0);
-  assert.deepEqual(
-    lain.map((x) => `${x.ref.templateId}#${x.ref.variantIndex}: ${x.aturan.join(",")}`),
-    [],
-    "varian gagal karena sebab DI LUAR dua utang yang diketahui"
-  );
+test("132/132 varian katalog lolos validator tanpa daftar utang", async () => {
+  assert.equal(summary.validationFailureRefs.length, 0,
+    summary.validationFailureRefs.map((ref) => `${ref.templateId}#${ref.variantIndex}: ${ref.errors.map((e) => e.rule).join(",")}`).join("; "));
+  assert.equal(summary.targets.everyVariantPassesValidation, true);
+  assert.deepEqual([...KATALOG_BUTUH_COPY], []);
 });
 
-test("utang template tercatat angkanya per jenis, bukan diam-diam", async () => {
-  // Angkanya ditulis supaya perbaikan copy terlihat maju: begitu template
-  // ditulis ulang, angka ini turun dan tesnya memaksa diperbarui.
-  const hitung = (aturan: string) =>
-    summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule === aturan)).length;
-  const panjang = hitung("L-05");
-  const perangkat = hitung("L-19");
-  const genreAds = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule.startsWith("A-"))).length;
-  // STANDAR 10/10 baris 9 (kata per shot). TIDAK menambah varian gagal —
-  // 82 dari 116 yang sudah gagal L-05 juga melanggar batas per shot. Angkanya
-  // dicatat supaya perbaikan copy terlihat maju di dua sumbu, bukan satu.
-  const perShot = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule === "S-09")).length;
-  assert.ok(perShot > 0 && perShot <= 116, `varian melanggar batas kata per shot: ${perShot}/132`);
-  assert.ok(panjang > 0 && panjang <= 130, `varian melanggar batas 22 kata: ${panjang}/132`);
-  // Story OS Ads: angkanya dicatat supaya penulisan ulang copy Ads terlihat
-  // maju. Nol berarti seluruh template Ads sudah berbentuk Story OS.
-  const storyOs = summary.validationFailureRefs.filter((r) => r.errors.some((e) => e.rule.startsWith("SA"))).length;
-  assert.ok(storyOs >= 0 && storyOs <= 132, `varian Ads belum berbentuk Story OS: ${storyOs}/132`);
-  assert.ok(perangkat > 0 && perangkat <= 17, `varian tanpa perangkat retoris: ${perangkat}/132`);
-  // 9 template Ads x 4 varian = 36. Semuanya berpenutup afiliasi.
-  assert.ok(genreAds > 0 && genreAds <= 36, `varian Ads dengan CTA salah genre: ${genreAds}/132`);
-  // Kalau keduanya nol, katalognya sudah bersih: hapus tes ini dan kembalikan
-  // invarian "semua varian lolos".
+test("seluruh aturan yang dulu dikecualikan sekarang tepat nol", async () => {
+  for (const rule of [
+    "L-05", "L-19", "A-01", "A-02", "S-04", "S-09",
+    "SA1", "SA2", "SA4", "SA6", "SA8",
+  ]) {
+    const refs = summary.validationFailureRefs.filter((ref) => ref.errors.some((error) => error.rule === rule));
+    assert.deepEqual(refs, [], `${rule} kembali menjadi utang: ${refs.map((ref) => `${ref.templateId}#${ref.variantIndex}`).join(", ")}`);
+  }
+});
+
+test("audit generator memakai konfigurasi produksi dan mengunci snapshot admisi tiap template", () => {
+  for (const template of CAMPAIGN_TEMPLATES) {
+    const audited = audit.templates.find((item) => item.templateId === template.id)!;
+    const expectedContentType = template.kind === "ads" ? "ads" : "affiliate";
+    assert.equal(audited.configuration.contentType, expectedContentType, `${template.id}: contentType audit`);
+    assert.equal(audited.configuration.format, template.format, `${template.id}: format audit`);
+    for (const variant of audited.variants) {
+      assert.deepEqual(variant.admission, {
+        contentType: expectedContentType,
+        format: template.format,
+        templateId: template.id,
+        durationSec: template.durationSec,
+      }, `${template.id}#${variant.variantIndex}: snapshot admisi bukan konfigurasi aktif`);
+    }
+  }
+  assert.ok(audit.templates.some((item) => item.configuration.contentType === "ads" && item.configuration.format === "ads"));
+  assert.ok(audit.templates.some((item) => item.configuration.contentType === "ads" && item.configuration.format === "talking_head"));
+  assert.ok(audit.templates.some((item) => item.configuration.format === "tvc"));
+  assert.deepEqual(audit.summary.admissionConfigurationRefs, []);
+  assert.equal(audit.summary.targets.everyAdmissionMatchesConfiguration, true);
+});
+
+test("audit admission berubah merah saat snapshot menyimpang dari konfigurasi aktif", () => {
+  const mutated = structuredClone(audit.templates);
+  mutated[0]!.variants[0]!.admission.contentType = mutated[0]!.configuration.contentType === "ads" ? "affiliate" : "ads";
+  mutated[0]!.variants[1]!.admission.format = "format-salah";
+  mutated[0]!.variants[2]!.admission.templateId = "template-salah";
+  mutated[0]!.variants[3]!.admission.durationSec = Number(mutated[0]!.variants[3]!.admission.durationSec) + 1;
+  const refs = admissionConfigurationFindings(mutated);
+  assert.deepEqual(refs.map((ref) => ref.mismatches), [["contentType"], ["format"], ["templateId"], ["durationSec"]]);
+});
+
+test("harga dan provenance harga hanya muncul di Story Ads price-led; body non-price beragam", () => {
+  const ads = audit.templates.filter((item) => item.group === "ads");
+  const nonPriceBodies = new Set<string>();
+  for (const template of ads) for (const variant of template.variants) {
+    const sources = variant.segments.flatMap((segment) => segment.bridgeSource ? [segment.bridgeSource] : []).sort();
+    if (template.templateId === "promo-terbatas") {
+      assert.ok(variant.segments.some((segment) => /\b(?:ribu|juta)\b/i.test(segment.text)));
+      assert.deepEqual(sources, ["spoken_approved_price", "spoken_product_name"]);
+      continue;
+    }
+    assert.ok(variant.segments.every((segment) => !/\b(?:harga|banderol|nominal|tercantum|nilai)\b/i.test(segment.text)), `${template.templateId}#${variant.variantIndex}`);
+    assert.deepEqual(sources, ["spoken_product_category", "spoken_product_name"]);
+    nonPriceBodies.add(variant.segments.filter((segment) => segment.role !== "hook" && segment.role !== "cta").map((segment) => segment.normalized).join("|"));
+  }
+  assert.equal(nonPriceBodies.size, 8 * 4, "body non-price masih memakai skeleton lintas template");
+});
+
+test("seluruh copy Ads membawa beat utuh, ringkas, dan SPIKE kanonik sampai hasil generator", async () => {
+  const adsTemplates = CAMPAIGN_TEMPLATES.filter((item) => item.group === "ads");
+  assert.equal(adsTemplates.length, 9);
+  for (const template of adsTemplates) {
+    const variants = await generateScripts({
+      product: auditProductForTemplate(template), register: "bunda", tanpaLlm: true,
+      contentType: "ads", qualityTier: template.tier as never,
+      durationSec: template.durationSec, templateId: template.id, format: template.format,
+      count: 4, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+    });
+    for (const variant of variants) {
+      assert.deepEqual(variant.segments.map((segment) => segment.label), ["HOOK", "FRICTION", "FRICTION", "SPIKE", "BUTTON"]);
+      assert.equal(variant.segments.filter((segment) => segment.label === "HOOK").length, 1);
+      assert.equal(variant.segments[0].text, "", `${template.id}: SA3 hook tidak senyap`);
+      assert.equal(variant.segments[0].tts_text, undefined, `${template.id}: SA3 hook masih punya TTS`);
+      assert.equal(variant.segments[0].start, 0, `${template.id}: HOOK tidak mulai di nol`);
+      assert.ok(variant.segments.slice(1).every((segment) => segment.start > 0), `${template.id}: beat setelah HOOK mulai di nol`);
+      assert.ok(variant.segments.every((segment) => segment.product_state === "hidden"), `${template.id}: prop blank menyamar sebagai produk`);
+      const expectedSources = template.id === "promo-terbatas"
+        ? ["spoken_approved_price", "spoken_product_name"]
+        : ["spoken_product_category", "spoken_product_name"];
+      assert.deepEqual(
+        variant.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(),
+        expectedSources, `${template.id}: provenance SA6 tidak lengkap`
+      );
+      assert.equal(variant.segments.filter((segment) => segment.role === "demo").length, 1);
+      for (const segment of variant.segments.filter((item) => item.label === "FRICTION" || item.label === "SPIKE")) {
+        const words = segment.text.replace(/\[[^\]]+\]/g, "").trim().split(/\s+/).filter(Boolean);
+        assert.ok(words.length <= 8, `${template.id} ${segment.label} terlalu panjang: ${segment.text}`);
+        assert.ok(words.length >= 2, `${template.id} ${segment.label} bukan kalimat utuh: ${segment.text}`);
+        assert.match(segment.text, /[.!?]$/, `${template.id} ${segment.label} tidak selesai: ${segment.text}`);
+      }
+      const spike = variant.segments.find((segment) => segment.label === "SPIKE")!;
+      const ratio = spike.start / template.durationSec;
+      assert.ok(ratio >= 0.65 && ratio <= 0.8, `${template.id} SPIKE mulai ${Math.round(ratio * 100)}%`);
+      assert.equal(variant.validation.passed, true, JSON.stringify(variant.validation.errors));
+      for (const segment of variant.segments) {
+        assert.deepEqual(unsupportedAdsOutcomeClaims(segment.text), [], `${template.id}: ${segment.text}`);
+      }
+    }
+  }
+});
+
+test("sembilan Story Ads menolak outcome tanpa bukti dan menerima staging netral", () => {
+  const mutations: Record<string, string> = {
+    "ads-unboxing-pov": "Segelnya terbuka mulus.",
+    "ads-meja-kosong": "Nah, alurnya ringkas dan tugasnya tersusun.",
+    "ads-panas-ekstrem": "Produknya mendinginkan ruangan jadi sejuk.",
+    "ads-tembus-dinding": "Produknya tetap utuh setelah benturan.",
+    "ads-atap-jebol": "Produknya masih bekerja setelah jatuh.",
+    "ads-dobrak-pintu": "Pesannya sampai otomatis.",
+    "ads-waktu-berhenti": "Semua pekerjaan jadi lebih cepat.",
+    "kenalin-bisnis": "Antreannya bergerak dan layanannya merespons.",
+    "promo-terbatas": "Kualitasnya meningkat.",
+  };
+  const safeControls: Record<string, string> = {
+    "ads-unboxing-pov": "Swatch warna polos diangkat dari kardus.",
+    "ads-meja-kosong": "Tiga kartu warna blank diletakkan di meja.",
+    "ads-panas-ekstrem": "Lampu panggung merah menyala.",
+    "ads-tembus-dinding": "Panel karton panggung digeser.",
+    "ads-atap-jebol": "Konfeti putih turun dari panel.",
+    "ads-dobrak-pintu": "Petugas mengangkat kartu warna polos.",
+    "ads-waktu-berhenti": "Aktor menahan pose di panggung.",
+    "kenalin-bisnis": "Kartu lipat polos dibuka di meja.",
+    "promo-terbatas": "Dua kartu warna polos dibuka bersamaan.",
+  };
+  assert.deepEqual(Object.keys(mutations).sort(), CAMPAIGN_TEMPLATES.filter((item) => item.group === "ads").map((item) => item.id).sort());
+  for (const [templateId, copy] of Object.entries(mutations)) {
+    assert.ok(unsupportedAdsOutcomeClaims(copy).length > 0, `${templateId}: ${copy}`);
+    assert.deepEqual(unsupportedAdsOutcomeClaims(safeControls[templateId]), [], `${templateId}: ${safeControls[templateId]}`);
+  }
+});
+
+test("prompt final dan first frame 9 Story Ads x 4 tetap netral tanpa generated factual text", () => {
+  const adsTemplates = audit.templates.filter((template) => template.group === "ads");
+  assert.equal(adsTemplates.length, 9);
+  for (const template of adsTemplates) {
+    assert.equal(template.variants.length, 4);
+    for (const variant of template.variants) {
+      assert.ok(variant.assembledShotDirections.length > 0, `${template.templateId}#${variant.variantIndex} tanpa prompt final`);
+      const firstFrame = variant.assembledShotDirections[0];
+      assert.match(firstFrame, /blank|unprinted|no letters/i, `${template.templateId}#${variant.variantIndex} first frame tidak mengunci prop blank`);
+      assert.deepEqual(unsupportedAdsOutcomeClaims(firstFrame), [], `${template.templateId}#${variant.variantIndex} first frame meminta fakta sintetis`);
+      for (const [shotIndex, prompt] of variant.assembledShotDirections.entries()) {
+        assert.deepEqual(
+          neutralStoryAdsPromptContradictions(prompt, {}, variant.assembledShotNumericScaffolds[shotIndex]),
+          [],
+          `${template.templateId}#${variant.variantIndex} melanggar kontrak subjek visual`
+        );
+        assert.deepEqual(
+          unsupportedAdsOutcomeClaims(prompt),
+          [],
+          `${template.templateId}#${variant.variantIndex} prompt visual: ${prompt.slice(0, 240)}`
+        );
+      }
+    }
+  }
+  assert.equal(summary.targets.adsStayOutcomeNeutral, true);
+  assert.deepEqual(summary.adsUnsupportedOutcomeRefs, []);
+  assert.equal(summary.targets.adsVisualContractClean, true);
+  assert.deepEqual(summary.adsVisualContractRefs, []);
+  assert.deepEqual(adsVisualContractFindings(audit.templates), []);
+  assert.equal(summary.targets.adsProviderReferencesClean, true);
+  assert.deepEqual(summary.adsProviderReferenceRefs, []);
+  assert.deepEqual(adsProviderReferenceFindings(audit.templates), []);
+  for (const template of adsTemplates) for (const variant of template.variants) {
+    assert.deepEqual(variant.providerReferencePaths, []);
+    assert.equal(variant.providerContentImageCount, 0);
+  }
+});
+
+test("aksi 9 Story Ads x 4 hanya memakai subjek prop netral untuk kategori fisik maupun layanan", async () => {
+  const adsTemplates = CAMPAIGN_TEMPLATES.filter((template) => template.group === "ads");
+  for (const template of adsTemplates) for (const category of ["beauty", "jasa"]) {
+    const product = { ...auditProductForTemplate(template), category };
+    const variants = await generateScripts({
+      product, register: "bunda", tanpaLlm: true, contentType: "ads",
+      qualityTier: template.tier as never, durationSec: template.durationSec,
+      templateId: template.id, count: 4,
+      hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+    });
+    for (const [variantIndex, variant] of variants.entries()) {
+      for (const segment of variant.segments) {
+        assert.ok(segment.action, `${template.id}#${variantIndex} tanpa action`);
+        assert.deepEqual(neutralStoryAdsActionContradictions(segment.action!), [], `${template.id}#${variantIndex}: ${segment.action}`);
+      }
+      const spec = planShots({
+        jobId: `contract-${template.id}-${category}-${variantIndex}`,
+        durationSec: template.durationSec, segments: variant.segments,
+        category: getCreatorCategory("hijaber")!, productName: product.name,
+        productCategory: category, productPriceIdr: product.price_idr,
+        productVisualDesc: `bottle labelled ${product.name}`,
+        brandBrief: `show ${product.name} as a readable product name`,
+        imageRefPath: "/tmp/contract-product.jpg", qualityTier: template.tier,
+        format: template.format, ugcTemplate: template.id, shotCountOverride: template.shotCount,
+        extraImageRefPaths: ["/tmp/extra-product-a.jpg", "/tmp/extra-product-b.jpg"],
+      });
+      assert.equal(spec.visualSubjectPolicy, "neutral_story_ads");
+      assert.deepEqual(spec.shots.flatMap((shot) => shot.imageRefPath ? [shot.imageRefPath] : []), []);
+      assert.deepEqual(spec.extraReferenceImagePaths ?? [], []);
+      assert.doesNotThrow(() => assertVisualSpec(spec));
+      for (const shot of spec.shots) {
+        const content = buildTaskContent(spec, shot, "dreamina-seedance-2-0-mini-260615") as Array<{ type?: string }>;
+        assert.equal(content.filter((item) => item.type === "image_url").length, 0, `${template.id}/${category} mengirim image ke provider`);
+        const providerPayload = JSON.stringify(content);
+        assert.doesNotMatch(providerPayload, new RegExp(product.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+        assert.doesNotMatch(providerPayload, /189(?:[ .]?000|\s*ribu)/i, `${template.id}/${category} harga bocor ke provider`);
+      }
+      const prompts = spec.shots.map((shot) => shot.prompt);
+      for (const [shotIndex, prompt] of prompts.entries()) {
+        assert.deepEqual(neutralStoryAdsPromptContradictions(prompt, {}, spec.shots[shotIndex].trustedNumericScaffolds), [], `${template.id}/${category}#${variantIndex}: ${prompt.slice(0, 300)}`);
+        assert.doesNotMatch(prompt, new RegExp(product.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"));
+      }
+    }
+  }
+});
+
+test("mutasi aksi dan prompt produk nyata mematikan kontrak visual Ads", () => {
+  const identity = { productName: "Kemeja Uji", productCategory: "fashion" };
+  const safeScaffold = "continuous 15-second story. Shot 1 of 3. at 0-3 seconds";
+  assert.deepEqual(
+    neutralStoryAdsPromptContradictions(safeScaffold, {}, ["15-second", "Shot 1 of 3", "at 0-3 seconds"]),
+    []
+  );
+  for (const disguised of ["189000-second offer", "Shot 189000 of 1 offer", "at 189000-189001 seconds offer"]) {
+    assert.notDeepEqual(neutralStoryAdsPromptContradictions(disguised, {}, ["15-second", "Shot 1 of 3", "at 0-3 seconds"]), [], disguised);
+  }
+  for (const [prompt, allowed] of [
+    ["continuous 15-second story; injected 15-second", "15-second"],
+    ["Shot 1 of 4; injected Shot 1 of 4", "Shot 1 of 4"],
+    ["at 3-6 seconds; injected at 3-6 seconds", "at 3-6 seconds"],
+  ] as const) {
+    assert.notDeepEqual(neutralStoryAdsPromptContradictions(prompt, {}, [allowed]), [], `collision exact lolos: ${allowed}`);
+  }
+  for (const injectedAvatar of [
+    "woman holding a bottle marked ACME beside a blank card",
+    "creator presenting branded serum packaging next to an unprinted swatch",
+    "presenter beside a readable ACME identifier and a plain colour card",
+  ]) assert.notDeepEqual(neutralStoryAdsPromptContradictions(injectedAvatar), [], injectedAvatar);
+  for (const action of [
+    "talent menahan produk di depan saksi",
+    "talent memutar kemasannya di samping swatch blank",
+    "talent mengangkat botolnya sambil memegang kartu blank",
+    "talent mengangkat Kemeja Uji di samping kartu blank",
+    "talent mengangkat fashion di samping kartu blank",
+    "talent membuka kartu blank 189000 di meja",
+    "talent membuka kartu blank Rp189.000 di meja",
+    "talent membuka kartu blank 50% di meja",
+    "talent membuka kartu blank 7 di meja",
+    "talent membuka kartu blank café di meja",
+    "talent membuka kartu blank cafe\u0301 di meja",
+    "talent membuka kartu blank Ж di meja",
+    "talent membuka kartu blank 189000-second offer di meja",
+    "talent membuka kartu blank Shot 189000 of 1 offer di meja",
+    "talent membuka kartu blank at 189000-189001 seconds offer di meja",
+  ]) assert.notDeepEqual(neutralStoryAdsActionContradictions(action, identity), [], action);
+  for (const safe of [
+    "talent membuka kartu warna polos di meja",
+    "talent menunjuk blok warna pada kartu blank",
+    "swatch blank dipindahkan mendekati saksi",
+    "talent membuka kartu blank di meja.",
+    "kartu blank bergerak — perlahan",
+  ]) assert.deepEqual(neutralStoryAdsActionContradictions(safe, identity), [], safe);
+  assert.notDeepEqual(neutralStoryAdsPromptContradictions("Product hero, label squarely readable to camera."), []);
+  for (const prompt of [
+    "talent memutar kemasannya di samping swatch blank",
+    "talent mengangkat botolnya sambil memegang kartu blank",
+    "talent mengangkat Kemeja Uji di samping kartu blank",
+    "talent mengangkat fashion di samping kartu blank",
+    "talent membuka kartu blank 189000 di meja",
+    "talent membuka kartu blank Rp189.000 di meja",
+    "talent membuka kartu blank 50% di meja",
+    "talent membuka kartu blank 7 di meja",
+    "talent membuka kartu blank café di meja",
+    "talent membuka kartu blank cafe\u0301 di meja",
+    "talent membuka kartu blank Ж di meja",
+    "talent membuka kartu blank 189000-second offer di meja",
+    "talent membuka kartu blank Shot 189000 of 1 offer di meja",
+    "talent membuka kartu blank at 189000-189001 seconds offer di meja",
+  ]) assert.notDeepEqual(neutralStoryAdsPromptContradictions(prompt, identity), [], prompt);
+  const mutation = structuredClone(audit.templates);
+  mutation.find((template) => template.templateId === "ads-atap-jebol")!.variants[0].assembledShotDirections[0] =
+    "Presenter holding product, label readable, true small size about the width of a hand.";
+  assert.ok(adsVisualContractFindings(mutation).length > 0);
+  assert.throws(
+    () => assertVisualSpec({
+      jobId: "mutation", width: 720, height: 1280,
+      shots: [{ index: 0, durationSec: 5, prompt: "blank card", imageRefPath: "/tmp/product.jpg" }],
+      extraReferenceImagePaths: ["/tmp/extra-product.jpg"],
+      negativePrompt: "added text overlay", qualityTier: "high_quality", generateAudio: true,
+      visualSubjectPolicy: "neutral_story_ads",
+    }),
+    /tanpa referensi gambar produk/
+  );
+  const providerMutation = structuredClone(audit.templates);
+  const providerVariant = providerMutation.find((template) => template.templateId === "ads-atap-jebol")!.variants[0];
+  providerVariant.providerReferencePaths = ["/tmp/product.jpg"];
+  providerVariant.providerContentImageCount = 1;
+  assert.ok(adsProviderReferenceFindings(providerMutation).length > 0);
+});
+
+test("mutasi subjek produk tetap terdeteksi setelah action dirakit menjadi prompt final", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-unboxing-pov")!;
+  const product = { id: "final-prompt", name: "Kemeja Uji", price_idr: 189000, category: "fashion" };
+  const [base] = await generateScripts({
+    product, register: "netral", qualityTier: template.tier, durationSec: template.durationSec,
+    contentType: "ads", templateId: template.id, count: 1, tanpaLlm: true,
+  });
+  for (const action of [
+    "talent memutar kemasannya di samping swatch blank",
+    "talent mengangkat botolnya sambil memegang kartu blank",
+    "talent mengangkat Kemeja Uji di samping kartu blank",
+    "talent mengangkat fashion di samping kartu blank",
+    "talent membuka kartu blank 189000 di meja",
+    "talent membuka kartu blank Rp189.000 di meja",
+    "talent membuka kartu blank 50% di meja",
+    "talent membuka kartu blank 7 di meja",
+    "talent membuka kartu blank café di meja",
+    "talent membuka kartu blank cafe\u0301 di meja",
+    "talent membuka kartu blank Ж di meja",
+    "talent membuka kartu blank 189000-second offer di meja",
+    "talent membuka kartu blank Shot 189000 of 1 offer di meja",
+    "talent membuka kartu blank at 189000-189001 seconds offer di meja",
+  ]) {
+    const segments = structuredClone(base.segments);
+    segments[1].action = action;
+    assert.throws(() => planShots({
+        jobId: "mutated-final-prompt", durationSec: template.durationSec, segments,
+        category: getCreatorCategory("hijaber")!, productName: product.name,
+        productCategory: product.category, productPriceIdr: product.price_idr, imageRefPath: "/tmp/product.jpg",
+        qualityTier: template.tier, format: template.format, ugcTemplate: template.id,
+        shotCountOverride: template.shotCount,
+      }),
+      /Kontrak (?:visual|prompt final) neutral Story Ads dilanggar/,
+      `prompt final meloloskan: ${action}`
+    );
+  }
+});
+
+test("mutasi outcome visual mematikan target audit secara end-to-end", async () => {
+  const mutations: Array<[string, string, string]> = [
+    ["ads-tembus-dinding", "durability", "the product remains undamaged beside a broken wall"],
+    ["ads-atap-jebol", "destruction", "the ceiling gives way with debris and dust bursting forward"],
+    ["ads-meja-kosong", "automatic-work", "a dashboard shows work finishing by itself and a progress bar completing"],
+    ["ads-panas-ekstrem", "relief", "the product activates and creates the first moment of relief"],
+    ["ads-waktu-berhenti", "efficacy", "the product is the only thing still moving in the scene"],
+    ["kenalin-bisnis", "service-result", "a dashboard shows the queue moving and a service result"],
+    ["promo-terbatas", "scarcity", "a deadline and limited stock countdown fill the screen"],
+    ["ads-dobrak-pintu", "reviewer-durability-exact", "produk ini tahan benturan"],
+    ["ads-unboxing-pov", "generated-readable-fact", "a card shows a readable product name and price"],
+  ];
+  for (const [templateId, outcomeClass, mutation] of mutations) {
+    const opening = UGC_TEMPLATE_ROLES[templateId].opening!;
+    const original = opening.role;
+    try {
+      opening.role = mutation;
+      const mutatedAudit = await generateCatalogScriptAudit();
+      assert.equal(mutatedAudit.summary.targets.adsStayOutcomeNeutral, false, `${templateId}:${outcomeClass}`);
+      assert.ok(
+        mutatedAudit.summary.adsUnsupportedOutcomeRefs.some((ref) =>
+          ref.templateId === templateId && ref.role.startsWith("shot_prompt_")
+        ),
+        `${templateId}:${outcomeClass} tidak tertangkap pada prompt final`
+      );
+    } finally {
+      opening.role = original;
+    }
+  }
+});
+
+test("shared evaluator menangkap exact phrase dan paraphrase pada setiap layer visual", () => {
+  const mutations = [
+    "produk ini tahan benturan",
+    "the service completes every job automatically",
+    "the package is drop-proof and remains intact",
+    "this product delivers visible results",
+    "pekerjaan selesai sendiri tanpa tangan",
+    "the product cools the room and relieves discomfort",
+    "the offer ends tonight and only two units remain",
+    "everything freezes while only the product moves",
+    "the booking is confirmed and the queue is cleared",
+    "the dashboard workflow becomes faster and the progress bar completes",
+    "a card shows a readable product name and price",
+    "harga dan nama produk tercetak pada kartu",
+    "nama layanan ditulis di depan saksi",
+    "harga pada label disorot ke kamera",
+  ];
+  for (const phrase of mutations) {
+    assert.ok(unsupportedAdsOutcomeClaims(phrase).length > 0, `detector tidak memahami: ${phrase}`);
+
+    const actionMutation = structuredClone(audit.templates);
+    actionMutation.find((template) => template.templateId === "ads-meja-kosong")!.variants[0].segments[0].action = phrase;
+    assert.ok(adsUnsupportedOutcomeFindings(actionMutation).some((ref) => ref.role.endsWith(":action")), `action: ${phrase}`);
+
+    const visualMutation = structuredClone(audit.templates);
+    visualMutation.find((template) => template.templateId === "ads-tembus-dinding")!.variants[0].segments[0].visualDirection = phrase;
+    assert.ok(adsUnsupportedOutcomeFindings(visualMutation).some((ref) => ref.role.endsWith(":visual_direction")), `visual_direction: ${phrase}`);
+
+    const promptMutation = structuredClone(audit.templates);
+    promptMutation.find((template) => template.templateId === "ads-atap-jebol")!.variants[0].assembledShotDirections[0] = phrase;
+    assert.ok(adsUnsupportedOutcomeFindings(promptMutation).some((ref) => ref.role === "shot_prompt_1"), `assembled prompt: ${phrase}`);
+
+    const opening = UGC_TEMPLATE_ROLES["ads-dobrak-pintu"].opening!;
+    const originalRole = opening.role;
+    const originalCamera = opening.camera;
+    try {
+      opening.role = phrase;
+      assert.ok(adsUnsupportedOutcomeFindings(audit.templates).some((ref) => ref.role === "ugc_role_opening"), `role: ${phrase}`);
+      opening.role = originalRole;
+      opening.camera = phrase;
+      assert.ok(adsUnsupportedOutcomeFindings(audit.templates).some((ref) => ref.role === "ugc_role_opening"), `camera: ${phrase}`);
+    } finally {
+      opening.role = originalRole;
+      opening.camera = originalCamera;
+    }
+  }
+});
+
+test("role staging kesembilan Ads adalah safe controls", () => {
+  for (const template of CAMPAIGN_TEMPLATES.filter((item) => item.group === "ads")) {
+    const roles = UGC_TEMPLATE_ROLES[template.id];
+    assert.ok(roles, `${template.id} tanpa role table`);
+    const directions = [roles.opening, ...roles.middle, roles.closing].filter(Boolean);
+    for (const direction of directions) {
+      assert.deepEqual(unsupportedAdsOutcomeClaims(`${direction!.role} ${direction!.camera}`), [], `${template.id}: ${direction!.role}`);
+    }
+  }
+});
+
+test("katalog 9 Ads konsisten dengan role render netral dan menahan preview legacy", () => {
+  const concepts: Record<string, { name: RegExp; metadata: RegExp; role: RegExp }> = {
+    "ads-unboxing-pov": { name: /POV Kardus Panggung/, metadata: /kardus|swatch warna polos/i, role: /inside a lightweight cardboard prop box|unprinted colour swatch/i },
+    "ads-meja-kosong": { name: /Tiga Kartu di Meja/, metadata: /tiga kartu warna|tanpa hasil layanan/i, role: /three unprinted colour cards/i },
+    "ads-panas-ekstrem": { name: /Panggung Lampu Merah/, metadata: /lampu merah|suasana, bukan hasil/i, role: /staged red lamp|theatrical haze/i },
+    "ads-tembus-dinding": { name: /Panel Karton Bergeser/, metadata: /panel karton|staging teatrikal/i, role: /cardboard wall panel|foam pieces/i },
+    "ads-atap-jebol": { name: /Konfeti dari Panel/, metadata: /panel kertas|konfeti/i, role: /paper ceiling panel|white confetti/i },
+    "ads-dobrak-pintu": { name: /Pintu Panggung Terbuka/, metadata: /panel pintu ringan|gerak properti ringan/i, role: /freestanding stage-door panel/i },
+    "ads-waktu-berhenti": { name: /Tableau Jam Properti/, metadata: /menahan pose|pose yang disengaja/i, role: /hold still poses|prop clock/i },
+    "kenalin-bisnis": { name: /Kartu Lipat di Meja/, metadata: /kartu lipat|fakta lewat audio/i, role: /folded blank colour card/i },
+    "promo-terbatas": { name: /Dua Kartu Warna/, metadata: /dua kartu warna|harga tidak digambar AI/i, role: /two contrasting plain colour cards/i },
+  };
+  const legacy = /alat.{0,20}lenyap|hilangnya pekerjaan|keluhan.{0,35}(?:selesai|terselesaikan)|cuma produk.{0,25}(?:bergerak|jalan)|deadline|berbatas waktu|atap runtuh|mendobrak|menembus ruangan/i;
+  for (const template of CAMPAIGN_TEMPLATES.filter((item) => item.group === "ads")) {
+    const expected = concepts[template.id];
+    assert.ok(expected, `${template.id}: mapping konsep katalog belum ada`);
+    const metadata = `${template.when} ${template.caution?.badge ?? ""} ${template.caution?.note ?? ""}`;
+    const roles = UGC_TEMPLATE_ROLES[template.id];
+    const roleText = [roles.opening, ...roles.middle, roles.closing].filter(Boolean).map((item) => `${item!.role} ${item!.camera}`).join(" ");
+    assert.match(template.name, expected.name, `${template.id}: nama katalog melenceng`);
+    assert.match(metadata, expected.metadata, `${template.id}: deskripsi/caution melenceng`);
+    assert.match(roleText, expected.role, `${template.id}: role render melenceng`);
+    assert.doesNotMatch(`${template.name} ${metadata}`, legacy, `${template.id}: metadata legacy masih menjanjikan hasil lama`);
+    assert.equal(template.preview, null, `${template.id}: preview legacy masih ditampilkan untuk konsep baru`);
+  }
+});
+
+test("Ads kategori layanan tanpa bukti fitur memakai aksi kartu yang netral", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-meja-kosong")!;
+  for (const category of ["app", "jasa", "toko"]) {
+    const variants = await generateScripts({
+      product: { ...auditProductForTemplate(template), category }, register: "bunda", tanpaLlm: true,
+      contentType: "ads", qualityTier: template.tier as never,
+      durationSec: template.durationSec, templateId: template.id,
+      count: 4, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+    });
+    for (const variant of variants) {
+      const actions = variant.segments.map((segment) => segment.action ?? "").join(" ");
+      assert.match(actions, /kartu|catatan|amplop/);
+      assert.doesNotMatch(actions, /dashboard|status|jadwal|antrean|otomatis|notifikasi|balasan|slot|diproses/);
+      assert.doesNotMatch(actions, /pegang produk|putar produk|produk berpindah|buka sisi produk/);
+      assert.equal(variant.validation.passed, true, JSON.stringify(variant.validation.errors));
+    }
+  }
+});
+
+test("T05, T08, T10, dan before-after seluruhnya tinggal inspeksi satu keadaan", () => {
+  for (const templateId of ["before-after", "t05-before-after", "t08-day-1-vs-day-7", "t10-bukti-di-lengan"]) {
+    const template = audit.templates.find((item) => item.templateId === templateId)!;
+    assert.equal(template.variants.length, 4);
+    for (const variant of template.variants) {
+      for (const segment of variant.segments) {
+        assert.deepEqual(riskyEvidenceClaims(templateId, segment.text), [], `${templateId}#${variant.variantIndex}: ${segment.text}`);
+      }
+    }
+  }
+  assert.deepEqual(summary.semanticRiskRefs, [], "audit lintas-field masih menemukan bukti komparatif");
+});
+
+test("audit risiko memeriksa text, TTS, action, dan visual direction hasil generator", () => {
+  const template = structuredClone(audit.templates.find((item) => item.templateId === "before-after")!);
+  const segment = template.variants[0].segments[1];
+  for (const field of ["text", "ttsText", "action", "visualDirection"] as const) {
+    const mutated = structuredClone(template);
+    const target = mutated.variants[0].segments[1];
+    target[field] = "Taruh dua tampilan berdampingan untuk melihat perubahan hasil.";
+    const findings = semanticRiskFindings([mutated]);
+    assert.ok(findings.some((finding) => finding.field === field), `${field} tidak dipindai audit risiko`);
+  }
+});
+
+test("empat varian Kartu Tanya Produk bebas narasumber dan testimoni sintetis", () => {
+  const template = audit.templates.find((item) => item.templateId === "t12-vox-pop")!;
+  assert.equal(template.variants.length, 4);
+  for (const variant of template.variants) {
+    const copy = variant.segments.map((segment) => segment.text).join(" ");
+    assert.doesNotMatch(copy, /narasumber|testimoni|wawancara|pendapat|rekomendasi|tanya(?:kan)? (?:satu )?orang|kata (?:dia|mereka)/i);
+  }
+});
+
+test("seluruh penutup TVC bebas klaim proses, kualitas, dan ketahanan terlarang", () => {
+  for (const template of audit.templates.filter((item) => item.group === "tvc")) {
+    for (const variant of template.variants) {
+      const cta = variant.segments.find((segment) => segment.role === "cta")!;
+      assert.deepEqual(unsupportedFactualClaims(cta.text), [], `${template.templateId}#${variant.variantIndex}: ${cta.text}`);
+      assert.doesNotMatch(cta.text, /dibuat setetes|terbukti|ketahuan bagus|bertahan|diuji|masih bekerja|dinilai sesudah/i);
+    }
+  }
+});
+
+test("mutasi beat Ads yang menghapus SPIKE dan BUTTON kembali ditolak", async () => {
+  const template = CAMPAIGN_TEMPLATES.find((item) => item.id === "ads-unboxing-pov")!;
+  const [variant] = await generateScripts({
+    product: auditProductForTemplate(template), register: "bunda", tanpaLlm: true,
+    contentType: "ads", qualityTier: template.tier as never,
+    durationSec: template.durationSec, templateId: template.id,
+    count: 1, hookFamilies: [template.hookFamily as never], lockHookFamily: true,
+  });
+  const mutated = variant.segments.map((segment) => ({ ...segment }));
+  const spike = mutated.find((segment) => segment.label === "SPIKE")!;
+  spike.label = "FRICTION";
+  mutated[mutated.length - 1].text = "Beli sekarang ya";
+  const rules = periksaStoryOsAds({ segments: mutated as never }, { contentType: "ads", durationSec: template.durationSec })
+    .map((finding) => finding.gerbang);
+  assert.ok(rules.includes("SA1"), `BUTTON rusak tidak ditangkap: ${rules.join(",")}`);
+  assert.ok(rules.includes("SA2"), `SPIKE hilang tidak ditangkap: ${rules.join(",")}`);
 });
 
 

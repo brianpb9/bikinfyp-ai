@@ -1,0 +1,9 @@
+{
+  "job": "job-da6hbdon74is73f4hl5g",
+  "result": "FAIL_BEFORE_FIXTURE",
+  "error": "column org_id does not exist",
+  "cause": "residue probe assumed payments.org_id although the managed schema identifies payments only by user_id",
+  "effects_before_failure": { "fixture_rows_created": 0, "media_objects_created": 0, "public_endpoints_called": 0 },
+  "cleanup": { "media": true, "database": true },
+  "remediation": "payments residue probe now uses the authoritative payments.user_id column"
+}

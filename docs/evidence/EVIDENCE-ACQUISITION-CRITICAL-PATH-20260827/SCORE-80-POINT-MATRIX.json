@@ -1,0 +1,42 @@
+{
+  "schema": "score-80-point-matrix/v2",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "scope": "SCORE_80_ONLY",
+  "current_raw": 77,
+  "target_raw": 104,
+  "required_raw_delta": 27,
+  "allocation_status": "CHANGES_REQUESTED_NO_ACCEPTED_CANONICAL_COMBINATION",
+  "accepted_token_count": 0,
+  "rules": {
+    "token_value_raw_points": 1,
+    "partial_tokens_allowed": false,
+    "strictly_cumulative_within_row": true,
+    "max_score_per_row": 10,
+    "weight_redistribution_allowed": false,
+    "exact_sha_evidence_and_authority_receipt_required": true,
+    "arithmetic_alone_does_not_close_noncompensable_80_slots": true,
+    "unmapped_points_may_not_be_invented": true
+  },
+  "rows": [
+    {"row":"Money safety","current":9,"accepted_target_80":null,"tokens":[],"gap":"No canonical accepted next-rung mapping supplied by the compression authority."},
+    {"row":"Auth intent & failure path","current":7,"accepted_target_80":null,"tokens":[],"gap":"No canonical accepted 8→10 allocation supplied by the compression authority."},
+    {"row":"Mobile UI 375","current":7,"accepted_target_80":null,"tokens":[],"gap":"Managed public-screen evidence is limited and excludes auth/OTP/keyboard; no accepted 8→10 allocation."},
+    {"row":"Hydration/interaction canary CI","current":8,"accepted_target_80":null,"tokens":[],"gap":"No canonical accepted 9→10 allocation supplied by the compression authority."},
+    {"row":"Content engine standard","current":7,"accepted_target_80":null,"tokens":[],"next_canonical_rung":"8 requires closing long-name, reference-intake, and copy debt; C5 does not substitute."},
+    {"row":"Brand fidelity","current":6,"accepted_target_80":null,"tokens":[],"next_canonical_rung":"7 requires trusted brand intake plus full vision-label QC; C5 does not substitute."},
+    {"row":"Anti-slop produksi","current":7,"accepted_target_80":null,"tokens":[],"next_canonical_rung":"8 requires a pixel/render canary; C5 or zero-spend fixtures do not substitute."},
+    {"row":"Prompt/verdict archive","current":8,"accepted_target_80":null,"tokens":[],"next_canonical_rung":"9 requires a production post-0032 real-job E2E binding prompt, model, verdict, artifact, and request."},
+    {"row":"NSFW rejection","current":6,"accepted_target_80":null,"tokens":[],"next_canonical_rung":"7 requires a larger sample, real-job auto-refund, and formal KPI; C5 or zero-spend fixtures do not substitute."},
+    {"row":"Payments (Midtrans sandbox)","current":2,"accepted_target_80":null,"tokens":[],"gap":"Canary prerequisites and separate PAYMENTS_GO_LIVE authority are defined, but no canonical row-rung allocation is accepted."},
+    {"row":"Legal/PDP","current":2,"accepted_target_80":2,"tokens":[],"classification":"100_ONLY_NO_80_CONTRIBUTION"},
+    {"row":"DR/monitoring/incident owner","current":2,"accepted_target_80":2,"tokens":[],"classification":"100_ONLY_NO_80_CONTRIBUTION"},
+    {"row":"Landing/pricing consistency","current":6,"accepted_target_80":null,"tokens":[],"gap":"Compressed economics fields and closed-canary consistency are required, but no canonical row-rung allocation is accepted."}
+  ],
+  "gate_classification": {
+    "80_INHERITED_BY_90": ["A","L","C5","P","G","B","R"],
+    "90_INCREMENTAL": "UNDEFINED_FOUNDER_AUTHORITY_REQUIRED",
+    "100_ONLY_ADDITIONAL": ["M","Q","I","U","K","O"],
+    "EXCLUDED_FROM_80_EVIDENCE": ["PITR","LEGAL_COUNSEL","REPRESENTATIVE_KPI_SAMPLE","STABLE_OPERATIONAL_CYCLE","INCIDENT_DR"],
+    "NOTE": "Mandatory noncompensable gates are not scored tokens. Arithmetic +27 raw is necessary but no accepted canonical row allocation currently reaches 104."
+  }
+}

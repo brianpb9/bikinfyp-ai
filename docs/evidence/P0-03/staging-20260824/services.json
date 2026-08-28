@@ -1,0 +1,16 @@
+[
+  {
+    "autoDeploy": "no",
+    "id": "srv-d9n28ue417fc73ch2b60",
+    "name": "racun-ai-staging-worker",
+    "suspended": "not_suspended",
+    "type": "background_worker"
+  },
+  {
+    "autoDeploy": "no",
+    "id": "srv-d9n28tijnfac73a87lt0",
+    "name": "racun-ai-staging-web",
+    "suspended": "not_suspended",
+    "type": "web_service"
+  }
+]

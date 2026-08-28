@@ -8,7 +8,8 @@
 // platform. Impor URL publik tetap best-effort OG/JSON-LD + input manual;
 // integrasi yang konsisten harus memakai API partner/OAuth toko seller resmi.
 
-import { validateMarketplaceUrl } from "./url-safety";
+import { isControlledStagingImageUrl, isControlledStagingProductUrl, validateMarketplaceUrl } from "./url-safety";
+import { safeRemoteGet } from "./safe-remote-fetch";
 // Tabel kata kunci pindah ke lib/category-guess.ts agar bisa dipakai komponen
 // klien juga (file ini mengimpor getDb, jadi server-only).
 import { guessCategory } from "./category-guess";
@@ -129,26 +130,9 @@ function absolutize(url: string, base: string): string {
 
 /** Ambil HTML halaman produk dengan timeout 8 dtk + UA browser. */
 export async function fetchProductHtml(url: string): Promise<{ ok: boolean; status: number; html?: string; error?: string }> {
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 8000);
-  try {
-    const res = await fetch(url, {
-      signal: controller.signal,
-      redirect: "follow",
-      headers: {
-        "user-agent": UA,
-        accept: "text/html,application/xhtml+xml",
-        "accept-language": "id-ID,id;q=0.9,en;q=0.8",
-      },
-    });
-    const html = await res.text();
-    return { ok: res.ok, status: res.status, html };
-  } catch (err) {
-    const msg = err instanceof Error && err.name === "AbortError" ? "timeout 8 detik" : String(err);
-    return { ok: false, status: 0, error: msg };
-  } finally {
-    clearTimeout(timer);
-  }
+  const result=await safeRemoteGet(url,{kind:"marketplace",timeoutMs:8000,maxBytes:2*1024*1024,headers:{"user-agent":UA,accept:"text/html,application/xhtml+xml","accept-language":"id-ID,id;q=0.9,en;q=0.8"}});
+  if(!result.ok)return{ok:false,status:result.status,error:result.error};
+  return{ok:result.status>=200&&result.status<300,status:result.status,html:result.body.toString("utf8")};
 }
 
 /** Ambil URL gambar dari blok JSON-LD (schema.org Product.image: string | string[]
@@ -297,9 +281,11 @@ export async function extractFromUrl(rawUrl: string): Promise<ExtractResult> {
     ...parseJsonLdImages(html),
     ...parseInlineProductImages(html),
   ].map((u) => absolutize(u, rawUrl));
+  const controlled = isControlledStagingProductUrl(rawUrl);
   const seenHash = new Set<string>();
   const imageUrls: string[] = [];
   for (const u of candidates) {
+    if (controlled && !isControlledStagingImageUrl(u)) continue;
     const hash = /\/([a-f0-9]{16,40})~/.exec(u)?.[1] ?? u;
     if (seenHash.has(hash)) continue;
     seenHash.add(hash);

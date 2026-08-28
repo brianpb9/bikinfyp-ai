@@ -1,0 +1,82 @@
+# Staging web runtime. Production continues to use render.production.yaml's
+# native Node service until a separate Founder-authorized production change.
+FROM node:22-bookworm-slim AS dependencies
+
+WORKDIR /srv/app
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# better-sqlite3 remains a production dependency for the reversible local
+# path, so npm must be able to compile it when no matching prebuild exists.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ pkg-config libsqlite3-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM dependencies AS build
+
+# Explicit copies keep secrets, local bootstrap, bus state, and evidence out of
+# every image layer. These are the inputs Next and its server routes consume.
+COPY app ./app
+COPY lib ./lib
+COPY public ./public
+COPY assets ./assets
+COPY knowledge ./knowledge
+COPY migrations ./migrations
+COPY scripts/migrate-postgres-runtime.mjs ./scripts/migrate-postgres-runtime.mjs
+COPY instrumentation.ts middleware.ts next.config.ts postcss.config.mjs tailwind.config.ts tsconfig.json ./
+
+RUN npm run build \
+  && npm prune --omit=dev
+
+FROM node:22-bookworm-slim AS runtime
+
+WORKDIR /srv/app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    NODE_OPTIONS=--max-old-space-size=512 \
+    FFMPEG_PATH=/usr/bin/ffmpeg \
+    FFPROBE_PATH=/usr/bin/ffprobe
+
+# Classifier runtime contract. The ffmpeg package also supplies ffprobe;
+# tesseract-ocr-eng is the exact language requested by the production probe.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-eng \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --gid 10001 racun \
+  && useradd --uid 10001 --gid racun --create-home --shell /usr/sbin/nologin racun
+
+# Next runtime and pre-deploy migration contract.
+COPY --from=build --chown=racun:racun /srv/app/node_modules ./node_modules
+COPY --from=build --chown=racun:racun /srv/app/.next ./.next
+COPY --from=build --chown=racun:racun /srv/app/public ./public
+COPY --from=build --chown=racun:racun /srv/app/package.json /srv/app/package-lock.json ./
+COPY --from=build --chown=racun:racun /srv/app/scripts/migrate-postgres-runtime.mjs ./scripts/migrate-postgres-runtime.mjs
+COPY --from=build --chown=racun:racun /srv/app/migrations ./migrations
+
+# Runtime filesystem assets loaded relative to process.cwd(). assets/probe is
+# mandatory for /api/health's real classifier smoke, not just binary presence.
+COPY --from=build --chown=racun:racun /srv/app/lib ./lib
+COPY --from=build --chown=racun:racun /srv/app/assets ./assets
+COPY --from=build --chown=racun:racun /srv/app/knowledge ./knowledge
+
+# Make an incomplete image fail during build, before it can reach Render.
+RUN command -v ffmpeg \
+  && command -v ffprobe \
+  && command -v tesseract \
+  && tesseract --list-langs | grep -qx eng \
+  && test -f /srv/app/assets/probe/probe-teks.png \
+  && test -f /srv/app/migrations/postgres/0035_job_product_snapshot.sql \
+  && test -f /srv/app/scripts/migrate-postgres-runtime.mjs \
+  && test -f /srv/app/.next/BUILD_ID \
+  && test -f /srv/app/public/manifest.json
+
+# Next cache, local rollback storage, upload normalization, and job
+# materialization must remain writable after dropping root.
+RUN mkdir -p /srv/app/.next/cache /srv/app/storage/jobs /srv/app/storage/uploads \
+  && chown -R racun:racun /srv/app/.next /srv/app/storage
+
+USER racun
+EXPOSE 3000
+CMD ["npm", "start"]

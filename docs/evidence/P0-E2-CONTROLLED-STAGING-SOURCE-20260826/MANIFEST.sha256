@@ -1,0 +1,5 @@
+c3e372ff7f2e4cee641b4288fc7b40a729eb432df4c9aefef1c2e9778cd08d89  README.md
+11c41e5ef7de647842460d32496a7efb6fc760c67955063f2295eb88bbbe50e5  TRACE-RECEIPT.json
+18ec02fe67fb315e6fb5c2def00da43e976c41a6d476f1fcb8c1345c5d22c5fa  VALIDATION.json
+baba8cdf6726608dbada831e26699340ee8e91d2afdf5581cafe57f416f84f1c  ../../../scripts/managed-retail-e2-controlled-trace-runner.mjs
+b76e25b2027c688b03631e353991258be233e82ffe3d88b563f3f1e641cbf6c2  ../../../public/staging-fixtures/e2-product.svg

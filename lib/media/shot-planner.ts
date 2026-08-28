@@ -25,7 +25,7 @@
 import { config } from "../config";
 import type { VisualSpec, ShotSpec, QualityTier } from "../providers/types";
 import { latarUntukTemplate } from "./latar-template";
-import type { CreatorCategory } from "../personas";
+import { getCreatorCategory, type CreatorCategory } from "../personas";
 import type { SegmentDraft } from "../script-engine/templates";
 import { CATEGORY_NOUN, CATEGORY_PAIN } from "../config/hooks";
 import { hargaTerbilang } from "../script-engine/terbilang";
@@ -36,6 +36,15 @@ import { getRecordingStyle, type StyleFormat } from "./recording-styles";
 import { blokKontrakMode, framingUntukMode, modeDikenal } from "./mode-kamera";
 import { formatById } from "../script-engine/format-katalog";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
+import { bridgeStoryAdsTerbukti, isStructuredStoryAds, temuanBridgeStoryAds, temuanHookSenyapAds, temuanStrukturStoryAds } from "../script-engine/story-os-ads";
+import {
+  isNeutralStoryAdsTemplate,
+  NEUTRAL_PROP_SIZE_LOCK,
+  neutralStoryAdsActionContradictions,
+  neutralStoryAdsPromptContradictions,
+  neutralStoryAdsUntrustedFieldContradictions,
+  neutralStoryAdsUntrustedNumericContradictions,
+} from "../script-engine/ads-visual-contract";
 
 export interface ShotPlanInput {
   jobId: string;
@@ -44,6 +53,7 @@ export interface ShotPlanInput {
   category: CreatorCategory;
   productName: string;
   productCategory: string;
+  productPriceIdr?: number | null;
   /** Deskripsi visual produk dari user (opsional) — memperkuat konsistensi identitas. */
   productVisualDesc?: string | null;
   /** M8 (dashboard brand): arahan kreatif bebas dari brand, disuntik ke tiap shot. */
@@ -93,6 +103,8 @@ export interface ShotPlanInput {
    * (kamera nyaris tidak pindah) menghasilkan struktur shot yang identik.
    * Tabelnya di lib/media/ugc-template-roles.ts. */
   ugcTemplate?: string | null;
+  /** Genre otoritatif dari snapshot admisi; jangan diturunkan dari label beat. */
+  contentType?: "affiliate" | "ads" | null;
   /** Gaya rekam (lib/media/recording-styles.ts) — sumbu "bagaimana direkam",
    *  terpisah dari "apa yang dijual". NULL / "standar" = perilaku lama persis.
    *
@@ -193,6 +205,10 @@ const SINGLE_SUBJECT_LOCK =
   "and appears a single time. That one person has exactly two hands, " +
   "both clearly visible and naturally attached to her own arms, and only those two hands ever touch " +
   "the product. ";
+const NEUTRAL_SINGLE_SUBJECT_LOCK =
+  "EXACTLY ONE person is present in the entire frame from start to finish — she is alone in the shot " +
+  "and appears a single time. That one person has exactly two hands, both clearly visible and naturally " +
+  "attached to her own arms, and only those two hands ever touch the staged blank props. ";
 
 /** Berapa orang yang BOLEH ada di frame untuk konfigurasi ini.
  *
@@ -294,19 +310,31 @@ const TALKING_HEAD_FRAMING =
 // diambil cukup jauh sehingga baris kecil tidak pernah bisa terbaca.
 // Keputusan itu mengubah tampilan, jadi menunggu Brian.
 //
-// Versi sekarang tetap dipertahankan: ia tidak memperbaiki, tapi ia menghapus
-// permintaan yang mustahil dan melarang angka volume karangan.
+// Percobaan 3 (render berbayar 20 Agu, test_output/adu_koreografi): masih
+// mengarang — "jddpgeer", "SOMSONG", "PAL Q3" pada label botol yang diambil
+// dekat. Tiga putaran prompt, tiga kali gagal, di dua model berbeda.
+//
+// KEPUTUSAN Brian 20 Agu: jalan keluar A — produk diambil cukup jauh sehingga
+// TIDAK ADA teks pada label yang pernah ter-resolve jadi huruf, termasuk nama
+// mereknya. Alasannya sederhana: huruf yang tidak pernah dirender tidak bisa
+// salah, sedangkan tiga putaran membuktikan huruf yang dirender selalu salah.
+//
+// Konsekuensi yang TIDAK disembunyikan: di bawah kebijakan ini QC-10 ("label
+// produk terbaca") tidak akan pernah PASS dari klip generasi — ia hanya bisa
+// menangkap salah eja yang terlanjur terbaca. Baris standar 10/10 "label
+// terbaca di >=2 titik" karena itu hanya bisa dipenuhi lewat packshot foto
+// asli (jalan keluar B), dan itu keputusan terpisah yang belum diambil.
 const IDENTITY_INSTRUCTION =
   "the exact same product from the reference image, identical packaging, identical label, " +
   "do not redesign or replace the product, the packaging stays physically intact and correct " +
   "(one cap, one dropper, nothing floating or duplicated). The ENTIRE bottle and its full label " +
   "stay completely inside the frame at all times, with visible margin on every side — never cropped " +
   "or cut off by the frame edges, camera framed wide enough that no part of the bottle ever leaves " +
-  "frame. The large bold brand name on the label stays sharp, steady and perfectly legible the whole " +
-  "time, reproduced with the EXACT same letters and spelling as the reference image (do not alter, " +
-  "add, drop, or misspell any letter). The smaller lines printed below the brand name read as fine " +
-  "printed TEXTURE at this distance — visible as faint grey lines of print, with no individual " +
-  "letters or words resolved anywhere. Never render invented words, invented ingredient names, or " +
+  "frame. The camera stays at a normal arm's-length viewing distance from the product, so " +
+  "ALL printed text on the label — the brand name included — reads only as fine printed " +
+  "TEXTURE: visible as faint lines and blocks of print, with no individual letter, word, or number " +
+  "resolved anywhere in any frame. The label keeps its exact colours, layout and proportions from " +
+  "the reference image. Never render invented words, invented ingredient names, or " +
   "invented volume figures on the label";
 
 // Aksi demo per KATEGORI PRODUK (2026-08-07, dipelajari dari akun UGC tim +
@@ -484,6 +512,10 @@ const DETIK_PERTAMA =
   "The very first frame is ALREADY mid-action — the shot never opens on a held pose or a static " +
   "product. Within the first second something visibly changes: the subject is already moving, " +
   "turning, reaching, or reacting, and the camera is already drifting. No frozen opening beat. ";
+const DETIK_PERTAMA_NETRAL =
+  "The very first frame is ALREADY mid-action — the shot opens on the blank prop already moving within " +
+  "the staged action. Within the first second something visibly changes: the subject is already moving, " +
+  "turning, reaching, or reacting, and the camera is already drifting. No frozen opening beat. ";
 
 const CRAZY_OPENER: Record<"hands_only" | "talking_head", string> = {
   hands_only:
@@ -513,6 +545,15 @@ function kunciUkuranAsli(namaProduk: string): string {
     `Every "${namaProduk}" in frame is at its true small size, about the width of a hand, ` +
     `resting on a surface or held in her hand, and the camera keeps a normal conversational distance from it.`
   );
+}
+
+/**
+ * Padanan kunci ukuran untuk visual netral yang memang tidak boleh membawa
+ * nama, foto, atau identitas produk. Gerbang akhir tetap keras pada skala dan
+ * jarak kamera, tetapi subjeknya adalah properti polos yang aman.
+ */
+function kunciUkuranPropertiNetral(): string {
+  return NEUTRAL_PROP_SIZE_LOCK;
 }
 
 /**
@@ -552,20 +593,91 @@ function kunciBahasa(mode: "presenter" | "voiceover"): { header: string; perShot
  * bawaan membawa kunci keselamatan filter (dada ke atas, satu orang) yang
  * tidak boleh hilang hanya karena penulis menulis "wide".
  */
-function sinematografiPenulis(segs: SegmentDraft[]): { aksi: string; kamera: string; tanpaWajah: boolean } | null {
-  const utama = segs.find((sg) => (sg.action ?? "").trim().length > 12);
+/**
+ * Pengikat kehadiran produk untuk aksi penulis.
+ *
+ * Dari render adu 20 Agu (test_output/adu_koreografi, dibayar): aksi penulis
+ * berbunyi "camera sweeps left to right across the mess, THEN pauses on the
+ * serum bottle". Model menurutinya secara harfiah — botol baru masuk frame di
+ * detik ~2,5 dari klip 5 detik, padahal prompt yang sama juga memuat kunci
+ * "the ENTIRE bottle stays completely inside the frame at all times".
+ *
+ * Jadi dua aturan bertabrakan di satu prompt dan yang menang adalah kalimat
+ * yang berbentuk koreografi, bukan kalimat yang berbentuk batasan. Untuk hook
+ * afiliasi 5 detik, setengah durasi tanpa produk adalah kerugian konversi yang
+ * nyata — bukan selera.
+ *
+ * Perbaikannya menyatakan kehadiran produk sebagai KEADAAN AWAL aksi itu
+ * sendiri, sehingga tidak ada lagi dua aturan yang berlomba. Kategori jasa
+ * dikecualikan: di sana memang tidak ada benda yang boleh muncul.
+ *
+ * TERUKUR DAN BELUM CUKUP (render verifikasi 20 Agu, V1-hook): dengan pengikat
+ * ini terpasang, botol TETAP baru masuk frame di detik ~2 dari 5. Aksi penulis
+ * berbunyi "...THEN pauses on the serum bottle" dan kalimat berbentuk
+ * koreografi itu tetap menang atas prefiks berbentuk batasan.
+ *
+ * Kesimpulan jujur: ini menolong, tapi akar masalahnya di HULU — penulis tidak
+ * seharusnya menulis aksi yang menunda kemunculan produk pada shot pembuka.
+ * Menambal di perakit prompt berarti melawan kalimat penulis dengan kalimat
+ * lain di prompt yang sama, dan putaran ini membuktikan siapa yang menang.
+ * Jangan klaim cacat ini beres sampai ada render yang menunjukkan sebaliknya.
+ */
+const praAksiHadir = (nama: string) =>
+  `"${nama}" is already fully inside the frame from the very first frame and never leaves it; ` +
+  `within that frame, `;
+
+/**
+ * Framing penulis yang mendekat ke label, ditumpulkan.
+ *
+ * Kebijakan jarak (A, 20 Agu) tidak ada gunanya kalau kalimat berikutnya di
+ * prompt yang sama berbunyi "tight macro" — dan penulis memang menulis begitu
+ * pada shot CTA, karena secara sinematik itu benar. Yang salah bukan seleranya,
+ * melainkan bahwa model tidak bisa menulis huruf: begitu label mengisi frame,
+ * hurufnya ter-resolve dan jadi karangan.
+ *
+ * Jadi macro diturunkan ke close biasa HANYA untuk produk berlabel. Framing
+ * penulis yang lain lewat apa adanya.
+ */
+const MACRO = /\b(tight\s+)?macro\b|extreme close|extreme wide|super close/gi;
+function tumpulkanMacro(kamera: string, adaLabel: boolean): string {
+  return adaLabel ? kamera.replace(MACRO, "close, at arm's-length viewing distance") : kamera;
+}
+
+function sinematografiPenulis(
+  segs: SegmentDraft[],
+  adaLabel: boolean,
+  gunakanKomposisiPenulis = true
+): { aksi: string; kamera: string; tanpaWajah: boolean } | null {
+  const beraksi = segs
+    .filter((sg) => (sg.action ?? "").trim().length > 12)
+    .slice()
+    .sort((a, b) => a.start - b.start);
+  const utama = beraksi[0];
   if (!utama) return null;
-  const kamera = [utama.framing, utama.angle, utama.camera]
-    .map((x) => (x ?? "").trim())
-    .filter(Boolean)
-    .join(", ");
+  // Neutral Story Ads hanya mempercayai aksi yang lolos grammar blank-prop.
+  // Framing/angle/camera/expression LLM tidak pernah mencapai prompt; dunia
+  // dan komposisinya selalu berasal dari tabel role netral yang dikurasi.
+  const kamera = gunakanKomposisiPenulis ? tumpulkanMacro(
+    [utama.framing, utama.angle, utama.camera]
+      .map((x) => (x ?? "").trim())
+      .filter(Boolean)
+      .join(", "),
+    adaLabel
+  ) : "";
+  const aksi = beraksi.length === 1
+    ? String(utama.action).trim()
+    : `single-shot timed progression: ${beraksi.map((sg, index) => {
+        const label = sg.label ?? sg.role.toUpperCase();
+        const transisi = index === 0 ? "at" : "then at";
+        return `${transisi} ${sg.start}-${sg.end} seconds [${label}], ${String(sg.action).trim()}`;
+      }).join("; ")}`;
   return {
-    aksi: String(utama.action).trim(),
+    aksi,
     kamera,
     // Penulis menandai sendiri bahwa wajah tidak terlihat di beat ini. Sebelum
     // ini penandanya diabaikan dan kamera memanggil wajah kembali ke frame —
     // persis konfigurasi yang catatan filter kita beri 0 dari 3 kelulusan.
-    tanpaWajah: /not visible|tidak terlihat|off camera/i.test(utama.expression ?? ""),
+    tanpaWajah: gunakanKomposisiPenulis && /not visible|tidak terlihat|off camera/i.test(utama.expression ?? ""),
   };
 }
 
@@ -670,7 +782,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // Seedance maksimal 15 detik. Di atas 15 detik, talking_head memang belum
   // punya jaminan identitas — itu yang harus dikatakan ke pengguna, bukan
   // ditutupi.
-  const wajahTerkunci = format === "talking_head" && !config.seedanceFaceRef;
+  const neutralStoryAds = isNeutralStoryAdsTemplate(input.ugcTemplate);
+  // Story Ads membutuhkan shot pembuka provider yang benar-benar senyap.
+  // Karena itu override modulnya tetap dihormati meski format presenter;
+  // persona netral terkurasi menjaga identitas tanpa referensi pengguna.
+  const wajahTerkunci = format === "talking_head" && !config.seedanceFaceRef && !neutralStoryAds;
   const numShots = wajahTerkunci
     ? Math.max(1, Math.ceil(input.durationSec / 15))
     : requested !== null ? requested : format === "talking_head"
@@ -695,7 +811,6 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // format berpresenter — larangan itu ada semata karena VO-nya dulu diganti.
   const lipSyncPresenter = format === "talking_head" || format === "tvc";
 
-  const segText = (role: string) => stripDeliveryTags(input.segments.find((s) => s.role === role)?.text ?? "");
   const noun = CATEGORY_NOUN[input.productCategory] ?? CATEGORY_NOUN.default;
   const pain = CATEGORY_PAIN[input.productCategory] ?? CATEGORY_PAIN.default;
 
@@ -737,6 +852,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       return terbaik === i;
     });
 
+  const trustedNumericScaffoldsForShot = (i: number, shotLabelOccurrences = 1): string[] => [
+    `${input.durationSec}-second`,
+    ...Array.from({ length: shotLabelOccurrences }, () => `Shot ${i + 1} of ${numShots}`),
+    ...segmenMilikShot(i).map((sg, index) =>
+      `${index === 0 ? "at" : "then at"} ${sg.start}-${sg.end} seconds`
+    ),
+  ];
+
   const dialogueForShot = (i: number): string[] =>
     // TVC dipecah jadi 3-6 modul, jadi tangga "hook / demo / sisanya CTA" di
     // bawah tidak bisa dipakai: shot 3,4,5 semuanya akan kebagian kalimat
@@ -758,8 +881,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // yang jendela waktunya memang beririsan dengannya. Shot tanpa irisan
     // sengaja dibiarkan TANPA dialog — beat visual murni, dan itu justru yang
     // membuat beat sensorik (busa, tuang, tekstur) punya ruang bernapas.
-    numShots === 1
-      ? [segText("hook"), segText("demo"), segText("cta")]
+    neutralStoryAds && i === 0
+      ? []
+      : numShots === 1
+      // Satu klip talking-head tetap memuat SELURUH timeline. Story OS Ads
+      // punya dua beat role="story" (FRICTION kedua + SPIKE); menyusun dialog
+      // dari tiga nama role lama membuang keduanya dari performance prompt
+      // sementara TTS final tetap mengucapkannya.
+      ? input.segments.slice().sort((a, b) => a.start - b.start).map((sg) => stripDeliveryTags(sg.text))
       : segmenMilikShot(i).map((sg) => stripDeliveryTags(sg.text));
 
   // --- TVC (M9, 2026-08-11) ---
@@ -1163,6 +1292,67 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     ), tanpaOrang };
   };
 
+  const curatedNeutralCategory = neutralStoryAds ? getCreatorCategory(input.category.id) : null;
+  if (neutralStoryAds && !curatedNeutralCategory) {
+    throw new Error(`Kontrak neutral Story Ads: persona "${input.category.id}" tidak ada di allowlist terkurasi.`);
+  }
+  const visualCategory = curatedNeutralCategory ?? input.category;
+  if (isStructuredStoryAds({ contentType: input.contentType, templateId: input.ugcTemplate })) {
+    const records = input.segments as Array<SegmentDraft & Record<string, unknown>>;
+    const storyFindings = [
+      ...temuanHookSenyapAds(records),
+      ...temuanStrukturStoryAds(records).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
+      ...temuanBridgeStoryAds(records, {
+        contentType: input.contentType, templateId: input.ugcTemplate,
+        productName: input.productName, productCategory: input.productCategory, productPriceIdr: input.productPriceIdr,
+      }).map((finding) => `${finding.gerbang}: ${finding.pesan}`),
+    ];
+    if (storyFindings.length > 0) {
+      throw new Error(`Kontrak Story Ads dilanggar sebelum prompt provider: ${storyFindings.join(", ")}`);
+    }
+  }
+  if (neutralStoryAds) {
+    for (const segment of input.segments) {
+      if (segment.action) {
+        const contradictions = neutralStoryAdsActionContradictions(segment.action, {
+          productName: input.productName,
+          productCategory: input.productCategory,
+        });
+        if (contradictions.length > 0) {
+          throw new Error(`Kontrak visual neutral Story Ads dilanggar sebelum prompt final: ${contradictions.join(", ")}`);
+        }
+      }
+      for (const [fieldName, field] of Object.entries({
+        role: segment.role,
+        label: segment.label,
+        mode: segment.mode,
+        saksi: segment.saksi,
+      })) {
+        if (!field) continue;
+        const findings = neutralStoryAdsUntrustedNumericContradictions(String(field));
+        if (findings.length > 0) {
+          throw new Error(`Kontrak chunk ${fieldName} neutral Story Ads dilanggar: ${findings.join(", ")}`);
+        }
+      }
+      for (const [fieldName, field] of Object.entries({
+        visual_direction: segment.visual_direction,
+        start_state: segment.start_state,
+        framing: segment.framing,
+        angle: segment.angle,
+        camera: segment.camera,
+        expression: segment.expression,
+      })) {
+        if (!field) continue;
+        const fieldFindings = neutralStoryAdsUntrustedFieldContradictions(field, {
+          productName: input.productName,
+          productCategory: input.productCategory,
+        });
+        if (fieldFindings.length > 0) {
+          throw new Error(`Kontrak field ${fieldName} neutral Story Ads dilanggar: ${fieldFindings.join(", ")}`);
+        }
+      }
+    }
+  }
   const shots: ShotSpec[] = Array.from({ length: numShots }, (_, i) => {
     const isFirst = i === 0;
     // "Closing beat" cuma dipakai kalau shot terakhir BUKAN shot pertama juga
@@ -1199,7 +1389,11 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // "jadikan ini default, bukan pilihan" — tapi kodenya hanya memberlakukannya
     // pada talking_head, sehingga format ads dikirim ke antrean berbayar
     // dengan konfigurasi yang catatan kita sendiri beri 0% kelulusan.
-    const sinema = sinematografiPenulis(segmenMilikShot(i));
+    const sinema = sinematografiPenulis(
+      segmenMilikShot(i),
+      !isServiceLike(input.productCategory),
+      !neutralStoryAds
+    );
     const formatBukaTanpaWajah = format === "talking_head" || format === "ads" || format === "tvc";
     const bukaTanpaWajah =
       // Penanda penulis "expression: not visible" ikut memutuskan, bukan cuma
@@ -1243,10 +1437,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       // Shot pembuka tanpa wajah: subjeknya TANGAN, bukan persona — promptSeed
       // mendeskripsikan wajah, dan menyebutnya di sini memanggil wajah ke frame.
       : bukaTanpaWajah
-      ? input.category.handsPrompt
+      ? visualCategory.handsPrompt
       : format === "talking_head" || format === "tvc" || format === "ads"
-      ? `${input.category.promptSeed}, ${input.category.deliveryPrompt}`
-      : input.category.handsPrompt;
+      ? `${visualCategory.promptSeed}, ${visualCategory.deliveryPrompt}`
+      : visualCategory.handsPrompt;
     // Bentuk produk mengalahkan kategori: kategori tahu JENIS-nya, bentuk tahu
     // apa yang FISIKNYA MUNGKIN. Kategori beauty untuk sabun batang tetap
     // beauty, tapi "menuangkan sedikit produk" tidak pernah bisa benar.
@@ -1317,6 +1511,8 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // gambarnya. Character-lock disebut ulang tiap shot karena itu yang
     // menjaga wajah tetap sama antar generate (pelajaran dari dokumen TVC).
     const ugcRoles = ugcRolesFor(input.ugcTemplate);
+    const noPhysicalProduct = isServiceLike(input.productCategory);
+    const neutralVisual = neutralStoryAds || noPhysicalProduct;
     /** Peran template untuk shot ke-i, sebagai OBJEK. Dipisah dari ugcBeat
      *  yang mengembalikan teks, supaya penanda withholdProduct bisa dibaca
      *  tanpa harus mengurai kalimatnya lagi. */
@@ -1373,32 +1569,44 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       if (!pick) return null;
       return (
         `${i === 0
-          ? `This is the OPENING shot of a continuous ${input.durationSec}-second story about "${input.productName}". `
+          ? neutralVisual
+            ? `This is the OPENING shot of a continuous ${input.durationSec}-second staged story using only neutral blank props. `
+            : `This is the OPENING shot of a continuous ${input.durationSec}-second story about "${input.productName}". `
           : isLastShot(i, numShots)
             ? `This is the FINAL shot, resolving what the earlier shots built up. `
             : `This shot continues directly from the previous one — same place, same person, same look, one step further on. `}` +
         `Shot ${i + 1} of ${numShots}: ${pick.role}. Camera: ${pick.camera}. ` +
         `This is the SAME woman from the earlier shots, seen at a LATER MOMENT — same face, same hair, same outfit. She exists only ONCE inside this frame: the continuity runs across time between shots, never as a side-by-side comparison within a single frame. ` +
-        `${IDENTITY_INSTRUCTION}`
+        `${neutralVisual ? "All generated props remain unprinted and non-factual." : IDENTITY_INSTRUCTION}`
       );
     };
     // Tanpa-produk ditentukan KATEGORI, bukan format: iklan untuk barang fisik
     // tetap menampilkan barangnya. Lihat isServiceLike di lib/config/hooks.ts.
-    const noPhysicalProduct = isServiceLike(input.productCategory);
     const beatTvc = format === "tvc" ? tvcBeat(i) : null;
     // AKSI PENULIS MENANG atas tabel beat (board review 20 Agu). Kalimatnya
     // dirakit dengan kunci identitas produk supaya presisi koreografi tidak
     // menukar presisi identitas — keduanya harus ada, bukan salah satu.
+    const aksiPenulis = sinema
+      ? neutralVisual
+        ? sinema.aksi
+        : `${praAksiHadir(input.productName)}${sinema.aksi}, ${IDENTITY_INSTRUCTION}`
+      : null;
+    const peranTemplate = ugcBeat(i);
     const beat =
-      (sinema ? `${sinema.aksi}, ${IDENTITY_INSTRUCTION}` : null) ??
-      ugcBeat(i) ??
+      (peranTemplate && aksiPenulis
+        // Peran template memegang dunia, komposisi, dan kesinambungan yang
+        // sudah dibuktikan render; aksi terstruktur penulis tetap menang pada
+        // koreografi DI DALAM dunia itu. Membuang salah satunya membuat Ads
+        // kembali generik atau kehilangan jangkarnya.
+        ? `${peranTemplate} Scripted action inside that exact setup: ${aksiPenulis}`
+        : aksiPenulis ?? peranTemplate) ??
       (format === "ads" && noPhysicalProduct
         // Iklan jasa: yang diperagakan adalah MANFAAT, bukan benda. Presenter
         // tidak memegang apa pun — begitu diminta memegang sesuatu, model akan
         // mengarang produk yang tidak pernah ada, dan itu justru menyesatkan
         // calon pembeli jasa.
         ? isFirst
-          ? `A person talking straight to camera about "${input.productName}", relaxed and convincing, hands free and gesturing naturally — holding no product of any kind. The place around them fits the business being described`
+          ? `A person presenting a service concept straight to camera, relaxed and convincing, hands free and gesturing naturally. The place around them fits the business being described`
           : isLastShot(i, numShots)
             ? `The same person wrapping up, looking straight at camera with a warm inviting nod, hands open in a natural gesture — still holding nothing`
             : `The same person continuing, gesturing naturally to make a point, the surroundings quietly reinforcing what the business does — no product in hand at any moment`
@@ -1465,7 +1673,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // Level gila: pembuka pattern-interrupt HANYA di shot pertama; vo_broll
     // (pan foto, tanpa model video) tidak punya jalur ini.
     const crazyOpener =
-      isFirst && (format === "hands_only" || format === "talking_head")
+      !neutralVisual && isFirst && (format === "hands_only" || format === "talking_head")
         ? input.hookLevel === "gila"
           ? CRAZY_OPENER[bukaTanpaWajah ? "hands_only" : format]
           // Level 4 ("agak gila"): produk tetap naik cepat ke tengah frame,
@@ -1514,7 +1722,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const perluSubjekTunggal =
       maksOrangPerFrame({ format, noModel: input.noModel, tvcRoute: input.tvcRoute }) === 1 &&
       !(beatTvc?.tanpaOrang ?? false);
-    const kunciSubjek = perluSubjekTunggal ? SINGLE_SUBJECT_LOCK : "";
+    const kunciSubjek = perluSubjekTunggal
+      ? neutralVisual ? NEUTRAL_SINGLE_SUBJECT_LOCK : SINGLE_SUBJECT_LOCK
+      : "";
 
     // LATAR per template — hanya untuk template yang beat-nya BELUM menentukan
     // tempat. Template dengan tabel peran sendiri sudah menyebut ruangannya,
@@ -1542,7 +1752,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
       input.tvcRoute === "intimate" || (i === 0 && ugcRoles?.opening?.pembukaDiam === true);
     const pakaiPembukaGenerikHandsOnly = format === "hands_only" && !punyaPeranTemplate;
     const detikPertama =
-      i === 0 && !pakaiPembukaGenerikHandsOnly && !kediamanDisengaja ? DETIK_PERTAMA : "";
+      i === 0 && !pakaiPembukaGenerikHandsOnly && !kediamanDisengaja
+        ? neutralVisual ? DETIK_PERTAMA_NETRAL : DETIK_PERTAMA
+        : "";
 
     const latar = !punyaPeranTemplate && input.ugcTemplate
       ? `${latarUntukTemplate(input.ugcTemplate).teks}. `
@@ -1566,14 +1778,25 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     //                  dipamerkan sejak frame pertama, CTA kehilangan bobot.
     //   Expression   — beat yang tidak menyebut ekspresi keluar datar.
     const busur = numShots <= 1 ? "hero" : isFirst ? "idle" : isLastShot(i, numShots) ? "hero" : "partial";
-    const produkAkhir =
-      busur === "idle"
+    const produkAkhir = neutralStoryAds
+      ? busur === "idle"
+        ? `Prop state at the end of this shot: the same plain unprinted colour card or swatch remains in the staged scene without being presented as merchandise.`
+        : busur === "partial"
+          ? `Prop state at the end of this shot: the same blank colour card or swatch has moved within the staged action; its surface remains plain and non-factual.`
+          : `Prop state at the end of this shot: the same blank colour card or swatch settles as the compositional focus, still without letters, numbers, logos, labels, prices, names, categories, or readable marks.`
+      : noPhysicalProduct
+        ? `Service state at the end of this shot: the presenter and setting carry the idea through natural gestures; no physical merchandise is introduced.`
+      : busur === "idle"
         ? `Product state at the end of this shot: still idle — present in frame but not yet held up or presented, its label not turned to camera.`
         : busur === "partial"
           ? `Product state at the end of this shot: partially revealed — in her hands and clearly in use, but not yet held up as a hero shot.`
           : `Product state at the end of this shot: hero — held up, label squarely readable to camera, and held still for the final second.`;
     const mulaiDari = isFirst
       ? `Start state: the first frame is already mid-action, not a posed opening.`
+      : neutralStoryAds
+        ? `Start state: this shot begins exactly where the previous one ended, with the same blank prop already moving in the staged action.`
+      : noPhysicalProduct
+        ? `Start state: this shot begins exactly where the previous one ended, with the same presenter and setting continuing naturally.`
       : `Start state: this shot begins exactly where the previous one ended — ${
           busur === "hero"
             ? `the product is already in her hands from the very first frame, so no time is spent picking it up`
@@ -1600,7 +1823,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
 
     // Kunci ukuran asli (§C.10) di TIAP shot — termasuk shot tanpa suara, yang
     // punya cacat produk-raksasa yang sama.
-    const ukuran = ` ${kunciUkuranAsli(input.productName)}`;
+    const ukuran = neutralVisual
+      ? ` ${kunciUkuranPropertiNetral()}`
+      : ` ${kunciUkuranAsli(input.productName)}`;
     // Kontrak talent mode ikut, terpisah dari framing: framing mengatur KAMERA,
     // kalimat ini mengatur apa yang dilakukan orangnya.
     const kontrak = framingMode ? ` ${blokKontrakMode(modeShot)}` : "";
@@ -1617,12 +1842,18 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const petunjukFormat = petunjukFormatIde(input.ideaFormat);
     const blokFormat = petunjukFormat ? ` ${petunjukFormat}` : "";
 
+    const visualProductDesc = neutralVisual ? "" : productDesc;
+    const visualBrandBrief = neutralVisual ? "" : brandBrief;
     const base = rapikan(punyaPeranTemplate
-      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}.${kameraPenulis} ${productDesc}${brandBrief}${panggung}${kontrak}${blokFormat}${ukuran}`
-      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}.${kameraPenulis} ${productDesc}${brandBrief}${beat}${panggung}${kontrak}${blokFormat}${ukuran}`);
+      ? `${beat} ${kunciSubjek}${detikPertama}${crazyOpener}${subject}. Shot ${i + 1} of ${numShots}.${kameraPenulis} ${visualProductDesc}${visualBrandBrief}${panggung}${kontrak}${blokFormat}${ukuran}`
+      : `${framing}${kunciSubjek}${detikPertama}${crazyOpener}${subject}. ${latar}Shot ${i + 1} of ${numShots}.${kameraPenulis} ${visualProductDesc}${visualBrandBrief}${beat}${panggung}${kontrak}${blokFormat}${ukuran}`);
 
     if (!withAudio) {
-      return { index: i, durationSec: perShot, prompt: base, imageRefPath: input.imageRefPath };
+      return {
+        index: i, durationSec: perShot, prompt: base,
+        ...(!neutralStoryAds ? { imageRefPath: input.imageRefPath } : {}),
+        ...(neutralStoryAds ? { trustedNumericScaffolds: trustedNumericScaffoldsForShot(i, punyaPeranTemplate ? 2 : 1) } : {}),
+      };
     }
 
     // Kunci bahasa 4 lapis. Lapis "perShot" mengikuti siapa yang terdengar:
@@ -1639,7 +1870,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // menggambar WAJAH pembicara di format tanpa-wajah -> QC-09 menolak (benar).
     // r4 (Brian 2026-08-07): harga di dialog WAJIB terbilang — model membaca
     // "Rp299.000" ngaco. Hanya pola harga yang dikonversi (kode produk aman).
-    const dialogue = hargaTerbilang(dialogueForShot(i).filter(Boolean).join(" "));
+    const dialogue = neutralStoryAds ? "" : hargaTerbilang(dialogueForShot(i).filter(Boolean).join(" "));
     const isLast = i === numShots - 1;
     // Bar kualitas suara (Brian 2026-08-07): "VO kayak real, tidak cepet, ada
     // pause/jeda" — tempo santai + jeda antar kalimat ditulis eksplisit.
@@ -1664,17 +1895,17 @@ export function planShots(input: ShotPlanInput): VisualSpec {
             ? `A composed, confident Indonesian brand voiceover is heard over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed. The narration stays entirely off-screen while the frame keeps to the product: "${dialogue}". `
             : `A composed, confident Indonesian brand voiceover delivers the line over this footage with measured pacing and clean articulation — the poised tone of a national television commercial, warm and composed; the voice comes from off-screen while anyone in frame keeps their lips closed and simply acts and reacts: "${dialogue}". `
         : format === "hands_only"
-        ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to hands and product): "${dialogue}". `
+        ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting, at an easy conversational speed (the narration stays entirely off-screen; the shot keeps to ${neutralVisual ? "the staged action and blank props" : "hands and product"}): "${dialogue}". `
         : lipSyncPresenter
           ? bukaTanpaWajah
             // Preseden job a1192101: frasa "presenter speaks to camera" membuat
             // model MENGGAMBAR wajah pembicara di shot yang harus tanpa wajah.
             // Shot pembuka memakai kalimat VO hands_only; presenter bicara ke
             // kamera baru mulai shot 2.
-            ? `A warm female VOICEOVER speaks in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words (the speaker stays entirely off-screen in this opening shot; the frame keeps to hands and product): "${dialogue}". `
+            ? `A warm female VOICEOVER speaks in casual Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words (the speaker stays entirely off-screen in this opening shot; the frame keeps to ${neutralVisual ? "the staged action and blank props" : "hands and product"}): "${dialogue}". `
             : `The presenter speaks casually to camera in Indonesian at a relaxed, unhurried pace with natural pauses between sentences, enunciating every word completely with clear separation between words — like a real person chatting with a friend, easy and unsalesy, saying: "${dialogue}". `
           : bukaTanpaWajah
-          ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words (the narration stays entirely off-screen in this opening shot; the frame keeps to hands and product): "${dialogue}". `
+          ? `A warm female VOICEOVER narrates in casual Indonesian at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words (the narration stays entirely off-screen in this opening shot; the frame keeps to ${neutralVisual ? "the staged action and blank props" : "hands and product"}): "${dialogue}". `
           : `A warm female VOICEOVER narrates in casual Indonesian over this footage at a relaxed, unhurried pace with natural pauses, enunciating every word completely with clear separation between words, like a real person chatting with a friend — the on-screen presenter reacts and demonstrates naturally with her lips closed and relaxed throughout, listening rather than speaking: "${dialogue}". `;
     const pacing =
       format === "tvc"
@@ -1691,7 +1922,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
         ? `The narration pauses for a full second before the next line — the pause should be clearly noticeable, not rushed. `
         : isLast
           ? `She pauses for a full second, smiles warmly, then ends with a friendly inviting tone — the pause should be clearly noticeable, not rushed. `
-          : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `;
+          : neutralVisual
+            ? `She pauses for a full second, taking a visible breath, before continuing the staged blank-prop action — the pause should be clearly noticeable, not rushed. `
+            : `She pauses for a full second, taking a visible breath, before showing the product closer — the pause should be clearly noticeable, not rushed. `;
     // rapikan() dipakai di prompt AKHIR, bukan cuma di base: titik gandanya
     // justru lahir DI SINI, saat `${base}. ` menempel pada base yang sudah
     // berakhir titik. Menormalkan potongannya saja meninggalkan cacat yang
@@ -1711,7 +1944,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     const prompt = rapikan(
       format === "talking_head" && !lipSyncPresenter && !bukaTanpaWajah
         ? `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Natural warm reactive expression throughout, with her lips closed and relaxed as she listens. ${bahasa.penutup}`
-        : `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader. ${bahasa.penutup}`
+        : neutralVisual
+          ? `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Natural conversational Indonesian, not a newsreader. ${bahasa.penutup}`
+          : `${base}. ${bahasa.header} ${bahasa.perShot} ${speechBerlabel}${pacing}Enunciate clearly the words "${input.productName}" and "${pain.replace(/nya$/, "")}". Natural conversational Indonesian, not a newsreader. ${bahasa.penutup}`
     );
     // Penanda menahan-produk ikut sebagai DATA. Sumbernya peran template
     // (ugcRoles) atau tabel rute TVC — keduanya menandainya eksplisit.
@@ -1720,7 +1955,9 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // pertama; prompt shot menggambarkan gerakannya, bukan keadaan awalnya.
     const awalShot = segmenMilikShot(i).slice().sort((a, b) => a.start - b.start)[0];
     return {
-      index: i, durationSec: perShot, prompt, imageRefPath: input.imageRefPath,
+      index: i, durationSec: perShot, prompt,
+      ...(!neutralStoryAds ? { imageRefPath: input.imageRefPath } : {}),
+      ...(neutralStoryAds ? { trustedNumericScaffolds: trustedNumericScaffoldsForShot(i, punyaPeranTemplate ? 2 : 1) } : {}),
       ...(menahanProdukDiShot(i) ? { withholdProduct: true } : {}),
       ...(beatTvc?.tanpaOrang ? { tanpaOrang: true } : {}),
       ...(awalShot?.start_state ? { startState: awalShot.start_state } : {}),
@@ -1729,7 +1966,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
 
   // Negative prompt per-format: hands_only melarang wajah sepenuhnya (bukan sekadar
   // "no face distortion"); format lain memakai negative kategori apa adanya.
-  let negativePrompt = input.category.negativePrompt;
+  let negativePrompt = visualCategory.negativePrompt;
   // r8: larangan bersama (format ber-video-AI saja — vo_broll pakai FOTO ASLI
   // user, tidak ada model video sama sekali, jadi tak relevan & tak diubah).
   // Model jangan "mencoba" merender teks kecil label sebagai tajam lalu gagal
@@ -1781,7 +2018,7 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // ekspresi panjang.
   const menahanProduk = format === "tvc" && (input.tvcRoute === "fabric" || input.tvcRoute === "intimate");
 
-  return {
+  const spec: VisualSpec = {
     jobId: input.jobId,
     width: 720,
     height: 1280,
@@ -1790,7 +2027,14 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     negativePrompt, // tetap mengandung MANDATORY_NEGATIVE_PROMPT dari kategori
     qualityTier: tier,
     generateAudio: withAudio, // konsisten dengan tier — ditegakkan juga di registry
-    extraReferenceImagePaths: input.extraImageRefPaths?.slice(0, 7), // r13: 4->7 (+1 primer = 8 total)
+    ...(!neutralStoryAds && input.extraImageRefPaths?.length
+      ? { extraReferenceImagePaths: input.extraImageRefPaths.slice(0, 7) }
+      : {}), // neutral Story Ads = text-to-video; foto produk tidak boleh bocor
+    ...(neutralStoryAds ? { visualSubjectPolicy: "neutral_story_ads" as const } : {}),
+    ...(neutralStoryAds ? { storyBridgeSources: bridgeStoryAdsTerbukti(
+      input.segments as Array<SegmentDraft & Record<string, unknown>>,
+      { productName: input.productName, productCategory: input.productCategory, productPriceIdr: input.productPriceIdr }
+    ) } : {}),
     // Iklan jasa: visual bisnis dipakai sebagai REFERENSI, bukan frame
     // pertama — kalau tidak, hasilnya video tentang logo, bukan orang yang
     // berbicara. Lihat catatan referenceOnlyImages di lib/providers/types.ts.
@@ -1812,6 +2056,18 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     referenceOnlyImages: format === "ads" || menahanProduk,
     ratio: input.ratio ?? "9:16",
   };
+  if (neutralStoryAds) {
+    for (const shot of spec.shots) {
+      const contradictions = neutralStoryAdsPromptContradictions(shot.prompt, {
+        productName: input.productName,
+        productCategory: input.productCategory,
+      }, shot.trustedNumericScaffolds);
+      if (contradictions.length > 0) {
+        throw new Error(`Kontrak prompt final neutral Story Ads dilanggar: ${contradictions.join(", ")}`);
+      }
+    }
+  }
+  return spec;
 }
 
 export { HANDS_ONLY_FRAMING, HANDS_ONLY_NEGATIVE, IDENTITY_INSTRUCTION, MANDATORY_NEGATIVE_PROMPT };

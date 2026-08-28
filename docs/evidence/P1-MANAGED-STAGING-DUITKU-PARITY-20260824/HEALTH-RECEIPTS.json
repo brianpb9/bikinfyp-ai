@@ -1,0 +1,10 @@
+{
+  "classification": "VERIFIED_MANAGED_PUBLIC",
+  "url": "https://racun-ai-staging-web.onrender.com/api/health",
+  "samples": [
+    { "sequence": 1, "http": 200, "ok": true, "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "build_sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3", "classifier_capable": true },
+    { "sequence": 2, "http": 200, "ok": true, "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "build_sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3", "classifier_capable": true },
+    { "sequence": 3, "http": 200, "ok": true, "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "build_sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3", "classifier_capable": true }
+  ],
+  "interval_seconds": 5
+}

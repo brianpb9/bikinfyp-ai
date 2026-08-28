@@ -1,0 +1,9 @@
+[
+  {
+    "name": "racun-ai-staging-postgres",
+    "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+    "databaseName": "racun_staging",
+    "status": "available",
+    "createdAt": "2026-08-01T16:37:18.722431Z"
+  }
+]

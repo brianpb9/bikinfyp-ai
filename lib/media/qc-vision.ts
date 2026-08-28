@@ -128,6 +128,12 @@ export interface TemuanFrame {
   jumlahTangan: number;
   /** Ada tulisan yang tidak terbaca / huruf acak? */
   teksAcak: boolean;
+  /** Ada tulisan apa pun yang terlihat. Untuk neutral Story Ads, bahkan teks
+   * yang terbaca rapi dilarang pada blank prop di bagian generated. */
+  teksTerlihat: boolean;
+  /** true hanya bila respons model memuat kedua field kontrak neutral sebagai
+   * boolean eksplisit. Schema lama/malformed tidak boleh berarti "aman". */
+  neutralFieldsComplete?: boolean;
   /** Ada anggota badan yang salah — jari berlebih, tangan tanpa pemilik,
    *  anggota badan berlipat. */
   anatomiRusak: boolean;
@@ -161,6 +167,10 @@ export interface QcVisionInput {
    *  di format ini — yang diperiksa jumlah wajah (harus 0) dan jumlah tangan
    *  (satu orang). */
   tanpaWajah?: boolean;
+  /** Blank-prop contract: pixel generated tidak boleh memuat produk atau teks. */
+  neutralStoryAds?: boolean;
+  /** Ekor packshot/endcard asli dikeluarkan dari sampling kontrak neutral. */
+  ekorSec?: number;
 }
 
 export interface QcVisionResult {
@@ -182,8 +192,41 @@ export interface QcVisionResult {
   detikGagal: number[];
 }
 
+/** Hard violations unique to generated pixels of neutral Story Ads. Kept
+ * pure so the fail-closed contract can be regression-tested without paying
+ * for a vision request. */
+export function neutralStoryAdsViolations(t: TemuanFrame): string[] {
+  const violations: string[] = [];
+  if (t.neutralFieldsComplete !== true) {
+    violations.push(`detik ${t.detik}: kontrak neutral tidak terbukti (field produkTerlihat/teksTerlihat tidak lengkap)`);
+    return violations;
+  }
+  if (t.produkTerlihat) violations.push(`detik ${t.detik}: produk/kemasan terlihat di bagian generated neutral`);
+  if (t.teksTerlihat) violations.push(`detik ${t.detik}: tulisan terlihat pada blank prop di bagian generated neutral`);
+  return violations;
+}
+
+/** Coverage contract for neutral pixels. Every scheduled sample must produce
+ * a parseable response; one clean frame cannot stand in for timed-out or
+ * malformed frames elsewhere in the video. */
+export function neutralStoryAdsCoverageViolations(
+  results: Array<TemuanFrame | null>,
+  scheduledSeconds?: number[],
+): string[] {
+  const violations: string[] = [];
+  results.forEach((result, index) => {
+    if (result === null) {
+      const at = scheduledSeconds?.[index];
+      violations.push(at === undefined
+        ? `sampel ${index + 1}: respons visi timeout/tidak dapat diparse`
+        : `detik ${at}: respons visi timeout/tidak dapat diparse`);
+    }
+  });
+  return violations;
+}
+
 const SKEMA = `Answer ONLY with a JSON object, no markdown fence:
-{"jumlahOrang": <int>, "jumlahOrangUtama": <int>, "jumlahWajah": <int>, "jumlahTangan": <int>, "teksAcak": <bool>,
+{"jumlahOrang": <int>, "jumlahOrangUtama": <int>, "jumlahWajah": <int>, "jumlahTangan": <int>, "teksAcak": <bool>, "teksTerlihat": <bool>,
  "anatomiRusak": <bool>, "produkTerlihat": <bool>, "fisikaJanggal": <bool>, "catatan": "<max 15 words>"}
 
 Definitions, be literal and count what you actually see:
@@ -201,6 +244,7 @@ Definitions, be literal and count what you actually see:
 - jumlahTangan: how many human hands are visible in total.
 - teksAcak: true if any visible writing is malformed, misspelled, or
   unreadable gibberish (common on product labels).
+- teksTerlihat: true if ANY readable or unreadable writing is visible.
 - anatomiRusak: true if there are extra fingers, hands not attached to a
   visible arm, duplicated or bent-wrong limbs.
 - produkTerlihat: true if a consumer product package is clearly visible.
@@ -229,9 +273,49 @@ const JEDA_MS = [0, 4_000, 15_000];
 
 const tidur = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function periksaFrame(framePath: string, detik: number, percobaan = 0): Promise<TemuanFrame | null> {
-  if (percobaan > 0) await tidur(JEDA_MS[Math.min(percobaan, JEDA_MS.length - 1)]);
+/** Strict parser untuk wire schema Gemini. Tidak ada coercion/default:
+ * missing field, numeric string, NaN/Infinity, negatif, pecahan, atau boolean
+ * palsu semuanya invalid dan harus memicu retry di periksaFrameVision. */
+export function parseVisionFrameResponse(value: unknown, detik: number): TemuanFrame | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const j = value as Record<string, unknown>;
+  const countKeys = ["jumlahOrang", "jumlahOrangUtama", "jumlahWajah", "jumlahTangan"] as const;
+  for (const key of countKeys) {
+    const v = j[key];
+    if (typeof v !== "number" || !Number.isFinite(v) || !Number.isInteger(v) || v < 0) return null;
+  }
+  const booleanKeys = ["teksAcak", "teksTerlihat", "anatomiRusak", "produkTerlihat", "fisikaJanggal"] as const;
+  for (const key of booleanKeys) if (typeof j[key] !== "boolean") return null;
+  if (typeof j.catatan !== "string") return null;
+  if ((j.jumlahOrangUtama as number) > (j.jumlahOrang as number)) return null;
+  if ((j.jumlahWajah as number) > (j.jumlahOrang as number)) return null;
+  return {
+    detik,
+    jumlahOrang: j.jumlahOrang as number,
+    jumlahOrangUtama: j.jumlahOrangUtama as number,
+    jumlahWajah: j.jumlahWajah as number,
+    jumlahTangan: j.jumlahTangan as number,
+    teksAcak: j.teksAcak as boolean,
+    teksTerlihat: j.teksTerlihat as boolean,
+    neutralFieldsComplete: true,
+    anatomiRusak: j.anatomiRusak as boolean,
+    produkTerlihat: j.produkTerlihat as boolean,
+    fisikaJanggal: j.fisikaJanggal as boolean,
+    catatan: (j.catatan as string).slice(0, 120),
+  };
+}
+
+export async function periksaFrameVision(
+  framePath: string,
+  detik: number,
+  percobaan = 0,
+  jedaMs: readonly number[] = JEDA_MS,
+): Promise<TemuanFrame | null> {
+  if (percobaan > 0) await tidur(jedaMs[Math.min(percobaan, jedaMs.length - 1)] ?? 0);
   const buf = fs.readFileSync(framePath);
+  const retry = () => percobaan < jedaMs.length - 1
+    ? periksaFrameVision(framePath, detik, percobaan + 1, jedaMs)
+    : Promise.resolve(null);
   let res: Response;
   try {
     res = await fetch(`${ENDPOINT}/${MODEL}:generateContent`, {
@@ -247,38 +331,30 @@ async function periksaFrame(framePath: string, detik: number, percobaan = 0): Pr
     // tanpa tangkapan ini satu panggilan lambat membatalkan seluruh
     // pemeriksaan. Terjadi sungguhan saat menjalankan papan nilai: satu frame
     // timeout, empat video sisanya tidak pernah diperiksa.
-    if (percobaan < JEDA_MS.length - 1) return periksaFrame(framePath, detik, percobaan + 1);
-    return null;
+    return retry();
   }
   if (!res.ok) {
     // 503/429 = layanan sibuk, bukan permintaan kita yang salah. Itu layak
     // ditunggu. Galat lain (400 permintaan salah, 403 kunci ditolak) tidak
     // akan membaik dengan menunggu — jangan buang waktu job untuk itu.
     const layakDiulang = res.status === 503 || res.status === 429 || res.status >= 500;
-    if (layakDiulang && percobaan < JEDA_MS.length - 1) return periksaFrame(framePath, detik, percobaan + 1);
+    if (layakDiulang) return retry();
     return null;
   }
-  const d = (await res.json()) as { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  let d: { candidates?: { content?: { parts?: { text?: string }[] } }[] };
+  try {
+    d = await res.json() as typeof d;
+  } catch {
+    return retry();
+  }
   const teks = d.candidates?.[0]?.content?.parts?.map((p) => p.text ?? "").join("") ?? "";
   const m = teks.match(/\{[\s\S]*\}/);
-  if (!m) return null;
+  if (!m) return retry();
   try {
-    const j = JSON.parse(m[0]);
-    return {
-      detik,
-      jumlahOrang: Number(j.jumlahOrang ?? 0),
-      jumlahOrangUtama: Number(j.jumlahOrangUtama ?? j.jumlahOrang ?? 0),
-      jumlahWajah: Number(j.jumlahWajah ?? 0),
-      jumlahTangan: Number(j.jumlahTangan ?? 0),
-      teksAcak: Boolean(j.teksAcak),
-      anatomiRusak: Boolean(j.anatomiRusak),
-      produkTerlihat: Boolean(j.produkTerlihat),
-      fisikaJanggal: Boolean(j.fisikaJanggal),
-      catatan: String(j.catatan ?? "").slice(0, 120),
-    };
+    const parsed = parseVisionFrameResponse(JSON.parse(m[0]), detik);
+    return parsed ?? retry();
   } catch {
-    if (percobaan < JEDA_MS.length - 1) return periksaFrame(framePath, detik, percobaan + 1);
-    return null;
+    return retry();
   }
 }
 
@@ -309,8 +385,12 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     // menjalankan belasan proses ffmpeg sekaligus justru merebut CPU dari
     // compositing yang berjalan di worker yang sama.
     const berkasFrame: { f: string; detik: number }[] = [];
-    for (const p of posisiSampel(durasi)) {
-      const detik = Math.max(0.1, durasi * p);
+    const durasiDiperiksa = input.neutralStoryAds
+      ? Math.max(0.5, durasi - Math.max(0, input.ekorSec ?? 0))
+      : durasi;
+    const posisiTerjadwal = posisiSampel(durasiDiperiksa);
+    for (const p of posisiTerjadwal) {
+      const detik = Math.max(0.1, durasiDiperiksa * p);
       const f = path.join(dir, `f${Math.round(detik * 10)}.jpg`);
       await runFfmpeg(["-y", "-ss", String(detik), "-i", input.videoPath, "-frames:v", "1", "-q:v", "3", f]);
       if (fs.existsSync(f)) berkasFrame.push({ f, detik: Math.round(detik * 10) / 10 });
@@ -325,9 +405,9 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     //
     // Penyebab frame ke-6 belum diketahui dan sengaja tidak ditebak lagi.
     // Yang pasti: jumlahnya masih di atas ambang minimal, jadi vonisnya sah.
-    const hasil = await Promise.all(berkasFrame.map(({ f, detik }) => periksaFrame(f, detik)));
+    const hasil = await Promise.all(berkasFrame.map(({ f, detik }) => periksaFrameVision(f, detik)));
     const temuan: TemuanFrame[] = hasil.filter((t): t is TemuanFrame => t !== null);
-    if (temuan.length === 0) return { temuan: null, lolos: false, masalah: ["tidak satu pun frame bisa diperiksa"], peringatan: [], detikGagal: [] };
+    if (temuan.length === 0 && !input.neutralStoryAds) return { temuan: null, lolos: false, masalah: ["tidak satu pun frame bisa diperiksa"], peringatan: [], detikGagal: [] };
 
     // PENGHALANG vs PERINGATAN, dan pembagiannya diuji pada video nyata.
     //
@@ -345,10 +425,24 @@ export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
     //     periksa sendiri dan jarinya ambigu, tidak jelas rusak bagi penonton
     //     biasa. QC yang mengada-ada lebih buruk daripada tidak ada — sekali
     //     orang berhenti memercayainya, ia berhenti berguna.
-    const masalah: string[] = [];
+    const masalah: string[] = input.neutralStoryAds
+      ? [
+          ...(berkasFrame.length === posisiTerjadwal.length
+            ? []
+            : [`coverage neutral tidak lengkap: ${berkasFrame.length}/${posisiTerjadwal.length} frame berhasil diekstrak`]),
+          ...neutralStoryAdsCoverageViolations(hasil, berkasFrame.map((item) => item.detik)),
+        ]
+      : [];
     const peringatan: string[] = [];
     const detikGagal: number[] = [];
     for (const t of temuan) {
+      if (input.neutralStoryAds) {
+        const neutralViolations = neutralStoryAdsViolations(t);
+        if (neutralViolations.length) {
+          masalah.push(...neutralViolations);
+          detikGagal.push(t.detik);
+        }
+      }
       if (input.tanpaWajah) {
         // hands_only melarang WAJAH, bukan manusia. Jumlah orang TIDAK diperiksa
         // di sini: shot yang benar pun selalu punya pemilik tangan.

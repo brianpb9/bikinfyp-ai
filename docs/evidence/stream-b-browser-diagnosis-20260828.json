@@ -1,0 +1,65 @@
+{
+  "schema": "stream-b-browser-diagnosis/v1",
+  "result": "BLOCKED_RUNTIME_PLUGIN",
+  "visual_points_claimed": 0,
+  "ssr_assets_promoted_to_visual": false,
+  "deployed_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "root_cause": {
+    "file": "/Users/hadrava/.codex/plugins/cache/openai-bundled/chrome/26.810.52044/scripts/browser-client.mjs",
+    "line": 806,
+    "generated_statement": "import {env as jm} from node:process",
+    "runtime_policy_probe": {
+      "node_path_import": "PASS",
+      "node_process_import": "BLOCKED"
+    },
+    "error": "Importing module node:process is not allowed in node_repl",
+    "bundle_sha256": "9230e2bd8b24b7ac7a0ba6774c64bf0d78ecdabbdd91d0ed627b02a587bae2df",
+    "chrome_and_iab_bundle_byte_identical": true,
+    "process_shim_already_defined_lines": "1-31",
+    "classification": "OpenAI browser plugin bundling/shim defect; not application, staging, CSP, or auth"
+  },
+  "compliant_surface_check": {
+    "chrome": "FAIL_SAME_BOOTSTRAP",
+    "in_app_browser": "FAIL_SAME_BOOTSTRAP",
+    "standalone_playwright": "NOT_USED_BROWSER_SKILL_PROHIBITS_UNRELATED_WORKAROUND",
+    "computer_use": "NOT_USED_BROWSER_SKILL_PROHIBITS_UNRELATED_WORKAROUND"
+  },
+  "minimum_durable_fix": {
+    "owner": "OpenAI browser plugin package, not application Builder",
+    "action": "Publish/install a browser/chrome plugin bundle that rewrites the lone node:process env import to the existing processShim.env (or otherwise removes forbidden node:process from the generated client). Do not hand-edit ephemeral plugin cache.",
+    "validation": [
+      "absolute-path setupBrowserRuntime import succeeds",
+      "agent is created",
+      "getForUrl staging succeeds",
+      "browser.documentation returns fully"
+    ]
+  },
+  "builder_test_remediation": {
+    "existing_public_base": "scripts/smoke-interaksi.mjs:18-59 already provides 375x812 public hydration/input/CSP smoke",
+    "missing_runner": "Add a managed-mobile-auth-hydration runner; existing e2e-ui.mjs:21 uses 390px and :33-44 dev-login, so it is not staging-compliant",
+    "onboarding_targets": [
+      "app/onboarding/page.tsx:100-134 loading/failure/recovery logic",
+      "app/onboarding/page.tsx:347-405 email/numeric input modes and loading labels"
+    ],
+    "dashboard_targets": [
+      "app/dashboard/_components/DashboardChrome.tsx:68-109 drawer/focus/Escape lifecycle",
+      "app/dashboard/_components/DashboardChrome.tsx:217-227 375px menu interaction"
+    ],
+    "required_assertions": [
+      "viewport 375x812 and reduced-height keyboard simulation with no horizontal overflow",
+      "email and numeric input focus/inputMode",
+      "delayed intercepted request-otp proves loading without Resend call",
+      "actual staged wrong-code rejection and preseeded OTP recovery",
+      "dashboard menu aria-expanded false->true, Escape closes, focus restores",
+      "no pageerror/hydration/CSP console errors",
+      "screenshots plus exact deployed SHA and sanitized request receipts"
+    ],
+    "safety": [
+      "intercept request-otp to prevent email-provider call",
+      "preseed OTP in bounded staging DB window",
+      "payments/generation endpoints never called",
+      "temporary org/membership/OTP removed",
+      "signup bonus compensated append-only to net zero"
+    ]
+  }
+}

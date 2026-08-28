@@ -13,6 +13,17 @@ export interface PgProductInput {
   name: string;
   priceIdr: number;
   category: string;
+  productTypeToken?: string | null;
+  productTypeConfirmedToken?: string | null;
+  productTypeConfirmedBy?: string | null;
+  productTypeConfirmedAt?: string | null;
+  productTypeVersion?: 1 | null;
+  categoryReviewState?: "CLEAR" | "QUARANTINED";
+  categoryReviewReason?: "CATEGORY_UNKNOWN" | "CATEGORY_AMBIGUOUS" | "CATEGORY_BUNDLE" | null;
+  categoryReviewedBy?: string | null;
+  categoryReviewedRole?: string | null;
+  categoryReviewedAt?: string | null;
+  categoryReviewVersion?: number;
   productVisualDesc?: string | null;
   images: string[];
   rawMeta?: unknown | null;
@@ -38,6 +49,23 @@ export interface PgScriptInput {
   hookLevel?: import("../config/hooks").HookLevel;
 }
 
+/**
+ * Transaction-phase evidence for retail PostgreSQL product creation.
+ * Callers must never infer rollback from an ordinary network/driver error.
+ */
+export class PgProductCreateFailure extends Error {
+  readonly commitAttempted: boolean;
+  readonly rollbackSucceeded: boolean;
+
+  constructor(cause: unknown, phase: { commitAttempted: boolean; rollbackSucceeded: boolean }) {
+    const message = cause instanceof Error ? cause.message : String(cause);
+    super(`PostgreSQL product create failed: ${message}`, { cause });
+    this.name = "PgProductCreateFailure";
+    this.commitAttempted = phase.commitAttempted;
+    this.rollbackSucceeded = phase.rollbackSucceeded;
+  }
+}
+
 export class PgProductPersonaScriptRepository {
   private readonly pool: Pool;
   private readonly now: () => string;
@@ -56,15 +84,24 @@ export class PgProductPersonaScriptRepository {
 
   async createProduct(userId: string, input: PgProductInput): Promise<ProductRow> {
     const client = await this.pool.connect();
+    let commitAttempted = false;
     try {
       await client.query("BEGIN");
       const product = await this.insertProduct(client, userId, input);
-      await this.insertAudit(client, userId, "product.created", "products", product.id, { name: product.name, category: product.category });
+      await this.insertAudit(client, userId, "product.created", "products", product.id, {
+        name: product.name, category: product.category, product_type: product.product_type_token,
+        product_type_state: product.product_type_state,
+        product_type_confirmation: product.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : null,
+        product_type_confirmed_by: product.product_type_confirmed_by,
+        product_type_confirmed_at: product.product_type_confirmed_at,
+        product_type_version: product.product_type_version,
+      });
+      commitAttempted = true;
       await client.query("COMMIT");
       return product;
     } catch (error) {
-      await client.query("ROLLBACK").catch(() => undefined);
-      throw error;
+      const rollbackSucceeded = await client.query("ROLLBACK").then(() => true, () => false);
+      throw new PgProductCreateFailure(error, { commitAttempted, rollbackSucceeded });
     } finally { client.release(); }
   }
 
@@ -89,6 +126,16 @@ export class PgProductPersonaScriptRepository {
   }
 
   /**
+   * Exact-ID read used only to reconcile an ambiguous create acknowledgement.
+   * Deliberately does not filter by owner: an ID collision/foreign row is a
+   * mismatch that must retain storage, never "absent" followed by deletion.
+   */
+  async getProductByIdForCreateReconciliation(productId: string): Promise<ProductRow | null> {
+    const found = await this.pool.query<ProductRow>("SELECT * FROM products WHERE id = $1", [productId]);
+    return found.rows[0] ?? null;
+  }
+
+  /**
    * Produk milik ORGANISASI, bukan milik anggota yang kebetulan membuatnya.
    *
    * Kepemilikan per-user benar untuk retail dan SALAH untuk dashboard brand:
@@ -106,18 +153,92 @@ export class PgProductPersonaScriptRepository {
   async updateOwnedProduct(
     userId: string,
     productId: string,
-    patch: Pick<PgProductInput, "name" | "priceIdr" | "category" | "productVisualDesc" | "promoPriceBeforeIdr" | "promoEndsAt" | "promoStockLeft">
+    patch: Pick<PgProductInput, "name" | "priceIdr" | "category" | "productTypeToken" | "productTypeConfirmedToken" | "productTypeConfirmedBy" | "productTypeConfirmedAt" | "productTypeVersion" | "categoryReviewState" | "categoryReviewReason" | "categoryReviewedBy" | "categoryReviewedRole" | "categoryReviewedAt" | "categoryReviewVersion" | "productVisualDesc" | "promoPriceBeforeIdr" | "promoEndsAt" | "promoStockLeft">
   ): Promise<ProductRow | null> {
-    const result = await this.pool.query<ProductRow>(
-      `UPDATE products SET name = $1, price_idr = $2, category = $3, product_visual_desc = $4,
-         promo_price_before_idr = $5, promo_ends_at = $6, promo_stock_left = $7
-       WHERE id = $8 AND user_id = $9 RETURNING *`,
-      [patch.name, patch.priceIdr, patch.category, patch.productVisualDesc ?? null,
-       patch.promoPriceBeforeIdr ?? null, patch.promoEndsAt ?? null, patch.promoStockLeft ?? null, productId, userId]
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<ProductRow>(
+      `UPDATE products SET name = $1, price_idr = $2, category = $3,
+         product_type_token = $4, product_type_confirmed_token = $5,
+         product_type_confirmed_by = $6, product_type_confirmed_at = $7,
+         product_type_version = $8, product_type_state = 'CONFIRMED', product_visual_desc = $9,
+         promo_price_before_idr = $10, promo_ends_at = $11, promo_stock_left = $12,
+         category_review_state=$13,category_review_reason=$14,category_reviewed_by=$15,
+         category_reviewed_role=$16,category_reviewed_at=$17,category_review_version=$18
+       WHERE id = $19 AND user_id = $20 RETURNING *`,
+      [patch.name, patch.priceIdr, patch.category, patch.productTypeToken, patch.productTypeConfirmedToken,
+       patch.productTypeConfirmedBy, patch.productTypeConfirmedAt, patch.productTypeVersion,
+       patch.productVisualDesc ?? null, patch.promoPriceBeforeIdr ?? null, patch.promoEndsAt ?? null,
+       patch.promoStockLeft ?? null,patch.categoryReviewState,patch.categoryReviewReason,
+       patch.categoryReviewedBy,patch.categoryReviewedRole,patch.categoryReviewedAt,patch.categoryReviewVersion,
+       productId,userId]
     );
-    const product = result.rows[0] ?? null;
-    if (product) await this.appendAudit(userId, "product.updated", "products", productId, { name: product.name, price_idr: product.price_idr });
-    return product;
+      const product = result.rows[0] ?? null;
+      if (product) {
+        if (patch.categoryReviewState === "QUARANTINED") await this.insertAudit(
+          client, userId, "product.category_quarantined", "products", productId,
+          { reason: patch.categoryReviewReason, category: patch.category, version: patch.categoryReviewVersion },
+        );
+        await this.insertAudit(client, userId, "product.updated", "products", productId, {
+          name: product.name, price_idr: product.price_idr, product_type: product.product_type_token,
+          product_type_state: product.product_type_state, product_type_confirmation: "USER_SELF_ASSERTION",
+          product_type_confirmed_by: product.product_type_confirmed_by,
+          product_type_confirmed_at: product.product_type_confirmed_at,
+          product_type_version: product.product_type_version,
+        });
+      }
+      await client.query("COMMIT");
+      return product;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally { client.release(); }
+  }
+
+  /** Ordinary retail details never rewrite C2 confirmation provenance. */
+  async updateOwnedProductDetails(
+    userId: string,
+    productId: string,
+    patch: Pick<PgProductInput, "name" | "priceIdr" | "category" | "categoryReviewState" | "categoryReviewReason" | "categoryReviewedBy" | "categoryReviewedRole" | "categoryReviewedAt" | "categoryReviewVersion" | "productVisualDesc" | "promoPriceBeforeIdr" | "promoEndsAt" | "promoStockLeft">
+  ): Promise<ProductRow | null> {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      const result = await client.query<ProductRow>(
+      `UPDATE products SET name = $1, price_idr = $2, category = $3,
+         product_visual_desc = $4, promo_price_before_idr = $5,
+         promo_ends_at = $6, promo_stock_left = $7,
+         category_review_state=$8,category_review_reason=$9,category_reviewed_by=$10,
+         category_reviewed_role=$11,category_reviewed_at=$12,category_review_version=$13
+       WHERE id = $14 AND user_id = $15 RETURNING *`,
+      [patch.name, patch.priceIdr, patch.category, patch.productVisualDesc ?? null,
+       patch.promoPriceBeforeIdr ?? null, patch.promoEndsAt ?? null,
+       patch.promoStockLeft ?? null,patch.categoryReviewState,patch.categoryReviewReason,
+       patch.categoryReviewedBy,patch.categoryReviewedRole,patch.categoryReviewedAt,patch.categoryReviewVersion,
+       productId,userId]
+    );
+      const product = result.rows[0] ?? null;
+      if (product) {
+        if (patch.categoryReviewState === "QUARANTINED") await this.insertAudit(
+          client, userId, "product.category_quarantined", "products", productId,
+          { reason: patch.categoryReviewReason, category: patch.category, version: patch.categoryReviewVersion },
+        );
+        await this.insertAudit(client, userId, "product.updated", "products", productId, {
+          name: product.name, price_idr: product.price_idr, product_type: product.product_type_token,
+          product_type_state: product.product_type_state,
+          product_type_confirmation: product.product_type_state === "CONFIRMED" ? "USER_SELF_ASSERTION" : null,
+          product_type_confirmed_by: product.product_type_confirmed_by,
+          product_type_confirmed_at: product.product_type_confirmed_at,
+          product_type_version: product.product_type_version,
+        });
+      }
+      await client.query("COMMIT");
+      return product;
+    } catch (error) {
+      await client.query("ROLLBACK").catch(() => undefined);
+      throw error;
+    } finally { client.release(); }
   }
 
   /**
@@ -256,14 +377,35 @@ export class PgProductPersonaScriptRepository {
     const product: ProductRow = {
       id: this.uuid(), user_id: userId, org_id: input.orgId ?? null, source_url: input.sourceUrl ?? null, name: input.name, price_idr: input.priceIdr,
       category: input.category, product_visual_desc: input.productVisualDesc ?? null, brand_brief: input.brandBrief ?? null, images: JSON.stringify(input.images),
+      product_type_token: input.productTypeToken ?? null, product_type_confirmed_token: input.productTypeConfirmedToken ?? null,
+      product_type_confirmed_by: input.productTypeConfirmedBy ?? null, product_type_confirmed_at: input.productTypeConfirmedAt ?? null,
+      product_type_version: input.productTypeVersion ?? null,
+      product_type_state: input.productTypeToken && input.productTypeConfirmedToken && input.productTypeConfirmedBy && input.productTypeConfirmedAt && input.productTypeVersion === 1 ? "CONFIRMED" : "QUARANTINED",
+      category_review_state: input.categoryReviewState ?? "QUARANTINED",
+      category_review_reason: input.categoryReviewReason === undefined ? "CATEGORY_UNKNOWN" : input.categoryReviewReason,
+      category_reviewed_by: input.categoryReviewedBy ?? null,
+      category_reviewed_role: input.categoryReviewedRole ?? null,
+      category_reviewed_at: input.categoryReviewedAt ?? null,
+      category_review_version: input.categoryReviewVersion ?? 1,
       promo_price_before_idr: input.promoPriceBeforeIdr ?? null, promo_ends_at: input.promoEndsAt ?? null,
       promo_stock_left: input.promoStockLeft ?? null,
       raw_meta: input.rawMeta === undefined || input.rawMeta === null ? null : JSON.stringify(input.rawMeta), created_at: this.now(),
     };
     await client.query(
-      `INSERT INTO products (id, user_id, org_id, source_url, name, price_idr, category, product_visual_desc, brand_brief, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
-      [product.id, product.user_id, product.org_id, product.source_url, product.name, product.price_idr, product.category, product.product_visual_desc, product.brand_brief, product.images, product.promo_price_before_idr, product.promo_ends_at, product.promo_stock_left, product.raw_meta, product.created_at]
+      `INSERT INTO products (id, user_id, org_id, source_url, name, price_idr, category,
+         product_type_token, product_type_confirmed_token, product_type_confirmed_by,
+         product_type_confirmed_at, product_type_version, product_type_state,
+         category_review_state,category_review_reason,category_reviewed_by,category_reviewed_role,
+         category_reviewed_at,category_review_version,
+         product_visual_desc, brand_brief, images, promo_price_before_idr, promo_ends_at, promo_stock_left, raw_meta, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,$22,$23,$24,$25,$26,$27)`,
+      [product.id, product.user_id, product.org_id, product.source_url, product.name, product.price_idr, product.category,
+       product.product_type_token, product.product_type_confirmed_token, product.product_type_confirmed_by,
+       product.product_type_confirmed_at, product.product_type_version, product.product_type_state,
+       product.category_review_state,product.category_review_reason,product.category_reviewed_by,
+       product.category_reviewed_role,product.category_reviewed_at,product.category_review_version,
+       product.product_visual_desc, product.brand_brief, product.images, product.promo_price_before_idr,
+       product.promo_ends_at, product.promo_stock_left, product.raw_meta, product.created_at]
     );
     return product;
   }

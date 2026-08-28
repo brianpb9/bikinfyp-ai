@@ -17,7 +17,7 @@ process.env.DB_PATH = `/tmp/racun-test-sandbox-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-sandbox-storage-${process.pid}`;
 process.env.RACUN_WORKER_DISABLED = "1";
 process.env.PAYMENT_GATEWAY = "duitku";
-process.env.DUITKU_MERCHANT_CODE = "DS34363";
+process.env.DUITKU_MERCHANT_CODE = "DTEST_SANDBOX";
 process.env.DUITKU_API_KEY = "kunci-uji-sandbox";
 process.env.DUITKU_IS_PRODUCTION = "false";
 process.env.ADMIN_EMAILS = "penguji@bikinfyp.test";
@@ -79,12 +79,12 @@ test("callback sandbox TIDAK mengkredit dompet pengguna biasa", async () => {
   ).run(uuid(), user.id, "duitku", orderId, 60000, 60000, "pending",
     JSON.stringify({ package_id: "hq5", payments_env: "sandbox" }), now());
 
-  const sig = crypto.createHash("md5").update("DS34363" + "60000" + orderId + "kunci-uji-sandbox").digest("hex");
+  const sig = crypto.createHmac("sha256", "kunci-uji-sandbox").update("DTEST_SANDBOX" + "60000" + orderId).digest("hex");
   const sebelum = getBalance(user.id);
   const res = await webhook(new Request("http://localhost/api/webhooks/duitku", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ merchantCode: "DS34363", amount: "60000", merchantOrderId: orderId, resultCode: "00", signature: sig }).toString(),
+    body: new URLSearchParams({ merchantCode: "DTEST_SANDBOX", amount: "60000", merchantOrderId: orderId, resultCode: "00", signature: sig }).toString(),
   }));
 
   assert.equal(res.status, 200, "Duitku harus berhenti mengulang");
@@ -113,12 +113,12 @@ test("callback sandbox TETAP mengkredit penguji terdaftar", async () => {
   ).run(uuid(), id, "duitku", orderId, 60000, 60000, "pending",
     JSON.stringify({ package_id: "hq5", payments_env: "sandbox" }), now());
 
-  const sig = crypto.createHash("md5").update("DS34363" + "60000" + orderId + "kunci-uji-sandbox").digest("hex");
+  const sig = crypto.createHmac("sha256", "kunci-uji-sandbox").update("DTEST_SANDBOX" + "60000" + orderId).digest("hex");
   const sebelum = getBalance(id);
   const res = await webhook(new Request("http://localhost/api/webhooks/duitku", {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({ merchantCode: "DS34363", amount: "60000", merchantOrderId: orderId, resultCode: "00", signature: sig }).toString(),
+    body: new URLSearchParams({ merchantCode: "DTEST_SANDBOX", amount: "60000", merchantOrderId: orderId, resultCode: "00", signature: sig }).toString(),
   }));
   const body = await res.json();
   assert.equal(body.credited, true, "penguji terdaftar harus tetap bisa menguji settlement");

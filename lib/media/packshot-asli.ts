@@ -25,7 +25,10 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { runFfmpeg, probeVideoSize } from "./ffmpeg";
+import { METADATA_IKUT } from "./metadata-aigc";
+import { isServiceLike } from "../config/hooks";
 
 const FPS = 24;
 
@@ -73,6 +76,12 @@ export async function dimensiDariKlip(klipPath: string): Promise<{ width: number
  *  menyisakan pita. Latar blur tetap dipasang di belakang sebagai jaring: bila
  *  fotonya jauh lebih lebar dari kanvas, sudut-sudutnya tetap terisi warna
  *  fotonya sendiri alih-alih hitam. */
+/** Rasio lebar/tinggi sebuah gambar. Dipakai memutuskan crop vs muat-utuh. */
+async function rasio(fotoPath: string): Promise<number> {
+  const { width, height } = await probeVideoSize(fotoPath);
+  return height > 0 ? width / height : 1;
+}
+
 export async function buildPackshotAsli(input: PackshotInput): Promise<string> {
   if (!fs.existsSync(input.fotoPath)) throw new Error(`foto produk tidak ada: ${input.fotoPath}`);
   fs.mkdirSync(path.dirname(input.outPath), { recursive: true });
@@ -83,11 +92,31 @@ export async function buildPackshotAsli(input: PackshotInput): Promise<string> {
   // rantai, supaya keduanya bergerak sebagai satu gambar — bukan produk
   // melayang di atas latar yang diam.
   const langkah = ((ZOOM_AKHIR - 1) / frames).toFixed(6);
+
+  // PENUH-BLEED ADA BATASNYA, dan batasnya ketahuan dari bukti 20 Agu.
+  //
+  // Foto uji JJ Glow berbentuk landscape lebar (1280x558). Dipotong penuh-bleed
+  // ke kanvas 9:16, yang tersisa cuma pita tengah: nama produk memang terbaca,
+  // tapi LOGO MEREK-nya terpotong keluar frame — di shot yang seluruh alasan
+  // keberadaannya adalah menampilkan merek dengan benar.
+  //
+  // Jadi crop dipakai selama yang dibuang masih wajar (foto potret/persegi,
+  // bentuk paling umum di e-commerce). Begitu fotonya jauh lebih lebar dari
+  // kanvas, produknya DIMUAT UTUH di atas latar blur dari fotonya sendiri:
+  // pita blur memang kurang megah, tapi merek yang terpotong jauh lebih buruk
+  // daripada pita.
+  const rasioFoto = await rasio(input.fotoPath);
+  const rasioKanvas = W / H;
+  // > 1,6x lebih lebar dari kanvas = kehilangan lebih dari ~38% lebar fotonya.
+  const terlaluLebar = rasioFoto / rasioKanvas > 1.6;
+  const depan = terlaluLebar
+    ? `[0:v]scale=${W}:${H}:force_original_aspect_ratio=decrease,pad=${W}:${H}:(ow-iw)/2:(oh-ih)/2:color=black@0[fg]`
+    : `[0:v]scale=${Math.round(W * 1.04)}:${Math.round(H * 1.04)}:force_original_aspect_ratio=increase,crop=${W}:${H}[fg]`;
   const filter = [
     `[0:v]scale=${W}:${H}:force_original_aspect_ratio=increase,crop=${W}:${H},boxblur=40:2,eq=brightness=0.03[bg]`,
     // Depan: penuhi kanvas lalu potong sisi. Sedikit lebih besar dari kanvas
     // (1,04) supaya push-in di akhir rantai tidak pernah menyingkap tepi.
-    `[0:v]scale=${Math.round(W * 1.04)}:${Math.round(H * 1.04)}:force_original_aspect_ratio=increase,crop=${W}:${H}[fg]`,
+    depan,
     `[bg][fg]overlay=(W-w)/2:(H-h)/2[flat]`,
     `[flat]zoompan=z='min(zoom+${langkah},${ZOOM_AKHIR})':d=${frames}:s=${W}x${H}:fps=${FPS},setsar=1[v]`,
   ].join(";");
@@ -101,6 +130,115 @@ export async function buildPackshotAsli(input: PackshotInput): Promise<string> {
   ]);
   if (!fs.existsSync(input.outPath)) throw new Error("packshot asli gagal dibuat");
   return input.outPath;
+}
+
+/** Berapa lama segmen packshot penutup. 1,8 dtk: cukup lama untuk membaca nama
+ *  merek dengan tenang, cukup pendek untuk tidak terasa video membeku. */
+export const PACKSHOT_EKOR_DTK = 1.8;
+
+/** Hash isi foto — dipakai QC-10 untuk membuktikan segmen packshot memang
+ *  berasal dari foto produk yang tercatat, bukan dari gambar lain. */
+export function sidikFoto(fotoPath: string): string {
+  return createHash("sha256").update(fs.readFileSync(fotoPath)).digest("hex");
+}
+
+/**
+ * TAMBAHKAN segmen packshot foto asli di ujung video yang sudah jadi.
+ *
+ * Bedanya dengan packshotAsliUntukShot di atas: yang itu MENGGANTI shot
+ * generate terakhir dan hanya berlaku kalau shot itu kebetulan tanpa orang.
+ * Yang ini MENAMBAH segmen pendek untuk semua video — keputusan Brian 20 Agu
+ * (jalan keluar A), sesudah render berbayar membuktikan model tetap mengarang
+ * huruf pada label ("jddpgeer", "SOMSONG") di putaran prompt ketiga.
+ *
+ * Di level composer, tidak pernah dikirim ke Seedance: labelnya benar karena
+ * ia memang foto produknya, bukan tafsiran model atas foto itu.
+ *
+ * Audionya melanjutkan bed ambient yang sama supaya penutup tidak jatuh ke
+ * senyap mendadak — potong keras ke sunyi terbaca sebagai video rusak, bukan
+ * sebagai akhir. Kalau bed tidak ada, dipakai senyap: concat menolak input
+ * yang jumlah streamnya berbeda, jadi audio tetap harus ada.
+ */
+export async function appendPackshot(input: {
+  videoPath: string;
+  workDir: string;
+  fotoPath: string;
+  /** Bed ambient yang sama dengan video utama. Boleh kosong. */
+  musicPath?: string;
+  durationSec?: number;
+}): Promise<{ path: string; ditambahkan: boolean; ekorSec: number; sidik?: string }> {
+  const dur = input.durationSec ?? PACKSHOT_EKOR_DTK;
+  if (!fs.existsSync(input.fotoPath)) {
+    console.warn(`[packshot] foto produk tidak ada, penutup dilewati: ${input.fotoPath}`);
+    return { path: input.videoPath, ditambahkan: false, ekorSec: 0 };
+  }
+  try {
+    const { width, height } = await probeVideoSize(input.videoPath);
+    const klip = path.join(input.workDir, "packshot-ekor.mp4");
+    await buildPackshotAsli({ fotoPath: input.fotoPath, durationSec: dur, width, height, outPath: klip });
+
+    // Audio untuk segmen: bed yang sama, atau senyap.
+    const adaBed = !!input.musicPath && fs.existsSync(input.musicPath);
+    const klipAudio = path.join(input.workDir, "packshot-ekor-audio.mp4");
+    await runFfmpeg([
+      "-y", "-v", "error", "-i", klip,
+      ...(adaBed
+        ? ["-stream_loop", "-1", "-i", input.musicPath!]
+        : ["-f", "lavfi", "-t", String(dur), "-i", "anullsrc=channel_layout=stereo:sample_rate=44100"]),
+      "-map", "0:v", "-map", "1:a", "-t", String(dur),
+      "-c:v", "copy", "-c:a", "aac", "-ar", "44100", "-ac", "2", klipAudio,
+    ]);
+
+    const gabung = path.join(input.workDir, "output-packshot.mp4");
+    await runFfmpeg([
+      "-y", "-v", "error", "-i", input.videoPath, "-i", klipAudio,
+      "-filter_complex",
+      `[0:v]scale=${width}:${height},setsar=1[v0];[1:v]scale=${width}:${height},setsar=1[v1];` +
+        `[v0][0:a][v1][1:a]concat=n=2:v=1:a=1[v][a]`,
+      "-map", "[v]", "-map", "[a]",
+      // PENANDA AIGC IKUT PINDAH. Ditemukan dari QC-08 FAIL pada render video
+      // penuh 20 Agu: concat ini me-reencode, dan re-encode tanpa
+      // -map_metadata membuang tag racun_aigc/aigc_watermark yang ditulis
+      // compositor. Penandanya bukan hiasan — Syarat & Ketentuan menjanjikan
+      // setiap video membawanya di dalam berkas, jadi menghapusnya diam-diam
+      // membuat janji itu bohong.
+      ...METADATA_IKUT,
+      "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "44100", "-ac", "2",
+      gabung,
+    ]);
+    return { path: gabung, ditambahkan: true, ekorSec: dur, sidik: sidikFoto(input.fotoPath) };
+  } catch (err) {
+    // Sama seperti endcard: kegagalan di sini paling buruk menghilangkan
+    // penutupnya, tidak boleh merusak video yang sudah benar.
+    console.warn(`[packshot] gagal menambahkan penutup: ${(err as Error).message}`);
+    return { path: input.videoPath, ditambahkan: false, ekorSec: 0 };
+  }
+}
+
+/** Satu policy packshot untuk W1 dan W2.
+ *
+ * Neutral Story Ads jasa/app/toko memang productless dan tidak mendapat
+ * packshot. Produk fisik (neutral maupun non-neutral) tetap mencoba append;
+ * kegagalannya dibawa sebagai `ditambahkan:false`/tanpa sidik ke QC agar
+ * physical-neutral fail closed, bukan disembunyikan worker. */
+export async function appendPackshotUntukQc(input: {
+  videoPath: string;
+  workDir: string;
+  fotoPath?: string;
+  musicPath?: string;
+  productCategory?: string | null;
+  visualSubjectPolicy?: "neutral_story_ads";
+}): Promise<{ path: string; ditambahkan: boolean; ekorSec: number; sidik?: string }> {
+  if (input.visualSubjectPolicy === "neutral_story_ads" && isServiceLike(input.productCategory)) {
+    return { path: input.videoPath, ditambahkan: false, ekorSec: 0 };
+  }
+  if (!input.fotoPath) return { path: input.videoPath, ditambahkan: false, ekorSec: 0 };
+  return appendPackshot({
+    videoPath: input.videoPath,
+    workDir: input.workDir,
+    fotoPath: input.fotoPath,
+    musicPath: input.musicPath,
+  });
 }
 
 /** Apakah shot ini sebaiknya memakai foto asli, bukan video generate?

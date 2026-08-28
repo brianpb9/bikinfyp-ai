@@ -75,12 +75,12 @@ test("getAvatarPreset mengembalikan null untuk yang tidak dikenal", () => {
   assert.ok(getAvatarPreset(AVATAR_PRESETS[0].id));
 });
 
-test("tiga template UGC Ads baru terdaftar dengan klip contoh", () => {
+test("tiga template UGC Ads baru terdaftar tanpa menampilkan klip legacy", () => {
   for (const id of ["ads-unboxing-pov", "ads-meja-kosong", "ads-panas-ekstrem"]) {
     const t = CAMPAIGN_TEMPLATES.find((x) => x.id === id);
     assert.ok(t, `${id} tidak ada`);
     assert.equal(t!.group, "ads", `${id} tidak masuk kolom UGC Ads`);
-    assert.ok(t!.preview && fs.existsSync(`public${t!.preview}`), `${id}: klip contoh hilang`);
+    assert.equal(t!.preview, null, `${id}: klip legacy tidak cocok dengan staging netral baru`);
     assert.ok(t!.caution, `${id}: tanpa peringatan — aturan dokumennya hilang`);
   }
 });

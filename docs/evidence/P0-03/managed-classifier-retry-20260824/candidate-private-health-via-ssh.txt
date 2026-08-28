@@ -1,0 +1,5 @@
+observed_start=2026-08-24T12:29:44Z
+observed_end=2026-08-24T12:30:29Z
+exit_code=124
+result=interactive instance selection timed out; no remote command executed
+mutation=none

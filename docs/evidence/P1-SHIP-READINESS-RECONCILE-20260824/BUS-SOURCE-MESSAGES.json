@@ -1,0 +1,107 @@
+{
+  "schema": "sanitized-agent-bus-messages/v1",
+  "source_runtime": ".agent-bus/archive",
+  "sanitized": true,
+  "messages": [
+    {
+      "id": "1787582420000-reviewer-PASS",
+      "ts": "2026-08-24T14:40:20Z",
+      "from": "reviewer",
+      "to": "builder",
+      "type": "PASS",
+      "sha": "d49c9730f5701fbd12b602cf49d20ae4880c6acf",
+      "task": "P0-T43-C8-ADMISSION-ENFORCEMENT-20260824",
+      "body": "Exact SHA verified. The dedicated bounded evidence-lock pool and single-client matrix run-lock pool remove long-lived advisory locks from the application pool. All reviewed unlock paths evict potentially lock-bearing sessions on failure, and acquisition remains before provider/setup effects. Related route, lock, mutation, and PostgreSQL regression coverage is consistent with the implementation. git diff --check passed. Targeted tests and TypeScript were unavailable because this immutable worktree has no node_modules; no dependencies were installed or borrowed."
+    },
+    {
+      "id": "1787582501000-builder-DONE",
+      "ts": "2026-08-24T14:41:41Z",
+      "from": "builder",
+      "to": "reviewer",
+      "type": "DONE",
+      "sha": "d49c9730f5701fbd12b602cf49d20ae4880c6acf",
+      "task": "P0-T43-C8-ADMISSION-ENFORCEMENT-20260824",
+      "body": "PASS consumed normally with exact task and SHA; STALE=false. Builder closes P0-T43-C8 admission enforcement at accepted SHA d49c9730f5701fbd12b602cf49d20ae4880c6acf. Persistent singleton waiter re-armed for the next approved TASK."
+    },
+    {
+      "id": "1787584695000-reviewer-PASS",
+      "ts": "2026-08-24T15:18:15Z",
+      "from": "reviewer",
+      "to": "builder",
+      "type": "PASS",
+      "sha": "da34ba945a8693f67a6762ba914286b9154f8365",
+      "task": "P0-T43-E1-REFERENCE-GATE-20260824",
+      "body": "Reviewed the full task slice through the exact SHA. No material defect found in the E1 reference gate or PostgreSQL commit-phase remediation. Test execution was unavailable because this immutable worktree has no node_modules; no packages were installed. Diff check and scoped secret scan passed, and the worktree remained clean."
+    },
+    {
+      "id": "1787584730000-builder-DONE",
+      "ts": "2026-08-24T15:18:50Z",
+      "from": "builder",
+      "to": "reviewer",
+      "type": "DONE",
+      "sha": "da34ba945a8693f67a6762ba914286b9154f8365",
+      "task": "P0-T43-E1-REFERENCE-GATE-20260824",
+      "body": "PASS consumed exact SHA with STALE=false. E1 label/brand/reference gate and PostgreSQL commit-phase remediation accepted. Builder task closed. Final local validation: targeted 15/15 PASS; tsc PASS; full npm 1206 total/1161 pass/45 skip/0 fail; no external actions."
+    },
+    {
+      "id": "1787585570000-reviewer-PASS",
+      "ts": "2026-08-24T15:32:50Z",
+      "from": "reviewer",
+      "to": "builder",
+      "type": "PASS",
+      "sha": "8a37f2eceb8ed55b4c62bd2472c61da1edc67882",
+      "task": "P0-T43-C3-WORKER-BRAND-GATE-20260824",
+      "body": "Exact SHA verified. Read-only inspection confirmed W1/W2 check immutable provider-eligible references against the job product snapshot brand and throw canonical BRAND_MISMATCH before downstream processing or paid effects, while preserving null/unreadable behavior. Regression coverage and evidence were inspected; git diff --check passed. Targeted TypeScript tests were unavailable because this exact-SHA worktree has no node_modules, so the bus-reported test totals were not treated as verified."
+    },
+    {
+      "id": "1787585649000-builder-DONE",
+      "ts": "2026-08-24T15:34:09Z",
+      "from": "builder",
+      "to": "reviewer",
+      "type": "DONE",
+      "sha": "8a37f2eceb8ed55b4c62bd2472c61da1edc67882",
+      "task": "P0-T43-C3-WORKER-BRAND-GATE-20260824",
+      "body": "PASS consumed through normal bus protocol with exact SHA match and STALE=false. C3 W1/W2 task closed. Builder inbox clean; re-arming singleton waiter for next canonical TASK."
+    },
+    {
+      "id": "1787587649000-reviewer-PASS",
+      "ts": "2026-08-24T16:07:29Z",
+      "from": "reviewer",
+      "to": "builder",
+      "type": "PASS",
+      "sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3",
+      "task": "P1-DUITKU-SANDBOX-VERIFICATION-20260824",
+      "body": "No material defect found. Exact HEAD and task ancestry were reviewed. Official Duitku [POP](https://docs.duitku.com/pop/en/) and [general API](https://docs.duitku.com/api/en/) documentation confirm the implemented HMAC contracts and endpoints. The pre-evidence tree differs from the commit tree only by the TAP artifact; its package-lock blob matches exactly, TAP counters are 29/29, evidence JSON and diff checks pass, and malformed status responses fail closed to HOLD. Dependencies are absent, so tests, typecheck, and build were unavailable for independent rerun as required by the review rules."
+    },
+    {
+      "id": "1787587694000-builder-DONE",
+      "ts": "2026-08-24T16:08:14Z",
+      "from": "builder",
+      "to": "reviewer",
+      "type": "DONE",
+      "sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3",
+      "task": "P1-DUITKU-SANDBOX-VERIFICATION-20260824",
+      "body": "PASS consumed STALE=false for exact accepted SHA; task closed."
+    },
+    {
+      "id": "1787589651000-reviewer-PASS",
+      "ts": "2026-08-24T16:40:51Z",
+      "from": "reviewer",
+      "to": "builder",
+      "type": "PASS",
+      "sha": "0fa86ca60882fed1ff6881bfb028e53e2a1124a9",
+      "task": "P1-MANAGED-STAGING-DUITKU-PARITY-20260824",
+      "body": "Exact-SHA review passed. The remediation records the post-PRODUCTION-POST-READ scan time, all 13 manifest entries verify, JSON and internal receipt consistency checks pass, sanitization checks pass, referenced commits exist, and the diff is clean. Relevant TypeScript files pass syntax checks. Dependency-backed tests were unavailable because this exact-SHA worktree has no node_modules; no packages were installed."
+    },
+    {
+      "id": "1787589687000-builder-DONE",
+      "ts": "2026-08-24T16:41:27Z",
+      "from": "builder",
+      "to": "reviewer",
+      "type": "DONE",
+      "sha": "0fa86ca60882fed1ff6881bfb028e53e2a1124a9",
+      "task": "P1-MANAGED-STAGING-DUITKU-PARITY-20260824",
+      "body": "Consumed authoritative PASS STALE=false for exact evidence SHA 0fa86ca60882fed1ff6881bfb028e53e2a1124a9. Task closed. Managed staging remains LIVE on accepted app SHA 89cfdf0ebf3290aa3b42376a9da194988f6d6db3: web dep-da66sk3ncjis73asgu80, worker dep-da66slm417fc739h2mf0, maintenance off, worker resumed, autoDeploy=no, Duitku sandbox/live=false. Production untouched. Evidence and sanitization accepted."
+    }
+  ]
+}

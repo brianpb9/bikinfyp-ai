@@ -1,0 +1,36 @@
+{
+  "schema": "sanitized-agent-bus-messages/v2",
+  "source_runtime": ".agent-bus/archive",
+  "projection": ["id", "ts", "from", "to", "type", "sha", "task", "task_id", "owner_id", "worker_id", "reply_to_id", "body"],
+  "sanitized": true,
+  "messages": [
+    {
+      "id": "1787743919000-reviewer-PASS",
+      "ts": "2026-08-26T11:31:59Z",
+      "from": "reviewer",
+      "to": "builder",
+      "type": "PASS",
+      "sha": "39140dd2485ec5c679477008cb61780a3edb6a43",
+      "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
+      "task_id": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
+      "owner_id": "builder-parity-e2e-20260826",
+      "worker_id": "builder-parity-e2e-20260826",
+      "reply_to_id": "1787743657000-builder-READY_FOR_REVIEW",
+      "body": "Exact tree and full task lineage reviewed. Direct gate counterexamples, evidence checksums/JSON, raw-to-pretty trace equality, fixture hash, CI Redis ordering, and static worker contract passed. The preserved targeted run is 17/17 and the managed trace proves isolated admission-to-worker completion, replay rejection, zero provider/payment value, cleanup, and canonical worker restoration. Package-dependent reruns were unavailable because this exact-SHA worktree intentionally has no node_modules."
+    },
+    {
+      "id": "1787743932000-builder-DONE",
+      "ts": "2026-08-26T11:32:12Z",
+      "from": "builder",
+      "to": "reviewer",
+      "type": "DONE",
+      "sha": "39140dd2485ec5c679477008cb61780a3edb6a43",
+      "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
+      "task_id": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
+      "owner_id": "builder-parity-e2e-20260826",
+      "worker_id": "builder-parity-e2e-20260826",
+      "reply_to_id": "",
+      "body": "PASS consumed with STALE=false for exact evidence SHA 39140dd. Task complete: managed staging admission-to-isolated-worker trace accepted; canonical worker restored/live; CI Redis prerequisite provisioned; production unchanged."
+    }
+  ]
+}

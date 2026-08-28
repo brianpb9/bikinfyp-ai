@@ -1,0 +1,38 @@
+{
+  "schema": "score-80-lane-l-normalization/v1",
+  "task": "SCORE-80-EXECUTION-20260828",
+  "slot": "L",
+  "source": {
+    "raw_dir": "STREAM-A-L-MANAGED.raw",
+    "manifest_path": "STREAM-A-L-MANAGED.raw/MANIFEST.sha256",
+    "manifest_sha256": "6611247bba5e5d05cbdad6dc5a0b37114d55a560fed56ee0d7db129eee9ff101",
+    "normalized_receipt_path": "STREAM-A-L-MANAGED.raw/l-normalized.json",
+    "sanitized": true
+  },
+  "exact_deployed_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "audit_execution": "PASS_CANDIDATE_PENDING_REVIEW",
+  "l_receipt_claim": "PENDING_REVIEWER",
+  "legacy_population_gate": "FAIL",
+  "l_gate_unlocked": false,
+  "inventory": {
+    "product_rows": 149,
+    "reference_entries": 148,
+    "matched_primary": 148,
+    "missing_primary": 0,
+    "matched_sidecar": 0,
+    "missing_sidecar": 148,
+    "orphan_primary": 56,
+    "orphan_sidecar": 0,
+    "products_without_photo": 1,
+    "evaluator_sidecar_missing": 148
+  },
+  "immutability": {
+    "db_row_fingerprint_equal": true,
+    "r2_inventory_fingerprint_equal": true,
+    "counts_equal": true,
+    "mutation": false
+  },
+  "blocking_reason": "148 of 148 referenced primaries lack evidence sidecars; fail-closed evaluator reports EVIDENCE_INVALID/SIDECAR_MISSING",
+  "points_claimed": 0,
+  "next_action": "REVIEW_RECEIPT_BUT_KEEP_L_GATE_LOCKED"
+}

@@ -1,0 +1,36 @@
+{
+  "classification": "VERIFIED_READ_ONLY_WITH_EXPLICIT_PROVENANCE_LIMIT",
+  "pre_task": {
+    "observed_at": "2026-08-24T11:31:30Z",
+    "source_receipt_id": "pre-managed-classifier-control-plane-final",
+    "source_path": "docs/evidence/P0-03/managed-web-classifier-canary-20260824/control-plane-final.json",
+    "source_sha256": "a255bcfd6f2329813741fbb789a75fd6fbebd0ee9d2f91ba78f9f37e1165efbc",
+    "immutable_commit": "1bb5eeff2dfbeefd0e84eb6f097f06e90f880cbe",
+    "web": { "service_id": "srv-d9nhccfqj5pc73et9hrg", "deploy_id": "dep-da3bfg142hec73arfot0", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "worker": { "service_id": "srv-d9ni3ndaeets73c07kq0", "deploy_id": "dep-da3bfg142hec73arfpfg", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" }
+  },
+  "pre_task_service_state_support": {
+    "source_receipt_id": "pre-production-services",
+    "source_path": "docs/evidence/P0-03/production-20260824/services.json",
+    "source_sha256": "ce402c610fd44b9ef540a2978cf5cb45e1b865965fbc38846acaa20f37d7ec50",
+    "immutable_commit": "3058d0b911e34663b183ea316a94520c69ed8a56",
+    "immutable_at": "2026-08-24T06:03:18Z",
+    "fields": { "web_auto_deploy": "yes", "web_suspended": "not_suspended", "worker_auto_deploy": "yes", "worker_suspended": "not_suspended" }
+  },
+  "post_task": {
+    "observed_at": "2026-08-24T16:31:13Z",
+    "source_receipt_id": "post-production-read-20260824T163113Z",
+    "source_path": "docs/evidence/P1-MANAGED-STAGING-DUITKU-PARITY-20260824/PRODUCTION-POST-READ.json",
+    "web": { "service_id": "srv-d9nhccfqj5pc73et9hrg", "branch": "main", "auto_deploy": "yes", "suspended": "not_suspended", "deploy_id": "dep-da3bfg142hec73arfot0", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "worker": { "service_id": "srv-d9ni3ndaeets73c07kq0", "branch": "main", "auto_deploy": "yes", "suspended": "not_suspended", "deploy_id": "dep-da3bfg142hec73arfpfg", "status": "live", "sha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d" },
+    "origin_main": "00ee62efd86ae7e10453a2a1896e63b62228aa4d"
+  },
+  "conclusions": {
+    "deploy_id_sha_status_unchanged": true,
+    "auto_deploy_and_suspension_unchanged_against_preexisting_receipt": true,
+    "production_mutation_performed_by_this_task": false,
+    "same_task_raw_pretask_terminal_capture_preserved": false,
+    "full_same_task_before_after_config_proof": false,
+    "limit": "The task did read production before staging mutation, but that terminal capture was not persisted. No claim relies on it. The deploy no-touch conclusion uses an independently committed 11:31:30Z receipt and the preserved 16:31:13Z post-task read. Only fields present in those immutable sources are compared."
+  }
+}

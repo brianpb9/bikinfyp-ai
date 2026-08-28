@@ -1,0 +1,64 @@
+#!/bin/sh
+# bus-wait <role> [timeout_seconds] [--task <task_id> --owner <owner_id>]
+#
+# Waits without consuming. Scoped Builders skip messages owned by others.
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+BUS_DIR=$(dirname "$SCRIPT_DIR")
+SELECT="$SCRIPT_DIR/bus-select.mjs"
+NODE_BIN=${AGENT_BUS_NODE_BIN:-node}
+POLL_SECONDS=${AGENT_BUS_POLL_SECONDS:-2}
+
+die() { code=$1; shift; printf 'bus-wait: %s\n' "$*" >&2; exit "$code"; }
+[ $# -ge 1 ] || die 2 "usage: bus-wait <role> [timeout_seconds] [--task <task_id> --owner <owner_id>]"
+ROLE=$1; shift
+case "$ROLE" in builder|reviewer) ;; *) die 2 "invalid role '$ROLE'" ;; esac
+
+TIMEOUT=3600; TASK=''; OWNER=''; TIMEOUT_SET=no
+if [ "$ROLE" = builder ]; then
+  TASK=${AGENT_BUS_TASK_ID:-}
+  OWNER=${AGENT_BUS_OWNER_ID:-}
+fi
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --task) [ $# -ge 2 ] || die 2 "--task requires a value"; TASK=$2; shift 2 ;;
+    --owner) [ $# -ge 2 ] || die 2 "--owner requires a value"; OWNER=$2; shift 2 ;;
+    *)
+      [ "$TIMEOUT_SET" = no ] || die 2 "unexpected argument '$1'"
+      TIMEOUT=$1; TIMEOUT_SET=yes; shift
+      ;;
+  esac
+done
+if { [ -n "$TASK" ] && [ -z "$OWNER" ]; } || { [ -z "$TASK" ] && [ -n "$OWNER" ]; }; then
+  die 2 "--task and --owner must be supplied together"
+fi
+case "$TIMEOUT" in ''|*[!0-9]*) die 2 "timeout must be a non-negative integer, got '$TIMEOUT'" ;; esac
+case "$TIMEOUT" in 0) ;; 0*) die 2 "timeout must not have a leading zero, got '$TIMEOUT'" ;; esac
+
+INBOX="$BUS_DIR/inbox/$ROLE"
+mkdir -p "$INBOX"
+
+# Publish readiness before the first scan, including the selector identity.
+if [ -n "${BUS_SIAP_BERKAS:-}" ]; then
+  if [ -n "${BUS_UJI_TUNDA_SIAP:-}" ]; then sleep "$BUS_UJI_TUNDA_SIAP"; fi
+  printf 'SIAP %s %s %s %s\n' "$ROLE" "$$" "$TASK" "$OWNER" > "$BUS_SIAP_BERKAS"
+fi
+
+DEADLINE=$(( $(date +%s) + TIMEOUT ))
+while :; do
+  if MSG=$("$NODE_BIN" "$SELECT" wait "$INBOX" "$ROLE" "$TASK" "$OWNER"); then
+    printf '%s\n' "$MSG"
+    cat "$MSG"
+    exit 0
+  else
+    rc=$?
+    case "$rc" in
+      5) ;;
+      8) die 8 "routing selector required or invalid for role=$ROLE" ;;
+      *) die 2 "selector failed rc=$rc" ;;
+    esac
+  fi
+  [ "$(date +%s)" -lt "$DEADLINE" ] || die 4 "timeout after ${TIMEOUT}s waiting for $ROLE task=${TASK:-legacy} owner=${OWNER:-legacy}"
+  sleep "$POLL_SECONDS"
+done

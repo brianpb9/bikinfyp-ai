@@ -1,0 +1,144 @@
+{
+  "schema": "evidence-to-point-contract/v1",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "review_status": "CHANGES_REQUESTED_CANONICAL_TOKEN_MAPPING_REQUIRED",
+  "authority_trust_state": {
+    "status": "CANONICAL_REVIEWER_BUS",
+    "mechanism": "Singleton independent Codex exact-SHA Reviewer plus durable append-only .agent-bus archive, role separation, and STALE protection.",
+    "crypto_or_hsm_required": false,
+    "builder_may_author_review_verdict": false
+  },
+  "baseline_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "application_bundle_sha": "0e953f9ccfd8991c96fecbed44bb3b892e0c8829",
+  "source_board": "docs/evidence/board-jawaban-2026-08-19.md",
+  "source_rows": [
+    ["Money safety",9],
+    ["Auth intent & failure path",7],
+    ["Mobile UI 375",7],
+    ["Hydration/interaction canary CI",8],
+    ["Content engine standard",7],
+    ["Brand fidelity",6],
+    ["Anti-slop produksi",7],
+    ["Prompt/verdict archive",8],
+    ["NSFW rejection",6],
+    ["Payments (Midtrans sandbox)",2],
+    ["Legal/PDP",2],
+    ["DR/monitoring/incident owner",2],
+    ["Landing/pricing consistency",6]
+  ],
+  "current": {
+    "raw_sum": 77,
+    "denominator": 130,
+    "normalized_rounded": 59,
+    "evidence_ceiling": 58,
+    "certified_score": 58
+  },
+  "score_delta": {
+    "canonical_58_to_80": 22,
+    "fixed_rubric_raw_77_to_104": 27,
+    "raw_delta_is_not_canonical_delta": true,
+    "mandatory_noncompensable_gates_are_separate_from_scored_tokens": true,
+    "c5_mandatory_gate_point_gain": "UNDEFINED_ZERO_AWARDED"
+  },
+  "point_rule": {
+    "evidence_receipt_changes_points": true,
+    "default_delta": 0,
+    "token_award_requires": [
+      "award_id",
+      "authority_receipt_id",
+      "token_id",
+      "row",
+      "prior_score",
+      "new_score",
+      "evidence_receipt_ids"
+    ],
+    "missing_authority_result": "NO_SCORE_CHANGE",
+    "weights_may_not_be_redistributed": true,
+    "partial_tokens_allowed": false,
+    "token_value_raw_points": 1,
+    "tokens_must_be_cumulative_within_row": true,
+    "ladder": "SCORE-80-POINT-MATRIX.json"
+  },
+  "thresholds": {
+    "80": {
+      "minimum_raw_sum": 104,
+      "gate_source": "docs/evidence/SHIP-READINESS-CANONICAL-20260824.md#syarat-eksplisit-untuk-80-dan-100",
+      "gate": "DEFINED",
+      "requires": ["A","L","C5","P","G","B","R"]
+    },
+    "90": {
+      "minimum_raw_sum": 117,
+      "gate_source": null,
+      "gate": "NOT_AUTHORIZED_FOR_CURRENT_WORK",
+      "requires": ["80"],
+      "incremental_requirements": "UNDEFINED_FOUNDER_AUTHORITY_REQUIRED"
+    },
+    "100": {
+      "minimum_raw_sum": 130,
+      "gate_source": "docs/evidence/SHIP-READINESS-CANONICAL-20260824.md#syarat-eksplisit-untuk-80-dan-100",
+      "gate": "DEFINED",
+      "requires": ["80","M","Q","I","U","K","O"]
+    }
+  },
+  "slots": {
+    "A": {"name":"exact managed staging deploy, PostgreSQL/R2, migrations, runtime readback","tier":"MANAGED_STAGING","state":"IN_PROGRESS_EXTERNAL_LANE","closure_authority":"REVIEWER_PASS","depends_on":[]},
+    "L": {"name":"paired legacy PostgreSQL and matching R2 population audit","tier":"MANAGED_STAGING","state":"OPEN","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
+    "C5": {"name":"CATEGORY_UNKNOWN/ambiguous/bundle fails closed into manual-review quarantine; no provider/publication/spend/irreversible downstream; only explicitly authorized human review role may release; no heuristic auto-map; accepted implementation required","tier":"AUTHORITY_AND_REPOSITORY","state":"FOUNDER_POLICY_APPROVED_IMPLEMENTATION_PENDING","closure_authority":"FOUNDER_DECISION_AND_REVIEWER_PASS","depends_on":[]},
+    "P": {"name":"one closed internal canary, provider receipt, DB truth, exactly-once settlement reconciliation, ambiguous STOP_NO_RETRY","tier":"PAYMENT_EXTERNAL","state":"BLOCKED_PRE_CANARY_ECONOMICS_AND_MERCHANT_CHANNEL_READINESS","closure_authority":"PAYMENT_OWNER_AND_REVIEWER_PASS","depends_on":["A"],"phase_dependencies":["G.PRE_CANARY_ECONOMICS","G.MERCHANT_CHANNEL_READINESS"]},
+    "G": {"name":"ordered payment authority: pre-canary economics/readiness first, then post-canary separate PAYMENTS_GO_LIVE decision","tier":"FOUNDER_AUTHORITY","state":"PRE_CANARY_ECONOMICS_MISSING_CANARY_NOT_READY","closure_authority":"FOUNDER_DECISION","depends_on":[],"phases":{"PRE_CANARY_ECONOMICS":{"state":"MISSING_CHEAPEST_SKU_60000_EXCEEDS_50000_CAP","depends_on":[]},"MERCHANT_CHANNEL_READINESS":{"state":"MISSING","depends_on":[]},"PAYMENTS_GO_LIVE":{"state":"NOT_DECIDED_CANARY_REQUIRED_FIRST","depends_on":["P","R"]}}},
+    "B": {"name":"controlled staging/production-like OTP-to-delivery/refund E2E and recovery","tier":"MANAGED_STAGING","state":"PENDING_A","closure_authority":"REVIEWER_PASS","depends_on":["A"]},
+    "R": {"name":"separate named Release Approver, Release Operator, and Rollback Authority; controls and verified intake with no Retail P0 fail-open","tier":"RELEASE_AUTHORITY","state":"ROLE_NAMES_REQUIRED","closure_authority":"RELEASE_OWNER_AND_REVIEWER_PASS","depends_on":["A"]},
+    "M": {"name":"C1-C13 PASS across all required E/A/W paths and no remaining P0/P1 partial","tier":"QA_RELEASE","state":"OPEN","closure_authority":"QA_RELEASE_REVIEWER_PASS","depends_on":["80"]},
+    "Q": {"name":"legal/PDP counsel sign-off","tier":"LEGAL","state":"OWNER_REQUIRED","closure_authority":"COUNSEL_SIGNOFF","depends_on":["80"]},
+    "I": {"name":"incident owner, alert delivery, restore, and drill","tier":"INCIDENT_DR","state":"OWNER_REQUIRED","closure_authority":"INCIDENT_OWNER_AND_REVIEWER_PASS","depends_on":["80"]},
+    "U": {"name":"production browser/mobile/auth coverage","tier":"PRODUCTION","state":"OPEN","closure_authority":"REVIEWER_PASS","depends_on":["80"]},
+    "K": {"name":"representative production prompt/QC/NSFW/product-fidelity KPI window","tier":"PRODUCTION","state":"OPEN","closure_authority":"INDEPENDENT_REVIEWER_PASS","depends_on":["80"]},
+    "O": {"name":"stable payment and worker operational cycle with zero-difference reconciliation","tier":"PRODUCTION_PAYMENT","state":"OPEN","closure_authority":"PAYMENT_OWNER_AND_REVIEWER_PASS","depends_on":["80"]}
+  },
+  "receipt_contract": {
+    "closed_state": "VERIFIED",
+    "required_fields": ["receipt_id","slot_id","artifact_path","artifact_sha256","exact_sha","evidence_tier","authority_class","authority_receipt_id","dependency_receipt_ids","verdict"],
+    "required_verdict": "PASS",
+    "artifact_path_prefix": "docs/evidence/",
+    "state_transition": "A slot becomes VERIFIED only when its latest valid receipt matches tier and closure_authority, binds bytes read from artifact_path at exact_sha, exact_sha is in reviewed ancestry, authority_receipt_id resolves to a committed PASS authority record for the same slot/class, and dependency_receipt_ids exactly cover PASS receipts for every dependency. A dependency on aggregate 80 expands to A,L,C5,P,G,B,R."
+  },
+  "receipt_registry": {
+    "A": [],
+    "L": [],
+    "C5": [],
+    "P": [],
+    "G": [],
+    "B": [],
+    "R": [],
+    "M": [],
+    "Q": [],
+    "I": [],
+    "U": [],
+    "K": [],
+    "O": []
+  },
+  "authority_registry": "AUTHORITY-REGISTRY.json",
+  "compression_source_task": "COMPRESSION-SOURCE-TASK.json",
+  "payment_sequence": {
+    "order": ["PRE_CANARY_ECONOMICS_AND_MERCHANT_CHANNEL_READINESS","ONE_CLOSED_CANARY_SETTLEMENT_RECONCILIATION","SEPARATE_PAYMENTS_GO_LIVE_DECISION"],
+    "pre_canary_required_fields_source": "FOUNDER-80-DIRECTION.json#price_cogs_required_fields",
+    "phase_receipts": {
+      "PRE_CANARY_ECONOMICS_AND_MERCHANT_CHANNEL_READINESS": ["Founder-approved economics record","merchant readiness receipt","selected channel readiness receipt"],
+      "ONE_CLOSED_CANARY_SETTLEMENT_RECONCILIATION": ["provider receipt","database truth receipt","exactly-once receipt","settlement reconciliation receipt"],
+      "SEPARATE_PAYMENTS_GO_LIVE_DECISION": ["Founder PAYMENTS_GO_LIVE decision after canary PASS","release-control receipt"]
+    },
+    "canary_may_execute_before_phase_1": false,
+    "go_live_may_be_decided_before_phase_2_pass": false
+  },
+  "founder_80_direction": "FOUNDER-80-DIRECTION.json",
+  "evidence_token_awards": [],
+  "score_state": {
+    "raw_sum": 77,
+    "normalized_rounded": 59,
+    "gate_80_closed": false,
+    "evidence_ceiling": 58,
+    "certified_score": 58,
+    "ceiling_transition": "The ceiling cannot become 80 until every A/L/C5/P/G/B/R slot is VERIFIED and Founder/Reviewer accepts a canonical +27 raw row allocation. No accepted allocation currently exists, so no token may be awarded."
+  },
+  "production_public_real_money": "OFF"
+}

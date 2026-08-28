@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { AI_RENDER_BLOCKED_TEMPLATE_IDS, aiRenderBlockMessage } from "../lib/template-render-safety";
+import { templateIdRenderOtoritatif } from "../lib/dashboard/render-cell";
 
 test("legacy before-after serta T05 T08 T10 diblokir dari render AI dengan alasan footage asli", () => {
   assert.deepEqual([...AI_RENDER_BLOCKED_TEMPLATE_IDS], [
@@ -13,6 +14,25 @@ test("legacy before-after serta T05 T08 T10 diblokir dari render AI dengan alasa
     assert.match(message ?? "", /Render AI diblokir/i);
   }
   assert.equal(aiRenderBlockMessage("t06-swatch-shade"), null);
+});
+
+test("request tanpa template_id tetap memakai snapshot blocked yang otoritatif", () => {
+  for (const id of AI_RENDER_BLOCKED_TEMPLATE_IDS) {
+    const authoritative = templateIdRenderOtoritatif({ templateId: id }, null);
+    assert.equal(authoritative, id);
+    assert.equal(aiRenderBlockMessage(authoritative), aiRenderBlockMessage(id));
+  }
+});
+
+test("shared renderSatuSel memblokir snapshot sebelum approval/job/kredit/enqueue", () => {
+  const source = readFileSync(new URL("../lib/dashboard/render-cell.ts", import.meta.url), "utf8");
+  const derive = source.indexOf("templateIdRenderOtoritatif(jejak.admisi, sel.templateId)");
+  const block = source.indexOf("aiRenderBlockMessage(templateIdOtoritatif)");
+  assert.ok(derive > 0 && block > derive, "shared cell tidak memblokir ID snapshot otoritatif");
+  for (const sideEffect of ["UPDATE scripts\n       SET segments=", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
+    const index = source.indexOf(sideEffect);
+    assert.ok(index > block, `${sideEffect} mendahului real-footage block`);
+  }
 });
 
 // Empat template bukti (before/after, day 1 vs day 7, bukti di lengan) tidak
@@ -37,7 +57,10 @@ for (const rel of ROUTE_PEMAKAI_SEL) {
     const source = readFileSync(new URL(rel, import.meta.url), "utf8");
     const blockIndex = source.indexOf("aiRenderBlockMessage(templateId)");
     const personaIndex = source.indexOf("pgFindOrCreatePersona(");
-    const poolIndex = source.indexOf("const pool = getPool(");
+    const poolIndex = Math.max(
+      source.indexOf("const pool = getPool("),
+      source.indexOf("const { pool, jobsRepo, creditsRepo } = routeDeps.createMatrixResources()"),
+    );
     const selIndex = source.indexOf("renderSatuSel(");
     assert.ok(blockIndex > 0, "route tidak memanggil safety guard");
     assert.ok(personaIndex > blockIndex, "blok harus terjadi sebelum membuat persona");
@@ -49,12 +72,12 @@ for (const rel of ROUTE_PEMAKAI_SEL) {
 
 test("side effect render hanya hidup di sel bersama, bukan tersebar di route", () => {
   const sel = readFileSync(new URL("../lib/dashboard/render-cell.ts", import.meta.url), "utf8");
-  for (const jejak of ["await smokeApproveScript(", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
+  for (const jejak of ["UPDATE scripts\n       SET segments=", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
     assert.ok(sel.includes(jejak), `${jejak} harus ada di sel render bersama`);
   }
   for (const rel of ROUTE_PEMAKAI_SEL) {
     const source = readFileSync(new URL(rel, import.meta.url), "utf8");
-    for (const jejak of ["await smokeApproveScript(", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
+    for (const jejak of ["UPDATE scripts\n       SET segments=", "INSERT INTO jobs", "await creditsRepo.holdCredits(", "await enqueueJob("]) {
       assert.ok(!source.includes(jejak), `${rel} menyalin ulang "${jejak}" — aturan uang harus satu salinan`);
     }
   }

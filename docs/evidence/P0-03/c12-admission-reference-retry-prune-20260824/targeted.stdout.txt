@@ -1,0 +1,414 @@
+TAP version 13
+# Subtest: approve NULL -> 422 SCRIPT_NOT_APPROVED
+ok 1 - approve NULL -> 422 SCRIPT_NOT_APPROVED
+  ---
+  duration_ms: 80.981583
+  type: 'test'
+  ...
+# Subtest: approve dengan kata terlarang -> 422 FORBIDDEN_WORDS (L-10 keras saat edit)
+ok 2 - approve dengan kata terlarang -> 422 FORBIDDEN_WORDS (L-10 keras saat edit)
+  ---
+  duration_ms: 242.5345
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"231ea7ff-3cca-4e83-a41d-d0eb1dc71048","produkId":"79c84197-958e-4897-a3ea-4563a10d0c36","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: setelah approve -> job dibuat (201) dan state QUEUED
+ok 3 - setelah approve -> job dibuat (201) dan state QUEUED
+  ---
+  duration_ms: 172.313375
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"eea09006-6acf-4fe5-b49e-e560b79a3d5e","produkId":"b1a70830-4a9d-45a8-9d67-b28387607942","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job eea09006] -> GENERATING_VISUAL
+# [failover] video e3-c9-observer gagal: observer stop -> coba provider berikutnya
+# [job eea09006] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission
+ok 4 - E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission
+  ---
+  duration_ms: 1088.134666
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"8f76e4a9-b5ad-450b-abe5-f99a0a98c176","produkId":"ce47f62d-b353-49c0-b31a-c98e70ddcdcd","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 8f76e4a9] -> GENERATING_VISUAL
+# [failover] video admission-e5-w2-observer gagal: observer stop -> coba provider berikutnya
+# [job 8f76e4a9] -> REFUNDED {"refunded_credits":12000}
+# Subtest: admission W2 -> queue delay -> E5 hapus source tetap memakai bytes admission tanpa install worker
+ok 5 - admission W2 -> queue delay -> E5 hapus source tetap memakai bytes admission tanpa install worker
+  ---
+  duration_ms: 151.996709
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"4ee28d63-9056-4fa6-aa27-6853cca3b564","produkId":"c39869c7-a9ee-456d-a887-03d3fd77128b","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"4ee28d63-9056-4fa6-aa27-6853cca3b564","produkId":"c39869c7-a9ee-456d-a887-03d3fd77128b","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: SQLite admission mengulang bounded saat exact images berubah sebelum INSERT
+ok 6 - SQLite admission mengulang bounded saat exact images berubah sebelum INSERT
+  ---
+  duration_ms: 8.992167
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"26245d5d-08f9-4aaa-a392-e2a635dffe04","produkId":"4bdf4431-7e74-4323-aaa5-c880bec9540e","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [api] unexpected error: Error: injected admission storage failure
+#     at MemoryStorage.storage.onApprovedReferencePut (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:401:54)
+#     at MemoryStorage.put (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:60:59)
+#     at prepareJobReferenceManifest (/Users/hadrava/HDRV/03_UGC_AI_ID/app/lib/job-reference-manifest.ts:83:26)
+#     at async prepareAdmissionReferenceManifest (/Users/hadrava/HDRV/03_UGC_AI_ID/app/lib/job-admission-reference.ts:18:20)
+#     at async POST (/Users/hadrava/HDRV/03_UGC_AI_ID/app/app/api/jobs/route.ts:236:29)
+#     at async admittedProductMutationScenario (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:185:21)
+#     at async waitForActual (node:assert:644:5)
+#     at async Function.rejects (node:assert:767:25)
+#     at async TestContext.<anonymous> (/Users/hadrava/HDRV/03_UGC_AI_ID/app/tests/http-photo-mutation-resume-w2.test.ts:398:3)
+#     at async Test.run (node:internal/test_runner/test:1054:7)
+# Subtest: storage preparation gagal sebelum job, hold, dan queue visibility SQLite
+ok 7 - storage preparation gagal sebelum job, hold, dan queue visibility SQLite
+  ---
+  duration_ms: 7.144375
+  type: 'test'
+  ...
+# Subtest: SQLite saldo known-insufficient ditolak sebelum PUT, job, dan hold
+ok 8 - SQLite saldo known-insufficient ditolak sebelum PUT, job, dan hold
+  ---
+  duration_ms: 2.809666
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"6d0e44da-67b9-4c0e-8b89-bd0cd4b1d640","produkId":"1b2b6b72-3b06-4fe6-a0cb-d7d1dcc6dd2e","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"eb94c59f-39bd-40ae-a908-53d387390ff9","produkId":"1b2b6b72-3b06-4fe6-a0cb-d7d1dcc6dd2e","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: dua admission SQLite konkuren menyisakan hanya object milik job pemenang
+ok 9 - dua admission SQLite konkuren menyisakan hanya object milik job pemenang
+  ---
+  duration_ms: 44.356875
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"5b13f5e2-b608-4ead-88f8-e5c1c06081e8","produkId":"e8f3e40a-7774-48aa-8e88-3a91a47769cd","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"5b13f5e2-b608-4ead-88f8-e5c1c06081e8","produkId":"e8f3e40a-7774-48aa-8e88-3a91a47769cd","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"5b13f5e2-b608-4ead-88f8-e5c1c06081e8","produkId":"e8f3e40a-7774-48aa-8e88-3a91a47769cd","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: SQLite images berubah sampai retry habis membersihkan seluruh prepared prefix
+ok 10 - SQLite images berubah sampai retry habis membersihkan seluruh prepared prefix
+  ---
+  duration_ms: 124.006083
+  type: 'test'
+  ...
+# [job 82a5aa0d] -> GENERATING_VISUAL
+# [failover] video e5-observer gagal: observer stop -> coba provider berikutnya
+# [job 82a5aa0d] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan
+ok 11 - E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan
+  ---
+  duration_ms: 105.738208
+  type: 'test'
+  ...
+# [job 0aede02f] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider
+ok 12 - E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider
+  ---
+  duration_ms: 4.440875
+  type: 'test'
+  ...
+# Subtest: guard: bukti C12 memanggil handler E5 dan resume W2 nyata
+ok 13 - guard: bukti C12 memanggil handler E5 dan resume W2 nyata
+  ---
+  duration_ms: 0.702458
+  type: 'test'
+  ...
+# Subtest: snapshot dibuat sekali dan mutation candidate tidak mengubah retry
+ok 14 - snapshot dibuat sekali dan mutation candidate tidak mengubah retry
+  ---
+  duration_ms: 0.765125
+  type: 'test'
+  ...
+# Subtest: dua create konkuren kembali dengan satu pemenang durable
+ok 15 - dua create konkuren kembali dengan satu pemenang durable
+  ---
+  duration_ms: 42.853542
+  type: 'test'
+  ...
+# Subtest: snapshot invalid gagal tertutup
+ok 16 - snapshot invalid gagal tertutup
+  ---
+  duration_ms: 0.524
+  type: 'test'
+  ...
+# Subtest: snapshot v1 hanya kompatibel untuk non-Story-Ads; v2 tetap membawa harga
+ok 17 - snapshot v1 hanya kompatibel untuk non-Story-Ads; v2 tetap membawa harga
+  ---
+  duration_ms: 0.219416
+  type: 'test'
+  ...
+# Subtest: A6 identity: talking_head + template job null tetap Story Ads dari snapshot admisi
+ok 18 - A6 identity: talking_head + template job null tetap Story Ads dari snapshot admisi
+  ---
+  duration_ms: 0.09075
+  type: 'test'
+  ...
+# Subtest: template snapshot admisi menang atas kolom job yang menyimpang
+ok 19 - template snapshot admisi menang atas kolom job yang menyimpang
+  ---
+  duration_ms: 0.040667
+  type: 'test'
+  ...
+# Subtest: admission builder membekukan seluruh metadata dari bentuk row database
+ok 20 - admission builder membekukan seluruh metadata dari bentuk row database
+  ---
+  duration_ms: 0.159125
+  type: 'test'
+  ...
+# Subtest: legacy dengan jejak provider tanpa snapshot ditolak
+ok 21 - legacy dengan jejak provider tanpa snapshot ditolak
+  ---
+  duration_ms: 0.060625
+  type: 'test'
+  ...
+# Subtest: A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan enqueue
+ok 22 - A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan enqueue
+  ---
+  duration_ms: 0.857417
+  type: 'test'
+  ...
+# Subtest: tepat tiga admission produksi memasang product snapshot + reference manifest pada INSERT yang sama
+ok 23 - tepat tiga admission produksi memasang product snapshot + reference manifest pada INSERT yang sama
+  ---
+  duration_ms: 82.166417
+  type: 'test'
+  ...
+# Subtest: kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot
+ok 24 - kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot
+  ---
+  duration_ms: 0.330875
+  type: 'test'
+  ...
+# Subtest: dashboard mengunci satu row produk sebelum validasi dan memakai row itu sampai snapshot job
+ok 25 - dashboard mengunci satu row produk sebelum validasi dan memakai row itu sampai snapshot job
+  ---
+  duration_ms: 0.133791
+  type: 'test'
+  ...
+# Subtest: C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi
+ok 26 - C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi
+  ---
+  duration_ms: 3.259291
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"job-admission-empty","produkId":"product-admission-empty","lolos":false,"foto":0,"tersetujui":0,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: preparation admission idempoten pada key deterministik dan raw identik
+ok 27 - preparation admission idempoten pada key deterministik dan raw identik
+  ---
+  duration_ms: 0.935541
+  type: 'test'
+  ...
+# Subtest: partial storage PUT gagal sebelum callback persistence/DB
+ok 28 - partial storage PUT gagal sebelum callback persistence/DB
+  ---
+  duration_ms: 0.402541
+  type: 'test'
+  ...
+# Subtest: source berubah antara resolver dan copy admission gagal REF_HASH_MISMATCH
+ok 29 - source berubah antara resolver dan copy admission gagal REF_HASH_MISMATCH
+  ---
+  duration_ms: 0.113875
+  type: 'test'
+  ...
+# Subtest: admission kosong/seluruhnya ditolak mempertahankan NO_APPROVED_REFERENCE
+ok 30 - admission kosong/seluruhnya ditolak mempertahankan NO_APPROVED_REFERENCE
+  ---
+  duration_ms: 5.87775
+  type: 'test'
+  ...
+# Subtest: cleanup admission butuh bukti absent; kegagalan delete tercatat tanpa mengubah outcome
+ok 31 - cleanup admission butuh bukti absent; kegagalan delete tercatat tanpa mengubah outcome
+  ---
+  duration_ms: 0.278208
+  type: 'test'
+  ...
+# Subtest: manifest dibuat sekali; retry/reorder/delete/add tetap memakai identitas awal
+ok 32 - manifest dibuat sekali; retry/reorder/delete/add tetap memakai identitas awal
+  ---
+  duration_ms: 11.741375
+  type: 'test'
+  ...
+# Subtest: dua create konkuren kembali dengan satu pemenang durable
+ok 33 - dua create konkuren kembali dengan satu pemenang durable
+  ---
+  duration_ms: 1.469917
+  type: 'test'
+  ...
+# Subtest: crash/hasil CAS ambigu tidak menghapus snapshot yang dapat diadopsi retry
+ok 34 - crash/hasil CAS ambigu tidak menghapus snapshot yang dapat diadopsi retry
+  ---
+  duration_ms: 2.867666
+  type: 'test'
+  ...
+# Subtest: manifest missing/hash-changed dan legacy tak terbukti gagal tertutup
+ok 35 - manifest missing/hash-changed dan legacy tak terbukti gagal tertutup
+  ---
+  duration_ms: 2.372791
+  type: 'test'
+  ...
+# Subtest: readFile I/O sesudah materialize berhasil dipropagasikan, bukan REF_HASH_MISMATCH
+ok 36 - readFile I/O sesudah materialize berhasil dipropagasikan, bukan REF_HASH_MISMATCH
+  ---
+  duration_ms: 3.331667
+  type: 'test'
+  ...
+# Subtest: A6 menempatkan verifikasi manifest sebelum approve, regen charge, task reset, dan enqueue
+ok 37 - A6 menempatkan verifikasi manifest sebelum approve, regen charge, task reset, dan enqueue
+  ---
+  duration_ms: 0.304125
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"f967525b-73b5-47c5-a8a9-4bca6b3bf6c7","produkId":"9141d8bf-29a5-4ff4-9e6b-eefe3aae269e","lolos":true,"foto":2,"tersetujui":1,"perAlasan":{"REF_PROMOTIONAL":1},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job f967525b] -> REFUNDED {"refunded_credits":0}
+# [failover] video pengamat-w2-c8 gagal: provider pengamat W2 C8: bukti invalid mencapai boundary provider -> coba provider berikutnya
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"51c4fdb0-cd39-403f-83af-007b345b79e8","produkId":"76860778-d163-4e40-9abd-31a0f3533a4a","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"EVIDENCE_INVALID":1},"perRinci":{"SIDECAR_CORRUPT":1},"semuaBelumDiperiksa":false}
+# [job 51c4fdb0] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"cab5fe4e-d39a-47e3-b24c-31401dcc9b6f","produkId":"33f6d1e3-aab5-4794-9bd6-67474708aea4","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"EVIDENCE_INVALID":1},"perRinci":{"SIDECAR_MISSING":1},"semuaBelumDiperiksa":false}
+# [job cab5fe4e] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"1e318c24-b513-4104-815d-7b5e6bba0d30","produkId":"e28f8470-de25-4e30-889b-7c381653c541","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"REF_MISSING":1},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 1e318c24] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"a1d839ac-8dd0-4fc5-8edb-7cc943763708","produkId":"d659c32a-451f-4c50-8b1e-b6d068d50ba0","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: W2 C1: worker wajib memilih packshot sah, bukan images[0] (banner promo)
+ok 38 - W2 C1: worker wajib memilih packshot sah, bukan images[0] (banner promo)
+  ---
+  duration_ms: 5.118333
+  type: 'test'
+  ...
+# Subtest: W2 C8 KONTROL: observer provider benar-benar terpasang (asersi nol tidak hampa)
+ok 39 - W2 C8 KONTROL: observer provider benar-benar terpasang (asersi nol tidak hampa)
+  ---
+  duration_ms: 2.098125
+  type: 'test'
+  ...
+# Subtest: W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti sah
+ok 40 - W2 C8: sidecar KORUP — payload tidak boleh di-materialize sebelum bukti sah
+  ---
+  duration_ms: 1.90075
+  type: 'test'
+  ...
+# Subtest: W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize sebelum bukti sah
+ok 41 - W2 C8: sidecar HILANG (bytes ada) — payload tidak boleh di-materialize sebelum bukti sah
+  ---
+  duration_ms: 2.098584
+  type: 'test'
+  ...
+# Subtest: W2 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping
+ok 42 - W2 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping
+  ---
+  duration_ms: 23.5025
+  type: 'test'
+  ...
+# [job a1d839ac] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"ed862241-5626-45f5-a44d-6215300f204a","produkId":"dc1bc08d-2814-469f-ab81-fa88ba4fec63","lolos":true,"foto":2,"tersetujui":2,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhenti sebelum berbayar
+ok 43 - W2 TOCTOU: bytes berubah antara verifikasi dan pengambilan — job berhenti sebelum berbayar
+  ---
+  duration_ms: 14.545166
+  type: 'test'
+  ...
+# [job ed862241] -> REFUNDED {"refunded_credits":0}
+# Subtest: W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tetap bytes yang disetujui
+ok 44 - W2 TOCTOU: path bersama ditimpa sesudah verifikasi — referensi utama tetap bytes yang disetujui
+  ---
+  duration_ms: 504.003042
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"admission-sqlite","jobId":"e7a13d67-bb24-4bee-99d5-050c3b9cb41a","produkId":"c13a704d-5c5c-4ad0-8455-755bb7f2ca45","lolos":true,"foto":2,"tersetujui":2,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job e7a13d67] -> GENERATING_VISUAL
+# [failover] video pengamat-w2 gagal: provider pengamat W2: berhenti sebelum biaya keluar -> coba provider berikutnya
+# [job e7a13d67] -> REFUNDED {"refunded_credits":12000}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"006de29b-7d02-4ab5-944e-b90851f83625","produkId":"6ad948ad-f37a-4ded-8a97-ad495ed5231d","lolos":true,"foto":8,"tersetujui":8,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission
+ok 45 - E3 HTTP PATCH + resume W2: provider tetap menerima snapshot admission
+  ---
+  duration_ms: 1788.904625
+  type: 'test'
+  ...
+# [job 006de29b] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"b22ba754-5def-40e8-aac3-40fe469528db","produkId":"9cc697e4-c27a-4a62-b4b7-b0fa7ca3ee3a","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job b22ba754] -> REFUNDED {"refunded_credits":0}
+# [job 468228cf] -> REFUNDED {"refunded_credits":0}
+# [job 90529209] -> REFUNDED {"refunded_credits":0}
+# [job 7a731ef9] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"942a787c-1262-4ea9-80d1-c36e89dc2898","produkId":"d6015723-fab4-4e8c-a865-c2995e5070d1","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 942a787c] -> REFUNDED {"refunded_credits":0}
+# [script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "Jasa Uji Snapshot" — LLM gagal dan template cadangan ikut ditolak gate: L-05 Panjang skrip 22 kata — untuk video 15 detik harus 26–48 kata.
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"2dcd843e-df0b-4eaa-beac-fc70f96f1540","produkId":"d79edd73-17e4-418e-b63c-60b64601a685","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 2dcd843e] -> REFUNDED {"refunded_credits":0}
+# [script-engine] TIDAK ADA NASKAH YANG LOLOS untuk "Jasa Uji Snapshot" — LLM gagal dan template cadangan ikut ditolak gate: L-05 Panjang skrip 22 kata — untuk video 15 detik harus 26–48 kata.
+# [job af1f163e] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"bf673ada-d600-4d11-9e29-0268f5b96918","produkId":"b2bd7789-73c0-4d5f-8d77-86dc4c06e5b9","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"EVIDENCE_INVALID":1},"perRinci":{"SIDECAR_MISSING":1},"semuaBelumDiperiksa":false}
+# [job bf673ada] -> REFUNDED {"refunded_credits":0}
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"10d56b75-6e76-4866-9bcf-7ecf5889fd7d","produkId":"b921e72d-b5b4-434d-b5dc-a3ad3589070b","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 10d56b75] -> REFUNDED {"refunded_credits":0}
+# Subtest: W2: delapan foto tersetujui menghasilkan paling banyak TUJUH referensi
+ok 46 - W2: delapan foto tersetujui menghasilkan paling banyak TUJUH referensi
+  ---
+  duration_ms: 509.623625
+  type: 'test'
+  ...
+# Subtest: W2 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih
+ok 47 - W2 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih
+  ---
+  duration_ms: 2.494375
+  type: 'test'
+  ...
+# Subtest: W2 A6/C9: manifest lama menang atas reorder/delete/add products.images
+ok 48 - W2 A6/C9: manifest lama menang atas reorder/delete/add products.images
+  ---
+  duration_ms: 2.075666
+  type: 'test'
+  ...
+# Subtest: W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot
+ok 49 - W2 legacy: jejak provider tanpa manifest tidak boleh diam-diam resnapshot
+  ---
+  duration_ms: 1.415375
+  type: 'test'
+  ...
+# Subtest: W2 product snapshot invalid gagal tertutup sebelum materialize/provider
+ok 50 - W2 product snapshot invalid gagal tertutup sebelum materialize/provider
+  ---
+  duration_ms: 1.1375
+  type: 'test'
+  ...
+# Subtest: W2 non-Ads melanjutkan snapshot v1 tanpa harga dan mempertahankan bytes durable
+ok 51 - W2 non-Ads melanjutkan snapshot v1 tanpa harga dan mempertahankan bytes durable
+  ---
+  duration_ms: 0.741083
+  type: 'test'
+  ...
+# Subtest: W2 Story Ads SA6 memakai name/category/price snapshot admission setelah row produk dimutasi
+ok 52 - W2 Story Ads SA6 memakai name/category/price snapshot admission setelah row produk dimutasi
+  ---
+  duration_ms: 6.947
+  type: 'test'
+  ...
+# Subtest: W2 Story Ads snapshot legacy tanpa price gagal tertutup sebelum referensi/provider
+ok 53 - W2 Story Ads snapshot legacy tanpa price gagal tertutup sebelum referensi/provider
+  ---
+  duration_ms: 1.596208
+  type: 'test'
+  ...
+# Subtest: W2 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah
+ok 54 - W2 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah
+  ---
+  duration_ms: 1.899708
+  type: 'test'
+  ...
+# Subtest: W2 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil
+ok 55 - W2 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil
+  ---
+  duration_ms: 0.630791
+  type: 'test'
+  ...
+# Subtest: W2 KANARI: galat yang dilempar worker membawa kode, bukan hanya kalimat
+ok 56 - W2 KANARI: galat yang dilempar worker membawa kode, bukan hanya kalimat
+  ---
+  duration_ms: 0.06525
+  type: 'test'
+  ...
+1..56
+# tests 56
+# suites 0
+# pass 56
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 4793.796167

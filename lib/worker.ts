@@ -4,6 +4,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { config } from "./config";
+import { errorReasonWithCode } from "./errors";
 import { getDb, now, type JobRow, type ScriptRow, type ProductRow, type PersonaRow } from "./db";
 import { getJob, transition, failJob, addCost, setJobProviders } from "./jobs";
 import { planShots } from "./media/shot-planner";
@@ -18,6 +19,7 @@ import { buildPhotoPanVideo } from "./media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "./media/vo-tts";
 import { synthesizeGeminiVoiceover } from "./media/gemini-tts";
 import { stripDeliveryTags } from "./script-engine/delivery-tags";
+import { deriveStoryAdsIdentity, isStructuredStoryAds, voiceoverStartSecForSegments } from "./script-engine/story-os-ads";
 import { hargaTerbilang } from "./script-engine/terbilang";
 import { buildCaptionCards } from "./media/captions";
 import { renderCaptionPngs } from "./media/render-captions";
@@ -28,13 +30,39 @@ import { captureCredits } from "./credits";
 import { formatHargaOverlay, type SegmentDraft } from "./script-engine/templates";
 import { AIGC_WATERMARK_TEXT } from "./config/compliance";
 import { mediaStorage } from "./storage";
-import { MAX_IMAGES } from "./product-images";
+import { MAKS_REFERENSI_PER_GENERASI } from "./product-images";
 import { personSafeReferencePhotos } from "./media/person-safe-refs";
 import { normalizeHookLevel } from "./config/hooks";
+import { bacaSnapshot } from "./script-engine/admisi";
+import { isNeutralStoryAdsTemplate } from "./script-engine/ads-visual-contract";
+import { materializeJobReferenceManifest } from "./job-reference-manifest";
+import { requireCurrentJobEvidence } from "./legacy-job-quarantine";
+import { normalisasiFormatWorker } from "./media/worker-format";
+import { appendPackshotUntukQc } from "./media/packshot-asli";
+import { assertApprovedReferenceBrands } from "./worker-reference-brand-gate";
+import { withProductEvidenceMutationLock } from "./job-admission-reference";
 
 const CONCURRENCY = 1;
 
+type SqliteQcRunner = typeof runQc;
+let sqliteQcRunner: SqliteQcRunner = runQc;
+
+/** Observer seam untuk processJob integration. `undefined` selalu memulihkan
+ * runQc produksi; tidak ada environment flag yang dapat mengaktifkannya. */
+export function setSqliteQcRunnerForTests(runner?: SqliteQcRunner): void {
+  sqliteQcRunner = runner ?? runQc;
+}
+
 class JobNoLongerActive extends Error {}
+
+/** Planning boundary W2. Diekspor agar regression menjalankan fungsi yang
+ * benar-benar dipakai processJob, bukan menyusun ulang normalisasinya di tes. */
+export function planSqliteWorkerShots(
+  input: Omit<Parameters<typeof planShots>[0], "format"> & { persistedFormat: string },
+) {
+  const { persistedFormat, ...planInput } = input;
+  return planShots({ ...planInput, format: normalisasiFormatWorker(persistedFormat) });
+}
 
 function advance(jobId: string, state: Parameters<typeof transition>[1], meta?: Record<string, unknown>) {
   if (!transition(jobId, state, meta)) throw new JobNoLongerActive("Job sudah berakhir saat worker masih berjalan.");
@@ -80,13 +108,35 @@ async function pump(): Promise<void> {
 }
 
 export async function processJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
+  const candidate = getJob(jobId);
+  if (!candidate || candidate.state !== "QUEUED") return;
+  // E3/E7 use this exact product-operation lock for re-quarantine. Reloading
+  // the job inside the lease closes the CLEAR-read -> paid-provider race and
+  // keeps category truth stable through READY/capture.
+  try {
+    await withProductEvidenceMutationLock(candidate.product_id, async () => {
+      await processJobWithProductLock(jobId, options);
+    });
+  } catch (error) {
+    if (options.retryViaQueue) throw error;
+    failJob(getJob(jobId) ?? candidate, errorReasonWithCode(error));
+  }
+}
+
+async function processJobWithProductLock(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
   const db = getDb();
   const job = getJob(jobId);
   if (!job || job.state !== "QUEUED") return;
 
   try {
     const script = db.prepare("SELECT * FROM scripts WHERE id = ?").get(job.script_id) as ScriptRow;
-    const product = db.prepare("SELECT * FROM products WHERE id = ?").get(job.product_id) as ProductRow;
+    const admisi = bacaSnapshot(script.validation_result);
+    const storyIdentity = deriveStoryAdsIdentity(admisi, {
+      format: job.format,
+      templateId: (job as typeof job & { template_id?: string | null }).template_id,
+      durationSec: job.duration_s,
+    });
+    let product = db.prepare("SELECT * FROM products WHERE id = ?").get(job.product_id) as ProductRow;
     const persona = job.persona_id
       ? (db.prepare("SELECT * FROM personas WHERE id = ?").get(job.persona_id) as PersonaRow | undefined)
       : undefined;
@@ -97,33 +147,81 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // avatar premium diam-diam tidak berpengaruh di dev.
     const presetKategori = getCreatorCategory(persona?.creator_category ?? "hijaber")!;
     const descKustom = (job as { avatar_custom_desc?: string | null }).avatar_custom_desc?.trim();
-    const category = descKustom
+    const category = descKustom && !isNeutralStoryAdsTemplate(storyIdentity.templateId)
       ? { ...presetKategori, promptSeed: descKustom, handsPrompt: descKustom }
       : presetKategori;
-    const segments = JSON.parse(script.segments) as SegmentDraft[];
-    const images = JSON.parse(product.images) as string[];
-    if (images.length === 0) throw new Error("Produk tidak punya foto — upload minimal 1 foto.");
+    const currentEvidence = requireCurrentJobEvidence({
+      approvedReferenceManifest: job.approved_reference_manifest,
+      jobProductSnapshot: job.job_product_snapshot,
+      productType: product,
+    });
+    const productSnapshot = currentEvidence.productSnapshot;
+    const snapshotPriceIdr = productSnapshot.priceIdr!;
+    product = {
+      ...product,
+      name: productSnapshot.productName,
+      category: productSnapshot.category,
+      price_idr: snapshotPriceIdr,
+      product_visual_desc: productSnapshot.productVisualDesc,
+      brand_brief: productSnapshot.brandBrief,
+      claims: JSON.stringify(productSnapshot.claims),
+      raw_meta: JSON.stringify(productSnapshot.trustedBrand.value ? { brand: productSnapshot.trustedBrand.value } : {}),
+    };
 
+    const segments = JSON.parse(script.segments) as SegmentDraft[];
+    // Fail-closed sebelum materialisasi referensi atau panggilan provider.
+    const voiceoverStartSec = voiceoverStartSecForSegments(segments, {
+      ...storyIdentity, productName: productSnapshot.productName, productCategory: productSnapshot.category, productPriceIdr: snapshotPriceIdr,
+    });
     const workDir = path.join(config.storageDir, "jobs", job.id);
     fs.mkdirSync(workDir, { recursive: true });
-    const imageRef = await mediaStorage().materialize(images[0]);
-    if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
+    // REFERENSI DIPILIH DARI BUKTI, BUKAN DARI URUTAN UNGGAH.
+    //
+    // Sampai 21 Agu baris ini `materialize(images[0])`: foto PERTAMA menang
+    // karena posisinya, apa pun isinya. Produk yang foto pertamanya banner
+    // promo mengirim BANNER ke model video sebagai acuan "beginilah rupa
+    // produknya", dan model menyalin teks banner ke kemasan. Baru ketahuan
+    // sesudah dibayar.
+    //
+    // GAGAL-TERTUTUP SEBELUM LANGKAH BERBAYAR. Resolver tidak pernah melempar;
+    // yang melempar di sini adalah pemanggilnya, dan ia melempar SEBELUM satu
+    // byte pun diambil — jadi nol materialize, nol provider, nol capture.
+    const snapshots = await materializeJobReferenceManifest(currentEvidence.manifest, workDir);
+    const pastikanManifestSebelumEfek = async () => {
+      await materializeJobReferenceManifest(currentEvidence.manifest, workDir);
+    };
+    const refUtama = snapshots[0];
 
     const tier = (job.quality_tier ?? "silent_caption") as QualityTier;
     const withAudio = tier !== "silent_caption";
-    // Foto ke-2..5 = referensi identitas tambahan (hanya berlaku di model r2v /
-    // tier bersuara — provider yang memutuskan; gagal materialize = lewati saja).
-    let primaryRef = imageRef;
+    const providerEligibleSnapshots = withAudio
+      ? snapshots.slice(0, MAKS_REFERENSI_PER_GENERASI)
+      : [refUtama];
+    await assertApprovedReferenceBrands(
+      providerEligibleSnapshots,
+      productSnapshot.productName,
+      productSnapshot.trustedBrand.value,
+    );
+    // Foto tambahan = referensi identitas (hanya berlaku di model r2v/tier
+    // bersuara). Sesudah masuk manifest, satu pun tidak boleh hilang diam-diam:
+    // missing/hash-changed menggagalkan attempt sebelum provider.
+    let primaryRef = refUtama;
     const extraRefs: string[] = [];
     if (withAudio) {
-      for (const rel of images.slice(1, MAX_IMAGES)) {
-        const p = await mediaStorage().materialize(rel).catch(() => null);
-        if (p) extraRefs.push(p);
-      }
+      // Referensi tambahan juga HANYA dari daftar tersetujui. Foto ke-2 dst
+      // dikirim ke model sebagai referensi identitas — sama berbahayanya kalau
+      // salah. Batasnya dipertahankan sama persis dengan sebelumnya
+      // (slice(1, MAX_IMAGES) => paling banyak tujuh tambahan), supaya langkah
+      // ini tidak diam-diam mengubah payload provider.
+      // Batas GENERASI, bukan batas unggah. MAKS_REFERENSI_PER_GENERASI=7
+      // menghitung primary + tambahan; slice(1, MAX_IMAGES=8) sebelumnya
+      // menghasilkan primary + tujuh = DELAPAN referensi, melewati kontraknya
+      // sendiri.
+      extraRefs.push(...providerEligibleSnapshots.slice(1));
       // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
       // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
       // model; terbukti crop lolos moderasi, lab fashion-r2b 2026-08-07).
-      const sanitized = await personSafeReferencePhotos([imageRef, ...extraRefs], workDir);
+      const sanitized = await personSafeReferencePhotos([refUtama, ...extraRefs], workDir);
       primaryRef = sanitized.safe[0];
       extraRefs.length = 0;
       extraRefs.push(...sanitized.safe.slice(1));
@@ -134,20 +232,23 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
 
     // --- GENERATING_VISUAL ---
     advance(job.id, "GENERATING_VISUAL");
-    const format = job.format === "talking_head" || job.format === "vo_broll" ? job.format : "hands_only";
-    const spec = planShots({
+    const format = normalisasiFormatWorker(job.format);
+    const spec = planSqliteWorkerShots({
       jobId: job.id,
       durationSec: job.duration_s,
       segments,
       category,
       productName: product.name,
       productCategory: product.category,
+      productPriceIdr: product.price_idr,
       productVisualDesc: product.product_visual_desc,
       brandBrief: product.brand_brief,
       imageRefPath: primaryRef,
       extraImageRefPaths: extraRefs,
       qualityTier: tier,
-      format,
+      persistedFormat: job.format,
+      contentType: storyIdentity.contentType,
+      ugcTemplate: storyIdentity.templateId,
       // Level hook dari skrip (S3): hanya "gila" yang mengubah prompt shot 1.
       hookLevel: normalizeHookLevel(script.hook_level),
     });
@@ -161,7 +262,13 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     assertVisualSpec(spec);
     const reused = format === "vo_broll" ? null : await findReusableClips(workDir, spec);
     if (reused) console.log(`[job ${job.id.slice(0, 8)}] resume: ${reused.assets.length} klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi`);
-    const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(spec, workDir) : await generateVideoWithFailover(spec, workDir));
+    let video;
+    if (reused) video = reused;
+    else if (format === "vo_broll") video = await buildPhotoPanVideo(spec, workDir);
+    else {
+      await pastikanManifestSebelumEfek();
+      video = await generateVideoWithFailover(spec, workDir);
+    }
     setJobProviders(job.id, video.providerName);
     addCost(job.id, video.costIdr);
 
@@ -191,6 +298,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     } else if (format === "vo_broll") {
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
+        await pastikanManifestSebelumEfek();
         const res = await synthesizeElevenLabsVoiceover(stripDeliveryTags(seg.text), path.join(workDir, `vo_real_${i}.mp3`));
         vo.push({ path: res.filePath, startSec: seg.start });
         addCost(job.id, res.costIdr);
@@ -209,6 +317,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       // video DIGANTI VO TTS ber-voice terkunci per avatar (gerak bibir klip
       // tetap dipakai — dialog prompt = teks yang sama dengan TTS).
       const voText = hargaTerbilang(segments.map((seg) => seg.tts_text ?? seg.text).join(" ... "));
+      await pastikanManifestSebelumEfek();
       const tts = await synthesizeGeminiVoiceover(voText, category.voiceName, category.voiceStyle, path.join(workDir, "vo_gemini.wav"));
       geminiVoPath = tts.filePath;
       addCost(job.id, tts.costIdr);
@@ -218,6 +327,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       let voiceProvider = "";
       for (let i = 0; i < segments.length; i++) {
         const seg = segments[i];
+        await pastikanManifestSebelumEfek();
         const res = await synthesizeVoiceWithFailover(
           {
             jobId: job.id,
@@ -249,15 +359,14 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     const cartLabel = cartLabelForUrl(product.source_url);
     const ctaBadgeText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning »" : "Klik Keranjang »";
     const ctaQcText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning" : "Klik Keranjang";
-    // Add-on promo: overlay harga jadi harga-coret + persen + deadline. Dicek
-    // ULANG saat render (bukan saat approve) — promo yang keburu kedaluwarsa
-    // di-drop dari overlay tanpa memblokir job (keputusan 2026-08-06); teks
-    // skrip yang menyebut promo sudah melewati gerbang HITL user.
+    // Add-on promo memakai nilai snapshot admission saja. Waktu kedaluwarsa
+    // tetap dievaluasi saat render, tetapi mutation row produk tidak pernah
+    // dapat mengubah harga-coret, deadline, atau scarcity job ini.
     const promo = resolvePromo({
       priceIdr: product.price_idr,
-      promoPriceBeforeIdr: product.promo_price_before_idr,
-      promoEndsAt: product.promo_ends_at,
-      promoStockLeft: product.promo_stock_left,
+      promoPriceBeforeIdr: productSnapshot.promoPriceBeforeIdr,
+      promoEndsAt: productSnapshot.promoEndsAt,
+      promoStockLeft: productSnapshot.promoStockLeft,
     });
     const priceOverlayText = promo ? formatPromoOverlayText(promo) : `Cuma ${formatHargaOverlay(product.price_idr)}`;
     const finalTexts = [
@@ -279,6 +388,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         clipPaths,
         mode: compositeMode,
         voiceoverWavPath: compositeMode === "embedded" ? geminiVoPath : undefined,
+        voiceoverStartSec,
         vo: compositeMode === "vo" ? vo : undefined,
         captions: captionCards,
         musicPath,
@@ -293,11 +403,23 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
       outPath = comp.outPath;
       renderParams = comp.renderParams;
 
+      // Sama persis dengan W1: konten generated neutral tidak membawa pixel
+      // produk, jadi physical-product wajib mendapat ekor foto asli sebelum
+      // QC. Kegagalan append tetap diteruskan sebagai sidik kosong agar QC-10
+      // menolak; jasa/app/toko productless sengaja N/A.
+      const pack = await appendPackshotUntukQc({
+        videoPath: outPath, workDir, fotoPath: primaryRef, musicPath,
+        productCategory: product.category, visualSubjectPolicy: spec.visualSubjectPolicy,
+      });
+      outPath = pack.path;
+
       // --- QC_CHECK ---
       advance(job.id, "QC_CHECK");
-      qc = await runQc({
+      qc = await sqliteQcRunner({
         filePath: outPath,
         targetDurationSec: job.duration_s,
+        ekorDisengajaSec: pack.ekorSec,
+        packshotSidik: pack.sidik,
         finalTexts,
         hookFamily: script.hook_family,
         register: script.register,
@@ -312,6 +434,7 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
         // QC-11: batas orang datang DARI SPEC yang dipakai merender, bukan
         // diturunkan ulang di QC — satu aturan, satu tempat.
         maxPeople: spec.maxPeople,
+        visualSubjectPolicy: spec.visualSubjectPolicy,
         // Jalur SQLite dev tidak punya tier presenter-lipsync.
         presenterLipsync: false,
         // critical = teks kepatuhan/konversi (watermark, harga/promo, CTA) —
@@ -344,6 +467,10 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     }
 
     // --- LABELING (watermark sudah dibakar saat compositing; verifikasi via QC-08) ---
+    // Storage kanonik diverifikasi lagi sesudah seluruh provider dan sebelum
+    // output/capture. Delete/overwrite yang terjadi di tengah render tidak
+    // boleh menghasilkan deliverable dari provenance yang sudah hilang.
+    await pastikanManifestSebelumEfek();
     advance(job.id, "LABELING", { watermark: renderParams.watermarkText });
 
     // --- READY ---
@@ -367,6 +494,6 @@ export async function processJob(jobId: string, options: { retryViaQueue?: boole
     // BullMQ owns retry/backoff. It receives the original failure until its
     // final attempt, where scripts/worker.ts applies the existing refund flow.
     if (options.retryViaQueue) throw err;
-    failJob(current, err instanceof Error ? err.message : String(err));
+    failJob(current, errorReasonWithCode(err));
   }
 }

@@ -1,0 +1,7 @@
+observed_at=2026-08-24T13:15:35Z
+url=https://racun-ai-staging-web.onrender.com/api/health
+http_status=200
+body_sha256=48d587075b47c0afda42131d9784ca09bc3c87f1aa923f5ec0d4d6ad6b584d0a
+body_begin
+{"ok":true,"intake":"open","payments_provider":"midtrans","payments_env":"sandbox","payments_live":false,"build_sha":"73280ffa342945dc08cee2fc664956975c8d5735","klasifikasi":{"mampu":true,"biner":{"ffmpeg":true,"ffprobe":true,"tesseract":true},"bahasaOcr":true,"smoke":true,"alasan":"Runtime ini bisa mengklasifikasi gambar (terbukti lewat smoke pipeline, bukan hanya -version).","diperiksaPada":"2026-08-24T12:29:07.284Z"}}
+body_end

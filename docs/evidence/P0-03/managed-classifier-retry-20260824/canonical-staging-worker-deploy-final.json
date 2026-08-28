@@ -1,0 +1,13 @@
+{
+  "id": "dep-da64cfbncjis73alvbn0",
+  "status": "live",
+  "commit": {
+    "id": "73280ffa342945dc08cee2fc664956975c8d5735",
+    "createdAt": "2026-08-24T12:13:08Z"
+  },
+  "createdAt": "2026-08-24T13:25:17.360591Z",
+  "startedAt": "2026-08-24T13:25:17.358026Z",
+  "finishedAt": "2026-08-24T13:26:29.874025Z",
+  "trigger": "service_resumed",
+  "updatedAt": "2026-08-24T13:26:29.874163Z"
+}

@@ -1,0 +1,123 @@
+
+> racun-ai@0.1.0 build
+> next build
+
+   ▲ Next.js 15.5.23
+   - Environments: .env.local
+
+   Creating an optimized production build ...
+ ✓ Compiled successfully in 2.7s
+   Linting and checking validity of types ...
+   Collecting page data ...
+   Generating static pages (0/25) ...
+   Generating static pages (6/25) 
+   Generating static pages (12/25) 
+   Generating static pages (18/25) 
+ ✓ Generating static pages (25/25)
+   Finalizing page optimization ...
+   Collecting build traces ...
+
+Route (app)                                         Size  First Load JS
+┌ ○ /                                            3.41 kB         109 kB
+├ ○ /_not-found                                    997 B         104 kB
+├ ƒ /admin                                         266 B         103 kB
+├ ƒ /api/auth/dev-login                            266 B         103 kB
+├ ƒ /api/auth/google                               266 B         103 kB
+├ ƒ /api/auth/google/callback                      266 B         103 kB
+├ ƒ /api/auth/logout                               266 B         103 kB
+├ ƒ /api/auth/me                                   266 B         103 kB
+├ ƒ /api/auth/request-otp                          266 B         103 kB
+├ ƒ /api/auth/verify-otp                           266 B         103 kB
+├ ƒ /api/brands/package-request                    266 B         103 kB
+├ ƒ /api/brands/request-access                     266 B         103 kB
+├ ƒ /api/credits                                   266 B         103 kB
+├ ƒ /api/credits/checkout                          266 B         103 kB
+├ ƒ /api/credits/topup                             266 B         103 kB
+├ ƒ /api/dashboard/assets                          266 B         103 kB
+├ ƒ /api/dashboard/brand-kit                       266 B         103 kB
+├ ƒ /api/dashboard/business-analysis               266 B         103 kB
+├ ƒ /api/dashboard/campaign/[runId]                266 B         103 kB
+├ ƒ /api/dashboard/campaign/confirm                266 B         103 kB
+├ ƒ /api/dashboard/campaign/generate               266 B         103 kB
+├ ƒ /api/dashboard/campaign/job/[jobId]            266 B         103 kB
+├ ƒ /api/dashboard/campaign/product                266 B         103 kB
+├ ƒ /api/dashboard/campaign/product/[id]/photos    266 B         103 kB
+├ ƒ /api/dashboard/library                         266 B         103 kB
+├ ƒ /api/dashboard/matrix                          266 B         103 kB
+├ ƒ /api/dashboard/onboarding                      266 B         103 kB
+├ ƒ /api/dashboard/org                             266 B         103 kB
+├ ƒ /api/dashboard/publish                         266 B         103 kB
+├ ƒ /api/dashboard/team                            266 B         103 kB
+├ ƒ /api/dashboard/templates                       266 B         103 kB
+├ ƒ /api/events                                    266 B         103 kB
+├ ƒ /api/files/[...path]                           266 B         103 kB
+├ ƒ /api/health                                    266 B         103 kB
+├ ƒ /api/jobs                                      266 B         103 kB
+├ ƒ /api/jobs/[id]                                 266 B         103 kB
+├ ƒ /api/jobs/[id]/output                          266 B         103 kB
+├ ƒ /api/jobs/[id]/report                          266 B         103 kB
+├ ƒ /api/meta                                      266 B         103 kB
+├ ƒ /api/orders/[orderId]                          266 B         103 kB
+├ ƒ /api/products                                  266 B         103 kB
+├ ƒ /api/products/[id]                             266 B         103 kB
+├ ƒ /api/products/[id]/photos                      266 B         103 kB
+├ ƒ /api/products/extract                          266 B         103 kB
+├ ƒ /api/promo/avatar/describe                     266 B         103 kB
+├ ƒ /api/promo/hooks                               266 B         103 kB
+├ ƒ /api/promo/jobs                                266 B         103 kB
+├ ƒ /api/promo/jobs/[id]                           266 B         103 kB
+├ ƒ /api/promo/upload                              266 B         103 kB
+├ ƒ /api/scripts/[id]                              266 B         103 kB
+├ ƒ /api/scripts/[id]/approve                      266 B         103 kB
+├ ƒ /api/scripts/generate                          266 B         103 kB
+├ ƒ /api/try                                       266 B         103 kB
+├ ƒ /api/webhooks/duitku                           266 B         103 kB
+├ ƒ /api/webhooks/midtrans                         266 B         103 kB
+├ ƒ /api/webhooks/payment                          266 B         103 kB
+├ ○ /bikin/gaya                                  9.71 kB         116 kB
+├ ○ /bikin/hasil                                  2.1 kB         108 kB
+├ ○ /bikin/jenis                                   999 B         107 kB
+├ ○ /bikin/paket                                 2.49 kB         108 kB
+├ ○ /bikin/produk                                6.28 kB         112 kB
+├ ○ /bikin/proses                                4.09 kB         110 kB
+├ ○ /bikin/skrip                                 31.3 kB         144 kB
+├ ○ /brands                                        828 B         107 kB
+├ ○ /coba                                        3.44 kB         109 kB
+├ ƒ /dashboard                                     828 B         107 kB
+├ ƒ /dashboard/assets                               3 kB         109 kB
+├ ƒ /dashboard/campaign                          19.4 kB         129 kB
+├ ƒ /dashboard/campaign/[runId]                  3.98 kB         110 kB
+├ ƒ /dashboard/campaign/job/[jobId]              3.83 kB         110 kB
+├ ƒ /dashboard/credits                           3.54 kB         106 kB
+├ ƒ /dashboard/library                           5.03 kB         111 kB
+├ ƒ /dashboard/matrix                              11 kB         117 kB
+├ ○ /dashboard/onboarding                        8.48 kB         116 kB
+├ ƒ /dashboard/profile                           5.34 kB         111 kB
+├ ƒ /dashboard/projects                            828 B         107 kB
+├ ƒ /dashboard/publish                           4.71 kB         111 kB
+├ ƒ /dashboard/request-access                    2.68 kB         105 kB
+├ ƒ /dashboard/support                             800 B         103 kB
+├ ○ /dashboard/suspended                           266 B         103 kB
+├ ƒ /dashboard/team                              3.48 kB         106 kB
+├ ƒ /dashboard/templates                         4.31 kB         115 kB
+├ ○ /harga                                         168 B         106 kB
+├ ○ /kontak                                        168 B         106 kB
+├ ○ /kredit                                       4.8 kB         111 kB
+├ ○ /legal/privacy                                 171 B         106 kB
+├ ○ /legal/refund                                  171 B         106 kB
+├ ○ /legal/terms                                   171 B         106 kB
+├ ○ /mulai                                       1.94 kB         108 kB
+├ ○ /onboarding                                  7.53 kB         113 kB
+├ ○ /promo                                       8.96 kB         115 kB
+└ ○ /video                                       4.59 kB         111 kB
++ First Load JS shared by all                     103 kB
+  ├ chunks/1255-a20f6c5e797a687b.js              46.4 kB
+  ├ chunks/4bd1b696-f785427dddbba9fb.js          54.2 kB
+  └ other shared chunks (total)                  1.93 kB
+
+
+ƒ Middleware                                     39.6 kB
+
+○  (Static)   prerendered as static content
+ƒ  (Dynamic)  server-rendered on demand
+

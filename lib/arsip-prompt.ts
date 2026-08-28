@@ -18,7 +18,7 @@
  *    Pengguna yang sudah membayar tidak boleh kehilangan videonya karena
  *    pencatatan kita bermasalah.
  */
-import { modeReferensi } from "./providers/stubs/byteplus";
+import { bytePlusTaskPayloadSha256, modeReferensi } from "./providers/stubs/byteplus";
 import type { VisualSpec } from "./providers/types";
 
 export interface ArsipPrompt {
@@ -49,6 +49,10 @@ export function ringkasSpec(spec: VisualSpec, model: string) {
       // ke pencatat adalah persis cara arsip ini pernah berbohong (lihat
       // catatan pada modeReferensi).
       referenceMode: s.imageRefPath ? modeReferensi(spec, model) : "text_to_video",
+      // Digest dari body yang benar-benar akan dikirim provider. Ini mengikat
+      // task per-shot ke prompt/model/referensi invocation yang tepat, termasuk
+      // saat hanya satu scene diregenerasi.
+      providerPayloadSha256: bytePlusTaskPayloadSha256(spec, s),
     })),
   };
 }
@@ -63,5 +67,6 @@ export function ringkasParams(spec: VisualSpec) {
     maxPeople: spec.maxPeople ?? null,
     jumlahReferensiTambahan: spec.extraReferenceImagePaths?.length ?? 0,
     referenceOnlyImages: spec.referenceOnlyImages === true,
+    storyBridgeSources: spec.storyBridgeSources ?? [],
   };
 }

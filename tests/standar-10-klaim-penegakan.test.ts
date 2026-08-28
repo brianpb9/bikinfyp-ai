@@ -96,6 +96,22 @@ for (const baris of S.BARIS_10) {
   });
 }
 
+// Label "render" ditambahkan 20 Agu untuk baris 7 (label merek dijamin packshot
+// foto asli di composer, bukan diminta dari penulis). Ia harus menunjuk ke
+// penegaknya yang nyata — kalau tidak, ia cuma "prompt" dengan nama yang lebih
+// meyakinkan, dan itu persis jenis klaim yang berkas ini ada untuk mencegah.
+test('label "render" wajib menyebut penegak nyatanya di kode', async () => {
+  const fs = await import("node:fs");
+  for (const b of S.BARIS_10) {
+    if (b.penegakan !== "render") continue;
+    assert.ok(b.catatan && b.catatan.length > 10, `baris ${b.no} berlabel "render" tanpa catatan alasan`);
+    const penegak = /appendPackshot/.test(b.catatan!) ? "lib/media/packshot-asli.ts" : null;
+    assert.ok(penegak, `baris ${b.no}: catatannya tidak menyebut fungsi penegak yang bisa dicari`);
+    const src = fs.readFileSync(penegak!, "utf8");
+    assert.match(src, /export async function appendPackshot/, `penegak baris ${b.no} tidak ada di ${penegak}`);
+  }
+});
+
 test('label "prompt"/"belum" wajib punya catatan alasan — supaya tidak jadi TODO tak bertuan', () => {
   for (const b of S.BARIS_10) {
     if (b.penegakan === "kode") continue;

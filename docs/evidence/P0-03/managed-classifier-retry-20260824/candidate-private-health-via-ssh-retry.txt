@@ -1,0 +1,5 @@
+observed_start=2026-08-24T12:30:49Z
+observed_end=2026-08-24T12:31:34Z
+exit_code=124
+result=SSH public-key authentication denied; no remote command executed
+mutation=none

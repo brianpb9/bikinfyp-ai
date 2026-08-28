@@ -1,0 +1,87 @@
+{
+  "schema": "managed-valid-product-trace/v1",
+  "task": "P1-MANAGED-STAGING-VALID-PRODUCT-TRACE-20260825",
+  "started_at": "2026-08-24T21:23:59.580Z",
+  "finished_at": "2026-08-24T21:24:07.198Z",
+  "deployed_app_sha_expected": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
+  "execution": "MANAGED_STAGING_ONE_OFF_PLUS_PUBLIC_HTTP",
+  "preconditions": {
+    "node_env_production": true,
+    "postgres_runtime": true,
+    "storage_mode_r2": true,
+    "r2_slots_present": true,
+    "queue_mode": "redis",
+    "payment_gateway": "duitku",
+    "duitku_production": false,
+    "payments_go_live": false,
+    "credential_values_or_digests_recorded": false
+  },
+  "requested_endpoints": [
+    "POST /api/products (valid)",
+    "POST /api/products (brand mismatch)",
+    "POST /api/products (unreadable label)"
+  ],
+  "forbidden_endpoints_called": [],
+  "payment_url_opened": false,
+  "generation_provider_called": false,
+  "positive": {
+    "http": 201,
+    "product_row_exact_owner": true,
+    "product_id_matches": true,
+    "product_fields_match": true,
+    "product_row_exact_create_data": true,
+    "nullable_create_fields_exact": true,
+    "raw_meta_exact": true,
+    "ordered_images_equal_api_and_r2_keys": true,
+    "image_count": 1,
+    "image_object_present": true,
+    "sidecar_present": true,
+    "sidecar": {
+      "jenis": "product_photo",
+      "layak_referensi": true,
+      "rasio_area_teks": 0.010943769290123457,
+      "jumlah_kata": 3,
+      "versi_bukti": 1,
+      "sha256_matches_object": true
+    }
+  },
+  "counterexamples": {
+    "brand_mismatch": { "http": 400, "code": "BRAND_MISMATCH", "retryable": false },
+    "label_unreadable": { "http": 400, "code": "LABEL_UNREADABLE", "retryable": false },
+    "classifier_failed": {
+      "executed": false,
+      "reason": "No deterministic managed input can force classifier infrastructure failure without mutating the accepted runtime; policy/runtime mutation is forbidden."
+    },
+    "evidence_invalid": {
+      "executed": false,
+      "reason": "The public admission boundary requires a credit-producing path before evidence preparation; corrupting accepted R2 evidence solely to bypass that order would weaken the safe trace and was not done."
+    }
+  },
+  "admission_boundary": {
+    "executed": false,
+    "reason": "PostgreSQL retail admission checks balance before prepareAdmissionReferenceManifest; zero balance cannot reach Product Truth, while sufficient balance would create a hold and enqueue. The task forbids both.",
+    "policy_weakened": false
+  },
+  "before": {
+    "target": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 },
+    "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 }
+  },
+  "before_cleanup": {
+    "target": { "users": 1, "products": 1, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 1 },
+    "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 }
+  },
+  "after_cleanup": {
+    "target": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "provider_tasks": 0, "ledger": 0, "payments": 0, "audits": 0 },
+    "queue": { "counts": { "wait": 0, "active": 0, "delayed": 0, "prioritized": 0, "failed": 0, "completed": 0, "paused": 0 }, "task_identity_jobs": 0 }
+  },
+  "cleanup": { "database": true, "media": true },
+  "result": "PASS",
+  "provenance": {
+    "render_job": "job-da6bcoe1egvs73a14jbg",
+    "job_status": "succeeded",
+    "job_created_at": "2026-08-24T21:23:45.613032Z",
+    "job_started_at": "2026-08-24T21:23:45Z",
+    "job_finished_at": "2026-08-24T21:24:21Z",
+    "source": "sanitized structured stdout fetched through Render logs"
+  }
+}

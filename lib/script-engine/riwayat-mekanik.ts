@@ -6,7 +6,11 @@
 // hari selalu dinilai terhadap array kosong, jadi tiap permintaan melihat bank
 // mekanik dalam urutan yang sama persis.
 //
-// KENAPA BUKAN KOLOM SENDIRI (keputusan Brian 20 Agu): migrasi terkunci sampai
+// KENAPA BUKAN KOLOM SENDIRI (keputusan Brian 20 Agu). Alasan yang DULU
+// ditulis di sini — "migrasi terkunci" — sudah kedaluwarsa: 0030-0032
+// terpasang sejak 18 Agu (diverifikasi 20 Agu, dry-run would_apply kosong).
+// Bentuk JSON dipertahankan karena cocok, bukan karena terpaksa. Teks lama:
+// migrasi terkunci sampai
 // rekonsiliasi ledger selesai. Mekaniknya dibaca dari kolom JSON yang SUDAH
 // ada — scripts.validation_result -> admisi.mechanic — pola yang sama dengan
 // products.raw_meta.brand. Kolom khusus menyusul sebagai keputusan tersendiri.

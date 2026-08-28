@@ -1,0 +1,11 @@
+deploy_id=dep-da62h4ajobas738bkbug
+candidate_sha=d2edab0972ea407148138c72f38e67e159748c64
+status=build_failed
+finished_at=2026-08-24T11:20:48.598666Z
+docker_install_ffmpeg=PASS
+docker_next_build_compile=PASS
+docker_next_page_data=FAIL
+error_class=SecretConfigurationError
+error_summary=AUTH_SECRET unavailable inside Docker build context while collecting page data for /api/promo/jobs
+canary_result=none
+paid_provider_invocation=not_independently_proven

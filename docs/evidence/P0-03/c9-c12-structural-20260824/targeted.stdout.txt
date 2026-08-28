@@ -1,0 +1,204 @@
+TAP version 13
+# [kanari-bukti] {"v":1,"runtime":"worker-sqlite","jobId":"a9939948-5e07-42f7-b078-8fa28c9d7c39","produkId":"413894f5-616c-4d8f-b22a-93ddd45e1515","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job a9939948] -> GENERATING_VISUAL
+# [failover] video e3-c9-observer gagal: observer stop -> coba provider berikutnya
+# [job a9939948] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission
+ok 1 - E3 HTTP PATCH + resume W2 non-optional memakai snapshot admission
+  ---
+  duration_ms: 161.970292
+  type: 'test'
+  ...
+# [job 6ab7f33c] -> GENERATING_VISUAL
+# [failover] video e5-observer gagal: observer stop -> coba provider berikutnya
+# [job 6ab7f33c] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan
+ok 2 - E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job berurutan
+  ---
+  duration_ms: 6.849541
+  type: 'test'
+  ...
+# [job 8a06e270] -> REFUNDED {"refunded_credits":12000}
+# Subtest: E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider
+ok 3 - E5 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider
+  ---
+  duration_ms: 3.218916
+  type: 'test'
+  ...
+# Subtest: guard: bukti C12 memanggil handler E5 dan resume W2 nyata
+ok 4 - guard: bukti C12 memanggil handler E5 dan resume W2 nyata
+  ---
+  duration_ms: 0.194125
+  type: 'test'
+  ...
+# Subtest: snapshot dibuat sekali dan mutation candidate tidak mengubah retry
+ok 5 - snapshot dibuat sekali dan mutation candidate tidak mengubah retry
+  ---
+  duration_ms: 1.812458
+  type: 'test'
+  ...
+# Subtest: dua create konkuren kembali dengan satu pemenang durable
+ok 6 - dua create konkuren kembali dengan satu pemenang durable
+  ---
+  duration_ms: 4.66725
+  type: 'test'
+  ...
+# Subtest: snapshot invalid gagal tertutup
+ok 7 - snapshot invalid gagal tertutup
+  ---
+  duration_ms: 0.658875
+  type: 'test'
+  ...
+# Subtest: snapshot v1 hanya kompatibel untuk non-Story-Ads; v2 tetap membawa harga
+ok 8 - snapshot v1 hanya kompatibel untuk non-Story-Ads; v2 tetap membawa harga
+  ---
+  duration_ms: 0.222542
+  type: 'test'
+  ...
+# Subtest: A6 identity: talking_head + template job null tetap Story Ads dari snapshot admisi
+ok 9 - A6 identity: talking_head + template job null tetap Story Ads dari snapshot admisi
+  ---
+  duration_ms: 0.088542
+  type: 'test'
+  ...
+# Subtest: template snapshot admisi menang atas kolom job yang menyimpang
+ok 10 - template snapshot admisi menang atas kolom job yang menyimpang
+  ---
+  duration_ms: 0.040625
+  type: 'test'
+  ...
+# Subtest: admission builder membekukan seluruh metadata dari bentuk row database
+ok 11 - admission builder membekukan seluruh metadata dari bentuk row database
+  ---
+  duration_ms: 0.170334
+  type: 'test'
+  ...
+# Subtest: legacy dengan jejak provider tanpa snapshot ditolak
+ok 12 - legacy dengan jejak provider tanpa snapshot ditolak
+  ---
+  duration_ms: 0.061333
+  type: 'test'
+  ...
+# Subtest: A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan enqueue
+ok 13 - A6 memvalidasi product snapshot sebelum approve, regen ledger, reset, dan enqueue
+  ---
+  duration_ms: 0.763083
+  type: 'test'
+  ...
+# Subtest: semua admission produksi memasang snapshot pada INSERT job yang sama
+ok 14 - semua admission produksi memasang snapshot pada INSERT job yang sama
+  ---
+  duration_ms: 50.957209
+  type: 'test'
+  ...
+# Subtest: kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot
+ok 15 - kedua worker memuat snapshot immutable sebelum SA6 dan memakai identity snapshot
+  ---
+  duration_ms: 0.740375
+  type: 'test'
+  ...
+# Subtest: dashboard mengunci satu row produk sebelum validasi dan memakai row itu sampai snapshot job
+ok 16 - dashboard mengunci satu row produk sebelum validasi dan memakai row itu sampai snapshot job
+  ---
+  duration_ms: 0.396416
+  type: 'test'
+  ...
+# Subtest: C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi
+ok 17 - C9 route-boundary proof terikat ke PATCH dan worker entrypoint produksi
+  ---
+  duration_ms: 1.27425
+  type: 'test'
+  ...
+# Subtest: manifest dibuat sekali; retry/reorder/delete/add tetap memakai identitas awal
+ok 18 - manifest dibuat sekali; retry/reorder/delete/add tetap memakai identitas awal
+  ---
+  duration_ms: 7.582458
+  type: 'test'
+  ...
+# Subtest: dua create konkuren kembali dengan satu pemenang durable
+ok 19 - dua create konkuren kembali dengan satu pemenang durable
+  ---
+  duration_ms: 0.675792
+  type: 'test'
+  ...
+# Subtest: crash/hasil CAS ambigu tidak menghapus snapshot yang dapat diadopsi retry
+ok 20 - crash/hasil CAS ambigu tidak menghapus snapshot yang dapat diadopsi retry
+  ---
+  duration_ms: 1.96525
+  type: 'test'
+  ...
+# Subtest: manifest missing/hash-changed dan legacy tak terbukti gagal tertutup
+ok 21 - manifest missing/hash-changed dan legacy tak terbukti gagal tertutup
+  ---
+  duration_ms: 0.837208
+  type: 'test'
+  ...
+# Subtest: readFile I/O sesudah materialize berhasil dipropagasikan, bukan REF_HASH_MISMATCH
+ok 22 - readFile I/O sesudah materialize berhasil dipropagasikan, bukan REF_HASH_MISMATCH
+  ---
+  duration_ms: 0.407833
+  type: 'test'
+  ...
+# Subtest: A6 menempatkan verifikasi manifest sebelum approve, regen charge, task reset, dan enqueue
+ok 23 - A6 menempatkan verifikasi manifest sebelum approve, regen charge, task reset, dan enqueue
+  ---
+  duration_ms: 0.183166
+  type: 'test'
+  ...
+# Subtest: counterexample detektor: images.at(0) tertangkap, komentar/string TIDAK dihitung
+ok 24 - counterexample detektor: images.at(0) tertangkap, komentar/string TIDAK dihitung
+  ---
+  duration_ms: 1.889333
+  type: 'test'
+  ...
+# Subtest: counterexample detektor: hasil resolver yang DIABAIKAN tertangkap (destrukturisasi + salah alamat)
+ok 25 - counterexample detektor: hasil resolver yang DIABAIKAN tertangkap (destrukturisasi + salah alamat)
+  ---
+  duration_ms: 1.435375
+  type: 'test'
+  ...
+# Subtest: harness: kedua sumber worker terbaca dan AST-nya benar-benar terurai
+ok 26 - harness: kedua sumber worker terbaca dan AST-nya benar-benar terurai
+  ---
+  duration_ms: 0.1
+  type: 'test'
+  ...
+# Subtest: API pusat lib/product-truth.ts ada dan BENAR-BENAR mengekspor resolveApprovedReference (runtime binding)
+ok 27 - API pusat lib/product-truth.ts ada dan BENAR-BENAR mengekspor resolveApprovedReference (runtime binding)
+  ---
+  duration_ms: 88.502875
+  type: 'test'
+  ...
+# Subtest: W1+W2: kedua worker mengimpor gerbang manifest job dari lib/job-reference-manifest (AST, bukan teks)
+ok 28 - W1+W2: kedua worker mengimpor gerbang manifest job dari lib/job-reference-manifest (AST, bukan teks)
+  ---
+  duration_ms: 11.476125
+  type: 'test'
+  ...
+# Subtest: W1+W2: loader manifest menerima daftar images sebagai candidateRels
+ok 29 - W1+W2: loader manifest menerima daftar images sebagai candidateRels
+  ---
+  duration_ms: 8.213417
+  type: 'test'
+  ...
+# Subtest: W1+W2: materializer menerima manifest loader, bukan daftar images mentah
+ok 30 - W1+W2: materializer menerima manifest loader, bukan daftar images mentah
+  ---
+  duration_ms: 7.54225
+  type: 'test'
+  ...
+# Subtest: W1+W2: tidak ada pemilihan posisional atas `images` (images[n], images.at(n), MAUPUN destrukturisasi)
+ok 31 - W1+W2: tidak ada pemilihan posisional atas `images` (images[n], images.at(n), MAUPUN destrukturisasi)
+  ---
+  duration_ms: 0.112625
+  type: 'test'
+  ...
+1..31
+# tests 31
+# suites 0
+# pass 31
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 646.986917

@@ -1,0 +1,65 @@
+{
+  "schema": "managed-post-e2-worker-trace/v1",
+  "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
+  "started_at": "2026-08-26T11:06:42.968Z",
+  "finished_at": "2026-08-26T11:06:51.090Z",
+  "exact_sha": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+  "runtime_identity": {
+    "service_id": "srv-d9n28ue417fc73ch2b60",
+    "deploy_env": "staging",
+    "db_runtime": "postgres",
+    "storage_mode": "r2",
+    "queue_name": "racun-jobs-staging-managed-staging-trace",
+    "canonical_queue_name": "racun-jobs-staging",
+    "deterministic_gate": "exact_managed_staging_worker_sha"
+  },
+  "external_provider_calls": 0,
+  "payment_invoice_refund_settlement_calls": 0,
+  "real_money_idr": 0,
+  "queue_before": {
+    "trace": { "waiting": 0, "active": 0, "delayed": 0, "prioritized": 0, "paused": 0, "failed": 0, "actionable": 0 },
+    "canonical": { "waiting": 0, "active": 0, "delayed": 0, "prioritized": 0, "paused": 0, "failed": 0, "actionable": 0 }
+  },
+  "trace": {
+    "dedicated_identity": true,
+    "dedicated_product": true,
+    "source_sha256": "b76e25b2027c688b03631e353991258be233e82ffe3d88b563f3f1e641cbf6c2",
+    "canonical_admission_http": 201,
+    "canonical_admission_job_id_matches_worker": true,
+    "canonical_admission_hold_idr": 0,
+    "canonical_admission_replay_http": 400,
+    "canonical_admission_capability_one_use": true,
+    "sidecar_verified": true,
+    "admission_manifest_exact": true,
+    "admission_snapshot_exact": true,
+    "queue_consumed_by_one_off_worker": true,
+    "terminal": "READY",
+    "provider_video": "deterministic-postgres-test",
+    "provider_voice": "none-silent-caption",
+    "cost_actual_idr": 0,
+    "qc": { "passed": true, "checks": [{ "code": "QC-08", "status": "pass" }], "fixture": true },
+    "deliverable_key": "jobs/5a96056d-92c6-4857-b5ce-8b542dca8f71/output.mp4",
+    "deliverable_present_in_r2": true,
+    "provider_task_rows": 0,
+    "payment_rows": 0,
+    "ledger_rows": []
+  },
+  "before_cleanup": {
+    "queue": {
+      "trace": { "waiting": 0, "active": 0, "delayed": 0, "prioritized": 0, "paused": 0, "failed": 0, "actionable": 0 },
+      "canonical": { "waiting": 0, "active": 0, "delayed": 0, "prioritized": 0, "paused": 0, "failed": 0, "actionable": 0 }
+    },
+    "db_rows": { "user": 1, "product": 1, "script": 1, "job": 1, "output": 1 }
+  },
+  "cleanup": { "database": true, "r2": true, "queue": true },
+  "queue_after": {
+    "trace": { "waiting": 0, "active": 0, "delayed": 0, "prioritized": 0, "paused": 0, "failed": 0, "actionable": 0 },
+    "canonical": { "waiting": 0, "active": 0, "delayed": 0, "prioritized": 0, "paused": 0, "failed": 0, "actionable": 0 }
+  },
+  "after_cleanup": {
+    "db_rows": { "users": 0, "products": 0, "scripts": 0, "jobs": 0, "outputs": 0, "audit_log": 0, "fyp_snapshots": 0, "provider_tasks": 0, "payments": 0, "credit_ledger": 0, "job_prompts": 0, "job_shots": 0, "post_plans": 0 },
+    "r2_objects_present": 0,
+    "queue_job_present": false
+  },
+  "result": "PASS"
+}

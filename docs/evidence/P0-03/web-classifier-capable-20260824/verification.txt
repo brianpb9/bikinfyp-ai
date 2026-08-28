@@ -1,0 +1,37 @@
+LOCAL VERIFICATION 2026-08-24 Asia/Jakarta
+
+render blueprints validate ./render.yaml --output json
+  valid=true
+  planned_actions=4
+  note=validation only; no Blueprint apply/sync/deploy
+
+npm run test:web-container
+  static_contract=PASS
+  tests=26
+  pass=26
+  fail=0
+  skipped=0
+  image_execution=NOT_RUN
+  reason=no local Docker/Podman engine
+
+tsx --test tests/klasifikasi-kapabilitas.test.ts tests/web-container-contract.test.ts
+  tests=40
+  pass=40
+  fail=0
+  skipped=0
+
+npm run build
+  result=PASS
+  routes_built=all listed Next routes
+
+npx tsc --noEmit
+  result=PASS
+
+git diff --check
+  result=PASS
+
+git diff --exit-code c3c99fcb004975c629758353c63f072fabf3c225 -- render.production.yaml
+  result=PASS; byte-identical
+
+shasum -a 256 render.production.yaml
+  3b1a33a4e4556717481d10e2dbe7a6ff9982bd7ce41b3ec0b92013f19b3710f7

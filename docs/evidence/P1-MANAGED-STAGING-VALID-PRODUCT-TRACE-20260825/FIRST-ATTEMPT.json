@@ -1,0 +1,18 @@
+{
+  "task": "P1-MANAGED-STAGING-VALID-PRODUCT-TRACE-20260825",
+  "job": "job-da6b3om7bikc738f0610",
+  "deployed_app_sha": "89cfdf0ebf3290aa3b42376a9da194988f6d6db3",
+  "runner_result": "FAIL",
+  "positive_http": 500,
+  "primary_web_error": "EACCES: permission denied, mkdir '/srv/app/data'",
+  "primary_web_error_at": "2026-08-24T21:04:49.005891749Z",
+  "diagnosis": "ensureDirs attempted to create the SQLite DB parent even when RACUN_DB_RUNTIME=postgres",
+  "recovery": {
+    "target_rows_after_cleanup": 0,
+    "task_identity_queue_jobs_after_cleanup": 0,
+    "all_queue_counts_zero": true,
+    "database_cleanup": true,
+    "media_cleanup": true
+  },
+  "remediation_commit": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb"
+}

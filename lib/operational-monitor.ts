@@ -109,13 +109,14 @@ export async function collectOperationalAlerts(
   const penulisMati = await db.query(
     `SELECT count(*)::int AS count, max(meta::jsonb->>'sebab') AS sebab
        FROM audit_log
-      WHERE action = 'naskah.penulis_tidak_tersedia' AND created_at >= $1`,
+      WHERE action IN ('naskah.penulis_tidak_tersedia', 'naskah.ide_tidak_tersedia')
+        AND created_at >= $1`,
     [windowStart]
   );
   const gagalNaskah = Number(penulisMati.rows[0]?.count ?? 0);
   if (gagalNaskah >= 3) alerts.push({
     fingerprint: "penulis-naskah-mati",
-    subject: `[BikinFYP] ALERT: ${gagalNaskah} permintaan naskah ditolak (penulis LLM tidak tersedia)`,
+    subject: `[BikinFYP] ALERT: ${gagalNaskah} permintaan naskah ditolak (lapisan LLM tidak tersedia)`,
     text:
       `Dalam ${settings.errorWindowMin} menit terakhir, ${gagalNaskah} permintaan naskah dijawab 503 karena penulis LLM gagal ` +
       `dan naskah template SENGAJA tidak disajikan. Sebab terakhir: ${penulisMati.rows[0]?.sebab ?? "tidak tercatat"}. ` +

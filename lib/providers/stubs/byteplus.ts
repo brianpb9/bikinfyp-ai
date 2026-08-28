@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { config } from "../../config";
 import { runFf } from "../../media/ffmpeg";
 import {
@@ -93,13 +94,41 @@ interface TaskResponse {
   error?: { code?: string; message?: string };
 }
 
+/** Diekspor untuk uji tarif — lihat tests/tarif-model-tak-dikenal.test.ts. */
+export function hitungBiayaUntukUji(model: string, totalTokens: number | undefined, durationSec: number, resolution: string) {
+  return estimateCostIdr(model, totalTokens, durationSec, resolution);
+}
+
 function estimateCostIdr(model: string, totalTokens: number | undefined, durationSec: number, resolution: string): { idr: number; estimated: boolean } {
   const rate = MODEL_RATES[model] ?? {};
   if (totalTokens && rate.tokenUsdPerM) {
     return { idr: Math.round((totalTokens / 1_000_000) * rate.tokenUsdPerM * config.usdIdr), estimated: false };
   }
-  const perSec = rate.perSecUsd?.[resolution] ?? rate.perSecUsd?.["480p"] ?? 0.01;
-  return { idr: Math.round(durationSec * perSec * config.usdIdr), estimated: true };
+  // MODEL TAK DIKENAL DITAKSIR MAHAL, BUKAN MURAH.
+  //
+  // Ditemukan 20 Agu dari daftar task nyata: akun ini memakai
+  // `dreamina-seedance-2-5-260628` yang TIDAK ada di MODEL_RATES. Fallback
+  // lama jatuh ke 0,01 USD/detik — tarif model termurah di tabel — sehingga
+  // 300 detik render model kelas atas tercatat ~Rp49.000 alih-alih ratusan
+  // ribu.
+  //
+  // Kenapa ini berbahaya melebihi salah catat: anggaran canary dan stop-rule
+  // membaca angka INI. Menaksir terlalu rendah berarti cap Rp250.000 bisa
+  // terlampaui jauh tanpa satu pun gerbang menyadarinya. Untuk uang, taksiran
+  // yang aman adalah yang MAHAL.
+  const tarifDikenal = rate.perSecUsd?.[resolution] ?? rate.perSecUsd?.["480p"];
+  if (tarifDikenal !== undefined) {
+    return { idr: Math.round(durationSec * tarifDikenal * config.usdIdr), estimated: true };
+  }
+  const tertinggi = Math.max(
+    ...Object.values(MODEL_RATES).flatMap((r) => Object.values(r.perSecUsd ?? {})),
+    0.01
+  );
+  console.warn(
+    `[byteplus] model "${model}" TIDAK ada di MODEL_RATES — biaya ditaksir dengan tarif TERTINGGI yang diketahui ` +
+      `($${tertinggi}/dtk). Tambahkan tarifnya sebelum angka ini dipakai untuk keputusan harga.`
+  );
+  return { idr: Math.round(durationSec * tertinggi * config.usdIdr), estimated: true };
 }
 
 /** Susun item content create-task. Diekspor untuk unit test.
@@ -147,6 +176,11 @@ export function modeReferensi(
   spec: VisualSpec,
   model: string
 ): "reference_image (r2v)" | "first_frame (i2v)" | "text_to_video" {
+  // Neutral Story Ads deliberately carry no product references. Keep this
+  // explicit policy separate from the legacy empty-spec probe used by the
+  // provider mode decision tests: absence alone is not sufficient evidence
+  // that a normal product render should switch away from its configured mode.
+  if (spec.visualSubjectPolicy === "neutral_story_ads") return "text_to_video";
   const modelDukungR2v = model.includes("dreamina-seedance-2");
   if (modelDukungR2v && spec.preferI2v !== true) return "reference_image (r2v)";
   return "first_frame (i2v)";
@@ -162,6 +196,7 @@ export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string
   // ke BytePlus, API menerima 8 foto referensi tanpa error (bukan API yg
   // membatasi 5, itu batas kode lama).
   const extras = (spec.extraReferenceImagePaths ?? []).slice(0, 7);
+  if (!shot.imageRefPath) return [textItem];
   // r2v adalah BAWAAN untuk model yang mendukungnya. Dulu ia hanya dipakai
   // kalau ada foto tambahan atau referenceOnlyImages dinyalakan — artinya
   // jalur retail (satu foto produk) selalu jatuh ke i2v, yaitu mode yang
@@ -182,7 +217,7 @@ export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string
 
 const PROVIDER_KEY = "byteplus";
 
-async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
+export function buildBytePlusTaskBody(spec: VisualSpec, shot: ShotSpec) {
   const tierCfg = config.tiers[spec.qualityTier] ?? config.tiers.silent_caption;
   const content = buildTaskContent(spec, shot, tierCfg.byteplusModel);
   // Mode r2v (ada role reference_image) minimal 4 dtk (diverifikasi: duration 3
@@ -211,6 +246,14 @@ async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
     duration: durationInt,
     watermark: false,
   };
+  return body;
+}
+
+export function bytePlusTaskPayloadSha256(spec: VisualSpec, shot: ShotSpec): string {
+  return crypto.createHash("sha256").update(JSON.stringify(buildBytePlusTaskBody(spec, shot))).digest("hex");
+}
+
+async function createTask(body: ReturnType<typeof buildBytePlusTaskBody>): Promise<string> {
   const res = await apiRequest<{ id: string }>("POST", `${config.byteplusBaseUrl}/contents/generations/tasks`, body);
   if (!res.id) throw new ProviderApiError("byteplus", "respons create task tanpa id");
   return res.id;
@@ -280,16 +323,18 @@ export const byteplusVideo: VideoProvider = {
         // mengirim yang baru. Worker yang mati saat polling kehilangan id
         // task-nya bersama prosesnya, dan tanpa langkah ini BytePlus menagih
         // dua kali untuk shot yang sama.
-        const remembered = await memo.get(spec.jobId, shot.index, PROVIDER_KEY);
+        const body = buildBytePlusTaskBody(spec, shot);
+        const payloadSha256 = crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex");
+        const remembered = await memo.get(spec.jobId, shot.index, PROVIDER_KEY, payloadSha256);
         if (remembered) {
           console.log(`[byteplus] job ${spec.jobId} shot ${shot.index}: lanjutkan task ${remembered} (tidak submit ulang)`);
           return { shot, taskId: remembered, startedAt: Date.now() };
         }
-        const taskId = await createTask(spec, shot);
+        const taskId = await createTask(body);
         // Disimpan SEBELUM polling. Menyimpannya setelah polling selesai tidak
         // ada gunanya — justru jendela antara submit dan selesai itulah yang
         // ingin dilindungi.
-        await memo.put(spec.jobId, shot.index, PROVIDER_KEY, taskId);
+        await memo.put(spec.jobId, shot.index, PROVIDER_KEY, taskId, payloadSha256);
         console.log(`[byteplus] job ${spec.jobId} shot ${shot.index}: task ${taskId} dikirim`);
         return { shot, taskId, startedAt: Date.now() };
       })

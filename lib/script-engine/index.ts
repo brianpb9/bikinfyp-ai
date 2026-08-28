@@ -24,13 +24,14 @@ import { COMPLIANCE_CHECKLIST } from "../config/compliance";
 import { kategoriJenuh } from "./standar-10";
 import { REGISTERS, type Register } from "./registers";
 import { renderSegmentsForTier, formatHargaNatural, type SegmentDraft, type TemplateCtx } from "./templates";
-import { templateCopy, TEMPLATE_COPY_CAPACITY } from "./template-copy";
+import { templateCopy, TEMPLATE_COPY_CAPACITY, type AdsStoryBeat } from "./template-copy";
 import { isTvcTemplate, jendelaKata, templateRequiresPriceMention, tokenMerek, validateScript, type ValidationResult } from "./validator";
 import { konteksAdmisi, type SnapshotAdmisi } from "./admisi";
 import { buildCaption, buildHashtags, suggestedPostTime } from "./caption";
+import { storyAdsTimeRanges } from "./story-os-ads";
 import { compileDeliveryText } from "./delivery-tags";
 import { keSegmentDraft, laporJatuhKeTemplate, llmSengajaDimatikan, llmSiap, tulisNaskah } from "./llm";
-import { bolehIdeaStage, petunjukNaskah, pilihIde, type IdeTerpilih } from "./ide";
+import { bolehIdeaStage, petunjukNaskah, pilihIde, type Ide, type IdeTerpilih } from "./ide";
 import { resolvePromo, promoDeadlineSpokenPhrase, type ActivePromo } from "../promo";
 import { getDb } from "../db";
 
@@ -81,6 +82,58 @@ export type SumberNaskah = "llm" | "template" | "degraded";
  * tidak pernah masuk antrean render, jadi tidak ada uang maupun mutu produk
  * yang dipertaruhkan di sana.
  */
+/**
+ * IDE TERPILIH TIDAK ADA — dan karena itu tidak ada naskah.
+ *
+ * Doktrin yang sama dengan TemplateTidakDisajikan di bawah, dan lahir dari
+ * kegagalan yang sama bentuknya. Render video penuh 20 Agu mencatat:
+ *   [idea] "Serum Glow Bright": Idea Stage dilewati — semua gelombang gagal
+ * lalu penulis menulis juga. Hasilnya "Eh, ini seru banget sih." — naskah
+ * tanpa sudut, dan videonya sudah terlanjur dibayar Rp35.015.
+ *
+ * Sebuah tahap yang mencatat kegagalannya lalu melanjutkan seolah tidak gagal
+ * bukan tahap, melainkan hiasan. Kalau bahan bakunya tidak ada, yang benar
+ * adalah menolak dengan alasan jelas dan mempersilakan mencoba lagi.
+ */
+export class IdeTidakTersedia extends Error {
+  readonly sebabTeknis: string;
+  constructor(sebabTeknis: string) {
+    super(
+      "Kami belum berhasil menemukan sudut cerita untuk produk ini. " +
+        `Coba lagi sebentar lagi ya. (sebab: ${sebabTeknis})`
+    );
+    this.name = "IdeTidakTersedia";
+    this.sebabTeknis = sebabTeknis;
+  }
+}
+
+/**
+ * GATE IDE GAGAL — ada kandidat, tapi belum ada yang TERPILIH.
+ *
+ * Berbeda dari IdeTidakTersedia: di sini Idea Stage hidup dan menghasilkan
+ * kandidat, hanya tidak ada yang melewati FYP Gate. Sampai 20 Agu naskah tetap
+ * ditulis "tanpa ide" dan kandidatnya cuma ditempel di layar sebagai catatan —
+ * jadi pengguna menerima naskah yang gerbangnya sendiri sudah menyatakan tidak
+ * layak, berdampingan dengan daftar ide yang tidak bisa ia pakai.
+ *
+ * Keputusan Brian 20 Agu: gate gagal = tidak ada naskah. Kandidatnya
+ * dikembalikan supaya pengguna memilih — ulangi pencarian ide, atau tulis dari
+ * salah satu kandidat. Ide yang ia pilih itulah yang masuk ke penulis.
+ */
+export class IdeGateGagal extends Error {
+  readonly kandidat: { ide: unknown; skor: number; sebab: string[] }[];
+  readonly sebabGagal: string[];
+  constructor(kandidat: { ide: unknown; skor: number; sebab: string[] }[], sebabGagal: string[]) {
+    super(
+      "Belum ada sudut cerita yang cukup kuat untuk produk ini. " +
+        "Pilih salah satu ide di bawah, atau minta kami cari lagi."
+    );
+    this.name = "IdeGateGagal";
+    this.kandidat = kandidat;
+    this.sebabGagal = sebabGagal;
+  }
+}
+
 export class TemplateTidakDisajikan extends Error {
   /** Sebab teknis untuk operator — dipisah supaya pesan pengguna tetap ramah. */
   readonly sebabTeknis: string;
@@ -257,6 +310,8 @@ export function pickHookFamilies(
 function buildCtx(product: ProductInput, register: Register): TemplateCtx {
   const cat = product.category;
   return {
+    category: cat,
+    priceIdr: product.price_idr ?? 0,
     reg: REGISTERS[register],
     harga: formatHargaNatural(product.price_idr),
     produk: product.name,
@@ -341,7 +396,14 @@ async function generateOne(
    * Enterprise, format dipilih di langkah confirm — sesudah naskah lahir — dan
    * mengunci nilai bawaan di sini akan menolak pilihan pengguna sendiri.
    */
-  formatDiminta?: string
+  formatDiminta?: string,
+  /**
+   * Tier ini menjalankan Idea Stage, jadi penulis WAJIB berangkat dari ide.
+   *
+   * Bukan "semua naskah wajib ide": high_quality memang dirancang tanpa Idea
+   * Stage (config.ideaStageTiers), dan memaksanya di sana memblokir tier itu.
+   */
+  wajibIde = false
 ): Promise<GeneratedScript> {
   // Ambang Rp100.000 diturunkan dari data, bukan ditebak: tiga video pemenang
   // yang menyebut harga ada di Rp27-30 ribu, sedangkan yang produknya di atas
@@ -360,7 +422,8 @@ async function generateOne(
   // ulang di sini berarti dua rumus waktu yang bisa berbeda diam-diam.
   const dasar = renderSegmentsForTier(family, ctx, tier, durationSec, cartLabel, beats, wordBudget, hargaMahal);
   const variasi = templateCopy(templateId, variantIndex, ctx);
-  const teksVariasi = variasi ? [variasi.hook, variasi.demo, variasi.cta] : null;
+  const teksVariasi = variasi && !variasi.story ? [variasi.hook, variasi.demo, variasi.cta] : null;
+  const segmenStory = variasi?.story ? storyKeSegmen(variasi.story, durationSec) : null;
   // ---- JALUR PENULIS LLM ----
   //
   // Menggantikan kalimat template. Yang TIDAK diganti: delivery tags, promo,
@@ -390,7 +453,7 @@ async function generateOne(
     templateId: templateId ?? null,
     wordBudget: wordBudget ?? null,
     cartLabel,
-    requirePriceMention: templateRequiresPriceMention(templateId),
+    requirePriceMention: templateRequiresPriceMention(templateId) && (product.price_idr ?? 0) > 0,
     hookLevel,
     productCategory: product.category,
     ...(mekanikIde ? { mechanic: mekanikIde } : {}),
@@ -438,7 +501,7 @@ async function generateOne(
   };
 
   const { minWc, maxWc } = jendelaKata({
-    qualityTier: tier, durationSec, wordBudget, productName: product.name,
+    qualityTier: tier, durationSec, wordBudget, productName: product.name, contentType,
   });
 
   // ---- LINGKAR PERBAIKAN LLM ----
@@ -454,12 +517,33 @@ async function generateOne(
   let hasil: { segments: SegmentDraft[]; validation: ReturnType<typeof validate> } | null = null;
   let keluhan: string[] = [];
   if (llmSiap() && !tanpaLlm) {
+    // PENJAGA TERAKHIR: penulis tidak pernah dipanggil tanpa ide.
+    //
+    // Keputusan Brian 20 Agu, dan penjaganya ditaruh di sini — bukan cuma di
+    // pemanggil — karena dua jalur berbeda sudah pernah bocor ke titik ini
+    // (Idea Stage mati, lalu gate gagal). Penjaga yang hidup di pemanggil
+    // hanya menjaga pemanggil yang sudah kita ingat.
+    //
+    // tanpaLlm dikecualikan di atas: jalur template/anonim memang tidak
+    // memakai Idea Stage sama sekali.
+    // Batasnya TIER, bukan "semua naskah". high_quality memang dirancang TANPA
+    // Idea Stage (config.ideaStageTiers) — memaksakan ide di sana berarti
+    // memblokir seluruh tier itu, dan penjaga yang mematikan produk bukan
+    // penjaga. Yang dijaga: di tier yang MENJALANKAN Idea Stage, penulis tidak
+    // pernah berangkat tanpa ide.
+    if (wajibIde && !petunjukIde) {
+      throw new Error(
+        "INVARIAN: penulis naskah dipanggil tanpa ide terpilih pada tier ber-Idea-Stage. " +
+          "Naskahnya harus berangkat dari ide yang lolos gate atau dipilih pengguna."
+      );
+    }
     for (let percobaan = 0; percobaan < MAKS_PERBAIKAN_LLM; percobaan++) {
       try {
         const segs = await tulisNaskah({
           productName: product.name, productCategory: product.category,
           priceIdr: product.price_idr ?? 0, durationSec, contentType, cartLabel,
           register, hookFamily: family, hookLevel: "normal", format,
+          templateId: templateId ?? null,
           // Penutup TVC menyebut MEREK, bukan seluruh nama SKU — lihat T-01.
           merek: tokenMerek(product.name),
           contoh: variasi ? `${variasi.hook} / ${variasi.demo} / ${variasi.cta}` : null,
@@ -467,7 +551,7 @@ async function generateOne(
           keluhan: keluhan.length ? keluhan : undefined,
           ide: petunjukIde,
         });
-        const kandidat = rakitDanNilai(keSegmentDraft(segs), true);
+        const kandidat = rakitDanNilai(keSegmentDraft(segs, contentType), true);
         if (kandidat.validation.passed) {
           // Baris POSITIF, sengaja. Sampai sekarang jalur LLM hanya menulis log
           // saat GAGAL, jadi keberhasilannya tidak bisa dibuktikan dari log —
@@ -513,11 +597,10 @@ async function generateOne(
 
   // Jalur template — CADANGAN, dan sejak gate dikeraskan ia tidak lagi setara.
   //
-  // Template dikalibrasi ke jendela lama 25-30 kata. Dengan batas Brian 1,5
-  // kata/detik (22 kata untuk 15 detik), 130 dari 132 varian melanggar — jadi
-  // "jatuh ke template" hampir selalu berarti naskah yang TIDAK memenuhi
-  // standar. Ia tetap dicoba, tapi hasilnya ditandai apa adanya dan tidak
-  // pernah disajikan sebagai keluaran normal.
+  // Template tetap jalur cadangan dan harus melewati validator yang sama.
+  // Target authoring-nya kini sinkron dengan batas Brian 1,5 kata/detik;
+  // kegagalan apa pun tetap ditandai apa adanya dan tidak pernah disajikan
+  // sebagai keluaran normal.
   // TOLAK, JANGAN SAJIKAN (keputusan Brian 20 Agu). Jalur anonim tetap boleh:
   // ia menampilkan contoh, tidak pernah dirender, dan mematikannya akan
   // membunuh magic moment tanpa login tanpa alasan.
@@ -532,7 +615,7 @@ async function generateOne(
   }
   let sumberNaskah: SumberNaskah = hasil ? "llm" : "template";
   if (!hasil) {
-    hasil = rakitDanNilai(dasar, false);
+    hasil = rakitDanNilai(segmenStory ?? dasar, false);
     for (let attempt = 0; attempt < MAX_REGEN && !hasil.validation.passed; attempt++) {
       const rapi = normalizeSegments(hasil.segments);
       hasil = { segments: rapi, validation: validate(rapi) };
@@ -575,6 +658,17 @@ function normalizeSegments(segments: SegmentDraft[]): SegmentDraft[] {
   }));
 }
 
+/** Lima beat Story OS memakai schedule tunggal yang juga mengikat prompt + gate. */
+function storyKeSegmen(beats: AdsStoryBeat[], durationSec: number): SegmentDraft[] {
+  const ranges = storyAdsTimeRanges(durationSec);
+  return beats.map((beat, index) => ({
+    ...beat,
+    start: ranges[index].start,
+    end: ranges[index].end,
+    visual_direction: beat.action,
+  }));
+}
+
 /** Generator utama: 3 varian, masing-masing beda keluarga hook. */
 export async function generateScripts(opts: {
   product: ProductInput;
@@ -612,6 +706,15 @@ export async function generateScripts(opts: {
   orgId?: string | null;
   /** Paksa jalur template — dipakai jalur anonim yang tidak boleh keluar uang. */
   tanpaLlm?: boolean;
+  /**
+   * IDE YANG DIPILIH PENGGUNA dari kandidat yang dikembalikan IdeGateGagal.
+   *
+   * Kalau ada, Idea Stage TIDAK dijalankan ulang dan gate TIDAK diperiksa lagi:
+   * pengguna sudah melihat skor beserta sebab gagalnya lalu memutuskan tetap
+   * memakainya. Yang dijaga bukan "ide harus lulus gate" melainkan "penulis
+   * tidak pernah menulis tanpa ide yang dipilih seseorang".
+   */
+  ideDipilih?: Ide | null;
 }): Promise<GeneratedScript[]> {
   const { product, register } = opts;
   const count = opts.count ?? 3;
@@ -664,7 +767,10 @@ export async function generateScripts(opts: {
   // BERGERBANG TIER. Idea Stage memakai model kelas atas dan sampai dua
   // panggilan pembuat ide per permintaan; high_quality tetap memakai penulis
   // LLM, yang tidak ia dapat cuma Gate 3. Enterprise selalu ikut.
-  if (llmSiap() && !opts.tanpaLlm && bolehIdeaStage({ tier, orgId: opts.orgId })) {
+  // Ide sudah DIPILIH pengguna -> Idea Stage tidak dijalankan ulang. Mencari
+  // ide baru di sini berarti mengabaikan pilihannya dan membakar biaya
+  // pembuat ide untuk hasil yang tidak akan dipakai.
+  if (!opts.ideDipilih && llmSiap() && !opts.tanpaLlm && bolehIdeaStage({ tier, orgId: opts.orgId })) {
     try {
       // ANTI-REPEAT PER MEREK (slice 4, 20 Agu). Parameter ini sudah ada sejak
     // Idea Stage lahir dan TIDAK PERNAH diisi — jendela 30 hari selalu dinilai
@@ -709,24 +815,44 @@ export async function generateScripts(opts: {
         // skornya dan minta pengguna memilih. Jadi kandidatnya dibawa keluar
         // lewat ideKandidat, dan naskahnya ditulis TANPA ide — perilaku
         // sebelum Gate 3, yang jujur sebagai "belum ada sudut yang layak".
+        // TIDAK ADA NASKAH. Kandidatnya dikembalikan supaya pengguna memilih.
         console.warn(
           `[idea] "${product.name}": tidak ada ide yang lulus FYP Gate setelah ${ide.putaran} putaran ` +
             `(terbaik ${ide.nilai.total} — ${ide.nilai.sebabGagal.join(", ")}). ` +
-            `Naskah ditulis TANPA ide; tiga kandidat teratas dikembalikan untuk dipilih pengguna.`
+            `Naskah TIDAK ditulis; tiga kandidat teratas dikembalikan untuk dipilih pengguna.`
+        );
+        throw new IdeGateGagal(
+          ide.peringkat.slice(0, 3).map((p) => ({
+            ide: p.ide,
+            skor: p.nilai.total,
+            sebab: p.nilai.sebabGagal,
+          })),
+          ide.nilai.sebabGagal
         );
       }
     } catch (err) {
-      console.warn(`[idea] "${product.name}": Idea Stage dilewati — ${(err as Error).message}`);
+      // TIDAK ADA LAGI "dilewati". Sampai 20 Agu blok ini menulis peringatan
+      // lalu membiarkan penulis bekerja tanpa ide sama sekali — dan itulah
+      // yang menghasilkan naskah tanpa sudut pada video berbayar Rp35.015.
+      // Gate yang gagal BUKAN Idea Stage yang mati — ia dilempar dari dalam
+      // try ini dan harus lewat apa adanya. Tanpa baris ini, kandidat yang
+      // sudah dikumpulkan hilang dan penggunanya menerima "coba lagi nanti"
+      // untuk keadaan yang justru butuh keputusannya.
+      if (err instanceof IdeGateGagal) throw err;
+      console.error(`[idea] "${product.name}": Idea Stage MATI — ${(err as Error).message}`);
+      throw new IdeTidakTersedia((err as Error).message);
     }
   }
 
   const hasil: GeneratedScript[] = [];
   for (let i = 0; i < families.length; i++) {
+    // Ide pilihan pengguna menang atas hasil gate: ia sudah melihat skornya.
     // Varian ke-i memakai ide peringkat ke-i kalau ada; kalau kandidatnya lebih
     // sedikit dari variannya, sisanya memakai ide terbaik.
     // Ide dipakai HANYA kalau gate lulus. Kalau tidak, naskah ditulis tanpa
     // ide dan kandidatnya ditawarkan ke pengguna (lihat catatan di atas).
-    const ideVarian = ide?.nilai.lulus ? (ide.peringkat[i] ?? ide.peringkat[0])?.ide ?? ide.ide : null;
+    const ideVarian = opts.ideDipilih
+      ?? (ide?.nilai.lulus ? (ide.peringkat[i] ?? ide.peringkat[0])?.ide ?? ide.ide : null);
     hasil.push(await generateOne(product, register, emotion, families[i], tier, durationSec,
       opts.beats, opts.wordBudget, opts.templateId, i, opts.contentType, opts.format,
       ideVarian ? petunjukNaskah(ideVarian) : undefined, opts.tanpaLlm === true,
@@ -734,7 +860,9 @@ export async function generateScripts(opts: {
       ide?.nilai.lulus ? ide.nilai.total : null,
       ideVarian ? `${ideVarian.mechanic}/${ideVarian.format ?? "-"}` : null,
       ideVarian?.format ?? null,
-      opts.format));
+      opts.format,
+      // Wajib ide HANYA di tier yang memang menjalankan Idea Stage.
+      !opts.tanpaLlm && bolehIdeaStage({ tier, orgId: opts.orgId })));
   }
   // Gate gagal: tiga terbaik ikut keluar supaya UI bisa menampilkannya dan
   // meminta pengguna memilih — bukan disimpan diam-diam di log server.

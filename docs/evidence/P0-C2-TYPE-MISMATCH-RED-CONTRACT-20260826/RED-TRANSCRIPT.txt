@@ -1,0 +1,42 @@
+$ node scripts/verify-c2-type-mismatch-red.mjs
+TAP version 13
+# Subtest: discovery: current Product Truth persistence has category but no authoritative type signal
+ok 1 - discovery: current Product Truth persistence has category but no authoritative type signal
+# Subtest: discovery: E1 E3 E6 E7 carry unchecked category into persistence
+ok 2 - discovery: E1 E3 E6 E7 carry unchecked category into persistence
+# Subtest: discovery: A1-A4 carry stored category to snapshot, generation, job, or hold boundaries
+ok 3 - discovery: A1-A4 carry stored category to snapshot, generation, job, or hold boundaries
+# Subtest: mutation controls: comparator rejects mismatch without rejecting valid positive or inventing missing policy
+ok 4 - mutation controls: comparator rejects mismatch without rejecting valid positive or inventing missing policy
+# Subtest: RED: every production boundary rejects supplied mismatch before its own effects
+not ok 5 - RED: every production boundary rejects supplied mismatch before its own effects
+  failureType: 'testCodeFailure'
+  error: |-
+    C2_MISSING_INVARIANT:
+    E1: storage, PostgreSQL/SQLite product persistence, and audit effects are not owned by a seam callback
+    E1: no AST CallExpression to validateAuthoritativeProductType
+    E3: category/brand PostgreSQL/SQLite updates and audits are not owned by a seam callback
+    E6: extraction audit, download, both product creates, and create audits are not owned by seam callbacks
+    E7: PostgreSQL update and audit are not owned by a seam callback
+    A1: persona/nonce/manifest/cleanup/job/snapshot/audit/hold/scoring/fail/managed-and-ordinary-enqueue effects are not owned by seam callbacks
+    A2: evidence/persona/provider/script/render effects are not owned by a seam callback
+    A3: evidence/provider/script persistence effects are not owned by a seam callback
+    A4: validation/manifest/cleanup/script/audit/job/commit/hold/scoring/enqueue/failure effects are not owned by a seam callback
+    CENTRAL: lib/product-type-boundary.ts is absent
+  code: 'ERR_ASSERTION'
+  expected: []
+  operator: 'deepStrictEqual'
+1..5
+# tests 5
+# suites 0
+# pass 4
+# fail 1
+# cancelled 0
+# skipped 0
+# todo 0
+
+C2_RED_VERIFIER={"expected_nonzero":true,"intended_failure_present":true,"exactly_one_failure":true,"discovery_and_controls_pass":true,"no_compile_or_setup_failure":true}
+
+The transcript omits nondeterministic duration/stack-location lines and
+deduplicates repeated sink diagnostics only; all test names, outcomes, boundary
+classes, totals, and verifier booleans are preserved.

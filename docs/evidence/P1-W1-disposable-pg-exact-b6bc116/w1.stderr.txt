@@ -1,0 +1,1 @@
+psql:migrations/postgres/0030_regen_ledger_type.sql:53: NOTICE:  constraint "credit_ledger_capture_delta_check" of relation "credit_ledger" does not exist, skipping

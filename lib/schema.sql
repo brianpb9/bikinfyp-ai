@@ -106,6 +106,21 @@ CREATE TABLE IF NOT EXISTS products (
   name TEXT NOT NULL,
   price_idr INTEGER NOT NULL,
   category TEXT NOT NULL,
+  product_type_token TEXT,
+  product_type_confirmed_token TEXT,
+  product_type_confirmed_by TEXT,
+  product_type_confirmed_at TEXT,
+  product_type_version INTEGER,
+  product_type_state TEXT NOT NULL DEFAULT 'QUARANTINED'
+    CHECK (product_type_state IN ('QUARANTINED', 'CONFIRMED')),
+  category_review_state TEXT NOT NULL DEFAULT 'QUARANTINED'
+    CHECK (category_review_state IN ('CLEAR', 'QUARANTINED')),
+  category_review_reason TEXT DEFAULT 'CATEGORY_UNKNOWN'
+    CHECK (category_review_reason IS NULL OR category_review_reason IN ('CATEGORY_UNKNOWN', 'CATEGORY_AMBIGUOUS', 'CATEGORY_BUNDLE')),
+  category_reviewed_by TEXT,
+  category_reviewed_role TEXT,
+  category_reviewed_at TEXT,
+  category_review_version INTEGER NOT NULL DEFAULT 1 CHECK (category_review_version >= 1),
   product_visual_desc TEXT, -- deskripsi visual produk dari user (konsistensi identitas shot)
   brand_brief TEXT, -- M8: arahan kreatif bebas dari brand (beda dari visual_desc di atas)
   claims TEXT, -- JSON array klaim singkat untuk overlay teks (ditulis brand, bukan AI)
@@ -115,7 +130,43 @@ CREATE TABLE IF NOT EXISTS products (
   promo_ends_at TEXT,             -- ISO date/datetime; lewat = promo di-drop saat dipakai
   promo_stock_left INTEGER,       -- stok tersisa (klaim user, urgensi jujur)
   raw_meta TEXT,
-  created_at TEXT NOT NULL
+  created_at TEXT NOT NULL,
+  CHECK (
+    product_type_state = 'QUARANTINED'
+    OR (
+      product_type_token IS NOT NULL
+      AND product_type_confirmed_token IS NOT NULL
+      AND product_type_confirmed_by IS NOT NULL
+      AND product_type_confirmed_at IS NOT NULL
+      AND product_type_version IS NOT NULL
+      AND product_type_version = 1
+      AND product_type_token = product_type_confirmed_token
+      AND length(trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279))) > 0
+      AND product_type_token = trim(product_type_token, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279))
+      AND product_type_confirmed_token = trim(product_type_confirmed_token, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279))
+      AND length(trim(product_type_confirmed_by, char(9)||char(10)||char(11)||char(12)||char(13)||char(32)||char(160)||char(5760)||char(8192)||char(8193)||char(8194)||char(8195)||char(8196)||char(8197)||char(8198)||char(8199)||char(8200)||char(8201)||char(8202)||char(8232)||char(8233)||char(8239)||char(8287)||char(12288)||char(65279))) > 0
+      AND strftime('%Y-%m-%dT%H:%M:%fZ', product_type_confirmed_at) IS NOT NULL
+      AND strftime('%Y-%m-%dT%H:%M:%fZ', product_type_confirmed_at) = product_type_confirmed_at
+    )
+  ),
+  CHECK (
+    (category_review_state = 'QUARANTINED'
+      AND category_review_reason IS NOT NULL
+      AND category_review_reason IN ('CATEGORY_UNKNOWN', 'CATEGORY_AMBIGUOUS', 'CATEGORY_BUNDLE')
+      AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
+    OR
+    (category_review_state = 'CLEAR'
+      AND category IN ('beauty','health','fashion','muslim_fashion','home','kitchen','gadget','electronics','food','kids','jasa','app','toko')
+      AND category_review_reason IS NULL AND (
+      (category_review_version = 1 AND category_reviewed_by IS NULL AND category_reviewed_role IS NULL AND category_reviewed_at IS NULL)
+      OR
+      (category_review_version >= 2
+        AND category_reviewed_by IS NOT NULL AND length(trim(category_reviewed_by)) > 0
+        AND category_reviewed_role IS NOT NULL AND length(trim(category_reviewed_role)) > 0
+        AND category_reviewed_at IS NOT NULL
+        AND strftime('%Y-%m-%dT%H:%M:%fZ', category_reviewed_at) = category_reviewed_at)
+    ))
+  )
 );
 CREATE INDEX IF NOT EXISTS idx_products_user ON products(user_id);
 CREATE INDEX IF NOT EXISTS idx_products_org ON products(org_id);
@@ -180,7 +231,9 @@ CREATE TABLE IF NOT EXISTS jobs (
   qc_retry_count INTEGER NOT NULL DEFAULT 0,
   created_at TEXT NOT NULL,
   completed_at TEXT,
-  state_changed_at TEXT -- kapan state terakhir berubah (untuk timeout per-state)
+  state_changed_at TEXT, -- kapan state terakhir berubah (untuk timeout per-state)
+  approved_reference_manifest TEXT, -- manifest referensi tersetujui immutable per job (P0 A6/C9)
+  job_product_snapshot TEXT -- metadata product-truth immutable per job (P0 C9)
 );
 CREATE INDEX IF NOT EXISTS idx_jobs_user ON jobs(user_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_state ON jobs(state);
@@ -324,6 +377,7 @@ CREATE TABLE IF NOT EXISTS provider_tasks (
   shot_index INTEGER NOT NULL,
   provider TEXT NOT NULL,
   task_id TEXT NOT NULL,
+  payload_sha256 TEXT,
   created_at TEXT NOT NULL,
   PRIMARY KEY (job_id, shot_index, provider)
 );

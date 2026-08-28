@@ -1,0 +1,325 @@
+{
+  "schema": "score80-stream-a-control-plane/v1",
+  "observed_at": "2026-08-27T18:53:29Z",
+  "services": [
+    {
+      "id": "srv-d9n28ue417fc73ch2b60",
+      "name": "racun-ai-staging-worker",
+      "type": "background_worker",
+      "branch": "staging/exact-46499ac-20260827",
+      "autoDeploy": "no",
+      "suspended": "not_suspended",
+      "updatedAt": "2026-08-27T15:32:13.276543Z",
+      "serviceDetails": {
+        "runtime": "docker",
+        "dockerfilePath": null,
+        "maintenanceMode": null,
+        "url": null
+      }
+    },
+    {
+      "id": "srv-d9n28tijnfac73a87lt0",
+      "name": "racun-ai-staging-web",
+      "type": "web_service",
+      "branch": "staging/exact-46499ac-20260827",
+      "autoDeploy": "no",
+      "suspended": "not_suspended",
+      "updatedAt": "2026-08-27T15:34:42.583533Z",
+      "serviceDetails": {
+        "runtime": "docker",
+        "dockerfilePath": null,
+        "maintenanceMode": {
+          "enabled": false,
+          "uri": ""
+        },
+        "url": "https://racun-ai-staging-web.onrender.com"
+      }
+    }
+  ],
+  "web_deploys": [
+    {
+      "id": "dep-da85dqjtqb8s73du3tj0",
+      "status": "live",
+      "commit": {
+        "createdAt": "2026-08-27T09:23:20Z",
+        "id": "46499ac5e345997b394e4ac522759e40fe2eae22",
+        "message": "test: bind readiness verifier to exact rubric"
+      },
+      "createdAt": "2026-08-27T15:25:30.687007Z",
+      "updatedAt": "2026-08-27T15:29:13.299935Z",
+      "finishedAt": "2026-08-27T15:28:39.489661Z",
+      "trigger": "api"
+    },
+    {
+      "id": "dep-da7cff7avr4c73bldrfg",
+      "status": "deactivated",
+      "commit": {
+        "createdAt": "2026-08-26T11:00:50Z",
+        "id": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+        "message": "fix: use BullMQ-valid trace queue name"
+      },
+      "createdAt": "2026-08-26T11:02:20.473965Z",
+      "updatedAt": "2026-08-27T15:28:39.487546Z",
+      "finishedAt": "2026-08-26T11:05:08.982172Z",
+      "trigger": "api"
+    },
+    {
+      "id": "dep-da7cce6417fc73fbi23g",
+      "status": "deactivated",
+      "commit": {
+        "createdAt": "2026-08-26T10:55:33Z",
+        "id": "a92d9ebf91b9a37998dec27bab3d0e6e888596bd",
+        "message": "fix: isolate trace jobs on dedicated queue"
+      },
+      "createdAt": "2026-08-26T10:55:52.189863Z",
+      "updatedAt": "2026-08-26T11:05:08.980742Z",
+      "finishedAt": "2026-08-26T10:58:38.877633Z",
+      "trigger": "api"
+    },
+    {
+      "id": "dep-da7c572d0e5s73e3o810",
+      "status": "deactivated",
+      "commit": {
+        "createdAt": "2026-08-26T10:40:12Z",
+        "id": "65d54b5b682acc6cde93ca3e32034d382b7dc57d",
+        "message": "fix: isolate trace worker from held jobs"
+      },
+      "createdAt": "2026-08-26T10:40:32.838531Z",
+      "updatedAt": "2026-08-26T10:58:38.876723Z",
+      "finishedAt": "2026-08-26T10:43:18.24709Z",
+      "trigger": "api"
+    },
+    {
+      "id": "dep-da7bu1ad0e5s73e30mbg",
+      "status": "deactivated",
+      "commit": {
+        "createdAt": "2026-08-26T10:24:53Z",
+        "id": "7a54128dbaa03f808355791edffeb25d91e69f17",
+        "message": "test: prove trace capability replay rejection"
+      },
+      "createdAt": "2026-08-26T10:25:09.274377Z",
+      "updatedAt": "2026-08-26T10:43:18.245848Z",
+      "finishedAt": "2026-08-26T10:27:08.16304Z",
+      "trigger": "api"
+    }
+  ],
+  "worker_deploys": [
+    {
+      "id": "dep-da85ffijnfac73crk8a0",
+      "status": "live",
+      "commit": {
+        "createdAt": "2026-08-27T09:23:20Z",
+        "id": "46499ac5e345997b394e4ac522759e40fe2eae22",
+        "message": "test: bind readiness verifier to exact rubric"
+      },
+      "createdAt": "2026-08-27T15:29:02.46145Z",
+      "updatedAt": "2026-08-27T15:30:32.91599Z",
+      "finishedAt": "2026-08-27T15:30:32.915671Z",
+      "trigger": "api"
+    },
+    {
+      "id": "dep-da7chou1egvs73e7bvig",
+      "status": "deactivated",
+      "commit": {
+        "createdAt": "2026-08-26T11:00:50Z",
+        "id": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+        "message": "fix: use BullMQ-valid trace queue name"
+      },
+      "createdAt": "2026-08-26T11:07:15.768996Z",
+      "updatedAt": "2026-08-27T15:30:32.913561Z",
+      "finishedAt": "2026-08-26T11:08:32.310514Z",
+      "trigger": "api"
+    },
+    {
+      "id": "dep-da7cgv6417fc73fbuv80",
+      "status": "deactivated",
+      "commit": {
+        "createdAt": "2026-08-26T11:00:50Z",
+        "id": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+        "message": "fix: use BullMQ-valid trace queue name"
+      },
+      "createdAt": "2026-08-26T11:05:32.155612Z",
+      "updatedAt": "2026-08-26T11:08:32.309363Z",
+      "finishedAt": "2026-08-26T11:06:40.799442Z",
+      "trigger": "api"
+    },
+    {
+      "id": "dep-da7cff1srm7s7384g1v0",
+      "status": "deactivated",
+      "commit": {
+        "createdAt": "2026-08-26T11:00:50Z",
+        "id": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+        "message": "fix: use BullMQ-valid trace queue name"
+      },
+      "createdAt": "2026-08-26T11:02:20.596433Z",
+      "updatedAt": "2026-08-26T11:06:40.79826Z",
+      "finishedAt": "2026-08-26T11:03:34.580073Z",
+      "trigger": "api"
+    },
+    {
+      "id": "dep-da7cem942hec73b175g0",
+      "status": "deactivated",
+      "commit": {
+        "createdAt": "2026-08-26T10:55:33Z",
+        "id": "a92d9ebf91b9a37998dec27bab3d0e6e888596bd",
+        "message": "fix: isolate trace jobs on dedicated queue"
+      },
+      "createdAt": "2026-08-26T11:00:41.649031Z",
+      "updatedAt": "2026-08-26T11:03:34.579109Z",
+      "finishedAt": "2026-08-26T11:01:57.334666Z",
+      "trigger": "api"
+    }
+  ],
+  "postgres": {
+    "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+    "name": "racun-ai-staging-postgres",
+    "databaseName": "racun_staging",
+    "status": "available",
+    "suspended": "not_suspended",
+    "plan": "free",
+    "version": "16",
+    "region": "singapore",
+    "highAvailabilityEnabled": false,
+    "diskAutoscalingEnabled": false,
+    "createdAt": "2026-08-01T16:37:18.722431Z",
+    "updatedAt": "2026-08-01T16:37:18.722431Z"
+  },
+  "recent_jobs": [
+    {
+      "id": "job-da85hoek1f9s73cbt11g",
+      "status": "succeeded",
+      "createdAt": "2026-08-27T15:33:53.973592Z",
+      "startedAt": "2026-08-27T15:33:54Z",
+      "finishedAt": "2026-08-27T15:34:21Z",
+      "startCommand": "node scripts/laporan-nsfw.mjs 7"
+    },
+    {
+      "id": "job-da85gfegekts73c9ut9g",
+      "status": "succeeded",
+      "createdAt": "2026-08-27T15:31:09.002144Z",
+      "startedAt": "2026-08-27T15:31:09Z",
+      "finishedAt": "2026-08-27T15:31:38Z",
+      "startCommand": "node --input-type=module -e \"import {Pool} from \\\"pg\\\"; import {S3Client,ListObjectsV2Command} from \\\"@aws-sdk/client-s3\\\"; const need=[\\\"DATABASE_URL\\\",\\\"R2_ENDPOINT\\\",\\\"R2_BUCKET\\\",\\\"R2_ACCESS_KEY_ID\\\",\\\"R2_SECRET_ACCESS_KEY\\\"]; const slots=Object.fromEntries(need.map(k=>[k,Boolean(process.env[k])])); if(Object.values(slots).some(v=>!v)) throw Error(\\\"managed slot absent\\\"); const pool=new Pool({connectionString:process.env.DATABASE_URL}); const q=await pool.query(\\\"SELECT current_database() db, (SELECT count(*)::int FROM schema_migrations) migrations, (SELECT max(version) FROM schema_migrations) latest, (SELECT count(*)::int FROM products) products\\\"); const s3=new S3Client({endpoint:process.env.R2_ENDPOINT,region:process.env.R2_REGION||\\\"auto\\\",credentials:{accessKeyId:process.env.R2_ACCESS_KEY_ID,secretAccessKey:process.env.R2_SECRET_ACCESS_KEY},forcePathStyle:true}); const page=await s3.send(new ListObjectsV2Command({Bucket:process.env.R2_BUCKET,MaxKeys:1})); console.log(JSON.stringify({schema:\\\"lane-a-managed-readback/v1\\\",exact_sha:process.env.RENDER_GIT_COMMIT||null,db:{connected:true,name:q.rows[0].db,migrations:q.rows[0].migrations,latest:q.rows[0].latest,products:q.rows[0].products},r2:{connected:true,key_count_at_most_one:(page.Contents||[]).length,bucket_name_redacted:true},slots_present:slots,mutation:false})); await pool.end();\""
+    },
+    {
+      "id": "job-da85e1ijnfac73crfct0",
+      "status": "succeeded",
+      "createdAt": "2026-08-27T15:25:58.464964Z",
+      "startedAt": "2026-08-27T15:25:58Z",
+      "finishedAt": "2026-08-27T15:26:21Z",
+      "startCommand": "node scripts/laporan-nsfw.mjs 7"
+    },
+    {
+      "id": "job-da7auc8u01pc738qm4ig",
+      "status": "failed",
+      "createdAt": "2026-08-26T09:17:37.697462Z",
+      "startedAt": "2026-08-26T09:17:37Z",
+      "finishedAt": "2026-08-26T09:18:16Z",
+      "startCommand": "REDIS_QUEUE_NAME=racun-jobs-staging-post-e2-trace EXPECTED_APP_SHA=8709f4a810894b810e9bdbd04ec738c0332662ff npx tsx scripts/managed-post-e2-worker-trace.ts"
+    },
+    {
+      "id": "job-da7asqh5efls73cnbbe0",
+      "status": "failed",
+      "createdAt": "2026-08-26T09:14:18.562682Z",
+      "startedAt": "2026-08-26T09:14:18Z",
+      "finishedAt": "2026-08-26T09:14:58Z",
+      "startCommand": "EXPECTED_APP_SHA=8709f4a810894b810e9bdbd04ec738c0332662ff npx tsx scripts/managed-post-e2-worker-trace.ts"
+    },
+    {
+      "id": "job-da64dpek1f9s7390i0ng",
+      "status": "succeeded",
+      "createdAt": "2026-08-24T13:28:05.478493Z",
+      "startedAt": "2026-08-24T13:28:05Z",
+      "finishedAt": "2026-08-24T13:28:30Z",
+      "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"CANONICAL_QUEUE_SUSTAINED \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"CANONICAL_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+    },
+    {
+      "id": "job-da64d761egvs73a20qng",
+      "status": "succeeded",
+      "createdAt": "2026-08-24T13:26:52.853809Z",
+      "startedAt": "2026-08-24T13:26:53Z",
+      "finishedAt": "2026-08-24T13:27:24Z",
+      "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"CANONICAL_QUEUE_POST \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"CANONICAL_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+    },
+    {
+      "id": "job-da64c1e417fc739a4ll0",
+      "status": "succeeded",
+      "createdAt": "2026-08-24T13:24:21.741498Z",
+      "startedAt": "2026-08-24T13:24:21Z",
+      "finishedAt": "2026-08-24T13:24:49Z",
+      "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"CANONICAL_QUEUE_PRE \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"CANONICAL_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+    },
+    {
+      "id": "job-da6476jl550s738cf7f0",
+      "status": "succeeded",
+      "createdAt": "2026-08-24T13:14:02.813093Z",
+      "startedAt": "2026-08-24T13:14:02Z",
+      "finishedAt": "2026-08-24T13:14:28Z",
+      "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"REPLAY_QUEUE_SUSTAINED \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"REPLAY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+    },
+    {
+      "id": "job-da646lm7bikc73aqep00",
+      "status": "succeeded",
+      "createdAt": "2026-08-24T13:12:54.331109Z",
+      "startedAt": "2026-08-24T13:12:54Z",
+      "finishedAt": "2026-08-24T13:13:19Z",
+      "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"REPLAY_QUEUE_POST \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"REPLAY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+    },
+    {
+      "id": "job-da645hmk1f9s738voujg",
+      "status": "succeeded",
+      "createdAt": "2026-08-24T13:10:30.849822Z",
+      "startedAt": "2026-08-24T13:10:31Z",
+      "finishedAt": "2026-08-24T13:10:36Z",
+      "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"REPLAY_QUEUE_PRE \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"REPLAY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+    },
+    {
+      "id": "job-da64563tqb8s739ig6d0",
+      "status": "failed",
+      "createdAt": "2026-08-24T13:09:44.587989Z",
+      "startedAt": "2026-08-24T13:09:44Z",
+      "finishedAt": "2026-08-24T13:10:13Z",
+      "startCommand": "node -e 'const {Queue}=require(\\\"bullmq\\\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\\\"racun-jobs\\\",\\\"racun-promo-jobs\\\"]){const q=new Queue(name,c); console.log(\\\"REPLAY_QUEUE_PRE \\\"+JSON.stringify({name,counts:await q.getJobCounts(\\\"wait\\\",\\\"active\\\",\\\"delayed\\\",\\\"prioritized\\\",\\\"failed\\\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\\\"REPLAY_QUEUE_ERROR \\\"+e.message);process.exit(1)})'"
+    },
+    {
+      "id": "job-da63uv6k1f9s738v67q0",
+      "status": "succeeded",
+      "createdAt": "2026-08-24T12:56:28.096306Z",
+      "startedAt": "2026-08-24T12:56:28Z",
+      "finishedAt": "2026-08-24T12:56:56Z",
+      "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"PARITY_QUEUE_FINAL \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"PARITY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+    },
+    {
+      "id": "job-da63shvqj5pc73e15d80",
+      "status": "succeeded",
+      "createdAt": "2026-08-24T12:51:19.812341Z",
+      "startedAt": "2026-08-24T12:51:19Z",
+      "finishedAt": "2026-08-24T12:51:46Z",
+      "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"PARITY_QUEUE_STATE \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"PARITY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+    }
+  ],
+  "health": {
+    "ok": true,
+    "intake": "open",
+    "payments_provider": "duitku",
+    "payments_env": "sandbox",
+    "payments_live": false,
+    "build_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+    "klasifikasi": {
+      "mampu": true,
+      "biner": {
+        "ffmpeg": true,
+        "ffprobe": true,
+        "tesseract": true
+      },
+      "bahasaOcr": true,
+      "smoke": true,
+      "alasan": "Runtime ini bisa mengklasifikasi gambar (terbukti lewat smoke pipeline, bukan hanya -version).",
+      "diperiksaPada": "2026-08-27T15:28:38.539Z"
+    }
+  },
+  "safety": {
+    "secret_values_persisted": false,
+    "control_plane_commands_read_only": true
+  }
+}

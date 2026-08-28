@@ -1,0 +1,10 @@
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/MANIFEST.md: OK
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/affected-tests.log: OK
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/build.log: OK
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/npm-test.log: OK
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/postgres-residue.stderr.txt: OK
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/postgres-residue.txt: OK
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/postgres-w1.log: OK
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/proof.txt: OK
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/script-catalog.log: OK
+docs/evidence/P0-03/c9-promo-rendered-output-remediation-20260824/tsc.log: OK

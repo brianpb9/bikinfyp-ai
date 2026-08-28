@@ -8,8 +8,8 @@
 
 export interface TaskMemo {
   /** id task yang masih layak dilanjutkan, atau null. */
-  get(jobId: string, shotIndex: number, provider: string): Promise<string | null>;
-  put(jobId: string, shotIndex: number, provider: string, taskId: string): Promise<void>;
+  get(jobId: string, shotIndex: number, provider: string, payloadSha256: string): Promise<string | null>;
+  put(jobId: string, shotIndex: number, provider: string, taskId: string, payloadSha256: string): Promise<void>;
   /** Dipanggil setelah job selesai — agar tabel tidak menumpuk dan tidak ada
    * task basi yang bisa terpakai ulang. */
   clear(jobId: string): Promise<void>;

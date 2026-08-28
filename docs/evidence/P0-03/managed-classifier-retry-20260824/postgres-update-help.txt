@@ -1,0 +1,69 @@
+Render CLI v2.22.0
+
+Update a Render Postgres database
+
+USAGE
+  render postgres update <postgresID|postgresName> [flags]
+
+FLAGS
+      --clear-ip-allow-list                 Remove all IP allow-list entries. Mutually exclusive with --ip-allow-list
+      --datadog-api-key <DATADOG_API_KEY>   Set the Datadog API key for monitoring. Pass an empty string to remove
+      --datadog-site <DATADOG_SITE>         Set the Datadog region/site (e.g. US1, US3, EU)
+      --disk-autoscaling                    Enable disk autoscaling. Pass --disk-autoscaling=false to disable
+      --disk-size-gb <DISK_SIZE_GB>         Set the disk size in GB. Must be 1 or a multiple of 5 (default: 0)
+      --environment <ENVIRONMENT>           Narrow lookup to an environment (ID or name, optional) when the same Postgres database name exists in multiple environments
+  -h, --help                                Show help for this command
+      --high-availability                   Enable high availability (Pro plans and above). Pass --high-availability=false to disable
+      --ip-allow-list <CIDR_DESCRIPTION>    Replace the IP allow-list with the supplied entries (format: cidr=<range>,description=<label>). Repeat the flag for multiple entries
+      --name <NAME>                         Rename the database
+      --plan <PLAN>                         Set the plan to one of: free | basic_256mb | basic_1gb | basic_4gb | pro_4gb | pro_8gb | pro_16gb | pro_32gb | pro_64gb | pro_128gb | pro_192gb | pro_256gb | pro_384gb | pro_512gb | accelerated_16gb | accelerated_32gb | accelerated_64gb | accelerated_128gb | accelerated_256gb | accelerated_384gb | accelerated_512gb | accelerated_768gb | accelerated_1024gb. Custom enterprise plan names are also accepted
+      --project <PROJECT>                   Narrow lookup to a project (ID or name, optional) when the same Postgres database name exists in multiple projects
+      --confirm                             Skip all confirmation prompts
+  -o, --output <FORMAT>                     Set output format to interactive, json, yaml, or text. Auto-switches to text on non-TTY (default: "interactive")
+
+EXAMPLES
+  # Rename
+  render pg update dpg-abc123def456ghi789jkl0 --name application_db
+
+  # Change plan
+  render pg update my-db --plan pro_4gb
+
+  # Grow the disk and enable autoscaling
+  render pg update my-db --disk-size-gb 50 --disk-autoscaling
+
+  # Replace the IP allow-list (entire list, not append)
+  render pg update my-db \
+    --ip-allow-list "cidr=203.0.113.5/32,description=office" \
+    --ip-allow-list "cidr=10.0.0.0/8,description=internal"
+
+  # Clear the IP allow-list
+  render pg update my-db --clear-ip-allow-list
+
+  # Disambiguate a name that exists in multiple environments
+  render pg update my-db --environment production --plan pro_8gb
+
+  # JSON output
+  render pg update dpg-abc123def456ghi789jkl0 --plan pro_4gb --output json
+
+DETAILS
+Update an existing Render Postgres database.
+
+The positional argument is the target database (ID dpg-... or name). At least
+one mutating flag must be supplied. Use --name to rename the database; the
+positional argument always identifies the target and is never the new name.
+
+Environment, project, workspace, and region are immutable. A database cannot be
+moved between them; the --project and --environment flags are for name
+disambiguation only.
+
+Only the fields you pass are changed; everything else is left untouched.
+
+Name lookup is scoped to your active workspace. If a name isn't found, switch
+workspaces with 'render workspace set <name|ID>' and try again, or pass the
+Postgres ID instead (which works across workspaces). If a name matches more
+than one database, narrow the search with --project <id|name> or
+--environment <id|name>.
+
+The --ip-allow-list flag replaces the server-side list; pass it once per entry.
+To remove all allow-list entries, pass --clear-ip-allow-list. The two flags are
+mutually exclusive.

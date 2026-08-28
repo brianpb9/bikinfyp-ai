@@ -1,0 +1,29 @@
+{
+  "observedAt": "2026-08-24T12:21:45.094Z",
+  "request": {
+    "method": "GET",
+    "path": "/v1/services/srv-d9ni3ndaeets73c07kq0",
+    "action": "get-service",
+    "payload": null
+  },
+  "response": {
+    "id": "srv-d9ni3ndaeets73c07kq0",
+    "name": "bikinfyp-ai-production-worker",
+    "type": "background_worker",
+    "repo": "https://github.com/brianpb9/bikinfyp-ai",
+    "branch": "main",
+    "autoDeploy": "yes",
+    "suspended": "not_suspended",
+    "updatedAt": "2026-08-20T08:18:50.344489Z",
+    "serviceDetails": {
+      "runtime": "docker",
+      "plan": "standard",
+      "region": "singapore",
+      "envSpecificDetails": {
+        "dockerCommand": "",
+        "dockerContext": ".",
+        "dockerfilePath": "Dockerfile.worker"
+      }
+    }
+  }
+}

@@ -2,7 +2,6 @@ import { Pool } from "pg";
 import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
 import { requireOrgContextApi } from "@/lib/dashboard-auth";
-import { createSignedUrl } from "@/lib/signed-url";
 import crypto from "node:crypto";
 import { enqueueJobResume } from "@/lib/job-queue";
 import { regenerateSceneTokens } from "@/lib/credits";
@@ -13,6 +12,11 @@ import { pgForgetShotTask } from "@/lib/postgres/task-memo";
 import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
 import { assertPaidAdmission } from "@/lib/job-intake";
+import { materializeJobReferenceManifest } from "@/lib/job-reference-manifest";
+import { assertCurrentC5JobGeneration, requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
+import path from "node:path";
+import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
+import { campaignJobDependencies } from "@/lib/campaign-job-dependencies";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -30,15 +34,32 @@ type SceneRow = {
   duration_sec: number; regen_requested: boolean; regen_count: number;
 };
 type JobRowLite = {
-  id: string; state: string; org_id: string | null; approved_at: string | null;
+  id: string; product_id: string; state: string; org_id: string | null; approved_at: string | null;
   requires_approval: boolean; product_name: string; segments: string;
   quality_tier: string;
+  format: string; template_id: string | null;
+  script_validation_result: string | null;
+  approved_reference_manifest: string | null;
+  job_product_snapshot: string | null;
+  product_type_token: string | null;
+  product_type_confirmed_token: string | null;
+  product_type_confirmed_by: string | null;
+  product_type_confirmed_at: string | Date | null;
+  product_type_version: number | null;
+  product_type_state: string | null;
+  product_category:string;category_review_state:string;category_review_reason:string|null;
+  category_reviewed_by:string|null;category_reviewed_role:string|null;category_reviewed_at:string|Date|null;category_review_version:number;
 };
 
 async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRowLite | null> {
   const res = await pool.query<JobRowLite>(
-    `SELECT j.id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier,
-            p.name AS product_name, s.segments
+    `SELECT j.id, j.product_id, j.state, j.org_id, j.approved_at, j.requires_approval, j.quality_tier, j.format, j.template_id,
+            j.approved_reference_manifest, j.job_product_snapshot,
+            p.product_type_token, p.product_type_confirmed_token, p.product_type_confirmed_by,
+            p.product_type_confirmed_at, p.product_type_version, p.product_type_state,
+            p.category AS product_category,p.category_review_state,p.category_review_reason,
+            p.category_reviewed_by,p.category_reviewed_role,p.category_reviewed_at,p.category_review_version,
+            p.name AS product_name, s.segments, s.validation_result AS script_validation_result
      FROM jobs j JOIN products p ON p.id=j.product_id JOIN scripts s ON s.id=j.script_id
      WHERE j.id=$1 AND j.org_id=$2`,
     [jobId, orgId]
@@ -51,13 +72,17 @@ async function loadJob(pool: Pool, jobId: string, orgId: string): Promise<JobRow
 // pesan, jadi ketiganya ditampilkan apa adanya, bukan diringkas.
 export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }> }) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
-    const { membership } = await requireOrgContextApi(req);
+    const routeDeps = campaignJobDependencies();
+    if (!routeDeps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
+    const { membership } = await routeDeps.requireOrgContextApi(req);
     const { jobId } = await ctx.params;
-    const pool = getPool(config.databaseUrl);
+    const pool = routeDeps.getPool();
     try {
       const job = await loadJob(pool, jobId, membership.org_id);
       if (!job) throw ERR.NOT_FOUND("Job-nya");
+      assertCategoryReviewClear({state:job.category_review_state as "CLEAR"|"QUARANTINED",
+        reason:job.category_review_reason as never,version:job.category_review_version},job.product_category);
+      assertCurrentC5JobGeneration(job);
       const scenes = (await pool.query<SceneRow>(
         "SELECT idx, prompt, storage_key, thumb_key, duration_sec, regen_requested, regen_count FROM job_shots WHERE job_id=$1 ORDER BY idx ASC",
         [jobId]
@@ -77,8 +102,8 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
           // brand merasa dicurangi.
           regen_tokens: regenerateSceneTokens(job.quality_tier as QualityTier, s.duration_sec),
           prompt: s.prompt,
-          video_url: createSignedUrl(s.storage_key),
-          thumb_url: s.thumb_key ? createSignedUrl(s.thumb_key) : null,
+          video_url: routeDeps.createSignedUrl(s.storage_key),
+          thumb_url: s.thumb_key ? routeDeps.createSignedUrl(s.thumb_key) : null,
           regen_requested: s.regen_requested,
           regen_count: s.regen_count,
           regen_left: Math.max(0, MAX_REGEN_PER_SCENE - s.regen_count),
@@ -99,8 +124,9 @@ export async function GET(req: Request, ctx: { params: Promise<{ jobId: string }
 // kredensial provider hanya ada di container worker.
 export async function POST(req: Request, ctx: { params: Promise<{ jobId: string }> }) {
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
+    const routeDeps = campaignJobDependencies();
+    if (!routeDeps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Requires Postgres runtime.");
+    const { user, membership } = await routeDeps.requireOrgContextApi(req);
     const { jobId } = await ctx.params;
     const body = await req.json().catch(() => ({}));
     const action = body.action === "approve" ? "approve" : body.action === "regenerate" ? "regenerate" : null;
@@ -125,15 +151,46 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
     // type='regen', tapi migrasi yang mengizinkan tipe itu (0030) belum
     // terpasang di produksi — tanpa gerbang ini, permintaannya berujung 500
     // dengan saldo yang sudah tersentuh.
-    await assertPaidAdmission();
+    await routeDeps.assertPaidAdmission();
 
-    const pool = getPool(config.databaseUrl);
+    const pool = routeDeps.getPool();
     try {
+      const initialJob = await loadJob(pool, jobId, membership.org_id);
+      if (!initialJob) throw ERR.NOT_FOUND("Job-nya");
+      return await routeDeps.withProductEvidenceMutationLock(initialJob.product_id, async () => {
+      // Reload only after acquiring the same product lock used by C5 review
+      // mutations. A row that was CLEAR during the ownership lookup may have
+      // been quarantined while this request waited for the lock.
       const job = await loadJob(pool, jobId, membership.org_id);
       if (!job) throw ERR.NOT_FOUND("Job-nya");
+      assertCategoryReviewClear({
+        state: job.category_review_state as "CLEAR" | "QUARANTINED",
+        reason: job.category_review_reason as never,
+        version: job.category_review_version,
+      }, job.product_category);
       if (!job.requires_approval) throw ERR.BAD_REQUEST("Job ini tidak memakai review scene.", "Job has no approval gate.");
       if (job.state !== "AWAITING_APPROVAL") {
         throw ERR.BAD_REQUEST("Scene-nya belum siap ditinjau, atau sudah lewat tahap ini.", `Job is in ${job.state}.`);
+      }
+
+      // A6 adalah boundary berbayar: approve bisa melanjutkan provider/TTS dan
+      // regenerate langsung menulis ledger `regen`. Keduanya wajib memeriksa
+      // manifest durable + bytes SEBELUM mutation, charge, task reset, atau
+      // enqueue. Job review legacy tanpa manifest sudah pasti punya scene
+      // provider, jadi provenance-nya tidak boleh direkonstruksi diam-diam.
+      try {
+        const currentEvidence = requireCurrentJobEvidence({
+          approvedReferenceManifest: job.approved_reference_manifest,
+          jobProductSnapshot: job.job_product_snapshot,
+          productType: {...job,category:job.product_category},
+        });
+        await materializeJobReferenceManifest(currentEvidence.manifest, path.join(config.storageDir, "jobs", jobId));
+      } catch (error) {
+        console.error(`[product-truth] A6 job ${jobId} dihentikan sebelum ${action}:`, error);
+        throw ERR.BAD_REQUEST(
+          "Snapshot data produk atau foto acuan tidak sah. Job dihentikan sebelum persetujuan atau biaya regenerate.",
+          "Product metadata snapshot or approved reference is invalid; no approval/regeneration side effect was applied."
+        );
       }
 
       if (action === "approve") {
@@ -282,6 +339,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ jobId: string 
       await pgForgetShotTask(jobId, idx);
       await enqueueJobResume(jobId, `regen${idx}`);
       return Response.json({ job_id: jobId, idx, regenerating: true, tokens_charged: chargedTokens });
+      });
     } finally {
       /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */
     }

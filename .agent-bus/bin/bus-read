@@ -1,0 +1,77 @@
+#!/bin/sh
+# bus-read <role> [--task <task_id> --owner <owner_id>]
+#
+# Selectively consumes one message, prints JSON + STALE, and archives it once.
+# A scoped Builder skips every other task/owner without mutating those files.
+# Legacy unowned messages remain consumable only through unscoped mode.
+set -eu
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+BUS_DIR=$(dirname "$SCRIPT_DIR")
+REPO_ROOT=$(dirname "$BUS_DIR")
+SELECT="$SCRIPT_DIR/bus-select.mjs"
+NODE_BIN=${AGENT_BUS_NODE_BIN:-node}
+
+die() { code=$1; shift; printf 'bus-read: %s\n' "$*" >&2; exit "$code"; }
+[ $# -ge 1 ] || die 2 "usage: bus-read <role> [--task <task_id> --owner <owner_id>]"
+ROLE=$1; shift
+case "$ROLE" in builder|reviewer) ;; *) die 2 "invalid role '$ROLE'" ;; esac
+
+TASK=''; OWNER=''
+if [ "$ROLE" = builder ]; then
+  TASK=${AGENT_BUS_TASK_ID:-}
+  OWNER=${AGENT_BUS_OWNER_ID:-}
+fi
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --task) [ $# -ge 2 ] || die 2 "--task requires a value"; TASK=$2; shift 2 ;;
+    --owner) [ $# -ge 2 ] || die 2 "--owner requires a value"; OWNER=$2; shift 2 ;;
+    *) die 2 "unknown argument '$1'" ;;
+  esac
+done
+if { [ -n "$TASK" ] && [ -z "$OWNER" ]; } || { [ -z "$TASK" ] && [ -n "$OWNER" ]; }; then
+  die 2 "--task and --owner must be supplied together"
+fi
+
+INBOX="$BUS_DIR/inbox/$ROLE"
+ARCHIVE="$BUS_DIR/archive"
+mkdir -p "$INBOX" "$ARCHIVE" "$BUS_DIR/tmp"
+
+# Serialize scan+archive. This is intentionally per inbox, not per owner: two
+# same-owner consumers cannot both print/archive the same file, while the lock
+# is held only for this short critical section.
+LOCKFILE="$BUS_DIR/tmp/read-$ROLE.lock"
+case "$(uname -s 2>/dev/null || echo unknown)" in
+  Darwin) command -v lockf >/dev/null 2>&1 || die 2 "lockf unavailable"; exec 9>"$LOCKFILE"; lockf 9 ;;
+  Linux) command -v flock >/dev/null 2>&1 || die 2 "flock unavailable"; exec 9>"$LOCKFILE"; flock -x 9 ;;
+  *) die 2 "only Darwin and Linux locking are supported" ;;
+esac
+
+if MSG=$("$NODE_BIN" "$SELECT" read "$INBOX" "$ROLE" "$TASK" "$OWNER"); then
+  :
+else
+  rc=$?
+  exec 9>&-
+  case "$rc" in
+    5) die 5 "no claimable message for role=$ROLE task=${TASK:-legacy} owner=${OWNER:-legacy}" ;;
+    8) die 8 "routing ownership rejected for role=$ROLE task=${TASK:-legacy} owner=${OWNER:-legacy}" ;;
+    *) die 2 "selector failed rc=$rc" ;;
+  esac
+fi
+
+case "$MSG" in "$INBOX"/*.json) ;; *) exec 9>&-; die 2 "selector returned unsafe path" ;; esac
+[ -f "$MSG" ] || { exec 9>&-; die 5 "selected message disappeared"; }
+DEST="$ARCHIVE/$(basename "$MSG")"
+[ ! -e "$DEST" ] || { exec 9>&-; die 9 "archive collision; refusing overwrite: $DEST"; }
+
+cat "$MSG"
+SHA=$("$NODE_BIN" -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(typeof m.sha==="string"?m.sha:"")' "$MSG" 2>/dev/null || true)
+STALE=true
+if [ -z "$SHA" ]; then
+  STALE=false
+elif git -C "$REPO_ROOT" merge-base --is-ancestor "$SHA" HEAD 2>/dev/null; then
+  STALE=false
+fi
+printf 'STALE=%s\n' "$STALE"
+mv "$MSG" "$DEST"
+exec 9>&-

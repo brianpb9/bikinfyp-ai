@@ -1,0 +1,18 @@
+{
+  "schema": "sanitized-agent-bus-message/v1",
+  "id": "1787844257000-reviewer-TASK",
+  "ts": "2026-08-27T15:24:17Z",
+  "from": "reviewer",
+  "to": "builder",
+  "type": "TASK",
+  "sha": "",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "task_id": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "owner_id": "builder-evidence-acquisition-20260827",
+  "worker_id": "builder-evidence-acquisition-20260827",
+  "reply_to_id": "",
+  "mode": "EVIDENCE_ACQUISITION",
+  "baseline_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "authority": "managed staging verification/test/canary/rollback/migrations/evidence approved",
+  "forbidden": ["production","public launch","real money"]
+}

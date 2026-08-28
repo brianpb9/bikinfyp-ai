@@ -15,8 +15,11 @@ import assert from "node:assert/strict";
 process.env.RACUN_NO_DOTENV = "1";
 process.env.DB_PATH = `/tmp/racun-test-storyos-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-storyos-storage-${process.pid}`;
+process.env.SCRIPT_LLM = "1";
+process.env.ANTHROPIC_API_KEY = "kunci-uji-story-ads";
 
-const { GERBANG_SA, periksaStoryOsAds, penegakanSA } = await import("../lib/script-engine/story-os-ads");
+const { GERBANG_SA, periksaStoryOsAds, penegakanSA, voiceoverStartSecForSegments } = await import("../lib/script-engine/story-os-ads");
+const { deteksiHargaIndonesia, tanpaNominalHargaTertulis } = await import("../lib/script-engine/price-mentions");
 
 /** Naskah Ads yang MEMENUHI Story OS — dipakai sebagai kontrol positif. */
 const LULUS = {
@@ -24,25 +27,25 @@ const LULUS = {
     {
       block: "HOOK", label: "HOOK", start: 0, end: 4, text: "",
       start_state: "Tangan menutup mulut di depan cermin kecil, produk tergeletak di meja rias",
-      action: "kamera diam, tangan turun perlahan", product_state: "partial",
+      action: "kamera diam, tangan turun perlahan", product_state: "hidden",
       why: "setup", mode: "CCTV", visual_direction: "meja rias, tanpa wajah",
     },
     {
-      block: "BODY", label: "FRICTION", start: 4, end: 8, text: "Ih, jangan sekarang dong.",
+      block: "BODY", label: "FRICTION", start: 4, end: 8.6, text: "Untuk Serum Uji, jangan sekarang dong.",
       start_state: "Timer di layar HP menyala, waktunya habis",
-      action: "tangan naik lagi ke mulut, lalu ditarik", product_state: "partial",
+      action: "tangan naik lagi ke mulut, lalu ditarik", product_state: "hidden", bridge_source: "spoken_product_name",
       why: "tension", mode: "SELFIE", visual_direction: "meja rias",
     },
     {
-      block: "BODY", label: "FRICTION", start: 8, end: 12, text: "Bentar, bentar.",
+      block: "BODY", label: "FRICTION", start: 8.6, end: 13.4, text: "Harganya 89 ribu. Bentar.",
       start_state: "Suara petugas memanggil dari luar pintu",
       action: "dia berdiri, menggeser kursi, mengambil produk dan memasukkannya ke saku",
-      product_state: "partial", why: "tension", mode: "HANDHELD", visual_direction: "beranjak",
+      product_state: "hidden", bridge_source: "spoken_approved_price", why: "tension", mode: "HANDHELD", visual_direction: "beranjak",
     },
     {
-      block: "BODY", label: "SPIKE", start: 12, end: 16, text: "Udah. Masuk aja.",
+      block: "BODY", label: "SPIKE", start: 13.4, end: 16, text: "Udah. Masuk aja.",
       start_state: "Petugas berdiri di ambang pintu, suara off camera",
-      action: "dia tersenyum lepas di depan petugas", product_state: "partial",
+      action: "dia tersenyum lepas di depan petugas", product_state: "hidden",
       why: "payoff", mode: "GENERAL", visual_direction: "ruang tunggu",
       saksi: "petugas, off camera",
     },
@@ -50,20 +53,22 @@ const LULUS = {
       block: "CTA", label: "BUTTON", start: 16, end: 20,
       text: "Tadi sikat gigi dulu. Keterima nggak ya? Detailnya ada di bawah ya.",
       start_state: "Produk di tangan, label menghadap kamera",
-      action: "diam satu detik di akhir", product_state: "hero",
+      action: "diam satu detik di akhir", product_state: "hidden",
       why: "payoff", mode: "SELLING", visual_direction: "produk hero",
     },
   ],
 } as never;
 
-test("SA yang diklaim 'kode' hanya SA1, SA2, SA4, SA6, SA8 — sisanya 'juri'", () => {
+const ADS_CTX = { contentType: "ads" as const, templateId: "promo-terbatas", durationSec: 20, productName: "Serum Uji", productCategory: "beauty", productPriceIdr: 89000 };
+
+test("SA3 silent-hook kini kode; kualitas konflik SA3 serta SA5/SA7 tetap dinilai juri", () => {
   assert.deepEqual(
     GERBANG_SA.filter((g) => g.penegakan === "kode").map((g) => g.id).sort(),
-    ["SA1", "SA2", "SA4", "SA6", "SA8"]
+    ["SA1", "SA2", "SA3", "SA4", "SA6", "SA8"]
   );
   assert.deepEqual(
     GERBANG_SA.filter((g) => g.penegakan === "juri").map((g) => g.id).sort(),
-    ["SA3", "SA5", "SA7"]
+    ["SA5", "SA7"]
   );
   // Tiap gerbang wajib menyebut siapa yang menegakkannya — supaya tidak ada
   // yang membaca daftar ini lalu mengira delapan-duanya dicek mesin.
@@ -73,14 +78,198 @@ test("SA yang diklaim 'kode' hanya SA1, SA2, SA4, SA6, SA8 — sisanya 'juri'", 
 });
 
 test("naskah Ads yang memenuhi Story OS: NOL temuan keras", () => {
-  const temuan = periksaStoryOsAds(LULUS, { contentType: "ads", durationSec: 20 });
+  const temuan = periksaStoryOsAds(LULUS, ADS_CTX);
   assert.deepEqual(temuan, [], `naskah sah ditolak: ${JSON.stringify(temuan)}`);
+});
+
+test("Ads 0/1/2 segmen gagal struktur lengkap di strict dan light", async () => {
+  const { validateScript } = await import("../lib/script-engine/validator");
+  const source = structuredClone((LULUS as unknown as { segments: Record<string, unknown>[] }).segments);
+  for (const length of [0, 1, 2]) {
+    const segments = source.slice(0, length);
+    const direct = periksaStoryOsAds({ segments } as never, ADS_CTX);
+    if (length === 0) assert.ok(direct.some((finding) => finding.gerbang === "SA3"), `${length}: tanpa SA3`);
+    assert.ok(direct.some((finding) => finding.gerbang === "SA4" && /5 beat/.test(finding.pesan)), `${length}: tanpa panjang`);
+    assert.ok(direct.some((finding) => finding.gerbang === "SA4" && /FRICTION/.test(finding.pesan)), `${length}: tanpa FRICTION`);
+    assert.ok(direct.some((finding) => finding.gerbang === "SA2" && /SPIKE/.test(finding.pesan)), `${length}: tanpa SPIKE`);
+    assert.ok(direct.some((finding) => finding.gerbang === "SA1" && /BUTTON/.test(finding.pesan)), `${length}: tanpa BUTTON`);
+    for (const mode of ["strict", "light"] as const) {
+      const result = validateScript({
+        segments, hookFamily: "H1", register: "netral", productName: "Serum Uji",
+        productPriceIdr: 89000, contentType: "ads", durationSec: 20, quality_tier: "super_hq",
+      } as never, mode);
+      assert.equal(result.passed, false, `${mode} meloloskan Ads ${length} segmen`);
+      for (const rule of ["SA1", "SA2", "SA4", ...(length === 0 ? ["SA3"] : [])]) {
+        assert.ok(result.errors.some((issue) => issue.rule === rule), `${mode}/${length}: tanpa ${rule}`);
+      }
+    }
+  }
+});
+
+test("SA3 menolak reordered, duplicate, missing, text, tts, alias suara, dan start nol di strict dan light", async () => {
+  const { validateScript } = await import("../lib/script-engine/validator");
+  const mutations: Array<[string, (segments: Record<string, unknown>[]) => void]> = [
+    ["reordered HOOK", (segments) => { [segments[0], segments[1]] = [segments[1], segments[0]]; }],
+    ["duplicate HOOK", (segments) => { segments.splice(1, 0, structuredClone(segments[0])); }],
+    ["missing HOOK", (segments) => { segments[0].block = "BODY"; segments[0].label = "FRICTION"; }],
+    ["nonempty text", (segments) => { segments[0].text = "Eh, dialog bocor."; }],
+    ["nonempty tts_text", (segments) => { segments[0].tts_text = "[excited] Eh, TTS bocor."; }],
+    ["speech alias", (segments) => { segments[0].dialogue = "Eh, alias bocor."; }],
+    ["later segment starts at zero", (segments) => { segments[1].start = 0; }],
+  ];
+  for (const [name, mutate] of mutations) {
+    const segments = structuredClone((LULUS as unknown as { segments: Record<string, unknown>[] }).segments);
+    mutate(segments);
+    for (const mode of ["strict", "light"] as const) {
+      const result = validateScript({
+        segments, hookFamily: "H1", register: "netral", productName: "Serum Uji",
+        productPriceIdr: 89000, contentType: "ads", durationSec: 20, quality_tier: "super_hq",
+      } as never, mode);
+      assert.ok(result.errors.some((issue) => issue.rule === "SA3"), `${mode} meloloskan ${name}`);
+    }
+  }
+});
+
+test("schema LLM Ads menolak HOOK bersuara dan menerima kontrol senyap", async () => {
+  const { SkemaNaskahAds } = await import("../lib/script-engine/llm");
+  assert.equal(SkemaNaskahAds.safeParse({ segments: LIVE_ADS_SAFE }).success, true);
+  for (const mutate of [
+    (segments: typeof LIVE_ADS_SAFE) => { [segments[0], segments[1]] = [segments[1], segments[0]]; },
+    (segments: typeof LIVE_ADS_SAFE) => { segments.splice(1, 0, structuredClone(segments[0])); },
+    (segments: typeof LIVE_ADS_SAFE) => { segments[0].block = "BODY"; segments[0].label = "FRICTION"; },
+    (segments: typeof LIVE_ADS_SAFE) => { segments[0].text = "Eh, bocor."; },
+  ]) {
+    const unsafe = structuredClone(LIVE_ADS_SAFE);
+    mutate(unsafe);
+    assert.equal(SkemaNaskahAds.safeParse({ segments: unsafe }).success, false);
+  }
+  const unknownSpeechAlias = structuredClone(LIVE_ADS_SAFE) as Array<Record<string, unknown>>;
+  unknownSpeechAlias[0].tts_text = "Eh, alias yang semula dibuang.";
+  assert.equal(SkemaNaskahAds.safeParse({ segments: unknownSpeechAlias }).success, false, "schema strict tidak boleh membuang alias suara diam-diam");
+});
+
+test("mapper Ads menolak susunan HOOK tidak kanonis tanpa mengurutkan ulang", async () => {
+  const { keSegmentDraft } = await import("../lib/script-engine/llm");
+  const reordered = structuredClone(LIVE_ADS_SAFE);
+  [reordered[0], reordered[1]] = [reordered[1], reordered[0]];
+  assert.throws(() => keSegmentDraft(reordered as never, "ads"), /Kontrak SA3 mapper/);
+
+  const safe = keSegmentDraft(structuredClone(LIVE_ADS_SAFE) as never, "ads");
+  assert.equal(safe[0].label, "HOOK");
+  assert.equal(safe[0].text, "");
+});
+
+test("live LLM Ads menolak reordered HOOK lalu menerima respons perbaikan tanpa normalisasi diam-diam", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      if (calls === 1) [segments[0], segments[1]] = [segments[1], segments[0]];
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [result] = await generateScripts({
+      product: { id: "live-reordered-hook", name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+      hookFamilies: ["H8"], lockHookFamily: true,
+    });
+    assert.equal(calls, 2);
+    assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    assert.equal(result.segments[0].label, "HOOK");
+    assert.equal(result.segments[0].text, "");
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
+test("live LLM Ads memperbaiki keluaran 0/1/2 segmen sebelum pipeline", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  try {
+    for (const length of [0, 1, 2]) {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls++;
+        const segments = calls === 1 ? structuredClone(LIVE_ADS_SAFE).slice(0, length) : structuredClone(LIVE_ADS_SAFE);
+        return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+      }) as never;
+      const [result] = await generateScripts({
+        product: { id: `live-short-${length}`, name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+        register: "netral", qualityTier: "high_quality", durationSec: 15,
+        contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+        hookFamilies: ["H8"], lockHookFamily: true,
+      });
+      assert.equal(calls, 2, `${length}: tidak direpair tepat sekali`);
+      assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+      assert.deepEqual(result.segments.map((segment) => segment.label), ["HOOK", "FRICTION", "FRICTION", "SPIKE", "BUTTON"]);
+    }
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
+test("live LLM Ads non-price menolak nominal Rp meski source benar lalu memperbaiki", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      if (calls === 1) {
+        segments[3].text = "Nah, harga Rp189000.";
+      }
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [result] = await generateScripts({
+      product: { id: "live-blank-bridge", name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+      hookFamilies: ["H8"], lockHookFamily: true,
+    });
+    assert.equal(calls, 2, "nominal non-price harus direpair tepat sekali");
+    assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    assert.deepEqual(
+      result.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(),
+      ["spoken_product_category", "spoken_product_name"]
+    );
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
+test("live LLM Ads menolak ketaatan CTA telanjang lalu menerima BUTTON bertanya", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      if (calls === 1) segments[4].text = "Detailnya ada di bawah ya.";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [result] = await generateScripts({
+      product: { id: "live-bare-cta", name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+      hookFamilies: ["H8"], lockHookFamily: true,
+    });
+    assert.equal(calls, 2, "CTA telanjang harus direpair tepat sekali");
+    assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    assert.match(result.segments[4].text, /\?[\s\S]*Detailnya ada di bawah ya/i);
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
 });
 
 test("SA1 — CTA tanpa tanya yang tersisa ditolak", () => {
   const rusak = JSON.parse(JSON.stringify(LULUS));
   rusak.segments[4].text = "Detailnya ada di bawah ya.";
-  const t = periksaStoryOsAds(rusak, { contentType: "ads", durationSec: 20 });
+  const t = periksaStoryOsAds(rusak, ADS_CTX);
   assert.ok(t.some((x) => x.gerbang === "SA1"), `SA1 tidak menangkap button tanpa tanya: ${JSON.stringify(t)}`);
 });
 
@@ -92,30 +281,33 @@ test("SA2 — spike tanpa saksi ditolak", () => {
   // dan menyebut "petugas" di action memang BERARTI saksinya hadir.
   rusak.segments[3].action = "dia tersenyum lepas ke arah cermin";
   rusak.segments[3].visual_direction = "ruang tunggu kosong";
-  const t = periksaStoryOsAds(rusak, { contentType: "ads", durationSec: 20 });
+  const t = periksaStoryOsAds(rusak, ADS_CTX);
   assert.ok(t.some((x) => x.gerbang === "SA2"), `SA2 tidak menangkap spike tanpa saksi: ${JSON.stringify(t)}`);
 });
 
 test("SA4 — friction cuma sekali ditolak", () => {
   const rusak = JSON.parse(JSON.stringify(LULUS));
   rusak.segments[2].label = "BODY";
-  const t = periksaStoryOsAds(rusak, { contentType: "ads", durationSec: 20 });
+  const t = periksaStoryOsAds(rusak, ADS_CTX);
   assert.ok(t.some((x) => x.gerbang === "SA4"), `SA4 tidak menangkap friction tunggal: ${JSON.stringify(t)}`);
 });
 
-test("SA6 — bridging kurang dari dua ditolak", () => {
+test("SA6 — prop blank partial/hero dan aksi generik tidak pernah menjadi bridge", () => {
   const rusak = JSON.parse(JSON.stringify(LULUS));
-  rusak.segments[0].product_state = "hidden";            // buang jembatan (b)
-  rusak.segments[2].action = "dia berdiri dan berjalan keluar"; // buang jembatan (a)
-  rusak.segments[4].text = "Keterima nggak ya? Detailnya ada di bawah ya."; // buang (c)
-  const t = periksaStoryOsAds(rusak, { contentType: "ads", durationSec: 20 });
-  assert.ok(t.some((x) => x.gerbang === "SA6"), `SA6 tidak menangkap bridging <2: ${JSON.stringify(t)}`);
+  delete rusak.segments[1].bridge_source;
+  delete rusak.segments[2].bridge_source;
+  rusak.segments[0].product_state = "partial";
+  rusak.segments[2].product_state = "hero";
+  rusak.segments[2].action = "talent buka lalu pegang kartu blank";
+  const t = periksaStoryOsAds(rusak, ADS_CTX);
+  assert.ok(t.some((x) => x.gerbang === "SA6" && /prop blank/.test(x.pesan)), JSON.stringify(t));
+  assert.ok(t.some((x) => x.gerbang === "SA6" && /belum terbukti=spoken_product_name,spoken_approved_price/.test(x.pesan)), JSON.stringify(t));
 });
 
 test("SA8 — body yang menjelaskan hook/produk ditolak", () => {
   const rusak = JSON.parse(JSON.stringify(LULUS));
   rusak.segments[1].text = "Aslinya sabun ini bikin gigi lebih bersih.";
-  const t = periksaStoryOsAds(rusak, { contentType: "ads", durationSec: 20 });
+  const t = periksaStoryOsAds(rusak, ADS_CTX);
   assert.ok(t.some((x) => x.gerbang === "SA8"), `SA8 tidak menangkap body penjelasan: ${JSON.stringify(t)}`);
 });
 
@@ -132,6 +324,531 @@ test("penulis Ads menerima instruksi Story OS, Affiliate tidak", async () => {
     assert.ok(new RegExp(kata, "i").test(ads), `instruksi Ads tidak menyebut ${kata}`);
   }
   assert.ok(!/BUTTON-first|SPIKE/i.test(aff), "Affiliate tidak boleh diberi beat Story OS Ads");
+  assert.match(ads, /must contain the exact CTA phrase[\s\S]+as a substring/i);
+  assert.match(ads, /unresolved story question or clause/i);
+  assert.match(ads, /must never be the whole line/i);
+  assert.doesNotMatch(ads, /CTA line must be exactly/i);
+});
+
+test("prompt live Ads memberi grammar action yang benar-benar diterima A-03", async () => {
+  const { blokAturan, blokTugasUntukUji } = await import("../lib/script-engine/llm");
+  const { neutralStoryAdsActionContradictions } = await import("../lib/script-engine/ads-visual-contract");
+  const aturanAds = blokAturan("ads");
+  const aturanAffiliate = blokAturan("affiliate");
+  const tugasAds = blokTugasUntukUji({ contentType: "ads", durationSec: 15, format: "ads" });
+
+  assert.match(aturanAds, /ADS ACTION LANGUAGE EXCEPTION[\s\S]+restricted Indonesian neutral-prop grammar accepted by A-03/i);
+  assert.match(aturanAds, /write all other non-dialogue fields in English/i);
+  assert.doesNotMatch(aturanAds, /Write every other field in English/i,
+    "prompt Ads masih memerintahkan action berbahasa Inggris tanpa pengecualian");
+  assert.match(aturanAds, /restricted Indonesian A-03 neutral-prop action/i);
+  assert.match(tugasAds, /STORY OS \(Ads only\)/i, "task block kehilangan konteks Ads yang memilih system contract ini");
+  assert.doesNotMatch(aturanAffiliate, /ADS ACTION LANGUAGE EXCEPTION/i);
+
+  for (const action of [
+    "talent buka kartu warna polos perlahan",
+    "swatch blank dipindahkan mendekati saksi",
+    "kartu warna polos diletakkan di depan kasir",
+    "talent menunjuk blok warna pada kartu blank",
+  ]) {
+    assert.match(aturanAds, new RegExp(action.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"), "i"),
+      `grammar prompt tidak memuat contoh model-compliant: ${action}`);
+    assert.deepEqual(neutralStoryAdsActionContradictions(action), [],
+      `prompt memerintahkan action yang ditolak A-03: ${action}`);
+  }
+});
+
+test("kontrak gabungan system+task Ads mewajibkan hidden dan lolos SA6", async () => {
+  const { blokAturan, blokTugasUntukUji } = await import("../lib/script-engine/llm");
+  const system = blokAturan("ads");
+  const combined = `${system}\n${blokTugasUntukUji({ contentType: "ads", durationSec: 15, format: "ads" })}`;
+  assert.match(combined, /product_state is 'hidden' on EVERY beat including BUTTON/i);
+  assert.match(combined, /Keep product_state='hidden' on every Ads beat/i);
+  assert.doesNotMatch(system, /The CTA is always 'hero'/i,
+    "system prompt Ads masih mengalahkan kontrak hidden milik task");
+  assert.match(system, /ADS STORY-AND-PIXEL OVERRIDE[\s\S]+exactly five positive contiguous[\s\S]+never use partial or hero/i);
+  assert.ok(system.lastIndexOf("ADS STORY-AND-PIXEL OVERRIDE") > system.lastIndexOf("15 detik = 3 shot"),
+    "override Ads tidak berada sesudah source text legacy tiga-shot yang dikoreksi");
+  assert.ok(system.lastIndexOf("ADS STORY-AND-PIXEL OVERRIDE") > system.lastIndexOf("produk hero"),
+    "override Ads tidak berada sesudah source text legacy yang dikoreksi");
+  assert.match(system, /"product_state": "hidden",/);
+  assert.doesNotMatch(system, /"product_state": "hidden" \| "partial" \| "hero"/,
+    "output shape Ads masih menawarkan state yang pasti ditolak SA6");
+
+  const compliant = structuredClone((LULUS as unknown as { segments: Record<string, unknown>[] }).segments);
+  compliant[1].text = "Untuk Serum Glow Bening, jangan sekarang dong.";
+  for (const segment of compliant) segment.product_state = "hidden";
+  const sa6 = periksaStoryOsAds({ segments: compliant } as never, {
+    contentType: "ads", templateId: "promo-terbatas", durationSec: 20, productName: "Serum Glow Bening",
+    productCategory: "beauty", productPriceIdr: 89_000,
+  }).filter((finding) => finding.gerbang === "SA6");
+  assert.deepEqual(sa6, [], `kontrak product_state gabungan ditolak SA6: ${JSON.stringify(sa6)}`);
+});
+
+test("task Ads memberi tepat lima timecode kontigu sampai exact duration seluruh katalog aktif", async () => {
+  const { blokAturan, blokTugasUntukUji } = await import("../lib/script-engine/llm");
+  const { storyAdsTimeRanges } = await import("../lib/script-engine/story-os-ads");
+  const { CAMPAIGN_TEMPLATES } = await import("../lib/templates");
+  const durations = [...new Set(CAMPAIGN_TEMPLATES.filter((template) => template.kind === "ads")
+    .map((template) => template.durationSec))].sort((a, b) => a - b);
+  assert.ok(durations.includes(15), "fixture tidak mencakup delapan template Ads 15 detik");
+  assert.ok(durations.some((duration) => duration !== 15), "fixture tidak mencakup durasi katalog Ads selain 15 detik");
+
+  const system = blokAturan("ads");
+  assert.doesNotMatch(system, /Each segment 4-6 seconds|CTA >= 4s/i);
+  assert.match(system, /NO generic 4-6 second minimum per beat/i);
+  const affiliateSystem = blokAturan("affiliate");
+  assert.match(affiliateSystem, /Each segment 4-6 seconds\. HOOK 3-5s\. CTA >= 4s\./i);
+  assert.match(affiliateSystem, /The CTA is always 'hero'/i, "cabang Ads mengubah kontrak Affiliate");
+  for (const duration of durations) {
+    const task = blokTugasUntukUji({ contentType: "ads", durationSec: duration, format: "ads" });
+    const line = task.match(new RegExp(`^ADS EXACT TIMECODES FOR THIS ${duration}-SECOND REQUEST: (.+)\\.$`, "m"));
+    assert.ok(line, `jadwal exact ${duration} detik tidak ada di task prompt`);
+    const ranges = line[1].split(", ").map((range) => {
+      const match = range.match(/^(\d+(?:\.\d+)?)-(\d+(?:\.\d+)?)$/);
+      assert.ok(match, `format timecode tidak dapat diparse: ${range}`);
+      return [Number(match[1]), Number(match[2])] as const;
+    });
+    assert.deepEqual(ranges, storyAdsTimeRanges(duration).map(({ start, end }) => [start, end]),
+      `${duration}s prompt tidak memakai schedule helper bersama`);
+    assert.equal(ranges.length, 5, `${duration}s tidak menghasilkan tepat lima beat`);
+    assert.equal(ranges[0][0], 0);
+    for (let index = 0; index < ranges.length; index++) {
+      assert.ok(ranges[index][1] > ranges[index][0], `${duration}s beat ${index} tidak berdurasi positif`);
+      if (index > 0) assert.equal(ranges[index][0], ranges[index - 1][1], `${duration}s punya gap/overlap pada beat ${index}`);
+    }
+    assert.equal(ranges.at(-1)?.[1], duration, `${duration}s tidak berakhir tepat pada requested duration`);
+    const spikeStartRatio = ranges[3][0] / duration;
+    assert.ok(spikeStartRatio >= 0.65 && spikeStartRatio <= 0.8,
+      `${duration}s SPIKE mulai di ${spikeStartRatio * 100}%, di luar kontrak 65-80%`);
+    const buttonDuration = ranges[4][1] - ranges[4][0];
+    assert.ok(buttonDuration >= 3 && buttonDuration <= 6,
+      `${duration}s BUTTON berdurasi ${buttonDuration}s, di luar kontrak 3-6s`);
+  }
+});
+
+test("gate timing Story Ads menolak gap, overlap, boundary, dan durasi beat rusak", () => {
+  const findingsFor = (mutate: (segments: Array<Record<string, unknown>>) => void) => {
+    const segments = structuredClone((LULUS as unknown as { segments: Array<Record<string, unknown>> }).segments);
+    mutate(segments);
+    return periksaStoryOsAds({ segments } as never, ADS_CTX).map((finding) => finding.pesan);
+  };
+  const cases: Array<[string, (segments: Array<Record<string, unknown>>) => void, RegExp]> = [
+    ["gap", (segments) => { segments[1].start = 4.1; }, /timing gap/],
+    ["overlap", (segments) => { segments[1].start = 3.9; }, /timing overlap/],
+    ["wrong start", (segments) => { segments[0].start = 0.1; }, /HOOK wajib mulai 0/],
+    ["wrong final", (segments) => { segments[4].end = 19.9; }, /final wajib berakhir tepat 20/],
+    ["wrong interior boundary", (segments) => { segments[1].end = 9; segments[2].start = 9; }, /boundary beat [12]/],
+    ["nonpositive", (segments) => { segments[2].end = segments[2].start; }, /wajib berdurasi positif/],
+    ["BUTTON terlalu pendek", (segments) => { segments[3].end = 17.5; segments[4].start = 17.5; }, /BUTTON wajib 3-6 detik/],
+    ["BUTTON terlalu panjang", (segments) => { segments[3].end = 13.5; segments[4].start = 13.5; }, /BUTTON wajib 3-6 detik/],
+  ];
+  for (const [label, mutate, expected] of cases) {
+    const findings = findingsFor(mutate);
+    assert.ok(findings.some((message) => expected.test(message)), `${label} tidak ditolak secara eksplisit: ${findings.join(" | ")}`);
+  }
+  const providerBoundary = structuredClone((LULUS as unknown as { segments: Array<Record<string, unknown>> }).segments);
+  providerBoundary[1].start = 4.1;
+  assert.throws(() => voiceoverStartSecForSegments(providerBoundary as never, {
+    contentType: "ads", templateId: "ads-meja-kosong", durationSec: 20,
+    productName: "Serum Uji", productCategory: "beauty", productPriceIdr: 89_000,
+  }), /timing gap|timing boundary/, "worker pre-provider boundary tidak menegakkan schedule bersama");
+});
+
+test("fallback katalog Story Ads memakai schedule helper yang sama", async () => {
+  const { CAMPAIGN_TEMPLATES } = await import("../lib/templates");
+  const { generateScripts } = await import("../lib/script-engine");
+  const { storyAdsTimeRanges } = await import("../lib/script-engine/story-os-ads");
+  const activeByDuration = new Map<number, (typeof CAMPAIGN_TEMPLATES)[number]>();
+  for (const template of CAMPAIGN_TEMPLATES.filter((item) => item.kind === "ads")) {
+    if (!activeByDuration.has(template.durationSec)) activeByDuration.set(template.durationSec, template);
+  }
+  for (const [durationSec, template] of activeByDuration) {
+    const [script] = await generateScripts({
+      product: { id: `fallback-${durationSec}`, name: "Jasa Uji", category: template.bestFor[0], price_idr: 89_000 },
+      register: "netral", qualityTier: template.tier, durationSec,
+      contentType: "ads", templateId: template.id, count: 1, tanpaLlm: true,
+    });
+    assert.deepEqual(script.segments.map(({ start, end }) => ({ start, end })), storyAdsTimeRanges(durationSec),
+      `${template.id} fallback tidak memakai schedule helper bersama`);
+  }
+});
+
+test("prompt produksi penulis Ads mengunci prop blank non-faktual tanpa meminta label produk", async () => {
+  const { blokTugasUntukUji } = await import("../lib/script-engine/llm");
+  for (const fixture of [
+    { productName: "Serum Glow Bening", productCategory: "beauty" },
+    { productName: "Jasa Kilat Beres", productCategory: "jasa" },
+  ]) {
+    const prompt = blokTugasUntukUji({ contentType: "ads", durationSec: 20, format: "ads", ...fixture });
+    assert.match(prompt, /plain unprinted colour card or swatch/i);
+    assert.match(prompt, /no letters, numbers, logos, labels, prices, product names, categories, or readable marks/i);
+    assert.doesNotMatch(prompt, /Product hero|label readable|action with the product|product present in frame 1/i);
+    assert.match(prompt, /spoken_product_category/);
+    assert.doesNotMatch(prompt, /positive approved price/);
+    assert.doesNotMatch(prompt, /price 89000|write it as words if spoken/i);
+  }
+  const promoPrompt = blokTugasUntukUji({ contentType: "ads", durationSec: 15, format: "ads", templateId: "promo-terbatas", priceIdr: 89_000 });
+  assert.match(promoPrompt, /positive approved price/);
+  assert.match(promoPrompt, /spoken_approved_price/);
+  const zeroPromoPrompt = blokTugasUntukUji({ contentType: "ads", durationSec: 15, format: "ads", templateId: "promo-terbatas", priceIdr: 0 });
+  assert.match(zeroPromoPrompt, /spoken_product_category/);
+  assert.match(zeroPromoPrompt, /Do NOT mention a price/);
+});
+
+test("provider LLM menerima Story Ads jasa harga nol dengan bridge nama dan kategori", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      segments[1].text = "Nah, Jasa Kilat Beres.";
+      segments[2].text = "Konteksnya kategori jasa, sih.";
+      segments[2].bridge_source = "spoken_product_category";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [result] = await generateScripts({
+      product: { id: "jasa-zero", name: "Jasa Kilat Beres", price_idr: 0, category: "jasa" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", format: "ads", templateId: "ads-meja-kosong", count: 1,
+      hookFamilies: ["H13"], lockHookFamily: true,
+    });
+    assert.equal(calls, 1);
+    assert.equal(result.script_source, "llm");
+    assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    assert.deepEqual(result.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(), ["spoken_product_category", "spoken_product_name"]);
+    assert.doesNotMatch(result.segments.map((segment) => segment.text).join(" "), /\b(?:harga|ribu|juta|banderol)\b/i);
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
+const LIVE_ADS_SAFE = [
+  { block: "HOOK", label: "HOOK", start: 0, end: 3, text: "", start_state: "kartu blank sudah di meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos bergerak sejak frame pertama", product_state: "hidden", expression: "curious", audio_note: "", why: "setup conflict", mode: "GENERAL" },
+  { block: "BODY", label: "FRICTION", start: 3, end: 6.45, text: "Nah, Kemeja Uji.", bridge_source: "spoken_product_name", start_state: "kartu blank dekat tangan", framing: "medium shot", angle: "eye level", camera: "slow push", action: "talent buka kartu warna polos perlahan", product_state: "hidden", expression: "focused", audio_note: "", why: "tension rises", mode: "GENERAL" },
+  { block: "BODY", label: "FRICTION", start: 6.45, end: 10.05, text: "Konteksnya kategori fashion, sih.", bridge_source: "spoken_product_category", start_state: "swatch blank sudah terbuka", framing: "close shot", angle: "eye level", camera: "slow drift", action: "swatch blank dipindahkan mendekati saksi", product_state: "hidden", expression: "focused", audio_note: "", why: "tension rises again", mode: "GENERAL" },
+  { block: "BODY", label: "SPIKE", start: 10.05, end: 12, text: "Udah, lihat.", start_state: "kasir berada di samping meja", framing: "medium shot", angle: "eye level", camera: "static camera", action: "kartu warna polos diletakkan di depan kasir", product_state: "hidden", expression: "relieved", audio_note: "", why: "payoff witnessed", mode: "GENERAL", saksi: "kasir off camera" },
+  { block: "CTA", label: "BUTTON", start: 12, end: 15, text: "Tadi ragu, cocok nggak? Detailnya ada di bawah ya.", start_state: "kartu blank menghadap kamera", framing: "close shot", angle: "eye level", camera: "static camera", action: "talent menunjuk blok warna pada kartu blank", product_state: "hidden", expression: "warm", audio_note: "", why: "button payoff", mode: "GENERAL" },
+];
+
+test("promo-terbatas harga nol lolos template dan provider tanpa L-02/SA6", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const product = { id: "promo-zero", name: "Jasa Promo Nol", price_idr: 0, category: "jasa" };
+  const common = {
+    product, register: "netral" as const, qualityTier: "high_quality" as const, durationSec: 15,
+    contentType: "ads" as const, format: "ads", templateId: "promo-terbatas", count: 1,
+    hookFamilies: ["H10" as const], lockHookFamily: true,
+  };
+  const [fallback] = await generateScripts({ ...common, tanpaLlm: true });
+  assert.equal(fallback.admisi.requirePriceMention, false);
+  assert.equal(fallback.validation.passed, true, JSON.stringify(fallback.validation.errors));
+  assert.deepEqual(fallback.segments.flatMap((segment) => segment.bridge_source ? [segment.bridge_source] : []).sort(), ["spoken_product_category", "spoken_product_name"]);
+  const [positive] = await generateScripts({ ...common, product: { ...product, price_idr: 89_000 }, tanpaLlm: true });
+  assert.equal(positive.admisi.requirePriceMention, true);
+  assert.equal(positive.validation.passed, true, JSON.stringify(positive.validation.errors));
+
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      segments[1].text = "Nah, Jasa Promo Nol.";
+      segments[2].text = "Konteksnya kategori jasa, sih.";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [live] = await generateScripts(common);
+    assert.equal(calls, 1);
+    assert.equal(live.admisi.requirePriceMention, false);
+    assert.equal(live.validation.passed, true, JSON.stringify(live.validation.errors));
+    assert.ok(!live.validation.errors.some((error) => error.rule === "L-02" || error.rule === "SA6"));
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
+test("SA6 strict mengunci exact bridge set menurut template dan harga immutable", async () => {
+  const { keSegmentDraft } = await import("../lib/script-engine/llm");
+  const { validateScript } = await import("../lib/script-engine/validator");
+  const validate = (segments: typeof LIVE_ADS_SAFE, templateId: string, productName: string, productCategory: string, priceIdr: number) =>
+    validateScript({
+      hook_family: "H13", register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", templateId, productName, productCategory, priceIdr,
+      segments: keSegmentDraft(structuredClone(segments) as never),
+    } as never, "strict");
+
+  const nonPrice = structuredClone(LIVE_ADS_SAFE);
+  assert.equal(validate(nonPrice, "ads-meja-kosong", "Kemeja Uji", "fashion", 189_000).passed, true);
+  nonPrice[2].text = "Harganya seratus delapan puluh sembilan ribu.";
+  nonPrice[2].bridge_source = "spoken_approved_price";
+  const forbidden = validate(nonPrice, "ads-meja-kosong", "Kemeja Uji", "fashion", 189_000);
+  assert.equal(forbidden.passed, false);
+  assert.ok(forbidden.errors.some((error) => error.rule === "SA6" && /set bridge wajib tepat/.test(error.message_id)));
+  assert.ok(forbidden.errors.some((error) => error.rule === "SA6" && /non-price memuat harga lisan/.test(error.message_id)));
+
+  const promo = structuredClone(LIVE_ADS_SAFE);
+  promo[2].text = "Harganya Rp189000.";
+  promo[2].bridge_source = "spoken_approved_price";
+  assert.equal(validate(promo, "promo-terbatas", "Kemeja Uji", "fashion", 189_000).passed, true);
+  const promoWithCategory = validate(LIVE_ADS_SAFE, "promo-terbatas", "Kemeja Uji", "fashion", 189_000);
+  assert.equal(promoWithCategory.passed, false);
+  assert.ok(promoWithCategory.errors.some((error) => error.rule === "SA6" && /terlarang=spoken_product_category/.test(error.message_id)));
+
+  const zeroService = structuredClone(LIVE_ADS_SAFE);
+  zeroService[1].text = "Nah, Jasa Kilat Beres.";
+  zeroService[2].text = "Konteksnya kategori jasa, sih.";
+  assert.equal(validate(zeroService, "ads-meja-kosong", "Jasa Kilat Beres", "jasa", 0).passed, true);
+  assert.equal(validate(zeroService, "promo-terbatas", "Jasa Kilat Beres", "jasa", 0).errors.some((error) => error.rule === "SA6"), false);
+  const zeroClaim = structuredClone(zeroService);
+  zeroClaim[3].text = "Nah, Rp0.";
+  const rejectedZero = validate(zeroClaim, "promo-terbatas", "Jasa Kilat Beres", "jasa", 0);
+  assert.equal(rejectedZero.passed, false);
+  assert.ok(rejectedZero.errors.some((error) => error.rule === "SA6" && /non-price memuat harga lisan/.test(error.message_id)));
+  assert.ok(rejectedZero.errors.some((error) => error.rule === "L-14" && /Rp0/.test(error.message_id)));
+  for (const label of [
+    "Rp nol", "Rp. zero", "IDR nol", "IDR zero", "harga 0", "harganya = 0",
+    "biaya itu 0", "harga itu adalah nol", "harga: nol", "harganya = zero",
+    "biaya itu nol", "tarif adalah nol", "banderol sekarang nol", "nol perak", "0 perak",
+    "Harganya, nol", "Harganya itu, nol", "Harga itu adalah: nol",
+    "biayanya; sekarang, zero", "tarifnya = saat ini: 0",
+  ]) {
+    const labeled = structuredClone(zeroService);
+    labeled[3].text = `Nah, ${label}.`;
+    const rejected = validate(labeled, "promo-terbatas", "Jasa Kilat Beres", "jasa", 0);
+    assert.ok(rejected.errors.some((error) => error.rule === "SA6"), label);
+    assert.ok(rejected.errors.some((error) => error.rule === "L-14"), label);
+  }
+  const positivePromoZeroBridge = structuredClone(LIVE_ADS_SAFE);
+  positivePromoZeroBridge[2].text = "Harganya nol ribu.";
+  positivePromoZeroBridge[2].bridge_source = "spoken_approved_price";
+  const zeroCannotVerifyPositive = validate(positivePromoZeroBridge, "promo-terbatas", "Kemeja Uji", "fashion", 1_000);
+  assert.equal(zeroCannotVerifyPositive.passed, false);
+  assert.ok(zeroCannotVerifyPositive.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)));
+
+  for (const groupedPerak of ["1.000 perak", "1,000 perak"]) {
+    const truthful = structuredClone(LIVE_ADS_SAFE);
+    truthful[2].text = `Harganya ${groupedPerak}.`;
+    truthful[2].bridge_source = "spoken_approved_price";
+    const accepted = validate(truthful, "promo-terbatas", "Kemeja Uji", "fashion", 1_000);
+    assert.equal(accepted.passed, true, `${groupedPerak}: ${JSON.stringify(accepted.errors)}`);
+    const mismatch = validate(truthful, "promo-terbatas", "Kemeja Uji", "fashion", 1);
+    assert.equal(mismatch.passed, false, groupedPerak);
+    assert.ok(mismatch.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)), groupedPerak);
+    assert.ok(mismatch.errors.some((error) => error.rule === "L-14" && /1000/.test(error.message_id)), groupedPerak);
+  }
+  for (const [malformedPerak, suffixPrice] of [["1,5 perak", 5], ["12.34 perak", 34]] as const) {
+    const malformed = structuredClone(LIVE_ADS_SAFE);
+    malformed[2].text = `Harganya ${malformedPerak}.`;
+    malformed[2].bridge_source = "spoken_approved_price";
+    const rejected = validate(malformed, "promo-terbatas", "Kemeja Uji", "fashion", suffixPrice);
+    assert.equal(rejected.passed, false, malformedPerak);
+    assert.ok(rejected.errors.some((error) => error.rule === "L-14"), `${malformedPerak}: ${JSON.stringify(rejected.errors)}`);
+    assert.ok(rejected.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)), malformedPerak);
+  }
+  for (const signedPerak of [
+    "-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak",
+    "Rp+5000 perak", "harga- 5.000 perak", "Harganya,+5,000 perak",
+    "(+5000 perak)", "+-5000 perak", "− 5.000 perak", "+ (5.000 perak)",
+    "＋5000 perak", "－5000 perak", "±5000 perak", "﹢ 5.000 perak", "﹣5,000 perak",
+    "⁺5000 perak", "⁻5000 perak", "₊5000 perak", "₋5000 perak", "➕5000 perak", "➖5000 perak",
+    "➕\uFE0F5000 perak", "➖\uFE0E5000 perak", "＋\u200B5000 perak", "﹣\u20605000 perak",
+    "⁺\u034F5000 perak", "+\u00AD5000 perak", "−\u200C5000 perak", "±\u200D5000 perak", "+\u202E5000 perak", "＋\u{E0100}5000 perak",
+  ]) {
+    const signed = structuredClone(LIVE_ADS_SAFE);
+    signed[2].text = `Harganya ${signedPerak}.`;
+    signed[2].bridge_source = "spoken_approved_price";
+    const rejected = validate(signed, "promo-terbatas", "Kemeja Uji", "fashion", 5_000);
+    assert.equal(rejected.passed, false, signedPerak);
+    assert.ok(rejected.errors.some((error) => error.rule === "L-14" && /bertanda/.test(error.message_id)), `${signedPerak}: ${JSON.stringify(rejected.errors)}`);
+    assert.ok(rejected.errors.some((error) => error.rule === "SA6" && /belum terbukti=spoken_approved_price/.test(error.message_id)), signedPerak);
+  }
+});
+
+test("SA6 non-price menangkap notasi harga Indonesia tanpa menolak angka biasa", () => {
+  for (const nominal of [
+    "Rp189000", "Rp 189.000", "189000 rupiah", "189.000 rupiah", "IDR 189000",
+    "189 ribu", "189 rb", "0,189 juta", "seratus delapan puluh sembilan ribu",
+  ]) {
+    const segments = structuredClone(LIVE_ADS_SAFE);
+    segments[3].text = `Nah, ${nominal}.`;
+    const findings = periksaStoryOsAds({ segments } as never, {
+      contentType: "ads", templateId: "ads-meja-kosong", durationSec: 15,
+      productName: "Kemeja Uji", productCategory: "fashion", productPriceIdr: 189_000,
+    });
+    assert.ok(findings.some((finding) => finding.gerbang === "SA6" && /non-price memuat harga lisan/.test(finding.pesan)), nominal);
+  }
+  const ordinary = structuredClone(LIVE_ADS_SAFE);
+  ordinary[3].text = "Nah, 3 kartu bergerak selama 15 detik.";
+  assert.equal(periksaStoryOsAds({ segments: ordinary } as never, {
+    contentType: "ads", templateId: "ads-meja-kosong", durationSec: 15,
+    productName: "Kemeja Uji", productCategory: "fashion", productPriceIdr: 189_000,
+  }).some((finding) => finding.gerbang === "SA6"), false);
+});
+
+test("detektor mempertahankan nominal nol eksplisit dan membedakannya dari angka biasa", () => {
+  for (const nominal of [
+    "Rp0", "Rp 0", "IDR0", "0 rupiah", "0 ribu", "0 rb", "0 juta", "0 jt",
+    "nol rupiah", "zero rupiah", "nol ribu", "zero juta", "nol perak", "0 perak",
+    "Rp nol", "Rp. zero", "IDR nol", "IDR zero", "harganya nol", "biaya zero",
+    "harga 0", "harganya = 0", "biaya itu 0", "harga itu adalah nol",
+    "harga: nol", "harganya = zero", "biaya itu nol", "tarif adalah nol", "banderol sekarang nol",
+    "Harganya, nol", "Harganya itu, nol", "Harga itu adalah: nol",
+    "biayanya; sekarang, zero", "tarifnya = saat ini: 0",
+  ]) {
+    const mentions = deteksiHargaIndonesia(nominal);
+    assert.deepEqual(mentions.map((mention) => mention.nilai), [0], `${nominal}: ${JSON.stringify(mentions)}`);
+  }
+  assert.deepEqual(deteksiHargaIndonesia("3 kartu bergerak selama 15 detik"), []);
+  assert.deepEqual(deteksiHargaIndonesia("nol kesempatan tersisa"), []);
+  assert.deepEqual(deteksiHargaIndonesia("0 kartu, zero masalah"), []);
+  assert.deepEqual(deteksiHargaIndonesia("harganyanol kesempatan"), []);
+  assert.deepEqual(deteksiHargaIndonesia("Harga. Nol kesempatan"), []);
+  assert.deepEqual(deteksiHargaIndonesia("seribu rupiah").map((mention) => mention.nilai), [1_000]);
+  assert.deepEqual(deteksiHargaIndonesia("sejuta rupiah").map((mention) => mention.nilai), [1_000_000]);
+  assert.deepEqual(deteksiHargaIndonesia("Rp189000").map((mention) => mention.nilai), [189_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1.000 perak").map((mention) => mention.nilai), [1_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1,000 perak").map((mention) => mention.nilai), [1_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1,5 perak"), []);
+  assert.deepEqual(deteksiHargaIndonesia("12.34 perak"), []);
+  assert.deepEqual(deteksiHargaIndonesia("kode5 perak"), []);
+  for (const signedPerak of [
+    "-5000 perak", "+5000 perak", "- 5.000 perak", "+ 5,000 perak", "+0 perak",
+    "Rp+5000 perak", "harga- 5.000 perak", "Harganya,+5,000 perak",
+    "(+5000 perak)", "+-5000 perak", "− 5.000 perak", "+ (5.000 perak)",
+    "＋5000 perak", "－5000 perak", "±5000 perak", "﹢ 5.000 perak", "﹣5,000 perak",
+    "⁺5000 perak", "⁻5000 perak", "₊5000 perak", "₋5000 perak", "➕5000 perak", "➖5000 perak",
+    "➕\uFE0F5000 perak", "➖\uFE0E5000 perak", "＋\u200B5000 perak", "﹣\u20605000 perak",
+    "⁺\u034F5000 perak", "+\u00AD5000 perak", "−\u200C5000 perak", "±\u200D5000 perak", "+\u202E5000 perak", "＋\u{E0100}5000 perak",
+  ]) {
+    assert.deepEqual(deteksiHargaIndonesia(signedPerak), [], signedPerak);
+    assert.equal(tanpaNominalHargaTertulis(signedPerak), signedPerak, `redactor: ${signedPerak}`);
+  }
+  assert.doesNotMatch(tanpaNominalHargaTertulis("1.000 perak"), /\d|perak/i);
+  assert.deepEqual(deteksiHargaIndonesia("1.000 ribu").map((mention) => mention.nilai), [1_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1,000 juta").map((mention) => mention.nilai), [1_000_000]);
+  assert.deepEqual(deteksiHargaIndonesia("1,5 ribu").map((mention) => mention.nilai), [1_500]);
+  assert.deepEqual(deteksiHargaIndonesia("1.5 juta").map((mention) => mention.nilai), [1_500_000]);
+});
+
+test("live promo harga nol merepair currency-word zero lalu exhaustion tidak menyajikan fallback", async () => {
+  const { generateScripts, TemplateTidakDisajikan } = await import("../lib/script-engine");
+  const request = {
+    product: { id: "promo-zero-live", name: "Jasa Promo Nol", price_idr: 0, category: "jasa" },
+    register: "netral" as const, qualityTier: "high_quality" as const, durationSec: 15,
+    contentType: "ads" as const, format: "ads", templateId: "promo-terbatas", count: 1,
+    hookFamilies: ["H10" as const], lockHookFamily: true,
+  };
+  const safeResponse = () => {
+    const segments = structuredClone(LIVE_ADS_SAFE);
+    segments[1].text = "Nah, Jasa Promo Nol.";
+    segments[2].text = "Konteksnya kategori jasa, sih.";
+    return segments;
+  };
+  const fetchAsli = globalThis.fetch;
+  try {
+    let calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = safeResponse();
+      if (calls === 1) segments[3].text = "Nah, Harganya, nol.";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    const [repaired] = await generateScripts(request);
+    assert.equal(calls, 2);
+    assert.equal(repaired.validation.passed, true, JSON.stringify(repaired.validation.errors));
+
+    calls = 0;
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = safeResponse();
+      segments[3].text = "Nah, Harga itu adalah: nol.";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    await assert.rejects(() => generateScripts(request), TemplateTidakDisajikan);
+    assert.equal(calls, 3);
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
+test("live LLM non-price yang terus mengirim name+price habis retry dan tidak disajikan", async () => {
+  const { generateScripts, TemplateTidakDisajikan } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  let calls = 0;
+  try {
+    globalThis.fetch = (async () => {
+      calls++;
+      const segments = structuredClone(LIVE_ADS_SAFE);
+      segments[3].text = "Nah, IDR 189000.";
+      return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+    }) as never;
+    await assert.rejects(() => generateScripts({
+      product: { id: "price-exhaust", name: "Kemeja Uji", price_idr: 189_000, category: "fashion" },
+      register: "netral", qualityTier: "high_quality", durationSec: 15,
+      contentType: "ads", format: "ads", templateId: "ads-meja-kosong", count: 1,
+      hookFamilies: ["H13"], lockHookFamily: true,
+    }), TemplateTidakDisajikan);
+    assert.equal(calls, 3);
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
+});
+
+test("A-03 keras di strict dan light, safe control tetap bebas A-03", async () => {
+  const { keSegmentDraft } = await import("../lib/script-engine/llm");
+  const { validateScript } = await import("../lib/script-engine/validator");
+  const safe = keSegmentDraft(structuredClone(LIVE_ADS_SAFE) as never);
+  const context = {
+    hook_family: "H8", register: "netral", productName: "Kemeja Uji", priceIdr: 189000,
+    productCategory: "fashion", qualityTier: "high_quality", durationSec: 15,
+    contentType: "ads", templateId: "ads-unboxing-pov", segments: safe,
+  } as const;
+  assert.ok(!validateScript(context as never, "strict").errors.some((issue) => issue.rule === "A-03"));
+  for (const action of [
+    "talent memutar kemasannya di samping swatch blank",
+    "talent mengangkat botolnya sambil memegang kartu blank",
+    "talent mengangkat Kemeja Uji di samping kartu blank",
+    "talent mengangkat fashion di samping kartu blank",
+  ]) {
+    const unsafe = structuredClone(safe);
+    unsafe[2].action = action;
+    for (const mode of ["strict", "light"] as const) {
+      assert.ok(validateScript({ ...context, segments: unsafe } as never, mode).errors.some((issue) => issue.rule === "A-03"), `${mode} meloloskan ${action}`);
+    }
+  }
+});
+
+test("live LLM Ads menolak aksi produk lalu menerima perbaikan prop netral sebelum provider", async () => {
+  const { generateScripts } = await import("../lib/script-engine");
+  const fetchAsli = globalThis.fetch;
+  try {
+    for (const unsafeAction of [
+      "talent memutar kemasannya di samping swatch blank",
+      "talent mengangkat botolnya sambil memegang kartu blank",
+      "talent mengangkat Kemeja Uji di samping kartu blank",
+      "talent mengangkat fashion di samping kartu blank",
+    ]) {
+      let calls = 0;
+      globalThis.fetch = (async () => {
+        calls++;
+        const segments = structuredClone(LIVE_ADS_SAFE);
+        if (calls === 1) segments[2].action = unsafeAction;
+        return { ok: true, json: async () => ({ content: [{ type: "text", text: JSON.stringify({ segments }) }] }) };
+      }) as never;
+      const [result] = await generateScripts({
+        product: { id: `live-ads-${calls}`, name: "Kemeja Uji", price_idr: 189000, category: "fashion" },
+        register: "netral", qualityTier: "high_quality", durationSec: 15,
+        contentType: "ads", templateId: "ads-unboxing-pov", count: 1,
+        hookFamilies: ["H8"], lockHookFamily: true,
+      });
+      assert.equal(calls, 2, `aksi tidak aman harus direpair: ${unsafeAction}`);
+      assert.equal(result.validation.passed, true, JSON.stringify(result.validation.errors));
+    }
+  } finally {
+    globalThis.fetch = fetchAsli;
+  }
 });
 
 test("validator menolak naskah Ads yang gagal SA — bukan sekadar mencatat", async () => {

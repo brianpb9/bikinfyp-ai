@@ -10,6 +10,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 import { config } from "../config";
+import { errorReasonWithCode } from "../errors";
 import { outputExtras, cartLabelForUrl } from "../script-engine";
 import { formatHargaOverlay, type SegmentDraft } from "../script-engine/templates";
 import { getCreatorCategory } from "../personas";
@@ -26,7 +27,8 @@ import { findReusableClips } from "../media/resume-clips";
 import { compositeVideo, type CompositeMode } from "../media/compositor";
 import { runQc } from "../media/qc";
 import { shotUntukDetik } from "../media/qc-vision";
-import { buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../media/packshot-asli";
+import { appendPackshotUntukQc, buildPackshotAsli, packshotAsliUntukShot, dimensiDariKlip } from "../media/packshot-asli";
+import { assertApprovedReferenceBrands } from "../worker-reference-brand-gate";
 import { buildCaptionCards } from "../media/captions";
 import { resolvePromo, formatPromoOverlayText } from "../promo";
 import { renderCaptionPngs } from "../media/render-captions";
@@ -38,10 +40,11 @@ import { buildPhotoPanVideo } from "../media/photo-video";
 import { synthesizeElevenLabsVoiceover } from "../media/vo-tts";
 import { synthesizeGeminiVoiceover } from "../media/gemini-tts";
 import { stripDeliveryTags } from "../script-engine/delivery-tags";
+import { deriveStoryAdsIdentity, isStructuredStoryAds, voiceoverStartSecForSegments, type StoryAdsIdentity } from "../script-engine/story-os-ads";
 import { hargaTerbilang } from "../script-engine/terbilang";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { mediaStorage } from "../storage";
-import { MAX_IMAGES } from "../product-images";
+import { MAKS_REFERENSI_PER_GENERASI } from "../product-images";
 import { personSafeReferencePhotos } from "../media/person-safe-refs";
 import { loadJobShots, materializeJobShots, persistJobShots } from "./job-shots";
 import { PgCreditPaymentRepository } from "./credit-payment";
@@ -49,18 +52,65 @@ import { PgJobsRepository } from "./jobs";
 import { getPool } from "./pool";
 import { normalizeHookLevel } from "../config/hooks";
 import { pgTaskMemo } from "./task-memo";
-import { appendEndcard, ENDCARD_DEFAULT_COLOR } from "../media/endcard";
+import { appendEndcard, ENDCARD_DEFAULT_COLOR, ENDCARD_DURASI_DTK } from "../media/endcard";
 import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
+import { materializeJobReferenceManifest, type JobReferenceManifest } from "../job-reference-manifest";
+import { trustedBrandFromRawMeta, type JobProductSnapshot } from "../job-product-snapshot";
+import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
+import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
+import { bacaSnapshot } from "../script-engine/admisi";
+import { normalisasiFormatWorker } from "../media/worker-format";
+import { managedStagingDeterministicWorkerGate } from "../staging-deterministic-worker";
+import { withProductEvidenceMutationLock } from "../job-admission-reference";
+import { freezeProviderRequestCorrelation } from "./prompt-request-correlation";
+
+type PostgresQcRunner = typeof runQc;
+let postgresQcRunner: PostgresQcRunner = runQc;
+
+/** Test-only post-compositor observation seam. `undefined` restores runQc;
+ * production has no flag or configuration path that can replace it. */
+export function setPostgresQcRunnerForTests(runner?: PostgresQcRunner): void {
+  postgresQcRunner = runner ?? runQc;
+}
 
 const uuid = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
 function assertUrl() { if (!/^postgres(?:ql)?:\/\//i.test(config.databaseUrl)) throw new Error("DATABASE_URL PostgreSQL wajib untuk worker pg."); return config.databaseUrl; }
-function deterministicFixtureAllowed() { return process.env.RACUN_WORKER_DETERMINISTIC === "1" && process.env.NODE_ENV !== "production"; }
+
+const processWorkerProductionDependencies={
+  databaseUrl:assertUrl,
+  createJobs:(databaseUrl:string)=>new PgJobsRepository(databaseUrl,{stateTimeoutsMin:config.stateTimeoutsMin}),
+  getPool,
+  createCredits:(databaseUrl:string)=>new PgCreditPaymentRepository(databaseUrl),
+  withProductEvidenceMutationLock,
+};
+type ProcessWorkerDependencies=typeof processWorkerProductionDependencies;
+let processWorkerDependencyOverrides:Partial<ProcessWorkerDependencies>|undefined;
+export function setProcessPostgresWorkerDependenciesForTests(overrides?:Partial<ProcessWorkerDependencies>):void {
+  processWorkerDependencyOverrides=overrides;
+}
+function processWorkerDependencies():ProcessWorkerDependencies {
+  return {...processWorkerProductionDependencies,...processWorkerDependencyOverrides};
+}
+
+/** Provider dialogue is deliberately absent for neutral Story Ads. Keeping
+ * embedded audio there would produce a paid silent video, so those jobs must
+ * take the external narration branch even when their format is talking_head. */
+export function shouldPreserveEmbeddedLipsync(input: {
+  format: string;
+  providerName: string;
+  storyIdentity: StoryAdsIdentity;
+}): boolean {
+  return !isMockProviderName(input.providerName)
+    && (input.format === "talking_head" || input.format === "tvc")
+    && !isStructuredStoryAds(input.storyIdentity);
+}
 
 type WorkerRow = {
   id: string; user_id: string; org_id: string | null; product_id: string; persona_id: string | null; script_id: string;
   format: string; quality_tier: string; duration_s: number; state: string;
+  provider_video: string | null;
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
   script_hook_level: string | null;
   /** Snapshot admisi (JSON) — membawa jejak ide sampai ke arsip prompt. */
@@ -75,12 +125,25 @@ type WorkerRow = {
   template_id: string | null;
   product_claims: string | null;
   ratio: string | null;
-  product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_images: string; product_price_idr: number;
-  promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
+  product_name: string; product_category: string; product_visual_desc: string | null; brand_brief: string | null; product_price_idr: number;
   product_source_url: string | null;
+  product_type_token: string | null;
+  product_type_confirmed_token: string | null;
+  product_type_confirmed_by: string | null;
+  product_type_confirmed_at: string | Date | null;
+  product_type_version: number | null;
+  product_type_state: string | null;
+  category_review_state: string | null;
+  category_review_reason: string | null;
+  category_reviewed_by: string | null;
+  category_reviewed_role: string | null;
+  category_reviewed_at: string | Date | null;
+  category_review_version: number | null;
   /** JSON bebas dari intake. Sumber MEREK TEPERCAYA (raw_meta.brand). */
   product_raw_meta: string | null;
   creator_category: string | null;
+  approved_reference_manifest: string | null;
+  job_product_snapshot: string | null;
 };
 
 /**
@@ -134,6 +197,9 @@ export function bolehFrameTurunan(input: {
 /** Ganti imageRefPath shot yang perannya menuntut komposisi berbeda dengan
  *  frame pertama buatan. Shot lain dibiarkan memakai foto produk asli. */
 async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: string): Promise<VisualSpec> {
+  // Neutral Story Ads sengaja text-to-video. Membuat frame pertama di sini
+  // akan memasukkan kembali foto produk yang baru saja dibuang planner.
+  if (spec.visualSubjectPolicy === "neutral_story_ads") return spec;
   // Jatahnya dibatasi MARGIN, bukan kebutuhan: frame ~Rp600 sedangkan margin
   // tier bersuara cuma Rp3.198. Yang dapat jatah lebih dulu adalah shot yang
   // WAJIB menahan produk — tanpa frame buatan shot itu mustahil benar.
@@ -144,6 +210,7 @@ async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: str
 
   const shots = await Promise.all(spec.shots.map(async (sh) => {
     if (!dipilih.has(sh.index)) return sh;
+    if (!sh.imageRefPath) throw new Error("frame pertama turunan wajib menerima reference image");
     try {
       const { path: p, biayaIdr } = await generateFirstFrame({
         productPhotoPath: sh.imageRefPath,
@@ -171,13 +238,7 @@ async function siapkanFramePertama(spec: VisualSpec, workDir: string, jobId: str
  * tebakan dihentikan sama sekali. Tanpa sumber ini, gerbang hero UNVERIFIED.
  */
 export function merekTepercaya(row: { product_raw_meta?: string | null }): string | null {
-  try {
-    const meta = JSON.parse(row.product_raw_meta ?? "{}") as { brand?: unknown };
-    const b = typeof meta.brand === "string" ? meta.brand.trim() : "";
-    return b || null;
-  } catch {
-    return null;
-  }
+  return trustedBrandFromRawMeta(row.product_raw_meta);
 }
 
 /** Verdict QC-F1 per shot, untuk diarsipkan bersama promptnya. */
@@ -188,6 +249,7 @@ export interface RingkasanQcF1 {
   status: import("../media/qc-frame").StatusQcF1;
   ulang: number;
   detail: string;
+  evidence: import("../media/qc-frame").HasilQcF1["evidence"];
 }
 
 /**
@@ -210,6 +272,12 @@ async function siapkanFrameTurunan(
   jobId: string,
   identitas: { kunci: string; deskripsi: string; productName: string; merekEksplisit?: string | null }
 ): Promise<{ spec: VisualSpec; qcF1: RingkasanQcF1[]; biayaIdr: number }> {
+  // Jalur CAST-REF dipilih dari tier/format, sehingga neutral Story Ads bisa
+  // tiba di sini meski planner sudah sengaja membuang semua foto produk.
+  // Jangan membuat paket cast yang tidak akan dipakai atau menyuntikkan ref.
+  if (spec.visualSubjectPolicy === "neutral_story_ads") {
+    return { spec, qcF1: [], biayaIdr: 0 };
+  }
   const { paketCastRefTersimpan, turunkanFrameAwalTerperiksa } = await import("../media/cast-ref");
   const qcF1: RingkasanQcF1[] = [];
   let biaya = 0;
@@ -230,6 +298,7 @@ async function siapkanFrameTurunan(
   // 429, ikut mematikan TTS produksi (catatan spike 17 Agu).
   const shots: typeof spec.shots = [];
   for (const sh of spec.shots) {
+    if (!sh.imageRefPath) throw new Error("frame cast turunan wajib menerima reference image");
     const productState = harusMenahanProduk(sh) ? "partial" : "hero";
     try {
       const hasil = await turunkanFrameAwalTerperiksa({
@@ -244,7 +313,8 @@ async function siapkanFrameTurunan(
         productState,
       });
       biaya += hasil.biayaIdr;
-      qcF1.push({ shot: sh.index, productState, status: hasil.qc.status, ulang: hasil.ulang, detail: hasil.qc.detail });
+      qcF1.push({ shot: sh.index, productState, status: hasil.qc.status, ulang: hasil.ulang,
+        detail: hasil.qc.detail, evidence: hasil.qc.evidence });
       const pesan = `[QC-F1] job ${jobId} shot ${sh.index} (${productState}): ${hasil.qc.status} setelah ${hasil.ulang} ulang — ${hasil.qc.detail}`;
       if (hasil.qc.status === "PASS") console.log(pesan); else console.error(pesan);
       // HANYA PASS yang jadi referensi. FAIL berarti produknya sudah bergeser
@@ -261,21 +331,62 @@ async function siapkanFrameTurunan(
 }
 
 export async function processPostgresJob(jobId: string, options: { retryViaQueue?: boolean } = {}): Promise<void> {
-  const databaseUrl = assertUrl();
-  const jobs = new PgJobsRepository(databaseUrl, { stateTimeoutsMin: config.stateTimeoutsMin });
-  const pool = getPool(databaseUrl);
+  const deps=processWorkerDependencies();
+  const databaseUrl = deps.databaseUrl();
+  const pool = deps.getPool(databaseUrl);
+  try {
+    const candidate = await pool.query<{ product_id: string; state: string }>(
+      "SELECT product_id,state FROM jobs WHERE id=$1",
+      [jobId],
+    );
+    const productId = candidate.rows[0]?.product_id;
+    if (!productId || ["READY", "FAILED", "REFUNDED"].includes(candidate.rows[0].state)) return;
+    // E3/E7 acquire this same cross-process advisory lock. The canonical row is
+    // reloaded only after ownership is established and remains stable until
+    // provider execution, output persistence, and capture have all completed.
+    await deps.withProductEvidenceMutationLock(productId, async () => {
+      await processPostgresJobWithProductLock(jobId, options, deps);
+    });
+  } catch (error) {
+    if (options.retryViaQueue) throw error;
+    const jobs=deps.createJobs(databaseUrl);
+    try {await jobs.failJob(jobId,errorReasonWithCode(error));} finally {await jobs.close();}
+  }
+}
+
+async function processPostgresJobWithProductLock(
+  jobId: string,
+  options: { retryViaQueue?: boolean },
+  deps: ProcessWorkerDependencies,
+): Promise<void> {
+  const databaseUrl = deps.databaseUrl();
+  const jobs = deps.createJobs(databaseUrl);
+  const pool = deps.getPool(databaseUrl);
   try {
     // j.* sudah bawa org_id (kolom asli tabel jobs, M1) — WorkerRow.org_id
     // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
     // (pool org untuk job dari dashboard bulk-generate, user biasa untuk retail).
     const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level, s.validation_result AS script_validation_result,
-      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.images AS product_images, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
-      p.promo_price_before_idr, p.promo_ends_at, p.promo_stock_left,
+      p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
+      p.product_type_token, p.product_type_confirmed_token, p.product_type_confirmed_by,
+      p.product_type_confirmed_at, p.product_type_version, p.product_type_state,
+      p.category_review_state,p.category_review_reason,p.category_reviewed_by,
+      p.category_reviewed_role,p.category_reviewed_at,p.category_review_version,
       pe.creator_category
       FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
     const row = found.rows[0];
     if (!row || ["READY", "FAILED", "REFUNDED"].includes(row.state)) return;
+    // C5 must fail before the first state transition/audit. Both provider and
+    // deterministic modes re-check later, but that is already an execution
+    // effect and therefore too late for quarantined work.
+    requireCurrentJobEvidence({
+      approvedReferenceManifest:row.approved_reference_manifest,
+      jobProductSnapshot:row.job_product_snapshot,
+      productType:{...row,category:row.product_category},
+    });
+    const hold = await pool.query("SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type='hold' LIMIT 1", [jobId]);
+    const executionMode = workerExecutionMode(hold.rowCount === 1);
     // r13 (review QA 2026-08-07): dulu SETIAP retry BullMQ untuk state != QUEUED
     // langsung gagal instan ("belum resumable") -> kegagalan transien SETELAH
     // video sukses (compositing/storage/dsb) selalu membakar biaya provider
@@ -289,28 +400,67 @@ export async function processPostgresJob(jobId: string, options: { retryViaQueue
     // dari upaya sebelumnya masih ada & valid di disk (lihat resume-clips.ts).
     if (!(await jobs.transition(jobId, "GENERATING_VISUAL", { worker: "postgres" }))) return;
 
-    if (deterministicFixtureAllowed()) {
+    if (executionMode === "deterministic_trace") {
       await runDeterministicFixture(row, jobs, pool);
     } else {
       await runProviderPipeline(row, jobs, pool);
     }
-    const credits = new PgCreditPaymentRepository(databaseUrl);
+    const credits = deps.createCredits(databaseUrl);
     try { await credits.captureCredits(row.org_id ? { userId: row.user_id, orgId: row.org_id } : row.user_id, jobId); } finally { await credits.close(); }
   } catch (error) {
     if (options.retryViaQueue) throw error;
-    await jobs.failJob(jobId, error instanceof Error ? error.message : String(error));
+    await jobs.failJob(jobId, errorReasonWithCode(error));
   } finally { await jobs.close(); /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
+}
+
+/** A ledger-less job is the managed zero-value trace marker. It must never
+ * reach the paid provider branch after the canonical worker is restored. */
+export function workerExecutionMode(
+  hasHold: boolean,
+  env: NodeJS.ProcessEnv = process.env,
+): "provider" | "deterministic_trace" {
+  const deterministic = managedStagingDeterministicWorkerGate(env).allowed;
+  if (deterministic && hasHold) {
+    throw new Error("TRACE_WORKER_REJECTS_HELD_ORDINARY_JOB");
+  }
+  if (!deterministic && !hasHold) {
+    throw new Error("ZERO_LEDGER_JOB_REQUIRES_DETERMINISTIC_WORKER_GATE");
+  }
+  return deterministic ? "deterministic_trace" : "provider";
 }
 
 async function runDeterministicFixture(row: WorkerRow, jobs: PgJobsRepository, pool: Pool) {
   if (process.env.RACUN_WORKER_FIXTURE_FAIL === "1") throw new Error("Forced deterministic PostgreSQL worker failure.");
+  const admission = parseDeterministicFixtureAdmission(row);
   const relVideo = `jobs/${row.id}/output.mp4`;
   const local = path.join(config.storageDir, relVideo);
   fs.mkdirSync(path.dirname(local), { recursive: true });
+  // The zero-provider branch must honor the exact same immutable admission
+  // boundary as the paid branch. Materialization verifies every job-owned
+  // snapshot byte/hash before FFmpeg can produce an output.
+  await materializeJobReferenceManifest(admission.manifest, path.dirname(local));
   await runFf(config.ffmpegPath, ["-y", "-f", "lavfi", "-i", `color=c=0x1f2937:s=720x1280:r=30:d=${row.duration_s}`, "-f", "lavfi", "-i", `sine=frequency=440:sample_rate=44100:duration=${row.duration_s}`, "-shortest", "-c:v", "libx264", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "96k", local]);
   await jobs.setProviders(row.id, "deterministic-postgres-test", "none-silent-caption");
   for (const state of ["GENERATING_VOICE", "COMPOSITING", "QC_CHECK", "LABELING"] as const) if (!(await jobs.transition(row.id, state, { worker: "postgres-fixture" }))) return;
   await persistReadyOutput(row, jobs, pool, relVideo, local, { passed: true, checks: [{ code: "QC-08", status: "pass" }], fixture: true });
+}
+
+/** Fail-closed parser shared by the managed deterministic branch and its
+ * counterexample tests. Canonical admission always supplies both values. */
+export function parseDeterministicFixtureAdmission(row: Pick<WorkerRow,
+  "approved_reference_manifest" | "job_product_snapshot" | "product_type_token"
+  | "product_type_confirmed_token" | "product_type_confirmed_by" | "product_type_confirmed_at"
+  | "product_type_version" | "product_type_state" | "category_review_state"
+  | "category_review_reason" | "category_reviewed_by" | "category_reviewed_role"
+  | "category_reviewed_at" | "category_review_version" | "product_category">): {
+  manifest: JobReferenceManifest;
+  productSnapshot: JobProductSnapshot;
+} {
+  return requireCurrentJobEvidence({
+    approvedReferenceManifest: row.approved_reference_manifest,
+    jobProductSnapshot: row.job_product_snapshot,
+    productType: {...row,category:row.product_category},
+  });
 }
 
 async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool: Pool) {
@@ -318,24 +468,85 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // still use the established SQLite rollback path for mock experimentation.
   if (config.providerVideo === "mock") throw new Error("Worker PostgreSQL membutuhkan PROVIDER_VIDEO nyata; fixture hanya diizinkan untuk test lokal eksplisit.");
   const segments = JSON.parse(row.script_segments) as SegmentDraft[];
-  const images = JSON.parse(row.product_images) as string[];
-  if (images.length === 0) throw new Error("Produk tidak punya foto — upload minimal 1 foto.");
-  const imageRef = await mediaStorage().materialize(images[0]);
-  if (!imageRef) throw new Error("Foto produk tidak ditemukan di storage.");
-  const workDir = path.join(config.storageDir, "jobs", row.id);
+  const admisi = bacaSnapshot(row.script_validation_result);
+  const storyIdentity = deriveStoryAdsIdentity(admisi, {
+    format: row.format, templateId: row.template_id, durationSec: row.duration_s,
+  });
+  const currentEvidence = requireCurrentJobEvidence({
+    approvedReferenceManifest: row.approved_reference_manifest,
+    jobProductSnapshot: row.job_product_snapshot,
+    productType: {...row,category:row.product_category},
+  });
+  const productSnapshot = currentEvidence.productSnapshot;
+  const snapshotPriceIdr = productSnapshot.priceIdr!;
+  // Semua consumer hilir tetap memakai WorkerRow, tetapi nilainya kini datang
+  // dari snapshot job, bukan JOIN products yang dapat berubah saat resume.
+  row.product_name = productSnapshot.productName;
+  row.product_category = productSnapshot.category;
+  row.product_price_idr = snapshotPriceIdr;
+  row.product_visual_desc = productSnapshot.productVisualDesc;
+  row.brand_brief = productSnapshot.brandBrief;
+  row.product_claims = JSON.stringify(productSnapshot.claims);
+  row.product_raw_meta = JSON.stringify(productSnapshot.trustedBrand.value
+    ? { brand: productSnapshot.trustedBrand.value }
+    : {});
+  // SA6 hanya membaca ProductInput yang dibekukan saat admission, tidak
+  // pernah JOIN products yang dapat berubah selama job mengantre/resume.
+  const voiceoverStartSec = voiceoverStartSecForSegments(segments, {
+    ...storyIdentity,
+    productName: productSnapshot.productName,
+    productCategory: productSnapshot.category,
+    productPriceIdr: snapshotPriceIdr,
+  });
+
+  // REFERENSI DIPILIH DARI BUKTI, BUKAN DARI URUTAN UNGGAH.
+  //
+  // Sampai 21 Agu baris ini `materialize(images[0])`: foto PERTAMA menang
+  // karena posisinya, apa pun isinya. Produk yang foto pertamanya banner
+  // promo mengirim BANNER ke model video sebagai acuan "beginilah rupa
+  // produknya", dan model menyalin teks banner ke kemasan. Baru ketahuan
+  // sesudah dibayar.
+  //
+  // GAGAL-TERTUTUP SEBELUM LANGKAH BERBAYAR. Resolver tidak pernah melempar;
+  // yang melempar di sini adalah pemanggilnya, dan ia melempar SEBELUM satu
+  // byte pun diambil — jadi nol materialize, nol provider, nol capture.
+  // workDir dibuat SEBELUM referensi diambil: snapshot bukti butuh rumah, dan
+  // rumah itu harus milik job ini. Dulu ia dibuat sesudah materialize.
+  const workDir = path.join(config.storageDir, row.id ? `jobs/${row.id}` : "jobs/tanpa-id");
   fs.mkdirSync(workDir, { recursive: true });
-  let primaryRef = imageRef;
+  const snapshots = await materializeJobReferenceManifest(currentEvidence.manifest, workDir);
+  const pastikanManifestSebelumEfek = async () => {
+    await materializeJobReferenceManifest(currentEvidence.manifest, workDir);
+  };
+  const refUtama = snapshots[0];
+  const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
+  const withAudio = tier !== "silent_caption";
+  const providerEligibleSnapshots = withAudio
+    ? snapshots.slice(0, MAKS_REFERENSI_PER_GENERASI)
+    : [refUtama];
+  await assertApprovedReferenceBrands(
+    providerEligibleSnapshots,
+    productSnapshot.productName,
+    productSnapshot.trustedBrand.value,
+  );
+  let primaryRef = refUtama;
   const extraRefs: string[] = [];
-  if ((row.quality_tier ?? "silent_caption") !== "silent_caption") {
-    for (const rel of images.slice(1, MAX_IMAGES)) {
-      const p = await mediaStorage().materialize(rel).catch(() => null);
-      if (p) extraRefs.push(p);
-    }
+  if (withAudio) {
+    // Referensi tambahan juga HANYA dari daftar tersetujui. Foto ke-2 dst
+    // dikirim ke model sebagai referensi identitas — sama berbahayanya kalau
+    // salah. Batasnya dipertahankan sama persis dengan sebelumnya
+    // (slice(1, MAX_IMAGES) => paling banyak tujuh tambahan), supaya langkah
+    // ini tidak diam-diam mengubah payload provider.
+    // Batas GENERASI, bukan batas unggah. MAKS_REFERENSI_PER_GENERASI=7
+    // menghitung primary + tambahan; slice(1, MAX_IMAGES=8) sebelumnya
+    // menghasilkan primary + tujuh = DELAPAN referensi, melewati kontraknya
+    // sendiri.
+    extraRefs.push(...providerEligibleSnapshots.slice(1));
     // BytePlus r2v MENOLAK referensi berisi orang sungguhan — foto berwajah
     // di-crop otomatis ke kain/produk (foto e-commerce fashion selalu pakai
     // model; terbukti lolos moderasi, lab fashion-r2b 2026-08-07). Bila tidak
     // ada satu pun foto aman, error berpesan-user → FAILED + refund jelas.
-    const sanitized = await personSafeReferencePhotos([imageRef, ...extraRefs], workDir);
+    const sanitized = await personSafeReferencePhotos([refUtama, ...extraRefs], workDir);
     primaryRef = sanitized.safe[0];
     extraRefs.length = 0;
     extraRefs.push(...sanitized.safe.slice(1));
@@ -350,16 +561,16 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // hasilnya "terinspirasi foto", bukan wajah persis (BytePlus menolak foto
   // wajah asli sebagai referensi, lihat lib/promo/avatar.ts).
   const customDesc = row.avatar_custom_desc?.trim();
-  const category = customDesc
+  const category = customDesc && !isNeutralStoryAdsTemplate(storyIdentity.templateId)
     ? { ...presetCategory, promptSeed: customDesc, handsPrompt: customDesc }
     : presetCategory;
-  const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
-  const withAudio = tier !== "silent_caption";
-  const format = row.format === "talking_head" || row.format === "vo_broll" || row.format === "tvc" ? row.format : "hands_only";
+  const format = normalisasiFormatWorker(row.format);
   const spec = planShots({ jobId: row.id, durationSec: row.duration_s, segments, category, productName: row.product_name,
     productCategory: row.product_category, productVisualDesc: row.product_visual_desc, brandBrief: row.brand_brief, imageRefPath: primaryRef,
+    productPriceIdr: row.product_price_idr,
     extraImageRefPaths: extraRefs, qualityTier: tier,
     format,
+    contentType: storyIdentity.contentType,
     // Format IDE (knowledge/formats) menyeberang ke kamera lewat snapshot
     // admisi — slice 3, 20 Agu. Tanpa baris ini format ide berhenti di
     // penulis naskah dan shot-nya digambar seolah formatnya tidak pernah ada.
@@ -376,7 +587,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // rute yang ditambahkan belakangan sampai ke database tapi tidak pernah
     // sampai ke perencana shot.
     tvcRoute: TVC_ROUTES.includes(row.tvc_route as never) ? (row.tvc_route as TvcRoute) : undefined,
-    ugcTemplate: row.template_id,
+    ugcTemplate: storyIdentity.templateId,
     recordStyle: row.record_style });
 
   // KONTRAK PENYEDIA DIPERIKSA DI SINI, bukan nanti di registry.
@@ -395,6 +606,31 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // Model yang akan dipakai penyedia — sama sumbernya dengan createTask(),
   // supaya mode referensi yang diarsipkan adalah mode yang benar-benar dikirim.
   const modelTier = (config.tiers[spec.qualityTier] ?? config.tiers.silent_caption).byteplusModel;
+  let qcF1: RingkasanQcF1[] = [];
+  const jejakIde = bacaJejakIde(row.script_validation_result);
+  async function simpanArsip(specArsip: VisualSpec, tahap: "pre-gate" | "provider-bound") {
+    try {
+      await pgSimpanArsipPrompt({
+        jobId: row.id,
+        specJson: JSON.stringify(ringkasSpec(specArsip, modelTier)),
+        segmentsJson: JSON.stringify(segments),
+        negativePrompt: specArsip.negativePrompt,
+        modelParams: JSON.stringify({
+          ...ringkasParams(specArsip), format, template_id: storyIdentity.templateId,
+          ...(qcF1.length ? { qc_f1: qcF1 } : {}),
+          archive_stage: tahap,
+        }),
+        ideId: jejakIde.ideId,
+        ideSkor: jejakIde.ideSkor,
+        // Resume hanya boleh mengganti snapshot jika belum ada request hidup.
+        // Bila satu shot lama masih ada, binding per-shot akan menghentikan
+        // campuran arsip/request alih-alih memutihkan lineage yang berbeda.
+        preserveExisting: row.state !== "QUEUED",
+      });
+    } catch (err) {
+      console.warn(`[job ${row.id.slice(0, 8)}] arsip prompt ${tahap} gagal disimpan (diabaikan): ${(err as Error).message}`);
+    }
+  }
 
   // Pemicu penyaring dicatat SEBELUM dikirim, tidak memblokir.
   //
@@ -422,24 +658,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // ditulis di sini, bukan setelah render sukses. Kegagalan menulis diabaikan:
   // ini catatan, bukan bagian produk, dan pengguna yang sudah membayar tidak
   // boleh kehilangan videonya karena pencatatan kita bermasalah.
-  try {
-    // Skor & identitas ide dibaca dari snapshot admisi yang ikut tersimpan di
-    // scripts.validation_result (audit E15, 19 Agu). Sebelumnya dua kolom ini
-    // disediakan migrasi 0032 lalu SELALU NULL, karena angkanya berhenti di
-    // memori proses web dan tidak pernah menyeberang ke worker.
-    const jejakIde = bacaJejakIde(row.script_validation_result);
-    await pgSimpanArsipPrompt({
-      jobId: row.id,
-      specJson: JSON.stringify(ringkasSpec(spec, modelTier)),
-      segmentsJson: JSON.stringify(segments),
-      negativePrompt: spec.negativePrompt,
-      modelParams: JSON.stringify({ ...ringkasParams(spec), format, template_id: row.template_id ?? null }),
-      ideId: jejakIde.ideId,
-      ideSkor: jejakIde.ideSkor,
-    });
-  } catch (err) {
-    console.warn(`[job ${row.id.slice(0, 8)}] arsip prompt gagal disimpan (diabaikan): ${(err as Error).message}`);
-  }
+  // Snapshot pra-gate menjaga jejak prompt yang dihentikan sebelum biaya.
+  // Untuk job yang lolos, snapshot ini akan diganti oleh snapshot provider-bound
+  // sesudah transformasi referensi dan tepat sebelum request video.
+  await simpanArsip(spec, "pre-gate");
 
   // GERBANG PROMPT — SESUDAH arsip, SEBELUM penyedia.
   //
@@ -491,7 +713,12 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       if (shot.idx >= spec.shots.length) continue;
       const tmpDir = path.join(workDir, `regen-${shot.idx}`);
       fs.mkdirSync(tmpDir, { recursive: true });
-      const single = await generateVideoWithFailover({ ...spec, shots: [spec.shots[shot.idx]] }, tmpDir);
+      await pastikanManifestSebelumEfek();
+      const regenSpec = { ...spec, shots: [spec.shots[shot.idx]] };
+      // pgSimpanArsipPrompt tetap menyimpan full archive lama bila shot lain
+      // masih punya request. Binding digest akan menolak campuran versi.
+      await simpanArsip(spec, "provider-bound");
+      const single = await generateVideoWithFailover(regenSpec, tmpDir);
       await jobs.addCost(row.id, single.costIdr);
       fs.copyFileSync(single.assets[0].filePath, path.join(workDir, `shot${shot.idx}.mp4`));
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -519,9 +746,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // dari paket CAST-REF avatar dan diperiksa QC-F1 dulu — supaya klipnya
   // terasa satu sesi rekaman, bukan beberapa ruangan berbeda. Lihat
   // bolehFrameTurunan() untuk kenapa gerbangnya tier + format.
-  let qcF1: RingkasanQcF1[] = [];
   let specSiap: VisualSpec;
   if (bolehFrameTurunan({ format, tier, orgId: row.org_id })) {
+    await pastikanManifestSebelumEfek();
     const turunan = await siapkanFrameTurunan(spec, workDir, row.id, {
       kunci: kunciCastRef({ presetId: row.creator_category, customDesc: customDesc ?? null }),
       deskripsi: category.promptSeed,
@@ -537,27 +764,26 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     qcF1 = turunan.qcF1;
     if (turunan.biayaIdr > 0) await jobs.addCost(row.id, turunan.biayaIdr);
   } else {
+    await pastikanManifestSebelumEfek();
     specSiap = await siapkanFramePertama(spec, workDir, row.id);
   }
-  // Verdict QC-F1 ikut ke arsip prompt lewat modelParams — SENGAJA belum kolom
-  // sendiri. Kolom qc_f1_json (migrasi 0033) menunggu 0030/0031 dipasang lebih
-  // dulu, dan menahan buktinya sampai migrasi itu jalan berarti kehilangan
-  // bukti dari job-job pertama yang justru paling perlu dibedah.
-  if (qcF1.length) {
-    try {
-      await pool.query(
-        // ::text di luar WAJIB — model_params kolomnya TEXT, dan Postgres tidak
-        // mengecor jsonb ke text secara implisit saat penugasan.
-        `UPDATE job_prompts SET model_params = (model_params::jsonb || $2::jsonb)::text WHERE job_id = $1`,
-        [row.id, JSON.stringify({ qc_f1: qcF1 })]
-      );
-    } catch (err) {
-      console.warn(`[job ${row.id.slice(0, 8)}] verdict QC-F1 gagal diarsipkan (diabaikan): ${(err as Error).message}`);
-    }
+  let video;
+  if (reused) video = reused;
+  else if (format === "vo_broll") video = await buildPhotoPanVideo(specSiap, workDir);
+  else {
+    await pastikanManifestSebelumEfek();
+    // WAJIB sesudah siapkanFramePertama/siapkanFrameTurunan: body BytePlus
+    // memuat byte gambar, jadi digest spec awal bukan digest yang dikirim.
+    // Tetap sebelum generate agar created_at selalu mendahului request provider.
+    await simpanArsip(specSiap, "provider-bound");
+    video = await generateVideoWithFailover(specSiap, workDir);
   }
-
-  const video = reused ?? (format === "vo_broll" ? await buildPhotoPanVideo(specSiap, workDir) : await generateVideoWithFailover(specSiap, workDir));
-  await jobs.setProviders(row.id, video.providerName);
+  // Resume scene yang sudah disetujui membawa provider sintetis
+  // `reused-from-disk`; itu mekanisme pemuatan, bukan penyedia yang membayar
+  // render awal. Pertahankan provenance provider asli dan gunakan identitas
+  // itu juga untuk keputusan audio/compositor di bawah.
+  const effectiveVideoProvider = reused ? row.provider_video ?? video.providerName : video.providerName;
+  if (!reused) await jobs.setProviders(row.id, effectiveVideoProvider);
   await jobs.addCost(row.id, video.costIdr);
 
   // M11: berhenti di sini untuk job brand yang belum disetujui. Suara,
@@ -609,7 +835,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   if (!(await jobs.transition(row.id, "GENERATING_VOICE", { worker: "postgres" }))) return;
   const vo: { path: string; startSec: number }[] = [];
   let geminiVoPath: string | undefined;
-  const usedMockVideo = isMockProviderName(video.providerName);
+  const usedMockVideo = isMockProviderName(effectiveVideoProvider);
   // r7 (Brian 2026-08-07): "presenter/lipsync jual Super HQ 80rb-an, sisanya
   // video+VO mulut nggak lipsync" — satu-satunya kombinasi berlip-sync
   // sungguhan adalah Wajah AI di tier Super HQ (audio embedded asli
@@ -630,19 +856,22 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // Gemini TTS TETAP dipakai untuk hands_only dan vo_broll — di sana
   // pembicaranya memang tidak pernah terlihat, jadi narasi luar-kamera adalah
   // bentuk yang benar, bukan kompromi.
-  const isPresenterLipsync = format === "talking_head" || format === "tvc";
+  const isPresenterLipsync = shouldPreserveEmbeddedLipsync({
+    format, providerName: effectiveVideoProvider, storyIdentity,
+  });
   if (!withAudio) await jobs.setProviders(row.id, undefined, "none-silent-caption");
   else if (format === "vo_broll") {
     // No embedded audio is possible here (no video model call happened) —
     // real TTS is the only option, unlike hands_only/talking_head's mock-only rule.
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
+      await pastikanManifestSebelumEfek();
       const result = await synthesizeElevenLabsVoiceover(stripDeliveryTags(segment.text), path.join(workDir, `vo_real_${i}.mp3`));
       vo.push({ path: result.filePath, startSec: segment.start });
       await jobs.addCost(row.id, result.costIdr);
     }
     await jobs.setProviders(row.id, undefined, "elevenlabs-tts");
-  } else if (!usedMockVideo && isPresenterLipsync) {
+  } else if (isPresenterLipsync) {
     // Presenter/Lipsync (Super HQ): audio embedded asli dipertahankan — TIDAK
     // diganti Gemini TTS, supaya lip-sync sungguhan dari model tetap utuh.
     await jobs.setProviders(row.id, undefined, "embedded-model-lipsync");
@@ -650,6 +879,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // SUARA RESMI = Gemini TTS (Brian 2026-08-07): audio embedded model video
     // diganti VO TTS ber-voice terkunci per avatar.
     const voText = hargaTerbilang(segments.map((segment) => segment.tts_text ?? segment.text).join(" ... "));
+    await pastikanManifestSebelumEfek();
     const tts = await synthesizeGeminiVoiceover(voText, category.voiceName, category.voiceStyle, path.join(workDir, "vo_gemini.wav"));
     geminiVoPath = tts.filePath;
     await jobs.addCost(row.id, tts.costIdr);
@@ -658,6 +888,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     let voiceProvider = "";
     for (let i = 0; i < segments.length; i++) {
       const segment = segments[i];
+      await pastikanManifestSebelumEfek();
       const result = await synthesizeVoiceWithFailover({ jobId: row.id, text: stripDeliveryTags(segment.text), segmentIndex: i, slotSec: segment.end - segment.start, language: "id-ID", register: row.script_register }, workDir);
       if (!voiceProvider) voiceProvider = result.providerName;
       vo.push({ path: result.asset.filePath, startSec: segment.start });
@@ -679,9 +910,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const cartLabel = cartLabelForUrl(row.product_source_url);
   const ctaBadgeText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning »" : "Klik Keranjang »";
   const ctaQcText = cartLabel === "keranjang kuning" ? "Klik Keranjang Kuning" : "Klik Keranjang";
-  // Add-on promo (cek ulang saat render — kedaluwarsa = drop overlay, lihat lib/promo.ts).
-  const promo = resolvePromo({ priceIdr: row.product_price_idr, promoPriceBeforeIdr: row.promo_price_before_idr,
-    promoEndsAt: row.promo_ends_at, promoStockLeft: row.promo_stock_left });
+  // Add-on promo dari snapshot admission; row produk mutable tidak dibaca lagi.
+  const promo = resolvePromo({ priceIdr: row.product_price_idr, promoPriceBeforeIdr: productSnapshot.promoPriceBeforeIdr,
+    promoEndsAt: productSnapshot.promoEndsAt, promoStockLeft: productSnapshot.promoStockLeft });
   const priceOverlayText = promo ? formatPromoOverlayText(promo) : `Cuma ${formatHargaOverlay(row.product_price_idr)}`;
   let outputPath = "";
   let renderParams = { watermark: true as const, watermarkText: AIGC_WATERMARK_TEXT };
@@ -690,9 +921,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     if (!(await jobs.transition(row.id, "COMPOSITING", { worker: "postgres", retry }))) return;
     const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths, mode,
       voiceoverWavPath: mode === "embedded" ? geminiVoPath : undefined,
+      voiceoverStartSec,
       vo: mode === "vo" ? vo : undefined, captions, musicPath, durationSec: row.duration_s,
       priceText: priceOverlayText, priceInCaptionMode: Boolean(promo) && mode === "caption", ctaText: ctaBadgeText,
-      demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: video.providerName });
+      demoRange: [demo.start, demo.end], ctaRange: [cta.start, cta.end], providerVideo: effectiveVideoProvider });
     outputPath = composite.outPath; renderParams = composite.renderParams;
 
     // Overlay klaim dipasang SEBELUM endcard, supaya klaim menempel di konten
@@ -704,6 +936,24 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       });
     }
 
+    // PACKSHOT PENUTUP FOTO ASLI (keputusan Brian 20 Agu, jalan keluar A).
+    //
+    // Sesudah overlay klaim, sebelum endcard: urutannya konten -> produk ->
+    // brand. Label produk dijamin benar karena segmen ini tidak pernah
+    // dikirim ke model video — ia foto yang diunggah penjual sendiri.
+    let ekorPackshotSec = 0;
+    let sidikPackshot: string | undefined;
+    const pack = await appendPackshotUntukQc({
+      videoPath: outputPath, workDir, fotoPath: primaryRef, musicPath,
+      productCategory: row.product_category, visualSubjectPolicy: spec.visualSubjectPolicy,
+    });
+    outputPath = pack.path;
+    ekorPackshotSec = pack.ekorSec;
+    sidikPackshot = pack.sidik;
+    if (pack.ditambahkan) {
+      console.log(`[job ${row.id.slice(0, 8)}] packshot penutup foto asli ditambahkan (${pack.ekorSec} dtk) — label dijamin benar`);
+    }
+
     // Endcard ber-brand, SESUDAH compositing dan SEBELUM QC.
     //
     // Sesudah compositing: graf filter compositor sudah panjang dan sudah
@@ -713,20 +963,32 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // Sebelum QC: QC memeriksa durasi, dan menambah 2 detik SETELAH
     // pemeriksaan akan membuat berkas yang dikirim ke brand berbeda dari yang
     // diperiksa — persis jenis celah yang membuat pemeriksaan jadi teater.
+    let ekorEndcardSec = 0;
     if (row.org_id) {
       const kit = await loadBrandKit(row.org_id);
       if (kit && (kit.logoPath || kit.tagline)) {
+        const sebelum = outputPath;
         outputPath = await appendEndcard({
           videoPath: outputPath, workDir,
           logoPath: kit.logoPath, colorHex: kit.color ?? ENDCARD_DEFAULT_COLOR, tagline: kit.tagline,
         });
+        // appendEndcard mengembalikan video ASLI kalau gagal/tidak ada isi —
+        // jadi ekornya dihitung dari apakah berkasnya benar-benar berubah,
+        // bukan dari niat memanggilnya.
+        if (outputPath !== sebelum) ekorEndcardSec = ENDCARD_DURASI_DTK;
       }
     }
     if (!(await jobs.transition(row.id, "QC_CHECK", { worker: "postgres" }))) return;
-    qc = await runQc({ filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
+    qc = await postgresQcRunner({ filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
+      // Ekor yang SENGAJA ditambahkan sesudah konten — QC-05 memakai ini
+      // supaya video yang lengkap tidak dinilai kelebihan durasi, dan QC-10
+      // memakainya untuk mengeluarkan segmen packshot dari jendela OCR.
+      ekorDisengajaSec: ekorPackshotSec + ekorEndcardSec,
+      packshotSidik: sidikPackshot,
       // QC-11: batas orang datang DARI SPEC yang dipakai merender, bukan
       // diturunkan ulang di QC — satu aturan, satu tempat.
       maxPeople: spec.maxPeople,
+      visualSubjectPolicy: spec.visualSubjectPolicy,
       presenterLipsync: isPresenterLipsync,
       finalTexts: [...segments.map((segment) => segment.text), formatHargaOverlay(row.product_price_idr), `Cek ${cartLabel}`, AIGC_WATERMARK_TEXT],
       hookFamily: row.script_hook_family, register: row.script_register, productName: row.product_name, productCategory: row.product_category, priceIdr: row.product_price_idr,
@@ -773,6 +1035,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
         const tmpDir = path.join(workDir, `qcfix-${idx}`);
         fs.mkdirSync(tmpDir, { recursive: true });
         try {
+          await pastikanManifestSebelumEfek();
           const ulang = await generateVideoWithFailover({ ...specSiap, shots: [specSiap.shots[idx]] }, tmpDir);
           await jobs.addCost(row.id, ulang.costIdr);
           fs.copyFileSync(ulang.assets[0].filePath, clipPaths[idx]);
@@ -795,6 +1058,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     }
   }
   if (!qc?.passed) throw new Error("QC tidak menghasilkan output lulus.");
+  await pastikanManifestSebelumEfek();
   if (!(await jobs.transition(row.id, "LABELING", { watermark: renderParams.watermarkText }))) return;
   const relVideo = path.relative(config.storageDir, outputPath).split(path.sep).join("/");
   await persistReadyOutput(row, jobs, pool, relVideo, outputPath, qc);
@@ -807,14 +1071,38 @@ async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: 
   if (!(await jobs.upsertOutput({ jobId: row.id, userId: row.user_id, videoUrl: relVideo, caption: row.caption, hashtags: row.hashtags,
     suggestedPostTime: extras.suggested_post_time, complianceChecklist: JSON.stringify(extras.compliance_checklist) }))) throw new Error("Kepemilikan output job tidak valid.");
   await pool.query("UPDATE jobs SET qc_result=$1,output_url=$2,completed_at=$3 WHERE id=$4", [JSON.stringify(qc), relVideo, at(), row.id]);
+  // Bekukan korelasi request provider ke arsip SEBELUM memo retry dibersihkan.
+  // provider_tasks sengaja bersifat sementara agar task kedaluwarsa tidak
+  // pernah terpakai ulang, tetapi menghapusnya dulu membuat satu job sukses
+  // mustahil dibuktikan ujung-ke-ujung: prompt/model dan verdict/artifact ada,
+  // sedangkan request yang menghasilkan shot-nya sudah hilang. Salinan ini
+  // read-only untuk audit; TaskMemo hanya dibersihkan setelah salinan lengkap
+  // benar-benar masuk ke satu row archive.
+  let requestCorrelationArchived = false;
+  try {
+    requestCorrelationArchived = await freezeProviderRequestCorrelation(pool, row.id);
+    if (!requestCorrelationArchived) {
+      console.warn(`[job ${row.id.slice(0, 8)}] korelasi request provider tidak lengkap; memo dipertahankan untuk recovery`);
+    }
+  } catch (err) {
+    // Sama dengan arsip prompt/QC-F1 lain: audit tidak boleh membatalkan video
+    // yang sudah selesai dan dibayar. Verifier terpisah akan fail-closed bila
+    // korelasi ini hilang atau ambigu.
+    console.warn(`[job ${row.id.slice(0, 8)}] korelasi request provider gagal diarsipkan (diabaikan): ${(err as Error).message}`);
+  }
+  // READY baru dipublikasikan setelah usaha pembekuan audit. Bila proses mati
+  // sebelumnya, job masih dapat dipulihkan; tidak ada terminal READY yang
+  // diam-diam kehilangan kesempatan korelasinya karena crash window.
   if (!(await jobs.transition(row.id, "READY", { worker: "postgres" }))) throw new Error("Job tidak lagi aktif saat finalisasi output.");
-  // Job selesai: ingatan task tidak berguna lagi, dan membiarkannya justru
+  // Job selesai: ingatan task yang SUDAH dibekukan tidak berguna lagi, dan membiarkannya justru
   // berbahaya — task lama yang masih tercatat bisa terpakai ulang kalau job
   // ini pernah disentuh lagi. Kegagalan pembersihan tidak boleh menggagalkan
   // job yang sudah sukses; barisnya kedaluwarsa sendiri lewat batas umur.
-  await pgTaskMemo.clear(row.id).catch((err) =>
-    console.warn(`[job ${row.id.slice(0, 8)}] gagal bersihkan ingatan task: ${(err as Error).message}`)
-  );
+  if (requestCorrelationArchived) {
+    await pgTaskMemo.clear(row.id).catch((err) =>
+      console.warn(`[job ${row.id.slice(0, 8)}] gagal bersihkan ingatan task: ${(err as Error).message}`)
+    );
+  }
 }
 
 /** The Redis worker owns timeout recovery while PostgreSQL is the runtime. */

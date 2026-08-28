@@ -1,0 +1,11 @@
+OBSERVED_START_UTC=2026-08-24T06:01:48Z
+OBSERVED_START_LOCAL=2026-08-24T13:01:48+0700 Asia/Jakarta
+{
+  "code": "UNAUTHORIZED",
+  "message_en": "Not authenticated. Please log in first.",
+  "message_id": "Kamu belum masuk. Login dulu ya, pakai nomor HP.",
+  "retryable": false
+}
+HTTP_STATUS=401
+PIPESTATUS=0 0
+OBSERVED_END_UTC=2026-08-24T06:01:48Z

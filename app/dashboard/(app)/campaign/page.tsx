@@ -27,6 +27,11 @@ import { JANJI_WAKTU } from "@/lib/janji-waktu";
 
 interface ProductPayload {
   product_id: string; name: string; price_idr: number; category: string;
+  product_type: string | null;
+  product_type_confirmation: {
+    state: "CONFIRMED"; actor_id: string; confirmed_at: string;
+    version: 1; provenance: "USER_SELF_ASSERTION";
+  } | null;
   product_visual_desc: string | null; brand_brief: string | null;
   promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
   source_url: string | null; images: string[]; image_urls: string[];
@@ -209,6 +214,8 @@ export default function CampaignPage() {
 
   const [kind, setKind] = useState<Kind>("affiliate");
   const [urlInput, setUrlInput] = useState("");
+  const [productType, setProductType] = useState("");
+  const [productTypeConfirmed, setProductTypeConfirmed] = useState(false);
   const [product, setProduct] = useState<ProductPayload | null>(null);
 
   const [format, setFormat] = useState<Format>("hands_only");
@@ -351,9 +358,14 @@ export default function CampaignPage() {
 
   // --- Langkah 2: link -> tarik data ---
   async function handleExtract(useManual: boolean) {
+    if (!productType.trim()) { setError("Isi jenis produk fisiknya dulu."); return; }
+    if (!productTypeConfirmed) { setError("Konfirmasi dulu bahwa jenis produk yang kamu isi sudah benar."); return; }
     setLoading(true); setError(null); setNotice(null);
     try {
-      const payload = useManual ? { name: "Produk baru", price_idr: 0 } : { url: urlInput.trim() };
+      const typeConfirmation = { product_type: productType.trim(), confirmed_product_type: productType.trim() };
+      const payload = useManual
+        ? { name: "Produk baru", price_idr: 0, ...typeConfirmation }
+        : { url: urlInput.trim(), ...typeConfirmation };
       const res = await apiFetch<{ extracted: boolean; message?: string } & Partial<ProductPayload>>(
         "/api/dashboard/campaign/product", { json: payload }
       );
@@ -399,10 +411,14 @@ export default function CampaignPage() {
    *  sini akan mengunggah foto ke produk yang salah (atau ke null). */
   async function handleMulaiDariFoto(files: FileList) {
     if (files.length === 0) return;
+    if (!productType.trim()) { setError("Isi jenis produk fisiknya dulu sebelum upload."); return; }
+    if (!productTypeConfirmed) { setError("Konfirmasi dulu bahwa jenis produk yang kamu isi sudah benar."); return; }
     setLoading(true); setError(null); setNotice(null);
     try {
       const dibuat = await apiFetch<{ extracted: boolean; message?: string } & Partial<ProductPayload>>(
-        "/api/dashboard/campaign/product", { json: { name: "Produk baru", price_idr: 0 } }
+        "/api/dashboard/campaign/product", { json: {
+          name: "Produk baru", price_idr: 0, product_type: productType.trim(), confirmed_product_type: productType.trim(),
+        } }
       );
       if (!dibuat.extracted) { setNotice(dibuat.message ?? "Gagal menyiapkan produk."); return; }
       const produk = dibuat as ProductPayload;
@@ -481,7 +497,8 @@ export default function CampaignPage() {
         method: "PATCH",
         json: {
           product_id: product.product_id, name: product.name, price_idr: product.price_idr,
-          category: product.category, product_visual_desc: product.product_visual_desc ?? "",
+          category: product.category, product_type: product.product_type,
+          product_visual_desc: product.product_visual_desc ?? "",
           brand_brief: product.brand_brief ?? "",
           promo_price_before_idr: product.promo_price_before_idr ?? null,
           promo_ends_at: product.promo_ends_at ?? null,
@@ -795,6 +812,16 @@ export default function CampaignPage() {
           </div>
 
           <div className="space-y-4 rounded-2xl border border-zinc-200 bg-white p-6 shadow-sm">
+            <input
+              value={productType}
+              onChange={(e) => { setProductType(e.target.value); setProductTypeConfirmed(false); }}
+              placeholder="Jenis produk fisik (mis. pasta gigi, serum wajah)"
+              className="w-full rounded-xl border border-zinc-300 px-4 py-3 text-sm text-zinc-900 transition-colors focus:border-amber-500 focus:outline-none"
+            />
+            <label className="flex items-start gap-3 rounded-xl border border-zinc-200 p-3 text-sm text-zinc-700">
+              <input type="checkbox" checked={productTypeConfirmed} onChange={(e) => setProductTypeConfirmed(e.target.checked)} className="mt-0.5 h-4 w-4" />
+              <span>Saya mengonfirmasi jenis produk ini benar. Ini pernyataan pengguna, bukan verifikasi staf.</span>
+            </label>
             <input
               value={urlInput}
               onChange={(e) => setUrlInput(e.target.value)}

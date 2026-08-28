@@ -1,0 +1,67 @@
+{
+  "observed_at": "2026-08-26T11:37:04Z",
+  "scope": "docs/evidence-only post-E2 ceiling recompute",
+  "score": {
+    "source_board_rows": 13,
+    "source_board_sum": 77,
+    "receipt_rows": 13,
+    "receipt_sum": 77,
+    "counterexample_rows": 12,
+    "counterexample_sum": 70,
+    "normalized_rounded": 59,
+    "retained_ceiling": 58,
+    "reported_score": 58,
+    "row_deltas_nonzero": 0,
+    "pass": true
+  },
+  "closed_conditions": [
+    "post_e2_exact_web_worker_parity",
+    "valid_product_admission_worker_output_exact_deploy"
+  ],
+  "remaining_open_conditions": [
+    "legacy_paired_db_r2_audit",
+    "c9_c12_aggregate",
+    "ocr_policy_and_coverage",
+    "representative_paid_provider_and_production_e2e",
+    "production_payment_legal_incident_dr"
+  ],
+  "accepted_bus": {
+    "task": "P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826",
+    "sha": "39140dd2485ec5c679477008cb61780a3edb6a43",
+    "owner_id": "builder-parity-e2e-20260826",
+    "messages_checked": 2,
+    "one_pass_and_done": true,
+    "stale_at_builder_consumption": false,
+    "pass": true
+  },
+  "source_evidence": {
+    "deployed_application_sha": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+    "source_checksums_checked": 13,
+    "web_worker_exact_parity": true,
+    "canonical_admission_http": 201,
+    "worker_terminal": "READY",
+    "r2_deliverable_present": true,
+    "provider_calls": 0,
+    "payment_value": 0,
+    "authoritative_cleanup": true,
+    "pass": true
+  },
+  "ancestry": {
+    "relations_checked": 5,
+    "fatal_lookups": 0,
+    "pass": true
+  },
+  "static_validation": {
+    "json_files_checked": 4,
+    "json_invalid": 0,
+    "markdown_links_missing": 0,
+    "secret_like_hits": 0,
+    "git_diff_check": "PASS"
+  },
+  "next_autonomous_task": "P0-C2-TYPE-MISMATCH-RED-CONTRACT-20260826",
+  "remote_calls": "NOT_RUN",
+  "deploy_or_provider_calls": "NOT_RUN",
+  "production_or_payment_mutation": "NOT_RUN",
+  "full_regression": "NOT_RUN_DOCS_ONLY",
+  "overall": "PASS"
+}

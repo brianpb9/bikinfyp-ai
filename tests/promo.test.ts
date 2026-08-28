@@ -120,24 +120,14 @@ test("injeksi promo di tier bersuara: degradasi otomatis, tetap lolos validator"
     const lain = v.validation.errors.map((e) => e.rule).filter((r) => !["L-05", "L-19", "S-09", "S-04"].includes(r));
     assert.deepEqual(lain, [], `${v.hook_family}: ${JSON.stringify(v.validation.errors)}`);
   }
-  // KONSEKUENSI NYATA batas 1,5 kata/detik, bukan tes yang ditambal.
-  //
-  // Harga coret ("dari 120 ribu jadi 85 ribu") menambah 6 kata. Pada jendela
-  // lama 25-30 kata ia masih muat; pada 22 kata tidak pernah muat lagi untuk
-  // naskah bersuara 15 detik. Tangga degradasi promo bekerja persis seperti
-  // dirancang — ia melepas elemen satu per satu — dan sekarang berakhir di
-  // "tanpa promo sama sekali".
-  //
-  // Yang dijaga: promo DILEPAS, bukan diselipkan sampai naskahnya meluber.
+  // Copy authored yang ringkas kini menyisakan ruang sah untuk harga coret.
+  // Yang dijaga: promo hanya masuk bila hasil akhirnya tetap <=22 kata dan
+  // lolos validator; perubahan copy tidak boleh menghidupkan overflow lama.
   const anyStrike = shortName.some((v) => v.segments.some((s) => s.text.includes("dari 120 ribu jadi 85 ribu")));
-  assert.equal(anyStrike, false,
-    "pada batas 22 kata harga coret memang tidak muat; kalau ini mulai lolos, " +
-    "berarti jendela kata berubah dan keputusan produk soal promo harus ditinjau ulang");
-
-  // Dan buktinya bukan sekadar 'tidak ada': elemen promo memang pernah dicoba
-  // dan gugur karena panjang, bukan karena promonya tidak pernah dirakit.
+  assert.equal(anyStrike, true, "copy ringkas seharusnya memuat harga coret tanpa overflow");
   const panjang = shortName.map((v) => v.segments.map((s) => s.text).join(" ").split(/\s+/).length);
-  assert.ok(panjang.every((n) => n > 22), `naskah dasar memang sudah di atas 22 kata: ${panjang.join(", ")}`);
+  assert.ok(panjang.every((n) => n <= 22), `promo bersuara melampaui 22 kata: ${panjang.join(", ")}`);
+  assert.ok(shortName.every((v) => v.validation.passed), "promo ringkas harus lolos validator");
 });
 
 test("semua 16 keluarga hook aman disuntik promo (silent 15s + 30s)", async () => {

@@ -1,0 +1,104 @@
+{
+  "schema": "managed-stream-b-evidence/v1",
+  "receipt_id": "STREAM-B-MANAGED-20260828",
+  "evidence_tier": "MANAGED_STAGING",
+  "origin": "https://racun-ai-staging-web.onrender.com",
+  "exact_deployed_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "deploy_id": "dep-da85dqjtqb8s73du3tj0",
+  "safety": {
+    "payments_live": false,
+    "payments_env": "sandbox",
+    "resend_or_email_provider_called": false,
+    "generation_provider_called": false,
+    "payment_provider_called": false,
+    "real_money_idr": 0,
+    "canonical_worktree_edited": false,
+    "agent_bus_touched": false
+  },
+  "otp": {
+    "fixture_email": "stream-b-58555520-623f-4255-97ae-37a6b9779f8b@staging.invalid",
+    "fixture_user_id": "ae527d6e-e76a-43fe-b5b9-036db660f7e1",
+    "success_http": 200,
+    "authenticated_me_http": 200,
+    "replay_http": 410,
+    "replay_code": "OTP_INVALID/no_code",
+    "wrong_code_http": 401,
+    "wrong_code_attempts_left": 4,
+    "recovery_http": 200,
+    "google_cancel_http": 302,
+    "google_cancel_location": "/onboarding?google_error=cancelled",
+    "otp_rows_after_flow": 0,
+    "verified_audit_rows": 2,
+    "status": "PASS_MANAGED_ZERO_PROVIDER"
+  },
+  "dashboard": {
+    "authenticated_dashboard_http": 200,
+    "authenticated_campaign_http": 200,
+    "authenticated_org_api_http": 200,
+    "dashboard_render_request_id": "34435925-c16b-4a6c",
+    "campaign_render_request_id": "d1d457c7-747e-48d1",
+    "downloaded_next_js_chunks": 9,
+    "downloaded_next_js_bytes": 491069,
+    "ssr_and_assets_status": "PASS",
+    "client_hydration_execution_status": "BLOCKED_BROWSER_RUNTIME_BOOTSTRAP",
+    "mobile_375_keyboard_loading_failure_recovery_status": "BLOCKED_BROWSER_RUNTIME_BOOTSTRAP",
+    "claim_limit": "SSR and asset retrieval are not promoted to executed hydration or 375 visual proof."
+  },
+  "prompt_archive": {
+    "managed_rows_observed": 0,
+    "fully_correlated_rows_observed": 0,
+    "new_trace": "NOT_RUN",
+    "reason": "No existing deployed zero-spend route binds prompt->model->verdict->artifact->request; canonical next rung explicitly requires a production real-job E2E. Provider/spend path was not authorized for this stream."
+  },
+  "cleanup": {
+    "otp_rows": 0,
+    "temporary_orgs": 0,
+    "temporary_memberships": 0,
+    "net_credit_ledger": 0,
+    "append_only_test_ledger_rows": 2,
+    "auditable_test_user_retained": 1,
+    "audit_rows_retained": 4,
+    "db_allowlist_after": [],
+    "history_preserved": true
+  },
+  "row_point_candidates": [
+    {
+      "row": "Auth intent & failure path",
+      "current": 7,
+      "candidate": "REVIEWER_MAPPING_REQUIRED",
+      "evidence": "managed OTP success/reject/replay/cancel/recovery",
+      "points_claimed": 0
+    },
+    {
+      "row": "Mobile UI 375",
+      "current": 7,
+      "candidate": "NONE",
+      "reason": "browser did not execute",
+      "points_claimed": 0
+    },
+    {
+      "row": "Hydration/interaction canary CI",
+      "current": 8,
+      "candidate": "NONE",
+      "reason": "SSR/assets only; hydration not executed",
+      "points_claimed": 0
+    },
+    {
+      "row": "Prompt/verdict archive",
+      "current": 8,
+      "candidate": "NONE",
+      "reason": "zero-spend correlation path absent",
+      "points_claimed": 0
+    }
+  ],
+  "slot_candidates": [
+    {
+      "slot": "B",
+      "status": "PARTIAL_EVIDENCE_CANDIDATE",
+      "closed": false,
+      "covered": "managed OTP success/failure/replay/cancel/recovery",
+      "missing": "OTP-to-delivery/refund E2E, executed 375 browser, controlled generation/delivery/refund"
+    }
+  ],
+  "result": "PASS_PARTIAL_NO_SCORE_CLAIM"
+}

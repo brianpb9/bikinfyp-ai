@@ -139,7 +139,26 @@ test("upload paralel memakai object key UUID yang berbeda dan hasil wajib WebP",
     const keys = [...a, ...b];
     assert.equal(new Set(keys).size, 4);
     assert.ok(keys.every((key) => /^uploads\/product-proof\/[0-9a-f-]+\.webp$/.test(key)));
-    assert.equal(fake.values.size, 4);
+
+    // SETIAP FOTO PLUS SIDECAR-nya (P0-B1, 21 Agu).
+    //
+    // Asersi lama di sini `fake.values.size === 4` — "storage berisi tepat
+    // empat objek". Itu benar selama jalur org tidak menerbitkan bukti sama
+    // sekali, dan justru ketiadaan bukti itulah cacat yang ditutup P0-B1:
+    // produk enterprise tidak punya satu pun sidecar, jadi begitu resolver
+    // ketat menyala mereka terbrick seluruhnya.
+    //
+    // Diperkuat, bukan dilonggarkan: yang dituntut sekarang delapan objek YANG
+    // BERPASANGAN — setiap kunci foto wajib punya `<kunci>.meta.json`. Asersi
+    // ini karena itu menjaga invariant baru di call-site yang sama, bukan
+    // sekadar menaikkan angka supaya hijau.
+    assert.equal(fake.values.size, 8, "empat foto wajib disertai empat sidecar");
+    for (const key of keys) {
+      assert.ok(
+        fake.values.has(`${key}.meta.json`),
+        `foto ${key} tersimpan tanpa bukti kelayakan — produk dari jalur ini akan terbrick`
+      );
+    }
   } finally {
     setMediaStorageForTests();
   }

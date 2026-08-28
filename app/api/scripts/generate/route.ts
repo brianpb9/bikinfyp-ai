@@ -1,23 +1,42 @@
-import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, now, uuid, audit, type ProductRow } from "@/lib/db";
-import { generateScripts, TemplateTidakDisajikan } from "@/lib/script-engine";
+import { TemplateTidakDisajikan, IdeTidakTersedia, IdeGateGagal } from "@/lib/script-engine";
 import { amplopValidasi } from "@/lib/script-engine/admisi";
 import { REGISTERS, type Register } from "@/lib/script-engine/registers";
-import { pgAudit, postgresRuntimeEnabled, smokeCreateScripts, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { pgAudit, postgresRuntimeEnabled } from "@/lib/postgres/smoke-runtime";
 import { normalizeHookLevel } from "@/lib/config/hooks";
 import { tierMasihDijual } from "@/lib/paket-kredit";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
-import { allowRate } from "@/lib/rate-limit";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
+import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
+import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
+import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 // POST /api/scripts/generate {product_id, register, emotion, format} -> 3 skrip tervalidasi.
+/**
+ * Ide yang dipilih pengguna dari daftar kandidat (IDEA_GATE_FAILED).
+ *
+ * Diperiksa seadanya di sini — bentuk lengkapnya sudah dijaga skema Zod di
+ * script-engine. Yang penting: hanya objek dengan one_liner yang dianggap ide,
+ * supaya `{"idea": true}` tidak menyelinap jadi "ide terpilih" dan mematikan
+ * gerbang yang baru saja kita pasang.
+ */
+function ideDipilihDariBody(body: Record<string, unknown>) {
+  const raw = body.idea;
+  if (!raw || typeof raw !== "object") return null;
+  const one = (raw as { one_liner?: unknown }).one_liner;
+  if (typeof one !== "string" || one.trim().length < 10) return null;
+  return raw as never;
+}
+
 export async function POST(req: Request) {
+  let evidenceLease: Awaited<ReturnType<typeof acquireAdmissionReferenceEvidence>> | null = null;
   try {
-    const user = await getAuthUser(req);
+    const routeDeps = admissionRouteDependencies();
+    const user = await routeDeps.getAuthUser(req);
     if (!user) throw ERR.UNAUTHORIZED();
 
     // BATAS 5 PER JAM PER PENGGUNA.
@@ -32,7 +51,7 @@ export async function POST(req: Request) {
     // dibatasi perbuatan orangnya. Fail-open mengikuti allowRate — memblokir
     // orang yang membayar karena Redis ngadat lebih merugikan daripada
     // meloloskan beberapa permintaan ekstra.
-    if (!(await allowRate("skrip:generate", user.id, 5, 3600))) {
+    if (!(await routeDeps.allowRate("skrip:generate", user.id, 5, 3600))) {
       throw ERR.BAD_REQUEST(
         "Sudah 5 kali buat skrip dalam sejam terakhir. Tunggu sebentar ya — tiap permintaan menulis naskah baru dari awal.",
         "Rate limited: scripts/generate 5/hour"
@@ -64,21 +83,65 @@ export async function POST(req: Request) {
       throw ERR.BAD_REQUEST("Register-nya pilih salah satu: bunda, bestie, genz, atau netral.", "Invalid register.");
     const durationSec = [15, 30, 45].includes(Number(body.duration_s)) ? Number(body.duration_s) : 15;
 
-    const product = postgresRuntimeEnabled()
-      ? await smokeGetProduct(user.id, productId)
+    const product = routeDeps.postgresRuntimeEnabled()
+      ? await routeDeps.smokeGetProduct(user.id, productId)
       : getDb().prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(productId, user.id) as ProductRow | undefined;
     if (!product) throw ERR.NOT_FOUND("Produknya");
     // Produk organisasi WAJIB lewat dashboard (RBAC belanja + gerbang review
     // scene + library org). Lihat pastikanBukanProdukOrg.
     pastikanBukanProdukOrg(product);
 
+    // Keep E5 serialized until provider + script persistence finish. In the
+    // PostgreSQL runtime the lease additionally holds the product row FOR
+    // SHARE; SQLite coordinates through the same keyed lock as DELETE.
+    // SQLite callbacks run only after the shared product lock is acquired.
+    // Never close over the pre-lock row: E3 may have re-quarantined it while
+    // this request waited for the lease.
+    const loadLockedSqliteProduct = () => {
+      const locked = getDb().prepare("SELECT * FROM products WHERE id=? AND user_id=? AND org_id IS NULL")
+        .get(product.id, user.id) as ProductRow | undefined;
+      if (!locked) throw ERR.NOT_FOUND("Produknya");
+      return locked;
+    };
+    evidenceLease = await acquireAdmissionReferenceEvidence({
+      productId: product.id,
+      owner: { kind: "user", id: user.id },
+      boundary: "A7",
+      loadSqliteCandidateRels: () => JSON.parse(loadLockedSqliteProduct().images || "[]") as string[],
+      loadSqliteProductType: () => {
+        const locked=loadLockedSqliteProduct();
+        return {
+          category: locked.category,
+          product_type_token: locked.product_type_token ?? null,
+          product_type_confirmed_token: locked.product_type_confirmed_token ?? null,
+          product_type_confirmed_by: locked.product_type_confirmed_by ?? null,
+          product_type_confirmed_at: locked.product_type_confirmed_at ?? null,
+          product_type_version: locked.product_type_version ?? null,
+          product_type_state: locked.product_type_state ?? "QUARANTINED",
+          category_review_state: locked.category_review_state ?? "QUARANTINED",
+          category_review_reason: locked.category_review_reason ?? "CATEGORY_UNKNOWN",
+          category_reviewed_by: locked.category_reviewed_by ?? null,
+          category_reviewed_role: locked.category_reviewed_role ?? null,
+          category_reviewed_at: locked.category_reviewed_at ?? null,
+          category_review_version: locked.category_review_version ?? 0,
+        };
+      },
+    });
+    const lockedProductType = evidenceLease.productType;
+    assertCategoryReviewClear({
+      state: lockedProductType?.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+      reason: lockedProductType?.category_review_reason as never,
+      version: lockedProductType?.category_review_version ?? 0,
+    }, lockedProductType?.category);
+    const lockedCategory = String(lockedProductType?.category ?? product.category);
+
     // Jaring pengaman nama (canary temuan #4): nama sah 4-6 kata bisa memakan
     // jendela kata L-05/S-09 sampai penulis mustahil lolos. Enterprise sudah
     // punya jaring ini; retail-lah yang kena di canary — tangga asli -> bersih
     // -> nama panggung merek, berhenti di anak tangga pertama yang lolos.
-    const jalan = (namaProduk: string) => generateScripts({
+    const jalan = (namaProduk: string) => routeDeps.generateScripts({
       product: {
-        id: product.id, name: namaProduk, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
+        id: product.id, name: namaProduk, price_idr: product.price_idr, category: lockedCategory, sourceUrl: product.source_url,
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
       },
       register,
@@ -87,6 +150,10 @@ export async function POST(req: Request) {
       durationSec,
       hookLevel,
       hookFamilies: hookFamilies.length ? hookFamilies : undefined,
+      // IDE PILIHAN PENGGUNA dari layar "belum ada ide yang lolos". Bentuknya
+      // divalidasi skema di pilihIde/petunjukNaskah; yang diperiksa di sini
+      // cuma bahwa ia objek, supaya body sembarangan tidak lolos jadi "ide".
+      ideDipilih: ideDipilihDariBody(body),
     });
     const jaring = await cobaDenganNamaPendek(jalan, product.name);
     const variants = jaring.variants;
@@ -117,8 +184,8 @@ export async function POST(req: Request) {
     const hasilValidasi = (v: typeof variants[number]) =>
       amplopValidasi(v.validation, { script_source: v.script_source, admisi: v.admisi });
     const makeOut = (v: typeof variants[number], id: string) => ({ id, ...v });
-    if (postgresRuntimeEnabled()) {
-      const created = await smokeCreateScripts(user.id, product.id, sah.map((v) => ({
+    if (routeDeps.postgresRuntimeEnabled()) {
+      const created = await routeDeps.smokeCreateScripts(user.id, product.id, sah.map((v) => ({
         hookFamily: v.hook_family, emotion: v.emotion, register: v.register, segments: v.segments,
         caption: v.caption, hashtags: v.hashtags, validationResult: hasilValidasi(v), qualityTier: tier,
         hookLevel,
@@ -147,6 +214,42 @@ export async function POST(req: Request) {
     // Naskah template TIDAK PERNAH disajikan (keputusan Brian 20 Agu). Jawab
     // 503 yang jujur, bukan 500 generik: penyebabnya di sisi kami dan bisa
     // pulih, jadi pengguna berhak tahu ia boleh mencoba lagi.
+    // IDE TERPILIH TIDAK ADA — doktrin yang sama dengan template yang tidak
+    // pernah disajikan. Sampai 20 Agu, Idea Stage yang mati hanya mencatat
+    // peringatan lalu membiarkan penulis bekerja tanpa sudut sama sekali.
+    // GATE IDE GAGAL — ada kandidat, belum ada yang terpilih. BUKAN 503:
+    // mencoba lagi dengan permintaan yang sama akan menghasilkan kegagalan
+    // yang sama. Yang dibutuhkan keputusan manusia, jadi 422 + kandidatnya.
+    if (err instanceof IdeGateGagal) {
+      console.warn(`[naskah] gate ide gagal — ${err.sebabGagal.join(", ")}`);
+      return Response.json(
+        {
+          code: "IDEA_GATE_FAILED",
+          message_id: err.message,
+          message_en: "No idea passed the FYP gate. Pick a candidate or retry idea search.",
+          retryable: false,
+          sebab_gagal: err.sebabGagal,
+          ide_kandidat: err.kandidat,
+        },
+        { status: 422 }
+      );
+    }
+    if (err instanceof IdeTidakTersedia) {
+      console.error(`[naskah] ditolak, Idea Stage mati — ${err.sebabTeknis}`);
+      try {
+        if (postgresRuntimeEnabled()) await pgAudit("script-engine", "naskah.ide_tidak_tersedia", "scripts", null, { sebab: err.sebabTeknis });
+        else audit("script-engine", "naskah.ide_tidak_tersedia", "scripts", null, { sebab: err.sebabTeknis });
+      } catch { /* alarm tidak boleh menelan galat aslinya */ }
+      return Response.json(
+        {
+          code: "IDEA_STAGE_UNAVAILABLE",
+          message_id: err.message,
+          message_en: `Idea stage unavailable: ${err.sebabTeknis}`,
+          retryable: true,
+        },
+        { status: 503 }
+      );
+    }
     if (err instanceof TemplateTidakDisajikan) {
       console.error(`[naskah] ditolak, template tidak disajikan — ${err.sebabTeknis}`);
       // Jejak untuk ALARM operasional: sejak template tidak lagi disajikan,
@@ -168,5 +271,7 @@ export async function POST(req: Request) {
       );
     }
     return errorResponse(err);
+  } finally {
+    await evidenceLease?.release();
   }
 }

@@ -5,10 +5,19 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import crypto from "node:crypto";
 import sharp from "sharp";
 import { config, ensureDirs } from "./config";
 import { mediaStorage } from "./storage";
+import { klasifikasiGambar, KEBIJAKAN_KLASIFIKASI, type HasilKlasifikasi, type JenisGambar } from "./media/klasifikasi-gambar";
+import { assertAuthoritativeLabelResult, type HasilLabel } from "./media/label-terbaca";
+
+let klasifikasiGambarUntukTest: ((path: string) => Promise<HasilKlasifikasi>) | undefined;
+/** Seam deterministik ingestion-test; tidak mengubah classifier produksi. */
+export function setProductImageClassifierForTests(classifier?: (path: string) => Promise<HasilKlasifikasi>): void {
+  klasifikasiGambarUntukTest = classifier;
+}
 
 export const ALLOWED_MIME: Record<string, string> = {
   "image/png": ".png",
@@ -67,36 +76,297 @@ export async function normalizeProductImageBuffer(data: Buffer): Promise<Buffer>
     .webp({ quality: 82, effort: 4 }).toBuffer();
 }
 
+export interface InspectedProductImageBatch {
+  readonly count: number;
+}
+
+type InspectedProductImage = { data: Buffer; labelEvidence: HasilLabel; sha256: string };
+const inspectedBatchPayload = new WeakMap<InspectedProductImageBatch, readonly InspectedProductImage[]>();
+
+/**
+ * Normalize first, then inspect the exact immutable bytes that will be stored.
+ * The opaque batch prevents callers from attaching an upload-byte verdict to
+ * different provider-bound bytes after WebP rotation/resizing/compression.
+ */
+export async function prepareInspectedProductImages(
+  blobs: readonly { mime: string; data: Buffer }[],
+  inspect: (normalizedPath: string, index: number) => Promise<HasilLabel>,
+): Promise<InspectedProductImageBatch> {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "product-image-inspection-"));
+  try {
+    const images: InspectedProductImage[] = [];
+    for (const [index, blob] of blobs.entries()) {
+      const data = await normalizeProductImageBuffer(blob.data);
+      const normalizedPath = path.join(dir, `${index}.webp`);
+      fs.writeFileSync(normalizedPath, data);
+      const labelEvidence = await inspect(normalizedPath, index);
+      assertAuthoritativeLabelResult(labelEvidence);
+      images.push({
+        data,
+        labelEvidence,
+        sha256: crypto.createHash("sha256").update(data).digest("hex"),
+      });
+    }
+    const batch = Object.freeze({ count: images.length });
+    inspectedBatchPayload.set(batch, images);
+    return batch;
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+function inspectedImages(batch: InspectedProductImageBatch | undefined, expected: number): readonly InspectedProductImage[] | null {
+  if (!batch) return null;
+  const images = inspectedBatchPayload.get(batch);
+  if (!images || images.length !== expected || batch.count !== expected) {
+    throw new Error("OCR_INSPECTION_BATCH_INVALID: normalized image evidence is missing or has the wrong length.");
+  }
+  for (const image of images) {
+    const actual = crypto.createHash("sha256").update(image.data).digest("hex");
+    if (actual !== image.sha256) throw new Error("OCR_INSPECTION_BYTES_MUTATED: inspected image bytes changed before persistence.");
+    assertAuthoritativeLabelResult(image.labelEvidence);
+  }
+  return images;
+}
+
 /** Simpan foto ke storage produk. startIndex untuk APPEND ke produk yang sudah
  * punya foto (nama file tidak boleh bertabrakan dengan yang lama). */
+/**
+ * BATAS REFERENSI PER GENERASI — 7, terpisah dari batas unggah (MAX_IMAGES=8).
+ *
+ * Pengguna boleh menyimpan lebih banyak foto di pustakanya daripada yang
+ * dikirim ke model dalam satu generasi. Dua angka berbeda untuk dua hal
+ * berbeda: yang satu kapasitas simpan, yang satu beban satu permintaan render.
+ */
+export const MAKS_REFERENSI_PER_GENERASI = 7;
+
+/** Sidecar metadata di storage — kelayakan dihitung SEKALI saat unggah.
+ *
+ * Disimpan sebagai objek terpisah, bukan kolom DB. Kuncinya `<rel>.meta.json`,
+ * jadi ia ikut ke mana pun berkasnya.
+ *
+ * ALASAN LAMA SUDAH KEDALUWARSA, dan itu dicatat di sini supaya tidak
+ * disalin lagi: pilihan ini semula dibenarkan dengan "migrasi terkunci sampai
+ * rekonsiliasi ledger". Terverifikasi 20 Agu 2026 — migrasi 0030-0032 SUDAH
+ * terpasang sejak 18 Agu (dry-run produksi: would_apply kosong).
+ *
+ * Pilihannya tetap dipertahankan, dengan alasan yang benar: data ini hidup
+ * berdampingan dengan berkasnya di storage, jadi ia tidak perlu jadi utang
+ * skema. Yang berubah cuma alasannya — dan alasan yang salah lebih berbahaya
+ * daripada tidak ada alasan, karena ia dipakai membenarkan keputusan berikutnya.
+ */
+export interface MetaGambar {
+  sha256: string;
+  /**
+   * Termasuk `belum_diperiksa` sejak 21 Agu. Sidecar WAJIB bisa menyimpan
+   * keadaan "tidak bisa diperiksa" apa adanya; kalau ia hanya punya dua vonis,
+   * kegagalan pemeriksaan terpaksa menyamar jadi salah satunya dan bukti yang
+   * berbohong itu jadi permanen. Lihat JenisGambar di lib/media/klasifikasi-gambar.ts.
+   */
+  jenis: JenisGambar;
+  layakReferensi: boolean;
+  rasioAreaTeks: number;
+  jumlahKata: number;
+  alasan: string;
+  /**
+   * Revisi aturan klasifikasi yang MENERBITKAN bukti ini.
+   *
+   * Tanpa field ini, bukti yang dibuat aturan lama tidak bisa dibedakan dari
+   * bukti yang dibuat aturan sekarang — dan aturan yang diperketat tidak akan
+   * pernah berlaku surut. Nilainya selalu diambil dari KEBIJAKAN_KLASIFIKASI,
+   * bukan ditulis literal, supaya penerbit dan penilainya tidak bisa
+   * berselisih.
+   */
+  versiBukti: number;
+  labelOcrStatus: "READABLE" | "UNREADABLE" | "OCR_FAILED";
+  labelOcrVersion: 1;
+}
+
+export const relMeta = (rel: string) => `${rel}.meta.json`;
+
+export async function bacaMetaGambar(rel: string): Promise<MetaGambar | null> {
+  try {
+    const obj = await mediaStorage().get(relMeta(rel));
+    return obj ? (JSON.parse(obj.body.toString("utf8")) as MetaGambar) : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Referensi yang BOLEH dikirim ke model — PROYEKSI dari resolver pusat.
+ *
+ * KARANTINA MENGGANTIKAN BACKFILL MALAS (21 Agu). Versi lama mengklasifikasi
+ * gambar warisan SAAT hendak dipakai jadi referensi, lalu menulis sidecarnya
+ * dari dalam jalur baca. Itu dicabut, dan tiga alasannya masing-masing cukup:
+ *
+ *   - bukti yang dicetak di tengah jalur render tidak pernah dilihat siapa pun.
+ *     Tidak ada rantai kustodi: ia menempel pada bytes apa pun yang kebetulan
+ *     ada di storage detik itu;
+ *   - di produksi jalur baca itu bisa berjalan di runtime TANPA
+ *     ffmpeg/tesseract (service web Render `runtime: node`). Klasifikasi gagal,
+ *     dan vonis kegagalan itu DIBEKUKAN jadi sidecar permanen — foto produk
+ *     yang sah dicap promosi selamanya oleh mesin yang kebetulan tidak punya
+ *     OCR;
+ *   - menulis dari jalur baca membuat operasi baca tidak idempoten.
+ *
+ * Penggantinya: gambar tanpa bukti sah DIKARANTINA — tidak layak, dan jalur
+ * baca tidak menulis apa pun. Bukti hanya diterbitkan di jalur
+ * ingestion/revalidasi yang terbukti punya binernya.
+ *
+ * FUNGSI INI SENGAJA TIPIS. Ia proyeksi dari `resolveApprovedReference`, bukan
+ * aturan kedua: dua jalur baca yang bisa berbeda jawaban adalah cara divergensi
+ * W1/W2 lahir kembali lewat pintu belakang. Pemanggil yang butuh alasan
+ * penolakan memanggil resolvernya langsung.
+ *
+ * BATAS `MAKS_REFERENSI_PER_GENERASI` TIDAK diterapkan di sini. Ia batas satu
+ * PERMINTAAN RENDER, bukan batas kelayakan — dan menerapkannya di sini membuat
+ * fungsi ini berbeda jawaban dari resolver begitu produk punya lebih dari tujuh
+ * foto sah. Pembatasan itu milik pemanggil yang menyusun payload generasi.
+ */
+export async function referensiLayak(rels: string[]): Promise<string[]> {
+  const { resolveApprovedReference } = await import("./product-truth");
+  const hasil = await resolveApprovedReference(rels);
+  return hasil.tersetujui.map((r) => r.rel);
+}
+
+/**
+ * Menerbitkan sidecar untuk bytes yang BARU SAJA disimpan.
+ *
+ * Satu-satunya penerbit bukti di berkas ini, dan sengaja begitu: selama
+ * penerbitan tersebar, setiap penulis bisa punya aturannya sendiri tentang apa
+ * yang masuk ke sidecar.
+ *
+ * KONTRAK HASH: sha256 dihitung dari BYTES YANG BENAR-BENAR DISIMPAN, bukan
+ * dari unggahan asli sebelum normalisasi WebP.
+ *
+ * KEGAGALAN KLASIFIKASI BUKAN VONIS. Kalau `klasifikasiGambar` sendiri
+ * melempar, yang ditulis `belum_diperiksa` — bukan `promotional_graphic`.
+ * `klasifikasiGambar` sudah menangani kegagalannya sendiri dengan cara itu;
+ * blok tangkap di sini hanya jaring untuk kegagalan di luar dugaannya.
+ */
+export async function tulisSidecar(
+  rel: string,
+  bytesTersimpan: Buffer,
+  absLokal: string,
+  // Bisa disuntik SUPAYA JALUR TANGKAP DI BAWAH BISA DIUJI. `klasifikasiGambar`
+  // sendiri dikontrak tidak pernah menolak, jadi tanpa suntikan ini blok
+  // tangkapnya tidak terjangkau test mana pun — dan cabang yang tidak bisa
+  // diuji adalah cabang yang diam-diam salah.
+  klasifikasi: (p: string) => Promise<HasilKlasifikasi> = klasifikasiGambar,
+  labelEvidence?: HasilLabel,
+): Promise<MetaGambar> {
+  const sha256 = crypto.createHash("sha256").update(bytesTersimpan).digest("hex");
+  let meta: MetaGambar;
+  try {
+    const k = await klasifikasi(absLokal);
+    meta = {
+      sha256,
+      jenis: k.jenis,
+      layakReferensi: k.layakReferensi,
+      rasioAreaTeks: k.rasioAreaTeks,
+      jumlahKata: k.jumlahKata,
+      alasan: k.alasan,
+      versiBukti: KEBIJAKAN_KLASIFIKASI.versiBukti,
+      labelOcrStatus: labelEvidence?.status === "READABLE" && labelEvidence.evidenceVersion === 1
+        ? "READABLE"
+        : labelEvidence?.status === "UNREADABLE" && labelEvidence.evidenceVersion === 1
+          ? "UNREADABLE"
+          : "OCR_FAILED",
+      labelOcrVersion: 1,
+    };
+  } catch (err) {
+    meta = {
+      sha256,
+      jenis: "belum_diperiksa",
+      layakReferensi: false,
+      rasioAreaTeks: 0,
+      jumlahKata: 0,
+      alasan: `Kami belum bisa memeriksa gambar ini: ${(err as Error).message}`,
+      versiBukti: KEBIJAKAN_KLASIFIKASI.versiBukti,
+      labelOcrStatus: "OCR_FAILED",
+      labelOcrVersion: 1,
+    };
+  }
+  await mediaStorage().put(relMeta(rel), Buffer.from(JSON.stringify(meta)), "application/json");
+  return meta;
+}
+
 export async function saveProductImages(
   productId: string,
   blobs: { mime: string; data: Buffer }[],
-  startIndex = 0
+  startIndex = 0,
+  inspectedBatch?: InspectedProductImageBatch,
 ): Promise<string[]> {
   ensureDirs();
   const dir = path.join(config.storageDir, "uploads", productId);
   fs.mkdirSync(dir, { recursive: true });
   const rels: string[] = [];
-  for (let i = 0; i < blobs.length; i++) {
-    const idx = startIndex + i;
-    const ext = ALLOWED_MIME[blobs[i].mime] ?? ".png";
-    let rel = path.join("uploads", productId, `${idx}${ext}`).split(path.sep).join("/");
-    let abs = path.join(config.storageDir, rel);
-    let normalized: Buffer | null = null;
-    try {
-      normalized = await normalizeProductImageBuffer(blobs[i].data);
-      rel = path.join("uploads", productId, `${idx}.webp`).split(path.sep).join("/");
-      abs = path.join(config.storageDir, rel);
-    } catch {
-      /* kompresi gagal tidak fatal — file asli tetap dipakai */
+  // Berkas lokal yang ditulis sepanjang jalan. Di mode r2 ia staging yang
+  // dibuang setelah put; di mode filesystem ia berkasnya sendiri. Dicatat
+  // supaya rollback tahu apa yang harus dibersihkan.
+  const lokal: string[] = [];
+  const inspected = inspectedImages(inspectedBatch, blobs.length);
+  try {
+    for (let i = 0; i < blobs.length; i++) {
+      const idx = startIndex + i;
+      const ext = ALLOWED_MIME[blobs[i].mime] ?? ".png";
+      let rel = path.join("uploads", productId, `${idx}${ext}`).split(path.sep).join("/");
+      let abs = path.join(config.storageDir, rel);
+      let normalized: Buffer | null = inspected?.[i].data ?? null;
+      if (normalized) {
+        rel = path.join("uploads", productId, `${idx}.webp`).split(path.sep).join("/");
+        abs = path.join(config.storageDir, rel);
+      } else {
+        try {
+          normalized = await normalizeProductImageBuffer(blobs[i].data);
+          rel = path.join("uploads", productId, `${idx}.webp`).split(path.sep).join("/");
+          abs = path.join(config.storageDir, rel);
+        } catch {
+          /* extraction/draft compatibility: file asli stays quarantined */
+        }
+      }
+      fs.writeFileSync(abs, normalized ?? blobs[i].data);
+      lokal.push(abs);
+
+      // KELAYAKAN DIHITUNG SEKALI, DI SINI. Bukan saat render: di sana biayanya
+      // sudah keluar, dan jawabannya tidak akan berubah — gambarnya sama.
+      //
+      // KONTRAK HASH: sha256 dihitung dari BYTES YANG BENAR-BENAR DISIMPAN,
+      // bukan dari unggahan asli.
+      //
+      // Cacat yang ditutup (ditemukan review independen): versi sebelumnya
+      // meng-hash `blobs[i].data` sementara yang ditulis ke storage adalah
+      // `normalized ?? blobs[i].data` — WebP hasil normalisasi. Selama
+      // normalisasi berhasil (kasus normal), sidecar membawa hash yang TIDAK
+      // PERNAH cocok dengan berkasnya, dan setiap foto sah akan ditolak sebagai
+      // bukti korup begitu verifikasi hash dinyalakan.
+      const bytesTersimpan = normalized ?? blobs[i].data;
+      // rel dicatat SEBELUM put: object store bisa commit lalu kehilangan
+      // responsnya, dan rollback tetap harus tahu kunci mana yang harus dibuang.
+      rels.push(rel);
+      await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
+      await tulisSidecar(rel, bytesTersimpan, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar, inspected?.[i].labelEvidence);
+      if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
     }
-    fs.writeFileSync(abs, normalized ?? blobs[i].data);
-    await mediaStorage().put(rel, fs.readFileSync(abs), rel.endsWith(".webp") ? "image/webp" : blobs[i].mime);
-    if (config.storageMode === "r2") fs.rmSync(abs, { force: true });
-    rels.push(rel);
+    return rels;
+  } catch (error) {
+    // ROLLBACK SEBATCH, bukan per-foto.
+    //
+    // Sebelumnya fungsi ini melempar tanpa membersihkan apa pun: kalau put
+    // `.meta.json` gagal, objek fotonya, berkas lokalnya, DAN seluruh foto dari
+    // iterasi sebelumnya tetap tertinggal — sementara kedua route pemanggil
+    // cuma mengubah error jadi response. Hasilnya bytes tanpa bukti, persis
+    // keadaan yang seluruh P0-B1 ada untuk menghapusnya.
+    //
+    // Yang dibuang: foto DAN sidecar-nya (deleteStoredProductImages menangani
+    // keduanya sebagai satu unit), plus staging lokal.
+    await deleteStoredProductImages(rels).catch((errBersih) =>
+      console.error("[storage] rollback unggah tidak tuntas:", errBersih)
+    );
+    for (const abs of lokal) fs.rmSync(abs, { force: true });
+    throw error;
   }
-  return rels;
 }
 
 /** Organization uploads use collision-proof object names. Array indexes are
@@ -104,20 +374,44 @@ export async function saveProductImages(
  * the same length and overwrite the same R2 key. */
 export async function saveUniqueProductImages(
   productId: string,
-  blobs: { mime: string; data: Buffer }[]
+  blobs: { mime: string; data: Buffer }[],
+  inspectedBatch?: InspectedProductImageBatch,
 ): Promise<string[]> {
   ensureDirs();
   const rels: string[] = [];
+  const inspected = inspectedImages(inspectedBatch, blobs.length);
   try {
-    for (const blob of blobs) {
+    for (const [blobIndex, blob] of blobs.entries()) {
       // Full decode + normalization is mandatory here. Never fall back to a
       // corrupt original merely because its metadata could still be parsed.
-      const normalized = await normalizeProductImageBuffer(blob.data);
+      const normalized = inspected?.[blobIndex].data ?? await normalizeProductImageBuffer(blob.data);
       const rel = path.posix.join("uploads", productId, `${crypto.randomUUID()}.webp`);
       // Track before put: an object store may commit then lose the response.
       // Cleanup must still know which idempotent key to delete.
       rels.push(rel);
       await mediaStorage().put(rel, normalized, "image/webp");
+      // BUKTI DITERBITKAN DI SINI JUGA (P0-B1, 21 Agu).
+      //
+      // Jalur ini sebelumnya menulis bytes TANPA sidecar sama sekali — jadi
+      // setiap produk yang dibuat lewat dashboard enterprise tidak punya satu
+      // pun bukti yang menyatakan fotonya layak. Begitu resolver ketat menyala,
+      // produk-produk itu terbrick seluruhnya, bukan sebagian.
+      //
+      // Berkas sementara diperlukan karena jalur ini — beda dari
+      // saveProductImages — tidak pernah menulis salinan lokal; ia langsung
+      // put ke object store. Classifier butuh path lokal.
+      const tmpKlas = fs.mkdtempSync(path.join(os.tmpdir(), "sidecar-org-"));
+      try {
+        const abs = path.join(tmpKlas, path.basename(rel));
+        fs.writeFileSync(abs, normalized);
+        await tulisSidecar(rel, normalized, abs, klasifikasiGambarUntukTest ?? klasifikasiGambar, inspected?.[blobIndex].labelEvidence);
+      } finally {
+        try {
+          fs.rmSync(tmpKlas, { recursive: true, force: true });
+        } catch (errBersih) {
+          console.warn(`[storage] gagal membersihkan ${tmpKlas}: ${(errBersih as Error).message}`);
+        }
+      }
     }
     return rels;
   } catch (error) {
@@ -126,9 +420,25 @@ export async function saveUniqueProductImages(
   }
 }
 
+/**
+ * Menghapus foto BESERTA sidecar-nya — satu unit, bukan dua.
+ *
+ * Sejak P0-B1 setiap foto punya `<kunci>.meta.json`, dan fungsi ini dipakai di
+ * tiga tempat yang semuanya berarti "foto ini tidak ada lagi": rollback saat
+ * unggah gagal, rollback saat penambahan ke DB gagal, dan penghapusan foto oleh
+ * pengguna. Menghapus hanya kunci fotonya meninggalkan bukti yatim di object
+ * store — dan bukti yatim itu bukan cuma sampah: ia bukti yang menyatakan
+ * sesuatu tentang berkas yang sudah tidak ada, persis keadaan yang resolver
+ * laporkan sebagai REF_MISSING.
+ *
+ * `delete` idempoten di kedua backend (`rm --force`; S3 DeleteObject atas kunci
+ * yang tidak ada tetap sukses), jadi menghapus sidecar yang memang belum pernah
+ * ada aman — termasuk untuk foto warisan dari sebelum P0-B1.
+ */
 export async function deleteStoredProductImages(keys: string[]): Promise<void> {
   const failed: string[] = [];
-  await Promise.all(keys.map(async (key) => {
+  const sasaran = keys.flatMap((key) => [key, relMeta(key)]);
+  await Promise.all(sasaran.map(async (key) => {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try { await mediaStorage().delete(key); return; }
       catch (error) {

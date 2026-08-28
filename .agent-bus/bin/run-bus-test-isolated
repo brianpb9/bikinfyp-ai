@@ -1,0 +1,82 @@
+#!/bin/sh
+# Re-run a mutating .agent-bus self-test in a disposable local clone.
+# The live repository is source-only; its inboxes, runtime state, supervisor,
+# worktrees, and object database are never test targets.
+set -u
+
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+BUS_DIR=$(dirname "$SCRIPT_DIR")
+REPO_ROOT=$(dirname "$BUS_DIR")
+
+die() { printf 'bus-test-isolate: %s\n' "$*" >&2; exit 2; }
+
+[ "${1:-}" != --verify ] || {
+  [ "$#" = 2 ] || exit 1
+  expected_root=$(CDPATH= cd -- "$2" 2>/dev/null && pwd -P) || exit 1
+  actual_root=$(CDPATH= cd -- "$REPO_ROOT" 2>/dev/null && pwd -P) || exit 1
+  [ "$expected_root" = "$actual_root" ] || exit 1
+  [ "${AGENT_BUS_TEST_ROOT:-}" = "$actual_root" ] || exit 1
+  verify_token=${AGENT_BUS_TEST_TOKEN:-}
+  [ "${#verify_token}" = 40 ] || exit 1
+  case "$verify_token" in *[!0-9a-f]*) exit 1 ;; esac
+  [ -d "$actual_root/.git" ] || exit 1
+  [ "$(cat "$actual_root/.git/agent-bus-test-token" 2>/dev/null || true)" = "$AGENT_BUS_TEST_TOKEN" ] || exit 1
+  exit 0
+}
+
+[ "$#" -ge 1 ] || die "usage: run-bus-test-isolated .agent-bus/test-*.sh [args...]"
+TEST_SCRIPT=$1
+shift
+case "$TEST_SCRIPT" in
+  .agent-bus/test-bus.sh|.agent-bus/test-reviewer-runtime.sh|.agent-bus/test-owner-routing.sh) ;;
+  *) die "refusing non-bus test path: $TEST_SCRIPT" ;;
+esac
+
+SOURCE_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD 2>/dev/null) || die "cannot resolve source HEAD"
+UNTRACKED_BUS_FILES=$(git -C "$REPO_ROOT" ls-files --others --exclude-standard -- .agent-bus) \
+  || die "cannot inspect untracked bus files"
+[ -z "$UNTRACKED_BUS_FILES" ] \
+  || die "stage new .agent-bus files before testing so the isolated patch is complete"
+TEST_ROOT=$(mktemp -d "${TMPDIR:-/tmp}/bikinfyp-agent-bus-test.XXXXXX") \
+  || die "cannot create isolated test directory"
+case "$TEST_ROOT" in
+  */bikinfyp-agent-bus-test.*) ;;
+  *) die "unsafe temporary path: $TEST_ROOT" ;;
+esac
+TEST_REPO="$TEST_ROOT/repo"
+PATCH_FILE="$TEST_ROOT/working-tree.patch"
+
+cleanup_isolated_test() {
+  case "$TEST_ROOT" in
+    */bikinfyp-agent-bus-test.*) rm -rf -- "$TEST_ROOT" ;;
+  esac
+}
+trap cleanup_isolated_test EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+git clone --quiet --local --no-hardlinks "$REPO_ROOT" "$TEST_REPO" \
+  || die "local clone failed"
+git -C "$TEST_REPO" checkout --quiet --detach "$SOURCE_SHA" \
+  || die "cannot detach isolated clone at $SOURCE_SHA"
+TEST_REPO=$(CDPATH= cd -- "$TEST_REPO" && pwd -P) || die "cannot resolve isolated clone path"
+TEST_TOKEN=$(printf '%s:%s:%s\n' "$$" "$(date +%s)" "$TEST_ROOT" | git hash-object --stdin) \
+  || die "cannot create isolated test token"
+printf '%s\n' "$TEST_TOKEN" > "$TEST_REPO/.git/agent-bus-test-token" \
+  || die "cannot persist isolated test token"
+
+# Include staged and unstaged bus changes so the command tests exactly what is
+# on the Builder's desk before commit, while still inheriting no ignored state.
+git -C "$REPO_ROOT" diff --binary --no-ext-diff --no-textconv "$SOURCE_SHA" -- .agent-bus > "$PATCH_FILE" \
+  || die "cannot capture working bus patch"
+if [ -s "$PATCH_FILE" ]; then
+  git -C "$TEST_REPO" apply "$PATCH_FILE" \
+    || die "cannot apply working bus patch to isolated clone"
+fi
+
+[ -f "$TEST_REPO/$TEST_SCRIPT" ] || die "test script is absent from isolated tree"
+AGENT_BUS_TEST_ROOT="$TEST_REPO" AGENT_BUS_TEST_TOKEN="$TEST_TOKEN" \
+  /bin/sh "$TEST_REPO/$TEST_SCRIPT" "$@"
+test_rc=$?
+exit "$test_rc"

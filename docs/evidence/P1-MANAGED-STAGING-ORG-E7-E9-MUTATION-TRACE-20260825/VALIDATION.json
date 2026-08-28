@@ -1,0 +1,11 @@
+{
+  "task": "P1-MANAGED-STAGING-ORG-E7-E9-MUTATION-TRACE-20260825",
+  "baseline_sha": "26df1e1e403091555c47a5a8882b378b8b20c48e",
+  "deployed_code_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
+  "focused_tests": { "command": "node --import tsx --test tests/org-photo-upload.test.ts tests/org-photo-brand-gate.test.ts tests/job-product-snapshot.test.ts", "passed": 26, "failed": 0, "skipped": 1 },
+  "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0 },
+  "runner_provenance": { "job": "job-da6s9uvqj5pc73dsvlf0", "embedded_runner_matches_repository_bytes": true, "runner_sha256": "4ac51bd2b5fb5b38f2f6a33f72a0d762879f307eebdec0f2368855512fe3d3e1", "runner_bytes": 15050 },
+  "secret_scan": { "environment_files_considered": 1, "secret_values_checked": 21, "exact_value_hits": 0 },
+  "control_plane": { "staging_web_deploy": "dep-da6b6omk1f9s73dr94k0", "staging_worker_deploy": "dep-da6b6p61egvs73a0kur0", "production_web_unchanged": "dep-da3bfg142hec73arfot0", "production_worker_unchanged": "dep-da3bfg142hec73arfpfg", "maintenance_changed": false, "worker_state_changed": false },
+  "scope_guards": { "production_mutated": false, "money_used": false, "provider_called": false, "policy_changed": false }
+}

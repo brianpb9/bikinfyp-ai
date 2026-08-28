@@ -32,6 +32,13 @@ import { probeDurationSec, probeVideoSize } from "../lib/media/ffmpeg";
 
 const BUKU = path.resolve(process.cwd(), "..", "test_output", "bukti-render.json");
 
+// Deteksi YuNet bersifat lokal, read-only, dan setiap qcSubjekLokal membuat
+// direktori frame unik sendiri. Menjalankan empat video sekaligus mengisi waktu
+// tunggu decode/inferensi tanpa mengurangi video atau frame yang diperiksa.
+// Jangan jadikan angka ini cara menyembunyikan timeout: assertion jumlah hasil
+// di bawah memastikan seluruh eligible video benar-benar selesai.
+const PARALEL_QC_LOKAL = 4;
+
 interface Catatan {
   berkas: string;
   visiLolos?: boolean | null;
@@ -44,18 +51,33 @@ test("setiap video katalog yang diklaim terbukti masih lolos pemeriksa kedua", {
   const buku: Record<string, Catatan> = JSON.parse(fs.readFileSync(BUKU, "utf8"));
   const terbukti = CAMPAIGN_TEMPLATES.filter((tpl) => buku[tpl.id]?.visiLolos === true && fs.existsSync(buku[tpl.id].berkas));
   if (terbukti.length === 0) return t.skip("belum ada template terbukti");
+  assert.ok(terbukti.length >= 29, `baseline 29 video eligible menyusut menjadi ${terbukti.length}`);
 
   const workDir = fs.mkdtempSync(path.join(os.tmpdir(), "piksel-"));
   const gagal: string[] = [];
   try {
-    for (const tpl of terbukti) {
-      // Batas WAJAH, bukan orang: hands_only melarang wajah, format lain
-      // menampilkan satu presenter (rute komedi dua). Angkanya diturunkan dari
-      // sumber yang sama dengan yang dipakai merender.
-      const maksWajah = maksOrangPerFrame({ format: tpl.format, tvcRoute: tpl.tvcRoute });
-      const c = await qcSubjekLokal(buku[tpl.id].berkas, maksWajah, workDir);
-      if (c.status === "fail") gagal.push(`${tpl.id} (${tpl.format}, maks ${maksWajah} wajah): ${c.detail}`);
-    }
+    const hasil = new Array<{ id: string; gagal: string | null } | undefined>(terbukti.length);
+    let berikutnya = 0;
+    const pekerja = async () => {
+      while (true) {
+        const indeks = berikutnya++;
+        if (indeks >= terbukti.length) return;
+        const tpl = terbukti[indeks];
+        // Batas WAJAH, bukan orang: hands_only melarang wajah, format lain
+        // menampilkan satu presenter (rute komedi dua). Angkanya diturunkan
+        // dari sumber yang sama dengan yang dipakai merender.
+        const maksWajah = maksOrangPerFrame({ format: tpl.format, tvcRoute: tpl.tvcRoute });
+        const c = await qcSubjekLokal(buku[tpl.id].berkas, maksWajah, workDir);
+        hasil[indeks] = {
+          id: tpl.id,
+          gagal: c.status === "fail" ? `${tpl.id} (${tpl.format}, maks ${maksWajah} wajah): ${c.detail}` : null,
+        };
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(PARALEL_QC_LOKAL, terbukti.length) }, () => pekerja()));
+    assert.equal(hasil.filter(Boolean).length, terbukti.length, "seluruh video eligible wajib selesai diperiksa");
+    assert.deepEqual(hasil.map((item) => item?.id), terbukti.map((tpl) => tpl.id), "video tidak boleh dilewati/diurutkan ulang");
+    gagal.push(...hasil.flatMap((item) => item?.gagal ? [item.gagal] : []));
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }

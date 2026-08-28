@@ -1,0 +1,199 @@
+
+> racun-ai@0.1.0 test:postgres-product-truth-w1
+> bash scripts/test-postgres-product-truth-w1.sh
+
+TAP version 13
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"d7f1d123-7bff-4270-bddd-3a49a0da2cc5","produkId":"8429f335-7cb5-41ee-8c95-27cd8e28347f","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"EVIDENCE_INVALID":1},"perRinci":{"SIDECAR_MISSING":1},"semuaBelumDiperiksa":false}
+# Subtest: W1 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah
+ok 1 - W1 KANARI: penolakan tercatat sebagai KODE, dan vonisnya TIDAK berubah
+  ---
+  duration_ms: 287.283625
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"e2195a74-a5b3-44fb-a578-cf38b00dba0f","produkId":"b64c60f5-25b3-41c2-92f1-798d3ad9d109","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [failover] video pengamat-uji gagal: provider pengamat: berhenti sebelum biaya keluar -> coba provider berikutnya
+# Subtest: W1 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil
+ok 2 - W1 KANARI: jalur LOLOS juga tercatat — tanpa penyebut, rasio mustahil
+  ---
+  duration_ms: 15.430916
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"8fe7b759-16e4-4af3-a0f4-4df908f5785d","produkId":"04c4c65b-d9bb-41c9-94d9-c547c6b51563","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job 8fe7b759] foto referensi aman-orang: 1 dipakai, 0 di-crop, 1 di-upscale (<320px), 0 dibuang
+# [failover] video pengamat-uji gagal: provider pengamat: berhenti sebelum biaya keluar -> coba provider berikutnya
+# Subtest: confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol reference Story Ads
+ok 3 - confirm tanpa template_id tetap mempersist snapshot dan W1 mengirim nol reference Story Ads
+  ---
+  duration_ms: 435.610375
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"f265eb85-ec4c-440e-b3a0-c39028c846cc","produkId":"de9cd1ee-ff29-48e1-ab39-cab1802034de","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job f265eb85] foto referensi aman-orang: 1 dipakai, 0 di-crop, 1 di-upscale (<320px), 0 dibuang
+# [job f265eb85] menunggu persetujuan brand (3 scene)
+# [job f265eb85] foto referensi aman-orang: 1 dipakai, 0 di-crop, 1 di-upscale (<320px), 0 dibuang
+# [job f265eb85] review: 3 klip ditarik dari storage
+# [job f265eb85] resume: 3 klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"b71c0d8d-755a-412a-9e1c-dc352a3cf5ab","produkId":"2dca7e60-1103-45ae-94ec-91d1b40474ad","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [job b71c0d8d] foto referensi aman-orang: 1 dipakai, 0 di-crop, 1 di-upscale (<320px), 0 dibuang
+# [job b71c0d8d] menunggu persetujuan brand (3 scene)
+# [job b71c0d8d] foto referensi aman-orang: 1 dipakai, 0 di-crop, 1 di-upscale (<320px), 0 dibuang
+# [job b71c0d8d] review: 3 klip ditarik dari storage
+# [job b71c0d8d] resume: 3 klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi
+# Subtest: W1 talking_head Story Ads memanggil TTS eksternal sekali setelah prompt provider tanpa ucapan
+ok 4 - W1 talking_head Story Ads memanggil TTS eksternal sekali setelah prompt provider tanpa ucapan
+  ---
+  duration_ms: 788.641834
+  type: 'test'
+  ...
+# Subtest: dashboard lock membuat validasi Story Ads dan snapshot melihat versi row yang identik
+ok 5 - dashboard lock membuat validasi Story Ads dan snapshot melihat versi row yang identik
+  ---
+  duration_ms: 13.469667
+  type: 'test'
+  ...
+# Subtest: shared confirm memblokir empat snapshot real-footage saat request template_id dihilangkan, tanpa side effect
+ok 6 - shared confirm memblokir empat snapshot real-footage saat request template_id dihilangkan, tanpa side effect
+  ---
+  duration_ms: 17.304334
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"2c1196a7-9c5f-495f-a2a8-49cd0d8aa2b2","produkId":"9bb13343-23b9-4be2-922a-5454072acdad","lolos":true,"foto":2,"tersetujui":1,"perAlasan":{"REF_PROMOTIONAL":1},"perRinci":{},"semuaBelumDiperiksa":false}
+# [failover] video pengamat-uji gagal: provider pengamat: berhenti sebelum biaya keluar -> coba provider berikutnya
+# Subtest: E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packshot sah
+ok 7 - E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packshot sah
+  ---
+  duration_ms: 29.074125
+  type: 'test'
+  ...
+# [failover] video pengamat-uji gagal: provider pengamat: berhenti sebelum biaya keluar -> coba provider berikutnya
+# Subtest: E9 HTTP DELETE approved source + resume W1 tetap memakai snapshot job berurutan
+ok 8 - E9 HTTP DELETE approved source + resume W1 tetap memakai snapshot job berurutan
+  ---
+  duration_ms: 40.09325
+  type: 'test'
+  ...
+# Subtest: E9 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider W1
+ok 9 - E9 HTTP DELETE yang membuat object manifest hilang gagal tertutup sebelum provider W1
+  ---
+  duration_ms: 9.328334
+  type: 'test'
+  ...
+# Subtest: guard: bukti C12 memanggil handler E9 dan resume W1 nyata
+ok 10 - guard: bukti C12 memanggil handler E9 dan resume W1 nyata
+  ---
+  duration_ms: 0.343625
+  type: 'test'
+  ...
+# Subtest: W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images
+ok 11 - W1 A6/C9: manifest durable mengalahkan reorder/delete/add products.images
+  ---
+  duration_ms: 6.38625
+  type: 'test'
+  ...
+# Subtest: W1 manifest create konkuren: row lock menghasilkan tepat satu pemenang
+ok 12 - W1 manifest create konkuren: row lock menghasilkan tepat satu pemenang
+  ---
+  duration_ms: 2.844375
+  type: 'test'
+  ...
+# Subtest: W1 product snapshot create konkuren: row lock menghasilkan tepat satu pemenang
+ok 13 - W1 product snapshot create konkuren: row lock menghasilkan tepat satu pemenang
+  ---
+  duration_ms: 2.979958
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"128e854a-41b6-46f5-b3ba-00a602c2d815","produkId":"ea36e2d6-40a6-48cb-8da5-d20fe22c8f28","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: W1 non-Ads melanjutkan snapshot produk v1 tanpa harga
+ok 14 - W1 non-Ads melanjutkan snapshot produk v1 tanpa harga
+  ---
+  duration_ms: 4.844416
+  type: 'test'
+  ...
+# Subtest: W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot
+ok 15 - W1 legacy: jejak provider tanpa manifest gagal tertutup tanpa resnapshot
+  ---
+  duration_ms: 4.624542
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"f33bae8f-1765-4153-9588-405fa2b27558","produkId":"6cc50991-f5a5-4650-b6ea-2b1f5e8db371","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"EVIDENCE_INVALID":1},"perRinci":{"SIDECAR_CORRUPT":1},"semuaBelumDiperiksa":false}
+# Subtest: W1 C8: sidecar KORUP — nol materialize, nol provider, gagal-tertutup, nol capture/regen
+ok 16 - W1 C8: sidecar KORUP — nol materialize, nol provider, gagal-tertutup, nol capture/regen
+  ---
+  duration_ms: 7.096667
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"5e03c57d-96c9-4837-9b4a-2de9b204f617","produkId":"b5d60ad0-7876-4535-ab30-e33908d8a47a","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"EVIDENCE_INVALID":1},"perRinci":{"SIDECAR_MISSING":1},"semuaBelumDiperiksa":false}
+# Subtest: W1 C8: sidecar HILANG — nol materialize, nol provider, gagal-tertutup, nol capture/regen
+ok 17 - W1 C8: sidecar HILANG — nol materialize, nol provider, gagal-tertutup, nol capture/regen
+  ---
+  duration_ms: 4.470417
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"57f2a35b-0b73-468a-a875-5f0aa15dd788","produkId":"e7734a81-cd69-4e6a-b060-7045fe17fe10","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"REF_HASH_MISMATCH":1},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: W1 C8: sha256 BEDA dari bytes tersimpan — nol materialize, nol provider, gagal-tertutup, nol capture/regen
+ok 18 - W1 C8: sha256 BEDA dari bytes tersimpan — nol materialize, nol provider, gagal-tertutup, nol capture/regen
+  ---
+  duration_ms: 4.361917
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"4fa507b7-b061-4f26-92f1-8fd00fb06fa3","produkId":"cc5c7bfa-af48-4d9f-afcd-d1f371d01b77","lolos":false,"foto":1,"tersetujui":0,"perAlasan":{"REF_MISSING":1},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: W1 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping
+ok 19 - W1 C11: sidecar SAH tetapi berkas hilang saat worker mulai — REF_MISSING tanpa efek samping
+  ---
+  duration_ms: 4.235417
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"98acd783-d612-4f08-bad7-836971d575e3","produkId":"fd282b13-658e-48ab-87c7-d78c143d666c","lolos":true,"foto":3,"tersetujui":2,"perAlasan":{"REF_PROMOTIONAL":1},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: W1: loop referensi tambahan HANYA meminta yang tersetujui, urut (berhenti di boundary person-safe)
+ok 20 - W1: loop referensi tambahan HANYA meminta yang tersetujui, urut (berhenti di boundary person-safe)
+  ---
+  duration_ms: 101.504458
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"be29ff6e-2657-4b62-8fc1-2642d63d2978","produkId":"03c9ee10-2c12-41a1-9a4e-146c64eb4287","lolos":true,"foto":3,"tersetujui":2,"perAlasan":{"REF_PROMOTIONAL":1},"perRinci":{},"semuaBelumDiperiksa":false}
+# [failover] video pengamat-uji gagal: provider pengamat: berhenti sebelum biaya keluar -> coba provider berikutnya
+# Subtest: W1: referensi tambahan yang DITERIMA PROVIDER — urutan, hash, dan tanpa banner
+ok 21 - W1: referensi tambahan yang DITERIMA PROVIDER — urutan, hash, dan tanpa banner
+  ---
+  duration_ms: 245.058333
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"ea0a7600-4a4b-4709-bed2-d0e80fb799d6","produkId":"246ebf13-78c5-4f28-ba6b-8b84e9410ebf","lolos":true,"foto":8,"tersetujui":8,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [failover] video pengamat-uji gagal: provider pengamat: berhenti sebelum biaya keluar -> coba provider berikutnya
+# Subtest: W1: delapan foto tersetujui — provider menerima satu primary + maksimal enam tambahan
+ok 22 - W1: delapan foto tersetujui — provider menerima satu primary + maksimal enam tambahan
+  ---
+  duration_ms: 288.107959
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"bc28b7a9-0926-4e5e-89a3-bc3804578981","produkId":"81935ad7-2ef5-4773-99f9-8030d6d7c158","lolos":true,"foto":2,"tersetujui":2,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# [failover] video pengamat-uji gagal: provider pengamat: berhenti sebelum biaya keluar -> coba provider berikutnya
+# Subtest: W1 TOCTOU: path bersama ditimpa sesudah diperiksa — provider tetap menerima bytes yang disetujui
+ok 23 - W1 TOCTOU: path bersama ditimpa sesudah diperiksa — provider tetap menerima bytes yang disetujui
+  ---
+  duration_ms: 215.161709
+  type: 'test'
+  ...
+# [kanari-bukti] {"v":1,"runtime":"worker-postgres","jobId":"bef18263-5209-4bd1-9c10-f5bf3b5d9904","produkId":"6d2267d3-35e0-411e-9cca-3a0d020047b4","lolos":true,"foto":1,"tersetujui":1,"perAlasan":{},"perRinci":{},"semuaBelumDiperiksa":false}
+# Subtest: W1 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih
+ok 24 - W1 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih
+  ---
+  duration_ms: 8.84675
+  type: 'test'
+  ...
+# Subtest: nol jaringan selama seluruh berkas test ini
+ok 25 - nol jaringan selama seluruh berkas test ini
+  ---
+  duration_ms: 0.104625
+  type: 'test'
+  ...
+1..25
+# tests 25
+# suites 0
+# pass 25
+# fail 0
+# cancelled 0
+# skipped 0
+# todo 0
+# duration_ms 2649.673625
+PASS: kontrak referensi W1 tervalidasi pada database disposable racun_w1_truth_11788_6510.

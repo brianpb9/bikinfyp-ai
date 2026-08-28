@@ -9,8 +9,14 @@ import { formatHargaNatural } from "./templates";
 import { misplacedEmphasisTags, stripDeliveryTags, unknownDeliveryTags } from "./delivery-tags";
 import { kataPerShot, levelHookCukup, payoffBukanKatalog } from "./standar-10";
 import { periksaStoryOsAds } from "./story-os-ads";
+import { deteksiHargaIndonesia, deteksiNominalPerakBertanda, hargaTerbilang, tanpaNominalHargaTertulis } from "./price-mentions";
+export { hargaTerbilang } from "./price-mentions";
 import { pilihTokenMerek } from "../merek";
 import { tutupiNama } from "../media/pemicu-filter";
+import {
+  isNeutralStoryAdsTemplate,
+  neutralStoryAdsActionContradictions,
+} from "./ads-visual-contract";
 
 export interface ScriptToValidate {
   hook_family: string;
@@ -66,6 +72,8 @@ export interface ScriptToValidate {
    * keranjang. Jadi setiap naskah Ads yang BENAR ditolak gerbang, dan yang
    * lolos justru yang salah genre. */
   contentType?: "affiliate" | "ads";
+  /** Identitas template kanonik; visual contract Ads tidak boleh ditebak dari format. */
+  templateId?: string | null;
   /** Level hook naskah — dipakai S-05 (STANDAR 10/10 baris 5). */
   hookLevel?: string | null;
   /** Kategori produk — S-05 memakainya untuk mengenali kategori jenuh. */
@@ -134,6 +142,7 @@ export function jendelaKata(script: {
   durationSec?: number | null;
   wordBudget?: number | null;
   productName?: string | null;
+  contentType?: "affiliate" | "ads" | null;
 }): { minWc: number; maxWc: number } {
   const tier = script.qualityTier ?? "silent_caption";
   const durationScale = (script.durationSec ?? 15) / 15;
@@ -148,11 +157,14 @@ export function jendelaKata(script: {
   // menyentuh 10 — dan naskah 10 kata untuk 15 detik memang terlalu sepi.
   const [baseMinWc, baseMaxWc] = tier === "silent_caption" ? [32, 48] : [16, 22];
   const kelonggaranNama = Math.min(6, wordCount(script.productName ?? ""));
+  // Story Ads menyisihkan opening visual tanpa ucapan (SA3). Batas bawah VO
+  // mengikuti waktu bicara yang benar-benar tersedia; batas atas tetap sama.
+  const kelonggaranHookSenyap = script.contentType === "ads" ? Math.max(1, Math.round(3 * durationScale)) : 0;
   const minWc = Math.max(
     1,
     (script.wordBudget
       ? Math.round(script.wordBudget * 0.85)
-      : Math.round(baseMinWc * durationScale)) - kelonggaranNama
+      : Math.round(baseMinWc * durationScale)) - kelonggaranNama - kelonggaranHookSenyap
   );
   const maxWc = script.wordBudget
     ? Math.round(script.wordBudget * 1.15)
@@ -190,9 +202,69 @@ const OVERCLAIM_PHRASES = ["100%", "paling bagus", "nomor 1", "nomor satu", "no 
  * PASANGANNYA dengan hasil — itu yang menjadikannya janji.
  */
 const KLAIM_TOKENS = new Set(["instan", "instant", "permanen", "memutihkan", "whitening", "mencerahkan"]);
+/** Kata sisipan antara pemicu waktu dan hasilnya. */
+const HASIL = "putih|putihan|bening|cerah|cerahan|glowing|glow up|glow-up|mulus|hilang|kempes|kencang";
 const KLAIM_POLA: RegExp[] = [
-  /\b(langsung|seketika|dalam (semalam|sehari|sekali pakai))\s+\w{0,6}\s*(putih|bening|cerah|glowing|mulus|hilang|kempes|kencang)/i,
-  /\b(pasti|dijamin)\s+(putih|bening|cerah|sembuh|hilang)/i,
+  // SISIPANNYA SAMPAI DUA KATA, bukan satu kata enam huruf.
+  //
+  // Batas lama `\w{0,6}` adalah alasan tunggal kenapa "kulit aku langsung
+  // KELIATAN glowing" lolos ke video berbayar 20 Agu: "keliatan" delapan
+  // huruf. Aturannya ada, penegaknya ada, dan tetap lolos karena satu angka.
+  new RegExp(`\\b(langsung|seketika|dalam (semalam|sehari|sekali pakai))\\s+(?:\\w+\\s+){0,2}(${HASIL})`, "i"),
+  new RegExp(`\\b(pasti|dijamin)\\s+(?:\\w+\\s+){0,2}(${HASIL}|sembuh)`, "i"),
+  // Hasil DULU, pemicu waktu belakangan: "mulus seketika", "bekasnya hilang
+  // dalam semalam". Urutan Indonesia bebas, jadi satu arah saja bocor.
+  new RegExp(`\\b(${HASIL})\\s+(?:\\w+\\s+){0,2}(seketika|instan|dalam semalam|sekali pakai)`, "i"),
+  /\bbekas(nya)?\s+(?:\w+\s+){0,2}hilang/i,
+];
+
+/**
+ * KOSAKATA HASIL KHUSUS KULIT — klaim walau tanpa pemicu waktu.
+ *
+ * Keputusan Brian 20 Agu: pada kategori kulit, "glowing"/"glow-up" sendirian
+ * SUDAH janji hasil — tidak perlu ada kata "langsung" di depannya. Untuk
+ * kategori lain kata yang sama tidak menjanjikan apa-apa ("lampunya glowing"),
+ * jadi daftar ini sengaja bergantung kategori: gerbang yang menghukum kalimat
+ * sah akan dimatikan orang, dan gerbang yang dimatikan tidak menjaga apa pun.
+ */
+const KULIT_KATEGORI = new Set(["beauty", "skincare", "kosmetik", "personal_care"]);
+
+/**
+ * KONTEKS AMAN untuk kata hasil — daftar eksplisit, bukan kebetulan regex.
+ *
+ * Diminta Brian 20 Agu supaya pengecualiannya bisa dibaca dan ditambah orang
+ * lain tanpa membedah pola. Isinya dari copy template NYATA yang sempat
+ * tertolak: "tim glowing" adalah sapaan komunitas, bukan janji hasil.
+ *
+ * Aturannya: kalau kata hasil muncul dalam salah satu bentuk ini, ia BUKAN
+ * klaim — walau kategorinya kulit.
+ */
+const KONTEKS_AMAN: { pola: RegExp; kenapa: string }[] = [
+  { pola: /\b(tim|geng|squad|klub|kelompok)\s+(glowing|cerah)\b/i, kenapa: "sapaan komunitas, bukan janji" },
+  { pola: /\b(buat|untuk|khusus)\s+(kamu|yang|para)\s+[\w\s]{0,12}(glowing)\b/i, kenapa: "penyebutan segmen audiens" },
+  { pola: /\bglowing\s+(itu|adalah|bukan)\b/i, kenapa: "membicarakan konsepnya, bukan menjanjikan" },
+];
+
+/**
+ * Kata hasil DALAM SATU KALIMAT dengan produk atau pemakaiannya = klaim.
+ *
+ * Keputusan Brian 20 Agu: pada kategori kulit, "glowing" yang sekalimat dengan
+ * produk atau cara memakainya sudah janji hasil, walau tanpa kata perubahan.
+ * "Pakai ini tiap malam, glowing." tidak menyebut 'jadi'/'bikin' dan tetap
+ * menjanjikan hasil.
+ */
+const KATA_PRODUK = /\b(produk|serum|krim|cream|sabun|toner|lotion|ini|dipakai|pakai|pemakaian|rutin|skincare)\b/i;
+const KATA_HASIL_KULIT = /\b(glowing|glow[\s-]?up|cerahan|putihan)\b/i;
+const KLAIM_KULIT_POLA: RegExp[] = [
+  // "glow up" hampir selalu janji perubahan, jadi ia klaim berdiri sendiri.
+  /\bglow[\s-]?up\b/i,
+  // "glowing" TIDAK berdiri sendiri — dan itu ketahuan dari template nyata
+  // ("Buat tim glowing yang masih urus kusamnya sendirian"), tempat ia jadi
+  // SAPAAN komunitas, bukan janji. Yang menjadikannya klaim adalah subjeknya
+  // (kulit/muka/wajah) atau kata perubahan (jadi/bikin/makin/langsung).
+  /\b(kulit|kulitnya|kulitmu|muka|mukanya|wajah|wajahnya)\s+(?:\w+\s+){0,3}(glowing|cerahan|putihan|mulus)/i,
+  /\b(jadi|bikin|makin|langsung|auto)\s+(?:\w+\s+){0,2}(glowing|cerahan|putihan)/i,
+  /\b(cerahan|putihan)\b/i,
 ];
 
 const MEDICAL_TOKENS = new Set([
@@ -220,7 +292,6 @@ export const LO_TOKENS = new Set(["lo", "lu", "elu"]);
 export const KAMU_TOKENS = new Set(["kamu", "kau", "anda"]);
 
 const PRICE_REGEX = /\d+([.,]\d+)?\s*(ribu|rb|ribuan|juta|jt)\b/i;
-const PRICE_MENTION_REGEX = /(\d+(?:[.,]\d+)?)\s*(ribu|rb|ribuan|juta|jt)\b/gi;
 
 function spokenPriceAmount(priceIdr: number): number | null {
   const match = formatHargaNatural(priceIdr).match(PRICE_REGEX);
@@ -243,69 +314,6 @@ function spokenPriceAmount(priceIdr: number): number | null {
  * Hanya rangkaian yang DIAKHIRI satuan (ribu/juta) yang dihitung. "dua kali
  * sehari" atau "tiga puluh detik" bukan harga dan tidak ikut terjaring.
  */
-const KATA_SATUAN: Record<string, number> = {
-  nol: 0, satu: 1, se: 1, dua: 2, tiga: 3, empat: 4, lima: 5,
-  enam: 6, tujuh: 7, delapan: 8, sembilan: 9,
-};
-
-export function hargaTerbilang(text: string): { frasa: string; nilai: number }[] {
-  const kata = text.toLowerCase().match(/[a-z]+/g) ?? [];
-  const hasil: { frasa: string; nilai: number }[] = [];
-  let kelompok = 0;      // ratusan/puluhan yang sudah ditutup
-  let tertunda = 0;      // satuan yang belum ditutup
-  let total = 0;         // AKUMULASI satu rangkaian: "satu juta dua ratus ribu"
-  let pengaliTerakhir = Infinity; // satuan hanya boleh MENGECIL dalam satu rangkaian
-  let mulai = -1;
-  let punyaAngka = false;
-  const reset = () => { kelompok = 0; tertunda = 0; total = 0; pengaliTerakhir = Infinity; mulai = -1; punyaAngka = false; };
-  /** Tutup rangkaian: sisa kelompok tanpa satuan ikut sebagai sisa nominal. */
-  const tutup = (sampai: number) => {
-    if (total > 0) {
-      const sisa = kelompok + tertunda;
-      hasil.push({ frasa: kata.slice(mulai, sampai).join(" "), nilai: Math.round(total + sisa) });
-    }
-    reset();
-  };
-  for (let i = 0; i < kata.length; i++) {
-    const w = kata[i];
-    const tandai = () => { if (mulai < 0) mulai = i; punyaAngka = true; };
-    if (w in KATA_SATUAN) { tandai(); tertunda = KATA_SATUAN[w]; continue; }
-    if (w === "sepuluh") { tandai(); tertunda = 10; continue; }
-    if (w === "sebelas") { tandai(); tertunda = 11; continue; }
-    if (w === "belas") { tandai(); tertunda = 10 + tertunda; continue; }
-    if (w === "puluh") { tandai(); kelompok += tertunda * 10; tertunda = 0; continue; }
-    // "dua setengah juta" = 2.500.000. Bentuk ini dipakai orang Indonesia
-    // sehari-hari dan sebelumnya tidak terbaca sama sekali — jadi klaim harga
-    // dalam bentuk itu lewat gerbang kebenaran tanpa diperiksa.
-    if (w === "setengah") { tandai(); tertunda += 0.5; continue; }
-    if (w === "ratus" || w === "seratus") {
-      tandai();
-      kelompok += (w === "seratus" ? 1 : tertunda || 1) * 100;
-      tertunda = 0;
-      continue;
-    }
-    if (w === "ribu" || w === "seribu" || w === "juta" || w === "sejuta") {
-      const seSendiri = w.startsWith("se");
-      // "85 ribu" angkanya DIGIT, dan jalur digit sudah memeriksanya. Satuan
-      // yang berdiri tanpa kata bilangan di depannya bukan harga terbilang.
-      if (!punyaAngka && !seSendiri) { tutup(i); continue; }
-      const pengali = w.includes("juta") ? 1_000_000 : 1_000;
-      // Satuan yang MEMBESAR berarti rangkaian baru ("dua ribu... lima juta").
-      if (pengali >= pengaliTerakhir) tutup(i);
-      tandai();
-      const nominal = seSendiri ? 1 : (kelompok + tertunda) || 1;
-      total += nominal * pengali;
-      pengaliTerakhir = pengali;
-      kelompok = 0;
-      tertunda = 0;
-      continue;
-    }
-    tutup(i);
-  }
-  tutup(kata.length);
-  return hasil;
-}
-
 export const PRICE_REQUIRED_TEMPLATE_IDS = ["diskon-gede", "promo-terbatas"] as const;
 
 export function templateRequiresPriceMention(templateId: string | null | undefined): boolean {
@@ -374,13 +382,16 @@ function wordCount(text: string): number {
  */
 export const SELALU_KERAS = new Set([
   "L-03", "L-05", "L-10", "L-11", "L-13", "L-14", "L-19", "L-21",
-  "T-01", "T-02", "T-03", "A-01", "A-02", "L-22",
+  "T-01", "T-02", "T-03", "A-01", "A-02", "A-03", "L-22",
   // STANDAR 10/10 (knowledge/rules/standard-10.md). Ketiganya aturan MUTU yang
   // bisa diperiksa mesin, dan Brian menyebutnya syarat render — bukan saran.
   "S-04", "S-05", "S-09", "L-23",
+  // S-10: kontrak segmen pembuka (20 Agu). Keras sejak lahir karena cacat yang
+  // ditutupnya sudah terbukti di piksel DUA kali, dan tambalan hilirnya gagal.
+  "S-10",
   // Story OS Ads (slice 2, 19 Agu). Gerbang SA yang bisa dicek mesin: gagal
   // satu = naskah tidak dirender (STORY-OS-ADS-v1 §3).
-  "SA1", "SA2", "SA4", "SA6", "SA8",
+  "SA1", "SA2", "SA3", "SA4", "SA6", "SA8",
 ]);
 
 /**
@@ -429,7 +440,11 @@ export const SELALU_KERAS = new Set([
  * berubah kalau daftar aturan struktur naskah berubah — karena ia memang
  * bukan pemeriksa struktur naskah.
  */
-export function periksaKataTerlarang(teksFinal: string, namaProduk?: string | null): RuleIssue[] {
+export function periksaKataTerlarang(
+  teksFinal: string,
+  namaProduk?: string | null,
+  productCategory?: string | null
+): RuleIssue[] {
   const lower = teksFinal.toLowerCase();
   const toks = tokens(teksFinal);
   const issues: RuleIssue[] = [];
@@ -443,10 +458,28 @@ export function periksaKataTerlarang(teksFinal: string, namaProduk?: string | nu
   const tanpaNama = tutupiNama(lower, namaProduk);
   const klaimTok = tanpaNama.split(/[^a-z0-9]+/i).find((t) => KLAIM_TOKENS.has(t));
   const klaimPola = KLAIM_POLA.find((p) => p.test(tanpaNama));
-  if (klaimTok || klaimPola) {
+  // Kosakata hasil khusus kulit — hanya untuk kategori yang punya kulit.
+  const kategoriKulit = KULIT_KATEGORI.has(String(productCategory ?? ""));
+  // Konteks aman diperiksa DULU: pengecualian yang datang belakangan tidak
+  // pernah sempat menyelamatkan kalimat yang sudah tertolak.
+  const aman = kategoriKulit && KONTEKS_AMAN.some((k) => k.pola.test(tanpaNama));
+  let kulitPola = kategoriKulit && !aman ? KLAIM_KULIT_POLA.find((p) => p.test(tanpaNama)) : undefined;
+  // Kata hasil SEKALIMAT dengan produk/pemakaiannya — klaim walau tanpa kata
+  // perubahan (keputusan Brian 20 Agu). Dipecah per kalimat, bukan per teks
+  // penuh: "Aku pakai ini malam. Temanku tim glowing." dua pernyataan berbeda.
+  if (kategoriKulit && !aman && !kulitPola) {
+    for (const kalimat of tanpaNama.split(/[.!?\n]+/)) {
+      if (KATA_HASIL_KULIT.test(kalimat) && KATA_PRODUK.test(kalimat)) {
+        kulitPola = KATA_HASIL_KULIT;
+        break;
+      }
+    }
+  }
+  const kena = klaimPola ?? kulitPola;
+  if (klaimTok || kena) {
     issues.push({
       rule: "L-23",
-      message_id: `Ada klaim hasil ("${klaimTok ?? tanpaNama.match(klaimPola!)?.[0]}") — janji hasil instan bisa menyeret akun kamu kena teguran. Ceritakan yang kelihatan saja.`,
+      message_id: `Ada klaim hasil ("${klaimTok ?? tanpaNama.match(kena!)?.[0]}") — janji hasil instan bisa menyeret akun kamu kena teguran. Ceritakan yang kelihatan saja.`,
     });
   }
   const medTok = toks.find((t) => MEDICAL_TOKENS.has(t));
@@ -483,6 +516,34 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // diklik, jadi L-03 tidak berlaku dan penutupnya punya aturan sendiri.
   const isAds = !isTvc && script.contentType === "ads";
 
+  // S-10: KONTRAK SEGMEN PEMBUKA — produk sudah di frame pada format yang
+  // seluruh kameranya memang tentang produk.
+  //
+  // Lahir dari render berbayar 20 Agu. Penulis menulis aksi hook "camera sweeps
+  // across the mess, THEN pauses on the serum bottle", dan model menurutinya
+  // harfiah: botol baru masuk frame detik ~2 dari 5. Percobaan menambalnya di
+  // perakit prompt — menambahkan kalimat batasan di depan aksi penulis — GAGAL
+  // pada render verifikasi: kalimat berbentuk koreografi mengalahkan kalimat
+  // berbentuk batasan, dan keduanya ada di prompt yang sama.
+  //
+  // Jadi aturannya dipindah ke hulu, ke tata bahasa shot penulis, tempat ia
+  // tidak punya lawan. hands_only berarti kameranya memang pada tangan DAN
+  // produk sejak frame pertama; hook 'hidden' di sana bukan pilihan gaya,
+  // melainkan hook yang kehilangan subjeknya.
+  //
+  // ads/tvc SENGAJA tidak diikutkan: di Story OS Ads, hook 'hidden' justru
+  // struktur yang benar (produk datang belakangan, lihat SA-jembatan), dan
+  // memaksakan kehadiran produk di sana akan merusak genrenya.
+  const formatMenuntutProduk = script.format === "hands_only";
+  const produkAwal = (hookSeg as { product_state?: string } | undefined)?.product_state;
+  if (formatMenuntutProduk && produkAwal === "hidden") {
+    push(true, {
+      rule: "S-10",
+      message_id:
+        "Shot pembuka format hands_only harus sudah menampilkan produk (product_state 'partial', bukan 'hidden') — kameranya memang tentang tangan dan produk, jadi produk yang baru masuk belakangan membuang separuh hook.",
+    });
+  }
+
   // L-01: >=2 partikel
   const particleCount = toks.filter((t) => PARTICLES.has(t)).length;
   if (!isTvc && particleCount < 2)
@@ -491,7 +552,9 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // L-02 bukan aturan global. Hanya template price-led/promo yang memberi
   // sinyal eksplisit boleh mewajibkan harga; template lain justru perlu ruang
   // untuk hook masalah, rasa penasaran, bukti, atau cerita tanpa boilerplate.
-  if (script.requirePriceMention && !PRICE_REGEX.test(hookDemo))
+  // L-02 hanya mengecek KEHADIRAN harga; kebenaran nominal (termasuk
+  // pembulatan formatter resmi 24.620 -> 25 ribu) diperiksa L-14.
+  if (script.requirePriceMention && deteksiHargaIndonesia(hookDemo).length === 0)
     push(false, { rule: "L-02", message_id: "Harganya belum disebut di awal video — pembeli butuh dengar angkanya (mis. '85 ribu').", segment: "demo" });
 
   // L-03: CTA menyebut "keranjang" — "kuning" cuma untuk TikTok Shop (istilah
@@ -644,6 +707,20 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   if (medTok || medPhrase)
     push(true, { rule: "L-11", message_id: `Ada klaim kesehatan ("${medTok ?? medPhrase}") — klaim medis dilarang keras di platform.` });
 
+  // L-23: klaim HASIL — diperiksa DI SINI, pada naskah, bukan cuma di QC.
+  //
+  // Sampai 20 Agu L-23 terdaftar di SELALU_KERAS tapi tidak pernah dipanggil
+  // dari validateScript: satu-satunya penegaknya QC-07, yang berjalan pada
+  // video JADI — yaitu sesudah tiga klip dibayar. Aturan yang hanya bisa
+  // menolak sesudah uangnya keluar tidak melindungi siapa pun; ia cuma
+  // mengubah kerugian jadi laporan.
+  //
+  // Kategori ikut supaya kosakata kulit ("glowing") hanya berlaku pada produk
+  // yang punya kulit.
+  for (const issue of periksaKataTerlarang(fullText, script.productName, script.productCategory)) {
+    if (issue.rule === "L-23") push(true, issue);
+  }
+
   // L-12: bahasa iklan formal
   const formal = FORMAL_PHRASES.find((p) => lower.includes(p));
   if (formal)
@@ -665,7 +742,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // Angka di dalam frasa harga diperiksa utuh (nominal + unit) di bawah.
   // Jangan pecah "24,62 ribu" menjadi token 24 dan 62 lalu menolaknya
   // sebelum pemeriksaan harga semantik sempat berjalan.
-  const nonPriceTokens = tokens(fullText.replace(PRICE_MENTION_REGEX, " "));
+  const nonPriceTokens = tokens(tanpaNominalHargaTertulis(fullText));
   // Angka DI DALAM NAMA PRODUK bukan klaim — tapi izinnya melekat pada
   // KEMUNCULAN namanya, bukan pada angkanya di mana pun.
   //
@@ -683,6 +760,9 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   );
   if (badDigit)
     push(false, { rule: "L-14", message_id: `Ada angka "${badDigit}" yang tidak ada di data produk — klaim harus sesuai data yang kamu kasih.` });
+  const signedPerak = deteksiNominalPerakBertanda(fullText)[0];
+  if (signedPerak)
+    push(false, { rule: "L-14", message_id: `Harga bertanda "${signedPerak}" tidak sah sebagai harga produk.` });
   const sourcePriceAmounts = [script.priceIdr, script.promoPriceBeforeIdr]
     .filter((value): value is number => Boolean(value));
   // Copy lisan sengaja memakai formatHargaNatural (mis. Rp24.620 ->
@@ -693,22 +773,9 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
     const spoken = spokenPriceAmount(amount);
     if (spoken !== null) allowedPriceAmounts.add(spoken);
   }
-  const wrongPrice = [...fullText.matchAll(PRICE_MENTION_REGEX)].find((match) => {
-    const number = Number(match[1].replace(",", "."));
-    const multiplier = /juta|jt/i.test(match[2]) ? 1_000_000 : 1_000;
-    return !allowedPriceAmounts.has(Math.round(number * multiplier));
-  });
+  const wrongPrice = deteksiHargaIndonesia(fullText).find((mention) => !allowedPriceAmounts.has(mention.nilai));
   if (wrongPrice) {
-    push(false, { rule: "L-14", message_id: `Harga "${wrongPrice[0]}" tidak cocok dengan harga produk yang diberikan.` });
-  }
-  // Harga yang ditulis dengan KATA — jalur yang justru kita perintahkan
-  // sendiri ke penulis LLM, dan satu-satunya jalur yang belum diperiksa.
-  const salahTerbilang = hargaTerbilang(fullText).find((h) => !allowedPriceAmounts.has(h.nilai));
-  if (salahTerbilang) {
-    push(false, {
-      rule: "L-14",
-      message_id: `Harga "${salahTerbilang.frasa}" (${salahTerbilang.nilai}) tidak cocok dengan harga produk yang diberikan.`,
-    });
+    push(false, { rule: "L-14", message_id: `Harga "${wrongPrice.frasa}" (${wrongPrice.nilai}) tidak cocok dengan harga produk yang diberikan.` });
   }
 
   // L-15: merek pesaing yang direndahkan
@@ -806,7 +873,7 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // "keras bahkan di mode light", dan di mode strict SEMUANYA jadi error. Jadi
   // push(false, ...) tetap menjatuhkan naskah di strict — persis kebalikan dari
   // yang dimaksud, dan tesnya yang menangkapnya.
-  if (!isTvc && hookSeg && !memakaiPerangkat(stripDeliveryTags(hookSeg.text))) {
+  if (!isTvc && !isAds && hookSeg && !memakaiPerangkat(stripDeliveryTags(hookSeg.text))) {
     push(false, {
       rule: "L-19",
       message_id: "Hook belum memakai perangkat retoris yang dikenali — pakai pertanyaan, negasi, sebut harga, atau pengakuan pribadi.",
@@ -919,9 +986,36 @@ export function validateScript(script: ScriptToValidate, mode: ValidationMode): 
   // sendiri dan sudah dijaga L-03/A-01/A-02.
   for (const t of periksaStoryOsAds(
     { segments: script.segments as never },
-    { contentType: script.contentType ?? null, durationSec: script.durationSec ?? null }
+    {
+      contentType: script.contentType ?? null,
+      templateId: script.templateId ?? null,
+      durationSec: script.durationSec ?? null,
+      productName: script.productName,
+      productCategory: script.productCategory,
+      productPriceIdr: script.priceIdr,
+    }
   )) {
     push(false, { rule: t.gerbang, message_id: t.pesan });
+  }
+
+  // A-03: action hasil LLM benar-benar disisipkan verbatim ke prompt provider.
+  // Karena itu instruksi Story Ads yang menyentuh produk nyata bukan masalah
+  // copy, melainkan pelanggaran boundary piksel dan harus keras di semua gate.
+  if (script.contentType === "ads" && isNeutralStoryAdsTemplate(script.templateId)) {
+    for (const segment of script.segments) {
+      if (!segment.action) continue;
+      const contradictions = neutralStoryAdsActionContradictions(segment.action, {
+        productName: script.productName,
+        productCategory: script.productCategory,
+      });
+      if (contradictions.length > 0) {
+        push(true, {
+          rule: "A-03",
+          segment: segment.role,
+          message_id: `Aksi visual Story Ads wajib memakai kartu/swatch/prop netral blank: ${contradictions.join(", ")}.`,
+        });
+      }
+    }
   }
 
   return { passed: errors.length === 0, errors, warnings, checked_at: new Date().toISOString() };

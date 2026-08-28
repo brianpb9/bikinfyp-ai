@@ -1,0 +1,5 @@
+name=typescript
+started_utc=2026-08-24T07:40:07Z
+ended_utc=2026-08-24T07:40:09Z
+duration_seconds=2
+exit_code=0

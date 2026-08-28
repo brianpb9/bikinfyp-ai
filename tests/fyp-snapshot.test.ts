@@ -5,9 +5,30 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import fs from "node:fs";
 
 process.env.DB_PATH = `/tmp/racun-test-fypsnap-${process.pid}.db`;
 process.env.STORAGE_DIR = `/tmp/racun-test-fypsnap-storage-${process.pid}`;
+
+// BERKAS DB DIBUANG DULU — PID BISA DIDAUR ULANG.
+//
+// Nama database ini memakai `process.pid`, dan berkasnya tidak pernah dihapus
+// siapa pun. Begitu OS mendaur ulang sebuah PID, jalan berikutnya MEMBUKA
+// database milik jalan lama yang sudah berisi `t@t.id`, lalu `INSERT` di bawah
+// gagal dengan UNIQUE constraint — `npm test` merah tanpa satu baris kode pun
+// berubah.
+//
+// Bukan hipotetis: saat baris ini ditulis ada 357 berkas
+// /tmp/racun-test-fypsnap-*.db tertinggal sejak 14 Agu, dan SETIAP satu berisi
+// baris `t@t.id`. Kegagalan itulah yang muncul di jalan penuh 21 Agu.
+//
+// Pola nama berbasis PID dipakai 65 berkas test di repo ini, jadi bahayanya
+// tidak khusus berkas ini — yang khusus cuma bahwa berkas ini yang lebih dulu
+// ketahuan. Yang diperbaiki di sini hanya yang benar-benar gagal; kelasnya
+// dilaporkan, bukan diam-diam ditulis ulang di 65 tempat.
+for (const akhiran of ["", "-wal", "-shm"]) {
+  fs.rmSync(`${process.env.DB_PATH}${akhiran}`, { force: true });
+}
 
 const { getDb, now, uuid } = await import("../lib/db");
 const { createFypSnapshot, applyFypReport } = await import("../lib/fyp-snapshot");

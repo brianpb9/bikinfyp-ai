@@ -1,0 +1,114 @@
+[
+  {
+    "id": "job-da85hoek1f9s73cbt11g",
+    "status": "succeeded",
+    "createdAt": "2026-08-27T15:33:53.973592Z",
+    "startedAt": "2026-08-27T15:33:54Z",
+    "finishedAt": "2026-08-27T15:34:21Z",
+    "startCommand": "node scripts/laporan-nsfw.mjs 7"
+  },
+  {
+    "id": "job-da85gfegekts73c9ut9g",
+    "status": "succeeded",
+    "createdAt": "2026-08-27T15:31:09.002144Z",
+    "startedAt": "2026-08-27T15:31:09Z",
+    "finishedAt": "2026-08-27T15:31:38Z",
+    "startCommand": "node --input-type=module -e \"import {Pool} from \\\"pg\\\"; import {S3Client,ListObjectsV2Command} from \\\"@aws-sdk/client-s3\\\"; const need=[\\\"DATABASE_URL\\\",\\\"R2_ENDPOINT\\\",\\\"R2_BUCKET\\\",\\\"R2_ACCESS_KEY_ID\\\",\\\"R2_SECRET_ACCESS_KEY\\\"]; const slots=Object.fromEntries(need.map(k=>[k,Boolean(process.env[k])])); if(Object.values(slots).some(v=>!v)) throw Error(\\\"managed slot absent\\\"); const pool=new Pool({connectionString:process.env.DATABASE_URL}); const q=await pool.query(\\\"SELECT current_database() db, (SELECT count(*)::int FROM schema_migrations) migrations, (SELECT max(version) FROM schema_migrations) latest, (SELECT count(*)::int FROM products) products\\\"); const s3=new S3Client({endpoint:process.env.R2_ENDPOINT,region:process.env.R2_REGION||\\\"auto\\\",credentials:{accessKeyId:process.env.R2_ACCESS_KEY_ID,secretAccessKey:process.env.R2_SECRET_ACCESS_KEY},forcePathStyle:true}); const page=await s3.send(new ListObjectsV2Command({Bucket:process.env.R2_BUCKET,MaxKeys:1})); console.log(JSON.stringify({schema:\\\"lane-a-managed-readback/v1\\\",exact_sha:process.env.RENDER_GIT_COMMIT||null,db:{connected:true,name:q.rows[0].db,migrations:q.rows[0].migrations,latest:q.rows[0].latest,products:q.rows[0].products},r2:{connected:true,key_count_at_most_one:(page.Contents||[]).length,bucket_name_redacted:true},slots_present:slots,mutation:false})); await pool.end();\""
+  },
+  {
+    "id": "job-da85e1ijnfac73crfct0",
+    "status": "succeeded",
+    "createdAt": "2026-08-27T15:25:58.464964Z",
+    "startedAt": "2026-08-27T15:25:58Z",
+    "finishedAt": "2026-08-27T15:26:21Z",
+    "startCommand": "node scripts/laporan-nsfw.mjs 7"
+  },
+  {
+    "id": "job-da7auc8u01pc738qm4ig",
+    "status": "failed",
+    "createdAt": "2026-08-26T09:17:37.697462Z",
+    "startedAt": "2026-08-26T09:17:37Z",
+    "finishedAt": "2026-08-26T09:18:16Z",
+    "startCommand": "REDIS_QUEUE_NAME=racun-jobs-staging-post-e2-trace EXPECTED_APP_SHA=8709f4a810894b810e9bdbd04ec738c0332662ff npx tsx scripts/managed-post-e2-worker-trace.ts"
+  },
+  {
+    "id": "job-da7asqh5efls73cnbbe0",
+    "status": "failed",
+    "createdAt": "2026-08-26T09:14:18.562682Z",
+    "startedAt": "2026-08-26T09:14:18Z",
+    "finishedAt": "2026-08-26T09:14:58Z",
+    "startCommand": "EXPECTED_APP_SHA=8709f4a810894b810e9bdbd04ec738c0332662ff npx tsx scripts/managed-post-e2-worker-trace.ts"
+  },
+  {
+    "id": "job-da64dpek1f9s7390i0ng",
+    "status": "succeeded",
+    "createdAt": "2026-08-24T13:28:05.478493Z",
+    "startedAt": "2026-08-24T13:28:05Z",
+    "finishedAt": "2026-08-24T13:28:30Z",
+    "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"CANONICAL_QUEUE_SUSTAINED \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"CANONICAL_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+  },
+  {
+    "id": "job-da64d761egvs73a20qng",
+    "status": "succeeded",
+    "createdAt": "2026-08-24T13:26:52.853809Z",
+    "startedAt": "2026-08-24T13:26:53Z",
+    "finishedAt": "2026-08-24T13:27:24Z",
+    "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"CANONICAL_QUEUE_POST \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"CANONICAL_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+  },
+  {
+    "id": "job-da64c1e417fc739a4ll0",
+    "status": "succeeded",
+    "createdAt": "2026-08-24T13:24:21.741498Z",
+    "startedAt": "2026-08-24T13:24:21Z",
+    "finishedAt": "2026-08-24T13:24:49Z",
+    "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"CANONICAL_QUEUE_PRE \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"CANONICAL_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+  },
+  {
+    "id": "job-da6476jl550s738cf7f0",
+    "status": "succeeded",
+    "createdAt": "2026-08-24T13:14:02.813093Z",
+    "startedAt": "2026-08-24T13:14:02Z",
+    "finishedAt": "2026-08-24T13:14:28Z",
+    "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"REPLAY_QUEUE_SUSTAINED \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"REPLAY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+  },
+  {
+    "id": "job-da646lm7bikc73aqep00",
+    "status": "succeeded",
+    "createdAt": "2026-08-24T13:12:54.331109Z",
+    "startedAt": "2026-08-24T13:12:54Z",
+    "finishedAt": "2026-08-24T13:13:19Z",
+    "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"REPLAY_QUEUE_POST \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"REPLAY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+  },
+  {
+    "id": "job-da645hmk1f9s738voujg",
+    "status": "succeeded",
+    "createdAt": "2026-08-24T13:10:30.849822Z",
+    "startedAt": "2026-08-24T13:10:31Z",
+    "finishedAt": "2026-08-24T13:10:36Z",
+    "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"REPLAY_QUEUE_PRE \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"REPLAY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+  },
+  {
+    "id": "job-da64563tqb8s739ig6d0",
+    "status": "failed",
+    "createdAt": "2026-08-24T13:09:44.587989Z",
+    "startedAt": "2026-08-24T13:09:44Z",
+    "finishedAt": "2026-08-24T13:10:13Z",
+    "startCommand": "node -e 'const {Queue}=require(\\\"bullmq\\\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\\\"racun-jobs\\\",\\\"racun-promo-jobs\\\"]){const q=new Queue(name,c); console.log(\\\"REPLAY_QUEUE_PRE \\\"+JSON.stringify({name,counts:await q.getJobCounts(\\\"wait\\\",\\\"active\\\",\\\"delayed\\\",\\\"prioritized\\\",\\\"failed\\\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\\\"REPLAY_QUEUE_ERROR \\\"+e.message);process.exit(1)})'"
+  },
+  {
+    "id": "job-da63uv6k1f9s738v67q0",
+    "status": "succeeded",
+    "createdAt": "2026-08-24T12:56:28.096306Z",
+    "startedAt": "2026-08-24T12:56:28Z",
+    "finishedAt": "2026-08-24T12:56:56Z",
+    "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"PARITY_QUEUE_FINAL \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"PARITY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+  },
+  {
+    "id": "job-da63shvqj5pc73e15d80",
+    "status": "succeeded",
+    "createdAt": "2026-08-24T12:51:19.812341Z",
+    "startedAt": "2026-08-24T12:51:19Z",
+    "finishedAt": "2026-08-24T12:51:46Z",
+    "startCommand": "node -e 'const {Queue}=require(\"bullmq\"); (async()=>{const c={connection:{url:process.env.REDIS_URL,maxRetriesPerRequest:null}}; for(const name of [process.env.REDIS_QUEUE_NAME||\"racun-jobs\",\"racun-promo-jobs\"]){const q=new Queue(name,c); console.log(\"PARITY_QUEUE_STATE \"+JSON.stringify({name,counts:await q.getJobCounts(\"wait\",\"active\",\"delayed\",\"prioritized\",\"failed\"),paused:await q.isPaused()})); await q.close()} process.exit(0)})().catch(e=>{console.error(\"PARITY_QUEUE_ERROR \"+e.message);process.exit(1)})'"
+  }
+]

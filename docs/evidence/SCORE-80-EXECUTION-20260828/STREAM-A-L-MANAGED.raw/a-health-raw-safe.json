@@ -1,0 +1,20 @@
+{
+  "ok": true,
+  "intake": "open",
+  "payments_provider": "duitku",
+  "payments_env": "sandbox",
+  "payments_live": false,
+  "build_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "klasifikasi": {
+    "mampu": true,
+    "biner": {
+      "ffmpeg": true,
+      "ffprobe": true,
+      "tesseract": true
+    },
+    "bahasaOcr": true,
+    "smoke": true,
+    "alasan": "Runtime ini bisa mengklasifikasi gambar (terbukti lewat smoke pipeline, bukan hanya -version).",
+    "diperiksaPada": "2026-08-27T15:28:38.539Z"
+  }
+}

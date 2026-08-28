@@ -1,0 +1,141 @@
+{
+  "schema": "lane-a-readonly-artifact/v1",
+  "task": "EVIDENCE-ACQUISITION-CRITICAL-PATH-20260827",
+  "status": "PENDING_INDEPENDENT_REVIEW",
+  "observed_at": ["2026-08-27T15:34:02.584Z","2026-08-27T15:34:55.657Z"],
+  "exact_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+  "independent_refresh": true,
+  "staging": {
+    "web": {
+      "service_id": "srv-d9n28tijnfac73a87lt0",
+      "name": "racun-ai-staging-web",
+      "type": "web_service",
+      "branch": "staging/exact-46499ac-20260827",
+      "auto_deploy": "no",
+      "suspended": "not_suspended",
+      "maintenance": false,
+      "runtime": "docker",
+      "dockerfile_path": "Dockerfile.web",
+      "pre_deploy_command": "node scripts/migrate-postgres-runtime.mjs",
+      "deploy_id": "dep-da85dqjtqb8s73du3tj0",
+      "deploy_status": "live",
+      "deploy_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+      "deploy_created_at": "2026-08-27T15:25:30.687007Z",
+      "deploy_finished_at": "2026-08-27T15:28:39.489661Z"
+    },
+    "worker": {
+      "service_id": "srv-d9n28ue417fc73ch2b60",
+      "name": "racun-ai-staging-worker",
+      "type": "background_worker",
+      "branch": "staging/exact-46499ac-20260827",
+      "auto_deploy": "no",
+      "suspended": "not_suspended",
+      "runtime": "docker",
+      "dockerfile_path": "Dockerfile.worker",
+      "deploy_id": "dep-da85ffijnfac73crk8a0",
+      "deploy_status": "live",
+      "deploy_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+      "deploy_created_at": "2026-08-27T15:29:02.46145Z",
+      "deploy_finished_at": "2026-08-27T15:30:32.915671Z"
+    },
+    "health": {
+      "http_status": 200,
+      "ok": true,
+      "intake": "open",
+      "build_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+      "payments_provider": "duitku",
+      "payments_env": "sandbox",
+      "payments_live": false,
+      "classifier": {
+        "capable": true,
+        "ffmpeg": true,
+        "ffprobe": true,
+        "tesseract": true,
+        "ocr_language": true,
+        "smoke": true,
+        "checked_at": "2026-08-27T15:28:38.539Z"
+      }
+    },
+    "postgres_control_plane": {
+      "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+      "name": "racun-ai-staging-postgres",
+      "database_name": "racun_staging",
+      "status": "available",
+      "suspended": "not_suspended",
+      "plan": "free",
+      "version": "16",
+      "region": "singapore",
+      "high_availability": false,
+      "disk_autoscaling": false
+    },
+    "readback_job": {
+      "id": "job-da85gfegekts73c9ut9g",
+      "service_id": "srv-d9n28ue417fc73ch2b60",
+      "status": "succeeded",
+      "created_at": "2026-08-27T15:31:09.002144Z",
+      "started_at": "2026-08-27T15:31:09Z",
+      "finished_at": "2026-08-27T15:31:38Z",
+      "log_timestamp": "2026-08-27T15:31:23.945534748Z",
+      "log_schema": "lane-a-managed-readback/v1",
+      "exact_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
+      "database_connected": true,
+      "database_name": "racun_staging",
+      "migration_count": 36,
+      "latest_migration": "0036_product_type_confirmation",
+      "product_count": 149,
+      "r2_connected": true,
+      "r2_key_count_at_most_one": 1,
+      "r2_bucket_name_redacted": true,
+      "required_slots_present": {
+        "DATABASE_URL": true,
+        "R2_ENDPOINT": true,
+        "R2_BUCKET": true,
+        "R2_ACCESS_KEY_ID": true,
+        "R2_SECRET_ACCESS_KEY": true
+      },
+      "mutation": false
+    }
+  },
+  "production_no_touch": {
+    "baseline_source": "docs/evidence/P0-POST-E2-PARITY-ADMISSION-WORKER-TRACE-20260826/CONTROL-PLANE.json",
+    "web": {
+      "service_id": "srv-d9nhccfqj5pc73et9hrg",
+      "branch": "main",
+      "auto_deploy": "yes",
+      "deploy_id": "dep-da79380u01pc73br2vug",
+      "deploy_status": "live",
+      "deploy_sha": "ec734b186307fe3a4c79cf6632f8f5e75f8634ae",
+      "deploy_finished_at": "2026-08-26T07:15:36.673075Z",
+      "matches_committed_baseline": true
+    },
+    "worker": {
+      "service_id": "srv-d9ni3ndaeets73c07kq0",
+      "branch": "main",
+      "auto_deploy": "yes",
+      "deploy_id": "dep-da79380u01pc73br30hg",
+      "deploy_status": "live",
+      "deploy_sha": "ec734b186307fe3a4c79cf6632f8f5e75f8634ae",
+      "deploy_finished_at": "2026-08-26T07:14:01.765979Z",
+      "matches_committed_baseline": true
+    },
+    "mutation_performed_by_refresh": false,
+    "release_control_blocker_auto_deploy_yes_remains": true
+  },
+  "limits": {
+    "direct_predeploy_log_receipt": "NOT_CAPTURED; configured pre-deploy command plus runtime migration readback are captured",
+    "paired_legacy_population_audit": "NOT_RUN",
+    "lane_B_current_sha_e2e": "NOT_RUN",
+    "restore_or_failure_recovery": "NOT_RUN",
+    "representative_kpi_window": "NOT_RUN",
+    "postgres_high_availability_or_pitr": "UNAVAILABLE_ON_OBSERVED_FREE_PLAN",
+    "production_behavior": "NOT_PROBED"
+  },
+  "safety": {
+    "commands_read_only": true,
+    "deploy_created": false,
+    "service_or_database_updated": false,
+    "provider_called": false,
+    "payment_or_real_money": false,
+    "secret_values_persisted": false
+  }
+}

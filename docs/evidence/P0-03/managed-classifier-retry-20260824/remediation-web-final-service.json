@@ -1,0 +1,22 @@
+{
+  "id": "srv-d9n28tijnfac73a87lt0",
+  "branch": "staging/exact-73280ff-20260824",
+  "autoDeploy": "no",
+  "suspended": "not_suspended",
+  "updatedAt": "2026-08-24T12:59:29.641256Z",
+  "type": "web_service",
+  "serviceDetails": {
+    "runtime": "docker",
+    "healthCheckPath": "/api/health",
+    "maintenanceMode": {
+      "enabled": false,
+      "uri": ""
+    },
+    "envSpecificDetails": {
+      "dockerCommand": "",
+      "dockerContext": ".",
+      "dockerfilePath": "Dockerfile.web",
+      "preDeployCommand": "node scripts/migrate-postgres-runtime.mjs"
+    }
+  }
+}

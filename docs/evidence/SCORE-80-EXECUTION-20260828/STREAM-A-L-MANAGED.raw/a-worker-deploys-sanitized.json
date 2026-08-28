@@ -1,0 +1,67 @@
+[
+  {
+    "id": "dep-da85ffijnfac73crk8a0",
+    "status": "live",
+    "commit": {
+      "createdAt": "2026-08-27T09:23:20Z",
+      "id": "46499ac5e345997b394e4ac522759e40fe2eae22",
+      "message": "test: bind readiness verifier to exact rubric"
+    },
+    "createdAt": "2026-08-27T15:29:02.46145Z",
+    "updatedAt": "2026-08-27T15:30:32.91599Z",
+    "finishedAt": "2026-08-27T15:30:32.915671Z",
+    "trigger": "api"
+  },
+  {
+    "id": "dep-da7chou1egvs73e7bvig",
+    "status": "deactivated",
+    "commit": {
+      "createdAt": "2026-08-26T11:00:50Z",
+      "id": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+      "message": "fix: use BullMQ-valid trace queue name"
+    },
+    "createdAt": "2026-08-26T11:07:15.768996Z",
+    "updatedAt": "2026-08-27T15:30:32.913561Z",
+    "finishedAt": "2026-08-26T11:08:32.310514Z",
+    "trigger": "api"
+  },
+  {
+    "id": "dep-da7cgv6417fc73fbuv80",
+    "status": "deactivated",
+    "commit": {
+      "createdAt": "2026-08-26T11:00:50Z",
+      "id": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+      "message": "fix: use BullMQ-valid trace queue name"
+    },
+    "createdAt": "2026-08-26T11:05:32.155612Z",
+    "updatedAt": "2026-08-26T11:08:32.309363Z",
+    "finishedAt": "2026-08-26T11:06:40.799442Z",
+    "trigger": "api"
+  },
+  {
+    "id": "dep-da7cff1srm7s7384g1v0",
+    "status": "deactivated",
+    "commit": {
+      "createdAt": "2026-08-26T11:00:50Z",
+      "id": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+      "message": "fix: use BullMQ-valid trace queue name"
+    },
+    "createdAt": "2026-08-26T11:02:20.596433Z",
+    "updatedAt": "2026-08-26T11:06:40.79826Z",
+    "finishedAt": "2026-08-26T11:03:34.580073Z",
+    "trigger": "api"
+  },
+  {
+    "id": "dep-da7cem942hec73b175g0",
+    "status": "deactivated",
+    "commit": {
+      "createdAt": "2026-08-26T10:55:33Z",
+      "id": "a92d9ebf91b9a37998dec27bab3d0e6e888596bd",
+      "message": "fix: isolate trace jobs on dedicated queue"
+    },
+    "createdAt": "2026-08-26T11:00:41.649031Z",
+    "updatedAt": "2026-08-26T11:03:34.579109Z",
+    "finishedAt": "2026-08-26T11:01:57.334666Z",
+    "trigger": "api"
+  }
+]

@@ -1,0 +1,21 @@
+observed_utc=2026-08-24T10:32Z..10:33Z
+identity=synthetic staging dev-login; identifier and cookie omitted
+dev_login_http=200
+dev_login_body=valid synthetic user; fields omitted
+credits_http=200
+balance=12000
+ledger_count=1
+jobs_before_http=200
+jobs_before_count=0
+admission_input=deliberately nonexistent script id; id omitted
+admission_http=404
+admission_code=NOT_FOUND
+jobs_after_http=200
+jobs_after_count=0
+database_synthetic_spend_rows_hold_capture_regen=0
+provider_call=none
+
+Interpretation: authentication, DB-backed reads, paid-admission readiness
+checks, and the handler boundary executed on the exact deployed SHA without
+creating a job or spend row. It is deliberately not a successful render or a
+valid-product end-to-end canary.

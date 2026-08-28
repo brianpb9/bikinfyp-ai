@@ -2,13 +2,13 @@ import { getAuthUser } from "@/lib/auth";
 import { ERR, errorResponse } from "@/lib/errors";
 import { getDb, audit, type ProductRow } from "@/lib/db";
 import { createSignedUrl } from "@/lib/signed-url";
-import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, saveProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
-import { pgAudit, pgSetProductImages, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
+import { ALLOWED_MIME, MAX_IMAGES, MAX_IMAGE_BYTES, bacaMetaGambar, deleteStoredProductImages, prepareInspectedProductImages, referensiLayak, saveUniqueProductImages, sniffMime, verifyDecodableImage } from "@/lib/product-images";
+import { pgAudit, postgresRuntimeEnabled, smokeGetProduct } from "@/lib/postgres/smoke-runtime";
 import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
-import fs from "node:fs";
-import os from "node:os";
-import path from "node:path";
-import { periksaLabelFoto } from "@/lib/media/label-terbaca";
+import { assertAuthoritativeLabelResult, periksaLabelFoto, merekTerdaftar } from "@/lib/media/label-terbaca";
+import { appendRetailProductImages, removeRetailProductImage } from "@/lib/retail-product-images";
+import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
+import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -25,11 +25,6 @@ async function ownedProduct(userId: string, productId: string): Promise<{ produc
   // scene + library org). Lihat pastikanBukanProdukOrg.
   pastikanBukanProdukOrg(product);
   return { product, images: JSON.parse(product.images || "[]") as string[] };
-}
-
-async function persistImages(userId: string, productId: string, images: string[]): Promise<void> {
-  if (postgresRuntimeEnabled()) await pgSetProductImages(userId, productId, images);
-  else getDb().prepare("UPDATE products SET images = ? WHERE id = ?").run(JSON.stringify(images), productId);
 }
 
 async function auditBoth(userId: string, action: string, productId: string, meta: Record<string, unknown>): Promise<void> {
@@ -78,24 +73,59 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // lolos, dan penggunanya membayar untuk kegagalan yang sudah bisa
     // diketahui di sini.
     //
-    // Diperiksa hanya untuk foto PERTAMA produk (yang jadi referensi utama);
-    // foto tambahan boleh berupa sudut lain yang labelnya tidak menghadap.
-    if (existing.length === 0 && blobs[0]) {
-      const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), "intake-label-"));
-      const tmpFile = path.join(tmpDir, "foto");
-      try {
-        fs.writeFileSync(tmpFile, blobs[0].data);
-        const label = await periksaLabelFoto(tmpFile, owned.product.name);
-        if (!label.terbaca) throw ERR.BAD_REQUEST(label.alasan!, "Product label not OCR-readable.");
-      } finally {
-        fs.rmSync(tmpDir, { recursive: true, force: true });
-      }
-    }
+    // SETIAP blob baru diperiksa sebelum satu pun byte/sidecar/list/audit
+    // dipersist. Foto #2+ tidak boleh menjadi jalan memutar gerbang merek.
+    const inspectedImages = await prepareInspectedProductImages(blobs, async (normalizedPath) => {
+        // Merek TERDAFTAR ikut — sumber yang sama dengan QC-F1
+        // (products.raw_meta.brand), bukan tebakan dari nama produk.
+        const label = await periksaLabelFoto(normalizedPath, owned.product.name, merekTerdaftar(owned.product));
+        assertAuthoritativeLabelResult(label);
+        // LUBANG YANG DITUTUP 20 Agu: sampai hari itu hasil kecocokan merek
+        // dihitung lalu DIBUANG — hanya `terbaca` yang diperiksa. Karena itu
+        // foto AI berlabel "bdodpgeer" lolos jadi referensi dan ikut ke lima
+        // render berbayar. Label yang terbaca tapi bukan merek penjualnya
+        // sendiri bukan foto produknya.
+        if (label.cocokMerek === false) {
+          throw ERR.BRAND_MISMATCH(label.alasan);
+        }
+        return label;
+    });
 
-    const added = await saveProductImages(id, blobs, existing.length);
-    const images = [...existing, ...added];
-    await persistImages(user.id, id, images);
-    await auditBoth(user.id, "product.photos_added", id, { added: added.length, total: images.length });
+    // UUID keys avoid object overwrite when two uploads observed the same
+    // starting list length. Publication into the list remains atomic below.
+    const added = await saveUniqueProductImages(id, blobs, inspectedImages);
+
+    // WIZARD BUTUH MINIMAL SATU FOTO PRODUK YANG LAYAK JADI ACUAN.
+    //
+    // Grafis promosi boleh disimpan di pustaka — penjual memang memakainya
+    // untuk hal lain — tapi ia tidak pernah jadi referensi render. Yang
+    // ditolak di sini keadaan "produk ini tidak punya SATU pun foto yang bisa
+    // dipakai", karena itu berarti setiap render sesudahnya dijamin memakai
+    // bahan yang salah.
+    try {
+      const semua = [...existing, ...added];
+      const layak = await referensiLayak(semua);
+      if (layak.length === 0) {
+        const metaBaru = await Promise.all(added.map((rel) => bacaMetaGambar(rel)));
+        const sebab = metaBaru.find((m) => m && !m.layakReferensi)?.alasan
+          ?? "Belum ada foto produk yang bisa dipakai jadi acuan.";
+        throw ERR.BAD_REQUEST(
+          `${sebab} Butuh minimal satu foto produk polos supaya videonya punya acuan yang benar.`,
+          "No reference-eligible product photo."
+        );
+      }
+    } catch (referenceError) {
+      await rejectAfterReferenceCheck("E4", added, referenceError);
+    }
+    const images = await appendRetailProductImages(user.id, id, added, MAX_IMAGES);
+    if (!images) {
+      await deleteStoredProductImages(added);
+      throw ERR.BAD_REQUEST("Daftar fotonya baru saja berubah. Muat ulang lalu coba lagi; maksimal 8 foto.", "Concurrent photo update rejected.");
+    }
+    // Telemetry pasca-commit tidak boleh menghasilkan false 500 dan mengundang
+    // retry yang menggandakan mutasi.
+    void auditBoth(user.id, "product.photos_added", id, { added: added.length, total: images.length })
+      .catch((error) => console.error("[audit] product.photos_added failed:", error));
     return Response.json({
       product_id: id,
       images,
@@ -107,8 +137,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
 }
 
 // DELETE /api/products/[id]/photos {path} — buang satu foto dari produk
-// (tombol ✕ di S2). File storage dibiarkan (orphan best-effort; path tetap
-// privat di balik signed URL + owner check).
+// (tombol ✕ di S2). Daftar DB dipersist DULU, baru foto+sidecar dibersihkan
+// best-effort. Kegagalan cleanup tidak boleh menghidupkan lagi entry yang sudah
+// dihapus dari daftar; client mendapat flag yang sama dengan jalur org E9.
 export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const user = await getAuthUser(req);
@@ -120,13 +151,21 @@ export async function DELETE(req: Request, ctx: { params: Promise<{ id: string }
     const body = await req.json().catch(() => ({}));
     const target = String(body.path ?? "");
     if (!owned.images.includes(target)) throw ERR.NOT_FOUND("Fotonya");
-    const images = owned.images.filter((p) => p !== target);
-    await persistImages(user.id, id, images);
-    await auditBoth(user.id, "product.photo_removed", id, { removed: target, total: images.length });
+    const { images, cleanupPending } = await withProductEvidenceMutationLock(id, async (lockClient) => {
+      const images = await removeRetailProductImage(user.id, id, target, lockClient);
+      if (!images) throw ERR.NOT_FOUND("Fotonya");
+      let cleanupPending = false;
+      try { await deleteStoredProductImages([target]); }
+      catch { cleanupPending = true; }
+      return { images, cleanupPending };
+    });
+    void auditBoth(user.id, "product.photo_removed", id, { removed: target, total: images.length })
+      .catch((error) => console.error("[audit] product.photo_removed failed:", error));
     return Response.json({
       product_id: id,
       images,
       image_urls: images.map((rel) => createSignedUrl(rel)),
+      cleanup_failed: cleanupPending,
     });
   } catch (err) {
     return errorResponse(err);

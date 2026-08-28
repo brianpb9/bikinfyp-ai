@@ -1,0 +1,5 @@
+58164488469beb1a6c3821bba3d551447a4d429f8b62e331030e80853552367b  docs/evidence/P0-03/ship-readiness-c9c12-reconcile-20260824/MANIFEST.md
+83f4f258c9c3736361b8e5ec4e8e9de8e6321d886498d7a830ec3cdcd5570cc9  docs/evidence/P0-03/ship-readiness-c9c12-reconcile-20260824/c12-checksum.log
+856756ad15555033d3dcd44893e496ccc8a227cc891e28edf0b02581312d4f2e  docs/evidence/P0-03/ship-readiness-c9c12-reconcile-20260824/c9-checksum.log
+b943f7e87c5abede7a9033895fa700996b97bcaf95d15f7be07ee697e1beca74  docs/evidence/P0-03/ship-readiness-c9c12-reconcile-20260824/consistency-checks.log
+6537b8117d1b75b052b9e7ef0e3486268a920e878dda3311675f686c8d3c5165  docs/evidence/P0-03/ship-readiness-c9c12-reconcile-20260824/proof.txt

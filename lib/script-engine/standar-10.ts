@@ -6,9 +6,13 @@
  * produk, kode berubah lewat tes — dan menyalin kalimatnya ke sini akan membuat
  * keduanya menyimpang diam-diam. Yang disalin cuma NOMOR barisnya.
  *
- * Tiga tingkat penegakan, dan bedanya harus jujur:
+ * Empat tingkat penegakan, dan bedanya harus jujur:
  *
  *   "kode"   — ada pemeriksa mekanis yang bisa MENOLAK naskah.
+ *   "render" — dijamin mekanis saat merender (composer/QC), bukan saat menulis.
+ *              Naskah tidak bisa melanggarnya karena naskah bukan tempatnya
+ *              diputuskan. Baris 7 begitu sejak 20 Agu: label merek dijamin
+ *              packshot foto asli, bukan diminta dari penulis atau model video.
  *   "prompt" — hanya disuntikkan ke penulis; ia bisa mengabaikannya.
  *   "belum"  — butuh bukti yang belum kita punya (render, riwayat akun).
  *
@@ -19,7 +23,7 @@ import { hookLevelRank, type HookLevel } from "../config/hooks";
 import { tutupiNama } from "../media/pemicu-filter";
 import type { SegmentDraft } from "./templates";
 
-export type Penegakan = "kode" | "prompt" | "belum";
+export type Penegakan = "kode" | "render" | "prompt" | "belum";
 
 export interface Baris10 {
   no: number;
@@ -51,8 +55,8 @@ export const BARIS_10: Baris10[] = [
   { no: 4, judul: "Payoff menjawab hook, bukan katalog", penegakan: "kode", dimensi: "payoff" },
   { no: 5, judul: "Level hook sesuai kategori", penegakan: "kode", dimensi: "scroll_stop" },
   { no: 6, judul: "Nol klaim yang bisa disalahkan", penegakan: "kode", dimensi: "brand_fidelity_plan" },
-  { no: 7, judul: "Brand fidelity terencana", penegakan: "prompt", dimensi: "brand_fidelity_plan",
-    catatan: "label terbaca di >=2 titik baru bisa dibuktikan dari video jadi (QC-10/QC-F1), bukan dari naskah" },
+  { no: 7, judul: "Brand fidelity terencana", penegakan: "render", dimensi: "brand_fidelity_plan",
+    catatan: "sejak 20 Agu label dijamin PACKSHOT foto asli di composer (appendPackshot), bukan diminta ke model video; QC-10 membuktikan asal-usul fotonya (sha) dan memburu huruf salah di bagian generate" },
   { no: 8, judul: "Filter-safe secara struktural", penegakan: "kode", dimensi: "nativeness" },
   { no: 9, judul: "Bahasa dikunci 4 lapis", penegakan: "kode", dimensi: "story_pull" },
   { no: 10, judul: "Struktur produksi jujur", penegakan: "kode", dimensi: "nativeness" },

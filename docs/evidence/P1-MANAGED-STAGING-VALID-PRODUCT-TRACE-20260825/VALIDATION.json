@@ -1,0 +1,35 @@
+{
+  "task": "P1-MANAGED-STAGING-VALID-PRODUCT-TRACE-20260825",
+  "code_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
+  "focused_tests": {
+    "command": "node --import tsx --test tests/config-ensure-dirs-postgres.test.ts tests/e1-reference-gate.test.ts",
+    "passed": 11,
+    "failed": 0
+  },
+  "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0, "performed_real_typescript_check": true },
+  "diff_check": { "command": "git diff --check", "exit_code": 0 },
+  "secret_scan": {
+    "environment_files_considered": 1,
+    "secret_values_checked": 11,
+    "exact_value_hits": 0
+  },
+  "runner_provenance": {
+    "job": "job-da6bcoe1egvs73a14jbg",
+    "embedded_runner_matches_repository_bytes": true,
+    "runner_sha256": "58b09c5c5557cd44fc5d22b0aecdb1367cfaf89df194223d7ee08f147a4e58e0",
+    "runner_bytes": 15093
+  },
+  "final_health_samples": [
+    { "http": 200, "ok": true, "build_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "classifier_capable": true },
+    { "http": 200, "ok": true, "build_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "classifier_capable": true },
+    { "http": 200, "ok": true, "build_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "classifier_capable": true }
+  ],
+  "scope_guards": {
+    "production_mutated": false,
+    "real_money_used": false,
+    "payment_provider_called": false,
+    "generation_provider_called": false,
+    "policy_weakened": false,
+    "archive_reset": false
+  }
+}

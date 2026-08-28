@@ -1,0 +1,280 @@
+#!/bin/sh
+# bus-send <to> <type> <sha> <task> <body...>
+#
+# Writes one message atomically into .agent-bus/inbox/<to>/.
+# Exit codes:
+#   0  message written (path printed on stdout)
+#   2  usage error / invalid role / invalid type
+#   3  SHA_BINDING violation (sha missing, malformed, or not in this repo)
+#   6  ROLE_SEPARATION violation (from == to)
+#   7  task already belongs to a different owner
+set -eu
+
+# `pwd -P` WAJIB, bukan `pwd` polos (temuan Reviewer, dibuktikan konkret:
+# repo yang sama dibuka lewat symlink DAN path asli menghasilkan DUA
+# penunggu). `pwd` logis mengembalikan ejaan path APA ADANYA (lewat
+# symlink kalau dipanggil lewat symlink); `pwd -P` selalu mengembalikan
+# path FISIK. Tanpa ini, dua proses yang membuka repo yang SAMA lewat dua
+# ejaan berbeda menghitung BUS_DIR yang berbeda secara TEKSTUAL padahal
+# menunjuk berkas fisik yang identik — dan pencocokan identitas berbasis
+# string di `penunggu_sah` gagal, menyimpulkan penunggu yang sah sebagai
+# proses asing, menghapus pidfile-nya, lalu menelurkan penunggu KEDUA.
+SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd -P)
+BUS_DIR=$(dirname "$SCRIPT_DIR")
+REPO_ROOT=$(dirname "$BUS_DIR")
+NODE_BIN=${AGENT_BUS_NODE_BIN:-node}
+
+ROLES="builder reviewer"
+TYPES="TASK READY_FOR_REVIEW CHANGES_REQUESTED PASS DONE QUESTION FOUNDER_DECISION_REQUIRED"
+SHA_REQUIRED_TYPES="READY_FOR_REVIEW CHANGES_REQUESTED PASS"
+
+die() { code=$1; shift; printf 'bus-send: %s\n' "$*" >&2; exit "$code"; }
+
+in_list() {
+  needle=$1; shift
+  for item in $*; do
+    [ "$item" = "$needle" ] && return 0
+  done
+  return 1
+}
+
+now_ms() {
+  ms=$(date +%s%3N 2>/dev/null || true)
+  case "$ms" in
+    '' | *[!0-9]*) ms=$(( $(date +%s) * 1000 )) ;;
+  esac
+  printf '%s' "$ms"
+}
+
+[ $# -ge 5 ] || die 2 "usage: bus-send <to> <type> <sha> <task> <body...>"
+
+TO=$1; TYPE=$2; SHA=$3; TASK=$4
+shift 4
+BODY=$*
+
+[ -n "$TASK" ] || die 2 "task must not be empty"
+
+# --- durable routing identity --------------------------------------------
+# A worktree-derived owner is the compatibility default. Independent workers
+# should set AGENT_BUS_OWNER_ID explicitly; Reviewer replies set all origin
+# overrides from the READY message so the route is copied, never recomputed.
+WORKTREE=$(git -C "$REPO_ROOT" rev-parse --show-toplevel 2>/dev/null) \
+  || die 2 "cannot resolve Git worktree"
+WORKTREE=$(CDPATH= cd -- "$WORKTREE" && pwd -P)
+COMMON_DIR=$(git -C "$REPO_ROOT" rev-parse --git-common-dir 2>/dev/null) \
+  || die 2 "cannot resolve Git common directory"
+case "$COMMON_DIR" in /*) ;; *) COMMON_DIR="$WORKTREE/$COMMON_DIR" ;; esac
+COMMON_DIR=$(CDPATH= cd -- "$COMMON_DIR" && pwd -P)
+DEFAULT_REPO_ID=$(printf '%s' "$COMMON_DIR" | git hash-object --stdin 2>/dev/null | cut -c1-16)
+DEFAULT_WORKER_ID=$(printf '%s' "$WORKTREE" | git hash-object --stdin 2>/dev/null | cut -c1-16)
+[ -n "$DEFAULT_REPO_ID" ] && [ -n "$DEFAULT_WORKER_ID" ] \
+  || die 2 "cannot derive routing identity"
+DEFAULT_BRANCH=$(git -C "$REPO_ROOT" symbolic-ref --quiet --short HEAD 2>/dev/null || printf 'DETACHED')
+
+OWNER_ID=${AGENT_BUS_OWNER_ID:-worker-$DEFAULT_WORKER_ID}
+WORKER_ID=${AGENT_BUS_WORKER_ID:-$OWNER_ID}
+REPLY_TO_ID=${AGENT_BUS_REPLY_TO_ID:-}
+[ "$OWNER_ID" = "$WORKER_ID" ] || die 2 "owner_id and worker_id must match"
+
+override_count=0
+for value in "${AGENT_BUS_ORIGIN_BRANCH:-}" "${AGENT_BUS_ORIGIN_WORKTREE:-}" \
+  "${AGENT_BUS_ORIGIN_REPO_ID:-}" "${AGENT_BUS_ORIGIN_REPO_PATH:-}"; do
+  [ -z "$value" ] || override_count=$((override_count + 1))
+done
+case "$override_count" in
+  0)
+    ORIGIN_BRANCH=$DEFAULT_BRANCH
+    ORIGIN_WORKTREE=$WORKTREE
+    ORIGIN_REPO_ID=$DEFAULT_REPO_ID
+    ORIGIN_REPO_PATH=$COMMON_DIR
+    ;;
+  4)
+    ORIGIN_BRANCH=$AGENT_BUS_ORIGIN_BRANCH
+    ORIGIN_WORKTREE=$AGENT_BUS_ORIGIN_WORKTREE
+    ORIGIN_REPO_ID=$AGENT_BUS_ORIGIN_REPO_ID
+    ORIGIN_REPO_PATH=$AGENT_BUS_ORIGIN_REPO_PATH
+    ;;
+  *) die 2 "origin routing overrides must be supplied together" ;;
+esac
+
+# --- role validation -------------------------------------------------------
+in_list "$TO" "$ROLES" || die 2 "invalid role '$TO' (allowed: $ROLES)"
+
+# 'from' defaults to the other role; BUS_FROM pins the sender explicitly.
+if [ -n "${BUS_FROM:-}" ]; then
+  FROM=$BUS_FROM
+else
+  case "$TO" in
+    builder) FROM=reviewer ;;
+    reviewer) FROM=builder ;;
+  esac
+fi
+in_list "$FROM" "$ROLES" || die 2 "invalid BUS_FROM '$FROM' (allowed: $ROLES)"
+
+# ROLE_SEPARATION: a role may never post into its own inbox.
+[ "$FROM" != "$TO" ] || die 6 "ROLE_SEPARATION: '$FROM' may not send to its own inbox"
+
+# --- type validation -------------------------------------------------------
+in_list "$TYPE" "$TYPES" || die 2 "invalid type '$TYPE' (allowed: $TYPES)"
+
+# --- SHA_BINDING -----------------------------------------------------------
+if in_list "$TYPE" "$SHA_REQUIRED_TYPES"; then
+  sha_ok=yes
+  [ "${#SHA}" -eq 40 ] || sha_ok=no
+  case "$SHA" in *[!0-9a-f]*) sha_ok=no ;; esac
+  [ "$sha_ok" = yes ] \
+    || die 3 "SHA_BINDING: type $TYPE requires a 40-char lowercase hex sha, got '$SHA'"
+  git -C "$REPO_ROOT" cat-file -e "$SHA^{commit}" 2>/dev/null \
+    || die 3 "SHA_BINDING: sha '$SHA' is not a commit in $REPO_ROOT"
+fi
+
+# --- compose ---------------------------------------------------------------
+INBOX="$BUS_DIR/inbox/$TO"
+TMPDIR_BUS="$BUS_DIR/tmp"
+mkdir -p "$INBOX" "$TMPDIR_BUS" "$BUS_DIR/archive"
+command -v "$NODE_BIN" >/dev/null 2>&1 || die 2 "Node.js is required for lossless JSON encoding"
+
+SEQUENCE_FILE="$TMPDIR_BUS/.sequence"
+SEQUENCE_LOCK="$TMPDIR_BUS/.sequence.lock"
+SEQUENCE_LOCK_KIND=''
+SHLOCK_HELD=no
+TMPFILE=''
+cleanup_send() {
+  [ -z "$TMPFILE" ] || rm -f "$TMPFILE"
+  if [ "$SEQUENCE_LOCK_KIND" = fd ]; then
+    exec 9>&-
+  elif [ "$SHLOCK_HELD" = yes ] && [ "$(cat "$SEQUENCE_LOCK" 2>/dev/null || true)" = "$$" ]; then
+    rm -f "$SEQUENCE_LOCK"
+  fi
+}
+trap cleanup_send EXIT
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+# Hold one OS-backed lock until the lower-numbered message is visible in its
+# inbox. Merely reserving a number and unlocking before `mv` lets a later,
+# smaller message overtake a large one. `lockf <fd>` is the native macOS form;
+# `flock <fd>` is the Linux equivalent. Both release automatically on crash.
+if [ -d "$SEQUENCE_LOCK" ]; then
+  # One-time recovery from the directory lock used by runtime versions before
+  # the fd lock. Never remove it while its recorded owner is alive.
+  legacy_owner=$(cat "$SEQUENCE_LOCK/pid" 2>/dev/null || true)
+  case "$legacy_owner" in
+    ''|*[!0-9]*) legacy_owner_live=no ;;
+    *) if kill -0 "$legacy_owner" 2>/dev/null; then legacy_owner_live=yes; else legacy_owner_live=no; fi ;;
+  esac
+  [ "$legacy_owner_live" = no ] || die 2 "legacy sequence lock is still owned by pid $legacy_owner; retry"
+  rm -f "$SEQUENCE_LOCK/pid"
+  rmdir "$SEQUENCE_LOCK" 2>/dev/null || die 2 "cannot recover legacy sequence lock"
+fi
+
+if command -v lockf >/dev/null 2>&1; then
+  exec 9>"$SEQUENCE_LOCK" || die 2 "cannot open sequence lock"
+  lockf 9 || die 2 "cannot acquire sequence lock"
+  SEQUENCE_LOCK_KIND=fd
+elif command -v flock >/dev/null 2>&1; then
+  exec 9>"$SEQUENCE_LOCK" || die 2 "cannot open sequence lock"
+  flock -x 9 || die 2 "cannot acquire sequence lock"
+  SEQUENCE_LOCK_KIND=fd
+elif command -v shlock >/dev/null 2>&1; then
+  while ! shlock -f "$SEQUENCE_LOCK" -p "$$"; do sleep 0.01; done
+  SHLOCK_HELD=yes
+  SEQUENCE_LOCK_KIND=shlock
+else
+  die 2 "lockf, flock, or shlock is required for ordered concurrent sends"
+fi
+
+# One task has one durable owner. The global sequence lock makes the history
+# scan plus the new publication atomic with respect to every other sender.
+if ! "$NODE_BIN" - "$BUS_DIR" "$TASK" "$OWNER_ID" <<'NODE'
+const fs = require("fs");
+const path = require("path");
+const [bus, task, owner] = process.argv.slice(2);
+for (const dir of [path.join(bus, "inbox", "builder"), path.join(bus, "inbox", "reviewer"), path.join(bus, "archive")]) {
+  if (!fs.existsSync(dir)) continue;
+  for (const name of fs.readdirSync(dir)) {
+    if (!name.endsWith(".json")) continue;
+    try {
+      const m = JSON.parse(fs.readFileSync(path.join(dir, name), "utf8"));
+      if (m.task_id === task && typeof m.owner_id === "string" && m.owner_id && m.owner_id !== owner) {
+        process.stderr.write(`task ${task} is owned by ${m.owner_id}, not ${owner}\n`);
+        process.exit(7);
+      }
+    } catch {}
+  }
+}
+NODE
+then
+  die 7 "task owner mismatch for task='$TASK' owner='$OWNER_ID'"
+fi
+
+MS=$(now_ms)
+LAST_MS=$(cat "$SEQUENCE_FILE" 2>/dev/null || true)
+case "$LAST_MS" in ''|*[!0-9]*) LAST_MS=0 ;; esac
+[ "$MS" -gt "$LAST_MS" ] || MS=$((LAST_MS + 1))
+
+while :; do
+  prefix_used=no
+  for existing in \
+    "$BUS_DIR/inbox/builder/$MS-"* \
+    "$BUS_DIR/inbox/reviewer/$MS-"* \
+    "$BUS_DIR/archive/$MS-"*; do
+    if [ -e "$existing" ]; then prefix_used=yes; break; fi
+  done
+  [ "$prefix_used" = no ] && break
+  MS=$((MS + 1))
+done
+
+printf '%s\n' "$MS" > "$SEQUENCE_FILE.new.$$"
+mv "$SEQUENCE_FILE.new.$$" "$SEQUENCE_FILE"
+
+NAME="$MS-$FROM-$TYPE.json"
+ID="$MS-$FROM-$TYPE"
+TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+
+# Write to tmp first, then rename into the inbox. Rename within one
+# filesystem is atomic, so a reader never sees a half-written message.
+TMPFILE="$TMPDIR_BUS/.$NAME.$$"
+"$NODE_BIN" - "$ID" "$TS" "$FROM" "$TO" "$TYPE" "$SHA" "$TASK" "$BODY" \
+  "$OWNER_ID" "$WORKER_ID" "$ORIGIN_BRANCH" "$ORIGIN_WORKTREE" \
+  "$ORIGIN_REPO_ID" "$ORIGIN_REPO_PATH" "$REPLY_TO_ID" > "$TMPFILE" <<'NODE'
+const [id, ts, from, to, type, sha, task, body, owner_id, worker_id,
+  origin_branch, origin_worktree, origin_repo_id, origin_repo_path, reply_to_id] = process.argv.slice(2);
+const bounded = [task, owner_id, worker_id, origin_branch, origin_worktree, origin_repo_id, origin_repo_path];
+if (bounded.some((value) => !value || value.length > 4096 || /[\0\r\n]/.test(value))) process.exit(2);
+process.stdout.write(`${JSON.stringify({
+  id, ts, from, to, type, sha, task, task_id: task, owner_id, worker_id,
+  origin_branch, origin_worktree, origin_repo_id, origin_repo_path, reply_to_id, body,
+})}\n`);
+NODE
+
+mv "$TMPFILE" "$INBOX/$NAME"
+TMPFILE=''
+if [ "$SEQUENCE_LOCK_KIND" = fd ]; then
+  exec 9>&-
+elif [ "$SHLOCK_HELD" = yes ] && [ "$(cat "$SEQUENCE_LOCK" 2>/dev/null || true)" = "$$" ]; then
+  rm -f "$SEQUENCE_LOCK"
+  SHLOCK_HELD=no
+fi
+SEQUENCE_LOCK_KIND=''
+trap - EXIT INT TERM HUP
+printf '%s\n' "$INBOX/$NAME"
+
+# INVARIAN PENUNGGU: kirim DARI builder adalah keadaan mantap. Kalau saat ini
+# tidak ada penunggu builder, Builder baru saja menjadi TULI terhadap balasan
+# Reviewer atas pesan yang barusan dikirim — dan dulu itu terjadi tanpa satu pun
+# tanda. Peringatan ini tidak mengubah apa pun dan tidak menggagalkan pengiriman;
+# ia hanya membuat kegagalan senyap jadi kegagalan yang TERLIHAT, tepat di detik
+# ia terjadi. Menonaktifkan: BUS_TANPA_PERINGATAN_PENUNGGU=1.
+if [ "$FROM" = builder ] && [ "${BUS_TANPA_PERINGATAN_PENUNGGU:-}" != 1 ]; then
+  route_key=$(printf '%s\n%s' "$TASK" "$OWNER_ID" | git hash-object --stdin 2>/dev/null | cut -c1-16)
+  waiter_pid=$(cat "$BUS_DIR/tmp/waiter-builder-$route_key.pid" 2>/dev/null || true)
+  waiter_ok=no
+  if [ -n "$waiter_pid" ] && kill -0 "$waiter_pid" 2>/dev/null; then
+    case "$(ps -o command= -p "$waiter_pid" 2>/dev/null || true)" in
+      *"$BUS_DIR/bin/bus-wait"*builder*"--task $TASK --owner $OWNER_ID"*) waiter_ok=yes ;;
+    esac
+  fi
+  [ "$waiter_ok" = yes ] || printf 'PERINGATAN: nol penunggu builder untuk task=%s owner=%s sesudah %s. Jalankan `bus-arm builder --task ... --owner ...`.\n' "$TASK" "$OWNER_ID" "$TYPE" >&2
+fi

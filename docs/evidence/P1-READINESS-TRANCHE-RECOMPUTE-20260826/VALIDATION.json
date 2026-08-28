@@ -1,0 +1,46 @@
+{
+  "observed_at": "2026-08-26T08:39:46Z",
+  "scope": "docs/evidence-only readiness recompute",
+  "score": {
+    "source_board_rows": 13,
+    "source_board_sum": 77,
+    "receipt_rows": 13,
+    "receipt_sum": 77,
+    "counterexample_rows": 12,
+    "counterexample_sum": 70,
+    "normalized_rounded": 59,
+    "retained_ceiling": 58,
+    "reported_score": 58,
+    "pass": true
+  },
+  "accepted_bus": {
+    "tasks_checked": 8,
+    "committed_sanitized_messages_checked": 16,
+    "one_pass_and_done_per_task": true,
+    "runtime_archive_recomparison": "NOT_AVAILABLE_IN_IMMUTABLE_TREE",
+    "pass": true
+  },
+  "ancestry": {
+    "ancestor_or_baseline_tasks": 7,
+    "accepted_non_ancestor_tasks": 1,
+    "commit_objects_resolved": 8,
+    "fatal_ancestry_lookups": 0,
+    "non_ancestor_task": "ONBOARDING-VIDEO-PROOF-20260826",
+    "non_ancestor_score_delta": 0,
+    "pass": true
+  },
+  "static_validation": {
+    "json_files_checked": 3,
+    "json_invalid": 0,
+    "markdown_links_checked": 8,
+    "markdown_links_missing": 0,
+    "secret_like_hits": 0,
+    "git_diff_check": "PASS",
+    "manifest": "PASS"
+  },
+  "remote_calls": "NOT_RUN",
+  "deploy_or_provider_calls": "NOT_RUN",
+  "production_or_payment_mutation": "NOT_RUN",
+  "full_regression": "NOT_RUN_DOCS_ONLY",
+  "overall": "PASS"
+}

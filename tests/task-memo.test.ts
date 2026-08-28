@@ -10,12 +10,13 @@ const { taskMemo, setTaskMemo } = await import("../lib/providers/task-memo");
 
 test("bawaan no-op: get selalu null, put/clear tidak melempar", async () => {
   const m = taskMemo();
-  assert.equal(await m.get("j", 0, "byteplus"), null);
-  await m.put("j", 0, "byteplus", "t1");
+  const digest = "a".repeat(64);
+  assert.equal(await m.get("j", 0, "byteplus", digest), null);
+  await m.put("j", 0, "byteplus", "t1", digest);
   await m.clear("j");
   // Tetap null: tanpa implementasi terpasang, perilakunya persis seperti
   // sebelum fitur ini ada — provider selalu mengirim task baru.
-  assert.equal(await m.get("j", 0, "byteplus"), null);
+  assert.equal(await m.get("j", 0, "byteplus", digest), null);
 });
 
 test("implementasi yang dipasang benar-benar dipakai", async () => {
@@ -27,10 +28,11 @@ test("implementasi yang dipasang benar-benar dipakai", async () => {
     async clear(j) { calls.push("clear"); for (const k of [...store.keys()]) if (k.startsWith(`${j}:`)) store.delete(k); },
   });
   const m = taskMemo();
-  assert.equal(await m.get("j1", 0, "byteplus"), null);
-  await m.put("j1", 0, "byteplus", "task-abc");
-  assert.equal(await m.get("j1", 0, "byteplus"), "task-abc");
+  const digest = "a".repeat(64);
+  assert.equal(await m.get("j1", 0, "byteplus", digest), null);
+  await m.put("j1", 0, "byteplus", "task-abc", digest);
+  assert.equal(await m.get("j1", 0, "byteplus", digest), "task-abc");
   await m.clear("j1");
-  assert.equal(await m.get("j1", 0, "byteplus"), null);
+  assert.equal(await m.get("j1", 0, "byteplus", digest), null);
   assert.deepEqual(calls, ["get", "put", "get", "clear", "get"]);
 });

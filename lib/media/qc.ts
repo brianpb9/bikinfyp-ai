@@ -5,11 +5,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { probeDurationSec, probeHasVideoStream, probeFormatTags, volumeDetect, runFfmpeg, runFf } from "./ffmpeg";
 import { periksaKataTerlarang, validateScript } from "../script-engine/validator";
 import { AIGC_WATERMARK_TEXT } from "../config/compliance";
 import { isServiceLike } from "../config/hooks";
-import { qcVision, POSISI_SAMPEL } from "./qc-vision";
+import { neutralStoryAdsCoverageViolations, neutralStoryAdsViolations, qcVision, POSISI_SAMPEL, type TemuanFrame } from "./qc-vision";
 import { qcSuara } from "./qc-suara";
 import { merekCocok } from "./qc-frame";
 import { GENERIC_PRODUCT_WORDS, KATA_DEPAN_MEREK } from "../merek";
@@ -129,23 +130,47 @@ export const QC_POLICY_BY_FORMAT = {
 
 export type QcSupportedFormat = keyof typeof QC_POLICY_BY_FORMAT;
 
-export function evaluateQcPolicy(format: string | undefined, checks: QcCheck[]): boolean {
+export function evaluateQcPolicy(
+  format: string | undefined,
+  checks: QcCheck[],
+  visualSubjectPolicy?: "neutral_story_ads",
+): boolean {
   const key = (format ?? "hands_only") as QcSupportedFormat;
   const policy = QC_POLICY_BY_FORMAT[key];
   if (!policy) return false;
   const byCode = new Map(checks.map((check) => [check.code, check]));
   // Required checks must be present and explicitly pass. Missing, fail, and
   // skip all reject the output.
-  if (policy.requiredPass.some((code) => byCode.get(code)?.status !== "pass")) return false;
+  const neutralNa = visualSubjectPolicy === "neutral_story_ads" ? new Set(["QC-03", "QC-10"]) : new Set<string>();
+  if (policy.requiredPass.some((code) => !neutralNa.has(code) && byCode.get(code)?.status !== "pass")) return false;
   // Any check outside the documented N/A list must also pass; this prevents a
   // future check from silently becoming optional.
   const permittedSkip: readonly string[] = policy.permittedSkip;
-  return checks.every((check) => check.status === "pass" || (check.status === "skip" && permittedSkip.includes(check.code)));
+  return checks.every((check) => check.status === "pass" || (
+    check.status === "skip" && (permittedSkip.includes(check.code) || neutralNa.has(check.code))
+  ));
 }
 
 export interface QcInput {
   filePath: string;
   targetDurationSec: number;
+  /**
+   * Detik yang SENGAJA ditambahkan sesudah konten: packshot penutup foto asli
+   * dan/atau endcard brand.
+   *
+   * Tanpa ini QC-05 menilai video yang lengkap sebagai kelebihan durasi —
+   * toleransinya ±2 dtk dan endcard sendiri sudah memakainya habis. Yang
+   * diperiksa QC seharusnya "durasi sesuai kontrak", bukan "durasi sesuai
+   * bagian yang digenerate".
+   */
+  ekorDisengajaSec?: number;
+  /**
+   * Segmen packshot berasal dari foto ini (sha256 isinya).
+   *
+   * QC-10 memakainya untuk membuktikan penutupnya benar-benar foto produk yang
+   * tercatat — bukan membaca huruf dari gambar generate.
+   */
+  packshotSidik?: string;
   /** Teks final yang terdengar/tertulis di video: segmen skrip + overlay. */
   finalTexts: string[];
   hookFamily: string;
@@ -181,6 +206,55 @@ export interface QcInput {
    *  QC-11 tidak dijalankan: menebak batasnya berarti menolak video yang
    *  sebenarnya sah. */
   maxPeople?: number;
+  /** Kontrak visual authoritative dari planner. Neutral Story Ads sengaja
+   * tidak merender pixel produk/label di bagian generated; foto produk hanya
+   * boleh muncul sebagai packshot asli yang provenance-nya tetap dibuktikan. */
+  visualSubjectPolicy?: "neutral_story_ads";
+}
+
+/** QC identitas khusus neutral Story Ads.
+ *
+ * QC-03/QC-10 lama menuntut produk berada di pixel generated, tepat kebalikan
+ * dari kontrak neutral. Keduanya N/A untuk bagian generated, tetapi provenance
+ * packshot foto asli tetap hard gate bila packshot memang ditambahkan. */
+export function neutralStoryAdsIdentityChecks(
+  input: Pick<QcInput, "packshotSidik" | "refImagePath" | "productCategory">,
+): QcCheck[] {
+  let provenance: QcCheck;
+  if (!input.packshotSidik && isServiceLike(input.productCategory)) {
+    provenance = {
+      code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip",
+      detail: "N/A: kategori jasa/app/toko secara eksplisit tidak punya produk fisik atau packshot untuk diverifikasi.",
+    };
+  } else if (!input.packshotSidik) {
+    provenance = {
+      code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
+      detail: "Produk fisik neutral wajib punya packshot foto asli; append/provenance packshot tidak tersedia.",
+    };
+  } else if (!input.refImagePath || !fs.existsSync(input.refImagePath)) {
+    provenance = {
+      code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
+      detail: "Packshot neutral tidak dapat dibuktikan: foto produk job tidak tersedia.",
+    };
+  } else {
+    const actual = createHash("sha256").update(fs.readFileSync(input.refImagePath)).digest("hex");
+    provenance = actual === input.packshotSidik
+      ? {
+          code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "pass",
+          detail: `N/A untuk pixel generated neutral; provenance packshot foto asli terverifikasi (sha ${actual.slice(0, 12)}).`,
+        }
+      : {
+          code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
+          detail: `Packshot neutral bukan foto produk job (sidik ${input.packshotSidik.slice(0, 12)} vs ${actual.slice(0, 12)}).`,
+        };
+  }
+  return [
+    provenance,
+    {
+      code: "QC-03", name: "Identitas produk konsisten", status: "skip",
+      detail: "N/A: kontrak neutral Story Ads melarang pixel produk di bagian generated; integritas blank-prop/no-product diperiksa QC-11.",
+    },
+  ];
 }
 
 /** Python dengan OpenCV: venv proyek bila ada, selain python3 sistem. */
@@ -633,7 +707,31 @@ function miripMerek(kataOcr: string, merek: string): boolean {
   return false;
 }
 
-export async function qcLabelFidelity(filePath: string, productName: string): Promise<QcCheck> {
+/**
+ * QC-10 punya DUA makna sejak kebijakan jarak label 20 Agu, dan keduanya
+ * ditulis terang-terangan supaya tidak ada yang salah membaca "pass"-nya.
+ *
+ * 1. Pada bagian video yang DIGENERATE: kamera sekarang menjaga jarak supaya
+ *    tidak ada huruf yang pernah ter-resolve. Jadi yang diburu di sini bukan
+ *    lagi "apakah merek terbaca" — melainkan huruf SALAH yang terlanjur
+ *    terbaca. Ketiadaan huruf adalah hasil yang benar, bukan kegagalan.
+ *
+ * 2. Pada segmen PACKSHOT penutup: tidak ada OCR sama sekali. Yang dibuktikan
+ *    adalah asal-usulnya — segmen itu dibangun dari berkas foto yang sama
+ *    dengan foto produk yang tercatat pada job (sha256 isinya). Ini bukti
+ *    PROVENANCE, bukan bukti visual bahwa mata manusia bisa membaca labelnya.
+ *    Dinyatakan begitu di detail-nya, karena mengaku membuktikan lebih dari
+ *    yang benar-benar diperiksa adalah cara sebuah gerbang berubah jadi hiasan.
+ *
+ * Ekor packshot DIKELUARKAN dari jendela OCR. Kalau tidak, tesseract yang
+ * salah membaca foto asli ("moseru" untuk "Mosseru") akan melaporkan cacat
+ * pada satu-satunya segmen yang labelnya dijamin benar.
+ */
+export async function qcLabelFidelity(
+  filePath: string,
+  productName: string,
+  opts?: { ekorSec?: number; packshotSidik?: string; fotoPath?: string }
+): Promise<QcCheck> {
   const tokens = brandTokens(productName);
   // Yang WAJIB terbaca token MEREKNYA, bukan token mana pun.
   //
@@ -648,6 +746,10 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
   const framesDir = fs.mkdtempSync(path.join(os.tmpdir(), "racun-qc10-"));
   try {
     const duration = await probeDurationSec(filePath);
+    // Jendela OCR = bagian yang DIGENERATE saja. Ekor packshot dibuktikan
+    // lewat sidik berkasnya, bukan lewat membaca hurufnya.
+    const ekor = Math.max(0, opts?.ekorSec ?? 0);
+    const durasiKonten = Math.max(0.5, duration - ekor);
     const found = new Set<string>();
     const mirip = new Set<string>();
     let sampled = 0;
@@ -656,7 +758,7 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
     // OCR full-frame gagal; upscale menyelesaikannya).
     for (const frac of [0.08, 0.2, 0.3, 0.42, 0.55, 0.68, 0.8, 0.92]) {
       const frame = path.join(framesDir, `f${Math.round(frac * 100)}.png`);
-      await runFfmpeg(["-y", "-v", "error", "-ss", (duration * frac).toFixed(2), "-i", filePath,
+      await runFfmpeg(["-y", "-v", "error", "-ss", (durasiKonten * frac).toFixed(2), "-i", filePath,
         "-frames:v", "1", "-vf", "scale=1440:-2:flags=lanczos", frame]);
       sampled++;
       const { words } = await ocrFrame(frame);
@@ -699,9 +801,28 @@ export async function qcLabelFidelity(filePath: string, productName: string): Pr
         detail: `label tercetak "${[...mirip].join(", ")}" — bukan "${merekUtama}". Merek salah eja = label rusak (AI slop).`,
       };
     }
+    // Tidak ada huruf salah yang terbaca di bagian generate. Di bawah kebijakan
+    // jarak label itu justru hasil yang DIINGINKAN — tapi ia hanya boleh jadi
+    // PASS kalau labelnya benar-benar dijamin di tempat lain, yaitu segmen
+    // packshot yang dibangun dari foto produk yang tercatat.
+    if (opts?.packshotSidik) {
+      const sidikFotoKini = opts.fotoPath && fs.existsSync(opts.fotoPath)
+        ? createHash("sha256").update(fs.readFileSync(opts.fotoPath)).digest("hex")
+        : null;
+      if (sidikFotoKini && sidikFotoKini !== opts.packshotSidik) {
+        return {
+          code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "fail",
+          detail: `packshot penutup TIDAK berasal dari foto produk yang tercatat (sidik ${opts.packshotSidik.slice(0, 12)} vs foto job ${sidikFotoKini.slice(0, 12)}) — jaminan labelnya batal.`,
+        };
+      }
+      return {
+        code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "pass",
+        detail: `nol huruf salah terbaca di ${sampled} frame bagian generate (sesuai kebijakan jarak label), dan penutupnya dibangun dari foto produk yang tercatat (sha ${opts.packshotSidik.slice(0, 12)}). Yang dibuktikan: ASAL-USUL foto penutup — bukan keterbacaan visualnya.`,
+      };
+    }
     return {
       code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip",
-      detail: `TIDAK TERBUKTI: OCR tidak membaca merek "${merekUtama}" maupun kata mirip di ${sampled} frame${found.size ? ` (hanya kata umum: ${[...found].join(", ")})` : ""}. Bukan bukti labelnya benar — fidelitas merek diputuskan QC-F1 (model visi).`,
+      detail: `TIDAK TERBUKTI: OCR tidak membaca merek "${merekUtama}" maupun kata mirip di ${sampled} frame${found.size ? ` (hanya kata umum: ${[...found].join(", ")})` : ""}. Tanpa packshot foto asli tidak ada yang menjamin label — fidelitas merek diputuskan QC-F1 (model visi).`,
     };
   } finally {
     fs.rmSync(framesDir, { recursive: true, force: true });
@@ -872,11 +993,13 @@ export function periksaQc07(
   finalTexts: string[],
   transkrip: string | null,
   /** Nama produk — dibuang dari teks sebelum diperiksa (lihat L-23). */
-  namaProduk?: string | null
+  namaProduk?: string | null,
+  /** Kategori produk — kosakata hasil khusus kulit hanya berlaku di sana. */
+  kategoriProduk?: string | null
 ): { status: "pass" | "fail"; detail: string } {
   // Nama produk ikut supaya SKU bernama "Whitening Serum" tidak dituduh
   // mengklaim — pola masking yang sama dengan standar baris 6 (L-23).
-  const terlarang = periksaKataTerlarang([finalTexts.join(" "), transkrip ?? ""].join(" "), namaProduk);
+  const terlarang = periksaKataTerlarang([finalTexts.join(" "), transkrip ?? ""].join(" "), namaProduk, kategoriProduk);
   const sumber = transkrip === null ? "segmen naskah (transkrip tidak tersedia)" : "transkrip audio + segmen";
   return {
     status: terlarang.length === 0 ? "pass" : "fail",
@@ -884,7 +1007,13 @@ export function periksaQc07(
   };
 }
 
-export async function runQc(input: QcInput): Promise<QcResult> {
+export interface RunQcOverrides {
+  /** Test-only seam for the paid vision boundary. All local ffmpeg/OCR/policy
+   * checks still execute; production callers never pass this argument. */
+  neutralVisionResults?: Array<TemuanFrame | null>;
+}
+
+export async function runQc(input: QcInput, overrides: RunQcOverrides = {}): Promise<QcResult> {
   const checks: QcCheck[] = [];
 
   const qcFormat = input.format ?? "hands_only";
@@ -928,7 +1057,9 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // di bawah: label yang TERBUKTI terbaca adalah bukti identitas produk jauh
   // lebih langsung/presisi daripada heuristik fraksi warna kasar QC-03.
   let labelFidelityPassed = false;
-  if (input.isMockProvider) {
+  if (input.visualSubjectPolicy === "neutral_story_ads") {
+    checks.push(neutralStoryAdsIdentityChecks(input)[0]);
+  } else if (input.isMockProvider) {
     checks.push({ code: "QC-10", name: "Label produk terbaca (anti-slop)", status: "skip", detail: "N/A: provider mock (dev/e2e) — konten sintetis tidak punya label produk nyata untuk dibaca." });
   // tvc ikut diperiksa (2026-08-11): TVC justru format yang PALING butuh
   // label benar — brand membayar untuk identitas produknya. Sebelumnya tvc
@@ -941,7 +1072,11 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     });
   } else if (input.format === "hands_only" || input.format === "talking_head" || input.format === "tvc") {
     try {
-      const labelCheck = await qcLabelFidelity(input.filePath, input.productName);
+      const labelCheck = await qcLabelFidelity(input.filePath, input.productName, {
+        ekorSec: input.ekorDisengajaSec,
+        packshotSidik: input.packshotSidik,
+        fotoPath: input.refImagePath,
+      });
       checks.push(labelCheck);
       labelFidelityPassed = labelCheck.status === "pass";
     } catch (err) {
@@ -959,7 +1094,9 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // produk pucat/kecil di frame ramai): kalau QC-10 SUDAH membuktikan label
   // terbaca, fraksi-warna tidak lagi jadi hard-fail sendirian — konsistensi
   // ANTAR SHOT (indikasi identitas produk BERGANTI di tengah video) tetap keras.
-  if (isServiceLike(input.productCategory)) {
+  if (input.visualSubjectPolicy === "neutral_story_ads") {
+    checks.push(neutralStoryAdsIdentityChecks(input)[1]);
+  } else if (isServiceLike(input.productCategory)) {
     // Iklan jasa TIDAK punya produk fisik. Gambar yang dikirim adalah visual
     // bisnis (logo/toko/screenshot) yang sengaja TIDAK muncul utuh di layar,
     // jadi membandingkan warna frame dengannya pasti gagal dan akan menolak
@@ -1002,11 +1139,15 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // QC-05 durasi ±2 detik dari target.
   try {
     const dur = await probeDurationSec(input.filePath);
-    const ok = Math.abs(dur - input.targetDurationSec) <= 2;
+    const ekor = input.ekorDisengajaSec ?? 0;
+    const target = input.targetDurationSec + ekor;
+    const ok = Math.abs(dur - target) <= 2;
     checks.push({
       code: "QC-05", name: "Durasi sesuai target",
       status: ok ? "pass" : "fail",
-      detail: `${dur.toFixed(2)} dtk vs target ${input.targetDurationSec} dtk`,
+      detail: ekor > 0
+        ? `${dur.toFixed(2)} dtk vs target ${target.toFixed(2)} dtk (konten ${input.targetDurationSec} + ekor disengaja ${ekor.toFixed(2)}: packshot/endcard)`
+        : `${dur.toFixed(2)} dtk vs target ${input.targetDurationSec} dtk`,
     });
   } catch (err) {
     checks.push({ code: "QC-05", name: "Durasi sesuai target", status: "fail", detail: String(err) });
@@ -1061,7 +1202,7 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // Kalau transkripsi tidak tersedia (mock, kunci kosong, tier senyap), QC-07
   // tetap memeriksa segmen dan MENGATAKANNYA di detail — bukan diam-diam
   // mengaku sudah memeriksa ucapan.
-  checks.push({ code: "QC-07", name: "Tanpa kata terlarang (overclaim/medis)", ...periksaQc07(input.finalTexts, transkripUcapan, input.productName) });
+  checks.push({ code: "QC-07", name: "Tanpa kata terlarang (overclaim/medis)", ...periksaQc07(input.finalTexts, transkripUcapan, input.productName, input.productCategory) });
 
 
   // QC-08 label AIGC via METADATA (watermark visual dihapus 2026-08-07 —
@@ -1094,6 +1235,21 @@ export async function runQc(input: QcInput): Promise<QcResult> {
   // ada manusia hasil generate untuk dihitung.
   if (qcFormat === "vo_broll") {
     checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "N/A: visual dari foto produk asli, bukan orang hasil AI." });
+  } else if (input.visualSubjectPolicy === "neutral_story_ads" && overrides.neutralVisionResults) {
+    const findings = overrides.neutralVisionResults.filter((item): item is TemuanFrame => item !== null);
+    const violations = overrides.neutralVisionResults.length
+      ? [
+          ...neutralStoryAdsCoverageViolations(overrides.neutralVisionResults),
+          ...findings.flatMap(neutralStoryAdsViolations),
+        ]
+      : ["kontrak neutral tidak terbukti: nol frame diperiksa"];
+    checks.push({
+      code: "QC-11", name: "Kontrak visual neutral Story Ads",
+      status: violations.length ? "fail" : "pass",
+      detail: violations.length
+        ? violations.join("; ")
+        : `${findings.length} frame: blank prop tanpa produk/teks terverifikasi`,
+    });
   } else if (input.isMockProvider) {
     checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: "N/A: provider mock (dev/e2e) — konten sintetis tidak punya subjek nyata." });
   } else if (input.maxPeople === undefined) {
@@ -1104,14 +1260,21 @@ export async function runQc(input: QcInput): Promise<QcResult> {
         videoPath: input.filePath,
         maksOrang: input.maxPeople,
         tanpaWajah: input.maxPeople === 0,
+        neutralStoryAds: input.visualSubjectPolicy === "neutral_story_ads",
+        ekorSec: input.ekorDisengajaSec,
       });
       if (v.temuan === null) {
-        // Model visi tidak bisa dipakai. Jangan diam — coba cadangan lokal.
-        try {
-          checks.push(await qcSubjekLokal(input.filePath, input.maxPeople, path.dirname(input.filePath)));
-        } catch (err) {
-          checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip",
-            detail: `model visi tidak tersedia (${v.masalah.join("; ")}) dan cadangan lokal gagal: ${err instanceof Error ? err.message : String(err)}` });
+        if (input.visualSubjectPolicy === "neutral_story_ads") {
+          checks.push({ code: "QC-11", name: "Kontrak visual neutral Story Ads", status: "fail",
+            detail: `tidak dapat membuktikan blank prop/no-product: ${v.masalah.join("; ")}` });
+        } else {
+          // Model visi tidak bisa dipakai. Jangan diam — coba cadangan lokal.
+          try {
+            checks.push(await qcSubjekLokal(input.filePath, input.maxPeople, path.dirname(input.filePath)));
+          } catch (err) {
+            checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip",
+              detail: `model visi tidak tersedia (${v.masalah.join("; ")}) dan cadangan lokal gagal: ${err instanceof Error ? err.message : String(err)}` });
+          }
         }
       } else
       checks.push({
@@ -1125,7 +1288,12 @@ export async function runQc(input: QcInput): Promise<QcResult> {
           : v.masalah.join("; "),
       });
     } catch (err) {
-      checks.push({ code: "QC-11", name: "Jumlah subjek & anatomi (visi)", status: "skip", detail: `pemeriksaan gagal dijalankan: ${err instanceof Error ? err.message : String(err)}` });
+      checks.push({
+        code: "QC-11",
+        name: input.visualSubjectPolicy === "neutral_story_ads" ? "Kontrak visual neutral Story Ads" : "Jumlah subjek & anatomi (visi)",
+        status: input.visualSubjectPolicy === "neutral_story_ads" ? "fail" : "skip",
+        detail: `pemeriksaan gagal dijalankan: ${err instanceof Error ? err.message : String(err)}`,
+      });
     }
   }
 
@@ -1155,6 +1323,6 @@ export async function runQc(input: QcInput): Promise<QcResult> {
     });
   }
 
-  const passed = evaluateQcPolicy(input.format, checks);
+  const passed = evaluateQcPolicy(input.format, checks, input.visualSubjectPolicy);
   return { passed, checks, checked_at: new Date().toISOString() };
 }

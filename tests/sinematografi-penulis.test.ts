@@ -69,7 +69,10 @@ test("AKSI yang ditulis penulis sampai ke prompt shot", () => {
 
 test("KAMERA & framing penulis ikut, bukan cuma format bawaan", () => {
   const p = rakit("ads").shots[0].prompt;
-  assert.match(p, /tight macro/i, "framing penulis hilang");
+  // "tight macro" penulis sengaja ditumpulkan untuk produk berlabel sejak
+  // kebijakan jarak 20 Agu (lihat test di bawah) — yang diuji di sini adalah
+  // bahwa sisa framing penulis tetap sampai, bukan macro-nya.
+  assert.match(p, /Shot composition:/i, "blok framing penulis hilang seluruhnya");
   assert.match(p, /slight top-down/i, "angle penulis hilang");
   assert.match(p, /static/i, "gerak kamera penulis hilang");
 });
@@ -108,4 +111,66 @@ test("kunci wajib tetap ada — sinematografi menambah, tidak menggusur", () => 
   assert.match(p, /true small size/i, "kunci ukuran asli hilang");
   assert.match(p, /Every spoken word is Indonesian/i, "kunci bahasa hilang");
   assert.match(p, /identical packaging|do not redesign/i, "kunci identitas produk hilang");
+});
+
+// Dari render berbayar 20 Agu (test_output/adu_koreografi): aksi penulis yang
+// menyuruh kamera menemukan produk BELAKANGAN mengalahkan kunci "botol selalu
+// di frame", dan model menurutinya — botol baru muncul detik ~2,5 dari 5 detik.
+// Dua aturan berlomba di satu prompt; yang berbentuk koreografi menang.
+test("aksi penulis TERIKAT pada kehadiran produk sejak frame pertama", () => {
+  const segMenyapu = JSON.parse(JSON.stringify(SEGMEN_KAYA));
+  segMenyapu[0].action =
+    "camera sweeps left to right across the mess, then pauses on the serum bottle lying on its side";
+  const p = rakit("hands_only", segMenyapu as never).shots[0].prompt;
+  const iHadir = p.search(/already fully inside the frame from the very first frame/i);
+  const iAksi = p.search(/camera sweeps left to right/i);
+  assert.ok(iHadir >= 0, `pengikat kehadiran produk hilang:\n${p.slice(0, 400)}`);
+  assert.ok(
+    iHadir < iAksi,
+    "pengikat harus MENDAHULUI aksi — kalau ia datang belakangan ia jadi aturan yang berlomba, persis yang kalah di render 20 Agu"
+  );
+});
+
+test("kategori jasa TIDAK dipaksa memunculkan benda", async () => {
+  const spec = planShots({
+    jobId: "uji-jasa", durationSec: 15, segments: SEGMEN_KAYA,
+    category: getCreatorCategory("hijaber")!, productName: "Jasa Desain Logo",
+    productCategory: "jasa", imageRefPath: "/tmp/x.jpg",
+    qualityTier: "super_hq", format: "ads",
+  } as never) as { shots: { prompt: string }[] };
+  assert.ok(
+    !/already fully inside the frame/i.test(spec.shots[0].prompt),
+    "jasa tidak punya benda untuk dijaga di frame — memaksanya membuat model mengarang produk"
+  );
+});
+
+// KEBIJAKAN JARAK LABEL (Brian, 20 Agu — jalan keluar A). Tiga putaran prompt
+// gagal membuat model mengeja label dengan benar; render 20 Agu menghasilkan
+// "jddpgeer"/"SOMSONG". Huruf yang tidak pernah dirender tidak bisa salah.
+test("tidak ada lagi permintaan mustahil 'nama merek terbaca tajam'", () => {
+  const p = rakit("hands_only").shots[0].prompt;
+  assert.ok(
+    !/brand name[^.]*legible|perfectly legible/i.test(p),
+    `permintaan yang tiga kali terbukti mustahil masih ada di prompt berbayar:\n${p.slice(0, 300)}`
+  );
+  assert.match(p, /no individual letter, word, or number resolved/i, "kebijakan jarak label hilang");
+});
+
+test("framing 'tight macro' penulis ditumpulkan untuk produk berlabel", () => {
+  const p = rakit("hands_only").shots[0].prompt;   // segmen hook menulis "tight macro"
+  assert.ok(
+    !/tight macro|extreme close/i.test(p),
+    `macro penulis lolos — label akan mengisi frame dan hurufnya jadi karangan:\n${p.slice(0, 300)}`
+  );
+  assert.match(p, /at arm's-length viewing distance/i, "penggantinya tidak terpasang");
+});
+
+test("produk jasa TIDAK ditumpulkan — tidak ada label untuk dilindungi", () => {
+  const spec = planShots({
+    jobId: "uji-jasa-macro", durationSec: 15, segments: SEGMEN_KAYA,
+    category: getCreatorCategory("hijaber")!, productName: "Jasa Desain Logo",
+    productCategory: "jasa", imageRefPath: "/tmp/x.jpg",
+    qualityTier: "super_hq", format: "ads",
+  } as never) as { shots: { prompt: string }[] };
+  assert.match(spec.shots[0].prompt, /tight macro/i, "framing sinematik penulis hilang tanpa alasan");
 });

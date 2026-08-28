@@ -1,0 +1,13 @@
+task=P1-C9-C12-STRUCTURAL-INVENTORY-20260824
+baseline_sha=752684eefc60a3ccb13f59e5b3daf98a83adf652
+baseline_tree=5ccc35b226043fdb74b177d134362d5ded4674ed
+started_utc=2026-08-24T08:00:29Z
+scope=local-read-only-evidence
+remote=false paid=false deploy=false production_data=false score_change=false
+targeted.exit_code=0 duration_seconds=1
+w2.exit_code=0 duration_seconds=1
+w1.exit_code=0 duration_seconds=5
+typescript.exit_code=0 duration_seconds=1
+disposable_postgres_residue_count=0
+secret_url_scan_matches=0
+ended_utc=2026-08-24T08:00:37Z

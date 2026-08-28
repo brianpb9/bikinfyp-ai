@@ -1,0 +1,23 @@
+{
+  "task": "P1-MANAGED-STAGING-ORG-INGESTION-TRACE-20260825",
+  "baseline_sha": "30c9d2d12ddc4cc64036fb8992cd9ac355e410d6",
+  "deployed_code_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb",
+  "focused_tests": {
+    "command": "node --import tsx --test tests/org-photo-brand-gate.test.ts tests/job-product-snapshot.test.ts",
+    "passed": 16,
+    "failed": 0,
+    "gated_skipped": 1,
+    "skip_reason": "UJI_PG_URL absent; structural SQL and managed PostgreSQL trace were executed separately"
+  },
+  "typecheck": { "command": "npx tsc --noEmit", "exit_code": 0, "performed_real_typescript_check": true },
+  "runner_syntax": { "command": "node --check scripts/managed-org-ingestion-trace-runner.mjs", "exit_code": 0 },
+  "diff_check": { "command": "git diff --check", "exit_code": 0 },
+  "secret_scan": { "environment_files_considered": 1, "secret_values_checked": 11, "exact_value_hits": 0 },
+  "runner_provenance": { "job": "job-da6hbsu7bikc738juoqg", "embedded_runner_matches_repository_bytes": true, "runner_sha256": "af8049509bbb0bc7c522a12ae9fe2c61815a2db9b227efc0594f5b79d822b3e5", "runner_bytes": 17918 },
+  "final_health_samples": [
+    { "http": 200, "ok": true, "intake": "open", "build_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "classifier_capable": true },
+    { "http": 200, "ok": true, "intake": "open", "build_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "classifier_capable": true },
+    { "http": 200, "ok": true, "intake": "open", "build_sha": "246fa65949a487e82e4594c0bebb6ecc5a4e53bb", "payments_provider": "duitku", "payments_env": "sandbox", "payments_live": false, "classifier_capable": true }
+  ],
+  "scope_guards": { "production_mutated": false, "real_money_used": false, "payment_provider_called": false, "generation_provider_called": false, "policy_changed": false, "maintenance_changed": false, "worker_state_changed": false }
+}

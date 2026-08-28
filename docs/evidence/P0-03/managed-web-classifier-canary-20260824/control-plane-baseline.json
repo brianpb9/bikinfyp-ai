@@ -1,0 +1,54 @@
+{
+  "observed_at": "2026-08-24T11:15:00Z",
+  "source": "later transcription of pre-mutation operator-session GET/deploy-list outputs; not a contemporaneous raw capture file",
+  "independently_proven": false,
+  "staging_web": {
+    "id": "srv-d9n28tijnfac73a87lt0",
+    "branch": "main",
+    "autoDeploy": "no",
+    "suspended": "not_suspended",
+    "runtime": "node",
+    "plan": "starter",
+    "region": "singapore",
+    "healthCheckPath": "",
+    "maintenanceMode": { "enabled": false, "uri": "" },
+    "buildCommand": "npm ci --include=dev && npm run build",
+    "preDeployCommand": "node scripts/migrate-postgres-runtime.mjs",
+    "startCommand": "npm start",
+    "latestDeploy": "dep-da61oebl550s73864vsg",
+    "latestSha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+    "latestStatus": "live",
+    "updatedAt": "2026-08-24T10:32:00.241843Z"
+  },
+  "staging_worker": {
+    "id": "srv-d9n28ue417fc73ch2b60",
+    "runtime": "docker",
+    "dockerfilePath": "Dockerfile.worker",
+    "latestDeploy": "dep-da61n0qjobas73894nfg",
+    "latestSha": "4a1d258155b128fee0fcd5a6143198f36a558163",
+    "latestStatus": "live",
+    "updatedAt": "2026-08-24T10:25:52.595322Z"
+  },
+  "staging_database": {
+    "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+    "status": "available",
+    "ipAllowListCount": 0,
+    "jobAggregateObserved": false,
+    "nonMutationIndependentlyProven": false
+  },
+  "production_web": {
+    "id": "srv-d9nhccfqj5pc73et9hrg",
+    "runtime": "node",
+    "latestDeploy": "dep-da3bfg142hec73arfot0",
+    "latestSha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d",
+    "updatedAt": "2026-08-20T08:20:32.112782Z"
+  },
+  "production_worker": {
+    "id": "srv-d9ni3ndaeets73c07kq0",
+    "runtime": "docker",
+    "dockerfilePath": "Dockerfile.worker",
+    "latestDeploy": "dep-da3bfg142hec73arfpfg",
+    "latestSha": "00ee62efd86ae7e10453a2a1896e63b62228aa4d",
+    "updatedAt": "2026-08-20T08:18:50.344489Z"
+  }
+}

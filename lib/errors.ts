@@ -18,6 +18,21 @@ export class ApiError extends Error {
   }
 }
 
+/** Stable worker/audit serialization for typed errors whose human message is
+ * intentionally separate from their machine-readable code. */
+export function errorReasonWithCode(error: unknown): string {
+  const value = error as { code?: unknown; body?: { code?: unknown } } | null;
+  const code = typeof value?.code === "string"
+    ? value.code
+    : typeof value?.body?.code === "string" ? value.body.code : "";
+  const message = error instanceof Error ? error.message : String(error);
+  return code && !message.includes(code) ? `${code}: ${message}` : message;
+}
+
+export function finalWorkerFailureReason(error: unknown, attempts: number): string {
+  return `Worker gagal setelah ${attempts} percobaan: ${errorReasonWithCode(error)}`;
+}
+
 export const ERR = {
   UNAUTHORIZED: () =>
     new ApiError(401, {
@@ -50,6 +65,27 @@ export const ERR = {
     }),
   BAD_REQUEST: (msgId: string, msgEn = "Bad request.") =>
     new ApiError(400, { code: "BAD_REQUEST", message_id: msgId, message_en: msgEn, retryable: false }),
+  LABEL_UNREADABLE: (msgId?: string | null) =>
+    new ApiError(400, {
+      code: "LABEL_UNREADABLE",
+      message_id: msgId?.trim() || "Label produknya belum terbaca. Upload foto yang lebih terang dan fokus ya.",
+      message_en: "Product label not OCR-readable.",
+      retryable: false,
+    }),
+  OCR_FAILED: (msgId?: string | null) =>
+    new ApiError(503, {
+      code: "OCR_FAILED",
+      message_id: msgId?.trim() || "Pemeriksaan label sedang tidak tersedia. Coba lagi sebentar ya — belum ada kredit yang dipakai.",
+      message_en: "Product-label OCR could not produce an authoritative result.",
+      retryable: true,
+    }),
+  BRAND_MISMATCH: (msgId?: string | null) =>
+    new ApiError(400, {
+      code: "BRAND_MISMATCH",
+      message_id: msgId?.trim() || "Merek pada foto tidak cocok dengan merek produk. Upload foto produk dengan merek yang benar ya.",
+      message_en: "Product label does not match the registered brand.",
+      retryable: false,
+    }),
   PAYLOAD_TOO_LARGE: (msgId: string, msgEn = "Payload too large.") =>
     new ApiError(413, { code: "PAYLOAD_TOO_LARGE", message_id: msgId, message_en: msgEn, retryable: false }),
   // 403, BUKAN 401: penggunanya sudah masuk dan identitasnya jelas — yang
@@ -108,6 +144,17 @@ export const ERR = {
 export function errorResponse(err: unknown): Response {
   if (err instanceof ApiError) {
     return Response.json(err.body, { status: err.status });
+  }
+  // Admission now enforces the same reference verdict that workers already
+  // used. Preserve its established machine code instead of laundering it into
+  // INTERNAL merely because it is reached before queue visibility.
+  if (err instanceof Error && (err as Error & { kode?: string }).kode === "NO_APPROVED_REFERENCE") {
+    return Response.json({
+      code: "NO_APPROVED_REFERENCE",
+      message_id: err.message,
+      message_en: "No approved product reference is available for this render.",
+      retryable: false,
+    } satisfies ApiErrorBody, { status: 422 });
   }
   console.error("[api] unexpected error:", err);
   const e = ERR.INTERNAL();

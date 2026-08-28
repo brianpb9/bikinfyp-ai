@@ -2,7 +2,6 @@ import crypto from "node:crypto";
 import { Pool } from "pg";
 import { ERR, errorResponse } from "@/lib/errors";
 import { config } from "@/lib/config";
-import { requireOrgContextApi } from "@/lib/dashboard-auth";
 import { templateRequiresPriceMention, validateScript } from "@/lib/script-engine/validator";
 import type { SegmentDraft } from "@/lib/script-engine/templates";
 import { tierPriceIdr } from "@/lib/credits";
@@ -12,15 +11,16 @@ import { getAvatarPreset } from "@/lib/avatar-presets";
 import { getRecordingStyle } from "@/lib/media/recording-styles";
 import { PgCreditPaymentRepository } from "@/lib/postgres/credit-payment";
 import { PgJobsRepository } from "@/lib/postgres/jobs";
-import { postgresRuntimeEnabled, pgFindOrCreatePersona, pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetOrgProduct, smokeGetScript } from "@/lib/postgres/smoke-runtime";
+import { pgAudit, pgSaveFypSnapshot, smokeApproveScript, smokeGetScript } from "@/lib/postgres/smoke-runtime";
 import { scoreScriptPlan, type FypVideoFormat } from "@/lib/fyp-score";
 import { getPool } from "@/lib/postgres/pool";
-import { assertDashboardRate } from "@/lib/dashboard-rate-limit";
 import { CAMPAIGN_TEMPLATES, TVC_ROUTES } from "@/lib/templates";
 import { aiRenderBlockMessage } from "@/lib/template-render-safety";
 import { renderSatuSel, type HasilSel } from "@/lib/dashboard/render-cell";
 import { pastikanBolehBelanja } from "@/lib/dashboard-rbac";
-import { assertPaidAdmission } from "@/lib/job-intake";
+import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
+import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
+import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -32,17 +32,19 @@ const MAX_VIDEOS = 6;
 // jadi satu job render. Kredit ditahan per-video dari wallet ORG; kegagalan
 // satu video (kredit kurang) tidak menggagalkan yang lain.
 export async function POST(req: Request) {
+  let evidenceLease: Awaited<ReturnType<typeof acquireAdmissionReferenceEvidence>> | null = null;
   try {
-    if (!postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
-    const { user, membership } = await requireOrgContextApi(req);
-    await assertDashboardRate("confirm", membership.org_id);
+    const routeDeps = admissionRouteDependencies();
+    if (!routeDeps.postgresRuntimeEnabled()) throw ERR.BAD_REQUEST("Dashboard butuh runtime PostgreSQL.", "Dashboard campaign requires Postgres runtime.");
+    const { user, membership } = await routeDeps.requireOrgContextApi(req);
+    await routeDeps.assertDashboardRate("confirm", membership.org_id);
     // Gerbang belanja. Langkah INI yang memotong saldo organisasi — bukan
     // pembuatan naskah — jadi di sinilah perannya diperiksa.
     pastikanBolehBelanja(membership.role);
     // Satu gerbang untuk semua yang memakan uang. Sebelumnya jalur ini cuma
     // memeriksa migrasi, jadi ia tetap membuka diri walau JOB_INTAKE_MODE
     // sudah "closed" untuk perawatan.
-    await assertPaidAdmission();
+    await routeDeps.assertPaidAdmission();
     const body = await req.json().catch(() => ({}));
 
     const productId = typeof body.product_id === "string" ? body.product_id : "";
@@ -50,9 +52,8 @@ export async function POST(req: Request) {
     // Per-ORG, bukan per-user. Produk dashboard dibuat satu anggota, dibayar
     // dari dompet organisasi, dan dipakai seluruh tim — pemeriksaan per-user
     // menolak rekan satu tim atas produk yang jelas ada di daftar mereka.
-    const product = await smokeGetOrgProduct(membership.org_id, productId);
+    const product = await routeDeps.smokeGetOrgProduct(membership.org_id, productId);
     if (!product) throw ERR.NOT_FOUND("Produknya");
-
     const scriptIds: string[] = (Array.isArray(body.script_ids) ? body.script_ids : [])
       .map((s: unknown) => String(s ?? "")).filter(Boolean).slice(0, MAX_VIDEOS);
     if (scriptIds.length === 0) throw ERR.BAD_REQUEST("Pilih minimal 1 skrip untuk dirender.", "No scripts selected.");
@@ -81,7 +82,19 @@ export async function POST(req: Request) {
     const creatorCategoryId = avatarPreset?.voice ?? (typeof body.creator_category === "string" ? body.creator_category : "");
     const category = getCreatorCategory(creatorCategoryId);
     if (!category || category.status !== "active") throw ERR.BAD_REQUEST("Pilih avatar dulu.", "Unknown or inactive creator category.");
-    const personaId = (await pgFindOrCreatePersona(user.id, category)).id;
+    evidenceLease = await acquireAdmissionReferenceEvidence({
+      productId: product.id,
+      owner: { kind: "org", id: membership.org_id },
+      boundary: "A5",
+      loadSqliteCandidateRels: () => JSON.parse(product.images || "[]") as string[],
+    });
+    const lockedProductType = evidenceLease.productType;
+    assertCategoryReviewClear({
+      state: lockedProductType?.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+      reason: lockedProductType?.category_review_reason as never,
+      version: lockedProductType?.category_review_version ?? 0,
+    }, lockedProductType?.category);
+    const personaId = (await routeDeps.pgFindOrCreatePersona(user.id, category)).id;
     const avatarCustomDesc = typeof body.avatar_custom_desc === "string" && body.avatar_custom_desc.trim()
       ? body.avatar_custom_desc.trim().slice(0, 600)
       : avatarPreset?.castLock.slice(0, 600) ?? null;
@@ -150,5 +163,7 @@ export async function POST(req: Request) {
     });
   } catch (err) {
     return errorResponse(err);
+  } finally {
+    await evidenceLease?.release();
   }
 }

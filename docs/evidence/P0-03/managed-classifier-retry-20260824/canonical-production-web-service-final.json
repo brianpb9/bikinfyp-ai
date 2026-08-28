@@ -1,0 +1,33 @@
+{
+  "observedAt": "2026-08-24T13:29:18.181Z",
+  "request": {
+    "method": "GET",
+    "path": "/v1/services/srv-d9nhccfqj5pc73et9hrg",
+    "action": "get-service",
+    "payload": null
+  },
+  "response": {
+    "id": "srv-d9nhccfqj5pc73et9hrg",
+    "name": "bikinfyp-ai-production-web",
+    "type": "web_service",
+    "repo": "https://github.com/brianpb9/bikinfyp-ai",
+    "branch": "main",
+    "autoDeploy": "yes",
+    "suspended": "not_suspended",
+    "updatedAt": "2026-08-20T08:20:32.112782Z",
+    "serviceDetails": {
+      "runtime": "node",
+      "plan": "starter",
+      "region": "singapore",
+      "healthCheckPath": "",
+      "maintenanceMode": {
+        "enabled": false,
+        "uri": ""
+      },
+      "envSpecificDetails": {
+        "buildCommand": "npm ci --include=dev && npm run build",
+        "startCommand": "npm run start"
+      }
+    }
+  }
+}

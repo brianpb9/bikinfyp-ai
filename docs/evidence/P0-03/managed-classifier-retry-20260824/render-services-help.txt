@@ -1,0 +1,42 @@
+Render CLI v2.22.0
+
+List services and datastores for the active workspace
+
+USAGE
+  render services [subcommand] [flags]
+
+SUBCOMMANDS
+  create               Create a new service or clone an existing one
+  delete               Delete a service
+  instances            List instances for a service
+  update               Update configuration for an existing service
+
+FLAGS
+  -e, --environment-ids <ENV_IDS>   Filter services by comma-separated environment IDs
+  -h, --help                        Show help for this command
+      --include-previews            Include preview environments
+      --confirm                     Skip all confirmation prompts
+  -o, --output <FORMAT>             Set output format to interactive, json, yaml, or text. Auto-switches to text on non-TTY (default: "interactive")
+
+EXAMPLES
+  # List all services
+  render services
+
+  # Output as JSON
+  render services --output json
+
+  # Filter by environment
+  render services -e env-abc123
+
+  # Include preview environments
+  render services --include-previews
+
+  # Combine filters
+  render services -e env-abc123,env-def456 --include-previews --output json
+
+DETAILS
+Lists all services and datastores for the active workspace. In interactive mode,
+you can view logs, restart services, trigger deploys, SSH into instances, and
+connect to Render Postgres databases and Render Key Value instances.
+
+Use "render services [subcommand] --help" for more information about a command.

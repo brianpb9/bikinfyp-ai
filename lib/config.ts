@@ -25,7 +25,6 @@ function env(key: string, fallback: string): string {
 }
 
 export const config = {
-  authSecret: env("AUTH_SECRET", "dev-secret-racun-ai-jangan-dipakai-produksi"),
   // Disiapkan pada checkpoint 1A. Adapter runtime masih SQLite hingga checkpoint 1C.
   databaseUrl: env("DATABASE_URL", ""),
   // Cutover is explicit and reversible.  SQLite remains available until the
@@ -157,6 +156,24 @@ export const config = {
    * menghabiskan kuota untuk semua orang.
    *
    * high_quality TETAP memakai penulis LLM; yang tidak ia dapat cuma Gate 3.
+   *
+   * RISIKO MUTU YANG DIKETAHUI DAN DITERIMA (keputusan Brian 20 Agu).
+   *
+   * Karena tier ini tidak menjalankan Idea Stage, penulisnya berangkat TANPA
+   * ide terpilih — satu-satunya jalur produksi yang begitu sejak invarian
+   * "penulis tidak pernah menulis tanpa ide" dipasang (lihat generateOne,
+   * parameter wajibIde). Akibat yang harus diharapkan, bukan disangkal:
+   * naskah high_quality lebih mudah datar dan lebih mudah bisa ditukar antar
+   * produk, karena tidak ada satu sudut yang dipilih dan dinilai lebih dulu.
+   *
+   * Diterima SEMENTARA karena biaya: Idea Stage memakai model kelas atas,
+   * sedangkan margin kotor high_quality cuma ~31% (COGS Rp8.313 per video
+   * 15 dtk terhadap harga Rp12.000 — docs/evidence/cogs-canary-2026-08-20.md).
+   *
+   * RENCANA: sesudah canary, evaluasi "idea pass murah" memakai Sonnet untuk
+   * tier ini, dihitung dengan harga token NYATA — bukan estimasi. Kalau satu
+   * lintasan ide murah muat di dalam margin Rp3.687, risiko ini ditutup;
+   * kalau tidak, ia tetap tercatat di sini sebagai pilihan sadar.
    */
   ideaStageTiers: env("IDEA_STAGE_TIERS", "super_hq")
     .split(",").map((t) => t.trim()).filter(Boolean),
@@ -331,19 +348,17 @@ export function paymentsLive(): boolean {
 }
 
 export function ensureDirs() {
-  for (const d of [
-    path.dirname(config.dbPath),
+  const dirs = [
     config.storageDir,
     path.join(config.storageDir, "uploads"),
     path.join(config.storageDir, "jobs"),
-  ]) {
+  ];
+  // PostgreSQL runtime must not depend on, or try to create, the rollback
+  // SQLite directory. The managed container intentionally runs non-root and
+  // only its storage/cache paths are writable; touching ./data here blocked
+  // otherwise-valid E1 uploads before Product Truth could run.
+  if (config.dbRuntime !== "postgres") dirs.unshift(path.dirname(config.dbPath));
+  for (const d of dirs) {
     fs.mkdirSync(d, { recursive: true });
   }
 }
-
-// Gagal-tertutup pada rahasia tanda tangan. Diletakkan di sini, bukan di
-// getDb(), karena config diimpor oleh SEMUA jalur — termasuk runtime Postgres
-// yang tidak pernah menyentuh SQLite. Pemeriksaan yang hanya jalan di jalur
-// SQLite tidak akan pernah berjalan di produksi.
-import { assertAuthSecretSafe } from "./secrets";
-assertAuthSecretSafe();
