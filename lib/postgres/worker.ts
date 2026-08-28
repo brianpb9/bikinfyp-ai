@@ -1067,6 +1067,32 @@ async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: 
   if (!(await jobs.upsertOutput({ jobId: row.id, userId: row.user_id, videoUrl: relVideo, caption: row.caption, hashtags: row.hashtags,
     suggestedPostTime: extras.suggested_post_time, complianceChecklist: JSON.stringify(extras.compliance_checklist) }))) throw new Error("Kepemilikan output job tidak valid.");
   await pool.query("UPDATE jobs SET qc_result=$1,output_url=$2,completed_at=$3 WHERE id=$4", [JSON.stringify(qc), relVideo, at(), row.id]);
+  // Bekukan korelasi request provider ke arsip SEBELUM memo retry dibersihkan.
+  // provider_tasks sengaja bersifat sementara agar task kedaluwarsa tidak
+  // pernah terpakai ulang, tetapi menghapusnya dulu membuat satu job sukses
+  // mustahil dibuktikan ujung-ke-ujung: prompt/model dan verdict/artifact ada,
+  // sedangkan request yang menghasilkan shot-nya sudah hilang. Salinan ini
+  // read-only untuk audit; TaskMemo tetap dibersihkan seperti sebelumnya.
+  try {
+    const requests = (await pool.query(
+      "SELECT job_id,shot_index,provider,task_id,created_at FROM provider_tasks WHERE job_id=$1 ORDER BY shot_index,provider",
+      [row.id]
+    )).rows;
+    await pool.query(
+      `UPDATE job_prompts
+          SET model_params = (model_params::jsonb || $2::jsonb)::text
+        WHERE job_id = $1`,
+      [row.id, JSON.stringify({ provider_requests: requests })]
+    );
+  } catch (err) {
+    // Sama dengan arsip prompt/QC-F1 lain: audit tidak boleh membatalkan video
+    // yang sudah selesai dan dibayar. Verifier terpisah akan fail-closed bila
+    // korelasi ini hilang atau ambigu.
+    console.warn(`[job ${row.id.slice(0, 8)}] korelasi request provider gagal diarsipkan (diabaikan): ${(err as Error).message}`);
+  }
+  // READY baru dipublikasikan setelah usaha pembekuan audit. Bila proses mati
+  // sebelumnya, job masih dapat dipulihkan; tidak ada terminal READY yang
+  // diam-diam kehilangan kesempatan korelasinya karena crash window.
   if (!(await jobs.transition(row.id, "READY", { worker: "postgres" }))) throw new Error("Job tidak lagi aktif saat finalisasi output.");
   // Job selesai: ingatan task tidak berguna lagi, dan membiarkannya justru
   // berbahaya — task lama yang masih tercatat bisa terpakai ulang kalau job
