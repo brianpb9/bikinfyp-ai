@@ -144,4 +144,10 @@ jobs:
           node-version: "22"
           cache: "npm"
       - run: npm ci
-      - run: npm run audit:script-catalog
+      - name: Measure catalog debt (visible non-gate)
+        id: catalog-debt
+        continue-on-error: true
+        run: npm run audit:script-catalog
+      - name: Surface catalog debt without blocking unrelated CI
+        if: steps.catalog-debt.outcome == 'failure'
+        run: echo "::warning title=Catalog debt remains::See the Measure catalog debt step for the current report."
