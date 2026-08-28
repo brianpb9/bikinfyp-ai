@@ -110,6 +110,15 @@ test("worker freezes provider request correlation before clearing retry memo", (
     "memo provider harus dipertahankan saat archive gagal/0-row");
 });
 
+test("worker archives finalized transformed spec immediately before video submission", () => {
+  const source = fs.readFileSync("lib/postgres/worker.ts", "utf8");
+  const prepared = source.indexOf("specSiap = await siapkanFramePertama");
+  const archive = source.indexOf('await simpanArsip(specSiap, "provider-bound")', prepared);
+  const submit = source.indexOf("generateVideoWithFailover(specSiap", archive);
+  assert.ok(prepared >= 0 && archive > prepared && submit > archive,
+    "snapshot provider-bound wajib sesudah transformasi referensi dan sebelum submit video");
+});
+
 test("resume meminta arsip lama dipertahankan saat provider task masih terikat", () => {
   const worker = fs.readFileSync("lib/postgres/worker.ts", "utf8");
   const runtime = fs.readFileSync("lib/postgres/smoke-runtime.ts", "utf8");

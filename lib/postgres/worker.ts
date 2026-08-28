@@ -604,6 +604,31 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // Model yang akan dipakai penyedia — sama sumbernya dengan createTask(),
   // supaya mode referensi yang diarsipkan adalah mode yang benar-benar dikirim.
   const modelTier = (config.tiers[spec.qualityTier] ?? config.tiers.silent_caption).byteplusModel;
+  let qcF1: RingkasanQcF1[] = [];
+  const jejakIde = bacaJejakIde(row.script_validation_result);
+  async function simpanArsip(specArsip: VisualSpec, tahap: "pre-gate" | "provider-bound") {
+    try {
+      await pgSimpanArsipPrompt({
+        jobId: row.id,
+        specJson: JSON.stringify(ringkasSpec(specArsip, modelTier)),
+        segmentsJson: JSON.stringify(segments),
+        negativePrompt: specArsip.negativePrompt,
+        modelParams: JSON.stringify({
+          ...ringkasParams(specArsip), format, template_id: storyIdentity.templateId,
+          ...(qcF1.length ? { qc_f1: qcF1 } : {}),
+          archive_stage: tahap,
+        }),
+        ideId: jejakIde.ideId,
+        ideSkor: jejakIde.ideSkor,
+        // Resume hanya boleh mengganti snapshot jika belum ada request hidup.
+        // Bila satu shot lama masih ada, binding per-shot akan menghentikan
+        // campuran arsip/request alih-alih memutihkan lineage yang berbeda.
+        preserveExisting: row.state !== "QUEUED",
+      });
+    } catch (err) {
+      console.warn(`[job ${row.id.slice(0, 8)}] arsip prompt ${tahap} gagal disimpan (diabaikan): ${(err as Error).message}`);
+    }
+  }
 
   // Pemicu penyaring dicatat SEBELUM dikirim, tidak memblokir.
   //
@@ -631,28 +656,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // ditulis di sini, bukan setelah render sukses. Kegagalan menulis diabaikan:
   // ini catatan, bukan bagian produk, dan pengguna yang sudah membayar tidak
   // boleh kehilangan videonya karena pencatatan kita bermasalah.
-  try {
-    // Skor & identitas ide dibaca dari snapshot admisi yang ikut tersimpan di
-    // scripts.validation_result (audit E15, 19 Agu). Sebelumnya dua kolom ini
-    // disediakan migrasi 0032 lalu SELALU NULL, karena angkanya berhenti di
-    // memori proses web dan tidak pernah menyeberang ke worker.
-    const jejakIde = bacaJejakIde(row.script_validation_result);
-    await pgSimpanArsipPrompt({
-      jobId: row.id,
-      specJson: JSON.stringify(ringkasSpec(spec, modelTier)),
-      segmentsJson: JSON.stringify(segments),
-      negativePrompt: spec.negativePrompt,
-      modelParams: JSON.stringify({ ...ringkasParams(spec), format, template_id: storyIdentity.templateId }),
-      ideId: jejakIde.ideId,
-      ideSkor: jejakIde.ideSkor,
-      // AWAITING_APPROVAL dan BullMQ retry dapat memakai task/klip yang dibuat
-      // invocation sebelumnya. Bila task itu masih ada, arsip yang terikat ke
-      // request tersebut tidak boleh ditimpa timestamp/prompt invocation baru.
-      preserveExisting: row.state !== "QUEUED",
-    });
-  } catch (err) {
-    console.warn(`[job ${row.id.slice(0, 8)}] arsip prompt gagal disimpan (diabaikan): ${(err as Error).message}`);
-  }
+  // Snapshot pra-gate menjaga jejak prompt yang dihentikan sebelum biaya.
+  // Untuk job yang lolos, snapshot ini akan diganti oleh snapshot provider-bound
+  // sesudah transformasi referensi dan tepat sebelum request video.
+  await simpanArsip(spec, "pre-gate");
 
   // GERBANG PROMPT — SESUDAH arsip, SEBELUM penyedia.
   //
@@ -705,7 +712,11 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       const tmpDir = path.join(workDir, `regen-${shot.idx}`);
       fs.mkdirSync(tmpDir, { recursive: true });
       await pastikanManifestSebelumEfek();
-      const single = await generateVideoWithFailover({ ...spec, shots: [spec.shots[shot.idx]] }, tmpDir);
+      const regenSpec = { ...spec, shots: [spec.shots[shot.idx]] };
+      // pgSimpanArsipPrompt tetap menyimpan full archive lama bila shot lain
+      // masih punya request. Binding digest akan menolak campuran versi.
+      await simpanArsip(spec, "provider-bound");
+      const single = await generateVideoWithFailover(regenSpec, tmpDir);
       await jobs.addCost(row.id, single.costIdr);
       fs.copyFileSync(single.assets[0].filePath, path.join(workDir, `shot${shot.idx}.mp4`));
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -733,7 +744,6 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // dari paket CAST-REF avatar dan diperiksa QC-F1 dulu — supaya klipnya
   // terasa satu sesi rekaman, bukan beberapa ruangan berbeda. Lihat
   // bolehFrameTurunan() untuk kenapa gerbangnya tier + format.
-  let qcF1: RingkasanQcF1[] = [];
   let specSiap: VisualSpec;
   if (bolehFrameTurunan({ format, tier, orgId: row.org_id })) {
     await pastikanManifestSebelumEfek();
@@ -755,28 +765,15 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     await pastikanManifestSebelumEfek();
     specSiap = await siapkanFramePertama(spec, workDir, row.id);
   }
-  // Verdict QC-F1 ikut ke arsip prompt lewat modelParams — SENGAJA belum kolom
-  // sendiri. Kolom qc_f1_json (migrasi 0033) menunggu 0030/0031 dipasang lebih
-  // dulu, dan menahan buktinya sampai migrasi itu jalan berarti kehilangan
-  // bukti dari job-job pertama yang justru paling perlu dibedah.
-  if (qcF1.length) {
-    try {
-      await pool.query(
-        // ::text di luar WAJIB — model_params kolomnya TEXT, dan Postgres tidak
-        // mengecor jsonb ke text secara implisit saat penugasan.
-        `UPDATE job_prompts SET model_params = (model_params::jsonb || $2::jsonb)::text WHERE job_id = $1`,
-        [row.id, JSON.stringify({ qc_f1: qcF1 })]
-      );
-    } catch (err) {
-      console.warn(`[job ${row.id.slice(0, 8)}] verdict QC-F1 gagal diarsipkan (diabaikan): ${(err as Error).message}`);
-    }
-  }
-
   let video;
   if (reused) video = reused;
   else if (format === "vo_broll") video = await buildPhotoPanVideo(specSiap, workDir);
   else {
     await pastikanManifestSebelumEfek();
+    // WAJIB sesudah siapkanFramePertama/siapkanFrameTurunan: body BytePlus
+    // memuat byte gambar, jadi digest spec awal bukan digest yang dikirim.
+    // Tetap sebelum generate agar created_at selalu mendahului request provider.
+    await simpanArsip(specSiap, "provider-bound");
     video = await generateVideoWithFailover(specSiap, workDir);
   }
   // Resume scene yang sudah disetujui membawa provider sintetis

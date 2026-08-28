@@ -19,6 +19,8 @@ function database(options: {
   requestAfterCompletion?: boolean;
   providerMismatch?: boolean;
   mixedPayload?: boolean;
+  archiveHashes?: string[];
+  requestHashes?: string[];
 } = {}) {
   const calls: string[] = [];
   const db: CorrelationQueryable = {
@@ -28,14 +30,18 @@ function database(options: {
       if (sql.startsWith("SELECT spec_json")) {
         result = options.missingArchive
           ? { rows: [], rowCount: 0 }
-          : { rows: [{ spec_json: spec, created_at: options.archiveAfterRequest
+          : { rows: [{ spec_json: options.archiveHashes ? JSON.stringify({ shots: [
+            { idx: 0, prompt: "satu", providerPayloadSha256: options.archiveHashes[0] },
+            { idx: 1, prompt: "dua", providerPayloadSha256: options.archiveHashes[1] },
+          ] }) : spec, created_at: options.archiveAfterRequest
             ? "2026-08-28T05:01:30.000Z" : "2026-08-28T05:00:00.000Z" }], rowCount: 1 };
       } else if (sql.startsWith("SELECT provider_video")) {
         result = { rows: [{ provider_video: "byteplus-ark-seedance", completed_at: "2026-08-28T05:02:00.000Z" }], rowCount: 1 };
       } else if (sql.startsWith("SELECT job_id,shot_index")) {
         const rows = [0, 1].map((shot_index) => ({
           job_id: "job-1", shot_index, provider: options.providerMismatch ? "provider-lain" : "byteplus",
-          payload_sha256: options.mixedPayload && shot_index === 1 ? "c".repeat(64) : HASHES[shot_index],
+          payload_sha256: options.requestHashes?.[shot_index]
+            ?? (options.mixedPayload && shot_index === 1 ? "c".repeat(64) : HASHES[shot_index]),
           task_id: `request-${shot_index}`, created_at: options.requestAfterCompletion
             ? "2026-08-28T05:03:00.000Z" : "2026-08-28T05:01:00.000Z",
         }));
@@ -96,4 +102,15 @@ test("one retained request plus one regenerated request bound to another archive
   assert.equal(await freezeProviderRequestCorrelation(db, "job-1"), false);
   assert.equal(calls.some((sql) => sql.includes("UPDATE job_prompts")), false);
   assert.equal(calls.some((sql) => /DELETE/i.test(sql)), false);
+});
+
+test("finalized generated-reference digest replaces pre-transform digest before a successful freeze", async () => {
+  const preTransform = ["a".repeat(64), "b".repeat(64)];
+  const providerBound = ["c".repeat(64), "d".repeat(64)];
+  assert.equal(await freezeProviderRequestCorrelation(database({
+    archiveHashes: preTransform, requestHashes: providerBound,
+  }).db, "job-1"), false);
+  assert.equal(await freezeProviderRequestCorrelation(database({
+    archiveHashes: providerBound, requestHashes: providerBound,
+  }).db, "job-1"), true);
 });

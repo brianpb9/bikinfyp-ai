@@ -18,6 +18,7 @@
     "provider mismatch",
     "legacy provider request without payload binding",
     "retained shot plus regenerated shot bound to different prompt/model payload versions",
+    "pre-transformation reference digest differs from finalized provider-bound reference bytes",
     "missing or failed verdict",
     "missing artifact",
     "archive write failure retains provider request recovery rows"
