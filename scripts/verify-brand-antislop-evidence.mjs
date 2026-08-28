@@ -15,6 +15,7 @@ if (!file || !archiveRoot || !trustPolicyFile) {
       readJobArchive: createJobEvidenceArchiveReader(archiveRoot, packet.job_id),
       trustedActorRoles: policy.trusted_actor_roles,
       approvedExtractors: policy.approved_extractors,
+      approvedQcEvaluatorIdentities: policy.approved_qc_evaluator_identities,
       approvedEvaluatorIdentities: policy.approved_evaluator_identities,
     };
     process.stdout.write(`${JSON.stringify(verifyBrandAntiSlopEvidence(packet, runtime))}\n`);

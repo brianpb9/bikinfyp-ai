@@ -64,6 +64,8 @@ function packet() {
       job_id: "job-1", product_id: "product-1", subject_id: "subject-product-1",
       artifact_sha256: ARTIFACT, extraction_manifest_sha256: EXTRACTION,
       ...sample, evaluated_at: "2026-08-28T05:11:00Z",
+      evaluator: { name: "qc-frame-fidelity", model: "vision-model-v1", version: "1" },
+      receipt: { storage_key: `jobs/job-1/evidence/qc-f1/${sample.shot_index}-${sample.frame_role}.json`, sha256: "0".repeat(64), payload: {} },
       qc_f1: {
         status: "PASS",
         evidence: { frameSha256: sample.frame_sha256, productPhotoSha256: REF },
@@ -71,7 +73,10 @@ function packet() {
       },
     })),
     final_qc: ["QC-03", "QC-10"].map((code) => ({ code, status: "pass", job_id: "job-1",
-      artifact_sha256: ARTIFACT, extraction_manifest_sha256: EXTRACTION })),
+      product_id: "product-1", subject_id: "subject-product-1", artifact_sha256: ARTIFACT,
+      extraction_manifest_sha256: EXTRACTION, evaluated_at: "2026-08-28T05:11:30Z",
+      evaluator: { name: "qc-frame-fidelity", model: "vision-model-v1", version: "1" },
+      receipt: { storage_key: `jobs/job-1/evidence/final-qc/${code}.json`, sha256: "0".repeat(64), payload: {} } })),
     anti_slop: { job_id: "job-1", product_id: "product-1", subject_id: "subject-product-1",
       artifact_sha256: ARTIFACT, extraction_manifest_sha256: EXTRACTION,
       evaluator: { name: "anti-slop-frame-inspector", model: "deterministic-fixture", version: "1" },
@@ -105,6 +110,21 @@ function packet() {
   value.extraction_manifest.sha256 = digest(extractionPayload);
   for (const sample of value.samples) sample.extraction_manifest_sha256 = value.extraction_manifest.sha256;
   for (const row of value.final_qc) row.extraction_manifest_sha256 = value.extraction_manifest.sha256;
+  for (const sample of value.samples) {
+    const payload = { job_id: value.job_id, product_id: value.product_id, subject_id: value.subject.id,
+      artifact_sha256: ARTIFACT, extraction_manifest_sha256: value.extraction_manifest.sha256,
+      shot_index: sample.shot_index, frame_role: sample.frame_role, frame_sha256: sample.frame_sha256,
+      artifact_timestamp_ms: sample.artifact_timestamp_ms, evaluated_at: sample.evaluated_at,
+      evaluator: sample.evaluator, qc_f1: sample.qc_f1 };
+    sample.receipt.payload = payload; sample.receipt.sha256 = digest(payload);
+  }
+  for (const row of value.final_qc) {
+    const payload = { code: row.code, status: row.status, job_id: value.job_id, product_id: value.product_id,
+      subject_id: value.subject.id, artifact_sha256: ARTIFACT,
+      extraction_manifest_sha256: value.extraction_manifest.sha256,
+      evaluated_at: row.evaluated_at, evaluator: row.evaluator };
+    row.receipt.payload = payload; row.receipt.sha256 = digest(payload);
+  }
   value.anti_slop.extraction_manifest_sha256 = value.extraction_manifest.sha256;
   const evaluationPayload = { job_id: value.job_id, product_id: value.product_id, subject_id: value.subject.id,
     artifact_sha256: ARTIFACT, extraction_manifest_sha256: value.extraction_manifest.sha256,
@@ -134,11 +154,14 @@ function trustedRuntime(value) {
         frames: value.extraction_manifest.frames }))],
     [value.anti_slop.evaluation_receipt.storage_key,
       JSON.stringify(canonical(value.anti_slop.evaluation_receipt.payload))],
+    ...value.samples.map((sample) => [sample.receipt.storage_key, JSON.stringify(canonical(sample.receipt.payload))]),
+    ...value.final_qc.map((row) => [row.receipt.storage_key, JSON.stringify(canonical(row.receipt.payload))]),
   ]);
   return {
     readJobArchive: (key) => archive.get(key),
     trustedActorRoles: { "reviewer-1": ["AUTHORIZED_PRODUCT_REVIEWER"] },
     approvedExtractors: ["ffmpeg@exact-sha"],
+    approvedQcEvaluatorIdentities: ["qc-frame-fidelity|vision-model-v1|1"],
     approvedEvaluatorIdentities: ["anti-slop-frame-inspector|deterministic-fixture|1"],
   };
 }
@@ -209,17 +232,10 @@ test("requires canonical archive bytes and trusted identities outside the caller
   hiddenProductShot.samples = hiddenProductShot.samples.filter((sample) => sample.shot_index !== 1);
   assert.throws(() => verifyBrandAntiSlopEvidence(hiddenProductShot, hiddenRuntime), /EXTRACTION_MANIFEST_DIGEST_MISMATCH/);
 
-  const omittedNonProductQc = packet(); const omittedRuntime = trustedRuntime(omittedNonProductQc);
+  const omittedNonProductQc = packet();
   omittedNonProductQc.extraction_manifest.shot_inventory[1].product_bearing = false;
   const extractionPayload = omittedNonProductQc.extraction_manifest;
   // Even with a canonical trusted classification, every shot still needs QC.
-  omittedRuntime.readJobArchive = (key) => key === extractionPayload.storage_key
-    ? JSON.stringify(canonical({ job_id: omittedNonProductQc.job_id, product_id: omittedNonProductQc.product_id,
-      subject_id: omittedNonProductQc.subject.id, artifact_sha256: ARTIFACT,
-      artifact_storage_key: omittedNonProductQc.artifact.storage_key, extractor: extractionPayload.extractor,
-      created_at: extractionPayload.created_at, sampling_plan: extractionPayload.sampling_plan,
-      shot_inventory: extractionPayload.shot_inventory, frames: extractionPayload.frames }))
-    : trustedRuntime(packet()).readJobArchive(key);
   const changedExtractionPayload = { job_id: omittedNonProductQc.job_id, product_id: omittedNonProductQc.product_id,
     subject_id: omittedNonProductQc.subject.id, artifact_sha256: ARTIFACT,
     artifact_storage_key: omittedNonProductQc.artifact.storage_key, extractor: extractionPayload.extractor,
@@ -227,9 +243,14 @@ test("requires canonical archive bytes and trusted identities outside the caller
     shot_inventory: extractionPayload.shot_inventory, frames: extractionPayload.frames };
   extractionPayload.sha256 = digest(changedExtractionPayload);
   omittedNonProductQc.samples = omittedNonProductQc.samples.filter((sample) => sample.shot_index !== 1);
-  for (const sample of omittedNonProductQc.samples) sample.extraction_manifest_sha256 = extractionPayload.sha256;
+  for (const sample of omittedNonProductQc.samples) {
+    sample.extraction_manifest_sha256 = extractionPayload.sha256;
+    sample.receipt.payload.extraction_manifest_sha256 = extractionPayload.sha256;
+    sample.receipt.sha256 = digest(sample.receipt.payload);
+  }
   for (const row of omittedNonProductQc.final_qc) row.extraction_manifest_sha256 = extractionPayload.sha256;
   omittedNonProductQc.anti_slop.extraction_manifest_sha256 = extractionPayload.sha256;
+  const omittedRuntime = trustedRuntime(omittedNonProductQc);
   assert.throws(() => verifyBrandAntiSlopEvidence(omittedNonProductQc, omittedRuntime), /PRODUCT_SHOT_QC_COVERAGE_INCOMPLETE/);
 });
 
@@ -251,6 +272,34 @@ test("job archive reader rejects encoded traversal and symlink escape", (t) => {
   assert.throws(() => read("jobs/job-1/evidence/valid.json?alias"), /JOB_ARCHIVE_KEY_NOT_CANONICAL/);
 });
 
+test("job archive reader rejects a job evidence directory symlink", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "brand-job-link-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const attacker = path.join(root, "jobs", "job-attacker", "evidence");
+  fs.mkdirSync(attacker, { recursive: true });
+  fs.mkdirSync(path.join(root, "jobs", "job-1"), { recursive: true });
+  fs.symlinkSync(attacker, path.join(root, "jobs", "job-1", "evidence"));
+  assert.throws(() => createJobEvidenceArchiveReader(root, "job-1"), /JOB_ARCHIVE_DIRECTORY_NOT_CANONICAL/);
+});
+
+test("rejects caller-forged per-frame and final QC PASS receipts", () => {
+  const forgedSample = packet(); const sampleRuntime = trustedRuntime(forgedSample);
+  forgedSample.samples[0].qc_f1.temuan.warnaSama = false;
+  forgedSample.samples[0].receipt.payload.qc_f1.temuan.warnaSama = false;
+  forgedSample.samples[0].receipt.sha256 = digest(forgedSample.samples[0].receipt.payload);
+  assert.throws(() => verifyBrandAntiSlopEvidence(forgedSample, sampleRuntime), /QC_F1_WARNASAMA_NOT_PROVEN|QC_F1_RECEIPT_ARCHIVE_DIGEST_MISMATCH/);
+
+  const forgedFinal = packet(); const finalRuntime = trustedRuntime(forgedFinal);
+  forgedFinal.final_qc[0].evaluator.model = "caller-model";
+  forgedFinal.final_qc[0].receipt.payload.evaluator.model = "caller-model";
+  forgedFinal.final_qc[0].receipt.sha256 = digest(forgedFinal.final_qc[0].receipt.payload);
+  assert.throws(() => verifyBrandAntiSlopEvidence(forgedFinal, finalRuntime), /QC_03_EVALUATOR_NOT_APPROVED/);
+
+  const missingTrust = packet(); const missingTrustRuntime = trustedRuntime(missingTrust);
+  missingTrustRuntime.approvedQcEvaluatorIdentities = [];
+  assert.throws(() => verifyBrandAntiSlopEvidence(missingTrust, missingTrustRuntime), /QC_F1_EVALUATOR_NOT_APPROVED/);
+});
+
 test("rejects every product-identity and generated-text slop signal", () => {
   for (const field of ["bentukSama", "tutupSama", "warnaSama", "tataLetakLabelSama", "merekTerbaca"]) {
     const input = packet(); const runtime = trustedRuntime(input); input.samples[0].qc_f1.temuan[field] = false;
@@ -261,7 +310,7 @@ test("rejects every product-identity and generated-text slop signal", () => {
   const misspelled = packet(); misspelled.anti_slop.misspelled_brand_candidates = ["moseru"];
   assert.throws(() => verifyBrandAntiSlopEvidence(misspelled, trustedRuntime(misspelled)), /MISSPELLED_BRAND_SLOP_DETECTED/);
   for (const code of ["QC-03", "QC-10"]) {
-    const input = packet(); input.final_qc.find((row) => row.code === code).status = "fail";
-    assert.throws(() => verifyBrandAntiSlopEvidence(input, trustedRuntime(input)), /NOT_PASS/, code);
+    const input = packet(); const runtime = trustedRuntime(input); input.final_qc.find((row) => row.code === code).status = "fail";
+    assert.throws(() => verifyBrandAntiSlopEvidence(input, runtime), /NOT_PASS/, code);
   }
 });
