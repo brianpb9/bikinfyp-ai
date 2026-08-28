@@ -99,7 +99,73 @@ test("mobile evidence runner has a truthful exact-SHA external image contract", 
   assert.match(evidenceLaunch, /test "\$inspected_image" = "\$image_id"/);
   assert.match(evidenceLaunch, /test "\$config_image" = "\$image_id"/);
   assert.match(evidenceLaunch, /mobile-evidence-launch\/v1/);
+  assert.match(evidenceLaunch, /EVIDENCE_RECEIPT_EXPORT_DIR/);
+  assert.match(evidenceLaunch, /chmod 0555 "\$launch_dir"/);
+  assert.match(evidenceLaunch, /docker cp "\$container_id:\/srv\/receipts\/\." "\$artifact_dir\/"/);
+  assert.match(evidenceLaunch, /retained container \$container_id/);
   assert.match(evidenceLaunch, /docker start --attach "\$container_id"/);
+});
+
+test("launcher gives non-root evidence access and exports receipts before removing a failed container", () => {
+  const dir=fs.mkdtempSync(path.join(os.tmpdir(),"mobile-evidence-launcher-"));
+  try {
+    const bin=path.join(dir,"bin"),state=path.join(dir,"state"),receipts=path.join(dir,"export");
+    fs.mkdirSync(bin);fs.mkdirSync(state);
+    const docker=path.join(bin,"docker");
+    fs.writeFileSync(docker,`#!/usr/bin/env bash
+set -euo pipefail
+printf '%s\\n' "$*" >> "$FAKE_DOCKER_STATE/log"
+image_id="sha256:$(printf '%064d' 0 | tr 0 a)"
+container_id="$(printf '%064d' 0 | tr 0 b)"
+if test "$1 $2" = "image inspect"; then
+  case "$4" in
+    '{{.Id}}') printf '%s\\n' "$image_id" ;;
+    *org.opencontainers.image.revision*) printf '%040d\\n' 0 | tr 0 c ;;
+    *ai.hdrv.source.tree*) printf '%040d\\n' 0 | tr 0 d ;;
+  esac
+elif test "$1" = create; then
+  previous=""
+  for argument in "$@"; do
+    if test "$previous" = --mount; then printf '%s\\n' "$argument" | sed -E 's/^type=bind,src=([^,]+),.*/\\1/' > "$FAKE_DOCKER_STATE/launch-dir"; fi
+    previous="$argument"
+  done
+  printf '%s\\n' "$container_id"
+elif test "$1 $2" = "container inspect"; then
+  printf '%s\\n' "$image_id"
+elif test "$1" = start; then
+  launch_dir="$(cat "$FAKE_DOCKER_STATE/launch-dir")"
+  node -e 'const fs=require("fs"),d=process.argv[1],f=d+"/attestation.json";const mode=p=>(fs.statSync(p).mode&0o777).toString(8);const a=JSON.parse(fs.readFileSync(f,"utf8"));fs.writeFileSync(process.env.FAKE_DOCKER_STATE+"/access",mode(d)+":"+mode(f)+":"+a.schema)' "$launch_dir"
+  exit 19
+elif test "$1" = cp; then
+  if test "\${FAKE_DOCKER_CP_FAIL:-false}" = true; then exit 23; fi
+  destination="\${@: -1}"
+  mkdir -p "$destination"
+  printf '%s\\n' '{"result":"FAIL_ARTIFACT_VERIFICATION"}' > "$destination/receipt.final.json"
+elif test "$1" = rm; then
+  :
+else
+  printf '%s\\n' "unexpected fake docker command: $*" >&2
+  exit 98
+fi
+`,{mode:0o755});
+    const envFile=path.join(dir,"evidence.env");fs.writeFileSync(envFile,"");
+    const env={...process.env,PATH:`${bin}:${process.env.PATH}`,FAKE_DOCKER_STATE:state,
+      EVIDENCE_IMAGE:"fixture:latest",EXPECTED_APP_SHA:"c".repeat(40),EVIDENCE_ENV_FILE:envFile,
+      EVIDENCE_RECEIPT_EXPORT_DIR:receipts};
+    assert.throws(()=>execFileSync(new URL("../scripts/run-mobile-evidence-image.sh",import.meta.url).pathname,
+      [],{env,stdio:"pipe"}));
+    assert.equal(fs.readFileSync(path.join(state,"access"),"utf8"),"555:444:mobile-evidence-launch/v1");
+    assert.equal(JSON.parse(fs.readFileSync(path.join(receipts,"receipt.final.json"),"utf8")).result,
+      "FAIL_ARTIFACT_VERIFICATION");
+    const log=fs.readFileSync(path.join(state,"log"),"utf8");
+    assert.ok(log.indexOf("cp ") < log.indexOf("rm -f "),"receipts must be exported before removal");
+    fs.writeFileSync(path.join(state,"log"),"");
+    assert.throws(()=>execFileSync(new URL("../scripts/run-mobile-evidence-image.sh",import.meta.url).pathname,
+      [],{env:{...env,FAKE_DOCKER_CP_FAIL:"true",EVIDENCE_RECEIPT_EXPORT_DIR:path.join(dir,"failed-export")},stdio:"pipe"}));
+    const failedExportLog=fs.readFileSync(path.join(state,"log"),"utf8");
+    assert.match(failedExportLog,/^cp /m);
+    assert.doesNotMatch(failedExportLog,/^rm -f /m,"container must remain available when export fails");
+  } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
 test("source content attestation verifies bytes and fails after mutation", () => {
