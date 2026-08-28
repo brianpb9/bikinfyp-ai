@@ -340,11 +340,14 @@ test("arsip prompt mencatat mode yang BENAR-BENAR dikirim, bukan menurunkannya s
   const { ringkasSpec } = await import("../lib/arsip-prompt");
   const { modeReferensi } = await import("../lib/providers/stubs/byteplus");
   const model = "dreamina-seedance-2-0-mini-260615";
+  const ref = `/tmp/prompt-archive-reference-${process.pid}.png`;
+  fs.writeFileSync(ref, Buffer.from("reference-bytes"));
   const spec = {
     qualityTier: "high_quality",
-    shots: [{ durationSec: 5, prompt: "p", imageRefPath: "a.png" }, { durationSec: 5, prompt: "q" }],
+    shots: [{ durationSec: 5, prompt: "p", imageRefPath: ref }, { durationSec: 5, prompt: "q" }],
   } as never;
   const r = ringkasSpec(spec, model);
+  fs.rmSync(ref, { force: true });
   assert.equal(r.model, model, "model harus ikut tercatat supaya modenya bisa diverifikasi ulang");
   assert.equal(r.shots[0].referenceMode, modeReferensi(spec, model), "harus SAMA dengan keputusan provider");
   assert.equal(r.shots[0].referenceMode, "reference_image (r2v)");

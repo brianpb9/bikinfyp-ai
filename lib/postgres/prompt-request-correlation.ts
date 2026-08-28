@@ -10,18 +10,23 @@ type ProviderRequestRow = {
   shot_index: number;
   provider: string;
   task_id: string;
+  payload_sha256: string | null;
   created_at: string;
 };
 
-function expectedShotIndices(specJson: string): number[] {
-  const spec = JSON.parse(specJson) as { shots?: Array<{ idx?: unknown }> };
+function expectedShotBindings(specJson: string): Map<number, string> {
+  const spec = JSON.parse(specJson) as { shots?: Array<{ idx?: unknown; providerPayloadSha256?: unknown }> };
   if (!Array.isArray(spec.shots) || spec.shots.length === 0) throw new Error("PROMPT_SHOTS_MISSING");
-  const indices = spec.shots.map((shot) => {
+  const bindings = new Map<number, string>();
+  for (const shot of spec.shots) {
     if (!Number.isInteger(shot?.idx)) throw new Error("PROMPT_SHOT_INVALID");
-    return shot.idx as number;
-  });
-  if (new Set(indices).size !== indices.length) throw new Error("PROMPT_SHOT_INDEX_DUPLICATE");
-  return indices;
+    if (typeof shot.providerPayloadSha256 !== "string" || !/^[0-9a-f]{64}$/.test(shot.providerPayloadSha256)) {
+      throw new Error("PROMPT_SHOT_PAYLOAD_BINDING_MISSING");
+    }
+    if (bindings.has(shot.idx as number)) throw new Error("PROMPT_SHOT_INDEX_DUPLICATE");
+    bindings.set(shot.idx as number, shot.providerPayloadSha256);
+  }
+  return bindings;
 }
 
 function time(value: string | null, field: string): number {
@@ -56,20 +61,21 @@ export async function freezeProviderRequestCorrelation(
   if (job.rowCount !== 1 || !job.rows[0]?.provider_video || !job.rows[0].completed_at) return false;
 
   const requests = await db.query<ProviderRequestRow>(
-    "SELECT job_id,shot_index,provider,task_id,created_at FROM provider_tasks WHERE job_id=$1 ORDER BY shot_index,provider",
+    "SELECT job_id,shot_index,provider,task_id,payload_sha256,created_at FROM provider_tasks WHERE job_id=$1 ORDER BY shot_index,provider",
     [jobId],
   );
-  const expected = expectedShotIndices(archive.rows[0].spec_json);
+  const expected = expectedShotBindings(archive.rows[0].spec_json);
   const actual = requests.rows.map((request) => request.shot_index);
-  if (requests.rowCount !== expected.length
+  if (requests.rowCount !== expected.size
     || new Set(actual).size !== actual.length
-    || expected.some((idx) => !actual.includes(idx))) {
+    || [...expected.keys()].some((idx) => !actual.includes(idx))) {
     return false;
   }
   const archiveAt = time(archive.rows[0].created_at, "ARCHIVE_CREATED_AT");
   const completedAt = time(job.rows[0].completed_at, "JOB_COMPLETED_AT");
   if (requests.rows.some((request) => {
-    if (request.job_id !== jobId || !request.provider || !request.task_id) return true;
+    if (request.job_id !== jobId || !request.provider || !request.task_id
+      || request.payload_sha256 !== expected.get(request.shot_index)) return true;
     const requestAt = time(request.created_at, "REQUEST_CREATED_AT");
     return requestAt < archiveAt
       || requestAt > completedAt

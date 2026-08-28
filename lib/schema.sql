@@ -377,6 +377,7 @@ CREATE TABLE IF NOT EXISTS provider_tasks (
   shot_index INTEGER NOT NULL,
   provider TEXT NOT NULL,
   task_id TEXT NOT NULL,
+  payload_sha256 TEXT,
   created_at TEXT NOT NULL,
   PRIMARY KEY (job_id, shot_index, provider)
 );

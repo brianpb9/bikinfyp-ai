@@ -4,6 +4,7 @@ import fs from "node:fs";
 import { verifyPromptArchiveTrace } from "../lib/prompt-archive-trace.mjs";
 
 function fixture() {
+  const payloads = ["a".repeat(64), "b".repeat(64)];
   return {
     job: {
       id: "job-1", state: "READY", provider_video: "byteplus-ark-seedance", output_url: "outputs/job-1.mp4",
@@ -13,7 +14,8 @@ function fixture() {
     archive: {
       job_id: "job-1",
       spec_json: JSON.stringify({ model: "seedance-1-0-pro", shots: [
-        { idx: 0, prompt: "shot zero" }, { idx: 1, prompt: "shot one" },
+        { idx: 0, prompt: "shot zero", providerPayloadSha256: payloads[0] },
+        { idx: 1, prompt: "shot one", providerPayloadSha256: payloads[1] },
       ] }),
       negative_prompt: "unsafe anatomy",
       model_params: JSON.stringify({ qualityTier: "pro", ratio: "9:16" }),
@@ -21,6 +23,7 @@ function fixture() {
     },
     requests: [0, 1].map((shot_index) => ({
       job_id: "job-1", shot_index, provider: "byteplus", task_id: `request-${shot_index}`,
+      payload_sha256: payloads[shot_index],
       created_at: `2026-08-28T05:01:0${shot_index}.000Z`,
     })),
   };
@@ -64,6 +67,12 @@ test("fails closed for ambiguous provider requests", () => {
   const input = fixture();
   input.requests.push({ ...input.requests[0], task_id: "request-retry" });
   assert.throws(() => verifyPromptArchiveTrace(input), /AMBIGUOUS_REQUEST_FOR_SHOT/);
+});
+
+test("fails closed when one regenerated request belongs to another prompt/model payload", () => {
+  const input = fixture();
+  input.requests[1].payload_sha256 = "c".repeat(64);
+  assert.throws(() => verifyPromptArchiveTrace(input), /REQUEST_ARCHIVE_PAYLOAD_MISMATCH/);
 });
 
 test("fails closed when request family does not match output provider", () => {

@@ -12,27 +12,34 @@ import type { TaskMemo } from "../providers/task-memo";
 const MAX_REUSE_AGE_MS = 2 * 60 * 60 * 1000;
 
 export const pgTaskMemo: TaskMemo = {
-  async get(jobId, shotIndex, provider) {
-    const res = await getPool(config.databaseUrl).query<{ task_id: string; created_at: string }>(
-      "SELECT task_id, created_at FROM provider_tasks WHERE job_id=$1 AND shot_index=$2 AND provider=$3",
+  async get(jobId, shotIndex, provider, payloadSha256) {
+    const res = await getPool(config.databaseUrl).query<{ task_id: string; created_at: string; payload_sha256: string | null }>(
+      "SELECT task_id, created_at, payload_sha256 FROM provider_tasks WHERE job_id=$1 AND shot_index=$2 AND provider=$3",
       [jobId, shotIndex, provider]
     );
     const row = res.rows[0];
     if (!row) return null;
     const age = Date.now() - Date.parse(row.created_at);
     if (!Number.isFinite(age) || age > MAX_REUSE_AGE_MS) return null;
+    // Baris pra-0041 tetap dilanjutkan untuk mencegah submit/biaya ganda, tetapi
+    // tidak akan pernah lolos pembekuan audit karena digest-nya NULL. Digest
+    // yang ada namun berbeda berarti konfigurasi/prompt berubah saat request
+    // masih hidup: berhenti, jangan diam-diam mengirim task kedua.
+    if (row.payload_sha256 && row.payload_sha256 !== payloadSha256) {
+      throw new Error("PROVIDER_TASK_PAYLOAD_MISMATCH");
+    }
     return row.task_id;
   },
 
-  async put(jobId, shotIndex, provider, taskId) {
+  async put(jobId, shotIndex, provider, taskId, payloadSha256) {
     // ON CONFLICT: percobaan ulang yang MEMANG mengirim task baru (mis. memo
     // sudah kedaluwarsa) harus menimpa yang lama, bukan gagal insert.
     await getPool(config.databaseUrl).query(
-      `INSERT INTO provider_tasks (job_id, shot_index, provider, task_id, created_at)
-       VALUES ($1,$2,$3,$4,$5)
+      `INSERT INTO provider_tasks (job_id, shot_index, provider, task_id, payload_sha256, created_at)
+       VALUES ($1,$2,$3,$4,$5,$6)
        ON CONFLICT (job_id, shot_index, provider)
-       DO UPDATE SET task_id=EXCLUDED.task_id, created_at=EXCLUDED.created_at`,
-      [jobId, shotIndex, provider, taskId, new Date().toISOString()]
+       DO UPDATE SET task_id=EXCLUDED.task_id, payload_sha256=EXCLUDED.payload_sha256, created_at=EXCLUDED.created_at`,
+      [jobId, shotIndex, provider, taskId, payloadSha256, new Date().toISOString()]
     );
   },
 

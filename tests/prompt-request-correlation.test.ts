@@ -5,7 +5,11 @@ import {
   type CorrelationQueryable,
 } from "../lib/postgres/prompt-request-correlation";
 
-const spec = JSON.stringify({ shots: [{ idx: 0, prompt: "satu" }, { idx: 1, prompt: "dua" }] });
+const HASHES = ["a".repeat(64), "b".repeat(64)];
+const spec = JSON.stringify({ shots: [
+  { idx: 0, prompt: "satu", providerPayloadSha256: HASHES[0] },
+  { idx: 1, prompt: "dua", providerPayloadSha256: HASHES[1] },
+] });
 
 function database(options: {
   missingArchive?: boolean;
@@ -14,6 +18,7 @@ function database(options: {
   archiveAfterRequest?: boolean;
   requestAfterCompletion?: boolean;
   providerMismatch?: boolean;
+  mixedPayload?: boolean;
 } = {}) {
   const calls: string[] = [];
   const db: CorrelationQueryable = {
@@ -30,6 +35,7 @@ function database(options: {
       } else if (sql.startsWith("SELECT job_id,shot_index")) {
         const rows = [0, 1].map((shot_index) => ({
           job_id: "job-1", shot_index, provider: options.providerMismatch ? "provider-lain" : "byteplus",
+          payload_sha256: options.mixedPayload && shot_index === 1 ? "c".repeat(64) : HASHES[shot_index],
           task_id: `request-${shot_index}`, created_at: options.requestAfterCompletion
             ? "2026-08-28T05:03:00.000Z" : "2026-08-28T05:01:00.000Z",
         }));
@@ -83,4 +89,11 @@ test("retry archive inserted after reused request cannot authorize cleanup", asy
 test("post-completion request and failover-provider mismatch cannot authorize cleanup", async () => {
   assert.equal(await freezeProviderRequestCorrelation(database({ requestAfterCompletion: true }).db, "job-1"), false);
   assert.equal(await freezeProviderRequestCorrelation(database({ providerMismatch: true }).db, "job-1"), false);
+});
+
+test("one retained request plus one regenerated request bound to another archive cannot authorize cleanup", async () => {
+  const { db, calls } = database({ mixedPayload: true });
+  assert.equal(await freezeProviderRequestCorrelation(db, "job-1"), false);
+  assert.equal(calls.some((sql) => sql.includes("UPDATE job_prompts")), false);
+  assert.equal(calls.some((sql) => /DELETE/i.test(sql)), false);
 });

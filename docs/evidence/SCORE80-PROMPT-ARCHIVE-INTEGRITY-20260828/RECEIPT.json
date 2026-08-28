@@ -7,7 +7,7 @@
   "public_payments": false,
   "claim": "NO_SCORE",
   "reason": "The canonical next rung still requires one production post-0032 real-job E2E. Deterministic fixtures validate the fail-closed verifier but do not substitute for that production trace.",
-  "closed_implementation_gap": "Terminal provider_tasks were deleted before a completed job could be audited; the worker now freezes per-shot provider request identities into job_prompts.model_params before clearing the retry memo.",
+  "closed_implementation_gap": "Terminal provider_tasks were deleted before a completed job could be audited; the worker now freezes per-shot provider request identities and exact provider-payload SHA-256 bindings into job_prompts.model_params before clearing the retry memo.",
   "correlation": ["prompt", "model", "verdict", "artifact", "provider_request"],
   "failure_modes": [
     "missing request-to-shot coverage",
@@ -16,6 +16,8 @@
     "provider request created after completed artifact",
     "ambiguous request per shot",
     "provider mismatch",
+    "legacy provider request without payload binding",
+    "retained shot plus regenerated shot bound to different prompt/model payload versions",
     "missing or failed verdict",
     "missing artifact",
     "archive write failure retains provider request recovery rows"

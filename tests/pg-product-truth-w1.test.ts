@@ -1942,11 +1942,11 @@ test("korelasi DB: archive write error mempertahankan provider_tasks", async (t)
   await pool.query(
     `INSERT INTO job_prompts (job_id,spec_json,segments_json,negative_prompt,model_params,created_at)
      VALUES ($1,$2,'[]','negative','bukan-json',$3)`,
-    [jobId, JSON.stringify({ shots: [{ idx: 0, prompt: "prompt" }] }), dibuat],
+    [jobId, JSON.stringify({ shots: [{ idx: 0, prompt: "prompt", providerPayloadSha256: "a".repeat(64) }] }), dibuat],
   );
   await pool.query(
-    "INSERT INTO provider_tasks (job_id,shot_index,provider,task_id,created_at) VALUES ($1,0,'byteplus','request-write-error',$2)",
-    [jobId, "2026-08-28T05:01:00.000Z"],
+    "INSERT INTO provider_tasks (job_id,shot_index,provider,task_id,payload_sha256,created_at) VALUES ($1,0,'byteplus','request-write-error',$2,$3)",
+    [jobId, "a".repeat(64), "2026-08-28T05:01:00.000Z"],
   );
   await assert.rejects(() => freezeProviderRequestCorrelation(pool, jobId));
   assert.equal((await pool.query("SELECT 1 FROM provider_tasks WHERE job_id=$1", [jobId])).rowCount, 1);

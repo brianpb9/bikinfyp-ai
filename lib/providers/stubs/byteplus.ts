@@ -8,6 +8,7 @@
 
 import fs from "node:fs";
 import path from "node:path";
+import crypto from "node:crypto";
 import { config } from "../../config";
 import { runFf } from "../../media/ffmpeg";
 import {
@@ -216,7 +217,7 @@ export function buildTaskContent(spec: VisualSpec, shot: ShotSpec, model: string
 
 const PROVIDER_KEY = "byteplus";
 
-async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
+export function buildBytePlusTaskBody(spec: VisualSpec, shot: ShotSpec) {
   const tierCfg = config.tiers[spec.qualityTier] ?? config.tiers.silent_caption;
   const content = buildTaskContent(spec, shot, tierCfg.byteplusModel);
   // Mode r2v (ada role reference_image) minimal 4 dtk (diverifikasi: duration 3
@@ -245,6 +246,14 @@ async function createTask(spec: VisualSpec, shot: ShotSpec): Promise<string> {
     duration: durationInt,
     watermark: false,
   };
+  return body;
+}
+
+export function bytePlusTaskPayloadSha256(spec: VisualSpec, shot: ShotSpec): string {
+  return crypto.createHash("sha256").update(JSON.stringify(buildBytePlusTaskBody(spec, shot))).digest("hex");
+}
+
+async function createTask(body: ReturnType<typeof buildBytePlusTaskBody>): Promise<string> {
   const res = await apiRequest<{ id: string }>("POST", `${config.byteplusBaseUrl}/contents/generations/tasks`, body);
   if (!res.id) throw new ProviderApiError("byteplus", "respons create task tanpa id");
   return res.id;
@@ -314,16 +323,18 @@ export const byteplusVideo: VideoProvider = {
         // mengirim yang baru. Worker yang mati saat polling kehilangan id
         // task-nya bersama prosesnya, dan tanpa langkah ini BytePlus menagih
         // dua kali untuk shot yang sama.
-        const remembered = await memo.get(spec.jobId, shot.index, PROVIDER_KEY);
+        const body = buildBytePlusTaskBody(spec, shot);
+        const payloadSha256 = crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex");
+        const remembered = await memo.get(spec.jobId, shot.index, PROVIDER_KEY, payloadSha256);
         if (remembered) {
           console.log(`[byteplus] job ${spec.jobId} shot ${shot.index}: lanjutkan task ${remembered} (tidak submit ulang)`);
           return { shot, taskId: remembered, startedAt: Date.now() };
         }
-        const taskId = await createTask(spec, shot);
+        const taskId = await createTask(body);
         // Disimpan SEBELUM polling. Menyimpannya setelah polling selesai tidak
         // ada gunanya — justru jendela antara submit dan selesai itulah yang
         // ingin dilindungi.
-        await memo.put(spec.jobId, shot.index, PROVIDER_KEY, taskId);
+        await memo.put(spec.jobId, shot.index, PROVIDER_KEY, taskId, payloadSha256);
         console.log(`[byteplus] job ${spec.jobId} shot ${shot.index}: task ${taskId} dikirim`);
         return { shot, taskId, startedAt: Date.now() };
       })
