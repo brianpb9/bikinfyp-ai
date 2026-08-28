@@ -41,14 +41,15 @@ function packet() {
         approved_at: "2026-08-28T05:00:00Z" },
       references: [{ job_id: "job-1", product_id: "product-1", subject_id: "subject-product-1",
         storage_key: "jobs/job-1/approved-references/0-product.webp", sha256: REF }] },
-    artifact: { job_id: "job-1", product_id: "product-1", subject_id: "subject-product-1", shot_count: 2,
+    artifact: { job_id: "job-1", product_id: "product-1", subject_id: "subject-product-1", shot_count: 2, duration_ms: 6000,
       storage_key: "outputs/job-1.mp4", sha256: ARTIFACT, completed_at: "2026-08-28T05:10:00Z" },
     extraction_manifest: { job_id: "job-1", product_id: "product-1", subject_id: "subject-product-1",
-      artifact_sha256: ARTIFACT, artifact_storage_key: "outputs/job-1.mp4",
+      artifact_sha256: ARTIFACT, artifact_storage_key: "outputs/job-1.mp4", artifact_duration_ms: 6000,
       storage_key: "jobs/job-1/evidence/extraction.json",
       sha256: EXTRACTION, extractor: "ffmpeg@exact-sha", created_at: "2026-08-28T05:10:30Z",
       sampling_plan: { version: 1, require_all_product_bearing_shots: true, required_roles: ["first", "beat"] },
-      shot_inventory: [{ shot_index: 0, product_bearing: true }, { shot_index: 1, product_bearing: true }],
+      shot_inventory: [{ shot_index: 0, product_bearing: true, start_ms: 0, end_ms: 3000 },
+        { shot_index: 1, product_bearing: true, start_ms: 3000, end_ms: 6000 }],
       frames: [
         { shot_index: 0, role: "first", frame_sha256: FRAME, artifact_timestamp_ms: 0 },
         { shot_index: 0, role: "beat", frame_sha256: FRAME_BEAT, artifact_timestamp_ms: 1800 },
@@ -103,7 +104,7 @@ function packet() {
   value.job_reference_manifest.sha256 = digest(referenceManifestPayload);
   value.approved_reference.manifest_sha256 = value.job_reference_manifest.sha256;
   const extractionPayload = { job_id: value.job_id, product_id: value.product_id, subject_id: value.subject.id,
-    artifact_sha256: ARTIFACT, artifact_storage_key: value.artifact.storage_key,
+    artifact_sha256: ARTIFACT, artifact_storage_key: value.artifact.storage_key, artifact_duration_ms: value.artifact.duration_ms,
     extractor: value.extraction_manifest.extractor, created_at: value.extraction_manifest.created_at,
     sampling_plan: value.extraction_manifest.sampling_plan, shot_inventory: value.extraction_manifest.shot_inventory,
     frames: value.extraction_manifest.frames };
@@ -148,7 +149,7 @@ function trustedRuntime(value) {
         references: value.job_reference_manifest.references }))],
     [value.extraction_manifest.storage_key,
       JSON.stringify(canonical({ job_id: value.job_id, product_id: value.product_id, subject_id: value.subject.id,
-        artifact_sha256: ARTIFACT, artifact_storage_key: value.artifact.storage_key,
+        artifact_sha256: ARTIFACT, artifact_storage_key: value.artifact.storage_key, artifact_duration_ms: value.artifact.duration_ms,
         extractor: value.extraction_manifest.extractor, created_at: value.extraction_manifest.created_at,
         sampling_plan: value.extraction_manifest.sampling_plan, shot_inventory: value.extraction_manifest.shot_inventory,
         frames: value.extraction_manifest.frames }))],
@@ -238,7 +239,8 @@ test("requires canonical archive bytes and trusted identities outside the caller
   // Even with a canonical trusted classification, every shot still needs QC.
   const changedExtractionPayload = { job_id: omittedNonProductQc.job_id, product_id: omittedNonProductQc.product_id,
     subject_id: omittedNonProductQc.subject.id, artifact_sha256: ARTIFACT,
-    artifact_storage_key: omittedNonProductQc.artifact.storage_key, extractor: extractionPayload.extractor,
+    artifact_storage_key: omittedNonProductQc.artifact.storage_key, artifact_duration_ms: omittedNonProductQc.artifact.duration_ms,
+    extractor: extractionPayload.extractor,
     created_at: extractionPayload.created_at, sampling_plan: extractionPayload.sampling_plan,
     shot_inventory: extractionPayload.shot_inventory, frames: extractionPayload.frames };
   extractionPayload.sha256 = digest(changedExtractionPayload);
@@ -284,20 +286,35 @@ test("job archive reader rejects a job evidence directory symlink", (t) => {
 
 test("rejects caller-forged per-frame and final QC PASS receipts", () => {
   const forgedSample = packet(); const sampleRuntime = trustedRuntime(forgedSample);
-  forgedSample.samples[0].qc_f1.temuan.warnaSama = false;
-  forgedSample.samples[0].receipt.payload.qc_f1.temuan.warnaSama = false;
+  forgedSample.samples[0].evaluated_at = "2026-08-28T05:11:15Z";
+  forgedSample.samples[0].receipt.payload.evaluated_at = forgedSample.samples[0].evaluated_at;
   forgedSample.samples[0].receipt.sha256 = digest(forgedSample.samples[0].receipt.payload);
-  assert.throws(() => verifyBrandAntiSlopEvidence(forgedSample, sampleRuntime), /QC_F1_WARNASAMA_NOT_PROVEN|QC_F1_RECEIPT_ARCHIVE_DIGEST_MISMATCH/);
+  assert.throws(() => verifyBrandAntiSlopEvidence(forgedSample, sampleRuntime), /QC_F1_RECEIPT_ARCHIVE_DIGEST_MISMATCH/);
 
   const forgedFinal = packet(); const finalRuntime = trustedRuntime(forgedFinal);
-  forgedFinal.final_qc[0].evaluator.model = "caller-model";
-  forgedFinal.final_qc[0].receipt.payload.evaluator.model = "caller-model";
+  forgedFinal.final_qc[0].evaluated_at = "2026-08-28T05:11:45Z";
+  forgedFinal.final_qc[0].receipt.payload.evaluated_at = forgedFinal.final_qc[0].evaluated_at;
   forgedFinal.final_qc[0].receipt.sha256 = digest(forgedFinal.final_qc[0].receipt.payload);
-  assert.throws(() => verifyBrandAntiSlopEvidence(forgedFinal, finalRuntime), /QC_03_EVALUATOR_NOT_APPROVED/);
+  assert.throws(() => verifyBrandAntiSlopEvidence(forgedFinal, finalRuntime), /QC_03_RECEIPT_ARCHIVE_DIGEST_MISMATCH/);
 
   const missingTrust = packet(); const missingTrustRuntime = trustedRuntime(missingTrust);
   missingTrustRuntime.approvedQcEvaluatorIdentities = [];
   assert.throws(() => verifyBrandAntiSlopEvidence(missingTrust, missingTrustRuntime), /QC_F1_EVALUATOR_NOT_APPROVED/);
+});
+
+test("rejects same-frame role alias and invalid shot/artifact time bounds", () => {
+  const sameFrame = packet(); const sameFrameRuntime = trustedRuntime(sameFrame);
+  sameFrame.extraction_manifest.frames[1].artifact_timestamp_ms = 0;
+  sameFrame.extraction_manifest.frames[1].frame_sha256 = FRAME;
+  assert.throws(() => verifyBrandAntiSlopEvidence(sameFrame, sameFrameRuntime), /BEAT_FRAME_NOT_DISTINCT_LATER_FRAME/);
+
+  const outsideShot = packet(); const outsideRuntime = trustedRuntime(outsideShot);
+  outsideShot.extraction_manifest.frames[3].artifact_timestamp_ms = 6000;
+  assert.throws(() => verifyBrandAntiSlopEvidence(outsideShot, outsideRuntime), /FRAME_OUTSIDE_SHOT_BOUNDS/);
+
+  const temporalGap = packet(); const gapRuntime = trustedRuntime(temporalGap);
+  temporalGap.extraction_manifest.shot_inventory[1].start_ms = 3100;
+  assert.throws(() => verifyBrandAntiSlopEvidence(temporalGap, gapRuntime), /SHOT_INVENTORY_TEMPORAL_GAP/);
 });
 
 test("rejects every product-identity and generated-text slop signal", () => {
