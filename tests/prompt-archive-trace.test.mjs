@@ -46,6 +46,20 @@ test("fails closed when archive post-dates a provider request", () => {
   assert.throws(() => verifyPromptArchiveTrace(input), /ARCHIVE_AFTER_PROVIDER_REQUEST/);
 });
 
+test("fails closed when provider request post-dates completed artifact", () => {
+  const input = fixture();
+  input.requests[1].created_at = "2026-08-28T05:03:00.000Z";
+  assert.throws(() => verifyPromptArchiveTrace(input), /REQUEST_AFTER_JOB_COMPLETION/);
+});
+
+test("accepts approval resume when request-bound archive timestamp is preserved", () => {
+  const input = fixture();
+  input.job.completed_at = "2026-08-28T08:00:00.000Z";
+  // Approval can happen hours later; the archive remains at the original
+  // pre-provider instant instead of being rewritten by the resume invocation.
+  assert.equal(verifyPromptArchiveTrace(input).status, "PASS");
+});
+
 test("fails closed for ambiguous provider requests", () => {
   const input = fixture();
   input.requests.push({ ...input.requests[0], task_id: "request-retry" });
@@ -69,12 +83,20 @@ test("fails closed when verdict or artifact is missing", () => {
 
 test("worker freezes provider request correlation before clearing retry memo", () => {
   const source = fs.readFileSync("lib/postgres/worker.ts", "utf8");
-  const select = source.indexOf("SELECT job_id,shot_index,provider,task_id,created_at FROM provider_tasks");
-  const archive = source.indexOf("provider_requests: requests", select);
+  const archive = source.indexOf("requestCorrelationArchived = await freezeProviderRequestCorrelation");
   const ready = source.indexOf('jobs.transition(row.id, "READY"', archive);
   const clear = source.indexOf("pgTaskMemo.clear(row.id)", archive);
-  assert.ok(select >= 0, "worker tidak membaca request provider terminal");
-  assert.ok(archive > select, "worker tidak membekukan request ke arsip prompt");
+  assert.ok(archive >= 0, "worker tidak membekukan request ke arsip prompt");
   assert.ok(ready > archive, "READY dipublikasikan sebelum usaha pembekuan audit");
   assert.ok(clear > archive, "memo provider dibersihkan sebelum korelasi dibekukan");
+  assert.match(source.slice(archive, clear + 100), /if \(requestCorrelationArchived\)/,
+    "memo provider harus dipertahankan saat archive gagal/0-row");
+});
+
+test("resume meminta arsip lama dipertahankan saat provider task masih terikat", () => {
+  const worker = fs.readFileSync("lib/postgres/worker.ts", "utf8");
+  const runtime = fs.readFileSync("lib/postgres/smoke-runtime.ts", "utf8");
+  assert.match(worker, /preserveExisting: row\.state !== "QUEUED"/);
+  assert.match(runtime, /EXISTS \(SELECT 1 FROM provider_tasks WHERE job_id=job_prompts\.job_id\)/);
+  assert.match(runtime, /THEN job_prompts\.created_at ELSE EXCLUDED\.created_at/);
 });

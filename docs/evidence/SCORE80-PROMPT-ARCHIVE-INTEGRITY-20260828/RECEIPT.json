@@ -12,9 +12,11 @@
   "failure_modes": [
     "missing request-to-shot coverage",
     "archive created after provider request",
+    "provider request created after completed artifact",
     "ambiguous request per shot",
     "provider mismatch",
     "missing or failed verdict",
-    "missing artifact"
+    "missing artifact",
+    "archive write failure retains provider request recovery rows"
   ]
 }

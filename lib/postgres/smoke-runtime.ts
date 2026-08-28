@@ -191,26 +191,38 @@ export async function pgInsertEvent(input: { userId: string | null; anonId: stri
 }
 
 /**
- * Simpan arsip prompt. Idempoten (job yang di-retry menimpa arsipnya sendiri,
- * karena prompt bisa BERUBAH antar percobaan dan yang berguna dibedah adalah
- * yang terakhir dikirim).
+ * Simpan arsip prompt. Idempoten. Invocation baru menimpa arsipnya sendiri,
+ * kecuali resume sudah memiliki provider task yang terikat ke arsip lama;
+ * pada kasus itu snapshot request-bound dipertahankan utuh.
  *
  * Kegagalan di sini TIDAK boleh menggagalkan job — pemanggil membungkusnya.
  */
 export async function pgSimpanArsipPrompt(input: {
   jobId: string; specJson: string; segmentsJson: string; negativePrompt: string;
   modelParams: string; ideId?: string | null; ideSkor?: number | null;
+  preserveExisting?: boolean;
 }) {
   const pool = getPool(url());
   await pool.query(
     `INSERT INTO job_prompts (job_id,spec_json,segments_json,negative_prompt,model_params,ide_id,ide_skor,created_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7,$8)
      ON CONFLICT (job_id) DO UPDATE SET
-       spec_json=EXCLUDED.spec_json, segments_json=EXCLUDED.segments_json,
-       negative_prompt=EXCLUDED.negative_prompt, model_params=EXCLUDED.model_params,
-       ide_id=EXCLUDED.ide_id, ide_skor=EXCLUDED.ide_skor, created_at=EXCLUDED.created_at`,
+       spec_json=CASE WHEN $9 AND EXISTS (SELECT 1 FROM provider_tasks WHERE job_id=job_prompts.job_id)
+                      THEN job_prompts.spec_json ELSE EXCLUDED.spec_json END,
+       segments_json=CASE WHEN $9 AND EXISTS (SELECT 1 FROM provider_tasks WHERE job_id=job_prompts.job_id)
+                          THEN job_prompts.segments_json ELSE EXCLUDED.segments_json END,
+       negative_prompt=CASE WHEN $9 AND EXISTS (SELECT 1 FROM provider_tasks WHERE job_id=job_prompts.job_id)
+                            THEN job_prompts.negative_prompt ELSE EXCLUDED.negative_prompt END,
+       model_params=CASE WHEN $9 AND EXISTS (SELECT 1 FROM provider_tasks WHERE job_id=job_prompts.job_id)
+                         THEN job_prompts.model_params ELSE EXCLUDED.model_params END,
+       ide_id=CASE WHEN $9 AND EXISTS (SELECT 1 FROM provider_tasks WHERE job_id=job_prompts.job_id)
+                   THEN job_prompts.ide_id ELSE EXCLUDED.ide_id END,
+       ide_skor=CASE WHEN $9 AND EXISTS (SELECT 1 FROM provider_tasks WHERE job_id=job_prompts.job_id)
+                     THEN job_prompts.ide_skor ELSE EXCLUDED.ide_skor END,
+       created_at=CASE WHEN $9 AND EXISTS (SELECT 1 FROM provider_tasks WHERE job_id=job_prompts.job_id)
+                       THEN job_prompts.created_at ELSE EXCLUDED.created_at END`,
     [input.jobId, input.specJson, input.segmentsJson, input.negativePrompt, input.modelParams,
-     input.ideId ?? null, input.ideSkor ?? null, new Date().toISOString()]
+     input.ideId ?? null, input.ideSkor ?? null, new Date().toISOString(), input.preserveExisting === true]
   );
 }
 

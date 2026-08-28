@@ -35,6 +35,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFileSync } from "node:child_process";
 import { Pool } from "pg";
+import { freezeProviderRequestCorrelation } from "../lib/postgres/prompt-request-correlation";
 
 const URL_UJI = process.env.UJI_PG_URL ?? "";
 const lewati = !URL_UJI;
@@ -1917,6 +1918,63 @@ test("W1 kontrol positif: bukti SAH sampai ke materialize, lalu halt bersih", as
   await assertNolEfekSamping(jobId, spy.putCalls, "W1 halt");
   const state = (await pool.query("SELECT state FROM jobs WHERE id=$1", [jobId])).rows[0].state;
   assert.ok(["FAILED", "REFUNDED"].includes(state), `job berakhir ${state}`);
+});
+
+test("korelasi DB: archive row hilang mempertahankan provider_tasks", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const jobId = await siapkanJob([], new Map());
+  await pool.query(
+    "INSERT INTO provider_tasks (job_id,shot_index,provider,task_id,created_at) VALUES ($1,0,'byteplus','request-missing-archive',$2)",
+    [jobId, at()],
+  );
+  assert.equal(await freezeProviderRequestCorrelation(pool, jobId), false);
+  assert.equal((await pool.query("SELECT 1 FROM provider_tasks WHERE job_id=$1", [jobId])).rowCount, 1);
+});
+
+test("korelasi DB: archive write error mempertahankan provider_tasks", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const jobId = await siapkanJob([], new Map());
+  const dibuat = "2026-08-28T05:00:00.000Z";
+  await pool.query(
+    `INSERT INTO job_prompts (job_id,spec_json,segments_json,negative_prompt,model_params,created_at)
+     VALUES ($1,$2,'[]','negative','bukan-json',$3)`,
+    [jobId, JSON.stringify({ shots: [{ idx: 0, prompt: "prompt" }] }), dibuat],
+  );
+  await pool.query(
+    "INSERT INTO provider_tasks (job_id,shot_index,provider,task_id,created_at) VALUES ($1,0,'byteplus','request-write-error',$2)",
+    [jobId, "2026-08-28T05:01:00.000Z"],
+  );
+  await assert.rejects(() => freezeProviderRequestCorrelation(pool, jobId));
+  assert.equal((await pool.query("SELECT 1 FROM provider_tasks WHERE job_id=$1", [jobId])).rowCount, 1);
+});
+
+test("korelasi DB: approval resume mempertahankan archive request-bound", async (t) => {
+  if (lewati) return t.skip("UJI_PG_URL kosong");
+  const jobId = await siapkanJob([], new Map());
+  const awal = "2026-08-28T05:00:00.000Z";
+  await pool.query(
+    `INSERT INTO job_prompts (job_id,spec_json,segments_json,negative_prompt,model_params,created_at)
+     VALUES ($1,$2,'[]','negative-awal',$3,$4)`,
+    [jobId, JSON.stringify({ shots: [{ idx: 0, prompt: "prompt-awal" }] }), JSON.stringify({ qualityTier: "high_quality" }), awal],
+  );
+  await pool.query(
+    "INSERT INTO provider_tasks (job_id,shot_index,provider,task_id,created_at) VALUES ($1,0,'byteplus','request-approval',$2)",
+    [jobId, "2026-08-28T05:01:00.000Z"],
+  );
+  const { pgSimpanArsipPrompt } = await import("../lib/postgres/smoke-runtime");
+  await pgSimpanArsipPrompt({
+    jobId,
+    specJson: JSON.stringify({ shots: [{ idx: 0, prompt: "prompt-resume" }] }),
+    segmentsJson: "[]",
+    negativePrompt: "negative-resume",
+    modelParams: JSON.stringify({ qualityTier: "pro" }),
+    preserveExisting: true,
+  });
+  const row = (await pool.query("SELECT spec_json,negative_prompt,model_params,created_at FROM job_prompts WHERE job_id=$1", [jobId])).rows[0];
+  assert.equal(JSON.parse(row.spec_json).shots[0].prompt, "prompt-awal");
+  assert.equal(row.negative_prompt, "negative-awal");
+  assert.equal(JSON.parse(row.model_params).qualityTier, "high_quality");
+  assert.equal(new Date(row.created_at).toISOString(), awal);
 });
 
 test("nol jaringan selama seluruh berkas test ini", (t) => {

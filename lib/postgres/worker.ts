@@ -63,6 +63,7 @@ import { bacaSnapshot } from "../script-engine/admisi";
 import { normalisasiFormatWorker } from "../media/worker-format";
 import { managedStagingDeterministicWorkerGate } from "../staging-deterministic-worker";
 import { withProductEvidenceMutationLock } from "../job-admission-reference";
+import { freezeProviderRequestCorrelation } from "./prompt-request-correlation";
 
 type PostgresQcRunner = typeof runQc;
 let postgresQcRunner: PostgresQcRunner = runQc;
@@ -644,6 +645,10 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       modelParams: JSON.stringify({ ...ringkasParams(spec), format, template_id: storyIdentity.templateId }),
       ideId: jejakIde.ideId,
       ideSkor: jejakIde.ideSkor,
+      // AWAITING_APPROVAL dan BullMQ retry dapat memakai task/klip yang dibuat
+      // invocation sebelumnya. Bila task itu masih ada, arsip yang terikat ke
+      // request tersebut tidak boleh ditimpa timestamp/prompt invocation baru.
+      preserveExisting: row.state !== "QUEUED",
     });
   } catch (err) {
     console.warn(`[job ${row.id.slice(0, 8)}] arsip prompt gagal disimpan (diabaikan): ${(err as Error).message}`);
@@ -1072,18 +1077,14 @@ async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: 
   // pernah terpakai ulang, tetapi menghapusnya dulu membuat satu job sukses
   // mustahil dibuktikan ujung-ke-ujung: prompt/model dan verdict/artifact ada,
   // sedangkan request yang menghasilkan shot-nya sudah hilang. Salinan ini
-  // read-only untuk audit; TaskMemo tetap dibersihkan seperti sebelumnya.
+  // read-only untuk audit; TaskMemo hanya dibersihkan setelah salinan lengkap
+  // benar-benar masuk ke satu row archive.
+  let requestCorrelationArchived = false;
   try {
-    const requests = (await pool.query(
-      "SELECT job_id,shot_index,provider,task_id,created_at FROM provider_tasks WHERE job_id=$1 ORDER BY shot_index,provider",
-      [row.id]
-    )).rows;
-    await pool.query(
-      `UPDATE job_prompts
-          SET model_params = (model_params::jsonb || $2::jsonb)::text
-        WHERE job_id = $1`,
-      [row.id, JSON.stringify({ provider_requests: requests })]
-    );
+    requestCorrelationArchived = await freezeProviderRequestCorrelation(pool, row.id);
+    if (!requestCorrelationArchived) {
+      console.warn(`[job ${row.id.slice(0, 8)}] korelasi request provider tidak lengkap; memo dipertahankan untuk recovery`);
+    }
   } catch (err) {
     // Sama dengan arsip prompt/QC-F1 lain: audit tidak boleh membatalkan video
     // yang sudah selesai dan dibayar. Verifier terpisah akan fail-closed bila
@@ -1094,13 +1095,15 @@ async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: 
   // sebelumnya, job masih dapat dipulihkan; tidak ada terminal READY yang
   // diam-diam kehilangan kesempatan korelasinya karena crash window.
   if (!(await jobs.transition(row.id, "READY", { worker: "postgres" }))) throw new Error("Job tidak lagi aktif saat finalisasi output.");
-  // Job selesai: ingatan task tidak berguna lagi, dan membiarkannya justru
+  // Job selesai: ingatan task yang SUDAH dibekukan tidak berguna lagi, dan membiarkannya justru
   // berbahaya — task lama yang masih tercatat bisa terpakai ulang kalau job
   // ini pernah disentuh lagi. Kegagalan pembersihan tidak boleh menggagalkan
   // job yang sudah sukses; barisnya kedaluwarsa sendiri lewat batas umur.
-  await pgTaskMemo.clear(row.id).catch((err) =>
-    console.warn(`[job ${row.id.slice(0, 8)}] gagal bersihkan ingatan task: ${(err as Error).message}`)
-  );
+  if (requestCorrelationArchived) {
+    await pgTaskMemo.clear(row.id).catch((err) =>
+      console.warn(`[job ${row.id.slice(0, 8)}] gagal bersihkan ingatan task: ${(err as Error).message}`)
+    );
+  }
 }
 
 /** The Redis worker owns timeout recovery while PostgreSQL is the runtime. */

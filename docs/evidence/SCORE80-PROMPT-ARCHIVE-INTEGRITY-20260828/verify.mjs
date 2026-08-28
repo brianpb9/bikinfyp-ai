@@ -9,8 +9,7 @@ assert.equal(receipt.provider_calls, 0);
 assert.equal(receipt.spend_idr, 0);
 assert.equal(receipt.claim, "NO_SCORE");
 assert.deepEqual(receipt.correlation, ["prompt", "model", "verdict", "artifact", "provider_request"]);
-for (const path of ["lib/prompt-archive-trace.mjs", "scripts/prompt-archive-trace.mjs", "tests/prompt-archive-trace.test.mjs"]) {
+for (const path of ["lib/prompt-archive-trace.mjs", "lib/postgres/prompt-request-correlation.ts", "scripts/prompt-archive-trace.mjs", "tests/prompt-archive-trace.test.mjs", "tests/prompt-request-correlation.test.ts"]) {
   assert.ok(fs.existsSync(path), `${path} missing`);
 }
 process.stdout.write("SCORE80_PROMPT_ARCHIVE_INTEGRITY_EVIDENCE=PASS\n");
-
