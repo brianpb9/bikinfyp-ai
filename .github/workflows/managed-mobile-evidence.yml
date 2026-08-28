@@ -98,7 +98,10 @@ jobs:
         with:
           ref: ${{ env.REVIEWED_SHA }}
           path: source
-          fetch-depth: 1
+          # The image builder creates and later clones a Git bundle from this
+          # checkout. Fetch full ancestry so that path never depends on a
+          # runner-specific shallow-boundary representation.
+          fetch-depth: 0
           persist-credentials: false
 
       - name: Prove detached exact commit and clean tree

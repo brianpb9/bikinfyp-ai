@@ -53,6 +53,43 @@ test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-ref
   assert.doesNotMatch(prJob, /managed-mobile-auth-hydration-runner\.test\.ts/);
 });
 
+test("managed evidence source checkout can create and clone its immutable Git bundle", () => {
+  const sourceCheckout = workflow.slice(
+    workflow.indexOf("      - name: Detached checkout of exact reviewed bundle"),
+    workflow.indexOf("      - name: Prove detached exact commit and clean tree"),
+  );
+  const depth = Number(sourceCheckout.match(/fetch-depth:\s*(\d+)/)?.[1]);
+  assert.equal(depth, 0, "the bundle source checkout needs complete ancestry");
+
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "mobile-ci-git-bundle-"));
+  const upstream = path.join(root, "upstream");
+  const checkout = path.join(root, "checkout");
+  const restored = path.join(root, "restored");
+  const bundle = path.join(root, "source.bundle");
+  try {
+    execFileSync("git", ["init", "--quiet", upstream]);
+    execFileSync("git", ["-C", upstream, "config", "user.name", "Bundle Test"]);
+    execFileSync("git", ["-C", upstream, "config", "user.email", "bundle-test@example.invalid"]);
+    fs.writeFileSync(path.join(upstream, "fixture.txt"), "first\n");
+    execFileSync("git", ["-C", upstream, "add", "fixture.txt"]);
+    execFileSync("git", ["-C", upstream, "commit", "--quiet", "-m", "first"]);
+    fs.appendFileSync(path.join(upstream, "fixture.txt"), "second\n");
+    execFileSync("git", ["-C", upstream, "commit", "--quiet", "-am", "second"]);
+
+    const cloneArgs = ["clone", "--quiet"];
+    if (depth > 0) cloneArgs.push(`--depth=${depth}`);
+    cloneArgs.push(`file://${upstream}`, checkout);
+    execFileSync("git", cloneArgs);
+    const expected = execFileSync("git", ["-C", checkout, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    execFileSync("git", ["-C", checkout, "bundle", "create", bundle, "HEAD"]);
+    execFileSync("git", ["clone", "--quiet", bundle, restored]);
+    const actual = execFileSync("git", ["-C", restored, "rev-parse", "HEAD"], { encoding: "utf8" }).trim();
+    assert.equal(actual, expected);
+  } finally {
+    fs.rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("catalog debt remains visible without contradicting its documented non-gate status", () => {
   const catalogJob = ciWorkflow.slice(ciWorkflow.indexOf("  catalog-debt-audit:"));
   assert.match(catalogJob, /id: catalog-debt[\s\S]*continue-on-error: true[\s\S]*npm run audit:script-catalog/);
