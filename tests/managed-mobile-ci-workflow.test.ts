@@ -24,7 +24,8 @@ test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-ref
   assert.match(workflow, /git cat-file -t/);
   assert.match(workflow, /ref: acf1fd49fadc3387c3ae6a13f711689f1e0d9397/);
   assert.match(workflow, /path: reviewed-bundle/);
-  assert.match(workflow, /path: reviewed-bundle[\s\S]*sparse-checkout: Dockerfile\.mobile-evidence/);
+  assert.match(workflow, /path: reviewed-bundle[\s\S]*sparse-checkout: \/Dockerfile\.mobile-evidence/);
+  assert.match(workflow, /sparse-checkout-cone-mode: false/);
   assert.match(workflow, /working-directory: reviewed-bundle[\s\S]*test "\$\(git rev-parse HEAD\)" = "\$REVIEWED_SHA"/);
   assert.doesNotMatch(workflow, /git merge-base --is-ancestor/);
   assert.match(workflow, /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'/);

@@ -44,7 +44,8 @@ jobs:
           path: reviewed-bundle
           fetch-depth: 1
           persist-credentials: false
-          sparse-checkout: Dockerfile.mobile-evidence
+          sparse-checkout: /Dockerfile.mobile-evidence
+          sparse-checkout-cone-mode: false
 
       - name: Prove reviewed bundle binding
         working-directory: reviewed-bundle
