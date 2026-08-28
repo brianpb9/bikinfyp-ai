@@ -28,18 +28,28 @@ cleanup(){
   original_status=$?
   final_status=$original_status
   if test -n "$container_id"; then
+    export_stage="$(mktemp -d "$artifact_dir/.mobile-evidence-export.XXXXXX")"
+    export_final="$artifact_dir/$container_id"
     export_ok=true
-    if ! docker cp "$container_id:/srv/receipts/." "$artifact_dir/"; then
+    if ! docker cp "$container_id:/srv/receipts/." "$export_stage/"; then
       export_ok=false
     fi
-    if test -f "$launch_dir/attestation.json" && ! cp "$launch_dir/attestation.json" "$artifact_dir/launch-attestation.json"; then
+    if test -f "$launch_dir/attestation.json" && ! cp "$launch_dir/attestation.json" "$export_stage/launch-attestation.json"; then
+      export_ok=false
+    fi
+    if test "$export_ok" = true && ! node -e 'const fs=require("fs");const [target,sha,containerId,imageId]=process.argv.slice(1);const receipt=JSON.parse(fs.readFileSync(target,"utf8"));const launch=receipt?.evidence_runner?.launch;if(receipt.exact_sha!==sha||launch?.container_id!==containerId||launch?.image_id!==imageId||launch?.config_image!==imageId)process.exit(1)' \
+      "$export_stage/receipt.json" "$expected_sha" "$container_id" "$image_id"; then
+      export_ok=false
+    fi
+    if test "$export_ok" = true && { test -e "$export_final" || ! mv "$export_stage" "$export_final"; }; then
       export_ok=false
     fi
     if test "$export_ok" = true; then
       if ! docker rm -f "$container_id" >/dev/null; then final_status=1; fi
     else
       printf '%s\n' "Evidence export failed; retained container $container_id for recovery." >&2
-      printf '%s\n' "Recover with: docker cp $container_id:/srv/receipts/. $artifact_dir/" >&2
+      printf '%s\n' "Unverified staging export retained at $export_stage" >&2
+      printf '%s\n' "Recover with: docker cp $container_id:/srv/receipts/. $export_stage/" >&2
       final_status=1
     fi
   fi

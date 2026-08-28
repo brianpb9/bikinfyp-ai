@@ -101,7 +101,9 @@ test("mobile evidence runner has a truthful exact-SHA external image contract", 
   assert.match(evidenceLaunch, /mobile-evidence-launch\/v1/);
   assert.match(evidenceLaunch, /EVIDENCE_RECEIPT_EXPORT_DIR/);
   assert.match(evidenceLaunch, /chmod 0555 "\$launch_dir"/);
-  assert.match(evidenceLaunch, /docker cp "\$container_id:\/srv\/receipts\/\." "\$artifact_dir\/"/);
+  assert.match(evidenceLaunch, /docker cp "\$container_id:\/srv\/receipts\/\." "\$export_stage\/"/);
+  assert.match(evidenceLaunch, /receipt\.exact_sha!==sha/);
+  assert.match(evidenceLaunch, /launch\?\.container_id!==containerId/);
   assert.match(evidenceLaunch, /retained container \$container_id/);
   assert.match(evidenceLaunch, /docker start --attach "\$container_id"/);
 });
@@ -140,7 +142,11 @@ elif test "$1" = cp; then
   if test "\${FAKE_DOCKER_CP_FAIL:-false}" = true; then exit 23; fi
   destination="\${@: -1}"
   mkdir -p "$destination"
-  printf '%s\\n' '{"result":"FAIL_ARTIFACT_VERIFICATION"}' > "$destination/receipt.final.json"
+  if test "\${FAKE_DOCKER_EMPTY_COPY:-false}" != true; then
+    receipt_sha="cccccccccccccccccccccccccccccccccccccccc"
+    if test "\${FAKE_DOCKER_STALE_RECEIPT:-false}" = true; then receipt_sha="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"; fi
+    printf '%s\\n' "{\\\"exact_sha\\\":\\\"$receipt_sha\\\",\\\"result\\\":\\\"FAIL_ARTIFACT_VERIFICATION\\\",\\\"evidence_runner\\\":{\\\"launch\\\":{\\\"container_id\\\":\\\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\\",\\\"image_id\\\":\\\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\\",\\\"config_image\\\":\\\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\\"}}}" > "$destination/receipt.json"
+  fi
 elif test "$1" = rm; then
   :
 else
@@ -155,7 +161,8 @@ fi
     assert.throws(()=>execFileSync(new URL("../scripts/run-mobile-evidence-image.sh",import.meta.url).pathname,
       [],{env,stdio:"pipe"}));
     assert.equal(fs.readFileSync(path.join(state,"access"),"utf8"),"555:444:mobile-evidence-launch/v1");
-    assert.equal(JSON.parse(fs.readFileSync(path.join(receipts,"receipt.final.json"),"utf8")).result,
+    const exportedRun=path.join(receipts,"b".repeat(64));
+    assert.equal(JSON.parse(fs.readFileSync(path.join(exportedRun,"receipt.json"),"utf8")).result,
       "FAIL_ARTIFACT_VERIFICATION");
     const log=fs.readFileSync(path.join(state,"log"),"utf8");
     assert.ok(log.indexOf("cp ") < log.indexOf("rm -f "),"receipts must be exported before removal");
@@ -165,6 +172,17 @@ fi
     const failedExportLog=fs.readFileSync(path.join(state,"log"),"utf8");
     assert.match(failedExportLog,/^cp /m);
     assert.doesNotMatch(failedExportLog,/^rm -f /m,"container must remain available when export fails");
+    fs.writeFileSync(path.join(state,"log"),"");
+    assert.throws(()=>execFileSync(new URL("../scripts/run-mobile-evidence-image.sh",import.meta.url).pathname,
+      [],{env:{...env,FAKE_DOCKER_EMPTY_COPY:"true",EVIDENCE_RECEIPT_EXPORT_DIR:path.join(dir,"empty-export")},stdio:"pipe"}));
+    const emptyExportLog=fs.readFileSync(path.join(state,"log"),"utf8");
+    assert.match(emptyExportLog,/^cp /m);
+    assert.doesNotMatch(emptyExportLog,/^rm -f /m,"container must remain when copied export has no current receipt");
+    fs.writeFileSync(path.join(state,"log"),"");
+    assert.throws(()=>execFileSync(new URL("../scripts/run-mobile-evidence-image.sh",import.meta.url).pathname,
+      [],{env:{...env,FAKE_DOCKER_STALE_RECEIPT:"true",EVIDENCE_RECEIPT_EXPORT_DIR:path.join(dir,"stale-export")},stdio:"pipe"}));
+    const staleExportLog=fs.readFileSync(path.join(state,"log"),"utf8");
+    assert.doesNotMatch(staleExportLog,/^rm -f /m,"container must remain when receipt is bound to another SHA");
   } finally {fs.rmSync(dir,{recursive:true,force:true});}
 });
 
