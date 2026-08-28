@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import {isProviderContentRejection,summarizeNsfwAggregates} from "../lib/nsfw-kpi.mjs";
+import {completeRequiredNsfwFormats,isProviderContentRejection,nsfwReportExitCode,
+  summarizeNsfwAggregates} from "../lib/nsfw-kpi.mjs";
 
 process.env.DB_PATH=`/tmp/racun-test-nsfw-zero-spend-${process.pid}.db`;
 process.env.STORAGE_DIR=`/tmp/racun-test-nsfw-zero-spend-storage-${process.pid}`;
@@ -25,6 +26,14 @@ test("formal NSFW KPI threshold is deterministic and excludes infrastructure fai
   ]);
   assert.equal(isProviderContentRejection("timeout after request bytes sent"),false);
   assert.equal(isProviderContentRejection("input image may contain real person"),true);
+});
+
+test("completely empty KPI window synthesizes required formats and exits nonzero",()=>{
+  const summaries=summarizeNsfwAggregates(completeRequiredNsfwFormats([]));
+  assert.deepEqual(summaries.map((row:{format:string;thresholdStatus:string})=>[row.format,row.thresholdStatus]),[
+    ["hands_only","NO_DATA"],["talking_head","NO_DATA"],
+  ]);
+  assert.equal(nsfwReportExitCode(summaries),1);
 });
 
 test("zero-spend content rejection uses real failJob refund exactly once",()=>{

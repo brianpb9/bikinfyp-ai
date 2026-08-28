@@ -15,8 +15,8 @@ import {isProviderContentRejection} from "../lib/nsfw-kpi.mjs";
 
 const src = fs.readFileSync("scripts/laporan-nsfw.mjs", "utf8");
 assert.match(src,/CONTENT_REJECTION_PATTERN_SOURCE/);
-assert.match(src,/thresholdStatus === "FAIL" \|\| r\.thresholdStatus === "NO_DATA"/,
-  "cohort scoped tanpa sampel wajib membuat laporan exit nonzero");
+assert.doesNotMatch(src,/!rows\.length[^\n]*process\.exit\(0\)/,"window kosong tidak boleh exit sukses lebih awal");
+assert.match(src,/nsfwReportExitCode\(summaries\)/,"CLI wajib memakai exit policy fail-closed");
 
 /** Penolakan konten NYATA yang pernah/mungkin diterima dari penyedia. */
 const PENOLAKAN_KONTEN = [

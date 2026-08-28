@@ -23,7 +23,8 @@
  * Pakai:  DATABASE_URL="postgres://…" node scripts/laporan-nsfw.mjs [hari=7]
  */
 import pg from "pg";
-import {CONTENT_REJECTION_PATTERN_SOURCE,summarizeNsfwAggregates} from "../lib/nsfw-kpi.mjs";
+import {CONTENT_REJECTION_PATTERN_SOURCE,completeRequiredNsfwFormats,nsfwReportExitCode,
+  summarizeNsfwAggregates} from "../lib/nsfw-kpi.mjs";
 
 const hari = Math.max(1, Number(process.argv[2] ?? 7));
 const url = process.env.DATABASE_URL;
@@ -63,12 +64,11 @@ try {
   );
 
   console.log(`KPI penolakan konten provider — ${hari} hari terakhir (sejak ${sejak.slice(0, 10)})`);
-  if (!rows.length) { console.log("(tidak ada job di jendela ini)"); process.exit(0); }
-  let adaPelanggaran = false;
-  for (const r of summarizeNsfwAggregates(rows)) {
+  if (!rows.length) console.log("(tidak ada job di jendela ini — format wajib dilaporkan NO_DATA)");
+  const summaries=summarizeNsfwAggregates(completeRequiredNsfwFormats(rows));
+  for (const r of summaries) {
     const status = r.thresholdStatus === "UNSCOPED" ? "" : r.thresholdStatus === "PASS" ? " ✅"
       : r.thresholdStatus === "NO_DATA" ? " ⚠ TANPA SAMPEL" : " ⛔ DI ATAS TARGET";
-    if (r.thresholdStatus === "FAIL" || r.thresholdStatus === "NO_DATA") adaPelanggaran = true;
     console.log(
       `${r.format.padEnd(13)} sukses=${r.success}  ditolak-konten=${r.rejected}  ` +
       `gagal-lain=${r.otherFailures}  ` +
@@ -77,7 +77,7 @@ try {
   }
   console.log("\nCatatan: penolakan konten di-refund otomatis (failJob → release); "
     + "rate di atas target = tata ulang matriks format, bukan tulis ulang naskah (standar-10 §E).");
-  process.exit(adaPelanggaran ? 1 : 0);
+  process.exit(nsfwReportExitCode(summaries));
 } finally {
   await c.end();
 }
