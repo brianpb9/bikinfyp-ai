@@ -6,10 +6,15 @@ import { TOPUP_PACKAGES } from "../lib/credits";
 
 const valid = { actorId: "tester-1", configuredTesterId: "tester-1", paymentMethod: "VA",
   configuredPaymentMethod:"VA",amountIdr:10_000,environment:"production" as const,prerequisites:{
-    merchantReady:true,merchantReadinessSource:"fixture://merchant-readiness",channelMinimumIdr:10_000,
-    channelMinimumSource:"fixture://channel-minimum",settlementClass:"T+1",settlementWindow:"next banking day",
-    settlementSource:"fixture://settlement",economics:{cogsIdr:6_000,feeIdr:100,taxIdr:0,netIdr:9_900,
-      marginIdr:3_900,cogsSource:"fixture://cogs",feeSource:"fixture://fee",taxSource:"fixture://tax"}}};
+    merchantReady:true,merchantReadinessSource:"evidence://merchant-readiness",channelMinimumIdr:10_000,
+    channelMinimumSource:"evidence://channel-minimum",settlementClass:"T+1",settlementWindow:"next banking day",
+    settlementSource:"evidence://settlement",sourceBundleSha256:"a".repeat(64),
+    sourceEffectiveAt:"2026-08-27T00:00:00.000Z",approval:{approverIdentity:"Founder/CEO",
+      approvalReference:"evidence://founder/payment-canary",approvalReceiptSha256:"b".repeat(64),
+      effectiveAt:"2026-08-27T00:00:00.000Z",expiresAt:"2026-08-29T00:00:00.000Z",approvedLossCapIdr:50_000},
+    economics:{cogsIdr:6_000,feeIdr:100,taxIdr:0,netIdr:9_900,
+      marginIdr:3_900,cogsSource:"evidence://cogs",feeSource:"evidence://fee",taxSource:"evidence://tax"}}};
+const fixedNow = () => new Date("2026-08-28T00:00:00.000Z");
 
 test("internal canary SKU is <=50k and absent from every public package export", () => {
   assert.equal(INTERNAL_PAYMENT_CANARY.amountIdr <= 50_000, true);
@@ -23,6 +28,7 @@ test("wrong tester, environment, amount, or method is denied before reservation/
     reserveSingleton: async () => { effects++; return true; },
     createInvoice: async () => { effects++; return { providerRef: "ref", redirectUrl: "url" }; },
     markIssued: async () => { effects++; }, markHoldNoRetry: async () => { effects++; },
+    now: fixedNow,
   };
   for (const input of [
     { ...valid, actorId: "intruder" },
@@ -34,7 +40,12 @@ test("wrong tester, environment, amount, or method is denied before reservation/
     { ...valid, prerequisites:{...valid.prerequisites,merchantReadinessSource:""} },
     { ...valid, prerequisites:{...valid.prerequisites,channelMinimumIdr:10_001} },
     { ...valid, prerequisites:{...valid.prerequisites,settlementWindow:""} },
+    { ...valid, prerequisites:{...valid.prerequisites,sourceBundleSha256:"short"} },
+    { ...valid, prerequisites:{...valid.prerequisites,approval:{...valid.prerequisites.approval,approverIdentity:"operator"}} },
+    { ...valid, prerequisites:{...valid.prerequisites,approval:{...valid.prerequisites.approval,expiresAt:"2026-08-27T00:00:00.000Z"}} },
     { ...valid, prerequisites:{...valid.prerequisites,economics:{...valid.prerequisites.economics,marginIdr:3_901}} },
+    { ...valid, prerequisites:{...valid.prerequisites,economics:{...valid.prerequisites.economics,cogsIdr:60_000,
+      marginIdr:-50_100}} },
   ]) await assert.rejects(runProductionPaymentCanary(input, deps), PaymentCanaryDenied);
   assert.equal(effects, 0);
 });
@@ -51,9 +62,11 @@ test("singleton prevents a second invoice and pins exact method/amount/env/ref",
       canaryId: "production-payment-canary-v1", amountIdr: 10_000, paymentMethod: "VA", environment: "production",
     }); return { providerRef: "provider-ref-pinned", redirectUrl: "https://provider.invalid/pay" }; },
     markIssued: async (input: unknown) => { issued = input; }, markHoldNoRetry: async () => assert.fail("success became HOLD"),
+    now: fixedNow,
   };
   assert.equal((await runProductionPaymentCanary(valid, deps)).outcome, "ISSUED");
-  assert.deepEqual(issued, { canaryId: "production-payment-canary-v1", providerRef: "provider-ref-pinned" });
+  assert.deepEqual(issued, { canaryId: "production-payment-canary-v1", providerRef: "provider-ref-pinned",
+    expectedState:"RESERVED" });
   await assert.rejects(runProductionPaymentCanary(valid, deps), /ALREADY_ISSUED_NO_RETRY/);
   assert.equal(providerCalls, 1);
 });
@@ -65,9 +78,26 @@ test("ambiguous provider result is durable HOLD_NO_RETRY", async () => {
     createInvoice: async () => { throw new Error("timeout after request bytes sent"); },
     markIssued: async () => assert.fail("ambiguous result became issued"),
     markHoldNoRetry: async (input) => { hold = input; },
+    now: fixedNow,
   });
   assert.equal(result.outcome, "HOLD_NO_RETRY");
-  assert.deepEqual(hold, { canaryId: "production-payment-canary-v1", reason: "timeout after request bytes sent" });
+  assert.deepEqual(hold, { canaryId: "production-payment-canary-v1", reason: "timeout after request bytes sent",
+    providerRef:undefined,expectedStates:["RESERVED"] });
+});
+
+test("provider reference survives markIssued failure for guarded reconciliation HOLD", async () => {
+  let hold: unknown;
+  const result=await runProductionPaymentCanary(valid,{
+    reserveSingleton:async()=>true,
+    createInvoice:async()=>({providerRef:"ref-known",redirectUrl:"https://provider.invalid/pay"}),
+    markIssued:async()=>{throw new Error("db write failed");},
+    markHoldNoRetry:async(input)=>{hold=input;},
+    now:fixedNow,
+  });
+  assert.equal(result.outcome,"HOLD_NO_RETRY");
+  assert.equal(result.providerRef,"ref-known");
+  assert.deepEqual(hold,{canaryId:"production-payment-canary-v1",reason:"db write failed",providerRef:"ref-known",
+    expectedStates:["RESERVED","ISSUED"]});
 });
 
 test("migration enforces database singleton and no-retry state", () => {
@@ -77,6 +107,9 @@ test("migration enforces database singleton and no-retry state", () => {
   assert.match(sql, /payments_env = 'production'/);
   assert.match(sql, /channel_minimum_idr <= amount_idr/);
   assert.match(sql, /prerequisite_receipt_sha256/);
+  assert.match(sql, /approval_receipt_sha256/);
+  assert.match(sql, /approved_loss_cap_idr/);
+  assert.match(sql, /source_bundle_sha256/);
   assert.match(sql, /settlement_class/);
   assert.match(sql, /HOLD_NO_RETRY/);
   assert.match(sql, /no_retry = TRUE/);
