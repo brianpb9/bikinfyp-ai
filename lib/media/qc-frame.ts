@@ -34,6 +34,7 @@ import os from "node:os";
 import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
+import { createHash } from "node:crypto";
 import { config } from "../config";
 import { tokenMerekUtama } from "./qc";
 
@@ -58,6 +59,11 @@ export interface HasilQcF1 {
     merekTerbaca: boolean | null;
   };
   biayaIdr: number;
+  /** Binding byte-ke-byte agar verdict tidak bisa dipindahkan ke frame/foto lain. */
+  evidence: {
+    frameSha256: string | null;
+    productPhotoSha256: string | null;
+  };
 }
 
 /**
@@ -162,6 +168,12 @@ export async function qcF1FrameFidelity(input: {
   productState?: "hero" | "partial";
 }): Promise<HasilQcF1> {
   const kosong = { bentukSama: null, tutupSama: null, warnaSama: null, tataLetakLabelSama: null, merekTerbaca: null };
+  const hashJikaAda = (p: string) => fs.existsSync(p)
+    ? createHash("sha256").update(fs.readFileSync(p)).digest("hex") : null;
+  const evidence = {
+    frameSha256: hashJikaAda(input.framePath),
+    productPhotoSha256: hashJikaAda(input.productPhotoPath),
+  };
   const hero = (input.productState ?? "hero") === "hero";
 
   if (!config.geminiApiKey) {
@@ -171,6 +183,7 @@ export async function qcF1FrameFidelity(input: {
       detail: "QC-F1 tidak dapat dijalankan: GEMINI_API_KEY belum di-set. Frame TIDAK boleh dipakai sebagai referensi.",
       temuan: kosong,
       biayaIdr: 0,
+      evidence,
     };
   }
 
@@ -187,6 +200,7 @@ export async function qcF1FrameFidelity(input: {
         detail: `QC-F1 tidak dapat memeriksa merek pada frame hero (${(err as Error).message}). Frame TIDAK dipakai.`,
         temuan: kosong,
         biayaIdr: 0,
+        evidence,
       };
     }
     ocr = { terbaca: null, teks: "" };
@@ -231,6 +245,7 @@ export async function qcF1FrameFidelity(input: {
       detail: `QC-F1 tidak dapat dijalankan (${galatTerakhir}). Frame TIDAK dipakai sebagai referensi.`,
       temuan: { ...kosong, merekTerbaca: ocr.terbaca },
       biayaIdr: 0,
+      evidence,
     };
   }
 
@@ -248,6 +263,7 @@ export async function qcF1FrameFidelity(input: {
         "(products.brand / merek hasil intake belum ada). Frame TIDAK dipakai sebagai referensi.",
       temuan: { ...kosong, merekTerbaca: null },
       biayaIdr: BIAYA_PERIKSA_IDR,
+      evidence,
     };
   }
 
@@ -275,5 +291,6 @@ export async function qcF1FrameFidelity(input: {
     detail: gagal.length === 0 ? `QC-F1 PASS${catatan}` : `QC-F1 FAIL: ${gagal.join(", ")}${catatan}`,
     temuan,
     biayaIdr: BIAYA_PERIKSA_IDR,
+    evidence,
   };
 }

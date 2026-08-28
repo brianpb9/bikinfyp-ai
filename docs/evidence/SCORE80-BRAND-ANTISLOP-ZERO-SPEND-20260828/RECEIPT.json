@@ -1,0 +1,12 @@
+{
+  "task": "SCORE80-BRAND-ANTISLOP-ZERO-SPEND-20260828",
+  "scope": "ZERO_SPEND_NO_SCORE_PREREQUISITE",
+  "production_mutation": false,
+  "provider_calls": 0,
+  "spend_idr": 0,
+  "public_action": false,
+  "claim": "NO_SCORE",
+  "reason": "Deterministic controls validate evidence binding and fail-closed acceptance only. A representative production output packet, evaluated through the real QC providers and independently reviewed, is still required for Brand fidelity or Anti-slop score movement.",
+  "bindings": ["approved_reference_sha256", "output_artifact_sha256", "output_frame_sha256", "qc_f1_shape_label_findings", "qc_03", "qc_10", "packshot_reference_sha256"],
+  "negative_controls": ["missing sample", "stale evaluation", "ambiguous QC", "frame mismatch", "reference mismatch", "packshot mismatch", "shape drift", "closure drift", "colour drift", "label-layout drift", "brand unreadable", "generated text", "misspelled brand"]
+}

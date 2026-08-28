@@ -30,7 +30,8 @@ test("merekCocok menolak merek yang TERPOTONG, menerima derau di ekor", () => {
 });
 
 test("bolehJadiReferensi HANYA untuk PASS", () => {
-  const dasar = { detail: "", temuan: { bentukSama: null, tutupSama: null, warnaSama: null, tataLetakLabelSama: null, merekTerbaca: null }, biayaIdr: 0 };
+  const dasar = { detail: "", temuan: { bentukSama: null, tutupSama: null, warnaSama: null, tataLetakLabelSama: null, merekTerbaca: null }, biayaIdr: 0,
+    evidence: { frameSha256: null, productPhotoSha256: null } };
   assert.equal(bolehJadiReferensi({ ...dasar, status: "PASS" }), true);
   assert.equal(bolehJadiReferensi({ ...dasar, status: "FAIL" }), false);
   assert.equal(bolehJadiReferensi({ ...dasar, status: "UNVERIFIED" }), false,
