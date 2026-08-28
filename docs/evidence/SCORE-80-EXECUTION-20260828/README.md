@@ -11,11 +11,6 @@ C5 Authorized Human Review Role and Release Approver are `Founder/CEO`, the
 Release Operator is the canonical Builder service/operator identity, and
 Rollback Authority is `Founder/CEO`. Approver and Operator remain separate.
 
-Lane A normalization is prepared but empty. No raw receipt was available in
-this slice, so no receipt was manufactured, normalized, registered, or scored.
-`A-RECEIPT-NORMALIZATION.json` defines the fail-closed fields and rejection
-rules to apply when sanitized raw receipts arrive.
-
 No payment or provider call was made. Public payments remain disabled,
 `PAYMENTS_GO_LIVE` remains unauthorized, public prices were not changed, and
 the closed canary remains blocked until every Founder prerequisite has an
@@ -25,16 +20,15 @@ Run `node docs/evidence/SCORE-80-EXECUTION-20260828/verify.mjs`.
 
 ## Stream B managed receipt
 
-The raw managed-staging receipt and its checksum manifest are preserved byte
-for byte under `STREAM-B-MANAGED.raw/`. Their SHA-256 values are pinned by the
-verifier and normalized in `B-RECEIPT-NORMALIZATION.json`.
+Only the raw managed-staging receipt and its checksum manifest remain under
+`STREAM-B-MANAGED.raw/`. The other 39 files named by that historical manifest
+are absent, so their HTTP, asset, database, and cleanup claims are explicitly
+unverified and are not accepted as partial facts.
 
-The normalized result is `PASS_PARTIAL_NO_SCORE`. Managed OTP success,
-wrong-code rejection, replay rejection, recovery, Google-cancel redirect, and
-authenticated dashboard HTTP evidence are retained as partial facts. The
-receipt explicitly lacks browser runtime bootstrap, so SSR and downloaded
-assets are not promoted to executed hydration or mobile-375 proof. Slot B
-remains open and Auth, Mobile, Hydration, and Prompt/archive receive zero
+The normalized result is `UNVERIFIED_SOURCE_ARTIFACTS_NO_SCORE`. The receipt's
+OTP, redirect, dashboard, and safety fields remain self-reported claims only.
+The verifier hashes every preserved entry and proves the 39-file absence. Slot
+B remains open and Auth, Mobile, Hydration, and Prompt/archive receive zero
 points from this slice.
 
 ## Streams A and L managed receipts

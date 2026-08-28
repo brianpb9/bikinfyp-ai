@@ -42,10 +42,17 @@ if(aRaw.web.deploy_status!=="live"||aRaw.worker.deploy_status!=="live"||aRaw.web
 if(laneL.audit_execution!=="PASS_CANDIDATE_PENDING_REVIEW"||laneL.l_receipt_claim!=="PENDING_REVIEWER"||laneL.legacy_population_gate!=="FAIL"||laneL.l_gate_unlocked||laneL.points_claimed!==0)fail("Lane L review boundary");
 if(lRaw.database.product_rows!==149||lRaw.correlation.reference_entries!==148||lRaw.correlation.matched_primary!==148||lRaw.correlation.missing_sidecar!==148||lRaw.correlation.orphan_primary!==56||lRaw.audit.produkTanpaFoto!==1||lRaw.audit.perRinci.SIDECAR_MISSING!==148||!lRaw.pre_post.db_row_fingerprint_equal||!lRaw.pre_post.r2_inventory_fingerprint_equal||lRaw.assessment.legacy_population_gate!=="FAIL")fail("Lane L facts");
 if(digest(streamBReceiptBytes)!==laneB.source.receipt_sha256||digest(streamBManifestBytes)!==laneB.source.manifest_sha256)fail("Stream B source bytes");
-if(!streamBManifestBytes.toString("utf8").includes(`${laneB.source.receipt_sha256}  ./RECEIPT.json`))fail("Stream B manifest receipt binding");
+const streamBEntries=streamBManifestBytes.toString("utf8").trim().split("\n").map((line)=>{
+  const match=line.match(/^([0-9a-f]{64})\s+\.\/(.+)$/);if(!match)fail("Stream B manifest shape");
+  return {sha256:match[1],name:match[2]};
+});
+const preservedStreamB=streamBEntries.filter((entry)=>fs.existsSync(path.join(dir,"STREAM-B-MANAGED.raw",entry.name)));
+for(const entry of preservedStreamB){if(digest(fs.readFileSync(path.join(dir,"STREAM-B-MANAGED.raw",entry.name)))!==entry.sha256)fail(`Stream B preserved mismatch ${entry.name}`);}
+if(!streamBEntries.some((entry)=>entry.name==="RECEIPT.json"&&entry.sha256===laneB.source.receipt_sha256))fail("Stream B manifest receipt binding");
+if(streamBEntries.length!==laneB.artifact_availability.manifest_entries||preservedStreamB.length!==laneB.artifact_availability.preserved_entries||streamBEntries.length-preservedStreamB.length!==laneB.artifact_availability.missing_entries||laneB.artifact_availability.state!=="ONLY_RECEIPT_PRESERVED")fail("Stream B artifact availability");
 if(streamBReceipt.receipt_id!=="STREAM-B-MANAGED-20260828"||streamBReceipt.exact_deployed_sha!==laneB.source.exact_deployed_sha||streamBReceipt.evidence_tier!==laneB.source.evidence_tier)fail("Stream B identity");
 if(streamBReceipt.result!=="PASS_PARTIAL_NO_SCORE_CLAIM"||streamBReceipt.dashboard.client_hydration_execution_status!=="BLOCKED_BROWSER_RUNTIME_BOOTSTRAP"||streamBReceipt.dashboard.mobile_375_keyboard_loading_failure_recovery_status!=="BLOCKED_BROWSER_RUNTIME_BOOTSTRAP")fail("Stream B partial boundary");
 if(streamBReceipt.safety.payments_live||streamBReceipt.safety.real_money_idr!==0||streamBReceipt.safety.resend_or_email_provider_called||streamBReceipt.safety.generation_provider_called||streamBReceipt.safety.payment_provider_called)fail("Stream B safety");
-if(laneB.result!=="PASS_PARTIAL_NO_SCORE"||laneB.slot_closed||laneB.points_claimed!==0||laneB.row_outcomes.length!==4||laneB.row_outcomes.some((row)=>row.points_awarded!==0))fail("Stream B score boundary");
+if(laneB.result!=="UNVERIFIED_SOURCE_ARTIFACTS_NO_SCORE"||laneB.accepted_partial_facts.length!==0||laneB.slot_closed||laneB.points_claimed!==0||laneB.row_outcomes.length!==4||laneB.row_outcomes.some((row)=>row.points_awarded!==0))fail("Stream B score boundary");
 if(!source.body.includes("Total raw target 104/130")||!source.body.includes("PAYMENTS_GO_LIVE NOT_AUTHORIZED")||!source.body.includes("Do not change public prices")||!source.body.includes("ambiguous STOP_NO_RETRY"))fail("payment boundary");
 console.log(JSON.stringify({result:"PASS",current_raw:current,target_raw:target,delta,positive_rows:allocation.rows.filter((row)=>row.delta>0).length,lane_a_receipt:laneA.output_contract.a_receipt_claim,lane_l_receipt:laneL.l_receipt_claim,l_gate_unlocked:laneL.l_gate_unlocked,stream_b_result:laneB.result,stream_b_slot_closed:false,score_awarded:0,public_payments:false}));

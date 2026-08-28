@@ -10,10 +10,17 @@
     "exact_deployed_sha": "46499ac5e345997b394e4ac522759e40fe2eae22",
     "evidence_tier": "MANAGED_STAGING"
   },
-  "result": "PASS_PARTIAL_NO_SCORE",
+  "result": "UNVERIFIED_SOURCE_ARTIFACTS_NO_SCORE",
   "slot_closed": false,
   "points_claimed": 0,
-  "accepted_partial_facts": [
+  "artifact_availability": {
+    "state": "ONLY_RECEIPT_PRESERVED",
+    "manifest_entries": 40,
+    "preserved_entries": 1,
+    "missing_entries": 39
+  },
+  "accepted_partial_facts": [],
+  "unverified_receipt_claims": [
     "managed OTP success HTTP 200 and authenticated /me HTTP 200",
     "managed OTP wrong-code rejection HTTP 401 with recovery HTTP 200",
     "managed OTP replay rejection HTTP 410",
@@ -29,7 +36,7 @@
     "prompt-model-verdict-artifact-request correlation"
   ],
   "row_outcomes": [
-    {"row":"Auth intent & failure path","current":7,"status":"PARTIAL_EVIDENCE_ONLY","points_awarded":0},
+    {"row":"Auth intent & failure path","current":7,"status":"UNVERIFIED_SOURCE_ARTIFACTS","points_awarded":0},
     {"row":"Mobile UI 375","current":7,"status":"BLOCKED_BROWSER_RUNTIME_BOOTSTRAP","points_awarded":0},
     {"row":"Hydration/interaction canary CI","current":8,"status":"BLOCKED_BROWSER_RUNTIME_BOOTSTRAP","points_awarded":0},
     {"row":"Prompt/verdict archive","current":8,"status":"NO_CORRELATED_TRACE","points_awarded":0}
