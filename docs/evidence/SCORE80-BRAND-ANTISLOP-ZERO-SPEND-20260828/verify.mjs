@@ -9,7 +9,7 @@ assert.equal(receipt.provider_calls, 0);
 assert.equal(receipt.spend_idr, 0);
 assert.equal(receipt.public_action, false);
 assert.equal(receipt.claim, "NO_SCORE");
-for (const path of ["lib/brand-antislop-evidence.mjs", "scripts/verify-brand-antislop-evidence.mjs", "tests/brand-antislop-evidence.test.mjs", "tests/qcf1-immutable-bytes.test.ts", "lib/media/qc-frame.ts"]) {
+for (const path of ["lib/brand-antislop-evidence.mjs", "lib/job-evidence-archive.mjs", "scripts/verify-brand-antislop-evidence.mjs", "tests/brand-antislop-evidence.test.mjs", "tests/qcf1-immutable-bytes.test.ts", "lib/media/qc-frame.ts"]) {
   assert.ok(fs.existsSync(path), `${path} missing`);
 }
 process.stdout.write("SCORE80_BRAND_ANTISLOP_ZERO_SPEND_EVIDENCE=PASS\n");

@@ -1,7 +1,11 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import { verifyBrandAntiSlopEvidence } from "../lib/brand-antislop-evidence.mjs";
+import { createJobEvidenceArchiveReader } from "../lib/job-evidence-archive.mjs";
 
 const REF = "a".repeat(64);
 const FRAME = "b".repeat(64);
@@ -227,6 +231,24 @@ test("requires canonical archive bytes and trusted identities outside the caller
   for (const row of omittedNonProductQc.final_qc) row.extraction_manifest_sha256 = extractionPayload.sha256;
   omittedNonProductQc.anti_slop.extraction_manifest_sha256 = extractionPayload.sha256;
   assert.throws(() => verifyBrandAntiSlopEvidence(omittedNonProductQc, omittedRuntime), /PRODUCT_SHOT_QC_COVERAGE_INCOMPLETE/);
+});
+
+test("job archive reader rejects encoded traversal and symlink escape", (t) => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "brand-archive-"));
+  t.after(() => fs.rmSync(root, { recursive: true, force: true }));
+  const evidence = path.join(root, "jobs", "job-1", "evidence");
+  const attacker = path.join(root, "jobs", "job-attacker", "evidence");
+  fs.mkdirSync(evidence, { recursive: true });
+  fs.mkdirSync(attacker, { recursive: true });
+  fs.writeFileSync(path.join(evidence, "valid.json"), "trusted");
+  fs.writeFileSync(path.join(attacker, "forged.json"), "forged");
+  fs.symlinkSync(path.join(attacker, "forged.json"), path.join(evidence, "linked.json"));
+  const read = createJobEvidenceArchiveReader(root, "job-1");
+  assert.equal(read("jobs/job-1/evidence/valid.json").toString(), "trusted");
+  assert.throws(() => read("jobs/job-1/evidence/%2e%2e/%2e%2e/job-attacker/evidence/forged.json"), /JOB_ARCHIVE_KEY_NOT_CANONICAL/);
+  assert.throws(() => read("jobs/job-1/evidence/../../job-attacker/evidence/forged.json"), /JOB_ARCHIVE_KEY_INVALID/);
+  assert.throws(() => read("jobs/job-1/evidence/linked.json"), /JOB_ARCHIVE_SYMLINK_ESCAPES_JOB/);
+  assert.throws(() => read("jobs/job-1/evidence/valid.json?alias"), /JOB_ARCHIVE_KEY_NOT_CANONICAL/);
 });
 
 test("rejects every product-identity and generated-text slop signal", () => {
