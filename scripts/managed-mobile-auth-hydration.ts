@@ -26,6 +26,7 @@ const EXPECTED_SHA = process.env.EXPECTED_APP_SHA?.trim() ?? "";
 const EVIDENCE_SOURCE_SHA = process.env.EVIDENCE_SOURCE_SHA?.trim() ?? "";
 const EVIDENCE_SOURCE_TREE = process.env.EVIDENCE_SOURCE_TREE?.trim() ?? "";
 const EVIDENCE_IMAGE_DIGEST = process.env.EVIDENCE_IMAGE_DIGEST?.trim() ?? "";
+const LAUNCH_ATTESTATION_PATH = process.env.EVIDENCE_LAUNCH_ATTESTATION_PATH?.trim() ?? "";
 const RECEIPT_DIR = path.resolve(process.env.RECEIPT_DIR ?? "artifacts/managed-mobile-auth-hydration");
 const OTP = "842731";
 const suffix = crypto.randomUUID();
@@ -42,6 +43,8 @@ assert.equal(new URL(BASE).origin, STAGING_ORIGIN, "BASE wajib exact canonical s
 assert.equal(EVIDENCE_SOURCE_SHA, EXPECTED_SHA, "external evidence image wajib dibangun dari exact app SHA");
 assert.match(EVIDENCE_SOURCE_TREE, /^[0-9a-f]{40}$/, "evidence source tree wajib Git tree SHA");
 assert.match(EVIDENCE_IMAGE_DIGEST, /^sha256:[0-9a-f]{64}$/, "immutable evidence image digest wajib tersedia");
+assert.equal(LAUNCH_ATTESTATION_PATH, "/run/evidence-launch/attestation.json",
+  "runner wajib dimulai oleh immutable-image launcher");
 assert.equal(process.env.RACUN_DEPLOY_ENV, "staging", "runner hanya boleh berjalan di staging");
 assert.equal(process.env.RACUN_DB_RUNTIME, "postgres", "runner memerlukan PostgreSQL staging");
 assert.match(config.databaseUrl, /^postgres(?:ql)?:\/\//i, "DATABASE_URL PostgreSQL wajib tersedia");
@@ -50,6 +53,15 @@ const sourceAttestation = JSON.parse(execFileSync(process.execPath,
   ["scripts/verify-mobile-evidence-source.mjs"], { encoding: "utf8" })) as {
     commit: string; tree: string; manifest_sha256: string; files: number;
   };
+const launchAttestation = JSON.parse(fs.readFileSync(LAUNCH_ATTESTATION_PATH,"utf8")) as {
+  schema:string;container_id:string;image_id:string;config_image:string;source_sha:string;source_tree:string;
+};
+assert.equal(launchAttestation.schema,"mobile-evidence-launch/v1");
+assert.match(launchAttestation.container_id,/^[0-9a-f]{64}$/);
+assert.equal(launchAttestation.image_id,EVIDENCE_IMAGE_DIGEST);
+assert.equal(launchAttestation.config_image,EVIDENCE_IMAGE_DIGEST);
+assert.equal(launchAttestation.source_sha,EVIDENCE_SOURCE_SHA);
+assert.equal(launchAttestation.source_tree,EVIDENCE_SOURCE_TREE);
 
 fs.mkdirSync(RECEIPT_DIR, { recursive: true });
 const pool = new Pool({ connectionString: config.databaseUrl });
@@ -124,7 +136,7 @@ const receipt: Record<string, unknown> = {
   forbidden_mutation_entrypoints: forbiddenMutationEntrypoints,
   review_status: "PENDING_INDEPENDENT_REVIEW",
   points_claimed: 0,
-  evidence_runner: { source: sourceAttestation, image_digest: EVIDENCE_IMAGE_DIGEST },
+  evidence_runner: { source: sourceAttestation, image_digest: EVIDENCE_IMAGE_DIGEST, launch: launchAttestation },
   screenshots: screenshotManifest,
   cleanup: { otp: false, membership: false, organization: false, identity_retained_with_provenance: false,
     net_zero: false, correction_audit_linked: false },
@@ -336,11 +348,12 @@ try {
   const executionResult = String(receipt.result);
   receipt.execution_result = executionResult;
   receipt.result = "PENDING_ARTIFACT_VERIFICATION";
-  const receiptKey = `${artifactPrefix}/receipt.json`;
+  const receiptKey = `${artifactPrefix}/receipt.pending.json`;
   const manifestKey = `${artifactPrefix}/manifest.json`;
+  const terminalReceiptKey = `${artifactPrefix}/receipt.final.json`;
   receipt.artifact_manifest = { channel: "private-r2", prefix: artifactPrefix,
     review_status: "PENDING_INDEPENDENT_REVIEW", points_claimed: 0, screenshots: screenshotManifest,
-    receipt_key: receiptKey, manifest_key: manifestKey };
+    receipt_key: receiptKey, manifest_key: manifestKey, terminal_receipt_key: terminalReceiptKey };
   receipt.finished_at = now();
   try {
     const serialized = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
@@ -359,7 +372,11 @@ try {
     await putAndVerify(manifestKey, manifestBytes, "application/json");
     receipt.result = executionResult;
     receipt.artifact_verification = { verified: true, manifest_key: manifestKey,
-      manifest_sha256: sha256(manifestBytes), receipt_key: receiptKey, receipt_sha256: sha256(serialized) };
+      manifest_sha256: sha256(manifestBytes), draft_receipt_key: receiptKey,
+      draft_receipt_sha256: sha256(serialized), terminal_receipt_key: terminalReceiptKey };
+    const terminalBytes=Buffer.from(`${JSON.stringify(receipt,null,2)}\n`);
+    await putAndVerify(terminalReceiptKey,terminalBytes,"application/json");
+    receipt.terminal_receipt_sha256=sha256(terminalBytes);
   } catch (error) {
     receipt.result = "FAIL_ARTIFACT_VERIFICATION";
     receipt.artifact_verification = { verified: false, error: String(error).slice(0, 500) };
@@ -367,5 +384,6 @@ try {
   }
   const finalBytes = Buffer.from(`${JSON.stringify(receipt, null, 2)}\n`);
   fs.writeFileSync(path.join(RECEIPT_DIR, "receipt.json"), finalBytes, { mode: 0o600 });
+  if(receipt.result!=="PASS")process.exitCode=1;
   console.log(JSON.stringify(receipt));
 }

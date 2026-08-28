@@ -1,5 +1,6 @@
 # Bounded external evidence runner. The supported build entrypoint is
-# scripts/build-mobile-evidence-image.sh, which supplies an exact clean git
+# scripts/build-mobile-evidence-image.sh, followed only by the immutable-ID
+# scripts/run-mobile-evidence-image.sh launcher. The build supplies a clean git
 # archive plus a git bundle used here to cryptographically verify its commit
 # and tree before any source reaches the runtime image.
 FROM node:22-bookworm-slim AS verified-source

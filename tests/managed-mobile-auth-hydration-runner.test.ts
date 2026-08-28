@@ -8,6 +8,7 @@ import { execFileSync } from "node:child_process";
 const source = fs.readFileSync(new URL("../scripts/managed-mobile-auth-hydration.ts", import.meta.url), "utf8");
 const evidenceDockerfile = fs.readFileSync(new URL("../Dockerfile.mobile-evidence", import.meta.url), "utf8");
 const evidenceBuild = fs.readFileSync(new URL("../scripts/build-mobile-evidence-image.sh", import.meta.url), "utf8");
+const evidenceLaunch = fs.readFileSync(new URL("../scripts/run-mobile-evidence-image.sh", import.meta.url), "utf8");
 
 test("managed mobile runner is exact-SHA, 375px, provider-free, and cleanup-bound", () => {
   assert.match(source, /EVIDENCE_SOURCE_SHA[\s\S]*EXPECTED_SHA/);
@@ -54,6 +55,12 @@ test("managed mobile runner is exact-SHA, 375px, provider-free, and cleanup-boun
   assert.match(source, /PENDING_ARTIFACT_VERIFICATION/);
   assert.match(source, /FAIL_ARTIFACT_VERIFICATION/);
   assert.match(source, /artifact_verification = \{ verified: true/);
+  assert.match(source, /receipt\.pending\.json/);
+  assert.match(source, /receipt\.final\.json/);
+  assert.match(source, /putAndVerify\(terminalReceiptKey,terminalBytes/);
+  assert.match(source, /draft_receipt_sha256/);
+  assert.match(source, /terminal_receipt_sha256/);
+  assert.match(source, /if\(receipt\.result!=="PASS"\)process\.exitCode=1/);
   assert.match(source, /consoleErrors\.push\(message\.text\(\)/);
   assert.match(source, /receipt\.console_errors = consoleErrors/);
   assert.ok(source.indexOf('cleanupStep("pool"') < source.indexOf("const cleanup = receipt.cleanup"),
@@ -86,6 +93,13 @@ test("mobile evidence runner has a truthful exact-SHA external image contract", 
   assert.match(evidenceBuild, /git archive --format=tar HEAD/);
   assert.match(evidenceBuild, /git bundle create/);
   assert.match(evidenceBuild, /docker image inspect --format '\{\{\.Id\}\}'/);
+  assert.match(evidenceLaunch, /docker create[\s\S]*"\$image_id"/);
+  assert.match(evidenceLaunch, /docker container inspect --format '\{\{\.Image\}\}'/);
+  assert.match(evidenceLaunch, /docker container inspect --format '\{\{\.Config\.Image\}\}'/);
+  assert.match(evidenceLaunch, /test "\$inspected_image" = "\$image_id"/);
+  assert.match(evidenceLaunch, /test "\$config_image" = "\$image_id"/);
+  assert.match(evidenceLaunch, /mobile-evidence-launch\/v1/);
+  assert.match(evidenceLaunch, /docker start --attach "\$container_id"/);
 });
 
 test("source content attestation verifies bytes and fails after mutation", () => {
