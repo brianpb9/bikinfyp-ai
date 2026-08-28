@@ -66,8 +66,9 @@ try {
   if (!rows.length) { console.log("(tidak ada job di jendela ini)"); process.exit(0); }
   let adaPelanggaran = false;
   for (const r of summarizeNsfwAggregates(rows)) {
-    const status = r.thresholdStatus === "UNSCOPED" ? "" : r.thresholdStatus === "PASS" ? " ✅" : " ⛔ DI ATAS TARGET";
-    if (r.thresholdStatus === "FAIL") adaPelanggaran = true;
+    const status = r.thresholdStatus === "UNSCOPED" ? "" : r.thresholdStatus === "PASS" ? " ✅"
+      : r.thresholdStatus === "NO_DATA" ? " ⚠ TANPA SAMPEL" : " ⛔ DI ATAS TARGET";
+    if (r.thresholdStatus === "FAIL" || r.thresholdStatus === "NO_DATA") adaPelanggaran = true;
     console.log(
       `${r.format.padEnd(13)} sukses=${r.success}  ditolak-konten=${r.rejected}  ` +
       `gagal-lain=${r.otherFailures}  ` +

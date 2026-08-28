@@ -15,6 +15,8 @@ import {isProviderContentRejection} from "../lib/nsfw-kpi.mjs";
 
 const src = fs.readFileSync("scripts/laporan-nsfw.mjs", "utf8");
 assert.match(src,/CONTENT_REJECTION_PATTERN_SOURCE/);
+assert.match(src,/thresholdStatus === "FAIL" \|\| r\.thresholdStatus === "NO_DATA"/,
+  "cohort scoped tanpa sampel wajib membuat laporan exit nonzero");
 
 /** Penolakan konten NYATA yang pernah/mungkin diterima dari penyedia. */
 const PENOLAKAN_KONTEN = [

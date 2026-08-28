@@ -15,11 +15,13 @@ test("formal NSFW KPI threshold is deterministic and excludes infrastructure fai
   const summary=summarizeNsfwAggregates([
     {format:"hands_only",sukses:"8",ditolak_konten:"2",gagal_semua:"5"},
     {format:"talking_head",sukses:6,ditolak_konten:4,gagal_semua:5},
+    {format:"hands_only",sukses:0,ditolak_konten:0,gagal_semua:3},
     {format:"new_format",sukses:0,ditolak_konten:0,gagal_semua:3},
   ]);
   assert.deepEqual(summary.map((row:{format:string;rate:number;otherFailures:number;thresholdStatus:string})=>
     [row.format,row.rate,row.otherFailures,row.thresholdStatus]),[
-    ["hands_only",0.2,3,"PASS"],["talking_head",0.4,1,"FAIL"],["new_format",0,3,"UNSCOPED"],
+    ["hands_only",0.2,3,"PASS"],["talking_head",0.4,1,"FAIL"],["hands_only",0,3,"NO_DATA"],
+    ["new_format",0,3,"UNSCOPED"],
   ]);
   assert.equal(isProviderContentRejection("timeout after request bytes sent"),false);
   assert.equal(isProviderContentRejection("input image may contain real person"),true);
