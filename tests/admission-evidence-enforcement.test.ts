@@ -279,6 +279,55 @@ test("A1/A4/A6 tetap menegakkan bukti di boundary otoritatif sebelum uang/queue"
     ]);
 });
 
+test("A6 actual handler reloads C5 state under product lock before charge/reset/enqueue", async (t) => {
+  const { POST } = await import("../app/api/dashboard/campaign/job/[jobId]/route");
+  const { setCampaignJobDependenciesForTests } = await import("../lib/campaign-job-dependencies");
+  t.after(() => setCampaignJobDependenciesForTests());
+
+  let row: Record<string, unknown> = {
+    id: "job-a6-race", product_id: "product-a6-race", state: "AWAITING_APPROVAL",
+    org_id: "org-a6-race", approved_at: null, requires_approval: true,
+    quality_tier: "high_quality", format: "hands_only", template_id: "problem-solution",
+    approved_reference_manifest: null, job_product_snapshot: null,
+    product_type_token: "serum wajah", product_type_confirmed_token: "serum wajah",
+    product_type_confirmed_by: "member-a6", product_type_confirmed_at: new Date(),
+    product_type_version: 1, product_type_state: "CONFIRMED",
+    product_category: "beauty", category_review_state: "CLEAR", category_review_reason: null,
+    category_reviewed_by: "founder", category_reviewed_role: "Founder/CEO",
+    category_reviewed_at: new Date(), category_review_version: 2,
+    product_name: "Serum", segments: "[]", script_validation_result: "{}",
+  };
+  const effects: string[] = [];
+  const pool = {
+    async query(sql: string) {
+      if (sql.includes("FROM jobs j JOIN products")) return { rows: [{ ...row }], rowCount: 1 };
+      effects.push(sql);
+      return { rows: [], rowCount: 0 };
+    },
+  };
+  setCampaignJobDependenciesForTests({
+    postgresRuntimeEnabled: () => true,
+    requireOrgContextApi: async () => ({
+      user: { id: "member-a6" }, membership: { org_id: "org-a6-race", role: "owner" },
+    }) as never,
+    assertPaidAdmission: async () => undefined,
+    getPool: () => pool as never,
+    withProductEvidenceMutationLock: async (_productId, operation) => {
+      row = { ...row, category_review_state: "QUARANTINED", category_review_reason: "CATEGORY_AMBIGUOUS", category_review_version: 3 };
+      return operation();
+    },
+  });
+
+  const response = await POST(new Request("http://local/api/dashboard/campaign/job/job-a6-race", {
+    method: "POST", headers: { "content-type": "application/json" },
+    body: JSON.stringify({ action: "regenerate", idx: 0 }),
+  }), { params: Promise.resolve({ jobId: "job-a6-race" }) });
+  const payload = await response.json() as { code?: string };
+  assert.equal(response.status, 422);
+  assert.equal(payload.code, "CATEGORY_REVIEW_REQUIRED");
+  assert.deepEqual(effects, [], "A6 charged, reset, audited, or enqueued after C5 re-quarantine");
+});
+
 test("matrix menyelesaikan duplicate replay sebelum lease current-product", () => {
   const body = source("../app/api/dashboard/matrix/route.ts");
   const duplicate = body.indexOf("if (sudahAda.length)");
@@ -422,6 +471,26 @@ test("POST A2/A3/A5/A7: C8 HTTP 422 dan nol provider/DB/queue/storage; kontrol s
       assert.equal(response.status, 422, `${item.boundary} menerima C2 quarantine setelah initial read`);
       assert.equal(payload.code, "PRODUCT_TYPE_CONFIRMATION_REQUIRED");
       assert.deepEqual(effects, { provider: 0, db: 0, queue: 0, storage: 0 });
+    }
+
+    // C5 is checked from the row reloaded while the product lock is held.
+    // A5 must not create a persona/audit trail, and A7 must not call the
+    // script provider or persist scripts, when a previously clear product is
+    // re-quarantined after the handlers' initial product read.
+    lockedProduct = {
+      ...currentProduct,
+      category_review_state: "QUARANTINED",
+      category_review_reason: "CATEGORY_AMBIGUOUS",
+      category_review_version: 2,
+    };
+    for (const item of cases.slice(2)) {
+      effects.provider = effects.db = effects.queue = effects.storage = 0;
+      const response = await item.call();
+      const payload = await response.json() as { code?: string };
+      assert.equal(response.status, 422, `${item.boundary} menerima C5 quarantine setelah initial read`);
+      assert.equal(payload.code, "CATEGORY_REVIEW_REQUIRED");
+      assert.deepEqual(effects, { provider: 0, db: 0, queue: 0, storage: 0 },
+        `${item.boundary} menulis persona/audit/script atau memanggil provider saat C5 quarantine`);
     }
 
     // Existing immutable jobs win over current corrupt/deleted product state.

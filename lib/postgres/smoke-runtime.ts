@@ -428,7 +428,7 @@ export async function pgListJobs(userId: string) {
   // hasil, bukan foto produk yang sama untuk semua video (lihat attachPreview
   // di app/api/jobs/route.ts). LEFT JOIN — job yang belum selesai tidak punya
   // baris outputs.
-  try { return (await pool.query("SELECT j.id,j.state,j.format,j.duration_s,j.created_at,j.completed_at,j.provider_video,j.provider_voice,j.cost_actual_idr,j.script_id,p.name AS product_name,p.images AS product_images,p.category AS product_category,p.category_review_state,p.category_review_reason,p.category_review_version,o.video_url AS output_video,fs.score AS fyp_score,fs.posted_url AS fyp_posted_url FROM jobs j JOIN products p ON p.id=j.product_id LEFT JOIN outputs o ON o.job_id=j.id LEFT JOIN fyp_snapshots fs ON fs.job_id=j.id WHERE j.user_id=$1 AND j.org_id IS NULL ORDER BY j.created_at DESC LIMIT 50", [userId])).rows; }
+  try { return (await pool.query("SELECT j.id,j.state,j.job_product_snapshot,j.format,j.duration_s,j.created_at,j.completed_at,j.provider_video,j.provider_voice,j.cost_actual_idr,j.script_id,p.name AS product_name,p.images AS product_images,p.category AS product_category,p.category_review_state,p.category_review_reason,p.category_review_version,o.video_url AS output_video,fs.score AS fyp_score,fs.posted_url AS fyp_posted_url FROM jobs j JOIN products p ON p.id=j.product_id LEFT JOIN outputs o ON o.job_id=j.id LEFT JOIN fyp_snapshots fs ON fs.job_id=j.id WHERE j.user_id=$1 AND j.org_id IS NULL ORDER BY j.created_at DESC LIMIT 50", [userId])).rows; }
   finally { /* pool dibagikan seluruh proses (lib/postgres/pool.ts) — JANGAN ditutup di sini */ }
 }
 

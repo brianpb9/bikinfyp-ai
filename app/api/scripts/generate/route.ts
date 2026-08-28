@@ -10,6 +10,7 @@ import { pastikanBukanProdukOrg } from "@/lib/dashboard-rbac";
 import { cobaDenganNamaPendek } from "@/lib/script-engine/jaring-nama";
 import { acquireAdmissionReferenceEvidence } from "@/lib/job-admission-reference";
 import { admissionRouteDependencies } from "@/lib/admission-route-dependencies";
+import { assertCategoryReviewClear } from "@/lib/product-type-boundary";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -93,12 +94,46 @@ export async function POST(req: Request) {
     // Keep E5 serialized until provider + script persistence finish. In the
     // PostgreSQL runtime the lease additionally holds the product row FOR
     // SHARE; SQLite coordinates through the same keyed lock as DELETE.
+    // SQLite callbacks run only after the shared product lock is acquired.
+    // Never close over the pre-lock row: E3 may have re-quarantined it while
+    // this request waited for the lease.
+    const loadLockedSqliteProduct = () => {
+      const locked = getDb().prepare("SELECT * FROM products WHERE id=? AND user_id=? AND org_id IS NULL")
+        .get(product.id, user.id) as ProductRow | undefined;
+      if (!locked) throw ERR.NOT_FOUND("Produknya");
+      return locked;
+    };
     evidenceLease = await acquireAdmissionReferenceEvidence({
       productId: product.id,
       owner: { kind: "user", id: user.id },
       boundary: "A7",
-      loadSqliteCandidateRels: () => JSON.parse(product.images || "[]") as string[],
+      loadSqliteCandidateRels: () => JSON.parse(loadLockedSqliteProduct().images || "[]") as string[],
+      loadSqliteProductType: () => {
+        const locked=loadLockedSqliteProduct();
+        return {
+          category: locked.category,
+          product_type_token: locked.product_type_token ?? null,
+          product_type_confirmed_token: locked.product_type_confirmed_token ?? null,
+          product_type_confirmed_by: locked.product_type_confirmed_by ?? null,
+          product_type_confirmed_at: locked.product_type_confirmed_at ?? null,
+          product_type_version: locked.product_type_version ?? null,
+          product_type_state: locked.product_type_state ?? "QUARANTINED",
+          category_review_state: locked.category_review_state ?? "QUARANTINED",
+          category_review_reason: locked.category_review_reason ?? "CATEGORY_UNKNOWN",
+          category_reviewed_by: locked.category_reviewed_by ?? null,
+          category_reviewed_role: locked.category_reviewed_role ?? null,
+          category_reviewed_at: locked.category_reviewed_at ?? null,
+          category_review_version: locked.category_review_version ?? 0,
+        };
+      },
     });
+    const lockedProductType = evidenceLease.productType;
+    assertCategoryReviewClear({
+      state: lockedProductType?.category_review_state as "CLEAR" | "QUARANTINED" | undefined,
+      reason: lockedProductType?.category_review_reason as never,
+      version: lockedProductType?.category_review_version ?? 0,
+    }, lockedProductType?.category);
+    const lockedCategory = String(lockedProductType?.category ?? product.category);
 
     // Jaring pengaman nama (canary temuan #4): nama sah 4-6 kata bisa memakan
     // jendela kata L-05/S-09 sampai penulis mustahil lolos. Enterprise sudah
@@ -106,7 +141,7 @@ export async function POST(req: Request) {
     // -> nama panggung merek, berhenti di anak tangga pertama yang lolos.
     const jalan = (namaProduk: string) => routeDeps.generateScripts({
       product: {
-        id: product.id, name: namaProduk, price_idr: product.price_idr, category: product.category, sourceUrl: product.source_url,
+        id: product.id, name: namaProduk, price_idr: product.price_idr, category: lockedCategory, sourceUrl: product.source_url,
         promoPriceBeforeIdr: product.promo_price_before_idr, promoEndsAt: product.promo_ends_at, promoStockLeft: product.promo_stock_left,
       },
       register,

@@ -16,9 +16,10 @@ const manifest = JSON.stringify({
   }],
 });
 const snapshot = JSON.stringify({
-  version: 3,
+  version: 4,
   productName: "NOVA Serum",
   category: "beauty",
+  categoryReviewVersion: 1,
   priceIdr: 13000,
   promoPriceBeforeIdr: null,
   promoEndsAt: null,
@@ -28,6 +29,7 @@ const snapshot = JSON.stringify({
   brandBrief: null,
   claims: [],
 });
+const snapshotReview2 = JSON.stringify({...JSON.parse(snapshot),categoryReviewVersion:2});
 const confirmedType = {
   product_type_token: "serum wajah",
   product_type_confirmed_token: "serum wajah",
@@ -35,6 +37,7 @@ const confirmedType = {
   product_type_confirmed_at: "2026-08-27T00:00:00.000Z",
   product_type_version: 1,
   product_type_state: "CONFIRMED",
+  product_category: "beauty",
   category_review_state: "CLEAR",
   category_review_reason: null,
   category_reviewed_by: null,
@@ -82,7 +85,7 @@ test("deterministic W1 C5 rejects with zero execution effects and admits Founder
     executionEffects++;
   },(error:unknown)=>(error as {body?:{code?:string}}).body?.code === "CATEGORY_REVIEW_REQUIRED");
   assert.equal(executionEffects,0);
-  const released=parseDeterministicFixtureAdmission({approved_reference_manifest:manifest,job_product_snapshot:snapshot,
+  const released=parseDeterministicFixtureAdmission({approved_reference_manifest:manifest,job_product_snapshot:snapshotReview2,
     ...confirmedType,category_reviewed_by:"founder-1",category_reviewed_role:"Founder/CEO",
     category_reviewed_at:"2026-08-27T20:00:00.000Z",category_review_version:2});
   assert.equal(released.productSnapshot.category,"beauty");
@@ -110,7 +113,8 @@ test("processPostgresJob W1 C5 rejects before transition/hold and released contr
 
   row={...row,category_review_state:"CLEAR",category_review_reason:null,
     category_reviewed_by:"founder-1",category_reviewed_role:"Founder/CEO",
-    category_reviewed_at:"2026-08-27T20:00:00.000Z",category_review_version:2};
+    category_reviewed_at:"2026-08-27T20:00:00.000Z",category_review_version:2,
+    job_product_snapshot:snapshotReview2};
   failures=0;
   await processPostgresJob("job-c5");
   assert.equal(failures,0); assert.equal(holdQueries,1); assert.equal(transitions,1);

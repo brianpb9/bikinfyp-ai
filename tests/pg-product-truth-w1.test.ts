@@ -337,7 +337,7 @@ async function siapkanJob(images: string[], isi: Map<string, Buffer>, tier = "si
     [sid, pid, JSON.stringify(segmen), t]
   );
   const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
-  const productSnapshot = createJobProductSnapshotRaw({ name: "Serum Glow Bright", category: "beauty", price_idr: 85_000 });
+  const productSnapshot = createJobProductSnapshotRaw({ category_review_version: 1, name: "Serum Glow Bright", category: "beauty", price_idr: 85_000 });
   const manifestRaw = manifestAdmisiFixture(jid, images, isi);
   await pool.query(
     "INSERT INTO jobs (id,user_id,product_id,script_id,format,quality_tier,duration_s,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at) VALUES ($1,$2,$3,$4,'hands_only',$5,15,$6,$7,'QUEUED',$8,$8)",
@@ -665,7 +665,7 @@ async function siapkanJobOrgDenganManifest(label: string) {
     { rel: approvedSecondSource, sha256: sha256(approvedSecondBytes), versiBukti: 1, labelOcrStatus: "READABLE", labelOcrVersion: 1, snapshotRel: snapshotRelSecond },
   ] });
   const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
-  const productSnapshot = createJobProductSnapshotRaw({ name: `Serum E9 ${label}`, category: "beauty", price_idr: 85_000, raw_meta: JSON.stringify({ brand: "Merek E9" }) });
+  const productSnapshot = createJobProductSnapshotRaw({ category_review_version: 1, name: `Serum E9 ${label}`, category: "beauty", price_idr: 85_000, raw_meta: JSON.stringify({ brand: "Merek E9" }) });
   await pool.query(
     `INSERT INTO jobs
       (id,user_id,org_id,product_id,script_id,format,quality_tier,duration_s,approved_reference_manifest,job_product_snapshot,state,created_at,state_changed_at)
@@ -1052,7 +1052,7 @@ test("E7 HTTP PATCH + resume W1: provider menerima snapshot admission dan packsh
     trustedBrand: { source: "products.raw_meta.brand", value: "Merek Awal" },
     productVisualDesc: "BOTOL-AMBER-AWAL", brandBrief: "ARAH-BRAND-AWAL", claims: ["klaim awal"],
   });
-  const rereadNow = parseJobProductSnapshot(createJobProductSnapshotRaw(current));
+  const rereadNow = parseJobProductSnapshot(createJobProductSnapshotRaw({...current, category_review_version: 1}));
   assert.notDeepEqual(rereadNow, admission, "counterexample gagal: re-read produk kini sama dengan snapshot admission");
   assert.equal(rereadNow.productName, mutasi.name); assert.equal(rereadNow.category, mutasi.category); assert.equal(rereadNow.priceIdr, mutasi.price_idr);
   assert.equal(rereadNow.productVisualDesc, mutasi.product_visual_desc); assert.equal(rereadNow.brandBrief, mutasi.brand_brief);
@@ -1827,6 +1827,7 @@ test("W1 C3: mismatch eksplisit pada referensi kedua memakai brand admission dan
   const jobId = await siapkanJob([rel1, rel2], isi, "high_quality");
   const { createJobProductSnapshotRaw } = await import("../lib/job-product-snapshot");
   const snapshot = createJobProductSnapshotRaw({
+    category_review_version: 1,
     name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
     raw_meta: JSON.stringify({ brand: "Merek Admission" }),
   });
@@ -1888,6 +1889,7 @@ test("W1 C3: brand cocok dan brand null tetap dapat mencapai provider", async (t
     const isi = new Map<string, Buffer>([[rel, bytes], [`${rel}.meta.json`, sidecar(bytes, true)]]);
     const jobId = await siapkanJob([rel], isi, "silent_caption");
     await pool.query("UPDATE jobs SET job_product_snapshot=$1 WHERE id=$2", [createJobProductSnapshotRaw({
+    category_review_version: 1,
       name: "Serum Glow Bright", category: "beauty", price_idr: 85_000,
       raw_meta: trustedBrand ? JSON.stringify({ brand: trustedBrand }) : "{}",
     }), jobId]);

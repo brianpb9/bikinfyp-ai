@@ -1,10 +1,12 @@
-export const JOB_PRODUCT_SNAPSHOT_VERSION = 3 as const;
+export const JOB_PRODUCT_SNAPSHOT_VERSION = 4 as const;
 export const TRUSTED_BRAND_SOURCE = "products.raw_meta.brand" as const;
 
 export interface JobProductSnapshot {
-  version: 1 | 2 | typeof JOB_PRODUCT_SNAPSHOT_VERSION;
+  version: 1 | 2 | 3 | typeof JOB_PRODUCT_SNAPSHOT_VERSION;
   productName: string;
   category: string;
+  /** C5 release generation bound at admission; prevents stale-category revival. */
+  categoryReviewVersion: number | null;
   /** Harga ProductInput pada saat job diterima; sumber bridge SA6 immutable. */
   priceIdr: number | null;
   /** Kebenaran promo persis saat admission; null berarti tanpa klaim promo. */
@@ -30,19 +32,21 @@ export function parseJobProductSnapshot(raw: string, options: { requirePrice?: b
   try { value = JSON.parse(raw); }
   catch { throw new Error("PRODUCT_SNAPSHOT_INVALID: snapshot metadata produk bukan JSON sah."); }
   const x = value as Partial<JobProductSnapshot> | null;
-  const versionValid = x?.version === 1 || x?.version === 2 || x?.version === JOB_PRODUCT_SNAPSHOT_VERSION;
+  const versionValid = x?.version === 1 || x?.version === 2 || x?.version === 3 || x?.version === JOB_PRODUCT_SNAPSHOT_VERSION;
   const priceValid = x?.version === 1
     ? x.priceIdr === undefined
     : Number.isSafeInteger(x?.priceIdr) && Number(x?.priceIdr) >= 0;
-  const promoValid = x?.version !== JOB_PRODUCT_SNAPSHOT_VERSION || (
+  const promoValid = (x?.version !== 3 && x?.version !== JOB_PRODUCT_SNAPSHOT_VERSION) || (
     (x.promoPriceBeforeIdr === null || (Number.isSafeInteger(x.promoPriceBeforeIdr) && Number(x.promoPriceBeforeIdr) >= 0))
     && nullableString(x.promoEndsAt)
     && (x.promoStockLeft === null || (Number.isSafeInteger(x.promoStockLeft) && Number(x.promoStockLeft) >= 0))
   );
+  const categoryReviewValid = x?.version !== JOB_PRODUCT_SNAPSHOT_VERSION
+    || (Number.isInteger(x.categoryReviewVersion) && Number(x.categoryReviewVersion) >= 1);
   if (!x || !versionValid
       || typeof x.productName !== "string" || !x.productName.trim()
       || typeof x.category !== "string" || !x.category.trim()
-      || !priceValid || !promoValid
+      || !priceValid || !promoValid || !categoryReviewValid
       || !x.trustedBrand || x.trustedBrand.source !== TRUSTED_BRAND_SOURCE
       || !nullableString(x.trustedBrand.value)
       || !nullableString(x.productVisualDesc)
@@ -55,19 +59,20 @@ export function parseJobProductSnapshot(raw: string, options: { requirePrice?: b
       "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: Story Ads snapshot v1 tidak memiliki harga admission immutable."
     );
   }
-  if (x.version !== JOB_PRODUCT_SNAPSHOT_VERSION && options.requirePromo) {
+  if (x.version !== 3 && x.version !== JOB_PRODUCT_SNAPSHOT_VERSION && options.requirePromo) {
     throw new UnsafeLegacyProductSnapshot(
       "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: snapshot sebelum v3 tidak memiliki promo admission immutable."
     );
   }
   return {
-    version: x.version as 1 | 2 | typeof JOB_PRODUCT_SNAPSHOT_VERSION,
+    version: x.version as 1 | 2 | 3 | typeof JOB_PRODUCT_SNAPSHOT_VERSION,
     productName: x.productName,
     category: x.category,
+    categoryReviewVersion: x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? Number(x.categoryReviewVersion) : null,
     priceIdr: x.version === 1 ? null : Number(x.priceIdr),
-    promoPriceBeforeIdr: x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? x.promoPriceBeforeIdr ?? null : null,
-    promoEndsAt: x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? x.promoEndsAt ?? null : null,
-    promoStockLeft: x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? x.promoStockLeft ?? null : null,
+    promoPriceBeforeIdr: x.version === 3 || x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? x.promoPriceBeforeIdr ?? null : null,
+    promoEndsAt: x.version === 3 || x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? x.promoEndsAt ?? null : null,
+    promoStockLeft: x.version === 3 || x.version === JOB_PRODUCT_SNAPSHOT_VERSION ? x.promoStockLeft ?? null : null,
     trustedBrand: { source: TRUSTED_BRAND_SOURCE, value: x.trustedBrand.value },
     productVisualDesc: x.productVisualDesc,
     brandBrief: x.brandBrief,
@@ -107,6 +112,7 @@ export function claimsFromRaw(raw: string | null | undefined): string[] {
 export function createJobProductSnapshotRaw(product: {
   name: string;
   category: string;
+  category_review_version: number;
   price_idr: number;
   raw_meta?: string | null;
   product_visual_desc?: string | null;
@@ -120,6 +126,7 @@ export function createJobProductSnapshotRaw(product: {
     version: JOB_PRODUCT_SNAPSHOT_VERSION,
     productName: product.name,
     category: product.category,
+    categoryReviewVersion: product.category_review_version,
     priceIdr: product.price_idr,
     promoPriceBeforeIdr: product.promo_price_before_idr ?? null,
     promoEndsAt: product.promo_ends_at ?? null,

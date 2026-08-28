@@ -13,8 +13,10 @@ import {
   requireCanonicalC5Category,
 } from "../lib/product-type-boundary";
 import { CATEGORY_REVIEW_SQLITE_UPGRADE_GUARDS } from "../lib/db";
-import { POST as releaseCategoryReview, setCategoryReviewReleaseDependenciesForTests } from
+import { POST as releaseCategoryReview } from
   "../app/api/dashboard/campaign/product/category-review/release/route";
+import { setCategoryReviewReleaseDependenciesForTests } from
+  "../lib/c5-category-review-release-dependencies";
 
 test("C5 structured outcomes quarantine all three reasons without heuristic mapping", () => {
   assert.equal(deriveCategoryReview("default").reason, "CATEGORY_UNKNOWN");
@@ -134,14 +136,18 @@ test("C5 Founder/CEO authority binds only the explicit server-trusted principal"
 
 test("C5 release route audits effective Founder role and explicit principal binding", () => {
   const source=fs.readFileSync(new URL("../app/api/dashboard/campaign/product/category-review/release/route.ts",import.meta.url),"utf8");
+  const dependencySource=fs.readFileSync(new URL("../lib/c5-category-review-release-dependencies.ts",import.meta.url),"utf8");
   assert.match(source,/effective_authorized_role:roleBinding\.effectiveRole/);
   assert.match(source,/underlying_membership_role:roleBinding\.membershipRole/);
   assert.match(source,/founder_principal_id:roleBinding\.founderPrincipalId/);
-  assert.match(source,/C5_AUTHORIZED_HUMAN_REVIEW_PRINCIPAL_ID/);
-  assert.match(source,/retailScope \? await deps\.getAuthUser\(req\)/);
+  assert.match(dependencySource,/C5_AUTHORIZED_HUMAN_REVIEW_PRINCIPAL_ID/);
+  assert.match(source,/const user=await deps\.getAuthUser\(req\)/);
+  assert.match(source,/const founderDirect=configuredRole === "Founder\/CEO"/);
+  assert.match(source,/founderDirect \? "org_id IS NOT NULL"/);
   assert.match(source,/resolvedCategory=requireCanonicalC5Category\(body\.resolved_category\)/);
   assert.match(source,/SET category=\$1,category_review_state='CLEAR'/);
   assert.match(source,/retailScope \? "org_id IS NULL"/);
+  assert.match(source,/product_org_id:row\.org_id/);
 });
 
 test("C5 release requires one canonical resolved category and CLEAR cannot bind default",()=>{
@@ -175,7 +181,7 @@ test("C5 ordinary category mutation cannot carry a prior Founder release to anot
 
 test("C5 actual release handler is Founder-only, durable, restart-safe, and reauthorizes idempotency",async(t)=>{
   t.after(()=>setCategoryReviewReleaseDependenciesForTests());
-  const row={user_id:"customer-9",category:"default",category_review_state:"QUARANTINED" as const,
+  const row={user_id:"customer-9",org_id:null as string|null,category:"default",category_review_state:"QUARANTINED" as const,
     category_review_reason:"CATEGORY_UNKNOWN" as const,category_reviewed_by:null as string|null,
     category_reviewed_role:null as string|null,category_reviewed_at:null as string|null,category_review_version:1};
   const audits:Array<{actor:string;meta:Record<string,unknown>}>=[];
@@ -216,8 +222,8 @@ test("C5 actual release handler is Founder-only, durable, restart-safe, and reau
     configuredRole:()=>configuredRole,now:()=>"2026-08-27T19:00:00.000Z",uuid:()=>"00000000-0000-4000-8000-000000000001",
     configuredPrincipalId:()=>configuredPrincipalId,
   });
-  const request=()=>new Request("http://local/api/category-review/release",{method:"POST",headers:{"content-type":"application/json"},
-    body:JSON.stringify({product_id:"retail-1",scope:"retail",resolved_category:"beauty",reason:"Founder verified exact category",expected_version:1})});
+  const request=(scope="retail",expectedVersion=1,resolvedCategory="beauty")=>new Request("http://local/api/category-review/release",{method:"POST",headers:{"content-type":"application/json"},
+    body:JSON.stringify({product_id:"product-1",scope,resolved_category:resolvedCategory,reason:"Founder verified exact category",expected_version:expectedVersion})});
 
   const forbidden=await releaseCategoryReview(request());
   assert.equal(forbidden.status,403);
@@ -255,4 +261,17 @@ test("C5 actual release handler is Founder-only, durable, restart-safe, and reau
   audits[0].meta.resolved_category="health";
   const tamperedReplay=await releaseCategoryReview(request());
   assert.equal(tamperedReplay.status,409);
+
+  // The server-bound Founder reviews a customer organization without being a
+  // member of that tenant. The target org comes from the locked product row
+  // and remains in the audit receipt.
+  row.org_id="customer-org-77";row.category="default";
+  row.category_review_state="QUARANTINED";row.category_review_reason="CATEGORY_UNKNOWN";
+  row.category_reviewed_by=null;row.category_reviewed_role=null;row.category_reviewed_at=null;
+  row.category_review_version=3;
+  const crossTenant=await releaseCategoryReview(request("organization",3,"health"));
+  assert.equal(crossTenant.status,200,await crossTenant.clone().text());
+  assert.equal(row.category,"health");assert.equal(row.category_review_version,4);
+  assert.equal(orgContextCalls,0,"Founder cross-tenant review must not resolve first org membership");
+  assert.equal(audits.at(-1)?.meta.product_org_id,"customer-org-77");
 });

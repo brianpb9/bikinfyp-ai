@@ -26,6 +26,7 @@ const manifest = JSON.stringify({
   }],
 });
 const snapshot = createJobProductSnapshotRaw({
+    category_review_version: 1,
   name: "Serum Current",
   category: "beauty",
   price_idr: 89_000,
@@ -34,6 +35,7 @@ const snapshot = createJobProductSnapshotRaw({
   promo_stock_left: null,
 });
 const confirmedType = {
+  category: "beauty",
   product_type_token: "serum wajah",
   product_type_confirmed_token: "serum wajah",
   product_type_confirmed_by: "user-1",
@@ -76,8 +78,14 @@ test("classifier tidak memutasi input dan current mengembalikan exact immutable 
   assert.equal(JSON.stringify(input), before);
   if (current.status === "CURRENT") {
     assert.equal(current.manifest.references[0].sha256, "a".repeat(64));
-    assert.equal(current.productSnapshot.version, 3);
+    assert.equal(current.productSnapshot.version, 4);
   }
+});
+
+test("C5 rejects a queued job after category or review generation changes",()=>{
+  const base={approvedReferenceManifest:manifest,jobProductSnapshot:snapshot,productType:confirmedType};
+  assert.equal(reason({...base,productType:{...confirmedType,category:"health"}}),"CATEGORY_REVIEW_GENERATION_MISMATCH");
+  assert.equal(reason({...base,productType:{...confirmedType,category_review_version:2}}),"CATEGORY_REVIEW_GENERATION_MISMATCH");
 });
 
 test("require seam mempertahankan kelas error canonical tanpa reason code baru", () => {
@@ -118,7 +126,7 @@ test("static guard: workers/A6 memakai classifier dan tidak memiliki live-row ma
   for (const file of boundaries) {
     const source = fs.readFileSync(file, "utf8");
     assert.match(source, /requireCurrentJobEvidence\(/, `${file} tidak memakai classifier shared`);
-    assert.match(source, /productType:\s*(?:product|row|job)/, `${file} tidak mengarantina provenance product type`);
+    assert.match(source, /productType:\s*(?:\{\.\.\.)?(?:product|row|job)/, `${file} tidak mengarantina provenance product type`);
     assert.doesNotMatch(source, /loadOrCreateJobReferenceManifest|installReferenceManifestIfSafe|candidateRels:\s*(?:images|row\.product_images)/);
   }
   const allProduction = [

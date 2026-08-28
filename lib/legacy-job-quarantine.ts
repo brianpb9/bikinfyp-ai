@@ -22,9 +22,11 @@ export type LegacyJobQuarantineReason =
   | "PRODUCT_SNAPSHOT_MALFORMED"
   | "PRODUCT_SNAPSHOT_UNSUPPORTED_VERSION"
   | "PRODUCT_TYPE_QUARANTINED"
-  | "CATEGORY_REVIEW_QUARANTINED";
+  | "CATEGORY_REVIEW_QUARANTINED"
+  | "CATEGORY_REVIEW_GENERATION_MISMATCH";
 
 export type ProductTypeProvenance = {
+  category?: string | null;
   product_type_token?: string | null;
   product_type_confirmed_token?: string | null;
   product_type_confirmed_by?: string | null;
@@ -54,6 +56,31 @@ export const LEGACY_REFERENCE_REASON =
   "REF_MANIFEST_LEGACY_UNSAFE: job tidak memiliki manifest referensi current yang dapat diverifikasi; worker gagal tertutup.";
 export const LEGACY_PRODUCT_REASON =
   "PRODUCT_SNAPSHOT_LEGACY_UNSAFE: job tanpa snapshot promo v3 tidak boleh memakai row produk mutable.";
+
+/** Bind delivery metadata and URLs to the exact C5 generation at admission. */
+export function isCurrentC5JobGeneration(input: {
+  job_product_snapshot?: string | null;
+  product_category?: string | null;
+  category_review_state?: string | null;
+  category_review_reason?: string | null;
+  category_review_version?: number | null;
+}): boolean {
+  if (input.category_review_state !== "CLEAR" || input.category_review_reason !== null
+      || !isCanonicalC5Category(input.product_category ?? "")) return false;
+  try {
+    const snapshot = parseJobProductSnapshot(input.job_product_snapshot ?? "");
+    return snapshot.version === JOB_PRODUCT_SNAPSHOT_VERSION
+      && snapshot.category === input.product_category
+      && snapshot.categoryReviewVersion === input.category_review_version;
+  } catch { return false; }
+}
+
+export function assertCurrentC5JobGeneration(input: Parameters<typeof isCurrentC5JobGeneration>[0]): void {
+  if (isCurrentC5JobGeneration(input)) return;
+  throw new ApiError(422, { code: "CATEGORY_REVIEW_REQUIRED",
+    message_id: "Kategori atau generasi tinjauan job sudah tidak berlaku.",
+    message_en: "Job category/review generation is no longer current.", retryable: false });
+}
 
 function jsonObject(raw: string): Record<string, unknown> | null {
   try {
@@ -145,6 +172,12 @@ export function classifyLegacyJobEvidence(input: {
     || !isCanonicalC5Category(productSnapshot.category))) {
     return { status: "QUARANTINED", reason: "CATEGORY_REVIEW_QUARANTINED" };
   }
+  if (input.productType !== undefined && (
+    productSnapshot.category !== input.productType?.category
+    || productSnapshot.categoryReviewVersion !== input.productType?.category_review_version
+  )) {
+    return { status: "QUARANTINED", reason: "CATEGORY_REVIEW_GENERATION_MISMATCH" };
+  }
   return { status: "CURRENT", manifest, productSnapshot };
 }
 
@@ -181,6 +214,7 @@ export function requireCurrentJobEvidence(input: Parameters<typeof classifyLegac
         retryable: false,
       });
     case "CATEGORY_REVIEW_QUARANTINED":
+    case "CATEGORY_REVIEW_GENERATION_MISMATCH":
       throw new ApiError(422, {
         code: "CATEGORY_REVIEW_REQUIRED",
         message_id: "Kategori produk masih dikarantina dan perlu rilis peninjau manusia berwenang.",
