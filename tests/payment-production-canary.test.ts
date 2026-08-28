@@ -11,7 +11,9 @@ import { TOPUP_PACKAGES } from "../lib/credits";
 const {privateKey,publicKey}=crypto.generateKeyPairSync("ed25519");
 const economics={cogsIdr:6_000,feeIdr:100,taxIdr:0,netIdr:9_900,marginIdr:3_900,
   cogsSource:"evidence://cogs",feeSource:"evidence://fee",taxSource:"evidence://tax"};
-const sourceBundle={schema:"payment-canary-source-bundle/v1",merchantReadinessSource:"evidence://merchant-readiness",
+const sourceBundle={schema:"payment-canary-source-bundle/v1",canaryId:"production-payment-canary-v1",amountIdr:10_000,
+  paymentMethod:"VA",merchantReady:true,channelMinimumIdr:10_000,settlementClass:"T+1",
+  settlementWindow:"next banking day",merchantReadinessSource:"evidence://merchant-readiness",
   channelMinimumSource:"evidence://channel-minimum",settlementSource:"evidence://settlement",
   cogsSource:economics.cogsSource,feeSource:economics.feeSource,taxSource:economics.taxSource,
   effectiveAt:"2026-08-27T00:00:00.000Z",expiresAt:"2026-08-29T00:00:00.000Z",economics};
@@ -63,7 +65,9 @@ test("wrong tester, environment, amount, or method is denied before reservation/
     { ...valid, prerequisites:{...valid.prerequisites,merchantReady:false} },
     { ...valid, prerequisites:{...valid.prerequisites,merchantReadinessSource:""} },
     { ...valid, prerequisites:{...valid.prerequisites,channelMinimumIdr:10_001} },
+    { ...valid, prerequisites:{...valid.prerequisites,channelMinimumIdr:1} },
     { ...valid, prerequisites:{...valid.prerequisites,settlementWindow:""} },
+    { ...valid, prerequisites:{...valid.prerequisites,settlementClass:"instant",settlementWindow:"arbitrary"} },
     { ...valid, prerequisites:{...valid.prerequisites,sourceBundleSha256:"short"} },
     { ...valid, prerequisites:{...valid.prerequisites,sourceExpiresAt:"2026-08-27T00:00:00.000Z"} },
     { ...valid, prerequisites:{...valid.prerequisites,approval:{...valid.prerequisites.approval,approverIdentity:"operator"}} },
@@ -160,6 +164,18 @@ test("provider reference survives markIssued failure for guarded reconciliation 
   assert.equal(result.providerRef,"ref-known");
   assert.deepEqual(hold,{canaryId:"production-payment-canary-v1",reason:"db write failed",providerRef:"ref-known",
     expectedStates:["RESERVED","ISSUED"]});
+});
+
+test("provider reference survives malformed redirect response", async () => {
+  let hold:unknown;
+  const result=await runProductionPaymentCanary(valid,{
+    reserveSingleton:async()=>true,createInvoice:async()=>({providerRef:"ref-partial",redirectUrl:"not-a-url"}),
+    markIssued:async()=>assert.fail("malformed response became issued"),markHoldNoRetry:async(input)=>{hold=input;},
+    now:fixedNow,loadTrustedFounderAuthority,
+  });
+  assert.equal(result.outcome,"HOLD_NO_RETRY");assert.equal(result.providerRef,"ref-partial");
+  assert.deepEqual(hold,{canaryId:"production-payment-canary-v1",reason:"AMBIGUOUS_PROVIDER_RESPONSE",
+    providerRef:"ref-partial",expectedStates:["RESERVED","ISSUED"]});
 });
 
 test("migration enforces database singleton and no-retry state", () => {

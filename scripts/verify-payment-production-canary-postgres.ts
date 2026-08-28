@@ -12,7 +12,9 @@ const pool=new Pool({connectionString:databaseUrl,max:2});
 const now=()=>new Date("2026-08-28T00:00:00.000Z");
 const economics={cogsIdr:6000,feeIdr:100,taxIdr:0,netIdr:9900,marginIdr:3900,
   cogsSource:"evidence://cogs",feeSource:"evidence://fee",taxSource:"evidence://tax"};
-const source={schema:"payment-canary-source-bundle/v1",merchantReadinessSource:"evidence://merchant-readiness",
+const source={schema:"payment-canary-source-bundle/v1",canaryId:"production-payment-canary-v1",amountIdr:10000,
+  paymentMethod:"VA",merchantReady:true,channelMinimumIdr:10000,settlementClass:"T+1",
+  settlementWindow:"next banking day",merchantReadinessSource:"evidence://merchant-readiness",
   channelMinimumSource:"evidence://channel-minimum",settlementSource:"evidence://settlement",
   cogsSource:economics.cogsSource,feeSource:economics.feeSource,taxSource:economics.taxSource,
   effectiveAt:"2026-08-27T00:00:00.000Z",expiresAt:"2026-08-29T00:00:00.000Z",economics};

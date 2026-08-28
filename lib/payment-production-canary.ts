@@ -169,7 +169,10 @@ export async function runProductionPaymentCanary(input: PaymentCanaryPinnedInput
   let sourceBundle:unknown, signedApproval:unknown;
   try { sourceBundle=JSON.parse(sourceBundleBytes.toString("utf8")); signedApproval=JSON.parse(approvalReceiptBytes.toString("utf8")); }
   catch { throw new PaymentCanaryDenied("PAYMENT_CANARY_SIGNED_EVIDENCE_JSON_INVALID"); }
-  const expectedSourceBundle={schema:"payment-canary-source-bundle/v1",merchantReadinessSource:sources.merchantReadinessSource,
+  const expectedSourceBundle={schema:"payment-canary-source-bundle/v1",canaryId:INTERNAL_PAYMENT_CANARY.id,
+    amountIdr:input.amountIdr,paymentMethod,merchantReady:p.merchantReady,channelMinimumIdr:p.channelMinimumIdr,
+    settlementClass:p.settlementClass.trim(),settlementWindow:p.settlementWindow.trim(),
+    merchantReadinessSource:sources.merchantReadinessSource,
     channelMinimumSource:sources.channelMinimumSource,settlementSource:sources.settlementSource,
     cogsSource:sources.cogsSource,feeSource:sources.feeSource,taxSource:sources.taxSource,
     effectiveAt:p.sourceEffectiveAt,expiresAt:p.sourceExpiresAt,economics:p.economics};
@@ -207,8 +210,12 @@ export async function runProductionPaymentCanary(input: PaymentCanaryPinnedInput
       paymentMethod: pinned.paymentMethod,
       environment: "production",
     });
-    if (!issued.providerRef.trim() || !issued.redirectUrl.trim()) throw new Error("AMBIGUOUS_PROVIDER_RESPONSE");
     providerRef=issued.providerRef.trim();
+    if (!providerRef) throw new Error("AMBIGUOUS_PROVIDER_RESPONSE");
+    let redirect:URL;
+    try { redirect=new URL(issued.redirectUrl); }
+    catch { throw new Error("AMBIGUOUS_PROVIDER_RESPONSE"); }
+    if (redirect.protocol!=="https:") throw new Error("AMBIGUOUS_PROVIDER_RESPONSE");
     await deps.markIssued({ canaryId: pinned.canaryId, providerRef, expectedState:"RESERVED" });
     return { outcome: "ISSUED" as const, ...issued, pinned };
   } catch (error) {
