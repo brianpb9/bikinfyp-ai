@@ -138,6 +138,17 @@ function retryAfterMs(response, fallback, maximum) {
   return Math.min(maximum, fallback);
 }
 
+function controlError(message, code, retryable) {
+  const error = new Error(message);
+  error.controlCode = code;
+  error.controlRetryable = retryable;
+  return error;
+}
+
+function isRetryableControlError(error) {
+  return error?.controlCode === "RENDER_TRANSIENT" && error?.controlRetryable === true;
+}
+
 export async function renderRequest(postgresId, token, init = {}, policy = {}) {
   const attempts = Math.max(1, Number(policy.attempts ?? 1));
   const baseDelayMs = Math.max(1, Number(policy.baseDelayMs ?? 500));
@@ -155,29 +166,32 @@ export async function renderRequest(postgresId, token, init = {}, policy = {}) {
           ...(init.body ? { "content-type": "application/json" } : {}),
         },
       });
-      if (response.ok) return response.json();
-      if (response.status !== 429 && response.status < 500) {
-        const rejected = new Error("Render control request rejected");
-        rejected.nonretryable = true;
-        throw rejected;
-      }
-    } catch (error) {
-      if (error?.nonretryable) throw new Error("Render control request rejected");
-      if (attempt + 1 >= attempts) throw new Error("Render control request failed");
-      response = undefined;
+    } catch {
+      if (attempt + 1 >= attempts)
+        throw controlError("Render control request failed", "RENDER_TRANSIENT", true);
+      await sleep(Math.min(maxDelayMs, baseDelayMs * 2 ** attempt));
+      continue;
     }
-    if (attempt + 1 >= attempts) throw new Error("Render control request failed");
+
+    if (response.ok) {
+      try { return await response.json(); }
+      catch { throw controlError("Render control response invalid", "RENDER_RESPONSE_INVALID", false); }
+    }
+    if (response.status !== 429 && response.status < 500)
+      throw controlError("Render control request rejected", "RENDER_REJECTED", false);
+    if (attempt + 1 >= attempts)
+      throw controlError("Render control request failed", "RENDER_TRANSIENT", true);
     const fallback = baseDelayMs * 2 ** attempt;
     await sleep(retryAfterMs(response, fallback, maxDelayMs));
   }
-  throw new Error("Render control request failed");
+  throw controlError("Render control request failed", "RENDER_TRANSIENT", true);
 }
 
 async function readPostgres(postgresId, token, policy) {
   return postgresShape(await renderRequest(postgresId, token, {}, policy));
 }
 
-async function replaceAllowList(postgresId, token, ipAllowList, policy) {
+export async function replaceAllowList(postgresId, token, ipAllowList, policy) {
   const updated = postgresShape(await renderRequest(postgresId, token, {
     method: "PATCH",
     body: JSON.stringify({ ipAllowList }),
@@ -185,16 +199,18 @@ async function replaceAllowList(postgresId, token, ipAllowList, policy) {
   if (!allowListIsExact(updated.ipAllowList, ipAllowList)) throw new Error("PATCH readback mismatch");
 }
 
-async function waitForAllowList(postgresId, token, expected, options = {}) {
+export async function waitForAllowList(postgresId, token, expected, options = {}) {
   const attempts = Number(options.attempts ?? 20);
   const intervalMs = Number(options.intervalMs ?? 1_000);
+  const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
   for (let index = 0; index < attempts; index++) {
     try {
       if (allowListIsExact((await readPostgres(postgresId, token, options.requestPolicy)).ipAllowList, expected)) return;
-    } catch {
+    } catch (error) {
+      if (!isRetryableControlError(error)) throw error;
       if (index + 1 >= attempts) throw new Error("allow-list read failed");
     }
-    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+    await sleep(intervalMs);
   }
   throw new Error("allow-list convergence failed");
 }
@@ -283,6 +299,10 @@ async function discoverPublicIPv4() {
 
 const defaultDeps = { readPostgres, replaceAllowList, waitForAllowList, verifyDatabaseTls, runEvidence, discoverPublicIPv4 };
 
+function emitReceipt(receipt) {
+  process.stdout.write(`${JSON.stringify(receipt)}\n`);
+}
+
 export async function openWindow(env = process.env, deps = defaultDeps) {
   const receipt = blankRunReceipt();
   const abortController = new AbortController();
@@ -346,7 +366,7 @@ export async function openWindow(env = process.env, deps = defaultDeps) {
     catch (error) { operationError = operationError ?? error; }
     signalGuard?.disarm();
   }
-  process.stdout.write(`${JSON.stringify(receipt)}\n`);
+  (deps.emitReceipt ?? emitReceipt)(receipt);
   if (operationError || !receipt.cleanup_readback_empty) throw new Error("managed staging DB TLS window run failed");
   return receipt;
 }
@@ -361,10 +381,10 @@ export async function closeWindow(env = process.env, deps = defaultDeps) {
     receipt.cleanup_patch_empty = true;
     await deps.waitForAllowList(postgresId, token, [], CLEANUP_WAIT_OPTIONS);
     receipt.cleanup_readback_empty = true;
-    process.stdout.write(`${JSON.stringify(receipt)}\n`);
+    (deps.emitReceipt ?? emitReceipt)(receipt);
     return receipt;
   } catch {
-    process.stdout.write(`${JSON.stringify(receipt)}\n`);
+    (deps.emitReceipt ?? emitReceipt)(receipt);
     throw new Error("managed staging DB TLS window cleanup failed");
   }
 }

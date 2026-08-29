@@ -13,9 +13,11 @@ import {
   PRODUCTION_POSTGRES_ID,
   PUBLIC_IPV4_SOURCE,
   renderRequest,
+  replaceAllowList,
   STAGING_POSTGRES_ID,
   validateTarget,
   verifyDatabaseTls,
+  waitForAllowList,
 } from "../scripts/managed-staging-db-tls-window.mjs";
 
 const workflow = fs.readFileSync(new URL("../.github/workflows/managed-mobile-evidence.yml", import.meta.url), "utf8");
@@ -219,6 +221,39 @@ test("cleanup failure is terminal and secondary close also requires empty readba
     waitForAllowList: async () => { secondary.push("readback"); throw new Error("not empty"); },
   }), /cleanup failed/);
   assert.deepEqual(secondary, ["patch:[]", "readback"]);
+});
+
+test("secondary cleanup 403 performs one GET, no backoff, and never claims empty readback", async () => {
+  const requests: string[] = [];
+  const waits: number[] = [];
+  const receipts: Array<Record<string, boolean>> = [];
+  const fetchImpl = async (_url: string, init: { method?: string } = {}) => {
+    requests.push(init.method ?? "GET");
+    if (init.method === "PATCH")
+      return { ok: true, status: 200, headers: { get: () => null }, json: async () => metadata };
+    return { ok: false, status: 403, headers: { get: () => null } };
+  };
+  const sleep = async (ms: number) => { waits.push(ms); };
+  const deps = {
+    ...mockedDeps([]),
+    replaceAllowList: (id: string, token: string, value: unknown[], policy: Record<string, unknown>) =>
+      replaceAllowList(id, token, value, { ...policy, fetchImpl, sleep }),
+    waitForAllowList: (id: string, token: string, value: unknown[],
+      options: { requestPolicy?: Record<string, unknown>; [key: string]: unknown } = {}) =>
+      waitForAllowList(id, token, value, {
+        ...options,
+        sleep,
+        requestPolicy: { ...options.requestPolicy, fetchImpl, sleep },
+      }),
+    emitReceipt: (receipt: Record<string, boolean>) => { receipts.push({ ...receipt }); },
+  };
+
+  await assert.rejects(closeWindow(env, deps), /cleanup failed/);
+  assert.deepEqual(requests, ["PATCH", "GET"]);
+  assert.deepEqual(waits, []);
+  assert.equal(receipts.length, 1);
+  assert.equal(receipts[0].cleanup_patch_empty, true);
+  assert.equal(receipts[0].cleanup_readback_empty, false);
 });
 
 test("signal guard aborts child and cleans once before terminal exit", async () => {
