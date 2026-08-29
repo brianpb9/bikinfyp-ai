@@ -3,9 +3,7 @@
 import assert from "node:assert/strict";
 import crypto from "node:crypto";
 import fs from "node:fs";
-import os from "node:os";
 import path from "node:path";
-import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 
 const directory = path.dirname(fileURLToPath(import.meta.url));
@@ -37,22 +35,35 @@ const expected = {
 };
 
 function archiveEntries(bytes) {
-  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), "normal-metadata-artifact-"));
-  const zipPath = path.join(temporary, "artifact.zip");
-  try {
-    fs.writeFileSync(zipPath, bytes, { mode: 0o600 });
-    const listing = spawnSync("unzip", ["-Z1", zipPath], { encoding: "utf8" });
-    assert.equal(listing.status, 0, listing.stderr);
-    const names = listing.stdout.trim().split("\n").filter(Boolean).sort();
-    assert.deepEqual(names, ["metadata-receipt.json", "secondary-cleanup.json"]);
-    return Object.fromEntries(names.map((name) => {
-      const extracted = spawnSync("unzip", ["-p", zipPath, name]);
-      assert.equal(extracted.status, 0, extracted.stderr?.toString());
-      return [name, extracted.stdout];
-    }));
-  } finally {
-    fs.rmSync(temporary, { recursive: true, force: true });
+  let eocd = -1;
+  for (let index = bytes.length - 22; index >= Math.max(0, bytes.length - 65_557); index--) {
+    if (bytes.readUInt32LE(index) === 0x06054b50) { eocd = index; break; }
   }
+  assert.notEqual(eocd, -1, "ZIP end-of-central-directory missing");
+  const count = bytes.readUInt16LE(eocd + 10);
+  let cursor = bytes.readUInt32LE(eocd + 16);
+  const entries = {};
+  for (let index = 0; index < count; index++) {
+    assert.equal(bytes.readUInt32LE(cursor), 0x02014b50, "ZIP central entry missing");
+    const method = bytes.readUInt16LE(cursor + 10);
+    const compressedSize = bytes.readUInt32LE(cursor + 20);
+    const uncompressedSize = bytes.readUInt32LE(cursor + 24);
+    const nameLength = bytes.readUInt16LE(cursor + 28);
+    const extraLength = bytes.readUInt16LE(cursor + 30);
+    const commentLength = bytes.readUInt16LE(cursor + 32);
+    const localOffset = bytes.readUInt32LE(cursor + 42);
+    const name = bytes.subarray(cursor + 46, cursor + 46 + nameLength).toString("utf8");
+    assert.equal(method, 0, "only stored artifact entries are accepted");
+    assert.equal(compressedSize, uncompressedSize, "stored entry size mismatch");
+    assert.equal(bytes.readUInt32LE(localOffset), 0x04034b50, "ZIP local entry missing");
+    const localNameLength = bytes.readUInt16LE(localOffset + 26);
+    const localExtraLength = bytes.readUInt16LE(localOffset + 28);
+    const dataOffset = localOffset + 30 + localNameLength + localExtraLength;
+    entries[name] = bytes.subarray(dataOffset, dataOffset + compressedSize);
+    cursor += 46 + nameLength + extraLength + commentLength;
+  }
+  assert.deepEqual(Object.keys(entries).sort(), ["metadata-receipt.json", "secondary-cleanup.json"]);
+  return entries;
 }
 
 function verify(candidate) {
