@@ -8,6 +8,9 @@
     "run_status": "completed",
     "run_conclusion": "failure",
     "head_sha": "503a8bfbf47d7873dbf07d40ce29ad40390b57d0",
+    "artifact_id": 9718242465,
+    "artifact_name": "normal-representative-metadata-33264551551-1",
+    "artifact_digest": "sha256:eb5ab24bce8a80293df26f2808101055cd5beb05b2da097eedae5a027bcaed1f",
     "receipt_artifact_uploaded": true,
     "cleanup_step_conclusion": "success"
   },

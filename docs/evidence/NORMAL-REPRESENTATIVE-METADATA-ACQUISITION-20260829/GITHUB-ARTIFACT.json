@@ -1,0 +1,33 @@
+{
+  "source": "GET /repos/brianpb9/bikinfyp-ai/actions/runs/33264551551/artifacts",
+  "total_count": 1,
+  "artifact": {
+    "id": 9718242465,
+    "name": "normal-representative-metadata-33264551551-1",
+    "size_in_bytes": 2008,
+    "expired": false,
+    "digest": "sha256:eb5ab24bce8a80293df26f2808101055cd5beb05b2da097eedae5a027bcaed1f",
+    "created_at": "2026-08-29T17:02:40Z",
+    "updated_at": "2026-08-29T17:02:40Z",
+    "expires_at": "2026-09-28T17:02:40Z",
+    "workflow_run": {
+      "id": 33264551551,
+      "head_branch": "main",
+      "head_sha": "503a8bfbf47d7873dbf07d40ce29ad40390b57d0"
+    },
+    "files": [
+      {
+        "artifact_name": "metadata-receipt.json",
+        "committed_name": "METADATA-RECEIPT.json",
+        "size_in_bytes": 1442,
+        "sha256": "0360dd4b07538bfc0ce6ab4a9dc2987c583b977f1e9a9d8092273b2f241c3c93"
+      },
+      {
+        "artifact_name": "secondary-cleanup.json",
+        "committed_name": "SECONDARY-CLEANUP.json",
+        "size_in_bytes": 274,
+        "sha256": "1cda346a12a0a394676e7220e270eedd6fa8fb71908664a48fbaab4d6a5394d4"
+      }
+    ]
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "source": "GET /repos/brianpb9/bikinfyp-ai/actions/runs/33264551551",
+  "id": 33264551551,
+  "name": "Managed mobile staging evidence",
+  "head_branch": "main",
+  "head_sha": "503a8bfbf47d7873dbf07d40ce29ad40390b57d0",
+  "path": ".github/workflows/managed-mobile-evidence.yml",
+  "run_number": 25,
+  "run_attempt": 1,
+  "event": "workflow_dispatch",
+  "status": "completed",
+  "conclusion": "failure",
+  "created_at": "2026-08-29T17:02:00Z",
+  "updated_at": "2026-08-29T17:02:43Z",
+  "run_started_at": "2026-08-29T17:02:00Z"
+}

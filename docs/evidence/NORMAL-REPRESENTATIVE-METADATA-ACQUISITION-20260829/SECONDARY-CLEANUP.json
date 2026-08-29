@@ -1,11 +1,1 @@
-{
-  "target_verified": true,
-  "ownership_verified": true,
-  "cleanup_patch_empty": false,
-  "cleanup_skipped_already_empty": true,
-  "cleanup_readback_empty": true,
-  "foreign_allow_list_preserved": false,
-  "secret_values_exposed": false,
-  "ip_value_exposed": false,
-  "production_access_attempted": false
-}
+{"target_verified":true,"ownership_verified":true,"cleanup_patch_empty":false,"cleanup_skipped_already_empty":true,"cleanup_readback_empty":true,"foreign_allow_list_preserved":false,"secret_values_exposed":false,"ip_value_exposed":false,"production_access_attempted":false}

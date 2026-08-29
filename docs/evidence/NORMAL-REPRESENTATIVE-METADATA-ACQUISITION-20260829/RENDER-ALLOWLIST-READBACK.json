@@ -1,0 +1,12 @@
+{
+  "captured_at": "2026-08-29T17:09:07Z",
+  "source": "Render CLI v2.24.0 authenticated control-plane read",
+  "command": "render postgres list --output json | jq staging-target allow-list projection",
+  "mutation": false,
+  "response": [
+    {
+      "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+      "ipAllowList": []
+    }
+  ]
+}

@@ -10,10 +10,14 @@ This immutable bundle records the bounded, read-only staging acquisition attempt
 - Decision: `FAIL_CLOSED`
 - Failure code: `CANONICAL_CANDIDATE_COUNT_NOT_ONE`
 - Canonical candidate count: `0`
+- Actions artifact: `9718242465` / `normal-representative-metadata-33264551551-1`
+- Artifact digest: `sha256:eb5ab24bce8a80293df26f2808101055cd5beb05b2da097eedae5a027bcaed1f`
 
 The run verified the staging target, an initially empty allow-list, the exact runner `/32`, and exact allow-list readback. It then found no row satisfying the approved canonical candidate predicate. The control did not choose a fallback and did not mutate staging data.
 
 Primary cleanup removed the run-owned allow-list entry and read back an empty list. Secondary cleanup verified ownership and observed that the list was already empty. A separate Render CLI read after the run also returned an empty allow-list.
+
+`GITHUB-RUN.json` and `GITHUB-ARTIFACT.json` preserve the sanitized Actions API provenance. The artifact metadata binds the original receipt filenames, byte sizes, and SHA-256 values to the committed byte-identical copies. `RENDER-ALLOWLIST-READBACK.json` preserves the independent post-cleanup Render response. Run `node verify.mjs` in this directory to verify the complete fail-closed contract.
 
 The result is not a successful metadata acquisition and contains no fabricated manifest. It is the fail-closed proof that Lane C cannot proceed without a separately approved action that creates or changes staging data, which this lane explicitly forbids.
 
