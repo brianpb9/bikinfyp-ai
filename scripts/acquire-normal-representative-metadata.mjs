@@ -142,6 +142,11 @@ async function acquireFromDatabaseAndR2(tlsUrl, metadata, expectedUser, env, opt
       stream?.encrypted === true && stream?.authorized === true && stream?.authorizationError == null && !hostnameError;
     if (!tlsVerified) throw new Error("DATABASE_TLS_OR_PRINCIPAL_MISMATCH");
 
+    const registry = await client.query("SELECT to_regclass('public.normal_representative_evidence_runs')::text AS value");
+    const evidenceRegistryPresent = typeof registry.rows[0]?.value === "string";
+    const noPriorEvidencePredicate = evidenceRegistryPresent
+      ? "AND NOT EXISTS (SELECT 1 FROM normal_representative_evidence_runs ne WHERE ne.job_id=j.id)"
+      : "";
     const candidates = await client.query(`SELECT j.id AS job_id,j.user_id,j.product_id,j.persona_id AS subject_id,
           j.approved_reference_manifest,j.job_product_snapshot
       FROM jobs j
@@ -151,7 +156,7 @@ async function acquireFromDatabaseAndR2(tlsUrl, metadata, expectedUser, env, opt
         AND j.job_product_snapshot IS NOT NULL AND j.output_url IS NULL
         AND NOT EXISTS (SELECT 1 FROM outputs o WHERE o.job_id=j.id)
         AND NOT EXISTS (SELECT 1 FROM provider_tasks pt WHERE pt.job_id=j.id)
-        AND NOT EXISTS (SELECT 1 FROM normal_representative_evidence_runs ne WHERE ne.job_id=j.id)
+        ${noPriorEvidencePredicate}
         AND (SELECT COUNT(*) FROM credit_ledger cl WHERE cl.job_id=j.id AND cl.type='hold')=1
         AND NOT EXISTS (SELECT 1 FROM credit_ledger cl WHERE cl.job_id=j.id AND cl.type IN ('capture','release'))
       LIMIT 2`);
@@ -180,7 +185,8 @@ async function acquireFromDatabaseAndR2(tlsUrl, metadata, expectedUser, env, opt
         staging_r2_identity_verified: true,
         r2_get_only: true,
         reference_digest_match: true,
-        zero_mutable_inputs_verified: true
+        zero_mutable_inputs_verified: true,
+        prior_evidence_registry_checked: true
       },
       manifest: {
         product_id: row.product_id,
@@ -204,7 +210,8 @@ async function acquireFromDatabaseAndR2(tlsUrl, metadata, expectedUser, env, opt
         user_id: row.user_id,
         reversible_hold_count: 1,
         terminal_ledger_count: 0,
-        prior_effect_count: 0
+        prior_effect_count: 0,
+        evidence_registry_present: evidenceRegistryPresent
       }
     };
   } finally {
@@ -244,6 +251,7 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
       allow_list_readback_exact: false, external_hostname_verified: false, sslmode_verify_full: false,
       dedicated_principal_verified: false, transaction_read_only_verified: false,
       r2_get_only: false, reference_digest_match: false, zero_mutable_inputs_verified: false,
+      prior_evidence_registry_checked: false,
       cleanup_patch_empty: false, cleanup_readback_empty: false,
       secret_values_exposed: false, production_access_attempted: false
     },

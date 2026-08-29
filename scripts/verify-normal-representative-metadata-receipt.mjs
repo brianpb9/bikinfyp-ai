@@ -27,19 +27,21 @@ for (const key of [
   "target_staging_only", "initial_allow_list_empty", "runner_ipv4_32_only", "allow_list_readback_exact",
   "external_hostname_verified", "sslmode_verify_full", "dedicated_principal_verified",
   "transaction_read_only_verified", "r2_get_only", "reference_digest_match", "zero_mutable_inputs_verified",
+  "prior_evidence_registry_checked",
   "cleanup_patch_empty", "cleanup_readback_empty"
 ]) assert.equal(receipt.controls[key], true, key);
 assert.equal(receipt.controls.secret_values_exposed, false);
 assert.equal(receipt.controls.production_access_attempted, false);
 
 assert.deepEqual(Object.keys(receipt.selection).sort(), [
-  "job_id", "prior_effect_count", "reversible_hold_count", "terminal_ledger_count", "user_id"
+  "evidence_registry_present", "job_id", "prior_effect_count", "reversible_hold_count", "terminal_ledger_count", "user_id"
 ].sort());
 assert.match(receipt.selection.job_id, /^[0-9a-f-]{20,}$/);
 assert.match(receipt.selection.user_id, /^[0-9a-f-]{20,}$/);
 assert.equal(receipt.selection.reversible_hold_count, 1);
 assert.equal(receipt.selection.terminal_ledger_count, 0);
 assert.equal(receipt.selection.prior_effect_count, 0);
+assert.equal(typeof receipt.selection.evidence_registry_present, "boolean");
 
 assert.deepEqual(Object.keys(receipt.manifest).sort(), [
   "product_id", "product_snapshot_id_or_sha", "reference_asset_id", "reference_authorization_receipt",

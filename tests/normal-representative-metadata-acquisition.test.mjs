@@ -27,7 +27,8 @@ const manifest = {
 const selection = {
   job_id: "33333333-3333-4333-8333-333333333333",
   user_id: "44444444-4444-4444-8444-444444444444",
-  reversible_hold_count: 1, terminal_ledger_count: 0, prior_effect_count: 0
+  reversible_hold_count: 1, terminal_ledger_count: 0, prior_effect_count: 0,
+  evidence_registry_present: false
 };
 
 function env(file) {
@@ -56,7 +57,7 @@ function successfulDeps(calls) {
         current_database_verified: true, current_user_verified: true, dedicated_principal_verified: true,
         pg_stat_ssl_verified: true, certificate_hostname_verified: true, canonical_candidate_count: 1,
         staging_r2_identity_verified: true, r2_get_only: true, reference_digest_match: true,
-        zero_mutable_inputs_verified: true
+        zero_mutable_inputs_verified: true, prior_evidence_registry_checked: true
       }, manifest, selection };
     }
   };
@@ -150,7 +151,8 @@ test("control source has no R2 write/delete command and workflow exposes isolate
   assert.match(source, /j\.id AS job_id,j\.user_id/);
   assert.match(source, /cl\.type='hold'\)=1/);
   assert.match(source, /cl\.type IN \('capture','release'\)/);
-  assert.match(source, /normal_representative_evidence_runs/);
+  assert.match(source, /to_regclass\('public\.normal_representative_evidence_runs'\)/);
+  assert.match(source, /evidenceRegistryPresent[\s\S]*NOT EXISTS \(SELECT 1 FROM normal_representative_evidence_runs/);
   assert.doesNotMatch(source, /ORDER BY[\s\S]*created_at|\blatest\b/i);
   const workflow = fs.readFileSync(new URL("../.github/workflows/managed-mobile-evidence.yml", import.meta.url), "utf8");
   assert.match(workflow, /inputs\.mode == 'representative-metadata-readonly'/);
