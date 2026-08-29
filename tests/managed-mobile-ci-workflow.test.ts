@@ -56,7 +56,7 @@ test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-ref
 
 test("managed R2 preflight runs before the full runner on the exact reviewed image", () => {
   const preflightAt = workflow.indexOf("      - name: Preflight staging R2 write-read-delete round trip");
-  const runnerAt = workflow.indexOf("      - name: Run and sanitize provider-free staging evidence with managed secret injection");
+  const runnerAt = workflow.indexOf("      - name: Run provider-free evidence inside temporary staging database TLS window");
   assert.ok(preflightAt > 0 && runnerAt > preflightAt);
   const step = workflow.slice(preflightAt, runnerAt);
   assert.match(step, /RACUN_DEPLOY_ENV: staging/);
@@ -69,6 +69,21 @@ test("managed R2 preflight runs before the full runner on the exact reviewed ima
     assert.match(step, new RegExp(`--env ${slot}(?:\\s|\\\\)`));
     assert.doesNotMatch(step, new RegExp(`--env ["']?${slot}=`));
   }
+});
+
+test("secret-bearing run and close share a locked control dependency bootstrap", () => {
+  const job = workflow.slice(workflow.indexOf("  exact-sha-mobile-evidence:"));
+  const setupAt = job.indexOf("      - name: Set up pinned Node runtime for trusted control");
+  const installAt = job.indexOf("      - name: Install locked trusted control dependencies without lifecycle scripts");
+  const runAt = job.indexOf("node control/scripts/managed-staging-db-tls-window.mjs run");
+  const closeAt = job.indexOf("node control/scripts/managed-staging-db-tls-window.mjs close");
+  assert.ok(setupAt > 0 && setupAt < installAt && installAt < runAt && runAt < closeAt);
+  const bootstrap = job.slice(setupAt, runAt);
+  assert.match(bootstrap, /actions\/setup-node@[0-9a-f]{40}/);
+  assert.match(bootstrap, /node-version: "22"/);
+  assert.match(bootstrap, /cache-dependency-path: control\/package-lock\.json/);
+  assert.match(bootstrap, /working-directory: control\n        run: npm ci --ignore-scripts/);
+  assert.equal((job.match(/npm ci --ignore-scripts/g) ?? []).length, 1);
 });
 
 test("R2 preflight is fail-closed, cleans up in finally, and emits booleans only", () => {
