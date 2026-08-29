@@ -137,5 +137,8 @@ test("dispatch modes are mutually isolated and full E2E remains explicit", () =>
   const contractAt = fullJob.indexOf("Validate staging database secret contract before evidence work");
   const shaAt = fullJob.indexOf("Validate hard-bound reviewed SHA and immutable control checkout");
   const buildAt = fullJob.indexOf("Build immutable exact-source evidence image");
-  assert.ok(contractAt > 0 && contractAt < shaAt && shaAt < buildAt);
+  assert.ok(
+    shaAt > 0 && shaAt < contractAt && contractAt < buildAt,
+    "immutable control/SHA binding must precede the first secret-bearing contract step, which must precede build"
+  );
 });
