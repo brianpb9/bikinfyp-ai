@@ -64,6 +64,7 @@ test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-ref
   assert.match(builder, /EXPECTED_EVIDENCE_RUNNER_SHA/);
   assert.match(builder, /test "\$sha" = "\$expected_runner"/);
   assert.match(tlsWindow, /required\("REVIEWED_APP_SHA", env\.REVIEWED_APP_SHA\)/);
+  assert.match(tlsWindow, /required\("REVIEWED_RUNNER_SHA", env\.REVIEWED_RUNNER_SHA\)/);
   assert.doesNotMatch(tlsWindow, /required\("REVIEWED_SHA"/);
   assert.match(publicHealth, /racun-ai-staging-web\.onrender\.com\/api\/health/);
   const prJob = workflow.slice(workflow.indexOf("  pr-static-validation:"), workflow.indexOf("  staging-database-secret-contract:"));
@@ -142,6 +143,7 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
   const run = path.join(root, "a".repeat(64));
   fs.mkdirSync(run);
   const sha = "b".repeat(40);
+  const runnerSha = "f".repeat(40);
   const image = `sha256:${"c".repeat(64)}`;
   const screenshots = Array.from({ length: 6 }, (_, index) => {
     const name = `0${index}-fixture.png`;
@@ -150,7 +152,7 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
     return { name, bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex"), private_key: `managed/${sha}/${name}` };
   });
   const launch = { schema: "mobile-evidence-launch/v1", container_id: "a".repeat(64), image_id: image,
-    config_image: image, source_sha: sha, source_tree: "d".repeat(40) };
+    config_image: image, source_sha: runnerSha, source_tree: "d".repeat(40) };
   const draftKey = `managed/${sha}/receipt.pending.json`;
   const manifestKey = `managed/${sha}/manifest.json`;
   const draftSha = "e".repeat(64);
@@ -169,7 +171,7 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
       draft_receipt_key: draftKey, draft_receipt_sha256: draftSha },
     artifact_manifest: { manifest_key: manifestKey, receipt_key: draftKey },
     review_status: "PENDING_INDEPENDENT_REVIEW", points_claimed: 0,
-    evidence_runner: { launch, source: { commit: sha } }, screenshots,
+    evidence_runner: { launch, source: { commit: runnerSha } }, screenshots,
   };
   fs.writeFileSync(path.join(run, "launch-attestation.json"), JSON.stringify(launch));
   fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify(receipt));
@@ -179,18 +181,21 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
     const managedEnv = { ...process.env, DATABASE_URL: "managed-db-value", AUTH_SECRET: "managed-auth-value",
       R2_ENDPOINT: "managed-endpoint-value", R2_BUCKET: "managed-bucket-value",
       R2_ACCESS_KEY_ID: "managed-access-value", R2_SECRET_ACCESS_KEY: "managed-secret-value" };
-    const verified = JSON.parse(execFileSync(process.execPath, [verifier, root, sha], { encoding: "utf8", env: managedEnv }));
+    const verified = JSON.parse(execFileSync(process.execPath, [verifier, root, sha, runnerSha], { encoding: "utf8", env: managedEnv }));
     assert.equal(verified.result, "PASS");
+    assert.equal(verified.app_sha, sha);
+    assert.equal(verified.runner_sha, runnerSha);
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, "0".repeat(40)], { stdio: "pipe", env: managedEnv }));
     fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify({ ...receipt, database_url: "postgresql://forbidden" }));
-    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha], { stdio: "pipe", env: managedEnv }));
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
     fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify({ ...receipt, harmless_note: managedEnv.AUTH_SECRET }));
-    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha], { stdio: "pipe", env: managedEnv }));
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
     fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify(receipt));
     fs.writeFileSync(path.join(run, "unexpected.txt"), managedEnv.DATABASE_URL);
-    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha], { stdio: "pipe", env: managedEnv }));
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
     fs.rmSync(path.join(run, "unexpected.txt"));
     fs.symlinkSync(path.join(run, "receipt.json"), path.join(run, "unexpected-link.json"));
-    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha], { stdio: "pipe", env: managedEnv }));
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }
