@@ -44,31 +44,49 @@ function required(name, value) {
 
 function mask(value) { process.stdout.write(`::add-mask::${value}\n`); }
 
-function parseManifest(raw) {
+export function parseManifest(raw, jobId) {
   const manifest = JSON.parse(raw);
-  if (manifest?.version !== 2 || !Array.isArray(manifest.references) || manifest.references.length < 1) {
+  if (manifest?.version !== 2 || !Array.isArray(manifest.references) || manifest.references.length < 1 ||
+      manifest.references.length > 7) {
     throw new Error("REFERENCE_MANIFEST_INVALID");
   }
-  const primary = manifest.references[0];
-  if (typeof primary?.rel !== "string" || !primary.rel ||
-      typeof primary?.snapshotRel !== "string" || !primary.snapshotRel.startsWith("jobs/") ||
-      !/^[0-9a-f]{64}$/.test(primary?.sha256 ?? "") ||
-      !Number.isInteger(primary?.versiBukti) || primary.versiBukti < 1 ||
-      primary?.labelOcrStatus !== "READABLE" || primary?.labelOcrVersion !== 1) {
-    throw new Error("REFERENCE_MANIFEST_INVALID");
+  for (const [index, reference] of manifest.references.entries()) {
+    if (typeof reference?.rel !== "string" || !reference.rel ||
+        typeof reference?.snapshotRel !== "string" ||
+        !/^[0-9a-f]{64}$/.test(reference?.sha256 ?? "") ||
+        !Number.isInteger(reference?.versiBukti) || reference.versiBukti < 1 ||
+        reference?.labelOcrStatus !== "READABLE" || reference?.labelOcrVersion !== 1) {
+      throw new Error("REFERENCE_MANIFEST_INVALID");
+    }
+    const extension = path.posix.extname(reference.rel);
+    const expectedSnapshotRel = path.posix.join("jobs", jobId, "approved-references", `${index}-${reference.sha256}${extension}`);
+    if (reference.snapshotRel !== expectedSnapshotRel || reference.snapshotRel.startsWith("/") ||
+        reference.snapshotRel.split("/").includes("..")) throw new Error("REFERENCE_STORAGE_OBJECT_INVALID");
   }
-  if (primary.snapshotRel.startsWith("/") || primary.snapshotRel.split("/").includes("..")) {
-    throw new Error("REFERENCE_STORAGE_OBJECT_INVALID");
-  }
-  return { manifest, primary };
+  return { manifest, primary: manifest.references[0] };
 }
 
-function parseProductSnapshot(raw) {
+export function parseProductSnapshot(raw) {
   const snapshot = JSON.parse(raw);
-  if (![1, 2, 3, 4].includes(snapshot?.version) || typeof snapshot?.productName !== "string" ||
+  const nullableString = (value) => value === null || typeof value === "string";
+  const versionValid = [1, 2, 3, 4].includes(snapshot?.version);
+  const priceValid = snapshot?.version !== 1 && Number.isSafeInteger(snapshot?.priceIdr) && snapshot.priceIdr >= 0;
+  const promoValid = ![3, 4].includes(snapshot?.version) || (
+    (snapshot.promoPriceBeforeIdr === null || (Number.isSafeInteger(snapshot.promoPriceBeforeIdr) && snapshot.promoPriceBeforeIdr >= 0)) &&
+    nullableString(snapshot.promoEndsAt) &&
+    (snapshot.promoStockLeft === null || (Number.isSafeInteger(snapshot.promoStockLeft) && snapshot.promoStockLeft >= 0))
+  );
+  const categoryReviewValid = snapshot?.version !== 4 ||
+    (Number.isInteger(snapshot.categoryReviewVersion) && snapshot.categoryReviewVersion >= 1);
+  if (!versionValid || !priceValid || !promoValid || !categoryReviewValid ||
+      typeof snapshot?.productName !== "string" ||
       typeof snapshot?.category !== "string" || !snapshot.productName.trim() || !snapshot.category.trim() ||
       snapshot?.trustedBrand?.source !== "products.raw_meta.brand" ||
-      !Array.isArray(snapshot?.claims)) throw new Error("PRODUCT_SNAPSHOT_INVALID");
+      typeof snapshot.trustedBrand.value !== "string" || !snapshot.trustedBrand.value.trim() ||
+      !nullableString(snapshot.productVisualDesc) || !nullableString(snapshot.brandBrief) ||
+      !Array.isArray(snapshot?.claims) || !snapshot.claims.every((claim) => typeof claim === "string")) {
+    throw new Error("PRODUCT_SNAPSHOT_INVALID");
+  }
   return snapshot;
 }
 
@@ -124,7 +142,7 @@ async function acquireFromDatabaseAndR2(tlsUrl, metadata, expectedUser, env, opt
       stream?.encrypted === true && stream?.authorized === true && stream?.authorizationError == null && !hostnameError;
     if (!tlsVerified) throw new Error("DATABASE_TLS_OR_PRINCIPAL_MISMATCH");
 
-    const candidates = await client.query(`SELECT j.product_id,j.persona_id AS subject_id,
+    const candidates = await client.query(`SELECT j.id AS job_id,j.user_id,j.product_id,j.persona_id AS subject_id,
           j.approved_reference_manifest,j.job_product_snapshot
       FROM jobs j
       WHERE j.state='QUEUED' AND j.requires_approval=FALSE
@@ -133,6 +151,9 @@ async function acquireFromDatabaseAndR2(tlsUrl, metadata, expectedUser, env, opt
         AND j.job_product_snapshot IS NOT NULL AND j.output_url IS NULL
         AND NOT EXISTS (SELECT 1 FROM outputs o WHERE o.job_id=j.id)
         AND NOT EXISTS (SELECT 1 FROM provider_tasks pt WHERE pt.job_id=j.id)
+        AND NOT EXISTS (SELECT 1 FROM normal_representative_evidence_runs ne WHERE ne.job_id=j.id)
+        AND (SELECT COUNT(*) FROM credit_ledger cl WHERE cl.job_id=j.id AND cl.type='hold')=1
+        AND NOT EXISTS (SELECT 1 FROM credit_ledger cl WHERE cl.job_id=j.id AND cl.type IN ('capture','release'))
       LIMIT 2`);
     if (candidates.rowCount !== 1) {
       const error = new Error("CANONICAL_CANDIDATE_COUNT_NOT_ONE");
@@ -140,7 +161,7 @@ async function acquireFromDatabaseAndR2(tlsUrl, metadata, expectedUser, env, opt
       throw error;
     }
     const row = candidates.rows[0];
-    const { manifest, primary } = parseManifest(row.approved_reference_manifest);
+    const { manifest, primary } = parseManifest(row.approved_reference_manifest, row.job_id);
     parseProductSnapshot(row.job_product_snapshot);
     const bytes = await r2Get(required("R2_BUCKET", env.R2_BUCKET), primary.snapshotRel);
     const actualDigest = digest(bytes);
@@ -177,6 +198,13 @@ async function acquireFromDatabaseAndR2(tlsUrl, metadata, expectedUser, env, opt
         },
         reference_storage_object_id: primary.snapshotRel,
         reference_digest_sha256: actualDigest
+      },
+      selection: {
+        job_id: row.job_id,
+        user_id: row.user_id,
+        reversible_hold_count: 1,
+        terminal_ledger_count: 0,
+        prior_effect_count: 0
       }
     };
   } finally {
@@ -219,6 +247,7 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
       cleanup_patch_empty: false, cleanup_readback_empty: false,
       secret_values_exposed: false, production_access_attempted: false
     },
+    selection: null,
     manifest: null,
     lane_effects: { database_writes: 0, r2_writes: 0, provider_posts: 0, provider_spend_usd: 0, publication: false, production_mutations: 0 }
   };
@@ -270,6 +299,7 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
     const acquired = await deps.acquireFromDatabaseAndR2(tlsUrl, metadata, expectedUser, env);
     Object.assign(receipt.controls, acquired.controls);
     receipt.candidate_count = acquired.controls.canonical_candidate_count;
+    receipt.selection = acquired.selection;
     receipt.manifest = acquired.manifest;
     receipt.decision = "PASS";
   } catch (error) {

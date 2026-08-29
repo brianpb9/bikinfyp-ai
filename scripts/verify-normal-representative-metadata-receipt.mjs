@@ -32,6 +32,15 @@ for (const key of [
 assert.equal(receipt.controls.secret_values_exposed, false);
 assert.equal(receipt.controls.production_access_attempted, false);
 
+assert.deepEqual(Object.keys(receipt.selection).sort(), [
+  "job_id", "prior_effect_count", "reversible_hold_count", "terminal_ledger_count", "user_id"
+].sort());
+assert.match(receipt.selection.job_id, /^[0-9a-f-]{20,}$/);
+assert.match(receipt.selection.user_id, /^[0-9a-f-]{20,}$/);
+assert.equal(receipt.selection.reversible_hold_count, 1);
+assert.equal(receipt.selection.terminal_ledger_count, 0);
+assert.equal(receipt.selection.prior_effect_count, 0);
+
 assert.deepEqual(Object.keys(receipt.manifest).sort(), [
   "product_id", "product_snapshot_id_or_sha", "reference_asset_id", "reference_authorization_receipt",
   "reference_digest_sha256", "reference_storage_object_id", "subject_id"
@@ -40,12 +49,21 @@ assert.match(receipt.manifest.product_id, /^[0-9a-f-]{20,}$/);
 assert.match(receipt.manifest.product_snapshot_id_or_sha, /^sha256:[0-9a-f]{64}$/);
 assert.equal(typeof receipt.manifest.subject_id, "string");
 assert.equal(typeof receipt.manifest.reference_asset_id, "string");
-assert.ok(receipt.manifest.reference_storage_object_id.startsWith("jobs/"));
 assert.match(receipt.manifest.reference_digest_sha256, /^[0-9a-f]{64}$/);
+assert.equal(receipt.manifest.reference_storage_object_id, path.posix.join(
+  "jobs", receipt.selection.job_id, "approved-references",
+  `0-${receipt.manifest.reference_digest_sha256}${path.posix.extname(receipt.manifest.reference_asset_id)}`
+));
+assert.deepEqual(Object.keys(receipt.manifest.reference_authorization_receipt).sort(), [
+  "label_ocr_status", "label_ocr_version", "manifest_sha256", "manifest_version",
+  "primary_index", "proof_version", "type"
+].sort());
 assert.equal(receipt.manifest.reference_authorization_receipt.type, "approved_reference_manifest:v2");
 assert.match(receipt.manifest.reference_authorization_receipt.manifest_sha256, /^[0-9a-f]{64}$/);
 assert.equal(receipt.manifest.reference_authorization_receipt.manifest_version, 2);
 assert.equal(receipt.manifest.reference_authorization_receipt.primary_index, 0);
+assert.ok(Number.isInteger(receipt.manifest.reference_authorization_receipt.proof_version));
+assert.ok(receipt.manifest.reference_authorization_receipt.proof_version > 0);
 assert.equal(receipt.manifest.reference_authorization_receipt.label_ocr_status, "READABLE");
 assert.equal(receipt.manifest.reference_authorization_receipt.label_ocr_version, 1);
 
