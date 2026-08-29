@@ -2,16 +2,22 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   classifyManagedBrowserDiagnostic,
+  canonicalRequestBodySha256,
+  matchesExpectedNetworkRequest,
   type BrowserDiagnostic,
   type ExpectedNetworkFailure,
   type ObservedNetworkFailure,
 } from "../scripts/managed-browser-error-classifier.ts";
 
 const origin = "https://racun-ai-staging-web.onrender.com";
+const bodyHash = (email: string, code: string) => canonicalRequestBodySha256(JSON.stringify({ email, code }))!;
 const expected = new Map<string, ExpectedNetworkFailure>([
-  ["wrong-otp", { fixtureId: "wrong-otp", method: "POST", url: `${origin}/api/auth/verify-otp`, outcome: "http", status: 401 }],
-  ["otp-replay", { fixtureId: "otp-replay", method: "POST", url: `${origin}/api/auth/verify-otp`, outcome: "http", status: 401 }],
-  ["deliberate-block", { fixtureId: "deliberate-block", method: "POST", url: `${origin}/api/__managed-deliberate-block__`, outcome: "blocked" }],
+  ["wrong-otp", { fixtureId: "wrong-otp", method: "POST", url: `${origin}/api/auth/verify-otp`, outcome: "http", status: 401,
+    bodySha256: bodyHash("fixture@staging.invalid", "111111") }],
+  ["otp-replay", { fixtureId: "otp-replay", method: "POST", url: `${origin}/api/auth/verify-otp`, outcome: "http", status: 401,
+    bodySha256: bodyHash("fixture@staging.invalid", "842731") }],
+  ["deliberate-block", { fixtureId: "deliberate-block", method: "POST", url: `${origin}/api/__managed-deliberate-block__`, outcome: "blocked",
+    bodySha256: bodyHash("fixture@staging.invalid", "blocked") }],
 ]);
 const issue = (requestId: string): BrowserDiagnostic => ({
   source: "network", level: "error", text: "Failed to load resource: the server responded with a status of 401", requestId,
@@ -24,6 +30,18 @@ test("deliberate wrong OTP 401 is expected only through its exact request id", (
   assert.deepEqual(classify(issue(observation.requestId), [observation]),
     { expected: true, reason: "exact-request-fixture", fixtureId: "wrong-otp" });
   assert.equal(classify(issue("different-request"), [observation]).expected, false);
+});
+
+test("wrong-OTP fixture binding rejects correct, replay, arbitrary, and other-email bodies", () => {
+  const fixture = expected.get("wrong-otp")!;
+  const request = (email: string, code: string) => ({ method: "POST", url: fixture.url,
+    postData: JSON.stringify({ code, email }) });
+  assert.equal(matchesExpectedNetworkRequest(fixture, request("fixture@staging.invalid", "111111")), true,
+    "canonical key order must not change the body identity");
+  assert.equal(matchesExpectedNetworkRequest(fixture, request("fixture@staging.invalid", "842731")), false);
+  assert.equal(matchesExpectedNetworkRequest(fixture, request("fixture@staging.invalid", "999999")), false);
+  assert.equal(matchesExpectedNetworkRequest(fixture, request("attacker@staging.invalid", "111111")), false);
+  assert.equal(matchesExpectedNetworkRequest(fixture, { method: "POST", url: fixture.url, postData: "not-json" }), false);
 });
 
 test("OTP replay and deliberate blocked request have separate exact fixtures", () => {
@@ -48,8 +66,10 @@ test("unexpected uncorrelated 4xx/5xx and fixture mismatches fail", () => {
   }
   const wrongStatus = { ...expected.get("wrong-otp")!, requestId: "cdp-wrong-status", status: 500 };
   const wrongUrl = { ...expected.get("wrong-otp")!, requestId: "cdp-wrong-url", url: `${origin}/api/other` };
+  const wrongBody = { ...expected.get("wrong-otp")!, requestId: "cdp-wrong-body", bodySha256: bodyHash("fixture@staging.invalid", "842731") };
   assert.equal(classify(issue(wrongStatus.requestId), [wrongStatus]).expected, false);
   assert.equal(classify(issue(wrongUrl.requestId), [wrongUrl]).expected, false);
+  assert.equal(classify(issue(wrongBody.requestId), [wrongBody]).expected, false);
 });
 
 test("unknown error text cannot be laundered by a valid request correlation", () => {

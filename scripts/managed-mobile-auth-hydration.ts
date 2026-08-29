@@ -21,6 +21,8 @@ import { runtimeAuthSecret } from "../lib/auth-secret-policy";
 import { mediaStorage } from "../lib/storage";
 import {
   classifyManagedBrowserDiagnostic,
+  canonicalRequestBodySha256,
+  matchesExpectedNetworkRequest,
   type BrowserDiagnostic,
   type ExpectedNetworkFailure,
   type ObservedNetworkFailure,
@@ -85,10 +87,12 @@ const consoleErrors: string[] = [];
 const pageErrors: string[] = [];
 const browserDiagnostics: BrowserDiagnostic[] = [];
 const observedFailures = new Map<string, ObservedNetworkFailure>();
-const cdpRequests = new Map<string, { fixtureId: string; method: string; url: string }>();
+const wrongOtpBodySha256 = canonicalRequestBodySha256(JSON.stringify({ email: email.trim(), code: "111111" }));
+assert.ok(wrongOtpBodySha256);
+const cdpRequests = new Map<string, { fixtureId: string; method: string; url: string; bodySha256: string }>();
 const expectedFailures = new Map<string, ExpectedNetworkFailure>([
   ["wrong-otp", { fixtureId: "wrong-otp", method: "POST", url: `${STAGING_ORIGIN}/api/auth/verify-otp`,
-    outcome: "http", status: 401 }],
+    outcome: "http", status: 401, bodySha256: wrongOtpBodySha256 }],
 ]);
 const pendingFailureFixtures: string[] = [];
 const requestReceipts: Array<{ endpoint: string; method: string; status: number }> = [];
@@ -161,14 +165,16 @@ try {
   page = await context.newPage();
   const cdp = await context.newCDPSession(page);
   await Promise.all([cdp.send("Network.enable"), cdp.send("Log.enable"), cdp.send("Runtime.enable")]);
-  cdp.on("Network.requestWillBeSent", (event: { requestId: string; request: { method: string; url: string } }) => {
+  cdp.on("Network.requestWillBeSent", (event: { requestId: string; request: { method: string; url: string; postData?: string } }) => {
     const fixtureIndex = pendingFailureFixtures.findIndex((fixtureId) => {
       const fixture = expectedFailures.get(fixtureId);
-      return fixture?.method === event.request.method && fixture.url === event.request.url;
+      return fixture ? matchesExpectedNetworkRequest(fixture, event.request) : false;
     });
     if (fixtureIndex < 0) return;
     const [fixtureId] = pendingFailureFixtures.splice(fixtureIndex, 1);
-    cdpRequests.set(event.requestId, { fixtureId, method: event.request.method, url: event.request.url });
+    const bodySha256 = canonicalRequestBodySha256(event.request.postData ?? "");
+    assert.ok(bodySha256);
+    cdpRequests.set(event.requestId, { fixtureId, method: event.request.method, url: event.request.url, bodySha256 });
   });
   cdp.on("Network.responseReceived", (event: { requestId: string; response: { status: number } }) => {
     const request = cdpRequests.get(event.requestId);
@@ -318,8 +324,9 @@ try {
   assert.equal(otpRequestIntercepted, 1);
   receipt.requests = requestReceipts;
   receipt.browser_error_classification = {
-    expected_failures: [...observedFailures.values()].map(({ fixtureId, requestId, method, url, outcome, status }) =>
-      ({ fixture_id: fixtureId, request_id: requestId, method, endpoint: new URL(url).pathname, outcome, status })),
+    expected_failures: [...observedFailures.values()].map(({ fixtureId, requestId, method, url, outcome, status, bodySha256 }) =>
+      ({ fixture_id: fixtureId, request_id: requestId, method, endpoint: new URL(url).pathname, outcome, status,
+        body_sha256: bodySha256 })),
     unexpected_errors: consoleErrors,
   };
   receipt.mobile = { otp_reduced_height_overflow: reducedOverflow, reduced_viewport: reducedViewport, dashboard_overflow: dashboardOverflow };

@@ -31,6 +31,8 @@ test("managed mobile runner is exact-SHA, 375px, provider-free, and cleanup-boun
   assert.match(source, /Network\.requestWillBeSent/);
   assert.match(source, /networkRequestId/);
   assert.match(source, /classifyManagedBrowserDiagnostic/);
+  assert.match(source, /matchesExpectedNetworkRequest/);
+  assert.match(source, /body_sha256/);
   assert.match(source, /pendingFailureFixtures\.push\("wrong-otp"\)/);
   assert.match(source, /wrong OTP wajib punya satu explicit CDP request-id correlation/);
   assert.match(source, /'koreksi'/);

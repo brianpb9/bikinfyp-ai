@@ -1,9 +1,12 @@
+import crypto from "node:crypto";
+
 export type ExpectedNetworkFailure = {
   fixtureId: string;
   method: string;
   url: string;
   outcome: "http" | "blocked";
   status?: number;
+  bodySha256: string;
 };
 
 export type ObservedNetworkFailure = ExpectedNetworkFailure & {
@@ -26,6 +29,31 @@ export type DiagnosticClassification = {
 const NETWORK_ERROR = /failed to load resource|net::err_|http error/i;
 const BLOCKED_ERROR = /net::err_|blocked/i;
 const HTTP_ERROR = /failed to load resource|http error/i;
+
+function canonicalJson(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalJson);
+  if (value && typeof value === "object") return Object.fromEntries(Object.entries(value as Record<string, unknown>)
+    .sort(([left], [right]) => left.localeCompare(right)).map(([key, item]) => [key, canonicalJson(item)]));
+  return value;
+}
+
+export function canonicalRequestBodySha256(postData: string): string | null {
+  try {
+    const parsed = JSON.parse(postData) as unknown;
+    return crypto.createHash("sha256").update(JSON.stringify(canonicalJson(parsed))).digest("hex");
+  } catch {
+    return null;
+  }
+}
+
+export function matchesExpectedNetworkRequest(
+  fixture: ExpectedNetworkFailure,
+  request: { method: string; url: string; postData?: string },
+): boolean {
+  return fixture.method === request.method && fixture.url === request.url
+    && typeof request.postData === "string"
+    && canonicalRequestBodySha256(request.postData) === fixture.bodySha256;
+}
 
 /**
  * A browser error is expected only when Chromium binds it to the exact CDP
@@ -50,7 +78,8 @@ export function classifyManagedBrowserDiagnostic(
     && observed.method === fixture.method
     && observed.url === fixture.url
     && observed.outcome === fixture.outcome
-    && observed.status === fixture.status;
+    && observed.status === fixture.status
+    && observed.bodySha256 === fixture.bodySha256;
   if (!exact) return { expected: false, reason: "fixture-mismatch" };
   if (fixture.outcome === "blocked" && !BLOCKED_ERROR.test(diagnostic.text))
     return { expected: false, reason: "outcome-text-mismatch" };
