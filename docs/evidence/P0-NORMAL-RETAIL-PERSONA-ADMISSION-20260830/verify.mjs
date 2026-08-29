@@ -17,6 +17,8 @@ const temporaryDeploy = lineage.deploys.find((deploy) => deploy.id === closure.t
 const lineageRollback = lineage.deploys.find((deploy) => deploy.id === closure.rollback_deploy.id);
 assert.equal(temporaryDeploy.commit.id, exactFix);
 assert.equal(temporaryDeploy.status, "deactivated");
+assert.equal(closure.temporary_fix_deploy.status_during_read_only_jobs, "live");
+assert.equal(closure.temporary_fix_deploy.final_status_after_rollback, temporaryDeploy.status);
 assert.equal(lineageRollback.commit.id, exactRollback);
 assert.equal(lineageRollback.status, "live");
 assert.ok(Math.abs(new Date(temporaryDeploy.updatedAt) - new Date(lineageRollback.finishedAt)) < 1000, "temporary deploy deactivation must coincide with rollback becoming live");

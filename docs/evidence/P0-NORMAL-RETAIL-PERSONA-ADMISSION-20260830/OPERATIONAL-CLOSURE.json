@@ -10,7 +10,8 @@
   "temporary_fix_deploy": {
     "id": "dep-da9j6g9srm7s73cgls90",
     "commit": "6ac032ad8f294761d615bcfddccbd5e46b15025f",
-    "status": "live",
+    "status_during_read_only_jobs": "live",
+    "final_status_after_rollback": "deactivated",
     "payments_live": false
   },
   "rollback_deploy": {
