@@ -12,11 +12,12 @@ export const STAGING_POSTGRES_NAME = "racun-ai-staging-postgres";
 export const PUBLIC_IPV4_SOURCE = "https://checkip.amazonaws.com/";
 const RENDER_API_ORIGIN = "https://api.render.com";
 const WINDOW_DESCRIPTION = "temporary-github-runner-one-run";
-const CLEANUP_REQUEST_POLICY = { attempts: 6, baseDelayMs: 500, maxDelayMs: 5_000 };
+const CLEANUP_TOTAL_BUDGET_MS = 25_000;
+const CLEANUP_REQUEST_POLICY = { attempts: 3, baseDelayMs: 250, maxDelayMs: 1_000, attemptTimeoutMs: 2_000 };
 const CLEANUP_WAIT_OPTIONS = {
-  attempts: 8,
-  intervalMs: 1_000,
-  requestPolicy: { attempts: 4, baseDelayMs: 500, maxDelayMs: 4_000 },
+  attempts: 4,
+  intervalMs: 500,
+  requestPolicy: { attempts: 2, baseDelayMs: 250, maxDelayMs: 1_000, attemptTimeoutMs: 2_000 },
 };
 
 const blankRunReceipt = () => ({
@@ -153,13 +154,30 @@ export async function renderRequest(postgresId, token, init = {}, policy = {}) {
   const attempts = Math.max(1, Number(policy.attempts ?? 1));
   const baseDelayMs = Math.max(1, Number(policy.baseDelayMs ?? 500));
   const maxDelayMs = Math.max(baseDelayMs, Number(policy.maxDelayMs ?? 5_000));
+  const attemptTimeoutMs = Math.max(1, Number(policy.attemptTimeoutMs ?? 10_000));
   const fetchImpl = policy.fetchImpl ?? fetch;
   const sleep = policy.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const now = policy.now ?? Date.now;
+  const deadlineAt = Number(policy.deadlineAt ?? Number.POSITIVE_INFINITY);
+  const timeoutSignal = policy.timeoutSignal ?? ((ms) => AbortSignal.timeout(ms));
+  const retryTransient = async (attempt, response) => {
+    if (attempt + 1 >= attempts)
+      throw controlError("Render control request failed", "RENDER_TRANSIENT", true);
+    const remaining = deadlineAt - now();
+    if (remaining <= 0) throw controlError("Render control deadline exceeded", "RENDER_DEADLINE", false);
+    const fallback = baseDelayMs * 2 ** attempt;
+    await sleep(Math.min(remaining, retryAfterMs(response, fallback, maxDelayMs)));
+  };
   for (let attempt = 0; attempt < attempts; attempt++) {
+    const remaining = deadlineAt - now();
+    if (remaining <= 0) throw controlError("Render control deadline exceeded", "RENDER_DEADLINE", false);
+    const perAttemptSignal = timeoutSignal(Math.min(attemptTimeoutMs, remaining));
+    const signal = init.signal ? AbortSignal.any([init.signal, perAttemptSignal]) : perAttemptSignal;
     let response;
     try {
       response = await fetchImpl(renderUrl(postgresId), {
         ...init,
+        signal,
         headers: {
           authorization: `Bearer ${token}`,
           accept: "application/json",
@@ -167,22 +185,23 @@ export async function renderRequest(postgresId, token, init = {}, policy = {}) {
         },
       });
     } catch {
-      if (attempt + 1 >= attempts)
-        throw controlError("Render control request failed", "RENDER_TRANSIENT", true);
-      await sleep(Math.min(maxDelayMs, baseDelayMs * 2 ** attempt));
+      await retryTransient(attempt);
       continue;
     }
 
     if (response.ok) {
-      try { return await response.json(); }
+      let body;
+      try { body = await response.text(); }
+      catch {
+        await retryTransient(attempt);
+        continue;
+      }
+      try { return JSON.parse(body); }
       catch { throw controlError("Render control response invalid", "RENDER_RESPONSE_INVALID", false); }
     }
     if (response.status !== 429 && response.status < 500)
       throw controlError("Render control request rejected", "RENDER_REJECTED", false);
-    if (attempt + 1 >= attempts)
-      throw controlError("Render control request failed", "RENDER_TRANSIENT", true);
-    const fallback = baseDelayMs * 2 ** attempt;
-    await sleep(retryAfterMs(response, fallback, maxDelayMs));
+    await retryTransient(attempt, response);
   }
   throw controlError("Render control request failed", "RENDER_TRANSIENT", true);
 }
@@ -297,11 +316,13 @@ async function discoverPublicIPv4() {
   return parsePublicIPv4(await response.text());
 }
 
-const defaultDeps = { readPostgres, replaceAllowList, waitForAllowList, verifyDatabaseTls, runEvidence, discoverPublicIPv4 };
-
 function emitReceipt(receipt) {
   process.stdout.write(`${JSON.stringify(receipt)}\n`);
 }
+
+const defaultDeps = {
+  readPostgres, replaceAllowList, waitForAllowList, verifyDatabaseTls, runEvidence, discoverPublicIPv4, emitReceipt,
+};
 
 export async function openWindow(env = process.env, deps = defaultDeps) {
   const receipt = blankRunReceipt();
@@ -315,9 +336,12 @@ export async function openWindow(env = process.env, deps = defaultDeps) {
     if (!cleanupRequired) return;
     cleanupPromise ??= (async () => {
       await mutationSettled;
-      await deps.replaceAllowList(STAGING_POSTGRES_ID, required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY), [], CLEANUP_REQUEST_POLICY);
+      const deadlineAt = Date.now() + CLEANUP_TOTAL_BUDGET_MS;
+      await deps.replaceAllowList(STAGING_POSTGRES_ID, required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY), [],
+        { ...CLEANUP_REQUEST_POLICY, deadlineAt });
       receipt.cleanup_patch_empty = true;
-      await deps.waitForAllowList(STAGING_POSTGRES_ID, required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY), [], CLEANUP_WAIT_OPTIONS);
+      await deps.waitForAllowList(STAGING_POSTGRES_ID, required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY), [],
+        { ...CLEANUP_WAIT_OPTIONS, deadlineAt, requestPolicy: { ...CLEANUP_WAIT_OPTIONS.requestPolicy, deadlineAt } });
       receipt.cleanup_readback_empty = true;
     })();
     return cleanupPromise;
@@ -377,9 +401,11 @@ export async function closeWindow(env = process.env, deps = defaultDeps) {
     const postgresId = validateTarget(required("STAGING_RENDER_POSTGRES_ID", env.STAGING_RENDER_POSTGRES_ID));
     receipt.target_verified = true;
     const token = required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY);
-    await deps.replaceAllowList(postgresId, token, [], CLEANUP_REQUEST_POLICY);
+    const deadlineAt = Date.now() + CLEANUP_TOTAL_BUDGET_MS;
+    await deps.replaceAllowList(postgresId, token, [], { ...CLEANUP_REQUEST_POLICY, deadlineAt });
     receipt.cleanup_patch_empty = true;
-    await deps.waitForAllowList(postgresId, token, [], CLEANUP_WAIT_OPTIONS);
+    await deps.waitForAllowList(postgresId, token, [],
+      { ...CLEANUP_WAIT_OPTIONS, deadlineAt, requestPolicy: { ...CLEANUP_WAIT_OPTIONS.requestPolicy, deadlineAt } });
     receipt.cleanup_readback_empty = true;
     (deps.emitReceipt ?? emitReceipt)(receipt);
     return receipt;

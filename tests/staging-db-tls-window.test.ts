@@ -59,6 +59,7 @@ function mockedDeps(calls: string[], overrides: Record<string, unknown> = {}) {
     },
     verifyDatabaseTls: async () => { calls.push("tls"); return dbPass; },
     runEvidence: async () => { calls.push("evidence"); },
+    emitReceipt: () => {},
     ...overrides,
   };
 }
@@ -101,7 +102,7 @@ test("Render cleanup transport retries network, 429 Retry-After, and 5xx before 
       if (call === 1) throw new Error("network");
       if (call === 2) return { ok: false, status: 429, headers: { get: () => "2" } };
       if (call === 3) return { ok: false, status: 503, headers: { get: () => null } };
-      return { ok: true, status: 200, headers: { get: () => null }, json: async () => metadata };
+      return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(metadata) };
     },
   });
   assert.equal(result.id, STAGING_POSTGRES_ID);
@@ -114,6 +115,51 @@ test("Render cleanup transport retries network, 429 Retry-After, and 5xx before 
     fetchImpl: async () => { rejectedCalls++; return { ok: false, status: 401, headers: { get: () => null } }; },
   }), /rejected/);
   assert.equal(rejectedCalls, 1);
+});
+
+test("Render cleanup times out stalled attempts and retries body transport, not malformed JSON", async () => {
+  let stalledCalls = 0;
+  await assert.rejects(renderRequest(STAGING_POSTGRES_ID, "fixture-token", {}, {
+    attempts: 2,
+    attemptTimeoutMs: 5,
+    sleep: async () => {},
+    timeoutSignal: (ms: number) => {
+      const controller = new AbortController();
+      setTimeout(() => controller.abort(), ms);
+      return controller.signal;
+    },
+    fetchImpl: async (_url: string, init: { signal: AbortSignal }) => {
+      stalledCalls++;
+      return new Promise((_resolve, reject) => init.signal.addEventListener("abort",
+        () => reject(new Error("timed out")), { once: true }));
+    },
+  }), /failed/);
+  assert.equal(stalledCalls, 2);
+
+  let bodyCalls = 0;
+  const recovered = await renderRequest(STAGING_POSTGRES_ID, "fixture-token", {}, {
+    attempts: 2,
+    sleep: async () => {},
+    fetchImpl: async () => {
+      bodyCalls++;
+      return bodyCalls === 1
+        ? { ok: true, status: 200, headers: { get: () => null }, text: async () => { throw new Error("body transport"); } }
+        : { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(metadata) };
+    },
+  });
+  assert.equal(recovered.id, STAGING_POSTGRES_ID);
+  assert.equal(bodyCalls, 2);
+
+  let malformedCalls = 0;
+  await assert.rejects(renderRequest(STAGING_POSTGRES_ID, "fixture-token", {}, {
+    attempts: 3,
+    sleep: async () => {},
+    fetchImpl: async () => {
+      malformedCalls++;
+      return { ok: true, status: 200, headers: { get: () => null }, text: async () => "{" };
+    },
+  }), /invalid/);
+  assert.equal(malformedCalls, 1);
 });
 
 test("Render control is hard-bound to staging and authoritative database identity", () => {
@@ -230,7 +276,7 @@ test("secondary cleanup 403 performs one GET, no backoff, and never claims empty
   const fetchImpl = async (_url: string, init: { method?: string } = {}) => {
     requests.push(init.method ?? "GET");
     if (init.method === "PATCH")
-      return { ok: true, status: 200, headers: { get: () => null }, json: async () => metadata };
+      return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(metadata) };
     return { ok: false, status: 403, headers: { get: () => null } };
   };
   const sleep = async (ms: number) => { waits.push(ms); };
@@ -254,6 +300,29 @@ test("secondary cleanup 403 performs one GET, no backoff, and never claims empty
   assert.equal(receipts.length, 1);
   assert.equal(receipts[0].cleanup_patch_empty, true);
   assert.equal(receipts[0].cleanup_readback_empty, false);
+});
+
+test("secondary cleanup shares one bounded deadline across PATCH and convergence GETs", async () => {
+  type CleanupPolicy = { deadlineAt?: number; attemptTimeoutMs?: number; requestPolicy?: CleanupPolicy };
+  let patchPolicy: CleanupPolicy = {};
+  let waitOptions: CleanupPolicy = {};
+  const startedAt = Date.now();
+  await closeWindow(env, {
+    ...mockedDeps([]),
+    replaceAllowList: async (_id: string, _token: string, _value: unknown[], policy: CleanupPolicy) => {
+      patchPolicy = policy;
+    },
+    waitForAllowList: async (_id: string, _token: string, _value: unknown[], options: CleanupPolicy = {}) => {
+      waitOptions = options;
+    },
+    emitReceipt: () => {},
+  });
+  assert.equal(patchPolicy.deadlineAt, waitOptions.deadlineAt);
+  assert.equal(waitOptions.requestPolicy?.deadlineAt, patchPolicy.deadlineAt);
+  assert.ok((patchPolicy.deadlineAt ?? 0) >= startedAt);
+  assert.ok((patchPolicy.deadlineAt ?? Number.POSITIVE_INFINITY) <= startedAt + 25_100);
+  assert.equal(patchPolicy.attemptTimeoutMs, 2_000);
+  assert.equal(waitOptions.requestPolicy?.attemptTimeoutMs, 2_000);
 });
 
 test("signal guard aborts child and cleans once before terminal exit", async () => {
