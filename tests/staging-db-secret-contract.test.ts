@@ -51,6 +51,9 @@ test("contract fails closed for scheme, host, database, user, sslmode, productio
     `${validUrl}&user=racun_staging`,
     `${validUrl}&port=6543`,
     `${validUrl}&dbname=wrong_database`,
+    `${validUrl}&password=override-secret`,
+    `${validUrl}&service=production`,
+    `${validUrl}&options=-csearch_path%3Dunsafe`,
     `${validUrl}&sslmode=verify-full`,
     validUrl.replace("sslmode=verify-full", "SSLMODE=verify-full"),
     validUrl.replace("sslmode=verify-full", "%73slmode=verify-full"),
@@ -69,11 +72,12 @@ test("pg-connection-string effective destination stays exact and override syntax
   assert.equal(effective.port, "5432");
   assert.equal(effective.database, STAGING_DATABASE_NAME);
   assert.equal(effective.user, STAGING_DATABASE_EXPECTED_USER);
-  const poisoned = `${validUrl}&host=evil.example&user=racun_staging&port=6543`;
+  const poisoned = `${validUrl}&host=evil.example&user=racun_staging&port=6543&password=override-secret`;
   const overridden = parsePgConnectionString(poisoned);
   assert.equal(overridden.host, "evil.example");
   assert.equal(overridden.user, "racun_staging");
   assert.equal(overridden.port, "6543");
+  assert.equal(overridden.password, "override-secret");
   assert.throws(() => validateStagingDatabaseSecretContract(poisoned, STAGING_DATABASE_EXPECTED_USER), /contract invalid/);
 });
 

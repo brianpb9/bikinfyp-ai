@@ -103,6 +103,8 @@ test("preflight-only rejects PostgreSQL query overrides or wrong port before any
   for (const databaseUrl of [
     `${env.MANAGED_DATABASE_URL}&host=evil.example&user=racun_staging`,
     `${env.MANAGED_DATABASE_URL}&port=6543`,
+    `${env.MANAGED_DATABASE_URL}&password=override-secret`,
+    `${env.MANAGED_DATABASE_URL}&service=production`,
     env.MANAGED_DATABASE_URL.replace(":5432/", ":6543/"),
     `${env.MANAGED_DATABASE_URL}&sslmode=verify-full`,
     env.MANAGED_DATABASE_URL.replace("sslmode=verify-full", "SSLMODE=verify-full"),
