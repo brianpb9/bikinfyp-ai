@@ -171,7 +171,7 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
       draft_receipt_key: draftKey, draft_receipt_sha256: draftSha },
     artifact_manifest: { manifest_key: manifestKey, receipt_key: draftKey },
     review_status: "PENDING_INDEPENDENT_REVIEW", points_claimed: 0,
-    evidence_runner: { launch, source: { commit: runnerSha } }, screenshots,
+    evidence_runner: { launch, image_digest: image, source: { commit: runnerSha, tree: launch.source_tree } }, screenshots,
   };
   fs.writeFileSync(path.join(run, "launch-attestation.json"), JSON.stringify(launch));
   fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify(receipt));
@@ -186,6 +186,40 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
     assert.equal(verified.app_sha, sha);
     assert.equal(verified.runner_sha, runnerSha);
     assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, "0".repeat(40)], { stdio: "pipe", env: managedEnv }));
+    const verifyFails = () => assert.throws(() => execFileSync(process.execPath,
+      [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
+    const mutateReceipt = (mutate: (candidate: any) => void) => {
+      const candidate = structuredClone(receipt) as any;
+      mutate(candidate);
+      fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify(candidate));
+      verifyFails();
+      fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify(receipt));
+    };
+    const mutateLaunch = (mutate: (candidate: any) => void) => {
+      const candidate = structuredClone(launch) as any;
+      mutate(candidate);
+      fs.writeFileSync(path.join(run, "launch-attestation.json"), JSON.stringify(candidate));
+      verifyFails();
+      fs.writeFileSync(path.join(run, "launch-attestation.json"), JSON.stringify(launch));
+    };
+    const wrongAppSha = "1".repeat(40), wrongRunnerSha = "2".repeat(40);
+    const wrongImage = `sha256:${"3".repeat(64)}`, wrongTree = "4".repeat(40);
+    mutateReceipt((candidate) => { candidate.exact_sha = wrongAppSha; });
+    mutateReceipt((candidate) => { candidate.runtime.build_sha = wrongAppSha; });
+    fs.writeFileSync(path.join(run, "manifest.json"), JSON.stringify({ ...manifest, exact_sha: wrongAppSha }));
+    verifyFails();
+    fs.writeFileSync(path.join(run, "manifest.json"), manifestBytes);
+    mutateReceipt((candidate) => { candidate.evidence_runner.source.commit = wrongRunnerSha; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.launch.source_sha = wrongRunnerSha; });
+    mutateLaunch((candidate) => { candidate.source_sha = wrongRunnerSha; });
+    mutateReceipt((candidate) => { delete candidate.evidence_runner.image_digest; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.image_digest = wrongImage; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.launch.image_id = wrongImage; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.launch.config_image = wrongImage; });
+    mutateLaunch((candidate) => { candidate.config_image = wrongImage; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.source.tree = wrongTree; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.launch.source_tree = wrongTree; });
+    mutateLaunch((candidate) => { candidate.source_tree = wrongTree; });
     fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify({ ...receipt, database_url: "postgresql://forbidden" }));
     assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
     fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify({ ...receipt, harmless_note: managedEnv.AUTH_SECRET }));
