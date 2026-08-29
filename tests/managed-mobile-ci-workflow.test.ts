@@ -56,7 +56,7 @@ test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-ref
 
 test("managed R2 preflight runs before the full runner on the exact reviewed image", () => {
   const preflightAt = workflow.indexOf("      - name: Preflight staging R2 write-read-delete round trip");
-  const runnerAt = workflow.indexOf("      - name: Run and sanitize provider-free staging evidence with managed secret injection");
+  const runnerAt = workflow.indexOf("      - name: Run provider-free evidence inside temporary staging database TLS window");
   assert.ok(preflightAt > 0 && runnerAt > preflightAt);
   const step = workflow.slice(preflightAt, runnerAt);
   assert.match(step, /RACUN_DEPLOY_ENV: staging/);

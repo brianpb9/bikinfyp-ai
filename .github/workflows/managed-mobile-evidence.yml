@@ -155,16 +155,12 @@ jobs:
             "$EVIDENCE_IMAGE_DIGEST" \
             /srv/evidence/scripts/preflight-staging-r2.mjs
 
-      - name: Open temporary exact-runner staging database TLS window
+      - name: Run provider-free evidence inside temporary staging database TLS window
         id: staging_db_tls_window
         env:
           STAGING_RENDER_POSTGRES_ID: dpg-d9n21fnlk1mc73djm8q0-a
           STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
           MANAGED_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-        run: node control/scripts/managed-staging-db-tls-window.mjs open
-
-      - name: Run and sanitize provider-free staging evidence with managed secret injection
-        env:
           EXPECTED_APP_SHA: ${{ env.REVIEWED_SHA }}
           EVIDENCE_INHERIT_STAGING_ENV: "1"
           EVIDENCE_RECEIPT_EXPORT_DIR: ${{ runner.temp }}/managed-mobile-receipts
@@ -178,10 +174,7 @@ jobs:
           R2_BUCKET: ${{ secrets.STAGING_R2_BUCKET }}
           R2_ACCESS_KEY_ID: ${{ secrets.STAGING_R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.STAGING_R2_SECRET_ACCESS_KEY }}
-        run: |
-          set -euo pipefail
-          bash control/scripts/run-mobile-evidence-image.sh
-          node control/scripts/verify-mobile-evidence-receipt.mjs "$RUNNER_TEMP/managed-mobile-receipts" "$REVIEWED_SHA"
+        run: node control/scripts/managed-staging-db-tls-window.mjs run
 
       - name: Always close temporary staging database TLS window
         id: staging_db_tls_cleanup
