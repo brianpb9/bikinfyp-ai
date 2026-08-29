@@ -17,6 +17,7 @@ import {
   verifyDatabaseTls,
   waitForAllowList,
 } from "./managed-staging-db-tls-window.mjs";
+import { validateStagingDatabaseSecretContract } from "./validate-staging-database-secret-contract.mjs";
 
 const CLEANUP_TOTAL_BUDGET_MS = 25_000;
 const CLEANUP_REQUEST_POLICY = { attempts: 3, baseDelayMs: 250, maxDelayMs: 1_000, attemptTimeoutMs: 2_000 };
@@ -113,6 +114,7 @@ export async function runTlsPreflight(env = process.env, deps = defaultDeps) {
   };
 
   try {
+    validateStagingDatabaseSecretContract(env.MANAGED_DATABASE_URL, env.STAGING_DATABASE_EXPECTED_USER);
     const expectedUser = validateExpectedUser(env.STAGING_DATABASE_EXPECTED_USER);
     receipt.expected_user_configured = true;
     const postgresId = validateTarget(required("STAGING_RENDER_POSTGRES_ID", env.STAGING_RENDER_POSTGRES_ID));

@@ -166,6 +166,12 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      - name: Validate staging database secret contract before evidence work
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_DATABASE_EXPECTED_USER: ${{ vars.STAGING_DATABASE_EXPECTED_USER }}
+        run: node control/scripts/validate-staging-database-secret-contract.mjs
+
       - name: Validate hard-bound reviewed SHA and immutable control checkout
         working-directory: control
         env:

@@ -47,7 +47,8 @@ test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-ref
   assert.doesNotMatch(workflow, /MIDTRANS|DUITKU|BYTEPLUS|RESEND/);
   assert.doesNotMatch(workflow, /EVIDENCE_ENV_FILE/);
   const fullJob = workflow.slice(workflow.indexOf("  exact-sha-mobile-evidence:"));
-  assert.doesNotMatch(fullJob, /STAGING_(?:DATABASE_URL|AUTH_SECRET|R2_[A-Z_]+):/);
+  assert.match(fullJob, /STAGING_DATABASE_URL: \$\{\{ secrets\.STAGING_DATABASE_URL \}\}[\s\S]*validate-staging-database-secret-contract\.mjs/);
+  assert.doesNotMatch(fullJob, /STAGING_(?:AUTH_SECRET|R2_[A-Z_]+):/);
   assert.match(launcher, /docker_env_args\+=\(--env "\$slot"\)/);
   assert.doesNotMatch(launcher, /docker_env_args\+=\(--env "\$slot=/);
   const prJob = workflow.slice(workflow.indexOf("  pr-static-validation:"), workflow.indexOf("  staging-database-secret-contract:"));

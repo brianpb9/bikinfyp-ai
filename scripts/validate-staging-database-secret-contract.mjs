@@ -11,10 +11,13 @@ const blankReceipt = () => ({
   expected_user_configured: false,
   scheme_verified: false,
   external_host_verified: false,
+  port_verified: false,
   database_verified: false,
   user_verified: false,
   credential_present: false,
   sslmode_verify_full: false,
+  query_exact: false,
+  fragment_absent: false,
   production_host_absent: false,
   secret_not_printed: true,
   network_attempted: false,
@@ -48,11 +51,14 @@ export function validateStagingDatabaseSecretContract(rawUrl, configuredUser) {
 
   receipt.scheme_verified = url.protocol === "postgres:" || url.protocol === "postgresql:";
   receipt.external_host_verified = url.hostname === STAGING_DATABASE_HOST;
+  receipt.port_verified = url.port === "5432";
   receipt.database_verified = decodeURIComponent(url.pathname.slice(1)) === STAGING_DATABASE_NAME;
   receipt.user_verified = decodeURIComponent(url.username) === STAGING_DATABASE_EXPECTED_USER;
   receipt.credential_present = url.password.length > 0;
   receipt.sslmode_verify_full = url.searchParams.getAll("sslmode").length === 1 &&
     url.searchParams.get("sslmode") === "verify-full";
+  receipt.query_exact = url.search === "?sslmode=verify-full";
+  receipt.fragment_absent = url.hash === "";
   receipt.production_host_absent = url.hostname !== PRODUCTION_DATABASE_HOST;
 
   const falseOnly = new Set([

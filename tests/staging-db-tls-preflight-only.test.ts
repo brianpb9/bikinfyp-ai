@@ -23,7 +23,7 @@ const env = {
   STAGING_RENDER_POSTGRES_ID: STAGING_POSTGRES_ID,
   STAGING_RENDER_API_KEY: "fixture-render-token",
   STAGING_DATABASE_EXPECTED_USER: STAGING_DATABASE_PRINCIPAL,
-  MANAGED_DATABASE_URL: `postgresql://${STAGING_DATABASE_PRINCIPAL}:fixture-password@${externalHost}/${metadata.databaseName}`,
+  MANAGED_DATABASE_URL: `postgresql://${STAGING_DATABASE_PRINCIPAL}:fixture-password@${externalHost}:5432/${metadata.databaseName}?sslmode=verify-full`,
 };
 const dbPass = {
   transaction_read_only_verified: true,
@@ -94,6 +94,21 @@ test("preflight-only rejects missing or noncanonical expected user before any de
   for (const configured of [undefined, "racun_staging", "racun_ai_production_postgres_user"]) {
     const calls: string[] = [];
     await assert.rejects(runTlsPreflight({ ...env, STAGING_DATABASE_EXPECTED_USER: configured }, deps(calls)),
+      /TLS preflight failed/);
+    assert.deepEqual(calls, []);
+  }
+});
+
+test("preflight-only rejects PostgreSQL query overrides or wrong port before any dependency call", async () => {
+  for (const databaseUrl of [
+    `${env.MANAGED_DATABASE_URL}&host=evil.example&user=racun_staging`,
+    `${env.MANAGED_DATABASE_URL}&port=6543`,
+    env.MANAGED_DATABASE_URL.replace(":5432/", ":6543/"),
+    `${env.MANAGED_DATABASE_URL}&sslmode=verify-full`,
+    env.MANAGED_DATABASE_URL.replace("sslmode=verify-full", "SSLMODE=verify-full"),
+  ]) {
+    const calls: string[] = [];
+    await assert.rejects(runTlsPreflight({ ...env, MANAGED_DATABASE_URL: databaseUrl }, deps(calls)),
       /TLS preflight failed/);
     assert.deepEqual(calls, []);
   }
