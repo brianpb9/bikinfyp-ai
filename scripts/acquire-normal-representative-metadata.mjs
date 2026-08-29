@@ -42,6 +42,12 @@ function required(name, value) {
   return value;
 }
 
+function exactSha(name, value) {
+  const sha = required(name, value);
+  if (!/^[0-9a-f]{40}$/.test(sha)) throw new Error(`invalid ${name}`);
+  return sha;
+}
+
 function mask(value) { process.stdout.write(`::add-mask::${value}\n`); }
 
 export function parseManifest(raw, jobId) {
@@ -246,12 +252,17 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
     decision: "FAIL_CLOSED",
     failure_code: null,
     candidate_count: null,
+    binding: {
+      app_sha: exactSha("EXPECTED_APP_SHA", env.EXPECTED_APP_SHA),
+      control_sha: exactSha("CONTROL_SHA", env.CONTROL_SHA)
+    },
     controls: {
       target_staging_only: false, initial_allow_list_empty: false, runner_ipv4_32_only: false,
       allow_list_readback_exact: false, external_hostname_verified: false, sslmode_verify_full: false,
       dedicated_principal_verified: false, transaction_read_only_verified: false,
       r2_get_only: false, reference_digest_match: false, zero_mutable_inputs_verified: false,
       prior_evidence_registry_checked: false,
+      window_owner_marker_created: false,
       cleanup_patch_empty: false, cleanup_readback_empty: false,
       secret_values_exposed: false, production_access_attempted: false
     },
@@ -293,6 +304,12 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
     const ip = parsePublicIPv4(await deps.discoverPublicIPv4());
     mask(ip);
     const exactList = exactRunnerAllowList(ip);
+    const markerPath = required("WINDOW_OWNER_MARKER_PATH", env.WINDOW_OWNER_MARKER_PATH);
+    fs.mkdirSync(path.dirname(markerPath), { recursive: true });
+    fs.writeFileSync(markerPath, `${JSON.stringify({
+      schema: "normal-metadata-window-owner/v1", postgres_id: postgresId, cidr_block: exactList[0].cidrBlock
+    })}\n`, { mode: 0o600 });
+    receipt.controls.window_owner_marker_created = true;
     cleanupRequired = true;
     signalGuard = createSignalGuard(cleanupOnce, abortController);
     signalGuard.install();

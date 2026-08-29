@@ -14,6 +14,7 @@ on:
       - scripts/validate-staging-database-secret-contract.mjs
       - scripts/verify-mobile-evidence-receipt.mjs
       - scripts/acquire-normal-representative-metadata.mjs
+      - scripts/close-owned-normal-metadata-window.mjs
       - scripts/verify-normal-representative-metadata-receipt.mjs
       - tests/managed-mobile-ci-workflow.test.ts
       - tests/managed-runner-sha-binding.test.ts
@@ -85,7 +86,7 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs scripts/managed-staging-db-tls-window.mjs scripts/run-staging-database-tls-preflight.mjs scripts/validate-staging-database-secret-contract.mjs scripts/verify-staging-app-health.mjs scripts/acquire-normal-representative-metadata.mjs scripts/verify-normal-representative-metadata-receipt.mjs
+      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs scripts/managed-staging-db-tls-window.mjs scripts/run-staging-database-tls-preflight.mjs scripts/validate-staging-database-secret-contract.mjs scripts/verify-staging-app-health.mjs scripts/acquire-normal-representative-metadata.mjs scripts/close-owned-normal-metadata-window.mjs scripts/verify-normal-representative-metadata-receipt.mjs
       - run: npx tsc --noEmit
       - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/managed-runner-sha-binding.test.ts tests/staging-app-health-preflight.test.ts tests/staging-r2-preflight.test.ts tests/staging-db-tls-window.test.ts tests/staging-db-secret-contract.test.ts tests/staging-db-tls-preflight-only.test.ts tests/normal-representative-metadata-acquisition.test.mjs
 
@@ -218,6 +219,9 @@ jobs:
           R2_BUCKET: ${{ secrets.STAGING_R2_BUCKET }}
           R2_ACCESS_KEY_ID: ${{ secrets.STAGING_R2_ACCESS_KEY_ID }}
           R2_SECRET_ACCESS_KEY: ${{ secrets.STAGING_R2_SECRET_ACCESS_KEY }}
+          EXPECTED_APP_SHA: ${{ env.EXPECTED_APP_SHA }}
+          CONTROL_SHA: ${{ github.sha }}
+          WINDOW_OWNER_MARKER_PATH: ${{ runner.temp }}/normal-metadata-window-owner.json
           METADATA_RECEIPT_PATH: ${{ runner.temp }}/normal-representative-metadata/metadata-receipt.json
         run: node scripts/acquire-normal-representative-metadata.mjs
 
@@ -229,16 +233,17 @@ jobs:
           STAGING_RENDER_POSTGRES_ID: dpg-d9n21fnlk1mc73djm8q0-a
           STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
           RECEIPT_DIR: ${{ runner.temp }}/normal-representative-metadata
+          WINDOW_OWNER_MARKER_PATH: ${{ runner.temp }}/normal-metadata-window-owner.json
         run: |
           set -euo pipefail
           umask 077
           mkdir -p "$RECEIPT_DIR"
-          node scripts/managed-staging-db-tls-window.mjs close > "$RECEIPT_DIR/secondary-cleanup.json"
+          node scripts/close-owned-normal-metadata-window.mjs > "$RECEIPT_DIR/secondary-cleanup.json"
 
       - name: Verify immutable secret-free receipt bundle
         if: steps.metadata_acquisition.outcome == 'success' && steps.metadata_cleanup.outcome == 'success'
         working-directory: control
-        run: node scripts/verify-normal-representative-metadata-receipt.mjs "${{ runner.temp }}/normal-representative-metadata"
+        run: node scripts/verify-normal-representative-metadata-receipt.mjs "${{ runner.temp }}/normal-representative-metadata" "$EXPECTED_APP_SHA" "${{ github.sha }}"
 
       - name: Upload append-only metadata receipts
         if: always() && steps.metadata_acquisition.outcome != 'skipped'

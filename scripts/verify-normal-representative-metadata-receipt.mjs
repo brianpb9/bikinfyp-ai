@@ -7,6 +7,10 @@ import path from "node:path";
 
 const dir = path.resolve(process.argv[2] ?? "");
 if (!dir) throw new Error("receipt directory required");
+const expectedAppSha = process.argv[3] ?? "";
+const expectedControlSha = process.argv[4] ?? "";
+assert.match(expectedAppSha, /^[0-9a-f]{40}$/);
+assert.match(expectedControlSha, /^[0-9a-f]{40}$/);
 const receiptPath = path.join(dir, "metadata-receipt.json");
 const cleanupPath = path.join(dir, "secondary-cleanup.json");
 for (const file of [receiptPath, cleanupPath]) {
@@ -23,11 +27,13 @@ assert.equal(receipt.task, "NORMAL-REPRESENTATIVE-METADATA-ACQUISITION-20260829"
 assert.equal(receipt.decision, "PASS");
 assert.equal(receipt.failure_code, null);
 assert.equal(receipt.candidate_count, 1);
+assert.deepEqual(receipt.binding, { app_sha: expectedAppSha, control_sha: expectedControlSha });
 for (const key of [
   "target_staging_only", "initial_allow_list_empty", "runner_ipv4_32_only", "allow_list_readback_exact",
   "external_hostname_verified", "sslmode_verify_full", "dedicated_principal_verified",
   "transaction_read_only_verified", "r2_get_only", "reference_digest_match", "zero_mutable_inputs_verified",
   "prior_evidence_registry_checked",
+  "window_owner_marker_created",
   "cleanup_patch_empty", "cleanup_readback_empty"
 ]) assert.equal(receipt.controls[key], true, key);
 assert.equal(receipt.controls.secret_values_exposed, false);
@@ -74,8 +80,10 @@ assert.deepEqual(receipt.lane_effects, {
   publication: false, production_mutations: 0
 });
 assert.equal(cleanup.target_verified, true);
-assert.equal(cleanup.cleanup_patch_empty, true);
+assert.equal(cleanup.ownership_verified, true);
+assert.equal(cleanup.cleanup_patch_empty || cleanup.cleanup_skipped_already_empty, true);
 assert.equal(cleanup.cleanup_readback_empty, true);
+assert.equal(cleanup.foreign_allow_list_preserved, false);
 assert.equal(cleanup.secret_values_exposed, false);
 assert.equal(cleanup.ip_value_exposed, false);
 assert.equal(cleanup.production_access_attempted, false);

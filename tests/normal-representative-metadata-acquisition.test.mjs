@@ -5,8 +5,12 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { exactRunnerAllowList } from "../scripts/managed-staging-db-tls-window.mjs";
 import { parseManifest, parseProductSnapshot, runMetadataAcquisition } from "../scripts/acquire-normal-representative-metadata.mjs";
+import { closeOwnedWindow } from "../scripts/close-owned-normal-metadata-window.mjs";
 
+const APP_SHA = "a".repeat(40);
+const CONTROL_SHA = "b".repeat(40);
 const DATABASE_URL = "postgresql://racun_staging_ci:credential@dpg-d9n21fnlk1mc73djm8q0-a.singapore-postgres.render.com:5432/racun_staging?sslmode=verify-full";
 const metadata = {
   id: "dpg-d9n21fnlk1mc73djm8q0-a", name: "racun-ai-staging-postgres",
@@ -40,6 +44,8 @@ function env(file) {
     RACUN_DEPLOY_ENV: "staging", STORAGE_MODE: "r2", R2_REGION: "auto",
     R2_ENDPOINT: "https://staging.example.invalid", R2_BUCKET: "staging-bucket",
     R2_ACCESS_KEY_ID: "test-access", R2_SECRET_ACCESS_KEY: "test-secret",
+    EXPECTED_APP_SHA: APP_SHA, CONTROL_SHA,
+    WINDOW_OWNER_MARKER_PATH: path.join(path.dirname(file), "window-owner.json"),
     METADATA_RECEIPT_PATH: file
   };
 }
@@ -132,14 +138,52 @@ test("receipt verifier binds immutable storage key to selected job and reversibl
   try {
     await runMetadataAcquisition(env(file), successfulDeps([]));
     fs.writeFileSync(path.join(dir, "secondary-cleanup.json"), JSON.stringify({
-      target_verified: true, cleanup_patch_empty: true, cleanup_readback_empty: true,
+      target_verified: true, ownership_verified: true, cleanup_patch_empty: false,
+      cleanup_skipped_already_empty: true, cleanup_readback_empty: true, foreign_allow_list_preserved: false,
       secret_values_exposed: false, ip_value_exposed: false, production_access_attempted: false
     }));
-    assert.equal(spawnSync(process.execPath, [verifier, dir]).status, 0);
+    assert.equal(spawnSync(process.execPath, [verifier, dir, APP_SHA, CONTROL_SHA]).status, 0);
     const receipt = JSON.parse(fs.readFileSync(file, "utf8"));
     receipt.manifest.reference_storage_object_id = receipt.manifest.reference_storage_object_id.replace(receipt.selection.job_id, "55555555-5555-4555-8555-555555555555");
     fs.writeFileSync(file, JSON.stringify(receipt));
-    assert.notEqual(spawnSync(process.execPath, [verifier, dir]).status, 0);
+    assert.notEqual(spawnSync(process.execPath, [verifier, dir, APP_SHA, CONTROL_SHA]).status, 0);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("fallback cleanup clears only this run's exact marker and preserves foreign lists", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "normal-metadata-owner-"));
+  const markerPath = path.join(dir, "owner.json");
+  const owned = exactRunnerAllowList("8.8.8.8");
+  fs.writeFileSync(markerPath, JSON.stringify({
+    schema: "normal-metadata-window-owner/v1", postgres_id: metadata.id, cidr_block: owned[0].cidrBlock
+  }));
+  const cleanupEnv = {
+    STAGING_RENDER_POSTGRES_ID: metadata.id, STAGING_RENDER_API_KEY: "render-test-token",
+    WINDOW_OWNER_MARKER_PATH: markerPath
+  };
+  try {
+    const calls = [];
+    const closed = await closeOwnedWindow(cleanupEnv, {
+      async readPostgres() { return { ...metadata, ipAllowList: owned }; },
+      async replaceAllowList(_id, _token, list) { calls.push(["replace", list]); },
+      async waitForAllowList(_id, _token, list) { calls.push(["wait", list]); }
+    });
+    assert.equal(closed.cleanup_readback_empty, true);
+    assert.deepEqual(calls, [["replace", []], ["wait", []]]);
+
+    let mutated = false;
+    await assert.rejects(closeOwnedWindow(cleanupEnv, {
+      async readPostgres() { return { ...metadata, ipAllowList: exactRunnerAllowList("1.1.1.1") }; },
+      async replaceAllowList() { mutated = true; }, async waitForAllowList() {}
+    }), /FOREIGN_ALLOW_LIST_PRESERVED/);
+    assert.equal(mutated, false);
+
+    fs.unlinkSync(markerPath);
+    await assert.rejects(closeOwnedWindow(cleanupEnv, {
+      async readPostgres() { throw new Error("must not inspect without ownership marker"); },
+      async replaceAllowList() { mutated = true; }, async waitForAllowList() {}
+    }));
+    assert.equal(mutated, false);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 
@@ -157,5 +201,6 @@ test("control source has no R2 write/delete command and workflow exposes isolate
   const workflow = fs.readFileSync(new URL("../.github/workflows/managed-mobile-evidence.yml", import.meta.url), "utf8");
   assert.match(workflow, /inputs\.mode == 'representative-metadata-readonly'/);
   assert.match(workflow, /if: always\(\).*metadata_acquisition\.outcome != 'skipped'/);
-  assert.match(workflow, /managed-staging-db-tls-window\.mjs close/);
+  assert.match(workflow, /close-owned-normal-metadata-window\.mjs/);
+  assert.match(workflow, /verify-normal-representative-metadata-receipt\.mjs[^\n]+\$EXPECTED_APP_SHA[^\n]+github\.sha/);
 });
