@@ -51,10 +51,11 @@ function env(file) {
 }
 
 function successfulDeps(calls) {
+  let currentList = [];
   return {
-    async readPostgres() { calls.push("read-metadata"); return metadata; },
+    async readPostgres() { calls.push("read-metadata"); return { ...metadata, ipAllowList: currentList }; },
     async discoverPublicIPv4() { calls.push("discover-ip"); return "8.8.8.8"; },
-    async replaceAllowList(_id, _token, list) { calls.push(list.length ? "open-/32" : "close-empty"); },
+    async replaceAllowList(_id, _token, list) { calls.push(list.length ? "open-/32" : "close-empty"); currentList = list; },
     async waitForAllowList(_id, _token, list) { calls.push(list.length ? "readback-/32" : "readback-empty"); },
     async acquireFromDatabaseAndR2() {
       calls.push("read-db-and-r2");
@@ -78,8 +79,46 @@ test("one bounded read-only acquisition freezes only canonical identifiers and a
     assert.equal(receipt.decision, "PASS");
     assert.deepEqual(receipt.manifest, manifest);
     assert.deepEqual(receipt.selection, selection);
-    assert.deepEqual(calls, ["read-metadata", "discover-ip", "open-/32", "readback-/32", "read-db-and-r2", "close-empty", "readback-empty"]);
+    assert.deepEqual(calls, ["read-metadata", "discover-ip", "open-/32", "readback-/32", "read-db-and-r2", "read-metadata", "close-empty", "readback-empty"]);
     assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).controls.cleanup_readback_empty, true);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("primary cleanup preserves a foreign list and rewrites PASS as FAIL_CLOSED", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "normal-metadata-primary-owner-"));
+  const file = path.join(dir, "metadata-receipt.json");
+  const calls = [];
+  const deps = successfulDeps(calls);
+  let reads = 0;
+  deps.readPostgres = async () => {
+    reads += 1;
+    return { ...metadata, ipAllowList: reads === 1 ? [] : exactRunnerAllowList("1.1.1.1") };
+  };
+  try {
+    await assert.rejects(runMetadataAcquisition(env(file), deps), /ACQUISITION_FAILED/);
+    const receipt = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(receipt.decision, "FAIL_CLOSED");
+    assert.equal(receipt.failure_code, "CLEANUP_FAILED");
+    assert.equal(receipt.controls.foreign_allow_list_preserved, true);
+    assert.equal(calls.includes("close-empty"), false);
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});
+
+test("primary cleanup transport failure never leaves a PASS receipt", async () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), "normal-metadata-primary-fail-"));
+  const file = path.join(dir, "metadata-receipt.json");
+  const deps = successfulDeps([]);
+  const originalReplace = deps.replaceAllowList;
+  deps.replaceAllowList = async (...args) => {
+    if (args[2].length === 0) throw new Error("cleanup transport failed");
+    return originalReplace(...args);
+  };
+  try {
+    await assert.rejects(runMetadataAcquisition(env(file), deps), /ACQUISITION_FAILED/);
+    const receipt = JSON.parse(fs.readFileSync(file, "utf8"));
+    assert.equal(receipt.decision, "FAIL_CLOSED");
+    assert.equal(receipt.failure_code, "CLEANUP_FAILED");
+    assert.equal(receipt.controls.cleanup_readback_empty, false);
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });
 

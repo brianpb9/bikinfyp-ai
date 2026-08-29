@@ -32,10 +32,10 @@ for (const key of [
   "target_staging_only", "initial_allow_list_empty", "runner_ipv4_32_only", "allow_list_readback_exact",
   "external_hostname_verified", "sslmode_verify_full", "dedicated_principal_verified",
   "transaction_read_only_verified", "r2_get_only", "reference_digest_match", "zero_mutable_inputs_verified",
-  "prior_evidence_registry_checked",
-  "window_owner_marker_created",
-  "cleanup_patch_empty", "cleanup_readback_empty"
+  "prior_evidence_registry_checked", "window_owner_marker_created", "cleanup_readback_empty"
 ]) assert.equal(receipt.controls[key], true, key);
+assert.equal(receipt.controls.cleanup_patch_empty || receipt.controls.cleanup_skipped_already_empty, true);
+assert.equal(receipt.controls.foreign_allow_list_preserved, false);
 assert.equal(receipt.controls.secret_values_exposed, false);
 assert.equal(receipt.controls.production_access_attempted, false);
 

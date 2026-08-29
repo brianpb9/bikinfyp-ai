@@ -263,7 +263,8 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
       r2_get_only: false, reference_digest_match: false, zero_mutable_inputs_verified: false,
       prior_evidence_registry_checked: false,
       window_owner_marker_created: false,
-      cleanup_patch_empty: false, cleanup_readback_empty: false,
+      cleanup_patch_empty: false, cleanup_skipped_already_empty: false,
+      cleanup_readback_empty: false, foreign_allow_list_preserved: false,
       secret_values_exposed: false, production_access_attempted: false
     },
     selection: null,
@@ -272,6 +273,7 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
   };
   const abortController = new AbortController();
   let cleanupRequired = false;
+  let ownedAllowList;
   let cleanupPromise;
   let mutationSettled = Promise.resolve();
   let signalGuard;
@@ -282,6 +284,16 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
       await mutationSettled;
       const deadlineAt = Date.now() + CLEANUP_TOTAL_BUDGET_MS;
       const token = required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY);
+      const current = postgresShape(await deps.readPostgres(STAGING_POSTGRES_ID, token));
+      if (allowListIsExact(current.ipAllowList, [])) {
+        receipt.controls.cleanup_skipped_already_empty = true;
+        receipt.controls.cleanup_readback_empty = true;
+        return;
+      }
+      if (!ownedAllowList || !allowListIsExact(current.ipAllowList, ownedAllowList)) {
+        receipt.controls.foreign_allow_list_preserved = true;
+        throw new Error("FOREIGN_ALLOW_LIST_PRESERVED");
+      }
       await deps.replaceAllowList(STAGING_POSTGRES_ID, token, [], { ...CLEANUP_REQUEST_POLICY, deadlineAt });
       receipt.controls.cleanup_patch_empty = true;
       await deps.waitForAllowList(STAGING_POSTGRES_ID, token, [], {
@@ -304,6 +316,7 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
     const ip = parsePublicIPv4(await deps.discoverPublicIPv4());
     mask(ip);
     const exactList = exactRunnerAllowList(ip);
+    ownedAllowList = exactList;
     const markerPath = required("WINDOW_OWNER_MARKER_PATH", env.WINDOW_OWNER_MARKER_PATH);
     fs.mkdirSync(path.dirname(markerPath), { recursive: true });
     fs.writeFileSync(markerPath, `${JSON.stringify({
@@ -339,7 +352,11 @@ export async function runMetadataAcquisition(env = process.env, deps = defaultDe
     if (Number.isInteger(error?.candidateCount)) receipt.candidate_count = error.candidateCount;
   } finally {
     try { await cleanupOnce(); }
-    catch (error) { operationError = operationError ?? error; receipt.failure_code = "CLEANUP_FAILED"; }
+    catch (error) {
+      operationError = operationError ?? error;
+      receipt.decision = "FAIL_CLOSED";
+      receipt.failure_code = "CLEANUP_FAILED";
+    }
     signalGuard?.disarm();
     receipt.finished_at = new Date().toISOString();
     const output = required("METADATA_RECEIPT_PATH", env.METADATA_RECEIPT_PATH);
