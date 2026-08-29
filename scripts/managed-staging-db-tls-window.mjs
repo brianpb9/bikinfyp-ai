@@ -27,12 +27,18 @@ const blankRunReceipt = () => ({
   public_ipv4_verified: false,
   single_32_applied: false,
   allow_list_readback_verified: false,
+  expected_user_configured: false,
   external_hostname_verified: false,
+  database_url_user_verified: false,
   sslmode_verify_full: false,
   transaction_read_only_verified: false,
   select_one_verified: false,
   current_database_verified: false,
   current_user_verified: false,
+  role_not_superuser_verified: false,
+  role_no_create_role_verified: false,
+  role_no_create_database_verified: false,
+  role_no_replication_verified: false,
   pg_stat_ssl_verified: false,
   certificate_hostname_verified: false,
   evidence_executed_once: false,
@@ -105,13 +111,14 @@ export function postgresShape(raw) {
   return value;
 }
 
-export function externalTlsDatabaseUrl(raw, metadata) {
+export function externalTlsDatabaseUrl(raw, metadata, expectedUser) {
   const url = new URL(required("MANAGED_DATABASE_URL", raw));
+  const principal = required("STAGING_DATABASE_EXPECTED_USER", expectedUser);
   const expectedHost = `${metadata.id}.${metadata.region}-postgres.render.com`;
   if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") throw new Error("postgres URL required");
   if (url.hostname !== expectedHost) throw new Error("external staging hostname required");
   if (decodeURIComponent(url.pathname.slice(1)) !== metadata.databaseName) throw new Error("database identity mismatch");
-  if (decodeURIComponent(url.username) !== metadata.databaseUser) throw new Error("database user mismatch");
+  if (decodeURIComponent(url.username) !== principal) throw new Error("database principal mismatch");
   if (!url.password) throw new Error("database credential missing");
   for (const key of ["ssl", "sslmode", "uselibpqcompat", "sslnegotiation", "sslcert", "sslkey", "sslrootcert"])
     url.searchParams.delete(key);
@@ -243,8 +250,9 @@ export async function waitForAllowList(postgresId, token, expected, options = {}
   throw new Error("allow-list convergence failed");
 }
 
-export async function verifyDatabaseTls(url, metadata, poolFactory = (config) => new Pool(config),
+export async function verifyDatabaseTls(url, metadata, expectedUser, poolFactory = (config) => new Pool(config),
   hostnameVerifier = tls.checkServerIdentity) {
+  const principal = required("STAGING_DATABASE_EXPECTED_USER", expectedUser);
   const pool = poolFactory({ connectionString: url.toString(), max: 1, connectionTimeoutMillis: 10_000 });
   let client;
   let transactionStarted = false;
@@ -256,6 +264,9 @@ export async function verifyDatabaseTls(url, metadata, poolFactory = (config) =>
     const one = await client.query("SELECT 1 AS one");
     const database = await client.query("SELECT current_database() AS current_database");
     const user = await client.query("SELECT current_user AS current_user");
+    const role = await client.query(
+      "SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication FROM pg_roles WHERE rolname = current_user"
+    );
     const ssl = await client.query("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()");
     const stream = client.connection?.stream;
     const certificate = typeof stream?.getPeerCertificate === "function" ? stream.getPeerCertificate(true) : null;
@@ -264,7 +275,11 @@ export async function verifyDatabaseTls(url, metadata, poolFactory = (config) =>
       transaction_read_only_verified: transactionStarted,
       select_one_verified: one.rowCount === 1 && one.rows[0]?.one === 1,
       current_database_verified: database.rowCount === 1 && database.rows[0]?.current_database === metadata.databaseName,
-      current_user_verified: user.rowCount === 1 && user.rows[0]?.current_user === metadata.databaseUser,
+      current_user_verified: user.rowCount === 1 && user.rows[0]?.current_user === principal,
+      role_not_superuser_verified: role.rowCount === 1 && role.rows[0]?.rolsuper === false,
+      role_no_create_role_verified: role.rowCount === 1 && role.rows[0]?.rolcreaterole === false,
+      role_no_create_database_verified: role.rowCount === 1 && role.rows[0]?.rolcreatedb === false,
+      role_no_replication_verified: role.rowCount === 1 && role.rows[0]?.rolreplication === false,
       pg_stat_ssl_verified: ssl.rowCount === 1 && ssl.rows[0]?.ssl === true,
       certificate_hostname_verified: stream?.encrypted === true && stream?.authorized === true &&
         stream?.authorizationError == null && !hostnameError,
@@ -356,6 +371,8 @@ export async function openWindow(env = process.env, deps = defaultDeps) {
     return cleanupPromise;
   };
   try {
+    const expectedUser = required("STAGING_DATABASE_EXPECTED_USER", env.STAGING_DATABASE_EXPECTED_USER);
+    receipt.expected_user_configured = true;
     const postgresId = validateTarget(required("STAGING_RENDER_POSTGRES_ID", env.STAGING_RENDER_POSTGRES_ID));
     receipt.target_verified = true;
     const token = required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY);
@@ -381,11 +398,12 @@ export async function openWindow(env = process.env, deps = defaultDeps) {
     abortController.signal.throwIfAborted();
     receipt.allow_list_readback_verified = true;
 
-    const tlsUrl = externalTlsDatabaseUrl(env.MANAGED_DATABASE_URL, metadata);
+    const tlsUrl = externalTlsDatabaseUrl(env.MANAGED_DATABASE_URL, metadata, expectedUser);
     receipt.external_hostname_verified = true;
+    receipt.database_url_user_verified = true;
     receipt.sslmode_verify_full = tlsUrl.searchParams.get("sslmode") === "verify-full";
     mask(tlsUrl.toString());
-    const dbReceipt = await deps.verifyDatabaseTls(tlsUrl, metadata);
+    const dbReceipt = await deps.verifyDatabaseTls(tlsUrl, metadata, expectedUser);
     abortController.signal.throwIfAborted();
     Object.assign(receipt, dbReceipt);
     if (Object.values(dbReceipt).some((value) => value !== true)) throw new Error("TLS preflight failed");
