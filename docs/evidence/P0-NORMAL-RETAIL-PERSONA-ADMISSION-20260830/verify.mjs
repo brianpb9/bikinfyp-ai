@@ -8,9 +8,32 @@ const decision = read("FOUNDER-DECISION.json");
 const control = read("RAW-CONTROL-PLANE.json");
 const health = read("RAW-HEALTH-SAMPLES.json");
 const logs = read("RAW-READONLY-JOB-LOGS.json");
+const lineage = read("RAW-TEMPORARY-DEPLOY-LINEAGE.json");
 const exactRollback = "ee767201679ae2213c40be6f913241f372d2378a";
+const exactFix = "6ac032ad8f294761d615bcfddccbd5e46b15025f";
 
-assert.deepEqual(closure.source_receipts, ["RAW-CONTROL-PLANE.json", "RAW-HEALTH-SAMPLES.json", "RAW-READONLY-JOB-LOGS.json"]);
+assert.deepEqual(closure.source_receipts, ["RAW-CONTROL-PLANE.json", "RAW-HEALTH-SAMPLES.json", "RAW-READONLY-JOB-LOGS.json", "RAW-TEMPORARY-DEPLOY-LINEAGE.json"]);
+const temporaryDeploy = lineage.deploys.find((deploy) => deploy.id === closure.temporary_fix_deploy.id);
+const lineageRollback = lineage.deploys.find((deploy) => deploy.id === closure.rollback_deploy.id);
+assert.equal(temporaryDeploy.commit.id, exactFix);
+assert.equal(temporaryDeploy.status, "deactivated");
+assert.equal(lineageRollback.commit.id, exactRollback);
+assert.equal(lineageRollback.status, "live");
+assert.ok(Math.abs(new Date(temporaryDeploy.updatedAt) - new Date(lineageRollback.finishedAt)) < 1000, "temporary deploy deactivation must coincide with rollback becoming live");
+assert.equal(closure.temporary_fix_deploy.commit, exactFix);
+assert.equal(lineage.temporary_health_capture.response.ok, true);
+assert.equal(lineage.temporary_health_capture.response.intake, "open");
+assert.equal(lineage.temporary_health_capture.response.payments_live, closure.temporary_fix_deploy.payments_live);
+assert.equal(lineage.temporary_health_capture.response.build_sha, exactFix);
+assert.equal(new Date(lineage.temporary_health_capture.observed_after).getTime(), new Date(temporaryDeploy.finishedAt).getTime());
+const reviewedWindowJobIds = [closure.read_only_discovery.successful_job, closure.read_only_discovery.diagnostics_job, closure.read_only_discovery.decision_packet_job];
+for (const id of reviewedWindowJobIds) {
+  const job = lineage.read_only_jobs.find((entry) => entry.id === id);
+  assert.equal(job.status, "succeeded");
+  assert.equal(job.serviceId, lineage.scope.service_id);
+  assert.ok(new Date(job.startedAt) >= new Date(temporaryDeploy.finishedAt), `${id} started before exact-fix deploy was live`);
+  assert.ok(new Date(job.finishedAt) < new Date(lineageRollback.finishedAt), `${id} did not finish before rollback became live`);
+}
 assert.equal(control.scope.rollback_deploy_id, closure.rollback_deploy.id);
 assert.equal(control.deploy.id, "dep-da9jbagn74is738a4060");
 assert.equal(control.deploy.commit.id, exactRollback);

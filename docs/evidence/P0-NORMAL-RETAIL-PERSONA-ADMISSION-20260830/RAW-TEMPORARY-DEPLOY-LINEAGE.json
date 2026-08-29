@@ -1,0 +1,19 @@
+{
+  "schema": "render-temporary-deploy-lineage-receipt/v1",
+  "observed_at": "2026-08-29T19:58:30Z",
+  "scope": {"service_id": "srv-d9n28tijnfac73a87lt0", "temporary_deploy_id": "dep-da9j6g9srm7s73cgls90", "rollback_deploy_id": "dep-da9jbagn74is738a4060"},
+  "source_commands": ["render deploys list srv-d9n28tijnfac73a87lt0 --output json --confirm", "render jobs list srv-d9n28tijnfac73a87lt0 --output json --confirm", "curl -fsS https://racun-ai-staging-web.onrender.com/api/health"],
+  "deploys": [
+    {"id":"dep-da9j6g9srm7s73cgls90","status":"deactivated","commit":{"id":"6ac032ad8f294761d615bcfddccbd5e46b15025f","createdAt":"2026-08-29T18:59:22Z"},"createdAt":"2026-08-29T19:30:09.900347Z","startedAt":"2026-08-29T19:30:09.86245Z","finishedAt":"2026-08-29T19:33:41.680845Z","updatedAt":"2026-08-29T19:43:08.863033Z","trigger":"api"},
+    {"id":"dep-da9jbagn74is738a4060","status":"live","commit":{"id":"ee767201679ae2213c40be6f913241f372d2378a","createdAt":"2026-08-29T16:01:47Z"},"createdAt":"2026-08-29T19:40:26.485692Z","startedAt":"2026-08-29T19:40:26.457781Z","finishedAt":"2026-08-29T19:43:08.864262Z","updatedAt":"2026-08-29T19:43:43.323896Z","trigger":"api"}
+  ],
+  "read_only_jobs": [
+    {"id":"job-da9jal5g1s2s73ajuh00","status":"succeeded","serviceId":"srv-d9n28tijnfac73a87lt0","createdAt":"2026-08-29T19:39:00.700986Z","startedAt":"2026-08-29T19:39:00Z","finishedAt":"2026-08-29T19:39:13Z"},
+    {"id":"job-da9jb09srm7s73ch149g","status":"succeeded","serviceId":"srv-d9n28tijnfac73a87lt0","createdAt":"2026-08-29T19:39:45.095709Z","startedAt":"2026-08-29T19:39:45Z","finishedAt":"2026-08-29T19:39:51Z"},
+    {"id":"job-da9jc9qjnfac73e23m80","status":"succeeded","serviceId":"srv-d9n28tijnfac73a87lt0","createdAt":"2026-08-29T19:42:31.63128Z","startedAt":"2026-08-29T19:42:31Z","finishedAt":"2026-08-29T19:43:02Z"},
+    {"id":"job-da9jd1mk1f9s73fiorm0","status":"succeeded","serviceId":"srv-d9n28tijnfac73a87lt0","createdAt":"2026-08-29T19:44:06.470332Z","startedAt":"2026-08-29T19:44:06Z","finishedAt":"2026-08-29T19:44:17Z"}
+  ],
+  "temporary_health_capture": {"observed_after":"2026-08-29T19:33:41.680845Z","observed_before":"2026-08-29T19:39:00.700986Z","response":{"ok":true,"intake":"open","payments_live":false,"build_sha":"6ac032ad8f294761d615bcfddccbd5e46b15025f"}},
+  "lineage_note": "The first three read-only jobs started after the temporary deploy became live and finished before the rollback became live/deactivated it. The no-write proof intentionally ran after rollback.",
+  "sanitization": "Only non-secret deploy/job timing fields and allowlisted public health fields retained; start commands and environment values omitted."
+}
