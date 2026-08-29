@@ -1,0 +1,52 @@
+{
+  "schema": "p0-normal-retail-founder-decision/v1",
+  "source": "job-da9jc9qjnfac73e23m80",
+  "approved_hq_15s_script_count": 7,
+  "near_miss_product_count": 4,
+  "products": [
+    {
+      "product_id": "fc78bee0-7890-429d-95e5-cac619a090e9",
+      "product_name": "Serum Verifikasi Final",
+      "category": "beauty",
+      "script_ids": ["a47622ee-a9c5-4777-b28b-b7ade3589e19"],
+      "product_type": {"state": "QUARANTINED", "version": null, "confirmed_shape_ok": false},
+      "category_disposition": {"state": "QUARANTINED", "reason": "CATEGORY_UNKNOWN", "version": 1, "clear_shape_ok": false},
+      "reference": {"count": 1, "bytes_present": true, "sidecar_present": false, "authorized_all": false},
+      "missing_truth": ["PRODUCT_TYPE_CONFIRMATION", "CATEGORY_DISPOSITION", "REFERENCE_ASSET_AUTHORIZATION"]
+    },
+    {
+      "product_id": "9432ab51-e6bb-47db-a337-9d876e7ac7bf",
+      "product_name": "Serum QC06 Debug",
+      "category": "beauty",
+      "script_ids": ["0eafe74b-580e-4f7a-97b6-5ee0086bcbd5", "01947173-9e49-4d6f-ad54-48fc52577fd1"],
+      "product_type": {"state": "QUARANTINED", "version": null, "confirmed_shape_ok": false},
+      "category_disposition": {"state": "QUARANTINED", "reason": "CATEGORY_UNKNOWN", "version": 1, "clear_shape_ok": false},
+      "reference": {"count": 1, "bytes_present": true, "sidecar_present": false, "authorized_all": false},
+      "missing_truth": ["PRODUCT_TYPE_CONFIRMATION", "CATEGORY_DISPOSITION", "REFERENCE_ASSET_AUTHORIZATION"]
+    },
+    {
+      "product_id": "edfa9176-eaeb-4b35-b072-9c13d1cf7875",
+      "product_name": "Serum Glow Premium",
+      "category": "beauty",
+      "script_ids": ["861f058b-bef3-4270-92e8-7767413170be", "43ccd1b5-4f15-4ca4-bb30-f47c60420369"],
+      "product_type": {"state": "QUARANTINED", "version": null, "confirmed_shape_ok": false},
+      "category_disposition": {"state": "QUARANTINED", "reason": "CATEGORY_UNKNOWN", "version": 1, "clear_shape_ok": false},
+      "reference": {"count": 1, "bytes_present": true, "sidecar_present": false, "authorized_all": false},
+      "missing_truth": ["PRODUCT_TYPE_CONFIRMATION", "CATEGORY_DISPOSITION", "REFERENCE_ASSET_AUTHORIZATION"]
+    },
+    {
+      "product_id": "66220a7d-4410-4be1-b5a1-c9724b460a8c",
+      "product_name": "Produk Uji Format Baru",
+      "category": "beauty",
+      "script_ids": ["4d68f96a-620f-48a8-b98c-dfe2bbfcfde8", "73de9449-146b-45ce-87da-f595c29378cf"],
+      "product_type": {"state": "QUARANTINED", "version": null, "confirmed_shape_ok": false},
+      "category_disposition": {"state": "QUARANTINED", "reason": "CATEGORY_UNKNOWN", "version": 1, "clear_shape_ok": false},
+      "reference": {"count": 1, "bytes_present": true, "sidecar_present": false, "authorized_all": false},
+      "missing_truth": ["PRODUCT_TYPE_CONFIRMATION", "CATEGORY_DISPOSITION", "REFERENCE_ASSET_AUTHORIZATION"]
+    }
+  ],
+  "decision_required": {
+    "question": "Which named product, if any, is authorized for normal product-type confirmation, category disposition, and reference-sidecar revalidation before a single candidate admission?",
+    "default_without_authorization": "STOP_NO_CANDIDATE"
+  }
+}
