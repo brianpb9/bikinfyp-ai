@@ -10,9 +10,12 @@ on:
       - scripts/preflight-staging-r2.mjs
       - scripts/run-staging-database-tls-preflight.mjs
       - scripts/run-mobile-evidence-image.sh
+      - scripts/verify-staging-app-health.mjs
       - scripts/validate-staging-database-secret-contract.mjs
       - scripts/verify-mobile-evidence-receipt.mjs
       - tests/managed-mobile-ci-workflow.test.ts
+      - tests/managed-runner-sha-binding.test.ts
+      - tests/staging-app-health-preflight.test.ts
       - tests/staging-db-secret-contract.test.ts
       - tests/staging-db-tls-preflight-only.test.ts
       - tests/staging-db-tls-window.test.ts
@@ -78,9 +81,9 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs scripts/managed-staging-db-tls-window.mjs scripts/run-staging-database-tls-preflight.mjs scripts/validate-staging-database-secret-contract.mjs
+      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs scripts/managed-staging-db-tls-window.mjs scripts/run-staging-database-tls-preflight.mjs scripts/validate-staging-database-secret-contract.mjs scripts/verify-staging-app-health.mjs
       - run: npx tsc --noEmit
-      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/staging-r2-preflight.test.ts tests/staging-db-tls-window.test.ts tests/staging-db-secret-contract.test.ts tests/staging-db-tls-preflight-only.test.ts
+      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/managed-runner-sha-binding.test.ts tests/staging-app-health-preflight.test.ts tests/staging-r2-preflight.test.ts tests/staging-db-tls-window.test.ts tests/staging-db-secret-contract.test.ts tests/staging-db-tls-preflight-only.test.ts
 
   staging-database-secret-contract:
     # This mode receives only the database URL and non-secret expected user.
@@ -167,12 +170,6 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
-      - name: Validate staging database secret contract before evidence work
-        env:
-          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-          STAGING_DATABASE_EXPECTED_USER: ${{ vars.STAGING_DATABASE_EXPECTED_USER }}
-        run: node control/scripts/validate-staging-database-secret-contract.mjs
-
       - name: Validate hard-bound reviewed SHA and immutable control checkout
         working-directory: control
         env:
@@ -182,6 +179,18 @@ jobs:
           set -euo pipefail
           test "$REQUESTED_SHA" = "$REVIEWED_APP_SHA"
           test "$(git rev-parse HEAD)" = "$CONTROL_SHA"
+
+      - name: Verify public staging app identity and safety before secrets
+        working-directory: control
+        env:
+          EXPECTED_APP_SHA: ${{ env.REVIEWED_APP_SHA }}
+        run: node scripts/verify-staging-app-health.mjs
+
+      - name: Validate staging database secret contract before evidence work
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_DATABASE_EXPECTED_USER: ${{ vars.STAGING_DATABASE_EXPECTED_USER }}
+        run: node control/scripts/validate-staging-database-secret-contract.mjs
 
       - name: Set up pinned Node runtime for trusted control
         uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4

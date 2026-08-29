@@ -12,6 +12,7 @@ const launcher = fs.readFileSync(new URL("../scripts/run-mobile-evidence-image.s
 const builder = fs.readFileSync(new URL("../scripts/build-mobile-evidence-image.sh", import.meta.url), "utf8");
 const r2Preflight = fs.readFileSync(new URL("../scripts/preflight-staging-r2.mjs", import.meta.url), "utf8");
 const tlsWindow = fs.readFileSync(new URL("../scripts/managed-staging-db-tls-window.mjs", import.meta.url), "utf8");
+const publicHealth = fs.readFileSync(new URL("../scripts/verify-staging-app-health.mjs", import.meta.url), "utf8");
 
 test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-reference-only", () => {
   assert.match(workflow, /workflow_dispatch:/);
@@ -64,9 +65,26 @@ test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-ref
   assert.match(builder, /test "\$sha" = "\$expected_runner"/);
   assert.match(tlsWindow, /required\("REVIEWED_APP_SHA", env\.REVIEWED_APP_SHA\)/);
   assert.doesNotMatch(tlsWindow, /required\("REVIEWED_SHA"/);
+  assert.match(publicHealth, /racun-ai-staging-web\.onrender\.com\/api\/health/);
   const prJob = workflow.slice(workflow.indexOf("  pr-static-validation:"), workflow.indexOf("  staging-database-secret-contract:"));
   assert.doesNotMatch(prJob, /environment:|secrets\.|EVIDENCE_INHERIT_STAGING_ENV|bash control\/scripts\/run-mobile-evidence-image\.sh/);
   assert.doesNotMatch(prJob, /managed-mobile-auth-hydration-runner\.test\.ts/);
+});
+
+test("wrong requested or deployed app SHA stops before every secret-bearing operation", () => {
+  const job = workflow.slice(workflow.indexOf("  exact-sha-mobile-evidence:"));
+  const checkoutAt = job.indexOf("      - name: Checkout immutable default-branch control code");
+  const inputAt = job.indexOf("      - name: Validate hard-bound reviewed SHA and immutable control checkout");
+  const healthAt = job.indexOf("      - name: Verify public staging app identity and safety before secrets");
+  const firstSecretAt = job.indexOf("      - name: Validate staging database secret contract before evidence work");
+  const r2At = job.indexOf("      - name: Preflight staging R2 write-read-delete round trip");
+  const tlsAt = job.indexOf("      - name: Run provider-free evidence inside temporary staging database TLS window");
+  assert.ok(checkoutAt >= 0 && checkoutAt < inputAt && inputAt < healthAt && healthAt < firstSecretAt
+    && firstSecretAt < r2At && r2At < tlsAt);
+  const secretFreePrefix = job.slice(0, firstSecretAt);
+  assert.doesNotMatch(secretFreePrefix, /secrets\.|STAGING_RENDER_API_KEY|STAGING_DATABASE_URL|docker (?:run|create)/);
+  assert.match(job.slice(inputAt, healthAt), /test "\$REQUESTED_SHA" = "\$REVIEWED_APP_SHA"/);
+  assert.match(job.slice(healthAt, firstSecretAt), /EXPECTED_APP_SHA: \$\{\{ env\.REVIEWED_APP_SHA \}\}[\s\S]*verify-staging-app-health\.mjs/);
 });
 
 test("managed R2 preflight runs before the full runner on the exact reviewed image", () => {
