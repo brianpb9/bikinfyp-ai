@@ -4,6 +4,6 @@ The exact fix SHA `6ac032ad8f294761d615bcfddccbd5e46b15025f` received Reviewer P
 
 Staging was restored to exact SHA `ee767201679ae2213c40be6f913241f372d2378a`. Six consecutive health samples matched that SHA, payments remained non-live, and the staging worker remained suspended with auto-deploy off.
 
-`OPERATIONAL-CLOSURE.json` records the deploy and no-write receipts. `FOUNDER-DECISION.json` lists the four products behind the seven approved high-quality 15-second scripts, without user PII. Every product lacks the same three mandatory facts: product-type confirmation, category disposition, and an authorized reference sidecar.
+`OPERATIONAL-CLOSURE.json` records the derived closure. Timestamped, scope-identifying `RAW-*` files preserve sanitized Render control-plane, public-health, and read-only job-log source receipts. `verify.mjs` cross-checks every closure/decision claim against those receipts, and `MANIFEST.sha256` binds all files. `FOUNDER-DECISION.json` lists the four products behind the seven approved high-quality 15-second scripts, without user PII. Every product lacks the same three mandatory facts: product-type confirmation, category disposition, and an authorized reference sidecar.
 
 No provider request, spend, hold, ledger mutation, publication, production change, candidate row, or evidence-run row occurred. The safe default is `STOP_NO_CANDIDATE` until one named product is explicitly authorized for the normal truth-revalidation path.

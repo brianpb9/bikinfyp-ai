@@ -1,0 +1,12 @@
+{
+  "schema": "render-readback-receipt/v1",
+  "observed_at": "2026-08-29T19:51:40Z",
+  "scope": {"web_service_id": "srv-d9n28tijnfac73a87lt0", "worker_service_id": "srv-d9n28ue417fc73ch2b60", "rollback_deploy_id": "dep-da9jbagn74is738a4060"},
+  "source_commands": ["render services --output json --confirm", "render deploys list srv-d9n28tijnfac73a87lt0 --output json --confirm"],
+  "services": [
+    {"id":"srv-d9n28ue417fc73ch2b60","name":"racun-ai-staging-worker","type":"background_worker","branch":"staging/exact-46499ac-20260827","autoDeploy":"no","suspended":"suspended","updatedAt":"2026-08-29T18:35:06.813133Z"},
+    {"id":"srv-d9n28tijnfac73a87lt0","name":"racun-ai-staging-web","type":"web_service","branch":"staging/exact-46499ac-20260827","autoDeploy":"no","suspended":"not_suspended","updatedAt":"2026-08-29T19:43:08.866615Z"}
+  ],
+  "deploy": {"id":"dep-da9jbagn74is738a4060","status":"live","commit":{"createdAt":"2026-08-29T16:01:47Z","id":"ee767201679ae2213c40be6f913241f372d2378a"},"createdAt":"2026-08-29T19:40:26.485692Z","startedAt":"2026-08-29T19:40:26.457781Z","finishedAt":"2026-08-29T19:43:08.864262Z","updatedAt":"2026-08-29T19:43:43.323896Z","trigger":"api"},
+  "sanitization": "Only non-secret service/deploy fields retained; no environment values or command payloads."
+}

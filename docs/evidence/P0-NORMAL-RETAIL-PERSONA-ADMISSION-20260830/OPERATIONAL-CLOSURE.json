@@ -4,6 +4,7 @@
   "reviewed_fix_sha": "6ac032ad8f294761d615bcfddccbd5e46b15025f",
   "reviewer_pass_id": "1788031784000-reviewer-PASS",
   "reviewer_pass_stale": false,
+  "source_receipts": ["RAW-CONTROL-PLANE.json", "RAW-HEALTH-SAMPLES.json", "RAW-READONLY-JOB-LOGS.json"],
   "staging_service_id": "srv-d9n28tijnfac73a87lt0",
   "worker_service_id": "srv-d9n28ue417fc73ch2b60",
   "temporary_fix_deploy": {

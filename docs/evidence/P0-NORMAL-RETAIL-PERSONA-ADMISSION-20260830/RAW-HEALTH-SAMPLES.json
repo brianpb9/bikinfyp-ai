@@ -1,0 +1,14 @@
+{
+  "schema": "public-health-readback-receipt/v1",
+  "scope": {"url": "https://racun-ai-staging-web.onrender.com/api/health", "service_id": "srv-d9n28tijnfac73a87lt0"},
+  "source_command": "curl -fsS https://racun-ai-staging-web.onrender.com/api/health",
+  "samples": [
+    {"sample":1,"observed_at":"2026-08-29T19:51:16Z","response":{"ok":true,"intake":"open","payments_live":false,"build_sha":"ee767201679ae2213c40be6f913241f372d2378a"}},
+    {"sample":2,"observed_at":"2026-08-29T19:51:16Z","response":{"ok":true,"intake":"open","payments_live":false,"build_sha":"ee767201679ae2213c40be6f913241f372d2378a"}},
+    {"sample":3,"observed_at":"2026-08-29T19:51:16Z","response":{"ok":true,"intake":"open","payments_live":false,"build_sha":"ee767201679ae2213c40be6f913241f372d2378a"}},
+    {"sample":4,"observed_at":"2026-08-29T19:51:16Z","response":{"ok":true,"intake":"open","payments_live":false,"build_sha":"ee767201679ae2213c40be6f913241f372d2378a"}},
+    {"sample":5,"observed_at":"2026-08-29T19:51:16Z","response":{"ok":true,"intake":"open","payments_live":false,"build_sha":"ee767201679ae2213c40be6f913241f372d2378a"}},
+    {"sample":6,"observed_at":"2026-08-29T19:51:17Z","response":{"ok":true,"intake":"open","payments_live":false,"build_sha":"ee767201679ae2213c40be6f913241f372d2378a"}}
+  ],
+  "sanitization": "Only public non-secret health fields retained."
+}
