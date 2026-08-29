@@ -30,6 +30,7 @@ const ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models";
 
 export interface QcSuaraInput {
   videoPath: string;
+  externalNetworkPolicy?: "allow" | "forbid";
   /** Teks yang SEHARUSNYA terdengar — segmen skrip, urut. */
   segmenSkrip: string[];
   /** Harga produk. Diperiksa terpisah karena paling berbahaya kalau salah. */
@@ -74,6 +75,7 @@ function memuatHarga(transkrip: string, priceIdr: number): boolean {
 }
 
 export async function qcSuara(input: QcSuaraInput): Promise<QcSuaraResult> {
+  if (input.externalNetworkPolicy === "forbid") throw new Error("NORMAL_EVIDENCE_EXTERNAL_AUDIO_QC_FORBIDDEN");
   if (!config.geminiApiKey) return { transkrip: null, lolos: false, masalah: ["QC suara tidak jalan: GEMINI_API_KEY belum di-set"], peringatan: [] };
   if (!fs.existsSync(input.videoPath)) return { transkrip: null, lolos: false, masalah: ["berkas video tidak ada"], peringatan: [] };
 

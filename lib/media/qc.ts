@@ -153,6 +153,8 @@ export function evaluateQcPolicy(
 
 export interface QcInput {
   filePath: string;
+  /** Fail-closed marker used by private representative evidence. */
+  externalQcPolicy?: "allow" | "forbid";
   targetDurationSec: number;
   /**
    * Detik yang SENGAJA ditambahkan sesudah konten: packshot penutup foto asli
@@ -1183,6 +1185,7 @@ export async function runQc(input: QcInput, overrides: RunQcOverrides = {}): Pro
       hasilSuara = await qcSuara({
         videoPath: input.filePath, segmenSkrip: input.finalTexts,
         priceIdr: input.priceIdr, productName: input.productName,
+        externalNetworkPolicy: input.externalQcPolicy,
       });
     } catch (err) {
       galatSuara = err instanceof Error ? err.message : String(err);
@@ -1262,6 +1265,7 @@ export async function runQc(input: QcInput, overrides: RunQcOverrides = {}): Pro
         tanpaWajah: input.maxPeople === 0,
         neutralStoryAds: input.visualSubjectPolicy === "neutral_story_ads",
         ekorSec: input.ekorDisengajaSec,
+        externalNetworkPolicy: input.externalQcPolicy,
       });
       if (v.temuan === null) {
         if (input.visualSubjectPolicy === "neutral_story_ads") {

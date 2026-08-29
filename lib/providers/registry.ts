@@ -16,6 +16,7 @@ import { mockVoiceA } from "./mock/voice-a";
 import { mockVoiceB } from "./mock/voice-b";
 import { byteplusVideo } from "./stubs/byteplus";
 import { dashscopeVideo } from "./stubs/dashscope";
+import { normalEvidenceStore } from "./normal-evidence";
 // google-tts.ts & azure-tts.ts sengaja TIDAK diimpor: TTS terpisah tidak dipakai di
 // jalur produksi (keputusan final 31 Jul) — file dipertahankan sebagai referensi.
 
@@ -89,6 +90,18 @@ export interface VideoGenResult {
 
 export async function generateVideoWithFailover(spec: VisualSpec, outDir: string): Promise<VideoGenResult> {
   assertVisualSpec(spec); // aturan keras #1 & #3 — ditegakkan di runtime
+  const evidence = await normalEvidenceStore().get(spec.jobId);
+  if (evidence) {
+    // This task intentionally gives up ordinary availability failover: one
+    // BytePlus attempt, or a terminal error. A second provider would be a
+    // second spend and a different request lineage.
+    if (videoProvidersForTests && (videoProvidersForTests.length !== 1 || videoProvidersForTests[0].name !== byteplusVideo.name)) {
+      throw new Error("NORMAL_EVIDENCE_BYTEPLUS_ONLY");
+    }
+    if (!(await byteplusVideo.healthCheck())) throw new Error("NORMAL_EVIDENCE_BYTEPLUS_UNAVAILABLE_NO_FAILOVER");
+    const assets = await byteplusVideo.generate(spec, outDir);
+    return { assets, providerName: byteplusVideo.name, costIdr: assets.reduce((sum, asset) => sum + asset.costIdr, 0) };
+  }
   const providers = videoOrder();
   // Aturan minimal-dua adalah aturan PRODUKSI (SR-ABS-01). Daftar yang dipasang
   // eksplisit untuk uji sengaja dikecualikan: uji boundary justru butuh tepat

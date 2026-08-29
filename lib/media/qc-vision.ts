@@ -159,6 +159,7 @@ export interface TemuanFrame {
 
 export interface QcVisionInput {
   videoPath: string;
+  externalNetworkPolicy?: "allow" | "forbid";
   /** Batas orang yang boleh tampil. 1 untuk format presenter tunggal, 2 untuk
    *  rute komedi. DIABAIKAN bila tanpaWajah — lihat di bawah. */
   maksOrang: number;
@@ -361,6 +362,7 @@ export async function periksaFrameVision(
 /** Periksa video jadi. Tidak melempar — kegagalan pemeriksaan dilaporkan
  *  sebagai "tidak diperiksa", bukan sebagai lulus. */
 export async function qcVision(input: QcVisionInput): Promise<QcVisionResult> {
+  if (input.externalNetworkPolicy === "forbid") throw new Error("NORMAL_EVIDENCE_EXTERNAL_VISION_QC_FORBIDDEN");
   if (!config.geminiApiKey) return { temuan: null, lolos: false, masalah: ["QC visual tidak jalan: GEMINI_API_KEY belum di-set"], peringatan: [], detikGagal: [] };
   if (!fs.existsSync(input.videoPath)) return { temuan: null, lolos: false, masalah: ["berkas video tidak ada"], peringatan: [], detikGagal: [] };
 

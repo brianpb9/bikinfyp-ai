@@ -16,6 +16,7 @@ import {
   type VideoProvider, type VideoAsset, type VisualSpec, type ShotSpec,
 } from "../types";
 import { taskMemo } from "../task-memo";
+import { assertNormalEvidenceProviderContract, normalEvidenceActualCostUsd, normalEvidenceStore } from "../normal-evidence";
 
 // Tarif referensi (USD). Sumber:
 // - seedance-1-0-pro: $2,5/1M output tokens — https://docs.byteplus.com/docs/ModelArk/1587798
@@ -31,7 +32,11 @@ const MODEL_RATES: Record<string, { tokenUsdPerM?: number; perSecUsd?: Record<st
   "seedance-1-0-pro-fast-250528": { perSecUsd: { "480p": 0.01, "720p": 0.024, "1080p": 0.048 } },
   "seedance-1-0-pro-250528": { tokenUsdPerM: 2.5 },
   "seedance-1-5-pro-251215": { perSecUsd: { "480p": 0.026, "720p": 0.052 } },
-  "dreamina-seedance-2-0-mini-260615": { perSecUsd: { "720p": 0.034 } }, // ESTIMASI dari COGS BRD §5.3 (Rp8.802/video)
+  // Official ModelArk pricing (https://docs.byteplus.com/docs/ModelArk/1099320): image-reference input is
+  // "input without video", $3.50/M tokens. Estimated tokens are
+  // duration*width*height*fps/1024; provider completion_tokens is authoritative
+  // after success. 15*720*1280*24/1024 = 324,000 => $1.134 pre-call.
+  "dreamina-seedance-2-0-mini-260615": { tokenUsdPerM: 3.5, perSecUsd: { "720p": 0.034 } },
   "dreamina-seedance-2-0-260128": { perSecUsd: { "720p": 0.143 } }, // ESTIMASI dari COGS BRD §5.3 (Rp37.164/video)
 };
 
@@ -51,6 +56,7 @@ function imageToDataUri(imagePath: string): string {
 }
 
 async function apiRequest<T>(method: string, url: string, body?: unknown): Promise<T> {
+  if (apiRequestForTests) return apiRequestForTests(method, url, body) as Promise<T>;
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30_000);
   let res: Response;
@@ -84,6 +90,23 @@ async function apiRequest<T>(method: string, url: string, body?: unknown): Promi
   }
   return data as T;
 }
+
+let apiRequestForTests: ((method: string, url: string, body?: unknown) => Promise<unknown>) | undefined;
+let afterEvidencePostForTests: (() => Promise<void>) | undefined;
+let sleepForTests: ((ms: number) => Promise<void>) | undefined;
+let downloadForTests: ((url: string) => Promise<Response>) | undefined;
+export function setBytePlusEvidenceHooksForTests(hooks?: {
+  request?: (method: string, url: string, body?: unknown) => Promise<unknown>;
+  afterPost?: () => Promise<void>;
+  sleep?: (ms: number) => Promise<void>;
+  download?: (url: string) => Promise<Response>;
+}) {
+  apiRequestForTests = hooks?.request;
+  afterEvidencePostForTests = hooks?.afterPost;
+  sleepForTests = hooks?.sleep;
+  downloadForTests = hooks?.download;
+}
+const tidur = (ms: number) => sleepForTests ? sleepForTests(ms) : new Promise<void>((resolve) => setTimeout(resolve, ms));
 
 interface TaskResponse {
   id: string;
@@ -276,7 +299,7 @@ async function pollOnce(taskId: string): Promise<TaskResponse> {
       const isHttpError = err instanceof ProviderApiError && /^byteplus: HTTP \d/.test(err.message);
       if (isHttpError || attempt >= delaysMs.length) throw err;
       console.warn(`[byteplus] poll ${taskId} gagal transien (${attempt + 1}/${delaysMs.length + 1}) — retry ${delaysMs[attempt]}ms`);
-      await new Promise((r) => setTimeout(r, delaysMs[attempt]));
+      await tidur(delaysMs[attempt]);
     }
   }
 }
@@ -287,7 +310,7 @@ async function pollTask(taskId: string, startedAt: number, maxWaitMs: number): P
     if (Date.now() - startedAt > maxWaitMs) {
       throw new ProviderApiError("byteplus", `task ${taskId} melebihi batas tunggu ${Math.round(maxWaitMs / 60000)} mnt`);
     }
-    await new Promise((r) => setTimeout(r, delay));
+    await tidur(delay);
     const t = await pollOnce(taskId);
     if (t.status === "succeeded") return t;
     if (t.status === "failed" || t.status === "cancelled" || t.status === "expired") {
@@ -314,6 +337,29 @@ export const byteplusVideo: VideoProvider = {
     if (!config.byteplusApiKey) throw new ProviderNotConfigured("byteplus-ark-seedance", "BYTEPLUS_ARK_API_KEY");
 
     const perShotTimeoutMs = (config.stateTimeoutsMin.GENERATING_VISUAL * 60_000) / Math.max(1, spec.shots.length);
+    const evidenceStore = normalEvidenceStore();
+    const evidence = await evidenceStore.get(spec.jobId);
+    if (evidence) {
+      const referencePath = spec.shots[0]?.imageRefPath;
+      assertNormalEvidenceProviderContract(evidence, {
+        runtime: process.env,
+        databaseUrl: config.databaseUrl,
+        storageMode: config.storageMode,
+        storageBucket: config.r2Bucket,
+        model: (config.tiers[spec.qualityTier] ?? config.tiers.silent_caption).byteplusModel,
+        resolution: (config.tiers[spec.qualityTier] ?? config.tiers.silent_caption).resolution,
+        durationSec: spec.shots.reduce((sum, shot) => sum + Math.ceil(shot.durationSec), 0),
+        shotCount: spec.shots.length,
+        width: spec.width,
+        height: spec.height,
+        referenceImageSha256: referencePath
+          ? crypto.createHash("sha256").update(fs.readFileSync(referencePath)).digest("hex")
+          : "",
+        preferI2v: spec.preferI2v,
+        hasExtraReferences: Boolean(spec.extraReferenceImagePaths?.length || spec.referenceOnlyImages),
+        visualSubjectPolicy: spec.visualSubjectPolicy,
+      });
+    }
 
     // Submit semua shot dulu (paralel), lalu polling — hemat waktu total.
     const memo = taskMemo();
@@ -325,16 +371,30 @@ export const byteplusVideo: VideoProvider = {
         // dua kali untuk shot yang sama.
         const body = buildBytePlusTaskBody(spec, shot);
         const payloadSha256 = crypto.createHash("sha256").update(JSON.stringify(body)).digest("hex");
-        const remembered = await memo.get(spec.jobId, shot.index, PROVIDER_KEY, payloadSha256);
+        const remembered = evidence
+          ? null
+          : await memo.get(spec.jobId, shot.index, PROVIDER_KEY, payloadSha256);
         if (remembered) {
           console.log(`[byteplus] job ${spec.jobId} shot ${shot.index}: lanjutkan task ${remembered} (tidak submit ulang)`);
           return { shot, taskId: remembered, startedAt: Date.now() };
         }
+        if (evidence) {
+          const claim = await evidenceStore.claimPost(spec.jobId, payloadSha256);
+          if (claim.action === "STOP_NO_RETRY") throw new Error("NORMAL_EVIDENCE_AMBIGUOUS_STOP_NO_RETRY");
+          if (claim.action === "POLL_ONLY") {
+            console.log(`[byteplus] evidence job ${spec.jobId}: poll known task only`);
+            return { shot, taskId: claim.taskId, startedAt: Date.now() };
+          }
+        }
         const taskId = await createTask(body);
+        if (evidence) {
+          await afterEvidencePostForTests?.();
+          await evidenceStore.bindTask(spec.jobId, payloadSha256, taskId);
+        }
         // Disimpan SEBELUM polling. Menyimpannya setelah polling selesai tidak
         // ada gunanya — justru jendela antara submit dan selesai itulah yang
         // ingin dilindungi.
-        await memo.put(spec.jobId, shot.index, PROVIDER_KEY, taskId, payloadSha256);
+        if (!evidence) await memo.put(spec.jobId, shot.index, PROVIDER_KEY, taskId, payloadSha256);
         console.log(`[byteplus] job ${spec.jobId} shot ${shot.index}: task ${taskId} dikirim`);
         return { shot, taskId, startedAt: Date.now() };
       })
@@ -351,7 +411,7 @@ export const byteplusVideo: VideoProvider = {
       const dlTimeout = setTimeout(() => dlController.abort(), 60_000);
       let dl: Response;
       try {
-        dl = await fetch(videoUrl, { signal: dlController.signal });
+        dl = downloadForTests ? await downloadForTests(videoUrl) : await fetch(videoUrl, { signal: dlController.signal });
       } catch (err) {
         const message = err instanceof Error && err.name === "AbortError" ? "unduh video timeout setelah 60 dtk" : String(err);
         throw new ProviderApiError("byteplus", message);
@@ -364,7 +424,16 @@ export const byteplusVideo: VideoProvider = {
       const secs = Math.round((Date.now() - startedAt) / 1000);
       const durSec = result.duration ?? Math.ceil(shot.durationSec);
       const tierCfg = config.tiers[spec.qualityTier] ?? config.tiers.silent_caption;
-      const cost = estimateCostIdr(tierCfg.byteplusModel, result.usage?.total_tokens, durSec, tierCfg.resolution);
+      const billedOutputTokens = result.usage?.completion_tokens ?? result.usage?.total_tokens;
+      const cost = estimateCostIdr(tierCfg.byteplusModel, billedOutputTokens, durSec, tierCfg.resolution);
+      if (evidence) {
+        if (!result.usage?.completion_tokens) throw new Error("NORMAL_EVIDENCE_COMPLETION_TOKENS_MISSING");
+        const actualCostUsd = normalEvidenceActualCostUsd(result.usage.completion_tokens);
+        if (actualCostUsd > evidence.maxCostUsd) throw new Error("NORMAL_EVIDENCE_ACTUAL_COST_GUARD_FAILED");
+        await evidenceStore.recordProviderSuccess(spec.jobId, {
+          taskId, usage: result.usage ?? null, actualCostUsd,
+        });
+      }
       console.log(
         `[byteplus] job ${spec.jobId} shot ${shot.index}: selesai ${secs} dtk, model=${tierCfg.byteplusModel}, audio=${spec.generateAudio}, biaya Rp${cost.idr}${cost.estimated ? " (estimasi tarif)" : " (dari usage)"}`
       );

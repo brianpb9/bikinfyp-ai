@@ -7,6 +7,8 @@ import { processJob } from "../lib/worker";
 import { processPostgresJob, sweepPostgresStaleJobs } from "../lib/postgres/worker";
 import { setTaskMemo } from "../lib/providers/task-memo";
 import { pgTaskMemo } from "../lib/postgres/task-memo";
+import { installNormalEvidenceStoreForRuntime } from "../lib/providers/normal-evidence";
+import { pgNormalEvidenceStore } from "../lib/postgres/normal-evidence";
 import { postgresRuntimeEnabled } from "../lib/postgres/smoke-runtime";
 import { redactWorkerError } from "../lib/worker-log";
 import { monitoringSettings, runOperationalMonitor } from "../lib/operational-monitor";
@@ -25,6 +27,7 @@ assertRuntimeAuthSecretSafe();
 // kalau tidak, percobaan pertama berjalan dengan memo no-op dan justru jendela
 // paling rawan (submit lalu proses mati) tetap terbuka.
 setTaskMemo(pgTaskMemo);
+installNormalEvidenceStoreForRuntime(postgresRuntimeEnabled(), pgNormalEvidenceStore);
 
 assertQueueConfiguration();
 if (queueMode() !== "redis") throw new Error("Worker terpisah membutuhkan RACUN_QUEUE_MODE=redis.");

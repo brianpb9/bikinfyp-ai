@@ -64,6 +64,8 @@ import { normalisasiFormatWorker } from "../media/worker-format";
 import { managedStagingDeterministicWorkerGate } from "../staging-deterministic-worker";
 import { withProductEvidenceMutationLock } from "../job-admission-reference";
 import { freezeProviderRequestCorrelation } from "./prompt-request-correlation";
+import { assertNormalEvidenceProviderContract, normalEvidenceStore } from "../providers/normal-evidence";
+import { assertNormalEvidenceReceiptMatchesArtifact, runNormalEvidenceOfflineQc, type NormalEvidenceOfflineQcReceipt } from "../media/normal-evidence-offline-qc";
 
 type PostgresQcRunner = typeof runQc;
 let postgresQcRunner: PostgresQcRunner = runQc;
@@ -105,6 +107,23 @@ export function shouldPreserveEmbeddedLipsync(input: {
   return !isMockProviderName(input.providerName)
     && (input.format === "talking_head" || input.format === "tvc")
     && !isStructuredStoryAds(input.storyIdentity);
+}
+
+export function selectPostVideoAudioRoute(input: {
+  representativeEvidence: boolean;
+  withAudio: boolean;
+  format: string;
+  presenterLipsync: boolean;
+  usedMockVideo: boolean;
+}): "embedded" | "none" | "elevenlabs" | "gemini" | "mock" {
+  if (input.representativeEvidence) {
+    if (!input.withAudio) throw new Error("NORMAL_EVIDENCE_BYTEPLUS_EMBEDDED_AUDIO_REQUIRED");
+    return "embedded";
+  }
+  if (!input.withAudio) return "none";
+  if (input.format === "vo_broll") return "elevenlabs";
+  if (input.presenterLipsync) return "embedded";
+  return input.usedMockVideo ? "mock" : "gemini";
 }
 
 type WorkerRow = {
@@ -192,6 +211,26 @@ export function bolehFrameTurunan(input: {
 }): boolean {
   if (input.format !== "hands_only") return false;
   return input.tier === "super_hq" || Boolean(input.orgId);
+}
+
+/** Exactly-one-provider evidence may not create or transform a first frame.
+ * The immutable, already-authorized job snapshot is the only permitted image
+ * input and is forced into BytePlus i2v as the literal first frame. */
+export function prepareNormalEvidenceBytePlusOnlySpec(spec: VisualSpec, approvedReferencePath: string): VisualSpec {
+  if (spec.visualSubjectPolicy === "neutral_story_ads") throw new Error("NORMAL_EVIDENCE_STRUCTURED_STORY_REQUIRES_EXTERNAL_VOICE");
+  if (spec.shots.length !== 1) throw new Error("NORMAL_EVIDENCE_REQUIRES_ONE_SHOT");
+  const shot = spec.shots[0];
+  if (perluFrameBuatan(shot) || shot.imageRefPath !== approvedReferencePath) {
+    throw new Error("NORMAL_EVIDENCE_EXTERNAL_FIRST_FRAME_PREPROCESSING_FORBIDDEN");
+  }
+  if (spec.extraReferenceImagePaths?.length || spec.referenceOnlyImages) {
+    throw new Error("NORMAL_EVIDENCE_EXACT_ARCHIVED_REFERENCE_ONLY");
+  }
+  if (spec.qualityTier !== "high_quality" || spec.generateAudio !== true) {
+    throw new Error("NORMAL_EVIDENCE_BYTEPLUS_EMBEDDED_AUDIO_REQUIRED");
+  }
+  return { ...spec, preferI2v: true, extraReferenceImagePaths: undefined, referenceOnlyImages: false,
+    shots: [{ ...shot, imageRefPath: approvedReferencePath }] };
 }
 
 /** Ganti imageRefPath shot yang perannya menuntut komposisi berbeda dengan
@@ -377,6 +416,15 @@ async function processPostgresJobWithProductLock(
       LEFT JOIN personas pe ON pe.id=j.persona_id WHERE j.id=$1`, [jobId]);
     const row = found.rows[0];
     if (!row || ["READY", "FAILED", "REFUNDED"].includes(row.state)) return;
+    const evidenceTerminal = await normalEvidenceStore().get(row.id);
+    if (evidenceTerminal?.state === "CAPTURED_NO_PUBLICATION") return;
+    if (evidenceTerminal?.state === "STOP_NO_RETRY") {
+      // A provider POST without a durably bound task is never retried. Close
+      // the customer ledger now; a successful queue return must not leave a
+      // hold waiting for the stale-job sweep.
+      await normalEvidenceStore().settleStopNoRetry(row.id);
+      return;
+    }
     // C5 must fail before the first state transition/audit. Both provider and
     // deterministic modes re-check later, but that is already an execution
     // effect and therefore too late for quarantined work.
@@ -405,6 +453,8 @@ async function processPostgresJobWithProductLock(
     } else {
       await runProviderPipeline(row, jobs, pool);
     }
+    const privateEvidence = await normalEvidenceStore().get(jobId);
+    if (privateEvidence?.state === "CAPTURED_NO_PUBLICATION") return;
     const credits = deps.createCredits(databaseUrl);
     try { await credits.captureCredits(row.org_id ? { userId: row.user_id, orgId: row.org_id } : row.user_id, jobId); } finally { await credits.close(); }
   } catch (error) {
@@ -477,6 +527,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     jobProductSnapshot: row.job_product_snapshot,
     productType: {...row,category:row.product_category},
   });
+  const representativeEvidence = await normalEvidenceStore().get(row.id);
   const productSnapshot = currentEvidence.productSnapshot;
   const snapshotPriceIdr = productSnapshot.priceIdr!;
   // Semua consumer hilir tetap memakai WorkerRow, tetapi nilainya kini datang
@@ -521,7 +572,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const refUtama = snapshots[0];
   const tier = (row.quality_tier ?? "silent_caption") as QualityTier;
   const withAudio = tier !== "silent_caption";
-  const providerEligibleSnapshots = withAudio
+  const providerEligibleSnapshots = representativeEvidence
+    ? [refUtama]
+    : withAudio
     ? snapshots.slice(0, MAKS_REFERENSI_PER_GENERASI)
     : [refUtama];
   await assertApprovedReferenceBrands(
@@ -531,7 +584,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   );
   let primaryRef = refUtama;
   const extraRefs: string[] = [];
-  if (withAudio) {
+  if (withAudio && !representativeEvidence) {
     // Referensi tambahan juga HANYA dari daftar tersetujui. Foto ke-2 dst
     // dikirim ke model sebagai referensi identitas — sama berbahayanya kalau
     // salah. Batasnya dipertahankan sama persis dengan sebelumnya
@@ -606,6 +659,31 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // Model yang akan dipakai penyedia — sama sumbernya dengan createTask(),
   // supaya mode referensi yang diarsipkan adalah mode yang benar-benar dikirim.
   const modelTier = (config.tiers[spec.qualityTier] ?? config.tiers.silent_caption).byteplusModel;
+  if (representativeEvidence) {
+    const primary = currentEvidence.manifest.references[0];
+    assertNormalEvidenceProviderContract(representativeEvidence, {
+      runtime: process.env,
+      databaseUrl: config.databaseUrl,
+      storageMode: config.storageMode,
+      storageBucket: config.r2Bucket,
+      model: modelTier,
+      resolution: (config.tiers[spec.qualityTier] ?? config.tiers.silent_caption).resolution,
+      durationSec: spec.shots.reduce((sum, shot) => sum + Math.ceil(shot.durationSec), 0),
+      shotCount: spec.shots.length,
+      width: spec.width,
+      height: spec.height,
+      format,
+      category: productSnapshot.category,
+      userId: row.user_id,
+      productId: row.product_id,
+      subjectId: row.persona_id,
+      referenceManifestRaw: row.approved_reference_manifest ?? undefined,
+      productSnapshotRaw: row.job_product_snapshot ?? undefined,
+    });
+    if (primary.sha256 !== representativeEvidence.referenceSha256) throw new Error("NORMAL_EVIDENCE_REFERENCE_MISMATCH");
+    if (productSnapshot.trustedBrand.value !== representativeEvidence.referenceBrand) throw new Error("NORMAL_EVIDENCE_BRAND_MISMATCH");
+    if (row.requires_approval) throw new Error("NORMAL_EVIDENCE_USER_REGEN_DISABLED");
+  }
   let qcF1: RingkasanQcF1[] = [];
   const jejakIde = bacaJejakIde(row.script_validation_result);
   async function simpanArsip(specArsip: VisualSpec, tahap: "pre-gate" | "provider-bound") {
@@ -706,7 +784,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // ulang — disk lokal worker sudah lama hilang saat brand akhirnya membuka
   // dashboard. Scene yang diminta ganti digenerate satu per satu, bukan
   // seluruh job, supaya scene yang sudah disetujui tidak ikut berubah.
-  if (row.requires_approval) {
+  if (row.requires_approval && !representativeEvidence) {
     const restored = await materializeJobShots(pool, row.id, workDir);
     if (restored) console.log(`[job ${row.id.slice(0, 8)}] review: ${restored} klip ditarik dari storage`);
     for (const shot of (await loadJobShots(pool, row.id)).filter((s) => s.regen_requested)) {
@@ -726,7 +804,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     }
   }
 
-  const reused = format === "vo_broll" ? null : await findReusableClips(workDir, spec);
+  const reused = representativeEvidence || format === "vo_broll" ? null : await findReusableClips(workDir, spec);
   if (reused) console.log(`[job ${row.id.slice(0, 8)}] resume: ${reused.assets.length} klip dari upaya sebelumnya dipakai ulang, provider TIDAK dipanggil lagi`);
   // FRAME PERTAMA BUATAN (2026-08-13). Mode i2v menjadikan gambar yang dikirim
   // sebagai frame pertama PERSIS — jadi selama gambarnya foto produk, setiap
@@ -747,7 +825,11 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   // terasa satu sesi rekaman, bukan beberapa ruangan berbeda. Lihat
   // bolehFrameTurunan() untuk kenapa gerbangnya tier + format.
   let specSiap: VisualSpec;
-  if (bolehFrameTurunan({ format, tier, orgId: row.org_id })) {
+  if (representativeEvidence) {
+    // No Gemini image/cast generation and no derived crop: the already
+    // verified immutable archive bytes become BytePlus's literal i2v frame.
+    specSiap = prepareNormalEvidenceBytePlusOnlySpec(spec, refUtama);
+  } else if (bolehFrameTurunan({ format, tier, orgId: row.org_id })) {
     await pastikanManifestSebelumEfek();
     const turunan = await siapkanFrameTurunan(spec, workDir, row.id, {
       kunci: kunciCastRef({ presetId: row.creator_category, customDesc: customDesc ?? null }),
@@ -859,8 +941,13 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   const isPresenterLipsync = shouldPreserveEmbeddedLipsync({
     format, providerName: effectiveVideoProvider, storyIdentity,
   });
-  if (!withAudio) await jobs.setProviders(row.id, undefined, "none-silent-caption");
-  else if (format === "vo_broll") {
+  const audioRoute = selectPostVideoAudioRoute({ representativeEvidence: Boolean(representativeEvidence),
+    withAudio, format, presenterLipsync: isPresenterLipsync, usedMockVideo });
+  if (audioRoute === "embedded") {
+    if (representativeEvidence && specSiap.generateAudio !== true) throw new Error("NORMAL_EVIDENCE_BYTEPLUS_EMBEDDED_AUDIO_REQUIRED");
+    await jobs.setProviders(row.id, undefined, "embedded-model-lipsync");
+  } else if (audioRoute === "none") await jobs.setProviders(row.id, undefined, "none-silent-caption");
+  else if (audioRoute === "elevenlabs") {
     // No embedded audio is possible here (no video model call happened) —
     // real TTS is the only option, unlike hands_only/talking_head's mock-only rule.
     for (let i = 0; i < segments.length; i++) {
@@ -871,11 +958,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       await jobs.addCost(row.id, result.costIdr);
     }
     await jobs.setProviders(row.id, undefined, "elevenlabs-tts");
-  } else if (isPresenterLipsync) {
-    // Presenter/Lipsync (Super HQ): audio embedded asli dipertahankan — TIDAK
-    // diganti Gemini TTS, supaya lip-sync sungguhan dari model tetap utuh.
-    await jobs.setProviders(row.id, undefined, "embedded-model-lipsync");
-  } else if (!usedMockVideo) {
+  } else if (audioRoute === "gemini") {
     // SUARA RESMI = Gemini TTS (Brian 2026-08-07): audio embedded model video
     // diganti VO TTS ber-voice terkunci per avatar.
     const voText = hargaTerbilang(segments.map((segment) => segment.tts_text ?? segment.text).join(" ... "));
@@ -917,7 +1000,8 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   let outputPath = "";
   let renderParams = { watermark: true as const, watermarkText: AIGC_WATERMARK_TEXT };
   let qc: Awaited<ReturnType<typeof runQc>> | null = null;
-  for (let retry = 0; retry < 2; retry++) {
+  let evidenceQc: NormalEvidenceOfflineQcReceipt | null = null;
+  for (let retry = 0; retry < (representativeEvidence ? 1 : 2); retry++) {
     if (!(await jobs.transition(row.id, "COMPOSITING", { worker: "postgres", retry }))) return;
     const composite = await compositeVideo({ jobId: row.id, workDir, clipPaths, mode,
       voiceoverWavPath: mode === "embedded" ? geminiVoPath : undefined,
@@ -979,7 +1063,8 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       }
     }
     if (!(await jobs.transition(row.id, "QC_CHECK", { worker: "postgres" }))) return;
-    qc = await postgresQcRunner({ filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
+    const qcInput: Parameters<typeof runQc>[0] = { filePath: outputPath, targetDurationSec: row.duration_s, isMockProvider: usedMockVideo,
+      externalQcPolicy: representativeEvidence ? "forbid" : "allow",
       // Ekor yang SENGAJA ditambahkan sesudah konten — QC-05 memakai ini
       // supaya video yang lengkap tidak dinilai kelebihan durasi, dan QC-10
       // memakainya untuk mengeluarkan segmen packshot dari jendela OCR.
@@ -1006,7 +1091,13 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
           : [{ text: priceOverlayText, startSec: demo.start, endSec: demo.end, critical: true }]),
         { text: ctaQcText, startSec: cta.start, endSec: cta.end, critical: true },
       ],
-    });
+    };
+    if (representativeEvidence) {
+      evidenceQc = await runNormalEvidenceOfflineQc(outputPath);
+      qc = evidenceQc;
+    } else {
+      qc = await postgresQcRunner(qcInput);
+    }
     await pool.query("UPDATE jobs SET qc_result=$1,qc_retry_count=$2 WHERE id=$3", [JSON.stringify(qc), retry, row.id]);
     if (qc.passed) break;
 
@@ -1026,7 +1117,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // kemungkinan besar arahannya, bukan satu lemparan dadu yang sial — dan
     // menggenerate ulang terus akan membakar margin tanpa memperbaiki apa pun.
     const qc11 = qc.checks.find((check) => check.code === "QC-11" && check.status === "fail");
-    if (retry === 0 && qc11?.detikGagal?.length && !usedMockVideo) {
+    if (!representativeEvidence && retry === 0 && qc11?.detikGagal?.length && !usedMockVideo) {
       const durasiShot = specSiap.shots.map((shot) => shot.durationSec);
       const idxCacat = [...new Set(qc11.detikGagal.map((d) => shotUntukDetik(durasiShot, d)))]
         .filter((i) => i >= 0)
@@ -1052,10 +1143,43 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // Sebut juga check skip: kebijakan bisa menolak TANPA satu pun fail
     // (skip tak berizin / check wajib hilang) — pesan kosong = debugging buta
     // (insiden 21979c08: "QC gagal setelah retry: " tanpa penyebab).
-    if (retry === 1) {
+    if (!representativeEvidence && retry === 1) {
       const notPass = qc.checks.filter((check) => check.status !== "pass").map((check) => `${check.code}:${check.status}`);
       throw new Error(`QC gagal setelah retry: ${notPass.join(", ") || "kebijakan menolak (check wajib hilang?)"}`);
     }
+  }
+  if (representativeEvidence) {
+    if (!evidenceQc) throw new Error("NORMAL_EVIDENCE_QC_MISSING");
+    const refreshed = await normalEvidenceStore().get(row.id);
+    if (!refreshed?.providerTaskId) throw new Error("NORMAL_EVIDENCE_TASK_CORRELATION_MISSING");
+    const artifact = fs.readFileSync(outputPath);
+    const artifactSha256 = crypto.createHash("sha256").update(artifact).digest("hex");
+    assertNormalEvidenceReceiptMatchesArtifact(evidenceQc, artifactSha256);
+    const artifactKey = `private/evidence/${representativeEvidence.taskId}/${artifactSha256}.mp4`;
+    await mediaStorage().put(artifactKey, artifact, "video/mp4");
+    await normalEvidenceStore().captureNoPublication(row.id, {
+      taskId: refreshed.providerTaskId,
+      artifactKey,
+      artifactSha256,
+      qc: evidenceQc,
+      correlation: {
+        task_id: representativeEvidence.taskId,
+        job_id: row.id,
+        user_id: row.user_id,
+        product_id: row.product_id,
+        subject_id: row.persona_id,
+        request_sha256: refreshed.payloadSha256,
+        provider_task_id: refreshed.providerTaskId,
+        prompt_archive_job_id: row.id,
+        usage_cost_state: refreshed.state,
+        artifact_sha256: artifactSha256,
+        qc_passed: evidenceQc.passed,
+        redaction_state: "PENDING_INDEPENDENT_REVIEW",
+        publication: "disabled",
+      },
+    });
+    console.log(`[job ${row.id.slice(0, 8)}] representative evidence captured privately; READY/output publication disabled`);
+    return;
   }
   if (!qc?.passed) throw new Error("QC tidak menghasilkan output lulus.");
   await pastikanManifestSebelumEfek();
