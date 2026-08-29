@@ -9,6 +9,7 @@ import { Pool } from "pg";
 export const STAGING_POSTGRES_ID = "dpg-d9n21fnlk1mc73djm8q0-a";
 export const PRODUCTION_POSTGRES_ID = "dpg-d9nh7rrncjis73a6e5b0-a";
 export const STAGING_POSTGRES_NAME = "racun-ai-staging-postgres";
+export const STAGING_DATABASE_PRINCIPAL = "racun_staging_ci";
 export const PUBLIC_IPV4_SOURCE = "https://checkip.amazonaws.com/";
 const RENDER_API_ORIGIN = "https://api.render.com";
 const WINDOW_DESCRIPTION = "temporary-github-runner-one-run";
@@ -64,6 +65,12 @@ function required(name, value) {
   return value;
 }
 
+export function validateExpectedUser(value) {
+  const configured = required("STAGING_DATABASE_EXPECTED_USER", value);
+  if (configured !== STAGING_DATABASE_PRINCIPAL) throw new Error("unexpected staging database principal");
+  return STAGING_DATABASE_PRINCIPAL;
+}
+
 export function validateTarget(postgresId) {
   if (postgresId === PRODUCTION_POSTGRES_ID) throw new Error("production target forbidden");
   if (postgresId !== STAGING_POSTGRES_ID) throw new Error("unexpected target");
@@ -114,7 +121,7 @@ export function postgresShape(raw) {
 
 export function externalTlsDatabaseUrl(raw, metadata, expectedUser) {
   const url = new URL(required("MANAGED_DATABASE_URL", raw));
-  const principal = required("STAGING_DATABASE_EXPECTED_USER", expectedUser);
+  const principal = validateExpectedUser(expectedUser);
   const expectedHost = `${metadata.id}.${metadata.region}-postgres.render.com`;
   if (url.protocol !== "postgres:" && url.protocol !== "postgresql:") throw new Error("postgres URL required");
   if (url.hostname !== expectedHost) throw new Error("external staging hostname required");
@@ -253,7 +260,7 @@ export async function waitForAllowList(postgresId, token, expected, options = {}
 
 export async function verifyDatabaseTls(url, metadata, expectedUser, poolFactory = (config) => new Pool(config),
   hostnameVerifier = tls.checkServerIdentity) {
-  const principal = required("STAGING_DATABASE_EXPECTED_USER", expectedUser);
+  const principal = validateExpectedUser(expectedUser);
   const pool = poolFactory({ connectionString: url.toString(), max: 1, connectionTimeoutMillis: 10_000 });
   let client;
   let transactionStarted = false;
@@ -373,7 +380,7 @@ export async function openWindow(env = process.env, deps = defaultDeps) {
     return cleanupPromise;
   };
   try {
-    const expectedUser = required("STAGING_DATABASE_EXPECTED_USER", env.STAGING_DATABASE_EXPECTED_USER);
+    const expectedUser = validateExpectedUser(env.STAGING_DATABASE_EXPECTED_USER);
     receipt.expected_user_configured = true;
     const postgresId = validateTarget(required("STAGING_RENDER_POSTGRES_ID", env.STAGING_RENDER_POSTGRES_ID));
     receipt.target_verified = true;

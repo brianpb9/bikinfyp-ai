@@ -14,7 +14,9 @@ import {
   PUBLIC_IPV4_SOURCE,
   renderRequest,
   replaceAllowList,
+  STAGING_DATABASE_PRINCIPAL,
   STAGING_POSTGRES_ID,
+  validateExpectedUser,
   validateTarget,
   verifyDatabaseTls,
   waitForAllowList,
@@ -31,7 +33,7 @@ const metadata = {
   ipAllowList: [],
 };
 const externalHost = `${STAGING_POSTGRES_ID}.singapore-postgres.render.com`;
-const expectedUser = "racun_staging_ci";
+const expectedUser = STAGING_DATABASE_PRINCIPAL;
 const managedUrl = `postgresql://${expectedUser}:fixture-password@${externalHost}/fixture-db`;
 const env = {
   ...process.env,
@@ -180,6 +182,7 @@ test("Render control is hard-bound to staging and authoritative database identit
 });
 
 test("database URL accepts only the dedicated expected staging principal on the provider-derived target", () => {
+  assert.equal(validateExpectedUser(expectedUser), "racun_staging_ci");
   const url = externalTlsDatabaseUrl(`${managedUrl}?sslmode=disable&ssl=0`, metadata, expectedUser);
   assert.equal(url.hostname, externalHost);
   assert.equal(decodeURIComponent(url.username), expectedUser);
@@ -187,10 +190,17 @@ test("database URL accepts only the dedicated expected staging principal on the 
   assert.equal(url.searchParams.has("ssl"), false);
   assert.throws(() => externalTlsDatabaseUrl(`postgresql://${expectedUser}:p@internal-host/fixture-db`, metadata, expectedUser));
   assert.throws(() => externalTlsDatabaseUrl(`postgresql://${expectedUser}:p@${externalHost}/wrong-db`, metadata, expectedUser));
-  for (const rejected of [metadata.databaseUser, "wrong_staging_user", "racun_ai_production_postgres_user"])
+  for (const rejected of [metadata.databaseUser, "racun_staging", "wrong_staging_user", "racun_ai_production_postgres_user"])
     assert.throws(() => externalTlsDatabaseUrl(`postgresql://${rejected}:p@${externalHost}/fixture-db`, metadata, expectedUser),
       /database principal mismatch/);
   assert.throws(() => externalTlsDatabaseUrl(managedUrl, metadata, undefined), /missing STAGING_DATABASE_EXPECTED_USER/);
+});
+
+test("configured principal cannot redefine truth even when its URL username matches", () => {
+  for (const rejected of [metadata.databaseUser, "racun_staging", "wrong_staging_user", "racun_ai_production_postgres_user"]) {
+    const matchingUrl = `postgresql://${rejected}:p@${externalHost}/fixture-db`;
+    assert.throws(() => externalTlsDatabaseUrl(matchingUrl, metadata, rejected), /unexpected staging database principal/);
+  }
 });
 
 test("TLS probe proves the exact principal is non-privileged inside READ ONLY and always ROLLBACK", async () => {
@@ -267,11 +277,14 @@ test("TLS probe fails closed for a wrong current_user or any privileged role fla
   }
 });
 
-test("missing expected principal fails before any metadata read or network mutation", async () => {
-  const calls: string[] = [];
-  const missing = { ...env, STAGING_DATABASE_EXPECTED_USER: undefined };
-  await assert.rejects(openWindow(missing, mockedDeps(calls)), /window run failed/);
-  assert.deepEqual(calls, []);
+test("missing, default, arbitrary, or production expected principal fails before metadata or network", async () => {
+  for (const rejected of [undefined, metadata.databaseUser, "racun_staging", "wrong_staging_user",
+    "racun_ai_production_postgres_user"]) {
+    const calls: string[] = [];
+    const rejectedEnv = { ...env, STAGING_DATABASE_EXPECTED_USER: rejected };
+    await assert.rejects(openWindow(rejectedEnv, mockedDeps(calls)), /window run failed/);
+    assert.deepEqual(calls, [], `${rejected ?? "missing"} must fail before dependencies`);
+  }
 });
 
 test("successful same-process window executes evidence once then cleans before return", async () => {
