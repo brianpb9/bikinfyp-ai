@@ -168,7 +168,7 @@ export async function POST(req: Request) {
     // the same HTTP contract.  The deterministic completion hook is scoped
     // to RACUN_POSTGRES_SMOKE and never starts the production worker.
     if (postgresRuntimeEnabled()) {
-      const created = await smokeCreateJob(user.id, { productId: product.id, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc });
+      const created = await smokeCreateJob(user.id, { productId: product.id, personaId, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc });
       // Snapshot Skor FYP BEKU (pre-render) — non-fatal, sama seperti jalur SQLite.
       if (!created.duplicate) {
         try {

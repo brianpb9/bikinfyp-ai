@@ -205,7 +205,7 @@ export async function smokeApproveScript(userId: string, scriptId: string, updat
   try { return await repo.approveOwnedScript(userId, scriptId, update, orgId); } finally { await repo.close(); }
 }
 
-export async function smokeCreateJob(userId: string, input: { productId: string; scriptId: string; format: string; qualityTier: string; durationS: number; priceIdr: number; avatarCustomDesc?: string | null }) {
+export async function smokeCreateJob(userId: string, input: { productId: string; personaId: string | null; scriptId: string; format: string; qualityTier: string; durationS: number; priceIdr: number; avatarCustomDesc?: string | null }) {
   const pool = getPool(url());
   try {
     // The user-row lock serializes wallet spends and the script-row lock
@@ -232,13 +232,24 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
           const active = await client.query<{ id: string }>("SELECT id FROM jobs WHERE id=$1 AND state NOT IN ('FAILED','REFUNDED','READY') FOR UPDATE", [script.rows[0].job_id]);
           if (active.rows[0]) { await client.query("COMMIT"); return { jobId: active.rows[0].id, duplicate: true }; }
         }
+        // The HTTP route validates ownership before entering this transaction,
+        // but the persona can be deleted or reassigned between that read and
+        // the job insert. Re-check it under the admission transaction so an
+        // explicitly selected missing/foreign persona fails before job/hold.
+        if (input.personaId) {
+          const persona = await client.query(
+            "SELECT id FROM personas WHERE id=$1 AND user_id=$2 FOR KEY SHARE",
+            [input.personaId, userId]
+          );
+          if (!persona.rows[0]) throw new Error("PERSONA_NOT_FOUND");
+        }
         const balance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);
         if (Number(balance.rows[0].balance) < input.priceIdr) throw new Error("INSUFFICIENT_CREDITS");
         const jobId = id(); const timestamp = at();
         // avatar_custom_desc ikut ditulis: sejak avatar premium dibuka untuk
         // retail, deskripsi presetnya harus sampai ke worker — worker Postgres
         // sudah membacanya sejak M8, jalur retail yang belum mengirimnya.
-        await client.query("INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,avatar_custom_desc,state,created_at,state_changed_at) VALUES ($1,$2,$3,NULL,$4,$5,$6,$7,$8,'QUEUED',$9,$9)", [jobId,userId,input.productId,input.scriptId,input.format,input.qualityTier,input.durationS,input.avatarCustomDesc ?? null,timestamp]);
+        await client.query("INSERT INTO jobs (id,user_id,product_id,persona_id,script_id,format,quality_tier,duration_s,avatar_custom_desc,state,created_at,state_changed_at) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,'QUEUED',$10,$10)", [jobId,userId,input.productId,input.personaId,input.scriptId,input.format,input.qualityTier,input.durationS,input.avatarCustomDesc ?? null,timestamp]);
         await client.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,'hold',$4,NULL,$5)", [id(),userId,-input.priceIdr,jobId,timestamp]);
         await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId,input.scriptId]);
         await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true }),timestamp]);

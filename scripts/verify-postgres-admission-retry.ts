@@ -17,6 +17,11 @@ const { smokeCreateJob } = await import("../lib/postgres/smoke-runtime");
 const count = 20;
 const userId = `admission-user-${crypto.randomUUID()}`;
 const productId = `admission-product-${crypto.randomUUID()}`;
+const personaId = `admission-persona-${crypto.randomUUID()}`;
+const foreignUserId = `admission-foreign-${crypto.randomUUID()}`;
+const foreignPersonaId = `admission-foreign-persona-${crypto.randomUUID()}`;
+const missingPersonaScriptId = `admission-missing-persona-${crypto.randomUUID()}`;
+const foreignPersonaScriptId = `admission-foreign-persona-script-${crypto.randomUUID()}`;
 const scriptIds = Array.from({ length: count }, () => `admission-script-${crypto.randomUUID()}`);
 const priceIdr = 5_000;
 const now = new Date().toISOString();
@@ -28,10 +33,22 @@ try {
     [userId, `${userId}@local.test`, now]
   );
   await pool.query(
+    "INSERT INTO users (id,email,tier,locale,created_at) VALUES ($1,$2,'free','id-ID',$3)",
+    [foreignUserId, `${foreignUserId}@local.test`, now]
+  );
+  await pool.query(
     "INSERT INTO products (id,user_id,name,price_idr,category,images,created_at) VALUES ($1,$2,'Produk admission',1000,'test','[]',$3)",
     [productId, userId, now]
   );
-  for (const scriptId of scriptIds) {
+  await pool.query(
+    "INSERT INTO personas (id,user_id,name,creator_category,voice_id,register,created_at) VALUES ($1,$2,'Persona admission','hijaber','mock-damayanti','bestie',$3)",
+    [personaId, userId, now]
+  );
+  await pool.query(
+    "INSERT INTO personas (id,user_id,name,creator_category,voice_id,register,created_at) VALUES ($1,$2,'Persona asing','hijaber','mock-damayanti','bestie',$3)",
+    [foreignPersonaId, foreignUserId, now]
+  );
+  for (const scriptId of [...scriptIds, missingPersonaScriptId, foreignPersonaScriptId]) {
     await pool.query(
       "INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,created_at) VALUES ($1,$2,'hook','neutral','casual','[]','caption','[]','{}','silent_caption',$3)",
       [scriptId, productId, now]
@@ -43,8 +60,33 @@ try {
     [`topup-${crypto.randomUUID()}`, userId, (count + 1) * priceIdr, now]
   );
 
+  await assert.rejects(
+    smokeCreateJob(userId, {
+      productId, personaId: `missing-${crypto.randomUUID()}`, scriptId: missingPersonaScriptId,
+      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+    }),
+    /PERSONA_NOT_FOUND/,
+    "persona yang hilang wajib gagal tertutup"
+  );
+  await assert.rejects(
+    smokeCreateJob(userId, {
+      productId, personaId: foreignPersonaId, scriptId: foreignPersonaScriptId,
+      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+    }),
+    /PERSONA_NOT_FOUND/,
+    "persona milik user lain wajib gagal tertutup"
+  );
+  const rejectedWrites = await pool.query<{ jobs: string; holds: string }>(
+    `SELECT
+       (SELECT COUNT(*)::text FROM jobs WHERE script_id = ANY($1::text[])) AS jobs,
+       (SELECT COUNT(*)::text FROM credit_ledger l JOIN jobs j ON j.id=l.job_id WHERE j.script_id = ANY($1::text[])) AS holds`,
+    [[missingPersonaScriptId, foreignPersonaScriptId]]
+  );
+  assert.equal(Number(rejectedWrites.rows[0]?.jobs), 0, "persona invalid tidak boleh menulis job");
+  assert.equal(Number(rejectedWrites.rows[0]?.holds), 0, "persona invalid tidak boleh menulis hold");
+
   const settled = await Promise.allSettled(scriptIds.map((scriptId) => smokeCreateJob(userId, {
-    productId, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+    productId, personaId, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
   })));
   const rejected = settled.filter((entry): entry is PromiseRejectedResult => entry.status === "rejected");
   assert.equal(rejected.length, 0, `admission paralel menolak ${rejected.length}: ${rejected.map((entry) => String(entry.reason)).join(" | ")}`);
@@ -57,13 +99,17 @@ try {
   );
   assert.equal(jobs.rowCount, count, "harus ada tepat 20 job");
   assert.ok(jobs.rows.every((row) => Number(row.n) === 1), "setiap script harus memiliki tepat satu job");
+  const personas = await pool.query<{ persona_id: string | null }>(
+    "SELECT persona_id FROM jobs WHERE user_id=$1", [userId]
+  );
+  assert.ok(personas.rows.every((row) => row.persona_id === personaId), "persona tervalidasi wajib tersimpan pada setiap job");
   const holds = await pool.query<{ job_id: string; n: string; delta: string }>(
     "SELECT job_id,COUNT(*)::text n,SUM(delta)::text delta FROM credit_ledger WHERE user_id=$1 AND type='hold' GROUP BY job_id ORDER BY job_id", [userId]
   );
   assert.equal(holds.rowCount, count, "harus ada tepat 20 hold");
   assert.ok(holds.rows.every((row) => Number(row.n) === 1 && Number(row.delta) === -priceIdr), "setiap job harus memiliki satu hold sebesar harga");
   const first = accepted[0];
-  const duplicate = await smokeCreateJob(userId, { productId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
+  const duplicate = await smokeCreateJob(userId, { productId, personaId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
   assert.equal(duplicate.duplicate, true, "job aktif untuk script yang sama harus idempoten");
   assert.equal(duplicate.jobId, first.jobId, "duplikat aktif harus menunjuk job awal");
   const activeDuplicateHolds = await pool.query("SELECT id FROM credit_ledger WHERE job_id=$1 AND type='hold'", [first.jobId]);
@@ -72,7 +118,7 @@ try {
   // This matches the historic rule: a terminal job does not block a deliberate
   // re-admission of the same approved script, and the script pointer advances.
   await pool.query("UPDATE jobs SET state='FAILED' WHERE id=$1", [first.jobId]);
-  const reAdmitted = await smokeCreateJob(userId, { productId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
+  const reAdmitted = await smokeCreateJob(userId, { productId, personaId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
   assert.equal(reAdmitted.duplicate, false, "job terminal harus mengizinkan re-admission");
   assert.notEqual(reAdmitted.jobId, first.jobId, "re-admission harus membuat job baru");
   const pointer = await pool.query<{ job_id: string }>("SELECT job_id FROM scripts WHERE id=$1", [scriptIds[0]]);
@@ -82,7 +128,7 @@ try {
   const balance = await pool.query<{ balance: string }>("SELECT balance::text FROM v_credit_balance WHERE user_id=$1", [userId]);
   assert.equal(Number(balance.rows[0]?.balance), 0, "saldo harus habis persis tanpa hold ganda/terlewat");
 
-  process.stdout.write(JSON.stringify({ admissions: count, jobs: jobs.rowCount, holds: holds.rowCount, active_duplicate: true, terminal_readmission: true, balance: Number(balance.rows[0]?.balance) }) + "\n");
+  process.stdout.write(JSON.stringify({ admissions: count, jobs: jobs.rowCount, holds: holds.rowCount, persona_persisted: true, missing_persona_fail_closed: true, foreign_persona_fail_closed: true, active_duplicate: true, terminal_readmission: true, balance: Number(balance.rows[0]?.balance) }) + "\n");
 } finally {
   await pool.end();
 }
