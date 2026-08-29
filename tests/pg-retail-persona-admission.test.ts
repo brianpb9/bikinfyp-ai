@@ -14,7 +14,7 @@ test("retail PostgreSQL passes the already validated persona into admission", ()
 });
 
 test("missing or foreign selected persona fails before any job or hold write", () => {
-  const ownershipCheck = runtime.indexOf("SELECT id FROM personas WHERE id=$1 AND user_id=$2 FOR KEY SHARE");
+  const ownershipCheck = runtime.indexOf("SELECT id FROM personas WHERE id=$1 AND user_id=$2 FOR UPDATE");
   const rejection = runtime.indexOf('throw new Error("PERSONA_NOT_FOUND")');
   const jobInsert = runtime.indexOf('client.query("INSERT INTO jobs');
   const holdInsert = runtime.indexOf('client.query("INSERT INTO credit_ledger');
@@ -22,6 +22,7 @@ test("missing or foreign selected persona fails before any job or hold write", (
   assert.ok(rejection > ownershipCheck, "missing/foreign persona must reject");
   assert.ok(jobInsert > rejection, "persona rejection must precede job insert");
   assert.ok(holdInsert > jobInsert, "hold remains after the protected job insert");
+  assert.doesNotMatch(runtime, /SELECT id FROM personas[^\n]+FOR KEY SHARE/, "KEY SHARE permits a concurrent non-key user_id reassignment");
 });
 
 test("admission change has no provider execution or candidate SQL bypass", () => {

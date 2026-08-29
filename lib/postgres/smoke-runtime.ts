@@ -238,7 +238,7 @@ export async function smokeCreateJob(userId: string, input: { productId: string;
         // explicitly selected missing/foreign persona fails before job/hold.
         if (input.personaId) {
           const persona = await client.query(
-            "SELECT id FROM personas WHERE id=$1 AND user_id=$2 FOR KEY SHARE",
+            "SELECT id FROM personas WHERE id=$1 AND user_id=$2 FOR UPDATE",
             [input.personaId, userId]
           );
           if (!persona.rows[0]) throw new Error("PERSONA_NOT_FOUND");
