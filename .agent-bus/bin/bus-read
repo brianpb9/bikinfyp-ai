@@ -1,5 +1,5 @@
 #!/bin/sh
-# bus-read <role> [--task <task_id> --owner <owner_id>]
+# bus-read <role> [--task <task_id> --owner <owner_id>] [--worktree <absolute path>]
 #
 # Selectively consumes one message, prints JSON + STALE, and archives it once.
 # A scoped Builder skips every other task/owner without mutating those files.
@@ -17,7 +17,7 @@ die() { code=$1; shift; printf 'bus-read: %s\n' "$*" >&2; exit "$code"; }
 ROLE=$1; shift
 case "$ROLE" in builder|reviewer) ;; *) die 2 "invalid role '$ROLE'" ;; esac
 
-TASK=''; OWNER=''
+TASK=''; OWNER=''; STALE_WORKTREE=''
 if [ "$ROLE" = builder ]; then
   TASK=${AGENT_BUS_TASK_ID:-}
   OWNER=${AGENT_BUS_OWNER_ID:-}
@@ -26,11 +26,18 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --task) [ $# -ge 2 ] || die 2 "--task requires a value"; TASK=$2; shift 2 ;;
     --owner) [ $# -ge 2 ] || die 2 "--owner requires a value"; OWNER=$2; shift 2 ;;
+    --worktree) [ $# -ge 2 ] || die 2 "--worktree requires a value"; STALE_WORKTREE=$2; shift 2 ;;
     *) die 2 "unknown argument '$1'" ;;
   esac
 done
 if { [ -n "$TASK" ] && [ -z "$OWNER" ]; } || { [ -z "$TASK" ] && [ -n "$OWNER" ]; }; then
   die 2 "--task and --owner must be supplied together"
+fi
+if [ -n "$STALE_WORKTREE" ]; then
+  [ "$ROLE" = builder ] || die 2 "--worktree is valid only for the scoped Builder reader"
+  [ -n "$TASK" ] && [ -n "$OWNER" ] \
+    || die 2 "--worktree requires --task and --owner"
+  case "$STALE_WORKTREE" in /*) ;; *) die 2 "--worktree must be an absolute path" ;; esac
 fi
 
 INBOX="$BUS_DIR/inbox/$ROLE"
@@ -67,7 +74,47 @@ DEST="$ARCHIVE/$(basename "$MSG")"
 cat "$MSG"
 SHA=$("$NODE_BIN" -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));process.stdout.write(typeof m.sha==="string"?m.sha:"")' "$MSG" 2>/dev/null || true)
 STALE=true
-if [ -z "$SHA" ]; then
+if [ -n "$STALE_WORKTREE" ]; then
+  # A scoped Builder may bind stale evaluation to the physical worktree that
+  # originated its READY message. Fail closed unless both the worktree and its
+  # Git-common-dir identity exactly match the route copied by Reviewer.
+  SCOPED_OK=false
+  if PHYSICAL_WORKTREE=$(CDPATH= cd -- "$STALE_WORKTREE" 2>/dev/null && pwd -P); then
+    TOPLEVEL=$(git -C "$PHYSICAL_WORKTREE" rev-parse --show-toplevel 2>/dev/null || true)
+    if [ -n "$TOPLEVEL" ]; then
+      TOPLEVEL=$(CDPATH= cd -- "$TOPLEVEL" 2>/dev/null && pwd -P || true)
+    fi
+    COMMON_DIR=$(git -C "$PHYSICAL_WORKTREE" rev-parse --git-common-dir 2>/dev/null || true)
+    if [ -n "$COMMON_DIR" ]; then
+      case "$COMMON_DIR" in /*) ;; *) COMMON_DIR="$TOPLEVEL/$COMMON_DIR" ;; esac
+      COMMON_DIR=$(CDPATH= cd -- "$COMMON_DIR" 2>/dev/null && pwd -P || true)
+    fi
+    REPO_ID=''
+    [ -z "$COMMON_DIR" ] || REPO_ID=$(printf '%s' "$COMMON_DIR" | git hash-object --stdin 2>/dev/null | cut -c1-16)
+    ROUTE=$("$NODE_BIN" -e '
+      const fs=require("fs");
+      const m=JSON.parse(fs.readFileSync(process.argv[1],"utf8"));
+      const fields=["origin_worktree","origin_repo_id","origin_repo_path"];
+      if (!m || typeof m!=="object" || fields.some((f)=>typeof m[f]!=="string" || !m[f])) process.exit(1);
+      process.stdout.write(fields.map((f)=>m[f]).join("\n"));
+    ' "$MSG" 2>/dev/null || true)
+    ROUTE_WORKTREE=$(printf '%s\n' "$ROUTE" | sed -n '1p')
+    ROUTE_REPO_ID=$(printf '%s\n' "$ROUTE" | sed -n '2p')
+    ROUTE_REPO_PATH=$(printf '%s\n' "$ROUTE" | sed -n '3p')
+    if [ -n "$TOPLEVEL" ] && [ "$PHYSICAL_WORKTREE" = "$TOPLEVEL" ] \
+      && [ "$ROUTE_WORKTREE" = "$PHYSICAL_WORKTREE" ] \
+      && [ -n "$COMMON_DIR" ] && [ "$ROUTE_REPO_PATH" = "$COMMON_DIR" ] \
+      && [ -n "$REPO_ID" ] && [ "$ROUTE_REPO_ID" = "$REPO_ID" ]; then
+      SCOPED_OK=true
+    fi
+  fi
+  if [ "$SCOPED_OK" = true ]; then
+    if [ -z "$SHA" ] \
+      || git -C "$PHYSICAL_WORKTREE" merge-base --is-ancestor "$SHA" HEAD 2>/dev/null; then
+      STALE=false
+    fi
+  fi
+elif [ -z "$SHA" ]; then
   STALE=false
 elif git -C "$REPO_ROOT" merge-base --is-ancestor "$SHA" HEAD 2>/dev/null; then
   STALE=false

@@ -98,6 +98,19 @@ every verdict is bound to an object that actually exists.
 Stale messages are **flagged, never deleted**. Deciding what a stale verdict is
 worth is a human/agent judgement, not something the bus should silently make.
 
+A routed Builder working from a linked worktree can bind this check explicitly:
+
+```sh
+bus-read builder --task "$TASK" --owner "$OWNER" --worktree /absolute/physical/worktree
+```
+
+`--worktree` is accepted only for a scoped Builder read (both `--task` and
+`--owner` are mandatory). Before using that worktree's HEAD, the reader requires
+its physical top-level, Git common-directory path, and derived repository ID to
+exactly match the message's copied origin route. A missing/non-repository path,
+origin mismatch, or different repository stays `STALE=true`; it can never make
+an unrelated verdict non-stale. Archive and routing behavior are unchanged.
+
 ## Role separation
 
 * The builder writes only to `inbox/reviewer/`.

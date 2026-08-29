@@ -28,7 +28,7 @@ die() { printf 'bus-test-isolate: %s\n' "$*" >&2; exit 2; }
 TEST_SCRIPT=$1
 shift
 case "$TEST_SCRIPT" in
-  .agent-bus/test-bus.sh|.agent-bus/test-reviewer-runtime.sh|.agent-bus/test-owner-routing.sh) ;;
+  .agent-bus/test-bus.sh|.agent-bus/test-reviewer-runtime.sh|.agent-bus/test-owner-routing.sh|.agent-bus/test-worktree-stale.sh) ;;
   *) die "refusing non-bus test path: $TEST_SCRIPT" ;;
 esac
 
