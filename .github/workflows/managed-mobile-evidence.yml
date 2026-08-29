@@ -8,13 +8,26 @@ on:
       - scripts/build-mobile-evidence-image.sh
       - scripts/managed-staging-db-tls-window.mjs
       - scripts/preflight-staging-r2.mjs
+      - scripts/run-staging-database-tls-preflight.mjs
       - scripts/run-mobile-evidence-image.sh
+      - scripts/validate-staging-database-secret-contract.mjs
       - scripts/verify-mobile-evidence-receipt.mjs
       - tests/managed-mobile-ci-workflow.test.ts
+      - tests/staging-db-secret-contract.test.ts
+      - tests/staging-db-tls-preflight-only.test.ts
       - tests/staging-db-tls-window.test.ts
       - tests/staging-r2-preflight.test.ts
   workflow_dispatch:
     inputs:
+      mode:
+        description: Safe staging database operation to run
+        required: true
+        default: secret-contract
+        type: choice
+        options:
+          - secret-contract
+          - tls-preflight-only
+          - full-e2e
       reviewed_sha:
         description: Exact 40-character Reviewer-approved staging bundle SHA
         required: true
@@ -65,14 +78,80 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs scripts/managed-staging-db-tls-window.mjs
+      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs scripts/managed-staging-db-tls-window.mjs scripts/run-staging-database-tls-preflight.mjs scripts/validate-staging-database-secret-contract.mjs
       - run: npx tsc --noEmit
-      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/staging-r2-preflight.test.ts tests/staging-db-tls-window.test.ts
+      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/staging-r2-preflight.test.ts tests/staging-db-tls-window.test.ts tests/staging-db-secret-contract.test.ts tests/staging-db-tls-preflight-only.test.ts
+
+  staging-database-secret-contract:
+    # This mode receives only the database URL and non-secret expected user.
+    # It never receives the Render token and cannot open an allow-list window.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'secret-contract'
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout immutable default-branch contract validator
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate staging database secret contract without network access
+        working-directory: control
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_DATABASE_EXPECTED_USER: ${{ vars.STAGING_DATABASE_EXPECTED_USER }}
+        run: node scripts/validate-staging-database-secret-contract.mjs
+
+  staging-database-tls-preflight:
+    # This mode proves the reviewed TLS/principal control and cleans up, but
+    # cannot execute the managed mobile E2E runner.
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'tls-preflight-only'
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout immutable default-branch control code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Set up pinned Node runtime for trusted preflight control
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: control/package-lock.json
+
+      - name: Install locked trusted preflight dependencies without lifecycle scripts
+        working-directory: control
+        run: npm ci --ignore-scripts
+
+      - name: Run temporary staging database TLS preflight only
+        id: staging_db_tls_preflight
+        env:
+          STAGING_RENDER_POSTGRES_ID: dpg-d9n21fnlk1mc73djm8q0-a
+          STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
+          STAGING_DATABASE_EXPECTED_USER: ${{ vars.STAGING_DATABASE_EXPECTED_USER }}
+          MANAGED_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: node control/scripts/run-staging-database-tls-preflight.mjs
+
+      - name: Always close temporary staging database TLS preflight window
+        if: always() && steps.staging_db_tls_preflight.outcome != 'skipped'
+        env:
+          STAGING_RENDER_POSTGRES_ID: dpg-d9n21fnlk1mc73djm8q0-a
+          STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
+        run: node control/scripts/managed-staging-db-tls-window.mjs close
 
   exact-sha-mobile-evidence:
     # Secret-bearing execution is only available from protected default main.
     # PR-controlled code cannot reach this job or its staging Environment.
-    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main'
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'full-e2e'
     environment: staging
     runs-on: ubuntu-latest
     timeout-minutes: 60
@@ -86,6 +165,12 @@ jobs:
           path: control
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Validate staging database secret contract before evidence work
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_DATABASE_EXPECTED_USER: ${{ vars.STAGING_DATABASE_EXPECTED_USER }}
+        run: node control/scripts/validate-staging-database-secret-contract.mjs
 
       - name: Validate hard-bound reviewed SHA and immutable control checkout
         working-directory: control
