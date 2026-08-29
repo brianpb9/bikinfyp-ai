@@ -101,9 +101,12 @@ if [ -n "$STALE_WORKTREE" ]; then
     ROUTE_WORKTREE=$(printf '%s\n' "$ROUTE" | sed -n '1p')
     ROUTE_REPO_ID=$(printf '%s\n' "$ROUTE" | sed -n '2p')
     ROUTE_REPO_PATH=$(printf '%s\n' "$ROUTE" | sed -n '3p')
+    ROUTE_WORKTREE_PHYSICAL=$(CDPATH= cd -- "$ROUTE_WORKTREE" 2>/dev/null && pwd -P || true)
+    ROUTE_REPO_PATH_PHYSICAL=$(CDPATH= cd -- "$ROUTE_REPO_PATH" 2>/dev/null && pwd -P || true)
     if [ -n "$TOPLEVEL" ] && [ "$PHYSICAL_WORKTREE" = "$TOPLEVEL" ] \
-      && [ "$ROUTE_WORKTREE" = "$PHYSICAL_WORKTREE" ] \
-      && [ -n "$COMMON_DIR" ] && [ "$ROUTE_REPO_PATH" = "$COMMON_DIR" ] \
+      && [ -n "$ROUTE_WORKTREE_PHYSICAL" ] && [ "$ROUTE_WORKTREE_PHYSICAL" = "$PHYSICAL_WORKTREE" ] \
+      && [ -n "$COMMON_DIR" ] && [ -n "$ROUTE_REPO_PATH_PHYSICAL" ] \
+      && [ "$ROUTE_REPO_PATH_PHYSICAL" = "$COMMON_DIR" ] \
       && [ -n "$REPO_ID" ] && [ "$ROUTE_REPO_ID" = "$REPO_ID" ]; then
       SCOPED_OK=true
     fi

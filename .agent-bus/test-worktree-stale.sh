@@ -13,6 +13,13 @@ SEND="$BUS_DIR/bin/bus-send"
 READ="$BUS_DIR/bin/bus-read"
 OWNER=builder-worktree-stale
 FAILURES=0
+LINKED=''
+LINKED_ROUTE=''
+
+cleanup() {
+  case "$LINKED_ROUTE" in /tmp/bikinfyp-agent-bus-linked-*) git -C "$REPO_ROOT" worktree remove --force "$LINKED_ROUTE" >/dev/null 2>&1 || true ;; esac
+}
+trap cleanup EXIT INT TERM HUP
 
 pass() { printf 'PASS  %s\n' "$1"; }
 fail() { printf 'FAIL  %s\n' "$1"; FAILURES=$((FAILURES + 1)); }
@@ -36,9 +43,10 @@ mkdir -p "$BUS_DIR/inbox/builder" "$BUS_DIR/inbox/reviewer" "$BUS_DIR/archive" "
 
 BASE_SHA=$(git -C "$REPO_ROOT" rev-parse HEAD)
 LINKED_SHA=$(git -C "$REPO_ROOT" commit-tree "$BASE_SHA^{tree}" -p "$BASE_SHA" -m linked-head </dev/null)
-LINKED="$REPO_ROOT-linked"
-git -C "$REPO_ROOT" worktree add --detach "$LINKED" "$LINKED_SHA" >/dev/null
-LINKED=$(physical "$LINKED")
+TOKEN_SHORT=$(printf '%s' "$AGENT_BUS_TEST_TOKEN" | cut -c1-12)
+LINKED_ROUTE="/tmp/bikinfyp-agent-bus-linked-$TOKEN_SHORT"
+git -C "$REPO_ROOT" worktree add --detach "$LINKED_ROUTE" "$LINKED_SHA" >/dev/null
+LINKED=$(physical "$LINKED_ROUTE")
 COMMON=$(common_dir "$LINKED")
 REPO_ID=$(route_key "$COMMON")
 
@@ -49,9 +57,9 @@ if git -C "$REPO_ROOT" merge-base --is-ancestor "$LINKED_SHA" HEAD 2>/dev/null; 
 else
   pass "fixture canonical HEAD is unrelated to linked SHA"
 fi
-send_pass WT-LINKED "$LINKED_SHA" "$LINKED" "$REPO_ID" "$COMMON"
-OUT=$($READ builder --task WT-LINKED --owner "$OWNER" --worktree "$LINKED")
-case "$OUT" in *'STALE=false'*) pass "linked worktree exact route is non-stale" ;; *) fail "linked worktree exact route was stale" ;; esac
+send_pass WT-LINKED "$LINKED_SHA" "$LINKED_ROUTE" "$REPO_ID" "$COMMON"
+OUT=$($READ builder --task WT-LINKED --owner "$OWNER" --worktree "$LINKED_ROUTE")
+case "$OUT" in *'STALE=false'*) pass "/tmp route resolves to physical linked worktree as non-stale" ;; *) fail "/tmp route alias was stale" ;; esac
 
 send_pass WT-MISMATCH "$LINKED_SHA" "$REPO_ROOT" "$REPO_ID" "$COMMON"
 OUT=$($READ builder --task WT-MISMATCH --owner "$OWNER" --worktree "$LINKED")
