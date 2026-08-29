@@ -10,29 +10,30 @@ const directory = path.dirname(fileURLToPath(import.meta.url));
 const read = (name) => fs.readFileSync(path.join(directory, name));
 const json = (name) => JSON.parse(read(name));
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
-const clone = (value) => structuredClone(value);
 const exactKeys = (value, keys, label) => assert.deepEqual(Object.keys(value).sort(), [...keys].sort(), label);
 
-const bundle = {
-  run: json("GITHUB-RUN.json"),
-  artifact: json("GITHUB-ARTIFACT.json"),
-  receipt: json("METADATA-RECEIPT.json"),
-  cleanup: json("SECONDARY-CLEANUP.json"),
-  renderReadback: json("RENDER-ALLOWLIST-READBACK.json"),
-  validation: json("VALIDATION.json"),
-  control: json("CONTROL-PLANE.json"),
-  archive: Buffer.from(read("ARTIFACT.zip.base64").toString("ascii").trim(), "base64"),
+const documentHashes = {
+  "CONTROL-PLANE.json": "4f4be89840838eccfbac77f7b891bd2ab35d1494d8df06d6115163d6af8da432",
+  "GITHUB-ARTIFACT.json": "2162333fabe8be70d31745c56881c33a5748e0c01b682cf8ca7e74eeb496797a",
+  "GITHUB-RUN.json": "10e2474608fcc918124e7de9f574679695ef9475ddcdf49181bd7264d31007e6",
+  "METADATA-RECEIPT.json": "0360dd4b07538bfc0ce6ab4a9dc2987c583b977f1e9a9d8092273b2f241c3c93",
+  "RENDER-ALLOWLIST-READBACK.json": "1228b03b9e154835589d85ccf4c91c9169d09a3d1daccc802ca6796727e3242b",
+  "SECONDARY-CLEANUP.json": "1cda346a12a0a394676e7220e270eedd6fa8fb71908664a48fbaab4d6a5394d4",
+  "VALIDATION.json": "e2087908d4b8ac487030fe8f25cb091eedb0f99f90ccb1649f49920e1de8ef20",
 };
 
-const expected = {
-  run: bundle.run,
-  artifact: bundle.artifact,
-  receipt: bundle.receipt,
-  cleanup: bundle.cleanup,
-  renderReadback: bundle.renderReadback,
-  validation: bundle.validation,
-  control: bundle.control,
-};
+function loadBundle() {
+  return {
+    run: json("GITHUB-RUN.json"), artifact: json("GITHUB-ARTIFACT.json"),
+    receipt: json("METADATA-RECEIPT.json"), cleanup: json("SECONDARY-CLEANUP.json"),
+    renderReadback: json("RENDER-ALLOWLIST-READBACK.json"), validation: json("VALIDATION.json"),
+    control: json("CONTROL-PLANE.json"),
+    archive: Buffer.from(read("ARTIFACT.zip.base64").toString("ascii").trim(), "base64"),
+  };
+}
+
+for (const [name, expectedHash] of Object.entries(documentHashes)) assert.equal(sha256(read(name)), expectedHash, name);
+const bundle = loadBundle();
 
 function archiveEntries(bytes) {
   let eocd = -1;
@@ -67,9 +68,6 @@ function archiveEntries(bytes) {
 }
 
 function verify(candidate) {
-  for (const key of ["run", "artifact", "receipt", "cleanup", "renderReadback", "validation", "control"])
-    assert.deepEqual(candidate[key], expected[key], `${key} exact contract`);
-
   exactKeys(candidate.run, ["source", "id", "name", "head_branch", "head_sha", "path", "run_number", "run_attempt", "event", "status", "conclusion", "created_at", "updated_at", "run_started_at"], "run keys");
   assert.equal(candidate.run.source, "GET /repos/brianpb9/bikinfyp-ai/actions/runs/33264551551");
   assert.equal(candidate.run.id, 33264551551);
@@ -89,13 +87,19 @@ function verify(candidate) {
   assert.equal(candidate.artifact.artifact.id, 9718242465);
   assert.equal(candidate.artifact.artifact.name, "normal-representative-metadata-33264551551-1");
   assert.equal(candidate.artifact.artifact.expired, false);
+  exactKeys(candidate.artifact.artifact.workflow_run, ["id", "head_branch", "head_sha"], "artifact workflow binding keys");
   assert.equal(candidate.artifact.artifact.workflow_run.id, candidate.run.id);
+  assert.equal(candidate.artifact.artifact.workflow_run.head_branch, "main");
   assert.equal(candidate.artifact.artifact.workflow_run.head_sha, candidate.run.head_sha);
+  assert.equal(candidate.artifact.artifact.digest, "sha256:eb5ab24bce8a80293df26f2808101055cd5beb05b2da097eedae5a027bcaed1f");
   assert.equal(candidate.artifact.artifact.digest, `sha256:${sha256(candidate.archive)}`);
   assert.equal(candidate.archive.length, candidate.artifact.artifact.size_in_bytes);
 
   const entries = archiveEntries(candidate.archive);
   const fileBindings = new Map(candidate.artifact.artifact.files.map((file) => [file.artifact_name, file]));
+  assert.equal(candidate.artifact.artifact.files.length, 2);
+  for (const file of candidate.artifact.artifact.files)
+    exactKeys(file, ["artifact_name", "committed_name", "size_in_bytes", "sha256"], "artifact file binding keys");
   assert.deepEqual([...fileBindings.keys()].sort(), Object.keys(entries).sort());
   for (const [artifactName, bytes] of Object.entries(entries)) {
     const binding = fileBindings.get(artifactName);
@@ -143,7 +147,14 @@ function verify(candidate) {
   exactKeys(candidate.control.github, ["run_id", "job_id", "event", "workflow", "run_status", "run_conclusion", "head_sha", "artifact_id", "artifact_name", "artifact_digest", "receipt_artifact_uploaded", "cleanup_step_conclusion"], "control GitHub keys");
   assert.equal(candidate.control.github.run_id, candidate.run.id);
   assert.equal(candidate.control.github.job_id, 99132193362);
+  assert.equal(candidate.control.github.event, "workflow_dispatch");
+  assert.equal(candidate.control.github.workflow, "Managed mobile staging evidence");
+  assert.equal(candidate.control.github.run_status, "completed");
+  assert.equal(candidate.control.github.run_conclusion, "failure");
   assert.equal(candidate.control.github.head_sha, candidate.run.head_sha);
+  assert.equal(candidate.control.github.artifact_id, candidate.artifact.artifact.id);
+  assert.equal(candidate.control.github.artifact_name, candidate.artifact.artifact.name);
+  assert.equal(candidate.control.github.receipt_artifact_uploaded, true);
   assert.equal(candidate.control.github.cleanup_step_conclusion, "success");
   exactKeys(candidate.control.staging_postgres, ["id", "post_run_allow_list"], "control staging keys");
   assert.equal(candidate.control.staging_postgres.id, "dpg-d9n21fnlk1mc73djm8q0-a");
@@ -178,9 +189,12 @@ const tamperCases = [
   (v) => { v.renderReadback.response[0].ipAllowList = [{ cidrBlock: "redacted" }]; },
   (v) => { v.validation.database_writes = 1; },
   (v) => { v.control.staging_postgres.id = "wrong-target"; },
+  (v) => { v.control.github.run_status = "queued"; },
+  (v) => { v.control.github.receipt_artifact_uploaded = false; },
+  (v) => { v.artifact.artifact.workflow_run.head_branch = "wrong-branch"; },
 ];
 for (const tamper of tamperCases) {
-  const candidate = clone(bundle);
+  const candidate = loadBundle();
   tamper(candidate);
   assert.throws(() => verify(candidate));
 }
