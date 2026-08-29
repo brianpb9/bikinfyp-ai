@@ -4,9 +4,9 @@ import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
 
-const [rootArg, expectedSha] = process.argv.slice(2);
-if (!rootArg || !/^[0-9a-f]{40}$/.test(expectedSha ?? "")) {
-  throw new Error("usage: verify-mobile-evidence-receipt.mjs RECEIPT_ROOT EXPECTED_SHA");
+const [rootArg, expectedAppSha, expectedRunnerSha] = process.argv.slice(2);
+if (!rootArg || !/^[0-9a-f]{40}$/.test(expectedAppSha ?? "") || !/^[0-9a-f]{40}$/.test(expectedRunnerSha ?? "")) {
+  throw new Error("usage: verify-mobile-evidence-receipt.mjs RECEIPT_ROOT EXPECTED_APP_SHA EXPECTED_RUNNER_SHA");
 }
 const root = fs.realpathSync(rootArg);
 const rootEntries = fs.readdirSync(root, { withFileTypes: true });
@@ -29,9 +29,9 @@ const manifestBytes = fs.readFileSync(path.join(runDir, "manifest.json"));
 const manifest = JSON.parse(manifestBytes.toString("utf8"));
 const launch = readJson("launch-attestation.json");
 assert.equal(receipt.schema, "managed-mobile-auth-hydration/v1");
-assert.equal(receipt.exact_sha, expectedSha);
+assert.equal(receipt.exact_sha, expectedAppSha);
 assert.equal(receipt.result, "PASS");
-assert.equal(receipt.runtime?.build_sha, expectedSha);
+assert.equal(receipt.runtime?.build_sha, expectedAppSha);
 assert.equal(receipt.runtime?.payments_live, false);
 assert.equal(receipt.otp_provider_calls, 0);
 assert.equal(receipt.payment_generation_calls, 0);
@@ -43,13 +43,21 @@ assert.equal(receipt.artifact_verification?.verified, true);
 assert.equal(receipt.review_status, "PENDING_INDEPENDENT_REVIEW");
 assert.equal(receipt.points_claimed, 0);
 assert.equal(launch.schema, "mobile-evidence-launch/v1");
-assert.equal(launch.source_sha, expectedSha);
+assert.match(launch.image_id, /^sha256:[0-9a-f]{64}$/, "external launch image id must be immutable");
+assert.equal(launch.config_image, launch.image_id, "external launch config image mismatch");
+assert.equal(launch.source_sha, expectedRunnerSha);
+assert.match(launch.source_tree, /^[0-9a-f]{40}$/, "external launch source tree must be a Git tree SHA");
 assert.equal(path.basename(runDir), launch.container_id);
 assert.equal(receipt.evidence_runner?.launch?.container_id, launch.container_id);
 assert.equal(receipt.evidence_runner?.launch?.image_id, launch.image_id);
-assert.equal(receipt.evidence_runner?.source?.commit, expectedSha);
+assert.equal(receipt.evidence_runner?.launch?.config_image, launch.image_id);
+assert.equal(receipt.evidence_runner?.launch?.source_sha, expectedRunnerSha);
+assert.equal(receipt.evidence_runner?.launch?.source_tree, launch.source_tree);
+assert.equal(receipt.evidence_runner?.image_digest, launch.image_id);
+assert.equal(receipt.evidence_runner?.source?.commit, expectedRunnerSha);
+assert.equal(receipt.evidence_runner?.source?.tree, launch.source_tree);
 assert.equal(manifest.schema, "managed-mobile-auth-hydration-manifest/v1");
-assert.equal(manifest.exact_sha, expectedSha);
+assert.equal(manifest.exact_sha, expectedAppSha);
 
 const sha256 = (bytes) => crypto.createHash("sha256").update(bytes).digest("hex");
 const screenshotNames = [];
@@ -128,7 +136,8 @@ for (const entry of runEntries) {
 }
 console.log(JSON.stringify({
   schema: "managed-mobile-receipt-verification/v1",
-  exact_sha: expectedSha,
+  app_sha: expectedAppSha,
+  runner_sha: expectedRunnerSha,
   result: "PASS",
   screenshots: receipt.screenshots.length,
   secrets_persisted: false,

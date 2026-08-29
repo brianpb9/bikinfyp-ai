@@ -9,28 +9,35 @@ import { execFileSync } from "node:child_process";
 const workflow = fs.readFileSync(new URL("../.github/workflows/managed-mobile-evidence.yml", import.meta.url), "utf8");
 const ciWorkflow = fs.readFileSync(new URL("../.github/workflows/ci.yml", import.meta.url), "utf8");
 const launcher = fs.readFileSync(new URL("../scripts/run-mobile-evidence-image.sh", import.meta.url), "utf8");
+const builder = fs.readFileSync(new URL("../scripts/build-mobile-evidence-image.sh", import.meta.url), "utf8");
 const r2Preflight = fs.readFileSync(new URL("../scripts/preflight-staging-r2.mjs", import.meta.url), "utf8");
+const tlsWindow = fs.readFileSync(new URL("../scripts/managed-staging-db-tls-window.mjs", import.meta.url), "utf8");
+const publicHealth = fs.readFileSync(new URL("../scripts/verify-staging-app-health.mjs", import.meta.url), "utf8");
 
 test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-reference-only", () => {
   assert.match(workflow, /workflow_dispatch:/);
   assert.match(workflow, /pull_request:\n    branches: \[main\]/);
   assert.match(workflow, /github\.event\.pull_request\.head\.repo\.full_name == github\.repository/);
   assert.match(workflow, /reviewed_sha:/);
-  assert.match(workflow, /REVIEWED_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397/);
-  assert.match(workflow, /test "\$REQUESTED_SHA" = "\$REVIEWED_SHA"/);
+  assert.match(workflow, /REVIEWED_APP_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397/);
+  assert.match(workflow, /REVIEWED_RUNNER_SHA: 9ba6330e394900c6c818be2021dcb8cc5a1b6d7b/);
+  assert.match(workflow, /test "\$REQUESTED_SHA" = "\$REVIEWED_APP_SHA"/);
   assert.match(workflow, /environment: staging/);
   assert.match(workflow, /permissions:\n  contents: read/);
-  assert.match(workflow, /git checkout --detach "\$REVIEWED_SHA"/);
+  assert.match(workflow, /git checkout --detach "\$REVIEWED_RUNNER_SHA"/);
   assert.match(workflow, /git rev-parse HEAD/);
   assert.match(workflow, /git cat-file -t/);
-  assert.match(workflow, /ref: acf1fd49fadc3387c3ae6a13f711689f1e0d9397/);
+  assert.match(workflow, /ref: 9ba6330e394900c6c818be2021dcb8cc5a1b6d7b/);
   assert.match(workflow, /path: reviewed-bundle/);
   assert.match(workflow, /path: reviewed-bundle[\s\S]*sparse-checkout: \/Dockerfile\.mobile-evidence/);
   assert.match(workflow, /sparse-checkout-cone-mode: false/);
-  assert.match(workflow, /working-directory: reviewed-bundle[\s\S]*test "\$\(git rev-parse HEAD\)" = "\$REVIEWED_SHA"/);
+  assert.match(workflow, /working-directory: reviewed-bundle[\s\S]*test "\$\(git rev-parse HEAD\)" = "\$REVIEWED_RUNNER_SHA"/);
   assert.doesNotMatch(workflow, /git merge-base --is-ancestor/);
   assert.match(workflow, /github\.event_name == 'workflow_dispatch' && github\.ref == 'refs\/heads\/main'/);
   assert.match(workflow, /EVIDENCE_SOURCE_SHA/);
+  assert.match(workflow, /EXPECTED_APP_SHA: \$\{\{ env\.REVIEWED_APP_SHA \}\}/);
+  assert.match(workflow, /EXPECTED_EVIDENCE_RUNNER_SHA: \$\{\{ env\.REVIEWED_RUNNER_SHA \}\}/);
+  assert.match(workflow, /REVIEWED_APP_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397/);
   assert.match(workflow, /org\.opencontainers\.image\.revision/);
   assert.match(workflow, /ai\.hdrv\.source\.tree/);
   assert.match(workflow, /EVIDENCE_INHERIT_STAGING_ENV: "1"/);
@@ -51,9 +58,34 @@ test("managed mobile workflow is manual, exact-SHA, staging-only, and secret-ref
   assert.doesNotMatch(fullJob, /STAGING_(?:AUTH_SECRET|R2_[A-Z_]+):/);
   assert.match(launcher, /docker_env_args\+=\(--env "\$slot"\)/);
   assert.doesNotMatch(launcher, /docker_env_args\+=\(--env "\$slot=/);
+  assert.match(launcher, /test "\$source_sha" = "\$expected_runner_sha"/);
+  assert.match(launcher, /evidence\?\.source\?\.commit!==runnerSha/);
+  assert.match(launcher, /launch\?\.source_sha!==runnerSha/);
+  assert.match(builder, /EXPECTED_EVIDENCE_RUNNER_SHA/);
+  assert.match(builder, /test "\$sha" = "\$expected_runner"/);
+  assert.match(tlsWindow, /required\("REVIEWED_APP_SHA", env\.REVIEWED_APP_SHA\)/);
+  assert.match(tlsWindow, /required\("REVIEWED_RUNNER_SHA", env\.REVIEWED_RUNNER_SHA\)/);
+  assert.doesNotMatch(tlsWindow, /required\("REVIEWED_SHA"/);
+  assert.match(publicHealth, /racun-ai-staging-web\.onrender\.com\/api\/health/);
   const prJob = workflow.slice(workflow.indexOf("  pr-static-validation:"), workflow.indexOf("  staging-database-secret-contract:"));
   assert.doesNotMatch(prJob, /environment:|secrets\.|EVIDENCE_INHERIT_STAGING_ENV|bash control\/scripts\/run-mobile-evidence-image\.sh/);
   assert.doesNotMatch(prJob, /managed-mobile-auth-hydration-runner\.test\.ts/);
+});
+
+test("wrong requested or deployed app SHA stops before every secret-bearing operation", () => {
+  const job = workflow.slice(workflow.indexOf("  exact-sha-mobile-evidence:"));
+  const checkoutAt = job.indexOf("      - name: Checkout immutable default-branch control code");
+  const inputAt = job.indexOf("      - name: Validate hard-bound reviewed SHA and immutable control checkout");
+  const healthAt = job.indexOf("      - name: Verify public staging app identity and safety before secrets");
+  const firstSecretAt = job.indexOf("      - name: Validate staging database secret contract before evidence work");
+  const r2At = job.indexOf("      - name: Preflight staging R2 write-read-delete round trip");
+  const tlsAt = job.indexOf("      - name: Run provider-free evidence inside temporary staging database TLS window");
+  assert.ok(checkoutAt >= 0 && checkoutAt < inputAt && inputAt < healthAt && healthAt < firstSecretAt
+    && firstSecretAt < r2At && r2At < tlsAt);
+  const secretFreePrefix = job.slice(0, firstSecretAt);
+  assert.doesNotMatch(secretFreePrefix, /secrets\.|STAGING_RENDER_API_KEY|STAGING_DATABASE_URL|docker (?:run|create)/);
+  assert.match(job.slice(inputAt, healthAt), /test "\$REQUESTED_SHA" = "\$REVIEWED_APP_SHA"/);
+  assert.match(job.slice(healthAt, firstSecretAt), /EXPECTED_APP_SHA: \$\{\{ env\.REVIEWED_APP_SHA \}\}[\s\S]*verify-staging-app-health\.mjs/);
 });
 
 test("managed R2 preflight runs before the full runner on the exact reviewed image", () => {
@@ -111,6 +143,7 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
   const run = path.join(root, "a".repeat(64));
   fs.mkdirSync(run);
   const sha = "b".repeat(40);
+  const runnerSha = "f".repeat(40);
   const image = `sha256:${"c".repeat(64)}`;
   const screenshots = Array.from({ length: 6 }, (_, index) => {
     const name = `0${index}-fixture.png`;
@@ -119,7 +152,7 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
     return { name, bytes: bytes.length, sha256: crypto.createHash("sha256").update(bytes).digest("hex"), private_key: `managed/${sha}/${name}` };
   });
   const launch = { schema: "mobile-evidence-launch/v1", container_id: "a".repeat(64), image_id: image,
-    config_image: image, source_sha: sha, source_tree: "d".repeat(40) };
+    config_image: image, source_sha: runnerSha, source_tree: "d".repeat(40) };
   const draftKey = `managed/${sha}/receipt.pending.json`;
   const manifestKey = `managed/${sha}/manifest.json`;
   const draftSha = "e".repeat(64);
@@ -138,7 +171,7 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
       draft_receipt_key: draftKey, draft_receipt_sha256: draftSha },
     artifact_manifest: { manifest_key: manifestKey, receipt_key: draftKey },
     review_status: "PENDING_INDEPENDENT_REVIEW", points_claimed: 0,
-    evidence_runner: { launch, source: { commit: sha } }, screenshots,
+    evidence_runner: { launch, image_digest: image, source: { commit: runnerSha, tree: launch.source_tree } }, screenshots,
   };
   fs.writeFileSync(path.join(run, "launch-attestation.json"), JSON.stringify(launch));
   fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify(receipt));
@@ -148,18 +181,55 @@ test("receipt verifier accepts a sanitized exact-SHA bundle and rejects a connec
     const managedEnv = { ...process.env, DATABASE_URL: "managed-db-value", AUTH_SECRET: "managed-auth-value",
       R2_ENDPOINT: "managed-endpoint-value", R2_BUCKET: "managed-bucket-value",
       R2_ACCESS_KEY_ID: "managed-access-value", R2_SECRET_ACCESS_KEY: "managed-secret-value" };
-    const verified = JSON.parse(execFileSync(process.execPath, [verifier, root, sha], { encoding: "utf8", env: managedEnv }));
+    const verified = JSON.parse(execFileSync(process.execPath, [verifier, root, sha, runnerSha], { encoding: "utf8", env: managedEnv }));
     assert.equal(verified.result, "PASS");
+    assert.equal(verified.app_sha, sha);
+    assert.equal(verified.runner_sha, runnerSha);
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, "0".repeat(40)], { stdio: "pipe", env: managedEnv }));
+    const verifyFails = () => assert.throws(() => execFileSync(process.execPath,
+      [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
+    const mutateReceipt = (mutate: (candidate: any) => void) => {
+      const candidate = structuredClone(receipt) as any;
+      mutate(candidate);
+      fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify(candidate));
+      verifyFails();
+      fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify(receipt));
+    };
+    const mutateLaunch = (mutate: (candidate: any) => void) => {
+      const candidate = structuredClone(launch) as any;
+      mutate(candidate);
+      fs.writeFileSync(path.join(run, "launch-attestation.json"), JSON.stringify(candidate));
+      verifyFails();
+      fs.writeFileSync(path.join(run, "launch-attestation.json"), JSON.stringify(launch));
+    };
+    const wrongAppSha = "1".repeat(40), wrongRunnerSha = "2".repeat(40);
+    const wrongImage = `sha256:${"3".repeat(64)}`, wrongTree = "4".repeat(40);
+    mutateReceipt((candidate) => { candidate.exact_sha = wrongAppSha; });
+    mutateReceipt((candidate) => { candidate.runtime.build_sha = wrongAppSha; });
+    fs.writeFileSync(path.join(run, "manifest.json"), JSON.stringify({ ...manifest, exact_sha: wrongAppSha }));
+    verifyFails();
+    fs.writeFileSync(path.join(run, "manifest.json"), manifestBytes);
+    mutateReceipt((candidate) => { candidate.evidence_runner.source.commit = wrongRunnerSha; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.launch.source_sha = wrongRunnerSha; });
+    mutateLaunch((candidate) => { candidate.source_sha = wrongRunnerSha; });
+    mutateReceipt((candidate) => { delete candidate.evidence_runner.image_digest; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.image_digest = wrongImage; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.launch.image_id = wrongImage; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.launch.config_image = wrongImage; });
+    mutateLaunch((candidate) => { candidate.config_image = wrongImage; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.source.tree = wrongTree; });
+    mutateReceipt((candidate) => { candidate.evidence_runner.launch.source_tree = wrongTree; });
+    mutateLaunch((candidate) => { candidate.source_tree = wrongTree; });
     fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify({ ...receipt, database_url: "postgresql://forbidden" }));
-    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha], { stdio: "pipe", env: managedEnv }));
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
     fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify({ ...receipt, harmless_note: managedEnv.AUTH_SECRET }));
-    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha], { stdio: "pipe", env: managedEnv }));
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
     fs.writeFileSync(path.join(run, "receipt.json"), JSON.stringify(receipt));
     fs.writeFileSync(path.join(run, "unexpected.txt"), managedEnv.DATABASE_URL);
-    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha], { stdio: "pipe", env: managedEnv }));
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
     fs.rmSync(path.join(run, "unexpected.txt"));
     fs.symlinkSync(path.join(run, "receipt.json"), path.join(run, "unexpected-link.json"));
-    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha], { stdio: "pipe", env: managedEnv }));
+    assert.throws(() => execFileSync(process.execPath, [verifier, root, sha, runnerSha], { stdio: "pipe", env: managedEnv }));
   } finally {
     fs.rmSync(root, { recursive: true, force: true });
   }

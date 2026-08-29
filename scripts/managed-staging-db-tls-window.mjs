@@ -322,7 +322,8 @@ async function runEvidence(tlsUrl, env, abortSignal) {
   await runCommand("bash", ["control/scripts/run-mobile-evidence-image.sh"], childEnv, abortSignal);
   await runCommand(process.execPath, ["control/scripts/verify-mobile-evidence-receipt.mjs",
     required("EVIDENCE_RECEIPT_EXPORT_DIR", env.EVIDENCE_RECEIPT_EXPORT_DIR),
-    required("REVIEWED_SHA", env.REVIEWED_SHA)], childEnv, abortSignal);
+    required("REVIEWED_APP_SHA", env.REVIEWED_APP_SHA),
+    required("REVIEWED_RUNNER_SHA", env.REVIEWED_RUNNER_SHA)], childEnv, abortSignal);
 }
 
 export function createSignalGuard(cleanup, abortController, terminate = (code) => { process.exitCode = code; }) {
