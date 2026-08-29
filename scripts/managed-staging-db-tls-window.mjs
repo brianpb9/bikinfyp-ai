@@ -222,14 +222,22 @@ export async function waitForAllowList(postgresId, token, expected, options = {}
   const attempts = Number(options.attempts ?? 20);
   const intervalMs = Number(options.intervalMs ?? 1_000);
   const sleep = options.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  const now = options.now ?? Date.now;
+  const deadlineAt = Number(options.deadlineAt ?? Number.POSITIVE_INFINITY);
   for (let index = 0; index < attempts; index++) {
+    if (deadlineAt - now() <= 0)
+      throw controlError("allow-list deadline exceeded", "RENDER_DEADLINE", false);
     try {
       if (allowListIsExact((await readPostgres(postgresId, token, options.requestPolicy)).ipAllowList, expected)) return;
     } catch (error) {
       if (!isRetryableControlError(error)) throw error;
       if (index + 1 >= attempts) throw new Error("allow-list read failed");
     }
-    await sleep(intervalMs);
+    const remaining = deadlineAt - now();
+    if (remaining <= 0) throw controlError("allow-list deadline exceeded", "RENDER_DEADLINE", false);
+    await sleep(Math.min(intervalMs, remaining));
+    if (deadlineAt - now() <= 0)
+      throw controlError("allow-list deadline exceeded", "RENDER_DEADLINE", false);
   }
   throw new Error("allow-list convergence failed");
 }

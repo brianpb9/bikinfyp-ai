@@ -325,6 +325,41 @@ test("secondary cleanup shares one bounded deadline across PATCH and convergence
   assert.equal(waitOptions.requestPolicy?.attemptTimeoutMs, 2_000);
 });
 
+test("secondary cleanup caps convergence sleep at one remaining millisecond and stops", async () => {
+  let clock = 0;
+  let gets = 0;
+  const waits: number[] = [];
+  const receipts: Array<Record<string, boolean>> = [];
+  const nonEmpty = { ...metadata, ipAllowList: exactRunnerAllowList("8.8.8.8") };
+  const fetchImpl = async () => {
+    gets++;
+    return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(nonEmpty) };
+  };
+  await assert.rejects(closeWindow(env, {
+    ...mockedDeps([]),
+    waitForAllowList: (id: string, token: string, value: unknown[], options: Record<string, any> = {}) =>
+      waitForAllowList(id, token, value, {
+        ...options,
+        deadlineAt: 1,
+        now: () => clock,
+        sleep: async (ms: number) => { waits.push(ms); clock += ms; },
+        requestPolicy: {
+          ...options.requestPolicy,
+          deadlineAt: 1,
+          now: () => clock,
+          fetchImpl,
+          sleep: async () => {},
+        },
+      }),
+    emitReceipt: (receipt: Record<string, boolean>) => { receipts.push({ ...receipt }); },
+  }), /cleanup failed/);
+  assert.equal(gets, 1);
+  assert.deepEqual(waits, [1]);
+  assert.equal(clock, 1);
+  assert.equal(receipts[0].cleanup_patch_empty, true);
+  assert.equal(receipts[0].cleanup_readback_empty, false);
+});
+
 test("signal guard aborts child and cleans once before terminal exit", async () => {
   const calls: string[] = [];
   const controller = new AbortController();
