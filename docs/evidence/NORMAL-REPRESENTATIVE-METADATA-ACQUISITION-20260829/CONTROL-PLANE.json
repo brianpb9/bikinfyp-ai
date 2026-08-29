@@ -1,0 +1,32 @@
+{
+  "captured_at": "2026-08-29T17:04:00Z",
+  "github": {
+    "run_id": 33264551551,
+    "job_id": 99132193362,
+    "event": "workflow_dispatch",
+    "workflow": "Managed mobile staging evidence",
+    "run_status": "completed",
+    "run_conclusion": "failure",
+    "head_sha": "503a8bfbf47d7873dbf07d40ce29ad40390b57d0",
+    "receipt_artifact_uploaded": true,
+    "cleanup_step_conclusion": "success"
+  },
+  "staging_postgres": {
+    "id": "dpg-d9n21fnlk1mc73djm8q0-a",
+    "post_run_allow_list": []
+  },
+  "production": {
+    "web": {
+      "id": "srv-d9nhccfqj5pc73et9hrg",
+      "auto_deploy": "no",
+      "status": "live",
+      "sha": "ec734b186307fe3a4c79cf6632f8f5e75f8634ae"
+    },
+    "worker": {
+      "id": "srv-d9ni3ndaeets73c07kq0",
+      "auto_deploy": "no",
+      "status": "live",
+      "sha": "ec734b186307fe3a4c79cf6632f8f5e75f8634ae"
+    }
+  }
+}

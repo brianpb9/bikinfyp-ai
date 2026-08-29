@@ -1,0 +1,44 @@
+{
+  "schema": "normal-representative-metadata-acquisition/v1",
+  "task": "NORMAL-REPRESENTATIVE-METADATA-ACQUISITION-20260829",
+  "started_at": "2026-08-29T17:02:33.734Z",
+  "finished_at": "2026-08-29T17:02:39.370Z",
+  "decision": "FAIL_CLOSED",
+  "failure_code": "CANONICAL_CANDIDATE_COUNT_NOT_ONE",
+  "candidate_count": 0,
+  "binding": {
+    "app_sha": "ee767201679ae2213c40be6f913241f372d2378a",
+    "control_sha": "503a8bfbf47d7873dbf07d40ce29ad40390b57d0"
+  },
+  "controls": {
+    "target_staging_only": true,
+    "initial_allow_list_empty": true,
+    "runner_ipv4_32_only": true,
+    "allow_list_readback_exact": true,
+    "external_hostname_verified": false,
+    "sslmode_verify_full": false,
+    "dedicated_principal_verified": false,
+    "transaction_read_only_verified": false,
+    "r2_get_only": false,
+    "reference_digest_match": false,
+    "zero_mutable_inputs_verified": false,
+    "prior_evidence_registry_checked": false,
+    "window_owner_marker_created": true,
+    "cleanup_patch_empty": true,
+    "cleanup_skipped_already_empty": false,
+    "cleanup_readback_empty": true,
+    "foreign_allow_list_preserved": false,
+    "secret_values_exposed": false,
+    "production_access_attempted": false
+  },
+  "selection": null,
+  "manifest": null,
+  "lane_effects": {
+    "database_writes": 0,
+    "r2_writes": 0,
+    "provider_posts": 0,
+    "provider_spend_usd": 0,
+    "publication": false,
+    "production_mutations": 0
+  }
+}

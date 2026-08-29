@@ -1,0 +1,18 @@
+{
+  "task": "NORMAL-REPRESENTATIVE-METADATA-ACQUISITION-20260829",
+  "status": "IDLE_COMPLETE_LANE_C",
+  "metadata_acquired": false,
+  "blocker": "NO_CANONICAL_APPROVED_UNFINISHED_STAGING_CANDIDATE",
+  "candidate_count": 0,
+  "no_candidate_created": true,
+  "allow_list_empty_after_primary_cleanup": true,
+  "allow_list_empty_after_secondary_cleanup": true,
+  "allow_list_empty_independent_render_readback": true,
+  "database_writes": 0,
+  "r2_writes": 0,
+  "provider_posts": 0,
+  "provider_spend_usd": 0,
+  "publication": false,
+  "production_mutations": 0,
+  "secret_safe": true
+}
