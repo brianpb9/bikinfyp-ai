@@ -377,7 +377,7 @@ async function siapkanJobLewatAdmisi(images: string[], isi: Map<string, Buffer>)
   setMediaStorageForTests(admissionStorage.storage);
   const { smokeCreateJob } = await import("../lib/postgres/smoke-runtime");
   const admitted = await smokeCreateJob(userId, {
-    productId, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr: 12000,
+    productId, personaId: null, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr: 12000,
   });
   assert.equal(admitted.duplicate, false);
   const { issueToken } = await import("../lib/auth");
