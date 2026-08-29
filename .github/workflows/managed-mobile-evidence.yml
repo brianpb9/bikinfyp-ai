@@ -29,7 +29,7 @@ on:
           - tls-preflight-only
           - full-e2e
       reviewed_sha:
-        description: Exact 40-character Reviewer-approved staging bundle SHA
+        description: Exact 40-character deployed staging app SHA
         required: true
         type: string
 
@@ -57,7 +57,7 @@ jobs:
       - name: Resolve exact reviewed bundle without secrets
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: acf1fd49fadc3387c3ae6a13f711689f1e0d9397
+          ref: 9ba6330e394900c6c818be2021dcb8cc5a1b6d7b
           path: reviewed-bundle
           fetch-depth: 1
           persist-credentials: false
@@ -67,11 +67,11 @@ jobs:
       - name: Prove reviewed bundle binding
         working-directory: reviewed-bundle
         env:
-          REVIEWED_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397
+          REVIEWED_RUNNER_SHA: 9ba6330e394900c6c818be2021dcb8cc5a1b6d7b
         run: |
           set -euo pipefail
-          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
-          printf '%s\n' "$REVIEWED_SHA" | grep -Eq '^[0-9a-f]{40}$'
+          test "$(git rev-parse HEAD)" = "$REVIEWED_RUNNER_SHA"
+          printf '%s\n' "$REVIEWED_RUNNER_SHA" | grep -Eq '^[0-9a-f]{40}$'
 
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
@@ -156,7 +156,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 60
     env:
-      REVIEWED_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397
+      REVIEWED_APP_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397
+      REVIEWED_RUNNER_SHA: 9ba6330e394900c6c818be2021dcb8cc5a1b6d7b
     steps:
       - name: Checkout immutable default-branch control code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
@@ -179,7 +180,7 @@ jobs:
           CONTROL_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
-          test "$REQUESTED_SHA" = "$REVIEWED_SHA"
+          test "$REQUESTED_SHA" = "$REVIEWED_APP_SHA"
           test "$(git rev-parse HEAD)" = "$CONTROL_SHA"
 
       - name: Set up pinned Node runtime for trusted control
@@ -193,10 +194,10 @@ jobs:
         working-directory: control
         run: npm ci --ignore-scripts
 
-      - name: Detached checkout of exact reviewed bundle
+      - name: Detached checkout of exact reviewed evidence runner
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
-          ref: ${{ env.REVIEWED_SHA }}
+          ref: ${{ env.REVIEWED_RUNNER_SHA }}
           path: source
           fetch-depth: 1
           persist-credentials: false
@@ -205,16 +206,16 @@ jobs:
         working-directory: source
         run: |
           set -euo pipefail
-          git checkout --detach "$REVIEWED_SHA"
-          test "$(git rev-parse HEAD)" = "$REVIEWED_SHA"
-          test "$(git cat-file -t "$REVIEWED_SHA")" = commit
+          git checkout --detach "$REVIEWED_RUNNER_SHA"
+          test "$(git rev-parse HEAD)" = "$REVIEWED_RUNNER_SHA"
+          test "$(git cat-file -t "$REVIEWED_RUNNER_SHA")" = commit
           test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
       - name: Build immutable exact-source evidence image
         working-directory: source
         env:
-          EXPECTED_APP_SHA: ${{ env.REVIEWED_SHA }}
-          EVIDENCE_IMAGE_TAG: managed-mobile-evidence:${{ env.REVIEWED_SHA }}
+          EXPECTED_EVIDENCE_RUNNER_SHA: ${{ env.REVIEWED_RUNNER_SHA }}
+          EVIDENCE_IMAGE_TAG: managed-mobile-evidence:${{ env.REVIEWED_RUNNER_SHA }}
         run: EVIDENCE_BUILD_OUTPUT_FILE="$GITHUB_ENV" bash ../control/scripts/build-mobile-evidence-image.sh
 
       - name: Independently verify OCI revision and tree labels
@@ -222,9 +223,9 @@ jobs:
         run: |
           set -euo pipefail
           expected_tree="$(git rev-parse 'HEAD^{tree}')"
-          test "$EVIDENCE_SOURCE_SHA" = "$REVIEWED_SHA"
+          test "$EVIDENCE_SOURCE_SHA" = "$REVIEWED_RUNNER_SHA"
           test "$EVIDENCE_SOURCE_TREE" = "$expected_tree"
-          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$EVIDENCE_IMAGE_DIGEST")" = "$REVIEWED_SHA"
+          test "$(docker image inspect --format '{{index .Config.Labels "org.opencontainers.image.revision"}}' "$EVIDENCE_IMAGE_DIGEST")" = "$REVIEWED_RUNNER_SHA"
           test "$(docker image inspect --format '{{index .Config.Labels "ai.hdrv.source.tree"}}' "$EVIDENCE_IMAGE_DIGEST")" = "$expected_tree"
 
       - name: Preflight staging R2 write-read-delete round trip
@@ -258,7 +259,8 @@ jobs:
           STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
           STAGING_DATABASE_EXPECTED_USER: ${{ vars.STAGING_DATABASE_EXPECTED_USER }}
           MANAGED_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
-          EXPECTED_APP_SHA: ${{ env.REVIEWED_SHA }}
+          EXPECTED_APP_SHA: ${{ env.REVIEWED_APP_SHA }}
+          EXPECTED_EVIDENCE_RUNNER_SHA: ${{ env.REVIEWED_RUNNER_SHA }}
           EVIDENCE_INHERIT_STAGING_ENV: "1"
           EVIDENCE_RECEIPT_EXPORT_DIR: ${{ runner.temp }}/managed-mobile-receipts
           BASE: https://racun-ai-staging-web.onrender.com
@@ -284,7 +286,7 @@ jobs:
       - name: Upload sanitized immutable receipt bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: managed-mobile-${{ env.REVIEWED_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
+          name: managed-mobile-${{ env.REVIEWED_APP_SHA }}-runner-${{ env.REVIEWED_RUNNER_SHA }}-${{ github.run_id }}-${{ github.run_attempt }}
           path: ${{ runner.temp }}/managed-mobile-receipts
           if-no-files-found: error
           retention-days: 30
