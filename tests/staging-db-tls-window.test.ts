@@ -49,6 +49,7 @@ const dbPass = {
   role_no_create_role_verified: true,
   role_no_create_database_verified: true,
   role_no_replication_verified: true,
+  role_no_bypass_rls_verified: true,
   pg_stat_ssl_verified: true,
   certificate_hostname_verified: true,
 };
@@ -205,7 +206,7 @@ test("TLS probe proves the exact principal is non-privileged inside READ ONLY an
       if (sql.includes("current_database")) return { rowCount: 1, rows: [{ current_database: metadata.databaseName }] };
       if (sql === "SELECT current_user AS current_user") return { rowCount: 1, rows: [{ current_user: expectedUser }] };
       if (sql.includes("FROM pg_roles")) return { rowCount: 1, rows: [{
-        rolsuper: false, rolcreaterole: false, rolcreatedb: false, rolreplication: false,
+        rolsuper: false, rolcreaterole: false, rolcreatedb: false, rolreplication: false, rolbypassrls: false,
       }] };
       if (sql.includes("pg_stat_ssl")) return { rowCount: 1, rows: [{ ssl: true }] };
       return { rowCount: 0, rows: [] };
@@ -219,7 +220,7 @@ test("TLS probe proves the exact principal is non-privileged inside READ ONLY an
     "SELECT 1 AS one",
     "SELECT current_database() AS current_database",
     "SELECT current_user AS current_user",
-    "SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication FROM pg_roles WHERE rolname = current_user",
+    "SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls FROM pg_roles WHERE rolname = current_user",
     "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()",
     "ROLLBACK",
   ]);
@@ -249,13 +250,16 @@ test("TLS probe fails closed for a wrong current_user or any privileged role fla
     })) as never,
     () => undefined
   );
-  const leastPrivilege = { rolsuper: false, rolcreaterole: false, rolcreatedb: false, rolreplication: false };
+  const leastPrivilege = {
+    rolsuper: false, rolcreaterole: false, rolcreatedb: false, rolreplication: false, rolbypassrls: false,
+  };
   assert.equal((await run("wrong_staging_user", leastPrivilege)).current_user_verified, false);
   const receiptKeys = {
     rolsuper: "role_not_superuser_verified",
     rolcreaterole: "role_no_create_role_verified",
     rolcreatedb: "role_no_create_database_verified",
     rolreplication: "role_no_replication_verified",
+    rolbypassrls: "role_no_bypass_rls_verified",
   } as const;
   for (const [flag, receiptKey] of Object.entries(receiptKeys)) {
     const receipt = await run(expectedUser, { ...leastPrivilege, [flag]: true });

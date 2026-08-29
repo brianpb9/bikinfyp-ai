@@ -39,6 +39,7 @@ const blankRunReceipt = () => ({
   role_no_create_role_verified: false,
   role_no_create_database_verified: false,
   role_no_replication_verified: false,
+  role_no_bypass_rls_verified: false,
   pg_stat_ssl_verified: false,
   certificate_hostname_verified: false,
   evidence_executed_once: false,
@@ -265,7 +266,7 @@ export async function verifyDatabaseTls(url, metadata, expectedUser, poolFactory
     const database = await client.query("SELECT current_database() AS current_database");
     const user = await client.query("SELECT current_user AS current_user");
     const role = await client.query(
-      "SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication FROM pg_roles WHERE rolname = current_user"
+      "SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls FROM pg_roles WHERE rolname = current_user"
     );
     const ssl = await client.query("SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()");
     const stream = client.connection?.stream;
@@ -280,6 +281,7 @@ export async function verifyDatabaseTls(url, metadata, expectedUser, poolFactory
       role_no_create_role_verified: role.rowCount === 1 && role.rows[0]?.rolcreaterole === false,
       role_no_create_database_verified: role.rowCount === 1 && role.rows[0]?.rolcreatedb === false,
       role_no_replication_verified: role.rowCount === 1 && role.rows[0]?.rolreplication === false,
+      role_no_bypass_rls_verified: role.rowCount === 1 && role.rows[0]?.rolbypassrls === false,
       pg_stat_ssl_verified: ssl.rowCount === 1 && ssl.rows[0]?.ssl === true,
       certificate_hostname_verified: stream?.encrypted === true && stream?.authorized === true &&
         stream?.authorizationError == null && !hostnameError,
