@@ -5,10 +5,10 @@ repo="$(git rev-parse --show-toplevel)"
 cd "$repo"
 sha="$(git rev-parse HEAD)"
 tree="$(git rev-parse 'HEAD^{tree}')"
-expected="${EXPECTED_APP_SHA:-$sha}"
+expected_runner="${EXPECTED_EVIDENCE_RUNNER_SHA:?EXPECTED_EVIDENCE_RUNNER_SHA is required}"
 tag="${EVIDENCE_IMAGE_TAG:-racun-mobile-evidence:$sha}"
 
-test "$sha" = "$expected"
+test "$sha" = "$expected_runner"
 test -z "$(git status --porcelain=v1 --untracked-files=all)"
 
 build_dir="$(mktemp -d)"

@@ -11,7 +11,8 @@ const evidenceBuild = fs.readFileSync(new URL("../scripts/build-mobile-evidence-
 const evidenceLaunch = fs.readFileSync(new URL("../scripts/run-mobile-evidence-image.sh", import.meta.url), "utf8");
 
 test("managed mobile runner is exact-SHA, 375px, provider-free, and cleanup-bound", () => {
-  assert.match(source, /EVIDENCE_SOURCE_SHA[\s\S]*EXPECTED_SHA/);
+  assert.match(source, /EVIDENCE_SOURCE_SHA[\s\S]*EXPECTED_RUNNER_SHA/);
+  assert.match(source, /EXPECTED_SHA[\s\S]*health\.build_sha/);
   assert.match(source, /health\.build_sha, EXPECTED_SHA/);
   assert.match(source, /RACUN_DEPLOY_ENV[\s\S]*staging/);
   assert.match(source, /width: 375, height: 812/);
@@ -27,7 +28,11 @@ test("managed mobile runner is exact-SHA, 375px, provider-free, and cleanup-boun
   assert.match(source, /aria-expanded/);
   assert.match(source, /keyboard\.press\("Escape"\)/);
   assert.match(source, /document\.activeElement === element/);
-  assert.match(source, /message\.type\(\) !== "error"/);
+  assert.match(source, /Network\.requestWillBeSent/);
+  assert.match(source, /networkRequestId/);
+  assert.match(source, /classifyManagedBrowserDiagnostic/);
+  assert.match(source, /pendingFailureFixtures\.push\("wrong-otp"\)/);
+  assert.match(source, /wrong OTP wajib punya satu explicit CDP request-id correlation/);
   assert.match(source, /'koreksi'/);
   assert.match(source, /history_rows_preserved/);
   assert.match(source, /'credit\.koreksi'/);
@@ -61,8 +66,9 @@ test("managed mobile runner is exact-SHA, 375px, provider-free, and cleanup-boun
   assert.match(source, /draft_receipt_sha256/);
   assert.match(source, /terminal_receipt_sha256/);
   assert.match(source, /if\(receipt\.result!=="PASS"\)process\.exitCode=1/);
-  assert.match(source, /consoleErrors\.push\(message\.text\(\)/);
+  assert.match(source, /consoleErrors\.push\(diagnostic\.text\)/);
   assert.match(source, /receipt\.console_errors = consoleErrors/);
+  assert.match(source, /browser_error_classification/);
   assert.ok(source.indexOf('cleanupStep("pool"') < source.indexOf("const cleanup = receipt.cleanup"),
     "pool close outcome must precede final cleanup result");
   assert.match(source, /sha256/);
@@ -90,6 +96,8 @@ test("mobile evidence runner has a truthful exact-SHA external image contract", 
   assert.match(evidenceDockerfile, /cmp \/tmp\/source\.tar \/tmp\/from-bundle\.tar/);
   assert.match(evidenceDockerfile, /USER node[\s\S]*test -w "\$RECEIPT_DIR"[\s\S]*\.node-write-smoke/);
   assert.match(evidenceBuild, /git status --porcelain=v1 --untracked-files=all/);
+  assert.match(evidenceBuild, /EXPECTED_EVIDENCE_RUNNER_SHA/);
+  assert.match(evidenceBuild, /test "\$sha" = "\$expected_runner"/);
   assert.match(evidenceBuild, /git archive --format=tar HEAD/);
   assert.match(evidenceBuild, /git bundle create/);
   assert.match(evidenceBuild, /docker image inspect --format '\{\{\.Id\}\}'/);
@@ -98,11 +106,15 @@ test("mobile evidence runner has a truthful exact-SHA external image contract", 
   assert.match(evidenceLaunch, /docker container inspect --format '\{\{\.Config\.Image\}\}'/);
   assert.match(evidenceLaunch, /test "\$inspected_image" = "\$image_id"/);
   assert.match(evidenceLaunch, /test "\$config_image" = "\$image_id"/);
+  assert.match(evidenceLaunch, /test "\$source_sha" = "\$expected_runner_sha"/);
+  assert.match(evidenceLaunch, /EXPECTED_EVIDENCE_RUNNER_SHA=\$expected_runner_sha/);
   assert.match(evidenceLaunch, /mobile-evidence-launch\/v1/);
   assert.match(evidenceLaunch, /EVIDENCE_RECEIPT_EXPORT_DIR/);
   assert.match(evidenceLaunch, /chmod 0555 "\$launch_dir"/);
   assert.match(evidenceLaunch, /docker cp "\$container_id:\/srv\/receipts\/\." "\$export_stage\/"/);
-  assert.match(evidenceLaunch, /receipt\.exact_sha!==sha/);
+  assert.match(evidenceLaunch, /receipt\.exact_sha!==appSha/);
+  assert.match(evidenceLaunch, /evidence\?\.source\?\.commit!==runnerSha/);
+  assert.match(evidenceLaunch, /launch\?\.source_sha!==runnerSha/);
   assert.match(evidenceLaunch, /launch\?\.container_id!==containerId/);
   assert.match(evidenceLaunch, /retained container \$container_id/);
   assert.match(evidenceLaunch, /docker start --attach "\$container_id"/);
@@ -145,7 +157,7 @@ elif test "$1" = cp; then
   if test "\${FAKE_DOCKER_EMPTY_COPY:-false}" != true; then
     receipt_sha="cccccccccccccccccccccccccccccccccccccccc"
     if test "\${FAKE_DOCKER_STALE_RECEIPT:-false}" = true; then receipt_sha="eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"; fi
-    printf '%s\\n' "{\\\"exact_sha\\\":\\\"$receipt_sha\\\",\\\"result\\\":\\\"FAIL_ARTIFACT_VERIFICATION\\\",\\\"evidence_runner\\\":{\\\"launch\\\":{\\\"container_id\\\":\\\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\\",\\\"image_id\\\":\\\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\\",\\\"config_image\\\":\\\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\\"}}}" > "$destination/receipt.json"
+    printf '%s\\n' "{\\\"exact_sha\\\":\\\"$receipt_sha\\\",\\\"result\\\":\\\"FAIL_ARTIFACT_VERIFICATION\\\",\\\"evidence_runner\\\":{\\\"source\\\":{\\\"commit\\\":\\\"cccccccccccccccccccccccccccccccccccccccc\\\"},\\\"launch\\\":{\\\"source_sha\\\":\\\"cccccccccccccccccccccccccccccccccccccccc\\\",\\\"container_id\\\":\\\"bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb\\\",\\\"image_id\\\":\\\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\\",\\\"config_image\\\":\\\"sha256:aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\\\"}}}" > "$destination/receipt.json"
   fi
 elif test "$1" = rm; then
   :
@@ -156,8 +168,13 @@ fi
 `,{mode:0o755});
     const envFile=path.join(dir,"evidence.env");fs.writeFileSync(envFile,"");
     const env={...process.env,PATH:`${bin}:${process.env.PATH}`,FAKE_DOCKER_STATE:state,
-      EVIDENCE_IMAGE:"fixture:latest",EXPECTED_APP_SHA:"c".repeat(40),EVIDENCE_ENV_FILE:envFile,
+      EVIDENCE_IMAGE:"fixture:latest",EXPECTED_APP_SHA:"c".repeat(40),EXPECTED_EVIDENCE_RUNNER_SHA:"c".repeat(40),EVIDENCE_ENV_FILE:envFile,
       EVIDENCE_RECEIPT_EXPORT_DIR:receipts};
+    assert.throws(()=>execFileSync(new URL("../scripts/run-mobile-evidence-image.sh",import.meta.url).pathname,
+      [],{env:{...env,EXPECTED_EVIDENCE_RUNNER_SHA:"e".repeat(40)},stdio:"pipe"}));
+    assert.doesNotMatch(fs.readFileSync(path.join(state,"log"),"utf8"),/^create /m,
+      "unreviewed runner SHA must fail before container creation");
+    fs.writeFileSync(path.join(state,"log"),"");
     assert.throws(()=>execFileSync(new URL("../scripts/run-mobile-evidence-image.sh",import.meta.url).pathname,
       [],{env,stdio:"pipe"}));
     assert.equal(fs.readFileSync(path.join(state,"access"),"utf8"),"555:444:mobile-evidence-launch/v1");

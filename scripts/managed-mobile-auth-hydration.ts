@@ -3,8 +3,8 @@
  * Managed staging mobile/auth/hydration trace.
  *
  * Run from Dockerfile.mobile-evidence, a bounded external evidence image built
- * from the same exact git SHA as the deployed staging image. The deployed SHA
- * is independently bound through /api/health. The request-OTP call is
+ * from an independently reviewed runner SHA. The deployed app SHA remains
+ * independently bound through /api/health. The request-OTP call is
  * intercepted in Chromium, so this runner never contacts Resend. It also
  * refuses every payment/generation request and cleans its temporary identity,
  * organization, OTP, and ledger rows.
@@ -14,15 +14,22 @@ import { execFileSync } from "node:child_process";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import path from "node:path";
-import { chromium, type Browser, type BrowserContext, type ConsoleMessage, type Page } from "playwright";
+import { chromium, type Browser, type BrowserContext, type Page } from "playwright";
 import { Pool } from "pg";
 import { config } from "../lib/config";
 import { runtimeAuthSecret } from "../lib/auth-secret-policy";
 import { mediaStorage } from "../lib/storage";
+import {
+  classifyManagedBrowserDiagnostic,
+  type BrowserDiagnostic,
+  type ExpectedNetworkFailure,
+  type ObservedNetworkFailure,
+} from "./managed-browser-error-classifier";
 
 const BASE = process.env.BASE ?? "https://racun-ai-staging-web.onrender.com";
 const STAGING_ORIGIN = "https://racun-ai-staging-web.onrender.com";
 const EXPECTED_SHA = process.env.EXPECTED_APP_SHA?.trim() ?? "";
+const EXPECTED_RUNNER_SHA = process.env.EXPECTED_EVIDENCE_RUNNER_SHA?.trim() ?? "";
 const EVIDENCE_SOURCE_SHA = process.env.EVIDENCE_SOURCE_SHA?.trim() ?? "";
 const EVIDENCE_SOURCE_TREE = process.env.EVIDENCE_SOURCE_TREE?.trim() ?? "";
 const EVIDENCE_IMAGE_DIGEST = process.env.EVIDENCE_IMAGE_DIGEST?.trim() ?? "";
@@ -39,8 +46,10 @@ const correctionId = `managed-mobile-correction-${suffix}`;
 const now = () => new Date().toISOString();
 
 assert.match(EXPECTED_SHA, /^[0-9a-f]{40}$/, "EXPECTED_APP_SHA wajib full SHA");
+assert.match(EXPECTED_RUNNER_SHA, /^[0-9a-f]{40}$/, "EXPECTED_EVIDENCE_RUNNER_SHA wajib full SHA");
 assert.equal(new URL(BASE).origin, STAGING_ORIGIN, "BASE wajib exact canonical staging origin");
-assert.equal(EVIDENCE_SOURCE_SHA, EXPECTED_SHA, "external evidence image wajib dibangun dari exact app SHA");
+assert.equal(EVIDENCE_SOURCE_SHA, EXPECTED_RUNNER_SHA,
+  "external evidence image wajib dibangun dari exact reviewed runner SHA");
 assert.match(EVIDENCE_SOURCE_TREE, /^[0-9a-f]{40}$/, "evidence source tree wajib Git tree SHA");
 assert.match(EVIDENCE_IMAGE_DIGEST, /^sha256:[0-9a-f]{64}$/, "immutable evidence image digest wajib tersedia");
 assert.equal(LAUNCH_ATTESTATION_PATH, "/run/evidence-launch/attestation.json",
@@ -74,6 +83,14 @@ let otpRequestIntercepted = 0;
 const forbiddenRequests: string[] = [];
 const consoleErrors: string[] = [];
 const pageErrors: string[] = [];
+const browserDiagnostics: BrowserDiagnostic[] = [];
+const observedFailures = new Map<string, ObservedNetworkFailure>();
+const cdpRequests = new Map<string, { fixtureId: string; method: string; url: string }>();
+const expectedFailures = new Map<string, ExpectedNetworkFailure>([
+  ["wrong-otp", { fixtureId: "wrong-otp", method: "POST", url: `${STAGING_ORIGIN}/api/auth/verify-otp`,
+    outcome: "http", status: 401 }],
+]);
+const pendingFailureFixtures: string[] = [];
 const requestReceipts: Array<{ endpoint: string; method: string; status: number }> = [];
 const forbiddenMutationEntrypoints = [
   "/api/credits/checkout", "/api/credits/topup", "/api/jobs", "/api/scripts/generate",
@@ -120,11 +137,6 @@ const focusedViewportEvidence = () => page!.evaluate(() => {
     focused_visible: Boolean(rect && rect.bottom > 0 && rect.top < (viewport?.height ?? window.innerHeight)),
   };
 });
-const relevantConsoleError = (message: ConsoleMessage) => {
-  if (message.type() !== "error") return;
-  consoleErrors.push(message.text().slice(0, 500));
-};
-
 const receipt: Record<string, unknown> = {
   schema: "managed-mobile-auth-hydration/v1",
   exact_sha: EXPECTED_SHA,
@@ -147,7 +159,36 @@ try {
   browser = await chromium.launch({ headless: true });
   context = await browser.newContext({ viewport: { width: 375, height: 812 } });
   page = await context.newPage();
-  page.on("console", relevantConsoleError);
+  const cdp = await context.newCDPSession(page);
+  await Promise.all([cdp.send("Network.enable"), cdp.send("Log.enable"), cdp.send("Runtime.enable")]);
+  cdp.on("Network.requestWillBeSent", (event: { requestId: string; request: { method: string; url: string } }) => {
+    const fixtureIndex = pendingFailureFixtures.findIndex((fixtureId) => {
+      const fixture = expectedFailures.get(fixtureId);
+      return fixture?.method === event.request.method && fixture.url === event.request.url;
+    });
+    if (fixtureIndex < 0) return;
+    const [fixtureId] = pendingFailureFixtures.splice(fixtureIndex, 1);
+    cdpRequests.set(event.requestId, { fixtureId, method: event.request.method, url: event.request.url });
+  });
+  cdp.on("Network.responseReceived", (event: { requestId: string; response: { status: number } }) => {
+    const request = cdpRequests.get(event.requestId);
+    if (request) observedFailures.set(event.requestId,
+      { ...request, requestId: event.requestId, outcome: "http", status: event.response.status });
+  });
+  cdp.on("Network.loadingFailed", (event: { requestId: string }) => {
+    const request = cdpRequests.get(event.requestId);
+    if (request) observedFailures.set(event.requestId,
+      { ...request, requestId: event.requestId, outcome: "blocked" });
+  });
+  cdp.on("Log.entryAdded", (event: { entry: { source: string; level: string; text: string; networkRequestId?: string } }) => {
+    browserDiagnostics.push({ source: event.entry.source === "network" ? "network" : "console",
+      level: event.entry.level, text: event.entry.text.slice(0, 500), requestId: event.entry.networkRequestId });
+  });
+  cdp.on("Runtime.consoleAPICalled", (event: { type: string; args: Array<{ value?: unknown; description?: string }> }) => {
+    if (event.type !== "error") return;
+    browserDiagnostics.push({ source: "console", level: "error", text: event.args
+      .map((arg) => String(arg.value ?? arg.description ?? "")).join(" ").slice(0, 500) });
+  });
   page.on("pageerror", (error) => pageErrors.push(error.message.slice(0, 300)));
 
   const healthResponse = await fetch(`${BASE}/api/health`);
@@ -209,6 +250,7 @@ try {
   const otpInput = page.locator('input[inputmode="numeric"]');
   assert.equal(await otpInput.getAttribute("inputmode"), "numeric");
   await otpInput.fill("111111");
+  pendingFailureFixtures.push("wrong-otp");
   const wrongResponse = page.waitForResponse((response) => response.url().endsWith("/api/auth/verify-otp"));
   await page.getByRole("button", { name: "Masuk & Mulai" }).click();
   const wrong = await wrongResponse;
@@ -262,11 +304,24 @@ try {
   const dashboardOverflow = await horizontalOverflow();
   assert.equal(dashboardOverflow.overflow, false, `dashboard overflow: ${JSON.stringify(dashboardOverflow)}`);
 
-  assert.deepEqual(consoleErrors, [], `hydration/CSP console errors: ${JSON.stringify(consoleErrors)}`);
+  for (const diagnostic of browserDiagnostics) {
+    const classification = classifyManagedBrowserDiagnostic(diagnostic, observedFailures, expectedFailures);
+    if (!classification.expected) consoleErrors.push(diagnostic.text);
+  }
+  assert.deepEqual(pendingFailureFixtures, [], "expected request fixture tidak terikat ke CDP request id");
+  const wrongOtpObservation = [...observedFailures.values()].filter((item) => item.fixtureId === "wrong-otp");
+  assert.equal(wrongOtpObservation.length, 1, "wrong OTP wajib punya satu explicit CDP request-id correlation");
+  assert.equal(wrongOtpObservation[0].status, 401, "correlated wrong OTP wajib 401");
+  assert.deepEqual(consoleErrors, [], `unexpected browser console errors: ${JSON.stringify(consoleErrors)}`);
   assert.deepEqual(pageErrors, [], `page errors: ${JSON.stringify(pageErrors)}`);
   assert.deepEqual(forbiddenRequests, [], `payment/generation request terdeteksi: ${JSON.stringify(forbiddenRequests)}`);
   assert.equal(otpRequestIntercepted, 1);
   receipt.requests = requestReceipts;
+  receipt.browser_error_classification = {
+    expected_failures: [...observedFailures.values()].map(({ fixtureId, requestId, method, url, outcome, status }) =>
+      ({ fixture_id: fixtureId, request_id: requestId, method, endpoint: new URL(url).pathname, outcome, status })),
+    unexpected_errors: consoleErrors,
+  };
   receipt.mobile = { otp_reduced_height_overflow: reducedOverflow, reduced_viewport: reducedViewport, dashboard_overflow: dashboardOverflow };
   receipt.dashboard = { aria_expanded: "false->true->false", escape_closed: true, focus_restored: true };
   receipt.otp_provider_calls = 0;
