@@ -162,7 +162,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
-      EXPECTED_APP_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397
+      EXPECTED_APP_SHA: ee767201679ae2213c40be6f913241f372d2378a
     steps:
       - name: Checkout immutable default-branch control code
         uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4

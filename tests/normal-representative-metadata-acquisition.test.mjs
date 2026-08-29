@@ -239,6 +239,8 @@ test("control source has no R2 write/delete command and workflow exposes isolate
   assert.doesNotMatch(source, /ORDER BY[\s\S]*created_at|\blatest\b/i);
   const workflow = fs.readFileSync(new URL("../.github/workflows/managed-mobile-evidence.yml", import.meta.url), "utf8");
   assert.match(workflow, /inputs\.mode == 'representative-metadata-readonly'/);
+  const metadataJob = workflow.slice(workflow.indexOf("  representative-metadata-readonly:"), workflow.indexOf("  exact-sha-mobile-evidence:"));
+  assert.match(metadataJob, /EXPECTED_APP_SHA: ee767201679ae2213c40be6f913241f372d2378a/);
   assert.match(workflow, /if: always\(\).*metadata_acquisition\.outcome != 'skipped'/);
   assert.match(workflow, /close-owned-normal-metadata-window\.mjs/);
   assert.match(workflow, /verify-normal-representative-metadata-receipt\.mjs[^\n]+\$EXPECTED_APP_SHA[^\n]+github\.sha/);
