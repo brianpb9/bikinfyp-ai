@@ -12,6 +12,7 @@ import {
   postgresShape,
   PRODUCTION_POSTGRES_ID,
   PUBLIC_IPV4_SOURCE,
+  renderRequest,
   STAGING_POSTGRES_ID,
   validateTarget,
   verifyDatabaseTls,
@@ -80,6 +81,37 @@ test("provider schema and exact readback reject source, broad, extra, or duplica
   assert.equal(allowListIsExact([{ cidrBlock: "8.8.8.0/24", description: expected[0].description }], expected), false);
   assert.equal(allowListIsExact([{ ...expected[0], providerExtra: true }], expected), false);
   assert.equal(allowListIsExact([...expected, ...expected], expected), false);
+});
+
+test("Render cleanup transport retries network, 429 Retry-After, and 5xx before success", async () => {
+  const waits: number[] = [];
+  let call = 0;
+  const result = await renderRequest(STAGING_POSTGRES_ID, "fixture-token", {
+    method: "PATCH",
+    body: JSON.stringify({ ipAllowList: [] }),
+  }, {
+    attempts: 4,
+    baseDelayMs: 100,
+    maxDelayMs: 500,
+    sleep: async (ms: number) => { waits.push(ms); },
+    fetchImpl: async () => {
+      call++;
+      if (call === 1) throw new Error("network");
+      if (call === 2) return { ok: false, status: 429, headers: { get: () => "2" } };
+      if (call === 3) return { ok: false, status: 503, headers: { get: () => null } };
+      return { ok: true, status: 200, headers: { get: () => null }, json: async () => metadata };
+    },
+  });
+  assert.equal(result.id, STAGING_POSTGRES_ID);
+  assert.deepEqual(waits, [100, 500, 400]);
+
+  let rejectedCalls = 0;
+  await assert.rejects(renderRequest(STAGING_POSTGRES_ID, "fixture-token", {}, {
+    attempts: 6,
+    sleep: async () => {},
+    fetchImpl: async () => { rejectedCalls++; return { ok: false, status: 401, headers: { get: () => null } }; },
+  }), /rejected/);
+  assert.equal(rejectedCalls, 1);
 });
 
 test("Render control is hard-bound to staging and authoritative database identity", () => {

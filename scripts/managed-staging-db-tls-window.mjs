@@ -12,6 +12,12 @@ export const STAGING_POSTGRES_NAME = "racun-ai-staging-postgres";
 export const PUBLIC_IPV4_SOURCE = "https://checkip.amazonaws.com/";
 const RENDER_API_ORIGIN = "https://api.render.com";
 const WINDOW_DESCRIPTION = "temporary-github-runner-one-run";
+const CLEANUP_REQUEST_POLICY = { attempts: 6, baseDelayMs: 500, maxDelayMs: 5_000 };
+const CLEANUP_WAIT_OPTIONS = {
+  attempts: 8,
+  intervalMs: 1_000,
+  requestPolicy: { attempts: 4, baseDelayMs: 500, maxDelayMs: 4_000 },
+};
 
 const blankRunReceipt = () => ({
   target_verified: false,
@@ -121,35 +127,74 @@ function renderUrl(postgresId) {
   return `${RENDER_API_ORIGIN}/v1/postgres/${encodeURIComponent(postgresId)}`;
 }
 
-async function renderRequest(postgresId, token, init = {}) {
-  const response = await fetch(renderUrl(postgresId), {
-    ...init,
-    headers: {
-      authorization: `Bearer ${token}`,
-      accept: "application/json",
-      ...(init.body ? { "content-type": "application/json" } : {}),
-    },
-  });
-  if (!response.ok) throw new Error("Render control request failed");
-  return response.json();
+function retryAfterMs(response, fallback, maximum) {
+  const raw = response?.headers?.get?.("retry-after");
+  if (raw) {
+    const seconds = Number(raw);
+    if (Number.isFinite(seconds) && seconds >= 0) return Math.min(maximum, seconds * 1_000);
+    const at = Date.parse(raw);
+    if (Number.isFinite(at)) return Math.min(maximum, Math.max(0, at - Date.now()));
+  }
+  return Math.min(maximum, fallback);
 }
 
-async function readPostgres(postgresId, token) {
-  return postgresShape(await renderRequest(postgresId, token));
+export async function renderRequest(postgresId, token, init = {}, policy = {}) {
+  const attempts = Math.max(1, Number(policy.attempts ?? 1));
+  const baseDelayMs = Math.max(1, Number(policy.baseDelayMs ?? 500));
+  const maxDelayMs = Math.max(baseDelayMs, Number(policy.maxDelayMs ?? 5_000));
+  const fetchImpl = policy.fetchImpl ?? fetch;
+  const sleep = policy.sleep ?? ((ms) => new Promise((resolve) => setTimeout(resolve, ms)));
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    let response;
+    try {
+      response = await fetchImpl(renderUrl(postgresId), {
+        ...init,
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "application/json",
+          ...(init.body ? { "content-type": "application/json" } : {}),
+        },
+      });
+      if (response.ok) return response.json();
+      if (response.status !== 429 && response.status < 500) {
+        const rejected = new Error("Render control request rejected");
+        rejected.nonretryable = true;
+        throw rejected;
+      }
+    } catch (error) {
+      if (error?.nonretryable) throw new Error("Render control request rejected");
+      if (attempt + 1 >= attempts) throw new Error("Render control request failed");
+      response = undefined;
+    }
+    if (attempt + 1 >= attempts) throw new Error("Render control request failed");
+    const fallback = baseDelayMs * 2 ** attempt;
+    await sleep(retryAfterMs(response, fallback, maxDelayMs));
+  }
+  throw new Error("Render control request failed");
 }
 
-async function replaceAllowList(postgresId, token, ipAllowList) {
+async function readPostgres(postgresId, token, policy) {
+  return postgresShape(await renderRequest(postgresId, token, {}, policy));
+}
+
+async function replaceAllowList(postgresId, token, ipAllowList, policy) {
   const updated = postgresShape(await renderRequest(postgresId, token, {
     method: "PATCH",
     body: JSON.stringify({ ipAllowList }),
-  }));
+  }, policy));
   if (!allowListIsExact(updated.ipAllowList, ipAllowList)) throw new Error("PATCH readback mismatch");
 }
 
-async function waitForAllowList(postgresId, token, expected, attempts = 20) {
+async function waitForAllowList(postgresId, token, expected, options = {}) {
+  const attempts = Number(options.attempts ?? 20);
+  const intervalMs = Number(options.intervalMs ?? 1_000);
   for (let index = 0; index < attempts; index++) {
-    if (allowListIsExact((await readPostgres(postgresId, token)).ipAllowList, expected)) return;
-    await new Promise((resolve) => setTimeout(resolve, 1_000));
+    try {
+      if (allowListIsExact((await readPostgres(postgresId, token, options.requestPolicy)).ipAllowList, expected)) return;
+    } catch {
+      if (index + 1 >= attempts) throw new Error("allow-list read failed");
+    }
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
   }
   throw new Error("allow-list convergence failed");
 }
@@ -250,9 +295,9 @@ export async function openWindow(env = process.env, deps = defaultDeps) {
     if (!cleanupRequired) return;
     cleanupPromise ??= (async () => {
       await mutationSettled;
-      await deps.replaceAllowList(STAGING_POSTGRES_ID, required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY), []);
+      await deps.replaceAllowList(STAGING_POSTGRES_ID, required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY), [], CLEANUP_REQUEST_POLICY);
       receipt.cleanup_patch_empty = true;
-      await deps.waitForAllowList(STAGING_POSTGRES_ID, required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY), []);
+      await deps.waitForAllowList(STAGING_POSTGRES_ID, required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY), [], CLEANUP_WAIT_OPTIONS);
       receipt.cleanup_readback_empty = true;
     })();
     return cleanupPromise;
@@ -312,9 +357,9 @@ export async function closeWindow(env = process.env, deps = defaultDeps) {
     const postgresId = validateTarget(required("STAGING_RENDER_POSTGRES_ID", env.STAGING_RENDER_POSTGRES_ID));
     receipt.target_verified = true;
     const token = required("STAGING_RENDER_API_KEY", env.STAGING_RENDER_API_KEY);
-    await deps.replaceAllowList(postgresId, token, []);
+    await deps.replaceAllowList(postgresId, token, [], CLEANUP_REQUEST_POLICY);
     receipt.cleanup_patch_empty = true;
-    await deps.waitForAllowList(postgresId, token, []);
+    await deps.waitForAllowList(postgresId, token, [], CLEANUP_WAIT_OPTIONS);
     receipt.cleanup_readback_empty = true;
     process.stdout.write(`${JSON.stringify(receipt)}\n`);
     return receipt;
