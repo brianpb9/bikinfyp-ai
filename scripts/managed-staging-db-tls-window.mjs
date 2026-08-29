@@ -233,6 +233,7 @@ export async function waitForAllowList(postgresId, token, expected, options = {}
       if (!isRetryableControlError(error)) throw error;
       if (index + 1 >= attempts) throw new Error("allow-list read failed");
     }
+    if (index + 1 >= attempts) break;
     const remaining = deadlineAt - now();
     if (remaining <= 0) throw controlError("allow-list deadline exceeded", "RENDER_DEADLINE", false);
     await sleep(Math.min(intervalMs, remaining));

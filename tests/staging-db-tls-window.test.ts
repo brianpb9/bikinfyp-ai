@@ -360,6 +360,39 @@ test("secondary cleanup caps convergence sleep at one remaining millisecond and 
   assert.equal(receipts[0].cleanup_readback_empty, false);
 });
 
+test("secondary cleanup never sleeps after its final successful non-converged GET", async () => {
+  let gets = 0;
+  const waits: number[] = [];
+  const receipts: Array<Record<string, boolean>> = [];
+  const nonEmpty = { ...metadata, ipAllowList: exactRunnerAllowList("8.8.8.8") };
+  await assert.rejects(closeWindow(env, {
+    ...mockedDeps([]),
+    waitForAllowList: (id: string, token: string, value: unknown[], options: Record<string, any> = {}) =>
+      waitForAllowList(id, token, value, {
+        ...options,
+        attempts: 1,
+        deadlineAt: 1_000,
+        now: () => 0,
+        sleep: async (ms: number) => { waits.push(ms); },
+        requestPolicy: {
+          ...options.requestPolicy,
+          deadlineAt: 1_000,
+          now: () => 0,
+          fetchImpl: async () => {
+            gets++;
+            return { ok: true, status: 200, headers: { get: () => null }, text: async () => JSON.stringify(nonEmpty) };
+          },
+          sleep: async () => {},
+        },
+      }),
+    emitReceipt: (receipt: Record<string, boolean>) => { receipts.push({ ...receipt }); },
+  }), /cleanup failed/);
+  assert.equal(gets, 1);
+  assert.deepEqual(waits, []);
+  assert.equal(receipts[0].cleanup_patch_empty, true);
+  assert.equal(receipts[0].cleanup_readback_empty, false);
+});
+
 test("signal guard aborts child and cleans once before terminal exit", async () => {
   const calls: string[] = [];
   const controller = new AbortController();
