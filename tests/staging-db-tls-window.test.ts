@@ -14,7 +14,9 @@ import {
   PUBLIC_IPV4_SOURCE,
   renderRequest,
   replaceAllowList,
+  STAGING_DATABASE_PRINCIPAL,
   STAGING_POSTGRES_ID,
+  validateExpectedUser,
   validateTarget,
   verifyDatabaseTls,
   waitForAllowList,
@@ -26,16 +28,18 @@ const metadata = {
   id: STAGING_POSTGRES_ID,
   name: "racun-ai-staging-postgres",
   databaseName: "fixture-db",
-  databaseUser: "fixture-user",
+  databaseUser: "racun_ai_staging_postgres_user",
   region: "singapore",
   ipAllowList: [],
 };
 const externalHost = `${STAGING_POSTGRES_ID}.singapore-postgres.render.com`;
-const managedUrl = `postgresql://fixture-user:fixture-password@${externalHost}/fixture-db`;
+const expectedUser = STAGING_DATABASE_PRINCIPAL;
+const managedUrl = `postgresql://${expectedUser}:fixture-password@${externalHost}/fixture-db`;
 const env = {
   ...process.env,
   STAGING_RENDER_POSTGRES_ID: STAGING_POSTGRES_ID,
   STAGING_RENDER_API_KEY: "fixture-token",
+  STAGING_DATABASE_EXPECTED_USER: expectedUser,
   MANAGED_DATABASE_URL: managedUrl,
 };
 const dbPass = {
@@ -43,6 +47,11 @@ const dbPass = {
   select_one_verified: true,
   current_database_verified: true,
   current_user_verified: true,
+  role_not_superuser_verified: true,
+  role_no_create_role_verified: true,
+  role_no_create_database_verified: true,
+  role_no_replication_verified: true,
+  role_no_bypass_rls_verified: true,
   pg_stat_ssl_verified: true,
   certificate_hostname_verified: true,
 };
@@ -172,17 +181,29 @@ test("Render control is hard-bound to staging and authoritative database identit
   assert.doesNotMatch(workflow, new RegExp(PRODUCTION_POSTGRES_ID));
 });
 
-test("database URL binds authoritative host, database, user, and verify-full", () => {
-  const url = externalTlsDatabaseUrl(`${managedUrl}?sslmode=disable&ssl=0`, metadata);
+test("database URL accepts only the dedicated expected staging principal on the provider-derived target", () => {
+  assert.equal(validateExpectedUser(expectedUser), "racun_staging_ci");
+  const url = externalTlsDatabaseUrl(`${managedUrl}?sslmode=disable&ssl=0`, metadata, expectedUser);
   assert.equal(url.hostname, externalHost);
+  assert.equal(decodeURIComponent(url.username), expectedUser);
   assert.equal(url.searchParams.get("sslmode"), "verify-full");
   assert.equal(url.searchParams.has("ssl"), false);
-  assert.throws(() => externalTlsDatabaseUrl("postgresql://fixture-user:p@internal-host/fixture-db", metadata));
-  assert.throws(() => externalTlsDatabaseUrl(`postgresql://fixture-user:p@${externalHost}/wrong-db`, metadata));
-  assert.throws(() => externalTlsDatabaseUrl(`postgresql://wrong-user:p@${externalHost}/fixture-db`, metadata));
+  assert.throws(() => externalTlsDatabaseUrl(`postgresql://${expectedUser}:p@internal-host/fixture-db`, metadata, expectedUser));
+  assert.throws(() => externalTlsDatabaseUrl(`postgresql://${expectedUser}:p@${externalHost}/wrong-db`, metadata, expectedUser));
+  for (const rejected of [metadata.databaseUser, "racun_staging", "wrong_staging_user", "racun_ai_production_postgres_user"])
+    assert.throws(() => externalTlsDatabaseUrl(`postgresql://${rejected}:p@${externalHost}/fixture-db`, metadata, expectedUser),
+      /database principal mismatch/);
+  assert.throws(() => externalTlsDatabaseUrl(managedUrl, metadata, undefined), /missing STAGING_DATABASE_EXPECTED_USER/);
 });
 
-test("TLS probe uses fixed SELECT order inside READ ONLY and always ROLLBACK", async () => {
+test("configured principal cannot redefine truth even when its URL username matches", () => {
+  for (const rejected of [metadata.databaseUser, "racun_staging", "wrong_staging_user", "racun_ai_production_postgres_user"]) {
+    const matchingUrl = `postgresql://${rejected}:p@${externalHost}/fixture-db`;
+    assert.throws(() => externalTlsDatabaseUrl(matchingUrl, metadata, rejected), /unexpected staging database principal/);
+  }
+});
+
+test("TLS probe proves the exact principal is non-privileged inside READ ONLY and always ROLLBACK", async () => {
   const queries: string[] = [];
   let released = false;
   let ended = false;
@@ -193,25 +214,77 @@ test("TLS probe uses fixed SELECT order inside READ ONLY and always ROLLBACK", a
       queries.push(sql);
       if (sql === "SELECT 1 AS one") return { rowCount: 1, rows: [{ one: 1 }] };
       if (sql.includes("current_database")) return { rowCount: 1, rows: [{ current_database: metadata.databaseName }] };
-      if (sql.includes("current_user")) return { rowCount: 1, rows: [{ current_user: metadata.databaseUser }] };
+      if (sql === "SELECT current_user AS current_user") return { rowCount: 1, rows: [{ current_user: expectedUser }] };
+      if (sql.includes("FROM pg_roles")) return { rowCount: 1, rows: [{
+        rolsuper: false, rolcreaterole: false, rolcreatedb: false, rolreplication: false, rolbypassrls: false,
+      }] };
       if (sql.includes("pg_stat_ssl")) return { rowCount: 1, rows: [{ ssl: true }] };
       return { rowCount: 0, rows: [] };
     },
     release: () => { released = true; },
   };
-  const result = await verifyDatabaseTls(new URL(managedUrl), metadata,
+  const result = await verifyDatabaseTls(new URL(managedUrl), metadata, expectedUser,
     (() => ({ connect: async () => client, end: async () => { ended = true; } })) as never, () => undefined);
   assert.deepEqual(queries, [
     "BEGIN TRANSACTION READ ONLY",
     "SELECT 1 AS one",
     "SELECT current_database() AS current_database",
     "SELECT current_user AS current_user",
+    "SELECT rolsuper, rolcreaterole, rolcreatedb, rolreplication, rolbypassrls FROM pg_roles WHERE rolname = current_user",
     "SELECT ssl FROM pg_stat_ssl WHERE pid = pg_backend_pid()",
     "ROLLBACK",
   ]);
   assert.deepEqual(result, dbPass);
   assert.equal(released, true);
   assert.equal(ended, true);
+});
+
+test("TLS probe fails closed for a wrong current_user or any privileged role flag", async () => {
+  const run = async (currentUser: string, role: Record<string, boolean>) => verifyDatabaseTls(
+    new URL(managedUrl), metadata, expectedUser,
+    (() => ({
+      connect: async () => ({
+        connection: { stream: { encrypted: true, authorized: true, authorizationError: null,
+          getPeerCertificate: () => ({}) } },
+        query: async (sql: string) => {
+          if (sql === "SELECT 1 AS one") return { rowCount: 1, rows: [{ one: 1 }] };
+          if (sql.includes("current_database")) return { rowCount: 1, rows: [{ current_database: metadata.databaseName }] };
+          if (sql === "SELECT current_user AS current_user") return { rowCount: 1, rows: [{ current_user: currentUser }] };
+          if (sql.includes("FROM pg_roles")) return { rowCount: 1, rows: [role] };
+          if (sql.includes("pg_stat_ssl")) return { rowCount: 1, rows: [{ ssl: true }] };
+          return { rowCount: 0, rows: [] };
+        },
+        release: () => {},
+      }),
+      end: async () => {},
+    })) as never,
+    () => undefined
+  );
+  const leastPrivilege = {
+    rolsuper: false, rolcreaterole: false, rolcreatedb: false, rolreplication: false, rolbypassrls: false,
+  };
+  assert.equal((await run("wrong_staging_user", leastPrivilege)).current_user_verified, false);
+  const receiptKeys = {
+    rolsuper: "role_not_superuser_verified",
+    rolcreaterole: "role_no_create_role_verified",
+    rolcreatedb: "role_no_create_database_verified",
+    rolreplication: "role_no_replication_verified",
+    rolbypassrls: "role_no_bypass_rls_verified",
+  } as const;
+  for (const [flag, receiptKey] of Object.entries(receiptKeys)) {
+    const receipt = await run(expectedUser, { ...leastPrivilege, [flag]: true });
+    assert.equal(receipt[receiptKey as keyof typeof receipt], false, `${flag} must fail its receipt boolean`);
+  }
+});
+
+test("missing, default, arbitrary, or production expected principal fails before metadata or network", async () => {
+  for (const rejected of [undefined, metadata.databaseUser, "racun_staging", "wrong_staging_user",
+    "racun_ai_production_postgres_user"]) {
+    const calls: string[] = [];
+    const rejectedEnv = { ...env, STAGING_DATABASE_EXPECTED_USER: rejected };
+    await assert.rejects(openWindow(rejectedEnv, mockedDeps(calls)), /window run failed/);
+    assert.deepEqual(calls, [], `${rejected ?? "missing"} must fail before dependencies`);
+  }
 });
 
 test("successful same-process window executes evidence once then cleans before return", async () => {
@@ -241,7 +314,7 @@ test("failures after PATCH, readback, TLS, identity, or E2E all clean and fail t
     };
     if (stage === "tls") overrides.verifyDatabaseTls = async () => { calls.push("tls"); throw new Error("tls failed"); };
     if (stage === "identity") overrides.readPostgres = async () => {
-      calls.push("read:metadata"); return { ...metadata, databaseUser: "authoritative-other-user" };
+      calls.push("read:metadata"); return { ...metadata, databaseName: "authoritative-other-database" };
     };
     if (stage === "evidence") overrides.runEvidence = async () => { calls.push("evidence"); throw new Error("E2E failed"); };
     await assert.rejects(openWindow(env, mockedDeps(calls, overrides)), /window run failed/);
@@ -415,6 +488,8 @@ test("workflow preserves R2, runs E2E inside opener finally, then secondary clea
   const runStep = workflow.slice(run, cleanup);
   const cleanupStep = workflow.slice(cleanup, upload);
   assert.match(runStep, /STAGING_RENDER_API_KEY: \$\{\{ secrets\.STAGING_RENDER_API_KEY \}\}/);
+  assert.match(runStep, /STAGING_DATABASE_EXPECTED_USER: \$\{\{ vars\.STAGING_DATABASE_EXPECTED_USER \}\}/);
+  assert.doesNotMatch(runStep, /STAGING_DATABASE_EXPECTED_USER:\s*(?:racun_staging_ci|\$\{\{ secrets\.)/);
   assert.match(runStep, /MANAGED_DATABASE_URL: \$\{\{ secrets\.STAGING_DATABASE_URL \}\}/);
   assert.match(runStep, /managed-staging-db-tls-window\.mjs run/);
   assert.match(cleanupStep, /if: always\(\) && steps\.staging_db_tls_window\.outcome != 'skipped'/);
