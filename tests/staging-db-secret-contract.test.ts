@@ -120,10 +120,10 @@ test("secret-contract mode has no Render token, egress discovery, allow-list, or
 
 test("dispatch modes are mutually isolated and full E2E remains explicit", () => {
   assert.match(workflow, /default: secret-contract/);
-  assert.match(workflow, /- secret-contract\n          - tls-preflight-only\n          - full-e2e/);
+  assert.match(workflow, /- secret-contract\n          - tls-preflight-only\n          - representative-metadata-readonly\n          - full-e2e/);
   const preflightJob = workflow.slice(
     workflow.indexOf("  staging-database-tls-preflight:"),
-    workflow.indexOf("  exact-sha-mobile-evidence:")
+    workflow.indexOf("  representative-metadata-readonly:")
   );
   assert.match(preflightJob, /inputs\.mode == 'tls-preflight-only'/);
   assert.match(preflightJob, /run-staging-database-tls-preflight\.mjs/);

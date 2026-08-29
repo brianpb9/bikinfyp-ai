@@ -13,6 +13,9 @@ on:
       - scripts/verify-staging-app-health.mjs
       - scripts/validate-staging-database-secret-contract.mjs
       - scripts/verify-mobile-evidence-receipt.mjs
+      - scripts/acquire-normal-representative-metadata.mjs
+      - scripts/close-owned-normal-metadata-window.mjs
+      - scripts/verify-normal-representative-metadata-receipt.mjs
       - tests/managed-mobile-ci-workflow.test.ts
       - tests/managed-runner-sha-binding.test.ts
       - tests/staging-app-health-preflight.test.ts
@@ -20,6 +23,7 @@ on:
       - tests/staging-db-tls-preflight-only.test.ts
       - tests/staging-db-tls-window.test.ts
       - tests/staging-r2-preflight.test.ts
+      - tests/normal-representative-metadata-acquisition.test.mjs
   workflow_dispatch:
     inputs:
       mode:
@@ -30,6 +34,7 @@ on:
         options:
           - secret-contract
           - tls-preflight-only
+          - representative-metadata-readonly
           - full-e2e
       reviewed_sha:
         description: Exact 40-character deployed staging app SHA
@@ -81,9 +86,9 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs scripts/managed-staging-db-tls-window.mjs scripts/run-staging-database-tls-preflight.mjs scripts/validate-staging-database-secret-contract.mjs scripts/verify-staging-app-health.mjs
+      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs scripts/managed-staging-db-tls-window.mjs scripts/run-staging-database-tls-preflight.mjs scripts/validate-staging-database-secret-contract.mjs scripts/verify-staging-app-health.mjs scripts/acquire-normal-representative-metadata.mjs scripts/close-owned-normal-metadata-window.mjs scripts/verify-normal-representative-metadata-receipt.mjs
       - run: npx tsc --noEmit
-      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/managed-runner-sha-binding.test.ts tests/staging-app-health-preflight.test.ts tests/staging-r2-preflight.test.ts tests/staging-db-tls-window.test.ts tests/staging-db-secret-contract.test.ts tests/staging-db-tls-preflight-only.test.ts
+      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/managed-runner-sha-binding.test.ts tests/staging-app-health-preflight.test.ts tests/staging-r2-preflight.test.ts tests/staging-db-tls-window.test.ts tests/staging-db-secret-contract.test.ts tests/staging-db-tls-preflight-only.test.ts tests/normal-representative-metadata-acquisition.test.mjs
 
   staging-database-secret-contract:
     # This mode receives only the database URL and non-secret expected user.
@@ -150,6 +155,105 @@ jobs:
           STAGING_RENDER_POSTGRES_ID: dpg-d9n21fnlk1mc73djm8q0-a
           STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
         run: node control/scripts/managed-staging-db-tls-window.mjs close
+
+  representative-metadata-readonly:
+    if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.mode == 'representative-metadata-readonly'
+    environment: staging
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      EXPECTED_APP_SHA: acf1fd49fadc3387c3ae6a13f711689f1e0d9397
+    steps:
+      - name: Checkout immutable default-branch control code
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: ${{ github.sha }}
+          path: control
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Bind dispatch to exact staging app and control
+        working-directory: control
+        env:
+          REQUESTED_SHA: ${{ inputs.reviewed_sha }}
+          CONTROL_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          test "$REQUESTED_SHA" = "$EXPECTED_APP_SHA"
+          test "$(git rev-parse HEAD)" = "$CONTROL_SHA"
+
+      - name: Verify public staging app identity and safety
+        working-directory: control
+        run: node scripts/verify-staging-app-health.mjs
+
+      - name: Validate staging database secret contract before network access
+        working-directory: control
+        env:
+          STAGING_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          STAGING_DATABASE_EXPECTED_USER: ${{ vars.STAGING_DATABASE_EXPECTED_USER }}
+        run: node scripts/validate-staging-database-secret-contract.mjs
+
+      - name: Set up pinned Node runtime
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: control/package-lock.json
+
+      - name: Install locked control dependencies without lifecycle scripts
+        working-directory: control
+        run: npm ci --ignore-scripts
+
+      - name: Acquire one immutable metadata packet read-only
+        id: metadata_acquisition
+        working-directory: control
+        env:
+          STAGING_RENDER_POSTGRES_ID: dpg-d9n21fnlk1mc73djm8q0-a
+          STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
+          STAGING_DATABASE_EXPECTED_USER: ${{ vars.STAGING_DATABASE_EXPECTED_USER }}
+          MANAGED_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+          RACUN_DEPLOY_ENV: staging
+          STORAGE_MODE: r2
+          R2_REGION: auto
+          R2_ENDPOINT: ${{ secrets.STAGING_R2_ENDPOINT }}
+          R2_BUCKET: ${{ secrets.STAGING_R2_BUCKET }}
+          R2_ACCESS_KEY_ID: ${{ secrets.STAGING_R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.STAGING_R2_SECRET_ACCESS_KEY }}
+          EXPECTED_APP_SHA: ${{ env.EXPECTED_APP_SHA }}
+          CONTROL_SHA: ${{ github.sha }}
+          WINDOW_OWNER_MARKER_PATH: ${{ runner.temp }}/normal-metadata-window-owner.json
+          METADATA_RECEIPT_PATH: ${{ runner.temp }}/normal-representative-metadata/metadata-receipt.json
+        run: node scripts/acquire-normal-representative-metadata.mjs
+
+      - name: Always re-close and prove empty staging DB allow-list
+        id: metadata_cleanup
+        if: always() && steps.metadata_acquisition.outcome != 'skipped'
+        working-directory: control
+        env:
+          STAGING_RENDER_POSTGRES_ID: dpg-d9n21fnlk1mc73djm8q0-a
+          STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
+          RECEIPT_DIR: ${{ runner.temp }}/normal-representative-metadata
+          WINDOW_OWNER_MARKER_PATH: ${{ runner.temp }}/normal-metadata-window-owner.json
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p "$RECEIPT_DIR"
+          node scripts/close-owned-normal-metadata-window.mjs > "$RECEIPT_DIR/secondary-cleanup.json"
+
+      - name: Verify immutable secret-free receipt bundle
+        if: steps.metadata_acquisition.outcome == 'success' && steps.metadata_cleanup.outcome == 'success'
+        working-directory: control
+        run: node scripts/verify-normal-representative-metadata-receipt.mjs "${{ runner.temp }}/normal-representative-metadata" "$EXPECTED_APP_SHA" "${{ github.sha }}"
+
+      - name: Upload append-only metadata receipts
+        if: always() && steps.metadata_acquisition.outcome != 'skipped'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: normal-representative-metadata-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/normal-representative-metadata
+          if-no-files-found: error
+          retention-days: 30
+          compression-level: 0
 
   exact-sha-mobile-evidence:
     # Secret-bearing execution is only available from protected default main.
