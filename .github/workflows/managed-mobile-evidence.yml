@@ -6,10 +6,12 @@ on:
     paths:
       - .github/workflows/managed-mobile-evidence.yml
       - scripts/build-mobile-evidence-image.sh
+      - scripts/managed-staging-db-tls-window.mjs
       - scripts/preflight-staging-r2.mjs
       - scripts/run-mobile-evidence-image.sh
       - scripts/verify-mobile-evidence-receipt.mjs
       - tests/managed-mobile-ci-workflow.test.ts
+      - tests/staging-db-tls-window.test.ts
       - tests/staging-r2-preflight.test.ts
   workflow_dispatch:
     inputs:
@@ -63,9 +65,9 @@ jobs:
           node-version: "22"
           cache: npm
       - run: npm ci
-      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs
+      - run: bash -n scripts/build-mobile-evidence-image.sh scripts/run-mobile-evidence-image.sh && node --check scripts/preflight-staging-r2.mjs scripts/managed-staging-db-tls-window.mjs
       - run: npx tsc --noEmit
-      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/staging-r2-preflight.test.ts
+      - run: npx tsx --test tests/managed-mobile-ci-workflow.test.ts tests/staging-r2-preflight.test.ts tests/staging-db-tls-window.test.ts
 
   exact-sha-mobile-evidence:
     # Secret-bearing execution is only available from protected default main.
@@ -153,6 +155,14 @@ jobs:
             "$EVIDENCE_IMAGE_DIGEST" \
             /srv/evidence/scripts/preflight-staging-r2.mjs
 
+      - name: Open temporary exact-runner staging database TLS window
+        id: staging_db_tls_window
+        env:
+          STAGING_RENDER_POSTGRES_ID: dpg-d9n21fnlk1mc73djm8q0-a
+          STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
+          MANAGED_DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: node control/scripts/managed-staging-db-tls-window.mjs open
+
       - name: Run and sanitize provider-free staging evidence with managed secret injection
         env:
           EXPECTED_APP_SHA: ${{ env.REVIEWED_SHA }}
@@ -163,7 +173,6 @@ jobs:
           RACUN_DB_RUNTIME: postgres
           STORAGE_MODE: r2
           R2_REGION: auto
-          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
           AUTH_SECRET: ${{ secrets.STAGING_AUTH_SECRET }}
           R2_ENDPOINT: ${{ secrets.STAGING_R2_ENDPOINT }}
           R2_BUCKET: ${{ secrets.STAGING_R2_BUCKET }}
@@ -173,6 +182,14 @@ jobs:
           set -euo pipefail
           bash control/scripts/run-mobile-evidence-image.sh
           node control/scripts/verify-mobile-evidence-receipt.mjs "$RUNNER_TEMP/managed-mobile-receipts" "$REVIEWED_SHA"
+
+      - name: Always close temporary staging database TLS window
+        id: staging_db_tls_cleanup
+        if: always() && steps.staging_db_tls_window.outcome != 'skipped'
+        env:
+          STAGING_RENDER_POSTGRES_ID: dpg-d9n21fnlk1mc73djm8q0-a
+          STAGING_RENDER_API_KEY: ${{ secrets.STAGING_RENDER_API_KEY }}
+        run: node control/scripts/managed-staging-db-tls-window.mjs close
 
       - name: Upload sanitized immutable receipt bundle
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
