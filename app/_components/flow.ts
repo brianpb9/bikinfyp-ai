@@ -49,7 +49,7 @@ export interface FlowScript {
    * tanpa pernah tahu bedanya. `degraded` tidak boleh pernah sampai ke sini —
    * kalau muncul, itu bug, bukan pilihan.
    */
-  script_source?: "llm" | "template" | "degraded";
+  script_source?: "llm" | "template" | "degraded" | "manual";
   /** Bentuk naskah saat ditulis — dipakai UI supaya gerbangnya sama dengan
    *  server (genre, durasi, jatah kata, label keranjang). */
   admisi?: SnapshotAdmisi;

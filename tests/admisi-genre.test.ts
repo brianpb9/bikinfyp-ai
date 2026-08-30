@@ -160,3 +160,13 @@ test("provenance selamat melewati approve — vonis diganti, jejak dibawa", () =
   assert.equal(bacaJejak(JSON.stringify(caraBaru)).admisi?.contentType, "ads");
   assert.equal(caraBaru.checked_at, "t1", "vonisnya tetap yang terbaru");
 });
+
+test("provenance manual eksplisit selamat melewati amplop validasi", () => {
+  const jejak = bacaJejak(JSON.stringify({
+    passed: true, errors: [], warnings: [], checked_at: "2026-08-31T00:00:00.000Z",
+    script_source: "manual",
+    admisi: { contentType: "affiliate", format: "hands_only", durationSec: 15 },
+  }));
+  assert.equal(jejak.script_source, "manual");
+  assert.equal(amplopValidasi({ passed: true, errors: [], warnings: [], checked_at: "t1" }, jejak).script_source, "manual");
+});

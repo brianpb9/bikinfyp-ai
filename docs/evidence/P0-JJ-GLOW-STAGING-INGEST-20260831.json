@@ -1,0 +1,68 @@
+{
+  "schema": "bikinfyp.staging-controlled-ingest-evidence/v1",
+  "task": "P0-JJ-GLOW-RIGHTS-REMEDIATION-20260831-R5",
+  "environment": "staging",
+  "reviewed_application_sha": "9a5ed85498fe3c429f64bfa7cdfd9fdcfbb93c0a",
+  "web_service_id": "srv-d9n28tijnfac73a87lt0",
+  "worker_service_id": "srv-d9n28ue417fc73ch2b60",
+  "worker_state_during_execution": "suspended",
+  "render_job_id": "job-daabf86k1f9s73fu76vg",
+  "render_job_status": "succeeded",
+  "started_at": "2026-08-30T23:07:12Z",
+  "finished_at": "2026-08-30T23:07:42Z",
+  "actor": {
+    "principal_id": "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8",
+    "email": "brianpb9@gmail.com",
+    "role": "Founder/CEO"
+  },
+  "product": {
+    "id": "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+    "name": "JJ GLOW GLUTA PINK BRIGHTENING SOAP",
+    "brand": "JJ GLOW",
+    "price_idr": 1,
+    "price_semantics": "STAGING_TEST_SENTINEL_NOT_MARKET_PRICE",
+    "category": "beauty",
+    "product_type": "bar soap",
+    "product_type_state": "CONFIRMED",
+    "category_review_state": "CLEAR",
+    "category_review_version": 2,
+    "category_reviewed_by": "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8",
+    "category_reviewed_role": "Founder/CEO"
+  },
+  "bpom_truth": {
+    "nie": "NA18260500350",
+    "classification": "Kosmetika / Padat Sabun",
+    "issued_on": "2026-04-13",
+    "expires_on": "2029-04-12",
+    "registrant_and_manufacturer": "PT Unindo Ajidharma Industry",
+    "claims_used": []
+  },
+  "reference": {
+    "count": 1,
+    "storage_key": "uploads/c470390e-ad3d-4cc8-9ba2-4557691fa7a7/9047a662-d664-48f8-9c67-69fc10bc8289.webp",
+    "sha256": "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1",
+    "visible_marks": [
+      "INTERNAL QA REFERENCE",
+      "NOT OFFICIAL PACKAGING",
+      "NOT FOR SALE"
+    ],
+    "classification": "product_photo",
+    "reference_eligible": true,
+    "external_image_inputs": false,
+    "official_packaging_or_trade_dress": false
+  },
+  "rights": {
+    "receipt_key": "uploads/c470390e-ad3d-4cc8-9ba2-4557691fa7a7/9047a662-d664-48f8-9c67-69fc10bc8289.webp.rights.json",
+    "receipt_sha256": "ca3906a381e6d299bc46fe62aeefbc3bd9b4183a6ff59c4f3cde2ca8f94788c3",
+    "scope": "internal_staging_ai_and_derivatives_only",
+    "publication_permitted": false,
+    "revoked": false
+  },
+  "postconditions": {
+    "products_matching_canonical_target": 1,
+    "references": 1,
+    "scripts": 0,
+    "jobs": 0,
+    "provider_calls": 0
+  }
+}

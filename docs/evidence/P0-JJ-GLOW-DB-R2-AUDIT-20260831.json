@@ -1,0 +1,47 @@
+{
+  "schema": "bikinfyp.db-r2-digest-audit-evidence/v1",
+  "task": "P0-JJ-GLOW-RIGHTS-REMEDIATION-20260831-R5",
+  "environment": "staging",
+  "render_job_id": "job-daabfsks728c73ftsplg",
+  "render_job_status": "succeeded",
+  "started_at": "2026-08-30T23:08:34Z",
+  "finished_at": "2026-08-30T23:08:46Z",
+  "product_id": "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+  "database_assertions": {
+    "canonical_product_count": 1,
+    "reference_count": 1,
+    "script_count": 0,
+    "job_count": 0,
+    "rights_binding_present": true,
+    "publication_permitted": false
+  },
+  "r2_assertions": {
+    "reference_present": true,
+    "reference_sha256": "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1",
+    "receipt_present": true,
+    "receipt_sha256": "ca3906a381e6d299bc46fe62aeefbc3bd9b4183a6ff59c4f3cde2ca8f94788c3",
+    "sidecar_present": true,
+    "sidecar_reference_sha256_matches": true,
+    "sidecar_kind": "product_photo",
+    "sidecar_reference_eligible": true,
+    "revocation_sentinel_present": false
+  },
+  "receipt_semantic_assertions": {
+    "canonical_json": true,
+    "actor_principal_matches": true,
+    "actor_role": "Founder/CEO",
+    "owning_user_matches": true,
+    "owning_org_id": null,
+    "product_and_brand_match": true,
+    "normalized_object_digest_matches_r2": true,
+    "normalized_object_size_matches_r2": true,
+    "no_external_image_inputs": true,
+    "no_third_party_logo_or_trade_dress": true,
+    "not_official_brand_source": true,
+    "publication_permitted": false
+  },
+  "control_plane_cleanup": {
+    "temporary_database_allowlist_used_for_sanitized_receipt_capture": true,
+    "database_allowlist_after_capture": []
+  }
+}

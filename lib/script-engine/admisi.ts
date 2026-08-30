@@ -97,7 +97,8 @@ export interface SnapshotAdmisi {
  * naskahnya, jadi jejaknya tidak hilang sambil menunggu.
  */
 export interface JejakNaskah {
-  script_source?: "llm" | "template" | "degraded";
+  /** Explicit human authorship; never a provider-failure fallback. */
+  script_source?: "llm" | "template" | "degraded" | "manual";
   admisi?: SnapshotAdmisi;
 }
 
@@ -118,7 +119,7 @@ export function bacaJejak(validationResult: unknown): JejakNaskah {
   const obj = parse(validationResult);
   const jejak: JejakNaskah = {};
   const src = obj?.script_source;
-  if (src === "llm" || src === "template" || src === "degraded") jejak.script_source = src;
+  if (src === "llm" || src === "template" || src === "degraded" || src === "manual") jejak.script_source = src;
   const snap = obj?.admisi;
   if (snap && typeof snap === "object") jejak.admisi = snap as SnapshotAdmisi;
   return jejak;
