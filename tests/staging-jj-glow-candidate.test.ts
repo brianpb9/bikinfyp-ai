@@ -89,10 +89,14 @@ test("precondition exact-state hanya tersedia untuk fixture dan web staging exac
     productId: JJ_GLOW_PRODUCT_ID, scriptId: JJ_GLOW_SCRIPT_ID };
   const runtime = { NODE_ENV: "production", RACUN_DEPLOY_ENV: "staging", RENDER_SERVICE_ID: JJ_GLOW_STAGING_WEB_SERVICE_ID } as NodeJS.ProcessEnv;
   assert.equal(authorizeJjGlowExactAdmission(intent, runtime), JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256);
-  assert.equal(authorizeJjGlowExactAdmission({ ...intent, expectedSha256: undefined }, runtime), undefined);
+  assert.throws(() => authorizeJjGlowExactAdmission({ ...intent, expectedSha256: undefined }, runtime), /DIGEST_REQUIRED/);
+  assert.throws(() => authorizeJjGlowExactAdmission({ ...intent, expectedSha256: null }, runtime), /DIGEST_REQUIRED/);
+  assert.throws(() => authorizeJjGlowExactAdmission({ ...intent, expectedSha256: "" }, runtime), /DIGEST_REQUIRED/);
+  assert.throws(() => authorizeJjGlowExactAdmission({ ...intent, expectedSha256: { sha: JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256 } }, runtime), /DIGEST_REQUIRED/);
+  assert.equal(authorizeJjGlowExactAdmission({ ...intent, expectedSha256: undefined, productId: "unrelated" }, runtime), null);
   assert.throws(() => authorizeJjGlowExactAdmission(intent, { ...runtime, RACUN_DEPLOY_ENV: "production" }), /UNAUTHORIZED/);
   assert.throws(() => authorizeJjGlowExactAdmission({ ...intent, userId: "other" }, runtime), /UNAUTHORIZED/);
-  assert.throws(() => authorizeJjGlowExactAdmission({ ...intent, expectedSha256: "0".repeat(64) }, runtime), /UNAUTHORIZED/);
+  assert.throws(() => authorizeJjGlowExactAdmission({ ...intent, expectedSha256: "0".repeat(64) }, runtime), /DIGEST_REQUIRED/);
 });
 
 test("runner memakai OTP acak singkat dan mengirim digest admission", () => {

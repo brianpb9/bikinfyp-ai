@@ -155,7 +155,7 @@ try {
   await assert.rejects(
     () => smokeCreateJob(unfundedUserId, {
       productId: unfundedProductId, personaId: null, scriptId: unfundedScriptId,
-      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null,
     }),
     /INSUFFICIENT_CREDITS/
   );
@@ -172,7 +172,7 @@ try {
   await assert.rejects(
     () => smokeCreateJob(rollbackUserId, {
       productId: rollbackProductId, personaId: null, scriptId: rollbackScriptId,
-      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null,
     }),
     /injected PG storage failure after write/
   );
@@ -191,7 +191,7 @@ try {
   let retryHookCalls = 0;
   const retried = await smokeCreateJob(retryUserId, {
     productId: retryProductId, personaId: null, scriptId: retryScriptId,
-    format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+    format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null,
     onRetryForTests: async ({ code }) => {
       retryHookCalls++;
       assert.equal(code, "40001");
@@ -217,13 +217,13 @@ try {
   await assert.rejects(
     smokeCreateJob(userId, {
       productId, personaId: `missing-${crypto.randomUUID()}`, scriptId: missingPersonaScriptId,
-      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null,
     }), /PERSONA_NOT_FOUND/
   );
   await assert.rejects(
     smokeCreateJob(userId, {
       productId, personaId: foreignPersonaId, scriptId: foreignPersonaScriptId,
-      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null,
     }), /PERSONA_NOT_FOUND/
   );
   assert.equal(Number((await pool.query<{ n: string }>(
@@ -232,7 +232,7 @@ try {
   )).rows[0].n), 0, "persona invalid tidak boleh menulis job");
 
   const settled = await Promise.allSettled(scriptIds.map((scriptId) => smokeCreateJob(userId, {
-    productId, personaId, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+    productId, personaId, scriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null,
   })));
   const rejected = settled.filter((entry): entry is PromiseRejectedResult => entry.status === "rejected");
   assert.equal(rejected.length, 0, `admission paralel menolak ${rejected.length}: ${rejected.map((entry) => String(entry.reason)).join(" | ")}`);
@@ -256,14 +256,14 @@ try {
   assert.equal(holds.rowCount, count, "harus ada tepat 20 hold");
   assert.ok(holds.rows.every((row) => Number(row.n) === 1 && Number(row.delta) === -priceIdr), "setiap job harus memiliki satu hold sebesar harga");
   const first = accepted[0];
-  const duplicate = await smokeCreateJob(userId, { productId, personaId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
+  const duplicate = await smokeCreateJob(userId, { productId, personaId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null });
   assert.equal(duplicate.duplicate, true, "job aktif untuk script yang sama harus idempoten");
   assert.equal(duplicate.jobId, first.jobId, "duplikat aktif harus menunjuk job awal");
   const activeDuplicateHolds = await pool.query("SELECT id FROM credit_ledger WHERE job_id=$1 AND type='hold'", [first.jobId]);
   assert.equal(activeDuplicateHolds.rowCount, 1, "duplikat aktif tidak boleh membuat hold kedua");
 
   const duplicateSettled = await Promise.all(Array.from({ length: 8 }, () => smokeCreateJob(userId, {
-    productId, personaId, scriptId: duplicateScriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+    productId, personaId, scriptId: duplicateScriptId, format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null,
   })));
   assert.equal(new Set(duplicateSettled.map((entry) => entry.jobId)).size, 1,
     "admission PG same-script konkuren tidak menunjuk satu winner");
@@ -276,7 +276,7 @@ try {
   // This matches the historic rule: a terminal job does not block a deliberate
   // re-admission of the same approved script, and the script pointer advances.
   await pool.query("UPDATE jobs SET state='FAILED' WHERE id=$1", [first.jobId]);
-  const reAdmitted = await smokeCreateJob(userId, { productId, personaId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr });
+  const reAdmitted = await smokeCreateJob(userId, { productId, personaId, scriptId: scriptIds[0], format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null });
   assert.equal(reAdmitted.duplicate, false, "job terminal harus mengizinkan re-admission");
   assert.notEqual(reAdmitted.jobId, first.jobId, "re-admission harus membuat job baru");
   const pointer = await pool.query<{ job_id: string }>("SELECT job_id FROM scripts WHERE id=$1", [scriptIds[0]]);
@@ -305,7 +305,7 @@ try {
     await blocker.query("SELECT pg_advisory_lock($1)", [advisoryKey]);
     const racedAdmission = smokeCreateJob(userId, {
       productId, personaId, scriptId: reassignmentRaceScriptId,
-      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr,
+      format: "hands_only", qualityTier: "silent_caption", durationS: 15, priceIdr, expectedProductStateSha256: null,
     });
     let blockedAfterPersonaLock = false;
     for (let attempt = 0; attempt < 100; attempt++) {

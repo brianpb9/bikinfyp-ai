@@ -53,14 +53,17 @@ export function assertJjGlowLockedProductState(product: ProductRow, expectedSha2
 
 export function authorizeJjGlowExactAdmission(input: {
   expectedSha256: unknown; userId: string; productId: string; scriptId: string;
-}, runtime: NodeJS.ProcessEnv = process.env): string | undefined {
-  if (input.expectedSha256 == null) return undefined;
-  if (runtime.RACUN_DEPLOY_ENV !== "staging"
-      || runtime.RENDER_SERVICE_ID !== JJ_GLOW_STAGING_WEB_SERVICE_ID
-      || input.userId !== JJ_GLOW_PRINCIPAL_ID || input.productId !== JJ_GLOW_PRODUCT_ID
-      || input.scriptId !== JJ_GLOW_SCRIPT_ID
-      || input.expectedSha256 !== JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256) {
-    throw new Error("JJ_GLOW_EXACT_ADMISSION_UNAUTHORIZED");
+}, runtime: NodeJS.ProcessEnv = process.env): string | null {
+  const exactTuple = runtime.RACUN_DEPLOY_ENV === "staging"
+    && runtime.RENDER_SERVICE_ID === JJ_GLOW_STAGING_WEB_SERVICE_ID
+    && input.userId === JJ_GLOW_PRINCIPAL_ID && input.productId === JJ_GLOW_PRODUCT_ID
+    && input.scriptId === JJ_GLOW_SCRIPT_ID;
+  if (exactTuple) {
+    if (input.expectedSha256 !== JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256) {
+      throw new Error("JJ_GLOW_EXACT_ADMISSION_DIGEST_REQUIRED");
+    }
+    return JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256;
   }
-  return JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256;
+  if (input.expectedSha256 == null) return null;
+  throw new Error("JJ_GLOW_EXACT_ADMISSION_UNAUTHORIZED");
 }

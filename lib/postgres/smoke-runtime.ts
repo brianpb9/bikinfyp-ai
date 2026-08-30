@@ -28,7 +28,7 @@ import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validat
 import { canonicalProductTypeTimestamp } from "../product-type-timestamp";
 import { stagingReferenceRightsBindingFromRawMeta } from "../staging-reference-rights";
 import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
-import { assertJjGlowLockedProductState } from "../staging-jj-glow-exact-admission";
+import { assertJjGlowLockedProductState, authorizeJjGlowExactAdmission } from "../staging-jj-glow-exact-admission";
 import { assertReferencePublicationPermitted, parseJobReferenceManifest, verifyJobReferenceManifestRights } from "../job-reference-manifest";
 
 /**
@@ -244,11 +244,15 @@ export async function smokeCreateJob(userId: string, input: {
   /** Exact-identity/HMAC managed staging trace only: Rp0 and no durable ledger artifact. */
   omitZeroLedger?: boolean;
   /** One-shot JJ GLOW staging contract, checked while the product row is locked. */
-  expectedProductStateSha256?: string;
+  expectedProductStateSha256: string | null;
   /** Disposable PostgreSQL verifier only; application routes never set it. */
   onRetryForTests?: (event: { attempt: number; jobId: string; code: "40001" | "40P01" }) => Promise<void>;
 }) {
   if (input.omitZeroLedger && input.priceIdr !== 0) throw new Error("ZERO_LEDGER_TRACE_REQUIRES_ZERO_PRICE");
+  const exactProductStateSha256 = authorizeJjGlowExactAdmission({
+    expectedSha256: input.expectedProductStateSha256,
+    userId, productId: input.productId, scriptId: input.scriptId,
+  });
   const pool = getPool(url());
   try {
     // The user-row lock serializes wallet spends and the script-row lock
@@ -327,8 +331,8 @@ export async function smokeCreateJob(userId: string, input: {
              FROM products WHERE id=$1 AND user_id=$2 FOR SHARE`, [input.productId, userId]);
         if (!product.rows[0]) throw new Error("PRODUCT_NOT_FOUND");
         const lockedProduct = product.rows[0];
-        if (input.expectedProductStateSha256) {
-          assertJjGlowLockedProductState(lockedProduct, input.expectedProductStateSha256);
+        if (exactProductStateSha256) {
+          assertJjGlowLockedProductState(lockedProduct, exactProductStateSha256);
         }
         assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version}, lockedProduct.category);
         await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
