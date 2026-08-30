@@ -16,7 +16,6 @@ const EMAIL = "brianpb9@gmail.com";
 const PRODUCT_ID = "c470390e-ad3d-4cc8-9ba2-4557691fa7a7";
 const PRODUCT_NAME = "JJ GLOW GLUTA PINK BRIGHTENING SOAP";
 const SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
-const OTP = "846271";
 const EXPECTED_REFERENCE_SHA = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 const EXPECTED_RECEIPT_SHA = "ca3906a381e6d299bc46fe62aeefbc3bd9b4183a6ff59c4f3cde2ca8f94788c3";
 const EXPECTED_HOLD_IDR = 12_000;
@@ -201,14 +200,20 @@ async function main() {
 
     const otpNow = new Date();
     const otpId = crypto.randomUUID();
+    const otp = String(crypto.randomInt(0, 1_000_000)).padStart(6, "0");
     await pool.query(
       "INSERT INTO otp_codes (id,email,code_hash,expires_at,attempts,created_at) VALUES ($1,$2,$3,$4,0,$5)",
-      [otpId, EMAIL, sha(`${process.env.AUTH_SECRET}:otp:${EMAIL}:${OTP}`),
-        new Date(otpNow.getTime() + 10 * 60_000).toISOString(), otpNow.toISOString()],
+      [otpId, EMAIL, sha(`${process.env.AUTH_SECRET}:otp:${EMAIL}:${otp}`),
+        new Date(otpNow.getTime() + 60_000).toISOString(), otpNow.toISOString()],
     );
-    const auth = await checkedJson(await fetch(`${BASE}/api/auth/verify-otp`, {
-      method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: EMAIL, code: OTP }),
-    }), "verify-otp");
+    let auth;
+    try {
+      auth = await checkedJson(await fetch(`${BASE}/api/auth/verify-otp`, {
+        method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ email: EMAIL, code: otp }),
+      }), "verify-otp");
+    } finally {
+      await pool.query("DELETE FROM otp_codes WHERE id=$1", [otpId]).catch(() => undefined);
+    }
     if (auth.body?.user?.id !== PRINCIPAL || auth.body?.user?.email !== EMAIL) throw new Error("wrong authenticated principal");
     const cookie = auth.response.headers.get("set-cookie");
     if (!cookie) throw new Error("session cookie missing");
@@ -222,7 +227,8 @@ async function main() {
 
     const admitted = await checkedJson(await fetch(`${BASE}/api/jobs`, {
       method: "POST", headers,
-      body: JSON.stringify({ script_id: SCRIPT_ID, creator_category: "lokal", format: "hands_only", quality_tier: "high_quality", duration_s: 15 }),
+      body: JSON.stringify({ script_id: SCRIPT_ID, creator_category: "lokal", format: "hands_only", quality_tier: "high_quality", duration_s: 15,
+        expected_product_state_sha256: EXPECTED_PRODUCT_STATE_SHA256 }),
     }), "admit-job");
     if (admitted.response.status !== 201 || admitted.body.state !== "QUEUED"
         || admitted.body.hold_idr !== EXPECTED_HOLD_IDR || admitted.body.duplicate) throw new Error("job admission response mismatch");

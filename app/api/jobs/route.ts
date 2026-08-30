@@ -22,6 +22,7 @@ import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validat
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 import { isCurrentC5JobGeneration, requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
 import { stagingReferenceRightsBindingFromRawMeta } from "@/lib/staging-reference-rights";
+import { authorizeJjGlowExactAdmission } from "@/lib/staging-jj-glow-exact-admission";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -46,6 +47,10 @@ export async function POST(req: Request) {
       ? await smokeGetProduct(user.id, script.product_id)
       : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(script.product_id, user.id) as ProductRow | undefined;
     if (!product) throw ERR.NOT_FOUND("Skripnya");
+    const expectedProductStateSha256 = authorizeJjGlowExactAdmission({
+      expectedSha256: body.expected_product_state_sha256,
+      userId: user.id, productId: product.id, scriptId: script.id,
+    });
     assertCategoryReviewClear({state:product.category_review_state as "CLEAR" | "QUARANTINED",reason:product.category_review_reason as never,version:product.category_review_version ?? 0}, product.category);
     // Produk organisasi WAJIB lewat dashboard: RBAC belanja, gerbang review
     // scene, dan library org semuanya hidup di sana. Lihat catatan lengkapnya
@@ -229,7 +234,7 @@ export async function POST(req: Request) {
     // the same HTTP contract.  The deterministic completion hook is scoped
     // to RACUN_POSTGRES_SMOKE and never starts the production worker.
     if (postgresRuntimeEnabled()) {
-      const created = await smokeCreateJob(user.id, { productId: product.id, personaId, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc, omitZeroLedger: zeroValueTrace });
+      const created = await smokeCreateJob(user.id, { productId: product.id, personaId, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc, omitZeroLedger: zeroValueTrace, expectedProductStateSha256 });
       // Snapshot Skor FYP BEKU (pre-render) — non-fatal, sama seperti jalur SQLite.
       if (!created.duplicate) {
         try {

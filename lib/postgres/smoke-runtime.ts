@@ -28,6 +28,7 @@ import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validat
 import { canonicalProductTypeTimestamp } from "../product-type-timestamp";
 import { stagingReferenceRightsBindingFromRawMeta } from "../staging-reference-rights";
 import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
+import { assertJjGlowLockedProductState } from "../staging-jj-glow-exact-admission";
 import { assertReferencePublicationPermitted, parseJobReferenceManifest, verifyJobReferenceManifestRights } from "../job-reference-manifest";
 
 /**
@@ -242,6 +243,8 @@ export async function smokeCreateJob(userId: string, input: {
   durationS: number; priceIdr: number; avatarCustomDesc?: string | null;
   /** Exact-identity/HMAC managed staging trace only: Rp0 and no durable ledger artifact. */
   omitZeroLedger?: boolean;
+  /** One-shot JJ GLOW staging contract, checked while the product row is locked. */
+  expectedProductStateSha256?: string;
   /** Disposable PostgreSQL verifier only; application routes never set it. */
   onRetryForTests?: (event: { attempt: number; jobId: string; code: "40001" | "40P01" }) => Promise<void>;
 }) {
@@ -305,6 +308,7 @@ export async function smokeCreateJob(userId: string, input: {
         // A shared row lock keeps product mutation behind COMMIT while the
         // admission snapshot and job row are installed atomically.
         const product = await client.query<{
+          id: string; user_id: string; org_id: string | null; source_url: string | null;
           name: string; category: string; price_idr: number; raw_meta: string | null;
           product_visual_desc: string | null; brand_brief: string | null; claims: string | null; images: string;
           promo_price_before_idr: number | null; promo_ends_at: string | null; promo_stock_left: number | null;
@@ -314,7 +318,7 @@ export async function smokeCreateJob(userId: string, input: {
           category_review_state: string; category_review_reason: string | null;
           category_reviewed_by: string | null; category_reviewed_role: string | null;
           category_reviewed_at: Date | string | null; category_review_version: number;
-        }>(`SELECT name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,images,
+        }>(`SELECT id,user_id,org_id,source_url,name,category,price_idr,raw_meta,product_visual_desc,brand_brief,claims,images,
                   promo_price_before_idr,promo_ends_at,promo_stock_left,
                   product_type_token,product_type_confirmed_token,product_type_confirmed_by,
                   product_type_confirmed_at,product_type_version,product_type_state,
@@ -323,6 +327,9 @@ export async function smokeCreateJob(userId: string, input: {
              FROM products WHERE id=$1 AND user_id=$2 FOR SHARE`, [input.productId, userId]);
         if (!product.rows[0]) throw new Error("PRODUCT_NOT_FOUND");
         const lockedProduct = product.rows[0];
+        if (input.expectedProductStateSha256) {
+          assertJjGlowLockedProductState(lockedProduct, input.expectedProductStateSha256);
+        }
         assertCategoryReviewClear({state:lockedProduct.category_review_state as "CLEAR" | "QUARANTINED",reason:lockedProduct.category_review_reason as never,version:lockedProduct.category_review_version}, lockedProduct.category);
         await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
           { kind: "DECLARED_PRODUCT_TYPE", sourceId: "locked-retail-product.product_type_token", token: lockedProduct.product_type_token ?? "", version: 1 },
