@@ -1,0 +1,51 @@
+{
+  "schema": "selected-reference-provenance-audit/v1",
+  "mode": "READ_ONLY",
+  "observed_at": "2026-08-30T05:44:25.383Z",
+  "exact_sha": "ee767201679ae2213c40be6f913241f372d2378a",
+  "service_id": "srv-d9n28tijnfac73a87lt0",
+  "product": {
+    "id": "fc78bee0-7890-429d-95e5-cac619a090e9",
+    "owner_user_id": "7c6fbc1f-bc21-493f-8405-158c4255fe15",
+    "name": "Serum Verifikasi Final",
+    "category": "beauty",
+    "product_type_token": null,
+    "product_type_confirmed_token": null,
+    "product_type_state": "QUARANTINED",
+    "product_type_version": null,
+    "category_review_state": "QUARANTINED",
+    "category_review_reason": "CATEGORY_UNKNOWN",
+    "category_review_version": 1,
+    "created_at": "2026-08-03T11:24:24.237Z",
+    "source_host": null,
+    "raw_meta_safe": {}
+  },
+  "references": [
+    {
+      "key": "uploads/fc78bee0-7890-429d-95e5-cac619a090e9/0.webp",
+      "bytes_present": true,
+      "bytes_sha256": "9f0ec3417cf6121c018dd5da86f38b402fac8fd40bf0a712429de8586ca081ef",
+      "sidecar_present": false,
+      "sidecar_sha256": null,
+      "sidecar": null
+    }
+  ],
+  "audits": [
+    {
+      "actor_id": "7c6fbc1f-bc21-493f-8405-158c4255fe15",
+      "action": "product.created",
+      "created_at": "2026-08-03T11:24:24.239Z",
+      "meta": {}
+    }
+  ],
+  "authorization_conclusion": "UNCONFIRMED",
+  "mutation": false,
+  "render_job": {
+    "id": "job-da9s6d8n74is7392o3ug",
+    "serviceId": "srv-d9n28tijnfac73a87lt0",
+    "status": "succeeded",
+    "createdAt": "2026-08-30T05:44:21.592923Z",
+    "startedAt": "2026-08-30T05:44:21Z",
+    "finishedAt": "2026-08-30T05:44:28Z"
+  }
+}

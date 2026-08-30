@@ -1,0 +1,50 @@
+{
+  "schema": "selected-truth-zero-mutation-proof/v1",
+  "mode": "READ_ONLY",
+  "observed_at": "2026-08-30T05:49:08.969Z",
+  "since": "2026-08-30T05:43:50Z",
+  "exact_sha": "ee767201679ae2213c40be6f913241f372d2378a",
+  "service_id": "srv-d9n28tijnfac73a87lt0",
+  "product_id": "fc78bee0-7890-429d-95e5-cac619a090e9",
+  "product": {
+    "product_type_token": null,
+    "product_type_confirmed_token": null,
+    "product_type_confirmed_by": null,
+    "product_type_confirmed_at": null,
+    "product_type_version": null,
+    "product_type_state": "QUARANTINED",
+    "category": "beauty",
+    "category_review_state": "QUARANTINED",
+    "category_review_reason": "CATEGORY_UNKNOWN",
+    "category_reviewed_by": null,
+    "category_reviewed_role": null,
+    "category_reviewed_at": null,
+    "category_review_version": 1
+  },
+  "counters": {
+    "evidence_runs": 0,
+    "jobs_created": 0,
+    "selected_product_jobs_created": 0,
+    "ledger_rows_created": 0,
+    "provider_tasks_created": 0,
+    "payments_created": 0,
+    "outputs_created": 0,
+    "selected_product_audits_created": 0,
+    "temporary_otp_rows": 0
+  },
+  "reference_authorization": "UNCONFIRMED",
+  "candidate_created": false,
+  "provider_requests": 0,
+  "spend_idr": 0,
+  "publication_count": 0,
+  "production_touched": false,
+  "pass": true,
+  "render_job": {
+    "id": "job-da9s8jhsrm7s73d6q3n0",
+    "serviceId": "srv-d9n28tijnfac73a87lt0",
+    "status": "succeeded",
+    "createdAt": "2026-08-30T05:49:02.625622Z",
+    "startedAt": "2026-08-30T05:49:02Z",
+    "finishedAt": "2026-08-30T05:49:14Z"
+  }
+}

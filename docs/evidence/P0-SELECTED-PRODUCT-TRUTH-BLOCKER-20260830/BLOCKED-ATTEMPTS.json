@@ -1,0 +1,30 @@
+{
+  "schema": "selected-product-truth-blocked-attempts/v1",
+  "service_id": "srv-d9n28tijnfac73a87lt0",
+  "exact_sha": "ee767201679ae2213c40be6f913241f372d2378a",
+  "attempts": [
+    {
+      "id": "job-da9s6t9srm7s73d6ledg",
+      "serviceId": "srv-d9n28tijnfac73a87lt0",
+      "status": "failed",
+      "createdAt": "2026-08-30T05:45:25.629402Z",
+      "startedAt": "2026-08-30T05:45:25Z",
+      "finishedAt": "2026-08-30T05:45:42Z",
+      "purpose": "combined owner confirmation and Founder category release",
+      "error": "FOUNDER_ROLE_NOT_CONFIGURED",
+      "write_started": false
+    },
+    {
+      "id": "job-da9s7dijnfac73ep7970",
+      "serviceId": "srv-d9n28tijnfac73a87lt0",
+      "status": "failed",
+      "createdAt": "2026-08-30T05:46:30.255776Z",
+      "startedAt": "2026-08-30T05:46:30Z",
+      "finishedAt": "2026-08-30T05:46:40Z",
+      "purpose": "owner-authenticated product-type confirmation",
+      "error": "OWNER_AUTH_IDENTITY_REQUIRED",
+      "write_started": false
+    }
+  ],
+  "conclusion": "FAIL_CLOSED_BEFORE_OTP_OR_PRODUCT_WRITE"
+}

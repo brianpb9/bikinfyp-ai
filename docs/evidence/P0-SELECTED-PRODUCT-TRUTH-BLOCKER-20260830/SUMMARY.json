@@ -1,0 +1,31 @@
+{
+  "schema": "selected-product-truth-blocker-evidence/v1",
+  "task": "P0-SELECTED-PRODUCT-TRUTH-BLOCKER-20260830",
+  "selected_product_id": "fc78bee0-7890-429d-95e5-cac619a090e9",
+  "selected_product_name": "Serum Verifikasi Final",
+  "selected_script_id": "a47622ee-a9c5-4777-b28b-b7ade3589e19",
+  "authorized_target": {
+    "product_type": "serum wajah",
+    "category": "beauty"
+  },
+  "actual_state": {
+    "product_type": "QUARANTINED_UNCHANGED",
+    "category": "QUARANTINED_CATEGORY_UNKNOWN_UNCHANGED",
+    "reference_authorization": "UNCONFIRMED",
+    "candidate_created": false
+  },
+  "blockers": [
+    "Reference has exact bytes but no sidecar, source URL, raw provenance, custom metadata, immutable object version, consent, licence, or rights-scope receipt.",
+    "Selected product owner has no email, so the normal email OTP authentication path cannot establish an owner session.",
+    "Staging has neither C5_AUTHORIZED_HUMAN_REVIEW_ROLE nor C5_AUTHORIZED_HUMAN_REVIEW_PRINCIPAL_ID configured.",
+    "Founder must select one exact principal ID; activity and masked identity metadata are not authority."
+  ],
+  "source_receipts": [
+    "PROVENANCE-RECEIPT.json",
+    "BLOCKED-ATTEMPTS.json",
+    "PRINCIPAL-CANDIDATES.json",
+    "ZERO-MUTATION.json"
+  ],
+  "safe_next_action": "FOUNDER_SELECT_EXACT_C5_PRINCIPAL_AND_AUTHORIZE_STAGING_BINDING; separately obtain durable rights receipt for exact reference bytes or replace through normal authorized ingestion",
+  "result": "FOUNDER_DECISION_REQUIRED"
+}
