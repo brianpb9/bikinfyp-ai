@@ -95,6 +95,8 @@ export class PgProductPersonaScriptRepository {
         product_type_confirmed_by: product.product_type_confirmed_by,
         product_type_confirmed_at: product.product_type_confirmed_at,
         product_type_version: product.product_type_version,
+        staging_reference_rights: input.rawMeta && typeof input.rawMeta === "object"
+          ? (input.rawMeta as Record<string, unknown>).staging_reference_rights ?? null : null,
       });
       commitAttempted = true;
       await client.query("COMMIT");

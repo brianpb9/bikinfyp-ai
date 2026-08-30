@@ -12,6 +12,7 @@ import { config, ensureDirs } from "./config";
 import { mediaStorage } from "./storage";
 import { klasifikasiGambar, KEBIJAKAN_KLASIFIKASI, type HasilKlasifikasi, type JenisGambar } from "./media/klasifikasi-gambar";
 import { assertAuthoritativeLabelResult, type HasilLabel } from "./media/label-terbaca";
+import { stagingReferenceRightsRel } from "./staging-reference-rights";
 
 let klasifikasiGambarUntukTest: ((path: string) => Promise<HasilKlasifikasi>) | undefined;
 /** Seam deterministik ingestion-test; tidak mengubah classifier produksi. */
@@ -437,7 +438,7 @@ export async function saveUniqueProductImages(
  */
 export async function deleteStoredProductImages(keys: string[]): Promise<void> {
   const failed: string[] = [];
-  const sasaran = keys.flatMap((key) => [key, relMeta(key)]);
+  const sasaran = keys.flatMap((key) => [key, relMeta(key), stagingReferenceRightsRel(key)]);
   await Promise.all(sasaran.map(async (key) => {
     for (let attempt = 1; attempt <= 3; attempt++) {
       try { await mediaStorage().delete(key); return; }

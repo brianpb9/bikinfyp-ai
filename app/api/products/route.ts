@@ -10,6 +10,7 @@ import { resolveApprovedReference, pesanTanpaReferensi } from "@/lib/product-tru
 import { GagalTanpaReferensi } from "@/lib/kanari-bukti";
 import { PgProductCreateFailure } from "@/lib/postgres/product-persona-script";
 import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, deriveCategoryReview, parseStructuredCategoryOutcome, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
+import { parseStagingReferenceRightsDeclaration, persistStagingReferenceRightsReceipt } from "@/lib/staging-reference-rights";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -29,6 +30,7 @@ export async function POST(req: Request) {
     let categoryOutcomeRaw: unknown = "KNOWN";
     // Merek terkonfirmasi user (audit C9) — sumber gerbang kesetiaan merek QC-F1.
     let brandRaw: unknown = undefined;
+    let stagingReferenceRightsRaw: unknown = undefined;
     let promoGet: (k: string) => unknown = () => undefined;
     const blobs: { mime: string; data: Buffer }[] = [];
 
@@ -43,6 +45,7 @@ export async function POST(req: Request) {
       categoryOutcomeRaw = form.get("category_outcome") ?? "KNOWN";
       visualDesc = form.get("product_visual_desc") ? String(form.get("product_visual_desc")).slice(0, 200) : null;
       brandRaw = form.get("brand") ?? undefined;
+      stagingReferenceRightsRaw = form.get("staging_reference_rights") ?? undefined;
       sourceUrl = form.get("source_url") ? String(form.get("source_url")) : null;
       promoGet = (k) => form.get(k) ?? undefined;
       for (const part of form.getAll("photos")) {
@@ -62,6 +65,7 @@ export async function POST(req: Request) {
       categoryOutcomeRaw = body.category_outcome ?? "KNOWN";
       visualDesc = body.product_visual_desc ? String(body.product_visual_desc).slice(0, 200) : null;
       brandRaw = body.brand;
+      stagingReferenceRightsRaw = body.staging_reference_rights;
       sourceUrl = body.source_url ? String(body.source_url) : null;
       promoGet = (k) => (body as Record<string, unknown>)[k];
       const b64: string[] = Array.isArray(body.images_base64) ? body.images_base64 : [];
@@ -78,6 +82,8 @@ export async function POST(req: Request) {
     const productTypeToken = String(productTypeRaw ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmedProductTypeToken = String(confirmedProductTypeRaw ?? "").normalize("NFKC").trim().toLocaleLowerCase("und");
     const confirmedAt = dependencies.now();
+    const stagingRights = parseStagingReferenceRightsDeclaration(stagingReferenceRightsRaw, user.id);
+    if (stagingRights && blobs.length !== 1) throw ERR.BAD_REQUEST("Fixture staging harus tepat satu gambar.", "Staging fixture requires exactly one image.");
     const categoryReview = deriveCategoryReview(category, parseStructuredCategoryOutcome(categoryOutcomeRaw));
     return await validateAuthoritativeProductType(buildAuthoritativeTypeBoundaryInput(
       { kind: "DECLARED_PRODUCT_TYPE", sourceId: "request.product_type", token: productTypeToken, version: 1 },
@@ -139,7 +145,7 @@ export async function POST(req: Request) {
     // raw_meta.brand: alamat fallback yang dibaca merekTepercaya() (worker) —
     // kolom products.brand (migrasi 0033, sesi lain) menang begitu di-land.
     const brand = validBrand(brandRaw);
-    const rawMeta = brand ? { brand } : null;
+    let rawMeta: Record<string, unknown> | null = brand ? { brand } : null;
     const brandTerdaftar = merekTerdaftar({ raw_meta: rawMeta ? JSON.stringify(rawMeta) : null });
 
     // E1 must apply the same gate as E4/E8 to every normalized upload before
@@ -154,6 +160,22 @@ export async function POST(req: Request) {
 
     const id = dependencies.uuid();
     const images = await saveProductImages(id, blobs, 0, inspectedImages);
+    if (stagingRights) {
+      try {
+        const persisted = await persistStagingReferenceRightsReceipt({
+          declaration: stagingRights, actorId: user.id, productId: id, productName: validName,
+          productBrand: brand, sourceBytes: blobs[0].data, rel: images[0], now: dependencies.now(),
+        });
+        rawMeta = { ...(rawMeta ?? {}), staging_reference_rights: {
+          receipt_key: persisted.storageKey, receipt_sha256: persisted.sha256,
+          reference_key: persisted.receipt.normalized_object.storage_key,
+          reference_sha256: persisted.receipt.normalized_object.sha256,
+          scope: persisted.receipt.rights_scope, publication_permitted: false,
+        } };
+      } catch (rightsError) {
+        await rejectAfterReferenceCheck("E1", images, rightsError);
+      }
+    }
     const usePostgres = dependencies.postgresRuntimeEnabled();
     const expectedCreation = {
       id,
