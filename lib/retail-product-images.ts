@@ -6,7 +6,7 @@ import {
 } from "./postgres/smoke-runtime";
 import type { PoolClient } from "pg";
 import crypto from "node:crypto";
-import type { StagingReferenceRightsBinding } from "./staging-reference-rights";
+import { removeStagingReferenceRightsBindingFromRawMeta, stagingReferenceRightsBindingFromRawMeta, type StagingReferenceRightsBinding } from "./staging-reference-rights";
 
 /**
  * Mutasi daftar foto retail harus menghitung hasil dari row terkini, bukan dari
@@ -25,15 +25,15 @@ export async function appendRetailProductImages(
 
   return getDb().transaction(() => {
     const row = getDb().prepare(
-      "SELECT images FROM products WHERE id = ? AND user_id = ? AND org_id IS NULL"
-    ).get(productId, userId) as { images: string } | undefined;
+      "SELECT images,raw_meta FROM products WHERE id = ? AND user_id = ? AND org_id IS NULL"
+    ).get(productId, userId) as { images: string; raw_meta: string | null } | undefined;
     if (!row) return null;
     const current = JSON.parse(row.images || "[]") as string[];
     if (current.length + added.length > maxImages) return null;
+    if (stagingReferenceRightsBindingFromRawMeta(row.raw_meta) || (rightsBinding && current.length !== 0)) return null;
     const images = [...current, ...added];
-    const raw = getDb().prepare("SELECT raw_meta FROM products WHERE id = ?").get(productId) as {raw_meta:string|null};
     let rawMeta:Record<string,unknown>={};
-    try { rawMeta=raw.raw_meta ? JSON.parse(raw.raw_meta) as Record<string,unknown> : {}; }
+    try { rawMeta=row.raw_meta ? JSON.parse(row.raw_meta) as Record<string,unknown> : {}; }
     catch { throw new Error("PRODUCT_RAW_META_INVALID"); }
     if (!rawMeta || typeof rawMeta !== "object" || Array.isArray(rawMeta)) throw new Error("PRODUCT_RAW_META_INVALID");
     if (rightsBinding) rawMeta.staging_reference_rights=rightsBinding;
@@ -60,15 +60,19 @@ export async function removeRetailProductImage(
 
   return getDb().transaction(() => {
     const row = getDb().prepare(
-      "SELECT images FROM products WHERE id = ? AND user_id = ? AND org_id IS NULL"
-    ).get(productId, userId) as { images: string } | undefined;
+      "SELECT images,raw_meta FROM products WHERE id = ? AND user_id = ? AND org_id IS NULL"
+    ).get(productId, userId) as { images: string; raw_meta: string | null } | undefined;
     if (!row) return null;
     const current = JSON.parse(row.images || "[]") as string[];
     if (!current.includes(target)) return null;
     const images = current.filter((image) => image !== target);
+    const rights = removeStagingReferenceRightsBindingFromRawMeta(row.raw_meta, target);
     getDb().prepare(
-      "UPDATE products SET images = ? WHERE id = ? AND user_id = ? AND org_id IS NULL"
-    ).run(JSON.stringify(images), productId, userId);
+      "UPDATE products SET images = ?, raw_meta = ? WHERE id = ? AND user_id = ? AND org_id IS NULL"
+    ).run(JSON.stringify(images), rights.rawMeta, productId, userId);
+    if (rights.removed) getDb().prepare(
+      `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES (?,?,?,?,?,?,?)`
+    ).run(crypto.randomUUID(),userId,"product.staging_reference_rights_removed","products",productId,JSON.stringify({reference_key:target}),new Date().toISOString());
     return images;
   })();
 }

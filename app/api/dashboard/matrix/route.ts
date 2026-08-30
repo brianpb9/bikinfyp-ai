@@ -306,6 +306,7 @@ export async function POST(req: Request) {
         owner: { kind: "org", id: membership.org_id },
         boundary: "A2",
         loadSqliteCandidateRels: () => productImages,
+        loadSqliteRawMeta: () => product.raw_meta,
         loadSqliteProductType: () => ({
           product_type_token: product.product_type_token ?? null,
           product_type_confirmed_token: product.product_type_confirmed_token ?? null,

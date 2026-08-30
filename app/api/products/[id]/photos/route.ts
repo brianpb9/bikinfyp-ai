@@ -57,6 +57,10 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     }
     if (blobs.length === 0) throw ERR.BAD_REQUEST("Tidak ada foto yang dikirim.", "No photos in request.");
     if (stagingRights && blobs.length !== 1) throw ERR.BAD_REQUEST("Fixture staging harus tepat satu gambar.", "Staging fixture requires exactly one image.");
+    if (stagingRights && existing.length !== 0) throw ERR.BAD_REQUEST(
+      "Fixture staging harus menjadi satu-satunya referensi produk.",
+      "Staging fixture must be the product's sole reference.",
+    );
     if (existing.length + blobs.length > MAX_IMAGES)
       throw ERR.BAD_REQUEST(`Total foto maksimal ${MAX_IMAGES} — produk ini sudah punya ${existing.length}.`, "Too many photos.");
 

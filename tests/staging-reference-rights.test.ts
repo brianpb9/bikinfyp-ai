@@ -13,6 +13,7 @@ const {
   verifyStagingReferenceRightsBinding,
 } = await import("../lib/staging-reference-rights");
 const { assertReferencePublicationPermitted, prepareJobReferenceManifest } = await import("../lib/job-reference-manifest");
+const { acquireAdmissionReferenceEvidence, assertAdmissionReferenceEvidence } = await import("../lib/job-admission-reference");
 const { KEBIJAKAN_KLASIFIKASI } = await import("../lib/media/klasifikasi-gambar");
 
 const actor = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
@@ -122,6 +123,8 @@ test("admission manifest binds receipt; missing, tampered, expired and non-publi
     productName:"JJ GLOW",productBrand:"JJ GLOW",sourceBytes:source,rel,now:"2026-08-31T01:00:00.000Z"});
   const binding={receipt_key:persisted.storageKey,receipt_sha256:persisted.sha256,reference_key:rel,
     reference_sha256:sha(normalized),scope:"internal_staging_ai_and_derivatives_only" as const,publication_permitted:false as const};
+  await assertAdmissionReferenceEvidence({productId:"jj",candidateRels:[rel],boundary:"A7",
+    stagingReferenceRightsBinding:binding});
   await assert.rejects(prepareJobReferenceManifest({jobId:"job-jj-unbound",candidateRels:[rel]}),/BINDING_MISSING/);
   const prepared=await prepareJobReferenceManifest({jobId:"job-jj",candidateRels:[rel],stagingReferenceRightsBinding:binding});
   assert.deepEqual(prepared.manifest.stagingReferenceRights?.binding,binding);
@@ -137,10 +140,59 @@ test("admission manifest binds receipt; missing, tampered, expired and non-publi
   await assert.rejects(verifyStagingReferenceRightsBinding({binding,referenceRel:rel,now:"2026-08-31T01:01:00.000Z"}),/RIGHTS_REVOKED/);
 });
 
+test("staging rights fail closed unless the fixture is the sole approved reference", async () => {
+  const parsed=parseStagingReferenceRightsDeclaration(declaration(),actor);
+  assert.ok(parsed);
+  const restricted="uploads/jj/sole.webp",other="uploads/jj/other.webp";
+  const restrictedBytes=Buffer.from("restricted"),otherBytes=Buffer.from("other");
+  for (const [rel,bytes] of [[restricted,restrictedBytes],[other,otherBytes]] as const) {
+    values.set(rel,bytes);
+    values.set(`${rel}.meta.json`,Buffer.from(JSON.stringify({sha256:sha(bytes),jenis:"product_photo",
+      layakReferensi:true,rasioAreaTeks:0,jumlahKata:0,alasan:"fixture",versiBukti:KEBIJAKAN_KLASIFIKASI.versiBukti,
+      labelOcrStatus:"READABLE",labelOcrVersion:1})));
+  }
+  const persisted=await persistStagingReferenceRightsReceipt({declaration:parsed,actorId:actor,productId:"jj",
+    productName:"JJ GLOW",productBrand:"JJ GLOW",sourceBytes:source,rel:restricted,now:"2026-08-31T01:00:00.000Z"});
+  const binding={receipt_key:persisted.storageKey,receipt_sha256:persisted.sha256,reference_key:restricted,
+    reference_sha256:sha(restrictedBytes),scope:"internal_staging_ai_and_derivatives_only" as const,publication_permitted:false as const};
+  await assert.rejects(assertAdmissionReferenceEvidence({productId:"jj",candidateRels:[other,restricted],boundary:"A7",
+    stagingReferenceRightsBinding:binding}),/REQUIRES_SOLE_REFERENCE/);
+  await assert.rejects(prepareJobReferenceManifest({jobId:"job-jj-multi",candidateRels:[other,restricted],
+    stagingReferenceRightsBinding:binding}),/REQUIRES_SOLE_REFERENCE/);
+});
+
+test("A7 evidence lease loads the persisted raw_meta binding under the product lock", async () => {
+  const parsed=parseStagingReferenceRightsDeclaration(declaration(),actor);
+  assert.ok(parsed);
+  const rel="uploads/jj/lease.webp",normalized=Buffer.from("lease-reference");
+  values.set(rel,normalized);
+  values.set(`${rel}.meta.json`,Buffer.from(JSON.stringify({sha256:sha(normalized),jenis:"product_photo",
+    layakReferensi:true,rasioAreaTeks:0,jumlahKata:0,alasan:"fixture",versiBukti:KEBIJAKAN_KLASIFIKASI.versiBukti,
+    labelOcrStatus:"READABLE",labelOcrVersion:1})));
+  const persisted=await persistStagingReferenceRightsReceipt({declaration:parsed,actorId:actor,productId:"jj",
+    productName:"JJ GLOW",productBrand:"JJ GLOW",sourceBytes:source,rel,now:"2026-08-31T01:00:00.000Z"});
+  const binding={receipt_key:persisted.storageKey,receipt_sha256:persisted.sha256,reference_key:rel,
+    reference_sha256:sha(normalized),scope:"internal_staging_ai_and_derivatives_only" as const,publication_permitted:false as const};
+  const lease=await acquireAdmissionReferenceEvidence({productId:"jj",owner:{kind:"user",id:actor},boundary:"A7",
+    loadSqliteCandidateRels:()=>[rel],loadSqliteRawMeta:()=>JSON.stringify({staging_reference_rights:binding})});
+  await lease.release();
+});
+
 test("both workers invoke the publication guard before READY transition", () => {
   const sqlite=fs.readFileSync("lib/worker.ts","utf8");
   const postgres=fs.readFileSync("lib/postgres/worker.ts","utf8");
   assert.ok(sqlite.indexOf("assertReferencePublicationPermitted(currentEvidence.manifest)") < sqlite.indexOf('transition(job.id, "READY")'));
   const persist=postgres.slice(postgres.indexOf("async function persistReadyOutput"));
   assert.ok(persist.indexOf("assertReferencePublicationPermitted") < persist.indexOf('jobs.transition(row.id, "READY"'));
+});
+
+test("deterministic PostgreSQL completion verifies rights and publication before state or output mutation", () => {
+  const source=fs.readFileSync("lib/postgres/smoke-runtime.ts","utf8");
+  const completion=source.slice(source.indexOf("export async function smokeCompleteJob"),source.indexOf("export async function smokeGetJob"));
+  const verify=completion.indexOf("await verifyJobReferenceManifestRights(manifest)");
+  const publication=completion.indexOf("assertReferencePublicationPermitted(manifest)");
+  const firstTransition=completion.indexOf("jobs.transition(jobId");
+  const outputPut=completion.indexOf("mediaStorage().put(outputUrl");
+  assert.ok(verify >= 0 && publication > verify);
+  assert.ok(publication < firstTransition && publication < outputPut);
 });

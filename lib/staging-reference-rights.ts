@@ -155,6 +155,20 @@ export function stagingReferenceRightsBindingFromRawMeta(raw: string | null | un
   return b as StagingReferenceRightsBinding;
 }
 
+export function removeStagingReferenceRightsBindingFromRawMeta(
+  raw: string | null | undefined,
+  target: string,
+): { rawMeta: string | null; removed: boolean } {
+  let parsed: unknown;
+  try { parsed = raw ? JSON.parse(raw) : {}; } catch { throw new Error("PRODUCT_RAW_META_INVALID"); }
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("PRODUCT_RAW_META_INVALID");
+  const rawMeta = parsed as Record<string, unknown>;
+  const binding = stagingReferenceRightsBindingFromRawMeta(raw);
+  if (!binding || binding.reference_key !== target) return { rawMeta: raw ?? null, removed: false };
+  delete rawMeta.staging_reference_rights;
+  return { rawMeta: Object.keys(rawMeta).length ? JSON.stringify(rawMeta) : null, removed: true };
+}
+
 export async function verifyStagingReferenceRightsBinding(input:{
   binding:StagingReferenceRightsBinding; referenceRel:string; now:string;
 }):Promise<StagingReferenceRightsReceipt> {

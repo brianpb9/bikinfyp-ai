@@ -74,6 +74,37 @@ function daftarFoto(productId: string): string[] {
   return JSON.parse(row.images) as string[];
 }
 
+test("E5 DELETE atomically clears matching staging-rights binding and audits lifecycle", async () => {
+  const target = "uploads/e5-rights/only.webp";
+  const productId = siapkanProduk([target]);
+  const binding = { receipt_key:`${target}.rights.json`,receipt_sha256:"a".repeat(64),reference_key:target,
+    reference_sha256:"b".repeat(64),scope:"internal_staging_ai_and_derivatives_only",publication_permitted:false };
+  db.prepare("UPDATE products SET raw_meta=? WHERE id=?").run(JSON.stringify({existing:"kept",staging_reference_rights:binding}),productId);
+
+  const result = await removeRetailProductImage(user.id,productId,target);
+  assert.deepEqual(result,[]);
+  const row=db.prepare("SELECT raw_meta FROM products WHERE id=?").get(productId) as {raw_meta:string};
+  assert.deepEqual(JSON.parse(row.raw_meta),{existing:"kept"});
+  const audit=db.prepare("SELECT action,meta FROM audit_log WHERE entity_id=? AND action=?").get(
+    productId,"product.staging_reference_rights_removed") as {action:string;meta:string}|undefined;
+  assert.equal(audit?.action,"product.staging_reference_rights_removed");
+  assert.deepEqual(JSON.parse(audit!.meta),{reference_key:target});
+});
+
+test("staging-rights binding atomically keeps its reference as the sole product image", async () => {
+  const first="uploads/sole/first.webp",second="uploads/sole/second.webp";
+  const productId=siapkanProduk([]);
+  const binding={receipt_key:`${first}.rights.json`,receipt_sha256:"a".repeat(64),reference_key:first,
+    reference_sha256:"b".repeat(64),scope:"internal_staging_ai_and_derivatives_only" as const,publication_permitted:false as const};
+  assert.deepEqual(await appendRetailProductImages(user.id,productId,[first],8,binding),[first]);
+  assert.equal(await appendRetailProductImages(user.id,productId,[second],8),null);
+  assert.deepEqual(daftarFoto(productId),[first]);
+
+  const occupied=siapkanProduk([second]);
+  assert.equal(await appendRetailProductImages(user.id,occupied,[first],8,binding),null);
+  assert.deepEqual(daftarFoto(occupied),[second]);
+});
+
 test("E5 DELETE: persist list terjadi sebelum foto+sidecar target dibersihkan; foto lain utuh", async (t) => {
   const target = "uploads/e5-target/0.webp";
   const lain = "uploads/e5-target/1.webp";

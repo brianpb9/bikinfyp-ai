@@ -6,7 +6,7 @@ import { config } from "./config";
 import { connectEvidenceLockClient, releaseSessionAdvisoryLock } from "./postgres/evidence-lock-pool";
 import type { PoolClient } from "pg";
 import { ERR } from "./errors";
-import { stagingReferenceRightsRel, verifyStagingReferenceRightsBinding, type StagingReferenceRightsBinding } from "./staging-reference-rights";
+import { stagingReferenceRightsBindingFromRawMeta, stagingReferenceRightsRel, verifyStagingReferenceRightsBinding, type StagingReferenceRightsBinding } from "./staging-reference-rights";
 
 type ProductEvidenceBoundary = "A1" | "A2" | "A3" | "A4" | "A5" | "A6" | "A7";
 type ProductOwner = { kind: "user" | "org"; id: string };
@@ -137,6 +137,7 @@ export async function acquireAdmissionReferenceEvidence(input: {
   boundary: ProductEvidenceBoundary;
   loadSqliteCandidateRels: () => Promise<string[]> | string[];
   loadSqliteProductType?: () => Promise<LockedProductTypeState | null> | LockedProductTypeState | null;
+  loadSqliteRawMeta?: () => Promise<string | null> | string | null;
 }): Promise<AdmissionEvidenceLease> {
   const releaseLocal = await acquireProcessProductOperation(input.productId);
   let client: PoolClient | null = null;
@@ -144,11 +145,12 @@ export async function acquireAdmissionReferenceEvidence(input: {
   try {
     let candidateRels: string[];
     let productType: LockedProductTypeState | null = null;
+    let stagingReferenceRightsBinding: StagingReferenceRightsBinding | null = null;
     if (evidenceLockDependencies().postgresRuntimeEnabled()) {
       client = await acquirePostgresProductLock(input.productId);
       const ownerColumn = input.owner.kind === "org" ? "org_id" : "user_id";
-      const locked = await client.query<LockedProductTypeState & { images: string }>(
-        `SELECT images,category,product_type_token,product_type_confirmed_token,product_type_confirmed_by,
+      const locked = await client.query<LockedProductTypeState & { images: string; raw_meta: string | null }>(
+        `SELECT images,raw_meta,category,product_type_token,product_type_confirmed_token,product_type_confirmed_by,
                 product_type_confirmed_at,product_type_version,product_type_state,
                 category_review_state,category_review_reason,category_reviewed_by,
                 category_reviewed_role,category_reviewed_at,category_review_version
@@ -158,14 +160,17 @@ export async function acquireAdmissionReferenceEvidence(input: {
       if (!locked.rows[0]) throw new Error(`Admission product ${input.productId} disappeared before ${input.boundary}`);
       candidateRels = JSON.parse(locked.rows[0].images || "[]") as string[];
       productType = locked.rows[0];
+      stagingReferenceRightsBinding = stagingReferenceRightsBindingFromRawMeta(locked.rows[0].raw_meta);
     } else {
       candidateRels = await input.loadSqliteCandidateRels();
       productType = await input.loadSqliteProductType?.() ?? null;
+      stagingReferenceRightsBinding = stagingReferenceRightsBindingFromRawMeta(await input.loadSqliteRawMeta?.() ?? null);
     }
     await assertAdmissionReferenceEvidence({
       productId: input.productId,
       candidateRels,
       boundary: input.boundary,
+      stagingReferenceRightsBinding,
     });
     return {
       productType,
@@ -212,9 +217,12 @@ export async function assertAdmissionReferenceEvidence(input: {
     if (unreadable) throw ERR.LABEL_UNREADABLE(unreadable.pesan);
     throw new GagalTanpaReferensi(pesanTanpaReferensi(resolution), resolution);
   }
-  if (input.stagingReferenceRightsBinding) await verifyStagingReferenceRightsBinding({
-    binding:input.stagingReferenceRightsBinding,referenceRel:resolution.utama.rel,now:new Date().toISOString(),
-  });
+  if (input.stagingReferenceRightsBinding) {
+    if (resolution.tersetujui.length !== 1) throw new Error("STAGING_REFERENCE_RIGHTS_REQUIRES_SOLE_REFERENCE");
+    await verifyStagingReferenceRightsBinding({
+      binding:input.stagingReferenceRightsBinding,referenceRel:resolution.utama.rel,now:new Date().toISOString(),
+    });
+  }
   else if (await mediaStorage().get(stagingReferenceRightsRel(resolution.utama.rel))) {
     throw new Error("STAGING_REFERENCE_RIGHTS_BINDING_MISSING");
   }

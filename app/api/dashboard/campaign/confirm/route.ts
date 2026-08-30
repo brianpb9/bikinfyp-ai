@@ -87,6 +87,7 @@ export async function POST(req: Request) {
       owner: { kind: "org", id: membership.org_id },
       boundary: "A5",
       loadSqliteCandidateRels: () => JSON.parse(product.images || "[]") as string[],
+      loadSqliteRawMeta: () => product.raw_meta,
     });
     const lockedProductType = evidenceLease.productType;
     assertCategoryReviewClear({

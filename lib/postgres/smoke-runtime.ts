@@ -28,6 +28,7 @@ import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validat
 import { canonicalProductTypeTimestamp } from "../product-type-timestamp";
 import { stagingReferenceRightsBindingFromRawMeta } from "../staging-reference-rights";
 import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
+import { assertReferencePublicationPermitted, parseJobReferenceManifest, verifyJobReferenceManifestRights } from "../job-reference-manifest";
 
 /**
  * PostgreSQL runtime switch.  `RACUN_POSTGRES_SMOKE=1` is retained solely for
@@ -405,11 +406,14 @@ export async function smokeCompleteJob(jobId: string) {
   const jobs = new PgJobsRepository(url(), { stateTimeoutsMin: config.stateTimeoutsMin });
   const pool = getPool(url());
   try {
+    const found = await pool.query("SELECT j.*, s.caption, s.hashtags, p.category FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id WHERE j.id=$1", [jobId]);
+    const job = found.rows[0]; if (!job) throw new Error("Job smoke tidak ditemukan.");
+    const manifest = parseJobReferenceManifest(job.approved_reference_manifest ?? "");
+    await verifyJobReferenceManifestRights(manifest);
+    assertReferencePublicationPermitted(manifest);
     for (const state of ["GENERATING_VISUAL", "GENERATING_VOICE", "COMPOSITING", "QC_CHECK", "LABELING"] as const) {
       if (!(await jobs.transition(jobId, state, { provider: "deterministic-smoke" }))) throw new Error("Job smoke tidak aktif.");
     }
-    const found = await pool.query("SELECT j.*, s.caption, s.hashtags, p.category FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN products p ON p.id=j.product_id WHERE j.id=$1", [jobId]);
-    const job = found.rows[0]; if (!job) throw new Error("Job smoke tidak ditemukan.");
     const outputUrl = `smoke/${jobId}.mp4`;
     const outputPath = path.join(config.storageDir, outputUrl);
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
@@ -459,6 +463,8 @@ export async function pgAppendRetailProductImages(userId: string, productId: str
              ELSE (COALESCE(NULLIF(raw_meta,''),'{}')::jsonb || jsonb_build_object('staging_reference_rights',$6::jsonb))::text END
        WHERE id=$1 AND user_id=$2 AND org_id IS NULL
          AND jsonb_array_length(COALESCE(NULLIF(images,''),'[]')::jsonb) + $4 <= $5
+         AND NOT (COALESCE(NULLIF(raw_meta,''),'{}')::jsonb ? 'staging_reference_rights')
+         AND ($6::jsonb IS NULL OR jsonb_array_length(COALESCE(NULLIF(images,''),'[]')::jsonb) = 0)
        RETURNING images`,
       [productId, userId, JSON.stringify(added), added.length, maxImages, rightsBinding ? JSON.stringify(rightsBinding) : null]
     );
@@ -474,20 +480,42 @@ export async function pgAppendRetailProductImages(userId: string, productId: str
 
 /** Atomic retail removal paired with pgAppendRetailProductImages. */
 export async function pgRemoveRetailProductImage(userId: string, productId: string, target: string, client?: PoolClient) {
-  const pool = client ?? getPool(url());
+  const dbClient = client ?? await getPool(url()).connect();
   try {
-    const result = await pool.query(
-      `UPDATE products
-       SET images=(SELECT COALESCE(jsonb_agg(value),'[]'::jsonb)::text
-                   FROM jsonb_array_elements_text(COALESCE(NULLIF(images,''),'[]')::jsonb) AS value
-                   WHERE value <> $3)
-       WHERE id=$1 AND user_id=$2 AND org_id IS NULL
-         AND COALESCE(NULLIF(images,''),'[]')::jsonb ? $3
-       RETURNING images`,
+    await dbClient.query("BEGIN");
+    const result = await dbClient.query(
+      `WITH locked AS (
+         SELECT id,raw_meta FROM products
+          WHERE id=$1 AND user_id=$2 AND org_id IS NULL
+            AND COALESCE(NULLIF(images,''),'[]')::jsonb ? $3
+          FOR UPDATE
+       )
+       UPDATE products AS p
+          SET images=(SELECT COALESCE(jsonb_agg(value),'[]'::jsonb)::text
+                        FROM jsonb_array_elements_text(COALESCE(NULLIF(p.images,''),'[]')::jsonb) AS value
+                       WHERE value <> $3),
+              raw_meta=CASE
+                WHEN COALESCE(NULLIF(locked.raw_meta,''),'{}')::jsonb #>> '{staging_reference_rights,reference_key}' = $3
+                THEN (COALESCE(NULLIF(locked.raw_meta,''),'{}')::jsonb - 'staging_reference_rights')::text
+                ELSE locked.raw_meta END
+         FROM locked WHERE p.id=locked.id
+       RETURNING p.images,
+         (COALESCE(NULLIF(locked.raw_meta,''),'{}')::jsonb #>> '{staging_reference_rights,reference_key}' = $3) AS rights_removed`,
       [productId, userId, target]
     );
-    return result.rows[0]?.images ? JSON.parse(result.rows[0].images) as string[] : null;
-  } finally { /* shared pool */ }
+    if (!result.rows[0]?.images) { await dbClient.query("ROLLBACK"); return null; }
+    if (result.rows[0].rights_removed) await dbClient.query(
+      `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [crypto.randomUUID(),userId,"product.staging_reference_rights_removed","products",productId,JSON.stringify({reference_key:target}),at()],
+    );
+    await dbClient.query("COMMIT");
+    return JSON.parse(result.rows[0].images) as string[];
+  } catch (error) {
+    await dbClient.query("ROLLBACK").catch(() => undefined);
+    throw error;
+  } finally {
+    if (!client) dbClient.release();
+  }
 }
 
 /** Organization product photo mutation. The org key is part of the UPDATE,

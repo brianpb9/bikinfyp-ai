@@ -99,6 +99,7 @@ export async function prepareJobReferenceManifest(input: {
   let stagingReferenceRights:JobReferenceManifest["stagingReferenceRights"];
   const primary=references[0];
   if (input.stagingReferenceRightsBinding) {
+    if (references.length !== 1) throw new Error("STAGING_REFERENCE_RIGHTS_REQUIRES_SOLE_REFERENCE");
     const receipt=await verifyStagingReferenceRightsBinding({binding:input.stagingReferenceRightsBinding,
       referenceRel:primary.rel,now:new Date().toISOString()});
     stagingReferenceRights={binding:input.stagingReferenceRightsBinding,receipt};
@@ -121,13 +122,7 @@ export async function materializeJobReferenceManifest(
   manifest: JobReferenceManifest,
   workDir: string
 ): Promise<string[]> {
-  if (manifest.stagingReferenceRights) {
-    const verified=await verifyStagingReferenceRightsBinding({binding:manifest.stagingReferenceRights.binding,
-      referenceRel:manifest.references[0].rel,now:new Date().toISOString()});
-    if (canonicalReferenceRightsJson(verified) !== canonicalReferenceRightsJson(manifest.stagingReferenceRights.receipt)) {
-      throw new Error("STAGING_REFERENCE_RIGHTS_MANIFEST_MISMATCH");
-    }
-  }
+  await verifyJobReferenceManifestRights(manifest);
   const dir = path.join(workDir, "ref-tersetujui");
   const snapshots: string[] = [];
   for (const ref of manifest.references) {
@@ -142,6 +137,17 @@ export async function materializeJobReferenceManifest(
     snapshots.push(await ambilSnapshotTersetujui(source, ref, dir));
   }
   return snapshots;
+}
+
+export async function verifyJobReferenceManifestRights(manifest: JobReferenceManifest): Promise<void> {
+  if (manifest.stagingReferenceRights) {
+    if (manifest.references.length !== 1) throw new Error("STAGING_REFERENCE_RIGHTS_REQUIRES_SOLE_REFERENCE");
+    const verified=await verifyStagingReferenceRightsBinding({binding:manifest.stagingReferenceRights.binding,
+      referenceRel:manifest.references[0].rel,now:new Date().toISOString()});
+    if (canonicalReferenceRightsJson(verified) !== canonicalReferenceRightsJson(manifest.stagingReferenceRights.receipt)) {
+      throw new Error("STAGING_REFERENCE_RIGHTS_MANIFEST_MISMATCH");
+    }
+  }
 }
 
 export function assertReferencePublicationPermitted(manifest:JobReferenceManifest):void {

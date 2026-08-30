@@ -108,6 +108,7 @@ export async function POST(req: Request) {
       owner: { kind: "user", id: user.id },
       boundary: "A7",
       loadSqliteCandidateRels: () => JSON.parse(loadLockedSqliteProduct().images || "[]") as string[],
+      loadSqliteRawMeta: () => loadLockedSqliteProduct().raw_meta,
       loadSqliteProductType: () => {
         const locked=loadLockedSqliteProduct();
         return {
