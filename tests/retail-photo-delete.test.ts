@@ -79,7 +79,7 @@ test("E5 DELETE: persist list terjadi sebelum foto+sidecar target dibersihkan; f
   const lain = "uploads/e5-target/1.webp";
   const productId = siapkanProduk([target, lain]);
   const storage = new StorageMemori();
-  for (const key of [target, `${target}.meta.json`, lain, `${lain}.meta.json`]) {
+  for (const key of [target, `${target}.meta.json`, `${target}.rights.json`, `${target}.rights.json.revoked.json`, lain, `${lain}.meta.json`]) {
     storage.values.set(key, Buffer.from(key));
   }
   let seluruhDeleteSesudahPersist = true;
@@ -99,11 +99,13 @@ test("E5 DELETE: persist list terjadi sebelum foto+sidecar target dibersihkan; f
   assert.equal(seluruhDeleteSesudahPersist, true, "storage dibersihkan sebelum daftar DB berhasil dipersist");
   assert.deepEqual(
     storage.deleteCalls.sort(),
-    [target, `${target}.meta.json`].sort(),
-    "cleanup harus menyasar tepat foto target dan sidecar-nya"
+    [target, `${target}.meta.json`, `${target}.rights.json`, `${target}.rights.json.revoked.json`].sort(),
+    "cleanup harus menyasar tepat foto target, sidecar teknis, dan receipt haknya"
   );
   assert.equal(storage.values.has(target), false);
   assert.equal(storage.values.has(`${target}.meta.json`), false);
+  assert.equal(storage.values.has(`${target}.rights.json`), false);
+  assert.equal(storage.values.has(`${target}.rights.json.revoked.json`), false);
   assert.equal(storage.values.has(lain), true, "foto yang tidak dihapus ikut hilang");
   assert.equal(storage.values.has(`${lain}.meta.json`), true, "sidecar foto lain ikut hilang");
 });

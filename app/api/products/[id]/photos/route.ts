@@ -9,6 +9,7 @@ import { assertAuthoritativeLabelResult, periksaLabelFoto, merekTerdaftar } from
 import { appendRetailProductImages, removeRetailProductImage } from "@/lib/retail-product-images";
 import { withProductEvidenceMutationLock } from "@/lib/job-admission-reference";
 import { rejectAfterReferenceCheck } from "@/lib/reference-rejection-rollback";
+import { parseStagingReferenceRightsDeclaration, persistStagingReferenceRightsReceipt } from "@/lib/staging-reference-rights";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -45,6 +46,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     const existing = owned.images;
 
     const form = await req.formData();
+    const stagingRights = parseStagingReferenceRightsDeclaration(form.get("staging_reference_rights") ?? undefined, user.id);
     const blobs: { mime: string; data: Buffer }[] = [];
     for (const part of form.getAll("photos")) {
       if (part instanceof File && part.size > 0) {
@@ -54,6 +56,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       }
     }
     if (blobs.length === 0) throw ERR.BAD_REQUEST("Tidak ada foto yang dikirim.", "No photos in request.");
+    if (stagingRights && blobs.length !== 1) throw ERR.BAD_REQUEST("Fixture staging harus tepat satu gambar.", "Staging fixture requires exactly one image.");
     if (existing.length + blobs.length > MAX_IMAGES)
       throw ERR.BAD_REQUEST(`Total foto maksimal ${MAX_IMAGES} — produk ini sudah punya ${existing.length}.`, "Too many photos.");
 
@@ -94,6 +97,25 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     // UUID keys avoid object overwrite when two uploads observed the same
     // starting list length. Publication into the list remains atomic below.
     const added = await saveUniqueProductImages(id, blobs, inspectedImages);
+    let rightsBinding: { receipt_key:string; receipt_sha256:string; reference_key:string; reference_sha256:string;
+      scope:"internal_staging_ai_and_derivatives_only"; publication_permitted:false } | undefined;
+    if (stagingRights) {
+      try {
+        const persisted = await persistStagingReferenceRightsReceipt({
+          declaration: stagingRights, actorId: user.id, productId: id, productName: owned.product.name,
+          productBrand: merekTerdaftar(owned.product), sourceBytes: blobs[0].data, rel: added[0], now: new Date().toISOString(),
+        });
+        rightsBinding = {
+          receipt_key: persisted.storageKey, receipt_sha256: persisted.sha256,
+          reference_key: persisted.receipt.normalized_object.storage_key,
+          reference_sha256: persisted.receipt.normalized_object.sha256,
+          scope: persisted.receipt.rights_scope, publication_permitted: false,
+        };
+      } catch (rightsError) {
+        await deleteStoredProductImages(added);
+        throw rightsError;
+      }
+    }
 
     // WIZARD BUTUH MINIMAL SATU FOTO PRODUK YANG LAYAK JADI ACUAN.
     //
@@ -117,7 +139,7 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
     } catch (referenceError) {
       await rejectAfterReferenceCheck("E4", added, referenceError);
     }
-    const images = await appendRetailProductImages(user.id, id, added, MAX_IMAGES);
+    const images = await appendRetailProductImages(user.id, id, added, MAX_IMAGES, rightsBinding);
     if (!images) {
       await deleteStoredProductImages(added);
       throw ERR.BAD_REQUEST("Daftar fotonya baru saja berubah. Muat ulang lalu coba lagi; maksimal 8 foto.", "Concurrent photo update rejected.");

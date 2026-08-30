@@ -282,7 +282,7 @@ test("E8 resolver menolak produk tanpa referensi dan rollback exact sebelum PG a
   assert.equal((await rejected.response.json()).message_en, "No reference-eligible product photo.");
   assert.equal(rejected.appendCalls, 0);
   assert.equal(rejected.auditCalls, 0);
-  assert.deepEqual([...new Set(rejected.storage.deleteCalls)].sort(), [rejected.added, `${rejected.added}.meta.json`].sort());
+  assert.deepEqual([...new Set(rejected.storage.deleteCalls)].sort(), [rejected.added, `${rejected.added}.meta.json`, `${rejected.added}.rights.json`, `${rejected.added}.rights.json.revoked.json`].sort());
   assert.deepEqual(seenKeys(rejected.storage), [rejected.unrelated]);
 
   const preserved = await run("preserve-existing", promotional, true);
@@ -350,7 +350,7 @@ test("E8 resolver menolak produk tanpa referensi dan rollback exact sebelum PG a
   assert.deepEqual(seenKeys(raced.storage), [
     raced.existing[0], `${raced.existing[0]}.meta.json`, raced.unrelated,
   ].sort(), "CAS miss hanya membersihkan exact upload baru+sidecar");
-  assert.deepEqual([...new Set(raced.storage.deleteCalls)].sort(), [raced.added, `${raced.added}.meta.json`].sort());
+  assert.deepEqual([...new Set(raced.storage.deleteCalls)].sort(), [raced.added, `${raced.added}.meta.json`, `${raced.added}.rights.json`, `${raced.added}.rights.json.revoked.json`].sort());
 });
 
 function assertOrgAppendUsesOrderedSnapshotCas(source: string, context: string) {

@@ -6,6 +6,7 @@ import { config } from "./config";
 import { connectEvidenceLockClient, releaseSessionAdvisoryLock } from "./postgres/evidence-lock-pool";
 import type { PoolClient } from "pg";
 import { ERR } from "./errors";
+import { stagingReferenceRightsRel, verifyStagingReferenceRightsBinding, type StagingReferenceRightsBinding } from "./staging-reference-rights";
 
 type ProductEvidenceBoundary = "A1" | "A2" | "A3" | "A4" | "A5" | "A6" | "A7";
 type ProductOwner = { kind: "user" | "org"; id: string };
@@ -197,6 +198,7 @@ export async function assertAdmissionReferenceEvidence(input: {
   productId: string;
   candidateRels: string[];
   boundary: ProductEvidenceBoundary;
+  stagingReferenceRightsBinding?: StagingReferenceRightsBinding | null;
 }): Promise<void> {
   const resolution = await resolveApprovedReference(input.candidateRels);
   catatKanariReferensi(resolution, {
@@ -209,6 +211,12 @@ export async function assertAdmissionReferenceEvidence(input: {
     const unreadable = resolution.ditolak.find((item) => item.alasan === "LABEL_UNREADABLE");
     if (unreadable) throw ERR.LABEL_UNREADABLE(unreadable.pesan);
     throw new GagalTanpaReferensi(pesanTanpaReferensi(resolution), resolution);
+  }
+  if (input.stagingReferenceRightsBinding) await verifyStagingReferenceRightsBinding({
+    binding:input.stagingReferenceRightsBinding,referenceRel:resolution.utama.rel,now:new Date().toISOString(),
+  });
+  else if (await mediaStorage().get(stagingReferenceRightsRel(resolution.utama.rel))) {
+    throw new Error("STAGING_REFERENCE_RIGHTS_BINDING_MISSING");
   }
 }
 
@@ -223,11 +231,13 @@ export async function prepareAdmissionReferenceManifest(input: {
   candidateRels: string[];
   runtime: "admission-sqlite" | "admission-postgres-retail" | "admission-postgres-org";
   onSnapshotTarget?: (snapshotRel: string) => void;
+  stagingReferenceRightsBinding?: StagingReferenceRightsBinding | null;
 }): Promise<{ manifest: JobReferenceManifest; raw: string }> {
   const prepared = await prepareJobReferenceManifest({
     jobId: input.jobId,
     candidateRels: input.candidateRels,
     onSnapshotTarget: input.onSnapshotTarget,
+    stagingReferenceRightsBinding:input.stagingReferenceRightsBinding,
     onResolved: (resolution) => {
       catatKanariReferensi(resolution, {
         jobId: input.jobId,

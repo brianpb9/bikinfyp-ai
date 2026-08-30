@@ -51,6 +51,15 @@ services:
         value: "1"
       - key: JOB_INTAKE_MODE
         value: open
+      # Founder-bound staging reference intake. Never copy these bindings to production.
+      - key: C5_AUTHORIZED_HUMAN_REVIEW_ROLE
+        value: Founder/CEO
+      - key: C5_AUTHORIZED_HUMAN_REVIEW_PRINCIPAL_ID
+        value: ac8b0a3e-8835-4e64-80e6-2e2cae6198b8
+      - key: STAGING_INTERNAL_REFERENCE_INGESTION
+        value: "1"
+      - key: STAGING_INTERNAL_REFERENCE_SERVICE_ID
+        value: srv-d9n28tijnfac73a87lt0
       - key: PROVIDER_VIDEO
         value: byteplus
       - key: PROVIDER_VOICE

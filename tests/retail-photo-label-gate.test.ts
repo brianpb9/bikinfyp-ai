@@ -211,7 +211,7 @@ test("E4 rollback referensi membersihkan hanya object baru dan membuat kegagalan
   assert.equal(auditCount(rejected.product.id), 0);
   assert.deepEqual(
     [...new Set(rejected.storage.deleteCalls)].sort(),
-    [rejected.added, `${rejected.added}.meta.json`].sort(),
+    [rejected.added, `${rejected.added}.meta.json`, `${rejected.added}.rights.json`, `${rejected.added}.rights.json.revoked.json`].sort(),
     "normal rejection wajib membersihkan exact foto baru + sidecar"
   );
   assert.deepEqual([...rejected.storage.values.keys()].sort(), [rejected.product.existing[0], rejected.unrelated].sort());

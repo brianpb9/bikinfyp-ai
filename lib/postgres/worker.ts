@@ -55,7 +55,7 @@ import { pgTaskMemo } from "./task-memo";
 import { appendEndcard, ENDCARD_DEFAULT_COLOR, ENDCARD_DURASI_DTK } from "../media/endcard";
 import { loadBrandKit } from "./brand-kit";
 import { appendClaimOverlays, sanitizeClaims } from "../media/claim-overlay";
-import { materializeJobReferenceManifest, type JobReferenceManifest } from "../job-reference-manifest";
+import { assertReferencePublicationPermitted, materializeJobReferenceManifest, parseJobReferenceManifest, type JobReferenceManifest } from "../job-reference-manifest";
 import { trustedBrandFromRawMeta, type JobProductSnapshot } from "../job-product-snapshot";
 import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
 import { isNeutralStoryAdsTemplate } from "../script-engine/ads-visual-contract";
@@ -1189,6 +1189,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
 }
 
 async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: Pool, relVideo: string, local: string, qc: unknown) {
+  assertReferencePublicationPermitted(parseJobReferenceManifest(row.approved_reference_manifest ?? ""));
   await mediaStorage().put(relVideo, fs.readFileSync(local), "video/mp4");
   if (config.storageMode !== "filesystem") fs.rmSync(local, { force: true });
   const extras = outputExtras(row.product_category);

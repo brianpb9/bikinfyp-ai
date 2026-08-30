@@ -815,7 +815,7 @@ test("E5 HTTP DELETE approved source + resume W2 tetap memakai snapshot job beru
   assert.deepEqual(currentImages(s.productId), body.images, "response E5 bukan daftar pasca-mutasi otoritatif");
   assert.equal(storage.values.has(s.approvedSource), false, "approved source E5 tidak dibersihkan");
   assert.equal(storage.values.has(`${s.approvedSource}.meta.json`), false, "sidecar approved source E5 tidak dibersihkan");
-  assert.deepEqual(storage.deleteCalls, [s.approvedSource, `${s.approvedSource}.meta.json`], "cleanup E5 menyasar object yang salah");
+  assert.deepEqual(storage.deleteCalls, [s.approvedSource, `${s.approvedSource}.meta.json`, `${s.approvedSource}.rights.json`, `${s.approvedSource}.rights.json.revoked.json`], "cleanup E5 menyasar object yang salah");
   assert.equal(storage.values.has(s.approvedSecondSource), true, "approved source kedua ikut terhapus");
   assert.equal(storage.values.has(`${s.approvedSecondSource}.meta.json`), true, "sidecar approved kedua ikut terhapus");
   assert.equal(storage.values.has(s.snapshotRel), true, "cleanup E5 menghapus object privat job");

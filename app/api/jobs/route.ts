@@ -21,6 +21,7 @@ import { authorizedManagedStagingZeroValueAdmission } from "@/lib/staging-admiss
 import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "@/lib/product-type-boundary";
 import { canonicalProductTypeTimestamp } from "@/lib/product-type-timestamp";
 import { isCurrentC5JobGeneration, requireCurrentJobEvidence } from "@/lib/legacy-job-quarantine";
+import { stagingReferenceRightsBindingFromRawMeta } from "@/lib/staging-reference-rights";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -89,6 +90,7 @@ export async function POST(req: Request) {
       productId: lockedProduct.id,
       candidateRels: JSON.parse(lockedProduct.images || "[]") as string[],
       boundary: "A1",
+      stagingReferenceRightsBinding:stagingReferenceRightsBindingFromRawMeta(lockedProduct.raw_meta),
     });
 
     // --- GERBANG HITL (aturan keras #5) ---
@@ -316,6 +318,7 @@ export async function POST(req: Request) {
           candidateRels: candidateImages,
           runtime: "admission-sqlite",
           onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
+          stagingReferenceRightsBinding:stagingReferenceRightsBindingFromRawMeta(candidateProduct.raw_meta),
         });
       } catch (error) {
         await cleanupKnownNonAdmission();

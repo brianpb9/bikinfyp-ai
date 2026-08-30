@@ -26,6 +26,7 @@ import { createJobProductSnapshotRaw } from "../job-product-snapshot";
 import { cleanupSupersededReferenceKeys, cleanupUnadmittedReferenceKeys, prepareAdmissionReferenceManifest } from "../job-admission-reference";
 import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validateAuthoritativeProductType } from "../product-type-boundary";
 import { canonicalProductTypeTimestamp } from "../product-type-timestamp";
+import { stagingReferenceRightsBindingFromRawMeta } from "../staging-reference-rights";
 import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
 
 /**
@@ -342,6 +343,7 @@ export async function smokeCreateJob(userId: string, input: {
           candidateRels: JSON.parse(lockedProduct.images) as string[],
           runtime: "admission-postgres-retail",
           onSnapshotTarget: (snapshotRel) => preparedSnapshotRels.add(snapshotRel),
+          stagingReferenceRightsBinding:stagingReferenceRightsBindingFromRawMeta(lockedProduct.raw_meta),
         });
         requireCurrentJobEvidence({
           approvedReferenceManifest: preparedReference.raw,
@@ -444,19 +446,30 @@ export async function pgListJobs(userId: string) {
 
 /** Atomic retail append. The resulting list is derived inside PostgreSQL so a
  * concurrent delete cannot be resurrected by a stale route snapshot. */
-export async function pgAppendRetailProductImages(userId: string, productId: string, added: string[], maxImages: number) {
+export async function pgAppendRetailProductImages(userId: string, productId: string, added: string[], maxImages: number,
+  rightsBinding?: import("../staging-reference-rights").StagingReferenceRightsBinding) {
   const pool = getPool(url());
+  const client = await pool.connect();
   try {
-    const result = await pool.query(
+    await client.query("BEGIN");
+    const result = await client.query(
       `UPDATE products
-       SET images=(COALESCE(NULLIF(images,''),'[]')::jsonb || $3::jsonb)::text
+       SET images=(COALESCE(NULLIF(images,''),'[]')::jsonb || $3::jsonb)::text,
+           raw_meta=CASE WHEN $6::jsonb IS NULL THEN raw_meta
+             ELSE (COALESCE(NULLIF(raw_meta,''),'{}')::jsonb || jsonb_build_object('staging_reference_rights',$6::jsonb))::text END
        WHERE id=$1 AND user_id=$2 AND org_id IS NULL
          AND jsonb_array_length(COALESCE(NULLIF(images,''),'[]')::jsonb) + $4 <= $5
        RETURNING images`,
-      [productId, userId, JSON.stringify(added), added.length, maxImages]
+      [productId, userId, JSON.stringify(added), added.length, maxImages, rightsBinding ? JSON.stringify(rightsBinding) : null]
     );
-    return result.rows[0]?.images ? JSON.parse(result.rows[0].images) as string[] : null;
-  } finally { /* shared pool */ }
+    if (!result.rows[0]?.images) { await client.query("ROLLBACK"); return null; }
+    if (rightsBinding) await client.query(
+      `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [crypto.randomUUID(),userId,"product.staging_reference_rights_ingested","products",productId,JSON.stringify(rightsBinding),at()]);
+    await client.query("COMMIT");
+    return JSON.parse(result.rows[0].images) as string[];
+  } catch(error) { await client.query("ROLLBACK").catch(()=>undefined); throw error; }
+  finally { client.release(); }
 }
 
 /** Atomic retail removal paired with pgAppendRetailProductImages. */

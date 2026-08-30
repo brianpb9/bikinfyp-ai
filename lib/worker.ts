@@ -35,7 +35,7 @@ import { personSafeReferencePhotos } from "./media/person-safe-refs";
 import { normalizeHookLevel } from "./config/hooks";
 import { bacaSnapshot } from "./script-engine/admisi";
 import { isNeutralStoryAdsTemplate } from "./script-engine/ads-visual-contract";
-import { materializeJobReferenceManifest } from "./job-reference-manifest";
+import { assertReferencePublicationPermitted, materializeJobReferenceManifest } from "./job-reference-manifest";
 import { requireCurrentJobEvidence } from "./legacy-job-quarantine";
 import { normalisasiFormatWorker } from "./media/worker-format";
 import { appendPackshotUntukQc } from "./media/packshot-asli";
@@ -474,6 +474,7 @@ async function processJobWithProductLock(jobId: string, options: { retryViaQueue
     advance(job.id, "LABELING", { watermark: renderParams.watermarkText });
 
     // --- READY ---
+    assertReferencePublicationPermitted(currentEvidence.manifest);
     const relVideo = path.relative(config.storageDir, outPath).split(path.sep).join("/");
     await mediaStorage().put(relVideo, fs.readFileSync(outPath), "video/mp4");
     const extras = outputExtras(product.category);

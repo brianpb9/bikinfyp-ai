@@ -4,6 +4,8 @@ import { mediaStorage } from "./storage";
 import { ambilSnapshotTersetujui, pastikanBytesTersetujui, resolveApprovedReference, type HasilResolusiReferensi, type ReferensiTersetujui } from "./product-truth";
 import { MAKS_REFERENSI_PER_GENERASI } from "./product-images";
 import { ERR } from "./errors";
+import { canonicalReferenceRightsJson, stagingReferenceRightsRel, verifyStagingReferenceRightsBinding,
+  type StagingReferenceRightsBinding, type StagingReferenceRightsReceipt } from "./staging-reference-rights";
 
 export const REFERENCE_MANIFEST_VERSION = 2 as const;
 
@@ -15,6 +17,7 @@ export interface JobReferenceManifestEntry extends ReferensiTersetujui {
 export interface JobReferenceManifest {
   version: typeof REFERENCE_MANIFEST_VERSION;
   references: JobReferenceManifestEntry[];
+  stagingReferenceRights?: { binding:StagingReferenceRightsBinding; receipt:StagingReferenceRightsReceipt };
 }
 
 export class UnsafeLegacyReferenceSnapshot extends Error {
@@ -48,7 +51,8 @@ export function parseJobReferenceManifest(raw: string): JobReferenceManifest {
       || !manifest.references.every(validReference)) {
     throw new Error("REF_MANIFEST_INVALID: bentuk manifest referensi job tidak sah.");
   }
-  return { version: REFERENCE_MANIFEST_VERSION, references: manifest.references };
+  return { version: REFERENCE_MANIFEST_VERSION, references: manifest.references,
+    ...(manifest.stagingReferenceRights ? {stagingReferenceRights:manifest.stagingReferenceRights} : {}) };
 }
 
 /**
@@ -69,6 +73,7 @@ export async function prepareJobReferenceManifest(input: {
   onResolved?: (resolution: HasilResolusiReferensi) => void;
   /** Admission callers track attempted deterministic keys for safe rollback. */
   onSnapshotTarget?: (snapshotRel: string) => void;
+  stagingReferenceRightsBinding?: StagingReferenceRightsBinding | null;
 }): Promise<{ manifest: JobReferenceManifest; raw: string; resolution: HasilResolusiReferensi }> {
   const resolution = await resolveApprovedReference(input.candidateRels);
   input.onResolved?.(resolution);
@@ -91,7 +96,17 @@ export async function prepareJobReferenceManifest(input: {
     await mediaStorage().put(snapshotRel, object.body);
     references.push({ ...ref, snapshotRel });
   }
-  const manifest: JobReferenceManifest = { version: REFERENCE_MANIFEST_VERSION, references };
+  let stagingReferenceRights:JobReferenceManifest["stagingReferenceRights"];
+  const primary=references[0];
+  if (input.stagingReferenceRightsBinding) {
+    const receipt=await verifyStagingReferenceRightsBinding({binding:input.stagingReferenceRightsBinding,
+      referenceRel:primary.rel,now:new Date().toISOString()});
+    stagingReferenceRights={binding:input.stagingReferenceRightsBinding,receipt};
+  } else if (await mediaStorage().get(stagingReferenceRightsRel(primary.rel))) {
+    throw new Error("STAGING_REFERENCE_RIGHTS_BINDING_MISSING");
+  }
+  const manifest: JobReferenceManifest = { version: REFERENCE_MANIFEST_VERSION, references,
+    ...(stagingReferenceRights ? {stagingReferenceRights} : {}) };
   const raw = JSON.stringify(manifest);
   return { manifest, raw, resolution };
 }
@@ -106,6 +121,13 @@ export async function materializeJobReferenceManifest(
   manifest: JobReferenceManifest,
   workDir: string
 ): Promise<string[]> {
+  if (manifest.stagingReferenceRights) {
+    const verified=await verifyStagingReferenceRightsBinding({binding:manifest.stagingReferenceRights.binding,
+      referenceRel:manifest.references[0].rel,now:new Date().toISOString()});
+    if (canonicalReferenceRightsJson(verified) !== canonicalReferenceRightsJson(manifest.stagingReferenceRights.receipt)) {
+      throw new Error("STAGING_REFERENCE_RIGHTS_MANIFEST_MISMATCH");
+    }
+  }
   const dir = path.join(workDir, "ref-tersetujui");
   const snapshots: string[] = [];
   for (const ref of manifest.references) {
@@ -120,4 +142,10 @@ export async function materializeJobReferenceManifest(
     snapshots.push(await ambilSnapshotTersetujui(source, ref, dir));
   }
   return snapshots;
+}
+
+export function assertReferencePublicationPermitted(manifest:JobReferenceManifest):void {
+  if (manifest.stagingReferenceRights?.receipt.publication_permitted === false) {
+    throw new Error("STAGING_REFERENCE_PUBLICATION_FORBIDDEN");
+  }
 }
