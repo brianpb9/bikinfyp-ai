@@ -35,7 +35,13 @@
     "issued_on": "2026-04-13",
     "expires_on": "2029-04-12",
     "registrant_and_manufacturer": "PT Unindo Ajidharma Industry",
-    "claims_used": []
+    "claims_used": [
+      {
+        "evidence_id": "BPOM-KO-NA18260500350-20260831",
+        "evidence_sha256": "d1c70d7e4f198ca8f63d587ceeeccc18af6b87fe2f7f5fb90a7ebb0b7f711d37",
+        "claim_ids": ["BPOM-REGISTRATION-STATUS", "BPOM-NIE", "BPOM-VALIDITY-DATES"]
+      }
+    ]
   },
   "reference": {
     "count": 1,

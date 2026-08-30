@@ -7,6 +7,8 @@
  */
 const { Pool } = require("pg");
 const crypto = require("node:crypto");
+const fs = require("node:fs");
+const path = require("node:path");
 
 const BASE = "https://racun-ai-staging-web.onrender.com";
 const PRINCIPAL = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
@@ -18,6 +20,30 @@ const OTP = "846271";
 const EXPECTED_REFERENCE_SHA = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 const EXPECTED_RECEIPT_SHA = "ca3906a381e6d299bc46fe62aeefbc3bd9b4183a6ff59c4f3cde2ca8f94788c3";
 const EXPECTED_HOLD_IDR = 12_000;
+const BPOM_EVIDENCE_PATH = "docs/evidence/BPOM-KO-NA18260500350-20260831.json";
+const BPOM_EVIDENCE_SHA256 = "d1c70d7e4f198ca8f63d587ceeeccc18af6b87fe2f7f5fb90a7ebb0b7f711d37";
+const EXPECTED_PRODUCT_STATE_SHA256 = "2d575429751a26f5fe3ef51ddb4be5d4f537beb720b69c0d2f5db2182bb77af1";
+
+const EXPECTED_PRODUCT_STATE = {
+  id: PRODUCT_ID, user_id: PRINCIPAL, org_id: null, name: PRODUCT_NAME, price_idr: 1,
+  category: "beauty", source_url: null,
+  product_visual_desc: "INTERNAL QA fixture. Rp1 is a staging sentinel, not a market-price claim. BPOM NIE NA18260500350 verified active.",
+  brand_brief: null, claims: null, promo_price_before_idr: null, promo_ends_at: null, promo_stock_left: null,
+  images: ["uploads/c470390e-ad3d-4cc8-9ba2-4557691fa7a7/9047a662-d664-48f8-9c67-69fc10bc8289.webp"],
+  brand: "JJ GLOW",
+  staging_reference_rights: {
+    scope: "internal_staging_ai_and_derivatives_only",
+    receipt_key: "uploads/c470390e-ad3d-4cc8-9ba2-4557691fa7a7/9047a662-d664-48f8-9c67-69fc10bc8289.webp.rights.json",
+    reference_key: "uploads/c470390e-ad3d-4cc8-9ba2-4557691fa7a7/9047a662-d664-48f8-9c67-69fc10bc8289.webp",
+    receipt_sha256: EXPECTED_RECEIPT_SHA, reference_sha256: EXPECTED_REFERENCE_SHA, publication_permitted: false,
+  },
+  product_type_token: "bar soap",
+  product_type_confirmed_token: "bar soap", product_type_confirmed_by: PRINCIPAL,
+  product_type_confirmed_at: "2026-08-30T23:07:25.811Z", product_type_version: 1,
+  product_type_state: "CONFIRMED", category_review_state: "CLEAR", category_review_reason: null,
+  category_reviewed_by: PRINCIPAL, category_reviewed_role: "Founder/CEO",
+  category_reviewed_at: "2026-08-30T23:07:26.018Z", category_review_version: 2,
+};
 
 const segments = [
   { role: "hook", start: 0, end: 3,
@@ -40,6 +66,74 @@ const initialValidation = {
   script_source: "manual", admisi: admission,
 };
 const sha = (value) => crypto.createHash("sha256").update(value).digest("hex");
+const canonical = (value) => Array.isArray(value) ? value.map(canonical) : value && typeof value === "object"
+  ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)]))
+  : value;
+const canonicalSha = (value) => sha(JSON.stringify(canonical(value)));
+const exactIso = (value) => value == null ? null : new Date(value).toISOString();
+const exactNumber = (value, field) => {
+  const parsed = Number(value);
+  if (!Number.isFinite(parsed)) throw new Error(`${field} is not finite`);
+  return parsed;
+};
+const nullableNumber = (value, field) => value == null ? null : exactNumber(value, field);
+
+function selectedProductState(product) {
+  let rawMeta;
+  try { rawMeta = JSON.parse(product.raw_meta || "{}"); } catch { throw new Error("product raw_meta invalid"); }
+  return {
+    id: product.id, user_id: product.user_id, org_id: product.org_id, name: product.name,
+    price_idr: exactNumber(product.price_idr, "price_idr"), category: product.category, source_url: product.source_url,
+    product_visual_desc: product.product_visual_desc, brand_brief: product.brand_brief, claims: product.claims,
+    promo_price_before_idr: nullableNumber(product.promo_price_before_idr, "promo_price_before_idr"),
+    promo_ends_at: product.promo_ends_at, promo_stock_left: nullableNumber(product.promo_stock_left, "promo_stock_left"),
+    images: JSON.parse(product.images || "[]"), brand: rawMeta.brand ?? null,
+    staging_reference_rights: rawMeta.staging_reference_rights ?? null,
+    product_type_token: product.product_type_token, product_type_confirmed_token: product.product_type_confirmed_token,
+    product_type_confirmed_by: product.product_type_confirmed_by,
+    product_type_confirmed_at: exactIso(product.product_type_confirmed_at),
+    product_type_version: exactNumber(product.product_type_version, "product_type_version"), product_type_state: product.product_type_state,
+    category_review_state: product.category_review_state, category_review_reason: product.category_review_reason,
+    category_reviewed_by: product.category_reviewed_by, category_reviewed_role: product.category_reviewed_role,
+    category_reviewed_at: exactIso(product.category_reviewed_at),
+    category_review_version: exactNumber(product.category_review_version, "category_review_version"),
+  };
+}
+
+function assertExpectedProductState(product) {
+  if (canonicalSha(EXPECTED_PRODUCT_STATE) !== EXPECTED_PRODUCT_STATE_SHA256) throw new Error("expected product-state digest constant invalid");
+  if (canonicalSha(selectedProductState(product)) !== EXPECTED_PRODUCT_STATE_SHA256) throw new Error("exact product/C5 state digest mismatch");
+}
+
+function validateBpomEvidence(bytes, nowMs = Date.now()) {
+  if (!Buffer.isBuffer(bytes)) throw new Error("BPOM evidence missing");
+  if (sha(bytes) !== BPOM_EVIDENCE_SHA256) throw new Error("BPOM evidence digest mismatch");
+  let evidence;
+  try { evidence = JSON.parse(bytes.toString("utf8")); } catch { throw new Error("BPOM evidence invalid JSON"); }
+  if (evidence.schema !== "bikinfyp.authoritative-product-evidence/v1"
+      || evidence.evidence_id !== "BPOM-KO-NA18260500350-20260831"
+      || !String(evidence.source_url || "").startsWith("https://cekbpom.pom.go.id/")
+      || evidence.query?.class_id !== "12" || evidence.query?.product_register !== "NA18260500350"
+      || evidence.query?.records_filtered !== 1 || !Number.isFinite(Date.parse(evidence.retrieved_at))
+      || !Number.isFinite(Date.parse(evidence.valid_until)) || nowMs > Date.parse(evidence.valid_until)) {
+    throw new Error("BPOM evidence invalid or stale");
+  }
+  const expectedFacts = {
+    application: "Notifikasi Kosmetika", category: "Kosmetika", nie: "NA18260500350",
+    product_name: "GLUTA PINK BRIGHTENING SOAP", brand: "JJ GLOW", product_form: "Padat Sabun",
+    status: "Berlaku", issued_on: "2026-04-13", expires_on: "2029-04-12",
+    registrant: "UNINDO AJIDHARMA INDUSTRY, PT", manufacturer: "UNINDO AJIDHARMA INDUSTRY, PT",
+    package: "Sachet, Dus 45 g, Sachet, Dus 90 g, Sachet, Dus 70 g, Sachet, Dus 80 g",
+  };
+  const claimIds = Array.isArray(evidence.claim_ledger) ? evidence.claim_ledger.map((claim) => claim.claim_id) : [];
+  if (evidence.source_record_sha256 !== "276fe8522820b4625fd9a4d5948aa30b8080addaa9d207eaf79600586c7da9fd"
+      || canonicalSha(evidence.source_record) !== evidence.source_record_sha256
+      || canonicalSha(evidence.facts) !== canonicalSha(expectedFacts)
+      || JSON.stringify(claimIds) !== JSON.stringify(["BPOM-REGISTRATION-STATUS", "BPOM-NIE", "BPOM-VALIDITY-DATES"])) {
+    throw new Error("BPOM evidence facts/claims mismatch");
+  }
+  return evidence;
+}
 
 async function checkedJson(response, label) {
   const text = await response.text();
@@ -57,6 +151,7 @@ async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   let inserted = false;
   try {
+    const bpomEvidence = validateBpomEvidence(fs.readFileSync(path.resolve(process.cwd(), BPOM_EVIDENCE_PATH)));
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -68,11 +163,9 @@ async function main() {
        FROM products p WHERE p.id=$1 AND p.user_id=$2 AND p.org_id IS NULL FOR UPDATE`,
       [PRODUCT_ID, PRINCIPAL],
       )).rows[0];
-      if (!product || product.name !== PRODUCT_NAME || product.category !== "beauty"
-        || product.category_review_state !== "CLEAR" || product.category_reviewed_by !== PRINCIPAL
-        || product.category_reviewed_role !== "Founder/CEO" || product.category_review_version !== 2
-        || product.product_type_state !== "CONFIRMED" || product.script_count !== 0 || product.job_count !== 0
+      if (!product || product.script_count !== 0 || product.job_count !== 0
         || product.balance < EXPECTED_HOLD_IDR) throw new Error("candidate preflight invariant mismatch");
+      assertExpectedProductState(product);
       const images = JSON.parse(product.images || "[]");
       const rights = JSON.parse(product.raw_meta || "{}").staging_reference_rights;
       if (images.length !== 1 || !rights || rights.reference_key !== images[0]
@@ -91,8 +184,10 @@ async function main() {
       await client.query(
         `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'script.manual_staged','scripts',$3,$4,$5)`,
         [crypto.randomUUID(), PRINCIPAL, SCRIPT_ID, JSON.stringify({
-          task: "P0-JJ-GLOW-RIGHTS-REMEDIATION-20260831-R5", source: "manual",
-          bpom_nie: "NA18260500350", claims: [], provider_calls: 0,
+          task: "P0-JJ-GLOW-CANDIDATE-CONTRACT-20260831-R6",
+          rights_evidence_source_task: "P0-JJ-GLOW-RIGHTS-REMEDIATION-20260831-R5",
+          source: "manual", bpom_evidence_id: bpomEvidence.evidence_id,
+          bpom_evidence_sha256: BPOM_EVIDENCE_SHA256, claims: bpomEvidence.claim_ledger, provider_calls: 0,
         }), now],
       );
       await client.query("COMMIT");
@@ -169,7 +264,10 @@ async function main() {
   }
 }
 
-module.exports = { segments, admission };
+module.exports = {
+  segments, admission, EXPECTED_PRODUCT_STATE, EXPECTED_PRODUCT_STATE_SHA256,
+  BPOM_EVIDENCE_PATH, BPOM_EVIDENCE_SHA256, selectedProductState, assertExpectedProductState, validateBpomEvidence,
+};
 if (require.main === module) {
   main().catch((error) => {
     console.error("JJ_GLOW_CANDIDATE_FAIL", error.message);

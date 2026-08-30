@@ -1,0 +1,61 @@
+{
+  "schema": "bikinfyp.authoritative-product-evidence/v1",
+  "evidence_id": "BPOM-KO-NA18260500350-20260831",
+  "authority": "Badan Pengawas Obat dan Makanan Republik Indonesia",
+  "source_url": "https://cekbpom.pom.go.id/produk-dt/12",
+  "source_page": "https://cekbpom.pom.go.id/produk-kosmetika",
+  "query": {
+    "class_id": "12",
+    "product_register": "NA18260500350",
+    "records_filtered": 1
+  },
+  "retrieved_at": "2026-08-30T23:23:30.000Z",
+  "valid_until": "2026-09-02T23:23:30.000Z",
+  "source_record_sha256": "276fe8522820b4625fd9a4d5948aa30b8080addaa9d207eaf79600586c7da9fd",
+  "source_record": {
+    "APPLICATION": "Notifikasi Kosmetika",
+    "CATEGORY": "Kosmetika",
+    "PRODUCT_REGISTER": "NA18260500350",
+    "PRODUCT_NAME": "GLUTA PINK BRIGHTENING SOAP",
+    "PRODUCT_BRANDS": "JJ GLOW",
+    "PRODUCT_FORM": "Padat Sabun",
+    "STATUS": "Berlaku",
+    "PRODUCT_DATE": "2026-04-13",
+    "PRODUCT_EXPIRED": "2029-04-12",
+    "REGISTRAR": "UNINDO AJIDHARMA INDUSTRY, PT",
+    "MANUFACTURER_NAME": "UNINDO AJIDHARMA INDUSTRY, PT",
+    "PRODUCT_PACKAGE": "Sachet, Dus 45 g, Sachet, Dus 90 g, Sachet, Dus 70 g, Sachet, Dus 80 g"
+  },
+  "facts": {
+    "application": "Notifikasi Kosmetika",
+    "category": "Kosmetika",
+    "nie": "NA18260500350",
+    "product_name": "GLUTA PINK BRIGHTENING SOAP",
+    "brand": "JJ GLOW",
+    "product_form": "Padat Sabun",
+    "status": "Berlaku",
+    "issued_on": "2026-04-13",
+    "expires_on": "2029-04-12",
+    "registrant": "UNINDO AJIDHARMA INDUSTRY, PT",
+    "manufacturer": "UNINDO AJIDHARMA INDUSTRY, PT",
+    "package": "Sachet, Dus 45 g, Sachet, Dus 90 g, Sachet, Dus 70 g, Sachet, Dus 80 g"
+  },
+  "claim_ledger": [
+    {
+      "claim_id": "BPOM-REGISTRATION-STATUS",
+      "statement": "JJ GLOW GLUTA PINK BRIGHTENING SOAP adalah kosmetika padat sabun yang terdaftar di BPOM dan berstatus Berlaku.",
+      "source_fields": ["PRODUCT_REGISTER", "PRODUCT_NAME", "PRODUCT_BRANDS", "PRODUCT_FORM", "STATUS"]
+    },
+    {
+      "claim_id": "BPOM-NIE",
+      "statement": "Nomor izin edar produk adalah NA18260500350.",
+      "source_fields": ["PRODUCT_REGISTER"]
+    },
+    {
+      "claim_id": "BPOM-VALIDITY-DATES",
+      "statement": "Data BPOM mencatat tanggal terbit 2026-04-13 dan tanggal kedaluwarsa registrasi 2029-04-12.",
+      "source_fields": ["PRODUCT_DATE", "PRODUCT_EXPIRED"]
+    }
+  ],
+  "privacy_minimization": "The source response was inspected directly; personnel, tax identifier, and street-address fields were intentionally omitted."
+}
