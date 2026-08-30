@@ -155,6 +155,10 @@ test("staging rights fail closed unless the fixture is the sole approved referen
     productName:"JJ GLOW",productBrand:"JJ GLOW",sourceBytes:source,rel:restricted,now:"2026-08-31T01:00:00.000Z"});
   const binding={receipt_key:persisted.storageKey,receipt_sha256:persisted.sha256,reference_key:restricted,
     reference_sha256:sha(restrictedBytes),scope:"internal_staging_ai_and_derivatives_only" as const,publication_permitted:false as const};
+  await assert.rejects(assertAdmissionReferenceEvidence({productId:"jj",candidateRels:[other,restricted],boundary:"A7"}),
+    /BINDING_MISSING/);
+  await assert.rejects(prepareJobReferenceManifest({jobId:"job-jj-secondary-unbound",candidateRels:[other,restricted]}),
+    /BINDING_MISSING/);
   await assert.rejects(assertAdmissionReferenceEvidence({productId:"jj",candidateRels:[other,restricted],boundary:"A7",
     stagingReferenceRightsBinding:binding}),/REQUIRES_SOLE_REFERENCE/);
   await assert.rejects(prepareJobReferenceManifest({jobId:"job-jj-multi",candidateRels:[other,restricted],

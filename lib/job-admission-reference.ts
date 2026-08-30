@@ -223,8 +223,12 @@ export async function assertAdmissionReferenceEvidence(input: {
       binding:input.stagingReferenceRightsBinding,referenceRel:resolution.utama.rel,now:new Date().toISOString(),
     });
   }
-  else if (await mediaStorage().get(stagingReferenceRightsRel(resolution.utama.rel))) {
-    throw new Error("STAGING_REFERENCE_RIGHTS_BINDING_MISSING");
+  else {
+    for (const reference of resolution.tersetujui) {
+      if (await mediaStorage().get(stagingReferenceRightsRel(reference.rel))) {
+        throw new Error("STAGING_REFERENCE_RIGHTS_BINDING_MISSING");
+      }
+    }
   }
 }
 

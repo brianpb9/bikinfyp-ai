@@ -103,8 +103,12 @@ export async function prepareJobReferenceManifest(input: {
     const receipt=await verifyStagingReferenceRightsBinding({binding:input.stagingReferenceRightsBinding,
       referenceRel:primary.rel,now:new Date().toISOString()});
     stagingReferenceRights={binding:input.stagingReferenceRightsBinding,receipt};
-  } else if (await mediaStorage().get(stagingReferenceRightsRel(primary.rel))) {
-    throw new Error("STAGING_REFERENCE_RIGHTS_BINDING_MISSING");
+  } else {
+    for (const reference of references) {
+      if (await mediaStorage().get(stagingReferenceRightsRel(reference.rel))) {
+        throw new Error("STAGING_REFERENCE_RIGHTS_BINDING_MISSING");
+      }
+    }
   }
   const manifest: JobReferenceManifest = { version: REFERENCE_MANIFEST_VERSION, references,
     ...(stagingReferenceRights ? {stagingReferenceRights} : {}) };
