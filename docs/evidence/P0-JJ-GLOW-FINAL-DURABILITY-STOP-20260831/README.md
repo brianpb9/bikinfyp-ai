@@ -1,0 +1,7 @@
+# JJ GLOW final durability stop
+
+Fresh staging-only BytePlus binding passed boolean-only isolation checks without emitting or persisting any key or secret-derived hash. The worker was resumed solely to deploy canonical reviewed runtime `9b597d26945b6505c9a3eca848819379f2eabc1d`. Before resume, the canonical staging queue was globally paused with `active=0` and the candidate in `paused=1`, so no provider dequeue could occur.
+
+The prior live worker runtime `ee767201679ae2213c40be6f913241f372d2378a` remained active while the exact deploy built. Its independent 60-second PostgreSQL stale sweep is not governed by BullMQ pause. At `2026-08-31T12:48:27.525Z`, while the exact deploy was still building, that sweep moved the over-90-minute candidate through FAILED to REFUNDED and released the full 12,000-credit hold. Exact deploy `dep-daanelvfdruc73an3t6g` became LIVE at `12:48:57.777754Z`, thirty seconds after the refund.
+
+Managed read-only evidence proves: job `REFUNDED`; hold `-12000` and release `+12000`; evidence ledger remains `PREPOST_READY`; provider post count `0`; no provider task, payload, artifact, retrieval, QC, cost, output, FYP publication, or post plan. Brand and Anti-Slop review are `NOT_RUN_NO_ARTIFACT`; Prompt Archive is `NOT_RUN_NO_PROVIDER_REQUEST`. Worker is suspended again and queue remains paused. This is a permanent `STOP_NO_RETRY`; no candidate #4 is authorized.
