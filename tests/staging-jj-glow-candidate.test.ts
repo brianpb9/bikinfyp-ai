@@ -6,7 +6,8 @@ import { periksaAdmisi } from "../lib/script-engine/admisi";
 import { assertNoJjGlowFinalCandidateHistory } from "../lib/postgres/smoke-runtime";
 import {
   assertJjGlowLockedProductState, authorizeJjGlowExactAdmission, authorizeJjGlowLifecycleAuthority,
-  JJ_GLOW_FINAL_RECOVERY_TASK, JJ_GLOW_LIFECYCLE_SCHEMA,
+  JJ_GLOW_FINAL_RECOVERY_TASK, JJ_GLOW_CANDIDATE_4_TASK, JJ_GLOW_CANDIDATE_4_SCRIPT_ID,
+  JJ_GLOW_LIFECYCLE_SCHEMA,
   JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256, JJ_GLOW_PRINCIPAL_ID,
   JJ_GLOW_PRODUCT_ID, JJ_GLOW_SCRIPT_ID, JJ_GLOW_STAGING_WEB_SERVICE_ID,
 } from "../lib/staging-jj-glow-exact-admission";
@@ -126,6 +127,8 @@ test("runner memakai OTP acak singkat dan mengirim digest admission", () => {
   assert.match(source, /final\.output_count !== 0[\s\S]*final\.provider_post_count !== 0/);
   assert.match(source, /item\.output_count\) !== 0[\s\S]*item\.provider_post_count\) !== 0/);
   assert.match(source, /JJ_GLOW_CANONICAL_CREATE_AUTHORITY_REQUIRED/);
+  assert.match(source, /JJ_GLOW_CANDIDATE_4_AUTHORITY_REQUIRED/);
+  assert.match(source, /candidate #4 historical preflight invariant mismatch/);
   assert.match(source, /JJ_GLOW_BOOTSTRAP_PASS/);
   assert.doesNotMatch(source, /const OTP\s*=|10 \* 60_000/);
 });
@@ -138,11 +141,23 @@ test("final recovery lifecycle authority exact dan mutation receipt butuh actor+
     mutation_policy:{delete_requires_reason_actor:true,supersede_requires_reason_actor:true},
   } as const;
   assert.deepEqual(authorizeJjGlowLifecycleAuthority(authority, JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256), authority);
+  const candidate4 = {...authority,task:JJ_GLOW_CANDIDATE_4_TASK,
+    final_candidate_ordinal:4,max_canonical_candidates_created:4} as const;
+  assert.deepEqual(authorizeJjGlowLifecycleAuthority(candidate4, JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256), candidate4);
   assert.throws(() => authorizeJjGlowLifecycleAuthority({...authority,final_candidate_ordinal:4}, JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256), /INVALID/);
+  assert.throws(() => authorizeJjGlowLifecycleAuthority({...candidate4,max_canonical_candidates_created:3}, JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256), /INVALID/);
   assert.throws(() => authorizeJjGlowLifecycleAuthority(authority, null), /UNAUTHORIZED/);
   assert.equal(fixture.lifecycleMutationReceipt("delete", JJ_GLOW_PRINCIPAL_ID,
     "admission failed permanently", authority.correlation_id).actor, JJ_GLOW_PRINCIPAL_ID);
   assert.throws(() => fixture.lifecycleMutationReceipt("supersede", "anonymous", "short", authority.correlation_id), /INVALID/);
+});
+
+test("candidate #4 memakai tuple staging exact dan script id khusus", () => {
+  const runtime = {NODE_ENV:"production",RACUN_DEPLOY_ENV:"staging",
+    RENDER_SERVICE_ID:JJ_GLOW_STAGING_WEB_SERVICE_ID} as NodeJS.ProcessEnv;
+  assert.equal(authorizeJjGlowExactAdmission({expectedSha256:JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256,
+    userId:JJ_GLOW_PRINCIPAL_ID,productId:JJ_GLOW_PRODUCT_ID,scriptId:JJ_GLOW_CANDIDATE_4_SCRIPT_ID},runtime),
+  JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256);
 });
 
 test("final recovery menolak job terminal maupun lifecycle delete history", async () => {

@@ -75,6 +75,10 @@ test("hands-only exception is exact-candidate only and retains one-request provi
     approvedScriptSha256:exact.approvedScriptSha256!,jobProviderVideo:null,jobProviderVoice:null,jobOutputUrl:null,
   }));
   assert.equal(normal.isJjGlowFinalEvidenceContract({...exact,jobId:"other"}), false);
+  assert.equal(normal.isJjGlowFinalEvidenceContract({...exact,
+    taskId:normal.JJ_GLOW_CANDIDATE_4_EVIDENCE_TASK,jobId:"11111111-1111-4111-8111-111111111111"}), true);
+  assert.equal(normal.isJjGlowFinalEvidenceContract({...exact,
+    taskId:normal.JJ_GLOW_CANDIDATE_4_EVIDENCE_TASK,jobId:"other"}), false);
   assert.throws(() => normal.assertNormalEvidenceProviderContract({...exact,jobId:"other"}, {
     runtime:process.env,databaseUrl:process.env.DATABASE_URL,storageMode:"r2",storageBucket:"bikinfyp-staging",
     model:normal.NORMAL_EVIDENCE_MODEL,resolution:normal.NORMAL_EVIDENCE_RESOLUTION,durationSec:15,shotCount:1,
@@ -139,6 +143,8 @@ test("exact queued candidate cannot execute without activated PREPOST_READY ledg
     productId:normal.JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID,scriptId:normal.JJ_GLOW_FINAL_EVIDENCE_SCRIPT_ID,
     format:"hands_only",durationS:15,state:"QUEUED"};
   assert.throws(()=>normal.assertJjGlowFinalEvidenceActivatedForWorker(row,null),/ACTIVATION_REQUIRED/);
+  assert.throws(()=>normal.assertJjGlowFinalEvidenceActivatedForWorker({...row,
+    jobId:"11111111-1111-4111-8111-111111111111",scriptId:normal.JJ_GLOW_CANDIDATE_4_SCRIPT_ID},null),/ACTIVATION_REQUIRED/);
   assert.throws(()=>normal.assertJjGlowFinalEvidenceActivatedForWorker(row,{...jjGlowContract(),state:"TASK_BOUND",providerPostCount:1}),/PREPOST_READY_REQUIRED/);
   assert.doesNotThrow(()=>normal.assertJjGlowFinalEvidenceActivatedForWorker(row,jjGlowContract()));
   assert.doesNotThrow(()=>normal.assertJjGlowFinalEvidenceActivatedForWorker({...row,jobId:"ordinary"},null));

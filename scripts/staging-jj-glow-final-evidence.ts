@@ -12,7 +12,8 @@ import { createJobProductSnapshotRaw, parseJobProductSnapshot } from "../lib/job
 import { getPool } from "../lib/postgres/pool";
 import {
   JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256, JJ_GLOW_PRINCIPAL_ID, JJ_GLOW_PRODUCT_ID,
-  JJ_GLOW_SCRIPT_ID, JJ_GLOW_STAGING_WEB_SERVICE_ID, assertJjGlowLockedProductState,
+  JJ_GLOW_SCRIPT_ID, JJ_GLOW_CANDIDATE_4_SCRIPT_ID, JJ_GLOW_CANDIDATE_4_TASK,
+  JJ_GLOW_STAGING_WEB_SERVICE_ID, assertJjGlowLockedProductState,
   jjGlowLifecycleStateSha256,
 } from "../lib/staging-jj-glow-exact-admission";
 import { mediaStorage } from "../lib/storage";
@@ -34,6 +35,12 @@ const EXPECTED_STATE_SHA256 = "c1722c6d967df3071be9449a3303fdf45a5e38dd339a54081
 const EXPECTED_CORRELATION_ID = "ee52cb72-6e2f-4a50-82c5-2f1158a88de0";
 const EXPECTED_RECEIPT_SHA256 = "ca3906a381e6d299bc46fe62aeefbc3bd9b4183a6ff59c4f3cde2ca8f94788c3";
 const sha256 = (value: string | Buffer) => crypto.createHash("sha256").update(value).digest("hex");
+const CANDIDATE_4_MODE = process.env.JJ_GLOW_EVIDENCE_CANDIDATE_ORDINAL === "4";
+const EVIDENCE_TASK = CANDIDATE_4_MODE ? JJ_GLOW_CANDIDATE_4_TASK : JJ_GLOW_FINAL_EVIDENCE_TASK;
+const EVIDENCE_SCRIPT_ID = CANDIDATE_4_MODE ? JJ_GLOW_CANDIDATE_4_SCRIPT_ID : JJ_GLOW_SCRIPT_ID;
+const EVIDENCE_JOB_ID = CANDIDATE_4_MODE ? process.env.JJ_GLOW_EXPECTED_JOB_ID?.trim() : JJ_GLOW_FINAL_EVIDENCE_JOB_ID;
+const EVIDENCE_CORRELATION_ID = CANDIDATE_4_MODE ? process.env.JJ_GLOW_LIFECYCLE_CORRELATION_ID?.trim() : EXPECTED_CORRELATION_ID;
+const EVIDENCE_STATE_SHA256 = CANDIDATE_4_MODE ? process.env.JJ_GLOW_EXPECTED_STATE_SHA256?.trim() : EXPECTED_STATE_SHA256;
 
 function assertRuntime() {
   if (process.env.NODE_ENV !== "production" || process.env.RACUN_DEPLOY_ENV !== "staging"
@@ -45,16 +52,19 @@ function assertRuntime() {
 }
 
 async function inspect(client: PoolClient, lock: boolean) {
+  if (!EVIDENCE_JOB_ID || !EVIDENCE_CORRELATION_ID || !EVIDENCE_STATE_SHA256) {
+    throw new Error("JJ_GLOW_FINAL_EVIDENCE_EXPECTED_LINEAGE_REQUIRED");
+  }
   const suffix = lock ? " FOR UPDATE" : "";
-  const job = (await client.query(`SELECT * FROM jobs WHERE id=$1${suffix}`, [JJ_GLOW_FINAL_EVIDENCE_JOB_ID])).rows[0];
+  const job = (await client.query(`SELECT * FROM jobs WHERE id=$1${suffix}`, [EVIDENCE_JOB_ID])).rows[0];
   const product = (await client.query(`SELECT * FROM products WHERE id=$1${suffix}`, [JJ_GLOW_PRODUCT_ID])).rows[0];
-  const script = (await client.query(`SELECT * FROM scripts WHERE id=$1${suffix}`, [JJ_GLOW_SCRIPT_ID])).rows[0];
+  const script = (await client.query(`SELECT * FROM scripts WHERE id=$1${suffix}`, [EVIDENCE_SCRIPT_ID])).rows[0];
   if (!job || !product || !script || !job.persona_id) throw new Error("JJ_GLOW_FINAL_EVIDENCE_CROSS_ROW_MISSING");
   const persona = (await client.query(`SELECT * FROM personas WHERE id=$1${suffix}`, [job.persona_id])).rows[0];
   if (!persona) throw new Error("JJ_GLOW_FINAL_EVIDENCE_PERSONA_MISSING");
   const lifecycle = (await client.query(
     "SELECT actor,created_at,meta FROM audit_log WHERE entity='jobs' AND entity_id=$1 AND action='candidate.lifecycle.created'",
-    [JJ_GLOW_FINAL_EVIDENCE_JOB_ID],
+    [EVIDENCE_JOB_ID],
   )).rows;
   const counts = (await client.query(`SELECT
     (SELECT count(*)::int FROM scripts WHERE product_id=$1) script_count,
@@ -68,14 +78,14 @@ async function inspect(client: PoolClient, lock: boolean) {
       AND action IN ('candidate.lifecycle.deleted','candidate.lifecycle.superseded')) lifecycle_mutations,
     (SELECT count(*)::int FROM credit_ledger WHERE job_id=$2 AND type='hold') hold_rows,
     (SELECT count(*)::int FROM credit_ledger WHERE job_id=$2 AND type IN ('capture','release')) terminal_rows`,
-    [JJ_GLOW_PRODUCT_ID, JJ_GLOW_FINAL_EVIDENCE_JOB_ID])).rows[0];
+    [JJ_GLOW_PRODUCT_ID, EVIDENCE_JOB_ID])).rows[0];
 
   assertJjGlowLockedProductState(product, JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256);
-  if (job.user_id !== JJ_GLOW_PRINCIPAL_ID || job.product_id !== JJ_GLOW_PRODUCT_ID || job.script_id !== JJ_GLOW_SCRIPT_ID
+  if (job.user_id !== JJ_GLOW_PRINCIPAL_ID || job.product_id !== JJ_GLOW_PRODUCT_ID || job.script_id !== EVIDENCE_SCRIPT_ID
       || job.org_id !== null || job.state !== "QUEUED" || job.format !== "hands_only"
       || job.provider_video !== null || job.provider_voice !== null || job.output_url !== null
       || job.quality_tier !== "high_quality" || Number(job.duration_s) !== 15 || job.requires_approval !== false
-      || script.product_id !== JJ_GLOW_PRODUCT_ID || script.job_id !== JJ_GLOW_FINAL_EVIDENCE_JOB_ID
+      || script.product_id !== JJ_GLOW_PRODUCT_ID || script.job_id !== EVIDENCE_JOB_ID
       || !script.approved_by_user_at || persona.user_id !== JJ_GLOW_PRINCIPAL_ID || persona.creator_category !== "lokal") {
     throw new Error("JJ_GLOW_FINAL_EVIDENCE_CROSS_ROW_MISMATCH");
   }
@@ -84,25 +94,26 @@ async function inspect(client: PoolClient, lock: boolean) {
   if (lifecycle.length !== 1 || lifecycle[0].actor !== JJ_GLOW_PRINCIPAL_ID) throw new Error("JJ_GLOW_FINAL_EVIDENCE_LIFECYCLE_CARDINALITY");
   const manualAuditRows = (await client.query(
     "SELECT actor,created_at,meta FROM audit_log WHERE entity='scripts' AND entity_id=$1 AND action='script.manual_staged' ORDER BY created_at,id",
-    [JJ_GLOW_SCRIPT_ID],
+    [EVIDENCE_SCRIPT_ID],
   )).rows;
   if (manualAuditRows.length !== 1 || manualAuditRows[0].actor !== JJ_GLOW_PRINCIPAL_ID) {
     throw new Error("JJ_GLOW_FINAL_EVIDENCE_MANUAL_AUDIT_CARDINALITY");
   }
   const approvedScriptSha256 = jjGlowApprovedScriptSha256(script, manualAuditRows[0]);
   const lifecycleMeta = JSON.parse(lifecycle[0].meta);
-  const lifecycleState = {schema:lifecycleMeta.schema,correlation_id:EXPECTED_CORRELATION_ID,
+  const lifecycleState = {schema:lifecycleMeta.schema,correlation_id:EVIDENCE_CORRELATION_ID,
     job_id:job.id,product_id:product.id,script_id:script.id,create_actor:JJ_GLOW_PRINCIPAL_ID,
     create_timestamp:lifecycleMeta.create_timestamp,transaction_id:lifecycleMeta.transaction_commit_receipt?.transaction_id,
     state:job.state,provider_task_count:Number(counts.provider_tasks),hold_count:Number(counts.hold_rows),
     approved_reference_manifest_sha256:sha256(job.approved_reference_manifest),
     job_product_snapshot_sha256:sha256(job.job_product_snapshot),database_binding_sha256:EXPECTED_DATABASE_BINDING_SHA256};
-  if (lifecycleMeta.task !== JJ_GLOW_FINAL_EVIDENCE_TASK || lifecycleMeta.correlation_id !== EXPECTED_CORRELATION_ID
-      || lifecycleMeta.post_commit_state_sha256 !== EXPECTED_STATE_SHA256 || lifecycleMeta.append_only !== true
-      || jjGlowLifecycleStateSha256(lifecycleState) !== EXPECTED_STATE_SHA256) {
+  if (lifecycleMeta.task !== EVIDENCE_TASK || lifecycleMeta.correlation_id !== EVIDENCE_CORRELATION_ID
+      || lifecycleMeta.post_commit_state_sha256 !== EVIDENCE_STATE_SHA256 || lifecycleMeta.append_only !== true
+      || jjGlowLifecycleStateSha256(lifecycleState) !== EVIDENCE_STATE_SHA256) {
     throw new Error("JJ_GLOW_FINAL_EVIDENCE_LIFECYCLE_MISMATCH");
   }
-  if (Number(counts.script_count) !== 1 || Number(counts.job_count) !== 1 || Number(counts.provider_tasks) !== 0
+  const expectedCandidateCount = CANDIDATE_4_MODE ? 2 : 1;
+  if (Number(counts.script_count) !== expectedCandidateCount || Number(counts.job_count) !== expectedCandidateCount || Number(counts.provider_tasks) !== 0
       || Number(counts.outputs) !== 0 || Number(counts.fyp_posted) !== 0 || Number(counts.post_plans) !== 0
       || Number(counts.evidence_rows) !== 0 || Number(counts.lifecycle_mutations) !== 0
       || Number(counts.hold_rows) !== 1 || Number(counts.terminal_rows) !== 0) {
@@ -137,7 +148,7 @@ async function inspect(client: PoolClient, lock: boolean) {
   await verifyStagingReferenceRightsBinding({ binding:rights, referenceRel:ref.rel, now:new Date().toISOString() });
 
   const frozen = {
-    taskId:JJ_GLOW_FINAL_EVIDENCE_TASK, jobId:job.id, productId:product.id, subjectId:persona.id,
+    taskId:EVIDENCE_TASK, jobId:job.id, productId:product.id, subjectId:persona.id,
     referenceSha256:ref.sha256, referenceManifestSha256:sha256(job.approved_reference_manifest),
     productSnapshotSha256:sha256(job.job_product_snapshot), deploySha:process.env.RENDER_GIT_COMMIT!,
     approvedScriptSha256,
@@ -152,7 +163,7 @@ async function main() {
   assertRuntime();
   const mode = process.argv[2] ?? "preflight";
   if (!['preflight','activate'].includes(mode)) throw new Error("JJ_GLOW_FINAL_EVIDENCE_MODE_INVALID");
-  if (mode === "activate" && process.env.JJ_GLOW_FINAL_EVIDENCE_ACTIVATE_CONFIRM !== JJ_GLOW_FINAL_EVIDENCE_TASK) {
+  if (mode === "activate" && process.env.JJ_GLOW_FINAL_EVIDENCE_ACTIVATE_CONFIRM !== EVIDENCE_TASK) {
     throw new Error("JJ_GLOW_FINAL_EVIDENCE_ACTIVATION_NOT_CONFIRMED");
   }
   const pool = getPool(config.databaseUrl), client = await pool.connect();
@@ -169,7 +180,7 @@ async function main() {
          resolution,estimated_cost_usd,max_cost_usd,provider_post_count,state,created_at,updated_at,
          lease_kind,lease_last_progress_at,lease_expires_at)
         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'hands_only',15,$16,$17,$18,0,'PREPOST_READY',$19,$19,$20,$21,$22)`,
-      [JJ_GLOW_FINAL_EVIDENCE_TASK,idempotencyKey,proof.frozen.jobId,proof.userId,proof.frozen.productId,
+      [EVIDENCE_TASK,idempotencyKey,proof.frozen.jobId,proof.userId,proof.frozen.productId,
         proof.frozen.subjectId,proof.frozen.referenceSha256,proof.frozen.referenceManifestSha256,proof.brand,
         NORMAL_EVIDENCE_AUTHORIZATION_SOURCE,proof.frozen.productSnapshotSha256,proof.frozen.approvedScriptSha256,
         proof.frozen.deploySha,NORMAL_EVIDENCE_MODEL,proof.frozen.category,NORMAL_EVIDENCE_RESOLUTION,

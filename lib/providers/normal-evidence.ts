@@ -9,6 +9,8 @@ export const JJ_GLOW_FINAL_EVIDENCE_JOB_ID = "55284f20-efb8-4b18-8a24-f90fc91af7
 export const JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID = "c470390e-ad3d-4cc8-9ba2-4557691fa7a7";
 export const JJ_GLOW_FINAL_EVIDENCE_USER_ID = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
 export const JJ_GLOW_FINAL_EVIDENCE_SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
+export const JJ_GLOW_CANDIDATE_4_EVIDENCE_TASK = "FINAL-POST-SWEEP-CANDIDATE-4-20260901";
+export const JJ_GLOW_CANDIDATE_4_SCRIPT_ID = "ca32178f-2731-4234-bb07-48f24a2f2079";
 export const JJ_GLOW_FINAL_EVIDENCE_REFERENCE_SHA256 = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 export const NORMAL_EVIDENCE_MODEL = "dreamina-seedance-2-0-mini-260615";
 export const NORMAL_EVIDENCE_RESOLUTION = "720p";
@@ -174,8 +176,11 @@ export function assertNormalEvidenceManagedRuntime(input: {
  * borrowing the single-POST evidence path. */
 export function isJjGlowFinalEvidenceContract(contract: Pick<NormalEvidenceContract,
   "taskId" | "jobId" | "userId" | "productId" | "referenceSha256" | "format" | "category" | "durationS">): boolean {
-  return contract.taskId === JJ_GLOW_FINAL_EVIDENCE_TASK
-    && contract.jobId === JJ_GLOW_FINAL_EVIDENCE_JOB_ID
+  const authorizedLineage = (contract.taskId === JJ_GLOW_FINAL_EVIDENCE_TASK
+      && contract.jobId === JJ_GLOW_FINAL_EVIDENCE_JOB_ID)
+    || (contract.taskId === JJ_GLOW_CANDIDATE_4_EVIDENCE_TASK
+      && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(contract.jobId));
+  return authorizedLineage
     && contract.userId === JJ_GLOW_FINAL_EVIDENCE_USER_ID
     && contract.productId === JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID
     && contract.referenceSha256 === JJ_GLOW_FINAL_EVIDENCE_REFERENCE_SHA256
@@ -186,9 +191,11 @@ export function isJjGlowFinalEvidenceContract(contract: Pick<NormalEvidenceContr
 export function assertJjGlowFinalEvidenceActivatedForWorker(input: {
   jobId:string;userId:string;productId:string;scriptId:string;format:string;durationS:number;state:string;
 }, contract:NormalEvidenceContract|null): void {
-  const exact = input.jobId === JJ_GLOW_FINAL_EVIDENCE_JOB_ID
+  const legacy = input.jobId === JJ_GLOW_FINAL_EVIDENCE_JOB_ID && input.scriptId === JJ_GLOW_FINAL_EVIDENCE_SCRIPT_ID;
+  const candidate4 = input.scriptId === JJ_GLOW_CANDIDATE_4_SCRIPT_ID;
+  const exact = (legacy || candidate4)
     && input.userId === JJ_GLOW_FINAL_EVIDENCE_USER_ID && input.productId === JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID
-    && input.scriptId === JJ_GLOW_FINAL_EVIDENCE_SCRIPT_ID && input.format === "hands_only" && input.durationS === 15;
+    && input.format === "hands_only" && input.durationS === 15;
   if (!exact) return;
   if (!contract || !isJjGlowFinalEvidenceContract(contract)
       || contract.idempotencyKey !== expectedNormalEvidenceIdempotencyKey(contract)

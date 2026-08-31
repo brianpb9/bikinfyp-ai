@@ -3,9 +3,11 @@ import crypto from "node:crypto";
 export const JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256 = "2d575429751a26f5fe3ef51ddb4be5d4f537beb720b69c0d2f5db2182bb77af1";
 export const JJ_GLOW_PRODUCT_ID = "c470390e-ad3d-4cc8-9ba2-4557691fa7a7";
 export const JJ_GLOW_SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
+export const JJ_GLOW_CANDIDATE_4_SCRIPT_ID = "ca32178f-2731-4234-bb07-48f24a2f2079";
 export const JJ_GLOW_PRINCIPAL_ID = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
 export const JJ_GLOW_STAGING_WEB_SERVICE_ID = "srv-d9n28tijnfac73a87lt0";
 export const JJ_GLOW_FINAL_RECOVERY_TASK = "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831";
+export const JJ_GLOW_CANDIDATE_4_TASK = "FINAL-POST-SWEEP-CANDIDATE-4-20260901";
 export const JJ_GLOW_LIFECYCLE_SCHEMA = "bikinfyp.staging-candidate-lifecycle/v1";
 
 type ProductRow = Record<string, unknown>;
@@ -24,11 +26,11 @@ const canonicalSha = (value: unknown) => crypto.createHash("sha256").update(JSON
 
 export type JjGlowLifecycleAuthority = {
   schema: typeof JJ_GLOW_LIFECYCLE_SCHEMA;
-  task: typeof JJ_GLOW_FINAL_RECOVERY_TASK;
+  task: typeof JJ_GLOW_FINAL_RECOVERY_TASK | typeof JJ_GLOW_CANDIDATE_4_TASK;
   correlation_id: string;
   historical_root_cause_waiver: true;
-  final_candidate_ordinal: 3;
-  max_canonical_candidates_created: 3;
+  final_candidate_ordinal: 3 | 4;
+  max_canonical_candidates_created: 3 | 4;
   provider_posts_at_admission: 0;
   mutation_policy: { delete_requires_reason_actor: true; supersede_requires_reason_actor: true };
 };
@@ -43,10 +45,13 @@ export function authorizeJjGlowLifecycleAuthority(
     throw new Error("JJ_GLOW_LIFECYCLE_UNAUTHORIZED");
   }
   const item = value as Partial<JjGlowLifecycleAuthority> | null;
-  if (!item || item.schema !== JJ_GLOW_LIFECYCLE_SCHEMA || item.task !== JJ_GLOW_FINAL_RECOVERY_TASK
+  const legacyAuthority = item?.task === JJ_GLOW_FINAL_RECOVERY_TASK
+    && item.final_candidate_ordinal === 3 && item.max_canonical_candidates_created === 3;
+  const candidate4Authority = item?.task === JJ_GLOW_CANDIDATE_4_TASK
+    && item.final_candidate_ordinal === 4 && item.max_canonical_candidates_created === 4;
+  if (!item || item.schema !== JJ_GLOW_LIFECYCLE_SCHEMA || (!legacyAuthority && !candidate4Authority)
     || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(String(item.correlation_id ?? ""))
-    || item.historical_root_cause_waiver !== true || item.final_candidate_ordinal !== 3
-    || item.max_canonical_candidates_created !== 3 || item.provider_posts_at_admission !== 0
+    || item.historical_root_cause_waiver !== true || item.provider_posts_at_admission !== 0
     || item.mutation_policy?.delete_requires_reason_actor !== true
     || item.mutation_policy?.supersede_requires_reason_actor !== true) {
     throw new Error("JJ_GLOW_LIFECYCLE_AUTHORITY_INVALID");
@@ -95,7 +100,7 @@ export function authorizeJjGlowExactAdmission(input: {
   const exactTuple = runtime.RACUN_DEPLOY_ENV === "staging"
     && runtime.RENDER_SERVICE_ID === JJ_GLOW_STAGING_WEB_SERVICE_ID
     && input.userId === JJ_GLOW_PRINCIPAL_ID && input.productId === JJ_GLOW_PRODUCT_ID
-    && input.scriptId === JJ_GLOW_SCRIPT_ID;
+    && (input.scriptId === JJ_GLOW_SCRIPT_ID || input.scriptId === JJ_GLOW_CANDIDATE_4_SCRIPT_ID);
   if (exactTuple) {
     if (input.expectedSha256 !== JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256) {
       throw new Error("JJ_GLOW_EXACT_ADMISSION_DIGEST_REQUIRED");

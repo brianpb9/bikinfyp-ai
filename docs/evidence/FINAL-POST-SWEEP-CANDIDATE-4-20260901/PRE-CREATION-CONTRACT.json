@@ -1,0 +1,20 @@
+{
+  "schema": "bikinfyp.candidate-4-precreation/v1",
+  "task": "FINAL-POST-SWEEP-CANDIDATE-4-20260901",
+  "candidate_ordinal": 4,
+  "max_canonical_candidates_created": 4,
+  "script_id": "ca32178f-2731-4234-bb07-48f24a2f2079",
+  "product_id": "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+  "principal_id": "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8",
+  "staging_web_service_id": "srv-d9n28tijnfac73a87lt0",
+  "predecessor_job_id": "55284f20-efb8-4b18-8a24-f90fc91af733",
+  "predecessor_required_state": "REFUNDED",
+  "predecessor_provider_posts": 0,
+  "predecessor_provider_tasks": 0,
+  "candidate_4_prior_history_required": 0,
+  "candidate_5_authorized": false,
+  "lease_kind": "ACTIVE_EVIDENCE_LEASE",
+  "lease_ttl_seconds": 21600,
+  "provider_post_before_sweep_proof": false,
+  "publication": false
+}

@@ -16,14 +16,19 @@ const PRINCIPAL = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
 const EMAIL = "brianpb9@gmail.com";
 const PRODUCT_ID = "c470390e-ad3d-4cc8-9ba2-4557691fa7a7";
 const PRODUCT_NAME = "JJ GLOW GLUTA PINK BRIGHTENING SOAP";
-const SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
+const LEGACY_SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
+const CANDIDATE_4_SCRIPT_ID = "ca32178f-2731-4234-bb07-48f24a2f2079";
+const CANDIDATE_4_TASK = "FINAL-POST-SWEEP-CANDIDATE-4-20260901";
+const CANDIDATE_4_MODE = process.env.JJ_GLOW_CANDIDATE_ORDINAL === "4";
+const SCRIPT_ID = CANDIDATE_4_MODE ? CANDIDATE_4_SCRIPT_ID : LEGACY_SCRIPT_ID;
 const EXPECTED_REFERENCE_SHA = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 const EXPECTED_RECEIPT_SHA = "ca3906a381e6d299bc46fe62aeefbc3bd9b4183a6ff59c4f3cde2ca8f94788c3";
 const EXPECTED_HOLD_IDR = 12_000;
 const BPOM_EVIDENCE_PATH = "scripts/fixtures/BPOM-KO-NA18260500350-20260831.json";
 const BPOM_EVIDENCE_SHA256 = "55bb83ce881ed1b01ed0cd829edb6f7234012af1347a95edf8e29c04b36330d0";
 const EXPECTED_PRODUCT_STATE_SHA256 = "2d575429751a26f5fe3ef51ddb4be5d4f537beb720b69c0d2f5db2182bb77af1";
-const FINAL_RECOVERY_TASK = "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831";
+const FINAL_RECOVERY_TASK = CANDIDATE_4_MODE ? CANDIDATE_4_TASK : "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831";
+const FINAL_CANDIDATE_ORDINAL = CANDIDATE_4_MODE ? 4 : 3;
 const LIFECYCLE_SCHEMA = "bikinfyp.staging-candidate-lifecycle/v1";
 
 const EXPECTED_PRODUCT_STATE = {
@@ -155,6 +160,9 @@ async function checkedJson(response, label) {
 
 async function main() {
   if (process.env.JJ_GLOW_CANONICAL_CREATE !== "1") throw new Error("JJ_GLOW_CANONICAL_CREATE_AUTHORITY_REQUIRED");
+  if (CANDIDATE_4_MODE && process.env.JJ_GLOW_CANDIDATE_4_CONFIRM !== CANDIDATE_4_TASK) {
+    throw new Error("JJ_GLOW_CANDIDATE_4_AUTHORITY_REQUIRED");
+  }
   if (!process.env.DATABASE_URL || !process.env.AUTH_SECRET) throw new Error("runtime secrets unavailable");
   if (process.env.RACUN_DEPLOY_ENV !== "staging" || process.env.RENDER_SERVICE_ID !== "srv-d9n28tijnfac73a87lt0") {
     throw new Error("staging service identity mismatch");
@@ -168,7 +176,8 @@ async function main() {
   }
   const lifecycleAuthority = {
     schema:LIFECYCLE_SCHEMA, task:FINAL_RECOVERY_TASK, correlation_id:lifecycleCorrelationId,
-    historical_root_cause_waiver:true, final_candidate_ordinal:3, max_canonical_candidates_created:3,
+    historical_root_cause_waiver:true, final_candidate_ordinal:FINAL_CANDIDATE_ORDINAL,
+    max_canonical_candidates_created:FINAL_CANDIDATE_ORDINAL,
     provider_posts_at_admission:0,
     mutation_policy:{delete_requires_reason_actor:true,supersede_requires_reason_actor:true},
   };
@@ -188,8 +197,25 @@ async function main() {
        FROM products p WHERE p.id=$1 AND p.user_id=$2 AND p.org_id IS NULL FOR UPDATE`,
       [PRODUCT_ID, PRINCIPAL],
       )).rows[0];
-      if (!product || product.script_count !== 0 || product.job_count !== 0
+      if (!product || product.script_count !== (CANDIDATE_4_MODE ? 1 : 0)
+        || product.job_count !== (CANDIDATE_4_MODE ? 1 : 0)
         || product.balance < EXPECTED_HOLD_IDR) throw new Error("candidate preflight invariant mismatch");
+      if (CANDIDATE_4_MODE) {
+        const prior = (await client.query(
+          `SELECT j.id,j.state,j.script_id,
+            (SELECT count(*)::int FROM provider_tasks pt WHERE pt.job_id=j.id) provider_tasks,
+            (SELECT coalesce(sum(ne.provider_post_count),0)::int FROM normal_representative_evidence_runs ne WHERE ne.job_id=j.id) provider_posts,
+            (SELECT count(*)::int FROM scripts s WHERE s.id=$2) candidate4_scripts,
+            (SELECT count(*)::int FROM jobs j4 WHERE j4.script_id=$2) candidate4_jobs,
+            (SELECT count(*)::int FROM audit_log a WHERE a.entity_id=$2 AND a.action LIKE 'candidate.lifecycle.%') candidate4_lifecycle
+           FROM jobs j WHERE j.product_id=$1 AND j.script_id=$3 FOR UPDATE`,
+          [PRODUCT_ID, CANDIDATE_4_SCRIPT_ID, LEGACY_SCRIPT_ID],
+        )).rows;
+        if (prior.length !== 1 || prior[0].id !== "55284f20-efb8-4b18-8a24-f90fc91af733"
+          || prior[0].state !== "REFUNDED" || prior[0].provider_tasks !== 0 || prior[0].provider_posts !== 0
+          || prior[0].candidate4_scripts !== 0 || prior[0].candidate4_jobs !== 0
+          || prior[0].candidate4_lifecycle !== 0) throw new Error("candidate #4 historical preflight invariant mismatch");
+      }
       assertExpectedProductState(product);
       const images = JSON.parse(product.images || "[]");
       const rights = JSON.parse(product.raw_meta || "{}").staging_reference_rights;
@@ -210,7 +236,8 @@ async function main() {
         `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'script.manual_staged','scripts',$3,$4,$5)`,
         [crypto.randomUUID(), PRINCIPAL, SCRIPT_ID, JSON.stringify({
           task: FINAL_RECOVERY_TASK, lifecycle_correlation_id:lifecycleCorrelationId,
-          final_candidate_ordinal:3, max_canonical_candidates_created:3,
+          final_candidate_ordinal:FINAL_CANDIDATE_ORDINAL,
+          max_canonical_candidates_created:FINAL_CANDIDATE_ORDINAL,
           rights_evidence_source_task: "P0-JJ-GLOW-RIGHTS-REMEDIATION-20260831-R5",
           source: "manual", bpom_evidence_id: bpomEvidence.evidence_id,
           bpom_evidence_sha256: BPOM_EVIDENCE_SHA256, claims: bpomEvidence.claim_ledger, provider_calls: 0,
@@ -322,8 +349,10 @@ async function main() {
       `SELECT (SELECT count(*)::int FROM scripts WHERE product_id=$1) scripts,
               (SELECT count(*)::int FROM jobs WHERE product_id=$1) jobs`, [PRODUCT_ID],
     )).rows[0];
-    if (totals.scripts !== 1 || totals.jobs !== 1) throw new Error("canonical candidate count mismatch");
-    console.log(JSON.stringify({event:"JJ_GLOW_CANDIDATE_PASS",product_id:PRODUCT_ID,script_id:SCRIPT_ID,job_id:jobId,
+    const expectedTotal = CANDIDATE_4_MODE ? 2 : 1;
+    if (totals.scripts !== expectedTotal || totals.jobs !== expectedTotal) throw new Error("canonical candidate count mismatch");
+    console.log(JSON.stringify({event:CANDIDATE_4_MODE ? "JJ_GLOW_CANDIDATE_4_PASS" : "JJ_GLOW_CANDIDATE_PASS",
+      task:FINAL_RECOVERY_TASK,candidate_ordinal:FINAL_CANDIDATE_ORDINAL,product_id:PRODUCT_ID,script_id:SCRIPT_ID,job_id:jobId,
       lifecycle_correlation_id:lifecycleCorrelationId,create_actor:PRINCIPAL,create_timestamp:lifecycleMeta.create_timestamp,
       transaction_commit_receipt:lifecycleMeta.transaction_commit_receipt,
       post_commit_state_sha256:admitted.body.lifecycle_receipt.stateSha256,
