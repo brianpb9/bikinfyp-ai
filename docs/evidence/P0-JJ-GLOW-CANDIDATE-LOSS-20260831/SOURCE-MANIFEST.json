@@ -1,0 +1,14 @@
+{
+  "schema": "bikinfyp.incident-source-manifest/v1",
+  "hash_algorithm": "sha256",
+  "receipts": {
+    "RAW-AUTHORITY.json": "872b8a5b5a21619d82327c0e84fa81565207cdffaacbc8fc080182720e02cd24",
+    "RAW-CONTROL-PLANE-ENDPOINT.json": "0e299be801186fbc918db304c4f5c5d2710167f6af708c0b216a0c1e5c1ab5d8",
+    "RAW-POSTGRES.json": "e410280e36407d94dace1fb32dee798a5fc44e5b95029ab334c1b8dfe9c53ad5",
+    "RAW-R12-REVIEW-DEPLOY.json": "cbc7f80394af499409842ef1e8cbd607cc49fa78b1d9e0522e5bc36e2528ddd8",
+    "RAW-R2.json": "94e7603125b454091b5d6579f7bfef29c6e68a7e68a62f85254418e6b0ca42a4",
+    "RAW-REDIS.json": "6490355f239a98e3cc9d1a31b70246b9ac1fc60e08c919c36c62c6784be4486f",
+    "RAW-SECRET-BINDING.json": "85e168d89edcebaf75f928a92c741bb5603c4cbe406573bc3acebf27fdc3846a",
+    "RAW-TIMELINE-RECOVERY.json": "75a93f6437a857e06e43945203076ad2542b6ecd3eec536b735a93a9d30148a4"
+  }
+}

@@ -1,0 +1,28 @@
+{
+  "receipt_type": "control_plane_and_lineage_endpoint",
+  "sources": [
+    {
+      "kind": "render_service_readback",
+      "captured_at": "2026-08-31T01:13:00Z",
+      "service_id": "srv-d9n28ue417fc73ch2b60",
+      "name": "racun-ai-staging-worker",
+      "type": "background_worker",
+      "suspended": "suspended",
+      "suspenders": ["user"],
+      "auto_deploy": "no"
+    },
+    {
+      "kind": "authenticated_http_readback",
+      "captured_at": "2026-08-31T01:02:14Z",
+      "service_id": "srv-d9n28tijnfac73a87lt0",
+      "exact_sha": "952276cae06be50b124894f611c85a8bce218d9d",
+      "http_status": 409,
+      "body": {
+        "code": "STAGING_LINEAGE_UNAVAILABLE"
+      },
+      "matching_service_log": "[staging-candidate-lineage] fail-closed sole exact candidate required"
+    }
+  ],
+  "authentication_material_recorded": false,
+  "mutation": false
+}

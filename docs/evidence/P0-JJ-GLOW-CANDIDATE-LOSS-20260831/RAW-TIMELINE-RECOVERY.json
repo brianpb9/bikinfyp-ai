@@ -1,0 +1,54 @@
+{
+  "receipt_type": "candidate_timeline_and_recovery_sources",
+  "candidate_render_job": {
+    "render_job_id": "job-daacbrtg1s2s73cp5sv0",
+    "status": "succeeded",
+    "admission_window": ["2026-08-31T00:08:15Z", "2026-08-31T00:08:40Z"]
+  },
+  "independent_committed_observations": [
+    {
+      "render_job_id": "job-daaccmqjnfac738552qg",
+      "result": "one exact script/job, QUEUED, one local persona, hold=-12000, provider_tasks=0, publication=false"
+    },
+    {
+      "render_job_id": "job-daacepijnfac7385avc0",
+      "completed_at": "2026-08-31T00:14:36Z",
+      "result": "exact candidate selected"
+    },
+    {
+      "render_job_id": "job-daaci31srm7s73eiqjn0",
+      "completed_at": "2026-08-31T00:22:01Z",
+      "result": "exact candidate selected before lineage write"
+    },
+    {
+      "render_job_id": "job-daacjuks728c7380o2c0",
+      "completed_at": "2026-08-31T00:25:57Z",
+      "result": "exact candidate selected before lineage write"
+    },
+    {
+      "render_job_id": "job-daackuhf2nfc739tjp4g",
+      "completed_at": "2026-08-31T00:28:05Z",
+      "result": "exact candidate selected before lineage write"
+    }
+  ],
+  "first_absence": {
+    "render_job_id": "job-daact6ijnfac7386ghgg",
+    "created_at": "2026-08-31T00:45:14Z",
+    "result": "exact candidate absent"
+  },
+  "loss_window": {
+    "after": "2026-08-31T00:28:05Z",
+    "before": "2026-08-31T00:45:14Z"
+  },
+  "control_plane_window_readback": {
+    "one_off_jobs_between_last_presence_and_first_absence": 0,
+    "web_deploys_between_last_presence_and_first_absence": 0
+  },
+  "retained_app_job_id_sources": {
+    "postgres": false,
+    "r2_lineage": false,
+    "bullmq": false,
+    "render_logs": false
+  },
+  "mutation": false
+}

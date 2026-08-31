@@ -1,0 +1,20 @@
+{
+  "receipt_type": "r2_read_only_lineage_recovery",
+  "source": {
+    "kind": "render_one_off_stdout",
+    "render_job_id": "job-daad7gqjnfac7387ahpg",
+    "checks": [
+      {
+        "key": "staging-evidence/p0-jj-glow-candidate-closure-20260831/lineage-receipt.json",
+        "result": "NoSuchKey"
+      },
+      {
+        "key": "evidence/staging/p0-jj-glow-candidate-closure-20260831/lineage-receipt.json",
+        "result": "NoSuchKey"
+      }
+    ],
+    "found": 0,
+    "mutation": false
+  },
+  "r2_credentials_recorded": false
+}

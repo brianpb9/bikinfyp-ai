@@ -3,6 +3,7 @@
   "task": "P0-JJ-GLOW-CANDIDATE-LOSS-20260831-R13",
   "recorded_at": "2026-08-31T01:13:00Z",
   "environment": "staging",
+  "source_manifest": "SOURCE-MANIFEST.json",
   "candidate": {
     "product_id": "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
     "script_id": "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d",

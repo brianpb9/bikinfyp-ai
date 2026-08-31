@@ -1,0 +1,54 @@
+{
+  "receipt_type": "redis_bullmq_read_only_recovery",
+  "sources": [
+    {
+      "kind": "render_one_off_stdout",
+      "render_job_id": "job-daad8te7bikc73840teg",
+      "queue": "racun-jobs-staging",
+      "counts": {
+        "wait": 0,
+        "waiting-children": 0,
+        "delayed": 0,
+        "active": 0,
+        "prioritized": 0,
+        "paused": 0,
+        "completed": 0,
+        "failed": 0
+      },
+      "candidate_window": ["2026-08-31T00:00:00Z", "2026-08-31T01:00:00Z"],
+      "candidate_window_job_rows": 0
+    },
+    {
+      "kind": "render_one_off_stdout",
+      "render_job_id": "job-daad9dhsrm7s73ekmon0",
+      "redis_binding_sha256": "2a903e92ccc5a9dc6d3b9aeb1b28ac5cea03e1c58d818d78df7a31a1ef4cd8ef",
+      "uptime_in_seconds": 1325551,
+      "evicted_keys": 0,
+      "dbsize": 8,
+      "queue_key_suffixes": ["events", "id", "meta"]
+    },
+    {
+      "kind": "render_one_off_stdout",
+      "render_job_id": "job-daad9nm7bikc73843b40",
+      "operation": "XRANGE",
+      "range": ["1788134400000-0", "1788138000000-9999"],
+      "event_count": 0
+    },
+    {
+      "kind": "render_one_off_stdout",
+      "render_job_id": "job-daad9tlg1s2s73critig",
+      "operation": "XINFO STREAM",
+      "event_stream_length": 99,
+      "first_entry": {
+        "stream_id": "1787736626104-0",
+        "event": "added"
+      },
+      "last_entry": {
+        "stream_id": "1787741210730-0",
+        "event": "removed"
+      }
+    }
+  ],
+  "mutation": false,
+  "redis_url_recorded": false
+}

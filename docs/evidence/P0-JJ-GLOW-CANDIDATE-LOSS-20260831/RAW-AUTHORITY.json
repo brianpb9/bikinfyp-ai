@@ -1,0 +1,30 @@
+{
+  "receipt_type": "founder_authority_and_backlog_directives",
+  "source": "founder_runtime_instruction",
+  "directives": [
+    {
+      "key": "MAX_CANONICAL_CANDIDATES_CREATED",
+      "value": 1,
+      "status": "consumed",
+      "instruction": "Do not replay the completed candidate and do not create a second candidate without expanded Founder authority."
+    },
+    {
+      "key": "replacement_candidate_increment",
+      "value": 1,
+      "status": "not_authorized",
+      "instruction": "A replacement requires explicit Founder authorization to raise the maximum from 1 to 2."
+    },
+    {
+      "key": "SECONDARY_GENERATION_PROVIDER",
+      "value": "GROK_IMAGINE",
+      "status": "approved_backlog_contract_only",
+      "instruction": "Durably record the post-lane contract without implementing it."
+    }
+  ],
+  "secret_entry_receipt_source": "docs/evidence/SCORE-80-EXECUTION-20260828/BYTEPLUS-STAGING-SECRET-BINDING-BLOCKER-20260831.json",
+  "secret_entry_receipt_source_sha256": "65befa4a4eb85b20f9286be498f3a2e2ea907327b97da55314123ec4ae202d6e",
+  "embedded_sanitized_copy": "RAW-SECRET-BINDING.json",
+  "embedded_sanitized_copy_sha256": "85e168d89edcebaf75f928a92c741bb5603c4cbe406573bc3acebf27fdc3846a",
+  "production_mutation_authorized": false,
+  "provider_post_authorized": false
+}

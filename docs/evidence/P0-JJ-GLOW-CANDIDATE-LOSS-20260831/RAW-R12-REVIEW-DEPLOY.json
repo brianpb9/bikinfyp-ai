@@ -1,0 +1,37 @@
+{
+  "receipt_type": "review_deploy_health",
+  "sources": [
+    {
+      "kind": "canonical_agent_bus_message",
+      "id": "1788137866000-reviewer-PASS",
+      "ts": "2026-08-31T00:57:46Z",
+      "from": "reviewer",
+      "to": "builder",
+      "type": "PASS",
+      "sha": "952276cae06be50b124894f611c85a8bce218d9d",
+      "task": "P0-JJ-GLOW-CANDIDATE-CLOSURE-20260831-R12",
+      "body": "No material defect found. The complete embedded rights receipt independently hashes to the fixed ca3906 digest, the product snapshot matches its fixed digest, all hold rows are counted with exactly-one/sum/net/terminal invariants enforced, and the database fingerprint omits raw infrastructure identifiers."
+    },
+    {
+      "kind": "render_deploy_readback",
+      "service_id": "srv-d9n28tijnfac73a87lt0",
+      "deploy_id": "dep-daad38e7bikc7383gc6g",
+      "status": "live",
+      "commit_id": "952276cae06be50b124894f611c85a8bce218d9d",
+      "finished_at": "2026-08-31T01:01:03Z"
+    },
+    {
+      "kind": "http_health_readback",
+      "captured_at": "2026-08-31T01:13:00Z",
+      "url": "https://racun-ai-staging-web.onrender.com/api/health",
+      "response": {
+        "ok": true,
+        "intake": "open",
+        "payments_env": "sandbox",
+        "payments_live": false,
+        "build_sha": "952276cae06be50b124894f611c85a8bce218d9d"
+      }
+    }
+  ],
+  "secret_values_recorded": false
+}

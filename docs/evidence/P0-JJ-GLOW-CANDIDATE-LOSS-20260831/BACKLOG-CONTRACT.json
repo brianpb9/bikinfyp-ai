@@ -1,6 +1,8 @@
 {
   "schema": "bikinfyp.post-lane-backlog-contract/v1",
   "recorded_at": "2026-08-31T01:13:00Z",
+  "authority_receipt": "RAW-AUTHORITY.json",
+  "secret_binding_receipt": "RAW-SECRET-BINDING.json",
   "implementation_status": "NOT_STARTED",
   "approved_configuration_intent": {
     "key": "SECONDARY_GENERATION_PROVIDER",
