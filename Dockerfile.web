@@ -25,6 +25,8 @@ COPY assets ./assets
 COPY knowledge ./knowledge
 COPY migrations ./migrations
 COPY scripts/migrate-postgres-runtime.mjs ./scripts/migrate-postgres-runtime.mjs
+COPY scripts/staging-jj-glow-candidate.cjs ./scripts/staging-jj-glow-candidate.cjs
+COPY scripts/fixtures/BPOM-KO-NA18260500350-20260831.json ./scripts/fixtures/BPOM-KO-NA18260500350-20260831.json
 COPY instrumentation.ts middleware.ts next.config.ts postcss.config.mjs tailwind.config.ts tsconfig.json ./
 
 RUN npm run build \
@@ -53,6 +55,8 @@ COPY --from=build --chown=racun:racun /srv/app/.next ./.next
 COPY --from=build --chown=racun:racun /srv/app/public ./public
 COPY --from=build --chown=racun:racun /srv/app/package.json /srv/app/package-lock.json ./
 COPY --from=build --chown=racun:racun /srv/app/scripts/migrate-postgres-runtime.mjs ./scripts/migrate-postgres-runtime.mjs
+COPY --from=build --chown=racun:racun /srv/app/scripts/staging-jj-glow-candidate.cjs ./scripts/staging-jj-glow-candidate.cjs
+COPY --from=build --chown=racun:racun /srv/app/scripts/fixtures/BPOM-KO-NA18260500350-20260831.json ./scripts/fixtures/BPOM-KO-NA18260500350-20260831.json
 COPY --from=build --chown=racun:racun /srv/app/migrations ./migrations
 
 # Runtime filesystem assets loaded relative to process.cwd(). assets/probe is
@@ -69,6 +73,8 @@ RUN command -v ffmpeg \
   && test -f /srv/app/assets/probe/probe-teks.png \
   && test -f /srv/app/migrations/postgres/0035_job_product_snapshot.sql \
   && test -f /srv/app/scripts/migrate-postgres-runtime.mjs \
+  && test -f /srv/app/scripts/staging-jj-glow-candidate.cjs \
+  && test -f /srv/app/scripts/fixtures/BPOM-KO-NA18260500350-20260831.json \
   && test -f /srv/app/.next/BUILD_ID \
   && test -f /srv/app/public/manifest.json
 

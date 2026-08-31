@@ -105,6 +105,9 @@ test("runner memakai OTP acak singkat dan mengirim digest admission", () => {
   assert.match(source, /otpNow\.getTime\(\) \+ 60_000/);
   assert.match(source, /DELETE FROM otp_codes WHERE id=\$1/);
   assert.match(source, /expected_product_state_sha256: EXPECTED_PRODUCT_STATE_SHA256/);
+  assert.match(source, /expected_database_binding_sha256: databaseBinding\.sha256/);
+  assert.match(source, /JJ_GLOW_CANONICAL_CREATE_AUTHORITY_REQUIRED/);
+  assert.match(source, /JJ_GLOW_BOOTSTRAP_PASS/);
   assert.doesNotMatch(source, /const OTP\s*=|10 \* 60_000/);
 });
 
@@ -112,7 +115,7 @@ test("claim BPOM membutuhkan evidence authoritative exact, belum stale", () => {
   const bytes = fs.readFileSync(fixture.BPOM_EVIDENCE_PATH);
   const evidence = fixture.validateBpomEvidence(bytes, Date.parse("2026-08-31T00:00:00.000Z"));
   assert.equal(evidence.evidence_id, "BPOM-KO-NA18260500350-20260831");
-  assert.equal(fixture.BPOM_EVIDENCE_SHA256, "d1c70d7e4f198ca8f63d587ceeeccc18af6b87fe2f7f5fb90a7ebb0b7f711d37");
+  assert.equal(fixture.BPOM_EVIDENCE_SHA256, "55bb83ce881ed1b01ed0cd829edb6f7234012af1347a95edf8e29c04b36330d0");
   assert.throws(() => fixture.validateBpomEvidence(null), /missing/);
   assert.throws(() => fixture.validateBpomEvidence(bytes, Date.parse("2026-09-03T00:00:00.000Z")), /stale/);
   const mismatched = Buffer.from(bytes);

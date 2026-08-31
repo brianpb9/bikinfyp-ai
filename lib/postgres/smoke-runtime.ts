@@ -30,6 +30,7 @@ import { stagingReferenceRightsBindingFromRawMeta } from "../staging-reference-r
 import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
 import { assertJjGlowLockedProductState, authorizeJjGlowExactAdmission } from "../staging-jj-glow-exact-admission";
 import { assertReferencePublicationPermitted, parseJobReferenceManifest, verifyJobReferenceManifestRights } from "../job-reference-manifest";
+import { postgresRuntimeBinding } from "./runtime-binding.cjs";
 
 /**
  * PostgreSQL runtime switch.  `RACUN_POSTGRES_SMOKE=1` is retained solely for
@@ -245,6 +246,8 @@ export async function smokeCreateJob(userId: string, input: {
   omitZeroLedger?: boolean;
   /** One-shot JJ GLOW staging contract, checked while the product row is locked. */
   expectedProductStateSha256: string | null;
+  /** Runner-computed non-secret physical DB identity; mandatory for exact JJ staging admission. */
+  expectedDatabaseBindingSha256?: string | null;
   /** Disposable PostgreSQL verifier only; application routes never set it. */
   onRetryForTests?: (event: { attempt: number; jobId: string; code: "40001" | "40P01" }) => Promise<void>;
 }) {
@@ -255,6 +258,12 @@ export async function smokeCreateJob(userId: string, input: {
   });
   const pool = getPool(url());
   try {
+    if (exactProductStateSha256) {
+      const binding = await postgresRuntimeBinding(pool);
+      if (input.expectedDatabaseBindingSha256 !== binding.sha256) {
+        throw new Error("JJ_GLOW_DATABASE_BINDING_MISMATCH");
+      }
+    }
     // The user-row lock serializes wallet spends and the script-row lock
     // serializes duplicate decisions. Read Committed then observes the latest
     // balance after the lock wait; SERIALIZABLE would retain a pre-wait

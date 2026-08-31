@@ -9,6 +9,7 @@ const { Pool } = require("pg");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
+const { postgresRuntimeBinding } = require("../lib/postgres/runtime-binding.cjs");
 
 const BASE = "https://racun-ai-staging-web.onrender.com";
 const PRINCIPAL = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
@@ -19,8 +20,8 @@ const SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
 const EXPECTED_REFERENCE_SHA = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 const EXPECTED_RECEIPT_SHA = "ca3906a381e6d299bc46fe62aeefbc3bd9b4183a6ff59c4f3cde2ca8f94788c3";
 const EXPECTED_HOLD_IDR = 12_000;
-const BPOM_EVIDENCE_PATH = "docs/evidence/BPOM-KO-NA18260500350-20260831.json";
-const BPOM_EVIDENCE_SHA256 = "d1c70d7e4f198ca8f63d587ceeeccc18af6b87fe2f7f5fb90a7ebb0b7f711d37";
+const BPOM_EVIDENCE_PATH = "scripts/fixtures/BPOM-KO-NA18260500350-20260831.json";
+const BPOM_EVIDENCE_SHA256 = "55bb83ce881ed1b01ed0cd829edb6f7234012af1347a95edf8e29c04b36330d0";
 const EXPECTED_PRODUCT_STATE_SHA256 = "2d575429751a26f5fe3ef51ddb4be5d4f537beb720b69c0d2f5db2182bb77af1";
 
 const EXPECTED_PRODUCT_STATE = {
@@ -143,6 +144,7 @@ async function checkedJson(response, label) {
 }
 
 async function main() {
+  if (process.env.JJ_GLOW_CANONICAL_CREATE !== "1") throw new Error("JJ_GLOW_CANONICAL_CREATE_AUTHORITY_REQUIRED");
   if (!process.env.DATABASE_URL || !process.env.AUTH_SECRET) throw new Error("runtime secrets unavailable");
   if (process.env.RACUN_DEPLOY_ENV !== "staging" || process.env.RENDER_SERVICE_ID !== "srv-d9n28tijnfac73a87lt0") {
     throw new Error("staging service identity mismatch");
@@ -151,6 +153,7 @@ async function main() {
   let inserted = false;
   try {
     const bpomEvidence = validateBpomEvidence(fs.readFileSync(path.resolve(process.cwd(), BPOM_EVIDENCE_PATH)));
+    const databaseBinding = await postgresRuntimeBinding(pool);
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
@@ -228,7 +231,8 @@ async function main() {
     const admitted = await checkedJson(await fetch(`${BASE}/api/jobs`, {
       method: "POST", headers,
       body: JSON.stringify({ script_id: SCRIPT_ID, creator_category: "lokal", format: "hands_only", quality_tier: "high_quality", duration_s: 15,
-        expected_product_state_sha256: EXPECTED_PRODUCT_STATE_SHA256 }),
+        expected_product_state_sha256: EXPECTED_PRODUCT_STATE_SHA256,
+        expected_database_binding_sha256: databaseBinding.sha256 }),
     }), "admit-job");
     if (admitted.response.status !== 201 || admitted.body.state !== "QUEUED"
         || admitted.body.hold_idr !== EXPECTED_HOLD_IDR || admitted.body.duplicate) throw new Error("job admission response mismatch");
@@ -275,7 +279,15 @@ module.exports = {
   BPOM_EVIDENCE_PATH, BPOM_EVIDENCE_SHA256, selectedProductState, assertExpectedProductState, validateBpomEvidence,
 };
 if (require.main === module) {
-  main().catch((error) => {
+  const entry = process.env.JJ_GLOW_BOOTSTRAP_PROBE === "1" ? async () => {
+    if (process.env.RACUN_DEPLOY_ENV !== "staging" || process.env.RENDER_SERVICE_ID !== "srv-d9n28tijnfac73a87lt0") {
+      throw new Error("staging service identity mismatch");
+    }
+    const bytes = fs.readFileSync(path.resolve(process.cwd(), BPOM_EVIDENCE_PATH));
+    validateBpomEvidence(bytes);
+    console.log(`JJ_GLOW_BOOTSTRAP_PASS runner_sha256=${sha(fs.readFileSync(__filename))} bpom_sha256=${sha(bytes)} database_queries=0 provider_calls=0 canonical_writes=0`);
+  } : main;
+  entry().catch((error) => {
     console.error("JJ_GLOW_CANDIDATE_FAIL", error.message);
     process.exit(1);
   });
