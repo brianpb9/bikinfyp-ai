@@ -12,9 +12,9 @@ import { createJobProductSnapshotRaw, parseJobProductSnapshot } from "../lib/job
 import { getPool } from "../lib/postgres/pool";
 import {
   JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256, JJ_GLOW_PRINCIPAL_ID, JJ_GLOW_PRODUCT_ID,
-  JJ_GLOW_SCRIPT_ID, JJ_GLOW_CANDIDATE_4_SCRIPT_ID, JJ_GLOW_CANDIDATE_4_TASK,
+  JJ_GLOW_SCRIPT_ID, JJ_GLOW_CANDIDATE_3_JOB_ID, JJ_GLOW_CANDIDATE_4_SCRIPT_ID, JJ_GLOW_CANDIDATE_4_TASK,
   JJ_GLOW_STAGING_WEB_SERVICE_ID, assertJjGlowLockedProductState,
-  jjGlowLifecycleStateSha256,
+  assertJjGlowCandidate4PredecessorInvariant, jjGlowLifecycleStateSha256,
 } from "../lib/staging-jj-glow-exact-admission";
 import { mediaStorage } from "../lib/storage";
 import { verifyStagingReferenceRightsBinding } from "../lib/staging-reference-rights";
@@ -70,6 +70,20 @@ async function inspect(client: PoolClient, lock: boolean) {
     "SELECT actor,created_at,meta FROM audit_log WHERE entity='jobs' AND entity_id=$1 AND action='candidate.lifecycle.created'",
     [EVIDENCE_JOB_ID],
   )).rows;
+  const predecessor = CANDIDATE_4_MODE ? (await client.query(
+    `SELECT j.id,j.product_id,j.script_id,j.state,j.provider_video,j.provider_voice,j.output_url,
+      (SELECT count(*)::int FROM provider_tasks pt WHERE pt.job_id=j.id) provider_task_count,
+      (SELECT coalesce(sum(ne.provider_post_count),0)::int FROM normal_representative_evidence_runs ne WHERE ne.job_id=j.id) provider_post_count,
+      (SELECT count(*)::int FROM outputs o WHERE o.job_id=j.id) output_count,
+      (SELECT count(*)::int FROM fyp_snapshots f WHERE f.job_id=j.id AND f.posted_url IS NOT NULL) fyp_posted_count,
+      (SELECT count(*)::int FROM post_plans pp WHERE pp.job_id=j.id) post_plan_count,
+      (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='hold') hold_count,
+      (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='release') release_count,
+      (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='capture') capture_count
+     FROM jobs j WHERE j.id=$1${suffix}`,
+    [JJ_GLOW_CANDIDATE_3_JOB_ID],
+  )).rows[0] : null;
+  if (CANDIDATE_4_MODE) assertJjGlowCandidate4PredecessorInvariant(predecessor);
   const counts = (await client.query(`SELECT
     (SELECT count(*)::int FROM scripts WHERE product_id=$1) script_count,
     (SELECT count(*)::int FROM jobs WHERE product_id=$1) job_count,
@@ -160,7 +174,8 @@ async function inspect(client: PoolClient, lock: boolean) {
     durationS:NORMAL_EVIDENCE_DURATION_S, resolution:NORMAL_EVIDENCE_RESOLUTION,
   };
   return { frozen, userId:job.user_id, brand:snapshot.trustedBrand.value!, referenceKey:ref.rel,
-    snapshotKey:ref.snapshotRel, receiptKey:rights.receipt_key, counts, databaseBindingSha256:binding.sha256 };
+    snapshotKey:ref.snapshotRel, receiptKey:rights.receipt_key, counts, databaseBindingSha256:binding.sha256,
+    predecessorVerified:CANDIDATE_4_MODE };
 }
 
 async function main() {
@@ -196,6 +211,10 @@ async function main() {
       referenceKey:proof.referenceKey,snapshotKey:proof.snapshotKey,receiptKey:proof.receiptKey,
       sourceR2Sha256:proof.frozen.referenceSha256,snapshotR2Sha256:proof.frozen.referenceSha256,
       receiptR2Sha256:EXPECTED_RECEIPT_SHA256,scriptCount:Number(proof.counts.script_count),candidateCount:Number(proof.counts.job_count),
+      predecessorVerified:proof.predecessorVerified,
+      ...(proof.predecessorVerified ? {predecessorJobId:JJ_GLOW_CANDIDATE_3_JOB_ID,predecessorState:"REFUNDED",
+        predecessorProviderTasks:0,predecessorProviderPosts:0,predecessorOutputs:0,predecessorPublication:false,
+        predecessorHoldCount:1,predecessorReleaseCount:1,predecessorCaptureCount:0} : {}),
       providerTasks:0,providerPosts:0,outputs:0,fypPosted:0,postPlans:0,holdCount:1,terminalLedgerCount:0,
       maxProviderPosts:1,maxSpendUsd:NORMAL_EVIDENCE_MAX_USD,autoRetry:false,publication:false,
       activeEvidenceLease:mode === "activate",metadataMutation:mode === "activate" ? "LEDGER_AND_ACTIVE_EVIDENCE_LEASE" : false}));

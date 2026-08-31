@@ -6,6 +6,7 @@ import { periksaAdmisi } from "../lib/script-engine/admisi";
 import { assertNoJjGlowFinalCandidateHistory, smokeCreateJob } from "../lib/postgres/smoke-runtime";
 import {
   assertJjGlowLockedProductState, authorizeJjGlowExactAdmission, authorizeJjGlowLifecycleAuthority,
+  assertJjGlowCandidate4PredecessorInvariant,
   JJ_GLOW_FINAL_RECOVERY_TASK, JJ_GLOW_CANDIDATE_4_TASK, JJ_GLOW_CANDIDATE_4_SCRIPT_ID,
   JJ_GLOW_LIFECYCLE_SCHEMA,
   JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256, JJ_GLOW_PRINCIPAL_ID,
@@ -212,6 +213,25 @@ test("candidate #4 final evidence requires its exact post-creation database bind
   assert.match(freeze,
     /binding\.sha256 !== EVIDENCE_DATABASE_BINDING_SHA256/,
     "live freeze connection must match that exact binding");
+});
+
+test("candidate #4 activation rejects every predecessor terminal/effect mutation", () => {
+  const exact = {
+    id:"55284f20-efb8-4b18-8a24-f90fc91af733",product_id:JJ_GLOW_PRODUCT_ID,script_id:JJ_GLOW_SCRIPT_ID,
+    state:"REFUNDED",provider_video:null,provider_voice:null,output_url:null,provider_task_count:0,
+    provider_post_count:0,output_count:0,fyp_posted_count:0,post_plan_count:0,hold_count:1,release_count:1,capture_count:0,
+  };
+  assert.doesNotThrow(() => assertJjGlowCandidate4PredecessorInvariant(exact));
+  const mutations: Array<[keyof typeof exact, unknown]> = [
+    ["id","wrong"],["product_id","wrong"],["script_id","wrong"],
+    ["state","READY"],["provider_video","byteplus"],["provider_voice","byteplus"],["output_url","private/x.mp4"],
+    ["provider_task_count",1],["provider_post_count",1],["output_count",1],["fyp_posted_count",1],
+    ["post_plan_count",1],["hold_count",2],["release_count",0],["capture_count",1],
+  ];
+  for (const [field,value] of mutations) {
+    assert.throws(() => assertJjGlowCandidate4PredecessorInvariant({...exact,[field]:value}),
+      /CANDIDATE_4_PREDECESSOR_CHANGED/, `must reject predecessor mutation ${field}`);
+  }
 });
 
 test("binding DB diperiksa pada client transaksi yang sama dan probe runtime dibundel", () => {

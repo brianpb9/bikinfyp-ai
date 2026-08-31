@@ -4,6 +4,7 @@ export const JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256 = "2d575429751a26f5fe3ef51ddb
 export const JJ_GLOW_PRODUCT_ID = "c470390e-ad3d-4cc8-9ba2-4557691fa7a7";
 export const JJ_GLOW_SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
 export const JJ_GLOW_CANDIDATE_4_SCRIPT_ID = "ca32178f-2731-4234-bb07-48f24a2f2079";
+export const JJ_GLOW_CANDIDATE_3_JOB_ID = "55284f20-efb8-4b18-8a24-f90fc91af733";
 export const JJ_GLOW_PRINCIPAL_ID = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
 export const JJ_GLOW_STAGING_WEB_SERVICE_ID = "srv-d9n28tijnfac73a87lt0";
 export const JJ_GLOW_FINAL_RECOVERY_TASK = "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831";
@@ -61,6 +62,27 @@ export function authorizeJjGlowLifecycleAuthority(
 
 export function jjGlowLifecycleStateSha256(value: Record<string, unknown>): string {
   return canonicalSha(value);
+}
+
+export type JjGlowCandidate4PredecessorReadback = {
+  id: unknown; product_id: unknown; script_id: unknown; state: unknown;
+  provider_video: unknown; provider_voice: unknown; output_url: unknown;
+  provider_task_count: unknown; provider_post_count: unknown; output_count: unknown;
+  fyp_posted_count: unknown; post_plan_count: unknown; hold_count: unknown;
+  release_count: unknown; capture_count: unknown;
+};
+
+/** Paid activation may proceed only while the exact candidate-3 predecessor is
+ * still terminal and effect-free. The activation transaction locks this row. */
+export function assertJjGlowCandidate4PredecessorInvariant(row: JjGlowCandidate4PredecessorReadback | null | undefined) {
+  if (!row || row.id !== JJ_GLOW_CANDIDATE_3_JOB_ID || row.product_id !== JJ_GLOW_PRODUCT_ID
+      || row.script_id !== JJ_GLOW_SCRIPT_ID || row.state !== "REFUNDED"
+      || row.provider_video !== null || row.provider_voice !== null || row.output_url !== null
+      || Number(row.provider_task_count) !== 0 || Number(row.provider_post_count) !== 0
+      || Number(row.output_count) !== 0 || Number(row.fyp_posted_count) !== 0 || Number(row.post_plan_count) !== 0
+      || Number(row.hold_count) !== 1 || Number(row.release_count) !== 1 || Number(row.capture_count) !== 0) {
+    throw new Error("JJ_GLOW_CANDIDATE_4_PREDECESSOR_CHANGED");
+  }
 }
 
 export function jjGlowSelectedProductState(product: ProductRow) {
