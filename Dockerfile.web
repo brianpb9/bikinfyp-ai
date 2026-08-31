@@ -29,6 +29,7 @@ COPY scripts/staging-jj-glow-candidate.cjs ./scripts/staging-jj-glow-candidate.c
 COPY scripts/staging-candidate-durability-probe.ts ./scripts/staging-candidate-durability-probe.ts
 COPY scripts/staging-jj-glow-final-evidence.ts ./scripts/staging-jj-glow-final-evidence.ts
 COPY scripts/staging-jj-glow-candidate4-runtime-authorize.ts ./scripts/staging-jj-glow-candidate4-runtime-authorize.ts
+COPY scripts/staging-jj-glow-candidate4-runtime-successor-authorize.ts ./scripts/staging-jj-glow-candidate4-runtime-successor-authorize.ts
 COPY scripts/fixtures/BPOM-KO-NA18260500350-20260831.json ./scripts/fixtures/BPOM-KO-NA18260500350-20260831.json
 COPY instrumentation.ts middleware.ts next.config.ts postcss.config.mjs tailwind.config.ts tsconfig.json ./
 
@@ -44,6 +45,10 @@ RUN ./node_modules/.bin/esbuild scripts/staging-candidate-durability-probe.ts \
       --bundle --packages=external --platform=node --format=cjs \
       --outfile=scripts/staging-jj-glow-candidate4-runtime-authorize.cjs \
   && node --check scripts/staging-jj-glow-candidate4-runtime-authorize.cjs \
+  && ./node_modules/.bin/esbuild scripts/staging-jj-glow-candidate4-runtime-successor-authorize.ts \
+      --bundle --packages=external --platform=node --format=cjs \
+      --outfile=scripts/staging-jj-glow-candidate4-runtime-successor-authorize.cjs \
+  && node --check scripts/staging-jj-glow-candidate4-runtime-successor-authorize.cjs \
   && npm run build \
   && npm prune --omit=dev
 
@@ -74,6 +79,7 @@ COPY --from=build --chown=racun:racun /srv/app/scripts/staging-jj-glow-candidate
 COPY --from=build --chown=racun:racun /srv/app/scripts/staging-candidate-durability-probe.cjs ./scripts/staging-candidate-durability-probe.cjs
 COPY --from=build --chown=racun:racun /srv/app/scripts/staging-jj-glow-final-evidence.cjs ./scripts/staging-jj-glow-final-evidence.cjs
 COPY --from=build --chown=racun:racun /srv/app/scripts/staging-jj-glow-candidate4-runtime-authorize.cjs ./scripts/staging-jj-glow-candidate4-runtime-authorize.cjs
+COPY --from=build --chown=racun:racun /srv/app/scripts/staging-jj-glow-candidate4-runtime-successor-authorize.cjs ./scripts/staging-jj-glow-candidate4-runtime-successor-authorize.cjs
 COPY --from=build --chown=racun:racun /srv/app/scripts/fixtures/BPOM-KO-NA18260500350-20260831.json ./scripts/fixtures/BPOM-KO-NA18260500350-20260831.json
 COPY --from=build --chown=racun:racun /srv/app/migrations ./migrations
 
@@ -96,6 +102,8 @@ RUN command -v ffmpeg \
   && node --check /srv/app/scripts/staging-candidate-durability-probe.cjs \
   && test -f /srv/app/scripts/staging-jj-glow-candidate4-runtime-authorize.cjs \
   && node --check /srv/app/scripts/staging-jj-glow-candidate4-runtime-authorize.cjs \
+  && test -f /srv/app/scripts/staging-jj-glow-candidate4-runtime-successor-authorize.cjs \
+  && node --check /srv/app/scripts/staging-jj-glow-candidate4-runtime-successor-authorize.cjs \
   && node /srv/app/scripts/staging-candidate-durability-probe.cjs self-check | grep -qx DURABILITY_PROBE_RUNTIME_SELF_CHECK_PASS \
   && test -f /srv/app/scripts/fixtures/BPOM-KO-NA18260500350-20260831.json \
   && test -f /srv/app/.next/BUILD_ID \

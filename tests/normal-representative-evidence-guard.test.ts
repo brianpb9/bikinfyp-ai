@@ -546,6 +546,23 @@ test("JJ GLOW freeze verifies DB/R2 independently and activation is ledger-only"
   assert.match(webDocker,/esbuild scripts\/staging-jj-glow-candidate4-runtime-authorize\.ts/);
   assert.match(webDocker,/COPY --from=build[^\n]+staging-jj-glow-candidate4-runtime-authorize\.cjs/);
   assert.match(webDocker,/node --check \/srv\/app\/scripts\/staging-jj-glow-candidate4-runtime-authorize\.cjs/);
+  const successorMigration = fs.readFileSync(new URL("../migrations/postgres/0048_candidate4_provider_runtime_successor_authorization.sql", import.meta.url), "utf8");
+  assert.match(successorMigration,/normal_evidence_runtime_successor_authorizations/);
+  assert.match(successorMigration,/prior_provider_runtime_sha='4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1'/);
+  assert.match(successorMigration,/authorization_task_id='SCORE80-NORMAL-PROVIDER-EVIDENCE-20260901'/);
+  assert.match(successorMigration,/jobrow\.state<>'GENERATING_VISUAL'/);
+  assert.match(successorMigration,/effects<>0/);
+  assert.match(successorMigration,/BEFORE UPDATE OR DELETE/);
+  const successorAuthorizer = fs.readFileSync(new URL("../scripts/staging-jj-glow-candidate4-runtime-successor-authorize.ts", import.meta.url), "utf8");
+  assert.match(successorAuthorizer,/BEGIN ISOLATION LEVEL SERIALIZABLE/);
+  assert.match(successorAuthorizer,/JJ_GLOW_PROVIDER_RUNTIME_SUCCESSOR_AUTHORIZED_NO_POST/);
+  assert.match(successorAuthorizer,/JJ_GLOW_PROVIDER_RUNTIME_TARGET_SHA/);
+  assert.match(successorAuthorizer,/INSERT INTO normal_evidence_runtime_successor_authorizations/);
+  assert.doesNotMatch(successorAuthorizer,/fetch\(|createTask|enqueueJob|claimPost/);
+  assert.match(webDocker,/COPY scripts\/staging-jj-glow-candidate4-runtime-successor-authorize\.ts/);
+  assert.match(webDocker,/esbuild scripts\/staging-jj-glow-candidate4-runtime-successor-authorize\.ts/);
+  assert.match(webDocker,/COPY --from=build[^\n]+staging-jj-glow-candidate4-runtime-successor-authorize\.cjs/);
+  assert.match(webDocker,/node --check \/srv\/app\/scripts\/staging-jj-glow-candidate4-runtime-successor-authorize\.cjs/);
 });
 
 test("migration enforces durable unique 0->1 ledger and private-only artifact key", () => {

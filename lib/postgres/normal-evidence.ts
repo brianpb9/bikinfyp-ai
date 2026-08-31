@@ -31,9 +31,10 @@ const map = (row: Record<string, unknown>): NormalEvidenceContract => ({
 export const pgNormalEvidenceStore: NormalEvidenceStore = {
   async get(jobId) {
     const row = (await getPool(config.databaseUrl).query(
-      `SELECT ne.*,ra.provider_runtime_sha
+      `SELECT ne.*,COALESCE(sa.provider_runtime_sha,ra.provider_runtime_sha) provider_runtime_sha
          FROM normal_representative_evidence_runs ne
          LEFT JOIN normal_evidence_runtime_authorizations ra ON ra.job_id=ne.job_id
+         LEFT JOIN normal_evidence_runtime_successor_authorizations sa ON sa.job_id=ne.job_id
         WHERE ne.job_id=$1`, [jobId]
     )).rows[0];
     return row ? map(row) : null;
@@ -295,7 +296,8 @@ export async function jjGlowCandidate4RuntimePreflightNoPost(
     await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
     const binding = await postgresRuntimeBinding(client);
     if (binding.sha256 !== sweepDatabaseBindingSha256) throw new Error("JJ_GLOW_SWEEP_PREFLIGHT_DATABASE_BINDING_MISMATCH");
-    const row = (await client.query(`SELECT ne.*,ra.provider_runtime_sha,ra.database_binding_sha256,
+    const row = (await client.query(`SELECT ne.*,COALESCE(sa.provider_runtime_sha,ra.provider_runtime_sha) provider_runtime_sha,
+        COALESCE(sa.database_binding_sha256,ra.database_binding_sha256) database_binding_sha256,
         j.state job_state,j.provider_video,j.provider_voice,j.output_url,
         (SELECT count(*)::int FROM provider_tasks pt WHERE pt.job_id=j.id) provider_tasks,
         (SELECT count(*)::int FROM outputs o WHERE o.job_id=j.id) outputs,
@@ -304,6 +306,7 @@ export async function jjGlowCandidate4RuntimePreflightNoPost(
       FROM normal_representative_evidence_runs ne
       JOIN jobs j ON j.id=ne.job_id
       LEFT JOIN normal_evidence_runtime_authorizations ra ON ra.job_id=ne.job_id
+      LEFT JOIN normal_evidence_runtime_successor_authorizations sa ON sa.job_id=ne.job_id
       WHERE ne.job_id=$1`, [JJ_GLOW_CANDIDATE_4_EVIDENCE_JOB_ID])).rows[0];
     if (!row?.provider_runtime_sha) { await client.query("ROLLBACK"); return null; }
     const contract = map(row);
@@ -312,7 +315,7 @@ export async function jjGlowCandidate4RuntimePreflightNoPost(
     if (contract.taskId !== JJ_GLOW_CANDIDATE_4_EVIDENCE_TASK || contract.state !== "PREPOST_READY"
         || contract.providerPostCount !== 0 || contract.providerTaskId !== null
         || row.lease_kind !== "ACTIVE_EVIDENCE_LEASE" || !row.lease_expires_at || Date.parse(row.lease_expires_at) <= Date.now()
-        || row.job_state !== "QUEUED" || row.provider_video !== null || row.provider_voice !== null || row.output_url !== null
+        || !["QUEUED","GENERATING_VISUAL"].includes(row.job_state) || row.provider_video !== null || row.provider_voice !== null || row.output_url !== null
         || Number(row.provider_tasks) !== 0 || Number(row.outputs) !== 0 || Number(row.fyp_posted) !== 0 || Number(row.post_plans) !== 0
         || row.database_binding_sha256 !== binding.sha256) throw new Error("JJ_GLOW_RUNTIME_PREFLIGHT_PRIOR_EFFECT_OR_AUTHORITY_MISMATCH");
     await client.query("ROLLBACK");

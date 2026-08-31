@@ -15,7 +15,8 @@ const TASK = "FINAL-POST-SWEEP-CANDIDATE-4-20260901";
 const REFERENCE = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 const APPROVED_SCRIPT = "110198510c75de3dba61d57260dce12af7cb0f06c6a4ddfc2254479cb8f05e7c";
 const ACTIVATION_DEPLOY = "13c22bc7a3a340f0ea5f4bb0db9a905691676c77";
-const SAFE_RUNTIME = "20e505c38a5320ebe33c82a1c0c84c990dd975ca";
+const SAFE_RUNTIME = "4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1";
+const SUCCESSOR_RUNTIME = "30e505c38a5320ebe33c82a1c0c84c990dd975ca";
 const BINDING = "f4fcf0f493e99f7ad0e5fb7ed320ea272080ef611b2500cb2f6ed89bd8f97610";
 const AT = "2026-08-31T19:47:54.433Z";
 let pool: Pool;
@@ -80,6 +81,26 @@ test("candidate #4 exact evidence tuple succeeds and every neighboring tuple is 
       await client.query("SAVEPOINT immutable");let mutation:unknown;
       try { await client.query(statement,[JOB]); } catch(error) { mutation=error; }
       await client.query("ROLLBACK TO SAVEPOINT immutable");await client.query("RELEASE SAVEPOINT immutable");
+      assert.equal((mutation as {code?:string})?.code,"23514");
+    }
+    await client.query("UPDATE jobs SET state='GENERATING_VISUAL' WHERE id=$1",[JOB]);
+    await client.query(`INSERT INTO normal_evidence_runtime_successor_authorizations
+      (job_id,prior_provider_runtime_sha,provider_runtime_sha,database_binding_sha256,
+       authorization_task_id,authorized_by,authorizer_deploy_sha,created_at)
+      VALUES ($1,$2,$3,$4,'SCORE80-NORMAL-PROVIDER-EVIDENCE-20260901',$5,$6,$7)`,
+    [JOB,SAFE_RUNTIME,SUCCESSOR_RUNTIME,BINDING,USER,SUCCESSOR_RUNTIME,AT]);
+    assert.deepEqual((await client.query(
+      `SELECT COALESCE(sa.provider_runtime_sha,ra.provider_runtime_sha) provider_runtime_sha
+         FROM normal_evidence_runtime_authorizations ra
+         LEFT JOIN normal_evidence_runtime_successor_authorizations sa ON sa.job_id=ra.job_id
+        WHERE ra.job_id=$1`,[JOB])).rows[0],{provider_runtime_sha:SUCCESSOR_RUNTIME});
+    for (const statement of [
+      "UPDATE normal_evidence_runtime_successor_authorizations SET provider_runtime_sha='aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' WHERE job_id=$1",
+      "DELETE FROM normal_evidence_runtime_successor_authorizations WHERE job_id=$1",
+    ]) {
+      await client.query("SAVEPOINT successor_immutable");let mutation:unknown;
+      try { await client.query(statement,[JOB]); } catch(error) { mutation=error; }
+      await client.query("ROLLBACK TO SAVEPOINT successor_immutable");await client.query("RELEASE SAVEPOINT successor_immutable");
       assert.equal((mutation as {code?:string})?.code,"23514");
     }
     await client.query("ROLLBACK");
