@@ -41,6 +41,9 @@ const EVIDENCE_SCRIPT_ID = CANDIDATE_4_MODE ? JJ_GLOW_CANDIDATE_4_SCRIPT_ID : JJ
 const EVIDENCE_JOB_ID = CANDIDATE_4_MODE ? process.env.JJ_GLOW_EXPECTED_JOB_ID?.trim() : JJ_GLOW_FINAL_EVIDENCE_JOB_ID;
 const EVIDENCE_CORRELATION_ID = CANDIDATE_4_MODE ? process.env.JJ_GLOW_LIFECYCLE_CORRELATION_ID?.trim() : EXPECTED_CORRELATION_ID;
 const EVIDENCE_STATE_SHA256 = CANDIDATE_4_MODE ? process.env.JJ_GLOW_EXPECTED_STATE_SHA256?.trim() : EXPECTED_STATE_SHA256;
+const EVIDENCE_DATABASE_BINDING_SHA256 = CANDIDATE_4_MODE
+  ? process.env.JJ_GLOW_EXPECTED_DATABASE_BINDING_SHA256?.trim()
+  : EXPECTED_DATABASE_BINDING_SHA256;
 
 function assertRuntime() {
   if (process.env.NODE_ENV !== "production" || process.env.RACUN_DEPLOY_ENV !== "staging"
@@ -52,7 +55,8 @@ function assertRuntime() {
 }
 
 async function inspect(client: PoolClient, lock: boolean) {
-  if (!EVIDENCE_JOB_ID || !EVIDENCE_CORRELATION_ID || !EVIDENCE_STATE_SHA256) {
+  if (!EVIDENCE_JOB_ID || !EVIDENCE_CORRELATION_ID || !EVIDENCE_STATE_SHA256
+      || !/^[0-9a-f]{64}$/.test(EVIDENCE_DATABASE_BINDING_SHA256 ?? "")) {
     throw new Error("JJ_GLOW_FINAL_EVIDENCE_EXPECTED_LINEAGE_REQUIRED");
   }
   const suffix = lock ? " FOR UPDATE" : "";
@@ -106,7 +110,7 @@ async function inspect(client: PoolClient, lock: boolean) {
     create_timestamp:lifecycleMeta.create_timestamp,transaction_id:lifecycleMeta.transaction_commit_receipt?.transaction_id,
     state:job.state,provider_task_count:Number(counts.provider_tasks),hold_count:Number(counts.hold_rows),
     approved_reference_manifest_sha256:sha256(job.approved_reference_manifest),
-    job_product_snapshot_sha256:sha256(job.job_product_snapshot),database_binding_sha256:EXPECTED_DATABASE_BINDING_SHA256};
+    job_product_snapshot_sha256:sha256(job.job_product_snapshot),database_binding_sha256:EVIDENCE_DATABASE_BINDING_SHA256};
   if (lifecycleMeta.task !== EVIDENCE_TASK || lifecycleMeta.correlation_id !== EVIDENCE_CORRELATION_ID
       || lifecycleMeta.post_commit_state_sha256 !== EVIDENCE_STATE_SHA256 || lifecycleMeta.append_only !== true
       || jjGlowLifecycleStateSha256(lifecycleState) !== EVIDENCE_STATE_SHA256) {
@@ -121,7 +125,7 @@ async function inspect(client: PoolClient, lock: boolean) {
   }
 
   const binding = await postgresRuntimeBinding(client);
-  if (binding.sha256 !== EXPECTED_DATABASE_BINDING_SHA256) throw new Error("JJ_GLOW_FINAL_EVIDENCE_DATABASE_BINDING_MISMATCH");
+  if (binding.sha256 !== EVIDENCE_DATABASE_BINDING_SHA256) throw new Error("JJ_GLOW_FINAL_EVIDENCE_DATABASE_BINDING_MISMATCH");
   const manifest = parseJobReferenceManifest(job.approved_reference_manifest);
   const snapshot = parseJobProductSnapshot(job.job_product_snapshot, { requirePrice:true });
   const expectedSnapshotRaw = createJobProductSnapshotRaw(product);

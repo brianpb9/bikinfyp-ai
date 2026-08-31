@@ -201,6 +201,19 @@ test("smokeCreateJob candidate #4 meneruskan authority dan menerima tepat satu p
   /CANDIDATE_4_HISTORY_INVALID/);
 });
 
+test("candidate #4 final evidence requires its exact post-creation database binding", () => {
+  const freeze = fs.readFileSync("scripts/staging-jj-glow-final-evidence.ts", "utf8");
+  assert.match(freeze,
+    /CANDIDATE_4_MODE\s*\?\s*process\.env\.JJ_GLOW_EXPECTED_DATABASE_BINDING_SHA256\?\.trim\(\)/,
+    "candidate #4 must not reuse the predecessor's historical database binding");
+  assert.match(freeze,
+    /database_binding_sha256:EVIDENCE_DATABASE_BINDING_SHA256/,
+    "lifecycle reconstruction must use the independently read-back exact binding");
+  assert.match(freeze,
+    /binding\.sha256 !== EVIDENCE_DATABASE_BINDING_SHA256/,
+    "live freeze connection must match that exact binding");
+});
+
 test("binding DB diperiksa pada client transaksi yang sama dan probe runtime dibundel", () => {
   const admission = fs.readFileSync("lib/postgres/smoke-runtime.ts", "utf8");
   const begin = admission.indexOf('client.query("BEGIN ISOLATION LEVEL READ COMMITTED")');
