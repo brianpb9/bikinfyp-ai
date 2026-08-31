@@ -24,6 +24,13 @@ const runtimeEvidenceHashes = {
   "WORKER-DEPLOY-RAW.json":"a7a6870235d9e1d62d0266a373ac9846b794ae8215e7cb6abf90e80fb6bb4687",
   "WORKER-RUNTIME-LOGS-RAW.json":"0a859db6c4bb97696e7451edaab0df05d5fc71b5fad8f5ae76131a6d4e8e8b3f",
   "WORKER-POST-SWEEP-SERVICE-RAW.json":"72fbab061e1edc51b870a701acaafc83948a6d8599f49e247359ba0875b20cde",
+  "LEASE-FRESH-PRE-SWEEP-MANAGED-JOB-RAW.json":"d278a02b5cc3157e05e4a29aac9e3fd6b735756f166aa74b90b84bf8588d036d",
+  "LEASE-FRESH-PRE-SWEEP-MANAGED-LOG-RAW.json":"59400bd2975a56c6dea18c74b2a8979cf718b6523af64f3dfdabd1027d0bc415",
+  "WORKER-STRUCTURED-SWEEP-DEPLOY-RAW.json":"cda8752c6338ed1776a0f4c8c6fc2581c947e364607cecafb4045a555dc213c0",
+  "WORKER-STRUCTURED-SWEEP-LOG-RAW.json":"dc49836bfbb5ebba2c09835b3554d61546ab8e1480af0dc34708e550c0a49b66",
+  "LEASE-FRESH-POST-SWEEP-MANAGED-JOB-RAW.json":"dde23be0bed290e63df548607b20de5774456657a73c6ef0a12833ed98382b8c",
+  "LEASE-FRESH-POST-SWEEP-MANAGED-LOG-RAW.json":"ac1c24b86b074bd050d33f832a0c96433a3f49a1b426748cdf81b1a778693c9e",
+  "WORKER-STRUCTURED-SWEEP-POST-SUSPEND-SERVICE-RAW.json":"02e4f8566cffc9f738dbb384ea48446d36c5565778358b645fc650b5b8ba28e1",
 };
 const runtimeEvidence = Object.fromEntries(Object.keys(runtimeEvidenceHashes)
   .map((path) => [path,JSON.parse(read(path))]));
@@ -174,6 +181,13 @@ const postSweepLog = runtimeEvidence["LEASE-POST-SWEEP-MANAGED-LOG-RAW.json"];
 const workerDeploy = runtimeEvidence["WORKER-DEPLOY-RAW.json"];
 const workerLogs = runtimeEvidence["WORKER-RUNTIME-LOGS-RAW.json"];
 const workerService = runtimeEvidence["WORKER-POST-SWEEP-SERVICE-RAW.json"];
+const freshPreSweepJob = runtimeEvidence["LEASE-FRESH-PRE-SWEEP-MANAGED-JOB-RAW.json"];
+const freshPreSweepLog = runtimeEvidence["LEASE-FRESH-PRE-SWEEP-MANAGED-LOG-RAW.json"];
+const structuredSweepDeploy = runtimeEvidence["WORKER-STRUCTURED-SWEEP-DEPLOY-RAW.json"];
+const structuredSweepLog = runtimeEvidence["WORKER-STRUCTURED-SWEEP-LOG-RAW.json"];
+const freshPostSweepJob = runtimeEvidence["LEASE-FRESH-POST-SWEEP-MANAGED-JOB-RAW.json"];
+const freshPostSweepLog = runtimeEvidence["LEASE-FRESH-POST-SWEEP-MANAGED-LOG-RAW.json"];
+const structuredSweepService = runtimeEvidence["WORKER-STRUCTURED-SWEEP-POST-SUSPEND-SERVICE-RAW.json"];
 const assertManagedLog = (job,log) => {
   assert.equal(job.serviceId,"srv-d9n28tijnfac73a87lt0");
   assert.equal(job.planId,"plan-srv-006");
@@ -275,4 +289,52 @@ assert.match(postgresJobsSource,/trigger: "WORKER_INTERVAL_60000_MS"/);
 assert.match(leaseSweepReadback,/BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY/);
 assert.match(leaseSweepReadback,/candidate_age_seconds/);
 assert.match(leaseSweepReadback,/queue_paused/);
-console.log("CANDIDATE_4_ACTIVATION_PRE_EXPLICIT_SWEEP_RECEIPT_CONTRACT=PASS");
+
+assert.equal(freshPreSweepJob.id,"job-daav8vv10e5c73csmv5g");
+assert.equal(freshPostSweepJob.id,"job-daavau2fngtc73ahlg2g");
+assert.equal(leaseJobSource(freshPreSweepJob,"pre-sweep"),leaseSweepReadback);
+assert.equal(leaseJobSource(freshPostSweepJob,"post-sweep"),leaseSweepReadback);
+const freshPreSweep = assertManagedLog(freshPreSweepJob,freshPreSweepLog);
+const freshPostSweep = assertManagedLog(freshPostSweepJob,freshPostSweepLog);
+assert.equal(freshPreSweep.phase,"pre-sweep");assert.equal(freshPostSweep.phase,"post-sweep");
+for (const receipt of [freshPreSweep,freshPostSweep]) {
+  assert.equal(receipt.event,"JJ_GLOW_CANDIDATE_4_LEASE_SWEEP_READBACK_PASS");
+  assert.equal(receipt.runtime_sha,exactReviewedSha);
+  assert.equal(receipt.transaction,"REPEATABLE READ READ ONLY");assert.equal(receipt.mutation,false);
+  assert.equal(receipt.queue_paused,true);assert.equal(receipt.queue_counts.active,0);
+  assert.ok(receipt.candidate_age_seconds > 1800);
+  assert.equal(receipt.candidate.state,"QUEUED");assert.equal(receipt.evidence.state,"PREPOST_READY");
+  assert.equal(receipt.evidence.lease_kind,"ACTIVE_EVIDENCE_LEASE");
+  assert.equal(receipt.evidence.provider_post_count,0);assert.equal(receipt.evidence.provider_task_id,null);
+  assert.equal(receipt.evidence.artifact_key,null);assert.equal(receipt.evidence.actual_cost_usd,null);
+  assert.ok(Date.parse(receipt.evidence.lease_expires_at) > Date.parse(receipt.evaluated_at));
+}
+assert.deepEqual(freshPostSweep.predecessor,freshPreSweep.predecessor);
+assert.deepEqual(freshPostSweep.candidate,freshPreSweep.candidate);
+assert.deepEqual(freshPostSweep.evidence,freshPreSweep.evidence);
+assert.deepEqual(freshPostSweep.queue_counts,freshPreSweep.queue_counts);
+
+const structuredRuntimeSha="20e505c38a5320ebe33c82a1c0c84c990dd975ca";
+assert.equal(structuredSweepDeploy.id,"dep-daav9h5g1s2s738gg22g");
+assert.equal(structuredSweepDeploy.status,"live");assert.equal(structuredSweepDeploy.commit.id,structuredRuntimeSha);
+assert.equal(structuredSweepLog.id,"81bc0083-a08b-4c0a-a48b-116ef77a4c4c");
+assert.equal(structuredSweepLog.labels.find(({name}) => name === "resource")?.value,"srv-d9n28ue417fc73ch2b60");
+assert.match(structuredSweepLog.labels.find(({name}) => name === "instance")?.value ?? "",/^srv-d9n28ue417fc73ch2b60-/);
+assert.equal(structuredSweepLog.labels.find(({name}) => name === "level")?.value,"info");
+assert.equal(structuredSweepLog.labels.find(({name}) => name === "type")?.value,"app");
+const structuredSweep=JSON.parse(structuredSweepLog.message);
+assert.deepEqual(structuredSweep,{
+  event:"POSTGRES_STALE_SWEEP_COMPLETED",component:"PgJobsRepository.sweepStaleJobs",
+  trigger:"WORKER_INTERVAL_60000_MS",runtime_sha:structuredRuntimeSha,
+  started_at:"2026-08-31T21:43:02.844Z",completed_at:"2026-08-31T21:43:03.203Z",
+  swept_jobs:0,reconciled_ready_holds:0,reconciled_promo_holds:0,
+});
+assert.ok(Date.parse(freshPreSweep.evaluated_at) < Date.parse(structuredSweep.started_at));
+assert.ok(Date.parse(structuredSweep.started_at) >= Date.parse(structuredSweepDeploy.finishedAt));
+assert.ok(Date.parse(structuredSweep.completed_at) <= Date.parse(structuredSweepLog.timestamp));
+assert.ok(Date.parse(structuredSweepLog.timestamp) < Date.parse(freshPostSweep.evaluated_at));
+assert.equal(structuredSweepService.id,"srv-d9n28ue417fc73ch2b60");
+assert.equal(structuredSweepService.name,"racun-ai-staging-worker");
+assert.equal(structuredSweepService.suspended,"suspended");
+assert.ok(Date.parse(structuredSweepService.updatedAt) > Date.parse(freshPostSweep.evaluated_at));
+console.log("CANDIDATE_4_ACTIVATION_AND_STRUCTURED_SWEEP_SURVIVAL_CONTRACT=PASS");

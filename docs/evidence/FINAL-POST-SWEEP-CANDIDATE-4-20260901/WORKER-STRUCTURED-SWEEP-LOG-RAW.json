@@ -1,0 +1,23 @@
+{
+  "id": "81bc0083-a08b-4c0a-a48b-116ef77a4c4c",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "srv-d9n28ue417fc73ch2b60"
+    },
+    {
+      "name": "instance",
+      "value": "srv-d9n28ue417fc73ch2b60-vvmqj"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "{\"event\":\"POSTGRES_STALE_SWEEP_COMPLETED\",\"component\":\"PgJobsRepository.sweepStaleJobs\",\"trigger\":\"WORKER_INTERVAL_60000_MS\",\"runtime_sha\":\"20e505c38a5320ebe33c82a1c0c84c990dd975ca\",\"started_at\":\"2026-08-31T21:43:02.844Z\",\"completed_at\":\"2026-08-31T21:43:03.203Z\",\"swept_jobs\":0,\"reconciled_ready_holds\":0,\"reconciled_promo_holds\":0}",
+  "timestamp": "2026-08-31T21:43:03.203795599Z"
+}
