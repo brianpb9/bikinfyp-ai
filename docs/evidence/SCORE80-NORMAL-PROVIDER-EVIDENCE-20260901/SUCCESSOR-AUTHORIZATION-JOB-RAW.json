@@ -1,0 +1,12 @@
+[
+  {
+    "createdAt": "2026-08-31T23:17:42.76514Z",
+    "finishedAt": "2026-08-31T23:17:54Z",
+    "id": "job-dab0n5id0e5s73d0s7a0",
+    "planId": "plan-srv-006",
+    "serviceId": "srv-d9n28tijnfac73a87lt0",
+    "startCommand": "env JJ_GLOW_PROVIDER_RUNTIME_TARGET_SHA=23fa4923ec667a44ef8044e309140ee169864f88 JJ_GLOW_RUNTIME_SUCCESSOR_AUTHORIZE_CONFIRM=SCORE80-NORMAL-PROVIDER-EVIDENCE-20260901 node scripts/staging-jj-glow-candidate4-runtime-successor-authorize.cjs",
+    "startedAt": "2026-08-31T23:17:42Z",
+    "status": "succeeded"
+  }
+]

@@ -1,0 +1,44 @@
+{
+  "schema": "render-env-config-redacted-paginated/v1",
+  "observed_at": "2026-08-31T23:22:20Z",
+  "pagination_complete": true,
+  "production_mutation": false,
+  "services": [
+    {
+      "service_id": "srv-d9n28ue417fc73ch2b60",
+      "service_name": "racun-ai-staging-worker",
+      "http_status": 200,
+      "pages_read": 2,
+      "total_env_vars": 24,
+      "key_rows": [
+        {
+          "key": "BYTEPLUS_ARK_API_KEY",
+          "value_sha256": "e235f534009788cbcb817e86779919604b8cc4255c98d62e0ce13829587603ab",
+          "has_value": true
+        }
+      ]
+    },
+    {
+      "service_id": "srv-d9n28tijnfac73a87lt0",
+      "service_name": "racun-ai-staging-web",
+      "http_status": 200,
+      "pages_read": 2,
+      "total_env_vars": 33,
+      "key_rows": []
+    },
+    {
+      "service_id": "srv-d9ni3ndaeets73c07kq0",
+      "service_name": "bikinfyp-ai-production-worker",
+      "http_status": 200,
+      "pages_read": 2,
+      "total_env_vars": 25,
+      "key_rows": [
+        {
+          "key": "BYTEPLUS_ARK_API_KEY",
+          "value_sha256": "13503e470ca13bb18eddb001c492a28e9c91ffa34513592e7a4768c7da6342cf",
+          "has_value": true
+        }
+      ]
+    }
+  ]
+}

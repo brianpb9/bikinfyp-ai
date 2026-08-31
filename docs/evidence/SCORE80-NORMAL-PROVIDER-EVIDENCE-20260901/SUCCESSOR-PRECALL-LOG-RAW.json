@@ -1,0 +1,21 @@
+[
+  {
+    "id": "a6b1fb07-7d9f-4957-82b4-1724cce6a06f",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "job-dab0p0c9v7es73bn44rg"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "{\"event\":\"CANDIDATE4_PROVIDER_PRECALL_FREEZE_PASS\",\"runtime_sha\":\"23fa4923ec667a44ef8044e309140ee169864f88\",\"transaction\":\"REPEATABLE READ READ ONLY\",\"database_to_r2_reference_digest\":\"PASS\",\"approved_script_digest\":\"PASS\",\"cross_row_metadata\":\"PASS\",\"active_evidence_lease\":true,\"provider_post_count\":0,\"provider_tasks\":0,\"outputs\":0,\"publication\":false,\"queue_paused\":true,\"queue_counts\":{\"waiting\":0,\"active\":0,\"delayed\":0,\"prioritized\":0,\"failed\":0,\"paused\":2},\"contract\":{\"schema\":\"candidate4-provider-evidence-cross-row-freeze/v1\",\"execution_task\":\"SCORE80-NORMAL-PROVIDER-EVIDENCE-20260901\",\"job_id\":\"2c49a5c8-9465-4400-a214-159336a2c097\",\"product_id\":\"c470390e-ad3d-4cc8-9ba2-4557691fa7a7\",\"subject_id\":\"777b1356-2a88-4120-ab61-d49b02ceca10\",\"script_id\":\"ca32178f-2731-4234-bb07-48f24a2f2079\",\"reference_sha256\":\"744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1\",\"reference_manifest_sha256\":\"33ed415c1a361f315d01f8aa1e181668fd00e3704cc69f4f8e2d65d6d6c967fa\",\"product_snapshot_sha256\":\"5fa4eba2297bf20724b417d1f97ba3cb747eef65f3246ac5b01f4402358502b6\",\"approved_script_sha256\":\"110198510c75de3dba61d57260dce12af7cb0f06c6a4ddfc2254479cb8f05e7c\",\"evidence_idempotency_key\":\"17523707c5f39c34c89552874b8e0420315bd2a8085ccf9be31a7808b3c8bf2c\",\"activation_sha\":\"13c22bc7a3a340f0ea5f4bb0db9a905691676c77\",\"provider_runtime_sha\":\"23fa4923ec667a44ef8044e309140ee169864f88\",\"database_binding_sha256\":\"f4fcf0f493e99f7ad0e5fb7ed320ea272080ef611b2500cb2f6ed89bd8f97610\",\"model\":\"dreamina-seedance-2-0-mini-260615\",\"resolution\":\"720p\",\"duration_s\":15,\"estimated_cost_usd\":1.134,\"max_cost_usd\":1.25,\"max_provider_posts\":1,\"auto_retry\":false,\"publication\":false,\"required_independent_verdicts\":[\"BRAND_FIDELITY\",\"ANTI_SLOP\",\"PROMPT_VERDICT_ARCHIVE\"]},\"contract_sha256\":\"9cfbbed2ae2088a40293ea58c9abad8fe89dd35196a804aebd1a885b43f7fa62\",\"job_state\":\"GENERATING_VISUAL\",\"reference_key\":\"uploads/c470390e-ad3d-4cc8-9ba2-4557691fa7a7/9047a662-d664-48f8-9c67-69fc10bc8289.webp\",\"snapshot_key\":\"jobs/2c49a5c8-9465-4400-a214-159336a2c097/approved-references/0-744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1.webp\",\"rights_receipt_key\":\"uploads/c470390e-ad3d-4cc8-9ba2-4557691fa7a7/9047a662-d664-48f8-9c67-69fc10bc8289.webp.rights.json\",\"lease_expires_at\":\"2026-09-01T03:01:56.911Z\",\"authorization_created_at\":\"2026-08-31T23:17:48.708Z\",\"mutation\":false,\"provider_post\":false,\"secret_value_output\":false}",
+    "timestamp": "2026-08-31T23:21:51.257887904Z"
+  }
+]

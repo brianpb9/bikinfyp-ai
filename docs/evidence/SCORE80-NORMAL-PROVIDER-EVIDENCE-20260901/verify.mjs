@@ -11,21 +11,60 @@ const hashes={
   "EXECUTION-PG-TYPE-FAILED-LOG-RAW.json":"4c21500c6c0ef1a6e6f9b0c63ed12299b8f6de4a694fa01478f8226dcb2c02b3",
   "INITIAL-PRECALL-PASS-JOB-RAW.json":"9628dac346a3c95764e1baa7dbfd0431169ecd89b9d3e05511565c73e5c417a0",
   "INITIAL-PRECALL-PASS-LOG-RAW.json":"15dcc71a0d0884303d5d43c48175785524f1b3d5e72170dc9750a5f8d4daa0aa",
+  "MANAGED-CREDENTIAL-JOBS-RAW.json":"11947dd28b7174e822546a3600f95874a60d94ec4754e76b4bbd15933e0c87e6",
+  "MANAGED-CREDENTIAL-LOGS-RAW.json":"38311e0497cb5f0717ff44e8214406778ea7dc92f3345875effbe3a98a6a13d1",
   "LEGACY-PREFLIGHT-FAILED-JOB-RAW.json":"d7df18a1be2e3779151328b4db54ed5d66ff38200d967a7334ed977b87097d2e",
   "LEGACY-PREFLIGHT-FAILED-LOG-RAW.json":"70eb6fbbbdc994ce548886836c777d5d79a3812c7234749d892775078772dc8f",
   "OBSOLETE-STATE-PREFLIGHT-FAILED-JOB-RAW.json":"e60250fe25a8316f4de5c4fec8e10b4403fda020865e449e46f2de1136163d30",
   "OBSOLETE-STATE-PREFLIGHT-FAILED-LOG-RAW.json":"945e58b93869802d4006104660e3ad2326d0341187178271e7d62b630d4d1af8",
   "POSTFAIL-PRECALL-PASS-JOB-RAW.json":"195ce3396ce36cf2e5254ae7c31efd6ec4b52b0b719fe5295cf48b16ec683d87",
   "POSTFAIL-PRECALL-PASS-LOG-RAW.json":"3653f67bdba11772b55839614f93848c82fb5245562db600bb7820240091e812",
+  "EXACT-RUNTIME-DEPLOYS-RAW.json":"810b5c8429720cdb3c39c6fc7ec3927706b9b3e48ff6e4e5a5e25e1b3b173996",
+  "RENDER-ENV-CONFIG-REDACTED.json":"f4b4fefe46be2e3d1f7af41d8833d92b79de2e42718e1cdb562d416dc7dd545c",
+  "SUCCESSOR-AUTHORIZATION-JOB-RAW.json":"2cc0768ba293bf83e2633c4462e00c1d00f1584868a23fd5039fea66958f4669",
+  "SUCCESSOR-AUTHORIZATION-LOG-RAW.json":"034898a537d2ed05b56ce52a52ea0b7519fb909b46278bc8187ad6f6ad1ff950",
+  "SUCCESSOR-PRECALL-JOB-RAW.json":"e6b47e0ce792cd7855261972e6c1e0fff09e05d9d2244e726dcb83032bd48c4e",
+  "SUCCESSOR-PRECALL-LOG-RAW.json":"4d9665fad99574ec8c7da4a374b327f2fdce33e0370a7361a555fd256cf424b7",
   "TASK-RAW.json":"f298733ce002b7f3c92aaaecb8cd89fde7b643a7c8f4c39b0a2a0d578bc86408",
 };
 const raw={};for(const [name,hash] of Object.entries(hashes)){const bytes=read(name);assert.equal(crypto.createHash("sha256").update(bytes).digest("hex"),hash,name);raw[name]=JSON.parse(bytes)}
-const task=raw["TASK-RAW.json"],credential=raw["CREDENTIAL-PREFLIGHT.json"];
+const task=raw["TASK-RAW.json"];
 assert.deepEqual([task.id,task.type,task.task,task.sha],["1788216339000-reviewer-TASK","TASK","SCORE80-NORMAL-PROVIDER-EVIDENCE-20260901","4c6023ca6406d28065ae5a64dcf5bbcae4f1cb6a"]);
-assert.deepEqual([credential.worker_key_present,credential.web_key_absent,credential.production_key_present,
-  credential.worker_distinct_from_production_shared,credential.authenticated_nonmutating_probe.http_status,
-  credential.authenticated_nonmutating_probe.authenticated,credential.provider_post,credential.secret_value_observed,
-  credential.secret_value_output],[true,true,true,true,404,true,false,false,false]);
+
+const managedJobs=raw["MANAGED-CREDENTIAL-JOBS-RAW.json"],managedLogs=raw["MANAGED-CREDENTIAL-LOGS-RAW.json"];
+const byJob=Object.fromEntries(managedJobs.map(value=>[value.id,value]));
+assert.deepEqual([byJob["job-dab0idmk1f9s739of47g"].serviceId,byJob["job-dab0idmk1f9s739of47g"].status],["srv-d9n28ue417fc73ch2b60","succeeded"]);
+assert.deepEqual([byJob["job-dab0mkvavr4c73een4r0"].serviceId,byJob["job-dab0mkvavr4c73een4r0"].status],["srv-d9n28tijnfac73a87lt0","succeeded"]);
+const managedReceipt=(event)=>managedLogs.map(x=>{try{return JSON.parse(x.message)}catch{return null}}).find(x=>x?.event===event);
+const workerCredential=managedReceipt("CANDIDATE4_MANAGED_WORKER_CREDENTIAL_PROBE_PASS");
+const webAbsent=managedReceipt("CANDIDATE4_MANAGED_WEB_KEY_ABSENCE_PASS");
+assert.deepEqual([workerCredential.render_service_id,workerCredential.key_sha256,workerCredential.probe_method,
+  workerCredential.http_status,workerCredential.authenticated,workerCredential.provider_post,workerCredential.secret_value_output],
+  ["srv-d9n28ue417fc73ch2b60","e235f534009788cbcb817e86779919604b8cc4255c98d62e0ce13829587603ab","GET",404,true,false,false]);
+assert.deepEqual([webAbsent.render_service_id,webAbsent.render_git_commit,webAbsent.key_present,webAbsent.provider_post],
+  ["srv-d9n28tijnfac73a87lt0","23fa4923ec667a44ef8044e309140ee169864f88",false,false]);
+assert.ok(managedLogs.some(x=>x.message==="CANDIDATE4_MANAGED_WEB_KEY_ABSENCE_FAIL"),"stale web credential discovery must remain archived");
+const envConfig=raw["RENDER-ENV-CONFIG-REDACTED.json"],envByService=Object.fromEntries(envConfig.services.map(x=>[x.service_id,x]));
+assert.equal(envConfig.pagination_complete,true);assert.equal(envConfig.production_mutation,false);
+assert.deepEqual(envByService["srv-d9n28tijnfac73a87lt0"].key_rows,[]);
+assert.equal(envByService["srv-d9n28ue417fc73ch2b60"].key_rows[0].value_sha256,workerCredential.key_sha256);
+assert.equal(envByService["srv-d9ni3ndaeets73c07kq0"].key_rows[0].value_sha256,"13503e470ca13bb18eddb001c492a28e9c91ffa34513592e7a4768c7da6342cf");
+assert.notEqual(workerCredential.key_sha256,envByService["srv-d9ni3ndaeets73c07kq0"].key_rows[0].value_sha256);
+
+for(const deployment of raw["EXACT-RUNTIME-DEPLOYS-RAW.json"]){assert.equal(deployment.status,"live");assert.equal(deployment.commit.id,"23fa4923ec667a44ef8044e309140ee169864f88")}
+assert.deepEqual(raw["SUCCESSOR-AUTHORIZATION-JOB-RAW.json"].map(x=>[x.id,x.status]),[["job-dab0n5id0e5s73d0s7a0","succeeded"]]);
+const successor=JSON.parse(raw["SUCCESSOR-AUTHORIZATION-LOG-RAW.json"].find(x=>x.message.startsWith("{"))?.message??"null");
+assert.equal(successor.event,"JJ_GLOW_PROVIDER_RUNTIME_SUCCESSOR_AUTHORIZED_NO_POST");
+assert.deepEqual([successor.prior_provider_runtime_sha,successor.provider_runtime_sha,successor.authorizer_deploy_sha],
+  ["4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1","23fa4923ec667a44ef8044e309140ee169864f88","23fa4923ec667a44ef8044e309140ee169864f88"]);
+assert.deepEqual([successor.provider_posts,successor.provider_tasks,successor.outputs,successor.publication],[0,0,0,false]);
+assert.deepEqual(raw["SUCCESSOR-PRECALL-JOB-RAW.json"].map(x=>[x.id,x.status]),[["job-dab0p0c9v7es73bn44rg","succeeded"]]);
+const successorPrecall=JSON.parse(raw["SUCCESSOR-PRECALL-LOG-RAW.json"].find(x=>x.message.startsWith("{"))?.message??"null");
+assert.equal(successorPrecall.event,"CANDIDATE4_PROVIDER_PRECALL_FREEZE_PASS");assert.equal(successorPrecall.runtime_sha,"23fa4923ec667a44ef8044e309140ee169864f88");
+assert.deepEqual([successorPrecall.database_to_r2_reference_digest,successorPrecall.approved_script_digest,successorPrecall.cross_row_metadata],['PASS','PASS','PASS']);
+assert.deepEqual([successorPrecall.provider_post_count,successorPrecall.provider_tasks,successorPrecall.outputs,successorPrecall.publication,
+  successorPrecall.queue_paused,successorPrecall.queue_counts.active,successorPrecall.contract_sha256],
+  [0,0,0,false,true,0,"9cfbbed2ae2088a40293ea58c9abad8fe89dd35196a804aebd1a885b43f7fa62"]);
 
 const job=(name)=>raw[name],messages=(name)=>raw[name].map(x=>x.message).join("\n");
 assert.deepEqual([job("LEGACY-PREFLIGHT-FAILED-JOB-RAW.json").id,job("LEGACY-PREFLIGHT-FAILED-JOB-RAW.json").status],
@@ -66,5 +105,7 @@ assert.match(preflight,/const RUNTIME="23fa4923ec667a44ef8044e309140ee169864f88"
 assert.match(preflight,/normal_evidence_runtime_successor_authorizations/);
 assert.match(execute,/RENDER_GIT_COMMIT!==RUNTIME/);assert.match(execute,/RACUN_WORKER_DETERMINISTIC==="1"/);assert.match(execute,/!paused\|\|Number\(counts\.active\)!==0/);
 assert.match(execute,/const RUNTIME="23fa4923ec667a44ef8044e309140ee169864f88"/);
+assert.match(execute,/const WORKER_KEY_SHA256="e235f534009788cbcb817e86779919604b8cc4255c98d62e0ce13829587603ab"/);
+assert.match(execute,/CANDIDATE4_ONE_SHOT_WORKER_KEY_ATTESTATION_MISMATCH/);
 assert.match(execute,/processPostgresJob\(JOB,\{retryViaQueue:true\}\)/);assert.match(execute,/auto_retry:false/);
 console.log("CANDIDATE4_ACTIVATED_PRECALL_AND_PARAMETER_TYPING_REMEDIATION=PASS");
