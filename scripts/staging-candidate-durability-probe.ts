@@ -83,8 +83,8 @@ async function create() {
       await setup.query(`INSERT INTO products (id,user_id,name,price_idr,category,product_visual_desc,images,raw_meta,claims,created_at,
         product_type_token,product_type_confirmed_token,product_type_confirmed_by,product_type_confirmed_at,product_type_version,product_type_state,
         category_review_state,category_review_reason,category_review_version)
-        VALUES ($1,$2,'NONCANONICAL DURABILITY FIXTURE',0,'beauty','synthetic fixture',$3,'{}','[]',$4,
-        'serum wajah','serum wajah',$2,$4,1,'CONFIRMED','CLEAR',NULL,1)`, [ids.product,ids.user,JSON.stringify([ids.reference]),now]);
+        VALUES ($1,$2,'NONCANONICAL DURABILITY FIXTURE',0,'beauty','synthetic fixture',$3,'{}','[]',$4::text,
+        'serum wajah','serum wajah',$2,$4::timestamptz,1,'CONFIRMED','CLEAR',NULL,1)`, [ids.product,ids.user,JSON.stringify([ids.reference]),now]);
       await setup.query(`INSERT INTO scripts (id,product_id,hook_family,emotion,register,segments,caption,hashtags,validation_result,quality_tier,approved_by_user_at,created_at)
         VALUES ($1,$2,'H1','netral','bestie','[]','fixture','[]','{}','high_quality',$3,$3)`, [ids.script,ids.product,now]);
       await setup.query("COMMIT");

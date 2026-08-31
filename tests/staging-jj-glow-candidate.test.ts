@@ -134,6 +134,8 @@ test("binding DB diperiksa pada client transaksi yang sama dan probe runtime dib
 
   const probe = fs.readFileSync("scripts/staging-candidate-durability-probe.ts", "utf8");
   assert.match(probe, /expectedDatabaseBindingSha256:binding\.sha256/);
+  assert.match(probe, /\$4::text,[\s\S]*\$4::timestamptz/,
+    "fixture timestamp must be explicitly typed across legacy TEXT and TIMESTAMPTZ columns");
   assert.match(probe, /catch \(error\) \{\s*try \{ await cleanupFixture\(\); \}/);
   assert.match(probe, /DELETE FROM jobs WHERE user_id=\$1 AND product_id=\$2 AND script_id=\$3/);
 });
