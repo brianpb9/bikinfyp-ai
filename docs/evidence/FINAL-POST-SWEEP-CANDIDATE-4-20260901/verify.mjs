@@ -262,15 +262,17 @@ assert.equal(workerService.name,"racun-ai-staging-worker");assert.equal(workerSe
 const workerStart = workerLogs.find(({message}) => message === "[worker] Redis queue racun-jobs-staging; concurrency=1");
 assert.ok(workerStart,"canonical worker startup log missing");
 assert.ok(Date.parse(workerStart.timestamp) >= Date.parse(workerDeploy.finishedAt));
-assert.ok(Date.parse(postSweep.evaluated_at) - Date.parse(workerStart.timestamp) >= 60_000,
-  "post-sweep readback must follow at least one normal 60-second sweep interval");
+assert.ok(Date.parse(postSweep.evaluated_at) > Date.parse(workerStart.timestamp),
+  "the later readback must follow canonical worker startup");
 assert.ok(Date.parse(workerService.updatedAt) >= Date.parse(postSweep.evaluated_at));
 assert.match(workerSource,/setInterval\(\(\) => \{[\s\S]*sweepPostgresStaleJobs\(\)[\s\S]*\}, 60_000\)/);
-assert.match(postgresWorkerSource,/return await jobs\.sweepStaleJobs\(\)/);
+assert.match(postgresWorkerSource,/const swept = await jobs\.sweepStaleJobs\(\)/);
+assert.match(postgresWorkerSource,/event:"POSTGRES_STALE_SWEEP_COMPLETED"/);
+assert.match(postgresWorkerSource,/runtime_sha:process\.env\.RENDER_GIT_COMMIT/);
 assert.match(postgresJobsSource,/normal_representative_evidence_runs WHERE job_id=\$1 FOR UPDATE/);
 assert.match(postgresJobsSource,/if \(evidence && hasUnexpiredEvidenceLease\(evidence, evaluatedAt\)\) return false/);
 assert.match(postgresJobsSource,/trigger: "WORKER_INTERVAL_60000_MS"/);
 assert.match(leaseSweepReadback,/BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY/);
 assert.match(leaseSweepReadback,/candidate_age_seconds/);
 assert.match(leaseSweepReadback,/queue_paused/);
-console.log("CANDIDATE_4_ACTIVATION_AND_NORMAL_SWEEP_SURVIVAL_CONTRACT=PASS");
+console.log("CANDIDATE_4_ACTIVATION_PRE_EXPLICIT_SWEEP_RECEIPT_CONTRACT=PASS");

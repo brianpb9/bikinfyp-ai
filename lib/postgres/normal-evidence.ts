@@ -44,9 +44,21 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
         return { action: "STOP_NO_RETRY" as const };
       }
       const evidenceRaw = (await client.query(
-        "SELECT * FROM normal_representative_evidence_runs WHERE job_id=$1 FOR UPDATE", [jobId]
+        `SELECT *,
+           (lease_kind='ACTIVE_EVIDENCE_LEASE'
+             AND lease_last_progress_at IS NOT NULL
+             AND lease_expires_at IS NOT NULL
+             AND lease_expires_at > CURRENT_TIMESTAMP) active_evidence_lease
+           FROM normal_representative_evidence_runs WHERE job_id=$1 FOR UPDATE`, [jobId]
       )).rows[0];
       if (evidenceRaw && evidenceRaw.state === "PREPOST_READY" && Number(evidenceRaw.provider_post_count) === 0) {
+        // Database time is authoritative and this row is locked. An expired
+        // pre-provider lease must be reactivated explicitly; claimPost may not
+        // silently revive it and spend before the periodic stale sweep runs.
+        if (evidenceRaw.active_evidence_lease !== true) {
+          await client.query("COMMIT");
+          return { action: "STOP_NO_RETRY" as const };
+        }
         const evidence = map(evidenceRaw);
         if (isJjGlowFinalEvidenceContract(evidence)) {
           const frozen = (await client.query(`SELECT s.*,j.provider_video,j.provider_voice,j.output_url,
@@ -68,7 +80,10 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
           `UPDATE normal_representative_evidence_runs
               SET provider_post_count=1,state='POST_ATTEMPTED',payload_sha256=$2,post_attempted_at=$3,updated_at=$3,
                   lease_kind=$4,lease_last_progress_at=$3,lease_expires_at=$5
-            WHERE job_id=$1 AND state='PREPOST_READY' AND provider_post_count=0 RETURNING job_id`,
+            WHERE job_id=$1 AND state='PREPOST_READY' AND provider_post_count=0
+              AND lease_kind='ACTIVE_EVIDENCE_LEASE' AND lease_last_progress_at IS NOT NULL
+              AND lease_expires_at IS NOT NULL AND lease_expires_at > CURRENT_TIMESTAMP
+            RETURNING job_id`,
           [jobId,payloadSha256,now,lease.kind,lease.expiresAt]);
         if (claimed.rowCount !== 1) throw new Error("NORMAL_EVIDENCE_POST_CLAIM_RACE");
         await client.query("COMMIT");

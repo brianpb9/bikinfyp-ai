@@ -97,9 +97,10 @@ test("stale abandoned job is refunded with a stable decision receipt", {skip,con
     assert.equal(await repo.sweepStaleJobs(Date.parse(EVALUATED_AT)),1);
     const job=(await pool.query("SELECT state FROM jobs WHERE id=$1",[f.jobId])).rows[0];
     const terminal=(await pool.query("SELECT type,delta FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','release')",[f.jobId])).rows;
-    const failed=(await pool.query("SELECT meta FROM audit_log WHERE entity_id=$1 AND action='job.transition' ORDER BY created_at,id LIMIT 1",[f.jobId])).rows[0];
+    const transitions=(await pool.query("SELECT meta FROM audit_log WHERE entity_id=$1 AND action='job.transition' ORDER BY created_at,id",[f.jobId])).rows;
     assert.equal(job.state,"REFUNDED");assert.deepEqual(terminal.map(x=>[x.type,Number(x.delta)]),[["release",12000]]);
-    const meta=JSON.parse(failed.meta);assert.equal(meta.reason_code,"STALE_SWEEP_TIMEOUT");assert.equal(meta.threshold_seconds,1800);
+    const meta=transitions.map(({meta})=>JSON.parse(meta)).find((entry)=>entry.reason_code==="STALE_SWEEP_TIMEOUT");
+    assert.ok(meta,"stable stale-sweep decision receipt missing");assert.equal(meta.threshold_seconds,1800);
     assert.equal(meta.last_progress_at,OLD);assert.equal(meta.evaluated_at,EVALUATED_AT);assert.equal(meta.state,"QUEUED");assert.equal(meta.predicate_match,true);
     const release=JSON.parse((await pool.query("SELECT meta FROM audit_log WHERE entity_id=$1 AND action='credit.release'",[f.jobId])).rows[0].meta);
     assert.equal(release.refund_reason_code,"STALE_SWEEP_TIMEOUT");
@@ -114,6 +115,25 @@ test("active pre-provider evidence lease is not refunded", {skip,concurrency:fal
     assert.equal((await pool.query("SELECT state FROM jobs WHERE id=$1",[f.jobId])).rows[0].state,"QUEUED");
     assert.equal((await pool.query("SELECT count(*)::int n FROM credit_ledger WHERE job_id=$1 AND type='release'",[f.jobId])).rows[0].n,0);
   } finally { await repo.close(); await cleanup(f); }
+});
+
+test("expired PREPOST_READY lease cannot claim a provider POST", {skip,concurrency:false}, async () => {
+  const f=await fixture();
+  const progressAt=new Date(Date.now()-2*60*60*1000).toISOString();
+  const expiresAt=new Date(Date.now()-60*60*1000).toISOString();
+  try {
+    await evidence(f,{progressAt,expiresAt});
+    const { pgNormalEvidenceStore } = await import("../lib/postgres/normal-evidence");
+    const claim=await pgNormalEvidenceStore.claimPost(f.jobId,"e".repeat(64));
+    assert.deepEqual(claim,{action:"STOP_NO_RETRY"});
+    const row=(await pool.query(
+      "SELECT state,provider_post_count,payload_sha256,lease_kind,lease_expires_at FROM normal_representative_evidence_runs WHERE job_id=$1",
+      [f.jobId]
+    )).rows[0];
+    assert.equal(row.state,"PREPOST_READY");assert.equal(Number(row.provider_post_count),0);
+    assert.equal(row.payload_sha256,null);assert.equal(row.lease_kind,"ACTIVE_EVIDENCE_LEASE");
+    assert.equal(new Date(row.lease_expires_at).toISOString(),expiresAt);
+  } finally { await cleanup(f); }
 });
 
 test("expired pre-provider lease follows STOP_NO_RETRY plus refund contract", {skip,concurrency:false}, async () => {

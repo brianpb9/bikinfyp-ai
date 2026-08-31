@@ -102,10 +102,15 @@ test("hands-only exception is exact-candidate only and retains one-request provi
   const worker = fs.readFileSync(new URL("../lib/postgres/worker.ts", import.meta.url), "utf8");
   assert.match(worker, /reviewedEvidenceSinglePost: exactJjGlowEvidence/);
   assert.match(worker, /jjGlowApprovedScriptSha256/);
+  assert.match(worker, /event:"POSTGRES_STALE_SWEEP_COMPLETED"/);
+  assert.match(worker, /runtime_sha:process\.env\.RENDER_GIT_COMMIT/);
+  assert.match(worker, /trigger:"WORKER_INTERVAL_60000_MS"/);
   const store = fs.readFileSync(new URL("../lib/postgres/normal-evidence.ts", import.meta.url), "utf8");
   assert.match(store, /BEGIN ISOLATION LEVEL SERIALIZABLE/);
   assert.match(store, /provider_video !== null \|\| frozen\.provider_voice !== null \|\| frozen\.output_url !== null/);
   assert.match(store, /jjGlowApprovedScriptSha256\(frozen, frozen\.manual_audit\)/);
+  assert.match(store, /lease_expires_at > CURRENT_TIMESTAMP/);
+  assert.match(store, /if \(evidenceRaw\.active_evidence_lease !== true\)/);
   const approval = fs.readFileSync(new URL("../app/api/scripts/\[id\]/approve/route.ts", import.meta.url), "utf8");
   assert.match(approval, /if \(script\.job_id\) throw ERR\.BAD_REQUEST/);
 });

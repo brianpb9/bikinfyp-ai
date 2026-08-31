@@ -1267,6 +1267,7 @@ async function persistReadyOutput(row: WorkerRow, jobs: PgJobsRepository, pool: 
 
 /** The Redis worker owns timeout recovery while PostgreSQL is the runtime. */
 export async function sweepPostgresStaleJobs(): Promise<number> {
+  const startedAt = new Date().toISOString();
   const jobs = new PgJobsRepository(assertUrl(), { stateTimeoutsMin: config.stateTimeoutsMin });
   try {
     // Penyapuan yang sama juga menutup celah arah sebaliknya: job yang SUKSES
@@ -1276,6 +1277,18 @@ export async function sweepPostgresStaleJobs(): Promise<number> {
     if (dirapikan) console.warn(`[sweep] ${dirapikan} job READY di-capture susulan (hold menggantung)`);
     const promoDirapikan = await jobs.reconcileReadyPromoHolds();
     if (promoDirapikan) console.warn(`[sweep] ${promoDirapikan} promo READY di-capture susulan (hold menggantung)`);
-    return await jobs.sweepStaleJobs();
+    const swept = await jobs.sweepStaleJobs();
+    console.log(JSON.stringify({
+      event:"POSTGRES_STALE_SWEEP_COMPLETED",
+      component:"PgJobsRepository.sweepStaleJobs",
+      trigger:"WORKER_INTERVAL_60000_MS",
+      runtime_sha:process.env.RENDER_GIT_COMMIT?.trim() || null,
+      started_at:startedAt,
+      completed_at:new Date().toISOString(),
+      swept_jobs:swept,
+      reconciled_ready_holds:dirapikan,
+      reconciled_promo_holds:promoDirapikan,
+    }));
+    return swept;
   } finally { await jobs.close(); }
 }
