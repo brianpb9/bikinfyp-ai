@@ -1,0 +1,21 @@
+[
+  {
+    "id": "0b05a006-0490-4854-9269-8d47b01b0035",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "job-dab094n40ujc739ejtu0"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "JJ_GLOW_FINAL_EVIDENCE_FAIL JJ_GLOW_FINAL_EVIDENCE_PRIOR_EFFECT_OR_CARDINALITY",
+    "timestamp": "2026-08-31T22:47:53.094018626Z"
+  }
+]

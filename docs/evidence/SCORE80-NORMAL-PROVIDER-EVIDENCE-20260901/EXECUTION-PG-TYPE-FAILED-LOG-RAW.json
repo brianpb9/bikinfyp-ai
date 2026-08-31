@@ -1,0 +1,21 @@
+[
+  {
+    "id": "7f47f804-9c93-41e6-823a-1511c2daab82",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "job-dab0ar3tqb8s73edklhg"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "CANDIDATE4_ONE_SHOT_WORKER_FAIL inconsistent types deduced for parameter $3",
+    "timestamp": "2026-08-31T22:51:46.539827124Z"
+  }
+]

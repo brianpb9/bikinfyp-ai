@@ -1,0 +1,10 @@
+{
+  "createdAt": "2026-08-31T22:51:24.582684Z",
+  "finishedAt": "2026-08-31T22:51:55Z",
+  "id": "job-dab0ar3tqb8s73edklhg",
+  "planId": "plan-srv-006",
+  "serviceId": "srv-d9n28ue417fc73ch2b60",
+  "startCommand": "npx tsx -e 'import {assertRuntimeAuthSecretSafe} from \"./lib/runtime/assert-runtime-auth-secret\";import {setTaskMemo} from \"./lib/providers/task-memo\";import {pgTaskMemo} from \"./lib/postgres/task-memo\";import {installNormalEvidenceStoreForRuntime} from \"./lib/providers/normal-evidence\";import {pgNormalEvidenceStore} from \"./lib/postgres/normal-evidence\";import {processPostgresJob} from \"./lib/postgres/worker\";(async()=>{assertRuntimeAuthSecretSafe();setTaskMemo(pgTaskMemo);installNormalEvidenceStoreForRuntime(true,pgNormalEvidenceStore);await processPostgresJob(\"2c49a5c8-9465-4400-a214-159336a2c097\",{retryViaQueue:true});console.log(JSON.stringify({event:\"CANDIDATE4_ONE_SHOT_WORKER_EXIT\",job_id:\"2c49a5c8-9465-4400-a214-159336a2c097\",runtime_sha:process.env.RENDER_GIT_COMMIT,retry_via_queue:false,publication:false}))})().catch(e=>{console.error(\"CANDIDATE4_ONE_SHOT_WORKER_FAIL\",e.message);process.exit(1)});'",
+  "startedAt": "2026-08-31T22:51:24Z",
+  "status": "failed"
+}

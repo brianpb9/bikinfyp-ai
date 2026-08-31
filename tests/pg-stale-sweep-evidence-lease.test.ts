@@ -139,6 +139,25 @@ test("expired PREPOST_READY lease cannot claim a provider POST", {skip,concurren
   } finally { await cleanup(f); }
 });
 
+test("active PREPOST_READY lease claims once across TEXT and TIMESTAMPTZ progress columns", {skip,concurrency:false}, async () => {
+  const f=await fixture("GENERATING_VISUAL"),payload="e".repeat(64);
+  try {
+    const progressAt=new Date().toISOString();
+    await evidence(f,{progressAt,expiresAt:normalEvidenceLeaseWindow(progressAt).expiresAt});
+    const { pgNormalEvidenceStore } = await import("../lib/postgres/normal-evidence");
+    assert.deepEqual(await pgNormalEvidenceStore.claimPost(f.jobId,payload),{action:"POST"});
+    const row=(await pool.query(
+      `SELECT state,provider_post_count,payload_sha256,post_attempted_at,updated_at,
+              lease_last_progress_at,lease_expires_at
+         FROM normal_representative_evidence_runs WHERE job_id=$1`,[f.jobId]
+    )).rows[0];
+    assert.equal(row.state,"POST_ATTEMPTED");assert.equal(Number(row.provider_post_count),1);
+    assert.equal(row.payload_sha256,payload);assert.equal(row.post_attempted_at,row.updated_at);
+    assert.equal(new Date(row.lease_last_progress_at).toISOString(),row.post_attempted_at);
+    assert.ok(Date.parse(row.lease_expires_at)>Date.parse(row.lease_last_progress_at));
+  } finally { await cleanup(f); }
+});
+
 test("expired pre-provider lease follows STOP_NO_RETRY plus refund contract", {skip,concurrency:false}, async () => {
   const f=await fixture(),repo=await sweeper();
   try {

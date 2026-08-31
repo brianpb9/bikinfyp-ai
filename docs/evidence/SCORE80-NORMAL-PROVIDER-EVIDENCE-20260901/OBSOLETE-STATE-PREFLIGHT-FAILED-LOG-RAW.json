@@ -1,0 +1,21 @@
+[
+  {
+    "id": "a145d449-8675-4402-b346-9b8c7030d143",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "job-dab0bbuk1f9s739nqk5g"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "CANDIDATE4_PROVIDER_PRECALL_FREEZE_FAIL C4_PROVIDER_PREFLIGHT_JOB_CROSS_ROW",
+    "timestamp": "2026-08-31T22:52:35.929383508Z"
+  }
+]

@@ -88,8 +88,9 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
         const now = new Date().toISOString(), lease = normalEvidenceLeaseWindow(now);
         const claimed = await client.query(
           `UPDATE normal_representative_evidence_runs
-              SET provider_post_count=1,state='POST_ATTEMPTED',payload_sha256=$2,post_attempted_at=$3,updated_at=$3,
-                  lease_kind=$4,lease_last_progress_at=$3,lease_expires_at=$5
+              SET provider_post_count=1,state='POST_ATTEMPTED',payload_sha256=$2,
+                  post_attempted_at=$3::text,updated_at=$3::text,
+                  lease_kind=$4,lease_last_progress_at=$3::timestamptz,lease_expires_at=$5::timestamptz
             WHERE job_id=$1 AND state='PREPOST_READY' AND provider_post_count=0
               AND lease_kind='ACTIVE_EVIDENCE_LEASE' AND lease_last_progress_at IS NOT NULL
               AND lease_expires_at IS NOT NULL AND lease_expires_at > CURRENT_TIMESTAMP

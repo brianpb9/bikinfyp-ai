@@ -1,0 +1,18 @@
+{
+  "id": "1788216339000-reviewer-TASK",
+  "ts": "2026-08-31T22:45:39Z",
+  "from": "reviewer",
+  "to": "builder",
+  "type": "TASK",
+  "sha": "4c6023ca6406d28065ae5a64dcf5bbcae4f1cb6a",
+  "task": "SCORE80-NORMAL-PROVIDER-EVIDENCE-20260901",
+  "task_id": "SCORE80-NORMAL-PROVIDER-EVIDENCE-20260901",
+  "owner_id": "worker-a4c4c9e34f1c07f2",
+  "worker_id": "worker-a4c4c9e34f1c07f2",
+  "origin_branch": "feat/jj-glow-staging-rights-20260831",
+  "origin_worktree": "/private/tmp/bikinfyp-normal-metadata-acquisition.NftSNO",
+  "origin_repo_id": "044b48e48ac7f7d7",
+  "origin_repo_path": "/Users/hadrava/HDRV/03_UGC_AI_ID/app/.git",
+  "reply_to_id": "",
+  "body": "Reviewer-authoritative next approved closure task. Candidate #4 survival/runtime authorization evidence PASS at 4c6023ca6406d28065ae5a64dcf5bbcae4f1cb6a. Use only existing Candidate #4 job 2c49a5c8-9465-4400-a214-159336a2c097; no candidate #5. First perform fresh read-only authoritative metadata freeze and PostgreSQL-to-R2 reference digest verification, and freeze the existing cross-row evidence contract for independent Brand Fidelity, Anti-Slop, and Prompt/Verdict Archive verdicts. Preconditions: staging-only fresh BytePlus key active and distinct from exposed shared key; exact reviewed provider runtime; active evidence lease; provider_post_count=0; estimate 1.134 USD <= hard cap 1.25; max posts 1; no auto retry; no publication; no production/payment mutation. If every pre-call gate passes, execute exactly one normal representative provider POST. Ambiguous result STOP_NO_RETRY and reconcile original request only. Capture provider receipt, artifact identity, actual/committed cost, full prompt/model/verdict/archive/retrieval/redaction lineage, pixel-based brand and anti-slop QC. Submit exact-SHA evidence bundle for independent atomic row verdicts. Public payments OFF, production auto-deploy OFF."
+}
