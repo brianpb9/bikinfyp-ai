@@ -38,7 +38,8 @@ function validRow() {
   const row = {
     id: "job-row-id", persona_id: "persona-row-id", product_id: JJ_PRODUCT_ID, script_id: JJ_SCRIPT_ID,
     state: "QUEUED", creator_category: "lokal", provider_video: null, provider_voice: null, output_url: null,
-    provider_task_count: 0, hold_count: 1, hold_delta: -12_000, terminal_ledger_count: 0, job_ledger_net: -12_000,
+    provider_task_count: 0, output_count:0, fyp_posted_count:0, post_plan_count:0, provider_post_count:0,
+    hold_count: 1, hold_delta: -12_000, terminal_ledger_count: 0, job_ledger_net: -12_000,
     database_name: "private-staging-db", database_principal: "staging_role",
     database_server_address: "10.0.0.12", database_server_port: 5432,
     product_job_count: 1, product_script_count: 1,
@@ -138,6 +139,10 @@ describe("staging candidate lineage evidence", () => {
     assert.deepEqual(receipt.lineage, { job_id: "job-row-id", persona_id: "persona-row-id", subject_id: "persona-row-id", product_id: JJ_PRODUCT_ID, script_id: JJ_SCRIPT_ID });
     assert.equal(receipt.frozen_runtime.state, "QUEUED");
     assert.equal(receipt.frozen_runtime.provider_task_count, 0);
+    assert.equal(receipt.frozen_runtime.output_count, 0);
+    assert.equal(receipt.frozen_runtime.fyp_posted_count, 0);
+    assert.equal(receipt.frozen_runtime.post_plan_count, 0);
+    assert.equal(receipt.frozen_runtime.provider_post_count, 0);
     assert.equal(receipt.frozen_runtime.terminal_ledger_count, 0);
     assert.equal(receipt.frozen_runtime.job_ledger_net, -12_000);
     assert.equal(receipt.frozen_runtime.worker_required_suspended, true);
@@ -217,5 +222,16 @@ describe("staging candidate lineage evidence", () => {
     const extraHolds = structuredClone(validRow());
     extraHolds.hold_count = 3;
     assert.throws(() => buildStagingCandidateLineageReceipt(extraHolds, "2026-08-31T00:00:00.000Z", sha));
+  });
+
+  it("rejects every correlated output, provider-post, or publication surface", () => {
+    for (const field of ["output_count", "fyp_posted_count", "post_plan_count", "provider_post_count"] as const) {
+      const changed = structuredClone(validRow()); changed[field] = 1;
+      assert.throws(() => buildStagingCandidateLineageReceipt(changed, "2026-08-31T00:00:00.000Z", sha), /invariant/, field);
+    }
+    for (const field of ["provider_video", "provider_voice", "output_url"] as const) {
+      const changed = structuredClone(validRow()); (changed as Record<string, unknown>)[field] = "unexpected";
+      assert.throws(() => buildStagingCandidateLineageReceipt(changed, "2026-08-31T00:00:00.000Z", sha), /invariant/, field);
+    }
   });
 });

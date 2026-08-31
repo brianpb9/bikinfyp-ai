@@ -117,6 +117,14 @@ test("runner memakai OTP acak singkat dan mengirim digest admission", () => {
   assert.match(source, /DELETE FROM scripts WHERE id=\$1 AND job_id IS NULL RETURNING id/);
   assert.match(source, /deleted\.rowCount !== 1/);
   assert.doesNotMatch(source, /SELECT id FROM jobs WHERE script_id=\$1"[^\n]*\.catch/);
+  for (const query of [
+    "FROM outputs o WHERE o.job_id=j.id",
+    "FROM fyp_snapshots f WHERE f.job_id=j.id AND f.posted_url IS NOT NULL",
+    "FROM post_plans pp WHERE pp.job_id=j.id",
+    "FROM normal_representative_evidence_runs n WHERE n.job_id=j.id",
+  ]) assert.equal(source.split(query).length - 1, 2, `${query} wajib diperiksa same-process dan post-exit`);
+  assert.match(source, /final\.output_count !== 0[\s\S]*final\.provider_post_count !== 0/);
+  assert.match(source, /item\.output_count\) !== 0[\s\S]*item\.provider_post_count\) !== 0/);
   assert.match(source, /JJ_GLOW_CANONICAL_CREATE_AUTHORITY_REQUIRED/);
   assert.match(source, /JJ_GLOW_BOOTSTRAP_PASS/);
   assert.doesNotMatch(source, /const OTP\s*=|10 \* 60_000/);

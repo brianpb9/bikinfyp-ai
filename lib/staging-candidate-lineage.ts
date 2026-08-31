@@ -27,6 +27,10 @@ type CandidateRow = Record<string, unknown> & {
   provider_voice: string | null;
   output_url: string | null;
   provider_task_count: number;
+  output_count: number;
+  fyp_posted_count: number;
+  post_plan_count: number;
+  provider_post_count: number;
   hold_count: number;
   hold_delta: number;
   terminal_ledger_count: number;
@@ -140,6 +144,8 @@ export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt
     || row.state !== "QUEUED" || row.creator_category !== "lokal"
     || row.provider_video !== null || row.provider_voice !== null || row.output_url !== null
     || Number(row.provider_task_count) !== 0 || Number(row.hold_count) !== 1
+    || Number(row.output_count) !== 0 || Number(row.fyp_posted_count) !== 0
+    || Number(row.post_plan_count) !== 0 || Number(row.provider_post_count) !== 0
     || Number(row.hold_delta) !== -12_000 || Number(row.terminal_ledger_count) !== 0
     || Number(row.job_ledger_net) !== -12_000
     || !row.database_name || !row.database_principal || !row.database_server_address
@@ -226,6 +232,10 @@ export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt
       provider_voice_is_null: true,
       output_url_is_null: true,
       provider_task_count: Number(row.provider_task_count),
+      output_count: Number(row.output_count),
+      fyp_posted_count: Number(row.fyp_posted_count),
+      post_plan_count: Number(row.post_plan_count),
+      provider_post_count: Number(row.provider_post_count),
       hold_count: Number(row.hold_count),
       hold_delta: Number(row.hold_delta),
       terminal_ledger_count: Number(row.terminal_ledger_count),

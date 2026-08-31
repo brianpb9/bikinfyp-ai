@@ -270,6 +270,10 @@ async function main() {
     const final = (await pool.query(
       `SELECT j.*,s.approved_by_user_at,s.validation_result,p.creator_category,
         (SELECT count(*)::int FROM provider_tasks t WHERE t.job_id=j.id) provider_task_count,
+        (SELECT count(*)::int FROM outputs o WHERE o.job_id=j.id) output_count,
+        (SELECT count(*)::int FROM fyp_snapshots f WHERE f.job_id=j.id AND f.posted_url IS NOT NULL) fyp_posted_count,
+        (SELECT count(*)::int FROM post_plans pp WHERE pp.job_id=j.id) post_plan_count,
+        (SELECT coalesce(sum(n.provider_post_count),0)::int FROM normal_representative_evidence_runs n WHERE n.job_id=j.id) provider_post_count,
         (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='hold' AND l.delta=$2) hold_count
        FROM jobs j JOIN scripts s ON s.id=j.script_id JOIN personas p ON p.id=j.persona_id
        WHERE j.id=$1 AND j.user_id=$3 AND j.product_id=$4 AND j.org_id IS NULL`,
@@ -277,7 +281,9 @@ async function main() {
     )).rows[0];
     if (!final || final.script_id !== SCRIPT_ID || final.state !== "QUEUED" || !final.approved_by_user_at
         || final.creator_category !== "lokal" || final.provider_video || final.provider_voice || final.output_url
-        || final.provider_task_count !== 0 || final.hold_count !== 1) throw new Error("post-admission cross-row invariant mismatch");
+        || final.provider_task_count !== 0 || final.output_count !== 0 || final.fyp_posted_count !== 0
+        || final.post_plan_count !== 0 || final.provider_post_count !== 0
+        || final.hold_count !== 1) throw new Error("post-admission cross-row invariant mismatch");
     const validation = JSON.parse(final.validation_result);
     const manifest = JSON.parse(final.approved_reference_manifest);
     if (validation.script_source !== "manual" || validation.passed !== true
@@ -321,7 +327,8 @@ async function main() {
       lifecycle_correlation_id:lifecycleCorrelationId,create_actor:PRINCIPAL,create_timestamp:lifecycleMeta.create_timestamp,
       transaction_commit_receipt:lifecycleMeta.transaction_commit_receipt,
       post_commit_state_sha256:admitted.body.lifecycle_receipt.stateSha256,
-      same_process_readback:true,provider_tasks:0,provider_posts:0,publication:false}));
+      same_process_readback:true,provider_tasks:Number(final.provider_task_count),provider_posts:Number(final.provider_post_count),
+      outputs:Number(final.output_count),fyp_posted:Number(final.fyp_posted_count),post_plans:Number(final.post_plan_count),publication:false}));
   } catch (error) {
     if (inserted) {
       // A read failure is ambiguity, never proof of absence. Leave every row
@@ -379,6 +386,10 @@ async function postExitReadback() {
     const row = (await client.query(
       `SELECT j.id,j.product_id,j.script_id,j.user_id,j.state,j.approved_reference_manifest,j.job_product_snapshot,
         (SELECT count(*)::int FROM provider_tasks t WHERE t.job_id=j.id) provider_task_count,
+        (SELECT count(*)::int FROM outputs o WHERE o.job_id=j.id) output_count,
+        (SELECT count(*)::int FROM fyp_snapshots f WHERE f.job_id=j.id AND f.posted_url IS NOT NULL) fyp_posted_count,
+        (SELECT count(*)::int FROM post_plans pp WHERE pp.job_id=j.id) post_plan_count,
+        (SELECT coalesce(sum(n.provider_post_count),0)::int FROM normal_representative_evidence_runs n WHERE n.job_id=j.id) provider_post_count,
         (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='hold') hold_count,
         a.actor lifecycle_actor,a.meta lifecycle_meta
        FROM jobs j JOIN audit_log a ON a.entity='jobs' AND a.entity_id=j.id AND a.action='candidate.lifecycle.created'
@@ -393,6 +404,8 @@ async function postExitReadback() {
       database_binding_sha256:binding.sha256};
     if (item.user_id !== PRINCIPAL || item.lifecycle_actor !== PRINCIPAL || meta.correlation_id !== correlationId
       || item.state !== "QUEUED" || Number(item.provider_task_count) !== 0 || Number(item.hold_count) !== 1
+      || Number(item.output_count) !== 0 || Number(item.fyp_posted_count) !== 0
+      || Number(item.post_plan_count) !== 0 || Number(item.provider_post_count) !== 0
       || canonicalSha(state) !== expectedStateSha256 || canonicalSha(meta.post_commit_state) !== expectedStateSha256
       || meta.post_commit_state_sha256 !== expectedStateSha256) {
       throw new Error("post-exit lifecycle state mismatch");
@@ -400,7 +413,9 @@ async function postExitReadback() {
     await client.query("COMMIT");
     console.log(JSON.stringify({event:"JJ_GLOW_POST_EXIT_READBACK_PASS",job_id:jobId,lifecycle_correlation_id:correlationId,
       post_commit_state_sha256:expectedStateSha256,new_process:true,new_pool:true,fresh_connection:true,
-      provider_tasks:0,provider_posts:0,publication:false,database_binding_sha256:binding.sha256}));
+      provider_tasks:Number(item.provider_task_count),provider_posts:Number(item.provider_post_count),
+      outputs:Number(item.output_count),fyp_posted:Number(item.fyp_posted_count),post_plans:Number(item.post_plan_count),
+      publication:false,database_binding_sha256:binding.sha256}));
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
   finally { client.release(); await pool.end(); }
 }
