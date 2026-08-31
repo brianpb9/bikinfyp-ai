@@ -1,0 +1,17 @@
+{
+  "query": "render deploys list srv-d9n28tijnfac73a87lt0 --output json | select first item",
+  "receipt": {
+    "commit": {
+      "createdAt": "2026-08-31T06:03:27Z",
+      "id": "630a0a1369522a2e17ac79b3eb136a4c3bc9e625",
+      "message": "fix managed durability fixture typing"
+    },
+    "createdAt": "2026-08-31T06:08:31.037031Z",
+    "finishedAt": "2026-08-31T06:11:49.845642Z",
+    "id": "dep-daahkngn74is73b08ba0",
+    "startedAt": "2026-08-31T06:08:31.008016Z",
+    "status": "live",
+    "trigger": "api",
+    "updatedAt": "2026-08-31T06:12:19.466267Z"
+  }
+}

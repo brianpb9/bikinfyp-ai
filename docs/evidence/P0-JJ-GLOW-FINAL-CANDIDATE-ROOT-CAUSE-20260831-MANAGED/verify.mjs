@@ -7,6 +7,9 @@ const evidence = JSON.parse(fs.readFileSync(
 const raw = JSON.parse(fs.readFileSync(
   new URL("./raw-managed-events.json", import.meta.url), "utf8",
 ));
+const deployRaw = JSON.parse(fs.readFileSync(new URL("./RAW-DEPLOY.json", import.meta.url), "utf8"));
+const jobsRaw = JSON.parse(fs.readFileSync(new URL("./RAW-DURABILITY-JOBS.json", import.meta.url), "utf8"));
+const logsRaw = JSON.parse(fs.readFileSync(new URL("./RAW-RENDER-LOGS.json", import.meta.url), "utf8"));
 const sha = "630a0a1369522a2e17ac79b3eb136a4c3bc9e625";
 const binding = "6d8f03e28a15f4f6fe729387c6f8a7e94645853d6729fd3c908a636b1d47683c";
 
@@ -15,6 +18,9 @@ assert.equal(evidence.reviewed_runtime_sha, sha);
 assert.equal(raw.deploy.commit, sha);
 assert.equal(raw.deploy.status, "live");
 assert.deepEqual(raw.health, { ok: true, build_sha: sha });
+assert.equal(deployRaw.receipt.id, evidence.staging_web.deploy_id);
+assert.equal(deployRaw.receipt.commit.id, sha);
+assert.equal(deployRaw.receipt.status, "live");
 assert.equal(evidence.staging_web.deploy_status, "live");
 assert.equal(evidence.staging_web.health_ok, true);
 assert.equal(evidence.staging_web.health_build_sha, sha);
@@ -55,6 +61,19 @@ assert.equal(create.job_id, readback.job_id);
 assert.equal(create.binding_sha256, readback.binding_sha256);
 assert.deepEqual(create.canonical_before, create.canonical_after);
 assert.deepEqual(readback.canonical_before, readback.canonical_after);
+assert.deepEqual(jobsRaw.receipts.map(({ id, status }) => ({ id, status })), [
+  { id: evidence.durability.create_process_job_id, status: "succeeded" },
+  { id: evidence.durability.readback_cleanup_process_job_id, status: "succeeded" },
+]);
+const capturedMessages = new Map(logsRaw.events.map((item) => [item.resource, JSON.parse(item.message)]));
+const { render_job_id: createRenderJob, status: createStatus, ...createEvent } = create;
+const { render_job_id: readbackRenderJob, status: readbackStatus, ...readbackEvent } = readback;
+assert.equal(createRenderJob, evidence.durability.create_process_job_id);
+assert.equal(readbackRenderJob, evidence.durability.readback_cleanup_process_job_id);
+assert.equal(createStatus, "succeeded");
+assert.equal(readbackStatus, "succeeded");
+assert.deepEqual(capturedMessages.get(createRenderJob), createEvent);
+assert.deepEqual(capturedMessages.get(readbackRenderJob), readbackEvent);
 
 for (const runtime of [evidence.database_bindings.runner, evidence.database_bindings.worker_one_off]) {
   assert.equal(runtime.sha256, binding);
@@ -75,6 +94,8 @@ assert.equal(web.caller_sha, sha);
 assert.equal(web.http, 409);
 assert.equal(web.web_candidate_absent, true);
 assert.equal(web.secret_exposed, false);
+assert.equal(capturedMessages.get(worker.render_job_id).binding_sha256, binding);
+assert.equal(capturedMessages.get(web.render_job_id).web_candidate_absent, true);
 
 assert.deepEqual(evidence.safety, {
   staging_only: true,

@@ -1,0 +1,25 @@
+{
+  "query": "render jobs list srv-d9n28tijnfac73a87lt0 --output json | select exact managed job ids",
+  "receipts": [
+    {
+      "createdAt": "2026-08-31T06:12:08.833031Z",
+      "finishedAt": "2026-08-31T06:12:21Z",
+      "id": "job-daahme4s728c738dpagg",
+      "planId": "plan-srv-006",
+      "serviceId": "srv-d9n28tijnfac73a87lt0",
+      "startCommand": "env DURABILITY_PROBE_AUTHORIZED=1 DURABILITY_PROBE_SUFFIX=630a0a13-20260831-0612 node scripts/staging-candidate-durability-probe.cjs create",
+      "startedAt": "2026-08-31T06:12:09Z",
+      "status": "succeeded"
+    },
+    {
+      "createdAt": "2026-08-31T06:12:41.369608Z",
+      "finishedAt": "2026-08-31T06:12:53Z",
+      "id": "job-daahmm9f2nfc73acbigg",
+      "planId": "plan-srv-006",
+      "serviceId": "srv-d9n28tijnfac73a87lt0",
+      "startCommand": "env DURABILITY_PROBE_AUTHORIZED=1 DURABILITY_PROBE_SUFFIX=630a0a13-20260831-0612 DURABILITY_PROBE_JOB_ID=99c76c2e-7feb-4ffd-8eb7-0cdb850090aa node scripts/staging-candidate-durability-probe.cjs readback-cleanup",
+      "startedAt": "2026-08-31T06:12:41Z",
+      "status": "succeeded"
+    }
+  ]
+}
