@@ -9,6 +9,8 @@ const hashes={
   "EXECUTION-COMPILE-FAILED-LOG-RAW.json":"7763b542a73a8b4d73b333e8e3f3eaf625dba9c1d48fa97f5ed981da47e23d88",
   "EXECUTION-PG-TYPE-FAILED-JOB-RAW.json":"3e266eb1179c77707351164c597c54a52c56c26c950392dfb58bb42b24f47b56",
   "EXECUTION-PG-TYPE-FAILED-LOG-RAW.json":"4c21500c6c0ef1a6e6f9b0c63ed12299b8f6de4a694fa01478f8226dcb2c02b3",
+  "EXTERNAL-LAUNCHER-ATTEST-JOB-RAW.json":"c496f2b0a5add7741c2dee0c433937d0deede6a3108e5e4eb99caedbb034781f",
+  "EXTERNAL-LAUNCHER-ATTEST-LOG-RAW.json":"e857b98a0374eb5476f3c13d6ad932a5961a17764ec0315d0e864302c1c354b7",
   "INITIAL-PRECALL-PASS-JOB-RAW.json":"9628dac346a3c95764e1baa7dbfd0431169ecd89b9d3e05511565c73e5c417a0",
   "INITIAL-PRECALL-PASS-LOG-RAW.json":"15dcc71a0d0884303d5d43c48175785524f1b3d5e72170dc9750a5f8d4daa0aa",
   "MANAGED-CREDENTIAL-JOBS-RAW.json":"11947dd28b7174e822546a3600f95874a60d94ec4754e76b4bbd15933e0c87e6",
@@ -65,6 +67,27 @@ assert.deepEqual([successorPrecall.database_to_r2_reference_digest,successorPrec
 assert.deepEqual([successorPrecall.provider_post_count,successorPrecall.provider_tasks,successorPrecall.outputs,successorPrecall.publication,
   successorPrecall.queue_paused,successorPrecall.queue_counts.active,successorPrecall.contract_sha256],
   [0,0,0,false,true,0,"9cfbbed2ae2088a40293ea58c9abad8fe89dd35196a804aebd1a885b43f7fa62"]);
+
+const externalSource=read("../../../scripts/staging-jj-glow-candidate4-provider-external.cjs");
+const externalSha=crypto.createHash("sha256").update(externalSource).digest("hex");
+assert.equal(externalSha,"b7c500b1645dd737fe72c70a0b5dea7412045ad1d57d415fd43b57f5932a864e");
+const externalJob=raw["EXTERNAL-LAUNCHER-ATTEST-JOB-RAW.json"][0];
+assert.deepEqual([externalJob.id,externalJob.serviceId,externalJob.status],
+  ["job-dab0taad0e5s73d1eomg","srv-d9n28ue417fc73ch2b60","succeeded"]);
+assert.match(externalJob.startCommand,/^env CANDIDATE4_PROVIDER_EXECUTION_MODE=ATTEST_NO_POST node -e /);
+const encodedExternal=externalJob.startCommand.match(/Buffer\.from\('([^']+)','base64'\)/)?.[1];
+assert.ok(encodedExternal,"managed start command must embed launcher bytes");
+assert.equal(Buffer.from(encodedExternal,"base64").toString(),externalSource,"managed start command bytes must equal reviewed artifact");
+assert.match(externalJob.startCommand,new RegExp(externalSha));
+const externalReceipt=JSON.parse(raw["EXTERNAL-LAUNCHER-ATTEST-LOG-RAW.json"].find(x=>x.message.startsWith("{"))?.message??"null");
+assert.deepEqual([externalReceipt.event,externalReceipt.launcher_sha256,externalReceipt.runtime_sha,
+  externalReceipt.execution_mode,externalReceipt.queue_paused,externalReceipt.queue_counts.active,
+  externalReceipt.provider_post,externalReceipt.mutation],
+  ["CANDIDATE4_EXTERNAL_LAUNCHER_ATTESTED_NO_POST",externalSha,"23fa4923ec667a44ef8044e309140ee169864f88",
+    "ATTEST_NO_POST",true,0,false,false]);
+assert.match(externalSource,/EXECUTE_EXACTLY_ONCE/);assert.match(externalSource,/CANDIDATE4_PROVIDER_EXECUTE_CONFIRM/);
+assert.match(externalSource,/processPostgresJob\(JOB,\{retryViaQueue:true\}\)/);
+assert.match(externalSource,/CANDIDATE4_EXTERNAL_LAUNCHER_WORKER_KEY_ATTESTATION_MISMATCH/);
 
 const job=(name)=>raw[name],messages=(name)=>raw[name].map(x=>x.message).join("\n");
 assert.deepEqual([job("LEGACY-PREFLIGHT-FAILED-JOB-RAW.json").id,job("LEGACY-PREFLIGHT-FAILED-JOB-RAW.json").status],

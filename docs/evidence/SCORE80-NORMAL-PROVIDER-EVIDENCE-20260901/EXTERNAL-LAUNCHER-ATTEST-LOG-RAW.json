@@ -1,0 +1,21 @@
+[
+  {
+    "id": "22122db7-778d-43a8-a19c-313c9b06f5bb",
+    "labels": [
+      {
+        "name": "resource",
+        "value": "job-dab0taad0e5s73d1eomg"
+      },
+      {
+        "name": "level",
+        "value": "info"
+      },
+      {
+        "name": "type",
+        "value": "app"
+      }
+    ],
+    "message": "{\"event\":\"CANDIDATE4_EXTERNAL_LAUNCHER_ATTESTED_NO_POST\",\"launcher_sha256\":\"b7c500b1645dd737fe72c70a0b5dea7412045ad1d57d415fd43b57f5932a864e\",\"runtime_sha\":\"23fa4923ec667a44ef8044e309140ee169864f88\",\"job_id\":\"2c49a5c8-9465-4400-a214-159336a2c097\",\"key_sha256\":\"e235f534009788cbcb817e86779919604b8cc4255c98d62e0ce13829587603ab\",\"queue_paused\":true,\"queue_counts\":{\"waiting\":0,\"active\":0,\"delayed\":0,\"prioritized\":0,\"failed\":0,\"paused\":2},\"execution_mode\":\"ATTEST_NO_POST\",\"provider_post\":false,\"mutation\":false,\"secret_value_output\":false}",
+    "timestamp": "2026-08-31T23:30:55.775863805Z"
+  }
+]
