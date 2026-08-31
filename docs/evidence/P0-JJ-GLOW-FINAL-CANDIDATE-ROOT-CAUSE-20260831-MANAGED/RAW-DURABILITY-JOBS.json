@@ -1,5 +1,5 @@
 {
-  "query": "render jobs list srv-d9n28tijnfac73a87lt0 --output json | select exact managed job ids",
+  "query": "render jobs list srv-d9n28tijnfac73a87lt0 --output json | jq -c '[.[] | select(.id==\"job-daahme4s728c738dpagg\" or .id==\"job-daahmm9f2nfc73acbigg\")]'",
   "receipts": [
     {
       "createdAt": "2026-08-31T06:12:08.833031Z",
