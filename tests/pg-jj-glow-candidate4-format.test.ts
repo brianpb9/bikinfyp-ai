@@ -13,6 +13,7 @@ const SCRIPT = "ca32178f-2731-4234-bb07-48f24a2f2079";
 const JOB = "2c49a5c8-9465-4400-a214-159336a2c097";
 const TASK = "FINAL-POST-SWEEP-CANDIDATE-4-20260901";
 const REFERENCE = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
+const APPROVED_SCRIPT = "110198510c75de3dba61d57260dce12af7cb0f06c6a4ddfc2254479cb8f05e7c";
 const AT = "2026-08-31T19:47:54.433Z";
 let pool: Pool;
 
@@ -22,7 +23,7 @@ after(async () => { if (!skip) await pool.end(); });
 type Tuple = {task:string;job:string;user:string;product:string;reference:string;
   approved:string|null;category:string;format:string;duration:number};
 const exact:Tuple = {task:TASK,job:JOB,user:USER,product:PRODUCT,reference:REFERENCE,
-  approved:"e".repeat(64),category:"beauty",format:"hands_only",duration:15};
+  approved:APPROVED_SCRIPT,category:"beauty",format:"hands_only",duration:15};
 
 async function insertEvidence(client:PoolClient, value:Tuple) {
   await client.query(`INSERT INTO normal_representative_evidence_runs
@@ -62,7 +63,9 @@ test("candidate #4 exact evidence tuple succeeds and every neighboring tuple is 
       ["task",{...exact,task:"FINAL-POST-SWEEP-CANDIDATE-5-UNAUTHORIZED"}],
       ["job",{...exact,job:altJob}], ["user",{...exact,user:altUser}],
       ["product",{...exact,product:altProduct}], ["reference",{...exact,reference:"f".repeat(64)}],
-      ["approved script",{...exact,approved:null}], ["category",{...exact,category:"food"}],
+      ["approved script null",{...exact,approved:null}],
+      ["approved script different non-null",{...exact,approved:"f".repeat(64)}],
+      ["category",{...exact,category:"food"}],
       ["format",{...exact,format:"talking_head"}], ["duration",{...exact,duration:30}],
     ];
     for (const [field,value] of neighbors) {

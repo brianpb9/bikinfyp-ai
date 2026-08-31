@@ -515,6 +515,7 @@ test("JJ GLOW freeze verifies DB/R2 independently and activation is ledger-only"
   assert.match(candidate4Migration, /user_id='ac8b0a3e-8835-4e64-80e6-2e2cae6198b8'/);
   assert.match(candidate4Migration, /product_id='c470390e-ad3d-4cc8-9ba2-4557691fa7a7'/);
   assert.match(candidate4Migration, /reference_sha256='744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1'/);
+  assert.match(candidate4Migration, /approved_script_sha256='110198510c75de3dba61d57260dce12af7cb0f06c6a4ddfc2254479cb8f05e7c'/);
 });
 
 test("migration enforces durable unique 0->1 ledger and private-only artifact key", () => {
