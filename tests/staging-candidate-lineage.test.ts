@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import { describe, it } from "node:test";
 import {
   authorizedStagingCandidateLineageRead,
@@ -14,6 +15,9 @@ import {
   JJ_SCRIPT_ID,
   stagingCandidateLineageHeader,
 } from "../lib/staging-candidate-lineage";
+import {
+  JJ_GLOW_FINAL_RECOVERY_TASK, JJ_GLOW_LIFECYCLE_SCHEMA, jjGlowLifecycleStateSha256,
+} from "../lib/staging-jj-glow-exact-admission";
 
 const secret = "0123456789abcdef0123456789abcdef";
 const sha = "a".repeat(40);
@@ -31,7 +35,7 @@ function validRow() {
     scope: JJ_RIGHTS_SCOPE,
     publication_permitted: false,
   };
-  return {
+  const row = {
     id: "job-row-id", persona_id: "persona-row-id", product_id: JJ_PRODUCT_ID, script_id: JJ_SCRIPT_ID,
     state: "QUEUED", creator_category: "lokal", provider_video: null, provider_voice: null, output_url: null,
     provider_task_count: 0, hold_count: 1, hold_delta: -12_000, terminal_ledger_count: 0, job_ledger_net: -12_000,
@@ -100,6 +104,23 @@ function validRow() {
     images: [referenceKey],
     raw_meta: { staging_reference_rights: binding },
   };
+  const digest = (value: unknown) => crypto.createHash("sha256").update(JSON.stringify(value)).digest("hex");
+  const lifecycleState = {
+    schema: JJ_GLOW_LIFECYCLE_SCHEMA, correlation_id: "11111111-1111-4111-8111-111111111111",
+    job_id: row.id, product_id: row.product_id, script_id: row.script_id,
+    create_actor: JJ_PRINCIPAL_ID, create_timestamp: "2026-08-31T07:00:00.000Z", transaction_id: "12345",
+    state: row.state, provider_task_count: 0, hold_count: 1,
+    approved_reference_manifest_sha256: digest(row.approved_reference_manifest),
+    job_product_snapshot_sha256: digest(row.job_product_snapshot), database_binding_sha256: "b".repeat(64),
+  };
+  return { ...row, lifecycle_receipt_count: 1, lifecycle_actor: JJ_PRINCIPAL_ID, lifecycle_meta: {
+    schema:JJ_GLOW_LIFECYCLE_SCHEMA,task:JJ_GLOW_FINAL_RECOVERY_TASK,correlation_id:lifecycleState.correlation_id,
+    historical_root_cause_waiver:true,final_candidate_ordinal:3,max_canonical_candidates_created:3,
+    provider_posts_at_admission:0,mutation_policy:{delete_requires_reason_actor:true,supersede_requires_reason_actor:true},
+    create_actor:JJ_PRINCIPAL_ID,create_timestamp:lifecycleState.create_timestamp,
+    transaction_commit_receipt:{transaction_id:"12345",atomic_with_job:true,visible_only_after_commit:true},
+    post_commit_state:lifecycleState,post_commit_state_sha256:jjGlowLifecycleStateSha256(lifecycleState),append_only:true,
+  } };
 }
 
 describe("staging candidate lineage evidence", () => {
@@ -123,6 +144,8 @@ describe("staging candidate lineage evidence", () => {
     assert.doesNotMatch(JSON.stringify(receipt), /email|secret|DATABASE_URL/i);
     assert.doesNotMatch(JSON.stringify(receipt), /private-staging-db|staging_role|10\.0\.0\.12/);
     assert.match(receipt.receipt_payload_sha256, /^[0-9a-f]{64}$/);
+    assert.equal(receipt.lifecycle.correlation_id, "11111111-1111-4111-8111-111111111111");
+    assert.equal(receipt.lifecycle.database_binding_sha256, "b".repeat(64));
   });
 
   it("projects an absent-candidate binding from the live web pool without DB identity fields", () => {

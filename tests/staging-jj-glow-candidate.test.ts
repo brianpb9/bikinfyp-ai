@@ -4,7 +4,8 @@ import { createRequire } from "node:module";
 import test from "node:test";
 import { periksaAdmisi } from "../lib/script-engine/admisi";
 import {
-  assertJjGlowLockedProductState, authorizeJjGlowExactAdmission,
+  assertJjGlowLockedProductState, authorizeJjGlowExactAdmission, authorizeJjGlowLifecycleAuthority,
+  JJ_GLOW_FINAL_RECOVERY_TASK, JJ_GLOW_LIFECYCLE_SCHEMA,
   JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256, JJ_GLOW_PRINCIPAL_ID,
   JJ_GLOW_PRODUCT_ID, JJ_GLOW_SCRIPT_ID, JJ_GLOW_STAGING_WEB_SERVICE_ID,
 } from "../lib/staging-jj-glow-exact-admission";
@@ -19,6 +20,7 @@ const fixture = require("../scripts/staging-jj-glow-candidate.cjs") as {
   BPOM_EVIDENCE_SHA256: string;
   assertExpectedProductState(product:Record<string,unknown>):void;
   validateBpomEvidence(bytes:Buffer|null,nowMs?:number):Record<string,unknown>;
+  lifecycleMutationReceipt(action:string,actor:string,reason:string,correlationId:string):Record<string,unknown>;
 };
 
 function productRow(state = fixture.EXPECTED_PRODUCT_STATE):Record<string,unknown> {
@@ -106,9 +108,27 @@ test("runner memakai OTP acak singkat dan mengirim digest admission", () => {
   assert.match(source, /DELETE FROM otp_codes WHERE id=\$1/);
   assert.match(source, /expected_product_state_sha256: EXPECTED_PRODUCT_STATE_SHA256/);
   assert.match(source, /expected_database_binding_sha256: databaseBinding\.sha256/);
+  assert.match(source, /lifecycle_authority:lifecycleAuthority/);
+  assert.match(source, /JJ_GLOW_READBACK_MODE === "post-exit"/);
+  assert.match(source, /candidate\.lifecycle\.deleted/);
   assert.match(source, /JJ_GLOW_CANONICAL_CREATE_AUTHORITY_REQUIRED/);
   assert.match(source, /JJ_GLOW_BOOTSTRAP_PASS/);
   assert.doesNotMatch(source, /const OTP\s*=|10 \* 60_000/);
+});
+
+test("final recovery lifecycle authority exact dan mutation receipt butuh actor+reason", () => {
+  const authority = {
+    schema:JJ_GLOW_LIFECYCLE_SCHEMA,task:JJ_GLOW_FINAL_RECOVERY_TASK,
+    correlation_id:"11111111-1111-4111-8111-111111111111",historical_root_cause_waiver:true,
+    final_candidate_ordinal:3,max_canonical_candidates_created:3,provider_posts_at_admission:0,
+    mutation_policy:{delete_requires_reason_actor:true,supersede_requires_reason_actor:true},
+  } as const;
+  assert.deepEqual(authorizeJjGlowLifecycleAuthority(authority, JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256), authority);
+  assert.throws(() => authorizeJjGlowLifecycleAuthority({...authority,final_candidate_ordinal:4}, JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256), /INVALID/);
+  assert.throws(() => authorizeJjGlowLifecycleAuthority(authority, null), /UNAUTHORIZED/);
+  assert.equal(fixture.lifecycleMutationReceipt("delete", JJ_GLOW_PRINCIPAL_ID,
+    "admission failed permanently", authority.correlation_id).actor, JJ_GLOW_PRINCIPAL_ID);
+  assert.throws(() => fixture.lifecycleMutationReceipt("supersede", "anonymous", "short", authority.correlation_id), /INVALID/);
 });
 
 test("binding DB diperiksa pada client transaksi yang sama dan probe runtime dibundel", () => {

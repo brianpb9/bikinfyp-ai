@@ -23,6 +23,8 @@ const EXPECTED_HOLD_IDR = 12_000;
 const BPOM_EVIDENCE_PATH = "scripts/fixtures/BPOM-KO-NA18260500350-20260831.json";
 const BPOM_EVIDENCE_SHA256 = "55bb83ce881ed1b01ed0cd829edb6f7234012af1347a95edf8e29c04b36330d0";
 const EXPECTED_PRODUCT_STATE_SHA256 = "2d575429751a26f5fe3ef51ddb4be5d4f537beb720b69c0d2f5db2182bb77af1";
+const FINAL_RECOVERY_TASK = "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831";
+const LIFECYCLE_SCHEMA = "bikinfyp.staging-candidate-lifecycle/v1";
 
 const EXPECTED_PRODUCT_STATE = {
   id: PRODUCT_ID, user_id: PRINCIPAL, org_id: null, name: PRODUCT_NAME, price_idr: 1,
@@ -77,6 +79,14 @@ const exactNumber = (value, field) => {
   return parsed;
 };
 const nullableNumber = (value, field) => value == null ? null : exactNumber(value, field);
+
+function lifecycleMutationReceipt(action, actor, reason, correlationId, timestamp = new Date().toISOString()) {
+  if (!["delete", "supersede"].includes(action) || actor !== PRINCIPAL
+    || typeof reason !== "string" || reason.trim().length < 12
+    || !/^[0-9a-f-]{36}$/.test(correlationId)) throw new Error("JJ_GLOW_LIFECYCLE_MUTATION_AUTHORITY_INVALID");
+  return { schema:LIFECYCLE_SCHEMA, task:FINAL_RECOVERY_TASK, correlation_id:correlationId,
+    action, actor, reason:reason.trim(), timestamp };
+}
 
 function selectedProductState(product) {
   let rawMeta;
@@ -152,6 +162,16 @@ async function main() {
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   let inserted = false;
   let databaseBinding;
+  const lifecycleCorrelationId = process.env.JJ_GLOW_LIFECYCLE_CORRELATION_ID || crypto.randomUUID();
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(lifecycleCorrelationId)) {
+    throw new Error("JJ_GLOW_LIFECYCLE_CORRELATION_INVALID");
+  }
+  const lifecycleAuthority = {
+    schema:LIFECYCLE_SCHEMA, task:FINAL_RECOVERY_TASK, correlation_id:lifecycleCorrelationId,
+    historical_root_cause_waiver:true, final_candidate_ordinal:3, max_canonical_candidates_created:3,
+    provider_posts_at_admission:0,
+    mutation_policy:{delete_requires_reason_actor:true,supersede_requires_reason_actor:true},
+  };
   try {
     const bpomEvidence = validateBpomEvidence(fs.readFileSync(path.resolve(process.cwd(), BPOM_EVIDENCE_PATH)));
     const client = await pool.connect();
@@ -189,7 +209,8 @@ async function main() {
       await client.query(
         `INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'script.manual_staged','scripts',$3,$4,$5)`,
         [crypto.randomUUID(), PRINCIPAL, SCRIPT_ID, JSON.stringify({
-          task: "P0-JJ-GLOW-CANDIDATE-CONTRACT-20260831-R6",
+          task: FINAL_RECOVERY_TASK, lifecycle_correlation_id:lifecycleCorrelationId,
+          final_candidate_ordinal:3, max_canonical_candidates_created:3,
           rights_evidence_source_task: "P0-JJ-GLOW-RIGHTS-REMEDIATION-20260831-R5",
           source: "manual", bpom_evidence_id: bpomEvidence.evidence_id,
           bpom_evidence_sha256: BPOM_EVIDENCE_SHA256, claims: bpomEvidence.claim_ledger, provider_calls: 0,
@@ -236,11 +257,15 @@ async function main() {
       method: "POST", headers,
       body: JSON.stringify({ script_id: SCRIPT_ID, creator_category: "lokal", format: "hands_only", quality_tier: "high_quality", duration_s: 15,
         expected_product_state_sha256: EXPECTED_PRODUCT_STATE_SHA256,
-        expected_database_binding_sha256: databaseBinding.sha256 }),
+        expected_database_binding_sha256: databaseBinding.sha256, lifecycle_authority:lifecycleAuthority }),
     }), "admit-job");
     if (admitted.response.status !== 201 || admitted.body.state !== "QUEUED"
         || admitted.body.hold_idr !== EXPECTED_HOLD_IDR || admitted.body.duplicate) throw new Error("job admission response mismatch");
     const jobId = admitted.body.job_id;
+    if (admitted.body.lifecycle_receipt?.correlationId !== lifecycleCorrelationId
+      || !/^[0-9a-f]{64}$/.test(admitted.body.lifecycle_receipt?.stateSha256 || "")) {
+      throw new Error("lifecycle admission receipt mismatch");
+    }
 
     const final = (await pool.query(
       `SELECT j.*,s.approved_by_user_at,s.validation_result,p.creator_category,
@@ -261,16 +286,59 @@ async function main() {
         || manifest.stagingReferenceRights?.binding?.reference_sha256 !== EXPECTED_REFERENCE_SHA
         || manifest.stagingReferenceRights?.binding?.receipt_sha256 !== EXPECTED_RECEIPT_SHA
         || manifest.stagingReferenceRights?.receipt?.publication_permitted !== false) throw new Error("manifest/provenance invariant mismatch");
+    const lifecycleRows = (await pool.query(
+      `SELECT actor,created_at,meta FROM audit_log
+       WHERE entity='jobs' AND entity_id=$1 AND action='candidate.lifecycle.created'`, [jobId],
+    )).rows;
+    if (lifecycleRows.length !== 1 || lifecycleRows[0].actor !== PRINCIPAL) throw new Error("lifecycle audit receipt missing");
+    const lifecycleMeta = JSON.parse(lifecycleRows[0].meta);
+    const lifecycleState = {
+      schema:LIFECYCLE_SCHEMA, correlation_id:lifecycleCorrelationId,
+      job_id:jobId, product_id:PRODUCT_ID, script_id:SCRIPT_ID,
+      create_actor:PRINCIPAL, create_timestamp:lifecycleMeta.create_timestamp,
+      transaction_id:lifecycleMeta.transaction_commit_receipt?.transaction_id,
+      state:"QUEUED", provider_task_count:0, hold_count:1,
+      approved_reference_manifest_sha256:sha(final.approved_reference_manifest),
+      job_product_snapshot_sha256:sha(final.job_product_snapshot),
+      database_binding_sha256:databaseBinding.sha256,
+    };
+    if (lifecycleMeta.schema !== LIFECYCLE_SCHEMA || lifecycleMeta.task !== FINAL_RECOVERY_TASK
+      || lifecycleMeta.correlation_id !== lifecycleCorrelationId || lifecycleMeta.create_actor !== PRINCIPAL
+      || lifecycleMeta.transaction_commit_receipt?.atomic_with_job !== true
+      || lifecycleMeta.transaction_commit_receipt?.visible_only_after_commit !== true
+      || lifecycleMeta.append_only !== true || lifecycleMeta.mutation_policy?.delete_requires_reason_actor !== true
+      || lifecycleMeta.mutation_policy?.supersede_requires_reason_actor !== true
+      || canonicalSha(lifecycleState) !== admitted.body.lifecycle_receipt.stateSha256
+      || lifecycleMeta.post_commit_state_sha256 !== admitted.body.lifecycle_receipt.stateSha256) {
+      throw new Error("lifecycle receipt/state digest mismatch");
+    }
     const totals = (await pool.query(
       `SELECT (SELECT count(*)::int FROM scripts WHERE product_id=$1) scripts,
               (SELECT count(*)::int FROM jobs WHERE product_id=$1) jobs`, [PRODUCT_ID],
     )).rows[0];
     if (totals.scripts !== 1 || totals.jobs !== 1) throw new Error("canonical candidate count mismatch");
-    console.log(`JJ_GLOW_CANDIDATE_PASS product=${PRODUCT_ID} script=${SCRIPT_ID} job=${jobId} provider_tasks=0`);
+    console.log(JSON.stringify({event:"JJ_GLOW_CANDIDATE_PASS",product_id:PRODUCT_ID,script_id:SCRIPT_ID,job_id:jobId,
+      lifecycle_correlation_id:lifecycleCorrelationId,create_actor:PRINCIPAL,create_timestamp:lifecycleMeta.create_timestamp,
+      transaction_commit_receipt:lifecycleMeta.transaction_commit_receipt,
+      post_commit_state_sha256:admitted.body.lifecycle_receipt.stateSha256,
+      same_process_readback:true,provider_tasks:0,provider_posts:0,publication:false}));
   } catch (error) {
     if (inserted) {
       const committed = (await pool.query("SELECT id FROM jobs WHERE script_id=$1", [SCRIPT_ID]).catch(() => ({ rows: [] }))).rows[0];
-      if (!committed) await pool.query("DELETE FROM scripts WHERE id=$1 AND job_id IS NULL", [SCRIPT_ID]).catch(() => undefined);
+      if (!committed) {
+        const mutation = lifecycleMutationReceipt("delete", PRINCIPAL,
+          "final admission failed before any job commit; no further candidate is authorized", lifecycleCorrelationId);
+        const cleanup = await pool.connect();
+        try {
+          await cleanup.query("BEGIN");
+          await cleanup.query(
+            "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'candidate.lifecycle.deleted','scripts',$3,$4,$5)",
+            [crypto.randomUUID(), PRINCIPAL, SCRIPT_ID, JSON.stringify(mutation), mutation.timestamp]);
+          await cleanup.query("DELETE FROM scripts WHERE id=$1 AND job_id IS NULL", [SCRIPT_ID]);
+          await cleanup.query("COMMIT");
+        } catch (cleanupError) { await cleanup.query("ROLLBACK").catch(() => undefined); throw new AggregateError([error,cleanupError], "admission and audited cleanup failed"); }
+        finally { cleanup.release(); }
+      }
     }
     throw error;
   } finally {
@@ -278,12 +346,57 @@ async function main() {
   }
 }
 
+async function postExitReadback() {
+  if (process.env.RACUN_DEPLOY_ENV !== "staging" || process.env.RENDER_SERVICE_ID !== "srv-d9n28tijnfac73a87lt0") {
+    throw new Error("staging service identity mismatch");
+  }
+  const jobId = process.env.JJ_GLOW_EXPECTED_JOB_ID;
+  const correlationId = process.env.JJ_GLOW_LIFECYCLE_CORRELATION_ID;
+  const expectedStateSha256 = process.env.JJ_GLOW_EXPECTED_STATE_SHA256;
+  if (!/^[0-9a-f-]{36}$/.test(jobId || "") || !/^[0-9a-f-]{36}$/.test(correlationId || "")
+    || !/^[0-9a-f]{64}$/.test(expectedStateSha256 || "")) throw new Error("post-exit receipt inputs invalid");
+  const pool = new Pool({ connectionString: process.env.DATABASE_URL, max:1 });
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN READ ONLY");
+    const binding = await postgresRuntimeBinding(client);
+    const row = (await client.query(
+      `SELECT j.id,j.product_id,j.script_id,j.user_id,j.state,j.approved_reference_manifest,j.job_product_snapshot,
+        (SELECT count(*)::int FROM provider_tasks t WHERE t.job_id=j.id) provider_task_count,
+        (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='hold') hold_count,
+        a.actor lifecycle_actor,a.meta lifecycle_meta
+       FROM jobs j JOIN audit_log a ON a.entity='jobs' AND a.entity_id=j.id AND a.action='candidate.lifecycle.created'
+       WHERE j.id=$1 AND j.product_id=$2 AND j.script_id=$3`, [jobId,PRODUCT_ID,SCRIPT_ID],
+    )).rows;
+    if (row.length !== 1) throw new Error("post-exit candidate/receipt cardinality mismatch");
+    const item = row[0], meta = JSON.parse(item.lifecycle_meta);
+    const state = {schema:LIFECYCLE_SCHEMA,correlation_id:correlationId,job_id:jobId,product_id:PRODUCT_ID,script_id:SCRIPT_ID,
+      create_actor:PRINCIPAL,create_timestamp:meta.create_timestamp,transaction_id:meta.transaction_commit_receipt?.transaction_id,
+      state:item.state,provider_task_count:Number(item.provider_task_count),hold_count:Number(item.hold_count),
+      approved_reference_manifest_sha256:sha(item.approved_reference_manifest),job_product_snapshot_sha256:sha(item.job_product_snapshot),
+      database_binding_sha256:binding.sha256};
+    if (item.user_id !== PRINCIPAL || item.lifecycle_actor !== PRINCIPAL || meta.correlation_id !== correlationId
+      || item.state !== "QUEUED" || Number(item.provider_task_count) !== 0 || Number(item.hold_count) !== 1
+      || canonicalSha(state) !== expectedStateSha256 || canonicalSha(meta.post_commit_state) !== expectedStateSha256
+      || meta.post_commit_state_sha256 !== expectedStateSha256) {
+      throw new Error("post-exit lifecycle state mismatch");
+    }
+    await client.query("COMMIT");
+    console.log(JSON.stringify({event:"JJ_GLOW_POST_EXIT_READBACK_PASS",job_id:jobId,lifecycle_correlation_id:correlationId,
+      post_commit_state_sha256:expectedStateSha256,new_process:true,new_pool:true,fresh_connection:true,
+      provider_tasks:0,provider_posts:0,publication:false,database_binding_sha256:binding.sha256}));
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client.release(); await pool.end(); }
+}
+
 module.exports = {
   segments, admission, EXPECTED_PRODUCT_STATE, EXPECTED_PRODUCT_STATE_SHA256,
   BPOM_EVIDENCE_PATH, BPOM_EVIDENCE_SHA256, selectedProductState, assertExpectedProductState, validateBpomEvidence,
+  lifecycleMutationReceipt,
 };
 if (require.main === module) {
-  const entry = process.env.JJ_GLOW_BOOTSTRAP_PROBE === "1" ? async () => {
+  const entry = process.env.JJ_GLOW_READBACK_MODE === "post-exit" ? postExitReadback
+    : process.env.JJ_GLOW_BOOTSTRAP_PROBE === "1" ? async () => {
     if (process.env.RACUN_DEPLOY_ENV !== "staging" || process.env.RENDER_SERVICE_ID !== "srv-d9n28tijnfac73a87lt0") {
       throw new Error("staging service identity mismatch");
     }

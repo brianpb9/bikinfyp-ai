@@ -34,6 +34,9 @@ export async function GET(request: Request) {
         (SELECT coalesce(sum(l.delta),0)::int FROM credit_ledger l WHERE l.job_id=j.id) job_ledger_net,
         (SELECT count(*)::int FROM jobs x WHERE x.product_id=j.product_id) product_job_count,
         (SELECT count(*)::int FROM scripts x WHERE x.product_id=j.product_id) product_script_count
+        ,(SELECT count(*)::int FROM audit_log a WHERE a.entity='jobs' AND a.entity_id=j.id AND a.action='candidate.lifecycle.created') lifecycle_receipt_count
+        ,(SELECT a.actor FROM audit_log a WHERE a.entity='jobs' AND a.entity_id=j.id AND a.action='candidate.lifecycle.created' ORDER BY a.created_at DESC LIMIT 1) lifecycle_actor
+        ,(SELECT a.meta FROM audit_log a WHERE a.entity='jobs' AND a.entity_id=j.id AND a.action='candidate.lifecycle.created' ORDER BY a.created_at DESC LIMIT 1) lifecycle_meta
        FROM jobs j
        JOIN personas p ON p.id=j.persona_id
        JOIN products pr ON pr.id=j.product_id
@@ -44,9 +47,11 @@ export async function GET(request: Request) {
     const sha = process.env.RENDER_GIT_COMMIT ?? "";
     const queriedAt = new Date().toISOString();
     const webBinding = buildStagingWebDatabaseBindingReceipt(binding, result.rowCount ?? 0, queriedAt, sha);
-    const body = result.rowCount === 0
-      ? webBinding
-      : { ...buildStagingCandidateLineageReceipt(result.rows[0], queriedAt, sha), web_process_database_binding: webBinding };
+    const lineage = result.rowCount === 0 ? null : buildStagingCandidateLineageReceipt(result.rows[0], queriedAt, sha);
+    if (lineage && lineage.lifecycle.database_binding_sha256 !== binding.sha256) {
+      throw new Error("JJ lifecycle/web database binding mismatch");
+    }
+    const body = lineage ? { ...lineage, web_process_database_binding: webBinding } : webBinding;
     return Response.json(body, {
       status: 200,
       headers: { "cache-control": "private, no-store, max-age=0, must-revalidate" },

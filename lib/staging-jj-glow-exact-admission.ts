@@ -5,6 +5,8 @@ export const JJ_GLOW_PRODUCT_ID = "c470390e-ad3d-4cc8-9ba2-4557691fa7a7";
 export const JJ_GLOW_SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
 export const JJ_GLOW_PRINCIPAL_ID = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
 export const JJ_GLOW_STAGING_WEB_SERVICE_ID = "srv-d9n28tijnfac73a87lt0";
+export const JJ_GLOW_FINAL_RECOVERY_TASK = "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831";
+export const JJ_GLOW_LIFECYCLE_SCHEMA = "bikinfyp.staging-candidate-lifecycle/v1";
 
 type ProductRow = Record<string, unknown>;
 const exactNumber = (value: unknown, field: string) => {
@@ -19,6 +21,42 @@ const canonical = (value: unknown): unknown => Array.isArray(value) ? value.map(
     ? Object.fromEntries(Object.entries(value).sort(([a], [b]) => a.localeCompare(b)).map(([key, item]) => [key, canonical(item)]))
     : value;
 const canonicalSha = (value: unknown) => crypto.createHash("sha256").update(JSON.stringify(canonical(value))).digest("hex");
+
+export type JjGlowLifecycleAuthority = {
+  schema: typeof JJ_GLOW_LIFECYCLE_SCHEMA;
+  task: typeof JJ_GLOW_FINAL_RECOVERY_TASK;
+  correlation_id: string;
+  historical_root_cause_waiver: true;
+  final_candidate_ordinal: 3;
+  max_canonical_candidates_created: 3;
+  provider_posts_at_admission: 0;
+  mutation_policy: { delete_requires_reason_actor: true; supersede_requires_reason_actor: true };
+};
+
+/** Exact final-recovery authority only; unrelated admissions cannot attach lifecycle claims. */
+export function authorizeJjGlowLifecycleAuthority(
+  value: unknown,
+  exactProductStateSha256: string | null,
+): JjGlowLifecycleAuthority | null {
+  if (exactProductStateSha256 === null) {
+    if (value == null) return null;
+    throw new Error("JJ_GLOW_LIFECYCLE_UNAUTHORIZED");
+  }
+  const item = value as Partial<JjGlowLifecycleAuthority> | null;
+  if (!item || item.schema !== JJ_GLOW_LIFECYCLE_SCHEMA || item.task !== JJ_GLOW_FINAL_RECOVERY_TASK
+    || !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(String(item.correlation_id ?? ""))
+    || item.historical_root_cause_waiver !== true || item.final_candidate_ordinal !== 3
+    || item.max_canonical_candidates_created !== 3 || item.provider_posts_at_admission !== 0
+    || item.mutation_policy?.delete_requires_reason_actor !== true
+    || item.mutation_policy?.supersede_requires_reason_actor !== true) {
+    throw new Error("JJ_GLOW_LIFECYCLE_AUTHORITY_INVALID");
+  }
+  return item as JjGlowLifecycleAuthority;
+}
+
+export function jjGlowLifecycleStateSha256(value: Record<string, unknown>): string {
+  return canonicalSha(value);
+}
 
 export function jjGlowSelectedProductState(product: ProductRow) {
   let rawMeta: Record<string, unknown>;

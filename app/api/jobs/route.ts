@@ -242,7 +242,7 @@ export async function POST(req: Request) {
     // the same HTTP contract.  The deterministic completion hook is scoped
     // to RACUN_POSTGRES_SMOKE and never starts the production worker.
     if (postgresRuntimeEnabled()) {
-      const created = await smokeCreateJob(user.id, { productId: product.id, personaId, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc, omitZeroLedger: zeroValueTrace, expectedProductStateSha256, expectedDatabaseBindingSha256: body.expected_database_binding_sha256 });
+      const created = await smokeCreateJob(user.id, { productId: product.id, personaId, scriptId: script.id, format, qualityTier: tier, durationS, priceIdr, avatarCustomDesc, omitZeroLedger: zeroValueTrace, expectedProductStateSha256, expectedDatabaseBindingSha256: body.expected_database_binding_sha256, lifecycleAuthority: body.lifecycle_authority });
       // Snapshot Skor FYP BEKU (pre-render) — non-fatal, sama seperti jalur SQLite.
       if (!created.duplicate) {
         try {
@@ -269,7 +269,8 @@ export async function POST(req: Request) {
         if (zeroValueTrace) await enqueueManagedStagingTraceJob(created.jobId);
         else await enqueueJob(created.jobId);
       }
-      return Response.json({ job_id: created.jobId, state: created.duplicate ? "QUEUED" : (postgresSmokeEnabled() ? "READY" : "QUEUED"), quality_tier: tier, hold_idr: priceIdr, ...(created.duplicate ? { duplicate: true } : {}) }, { status: created.duplicate ? 200 : 201 });
+      const lifecycle = "lifecycle" in created ? created.lifecycle : undefined;
+      return Response.json({ job_id: created.jobId, state: created.duplicate ? "QUEUED" : (postgresSmokeEnabled() ? "READY" : "QUEUED"), quality_tier: tier, hold_idr: priceIdr, ...(created.duplicate ? { duplicate: true } : {}), ...(lifecycle ? { lifecycle_receipt: lifecycle } : {}) }, { status: created.duplicate ? 200 : 201 });
     }
 
     // Submit ganda yang sudah tampak tidak perlu menyalin reference bytes lagi.

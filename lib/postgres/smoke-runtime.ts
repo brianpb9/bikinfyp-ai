@@ -28,7 +28,10 @@ import { assertCategoryReviewClear, buildAuthoritativeTypeBoundaryInput, validat
 import { canonicalProductTypeTimestamp } from "../product-type-timestamp";
 import { stagingReferenceRightsBindingFromRawMeta } from "../staging-reference-rights";
 import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
-import { assertJjGlowLockedProductState, authorizeJjGlowExactAdmission } from "../staging-jj-glow-exact-admission";
+import {
+  assertJjGlowLockedProductState, authorizeJjGlowExactAdmission, authorizeJjGlowLifecycleAuthority,
+  JJ_GLOW_LIFECYCLE_SCHEMA, jjGlowLifecycleStateSha256,
+} from "../staging-jj-glow-exact-admission";
 import { assertReferencePublicationPermitted, parseJobReferenceManifest, verifyJobReferenceManifestRights } from "../job-reference-manifest";
 import { postgresRuntimeBinding } from "./runtime-binding.cjs";
 
@@ -248,6 +251,8 @@ export async function smokeCreateJob(userId: string, input: {
   expectedProductStateSha256: string | null;
   /** Runner-computed non-secret physical DB identity; mandatory for exact JJ staging admission. */
   expectedDatabaseBindingSha256?: string | null;
+  /** Final recovery only: exact bounded authority copied into the atomic lifecycle receipt. */
+  lifecycleAuthority?: unknown;
   /** Disposable PostgreSQL verifier only; application routes never set it. */
   onRetryForTests?: (event: { attempt: number; jobId: string; code: "40001" | "40P01" }) => Promise<void>;
 }) {
@@ -256,6 +261,7 @@ export async function smokeCreateJob(userId: string, input: {
     expectedSha256: input.expectedProductStateSha256,
     userId, productId: input.productId, scriptId: input.scriptId,
   });
+  const lifecycleAuthority = authorizeJjGlowLifecycleAuthority(input.lifecycleAuthority, exactProductStateSha256);
   const pool = getPool(url());
   try {
     // The user-row lock serializes wallet spends and the script-row lock
@@ -295,6 +301,7 @@ export async function smokeCreateJob(userId: string, input: {
         if (script.rows[0].job_id) {
           const active = await client.query<{ id: string }>("SELECT id FROM jobs WHERE id=$1 AND state NOT IN ('FAILED','REFUNDED','READY') FOR UPDATE", [script.rows[0].job_id]);
           if (active.rows[0]) {
+            if (lifecycleAuthority) throw new Error("JJ_GLOW_FINAL_CANDIDATE_ALREADY_EXISTS");
             commitAttempted = true;
             await client.query("COMMIT");
             await cleanupUnadmittedReferenceKeys({
@@ -378,6 +385,9 @@ export async function smokeCreateJob(userId: string, input: {
         const balance = await client.query<{ balance: string }>("SELECT COALESCE(SUM(delta),0) AS balance FROM credit_ledger WHERE user_id=$1", [userId]);
         if (Number(balance.rows[0].balance) < input.priceIdr) throw new Error("INSUFFICIENT_CREDITS");
         const timestamp = at();
+        const transactionId = lifecycleAuthority
+          ? (await client.query<{ transaction_id: string }>("SELECT txid_current()::text transaction_id")).rows[0].transaction_id
+          : null;
         // avatar_custom_desc ikut ditulis: sejak avatar premium dibuka untuk
         // retail, deskripsi presetnya harus sampai ke worker — worker Postgres
         // sudah membacanya sejak M8, jalur retail yang belum mengirimnya.
@@ -386,9 +396,42 @@ export async function smokeCreateJob(userId: string, input: {
           await client.query("INSERT INTO credit_ledger (id,user_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,'hold',$4,NULL,$5)", [id(),userId,-input.priceIdr,jobId,timestamp]);
         }
         await client.query("UPDATE scripts SET job_id=$1 WHERE id=$2", [jobId,input.scriptId]);
-        await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true }),timestamp]);
+        const lifecycleState = lifecycleAuthority ? {
+          schema: JJ_GLOW_LIFECYCLE_SCHEMA,
+          correlation_id: lifecycleAuthority.correlation_id,
+          job_id: jobId, product_id: input.productId, script_id: input.scriptId,
+          create_actor: userId, create_timestamp: timestamp, transaction_id: transactionId,
+          state: "QUEUED", provider_task_count: 0, hold_count: input.omitZeroLedger ? 0 : 1,
+          approved_reference_manifest_sha256: crypto.createHash("sha256").update(preparedReference.raw).digest("hex"),
+          job_product_snapshot_sha256: crypto.createHash("sha256").update(productSnapshotRaw).digest("hex"),
+          database_binding_sha256: input.expectedDatabaseBindingSha256,
+        } : null;
+        const lifecycleStateSha256 = lifecycleState ? jjGlowLifecycleStateSha256(lifecycleState) : null;
+        await client.query("INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'job.created','jobs',$3,$4,$5)", [id(),userId,jobId,JSON.stringify({ script_id: input.scriptId, smoke: true, ...(lifecycleAuthority ? { lifecycle_correlation_id: lifecycleAuthority.correlation_id } : {}) }),timestamp]);
+        if (lifecycleAuthority && lifecycleState && lifecycleStateSha256) {
+          await client.query(
+            "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'candidate.lifecycle.created','jobs',$3,$4,$5)",
+            [id(), userId, jobId, JSON.stringify({
+              ...lifecycleAuthority, create_actor: userId, create_timestamp: timestamp,
+              transaction_commit_receipt: { transaction_id: transactionId, atomic_with_job: true, visible_only_after_commit: true },
+              post_commit_state: lifecycleState, post_commit_state_sha256: lifecycleStateSha256, append_only: true,
+            }), timestamp],
+          );
+        }
         commitAttempted = true;
         await client.query("COMMIT");
+        if (lifecycleAuthority && lifecycleState) {
+          const committed = (await client.query<{ meta: string; actor: string; created_at: Date | string }>(
+            `SELECT a.meta,a.actor,a.created_at FROM audit_log a JOIN jobs j ON j.id=a.entity_id
+             WHERE a.action='candidate.lifecycle.created' AND a.entity='jobs' AND a.entity_id=$1`, [jobId],
+          )).rows;
+          if (committed.length !== 1) throw new Error("JJ_GLOW_LIFECYCLE_COMMIT_RECEIPT_MISSING");
+          const meta = JSON.parse(committed[0].meta) as Record<string, unknown>;
+          if (committed[0].actor !== userId || meta.correlation_id !== lifecycleAuthority.correlation_id
+            || meta.post_commit_state_sha256 !== jjGlowLifecycleStateSha256(lifecycleState)) {
+            throw new Error("JJ_GLOW_LIFECYCLE_COMMIT_RECEIPT_MISMATCH");
+          }
+        }
         await cleanupSupersededReferenceKeys({
           jobId,
           snapshotRels: preparedSnapshotRels,
@@ -397,7 +440,9 @@ export async function smokeCreateJob(userId: string, input: {
             "SELECT approved_reference_manifest FROM jobs WHERE id=$1", [jobId]
           )).rows[0]?.approved_reference_manifest ?? null,
         });
-        return { jobId, duplicate: false };
+        return { jobId, duplicate: false, ...(lifecycleAuthority && lifecycleState ? {
+          lifecycle: { correlationId: lifecycleAuthority.correlation_id, stateSha256: jjGlowLifecycleStateSha256(lifecycleState) },
+        } : {}) };
       } catch (error) {
         const rollbackSucceeded = await client.query("ROLLBACK").then(() => true, () => false);
         const code = (error as { code?: string }).code;
