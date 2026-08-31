@@ -3,6 +3,7 @@ import { describe, it } from "node:test";
 import {
   authorizedStagingCandidateLineageRead,
   buildStagingCandidateLineageReceipt,
+  buildStagingWebDatabaseBindingReceipt,
   JJ_LINEAGE_HEADER,
   JJ_LINEAGE_SERVICE_ID,
   JJ_PRODUCT_ID,
@@ -122,6 +123,26 @@ describe("staging candidate lineage evidence", () => {
     assert.doesNotMatch(JSON.stringify(receipt), /email|secret|DATABASE_URL/i);
     assert.doesNotMatch(JSON.stringify(receipt), /private-staging-db|staging_role|10\.0\.0\.12/);
     assert.match(receipt.receipt_payload_sha256, /^[0-9a-f]{64}$/);
+  });
+
+  it("projects an absent-candidate binding from the live web pool without DB identity fields", () => {
+    const receipt = buildStagingWebDatabaseBindingReceipt({
+      sha256: "b".repeat(64),
+      components: ["database_name", "server_version_num", "system_identifier"],
+    }, 0, "2026-08-31T00:00:00.000Z", sha);
+    assert.equal(receipt.candidate_present, false);
+    assert.equal(receipt.candidate_row_count, 0);
+    assert.equal(receipt.runtime, "live-web-pool-read-only");
+    assert.deepEqual(receipt.database_binding, {
+      sha256: "b".repeat(64),
+      database_name_present: true,
+      server_version_present: true,
+      system_identifier_present: true,
+    });
+    assert.doesNotMatch(JSON.stringify(receipt), /private-staging-db|staging_role|10\.0\.0\.12|DATABASE_URL/i);
+    assert.throws(() => buildStagingWebDatabaseBindingReceipt({
+      sha256: "b".repeat(64), components: ["database_name"],
+    }, 0, "2026-08-31T00:00:00.000Z", sha), /INCOMPLETE/);
   });
 
   it("rejects incomplete or mutated admission-time lineage", () => {

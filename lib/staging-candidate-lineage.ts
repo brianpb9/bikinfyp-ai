@@ -84,6 +84,38 @@ export function authorizedStagingCandidateLineageRead(
   return crypto.timingSafeEqual(Buffer.from(parts[4], "hex"), Buffer.from(expected, "hex"));
 }
 
+export function buildStagingWebDatabaseBindingReceipt(
+  binding: { sha256: string; components: string[] },
+  candidateRowCount: number,
+  queriedAt: string,
+  deployedSha: string,
+) {
+  if (!/^[0-9a-f]{64}$/.test(binding.sha256)
+    || !/^[0-9a-f]{40}$/.test(deployedSha)
+    || !Number.isInteger(candidateRowCount) || candidateRowCount < 0 || candidateRowCount > 1) {
+    throw new Error("STAGING_WEB_DATABASE_BINDING_INVALID");
+  }
+  const componentSet = new Set(binding.components);
+  const components = {
+    database_name_present: componentSet.has("database_name"),
+    server_version_present: componentSet.has("server_version_num"),
+    system_identifier_present: componentSet.has("system_identifier"),
+  };
+  if (Object.values(components).some((present) => !present)) {
+    throw new Error("STAGING_WEB_DATABASE_BINDING_INCOMPLETE");
+  }
+  return {
+    schema: "bikinfyp.staging-web-database-binding/v1",
+    task: JJ_LINEAGE_TASK,
+    queried_at: queriedAt,
+    deployed_sha: deployedSha,
+    candidate_present: candidateRowCount === 1,
+    candidate_row_count: candidateRowCount,
+    runtime: "live-web-pool-read-only",
+    database_binding: { sha256: binding.sha256, ...components },
+  };
+}
+
 export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt: string, deployedSha: string) {
   const manifest = parsed<Record<string, any>>(row.approved_reference_manifest);
   const snapshot = parsed<Record<string, unknown>>(row.job_product_snapshot);

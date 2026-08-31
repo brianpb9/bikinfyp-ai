@@ -3,18 +3,26 @@ import { getPool } from "@/lib/postgres/pool";
 import {
   authorizedStagingCandidateLineageRead,
   buildStagingCandidateLineageReceipt,
+  buildStagingWebDatabaseBindingReceipt,
   JJ_PRINCIPAL_ID,
   JJ_PRODUCT_ID,
   JJ_SCRIPT_ID,
 } from "@/lib/staging-candidate-lineage";
+import { postgresRuntimeBinding } from "@/lib/postgres/runtime-binding.cjs";
+import type { PoolClient } from "pg";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
   if (!authorizedStagingCandidateLineageRead(request)) return new Response("Not found", { status: 404 });
+  const pool = getPool(config.databaseUrl);
+  let client: PoolClient | null = null;
   try {
-    const result = await getPool(config.databaseUrl).query(
+    client = await pool.connect();
+    await client.query("BEGIN READ ONLY");
+    const binding = await postgresRuntimeBinding(client);
+    const result = await client.query(
       `SELECT j.*, p.creator_category, pr.images, pr.raw_meta,
         current_database() database_name, current_user database_principal,
         coalesce(inet_server_addr()::text,'local') database_server_address,
@@ -32,14 +40,20 @@ export async function GET(request: Request) {
        WHERE j.product_id=$1 AND j.script_id=$2 AND j.user_id=$3 AND j.org_id IS NULL`,
       [JJ_PRODUCT_ID, JJ_SCRIPT_ID, JJ_PRINCIPAL_ID],
     );
-    if (result.rowCount !== 1) throw new Error("sole exact candidate required");
+    await client.query("COMMIT");
     const sha = process.env.RENDER_GIT_COMMIT ?? "";
-    return Response.json(buildStagingCandidateLineageReceipt(result.rows[0], new Date().toISOString(), sha), {
+    const queriedAt = new Date().toISOString();
+    const webBinding = buildStagingWebDatabaseBindingReceipt(binding, result.rowCount ?? 0, queriedAt, sha);
+    const body = result.rowCount === 0
+      ? webBinding
+      : { ...buildStagingCandidateLineageReceipt(result.rows[0], queriedAt, sha), web_process_database_binding: webBinding };
+    return Response.json(body, {
       status: 200,
       headers: { "cache-control": "private, no-store, max-age=0, must-revalidate" },
     });
   } catch (error) {
+    await client?.query("ROLLBACK").catch(() => undefined);
     console.error("[staging-candidate-lineage] fail-closed", error instanceof Error ? error.message : "unknown error");
     return Response.json({ code: "STAGING_LINEAGE_UNAVAILABLE" }, { status: 409 });
-  }
+  } finally { client?.release(); }
 }
