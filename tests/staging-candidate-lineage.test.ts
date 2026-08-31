@@ -113,7 +113,8 @@ function validRow() {
     approved_reference_manifest_sha256: digest(row.approved_reference_manifest),
     job_product_snapshot_sha256: digest(row.job_product_snapshot), database_binding_sha256: "b".repeat(64),
   };
-  return { ...row, lifecycle_receipt_count: 1, lifecycle_actor: JJ_PRINCIPAL_ID, lifecycle_meta: {
+  return { ...row, lifecycle_receipt_count: 1, lifecycle_actor: JJ_PRINCIPAL_ID,
+    lifecycle_created_at:"2026-08-31T07:00:00.000Z", lifecycle_meta: {
     schema:JJ_GLOW_LIFECYCLE_SCHEMA,task:JJ_GLOW_FINAL_RECOVERY_TASK,correlation_id:lifecycleState.correlation_id,
     historical_root_cause_waiver:true,final_candidate_ordinal:3,max_canonical_candidates_created:3,
     provider_posts_at_admission:0,mutation_policy:{delete_requires_reason_actor:true,supersede_requires_reason_actor:true},
@@ -188,6 +189,19 @@ describe("staging candidate lineage evidence", () => {
     const mutatedReceipt = structuredClone(validRow());
     mutatedReceipt.approved_reference_manifest.stagingReferenceRights.receipt.creation_tool = "evil";
     assert.throws(() => buildStagingCandidateLineageReceipt(mutatedReceipt, "2026-08-31T00:00:00.000Z", sha));
+
+    const lifecycleMutations: Array<[string, (row: ReturnType<typeof validRow>) => void]> = [
+      ["state schema", (row) => { row.lifecycle_meta.post_commit_state.schema = "wrong"; }],
+      ["correlation", (row) => { row.lifecycle_meta.post_commit_state.correlation_id = "22222222-2222-4222-8222-222222222222"; }],
+      ["actor", (row) => { row.lifecycle_meta.post_commit_state.create_actor = "other"; }],
+      ["timestamp", (row) => { row.lifecycle_meta.post_commit_state.create_timestamp = "2026-08-31T07:00:01.000Z"; }],
+      ["transaction", (row) => { row.lifecycle_meta.post_commit_state.transaction_id = "54321"; }],
+      ["audit timestamp", (row) => { row.lifecycle_created_at = "2026-08-31T07:00:02.000Z"; }],
+    ];
+    for (const [label, mutate] of lifecycleMutations) {
+      const changed = structuredClone(validRow()); mutate(changed);
+      assert.throws(() => buildStagingCandidateLineageReceipt(changed, "2026-08-31T00:00:00.000Z", sha), /invariant/, label);
+    }
   });
 
   it("rejects candidates whose hold was released or captured", () => {

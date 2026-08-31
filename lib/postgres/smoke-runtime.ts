@@ -54,6 +54,26 @@ function url() {
 const id = () => crypto.randomUUID();
 const at = () => new Date().toISOString();
 
+export async function assertNoJjGlowFinalCandidateHistory(
+  queryable: Pick<PoolClient, "query">,
+  productId: string,
+  scriptId: string,
+) {
+  const history = (await queryable.query<{
+    prior_job: boolean; prior_script_pointer: boolean; prior_lifecycle: boolean;
+  }>(
+    `SELECT EXISTS(SELECT 1 FROM jobs WHERE product_id=$1 OR script_id=$2) prior_job,
+            EXISTS(SELECT 1 FROM scripts WHERE id=$2 AND job_id IS NOT NULL) prior_script_pointer,
+            EXISTS(SELECT 1 FROM audit_log WHERE action IN
+              ('candidate.lifecycle.created','candidate.lifecycle.deleted','candidate.lifecycle.superseded')
+              AND (entity_id=$2 OR meta::jsonb->>'task'=$3)) prior_lifecycle`,
+    [productId, scriptId, "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831"],
+  )).rows[0];
+  if (!history || history.prior_job || history.prior_script_pointer || history.prior_lifecycle) {
+    throw new Error("JJ_GLOW_FINAL_CANDIDATE_HISTORY_EXISTS");
+  }
+}
+
 export async function smokeFindOrCreateUser(phone: string): Promise<UserRow> {
   const repo = new PgAuthOtpAuditRepository(url(), { authSecret: runtimeAuthSecret(), otpExpiryMin: config.otpExpiryMin, otpMaxAttempts: config.otpMaxAttempts, otpRateLimitPer15Min: config.otpRateLimitPer15Min });
   try { return await repo.findOrCreateUserByPhone(phone); } finally { await repo.close(); }
@@ -298,10 +318,10 @@ export async function smokeCreateJob(userId: string, input: {
         // different scripts to be admitted concurrently.
         const script = await client.query<{ job_id: string | null }>("SELECT job_id FROM scripts WHERE id=$1 FOR UPDATE", [input.scriptId]);
         if (!script.rows[0]) throw new Error("SCRIPT_NOT_FOUND");
+        if (lifecycleAuthority) await assertNoJjGlowFinalCandidateHistory(client, input.productId, input.scriptId);
         if (script.rows[0].job_id) {
           const active = await client.query<{ id: string }>("SELECT id FROM jobs WHERE id=$1 AND state NOT IN ('FAILED','REFUNDED','READY') FOR UPDATE", [script.rows[0].job_id]);
           if (active.rows[0]) {
-            if (lifecycleAuthority) throw new Error("JJ_GLOW_FINAL_CANDIDATE_ALREADY_EXISTS");
             commitAttempted = true;
             await client.query("COMMIT");
             await cleanupUnadmittedReferenceKeys({

@@ -324,17 +324,33 @@ async function main() {
       same_process_readback:true,provider_tasks:0,provider_posts:0,publication:false}));
   } catch (error) {
     if (inserted) {
-      const committed = (await pool.query("SELECT id FROM jobs WHERE script_id=$1", [SCRIPT_ID]).catch(() => ({ rows: [] }))).rows[0];
+      // A read failure is ambiguity, never proof of absence. Leave every row
+      // untouched so operators cannot accidentally erase a committed final candidate.
+      const committed = (await pool.query("SELECT id FROM jobs WHERE script_id=$1", [SCRIPT_ID])).rows[0];
       if (!committed) {
         const mutation = lifecycleMutationReceipt("delete", PRINCIPAL,
           "final admission failed before any job commit; no further candidate is authorized", lifecycleCorrelationId);
         const cleanup = await pool.connect();
         try {
           await cleanup.query("BEGIN");
+          const lockedScript = (await cleanup.query(
+            "SELECT id,job_id FROM scripts WHERE id=$1 FOR UPDATE", [SCRIPT_ID],
+          )).rows;
+          const lockedJobs = (await cleanup.query(
+            "SELECT id FROM jobs WHERE script_id=$1 FOR UPDATE", [SCRIPT_ID],
+          )).rows;
+          if (lockedScript.length !== 1 || lockedScript[0].job_id !== null || lockedJobs.length !== 0) {
+            throw new Error("final candidate cleanup is ambiguous or a job committed");
+          }
+          const deleted = await cleanup.query(
+            "DELETE FROM scripts WHERE id=$1 AND job_id IS NULL RETURNING id", [SCRIPT_ID],
+          );
+          if (deleted.rowCount !== 1 || deleted.rows[0]?.id !== SCRIPT_ID) {
+            throw new Error("final candidate cleanup did not delete exactly one unbound script");
+          }
           await cleanup.query(
             "INSERT INTO audit_log (id,actor,action,entity,entity_id,meta,created_at) VALUES ($1,$2,'candidate.lifecycle.deleted','scripts',$3,$4,$5)",
             [crypto.randomUUID(), PRINCIPAL, SCRIPT_ID, JSON.stringify(mutation), mutation.timestamp]);
-          await cleanup.query("DELETE FROM scripts WHERE id=$1 AND job_id IS NULL", [SCRIPT_ID]);
           await cleanup.query("COMMIT");
         } catch (cleanupError) { await cleanup.query("ROLLBACK").catch(() => undefined); throw new AggregateError([error,cleanupError], "admission and audited cleanup failed"); }
         finally { cleanup.release(); }

@@ -40,6 +40,7 @@ type CandidateRow = Record<string, unknown> & {
   lifecycle_receipt_count: number;
   lifecycle_actor: string;
   lifecycle_meta: string | Record<string, unknown>;
+  lifecycle_created_at: Date | string;
   approved_reference_manifest: string | Record<string, unknown>;
   job_product_snapshot: string | Record<string, unknown>;
   images: string | string[];
@@ -134,6 +135,7 @@ export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt
   const manifestReceipt = manifestRights?.receipt;
   const lifecycle = parsed<Record<string, any>>(row.lifecycle_meta);
   const lifecycleState = lifecycle?.post_commit_state as Record<string, unknown> | undefined;
+  const lifecycleAuditTimestamp = new Date(row.lifecycle_created_at).toISOString();
   if (row.product_id !== JJ_PRODUCT_ID || row.script_id !== JJ_SCRIPT_ID
     || row.state !== "QUEUED" || row.creator_category !== "lokal"
     || row.provider_video !== null || row.provider_voice !== null || row.output_url !== null
@@ -148,14 +150,23 @@ export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt
     || lifecycle?.historical_root_cause_waiver !== true || lifecycle?.final_candidate_ordinal !== 3
     || lifecycle?.max_canonical_candidates_created !== 3 || lifecycle?.provider_posts_at_admission !== 0
     || lifecycle?.create_actor !== JJ_PRINCIPAL_ID || lifecycle?.append_only !== true
+    || lifecycle?.create_timestamp !== lifecycleAuditTimestamp
     || lifecycle?.transaction_commit_receipt?.atomic_with_job !== true
     || lifecycle?.transaction_commit_receipt?.visible_only_after_commit !== true
+    || typeof lifecycle?.transaction_commit_receipt?.transaction_id !== "string"
+    || !/^[0-9]+$/.test(lifecycle.transaction_commit_receipt.transaction_id)
     || lifecycle?.mutation_policy?.delete_requires_reason_actor !== true
     || lifecycle?.mutation_policy?.supersede_requires_reason_actor !== true
-    || !lifecycleState || lifecycleState.job_id !== row.id || lifecycleState.product_id !== row.product_id
+    || !lifecycleState || lifecycleState.schema !== lifecycle.schema
+    || lifecycleState.correlation_id !== lifecycle.correlation_id
+    || lifecycleState.create_actor !== lifecycle.create_actor
+    || lifecycleState.create_timestamp !== lifecycle.create_timestamp
+    || lifecycleState.transaction_id !== lifecycle.transaction_commit_receipt.transaction_id
+    || lifecycleState.job_id !== row.id || lifecycleState.product_id !== row.product_id
     || lifecycleState.script_id !== row.script_id || lifecycleState.state !== row.state
     || Number(lifecycleState.provider_task_count) !== Number(row.provider_task_count)
     || Number(lifecycleState.hold_count) !== Number(row.hold_count)
+    || !/^[0-9a-f]{64}$/.test(String(lifecycleState.database_binding_sha256 ?? ""))
     || lifecycleState.approved_reference_manifest_sha256 !== sha256(typeof row.approved_reference_manifest === "string" ? row.approved_reference_manifest : JSON.stringify(row.approved_reference_manifest))
     || lifecycleState.job_product_snapshot_sha256 !== sha256(typeof row.job_product_snapshot === "string" ? row.job_product_snapshot : JSON.stringify(row.job_product_snapshot))
     || jjGlowLifecycleStateSha256(lifecycleState) !== lifecycle?.post_commit_state_sha256

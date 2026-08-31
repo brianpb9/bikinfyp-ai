@@ -3,6 +3,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { periksaAdmisi } from "../lib/script-engine/admisi";
+import { assertNoJjGlowFinalCandidateHistory } from "../lib/postgres/smoke-runtime";
 import {
   assertJjGlowLockedProductState, authorizeJjGlowExactAdmission, authorizeJjGlowLifecycleAuthority,
   JJ_GLOW_FINAL_RECOVERY_TASK, JJ_GLOW_LIFECYCLE_SCHEMA,
@@ -111,6 +112,11 @@ test("runner memakai OTP acak singkat dan mengirim digest admission", () => {
   assert.match(source, /lifecycle_authority:lifecycleAuthority/);
   assert.match(source, /JJ_GLOW_READBACK_MODE === "post-exit"/);
   assert.match(source, /candidate\.lifecycle\.deleted/);
+  assert.match(source, /SELECT id FROM jobs WHERE script_id=\$1"[\s\S]*SELECT id,job_id FROM scripts WHERE id=\$1 FOR UPDATE/);
+  assert.match(source, /SELECT id FROM jobs WHERE script_id=\$1 FOR UPDATE/);
+  assert.match(source, /DELETE FROM scripts WHERE id=\$1 AND job_id IS NULL RETURNING id/);
+  assert.match(source, /deleted\.rowCount !== 1/);
+  assert.doesNotMatch(source, /SELECT id FROM jobs WHERE script_id=\$1"[^\n]*\.catch/);
   assert.match(source, /JJ_GLOW_CANONICAL_CREATE_AUTHORITY_REQUIRED/);
   assert.match(source, /JJ_GLOW_BOOTSTRAP_PASS/);
   assert.doesNotMatch(source, /const OTP\s*=|10 \* 60_000/);
@@ -129,6 +135,21 @@ test("final recovery lifecycle authority exact dan mutation receipt butuh actor+
   assert.equal(fixture.lifecycleMutationReceipt("delete", JJ_GLOW_PRINCIPAL_ID,
     "admission failed permanently", authority.correlation_id).actor, JJ_GLOW_PRINCIPAL_ID);
   assert.throws(() => fixture.lifecycleMutationReceipt("supersede", "anonymous", "short", authority.correlation_id), /INVALID/);
+});
+
+test("final recovery menolak job terminal maupun lifecycle delete history", async () => {
+  const queryable = (history:{prior_job:boolean;prior_script_pointer:boolean;prior_lifecycle:boolean}) => ({
+    query: async () => ({ rows:[history], rowCount:1 }),
+  }) as never;
+  await assert.doesNotReject(() => assertNoJjGlowFinalCandidateHistory(queryable({
+    prior_job:false,prior_script_pointer:false,prior_lifecycle:false,
+  }), JJ_GLOW_PRODUCT_ID, JJ_GLOW_SCRIPT_ID));
+  await assert.rejects(() => assertNoJjGlowFinalCandidateHistory(queryable({
+    prior_job:true,prior_script_pointer:false,prior_lifecycle:false,
+  }), JJ_GLOW_PRODUCT_ID, JJ_GLOW_SCRIPT_ID), /HISTORY_EXISTS/, "terminal job history must block #4");
+  await assert.rejects(() => assertNoJjGlowFinalCandidateHistory(queryable({
+    prior_job:false,prior_script_pointer:false,prior_lifecycle:true,
+  }), JJ_GLOW_PRODUCT_ID, JJ_GLOW_SCRIPT_ID), /HISTORY_EXISTS/, "deleted lifecycle history must block #4");
 });
 
 test("binding DB diperiksa pada client transaksi yang sama dan probe runtime dibundel", () => {

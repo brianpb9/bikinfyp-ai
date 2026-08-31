@@ -37,6 +37,7 @@ export async function GET(request: Request) {
         ,(SELECT count(*)::int FROM audit_log a WHERE a.entity='jobs' AND a.entity_id=j.id AND a.action='candidate.lifecycle.created') lifecycle_receipt_count
         ,(SELECT a.actor FROM audit_log a WHERE a.entity='jobs' AND a.entity_id=j.id AND a.action='candidate.lifecycle.created' ORDER BY a.created_at DESC LIMIT 1) lifecycle_actor
         ,(SELECT a.meta FROM audit_log a WHERE a.entity='jobs' AND a.entity_id=j.id AND a.action='candidate.lifecycle.created' ORDER BY a.created_at DESC LIMIT 1) lifecycle_meta
+        ,(SELECT a.created_at FROM audit_log a WHERE a.entity='jobs' AND a.entity_id=j.id AND a.action='candidate.lifecycle.created' ORDER BY a.created_at DESC LIMIT 1) lifecycle_created_at
        FROM jobs j
        JOIN personas p ON p.id=j.persona_id
        JOIN products pr ON pr.id=j.product_id
