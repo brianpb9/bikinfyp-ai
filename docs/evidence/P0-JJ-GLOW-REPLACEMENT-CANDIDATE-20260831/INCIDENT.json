@@ -1,0 +1,37 @@
+{
+  "schema": "bikinfyp.replacement-candidate-incident/v1",
+  "task": "P0-JJ-GLOW-REPLACEMENT-CANDIDATE-20260831-R16",
+  "historical_candidate_loss_receipt": {
+    "status": "PASS",
+    "exact_evidence_sha": "84a1221356502273907de34fcc6fb503a4fe8df3"
+  },
+  "authority": {
+    "max_canonical_candidates_created": 2,
+    "one_replacement_candidate_only": true,
+    "authority_bus_sha256": "71920b7bb408718db873d3a8d07c3063bca6fe6f4f8f24f7141ede2b93c78192"
+  },
+  "replacement_attempt": {
+    "render_job_id": "job-daagcs9f2nfc73a8gsp0",
+    "render_status": "succeeded",
+    "attempt_count": 1,
+    "replay_performed": false,
+    "durable_creation_status": "ABSENT_AFTER_ATTEMPT",
+    "candidate_job_id": null
+  },
+  "current_state": {
+    "replacement_candidate_created": "UNPROVEN",
+    "total_canonical_candidates_created": "UNPROVEN_BETWEEN_1_AND_2",
+    "current_eligible_candidate_count": 0,
+    "provider_post_count": 0,
+    "publication_count": 0,
+    "production_mutation_count": 0,
+    "real_money_mutation_count": 0,
+    "worker_suspended": true
+  },
+  "decision": {
+    "result": "FOUNDER_DECISION_REQUIRED",
+    "reason": "The sole authorized replacement admission attempt completed at the control plane, but the signed lineage endpoint and an independent read-only Postgres receipt prove that no exact candidate, script, job, or provider task is durable. The task explicitly requires escalation if the replacement becomes ambiguous or lost.",
+    "candidate_replay": "PROHIBITED_WITHOUT_NEW_EXPLICIT_AUTHORITY",
+    "provider_post": "PROHIBITED"
+  }
+}

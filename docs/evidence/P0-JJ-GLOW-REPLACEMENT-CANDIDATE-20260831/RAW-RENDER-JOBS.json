@@ -1,0 +1,35 @@
+{
+  "queried_at": "2026-08-31T04:49:40Z",
+  "service_id": "srv-d9n28tijnfac73a87lt0",
+  "jobs": [
+    {
+      "purpose": "sole_authorized_replacement_admission_attempt",
+      "id": "job-daagcs9f2nfc73a8gsp0",
+      "status": "succeeded",
+      "created_at": "2026-08-31T04:43:29.01271Z",
+      "started_at": "2026-08-31T04:43:29Z",
+      "finished_at": "2026-08-31T04:43:57Z",
+      "candidate_runner_sha256": "d564430920b06b0195b4411ab6c1fa00361dbc4055726ec72b8bb212271406ac",
+      "bpom_evidence_sha256": "d1c70d7e4f198ca8f63d587ceeeccc18af6b87fe2f7f5fb90a7ebb0b7f711d37",
+      "render_start_command_sha256_with_trailing_lf": "e26b222c48357ae3e99965610443f4fc6f77dfb1fa7bb3c5e66b4de0ed8e1843"
+    },
+    {
+      "purpose": "signed_fail_closed_lineage_read",
+      "id": "job-daagdjhsrm7s73esune0",
+      "status": "failed",
+      "created_at": "2026-08-31T04:45:02.415599Z",
+      "started_at": "2026-08-31T04:45:03Z",
+      "finished_at": "2026-08-31T04:45:09Z",
+      "render_start_command_sha256_with_trailing_lf": "371a8e32702abb7d9693719a5ac927d6bbd903dfdaba8ccfbd618b0fb1ddf629"
+    },
+    {
+      "purpose": "short_read_only_postgres_receipt",
+      "id": "job-daagflijnfac738fht2g",
+      "status": "failed_as_designed_after_emitting_receipt",
+      "created_at": "2026-08-31T04:49:26.559716Z",
+      "started_at": "2026-08-31T04:49:26Z",
+      "finished_at": "2026-08-31T04:49:37Z",
+      "render_start_command_sha256_with_trailing_lf": "b4cdff142002ac6ef36fbda0a249675ca1b4d4ef2da09c474d0a309b2b33217c"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "queried_at": "2026-08-31T04:49:32Z",
+  "source_job_id": "job-daagflijnfac738fht2g",
+  "transaction": "BEGIN READ ONLY",
+  "log_line": "JJ_DB_READBACK {\"rows\":[],\"totals\":{\"scripts\":0,\"jobs\":0,\"provider_tasks\":0},\"mutation\":false}",
+  "rows": [],
+  "totals": {"scripts":0,"jobs":0,"provider_tasks":0},
+  "mutation": false
+}

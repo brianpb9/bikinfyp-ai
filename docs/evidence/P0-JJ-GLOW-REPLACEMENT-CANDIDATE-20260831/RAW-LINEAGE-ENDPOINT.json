@@ -1,0 +1,8 @@
+{
+  "queried_at": "2026-08-31T04:45:06Z",
+  "authentication": "HMAC signed in the staging web one-off; no secret was logged or persisted",
+  "http_status": 409,
+  "response": {"code":"STAGING_LINEAGE_UNAVAILABLE"},
+  "matching_web_log": "[staging-candidate-lineage] fail-closed sole exact candidate required",
+  "mutation": false
+}

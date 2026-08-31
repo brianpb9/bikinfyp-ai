@@ -1,0 +1,11 @@
+{
+  "queried_at": "2026-08-31T04:50:00Z",
+  "id": "srv-d9n28ue417fc73ch2b60",
+  "name": "racun-ai-staging-worker",
+  "type": "background_worker",
+  "suspended": "suspended",
+  "suspenders": ["user"],
+  "auto_deploy": "no",
+  "auto_deploy_trigger": "off",
+  "branch": "staging/exact-46499ac-20260827"
+}
