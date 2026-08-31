@@ -16,5 +16,6 @@ const url=new URL(process.argv[2]);url.pathname=`/${process.argv[3]}`;process.st
 NODE
 )"
 DATABASE_URL="$test_url" bash scripts/migrate-postgres.sh >/dev/null
-DATABASE_URL="$test_url" UJI_PG_URL="$test_url" RACUN_NO_DOTENV=1 npx tsx --test tests/pg-stale-sweep-evidence-lease.test.ts
+DATABASE_URL="$test_url" UJI_PG_URL="$test_url" RACUN_NO_DOTENV=1 npx tsx --test \
+  tests/pg-stale-sweep-evidence-lease.test.ts tests/pg-jj-glow-candidate4-format.test.ts
 printf '%s\n' 'NONCANONICAL_FIXTURE_LIFECYCLE=PASS' 'PROVIDER_CALLS=0' 'CANONICAL_CANDIDATE_COUNT_CHANGE=0'

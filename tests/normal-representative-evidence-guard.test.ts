@@ -509,6 +509,12 @@ test("JJ GLOW freeze verifies DB/R2 independently and activation is ledger-only"
   assert.match(migration, /format='hands_only'/);
   assert.match(migration, /approved_script_sha256 IS NOT NULL/);
   assert.match(migration, /NORMAL-REPRESENTATIVE-EVIDENCE-GUARD-20260829' AND format='talking_head'/);
+  const candidate4Migration = fs.readFileSync(new URL("../migrations/postgres/0046_jj_glow_candidate4_exact_evidence_format.sql", import.meta.url), "utf8");
+  assert.match(candidate4Migration, /task_id='FINAL-POST-SWEEP-CANDIDATE-4-20260901'/);
+  assert.match(candidate4Migration, /job_id='2c49a5c8-9465-4400-a214-159336a2c097'/);
+  assert.match(candidate4Migration, /user_id='ac8b0a3e-8835-4e64-80e6-2e2cae6198b8'/);
+  assert.match(candidate4Migration, /product_id='c470390e-ad3d-4cc8-9ba2-4557691fa7a7'/);
+  assert.match(candidate4Migration, /reference_sha256='744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1'/);
 });
 
 test("migration enforces durable unique 0->1 ledger and private-only artifact key", () => {
