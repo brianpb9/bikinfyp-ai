@@ -8,4 +8,6 @@ Two deterministic pre-POST failures are preserved. The first wrapper did not com
 
 The narrow fix casts the shared ISO timestamp separately at the SQL boundary. A real disposable PostgreSQL regression now proves an active lease can make exactly one durable claim across those mixed column types. The reviewed one-shot wrapper is exact worker/runtime/job bound, rejects deterministic mode, requires the staging key and R2/PostgreSQL identities, checks the queue is paused with zero active jobs, and requests no queue retry.
 
+Remediation runtime `23fa4923ec667a44ef8044e309140ee169864f88` contains that fix plus an append-only successor authorization ledger. The successor insert is valid only when executed by that same exact deployed SHA and only while Candidate #4 remains `GENERATING_VISUAL`, `PREPOST_READY`, actively leased, and zero-effect. The fresh preflight and one-shot wrapper are both hard-bound to this corrected runtime; the original `4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1` authorization remains immutable history.
+
 No provider execution is authorized from this implementation packet until canonical Reviewer PASSes its exact SHA. The worker remains suspended, the queue remains paused, and the one provider POST is still unused.

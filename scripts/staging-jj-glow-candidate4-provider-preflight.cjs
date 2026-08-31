@@ -12,7 +12,8 @@ const SUBJECT="777b1356-2a88-4120-ab61-d49b02ceca10";
 const PRINCIPAL="ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
 const TASK="FINAL-POST-SWEEP-CANDIDATE-4-20260901";
 const EXECUTION_TASK="SCORE80-NORMAL-PROVIDER-EVIDENCE-20260901";
-const RUNTIME="4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1";
+const RUNTIME="23fa4923ec667a44ef8044e309140ee169864f88";
+const PRIOR_RUNTIME="4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1";
 const ACTIVATION="13c22bc7a3a340f0ea5f4bb0db9a905691676c77";
 const BINDING="f4fcf0f493e99f7ad0e5fb7ed320ea272080ef611b2500cb2f6ed89bd8f97610";
 const REFERENCE="744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
@@ -48,10 +49,16 @@ async function main(){
       e.resolution,e.estimated_cost_usd,e.max_cost_usd,e.provider_post_count,e.state evidence_state,
       e.provider_task_id,e.payload_sha256,e.artifact_key,e.retrieval_sha256,e.qc_json,e.actual_cost_usd,
       e.lease_kind,e.lease_last_progress_at,e.lease_expires_at,
-      a.provider_runtime_sha,a.database_binding_sha256 auth_binding,a.authorization_task_id,a.authorized_by,a.created_at auth_created_at
+      COALESCE(sa.provider_runtime_sha,a.provider_runtime_sha) provider_runtime_sha,
+      COALESCE(sa.database_binding_sha256,a.database_binding_sha256) auth_binding,
+      COALESCE(sa.authorization_task_id,a.authorization_task_id) authorization_task_id,
+      COALESCE(sa.authorized_by,a.authorized_by) authorized_by,
+      COALESCE(sa.created_at,a.created_at) auth_created_at,
+      a.provider_runtime_sha prior_provider_runtime_sha,sa.authorizer_deploy_sha
       FROM jobs j JOIN products p ON p.id=j.product_id JOIN scripts s ON s.id=j.script_id JOIN personas pe ON pe.id=j.persona_id
       JOIN normal_representative_evidence_runs e ON e.job_id=j.id
-      JOIN normal_evidence_runtime_authorizations a ON a.job_id=j.id WHERE j.id=$1`,[JOB])).rows;
+      JOIN normal_evidence_runtime_authorizations a ON a.job_id=j.id
+      JOIN normal_evidence_runtime_successor_authorizations sa ON sa.job_id=j.id WHERE j.id=$1`,[JOB])).rows;
     fail(row.length===1,"C4_PROVIDER_PREFLIGHT_ROW_CARDINALITY");const r=row[0];
     const lifecycle=(await c.query("SELECT actor,meta FROM audit_log WHERE entity='jobs' AND entity_id=$1 AND action='candidate.lifecycle.created' ORDER BY created_at,id",[JOB])).rows;
     const audits=(await c.query("SELECT actor,created_at,meta FROM audit_log WHERE entity='scripts' AND entity_id=$1 AND action='script.manual_staged' ORDER BY created_at,id",[SCRIPT])).rows;
@@ -78,7 +85,8 @@ async function main(){
     fail(lifecycle.length===1&&lifecycle[0].actor===PRINCIPAL&&lifecycleMeta.task===TASK
       &&lifecycleMeta.final_candidate_ordinal===4&&lifecycleMeta.max_canonical_candidates_created===4,"C4_PROVIDER_PREFLIGHT_LIFECYCLE");
     fail(r.evidence_task===TASK&&r.deploy_sha===ACTIVATION&&r.provider_runtime_sha===RUNTIME&&r.auth_binding===BINDING
-      &&r.authorization_task_id==="FINAL-POST-SWEEP-CANDIDATE-4-R3-20260901"&&r.authorized_by===PRINCIPAL
+      &&r.prior_provider_runtime_sha===PRIOR_RUNTIME&&r.authorization_task_id===EXECUTION_TASK
+      &&r.authorizer_deploy_sha===RUNTIME&&r.authorized_by===PRINCIPAL
       &&r.reference_sha256===REFERENCE&&r.reference_manifest_sha256===MANIFEST&&r.product_snapshot_sha256===SNAPSHOT
       &&r.approved_script_sha256===SCRIPT_DIGEST&&r.reference_brand==="JJ GLOW"&&r.model==="dreamina-seedance-2-0-mini-260615"
       &&r.evidence_category==="beauty"&&r.evidence_format==="hands_only"&&Number(r.evidence_duration)===15&&r.resolution==="720p"

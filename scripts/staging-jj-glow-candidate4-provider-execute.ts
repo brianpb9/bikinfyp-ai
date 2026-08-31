@@ -8,7 +8,7 @@ import { pgNormalEvidenceStore } from "../lib/postgres/normal-evidence";
 import { processPostgresJob } from "../lib/postgres/worker";
 
 const JOB="2c49a5c8-9465-4400-a214-159336a2c097";
-const RUNTIME="4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1";
+const RUNTIME="23fa4923ec667a44ef8044e309140ee169864f88";
 
 async function main(){
   if(process.env.NODE_ENV!=="production"||process.env.RACUN_DEPLOY_ENV!=="staging"

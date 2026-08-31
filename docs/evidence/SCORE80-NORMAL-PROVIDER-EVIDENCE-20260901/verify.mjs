@@ -62,6 +62,9 @@ const preflight=read("../../../scripts/staging-jj-glow-candidate4-provider-prefl
 assert.match(store,/post_attempted_at=\$3::text,updated_at=\$3::text/);assert.match(store,/lease_last_progress_at=\$3::timestamptz,lease_expires_at=\$5::timestamptz/);
 assert.match(test,/active PREPOST_READY lease claims once across TEXT and TIMESTAMPTZ progress columns/);
 assert.match(preflight,/database_to_r2_reference_digest:"PASS"/);assert.match(preflight,/required_independent_verdicts/);
+assert.match(preflight,/const RUNTIME="23fa4923ec667a44ef8044e309140ee169864f88"/);
+assert.match(preflight,/normal_evidence_runtime_successor_authorizations/);
 assert.match(execute,/RENDER_GIT_COMMIT!==RUNTIME/);assert.match(execute,/RACUN_WORKER_DETERMINISTIC==="1"/);assert.match(execute,/!paused\|\|Number\(counts\.active\)!==0/);
+assert.match(execute,/const RUNTIME="23fa4923ec667a44ef8044e309140ee169864f88"/);
 assert.match(execute,/processPostgresJob\(JOB,\{retryViaQueue:true\}\)/);assert.match(execute,/auto_retry:false/);
 console.log("CANDIDATE4_ACTIVATED_PRECALL_AND_PARAMETER_TYPING_REMEDIATION=PASS");
