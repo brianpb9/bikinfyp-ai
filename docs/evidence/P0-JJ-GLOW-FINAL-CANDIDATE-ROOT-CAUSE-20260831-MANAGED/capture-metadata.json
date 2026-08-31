@@ -1,0 +1,36 @@
+{
+  "captured_at": "2026-08-31T06:31:52Z",
+  "encoding": "exact UTF-8 command stdout with one terminal LF",
+  "captures": [
+    {
+      "file": "CAPTURE-DEPLOY-SOURCE.json",
+      "command": "render deploys list srv-d9n28tijnfac73a87lt0 --output json | jq -c '.[0]'",
+      "bytes": 379,
+      "sha256": "6ed3c5e79272cb1ee4903c500430516b16c3ca08980a1e168977ef066602b2ad"
+    },
+    {
+      "file": "CAPTURE-WEB-JOBS-SOURCE.json",
+      "command": "render jobs list srv-d9n28tijnfac73a87lt0 --output json | jq -c '[.[] | select exact managed job ids]'",
+      "bytes": 3609,
+      "sha256": "95ab6061c54c200adb04aa506b1bc3b1c668e9ce067bbdfc8971455f1857edf6"
+    },
+    {
+      "file": "CAPTURE-WORKER-JOBS-SOURCE.json",
+      "command": "render jobs list srv-d9n28ue417fc73ch2b60 --output json | jq -c '[.[] | select exact worker binding job id]'",
+      "bytes": 1316,
+      "sha256": "08634a04c9695f15d28b14b5d29f26e2cfe0053e907f0864532830a653665647"
+    },
+    {
+      "file": "CAPTURE-LOGS-SOURCE.json",
+      "command": "render logs --resources job-daahme4s728c738dpagg,job-daahmm9f2nfc73acbigg,job-daahk1on74is73b069v0,job-daahn19srm7s73f06i70,job-daahnlpsrm7s73f07sm0 --start 2026-08-31T06:07:00Z --end 2026-08-31T06:15:10Z --direction forward --limit 200 --output json | jq -sc '.'",
+      "bytes": 3472,
+      "sha256": "41a5752109be9a43f2720a938a3f6c17e37bb4e2b5ae681cd2a6c53f75da88a1"
+    },
+    {
+      "file": "CAPTURE-HEALTH-SOURCE.json",
+      "command": "curl -fsS https://racun-ai-staging-web.onrender.com/api/health",
+      "bytes": 423,
+      "sha256": "d69360fb4f9aa42b657273261013a81a68d2fd5286b3a64a903bf05381a49175"
+    }
+  ]
+}

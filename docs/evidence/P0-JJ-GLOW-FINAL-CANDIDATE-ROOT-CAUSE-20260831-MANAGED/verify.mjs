@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import crypto from "node:crypto";
 import fs from "node:fs";
 
 const evidence = JSON.parse(fs.readFileSync(
@@ -10,6 +11,18 @@ const raw = JSON.parse(fs.readFileSync(
 const deployRaw = JSON.parse(fs.readFileSync(new URL("./RAW-DEPLOY.json", import.meta.url), "utf8"));
 const jobsRaw = JSON.parse(fs.readFileSync(new URL("./RAW-DURABILITY-JOBS.json", import.meta.url), "utf8"));
 const logsRaw = JSON.parse(fs.readFileSync(new URL("./RAW-RENDER-LOGS.json", import.meta.url), "utf8"));
+const captureMetadata = JSON.parse(fs.readFileSync(new URL("./capture-metadata.json", import.meta.url), "utf8"));
+const captureBytes = new Map(captureMetadata.captures.map((capture) => {
+  const bytes = fs.readFileSync(new URL(`./${capture.file}`, import.meta.url));
+  assert.equal(bytes.byteLength, capture.bytes, `${capture.file} byte count`);
+  assert.equal(crypto.createHash("sha256").update(bytes).digest("hex"), capture.sha256, `${capture.file} digest`);
+  return [capture.file, bytes];
+}));
+const capturedDeploy = JSON.parse(captureBytes.get("CAPTURE-DEPLOY-SOURCE.json"));
+const capturedWebJobs = JSON.parse(captureBytes.get("CAPTURE-WEB-JOBS-SOURCE.json"));
+const capturedWorkerJobs = JSON.parse(captureBytes.get("CAPTURE-WORKER-JOBS-SOURCE.json"));
+const capturedLogs = JSON.parse(captureBytes.get("CAPTURE-LOGS-SOURCE.json"));
+const capturedHealth = JSON.parse(captureBytes.get("CAPTURE-HEALTH-SOURCE.json"));
 const sha = "630a0a1369522a2e17ac79b3eb136a4c3bc9e625";
 const binding = "6d8f03e28a15f4f6fe729387c6f8a7e94645853d6729fd3c908a636b1d47683c";
 
@@ -21,6 +34,11 @@ assert.deepEqual(raw.health, { ok: true, build_sha: sha });
 assert.equal(deployRaw.receipt.id, evidence.staging_web.deploy_id);
 assert.equal(deployRaw.receipt.commit.id, sha);
 assert.equal(deployRaw.receipt.status, "live");
+assert.equal(capturedDeploy.id, evidence.staging_web.deploy_id);
+assert.equal(capturedDeploy.commit.id, sha);
+assert.equal(capturedDeploy.status, "live");
+assert.equal(capturedHealth.ok, true);
+assert.equal(capturedHealth.build_sha, sha);
 assert.equal(evidence.staging_web.deploy_status, "live");
 assert.equal(evidence.staging_web.health_ok, true);
 assert.equal(evidence.staging_web.health_build_sha, sha);
@@ -65,7 +83,20 @@ assert.deepEqual(jobsRaw.receipts.map(({ id, status }) => ({ id, status })), [
   { id: evidence.durability.create_process_job_id, status: "succeeded" },
   { id: evidence.durability.readback_cleanup_process_job_id, status: "succeeded" },
 ]);
+const capturedJobReceipts = new Map([...capturedWebJobs, ...capturedWorkerJobs].map((job) => [job.id, job]));
+for (const jobId of [
+  evidence.durability.create_process_job_id,
+  evidence.durability.readback_cleanup_process_job_id,
+  evidence.failed_probe_cleanup.verified_by_readonly_job_id,
+  evidence.database_bindings.worker_one_off.job_id,
+  evidence.staging_web.authenticated_db_query_job_id,
+]) {
+  assert.equal(capturedJobReceipts.get(jobId)?.status, "succeeded", `${jobId} status`);
+}
 const capturedMessages = new Map(logsRaw.events.map((item) => [item.resource, JSON.parse(item.message)]));
+const providerLogMessages = new Map(capturedLogs
+  .filter((item) => item.message.startsWith("{"))
+  .map((item) => [item.labels.find((label) => label.name === "resource")?.value, JSON.parse(item.message)]));
 const { render_job_id: createRenderJob, status: createStatus, ...createEvent } = create;
 const { render_job_id: readbackRenderJob, status: readbackStatus, ...readbackEvent } = readback;
 assert.equal(createRenderJob, evidence.durability.create_process_job_id);
@@ -74,6 +105,8 @@ assert.equal(createStatus, "succeeded");
 assert.equal(readbackStatus, "succeeded");
 assert.deepEqual(capturedMessages.get(createRenderJob), createEvent);
 assert.deepEqual(capturedMessages.get(readbackRenderJob), readbackEvent);
+assert.deepEqual(providerLogMessages.get(createRenderJob), createEvent);
+assert.deepEqual(providerLogMessages.get(readbackRenderJob), readbackEvent);
 
 for (const runtime of [evidence.database_bindings.runner, evidence.database_bindings.worker_one_off]) {
   assert.equal(runtime.sha256, binding);
@@ -96,6 +129,8 @@ assert.equal(web.web_candidate_absent, true);
 assert.equal(web.secret_exposed, false);
 assert.equal(capturedMessages.get(worker.render_job_id).binding_sha256, binding);
 assert.equal(capturedMessages.get(web.render_job_id).web_candidate_absent, true);
+assert.equal(providerLogMessages.get(worker.render_job_id).binding_sha256, binding);
+assert.equal(providerLogMessages.get(web.render_job_id).web_candidate_absent, true);
 
 assert.deepEqual(evidence.safety, {
   staging_only: true,
