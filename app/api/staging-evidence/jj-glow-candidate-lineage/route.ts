@@ -18,6 +18,9 @@ export async function GET(request: Request) {
       `SELECT j.*, p.creator_category, pr.images, pr.raw_meta,
         (SELECT count(*)::int FROM provider_tasks t WHERE t.job_id=j.id) provider_task_count,
         (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='hold' AND l.delta=-12000) hold_count,
+        (SELECT coalesce(sum(l.delta),0)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='hold') hold_delta,
+        (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type IN ('capture','release')) terminal_ledger_count,
+        (SELECT coalesce(sum(l.delta),0)::int FROM credit_ledger l WHERE l.job_id=j.id) job_ledger_net,
         (SELECT count(*)::int FROM jobs x WHERE x.product_id=j.product_id) product_job_count,
         (SELECT count(*)::int FROM scripts x WHERE x.product_id=j.product_id) product_script_count
        FROM jobs j

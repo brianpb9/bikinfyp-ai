@@ -1,6 +1,6 @@
 import crypto from "node:crypto";
 
-export const JJ_LINEAGE_TASK = "P0-JJ-GLOW-CANDIDATE-CLOSURE-20260831-R10";
+export const JJ_LINEAGE_TASK = "P0-JJ-GLOW-CANDIDATE-CLOSURE-20260831-R11";
 export const JJ_LINEAGE_HEADER = "x-racun-staging-lineage-read";
 export const JJ_LINEAGE_TTL_MS = 5 * 60_000;
 export const JJ_LINEAGE_SERVICE_ID = "srv-d9n28tijnfac73a87lt0";
@@ -9,6 +9,8 @@ export const JJ_SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
 export const JJ_PRINCIPAL_ID = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
 export const JJ_REFERENCE_SHA = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 export const JJ_RIGHTS_RECEIPT_SHA = "ca3906a381e6d299bc46fe62aeefbc3bd9b4183a6ff59c4f3cde2ca8f94788c3";
+export const JJ_RIGHTS_SCOPE = "internal_staging_ai_and_derivatives_only";
+export const JJ_PRODUCT_SNAPSHOT_SHA = "674b9dc532404087544e4f0a95c56d7a0e077388ce78aab9827f92c2a2df73d6";
 
 type CandidateRow = Record<string, unknown> & {
   id: string;
@@ -22,6 +24,9 @@ type CandidateRow = Record<string, unknown> & {
   output_url: string | null;
   provider_task_count: number;
   hold_count: number;
+  hold_delta: number;
+  terminal_ledger_count: number;
+  job_ledger_net: number;
   product_job_count: number;
   product_script_count: number;
   approved_reference_manifest: string | Record<string, unknown>;
@@ -80,17 +85,40 @@ export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt
   const images = parsed<string[]>(row.images);
   const rights = parsed<Record<string, any>>(row.raw_meta)?.staging_reference_rights;
   const referenceKey = images?.[0];
+  const receiptKey = `${referenceKey}.rights.json`;
+  const manifestRights = manifest?.stagingReferenceRights;
+  const manifestBinding = manifestRights?.binding;
+  const manifestReceipt = manifestRights?.receipt;
   if (row.product_id !== JJ_PRODUCT_ID || row.script_id !== JJ_SCRIPT_ID
     || row.state !== "QUEUED" || row.creator_category !== "lokal"
     || row.provider_video !== null || row.provider_voice !== null || row.output_url !== null
     || Number(row.provider_task_count) !== 0 || Number(row.hold_count) !== 1
+    || Number(row.hold_delta) !== -12_000 || Number(row.terminal_ledger_count) !== 0
+    || Number(row.job_ledger_net) !== -12_000
     || Number(row.product_job_count) !== 1 || Number(row.product_script_count) !== 1
     || !row.id || !row.persona_id || !manifest || !snapshot || images?.length !== 1
     || referenceKey !== rights?.reference_key
     || rights?.reference_sha256 !== JJ_REFERENCE_SHA
     || rights?.receipt_sha256 !== JJ_RIGHTS_RECEIPT_SHA
+    || rights?.receipt_key !== receiptKey || rights?.scope !== JJ_RIGHTS_SCOPE
     || rights?.publication_permitted !== false
-    || manifest.references?.length !== 1 || manifest.references[0]?.sha256 !== JJ_REFERENCE_SHA) {
+    || manifest.references?.length !== 1 || manifest.references[0]?.rel !== referenceKey
+    || manifest.references[0]?.sha256 !== JJ_REFERENCE_SHA
+    || manifestBinding?.reference_key !== referenceKey || manifestBinding?.receipt_key !== receiptKey
+    || manifestBinding?.reference_sha256 !== JJ_REFERENCE_SHA
+    || manifestBinding?.receipt_sha256 !== JJ_RIGHTS_RECEIPT_SHA
+    || manifestBinding?.scope !== JJ_RIGHTS_SCOPE || manifestBinding?.publication_permitted !== false
+    || manifestReceipt?.schema !== "bikinfyp.staging-reference-rights/v1"
+    || manifestReceipt?.source_kind !== "internally_created_synthetic"
+    || manifestReceipt?.actor_principal_id !== JJ_PRINCIPAL_ID || manifestReceipt?.actor_role !== "Founder/CEO"
+    || manifestReceipt?.owning_user_id !== JJ_PRINCIPAL_ID || manifestReceipt?.owning_org_id !== null
+    || manifestReceipt?.product_id !== JJ_PRODUCT_ID
+    || manifestReceipt?.rights_scope !== JJ_RIGHTS_SCOPE || manifestReceipt?.publication_permitted !== false
+    || manifestReceipt?.normalized_object?.storage_key !== referenceKey
+    || manifestReceipt?.normalized_object?.sha256 !== JJ_REFERENCE_SHA
+    || manifestReceipt?.revocation?.storage_key !== `${receiptKey}.revoked.json`
+    || manifestReceipt?.revocation?.status_at_issuance !== "NOT_REVOKED"
+    || sha256(bytesFor(snapshot)) !== JJ_PRODUCT_SNAPSHOT_SHA) {
     throw new Error("JJ candidate lineage invariant mismatch");
   }
   const payload = {
@@ -124,6 +152,9 @@ export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt
       output_url_is_null: true,
       provider_task_count: Number(row.provider_task_count),
       hold_count: Number(row.hold_count),
+      hold_delta: Number(row.hold_delta),
+      terminal_ledger_count: Number(row.terminal_ledger_count),
+      job_ledger_net: Number(row.job_ledger_net),
       exact_product_job_count: Number(row.product_job_count),
       exact_product_script_count: Number(row.product_script_count),
       worker_required_suspended: true,
