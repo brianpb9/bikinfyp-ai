@@ -1,0 +1,26 @@
+{
+  "schema": "bikinfyp.final-recovery-candidate-managed-evidence/v1",
+  "task": "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831",
+  "reviewed_runtime_sha": "a41cedd9fe2895f0b98f41d1ccd4500523c280f2",
+  "admission_runtime_sha": "c5822558710d088a2d1ac74b495097b81f8441ee",
+  "deploy_id": "dep-daajhjhsrm7s73f4nk80",
+  "admission_job_id": "job-daajath42hec73allv8g",
+  "fresh_post_exit_job_id": "job-daajjfqjnfac738o0320",
+  "independent_reviewer_job_id": "job-daajjsek1f9s73amtmsg",
+  "candidate": {
+    "job_id": "55284f20-efb8-4b18-8a24-f90fc91af733",
+    "correlation_id": "ee52cb72-6e2f-4a50-82c5-2f1158a88de0",
+    "state_sha256": "c1722c6d967df3071be9449a3303fdf45a5e38dd339a54081375b7adb0aba58d",
+    "database_binding_sha256": "6d8f03e28a15f4f6fe729387c6f8a7e94645853d6729fd3c908a636b1d47683c",
+    "transaction_id": "132418",
+    "create_actor": "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8",
+    "create_timestamp": "2026-08-31T08:04:15.376Z"
+  },
+  "fresh_post_exit": {"candidate_count":1,"script_count":1,"provider_tasks":0,"provider_posts":0,"outputs":0,"fyp_posted":0,"post_plans":0,"publication":false},
+  "independent_reviewer": {"receipt_payload_sha256":"e2a066dd4193f5dc9669cf885814166d1af29fdeaa969a76b2191dc25af22f5c","candidate_count":1,"script_count":1,"provider_tasks":0,"provider_posts":0,"outputs":0,"fyp_posted":0,"post_plans":0,"hold_count":1,"terminal_ledger_count":0,"publication":false,"mutation":false},
+  "candidate_replay_count": 0,
+  "provider_call_count": 0,
+  "metadata_mutation": false,
+  "production_mutation": false,
+  "public_payment_mutation": false
+}

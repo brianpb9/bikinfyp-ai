@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-08-31T08:24:00Z",
+  "captures": [
+    {"file":"CAPTURE-DEPLOYS-SOURCE.json","command":"render deploys list srv-d9n28tijnfac73a87lt0 --output json | jq -c '[.[] | select(.id==\"dep-daaj83942hec73alej2g\" or .id==\"dep-daajhjhsrm7s73f4nk80\")]'","bytes":768,"sha256":"9e6da68e2f2755aba4350e3d9ce34c498f5e17ddac7437797e4b7c0b4094d13c"},
+    {"file":"CAPTURE-JOBS-SOURCE.json","command":"render jobs list srv-d9n28tijnfac73a87lt0 --output json | jq -c '[.[] | select(.id==\"job-daajath42hec73allv8g\" or .id==\"job-daajjfqjnfac738o0320\" or .id==\"job-daajjsek1f9s73amtmsg\")]'","bytes":3375,"sha256":"eb567985f2466a333f86c1aa0964581eedadb3775875501d72e814e5f072554a"},
+    {"file":"CAPTURE-LOGS-SOURCE.json","command":"render logs --resources job-daajath42hec73allv8g,job-daajjfqjnfac738o0320,job-daajjsek1f9s73amtmsg --start 2026-08-31T08:04:00Z --end 2026-08-31T08:24:00Z --direction forward --limit 200 --output json | jq -sc '.'","bytes":2666,"sha256":"8b3996d66684fe97d0930c2245d90b1aed122df49699ea9ac789d46194576528"},
+    {"file":"CAPTURE-HEALTH-SOURCE.json","command":"curl -fsS https://racun-ai-staging-web.onrender.com/api/health | jq -c '.'","bytes":423,"sha256":"26305f61fe3192d94c3ba4cbd9446ffac8f3b07fcedf5718ea3d31afefe1cc40"},
+    {"file":"CAPTURE-SERVICES-SOURCE.json","command":"render services list --output json | jq -c '[.[] | select(.service.id==\"srv-d9n28tijnfac73a87lt0\" or .service.id==\"srv-d9n28ue417fc73ch2b60\") | {id:.service.id,name:.service.name,type:.service.type,suspended:.service.suspended}]'","bytes":233,"sha256":"7c7ccdb1a78e278ae555c5146cbed9d0a09278bb9991a3e9da138a7b3e74b406"}
+  ]
+}
