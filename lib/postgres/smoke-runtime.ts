@@ -30,7 +30,8 @@ import { stagingReferenceRightsBindingFromRawMeta } from "../staging-reference-r
 import { requireCurrentJobEvidence } from "../legacy-job-quarantine";
 import {
   assertJjGlowLockedProductState, authorizeJjGlowExactAdmission, authorizeJjGlowLifecycleAuthority,
-  JJ_GLOW_LIFECYCLE_SCHEMA, jjGlowLifecycleStateSha256,
+  JJ_GLOW_CANDIDATE_4_TASK, JJ_GLOW_LIFECYCLE_SCHEMA, jjGlowLifecycleStateSha256,
+  type JjGlowLifecycleAuthority,
 } from "../staging-jj-glow-exact-admission";
 import { assertReferencePublicationPermitted, parseJobReferenceManifest, verifyJobReferenceManifestRights } from "../job-reference-manifest";
 import { postgresRuntimeBinding } from "./runtime-binding.cjs";
@@ -58,7 +59,33 @@ export async function assertNoJjGlowFinalCandidateHistory(
   queryable: Pick<PoolClient, "query">,
   productId: string,
   scriptId: string,
+  lifecycleAuthority: JjGlowLifecycleAuthority | null = null,
 ) {
+  if (lifecycleAuthority?.task === JJ_GLOW_CANDIDATE_4_TASK) {
+    const history = (await queryable.query<{
+      product_job_count: number; valid_predecessor_count: number; candidate_job_count: number;
+      prior_script_pointer: boolean; prior_lifecycle: boolean;
+    }>(
+      `SELECT (SELECT count(*)::int FROM jobs WHERE product_id=$1) product_job_count,
+              (SELECT count(*)::int FROM jobs j
+                WHERE j.product_id=$1 AND j.id='55284f20-efb8-4b18-8a24-f90fc91af733'
+                  AND j.script_id='f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d' AND j.state='REFUNDED'
+                  AND NOT EXISTS (SELECT 1 FROM provider_tasks pt WHERE pt.job_id=j.id)
+                  AND NOT EXISTS (SELECT 1 FROM normal_representative_evidence_runs ne
+                    WHERE ne.job_id=j.id AND ne.provider_post_count <> 0)) valid_predecessor_count,
+              (SELECT count(*)::int FROM jobs WHERE script_id=$2) candidate_job_count,
+              EXISTS(SELECT 1 FROM scripts WHERE id=$2 AND job_id IS NOT NULL) prior_script_pointer,
+              EXISTS(SELECT 1 FROM audit_log WHERE action IN
+                ('candidate.lifecycle.created','candidate.lifecycle.deleted','candidate.lifecycle.superseded')
+                AND (entity_id=$2 OR meta::jsonb->>'task'=$3)) prior_lifecycle`,
+      [productId, scriptId, JJ_GLOW_CANDIDATE_4_TASK],
+    )).rows[0];
+    if (!history || Number(history.product_job_count) !== 1 || Number(history.valid_predecessor_count) !== 1
+        || Number(history.candidate_job_count) !== 0 || history.prior_script_pointer || history.prior_lifecycle) {
+      throw new Error("JJ_GLOW_CANDIDATE_4_HISTORY_INVALID");
+    }
+    return;
+  }
   const history = (await queryable.query<{
     prior_job: boolean; prior_script_pointer: boolean; prior_lifecycle: boolean;
   }>(
@@ -318,7 +345,7 @@ export async function smokeCreateJob(userId: string, input: {
         // different scripts to be admitted concurrently.
         const script = await client.query<{ job_id: string | null }>("SELECT job_id FROM scripts WHERE id=$1 FOR UPDATE", [input.scriptId]);
         if (!script.rows[0]) throw new Error("SCRIPT_NOT_FOUND");
-        if (lifecycleAuthority) await assertNoJjGlowFinalCandidateHistory(client, input.productId, input.scriptId);
+        if (lifecycleAuthority) await assertNoJjGlowFinalCandidateHistory(client, input.productId, input.scriptId, lifecycleAuthority);
         if (script.rows[0].job_id) {
           const active = await client.query<{ id: string }>("SELECT id FROM jobs WHERE id=$1 AND state NOT IN ('FAILED','REFUNDED','READY') FOR UPDATE", [script.rows[0].job_id]);
           if (active.rows[0]) {

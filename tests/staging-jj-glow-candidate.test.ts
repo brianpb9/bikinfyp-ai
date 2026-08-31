@@ -3,7 +3,7 @@ import fs from "node:fs";
 import { createRequire } from "node:module";
 import test from "node:test";
 import { periksaAdmisi } from "../lib/script-engine/admisi";
-import { assertNoJjGlowFinalCandidateHistory } from "../lib/postgres/smoke-runtime";
+import { assertNoJjGlowFinalCandidateHistory, smokeCreateJob } from "../lib/postgres/smoke-runtime";
 import {
   assertJjGlowLockedProductState, authorizeJjGlowExactAdmission, authorizeJjGlowLifecycleAuthority,
   JJ_GLOW_FINAL_RECOVERY_TASK, JJ_GLOW_CANDIDATE_4_TASK, JJ_GLOW_CANDIDATE_4_SCRIPT_ID,
@@ -173,6 +173,32 @@ test("final recovery menolak job terminal maupun lifecycle delete history", asyn
   await assert.rejects(() => assertNoJjGlowFinalCandidateHistory(queryable({
     prior_job:false,prior_script_pointer:false,prior_lifecycle:true,
   }), JJ_GLOW_PRODUCT_ID, JJ_GLOW_SCRIPT_ID), /HISTORY_EXISTS/, "deleted lifecycle history must block #4");
+});
+
+test("smokeCreateJob candidate #4 meneruskan authority dan menerima tepat satu predecessor refunded", async () => {
+  const authority = {
+    schema:JJ_GLOW_LIFECYCLE_SCHEMA,task:JJ_GLOW_CANDIDATE_4_TASK,
+    correlation_id:"550e8400-e29b-41d4-a716-446655440000",historical_root_cause_waiver:true,
+    provider_posts_at_admission:0,mutation_policy:{delete_requires_reason_actor:true,supersede_requires_reason_actor:true},
+    final_candidate_ordinal:4,max_canonical_candidates_created:4,
+  } as const;
+  const queryable = (history:{product_job_count:number;valid_predecessor_count:number;candidate_job_count:number;
+    prior_script_pointer:boolean;prior_lifecycle:boolean}) => ({
+    query: async () => ({ rows:[history], rowCount:1 }),
+  }) as never;
+  const exact = {product_job_count:1,valid_predecessor_count:1,candidate_job_count:0,
+    prior_script_pointer:false,prior_lifecycle:false};
+  assert.match(smokeCreateJob.toString(),
+    /assertNoJjGlowFinalCandidateHistory\(client,\s*input\.productId,\s*input\.scriptId,\s*lifecycleAuthority\)/,
+    "canonical admission must pass the reviewed 4/4 authority into its history guard");
+  await assert.doesNotReject(() => assertNoJjGlowFinalCandidateHistory(
+    queryable(exact), JJ_GLOW_PRODUCT_ID, JJ_GLOW_CANDIDATE_4_SCRIPT_ID, authority));
+  await assert.rejects(() => assertNoJjGlowFinalCandidateHistory(
+    queryable({...exact,valid_predecessor_count:0}), JJ_GLOW_PRODUCT_ID, JJ_GLOW_CANDIDATE_4_SCRIPT_ID, authority),
+  /CANDIDATE_4_HISTORY_INVALID/);
+  await assert.rejects(() => assertNoJjGlowFinalCandidateHistory(
+    queryable({...exact,product_job_count:2}), JJ_GLOW_PRODUCT_ID, JJ_GLOW_CANDIDATE_4_SCRIPT_ID, authority),
+  /CANDIDATE_4_HISTORY_INVALID/);
 });
 
 test("binding DB diperiksa pada client transaksi yang sama dan probe runtime dibundel", () => {
