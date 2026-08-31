@@ -27,6 +27,7 @@ COPY migrations ./migrations
 COPY scripts/migrate-postgres-runtime.mjs ./scripts/migrate-postgres-runtime.mjs
 COPY scripts/staging-jj-glow-candidate.cjs ./scripts/staging-jj-glow-candidate.cjs
 COPY scripts/staging-candidate-durability-probe.ts ./scripts/staging-candidate-durability-probe.ts
+COPY scripts/staging-jj-glow-final-evidence.ts ./scripts/staging-jj-glow-final-evidence.ts
 COPY scripts/fixtures/BPOM-KO-NA18260500350-20260831.json ./scripts/fixtures/BPOM-KO-NA18260500350-20260831.json
 COPY instrumentation.ts middleware.ts next.config.ts postcss.config.mjs tailwind.config.ts tsconfig.json ./
 
@@ -34,6 +35,10 @@ RUN ./node_modules/.bin/esbuild scripts/staging-candidate-durability-probe.ts \
       --bundle --packages=external --platform=node --format=cjs \
       --outfile=scripts/staging-candidate-durability-probe.cjs \
   && node --check scripts/staging-candidate-durability-probe.cjs \
+  && ./node_modules/.bin/esbuild scripts/staging-jj-glow-final-evidence.ts \
+      --bundle --packages=external --platform=node --format=cjs \
+      --outfile=scripts/staging-jj-glow-final-evidence.cjs \
+  && node --check scripts/staging-jj-glow-final-evidence.cjs \
   && npm run build \
   && npm prune --omit=dev
 
@@ -62,6 +67,7 @@ COPY --from=build --chown=racun:racun /srv/app/package.json /srv/app/package-loc
 COPY --from=build --chown=racun:racun /srv/app/scripts/migrate-postgres-runtime.mjs ./scripts/migrate-postgres-runtime.mjs
 COPY --from=build --chown=racun:racun /srv/app/scripts/staging-jj-glow-candidate.cjs ./scripts/staging-jj-glow-candidate.cjs
 COPY --from=build --chown=racun:racun /srv/app/scripts/staging-candidate-durability-probe.cjs ./scripts/staging-candidate-durability-probe.cjs
+COPY --from=build --chown=racun:racun /srv/app/scripts/staging-jj-glow-final-evidence.cjs ./scripts/staging-jj-glow-final-evidence.cjs
 COPY --from=build --chown=racun:racun /srv/app/scripts/fixtures/BPOM-KO-NA18260500350-20260831.json ./scripts/fixtures/BPOM-KO-NA18260500350-20260831.json
 COPY --from=build --chown=racun:racun /srv/app/migrations ./migrations
 

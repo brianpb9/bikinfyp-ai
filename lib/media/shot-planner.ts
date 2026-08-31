@@ -74,6 +74,10 @@ export interface ShotPlanInput {
   /** Multi-shot: jumlah scene yang diminta user (2-6). Tanpa ini, jumlahnya
    * diturunkan dari durasi & format seperti sebelumnya. */
   shotCountOverride?: number;
+  /** Exact reviewed evidence only: collapse a <=15s hands-only plan to one
+   * provider request. The provider contract independently rejects every job
+   * except the immutable JJ GLOW candidate. */
+  reviewedEvidenceSinglePost?: boolean;
   /**
    * Format IDE terpilih (knowledge/formats/*.json) — beda sumbu dari `format`
    * di atas, yang menentukan jenis produksi (hands_only/talking_head/...).
@@ -787,7 +791,10 @@ export function planShots(input: ShotPlanInput): VisualSpec {
   // Karena itu override modulnya tetap dihormati meski format presenter;
   // persona netral terkurasi menjaga identitas tanpa referensi pengguna.
   const wajahTerkunci = format === "talking_head" && !config.seedanceFaceRef && !neutralStoryAds;
-  const numShots = wajahTerkunci
+  if (input.reviewedEvidenceSinglePost && (format !== "hands_only" || input.durationSec > 15)) {
+    throw new Error("REVIEWED_EVIDENCE_SINGLE_POST_SHAPE_INVALID");
+  }
+  const numShots = input.reviewedEvidenceSinglePost ? 1 : wajahTerkunci
     ? Math.max(1, Math.ceil(input.durationSec / 15))
     : requested !== null ? requested : format === "talking_head"
       ? Math.max(1, Math.ceil(input.durationSec / 15))

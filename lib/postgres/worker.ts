@@ -64,7 +64,7 @@ import { normalisasiFormatWorker } from "../media/worker-format";
 import { managedStagingDeterministicWorkerGate } from "../staging-deterministic-worker";
 import { withProductEvidenceMutationLock } from "../job-admission-reference";
 import { freezeProviderRequestCorrelation } from "./prompt-request-correlation";
-import { assertNormalEvidenceProviderContract, normalEvidenceStore } from "../providers/normal-evidence";
+import { assertNormalEvidenceProviderContract, isJjGlowFinalEvidenceContract, normalEvidenceStore } from "../providers/normal-evidence";
 import { assertNormalEvidenceReceiptMatchesArtifact, runNormalEvidenceOfflineQc, type NormalEvidenceOfflineQcReceipt } from "../media/normal-evidence-offline-qc";
 
 type PostgresQcRunner = typeof runQc;
@@ -528,6 +528,7 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     productType: {...row,category:row.product_category},
   });
   const representativeEvidence = await normalEvidenceStore().get(row.id);
+  const exactJjGlowEvidence = representativeEvidence ? isJjGlowFinalEvidenceContract(representativeEvidence) : false;
   const productSnapshot = currentEvidence.productSnapshot;
   const snapshotPriceIdr = productSnapshot.priceIdr!;
   // Semua consumer hilir tetap memakai WorkerRow, tetapi nilainya kini datang
@@ -641,7 +642,8 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     // sampai ke perencana shot.
     tvcRoute: TVC_ROUTES.includes(row.tvc_route as never) ? (row.tvc_route as TvcRoute) : undefined,
     ugcTemplate: storyIdentity.templateId,
-    recordStyle: row.record_style });
+    recordStyle: row.record_style,
+    reviewedEvidenceSinglePost: exactJjGlowEvidence });
 
   // KONTRAK PENYEDIA DIPERIKSA DI SINI, bukan nanti di registry.
   //

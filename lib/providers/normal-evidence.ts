@@ -3,6 +3,11 @@ import { MANAGED_STAGING_WORKER_SERVICE_ID } from "../staging-deterministic-work
 import type { NormalEvidenceOfflineQcReceipt } from "../media/normal-evidence-offline-qc";
 
 export const NORMAL_EVIDENCE_TASK = "NORMAL-REPRESENTATIVE-EVIDENCE-GUARD-20260829";
+export const JJ_GLOW_FINAL_EVIDENCE_TASK = "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831";
+export const JJ_GLOW_FINAL_EVIDENCE_JOB_ID = "55284f20-efb8-4b18-8a24-f90fc91af733";
+export const JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID = "c470390e-ad3d-4cc8-9ba2-4557691fa7a7";
+export const JJ_GLOW_FINAL_EVIDENCE_USER_ID = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
+export const JJ_GLOW_FINAL_EVIDENCE_REFERENCE_SHA256 = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 export const NORMAL_EVIDENCE_MODEL = "dreamina-seedance-2-0-mini-260615";
 export const NORMAL_EVIDENCE_RESOLUTION = "720p";
 export const NORMAL_EVIDENCE_FORMAT = "talking_head";
@@ -143,6 +148,20 @@ export function assertNormalEvidenceManagedRuntime(input: {
   return env;
 }
 
+/** The sole hands-only exception is a reviewed, immutable staging candidate.
+ * Keeping the identity predicate here prevents a generic hands-only job from
+ * borrowing the single-POST evidence path. */
+export function isJjGlowFinalEvidenceContract(contract: Pick<NormalEvidenceContract,
+  "taskId" | "jobId" | "userId" | "productId" | "referenceSha256" | "format" | "category" | "durationS">): boolean {
+  return contract.taskId === JJ_GLOW_FINAL_EVIDENCE_TASK
+    && contract.jobId === JJ_GLOW_FINAL_EVIDENCE_JOB_ID
+    && contract.userId === JJ_GLOW_FINAL_EVIDENCE_USER_ID
+    && contract.productId === JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID
+    && contract.referenceSha256 === JJ_GLOW_FINAL_EVIDENCE_REFERENCE_SHA256
+    && contract.format === "hands_only" && contract.category === "beauty"
+    && contract.durationS === NORMAL_EVIDENCE_DURATION_S;
+}
+
 /** Full preflight at the last boundary before any outbound provider request. */
 export function assertNormalEvidenceProviderContract(contract: NormalEvidenceContract, input: {
   runtime?: NodeJS.ProcessEnv;
@@ -168,7 +187,8 @@ export function assertNormalEvidenceProviderContract(contract: NormalEvidenceCon
   visualSubjectPolicy?: string;
 }) {
   const env = assertNormalEvidenceManagedRuntime(input);
-  if (contract.taskId !== NORMAL_EVIDENCE_TASK) throw new Error("NORMAL_EVIDENCE_TASK_MISMATCH");
+  const exactJjGlow = isJjGlowFinalEvidenceContract(contract);
+  if (contract.taskId !== NORMAL_EVIDENCE_TASK && !exactJjGlow) throw new Error("NORMAL_EVIDENCE_TASK_MISMATCH");
   const runtimeSha = env.RENDER_GIT_COMMIT;
   if (!runtimeSha || runtimeSha !== contract.deploySha || !/^[0-9a-f]{40}$/.test(runtimeSha)) throw new Error("NORMAL_EVIDENCE_DEPLOY_SHA_MISMATCH");
   if (input.model !== contract.model || input.model !== NORMAL_EVIDENCE_MODEL) throw new Error("NORMAL_EVIDENCE_MODEL_MISMATCH");
@@ -176,7 +196,8 @@ export function assertNormalEvidenceProviderContract(contract: NormalEvidenceCon
   if (input.durationSec !== NORMAL_EVIDENCE_DURATION_S || contract.durationS !== NORMAL_EVIDENCE_DURATION_S || input.shotCount !== 1) throw new Error("NORMAL_EVIDENCE_REQUIRES_ONE_15S_SHOT");
   if ((input.width !== undefined && input.width !== NORMAL_EVIDENCE_WIDTH)
       || (input.height !== undefined && input.height !== NORMAL_EVIDENCE_HEIGHT)) throw new Error("NORMAL_EVIDENCE_DIMENSIONS_MISMATCH");
-  if (contract.format !== NORMAL_EVIDENCE_FORMAT || (input.format && input.format !== contract.format)) throw new Error("NORMAL_EVIDENCE_FORMAT_MISMATCH");
+  const expectedFormat = exactJjGlow ? "hands_only" : NORMAL_EVIDENCE_FORMAT;
+  if (contract.format !== expectedFormat || (input.format && input.format !== contract.format)) throw new Error("NORMAL_EVIDENCE_FORMAT_MISMATCH");
   if (!contract.category || (input.category && input.category !== contract.category)) throw new Error("NORMAL_EVIDENCE_CATEGORY_MISMATCH");
   if (input.userId && input.userId !== contract.userId) throw new Error("NORMAL_EVIDENCE_USER_MISMATCH");
   if (input.productId && input.productId !== contract.productId) throw new Error("NORMAL_EVIDENCE_PRODUCT_MISMATCH");
