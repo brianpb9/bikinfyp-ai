@@ -1,0 +1,55 @@
+{
+  "schema": "bikinfyp.post-lane-backlog-contract/v1",
+  "recorded_at": "2026-08-31T01:13:00Z",
+  "implementation_status": "NOT_STARTED",
+  "approved_configuration_intent": {
+    "key": "SECONDARY_GENERATION_PROVIDER",
+    "value": "GROK_IMAGINE",
+    "phase": "POST_JJ_GLOW_CANDIDATE_LANE",
+    "scope": "backlog_contract_only"
+  },
+  "provider_post_gate": {
+    "allowed_now": false,
+    "required_human_actions": [
+      {
+        "action": "AUTHORIZE_REPLACEMENT_CANDIDATE",
+        "required_decision": "Raise MAX_CANONICAL_CANDIDATES_CREATED from 1 to 2 for one replacement candidate."
+      },
+      {
+        "action": "ENTER_STAGING_PROVIDER_SECRET",
+        "canonical_env_name": "BYTEPLUS_ARK_API_KEY",
+        "required_bindings": {
+          "github_staging": false,
+          "render_staging_web": false,
+          "render_staging_worker": true
+        },
+        "worker": {
+          "destination": "https://dashboard.render.com/worker/srv-d9n28ue417fc73ch2b60",
+          "navigation": "Environment -> Environment Variables",
+          "operation": "replace",
+          "key": "BYTEPLUS_ARK_API_KEY",
+          "save_mode": "Save only, then resume/deploy this worker only"
+        },
+        "web": {
+          "destination": "https://dashboard.render.com/web/srv-d9n28tijnfac73a87lt0",
+          "navigation": "Environment -> Environment Variables",
+          "operation": "delete",
+          "key": "BYTEPLUS_ARK_API_KEY",
+          "save_mode": "Save and deploy"
+        },
+        "production_mutation_authorized": false,
+        "secret_value_must_not_enter_git_chat_or_logs": true
+      }
+    ]
+  },
+  "non_actions": [
+    "Do not implement GROK_IMAGINE in this incident task.",
+    "Do not create a replacement candidate without Founder authorization.",
+    "Do not add BYTEPLUS_ARK_API_KEY to GitHub or staging web.",
+    "Do not mutate production.",
+    "Do not make a provider POST before both human actions are complete and independently verified."
+  ],
+  "mutation_performed": false,
+  "provider_called": false,
+  "secret_value_recorded": false
+}

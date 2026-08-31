@@ -1,0 +1,135 @@
+{
+  "schema": "bikinfyp.staging-candidate-loss-incident/v1",
+  "task": "P0-JJ-GLOW-CANDIDATE-LOSS-20260831-R13",
+  "recorded_at": "2026-08-31T01:13:00Z",
+  "environment": "staging",
+  "candidate": {
+    "product_id": "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+    "script_id": "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d",
+    "principal_id": "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8",
+    "app_job_id": null,
+    "app_job_id_recoverable": false,
+    "max_canonical_candidates_created": 1,
+    "canonical_candidates_created": 1,
+    "replacement_authorized": false
+  },
+  "accepted_implementation": {
+    "sha": "952276cae06be50b124894f611c85a8bce218d9d",
+    "task": "P0-JJ-GLOW-CANDIDATE-CLOSURE-20260831-R12",
+    "review": "PASS",
+    "reviewed_at": "2026-08-31T00:57:46Z",
+    "deploy_id": "dep-daad38e7bikc7383gc6g",
+    "web_service_id": "srv-d9n28tijnfac73a87lt0",
+    "deploy_state": "live",
+    "deploy_finished_at": "2026-08-31T01:01:03Z",
+    "health": {
+      "ok": true,
+      "build_sha": "952276cae06be50b124894f611c85a8bce218d9d",
+      "payments_live": false
+    },
+    "lineage_endpoint_http": 409,
+    "lineage_endpoint_code": "STAGING_LINEAGE_UNAVAILABLE",
+    "lineage_failure_reason": "sole exact candidate required"
+  },
+  "worker_control_plane": {
+    "service_id": "srv-d9n28ue417fc73ch2b60",
+    "state": "suspended",
+    "suspenders": ["user"],
+    "provider_execution_possible_during_audit": false
+  },
+  "timeline": {
+    "retained_bonus_grant_at": "2026-08-31T00:07:09.879Z",
+    "candidate_admitted_between": [
+      "2026-08-31T00:08:15Z",
+      "2026-08-31T00:08:40Z"
+    ],
+    "last_independent_candidate_observation_at": "2026-08-31T00:28:05Z",
+    "first_confirmed_candidate_absence_at": "2026-08-31T00:45:14Z",
+    "loss_window": {
+      "after": "2026-08-31T00:28:05Z",
+      "before": "2026-08-31T00:45:14Z"
+    }
+  },
+  "postgres_readback": {
+    "binding_sha256": "79e3519ca5ec3cffb4ce8613a73da293736acc3323d774d663c0783c5f4e3ba8",
+    "product_count": 1,
+    "script_count": 0,
+    "product_job_count": 0,
+    "exact_candidate_count": 0,
+    "candidate_hold_rows": 0,
+    "candidate_audit_rows": 0,
+    "candidate_local_persona_rows": 0,
+    "recovered_job_ids": [],
+    "append_only_ledger_trigger_present": true,
+    "retained_bonus_grant_id": "jj-glow-candidate-credit-grant-20260831",
+    "mutation": false
+  },
+  "r2_readback": {
+    "lineage_keys_checked": [
+      "staging-evidence/p0-jj-glow-candidate-closure-20260831/lineage-receipt.json",
+      "evidence/staging/p0-jj-glow-candidate-closure-20260831/lineage-receipt.json"
+    ],
+    "lineage_keys_found": 0,
+    "reference_and_rights_receipt_remain": true,
+    "mutation": false
+  },
+  "redis_readback": {
+    "binding_sha256": "2a903e92ccc5a9dc6d3b9aeb1b28ac5cea03e1c58d818d78df7a31a1ef4cd8ef",
+    "runtime_uptime_seconds": 1325551,
+    "evicted_keys": 0,
+    "database_key_count": 8,
+    "queue_name": "racun-jobs-staging",
+    "queue_counts": {
+      "wait": 0,
+      "waiting-children": 0,
+      "delayed": 0,
+      "active": 0,
+      "prioritized": 0,
+      "paused": 0,
+      "completed": 0,
+      "failed": 0
+    },
+    "queue_keys_present": ["events", "id", "meta"],
+    "candidate_window_event_count": 0,
+    "event_stream_length": 99,
+    "event_stream_first_id": "1787736626104-0",
+    "event_stream_last_id": "1787741210730-0",
+    "older_events_retained": true,
+    "candidate_was_enqueued_to_current_queue": false,
+    "mutation": false
+  },
+  "recovery_sources": {
+    "postgres": "ABSENT",
+    "r2_lineage_receipt": "ABSENT",
+    "bullmq_job_or_event": "ABSENT",
+    "retained_render_log_with_app_job_id": "ABSENT",
+    "safe_exact_row_restore_available": false
+  },
+  "classification": {
+    "proven": [
+      "The candidate committed and was independently visible through 2026-08-31T00:28:05Z.",
+      "The candidate and its hold, admission audit, manual-script audit, and local persona are absent from the current PostgreSQL state.",
+      "The append-only ledger trigger remains present, so ordinary application deletion does not explain the missing hold.",
+      "The current Redis runtime was not reset and contains older events, but contains no candidate job or event in the admission window.",
+      "No exact app job UUID survives in the checked recovery sources."
+    ],
+    "inference": "A PostgreSQL state rollback or binding drift after committed observation is more consistent with the evidence than transaction rollback or ordinary cleanup.",
+    "not_proven": "The exact PostgreSQL control-plane mechanism and the historical reason the admission did not enter the current BullMQ queue are not retained.",
+    "incident_state": "FOUNDER_DECISION_REQUIRED"
+  },
+  "authority_required": {
+    "decision": "Authorize one replacement canonical candidate and raise MAX_CANONICAL_CANDIDATES_CREATED from 1 to 2.",
+    "if_authorized": "A new persona, job, hold, admission audit, and candidate snapshot must be treated as a replacement candidate, never as restoration of the lost row.",
+    "without_authorization": "Do not recreate, enqueue, resume the worker, or call a generation provider."
+  },
+  "safety": {
+    "database_mutation": false,
+    "redis_mutation": false,
+    "r2_mutation": false,
+    "provider_called": false,
+    "provider_tasks_found": 0,
+    "output_found": false,
+    "production_touched": false,
+    "secret_values_recorded": false
+  }
+}
