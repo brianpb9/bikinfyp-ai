@@ -24,6 +24,7 @@ import {
   NORMAL_EVIDENCE_MODEL, NORMAL_EVIDENCE_RESOLUTION, expectedNormalEvidenceIdempotencyKey,
   jjGlowApprovedScriptSha256,
 } from "../lib/providers/normal-evidence";
+import { normalEvidenceLeaseWindow } from "../lib/normal-evidence-lease";
 
 const { postgresRuntimeBinding } = require("../lib/postgres/runtime-binding.cjs") as {
   postgresRuntimeBinding(client: PoolClient): Promise<{sha256:string}>;
@@ -161,16 +162,18 @@ async function main() {
     const idempotencyKey = expectedNormalEvidenceIdempotencyKey(proof.frozen);
     if (mode === "activate") {
       const now = new Date().toISOString();
+      const lease = normalEvidenceLeaseWindow(now);
       await client.query(`INSERT INTO normal_representative_evidence_runs
         (task_id,idempotency_key,job_id,user_id,product_id,subject_id,reference_sha256,reference_manifest_sha256,
          reference_brand,authorization_source,product_snapshot_sha256,approved_script_sha256,deploy_sha,model,category,format,duration_s,
-         resolution,estimated_cost_usd,max_cost_usd,provider_post_count,state,created_at,updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'hands_only',15,$16,$17,$18,0,'PREPOST_READY',$19,$19)`,
+         resolution,estimated_cost_usd,max_cost_usd,provider_post_count,state,created_at,updated_at,
+         lease_kind,lease_last_progress_at,lease_expires_at)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'hands_only',15,$16,$17,$18,0,'PREPOST_READY',$19,$19,$20,$21,$22)`,
       [JJ_GLOW_FINAL_EVIDENCE_TASK,idempotencyKey,proof.frozen.jobId,proof.userId,proof.frozen.productId,
         proof.frozen.subjectId,proof.frozen.referenceSha256,proof.frozen.referenceManifestSha256,proof.brand,
         NORMAL_EVIDENCE_AUTHORIZATION_SOURCE,proof.frozen.productSnapshotSha256,proof.frozen.approvedScriptSha256,
         proof.frozen.deploySha,NORMAL_EVIDENCE_MODEL,proof.frozen.category,NORMAL_EVIDENCE_RESOLUTION,
-        NORMAL_EVIDENCE_ESTIMATE_USD,NORMAL_EVIDENCE_MAX_USD,now]);
+        NORMAL_EVIDENCE_ESTIMATE_USD,NORMAL_EVIDENCE_MAX_USD,now,lease.kind,lease.lastProgressAt,lease.expiresAt]);
       await client.query("COMMIT");
     } else await client.query("ROLLBACK");
     console.log(JSON.stringify({event:mode === "activate" ? "JJ_GLOW_FINAL_EVIDENCE_ACTIVATED_NO_POST" : "JJ_GLOW_METADATA_FREEZE_PASS",
@@ -179,7 +182,8 @@ async function main() {
       sourceR2Sha256:proof.frozen.referenceSha256,snapshotR2Sha256:proof.frozen.referenceSha256,
       receiptR2Sha256:EXPECTED_RECEIPT_SHA256,scriptCount:Number(proof.counts.script_count),candidateCount:Number(proof.counts.job_count),
       providerTasks:0,providerPosts:0,outputs:0,fypPosted:0,postPlans:0,holdCount:1,terminalLedgerCount:0,
-      maxProviderPosts:1,maxSpendUsd:NORMAL_EVIDENCE_MAX_USD,autoRetry:false,publication:false,metadataMutation:mode === "activate" ? "LEDGER_ONLY" : false}));
+      maxProviderPosts:1,maxSpendUsd:NORMAL_EVIDENCE_MAX_USD,autoRetry:false,publication:false,
+      activeEvidenceLease:mode === "activate",metadataMutation:mode === "activate" ? "LEDGER_AND_ACTIVE_EVIDENCE_LEASE" : false}));
   } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
   finally { client.release(); await pool.end(); }
 }

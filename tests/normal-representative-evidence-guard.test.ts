@@ -494,6 +494,9 @@ test("JJ GLOW freeze verifies DB/R2 independently and activation is ledger-only"
   assert.match(runner, /mediaStorage\(\)\.get\(rights\.receipt_key\)/);
   assert.match(runner, /verifyStagingReferenceRightsBinding/);
   assert.match(runner, /INSERT INTO normal_representative_evidence_runs/);
+  assert.match(runner, /normalEvidenceLeaseWindow\(now\)/);
+  assert.match(runner, /lease_kind,lease_last_progress_at,lease_expires_at/);
+  assert.match(runner, /lease\.kind,lease\.lastProgressAt,lease\.expiresAt/);
   assert.doesNotMatch(runner, /fetch\(|createTask|enqueueJob/);
   const migration = fs.readFileSync(new URL("../migrations/postgres/0044_jj_glow_exact_evidence_format.sql", import.meta.url), "utf8");
   assert.match(migration, /job_id='55284f20-efb8-4b18-8a24-f90fc91af733'/);

@@ -29,13 +29,14 @@ assert.match(oldJobs,/job\.state_changed_at \?\? job\.created_at/);assert.match(
 const root=new URL("../../../",dir);
 const source=(path)=>fs.readFileSync(new URL(path,root),"utf8");
 const migration=source("migrations/postgres/0045_normal_evidence_active_lease.sql");
-const jobsSource=source("lib/postgres/jobs.ts"),store=source("lib/postgres/normal-evidence.ts"),activation=source("scripts/normal-evidence-activate.ts");
+const jobsSource=source("lib/postgres/jobs.ts"),store=source("lib/postgres/normal-evidence.ts"),activation=source("scripts/normal-evidence-activate.ts"),exactActivation=source("scripts/staging-jj-glow-final-evidence.ts");
 assert.match(migration,/lease_kind='ACTIVE_EVIDENCE_LEASE'/);assert.match(migration,/lease_expires_at > lease_last_progress_at/);
 assert.match(jobsSource,/SELECT id,user_id[\s\S]*FROM jobs WHERE id=\$1 FOR UPDATE/);
 assert.match(jobsSource,/FROM normal_representative_evidence_runs WHERE job_id=\$1 FOR UPDATE/);
 assert.match(jobsSource,/reason_code: reasonCode/);assert.match(jobsSource,/refund_reason_code: reasonCode/);
 assert.match(jobsSource,/isProviderEvidenceInFlight/);assert.match(jobsSource,/hasUnexpiredEvidenceLease/);
-for(const op of [store,activation])assert.match(op,/normalEvidenceLeaseWindow/);
+for(const op of [store,activation,exactActivation])assert.match(op,/normalEvidenceLeaseWindow/);
+assert.match(exactActivation,/lease_kind,lease_last_progress_at,lease_expires_at/);assert.match(exactActivation,/lease\.kind,lease\.lastProgressAt,lease\.expiresAt/);
 assert.equal(contract.lease_kind,"ACTIVE_EVIDENCE_LEASE");assert.equal(contract.ttl_seconds,21600);
 assert.deepEqual(contract.canonical_lock_order,["jobs FOR UPDATE","normal_representative_evidence_runs FOR UPDATE"]);
 assert.equal(contract.generic_not_id_exemption,true);assert.equal(contract.new_refund_reason_code,"STALE_SWEEP_TIMEOUT");
