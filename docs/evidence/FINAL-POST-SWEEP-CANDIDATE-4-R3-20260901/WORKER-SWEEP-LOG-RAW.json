@@ -1,0 +1,23 @@
+{
+  "id": "c0517298-9f79-48bb-aaa4-adc8500a3aa7",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "srv-d9n28ue417fc73ch2b60"
+    },
+    {
+      "name": "instance",
+      "value": "srv-d9n28ue417fc73ch2b60-wdbnn"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "{\"event\":\"POSTGRES_STALE_SWEEP_COMPLETED\",\"component\":\"PgJobsRepository.sweepStaleJobs\",\"trigger\":\"WORKER_INTERVAL_60000_MS\",\"runtime_sha\":\"4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1\",\"database_binding_sha256\":\"f4fcf0f493e99f7ad0e5fb7ed320ea272080ef611b2500cb2f6ed89bd8f97610\",\"started_at\":\"2026-08-31T22:35:35.540Z\",\"completed_at\":\"2026-08-31T22:35:35.595Z\",\"swept_jobs\":0,\"reconciled_ready_holds\":0,\"reconciled_promo_holds\":0,\"candidate4_provider_runtime_preflight\":{\"status\":\"ACCEPTED_NO_POST\",\"job_id\":\"2c49a5c8-9465-4400-a214-159336a2c097\",\"provider_runtime_sha\":\"4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1\",\"database_binding_sha256\":\"f4fcf0f493e99f7ad0e5fb7ed320ea272080ef611b2500cb2f6ed89bd8f97610\"}}",
+  "timestamp": "2026-08-31T22:35:35.596088538Z"
+}

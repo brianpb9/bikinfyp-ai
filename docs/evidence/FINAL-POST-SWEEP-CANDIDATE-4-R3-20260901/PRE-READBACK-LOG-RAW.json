@@ -1,0 +1,19 @@
+{
+  "id": "9207c1c1-7b06-412e-9fb1-db3a842d788a",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-dab011rtqb8s73ecn9f0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "{\"event\":\"JJ_GLOW_CANDIDATE_4_R3_STATE_READBACK_PASS\",\"phase\":\"pre-sweep\",\"runtime_sha\":\"4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1\",\"database_binding_sha256\":\"f4fcf0f493e99f7ad0e5fb7ed320ea272080ef611b2500cb2f6ed89bd8f97610\",\"evaluated_at\":\"2026-08-31T22:30:34.671Z\",\"transaction\":\"REPEATABLE READ READ ONLY\",\"candidate\":{\"state\":\"QUEUED\",\"provider_video\":null,\"provider_voice\":null,\"output_url\":null,\"task_id\":\"FINAL-POST-SWEEP-CANDIDATE-4-20260901\",\"deploy_sha\":\"13c22bc7a3a340f0ea5f4bb0db9a905691676c77\",\"approved_script_sha256\":\"110198510c75de3dba61d57260dce12af7cb0f06c6a4ddfc2254479cb8f05e7c\",\"evidence_state\":\"PREPOST_READY\",\"provider_post_count\":0,\"provider_task_id\":null,\"payload_sha256\":null,\"artifact_key\":null,\"actual_cost_usd\":null,\"lease_kind\":\"ACTIVE_EVIDENCE_LEASE\",\"lease_expires_at\":\"2026-09-01T03:01:56.911Z\",\"provider_runtime_sha\":\"4d1cf4fc375fbb75ed09de7f5ab36ce3f72b38a1\",\"database_binding_sha256\":\"f4fcf0f493e99f7ad0e5fb7ed320ea272080ef611b2500cb2f6ed89bd8f97610\",\"authorization_task_id\":\"FINAL-POST-SWEEP-CANDIDATE-4-R3-20260901\",\"authorized_by\":\"ac8b0a3e-8835-4e64-80e6-2e2cae6198b8\",\"authorization_created_at\":\"2026-08-31T22:29:07.724Z\",\"provider_tasks\":0,\"outputs\":0,\"fyp_posted\":0,\"post_plans\":0,\"holds\":1,\"terminal_ledger\":0},\"product_jobs\":2,\"product_scripts\":2,\"mutation\":false,\"queue_paused\":true,\"queue_counts\":{\"waiting\":0,\"active\":0,\"delayed\":0,\"prioritized\":0,\"failed\":0,\"paused\":2}}",
+  "timestamp": "2026-08-31T22:30:34.721624932Z"
+}
