@@ -103,6 +103,10 @@ export interface VisualSpec {
   visualSubjectPolicy?: "neutral_story_ads";
   /** Hanya jenis provenance SA6; nilai identitas/harga tidak masuk payload visual. */
   storyBridgeSources?: Array<"spoken_product_name" | "spoken_product_category" | "spoken_approved_price">;
+  /** Exact reviewed staging evidence receipt, rechecked at the outbound
+   * provider boundary. Ordinary generation never sets these fields. */
+  evidenceApprovedScriptSha256?: string;
+  evidenceJobSurfacesClean?: boolean;
 }
 
 export interface VideoAsset {

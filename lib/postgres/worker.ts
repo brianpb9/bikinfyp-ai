@@ -64,7 +64,7 @@ import { normalisasiFormatWorker } from "../media/worker-format";
 import { managedStagingDeterministicWorkerGate } from "../staging-deterministic-worker";
 import { withProductEvidenceMutationLock } from "../job-admission-reference";
 import { freezeProviderRequestCorrelation } from "./prompt-request-correlation";
-import { assertNormalEvidenceProviderContract, isJjGlowFinalEvidenceContract, normalEvidenceStore } from "../providers/normal-evidence";
+import { assertNormalEvidenceProviderContract, isJjGlowFinalEvidenceContract, jjGlowApprovedScriptSha256, normalEvidenceStore } from "../providers/normal-evidence";
 import { assertNormalEvidenceReceiptMatchesArtifact, runNormalEvidenceOfflineQc, type NormalEvidenceOfflineQcReceipt } from "../media/normal-evidence-offline-qc";
 
 type PostgresQcRunner = typeof runQc;
@@ -129,11 +129,16 @@ export function selectPostVideoAudioRoute(input: {
 type WorkerRow = {
   id: string; user_id: string; org_id: string | null; product_id: string; persona_id: string | null; script_id: string;
   format: string; quality_tier: string; duration_s: number; state: string;
-  provider_video: string | null;
+  provider_video: string | null; provider_voice: string | null; output_url: string | null;
   script_segments: string; caption: string; hashtags: string; script_register: string; script_hook_family: string;
   script_hook_level: string | null;
   /** Snapshot admisi (JSON) — membawa jejak ide sampai ke arsip prompt. */
   script_validation_result: string | null;
+  script_id_frozen: string; script_product_id: string; script_job_id: string | null;
+  script_emotion: string; script_quality_tier: string; script_approved_by_user_at: string | null;
+  script_edited_by_user: number; script_created_at: string; script_manual_audit_meta: string | null;
+  script_manual_audit_actor: string | null; script_manual_audit_created_at: string | null;
+  script_manual_audit_count: number;
   avatar_custom_desc: string | null;
   requires_approval: boolean;
   approved_at: string | null;
@@ -405,7 +410,15 @@ async function processPostgresJobWithProductLock(
     // j.* sudah bawa org_id (kolom asli tabel jobs, M1) — WorkerRow.org_id
     // dipakai supaya capture ledger di bawah masuk ke wallet yang benar
     // (pool org untuk job dari dashboard bulk-generate, user biasa untuk retail).
-    const found = await pool.query<WorkerRow>(`SELECT j.*, s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family, s.hook_level AS script_hook_level, s.validation_result AS script_validation_result,
+    const found = await pool.query<WorkerRow>(`SELECT j.*, s.id AS script_id_frozen,s.product_id AS script_product_id,s.job_id AS script_job_id,
+      s.segments AS script_segments, s.caption, s.hashtags, s.register AS script_register, s.hook_family AS script_hook_family,
+      s.hook_level AS script_hook_level, s.emotion AS script_emotion,s.quality_tier AS script_quality_tier,
+      s.approved_by_user_at AS script_approved_by_user_at,s.edited_by_user AS script_edited_by_user,
+      s.created_at AS script_created_at,s.validation_result AS script_validation_result,
+      (SELECT a.meta FROM audit_log a WHERE a.entity='scripts' AND a.entity_id=s.id AND a.action='script.manual_staged' ORDER BY a.created_at,a.id LIMIT 1) AS script_manual_audit_meta,
+      (SELECT a.actor FROM audit_log a WHERE a.entity='scripts' AND a.entity_id=s.id AND a.action='script.manual_staged' ORDER BY a.created_at,a.id LIMIT 1) AS script_manual_audit_actor,
+      (SELECT a.created_at FROM audit_log a WHERE a.entity='scripts' AND a.entity_id=s.id AND a.action='script.manual_staged' ORDER BY a.created_at,a.id LIMIT 1) AS script_manual_audit_created_at,
+      (SELECT count(*)::int FROM audit_log a WHERE a.entity='scripts' AND a.entity_id=s.id AND a.action='script.manual_staged') AS script_manual_audit_count,
       p.name AS product_name, p.category AS product_category, p.product_visual_desc, p.brand_brief, p.claims AS product_claims, p.price_idr AS product_price_idr, p.source_url AS product_source_url, p.raw_meta AS product_raw_meta,
       p.product_type_token, p.product_type_confirmed_token, p.product_type_confirmed_by,
       p.product_type_confirmed_at, p.product_type_version, p.product_type_state,
@@ -529,6 +542,17 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
   });
   const representativeEvidence = await normalEvidenceStore().get(row.id);
   const exactJjGlowEvidence = representativeEvidence ? isJjGlowFinalEvidenceContract(representativeEvidence) : false;
+  const exactJjGlowScriptSha256 = exactJjGlowEvidence ? jjGlowApprovedScriptSha256({
+    id:row.script_id_frozen,job_id:row.script_job_id,product_id:row.script_product_id,
+    hook_family:row.script_hook_family,emotion:row.script_emotion,register:row.script_register,
+    segments:row.script_segments,caption:row.caption,hashtags:row.hashtags,validation_result:row.script_validation_result,
+    quality_tier:row.script_quality_tier,hook_level:row.script_hook_level,
+    approved_by_user_at:row.script_approved_by_user_at,edited_by_user:row.script_edited_by_user,created_at:row.script_created_at,
+  }, {actor:row.script_manual_audit_actor,created_at:row.script_manual_audit_created_at,meta:row.script_manual_audit_meta}) : undefined;
+  if (exactJjGlowEvidence && (row.provider_video !== null || row.provider_voice !== null || row.output_url !== null)) {
+    throw new Error("JJ_GLOW_EVIDENCE_PRIOR_JOB_EFFECT");
+  }
+  if (exactJjGlowEvidence && Number(row.script_manual_audit_count) !== 1) throw new Error("JJ_GLOW_EVIDENCE_MANUAL_AUDIT_CARDINALITY");
   const productSnapshot = currentEvidence.productSnapshot;
   const snapshotPriceIdr = productSnapshot.priceIdr!;
   // Semua consumer hilir tetap memakai WorkerRow, tetapi nilainya kini datang
@@ -643,7 +667,9 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
     tvcRoute: TVC_ROUTES.includes(row.tvc_route as never) ? (row.tvc_route as TvcRoute) : undefined,
     ugcTemplate: storyIdentity.templateId,
     recordStyle: row.record_style,
-    reviewedEvidenceSinglePost: exactJjGlowEvidence });
+    reviewedEvidenceSinglePost: exactJjGlowEvidence,
+    evidenceApprovedScriptSha256: exactJjGlowScriptSha256,
+    evidenceJobSurfacesClean: exactJjGlowEvidence ? true : undefined });
 
   // KONTRAK PENYEDIA DIPERIKSA DI SINI, bukan nanti di registry.
   //
@@ -681,6 +707,8 @@ async function runProviderPipeline(row: WorkerRow, jobs: PgJobsRepository, pool:
       subjectId: row.persona_id,
       referenceManifestRaw: row.approved_reference_manifest ?? undefined,
       productSnapshotRaw: row.job_product_snapshot ?? undefined,
+      approvedScriptSha256: exactJjGlowScriptSha256,
+      jobProviderVideo: row.provider_video,jobProviderVoice:row.provider_voice,jobOutputUrl:row.output_url,
     });
     if (primary.sha256 !== representativeEvidence.referenceSha256) throw new Error("NORMAL_EVIDENCE_REFERENCE_MISMATCH");
     if (productSnapshot.trustedBrand.value !== representativeEvidence.referenceBrand) throw new Error("NORMAL_EVIDENCE_BRAND_MISMATCH");

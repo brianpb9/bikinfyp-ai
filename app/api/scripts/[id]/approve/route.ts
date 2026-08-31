@@ -21,6 +21,9 @@ export async function POST(req: Request, ctx: { params: Promise<{ id: string }> 
       ? await smokeGetScript(user.id, id)
       : db!.prepare("SELECT * FROM scripts WHERE id = ?").get(id) as ScriptRow | undefined;
     if (!script) throw ERR.NOT_FOUND("Skripnya");
+    // A bound script is immutable evidence for an admitted job. Editing it in
+    // place would silently replace the reviewed provider payload lineage.
+    if (script.job_id) throw ERR.BAD_REQUEST("Skrip yang sudah terikat ke job tidak bisa diedit atau disetujui ulang.");
     const product = postgresRuntimeEnabled()
       ? await smokeGetProduct(user.id, script.product_id)
       : db!.prepare("SELECT * FROM products WHERE id = ? AND user_id = ?").get(script.product_id, user.id) as ProductRow | undefined;

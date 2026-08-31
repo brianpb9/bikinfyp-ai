@@ -22,6 +22,7 @@ import {
   JJ_GLOW_FINAL_EVIDENCE_TASK, NORMAL_EVIDENCE_AUTHORIZATION_SOURCE,
   NORMAL_EVIDENCE_DURATION_S, NORMAL_EVIDENCE_ESTIMATE_USD, NORMAL_EVIDENCE_MAX_USD,
   NORMAL_EVIDENCE_MODEL, NORMAL_EVIDENCE_RESOLUTION, expectedNormalEvidenceIdempotencyKey,
+  jjGlowApprovedScriptSha256,
 } from "../lib/providers/normal-evidence";
 
 const { postgresRuntimeBinding } = require("../lib/postgres/runtime-binding.cjs") as {
@@ -71,6 +72,7 @@ async function inspect(client: PoolClient, lock: boolean) {
   assertJjGlowLockedProductState(product, JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256);
   if (job.user_id !== JJ_GLOW_PRINCIPAL_ID || job.product_id !== JJ_GLOW_PRODUCT_ID || job.script_id !== JJ_GLOW_SCRIPT_ID
       || job.org_id !== null || job.state !== "QUEUED" || job.format !== "hands_only"
+      || job.provider_video !== null || job.provider_voice !== null || job.output_url !== null
       || job.quality_tier !== "high_quality" || Number(job.duration_s) !== 15 || job.requires_approval !== false
       || script.product_id !== JJ_GLOW_PRODUCT_ID || script.job_id !== JJ_GLOW_FINAL_EVIDENCE_JOB_ID
       || !script.approved_by_user_at || persona.user_id !== JJ_GLOW_PRINCIPAL_ID || persona.creator_category !== "lokal") {
@@ -79,6 +81,14 @@ async function inspect(client: PoolClient, lock: boolean) {
   const validation = JSON.parse(script.validation_result);
   if (validation.passed !== true || validation.script_source !== "manual") throw new Error("JJ_GLOW_FINAL_EVIDENCE_SCRIPT_NOT_APPROVED_MANUAL");
   if (lifecycle.length !== 1 || lifecycle[0].actor !== JJ_GLOW_PRINCIPAL_ID) throw new Error("JJ_GLOW_FINAL_EVIDENCE_LIFECYCLE_CARDINALITY");
+  const manualAuditRows = (await client.query(
+    "SELECT actor,created_at,meta FROM audit_log WHERE entity='scripts' AND entity_id=$1 AND action='script.manual_staged' ORDER BY created_at,id",
+    [JJ_GLOW_SCRIPT_ID],
+  )).rows;
+  if (manualAuditRows.length !== 1 || manualAuditRows[0].actor !== JJ_GLOW_PRINCIPAL_ID) {
+    throw new Error("JJ_GLOW_FINAL_EVIDENCE_MANUAL_AUDIT_CARDINALITY");
+  }
+  const approvedScriptSha256 = jjGlowApprovedScriptSha256(script, manualAuditRows[0]);
   const lifecycleMeta = JSON.parse(lifecycle[0].meta);
   const lifecycleState = {schema:lifecycleMeta.schema,correlation_id:EXPECTED_CORRELATION_ID,
     job_id:job.id,product_id:product.id,script_id:script.id,create_actor:JJ_GLOW_PRINCIPAL_ID,
@@ -129,6 +139,7 @@ async function inspect(client: PoolClient, lock: boolean) {
     taskId:JJ_GLOW_FINAL_EVIDENCE_TASK, jobId:job.id, productId:product.id, subjectId:persona.id,
     referenceSha256:ref.sha256, referenceManifestSha256:sha256(job.approved_reference_manifest),
     productSnapshotSha256:sha256(job.job_product_snapshot), deploySha:process.env.RENDER_GIT_COMMIT!,
+    approvedScriptSha256,
     model:NORMAL_EVIDENCE_MODEL, category:snapshot.category, format:"hands_only",
     durationS:NORMAL_EVIDENCE_DURATION_S, resolution:NORMAL_EVIDENCE_RESOLUTION,
   };
@@ -152,14 +163,14 @@ async function main() {
       const now = new Date().toISOString();
       await client.query(`INSERT INTO normal_representative_evidence_runs
         (task_id,idempotency_key,job_id,user_id,product_id,subject_id,reference_sha256,reference_manifest_sha256,
-         reference_brand,authorization_source,product_snapshot_sha256,deploy_sha,model,category,format,duration_s,
+         reference_brand,authorization_source,product_snapshot_sha256,approved_script_sha256,deploy_sha,model,category,format,duration_s,
          resolution,estimated_cost_usd,max_cost_usd,provider_post_count,state,created_at,updated_at)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,'hands_only',15,$15,$16,$17,0,'PREPOST_READY',$18,$18)`,
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,'hands_only',15,$16,$17,$18,0,'PREPOST_READY',$19,$19)`,
       [JJ_GLOW_FINAL_EVIDENCE_TASK,idempotencyKey,proof.frozen.jobId,proof.userId,proof.frozen.productId,
         proof.frozen.subjectId,proof.frozen.referenceSha256,proof.frozen.referenceManifestSha256,proof.brand,
-        NORMAL_EVIDENCE_AUTHORIZATION_SOURCE,proof.frozen.productSnapshotSha256,proof.frozen.deploySha,
-        NORMAL_EVIDENCE_MODEL,proof.frozen.category,NORMAL_EVIDENCE_RESOLUTION,NORMAL_EVIDENCE_ESTIMATE_USD,
-        NORMAL_EVIDENCE_MAX_USD,now]);
+        NORMAL_EVIDENCE_AUTHORIZATION_SOURCE,proof.frozen.productSnapshotSha256,proof.frozen.approvedScriptSha256,
+        proof.frozen.deploySha,NORMAL_EVIDENCE_MODEL,proof.frozen.category,NORMAL_EVIDENCE_RESOLUTION,
+        NORMAL_EVIDENCE_ESTIMATE_USD,NORMAL_EVIDENCE_MAX_USD,now]);
       await client.query("COMMIT");
     } else await client.query("ROLLBACK");
     console.log(JSON.stringify({event:mode === "activate" ? "JJ_GLOW_FINAL_EVIDENCE_ACTIVATED_NO_POST" : "JJ_GLOW_METADATA_FREEZE_PASS",

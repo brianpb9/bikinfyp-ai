@@ -1,7 +1,7 @@
 import crypto from "node:crypto";
 import { config } from "../config";
 import { getPool } from "./pool";
-import type { NormalEvidenceContract, NormalEvidenceStore } from "../providers/normal-evidence";
+import { isJjGlowFinalEvidenceContract, jjGlowApprovedScriptSha256, type NormalEvidenceContract, type NormalEvidenceStore } from "../providers/normal-evidence";
 import { assertNormalEvidenceReceiptMatchesArtifact } from "../media/normal-evidence-offline-qc";
 
 const map = (row: Record<string, unknown>): NormalEvidenceContract => ({
@@ -9,7 +9,9 @@ const map = (row: Record<string, unknown>): NormalEvidenceContract => ({
   userId: String(row.user_id), productId: String(row.product_id), subjectId: String(row.subject_id),
   referenceSha256: String(row.reference_sha256), referenceManifestSha256: String(row.reference_manifest_sha256),
   referenceBrand: String(row.reference_brand), authorizationSource: String(row.authorization_source),
-  productSnapshotSha256: String(row.product_snapshot_sha256), deploySha: String(row.deploy_sha),
+  productSnapshotSha256: String(row.product_snapshot_sha256),
+  approvedScriptSha256: row.approved_script_sha256 ? String(row.approved_script_sha256) : null,
+  deploySha: String(row.deploy_sha),
   model: String(row.model), category: String(row.category), format: String(row.format),
   resolution: String(row.resolution), durationS: Number(row.duration_s),
   estimatedCostUsd: Number(row.estimated_cost_usd), maxCostUsd: Number(row.max_cost_usd),
@@ -30,13 +32,41 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
     // This commit is the durable point of no return and occurs before the
     // network call. The unique job/task/idempotency constraints make 0 -> 1
     // the only possible outbound transition.
-    const claimed = await pool.query(
-      `UPDATE normal_representative_evidence_runs
-          SET provider_post_count=1,state='POST_ATTEMPTED',payload_sha256=$2,post_attempted_at=$3,updated_at=$3
-        WHERE job_id=$1 AND state='PREPOST_READY' AND provider_post_count=0
-        RETURNING job_id`, [jobId, payloadSha256, new Date().toISOString()]
-    );
-    if (claimed.rowCount === 1) return { action: "POST" as const };
+    const client = await pool.connect();
+    try {
+      await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+      const evidenceRaw = (await client.query(
+        "SELECT * FROM normal_representative_evidence_runs WHERE job_id=$1 FOR UPDATE", [jobId]
+      )).rows[0];
+      if (evidenceRaw && evidenceRaw.state === "PREPOST_READY" && Number(evidenceRaw.provider_post_count) === 0) {
+        const evidence = map(evidenceRaw);
+        if (isJjGlowFinalEvidenceContract(evidence)) {
+          const frozen = (await client.query(`SELECT s.*,j.provider_video,j.provider_voice,j.output_url,
+            (SELECT count(*)::int FROM audit_log a WHERE a.entity='scripts' AND a.entity_id=s.id AND a.action='script.manual_staged') manual_audit_count,
+            (SELECT json_build_object('actor',a.actor,'created_at',a.created_at,'meta',a.meta)
+               FROM audit_log a WHERE a.entity='scripts' AND a.entity_id=s.id AND a.action='script.manual_staged'
+               ORDER BY a.created_at,a.id LIMIT 1) manual_audit
+            FROM jobs j JOIN scripts s ON s.id=j.script_id WHERE j.id=$1 FOR UPDATE OF j,s`, [jobId])).rows[0];
+          if (!frozen || frozen.provider_video !== null || frozen.provider_voice !== null || frozen.output_url !== null) {
+            throw new Error("JJ_GLOW_EVIDENCE_PRIOR_JOB_EFFECT");
+          }
+          if (Number(frozen.manual_audit_count) !== 1
+              || jjGlowApprovedScriptSha256(frozen, frozen.manual_audit) !== evidence.approvedScriptSha256) {
+            throw new Error("JJ_GLOW_EVIDENCE_SCRIPT_DIGEST_MISMATCH");
+          }
+        }
+        const claimed = await client.query(
+          `UPDATE normal_representative_evidence_runs
+              SET provider_post_count=1,state='POST_ATTEMPTED',payload_sha256=$2,post_attempted_at=$3,updated_at=$3
+            WHERE job_id=$1 AND state='PREPOST_READY' AND provider_post_count=0 RETURNING job_id`,
+          [jobId,payloadSha256,new Date().toISOString()]);
+        if (claimed.rowCount !== 1) throw new Error("NORMAL_EVIDENCE_POST_CLAIM_RACE");
+        await client.query("COMMIT");
+        return { action:"POST" as const };
+      }
+      await client.query("COMMIT");
+    } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+    finally { client.release(); }
     const row = (await pool.query(
       "SELECT state,provider_post_count,provider_task_id,payload_sha256 FROM normal_representative_evidence_runs WHERE job_id=$1",
       [jobId]

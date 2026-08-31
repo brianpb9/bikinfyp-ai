@@ -358,6 +358,10 @@ export const byteplusVideo: VideoProvider = {
         preferI2v: spec.preferI2v,
         hasExtraReferences: Boolean(spec.extraReferenceImagePaths?.length || spec.referenceOnlyImages),
         visualSubjectPolicy: spec.visualSubjectPolicy,
+        approvedScriptSha256: spec.evidenceApprovedScriptSha256,
+        jobProviderVideo: spec.evidenceJobSurfacesClean === true ? null : "UNVERIFIED",
+        jobProviderVoice: spec.evidenceJobSurfacesClean === true ? null : "UNVERIFIED",
+        jobOutputUrl: spec.evidenceJobSurfacesClean === true ? null : "UNVERIFIED",
       });
     }
 

@@ -78,6 +78,8 @@ export interface ShotPlanInput {
    * provider request. The provider contract independently rejects every job
    * except the immutable JJ GLOW candidate. */
   reviewedEvidenceSinglePost?: boolean;
+  evidenceApprovedScriptSha256?: string;
+  evidenceJobSurfacesClean?: boolean;
   /**
    * Format IDE terpilih (knowledge/formats/*.json) — beda sumbu dari `format`
    * di atas, yang menentukan jenis produksi (hands_only/talking_head/...).
@@ -2062,6 +2064,8 @@ export function planShots(input: ShotPlanInput): VisualSpec {
     // dan alasannya kuat, tapi jangan diklaim terbukti sebelum ada rekamannya.
     referenceOnlyImages: format === "ads" || menahanProduk,
     ratio: input.ratio ?? "9:16",
+    evidenceApprovedScriptSha256: input.evidenceApprovedScriptSha256,
+    evidenceJobSurfacesClean: input.evidenceJobSurfacesClean,
   };
   if (neutralStoryAds) {
     for (const shot of spec.shots) {

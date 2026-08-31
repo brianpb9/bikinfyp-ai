@@ -68,6 +68,7 @@ try {
     referenceSha256: manifest.references[0].sha256,
     referenceManifestSha256: sha256(row.approved_reference_manifest),
     productSnapshotSha256: sha256(row.job_product_snapshot),
+    approvedScriptSha256: null,
     deploySha,
     model: NORMAL_EVIDENCE_MODEL,
     category: snapshot.category,

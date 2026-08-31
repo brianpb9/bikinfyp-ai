@@ -4,6 +4,10 @@ ALTER TABLE normal_representative_evidence_runs
   DROP CONSTRAINT IF EXISTS normal_representative_evidence_runs_format_check;
 
 ALTER TABLE normal_representative_evidence_runs
+  ADD COLUMN IF NOT EXISTS approved_script_sha256 TEXT
+    CHECK (approved_script_sha256 IS NULL OR approved_script_sha256 ~ '^[0-9a-f]{64}$');
+
+ALTER TABLE normal_representative_evidence_runs
   ADD CONSTRAINT normal_representative_evidence_runs_exact_format_check CHECK (
     (task_id='NORMAL-REPRESENTATIVE-EVIDENCE-GUARD-20260829' AND format='talking_head')
     OR
@@ -12,5 +16,6 @@ ALTER TABLE normal_representative_evidence_runs
       AND user_id='ac8b0a3e-8835-4e64-80e6-2e2cae6198b8'
       AND product_id='c470390e-ad3d-4cc8-9ba2-4557691fa7a7'
       AND reference_sha256='744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1'
+      AND approved_script_sha256 IS NOT NULL
       AND category='beauty' AND format='hands_only' AND duration_s=15)
   );

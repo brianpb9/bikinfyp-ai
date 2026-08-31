@@ -42,6 +42,7 @@ export interface NormalEvidenceContract {
   referenceBrand: string;
   authorizationSource: string;
   productSnapshotSha256: string;
+  approvedScriptSha256: string | null;
   deploySha: string;
   model: string;
   category: string;
@@ -112,9 +113,20 @@ export function deterministicEvidenceDigest(value: unknown): string {
   return crypto.createHash("sha256").update(canonical(value)).digest("hex");
 }
 
+export function jjGlowApprovedScriptSha256(script: Record<string, unknown>, manualAudit: Record<string, unknown>): string {
+  return deterministicEvidenceDigest({
+    id:script.id,job_id:script.job_id,product_id:script.product_id,hook_family:script.hook_family,
+    emotion:script.emotion,register:script.register,segments:script.segments,caption:script.caption,
+    hashtags:script.hashtags,validation_result:script.validation_result,quality_tier:script.quality_tier,
+    hook_level:script.hook_level,approved_by_user_at:script.approved_by_user_at,
+    edited_by_user:Number(script.edited_by_user),created_at:script.created_at,
+    manual_evidence_audit:manualAudit,
+  });
+}
+
 export function expectedNormalEvidenceIdempotencyKey(contract: Pick<NormalEvidenceContract,
   "taskId" | "jobId" | "productId" | "subjectId" | "referenceSha256" | "referenceManifestSha256"
-  | "productSnapshotSha256" | "deploySha" | "model" | "category" | "format" | "durationS" | "resolution">): string {
+  | "productSnapshotSha256" | "approvedScriptSha256" | "deploySha" | "model" | "category" | "format" | "durationS" | "resolution">): string {
   return deterministicEvidenceDigest({
     taskId: contract.taskId,
     jobId: contract.jobId,
@@ -123,6 +135,7 @@ export function expectedNormalEvidenceIdempotencyKey(contract: Pick<NormalEviden
     referenceSha256: contract.referenceSha256,
     referenceManifestSha256: contract.referenceManifestSha256,
     productSnapshotSha256: contract.productSnapshotSha256,
+    approvedScriptSha256: contract.approvedScriptSha256,
     deploySha: contract.deploySha,
     model: contract.model,
     category: contract.category,
@@ -185,6 +198,10 @@ export function assertNormalEvidenceProviderContract(contract: NormalEvidenceCon
   preferI2v?: boolean;
   hasExtraReferences?: boolean;
   visualSubjectPolicy?: string;
+  approvedScriptSha256?: string;
+  jobProviderVideo?: string | null;
+  jobProviderVoice?: string | null;
+  jobOutputUrl?: string | null;
 }) {
   const env = assertNormalEvidenceManagedRuntime(input);
   const exactJjGlow = isJjGlowFinalEvidenceContract(contract);
@@ -203,6 +220,11 @@ export function assertNormalEvidenceProviderContract(contract: NormalEvidenceCon
   if (input.productId && input.productId !== contract.productId) throw new Error("NORMAL_EVIDENCE_PRODUCT_MISMATCH");
   if (input.subjectId !== undefined && input.subjectId !== contract.subjectId) throw new Error("NORMAL_EVIDENCE_SUBJECT_MISMATCH");
   if (contract.authorizationSource !== NORMAL_EVIDENCE_AUTHORIZATION_SOURCE) throw new Error("NORMAL_EVIDENCE_AUTHORIZATION_MISMATCH");
+  if (exactJjGlow && (!contract.approvedScriptSha256 || !/^[0-9a-f]{64}$/.test(contract.approvedScriptSha256)
+      || input.approvedScriptSha256 !== contract.approvedScriptSha256)) throw new Error("JJ_GLOW_EVIDENCE_SCRIPT_DIGEST_MISMATCH");
+  if (exactJjGlow && (input.jobProviderVideo !== null || input.jobProviderVoice !== null || input.jobOutputUrl !== null)) {
+    throw new Error("JJ_GLOW_EVIDENCE_PRIOR_JOB_EFFECT");
+  }
   if (!contract.referenceBrand.trim()) throw new Error("NORMAL_EVIDENCE_BRAND_NOT_FROZEN");
   if (input.referenceManifestRaw && sha256(input.referenceManifestRaw) !== contract.referenceManifestSha256) throw new Error("NORMAL_EVIDENCE_REFERENCE_MANIFEST_MISMATCH");
   if (input.productSnapshotRaw && sha256(input.productSnapshotRaw) !== contract.productSnapshotSha256) throw new Error("NORMAL_EVIDENCE_PRODUCT_SNAPSHOT_MISMATCH");

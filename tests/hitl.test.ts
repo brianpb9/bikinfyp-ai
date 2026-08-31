@@ -113,4 +113,11 @@ test("setelah approve -> job dibuat (201) dan state QUEUED", async () => {
   assert.equal(bal.b, 0);
   const holds = db.prepare("SELECT COUNT(*) AS n FROM credit_ledger WHERE user_id = ? AND type = 'hold'").get(user.id) as { n: number };
   assert.equal(holds.n, 1);
+
+  const frozenBefore = (db.prepare("SELECT segments,validation_result,approved_by_user_at FROM scripts WHERE id=?").get(scriptId)) as Record<string,unknown>;
+  const mutateBound = await approveScript(req(`/api/scripts/${scriptId}/approve`, {
+    segments:segments.map((segment,index) => index === 1 ? {...segment,text:"klaim baru sesudah job terikat"} : segment),
+  }),ctxOf(scriptId));
+  assert.equal(mutateBound.status,400);
+  assert.deepEqual(db.prepare("SELECT segments,validation_result,approved_by_user_at FROM scripts WHERE id=?").get(scriptId),frozenBefore);
 });

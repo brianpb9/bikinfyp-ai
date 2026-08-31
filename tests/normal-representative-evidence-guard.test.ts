@@ -37,7 +37,7 @@ function contract(): NormalEvidenceContract {
   const base = {
     taskId: normal.NORMAL_EVIDENCE_TASK, jobId: "job-evidence", productId: "product-1", subjectId: "persona-1",
     referenceSha256: refSha256, referenceManifestSha256: "c".repeat(64),
-    productSnapshotSha256: "d".repeat(64), deploySha: "a".repeat(40),
+    productSnapshotSha256: "d".repeat(64), approvedScriptSha256:null, deploySha: "a".repeat(40),
     model: normal.NORMAL_EVIDENCE_MODEL, category: "skincare", format: normal.NORMAL_EVIDENCE_FORMAT,
     durationS: 15, resolution: normal.NORMAL_EVIDENCE_RESOLUTION,
   };
@@ -54,7 +54,7 @@ function jjGlowContract(): NormalEvidenceContract {
     taskId: normal.JJ_GLOW_FINAL_EVIDENCE_TASK, jobId: normal.JJ_GLOW_FINAL_EVIDENCE_JOB_ID,
     userId: normal.JJ_GLOW_FINAL_EVIDENCE_USER_ID, productId: normal.JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID,
     subjectId: "persona-lokal-reviewed", referenceSha256: normal.JJ_GLOW_FINAL_EVIDENCE_REFERENCE_SHA256,
-    referenceManifestSha256: "c".repeat(64), productSnapshotSha256: "d".repeat(64),
+    referenceManifestSha256: "c".repeat(64), productSnapshotSha256: "d".repeat(64), approvedScriptSha256:"e".repeat(64),
     deploySha: "a".repeat(40), model: normal.NORMAL_EVIDENCE_MODEL, category: "beauty",
     format: "hands_only", durationS:15, resolution:normal.NORMAL_EVIDENCE_RESOLUTION,
   };
@@ -72,6 +72,7 @@ test("hands-only exception is exact-candidate only and retains one-request provi
     model:normal.NORMAL_EVIDENCE_MODEL,resolution:normal.NORMAL_EVIDENCE_RESOLUTION,durationSec:15,shotCount:1,
     width:720,height:1280,format:"hands_only",category:"beauty",userId:exact.userId,productId:exact.productId,
     subjectId:exact.subjectId,referenceImageSha256:exact.referenceSha256,preferI2v:true,
+    approvedScriptSha256:exact.approvedScriptSha256!,jobProviderVideo:null,jobProviderVoice:null,jobOutputUrl:null,
   }));
   assert.equal(normal.isJjGlowFinalEvidenceContract({...exact,jobId:"other"}), false);
   assert.throws(() => normal.assertNormalEvidenceProviderContract({...exact,jobId:"other"}, {
@@ -84,8 +85,25 @@ test("hands-only exception is exact-candidate only and retains one-request provi
     model:normal.NORMAL_EVIDENCE_MODEL,resolution:normal.NORMAL_EVIDENCE_RESOLUTION,durationSec:15,shotCount:3,
     format:"hands_only",
   }), /ONE_15S_SHOT/);
+  assert.throws(() => normal.assertNormalEvidenceProviderContract(exact, {
+    runtime:process.env,databaseUrl:process.env.DATABASE_URL,storageMode:"r2",storageBucket:"bikinfyp-staging",
+    model:normal.NORMAL_EVIDENCE_MODEL,resolution:normal.NORMAL_EVIDENCE_RESOLUTION,durationSec:15,shotCount:1,
+    format:"hands_only",approvedScriptSha256:"0".repeat(64),jobProviderVideo:null,jobProviderVoice:null,jobOutputUrl:null,
+  }), /SCRIPT_DIGEST_MISMATCH/);
+  assert.throws(() => normal.assertNormalEvidenceProviderContract(exact, {
+    runtime:process.env,databaseUrl:process.env.DATABASE_URL,storageMode:"r2",storageBucket:"bikinfyp-staging",
+    model:normal.NORMAL_EVIDENCE_MODEL,resolution:normal.NORMAL_EVIDENCE_RESOLUTION,durationSec:15,shotCount:1,
+    format:"hands_only",approvedScriptSha256:exact.approvedScriptSha256!,jobProviderVideo:"prior-provider",jobProviderVoice:null,jobOutputUrl:null,
+  }), /PRIOR_JOB_EFFECT/);
   const worker = fs.readFileSync(new URL("../lib/postgres/worker.ts", import.meta.url), "utf8");
   assert.match(worker, /reviewedEvidenceSinglePost: exactJjGlowEvidence/);
+  assert.match(worker, /jjGlowApprovedScriptSha256/);
+  const store = fs.readFileSync(new URL("../lib/postgres/normal-evidence.ts", import.meta.url), "utf8");
+  assert.match(store, /BEGIN ISOLATION LEVEL SERIALIZABLE/);
+  assert.match(store, /provider_video !== null \|\| frozen\.provider_voice !== null \|\| frozen\.output_url !== null/);
+  assert.match(store, /jjGlowApprovedScriptSha256\(frozen, frozen\.manual_audit\)/);
+  const approval = fs.readFileSync(new URL("../app/api/scripts/\[id\]/approve/route.ts", import.meta.url), "utf8");
+  assert.match(approval, /if \(script\.job_id\) throw ERR\.BAD_REQUEST/);
 });
 
 test("reviewed exact hands-only plan becomes one 15-second provider request", () => {
@@ -103,6 +121,17 @@ test("reviewed exact hands-only plan becomes one 15-second provider request", ()
   assert.throws(() => planShots({jobId:"other",durationSec:20,segments:[],category,
     productName:"x",productCategory:"beauty",imageRefPath:ref,qualityTier:"high_quality",
     format:"hands_only",reviewedEvidenceSinglePost:true}), /SINGLE_POST_SHAPE_INVALID/);
+});
+
+test("approved script digest binds content, approval fields, and manual evidence audit", () => {
+  const script = {id:"s",job_id:normal.JJ_GLOW_FINAL_EVIDENCE_JOB_ID,product_id:normal.JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID,
+    hook_family:"H1",emotion:"senang",register:"bestie",segments:"[]",caption:"caption",hashtags:"[]",
+    validation_result:'{"passed":true}',quality_tier:"high_quality",hook_level:"agak_berani",
+    approved_by_user_at:"2026-08-31T00:00:00.000Z",edited_by_user:0,created_at:"2026-08-31T00:00:00.000Z"};
+  const audit = {actor:normal.JJ_GLOW_FINAL_EVIDENCE_USER_ID,created_at:"2026-08-31T00:00:00.000Z",meta:'{"provider_calls":0}'};
+  const digest = normal.jjGlowApprovedScriptSha256(script,audit);
+  assert.notEqual(normal.jjGlowApprovedScriptSha256({...script,caption:"mutated"},audit),digest);
+  assert.notEqual(normal.jjGlowApprovedScriptSha256(script,{...audit,meta:'{"provider_calls":1}'}),digest);
 });
 
 class MemoryStore implements NormalEvidenceStore {
@@ -442,6 +471,7 @@ test("JJ GLOW freeze verifies DB/R2 independently and activation is ledger-only"
   const migration = fs.readFileSync(new URL("../migrations/postgres/0044_jj_glow_exact_evidence_format.sql", import.meta.url), "utf8");
   assert.match(migration, /job_id='55284f20-efb8-4b18-8a24-f90fc91af733'/);
   assert.match(migration, /format='hands_only'/);
+  assert.match(migration, /approved_script_sha256 IS NOT NULL/);
   assert.match(migration, /NORMAL-REPRESENTATIVE-EVIDENCE-GUARD-20260829' AND format='talking_head'/);
 });
 
