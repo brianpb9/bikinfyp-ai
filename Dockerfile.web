@@ -94,6 +94,7 @@ RUN command -v ffmpeg \
   && test -f /srv/app/scripts/staging-jj-glow-candidate.cjs \
   && test -x /usr/local/bin/node \
   && node --check /srv/app/scripts/staging-candidate-durability-probe.cjs \
+  && test -f /srv/app/scripts/staging-jj-glow-candidate4-runtime-authorize.cjs \
   && node --check /srv/app/scripts/staging-jj-glow-candidate4-runtime-authorize.cjs \
   && node /srv/app/scripts/staging-candidate-durability-probe.cjs self-check | grep -qx DURABILITY_PROBE_RUNTIME_SELF_CHECK_PASS \
   && test -f /srv/app/scripts/fixtures/BPOM-KO-NA18260500350-20260831.json \

@@ -38,6 +38,7 @@ assert.match(authorizer,/lease_expires_at/);
 assert.doesNotMatch(authorizer,/fetch\(|createTask|enqueueJob|claimPost|provider_tasks\s+INSERT/i);
 assert.match(webDocker,/esbuild scripts\/staging-jj-glow-candidate4-runtime-authorize\.ts/);
 assert.match(webDocker,/COPY --from=build[^\n]+staging-jj-glow-candidate4-runtime-authorize\.cjs/);
+assert.match(webDocker,/test -f \/srv\/app\/scripts\/staging-jj-glow-candidate4-runtime-authorize\.cjs/);
 assert.match(webDocker,/node --check \/srv\/app\/scripts\/staging-jj-glow-candidate4-runtime-authorize\.cjs/);
 
 console.log("CANDIDATE_4_R3_RUNTIME_AUTHORIZATION_AND_SWEEP_BINDING_CONTRACT=PASS");
