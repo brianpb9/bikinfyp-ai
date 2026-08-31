@@ -541,6 +541,11 @@ test("JJ GLOW freeze verifies DB/R2 independently and activation is ledger-only"
   assert.match(runtimeAuthorizer,/JJ_GLOW_PROVIDER_RUNTIME_AUTHORIZED_NO_POST/);
   assert.match(runtimeAuthorizer,/INSERT INTO normal_evidence_runtime_authorizations/);
   assert.doesNotMatch(runtimeAuthorizer,/fetch\(|createTask|enqueueJob|claimPost/);
+  const webDocker = fs.readFileSync(new URL("../Dockerfile.web", import.meta.url), "utf8");
+  assert.match(webDocker,/COPY scripts\/staging-jj-glow-candidate4-runtime-authorize\.ts/);
+  assert.match(webDocker,/esbuild scripts\/staging-jj-glow-candidate4-runtime-authorize\.ts/);
+  assert.match(webDocker,/COPY --from=build[^\n]+staging-jj-glow-candidate4-runtime-authorize\.cjs/);
+  assert.match(webDocker,/node --check \/srv\/app\/scripts\/staging-jj-glow-candidate4-runtime-authorize\.cjs/);
 });
 
 test("migration enforces durable unique 0->1 ledger and private-only artifact key", () => {

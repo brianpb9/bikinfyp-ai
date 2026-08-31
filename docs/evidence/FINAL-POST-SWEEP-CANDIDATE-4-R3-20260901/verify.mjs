@@ -8,6 +8,7 @@ const store=read("../../../lib/postgres/normal-evidence.ts");
 const jobs=read("../../../lib/postgres/jobs.ts");
 const worker=read("../../../lib/postgres/worker.ts");
 const authorizer=read("../../../scripts/staging-jj-glow-candidate4-runtime-authorize.ts");
+const webDocker=read("../../../Dockerfile.web");
 
 assert.match(migration,/job_id='2c49a5c8-9465-4400-a214-159336a2c097'/);
 assert.match(migration,/activation_deploy_sha='13c22bc7a3a340f0ea5f4bb0db9a905691676c77'/);
@@ -35,5 +36,8 @@ assert.match(authorizer,/INSERT INTO normal_evidence_runtime_authorizations/);
 assert.match(authorizer,/JJ_GLOW_PROVIDER_RUNTIME_AUTHORIZED_NO_POST/);
 assert.match(authorizer,/lease_expires_at/);
 assert.doesNotMatch(authorizer,/fetch\(|createTask|enqueueJob|claimPost|provider_tasks\s+INSERT/i);
+assert.match(webDocker,/esbuild scripts\/staging-jj-glow-candidate4-runtime-authorize\.ts/);
+assert.match(webDocker,/COPY --from=build[^\n]+staging-jj-glow-candidate4-runtime-authorize\.cjs/);
+assert.match(webDocker,/node --check \/srv\/app\/scripts\/staging-jj-glow-candidate4-runtime-authorize\.cjs/);
 
 console.log("CANDIDATE_4_R3_RUNTIME_AUTHORIZATION_AND_SWEEP_BINDING_CONTRACT=PASS");
