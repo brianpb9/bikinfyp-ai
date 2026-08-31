@@ -127,7 +127,7 @@ export function jjGlowApprovedScriptSha256(script: Record<string, unknown>, manu
 export function expectedNormalEvidenceIdempotencyKey(contract: Pick<NormalEvidenceContract,
   "taskId" | "jobId" | "productId" | "subjectId" | "referenceSha256" | "referenceManifestSha256"
   | "productSnapshotSha256" | "approvedScriptSha256" | "deploySha" | "model" | "category" | "format" | "durationS" | "resolution">): string {
-  return deterministicEvidenceDigest({
+  const legacy = {
     taskId: contract.taskId,
     jobId: contract.jobId,
     productId: contract.productId,
@@ -135,14 +135,20 @@ export function expectedNormalEvidenceIdempotencyKey(contract: Pick<NormalEviden
     referenceSha256: contract.referenceSha256,
     referenceManifestSha256: contract.referenceManifestSha256,
     productSnapshotSha256: contract.productSnapshotSha256,
-    approvedScriptSha256: contract.approvedScriptSha256,
     deploySha: contract.deploySha,
     model: contract.model,
     category: contract.category,
     format: contract.format,
     durationS: contract.durationS,
     resolution: contract.resolution,
-  });
+  };
+  // NULL means a pre-0044 ordinary contract. Omitting the key preserves its
+  // byte-for-byte legacy idempotency digest and therefore safe crash resume.
+  // The exact JJ contract requires a non-null digest at both SQL and runtime
+  // gates, so its script binding is still part of the key.
+  return deterministicEvidenceDigest(contract.approvedScriptSha256
+    ? {...legacy,approvedScriptSha256:contract.approvedScriptSha256}
+    : legacy);
 }
 
 const sha256 = (raw: string) => crypto.createHash("sha256").update(raw).digest("hex");

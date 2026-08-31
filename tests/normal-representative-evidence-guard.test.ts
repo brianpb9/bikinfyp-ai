@@ -193,6 +193,18 @@ test("idempotency digest is canonical and the Reviewer cost is frozen", () => {
   }));
 });
 
+test("pre-0044 ordinary ledger keeps its legacy idempotency digest", () => {
+  const ordinary = contract();
+  const legacy = normal.deterministicEvidenceDigest({taskId:ordinary.taskId,jobId:ordinary.jobId,
+    productId:ordinary.productId,subjectId:ordinary.subjectId,referenceSha256:ordinary.referenceSha256,
+    referenceManifestSha256:ordinary.referenceManifestSha256,productSnapshotSha256:ordinary.productSnapshotSha256,
+    deploySha:ordinary.deploySha,model:ordinary.model,category:ordinary.category,format:ordinary.format,
+    durationS:ordinary.durationS,resolution:ordinary.resolution});
+  assert.equal(ordinary.approvedScriptSha256,null);
+  assert.equal(normal.expectedNormalEvidenceIdempotencyKey(ordinary),legacy);
+  assert.notEqual(normal.expectedNormalEvidenceIdempotencyKey(jjGlowContract()),legacy);
+});
+
 test("paid guard rejects every wrong managed-worker/runtime/storage identity", () => {
   const base = { ...process.env };
   const input = { databaseUrl: process.env.DATABASE_URL, storageMode: "r2", storageBucket: "bikinfyp-staging" };
