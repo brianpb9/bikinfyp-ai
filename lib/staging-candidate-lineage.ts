@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
+import { canonicalReferenceRightsJson, referenceRightsSha256 } from "./staging-reference-rights";
 
-export const JJ_LINEAGE_TASK = "P0-JJ-GLOW-CANDIDATE-CLOSURE-20260831-R11";
+export const JJ_LINEAGE_TASK = "P0-JJ-GLOW-CANDIDATE-CLOSURE-20260831-R12";
 export const JJ_LINEAGE_HEADER = "x-racun-staging-lineage-read";
 export const JJ_LINEAGE_TTL_MS = 5 * 60_000;
 export const JJ_LINEAGE_SERVICE_ID = "srv-d9n28tijnfac73a87lt0";
@@ -27,6 +28,10 @@ type CandidateRow = Record<string, unknown> & {
   hold_delta: number;
   terminal_ledger_count: number;
   job_ledger_net: number;
+  database_name: string;
+  database_principal: string;
+  database_server_address: string;
+  database_server_port: number;
   product_job_count: number;
   product_script_count: number;
   approved_reference_manifest: string | Record<string, unknown>;
@@ -95,6 +100,8 @@ export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt
     || Number(row.provider_task_count) !== 0 || Number(row.hold_count) !== 1
     || Number(row.hold_delta) !== -12_000 || Number(row.terminal_ledger_count) !== 0
     || Number(row.job_ledger_net) !== -12_000
+    || !row.database_name || !row.database_principal || !row.database_server_address
+    || !Number.isInteger(Number(row.database_server_port)) || Number(row.database_server_port) <= 0
     || Number(row.product_job_count) !== 1 || Number(row.product_script_count) !== 1
     || !row.id || !row.persona_id || !manifest || !snapshot || images?.length !== 1
     || referenceKey !== rights?.reference_key
@@ -108,6 +115,7 @@ export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt
     || manifestBinding?.reference_sha256 !== JJ_REFERENCE_SHA
     || manifestBinding?.receipt_sha256 !== JJ_RIGHTS_RECEIPT_SHA
     || manifestBinding?.scope !== JJ_RIGHTS_SCOPE || manifestBinding?.publication_permitted !== false
+    || referenceRightsSha256(canonicalReferenceRightsJson(manifestReceipt)) !== JJ_RIGHTS_RECEIPT_SHA
     || manifestReceipt?.schema !== "bikinfyp.staging-reference-rights/v1"
     || manifestReceipt?.source_kind !== "internally_created_synthetic"
     || manifestReceipt?.actor_principal_id !== JJ_PRINCIPAL_ID || manifestReceipt?.actor_role !== "Founder/CEO"
@@ -158,6 +166,15 @@ export function buildStagingCandidateLineageReceipt(row: CandidateRow, queriedAt
       exact_product_job_count: Number(row.product_job_count),
       exact_product_script_count: Number(row.product_script_count),
       worker_required_suspended: true,
+    },
+    control_plane: {
+      database_binding_sha256: sha256(JSON.stringify({
+        database: row.database_name,
+        principal: row.database_principal,
+        server_address: row.database_server_address,
+        server_port: Number(row.database_server_port),
+      })),
+      database_binding_components_present: true,
     },
   };
   return { ...payload, receipt_payload_sha256: sha256(bytesFor(payload)) };

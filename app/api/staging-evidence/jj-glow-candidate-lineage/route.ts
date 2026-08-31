@@ -16,8 +16,11 @@ export async function GET(request: Request) {
   try {
     const result = await getPool(config.databaseUrl).query(
       `SELECT j.*, p.creator_category, pr.images, pr.raw_meta,
+        current_database() database_name, current_user database_principal,
+        coalesce(inet_server_addr()::text,'local') database_server_address,
+        coalesce(inet_server_port(),0)::int database_server_port,
         (SELECT count(*)::int FROM provider_tasks t WHERE t.job_id=j.id) provider_task_count,
-        (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='hold' AND l.delta=-12000) hold_count,
+        (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='hold') hold_count,
         (SELECT coalesce(sum(l.delta),0)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type='hold') hold_delta,
         (SELECT count(*)::int FROM credit_ledger l WHERE l.job_id=j.id AND l.type IN ('capture','release')) terminal_ledger_count,
         (SELECT coalesce(sum(l.delta),0)::int FROM credit_ledger l WHERE l.job_id=j.id) job_ledger_net,
