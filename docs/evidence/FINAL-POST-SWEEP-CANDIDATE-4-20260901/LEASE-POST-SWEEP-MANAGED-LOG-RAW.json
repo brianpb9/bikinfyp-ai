@@ -1,0 +1,19 @@
+{
+  "id": "629c5999-c394-4bb2-965d-13c6de9f7389",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daaurirtqb8s73b8vfug"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "{\"event\":\"JJ_GLOW_CANDIDATE_4_LEASE_SWEEP_READBACK_PASS\",\"phase\":\"post-sweep\",\"runtime_sha\":\"13c22bc7a3a340f0ea5f4bb0db9a905691676c77\",\"transaction\":\"REPEATABLE READ READ ONLY\",\"evaluated_at\":\"2026-08-31T21:10:42.171Z\",\"candidate_age_seconds\":4967.738,\"product_jobs\":2,\"product_scripts\":2,\"predecessor\":{\"id\":\"55284f20-efb8-4b18-8a24-f90fc91af733\",\"script_id\":\"f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d\",\"state\":\"REFUNDED\",\"created_at\":\"2026-08-31T08:04:15.376Z\",\"state_changed_at\":\"2026-08-31T12:48:27.525Z\",\"provider_video\":null,\"provider_voice\":null,\"output_url\":null,\"provider_tasks\":0,\"provider_posts\":0,\"outputs\":0,\"fyp_posted\":0,\"post_plans\":0,\"holds\":1,\"releases\":1,\"captures\":0},\"candidate\":{\"id\":\"2c49a5c8-9465-4400-a214-159336a2c097\",\"script_id\":\"ca32178f-2731-4234-bb07-48f24a2f2079\",\"state\":\"QUEUED\",\"created_at\":\"2026-08-31T19:47:54.433Z\",\"state_changed_at\":\"2026-08-31T19:47:54.433Z\",\"provider_video\":null,\"provider_voice\":null,\"output_url\":null,\"provider_tasks\":0,\"provider_posts\":0,\"outputs\":0,\"fyp_posted\":0,\"post_plans\":0,\"holds\":1,\"releases\":0,\"captures\":0},\"evidence\":{\"task_id\":\"FINAL-POST-SWEEP-CANDIDATE-4-20260901\",\"idempotency_key\":\"17523707c5f39c34c89552874b8e0420315bd2a8085ccf9be31a7808b3c8bf2c\",\"job_id\":\"2c49a5c8-9465-4400-a214-159336a2c097\",\"deploy_sha\":\"13c22bc7a3a340f0ea5f4bb0db9a905691676c77\",\"approved_script_sha256\":\"110198510c75de3dba61d57260dce12af7cb0f06c6a4ddfc2254479cb8f05e7c\",\"state\":\"PREPOST_READY\",\"provider_post_count\":0,\"provider_task_id\":null,\"artifact_key\":null,\"actual_cost_usd\":null,\"lease_kind\":\"ACTIVE_EVIDENCE_LEASE\",\"lease_last_progress_at\":\"2026-08-31T21:01:56.911Z\",\"lease_expires_at\":\"2026-09-01T03:01:56.911Z\",\"created_at\":\"2026-08-31T21:01:56.911Z\",\"updated_at\":\"2026-08-31T21:01:56.911Z\"},\"mutation\":false,\"queue_paused\":true,\"queue_counts\":{\"waiting\":0,\"active\":0,\"delayed\":0,\"prioritized\":0,\"failed\":0,\"paused\":2}}",
+  "timestamp": "2026-08-31T21:10:42.195162944Z"
+}
