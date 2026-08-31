@@ -1,0 +1,52 @@
+{
+  "receipt_type": "render_and_local_log_recovery_search",
+  "captured_at": "2026-08-31T01:09:00Z",
+  "target": {
+    "product_id": "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+    "script_id": "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d",
+    "principal_id": "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8",
+    "candidate_render_job_id": "job-daacbrtg1s2s73cp5sv0",
+    "post_audit_render_job_id": "job-daaccmqjnfac738552qg"
+  },
+  "queries": [
+    {
+      "source": "Render logs",
+      "resource_id": "job-daacbrtg1s2s73cp5sv0",
+      "time_range": ["2026-08-31T00:08:00Z", "2026-08-31T00:10:00Z"],
+      "search_terms": [
+        "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+        "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d",
+        "JJ_GLOW_CANDIDATE_PASS"
+      ],
+      "retained_matching_log_lines": 0,
+      "result": "NO_RETAINED_OUTPUT"
+    },
+    {
+      "source": "Render logs",
+      "resource_id": "job-daaccmqjnfac738552qg",
+      "time_range": ["2026-08-31T00:09:00Z", "2026-08-31T00:12:00Z"],
+      "search_terms": [
+        "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+        "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d",
+        "job_id"
+      ],
+      "retained_matching_log_lines": 0,
+      "result": "NO_RETAINED_OUTPUT"
+    },
+    {
+      "source": "local canonical repository, .agent-bus archive/inboxes, and /private/tmp task worktrees",
+      "search_tool": "rg",
+      "search_terms": [
+        "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+        "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d",
+        "job-daacbrtg1s2s73cp5sv0",
+        "job-daaccmqjnfac738552qg"
+      ],
+      "unknown_app_job_uuid_matches": 0,
+      "result": "NO_APP_JOB_UUID"
+    }
+  ],
+  "app_job_id_recovered": null,
+  "mutation": false,
+  "secret_values_recorded": false
+}

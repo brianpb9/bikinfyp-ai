@@ -1,5 +1,10 @@
 {
   "receipt_type": "candidate_timeline_and_recovery_sources",
+  "target": {
+    "product_id": "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+    "script_id": "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d",
+    "principal_id": "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8"
+  },
   "candidate_render_job": {
     "render_job_id": "job-daacbrtg1s2s73cp5sv0",
     "status": "succeeded",
@@ -50,5 +55,6 @@
     "bullmq": false,
     "render_logs": false
   },
+  "render_log_recovery_receipt": "RAW-LOG-RECOVERY.json",
   "mutation": false
 }

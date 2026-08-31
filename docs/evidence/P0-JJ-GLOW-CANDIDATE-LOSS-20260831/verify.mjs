@@ -21,9 +21,11 @@ const redis = receipts["RAW-REDIS.json"];
 const timeline = receipts["RAW-TIMELINE-RECOVERY.json"];
 const authority = receipts["RAW-AUTHORITY.json"];
 const secretReceipt = receipts["RAW-SECRET-BINDING.json"];
+const founderBus = receipts["RAW-FOUNDER-AUTHORITY-BUS.json"];
+const logRecovery = receipts["RAW-LOG-RECOVERY.json"];
 
 assert.equal(manifest.schema, "bikinfyp.incident-source-manifest/v1");
-assert.equal(Object.keys(manifest.receipts).length, 8);
+assert.equal(Object.keys(manifest.receipts).length, 10);
 
 const pass = review.sources.find((source) => source.kind === "canonical_agent_bus_message");
 const deploy = review.sources.find((source) => source.kind === "render_deploy_readback");
@@ -76,11 +78,45 @@ assert.equal(timeline.first_absence.created_at, timeline.loss_window.before);
 assert.ok(Date.parse(timeline.loss_window.after) < Date.parse(timeline.loss_window.before));
 assert.equal(timeline.control_plane_window_readback.one_off_jobs_between_last_presence_and_first_absence, 0);
 assert.equal(timeline.control_plane_window_readback.web_deploys_between_last_presence_and_first_absence, 0);
-assert.ok(Object.values(timeline.retained_app_job_id_sources).every((present) => present === false));
+assert.deepEqual(timeline.target, {
+  product_id: incident.candidate.product_id,
+  script_id: incident.candidate.script_id,
+  principal_id: incident.candidate.principal_id,
+});
+assert.deepEqual(logRecovery.target.product_id, timeline.target.product_id);
+assert.deepEqual(logRecovery.target.script_id, timeline.target.script_id);
+assert.deepEqual(logRecovery.target.principal_id, timeline.target.principal_id);
+assert.equal(timeline.render_log_recovery_receipt, "RAW-LOG-RECOVERY.json");
+assert.ok(logRecovery.queries.filter((query) => query.source === "Render logs")
+  .every((query) => query.retained_matching_log_lines === 0 && query.result === "NO_RETAINED_OUTPUT"));
+assert.equal(logRecovery.queries.find((query) => query.search_tool === "rg").unknown_app_job_uuid_matches, 0);
+assert.equal(logRecovery.app_job_id_recovered, null);
+
+const recoveredSources = {
+  postgres: pgCounts.exact_candidate_count > 0 || pgTrace.recovered_job_ids.length > 0,
+  r2_lineage: r2.source.found > 0,
+  bullmq: queue.candidate_window_job_rows > 0 || events.event_count > 0,
+  render_logs: logRecovery.app_job_id_recovered !== null,
+};
+assert.deepEqual(recoveredSources, timeline.retained_app_job_id_sources);
+assert.ok(Object.values(recoveredSources).every((present) => present === false));
 
 const maxDirective = authority.directives.find((directive) => directive.key === "MAX_CANONICAL_CANDIDATES_CREATED");
 const replacementDirective = authority.directives.find((directive) => directive.key === "replacement_candidate_increment");
 const grokDirective = authority.directives.find((directive) => directive.key === "SECONDARY_GENERATION_PROVIDER");
+assert.equal(founderBus.id, "1788139754000-reviewer-TASK");
+assert.equal(founderBus.from, "reviewer");
+assert.equal(founderBus.to, "builder");
+assert.equal(founderBus.type, "TASK");
+assert.equal(founderBus.task, "P0-JJ-GLOW-CANDIDATE-LOSS-AUTHORITY-20260831");
+assert.equal(founderBus.owner_id, "worker-a4c4c9e34f1c07f2");
+assert.equal(authority.authority_bus_receipt, "RAW-FOUNDER-AUTHORITY-BUS.json");
+assert.equal(authority.authority_bus_receipt_sha256, manifest.receipts[authority.authority_bus_receipt]);
+assert.match(founderBus.body, /MAX_CANONICAL_CANDIDATES_CREATED=1/);
+assert.match(founderBus.body, /allowance is consumed/);
+assert.match(founderBus.body, /replacement candidate is NOT currently authorized/);
+assert.match(founderBus.body, /SECONDARY_GENERATION_PROVIDER=GROK_IMAGINE/);
+assert.match(founderBus.body, /approved only as a post-current-lane backlog requirement/);
 assert.equal(maxDirective.value, 1);
 assert.equal(maxDirective.status, "consumed");
 assert.equal(replacementDirective.status, "not_authorized");
@@ -88,8 +124,8 @@ assert.equal(grokDirective.value, "GROK_IMAGINE");
 assert.equal(grokDirective.status, "approved_backlog_contract_only");
 assert.equal(authority.provider_post_authorized, false);
 assert.equal(authority.secret_entry_receipt_source_sha256, "65befa4a4eb85b20f9286be498f3a2e2ea907327b97da55314123ec4ae202d6e");
-assert.equal(authority.embedded_sanitized_copy, "RAW-SECRET-BINDING.json");
-assert.equal(authority.embedded_sanitized_copy_sha256, manifest.receipts[authority.embedded_sanitized_copy]);
+assert.equal(authority.secret_entry_receipt_source, "RAW-SECRET-BINDING.json");
+assert.equal(authority.secret_entry_receipt_source_sha256, manifest.receipts[authority.secret_entry_receipt_source]);
 assert.equal(secretReceipt.secret_value_observed, false);
 assert.equal(secretReceipt.required_human_actions.length, 2);
 assert.deepEqual(secretReceipt.required_bindings, {
@@ -101,7 +137,7 @@ assert.deepEqual(secretReceipt.required_bindings, {
 const founderDecisionRequired = maxDirective.status === "consumed"
   && replacementDirective.status === "not_authorized"
   && pgCounts.exact_candidate_count === 0
-  && Object.values(timeline.retained_app_job_id_sources).every((present) => present === false);
+  && Object.values(recoveredSources).every((present) => present === false);
 assert.equal(founderDecisionRequired, true);
 
 assert.equal(incident.schema, "bikinfyp.staging-candidate-loss-incident/v1");
@@ -170,7 +206,8 @@ assert.equal(postgres.raw_database_identifiers_recorded, false);
 assert.equal(r2.r2_credentials_recorded, false);
 assert.equal(redis.redis_url_recorded, false);
 assert.equal(secretReceipt.provider_called, false);
-assert.equal(secretReceipt.production_mutation_authorized, false);
+assert.equal(secretReceipt.targets.production_worker.mutation_authorized, false);
+assert.equal(secretReceipt.production_mutated, false);
 
 const serialized = JSON.stringify({ incident, backlog, receipts });
 assert.doesNotMatch(serialized, /sk-[A-Za-z0-9_-]{12,}/);

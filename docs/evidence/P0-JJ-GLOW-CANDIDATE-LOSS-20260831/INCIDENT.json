@@ -1,6 +1,6 @@
 {
   "schema": "bikinfyp.staging-candidate-loss-incident/v1",
-  "task": "P0-JJ-GLOW-CANDIDATE-LOSS-20260831-R13",
+  "task": "P0-JJ-GLOW-CANDIDATE-LOSS-20260831-R15",
   "recorded_at": "2026-08-31T01:13:00Z",
   "environment": "staging",
   "source_manifest": "SOURCE-MANIFEST.json",
