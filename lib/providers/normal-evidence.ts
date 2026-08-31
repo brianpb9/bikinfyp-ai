@@ -10,6 +10,8 @@ export const JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID = "c470390e-ad3d-4cc8-9ba2-455769
 export const JJ_GLOW_FINAL_EVIDENCE_USER_ID = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
 export const JJ_GLOW_FINAL_EVIDENCE_SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
 export const JJ_GLOW_CANDIDATE_4_EVIDENCE_TASK = "FINAL-POST-SWEEP-CANDIDATE-4-20260901";
+export const JJ_GLOW_CANDIDATE_4_EVIDENCE_JOB_ID = "2c49a5c8-9465-4400-a214-159336a2c097";
+export const JJ_GLOW_CANDIDATE_4_RUNTIME_AUTHORIZATION_TASK = "FINAL-POST-SWEEP-CANDIDATE-4-R3-20260901";
 export const JJ_GLOW_CANDIDATE_4_SCRIPT_ID = "ca32178f-2731-4234-bb07-48f24a2f2079";
 export const JJ_GLOW_FINAL_EVIDENCE_REFERENCE_SHA256 = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 export const NORMAL_EVIDENCE_MODEL = "dreamina-seedance-2-0-mini-260615";
@@ -48,6 +50,9 @@ export interface NormalEvidenceContract {
   productSnapshotSha256: string;
   approvedScriptSha256: string | null;
   deploySha: string;
+  /** Append-only post-activation authorization. Ordinary and legacy rows use
+   * deploySha; Candidate #4 may bind one later reviewed safe worker SHA. */
+  providerRuntimeSha?: string;
   model: string;
   category: string;
   format: string;
@@ -171,6 +176,17 @@ export function assertNormalEvidenceManagedRuntime(input: {
   return env;
 }
 
+export function assertNormalEvidenceRuntimeSha(
+  contract: Pick<NormalEvidenceContract, "deploySha" | "providerRuntimeSha">,
+  runtimeSha: string | undefined,
+): string {
+  const authorized = contract.providerRuntimeSha || contract.deploySha;
+  if (!runtimeSha || runtimeSha !== authorized || !/^[0-9a-f]{40}$/.test(runtimeSha)) {
+    throw new Error("NORMAL_EVIDENCE_DEPLOY_SHA_MISMATCH");
+  }
+  return runtimeSha;
+}
+
 /** The sole hands-only exception is a reviewed, immutable staging candidate.
  * Keeping the identity predicate here prevents a generic hands-only job from
  * borrowing the single-POST evidence path. */
@@ -236,8 +252,7 @@ export function assertNormalEvidenceProviderContract(contract: NormalEvidenceCon
   const env = assertNormalEvidenceManagedRuntime(input);
   const exactJjGlow = isJjGlowFinalEvidenceContract(contract);
   if (contract.taskId !== NORMAL_EVIDENCE_TASK && !exactJjGlow) throw new Error("NORMAL_EVIDENCE_TASK_MISMATCH");
-  const runtimeSha = env.RENDER_GIT_COMMIT;
-  if (!runtimeSha || runtimeSha !== contract.deploySha || !/^[0-9a-f]{40}$/.test(runtimeSha)) throw new Error("NORMAL_EVIDENCE_DEPLOY_SHA_MISMATCH");
+  assertNormalEvidenceRuntimeSha(contract, env.RENDER_GIT_COMMIT);
   if (input.model !== contract.model || input.model !== NORMAL_EVIDENCE_MODEL) throw new Error("NORMAL_EVIDENCE_MODEL_MISMATCH");
   if (input.resolution !== contract.resolution || input.resolution !== NORMAL_EVIDENCE_RESOLUTION) throw new Error("NORMAL_EVIDENCE_RESOLUTION_MISMATCH");
   if (input.durationSec !== NORMAL_EVIDENCE_DURATION_S || contract.durationS !== NORMAL_EVIDENCE_DURATION_S || input.shotCount !== 1) throw new Error("NORMAL_EVIDENCE_REQUIRES_ONE_15S_SHOT");

@@ -66,6 +66,7 @@ import { withProductEvidenceMutationLock } from "../job-admission-reference";
 import { freezeProviderRequestCorrelation } from "./prompt-request-correlation";
 import { assertJjGlowFinalEvidenceActivatedForWorker, assertNormalEvidenceProviderContract, isJjGlowFinalEvidenceContract, jjGlowApprovedScriptSha256, normalEvidenceStore } from "../providers/normal-evidence";
 import { assertNormalEvidenceReceiptMatchesArtifact, runNormalEvidenceOfflineQc, type NormalEvidenceOfflineQcReceipt } from "../media/normal-evidence-offline-qc";
+import { jjGlowCandidate4RuntimePreflightNoPost } from "./normal-evidence";
 
 type PostgresQcRunner = typeof runQc;
 let postgresQcRunner: PostgresQcRunner = runQc;
@@ -1277,18 +1278,21 @@ export async function sweepPostgresStaleJobs(): Promise<number> {
     if (dirapikan) console.warn(`[sweep] ${dirapikan} job READY di-capture susulan (hold menggantung)`);
     const promoDirapikan = await jobs.reconcileReadyPromoHolds();
     if (promoDirapikan) console.warn(`[sweep] ${promoDirapikan} promo READY di-capture susulan (hold menggantung)`);
-    const swept = await jobs.sweepStaleJobs();
+    const sweep = await jobs.sweepStaleJobsWithReceipt();
+    const candidate4ProviderRuntimePreflight = await jjGlowCandidate4RuntimePreflightNoPost(sweep.databaseBindingSha256);
     console.log(JSON.stringify({
       event:"POSTGRES_STALE_SWEEP_COMPLETED",
       component:"PgJobsRepository.sweepStaleJobs",
       trigger:"WORKER_INTERVAL_60000_MS",
       runtime_sha:process.env.RENDER_GIT_COMMIT?.trim() || null,
+      database_binding_sha256:sweep.databaseBindingSha256,
       started_at:startedAt,
       completed_at:new Date().toISOString(),
-      swept_jobs:swept,
+      swept_jobs:sweep.swept,
       reconciled_ready_holds:dirapikan,
       reconciled_promo_holds:promoDirapikan,
+      candidate4_provider_runtime_preflight:candidate4ProviderRuntimePreflight,
     }));
-    return swept;
+    return sweep.swept;
   } finally { await jobs.close(); }
 }

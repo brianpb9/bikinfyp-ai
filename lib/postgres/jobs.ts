@@ -7,6 +7,7 @@ import { Pool, type PoolClient } from "pg";
 import { JOB_STATES, type JobState } from "../jobs";
 import { hasUnexpiredEvidenceLease, isProviderEvidenceInFlight, type EvidenceLeaseRow } from "../normal-evidence-lease";
 import { getPool } from "./pool";
+import { postgresRuntimeBinding } from "./runtime-binding.cjs";
 
 export type PgJob = { id: string; user_id: string; org_id: string | null; state: JobState; created_at: string; state_changed_at: string | null; completed_at: string | null; cost_actual_idr: number; provider_video: string | null; provider_voice: string | null; output_url: string | null };
 type StateTimeouts = Partial<Record<string, number>>;
@@ -63,13 +64,25 @@ export class PgJobsRepository {
    * (brand review scene), bukan macet — men-sweep-nya akan me-refund job
    * yang sebenarnya sehat. */
   async sweepStaleJobs(referenceNow = new Date(this.now()).getTime()): Promise<number> {
-    const active = await this.pool.query<PgJob>("SELECT id,user_id,org_id,state,created_at,state_changed_at,completed_at,cost_actual_idr,provider_video,provider_voice,output_url FROM jobs WHERE state NOT IN ('READY','FAILED','REFUNDED','AWAITING_APPROVAL')");
-    let swept = 0;
-    for (const job of active.rows) {
+    return (await this.sweepStaleJobsWithReceipt(referenceNow)).swept;
+  }
+
+  /** The binding and active-job enumeration use this exact checked-out
+   * connection. The receipt therefore cannot describe a sweep on another
+   * PostgreSQL database while borrowing an unrelated web readback digest. */
+  async sweepStaleJobsWithReceipt(referenceNow = new Date(this.now()).getTime()): Promise<{
+    swept: number; databaseBindingSha256: string;
+  }> {
+    const receiptClient = await this.pool.connect();
+    try {
+      const binding = await postgresRuntimeBinding(receiptClient);
+      const active = await receiptClient.query<PgJob>("SELECT id,user_id,org_id,state,created_at,state_changed_at,completed_at,cost_actual_idr,provider_video,provider_voice,output_url FROM jobs WHERE state NOT IN ('READY','FAILED','REFUNDED','AWAITING_APPROVAL')");
+      let swept = 0;
+      for (const job of active.rows) {
       const changed = new Date(job.state_changed_at ?? job.created_at).getTime();
       const minutes = this.timeouts[job.state] ?? 90;
       if (referenceNow - changed <= minutes * 60_000) continue;
-      const changedBySweep = await this.transaction(async (client) => {
+      const changedBySweep = await this.transactionOnClient(receiptClient, async (client) => {
         // Canonical lock order for every evidence-authority operation is job
         // first, evidence second. Activation uses the same order, so either
         // the lease commits first or the refund commits first—never both.
@@ -121,8 +134,9 @@ export class PgJobsRepository {
         return result.changed;
       });
       if (changedBySweep) swept++;
-    }
-    return swept;
+      }
+      return { swept, databaseBindingSha256:binding.sha256 };
+    } finally { receiptClient.release(); }
   }
 
   private async failLockedJob(
@@ -313,6 +327,27 @@ export class PgJobsRepository {
         throw error;
       } finally {
         client.release();
+      }
+    }
+    throw new Error("Transaksi PostgreSQL habis retry.");
+  }
+  private async transactionOnClient<T>(client: PoolClient, fn: (client: PoolClient) => Promise<T>): Promise<T> {
+    const maxAttempts=8;
+    for (let attempt=0;attempt<maxAttempts;attempt++) {
+      try {
+        await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+        const value=await fn(client);
+        await client.query("COMMIT");
+        return value;
+      } catch(error) {
+        await client.query("ROLLBACK").catch(()=>undefined);
+        const code=(error as {code?:string}).code;
+        if ((code==="40001" || code==="40P01") && attempt<maxAttempts-1) {
+          const backoffMs=Math.min(200,5*(2**attempt))+Math.floor(Math.random()*11);
+          await new Promise<void>((resolve)=>setTimeout(resolve,backoffMs));
+          continue;
+        }
+        throw error;
       }
     }
     throw new Error("Transaksi PostgreSQL habis retry.");

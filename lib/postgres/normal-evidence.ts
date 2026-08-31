@@ -1,9 +1,15 @@
 import crypto from "node:crypto";
 import { config } from "../config";
 import { getPool } from "./pool";
-import { isJjGlowFinalEvidenceContract, jjGlowApprovedScriptSha256, type NormalEvidenceContract, type NormalEvidenceStore } from "../providers/normal-evidence";
+import {
+  assertNormalEvidenceManagedRuntime, assertNormalEvidenceRuntimeSha,
+  isJjGlowFinalEvidenceContract, jjGlowApprovedScriptSha256,
+  JJ_GLOW_CANDIDATE_4_EVIDENCE_JOB_ID, JJ_GLOW_CANDIDATE_4_EVIDENCE_TASK,
+  type NormalEvidenceContract, type NormalEvidenceStore,
+} from "../providers/normal-evidence";
 import { assertNormalEvidenceReceiptMatchesArtifact } from "../media/normal-evidence-offline-qc";
 import { normalEvidenceLeaseWindow } from "../normal-evidence-lease";
+import { postgresRuntimeBinding } from "./runtime-binding.cjs";
 
 const map = (row: Record<string, unknown>): NormalEvidenceContract => ({
   taskId: String(row.task_id), idempotencyKey: String(row.idempotency_key), jobId: String(row.job_id),
@@ -13,6 +19,7 @@ const map = (row: Record<string, unknown>): NormalEvidenceContract => ({
   productSnapshotSha256: String(row.product_snapshot_sha256),
   approvedScriptSha256: row.approved_script_sha256 ? String(row.approved_script_sha256) : null,
   deploySha: String(row.deploy_sha),
+  providerRuntimeSha: row.provider_runtime_sha ? String(row.provider_runtime_sha) : String(row.deploy_sha),
   model: String(row.model), category: String(row.category), format: String(row.format),
   resolution: String(row.resolution), durationS: Number(row.duration_s),
   estimatedCostUsd: Number(row.estimated_cost_usd), maxCostUsd: Number(row.max_cost_usd),
@@ -24,7 +31,10 @@ const map = (row: Record<string, unknown>): NormalEvidenceContract => ({
 export const pgNormalEvidenceStore: NormalEvidenceStore = {
   async get(jobId) {
     const row = (await getPool(config.databaseUrl).query(
-      "SELECT * FROM normal_representative_evidence_runs WHERE job_id=$1", [jobId]
+      `SELECT ne.*,ra.provider_runtime_sha
+         FROM normal_representative_evidence_runs ne
+         LEFT JOIN normal_evidence_runtime_authorizations ra ON ra.job_id=ne.job_id
+        WHERE ne.job_id=$1`, [jobId]
     )).rows[0];
     return row ? map(row) : null;
   },
@@ -272,3 +282,40 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
     }
   },
 };
+
+/** Read-only, actual-worker preflight for the one append-only Candidate #4
+ * runtime authorization. It deliberately stops before payload construction,
+ * claimPost, queue consumption, or any provider boundary. */
+export async function jjGlowCandidate4RuntimePreflightNoPost(
+  sweepDatabaseBindingSha256: string,
+): Promise<null | { status: "ACCEPTED_NO_POST"; job_id: string; provider_runtime_sha: string; database_binding_sha256: string }> {
+  const pool = getPool(config.databaseUrl), client = await pool.connect();
+  try {
+    await client.query("BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY");
+    const binding = await postgresRuntimeBinding(client);
+    if (binding.sha256 !== sweepDatabaseBindingSha256) throw new Error("JJ_GLOW_SWEEP_PREFLIGHT_DATABASE_BINDING_MISMATCH");
+    const row = (await client.query(`SELECT ne.*,ra.provider_runtime_sha,ra.database_binding_sha256,
+        j.state job_state,j.provider_video,j.provider_voice,j.output_url,
+        (SELECT count(*)::int FROM provider_tasks pt WHERE pt.job_id=j.id) provider_tasks,
+        (SELECT count(*)::int FROM outputs o WHERE o.job_id=j.id) outputs,
+        (SELECT count(*)::int FROM fyp_snapshots f WHERE f.job_id=j.id AND f.posted_url IS NOT NULL) fyp_posted,
+        (SELECT count(*)::int FROM post_plans pp WHERE pp.job_id=j.id) post_plans
+      FROM normal_representative_evidence_runs ne
+      JOIN jobs j ON j.id=ne.job_id
+      LEFT JOIN normal_evidence_runtime_authorizations ra ON ra.job_id=ne.job_id
+      WHERE ne.job_id=$1`, [JJ_GLOW_CANDIDATE_4_EVIDENCE_JOB_ID])).rows[0];
+    if (!row?.provider_runtime_sha) { await client.query("ROLLBACK"); return null; }
+    const contract = map(row);
+    assertNormalEvidenceManagedRuntime({ databaseUrl:config.databaseUrl, storageMode:config.storageMode, storageBucket:config.r2Bucket });
+    assertNormalEvidenceRuntimeSha(contract, process.env.RENDER_GIT_COMMIT);
+    if (contract.taskId !== JJ_GLOW_CANDIDATE_4_EVIDENCE_TASK || contract.state !== "PREPOST_READY"
+        || contract.providerPostCount !== 0 || contract.providerTaskId !== null
+        || row.lease_kind !== "ACTIVE_EVIDENCE_LEASE" || !row.lease_expires_at || Date.parse(row.lease_expires_at) <= Date.now()
+        || row.job_state !== "QUEUED" || row.provider_video !== null || row.provider_voice !== null || row.output_url !== null
+        || Number(row.provider_tasks) !== 0 || Number(row.outputs) !== 0 || Number(row.fyp_posted) !== 0 || Number(row.post_plans) !== 0
+        || row.database_binding_sha256 !== binding.sha256) throw new Error("JJ_GLOW_RUNTIME_PREFLIGHT_PRIOR_EFFECT_OR_AUTHORITY_MISMATCH");
+    await client.query("ROLLBACK");
+    return { status:"ACCEPTED_NO_POST",job_id:contract.jobId,provider_runtime_sha:contract.providerRuntimeSha!,database_binding_sha256:binding.sha256 };
+  } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+  finally { client.release(); }
+}

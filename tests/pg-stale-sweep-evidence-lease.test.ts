@@ -94,7 +94,10 @@ async function sweeper() {
 test("stale abandoned job is refunded with a stable decision receipt", {skip,concurrency:false}, async () => {
   const f=await fixture(),repo=await sweeper();
   try {
-    assert.equal(await repo.sweepStaleJobs(Date.parse(EVALUATED_AT)),1);
+    const {postgresRuntimeBinding}=await import("../lib/postgres/runtime-binding.cjs");
+    const expectedBinding=await postgresRuntimeBinding(pool);
+    const sweep=await repo.sweepStaleJobsWithReceipt(Date.parse(EVALUATED_AT));
+    assert.equal(sweep.swept,1);assert.equal(sweep.databaseBindingSha256,expectedBinding.sha256);
     const job=(await pool.query("SELECT state FROM jobs WHERE id=$1",[f.jobId])).rows[0];
     const terminal=(await pool.query("SELECT type,delta FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','release')",[f.jobId])).rows;
     const transitions=(await pool.query("SELECT meta FROM audit_log WHERE entity_id=$1 AND action='job.transition' ORDER BY created_at,id",[f.jobId])).rows;

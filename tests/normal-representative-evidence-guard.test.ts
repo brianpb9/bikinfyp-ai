@@ -115,6 +115,15 @@ test("hands-only exception is exact-candidate only and retains one-request provi
   assert.match(approval, /if \(script\.job_id\) throw ERR\.BAD_REQUEST/);
 });
 
+test("append-only Candidate #4 runtime authorization changes only the exact runtime gate", () => {
+  const activation={...jjGlowContract(),deploySha:"1".repeat(40),providerRuntimeSha:"2".repeat(40)};
+  assert.doesNotThrow(()=>normal.assertNormalEvidenceRuntimeSha(activation,"2".repeat(40)));
+  assert.throws(()=>normal.assertNormalEvidenceRuntimeSha(activation,"1".repeat(40)),/DEPLOY_SHA_MISMATCH/);
+  const legacy={...activation,providerRuntimeSha:undefined};
+  assert.doesNotThrow(()=>normal.assertNormalEvidenceRuntimeSha(legacy,"1".repeat(40)));
+  assert.throws(()=>normal.assertNormalEvidenceRuntimeSha(legacy,"2".repeat(40)),/DEPLOY_SHA_MISMATCH/);
+});
+
 test("reviewed exact hands-only plan becomes one 15-second provider request", () => {
   const category = getCreatorCategory("lokal");
   assert.ok(category);
@@ -521,6 +530,17 @@ test("JJ GLOW freeze verifies DB/R2 independently and activation is ledger-only"
   assert.match(candidate4Migration, /product_id='c470390e-ad3d-4cc8-9ba2-4557691fa7a7'/);
   assert.match(candidate4Migration, /reference_sha256='744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1'/);
   assert.match(candidate4Migration, /approved_script_sha256='110198510c75de3dba61d57260dce12af7cb0f06c6a4ddfc2254479cb8f05e7c'/);
+  const runtimeMigration = fs.readFileSync(new URL("../migrations/postgres/0047_candidate4_provider_runtime_authorization.sql", import.meta.url), "utf8");
+  assert.match(runtimeMigration,/normal_evidence_runtime_authorizations/);
+  assert.match(runtimeMigration,/database_binding_sha256='f4fcf0f493e99f7ad0e5fb7ed320ea272080ef611b2500cb2f6ed89bd8f97610'/);
+  assert.match(runtimeMigration,/provider_runtime_sha<>activation_deploy_sha/);
+  assert.match(runtimeMigration,/BEFORE UPDATE OR DELETE/);
+  assert.match(runtimeMigration,/evidence\.deploy_sha<>NEW\.activation_deploy_sha/);
+  const runtimeAuthorizer = fs.readFileSync(new URL("../scripts/staging-jj-glow-candidate4-runtime-authorize.ts", import.meta.url), "utf8");
+  assert.match(runtimeAuthorizer,/BEGIN ISOLATION LEVEL SERIALIZABLE/);
+  assert.match(runtimeAuthorizer,/JJ_GLOW_PROVIDER_RUNTIME_AUTHORIZED_NO_POST/);
+  assert.match(runtimeAuthorizer,/INSERT INTO normal_evidence_runtime_authorizations/);
+  assert.doesNotMatch(runtimeAuthorizer,/fetch\(|createTask|enqueueJob|claimPost/);
 });
 
 test("migration enforces durable unique 0->1 ledger and private-only artifact key", () => {
