@@ -134,6 +134,21 @@ test("approved script digest binds content, approval fields, and manual evidence
   assert.notEqual(normal.jjGlowApprovedScriptSha256(script,{...audit,meta:'{"provider_calls":1}'}),digest);
 });
 
+test("exact queued candidate cannot execute without activated PREPOST_READY ledger", () => {
+  const row={jobId:normal.JJ_GLOW_FINAL_EVIDENCE_JOB_ID,userId:normal.JJ_GLOW_FINAL_EVIDENCE_USER_ID,
+    productId:normal.JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID,scriptId:normal.JJ_GLOW_FINAL_EVIDENCE_SCRIPT_ID,
+    format:"hands_only",durationS:15,state:"QUEUED"};
+  assert.throws(()=>normal.assertJjGlowFinalEvidenceActivatedForWorker(row,null),/ACTIVATION_REQUIRED/);
+  assert.throws(()=>normal.assertJjGlowFinalEvidenceActivatedForWorker(row,{...jjGlowContract(),state:"TASK_BOUND",providerPostCount:1}),/PREPOST_READY_REQUIRED/);
+  assert.doesNotThrow(()=>normal.assertJjGlowFinalEvidenceActivatedForWorker(row,jjGlowContract()));
+  assert.doesNotThrow(()=>normal.assertJjGlowFinalEvidenceActivatedForWorker({...row,jobId:"ordinary"},null));
+  const worker=fs.readFileSync(new URL("../lib/postgres/worker.ts",import.meta.url),"utf8");
+  const load=worker.indexOf("const evidenceTerminal = await normalEvidenceStore().get(row.id)");
+  const guard=worker.indexOf("assertJjGlowFinalEvidenceActivatedForWorker",load);
+  const transition=worker.indexOf('jobs.transition(jobId, "GENERATING_VISUAL"',guard);
+  assert.ok(load>0&&guard>load&&transition>guard,"activation guard must precede first worker state transition");
+});
+
 class MemoryStore implements NormalEvidenceStore {
   row = contract();
   claims = 0;

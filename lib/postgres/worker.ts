@@ -64,7 +64,7 @@ import { normalisasiFormatWorker } from "../media/worker-format";
 import { managedStagingDeterministicWorkerGate } from "../staging-deterministic-worker";
 import { withProductEvidenceMutationLock } from "../job-admission-reference";
 import { freezeProviderRequestCorrelation } from "./prompt-request-correlation";
-import { assertNormalEvidenceProviderContract, isJjGlowFinalEvidenceContract, jjGlowApprovedScriptSha256, normalEvidenceStore } from "../providers/normal-evidence";
+import { assertJjGlowFinalEvidenceActivatedForWorker, assertNormalEvidenceProviderContract, isJjGlowFinalEvidenceContract, jjGlowApprovedScriptSha256, normalEvidenceStore } from "../providers/normal-evidence";
 import { assertNormalEvidenceReceiptMatchesArtifact, runNormalEvidenceOfflineQc, type NormalEvidenceOfflineQcReceipt } from "../media/normal-evidence-offline-qc";
 
 type PostgresQcRunner = typeof runQc;
@@ -430,6 +430,11 @@ async function processPostgresJobWithProductLock(
     const row = found.rows[0];
     if (!row || ["READY", "FAILED", "REFUNDED"].includes(row.state)) return;
     const evidenceTerminal = await normalEvidenceStore().get(row.id);
+    // Candidate #3 was already queued while the worker was intentionally
+    // suspended. Missing activation must never make it fall through to the
+    // ordinary multi-shot/failover path when that worker resumes.
+    assertJjGlowFinalEvidenceActivatedForWorker({jobId:row.id,userId:row.user_id,productId:row.product_id,
+      scriptId:row.script_id,format:row.format,durationS:Number(row.duration_s),state:row.state},evidenceTerminal);
     if (evidenceTerminal?.state === "CAPTURED_NO_PUBLICATION") return;
     if (evidenceTerminal?.state === "STOP_NO_RETRY") {
       // A provider POST without a durably bound task is never retried. Close

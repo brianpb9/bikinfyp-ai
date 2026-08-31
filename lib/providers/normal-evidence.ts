@@ -7,6 +7,7 @@ export const JJ_GLOW_FINAL_EVIDENCE_TASK = "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-
 export const JJ_GLOW_FINAL_EVIDENCE_JOB_ID = "55284f20-efb8-4b18-8a24-f90fc91af733";
 export const JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID = "c470390e-ad3d-4cc8-9ba2-4557691fa7a7";
 export const JJ_GLOW_FINAL_EVIDENCE_USER_ID = "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8";
+export const JJ_GLOW_FINAL_EVIDENCE_SCRIPT_ID = "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d";
 export const JJ_GLOW_FINAL_EVIDENCE_REFERENCE_SHA256 = "744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1";
 export const NORMAL_EVIDENCE_MODEL = "dreamina-seedance-2-0-mini-260615";
 export const NORMAL_EVIDENCE_RESOLUTION = "720p";
@@ -179,6 +180,21 @@ export function isJjGlowFinalEvidenceContract(contract: Pick<NormalEvidenceContr
     && contract.referenceSha256 === JJ_GLOW_FINAL_EVIDENCE_REFERENCE_SHA256
     && contract.format === "hands_only" && contract.category === "beauty"
     && contract.durationS === NORMAL_EVIDENCE_DURATION_S;
+}
+
+export function assertJjGlowFinalEvidenceActivatedForWorker(input: {
+  jobId:string;userId:string;productId:string;scriptId:string;format:string;durationS:number;state:string;
+}, contract:NormalEvidenceContract|null): void {
+  const exact = input.jobId === JJ_GLOW_FINAL_EVIDENCE_JOB_ID
+    && input.userId === JJ_GLOW_FINAL_EVIDENCE_USER_ID && input.productId === JJ_GLOW_FINAL_EVIDENCE_PRODUCT_ID
+    && input.scriptId === JJ_GLOW_FINAL_EVIDENCE_SCRIPT_ID && input.format === "hands_only" && input.durationS === 15;
+  if (!exact) return;
+  if (!contract || !isJjGlowFinalEvidenceContract(contract)
+      || contract.idempotencyKey !== expectedNormalEvidenceIdempotencyKey(contract)
+      || !contract.approvedScriptSha256) throw new Error("JJ_GLOW_FINAL_EVIDENCE_ACTIVATION_REQUIRED");
+  if (input.state === "QUEUED" && (contract.state !== "PREPOST_READY" || contract.providerPostCount !== 0)) {
+    throw new Error("JJ_GLOW_FINAL_EVIDENCE_PREPOST_READY_REQUIRED");
+  }
 }
 
 /** Full preflight at the last boundary before any outbound provider request. */

@@ -9,6 +9,11 @@ for(const [name,digest] of Object.entries(capture.files)) assert.equal(crypto.cr
 const sha="885b7e03f75bd68ae4e53f7d74b99ab12304ceb6";
 assert.equal(deploy.status,"live");assert.equal(deploy.commit.id,sha);assert.equal(health.build_sha,sha);
 assert.equal(job.status,"succeeded");assert.equal(job.startCommand,"node scripts/staging-jj-glow-final-evidence.cjs preflight");
+const logs=[read("CAPTURE-RAW-RENDER-LOG.json")];
+const matching=logs.filter((entry)=>entry.labels?.some((label)=>label.name==="resource"&&label.value===job.id))
+  .map((entry)=>{try{return JSON.parse(entry.message)}catch{return null}})
+  .filter((payload)=>payload?.event==="JJ_GLOW_METADATA_FREEZE_PASS");
+assert.equal(matching.length,1,"exactly one managed job-bound freeze event");assert.deepEqual(matching[0],proof);
 assert.equal(proof.event,"JJ_GLOW_METADATA_FREEZE_PASS");assert.equal(proof.deploySha,sha);
 assert.equal(proof.jobId,"55284f20-efb8-4b18-8a24-f90fc91af733");assert.equal(proof.candidateCount,1);assert.equal(proof.scriptCount,1);
 assert.equal(proof.referenceSha256,"744707593be97ac61673b03576e441bf1fd6793833830102cf2a2c9bdf8ae4c1");
