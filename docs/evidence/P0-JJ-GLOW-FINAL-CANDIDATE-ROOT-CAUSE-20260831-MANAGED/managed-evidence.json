@@ -1,0 +1,88 @@
+{
+  "schema": "bikinfyp.jj-glow-managed-durability/v1",
+  "task": "P0-JJ-GLOW-FINAL-CANDIDATE-ROOT-CAUSE-20260831",
+  "reviewed_runtime_sha": "630a0a1369522a2e17ac79b3eb136a4c3bc9e625",
+  "staging_web": {
+    "service_id": "srv-d9n28tijnfac73a87lt0",
+    "deploy_id": "dep-daahkngn74is73b08ba0",
+    "deploy_status": "live",
+    "health_ok": true,
+    "health_build_sha": "630a0a1369522a2e17ac79b3eb136a4c3bc9e625",
+    "authenticated_db_query_job_id": "job-daahnlpsrm7s73f07sm0",
+    "authenticated_db_query_http": 409,
+    "authenticated_db_query_candidate_absent": true,
+    "database_query_executed": true,
+    "database_binding_sha256_directly_emitted": false,
+    "binding_limitation": "The existing authenticated web route fail-closes before emitting a binding when the canonical candidate is absent; no new diagnostic endpoint or candidate was authorized."
+  },
+  "failed_probe_cleanup": {
+    "jobs": [
+      "job-daahgkijnfac738icp40",
+      "job-daahhccs728c738dc3a0"
+    ],
+    "failure": "inconsistent types deduced for parameter $4",
+    "verified_by_readonly_job_id": "job-daahk1on74is73b069v0",
+    "failed_suffix_scripts_after": 0,
+    "failed_suffix_jobs_after": 0,
+    "canonical_scripts_after": 0,
+    "canonical_jobs_after": 0,
+    "canonical_provider_tasks_after": 0
+  },
+  "durability": {
+    "suffix": "630a0a13-20260831-0612",
+    "created_job_id": "99c76c2e-7feb-4ffd-8eb7-0cdb850090aa",
+    "create_process_job_id": "job-daahme4s728c738dpagg",
+    "create_process_status": "succeeded",
+    "readback_cleanup_process_job_id": "job-daahmm9f2nfc73acbigg",
+    "readback_cleanup_process_status": "succeeded",
+    "new_process": true,
+    "new_pool": true,
+    "job_rows": 1,
+    "script_pointer_rows": 1,
+    "audit_rows": 1,
+    "ledger_rows": 0,
+    "cleanup": "PASS",
+    "provider_calls": 0,
+    "queue_writes": 0,
+    "canonical_before": { "scripts": 0, "jobs": 0 },
+    "canonical_after_create": { "scripts": 0, "jobs": 0 },
+    "canonical_after_cleanup": { "scripts": 0, "jobs": 0 }
+  },
+  "database_bindings": {
+    "runner": {
+      "service_id": "srv-d9n28tijnfac73a87lt0",
+      "sha256": "6d8f03e28a15f4f6fe729387c6f8a7e94645853d6729fd3c908a636b1d47683c",
+      "database_name_present": true,
+      "server_version_present": true,
+      "system_identifier_present": true
+    },
+    "worker_one_off": {
+      "service_id": "srv-d9n28ue417fc73ch2b60",
+      "job_id": "job-daahn19srm7s73f06i70",
+      "job_status": "succeeded",
+      "persistent_service_suspended": true,
+      "image_sha": "ee767201679ae2213c40be6f913241f372d2378a",
+      "sha256": "6d8f03e28a15f4f6fe729387c6f8a7e94645853d6729fd3c908a636b1d47683c",
+      "database_name_present": true,
+      "server_version_present": true,
+      "system_identifier_present": true
+    },
+    "runner_worker_match": true,
+    "contains_database_url_or_secret": false
+  },
+  "safety": {
+    "staging_only": true,
+    "production_mutation": false,
+    "persistent_worker_unsuspended": false,
+    "candidate_3_created": false,
+    "provider_post_count": 0,
+    "publication_count": 0
+  },
+  "historical_root_cause": {
+    "actor_or_statement_identified": false,
+    "retained_statement_log_available": false,
+    "root_cause_identified": false,
+    "final_attempt_safe": false,
+    "blocker": "Retained Render/PostgreSQL evidence has no statement-level audit for the historical disappearance, so the destructive actor or SQL statement cannot be reconstructed."
+  }
+}

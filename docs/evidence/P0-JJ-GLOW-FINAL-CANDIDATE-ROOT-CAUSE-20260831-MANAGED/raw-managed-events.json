@@ -1,0 +1,84 @@
+{
+  "capture_source": "Render CLI deploy/job status plus exact application log event payloads; secret-bearing commands and URLs are intentionally not retained",
+  "deploy": {
+    "id": "dep-daahkngn74is73b08ba0",
+    "commit": "630a0a1369522a2e17ac79b3eb136a4c3bc9e625",
+    "status": "live",
+    "finished_at": "2026-08-31T06:11:49.845642Z"
+  },
+  "health": {
+    "ok": true,
+    "build_sha": "630a0a1369522a2e17ac79b3eb136a4c3bc9e625"
+  },
+  "events": [
+    {
+      "render_job_id": "job-daahk1on74is73b069v0",
+      "status": "succeeded",
+      "event": "JJ_MANAGED_READONLY_PASS",
+      "deploy_sha": "92b1f5f52d8af1c9a24ad0bbe918c030e6ff0970",
+      "binding_sha256": "6d8f03e28a15f4f6fe729387c6f8a7e94645853d6729fd3c908a636b1d47683c",
+      "database_name_present": true,
+      "server_version_present": true,
+      "system_identifier_present": true,
+      "canonical_scripts": 0,
+      "canonical_jobs": 0,
+      "canonical_provider_tasks": 0,
+      "failed_suffix_scripts": 0,
+      "failed_suffix_jobs": 0,
+      "mutation": false
+    },
+    {
+      "render_job_id": "job-daahme4s728c738dpagg",
+      "status": "succeeded",
+      "event": "DURABILITY_CREATE_PASS",
+      "suffix": "630a0a13-20260831-0612",
+      "job_id": "99c76c2e-7feb-4ffd-8eb7-0cdb850090aa",
+      "binding_sha256": "6d8f03e28a15f4f6fe729387c6f8a7e94645853d6729fd3c908a636b1d47683c",
+      "persistence": "smokeCreateJob",
+      "provider_calls": 0,
+      "queue_writes": 0,
+      "canonical_before": { "scripts": 0, "jobs": 0 },
+      "canonical_after": { "scripts": 0, "jobs": 0 }
+    },
+    {
+      "render_job_id": "job-daahmm9f2nfc73acbigg",
+      "status": "succeeded",
+      "event": "DURABILITY_READBACK_CLEANUP_PASS",
+      "suffix": "630a0a13-20260831-0612",
+      "job_id": "99c76c2e-7feb-4ffd-8eb7-0cdb850090aa",
+      "binding_sha256": "6d8f03e28a15f4f6fe729387c6f8a7e94645853d6729fd3c908a636b1d47683c",
+      "new_process": true,
+      "new_pool": true,
+      "job": 1,
+      "script_pointer": 1,
+      "audit_rows": 1,
+      "ledger_rows": 0,
+      "cleanup": "PASS",
+      "provider_calls": 0,
+      "queue_writes": 0,
+      "canonical_before": { "scripts": 0, "jobs": 0 },
+      "canonical_after": { "scripts": 0, "jobs": 0 }
+    },
+    {
+      "render_job_id": "job-daahn19srm7s73f06i70",
+      "status": "succeeded",
+      "event": "WORKER_DB_BINDING_PASS",
+      "deploy_sha": "ee767201679ae2213c40be6f913241f372d2378a",
+      "binding_sha256": "6d8f03e28a15f4f6fe729387c6f8a7e94645853d6729fd3c908a636b1d47683c",
+      "database_name_present": true,
+      "server_version_present": true,
+      "system_identifier_present": true,
+      "mutation": false
+    },
+    {
+      "render_job_id": "job-daahnlpsrm7s73f07sm0",
+      "status": "succeeded",
+      "event": "WEB_DB_QUERY_ATTESTATION",
+      "caller_sha": "630a0a1369522a2e17ac79b3eb136a4c3bc9e625",
+      "http": 409,
+      "web_candidate_absent": true,
+      "secret_exposed": false,
+      "mutation": false
+    }
+  ]
+}
