@@ -3,6 +3,7 @@ import { config } from "../config";
 import { getPool } from "./pool";
 import { isJjGlowFinalEvidenceContract, jjGlowApprovedScriptSha256, type NormalEvidenceContract, type NormalEvidenceStore } from "../providers/normal-evidence";
 import { assertNormalEvidenceReceiptMatchesArtifact } from "../media/normal-evidence-offline-qc";
+import { normalEvidenceLeaseWindow } from "../normal-evidence-lease";
 
 const map = (row: Record<string, unknown>): NormalEvidenceContract => ({
   taskId: String(row.task_id), idempotencyKey: String(row.idempotency_key), jobId: String(row.job_id),
@@ -35,6 +36,13 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
     const client = await pool.connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+      const jobAuthority = (await client.query<{ state: string }>(
+        "SELECT state FROM jobs WHERE id=$1 FOR UPDATE", [jobId]
+      )).rows[0];
+      if (!jobAuthority || ["READY", "FAILED", "REFUNDED"].includes(jobAuthority.state)) {
+        await client.query("COMMIT");
+        return { action: "STOP_NO_RETRY" as const };
+      }
       const evidenceRaw = (await client.query(
         "SELECT * FROM normal_representative_evidence_runs WHERE job_id=$1 FOR UPDATE", [jobId]
       )).rows[0];
@@ -55,11 +63,13 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
             throw new Error("JJ_GLOW_EVIDENCE_SCRIPT_DIGEST_MISMATCH");
           }
         }
+        const now = new Date().toISOString(), lease = normalEvidenceLeaseWindow(now);
         const claimed = await client.query(
           `UPDATE normal_representative_evidence_runs
-              SET provider_post_count=1,state='POST_ATTEMPTED',payload_sha256=$2,post_attempted_at=$3,updated_at=$3
+              SET provider_post_count=1,state='POST_ATTEMPTED',payload_sha256=$2,post_attempted_at=$3,updated_at=$3,
+                  lease_kind=$4,lease_last_progress_at=$3,lease_expires_at=$5
             WHERE job_id=$1 AND state='PREPOST_READY' AND provider_post_count=0 RETURNING job_id`,
-          [jobId,payloadSha256,new Date().toISOString()]);
+          [jobId,payloadSha256,now,lease.kind,lease.expiresAt]);
         if (claimed.rowCount !== 1) throw new Error("NORMAL_EVIDENCE_POST_CLAIM_RACE");
         await client.query("COMMIT");
         return { action:"POST" as const };
@@ -79,27 +89,51 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
       return { action: "POLL_ONLY" as const, taskId: String(row.provider_task_id) };
     }
     await pool.query(
-      "UPDATE normal_representative_evidence_runs SET state='STOP_NO_RETRY',stop_reason='AMBIGUOUS_POST_WITHOUT_TASK',updated_at=$2 WHERE job_id=$1 AND state<>'CAPTURED_NO_PUBLICATION'",
+      `UPDATE normal_representative_evidence_runs
+          SET state='STOP_NO_RETRY',stop_reason='AMBIGUOUS_POST_WITHOUT_TASK',updated_at=$2,
+              lease_kind=NULL,lease_last_progress_at=NULL,lease_expires_at=NULL
+        WHERE job_id=$1 AND state<>'CAPTURED_NO_PUBLICATION'`,
       [jobId, new Date().toISOString()]
     );
     return { action: "STOP_NO_RETRY" as const };
   },
   async bindTask(jobId, payloadSha256, taskId) {
-    const result = await getPool(config.databaseUrl).query(
-      `UPDATE normal_representative_evidence_runs SET state='TASK_BOUND',provider_task_id=$3,task_bound_at=$4,updated_at=$4
-        WHERE job_id=$1 AND state='POST_ATTEMPTED' AND provider_post_count=1 AND payload_sha256=$2 AND provider_task_id IS NULL`,
-      [jobId, payloadSha256, taskId, new Date().toISOString()]
-    );
-    if (result.rowCount !== 1) throw new Error("NORMAL_EVIDENCE_TASK_BIND_AMBIGUOUS");
+    const client = await getPool(config.databaseUrl).connect();
+    try {
+      await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+      const job = (await client.query<{ state: string }>("SELECT state FROM jobs WHERE id=$1 FOR UPDATE", [jobId])).rows[0];
+      if (!job || ["READY", "FAILED", "REFUNDED"].includes(job.state)) throw new Error("NORMAL_EVIDENCE_TASK_BIND_JOB_TERMINAL");
+      const now = new Date().toISOString(), lease = normalEvidenceLeaseWindow(now);
+      const result = await client.query(
+        `UPDATE normal_representative_evidence_runs
+            SET state='TASK_BOUND',provider_task_id=$3,task_bound_at=$4,updated_at=$4,
+                lease_kind=$5,lease_last_progress_at=$4,lease_expires_at=$6
+          WHERE job_id=$1 AND state='POST_ATTEMPTED' AND provider_post_count=1 AND payload_sha256=$2 AND provider_task_id IS NULL`,
+        [jobId, payloadSha256, taskId, now, lease.kind, lease.expiresAt]
+      );
+      if (result.rowCount !== 1) throw new Error("NORMAL_EVIDENCE_TASK_BIND_AMBIGUOUS");
+      await client.query("COMMIT");
+    } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+    finally { client.release(); }
   },
   async recordProviderSuccess(jobId, input) {
-    const result = await getPool(config.databaseUrl).query(
-      `UPDATE normal_representative_evidence_runs
-          SET state='PROVIDER_SUCCEEDED',provider_usage_json=$2,actual_cost_usd=$3,provider_succeeded_at=$4,updated_at=$4
-        WHERE job_id=$1 AND state IN ('TASK_BOUND','PROVIDER_SUCCEEDED') AND provider_post_count=1 AND provider_task_id=$5 AND $3 <= max_cost_usd`,
-      [jobId, JSON.stringify(input.usage ?? null), input.actualCostUsd, new Date().toISOString(), input.taskId]
-    );
-    if (result.rowCount !== 1) throw new Error("NORMAL_EVIDENCE_SUCCESS_CORRELATION_MISSING");
+    const client = await getPool(config.databaseUrl).connect();
+    try {
+      await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
+      const job = (await client.query<{ state: string }>("SELECT state FROM jobs WHERE id=$1 FOR UPDATE", [jobId])).rows[0];
+      if (!job || ["READY", "FAILED", "REFUNDED"].includes(job.state)) throw new Error("NORMAL_EVIDENCE_SUCCESS_JOB_TERMINAL");
+      const now = new Date().toISOString(), lease = normalEvidenceLeaseWindow(now);
+      const result = await client.query(
+        `UPDATE normal_representative_evidence_runs
+            SET state='PROVIDER_SUCCEEDED',provider_usage_json=$2,actual_cost_usd=$3,provider_succeeded_at=$4,updated_at=$4,
+                lease_kind=$6,lease_last_progress_at=$4,lease_expires_at=$7
+          WHERE job_id=$1 AND state IN ('TASK_BOUND','PROVIDER_SUCCEEDED') AND provider_post_count=1 AND provider_task_id=$5 AND $3 <= max_cost_usd`,
+        [jobId, JSON.stringify(input.usage ?? null), input.actualCostUsd, now, input.taskId, lease.kind, lease.expiresAt]
+      );
+      if (result.rowCount !== 1) throw new Error("NORMAL_EVIDENCE_SUCCESS_CORRELATION_MISSING");
+      await client.query("COMMIT");
+    } catch (error) { await client.query("ROLLBACK").catch(() => undefined); throw error; }
+    finally { client.release(); }
   },
   async captureNoPublication(jobId, input) {
     // Repeat the digest/receipt check at the durable boundary. The worker may
@@ -120,7 +154,8 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
       const frozen = await client.query(
         `UPDATE normal_representative_evidence_runs
             SET state='CAPTURED_NO_PUBLICATION',qc_json=$2,artifact_key=$3,retrieval_sha256=$4,
-                correlation_json=$5,redaction_verified=FALSE,captured_at=$6,updated_at=$6
+                correlation_json=$5,redaction_verified=FALSE,captured_at=$6,updated_at=$6,
+                lease_kind=NULL,lease_last_progress_at=NULL,lease_expires_at=NULL
           WHERE job_id=$1 AND state='PROVIDER_SUCCEEDED' AND provider_post_count=1 AND provider_task_id=$7`,
         [jobId, JSON.stringify(input.qc), input.artifactKey, input.artifactSha256,
           JSON.stringify(input.correlation), now, input.taskId]
@@ -173,15 +208,15 @@ export const pgNormalEvidenceStore: NormalEvidenceStore = {
     const client = await getPool(config.databaseUrl).connect();
     try {
       await client.query("BEGIN ISOLATION LEVEL SERIALIZABLE");
-      const evidence = (await client.query<{ state: string }>(
-        "SELECT state FROM normal_representative_evidence_runs WHERE job_id=$1 FOR UPDATE", [jobId]
-      )).rows[0];
-      if (!evidence || evidence.state !== "STOP_NO_RETRY") throw new Error("NORMAL_EVIDENCE_STOP_STATE_REQUIRED");
       const job = (await client.query<{ user_id: string; org_id: string | null; state: string }>(
         "SELECT user_id,org_id,state FROM jobs WHERE id=$1 FOR UPDATE", [jobId]
       )).rows[0];
       if (!job) throw new Error("NORMAL_EVIDENCE_STOP_JOB_MISSING");
       if (["READY", "FAILED", "REFUNDED"].includes(job.state)) throw new Error("NORMAL_EVIDENCE_STOP_JOB_ALREADY_TERMINAL");
+      const evidence = (await client.query<{ state: string }>(
+        "SELECT state FROM normal_representative_evidence_runs WHERE job_id=$1 FOR UPDATE", [jobId]
+      )).rows[0];
+      if (!evidence || evidence.state !== "STOP_NO_RETRY") throw new Error("NORMAL_EVIDENCE_STOP_STATE_REQUIRED");
       if (job.org_id) await client.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE", [job.org_id]);
       else await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [job.user_id]);
       const terminal = await client.query("SELECT 1 FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','release')", [jobId]);

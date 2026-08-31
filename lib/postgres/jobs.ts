@@ -5,6 +5,7 @@
 import crypto from "node:crypto";
 import { Pool, type PoolClient } from "pg";
 import { JOB_STATES, type JobState } from "../jobs";
+import { hasUnexpiredEvidenceLease, isProviderEvidenceInFlight, type EvidenceLeaseRow } from "../normal-evidence-lease";
 import { getPool } from "./pool";
 
 export type PgJob = { id: string; user_id: string; org_id: string | null; state: JobState; created_at: string; state_changed_at: string | null; completed_at: string | null; cost_actual_idr: number; provider_video: string | null; provider_voice: string | null; output_url: string | null };
@@ -46,31 +47,15 @@ export class PgJobsRepository {
   }
 
   /** FAILED -> release ledger -> REFUNDED is one serializable transaction. */
-  async failJob(id: string, reason: string): Promise<{ changed: boolean; refunded: number }> {
+  async failJob(id: string, reason: string, reasonCode = "WORKER_FAILURE"): Promise<{ changed: boolean; refunded: number }> {
     return this.transaction(async (client) => {
       const at = this.now();
-      const failed = await client.query<PgJob>("UPDATE jobs SET state='FAILED',completed_at=$1,state_changed_at=$1 WHERE id=$2 AND state NOT IN ('READY','FAILED','REFUNDED') RETURNING id,user_id,org_id,state,created_at,state_changed_at,completed_at,cost_actual_idr,provider_video,provider_voice,output_url", [at, id]);
-      const job = failed.rows[0]; if (!job) return { changed: false, refunded: 0 };
-      await this.audit(client, "worker", "job.transition", "jobs", id, { to: "FAILED", at, reason });
-      // Wallet yang dikunci ikut job.org_id (pool org bila job dibuat lewat
-      // dashboard bulk-generate, kalau tidak baris user biasa) — lihat
-      // lockWallet yang sama di PgCreditPaymentRepository.
-      if (job.org_id) await client.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE", [job.org_id]);
-      else await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [job.user_id]);
-      const terminal = await client.query("SELECT id FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','release')", [id]);
-      let refunded = 0;
-      if (!terminal.rowCount) {
-        const held = await client.query<{ held: string }>("SELECT COALESCE(-SUM(delta),0) AS held FROM credit_ledger WHERE job_id=$1 AND type='hold'", [id]);
-        refunded = Number(held.rows[0].held);
-        if (refunded > 0) {
-          await client.query("INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,$4,'release',$5,NULL,$6)", [this.uuid(), job.user_id, job.org_id, refunded, id, at]);
-          await this.audit(client, job.user_id, "credit.release", "jobs", id, { amount_idr: refunded, org_id: job.org_id ?? undefined });
-        }
-      }
-      const done = await client.query("UPDATE jobs SET state='REFUNDED',state_changed_at=$1 WHERE id=$2 AND state='FAILED'", [at, id]);
-      if (done.rowCount !== 1) throw new Error("FAILED job tidak dapat dipindahkan ke REFUNDED.");
-      await this.audit(client, "worker", "job.transition", "jobs", id, { to: "REFUNDED", at, refunded_credits: refunded });
-      return { changed: true, refunded };
+      const job = (await client.query<PgJob>(
+        "SELECT id,user_id,org_id,state,created_at,state_changed_at,completed_at,cost_actual_idr,provider_video,provider_voice,output_url FROM jobs WHERE id=$1 FOR UPDATE",
+        [id],
+      )).rows[0];
+      if (!job || ["READY", "FAILED", "REFUNDED"].includes(job.state)) return { changed: false, refunded: 0 };
+      return this.failLockedJob(client, job, at, reason, reasonCode);
     });
   }
 
@@ -83,9 +68,103 @@ export class PgJobsRepository {
     for (const job of active.rows) {
       const changed = new Date(job.state_changed_at ?? job.created_at).getTime();
       const minutes = this.timeouts[job.state] ?? 90;
-      if (referenceNow - changed > minutes * 60_000 && (await this.failJob(job.id, `Job di state ${job.state} lebih dari ${minutes} menit`)).changed) swept++;
+      if (referenceNow - changed <= minutes * 60_000) continue;
+      const changedBySweep = await this.transaction(async (client) => {
+        // Canonical lock order for every evidence-authority operation is job
+        // first, evidence second. Activation uses the same order, so either
+        // the lease commits first or the refund commits first—never both.
+        const current = (await client.query<PgJob>(
+          "SELECT id,user_id,org_id,state,created_at,state_changed_at,completed_at,cost_actual_idr,provider_video,provider_voice,output_url FROM jobs WHERE id=$1 FOR UPDATE",
+          [job.id],
+        )).rows[0];
+        if (!current || ["READY", "FAILED", "REFUNDED", "AWAITING_APPROVAL"].includes(current.state)) return false;
+        const lastProgressAt = current.state_changed_at ?? current.created_at;
+        const thresholdMinutes = this.timeouts[current.state] ?? 90;
+        const thresholdSeconds = thresholdMinutes * 60;
+        const ageMs = referenceNow - Date.parse(lastProgressAt);
+        if (!(ageMs > thresholdSeconds * 1_000)) return false;
+        const evaluatedAt = new Date(referenceNow).toISOString();
+        const evidence = (await client.query<EvidenceLeaseRow>(
+          `SELECT state,provider_post_count,lease_kind,lease_last_progress_at,lease_expires_at
+             FROM normal_representative_evidence_runs WHERE job_id=$1 FOR UPDATE`,
+          [current.id],
+        )).rows[0];
+        if (evidence && isProviderEvidenceInFlight(evidence)) return false;
+        if (evidence && hasUnexpiredEvidenceLease(evidence, evaluatedAt)) return false;
+        if (evidence?.lease_kind === "ACTIVE_EVIDENCE_LEASE" && evidence.state === "PREPOST_READY"
+            && Number(evidence.provider_post_count) === 0) {
+          const expired = await client.query(
+            `UPDATE normal_representative_evidence_runs
+                SET state='STOP_NO_RETRY',stop_reason='ACTIVE_EVIDENCE_LEASE_EXPIRED',
+                    lease_kind=NULL,lease_last_progress_at=NULL,lease_expires_at=NULL,updated_at=$2
+              WHERE job_id=$1 AND state='PREPOST_READY' AND provider_post_count=0
+                AND lease_kind='ACTIVE_EVIDENCE_LEASE' AND lease_expires_at <= $2::timestamptz`,
+            [current.id, evaluatedAt],
+          );
+          // A concurrent renewal cannot be treated as abandoned.
+          if (expired.rowCount !== 1) return false;
+        }
+        const decision = {
+          component: "PgJobsRepository.sweepStaleJobs",
+          trigger: "WORKER_INTERVAL_60000_MS",
+          created_at: current.created_at,
+          last_progress_at: lastProgressAt,
+          evaluated_at: evaluatedAt,
+          threshold_seconds: thresholdSeconds,
+          state: current.state,
+          age_seconds: ageMs / 1_000,
+          predicate: "active_state AND age_seconds > threshold_seconds",
+          predicate_match: true,
+        };
+        const result = await this.failLockedJob(client, current, evaluatedAt,
+          `Job di state ${current.state} lebih dari ${thresholdMinutes} menit`, "STALE_SWEEP_TIMEOUT", decision);
+        return result.changed;
+      });
+      if (changedBySweep) swept++;
     }
     return swept;
+  }
+
+  private async failLockedJob(
+    client: PoolClient,
+    job: PgJob,
+    at: string,
+    reason: string,
+    reasonCode: string,
+    decision: Record<string, unknown> = {},
+  ): Promise<{ changed: boolean; refunded: number }> {
+    const failed = await client.query(
+      "UPDATE jobs SET state='FAILED',completed_at=$1,state_changed_at=$1 WHERE id=$2 AND state NOT IN ('READY','FAILED','REFUNDED')",
+      [at, job.id],
+    );
+    if (failed.rowCount !== 1) return { changed: false, refunded: 0 };
+    await this.audit(client, "worker", "job.transition", "jobs", job.id,
+      { to: "FAILED", at, reason, reason_code: reasonCode, ...decision });
+    // Wallet yang dikunci ikut job.org_id (pool org bila job dibuat lewat
+    // dashboard bulk-generate, kalau tidak baris user biasa).
+    if (job.org_id) await client.query("SELECT id FROM organizations WHERE id=$1 FOR UPDATE", [job.org_id]);
+    else await client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE", [job.user_id]);
+    const terminal = await client.query("SELECT id FROM credit_ledger WHERE job_id=$1 AND type IN ('capture','release')", [job.id]);
+    let refunded = 0;
+    if (!terminal.rowCount) {
+      const held = await client.query<{ held: string }>(
+        "SELECT COALESCE(-SUM(delta),0) AS held FROM credit_ledger WHERE job_id=$1 AND type='hold'", [job.id]
+      );
+      refunded = Number(held.rows[0].held);
+      if (refunded > 0) {
+        await client.query(
+          "INSERT INTO credit_ledger (id,user_id,org_id,delta,type,job_id,payment_id,created_at) VALUES ($1,$2,$3,$4,'release',$5,NULL,$6)",
+          [this.uuid(), job.user_id, job.org_id, refunded, job.id, at]
+        );
+        await this.audit(client, job.user_id, "credit.release", "jobs", job.id,
+          { amount_idr: refunded, org_id: job.org_id ?? undefined, refund_reason_code: reasonCode });
+      }
+    }
+    const done = await client.query("UPDATE jobs SET state='REFUNDED',state_changed_at=$1 WHERE id=$2 AND state='FAILED'", [at, job.id]);
+    if (done.rowCount !== 1) throw new Error("FAILED job tidak dapat dipindahkan ke REFUNDED.");
+    await this.audit(client, "worker", "job.transition", "jobs", job.id,
+      { to: "REFUNDED", at, refunded_credits: refunded, refund_reason_code: reasonCode });
+    return { changed: true, refunded };
   }
 
   /**

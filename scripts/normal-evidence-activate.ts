@@ -19,6 +19,7 @@ import {
   NORMAL_EVIDENCE_FORMAT, NORMAL_EVIDENCE_MAX_USD, NORMAL_EVIDENCE_MODEL, NORMAL_EVIDENCE_RESOLUTION,
   NORMAL_EVIDENCE_TASK, assertNormalEvidenceManagedRuntime, expectedNormalEvidenceIdempotencyKey,
 } from "../lib/providers/normal-evidence";
+import { normalEvidenceLeaseWindow } from "../lib/normal-evidence-lease";
 
 const jobId = process.argv[2]?.trim();
 const deploySha = process.env.RENDER_GIT_COMMIT?.trim() ?? "";
@@ -68,22 +69,26 @@ try {
   };
   const idempotencyKey = expectedNormalEvidenceIdempotencyKey(frozen);
   const now = new Date().toISOString();
+  const lease = normalEvidenceLeaseWindow(now);
   await client.query(
     `INSERT INTO normal_representative_evidence_runs
       (task_id,idempotency_key,job_id,user_id,product_id,subject_id,reference_sha256,reference_manifest_sha256,
        reference_brand,authorization_source,product_snapshot_sha256,deploy_sha,model,category,format,duration_s,
-       resolution,estimated_cost_usd,max_cost_usd,provider_post_count,state,created_at,updated_at)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,0,'PREPOST_READY',$20,$20)`,
+       resolution,estimated_cost_usd,max_cost_usd,provider_post_count,state,created_at,updated_at,
+       lease_kind,lease_last_progress_at,lease_expires_at)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,0,'PREPOST_READY',$20,$20,$21,$22,$23)`,
     [NORMAL_EVIDENCE_TASK, idempotencyKey, row.job_id, row.user_id, row.product_id, row.subject_id,
       frozen.referenceSha256, frozen.referenceManifestSha256, brand, NORMAL_EVIDENCE_AUTHORIZATION_SOURCE,
       frozen.productSnapshotSha256, deploySha, NORMAL_EVIDENCE_MODEL, snapshot.category, NORMAL_EVIDENCE_FORMAT,
       NORMAL_EVIDENCE_DURATION_S, NORMAL_EVIDENCE_RESOLUTION, NORMAL_EVIDENCE_ESTIMATE_USD,
-      NORMAL_EVIDENCE_MAX_USD, now]
+      NORMAL_EVIDENCE_MAX_USD, now, lease.kind, lease.lastProgressAt, lease.expiresAt]
   );
   await client.query("COMMIT");
   console.log(JSON.stringify({ verdict: "ACTIVATED_NO_POST", taskId: NORMAL_EVIDENCE_TASK, jobId, deploySha,
     idempotencyKey, referenceSha256: frozen.referenceSha256, referenceManifestSha256: frozen.referenceManifestSha256,
-    productSnapshotSha256: frozen.productSnapshotSha256, publication: "disabled" }, null, 2));
+    productSnapshotSha256: frozen.productSnapshotSha256, leaseKind: lease.kind,
+    leaseLastProgressAt: lease.lastProgressAt, leaseExpiresAt: lease.expiresAt,
+    publication: "disabled" }, null, 2));
 } catch (error) {
   await client.query("ROLLBACK").catch(() => undefined);
   throw error;

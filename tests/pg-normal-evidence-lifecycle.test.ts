@@ -46,7 +46,7 @@ test("CAPTURED_NO_PUBLICATION releases hold and terminalizes job without output/
     VALUES ($1,$2,$3,$4,$5,'subject',$6,$7,'Brand','approved_reference_manifest:v2',$8,$9,
       'dreamina-seedance-2-0-mini-260615','skincare','talking_head',15,'720p',1.134,1.25,1,
       'PROVIDER_SUCCEEDED',$10,'provider-task','{"completion_tokens":324000}',1.134,$11,$11)`,
-    [`NORMAL-REPRESENTATIVE-EVIDENCE-GUARD-20260829-${jobId}`, digest(`capture:${jobId}`), jobId, userId, productId,
+    ["NORMAL-REPRESENTATIVE-EVIDENCE-GUARD-20260829", digest(`capture:${jobId}`), jobId, userId, productId,
       "2".repeat(64), "3".repeat(64), "4".repeat(64), "5".repeat(40), "6".repeat(64), t]);
 
   const { pgNormalEvidenceStore } = await import("../lib/postgres/normal-evidence");
@@ -91,6 +91,10 @@ test("CAPTURED_NO_PUBLICATION releases hold and terminalizes job without output/
   )).rows[0];
   assert.equal(attested.redaction_verified, true);
   assert.equal(attested.digest_bound, true);
+  // The production schema intentionally permits one ordinary evidence task.
+  // Recycle that task id only inside this disposable database so the second
+  // independent lifecycle case can exercise the same authoritative contract.
+  await pool!.query("DELETE FROM normal_representative_evidence_runs WHERE job_id=$1", [jobId]);
 });
 
 test("STOP_NO_RETRY settlement releases hold and atomically terminalizes REFUNDED", { skip }, async () => {
@@ -107,7 +111,7 @@ test("STOP_NO_RETRY settlement releases hold and atomically terminalizes REFUNDE
     VALUES ($1,$2,$3,$4,$5,'subject',$6,$7,'Brand','approved_reference_manifest:v2',$8,$9,
       'dreamina-seedance-2-0-mini-260615','skincare','talking_head',15,'720p',1.134,1.25,1,
       'STOP_NO_RETRY',$10,'AMBIGUOUS_POST_WITHOUT_TASK',$11,$11)`,
-    [`NORMAL-REPRESENTATIVE-EVIDENCE-GUARD-20260829-STOP-${jobId}`, digest(`stop:${jobId}`), jobId, userId, productId,
+    ["NORMAL-REPRESENTATIVE-EVIDENCE-GUARD-20260829", digest(`stop:${jobId}`), jobId, userId, productId,
       "2".repeat(64), "3".repeat(64), "4".repeat(64), "5".repeat(40), "6".repeat(64), t]);
   const { pgNormalEvidenceStore } = await import("../lib/postgres/normal-evidence");
   await pgNormalEvidenceStore.settleStopNoRetry(jobId);

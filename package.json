@@ -26,6 +26,7 @@
     "test:postgres-credit-payment": "bash scripts/test-postgres-credit-payment.sh",
     "test:postgres-jobs": "bash scripts/test-postgres-jobs.sh",
     "test:postgres-normal-evidence": "bash scripts/test-postgres-normal-evidence-lifecycle.sh",
+    "test:postgres-stale-sweep-evidence-lease": "bash scripts/test-postgres-stale-sweep-evidence-lease.sh",
     "test:postgres-data-rehearsal": "bash scripts/test-postgres-data-rehearsal.sh",
     "test:postgres-runtime-smoke": "bash scripts/test-postgres-runtime-smoke.sh",
     "test:postgres-admission-retry": "bash scripts/test-postgres-admission-retry.sh",

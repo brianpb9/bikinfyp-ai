@@ -1,6 +1,7 @@
 import crypto from "node:crypto";
 import { MANAGED_STAGING_WORKER_SERVICE_ID } from "../staging-deterministic-worker";
 import type { NormalEvidenceOfflineQcReceipt } from "../media/normal-evidence-offline-qc";
+export { ACTIVE_EVIDENCE_LEASE, NORMAL_EVIDENCE_LEASE_TTL_SECONDS } from "../normal-evidence-lease";
 
 export const NORMAL_EVIDENCE_TASK = "NORMAL-REPRESENTATIVE-EVIDENCE-GUARD-20260829";
 export const JJ_GLOW_FINAL_EVIDENCE_TASK = "P0-JJ-GLOW-FINAL-RECOVERY-CANDIDATE-20260831";
