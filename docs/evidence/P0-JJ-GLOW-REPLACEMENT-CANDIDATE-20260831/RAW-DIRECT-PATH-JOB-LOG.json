@@ -1,0 +1,11 @@
+{
+  "query": "render logs --resources job-daagck1srm7s73esrum0 --start 2026-08-31T04:42:50Z --end 2026-08-31T04:43:15Z --direction forward --limit 100 --output json",
+  "query_sha256": "11021163271948813b0d9c38ba9d698c601f55073e7027a02faa63700dbd301b",
+  "source_file": "RAW-DIRECT-PATH-JOB-LOG-SOURCE.txt",
+  "source_encoding": "exact concatenated JSON objects from Render CLI; committed text has one terminal LF added by patch transport and verifier removes exactly that LF",
+  "raw_provider_response_sha256": "488f0cb2898d75035240249693b447dec7da2ea6bde5f9810b63c61c670d50ba",
+  "job_id": "job-daagck1srm7s73esrum0",
+  "service_id": "srv-d9n28tijnfac73a87lt0",
+  "exact_start_command": "node scripts/staging-jj-glow-candidate.cjs",
+  "result": "PRE_EXECUTION_BOOTSTRAP_FAILURE"
+}

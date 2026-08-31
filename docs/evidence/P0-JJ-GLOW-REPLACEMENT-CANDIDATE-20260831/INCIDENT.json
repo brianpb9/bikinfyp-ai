@@ -13,8 +13,13 @@
   "replacement_attempt": {
     "render_job_id": "job-daagcs9f2nfc73a8gsp0",
     "render_status": "succeeded",
-    "attempt_count": 1,
-    "replay_performed": false,
+    "control_plane_runner_launch_count": 2,
+    "direct_path_launch_count": 1,
+    "direct_path_pre_execution_bootstrap_failure_count": 1,
+    "embedded_runner_launch_count": 1,
+    "candidate_code_execution_count": "AT_MOST_1_UNPROVEN",
+    "candidate_creation_attempt_count": 1,
+    "candidate_code_replay_performed": false,
     "durable_creation_status": "ABSENT_AFTER_ATTEMPT",
     "candidate_job_id": null
   },
@@ -30,7 +35,7 @@
   },
   "decision": {
     "result": "FOUNDER_DECISION_REQUIRED",
-    "reason": "The sole authorized replacement admission attempt completed at the control plane, but the signed lineage endpoint and an independent read-only Postgres receipt prove that no exact candidate, script, job, or provider task is durable. The task explicitly requires escalation if the replacement becomes ambiguous or lost.",
+    "reason": "Two control-plane runner launches occurred: one direct-path launch is proven by exact application logs to have failed in Node's entrypoint loader before candidate code execution, and one embedded candidate creation attempt completed at the control plane. The signed lineage endpoint and an independent read-only Postgres receipt prove that no exact candidate, script, job, or provider task is durable. The task explicitly requires escalation if the replacement becomes ambiguous or lost.",
     "candidate_replay": "PROHIBITED_WITHOUT_NEW_EXPLICIT_AUTHORITY",
     "provider_post": "PROHIBITED"
   }

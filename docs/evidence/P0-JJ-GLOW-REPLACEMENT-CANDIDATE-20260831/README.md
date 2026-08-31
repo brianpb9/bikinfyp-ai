@@ -1,8 +1,12 @@
 # P0 JJ GLOW replacement candidate incident
 
-The sole authorized replacement admission attempt was launched exactly once as Render one-off
-`job-daagcs9f2nfc73a8gsp0` and the control plane reported `succeeded`. No second admission was
-launched.
+Two control-plane commands referenced the replacement runner. The first, direct-path command in
+`job-daagck1srm7s73esrum0`, failed in Node's entrypoint loader with `MODULE_NOT_FOUND`, an empty
+require stack, and no project marker: the candidate file was absent and no candidate code ran.
+The only command capable of executing candidate code was the later embedded transport in
+`job-daagcs9f2nfc73a8gsp0`; its control plane reported `succeeded`. Thus the packet counts two
+runner launches, one proven pre-execution bootstrap failure, and one candidate creation attempt.
+No candidate-code replay was launched.
 
 The candidate cannot be frozen because it is absent from the authoritative staging database.
 The signed lineage endpoint failed closed with `409`, and the independent read-only Postgres

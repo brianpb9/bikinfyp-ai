@@ -1,0 +1,307 @@
+{
+  "id": "8943c4bb-89b8-41e1-8502-861681647747",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "node:internal/modules/cjs/loader:1433",
+  "timestamp": "2026-08-31T04:43:02.758511158Z"
+}{
+  "id": "d112fc98-4ffb-454b-9a4d-1fb954e9042b",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "error"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "  throw err;",
+  "timestamp": "2026-08-31T04:43:02.758545378Z"
+}{
+  "id": "5d6ea0e1-8bb7-459d-8120-290b976aab07",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "  ^",
+  "timestamp": "2026-08-31T04:43:02.758549408Z"
+}{
+  "id": "55a5337b-9def-4366-851d-b111659f5cc6",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "",
+  "timestamp": "2026-08-31T04:43:02.758552378Z"
+}{
+  "id": "02de087e-86c9-4744-9b2d-65a53a55de5b",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "error"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "Error: Cannot find module '/srv/app/scripts/staging-jj-glow-candidate.cjs'",
+  "timestamp": "2026-08-31T04:43:02.758555958Z"
+}{
+  "id": "65c024db-326b-47f6-8b2e-23b6dd0efbab",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "    at Function._resolveFilename (node:internal/modules/cjs/loader:1430:15)",
+  "timestamp": "2026-08-31T04:43:02.758559259Z"
+}{
+  "id": "4fceb110-d074-481d-983b-c6aae0ab0332",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "    at defaultResolveImpl (node:internal/modules/cjs/loader:1040:19)",
+  "timestamp": "2026-08-31T04:43:02.758562348Z"
+}{
+  "id": "e75f4e17-f890-4284-905a-a49de77ac35e",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "    at resolveForCJSWithHooks (node:internal/modules/cjs/loader:1045:22)",
+  "timestamp": "2026-08-31T04:43:02.758565208Z"
+}{
+  "id": "b7954a9b-100f-4cfe-879f-279f41e3b611",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "    at Function._load (node:internal/modules/cjs/loader:1216:25)",
+  "timestamp": "2026-08-31T04:43:02.758568728Z"
+}{
+  "id": "ceeb9a8e-4a3c-4151-bd66-c40218333d2c",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "    at wrapModuleLoad (node:internal/modules/cjs/loader:254:19)",
+  "timestamp": "2026-08-31T04:43:02.758572399Z"
+}{
+  "id": "7a9c0304-d682-43c7-94dc-b9d474c0f76c",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:171:5)",
+  "timestamp": "2026-08-31T04:43:02.758576919Z"
+}{
+  "id": "5e794aac-df1c-4444-80e1-2aeaf89a55a8",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "    at node:internal/main/run_main_module:36:49 {",
+  "timestamp": "2026-08-31T04:43:02.758581589Z"
+}{
+  "id": "feb9a8cd-ec60-46c1-9d97-1310efe94e38",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "  code: 'MODULE_NOT_FOUND',",
+  "timestamp": "2026-08-31T04:43:02.758585309Z"
+}{
+  "id": "e3390cf5-66a8-4ec3-9361-90ba170bbff5",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "  requireStack: []",
+  "timestamp": "2026-08-31T04:43:02.758588729Z"
+}{
+  "id": "1feb2b7d-353b-4629-8ae6-a1e4989977c7",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "}",
+  "timestamp": "2026-08-31T04:43:02.758591699Z"
+}{
+  "id": "27f605b9-b048-4f59-ac7c-1f12f0723e68",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "",
+  "timestamp": "2026-08-31T04:43:02.758594999Z"
+}{
+  "id": "23f4224a-e391-443b-a62d-af943cf344b5",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagck1srm7s73esrum0"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "Node.js v22.23.2",
+  "timestamp": "2026-08-31T04:43:02.758598819Z"
+}

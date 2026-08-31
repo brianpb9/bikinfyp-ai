@@ -21,7 +21,9 @@
   "canonical_admission_signature": {
     "candidate_runner_sha256": "d564430920b06b0195b4411ab6c1fa00361dbc4055726ec72b8bb212271406ac",
     "bpom_evidence_sha256": "d1c70d7e4f198ca8f63d587ceeeccc18af6b87fe2f7f5fb90a7ebb0b7f711d37",
-    "exact_start_command_sha256": "09d4253d1333dadf59087e145efdaa7abee75d424a6cc34af720884c8de3c8b6"
+    "exact_start_command_sha256": "09d4253d1333dadf59087e145efdaa7abee75d424a6cc34af720884c8de3c8b6",
+    "direct_path_start_command": "node scripts/staging-jj-glow-candidate.cjs",
+    "direct_path_start_command_sha256": "d4e4353b9d63ca2367b506a18ec452bac05cf09b60bd839c29619595d1d4e596"
   },
   "jobs": [
     {"id":"job-daagflijnfac738fht2g","service_id":"srv-d9n28tijnfac73a87lt0","status":"failed","created_at":"2026-08-31T04:49:26.559716Z","started_at":"2026-08-31T04:49:26Z","finished_at":"2026-08-31T04:49:37Z","start_command_sha256":"4db512814d89b25b59c9580da7d2684b7a874eb20a7b52d98367d6b63eb1f35d"},
