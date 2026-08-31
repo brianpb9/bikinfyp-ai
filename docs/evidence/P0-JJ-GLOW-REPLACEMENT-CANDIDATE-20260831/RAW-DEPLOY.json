@@ -1,0 +1,12 @@
+{
+  "query": "render deploys list srv-d9n28tijnfac73a87lt0 --output json",
+  "service_id": "srv-d9n28tijnfac73a87lt0",
+  "live_deploy": {
+    "id": "dep-daad38e7bikc7383gc6g",
+    "status": "live",
+    "created_at": "2026-08-31T00:58:09.476823Z",
+    "finished_at": "2026-08-31T01:01:03.643626Z",
+    "commit_sha": "952276cae06be50b124894f611c85a8bce218d9d",
+    "commit_message": "fix: seal candidate lineage receipt"
+  }
+}

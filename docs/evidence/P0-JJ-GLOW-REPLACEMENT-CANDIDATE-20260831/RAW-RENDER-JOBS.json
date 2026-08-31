@@ -1,35 +1,56 @@
 {
-  "queried_at": "2026-08-31T04:49:40Z",
-  "service_id": "srv-d9n28tijnfac73a87lt0",
+  "capture": {
+    "captured_at": "2026-08-31T04:56:30Z",
+    "cli_version": "2.24.0",
+    "query": "render jobs list srv-d9n28tijnfac73a87lt0 --output json",
+    "query_sha256": "f60657b1f04f7b302cbc3db190425a778ee96ca1f2151fb61d84b703f5d2052f",
+    "pagination_flags_available": false,
+    "raw_response_count": 20,
+    "raw_response_sha256": "a24a35542dd71ce805caeb9302a76f17420f35c4bcbf95b0a57031bcb2cee5d5",
+    "newest_returned_at": "2026-08-31T04:49:26.559716Z",
+    "oldest_returned_at": "2026-08-31T00:45:14.109Z"
+  },
+  "authorized_window": {
+    "start_inclusive": "2026-08-31T04:40:14Z",
+    "end_inclusive": "2026-08-31T04:49:40Z",
+    "basis": "Founder authority receipt timestamp through immutable Postgres receipt completion",
+    "response_digest_encoding": "sha256(canonical-json(jobs))",
+    "response_sha256": "609f83e4748123fbb2c3a1b027ef00bde0b34a8352a17fab5029b5f4a6b2bb33"
+  },
+  "canonical_admission_signature": {
+    "candidate_runner_sha256": "d564430920b06b0195b4411ab6c1fa00361dbc4055726ec72b8bb212271406ac",
+    "bpom_evidence_sha256": "d1c70d7e4f198ca8f63d587ceeeccc18af6b87fe2f7f5fb90a7ebb0b7f711d37",
+    "exact_start_command_sha256": "09d4253d1333dadf59087e145efdaa7abee75d424a6cc34af720884c8de3c8b6"
+  },
   "jobs": [
-    {
-      "purpose": "sole_authorized_replacement_admission_attempt",
-      "id": "job-daagcs9f2nfc73a8gsp0",
-      "status": "succeeded",
-      "created_at": "2026-08-31T04:43:29.01271Z",
-      "started_at": "2026-08-31T04:43:29Z",
-      "finished_at": "2026-08-31T04:43:57Z",
-      "candidate_runner_sha256": "d564430920b06b0195b4411ab6c1fa00361dbc4055726ec72b8bb212271406ac",
-      "bpom_evidence_sha256": "d1c70d7e4f198ca8f63d587ceeeccc18af6b87fe2f7f5fb90a7ebb0b7f711d37",
-      "render_start_command_sha256_with_trailing_lf": "e26b222c48357ae3e99965610443f4fc6f77dfb1fa7bb3c5e66b4de0ed8e1843"
-    },
-    {
-      "purpose": "signed_fail_closed_lineage_read",
-      "id": "job-daagdjhsrm7s73esune0",
-      "status": "failed",
-      "created_at": "2026-08-31T04:45:02.415599Z",
-      "started_at": "2026-08-31T04:45:03Z",
-      "finished_at": "2026-08-31T04:45:09Z",
-      "render_start_command_sha256_with_trailing_lf": "371a8e32702abb7d9693719a5ac927d6bbd903dfdaba8ccfbd618b0fb1ddf629"
-    },
-    {
-      "purpose": "short_read_only_postgres_receipt",
-      "id": "job-daagflijnfac738fht2g",
-      "status": "failed_as_designed_after_emitting_receipt",
-      "created_at": "2026-08-31T04:49:26.559716Z",
-      "started_at": "2026-08-31T04:49:26Z",
-      "finished_at": "2026-08-31T04:49:37Z",
-      "render_start_command_sha256_with_trailing_lf": "b4cdff142002ac6ef36fbda0a249675ca1b4d4ef2da09c474d0a309b2b33217c"
-    }
-  ]
+    {"id":"job-daagflijnfac738fht2g","service_id":"srv-d9n28tijnfac73a87lt0","status":"failed","created_at":"2026-08-31T04:49:26.559716Z","started_at":"2026-08-31T04:49:26Z","finished_at":"2026-08-31T04:49:37Z","start_command_sha256":"4db512814d89b25b59c9580da7d2684b7a874eb20a7b52d98367d6b63eb1f35d"},
+    {"id":"job-daagfccs728c738aielg","service_id":"srv-d9n28tijnfac73a87lt0","status":"succeeded","created_at":"2026-08-31T04:48:49.388806Z","started_at":"2026-08-31T04:48:49Z","finished_at":"2026-08-31T04:48:59Z","start_command_sha256":"99f8ae3ee650375fc0b752424b6048a145b6a14f3e524c2266c8e3ee7b191ef6"},
+    {"id":"job-daagf567bikc738dbbrg","service_id":"srv-d9n28tijnfac73a87lt0","status":"succeeded","created_at":"2026-08-31T04:48:20.913782Z","started_at":"2026-08-31T04:48:21Z","finished_at":"2026-08-31T04:48:28Z","start_command_sha256":"c77b0baeee5001f83a06b73fc00dc0004528f9b44e26802d63ab30fac7ea5e14"},
+    {"id":"job-daageqon74is73as9rj0","service_id":"srv-d9n28tijnfac73a87lt0","status":"succeeded","created_at":"2026-08-31T04:47:39.034027Z","started_at":"2026-08-31T04:47:39Z","finished_at":"2026-08-31T04:47:45Z","start_command_sha256":"aad7bf14964cfc92230e9c80d4e04dd5d78423e332199eca0c65a15b3d9578e2"},
+    {"id":"job-daage30n74is73as72cg","service_id":"srv-d9n28tijnfac73a87lt0","status":"succeeded","created_at":"2026-08-31T04:46:04.571297Z","started_at":"2026-08-31T04:46:04Z","finished_at":"2026-08-31T04:46:28Z","start_command_sha256":"24a8fbf473456ea1926f36d7923fbdb21447c4208c29bf0d3c001f8a96cbaa82"},
+    {"id":"job-daagdjhsrm7s73esune0","service_id":"srv-d9n28tijnfac73a87lt0","status":"failed","created_at":"2026-08-31T04:45:02.415599Z","started_at":"2026-08-31T04:45:03Z","finished_at":"2026-08-31T04:45:09Z","start_command_sha256":"8295f7f28b8046e97abb79ff0a6152987a9ce6d1327688ef63a6f43dd670bc6d"},
+    {"id":"job-daagcs9f2nfc73a8gsp0","service_id":"srv-d9n28tijnfac73a87lt0","status":"succeeded","created_at":"2026-08-31T04:43:29.01271Z","started_at":"2026-08-31T04:43:29Z","finished_at":"2026-08-31T04:43:57Z","start_command_sha256":"09d4253d1333dadf59087e145efdaa7abee75d424a6cc34af720884c8de3c8b6"},
+    {"id":"job-daagck1srm7s73esrum0","service_id":"srv-d9n28tijnfac73a87lt0","status":"failed","created_at":"2026-08-31T04:42:56.526966Z","started_at":"2026-08-31T04:42:56Z","finished_at":"2026-08-31T04:43:07Z","start_command_sha256":"d4e4353b9d63ca2367b506a18ec452bac05cf09b60bd839c29619595d1d4e596"},
+    {"id":"job-daagc3psrm7s73esqks0","service_id":"srv-d9n28tijnfac73a87lt0","status":"succeeded","created_at":"2026-08-31T04:41:51.329985Z","started_at":"2026-08-31T04:41:51Z","finished_at":"2026-08-31T04:42:15Z","start_command_sha256":"664aafb8d6c4fa1638d956d75d43ce7f767a867b16e1c53f648768685630cd07"},
+    {"id":"job-daagbpss728c738a8ce0","service_id":"srv-d9n28tijnfac73a87lt0","status":"failed","created_at":"2026-08-31T04:41:11.736579Z","started_at":"2026-08-31T04:41:11Z","finished_at":"2026-08-31T04:41:23Z","start_command_sha256":"9c52359472a68b219ece7e61c4f20b29b15bbb996c8d3dbce4a381b9cff3ba8d"},
+    {"id":"job-daagbi9srm7s73esp7k0","service_id":"srv-d9n28tijnfac73a87lt0","status":"failed","created_at":"2026-08-31T04:40:41.000946Z","started_at":"2026-08-31T04:40:41Z","finished_at":"2026-08-31T04:41:05Z","start_command_sha256":"07cae98fbc9ccfea6bf39cc3a8015c5c813d5f529cee72eb86a308de31eb9ca7"},
+    {"id":"job-daagbi4s728c738a7ndg","service_id":"srv-d9n28tijnfac73a87lt0","status":"succeeded","created_at":"2026-08-31T04:40:40.999697Z","started_at":"2026-08-31T04:40:41Z","finished_at":"2026-08-31T04:41:08Z","start_command_sha256":"aee48252562526c99202aaaf0c289a9e82a5e030fe40e82ce39856fcbff9258c"}
+  ],
+  "actual_control_plane_completion_record": {
+    "id": "job-daagcs9f2nfc73a8gsp0",
+    "plan_id": "plan-srv-006",
+    "service_id": "srv-d9n28tijnfac73a87lt0",
+    "status": "succeeded",
+    "created_at": "2026-08-31T04:43:29.01271Z",
+    "started_at": "2026-08-31T04:43:29Z",
+    "finished_at": "2026-08-31T04:43:57Z",
+    "start_command_sha256": "09d4253d1333dadf59087e145efdaa7abee75d424a6cc34af720884c8de3c8b6"
+  },
+  "application_completion_log_query": {
+    "query": "render logs --resources job-daagcs9f2nfc73a8gsp0 --direction backward --limit 100 --output json",
+    "captured_at": "2026-08-31T04:56:00Z",
+    "entry_count": 0,
+    "raw_response_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "interpretation": "No application completion line was returned; only the Render control-plane completion record is available. This is evidence of ambiguity, not proof that the runner body completed."
+  }
 }

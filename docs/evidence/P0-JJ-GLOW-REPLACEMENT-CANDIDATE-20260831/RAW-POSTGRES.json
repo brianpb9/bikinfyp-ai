@@ -1,9 +1,32 @@
 {
   "queried_at": "2026-08-31T04:49:32Z",
-  "source_job_id": "job-daagflijnfac738fht2g",
+  "job": {
+    "id": "job-daagflijnfac738fht2g",
+    "service_id": "srv-d9n28tijnfac73a87lt0",
+    "status": "failed",
+    "created_at": "2026-08-31T04:49:26.559716Z",
+    "started_at": "2026-08-31T04:49:26Z",
+    "finished_at": "2026-08-31T04:49:37Z"
+  },
+  "deployed_identity": {
+    "service_id": "srv-d9n28tijnfac73a87lt0",
+    "deploy_id": "dep-daad38e7bikc7383gc6g",
+    "deployed_sha": "952276cae06be50b124894f611c85a8bce218d9d",
+    "deploy_status": "live"
+  },
+  "target": {
+    "product_id": "c470390e-ad3d-4cc8-9ba2-4557691fa7a7",
+    "script_id": "f2207c1f-4a96-4c03-a42e-8b2c6fc3f68d",
+    "principal_id": "ac8b0a3e-8835-4e64-80e6-2e2cae6198b8"
+  },
+  "executed_start_command_encoding": "base64",
+  "executed_start_command_sha256": "4db512814d89b25b59c9580da7d2684b7a874eb20a7b52d98367d6b63eb1f35d",
+  "executed_start_command_base64": "bm9kZSAtZSAiY29uc3R7Q2xpZW50fT1yZXF1aXJlKCdwZycpOyhhc3luYygpPT57Y29uc3QgYz1uZXcgQ2xpZW50KHtjb25uZWN0aW9uU3RyaW5nOnByb2Nlc3MuZW52LkRBVEFCQVNFX1VSTH0pO2F3YWl0IGMuY29ubmVjdCgpO2F3YWl0IGMucXVlcnkoJ0JFR0lOIFJFQUQgT05MWScpO2NvbnN0IHE9YXdhaXQgYy5xdWVyeShcIlNFTEVDVCBqLmlkLGouc3RhdGUsKFNFTEVDVCBjb3VudCgqKTo6aW50IEZST00gcHJvdmlkZXJfdGFza3MgdCBXSEVSRSB0LmpvYl9pZD1qLmlkKSBwcm92aWRlcl90YXNrcyBGUk9NIGpvYnMgaiBXSEVSRSBqLnByb2R1Y3RfaWQ9J2M0NzAzOTBlLWFkM2QtNGNjOC05YmEyLTQ1NTc2OTFmYTdhNycgQU5EIGouc2NyaXB0X2lkPSdmMjIwN2MxZi00YTk2LTRjMDMtYTQyZS04YjJjNmZjM2Y2OGQnIEFORCBqLnVzZXJfaWQ9J2FjOGIwYTNlLTg4MzUtNGU2NC04MGU2LTJlMmNhZTYxOThiOCcgQU5EIGoub3JnX2lkIElTIE5VTExcIik7Y29uc3QgdD1hd2FpdCBjLnF1ZXJ5KFwiU0VMRUNUIChTRUxFQ1QgY291bnQoKik6OmludCBGUk9NIHNjcmlwdHMgV0hFUkUgcHJvZHVjdF9pZD0nYzQ3MDM5MGUtYWQzZC00Y2M4LTliYTItNDU1NzY5MWZhN2E3Jykgc2NyaXB0cywoU0VMRUNUIGNvdW50KCopOjppbnQgRlJPTSBqb2JzIFdIRVJFIHByb2R1Y3RfaWQ9J2M0NzAzOTBlLWFkM2QtNGNjOC05YmEyLTQ1NTc2OTFmYTdhNycpIGpvYnMsKFNFTEVDVCBjb3VudCgqKTo6aW50IEZST00gcHJvdmlkZXJfdGFza3MgdCBKT0lOIGpvYnMgaiBPTiBqLmlkPXQuam9iX2lkIFdIRVJFIGoucHJvZHVjdF9pZD0nYzQ3MDM5MGUtYWQzZC00Y2M4LTliYTItNDU1NzY5MWZhN2E3JykgcHJvdmlkZXJfdGFza3NcIik7YXdhaXQgYy5xdWVyeSgnQ09NTUlUJyk7YXdhaXQgYy5lbmQoKTt0aHJvdyBFcnJvcignSkpfREJfUkVBREJBQ0sgJytKU09OLnN0cmluZ2lmeSh7cm93czpxLnJvd3MsdG90YWxzOnQucm93c1swXSxtdXRhdGlvbjpmYWxzZX0pKX0pKCkuY2F0Y2goZT0+e2NvbnNvbGUuZXJyb3IoZS5tZXNzYWdlKTtwcm9jZXNzLmV4aXQoMSl9KSI=",
   "transaction": "BEGIN READ ONLY",
-  "log_line": "JJ_DB_READBACK {\"rows\":[],\"totals\":{\"scripts\":0,\"jobs\":0,\"provider_tasks\":0},\"mutation\":false}",
-  "rows": [],
-  "totals": {"scripts":0,"jobs":0,"provider_tasks":0},
-  "mutation": false
+  "exact_emitted_log_line": "JJ_DB_READBACK {\"rows\":[],\"totals\":{\"scripts\":0,\"jobs\":0,\"provider_tasks\":0},\"mutation\":false}",
+  "parsed_emitted_payload": {
+    "rows": [],
+    "totals": {"scripts":0,"jobs":0,"provider_tasks":0},
+    "mutation": false
+  }
 }
