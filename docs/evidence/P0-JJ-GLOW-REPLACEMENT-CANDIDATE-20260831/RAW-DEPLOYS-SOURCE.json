@@ -1,0 +1,282 @@
+[
+  {
+    "commit": {
+      "createdAt": "2026-08-31T00:52:24Z",
+      "id": "952276cae06be50b124894f611c85a8bce218d9d",
+      "message": "fix: seal candidate lineage receipt"
+    },
+    "createdAt": "2026-08-31T00:58:09.476823Z",
+    "finishedAt": "2026-08-31T01:01:03.643626Z",
+    "id": "dep-daad38e7bikc7383gc6g",
+    "startedAt": "2026-08-31T00:58:09.447756Z",
+    "status": "live",
+    "trigger": "api",
+    "updatedAt": "2026-08-31T01:01:32.262263Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-30T23:50:21Z",
+      "id": "edfc8a6d0310a78c456fbee6ee415dd5e900636d",
+      "message": "fix: require JJ Glow admission digest"
+    },
+    "createdAt": "2026-08-30T23:55:17.866304Z",
+    "finishedAt": "2026-08-30T23:58:26.354441Z",
+    "id": "dep-daac5pcs728c73fvje80",
+    "startedAt": "2026-08-30T23:55:17.833275Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-31T01:01:03.642539Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-30T22:51:05Z",
+      "id": "9a5ed85498fe3c429f64bfa7cdfd9fdcfbb93c0a",
+      "message": "fix: reject unbound restricted secondary refs"
+    },
+    "createdAt": "2026-08-30T22:55:06.530595Z",
+    "finishedAt": "2026-08-30T22:58:02.582851Z",
+    "id": "dep-daab9ih42hec73a1o470",
+    "startedAt": "2026-08-30T22:55:06.497961Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-30T23:58:26.353417Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-29T16:01:47Z",
+      "id": "ee767201679ae2213c40be6f913241f372d2378a",
+      "message": "integrate reviewed normal evidence guard\n\nReviewed-source: 05333f14dde6b844f5da543726710600532f38a5\\nReviewed-base: acf1fd49fadc3387c3ae6a13f711689f1e0d9397\\nTree-equivalence: a87b840205613926b913259f88ebc96d0695442a\\nUnrelated-files-changed: 0"
+    },
+    "createdAt": "2026-08-29T19:40:26.485692Z",
+    "finishedAt": "2026-08-29T19:43:08.864262Z",
+    "id": "dep-da9jbagn74is738a4060",
+    "startedAt": "2026-08-29T19:40:26.457781Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-30T22:58:02.581197Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-29T18:59:22Z",
+      "id": "6ac032ad8f294761d615bcfddccbd5e46b15025f",
+      "message": "fix: preserve staging retail persona admission"
+    },
+    "createdAt": "2026-08-29T19:30:09.900347Z",
+    "finishedAt": "2026-08-29T19:33:41.680845Z",
+    "id": "dep-da9j6g9srm7s73cgls90",
+    "startedAt": "2026-08-29T19:30:09.86245Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-29T19:43:08.863033Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-29T18:59:22Z",
+      "id": "6ac032ad8f294761d615bcfddccbd5e46b15025f",
+      "message": "fix: preserve staging retail persona admission"
+    },
+    "createdAt": "2026-08-29T19:02:24.472355Z",
+    "finishedAt": "2026-08-29T19:04:32.629478Z",
+    "id": "dep-da9ipg2jnfac73e0mbf0",
+    "startedAt": "2026-08-29T19:02:24.442092Z",
+    "status": "canceled",
+    "trigger": "api",
+    "updatedAt": "2026-08-29T19:04:32.629979Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-29T18:47:49Z",
+      "id": "8298d88196639416fce7fb5fb42dbdf559ff4124",
+      "message": "fix: lock persona ownership through admission"
+    },
+    "createdAt": "2026-08-29T18:51:37.147212Z",
+    "finishedAt": "2026-08-29T18:52:32.957959Z",
+    "id": "dep-da9ikee7bikc739ei8l0",
+    "startedAt": "2026-08-29T18:51:37.115399Z",
+    "status": "build_failed",
+    "trigger": "api",
+    "updatedAt": "2026-08-29T18:52:32.958469Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-29T16:01:47Z",
+      "id": "ee767201679ae2213c40be6f913241f372d2378a",
+      "message": "integrate reviewed normal evidence guard\n\nReviewed-source: 05333f14dde6b844f5da543726710600532f38a5\\nReviewed-base: acf1fd49fadc3387c3ae6a13f711689f1e0d9397\\nTree-equivalence: a87b840205613926b913259f88ebc96d0695442a\\nUnrelated-files-changed: 0"
+    },
+    "createdAt": "2026-08-29T16:23:19.914438Z",
+    "finishedAt": "2026-08-29T16:27:45.307014Z",
+    "id": "dep-da9getpf2nfc73fg310g",
+    "startedAt": "2026-08-29T16:23:19.884578Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-29T19:33:41.679733Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-28T12:24:21Z",
+      "id": "acf1fd49fadc3387c3ae6a13f711689f1e0d9397",
+      "message": "merge: integrate accepted C5 and staging evidence lineages"
+    },
+    "createdAt": "2026-08-29T05:33:33.620628Z",
+    "finishedAt": "2026-08-29T05:34:59.910202Z",
+    "id": "dep-da96ubajnfac73cspimg",
+    "startedAt": "2026-08-29T05:33:33.59008Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-29T16:27:45.305536Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-28T12:24:21Z",
+      "id": "acf1fd49fadc3387c3ae6a13f711689f1e0d9397",
+      "message": "merge: integrate accepted C5 and staging evidence lineages"
+    },
+    "createdAt": "2026-08-28T12:35:54.159909Z",
+    "finishedAt": "2026-08-28T12:39:44.524614Z",
+    "id": "dep-da8o1aid0e5s7397u290",
+    "startedAt": "2026-08-28T12:35:54.11635Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-29T05:34:59.90902Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-27T09:23:20Z",
+      "id": "46499ac5e345997b394e4ac522759e40fe2eae22",
+      "message": "test: bind readiness verifier to exact rubric"
+    },
+    "createdAt": "2026-08-27T15:25:30.687007Z",
+    "finishedAt": "2026-08-27T15:28:39.489661Z",
+    "id": "dep-da85dqjtqb8s73du3tj0",
+    "startedAt": "2026-08-27T15:25:30.654516Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-28T12:39:44.523544Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-26T11:00:50Z",
+      "id": "565f3fad6446152966bd8003a0aa8f6536bd279b",
+      "message": "fix: use BullMQ-valid trace queue name"
+    },
+    "createdAt": "2026-08-26T11:02:20.473965Z",
+    "finishedAt": "2026-08-26T11:05:08.982172Z",
+    "id": "dep-da7cff7avr4c73bldrfg",
+    "startedAt": "2026-08-26T11:02:20.431892Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-27T15:28:39.487546Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-26T10:55:33Z",
+      "id": "a92d9ebf91b9a37998dec27bab3d0e6e888596bd",
+      "message": "fix: isolate trace jobs on dedicated queue"
+    },
+    "createdAt": "2026-08-26T10:55:52.189863Z",
+    "finishedAt": "2026-08-26T10:58:38.877633Z",
+    "id": "dep-da7cce6417fc73fbi23g",
+    "startedAt": "2026-08-26T10:55:52.159199Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-26T11:05:08.980742Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-26T10:40:12Z",
+      "id": "65d54b5b682acc6cde93ca3e32034d382b7dc57d",
+      "message": "fix: isolate trace worker from held jobs"
+    },
+    "createdAt": "2026-08-26T10:40:32.838531Z",
+    "finishedAt": "2026-08-26T10:43:18.24709Z",
+    "id": "dep-da7c572d0e5s73e3o810",
+    "startedAt": "2026-08-26T10:40:31.887412Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-26T10:58:38.876723Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-26T10:24:53Z",
+      "id": "7a54128dbaa03f808355791edffeb25d91e69f17",
+      "message": "test: prove trace capability replay rejection"
+    },
+    "createdAt": "2026-08-26T10:25:09.274377Z",
+    "finishedAt": "2026-08-26T10:27:08.16304Z",
+    "id": "dep-da7bu1ad0e5s73e30mbg",
+    "startedAt": "2026-08-26T10:25:09.239625Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-26T10:43:18.245848Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-26T10:16:50Z",
+      "id": "0a2a866952e1a7729c98e9f7029c567c306467c0",
+      "message": "fix: make zero-value trace single-use"
+    },
+    "createdAt": "2026-08-26T10:17:09.490738Z",
+    "finishedAt": "2026-08-26T10:20:17.032979Z",
+    "id": "dep-da7bq9ad0e5s73e2kb50",
+    "startedAt": "2026-08-26T10:17:09.427967Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-26T10:27:08.161106Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-26T09:55:55Z",
+      "id": "58aeb4f19874290916a1497707632ff87e7e7d0d",
+      "message": "fix: enforce immutable admission in trace worker"
+    },
+    "createdAt": "2026-08-26T09:56:17.732984Z",
+    "finishedAt": "2026-08-26T09:59:24.215763Z",
+    "id": "dep-da7bggek1f9s73cu5eg0",
+    "startedAt": "2026-08-26T09:56:17.695807Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-26T10:20:17.031778Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-26T09:42:33Z",
+      "id": "03acd0f706f225039e2f5f16810c6f55e7402b60",
+      "message": "fix: trace canonical staging admission path"
+    },
+    "createdAt": "2026-08-26T09:42:52.130253Z",
+    "finishedAt": "2026-08-26T09:45:36.522506Z",
+    "id": "dep-da7ba72d0e5s73e1058g",
+    "startedAt": "2026-08-26T09:42:52.090414Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-26T09:59:24.214611Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-26T09:26:26Z",
+      "id": "52653947c1afa06b921bbcdb9d0ce34b65b5194c",
+      "message": "fix: include staging trace fixture in worker image"
+    },
+    "createdAt": "2026-08-26T09:26:40.064438Z",
+    "finishedAt": "2026-08-26T09:28:39.208124Z",
+    "id": "dep-da7b2jp5efls73cnu54g",
+    "startedAt": "2026-08-26T09:26:40.029811Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-26T09:45:36.521453Z"
+  },
+  {
+    "commit": {
+      "createdAt": "2026-08-26T09:07:08Z",
+      "id": "8709f4a810894b810e9bdbd04ec738c0332662ff",
+      "message": "feat: add exact-sha staging worker trace harness"
+    },
+    "createdAt": "2026-08-26T09:08:08.501069Z",
+    "finishedAt": "2026-08-26T09:11:12.584236Z",
+    "id": "dep-da7apu0ae00c73b90i4g",
+    "startedAt": "2026-08-26T09:08:08.467363Z",
+    "status": "deactivated",
+    "trigger": "api",
+    "updatedAt": "2026-08-26T09:28:39.207004Z"
+  }
+]

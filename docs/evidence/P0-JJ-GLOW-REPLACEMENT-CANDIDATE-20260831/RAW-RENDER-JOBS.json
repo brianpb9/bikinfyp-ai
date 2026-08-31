@@ -4,9 +4,10 @@
     "cli_version": "2.24.0",
     "query": "render jobs list srv-d9n28tijnfac73a87lt0 --output json",
     "query_sha256": "f60657b1f04f7b302cbc3db190425a778ee96ca1f2151fb61d84b703f5d2052f",
+    "raw_response_file": "RAW-RENDER-JOBS-SOURCE.json",
     "pagination_flags_available": false,
     "raw_response_count": 20,
-    "raw_response_sha256": "a24a35542dd71ce805caeb9302a76f17420f35c4bcbf95b0a57031bcb2cee5d5",
+    "raw_response_sha256": "ab5de6371e782df973a1f7dd2715c71e3eafadea81737550ca8eba338c59b63d",
     "newest_returned_at": "2026-08-31T04:49:26.559716Z",
     "oldest_returned_at": "2026-08-31T00:45:14.109Z"
   },

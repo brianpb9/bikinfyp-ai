@@ -1,5 +1,9 @@
 {
   "queried_at": "2026-08-31T04:49:32Z",
+  "raw_log_query": "render logs --resources job-daagflijnfac738fht2g --start 2026-08-31T04:49:20Z --end 2026-08-31T04:49:45Z --direction forward --limit 100 --output json",
+  "raw_log_query_sha256": "a6cd85e2d215d0e9b94b779f229c93c53e66e1b92fb4f500ed84b4bc038de72d",
+  "raw_log_response_file": "RAW-POSTGRES-LOG-SOURCE.json",
+  "raw_log_response_sha256": "a73cfaa8db1b92cea3352a50e8a23887a679bab85d1be1bd0d3f7a530c4fa9ae",
   "job": {
     "id": "job-daagflijnfac738fht2g",
     "service_id": "srv-d9n28tijnfac73a87lt0",

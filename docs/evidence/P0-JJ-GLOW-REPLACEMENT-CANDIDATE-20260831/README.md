@@ -11,10 +11,16 @@ The receipt now preserves the exact executed command and emitted payload, bound 
 job, staging service, live deployed SHA, product, script, and principal.
 
 The exhaustive Render job-list capture covers the full Founder-authorized window. Its query,
-raw response, and canonical window projection are digest-bound; exactly one entry has the exact
+secret-safe exact 20-row response bytes, and canonical window projection are committed and
+digest-bound. The verifier derives the count, time bounds, window rows, and command hashes from
+those source bytes; exactly one entry has the exact
 canonical-admission command hash, with the recorded start, control-plane completion, and finish
 time. A separate digest-bound application-log query returned zero entries; the packet does not
 misrepresent the control-plane `succeeded` state as proof that the runner body completed.
+
+The Postgres receipt likewise includes the exact secret-free Render log response. The verifier
+derives its emitted payload from that raw message and binds the log resource to the raw job record,
+the exact executed start command, and the raw live-deploy record.
 
 Consequently, `REPLACEMENT_CANDIDATE_CREATED=YES`, `TOTAL_CANONICAL_CANDIDATES_CREATED=2`, and
 `CURRENT_ELIGIBLE_CANDIDATE_COUNT=1` cannot be truthfully asserted. Candidate replay and provider

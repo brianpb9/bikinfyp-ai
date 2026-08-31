@@ -1,0 +1,19 @@
+{
+  "id": "6b21a38b-a048-4b98-910c-998add3b2c26",
+  "labels": [
+    {
+      "name": "resource",
+      "value": "job-daagflijnfac738fht2g"
+    },
+    {
+      "name": "level",
+      "value": "info"
+    },
+    {
+      "name": "type",
+      "value": "app"
+    }
+  ],
+  "message": "JJ_DB_READBACK {\"rows\":[],\"totals\":{\"scripts\":0,\"jobs\":0,\"provider_tasks\":0},\"mutation\":false}",
+  "timestamp": "2026-08-31T04:49:32.774202437Z"
+}
