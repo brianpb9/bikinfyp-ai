@@ -14,7 +14,8 @@ import {
   JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256, JJ_GLOW_PRINCIPAL_ID, JJ_GLOW_PRODUCT_ID,
   JJ_GLOW_SCRIPT_ID, JJ_GLOW_CANDIDATE_3_JOB_ID, JJ_GLOW_CANDIDATE_4_SCRIPT_ID, JJ_GLOW_CANDIDATE_4_TASK,
   JJ_GLOW_STAGING_WEB_SERVICE_ID, assertJjGlowLockedProductState,
-  assertJjGlowCandidate4PredecessorInvariant, jjGlowLifecycleStateSha256,
+  assertJjGlowCandidate4PredecessorInvariant, assertJjGlowLifecycleActivationInvariant,
+  jjGlowLifecycleStateSha256,
 } from "../lib/staging-jj-glow-exact-admission";
 import { mediaStorage } from "../lib/storage";
 import { verifyStagingReferenceRightsBinding } from "../lib/staging-reference-rights";
@@ -67,7 +68,8 @@ async function inspect(client: PoolClient, lock: boolean) {
   const persona = (await client.query(`SELECT * FROM personas WHERE id=$1${suffix}`, [job.persona_id])).rows[0];
   if (!persona) throw new Error("JJ_GLOW_FINAL_EVIDENCE_PERSONA_MISSING");
   const lifecycle = (await client.query(
-    "SELECT actor,created_at,meta FROM audit_log WHERE entity='jobs' AND entity_id=$1 AND action='candidate.lifecycle.created'",
+    `SELECT id,actor,created_at,meta FROM audit_log WHERE entity='jobs' AND entity_id=$1
+      AND action='candidate.lifecycle.created'${suffix}`,
     [EVIDENCE_JOB_ID],
   )).rows;
   const predecessor = CANDIDATE_4_MODE ? (await client.query(
@@ -118,16 +120,17 @@ async function inspect(client: PoolClient, lock: boolean) {
     throw new Error("JJ_GLOW_FINAL_EVIDENCE_MANUAL_AUDIT_CARDINALITY");
   }
   const approvedScriptSha256 = jjGlowApprovedScriptSha256(script, manualAuditRows[0]);
-  const lifecycleMeta = JSON.parse(lifecycle[0].meta);
+  const lifecycleMeta = assertJjGlowLifecycleActivationInvariant({
+    row:lifecycle[0], task:EVIDENCE_TASK, correlationId:EVIDENCE_CORRELATION_ID,
+    stateSha256:EVIDENCE_STATE_SHA256,
+  });
   const lifecycleState = {schema:lifecycleMeta.schema,correlation_id:EVIDENCE_CORRELATION_ID,
     job_id:job.id,product_id:product.id,script_id:script.id,create_actor:JJ_GLOW_PRINCIPAL_ID,
     create_timestamp:lifecycleMeta.create_timestamp,transaction_id:lifecycleMeta.transaction_commit_receipt?.transaction_id,
     state:job.state,provider_task_count:Number(counts.provider_tasks),hold_count:Number(counts.hold_rows),
     approved_reference_manifest_sha256:sha256(job.approved_reference_manifest),
     job_product_snapshot_sha256:sha256(job.job_product_snapshot),database_binding_sha256:EVIDENCE_DATABASE_BINDING_SHA256};
-  if (lifecycleMeta.task !== EVIDENCE_TASK || lifecycleMeta.correlation_id !== EVIDENCE_CORRELATION_ID
-      || lifecycleMeta.post_commit_state_sha256 !== EVIDENCE_STATE_SHA256 || lifecycleMeta.append_only !== true
-      || jjGlowLifecycleStateSha256(lifecycleState) !== EVIDENCE_STATE_SHA256) {
+  if (jjGlowLifecycleStateSha256(lifecycleState) !== EVIDENCE_STATE_SHA256) {
     throw new Error("JJ_GLOW_FINAL_EVIDENCE_LIFECYCLE_MISMATCH");
   }
   const expectedCandidateCount = CANDIDATE_4_MODE ? 2 : 1;

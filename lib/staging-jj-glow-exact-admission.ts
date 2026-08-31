@@ -64,6 +64,45 @@ export function jjGlowLifecycleStateSha256(value: Record<string, unknown>): stri
   return canonicalSha(value);
 }
 
+export type JjGlowLifecycleActivationReadback = {
+  actor: unknown;
+  created_at: unknown;
+  meta: unknown;
+};
+
+/** Activation revalidates the complete immutable authority receipt while its
+ * audit row is locked. `audit_log` is not protected by an update trigger, so
+ * checking only the state digest is not an activation boundary. */
+export function assertJjGlowLifecycleActivationInvariant(input: {
+  row: JjGlowLifecycleActivationReadback | null | undefined;
+  task: typeof JJ_GLOW_FINAL_RECOVERY_TASK | typeof JJ_GLOW_CANDIDATE_4_TASK;
+  correlationId: string;
+  stateSha256: string;
+}) {
+  const { row, task, correlationId, stateSha256 } = input;
+  let meta: Record<string, any>;
+  try { meta = JSON.parse(String(row?.meta ?? "")) as Record<string, any>; }
+  catch { throw new Error("JJ_GLOW_FINAL_EVIDENCE_LIFECYCLE_MISMATCH"); }
+  const ordinal = task === JJ_GLOW_CANDIDATE_4_TASK ? 4 : 3;
+  const createdAt = row?.created_at == null ? null : new Date(row.created_at as string | number | Date).toISOString();
+  const transactionId = meta.transaction_commit_receipt?.transaction_id;
+  if (!row || row.actor !== JJ_GLOW_PRINCIPAL_ID || meta.schema !== JJ_GLOW_LIFECYCLE_SCHEMA
+      || meta.task !== task || meta.correlation_id !== correlationId
+      || meta.historical_root_cause_waiver !== true || meta.final_candidate_ordinal !== ordinal
+      || meta.max_canonical_candidates_created !== ordinal || meta.provider_posts_at_admission !== 0
+      || meta.mutation_policy?.delete_requires_reason_actor !== true
+      || meta.mutation_policy?.supersede_requires_reason_actor !== true
+      || meta.create_actor !== JJ_GLOW_PRINCIPAL_ID || meta.create_timestamp !== createdAt
+      || !/^[0-9]+$/.test(String(transactionId ?? ""))
+      || meta.transaction_commit_receipt?.atomic_with_job !== true
+      || meta.transaction_commit_receipt?.visible_only_after_commit !== true
+      || meta.append_only !== true || meta.post_commit_state_sha256 !== stateSha256
+      || !meta.post_commit_state || jjGlowLifecycleStateSha256(meta.post_commit_state) !== stateSha256) {
+    throw new Error("JJ_GLOW_FINAL_EVIDENCE_LIFECYCLE_MISMATCH");
+  }
+  return meta;
+}
+
 export type JjGlowCandidate4PredecessorReadback = {
   id: unknown; product_id: unknown; script_id: unknown; state: unknown;
   provider_video: unknown; provider_voice: unknown; output_url: unknown;

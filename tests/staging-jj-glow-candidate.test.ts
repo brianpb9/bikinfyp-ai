@@ -7,6 +7,8 @@ import { assertNoJjGlowFinalCandidateHistory, smokeCreateJob } from "../lib/post
 import {
   assertJjGlowLockedProductState, authorizeJjGlowExactAdmission, authorizeJjGlowLifecycleAuthority,
   assertJjGlowCandidate4PredecessorInvariant,
+  assertJjGlowLifecycleActivationInvariant,
+  jjGlowLifecycleStateSha256,
   JJ_GLOW_FINAL_RECOVERY_TASK, JJ_GLOW_CANDIDATE_4_TASK, JJ_GLOW_CANDIDATE_4_SCRIPT_ID,
   JJ_GLOW_LIFECYCLE_SCHEMA,
   JJ_GLOW_EXPECTED_PRODUCT_STATE_SHA256, JJ_GLOW_PRINCIPAL_ID,
@@ -232,6 +234,51 @@ test("candidate #4 activation rejects every predecessor terminal/effect mutation
     assert.throws(() => assertJjGlowCandidate4PredecessorInvariant({...exact,[field]:value}),
       /CANDIDATE_4_PREDECESSOR_CHANGED/, `must reject predecessor mutation ${field}`);
   }
+});
+
+test("candidate #4 activation locks and rejects every lifecycle authority mutation", () => {
+  const stateSha256 = "a".repeat(64);
+  const createdAt = "2026-08-31T19:47:54.433Z";
+  const state = {proof:"fixture"};
+  const exact = {
+    schema:JJ_GLOW_LIFECYCLE_SCHEMA,task:JJ_GLOW_CANDIDATE_4_TASK,
+    correlation_id:"84e77d2f-6da7-4bb3-a56f-a59aa25cea5a",historical_root_cause_waiver:true,
+    final_candidate_ordinal:4,max_canonical_candidates_created:4,provider_posts_at_admission:0,
+    mutation_policy:{delete_requires_reason_actor:true,supersede_requires_reason_actor:true},
+    create_actor:JJ_GLOW_PRINCIPAL_ID,create_timestamp:createdAt,
+    transaction_commit_receipt:{transaction_id:"134621",atomic_with_job:true,visible_only_after_commit:true},
+    post_commit_state:state,post_commit_state_sha256:stateSha256,append_only:true,
+  };
+  // Isolate authority-field validation from the independently covered state digest check.
+  const validStateSha = jjGlowLifecycleStateSha256(state);
+  exact.post_commit_state_sha256 = validStateSha;
+  const input = {row:{actor:JJ_GLOW_PRINCIPAL_ID,created_at:createdAt,meta:JSON.stringify(exact)},
+    task:JJ_GLOW_CANDIDATE_4_TASK,correlationId:exact.correlation_id,stateSha256:validStateSha} as const;
+  assert.doesNotThrow(() => assertJjGlowLifecycleActivationInvariant(input));
+  const mutations: Array<(value:typeof exact) => void> = [
+    (v) => { v.schema="wrong" as typeof v.schema; }, (v) => { v.task=JJ_GLOW_FINAL_RECOVERY_TASK; },
+    (v) => { v.correlation_id="wrong"; }, (v) => { v.historical_root_cause_waiver=false; },
+    (v) => { v.final_candidate_ordinal=3; }, (v) => { v.max_canonical_candidates_created=3; },
+    (v) => { v.provider_posts_at_admission=1; },
+    (v) => { v.mutation_policy.delete_requires_reason_actor=false; },
+    (v) => { v.mutation_policy.supersede_requires_reason_actor=false; },
+    (v) => { v.create_actor="wrong"; }, (v) => { v.create_timestamp="2026-08-31T19:47:55.433Z"; },
+    (v) => { v.transaction_commit_receipt.transaction_id=""; },
+    (v) => { v.transaction_commit_receipt.atomic_with_job=false; },
+    (v) => { v.transaction_commit_receipt.visible_only_after_commit=false; },
+    (v) => { v.append_only=false; }, (v) => { v.post_commit_state_sha256="b".repeat(64); },
+    (v) => { v.post_commit_state={proof:"mutated"}; },
+  ];
+  for (const mutate of mutations) {
+    const changed = structuredClone(exact); mutate(changed);
+    assert.throws(() => assertJjGlowLifecycleActivationInvariant({...input,row:{...input.row,meta:JSON.stringify(changed)}}),
+      /LIFECYCLE_MISMATCH/);
+  }
+  assert.throws(() => assertJjGlowLifecycleActivationInvariant({...input,row:{...input.row,actor:"wrong"}}), /LIFECYCLE_MISMATCH/);
+  assert.throws(() => assertJjGlowLifecycleActivationInvariant({...input,row:{...input.row,created_at:"2026-08-31T19:47:55.433Z"}}), /LIFECYCLE_MISMATCH/);
+  const freeze = fs.readFileSync("scripts/staging-jj-glow-final-evidence.ts", "utf8");
+  assert.match(freeze, /candidate\.lifecycle\.created'\$\{suffix\}/,
+    "activation must apply FOR UPDATE to the exact lifecycle audit row");
 });
 
 test("binding DB diperiksa pada client transaksi yang sama dan probe runtime dibundel", () => {
