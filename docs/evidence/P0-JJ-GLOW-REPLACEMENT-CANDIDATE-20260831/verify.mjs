@@ -73,7 +73,15 @@ for (const job of jobs.jobs) {
   assert.ok(Date.parse(job.created_at) <= Date.parse(jobs.authorized_window.end_inclusive));
   assert.match(job.start_command_sha256, /^[0-9a-f]{64}$/);
 }
-assert.equal(sha(fs.readFileSync(path.join(dir, "../../../scripts/staging-jj-glow-candidate.cjs"))), jobs.canonical_admission_signature.candidate_runner_sha256);
+// The executed transport command embeds the exact runner bytes. Hash those
+// immutable captured bytes, never the mutable current implementation.
+const embeddedAdmission = rawWindow.find((job) => job.id === "job-daagcs9f2nfc73a8gsp0");
+assert.ok(embeddedAdmission);
+const embeddedBase64 = [...embeddedAdmission.startCommand.matchAll(/Buffer\.from\('([A-Za-z0-9+/=]+)','base64'\)/g)];
+assert.equal(embeddedBase64.length, 2);
+const historicalRunnerBytes = Buffer.from(embeddedBase64[0][1], "base64");
+assert.equal(sha(historicalRunnerBytes), jobs.canonical_admission_signature.candidate_runner_sha256);
+assert.match(historicalRunnerBytes.toString("utf8"), /JJ_GLOW_CANDIDATE_PASS/);
 assert.equal(sha(fs.readFileSync(path.join(dir, "../BPOM-KO-NA18260500350-20260831.json"))), jobs.canonical_admission_signature.bpom_evidence_sha256);
 const matchingAdmissions = jobs.jobs.filter((job) => job.start_command_sha256 === jobs.canonical_admission_signature.exact_start_command_sha256);
 assert.equal(matchingAdmissions.length, 1);

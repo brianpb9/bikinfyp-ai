@@ -151,12 +151,15 @@ async function main() {
   }
   const pool = new Pool({ connectionString: process.env.DATABASE_URL });
   let inserted = false;
+  let databaseBinding;
   try {
     const bpomEvidence = validateBpomEvidence(fs.readFileSync(path.resolve(process.cwd(), BPOM_EVIDENCE_PATH)));
-    const databaseBinding = await postgresRuntimeBinding(pool);
     const client = await pool.connect();
     try {
       await client.query("BEGIN");
+      // Bind script creation to the exact transactional backend. The same
+      // digest is then required by the web admission transaction.
+      databaseBinding = await postgresRuntimeBinding(client);
       const product = (await client.query(
       `SELECT p.*,
         (SELECT count(*)::int FROM scripts s WHERE s.product_id=p.id) script_count,
@@ -200,6 +203,7 @@ async function main() {
     } finally {
       client.release();
     }
+    if (!databaseBinding) throw new Error("database binding unavailable after script transaction");
 
     const otpNow = new Date();
     const otpId = crypto.randomUUID();

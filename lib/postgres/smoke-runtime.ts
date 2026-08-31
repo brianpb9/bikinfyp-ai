@@ -258,12 +258,6 @@ export async function smokeCreateJob(userId: string, input: {
   });
   const pool = getPool(url());
   try {
-    if (exactProductStateSha256) {
-      const binding = await postgresRuntimeBinding(pool);
-      if (input.expectedDatabaseBindingSha256 !== binding.sha256) {
-        throw new Error("JJ_GLOW_DATABASE_BINDING_MISMATCH");
-      }
-    }
     // The user-row lock serializes wallet spends and the script-row lock
     // serializes duplicate decisions. Read Committed then observes the latest
     // balance after the lock wait; SERIALIZABLE would retain a pre-wait
@@ -277,6 +271,15 @@ export async function smokeCreateJob(userId: string, input: {
       let commitAttempted = false;
       try {
         await client.query("BEGIN ISOLATION LEVEL READ COMMITTED");
+        // Attest the exact backend participating in this attempt, after BEGIN.
+        // A pool-level preflight could run on a different connection and fail
+        // to protect against routing/failover between preflight and COMMIT.
+        if (exactProductStateSha256 || input.expectedDatabaseBindingSha256) {
+          const binding = await postgresRuntimeBinding(client);
+          if (input.expectedDatabaseBindingSha256 !== binding.sha256) {
+            throw new Error("JJ_GLOW_DATABASE_BINDING_MISMATCH");
+          }
+        }
         // Serialize spends for the same wallet before any predicate read. It
         // prevents concurrent balance aggregates from becoming serialization
         // pivots, while admissions for different users remain concurrent.

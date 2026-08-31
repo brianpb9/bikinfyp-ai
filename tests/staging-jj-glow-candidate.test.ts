@@ -111,6 +111,33 @@ test("runner memakai OTP acak singkat dan mengirim digest admission", () => {
   assert.doesNotMatch(source, /const OTP\s*=|10 \* 60_000/);
 });
 
+test("binding DB diperiksa pada client transaksi yang sama dan probe runtime dibundel", () => {
+  const admission = fs.readFileSync("lib/postgres/smoke-runtime.ts", "utf8");
+  const begin = admission.indexOf('client.query("BEGIN ISOLATION LEVEL READ COMMITTED")');
+  const binding = admission.indexOf("postgresRuntimeBinding(client)", begin);
+  const firstLock = admission.indexOf('client.query("SELECT id FROM users WHERE id=$1 FOR UPDATE"', binding);
+  assert.ok(begin >= 0 && binding > begin && firstLock > binding,
+    "setiap attempt harus attest backend pada client setelah BEGIN sebelum admission writes");
+  assert.doesNotMatch(admission.slice(0, begin), /postgresRuntimeBinding\(pool\)/);
+
+  const runner = fs.readFileSync("scripts/staging-jj-glow-candidate.cjs", "utf8");
+  const runnerBegin = runner.indexOf('client.query("BEGIN")');
+  const runnerBinding = runner.indexOf("postgresRuntimeBinding(client)", runnerBegin);
+  const runnerInsert = runner.indexOf("INSERT INTO scripts", runnerBinding);
+  assert.ok(runnerBegin >= 0 && runnerBinding > runnerBegin && runnerInsert > runnerBinding);
+
+  const dockerfile = fs.readFileSync("Dockerfile.web", "utf8");
+  assert.match(dockerfile, /esbuild scripts\/staging-candidate-durability-probe\.ts/);
+  assert.match(dockerfile, /node --check \/srv\/app\/scripts\/staging-candidate-durability-probe\.cjs/);
+  assert.match(dockerfile, /staging-candidate-durability-probe\.cjs self-check \| grep -qx DURABILITY_PROBE_RUNTIME_SELF_CHECK_PASS/);
+  assert.doesNotMatch(dockerfile, /tsx scripts\/staging-candidate-durability-probe/);
+
+  const probe = fs.readFileSync("scripts/staging-candidate-durability-probe.ts", "utf8");
+  assert.match(probe, /expectedDatabaseBindingSha256:binding\.sha256/);
+  assert.match(probe, /catch \(error\) \{\s*try \{ await cleanupFixture\(\); \}/);
+  assert.match(probe, /DELETE FROM jobs WHERE user_id=\$1 AND product_id=\$2 AND script_id=\$3/);
+});
+
 test("claim BPOM membutuhkan evidence authoritative exact, belum stale", () => {
   const bytes = fs.readFileSync(fixture.BPOM_EVIDENCE_PATH);
   const evidence = fixture.validateBpomEvidence(bytes, Date.parse("2026-08-31T00:00:00.000Z"));
