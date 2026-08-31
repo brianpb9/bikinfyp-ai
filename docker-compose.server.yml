@@ -1,0 +1,111 @@
+# BikinFYP — deployment satu server (VPS 8 core / 31 GB).
+#
+# ────────────────────────────────────────────────────────────────────────────
+# PEMBAGIAN CPU ADALAH INTI BERKAS INI, BUKAN HIASAN
+# ────────────────────────────────────────────────────────────────────────────
+# Permintaan "job tidak boleh mengganggu request" dijaga di DUA lapis, dan
+# keduanya diperlukan:
+#
+#   1. Di dalam aplikasi — antrean di lib/media/antrean-render.ts membatasi
+#      berapa ffmpeg boleh jalan bersamaan (FFMPEG_MAX_CONCURRENT).
+#   2. Di sini — cgroup Docker membatasi total CPU si worker.
+#
+# Lapis 1 saja tidak cukup: kalau suatu saat ada jalur yang memanggil ffmpeg
+# tanpa lewat antrean, atau ffmpeg mengabaikan -threads pada codec tertentu,
+# batas aplikasi bocor. Lapis 2 adalah rem keras yang tidak bergantung pada
+# kebenaran kode kita.
+#
+# Jatah 8 core:  worker 4  ·  web 2  ·  postgres 1  ·  sisa 1 untuk sistem
+# Worker TIDAK PERNAH bisa mengambil jatah web, apa pun yang terjadi padanya.
+
+name: bikinfyp
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:?wajib}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?wajib}
+      POSTGRES_DB: ${POSTGRES_DB:-bikinfyp}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # TIDAK dipublikasikan ke host. Hanya container lain yang boleh menyentuhnya.
+    expose: ["5432"]
+    cpus: 1.0
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    # Antrean job tidak boleh hilang saat server reboot.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    expose: ["6379"]
+    cpus: 0.5
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    restart: unless-stopped
+    env_file: [.env.server]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bikinfyp}
+      REDIS_URL: redis://redis:6379
+      # Web TIDAK merender. Kalau suatu jalur permintaan sampai memanggil
+      # ffmpeg, satu slot saja sudah cukup — dan kalau ternyata ia butuh lebih,
+      # itu bug arsitektur yang harus terlihat, bukan diakomodasi diam-diam.
+      FFMPEG_MAX_CONCURRENT: "1"
+      FFMPEG_THREADS: "1"
+    # Port 3000 hanya di localhost. nginx di host yang menghadap internet;
+    # membuka 0.0.0.0:3000 berarti aplikasi bisa diakses tanpa TLS.
+    ports: ["127.0.0.1:3000:3000"]
+    cpus: 2.0
+    mem_limit: 3g
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 40s
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.worker
+    restart: unless-stopped
+    env_file: [.env.server]
+    environment:
+      DATABASE_URL: postgres://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-bikinfyp}
+      REDIS_URL: redis://redis:6379
+      # 2 ffmpeg x 2 thread = 4 core, tepat sama dengan pagu cpus di bawah.
+      # Kalau kedua angka ini berubah, ubah keduanya bersamaan.
+      FFMPEG_MAX_CONCURRENT: "2"
+      FFMPEG_THREADS: "2"
+      FFMPEG_QUEUE_TIMEOUT_MS: "900000"
+    cpus: 4.0
+    mem_limit: 8g
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+volumes:
+  pgdata:
+  redisdata:

@@ -53,6 +53,39 @@ export const config = {
   r2Region: env("R2_REGION", "auto"),
   ffmpegPath: env("FFMPEG_PATH", "/opt/homebrew/bin/ffmpeg"),
   ffprobePath: env("FFPROBE_PATH", "/opt/homebrew/bin/ffprobe"),
+  /**
+   * Berapa ffmpeg boleh berjalan BERSAMAAN dalam satu proses.
+   *
+   * Bawaannya 2, dan angka itu bukan tebakan bebas: server punya 8 core, dan
+   * batas ini dipasangkan dengan FFMPEG_THREADS (bawaan 2) sehingga render
+   * paling banyak memakai 4 core. Empat sisanya ditinggalkan untuk Next,
+   * Postgres, dan sistem — supaya job tidak pernah menghabiskan mesin dan
+   * membuat request HTTP ikut tersendat.
+   *
+   * Sampai 31 Agu 2026 pembatas ini TIDAK ADA. Ia tidak diperlukan di Render
+   * karena plan starter memang cuma punya sedikit CPU dan `-threads 1`
+   * mengunci ffmpeg ke satu inti. Di mesin 8 core, kekecilan itu hilang dan
+   * satu job bisa mengambil seluruh mesin.
+   */
+  ffmpegMaxConcurrent: Math.max(1, parseInt(env("FFMPEG_MAX_CONCURRENT", "2"), 10)),
+  /**
+   * Batas menunggu slot. Antrean tanpa batas mengubah macet jadi menggantung.
+   *
+   * TIDAK dipasangi batas bawah buatan. Versi pertama memakai
+   * Math.max(30_000, ...) — angka yang enak dilihat tapi membuat perilaku
+   * timeout MUSTAHIL diuji tanpa menunggu 30 detik sungguhan, jadi sifat yang
+   * paling penting di modul ini justru jadi yang paling tidak terbukti.
+   * Nilai tidak masuk akal (bukan angka, nol, negatif) jatuh ke bawaan.
+   */
+  ffmpegQueueTimeoutMs: (() => {
+    const n = parseInt(env("FFMPEG_QUEUE_TIMEOUT_MS", "900000"), 10);
+    return Number.isFinite(n) && n > 0 ? n : 900_000;
+  })(),
+  /**
+   * Thread per proses ffmpeg. Tetap 1 secara bawaan supaya perilaku di Render
+   * tidak berubah diam-diam; server baru menaikkannya lewat env.
+   */
+  ffmpegThreads: Math.max(1, parseInt(env("FFMPEG_THREADS", "1"), 10)),
   providerVideo: env("PROVIDER_VIDEO", "mock"),
   providerVoice: env("PROVIDER_VOICE", "mock"),
   llmApiKey: env("LLM_API_KEY", ""),

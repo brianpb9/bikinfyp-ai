@@ -1,0 +1,112 @@
+# Web runtime BikinFYP — image Docker untuk deployment satu server.
+#
+# KENAPA BERKAS INI BARU ADA SEKARANG. Di Render, web dijalankan sebagai
+# layanan Node native (lihat render.production.yaml); hanya worker yang punya
+# image. Pindah ke VPS menuntut keduanya berbentuk container, jadi image ini
+# dibuat mengikuti pola Dockerfile.worker yang sudah terbukti — bukan disalin
+# dari cabang lain, karena Dockerfile.web di cabang itu menunjuk berkas yang
+# BELUM ADA di main (instrumentation.ts, assets/probe, migrasi 0035). Menyalin
+# begitu saja akan gagal saat build, atau lebih buruk: lolos build lalu gagal
+# saat dijalankan.
+
+FROM node:22-bookworm-slim AS dependencies
+
+WORKDIR /srv/app
+ENV NEXT_TELEMETRY_DISABLED=1
+
+# better-sqlite3 tetap dependensi produksi untuk jalur rollback SQLite, jadi
+# npm harus bisa mengompilnya bila tidak ada prebuild yang cocok.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends python3 make g++ pkg-config libsqlite3-dev \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY package.json package-lock.json ./
+RUN npm ci
+
+FROM dependencies AS build
+
+# AUTH_SECRET DIBUTUHKAN SAAT BUILD, dan ini bukan kelalaian konfigurasi.
+#
+# `next build` mengevaluasi setiap route untuk mengumpulkan metadata, dan
+# lib/secrets.ts sengaja gagal-tertutup: di production, AUTH_SECRET kosong
+# MENOLAK boot. Di Render env var tersedia sejak tahap build, jadi penjaga itu
+# tidak pernah terlihat. Di Docker tahap build punya env sendiri, dan
+# penjaganya menyala — persis seperti seharusnya.
+#
+# Nilai di bawah HANYA hidup di stage ini. Stage runtime dimulai dari FROM
+# baru, jadi ia tidak mewarisi apa pun; AUTH_SECRET sungguhan datang dari
+# .env.server saat container jalan. Nilainya sengaja dibuat berbunyi seperti
+# apa adanya supaya tidak pernah tersangka rahasia betulan.
+ARG BUILD_AUTH_SECRET=nilai-hanya-untuk-build-bukan-rahasia-produksi-0123456789
+ENV AUTH_SECRET=${BUILD_AUTH_SECRET}
+
+# Salinan eksplisit — menjaga rahasia, state lokal, dan bukti audit keluar dari
+# setiap layer image.
+COPY app ./app
+COPY lib ./lib
+COPY public ./public
+COPY assets ./assets
+COPY knowledge ./knowledge
+COPY migrations ./migrations
+# HANYA skrip yang benar-benar dipakai runtime.
+#
+# Menyalin seluruh scripts/ menggagalkan build: scripts/fyp-golden-dump.ts
+# mengimpor ../tests/helpers/fyp-fixture-plans, dan tests/ memang TIDAK ikut
+# masuk image. Ketahuan saat build, bukan saat jalan — itu memang gunanya
+# Next mengetikkan seluruh pohon. Salinan sempit ini sekaligus menjaga alat
+# uji dan dump fixture keluar dari image produksi.
+COPY scripts/migrate-postgres-runtime.mjs ./scripts/migrate-postgres-runtime.mjs
+# Image produksi WAJIB membawa alat migrasi produksinya sendiri. Versi
+# pertama hanya menyalin runner staging, jadi image tidak bisa memigrasi
+# databasenya sendiri — ketahuan saat smoke, bukan saat cutover.
+COPY scripts/migrate-postgres-production.mjs ./scripts/migrate-postgres-production.mjs
+COPY middleware.ts next.config.ts postcss.config.mjs tailwind.config.ts tsconfig.json ./
+
+RUN npm run build && npm prune --omit=dev
+
+FROM node:22-bookworm-slim AS runtime
+
+WORKDIR /srv/app
+ENV NODE_ENV=production \
+    NEXT_TELEMETRY_DISABLED=1 \
+    FFMPEG_PATH=/usr/bin/ffmpeg \
+    FFPROBE_PATH=/usr/bin/ffprobe
+
+# ffmpeg/ffprobe: probe durasi di jalur permintaan. tesseract: QC label
+# (lib/media/qc.ts) — dipasang karena kode di image ini memanggilnya, bukan
+# karena worker punya.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ffmpeg tesseract-ocr tesseract-ocr-eng \
+  && rm -rf /var/lib/apt/lists/* \
+  && groupadd --gid 10001 racun \
+  && useradd --uid 10001 --gid racun --create-home --shell /usr/sbin/nologin racun
+
+COPY --from=build --chown=racun:racun /srv/app/node_modules ./node_modules
+COPY --from=build --chown=racun:racun /srv/app/.next ./.next
+COPY --from=build --chown=racun:racun /srv/app/public ./public
+COPY --from=build --chown=racun:racun /srv/app/package.json /srv/app/package-lock.json ./
+COPY --from=build --chown=racun:racun /srv/app/migrations ./migrations
+COPY --from=build --chown=racun:racun /srv/app/scripts/migrate-postgres-runtime.mjs ./scripts/migrate-postgres-runtime.mjs
+COPY --from=build --chown=racun:racun /srv/app/scripts/migrate-postgres-production.mjs ./scripts/migrate-postgres-production.mjs
+COPY --from=build --chown=racun:racun /srv/app/lib ./lib
+COPY --from=build --chown=racun:racun /srv/app/assets ./assets
+COPY --from=build --chown=racun:racun /srv/app/knowledge ./knowledge
+
+# Image yang tidak lengkap harus GAGAL SAAT BUILD, bukan saat melayani orang.
+# Setiap baris di bawah pernah jadi penyebab kegagalan runtime di suatu tempat.
+RUN command -v ffmpeg \
+  && command -v ffprobe \
+  && command -v tesseract \
+  && tesseract --list-langs | grep -qx eng \
+  && test -f /srv/app/.next/BUILD_ID \
+  && test -f /srv/app/public/manifest.json \
+  && test -f /srv/app/scripts/migrate-postgres-runtime.mjs \
+  && test -f /srv/app/scripts/migrate-postgres-production.mjs \
+  && test -d /srv/app/migrations/postgres
+
+RUN mkdir -p /srv/app/.next/cache /srv/app/storage/jobs /srv/app/storage/uploads \
+  && chown -R racun:racun /srv/app/.next /srv/app/storage
+
+USER racun
+EXPOSE 3000
+CMD ["npm", "start"]

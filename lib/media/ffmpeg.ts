@@ -3,6 +3,7 @@
 import { execFile } from "node:child_process";
 import fs from "node:fs";
 import { config } from "../config";
+import { denganSlotRender } from "./antrean-render";
 
 export function runFf(cmd: string, args: string[]): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
@@ -19,13 +20,32 @@ export function runFf(cmd: string, args: string[]): Promise<{ stdout: string; st
   });
 }
 
-/** Keep FFmpeg's frame/filter workers within the Render Starter memory budget. */
+/** Keep FFmpeg's frame/filter workers within the memory budget of the host. */
 export function boundedFfmpegArgs(args: string[]): string[] {
-  return ["-threads", "1", "-filter_threads", "1", "-filter_complex_threads", "1", ...args];
+  const t = String(config.ffmpegThreads);
+  return ["-threads", t, "-filter_threads", t, "-filter_complex_threads", t, ...args];
 }
 
-export const runFfmpeg = (args: string[]) => runFf(config.ffmpegPath, boundedFfmpegArgs(args));
+/**
+ * ffmpeg SELALU lewat antrean; ffprobe TIDAK PERNAH.
+ *
+ * Pembedaan ini yang membuat "job tidak mengganggu request" benar-benar
+ * berlaku. ffprobe dipakai di jalur permintaan (validasi unggahan, cek durasi)
+ * dan selesai dalam milidetik — mengantrekannya berarti sebuah request
+ * menunggu render tiga menit. Alasan lengkapnya di lib/media/antrean-render.ts.
+ */
+export const runFfmpeg = (args: string[]) =>
+  denganSlotRender(labelDariArgs(args), () => runFf(config.ffmpegPath, boundedFfmpegArgs(args)));
 export const runFfprobe = (args: string[]) => runFf(config.ffprobePath, args);
+
+/** Nama berkas keluaran dipakai sebagai label log — cukup untuk menelusuri
+ *  job mana yang menunggu, tanpa membocorkan seluruh baris perintah. */
+function labelDariArgs(args: string[]): string {
+  const keluaran = args[args.length - 1];
+  return typeof keluaran === "string" && keluaran.includes("/")
+    ? keluaran.slice(keluaran.lastIndexOf("/") + 1)
+    : "ffmpeg";
+}
 
 export async function probeDurationSec(file: string): Promise<number> {
   const { stdout } = await runFfprobe([
