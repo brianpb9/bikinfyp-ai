@@ -250,3 +250,26 @@ export function mulaiPenyegaranKredensial(intervalMs = 30_000): void {
 export function statusKredensial() {
   return { terakhirDimuat, dariDatabase: meta.size };
 }
+
+/**
+ * Redirect URI yang HARUS terdaftar di Google Cloud Console, apa adanya.
+ *
+ * Ada di sini karena redirect_uri_mismatch adalah kegagalan yang paling mudah
+ * dibuat dan paling sulit didiagnosis: Google menolak SEBELUM callback kita
+ * tersentuh, jadi tidak ada satu pun log di sisi kita yang menunjukkan
+ * penyebabnya. Operator lalu menebak-nebak — dengan atau tanpa www, dengan
+ * atau tanpa garis miring — sementara nilai yang benar sebenarnya sudah pasti
+ * dan bisa dibaca dari APP_BASE_URL.
+ *
+ * Ditampilkan di halaman kredensial supaya jadi tempelan yang disalin, bukan
+ * tebakan.
+ */
+export function redirectUriGoogle(): string {
+  const base = config.appBaseUrl.replace(/\/+$/, "");
+  // APP_BASE_URL kosong -> kembalikan kosong, JANGAN path relatif.
+  // "/api/auth/google/callback" terlihat masuk akal dan akan disalin operator
+  // ke Google Console, lalu ditolak dengan galat yang sama sekali tidak
+  // menunjuk ke penyebabnya. Kosong memaksa halaman mengatakan apa adanya.
+  if (!base) return "";
+  return `${base}/api/auth/google/callback`;
+}

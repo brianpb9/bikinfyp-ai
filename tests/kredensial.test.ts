@@ -133,3 +133,40 @@ test("worker ikut menyegarkan — kalau tidak, ia memakai kunci lama selamanya",
     assert.match(baca(rute), /await pastikanSegar\(\)/, `${rute} memakai kredensial tanpa menyegarkannya`);
   }
 });
+
+test("redirect URI Google diturunkan dari APP_BASE_URL, bukan diketik", () => {
+  // redirect_uri_mismatch adalah kegagalan yang paling mudah dibuat dan paling
+  // sulit didiagnosis: Google menolak SEBELUM callback kita tersentuh, jadi
+  // tidak ada satu pun log di sisi kita yang menunjukkan penyebabnya. Operator
+  // lalu menebak — dengan atau tanpa www, dengan atau tanpa garis miring.
+  const semula = config.appBaseUrl;
+  const pasang = (v: string) => { (config as unknown as Record<string, string>).appBaseUrl = v; };
+
+  pasang("https://bikinfyp.com");
+  assert.equal(K.redirectUriGoogle(), "https://bikinfyp.com/api/auth/google/callback");
+
+  // Garis miring berlebih tidak boleh bocor jadi "//callback".
+  pasang("https://bikinfyp.com/");
+  assert.equal(K.redirectUriGoogle(), "https://bikinfyp.com/api/auth/google/callback");
+
+  // KOSONG HARUS KOSONG, bukan path relatif. "/api/auth/google/callback"
+  // terlihat masuk akal dan akan disalin operator ke Google Console, lalu
+  // ditolak dengan galat yang tidak menunjuk penyebabnya sama sekali.
+  pasang("");
+  assert.equal(K.redirectUriGoogle(), "", "APP_BASE_URL kosong menghasilkan alamat yang menyesatkan");
+
+  pasang(semula);
+
+  // Dan nilainya benar-benar ditampilkan di halaman kredensial, bukan cuma ada.
+  assert.match(baca("app/admin/kredensial/page.tsx"), /redirectUriGoogle\(\)/, "halaman tidak menampilkan alamatnya");
+});
+
+test("yang dikirim ke Google SAMA dengan yang ditampilkan ke operator", () => {
+  // Kalau rute memakai rumus berbeda dari yang dipamerkan halaman admin,
+  // operator akan memasang alamat yang benar untuk halaman tapi salah untuk
+  // Google — dan tetap ditolak.
+  const rute = baca("app/api/auth/google/route.ts");
+  assert.match(rute, /\$\{config\.appBaseUrl\}\/api\/auth\/google\/callback/);
+  const cb = baca("app/api/auth/google/callback/route.ts");
+  assert.match(cb, /\$\{config\.appBaseUrl\}\/api\/auth\/google\/callback/);
+});
