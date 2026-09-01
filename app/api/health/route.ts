@@ -53,6 +53,13 @@ export async function GET() {
       {
         ok: true,
         intake,
+        // BENDERA LOGIN GOOGLE, dengan alasan yang sama seperti kontrak
+        // pembayaran di atas: halaman onboarding tidak boleh menawarkan tombol
+        // yang pasti gagal. Sebelum 1 Sep tombol "Masuk pakai Google" SELALU
+        // tampil, dan menekannya memunculkan JSON mentah karena kredensialnya
+        // memang tidak pernah dipasang di mana pun. Non-rahasia: ini cuma
+        // menyatakan ADA atau TIDAK, bukan nilainya.
+        google_login: Boolean(config.googleOauthClientId && config.googleOauthClientSecret),
         payments_provider: paymentsProvider(),
         payments_env: paymentsEnv(),
         payments_live: paymentsHidup,

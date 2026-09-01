@@ -11,10 +11,23 @@ export const dynamic = "force-dynamic";
 // GET /api/auth/google — mulai login Google, redirect ke consent screen.
 // Alternatif email OTP yang sudah ada, bukan pengganti (keputusan Brian
 // 2026-08-03: dua-duanya tetap ada).
+/** Antar balik ke halaman masuk dengan pesan yang bisa dibaca. */
+function kembaliDenganGalat(alasan: string): Response {
+  const url = new URL("/onboarding", config.appBaseUrl || "http://localhost:3210");
+  url.searchParams.set("google_error", alasan);
+  return new Response(null, { status: 302, headers: { location: url.toString() } });
+}
+
 export async function GET(req: Request) {
   try {
-    if (!config.googleOauthClientId) throw ERR.BAD_REQUEST("Login Google belum dikonfigurasi.", "Google OAuth not configured.");
-    if (!config.appBaseUrl) throw ERR.BAD_REQUEST("APP_BASE_URL belum diisi.", "APP_BASE_URL not configured.");
+    // INI NAVIGASI BROWSER, BUKAN PANGGILAN API.
+    //
+    // Sebelumnya kedua penjagaan di bawah melempar BAD_REQUEST, dan pengguna
+    // yang menekan "Masuk pakai Google" melihat JSON mentah di layar. Callback
+    // di sebelah sudah lama memakai pola yang benar — mengantar balik ke
+    // halaman masuk dengan pesan — dan jalur berangkatnya tertinggal.
+    if (!config.googleOauthClientId || !config.googleOauthClientSecret) return kembaliDenganGalat("not_configured");
+    if (!config.appBaseUrl) return kembaliDenganGalat("not_configured");
 
     const state = crypto.randomBytes(24).toString("base64url");
     const redirectUri = `${config.appBaseUrl}/api/auth/google/callback`;

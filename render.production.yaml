@@ -81,6 +81,15 @@ services:
       - key: APP_BASE_URL
         value: https://bikinfyp.com
       # Gateway aktif (keputusan pindah ke Duitku, 2026-08-19).
+      # Login Google. TIDAK PERNAH diisi sampai 1 Sep 2026, jadi tombol
+      # "Masuk pakai Google" selalu gagal di produksi. Kosong = tombolnya
+      # disembunyikan dan hanya OTP email yang ditawarkan.
+      # Redirect URI di Google Cloud Console wajib persis:
+      #   https://bikinfyp.com/api/auth/google/callback
+      - key: GOOGLE_OAUTH_CLIENT_ID
+        sync: false
+      - key: GOOGLE_OAUTH_CLIENT_SECRET
+        sync: false
       - key: PAYMENT_GATEWAY
         value: duitku
       # Kredensial dari dashboard Duitku (Proyek). Sandbox dulu untuk tinjauan

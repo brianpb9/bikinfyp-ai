@@ -10,10 +10,19 @@ import { ajakan, useKesiapan } from "../_components/kesiapan";
 import { JANJI_WAKTU } from "@/lib/janji-waktu";
 import { SiteFooter } from "../_components/SiteFooter";
 
+/** Harga tier di landing. SATU sumber untuk kalkulator dan section "Harga
+ *  transparan" — kalau keduanya menyimpan angkanya sendiri, halaman yang
+ *  menjanjikan transparansi justru bisa menyebut dua harga berbeda. */
+const TIER_LANDING = [
+  { label: "AI Bersuara", price: 12_000, jelas: "AI memperagakan produkmu, dengan suara yang menjelaskan" },
+  { label: "Bersuara Pro", price: 80_000, jelas: "Presenter AI bicara langsung ke kamera, lip-sync sungguhan" },
+] as const;
+
 const GOOGLE_ERROR_MESSAGES: Record<string, string> = {
   cancelled: "Login Google dibatalkan.",
   state_mismatch: "Sesi login-nya kedaluwarsa, coba lagi ya.",
   email_not_verified: "Email Google kamu belum terverifikasi. Pakai email lain atau login pakai OTP.",
+  not_configured: "Login Google belum aktif. Untuk sekarang pakai OTP email ya.",
 };
 
 /** Klip showcase yang baru diunduh setelah tergulir ke layar.
@@ -68,15 +77,26 @@ export default function OnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [monthlyVideos, setMonthlyVideos] = useState(10);
-  const [tierPrice, setTierPrice] = useState<12000 | 80000>(12000);
+  // Nilai awal DITURUNKAN dari TIER_LANDING, bukan diketik ulang.
+  const [tierPrice, setTierPrice] = useState<number>(TIER_LANDING[0].price);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   // r13 (review produk 2026-08-07): landing publik sempat mengklaim "Checkout
   // aman lewat GoPay/OVO/DANA..." tanpa syarat walau Duitku belum aktif.
   const [paymentsLive, setPaymentsLive] = useState<boolean | null>(null);
+  // null = belum dijawab server. Tombol Google disembunyikan sampai server
+  // BILANG kredensialnya ada — bukan sebaliknya. Menawarkan tombol yang pasti
+  // gagal lebih buruk daripada tidak menawarkannya sama sekali.
+  const [googleLogin, setGoogleLogin] = useState<boolean | null>(null);
 
   useEffect(() => {
     track("landing_view");
-    fetch("/api/health").then((r) => r.json()).then((d) => setPaymentsLive(Boolean(d.payments_live))).catch(() => setPaymentsLive(false));
+    fetch("/api/health")
+      .then((r) => r.json())
+      .then((d) => {
+        setPaymentsLive(Boolean(d.payments_live));
+        setGoogleLogin(Boolean(d.google_login));
+      })
+      .catch(() => { setPaymentsLive(false); setGoogleLogin(false); });
   }, []);
 
   useEffect(() => {
@@ -141,8 +161,14 @@ export default function OnboardingPage() {
             <div className="flex items-center justify-between text-xs font-semibold text-zinc-500">
               {/* Nama produk mengikuti SiteChrome dan <title>: "BikinFYP AI".
                   Halaman ini sempat tertinggal menulis "BikinFYP.AI". */}
+              {/* Pil "● Harga transparan" DICABUT 1 Sep 2026.
+                  Lencana kecil bertitik di pojok adalah bahasa visual yang
+                  sudah terlalu sering dipakai halaman buatan AI, dan ia juga
+                  tidak membuktikan apa pun — klaim transparansi yang tidak
+                  disertai angka cuma stiker. Janjinya sekarang ditepati di
+                  section "Harga transparan" di bawah, lengkap dengan harga
+                  sebenarnya. */}
               <span className="font-display text-base font-extrabold text-zinc-900">BikinFYP <span className="text-amber-500">AI</span></span>
-              <span className="rounded-full bg-emerald-50 px-3 py-1 text-emerald-700">● Harga transparan</span>
             </div>
             <div className="mx-auto w-48 overflow-hidden rounded-[28px] bg-zinc-900 shadow-2xl shadow-amber-900/10 ring-1 ring-black/5">
               <video src="/demo/contoh-hero.mp4" autoPlay muted loop playsInline className="aspect-[9/16] w-full" />
@@ -247,7 +273,7 @@ export default function OnboardingPage() {
               <div className="mt-5 flex items-end justify-between"><span className="text-4xl font-extrabold text-amber-300">{monthlyVideos}</span><span className="mb-1 text-sm text-zinc-300">video / bulan</span></div>
               <input aria-label="Jumlah video per bulan" type="range" min="1" max="100" value={monthlyVideos} onChange={(e) => setMonthlyVideos(Number(e.target.value))} className="mt-3 w-full accent-amber-400" />
               <div className="mt-5 grid grid-cols-3 gap-2">
-                {([{ label: "AI Bersuara", price: 12000 }, { label: "Bersuara Pro", price: 80000 }] as const).map((tier) => <button type="button" key={tier.price} onClick={() => setTierPrice(tier.price)} className={`rounded-xl border px-2 py-2 text-left text-[11px] font-bold ${tierPrice === tier.price ? "border-amber-300 bg-amber-400 text-zinc-950" : "border-zinc-700 text-zinc-200"}`}><span className="block leading-tight">{tier.label}</span><span className="mt-1 block text-xs">Rp{tier.price.toLocaleString("id-ID")}</span></button>)}
+                {TIER_LANDING.map((tier) => <button type="button" key={tier.price} onClick={() => setTierPrice(tier.price)} className={`rounded-xl border px-2 py-2 text-left text-[11px] font-bold ${tierPrice === tier.price ? "border-amber-300 bg-amber-400 text-zinc-950" : "border-zinc-700 text-zinc-200"}`}><span className="block leading-tight">{tier.label}</span><span className="mt-1 block text-xs">Rp{tier.price.toLocaleString("id-ID")}</span></button>)}
               </div>
               <div className="mt-5 rounded-2xl bg-white p-4 text-zinc-900"><div className="flex justify-between text-xs text-zinc-500"><span>Jasa UGC manusia*</span><span className="line-through">Rp{humanCost.toLocaleString("id-ID")}</span></div><div className="mt-1 flex justify-between text-xs text-zinc-500"><span>BikinFYP AI</span><span>Rp{aiCost.toLocaleString("id-ID")}</span></div><p className="mt-3 font-display text-2xl font-extrabold text-emerald-600">Hemat Rp{saving.toLocaleString("id-ID")}</p><p className="text-sm font-bold text-emerald-600">{savingPercent}% lebih hemat</p></div>
               <p className="mt-3 text-[10px] leading-relaxed text-zinc-400">*Estimasi Rp100–150 ribu/video dari riset pasar Fastwork; kalkulator memakai titik tengah Rp125 ribu.</p>
@@ -267,6 +293,33 @@ export default function OnboardingPage() {
               <p className="mt-3 text-center text-[11px] text-zinc-400">Metode ditampilkan oleh halaman pembayaran Duitku sesuai kanal merchant yang aktif.</p>
             </section>
             )}
+
+            {/* HARGA TRANSPARAN — dulu cuma lencana di pojok atas.
+                Section ini menggantikannya karena transparansi diukur dari
+                angka yang benar-benar disebut, bukan dari kata "transparan". */}
+            <section>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">Harga transparan</p>
+              <h2 className="mt-1 font-display text-2xl font-extrabold text-zinc-900">Bayar per video, bukan langganan</h2>
+              <div className="mt-4 space-y-2">
+                {TIER_LANDING.map((tier) => (
+                  <div key={tier.price} className="flex items-start justify-between gap-3 rounded-2xl border border-zinc-200 bg-white p-4">
+                    <span className="min-w-0">
+                      <span className="block font-bold text-zinc-900">{tier.label}</span>
+                      <span className="mt-0.5 block text-xs leading-5 text-zinc-500">{tier.jelas}</span>
+                    </span>
+                    <span className="shrink-0 text-right">
+                      <span className="block font-display text-lg font-extrabold text-zinc-900">Rp{tier.price.toLocaleString("id-ID")}</span>
+                      <span className="block text-[11px] text-zinc-400">per video</span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <ul className="mt-3 space-y-1.5 text-sm leading-6 text-zinc-600">
+                <li>Tidak ada biaya bulanan. Isi saldo seperlunya, pakai kapan saja.</li>
+                <li>Kalau video gagal dibuat, kreditnya kembali ke saldomu.</li>
+                <li>Harga di atas sudah termasuk suara. Tidak ada biaya tambahan di akhir.</li>
+              </ul>
+            </section>
 
             <section><p className="text-xs font-bold uppercase tracking-[0.16em] text-amber-600">Jawaban jujur sebelum mulai</p><h2 className="mt-1 font-display text-2xl font-extrabold text-zinc-900">Yang perlu kamu tahu</h2><div className="mt-4 space-y-2">{[
               ["Videonya kelihatan AI? Aman dari TikTok Shop?", "Video diberi label AIGC dan kamu tetap perlu menyalakan label konten AI saat upload. Kami tidak menyembunyikan asal konten—ini membantu kamu mengikuti aturan platform."],
@@ -325,6 +378,7 @@ export default function OnboardingPage() {
               <a href="/legal/privacy" className="font-semibold text-zinc-700 underline underline-offset-2">Kebijakan Privasi</a>.
               Foto yang kamu unggah diproses oleh penyedia AI di luar negeri untuk membuat videomu.
             </p>
+            {googleLogin === true && (
             <a
               href={`/api/auth/google${
                 typeof window !== "undefined" && tujuanAman(new URLSearchParams(window.location.search).get("next"))
@@ -341,9 +395,12 @@ export default function OnboardingPage() {
               </svg>
               Masuk pakai Google
             </a>
-            <div className="flex items-center gap-3 text-sm text-zinc-400">
-              <div className="h-px flex-1 bg-zinc-200" /> atau <div className="h-px flex-1 bg-zinc-200" />
-            </div>
+            )}
+            {googleLogin === true && (
+              <div className="flex items-center gap-3 text-sm text-zinc-400">
+                <div className="h-px flex-1 bg-zinc-200" /> atau <div className="h-px flex-1 bg-zinc-200" />
+              </div>
+            )}
             <form onSubmit={requestOtp} className="space-y-4">
               <input
                 type="email"
