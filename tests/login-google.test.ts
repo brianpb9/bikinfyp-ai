@@ -106,3 +106,21 @@ test("bendera kemampuan SELAMAT walau health gagal", () => {
   assert.match(gagal, /ok: false/, "jalur gagal tidak boleh mengaku sehat");
   assert.match(gagal, /status: 503/, "status 503 tidak boleh dilunakkan");
 });
+
+test("OTP email: kunci kosong menjawab KEADAAN, bukan 'gangguan'", () => {
+  // Ditemukan dari laporan Brian, bukan dari membaca kode: minta OTP di server
+  // baru menjawab 500 "Ada gangguan di sisi kami. Coba lagi sebentar lagi ya."
+  // Kalimat itu salah dua kali — ini bukan gangguan, dan mencoba lagi tidak
+  // akan pernah berhasil selama RESEND_API_KEY kosong.
+  const src = kode("app/api/auth/request-otp/route.ts");
+  assert.match(src, /EMAIL_LOGIN_NOT_CONFIGURED/);
+  assert.match(src, /status: 503/);
+  assert.match(src, /retryable: false/, "menyuruh pengguna mencoba lagi sesuatu yang mustahil");
+
+  // Penjagaan harus MENDAHULUI pengiriman; kalau di belakang, ia tidak pernah
+  // tercapai karena sendOtpEmail sudah melempar lebih dulu.
+  assert.ok(
+    src.indexOf("EMAIL_LOGIN_NOT_CONFIGURED") < src.indexOf("await sendOtpEmail"),
+    "penjagaan berada SESUDAH sendOtpEmail — tidak akan pernah dieksekusi",
+  );
+});

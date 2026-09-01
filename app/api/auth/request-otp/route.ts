@@ -30,6 +30,30 @@ export async function POST(req: Request) {
       );
     }
 
+    // KEADAAN KONFIGURASI YANG DIKETAHUI, BUKAN GANGGUAN.
+    //
+    // Tanpa RESEND_API_KEY, sendOtpEmail() MELEMPAR dan errorResponse
+    // mengubahnya jadi 500 "Ada gangguan di sisi kami. Coba lagi sebentar
+    // lagi ya." — kalimat yang salah dua kali: ini bukan gangguan, dan
+    // mencoba lagi tidak akan pernah berhasil. Pengguna disuruh menunggu
+    // sesuatu yang tidak akan datang.
+    //
+    // hasEmailKey() sudah ada dan bahkan sudah dipakai di jawaban sukses di
+    // bawah; ia cuma tidak pernah dipakai untuk MEMUTUSKAN. Pola jawabannya
+    // mengikuti PAYMENT_NOT_CONFIGURED di rute checkout: 503, retryable
+    // false, dan sebut jalan keluarnya.
+    if (isProduction() && !hasEmailKey()) {
+      return Response.json(
+        {
+          code: "EMAIL_LOGIN_NOT_CONFIGURED",
+          message_id: "Login lewat email belum aktif di server ini. Hubungi tim kami ya.",
+          message_en: "Email OTP is not configured on this server (RESEND_API_KEY missing).",
+          retryable: false,
+        },
+        { status: 503 }
+      );
+    }
+
     const code = generateCode();
     const { mode } = await sendOtpEmail(email, code);
     if (postgresRuntimeEnabled()) await pgStoreOtp(email, code); else storeOtp(email, code);
