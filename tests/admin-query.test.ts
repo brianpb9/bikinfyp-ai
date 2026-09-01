@@ -58,3 +58,41 @@ test("SELURUH repo memakai pola yang sama untuk batas waktu", () => {
   for (const d of ["app", "lib"]) telusur(path.join(akar, d));
   assert.deepEqual(korban, [], `membandingkan kolom text dengan NOW(): ${korban.join(", ")}`);
 });
+
+test("setiap tab admin punya query dan tampilan, tidak ada yang kosong", () => {
+  // Menu yang ada di navigasi tapi tidak punya isi adalah janji yang tidak
+  // ditepati — operator menekannya, halaman kosong, dan ia berhenti percaya
+  // pada menu yang lain.
+  const src = baca("app/admin/page.tsx");
+
+  // Daftar tab DIBACA DARI KODE, bukan diketik ulang di test. Versi pertama
+  // memeriksa daftar yang saya ketik sendiri — jadi menambah tab baru yang
+  // kosong tetap lolos, yaitu persis kegagalan yang test ini ada untuk
+  // mencegah. Terbukti: mutasi "tab tanpa isi" lewat begitu saja.
+  const blok = src.slice(src.indexOf("const TAB = ["), src.indexOf("] as const;"));
+  const tabs = [...blok.matchAll(/id: "([a-z]+)"/g)].map((m) => m[1]);
+  assert.ok(tabs.length >= 6, `tab terbaca cuma ${tabs.length} — pembacaan daftar rusak`);
+
+  for (const tab of tabs) {
+    const komponen = tab.charAt(0).toUpperCase() + tab.slice(1);
+    assert.match(src, new RegExp(`async function ${komponen}\\(`), `tab "${tab}" tidak punya komponen`);
+    assert.match(src, new RegExp(`aktif === "${tab}" && <${komponen} ?/>`), `tab "${tab}" tidak dirender`);
+  }
+});
+
+test("saldo di admin memakai aturan yang SAMA dengan yang dilihat pengguna", () => {
+  // getBalance() menyaring org_id IS NULL. Kalau admin menghitungnya beda, ia
+  // menampilkan saldo yang penggunanya sendiri tidak pernah lihat — dan
+  // selisih itu baru ketahuan saat ada yang komplain.
+  const src = baca("app/admin/page.tsx");
+  assert.match(src, /c\.user_id = u\.id AND c\.org_id IS NULL/, "saldo admin tidak menyaring org_id");
+  const credits = baca("lib/credits.ts");
+  assert.match(credits, /user_id = \? AND org_id IS NULL/, "aturan getBalance berubah — samakan admin");
+});
+
+test("COGS admin dari cost_actual_idr, bukan ditaksir dari daftar harga", () => {
+  const src = baca("app/admin/page.tsx");
+  assert.match(src, /SUM\(cost_actual_idr\)/);
+  assert.match(src, /SUM\(j\.cost_actual_idr\)/);
+  assert.doesNotMatch(src, /cogsIdr|priceIdr/, "admin menaksir biaya dari config, bukan dari yang tercatat");
+});
