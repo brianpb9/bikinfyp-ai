@@ -90,3 +90,19 @@ test("HARGA TRANSPARAN: pil dicabut, janjinya ditepati section dengan angka", ()
     "harga 12.000 tertulis lebih dari sekali — dua salinan bisa melenceng",
   );
 });
+
+test("bendera kemampuan SELAMAT walau health gagal", () => {
+  // Jebakan yang ditutup: jawaban 503 dulu hanya {ok, code}, jadi semua bendera
+  // hilang begitu ada masalah konfigurasi yang TIDAK berhubungan — misalnya
+  // STORAGE_MODE belum r2. Akibatnya memasang kredensial Google tidak akan
+  // memunculkan tombolnya, dan orang mengira kredensialnya yang salah.
+  const src = kode("app/api/health/route.ts");
+  // Dipotong dari blok catch, BUKAN dari nama kodenya: `ok: false` berada
+  // sebelum baris itu, jadi memotong di sana melewatkan justru asersi yang
+  // menjaga jalur gagal tidak mengaku sehat.
+  const gagal = src.slice(src.indexOf("catch (error)"));
+  assert.match(gagal, /google_login: Boolean\(/, "bendera google hilang di jalur gagal");
+  assert.match(gagal, /payments_live: paymentsLive\(\)/, "bendera pembayaran hilang di jalur gagal");
+  assert.match(gagal, /ok: false/, "jalur gagal tidak boleh mengaku sehat");
+  assert.match(gagal, /status: 503/, "status 503 tidak boleh dilunakkan");
+});

@@ -73,6 +73,28 @@ export async function GET() {
     );
   } catch (error) {
     console.error("[health] configuration failure", error);
-    return Response.json({ ok: false, code: "HEALTH_CONFIGURATION_FAILED" }, { status: 503 });
+    // BENDERA KEMAMPUAN TETAP DIKIRIM WALAU HEALTH GAGAL.
+    //
+    // Halaman onboarding membaca google_login dan payments_live dari sini untuk
+    // memutuskan tombol mana yang ditawarkan. Sampai 1 Sep jawaban 503 hanya
+    // berisi {ok, code}, jadi SEMUA bendera hilang begitu ada satu masalah
+    // konfigurasi yang tidak berhubungan — misalnya STORAGE_MODE belum r2.
+    //
+    // Akibatnya jebakan yang bisa diramalkan: memasang kredensial Google tidak
+    // akan memunculkan tombolnya, karena health masih gagal karena urusan lain,
+    // dan orang akan mengira kredensialnya yang salah.
+    //
+    // Kedua bendera ini tidak bergantung pada apa pun yang bisa membuat health
+    // gagal, jadi mengirimnya tetap jujur. `ok: false` tetap false — status
+    // 503-nya tidak dilunakkan.
+    return Response.json(
+      {
+        ok: false,
+        code: "HEALTH_CONFIGURATION_FAILED",
+        google_login: Boolean(config.googleOauthClientId && config.googleOauthClientSecret),
+        payments_live: paymentsLive(),
+      },
+      { status: 503 }
+    );
   }
 }
