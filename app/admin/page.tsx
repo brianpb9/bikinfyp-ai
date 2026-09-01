@@ -71,7 +71,7 @@ function alasanGagal(qc: string | null): string {
 
 async function ambilRingkasan() {
   const pool = getPool(config.databaseUrl);
-  const [pengguna, uang, job, biaya] = await Promise.all([
+  const [pengguna, uang, job, biaya, gratis] = await Promise.all([
     pool.query<{ total: string; baru: string }>(
       `SELECT COUNT(*)::text AS total,
               COUNT(*) FILTER (WHERE created_at > $1)::text AS baru
@@ -94,8 +94,23 @@ async function ambilRingkasan() {
               COUNT(*) FILTER (WHERE state = 'DONE')::text AS selesai
          FROM jobs`,
     ),
+    // BIAYA PAKET GRATIS. Setiap pendaftar baru menerima bonus senilai satu
+    // video, dan itu uang yang benar-benar keluar dari kas — bukan diskon.
+    // Ditampilkan supaya ia terlihat sejak orang pertama mendaftar, bukan
+    // mengejutkan di tagihan BytePlus akhir bulan.
+    pool.query<{ total: string; penerima: string }>(
+      `SELECT COALESCE(SUM(delta),0)::text AS total,
+              COUNT(DISTINCT user_id)::text AS penerima
+         FROM credit_ledger WHERE type = 'bonus'`,
+    ),
   ]);
-  return { pengguna: pengguna.rows[0], uang: uang.rows[0], job: job.rows, biaya: biaya.rows[0] };
+  return {
+    pengguna: pengguna.rows[0],
+    uang: uang.rows[0],
+    job: job.rows,
+    biaya: biaya.rows[0],
+    gratis: gratis.rows[0],
+  };
 }
 
 async function ambilKeuangan() {
@@ -303,7 +318,7 @@ export default async function AdminPage({ searchParams }: { searchParams: Promis
 }
 
 async function Ringkasan() {
-  const { pengguna, uang, job, biaya } = await ambilRingkasan();
+  const { pengguna, uang, job, biaya, gratis } = await ambilRingkasan();
   const pendapatan = Number(uang?.pendapatan ?? 0);
   const cogs = Number(biaya?.cogs ?? 0);
   const margin = pendapatan - cogs;
@@ -327,6 +342,11 @@ async function Ringkasan() {
           label="Pengguna"
           nilai={angka(Number(pengguna?.total ?? 0))}
           catatan={`${angka(Number(pengguna?.baru ?? 0))} baru 30 hari`}
+        />
+        <Kartu
+          label="Biaya paket gratis"
+          nilai={rupiah(Number(gratis?.total ?? 0))}
+          catatan={`${angka(Number(gratis?.penerima ?? 0))} pendaftar dapat bonus`}
         />
       </section>
 
