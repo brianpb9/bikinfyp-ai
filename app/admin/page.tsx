@@ -40,9 +40,24 @@ async function ambilData() {
          FROM jobs j LEFT JOIN users u ON u.id = j.user_id
         ORDER BY j.created_at DESC LIMIT 40`
     ),
+    // BATAS WAKTU DIHITUNG DI JS, BUKAN DI SQL.
+    //
+    // `created_at` bertipe TEXT di seluruh skema — timestamp disimpan sebagai
+    // string ISO-8601. Query lama berbunyi `created_at > NOW() - INTERVAL
+    // '7 days'`, dan Postgres MENOLAK membandingkan text dengan timestamptz:
+    //   operator does not exist: text > timestamp with time zone
+    // Halaman admin gagal total dengan "server-side exception", bukan sekadar
+    // salah angka.
+    //
+    // Diperbaiki mengikuti pola yang sudah dipakai di SELURUH kode lain
+    // (lib/otp.ts, lib/extract.ts, lib/postgres/smoke-runtime.ts): hitung
+    // ambangnya di JS sebagai ISO, lalu bandingkan teks dengan teks. Sah
+    // karena ISO-8601 berurut secara leksikografis sama dengan kronologis —
+    // dan kolomnya tetap bisa dipakai indeks, tidak seperti kalau di-cast.
     pool.query<{ state: string; n: string }>(
       `SELECT state, COUNT(*)::text AS n FROM jobs
-        WHERE created_at > NOW() - INTERVAL '7 days' GROUP BY state ORDER BY 2 DESC`
+        WHERE created_at > $1 GROUP BY state ORDER BY 2 DESC`,
+      [new Date(Date.now() - 7 * 24 * 60 * 60_000).toISOString()]
     ),
     pool.query<{ n: string; total: string }>(
       `SELECT COUNT(DISTINCT user_id)::text AS n, COALESCE(SUM(delta),0)::text AS total
